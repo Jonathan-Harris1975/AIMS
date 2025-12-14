@@ -1,13 +1,12 @@
 {
   "name": "AI-management-suite",
-  "version": "2.6.6",
+  "version": "2.6.2",
   "type": "module",
   "main": "server.js",
-  "private": true,
 
   "scripts": {
-    "build": "echo \"Build step completed\"",
-    "start": "node server.js"
+    "start": "node server.js",
+    "build": "echo 'Skipping TypeScript build — pure ESM JS project'"
   },
 
   "engines": {
@@ -45,5 +44,7 @@
 
   "devDependencies": {
     "supertest": "^7.0.0"
-  }
+  },
+
+  "private": true
 }
