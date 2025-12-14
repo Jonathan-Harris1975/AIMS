@@ -5,9 +5,7 @@
   "main": "server.js",
   "private": true,
 
-  "scripts": {
-    "build": "echo \"No build step required\"",
-    "start": "node server.js"
+  "scripts": { "start": "node server.js"
   },
 
   "engines": {
