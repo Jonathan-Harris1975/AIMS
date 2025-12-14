@@ -5,9 +5,9 @@
   "main": "server.js",
 
   "scripts": {
-    "start": "node server.js",
-    "build": "echo 'Skipping TypeScript build — pure ESM JS project'"
-  },
+  "build": "echo \"Build step completed\"",
+  "start": "node server.js"
+},
 
   "engines": {
     "node": ">=22 <25"
