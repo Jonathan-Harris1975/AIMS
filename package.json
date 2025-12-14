@@ -1,13 +1,14 @@
 {
   "name": "AI-management-suite",
-  "version": "2.6.2",
+  "version": "2.6.6",
   "type": "module",
   "main": "server.js",
+  "private": true,
 
   "scripts": {
-  "start": "node server.js",
-  "build": "echo 'Skipping build' && node server.js"
-},
+    "build": "echo \"No build step required\"",
+    "start": "node server.js"
+  },
 
   "engines": {
     "node": ">=22 <25"
@@ -44,7 +45,5 @@
 
   "devDependencies": {
     "supertest": "^7.0.0"
-  },
-
-  "private": true
+  }
 }
