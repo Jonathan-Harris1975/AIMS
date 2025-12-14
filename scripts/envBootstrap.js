@@ -283,7 +283,7 @@ export const config = {
   RETRY_DELAY_MS: toNumber(process.env.RETRY_DELAY_MS),
   RETRY_BACKOFF_MULTIPLIER: toNumber(process.env.RETRY_BACKOFF_MULTIPLIER),
 
-  SHIPER: process.env.SHIPER,
+  
 };
 
 // Default export
