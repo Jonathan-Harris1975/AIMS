@@ -2,33 +2,24 @@ import express from "express";
 
 const app = express();
 
-/* ───────────────────────────────
-   Health endpoints (Shiper probes)
-─────────────────────────────── */
+// ─────────────────────────────────────────────
+// Health + root endpoints
+// ─────────────────────────────────────────────
 app.get("/", (_req, res) => res.status(200).send("OK"));
 app.get("/health", (_req, res) => res.status(200).json({ status: "ok" }));
 
-/* ───────────────────────────────
-   PORT handling (MANDATORY)
-─────────────────────────────── */
-const PORT = process.env.PORT;
+// ─────────────────────────────────────────────
+// Shiper uses a FIXED app port (from UI)
+// NOT an injected PORT env variable
+// ─────────────────────────────────────────────
+const PORT = 3000;
 
-if (!PORT) {
-  console.error("❌ PORT not provided by platform");
-  process.exit(1); // force Shiper to retry with env injected
-}
-
-/* ───────────────────────────────
-   Start server (bind to all IFs)
-─────────────────────────────── */
-app.listen(Number(PORT), "0.0.0.0", () => {
+app.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 Server listening on ${PORT}`);
 });
 
-/* ───────────────────────────────
-   Graceful shutdown (PaaS-safe)
-─────────────────────────────── */
+// Graceful shutdown (optional but clean)
 process.on("SIGTERM", () => {
-  console.log("🛑 SIGTERM received, shutting down");
+  console.log("🛑 SIGTERM received");
   process.exit(0);
 });
