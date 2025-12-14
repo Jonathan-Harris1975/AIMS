@@ -5,8 +5,8 @@
   "main": "server.js",
 
   "scripts": {
-  "build": "echo 'Skipping build' && npm start",
-  "start": "node server.js"
+  "start": "node server.js",
+  "build": "echo 'Skipping build' && node server.js"
 },
 
   "engines": {
