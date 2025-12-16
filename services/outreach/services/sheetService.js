@@ -1,5 +1,8 @@
 import { google } from "googleapis";
 
+const SHEET_ID = process.env.GOOGLE_SHEET_ID;
+const TAB_NAME = "Leads";
+
 const auth = new google.auth.GoogleAuth({
   credentials: {
     client_email: process.env.GOOGLE_CLIENT_EMAIL,
@@ -10,12 +13,12 @@ const auth = new google.auth.GoogleAuth({
 
 const sheets = google.sheets({ version: "v4", auth });
 
-export async function appendLeadRows(rows) {
+export async function appendLeadRows(rows = []) {
   if (!rows.length) return;
 
-  await sheets.spreadsheets.values.append({
-    spreadsheetId: process.env.GOOGLE_SHEET_ID,
-    range: "Leads!A1",
+  return sheets.spreadsheets.values.append({
+    spreadsheetId: SHEET_ID,
+    range: `${TAB_NAME}!A1`,
     valueInputOption: "RAW",
     insertDataOption: "INSERT_ROWS",
     requestBody: { values: rows }
