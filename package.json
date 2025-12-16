@@ -11,6 +11,7 @@
     "node": ">=22 <25"
   },
   "dependencies": {
+    "googleapis":"^131.0.0",
     "@aws-sdk/client-polly": "^3.663.0",
     "@aws-sdk/client-s3": "^3.663.0",
     "@google/generative-ai": "0.10.0",
