@@ -26,6 +26,6 @@ export async function saveProgress(progress) {
     ...progress,
     lastRunAt: new Date().toISOString()
   };
-  await putJson("meta", KEY, payload);
+  await putJson("metasystem", KEY, payload);
   return payload;
 }
