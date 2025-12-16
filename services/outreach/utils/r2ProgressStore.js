@@ -12,7 +12,7 @@ const base = () => ({
 
 export async function loadProgress() {
   try {
-    const txt = await getObjectAsText("meta", KEY);
+    const txt = await getObjectAsText("metasystem", KEY);
     return { ...base(), ...JSON.parse(txt) };
   } catch {
     info("outreach.progress.init");
