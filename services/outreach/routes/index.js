@@ -1,17 +1,34 @@
 import express from "express";
 import { runKeyword } from "../services/outreachService.js";
-import { runNextBatch } from "../services/batchService.js";
-import { loadProgress } from "../utils/r2ProgressStore.js";
+import { runNextBatch, resetProgress, getProgress } from "../services/batchService.js";
 
 const router = express.Router();
 
-router.get("/health", (_, res) => res.json({ ok: true }));
-router.get("/progress", async (_, res) => res.json(await loadProgress()));
-router.post("/keyword", async (req, res) =>
-  res.json(await runKeyword(req.body.keyword))
-);
-router.post("/batch/next", async (_, res) =>
-  res.json(await runNextBatch())
-);
+router.get("/health", (_req, res) => res.json({ ok: true, service: "outreach" }));
 
-export default router
+router.get("/progress", async (_req, res) => {
+  const progress = await getProgress();
+  res.json({ ok: true, progress });
+});
+
+router.post("/keyword", async (req, res) => {
+  const { keyword } = req.body || {};
+  if (!keyword || typeof keyword !== "string") {
+    return res.status(400).json({ ok: false, error: "keyword is required" });
+  }
+  const result = await runKeyword(keyword);
+  res.json({ ok: true, ...result });
+});
+
+router.post("/batch/next", async (_req, res) => {
+  const result = await runNextBatch();
+  res.json({ ok: true, ...result });
+});
+
+router.post("/batch/reset", async (req, res) => {
+  const { lastProcessedIndex = 0 } = req.body || {};
+  const result = await resetProgress(Number(lastProcessedIndex) || 0);
+  res.json({ ok: true, progress: result });
+});
+
+export default router;
