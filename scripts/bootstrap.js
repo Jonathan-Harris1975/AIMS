@@ -19,7 +19,7 @@ async function run(cmd, label) {
 }
 
 (async () => {
-  debug('🧩 Starting AI Podcast Suite bootstrap sequence...');
+  debug('🧩 Starting AI-management-suite bootstrap sequence...');
   debug('---------------------------------------------');
 
   // 1️⃣ Load and validate environment variables
