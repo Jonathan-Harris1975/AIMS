@@ -1,8 +1,16 @@
 import { serpLookup, enrichDomain, shouldBlockDomain } from "./outreachCore.js";
 import { batchValidateEmails } from "./zeroBounceBatch.js";
 
+// Optimised, ENV-driven domain cap
+const MAX_DOMAINS_PER_KEYWORD = Number(
+  process.env.MAX_DOMAINS_PER_KEYWORD || 25
+);
+
 function normaliseHost(host) {
-  return String(host || "").toLowerCase().replace(/^www\./, "").trim();
+  return String(host || "")
+    .toLowerCase()
+    .replace(/^www\./, "")
+    .trim();
 }
 
 export async function serpOutreach(keyword) {
@@ -12,13 +20,15 @@ export async function serpOutreach(keyword) {
   const raw = Array.isArray(serp?.results) ? serp.results : [];
   const domains = [];
 
-  raw.forEach((r) => {
+  for (const r of raw) {
     try {
       const u = new URL(r.link || r.url);
       const host = normaliseHost(u.hostname);
       if (host) domains.push(host);
-    } catch {}
-  });
+    } catch {
+      // ignore malformed URLs
+    }
+  }
 
   const uniqueAll = [...new Set(domains)];
   const allowed = [];
@@ -26,19 +36,31 @@ export async function serpOutreach(keyword) {
 
   for (const d of uniqueAll) {
     const b = shouldBlockDomain(d);
-    if (b.blocked) blocked.push({ domain: d, reason: b.reason });
-    else allowed.push(d);
-    if (allowed.length >= 10) break;
+    if (b.blocked) {
+      blocked.push({ domain: d, reason: b.reason });
+    } else {
+      allowed.push(d);
+    }
+
+    if (allowed.length >= MAX_DOMAINS_PER_KEYWORD) break;
   }
 
-  console.log(`Found ${uniqueAll.length} unique domains (allowed=${allowed.length}, blocked=${blocked.length})`);
+  console.log(
+    `Found ${uniqueAll.length} unique domains ` +
+    `(allowed=${allowed.length}/${MAX_DOMAINS_PER_KEYWORD}, blocked=${blocked.length})`
+  );
+
   if (blocked.length) {
     console.log(
-      `🧱 Blocked: ${blocked.slice(0, 8).map((x) => `${x.domain}(${x.reason})`).join(", ")}${blocked.length > 8 ? " …" : ""}`
+      `🧱 Blocked: ${blocked
+        .slice(0, 8)
+        .map((x) => `${x.domain}(${x.reason})`)
+        .join(", ")}${blocked.length > 8 ? " …" : ""}`
     );
   }
 
   const enriched = [];
+
   for (const d of allowed) {
     try {
       enriched.push(await enrichDomain(d));
@@ -50,20 +72,23 @@ export async function serpOutreach(keyword) {
         domainInfo: null,
         blocked: false,
         blockReason: null,
-        editorial: { hasEditorialSurface: false, signals: [] },
+        editorial: {
+          hasEditorialSurface: false,
+          signals: [],
+        },
       });
     }
   }
 
-  // ZeroBounce once per keyword (non-fatal via zeroBounceBatch.js)
+  // ZeroBounce once per keyword (non-fatal)
   const allEmails = enriched.flatMap((e) => e.emails);
   const validationMap = await batchValidateEmails(allEmails);
 
-  enriched.forEach((e) => {
+  for (const e of enriched) {
     e.emails = e.emails.map((email) => {
       const v = validationMap.get(email) || { status: "unknown" };
 
-      // Conservative scoring: valid wins, catch-all is usable, unknown stays low
+      // Conservative scoring
       let score = 0.25;
       if (v.status === "valid") score = 1;
       else if (v.status === "catch-all") score = 0.55;
@@ -73,14 +98,14 @@ export async function serpOutreach(keyword) {
       return { email, validation: v, score };
     });
 
-    // helpful metadata for downstream scoring/filtering without breaking existing code
+    // Metadata preserved for downstream filters
     e.meta = {
       editorialSurface: Boolean(e.editorial?.hasEditorialSurface),
       editorialSignals: e.editorial?.signals || [],
       blocked: Boolean(e.blocked),
       blockReason: e.blockReason || null,
     };
-  });
+  }
 
   return { keyword, domains: enriched };
-}
+        }
