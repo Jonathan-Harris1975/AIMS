@@ -24,7 +24,7 @@ const routeRegistry = [
 try {
   routeRegistry.forEach(({ path, name, routes }) => {
     router.use(path, routes);
-    info("🧩 Route mounted", { path, name });
+    info(" ✅ Route mounted", { path, name });
   });
 
   info(`🟩 Routes mounted: ${routeRegistry.length} services registered`);
