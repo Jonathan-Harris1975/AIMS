@@ -1,76 +1,55 @@
+import fs from "fs";
 import path from "path";
-import { getObjectAsText, putJson } from "#shared/r2-client.js";
 import { serpOutreach } from "./serp-OutreachService.js";
 import { extractGoodLeads } from "../utils/filters.js";
 import { appendLeadRows } from "./sheetService.js";
-import fs from "fs";
+import { loadProgress, saveProgress } from "../utils/r2ProgressStore.js";
 
-const PROGRESS_KEY = process.env.OUTREACH_PROGRESS_KEY || "outreach/progress.json";
-const BATCH_SIZE = Number(process.env.OUTREACH_BATCH_SIZE || "50");
-const RATE_DELAY = Number(process.env.SERP_RATE_DELAY_MS || "1500");
-const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+const KEYWORDS_FILE =
+  process.env.OUTREACH_KEYWORDS_FILE ||
+  "services/outreach/keywords.txt";
 
-function keywordsPath() {
-  return process.env.OUTREACH_KEYWORDS_FILE || path.join("services", "outreach", "keywords.txt");
-}
+const BATCH_SIZE = Number(process.env.OUTREACH_BATCH_SIZE || 40);
+const RATE_DELAY_MS = Number(process.env.SERP_RATE_DELAY_MS || 1500);
 
-function loadKeywords(file) {
-  const p = path.resolve(process.cwd(), file);
-  return fs.readFileSync(p, "utf8").split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-}
+const wait = (ms) => new Promise(r => setTimeout(r, ms));
 
-export async function getProgress() {
-  try {
-    const txt = await getObjectAsText("meta", PROGRESS_KEY);
-    const p = JSON.parse(txt);
-    return {
-      batchSize: BATCH_SIZE,
-      lastProcessedIndex: Number(p.lastProcessedIndex || 0),
-      updatedAt: p.updatedAt || null
-    };
-  } catch {
-    return { batchSize: BATCH_SIZE, lastProcessedIndex: 0, updatedAt: null };
-  }
-}
-
-async function saveProgress(lastProcessedIndex) {
-  const payload = { lastProcessedIndex, updatedAt: new Date().toISOString() };
-  await putJson("meta", PROGRESS_KEY, payload);
-  return payload;
-}
-
-export async function resetProgress(lastProcessedIndex = 0) {
-  return saveProgress(Number(lastProcessedIndex) || 0);
+function loadKeywords() {
+  return fs
+    .readFileSync(path.resolve(KEYWORDS_FILE), "utf8")
+    .split(/\r?\n/)
+    .map(l => l.trim())
+    .filter(Boolean);
 }
 
 export async function runNextBatch() {
-  const kws = loadKeywords(keywordsPath());
-  const prog = await getProgress();
+  const keywords = loadKeywords();
+  const progress = await loadProgress();
 
-  const start = prog.lastProcessedIndex;
-  const end = Math.min(start + BATCH_SIZE, kws.length);
-  const slice = kws.slice(start, end);
+  const start = progress.lastProcessedIndex;
+  const batch = keywords.slice(start, start + BATCH_SIZE);
 
-  if (!slice.length) {
-    return { done: true, batchStart: start, batchEnd: start, nextIndex: start, processed: 0 };
-  }
+  console.log(
+    `🚀 Outreach batch starting: ${start} → ${start + batch.length}`
+  );
 
+  let globalIndex = start;
   let totalLeads = 0;
-  let keywordsWithLeads = 0;
 
-  for (let i = 0; i < slice.length; i++) {
-    const kw = slice[i];
+  for (let i = 0; i < batch.length; i++) {
+    const keyword = batch[i];
+    console.log(`🔁 Keyword ${i + 1}/${batch.length}: ${keyword}`);
 
-    const result = await serpOutreach(kw);
-    const good = extractGoodLeads(result, kw);
+    const result = await serpOutreach(keyword);
+    const good = extractGoodLeads(result, keyword);
 
     if (good.length) {
-      const rows = good.map((r) => [
+      const rows = good.map(r => [
         r.timestamp,
         r.keyword,
         r.domain,
         r.da,
-        r.serpPosition ?? r.serpPos ?? null,
+        r.serpPosition ?? null,
         r.email,
         r.emailScore,
         r.leadScore
@@ -78,22 +57,25 @@ export async function runNextBatch() {
 
       await appendLeadRows(rows);
       totalLeads += good.length;
-      keywordsWithLeads += 1;
     }
 
-    await wait(RATE_DELAY);
+    globalIndex++;
+    console.log(
+      `📊 Progress: keyword ${globalIndex}/${keywords.length}`
+    );
+
+    await wait(RATE_DELAY_MS);
   }
 
-  const nextIndex = start + slice.length;
-  await saveProgress(nextIndex);
+  await saveProgress({ lastProcessedIndex: globalIndex });
+
+  console.log(
+    `🏁 Batch complete — ${totalLeads} leads saved. Next start index: ${globalIndex}`
+  );
 
   return {
-    done: false,
-    batchStart: start,
-    batchEnd: end,
-    processed: slice.length,
-    nextIndex,
+    processed: batch.length,
     totalLeads,
-    keywordsWithLeads
+    nextStartIndex: globalIndex
   };
-}
+        }
