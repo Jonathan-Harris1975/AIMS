@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const KEY_RAPIDAPI = process.env.RAPIDAPI_KEY;
+const KEY_SERPAPI = process.env.API_SERP_KEY;
 const KEY_URLSCAN = process.env.API_URLSCAN_KEY;
 const KEY_PROSPEO = process.env.API_PROSPEO_KEY;
 const KEY_HUNTER = process.env.API_HUNTER_KEY;
@@ -10,58 +10,27 @@ const URLSCAN_BASE = "https://urlscan.io/api/v1";
 const PROSPEO_BASE = "https://api.prospeo.io";
 const HUNTER_BASE = "https://api.hunter.io";
 const APOLLO_BASE = "https://api.apollo.io";
-const SERP_HOST = "google-search116.p.rapidapi.com";
 
 const SERP_RESULT_LIMIT = Number(process.env.SERP_RESULT_LIMIT || 30);
 
-const HUNTER_DELAY_MS = Number(process.env.HUNTER_DELAY_MS || "500");
-const APOLLO_DELAY_MS = Number(process.env.APOLLO_DELAY_MS || "800");
-const URLSCAN_DELAY_MS = Number(process.env.URLSCAN_DELAY_MS || "2000");
+const HUNTER_DELAY_MS = Number(process.env.HUNTER_DELAY_MS || 500);
+const APOLLO_DELAY_MS = Number(process.env.APOLLO_DELAY_MS || 800);
+const URLSCAN_DELAY_MS = Number(process.env.URLSCAN_DELAY_MS || 2000);
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /* ================= DOMAIN QUALITY FILTERS ================= */
 
 const HARD_BLOCK_DOMAINS = new Set([
-  "capterra.com",
-  "g2.com",
-  "trustpilot.com",
-  "softwareadvice.com",
-  "getapp.com",
-  "sourceforge.net",
-  "alternativeto.net",
-  "stackshare.io",
-  "producthunt.com",
-  "reddit.com",
-  "quora.com",
-  "linkedin.com",
-  "facebook.com",
-  "x.com",
-  "twitter.com",
-  "tiktok.com",
-  "youtube.com",
-  "medium.com",
-  "substack.com",
-  "slideshare.net",
-  "wikipedia.org",
-  "wikidata.org",
-  "britannica.com",
-  "investopedia.com",
-  "prnewswire.com",
-  "businesswire.com",
-  "globenewswire.com",
-  "einpresswire.com",
-  "newswire.com",
-  "github.com",
-  "gitlab.com",
-  "bitbucket.org",
-  "npmjs.com",
-  "pypi.org",
-  "crates.io",
-  "docker.com",
-  "hub.docker.com",
-  "play.google.com",
-  "apps.apple.com",
+  "capterra.com","g2.com","trustpilot.com","softwareadvice.com","getapp.com",
+  "sourceforge.net","alternativeto.net","stackshare.io","producthunt.com",
+  "reddit.com","quora.com","linkedin.com","facebook.com","x.com","twitter.com",
+  "tiktok.com","youtube.com","medium.com","substack.com","slideshare.net",
+  "wikipedia.org","wikidata.org","britannica.com","investopedia.com",
+  "prnewswire.com","businesswire.com","globenewswire.com","einpresswire.com",
+  "newswire.com","github.com","gitlab.com","bitbucket.org","npmjs.com",
+  "pypi.org","crates.io","docker.com","hub.docker.com",
+  "play.google.com","apps.apple.com",
 ]);
 
 const HARD_BLOCK_HOST_PATTERNS = [
@@ -76,17 +45,7 @@ const HARD_BLOCK_HOST_PATTERNS = [
   /(^|\.)webflow\.io$/i,
 ];
 
-const HARD_BLOCK_TLDS = new Set([
-  "tk",
-  "ml",
-  "ga",
-  "cf",
-  "gq",
-  "top",
-  "click",
-  "link",
-  "live",
-]);
+const HARD_BLOCK_TLDS = new Set(["tk","ml","ga","cf","gq","top","click","link","live"]);
 
 export function shouldBlockDomain(domain) {
   if (!domain || typeof domain !== "string") {
@@ -115,35 +74,40 @@ export function shouldBlockDomain(domain) {
   return { blocked: false, reason: null };
 }
 
-/* ================= SERP (FIXED) ================= */
+/* ================= SERP (OFFICIAL SERPAPI) ================= */
 
 export async function serpLookup(keyword) {
-  if (!KEY_RAPIDAPI) {
-    throw new Error("RAPIDAPI_KEY missing");
+  if (!KEY_SERPAPI) {
+    throw new Error("API_SERP_KEY missing");
   }
 
-  const res = await axios.get(`https://${SERP_HOST}/`, {
+  const res = await axios.get("https://serpapi.com/search", {
     params: {
-      query: keyword,
-      limit: SERP_RESULT_LIMIT, // ✅ CORRECT PARAM FOR THIS API
+      api_key: KEY_SERPAPI,
+      engine: "google",
+      q: keyword,
+      num: SERP_RESULT_LIMIT,
     },
-    headers: {
-      "x-rapidapi-key": KEY_RAPIDAPI,
-      "x-rapidapi-host": SERP_HOST,
-    },
-    timeout: 15000,
+    timeout: 20000,
   });
 
-  const results =
-    res.data?.results ||
-    res.data?.organic_results ||
-    [];
+  const organic = Array.isArray(res.data?.organic_results)
+    ? res.data.organic_results
+    : [];
 
   console.log(
-    `🔎 SERP raw results for "${keyword}": ${results.length}`
+    `🔎 SERPAPI results for "${keyword}": ${organic.length}`
   );
 
-  return { results };
+  // Normalise to your existing pipeline shape
+  return {
+    results: organic.map((r) => ({
+      link: r.link,
+      title: r.title,
+      snippet: r.snippet,
+      position: r.position,
+    })),
+  };
 }
 
 /* ================= URLSCAN ================= */
@@ -216,21 +180,9 @@ function isLowValue(email) {
   if (!local || local.length <= 1) return true;
 
   const role = new Set([
-    "info",
-    "support",
-    "help",
-    "contact",
-    "admin",
-    "sales",
-    "billing",
-    "noreply",
-    "no-reply",
-    "webmaster",
-    "hello",
-    "team",
-    "careers",
-    "jobs",
-    "press",
+    "info","support","help","contact","admin","sales","billing",
+    "noreply","no-reply","webmaster","hello","team","careers",
+    "jobs","press",
   ]);
 
   return role.has(local);
@@ -302,4 +254,4 @@ export async function enrichDomain(domain) {
       editorial: { hasEditorialSurface: false, signals: [] },
     };
   }
-        }
+}
