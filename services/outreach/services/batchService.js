@@ -12,14 +12,26 @@ const KEYWORDS_FILE =
 const BATCH_SIZE = Number(process.env.OUTREACH_BATCH_SIZE || 40);
 const RATE_DELAY_MS = Number(process.env.SERP_RATE_DELAY_MS || 1500);
 
-const wait = (ms) => new Promise(r => setTimeout(r, ms));
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function loadKeywords() {
   return fs
     .readFileSync(path.resolve(KEYWORDS_FILE), "utf8")
     .split(/\r?\n/)
-    .map(l => l.trim())
+    .map((l) => l.trim())
     .filter(Boolean);
+}
+
+// --------------------------------------------------
+// PUBLIC API (used by routes)
+// --------------------------------------------------
+
+export async function getProgress() {
+  return loadProgress();
+}
+
+export async function resetProgress(index = 0) {
+  return saveProgress({ lastProcessedIndex: Number(index) || 0 });
 }
 
 export async function runNextBatch() {
@@ -38,13 +50,14 @@ export async function runNextBatch() {
 
   for (let i = 0; i < batch.length; i++) {
     const keyword = batch[i];
+
     console.log(`🔁 Keyword ${i + 1}/${batch.length}: ${keyword}`);
 
     const result = await serpOutreach(keyword);
     const good = extractGoodLeads(result, keyword);
 
     if (good.length) {
-      const rows = good.map(r => [
+      const rows = good.map((r) => [
         r.timestamp,
         r.keyword,
         r.domain,
@@ -52,7 +65,7 @@ export async function runNextBatch() {
         r.serpPosition ?? null,
         r.email,
         r.emailScore,
-        r.leadScore
+        r.leadScore,
       ]);
 
       await appendLeadRows(rows);
@@ -60,6 +73,7 @@ export async function runNextBatch() {
     }
 
     globalIndex++;
+
     console.log(
       `📊 Progress: keyword ${globalIndex}/${keywords.length}`
     );
@@ -76,6 +90,6 @@ export async function runNextBatch() {
   return {
     processed: batch.length,
     totalLeads,
-    nextStartIndex: globalIndex
+    nextStartIndex: globalIndex,
   };
-        }
+}
