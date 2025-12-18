@@ -32,7 +32,7 @@ if (!loggerInstance) {
   } else {
     loggerInstance = pino({
       level: process.env.LOG_LEVEL || "debug",
-      base: { service: "ai-podcast-suite" },
+      base: { service: "AI-management-suite" },
       timestamp: pino.stdTimeFunctions.isoTime,
       transport: {
         target: "pino-pretty",
