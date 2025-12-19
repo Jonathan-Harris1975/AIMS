@@ -1,91 +1,70 @@
 import { serpLookup, enrichDomain, shouldBlockDomain } from "./outreachCore.js";
 import { batchValidateEmails } from "./zeroBounceBatch.js";
 
-const MAX_DOMAINS_PER_KEYWORD = Number(
-  process.env.MAX_DOMAINS_PER_KEYWORD || 25
-);
-
 function normaliseHost(host) {
-  return String(host || "")
-    .toLowerCase()
-    .replace(/^www\./, "")
-    .trim();
+  return host.toLowerCase().replace(/^www\./, "");
 }
 
 export async function serpOutreach(keyword) {
   console.log(`🔍 SERP for keyword: ${keyword}`);
 
-  const serp = await serpLookup(keyword);
-  const raw = Array.isArray(serp?.results) ? serp.results : [];
+  const results = await serpLookup(keyword);
+  console.log(`🔎 SERPAPI results for "${keyword}": ${results.length}`);
 
   const domains = [];
-  for (const r of raw) {
+  results.forEach((r) => {
     try {
-      const u = new URL(r.link || r.url);
-      const host = normaliseHost(u.hostname);
-      if (host) domains.push(host);
+      const u = new URL(r.link);
+      domains.push({
+        domain: normaliseHost(u.hostname),
+        position: r.position,
+      });
     } catch {}
-  }
+  });
 
-  const uniqueAll = [...new Set(domains)];
+  const unique = new Map();
+  domains.forEach((d) => {
+    if (!unique.has(d.domain)) unique.set(d.domain, d);
+  });
+
   const allowed = [];
   const blocked = [];
 
-  for (const d of uniqueAll) {
-    const b = shouldBlockDomain(d);
-    if (b.blocked) blocked.push({ domain: d, reason: b.reason });
+  for (const d of unique.values()) {
+    const b = shouldBlockDomain(d.domain);
+    if (b.blocked) blocked.push(d.domain);
     else allowed.push(d);
-
-    if (allowed.length >= MAX_DOMAINS_PER_KEYWORD) break;
   }
 
   console.log(
-    `Found ${uniqueAll.length} unique domains ` +
-    `(allowed=${allowed.length}/${MAX_DOMAINS_PER_KEYWORD}, blocked=${blocked.length})`
+    `Found ${unique.size} unique domains (allowed=${allowed.length}, blocked=${blocked.length})`
   );
 
   const enriched = [];
   for (const d of allowed) {
-    try {
-      enriched.push(await enrichDomain(d));
-    } catch (err) {
-      console.log(`❌ enrichDomain failed for ${d}: ${err.message}`);
-      enriched.push({
-        domain: d,
-        emails: [],
-        editorial: { hasEditorialSurface: false, signals: [] }
-      });
-    }
+    enriched.push(await enrichDomain(d.domain, d));
   }
 
-  // ZeroBounce once per keyword
-  const allEmails = enriched.flatMap(e => e.emails);
-  const validationMap = await batchValidateEmails(allEmails);
+  const allEmails = enriched.flatMap((e) => e.emails);
+  const validation = await batchValidateEmails(allEmails);
 
-  let goodDomains = 0;
-  let goodEmails = 0;
-
-  for (const e of enriched) {
-    e.emails = e.emails.map(email => {
-      const v = validationMap.get(email) || { status: "unknown" };
-
-      let score = 0.25;
-      if (v.status === "valid") score = 1;
-      else if (v.status === "catch-all") score = 0.55;
-      else if (v.status === "unknown") score = 0.3;
-      else score = 0.1;
-
-      if (score >= 0.55) goodEmails++;
-
-      return { email, validation: v, score };
+  enriched.forEach((e) => {
+    e.emails = e.emails.map((email) => {
+      const v = validation.get(email) || { status: "unknown" };
+      return { email, validation: v };
     });
+  });
 
-    if (e.emails.some(m => m.score >= 0.55)) goodDomains++;
-  }
+  const goodDomains = enriched.filter(
+    (e) => e.authority?.totalScore >= 25 && e.emails.length
+  );
 
   console.log(
-    `✅ Keyword "${keyword}" → ${goodDomains} good domains, ${goodEmails} good emails`
+    `✅ Keyword "${keyword}" → ${goodDomains.length} good domains, ${goodDomains.reduce(
+      (a, b) => a + b.emails.length,
+      0
+    )} good emails`
   );
 
   return { keyword, domains: enriched };
-                                  }
+}
