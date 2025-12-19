@@ -18,6 +18,8 @@ const APOLLO_BASE = "https://api.apollo.io";
 /* ================= CONFIG ================= */
 
 const SERP_RESULT_LIMIT = Number(process.env.SERP_RESULT_LIMIT || 30);
+const SERP_PAGE_SIZE = 10; // Google reality
+
 const HUNTER_DELAY_MS = Number(process.env.HUNTER_DELAY_MS || 500);
 const APOLLO_DELAY_MS = Number(process.env.APOLLO_DELAY_MS || 800);
 const URLSCAN_DELAY_MS = Number(process.env.URLSCAN_DELAY_MS || 2000);
@@ -78,33 +80,53 @@ export function shouldBlockDomain(domain) {
   return { blocked: false, reason: null };
 }
 
-/* ================= SERP (SerpAPI) ================= */
+/* ================= SERP (SERPAPI + PAGINATION) ================= */
 
 export async function serpLookup(keyword) {
-  if (!KEY_SERPAPI) throw new Error("API_SERP_KEY missing");
+  if (!KEY_SERPAPI) {
+    throw new Error("API_SERP_KEY missing");
+  }
 
-  const res = await axios.get("https://serpapi.com/search", {
-    params: {
-      api_key: KEY_SERPAPI,
-      engine: "google",
-      q: keyword,
-      num: SERP_RESULT_LIMIT,
-    },
-    timeout: 20000,
-  });
+  const collected = [];
+  let start = 0;
 
-  const organic = Array.isArray(res.data?.organic_results)
-    ? res.data.organic_results
-    : [];
+  while (collected.length < SERP_RESULT_LIMIT) {
+    const res = await axios.get("https://serpapi.com/search", {
+      params: {
+        api_key: KEY_SERPAPI,
+        engine: "google",
+        q: keyword,
+        num: SERP_PAGE_SIZE,
+        start,
+      },
+      timeout: 20000,
+    });
 
-  console.log(`🔎 SERPAPI results for "${keyword}": ${organic.length}`);
+    const organic = Array.isArray(res.data?.organic_results)
+      ? res.data.organic_results
+      : [];
+
+    if (!organic.length) break;
+
+    collected.push(...organic);
+
+    if (organic.length < SERP_PAGE_SIZE) break;
+
+    start += SERP_PAGE_SIZE;
+  }
+
+  const trimmed = collected.slice(0, SERP_RESULT_LIMIT);
+
+  console.log(
+    `🔎 SERPAPI paginated results for "${keyword}": ${trimmed.length}`
+  );
 
   return {
-    results: organic.map((r) => ({
+    results: trimmed.map((r) => ({
       link: r.link,
-      position: r.position,
       title: r.title,
       snippet: r.snippet,
+      position: r.position,
     })),
   };
 }
@@ -179,7 +201,7 @@ function isLowValue(email) {
   ].includes(local);
 }
 
-/* ================= ENRICH DOMAIN (FIXED) ================= */
+/* ================= ENRICH DOMAIN ================= */
 
 export async function enrichDomain(domain) {
   const d = String(domain || "").toLowerCase().replace(/^www\./, "").trim();
@@ -198,7 +220,7 @@ export async function enrichDomain(domain) {
 
   const emails = new Set();
 
-  /* 🔥 PROSPEO ALWAYS RUNS */
+  // Prospeo always
   if (KEY_PROSPEO) {
     try {
       const p = await getProspeo(d);
@@ -206,7 +228,7 @@ export async function enrichDomain(domain) {
     } catch {}
   }
 
-  /* 🔥 HUNTER */
+  // Hunter
   let hunterOk = true;
   if (KEY_HUNTER) {
     try {
@@ -220,7 +242,7 @@ export async function enrichDomain(domain) {
     }
   }
 
-  /* 🔥 APOLLO FALLBACK */
+  // Apollo fallback
   if ((!hunterOk || emails.size < 2) && KEY_APOLLO) {
     try {
       const a = await getApollo(d);
@@ -228,7 +250,7 @@ export async function enrichDomain(domain) {
     } catch {}
   }
 
-  /* 🧠 URLSCAN — METADATA ONLY */
+  // urlscan — metadata only
   const domainInfo = await getUrlscan(d);
 
   return {
@@ -239,4 +261,4 @@ export async function enrichDomain(domain) {
     blockReason: null,
     editorial: { hasEditorialSurface: Boolean(domainInfo), signals: [] },
   };
-}
+     } 
