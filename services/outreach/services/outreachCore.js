@@ -17,34 +17,90 @@ const KEY_APOLLO = process.env.API_APOLLO_KEY;
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /* ============================================================
-   🚫 DOMAIN BLOCKING
+   🚫 DOMAIN BLOCKING (JUNK + NO-REPLY TARGETS)
 ============================================================ */
+
+// Exact domains (and their subdomains) that never convert
 const HARD_BLOCK_DOMAINS = new Set([
-    "capterra.com","g2.com","trustpilot.com","softwareadvice.com","getapp.com",
+  // review / comparison
+  "capterra.com","g2.com","trustpilot.com","softwareadvice.com","getapp.com",
   "sourceforge.net","alternativeto.net","stackshare.io","producthunt.com",
+
+  // social / UGC
   "reddit.com","quora.com","linkedin.com","facebook.com","x.com","twitter.com",
   "tiktok.com","youtube.com","medium.com","substack.com","slideshare.net",
+
+  // reference / academic / publishers
   "wikipedia.org","wikidata.org","britannica.com","investopedia.com",
+  "forbes.com","hbr.org","mckinsey.com","ibm.com","nature.com","sciencedirect.com",
+  "arxiv.org","unesco.org",
+
+  // press release syndication
   "prnewswire.com","businesswire.com","globenewswire.com","einpresswire.com",
-  "newswire.com","github.com","gitlab.com","bitbucket.org","npmjs.com",
-  "pypi.org","crates.io","docker.com","hub.docker.com",
+  "newswire.com",
+
+  // dev / package / infra
+  "github.com","gitlab.com","bitbucket.org","npmjs.com","pypi.org",
+  "crates.io","docker.com","hub.docker.com",
+
+  // app stores
   "play.google.com","apps.apple.com",
 ]);
 
+// Host suffixes that are guaranteed dead ends for outreach
+const HARD_BLOCK_SUFFIXES = [
+  ".gov",
+  ".edu",
+  ".ac.uk",
+  ".ac.",
+];
+
+// Hostname fragments that indicate support/docs/KB systems
+const HARD_BLOCK_CONTAINS = [
+  "zendesk",
+  "support.",
+  "help.",
+  "kb.",
+  "knowledgebase",
+  "docs.",
+  "developer.",
+  "developers.",
+  "api.",
+];
+
 export function shouldBlockDomain(domain) {
-  if (!domain) return { blocked: true, reason: "invalid" };
+  if (!domain || typeof domain !== "string") {
+    return { blocked: true, reason: "invalid_domain" };
+  }
+
   const d = domain.toLowerCase().replace(/^www\./, "");
 
+  // exact + subdomain block
   for (const root of HARD_BLOCK_DOMAINS) {
     if (d === root || d.endsWith(`.${root}`)) {
       return { blocked: true, reason: `blocked:${root}` };
     }
   }
-  return { blocked: false };
+
+  // suffix block (.gov, .edu, .ac.*)
+  for (const suf of HARD_BLOCK_SUFFIXES) {
+    if (d.endsWith(suf)) {
+      return { blocked: true, reason: "academic_or_gov" };
+    }
+  }
+
+  // fragment block (zendesk, docs, support, etc.)
+  for (const frag of HARD_BLOCK_CONTAINS) {
+    if (d.includes(frag)) {
+      return { blocked: true, reason: "support_or_docs" };
+    }
+  }
+
+  return { blocked: false, reason: null };
 }
 
 /* ============================================================
-   🔍 SERPAPI
+   🔍 SERPAPI (LIMIT = 50)
 ============================================================ */
 export async function serpLookup(keyword) {
   if (!SERP_API_KEY) throw new Error("API_SERP_KEY missing");
@@ -53,7 +109,7 @@ export async function serpLookup(keyword) {
     params: {
       q: keyword,
       engine: "google",
-      num: 30,
+      num: 50,              // 👈 increased as requested
       api_key: SERP_API_KEY,
     },
     timeout: 20000,
@@ -63,7 +119,7 @@ export async function serpLookup(keyword) {
 }
 
 /* ============================================================
-   📊 OPENPAGERANK
+   📊 OPENPAGERANK (AUTHORITY SIGNAL)
 ============================================================ */
 async function getOpenPageRank(domain) {
   if (!OPENPAGERANK_KEY) return null;
@@ -84,7 +140,7 @@ async function getOpenPageRank(domain) {
 }
 
 /* ============================================================
-   📰 URLSCAN — EDITORIAL HINTS ONLY
+   📰 URLSCAN — LIGHT EDITORIAL HINTS ONLY
 ============================================================ */
 async function getUrlscan(domain) {
   if (!KEY_URLSCAN) return null;
