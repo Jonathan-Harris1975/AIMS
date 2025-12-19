@@ -1,35 +1,26 @@
 import axios from "axios";
 
-/* ================= ENV KEYS ================= */
+/* ============================================================
+   🔑 ENV KEYS
+============================================================ */
+const SERP_API_KEY = process.env.API_SERP_KEY;
+const OPENPAGERANK_KEY = process.env.API_OPENPAGERANK_KEY;
 
-const KEY_SERPAPI = process.env.API_SERP_KEY;
 const KEY_URLSCAN = process.env.API_URLSCAN_KEY;
 const KEY_PROSPEO = process.env.API_PROSPEO_KEY;
 const KEY_HUNTER = process.env.API_HUNTER_KEY;
 const KEY_APOLLO = process.env.API_APOLLO_KEY;
 
-/* ================= BASE URLS ================= */
-
-const URLSCAN_BASE = "https://urlscan.io/api/v1";
-const PROSPEO_BASE = "https://api.prospeo.io";
-const HUNTER_BASE = "https://api.hunter.io";
-const APOLLO_BASE = "https://api.apollo.io";
-
-/* ================= CONFIG ================= */
-
-const SERP_RESULT_LIMIT = Number(process.env.SERP_RESULT_LIMIT || 30);
-const SERP_PAGE_SIZE = 10; // Google reality
-
-const HUNTER_DELAY_MS = Number(process.env.HUNTER_DELAY_MS || 500);
-const APOLLO_DELAY_MS = Number(process.env.APOLLO_DELAY_MS || 800);
-const URLSCAN_DELAY_MS = Number(process.env.URLSCAN_DELAY_MS || 2000);
-
+/* ============================================================
+   ⏱️ RATE CONTROL
+============================================================ */
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
-/* ================= DOMAIN FILTERING ================= */
-
+/* ============================================================
+   🚫 DOMAIN BLOCKING
+============================================================ */
 const HARD_BLOCK_DOMAINS = new Set([
-  "capterra.com","g2.com","trustpilot.com","softwareadvice.com","getapp.com",
+    "capterra.com","g2.com","trustpilot.com","softwareadvice.com","getapp.com",
   "sourceforge.net","alternativeto.net","stackshare.io","producthunt.com",
   "reddit.com","quora.com","linkedin.com","facebook.com","x.com","twitter.com",
   "tiktok.com","youtube.com","medium.com","substack.com","slideshare.net",
@@ -40,187 +31,132 @@ const HARD_BLOCK_DOMAINS = new Set([
   "play.google.com","apps.apple.com",
 ]);
 
-const HARD_BLOCK_HOST_PATTERNS = [
-  /\.gov(\.|$)/i,
-  /\.edu(\.|$)/i,
-  /\.ac\.uk(\.|$)/i,
-  /(^|\.)github\.io$/i,
-  /(^|\.)vercel\.app$/i,
-  /(^|\.)netlify\.app$/i,
-  /(^|\.)wixsite\.com$/i,
-  /(^|\.)sites\.google\.com$/i,
-  /(^|\.)webflow\.io$/i,
-];
-
-const HARD_BLOCK_TLDS = new Set(["tk","ml","ga","cf","gq","top","click","link","live"]);
-
 export function shouldBlockDomain(domain) {
-  if (!domain || typeof domain !== "string") {
-    return { blocked: true, reason: "invalid_domain" };
-  }
-
-  const d = domain.trim().toLowerCase().replace(/^www\./, "");
-  if (!d || d.includes("..")) return { blocked: true, reason: "invalid_domain" };
+  if (!domain) return { blocked: true, reason: "invalid" };
+  const d = domain.toLowerCase().replace(/^www\./, "");
 
   for (const root of HARD_BLOCK_DOMAINS) {
     if (d === root || d.endsWith(`.${root}`)) {
-      return { blocked: true, reason: `hard_block:${root}` };
+      return { blocked: true, reason: `blocked:${root}` };
     }
   }
-
-  for (const re of HARD_BLOCK_HOST_PATTERNS) {
-    if (re.test(d)) return { blocked: true, reason: "hard_block:host_pattern" };
-  }
-
-  const tld = d.split(".").pop();
-  if (HARD_BLOCK_TLDS.has(tld)) {
-    return { blocked: true, reason: `hard_block:tld:${tld}` };
-  }
-
-  return { blocked: false, reason: null };
+  return { blocked: false };
 }
 
-/* ================= SERP (SERPAPI + PAGINATION) ================= */
-
+/* ============================================================
+   🔍 SERPAPI
+============================================================ */
 export async function serpLookup(keyword) {
-  if (!KEY_SERPAPI) {
-    throw new Error("API_SERP_KEY missing");
-  }
+  if (!SERP_API_KEY) throw new Error("API_SERP_KEY missing");
 
-  const collected = [];
-  let start = 0;
+  const res = await axios.get("https://serpapi.com/search", {
+    params: {
+      q: keyword,
+      engine: "google",
+      num: 30,
+      api_key: SERP_API_KEY,
+    },
+    timeout: 20000,
+  });
 
-  while (collected.length < SERP_RESULT_LIMIT) {
-    const res = await axios.get("https://serpapi.com/search", {
-      params: {
-        api_key: KEY_SERPAPI,
-        engine: "google",
-        q: keyword,
-        num: SERP_PAGE_SIZE,
-        start,
-      },
-      timeout: 20000,
-    });
-
-    const organic = Array.isArray(res.data?.organic_results)
-      ? res.data.organic_results
-      : [];
-
-    if (!organic.length) break;
-
-    collected.push(...organic);
-
-    if (organic.length < SERP_PAGE_SIZE) break;
-
-    start += SERP_PAGE_SIZE;
-  }
-
-  const trimmed = collected.slice(0, SERP_RESULT_LIMIT);
-
-  console.log(
-    `🔎 SERPAPI paginated results for "${keyword}": ${trimmed.length}`
-  );
-
-  return {
-    results: trimmed.map((r) => ({
-      link: r.link,
-      title: r.title,
-      snippet: r.snippet,
-      position: r.position,
-    })),
-  };
+  return res.data?.organic_results || [];
 }
 
-/* ================= URLSCAN (NON-BLOCKING) ================= */
-
-async function getUrlscan(domain) {
-  if (!KEY_URLSCAN) return null;
+/* ============================================================
+   📊 OPENPAGERANK
+============================================================ */
+async function getOpenPageRank(domain) {
+  if (!OPENPAGERANK_KEY) return null;
 
   try {
-    const res = await axios.get(`${URLSCAN_BASE}/search/`, {
+    const res = await axios.get(
+      "https://openpagerank.com/api/v1.0/getPageRank",
+      {
+        params: { "domains[]": domain },
+        headers: { "API-OPR": OPENPAGERANK_KEY },
+        timeout: 15000,
+      }
+    );
+    return res.data?.response?.[0] || null;
+  } catch {
+    return null;
+  }
+}
+
+/* ============================================================
+   📰 URLSCAN — EDITORIAL HINTS ONLY
+============================================================ */
+async function getUrlscan(domain) {
+  if (!KEY_URLSCAN) return null;
+  try {
+    const res = await axios.get("https://urlscan.io/api/v1/search/", {
       params: { q: `domain:${domain}` },
       headers: { "API-Key": KEY_URLSCAN },
       timeout: 15000,
     });
-    await wait(URLSCAN_DELAY_MS);
     return res.data;
   } catch {
     return null;
   }
 }
 
-/* ================= ENRICHMENT PROVIDERS ================= */
+function detectEditorialHints(domainInfo) {
+  if (!domainInfo?.results) return false;
 
+  const text = domainInfo.results
+    .map((r) => `${r?.page?.title || ""} ${r?.page?.url || ""}`)
+    .join(" ")
+    .toLowerCase();
+
+  return (
+    text.includes("/blog") ||
+    text.includes("/insights") ||
+    text.includes("/resources") ||
+    text.includes("/news")
+  );
+}
+
+/* ============================================================
+   📧 EMAIL ENRICHMENT
+============================================================ */
 async function getProspeo(domain) {
-  const res = await axios.get(`${PROSPEO_BASE}/api/email-finder`, {
+  const res = await axios.get("https://api.prospeo.io/api/email-finder", {
     params: { domain },
     headers: { "X-Api-Key": KEY_PROSPEO },
-    timeout: 15000,
   });
   return res.data;
 }
 
 async function getHunter(domain) {
-  const res = await axios.get(`${HUNTER_BASE}/v2/domain-search`, {
+  const res = await axios.get("https://api.hunter.io/v2/domain-search", {
     params: { domain, api_key: KEY_HUNTER },
-    timeout: 15000,
   });
-  await wait(HUNTER_DELAY_MS);
   return res.data;
-}
-
-function isHunterQuotaError(err) {
-  const s = err?.response?.status;
-  const msg = String(err?.response?.data?.message || "").toLowerCase();
-  return s === 401 || s === 402 || msg.includes("quota") || msg.includes("exceeded");
 }
 
 async function getApollo(domain) {
-  const res = await axios.post(
-    `${APOLLO_BASE}/v1/mixed_people/search`,
-    {
-      api_key: KEY_APOLLO,
-      q_organization_domains: [domain],
-      page: 1,
-      per_page: 10,
-    },
-    { timeout: 20000 }
-  );
-  await wait(APOLLO_DELAY_MS);
+  const res = await axios.post("https://api.apollo.io/v1/mixed_people/search", {
+    api_key: KEY_APOLLO,
+    q_organization_domains: [domain],
+    page: 1,
+    per_page: 10,
+  });
   return res.data;
 }
 
-/* ================= EMAIL QUALITY ================= */
-
-function isLowValue(email) {
-  if (!email || !email.includes("@")) return true;
-  const local = email.split("@")[0].toLowerCase();
-  return [
-    "info","support","help","contact","admin","sales","billing",
-    "noreply","no-reply","webmaster","hello","team","careers","jobs","press",
-  ].includes(local);
-}
-
-/* ================= ENRICH DOMAIN ================= */
-
-export async function enrichDomain(domain) {
-  const d = String(domain || "").toLowerCase().replace(/^www\./, "").trim();
+/* ============================================================
+   🧠 ENRICH DOMAIN
+============================================================ */
+export async function enrichDomain(domain, serpMeta = {}) {
+  const d = domain.toLowerCase().replace(/^www\./, "");
   const block = shouldBlockDomain(d);
 
   if (block.blocked) {
-    return {
-      domain: d,
-      emails: [],
-      domainInfo: null,
-      blocked: true,
-      blockReason: block.reason,
-      editorial: { hasEditorialSurface: false, signals: [] },
-    };
+    return { domain: d, blocked: true, reason: block.reason };
   }
 
   const emails = new Set();
 
-  // Prospeo always
   if (KEY_PROSPEO) {
     try {
       const p = await getProspeo(d);
@@ -228,37 +164,45 @@ export async function enrichDomain(domain) {
     } catch {}
   }
 
-  // Hunter
-  let hunterOk = true;
   if (KEY_HUNTER) {
     try {
       const h = await getHunter(d);
-      h?.data?.emails?.forEach((e) => {
-        const email = e.email || e.value;
-        if (email) emails.add(email.toLowerCase());
-      });
-    } catch (err) {
-      if (isHunterQuotaError(err)) hunterOk = false;
-    }
+      h?.data?.emails?.forEach((e) => e?.email && emails.add(e.email.toLowerCase()));
+    } catch {}
   }
 
-  // Apollo fallback
-  if ((!hunterOk || emails.size < 2) && KEY_APOLLO) {
+  if (emails.size < 2 && KEY_APOLLO) {
     try {
       const a = await getApollo(d);
       a?.people?.forEach((p) => p?.email && emails.add(p.email.toLowerCase()));
     } catch {}
   }
 
-  // urlscan — metadata only
   const domainInfo = await getUrlscan(d);
+  const hasEditorial = detectEditorialHints(domainInfo);
+  const opr = await getOpenPageRank(d);
+
+  const serpPosition = serpMeta.position || null;
+  const serpScore = serpPosition ? Math.max(0, 30 - serpPosition) : 0;
+  const oprScore = opr?.page_rank_decimal ? opr.page_rank_decimal * 2 : 0;
+  const editorialBonus = hasEditorial ? 5 : 0;
+  const emailBonus = emails.size ? 5 : 0;
+
+  const totalScore = Math.round(
+    serpScore + oprScore + editorialBonus + emailBonus
+  );
 
   return {
     domain: d,
-    emails: [...emails].filter((e) => !isLowValue(e)),
-    domainInfo,
+    emails: [...emails],
+    authority: {
+      serpPosition,
+      serpScore,
+      openPageRank: opr?.page_rank_decimal ?? null,
+      openPageRankRank: opr?.rank ?? null,
+      editorialSurface: hasEditorial,
+      totalScore,
+    },
     blocked: false,
-    blockReason: null,
-    editorial: { hasEditorialSurface: Boolean(domainInfo), signals: [] },
   };
-     } 
+  }
