@@ -1,70 +1,146 @@
 import { serpLookup, enrichDomain, shouldBlockDomain } from "./outreachCore.js";
 import { batchValidateEmails } from "./zeroBounceBatch.js";
 
-function normaliseHost(host) {
-  return host.toLowerCase().replace(/^www\./, "");
+/* ============================================================
+   🧠 TIER LOGIC (REPLY-RATE OPTIMISED)
+============================================================ */
+function classifyTier(score) {
+  if (score >= 35) return "A"; // Big sites, low replies
+  if (score >= 22) return "B"; // Solid mid-range
+  if (score >= 12) return "C"; // Small / niche — best replies
+  return "D";                 // Junk
 }
 
+function normaliseHost(host) {
+  return String(host || "").toLowerCase().replace(/^www\./, "").trim();
+}
+
+/* ============================================================
+   🚀 MAIN OUTREACH FUNCTION
+============================================================ */
 export async function serpOutreach(keyword) {
   console.log(`🔍 SERP for keyword: ${keyword}`);
 
-  const results = await serpLookup(keyword);
-  console.log(`🔎 SERPAPI results for "${keyword}": ${results.length}`);
+  const serpResults = await serpLookup(keyword);
+  console.log(`🔎 SERPAPI results for "${keyword}": ${serpResults.length}`);
 
-  const domains = [];
-  results.forEach((r) => {
+  /* --------------------------------------------
+     🌐 EXTRACT UNIQUE DOMAINS (NO HARD LIMIT)
+  -------------------------------------------- */
+  const domainMap = new Map();
+
+  serpResults.forEach((r) => {
     try {
-      const u = new URL(r.link);
-      domains.push({
-        domain: normaliseHost(u.hostname),
-        position: r.position,
-      });
+      const url = new URL(r.link);
+      const domain = normaliseHost(url.hostname);
+
+      if (!domainMap.has(domain)) {
+        domainMap.set(domain, {
+          domain,
+          position: r.position || null,
+        });
+      }
     } catch {}
   });
 
-  const unique = new Map();
-  domains.forEach((d) => {
-    if (!unique.has(d.domain)) unique.set(d.domain, d);
-  });
+  const uniqueDomains = [...domainMap.values()];
 
+  /* --------------------------------------------
+     🚫 BLOCK JUNK DOMAINS
+  -------------------------------------------- */
   const allowed = [];
   const blocked = [];
 
-  for (const d of unique.values()) {
+  uniqueDomains.forEach((d) => {
     const b = shouldBlockDomain(d.domain);
     if (b.blocked) blocked.push(d.domain);
     else allowed.push(d);
-  }
+  });
 
   console.log(
-    `Found ${unique.size} unique domains (allowed=${allowed.length}, blocked=${blocked.length})`
+    `Found ${uniqueDomains.length} unique domains (allowed=${allowed.length}, blocked=${blocked.length})`
   );
 
+  /* --------------------------------------------
+     🧬 ENRICH DOMAINS
+  -------------------------------------------- */
   const enriched = [];
   for (const d of allowed) {
     enriched.push(await enrichDomain(d.domain, d));
   }
 
+  /* --------------------------------------------
+     📧 EMAIL VALIDATION (BATCH)
+  -------------------------------------------- */
   const allEmails = enriched.flatMap((e) => e.emails);
-  const validation = await batchValidateEmails(allEmails);
+  const validationMap = await batchValidateEmails(allEmails);
 
   enriched.forEach((e) => {
     e.emails = e.emails.map((email) => {
-      const v = validation.get(email) || { status: "unknown" };
+      const v = validationMap.get(email) || { status: "unknown" };
       return { email, validation: v };
     });
   });
 
-  const goodDomains = enriched.filter(
-    (e) => e.authority?.totalScore >= 25 && e.emails.length
+  /* --------------------------------------------
+     🏷️ ASSIGN TIERS
+  -------------------------------------------- */
+  enriched.forEach((e) => {
+    e.authority.tier = classifyTier(e.authority.totalScore);
+  });
+
+  /* --------------------------------------------
+     🎯 ADAPTIVE FILTERING (REPLY-RATE AWARE)
+  -------------------------------------------- */
+  let accepted = enriched.filter(
+    (e) =>
+      e.authority.tier !== "D" &&
+      e.emails.length > 0
+  );
+
+  // If yield is poor, relax slightly (never junk)
+  if (accepted.length < 3) {
+    accepted = enriched.filter(
+      (e) =>
+        e.authority.totalScore >= 8 &&
+        e.emails.length > 0
+    );
+  }
+
+  /* --------------------------------------------
+     📈 PRIORITISE BY REPLY PROBABILITY
+  -------------------------------------------- */
+  accepted.sort((a, b) => {
+    const tierWeight = { A: 1, B: 2, C: 3 };
+    return (
+      tierWeight[b.authority.tier] - tierWeight[a.authority.tier] ||
+      b.emails.length - a.emails.length ||
+      b.authority.totalScore - a.authority.totalScore
+    );
+  });
+
+  /* --------------------------------------------
+     📊 DEBUG VISIBILITY (CRITICAL)
+  -------------------------------------------- */
+  console.table(
+    enriched.map((e) => ({
+      domain: e.domain,
+      score: e.authority.totalScore,
+      tier: e.authority.tier,
+      emails: e.emails.length,
+    }))
   );
 
   console.log(
-    `✅ Keyword "${keyword}" → ${goodDomains.length} good domains, ${goodDomains.reduce(
+    `✅ Keyword "${keyword}" → ${accepted.length} viable domains, ${accepted.reduce(
       (a, b) => a + b.emails.length,
       0
-    )} good emails`
+    )} emails`
   );
 
-  return { keyword, domains: enriched };
-}
+  return {
+    keyword,
+    domains: enriched,
+    acceptedDomains: accepted,
+  };
+  }
