@@ -1,25 +1,30 @@
 import axios from "axios";
 
+/* ================= ENV KEYS ================= */
+
 const KEY_SERPAPI = process.env.API_SERP_KEY;
 const KEY_URLSCAN = process.env.API_URLSCAN_KEY;
 const KEY_PROSPEO = process.env.API_PROSPEO_KEY;
 const KEY_HUNTER = process.env.API_HUNTER_KEY;
 const KEY_APOLLO = process.env.API_APOLLO_KEY;
 
+/* ================= BASE URLS ================= */
+
 const URLSCAN_BASE = "https://urlscan.io/api/v1";
 const PROSPEO_BASE = "https://api.prospeo.io";
 const HUNTER_BASE = "https://api.hunter.io";
 const APOLLO_BASE = "https://api.apollo.io";
 
-const SERP_RESULT_LIMIT = Number(process.env.SERP_RESULT_LIMIT || 30);
+/* ================= CONFIG ================= */
 
+const SERP_RESULT_LIMIT = Number(process.env.SERP_RESULT_LIMIT || 30);
 const HUNTER_DELAY_MS = Number(process.env.HUNTER_DELAY_MS || 500);
 const APOLLO_DELAY_MS = Number(process.env.APOLLO_DELAY_MS || 800);
 const URLSCAN_DELAY_MS = Number(process.env.URLSCAN_DELAY_MS || 2000);
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
-/* ================= DOMAIN QUALITY FILTERS ================= */
+/* ================= DOMAIN FILTERING ================= */
 
 const HARD_BLOCK_DOMAINS = new Set([
   "capterra.com","g2.com","trustpilot.com","softwareadvice.com","getapp.com",
@@ -65,8 +70,7 @@ export function shouldBlockDomain(domain) {
     if (re.test(d)) return { blocked: true, reason: "hard_block:host_pattern" };
   }
 
-  const parts = d.split(".");
-  const tld = parts[parts.length - 1];
+  const tld = d.split(".").pop();
   if (HARD_BLOCK_TLDS.has(tld)) {
     return { blocked: true, reason: `hard_block:tld:${tld}` };
   }
@@ -74,12 +78,10 @@ export function shouldBlockDomain(domain) {
   return { blocked: false, reason: null };
 }
 
-/* ================= SERP (OFFICIAL SERPAPI) ================= */
+/* ================= SERP (SerpAPI) ================= */
 
 export async function serpLookup(keyword) {
-  if (!KEY_SERPAPI) {
-    throw new Error("API_SERP_KEY missing");
-  }
+  if (!KEY_SERPAPI) throw new Error("API_SERP_KEY missing");
 
   const res = await axios.get("https://serpapi.com/search", {
     params: {
@@ -95,24 +97,23 @@ export async function serpLookup(keyword) {
     ? res.data.organic_results
     : [];
 
-  console.log(
-    `🔎 SERPAPI results for "${keyword}": ${organic.length}`
-  );
+  console.log(`🔎 SERPAPI results for "${keyword}": ${organic.length}`);
 
-  // Normalise to your existing pipeline shape
   return {
     results: organic.map((r) => ({
       link: r.link,
+      position: r.position,
       title: r.title,
       snippet: r.snippet,
-      position: r.position,
     })),
   };
 }
 
-/* ================= URLSCAN ================= */
+/* ================= URLSCAN (NON-BLOCKING) ================= */
 
 async function getUrlscan(domain) {
+  if (!KEY_URLSCAN) return null;
+
   try {
     const res = await axios.get(`${URLSCAN_BASE}/search/`, {
       params: { q: `domain:${domain}` },
@@ -126,7 +127,7 @@ async function getUrlscan(domain) {
   }
 }
 
-/* ================= PROSPEO ================= */
+/* ================= ENRICHMENT PROVIDERS ================= */
 
 async function getProspeo(domain) {
   const res = await axios.get(`${PROSPEO_BASE}/api/email-finder`, {
@@ -136,8 +137,6 @@ async function getProspeo(domain) {
   });
   return res.data;
 }
-
-/* ================= HUNTER ================= */
 
 async function getHunter(domain) {
   const res = await axios.get(`${HUNTER_BASE}/v2/domain-search`, {
@@ -153,8 +152,6 @@ function isHunterQuotaError(err) {
   const msg = String(err?.response?.data?.message || "").toLowerCase();
   return s === 401 || s === 402 || msg.includes("quota") || msg.includes("exceeded");
 }
-
-/* ================= APOLLO ================= */
 
 async function getApollo(domain) {
   const res = await axios.post(
@@ -174,21 +171,15 @@ async function getApollo(domain) {
 /* ================= EMAIL QUALITY ================= */
 
 function isLowValue(email) {
-  if (typeof email !== "string" || !email.includes("@")) return true;
-
-  const [local] = email.toLowerCase().split("@");
-  if (!local || local.length <= 1) return true;
-
-  const role = new Set([
+  if (!email || !email.includes("@")) return true;
+  const local = email.split("@")[0].toLowerCase();
+  return [
     "info","support","help","contact","admin","sales","billing",
-    "noreply","no-reply","webmaster","hello","team","careers",
-    "jobs","press",
-  ]);
-
-  return role.has(local);
+    "noreply","no-reply","webmaster","hello","team","careers","jobs","press",
+  ].includes(local);
 }
 
-/* ================= ENRICH DOMAIN ================= */
+/* ================= ENRICH DOMAIN (FIXED) ================= */
 
 export async function enrichDomain(domain) {
   const d = String(domain || "").toLowerCase().replace(/^www\./, "").trim();
@@ -205,53 +196,47 @@ export async function enrichDomain(domain) {
     };
   }
 
-  try {
-    const domainInfo = KEY_URLSCAN ? await getUrlscan(d) : null;
-    const emails = new Set();
+  const emails = new Set();
 
-    if (KEY_PROSPEO) {
-      try {
-        const p = await getProspeo(d);
-        p?.emails?.forEach((e) => e?.email && emails.add(e.email.toLowerCase()));
-      } catch {}
-    }
-
-    let hunterOk = true;
-    if (KEY_HUNTER) {
-      try {
-        const h = await getHunter(d);
-        h?.data?.emails?.forEach((e) => {
-          const email = e.email || e.value;
-          if (email) emails.add(email.toLowerCase());
-        });
-      } catch (err) {
-        if (isHunterQuotaError(err)) hunterOk = false;
-      }
-    }
-
-    if ((!hunterOk || emails.size < 2) && KEY_APOLLO) {
-      try {
-        const a = await getApollo(d);
-        a?.people?.forEach((p) => p?.email && emails.add(p.email.toLowerCase()));
-      } catch {}
-    }
-
-    return {
-      domain: d,
-      emails: [...emails].filter((e) => !isLowValue(e)),
-      domainInfo,
-      blocked: false,
-      blockReason: null,
-      editorial: { hasEditorialSurface: false, signals: [] },
-    };
-  } catch {
-    return {
-      domain: d,
-      emails: [],
-      domainInfo: null,
-      blocked: false,
-      blockReason: null,
-      editorial: { hasEditorialSurface: false, signals: [] },
-    };
+  /* 🔥 PROSPEO ALWAYS RUNS */
+  if (KEY_PROSPEO) {
+    try {
+      const p = await getProspeo(d);
+      p?.emails?.forEach((e) => e?.email && emails.add(e.email.toLowerCase()));
+    } catch {}
   }
+
+  /* 🔥 HUNTER */
+  let hunterOk = true;
+  if (KEY_HUNTER) {
+    try {
+      const h = await getHunter(d);
+      h?.data?.emails?.forEach((e) => {
+        const email = e.email || e.value;
+        if (email) emails.add(email.toLowerCase());
+      });
+    } catch (err) {
+      if (isHunterQuotaError(err)) hunterOk = false;
+    }
+  }
+
+  /* 🔥 APOLLO FALLBACK */
+  if ((!hunterOk || emails.size < 2) && KEY_APOLLO) {
+    try {
+      const a = await getApollo(d);
+      a?.people?.forEach((p) => p?.email && emails.add(p.email.toLowerCase()));
+    } catch {}
+  }
+
+  /* 🧠 URLSCAN — METADATA ONLY */
+  const domainInfo = await getUrlscan(d);
+
+  return {
+    domain: d,
+    emails: [...emails].filter((e) => !isLowValue(e)),
+    domainInfo,
+    blocked: false,
+    blockReason: null,
+    editorial: { hasEditorialSurface: Boolean(domainInfo), signals: [] },
+  };
 }
