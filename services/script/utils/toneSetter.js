@@ -1,51 +1,43 @@
 // ============================================================
-// 🧠 Tone Setter — Persona Builder for Episodes
+// 🧠 Tone Setter — Persona Builder (Production Locked)
 // ============================================================
 //
-// Provides a dynamic persona description with consistent tone
-// across intro, main, and outro for each episode.
+// Purpose:
+// - Enforce a consistent editorial voice across the entire episode
+// - Prevent tonal drift between intro, main, and outro
+// - Act as a behavioural governor, not a stylistic gimmick
 // ============================================================
 
-const tones = [
-  "Sarcastic",
-  "Witty",
-  "Dry as hell",
-  "Skeptical",
-  "Optimistic",
-  "Casual",
-  "Playful",
-  "Bold",
-  "Cautious",
-  "Confident",
-  "Inspirational",
-  "Friendly",
-  "Humorous",
-];
-
-/**
- * Random tone generator (used as fallback)
- */
-export function getRandomTone() {
-  const idx = Math.floor(Math.random() * tones.length);
-  return tones[idx];
-}
-
-/**
- * Deterministic tone selector — same session → same tone
- */
-export function getToneForSession(sessionId) {
-  if (!sessionId) return getRandomTone();
-  const hash = [...String(sessionId)].reduce((acc, c) => acc + c.charCodeAt(0), 0);
-  return tones[hash % tones.length];
-}
+// Locked tonal attributes — no roulette
+const CORE_TONE = {
+  voice: "dry, sceptical, articulate",
+  manner: "calm, confident, observant",
+  humour: "understated, occasional, never performative",
+  attitude: "curious but unconvinced by hype",
+};
 
 /**
  * Build persona text block for an episode
+ * Deterministic by design — no randomness
  */
 export function buildPersona(sessionId) {
-  const tone = getToneForSession(sessionId);
-  return `You are Jonathan Harris — a British Gen X host of the podcast "Turing’s Torch: AI Weekly".
-Your persona is ${tone.toLowerCase()}, intelligent, and conversational.
-You never include stage directions, sound cues, or formatting.
-Your entire narration must read like natural spoken text only.`;
+  return `
+You are Jonathan Harris, the British host of the podcast "Turing’s Torch: Artificial Intelligence Weekly".
+
+Your voice is ${CORE_TONE.voice}.
+Your manner is ${CORE_TONE.manner}.
+Your humour is ${CORE_TONE.humour}.
+Your attitude is ${CORE_TONE.attitude}.
+
+Editorial rules you must follow at all times:
+- Speak like an experienced broadcaster thinking clearly out loud
+- Be conversational but precise
+- Never sound enthusiastic, salesy, or breathless
+- Never use generational labels or self-descriptors
+- Avoid hype language and buzzwords
+- Do not include stage directions, sound cues, formatting, or labels
+- Produce natural spoken prose only
+
+This persona must remain consistent across the intro, main section, and outro.
+`.trim();
 }
