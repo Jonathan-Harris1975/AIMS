@@ -1,43 +1,53 @@
 // ====================================================================
-// editAndFormat.js – Full Production Version
+// editAndFormat.js – Production-Safe Final Pass
 // ====================================================================
-// - TTS-friendly normalisation
-// - Replaces “AI” → “artificial intelligence”
-// - Splits long sentences (>22 words)
-// - Light humanisation layer
+// Responsibilities:
+// - TTS-safe normalisation
+// - Conservative acronym expansion
+// - Gentle sentence length control
+// - Deterministic micro-variation only
 // ====================================================================
 
 function splitLongSentences(text) {
   const sentences = text.split(/(?<=[.!?])\s+/);
-  const processed = sentences.map(s => {
-    const wordCount = s.trim().split(/\s+/).length;
-    if (wordCount <= 22) return s;
 
-    // Split long sentences into natural chunks
-    return s.replace(/(.{1,160})(\s|$)/g, "$1. ").trim();
+  const processed = sentences.flatMap(sentence => {
+    const words = sentence.trim().split(/\s+/);
+    if (words.length <= 22) return sentence;
+
+    // Prefer splitting on commas, semicolons, or dashes
+    const softSplit = sentence.split(/,\s+|;\s+|\s+-\s+/);
+    if (softSplit.length > 1) return softSplit.map(s => s.trim());
+
+    // Fallback: split roughly in half, preserving words
+    const midpoint = Math.floor(words.length / 2);
+    const first = words.slice(0, midpoint).join(" ");
+    const second = words.slice(midpoint).join(" ");
+    return [`${first}.`, second];
   });
 
   return processed.join(" ");
 }
 
-// Light humaniser (subtle word variation, not stylistic rewrite)
+// Deterministic micro-variation (no randomness)
 function humanise(text) {
-  const variations = {
-    "however": ["however", "mind you", "that said"],
-    "but": ["but", "yet", "still"],
-    "so": ["so", "therefore", "as a result"],
-    "really": ["really", "truly", "genuinely"]
-  };
+  return text
+    .replace(/\bHowever\b/g, "That said")
+    .replace(/\bhowever\b/g, "that said")
+    .replace(/\bBut\b/g, "Yet")
+    .replace(/\bbut\b/g, "yet")
+    .replace(/\bSo\b/g, "As a result")
+    .replace(/\bso\b/g, "as a result");
+}
 
-  return text.replace(/\b(however|but|so|really)\b/gi, match => {
-    const opts = variations[match.toLowerCase()];
-    if (!opts) return match;
-    if (Math.random() > 0.35) return match; // low probability
-    const choice = opts[Math.floor(Math.random() * opts.length)];
-    return match[0] === match[0].toUpperCase()
-      ? choice.charAt(0).toUpperCase() + choice.slice(1)
-      : choice;
-  });
+// Safe acronym expansion (avoids OpenAI, etc.)
+function expandAI(text) {
+  return text
+    .replace(/\bAI\b(?![a-zA-Z])/g, "artificial intelligence")
+    .replace(
+      /(artificial intelligence)(\s+artificial intelligence)+/gi,
+      "artificial intelligence"
+    );
 }
 
 export default function editAndFormat(text) {
@@ -47,18 +57,19 @@ export default function editAndFormat(text) {
 
   // Normalise spacing
   out = out.replace(/[ \t]+/g, " ");
+  out = out.replace(/\n{3,}/g, "\n\n");
 
-  // Replace AI → artificial intelligence
-  out = out.replace(/\bAI\b/g, "artificial intelligence");
+  // Normalise ellipses to a single pause
+  out = out.replace(/\.{3,}/g, ", ");
 
-  // Remove ellipses
-  out = out.replace(/\.{3,}/g, ".");
+  // Expand AI safely
+  out = expandAI(out);
 
-  // Split long sentences
+  // Sentence length control
   out = splitLongSentences(out);
 
-  // Apply light humanisation
+  // Deterministic micro-humanisation
   out = humanise(out);
 
-  return out;
+  return out.trim();
 }
