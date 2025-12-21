@@ -27,7 +27,7 @@ export function getIntroPrompt({ weatherSummary, turingQuote, sessionMeta } = {}
     ? ` If you reference a day, it must be "${maybeWeekday}".`
     : "";
 
-  const tagline = `Tired of drowning in artificial intelligence headlines? Ready for clarity, insight, and a direct line to the pulse of innovation? Welcome to Turing's Torch: AI Weekly! I'm Jonathan Harris, your host, and I'm cutting through the noise to bring you the most critical artificial intelligence developments, explained, analysed, and delivered straight to you. Let's ignite your understanding of artificial intelligence, together.`;
+  const tagline = `Tired of drowning in artificial intelligence headlines? Ready for clarity, insight, and a direct line to the pulse of innovation? Welcome to Turing's Torch: artificial intelligence Weekly! I'm Jonathan Harris, your host, and I'm cutting through the noise to bring you the most critical artificial intelligence developments, explained, analysed, and delivered straight to you. Let's ignite your understanding of artificial intelligence, together.`;
 
   return `
 You are ${persona.host}, hosting "${persona.show}".
@@ -44,58 +44,77 @@ ${weekdayLine}
 `.trim();
 }
 
-
-// MAIN TEMPLATE – Per-batch mini editorial (used by mainChunker)
+// MAIN TEMPLATE – Per-batch story segment (used by mainChunker)
 export function getMainPrompt({ articles, sessionMeta, targetSeconds, batchIndex, totalBatches }) {
   const persona = buildPersona(sessionMeta);
 
   const approxSeconds = targetSeconds || 600;
-  const approxWords = Math.max(200, Math.round(approxSeconds * 2.3));
+  const approxMinutes = Math.max(4, Math.round(approxSeconds / 60));
+  const approxWords = Math.max(220, Math.round(approxSeconds * 2.3)); // ~2.3 w/s
 
   const articlePreview = (articles || [])
-    .map((a) => `${a.title}\n${a.summary}`)
+    .map((a) => {
+      const title = (a?.title || "").trim();
+      const summary = (a?.summary || "").trim();
+      const link = (a?.link || "").trim();
+      return [
+        title ? `TITLE: ${title}` : "",
+        summary ? `SUMMARY: ${summary}` : "",
+        link ? `LINK: ${link}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n");
+    })
+    .filter(Boolean)
     .join("\n\n");
 
   return `
-You are ${persona.host}, hosting "${persona.show}" in a sceptical, witty British radio voice with a Gen-X vibe that is never explicitly named.
+${persona}
 
-You are writing ONE self-contained editorial segment based on the articles below.
-This segment will later be combined with other segments into a longer MAIN section, but you must write it as if it stands on its own.
+You are writing ONE self-contained MAIN-SECTION story segment based on the RSS articles below.
+This segment will later be merged with other segments, so write it as spoken prose that stands on its own.
 
-AIM:
-- Length: around ${approxWords} words (but do not mention word counts or timing).
-- Tone: dry, intelligent, slightly sardonic, but never cruel.
-- Style: BBC-meets-WIRED commentary — calm, analytical, conversational.
+Length target: ~${approxMinutes} minutes (~${approxWords} words).
 
-STRICT RULES:
-- Do NOT refer to article numbers or lists. Never say "article 1", "article 2", "story three", etc.
-- Do NOT enumerate stories with "first, second, third".
-- Do NOT use bullet points or explicit list structures.
-- Do NOT refer to "this batch", "this segment", or any internal process.
-- Focus on the underlying themes and what these stories collectively suggest.
-- Avoid repeating the same point in different words.
-- No fictional scenes or hypotheticals — this is editorial analysis, not a sketch.
+NON-NEGOTIABLE:
+- Plain British English. Spoken. No bullets, no numbering, no headings, no stage directions.
+- Do not mention “RSS”, “feed”, “articles”, “sources”, “links”, or any internal process.
+- Do not quote large blocks of text. No “according to”. No legalese.
+- Assume the listener is smart but busy: explain the topic clearly without dumbing it down.
 
-STRUCTURE:
-- Start with one clean line that frames the core issue or mood of these articles.
-- Then develop the idea in a few short, spoken-language paragraphs.
-- End with a natural, human-sounding closing line that feels complete but not final for the entire show.
+GOLD-STANDARD FLOW (do NOT label these steps, just do them):
+1) Orientation: in 1–2 sentences, state what actually happened in plain English.
+2) Translation: unpack the jargon. Explain what it really means in practice.
+3) Why it matters now: give the real-world impact (people, power, money, control, risk).
+4) Connective tissue: if the idea relates to broader patterns this week (transparency, regulation, jobs, security, climate, etc.), weave that in naturally.
+5) Sober scepticism: one controlled, Gen-X-leaning sceptical punchline or observation, then land the point with clarity.
 
-ARTICLES (for your eyes only – never reference them directly by number or position):
+End with a clean, spoken closing line that feels complete but not like the end of the whole episode.
+
+RSS INPUT (for your eyes only — never reference directly):
 ${articlePreview}
 
-Return ONLY the editorial segment as plain text.
+Return ONLY the finished segment as plain text.
 `.trim();
 }
 
-
-// OUTRO TEMPLATE – Sponsor → CTA → Sign-off
+// OUTRO TEMPLATE – Value recap → Newsletter (site) → Sponsor (book URL) → Sign-off
 export function getOutroPromptFull(book, sessionMeta) {
   const persona = buildPersona(sessionMeta);
-  const { outroSeconds } = calculateDuration("outro", sessionMeta); // kept for future use
+  calculateDuration("outro", sessionMeta); // keep duration hook (future-proof)
 
-  const rawUrl = book?.url || "https://jonathan-harris.online";
-  const spoken = rawUrl
+  const siteUrl = "https://jonathan-harris.online";
+  const siteSpoken = siteUrl
+    .replace(/^https?:\/\//, "")
+    .replace(/www\./, "")
+    .replace(/\./g, " dot ")
+    .replace(/-/g, " dash ")
+    .replace(/\//g, " slash ")
+    .trim();
+
+  const bookTitle = (book?.title || "one of my artificial intelligence ebooks").trim();
+  const bookUrl = (book?.url || "https://books.jonathan-harris.online").trim();
+  const bookSpoken = bookUrl
     .replace(/^https?:\/\//, "")
     .replace(/www\./, "")
     .replace(/\./g, " dot ")
@@ -105,23 +124,25 @@ export function getOutroPromptFull(book, sessionMeta) {
 
   const closingTagline = `That's it for this week's Turing's Torch. Keep the flame burning, stay curious, and I'll see you next week with more artificial intelligence insights that matter. I'm Jonathan Harris—keep building the future.`;
 
-  const safeTitle = book?.title || "one of my artificial intelligence ebooks";
-
   return `
-Write a reflective OUTRO for "${persona.show}" in a British radio tone with a Gen-X vibe that is never explicitly named.
+${persona}
 
-Start with a single reflective line that ties together the feel of this week's themes.
+Write a tight, confident OUTRO (30–40 seconds) in a dry, witty British radio voice.
 
-Then, without using bullets, naturally segue into the sponsor mention in one or two sentences:
-Mention "${safeTitle}", available at ${spoken}, in a conversational way.
-
-Immediately and naturally blend into this CTA as part of the same flow:
-"And while you're there, you can sign up for the daily artificial intelligence newsletter — it’s quick, sharp, and blissfully free of fluff."
-
-End EXACTLY with:
+MANDATORY ORDER (no bullets, no headings, just spoken flow):
+1) Value recap: one or two sentences that acknowledge the week’s intensity and why clarity matters.
+2) Newsletter CTA (SITE ONLY): Invite listeners to get the daily AI briefing at ${siteSpoken}. Keep it simple: one email, no hype, no fluff.
+3) Sponsor (BOOK ONLY): Seamlessly introduce this week's sponsor as your own book: "${bookTitle}", available at ${bookSpoken}. Frame it as a deeper dive for people who want understanding, not buzzwords.
+4) Close: End EXACTLY with:
 "${closingTagline}"
 
-Plain text only.
+Rules:
+- Do NOT merge the website URL with the book URL.
+- Do NOT include more than one website mention.
+- No discounts, no urgency, no “limited time”.
+- Plain text only.
+
+Now write the OUTRO.
 `.trim();
 }
 
