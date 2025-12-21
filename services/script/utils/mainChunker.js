@@ -21,33 +21,42 @@ function buildMainSynthesisPrompt(sessionMeta, segments, totalMainSeconds) {
   const minutes = Math.max(10, Math.round((totalMainSeconds || 1800) / 60));
   const approxWords = Math.round((totalMainSeconds || 1800) * 2.3); // ~2.3 w/s
 
-  const joinedSegments = segments
-    .map((seg) => seg.trim())
+  const joinedSegments = (segments || [])
+    .map((seg) => String(seg || "").trim())
     .filter(Boolean)
     .join("\n\n---\n\n");
 
   return `
-You are hosting a long-form British radio-style podcast main segment.
+You are hosting a long-form British radio-style podcast MAIN section.
 
-You are given several short editorial segments, each based on different AI-related news stories from this week. These segments are rough draft material only.
+You are given several draft story segments (separated by ---). They were written independently and may overlap.
+Your job is to rewrite them into ONE single, coherent MAIN SECTION monologue.
 
-Your job is to rewrite them into ONE single, coherent MAIN SECTION monologue for the show:
-- Target length: about ${minutes} minutes (~${approxWords} words)
-- Tone: dry, sceptical, witty British radio host, Gen-X vibe without ever naming generations
-- Style: BBC-meets-WIRED, intelligent and conversational
+Target length: about ${minutes} minutes (~${approxWords} words).
 
-STRICT RULES:
-- Do NOT mention "segments", "batches", or any internal structure.
-- Do NOT reference article numbers or lists like "article 1, article 2" or "first/second/third".
-- Group related ideas into 2–4 clear themes only.
-- If multiple segments cover similar ground, MERGE them into one unified treatment and mention the idea only once.
-- Avoid repetition: do not restate the same argument, concern, or example in different words.
-- No bullets, no numbered lists, no "first up / next up / finally".
-- No fictional scenes, no hypotheticals; this is editorial analysis, not storytelling.
-- Keep paragraphs short and spoken-language friendly.
-- Maintain a smooth flow from theme to theme with natural transitions.
+TONE & STYLE:
+- Dry, sceptical, witty British radio host voice (Gen-X energy without naming generations).
+- BBC-meets-WIRED: intelligent, conversational, no theatrics.
+- Spoken prose only. No bullets, no numbering, no headings, no stage directions.
 
-SOURCE DRAFT SEGMENTS (separated by ---):
+NON-NEGOTIABLE RULES:
+- Do NOT mention “segments”, “batches”, “prompts”, “LLM”, “RSS”, “articles”, “sources”, or “links”.
+- Do NOT reference draft order ("first/second/third") or story counts.
+- No repetition: if the same point appears twice, merge it into one sharper treatment.
+- Organise the monologue into 2–4 natural THEMES (again: no headings; just smooth transitions).
+- Escalate: when two ideas overlap, move from “what it is” → “so what” → “what it changes / risks”.
+- Explain, don’t just comment. Always make the topic intelligible to a smart listener in the room.
+
+GOLD-STANDARD NARRATIVE FLOW (do not label):
+- Orientation: quickly ground the listener in what’s happening.
+- Translation: unpack the jargon into plain English consequences.
+- Why it matters now: connect to people, power, money, control, risk, or security.
+- Connective tissue: stitch themes together so it feels intentional, not stitched.
+- Sober scepticism: one controlled punchline per theme at most, then land the point with clarity.
+
+End with a strong, spoken closing line that sounds like “that’s the main section done” without sounding like the entire episode is ending.
+
+DRAFT INPUT (separated by ---):
 ${joinedSegments}
 
 Now write the FINAL MAIN SECTION as a single continuous monologue, plain text only.
@@ -77,21 +86,23 @@ export async function generateMainLongform(sessionMeta, articles, totalMainSecon
     groups: groups.length,
     perGroupSeconds,
     totalMainSeconds,
-    groupSize,
+    sessionId: sessionMeta?.sessionId || String(sessionMeta),
   });
 
   const parts = [];
 
   for (let i = 0; i < groups.length; i++) {
+    const batchArticles = groups[i];
+
     const prompt = getMainPrompt({
+      articles: batchArticles,
       sessionMeta,
-      articles: groups[i],
       targetSeconds: perGroupSeconds,
       batchIndex: i + 1,
       totalBatches: groups.length,
     });
 
-    const res = await resilientRequest(`scriptMain-${i + 1}`, {
+    const res = await resilientRequest("scriptMain", {
       sessionId: sessionMeta,
       section: `main-chunk-${i + 1}`,
       messages: [{ role: "system", content: prompt }],
@@ -103,11 +114,7 @@ export async function generateMainLongform(sessionMeta, articles, totalMainSecon
     await sessionCache.storeTempPart(sessionMeta, `main-chunk-${i + 1}`, cleaned);
   }
 
-  const synthesisPrompt = buildMainSynthesisPrompt(
-    sessionMeta,
-    parts,
-    totalMainSeconds
-  );
+  const synthesisPrompt = buildMainSynthesisPrompt(sessionMeta, parts, totalMainSeconds);
 
   const synthesisRes = await resilientRequest("scriptMain-synthesis", {
     sessionId: sessionMeta,
@@ -115,9 +122,7 @@ export async function generateMainLongform(sessionMeta, articles, totalMainSecon
     messages: [{ role: "system", content: synthesisPrompt }],
   });
 
-  const finalCombined = cleanTranscript(
-    String(synthesisRes || parts.join("\n\n"))
-  );
+  const finalCombined = cleanTranscript(String(synthesisRes || parts.join("\n\n")));
 
   await sessionCache.storeTempPart(sessionMeta, "main", finalCombined);
 
