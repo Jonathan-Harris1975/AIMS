@@ -1,0 +1,5 @@
+#!/bin/sh
+if grep -R "process.env" -n --include="*.js" . | grep -v envBootstrap.js; then
+  echo "❌ process.env usage outside envBootstrap.js detected"
+  exit 1
+fi
