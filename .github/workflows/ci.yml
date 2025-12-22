@@ -1,0 +1,44 @@
+name: CI – Env hygiene & build
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  env-hygiene:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install deps
+        run: npm ci
+
+      # --- ENV-only enforcement ---
+      - name: Ensure no direct process.env usage
+        run: |
+          if grep -R "process\.env" -n --include="*.js" . | grep -v "scripts/envBootstrap.js"; then
+            echo "❌ process.env usage outside envBootstrap.js"
+            exit 1
+          fi
+
+      # --- Bootstrap sanity check ---
+      - name: Verify env bootstrap loads
+        run: node -e "import('./scripts/envBootstrap.js')"
+
+      # --- Build (if you have one) ---
+      - name: Build
+        run: |
+          if [ -f package.json ] && grep -q "\"build\"" package.json; then
+            npm run build
+          else
+            echo "No build step defined, skipping"
+          fi
