@@ -32,6 +32,11 @@ You are an experienced Gen-X technology journalist writing for an AI-focused aud
 
 Rewrite each RSS feed item into a clear, factual, paragraph-length brief.
 
+TOPIC FIDELITY (NON-NEGOTIABLE):
+- You MUST stay on the exact topic of the provided content.
+- Do NOT introduce unrelated themes, substitute a different story, or "fill gaps" with general knowledge.
+- If the provided content is empty, too thin, or clearly not about the title, output exactly: REWRITE_ABORTED
+
 Tone & Style:
 - Witty in a dry, skeptical, British-Gen-X way (think Wired UK 1999 meets The Register 2005).
 - Conversational but precise. Smart, grounded, slightly cynical.
@@ -99,7 +104,12 @@ export function USER_ITEM({
   const approxMaxWords = Math.round(maxChars / 5);
 
   return [
-    "Content to rewrite:",
+    "Article metadata:",
+    `- Title: ${clean(title)}`,
+    `- URL: ${clean(url)}`,
+    published ? `- Published: ${clean(published)}` : "",
+    "",
+    "Content to rewrite (use this only):",
     cleanedText,
     "",
     `MANDATORY REQUIREMENTS:`,
@@ -113,6 +123,7 @@ export function USER_ITEM({
     `Line 3+: Summary (${minChars}-${maxChars} chars)`,
     "",
     "CRITICAL ENFORCEMENT:",
+    "- If the content is empty/too thin or doesn't match the title, output exactly: REWRITE_ABORTED",
     "- Do not mention any source names, publications, websites, authors, or include any promotional content like newsletter signups, subscriptions, or calls-to-action.",
     "- Write as standalone journalism.",
     "- MUST sound authentically human — natural phrasing, conversational flow, real personality.",
@@ -139,9 +150,9 @@ export function normalizeModelText(result = "") {
 export function clampTitleTo12Words(title = "", maxWords = 12) {
   const cleaned = title.replace(/[""'']/g, "'").trim();
   const words = cleaned.split(/\s+/);
-  
+
   if (words.length <= maxWords) return cleaned;
-  
+
   // Trim to max words and remove trailing punctuation if incomplete
   const trimmed = words.slice(0, maxWords).join(" ");
   return trimmed.replace(/[,;:]$/, "").trim();
@@ -153,36 +164,36 @@ export function clampSummaryToWindow(
   max = MAX_SUMMARY_CHARS
 ) {
   const normalized = String(summary).replace(/\s+/g, " ").trim();
-  
+
   if (!normalized) return "";
-  
+
   // If too short, return as-is (don't pad artificially)
   if (normalized.length < min) {
     console.warn(`Summary too short: ${normalized.length} chars (min: ${min})`);
     return normalized;
   }
-  
+
   // If within range, return as-is
   if (normalized.length <= max) return normalized;
-  
+
   // If too long, find last sentence break before max
   const cutoffPeriod = normalized.lastIndexOf(".", max);
   const cutoffQuestion = normalized.lastIndexOf("?", max);
   const cutoffExclaim = normalized.lastIndexOf("!", max);
-  
+
   const cutoff = Math.max(cutoffPeriod, cutoffQuestion, cutoffExclaim);
-  
+
   // Only cut at sentence break if it's not too far back
   if (cutoff > min) {
     return normalized.slice(0, cutoff + 1).trim();
   }
-  
+
   // Otherwise hard cut at max, try to break at word boundary
   const lastSpace = normalized.lastIndexOf(" ", max);
   if (lastSpace > min) {
     return normalized.slice(0, lastSpace).trim() + "…";
   }
-  
+
   // Last resort: hard cut with ellipsis
   return normalized.slice(0, max - 1).trim() + "…";
 }
