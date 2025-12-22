@@ -1,3 +1,4 @@
+
 /**
  * feedGenerator.js
  * Builds and uploads a W3C-valid RSS 2.0 feed using rewritten articles.
@@ -32,10 +33,11 @@ export async function generateFeed(bucket, rewrittenItems) {
     // Load existing feed items from R2
     const existingItems = await loadExistingFeedItems(bucket);
 
-    // Normalize new items
+    // Normalize new items (HARD: only publish items with a valid rewritten summary)
     const newItems = rewrittenItems
       .filter((x) => x && typeof x === "object")
-      .map((item) => normalizeItem(item, channelLink, now));
+      .map((item) => normalizeItem(item, channelLink, now))
+      .filter((it) => isPublishable(it));
 
     // Merge existing and new items, deduplicate by link or guid
     const mergedItems = mergeAndDeduplicateItems(existingItems, newItems);
@@ -215,8 +217,8 @@ function normalizeItem(item, fallbackLink, now) {
     guid = `ai-news-${randomId}`;
   }
 
-  // Prefer rewritten; fallback to summary; never null
-  const rewritten = String(item?.rewritten || item?.summary || "").trim();
+  // HARD: publish rewritten only (never fall back to source summary)
+  const rewritten = String(item?.rewritten || "").trim();
 
   return { title, link, pubDate, guid, rewritten };
 }
@@ -228,6 +230,18 @@ function buildDescriptionHtml(title, rewrittenHtml, link) {
   const safeLink = escapeHtml(link);
   const anchor = `<a href="${safeLink}">Read on Jonathan-Harris RSS Feed</a>`;
   return `<strong>${safeTitle}</strong><br/><br/>${body}<br/><br/>${anchor}`;
+}
+
+function isPublishable(item) {
+  const rewritten = String(item?.rewritten || "").trim();
+  if (!rewritten) return false;
+  if (rewritten === "REWRITE_ABORTED") return false;
+  if (rewritten.startsWith("⚠️")) return false;
+  // Guard against accidental full HTML dumps
+  if (/<[^>]+>/.test(rewritten)) return false;
+  // Guard against ultra-short junk
+  if (rewritten.length < 120) return false;
+  return true;
 }
 
 function normalizeUrl(url = "") {
@@ -259,4 +273,4 @@ function escapeXml(str = "") {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&apos;");
-        }
+}
