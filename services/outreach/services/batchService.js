@@ -1,36 +1,103 @@
-import express from "express";
-import { runKeyword } from "../services/outreachService.js";
-import { runNextBatch, resetProgress } from "../services/batchService.js";
+import fs from "fs";
+import path from "path";
 
-const router = express.Router();
+import { ENV } from "../../../scripts/envBootstrap.js";
+import { wait } from "#shared/wait.js";
+import { log, info } from "#logger.js";
 
-router.get("/health", (_req, res) =>
-  res.json({ ok: true, service: "outreach" })
+import { runKeyword } from "./outreachService.js";
+
+/* ============================================================
+   Batch progress (local file – not env-driven)
+============================================================ */
+
+const PROGRESS_FILE = path.resolve(
+  process.cwd(),
+  "services/outreach/data/batch-progress.json"
 );
 
-router.post("/keyword", async (req, res) => {
-  const { keyword } = req.body || {};
+function loadProgress() {
+  try {
+    if (!fs.existsSync(PROGRESS_FILE)) {
+      return { lastProcessedIndex: 0 };
+    }
+    return JSON.parse(fs.readFileSync(PROGRESS_FILE, "utf8"));
+  } catch (err) {
+    log.error("❌ Failed to load batch progress:", err);
+    return { lastProcessedIndex: 0 };
+  }
+}
 
-  if (!keyword || typeof keyword !== "string") {
-    return res.status(400).json({
-      ok: false,
-      error: "keyword is required"
-    });
+function saveProgress(progress) {
+  try {
+    fs.mkdirSync(path.dirname(PROGRESS_FILE), { recursive: true });
+    fs.writeFileSync(PROGRESS_FILE, JSON.stringify(progress, null, 2));
+  } catch (err) {
+    log.error("❌ Failed to save batch progress:", err);
+  }
+}
+
+/* ============================================================
+   Batch runner
+============================================================ */
+
+export async function runNextBatch() {
+  const keywords = ENV.OUTREACH_KEYWORDS || [];
+  if (!Array.isArray(keywords) || keywords.length === 0) {
+    info("ℹ️ No outreach keywords configured");
+    return { processed: 0, done: true };
   }
 
-  const result = await runKeyword(keyword);
-  res.json({ ok: true, ...result });
-});
+  const progress = loadProgress();
+  let index = progress.lastProcessedIndex;
 
-router.post("/batch/next", async (_req, res) => {
-  const result = await runNextBatch();
-  res.json({ ok: true, ...result });
-});
+  const batchSize = ENV.OUTREACH_BATCH_SIZE;
+  const delayMs = ENV.SERP_RATE_DELAY_MS;
 
-router.post("/batch/reset", async (req, res) => {
-  const { lastProcessedIndex = 0 } = req.body || {};
-  const result = await resetProgress(Number(lastProcessedIndex) || 0);
-  res.json({ ok: true, progress: result });
-});
+  let processed = 0;
 
-export default router;
+  while (index < keywords.length && processed < batchSize) {
+    const keyword = keywords[index];
+
+    info(`🔎 Outreach batch keyword [${index}]: ${keyword}`);
+    await runKeyword(keyword);
+
+    index++;
+    processed++;
+
+    saveProgress({ lastProcessedIndex: index });
+
+    if (delayMs > 0) {
+      await wait(delayMs);
+    }
+  }
+
+  const done = index >= keywords.length;
+
+  if (done) {
+    info("🏁 Outreach batch completed");
+  }
+
+  return {
+    processed,
+    done,
+    lastProcessedIndex: index
+  };
+}
+
+/* ============================================================
+   Progress reset
+============================================================ */
+
+export function resetProgress(lastProcessedIndex = 0) {
+  const index =
+    Number.isFinite(lastProcessedIndex) && lastProcessedIndex >= 0
+      ? lastProcessedIndex
+      : 0;
+
+  saveProgress({ lastProcessedIndex: index });
+
+  info(`🔄 Outreach progress reset to index ${index}`);
+
+  return { lastProcessedIndex: index };
+}
