@@ -2,7 +2,7 @@ name: CI – Env hygiene & build
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
 
 jobs:
@@ -17,17 +17,17 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: "npm"
+          cache: npm
 
-      - name: Install dependencies (deterministic)
+      - name: Install dependencies
         run: npm ci
 
       # ------------------------------------------------------------
-      # ENV discipline: NO direct process.env in application code
+      # ENV discipline: only OUR code is checked
       # ------------------------------------------------------------
       - name: Enforce ENV-only access
         run: |
-          echo "🔍 Scanning for illegal process.env usage..."
+          echo "🔍 Checking for illegal process.env usage (app code only)"
 
           if grep -R "process\.env" \
             services routes utils scripts server.js \
@@ -42,7 +42,7 @@ jobs:
           fi
 
       # ------------------------------------------------------------
-      # Optional: build validation (no Docker here)
+      # Preflight env validation (allowed to read env)
       # ------------------------------------------------------------
-      - name: Validate app boot (no secrets)
+      - name: Validate environment schema
         run: node deployment-check.js
