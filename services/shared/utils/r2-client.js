@@ -32,6 +32,7 @@ const {
 
   // Buckets
   R2_BUCKET_PODCAST,
+  R2_BUCKET_RAW,
   R2_BUCKET_RAW_TEXT,
   R2_BUCKET_META,
   R2_BUCKET_MERGED,
@@ -41,6 +42,12 @@ const {
   R2_BUCKET_TRANSCRIPTS,
   R2_BUCKET_CHUNKS,
   R2_BUCKET_EDITED_AUDIO,
+
+  // Legacy/compat (read-only)
+  R2_BUCKET_PODCAST_OUTPUT,
+
+  // Legacy/compat (read-only)
+  R2_BUCKET_RAW_TEXT_INPUT,
 
   // NEW — metasystem bucket for episode counter
   R2_BUCKET_META_SYSTEM,
@@ -59,6 +66,12 @@ const {
 
   // NEW — metasystem public URL (optional)
   R2_PUBLIC_BASE_URL_META_SYSTEM,
+
+  // Legacy/compat (read-only)
+  R2_PUBLIC_BASE_URL_RSS_FEEDS,
+
+  // Legacy/compat (read-only)
+  R2_PUBLIC_BASE_URL_PODCAST_OUTPUT,
 } = process.env;
 
 // ------------------------------------------------------------
@@ -73,11 +86,24 @@ export const s3 = new S3Client({
   },
 });
 
+
+// ------------------------------------------------------------
+// 🎧 Canonical bucket key exports (wire-only)
+// ------------------------------------------------------------
+// NOTE: These are bucket *keys* (aliases), not bucket names.
+// They preserve existing runtime behaviour while making intent explicit.
+export const R2_BUCKET_RAW_AUDIO = R2_BUCKET_RAW;
+export const R2_BUCKET_RAW_TEXT_KEY = R2_BUCKET_RAW_TEXT || R2_BUCKET_RAW_TEXT_INPUT;
+export const R2_BUCKET_PODCAST_KEY = R2_BUCKET_PODCAST || R2_BUCKET_PODCAST_OUTPUT;
+export const R2_PUBLIC_BASE_URL_PODCAST_RESOLVED = R2_PUBLIC_BASE_URL_PODCAST || R2_PUBLIC_BASE_URL_PODCAST_OUTPUT;
+export const R2_PUBLIC_BASE_URL_RSS_RESOLVED = R2_PUBLIC_BASE_URL_RSS || R2_PUBLIC_BASE_URL_RSS_FEEDS;
+
 // ------------------------------------------------------------
 // 🪣 Bucket Aliases (all services unify on these keys)
 // ------------------------------------------------------------
 export const R2_BUCKETS = {
   podcast:         R2_BUCKET_PODCAST,
+  R2_BUCKET_RAW,
   rawtext:         R2_BUCKET_RAW_TEXT,
   rawText:         R2_BUCKET_RAW_TEXT,
   "raw-text":      R2_BUCKET_RAW_TEXT,
@@ -87,6 +113,11 @@ export const R2_BUCKETS = {
 
   chunks:          R2_BUCKET_CHUNKS,
   "podcast-chunks":R2_BUCKET_CHUNKS,
+
+  // Raw audio (TTS output, pre-merge)
+  rawAudio:        R2_BUCKET_CHUNKS,
+  rawaudio:        R2_BUCKET_CHUNKS,
+  "raw-audio":     R2_BUCKET_CHUNKS,
 
   // Newsletter RSS feed
   rss:             R2_BUCKET_RSS_FEEDS,
@@ -102,8 +133,26 @@ export const R2_BUCKETS = {
 
   // NEW — final edited/mastered audio
   edited:          R2_BUCKET_EDITED_AUDIO,
+
+  // Legacy/compat (read-only)
+  R2_BUCKET_PODCAST_OUTPUT,
+
+  // Legacy/compat (read-only)
+  R2_BUCKET_RAW_TEXT_INPUT,
   editedAudio:     R2_BUCKET_EDITED_AUDIO,
+
+  // Legacy/compat (read-only)
+  R2_BUCKET_PODCAST_OUTPUT,
+
+  // Legacy/compat (read-only)
+  R2_BUCKET_RAW_TEXT_INPUT,
   "edited-audio":  R2_BUCKET_EDITED_AUDIO,
+
+  // Legacy/compat (read-only)
+  R2_BUCKET_PODCAST_OUTPUT,
+
+  // Legacy/compat (read-only)
+  R2_BUCKET_RAW_TEXT_INPUT,
 
   // NEW — metasystem bucket (episode-counter + system files)
   metasystem:      R2_BUCKET_META_SYSTEM,
@@ -141,7 +190,19 @@ export const R2_PUBLIC_URLS = {
 
   // NEW — metasystem public URL
   metasystem:      R2_PUBLIC_BASE_URL_META_SYSTEM,
+
+  // Legacy/compat (read-only)
+  R2_PUBLIC_BASE_URL_RSS_FEEDS,
+
+  // Legacy/compat (read-only)
+  R2_PUBLIC_BASE_URL_PODCAST_OUTPUT,
   metaSystem:      R2_PUBLIC_BASE_URL_META_SYSTEM,
+
+  // Legacy/compat (read-only)
+  R2_PUBLIC_BASE_URL_RSS_FEEDS,
+
+  // Legacy/compat (read-only)
+  R2_PUBLIC_BASE_URL_PODCAST_OUTPUT,
 };
 
 // ------------------------------------------------------------
@@ -240,6 +301,11 @@ export default {
   s3,
   R2_BUCKETS,
   R2_PUBLIC_URLS,
+  R2_BUCKET_RAW_AUDIO,
+  R2_BUCKET_RAW_TEXT_KEY,
+  R2_BUCKET_PODCAST_KEY,
+  R2_PUBLIC_BASE_URL_PODCAST_RESOLVED,
+  R2_PUBLIC_BASE_URL_RSS_RESOLVED,
   uploadBuffer,
   uploadText,
   getObjectAsText,
