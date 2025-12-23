@@ -29,14 +29,11 @@ import { editingProcessor } from "./editingProcessor.js";
 import { podcastProcessor } from "./podcastProcessor.js";
 
 // ENV
-const RAW_TEXT_BUCKET =
-  process.env.R2_BUCKET_RAW_TEXT || process.env.R2_BUCKET_RAW_TEXT_INPUT;
+const RAW_TEXT_BUCKET = R2_BUCKET_RAW_TEXT_KEY;
 const RAW_TEXT_BASE_URL = process.env.R2_PUBLIC_BASE_URL_RAW_TEXT;
 
-const FINAL_BUCKET =
-  process.env.R2_BUCKET_PODCAST || process.env.R2_BUCKET_PODCAST_OUTPUT;
-const PUBLIC_BASE_URL_PODCAST =
-  process.env.R2_PUBLIC_BASE_URL_PODCAST || process.env.R2_PUBLIC_BASE_URL_PODCAST_OUTPUT;
+const FINAL_BUCKET = R2_BUCKET_PODCAST_KEY;
+const PUBLIC_BASE_URL_PODCAST = R2_PUBLIC_BASE_URL_PODCAST_RESOLVED;
 
 // ------------------------------------------------------------
 // 📥 Load all text chunks from R2
