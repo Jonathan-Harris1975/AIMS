@@ -2,11 +2,6 @@ import fs from "fs";
 import path from "path";
 
 const ROOT = process.cwd();
-const JS_FILE = /\.js$/;
-
-// Only rewrite these bad patterns:
-// "#shared/foo.js"  -> "#shared/utils/foo.js"
-const BAD_IMPORT = /(["'])#shared\/(?!utils\/)([^"']+\.js)\1/g;
 
 const SKIP_DIRS = new Set([
   "node_modules",
@@ -16,6 +11,14 @@ const SKIP_DIRS = new Set([
   ".next",
   ".cache"
 ]);
+
+// Match:
+//   "#shared/foo"
+//   "#shared/foo.js"
+// BUT NOT:
+//   "#shared/utils/foo"
+const BAD_IMPORT =
+  /(["'])#shared\/(?!utils\/)([^"'\/]+(?:\/[^"'\/]+)*)\1/g;
 
 function walk(dir) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -28,7 +31,7 @@ function walk(dir) {
       continue;
     }
 
-    if (!JS_FILE.test(entry.name)) continue;
+    if (!full.endsWith(".js")) continue;
 
     const src = fs.readFileSync(full, "utf8");
     if (!BAD_IMPORT.test(src)) continue;
@@ -43,6 +46,6 @@ function walk(dir) {
   }
 }
 
-console.log("🔧 Fixing #shared imports...");
+console.log("🔧 Normalising #shared imports...");
 walk(ROOT);
 console.log("✅ Done.");
