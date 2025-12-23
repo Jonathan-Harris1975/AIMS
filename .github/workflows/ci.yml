@@ -45,4 +45,51 @@ jobs:
       # Preflight env validation (allowed to read env)
       # ------------------------------------------------------------
       - name: Validate environment schema
+        run: node deployment-check.jsname: CI – Env hygiene & build
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+
+jobs:
+  env-hygiene:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # ------------------------------------------------------------
+      # ENV discipline: only OUR code is checked
+      # ------------------------------------------------------------
+      - name: Enforce ENV-only access
+        run: |
+          echo "🔍 Checking for illegal process.env usage (app code only)"
+
+          if grep -R "process\.env" \
+            services routes utils scripts server.js \
+            --include="*.js" \
+            --exclude=scripts/envBootstrap.js \
+            --exclude=deployment-check.js; then
+
+            echo "❌ process.env usage found outside envBootstrap.js"
+            exit 1
+          else
+            echo "✅ ENV-only rule passed"
+          fi
+
+      # ------------------------------------------------------------
+      # Preflight env validation (allowed to read env)
+      # ------------------------------------------------------------
+      - name: Validate environment schema
         run: node deployment-check.js
