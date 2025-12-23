@@ -2,34 +2,47 @@ import fs from "fs";
 import path from "path";
 
 const ROOT = process.cwd();
-const TARGET_EXT = ".js";
+const JS_FILE = /\.js$/;
 
-// what we are fixing
-const FROM = /(["'])#shared\/(?!utils\/)/g;
-const TO = `$1#shared/utils/`;
+// Only rewrite these bad patterns:
+// "#shared/foo.js"  -> "#shared/utils/foo.js"
+const BAD_IMPORT = /(["'])#shared\/(?!utils\/)([^"']+\.js)\1/g;
+
+const SKIP_DIRS = new Set([
+  "node_modules",
+  ".git",
+  "dist",
+  "build",
+  ".next",
+  ".cache"
+]);
 
 function walk(dir) {
-  const entries = fs.readdirSync(dir, { withFileTypes: true });
-  for (const e of entries) {
-    const p = path.join(dir, e.name);
-    if (e.isDirectory()) {
-      if (
-        e.name === "node_modules" ||
-        e.name === ".git" ||
-        e.name === "dist" ||
-        e.name === "build"
-      ) continue;
-      walk(p);
-    } else if (e.isFile() && p.endsWith(TARGET_EXT)) {
-      const src = fs.readFileSync(p, "utf8");
-      if (FROM.test(src)) {
-        const next = src.replace(FROM, TO);
-        fs.writeFileSync(p, next);
-        console.log("✔ fixed:", path.relative(ROOT, p));
-      }
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (SKIP_DIRS.has(entry.name)) continue;
+
+    const full = path.join(dir, entry.name);
+
+    if (entry.isDirectory()) {
+      walk(full);
+      continue;
     }
+
+    if (!JS_FILE.test(entry.name)) continue;
+
+    const src = fs.readFileSync(full, "utf8");
+    if (!BAD_IMPORT.test(src)) continue;
+
+    const fixed = src.replace(
+      BAD_IMPORT,
+      (_m, q, file) => `${q}#shared/utils/${file}${q}`
+    );
+
+    fs.writeFileSync(full, fixed);
+    console.log("✔ fixed:", path.relative(ROOT, full));
   }
 }
 
+console.log("🔧 Fixing #shared imports...");
 walk(ROOT);
-console.log("Done.");
+console.log("✅ Done.");
