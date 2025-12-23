@@ -1,13 +1,17 @@
-# Node.js dependencies - force clean install
+# ============================================================
+# Node.js dependencies (never copy local installs)
+# ============================================================
 node_modules
 .npm
 .pnpm
 .yarn
-.npmrc
-.pnpmfile.js
-.yarnrc
 
-# Log files
+# Do NOT ignore .npmrc if you use it for registries
+# .npmrc
+
+# ============================================================
+# Logs
+# ============================================================
 npm-debug.log*
 pnpm-debug.log*
 yarn-debug.log*
@@ -15,7 +19,9 @@ yarn-error.log*
 *.log
 logs/
 
-# Environment variables
+# ============================================================
+# Environment variables (never ship secrets)
+# ============================================================
 .env
 .env.*
 .env.local
@@ -23,8 +29,11 @@ logs/
 .env.test
 .env.production
 !.env.example
+!env.template
 
+# ============================================================
 # Build outputs
+# ============================================================
 dist/
 build/
 coverage/
@@ -33,7 +42,9 @@ coverage/
 .next/
 .nuxt/
 
-# Cache directories
+# ============================================================
+# Cache / temp directories
+# ============================================================
 .cache/
 .turbo/
 .webpack/
@@ -41,39 +52,53 @@ coverage/
 tmp/
 temp/
 
-# OS files
+# ============================================================
+# OS / editor junk
+# ============================================================
 .DS_Store
 Thumbs.db
 desktop.ini
-
-# IDE files
 .vscode/
 .idea/
 *.swp
 *.swo
 
-# Git
+# ============================================================
+# Git metadata (never needed in image)
+# ============================================================
 .git/
 .gitignore
 .github/
 
-# Package manager lock files - FORCE CLEAN INSTALL
-package-lock.json
+# ============================================================
+# Package manager lock files
+# ============================================================
+# ❗ REQUIRED for npm ci — DO NOT IGNORE
+!package-lock.json
+!package.json
+
+# Ignore other ecosystems you are not using
 yarn.lock
 pnpm-lock.yaml
 npm-shrinkwrap.json
 
+# ============================================================
 # Archives
+# ============================================================
 *.zip
 *.tar
 *.gz
 
-# Docker
-Dockerfile*
+# ============================================================
+# Docker metadata
+# ============================================================
 docker-compose*
-.dockerignore
+Dockerfile*
+!.dockerignore
 
-# Miscellaneous
+# ============================================================
+# Misc
+# ============================================================
 *.tmp
 *.temp
 .circleci/
