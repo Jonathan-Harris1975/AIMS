@@ -36,7 +36,7 @@
   },
   "imports": {
     "#scripts/*": "./scripts/*",
-    "#shared/*": "./services/shared/utils/",
+    "#shared/*": "./services/shared/*",
     "#logger.js": "./logger.js",
     "#routes/*": "./routes/*"
   },
