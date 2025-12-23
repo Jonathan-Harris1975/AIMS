@@ -7,7 +7,7 @@ import { extractGoodLeads } from "../utils/filters.js";
 import { appendLeadRows } from "./sheetService.js";
 import { loadProgress, saveProgress } from "../utils/r2ProgressStore.js";
 import { ENV } from "#scripts/envBootstrap.js";
-import { wait } from "#shared/utils/wait.js";
+import { wait } from "#shared/wait.js";
 
 const KEYWORDS_FILE =
   ENV.OUTREACH_KEYWORDS_FILE || "services/outreach/keywords.txt";
