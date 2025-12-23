@@ -5,13 +5,12 @@
   "main": "server.js",
 
   "scripts": {
-    "postinstall": "node scripts/fix-shared-imports.js",
     "build": "echo \"Build step completed\"",
     "start": "node server.js"
   },
 
   "engines": {
-    "node": ">=22 <25"
+    "node": ">=20 <25"
   },
 
   "dependencies": {
