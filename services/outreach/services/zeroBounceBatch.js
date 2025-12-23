@@ -1,12 +1,11 @@
+// services/outreach/services/zeroBounceBatch.js
+
 import axios from "axios";
+import { ENV } from "#scripts/envBootstrap.js";
+import { wait } from "#shared/utils/wait.js";
 
-const ZERO_API_KEY = process.env.API_ZERO_KEY;
 const ZERO_BASE = "https://api.zerobounce.net/v2";
-
-const BATCH_SIZE = 50;
-const BATCH_DELAY_MS = 4000;
-
-const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+const BATCH_SIZE = 50; // unchanged
 
 export async function batchValidateEmails(emails = []) {
   const resultMap = new Map();
@@ -15,9 +14,7 @@ export async function batchValidateEmails(emails = []) {
     (e) => typeof e === "string" && e.includes("@")
   );
 
-  // Fail-safe: ZeroBounce disabled
-  if (!ZERO_API_KEY) {
-    console.log("⚠️ ZeroBounce disabled (API_ZERO_KEY missing)");
+  if (!ENV.API_ZERO_KEY) {
     clean.forEach((e) =>
       resultMap.set(e, { status: "unknown", sub_status: "not_checked" })
     );
@@ -31,34 +28,31 @@ export async function batchValidateEmails(emails = []) {
       const res = await axios.post(
         `${ZERO_BASE}/batch-validate`,
         {
-          api_key: ZERO_API_KEY,
+          api_key: ENV.API_ZERO_KEY,
           email_batch: batch.map((email) => ({ email_address: email })),
         },
         { timeout: 30000 }
       );
 
-      const data = res.data?.email_batch || [];
-      data.forEach((item) => {
+      res.data?.email_batch?.forEach((item) => {
         resultMap.set(item.email_address, {
           status: item.status,
           sub_status: item.sub_status,
         });
       });
-
-      console.log(
-        `ZeroBounce batch validated (${batch.length} emails)`
-      );
     } catch {
-      console.log("⚠️ ZeroBounce batch failed – marking unknown");
       batch.forEach((email) =>
-        resultMap.set(email, { status: "unknown", sub_status: "batch_failed" })
+        resultMap.set(email, {
+          status: "unknown",
+          sub_status: "batch_failed",
+        })
       );
     }
 
     if (i + BATCH_SIZE < clean.length) {
-      await wait(BATCH_DELAY_MS);
+      await wait(ENV.HUNTER_DELAY_MS);
     }
   }
 
   return resultMap;
-}
+        }
