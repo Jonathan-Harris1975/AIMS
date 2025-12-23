@@ -12,6 +12,7 @@
 // ============================================================
 
 import { buildRssXml } from "./xmlBuilder.js";
+import { R2_PUBLIC_BASE_URL_RSS_RESOLVED } from "#shared/r2-client.js";
 import { info, warn } from "#logger.js";
 
 export function generateFeedXML(episodesMeta) {
@@ -62,7 +63,7 @@ export function generateFeedXML(episodesMeta) {
     // Prefer explicit feed URL env, fallback to RSS feeds base if set.
     rssSelfLink:
       stripQuotes(process.env.PODCAST_RSS_FEED_URL || "") ||
-      stripQuotes(process.env.R2_PUBLIC_BASE_URL_RSS_FEEDS || ""),
+      stripQuotes(R2_PUBLIC_BASE_URL_RSS_RESOLVED || ""),
 
     // Podcasting 2.0 / PSP-1 recommended:
     // podcast:guid – globally unique ID for the show
