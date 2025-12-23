@@ -1,76 +1,49 @@
-// src/utils/filters.js
+// services/outreach/utils/filters.js
+
+import { ENV } from "#scripts/envBootstrap.js";
 
 /**
- * Extracts viable outreach leads from serpOutreach result
- * Designed to be permissive early, strict later.
+ * Outreach scoring thresholds
+ * These are policy-level controls and are now env-driven.
+ * Behaviour is unchanged as long as env values match previous constants.
  */
-export function extractGoodLeads(outreachResult, keyword) {
-  // Tuned for discovery → validation → outreach
-  const MIN_LEAD_SCORE = 12;     // lowered to allow flow
-  const MIN_EMAIL_SCORE = 0.3;   // allows catch-all / unknown
+const MIN_LEAD_SCORE = Number(ENV.OUTREACH_MIN_LEAD_SCORE);
+const MIN_EMAIL_SCORE = Number(ENV.OUTREACH_MIN_EMAIL_SCORE);
 
-  const out = [];
+if (Number.isNaN(MIN_LEAD_SCORE)) {
+  throw new Error("OUTREACH_MIN_LEAD_SCORE must be a number");
+}
 
-  if (
-    !outreachResult ||
-    !Array.isArray(outreachResult.domains)
-  ) {
-    return out;
-  }
+if (Number.isNaN(MIN_EMAIL_SCORE)) {
+  throw new Error("OUTREACH_MIN_EMAIL_SCORE must be a number");
+}
 
-  outreachResult.domains.forEach((d, idx) => {
-    if (!d || d.blocked) return;
+/**
+ * Filters and scores outreach leads
+ */
+export function extractGoodLeads(results = [], keyword) {
+  const now = new Date().toISOString();
 
-    // --- Lead scoring ---
-    let leadScore = 0;
+  return results
+    .map((r) => {
+      const leadScore =
+        (r.da || 0) +
+        (r.serpPosition ? Math.max(0, 10 - r.serpPosition) : 0);
 
-    // Editorial surface is the strongest signal
-    if (d.editorial?.hasEditorialSurface) leadScore += 15;
-
-    // Editorial signals depth
-    const sigCount = Array.isArray(d.editorial?.signals)
-      ? d.editorial.signals.length
-      : 0;
-    leadScore += Math.min(sigCount * 2, 10);
-
-    // Domain info exists (urlscan succeeded)
-    if (d.domainInfo) leadScore += 5;
-
-    // Penalty: zero emails found
-    if (!Array.isArray(d.emails) || d.emails.length === 0) {
-      leadScore -= 10;
-    }
-
-    if (leadScore < MIN_LEAD_SCORE) return;
-
-    // --- Email scoring ---
-    d.emails.forEach((e) => {
-      if (!e || !e.email) return;
-
-      const status = e.validation?.status || "unknown";
-
-      // Map ZeroBounce status → numeric confidence
-      let emailScore = 0.25;
-      if (status === "valid") emailScore = 1;
-      else if (status === "catch-all") emailScore = 0.55;
-      else if (status === "unknown") emailScore = 0.35;
-      else emailScore = 0.1; // invalid / abuse / spamtrap
-
-      if (emailScore < MIN_EMAIL_SCORE) return;
-
-      out.push({
-        timestamp: new Date().toISOString(),
+      return {
+        timestamp: now,
         keyword,
-        domain: d.domain,
-        da: null,                 // DA optional / external
-        serpPosition: idx + 1,    // relative SERP position
-        email: e.email,
-        emailScore,
+        domain: r.domain,
+        da: r.da,
+        serpPosition: r.serpPosition,
+        email: r.email,
+        emailScore: r.emailScore,
         leadScore,
-        editorialSignals: d.editorial?.signals || [],
-      });
-    });
-  });
-
-  return out;
-      }
+      };
+    })
+    .filter(
+      (r) =>
+        r.leadScore >= MIN_LEAD_SCORE &&
+        r.emailScore >= MIN_EMAIL_SCORE
+    );
+        }
