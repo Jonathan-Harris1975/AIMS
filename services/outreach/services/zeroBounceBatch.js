@@ -2,7 +2,7 @@
 
 import axios from "axios";
 import { ENV } from "#scripts/envBootstrap.js";
-import { wait } from "#shared/utils/wait.js";
+import { wait } from "#shared/wait.js";
 
 const ZERO_BASE = "https://api.zerobounce.net/v2";
 const BATCH_SIZE = 50; // unchanged
