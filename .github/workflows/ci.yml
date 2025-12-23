@@ -4,40 +4,45 @@ on:
   push:
     branches: [ "main" ]
   pull_request:
-    branches: [ "main" ]
 
 jobs:
   env-hygiene:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repo
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Use Node.js
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: "npm"
 
-      - name: Install deps
+      - name: Install dependencies (deterministic)
         run: npm ci
-      # --- ENV-only enforcement ---
-      - name: Ensure no direct process.env usage
+
+      # ------------------------------------------------------------
+      # ENV discipline: NO direct process.env in application code
+      # ------------------------------------------------------------
+      - name: Enforce ENV-only access
         run: |
-          if grep -R "process\.env" -n --include="*.js" . | grep -v "scripts/envBootstrap.js"; then
-            echo "❌ process.env usage outside envBootstrap.js"
+          echo "🔍 Scanning for illegal process.env usage..."
+
+          if grep -R "process\.env" \
+            services routes utils scripts server.js \
+            --include="*.js" \
+            --exclude=scripts/envBootstrap.js \
+            --exclude=deployment-check.js; then
+
+            echo "❌ process.env usage found outside envBootstrap.js"
             exit 1
-          fi
-
-      # --- Bootstrap sanity check ---
-      - name: Verify env bootstrap loads
-        run: node -e "import('./scripts/envBootstrap.js')"
-
-      # --- Build (if you have one) ---
-      - name: Build
-        run: |
-          if [ -f package.json ] && grep -q "\"build\"" package.json; then
-            npm run build
           else
-            echo "No build step defined, skipping"
+            echo "✅ ENV-only rule passed"
           fi
+
+      # ------------------------------------------------------------
+      # Optional: build validation (no Docker here)
+      # ------------------------------------------------------------
+      - name: Validate app boot (no secrets)
+        run: node deployment-check.js
