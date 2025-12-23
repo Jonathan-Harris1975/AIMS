@@ -12,13 +12,8 @@ const SKIP_DIRS = new Set([
   ".cache"
 ]);
 
-// Match:
-//   "#shared/foo"
-//   "#shared/foo.js"
-// BUT NOT:
-//   "#shared/utils/foo"
-const BAD_IMPORT =
-  /(["'])#shared\/(?!utils\/)([^"'\/]+(?:\/[^"'\/]+)*)\1/g;
+const IMPORT_RE =
+  /import\s+[^;]*?\s+from\s+["'](#shared\/(?!utils\/)[^"']+)["']/g;
 
 function walk(dir) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -33,19 +28,21 @@ function walk(dir) {
 
     if (!full.endsWith(".js")) continue;
 
-    const src = fs.readFileSync(full, "utf8");
-    if (!BAD_IMPORT.test(src)) continue;
+    let src = fs.readFileSync(full, "utf8");
+    let changed = false;
 
-    const fixed = src.replace(
-      BAD_IMPORT,
-      (_m, q, file) => `${q}#shared/utils/${file}${q}`
-    );
+    src = src.replace(IMPORT_RE, (m, spec) => {
+      changed = true;
+      return m.replace(spec, `#shared/utils/${spec.slice("#shared/".length)}`);
+    });
 
-    fs.writeFileSync(full, fixed);
-    console.log("✔ fixed:", path.relative(ROOT, full));
+    if (changed) {
+      fs.writeFileSync(full, src);
+      console.log("✔ fixed:", path.relative(ROOT, full));
+    }
   }
 }
 
-console.log("🔧 Normalising #shared imports...");
+console.log("🔧 Fixing #shared ESM imports...");
 walk(ROOT);
 console.log("✅ Done.");
