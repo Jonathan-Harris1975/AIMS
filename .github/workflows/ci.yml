@@ -10,86 +10,75 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # ------------------------------------------------------------
+      # Checkout
+      # ------------------------------------------------------------
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # ------------------------------------------------------------
+      # Node setup (no npm cache – deterministic)
+      # ------------------------------------------------------------
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
 
       # ------------------------------------------------------------
-      # ENV discipline: only OUR code is checked
+      # Install dependencies
+      # ------------------------------------------------------------
+      - name: Install dependencies
+        run: |
+          if [ ! -f package-lock.json ]; then
+            echo "❌ package-lock.json missing"
+            exit 1
+          fi
+          npm ci --no-audit --no-fund
+
+      # ------------------------------------------------------------
+      # Import hygiene: enforce #shared discipline
+      # ------------------------------------------------------------
+      - name: Enforce shared import discipline
+        run: |
+          echo "🔍 Checking #shared imports"
+
+          if grep -R "#shared/" services \
+            --include="*.js" \
+            | grep -v "#shared/utils/"; then
+
+            echo "❌ Illegal #shared import detected"
+            exit 1
+          else
+            echo "✅ Shared import rule passed"
+          fi
+
+      # ------------------------------------------------------------
+      # ENV discipline (mirror pre-commit)
       # ------------------------------------------------------------
       - name: Enforce ENV-only access
         run: |
-          echo "🔍 Checking for illegal process.env usage (app code only)"
+          echo "🔍 Checking process.env usage"
 
-          if grep -R "process\.env" \
-            services routes utils scripts server.js \
+          if grep -R "process.env" -n \
+            services routes scripts server.js \
             --include="*.js" \
-            --exclude=scripts/envBootstrap.js \
-            --exclude=deployment-check.js; then
+            | grep -v envBootstrap.js; then
 
-            echo "❌ process.env usage found outside envBootstrap.js"
+            echo "❌ process.env usage outside envBootstrap.js"
             exit 1
           else
             echo "✅ ENV-only rule passed"
           fi
 
       # ------------------------------------------------------------
-      # Preflight env validation (allowed to read env)
-      # ------------------------------------------------------------
-      - name: Validate environment schema
-        run: node deployment-check.jsname: CI – Env hygiene & build
-
-on:
-  push:
-    branches: ["main"]
-  pull_request:
-
-jobs:
-  env-hygiene:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      # ------------------------------------------------------------
-      # ENV discipline: only OUR code is checked
-      # ------------------------------------------------------------
-      - name: Enforce ENV-only access
-        run: |
-          echo "🔍 Checking for illegal process.env usage (app code only)"
-
-          if grep -R "process\.env" \
-            services routes utils scripts server.js \
-            --include="*.js" \
-            --exclude=scripts/envBootstrap.js \
-            --exclude=deployment-check.js; then
-
-            echo "❌ process.env usage found outside envBootstrap.js"
-            exit 1
-          else
-            echo "✅ ENV-only rule passed"
-          fi
-
-      # ------------------------------------------------------------
-      # Preflight env validation (allowed to read env)
+      # Env schema validation
       # ------------------------------------------------------------
       - name: Validate environment schema
         run: node deployment-check.js
+
+      # ------------------------------------------------------------
+      # Bootstrap + import resolution smoke test
+      # ------------------------------------------------------------
+      - name: Bootstrap smoke test
+        run: |
+          node -e "import('./scripts/startupDump.js').then(m => m.dumpConfig())"
