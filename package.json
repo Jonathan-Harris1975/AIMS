@@ -11,7 +11,6 @@
     "node": ">=22 <25"
   },
   "dependencies": {
-    "googleapis":"^131.0.0",
     "@aws-sdk/client-polly": "^3.663.0",
     "@aws-sdk/client-s3": "^3.663.0",
     "@google/generative-ai": "0.10.0",
@@ -36,7 +35,8 @@
     "zod": "^3.23.8"
   },
   "imports": {
-    "#shared/*": "./services/shared/utils/*",
+    "#scripts/*": "./scripts/*",
+    "#shared/*": "./services/shared/*",
     "#logger.js": "./logger.js",
     "#routes/*": "./routes/*"
   },
