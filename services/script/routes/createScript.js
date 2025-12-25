@@ -3,7 +3,7 @@
 import express from 'express';
 import crypto from 'crypto';
 import { orchestrateEpisode } from '../utils/orchestrator.js';
-import { error } from '#logger.js';
+import { error } from '../../../logger.js';
 
 const router = express.Router();
 

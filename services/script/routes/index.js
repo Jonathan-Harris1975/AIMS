@@ -1,7 +1,7 @@
 // services/script/routes/index.js
 
 import express from "express";
-import { info, error } from "#logger.js";
+import { info, error } from "../../../logger.js";
 import {
   generateIntro,
   generateMain,
