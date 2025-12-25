@@ -1,8 +1,8 @@
 // services/outreach/utils/r2ProgressStore.js
 
-import { getObjectAsText, putJson } from "#shared/r2-client.js";
-import { info } from "#logger.js";
-import { ENV } from "#scripts/envBootstrap.js";
+import { getObjectAsText, putJson } from "../../shared/utils/r2-client.js";
+import { info } from "../../../logger.js";
+import { ENV } from "../../../scripts/envBootstrap.js";
 
 const DEFAULT_KEY = "outreach/progress.json";
 

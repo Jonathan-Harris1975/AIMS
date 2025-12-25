@@ -1,6 +1,6 @@
 // services/outreach/utils/filters.js
 
-import { ENV } from "#scripts/envBootstrap.js";
+import { ENV } from "../../../scripts/envBootstrap.js";
 
 /**
  * Outreach scoring thresholds
