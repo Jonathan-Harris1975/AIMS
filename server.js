@@ -1,7 +1,7 @@
 // server.js
 import express from "express";
 import cors from "cors";
-import { info, debug, error } from "#logger.js";
+import { info, debug, error } from "./logger.js";
 import routes from "./routes/index.js";
 
 const app = express();

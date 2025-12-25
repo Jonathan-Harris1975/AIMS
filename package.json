@@ -38,13 +38,6 @@
     "zod": "^3.23.8"
   },
 
-  "imports": {
-    "#scripts/*": "./scripts/*",
-    "#shared/*": "./services/shared/utils/*",
-    "#logger.js": "./logger.js",
-    "#routes/*": "./routes/*"
-  },
-
   "devDependencies": {
     "supertest": "^7.0.0"
   },
