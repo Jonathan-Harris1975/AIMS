@@ -2,8 +2,8 @@ import fs from "fs";
 import path from "path";
 
 import { ENV } from "../../../scripts/envBootstrap.js";
-import { wait } from "#shared/wait.js";
-import { log, info } from "#logger.js";
+import { wait } from "../../../services/shared/utils/wait.js";
+import { log, info } from "../../../logger.js";
 
 import { runKeyword } from "./outreachService.js";
 
