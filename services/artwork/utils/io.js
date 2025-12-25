@@ -1,5 +1,5 @@
 // services/artwork/utils/io.js (patched)
-import { putObject, putJson } from "#shared/r2-client.js";
+import { putObject, putJson } from "../../shared/utils/r2-client.js";
 import { info, error } from "#logger.js";
 
 const ART_BUCKET  = process.env.R2_BUCKET_ART;
