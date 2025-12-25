@@ -2,7 +2,7 @@ import fs from "fs/promises";
 import path from "path";
 import { fileURLToPath } from "url";
 import { info, error , debug} from "#logger.js";
-import { getObjectAsText, putText, putJson } from "#shared/r2-client.js";
+import { getObjectAsText, putText, putJson } from "../../shared/utils/r2-client.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
