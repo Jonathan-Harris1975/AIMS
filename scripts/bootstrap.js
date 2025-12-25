@@ -41,32 +41,24 @@ function needsImportFix() {
   debug("🧩 Starting AI-management-suite bootstrap sequence...");
   debug("---------------------------------------------");
 
-  // 1️⃣ Load and validate environment variables
+  //  Load and validate environment variables
   run("node ./scripts/envBootstrap.js", "Environment Bootstrap");
 
-  // 2️⃣ Fix illegal shared imports (only if needed)
-  if (needsImportFix()) {
-    run(
-      "node ./scripts/fix-shared-imports.js",
-      "Shared Import Auto-Fix"
-    );
-  } else {
-    info("🟢 Shared imports already compliant — skipping fix.");
-  }
+  
 
-  // 3️⃣ Initialize RSS feed data into R2 (critical)
+  //  Initialize RSS feed data into R2 (critical)
   run(
     "node ./services/rss-feed-creator/startup/rss-init.js",
     "RSS Init"
   );
 
-  // 4️⃣ Perform runtime sanity checks
+  //  Perform runtime sanity checks
   run("node ./scripts/startupCheck.js", "Startup Check");
 
-  // 5️⃣ Validate temp storage + Cloudflare R2 connectivity
+  // Validate temp storage + Cloudflare R2 connectivity
   run("node ./scripts/tempStorage.js", "R2 Check");
 
-  // 6️⃣ Launch the main web server
+  //  Launch the main web server
   run("node ./server.js", "Start Server");
 
   debug("---------------------------------------------");
