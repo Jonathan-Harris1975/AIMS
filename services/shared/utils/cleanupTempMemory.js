@@ -15,7 +15,7 @@
 // DOES NOT touch R2 or delete any files.
 // ============================================================
 
-import { log } from "#logger.js";
+import { log } from "../../../logger.js";
 import * as sessionCache from "../../script/utils/sessionCache.js";
 
 export async function cleanupTempMemory(sessionId) {

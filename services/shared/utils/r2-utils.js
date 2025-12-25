@@ -6,8 +6,8 @@
 // Used by orchestrators and pipelines.
 // ============================================================
 
-import { listKeys, R2_BUCKETS, buildPublicUrl } from "#shared/r2-client.js";
-import { info, error } from "#logger.js";
+import { listKeys, R2_BUCKETS, buildPublicUrl } from "./r2-client.js";
+import { info, error } from "../../../logger.js";
 
 /**
  * Returns an array of public URLs for all text chunks

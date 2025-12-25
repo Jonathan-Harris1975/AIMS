@@ -6,8 +6,8 @@
 //   - Leaves episode counter intact
 // ============================================================
 
-import { listKeys, deleteObject, getObjectAsText } from "#shared/r2-client.js";
-import { info, warn, debug } from "#logger.js";
+import { listKeys, deleteObject, getObjectAsText } from "./r2-client.js";
+import { info, warn, debug } from "../../../logger.js";
 
 const META_BUCKET = "meta";
 

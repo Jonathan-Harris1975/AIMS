@@ -7,8 +7,8 @@
 // This catches stragglers missed by the main cleanupSession.
 // ============================================================
 
-import { log, debug } from "#logger.js";
-import { listKeys, deleteObject } from "#shared/r2-client.js";
+import { log, debug } from "../../../logger.js";
+import { listKeys, deleteObject } from "./r2-client.js";
 
 const ALL_BUCKETS = [
   "edited",

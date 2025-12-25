@@ -21,7 +21,7 @@
 // ============================================================
 
 import crypto from "node:crypto";
-import { info, warn, error, debug } from "#logger.js";
+import { info, warn, error, debug } from "../../../logger.js";
 
 // unifies logging interface expected by this module
 const log = { info, warn, error, debug };

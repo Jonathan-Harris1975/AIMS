@@ -18,7 +18,7 @@ import {
   ListObjectsV2Command,
   DeleteObjectCommand,
 } from "@aws-sdk/client-s3";
-import { log } from "#logger.js";
+import { log } from "../../../logger.js";
 
 // ------------------------------------------------------------
 // 🔧 Environment Variables

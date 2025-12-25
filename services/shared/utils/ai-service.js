@@ -17,8 +17,8 @@
 // ============================================================
 
 import aiConfig from "./ai-config.js";
-import { safeRouteLog } from "#logger.js";
-import { info, error as logError } from "#logger.js";
+import { safeRouteLog } from "../../../logger.js";
+import { info, error as logError } from "../../../logger.js";
 import fetch from "node-fetch";
 
 // ---------------------------------------------

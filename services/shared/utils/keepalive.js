@@ -1,4 +1,4 @@
-import { info ,debug} from "#logger.js";
+import { info ,debug} from "../../../logger.js";
 
 const KA_MAP = globalThis.__KEEPALIVES__ || (globalThis.__KEEPALIVES__ = new Map());
 

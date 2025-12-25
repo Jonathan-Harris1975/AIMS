@@ -10,8 +10,8 @@
 // Then logs a summary.
 // ============================================================
 
-import { log, debug } from "#logger.js";
-import { listKeys, deleteObject } from "#shared/r2-client.js";
+import { log, debug } from "../../../logger.js";
+import { listKeys, deleteObject } from "./r2-client.js";
 
 const BUCKETS_TO_CLEAN = ["edited", "rawtext", "merged", "chunks"];
 
