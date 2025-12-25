@@ -5,7 +5,7 @@
 // ============================================================
 
 import express from "express";
-import { info, error } from "#logger.js";
+import { info, error } from "../../../logger.js";
 import { orchestrateTTS } from "../index.js";
 
 const router = express.Router();
