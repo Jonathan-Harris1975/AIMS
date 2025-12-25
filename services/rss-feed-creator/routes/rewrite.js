@@ -5,7 +5,7 @@
 
 import express from "express";
 import { endToEndRewrite } from "../rewrite-pipeline.js";
-import { info, error, debug } from "#logger.js";
+import { info, error, debug } from "../../../logger.js";
 
 const router = express.Router();
 
