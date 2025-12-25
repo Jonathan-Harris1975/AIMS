@@ -3,7 +3,7 @@ import { resilientRequest } from "../../shared/utils/ai-service.js";
 import { getMainPrompt } from "./promptTemplates.js";
 import { cleanTranscript } from "./textHelpers.js";
 import * as sessionCache from "./sessionCache.js";
-import { info, debug } from "#logger.js";
+import { info, debug } from "../../../logger.js";
 
 /**
  * Split array into chunks of size n (last chunk may be smaller)

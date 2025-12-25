@@ -1,6 +1,6 @@
 // services/script/utils/getWeatherSummary.js
 import fetch from "node-fetch";
-import { info, error , debug} from "#logger.js";
+import { info, error , debug} from "../../../logger.js";
 
 /**
  * Returns a short, temperature-free weather line such as:

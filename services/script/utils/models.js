@@ -21,7 +21,7 @@ import { generateMainLongform } from "./mainChunker.js";
 import * as sessionCache from "./sessionCache.js";
 import { generateEpisodeMetaLLM } from "./podcastHelper.js";
 import getSponsor from "./getSponsor.js";
-import { info, error, debug } from "#logger.js";
+import { info, error, debug } from "../../../logger.js";
 
 function toPlainText(s) {
   if (!s) return "";

@@ -1,4 +1,4 @@
-import { warn, info, error, debug } from "#logger.js";
+import { warn, info, error, debug } from "../../../logger.js";
 // services/script/utils/getSponsor.js
 import fs from "fs";
 import path from "path";

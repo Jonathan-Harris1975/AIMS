@@ -4,8 +4,8 @@
 // Uses the *metasystem* bucket exclusively for episode counter
 // ============================================================
 
-import { log } from "#logger.js";
-import { getObjectAsText, putJson } from "#shared/r2-client.js";
+import { log } from "../../../logger.js";
+import { getObjectAsText, putJson } from "../../../services/shared/utils/r2-client.js";
 
 // Correct bucket alias for episode counter
 const EPISODE_COUNTER_BUCKET = "metasystem";

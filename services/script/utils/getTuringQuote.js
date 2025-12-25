@@ -7,7 +7,7 @@
 import fs from "fs/promises";
 import path from "path";
 import { fileURLToPath } from "url";
-import { info, error,debug} from "#logger.js";
+import { info, error,debug} from "../../../logger.js";
 
 let quotesCache = null;
 

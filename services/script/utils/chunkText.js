@@ -9,7 +9,7 @@
 // - Comprehensive edge case handling
 // ============================================================
 
-import { info, debug } from "#logger.js";
+import { info, debug } from "../../../logger.js";
 
 /**
  * Chunks text for AWS Polly Natural voice synthesis with intelligent splitting

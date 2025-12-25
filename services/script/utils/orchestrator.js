@@ -2,10 +2,10 @@
 // orchestrator.js 
 // ====================================================================
 
-import { info, error, debug } from "#logger.js";
+import { info, error, debug } from "../../../logger.js";
 import models from "./models.js";
 import { composeEpisode } from "../routes/composeScript.js";
-import { uploadText } from "#shared/r2-client.js"
+import { uploadText } from "../../../services/shared/utils/r2-client.js"
 import chunkText from "./chunkText.js";
 import { generateEpisodeMetaLLM } from "./podcastHelper.js";
 import * as sessionCache from "./sessionCache.js";

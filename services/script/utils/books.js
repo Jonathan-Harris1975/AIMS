@@ -1,5 +1,5 @@
 import { createRequire } from 'module';
-import { warn, error } from '#logger.js';
+import { warn, error } from '../../../logger.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 

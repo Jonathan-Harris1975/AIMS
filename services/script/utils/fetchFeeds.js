@@ -1,7 +1,7 @@
 // services/script/utils/fetchFeeds.js
 import Parser from "rss-parser";
 import fetch from "node-fetch";
-import { info, error, debug} from "#logger.js";
+import { info, error, debug} from "../../../logger.js";
 
 const parser = new Parser();
 

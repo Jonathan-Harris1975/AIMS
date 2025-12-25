@@ -8,7 +8,7 @@
 // ====================================================================
 
 import { resilientRequest } from "../../shared/utils/ai-service.js";
-import { info, warn, error } from "#logger.js";
+import { info, warn, error } from "../../../logger.js";
 
 function buildEditorialPrompt(scriptText) {
   return `

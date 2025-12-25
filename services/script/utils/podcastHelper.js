@@ -4,7 +4,7 @@
 
 import { resilientRequest } from "../../shared/utils/ai-service.js";
 import * as sessionCache from "./sessionCache.js";
-import { info, error, debug } from "#logger.js";
+import { info, error, debug } from "../../../logger.js";
 import { extractMainContent } from "./textHelpers.js";
 
 /* -----------------------------------------------------------
