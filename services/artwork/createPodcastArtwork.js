@@ -1,5 +1,5 @@
 // services/artwork/createPodcastArtwork.js
-import { info, error, debug } from "#logger.js";
+import { info, error, debug } from "../../logger.js";
 import { uploadBuffer } from "../shared/utils/r2-client.js";
 import { generatePodcastArtwork } from "./utils/artwork.js";
 
