@@ -7,7 +7,7 @@
 // ============================================================
 
 import OpenAI from "openai";
-import { warn, error } from "#logger.js";
+import { warn, error } from "../../../logger.js";
 
 // ------------------------------------------------------------
 // 🔍 Required Environment Variables
