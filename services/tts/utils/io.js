@@ -2,7 +2,7 @@
 // Unified I/O helpers for TTS audio pipeline – central R2 + logger
 
 import { putObject, putJson, R2_BUCKET_RAW_AUDIO } from "#shared/r2-client.js";
-import { info, error } from "#logger.js";
+import { info, error } from "../../../logger.js";
 
 // Environment variables (required)
 const RAW_BUCKET     = R2_BUCKET_RAW_AUDIO;       // bucket key alias for raw audio

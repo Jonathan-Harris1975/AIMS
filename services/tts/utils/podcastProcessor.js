@@ -4,7 +4,7 @@
 // ============================================================
 
 import { spawn } from "node:child_process";
-import { info, warn, error, debug } from "#logger.js";
+import { info, warn, error, debug } from "../../../logger.js";
 import { putObject } from "#shared/r2-client.js";
 import fs from "node:fs";
 import path from "node:path";

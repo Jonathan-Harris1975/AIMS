@@ -15,7 +15,7 @@
 import fs from "fs";
 import path from "path";
 import { spawn, spawnSync } from "child_process";
-import { log } from "#logger.js";
+import { log } from "../../../logger.js";
 import { startKeepAlive, stopKeepAlive } from "#shared/keepalive.js";
 import { uploadBuffer } from "#shared/r2-client.js";
 

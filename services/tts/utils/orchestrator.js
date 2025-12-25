@@ -2,7 +2,7 @@
 // 🎬 TTS Orchestrator — Full Audio Generation Pipeline (FIXED)
 // ============================================================
 
-import { info, error, debug } from "#logger.js";
+import { info, error, debug } from "../../../logger.js";
 import { ENV } from "#scripts/envBootstrap.js";
 import { startKeepAlive, stopKeepAlive } from "#shared/keepalive.js";
 import { listKeys, getObject } from "#shared/r2-client.js";

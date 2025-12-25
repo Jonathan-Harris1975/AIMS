@@ -13,7 +13,7 @@ import {
   PollyClient,
   SynthesizeSpeechCommand,
 } from "@aws-sdk/client-polly";
-import { info, error, warn,debug } from "#logger.js";
+import { info, error, warn,debug } from "../../../logger.js";
 import { putObject } from "#shared/r2-client.js";
 import pLimit from "p-limit";
 
