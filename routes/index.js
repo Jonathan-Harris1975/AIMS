@@ -1,6 +1,6 @@
 // routes/index.js
 import express from "express";
-import { info, error } from "#logger.js";
+import { info, error } from "../logger.js";
 
 // Service routes
 import rssRoutes from "../services/rss-feed-creator/routes/rewrite.js";
