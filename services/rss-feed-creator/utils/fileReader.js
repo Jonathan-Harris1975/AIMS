@@ -7,7 +7,7 @@
 
 import fs from "fs";
 import path from "path";
-import { info, error , debug} from "#logger.js";
+import { info, error , debug} from "../../../logger.js";
 import { getObjectAsText } from "../../shared/utils/r2-client.js";
 
 const R2_BUCKET = process.env.R2_BUCKET_RSS_FEEDS || "rss-feeds";

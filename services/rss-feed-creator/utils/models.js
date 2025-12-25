@@ -13,7 +13,7 @@
 // ============================================================
 
 import crypto from "crypto";
-import { debug, error, warn } from "#logger.js";
+import { debug, error, warn } from "../../../logger.js";
 import { resilientRequest } from "../../shared/utils/ai-service.js";
 import { RSS_PROMPTS } from "./rss-prompts.js";
 import { shortenUrl } from "./shortio.js";
