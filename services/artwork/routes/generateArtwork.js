@@ -5,7 +5,7 @@
 import express from "express";
 import fetch from "node-fetch";
 import { putObject } from "../../shared/utils/r2-client.js";
-import { info, error } from "#logger.js";
+import { info, error } from "../../../logger.js";
 
 const router = express.Router();
 
