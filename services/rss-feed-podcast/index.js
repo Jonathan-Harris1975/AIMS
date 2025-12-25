@@ -9,10 +9,10 @@
 // - Optional: AUTO_CALL=yes → notify PodcastIndex Hub automatically
 // ============================================================
 
-import { listKeys, getObjectAsText, putObject, R2_PUBLIC_BASE_URL_RSS_RESOLVED } from "#shared/r2-client.js";
-import { info, warn, error } from "#logger.js";
+import { listKeys, getObjectAsText, putObject, R2_PUBLIC_BASE_URL_RSS_RESOLVED } from "../../services/shared/utils/r2-client.js";
+import { info, warn, error } from "../../../logger.js";
 import { generateFeedXML } from "./generateFeed.js";
-import { notifyHubByUrl } from "#shared/podcastIndexClient.js";
+import { notifyHubByUrl } from "../../services/shared/utils/podcastIndexClient.js";
 
 const META_BUCKET_ALIAS = "meta";
 

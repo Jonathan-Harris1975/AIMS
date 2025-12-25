@@ -12,8 +12,8 @@
 // ============================================================
 
 import { buildRssXml } from "./xmlBuilder.js";
-import { R2_PUBLIC_BASE_URL_RSS_RESOLVED } from "#shared/r2-client.js";
-import { info, warn } from "#logger.js";
+import { R2_PUBLIC_BASE_URL_RSS_RESOLVED } from "../../services/shared/utils/r2-client.js";
+import { info, warn } from "../../../logger.js";
 
 export function generateFeedXML(episodesMeta) {
   if (!Array.isArray(episodesMeta) || episodesMeta.length === 0) {
