@@ -1,5 +1,5 @@
 // scripts/startupCheck.js
-import { info, error ,debug} from "#logger.js";
+import { info, error ,debug} from "../logger.js";
 
 try {
   info("🟩 startupCheck.js reached — container runtime confirmed!");

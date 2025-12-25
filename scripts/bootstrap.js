@@ -6,7 +6,7 @@
 // ============================================================
 
 import { execSync } from "child_process";
-import { log, info, debug } from "#logger.js";
+import { log, info, debug } from "../logger.js";
 import fs from "fs";
 
 function run(cmd, label, { optional = false } = {}) {
@@ -41,24 +41,32 @@ function needsImportFix() {
   debug("🧩 Starting AI-management-suite bootstrap sequence...");
   debug("---------------------------------------------");
 
-  //  Load and validate environment variables
+  // 1️⃣ Load and validate environment variables
   run("node ./scripts/envBootstrap.js", "Environment Bootstrap");
 
-  
+  // 2️⃣ Fix illegal shared imports (only if needed)
+  if (needsImportFix()) {
+    run(
+      "node ./scripts/fix-shared-imports.js",
+      "Shared Import Auto-Fix"
+    );
+  } else {
+    info("🟢 Shared imports already compliant — skipping fix.");
+  }
 
-  //  Initialize RSS feed data into R2 (critical)
+  // 3️⃣ Initialize RSS feed data into R2 (critical)
   run(
     "node ./services/rss-feed-creator/startup/rss-init.js",
     "RSS Init"
   );
 
-  //  Perform runtime sanity checks
+  // 4️⃣ Perform runtime sanity checks
   run("node ./scripts/startupCheck.js", "Startup Check");
 
-  // Validate temp storage + Cloudflare R2 connectivity
+  // 5️⃣ Validate temp storage + Cloudflare R2 connectivity
   run("node ./scripts/tempStorage.js", "R2 Check");
 
-  //  Launch the main web server
+  // 6️⃣ Launch the main web server
   run("node ./server.js", "Start Server");
 
   debug("---------------------------------------------");
