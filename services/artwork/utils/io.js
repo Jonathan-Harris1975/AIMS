@@ -1,4 +1,4 @@
-// services/artwork/utils/io.js (patched)
+// services/artwork/utils/io.js
 import { putObject, putJson } from "../../shared/utils/r2-client.js";
 import { info, error } from "../../../logger.js";
 
