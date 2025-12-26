@@ -12,7 +12,7 @@
 // ============================================================
 
 import { buildRssXml } from "./xmlBuilder.js";
-import { R2_PUBLIC_BASE_URL_RSS_RESOLVED } from "../../services/shared/utils/r2-client.js";
+import { R2_PUBLIC_BASE_URL_RSS_RESOLVED } from "../../shared/utils/r2-client.js";
 import { info, warn } from "../../../logger.js";
 
 export function generateFeedXML(episodesMeta) {
