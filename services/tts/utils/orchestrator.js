@@ -4,7 +4,7 @@
 
 import { info, error, debug } from "../../../logger.js";
 import { ENV } from "#scripts/envBootstrap.js";
-import { startKeepAlive, stopKeepAlive } from "#shared/keepalive.js";
+import { startKeepAlive, stopKeepAlive } from "../../shared/keepalive.js";
 import { listKeys, getObject } from "#shared/r2-client.js";
 import { ttsProcessor } from "./ttsProcessor.js";
 import { mergeProcessor } from "./mergeProcessor.js";
