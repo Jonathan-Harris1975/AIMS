@@ -1,5 +1,5 @@
 import express from "express";
-import log from "../logger.js";
+import { info, error, debug } from "../logger.js";
 import { orchestrateScript } from "../services/script/utils/orchestrator.js";
 
 const router = express.Router();
