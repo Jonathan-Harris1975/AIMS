@@ -5,7 +5,7 @@
 // ============================================================
 
 import { log } from "../../../logger.js";
-import { getObjectAsText, putJson } from "../../../services/shared/utils/r2-client.js";
+import { getObjectAsText, putJson } from "../../shared/utils/r2-client.js";
 
 // Correct bucket alias for episode counter
 const EPISODE_COUNTER_BUCKET = "metasystem";
