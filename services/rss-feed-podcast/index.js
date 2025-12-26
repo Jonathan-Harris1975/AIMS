@@ -10,7 +10,7 @@
 // ============================================================
 
 import { listKeys, getObjectAsText, putObject, R2_PUBLIC_BASE_URL_RSS_RESOLVED } from "../../shared/utils/r2-client.js";
-import { info, warn, error } from "../../../logger.js";
+import { info, warn, error } from "../../../,logger.js";
 import { generateFeedXML } from "./generateFeed.js";
 import { notifyHubByUrl } from "../../shared/utils/podcastIndexClient.js";
 
