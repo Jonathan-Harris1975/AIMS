@@ -1,7 +1,7 @@
 // services/outreach/services/sheetService.js
 
 import { google } from "googleapis";
-import { ENV } from "../../../scripts/envBootstrap.js";
+import { ENV } from "../../scripts/envBootstrap.js";
 
 const TAB_NAME = "Leads";
 
