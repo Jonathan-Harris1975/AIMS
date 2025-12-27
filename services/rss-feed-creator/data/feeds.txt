@@ -10,6 +10,7 @@ https://yatter.in/feed
 https://shaip.com/feed
 https://aiiottalk.com/feed
 https://oreilly.com/radar/topics/ai-ml/feed
+https://www.artificialintelligence-news.com/feed
 https://clarifai.com/blog/rss.xml
 https://unbabel.com/category/blog/feed
 https://blog.kore.ai/rss.xml
