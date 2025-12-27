@@ -29,3 +29,4 @@ https://aitimejournal.com/feed
 https://dlabs.ai/feed
 https://www.technologyreview.com/topic/artificial-intelligence/feed
 https://www.deepmind.com/blog/rss.xml
+https://ainowinstitute.org/feed
