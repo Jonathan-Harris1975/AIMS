@@ -1,7 +1,7 @@
 // services/outreach/services/zeroBounceBatch.js
 
 import axios from "axios";
-import { ENV } from "../../scripts/envBootstrap.js";
+import { ENV } from "../../../scripts/envBootstrap.js";
 import { wait } from "../../shared/utils/wait.js";
 
 const ZERO_BASE = "https://api.zerobounce.net/v2";
