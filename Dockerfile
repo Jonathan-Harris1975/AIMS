@@ -1,12 +1,13 @@
 # ============================================================
 # Base image
 # ============================================================
-FROM node:20-bookworm-slim AS base
+FROM node:20-bookworm-slim
 
 ENV NODE_ENV=production
+ENV TZ=UTC
 
 # ============================================================
-# System dependencies (ffmpeg + audio stack)
+# System dependencies (ffmpeg + runtime essentials)
 # ============================================================
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
@@ -21,13 +22,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 # ============================================================
-# Dependencies (deterministic)
+# Dependencies (deterministic, production only)
 # ============================================================
-# Copy only package files first for layer caching
 COPY package.json package-lock.json ./
 
-# npm ci requires package-lock.json (by design)
-RUN npm ci --omit=dev && npm cache clean --force
+RUN npm ci --omit=dev \
+ && npm cache clean --force
 
 # ============================================================
 # Application source
@@ -35,8 +35,9 @@ RUN npm ci --omit=dev && npm cache clean --force
 COPY . .
 
 # ============================================================
-# Safety: ensure no accidental env access crept in
-# (fails build if process.env is used outside bootstrap)
+# Repo hygiene enforcement
+# - ENV access ONLY via envBootstrap
+# - Fails build if violated
 # ============================================================
 RUN grep -R "process\.env" -n --include="*.js" . \
     | grep -v "scripts/envBootstrap.js" \
@@ -48,5 +49,10 @@ RUN grep -R "process\.env" -n --include="*.js" . \
 # ============================================================
 EXPOSE 3000
 
+# dumb-init ensures proper signal handling (SIGTERM, SIGINT)
 ENTRYPOINT ["dumb-init", "--"]
-CMD ["node", "server.js"]
+
+# 🚀 IMPORTANT:
+# Bootstrap is the canonical entrypoint.
+# It runs envBootstrap, RSS init, checks, then launches server.js
+CMD ["node", "scripts/bootstrap.js"]
