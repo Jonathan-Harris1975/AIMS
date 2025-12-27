@@ -8,8 +8,8 @@ import path from "path";
 import { spawn } from "child_process";
 import fetch from "node-fetch";
 import { info, error, warn , debug} from "../../../logger.js";
-import { startKeepAlive, stopKeepAlive } from "../../shared/keepalive.js";
-import { uploadBuffer } from "../../shared/r2-client.js";
+import { startKeepAlive, stopKeepAlive } from "../../shared/utils/keepalive.js";
+import { uploadBuffer } from "../../shared/utils/r2-client.js";
 
 const TMP_DIR = "/tmp/podcast_merge";
 const MERGED_BUCKET = "merged";
