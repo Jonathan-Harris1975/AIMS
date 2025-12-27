@@ -14,7 +14,7 @@
 //   • Fully isolated stateless runs
 // ============================================================
 
-import { info, error } from "../../../logger.js";
+import { info, error } from "../../logger.js";
 import { orchestrateScript } from "../script/index.js";
 import { orchestrateTTS } from "../tts/utils/orchestrator.js";
 import { createPodcastArtwork } from "../artwork/createPodcastArtwork.js";
