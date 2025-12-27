@@ -1,6 +1,6 @@
 // run-rss-route.js
 import runRssRewriter from "./index.js";
-import { endToEndRewrite } from "./rewrite-pipeline.js";
+import { endToEndRewrite } from "../rewrite-pipeline.js";
 import { info, error } from "../../../logger.js";
 
 export function registerRssRoute(app){
