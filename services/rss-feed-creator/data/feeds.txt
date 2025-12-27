@@ -1,4 +1,5 @@
 https://blog.tensorflow.org/feeds/posts/default
+https://openai.com/news/rss.xml
 https://marktechpost.com/feed
 https://analyticsvidhya.com/feed
 https://ai2people.com/feed
