@@ -1,3 +1,4 @@
+https://blog.tensorflow.org/feeds/posts/default
 https://marktechpost.com/feed
 https://analyticsvidhya.com/feed
 https://ai2people.com/feed
