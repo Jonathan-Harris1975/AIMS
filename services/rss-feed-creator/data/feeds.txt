@@ -26,3 +26,4 @@ https://insights.fusemachines.com/feed
 https://kavita-ganesan.com/feed
 https://aitimejournal.com/feed
 https://dlabs.ai/feed
+https://www.technologyreview.com/topic/artificial-intelligence/feed
