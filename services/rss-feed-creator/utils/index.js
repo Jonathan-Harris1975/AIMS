@@ -1,6 +1,6 @@
 // /services/rss-feed-creator/index.js
-import { uploadRssDataFiles } from "./bootstrap.js";
-import { runRewritePipeline } from "./rewrite-pipeline.js";
+import { uploadRssDataFiles } from "./rss-bootstrap.js";
+import { runRewritePipeline } from "../rewrite-pipeline.js";
 import { log } from "../../../logger.js";
 
 export async function startFeedCreator() {
