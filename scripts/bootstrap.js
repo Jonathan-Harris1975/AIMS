@@ -44,16 +44,7 @@ function needsImportFix() {
   // 1️⃣ Load and validate environment variables
   run("node ./scripts/envBootstrap.js", "Environment Bootstrap");
 
-  // 2️⃣ Fix illegal shared imports (only if needed)
-  if (needsImportFix()) {
-    run(
-      "node ./scripts/fix-shared-imports.js",
-      "Shared Import Auto-Fix"
-    );
-  } else {
-    info("🟢 Shared imports already compliant — skipping fix.");
-  }
-
+  
   // 3️⃣ Initialize RSS feed data into R2 (critical)
   run(
     "node ./services/rss-feed-creator/startup/rss-init.js",
