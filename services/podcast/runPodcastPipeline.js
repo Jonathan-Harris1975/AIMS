@@ -14,14 +14,14 @@
 //   • Fully isolated stateless runs
 // ============================================================
 
-import { info, error } from "../../logger.js";
+import { log } from "../../logger.js";
 import { orchestrateScript } from "../script/index.js";
 import { orchestrateTTS } from "../tts/utils/orchestrator.js";
 import { createPodcastArtwork } from "../artwork/createPodcastArtwork.js";
 
-import cleanupSession from "../../shared/utils/cleanupSession.js";
-import finalCleanupSession from "../../shared/utils/cleanupSessionFinal.js";
-import cleanupTempMemory from "../../shared/utils/cleanupTempMemory.js";
+import cleanupSession from "../shared/utils/cleanupSession.js";
+import finalCleanupSession from "../shared/utils/cleanupSessionFinal.js";
+import cleanupTempMemory from "../shared/utils/cleanupTempMemory.js";
 
 import runRssFeedCreator from "../rss-feed-podcast/index.js";
 
