@@ -39,6 +39,7 @@ const bool = (k, d = false) => {
    Canonical ENV Contract (Phase 2)
 ============================================================ */
 export const ENV = {
+  /* ---------------- Core ---------------- */
   core: {
     NODE_ENV: req("NODE_ENV"),
     PORT: num("PORT", 3000),
@@ -49,6 +50,7 @@ export const ENV = {
     AUTO_CALL: opt("AUTO_CALL", "yes"),
   },
 
+  /* ---------------- AI Runtime ---------------- */
   ai: {
     timeoutMs: num("AI_TIMEOUT", 60000),
     maxTokens: num("AI_MAX_TOKENS", 4096),
@@ -85,6 +87,7 @@ export const ENV = {
     },
   },
 
+  /* ---------------- RSS / Feeds ---------------- */
   rss: {
     feedUrl: req("FEED_URL"),
     cutoffHours: num("FEED_CUTOFF_HOURS", 48),
@@ -99,6 +102,7 @@ export const ENV = {
     description: opt("RSS_FEED_DESCRIPTION"),
   },
 
+  /* ---------------- Podcast ---------------- */
   podcast: {
     title: req("PODCAST_TITLE"),
     author: req("PODCAST_AUTHOR"),
@@ -140,6 +144,7 @@ export const ENV = {
     },
   },
 
+  /* ---------------- TTS ---------------- */
   tts: {
     voiceId: opt("POLLY_VOICE_ID", "Brian"),
     concurrency: num("TTS_CONCURRENCY", 3),
@@ -155,6 +160,7 @@ export const ENV = {
     },
   },
 
+  /* ---------------- R2 ---------------- */
   r2: {
     endpoint: opt("R2_ENDPOINT"),
     region: opt("R2_REGION", "auto"),
@@ -186,8 +192,8 @@ export const ENV = {
     },
   },
 
+  /* ---------------- Outreach (Parked) ---------------- */
   outreach: {
-    // parked
     apiKeys: {
       serp: opt("API_SERP_KEY"),
       hunter: opt("API_HUNTER_KEY"),
@@ -200,7 +206,27 @@ export const ENV = {
 };
 
 /* ============================================================
-   Backward-compat bridge (Phase 2 only)
+   Phase 2 Compatibility Aliases
+   (REMOVE in Phase 4 once migrations are complete)
+============================================================ */
+ENV.R2_BUCKET_RAW_TEXT = ENV.r2.buckets.rawText;
+ENV.R2_BUCKET_PODCAST  = ENV.r2.buckets.podcast;
+ENV.R2_BUCKET_CHUNKS   = ENV.r2.buckets.chunks;
+ENV.R2_BUCKET_META     = ENV.r2.buckets.meta;
+ENV.R2_BUCKET_MERGED   = ENV.r2.buckets.merged;
+ENV.R2_BUCKET_ART      = ENV.r2.buckets.art;
+
+ENV.R2_PUBLIC_BASE_URL_PODCAST     = ENV.r2.publicBase.podcast;
+ENV.R2_PUBLIC_BASE_URL_RAW_TEXT    = ENV.r2.publicBase.rawText;
+ENV.R2_PUBLIC_BASE_URL_META        = ENV.r2.publicBase.meta;
+ENV.R2_PUBLIC_BASE_URL_MERGE       = ENV.r2.publicBase.merge;
+ENV.R2_PUBLIC_BASE_URL_ART         = ENV.r2.publicBase.art;
+ENV.R2_PUBLIC_BASE_URL_CHUNKS      = ENV.r2.publicBase.chunks;
+ENV.R2_PUBLIC_BASE_URL_EDITED_AUDIO= ENV.r2.publicBase.edited;
+ENV.R2_PUBLIC_BASE_URL_TRANSCRIPT  = ENV.r2.publicBase.transcript;
+
+/* ============================================================
+   Phase 2 Backward Compatibility (Flat Snapshot)
 ============================================================ */
 export const ENV_FLAT = Object.freeze({
   ...process.env,
