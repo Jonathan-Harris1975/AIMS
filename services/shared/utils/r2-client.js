@@ -42,6 +42,8 @@ const {
   R2_BUCKET_TRANSCRIPTS,
   R2_BUCKET_CHUNKS,
   R2_BUCKET_EDITED_AUDIO,
+  R2_BUCKET_BLOG,
+  R2_BUCKET_BLOG_IMAGES,
 
   // Legacy/compat (read-only)
   R2_BUCKET_PODCAST_OUTPUT,
@@ -63,6 +65,8 @@ const {
   R2_PUBLIC_BASE_URL_TRANSCRIPT,
   R2_PUBLIC_BASE_URL_CHUNKS,
   R2_PUBLIC_BASE_URL_EDITED_AUDIO,
+  R2_PUBLIC_BASE_URL_BLOG,
+  R2_PUBLIC_BASE_URL_BLOG_IMAGES,
 
   // NEW — metasystem public URL (optional)
   R2_PUBLIC_BASE_URL_META_SYSTEM,
@@ -134,6 +138,14 @@ export const R2_BUCKETS = {
   // NEW — final edited/mastered audio
   edited:          R2_BUCKET_EDITED_AUDIO,
 
+  // Blog (HTML)
+  blog:            R2_BUCKET_BLOG,
+
+  // Blog images (header art)
+  blogImages:      R2_BUCKET_BLOG_IMAGES,
+  blogimages:      R2_BUCKET_BLOG_IMAGES,
+  "blog-images":   R2_BUCKET_BLOG_IMAGES,
+
   // Legacy/compat (read-only)
   R2_BUCKET_PODCAST_OUTPUT,
 
@@ -187,6 +199,12 @@ export const R2_PUBLIC_URLS = {
   edited:          R2_PUBLIC_BASE_URL_EDITED_AUDIO,
   editedAudio:     R2_PUBLIC_BASE_URL_EDITED_AUDIO,
   "edited-audio":  R2_PUBLIC_BASE_URL_EDITED_AUDIO,
+
+  // Blog
+  blog:            R2_PUBLIC_BASE_URL_BLOG,
+  blogImages:      R2_PUBLIC_BASE_URL_BLOG_IMAGES,
+  blogimages:      R2_PUBLIC_BASE_URL_BLOG_IMAGES,
+  "blog-images":   R2_PUBLIC_BASE_URL_BLOG_IMAGES,
 
   // NEW — metasystem public URL
   metasystem:      R2_PUBLIC_BASE_URL_META_SYSTEM,

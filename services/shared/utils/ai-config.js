@@ -31,6 +31,9 @@ export const aiConfig = {
     artworkPrompt: ["meta","google"],
     rssRewrite: ["chatgpt", "google", "meta"],
     rssShortTitle: ["chatgpt", "google", "meta"],
+
+    // Blog
+    blogWeekly: ["google", "chatgpt", "deepseek"],
   },
 
   commonParams: { temperature: 0.85, timeout: 45000 },
