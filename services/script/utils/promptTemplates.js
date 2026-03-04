@@ -27,18 +27,23 @@ export function getIntroPrompt({ weatherSummary, turingQuote, sessionMeta } = {}
     ? ` If you reference a day, it must be "${maybeWeekday}".`
     : "";
 
-  const tagline = `Tired of drowning in artificial intelligence headlines? Ready for clarity, insight, and a direct line to the pulse of innovation? Welcome to Turing's Torch: artificial intelligence Weekly! I'm Jonathan Harris, your host, and I'm cutting through the noise to bring you the most critical artificial intelligence developments, explained, analysed, and delivered straight to you. Let's ignite your understanding of artificial intelligence, together.`;
+  // Keep the sign-off consistent, tight, and non-salesy.
+  const tagline = `This is Turing’s Torch: Artificial Intelligence Weekly — the bits that matter, minus the hype.`;
 
   return `
-You are ${persona.host}, hosting "${persona.show}".
+${persona}
 
-Write a tight, confident radio-style INTRO with a dry, confident British tone:
-- Subtle nod to the weather using: "${weatherSummary}" — keep it wry and passing.
-- Smoothly introduce this Alan Turing quote: "${turingQuote}" and link it to the mission of demystifying artificial intelligence.
-- Maintain a BBC/WIRED editorial energy — sharp, never theatrical.
-- No metaphors about "journeys", no stage cues.
+Write a tight, confident radio-style INTRO in a dry, sceptical British voice.
 
-End EXACTLY with this tagline:
+Non‑negotiable:
+- One short, wry nod to the weather using: "${weatherSummary}" (a passing line, not a segment).
+- Introduce this Alan Turing quote: "${turingQuote}" and connect it to the week’s theme: separating signal from noise.
+- Sound like a seasoned host who’s seen a thousand “breakthroughs” come and go.
+- No corporate optimism. No breathless hype. No “welcome to another exciting episode”.
+- No metaphors about journeys, landscapes, revolutions, or “rapidly evolving” anything.
+- No stage directions, no headings, no bullet points.
+
+End EXACTLY with this line:
 "${tagline}"
 ${weekdayLine}
 `.trim();
@@ -122,7 +127,7 @@ export function getOutroPromptFull(book, sessionMeta) {
     .replace(/\//g, " slash ")
     .trim();
 
-  const closingTagline = `That's it for this week's Turing's Torch. Keep the flame burning, stay curious, and I'll see you next week with more artificial intelligence insights that matter. I'm Jonathan Harris—keep building the future.`;
+  const closingTagline = `That’s your lot for this week’s Turing’s Torch. If you want the daily brief, head to jonathan-harris dot online. Same time next week — try not to believe the press releases.`;
 
   return `
 ${persona}
