@@ -132,12 +132,77 @@ export async function rewriteArticle(item = {}) {
 
   // Parse model output into title + summary
   const parsed = RSS_PROMPTS.normalizeModelText(raw);
-  const rewrittenTitle = RSS_PROMPTS.clampTitleTo12Words(parsed.title || title, 12);
-  const rewrittenSummary = RSS_PROMPTS.clampSummaryToWindow(
+  let rewrittenTitle = RSS_PROMPTS.clampTitleTo12Words(parsed.title || title, 12);
+  let rewrittenSummary = RSS_PROMPTS.clampSummaryToWindow(
     parsed.summary || "",
     RSS_PROMPTS.MIN_SUMMARY_CHARS,
     RSS_PROMPTS.MAX_SUMMARY_CHARS
   );
+
+  // Anti-fluff guard (one retry): prevent press-release phrasing from leaking into the feed.
+  const bannedPhrases = [
+    "in a significant development",
+    "in a move that",
+    "rapidly evolving",
+    "groundbreaking",
+    "transformative",
+    "revolutionary",
+    "cutting-edge",
+    "game-changer",
+    "paradigm shift",
+    "unprecedented",
+    "delve into",
+    "landscape",
+    "underscores",
+    "showcases",
+    "notably",
+  ];
+
+  const looksFluffy = bannedPhrases.some((p) => rewrittenSummary.toLowerCase().includes(p));
+
+  if (looksFluffy) {
+    debug("rss-feed-creator.model.output.fluffDetected", {
+      matched: bannedPhrases
+        .filter((p) => rewrittenSummary.toLowerCase().includes(p))
+        .slice(0, 5),
+    });
+
+    const retryMessages = [
+      {
+        role: "system",
+        content:
+          String(systemPrompt) +
+          "\n\nHARD RULE: Avoid press-release/editorial filler. Output must sound spoken and blunt.",
+      },
+      {
+        role: "user",
+        content:
+          String(userPrompt) +
+          "\n\nRewrite again, tighter and more spoken. Do NOT use any of these phrases (or close variants): " +
+          bannedPhrases.join(", "),
+      },
+    ];
+
+    const raw2 = await resilientRequest("rssRewrite", {
+      messages: retryMessages,
+      temperature: 0.55,
+      max_tokens: 900,
+    });
+
+    const parsed2 = RSS_PROMPTS.normalizeModelText(raw2);
+    const t2 = RSS_PROMPTS.clampTitleTo12Words(parsed2.title || rewrittenTitle, 12);
+    const s2 = RSS_PROMPTS.clampSummaryToWindow(
+      parsed2.summary || rewrittenSummary,
+      RSS_PROMPTS.MIN_SUMMARY_CHARS,
+      RSS_PROMPTS.MAX_SUMMARY_CHARS
+    );
+
+    if (s2 && s2.length >= RSS_PROMPTS.MIN_SUMMARY_CHARS) {
+      rewrittenTitle = t2;
+      rewrittenSummary = s2;
+    }
+  }
+
 
   // Validate format constraints
   const v = RSS_PROMPTS.validateOutput(rewrittenTitle, rewrittenSummary, {
