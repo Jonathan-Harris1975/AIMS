@@ -117,7 +117,7 @@ Composition: wide header image suitable for a blog hero banner.`;
       {
         role: "system",
         content:
-          "You write for the blog of 'Turing’s Torch AI Weekly'. Voice: British Gen-X, sharp, sceptical, lightly sarcastic, zero corporate fluff. Output MUST be HTML only (no markdown). Use <h2>, <p>, <ul><li>. No inline styles.",
+          "You write for the blog of 'Turing’s Torch AI Weekly'. Voice: dry, sceptical British host energy; sharp, lightly sarcastic when deserved; zero corporate fluff. Output MUST be HTML only (no markdown). Use <h2>, <p>, <ul><li>. No inline styles.",
       },
       {
         role: "user",
@@ -129,7 +129,7 @@ Rules:
 - Then 4–7 sections with <h2> headings.
 - Each section should connect 2–5 related stories.
 - Include practical "so what" takeaways.
-- Avoid hype words: groundbreaking, transformative, revolutionary, rapidly evolving landscape.
+- Avoid hype words/phrases (and close variants): groundbreaking, transformative, revolutionary, rapidly evolving, game-changer, paradigm shift, unprecedented, in a move that signals.
 - No "In this post we explore" style filler.
 
 Use these source summaries (do not quote them verbatim; rewrite in your own voice):
@@ -147,6 +147,59 @@ ${sourcesForPrompt}
     });
 
     bodyHtml = String(bodyHtml || "").trim();
+
+    // Quick anti-fluff guard: if the model slips into press-release mode, regenerate once.
+    const bannedPhrases = [
+      "in a significant development",
+      "in a move that",
+      "rapidly evolving",
+      "groundbreaking",
+      "transformative",
+      "revolutionary",
+      "cutting-edge",
+      "game-changer",
+      "paradigm shift",
+      "unprecedented",
+      "delve into",
+      "landscape",
+      "underscores",
+      "showcases",
+      "notably",
+      "this week we explore",
+      "in this post",
+    ];
+
+    const hasFluff = bannedPhrases.some((p) => bodyHtml.toLowerCase().includes(p));
+    if (hasFluff) {
+      debug("blog.weekly.body.regen.fluffDetected", { week, matched: bannedPhrases.filter(p => bodyHtml.toLowerCase().includes(p)).slice(0, 5) });
+      const regenMessages = [
+        messages[0],
+        {
+          role: "user",
+          content:
+            `Rewrite the same weekly roundup again.
+
+Hard rules:
+- Remove ANY press-release/editorial filler.
+- Do NOT use any of these phrases (or close variants): ${bannedPhrases.join(", ")}.
+- Keep it tight and spoken, like a host writing a column.
+
+Return HTML only.
+
+Sources (same as before):
+\n\n${sourcesForPrompt}`,
+        },
+      ];
+
+      bodyHtml = await resilientRequest("blogWeekly", {
+        sessionId,
+        messages: regenMessages,
+        max_tokens: 2600,
+        temperature: 0.65,
+      });
+      bodyHtml = String(bodyHtml || "").trim();
+    }
+
     if (!bodyHtml || !bodyHtml.includes("<p")) {
       // hard fallback: simple paragraphs from item summaries
       bodyHtml = `
