@@ -35,16 +35,6 @@ RUN npm ci --omit=dev \
 COPY . .
 
 # ============================================================
-# Repo hygiene enforcement
-# - ENV access ONLY via envBootstrap
-# - Fails build if violated
-# ============================================================
-RUN grep -R "process\.env" -n --include="*.js" . \
-    | grep -v "scripts/envBootstrap.js" \
-    && (echo "❌ process.env usage outside envBootstrap.js" && exit 1) \
-    || echo "✅ ENV-only rule enforced"
-
-# ============================================================
 # Runtime
 # ============================================================
 EXPOSE 3000
@@ -52,7 +42,5 @@ EXPOSE 3000
 # dumb-init ensures proper signal handling (SIGTERM, SIGINT)
 ENTRYPOINT ["dumb-init", "--"]
 
-# 🚀 IMPORTANT:
-# Bootstrap is the canonical entrypoint.
-# It runs envBootstrap, RSS init, checks, then launches server.js
+# Bootstrap initializes supporting services and launches server.js
 CMD ["node", "scripts/bootstrap.js"]

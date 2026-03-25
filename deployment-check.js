@@ -1,13 +1,24 @@
 // deployment-check.js
-import { ENV } from "./scripts/envBootstrap.js";
+const REQUIRED_ENV_KEYS = [
+  "NODE_ENV",
+  "OPENROUTER_API_BASE",
+  "RAPIDAPI_HOST",
+  "RAPIDAPI_KEY",
+  "FEED_URL",
+  "PODCAST_TITLE",
+  "PODCAST_AUTHOR",
+  "PODCAST_DESCRIPTION",
+  "PODCAST_LINK",
+];
 
-const required = Object.entries(ENV)
-  .filter(([_, v]) => v === undefined)
-  .map(([k]) => k);
+const missing = REQUIRED_ENV_KEYS.filter((key) => {
+  const value = process.env[key];
+  return value === undefined || String(value).trim() === "";
+});
 
-if (required.length) {
+if (missing.length) {
   console.error("❌ Missing required ENV variables:");
-  required.forEach((k) => console.error(`  - ${k}`));
+  missing.forEach((key) => console.error(`  - ${key}`));
   process.exit(1);
 }
 
