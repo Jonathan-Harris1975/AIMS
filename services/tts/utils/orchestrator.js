@@ -3,7 +3,6 @@
 // ============================================================
 
 import { info, error, debug } from "../../../logger.js";
-import { ENV } from "../../../scripts/envBootstrap.js";
 import { startKeepAlive, stopKeepAlive } from "../../shared/utils/keepalive.js";
 import { listKeys, getObject } from "../../shared/utils/r2-client.js";
 import { ttsProcessor } from "./ttsProcessor.js";
@@ -12,16 +11,15 @@ import { editingProcessor } from "./editingProcessor.js";
 import { podcastProcessor } from "./podcastProcessor.js";
 
 /* ============================================================
-   R2 configuration (authoritative)
+   R2 configuration
 ============================================================ */
-const RAW_TEXT_BUCKET = ENV.R2_BUCKET_RAW_TEXT;
-const RAW_TEXT_BASE_URL = ENV.R2_PUBLIC_BASE_URL_RAW_TEXT;
+const RAW_TEXT_BUCKET = process.env.R2_BUCKET_RAW_TEXT;
+const PUBLIC_BASE_URL_PODCAST = process.env.R2_PUBLIC_BASE_URL_PODCAST;
 
-const FINAL_BUCKET = ENV.R2_BUCKET_PODCAST;
-const PUBLIC_BASE_URL_PODCAST = ENV.R2_PUBLIC_BASE_URL_PODCAST;
-
-if (!RAW_TEXT_BUCKET) throw new Error("Missing ENV.R2_BUCKET_RAW_TEXT");
-if (!FINAL_BUCKET) throw new Error("Missing ENV.R2_BUCKET_PODCAST");
+if (!RAW_TEXT_BUCKET) throw new Error("Missing process.env.R2_BUCKET_RAW_TEXT");
+if (!process.env.R2_BUCKET_PODCAST) {
+  throw new Error("Missing process.env.R2_BUCKET_PODCAST");
+}
 
 /* ============================================================
    📥 Load all text chunks from R2
@@ -56,7 +54,7 @@ async function loadTextChunksFromR2(sessionId) {
 
     chunkList.push({
       key,
-      text, // ⭐ REQUIRED by ttsProcessor
+      text,
     });
   }
 
