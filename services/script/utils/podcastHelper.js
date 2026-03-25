@@ -204,7 +204,7 @@ export async function generateEpisodeMetaLLM(rawTranscript, sessionMeta = {}) {
 
   try {
     const prompt = getTitleDescriptionPrompt(mainOnly);
-    const tdRaw = await resilientRequest("meta-title-description", {
+    const tdRaw = await resilientRequest("metadata", {
       sessionId,
       messages: [{ role: "user", content: prompt }],
     });
@@ -237,7 +237,7 @@ export async function generateEpisodeMetaLLM(rawTranscript, sessionMeta = {}) {
   /* SEO Keywords */
   let keywords = [];
   try {
-    const kw = await resilientRequest("meta-seo", {
+    const kw = await resilientRequest("seoKeywords", {
       sessionId,
       messages: [{ role: "user", content: getSEOKeywordsPrompt(description) }]
     });
@@ -254,7 +254,7 @@ export async function generateEpisodeMetaLLM(rawTranscript, sessionMeta = {}) {
   /* Artwork Prompt */
   let artworkPrompt = "";
   try {
-    artworkPrompt = await resilientRequest("meta-artwork", {
+    artworkPrompt = await resilientRequest("artworkPrompt", {
       sessionId,
       messages: [{ role: "user", content: getArtworkPrompt(description) }]
     });

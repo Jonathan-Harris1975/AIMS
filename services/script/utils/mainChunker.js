@@ -116,7 +116,7 @@ export async function generateMainLongform(sessionMeta, articles, totalMainSecon
 
   const synthesisPrompt = buildMainSynthesisPrompt(sessionMeta, parts, totalMainSeconds);
 
-  const synthesisRes = await resilientRequest("scriptMain-synthesis", {
+  const synthesisRes = await resilientRequest("scriptMain", {
     sessionId: sessionMeta,
     section: "main-synthesis",
     messages: [{ role: "system", content: synthesisPrompt }],

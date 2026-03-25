@@ -33,4 +33,12 @@ export async function clearTempParts(sessionIdLike) {
   return true;
 }
 
-export default { storeTempPart, getTempPart, getAllTempParts, clearTempParts };
+export const clearSession = clearTempParts;
+
+export default {
+  storeTempPart,
+  getTempPart,
+  getAllTempParts,
+  clearTempParts,
+  clearSession,
+};

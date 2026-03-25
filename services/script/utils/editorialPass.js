@@ -63,7 +63,7 @@ export async function runEditorialPass(meta = {}, scriptText = "") {
   try {
     const prompt = buildEditorialPrompt(scriptText);
 
-    const refined = await resilientRequest("editorial-pass", {
+    const refined = await resilientRequest("editorialPass", {
       sessionId,
       section: "editorial-human",
       messages: [{ role: "user", content: prompt }],
