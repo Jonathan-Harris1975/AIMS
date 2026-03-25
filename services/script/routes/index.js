@@ -2,6 +2,7 @@
 
 import express from "express";
 import { info, error } from "../../../logger.js";
+import { sanitizeSessionId } from "../../shared/utils/sessionId.js";
 import {
   generateIntro,
   generateMain,
@@ -12,10 +13,24 @@ import { orchestrateEpisode } from "../utils/orchestrator.js";
 
 const router = express.Router();
 
+function normalizePayload(body = {}) {
+  if (!body || typeof body !== "object") {
+    return {};
+  }
+
+  const payload = { ...body };
+
+  if (payload.sessionId !== undefined) {
+    payload.sessionId = sanitizeSessionId(payload.sessionId, "TT");
+  }
+
+  return payload;
+}
+
 // ─────────────────────────────
 //  HEALTH CHECK
 // ─────────────────────────────
-router.get("/health", (req, res) => {
+router.get("/health", (_req, res) => {
   res.json({ ok: true, service: "script" });
 });
 
@@ -24,8 +39,9 @@ router.get("/health", (req, res) => {
 // ─────────────────────────────
 router.post("/intro", async (req, res) => {
   try {
-    info("script.intro.req", { date: req.body.date });
-    const result = await generateIntro(req.body);
+    const payload = normalizePayload(req.body);
+    info("script.intro.req", { date: payload.date, sessionId: payload.sessionId });
+    const result = await generateIntro(payload);
     res.json({ ok: true, text: result });
   } catch (err) {
     error("script.intro.fail", { err: err.message });
@@ -38,8 +54,9 @@ router.post("/intro", async (req, res) => {
 // ─────────────────────────────
 router.post("/main", async (req, res) => {
   try {
-    info("script.main.req", { date: req.body.date });
-    const result = await generateMain(req.body);
+    const payload = normalizePayload(req.body);
+    info("script.main.req", { date: payload.date, sessionId: payload.sessionId });
+    const result = await generateMain(payload);
     res.json({ ok: true, text: result });
   } catch (err) {
     error("script.main.fail", { err: err.message });
@@ -52,8 +69,9 @@ router.post("/main", async (req, res) => {
 // ─────────────────────────────
 router.post("/outro", async (req, res) => {
   try {
-    info("script.outro.req", { date: req.body.date });
-    const result = await generateOutro(req.body);
+    const payload = normalizePayload(req.body);
+    info("script.outro.req", { date: payload.date, sessionId: payload.sessionId });
+    const result = await generateOutro(payload);
     res.json({ ok: true, text: result });
   } catch (err) {
     error("script.outro.fail", { err: err.message });
@@ -66,8 +84,9 @@ router.post("/outro", async (req, res) => {
 // ─────────────────────────────
 router.post("/compose", async (req, res) => {
   try {
-    info("script.compose.req", { date: req.body.date });
-    const result = await generateComposedEpisode(req.body);
+    const payload = normalizePayload(req.body);
+    info("script.compose.req", { date: payload.date, sessionId: payload.sessionId });
+    const result = await generateComposedEpisode(payload);
     res.json({ ok: true, ...result });
   } catch (err) {
     error("script.compose.fail", { err: err.message });
@@ -80,8 +99,9 @@ router.post("/compose", async (req, res) => {
 // ─────────────────────────────
 router.post("/orchestrate", async (req, res) => {
   try {
-    info("script.orchestrate.req", { date: req.body.date });
-    const result = await orchestrateEpisode(req.body);
+    const payload = normalizePayload(req.body);
+    info("script.orchestrate.req", { date: payload.date, sessionId: payload.sessionId });
+    const result = await orchestrateEpisode(payload);
     res.json(result);
   } catch (err) {
     error("script.orchestrate.fail", { err: err.message });
