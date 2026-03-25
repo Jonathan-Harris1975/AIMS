@@ -9,7 +9,7 @@
 // - Optional: AUTO_CALL=yes → notify PodcastIndex Hub automatically
 // ============================================================
 
-import { listKeys, getObjectAsText, putObject, R2_PUBLIC_BASE_URL_RSS_RESOLVED } from "../shared/utils/r2-client.js";
+import { listKeys, getObjectAsText, putObject, R2_PUBLIC_URLS } from "../shared/utils/r2-client.js";
 import { info, warn, error } from "../../logger.js";
 import { generateFeedXML } from "./generateFeed.js";
 import { notifyHubByUrl } from "../shared/utils/podcastIndexClient.js";
@@ -25,7 +25,7 @@ const RSS_KEY = "turing-torch.xml";
 // Feed URL for PodcastIndex notifications
 const FEED_URL =
   process.env.PODCAST_RSS_FEED_URL ||
-  `${R2_PUBLIC_BASE_URL_RSS_RESOLVED || ""}/turing-torch.xml`;
+  `${R2_PUBLIC_URLS.podcastRss || ""}/${RSS_KEY}`;
 
 export async function runRssFeedCreator() {
   info("🚀 Starting RSS feed generation");
@@ -121,7 +121,7 @@ export async function runRssFeedCreator() {
   });
 
   try {
-    const res = await notifyHubByUrl(process.env.PODCAST_LINK);
+    const res = await notifyHubByUrl(FEED_URL);
     info("📡 PodcastIndex Hub notified successfully!", {
       result: res?.status,
       feedUrl: FEED_URL,
