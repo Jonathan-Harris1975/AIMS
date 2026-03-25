@@ -74,6 +74,9 @@ export async function runPodcastPipeline(sessionId) {
     // -----------------------------------------------------------
     log.info("🗣️ TTS pipeline starting…");
     const tts = await orchestrateTTS(sessionId);
+    if (!tts?.ok) {
+      throw new Error(tts?.error || "TTS pipeline failed");
+    }
     log.info("🗣️ TTS pipeline complete", { sessionId });
 
     // -----------------------------------------------------------
