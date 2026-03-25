@@ -1,14 +1,16 @@
 // services/outreach/services/sheetService.js
 
 import { google } from "googleapis";
-import { ENV } from "../../../scripts/envBootstrap.js";
 
 const TAB_NAME = "Leads";
+const googleClientEmail = process.env.GOOGLE_CLIENT_EMAIL;
+const googlePrivateKey = process.env.GOOGLE_PRIVATE_KEY;
+const googleSheetId = process.env.GOOGLE_SHEET_ID;
 
 const auth = new google.auth.GoogleAuth({
   credentials: {
-    client_email: ENV.GOOGLE_CLIENT_EMAIL,
-    private_key: ENV.GOOGLE_PRIVATE_KEY.replace(/\\n/g, "\n"),
+    client_email: googleClientEmail,
+    private_key: googlePrivateKey?.replace(/\\n/g, "\n"),
   },
   scopes: ["https://www.googleapis.com/auth/spreadsheets"],
 });
@@ -27,7 +29,7 @@ export async function appendLeadRows(rows = []) {
   if (!rows.length) return;
 
   return sheets.spreadsheets.values.append({
-    spreadsheetId: normalizeSpreadsheetId(ENV.GOOGLE_SHEET_ID),
+    spreadsheetId: normalizeSpreadsheetId(googleSheetId),
     range: `${TAB_NAME}!A1`,
     valueInputOption: "RAW",
     insertDataOption: "INSERT_ROWS",

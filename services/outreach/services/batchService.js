@@ -1,7 +1,6 @@
 import fs from "fs";
 import path from "path";
 
-import { ENV } from "../../../scripts/envBootstrap.js";
 import { wait } from "../../shared/utils/wait.js";
 import { log, info } from "../../../logger.js";
 
@@ -15,6 +14,15 @@ const PROGRESS_FILE = path.resolve(
   process.cwd(),
   "services/outreach/data/batch-progress.json"
 );
+
+function parseKeywords(raw) {
+  if (!raw) return [];
+
+  return String(raw)
+    .split(/\r?\n|,/) 
+    .map((value) => value.trim())
+    .filter(Boolean);
+}
 
 function loadProgress() {
   try {
@@ -42,8 +50,8 @@ function saveProgress(progress) {
 ============================================================ */
 
 export async function runNextBatch() {
-  const keywords = ENV.OUTREACH_KEYWORDS || [];
-  if (!Array.isArray(keywords) || keywords.length === 0) {
+  const keywords = parseKeywords(process.env.OUTREACH_KEYWORDS);
+  if (!keywords.length) {
     info("ℹ️ No outreach keywords configured");
     return { processed: 0, done: true };
   }
@@ -51,8 +59,13 @@ export async function runNextBatch() {
   const progress = loadProgress();
   let index = progress.lastProcessedIndex;
 
-  const batchSize = ENV.OUTREACH_BATCH_SIZE;
-  const delayMs = ENV.SERP_RATE_DELAY_MS;
+  const batchSize = Number(process.env.OUTREACH_BATCH_SIZE) || 0;
+  const delayMs = Number(process.env.SERP_RATE_DELAY_MS) || 0;
+
+  if (batchSize <= 0) {
+    info("ℹ️ OUTREACH_BATCH_SIZE is not configured");
+    return { processed: 0, done: true, lastProcessedIndex: index };
+  }
 
   let processed = 0;
 
@@ -81,7 +94,7 @@ export async function runNextBatch() {
   return {
     processed,
     done,
-    lastProcessedIndex: index
+    lastProcessedIndex: index,
   };
 }
 

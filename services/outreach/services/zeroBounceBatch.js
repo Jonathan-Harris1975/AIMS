@@ -1,11 +1,10 @@
 // services/outreach/services/zeroBounceBatch.js
 
 import axios from "axios";
-import { ENV } from "../../../scripts/envBootstrap.js";
 import { wait } from "../../shared/utils/wait.js";
 
 const ZERO_BASE = "https://api.zerobounce.net/v2";
-const BATCH_SIZE = 50; // unchanged
+const BATCH_SIZE = 50;
 
 export async function batchValidateEmails(emails = []) {
   const resultMap = new Map();
@@ -14,7 +13,7 @@ export async function batchValidateEmails(emails = []) {
     (e) => typeof e === "string" && e.includes("@")
   );
 
-  if (!ENV.API_ZERO_KEY) {
+  if (!process.env.API_ZERO_KEY) {
     clean.forEach((e) =>
       resultMap.set(e, { status: "unknown", sub_status: "not_checked" })
     );
@@ -28,7 +27,7 @@ export async function batchValidateEmails(emails = []) {
       const res = await axios.post(
         `${ZERO_BASE}/batch-validate`,
         {
-          api_key: ENV.API_ZERO_KEY,
+          api_key: process.env.API_ZERO_KEY,
           email_batch: batch.map((email) => ({ email_address: email })),
         },
         { timeout: 30000 }
@@ -50,9 +49,9 @@ export async function batchValidateEmails(emails = []) {
     }
 
     if (i + BATCH_SIZE < clean.length) {
-      await wait(ENV.HUNTER_DELAY_MS);
+      await wait(Number(process.env.HUNTER_DELAY_MS) || 0);
     }
   }
 
   return resultMap;
-        }
+}
