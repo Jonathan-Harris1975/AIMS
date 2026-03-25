@@ -8,8 +8,7 @@ const router = express.Router();
 router.post("/", async (req, res) => {
   try {
     const payload = req.body || {};
-    const bucket = process.env.R2_BUCKET_ART;
-    if (!bucket) throw new Error("R2_BUCKET_ART not set");
+    const bucket = "art";
 
     const key = `artwork/requests/${Date.now()}.json`;
     await putJson(bucket, key, payload);

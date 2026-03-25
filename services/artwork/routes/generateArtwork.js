@@ -5,6 +5,7 @@
 import express from "express";
 import fetch from "node-fetch";
 import { putObject } from "../../shared/utils/r2-client.js";
+import { sanitizeSessionId } from "../../shared/utils/sessionId.js";
 import { info, error } from "../../../logger.js";
 
 const router = express.Router();
@@ -73,10 +74,12 @@ export async function generateArtwork(sessionId, prompt = '') {
 // ------------------------------------------------------------
 // Express Route Wrapper
 // ------------------------------------------------------------
-router.post("/generate", async (req, res) => {
-  const sessionId = req.body.sessionId || `art-${Date.now()}`;
-  const prompt = req.body.prompt || "Podcast cover art: abstract AI design";
+router.post("/", async (req, res) => {
+  let sessionId;
+
   try {
+    sessionId = sanitizeSessionId(req.body?.sessionId || `art-${Date.now()}`, "art");
+    const prompt = req.body?.prompt || "Podcast cover art: abstract AI design";
     const url = await generateArtwork(sessionId, prompt);
     res.json({ ok: true, sessionId, url });
   } catch (err) {
