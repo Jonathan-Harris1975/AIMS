@@ -6,6 +6,7 @@
 
 import express from "express";
 import { info, error } from "../../../logger.js";
+import { sanitizeSessionId } from "../../shared/utils/sessionId.js";
 import { orchestrateTTS } from "../index.js";
 
 const router = express.Router();
@@ -18,8 +19,13 @@ router.get("/health", (_req, res) => res.json({ ok: true, service: "tts" }));
  * body: { sessionId?: string }
  */
 router.post("/orchestrate", async (req, res) => {
-  // Never await the full pipeline in this request handler
-  const sessionId = req.body?.sessionId || `TT-${Date.now()}`;
+  let sessionId;
+
+  try {
+    sessionId = sanitizeSessionId(req.body?.sessionId || `TT-${Date.now()}`, "TT");
+  } catch (err) {
+    return res.status(400).json({ ok: false, error: err.message });
+  }
 
   // Defensively ensure we never inherit a slow server timeout
   if (typeof req.setTimeout === "function") {
