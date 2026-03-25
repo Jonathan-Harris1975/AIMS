@@ -174,6 +174,63 @@ export const R2_BUCKETS = {
 // ------------------------------------------------------------
 // 🌍 Public URL Aliases
 // ------------------------------------------------------------
+export const BUCKET_ENV_BY_ALIAS = {
+  podcast: "R2_BUCKET_PODCAST",
+  R2_BUCKET_RAW: "R2_BUCKET_RAW",
+  rawtext: "R2_BUCKET_RAW_TEXT",
+  rawText: "R2_BUCKET_RAW_TEXT",
+  "raw-text": "R2_BUCKET_RAW_TEXT",
+  meta: "R2_BUCKET_META",
+  merged: "R2_BUCKET_MERGED",
+  art: "R2_BUCKET_ART",
+  chunks: "R2_BUCKET_CHUNKS",
+  "podcast-chunks": "R2_BUCKET_CHUNKS",
+  rawAudio: "R2_BUCKET_CHUNKS",
+  rawaudio: "R2_BUCKET_CHUNKS",
+  "raw-audio": "R2_BUCKET_CHUNKS",
+  rss: "R2_BUCKET_RSS_FEEDS",
+  "rss-feeds": "R2_BUCKET_RSS_FEEDS",
+  rssfeeds: "R2_BUCKET_RSS_FEEDS",
+  podcastRss: "R2_BUCKET_PODCAST_RSS_FEEDS",
+  transcripts: "R2_BUCKET_TRANSCRIPTS",
+  transcript: "R2_BUCKET_TRANSCRIPTS",
+  edited: "R2_BUCKET_EDITED_AUDIO",
+  editedAudio: "R2_BUCKET_EDITED_AUDIO",
+  "edited-audio": "R2_BUCKET_EDITED_AUDIO",
+  blog: "R2_BUCKET_BLOG",
+  blogImages: "R2_BUCKET_BLOG_IMAGES",
+  blogimages: "R2_BUCKET_BLOG_IMAGES",
+  "blog-images": "R2_BUCKET_BLOG_IMAGES",
+  metasystem: "R2_BUCKET_META_SYSTEM",
+  metaSystem: "R2_BUCKET_META_SYSTEM",
+};
+
+export const PUBLIC_URL_ENV_BY_ALIAS = {
+  podcast: "R2_PUBLIC_BASE_URL_PODCAST",
+  rawtext: "R2_PUBLIC_BASE_URL_RAW_TEXT",
+  rawText: "R2_PUBLIC_BASE_URL_RAW_TEXT",
+  "raw-text": "R2_PUBLIC_BASE_URL_RAW_TEXT",
+  meta: "R2_PUBLIC_BASE_URL_META",
+  merged: "R2_PUBLIC_BASE_URL_MERGE",
+  art: "R2_PUBLIC_BASE_URL_ART",
+  rss: "R2_PUBLIC_BASE_URL_RSS",
+  "rss-feeds": "R2_PUBLIC_BASE_URL_RSS",
+  transcript: "R2_PUBLIC_BASE_URL_TRANSCRIPT",
+  transcripts: "R2_PUBLIC_BASE_URL_TRANSCRIPT",
+  chunks: "R2_PUBLIC_BASE_URL_CHUNKS",
+  "podcast-chunks": "R2_PUBLIC_BASE_URL_CHUNKS",
+  podcastRss: "R2_PUBLIC_BASE_URL_PODCAST_RSS",
+  edited: "R2_PUBLIC_BASE_URL_EDITED_AUDIO",
+  editedAudio: "R2_PUBLIC_BASE_URL_EDITED_AUDIO",
+  "edited-audio": "R2_PUBLIC_BASE_URL_EDITED_AUDIO",
+  blog: "R2_PUBLIC_BASE_URL_BLOG",
+  blogImages: "R2_PUBLIC_BASE_URL_BLOG_IMAGES",
+  blogimages: "R2_PUBLIC_BASE_URL_BLOG_IMAGES",
+  "blog-images": "R2_PUBLIC_BASE_URL_BLOG_IMAGES",
+  metasystem: "R2_PUBLIC_BASE_URL_META_SYSTEM",
+  metaSystem: "R2_PUBLIC_BASE_URL_META_SYSTEM",
+};
+
 export const R2_PUBLIC_URLS = {
   podcast:         R2_PUBLIC_BASE_URL_PODCAST,
   rawtext:         R2_PUBLIC_BASE_URL_RAW_TEXT,
@@ -227,11 +284,17 @@ export const R2_PUBLIC_URLS = {
 // 🧩 Validation Helper
 // ------------------------------------------------------------
 export function ensureBucketKey(bucketKey) {
-  const bucket = R2_BUCKETS[bucketKey];
-  if (!bucket) {
+  if (!Object.prototype.hasOwnProperty.call(R2_BUCKETS, bucketKey)) {
     const valid = Object.keys(R2_BUCKETS).join(", ");
     throw new Error(`❌ Unknown R2 bucket key: ${bucketKey} — valid keys: ${valid}`);
   }
+
+  const bucket = R2_BUCKETS[bucketKey];
+  if (!bucket) {
+    const envName = BUCKET_ENV_BY_ALIAS[bucketKey] || `bucket alias '${bucketKey}'`;
+    throw new Error(`❌ R2 bucket alias '${bucketKey}' is configured in code but missing in env (${envName}).`);
+  }
+
   return bucket;
 }
 
@@ -252,7 +315,8 @@ export async function uploadBuffer(bucketKey, key, buffer, contentType = "applic
 
   const base = R2_PUBLIC_URLS[bucketKey];
   if (!base) {
-    throw new Error(`❌ No public URL configured for R2 bucket alias '${bucketKey}'`);
+    const envName = PUBLIC_URL_ENV_BY_ALIAS[bucketKey] || `public URL alias '${bucketKey}'`;
+    throw new Error(`❌ No public URL configured for R2 bucket alias '${bucketKey}' (${envName}).`);
   }
 
   return `${base}/${encodeURIComponent(key)}`;
@@ -284,7 +348,10 @@ export const putJson = async (bucketKey, key, obj) =>
 
 export function buildPublicUrl(bucketKey, key) {
   const base = R2_PUBLIC_URLS[bucketKey];
-  if (!base) throw new Error(`❌ No public URL configured for ${bucketKey}`);
+  if (!base) {
+    const envName = PUBLIC_URL_ENV_BY_ALIAS[bucketKey] || `public URL alias '${bucketKey}'`;
+    throw new Error(`❌ No public URL configured for ${bucketKey} (${envName})`);
+  }
   return `${base}/${encodeURIComponent(key)}`;
 }
 
