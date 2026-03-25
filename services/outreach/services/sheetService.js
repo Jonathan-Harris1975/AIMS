@@ -15,11 +15,19 @@ const auth = new google.auth.GoogleAuth({
 
 const sheets = google.sheets({ version: "v4", auth });
 
+function normalizeSpreadsheetId(value = "") {
+  const raw = String(value || "").trim();
+  if (!raw) return raw;
+
+  const match = raw.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+  return match?.[1] || raw;
+}
+
 export async function appendLeadRows(rows = []) {
   if (!rows.length) return;
 
   return sheets.spreadsheets.values.append({
-    spreadsheetId: ENV.GOOGLE_SHEET_ID,
+    spreadsheetId: normalizeSpreadsheetId(ENV.GOOGLE_SHEET_ID),
     range: `${TAB_NAME}!A1`,
     valueInputOption: "RAW",
     insertDataOption: "INSERT_ROWS",
