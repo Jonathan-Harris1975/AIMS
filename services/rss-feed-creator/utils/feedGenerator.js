@@ -117,7 +117,12 @@ export async function generateFeed(bucket, rewrittenItems) {
       size: xmlString.length,
     });
   } catch (err) {
-    error("rss-feed-creator.generateFeed.fail", err, { bucket });
+    error("rss-feed-creator.generateFeed.fail", {
+      bucket,
+      message: err?.message,
+      stack: err?.stack,
+    });
+    throw err;
   }
 }
 
