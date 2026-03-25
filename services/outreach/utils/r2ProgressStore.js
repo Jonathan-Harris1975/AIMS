@@ -2,20 +2,20 @@
 
 import { getObjectAsText, putJson } from "../../shared/utils/r2-client.js";
 import { info } from "../../../logger.js";
-import { ENV } from "../../../scripts/envBootstrap.js";
 
 const DEFAULT_KEY = "outreach/progress.json";
+const DEFAULT_BATCH_SIZE = Number(process.env.OUTREACH_BATCH_SIZE) || 0;
 
 function baseProgress() {
   return {
     lastProcessedIndex: 0,
-    batchSize: ENV.OUTREACH_BATCH_SIZE,
-    updatedAt: null
+    batchSize: DEFAULT_BATCH_SIZE,
+    updatedAt: null,
   };
 }
 
 export async function loadProgress() {
-  const key = ENV.OUTREACH_PROGRESS_KEY || DEFAULT_KEY;
+  const key = process.env.OUTREACH_PROGRESS_KEY || DEFAULT_KEY;
 
   try {
     const txt = await getObjectAsText("metasystem", key);
@@ -27,19 +27,19 @@ export async function loadProgress() {
 }
 
 export async function saveProgress(progress) {
-  const key = ENV.OUTREACH_PROGRESS_KEY || DEFAULT_KEY;
+  const key = process.env.OUTREACH_PROGRESS_KEY || DEFAULT_KEY;
 
   const payload = {
     ...baseProgress(),
     ...progress,
-    updatedAt: new Date().toISOString()
+    updatedAt: new Date().toISOString(),
   };
 
   await putJson("metasystem", key, payload);
 
   info("outreach.batch.cursor", {
     nextStartIndex: payload.lastProcessedIndex,
-    batchSize: payload.batchSize
+    batchSize: payload.batchSize,
   });
 
   return payload;

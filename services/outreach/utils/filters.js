@@ -1,14 +1,11 @@
 // services/outreach/utils/filters.js
 
-import { ENV } from "../../../scripts/envBootstrap.js";
-
 /**
  * Outreach scoring thresholds
- * These are policy-level controls and are now env-driven.
- * Behaviour is unchanged as long as env values match previous constants.
+ * These are policy-level controls and are env-driven.
  */
-const MIN_LEAD_SCORE = Number(ENV.OUTREACH_MIN_LEAD_SCORE);
-const MIN_EMAIL_SCORE = Number(ENV.OUTREACH_MIN_EMAIL_SCORE);
+const MIN_LEAD_SCORE = Number(process.env.OUTREACH_MIN_LEAD_SCORE);
+const MIN_EMAIL_SCORE = Number(process.env.OUTREACH_MIN_EMAIL_SCORE);
 
 if (Number.isNaN(MIN_LEAD_SCORE)) {
   throw new Error("OUTREACH_MIN_LEAD_SCORE must be a number");
@@ -46,4 +43,4 @@ export function extractGoodLeads(results = [], keyword) {
         r.leadScore >= MIN_LEAD_SCORE &&
         r.emailScore >= MIN_EMAIL_SCORE
     );
-        }
+}
