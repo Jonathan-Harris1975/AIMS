@@ -1,4 +1,4 @@
-name: CI – Env hygiene & build
+name: CI - install and syntax sanity
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
   pull_request:
 
 jobs:
-  env-hygiene:
+  sanity:
     runs-on: ubuntu-latest
 
     steps:
@@ -20,28 +20,23 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
 
-      # ------------------------------------------------------------
-      # ENV discipline: application code only
-      # ------------------------------------------------------------
-      - name: Enforce ENV-only access
+      - name: Verify envBootstrap wrapper is not imported by app code
         run: |
-          echo "🔍 Checking for illegal process.env usage (application code only)"
-
-          if grep -R "process\.env" \
-            services routes server.js \
-            --include="*.js" \
-            --exclude="**/node_modules/**"; then
-
-            echo "❌ process.env usage found outside envBootstrap.js"
+          echo "🔍 Checking for leftover envBootstrap imports"
+          if rg -n 'scripts/envBootstrap\.js|\bENV\b' \
+            deployment-check.js scripts services routes server.js \
+            --glob '!scripts/envBootstrap.js'; then
+            echo "❌ Found leftover envBootstrap usage in application code"
             exit 1
-          else
-            echo "✅ ENV-only rule passed"
           fi
+          echo "✅ No leftover envBootstrap imports found"
 
-      # ------------------------------------------------------------
-      # Validate ENV schema (bootstrap-only)
-      # ------------------------------------------------------------
-      - name: Validate environment schema
-        run: node scripts/envBootstrap.js
+      - name: Syntax check JavaScript files
+        run: |
+          echo "🔎 Running node --check across repository"
+          find . -name '*.js' -not -path './node_modules/*' -print0 | while IFS= read -r -d '' file; do
+            node --check "$file"
+          done
+          echo "✅ Syntax checks passed"
