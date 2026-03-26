@@ -3,10 +3,12 @@ import os from "node:os";
 import path from "node:path";
 import { debug, warn } from "../../../logger.js";
 
+const DEFAULT_TMP_ROOT = process.env.APP_TMP_DIR || path.join(os.tmpdir(), "ai-management-suite");
 const BASE_STATE_DIR = path.resolve(
-  process.env.APP_STATE_DIR ||
-    path.join(process.env.APP_TMP_DIR || path.join(os.tmpdir(), "ai-management-suite"), "state")
+  process.env.APP_STATE_DIR || path.join(DEFAULT_TMP_ROOT, "state")
 );
+
+let ephemeralWarningLogged = false;
 
 function cloneValue(value) {
   if (value === undefined) return undefined;
@@ -17,7 +19,22 @@ function cloneValue(value) {
   }
 }
 
+function warnIfEphemeralState() {
+  if (ephemeralWarningLogged) return;
+  if (process.env.NODE_ENV !== "production") return;
+  if (process.env.APP_STATE_DIR) return;
+
+  ephemeralWarningLogged = true;
+  warn("state.storage.ephemeral", {
+    baseStateDir: BASE_STATE_DIR,
+    message:
+      "APP_STATE_DIR is not set. Job and Hookdeck dedupe state are being persisted under a temporary filesystem path and will be lost on container restart.",
+  });
+}
+
 function ensureStateDir() {
+  warnIfEphemeralState();
+
   if (!fs.existsSync(BASE_STATE_DIR)) {
     fs.mkdirSync(BASE_STATE_DIR, { recursive: true });
     debug("state.dir.created", { BASE_STATE_DIR });

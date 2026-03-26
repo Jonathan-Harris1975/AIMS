@@ -12,7 +12,24 @@ function nowIso() {
 }
 
 function cloneJob(job) {
-  return job ? { ...job } : null;
+  if (!job) return null;
+
+  try {
+    return structuredClone(job);
+  } catch {
+    return JSON.parse(JSON.stringify(job));
+  }
+}
+
+export function sanitizeJobForClient(job) {
+  const cloned = cloneJob(job);
+  if (!cloned) return null;
+
+  if (cloned.error && typeof cloned.error === "object") {
+    delete cloned.error.stack;
+  }
+
+  return cloned;
 }
 
 function loadJobs() {
