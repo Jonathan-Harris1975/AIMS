@@ -14,7 +14,7 @@ import {
   SynthesizeSpeechCommand,
 } from "@aws-sdk/client-polly";
 import { info, error, warn,debug } from "../../../logger.js";
-import { putObject } from "../../shared/utils/r2-client.js";
+import { putObject, buildPublicUrl } from "../../shared/utils/r2-client.js";
 import pLimit from "p-limit";
 
 // ------------------------------------------------------------
@@ -22,8 +22,7 @@ import pLimit from "p-limit";
 // ------------------------------------------------------------
 const REGION = process.env.AWS_REGION;
 const VOICE_ID = process.env.POLLY_VOICE_ID;
-const CHUNKS_BUCKET = process.env.R2_BUCKET_CHUNKS;
-const PUBLIC_CHUNKS_BASE = process.env.R2_PUBLIC_BASE_URL_CHUNKS;
+const CHUNKS_BUCKET_KEY = "chunks";
 
 const MAX_CHARS = Number(process.env.MAX_POLLY_NATURAL_CHUNK_CHARS) || 2500;
 const CONCURRENCY = Number(process.env.TTS_CONCURRENCY) || 3;
@@ -95,9 +94,9 @@ async function processChunkWithRetry(sessionId, chunk, chunkNumber, attempt = 1)
     const audioBuffer = await synthesizeTextWithRetry(cleaned);
 
     const key = `${sessionId}/chunk-${String(chunkNumber).padStart(3, "0")}.mp3`;
-    await putObject(CHUNKS_BUCKET, key, audioBuffer, "audio/mpeg");
+    await putObject(CHUNKS_BUCKET_KEY, key, audioBuffer, "audio/mpeg");
 
-    const url = `${PUBLIC_CHUNKS_BASE}/${encodeURIComponent(key)}`;
+    const url = buildPublicUrl(CHUNKS_BUCKET_KEY, key);
 
     const logMessage = attempt > 1 
       ? `✅ Chunk ${chunkNumber} recovered (attempt ${attempt})`
@@ -196,7 +195,7 @@ async function ttsProcessor(sessionId, chunkList = []) {
     warn(`TTS completed with ${failed.length} failures`, summary);
   } else {
    debug (`TTS completed successfully`, summary);}
-  info("🗣️ TTS completed successfully", )
+  info("🗣️ TTS completed successfully")
 
   if (successful.length === 0) {
     throw new Error("TTS processing failed - no chunks were successfully produced");
