@@ -3,11 +3,22 @@ import { info, error, debug } from "../../logger.js";
 import { uploadBuffer } from "../shared/utils/r2-client.js";
 import { generatePodcastArtwork } from "./utils/artwork.js";
 
-// Uses the new dedicated blog-images bucket alias
 const R2_BUCKET_BLOG_IMAGES_KEY = "blogImages";
+const ARTWORK_TIMEOUT_MS = Number(process.env.ARTWORK_TIMEOUT_MS || process.env.AI_TIMEOUT) || 60_000;
+
+function withTimeout(promise, timeoutMs, label) {
+  let timer;
+
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs);
+      timer.unref?.();
+    }),
+  ]).finally(() => clearTimeout(timer));
+}
 
 export async function createBlogArtwork(input) {
-  // Supports createBlogArtwork("BLOG-2026-W10") or createBlogArtwork({ sessionId, prompt })
   const sessionId = typeof input === "string" ? input : input?.sessionId;
   const prompt = typeof input === "object" ? input?.prompt : undefined;
 
@@ -18,7 +29,11 @@ export async function createBlogArtwork(input) {
 
     const theme = prompt || `Blog header artwork for AI Weekly ${sessionId}`;
 
-    const base64Data = await generatePodcastArtwork(theme);
+    const base64Data = await withTimeout(
+      generatePodcastArtwork(theme),
+      ARTWORK_TIMEOUT_MS,
+      "Blog artwork generation"
+    );
     const buffer = Buffer.from(base64Data, "base64");
 
     const key = `${sessionId}.png`;

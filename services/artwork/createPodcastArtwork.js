@@ -4,10 +4,21 @@ import { uploadBuffer } from "../shared/utils/r2-client.js";
 import { generatePodcastArtwork } from "./utils/artwork.js";
 
 const R2_BUCKET_ART_KEY = "art";
+const ARTWORK_TIMEOUT_MS = Number(process.env.ARTWORK_TIMEOUT_MS || process.env.AI_TIMEOUT) || 60_000;
+
+function withTimeout(promise, timeoutMs, label) {
+  let timer;
+
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs);
+      timer.unref?.();
+    }),
+  ]).finally(() => clearTimeout(timer));
+}
 
 export async function createPodcastArtwork(input) {
-  // Support both createPodcastArtwork("TT-2025-11-28")
-  // and createPodcastArtwork({ sessionId: "TT-2025-11-28", prompt })
   const sessionId = typeof input === "string" ? input : input?.sessionId;
   const prompt = typeof input === "object" ? input?.prompt : undefined;
 
@@ -20,11 +31,13 @@ export async function createPodcastArtwork(input) {
     const theme =
       prompt || `Podcast artwork for AI Weekly episode ${sessionId}`;
 
-    // Generate base64 PNG from OpenRouter
-    const base64Data = await generatePodcastArtwork(theme);
+    const base64Data = await withTimeout(
+      generatePodcastArtwork(theme),
+      ARTWORK_TIMEOUT_MS,
+      "Podcast artwork generation"
+    );
     const buffer = Buffer.from(base64Data, "base64");
 
-    // Save to R2 with the correct filename
     const key = `${sessionId}.png`;
     const publicUrl = await uploadBuffer(
       R2_BUCKET_ART_KEY,
