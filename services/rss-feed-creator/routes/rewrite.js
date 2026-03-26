@@ -6,10 +6,11 @@
 import express from "express";
 import { endToEndRewrite } from "../rewrite-pipeline.js";
 import { info, error, debug } from "../../../logger.js";
+import { hookdeckDedupe } from "../../shared/utils/hookdeckDedupe.js";
 
 const router = express.Router();
 
-router.post("/rewrite", async (req, res) => {
+router.post("/rewrite", hookdeckDedupe("rss:rewrite"), async (req, res) => {
   try {
     info("rewrite.route.start");
 
