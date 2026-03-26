@@ -35,7 +35,7 @@ export async function createPodcastArtwork(input) {
 
     debug("done", { key, publicUrl });
 
-    return { ok: true, key, publicUrl };
+    return { ok: true, key, url: publicUrl, publicUrl };
   } catch (err) {
     error("artwork.fail", { sessionId, error: err.message });
     return { ok: false, error: err.message };
