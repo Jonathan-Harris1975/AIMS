@@ -6,6 +6,7 @@ process.env.NODE_ENV = "test";
 process.env.CORS_ORIGINS = "";
 
 const { default: app } = await import("../server.js");
+const jobStore = await import("../services/shared/utils/jobStore.js");
 
 test("GET /health returns ok", async () => {
   const response = await request(app).get("/health");
@@ -67,4 +68,49 @@ test("disallowed CORS origin returns 403", async () => {
   assert.equal(response.status, 403);
   assert.equal(response.body.ok, false);
   assert.equal(response.body.error, "CORS origin not allowed");
+});
+
+test("POST /tts/orchestrate returns 202 when the same session is already running", async () => {
+  const sessionId = `TT-tts-duplicate-${Date.now()}`;
+  jobStore.startJob("tts", sessionId, { route: "test-preseed" });
+
+  const response = await request(app)
+    .post("/tts/orchestrate")
+    .send({ sessionId });
+
+  assert.equal(response.status, 202);
+  assert.equal(response.body.ok, true);
+  assert.equal(response.body.duplicateJob, true);
+  assert.equal(response.body.sessionId, sessionId);
+});
+
+test("POST /podcast/run returns 202 when the same session is already running", async () => {
+  const sessionId = `TT-podcast-duplicate-${Date.now()}`;
+  jobStore.startJob("podcast", sessionId, { route: "test-preseed" });
+
+  const response = await request(app)
+    .post("/podcast/run")
+    .send({ sessionId });
+
+  assert.equal(response.status, 202);
+  assert.equal(response.body.ok, true);
+  assert.equal(response.body.duplicateJob, true);
+  assert.equal(response.body.sessionId, sessionId);
+});
+
+test("POST /tts/orchestrate marks the job failed when orchestration returns ok=false", async () => {
+  const sessionId = `TT-tts-fail-${Date.now()}`;
+  const startResponse = await request(app)
+    .post("/tts/orchestrate")
+    .send({ sessionId });
+
+  assert.equal(startResponse.status, 200);
+  assert.equal(startResponse.body.ok, true);
+
+  await new Promise((resolve) => setTimeout(resolve, 50));
+
+  const statusResponse = await request(app).get(`/tts/status/${encodeURIComponent(sessionId)}`);
+  assert.equal(statusResponse.status, 200);
+  assert.equal(statusResponse.body.ok, true);
+  assert.equal(statusResponse.body.job.status, "failed");
 });
