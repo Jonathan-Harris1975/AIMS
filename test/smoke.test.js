@@ -45,3 +45,26 @@ test("POST /artwork/generate rejects invalid prompt payload", async () => {
   assert.equal(response.status, 400);
   assert.equal(response.body.ok, false);
 });
+
+test("malformed JSON returns 400 instead of 500", async () => {
+  const response = await request(app)
+    .post("/outreach/keyword")
+    .set("content-type", "application/json")
+    .send('{"keyword":');
+
+  assert.equal(response.status, 400);
+  assert.equal(response.body.ok, false);
+  assert.equal(response.body.error, "Invalid JSON body");
+});
+
+test("disallowed CORS origin returns 403", async () => {
+  process.env.CORS_ORIGINS = "https://allowed.example";
+  const { default: freshApp } = await import(`../server.js?cors=${Date.now()}`);
+  const response = await request(freshApp)
+    .get("/health")
+    .set("Origin", "https://blocked.example");
+
+  assert.equal(response.status, 403);
+  assert.equal(response.body.ok, false);
+  assert.equal(response.body.error, "CORS origin not allowed");
+});
