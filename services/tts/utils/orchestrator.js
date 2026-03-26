@@ -13,10 +13,10 @@ import { podcastProcessor } from "./podcastProcessor.js";
 /* ============================================================
    R2 configuration
 ============================================================ */
-const RAW_TEXT_BUCKET = process.env.R2_BUCKET_RAW_TEXT;
+const RAW_TEXT_BUCKET = "rawtext";
 const PUBLIC_BASE_URL_PODCAST = process.env.R2_PUBLIC_BASE_URL_PODCAST;
 
-if (!RAW_TEXT_BUCKET) throw new Error("Missing process.env.R2_BUCKET_RAW_TEXT");
+if (!process.env.R2_BUCKET_RAW_TEXT) throw new Error("Missing process.env.R2_BUCKET_RAW_TEXT");
 if (!process.env.R2_BUCKET_PODCAST) {
   throw new Error("Missing process.env.R2_BUCKET_PODCAST");
 }
@@ -115,22 +115,22 @@ export async function orchestrateTTS(session) {
 
     // 4️⃣ Editing
     const t3 = Date.now();
-    const editedBuffer = await editingProcessor(sessionId, merged);
+    const editedPath = await editingProcessor(sessionId, merged);
 
-    if (!editedBuffer?.length) {
-      throw new Error("Editing returned no audio data.");
+    if (!editedPath || typeof editedPath !== "string") {
+      throw new Error("Editing did not return a valid output path.");
     }
 
     info("🟩 Editing saved to R2");
     debug("✂️ Editing complete", {
       sessionId,
-      bytes: editedBuffer.length,
+      editedPath,
       ms: Date.now() - t3,
     });
 
     // 5️⃣ Podcast mixdown
     const t4 = Date.now();
-    const final = await podcastProcessor(sessionId, editedBuffer);
+    const final = await podcastProcessor(sessionId, editedPath);
 
     const finalBuffer = final?.buffer;
     const finalKey = final?.key || `${sessionId}_podcast.mp3`;

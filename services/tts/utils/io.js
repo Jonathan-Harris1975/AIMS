@@ -2,60 +2,40 @@
 // Unified I/O helpers for TTS audio pipeline – central R2 + logger
 
 import { putObject, putJson, R2_BUCKET_RAW_AUDIO } from "../../shared/utils/r2-client.js";
-import { info, error } from "../../../logger.js";
+import { info } from "../../../logger.js";
 
-// Environment variables (required)
-const RAW_BUCKET     = R2_BUCKET_RAW_AUDIO;       // bucket key alias for raw audio
-const MERGED_BUCKET  = process.env.R2_BUCKET_MERGED;    // podcast-merged
-const META_BUCKET    = process.env.R2_BUCKET_META;      // podcast-meta
-const PODCAST_BUCKET = process.env.R2_BUCKET_PODCAST;   // podcast
-const PUBLIC_BASE    = process.env.R2_PUBLIC_BASE_URL_PODCAST; // base URL for public access
+// Use canonical alias keys for the shared R2 client.
+const RAW_BUCKET = R2_BUCKET_RAW_AUDIO;
+const MERGED_BUCKET = "merged";
+const META_BUCKET = "meta";
+const PODCAST_BUCKET = "podcast";
+const PUBLIC_BASE = process.env.R2_PUBLIC_BASE_URL_PODCAST;
 
 function requireEnv(name, val) {
   if (!val) throw new Error(`Missing required env: ${name}`);
   return val;
 }
 
-/**
- * Save a TTS chunk (MP3) to R2.
- * @param {Buffer|Uint8Array} audioBuffer - MP3 bytes
- * @param {string} key - e.g. "chunks/session123/part1.mp3"
- */
 export async function saveTtsChunk(audioBuffer, key) {
-  requireEnv("R2_BUCKET_RAW", RAW_BUCKET);
+  requireEnv("R2_BUCKET_RAW", process.env.R2_BUCKET_RAW);
   await putObject(RAW_BUCKET, key, audioBuffer, "audio/mpeg");
   info("tts.chunk.put", { bucket: RAW_BUCKET, key, bytes: audioBuffer.length });
 }
 
-/**
- * Save merged TTS file to R2 (final output).
- * @param {Buffer|Uint8Array} audioBuffer - final merged MP3 bytes
- * @param {string} key - e.g. "episodes/session123/merged.mp3"
- */
 export async function saveMergedTts(audioBuffer, key) {
-  requireEnv("R2_BUCKET_MERGED", MERGED_BUCKET);
+  requireEnv("R2_BUCKET_MERGED", process.env.R2_BUCKET_MERGED);
   await putObject(MERGED_BUCKET, key, audioBuffer, "audio/mpeg");
   info("tts.merged.put", { bucket: MERGED_BUCKET, key, bytes: audioBuffer.length });
 }
 
-/**
- * Save metadata (JSON transcript, timestamps, etc.)
- * @param {string} key - e.g. "episodes/session123/meta.json"
- * @param {object} data
- */
 export async function saveTtsMeta(key, data) {
-  requireEnv("R2_BUCKET_META", META_BUCKET);
+  requireEnv("R2_BUCKET_META", process.env.R2_BUCKET_META);
   await putJson(META_BUCKET, key, data);
   info("tts.meta.put", { bucket: META_BUCKET, key });
 }
 
-/**
- * Publish final MP3 to public bucket and return its URL.
- * @param {Buffer|Uint8Array} audioBuffer
- * @param {string} key - e.g. "episodes/session123/final.mp3"
- */
 export async function publishFinalTts(audioBuffer, key) {
-  requireEnv("R2_BUCKET_PODCAST", PODCAST_BUCKET);
+  requireEnv("R2_BUCKET_PODCAST", process.env.R2_BUCKET_PODCAST);
   requireEnv("R2_PUBLIC_BASE_URL_PODCAST", PUBLIC_BASE);
 
   await putObject(PODCAST_BUCKET, key, audioBuffer, "audio/mpeg");
