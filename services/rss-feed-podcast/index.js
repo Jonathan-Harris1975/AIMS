@@ -46,9 +46,12 @@ export async function runRssFeedCreator() {
     return;
   }
 
-  const metaKeys = keys.filter((key) =>
-    typeof key === "string" ? key.endsWith(".json") : false
-  );
+  const metaKeys = keys.filter((key) => {
+    if (typeof key !== "string" || !key.endsWith(".json")) return false;
+    if (key.endsWith("-tts.json") || key.endsWith("-meta.json")) return false;
+    if (key.includes("/")) return false;
+    return true;
+  });
 
   if (metaKeys.length === 0) {
     warn("No .json metadata files found in meta bucket root");
