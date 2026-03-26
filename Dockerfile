@@ -39,8 +39,5 @@ COPY . .
 # ============================================================
 EXPOSE 3000
 
-# dumb-init ensures proper signal handling (SIGTERM, SIGINT)
 ENTRYPOINT ["dumb-init", "--"]
-
-# Bootstrap initializes supporting services and launches server.js
-CMD ["node", "scripts/bootstrap.js"]
+CMD ["npm", "start"]

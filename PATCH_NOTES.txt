@@ -1,0 +1,16 @@
+Patched repo snapshot generated on 2026-03-26.
+
+Implemented fixes in this ZIP:
+- Added missing services/shared/utils/sessionId.js helper
+- Fixed services/script/routes/createScript.js runtime failure
+- Standardised several R2 helper calls to use alias keys where required
+- Fixed TTS orchestrator editing-stage output handling
+- Improved outreach async error forwarding
+- Fixed broken logger success helper
+- Added configurable CORS handling and graceful shutdown in server.js
+- Aligned Docker and npm start to the bootstrap entrypoint
+- Strengthened startupCheck.js to validate importability and ffmpeg/ffprobe presence
+
+Notes:
+- package-lock.json was intentionally left unchanged
+- This ZIP focuses on the highest-value confirmed fixes first rather than a full architectural rewrite
