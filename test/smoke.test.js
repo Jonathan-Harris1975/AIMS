@@ -116,3 +116,14 @@ test("POST /tts/orchestrate marks the job failed when orchestration returns ok=f
   assert.equal(statusResponse.body.ok, true);
   assert.equal(statusResponse.body.job.status, "failed");
 });
+
+test("job status responses do not expose stack traces", async () => {
+  const sessionId = `TT-no-stack-${Date.now()}`;
+  jobStore.failJob("tts", sessionId, new Error("kaboom"));
+
+  const response = await request(app).get(`/tts/status/${encodeURIComponent(sessionId)}`);
+  assert.equal(response.status, 200);
+  assert.equal(response.body.ok, true);
+  assert.equal(response.body.job.error.message, "kaboom");
+  assert.equal("stack" in (response.body.job.error || {}), false);
+});
