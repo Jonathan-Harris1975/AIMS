@@ -1,0 +1,45 @@
+name: CI - install and syntax sanity
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+
+jobs:
+  sanity:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Verify envBootstrap wrapper is not imported by app code
+        run: |
+          echo "🔍 Checking for leftover envBootstrap imports"
+          if rg -n 'scripts/envBootstrap\.js|\bENV\b' \
+            deployment-check.js scripts services routes server.js \
+            --glob '!scripts/envBootstrap.js'; then
+            echo "❌ Found leftover envBootstrap usage in application code"
+            exit 1
+          fi
+          echo "✅ No leftover envBootstrap imports found"
+
+      - name: Syntax check JavaScript files
+        run: |
+          echo "🔎 Running node --check across repository"
+          find . -name '*.js' -not -path './node_modules/*' -print0 | while IFS= read -r -d '' file; do
+            node --check "$file"
+          done
+          echo "✅ Syntax checks passed"
+
+      - name: Run smoke tests
+        run: npm test
