@@ -9,12 +9,15 @@ export function registerRssRoute(app) {
       try {
         info("rss.trigger.background.start");
         const result = await endToEndRewrite();
-        info("rss.trigger.background.complete", { result });
+        info("rss.trigger.background.complete", {
+          totalItems: result?.totalItems || 0,
+          rewrittenItems: result?.rewrittenItems || 0,
+        });
       } catch (err) {
-        error("rss.trigger.background.fail", { err: err?.message || String(err) });
+        error("rss.trigger.background.fail", {
+          error: err?.message || String(err),
+        });
       }
     });
   });
 }
-
-export default registerRssRoute;
