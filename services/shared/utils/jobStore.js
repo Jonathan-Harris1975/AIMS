@@ -11,6 +11,10 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+function cloneJob(job) {
+  return job ? { ...job } : null;
+}
+
 function loadJobs() {
   const persisted = readJsonState(STATE_FILE, { jobs: [] });
   const jobs = Array.isArray(persisted?.jobs) ? persisted.jobs : [];
@@ -46,11 +50,6 @@ function pruneExpired(now = Date.now()) {
   }
 }
 
-function existingOrNow(type, sessionId) {
-  const existing = jobs.get(makeKey(type, sessionId));
-  return existing?.startedAt || nowIso();
-}
-
 function upsertJob(type, sessionId, patch = {}) {
   pruneExpired();
 
@@ -70,17 +69,43 @@ function upsertJob(type, sessionId, patch = {}) {
 
   jobs.set(key, next);
   persistJobs();
-  return next;
+  return cloneJob(next);
+}
+
+function isActiveStatus(status) {
+  return status === "queued" || status === "running";
 }
 
 export function startJob(type, sessionId, metadata = {}) {
+  const existing = jobs.get(makeKey(type, sessionId));
+  const attempt = Number(existing?.attempt || 0) + 1;
+
   return upsertJob(type, sessionId, {
     status: "running",
-    startedAt: existingOrNow(type, sessionId),
+    attempt,
+    startedAt: existing?.startedAt || nowIso(),
     finishedAt: undefined,
     error: undefined,
+    result: undefined,
     ...metadata,
   });
+}
+
+export function beginJob(type, sessionId, metadata = {}) {
+  pruneExpired();
+
+  const existing = jobs.get(makeKey(type, sessionId));
+  if (existing && isActiveStatus(existing.status)) {
+    return {
+      started: false,
+      job: cloneJob(existing),
+    };
+  }
+
+  return {
+    started: true,
+    job: startJob(type, sessionId, metadata),
+  };
 }
 
 export function completeJob(type, sessionId, metadata = {}) {
@@ -108,6 +133,5 @@ export function failJob(type, sessionId, err, metadata = {}) {
 
 export function getJob(type, sessionId) {
   pruneExpired();
-  const job = jobs.get(makeKey(type, sessionId));
-  return job ? { ...job } : null;
+  return cloneJob(jobs.get(makeKey(type, sessionId)));
 }
