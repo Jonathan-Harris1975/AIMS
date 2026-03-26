@@ -25,8 +25,8 @@ router.post("/", async (req, res) => {
 
     // 🔄 Directly trigger the local edit processor instead of webhook
     try {
-      const { runEditPipeline } = await import("../../edit/runEditPipeline.js");
-      await runEditPipeline({ sessionId });
+      const { editingProcessor } = await import("../utils/editingProcessor.js");
+      await editingProcessor(sessionId, result?.key || result?.localPath || result?.path);
       log.info(`🎬 Local edit pipeline triggered for ${sessionId}`);
     } catch (err) {
       log.warn(`⚠️ Edit pipeline not available for ${sessionId}: ${err.message}`);
