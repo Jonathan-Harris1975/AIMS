@@ -1,4 +1,3 @@
-// server.js
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
@@ -7,6 +6,7 @@ import pinoHttp from "pino-http";
 import { info, debug, error, log } from "./logger.js";
 import routes from "./routes/index.js";
 import { fileURLToPath } from "node:url";
+import { createRateLimitMiddleware } from "./services/shared/middleware/rateLimit.js";
 
 export const app = express();
 
@@ -26,6 +26,15 @@ function parseTrustProxy(value) {
   return value;
 }
 
+function isLoopbackOrigin(origin) {
+  try {
+    const url = new URL(origin);
+    return ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
 const trustProxy = parseTrustProxy(process.env.TRUST_PROXY);
 app.set("trust proxy", trustProxy);
 
@@ -39,7 +48,7 @@ app.use(
     origin(origin, callback) {
       if (!origin) return callback(null, true);
       if (allowedOrigins.includes(origin)) return callback(null, true);
-      if (process.env.NODE_ENV !== "production" && allowedOrigins.length === 0) {
+      if (process.env.NODE_ENV !== "production" && allowedOrigins.length === 0 && isLoopbackOrigin(origin)) {
         return callback(null, true);
       }
       return callback(new Error("CORS origin not allowed"));
@@ -84,10 +93,11 @@ app.use(
     },
   })
 );
+app.use(createRateLimitMiddleware());
 
 app.get("/", (_req, res) => res.status(200).send("OK"));
 app.get("/health", (_req, res) =>
-  res.status(200).json({ status: "ok", trustProxy })
+  res.status(200).json({ ok: true, status: "ok", trustProxy })
 );
 
 app.use("/", routes);
@@ -143,8 +153,8 @@ export function startServer(port = PORT, host = "0.0.0.0") {
   }
 
   server = app.listen(port, host, () => {
-    info("🟩 AI Management Suite started on port " + port);
-    debug("📡 Endpoints: /rss /script /tts /artwork /podcast /outreach /blog");
+    info("AI Management Suite started", { port, host });
+    debug("server.endpoints", { endpoints: ["/rss", "/script", "/tts", "/artwork", "/podcast", "/outreach", "/blog"] });
     debug("server.trustProxy", { trustProxy });
   });
 
