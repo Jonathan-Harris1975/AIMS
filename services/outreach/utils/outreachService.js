@@ -1,6 +1,6 @@
-import { serpOutreach } from "./serp-OutreachService.js";
+import { serpOutreach } from "../services/serp-OutreachService.js";
 import { extractGoodLeads } from "../utils/filters.js";
-import { appendLeadRows } from "./sheetService.js";
+import { appendLeadRows } from "../services/sheetService.js";
 
 export async function runKeyword(keyword) {
   const result = await serpOutreach(keyword);
