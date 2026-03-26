@@ -4,6 +4,7 @@ import request from "supertest";
 
 process.env.NODE_ENV = "test";
 process.env.CORS_ORIGINS = "";
+process.env.RATE_LIMIT_ENABLED = "false";
 
 const { default: app } = await import("../server.js");
 const jobStore = await import("../services/shared/utils/jobStore.js");
@@ -11,6 +12,7 @@ const jobStore = await import("../services/shared/utils/jobStore.js");
 test("GET /health returns ok", async () => {
   const response = await request(app).get("/health");
   assert.equal(response.status, 200);
+  assert.equal(response.body.ok, true);
   assert.equal(response.body.status, "ok");
 });
 
@@ -104,7 +106,7 @@ test("POST /tts/orchestrate marks the job failed when orchestration returns ok=f
     .post("/tts/orchestrate")
     .send({ sessionId });
 
-  assert.equal(startResponse.status, 200);
+  assert.equal(startResponse.status, 202);
   assert.equal(startResponse.body.ok, true);
 
   await new Promise((resolve) => setTimeout(resolve, 50));
