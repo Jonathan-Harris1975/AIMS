@@ -1,4 +1,3 @@
-// services/podcast/index.js
 import express from "express";
 import { runPodcastPipeline } from "./runPodcastPipeline.js";
 import { sanitizeSessionId } from "../shared/utils/sessionId.js";
@@ -53,7 +52,7 @@ router.post("/run", hookdeckDedupe("podcast:run"), async (req, res) => {
         error("api.podcast.error", { sessionId, eventId, error: err.message });
       });
 
-    res.json({
+    res.status(202).json({
       ok: true,
       sessionId,
       status: "running",
