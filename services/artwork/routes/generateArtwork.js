@@ -6,6 +6,11 @@ import express from "express";
 import fetch from "node-fetch";
 import { putObject } from "../../shared/utils/r2-client.js";
 import { sanitizeSessionId } from "../../shared/utils/sessionId.js";
+import { hookdeckDedupe } from "../../shared/utils/hookdeckDedupe.js";
+import {
+  validateBody,
+  artworkGenerateBodySchema,
+} from "../../shared/utils/requestSchemas.js";
 import { info, error } from "../../../logger.js";
 
 const router = express.Router();
@@ -13,7 +18,7 @@ const router = express.Router();
 // ------------------------------------------------------------
 // Generate Artwork Function
 // ------------------------------------------------------------
-export async function generateArtwork(sessionId, prompt = '') {
+export async function generateArtwork(sessionId, prompt = "") {
   const url = "https://openrouter.ai/api/v1/chat/completions";
   if (!prompt || !prompt.trim()) {
     prompt = `Podcast cover art for ${sessionId} — abstract AI-themed design, high-contrast, bold typography`;
@@ -74,12 +79,17 @@ export async function generateArtwork(sessionId, prompt = '') {
 // ------------------------------------------------------------
 // Express Route Wrapper
 // ------------------------------------------------------------
-router.post("/", async (req, res) => {
+router.post("/", hookdeckDedupe("artwork:generate"), async (req, res) => {
   let sessionId;
 
   try {
-    sessionId = sanitizeSessionId(req.body?.sessionId || `art-${Date.now()}`, "art");
-    const prompt = req.body?.prompt || "Podcast cover art: abstract AI design";
+    const parsed = validateBody(artworkGenerateBodySchema, req.body);
+    if (!parsed.ok) {
+      return res.status(400).json({ ok: false, error: parsed.error });
+    }
+
+    sessionId = sanitizeSessionId(parsed.data.sessionId || `art-${Date.now()}`, "art");
+    const prompt = parsed.data.prompt || "Podcast cover art: abstract AI design";
     const url = await generateArtwork(sessionId, prompt);
     res.json({ ok: true, sessionId, url });
   } catch (err) {

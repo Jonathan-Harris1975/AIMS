@@ -1,15 +1,24 @@
-// services/artwork/routes/createArtwork.js (patched)
+// services/artwork/routes/createArtwork.js
 import express from "express";
 import { putJson } from "../../shared/utils/r2-client.js";
-import { info, error, debug } from "../../../logger.js";
+import { hookdeckDedupe } from "../../shared/utils/hookdeckDedupe.js";
+import {
+  validateBody,
+  artworkCreateBodySchema,
+} from "../../shared/utils/requestSchemas.js";
+import { error, debug } from "../../../logger.js";
 
 const router = express.Router();
 
-router.post("/", async (req, res) => {
+router.post("/", hookdeckDedupe("artwork:create"), async (req, res) => {
   try {
-    const payload = req.body || {};
-    const bucket = "art";
+    const parsed = validateBody(artworkCreateBodySchema, req.body);
+    if (!parsed.ok) {
+      return res.status(400).json({ ok: false, error: parsed.error });
+    }
 
+    const payload = parsed.data;
+    const bucket = "art";
     const key = `artwork/requests/${Date.now()}.json`;
     await putJson(bucket, key, payload);
     debug("artwork.create.stored", { bucket, key });
