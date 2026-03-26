@@ -1,6 +1,6 @@
 // services/script/utils/getWeatherSummary.js
 import fetch from "node-fetch";
-import { info, error , debug} from "../../../logger.js";
+import { info, error, debug } from "../../../logger.js";
 
 /**
  * Returns a short, temperature-free weather line such as:
@@ -16,26 +16,40 @@ export async function getWeatherSummary() {
     if (!apiKey) throw new Error("Missing RAPIDAPI_KEY");
 
     const url = `https://${apiHost}/current.json?q=${encodeURIComponent(location)}`;
-    debug("Fetching weather data");
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
 
-    const res = await fetch(url, {
-      method: "GET",
-      headers: {
-        "x-rapidapi-key": apiKey,
-        "x-rapidapi-host": apiHost,
-      },
-    });
+    debug("weather.fetch.start", { location, apiHost });
 
-    if (!res.ok) throw new Error(`Weather fetch failed: ${res.status} ${res.statusText}`);
-    const data = await res.json();
+    try {
+      const res = await fetch(url, {
+        method: "GET",
+        headers: {
+          "x-rapidapi-key": apiKey,
+          "x-rapidapi-host": apiHost,
+        },
+        signal: controller.signal,
+      });
 
-    const condition = (data?.current?.condition?.text || "overcast").toLowerCase().trim();
-    const summary = `${condition} in London`;
-    info("🌤️ Weather summary fetch successfully");
-    debug("Weather summary: ${summary}");
-    return summary;
+      if (!res.ok) {
+        throw new Error(`Weather fetch failed: ${res.status} ${res.statusText}`);
+      }
+
+      const data = await res.json();
+      const condition = (data?.current?.condition?.text || "overcast")
+        .toLowerCase()
+        .trim();
+      const summary = `${condition} in London`;
+
+      info("weather.fetch.success", { location, summary });
+      debug("weather.fetch.summary", { summary });
+
+      return summary;
+    } finally {
+      clearTimeout(timeout);
+    }
   } catch (err) {
-    error("Failed to get weather summary");
+    error("weather.fetch.fail", { error: err?.message || String(err) });
     return "grey skies in London";
   }
 }
