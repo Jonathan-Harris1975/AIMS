@@ -360,8 +360,26 @@ export function buildPublicUrl(bucketKey, key) {
 // ------------------------------------------------------------
 export async function listKeys(bucketKey, prefix = "") {
   const bucket = ensureBucketKey(bucketKey);
-  const { Contents } = await s3.send(new ListObjectsV2Command({ Bucket: bucket, Prefix: prefix }));
-  return Contents ? Contents.map((c) => c.Key) : [];
+  const keys = [];
+  let continuationToken;
+
+  do {
+    const response = await s3.send(
+      new ListObjectsV2Command({
+        Bucket: bucket,
+        Prefix: prefix,
+        ContinuationToken: continuationToken,
+      })
+    );
+
+    if (response.Contents?.length) {
+      keys.push(...response.Contents.map((item) => item.Key).filter(Boolean));
+    }
+
+    continuationToken = response.IsTruncated ? response.NextContinuationToken : undefined;
+  } while (continuationToken);
+
+  return keys;
 }
 
 export async function deleteObject(bucketKey, key) {
