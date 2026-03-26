@@ -3,7 +3,7 @@ import express from "express";
 import { runPodcastPipeline } from "./runPodcastPipeline.js";
 import { sanitizeSessionId } from "../shared/utils/sessionId.js";
 import { hookdeckDedupe } from "../shared/utils/hookdeckDedupe.js";
-import { getJob, startJob, completeJob, failJob } from "../shared/utils/jobStore.js";
+import { getJob, beginJob, completeJob, failJob } from "../shared/utils/jobStore.js";
 import { validateBody, podcastRunBodySchema } from "../shared/utils/requestSchemas.js";
 import { info, error } from "../../logger.js";
 
@@ -26,10 +26,22 @@ router.post("/run", hookdeckDedupe("podcast:run"), async (req, res) => {
 
     info("api.podcast.start", { sessionId, eventId });
 
-    startJob("podcast", sessionId, {
+    const { started, job } = beginJob("podcast", sessionId, {
       eventId,
       route: "podcast.run",
     });
+
+    if (!started) {
+      return res.status(202).json({
+        ok: true,
+        duplicateJob: true,
+        sessionId,
+        status: job?.status || "running",
+        statusUrl: `/podcast/status/${encodeURIComponent(sessionId)}`,
+        message: "Podcast pipeline already running for this session.",
+        job,
+      });
+    }
 
     void runPodcastPipeline(sessionId)
       .then((result) => {
