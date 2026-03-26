@@ -2,7 +2,13 @@ import express from "express";
 import { runPodcastPipeline } from "./runPodcastPipeline.js";
 import { sanitizeSessionId } from "../shared/utils/sessionId.js";
 import { hookdeckDedupe } from "../shared/utils/hookdeckDedupe.js";
-import { getJob, beginJob, completeJob, failJob } from "../shared/utils/jobStore.js";
+import {
+  getJob,
+  beginJob,
+  completeJob,
+  failJob,
+  sanitizeJobForClient,
+} from "../shared/utils/jobStore.js";
 import { validateBody, podcastRunBodySchema } from "../shared/utils/requestSchemas.js";
 import { info, error } from "../../logger.js";
 
@@ -38,7 +44,7 @@ router.post("/run", hookdeckDedupe("podcast:run"), async (req, res) => {
         status: job?.status || "running",
         statusUrl: `/podcast/status/${encodeURIComponent(sessionId)}`,
         message: "Podcast pipeline already running for this session.",
-        job,
+        job: sanitizeJobForClient(job),
       });
     }
 
@@ -72,7 +78,7 @@ router.get("/status/:sessionId", (req, res) => {
     return res.status(404).json({ ok: false, error: "No podcast job found", sessionId });
   }
 
-  return res.json({ ok: true, job });
+  return res.json({ ok: true, job: sanitizeJobForClient(job) });
 });
 
 router.get("/health", (_req, res) =>
