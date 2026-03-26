@@ -1,3 +1,4 @@
+import { info } from "../../../logger.js";
 import { serpLookup, enrichDomain, shouldBlockDomain } from "./outreachCore.js";
 import { batchValidateEmails } from "./zeroBounceBatch.js";
 
@@ -21,10 +22,10 @@ function normaliseHost(host) {
 ============================================================ */
 
 export async function serpOutreach(keyword) {
-  console.log(`🔍 SERP for keyword: ${keyword}`);
+  info("outreach.serp.start", { keyword });
 
   const serpResults = await serpLookup(keyword);
-  console.log(`🔎 SERPAPI results for "${keyword}": ${serpResults.length}`);
+  info("outreach.serp.results", { keyword, results: serpResults.length });
 
   /* ------------------------------
      🌐 UNIQUE DOMAINS
@@ -55,9 +56,12 @@ export async function serpOutreach(keyword) {
     else allowed.push(d);
   });
 
-  console.log(
-    `Found ${uniqueDomains.length} unique domains (allowed=${allowed.length}, blocked=${blocked.length})`
-  );
+  info("outreach.serp.domainSummary", {
+    keyword,
+    uniqueDomains: uniqueDomains.length,
+    allowed: allowed.length,
+    blocked: blocked.length,
+  });
 
   /* ------------------------------
      🧬 ENRICH
@@ -120,21 +124,21 @@ export async function serpOutreach(keyword) {
   /* ------------------------------
      📊 VISIBILITY
   ------------------------------ */
-  console.table(
-    enriched.map((e) => ({
+  info("outreach.serp.scored", {
+    keyword,
+    domains: enriched.map((e) => ({
       domain: e.domain,
       score: e.authority.totalScore,
       tier: e.authority.tier,
       emails: e.emails.length,
-    }))
-  );
+    })),
+  });
 
-  console.log(
-    `✅ Keyword "${keyword}" → ${accepted.length} viable domains, ${accepted.reduce(
-      (a, b) => a + b.emails.length,
-      0
-    )} emails`
-  );
+  info("outreach.serp.accepted", {
+    keyword,
+    acceptedDomains: accepted.length,
+    emails: accepted.reduce((a, b) => a + b.emails.length, 0),
+  });
 
   return {
     keyword,

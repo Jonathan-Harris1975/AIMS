@@ -1,5 +1,10 @@
 import axios from "axios";
 
+const http = axios.create({
+  timeout: 15000,
+  maxRedirects: 3,
+});
+
 /* ============================================================
    🔑 ENV KEYS
 ============================================================ */
@@ -105,7 +110,7 @@ export function shouldBlockDomain(domain) {
 export async function serpLookup(keyword) {
   if (!SERP_API_KEY) throw new Error("API_SERP_KEY missing");
 
-  const res = await axios.get("https://serpapi.com/search", {
+  const res = await http.get("https://serpapi.com/search", {
     params: {
       q: keyword,
       engine: "google",
@@ -125,7 +130,7 @@ async function getOpenPageRank(domain) {
   if (!OPENPAGERANK_KEY) return null;
 
   try {
-    const res = await axios.get(
+    const res = await http.get(
       "https://openpagerank.com/api/v1.0/getPageRank",
       {
         params: { "domains[]": domain },
@@ -145,7 +150,7 @@ async function getOpenPageRank(domain) {
 async function getUrlscan(domain) {
   if (!KEY_URLSCAN) return null;
   try {
-    const res = await axios.get("https://urlscan.io/api/v1/search/", {
+    const res = await http.get("https://urlscan.io/api/v1/search/", {
       params: { q: `domain:${domain}` },
       headers: { "API-Key": KEY_URLSCAN },
       timeout: 15000,
@@ -176,27 +181,32 @@ function detectEditorialHints(domainInfo) {
    📧 EMAIL ENRICHMENT
 ============================================================ */
 async function getProspeo(domain) {
-  const res = await axios.get("https://api.prospeo.io/api/email-finder", {
+  if (!KEY_PROSPEO) return null;
+  const res = await http.get("https://api.prospeo.io/api/email-finder", {
     params: { domain },
     headers: { "X-Api-Key": KEY_PROSPEO },
+    timeout: 15000,
   });
   return res.data;
 }
 
 async function getHunter(domain) {
-  const res = await axios.get("https://api.hunter.io/v2/domain-search", {
+  if (!KEY_HUNTER) return null;
+  const res = await http.get("https://api.hunter.io/v2/domain-search", {
     params: { domain, api_key: KEY_HUNTER },
+    timeout: 15000,
   });
   return res.data;
 }
 
 async function getApollo(domain) {
-  const res = await axios.post("https://api.apollo.io/v1/mixed_people/search", {
+  if (!KEY_APOLLO) return null;
+  const res = await http.post("https://api.apollo.io/v1/mixed_people/search", {
     api_key: KEY_APOLLO,
     q_organization_domains: [domain],
     page: 1,
     per_page: 10,
-  });
+  }, { timeout: 15000 });
   return res.data;
 }
 
