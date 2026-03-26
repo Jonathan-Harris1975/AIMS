@@ -16,9 +16,15 @@ import { podcastProcessor } from "./podcastProcessor.js";
 const RAW_TEXT_BUCKET = "rawtext";
 const PUBLIC_BASE_URL_PODCAST = process.env.R2_PUBLIC_BASE_URL_PODCAST;
 
-if (!process.env.R2_BUCKET_RAW_TEXT) throw new Error("Missing process.env.R2_BUCKET_RAW_TEXT");
-if (!process.env.R2_BUCKET_PODCAST) {
-  throw new Error("Missing process.env.R2_BUCKET_PODCAST");
+function validateTtsRuntimeConfig() {
+  const missing = [];
+
+  if (!process.env.R2_BUCKET_RAW_TEXT) missing.push("R2_BUCKET_RAW_TEXT");
+  if (!process.env.R2_BUCKET_PODCAST) missing.push("R2_BUCKET_PODCAST");
+
+  if (missing.length) {
+    throw new Error(`Missing required TTS environment variables: ${missing.join(", ")}`);
+  }
 }
 
 /* ============================================================
@@ -74,6 +80,7 @@ export async function orchestrateTTS(session) {
   info("🎬 Orchestration begin", { sessionId });
 
   try {
+    validateTtsRuntimeConfig();
     startKeepAlive("ttsProcessor", 220000);
 
     // 1️⃣ Load text chunks

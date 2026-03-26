@@ -16,6 +16,14 @@ const __dirname = path.dirname(__filename);
 const TMP_DIR = "/tmp/podcast_master";
 if (!fs.existsSync(TMP_DIR)) fs.mkdirSync(TMP_DIR, { recursive: true });
 
+function requireEnv(name) {
+  const value = process.env[name];
+  if (value === undefined || String(value).trim() === "") {
+    throw new Error(`Missing required env: ${name}`);
+  }
+  return value;
+}
+
 function runFFmpeg(args, timeoutMs = 180000) {
   return new Promise((resolve, reject) => {
     const p = spawn("ffmpeg", args);
@@ -156,20 +164,35 @@ async function updateMetaFile(sessionId, finalBuffer, finalPath, podcastUrl) {
 // Main Processor — uses edited audio from R2 (Option B)
 // ============================================================
 
-export async function podcastProcessor(sessionId, editedBufferIgnored) {
-  info("🎚 Fetching edited audio from R2", { sessionId });
+export async function podcastProcessor(sessionId, editedPathOrBuffer) {
+  const introUrl = requireEnv("PODCAST_INTRO_URL");
+  const outroUrl = requireEnv("PODCAST_OUTRO_URL");
+  const publicBasePodcast = requireEnv("R2_PUBLIC_BASE_URL_PODCAST");
 
-  const editedUrl = `${process.env.R2_PUBLIC_BASE_URL_EDITED_AUDIO}/${sessionId}_edited.mp3`;
+  let editedBuffer;
+  let editedSource = "r2";
 
-  const res = await fetch(editedUrl);
-  if (!res.ok) throw new Error("Failed to fetch edited audio from R2");
+  if (typeof editedPathOrBuffer === "string" && fs.existsSync(editedPathOrBuffer)) {
+    info("🎚 Using local edited audio", { sessionId, path: editedPathOrBuffer });
+    editedBuffer = fs.readFileSync(editedPathOrBuffer);
+    editedSource = "local";
+  } else if (Buffer.isBuffer(editedPathOrBuffer)) {
+    info("🎚 Using in-memory edited audio", { sessionId });
+    editedBuffer = editedPathOrBuffer;
+    editedSource = "buffer";
+  } else {
+    const publicBaseEdited = requireEnv("R2_PUBLIC_BASE_URL_EDITED_AUDIO");
+    const editedUrl = `${publicBaseEdited}/${sessionId}_edited.mp3`;
 
-  const editedBuffer = Buffer.from(await res.arrayBuffer());
+    info("🎚 Fetching edited audio from R2", { sessionId, editedUrl });
 
-  info("🎧 Retrieved edited audio", { sessionId });
+    const res = await fetch(editedUrl);
+    if (!res.ok) throw new Error("Failed to fetch edited audio from R2");
 
-  const introUrl = process.env.PODCAST_INTRO_URL;
-  const outroUrl = process.env.PODCAST_OUTRO_URL;
+    editedBuffer = Buffer.from(await res.arrayBuffer());
+  }
+
+  info("🎧 Retrieved edited audio", { sessionId, source: editedSource });
 
   const intro = `${TMP_DIR}/${sessionId}_intro.mp3`;
   const main = `${TMP_DIR}/${sessionId}_main.mp3`;
@@ -201,7 +224,7 @@ file '${outro}'
   const finalBuffer = fs.readFileSync(final);
 
   const podcastKey = `${sessionId}.mp3`;
-  const podcastUrl = `${process.env.R2_PUBLIC_BASE_URL_PODCAST}/${podcastKey}`;
+  const podcastUrl = `${publicBasePodcast}/${podcastKey}`;
 
   await safePutObject("podcast", podcastKey, finalBuffer, "audio/mpeg");
 
