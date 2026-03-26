@@ -10,6 +10,25 @@ import { fileURLToPath } from "node:url";
 
 export const app = express();
 
+function parseTrustProxy(value) {
+  if (value === undefined || value === null || value === "") {
+    return process.env.NODE_ENV === "production" ? 1 : false;
+  }
+
+  if (value === true || value === false) {
+    return value;
+  }
+
+  const normalized = String(value).trim().toLowerCase();
+  if (["1", "true", "yes", "on"].includes(normalized)) return true;
+  if (["0", "false", "no", "off"].includes(normalized)) return false;
+  if (/^\d+$/.test(normalized)) return Number(normalized);
+  return value;
+}
+
+const trustProxy = parseTrustProxy(process.env.TRUST_PROXY);
+app.set("trust proxy", trustProxy);
+
 const allowedOrigins = (process.env.CORS_ORIGINS || "")
   .split(",")
   .map((value) => value.trim())
@@ -27,8 +46,8 @@ app.use(
     },
   })
 );
-app.use(express.json({ limit: "10mb" }));
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || "10mb" }));
+app.use(express.urlencoded({ extended: true, limit: process.env.URLENCODED_BODY_LIMIT || "10mb" }));
 app.use(
   pinoHttp({
     logger: log,
@@ -67,7 +86,9 @@ app.use(
 );
 
 app.get("/", (_req, res) => res.status(200).send("OK"));
-app.get("/health", (_req, res) => res.status(200).json({ status: "ok" }));
+app.get("/health", (_req, res) =>
+  res.status(200).json({ status: "ok", trustProxy })
+);
 
 app.use("/", routes);
 
@@ -75,15 +96,46 @@ app.use((req, res) => {
   res.status(404).json({ ok: false, error: "Not found", path: req.path });
 });
 
-app.use((err, _req, res, _next) => {
-  error("server.unhandled", { error: err?.stack || String(err) });
+app.use((err, req, res, _next) => {
+  const requestId = req?.id || req?.headers?.["x-request-id"] || null;
+
+  if (err?.type === "entity.parse.failed") {
+    return res.status(400).json({
+      ok: false,
+      error: "Invalid JSON body",
+      requestId,
+    });
+  }
+
+  if (err?.type === "entity.too.large" || err?.status === 413) {
+    return res.status(413).json({
+      ok: false,
+      error: "Request body too large",
+      requestId,
+    });
+  }
+
+  if (err?.type === "request.aborted") {
+    return res.status(400).json({
+      ok: false,
+      error: "Request aborted before body was fully received",
+      requestId,
+    });
+  }
+
+  error("server.unhandled", {
+    requestId,
+    error: err?.stack || String(err),
+  });
+
   const message = err?.message === "CORS origin not allowed" ? err.message : "Internal error";
   const status = err?.message === "CORS origin not allowed" ? 403 : 500;
-  res.status(status).json({ ok: false, error: message });
+  res.status(status).json({ ok: false, error: message, requestId });
 });
 
 const PORT = process.env.PORT || 3000;
 let server;
+let processHandlersBound = false;
 
 export function startServer(port = PORT, host = "0.0.0.0") {
   if (server?.listening) {
@@ -93,7 +145,25 @@ export function startServer(port = PORT, host = "0.0.0.0") {
   server = app.listen(port, host, () => {
     info("🟩 AI Management Suite started on port " + port);
     debug("📡 Endpoints: /rss /script /tts /artwork /podcast /outreach /blog");
+    debug("server.trustProxy", { trustProxy });
   });
+
+  if (!processHandlersBound) {
+    processHandlersBound = true;
+    process.on("SIGTERM", () => shutdown("SIGTERM"));
+    process.on("SIGINT", () => shutdown("SIGINT"));
+    process.on("unhandledRejection", (reason) => {
+      error("server.unhandledRejection", {
+        error: reason instanceof Error ? reason.stack || reason.message : String(reason),
+      });
+    });
+    process.on("uncaughtException", (err) => {
+      error("server.uncaughtException", {
+        error: err?.stack || err?.message || String(err),
+      });
+      shutdown("uncaughtException");
+    });
+  }
 
   return server;
 }
@@ -116,7 +186,7 @@ function shutdown(signal) {
 
   if (!server) {
     info("server.shutdown.complete", { signal, note: "server_not_running" });
-    process.exit(0);
+    process.exit(signal === "uncaughtException" ? 1 : 0);
     return;
   }
 
@@ -127,7 +197,7 @@ function shutdown(signal) {
     }
 
     info("server.shutdown.complete", { signal });
-    process.exit(0);
+    process.exit(signal === "uncaughtException" ? 1 : 0);
   });
 
   setTimeout(() => {
@@ -135,9 +205,6 @@ function shutdown(signal) {
     process.exit(1);
   }, Number(process.env.SHUTDOWN_TIMEOUT_MS) || 10000).unref();
 }
-
-process.on("SIGTERM", () => shutdown("SIGTERM"));
-process.on("SIGINT", () => shutdown("SIGINT"));
 
 const isEntrypoint = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
 if (isEntrypoint) {
