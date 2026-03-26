@@ -1,8 +1,9 @@
 // ============================================================
 // 📰 Fetch Feeds Utility (PARSES items)
 // ============================================================
-// Rotates through rss-feeds.txt and url-feeds.txt, then fetches
-// and parses each selected feed into article items.
+// Rotates through rss-feeds.txt and url-feeds.txt (with legacy
+// local fallbacks to feeds.txt / urls.txt), then fetches and parses
+// each selected feed into article items.
 // ============================================================
 
 import Parser from "rss-parser";

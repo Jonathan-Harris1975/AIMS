@@ -26,17 +26,34 @@ function parseList(text = "") {
     .filter((l) => l.length > 0 && !l.startsWith("#"));
 }
 
+function localFilenameCandidates(filename) {
+  if (filename === RSS_FILE) return [RSS_FILE, "feeds.txt"];
+  if (filename === URL_FILE) return [URL_FILE, "urls.txt"];
+  return [filename];
+}
+
+function r2KeyCandidates(filename) {
+  if (filename === RSS_FILE) return ["data/rss-feeds.txt", "data/feeds.txt"];
+  if (filename === URL_FILE) return ["data/url-feeds.txt", "data/urls.txt"];
+  return [`data/${filename}`];
+}
+
 async function readFileOrR2(filename) {
-  const localPath = path.resolve("services/rss-feed-creator/data", filename);
-  if (fs.existsSync(localPath)) {
-    return fs.readFileSync(localPath, "utf-8");
+  for (const candidate of localFilenameCandidates(filename)) {
+    const localPath = path.resolve("services/rss-feed-creator/data", candidate);
+    if (fs.existsSync(localPath)) {
+      return fs.readFileSync(localPath, "utf-8");
+    }
   }
-  try {
-    return await getObjectAsText(R2_BUCKET, `data/${filename}`);
-  } catch (err) {
-    error("feedRotation.readFile.fail", { filename, err: err.message });
-    return "";
+
+  for (const key of r2KeyCandidates(filename)) {
+    try {
+      return await getObjectAsText(R2_BUCKET, key);
+    } catch {}
   }
+
+  error("feedRotation.readFile.fail", { filename, err: "file not found locally or in R2" });
+  return "";
 }
 
 export async function loadRotationState() {
@@ -68,12 +85,12 @@ export async function loadNextFeedBatch() {
   const urlIndex = rotation.urlIndex || 0;
 
   const nextRss = [];
-  for (let i = 0; i < MAX_RSS_FEEDS_PER_RUN; i++) {
+  for (let i = 0; i < MAX_RSS_FEEDS_PER_RUN && rssList.length > 0; i++) {
     nextRss.push(rssList[(rssIndex + i) % rssList.length]);
   }
 
   const nextUrl = [];
-  for (let i = 0; i < MAX_URL_FEEDS_PER_RUN; i++) {
+  for (let i = 0; i < MAX_URL_FEEDS_PER_RUN && urlList.length > 0; i++) {
     nextUrl.push(urlList[(urlIndex + i) % urlList.length]);
   }
 
