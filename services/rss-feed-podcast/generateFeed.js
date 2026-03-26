@@ -47,8 +47,14 @@ export function generateFeedXML(episodesMeta) {
     copyright: process.env.PODCAST_COPYRIGHT || "",
     itunesAuthor: process.env.PODCAST_AUTHOR || "",
     itunesExplicit: process.env.PODCAST_EXPLICIT || "no",
-    itunesType: process.env.itunes_type || "episodic",
-    itunesKeywords: process.env.itunes_keywords || "",
+    itunesType:
+      process.env.PODCAST_ITUNES_TYPE ||
+      process.env.itunes_type ||
+      "episodic",
+    itunesKeywords:
+      process.env.PODCAST_ITUNES_KEYWORDS ||
+      process.env.itunes_keywords ||
+      "",
     ownerName: process.env.PODCAST_OWNER_NAME || "",
     ownerEmail: process.env.PODCAST_OWNER_EMAIL || "",
     imageUrl: process.env.PODCAST_IMAGE_URL || "",
@@ -56,8 +62,14 @@ export function generateFeedXML(episodesMeta) {
       process.env.PODCAST_CATEGORY_1 || "",
       process.env.PODCAST_CATEGORY_2 || ""
     ].filter(Boolean),
-    fundingUrl: process.env.funding_url || "",
-    fundingText: process.env.funding_text || "",
+    fundingUrl:
+      process.env.PODCAST_FUNDING_URL ||
+      process.env.funding_url ||
+      "",
+    fundingText:
+      process.env.PODCAST_FUNDING_TEXT ||
+      process.env.funding_text ||
+      "",
 
     // Atom self-link (feed URL). Strongly recommended for PSP-1.
     // Prefer explicit feed URL env, fallback to RSS feeds base if set.
