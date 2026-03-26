@@ -1,6 +1,7 @@
 // ============================================================
 // 🧠 AI Podcast Suite — Bootstrap Sequence
 // ============================================================
+import "dotenv/config";
 
 import { execFileSync } from "node:child_process";
 import { log, info, debug } from "../logger.js";

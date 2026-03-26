@@ -1,4 +1,5 @@
 // scripts/startupCheck.js
+import "dotenv/config";
 import { access } from "node:fs/promises";
 import { constants } from "node:fs";
 import { info, error, debug } from "../logger.js";
