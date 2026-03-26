@@ -41,10 +41,11 @@ async function readLocalFile(filename) {
  * Ensure that R2 has the *real* data, not placeholders.
  */
 export async function ensureR2Sources() {
-  const bucket =
-    process.env.R2_BUCKET_RSS_FEEDS ||
-    process.env.R2_BUCKET_PODCAST ||
-    "rss-feeds";
+  if (!process.env.R2_BUCKET_RSS_FEEDS) {
+    throw new Error("Missing process.env.R2_BUCKET_RSS_FEEDS");
+  }
+
+  const bucket = "rss";
 
   debug(`🪣 Using R2 bucket: ${bucket}`);
 
@@ -94,10 +95,11 @@ export async function ensureR2Sources() {
  * Save rotation index update.
  */
 export async function saveRotation(nextIndex) {
-  const bucket =
-    process.env.R2_BUCKET_RSS_FEEDS ||
-    process.env.R2_BUCKET_PODCAST ||
-    "rss-feeds";
+  if (!process.env.R2_BUCKET_RSS_FEEDS) {
+    throw new Error("Missing process.env.R2_BUCKET_RSS_FEEDS");
+  }
+
+  const bucket = "rss";
 
   await putJson(bucket, ROTATION_KEY, { lastIndex: nextIndex });
   info(`🔁 Saved feed rotation index → ${nextIndex}`);

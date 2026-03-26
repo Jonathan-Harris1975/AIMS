@@ -10,7 +10,7 @@ import path from "path";
 import { info, error } from "../../../logger.js";
 import { getObjectAsText, putJson } from "../../shared/utils/r2-client.js";
 
-const R2_BUCKET = process.env.R2_BUCKET_RSS_FEEDS || "rss-feeds";
+const R2_BUCKET = "rss";
 
 const ROTATION_FILE = "data/feed-rotation.json";
 const RSS_FILE = "rss-feeds.txt";
@@ -19,9 +19,6 @@ const URL_FILE = "url-feeds.txt";
 const MAX_RSS_FEEDS_PER_RUN = Number(process.env.MAX_RSS_FEEDS_PER_RUN) || 5;
 const MAX_URL_FEEDS_PER_RUN = Number(process.env.MAX_URL_FEEDS_PER_RUN) || 1;
 
-// ─────────────────────────────────────────────
-// Helpers
-// ─────────────────────────────────────────────
 function parseList(text = "") {
   return text
     .split("\n")
@@ -42,9 +39,6 @@ async function readFileOrR2(filename) {
   }
 }
 
-// ─────────────────────────────────────────────
-// Load and Save Rotation State
-// ─────────────────────────────────────────────
 export async function loadRotationState() {
   try {
     const text = await getObjectAsText(R2_BUCKET, ROTATION_FILE);
@@ -59,9 +53,6 @@ export async function saveFeedRotation(state) {
   info("feedRotation.saved", state);
 }
 
-// ─────────────────────────────────────────────
-// Main Rotation Logic
-// ─────────────────────────────────────────────
 export async function loadNextFeedBatch() {
   const rssText = await readFileOrR2(RSS_FILE);
   const urlText = await readFileOrR2(URL_FILE);
@@ -87,8 +78,8 @@ export async function loadNextFeedBatch() {
   }
 
   const newState = {
-    rssIndex: (rssIndex + MAX_RSS_FEEDS_PER_RUN) % rssList.length,
-    urlIndex: (urlIndex + MAX_URL_FEEDS_PER_RUN) % urlList.length,
+    rssIndex: rssList.length ? (rssIndex + MAX_RSS_FEEDS_PER_RUN) % rssList.length : 0,
+    urlIndex: urlList.length ? (urlIndex + MAX_URL_FEEDS_PER_RUN) % urlList.length : 0,
   };
 
   await saveFeedRotation(newState);

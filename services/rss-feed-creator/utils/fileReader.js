@@ -7,10 +7,10 @@
 
 import fs from "fs";
 import path from "path";
-import { info, error , debug} from "../../../logger.js";
+import { error, debug } from "../../../logger.js";
 import { getObjectAsText } from "../../shared/utils/r2-client.js";
 
-const R2_BUCKET = process.env.R2_BUCKET_RSS_FEEDS || "rss-feeds";
+const R2_BUCKET = "rss";
 
 /**
  * Read text file from local filesystem or Cloudflare R2.
@@ -20,13 +20,11 @@ const R2_BUCKET = process.env.R2_BUCKET_RSS_FEEDS || "rss-feeds";
 export async function readLocalOrR2File(filename) {
   const localPath = path.resolve("services/rss-feed-creator/data", filename);
 
-  // Try local file first
   if (fs.existsSync(localPath)) {
     debug("rss.fetchFeeds.local.hit", { file: filename });
     return fs.readFileSync(localPath, "utf-8");
   }
 
-  // Fallback to R2 bucket
   try {
     const text = await getObjectAsText(R2_BUCKET, `data/${filename}`);
     debug("rss.fetchFeeds.r2.success", { bucket: R2_BUCKET, key: filename });
