@@ -1,46 +1,78 @@
-// ============================================================
-// 🧠 AI Podcast Suite — Bootstrap Sequence
-// ============================================================
 import "dotenv/config";
+import { spawn } from "node:child_process";
+import { info, debug, warn, error } from "../logger.js";
 
-import { execFileSync } from "node:child_process";
-import { log, info, debug, warn } from "../logger.js";
-import { startServer } from "../server.js";
+const STEP_TIMEOUT_MS = Number(process.env.BOOTSTRAP_STEP_TIMEOUT_MS) || 120_000;
 
-function runNodeScript(scriptPath, label, { optional = false } = {}) {
-  try {
-    info(`🔎 Running ${label}...`);
-    execFileSync(process.execPath, [scriptPath], { stdio: "inherit" });
-    info(`🟩 ${label} completed successfully.`);
-    return true;
-  } catch (err) {
-    if (optional) {
-      warn(`${label} skipped or not required.`, {
-        error: err?.message || String(err),
-      });
-      return false;
-    }
-    log.error({ error: err.message }, `❌ ${label} failed`);
-    process.exit(1);
-  }
+function runNodeScript(scriptPath, label, { optional = false, timeoutMs = STEP_TIMEOUT_MS } = {}) {
+  return new Promise((resolve, reject) => {
+    info("bootstrap.step.start", { label, scriptPath, timeoutMs, optional });
+
+    const child = spawn(process.execPath, [scriptPath], {
+      stdio: "inherit",
+      env: process.env,
+    });
+
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill("SIGTERM");
+    }, timeoutMs);
+    timer.unref?.();
+
+    child.once("error", (err) => {
+      clearTimeout(timer);
+      if (optional) {
+        warn("bootstrap.step.optional.error", { label, error: err?.message || String(err) });
+        resolve(false);
+        return;
+      }
+      reject(err);
+    });
+
+    child.once("close", (code, signal) => {
+      clearTimeout(timer);
+
+      if (code === 0) {
+        info("bootstrap.step.complete", { label, scriptPath });
+        resolve(true);
+        return;
+      }
+
+      const err = new Error(
+        timedOut
+          ? `${label} timed out after ${timeoutMs}ms`
+          : `${label} exited with code ${code}${signal ? ` (signal ${signal})` : ""}`
+      );
+
+      if (optional) {
+        warn("bootstrap.step.optional.skipped", { label, error: err.message });
+        resolve(false);
+        return;
+      }
+
+      reject(err);
+    });
+  });
 }
 
-(async () => {
-  debug("🧩 Starting AI-management-suite bootstrap sequence...");
-  debug("---------------------------------------------");
+async function main() {
+  debug("bootstrap.start", { stepTimeoutMs: STEP_TIMEOUT_MS });
 
   const hasRssStorage = Boolean(process.env.R2_BUCKET_RSS_FEEDS);
-  runNodeScript(
-    "./services/rss-feed-creator/startup/rss-init.js",
-    "RSS Init",
-    { optional: !hasRssStorage }
-  );
-  runNodeScript("./scripts/startupCheck.js", "Startup Check");
-  runNodeScript("./scripts/tempStorage.js", "R2 Check");
+  await runNodeScript("./services/rss-feed-creator/startup/rss-init.js", "RSS Init", {
+    optional: !hasRssStorage,
+  });
+  await runNodeScript("./scripts/startupCheck.js", "Startup Check");
+  await runNodeScript("./scripts/tempStorage.js", "Temp Storage Check");
 
-  info("🚀 Launching main web server...");
+  info("bootstrap.server.starting");
+  const { startServer } = await import("../server.js");
   startServer();
+  info("bootstrap.complete");
+}
 
-  debug("---------------------------------------------");
-  info("🏁 Bootstrap complete — server is running.");
-})();
+main().catch((err) => {
+  error("bootstrap.fail", { error: err?.stack || err?.message || String(err) });
+  process.exit(1);
+});
