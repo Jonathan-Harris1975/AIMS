@@ -1,7 +1,3 @@
-// ============================================================
-// 🎙 TTS Router — Handles TTS orchestration API endpoints
-// ============================================================
-
 import express from "express";
 import { info, error } from "../../../logger.js";
 import { sanitizeSessionId } from "../../shared/utils/sessionId.js";
@@ -12,7 +8,6 @@ import { orchestrateTTS } from "../index.js";
 
 const router = express.Router();
 
-// Health
 router.get("/health", (_req, res) => res.json({ ok: true, service: "tts" }));
 
 router.get("/status/:sessionId", (req, res) => {
@@ -26,10 +21,6 @@ router.get("/status/:sessionId", (req, res) => {
   return res.json({ ok: true, job });
 });
 
-/**
- * POST /tts/orchestrate
- * body: { sessionId?: string }
- */
 router.post("/orchestrate", hookdeckDedupe("tts:orchestrate"), async (req, res) => {
   const parsed = validateBody(ttsOrchestrateBodySchema, req.body);
   if (!parsed.ok) {
@@ -60,7 +51,7 @@ router.post("/orchestrate", hookdeckDedupe("tts:orchestrate"), async (req, res) 
     });
   }
 
-  res.json({
+  res.status(202).json({
     ok: true,
     message: "TTS orchestration started",
     sessionId,
@@ -70,7 +61,7 @@ router.post("/orchestrate", hookdeckDedupe("tts:orchestrate"), async (req, res) 
 
   void (async () => {
     try {
-      info("🏁 Detached TTS job started", { sessionId, eventId });
+      info("tts.job.start", { sessionId, eventId });
       const result = await orchestrateTTS(sessionId);
       if (!result?.ok) {
         throw new Error(result?.error || "TTS orchestration failed");
@@ -79,10 +70,10 @@ router.post("/orchestrate", hookdeckDedupe("tts:orchestrate"), async (req, res) 
         eventId,
         result,
       });
-      info("🏁 Detached TTS job completed", { sessionId, eventId });
+      info("tts.job.complete", { sessionId, eventId });
     } catch (err) {
       failJob("tts", sessionId, err, { eventId });
-      error("💥 Detached TTS job failed", { sessionId, eventId, error: err?.stack || err?.message });
+      error("tts.job.fail", { sessionId, eventId, error: err?.stack || err?.message });
     }
   })();
 });
