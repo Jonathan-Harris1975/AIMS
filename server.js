@@ -2,7 +2,9 @@
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
-import { info, debug, error } from "./logger.js";
+import crypto from "node:crypto";
+import pinoHttp from "pino-http";
+import { info, debug, error, log } from "./logger.js";
 import routes from "./routes/index.js";
 import { fileURLToPath } from "node:url";
 
@@ -27,6 +29,42 @@ app.use(
 );
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
+app.use(
+  pinoHttp({
+    logger: log,
+    quietReqLogger: true,
+    genReqId(req, res) {
+      const inherited =
+        req.headers["x-request-id"] ||
+        req.headers["x-hookdeck-eventid"] ||
+        req.headers["x-hookdeck-event-id"];
+      const requestId =
+        typeof inherited === "string" && inherited.trim()
+          ? inherited.trim()
+          : crypto.randomUUID();
+      res.setHeader("x-request-id", requestId);
+      return requestId;
+    },
+    serializers: {
+      req(req) {
+        return {
+          id: req.id,
+          method: req.method,
+          url: req.url,
+          remoteAddress: req.ip,
+        };
+      },
+      res(res) {
+        return { statusCode: res.statusCode };
+      },
+    },
+    customLogLevel(_req, res, err) {
+      if (err || res.statusCode >= 500) return "error";
+      if (res.statusCode >= 400) return "warn";
+      return "info";
+    },
+  })
+);
 
 app.get("/", (_req, res) => res.status(200).send("OK"));
 app.get("/health", (_req, res) => res.status(200).json({ status: "ok" }));
