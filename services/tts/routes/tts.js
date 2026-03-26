@@ -6,7 +6,7 @@ import express from "express";
 import { info, error } from "../../../logger.js";
 import { sanitizeSessionId } from "../../shared/utils/sessionId.js";
 import { hookdeckDedupe } from "../../shared/utils/hookdeckDedupe.js";
-import { getJob, startJob, completeJob, failJob } from "../../shared/utils/jobStore.js";
+import { getJob, beginJob, completeJob, failJob } from "../../shared/utils/jobStore.js";
 import { validateBody, ttsOrchestrateBodySchema } from "../../shared/utils/requestSchemas.js";
 import { orchestrateTTS } from "../index.js";
 
@@ -43,10 +43,22 @@ router.post("/orchestrate", hookdeckDedupe("tts:orchestrate"), async (req, res) 
     req.setTimeout(0);
   }
 
-  startJob("tts", sessionId, {
+  const { started, job } = beginJob("tts", sessionId, {
     eventId,
     route: "tts.orchestrate",
   });
+
+  if (!started) {
+    return res.status(202).json({
+      ok: true,
+      duplicateJob: true,
+      message: "TTS orchestration already running for this session",
+      sessionId,
+      status: job?.status || "running",
+      statusUrl: `/tts/status/${encodeURIComponent(sessionId)}`,
+      job,
+    });
+  }
 
   res.json({
     ok: true,
@@ -60,9 +72,12 @@ router.post("/orchestrate", hookdeckDedupe("tts:orchestrate"), async (req, res) 
     try {
       info("🏁 Detached TTS job started", { sessionId, eventId });
       const result = await orchestrateTTS(sessionId);
+      if (!result?.ok) {
+        throw new Error(result?.error || "TTS orchestration failed");
+      }
       completeJob("tts", sessionId, {
         eventId,
-        result: result && typeof result === "object" ? result : { ok: true },
+        result,
       });
       info("🏁 Detached TTS job completed", { sessionId, eventId });
     } catch (err) {
