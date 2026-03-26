@@ -45,7 +45,7 @@ router.post("/podcast/pipeline", async (req, res) => {
       null;
 
     // 2) TTS (services/tts/routes/tts.js mounted at /tts)
-    const ttsResp = await fetch(`${base}/tts`, {
+    const ttsResp = await fetch(`${base}/tts/orchestrate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ sessionId }),

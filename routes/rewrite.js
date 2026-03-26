@@ -4,7 +4,7 @@
 
 import express from "express";
 import { info, error } from "../logger.js";
-import { rewriteRSSFeeds } from "../services/rss-feed-creator/rewrite-pipeline.js";
+import { endToEndRewrite } from "../services/rss-feed-creator/rewrite-pipeline.js";
 
 const router = express.Router();
 
@@ -19,7 +19,7 @@ router.post("/rss/rewrite", async (req, res) => {
   info("📰 RSS rewrite requested", { batchSize });
 
   try {
-    const result = await rewriteRSSFeeds({ batchSize });
+    const result = await endToEndRewrite({ batchSize });
     return res.json({ ok: true, ...result });
   } catch (err) {
     error("💥 RSS rewrite failed", { error: err.message });
