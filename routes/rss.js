@@ -1,6 +1,6 @@
-// /routes/rss.js — AI Podcast Suite (Final Stable 2025-10-11)
 import express from "express";
 import { getObject } from "../services/shared/utils/r2-client.js";
+import { endToEndRewrite } from "../services/rss-feed-creator/rewrite-pipeline.js";
 
 const router = express.Router();
 
@@ -12,14 +12,12 @@ router.all("/", async (req, res) => {
 
   if (!isPost) {
     try {
-      const xml = await getObject("rss.xml");
+      const xml = await getObject("rss", "feed.xml");
       res.set("Content-Type", "application/rss+xml");
-      res.send(
-        xml || "<rss><channel><title>No RSS Found</title></channel></rss>"
-      );
+      res.send(xml || "<rss><channel><title>No RSS Found</title></channel></rss>");
     } catch (err) {
       res.status(500).json({
-        success: false,
+        ok: false,
         route: "rss",
         message: "Failed to fetch RSS feed.",
         error: err.message,
@@ -27,17 +25,16 @@ router.all("/", async (req, res) => {
     }
   } else {
     try {
-      // Placeholder for RSS rebuild logic (e.g. re-run rewrite pipeline)
-      const result = { note: "RSS feed rebuild triggered (placeholder)." };
+      const result = await endToEndRewrite();
       res.status(200).json({
-        success: true,
+        ok: true,
         route: "rss",
         message: "RSS feed rebuild completed successfully.",
         result,
       });
     } catch (error) {
       res.status(500).json({
-        success: false,
+        ok: false,
         route: "rss",
         message: "RSS feed rebuild failed.",
         error: error.message,
