@@ -40,3 +40,6 @@ jobs:
             node --check "$file"
           done
           echo "✅ Syntax checks passed"
+
+      - name: Run smoke tests
+        run: npm test
