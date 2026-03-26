@@ -2,13 +2,7 @@ import express from "express";
 import { runPodcastPipeline } from "./runPodcastPipeline.js";
 import { sanitizeSessionId } from "../shared/utils/sessionId.js";
 import { hookdeckDedupe } from "../shared/utils/hookdeckDedupe.js";
-import {
-  getJob,
-  beginJob,
-  completeJob,
-  failJob,
-  sanitizeJobForClient,
-} from "../shared/utils/jobStore.js";
+import { getPublicJob, beginJob, completeJob, failJob } from "../shared/utils/jobStore.js";
 import { validateBody, podcastRunBodySchema } from "../shared/utils/requestSchemas.js";
 import { info, error } from "../../logger.js";
 
@@ -44,7 +38,7 @@ router.post("/run", hookdeckDedupe("podcast:run"), async (req, res) => {
         status: job?.status || "running",
         statusUrl: `/podcast/status/${encodeURIComponent(sessionId)}`,
         message: "Podcast pipeline already running for this session.",
-        job: sanitizeJobForClient(job),
+        job,
       });
     }
 
@@ -72,13 +66,13 @@ router.post("/run", hookdeckDedupe("podcast:run"), async (req, res) => {
 
 router.get("/status/:sessionId", (req, res) => {
   const sessionId = sanitizeSessionId(req.params.sessionId, "TT");
-  const job = getJob("podcast", sessionId);
+  const job = getPublicJob("podcast", sessionId);
 
   if (!job) {
     return res.status(404).json({ ok: false, error: "No podcast job found", sessionId });
   }
 
-  return res.json({ ok: true, job: sanitizeJobForClient(job) });
+  return res.json({ ok: true, job });
 });
 
 router.get("/health", (_req, res) =>
