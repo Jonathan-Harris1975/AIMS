@@ -1,12 +1,12 @@
 // services/script/utils/fetchFeeds.js
 import Parser from "rss-parser";
 import { fetchWithTimeout } from "../../shared/http-client.js";
-import { error, debug } from "../../../logger.js";
+import { info, error, debug} from "../../../logger.js";
 
 const parser = new Parser();
-const FEED_FETCH_TIMEOUT_MS = 15_000;
+const FEED_FETCH_TIMEOUT_MS = Number(process.env.FEED_FETCH_TIMEOUT_MS) || 15_000;
 
-function withinDays(dateValue, days = 7) {
+function withinDays(dateValue, days=7) {
   if (!dateValue) return false;
   const pubDate = new Date(dateValue);
   if (isNaN(pubDate.getTime())) return false;
@@ -38,8 +38,7 @@ function calculateArticleScore(item) {
  * Returns: { items, feedUrl }
  */
 export default async function fetchFeedArticles(feedUrlArg, windowDays = 7) {
-  const feedUrl =
-    (typeof feedUrlArg === "string" ? feedUrlArg : "")?.trim() || process.env.FEED_URL?.trim();
+  const feedUrl = feedUrlArg?.trim() || process.env.FEED_URL?.trim();
 
   if (!feedUrl) {
     error("❌ No FEED_URL provided — set FEED_URL in environment or pass as arg.");
@@ -47,7 +46,7 @@ export default async function fetchFeedArticles(feedUrlArg, windowDays = 7) {
   }
 
   try {
-    debug("📡 Fetching RSS feed", { feedUrl });
+    debug("📡 Fetching RSS feed", { feedUrl, timeoutMs: FEED_FETCH_TIMEOUT_MS });
     const res = await fetchWithTimeout(feedUrl, { timeout: FEED_FETCH_TIMEOUT_MS });
     if (!res.ok) throw new Error(`Fetch failed: ${res.status} ${res.statusText}`);
     const text = await res.text();
@@ -57,14 +56,12 @@ export default async function fetchFeedArticles(feedUrlArg, windowDays = 7) {
       feed = await parser.parseString(text);
     } catch {
       if (text.includes("<feed")) {
-        const matchTitles = [...text.matchAll(/<title>(.*?)<\/title>/g)].map((m) => m[1]);
-        const matchLinks = [...text.matchAll(/<link[^>]*href="([^"]+)"/g)].map((m) => m[1]);
+        const matchTitles = [...text.matchAll(/<title>(.*?)<\/title>/g)].map(m => m[1]);
+        const matchLinks = [...text.matchAll(/<link[^>]*href="([^"]+)"/g)].map(m => m[1]);
         feed = {
           title: matchTitles[0] || "Untitled Feed",
           items: matchTitles.slice(1).map((t, i) => ({
-            title: t,
-            link: matchLinks[i + 1] || "",
-            contentSnippet: "",
+            title: t, link: matchLinks[i + 1] || "", contentSnippet: ""
           })),
         };
       } else if (text.trim().startsWith("{")) {
@@ -75,19 +72,23 @@ export default async function fetchFeedArticles(feedUrlArg, windowDays = 7) {
       }
     }
 
-    const allItems = feed.items || [];
-    const recent = allItems.filter((it) =>
-      withinDays(it.pubDate || it.isoDate || it.published, windowDays)
-    );
+    const allItems = (feed.items || []);
+    const recent = allItems.filter(it => withinDays(it.pubDate || it.isoDate || it.published, windowDays));
 
     const scoredItems = recent
-      .map((item) => ({ ...item, score: calculateArticleScore(item) }))
+      .map(item => ({ ...item, score: calculateArticleScore(item) }))
       .sort((a, b) => b.score - a.score);
 
-    debug(`✅ Parsed ${scoredItems.length} items from feed (last ${windowDays} days).`, { feedUrl });
+    info("📰 Feed articles loaded", {
+      feedUrl,
+      feedTitle: feed.title,
+      recentItems: recent.length,
+      returnedItems: scoredItems.length,
+    });
+
     return { items: scoredItems, feedUrl };
   } catch (err) {
-    error("❌ Error fetching or parsing RSS feed", { message: err.message, feedUrl });
+    error("❌ Failed to fetch or parse RSS feed", { feedUrl, error: err.message });
     return { items: [], feedUrl };
   }
 }
