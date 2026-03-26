@@ -1,11 +1,6 @@
-/**
- * rewrite.js
- * Handles POST /rss/rewrite — fetches, rewrites, and regenerates the RSS feed.
- */
-
 import express from "express";
 import { endToEndRewrite } from "../rewrite-pipeline.js";
-import { info, error, debug } from "../../../logger.js";
+import { info, error } from "../../../logger.js";
 import { hookdeckDedupe } from "../../shared/utils/hookdeckDedupe.js";
 
 const router = express.Router();
@@ -14,22 +9,20 @@ router.post("/rewrite", hookdeckDedupe("rss:rewrite"), async (req, res) => {
   try {
     info("rewrite.route.start");
 
-    // Execute rewrite pipeline
     const result = await endToEndRewrite();
 
     info("rewrite.route.complete", { result });
 
     res.json({
-      status: "ok",
-      message: "RSS rewrite process triggered successfully",
+      ok: true,
       totalItems: result?.totalItems || 0,
       rewrittenItems: result?.rewrittenItems || 0,
+      message: "RSS rewrite process completed successfully",
     });
   } catch (err) {
-    error("rewrite.route.error", err);
-    res.status(500).json({ error: err.message || "Rewrite route failed" });
+    error("rewrite.route.error", { error: err?.stack || err?.message || String(err) });
+    res.status(500).json({ ok: false, error: err.message || "Rewrite route failed" });
   }
 });
 
-// ✅ Default export for Express loader compatibility
 export default router;
