@@ -63,7 +63,6 @@ function upsertJob(type, sessionId, patch = {}) {
     status: existing?.status || "queued",
     createdAt: existing?.createdAt || timestamp,
     updatedAt: timestamp,
-    attempt: Number(existing?.attempt || 0),
     ...existing,
     ...patch,
   };
@@ -84,7 +83,7 @@ export function startJob(type, sessionId, metadata = {}) {
   return upsertJob(type, sessionId, {
     status: "running",
     attempt,
-    startedAt: nowIso(),
+    startedAt: existing?.startedAt || nowIso(),
     finishedAt: undefined,
     error: undefined,
     result: undefined,

@@ -10,7 +10,7 @@ function makeStateDir() {
 
 test("beginJob prevents concurrent reuse of the same running job", async () => {
   process.env.APP_STATE_DIR = makeStateDir();
-  const mod = await import(`../services/shared/utils/jobStore.js?case=running-${Date.now()}`);
+  const mod = await import(`./services/shared/utils/jobStore.js?case=running-${Date.now()}`);
 
   const first = mod.beginJob("tts", "TT-jobstore-running", { route: "test" });
   assert.equal(first.started, true);
@@ -25,7 +25,7 @@ test("beginJob prevents concurrent reuse of the same running job", async () => {
 
 test("beginJob allows a rerun after completion and increments attempt count", async () => {
   process.env.APP_STATE_DIR = makeStateDir();
-  const mod = await import(`../services/shared/utils/jobStore.js?case=rerun-${Date.now()}`);
+  const mod = await import(`./services/shared/utils/jobStore.js?case=rerun-${Date.now()}`);
 
   const first = mod.beginJob("podcast", "TT-jobstore-complete", { route: "test" });
   assert.equal(first.started, true);
