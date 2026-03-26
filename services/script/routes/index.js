@@ -1,5 +1,3 @@
-// services/script/routes/index.js
-
 import express from "express";
 import { info, error } from "../../../logger.js";
 import { sanitizeSessionId } from "../../shared/utils/sessionId.js";
@@ -47,16 +45,10 @@ function validateOrThrow(schema, body) {
   return normalizePayload(parsed.data);
 }
 
-// ─────────────────────────────
-//  HEALTH CHECK
-// ─────────────────────────────
 router.get("/health", (_req, res) => {
   res.json({ ok: true, service: "script" });
 });
 
-// ─────────────────────────────
-//  INTRO
-// ─────────────────────────────
 router.post("/intro", hookdeckDedupe("script:intro"), async (req, res) => {
   try {
     const payload = validateOrThrow(IntroSchema, req.body);
@@ -69,9 +61,6 @@ router.post("/intro", hookdeckDedupe("script:intro"), async (req, res) => {
   }
 });
 
-// ─────────────────────────────
-//  MAIN
-// ─────────────────────────────
 router.post("/main", hookdeckDedupe("script:main"), async (req, res) => {
   try {
     const payload = validateOrThrow(MainSchema, req.body);
@@ -84,9 +73,6 @@ router.post("/main", hookdeckDedupe("script:main"), async (req, res) => {
   }
 });
 
-// ─────────────────────────────
-//  OUTRO
-// ─────────────────────────────
 router.post("/outro", hookdeckDedupe("script:outro"), async (req, res) => {
   try {
     const payload = validateOrThrow(OutroSchema, req.body);
@@ -99,9 +85,6 @@ router.post("/outro", hookdeckDedupe("script:outro"), async (req, res) => {
   }
 });
 
-// ─────────────────────────────
-//  COMPOSE
-// ─────────────────────────────
 router.post("/compose", hookdeckDedupe("script:compose"), async (req, res) => {
   try {
     const payload = validateOrThrow(ComposeSchema, req.body);
@@ -114,15 +97,12 @@ router.post("/compose", hookdeckDedupe("script:compose"), async (req, res) => {
   }
 });
 
-// ─────────────────────────────
-//  ORCHESTRATE (FULL PIPELINE)
-// ─────────────────────────────
 router.post("/orchestrate", hookdeckDedupe("script:orchestrate"), async (req, res) => {
   try {
     const payload = validateOrThrow(OrchestrateSchema, req.body);
     info("script.orchestrate.req", { date: payload.date, sessionId: payload.sessionId });
     const result = await orchestrateEpisode(payload);
-    res.json(result);
+    res.json({ ok: true, sessionId: payload.sessionId, ...result });
   } catch (err) {
     error("script.orchestrate.fail", { err: err.message });
     res.status(err.statusCode || 500).json({ ok: false, error: err.message });
