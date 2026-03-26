@@ -2,13 +2,30 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { debug, warn } from "../../../logger.js";
+import { getObjectAsText, putJson } from "./r2-client.js";
 
-const DEFAULT_TMP_ROOT = process.env.APP_TMP_DIR || path.join(os.tmpdir(), "ai-management-suite");
 const BASE_STATE_DIR = path.resolve(
-  process.env.APP_STATE_DIR || path.join(DEFAULT_TMP_ROOT, "state")
+  process.env.APP_STATE_DIR ||
+    path.join(process.env.APP_TMP_DIR || path.join(os.tmpdir(), "ai-management-suite"), "state")
 );
+const REMOTE_STATE_PREFIX = String(process.env.STATE_REMOTE_PREFIX || "state")
+  .replace(/^\/+/, "")
+  .replace(/\/+$/, "");
+const KNOWN_REMOTE_FILES = new Set(["job-store.json", "hookdeck-dedupe.json"]);
+const remoteStateCache = new Map();
 
-let ephemeralWarningLogged = false;
+const remoteStateMode = String(process.env.STATE_BACKEND || "auto").trim().toLowerCase();
+const hasRemoteStateEnv = Boolean(
+  process.env.R2_ENDPOINT &&
+    process.env.R2_ACCESS_KEY_ID &&
+    process.env.R2_SECRET_ACCESS_KEY &&
+    process.env.R2_BUCKET_META_SYSTEM
+);
+const remoteStateEnabled =
+  remoteStateMode === "r2" || (remoteStateMode === "auto" && hasRemoteStateEnv);
+
+let warnedRemoteStateDisabled = false;
+let remoteWriteQueue = Promise.resolve();
 
 function cloneValue(value) {
   if (value === undefined) return undefined;
@@ -19,22 +36,7 @@ function cloneValue(value) {
   }
 }
 
-function warnIfEphemeralState() {
-  if (ephemeralWarningLogged) return;
-  if (process.env.NODE_ENV !== "production") return;
-  if (process.env.APP_STATE_DIR) return;
-
-  ephemeralWarningLogged = true;
-  warn("state.storage.ephemeral", {
-    baseStateDir: BASE_STATE_DIR,
-    message:
-      "APP_STATE_DIR is not set. Job and Hookdeck dedupe state are being persisted under a temporary filesystem path and will be lost on container restart.",
-  });
-}
-
 function ensureStateDir() {
-  warnIfEphemeralState();
-
   if (!fs.existsSync(BASE_STATE_DIR)) {
     fs.mkdirSync(BASE_STATE_DIR, { recursive: true });
     debug("state.dir.created", { BASE_STATE_DIR });
@@ -43,11 +45,110 @@ function ensureStateDir() {
   return BASE_STATE_DIR;
 }
 
+function isLikelyEphemeralStateDir(dirPath) {
+  const resolved = path.resolve(dirPath);
+  const tmpRoot = path.resolve(os.tmpdir());
+  return resolved === tmpRoot || resolved.startsWith(`${tmpRoot}${path.sep}`);
+}
+
+function warnIfUsingLocalOnlyState() {
+  if (warnedRemoteStateDisabled) return;
+  warnedRemoteStateDisabled = true;
+
+  const localOnly = !remoteStateEnabled;
+  const inProduction = process.env.NODE_ENV === "production";
+
+  if (!localOnly || !inProduction || !isLikelyEphemeralStateDir(BASE_STATE_DIR)) {
+    return;
+  }
+
+  warn("state.persistence.local_only", {
+    backend: remoteStateMode,
+    stateDir: BASE_STATE_DIR,
+    message:
+      "State persistence is using local ephemeral storage. Configure R2_BUCKET_META_SYSTEM and set STATE_BACKEND=auto or r2 for durable job and dedupe state.",
+  });
+}
+
+function remoteStateKey(filename) {
+  return REMOTE_STATE_PREFIX ? `${REMOTE_STATE_PREFIX}/${filename}` : filename;
+}
+
+function isMissingRemoteStateError(err) {
+  const text = `${err?.name || ""} ${err?.code || ""} ${err?.message || ""}`.toLowerCase();
+  return (
+    text.includes("nosuchkey") ||
+    text.includes("not found") ||
+    text.includes("notfound") ||
+    text.includes("the specified key does not exist") ||
+    text.includes("unknown r2 bucket alias")
+  );
+}
+
+async function hydrateRemoteState() {
+  if (!remoteStateEnabled) {
+    warnIfUsingLocalOnlyState();
+    return;
+  }
+
+  for (const filename of KNOWN_REMOTE_FILES) {
+    const key = remoteStateKey(filename);
+
+    try {
+      const raw = await getObjectAsText("metaSystem", key);
+      const trimmed = String(raw || "").trim();
+      if (!trimmed) continue;
+
+      remoteStateCache.set(filename, JSON.parse(trimmed));
+      debug("state.remote.hydrated", { key });
+    } catch (err) {
+      if (isMissingRemoteStateError(err)) {
+        debug("state.remote.missing", { key });
+        continue;
+      }
+
+      warn("state.remote.hydrate.fail", {
+        key,
+        error: err?.message || String(err),
+      });
+    }
+  }
+}
+
+await hydrateRemoteState();
+
+function queueRemoteWrite(filename, value) {
+  if (!remoteStateEnabled) {
+    warnIfUsingLocalOnlyState();
+    return;
+  }
+
+  const key = remoteStateKey(filename);
+  const snapshot = cloneValue(value);
+  remoteStateCache.set(filename, snapshot);
+
+  remoteWriteQueue = remoteWriteQueue
+    .then(async () => {
+      await putJson("metaSystem", key, snapshot);
+      debug("state.remote.write.complete", { key });
+    })
+    .catch((err) => {
+      warn("state.remote.write.fail", {
+        key,
+        error: err?.message || String(err),
+      });
+    });
+}
+
 export function getStateFilePath(filename) {
   return path.join(ensureStateDir(), filename);
 }
 
 export function readJsonState(filename, fallback) {
+  if (remoteStateCache.has(filename)) {
+    return cloneValue(remoteStateCache.get(filename));
+  }
+
   const filePath = getStateFilePath(filename);
 
   try {
@@ -71,12 +172,14 @@ export function writeJsonState(filename, value) {
   try {
     fs.writeFileSync(tempFilePath, JSON.stringify(value, null, 2));
     fs.renameSync(tempFilePath, filePath);
+    queueRemoteWrite(filename, value);
     return true;
   } catch (err) {
     warn("state.write.fail", { filePath, error: err?.message || String(err) });
     try {
       if (fs.existsSync(tempFilePath)) fs.unlinkSync(tempFilePath);
     } catch {}
-    return false;
+    queueRemoteWrite(filename, value);
+    return remoteStateEnabled;
   }
 }

@@ -12,21 +12,38 @@ function nowIso() {
 }
 
 function cloneJob(job) {
-  if (!job) return null;
-
-  try {
-    return structuredClone(job);
-  } catch {
-    return JSON.parse(JSON.stringify(job));
-  }
+  return job ? { ...job } : null;
 }
 
-export function sanitizeJobForClient(job) {
+function sanitiseJobError(err) {
+  if (!err) return undefined;
+  if (err instanceof Error) {
+    return {
+      name: err.name,
+      message: err.message,
+      code: err.code,
+      status: err.status,
+    };
+  }
+
+  if (typeof err === "object") {
+    return {
+      name: err.name,
+      message: err.message || String(err),
+      code: err.code,
+      status: err.status,
+    };
+  }
+
+  return { message: String(err) };
+}
+
+export function toPublicJob(job) {
   const cloned = cloneJob(job);
   if (!cloned) return null;
 
-  if (cloned.error && typeof cloned.error === "object") {
-    delete cloned.error.stack;
+  if (cloned.error) {
+    cloned.error = sanitiseJobError(cloned.error);
   }
 
   return cloned;
@@ -39,7 +56,7 @@ function loadJobs() {
   return new Map(
     jobs
       .filter((job) => job && typeof job.type === "string" && typeof job.sessionId === "string")
-      .map((job) => [makeKey(job.type, job.sessionId), job])
+      .map((job) => [makeKey(job.type, job.sessionId), { ...job, error: sanitiseJobError(job.error) }])
   );
 }
 
@@ -47,7 +64,10 @@ const jobs = loadJobs();
 
 function persistJobs() {
   writeJsonState(STATE_FILE, {
-    jobs: [...jobs.values()],
+    jobs: [...jobs.values()].map((job) => ({
+      ...job,
+      error: sanitiseJobError(job.error),
+    })),
   });
 }
 
@@ -82,6 +102,7 @@ function upsertJob(type, sessionId, patch = {}) {
     updatedAt: timestamp,
     ...existing,
     ...patch,
+    error: sanitiseJobError(patch.error ?? existing?.error),
   };
 
   jobs.set(key, next);
@@ -135,15 +156,10 @@ export function completeJob(type, sessionId, metadata = {}) {
 }
 
 export function failJob(type, sessionId, err, metadata = {}) {
-  const error =
-    err instanceof Error
-      ? { message: err.message, stack: err.stack }
-      : { message: String(err) };
-
   return upsertJob(type, sessionId, {
     status: "failed",
     finishedAt: nowIso(),
-    error,
+    error: sanitiseJobError(err),
     ...metadata,
   });
 }
@@ -151,4 +167,8 @@ export function failJob(type, sessionId, err, metadata = {}) {
 export function getJob(type, sessionId) {
   pruneExpired();
   return cloneJob(jobs.get(makeKey(type, sessionId)));
+}
+
+export function getPublicJob(type, sessionId) {
+  return toPublicJob(getJob(type, sessionId));
 }
