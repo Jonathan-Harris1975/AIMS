@@ -5,8 +5,10 @@
 
 import express from "express";
 import { info, error } from "../logger.js";
+import { fetchWithTimeout } from "../services/shared/http-client.js";
 
 const router = express.Router();
+const INTERNAL_ROUTE_TIMEOUT_MS = Number(process.env.INTERNAL_ROUTE_TIMEOUT_MS) || 60_000;
 
 function baseUrl() {
   const port = process.env.PORT || 3000;
@@ -29,37 +31,33 @@ router.post("/podcast/pipeline", async (req, res) => {
   info("🎧 Podcast pipeline start", { sessionId });
 
   try {
-    // 1) SCRIPT ORCHESTRATION
-    const scriptResp = await fetch(`${base}/script/orchestrate`, {
+    const scriptResp = await fetchWithTimeout(`${base}/script/orchestrate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ sessionId, date, topic, tone }),
+      timeout: INTERNAL_ROUTE_TIMEOUT_MS,
     });
     if (!scriptResp.ok) throw new Error(`Script orchestration failed: ${scriptResp.status}`);
     const scriptData = await scriptResp.json();
 
-    // Some script flows emit metaUrl data under compose step; keep optional.
-    const metaUrls =
-      scriptData?.steps?.compose?.metaUrls ||
-      scriptData?.metaUrls ||
-      null;
+    const metaUrls = scriptData?.steps?.compose?.metaUrls || scriptData?.metaUrls || null;
 
-    // 2) TTS (services/tts/routes/tts.js mounted at /tts)
-    const ttsResp = await fetch(`${base}/tts/orchestrate`, {
+    const ttsResp = await fetchWithTimeout(`${base}/tts/orchestrate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ sessionId }),
+      timeout: INTERNAL_ROUTE_TIMEOUT_MS,
     });
     if (!ttsResp.ok) throw new Error(`TTS failed: ${ttsResp.status}`);
     const ttsData = await ttsResp.json();
 
-    // 3) ARTWORK (non-blocking; return warning if fails)
     let artworkData = { ok: false };
     try {
-      const artResp = await fetch(`${base}/artwork/generate`, {
+      const artResp = await fetchWithTimeout(`${base}/artwork/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sessionId, metaUrls }),
+        timeout: INTERNAL_ROUTE_TIMEOUT_MS,
       });
       if (!artResp.ok) throw new Error(`Artwork failed: ${artResp.status}`);
       artworkData = await artResp.json();
