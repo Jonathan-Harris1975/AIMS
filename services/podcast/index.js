@@ -2,38 +2,66 @@
 import express from "express";
 import { runPodcastPipeline } from "./runPodcastPipeline.js";
 import { sanitizeSessionId } from "../shared/utils/sessionId.js";
-import { info } from "../../logger.js";
+import { hookdeckDedupe } from "../shared/utils/hookdeckDedupe.js";
+import { getJob, startJob, completeJob, failJob } from "../shared/utils/jobStore.js";
+import { validateBody, podcastRunBodySchema } from "../shared/utils/requestSchemas.js";
+import { info, error } from "../../logger.js";
 
 const router = express.Router();
 
-router.post("/run", async (req, res) => {
+router.post("/run", hookdeckDedupe("podcast:run"), async (req, res) => {
   try {
-    // Handle both nested and raw JSON payloads
     const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
+    const parsed = validateBody(podcastRunBodySchema, body);
+    if (!parsed.ok) {
+      return res.status(400).json({ ok: false, error: parsed.error });
+    }
+
+    const payload = parsed.data;
     const sessionId = sanitizeSessionId(
-      body?.sessionId ||
-        body?.data?.sessionId ||
-        `TT-${new Date().toISOString().slice(0, 10)}`,
+      payload.sessionId || payload.data?.sessionId || `TT-${new Date().toISOString().slice(0, 10)}`,
       "TT"
     );
+    const eventId = req.hookdeckEventId || null;
 
-    info("api.podcast.start", { sessionId });
+    info("api.podcast.start", { sessionId, eventId });
 
-    if (!sessionId) throw new Error("sessionId is required");
+    startJob("podcast", sessionId, {
+      eventId,
+      route: "podcast.run",
+    });
 
-    // Kick off async process
-    runPodcastPipeline(sessionId)
-      .then(() => info("api.podcast.complete", { sessionId }))
-      .catch((err) => info("api.podcast.error", { sessionId, error: err.message }));
+    void runPodcastPipeline(sessionId)
+      .then((result) => {
+        completeJob("podcast", sessionId, { eventId, result });
+        info("api.podcast.complete", { sessionId, eventId });
+      })
+      .catch((err) => {
+        failJob("podcast", sessionId, err, { eventId });
+        error("api.podcast.error", { sessionId, eventId, error: err.message });
+      });
 
     res.json({
       ok: true,
       sessionId,
-      message: "Pipeline started. Logs will record progress.",
+      status: "running",
+      statusUrl: `/podcast/status/${encodeURIComponent(sessionId)}`,
+      message: "Pipeline started. Use the status endpoint or logs to track progress.",
     });
   } catch (err) {
     res.status(400).json({ ok: false, error: err.message });
   }
+});
+
+router.get("/status/:sessionId", (req, res) => {
+  const sessionId = sanitizeSessionId(req.params.sessionId, "TT");
+  const job = getJob("podcast", sessionId);
+
+  if (!job) {
+    return res.status(404).json({ ok: false, error: "No podcast job found", sessionId });
+  }
+
+  return res.json({ ok: true, job });
 });
 
 router.get("/health", (_req, res) =>
