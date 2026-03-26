@@ -1,11 +1,11 @@
-
 // ============================================================
 // 🎚 Podcast Processor — Clean Final Version (Fully Updated)
 // ============================================================
 
 import { spawn } from "node:child_process";
-import { info, warn, error, debug } from "../../../logger.js";
+import { info, warn } from "../../../logger.js";
 import { putObject } from "../../shared/utils/r2-client.js";
+import { fetchWithTimeout } from "../../shared/http-client.js";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -14,6 +14,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const TMP_DIR = "/tmp/podcast_master";
+const HTTP_FETCH_TIMEOUT_MS = 20_000;
 if (!fs.existsSync(TMP_DIR)) fs.mkdirSync(TMP_DIR, { recursive: true });
 
 function requireEnv(name) {
@@ -101,9 +102,10 @@ async function updateMetaFile(sessionId, finalBuffer, finalPath, podcastUrl) {
   let existing = {};
   try {
     if (metaUrl) {
-      const res = await fetch(metaUrl);
-      if (res.ok && res.headers.get("content-type")?.includes("application/json"))
+      const res = await fetchWithTimeout(metaUrl, { timeout: HTTP_FETCH_TIMEOUT_MS });
+      if (res.ok && res.headers.get("content-type")?.includes("application/json")) {
         existing = await res.json();
+      }
     }
   } catch {}
 
@@ -172,73 +174,76 @@ export async function podcastProcessor(sessionId, editedPathOrBuffer) {
   let editedBuffer;
   let editedSource = "r2";
 
-  if (typeof editedPathOrBuffer === "string" && fs.existsSync(editedPathOrBuffer)) {
-    info("🎚 Using local edited audio", { sessionId, path: editedPathOrBuffer });
-    editedBuffer = fs.readFileSync(editedPathOrBuffer);
-    editedSource = "local";
-  } else if (Buffer.isBuffer(editedPathOrBuffer)) {
-    info("🎚 Using in-memory edited audio", { sessionId });
-    editedBuffer = editedPathOrBuffer;
-    editedSource = "buffer";
-  } else {
-    const publicBaseEdited = requireEnv("R2_PUBLIC_BASE_URL_EDITED_AUDIO");
-    const editedUrl = `${publicBaseEdited}/${sessionId}_edited.mp3`;
-
-    info("🎚 Fetching edited audio from R2", { sessionId, editedUrl });
-
-    const res = await fetch(editedUrl);
-    if (!res.ok) throw new Error("Failed to fetch edited audio from R2");
-
-    editedBuffer = Buffer.from(await res.arrayBuffer());
-  }
-
-  info("🎧 Retrieved edited audio", { sessionId, source: editedSource });
-
   const intro = `${TMP_DIR}/${sessionId}_intro.mp3`;
   const main = `${TMP_DIR}/${sessionId}_main.mp3`;
   const outro = `${TMP_DIR}/${sessionId}_outro.mp3`;
   const final = `${TMP_DIR}/${sessionId}_final.mp3`;
-
-  fs.writeFileSync(main, editedBuffer);
-
-  async function dl(url, dest) {
-    const r = await fetch(url);
-    if (!r.ok) throw new Error(`Download failed: ${url}`);
-    fs.writeFileSync(dest, Buffer.from(await r.arrayBuffer()));
-  }
-
-  await dl(introUrl, intro);
-  await dl(outroUrl, outro);
-
   const list = `${TMP_DIR}/${sessionId}_list.txt`;
-  fs.writeFileSync(
-    list,
-    `file '${intro}'
+  const tempFiles = [intro, main, outro, final, list];
+
+  try {
+    if (typeof editedPathOrBuffer === "string" && fs.existsSync(editedPathOrBuffer)) {
+      info("🎚 Using local edited audio", { sessionId, path: editedPathOrBuffer });
+      editedBuffer = fs.readFileSync(editedPathOrBuffer);
+      editedSource = "local";
+    } else if (Buffer.isBuffer(editedPathOrBuffer)) {
+      info("🎚 Using in-memory edited audio", { sessionId });
+      editedBuffer = editedPathOrBuffer;
+      editedSource = "buffer";
+    } else {
+      const publicBaseEdited = requireEnv("R2_PUBLIC_BASE_URL_EDITED_AUDIO");
+      const editedUrl = `${publicBaseEdited}/${sessionId}_edited.mp3`;
+
+      info("🎚 Fetching edited audio from R2", { sessionId, editedUrl });
+
+      const res = await fetchWithTimeout(editedUrl, { timeout: HTTP_FETCH_TIMEOUT_MS });
+      if (!res.ok) throw new Error("Failed to fetch edited audio from R2");
+
+      editedBuffer = Buffer.from(await res.arrayBuffer());
+    }
+
+    info("🎧 Retrieved edited audio", { sessionId, source: editedSource });
+
+    fs.writeFileSync(main, editedBuffer);
+
+    async function dl(url, dest) {
+      const r = await fetchWithTimeout(url, { timeout: HTTP_FETCH_TIMEOUT_MS });
+      if (!r.ok) throw new Error(`Download failed: ${url}`);
+      fs.writeFileSync(dest, Buffer.from(await r.arrayBuffer()));
+    }
+
+    await dl(introUrl, intro);
+    await dl(outroUrl, outro);
+
+    fs.writeFileSync(
+      list,
+      `file '${intro}'
 file '${main}'
 file '${outro}'
 `
-  );
+    );
 
-  await runFFmpeg(["-y", "-f", "concat", "-safe", "0", "-i", list, "-c", "copy", final]);
+    await runFFmpeg(["-y", "-f", "concat", "-safe", "0", "-i", list, "-c", "copy", final]);
 
-  const finalBuffer = fs.readFileSync(final);
+    const finalBuffer = fs.readFileSync(final);
 
-  const podcastKey = `${sessionId}.mp3`;
-  const podcastUrl = `${publicBasePodcast}/${podcastKey}`;
+    const podcastKey = `${sessionId}.mp3`;
+    const podcastUrl = `${publicBasePodcast}/${podcastKey}`;
 
-  await safePutObject("podcast", podcastKey, finalBuffer, "audio/mpeg");
+    await safePutObject("podcast", podcastKey, finalBuffer, "audio/mpeg");
 
-  info("📡 Uploaded final podcast", { sessionId, podcastKey });
+    info("📡 Uploaded final podcast", { sessionId, podcastKey });
 
-  await updateMetaFile(sessionId, finalBuffer, final, podcastUrl);
+    await updateMetaFile(sessionId, finalBuffer, final, podcastUrl);
 
-  cleanup([intro, main, outro, final, list]);
-
-  return {
-    buffer: finalBuffer,
-    key: podcastKey,
-    url: podcastUrl,
-  };
+    return {
+      buffer: finalBuffer,
+      key: podcastKey,
+      url: podcastUrl,
+    };
+  } finally {
+    cleanup(tempFiles);
+  }
 }
 
 export default podcastProcessor;
