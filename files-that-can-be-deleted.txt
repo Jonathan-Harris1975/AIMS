@@ -1,0 +1,21 @@
+Files identified as deletion candidates from repository evidence in this remediation pass
+
+Status: candidate deletions, not blind deletions.
+These files are safe to target for removal only after confirming nothing outside this repo imports them.
+Reason: they are duplicate root-level copies that diverge from the mounted runtime modules and contain broken relative imports.
+
+1. index.js
+   Reason: duplicate podcast router at repo root; not the canonical mounted module path.
+   Evidence note: canonical runtime router is services/podcast/index.js.
+
+2. tts.js
+   Reason: duplicate TTS router at repo root; not the canonical mounted module path.
+   Evidence note: canonical runtime router is services/tts/routes/tts.js.
+
+3. jobStore.js
+   Reason: duplicate root job-store implementation with invalid relative import to ./stateFile.js.
+   Evidence note: canonical runtime job store is services/shared/utils/jobStore.js.
+
+Not included as deletable in this pass:
+- state or temp files were not blanket-listed for deletion because some are runtime artefacts and some may still be referenced operationally.
+- any service files under services/ were not listed for deletion because no repository-only proof showed they are dead code.
