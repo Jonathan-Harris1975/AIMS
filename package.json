@@ -7,7 +7,9 @@
     "build": "echo \"Build step completed\"",
     "start": "node scripts/bootstrap.js",
     "start:server": "node server.js",
-    "check:startup": "node scripts/startupCheck.js"
+    "check:startup": "node scripts/startupCheck.js",
+    "test": "node --test",
+    "test:smoke": "node --test test/*.test.js"
   },
   "engines": {
     "node": ">=20 <25"
