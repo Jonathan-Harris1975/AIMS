@@ -169,7 +169,7 @@ export function clampSummaryToWindow(
 
   // If too short, return as-is (don't pad artificially)
   if (normalized.length < min) {
-    console.warn(`Summary too short: ${normalized.length} chars (min: ${min})`);
+    warn("rss.summary.tooShort", { length: normalized.length, min });
     return normalized;
   }
 
