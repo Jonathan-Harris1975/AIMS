@@ -1,40 +1,50 @@
-// ==========================================================
-// 🌐 Shared HTTP Client
-// ----------------------------------------------------------
-// Provides a robust fetch() wrapper with timeout support
-// ==========================================================
-
 import fetch from "node-fetch";
 
-/**
- * Fetch with timeout guard
- * @param {string} url
- * @param {Object} [options]
- * @param {number} [options.timeout=15000] - milliseconds
- * @returns {Promise<Response>}
- */
-export async function fetchWithTimeout(url, options = {}) {
-  const { timeout = 15000, ...rest } = options;
+export function withTimeoutSignal(timeoutMs) {
   const controller = new AbortController();
-  const id = setTimeout(() => controller.abort(), timeout);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  timer.unref?.();
+
+  return {
+    signal: controller.signal,
+    clear: () => clearTimeout(timer),
+  };
+}
+
+export async function fetchWithTimeout(url, options = {}) {
+  const { timeout = 15000, signal: upstreamSignal, ...rest } = options;
+  const { signal, clear } = withTimeoutSignal(timeout);
+
+  const abortHandler = () => {
+    try {
+      signal.throwIfAborted?.();
+    } catch {}
+  };
+
+  if (upstreamSignal?.addEventListener) {
+    upstreamSignal.addEventListener("abort", abortHandler, { once: true });
+  }
 
   try {
-    const response = await fetch(url, { ...rest, signal: controller.signal });
+    const response = await fetch(url, {
+      ...rest,
+      signal: upstreamSignal || signal,
+    });
     return response;
   } catch (err) {
-    if (err.name === "AbortError") {
+    const aborted = err?.name === "AbortError" || err?.code === "ABORT_ERR";
+    if (aborted) {
       throw new Error(`Request timed out after ${timeout}ms: ${url}`);
     }
     throw err;
   } finally {
-    clearTimeout(id);
+    clear();
+    if (upstreamSignal?.removeEventListener) {
+      upstreamSignal.removeEventListener("abort", abortHandler);
+    }
   }
 }
 
-/**
- * Fetch text content from a URL safely.
- * Returns {ok:boolean, status:number, text:string|null}
- */
 export async function fetchTextSafe(url, options = {}) {
   try {
     const resp = await fetchWithTimeout(url, options);
