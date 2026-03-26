@@ -3,22 +3,31 @@
 /**
  * Outreach scoring thresholds
  * These are policy-level controls and are env-driven.
+ *
+ * Keep validation lazy so the whole application can boot even when
+ * outreach-specific configuration is absent.
  */
-const MIN_LEAD_SCORE = Number(process.env.OUTREACH_MIN_LEAD_SCORE);
-const MIN_EMAIL_SCORE = Number(process.env.OUTREACH_MIN_EMAIL_SCORE);
+function readNumericEnv(name) {
+  const raw = process.env[name];
 
-if (Number.isNaN(MIN_LEAD_SCORE)) {
-  throw new Error("OUTREACH_MIN_LEAD_SCORE must be a number");
-}
+  if (raw === undefined || String(raw).trim() === "") {
+    throw new Error(`${name} is required for outreach lead filtering`);
+  }
 
-if (Number.isNaN(MIN_EMAIL_SCORE)) {
-  throw new Error("OUTREACH_MIN_EMAIL_SCORE must be a number");
+  const value = Number(raw);
+  if (Number.isNaN(value)) {
+    throw new Error(`${name} must be a number`);
+  }
+
+  return value;
 }
 
 /**
  * Filters and scores outreach leads
  */
 export function extractGoodLeads(results = [], keyword) {
+  const MIN_LEAD_SCORE = readNumericEnv("OUTREACH_MIN_LEAD_SCORE");
+  const MIN_EMAIL_SCORE = readNumericEnv("OUTREACH_MIN_EMAIL_SCORE");
   const now = new Date().toISOString();
 
   return results
