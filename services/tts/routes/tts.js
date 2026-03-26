@@ -1,12 +1,13 @@
 // ============================================================
 // 🎙 TTS Router — Handles TTS orchestration API endpoints
-//  - Returns immediately to avoid request timeouts
-//  - Runs the long job detached from the HTTP lifecycle
 // ============================================================
 
 import express from "express";
 import { info, error } from "../../../logger.js";
 import { sanitizeSessionId } from "../../shared/utils/sessionId.js";
+import { hookdeckDedupe } from "../../shared/utils/hookdeckDedupe.js";
+import { getJob, startJob, completeJob, failJob } from "../../shared/utils/jobStore.js";
+import { validateBody, ttsOrchestrateBodySchema } from "../../shared/utils/requestSchemas.js";
 import { orchestrateTTS } from "../index.js";
 
 const router = express.Router();
@@ -14,35 +15,59 @@ const router = express.Router();
 // Health
 router.get("/health", (_req, res) => res.json({ ok: true, service: "tts" }));
 
+router.get("/status/:sessionId", (req, res) => {
+  const sessionId = sanitizeSessionId(req.params.sessionId, "TT");
+  const job = getJob("tts", sessionId);
+
+  if (!job) {
+    return res.status(404).json({ ok: false, error: "No TTS job found", sessionId });
+  }
+
+  return res.json({ ok: true, job });
+});
+
 /**
  * POST /tts/orchestrate
  * body: { sessionId?: string }
  */
-router.post("/orchestrate", async (req, res) => {
-  let sessionId;
-
-  try {
-    sessionId = sanitizeSessionId(req.body?.sessionId || `TT-${Date.now()}`, "TT");
-  } catch (err) {
-    return res.status(400).json({ ok: false, error: err.message });
+router.post("/orchestrate", hookdeckDedupe("tts:orchestrate"), async (req, res) => {
+  const parsed = validateBody(ttsOrchestrateBodySchema, req.body);
+  if (!parsed.ok) {
+    return res.status(400).json({ ok: false, error: parsed.error });
   }
 
-  // Defensively ensure we never inherit a slow server timeout
+  const sessionId = sanitizeSessionId(parsed.data.sessionId || `TT-${Date.now()}`, "TT");
+  const eventId = req.hookdeckEventId || null;
+
   if (typeof req.setTimeout === "function") {
-    req.setTimeout(0); // unlimited for proxies that respect it
+    req.setTimeout(0);
   }
 
-  // Respond immediately
-  res.json({ ok: true, message: "TTS orchestration started", sessionId });
+  startJob("tts", sessionId, {
+    eventId,
+    route: "tts.orchestrate",
+  });
 
-  // Run the heavy work out-of-band
-  (async () => {
+  res.json({
+    ok: true,
+    message: "TTS orchestration started",
+    sessionId,
+    status: "running",
+    statusUrl: `/tts/status/${encodeURIComponent(sessionId)}`,
+  });
+
+  void (async () => {
     try {
-      info("🏁 Detached TTS job started", { sessionId });
-      await orchestrateTTS(sessionId);
-      info("🏁 Detached TTS job completed", { sessionId });
+      info("🏁 Detached TTS job started", { sessionId, eventId });
+      const result = await orchestrateTTS(sessionId);
+      completeJob("tts", sessionId, {
+        eventId,
+        result: result && typeof result === "object" ? result : { ok: true },
+      });
+      info("🏁 Detached TTS job completed", { sessionId, eventId });
     } catch (err) {
-      error("💥 Detached TTS job failed", { sessionId, error: err?.stack || err?.message });
+      failJob("tts", sessionId, err, { eventId });
+      error("💥 Detached TTS job failed", { sessionId, eventId, error: err?.stack || err?.message });
     }
   })();
 });
