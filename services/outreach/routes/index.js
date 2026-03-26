@@ -30,7 +30,7 @@ router.post("/batch/next", asyncRoute(async (_req, res) => {
 
 router.post("/batch/reset", asyncRoute(async (req, res) => {
   const { lastProcessedIndex = 0 } = req.body || {};
-  const result = resetProgress(Number(lastProcessedIndex) || 0);
+  const result = await resetProgress(Number(lastProcessedIndex) || 0);
   res.json({ ok: true, progress: result });
 }));
 
