@@ -2,13 +2,7 @@ import express from "express";
 import { info, error } from "../../../logger.js";
 import { sanitizeSessionId } from "../../shared/utils/sessionId.js";
 import { hookdeckDedupe } from "../../shared/utils/hookdeckDedupe.js";
-import {
-  getJob,
-  beginJob,
-  completeJob,
-  failJob,
-  sanitizeJobForClient,
-} from "../../shared/utils/jobStore.js";
+import { getPublicJob, beginJob, completeJob, failJob } from "../../shared/utils/jobStore.js";
 import { validateBody, ttsOrchestrateBodySchema } from "../../shared/utils/requestSchemas.js";
 import { orchestrateTTS } from "../index.js";
 
@@ -18,13 +12,13 @@ router.get("/health", (_req, res) => res.json({ ok: true, service: "tts" }));
 
 router.get("/status/:sessionId", (req, res) => {
   const sessionId = sanitizeSessionId(req.params.sessionId, "TT");
-  const job = getJob("tts", sessionId);
+  const job = getPublicJob("tts", sessionId);
 
   if (!job) {
     return res.status(404).json({ ok: false, error: "No TTS job found", sessionId });
   }
 
-  return res.json({ ok: true, job: sanitizeJobForClient(job) });
+  return res.json({ ok: true, job });
 });
 
 router.post("/orchestrate", hookdeckDedupe("tts:orchestrate"), async (req, res) => {
@@ -53,7 +47,7 @@ router.post("/orchestrate", hookdeckDedupe("tts:orchestrate"), async (req, res) 
       sessionId,
       status: job?.status || "running",
       statusUrl: `/tts/status/${encodeURIComponent(sessionId)}`,
-      job: sanitizeJobForClient(job),
+      job,
     });
   }
 

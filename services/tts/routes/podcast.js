@@ -5,9 +5,9 @@ const router = express.Router();
 
 router.post("/", async (req, res) => {
   const { sessionId } = req.body || {};
-  if (!sessionId) return res.status(400).json({ error: "sessionId is required" });
+  if (!sessionId) return res.status(400).json({ ok: false, error: "sessionId is required" });
   log.info("📣 podcast final ack", { sessionId });
-  res.json({ success: true, sessionId });
+  res.json({ ok: true, sessionId });
 });
 
 export default router;

@@ -6,10 +6,10 @@ const router = express.Router();
 router.get("/:filename", async (req, res) => {
   try {
     const { filename } = req.params;
-    const info = await getPodcastInfo(filename); 
-    res.json({ success: true, info });
+    const info = await getPodcastInfo(filename);
+    res.json({ ok: true, info });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ ok: false, error: err.message });
   }
 });
 
