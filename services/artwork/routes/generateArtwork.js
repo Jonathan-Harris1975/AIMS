@@ -3,7 +3,6 @@
 // ============================================================
 
 import express from "express";
-import fetch from "node-fetch";
 import { putObject } from "../../shared/utils/r2-client.js";
 import { sanitizeSessionId } from "../../shared/utils/sessionId.js";
 import { hookdeckDedupe } from "../../shared/utils/hookdeckDedupe.js";
@@ -11,9 +10,11 @@ import {
   validateBody,
   artworkGenerateBodySchema,
 } from "../../shared/utils/requestSchemas.js";
+import { fetchWithTimeout } from "../../shared/http-client.js";
 import { info, error } from "../../../logger.js";
 
 const router = express.Router();
+const ARTWORK_TIMEOUT_MS = Number(process.env.ARTWORK_TIMEOUT_MS || process.env.AI_TIMEOUT) || 60_000;
 
 // ------------------------------------------------------------
 // Generate Artwork Function
@@ -51,7 +52,12 @@ export async function generateArtwork(sessionId, prompt = "") {
   });
 
   try {
-    const res = await fetch(url, { method: "POST", headers, body });
+    const res = await fetchWithTimeout(url, {
+      method: "POST",
+      headers,
+      body,
+      timeout: ARTWORK_TIMEOUT_MS,
+    });
     if (!res.ok) {
       const msg = await res.text();
       throw new Error(`Artwork generation failed: ${msg.slice(0, 200)}`);
