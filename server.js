@@ -4,8 +4,10 @@ import express from "express";
 import cors from "cors";
 import { info, debug, error } from "./logger.js";
 import routes from "./routes/index.js";
+import { fileURLToPath } from "node:url";
 
-const app = express();
+export const app = express();
+
 const allowedOrigins = (process.env.CORS_ORIGINS || "")
   .split(",")
   .map((value) => value.trim())
@@ -43,14 +45,42 @@ app.use((err, _req, res, _next) => {
 });
 
 const PORT = process.env.PORT || 3000;
+let server;
 
-const server = app.listen(PORT, "0.0.0.0", () => {
-  info("🟩 AI Management Suite started on port " + PORT);
-  debug("📡 Endpoints: /rss /script /tts /artwork /podcast /outreach /blog");
-});
+export function startServer(port = PORT, host = "0.0.0.0") {
+  if (server?.listening) {
+    return server;
+  }
+
+  server = app.listen(port, host, () => {
+    info("🟩 AI Management Suite started on port " + port);
+    debug("📡 Endpoints: /rss /script /tts /artwork /podcast /outreach /blog");
+  });
+
+  return server;
+}
+
+export async function stopServer() {
+  if (!server) return;
+
+  await new Promise((resolve, reject) => {
+    server.close((err) => {
+      if (err) reject(err);
+      else resolve();
+    });
+  });
+
+  server = undefined;
+}
 
 function shutdown(signal) {
   info("server.shutdown.start", { signal });
+
+  if (!server) {
+    info("server.shutdown.complete", { signal, note: "server_not_running" });
+    process.exit(0);
+    return;
+  }
 
   server.close((err) => {
     if (err) {
@@ -70,5 +100,10 @@ function shutdown(signal) {
 
 process.on("SIGTERM", () => shutdown("SIGTERM"));
 process.on("SIGINT", () => shutdown("SIGINT"));
+
+const isEntrypoint = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
+if (isEntrypoint) {
+  startServer();
+}
 
 export default app;
