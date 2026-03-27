@@ -8,6 +8,15 @@ const cleanupState = globalThis.__AI_MANAGEMENT_RATE_LIMIT_CLEANUP__ || { timer:
 globalThis.__AI_MANAGEMENT_RATE_LIMIT_BUCKETS__ = buckets;
 globalThis.__AI_MANAGEMENT_RATE_LIMIT_CLEANUP__ = cleanupState;
 
+function normaliseEnvString(value) {
+  if (value === undefined || value === null) return "";
+  return String(value).trim();
+}
+
+function isProductionEnv(value = process.env.NODE_ENV) {
+  return normaliseEnvString(value).toLowerCase() === "production";
+}
+
 function parseBoolean(value, fallback = false) {
   if (value === undefined || value === null || value === "") return fallback;
   if (typeof value === "boolean") return value;
@@ -49,7 +58,7 @@ export function createRateLimitMiddleware(options = {}) {
   const maxRequests = Number(options.maxRequests || process.env.RATE_LIMIT_MAX_REQUESTS || DEFAULT_MAX_REQUESTS);
   const enabled = parseBoolean(
     options.enabled ?? process.env.RATE_LIMIT_ENABLED,
-    process.env.NODE_ENV === "production"
+    isProductionEnv()
   );
 
   if (!enabled) {
