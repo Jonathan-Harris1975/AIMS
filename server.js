@@ -10,9 +10,18 @@ import { createRateLimitMiddleware } from "./services/shared/middleware/rateLimi
 
 export const app = express();
 
+function normaliseEnvString(value) {
+  if (value === undefined || value === null) return "";
+  return String(value).trim();
+}
+
+function isProductionEnv(value = process.env.NODE_ENV) {
+  return normaliseEnvString(value).toLowerCase() === "production";
+}
+
 function parseTrustProxy(value) {
   if (value === undefined || value === null || value === "") {
-    return process.env.NODE_ENV === "production" ? 1 : false;
+    return isProductionEnv() ? 1 : false;
   }
 
   if (value === true || value === false) {
@@ -48,7 +57,7 @@ app.use(
     origin(origin, callback) {
       if (!origin) return callback(null, true);
       if (allowedOrigins.includes(origin)) return callback(null, true);
-      if (process.env.NODE_ENV !== "production" && allowedOrigins.length === 0 && isLoopbackOrigin(origin)) {
+      if (!isProductionEnv() && allowedOrigins.length === 0 && isLoopbackOrigin(origin)) {
         return callback(null, true);
       }
       return callback(new Error("CORS origin not allowed"));

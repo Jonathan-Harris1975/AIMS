@@ -1,5 +1,14 @@
 import pino from "pino";
 
+function normaliseEnvString(value) {
+  if (value === undefined || value === null) return "";
+  return String(value).trim();
+}
+
+function isProductionEnv(value = process.env.NODE_ENV) {
+  return normaliseEnvString(value).toLowerCase() === "production";
+}
+
 function parseBoolean(value) {
   if (typeof value === "boolean") return value;
   if (value === undefined || value === null) return false;
@@ -67,7 +76,7 @@ function wrapLogger(instance) {
 }
 
 const isProd =
-  process.env.NODE_ENV === "production" ||
+  isProductionEnv() ||
   parseBoolean(process.env.SHIPPER) ||
   parseBoolean(process.env.SHIPER);
 
