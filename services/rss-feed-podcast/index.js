@@ -14,6 +14,16 @@ import { info, warn, error } from "../../logger.js";
 import { generateFeedXML } from "./generateFeed.js";
 import { notifyHubByUrl } from "../shared/utils/podcastIndexClient.js";
 
+function envString(...keys) {
+  for (const key of keys) {
+    const value = process.env[key];
+    if (value !== undefined && String(value).trim() !== "") {
+      return String(value).trim();
+    }
+  }
+  return "";
+}
+
 const META_BUCKET_ALIAS = "meta";
 
 // FIXED: your files live in bucket root, NOT "podcast-meta/"
@@ -24,7 +34,7 @@ const RSS_KEY = "turing-torch.xml";
 
 // Feed URL for PodcastIndex notifications
 const FEED_URL =
-  process.env.PODCAST_RSS_FEED_URL ||
+  envString("PODCAST_RSS_FEED_URL") ||
   `${R2_PUBLIC_URLS.podcastRss || ""}/${RSS_KEY}`;
 
 export async function runRssFeedCreator() {
