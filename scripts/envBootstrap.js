@@ -17,6 +17,21 @@ const opt = (k, d = undefined) => {
   return v === undefined ? d : v;
 };
 
+const str = (k, d = undefined) => {
+  const raw = opt(k, d);
+  if (raw === undefined || raw === null) return raw;
+  return String(raw).trim();
+};
+
+const firstDefined = (...keys) => {
+  for (const key of keys) {
+    if (process.env[key] !== undefined && String(process.env[key]).trim() !== "") {
+      return String(process.env[key]).trim();
+    }
+  }
+  return undefined;
+};
+
 const num = (k, d = undefined) => {
   const raw = opt(k, d);
   if (raw === undefined) return undefined;
@@ -40,11 +55,11 @@ const bool = (k, d = undefined) => {
 ============================================================ */
 export const ENV = {
   /* ---------------- Core ---------------- */
-  NODE_ENV: req("NODE_ENV"),
+  NODE_ENV: str("NODE_ENV", "development").toLowerCase(),
   PORT: num("PORT", 3000),
-  LOG_LEVEL: opt("LOG_LEVEL", "info"),
-  APP_TITLE: req("APP_TITLE"),
-  APP_URL: opt("APP_URL"),
+  LOG_LEVEL: str("LOG_LEVEL", "info"),
+  APP_TITLE: str("APP_TITLE"),
+  APP_URL: str("APP_URL"),
 
   DEBUG_ROUTES: bool("DEBUG_ROUTES", false),
   AUTO_CALL: opt("AUTO_CALL", "yes"),
@@ -58,7 +73,7 @@ export const ENV = {
   AI_TOP_P: num("AI_TOP_P", 0.9),
 
   /* ---------------- OpenRouter ---------------- */
-  OPENROUTER_API_BASE: req("OPENROUTER_API_BASE"),
+  OPENROUTER_API_BASE: str("OPENROUTER_API_BASE"),
 
   OPENROUTER_ANTHROPIC: opt("OPENROUTER_ANTHROPIC"),
   OPENROUTER_API_KEY_ANTHROPIC: opt("OPENROUTER_API_KEY_ANTHROPIC"),
@@ -75,8 +90,8 @@ export const ENV = {
   OPENROUTER_META: opt("OPENROUTER_META"),
 
   /* ---------------- RapidAPI ---------------- */
-  RAPIDAPI_HOST: req("RAPIDAPI_HOST"),
-  RAPIDAPI_KEY: req("RAPIDAPI_KEY"),
+  RAPIDAPI_HOST: str("RAPIDAPI_HOST"),
+  RAPIDAPI_KEY: str("RAPIDAPI_KEY"),
 
   /* ---------------- Outreach APIs ---------------- */
   API_SERP_KEY: opt("API_SERP_KEY"),
@@ -103,7 +118,7 @@ export const ENV = {
   OUTREACH_MIN_EMAIL_SCORE: num("OUTREACH_MIN_EMAIL_SCORE"),
 
   /* ---------------- Feed / RSS ---------------- */
-  FEED_URL: req("FEED_URL"),
+  FEED_URL: str("FEED_URL"),
   FEED_CUTOFF_HOURS: num("FEED_CUTOFF_HOURS", 48),
   FEED_FRESHNESS_HOURS: num("FEED_FRESHNESS_HOURS", 24),
   FEED_RETENTION_DAYS: num("FEED_RETENTION_DAYS", 60),
@@ -116,11 +131,11 @@ export const ENV = {
   RSS_TOPIC_GUARD_MIN_OVERLAP: num("RSS_TOPIC_GUARD_MIN_OVERLAP", 0.12),
 
   /* ---------------- Podcast metadata ---------------- */
-  PODCAST_TITLE: req("PODCAST_TITLE"),
-  PODCAST_AUTHOR: req("PODCAST_AUTHOR"),
-  PODCAST_DESCRIPTION: req("PODCAST_DESCRIPTION"),
-  PODCAST_LINK: req("PODCAST_LINK"),
-  PODCAST_LANGUAGE: opt("PODCAST_LANGUAGE", "en-uk"),
+  PODCAST_TITLE: str("PODCAST_TITLE"),
+  PODCAST_AUTHOR: str("PODCAST_AUTHOR"),
+  PODCAST_DESCRIPTION: str("PODCAST_DESCRIPTION"),
+  PODCAST_LINK: str("PODCAST_LINK"),
+  PODCAST_LANGUAGE: (str("PODCAST_LANGUAGE", "en-gb") || "en-gb").toLowerCase().replace("en-uk", "en-gb"),
   PODCAST_EXPLICIT: bool("PODCAST_EXPLICIT", false),
 
   PODCAST_CATEGORY_1: opt("PODCAST_CATEGORY_1"),
@@ -129,7 +144,7 @@ export const ENV = {
   PODCAST_IMAGE_URL: opt("PODCAST_IMAGE_URL"),
   PODCAST_OWNER_NAME: opt("PODCAST_OWNER_NAME"),
   PODCAST_OWNER_EMAIL: opt("PODCAST_OWNER_EMAIL"),
-  PODCASTINDEX_USER_AGENT: opt("PODCASTINDEX_USER_AGENT"),
+  PODCASTINDEX_USER_AGENT: str("PODCASTINDEX_USER_AGENT"),
 
   PODCAST_INTRO_URL: opt("PODCAST_INTRO_URL"),
   PODCAST_OUTRO_URL: opt("PODCAST_OUTRO_URL"),
@@ -181,15 +196,20 @@ export const ENV = {
   R2_PUBLIC_BASE_URL_META_SYSTEM: opt("R2_PUBLIC_BASE_URL_META_SYSTEM"),
 
   /* ---------------- Google Sheets ---------------- */
-  GOOGLE_CLIENT_EMAIL: opt("GOOGLE_CLIENT_EMAIL"),
+  GOOGLE_CLIENT_EMAIL: str("GOOGLE_CLIENT_EMAIL"),
   GOOGLE_PRIVATE_KEY: opt("GOOGLE_PRIVATE_KEY"),
-  GOOGLE_SHEET_ID: opt("GOOGLE_SHEET_ID"),
+  GOOGLE_SHEET_ID: str("GOOGLE_SHEET_ID"),
 
   /* ---------------- Funding / iTunes ---------------- */
-  funding_text: opt("funding_text"),
-  funding_url: opt("funding_url"),
-  itunes_keywords: opt("itunes_keywords"),
-  itunes_type: opt("itunes_type"),
+  PODCAST_RSS_FEED_URL: firstDefined("PODCAST_RSS_FEED_URL"),
+  PODCAST_FUNDING_TEXT: firstDefined("PODCAST_FUNDING_TEXT", "funding_text"),
+  PODCAST_FUNDING_URL: firstDefined("PODCAST_FUNDING_URL", "funding_url"),
+  PODCAST_ITUNES_KEYWORDS: firstDefined("PODCAST_ITUNES_KEYWORDS", "itunes_keywords"),
+  PODCAST_ITUNES_TYPE: firstDefined("PODCAST_ITUNES_TYPE", "itunes_type"),
+  funding_text: firstDefined("funding_text", "PODCAST_FUNDING_TEXT"),
+  funding_url: firstDefined("funding_url", "PODCAST_FUNDING_URL"),
+  itunes_keywords: firstDefined("itunes_keywords", "PODCAST_ITUNES_KEYWORDS"),
+  itunes_type: firstDefined("itunes_type", "PODCAST_ITUNES_TYPE"),
 
   /* ---------------- Short.io ---------------- */
   SHORTIO_API_KEY: opt("SHORTIO_API_KEY"),
