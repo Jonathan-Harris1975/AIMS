@@ -10,6 +10,11 @@ import { error, debug } from "../../../logger.js";
 
 const router = express.Router();
 
+function sendRouteError(req, res, err, fallbackMessage = "Internal error") {
+  const requestId = req?.id || req?.headers?.["x-request-id"] || null;
+  return res.status(500).json({ ok: false, error: fallbackMessage, requestId });
+}
+
 router.post("/", hookdeckDedupe("artwork:create"), async (req, res) => {
   try {
     const parsed = validateBody(artworkCreateBodySchema, req.body);
@@ -25,8 +30,11 @@ router.post("/", hookdeckDedupe("artwork:create"), async (req, res) => {
 
     res.json({ ok: true, bucket, key });
   } catch (err) {
-    error("artwork.create.fail", { message: err.message });
-    res.status(500).json({ ok: false, error: err.message });
+    error("artwork.create.fail", {
+      requestId: req?.id || req?.headers?.["x-request-id"] || null,
+      error: err?.stack || err?.message || String(err),
+    });
+    return sendRouteError(req, res, err, "Artwork request storage failed");
   }
 });
 

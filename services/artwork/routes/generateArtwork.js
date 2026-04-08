@@ -16,6 +16,11 @@ import { info, error } from "../../../logger.js";
 const router = express.Router();
 const ARTWORK_TIMEOUT_MS = Number(process.env.ARTWORK_TIMEOUT_MS || process.env.AI_TIMEOUT) || 60_000;
 
+function sendRouteError(req, res, err, fallbackMessage = "Internal error") {
+  const requestId = req?.id || req?.headers?.["x-request-id"] || null;
+  return res.status(500).json({ ok: false, error: fallbackMessage, requestId });
+}
+
 // ------------------------------------------------------------
 // Generate Artwork Function
 // ------------------------------------------------------------
@@ -99,8 +104,12 @@ router.post("/", hookdeckDedupe("artwork:generate"), async (req, res) => {
     const url = await generateArtwork(sessionId, prompt);
     res.json({ ok: true, sessionId, url });
   } catch (err) {
-    error("💥 Artwork route failed", { sessionId, error: err.message });
-    res.status(500).json({ ok: false, error: err.message });
+    error("💥 Artwork route failed", {
+      sessionId,
+      requestId: req?.id || req?.headers?.["x-request-id"] || null,
+      error: err?.stack || err?.message || String(err),
+    });
+    return sendRouteError(req, res, err, "Artwork generation failed");
   }
 });
 
