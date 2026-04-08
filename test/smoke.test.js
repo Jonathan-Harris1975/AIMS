@@ -5,6 +5,7 @@ import request from "supertest";
 process.env.NODE_ENV = "test";
 process.env.CORS_ORIGINS = "";
 process.env.RATE_LIMIT_ENABLED = "false";
+process.env.ALLOW_EPHEMERAL_STATE = "true";
 
 const { default: app } = await import("../server.js");
 const jobStore = await import("../services/shared/utils/jobStore.js");
@@ -126,4 +127,46 @@ test("job status responses do not expose stack traces", async () => {
   assert.equal(response.body.ok, true);
   assert.equal(response.body.job.error.message, "kaboom");
   assert.equal("stack" in (response.body.job.error || {}), false);
+});
+
+test("POST /cloudflare/purge rejects an empty body instead of defaulting to purge_everything", async () => {
+  process.env.CLOUDFLARE_PURGE_SHARED_SECRET = "test-secret";
+  const { default: freshApp } = await import(`../server.js?cf-empty=${Date.now()}`);
+  const response = await request(freshApp)
+    .post("/cloudflare/purge")
+    .set("x-cloudflare-purge-secret", "test-secret")
+    .send({});
+
+  assert.equal(response.status, 400);
+  assert.equal(response.body.ok, false);
+  assert.match(response.body.error, /Provide exactly one purge mode/);
+});
+
+test("POST /cloudflare/purge requires the shared secret when configured", async () => {
+  process.env.CLOUDFLARE_PURGE_SHARED_SECRET = "test-secret";
+  const { default: freshApp } = await import(`../server.js?cf-auth=${Date.now()}`);
+  const response = await request(freshApp)
+    .post("/cloudflare/purge")
+    .send({ purge_everything: true });
+
+  assert.equal(response.status, 401);
+  assert.equal(response.body.ok, false);
+  assert.equal(response.body.error, "Missing Cloudflare purge secret.");
+});
+
+test("production import fails fast when durable state is not configured and override is absent", async () => {
+  process.env.NODE_ENV = "production";
+  process.env.ALLOW_EPHEMERAL_STATE = "false";
+  delete process.env.R2_ENDPOINT;
+  delete process.env.R2_ACCESS_KEY_ID;
+  delete process.env.R2_SECRET_ACCESS_KEY;
+  delete process.env.R2_BUCKET_META_SYSTEM;
+
+  await assert.rejects(
+    () => import(`../services/shared/utils/stateFile.js?prod-guard=${Date.now()}`),
+    /Production state backend is not durable|configured state directory resolves inside the container tmp filesystem/i
+  );
+
+  process.env.NODE_ENV = "test";
+  process.env.ALLOW_EPHEMERAL_STATE = "true";
 });
