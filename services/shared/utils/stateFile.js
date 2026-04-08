@@ -27,6 +27,15 @@ const remoteStateEnabled =
 let warnedRemoteStateDisabled = false;
 let remoteWriteQueue = Promise.resolve();
 
+function parseBoolean(value, fallback = false) {
+  if (value === undefined || value === null || value === "") return fallback;
+  if (typeof value === "boolean") return value;
+  const normalised = String(value).trim().toLowerCase();
+  if (["1", "true", "yes", "on"].includes(normalised)) return true;
+  if (["0", "false", "no", "off"].includes(normalised)) return false;
+  return fallback;
+}
+
 function cloneValue(value) {
   if (value === undefined) return undefined;
   try {
@@ -49,6 +58,23 @@ function isLikelyEphemeralStateDir(dirPath) {
   const resolved = path.resolve(dirPath);
   const tmpRoot = path.resolve(os.tmpdir());
   return resolved === tmpRoot || resolved.startsWith(`${tmpRoot}${path.sep}`);
+}
+
+function assertProductionSafeStateBackend() {
+  const inProduction = String(process.env.NODE_ENV || "").trim().toLowerCase() === "production";
+  const allowEphemeralState = parseBoolean(process.env.ALLOW_EPHEMERAL_STATE, false);
+
+  if (!inProduction || allowEphemeralState || remoteStateEnabled) {
+    return;
+  }
+
+  const locationHint = isLikelyEphemeralStateDir(BASE_STATE_DIR)
+    ? "The configured state directory resolves inside the container tmp filesystem."
+    : "The configured state backend is local-only, which is unsafe on the target Koyeb deployment model.";
+
+  throw new Error(
+    `${locationHint} Configure durable state with R2_BUCKET_META_SYSTEM and STATE_BACKEND=auto or r2, or set ALLOW_EPHEMERAL_STATE=true only if you are intentionally accepting state loss across restarts.`
+  );
 }
 
 function warnIfUsingLocalOnlyState() {
@@ -84,6 +110,8 @@ function isMissingRemoteStateError(err) {
     text.includes("unknown r2 bucket alias")
   );
 }
+
+assertProductionSafeStateBackend();
 
 async function hydrateRemoteState() {
   if (!remoteStateEnabled) {

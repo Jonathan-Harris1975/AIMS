@@ -100,6 +100,14 @@ export const cloudflarePurgeBodySchema = z
       });
     }
 
+    if (selectedModes.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: [],
+        message: "Provide exactly one purge mode: purge_everything, files, tags, hosts, or prefixes.",
+      });
+    }
+
     if (selectedModes.length > 1) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
