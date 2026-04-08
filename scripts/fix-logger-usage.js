@@ -14,15 +14,13 @@ import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const ROOT = path.resolve(__dirname, "..");
+const isEntrypoint = process.argv[1] && path.resolve(process.argv[1]) === __filename;
 
 function walk(dir) {
   const entries = fs.readdirSync(dir, { withFileTypes: true });
 
   for (const entry of entries) {
-    if (
-      entry.name === "node_modules" ||
-      entry.name.startsWith(".")
-    ) {
+    if (entry.name === "node_modules" || entry.name.startsWith(".")) {
       continue;
     }
 
@@ -35,17 +33,16 @@ function walk(dir) {
 
     if (!entry.name.endsWith(".js")) continue;
 
-    let original = fs.readFileSync(fullPath, "utf8");
+    const original = fs.readFileSync(fullPath, "utf8");
     let updated = original;
 
-    // 1️⃣ Remove `log` from logger imports
     updated = updated.replace(
       /import\s*\{([^}]+)\}\s*from\s*["'](.+\/logger\.js)["']/g,
       (match, imports, importPath) => {
         const cleaned = imports
           .split(",")
-          .map(i => i.trim())
-          .filter(i => i && i !== "log");
+          .map((value) => value.trim())
+          .filter((value) => value && value !== "log");
 
         if (cleaned.length === 0) return match;
 
@@ -53,7 +50,6 @@ function walk(dir) {
       }
     );
 
-    // 2️⃣ Replace log(...) → info(...)
     updated = updated.replace(/\blog\s*\(/g, "info(");
 
     if (updated !== original) {
@@ -63,6 +59,12 @@ function walk(dir) {
   }
 }
 
-console.log("🔍 Scanning repo for legacy logger usage...");
-walk(ROOT);
-console.log("✅ Logger usage normalisation complete.");
+export function normaliseLoggerUsage(rootDir = ROOT) {
+  console.log("🔍 Scanning repo for legacy logger usage...");
+  walk(rootDir);
+  console.log("✅ Logger usage normalisation complete.");
+}
+
+if (isEntrypoint) {
+  normaliseLoggerUsage();
+}
