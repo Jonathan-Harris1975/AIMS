@@ -17,6 +17,16 @@ function isProductionEpisodeMode() {
   return process.env.PODCAST_RSS_EP === "Yes";
 }
 
+function isMissingObjectError(err) {
+  const text = `${err?.name || ""} ${err?.code || ""} ${err?.message || ""}`.toLowerCase();
+  return (
+    text.includes("nosuchkey") ||
+    text.includes("not found") ||
+    text.includes("notfound") ||
+    text.includes("the specified key does not exist")
+  );
+}
+
 // Load counter
 async function loadCounter() {
   try {
@@ -26,13 +36,16 @@ async function loadCounter() {
     if (typeof parsed.nextEpisodeNumber === "number" && parsed.nextEpisodeNumber > 0) {
       return parsed;
     }
-  } catch (err) {
-    log.warn("episodeCounter: failed to load existing counter, initialising new one", {
-      error: err?.message,
-    });
-  }
 
-  return { nextEpisodeNumber: 1 };
+    throw new Error("episodeCounter: stored counter is invalid");
+  } catch (err) {
+    if (!isMissingObjectError(err)) {
+      throw err;
+    }
+
+    log.warn("episodeCounter: counter missing, initialising new one");
+    return { nextEpisodeNumber: 1 };
+  }
 }
 
 // Save counter
