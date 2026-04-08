@@ -17,6 +17,23 @@ test("GET /health returns ok", async () => {
   assert.equal(response.body.status, "ok");
 });
 
+test("GET /rss returns a structured service error instead of a 404 when RSS storage is unavailable", async () => {
+  const response = await request(app).get("/rss");
+
+  assert.equal(response.status, 500);
+  assert.equal(response.body.ok, false);
+  assert.equal(response.body.route, "rss");
+  assert.equal(response.body.message, "Failed to fetch RSS feed.");
+  assert.equal("error" in response.body, false);
+});
+
+test("POST /rss returns a structured service error instead of a 404 when rewrite dependencies are unavailable", async () => {
+  const response = await request(app).post("/rss").send({});
+
+  assert.notEqual(response.status, 404);
+  assert.equal(response.body.route, "rss");
+});
+
 test("GET /tts/status/:sessionId returns 404 for unknown job", async () => {
   const response = await request(app).get("/tts/status/TT-smoke-missing");
   assert.equal(response.status, 404);
