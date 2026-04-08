@@ -13,7 +13,8 @@ import {
 /* ============================================================
    Batch progress
    - Prefer R2/metasystem for hosted runtimes (Koyeb, containers)
-   - Fall back to local file storage when metasystem is not configured
+   - Fall back to local file storage only outside production, or when
+     ALLOW_EPHEMERAL_STATE=true explicitly opts into state loss.
 ============================================================ */
 
 const PROGRESS_FILE = path.resolve(
@@ -30,8 +31,40 @@ function parseKeywords(raw) {
     .filter(Boolean);
 }
 
-function canUseR2Progress() {
-  return Boolean(process.env.R2_BUCKET_META_SYSTEM);
+function parseBoolean(value, fallback = false) {
+  if (value === undefined || value === null || value === "") return fallback;
+  if (typeof value === "boolean") return value;
+  const normalized = String(value).trim().toLowerCase();
+  if (["1", "true", "yes", "on"].includes(normalized)) return true;
+  if (["0", "false", "no", "off"].includes(normalized)) return false;
+  return fallback;
+}
+
+function isProductionEnv(value = process.env.NODE_ENV) {
+  return String(value || "").trim().toLowerCase() === "production";
+}
+
+function hasDurableR2ProgressEnv() {
+  return Boolean(
+    process.env.R2_ENDPOINT &&
+      process.env.R2_ACCESS_KEY_ID &&
+      process.env.R2_SECRET_ACCESS_KEY &&
+      process.env.R2_BUCKET_META_SYSTEM
+  );
+}
+
+function canUseLocalFallback() {
+  return !isProductionEnv() || parseBoolean(process.env.ALLOW_EPHEMERAL_STATE, false);
+}
+
+function ensureLocalFallbackAllowed(reason) {
+  if (canUseLocalFallback()) {
+    return;
+  }
+
+  throw new Error(
+    `${reason}. Outreach batch progress cannot fall back to local filesystem state in production. Configure R2_ENDPOINT, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, and R2_BUCKET_META_SYSTEM, or set ALLOW_EPHEMERAL_STATE=true only if you intentionally accept cursor loss across restarts.`
+  );
 }
 
 function loadLocalProgress() {
@@ -58,24 +91,30 @@ function saveLocalProgress(progress) {
 }
 
 async function loadProgress() {
-  if (canUseR2Progress()) {
+  if (hasDurableR2ProgressEnv()) {
     try {
       return await loadR2Progress();
     } catch (err) {
       warn("outreach.progress.r2.load.fail", { error: err?.message });
+      ensureLocalFallbackAllowed("Durable outreach progress load failed");
     }
+  } else {
+    ensureLocalFallbackAllowed("Durable outreach progress is not configured");
   }
 
   return loadLocalProgress();
 }
 
 async function saveProgress(progress) {
-  if (canUseR2Progress()) {
+  if (hasDurableR2ProgressEnv()) {
     try {
       return await saveR2Progress(progress);
     } catch (err) {
       warn("outreach.progress.r2.save.fail", { error: err?.message });
+      ensureLocalFallbackAllowed("Durable outreach progress save failed");
     }
+  } else {
+    ensureLocalFallbackAllowed("Durable outreach progress is not configured");
   }
 
   return saveLocalProgress(progress);
