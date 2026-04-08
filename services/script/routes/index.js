@@ -45,6 +45,13 @@ function validateOrThrow(schema, body) {
   return normalizePayload(parsed.data);
 }
 
+function sendRouteError(req, res, err, fallbackMessage = "Internal error") {
+  const statusCode = Number(err?.statusCode) || 500;
+  const requestId = req?.id || req?.headers?.["x-request-id"] || null;
+  const publicMessage = statusCode >= 500 ? fallbackMessage : err?.message || fallbackMessage;
+  return res.status(statusCode).json({ ok: false, error: publicMessage, requestId });
+}
+
 router.get("/health", (_req, res) => {
   res.json({ ok: true, service: "script" });
 });
@@ -57,7 +64,7 @@ router.post("/intro", hookdeckDedupe("script:intro"), async (req, res) => {
     res.json({ ok: true, sessionId: payload.sessionId, text: result });
   } catch (err) {
     error("script.intro.fail", { err: err.message });
-    res.status(err.statusCode || 500).json({ ok: false, error: err.message });
+    return sendRouteError(req, res, err, "Script intro failed");
   }
 });
 
@@ -69,7 +76,7 @@ router.post("/main", hookdeckDedupe("script:main"), async (req, res) => {
     res.json({ ok: true, sessionId: payload.sessionId, text: result });
   } catch (err) {
     error("script.main.fail", { err: err.message });
-    res.status(err.statusCode || 500).json({ ok: false, error: err.message });
+    return sendRouteError(req, res, err, "Script main failed");
   }
 });
 
@@ -81,7 +88,7 @@ router.post("/outro", hookdeckDedupe("script:outro"), async (req, res) => {
     res.json({ ok: true, sessionId: payload.sessionId, text: result });
   } catch (err) {
     error("script.outro.fail", { err: err.message });
-    res.status(err.statusCode || 500).json({ ok: false, error: err.message });
+    return sendRouteError(req, res, err, "Script outro failed");
   }
 });
 
@@ -93,7 +100,7 @@ router.post("/compose", hookdeckDedupe("script:compose"), async (req, res) => {
     res.json({ ok: true, sessionId: payload.sessionId, ...result });
   } catch (err) {
     error("script.compose.fail", { err: err.message });
-    res.status(err.statusCode || 500).json({ ok: false, error: err.message });
+    return sendRouteError(req, res, err, "Script compose failed");
   }
 });
 
@@ -105,7 +112,7 @@ router.post("/orchestrate", hookdeckDedupe("script:orchestrate"), async (req, re
     res.json({ ok: true, sessionId: payload.sessionId, ...result });
   } catch (err) {
     error("script.orchestrate.fail", { err: err.message });
-    res.status(err.statusCode || 500).json({ ok: false, error: err.message });
+    return sendRouteError(req, res, err, "Script orchestration failed");
   }
 });
 
