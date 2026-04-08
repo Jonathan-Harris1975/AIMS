@@ -1,22 +1,19 @@
-# Changes Included in production-fixes.zip
+# Fresh check patch set
 
-- `services/cloudflare-purge/routes/index.js`  
-  Fixes an unauthenticated cache-purge endpoint by requiring a shared secret, failing closed in production, and removing upstream error detail leakage from client responses.
+Changed files:
 
-- `services/cloudflare-purge/utils/purgeCloudflareCache.js`  
-  Removes the implicit `purge_everything` fallback and enforces explicit purge modes. Simplifies auth handling to Cloudflare bearer-token flow only.
+- `services/outreach/services/batchService.js`
+  - Fixes production fallback to `services/outreach/data/batch-progress.json` when durable R2 progress is missing or failing.
+  - Production now fails fast unless `ALLOW_EPHEMERAL_STATE=true` explicitly opts into local state loss.
 
-- `services/shared/utils/requestSchemas.js`  
-  Tightens Cloudflare purge request validation so callers must choose exactly one purge mode.
+- `services/outreach/utils/r2ProgressStore.js`
+  - Fixes catch-all error handling that treated any R2 read failure as “progress file missing”.
+  - Only genuine missing-object conditions initialise a new progress cursor; other errors now propagate.
 
-- `services/shared/utils/stateFile.js`  
-  Adds a production guard that blocks local ephemeral state unless explicitly overridden with `ALLOW_EPHEMERAL_STATE=true`.
+- `services/script/utils/episodeCounter.js`
+  - Fixes catch-all error handling that reset the podcast episode counter to `1` on any R2 read failure.
+  - Only genuine missing-object conditions initialise a new counter; other errors now propagate.
 
-- `scripts/startupCheck.js`  
-  Adds startup validation for production-safe state configuration and Cloudflare purge secret configuration.
-
-- `env.template`  
-  Documents missing environment variables required for the Cloudflare purge service and production-safe state behaviour.
-
-- `test/smoke.test.js`  
-  Adds regression coverage for Cloudflare purge validation/auth and the production state backend guard.
+- `test/durable-state.test.js`
+  - Adds regression coverage for production durable-state behaviour.
+  - Verifies no silent local fallback in production and no silent reset on non-missing R2 failures.
