@@ -10,6 +10,7 @@ import artworkRoutes from "../services/artwork/index.js";
 import podcastRoutes from "../services/podcast/index.js";
 import outreachRoutes from "../services/outreach/routes/index.js";
 import blogRoutes from "../services/blog/index.js";
+import cloudflarePurgeRoutes from "../services/cloudflare-purge/index.js";
 
 const router = express.Router();
 
@@ -20,7 +21,8 @@ const routeRegistry = [
   { path: "/artwork", name: "Artwork", routes: artworkRoutes },
   { path: "/podcast", name: "Podcast Pipeline", routes: podcastRoutes },
   { path: "/outreach", name: "Outreach", routes: outreachRoutes },
-  { path: "/blog", name: "Blog", routes: blogRoutes }
+  { path: "/blog", name: "Blog", routes: blogRoutes },
+  { path: "/cloudflare", name: "Cloudflare Purge", routes: cloudflarePurgeRoutes }
 ];
 
 try {
