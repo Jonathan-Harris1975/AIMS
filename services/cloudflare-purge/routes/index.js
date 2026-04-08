@@ -1,0 +1,82 @@
+import express from "express";
+import { info, error } from "../../../logger.js";
+import {
+  validateBody,
+  cloudflarePurgeBodySchema,
+} from "../../shared/utils/requestSchemas.js";
+import { purgeCloudflareCache } from "../utils/purgeCloudflareCache.js";
+
+const router = express.Router();
+
+const asyncRoute = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+
+function getPurgeMode(body = {}) {
+  if (body?.purge_everything === true) return "purge_everything";
+  if (Array.isArray(body?.files)) return "files";
+  if (Array.isArray(body?.tags)) return "tags";
+  if (Array.isArray(body?.hosts)) return "hosts";
+  if (Array.isArray(body?.prefixes)) return "prefixes";
+  return "purge_everything";
+}
+
+function getPurgeCounts(body = {}) {
+  return {
+    files: Array.isArray(body.files) ? body.files.length : 0,
+    tags: Array.isArray(body.tags) ? body.tags.length : 0,
+    hosts: Array.isArray(body.hosts) ? body.hosts.length : 0,
+    prefixes: Array.isArray(body.prefixes) ? body.prefixes.length : 0,
+  };
+}
+
+router.get("/health", (_req, res) => {
+  res.json({
+    ok: true,
+    service: "cloudflare-purge",
+    configured: Boolean(process.env.CF_zone?.trim() && process.env.CF_purge?.trim()),
+    time: new Date().toISOString(),
+  });
+});
+
+router.post("/purge", asyncRoute(async (req, res) => {
+  const parsed = validateBody(cloudflarePurgeBodySchema, req.body);
+  if (!parsed.ok) {
+    return res.status(400).json({ ok: false, error: parsed.error });
+  }
+
+  const payload = parsed.data;
+  const mode = getPurgeMode(payload);
+
+  info("cloudflare.purge.request", {
+    mode,
+    counts: getPurgeCounts(payload),
+  });
+
+  try {
+    const result = await purgeCloudflareCache(payload);
+
+    info("cloudflare.purge.complete", {
+      mode: result.mode,
+      requestId: result.result?.id || null,
+    });
+
+    return res.json({
+      ok: true,
+      service: "cloudflare-purge",
+      ...result,
+    });
+  } catch (err) {
+    error("cloudflare.purge.fail", {
+      mode,
+      statusCode: err?.statusCode || err?.status || 500,
+      error: err?.message || String(err),
+    });
+
+    return res.status(err?.statusCode || err?.status || 500).json({
+      ok: false,
+      error: err?.message || "Cloudflare purge failed",
+      details: err?.details || undefined,
+    });
+  }
+}));
+
+export default router;
