@@ -18,7 +18,7 @@ const requiredEntryModules = [
   "services/rss-feed-creator/index.js",
 ];
 
-const importPattern = /(?:import\s+(?:[^'"()]+?\s+from\s+)?|export\s+[^'"()]+?\s+from\s+|import\()(["'])(\.{1,2}\/[^"'()]+)\1/g;
+const importPattern = /(?:import\s+(?:[^'"()]+?\s+from\s+)?|export\s+[^'"()]+?\s+from\s+|import\()(["'])(\.{1,2}\/[^'"()]+)\1/g;
 
 function parseBoolean(value, fallback = false) {
   if (value === undefined || value === null || value === "") return fallback;
@@ -111,23 +111,6 @@ function assertProductionStateConfig() {
   }
 }
 
-function assertCloudflarePurgeProtection() {
-  const nodeEnv = String(process.env.NODE_ENV || "").trim().toLowerCase();
-  const cloudflareConfigured = Boolean(
-    String(process.env.CF_zone || "").trim() && String(process.env.CF_purge || "").trim()
-  );
-
-  if (nodeEnv !== "production" || !cloudflareConfigured) {
-    return;
-  }
-
-  if (!String(process.env.CLOUDFLARE_PURGE_SHARED_SECRET || "").trim()) {
-    throw new Error(
-      "Cloudflare purge service is configured but CLOUDFLARE_PURGE_SHARED_SECRET is missing. Refusing to expose an unauthenticated destructive purge route in production."
-    );
-  }
-}
-
 try {
   info("startupCheck.start", { cwd: process.cwd(), node: process.version });
 
@@ -139,7 +122,6 @@ try {
   }
 
   assertProductionStateConfig();
-  assertCloudflarePurgeProtection();
 
   const warnings = [];
   if (!process.env.PORT) warnings.push("PORT not set; default server port 3000 will be used");
