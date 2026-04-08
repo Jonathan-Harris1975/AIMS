@@ -163,7 +163,7 @@ export function startServer(port = PORT, host = "0.0.0.0") {
 
   server = app.listen(port, host, () => {
     info("AI Management Suite started", { port, host });
-    debug("server.endpoints", { endpoints: ["/rss", "/script", "/tts", "/artwork", "/podcast", "/outreach", "/blog"] });
+    debug("server.endpoints", { endpoints: ["/rss", "/script", "/tts", "/artwork", "/podcast", "/outreach", "/blog", "/cloudflare"] });
     debug("server.trustProxy", { trustProxy });
   });
 
