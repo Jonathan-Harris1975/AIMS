@@ -95,10 +95,10 @@ export const s3 = new S3Client({
 // 🎧 Canonical bucket key exports (wire-only)
 // ------------------------------------------------------------
 // NOTE: These are bucket *keys* (aliases), not bucket names.
-// They preserve existing runtime behaviour while making intent explicit.
-export const R2_BUCKET_RAW_AUDIO = R2_BUCKET_RAW;
-export const R2_BUCKET_RAW_TEXT_KEY = R2_BUCKET_RAW_TEXT || R2_BUCKET_RAW_TEXT_INPUT;
-export const R2_BUCKET_PODCAST_KEY = R2_BUCKET_PODCAST || R2_BUCKET_PODCAST_OUTPUT;
+// Use alias strings here so helpers can safely call ensureBucketKey/buildPublicUrl.
+export const R2_BUCKET_RAW_AUDIO = "chunks";
+export const R2_BUCKET_RAW_TEXT_KEY = "rawtext";
+export const R2_BUCKET_PODCAST_KEY = "podcast";
 export const R2_PUBLIC_BASE_URL_PODCAST_RESOLVED = R2_PUBLIC_BASE_URL_PODCAST || R2_PUBLIC_BASE_URL_PODCAST_OUTPUT;
 export const R2_PUBLIC_BASE_URL_RSS_RESOLVED = R2_PUBLIC_BASE_URL_RSS || R2_PUBLIC_BASE_URL_RSS_FEEDS;
 
