@@ -8,6 +8,13 @@ import { info, error } from "../../logger.js";
 
 const router = express.Router();
 
+function sendRouteError(req, res, err, fallbackMessage = "Internal error") {
+  const statusCode = Number(err?.statusCode) || 500;
+  const requestId = req?.id || req?.headers?.["x-request-id"] || null;
+  const publicMessage = statusCode >= 500 ? fallbackMessage : err?.message || fallbackMessage;
+  return res.status(statusCode).json({ ok: false, error: publicMessage, requestId });
+}
+
 router.post("/run", hookdeckDedupe("podcast:run"), async (req, res) => {
   try {
     const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
@@ -60,7 +67,11 @@ router.post("/run", hookdeckDedupe("podcast:run"), async (req, res) => {
       message: "Pipeline started. Use the status endpoint or logs to track progress.",
     });
   } catch (err) {
-    res.status(400).json({ ok: false, error: err.message });
+    error("api.podcast.route.fail", {
+      requestId: req?.id || req?.headers?.["x-request-id"] || null,
+      error: err?.stack || err?.message || String(err),
+    });
+    return sendRouteError(req, res, err, "Podcast pipeline request failed");
   }
 });
 
