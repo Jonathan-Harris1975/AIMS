@@ -28,6 +28,36 @@ function getPurgeCounts(body = {}) {
   };
 }
 
+function getConfiguredSharedSecret() {
+  return String(process.env.CLOUDFLARE_PURGE_SHARED_SECRET || "").trim();
+}
+
+function requirePurgeSecret(req, res) {
+  const configuredSecret = getConfiguredSharedSecret();
+  if (!configuredSecret) {
+    return true;
+  }
+
+  const providedSecret = String(req.get("x-cloudflare-purge-secret") || "").trim();
+  if (!providedSecret) {
+    res.status(401).json({
+      ok: false,
+      error: "Missing Cloudflare purge secret.",
+    });
+    return false;
+  }
+
+  if (providedSecret !== configuredSecret) {
+    res.status(403).json({
+      ok: false,
+      error: "Invalid Cloudflare purge secret.",
+    });
+    return false;
+  }
+
+  return true;
+}
+
 router.get("/health", (_req, res) => {
   res.json({
     ok: true,
@@ -38,6 +68,10 @@ router.get("/health", (_req, res) => {
 });
 
 router.post("/purge", asyncRoute(async (req, res) => {
+  if (!requirePurgeSecret(req, res)) {
+    return;
+  }
+
   const parsed = validateBody(cloudflarePurgeBodySchema, req.body);
   if (!parsed.ok) {
     return res.status(400).json({ ok: false, error: parsed.error });
