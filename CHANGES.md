@@ -1,19 +1,13 @@
-# Fresh check patch set
+# Production fixes
 
-Changed files:
-
-- `services/outreach/services/batchService.js`
-  - Fixes production fallback to `services/outreach/data/batch-progress.json` when durable R2 progress is missing or failing.
-  - Production now fails fast unless `ALLOW_EPHEMERAL_STATE=true` explicitly opts into local state loss.
-
-- `services/outreach/utils/r2ProgressStore.js`
-  - Fixes catch-all error handling that treated any R2 read failure as “progress file missing”.
-  - Only genuine missing-object conditions initialise a new progress cursor; other errors now propagate.
-
-- `services/script/utils/episodeCounter.js`
-  - Fixes catch-all error handling that reset the podcast episode counter to `1` on any R2 read failure.
-  - Only genuine missing-object conditions initialise a new counter; other errors now propagate.
-
-- `test/durable-state.test.js`
-  - Adds regression coverage for production durable-state behaviour.
-  - Verifies no silent local fallback in production and no silent reset on non-missing R2 failures.
+- `routes/index.js` — Mounted the RSS feed router so `/rss` exists alongside `/rss/rewrite`.
+- `routes/rss.js` — Aligned the default RSS object key with the writer (`feed.xml`) and stopped returning raw internal errors to clients.
+- `env.template` — Corrected `RSS_OBJECT_KEY` default from `rss.xml` to `feed.xml`.
+- `services/script/routes/index.js` — Sanitised 500-level route errors while preserving 400 validation details.
+- `services/podcast/index.js` — Sanitised route-level 500 responses and added request ID propagation to client-visible failures.
+- `services/artwork/routes/createArtwork.js` — Sanitised 500 responses and added request ID propagation.
+- `services/artwork/routes/generateArtwork.js` — Sanitised 500 responses and added request ID propagation.
+- `services/rss-feed-creator/routes/rewrite.js` — Sanitised 500 responses and added request ID propagation.
+- `scripts/fix-logger-usage.js` — Removed import-time side effects so the script only rewrites files when executed directly.
+- `deployment-check.js` — Removed import-time process exit side effects by gating execution behind an entrypoint check.
+- `test/smoke.test.js` — Added regression coverage for `/rss` route mounting and structured error responses.
