@@ -14,13 +14,27 @@ function baseProgress() {
   };
 }
 
+function isMissingObjectError(err) {
+  const text = `${err?.name || ""} ${err?.code || ""} ${err?.message || ""}`.toLowerCase();
+  return (
+    text.includes("nosuchkey") ||
+    text.includes("not found") ||
+    text.includes("notfound") ||
+    text.includes("the specified key does not exist")
+  );
+}
+
 export async function loadProgress() {
   const key = process.env.OUTREACH_PROGRESS_KEY || DEFAULT_KEY;
 
   try {
     const txt = await getObjectAsText("metasystem", key);
     return { ...baseProgress(), ...JSON.parse(txt) };
-  } catch {
+  } catch (err) {
+    if (!isMissingObjectError(err)) {
+      throw err;
+    }
+
     info("outreach.progress.init", { bucket: "metasystem", key });
     return baseProgress();
   }
