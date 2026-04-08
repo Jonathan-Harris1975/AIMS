@@ -1,13 +1,16 @@
-# Production fixes
+# Changes
 
-- `routes/index.js` — Mounted the RSS feed router so `/rss` exists alongside `/rss/rewrite`.
-- `routes/rss.js` — Aligned the default RSS object key with the writer (`feed.xml`) and stopped returning raw internal errors to clients.
-- `env.template` — Corrected `RSS_OBJECT_KEY` default from `rss.xml` to `feed.xml`.
-- `services/script/routes/index.js` — Sanitised 500-level route errors while preserving 400 validation details.
-- `services/podcast/index.js` — Sanitised route-level 500 responses and added request ID propagation to client-visible failures.
-- `services/artwork/routes/createArtwork.js` — Sanitised 500 responses and added request ID propagation.
-- `services/artwork/routes/generateArtwork.js` — Sanitised 500 responses and added request ID propagation.
-- `services/rss-feed-creator/routes/rewrite.js` — Sanitised 500 responses and added request ID propagation.
-- `scripts/fix-logger-usage.js` — Removed import-time side effects so the script only rewrites files when executed directly.
-- `deployment-check.js` — Removed import-time process exit side effects by gating execution behind an entrypoint check.
-- `test/smoke.test.js` — Added regression coverage for `/rss` route mounting and structured error responses.
+- `package.json`  
+  Includes `job-store.test.js` in the default test command so CI exercises the job-state concurrency checks.
+
+- `services/shared/http-client.js`  
+  Fixes `fetchWithTimeout()` so request timeouts still fire when an upstream `AbortSignal` is supplied, while still honouring caller-initiated aborts.
+
+- `services/shared/utils/r2-client.js`  
+  Corrects canonical bucket-key exports so helper modules receive shared-client alias keys instead of raw bucket names.
+
+- `test/http-client.test.js`  
+  Adds a regression test proving timeout enforcement still works with a caller-supplied abort signal.
+
+- `test/r2-client-exports.test.js`  
+  Adds a regression test proving the exported canonical R2 bucket identifiers are alias keys.
