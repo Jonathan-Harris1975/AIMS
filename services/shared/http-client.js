@@ -2,10 +2,11 @@ import fetch from "node-fetch";
 
 export function withTimeoutSignal(timeoutMs) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const timer = setTimeout(() => controller.abort(new Error("request timed out")), timeoutMs);
   timer.unref?.();
 
   return {
+    controller,
     signal: controller.signal,
     clear: () => clearTimeout(timer),
   };
@@ -13,27 +14,34 @@ export function withTimeoutSignal(timeoutMs) {
 
 export async function fetchWithTimeout(url, options = {}) {
   const { timeout = 15000, signal: upstreamSignal, ...rest } = options;
-  const { signal, clear } = withTimeoutSignal(timeout);
+  const { controller, signal, clear } = withTimeoutSignal(timeout);
 
   const abortHandler = () => {
-    try {
-      signal.throwIfAborted?.();
-    } catch {}
+    if (!signal.aborted) {
+      controller.abort(upstreamSignal?.reason || new Error("request aborted"));
+    }
   };
 
-  if (upstreamSignal?.addEventListener) {
+  if (upstreamSignal?.aborted) {
+    abortHandler();
+  } else if (upstreamSignal?.addEventListener) {
     upstreamSignal.addEventListener("abort", abortHandler, { once: true });
   }
 
   try {
     const response = await fetch(url, {
       ...rest,
-      signal: upstreamSignal || signal,
+      signal,
     });
     return response;
   } catch (err) {
     const aborted = err?.name === "AbortError" || err?.code === "ABORT_ERR";
     if (aborted) {
+      if (upstreamSignal?.aborted) {
+        throw upstreamSignal.reason instanceof Error
+          ? upstreamSignal.reason
+          : new Error(`Request aborted: ${url}`);
+      }
       throw new Error(`Request timed out after ${timeout}ms: ${url}`);
     }
     throw err;
