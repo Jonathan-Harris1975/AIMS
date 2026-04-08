@@ -5,6 +5,11 @@ import { hookdeckDedupe } from "../../shared/utils/hookdeckDedupe.js";
 
 const router = express.Router();
 
+function sendRouteError(req, res, fallbackMessage = "Internal error") {
+  const requestId = req?.id || req?.headers?.["x-request-id"] || null;
+  return res.status(500).json({ ok: false, error: fallbackMessage, requestId });
+}
+
 router.post("/rewrite", hookdeckDedupe("rss:rewrite"), async (req, res) => {
   try {
     info("rewrite.route.start");
@@ -20,8 +25,11 @@ router.post("/rewrite", hookdeckDedupe("rss:rewrite"), async (req, res) => {
       message: "RSS rewrite process completed successfully",
     });
   } catch (err) {
-    error("rewrite.route.error", { error: err?.stack || err?.message || String(err) });
-    res.status(500).json({ ok: false, error: err.message || "Rewrite route failed" });
+    error("rewrite.route.error", {
+      requestId: req?.id || req?.headers?.["x-request-id"] || null,
+      error: err?.stack || err?.message || String(err),
+    });
+    return sendRouteError(req, res, "Rewrite route failed");
   }
 });
 
