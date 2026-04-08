@@ -3,7 +3,8 @@ import express from "express";
 import { info, error } from "../logger.js";
 
 // Service routes
-import rssRoutes from "../services/rss-feed-creator/routes/rewrite.js";
+import rssFeedRoutes from "./rss.js";
+import rssRewriteRoutes from "../services/rss-feed-creator/routes/rewrite.js";
 import scriptRoutes from "../services/script/routes/index.js";
 import ttsRoutes from "../services/tts/routes/tts.js";
 import artworkRoutes from "../services/artwork/index.js";
@@ -15,7 +16,8 @@ import cloudflarePurgeRoutes from "../services/cloudflare-purge/index.js";
 const router = express.Router();
 
 const routeRegistry = [
-  { path: "/rss", name: "RSS Feed Creator", routes: rssRoutes },
+  { path: "/rss", name: "RSS Feed", routes: rssFeedRoutes },
+  { path: "/rss", name: "RSS Feed Creator", routes: rssRewriteRoutes },
   { path: "/script", name: "Script", routes: scriptRoutes },
   { path: "/tts", name: "TTS", routes: ttsRoutes },
   { path: "/artwork", name: "Artwork", routes: artworkRoutes },
