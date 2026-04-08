@@ -104,44 +104,24 @@ function buildPurgePayload(input = {}) {
     };
   }
 
-  return {
-    mode: "purge_everything",
-    payload: { purge_everything: true },
-  };
+  throw createStatusError(
+    "Cloudflare purge requests must specify exactly one purge mode.",
+    400
+  );
 }
 
-function buildAuthHeaders(authMode = "token") {
-  const tokenOrKey = normaliseEnvString(process.env.CF_purge);
-  const email = normaliseEnvString(process.env.CF_EMAIL);
+function buildAuthHeaders() {
+  const token = normaliseEnvString(process.env.CF_purge);
 
-  if (!tokenOrKey) {
+  if (!token) {
     throw createStatusError(
       "Cloudflare purge is not configured. Missing CF_purge environment variable.",
       500
     );
   }
 
-  if (authMode === "global-key") {
-    if (!email) {
-      throw createStatusError(
-        "Cloudflare Global API Key auth requires CF_EMAIL. CF_purge on its own is treated as an API token and must be sent as an Authorization Bearer token.",
-        500,
-        {
-          authMode,
-          missing: ["CF_EMAIL"],
-        }
-      );
-    }
-
-    return {
-      "X-Auth-Email": email,
-      "X-Auth-Key": tokenOrKey,
-      "Content-Type": "application/json",
-    };
-  }
-
   return {
-    Authorization: `Bearer ${tokenOrKey}`,
+    Authorization: `Bearer ${token}`,
     "Content-Type": "application/json",
   };
 }
@@ -167,13 +147,12 @@ export async function purgeCloudflareCache(input = {}, options = {}) {
   }
 
   const { mode, payload } = buildPurgePayload(input);
-  const authMode = options?.authMode || "token";
   const url = `https://api.cloudflare.com/client/v4/zones/${encodeURIComponent(zoneId)}/purge_cache`;
 
   const response = await fetchWithTimeout(url, {
     method: "POST",
     timeout: Number(options?.timeoutMs) || DEFAULT_TIMEOUT_MS,
-    headers: buildAuthHeaders(authMode),
+    headers: buildAuthHeaders(),
     body: JSON.stringify(payload),
   });
 
@@ -188,9 +167,6 @@ export async function purgeCloudflareCache(input = {}, options = {}) {
       {
         mode,
         status: response.status,
-        errors: Array.isArray(body?.errors) ? body.errors : [],
-        messages: Array.isArray(body?.messages) ? body.messages : [],
-        result: body?.result || null,
       }
     );
   }
