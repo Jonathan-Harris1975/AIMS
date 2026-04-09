@@ -31,8 +31,8 @@ function getFeaturedBookApiUrl() {
   return cleanString(process.env.FEATURED_BOOK_API_URL) || DEFAULT_FEATURED_BOOK_API_URL;
 }
 
-function getFeaturedBookTimeoutMs() {
-  const timeout = Number(process.env.AI_TIMEOUT) || 15_000;
+function getFeaturedBookTimeoutMs(timeoutOverride) {
+  const timeout = Number(timeoutOverride ?? process.env.AI_TIMEOUT) || 15_000;
   return Number.isFinite(timeout) && timeout > 0 ? timeout : 15_000;
 }
 
@@ -90,12 +90,13 @@ function buildFallbackSponsor(reason, meta = {}) {
   return { ...FALLBACK_SPONSOR };
 }
 
-export default async function getSponsor() {
-  const url = getFeaturedBookApiUrl();
-  const timeout = getFeaturedBookTimeoutMs();
+export default async function getSponsor(options = {}) {
+  const url = cleanString(options?.apiUrl) || getFeaturedBookApiUrl();
+  const timeout = getFeaturedBookTimeoutMs(options?.timeout);
+  const fetchImpl = typeof options?.fetchImpl === "function" ? options.fetchImpl : fetchWithTimeout;
 
   try {
-    const response = await fetchWithTimeout(url, {
+    const response = await fetchImpl(url, {
       method: "GET",
       headers: {
         accept: "application/json",
