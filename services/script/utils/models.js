@@ -114,7 +114,7 @@ export async function generateMain(sessionIdLike) {
 export async function generateOutro(sessionIdLike) {
   const sessionMeta = normalizeSessionMeta(sessionIdLike);
 
-  const book = getSponsor();
+  const book = await getSponsor();
   const prompt = getOutroPromptFull(book, sessionMeta);
 
   const res = await resilientRequest("scriptOutro", {
