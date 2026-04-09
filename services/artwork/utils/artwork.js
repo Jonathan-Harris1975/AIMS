@@ -1,32 +1,24 @@
 // ============================================================
-// 🖼️ Podcast Artwork Generator (OpenRouter Image Model)
+// 🖼️ Artwork Generator (OpenRouter Image Model)
 // ============================================================
 //
-// Uses the dedicated ART model + API key.
-// This runs separately from the main ai-service.js model routing.
+// Shared image transport for podcast covers and blog hero artwork.
 // ============================================================
 
 import OpenAI from "openai";
 import { warn, error } from "../../../logger.js";
 
-// ------------------------------------------------------------
-// 🔍 Required Environment Variables
-// ------------------------------------------------------------
 const REQUIRED = [
   "OPENROUTER_API_KEY_ART",
-  "OPENROUTER_ART"  // model name for image generation
+  "OPENROUTER_ART",
 ];
 
-const missing = REQUIRED.filter(k => !process.env[k] || process.env[k].trim() === "");
+const missing = REQUIRED.filter((key) => !process.env[key] || process.env[key].trim() === "");
 
 if (missing.length > 0) {
-  // Do NOT crash the entire suite — warn and disable artwork generation.
   warn("⚠️ Artwork generator missing required environment variables", { missing });
 }
 
-// ------------------------------------------------------------
-// ⚙️ Config
-// ------------------------------------------------------------
 const cfg = {
   key: process.env.OPENROUTER_API_KEY_ART || "",
   baseURL: "https://openrouter.ai/api/v1",
@@ -38,10 +30,25 @@ const client = new OpenAI({
   baseURL: cfg.baseURL,
 });
 
-// ------------------------------------------------------------
-// 🎨 Generate Podcast Artwork (Base64 PNG)
-// ------------------------------------------------------------
-export async function generatePodcastArtwork(prompt) {
+function buildInstruction(prompt, mode = "podcast") {
+  if (mode === "blog") {
+    return [
+      "Create a wide editorial blog hero image.",
+      "Composition: cinematic landscape banner, clearly usable as a website article header.",
+      "Style: premium, modern, restrained, atmospheric, no text.",
+      `Theme: \"${prompt}\".`,
+    ].join(" ");
+  }
+
+  return [
+    "Create a 1400x1400 podcast cover art image.",
+    "Style: vibrant, futuristic, eye-catching.",
+    `Theme: \"${prompt}\".`,
+    "Do NOT include any text.",
+  ].join(" ");
+}
+
+async function generateArtworkBase64(prompt, { mode = "podcast" } = {}) {
   if (!cfg.key || !cfg.model) {
     throw new Error("Artwork generation disabled: missing required OpenRouter env vars.");
   }
@@ -55,10 +62,7 @@ export async function generatePodcastArtwork(prompt) {
           content: [
             {
               type: "text",
-              text: `Create a 1400x1400 podcast cover art image. 
-                     Style: vibrant, futuristic, eye-catching. 
-                     Theme: "${prompt}". 
-                     Do NOT include any text.`,
+              text: buildInstruction(prompt, mode),
             },
           ],
         },
@@ -66,34 +70,38 @@ export async function generatePodcastArtwork(prompt) {
       max_tokens: 2048,
     });
 
-    // Newer OpenRouter image models respond with images[]
     const images = result.choices?.[0]?.message?.images;
     if (Array.isArray(images) && images[0]?.image_url?.url) {
       const url = images[0].image_url.url;
       if (url.startsWith("data:image/png;base64,")) {
-        return url.split(",")[1]; // return base64 only
+        return url.split(",")[1];
       }
     }
 
-    // Fallback: check content array for image objects
     const content = result.choices?.[0]?.message?.content;
     if (Array.isArray(content)) {
-      const imageItem = content.find(i => i.type === "image" && i.image_url?.url);
+      const imageItem = content.find((item) => item.type === "image" && item.image_url?.url);
       const url = imageItem?.image_url?.url;
       if (url && url.startsWith("data:image/png;base64,")) {
         return url.split(",")[1];
       }
     }
 
-    // Fallback: regex search
     const raw = JSON.stringify(result);
     const match = raw.match(/data:image\/png;base64,([^"]+)/);
     if (match) return match[1];
 
     throw new Error("No image data found in OpenRouter response.");
-
   } catch (e) {
-    error("Artwork generation error", { error: e?.message || e });
+    error("Artwork generation error", { error: e?.message || e, mode });
     throw new Error(`Failed to generate artwork: ${e.message}`);
   }
-      }
+}
+
+export async function generatePodcastArtwork(prompt) {
+  return generateArtworkBase64(prompt, { mode: "podcast" });
+}
+
+export async function generateBlogArtwork(prompt) {
+  return generateArtworkBase64(prompt, { mode: "blog" });
+}
