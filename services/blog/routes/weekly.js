@@ -15,7 +15,7 @@ router.post("/build", hookdeckDedupe("blog:weeklyBuild"), asyncRoute(async (req,
     return res.status(400).json({ ok: false, error: parsed.error });
   }
 
-  const requestedDays = Number(parsed.data.days || process.env.BLOG_WEEK_DAYS || 7);
+  const requestedDays = parsed.data.days;
   const weekId = parsed.data.weekId;
 
   const result = await buildWeeklyBlogPost({ days: requestedDays, weekId });
