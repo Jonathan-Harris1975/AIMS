@@ -1,13 +1,24 @@
 // services/blog/weekly/buildWeeklyBlogPost.js
-import { info, error, debug } from "../../../logger.js";
+import { info, error, debug, warn } from "../../../logger.js";
 import { getObjectAsText, putText, putJson, buildPublicUrl } from "../../shared/utils/r2-client.js";
 import { resilientRequest } from "../../shared/utils/ai-service.js";
 import { slugify } from "../utils/slug.js";
 import { indexTemplate, pageTemplate, weeklyPostBody } from "../utils/templates.js";
 import { createBlogArtwork } from "../../artwork/createBlogArtwork.js";
+import {
+  cleanSourceText,
+  cleanSourceTitle,
+  parseStructuredWeeklyPackage,
+  normaliseWeeklyPackage,
+  renderWeeklyBodyHtml,
+  buildBlogArtworkPrompt,
+  buildPostManifestEntry,
+  mergePostsManifest,
+  buildWeeklyPackagePrompt,
+  hasBannedPhrases,
+} from "../utils/weeklyPackage.js";
 
 function isoWeekId(d = new Date()) {
-  // ISO week: https://en.wikipedia.org/wiki/ISO_week_date
   const date = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
   const dayNum = date.getUTCDay() || 7;
   date.setUTCDate(date.getUTCDate() + 4 - dayNum);
@@ -17,27 +28,31 @@ function isoWeekId(d = new Date()) {
   return `${yyyy}-W${String(weekNo).padStart(2, "0")}`;
 }
 
-function parsePubDate(v) {
-  const t = Date.parse(v);
-  return Number.isFinite(t) ? new Date(t) : null;
+function parseIsoWeekId(weekId) {
+  const match = String(weekId || "").match(/^(\d{4})-W(\d{2})$/);
+  if (!match) return null;
+
+  const year = Number(match[1]);
+  const week = Number(match[2]);
+  const januaryFourth = new Date(Date.UTC(year, 0, 4));
+  const januaryFourthDay = januaryFourth.getUTCDay() || 7;
+  const weekStart = new Date(januaryFourth);
+  weekStart.setUTCDate(januaryFourth.getUTCDate() - januaryFourthDay + 1 + (week - 1) * 7);
+  weekStart.setUTCHours(0, 0, 0, 0);
+
+  const weekEnd = new Date(weekStart);
+  weekEnd.setUTCDate(weekEnd.getUTCDate() + 7);
+
+  return {
+    weekId: `${year}-W${String(week).padStart(2, "0")}`,
+    start: weekStart,
+    end: weekEnd,
+  };
 }
 
-function stripCdataHtml(html) {
-  // rss-feed-creator stores rewritten text in CDATA inside description
-  // We keep it readable; remove most tags but preserve basic spacing.
-  return String(html || "")
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<[^>]+>/g, "")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-}
-
-function toHtmlParagraphs(text) {
-  const parts = String(text || "")
-    .split(/\n\s*\n/)
-    .map((p) => p.trim())
-    .filter(Boolean);
-  return parts.map((p) => `<p>${escapeHtml(p)}</p>`).join("\n");
+function parsePubDate(value) {
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? new Date(parsed) : null;
 }
 
 function escapeHtml(str) {
@@ -49,234 +64,325 @@ function escapeHtml(str) {
     .replace(/'/g, "&#39;");
 }
 
-export async function buildWeeklyBlogPost({ days = 7, weekId } = {}) {
-  const prefix = process.env.BLOG_PREFIX || "blog";
-  const rssBucketKey = "rss"; // newsletter RSS feed bucket alias (R2_BUCKET_RSS_FEEDS)
-  const feedKey = "feed.json";
-  const outBucketKey = "blog";
+function escapeXml(str) {
+  return String(str || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
 
-  const now = new Date();
-  const cutoff = new Date(now.getTime() - Number(days) * 86400000);
-  const week = weekId || isoWeekId(now);
-  const sessionId = `BLOG-${week}`;
+function formatDate(date) {
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(date);
+}
 
-  try {
-    info("blog.weekly.build.start", { days, week, rssBucketKey, feedKey });
-
-    const raw = await getObjectAsText(rssBucketKey, feedKey);
-    const feed = JSON.parse(raw);
-    const channel = feed?.rss?.channel || {};
-    const itemsRaw = channel?.item || [];
-    const items = (Array.isArray(itemsRaw) ? itemsRaw : [itemsRaw])
-      .map((it) => {
-        const pubDate = it?.pubDate;
-        const d = parsePubDate(pubDate);
-        const cdata = it?.description?.__cdata || "";
-        return {
-          title: String(it?.title || "Untitled"),
-          link: String(it?.link || ""),
-          pubDate: d,
-          pubDateRaw: pubDate,
-          rewritten: stripCdataHtml(cdata),
-        };
-      })
-      .filter((it) => it.pubDate && it.pubDate >= cutoff)
-      .sort((a, b) => b.pubDate - a.pubDate);
-
-    if (!items.length) {
-      return { ok: false, error: `No RSS items found in the last ${days} days.` };
+function buildWeeklyWindow({ now = new Date(), weekId, days } = {}) {
+  if (weekId) {
+    const parsedWeek = parseIsoWeekId(weekId);
+    if (!parsedWeek) {
+      throw new Error(`Invalid weekId '${weekId}'. Expected format YYYY-WNN.`);
     }
 
-    const dateLabel = `${week} · last ${days} days`;
-    const title = `AI Weekly Roundup — ${week}`;
+    return {
+      week: parsedWeek.weekId,
+      start: parsedWeek.start,
+      end: parsedWeek.end,
+      days: Math.round((parsedWeek.end - parsedWeek.start) / 86400000),
+      dateLabel: `${formatDate(parsedWeek.start)} to ${formatDate(new Date(parsedWeek.end.getTime() - 86400000))}`,
+      mode: "iso-week",
+    };
+  }
 
-    // ─────────────────────────────────────────
-    // 1) Generate on-brand header artwork
-    // ─────────────────────────────────────────
-    const artPrompt = `Weekly blog header artwork for "Turing’s Torch AI Weekly".
-Theme: the past week in AI news — sharp, modern, premium tech aesthetic.
-Style: dark navy background, neon teal + muted purple accents, abstract AI circuitry / data glow.
-No text, no logos, no people, no photorealistic faces.
-Composition: wide header image suitable for a blog hero banner.`;
+  if (Number.isInteger(days) && days > 0) {
+    const end = new Date(now);
+    const start = new Date(end.getTime() - days * 86400000);
+    return {
+      week: isoWeekId(new Date(end.getTime() - 86400000)),
+      start,
+      end,
+      days,
+      dateLabel: `${formatDate(start)} to ${formatDate(new Date(end.getTime() - 86400000))}`,
+      mode: "rolling-window",
+    };
+  }
 
-    const art = await createBlogArtwork({ sessionId, prompt: artPrompt });
-    const imageUrl = art?.ok ? art.publicUrl : "";
+  const utcNow = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const day = utcNow.getUTCDay() || 7;
+  const startOfCurrentWeek = new Date(utcNow);
+  startOfCurrentWeek.setUTCDate(utcNow.getUTCDate() - day + 1);
 
-    // ─────────────────────────────────────────
-    // 2) Generate the weekly post body (HTML)
-    // ─────────────────────────────────────────
-    const sourcesForPrompt = items
-      .slice(0, 18)
-      .map(
-        (it, idx) =>
-          `${idx + 1}. ${it.title}\nSummary: ${it.rewritten}\nLink: ${it.link}`
-      )
-      .join("\n\n");
+  const start = new Date(startOfCurrentWeek);
+  start.setUTCDate(start.getUTCDate() - 7);
 
-    const messages = [
-      {
-        role: "system",
-        content:
-          "You write for the blog of 'Turing’s Torch AI Weekly'. Voice: dry, sceptical British host energy; sharp, lightly sarcastic when deserved; zero corporate fluff. Output MUST be HTML only (no markdown). Use <h2>, <p>, <ul><li>. No inline styles.",
-      },
-      {
-        role: "user",
-        content:
-          `Write a weekly AI news roundup blog post for ${week}.
+  const end = new Date(startOfCurrentWeek);
 
-Rules:
-- Start with a short hook paragraph.
-- Then 4–7 sections with <h2> headings.
-- Each section should connect 2–5 related stories.
-- Include practical "so what" takeaways.
-- Avoid hype words/phrases (and close variants): groundbreaking, transformative, revolutionary, rapidly evolving, game-changer, paradigm shift, unprecedented, in a move that signals.
-- No "In this post we explore" style filler.
+  return {
+    week: isoWeekId(start),
+    start,
+    end,
+    days: Math.round((end - start) / 86400000),
+    dateLabel: `${formatDate(start)} to ${formatDate(new Date(end.getTime() - 86400000))}`,
+    mode: "previous-complete-week",
+  };
+}
 
-Use these source summaries (do not quote them verbatim; rewrite in your own voice):
+function normaliseFeedItems(feed, window) {
+  const channel = feed?.rss?.channel || {};
+  const itemsRaw = channel?.item || [];
+  const itemsArray = Array.isArray(itemsRaw) ? itemsRaw : [itemsRaw];
 
-${sourcesForPrompt}
-`,
-      },
-    ];
+  return itemsArray
+    .map((item) => {
+      const pubDateRaw = item?.pubDate;
+      const pubDate = parsePubDate(pubDateRaw);
+      const rewritten = cleanSourceText(item?.description?.__cdata || "");
+      const title = cleanSourceTitle(item?.title || item?.shortTitle || "Untitled");
+      const link = String(item?.link || "").trim();
+      return {
+        title,
+        link,
+        pubDate,
+        pubDateRaw,
+        rewritten,
+      };
+    })
+    .filter((item) => item.pubDate && item.pubDate >= window.start && item.pubDate < window.end && item.rewritten)
+    .sort((a, b) => b.pubDate - a.pubDate);
+}
 
-    let bodyHtml = await resilientRequest("blogWeekly", {
-      sessionId,
-      messages,
-      max_tokens: 2600,
-      temperature: 0.85,
+async function loadExistingPostsManifest(bucketKey, key) {
+  try {
+    const raw = await getObjectAsText(bucketKey, key);
+    return JSON.parse(raw);
+  } catch {
+    return { posts: [] };
+  }
+}
+
+async function generateStructuredWeeklyPackage({ sessionId, week, dateLabel, items }) {
+  const prompt = buildWeeklyPackagePrompt({ week, dateLabel, items });
+  const baseMessages = [
+    { role: "system", content: prompt.system },
+    { role: "user", content: prompt.user },
+  ];
+
+  let raw = await resilientRequest("blogWeekly", {
+    sessionId,
+    messages: baseMessages,
+    max_tokens: 2200,
+    temperature: 0.45,
+  });
+
+  let parsed = parseStructuredWeeklyPackage(raw);
+  let weeklyPackage = parsed.ok ? normaliseWeeklyPackage(parsed.data, { week, dateLabel, items }) : null;
+  let bannedMatches = hasBannedPhrases(JSON.stringify(weeklyPackage || {}));
+
+  if (!parsed.ok || bannedMatches.length) {
+    debug("blog.weekly.package.regen", {
+      week,
+      reason: parsed.ok ? "banned-phrases" : "invalid-json",
+      bannedMatches: bannedMatches.slice(0, 5),
+      parseError: parsed.ok ? undefined : parsed.error,
     });
 
-    bodyHtml = String(bodyHtml || "").trim();
-
-    // Quick anti-fluff guard: if the model slips into press-release mode, regenerate once.
-    const bannedPhrases = [
-      "in a significant development",
-      "in a move that",
-      "rapidly evolving",
-      "groundbreaking",
-      "transformative",
-      "revolutionary",
-      "cutting-edge",
-      "game-changer",
-      "paradigm shift",
-      "unprecedented",
-      "delve into",
-      "landscape",
-      "underscores",
-      "showcases",
-      "notably",
-      "this week we explore",
-      "in this post",
-    ];
-
-    const hasFluff = bannedPhrases.some((p) => bodyHtml.toLowerCase().includes(p));
-    if (hasFluff) {
-      debug("blog.weekly.body.regen.fluffDetected", { week, matched: bannedPhrases.filter(p => bodyHtml.toLowerCase().includes(p)).slice(0, 5) });
-      const regenMessages = [
-        messages[0],
+    raw = await resilientRequest("blogWeekly", {
+      sessionId,
+      messages: [
+        baseMessages[0],
         {
           role: "user",
-          content:
-            `Rewrite the same weekly roundup again.
-
-Hard rules:
-- Remove ANY press-release/editorial filler.
-- Do NOT use any of these phrases (or close variants): ${bannedPhrases.join(", ")}.
-- Keep it tight and spoken, like a host writing a column.
-
-Return HTML only.
-
-Sources (same as before):
-\n\n${sourcesForPrompt}`,
+          content: `${prompt.user}\n\nRepair instructions:\n- Return valid JSON only\n- Remove these phrases and close variants: ${bannedMatches.length ? bannedMatches.join(", ") : "press-release filler, hype language, roundup boilerplate"}\n- Do not emit HTML, markdown, code fences, notes, or extra keys`,
         },
-      ];
+      ],
+      max_tokens: 2200,
+      temperature: 0.35,
+    });
 
-      bodyHtml = await resilientRequest("blogWeekly", {
-        sessionId,
-        messages: regenMessages,
-        max_tokens: 2600,
-        temperature: 0.65,
-      });
-      bodyHtml = String(bodyHtml || "").trim();
+    parsed = parseStructuredWeeklyPackage(raw);
+    weeklyPackage = parsed.ok ? normaliseWeeklyPackage(parsed.data, { week, dateLabel, items }) : null;
+    bannedMatches = hasBannedPhrases(JSON.stringify(weeklyPackage || {}));
+  }
+
+  if (!parsed.ok) {
+    warn("blog.weekly.package.parseFallback", { week, error: parsed.error });
+    return normaliseWeeklyPackage({}, { week, dateLabel, items });
+  }
+
+  if (bannedMatches.length) {
+    warn("blog.weekly.package.bannedResidual", { week, bannedMatches: bannedMatches.slice(0, 5) });
+  }
+
+  return weeklyPackage;
+}
+
+export async function buildWeeklyBlogPost({ days, weekId } = {}) {
+  const prefix = process.env.BLOG_PREFIX || "blog";
+  const rssBucketKey = "rss";
+  const feedKey = "feed.json";
+  const outBucketKey = "blog";
+  const window = buildWeeklyWindow({ now: new Date(), weekId, days });
+  const sessionId = `BLOG-${window.week}`;
+  const createdAt = new Date().toISOString();
+
+  try {
+    info("blog.weekly.build.start", {
+      days: window.days,
+      week: window.week,
+      mode: window.mode,
+      dateLabel: window.dateLabel,
+      rssBucketKey,
+      feedKey,
+    });
+
+    const rawFeed = await getObjectAsText(rssBucketKey, feedKey);
+    const feed = JSON.parse(rawFeed);
+    const items = normaliseFeedItems(feed, window);
+
+    if (!items.length) {
+      return {
+        ok: false,
+        error: `No rewritten RSS items found for ${window.dateLabel}.`,
+      };
     }
 
-    if (!bodyHtml || !bodyHtml.includes("<p")) {
-      // hard fallback: simple paragraphs from item summaries
-      bodyHtml = `
-<h2>What happened</h2>
-${items.slice(0, 10).map((it) => `<p><strong>${escapeHtml(it.title)}:</strong> ${escapeHtml(it.rewritten)}</p>`).join("\n")}
-<h2>The boring bit that matters</h2>
-<p>If you’re seeing a pattern, that’s because there is one: tooling is maturing, governance is lagging, and the marketing departments are still doing lines of espresso.</p>
-`;
-    }
+    const weeklyPackage = await generateStructuredWeeklyPackage({
+      sessionId,
+      week: window.week,
+      dateLabel: window.dateLabel,
+      items,
+    });
 
-    // ─────────────────────────────────────────
-    // 3) Write outputs to R2
-    // ─────────────────────────────────────────
-    const slug = slugify(`${week}-ai-weekly-roundup`);
+    const title = weeklyPackage.title;
+    const slug = slugify(`${window.week}-${title}`);
     const dir = `${prefix}/${slug}`;
+
+    const bodyHtml = renderWeeklyBodyHtml(weeklyPackage, { escapeHtml });
+    const imagePrompt = buildBlogArtworkPrompt({
+      week: window.week,
+      title,
+      summary: weeklyPackage.summary,
+      dominantThemes: weeklyPackage.dominantThemes,
+    });
+
+    const art = await createBlogArtwork({ sessionId, prompt: imagePrompt });
+    const imageUrl = art?.ok ? art.publicUrl : "";
 
     const postUrl = buildPublicUrl(outBucketKey, `${dir}/index.html`);
     const postMetaUrl = buildPublicUrl(outBucketKey, `${dir}/post.json`);
+    const postsManifestUrl = buildPublicUrl(outBucketKey, `${prefix}/posts.json`);
+
+    const cleanedSources = items.map((item) => ({
+      title: item.title,
+      link: item.link,
+      pubDate: item.pubDateRaw,
+    }));
+
+    const postEntry = buildPostManifestEntry({
+      week: window.week,
+      slug,
+      title,
+      summary: weeklyPackage.summary,
+      bodyHtml,
+      imageUrl,
+      imagePrompt,
+      dateLabel: window.dateLabel,
+      postUrl,
+      sources: cleanedSources,
+      dominantThemes: weeklyPackage.dominantThemes,
+      publishedAt: createdAt,
+    });
 
     const contentHtml = weeklyPostBody({
       title,
-      dateLabel,
+      summary: weeklyPackage.summary,
+      dateLabel: window.dateLabel,
       imageUrl,
       html: bodyHtml,
-      sources: items.map((it) => ({ title: it.title, link: it.link })),
+      sources: cleanedSources,
     });
 
     const fullHtml = pageTemplate({
       title,
-      description: `Weekly AI roundup for ${week}.`,
+      description: weeklyPackage.summary,
       canonicalUrl: postUrl,
       imageUrl,
       contentHtml,
     });
 
+    const existingManifest = await loadExistingPostsManifest(outBucketKey, `${prefix}/posts.json`);
+    const mergedManifest = mergePostsManifest(existingManifest, postEntry);
+
     await putText(outBucketKey, `${dir}/index.html`, fullHtml, "text/html; charset=utf-8");
     await putJson(outBucketKey, `${dir}/post.json`, {
       ok: true,
-      week,
-      days,
-      title,
+      week: window.week,
+      days: window.days,
+      window: {
+        start: window.start.toISOString(),
+        end: window.end.toISOString(),
+        label: window.dateLabel,
+        mode: window.mode,
+      },
       slug,
+      title,
+      summary: weeklyPackage.summary,
+      body_html: bodyHtml,
       url: postUrl,
-      imageUrl,
-      createdAt: new Date().toISOString(),
-      sources: items.map((it) => ({
-        title: it.title,
-        link: it.link,
-        pubDate: it.pubDateRaw,
-      })),
+      image_url: imageUrl,
+      image_prompt: imagePrompt,
+      themes: weeklyPackage.dominantThemes,
+      createdAt,
+      sources: cleanedSources,
     });
+    await putJson(outBucketKey, `${prefix}/posts.json`, mergedManifest);
 
-    // Index (simple: latest only)
     const indexHtml = indexTemplate({
-      title: "Turing’s Torch — Weekly Blog",
-      items: [{ title, url: postUrl, dateLabel }],
+      title: "Turing's Torch - Weekly Blog",
+      items: mergedManifest.posts.map((post) => ({
+        title: post.title,
+        url: post.url,
+        dateLabel: post.date_label,
+        summary: post.summary,
+      })),
     });
     await putText(outBucketKey, `${prefix}/index.html`, indexHtml, "text/html; charset=utf-8");
 
-    // Sitemap (latest + index)
     const sitemap = `<?xml version="1.0" encoding="UTF-8"?>\n` +
       `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n` +
       `  <url><loc>${escapeXml(buildPublicUrl(outBucketKey, `${prefix}/index.html`))}</loc></url>\n` +
-      `  <url><loc>${escapeXml(postUrl)}</loc></url>\n` +
-      `</urlset>`;
+      `  <url><loc>${escapeXml(postsManifestUrl)}</loc></url>\n` +
+      mergedManifest.posts
+        .map((post) => `  <url><loc>${escapeXml(post.url)}</loc></url>`)
+        .join("\n") +
+      `\n</urlset>`;
     await putText(outBucketKey, `${prefix}/sitemap.xml`, sitemap, "application/xml; charset=utf-8");
 
-    info("blog.weekly.build.success", { week, postUrl, postMetaUrl, imageUrl });
+    info("blog.weekly.build.success", {
+      week: window.week,
+      postUrl,
+      postMetaUrl,
+      postsManifestUrl,
+      imageUrl,
+      sourceCount: cleanedSources.length,
+      themeCount: weeklyPackage.dominantThemes.length,
+    });
 
     return {
       ok: true,
-      week,
-      days,
+      week: window.week,
+      days: window.days,
       title,
       slug,
+      summary: weeklyPackage.summary,
       postUrl,
       postMetaUrl,
+      postsManifestUrl,
       imageUrl,
       indexUrl: buildPublicUrl(outBucketKey, `${prefix}/index.html`),
       sitemapUrl: buildPublicUrl(outBucketKey, `${prefix}/sitemap.xml`),
@@ -285,13 +391,4 @@ ${items.slice(0, 10).map((it) => `<p><strong>${escapeHtml(it.title)}:</strong> $
     error("blog.weekly.build.fail", { error: e.message, stack: e.stack });
     return { ok: false, error: e.message };
   }
-}
-
-function escapeXml(str) {
-  return String(str || "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/\"/g, "&quot;")
-    .replace(/'/g, "&apos;");
 }
