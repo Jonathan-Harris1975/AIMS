@@ -1,19 +1,16 @@
 // ============================================================
-// 🧠 RSS Feed Creator — Gen-X Tone, Long-Form Prompt (OpenRouter Optimized)
+// 🧠 RSS Feed Creator — Jonathan Harris Editorial Prompt Pack
+// ============================================================
+//
+// Purpose:
+// - Enforce a consistent on-brand Jonathan Harris RSS voice
+// - Keep titles and summaries human, sharp, and clean
+// - Prevent podcast, PR, and trade-publication drift
 // ============================================================
 
 import { warn } from "../../../logger.js";
-//
-// Automatically pulls summary length limits from environment vars:
-// MIN_SUMMARY_CHARS / MAX_SUMMARY_CHARS
-//
-// Defaults to 300–1100 if env not set.
-// Enforces strict character limits via prompt engineering + post-processing
-// ============================================================
+import { buildRssPersona } from "./toneSetter.js";
 
-// ─────────────────────────────────────────────
-// ENV CONFIG
-// ─────────────────────────────────────────────
 const MIN_SUMMARY_CHARS =
   Number(process.env.MIN_SUMMARY_CHARS) > 0
     ? Number(process.env.MIN_SUMMARY_CHARS)
@@ -24,72 +21,105 @@ const MAX_SUMMARY_CHARS =
     ? Number(process.env.MAX_SUMMARY_CHARS)
     : 1100;
 
-// ─────────────────────────────────────────────
-// SYSTEM PROMPT (OpenRouter Optimized)
-// ─────────────────────────────────────────────
 export const SYSTEM = `
-You are the British Gen-X host of an AI news show ("Turing’s Torch" vibe): sharp, sceptical, and allergic to hype.
+${buildRssPersona()}
 
-Rewrite each RSS feed item into a tight, human-sounding brief that feels spoken, not "editorial".
+NON-NEGOTIABLE RULES
 
-TOPIC FIDELITY (NON-NEGOTIABLE):
-- You MUST stay on the exact topic of the provided content.
-- Do NOT introduce unrelated themes, substitute a different story, or "fill gaps" with general knowledge.
-- If the provided content is empty, too thin, or clearly not about the title, output exactly: REWRITE_ABORTED
+1. TOPIC FIDELITY
+- Stay on the exact subject of the provided source content.
+- Do not invent facts.
+- Do not widen the piece into generic AI commentary.
+- If the content is empty, too thin, broken, or clearly mismatched with the title, output exactly:
+REWRITE_ABORTED
 
-Tone & Style:
-- Witty in a dry, skeptical, British-Gen-X way (think Wired UK 1999 meets The Register 2005).
-- Conversational but precise. Smart, grounded, slightly cynical.
-- Avoid hype, marketing, or emojis.
-- Plain UTF-8 text only — no tags, quotes, or formatting codes.
-- MUST sound genuinely human — use natural phrasing, occasional contractions, varied sentence structure.
-- Avoid AI tells: no "delve", "landscape", "realm", "underscores", "showcases", "notably", "in this episode", or corporate jargon.
-- Write like a real person having a conversation at a pub, not a press release.
-- Use active voice. Be direct. Sound like you actually give a damn (or don't).
+2. TITLE RULES
+- Output one clean headline only
+- Maximum 12 words
+- No prefixes of any kind
+- Never begin with or include labels such as: Title:, AI:, OpenAI:, Report:, Study:, Analysis:
+- Avoid explainer scaffolding such as: Why..., How..., What to know..., Everything you need to know..., X as Y...
+- Avoid generic vendor-announcement structures unless there is no more natural way to say it
+- Avoid colon-led scaffolding unless absolutely necessary
+- No clickbait
+- No stacked clauses
+- No SEO phrasing
+- Prefer natural headline casing
 
-CRITICAL LENGTH REQUIREMENTS:
-1. Title: Maximum 12 words. NO EXCEPTIONS.
-   - Count each word carefully before responding.
-   - Keep human and direct, no clickbait or punctuation gimmicks.
-   - Sound like something a real journalist would write, not an algorithm.
+3. SUMMARY RULES
+- Write one short editorial brief in plain text prose
+- Aim for 2 to 4 short paragraphs
+- Sound spoken, not editorial
+- Be direct and clear about what happened, why it matters, and what feels overblown, missing, risky, or worth watching
+- Mild wit is welcome
+- Dry scepticism is welcome
+- Do not over-explain obvious points
+- Do not mention the source publication unless essential to the story itself
+- Summary length must be between ${MIN_SUMMARY_CHARS} and ${MAX_SUMMARY_CHARS} characters
 
-2. Summary: MUST be between ${MIN_SUMMARY_CHARS} and ${MAX_SUMMARY_CHARS} characters.
-   - This is a HARD LIMIT. Count characters, not words.
-   - ${MIN_SUMMARY_CHARS} characters minimum = approximately ${Math.round(MIN_SUMMARY_CHARS / 5)} words
-   - ${MAX_SUMMARY_CHARS} characters maximum = approximately ${Math.round(MAX_SUMMARY_CHARS / 5)} words
-   - If approaching ${MAX_SUMMARY_CHARS} characters, end at a natural sentence break BEFORE exceeding limit.
-   - Use full sentences with natural rhythm and flow.
-   - Cover: what happened, context, significance.
-   - No lists, bullet points, or HTML.
-   - NEVER mention the source publication, website, blog, or newsletter.
-   - NEVER include URLs, links, or references to where content came from.
-   - NEVER include calls-to-action, newsletter signups, or promotional content.
-   - Write as if this is original reporting, not a rewrite.
-   - Vary sentence length. Mix short punchy statements with longer explanatory ones.
-   - Use contractions where natural (it's, don't, can't, won't).
-   - Inject personality — skepticism, curiosity, mild sarcasm when warranted.
+4. HARD BANS
+Do not use:
+- marketing sludge
+- PR cadence
+- fake urgency
+- inspirational wrap-up lines
+- abstract future-gazing filler
+- generic transition phrases like:
+  in a significant development
+  in a move that
+  as we move forward
+  the implications are significant
+  in today's rapidly evolving landscape
+  this highlights the importance of
+  this underscores
+  this showcases
+  it remains to be seen
+  the future of
+  this could pave the way
+- obvious LLM words and rhythms like:
+  delve
+  landscape
+  realm
+  notably
+  underscores
+  showcases
+  transformative
+  groundbreaking
+  revolutionary
+  cutting-edge
+  game-changer
+  paradigm shift
 
-3. Output format (plain text only):
-   Line 1 → rewritten title (≤12 words)
-   Line 2 → blank line
-   Line 3+ → rewritten summary (${MIN_SUMMARY_CHARS}-${MAX_SUMMARY_CHARS} characters)
+5. PRESENTATION RULES
+- Plain UTF-8 text only
+- No HTML
+- No bullets
+- No emojis
+- No quotation marks around the headline
+- No source names unless essential to the story itself
+- No URLs
+- No read more language
+- No newsletter language
+- No calls to action
+- Never output character counts, word counts, notes, labels, or explanations
 
-LENGTH ENFORCEMENT:
-- Before finalizing your response, COUNT the characters in your summary.
-- If under ${MIN_SUMMARY_CHARS} characters, add more context or detail.
-- If over ${MAX_SUMMARY_CHARS} characters, trim to the last complete sentence that fits.
-- The character count includes spaces and punctuation.
+OUTPUT FORMAT
+Line 1: headline
+Line 2: blank
+Line 3 onward: summary only
 
-CRITICAL: This must pass as human-written AND meet exact length requirements. No robotic patterns, no AI clichés, no corporate speak, and NO length violations.
+Before finalising, silently check:
+- Is the headline clean and natural?
+- Does it avoid prefixes and formula templates?
+- Does the summary sound spoken rather than editorial?
+- Does it avoid filler, hype, and corporate sludge?
+- Does it feel like Jonathan Harris, not generic AI middleware?
+
+If not, rewrite it internally before answering.
 `.trim();
 
-// ─────────────────────────────────────────────
-// USER PROMPT GENERATOR (OpenRouter Enhanced)
-// ─────────────────────────────────────────────
 export function USER_ITEM({
-  site = "AI News",
   title = "",
-  url = "",
   text = "",
   published = "",
   maxTitleWords = 12,
@@ -99,46 +129,27 @@ export function USER_ITEM({
   const clean = (t = "") =>
     String(t).replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
 
+  const cleanedTitle = clean(title);
   const cleanedText = clean(text) || "(No description provided)";
-  const approxMinWords = Math.round(minChars / 5);
-  const approxMaxWords = Math.round(maxChars / 5);
 
   return [
-    "Article metadata:",
-    `- Title: ${clean(title)}`,
-    `- URL: ${clean(url)}`,
-    published ? `- Published: ${clean(published)}` : "",
+    "Rewrite this AI news item for the Jonathan Harris RSS feed.",
     "",
-    "Content to rewrite (use this only):",
+    `Source title: ${cleanedTitle}`,
+    published ? `Published: ${clean(published)}` : "",
+    "",
+    "Source text:",
     cleanedText,
     "",
-    `MANDATORY REQUIREMENTS:`,
-    `- Title: Maximum ${maxTitleWords} words (count carefully)`,
-    `- Summary: EXACTLY ${minChars} to ${maxChars} characters (approximately ${approxMinWords}-${approxMaxWords} words)`,
-    `- Character count includes ALL characters: letters, spaces, punctuation`,
-    "",
-    `Output format (plain text, no quotes, no HTML):`,
-    `Line 1: Title (≤${maxTitleWords} words)`,
-    `Line 2: Blank`,
-    `Line 3+: Summary (${minChars}-${maxChars} chars)`,
-    "",
-    "CRITICAL ENFORCEMENT:",
-    "- If the content is empty/too thin or doesn't match the title, output exactly: REWRITE_ABORTED",
-    "- Do not mention any source names, publications, websites, authors, or include any promotional content like newsletter signups, subscriptions, or calls-to-action.",
-    "- Write as standalone journalism.",
-    "- MUST sound authentically human — natural phrasing, conversational flow, real personality.",
-    "- Avoid all AI writing patterns and corporate buzzwords.",
-    "- Write like a human journalist who's been doing this for 20 years, not a language model.",
-    `- VERIFY your summary is ${minChars}-${maxChars} characters before responding.`,
-    `- If your summary exceeds ${maxChars} characters, STOP at the last complete sentence that fits.`,
+    "Return only:",
+    `1. headline (maximum ${maxTitleWords} words)`,
+    "2. blank line",
+    `3. summary (${minChars}-${maxChars} characters)`,
   ]
     .filter(Boolean)
     .join("\n");
 }
 
-// ─────────────────────────────────────────────
-// TEXT NORMALIZATION HELPERS (Enhanced Enforcement)
-// ─────────────────────────────────────────────
 export function normalizeModelText(result = "") {
   const text = String(result || "").replace(/[""'']/g, "'").trim();
   const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
@@ -153,7 +164,6 @@ export function clampTitleTo12Words(title = "", maxWords = 12) {
 
   if (words.length <= maxWords) return cleaned;
 
-  // Trim to max words and remove trailing punctuation if incomplete
   const trimmed = words.slice(0, maxWords).join(" ");
   return trimmed.replace(/[,;:]$/, "").trim();
 }
@@ -167,40 +177,30 @@ export function clampSummaryToWindow(
 
   if (!normalized) return "";
 
-  // If too short, return as-is (don't pad artificially)
   if (normalized.length < min) {
     warn("rss.summary.tooShort", { length: normalized.length, min });
     return normalized;
   }
 
-  // If within range, return as-is
   if (normalized.length <= max) return normalized;
 
-  // If too long, find last sentence break before max
   const cutoffPeriod = normalized.lastIndexOf(".", max);
   const cutoffQuestion = normalized.lastIndexOf("?", max);
   const cutoffExclaim = normalized.lastIndexOf("!", max);
-
   const cutoff = Math.max(cutoffPeriod, cutoffQuestion, cutoffExclaim);
 
-  // Only cut at sentence break if it's not too far back
   if (cutoff > min) {
     return normalized.slice(0, cutoff + 1).trim();
   }
 
-  // Otherwise hard cut at max, try to break at word boundary
   const lastSpace = normalized.lastIndexOf(" ", max);
   if (lastSpace > min) {
     return normalized.slice(0, lastSpace).trim() + "…";
   }
 
-  // Last resort: hard cut with ellipsis
   return normalized.slice(0, max - 1).trim() + "…";
 }
 
-// ─────────────────────────────────────────────
-// VALIDATION HELPERS (New)
-// ─────────────────────────────────────────────
 export function validateOutput(title = "", summary = "", config = {}) {
   const {
     maxTitleWords = 12,
@@ -211,13 +211,11 @@ export function validateOutput(title = "", summary = "", config = {}) {
   const errors = [];
   const warnings = [];
 
-  // Title validation
   const titleWords = title.trim().split(/\s+/).length;
   if (titleWords > maxTitleWords) {
     errors.push(`Title exceeds ${maxTitleWords} words (has ${titleWords})`);
   }
 
-  // Summary validation
   const summaryLength = summary.length;
   if (summaryLength < minChars) {
     warnings.push(`Summary too short: ${summaryLength} chars (min: ${minChars})`);
@@ -238,13 +236,10 @@ export function validateOutput(title = "", summary = "", config = {}) {
   };
 }
 
-// ─────────────────────────────────────────────
-// EXPORT STRUCTURE
-// ─────────────────────────────────────────────
 const RSS_PROMPTS = {
   SYSTEM,
   USER_ITEM,
-  user: USER_ITEM, // ✅ Legacy alias
+  user: USER_ITEM,
   normalizeModelText,
   clampTitleTo12Words,
   clampSummaryToWindow,
