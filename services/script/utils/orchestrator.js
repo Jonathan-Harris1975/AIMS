@@ -12,6 +12,7 @@ import * as sessionCache from "./sessionCache.js";
 import { attachEpisodeNumberIfNeeded } from "./episodeCounter.js";
 import editAndFormat from "./editAndFormat.js";
 import { runEditorialPass } from "./editorialPass.js";
+import { validateTranscriptStructure } from "./scriptValidation.js";
 
 const {
   generateIntro,
@@ -67,6 +68,11 @@ export async function orchestrateScript(input) {
     const initialFullText =
       composed?.fullText ?? [intro, main, outro].join("\n\n");
 
+    const initialValidation = validateTranscriptStructure(initialFullText);
+    if (!initialValidation.ok) {
+      throw new Error(`Composed script failed structure validation: ${initialValidation.reasons.join("; ")}`);
+    }
+
     // ============================================================
     // 3) Editorial Pass (humanisation, variety, tone consistency)
     // ============================================================
@@ -75,15 +81,33 @@ export async function orchestrateScript(input) {
       initialFullText
     );
 
+    const editorialCandidate = (editorialText && editorialText.trim()) || initialFullText;
+    const editorialValidation = validateTranscriptStructure(editorialCandidate);
+    const safeEditorialText = editorialValidation.ok ? editorialCandidate : initialFullText;
+
+    if (!editorialValidation.ok) {
+      info("editorialPass.fallback.initialScript", {
+        sessionId: sid,
+        reasons: editorialValidation.reasons,
+      });
+    }
+
     // ============================================================
     // 4) Local formatting pass (punctuation, spacing, flow polish)
     // ============================================================
-    const formattedText = editAndFormat(editorialText || initialFullText);
+    const formattedText = editAndFormat(safeEditorialText);
 
-    const finalFullText =
+    const finalCandidate =
       (formattedText && formattedText.trim()) ||
-      (editorialText && editorialText.trim()) ||
+      safeEditorialText ||
       initialFullText;
+
+    const finalValidation = validateTranscriptStructure(finalCandidate);
+    if (!finalValidation.ok) {
+      throw new Error(`Final script failed structure validation: ${finalValidation.reasons.join("; ")}`);
+    }
+
+    const finalFullText = finalCandidate;
 
     // ============================================================
     // 5) Chunk for TTS + upload to R2

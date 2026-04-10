@@ -145,37 +145,50 @@ Return ONLY the keywords.
  * Artwork Prompt (Editorial Illustration Standard)
  * -----------------------------------------------------------
  */
+const ARTWORK_BANNED_TERMS = [
+  "pastel",
+  "child",
+  "children",
+  "storybook",
+  "playful",
+  "cute",
+  "whimsical",
+  "fantasy",
+  "dreamscape",
+  "magic",
+  "magical",
+  "orb",
+  "cartoon",
+  "anime",
+  "candy",
+  "fairytale",
+  "toy",
+];
+
+function sanitiseThemeText(description = "") {
+  return String(description || "")
+    .replace(/\s+/g, " ")
+    .replace(/https?:\/\/\S+/gi, "")
+    .replace(/[^\w\s,.'’\-]/g, " ")
+    .trim();
+}
+
+function isOffBrandArtworkPrompt(text = "") {
+  const lowered = String(text || "").toLowerCase();
+  return ARTWORK_BANNED_TERMS.some((term) => lowered.includes(term));
+}
+
 export function getArtworkPrompt(description) {
-  const month = new Date().getMonth();
-  let seasonalTone = "neutral light and shadow";
+  const theme = sanitiseThemeText(description);
 
-  if (month >= 2 && month <= 4) seasonalTone = "soft spring light, restrained colour";
-  else if (month >= 5 && month <= 7) seasonalTone = "warm summer contrast, gentle glow";
-  else if (month >= 8 && month <= 10) seasonalTone = "muted autumn tones, subtle depth";
-  else seasonalTone = "cool winter palette, clean contrast";
-
-  return `
-Create a premium editorial illustration inspired by the themes below.
-
-STYLE:
-Abstract, modern, intelligent.
-Organic shapes, smooth gradients, quiet complexity.
-Subtle reaction–diffusion or mathematical texture as a nod to foundational AI ideas.
-${seasonalTone}.
-
-STRICT RULES:
-- No people
-- No faces or silhouettes
-- No robots
-- No circuitry
-- No text or lettering
-- No logos
-- Abstract only
-- ≤250 characters
-
-THEMES:
-${description}
-`.trim();
+  return [
+    "Premium editorial AI podcast cover art.",
+    "Mood: sharp, sceptical, cinematic, adult, intelligent, grounded.",
+    "Palette: deep navy, charcoal, restrained teal, muted purple, soft metallic highlights.",
+    "Style: abstract technological realism, clean geometry, subtle data motifs, negative space, no text.",
+    "Avoid: pastel fantasy, dreamy clouds, magical orb, cute or childlike sci-fi, cartoon softness.",
+    `Themes: ${theme || "AI systems, governance, power, risk, work, security."}`,
+  ].join(" ").slice(0, 500);
 }
 
 /* -----------------------------------------------------------
@@ -252,14 +265,20 @@ export async function generateEpisodeMetaLLM(rawTranscript, sessionMeta = {}) {
   }
 
   /* Artwork Prompt */
-  let artworkPrompt = "";
+  let artworkPrompt = getArtworkPrompt(description);
   try {
-    artworkPrompt = await resilientRequest("artworkPrompt", {
+    const candidatePrompt = await resilientRequest("artworkPrompt", {
       sessionId,
       messages: [{ role: "user", content: getArtworkPrompt(description) }]
     });
 
-    artworkPrompt = String(artworkPrompt).slice(0, 250);
+    const cleanedCandidate = String(candidatePrompt || "").replace(/\s+/g, " ").trim().slice(0, 500);
+    if (cleanedCandidate && !isOffBrandArtworkPrompt(cleanedCandidate)) {
+      artworkPrompt = cleanedCandidate;
+    } else if (cleanedCandidate) {
+      warn("meta.artwork.offbrand", { sessionId, candidatePrompt: cleanedCandidate });
+    }
+
     await sessionCache.storeTempPart(sessionMeta, "artworkPrompt", artworkPrompt);
   } catch {
     error("meta.artwork.fail", { sessionId });

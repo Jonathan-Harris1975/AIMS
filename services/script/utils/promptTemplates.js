@@ -19,6 +19,8 @@ function weekdayFromDateStr(dateStr) {
   }
 }
 
+export const OUTRO_CLOSING_TAGLINE = `That’s your lot for this week’s Turing’s Torch. If you want the daily brief, head to jonathan-harris dot online. Same time next week — try not to believe the press releases.`;
+
 // INTRO TEMPLATE
 export function getIntroPrompt({ weatherSummary, turingQuote, sessionMeta } = {}) {
   const persona = buildPersona(sessionMeta);
@@ -127,7 +129,6 @@ export function getOutroPromptFull(book, sessionMeta) {
     .replace(/\//g, " slash ")
     .trim();
 
-  const closingTagline = `That’s your lot for this week’s Turing’s Torch. If you want the daily brief, head to jonathan-harris dot online. Same time next week — try not to believe the press releases.`;
 
   return `
 ${persona}
@@ -139,7 +140,7 @@ MANDATORY ORDER (no bullets, no headings, just spoken flow):
 2) Newsletter CTA (SITE ONLY): Invite listeners to get the daily AI briefing at ${siteSpoken}. Keep it simple: one email, no hype, no fluff.
 3) Sponsor (BOOK ONLY): Seamlessly introduce this week's sponsor as your own book: "${bookTitle}", available at ${bookSpoken}. Frame it as a deeper dive for people who want understanding, not buzzwords.
 4) Close: End EXACTLY with:
-"${closingTagline}"
+"${OUTRO_CLOSING_TAGLINE}"
 
 Rules:
 - Do NOT merge the website URL with the book URL.
