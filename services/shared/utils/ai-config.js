@@ -34,6 +34,10 @@ export const aiConfig = {
 
     // Blog
     blogWeekly: ["google", "chatgpt", "deepseek"],
+
+    // OneUp social scheduler
+    oneupDaily: ["chatgpt", "google", "deepseek"],
+    oneupQuiz: ["chatgpt", "google", "deepseek"],
   },
 
   commonParams: { temperature: 0.85, timeout: 45000 },

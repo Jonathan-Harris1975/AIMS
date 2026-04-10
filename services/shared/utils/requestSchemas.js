@@ -2,6 +2,15 @@ import { z } from "zod";
 
 const optionalSessionId = z.string().trim().min(1).max(80).optional();
 
+
+const booleanish = z
+  .union([z.boolean(), z.string(), z.number()])
+  .transform((value) => {
+    if (typeof value === "boolean") return value;
+    if (typeof value === "number") return value !== 0;
+    return ["1", "true", "yes", "on"].includes(String(value).trim().toLowerCase());
+  });
+
 export const ttsOrchestrateBodySchema = z
   .object({
     sessionId: optionalSessionId,
@@ -140,3 +149,50 @@ export function validateBody(schema, body) {
     data: result.data,
   };
 }
+
+
+const optionalIsoDate = z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, "must be YYYY-MM-DD").optional();
+const optionalScheduledDateTime = z
+  .string()
+  .trim()
+  .regex(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/, "must be YYYY-MM-DD HH:MM")
+  .optional();
+
+export const oneupDailyBodySchema = z
+  .object({
+    publishDate: optionalIsoDate,
+    scheduledDateTime: optionalScheduledDateTime,
+    dryRun: booleanish.optional(),
+    categoryName: z.string().trim().min(1).max(120).optional(),
+    socialNetworkId: z.union([z.string().trim().min(1).max(400), z.array(z.string().trim().min(1).max(200)).min(1)]).optional(),
+    imageUrl: z.string().trim().url().optional(),
+    apiKey: z.string().trim().min(1).max(200).optional(),
+  })
+  .passthrough()
+  .transform((value) => ({
+    ...value,
+    socialNetworkId: Array.isArray(value.socialNetworkId)
+      ? JSON.stringify(value.socialNetworkId)
+      : value.socialNetworkId,
+  }));
+
+export const oneupQuizBodySchema = z
+  .object({
+    questionPublishDate: optionalIsoDate,
+    answerPublishDate: optionalIsoDate,
+    questionScheduledDateTime: optionalScheduledDateTime,
+    answerScheduledDateTime: optionalScheduledDateTime,
+    dryRun: booleanish.optional(),
+    categoryName: z.string().trim().min(1).max(120).optional(),
+    socialNetworkId: z.union([z.string().trim().min(1).max(400), z.array(z.string().trim().min(1).max(200)).min(1)]).optional(),
+    questionImageUrl: z.string().trim().url().optional(),
+    answerImageUrl: z.string().trim().url().optional(),
+    apiKey: z.string().trim().min(1).max(200).optional(),
+  })
+  .passthrough()
+  .transform((value) => ({
+    ...value,
+    socialNetworkId: Array.isArray(value.socialNetworkId)
+      ? JSON.stringify(value.socialNetworkId)
+      : value.socialNetworkId,
+  }));
