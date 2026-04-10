@@ -36,15 +36,17 @@ function buildInstruction(prompt, mode = "podcast") {
       "Create a wide editorial blog hero image.",
       "Composition: cinematic landscape banner, clearly usable as a website article header.",
       "Style: premium, modern, restrained, atmospheric, no text.",
-      `Theme: \"${prompt}\".`,
+      `Theme: "${prompt}".`,
     ].join(" ");
   }
 
   return [
-    "Create a 1400x1400 podcast cover art image.",
-    "Style: vibrant, futuristic, eye-catching.",
-    `Theme: \"${prompt}\".`,
-    "Do NOT include any text.",
+    "Create a 1400x1400 premium editorial podcast cover art image for an adult AI news show.",
+    "Mood: sharp, sceptical, intelligent, cinematic, grounded, modern, minimal.",
+    "Palette: deep navy, charcoal, restrained neon teal, muted purple, soft metallic highlights.",
+    "Style: abstract technological realism, subtle data motifs, clean negative space, premium magazine illustration, no text.",
+    `Theme: "${prompt}".`,
+    "Avoid pastel fantasy, dreamy clouds, magical orb imagery, childlike sci-fi, cartoon softness, playful candy colours, whimsical storybook visuals, cute illustration, or anything toy-like.",
   ].join(" ");
 }
 
