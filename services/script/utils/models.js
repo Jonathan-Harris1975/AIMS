@@ -69,7 +69,7 @@ export async function generateIntro(sessionIdLike) {
 // MAIN – Longform via batching + synthesis (Option B)
 export async function generateMain(sessionIdLike) {
   const sessionMeta = normalizeSessionMeta(sessionIdLike);
-  const { items } = await fetchFeedArticles();
+  const { items, feedUrl, source } = await fetchFeedArticles();
 
   const articles = (items || [])
     .map((it) => ({
@@ -96,11 +96,17 @@ export async function generateMain(sessionIdLike) {
   });
 
   if (!articles.length) {
-    debug("No articles available for MAIN – returning empty main section", {
+    const failureDetails = {
       sessionId: sessionMeta.sessionId,
-    });
+      feedUrl: feedUrl || null,
+      source: source || null,
+    };
+
     await sessionCache.storeTempPart(sessionMeta, "main", "");
-    return "";
+
+    throw new Error(
+      `Main section generation aborted: no recent feed articles available from ${feedUrl || source || "configured sources"}`
+    );
   }
 
   const combined = await generateMainLongform(sessionMeta, articles, mainSeconds);
