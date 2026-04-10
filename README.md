@@ -100,6 +100,13 @@ creation.
 
 ------------------------------------------------------------------------
 
+### **📣 oneup/**
+
+Schedules Jonathan Harris social posts into OneUp via the public API.
+Includes seven day-specific daily lanes plus a weekly quiz series, shared prompt generation, queue guarding, dry-run previews, and weekend RSS-assisted freshness with fallback when the feed is not suitable.
+
+------------------------------------------------------------------------
+
 # ⚙️ Installation
 
 ``` bash
