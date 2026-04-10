@@ -102,6 +102,27 @@ async function loadChunk(input) {
   return loadLocalToBuffer(input);
 }
 
+
+function writeBufferToTemp(sessionId, label, buffer) {
+  const safeLabel = String(label || "chunk").replace(/[^a-z0-9_-]+/gi, "_");
+  const outputPath = path.join(TMP_DIR, `${sessionId}_${safeLabel}.mp3`);
+  fs.writeFileSync(outputPath, buffer);
+  return outputPath;
+}
+
+async function materializeSourceToLocal(sessionId, source, label = "single") {
+  if (!source) {
+    throw new Error("Cannot materialize an empty source");
+  }
+
+  if (!isRemote(source)) {
+    return source;
+  }
+
+  const buffer = await loadChunk(source);
+  return writeBufferToTemp(sessionId, label, buffer);
+}
+
 // ------------------------------------------------------------
 // 🎧 STREAM MERGE — merge array of buffers into outputPath
 // ------------------------------------------------------------
@@ -159,6 +180,14 @@ async function streamMergeBuffers(buffers, outputPath, attempt = 1) {
 // 🧩 MODULAR BATCH MERGE (recursive, bulletproof)
 // ------------------------------------------------------------
 async function modularMerge(sessionId, sources) {
+  if (!Array.isArray(sources) || sources.length === 0) {
+    throw new Error("modularMerge requires at least one source.");
+  }
+
+  if (sources.length === 1) {
+    return materializeSourceToLocal(sessionId, sources[0], "single_0");
+  }
+
   let round = 1;
   let current = sources;
 
@@ -255,6 +284,10 @@ export async function mergeProcessor(sessionId, chunkUrls = []) {
 
     const finalPath = await modularMerge(sid, chunkUrls);
 
+    if (!finalPath || !fs.existsSync(finalPath)) {
+      throw new Error(`Merge output missing on local disk: ${finalPath || "<empty>"}`);
+    }
+
     const mergedBuf = fs.readFileSync(finalPath);
     const mergedKey = `${sid}.mp3`;
 
@@ -289,4 +322,5 @@ export async function mergeProcessor(sessionId, chunkUrls = []) {
   }
 }
 
+export { modularMerge, materializeSourceToLocal };
 export default mergeProcessor;
