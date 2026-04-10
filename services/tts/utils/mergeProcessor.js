@@ -110,7 +110,7 @@ function writeBufferToTemp(sessionId, label, buffer) {
   return outputPath;
 }
 
-async function materializeSourceToLocal(sessionId, source, label = "single") {
+export async function materializeSourceToLocal(sessionId, source, label = "single") {
   if (!source) {
     throw new Error("Cannot materialize an empty source");
   }
@@ -322,5 +322,5 @@ export async function mergeProcessor(sessionId, chunkUrls = []) {
   }
 }
 
-export { modularMerge, materializeSourceToLocal };
+export { modularMerge };
 export default mergeProcessor;
