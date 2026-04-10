@@ -12,6 +12,7 @@ import podcastRoutes from "../services/podcast/index.js";
 import outreachRoutes from "../services/outreach/routes/index.js";
 import blogRoutes from "../services/blog/index.js";
 import cloudflarePurgeRoutes from "../services/cloudflare-purge/index.js";
+import oneupRoutes from "../services/oneup/index.js";
 
 const router = express.Router();
 
@@ -24,7 +25,8 @@ const routeRegistry = [
   { path: "/podcast", name: "Podcast Pipeline", routes: podcastRoutes },
   { path: "/outreach", name: "Outreach", routes: outreachRoutes },
   { path: "/blog", name: "Blog", routes: blogRoutes },
-  { path: "/cloudflare", name: "Cloudflare Purge", routes: cloudflarePurgeRoutes }
+  { path: "/cloudflare", name: "Cloudflare Purge", routes: cloudflarePurgeRoutes },
+  { path: "/oneup", name: "OneUp Social Scheduler", routes: oneupRoutes }
 ];
 
 try {
