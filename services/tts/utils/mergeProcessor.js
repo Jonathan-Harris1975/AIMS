@@ -104,6 +104,7 @@ async function loadChunk(input) {
 
 
 function writeBufferToTemp(sessionId, label, buffer) {
+  ensureTmpDir();
   const safeLabel = String(label || "chunk").replace(/[^a-z0-9_-]+/gi, "_");
   const outputPath = path.join(TMP_DIR, `${sessionId}_${safeLabel}.mp3`);
   fs.writeFileSync(outputPath, buffer);
