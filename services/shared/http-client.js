@@ -1,5 +1,10 @@
 import fetch from "node-fetch";
 
+const DEFAULT_HEADERS = {
+  accept: "*/*",
+  "user-agent": "AI-management-suite/production (+https://jonathan-harris.online)",
+};
+
 export function withTimeoutSignal(timeoutMs) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(new Error("request timed out")), timeoutMs);
@@ -13,7 +18,7 @@ export function withTimeoutSignal(timeoutMs) {
 }
 
 export async function fetchWithTimeout(url, options = {}) {
-  const { timeout = 15000, signal: upstreamSignal, ...rest } = options;
+  const { timeout = 15000, signal: upstreamSignal, headers: callerHeaders, ...rest } = options;
   const { controller, signal, clear } = withTimeoutSignal(timeout);
 
   const abortHandler = () => {
@@ -31,6 +36,10 @@ export async function fetchWithTimeout(url, options = {}) {
   try {
     const response = await fetch(url, {
       ...rest,
+      headers: {
+        ...DEFAULT_HEADERS,
+        ...(callerHeaders || {}),
+      },
       signal,
     });
     return response;
