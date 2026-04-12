@@ -146,7 +146,24 @@ export async function orchestrateScript(input) {
     );
 
     // ============================================================
-    // 8) Session cleanup (optional)
+    // 8) Generate and upload HTML transcript
+    // ============================================================
+    try {
+      const { generateTranscriptHtml } = await import("./generateTranscriptHtml.js");
+      const transcriptBase = process.env.R2_PUBLIC_BASE_URL_TRANSCRIPT || "";
+      const htmlContent = generateTranscriptHtml(sid, finalFullText, meta, transcriptBase);
+      await uploadText("transcript", `${sid}.html`, htmlContent, "text/html");
+      info("📄 HTML transcript uploaded", { sessionId: sid });
+    } catch (htmlErr) {
+      // Non-fatal — txt transcript is already saved, HTML is a bonus
+      error("⚠️ HTML transcript generation failed", {
+        sessionId: sid,
+        error: htmlErr?.message,
+      });
+    }
+
+    // ============================================================
+    // 9) Session cleanup (optional)
     // ============================================================
     scheduleCleanup(sid);
 
