@@ -108,7 +108,7 @@ test("mergePostsManifest keeps latest post first and removes duplicates by week"
     ],
   }, nextEntry);
 
-  assert.equal(merged.posts.length, 2);
-  assert.equal(merged.posts[0].week, "2026-W14");
-  assert.equal(merged.posts[1].week, "2026-W13");
+  assert.equal(merged.items.length, 2);
+  assert.equal(merged.items[0].week, "2026-W14");
+  assert.equal(merged.items[1].week, "2026-W13");
 });
