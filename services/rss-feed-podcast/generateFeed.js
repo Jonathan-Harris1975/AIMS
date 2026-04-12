@@ -161,11 +161,20 @@ function mapMetaToEpisode(meta) {
     ? keywords
     : "";
 
+  // Per-episode link. Set PODCAST_EPISODE_BASE_URL once episode pages exist
+  // (e.g. https://jonathan-harris.online/podcast/episodes/).
+  // Falls back to transcriptUrl until then.
+  const episodeBaseUrl = envString("PODCAST_EPISODE_BASE_URL");
+  const link = episodeBaseUrl
+    ? `${episodeBaseUrl.replace(/\/$/, "")}/${sessionId}/`
+    : transcriptUrl || "";
+
   return {
     title,
     description: description || "",
     guid,
     pubDate: pubDateStr,
+    link,
     enclosureUrl: podcastUrl,
     enclosureLength: fileSize || 0,
     durationSeconds: typeof duration === "number" ? duration : null,

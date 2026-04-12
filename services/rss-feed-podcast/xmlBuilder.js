@@ -147,6 +147,7 @@ export function buildRssXml(channel, items) {
     if (ep.description) parts.push(tag("description", ep.description));
     if (ep.guid) parts.push(tag("guid", ep.guid));
     if (ep.pubDate) parts.push(tag("pubDate", ep.pubDate));
+    if (ep.link) parts.push(tag("link", ep.link));
 
     if (ep.enclosureUrl) {
       parts.push(
