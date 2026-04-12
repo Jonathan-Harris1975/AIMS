@@ -131,6 +131,22 @@ export async function runPodcastPipeline(sessionId) {
     }
 
     // -----------------------------------------------------------
+    // 🌐 7) Trigger website rebuild
+    // -----------------------------------------------------------
+    try {
+      log.info("🌐 Triggering website rebuild…");
+      const rebuildRes = await fetch("https://hooks.jonathan-harris.online/4q1mkzkfvb566f", {
+        method: "POST",
+      });
+      log.info("🌐 Website rebuild triggered", { status: rebuildRes.status });
+    } catch (rebuildErr) {
+      log.warn("⚠️ Website rebuild trigger failed — site will update on next deploy", {
+        sessionId,
+        error: rebuildErr?.message,
+      });
+    }
+
+    // -----------------------------------------------------------
     // 🎉 DONE
     // -----------------------------------------------------------
     const summary = {
