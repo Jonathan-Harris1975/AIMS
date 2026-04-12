@@ -382,7 +382,7 @@ export function buildPostManifestEntry({
     body_html: bodyHtml,
     url: postUrl,
     canonical_url: postUrl,
-    path: slug ? `/blog/${slug}/` : undefined,
+    path: slug ? `/blog/posts/${slug}/` : undefined,
     image: imageUrl,
     image_url: imageUrl,
     image_prompt: imagePrompt,
@@ -397,9 +397,11 @@ export function buildPostManifestEntry({
 export function mergePostsManifest(existingPayload, nextEntry) {
   const existingArray = Array.isArray(existingPayload)
     ? existingPayload
-    : Array.isArray(existingPayload?.posts)
-      ? existingPayload.posts
-      : [];
+    : Array.isArray(existingPayload?.items)
+      ? existingPayload.items
+      : Array.isArray(existingPayload?.posts)
+        ? existingPayload.posts
+        : [];
 
   const filtered = existingArray.filter((entry) => {
     if (!entry || typeof entry !== "object") return false;
@@ -411,7 +413,7 @@ export function mergePostsManifest(existingPayload, nextEntry) {
 
   return {
     updated_at: nextEntry.published_at,
-    posts: [nextEntry, ...filtered].sort((a, b) => String(b?.published_at || "").localeCompare(String(a?.published_at || ""))),
+    items: [nextEntry, ...filtered].sort((a, b) => String(b?.published_at || "").localeCompare(String(a?.published_at || ""))),
   };
 }
 

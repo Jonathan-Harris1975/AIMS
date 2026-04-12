@@ -70,11 +70,11 @@ export function indexTemplate({ title = "Blog", items = [] }) {
   const contentHtml = `
 <header>
   <h1>${escapeHtml(title)}</h1>
-  <p class="meta">Weekly AI briefings, minus the noise.</p>
+  <p class="meta">Weekly AI briefings with a bit of judgement, a low tolerance for hype, and direct routes into the site.</p>
 </header>
 <div class="card">
   <ol>
-    ${list || "<li>No posts yet.</li>"}
+    ${list || "<li>The archive is ready for the first published briefing.</li>"}
   </ol>
 </div>`;
 
