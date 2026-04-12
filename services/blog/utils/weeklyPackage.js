@@ -394,24 +394,89 @@ export function buildPostManifestEntry({
   };
 }
 
-export function mergePostsManifest(existingPayload, nextEntry) {
-  const existingArray = Array.isArray(existingPayload)
-    ? existingPayload
-    : Array.isArray(existingPayload?.items)
-      ? existingPayload.items
-      : Array.isArray(existingPayload?.posts)
-        ? existingPayload.posts
-        : [];
+function normaliseManifestEntry(entry = {}) {
+  if (!entry || typeof entry !== "object") {
+    return null;
+  }
 
-  const filtered = existingArray.filter((entry) => {
-    if (!entry || typeof entry !== "object") return false;
-    if (nextEntry.week && entry.week === nextEntry.week) return false;
-    if (nextEntry.slug && entry.slug === nextEntry.slug) return false;
-    if (nextEntry.url && entry.url === nextEntry.url) return false;
-    return true;
-  });
+  const url = cleanString(entry.url)
+    || cleanString(entry.canonical_url)
+    || cleanString(entry.link)
+    || cleanString(entry.permalink);
+  const slug = cleanString(entry.slug) || deriveSlugFromUrl(url);
+  const path = cleanString(entry.path) || (slug ? `/blog/posts/${slug}/` : "");
+  const publishedAt = cleanString(entry.published_at)
+    || cleanString(entry.published)
+    || cleanString(entry.pubDate)
+    || cleanString(entry.datePublished)
+    || cleanString(entry.date);
+  const summary = cleanString(entry.summary)
+    || cleanString(entry.excerpt)
+    || cleanString(entry.desc)
+    || cleanString(entry.description);
+  const imageUrl = cleanString(entry.image)
+    || cleanString(entry.image_url)
+    || cleanString(entry.cover)
+    || cleanString(entry.heroImage);
+  const title = cleanString(entry.title) || cleanString(entry.headline);
+
+  if (!slug || !title || !url) {
+    return null;
+  }
 
   return {
+    id: cleanString(entry.id) || cleanString(entry.week) || slug,
+    week: cleanString(entry.week),
+    slug,
+    title,
+    summary,
+    excerpt: summary,
+    body_html: cleanString(entry.body_html),
+    url,
+    canonical_url: cleanString(entry.canonical_url) || url,
+    path,
+    image: imageUrl,
+    image_url: imageUrl,
+    image_prompt: cleanString(entry.image_prompt),
+    date_label: cleanString(entry.date_label),
+    published_at: publishedAt,
+    themes: Array.isArray(entry.themes) ? entry.themes.map(cleanString).filter(Boolean) : [],
+    source_count: Number.isFinite(entry.source_count) ? entry.source_count : Array.isArray(entry.sources) ? entry.sources.length : 0,
+    sources: Array.isArray(entry.sources) ? entry.sources : [],
+  };
+}
+
+function deriveSlugFromUrl(url) {
+  const cleanUrl = cleanString(url);
+  if (!cleanUrl) {
+    return "";
+  }
+
+  const match = cleanUrl.match(/\/blog\/posts\/([^/?#]+)\/?$/i);
+  return match ? cleanString(match[1]) : "";
+}
+
+function cleanString(value) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+export function mergePostsManifest(existingPayload, nextEntry) {
+  const existingArray = Array.isArray(existingPayload?.items)
+    ? existingPayload.items
+    : [];
+
+  const filtered = existingArray
+    .map(normaliseManifestEntry)
+    .filter(Boolean)
+    .filter((entry) => {
+      if (nextEntry.week && entry.week === nextEntry.week) return false;
+      if (nextEntry.slug && entry.slug === nextEntry.slug) return false;
+      if (nextEntry.url && entry.url === nextEntry.url) return false;
+      return true;
+    });
+
+  return {
+    schema_version: 1,
     updated_at: nextEntry.published_at,
     items: [nextEntry, ...filtered].sort((a, b) => String(b?.published_at || "").localeCompare(String(a?.published_at || ""))),
   };
