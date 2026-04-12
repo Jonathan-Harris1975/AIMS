@@ -3,7 +3,7 @@ import { info, error, debug, warn } from "../../../logger.js";
 import { getObjectAsText, putText, putJson } from "../../shared/utils/r2-client.js";
 import { resilientRequest } from "../../shared/utils/ai-service.js";
 import { slugify } from "../utils/slug.js";
-import { indexTemplate, pageTemplate, weeklyPostBody } from "../utils/templates.js";
+import { pageTemplate, weeklyPostBody } from "../utils/templates.js";
 import { createBlogArtwork } from "../../artwork/createBlogArtwork.js";
 import {
   cleanSourceText,
@@ -159,9 +159,12 @@ function normaliseFeedItems(feed, window) {
 async function loadExistingPostsManifest(bucketKey, key) {
   try {
     const raw = await getObjectAsText(bucketKey, key);
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object"
+      ? parsed
+      : { schema_version: 1, updated_at: null, items: [] };
   } catch {
-    return { items: [] };
+    return { schema_version: 1, updated_at: null, items: [] };
   }
 }
 
@@ -182,8 +185,8 @@ function buildSiteBlogUrls(slug, prefix = "blog") {
     postUrl: joinUrl(siteBaseUrl, postPath),
     postMetaUrl: joinUrl(siteBaseUrl, `${postPath}post.json`),
     postsManifestUrl: joinUrl(siteBaseUrl, `${blogBasePath}/posts.json`),
-    indexUrl: joinUrl(siteBaseUrl, `${blogBasePath}/`),
-    sitemapUrl: joinUrl(siteBaseUrl, `${blogBasePath}/sitemap.xml`),
+    blogHubUrl: joinUrl(siteBaseUrl, `${blogBasePath}/`),
+    weeklyArchiveUrl: joinUrl(siteBaseUrl, `${blogBasePath}/weekly/`),
   };
 }
 
@@ -328,7 +331,7 @@ export async function buildWeeklyBlogPost({ days, weekId } = {}) {
     const art = await createBlogArtwork({ sessionId, prompt: imagePrompt });
     const imageUrl = art?.ok ? art.publicUrl : "";
 
-    const { postUrl, postMetaUrl, postsManifestUrl, indexUrl, sitemapUrl } = buildSiteBlogUrls(slug, prefix);
+    const { postPath, postUrl, postMetaUrl, postsManifestUrl, blogHubUrl, weeklyArchiveUrl } = buildSiteBlogUrls(slug, prefix);
 
     const cleanedSources = items.map((item) => ({
       title: item.title,
@@ -365,6 +368,8 @@ export async function buildWeeklyBlogPost({ days, weekId } = {}) {
       description: weeklyPackage.summary,
       canonicalUrl: postUrl,
       imageUrl,
+      publishedAt: createdAt,
+      dateLabel: window.dateLabel,
       contentHtml,
     });
 
@@ -373,6 +378,7 @@ export async function buildWeeklyBlogPost({ days, weekId } = {}) {
 
     await putText(outBucketKey, `${dir}/index.html`, fullHtml, "text/html; charset=utf-8");
     await putJson(outBucketKey, `${dir}/post.json`, {
+      schema_version: 1,
       ok: true,
       week: window.week,
       days: window.days,
@@ -385,36 +391,22 @@ export async function buildWeeklyBlogPost({ days, weekId } = {}) {
       slug,
       title,
       summary: weeklyPackage.summary,
+      excerpt: weeklyPackage.summary,
+      date_label: window.dateLabel,
       body_html: bodyHtml,
       url: postUrl,
+      canonical_url: postUrl,
+      path: postPath,
+      image: imageUrl,
       image_url: imageUrl,
       image_prompt: imagePrompt,
+      published_at: createdAt,
       themes: weeklyPackage.dominantThemes,
-      createdAt,
+      created_at: createdAt,
       sources: cleanedSources,
     });
     await putJson(outBucketKey, `${prefix}/posts.json`, mergedManifest);
 
-    const indexHtml = indexTemplate({
-      title: "Turing's Torch - Weekly Blog",
-      items: mergedManifest.items.map((post) => ({
-        title: post.title,
-        url: post.url,
-        dateLabel: post.date_label,
-        summary: post.summary,
-      })),
-    });
-    await putText(outBucketKey, `${prefix}/index.html`, indexHtml, "text/html; charset=utf-8");
-
-    const sitemap = `<?xml version="1.0" encoding="UTF-8"?>\n` +
-      `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n` +
-      `  <url><loc>${escapeXml(indexUrl)}</loc></url>\n` +
-      `  <url><loc>${escapeXml(postsManifestUrl)}</loc></url>\n` +
-      mergedManifest.items
-        .map((post) => `  <url><loc>${escapeXml(post.url)}</loc></url>`)
-        .join("\n") +
-      `\n</urlset>`;
-    await putText(outBucketKey, `${prefix}/sitemap.xml`, sitemap, "application/xml; charset=utf-8");
 
     info("blog.weekly.build.success", {
       week: window.week,
@@ -439,8 +431,13 @@ export async function buildWeeklyBlogPost({ days, weekId } = {}) {
       postMetaUrl,
       postsManifestUrl,
       imageUrl,
-      indexUrl,
-      sitemapUrl,
+      blogHubUrl,
+      weeklyArchiveUrl,
+      publishedObjects: {
+        postHtmlKey: `${dir}/index.html`,
+        postMetaKey: `${dir}/post.json`,
+        manifestKey: `${prefix}/posts.json`,
+      },
       rebuild,
     };
   } catch (e) {
