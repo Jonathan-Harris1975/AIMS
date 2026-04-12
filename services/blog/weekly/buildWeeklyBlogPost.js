@@ -1,6 +1,6 @@
 // services/blog/weekly/buildWeeklyBlogPost.js
 import { info, error, debug, warn } from "../../../logger.js";
-import { getObjectAsText, putText, putJson, buildPublicUrl } from "../../shared/utils/r2-client.js";
+import { getObjectAsText, putText, putJson } from "../../shared/utils/r2-client.js";
 import { resilientRequest } from "../../shared/utils/ai-service.js";
 import { slugify } from "../utils/slug.js";
 import { indexTemplate, pageTemplate, weeklyPostBody } from "../utils/templates.js";
@@ -161,7 +161,62 @@ async function loadExistingPostsManifest(bucketKey, key) {
     const raw = await getObjectAsText(bucketKey, key);
     return JSON.parse(raw);
   } catch {
-    return { posts: [] };
+    return { items: [] };
+  }
+}
+
+function joinUrl(base, path) {
+  return `${String(base || "").replace(/\/$/, "")}/${String(path || "").replace(/^\//, "")}`;
+}
+
+function buildSiteBlogUrls(slug, prefix = "blog") {
+  const siteBaseUrl = String(process.env.SITE_BASE_URL || "https://jonathan-harris.online").replace(/\/$/, "");
+  const normalisedPrefix = String(prefix || "blog").replace(/^\/+|\/+$/g, "") || "blog";
+  const blogBasePath = `/${normalisedPrefix}`;
+  const postPath = `${blogBasePath}/posts/${encodeURIComponent(slug)}/`;
+
+  return {
+    siteBaseUrl,
+    blogBasePath,
+    postPath,
+    postUrl: joinUrl(siteBaseUrl, postPath),
+    postMetaUrl: joinUrl(siteBaseUrl, `${postPath}post.json`),
+    postsManifestUrl: joinUrl(siteBaseUrl, `${blogBasePath}/posts.json`),
+    indexUrl: joinUrl(siteBaseUrl, `${blogBasePath}/`),
+    sitemapUrl: joinUrl(siteBaseUrl, `${blogBasePath}/sitemap.xml`),
+  };
+}
+
+async function triggerWebsiteRebuild() {
+  const hookUrl = String(process.env.WEBSITE_REBUILD_HOOK || "https://hooks.jonathan-harris.online/4q1mkzkfvb566f").trim();
+
+  if (!hookUrl) {
+    return { ok: false, skipped: true, reason: "missing-hook-url" };
+  }
+
+  try {
+    info("blog.weekly.rebuild.start", { hookUrl });
+    const response = await fetch(hookUrl, { method: "POST" });
+    const result = { ok: response.ok, status: response.status, hookUrl };
+
+    if (response.ok) {
+      info("blog.weekly.rebuild.success", result);
+    } else {
+      warn("blog.weekly.rebuild.nonOk", result);
+    }
+
+    return result;
+  } catch (rebuildError) {
+    warn("blog.weekly.rebuild.fail", {
+      hookUrl,
+      error: rebuildError?.message || "Unknown rebuild trigger error",
+    });
+
+    return {
+      ok: false,
+      hookUrl,
+      error: rebuildError?.message || "Unknown rebuild trigger error",
+    };
   }
 }
 
@@ -260,7 +315,7 @@ export async function buildWeeklyBlogPost({ days, weekId } = {}) {
 
     const title = weeklyPackage.title;
     const slug = slugify(`${window.week}-${title}`);
-    const dir = `${prefix}/${slug}`;
+    const dir = `${prefix}/posts/${slug}`;
 
     const bodyHtml = renderWeeklyBodyHtml(weeklyPackage, { escapeHtml });
     const imagePrompt = buildBlogArtworkPrompt({
@@ -273,9 +328,7 @@ export async function buildWeeklyBlogPost({ days, weekId } = {}) {
     const art = await createBlogArtwork({ sessionId, prompt: imagePrompt });
     const imageUrl = art?.ok ? art.publicUrl : "";
 
-    const postUrl = buildPublicUrl(outBucketKey, `${dir}/index.html`);
-    const postMetaUrl = buildPublicUrl(outBucketKey, `${dir}/post.json`);
-    const postsManifestUrl = buildPublicUrl(outBucketKey, `${prefix}/posts.json`);
+    const { postUrl, postMetaUrl, postsManifestUrl, indexUrl, sitemapUrl } = buildSiteBlogUrls(slug, prefix);
 
     const cleanedSources = items.map((item) => ({
       title: item.title,
@@ -344,7 +397,7 @@ export async function buildWeeklyBlogPost({ days, weekId } = {}) {
 
     const indexHtml = indexTemplate({
       title: "Turing's Torch - Weekly Blog",
-      items: mergedManifest.posts.map((post) => ({
+      items: mergedManifest.items.map((post) => ({
         title: post.title,
         url: post.url,
         dateLabel: post.date_label,
@@ -355,9 +408,9 @@ export async function buildWeeklyBlogPost({ days, weekId } = {}) {
 
     const sitemap = `<?xml version="1.0" encoding="UTF-8"?>\n` +
       `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n` +
-      `  <url><loc>${escapeXml(buildPublicUrl(outBucketKey, `${prefix}/index.html`))}</loc></url>\n` +
+      `  <url><loc>${escapeXml(indexUrl)}</loc></url>\n` +
       `  <url><loc>${escapeXml(postsManifestUrl)}</loc></url>\n` +
-      mergedManifest.posts
+      mergedManifest.items
         .map((post) => `  <url><loc>${escapeXml(post.url)}</loc></url>`)
         .join("\n") +
       `\n</urlset>`;
@@ -373,6 +426,8 @@ export async function buildWeeklyBlogPost({ days, weekId } = {}) {
       themeCount: weeklyPackage.dominantThemes.length,
     });
 
+    const rebuild = await triggerWebsiteRebuild();
+
     return {
       ok: true,
       week: window.week,
@@ -384,8 +439,9 @@ export async function buildWeeklyBlogPost({ days, weekId } = {}) {
       postMetaUrl,
       postsManifestUrl,
       imageUrl,
-      indexUrl: buildPublicUrl(outBucketKey, `${prefix}/index.html`),
-      sitemapUrl: buildPublicUrl(outBucketKey, `${prefix}/sitemap.xml`),
+      indexUrl,
+      sitemapUrl,
+      rebuild,
     };
   } catch (e) {
     error("blog.weekly.build.fail", { error: e.message, stack: e.stack });
