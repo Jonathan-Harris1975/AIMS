@@ -460,25 +460,85 @@ function cleanString(value) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function coerceManifestEntryForMerge(entry = {}) {
+  const normalised = normaliseManifestEntry(entry);
+  if (normalised) {
+    return normalised;
+  }
+
+  if (!entry || typeof entry !== "object") {
+    return null;
+  }
+
+  const url = cleanString(entry.url)
+    || cleanString(entry.canonical_url)
+    || cleanString(entry.link)
+    || cleanString(entry.permalink);
+  const slug = cleanString(entry.slug) || deriveSlugFromUrl(url);
+  const week = cleanString(entry.week);
+
+  if (!week && !slug && !url) {
+    return null;
+  }
+
+  const publishedAt = cleanString(entry.published_at)
+    || cleanString(entry.published)
+    || cleanString(entry.pubDate)
+    || cleanString(entry.datePublished)
+    || cleanString(entry.date);
+
+  return {
+    id: cleanString(entry.id) || week || slug || url,
+    week,
+    slug,
+    title: cleanString(entry.title) || cleanString(entry.headline),
+    summary: cleanString(entry.summary) || cleanString(entry.excerpt) || cleanString(entry.desc) || cleanString(entry.description),
+    excerpt: cleanString(entry.excerpt) || cleanString(entry.summary) || cleanString(entry.desc) || cleanString(entry.description),
+    body_html: cleanString(entry.body_html),
+    url,
+    canonical_url: cleanString(entry.canonical_url) || url,
+    path: cleanString(entry.path) || (slug ? `/blog/posts/${slug}/` : ""),
+    image: cleanString(entry.image) || cleanString(entry.image_url) || cleanString(entry.cover) || cleanString(entry.heroImage),
+    image_url: cleanString(entry.image_url) || cleanString(entry.image) || cleanString(entry.cover) || cleanString(entry.heroImage),
+    image_prompt: cleanString(entry.image_prompt),
+    date_label: cleanString(entry.date_label),
+    published_at: publishedAt,
+    themes: Array.isArray(entry.themes) ? entry.themes.map(cleanString).filter(Boolean) : [],
+    source_count: Number.isFinite(entry.source_count) ? entry.source_count : Array.isArray(entry.sources) ? entry.sources.length : 0,
+    sources: Array.isArray(entry.sources) ? entry.sources : [],
+  };
+}
+
 export function mergePostsManifest(existingPayload, nextEntry) {
+  const incomingEntry = coerceManifestEntryForMerge(nextEntry);
+  if (!incomingEntry) {
+    return {
+      schema_version: 1,
+      updated_at: "",
+      items: [],
+    };
+  }
+
   const existingArray = Array.isArray(existingPayload?.items)
     ? existingPayload.items
-    : [];
+    : Array.isArray(existingPayload?.posts)
+      ? existingPayload.posts
+      : [];
 
   const filtered = existingArray
-    .map(normaliseManifestEntry)
+    .map(coerceManifestEntryForMerge)
     .filter(Boolean)
     .filter((entry) => {
-      if (nextEntry.week && entry.week === nextEntry.week) return false;
-      if (nextEntry.slug && entry.slug === nextEntry.slug) return false;
-      if (nextEntry.url && entry.url === nextEntry.url) return false;
+      if (incomingEntry.week && entry.week === incomingEntry.week) return false;
+      if (incomingEntry.slug && entry.slug === incomingEntry.slug) return false;
+      if (incomingEntry.url && entry.url === incomingEntry.url) return false;
       return true;
     });
 
   return {
     schema_version: 1,
-    updated_at: nextEntry.published_at,
-    items: [nextEntry, ...filtered].sort((a, b) => String(b?.published_at || "").localeCompare(String(a?.published_at || ""))),
+    updated_at: incomingEntry.published_at,
+    items: [incomingEntry, ...filtered].sort((a, b) => String(b?.published_at || "").localeCompare(String(a?.published_at || ""))),
   };
 }
 
