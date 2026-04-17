@@ -1,10 +1,5 @@
 // ====================================================================
-// editorialPass.js – Broadcast-Grade Human Dialogue Pass
-// ====================================================================
-// Purpose:
-// - Remove AI stiffness without introducing detectable gimmicks
-// - Preserve clarity, pacing, and authority
-// - Sound like a seasoned British broadcaster thinking aloud
+// editorialPass.js – Broadcast-Grade Spoken-Word QC Pass
 // ====================================================================
 
 import { resilientRequest } from "../../shared/utils/ai-service.js";
@@ -12,43 +7,58 @@ import { info, warn, error } from "../../../logger.js";
 
 function buildEditorialPrompt(scriptText) {
   return `
-You are editing a finished podcast script so it sounds unmistakably human-written and naturally spoken.
+You are performing the final spoken-word quality control pass on a podcast transcript.
 
-PRIMARY OBJECTIVE:
-Make the dialogue feel like a real person thinking clearly out loud — not performing, not lecturing.
+Your job is not to rewrite for style.
+Your job is to make the script clean, natural, broadcast-ready, and safe for text-to-speech.
 
-STYLE REQUIREMENTS:
-- Vary sentence length and rhythm naturally
-- Use contractions inconsistently, as real people do
-- Allow occasional conversational pivots ("And the thing is", "Which is where this gets interesting")
-- Mild self-correction is acceptable ("or rather", "more accurately")
-- Use pauses sparingly with commas and em dashes — never theatrically
-- Start some sentences with conjunctions when it feels natural
-- Let emphasis come from phrasing, not repetition
+DO NOT
+- add new facts
+- change the order of ideas
+- add fresh commentary
+- make the voice more dramatic
+- insert filler phrases
+- lengthen the script
+- turn plain wording into academic wording
 
-TONE:
-- British radio voice
-- Dry, observational, lightly sceptical
-- Calm authority, not enthusiasm
-- No generational labels
-- No performative sarcasm
+YOU MUST
+- fix broken sentence joins
+- fix malformed punctuation
+- remove stitched or corrupted phrasing
+- remove repetitive scaffolding
+- shorten any sentence that sounds clumsy aloud
+- keep the existing editorial stance
+- preserve the dry, sceptical tone
+- preserve plain British English
+- preserve the intended meaning exactly
 
-HUMAN CONSISTENCY RULES:
-- Do NOT add new facts
-- Do NOT reorder topics
-- Do NOT re-explain ideas already explained
-- Remove generic AI phrases ("delve into", "it's worth noting", "in conclusion")
-- If something is said twice, merge it into one clean thought
-- Maintain suitability for text-to-speech
+RULES
+- Most sentences should stay under 32 words
+- Prefer natural spoken rhythm over formal written rhythm
+- Replace awkward connectors with normal speech
+- Remove duplicated thoughts
+- Trim overlong CTA language
+- Never allow a full spoken URL path
+- Keep the ending clean and concise
 
-IMPORTANT:
-This is a polishing pass, not a rewrite.
-Clarity comes first. Humanity comes from restraint.
+WATCH FOR FAILURES LIKE THESE
+- corrupted connectors
+- sudden full stops inside sentences
+- duplicated wording
+- overbuilt abstractions
+- templated transitions repeated too often
 
-SCRIPT TO EDIT:
+SELF-CHECK BEFORE RETURNING
+- Does every sentence sound natural when read aloud?
+- Is there any punctuation that would make TTS stumble?
+- Is any phrase obviously machine-stitched?
+- Does the ending land cleanly?
+- Is the output plain text only?
+
+TRANSCRIPT TO CLEAN:
 ${scriptText}
 
-Return ONLY the refined script as plain text.
+Return only the corrected transcript as plain text.
 `.trim();
 }
 
@@ -67,7 +77,7 @@ export async function runEditorialPass(meta = {}, scriptText = "") {
       sessionId,
       section: "editorial-human",
       messages: [{ role: "user", content: prompt }],
-      temperature: 0.65
+      temperature: 0.25,
     });
 
     if (!refined || refined.length < scriptText.length * 0.6) {
@@ -78,7 +88,7 @@ export async function runEditorialPass(meta = {}, scriptText = "") {
     info("editorialPass.complete", {
       sessionId,
       originalLength: scriptText.length,
-      refinedLength: refined.length
+      refinedLength: refined.length,
     });
 
     return refined.trim();
