@@ -25,30 +25,74 @@ const BRAND_VOICE = `You write for Jonathan Harris, an AI author and podcast hos
 Voice rules:
 - British English
 - sharp, clear, sceptical of hype
-- intelligent, human, readable
+- conversational, intelligent, grounded
+- readable for Facebook and Instagram
+- concise, human, and scroll-stopping
 - no corporate sludge
-- no cringe hustle language
+- no motivational cheese
+- no jargon-heavy waffle
 - no emojis
 - no hashtags in the model output
 - no markdown fences
 - no explanations outside the requested JSON
-- keep claims grounded and specific`;
+- keep claims grounded, concrete, and specific
+- prefer one clear idea over padded filler
+- never sound like a textbook, glossary, press release, Wikipedia entry, or poster slogan`;
 
 export function buildDailyPrompt({ lane, publishDate, history = [], rssItems = [] }) {
   const laneGuidance = {
-    monday: `Write a Monday motivation post using one real quote from a recognised tech, science, philosophy, or business figure. Add a short Jonathan Harris style reflection linking the quote to AI, discipline, or building useful things. 55 to 90 words total.` ,
-    tuesday: `Write a Tuesday tech-talk post that teaches one useful AI, machine learning, or computing concept in plain English. Keep it educational and practical. Do not frame it as AI history and do not turn it into an AI pioneer profile. 45 to 80 words.` ,
-    wednesday: `Write a Wednesday writer's-corner post about how writers, authors, or content creators can use AI without sounding lazy, fake, or derivative. 45 to 80 words.` ,
-    thursday: `Write a Thursday industry-AI post explaining one practical AI use case in a real sector such as healthcare, manufacturing, finance, logistics, education, or retail. 45 to 80 words.` ,
-    friday: `Write a Friday build-in-public post in first person plural or singular from Jonathan Harris's brand perspective. It should sound like a real maker update about systems, automation, experimentation, workflow, optimisation, or a genuine development challenge solved. 35 to 70 words.` ,
-    saturday: `Write a Saturday AI ethics post that poses one thoughtful, current-feeling question or dilemma about responsible AI, policy, privacy, bias, employment, power, creativity, or misuse. Use the supplied RSS context only if it naturally helps make the post fresher and more specific. If the RSS context is weak, irrelevant, or missing, fall back to a strong standalone ethics question. End with an invitation to comment. 55 to 95 words.` ,
-    sunday: `Write a Sunday AI spotlight post about one significant AI figure. It can be a pioneer, researcher, builder, or influential thinker. Use the supplied RSS context if it genuinely surfaces a timely and credible person worth spotlighting. If not, fall back to a strong classic or modern AI figure and make the post feel fresh through relevance, not fluff. Keep a warm educational tone and end with a reflection or question. 55 to 95 words.` ,
+    monday: `Write a Monday post built around one real quote from a recognised figure in technology, science, philosophy, literature, or business.
+Use the quote as a springboard for a brief, sharp reflection tied to AI, discipline, useful work, or craft.
+Keep it grounded rather than preachy.
+Do not invent quotes.
+Do not explain the person's full biography.
+Content target: 45 to 75 words.`,
+    tuesday: `Write a Tuesday concept post that explains one AI, machine learning, or computing idea in plain English.
+Use one concrete example or analogy so it feels useful, not abstract.
+It should read like a smart person explaining something clearly, not like a glossary entry.
+Do not drift into history, biography, or generic "AI is changing everything" filler.
+Content target: 45 to 70 words.`,
+    wednesday: `Write a Wednesday post for writers, authors, or content creators.
+Focus on one practical way AI can help with the work: planning, drafting, editing, structuring, research, repurposing, or workflow cleanup.
+Name the tangible benefit.
+Do not ramble about authenticity, creativity, or the future in vague terms.
+Content target: 40 to 70 words.`,
+    thursday: `Write a Thursday post about one believable industry use case for AI.
+Pick a real sector and one concrete task where AI helps: triage, forecasting, document handling, quality checks, routing, fraud review, admin reduction, or similar.
+Keep the tone modest and useful.
+Do not oversell, futurise, or make broad industry claims.
+Content target: 45 to 75 words.`,
+    friday: `Write a Friday build-in-public post in first person from Jonathan Harris's perspective.
+It must feel like a genuine maker update.
+Include at least one specific detail such as a bottleneck, bug, workflow tweak, decision, lesson, metric, failed approach, or small win.
+Keep it honest and grounded.
+Do not use vague phrases such as "exciting things", "big moves", or "game-changing".
+Content target: 35 to 65 words.`,
+    saturday: `Write a Saturday AI ethics or policy post in plain English.
+Frame it around one thoughtful question, tension, or trade-off that a normal reader can grasp quickly.
+Use the RSS context only if it clearly makes the post sharper, more timely, and more specific.
+If the RSS context is weak, irrelevant, thin, or repetitive, ignore it and write a strong standalone evergreen post.
+End with a natural invitation for readers to comment.
+Content target: 50 to 80 words.`,
+    sunday: `Write a Sunday spotlight post about one AI figure.
+Cover who they are, what they contributed, and why that still matters now.
+Write it as natural prose, not a list.
+Do not produce comma-chained biography fragments, CV shorthand, bullet-style structure, or metadata-style summaries.
+Use the RSS context only if it clearly surfaces a credible and timely person worth featuring.
+If the RSS context is weak, irrelevant, or thin, ignore it and write a strong standalone spotlight.
+End with a brief reflection or natural reader prompt.
+Content target: 55 to 85 words.`,
   };
 
   return {
     system: `${BRAND_VOICE}
-Return valid JSON only with keys: title, topic, content, firstComment.
-firstComment should usually be an empty string unless a useful first comment adds value.`,
+Return valid JSON only with exactly these keys: title, topic, content, firstComment.
+No extra keys.
+Every value must be a plain string.
+firstComment should usually be an empty string unless a short, genuinely useful follow-up comment adds value.
+Do not put hashtags in any field.
+Do not wrap the JSON in markdown fences.
+Do not add notes before or after the JSON.`,
     user: `Lane: ${lane.label}
 Publish date: ${publishDate}
 
@@ -62,12 +106,14 @@ RSS context for weekend-aware lanes:
 ${renderRssBlock(rssItems)}
 
 Output rules:
-- title: short internal label, max 80 chars
-- topic: 2 to 7 words summarising the angle
+- title: short internal label, max 80 chars, plain text only
+- topic: 2 to 6 words, specific angle, not generic
 - content: the actual post copy only
 - firstComment: usually empty
-- do not include hashtags in content
-- no markdown, no bullets, no labels
+- content must stand alone without hashtags
+- no markdown, no bullets, no labels, no quote marks around the full post
+- avoid textbook tone, Wikipedia tone, corporate tone, and motivational-poster tone
+- avoid opening with bland templates such as "Here is", "Did you know", or "AI is transforming"
 - JSON only`,
   };
 }
@@ -75,8 +121,12 @@ Output rules:
 export function buildQuizPrompt({ questionDate, answerDate, history = [] }) {
   return {
     system: `${BRAND_VOICE}
-Return valid JSON only with keys: topic, questionTitle, questionContent, answerTitle, answerContent.
-Do not include hashtags in any field.`,
+Return valid JSON only with exactly these keys: topic, questionTitle, questionContent, answerTitle, answerContent.
+No extra keys.
+Every value must be a plain string.
+Do not include hashtags in any field.
+Do not wrap the JSON in markdown fences.
+Do not add notes before or after the JSON.`,
     user: `Create a paired weekly AI quiz post for Jonathan Harris.
 Question publish date: ${questionDate}
 Answer publish date: ${answerDate}
@@ -86,18 +136,22 @@ ${renderHistoryBlock(history)}
 
 Requirements:
 - Topic must be AI, machine learning, or computing literacy
-- Question post: 50 to 85 words
-- Start with a bolded question using markdown bold
-- Include four options labelled A), B), C), D)
-- Exactly one correct option
-- Wrong answers must be plausible
-- End the question post with: Comment your answer below and tag a friend who should try this!
-- Answer post: 45 to 85 words
-- Start with: Quiz Answer!
-- State the correct answer clearly
-- Explain why in plain English
-- End with: Did you get it right?
+- Make the question feel clean, quick to read, and genuinely answerable
+- Use plain text only, not markdown
+- Question post content target: 45 to 75 words
+- Ask one clear question on the first line
+- Then include exactly four answer options labelled A), B), C), D)
+- The four options must be parallel in structure and belong to the same category of answer
+- Exactly one option must be correct
+- Wrong answers must be plausible but clearly wrong once explained
+- Avoid trick questions, vague wording, and giveaway joke answers
+- End the question post with: Comment your answer below.
+- Answer post content target: 35 to 65 words
+- Start the answer post with: Quiz Answer!
+- State the correct option clearly in the first sentence
+- Explain why in plain English, quickly and cleanly
+- End the answer post with: Did you get it right?
 
-JSON only.` ,
+JSON only.`,
   };
 }
