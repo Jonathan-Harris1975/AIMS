@@ -22,6 +22,7 @@ import * as sessionCache from "./sessionCache.js";
 import { generateEpisodeMetaLLM } from "./podcastHelper.js";
 import getSponsor from "./getSponsor.js";
 import { info, error, debug } from "../../../logger.js";
+import { enforceCanonicalOutro } from "./scriptValidation.js";
 
 function toPlainText(s) {
   if (!s) return "";
@@ -130,13 +131,16 @@ export async function generateOutro(sessionIdLike) {
   });
 
   const cleaned = sanitizeOutput(res);
-  await sessionCache.storeTempPart(sessionMeta, "outro", cleaned);
+  const finalOutro = enforceCanonicalOutro(cleaned);
+
+  await sessionCache.storeTempPart(sessionMeta, "outro", finalOutro);
   debug("Outro generated with sponsor", {
     sessionId: sessionMeta.sessionId,
     sponsorTitle: book?.title,
     sponsorUrl: book?.url,
+    canonicalClosingApplied: finalOutro !== cleaned,
   });
-  return cleaned;
+  return finalOutro;
 }
 
 export async function generateComposedEpisode(sessionIdLike) {

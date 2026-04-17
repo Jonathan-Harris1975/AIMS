@@ -7,13 +7,19 @@ function normaliseWhitespace(text = "") {
   return String(text || "").replace(/\s+/g, " ").trim();
 }
 
-function escapeRegExp(value = "") {
-  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+function normaliseForComparison(text = "") {
+  return normaliseWhitespace(
+    String(text || "")
+      .replace(/[“”]/g, '"')
+      .replace(/[’]/g, "'")
+      .replace(/[‐‑‒–—]/g, "-")
+  );
 }
 
 export function hasRequiredOutro(text = "") {
-  const normalised = normaliseWhitespace(text);
-  return normalised.includes(normaliseWhitespace(OUTRO_CLOSING_TAGLINE));
+  const normalised = normaliseForComparison(text).toLowerCase();
+  const tagline = normaliseForComparison(OUTRO_CLOSING_TAGLINE).toLowerCase();
+  return normalised.includes(tagline);
 }
 
 export function endsCleanly(text = "") {
@@ -41,18 +47,32 @@ export function extractOutro(text = "") {
   const trimmed = String(text || "").trim();
   if (!trimmed) return "";
 
-  const taglinePattern = new RegExp(`${escapeRegExp(OUTRO_CLOSING_TAGLINE)}\\s*$`, "i");
-  const match = trimmed.match(taglinePattern);
-  if (!match) return "";
+  const normalisedTagline = normaliseForComparison(OUTRO_CLOSING_TAGLINE).toLowerCase();
+  const paragraphs = trimmed
+    .split(/\n\s*\n/)
+    .map((part) => part.trim())
+    .filter(Boolean);
 
-  const endIndex = trimmed.length;
-  const uptoTagline = trimmed.slice(0, endIndex - match[0].length).trimEnd();
-  const paragraphs = uptoTagline.split(/\n\s*\n/).map((part) => part.trim()).filter(Boolean);
+  if (!paragraphs.length) return "";
 
-  if (!paragraphs.length) return match[0].trim();
+  for (let i = paragraphs.length - 1; i >= 0; i--) {
+    const normalisedParagraph = normaliseForComparison(paragraphs[i]).toLowerCase();
+    if (!normalisedParagraph.includes(normalisedTagline)) continue;
 
-  const outroBody = paragraphs[paragraphs.length - 1];
-  return `${outroBody}\n\n${match[0].trim()}`.trim();
+    const bodyStartIndex = i > 0 ? i - 1 : i;
+    return paragraphs.slice(bodyStartIndex, i + 1).join("\n\n").trim();
+  }
+
+  return "";
+}
+
+export function enforceCanonicalOutro(text = "") {
+  const trimmed = String(text || "").trim();
+  if (!trimmed) return OUTRO_CLOSING_TAGLINE;
+  if (hasRequiredOutro(trimmed)) return trimmed;
+
+  const base = endsCleanly(trimmed) ? trimmed : `${trimmed}.`;
+  return `${base}\n\n${OUTRO_CLOSING_TAGLINE}`.trim();
 }
 
 export function validateTranscriptStructure(text = "") {
