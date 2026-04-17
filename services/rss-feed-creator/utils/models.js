@@ -140,31 +140,11 @@ export async function rewriteArticle(item = {}) {
   );
 
   // Anti-fluff guard (one retry): prevent press-release phrasing from leaking into the feed.
-  const bannedPhrases = [
-    "in a significant development",
-    "in a move that",
-    "rapidly evolving",
-    "groundbreaking",
-    "transformative",
-    "revolutionary",
-    "cutting-edge",
-    "game-changer",
-    "paradigm shift",
-    "unprecedented",
-    "delve into",
-    "landscape",
-    "underscores",
-    "showcases",
-    "notably",
-  ];
+  let bannedPhrases = RSS_PROMPTS.findBannedSummaryPhrases(rewrittenSummary);
 
-  const looksFluffy = bannedPhrases.some((p) => rewrittenSummary.toLowerCase().includes(p));
-
-  if (looksFluffy) {
+  if (bannedPhrases.length) {
     debug("rss-feed-creator.model.output.fluffDetected", {
-      matched: bannedPhrases
-        .filter((p) => rewrittenSummary.toLowerCase().includes(p))
-        .slice(0, 5),
+      matched: bannedPhrases.slice(0, 5),
     });
 
     const retryMessages = [
@@ -179,7 +159,7 @@ export async function rewriteArticle(item = {}) {
         content:
           String(userPrompt) +
           "\n\nRewrite again, tighter and more spoken. Do NOT use any of these phrases (or close variants): " +
-          bannedPhrases.join(", "),
+          RSS_PROMPTS.BANNED_SUMMARY_PHRASES.join(", "),
       },
     ];
 
@@ -201,10 +181,16 @@ export async function rewriteArticle(item = {}) {
       rewrittenTitle = t2;
       rewrittenSummary = s2;
     }
+
+    bannedPhrases = RSS_PROMPTS.findBannedSummaryPhrases(rewrittenSummary);
+    if (bannedPhrases.length) {
+      throw new Error(
+        `Rewrite contains banned filler after retry: ${bannedPhrases.slice(0, 5).join(", ")}`
+      );
+    }
   }
 
-
-  // Validate format constraints
+  // Validate format + brand constraints
   const v = RSS_PROMPTS.validateOutput(rewrittenTitle, rewrittenSummary, {
     maxTitleWords: 12,
     minChars: RSS_PROMPTS.MIN_SUMMARY_CHARS,
@@ -245,8 +231,8 @@ export async function rewriteArticle(item = {}) {
   return {
     ...item,
     // publish summary only (feedGenerator will wrap it in HTML/CDATAs)
-    rewritten: rewrittenSummary.trim(),
-    shortTitle: rewrittenTitle,
+    rewritten: RSS_PROMPTS.normalizeSummaryText(rewrittenSummary),
+    shortTitle: RSS_PROMPTS.normalizePlainText(rewrittenTitle),
     shortUrl,
     shortGuid,
     pubDate: new Date().toUTCString(),
@@ -339,13 +325,3 @@ export async function generateShortTitle(item = {}) {
     return String(item?.title || "Untitled Article").slice(0, 80);
   }
 }
-
-// ============================================================
-// 🔹 Export model route map
-// ============================================================
-
-export default {
-  rssRewrite: rewriteArticle,
-  rssShortTitle: generateShortTitle,
-  rewriteRssFeedItems,
-};
