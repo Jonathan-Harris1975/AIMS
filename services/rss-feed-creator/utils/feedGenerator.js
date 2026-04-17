@@ -1,4 +1,3 @@
-
 /**
  * feedGenerator.js
  * Builds and uploads a W3C-valid RSS 2.0 feed using rewritten articles.
@@ -8,9 +7,13 @@
 import crypto from "crypto";
 import { XMLBuilder } from "fast-xml-parser";
 import { r2Put, r2Get } from "../../shared/utils/r2-client.js";
-import { info, error ,debug} from "../../../logger.js";
+import { info, error, debug } from "../../../logger.js";
+import { RSS_PROMPTS } from "./rss-prompts.js";
 
 const FEED_RETENTION_DAYS = Number(process.env.FEED_RETENTION_DAYS) || 7; // default 7 days
+const INCLUDE_WRAPPER_CTA = /^(1|true|yes|on)$/i.test(
+  String(process.env.RSS_INCLUDE_WRAPPER_CTA || "")
+);
 
 export async function generateFeed(bucket, rewrittenItems) {
   try {
@@ -43,40 +46,52 @@ export async function generateFeed(bucket, rewrittenItems) {
     // Normalize new items (HARD: only publish items with a valid rewritten summary)
     const newItems = rewrittenItems
       .filter((x) => x && typeof x === "object")
-      .map((item) => normalizeItem(item, channelLink, now))
-      .filter((it) => isPublishable(it));
+      .map((item) => normalizeItem(item, channelLink, now));
 
     // Merge existing and new items, deduplicate by link or guid
     const mergedItems = mergeAndDeduplicateItems(existingItems, newItems);
 
+    const publishableItems = mergedItems.filter((item) => {
+      const issues = getPublicationIssues(item);
+      if (issues.length) {
+        debug("rss-feed-creator.generateFeed.itemRejected", {
+          title: item?.title,
+          link: item?.link,
+          issues: issues.slice(0, 6),
+        });
+        return false;
+      }
+      return true;
+    });
+
     // Filter by retention period
-    const validItems = mergedItems.filter((item) => 
+    const validItems = publishableItems.filter((item) =>
       isWithinRetention(item.pubDate, retentionCutoff)
     );
 
     // Sort by pubDate descending (newest first)
     validItems.sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
 
-    const totalBeforeRetention = mergedItems.length;
+    const totalBeforeRetention = publishableItems.length;
     const discardedCount = totalBeforeRetention - validItems.length;
 
     if (validItems.length === 0) {
-      debug("rss-feed-creator.generateFeed.skip", { 
+      debug("rss-feed-creator.generateFeed.skip", {
         reason: "no items within retention period",
         retentionDays: FEED_RETENTION_DAYS,
-        discarded: discardedCount
+        discarded: discardedCount,
       });
       return;
     }
 
-    const feedObj = {
+    const feedState = {
       rss: {
         "@_version": "2.0",
         "@_xmlns:atom": "http://www.w3.org/2005/Atom",
         channel: {
-          title: escapeXml(channelTitle),
+          title: channelTitle,
           link: channelLink,
-          description: escapeXml(channelDesc),
+          description: channelDesc,
           language: "en-gb",
           lastBuildDate: buildDate,
           pubDate: buildDate,
@@ -84,10 +99,10 @@ export async function generateFeed(bucket, rewrittenItems) {
           "atom:link": {
             "@_href": feedSelfLink,
             "@_rel": "self",
-            "@_type": "application/rss+xml"
+            "@_type": "application/rss+xml",
           },
           item: validItems.map((it) => ({
-            title: escapeXml(it.title || "Untitled Article"),
+            title: it.title || "Untitled Article",
             link: it.link,
             guid: { "@_isPermaLink": "false", "#text": it.guid },
             pubDate: it.pubDate,
@@ -99,6 +114,8 @@ export async function generateFeed(bucket, rewrittenItems) {
       },
     };
 
+    const feedObj = buildXmlFeedObject(feedState);
+
     const builder = new XMLBuilder({
       format: true,
       ignoreAttributes: false,
@@ -108,12 +125,12 @@ export async function generateFeed(bucket, rewrittenItems) {
 
     const xmlString =
       '<?xml version="1.0" encoding="UTF-8"?>\n' + builder.build(feedObj);
-    const jsonString = JSON.stringify(feedObj, null, 2);
+    const jsonString = JSON.stringify(feedState, null, 2);
 
     await r2Put(bucket, "feed.xml", xmlString, "application/rss+xml");
     await r2Put(bucket, "feed.json", jsonString, "application/json");
-    
-    info("📝 rss-feed-creator.generateFeed.success")
+
+    info("📝 rss-feed-creator.generateFeed.success");
     debug("📝 rss-feed-creator.generateFeed.success", {
       bucket,
       existingItems: existingItems.length,
@@ -144,38 +161,39 @@ async function loadExistingFeedItems(bucket) {
 
     const feedData = JSON.parse(jsonContent);
     const items = feedData?.rss?.channel?.item || [];
-    
+
     // Convert back to our internal format
     return (Array.isArray(items) ? items : [items]).map((item) => ({
-      title: item.title || "Untitled Article",
+      title: normalizeCanonicalTitle(item.title || "Untitled Article"),
       link: item.link || "",
       pubDate: item.pubDate || new Date().toUTCString(),
       guid: item.guid?.["#text"] || item.guid || "",
       rewritten: extractTextFromCDATA(item.description?.__cdata || ""),
     }));
   } catch (err) {
-    info("rss-feed-creator.loadExisting.fail", { 
-      bucket, 
+    info("rss-feed-creator.loadExisting.fail", {
+      bucket,
       reason: err.message,
-      note: "Starting with empty feed" 
+      note: "Starting with empty feed",
     });
     return [];
   }
 }
 
 function extractTextFromCDATA(cdataHtml) {
-  // Extract content between <strong> tags and before <a> tag
-  try {
-    const match = cdataHtml.match(/<strong>.*?<\/strong><br\/><br\/>(.*?)<br\/><br\/>/s);
-    return match ? match[1].trim() : cdataHtml;
-  } catch {
-    return cdataHtml;
-  }
+  const html = String(cdataHtml || "");
+  const withoutTitle = html.replace(/^\s*<strong>[\s\S]*?<\/strong>/i, "").trim();
+  const withoutLegacyCta = withoutTitle.replace(
+    /<a\b[^>]*>\s*Read on Jonathan-Harris RSS Feed\s*<\/a>/gi,
+    ""
+  );
+
+  return htmlToPlainText(withoutLegacyCta);
 }
 
 function mergeAndDeduplicateItems(existingItems, newItems) {
   const itemMap = new Map();
-  
+
   // Add existing items first
   for (const item of existingItems) {
     const key = item.link || item.guid;
@@ -183,7 +201,7 @@ function mergeAndDeduplicateItems(existingItems, newItems) {
       itemMap.set(key, item);
     }
   }
-  
+
   // Add/overwrite with new items (new items take precedence)
   for (const item of newItems) {
     const key = item.link || item.guid;
@@ -191,7 +209,7 @@ function mergeAndDeduplicateItems(existingItems, newItems) {
       itemMap.set(key, item);
     }
   }
-  
+
   return Array.from(itemMap.values());
 }
 
@@ -199,7 +217,7 @@ function isWithinRetention(pubDateStr, cutoffDate) {
   try {
     const itemDate = new Date(pubDateStr);
     if (isNaN(itemDate.getTime())) return false;
-    
+
     // Keep items that are newer than the cutoff and not in the future
     return itemDate >= cutoffDate && itemDate <= new Date();
   } catch {
@@ -208,9 +226,9 @@ function isWithinRetention(pubDateStr, cutoffDate) {
 }
 
 function normalizeItem(item, fallbackLink, now) {
-  const title = item?.shortTitle || item?.title || "Untitled Article";
+  const title = normalizeCanonicalTitle(item?.shortTitle || item?.title || "Untitled Article");
   const link = normalizeUrl(item?.shortUrl || item?.link || fallbackLink);
-  
+
   // Parse pubDate and keep as ISO string for easier comparison
   let pubDate;
   try {
@@ -221,7 +239,7 @@ function normalizeItem(item, fallbackLink, now) {
   }
 
   // Use existing GUID if available, otherwise generate new one
-  let guid = item?.guid;
+  let guid = item?.guid || item?.shortGuid;
   if (!guid) {
     const randomId = parseInt(crypto.randomBytes(6).toString("hex"), 16)
       .toString(36)
@@ -230,30 +248,69 @@ function normalizeItem(item, fallbackLink, now) {
   }
 
   // HARD: publish rewritten only (never fall back to source summary)
-  const rewritten = String(item?.rewritten || "").trim();
+  const rewritten = RSS_PROMPTS.normalizeSummaryText(item?.rewritten || "");
 
   return { title, link, pubDate, guid, rewritten };
 }
 
-function buildDescriptionHtml(title, rewrittenHtml, link) {
-  // Inside CDATA we can include simple HTML; keep title escaped for HTML
-  const safeTitle = escapeHtml(title);
-  const body = (rewrittenHtml || "").trim();
+function buildDescriptionHtml(title, rewrittenText, link) {
+  const safeTitle = escapeHtml(normalizeCanonicalTitle(title));
+  const body = renderParagraphHtml(rewrittenText);
+
+  if (!body) {
+    return `<strong>${safeTitle}</strong>`;
+  }
+
+  if (!INCLUDE_WRAPPER_CTA || !link) {
+    return `<strong>${safeTitle}</strong>${body}`;
+  }
+
   const safeLink = escapeHtml(link);
-  const anchor = `<a href="${safeLink}">Read on Jonathan-Harris RSS Feed</a>`;
-  return `<strong>${safeTitle}</strong><br/><br/>${body}<br/><br/>${anchor}`;
+  const anchor = `<p><a href="${safeLink}">Read on Jonathan-Harris RSS Feed</a></p>`;
+  return `<strong>${safeTitle}</strong>${body}${anchor}`;
+}
+
+function getPublicationIssues(item) {
+  const issues = [];
+  const title = normalizeCanonicalTitle(item?.title || "");
+  const rewritten = RSS_PROMPTS.normalizeSummaryText(item?.rewritten || "");
+
+  const titleValidation = RSS_PROMPTS.validateTitleBrand(title);
+  if (!titleValidation.valid) {
+    issues.push(...titleValidation.errors);
+  }
+
+  if (!rewritten) {
+    issues.push("Summary is empty");
+  }
+  if (/^\s*REWRITE_ABORTED\s*$/i.test(rewritten)) {
+    issues.push('Summary is sentinel value "REWRITE_ABORTED"');
+  }
+  if (rewritten.startsWith("⚠️")) {
+    issues.push("Summary begins with warning sentinel");
+  }
+  if (/<[^>]+>/.test(rewritten)) {
+    issues.push("Summary contains raw HTML markup");
+  }
+  if (RSS_PROMPTS.hasMetadataLeak(rewritten)) {
+    issues.push(...RSS_PROMPTS.findMetadataLeaks(rewritten));
+  }
+
+  const bannedPhrases = RSS_PROMPTS.findBannedSummaryPhrases(rewritten);
+  if (bannedPhrases.length) {
+    issues.push(`Summary contains banned filler: ${bannedPhrases.slice(0, 5).join(", ")}`);
+  }
+
+  // Guard against ultra-short junk
+  if (rewritten && rewritten.length < 120) {
+    issues.push(`Summary too short for publication (${rewritten.length} chars)`);
+  }
+
+  return Array.from(new Set(issues));
 }
 
 function isPublishable(item) {
-  const rewritten = String(item?.rewritten || "").trim();
-  if (!rewritten) return false;
-  if (rewritten === "REWRITE_ABORTED") return false;
-  if (rewritten.startsWith("⚠️")) return false;
-  // Guard against accidental full HTML dumps
-  if (/<[^>]+>/.test(rewritten)) return false;
-  // Guard against ultra-short junk
-  if (rewritten.length < 120) return false;
-  return true;
+  return getPublicationIssues(item).length === 0;
 }
 
 function normalizeUrl(url = "") {
@@ -267,6 +324,87 @@ function normalizeUrl(url = "") {
   } catch {
     return "";
   }
+}
+
+function renderParagraphHtml(text = "") {
+  const normalized = RSS_PROMPTS.normalizeSummaryText(text);
+  if (!normalized) return "";
+
+  return normalized
+    .split(/\n\n+/)
+    .filter(Boolean)
+    .map((paragraph) => `<p>${escapeHtml(paragraph)}</p>`)
+    .join("");
+}
+
+function normalizeCanonicalTitle(title = "") {
+  return RSS_PROMPTS.normalizePlainText(decodeHtmlEntitiesFully(title));
+}
+
+function htmlToPlainText(html = "") {
+  const withParagraphs = String(html || "")
+    .replace(/<\/p>\s*<p[^>]*>/gi, "\n\n")
+    .replace(/<p[^>]*>/gi, "")
+    .replace(/<\/p>/gi, "\n\n")
+    .replace(/<br\s*\/?>\s*<br\s*\/?>/gi, "\n\n")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<[^>]*>/g, " ");
+
+  return RSS_PROMPTS.normalizeSummaryText(decodeHtmlEntitiesFully(withParagraphs));
+}
+
+function decodeHtmlEntitiesFully(str = "") {
+  let current = String(str || "");
+
+  for (let i = 0; i < 4; i++) {
+    const next = decodeHtmlEntitiesOnce(current);
+    if (next === current) break;
+    current = next;
+  }
+
+  return current;
+}
+
+function decodeHtmlEntitiesOnce(str = "") {
+  return String(str)
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&apos;/gi, "'")
+    .replace(/&#39;/gi, "'")
+    .replace(/&#x27;/gi, "'");
+}
+
+function buildXmlFeedObject(feedState) {
+  const channel = feedState?.rss?.channel || {};
+  const items = channel?.item || [];
+  const itemList = Array.isArray(items) ? items : [items];
+
+  return {
+    rss: {
+      "@_version": "2.0",
+      "@_xmlns:atom": "http://www.w3.org/2005/Atom",
+      channel: {
+        title: escapeXml(channel.title || ""),
+        link: channel.link || "",
+        description: escapeXml(channel.description || ""),
+        language: channel.language || "en-gb",
+        lastBuildDate: channel.lastBuildDate,
+        pubDate: channel.pubDate,
+        generator: channel.generator,
+        "atom:link": channel["atom:link"],
+        item: itemList.map((item) => ({
+          title: escapeXml(item.title || "Untitled Article"),
+          link: item.link,
+          guid: item.guid,
+          pubDate: item.pubDate,
+          description: item.description,
+        })),
+      },
+    },
+  };
 }
 
 function escapeHtml(str = "") {

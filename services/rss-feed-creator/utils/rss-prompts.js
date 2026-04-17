@@ -21,6 +21,71 @@ const MAX_SUMMARY_CHARS =
     ? Number(process.env.MAX_SUMMARY_CHARS)
     : 1100;
 
+const TITLE_BRAND_PATTERNS = [
+  { pattern: /^\s*title\s*:/i, message: 'Title uses banned prefix "Title:"' },
+  { pattern: /^\s*ai\s*:/i, message: 'Title uses banned prefix "AI:"' },
+  { pattern: /^\s*openai\s*:/i, message: 'Title uses banned prefix "OpenAI:"' },
+  { pattern: /^\s*report\s*:/i, message: 'Title uses banned prefix "Report:"' },
+  { pattern: /^\s*study\s*:/i, message: 'Title uses banned prefix "Study:"' },
+  { pattern: /^\s*analysis\s*:/i, message: 'Title uses banned prefix "Analysis:"' },
+  { pattern: /^\s*rewrite_aborted\s*$/i, message: 'Title is sentinel value "REWRITE_ABORTED"' },
+  { pattern: /\brewrite_aborted\b/i, message: 'Title contains sentinel value "REWRITE_ABORTED"' },
+  { pattern: /^\s*why\b/i, message: 'Title uses banned explainer scaffold "Why..."' },
+  { pattern: /^\s*how\b/i, message: 'Title uses banned explainer scaffold "How..."' },
+  {
+    pattern: /^\s*what\s+to\s+know\b/i,
+    message: 'Title uses banned explainer scaffold "What to know..."',
+  },
+  {
+    pattern: /^\s*everything\s+you\s+need\s+to\s+know\b/i,
+    message: 'Title uses banned explainer scaffold "Everything you need to know..."',
+  },
+  {
+    pattern: /^\s*questions\s+to\s+consider\b/i,
+    message: 'Title uses banned explainer scaffold "Questions to consider..."',
+  },
+];
+
+const METADATA_LEAK_PATTERNS = [
+  { pattern: /(^|\n)\s*character\s*count\s*:/i, message: 'Contains metadata leak "Character count:"' },
+  { pattern: /(^|\n)\s*word\s*count\s*:/i, message: 'Contains metadata leak "Word count:"' },
+  { pattern: /(^|\n)\s*note\s*:/i, message: 'Contains metadata leak "Note:"' },
+  { pattern: /(^|\n)\s*label\s*:/i, message: 'Contains metadata leak "Label:"' },
+  { pattern: /(^|\n)\s*summary\s*:/i, message: 'Contains metadata leak "Summary:"' },
+  { pattern: /(^|\n)\s*headline\s*:/i, message: 'Contains metadata leak "Headline:"' },
+  { pattern: /(^|\n)\s*title\s*:/i, message: 'Contains metadata leak "Title:"' },
+];
+
+const BANNED_SUMMARY_PHRASES = [
+  "in a significant development",
+  "in a move that",
+  "as we move forward",
+  "the implications are significant",
+  "in today's rapidly evolving landscape",
+  "this highlights the importance of",
+  "this underscores",
+  "this showcases",
+  "it remains to be seen",
+  "the future of",
+  "this could pave the way",
+  "it will be interesting to see",
+  "one might wonder",
+  "in a world where",
+  "rapidly evolving",
+  "transformative",
+  "groundbreaking",
+  "revolutionary",
+  "cutting-edge",
+  "game-changer",
+  "paradigm shift",
+  "unprecedented",
+  "delve into",
+  "landscape",
+  "underscores",
+  "showcases",
+  "notably",
+];
+
 export const SYSTEM = `
 ${buildRssPersona()}
 
@@ -76,6 +141,9 @@ Do not use:
   it remains to be seen
   the future of
   this could pave the way
+  it will be interesting to see
+  one might wonder
+  in a world where
 - obvious LLM words and rhythms like:
   delve
   landscape
@@ -150,17 +218,63 @@ export function USER_ITEM({
     .join("\n");
 }
 
+function normalizeStraightQuotes(text = "") {
+  return String(text || "")
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'");
+}
+
+export function normalizePlainText(text = "") {
+  return normalizeStraightQuotes(text).replace(/\s+/g, " ").trim();
+}
+
+export function normalizeSummaryText(summary = "") {
+  const normalized = normalizeStraightQuotes(summary).replace(/\r\n?/g, "\n");
+  const paragraphs = normalized
+    .split(/\n\s*\n+/)
+    .map((paragraph) =>
+      paragraph
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .join(" ")
+        .replace(/[ \t]+/g, " ")
+        .trim()
+    )
+    .filter(Boolean);
+
+  return paragraphs.join("\n\n").trim();
+}
+
 export function normalizeModelText(result = "") {
-  const text = String(result || "").replace(/[""'']/g, "'").trim();
-  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-  const title = lines.shift() || "";
-  const summary = lines.join(" ").trim();
-  return { title, summary };
+  const text = normalizeStraightQuotes(result).replace(/\r\n?/g, "\n").trim();
+  const lines = text.split("\n");
+
+  let title = "";
+  const summaryLines = [];
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+
+    if (!title) {
+      if (line) {
+        title = line;
+      }
+      continue;
+    }
+
+    summaryLines.push(rawLine);
+  }
+
+  return {
+    title: normalizePlainText(title),
+    summary: normalizeSummaryText(summaryLines.join("\n")),
+  };
 }
 
 export function clampTitleTo12Words(title = "", maxWords = 12) {
-  const cleaned = title.replace(/[""'']/g, "'").trim();
-  const words = cleaned.split(/\s+/);
+  const cleaned = normalizePlainText(title);
+  const words = cleaned ? cleaned.split(/\s+/) : [];
 
   if (words.length <= maxWords) return cleaned;
 
@@ -173,7 +287,7 @@ export function clampSummaryToWindow(
   min = MIN_SUMMARY_CHARS,
   max = MAX_SUMMARY_CHARS
 ) {
-  const normalized = String(summary).replace(/\s+/g, " ").trim();
+  const normalized = normalizeSummaryText(summary);
 
   if (!normalized) return "";
 
@@ -190,15 +304,54 @@ export function clampSummaryToWindow(
   const cutoff = Math.max(cutoffPeriod, cutoffQuestion, cutoffExclaim);
 
   if (cutoff > min) {
-    return normalized.slice(0, cutoff + 1).trim();
+    return normalizeSummaryText(normalized.slice(0, cutoff + 1));
   }
 
   const lastSpace = normalized.lastIndexOf(" ", max);
   if (lastSpace > min) {
-    return normalized.slice(0, lastSpace).trim() + "…";
+    return normalizeSummaryText(normalized.slice(0, lastSpace)) + "…";
   }
 
-  return normalized.slice(0, max - 1).trim() + "…";
+  return normalizeSummaryText(normalized.slice(0, max - 1)) + "…";
+}
+
+export function findMetadataLeaks(text = "") {
+  const source = String(text || "");
+  return METADATA_LEAK_PATTERNS.filter(({ pattern }) => pattern.test(source)).map(
+    ({ message }) => message
+  );
+}
+
+export function hasMetadataLeak(text = "") {
+  return findMetadataLeaks(text).length > 0;
+}
+
+export function findBannedSummaryPhrases(summary = "") {
+  const lowered = normalizeSummaryText(summary).toLowerCase();
+  return BANNED_SUMMARY_PHRASES.filter((phrase) => lowered.includes(phrase));
+}
+
+export function validateTitleBrand(title = "") {
+  const cleanedTitle = normalizePlainText(title);
+  const errors = [];
+
+  if (!cleanedTitle) {
+    errors.push("Title is empty");
+    return { valid: false, errors };
+  }
+
+  for (const { pattern, message } of TITLE_BRAND_PATTERNS) {
+    if (pattern.test(cleanedTitle)) {
+      errors.push(message);
+    }
+  }
+
+  errors.push(...findMetadataLeaks(cleanedTitle));
+
+  return {
+    valid: errors.length === 0,
+    errors,
+  };
 }
 
 export function validateOutput(title = "", summary = "", config = {}) {
@@ -208,20 +361,48 @@ export function validateOutput(title = "", summary = "", config = {}) {
     maxChars = MAX_SUMMARY_CHARS,
   } = config;
 
+  const normalizedTitle = normalizePlainText(title);
+  const normalizedSummary = normalizeSummaryText(summary);
+
   const errors = [];
   const warnings = [];
 
-  const titleWords = title.trim().split(/\s+/).length;
+  const titleBrand = validateTitleBrand(normalizedTitle);
+  if (!titleBrand.valid) {
+    errors.push(...titleBrand.errors);
+  }
+
+  const titleWords = normalizedTitle ? normalizedTitle.split(/\s+/).length : 0;
   if (titleWords > maxTitleWords) {
     errors.push(`Title exceeds ${maxTitleWords} words (has ${titleWords})`);
   }
 
-  const summaryLength = summary.length;
+  if (!normalizedSummary) {
+    errors.push("Summary is empty");
+  }
+
+  const summaryLength = normalizedSummary.length;
   if (summaryLength < minChars) {
     warnings.push(`Summary too short: ${summaryLength} chars (min: ${minChars})`);
   }
   if (summaryLength > maxChars) {
     errors.push(`Summary too long: ${summaryLength} chars (max: ${maxChars})`);
+  }
+
+  if (/<[^>]+>/.test(normalizedSummary)) {
+    errors.push("Summary contains HTML markup");
+  }
+
+  const summaryMetadataLeaks = findMetadataLeaks(normalizedSummary);
+  if (summaryMetadataLeaks.length) {
+    errors.push(...summaryMetadataLeaks);
+  }
+
+  const bannedSummaryPhrases = findBannedSummaryPhrases(normalizedSummary);
+  if (bannedSummaryPhrases.length) {
+    errors.push(
+      `Summary contains banned filler: ${bannedSummaryPhrases.slice(0, 5).join(", ")}`
+    );
   }
 
   return {
@@ -231,7 +412,7 @@ export function validateOutput(title = "", summary = "", config = {}) {
     stats: {
       titleWords,
       summaryChars: summaryLength,
-      summaryWords: summary.trim().split(/\s+/).length,
+      summaryWords: normalizedSummary ? normalizedSummary.split(/\s+/).length : 0,
     },
   };
 }
@@ -240,10 +421,19 @@ const RSS_PROMPTS = {
   SYSTEM,
   USER_ITEM,
   user: USER_ITEM,
+  normalizePlainText,
+  normalizeSummaryText,
   normalizeModelText,
   clampTitleTo12Words,
   clampSummaryToWindow,
+  validateTitleBrand,
   validateOutput,
+  findMetadataLeaks,
+  hasMetadataLeak,
+  findBannedSummaryPhrases,
+  TITLE_BRAND_PATTERNS,
+  METADATA_LEAK_PATTERNS,
+  BANNED_SUMMARY_PHRASES,
   MIN_SUMMARY_CHARS,
   MAX_SUMMARY_CHARS,
 };
