@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   hasRequiredOutro,
   extractOutro,
+  enforceCanonicalOutro,
   validateTranscriptStructure,
 } from "../services/script/utils/scriptValidation.js";
 import { OUTRO_CLOSING_TAGLINE } from "../services/script/utils/promptTemplates.js";
@@ -31,4 +32,15 @@ test("script validation accepts the required outro when quotes and dashes are no
   const validation = validateTranscriptStructure(transcript);
   assert.equal(validation.ok, true);
   assert.deepEqual(validation.reasons, []);
+});
+
+
+test("enforceCanonicalOutro appends the canonical branded closing line when the model omits it", () => {
+  const draftOutro = `The week was loud and the sensible part took a bit of digging. For the daily brief, head to jonathan-harris dot online. If you want the deeper version, this week's book will sort that out.`;
+
+  const repaired = enforceCanonicalOutro(draftOutro);
+
+  assert.equal(hasRequiredOutro(repaired), true);
+  assert.match(repaired, /That’s your lot for this week’s Turing’s Torch\./);
+  assert.equal(repaired.endsWith(OUTRO_CLOSING_TAGLINE), true);
 });
