@@ -1,13 +1,7 @@
 # CHANGES
 
-## deployment-check.js
-- Fixes two confirmed deployment-gate defects.
-- Loads `.env` before validating, so the CLI reflects the same configuration source used by the rest of the repository.
-- Adds the existing production durable-state requirement to the deployment check, preventing false-green deploy approvals when `scripts/startupCheck.js` would still fail.
-- Safe because it only tightens a preflight script and does not alter any request/response contracts, runtime routes, storage keys, or service behaviour.
-
-## test/deployment-check.test.js
-- Adds regression coverage for the two confirmed defects.
-- Verifies the CLI now honours `.env` input.
-- Verifies production validation fails when durable state is not configured.
-- Safe because it only locks in the intended preflight contract.
+## .github/workflows/ci.yml
+- **Issue fixed:** The `Verify envBootstrap wrapper is not imported by app code` step used the pattern `\bENV\b`, which matched harmless comments and user-facing strings such as `ENV TUNABLES` and `Missing required ENV variables`.
+- **Production impact:** Clean commits could fail CI even when `scripts/envBootstrap.js` was not imported by application code, blocking merges and deployments on a false positive.
+- **Patch applied:** Narrowed the ripgrep pattern so it now detects explicit `scripts/envBootstrap.js` references and actual `ENV` import statements instead of any standalone `ENV` text.
+- **Why this is safe:** This preserves the original guardrail objective without changing runtime code, request/response contracts, environment contracts, routes, or deployment behaviour.
