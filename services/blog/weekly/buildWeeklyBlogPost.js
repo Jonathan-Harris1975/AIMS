@@ -191,36 +191,55 @@ function buildSiteBlogUrls(slug, prefix = "blog") {
 }
 
 async function triggerWebsiteRebuild() {
-  const hookUrl = String(process.env.WEBSITE_REBUILD_HOOK || "https://hooks.jonathan-harris.online/4q1mkzkfvb566f").trim();
+  const primaryHook = String(process.env.WEBSITE_REBUILD_HOOK || "https://hooks.jonathan-harris.online/4q1mkzkfvb566f").trim();
+  const fallbackHook = String(process.env.WEBSITE_REBUILD_HOOK_FALLBACK || "").trim();
+  const hooks = [primaryHook, fallbackHook].filter(Boolean);
 
-  if (!hookUrl) {
+  if (!hooks.length) {
     return { ok: false, skipped: true, reason: "missing-hook-url" };
   }
 
-  try {
-    info("blog.weekly.rebuild.start", { hookUrl });
-    const response = await fetch(hookUrl, { method: "POST" });
-    const result = { ok: response.ok, status: response.status, hookUrl };
+  let lastError = null;
 
-    if (response.ok) {
-      info("blog.weekly.rebuild.success", result);
-    } else {
-      warn("blog.weekly.rebuild.nonOk", result);
+  for (const hookUrl of hooks) {
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        info("blog.weekly.rebuild.start", { hookUrl, attempt });
+        const response = await fetch(hookUrl, { method: "POST" });
+        const body = await response.text().catch(() => "");
+        const result = { ok: response.ok, status: response.status, hookUrl, attempt, body };
+
+        if (response.ok) {
+          info("blog.weekly.rebuild.success", {
+            hookUrl,
+            attempt,
+            status: response.status,
+          });
+          return result;
+        }
+
+        lastError = new Error(`non-2xx response ${response.status}`);
+        warn("blog.weekly.rebuild.nonOk", {
+          hookUrl,
+          attempt,
+          status: response.status,
+          body: body.slice(0, 500),
+        });
+      } catch (rebuildError) {
+        lastError = rebuildError;
+        warn("blog.weekly.rebuild.fail", {
+          hookUrl,
+          attempt,
+          error: rebuildError?.message || "Unknown rebuild trigger error",
+        });
+      }
     }
-
-    return result;
-  } catch (rebuildError) {
-    warn("blog.weekly.rebuild.fail", {
-      hookUrl,
-      error: rebuildError?.message || "Unknown rebuild trigger error",
-    });
-
-    return {
-      ok: false,
-      hookUrl,
-      error: rebuildError?.message || "Unknown rebuild trigger error",
-    };
   }
+
+  return {
+    ok: false,
+    error: lastError?.message || "Unknown rebuild trigger error",
+  };
 }
 
 async function generateStructuredWeeklyPackage({ sessionId, week, dateLabel, items }) {
