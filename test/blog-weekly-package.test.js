@@ -8,6 +8,7 @@ import {
   normaliseWeeklyPackage,
   renderWeeklyBodyHtml,
   buildBlogArtworkPrompt,
+  buildPostManifestEntry,
   mergePostsManifest,
 } from "../services/blog/utils/weeklyPackage.js";
 
@@ -111,4 +112,28 @@ test("mergePostsManifest keeps latest post first and removes duplicates by week"
   assert.equal(merged.items.length, 2);
   assert.equal(merged.items[0].week, "2026-W14");
   assert.equal(merged.items[1].week, "2026-W13");
+});
+
+
+test("buildPostManifestEntry writes the website's canonical blog post path contract", () => {
+  const entry = buildPostManifestEntry({
+    week: "2026-W15",
+    slug: "2026-w15-what-actually-mattered",
+    title: "What Actually Mattered in AI",
+    summary: "Sharp summary.",
+    bodyHtml: "<p>Body</p>",
+    imageUrl: "https://images.example.com/weekly.png",
+    imagePrompt: "Prompt",
+    dateLabel: "7 April 2026 to 13 April 2026",
+    postUrl: "https://jonathan-harris.online/blog/posts/2026-w15-what-actually-mattered/",
+    sources: [{ title: "Source", link: "https://example.com", pubDate: "2026-04-13T08:00:00Z" }],
+    dominantThemes: ["Models"],
+    publishedAt: "2026-04-14T08:00:00Z",
+  });
+
+  assert.equal(entry.path, "/blog/posts/2026-w15-what-actually-mattered/");
+  assert.equal(entry.url, "https://jonathan-harris.online/blog/posts/2026-w15-what-actually-mattered/");
+  assert.equal(entry.canonical_url, entry.url);
+  assert.equal(entry.image, "https://images.example.com/weekly.png");
+  assert.equal(entry.source_count, 1);
 });
