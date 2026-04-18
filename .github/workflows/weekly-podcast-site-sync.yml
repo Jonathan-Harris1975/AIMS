@@ -1,0 +1,22 @@
+name: Weekly podcast site sync
+
+on:
+  schedule:
+    - cron: '0 8 * * 1'
+  workflow_dispatch:
+
+jobs:
+  trigger-website-rebuild:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger website rebuild hook
+        env:
+          WEBSITE_REBUILD_HOOK: ${{ secrets.WEBSITE_REBUILD_HOOK }}
+        run: |
+          HOOK="${WEBSITE_REBUILD_HOOK:-https://hooks.jonathan-harris.online/4q1mkzkfvb566f}"
+          STATUS=$(curl -sS -o /tmp/rebuild-response.txt -w '%{http_code}' -X POST "$HOOK")
+          cat /tmp/rebuild-response.txt || true
+          if [ "$STATUS" -lt 200 ] || [ "$STATUS" -ge 300 ]; then
+            echo "Website rebuild hook failed with status $STATUS"
+            exit 1
+          fi
