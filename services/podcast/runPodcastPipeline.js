@@ -7,6 +7,22 @@ import cleanupSession from "../shared/utils/cleanupSession.js";
 import finalCleanupSession from "../shared/utils/cleanupSessionFinal.js";
 import cleanupTempMemory from "../shared/utils/cleanupTempMemory.js";
 
+function normalisePipelineInput(input, maybeOptions = {}) {
+  if (input && typeof input === "object" && !Array.isArray(input)) {
+    return {
+      force: false,
+      ...input,
+      ...maybeOptions,
+    };
+  }
+
+  return {
+    sessionId: typeof input === "string" ? input : undefined,
+    force: false,
+    ...(maybeOptions || {}),
+  };
+}
+
 async function triggerWebsiteRebuild(log, sessionId) {
   const primaryHook = String(process.env.WEBSITE_REBUILD_HOOK || "https://hooks.jonathan-harris.online/4q1mkzkfvb566f").trim();
   const fallbackHook = String(process.env.WEBSITE_REBUILD_HOOK_FALLBACK || "").trim();
@@ -60,7 +76,8 @@ async function triggerWebsiteRebuild(log, sessionId) {
   };
 }
 
-export async function runPodcastPipeline({ sessionId, force = false } = {}) {
+export async function runPodcastPipeline(input = {}, maybeOptions = {}) {
+  const { sessionId, force } = normalisePipelineInput(input, maybeOptions);
   const log = { info, warn, error };
 
   if (!sessionId) {
@@ -71,21 +88,21 @@ export async function runPodcastPipeline({ sessionId, force = false } = {}) {
     log.info("🚀 Podcast pipeline starting", { sessionId, force });
 
     log.info("📝 Generating podcast script…");
-    const script = await getScriptForPodcast(sessionId, { force });
+    const script = await getScriptForPodcast({ sessionId, force });
     if (!script?.ok) {
       throw new Error(script?.error || "Podcast script generation failed");
     }
     log.info("📝 Podcast script ready", { sessionId });
 
     log.info("🎨 Generating podcast artwork…");
-    const artwork = await processArtwork(sessionId, { force });
+    const artwork = await processArtwork({ sessionId, force });
     if (!artwork?.ok) {
       throw new Error(artwork?.error || "Artwork generation failed");
     }
     log.info("🎨 Artwork generation complete", { sessionId });
 
     log.info("🗣️ TTS pipeline starting…");
-    const tts = await orchestrateTTS(sessionId);
+    const tts = await orchestrateTTS({ sessionId, force });
     if (!tts?.ok) {
       throw new Error(tts?.error || "TTS pipeline failed");
     }
