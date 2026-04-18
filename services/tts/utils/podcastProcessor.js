@@ -10,6 +10,19 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+function slugify(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[’']/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+}
+
+function joinUrl(base, segment) {
+  return `${String(base || "").replace(/\/$/, "")}/${String(segment || "").replace(/^\//, "")}`;
+}
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -88,6 +101,11 @@ async function updateMetaFile(sessionId, finalBuffer, finalPath, podcastUrl) {
     process.env.R2_PUBLIC_BASE_URL_TRANSCRIPT ||
     process.env.R2_PUBLIC_BASE_URL_RAW_TEXT ||
     "";
+  const transcriptHtmlBase =
+    process.env.PODCAST_TRANSCRIPT_HTML_BASE_URL ||
+    process.env.R2_PUBLIC_BASE_URL_TRANSCRIPT_HTML ||
+    "";
+  const siteBaseUrl = process.env.SITE_BASE_URL || "https://jonathan-harris.online";
 
   const metaUrl = metaBase ? `${metaBase}/${metaKey}` : "";
 
@@ -127,17 +145,28 @@ async function updateMetaFile(sessionId, finalBuffer, finalPath, podcastUrl) {
     if (!isNaN(d)) duration = d;
   } catch {}
 
+  const title = existing.title || "Untitled Episode";
+  const episodeSlug = existing.episodeSlug || slugify(title || sessionId);
+  const episodePageUrl = joinUrl(siteBaseUrl, `podcast/episodes/${episodeSlug}/`);
+  const transcriptTextUrl = transcriptBase ? `${transcriptBase}/${sessionId}.txt` : "";
+  const transcriptHtmlUrl = transcriptHtmlBase ? `${transcriptHtmlBase}/${episodeSlug}/` : "";
+
   const updated = {
     session: { sessionId, date: sessionDate },
-    title: existing.title || "Untitled Episode",
+    sessionId,
+    title,
     description: existing.description || "",
     keywords: existing.keywords || [],
     artworkPrompt: existing.artworkPrompt || "",
     episodeNumber: existing.episodeNumber || 1,
+    episodeSlug,
+    episodePageUrl,
     createdAt: existing.createdAt || sessionDate,
     updatedAt: new Date().toISOString(),
     artUrl: `${artBase}/${sessionId}.png`,
-    transcriptUrl: `${transcriptBase}/${sessionId}.txt`,
+    transcriptTextUrl,
+    transcriptHtmlUrl,
+    transcriptUrl: transcriptTextUrl,
     podcastUrl,
     duration,
     fileSize: finalBuffer.length,
