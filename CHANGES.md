@@ -1,7 +1,6 @@
 # CHANGES
 
-## .github/workflows/ci.yml
-- **Issue fixed:** The `Verify envBootstrap wrapper is not imported by app code` step used the pattern `\bENV\b`, which matched harmless comments and user-facing strings such as `ENV TUNABLES` and `Missing required ENV variables`.
-- **Production impact:** Clean commits could fail CI even when `scripts/envBootstrap.js` was not imported by application code, blocking merges and deployments on a false positive.
-- **Patch applied:** Narrowed the ripgrep pattern so it now detects explicit `scripts/envBootstrap.js` references and actual `ENV` import statements instead of any standalone `ENV` text.
-- **Why this is safe:** This preserves the original guardrail objective without changing runtime code, request/response contracts, environment contracts, routes, or deployment behaviour.
+## services/tts/utils/mergeProcessor.js
+- Fixed `fetchWithTimeout(url)` so the timeout is cleared after the fetch settles.
+- Added `unref()` on the timeout when available so a completed remote fetch does not keep the process alive.
+- Patch is safe because it does not change timeout duration, retry behaviour, merge flow, upload flow, route shapes, or storage contracts. It only removes an unintended lingering timer on a successful fast path.
