@@ -46,15 +46,19 @@ function isRemote(input) {
 // 🌐 Remote Download w/ Timeout + Retries
 // ------------------------------------------------------------
 async function fetchWithTimeout(url) {
-  return Promise.race([
-    fetch(url),
-    new Promise((_, reject) =>
-      setTimeout(
-        () => reject(new Error(`Download timeout`)),
-        DOWNLOAD_TIMEOUT_MS
-      )
-    ),
-  ]);
+  let timeoutId;
+
+  try {
+    return await Promise.race([
+      fetch(url),
+      new Promise((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error(`Download timeout`)), DOWNLOAD_TIMEOUT_MS);
+        timeoutId.unref?.();
+      }),
+    ]);
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 async function downloadRemoteToBuffer(url, attempt = 1) {
