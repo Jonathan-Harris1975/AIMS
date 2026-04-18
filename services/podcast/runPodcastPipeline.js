@@ -1,84 +1,89 @@
-// services/podcast/runPodcastPipeline.js
-// ============================================================
-// 🎙 FULL PODCAST PIPELINE – FINAL STABLE VERSION
-// ============================================================
-// Features:
-//   • Clean script orchestration with correct payload
-//   • ChatGPT-only editorial pass (external config)
-//   • Correct episode counter in metasystem bucket
-//   • Artwork pipeline with prompt fallback
-//   • Stable TTS pipeline
-//   • Clean + validated RSS feed update
-//   • R2 session cleanup for artefacts
-//   • Memory cleanup (no R2 deletions)
-//   • Fully isolated stateless runs
-// ============================================================
-
-import { log, warn } from "../../logger.js";
-import { orchestrateScript } from "../script/index.js";
-import { orchestrateTTS } from "../tts/utils/orchestrator.js";
-import { createPodcastArtwork } from "../artwork/createPodcastArtwork.js";
-
+import { info, warn, error } from "../../logger.js";
+import { getScriptForPodcast } from "../script/index.js";
+import { processArtwork } from "../artwork/index.js";
+import { orchestrateTTS } from "../tts/index.js";
+import { runRssFeedCreator } from "../rss-feed-podcast/index.js";
 import cleanupSession from "../shared/utils/cleanupSession.js";
 import finalCleanupSession from "../shared/utils/cleanupSessionFinal.js";
 import cleanupTempMemory from "../shared/utils/cleanupTempMemory.js";
 
-import runRssFeedCreator from "../rss-feed-podcast/index.js";
+async function triggerWebsiteRebuild(log, sessionId) {
+  const primaryHook = String(process.env.WEBSITE_REBUILD_HOOK || "https://hooks.jonathan-harris.online/4q1mkzkfvb566f").trim();
+  const fallbackHook = String(process.env.WEBSITE_REBUILD_HOOK_FALLBACK || "").trim();
+  const hooks = [primaryHook, fallbackHook].filter(Boolean);
 
-export async function runPodcastPipeline(sessionId) {
-  log.info("api.podcast.start", { sessionId });
+  if (!hooks.length) {
+    return { ok: false, skipped: true, reason: "missing-hook-url" };
+  }
+
+  let lastError = null;
+
+  for (const hookUrl of hooks) {
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        const response = await fetch(hookUrl, { method: "POST" });
+        const body = await response.text().catch(() => "");
+
+        if (response.ok) {
+          log.info("🌐 Website rebuild triggered", {
+            sessionId,
+            hookUrl,
+            attempt,
+            status: response.status,
+          });
+          return { ok: true, hookUrl, attempt, status: response.status, body };
+        }
+
+        lastError = new Error(`non-2xx response ${response.status}`);
+        log.warn("⚠️ Website rebuild trigger returned non-2xx", {
+          sessionId,
+          hookUrl,
+          attempt,
+          status: response.status,
+          body: body.slice(0, 500),
+        });
+      } catch (rebuildErr) {
+        lastError = rebuildErr;
+        log.warn("⚠️ Website rebuild trigger attempt failed", {
+          sessionId,
+          hookUrl,
+          attempt,
+          error: rebuildErr?.message,
+        });
+      }
+    }
+  }
+
+  return {
+    ok: false,
+    error: lastError?.message || "unknown rebuild trigger error",
+  };
+}
+
+export async function runPodcastPipeline({ sessionId, force = false } = {}) {
+  const log = { info, warn, error };
+
+  if (!sessionId) {
+    throw new Error("Missing required sessionId");
+  }
 
   try {
-    // -----------------------------------------------------------
-    // 🧠 1) SCRIPT GENERATION
-    // -----------------------------------------------------------
-    log.info("🧠 Orchestrating script generation…");
+    log.info("🚀 Podcast pipeline starting", { sessionId, force });
 
-    const script = await orchestrateScript({
-      sessionId,
-      date: new Date().toISOString(),
-      tone: "balanced",
-      location: "London",
-
-      // fetched internally by orchestrator
-      weather: null,
-      turingQuote: null,
-    });
-
-    log.info("🧾 Script generation complete", {
-      transcriptKey: script?.transcriptKey,
-      metaKey: script?.metaKey,
-      artworkPrompt: script?.artworkPrompt,
-    });
-
-    // -----------------------------------------------------------
-    // 🎨 2) ARTWORK GENERATION
-    // -----------------------------------------------------------
-    const artworkPrompt =
-      script?.artworkPrompt ||
-      script?.metadata?.artworkPrompt ||
-      undefined;
-
-    const artwork = await createPodcastArtwork({
-      sessionId,
-      prompt: artworkPrompt,
-    });
-
-    if (!artwork?.ok) {
-      warn("🎨 Artwork generation failed", {
-        sessionId,
-        error: artwork?.error || "unknown artwork error",
-      });
-    } else {
-      log.info("🎨 Artwork complete", {
-        sessionId,
-        artUrl: artwork?.url || null,
-      });
+    log.info("📝 Generating podcast script…");
+    const script = await getScriptForPodcast(sessionId, { force });
+    if (!script?.ok) {
+      throw new Error(script?.error || "Podcast script generation failed");
     }
+    log.info("📝 Podcast script ready", { sessionId });
 
-    // -----------------------------------------------------------
-    // 🗣️ 3) TTS PIPELINE
-    // -----------------------------------------------------------
+    log.info("🎨 Generating podcast artwork…");
+    const artwork = await processArtwork(sessionId, { force });
+    if (!artwork?.ok) {
+      throw new Error(artwork?.error || "Artwork generation failed");
+    }
+    log.info("🎨 Artwork generation complete", { sessionId });
+
     log.info("🗣️ TTS pipeline starting…");
     const tts = await orchestrateTTS(sessionId);
     if (!tts?.ok) {
@@ -86,11 +91,7 @@ export async function runPodcastPipeline(sessionId) {
     }
     log.info("🗣️ TTS pipeline complete", { sessionId });
 
-    // -----------------------------------------------------------
-    // 📡 4) RSS FEED UPDATE
-    // -----------------------------------------------------------
     log.info("📡 Updating RSS feed…");
-
     try {
       await runRssFeedCreator();
       log.info("📡 RSS feed updated successfully");
@@ -101,13 +102,10 @@ export async function runPodcastPipeline(sessionId) {
       });
     }
 
-    // -----------------------------------------------------------
-    // 🧹 5) CLEANUP R2 SESSION (artefacts)
-    // -----------------------------------------------------------
     try {
       log.info("🧹 Cleaning R2 artefacts…");
       await cleanupSession(sessionId);
-      await finalCleanupSession(sessionId); // catches stray artefacts
+      await finalCleanupSession(sessionId);
       log.info("🧹 R2 cleanup complete");
     } catch (cleanupErr) {
       log.error("⚠️ R2 cleanup failed", {
@@ -116,9 +114,6 @@ export async function runPodcastPipeline(sessionId) {
       });
     }
 
-    // -----------------------------------------------------------
-    // 🧽 6) MEMORY CLEANUP (in-process only)
-    // -----------------------------------------------------------
     try {
       log.info("🧽 Clearing temporary memory…");
       await cleanupTempMemory(sessionId);
@@ -130,35 +125,25 @@ export async function runPodcastPipeline(sessionId) {
       });
     }
 
-    // -----------------------------------------------------------
-    // 🌐 7) Trigger website rebuild
-    // -----------------------------------------------------------
-    try {
-      log.info("🌐 Triggering website rebuild…");
-      const rebuildRes = await fetch("https://hooks.jonathan-harris.online/4q1mkzkfvb566f", {
-        method: "POST",
-      });
-      log.info("🌐 Website rebuild triggered", { status: rebuildRes.status });
-    } catch (rebuildErr) {
-      log.warn("⚠️ Website rebuild trigger failed — site will update on next deploy", {
+    log.info("🌐 Triggering website rebuild…");
+    const rebuild = await triggerWebsiteRebuild(log, sessionId);
+    if (!rebuild.ok) {
+      log.warn("⚠️ Website rebuild did not confirm success", {
         sessionId,
-        error: rebuildErr?.message,
+        error: rebuild.error || rebuild.reason || "unknown",
       });
     }
 
-    // -----------------------------------------------------------
-    // 🎉 DONE
-    // -----------------------------------------------------------
     const summary = {
       sessionId,
       script,
       artwork,
       tts,
+      rebuild,
     };
 
     log.info("🏁 Podcast pipeline complete", { sessionId });
     return summary;
-
   } catch (err) {
     log.error("💥 Podcast pipeline failed", {
       sessionId,
