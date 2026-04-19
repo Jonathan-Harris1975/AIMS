@@ -62,7 +62,7 @@ function buildEpisodePageUrl(meta, sessionId) {
   return "";
 }
 
-function resolveTranscript(meta) {
+function resolveTranscript(meta, sessionId) {
   const htmlUrl = stripQuotes(meta.transcriptHtmlUrl || meta.transcript_url_html || "");
   const textUrl = stripQuotes(
     meta.transcriptTextUrl || meta.transcriptUrl || meta.transcript_url || ""
@@ -70,6 +70,17 @@ function resolveTranscript(meta) {
 
   if (isAbsoluteHttpUrl(htmlUrl)) {
     return { url: htmlUrl, type: "text/html" };
+  }
+
+  const transcriptHtmlBase = stripQuotes(
+    envString(
+      "PODCAST_TRANSCRIPT_HTML_BASE_URL",
+      "R2_PUBLIC_BASE_URL_TRANSCRIPT_HTML",
+      "R2_PUBLIC_BASE_URL_TRANSCRIPT"
+    )
+  );
+  if (isAbsoluteHttpUrl(transcriptHtmlBase) && sessionId) {
+    return { url: joinUrl(transcriptHtmlBase, `${sessionId}.html`), type: "text/html" };
   }
 
   if (isAbsoluteHttpUrl(textUrl)) {
@@ -178,18 +189,15 @@ function mapMetaToEpisode(meta) {
     ? keywords
     : "";
 
-  const transcript = resolveTranscript(meta);
+  const transcript = resolveTranscript(meta, sessionId);
   const episodePageUrl = buildEpisodePageUrl(meta, sessionId);
-  const link = isAbsoluteHttpUrl(episodePageUrl)
-    ? episodePageUrl
-    : transcript.url || "";
+  const link = isAbsoluteHttpUrl(episodePageUrl) ? episodePageUrl : "";
 
   if (!link) {
-    warn("⚠️ Episode metadata has no publishable episode link", {
+    warn("⚠️ Episode metadata has no publishable canonical episode link", {
       sessionId,
       title,
       episodePageUrl,
-      transcriptUrl: transcript.url,
     });
   }
 
