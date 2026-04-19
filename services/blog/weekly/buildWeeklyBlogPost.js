@@ -399,7 +399,7 @@ export async function buildWeeklyBlogPost({ days, weekId } = {}) {
     await putJson(outBucketKey, `${dir}/post.json`, {
       schema_version: 1,
       ok: true,
-      week: window.week,
+      ...postEntry,
       days: window.days,
       window: {
         start: window.start.toISOString(),
@@ -407,22 +407,7 @@ export async function buildWeeklyBlogPost({ days, weekId } = {}) {
         label: window.dateLabel,
         mode: window.mode,
       },
-      slug,
-      title,
-      summary: weeklyPackage.summary,
-      excerpt: weeklyPackage.summary,
-      date_label: window.dateLabel,
-      body_html: bodyHtml,
-      url: postUrl,
-      canonical_url: postUrl,
-      path: postPath,
-      image: imageUrl,
-      image_url: imageUrl,
-      image_prompt: imagePrompt,
-      published_at: createdAt,
-      themes: weeklyPackage.dominantThemes,
       created_at: createdAt,
-      sources: cleanedSources,
     });
     await putJson(outBucketKey, `${prefix}/posts.json`, mergedManifest);
 
