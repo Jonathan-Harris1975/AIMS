@@ -23,6 +23,14 @@ function joinUrl(base, segment) {
   return `${String(base || "").replace(/\/$/, "")}/${String(segment || "").replace(/^\//, "")}`;
 }
 
+function buildTranscriptAssetUrl(baseUrl, sessionId, extension) {
+  const base = String(baseUrl || "").trim().replace(/\/$/, "");
+  const sid = String(sessionId || "").trim();
+  if (!base || !sid) return "";
+  const ext = String(extension || "").replace(/^\./, "");
+  return `${base}/${sid}.${ext}`;
+}
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -104,6 +112,7 @@ async function updateMetaFile(sessionId, finalBuffer, finalPath, podcastUrl) {
   const transcriptHtmlBase =
     process.env.PODCAST_TRANSCRIPT_HTML_BASE_URL ||
     process.env.R2_PUBLIC_BASE_URL_TRANSCRIPT_HTML ||
+    process.env.R2_PUBLIC_BASE_URL_TRANSCRIPT ||
     "";
   const siteBaseUrl = process.env.SITE_BASE_URL || "https://jonathan-harris.online";
 
@@ -148,8 +157,8 @@ async function updateMetaFile(sessionId, finalBuffer, finalPath, podcastUrl) {
   const title = existing.title || "Untitled Episode";
   const episodeSlug = existing.episodeSlug || slugify(title || sessionId);
   const episodePageUrl = joinUrl(siteBaseUrl, `podcast/episodes/${episodeSlug}/`);
-  const transcriptTextUrl = transcriptBase ? `${transcriptBase}/${sessionId}.txt` : "";
-  const transcriptHtmlUrl = transcriptHtmlBase ? `${transcriptHtmlBase}/${episodeSlug}/` : "";
+  const transcriptTextUrl = buildTranscriptAssetUrl(transcriptBase, sessionId, "txt");
+  const transcriptHtmlUrl = buildTranscriptAssetUrl(transcriptHtmlBase, sessionId, "html");
 
   const updated = {
     session: { sessionId, date: sessionDate },
@@ -166,7 +175,7 @@ async function updateMetaFile(sessionId, finalBuffer, finalPath, podcastUrl) {
     artUrl: `${artBase}/${sessionId}.png`,
     transcriptTextUrl,
     transcriptHtmlUrl,
-    transcriptUrl: transcriptTextUrl,
+    transcriptUrl: transcriptHtmlUrl || transcriptTextUrl,
     podcastUrl,
     duration,
     fileSize: finalBuffer.length,
