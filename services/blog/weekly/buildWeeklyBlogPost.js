@@ -190,7 +190,7 @@ function buildSiteBlogUrls(slug, prefix = "blog") {
   };
 }
 
-async function triggerWebsiteRebuild() {
+async function triggerWebsiteRebuild(context = {}) {
   const primaryHook = String(process.env.WEBSITE_REBUILD_HOOK || "https://hooks.jonathan-harris.online/4q1mkzkfvb566f").trim();
   const fallbackHook = String(process.env.WEBSITE_REBUILD_HOOK_FALLBACK || "").trim();
   const hooks = [primaryHook, fallbackHook].filter(Boolean);
@@ -204,13 +204,14 @@ async function triggerWebsiteRebuild() {
   for (const hookUrl of hooks) {
     for (let attempt = 1; attempt <= 3; attempt += 1) {
       try {
-        info("blog.weekly.rebuild.start", { hookUrl, attempt });
+        info("blog.weekly.rebuild.start", { ...context, hookUrl, attempt });
         const response = await fetch(hookUrl, { method: "POST" });
         const body = await response.text().catch(() => "");
         const result = { ok: response.ok, status: response.status, hookUrl, attempt, body };
 
         if (response.ok) {
           info("blog.weekly.rebuild.success", {
+            ...context,
             hookUrl,
             attempt,
             status: response.status,
@@ -220,6 +221,7 @@ async function triggerWebsiteRebuild() {
 
         lastError = new Error(`non-2xx response ${response.status}`);
         warn("blog.weekly.rebuild.nonOk", {
+          ...context,
           hookUrl,
           attempt,
           status: response.status,
@@ -228,6 +230,7 @@ async function triggerWebsiteRebuild() {
       } catch (rebuildError) {
         lastError = rebuildError;
         warn("blog.weekly.rebuild.fail", {
+          ...context,
           hookUrl,
           attempt,
           error: rebuildError?.message || "Unknown rebuild trigger error",
@@ -414,6 +417,7 @@ export async function buildWeeklyBlogPost({ days, weekId } = {}) {
 
     info("blog.weekly.build.success", {
       week: window.week,
+      postPath,
       postUrl,
       postMetaUrl,
       postsManifestUrl,
@@ -422,7 +426,16 @@ export async function buildWeeklyBlogPost({ days, weekId } = {}) {
       themeCount: weeklyPackage.dominantThemes.length,
     });
 
-    const rebuild = await triggerWebsiteRebuild();
+    const rebuild = await triggerWebsiteRebuild({ week: window.week, slug, postUrl });
+
+    if (!rebuild.ok) {
+      warn("blog.weekly.rebuild.unconfirmed", {
+        week: window.week,
+        slug,
+        postUrl,
+        error: rebuild.error || rebuild.reason || "unknown rebuild trigger outcome",
+      });
+    }
 
     return {
       ok: true,
@@ -431,6 +444,7 @@ export async function buildWeeklyBlogPost({ days, weekId } = {}) {
       title,
       slug,
       summary: weeklyPackage.summary,
+      postPath,
       postUrl,
       postMetaUrl,
       postsManifestUrl,
