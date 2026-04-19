@@ -114,6 +114,16 @@ function isActiveStatus(status) {
   return status === "queued" || status === "running";
 }
 
+
+export function queueJob(type, sessionId, metadata = {}) {
+  return upsertJob(type, sessionId, {
+    status: "queued",
+    finishedAt: undefined,
+    error: undefined,
+    ...metadata,
+  });
+}
+
 export function startJob(type, sessionId, metadata = {}) {
   const existing = jobs.get(makeKey(type, sessionId));
   const attempt = Number(existing?.attempt || 0) + 1;

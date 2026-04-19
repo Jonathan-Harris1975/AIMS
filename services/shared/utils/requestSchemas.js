@@ -196,3 +196,41 @@ export const oneupQuizBodySchema = z
       ? JSON.stringify(value.socialNetworkId)
       : value.socialNetworkId,
   }));
+
+
+const auditExcludePatternsSchema = z.array(z.string().trim().min(1).max(200)).max(20).optional();
+
+export const auditRunBodySchema = z
+  .object({
+    sessionId: optionalSessionId,
+    websiteUrl: z.string().trim().url().optional(),
+    reportPrefix: z.string().trim().min(1).max(300).optional(),
+    workflowRef: z.string().trim().min(1).max(120).optional(),
+    requestedBy: z.string().trim().min(1).max(120).optional(),
+    notes: z.string().trim().min(1).max(4000).optional(),
+    excludePatterns: auditExcludePatternsSchema,
+  })
+  .passthrough();
+
+export const auditCallbackBodySchema = z
+  .object({
+    auditType: z.string().trim().min(1).max(80),
+    sessionId: z.string().trim().min(1).max(120),
+    status: z.enum(["queued", "running", "completed", "failed"]).optional().default("completed"),
+    reportPrefix: z.string().trim().min(1).max(500),
+    reportUrl: z.string().trim().url().optional(),
+    summaryUrl: z.string().trim().url().optional(),
+    executionUrl: z.string().trim().url().optional(),
+    preflightUrl: z.string().trim().url().optional(),
+    evidenceUrl: z.string().trim().url().optional(),
+    reconciliationUrl: z.string().trim().url().optional(),
+    workflowRunUrl: z.string().trim().url().optional().or(z.literal("")),
+    screenshotCount: z.coerce.number().int().min(0).optional(),
+    mobileFailureCount: z.coerce.number().int().min(0).optional(),
+    issueCount: z.coerce.number().int().min(0).optional(),
+    message: z.string().trim().min(1).max(4000).optional(),
+    error: z.string().trim().min(1).max(4000).optional(),
+    finishedAt: z.string().trim().min(1).max(80).optional(),
+    artefacts: z.record(z.string().trim(), z.string().trim().url()).optional(),
+  })
+  .passthrough();
