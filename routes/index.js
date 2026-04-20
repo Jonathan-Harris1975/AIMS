@@ -13,6 +13,7 @@ import outreachRoutes from "../services/outreach/routes/index.js";
 import blogRoutes from "../services/blog/index.js";
 import cloudflarePurgeRoutes from "../services/cloudflare-purge/index.js";
 import oneupRoutes from "../services/oneup/index.js";
+import auditsRoutes from "../audits/index.js";
 
 const router = express.Router();
 
@@ -26,7 +27,8 @@ const routeRegistry = [
   { path: "/outreach", name: "Outreach", routes: outreachRoutes },
   { path: "/blog", name: "Blog", routes: blogRoutes },
   { path: "/cloudflare", name: "Cloudflare Purge", routes: cloudflarePurgeRoutes },
-  { path: "/oneup", name: "OneUp Social Scheduler", routes: oneupRoutes }
+  { path: "/oneup", name: "OneUp Social Scheduler", routes: oneupRoutes },
+  { path: "/audits", name: "Audit Automation", routes: auditsRoutes }
 ];
 
 try {
