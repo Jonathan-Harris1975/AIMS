@@ -1,6 +1,6 @@
-import { info } from "../../../logger.js";
-import { failJob, queueJob, startJob, completeJob, getPublicJob } from "../../shared/utils/jobStore.js";
-import { sanitizeSessionId } from "../../shared/utils/sessionId.js";
+import { info } from "../../logger.js";
+import { failJob, queueJob, startJob, completeJob, getPublicJob } from "../../services/shared/utils/jobStore.js";
+import { sanitizeSessionId } from "../../services/shared/utils/sessionId.js";
 import { dispatchGithubWorkflow } from "./githubDispatch.js";
 import { buildAuditPrefix, makeAuditJobType } from "./auditPaths.js";
 import { publishAuditLatest, publishAuditRequest } from "./publishAuditArtifacts.js";
