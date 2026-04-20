@@ -25,9 +25,9 @@ jobs:
       - name: Verify envBootstrap wrapper is not imported by app code
         run: |
           echo "🔍 Checking for leftover envBootstrap imports"
-          if rg -n 'scripts/envBootstrap\.js|import\s+[^;]*\bENV\b[^;]*from' \
+          if grep -RInE 'scripts/envBootstrap\.js|import[[:space:]]+[^;]*\bENV\b[^;]*from' \
             deployment-check.js scripts services routes server.js \
-            --glob '!scripts/envBootstrap.js'; then
+            --exclude='envBootstrap.js'; then
             echo "❌ Found leftover envBootstrap usage in application code"
             exit 1
           fi
