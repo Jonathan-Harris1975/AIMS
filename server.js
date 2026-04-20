@@ -44,8 +44,26 @@ function isLoopbackOrigin(origin) {
   }
 }
 
+function isCorsDeniedError(err) {
+  return err?.message === "CORS origin not allowed";
+}
+
 const trustProxy = parseTrustProxy(process.env.TRUST_PROXY);
 app.set("trust proxy", trustProxy);
+
+/*
+ * Silence repetitive ACME challenge probes before they hit:
+ * - CORS
+ * - body parsers
+ * - pino-http
+ * - rate limiting
+ *
+ * This keeps runtime waste and log spam down.
+ */
+app.use("/.well-known/acme-challenge", (_req, res) => {
+  res.set("Cache-Control", "public, max-age=300");
+  return res.status(204).end();
+});
 
 const allowedOrigins = (process.env.CORS_ORIGINS || "")
   .split(",")
@@ -64,8 +82,10 @@ app.use(
     },
   })
 );
+
 app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: process.env.URLENCODED_BODY_LIMIT || "10mb" }));
+
 app.use(
   pinoHttp({
     logger: log,
@@ -75,10 +95,12 @@ app.use(
         req.headers["x-request-id"] ||
         req.headers["x-hookdeck-eventid"] ||
         req.headers["x-hookdeck-event-id"];
+
       const requestId =
         typeof inherited === "string" && inherited.trim()
           ? inherited.trim()
           : crypto.randomUUID();
+
       res.setHeader("x-request-id", requestId);
       return requestId;
     },
@@ -102,9 +124,11 @@ app.use(
     },
   })
 );
+
 app.use(createRateLimitMiddleware());
 
 app.get("/", (_req, res) => res.status(200).send("OK"));
+
 app.get("/health", (_req, res) =>
   res.status(200).json({ ok: true, status: "ok", trustProxy })
 );
@@ -147,9 +171,14 @@ app.use((err, req, res, _next) => {
     error: err?.stack || String(err),
   });
 
-  const message = err?.message === "CORS origin not allowed" ? err.message : "Internal error";
-  const status = err?.message === "CORS origin not allowed" ? 403 : 500;
-  res.status(status).json({ ok: false, error: message, requestId });
+  const status = isCorsDeniedError(err) ? 403 : 500;
+  const message = isCorsDeniedError(err) ? err.message : "Internal error";
+
+  res.status(status).json({
+    ok: false,
+    error: message,
+    requestId,
+  });
 });
 
 const PORT = process.env.PORT || 3000;
@@ -163,19 +192,35 @@ export function startServer(port = PORT, host = "0.0.0.0") {
 
   server = app.listen(port, host, () => {
     info("AI Management Suite started", { port, host });
-    debug("server.endpoints", { endpoints: ["/rss", "/script", "/tts", "/artwork", "/podcast", "/outreach", "/blog", "/cloudflare", "/oneup"] });
+    debug("server.endpoints", {
+      endpoints: [
+        "/rss",
+        "/script",
+        "/tts",
+        "/artwork",
+        "/podcast",
+        "/outreach",
+        "/blog",
+        "/cloudflare",
+        "/oneup",
+        "/audits",
+      ],
+    });
     debug("server.trustProxy", { trustProxy });
   });
 
   if (!processHandlersBound) {
     processHandlersBound = true;
+
     process.on("SIGTERM", () => shutdown("SIGTERM"));
     process.on("SIGINT", () => shutdown("SIGINT"));
+
     process.on("unhandledRejection", (reason) => {
       error("server.unhandledRejection", {
         error: reason instanceof Error ? reason.stack || reason.message : String(reason),
       });
     });
+
     process.on("uncaughtException", (err) => {
       error("server.uncaughtException", {
         error: err?.stack || err?.message || String(err),
