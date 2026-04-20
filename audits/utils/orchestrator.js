@@ -8,6 +8,14 @@ import { publishAuditLatest, publishAuditRequest } from "./publishAuditArtifacts
 const DEFAULT_WEBSITE_URL = "https://jonathan-harris.online";
 const DEFAULT_EXCLUDE_PATTERNS = ["/podcast", "/blog"];
 
+function resolveCallbackBaseUrl() {
+  const preferred = String(process.env.AUDIT_CALLBACK_BASE_URL || "").trim();
+  if (preferred) return preferred.replace(/\/$/, "");
+
+  const fallback = String(process.env.APP_URL || "").trim();
+  return fallback ? fallback.replace(/\/$/, "") : "";
+}
+
 export async function startAuditRun({
   auditType,
   workflowId,
@@ -17,7 +25,7 @@ export async function startAuditRun({
   const sessionId = sanitizeSessionId(body.sessionId || `${auditType}-${Date.now()}`, `AUD-${auditType.toUpperCase()}`);
   const reportPrefix = body.reportPrefix || buildAuditPrefix(auditType, sessionId);
   const jobType = makeAuditJobType(auditType);
-  const callbackBaseUrl = String(process.env.APP_URL || process.env.AUDIT_CALLBACK_BASE_URL || "").trim().replace(/\/$/, "");
+  const callbackBaseUrl = resolveCallbackBaseUrl();
   const callbackUrl = callbackBaseUrl ? `${callbackBaseUrl}${callbackPath}` : "";
 
   const payload = {
@@ -78,6 +86,7 @@ export async function startAuditRun({
       sessionId,
       workflowId,
       reportPrefix,
+      callbackUrl,
     });
 
     return {
