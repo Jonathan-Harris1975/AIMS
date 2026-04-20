@@ -1,6 +1,6 @@
 import express from "express";
-import { hookdeckDedupe } from "../../shared/utils/hookdeckDedupe.js";
-import { validateBody, auditCallbackBodySchema, auditRunBodySchema } from "../../shared/utils/requestSchemas.js";
+import { hookdeckDedupe } from "../../services/shared/utils/hookdeckDedupe.js";
+import { validateBody, auditCallbackBodySchema, auditRunBodySchema } from "../../services/shared/utils/requestSchemas.js";
 import { completeAuditRun, getAuditJob, startAuditRun } from "../utils/orchestrator.js";
 import { requireAuditCallbackAuth } from "../utils/callbackAuth.js";
 
