@@ -66,6 +66,18 @@ async function main() {
   await runNodeScript("./scripts/startupCheck.js", "Startup Check");
   await runNodeScript("./scripts/tempStorage.js", "Temp Storage Check");
 
+  // One-time migration: force-convert all plain-text transcripts to HTML.
+  // Set BACKFILL_TRANSCRIPT_HTML=true in the deployment environment to trigger
+  // this run, then unset (or set to false) after the deployment completes.
+  if (process.env.BACKFILL_TRANSCRIPT_HTML === "true") {
+    info("bootstrap.backfill.queued", { reason: "BACKFILL_TRANSCRIPT_HTML=true" });
+    await runNodeScript(
+      "./scripts/backfill-transcript-html.js",
+      "Transcript HTML Backfill",
+      { optional: true, timeoutMs: Number(process.env.BACKFILL_TRANSCRIPT_HTML_TIMEOUT_MS) || 600_000 }
+    );
+  }
+
   info("bootstrap.server.starting");
   const { startServer } = await import("../server.js");
   startServer();
