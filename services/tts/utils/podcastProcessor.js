@@ -109,12 +109,13 @@ async function updateMetaFile(sessionId, finalBuffer, finalPath, podcastUrl) {
     process.env.R2_PUBLIC_BASE_URL_TRANSCRIPT ||
     process.env.R2_PUBLIC_BASE_URL_RAW_TEXT ||
     "";
+  const siteBaseUrl = process.env.SITE_BASE_URL || "https://jonathan-harris.online";
   const transcriptHtmlBase =
     process.env.PODCAST_TRANSCRIPT_HTML_BASE_URL ||
     process.env.R2_PUBLIC_BASE_URL_TRANSCRIPT_HTML ||
+    joinUrl(siteBaseUrl, "transcripts") ||
     process.env.R2_PUBLIC_BASE_URL_TRANSCRIPT ||
     "";
-  const siteBaseUrl = process.env.SITE_BASE_URL || "https://jonathan-harris.online";
 
   const metaUrl = metaBase ? `${metaBase}/${metaKey}` : "";
 
