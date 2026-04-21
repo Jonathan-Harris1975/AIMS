@@ -168,20 +168,23 @@ function renderFooter() {
  * @param {string} sessionId    - e.g. "TT-2026-04-10"
  * @param {string} transcriptText - raw plain-text content
  * @param {object} meta         - episode metadata from the meta bucket
- * @param {string} transcriptBaseUrl - R2_PUBLIC_BASE_URL_TRANSCRIPT value
+ * @param {string} transcriptHtmlBaseUrl - public transcript HTML base URL
  * @returns {string} complete HTML document
  */
-export function generateTranscriptHtml(sessionId, transcriptText, meta, transcriptBaseUrl) {
+export function generateTranscriptHtml(sessionId, transcriptText, meta, transcriptHtmlBaseUrl) {
   const title = meta?.title || `Turing's Torch AI Weekly — ${sessionId}`;
   const description = meta?.description || "A sharp, no-hype take on the latest in artificial intelligence.";
   const artUrl = meta?.artUrl || "https://podcast-coverart.jonathan-harris.online/cover-art.png";
   const episodeNum = meta?.episodeNumber ? `Episode ${meta.episodeNumber}` : "";
   const pubDate = formatPubDate(meta?.pubDate || meta?.session?.date || "");
-  const base = (transcriptBaseUrl || "").replace(/\/$/, "");
-  const htmlUrl = base ? `${base}/${sessionId}.html` : "";
+  const siteBaseUrl = String(meta?.siteBaseUrl || process.env.SITE_BASE_URL || "https://jonathan-harris.online").replace(/\/$/, "");
+  const htmlBase = String(transcriptHtmlBaseUrl || "").replace(/\/$/, "");
+  const rawTranscriptBase = String(process.env.R2_PUBLIC_BASE_URL_TRANSCRIPT || "").replace(/\/$/, "");
+  const archiveUrl = `${siteBaseUrl}/transcripts/`;
+  const htmlUrl = absoluteUrl(meta?.transcriptHtmlUrl, htmlBase ? `${htmlBase}/${sessionId}.html` : `${archiveUrl}${sessionId}.html`);
   const listenUrl = absoluteUrl(meta?.podcastUrl, "https://open.spotify.com/show/4NluRPjuAIGK59vVf7GcoF");
-  const episodePageUrl = absoluteUrl(meta?.episodePageUrl, "https://jonathan-harris.online/podcast/");
-  const transcriptTextUrl = absoluteUrl(meta?.transcriptTextUrl, base ? `${base}/${sessionId}.txt` : "");
+  const episodePageUrl = absoluteUrl(meta?.episodePageUrl, `${siteBaseUrl}/podcast/`);
+  const transcriptTextUrl = absoluteUrl(meta?.transcriptTextUrl, rawTranscriptBase ? `${rawTranscriptBase}/${sessionId}.txt` : "");
 
   const metaDate = pubDate ? `${episodeNum}${episodeNum && pubDate ? " · " : ""}${pubDate}` : episodeNum;
   const paragraphs = textToParagraphs(transcriptText);
@@ -396,6 +399,7 @@ ${metaDate ? `<p class="meta-line">${escapeHtml(metaDate)}</p>` : ""}
 <div class="transcript-body">
   <nav aria-label="Transcript navigation" class="transcript-nav">
     <a href="https://jonathan-harris.online/podcast/">← Back to Podcast</a>
+    <a href="${escapeHtml(archiveUrl)}">Transcript archive</a>
     <a href="${escapeHtml(listenUrl)}" rel="noopener noreferrer" target="_blank">Listen to this episode</a>
     <a href="https://podcasts.apple.com/gb/podcast/turings-torch-ai-weekly/id1862839712" rel="noopener noreferrer" target="_blank">Apple Podcasts</a>
     ${transcriptTextUrl ? `<a href="${escapeHtml(transcriptTextUrl)}" rel="noopener noreferrer" target="_blank">Plain text version</a>` : ""}
@@ -423,6 +427,7 @@ ${paragraphs}
     <p>Subscribe for a sharp, no-hype take on AI every Friday. Zero buzzwords. Zero hand-wringing.</p>
     <div class="cta-row">
       <a class="button" href="${escapeHtml(listenUrl)}" rel="noopener noreferrer" target="_blank">Listen to this episode</a>
+      <a class="button secondary" href="${escapeHtml(archiveUrl)}">Browse transcript archive</a>
       <a class="button secondary" href="https://jonathan-harris.online/newsletter/">Get the Newsletter</a>
     </div>
   </aside>

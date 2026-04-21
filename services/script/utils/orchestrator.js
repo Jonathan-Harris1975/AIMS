@@ -150,8 +150,14 @@ export async function orchestrateScript(input) {
     // ============================================================
     try {
       const { generateTranscriptHtml } = await import("./generateTranscriptHtml.js");
-      const transcriptBase = process.env.R2_PUBLIC_BASE_URL_TRANSCRIPT || "";
-      const htmlContent = generateTranscriptHtml(sid, finalFullText, meta, transcriptBase);
+      const siteBaseUrl = process.env.SITE_BASE_URL || "https://jonathan-harris.online";
+      const transcriptHtmlBase =
+        process.env.PODCAST_TRANSCRIPT_HTML_BASE_URL ||
+        process.env.R2_PUBLIC_BASE_URL_TRANSCRIPT_HTML ||
+        `${String(siteBaseUrl).replace(/\/$/, "")}/transcripts` ||
+        process.env.R2_PUBLIC_BASE_URL_TRANSCRIPT ||
+        "";
+      const htmlContent = generateTranscriptHtml(sid, finalFullText, meta, transcriptHtmlBase);
       await uploadText("transcript", `${sid}.html`, htmlContent, "text/html");
       info("📄 HTML transcript uploaded", { sessionId: sid });
     } catch (htmlErr) {
