@@ -14,9 +14,10 @@ test('generateTranscriptHtml uses on-brand header, governed scripts, and square 
       pubDate: '2026-04-10T00:00:00Z',
       podcastUrl: 'https://pub.example.com/TT-2026-04-10.mp3',
       episodePageUrl: 'https://jonathan-harris.online/podcast/episodes/openai-four-day-week-ai-governance-and-memory-problems/',
+      transcriptHtmlUrl: 'https://jonathan-harris.online/transcripts/TT-2026-04-10.html',
       transcriptTextUrl: 'https://transcripts.jonathan-harris.online/TT-2026-04-10.txt',
     },
-    'https://transcripts.jonathan-harris.online'
+    'https://jonathan-harris.online/transcripts'
   );
 
   assert.match(html, /class="jh-header"/);
@@ -29,4 +30,22 @@ test('generateTranscriptHtml uses on-brand header, governed scripts, and square 
   assert.match(html, /data-jh-header-reveal-anchor/);
   assert.match(html, /Browse Books/);
   assert.match(html, /Full Episode Transcript/);
+});
+
+
+test('generateTranscriptHtml prefers canonical main-domain transcript URL and archive links', () => {
+  const html = generateTranscriptHtml(
+    'TT-2026-04-11',
+    'Only paragraph.',
+    {
+      title: 'Test Episode',
+      transcriptHtmlUrl: 'https://jonathan-harris.online/transcripts/TT-2026-04-11.html',
+      transcriptTextUrl: 'https://transcripts.jonathan-harris.online/TT-2026-04-11.txt',
+    },
+    'https://transcripts.jonathan-harris.online'
+  );
+
+  assert.match(html, /rel="canonical" href="https:\/\/jonathan-harris\.online\/transcripts\/TT-2026-04-11\.html"/);
+  assert.match(html, /Transcript archive/);
+  assert.match(html, /https:\/\/jonathan-harris\.online\/transcripts\//);
 });

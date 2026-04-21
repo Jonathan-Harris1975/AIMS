@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 process.env.SITE_BASE_URL = "https://jonathan-harris.online";
 process.env.R2_PUBLIC_BASE_URL_TRANSCRIPT = "https://transcripts.jonathan-harris.online";
+process.env.PODCAST_TRANSCRIPT_HTML_BASE_URL = "https://jonathan-harris.online/transcripts";
 
 const { generateFeedXML } = await import("../services/rss-feed-podcast/generateFeed.js");
 
@@ -16,7 +17,7 @@ test("generateFeedXML keeps episode page, audio enclosure, and transcript URLs d
       episodePageUrl: "https://jonathan-harris.online/podcast/episodes/ai-accountability-costs-and-local-control/",
       podcastUrl: "https://podcast.jonathan-harris.online/TT-2026-04-17.mp3",
       transcriptTextUrl: "https://transcripts.jonathan-harris.online/TT-2026-04-17.txt",
-      transcriptHtmlUrl: "https://transcripts.jonathan-harris.online/TT-2026-04-17.html",
+      transcriptHtmlUrl: "https://jonathan-harris.online/transcripts/TT-2026-04-17.html",
       pubDate: "Fri, 17 Apr 2026 00:00:00 GMT",
       duration: 1800,
       fileSize: 123456,
@@ -27,6 +28,6 @@ test("generateFeedXML keeps episode page, audio enclosure, and transcript URLs d
 
   assert.match(xml, /<link>https:\/\/jonathan-harris\.online\/podcast\/episodes\/ai-accountability-costs-and-local-control\/<\/link>/);
   assert.match(xml, /<enclosure url="https:\/\/podcast\.jonathan-harris\.online\/TT-2026-04-17\.mp3" length="123456" type="audio\/mpeg" \/>/);
-  assert.match(xml, /<podcast:transcript url="https:\/\/transcripts\.jonathan-harris\.online\/TT-2026-04-17\.html" type="text\/html" \/>/);
+  assert.match(xml, /<podcast:transcript url="https:\/\/jonathan-harris\.online\/transcripts\/TT-2026-04-17\.html" type="text\/html" \/>/);
   assert.doesNotMatch(xml, /<link>https:\/\/transcripts\.jonathan-harris\.online\/TT-2026-04-17\.txt<\/link>/);
 });
