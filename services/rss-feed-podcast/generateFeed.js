@@ -67,6 +67,7 @@ function resolveTranscript(meta, sessionId) {
   const textUrl = stripQuotes(
     meta.transcriptTextUrl || meta.transcriptUrl || meta.transcript_url || ""
   );
+  const siteBaseUrl = stripQuotes(envString("SITE_BASE_URL") || "https://jonathan-harris.online");
 
   if (isAbsoluteHttpUrl(htmlUrl)) {
     return { url: htmlUrl, type: "text/html" };
@@ -75,10 +76,9 @@ function resolveTranscript(meta, sessionId) {
   const transcriptHtmlBase = stripQuotes(
     envString(
       "PODCAST_TRANSCRIPT_HTML_BASE_URL",
-      "R2_PUBLIC_BASE_URL_TRANSCRIPT_HTML",
-      "R2_PUBLIC_BASE_URL_TRANSCRIPT"
+      "R2_PUBLIC_BASE_URL_TRANSCRIPT_HTML"
     )
-  );
+  ) || (isAbsoluteHttpUrl(siteBaseUrl) ? joinUrl(siteBaseUrl, "transcripts") : stripQuotes(envString("R2_PUBLIC_BASE_URL_TRANSCRIPT")));
   if (isAbsoluteHttpUrl(transcriptHtmlBase) && sessionId) {
     return { url: joinUrl(transcriptHtmlBase, `${sessionId}.html`), type: "text/html" };
   }
