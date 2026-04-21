@@ -81,6 +81,7 @@ function buildRepairedMeta(sessionId, existing = {}) {
   const transcriptHtmlBase =
     process.env.PODCAST_TRANSCRIPT_HTML_BASE_URL ||
     process.env.R2_PUBLIC_BASE_URL_TRANSCRIPT_HTML ||
+    joinUrl(siteBaseUrl, "transcripts") ||
     process.env.R2_PUBLIC_BASE_URL_TRANSCRIPT ||
     "";
   const podcastBase = process.env.R2_PUBLIC_BASE_URL_PODCAST || "";
@@ -128,7 +129,13 @@ function sleep(ms) {
 }
 
 async function main() {
-  const transcriptBase = (process.env.R2_PUBLIC_BASE_URL_TRANSCRIPT || "").replace(/\/$/, "");
+  const transcriptHtmlBase = (
+    process.env.PODCAST_TRANSCRIPT_HTML_BASE_URL ||
+    process.env.R2_PUBLIC_BASE_URL_TRANSCRIPT_HTML ||
+    joinUrl(process.env.SITE_BASE_URL || "https://jonathan-harris.online", "transcripts") ||
+    process.env.R2_PUBLIC_BASE_URL_TRANSCRIPT ||
+    ""
+  ).replace(/\/$/, "");
 
   console.log("🔍 Listing transcript bucket keys…");
   const allKeys = await listKeys(TRANSCRIPT_BUCKET, "");
@@ -170,7 +177,7 @@ async function main() {
       }
 
       const repairedMeta = buildRepairedMeta(sessionId, meta);
-      const html = generateTranscriptHtml(sessionId, transcriptText, repairedMeta, transcriptBase);
+      const html = generateTranscriptHtml(sessionId, transcriptText, repairedMeta, transcriptHtmlBase);
 
       if (!DRY_RUN) {
         await uploadText(TRANSCRIPT_BUCKET, `${sessionId}.html`, html, "text/html");
