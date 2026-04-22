@@ -1,169 +1,250 @@
-# 📘 Project README
+# AI Management Suite
 
-------------------------------------------------------------------------
+AI Management Suite is the content operations service behind Jonathan Harris's podcast, blog, RSS, artwork, social scheduling, outreach, and audit workflows.
 
-# 🚀 Project Overview
+It is a modular Node/Express application. Each service stays in its own folder, but the app runs as one API with shared logging, request validation, Cloudflare R2 storage helpers, and release automation.
 
-This project is a modular content‑generation platform capable of
-producing podcast episodes, scripts, artwork, text‑to‑speech audio, and
-RSS feeds.\
-Its service‑oriented architecture keeps features isolated, scalable, and
-easy to extend.
+## What this repo does
 
-------------------------------------------------------------------------
+This repo currently handles:
 
-# 📂 Repository Structure
+- podcast pipeline orchestration
+- script generation
+- TTS generation
+- artwork generation
+- RSS feed creation and rewrite services
+- weekly blog post generation and publication
+- blog RSS feed publication
+- outreach workflows
+- OneUp social scheduling
+- audit routes
+- Cloudflare purge support
 
-    /services
-      ├── api
-      ├── artwork
-      ├── podcast
-      ├── rss-feed-creator
-      ├── rss-feed-podcast
-      ├── script
-      ├── shared
-      └── tts
+## Runtime
 
-Each folder represents a self‑contained service with its own logic,
-routing, and utilities.
+- **Node:** `>=20 <25`
+- **App entry:** `server.js`
+- **Start command:** `npm start`
+- **Health check:** `GET /health`
 
-------------------------------------------------------------------------
+## Repo structure
 
-# 🧩 Service Descriptions
+```text
+/services
+  api/
+  artwork/
+  blog/
+  cloudflare-purge/
+  oneup/
+  outreach/
+  podcast/
+  rss-feed-creator/
+  rss-feed-podcast/
+  script/
+  shared/
+  tts/
+/audits
+/routes
+/scripts
+/test
+```
 
-### **🟦 api/**
+## Main route groups
 
-Acts as the main entry point for external requests.\
-Provides API endpoints that trigger internal services such as podcast
-generation, RSS feed creation, artwork creation, and more.
+Mounted from `routes/index.js`:
 
-------------------------------------------------------------------------
+- `/rss`
+- `/script`
+- `/tts`
+- `/artwork`
+- `/podcast`
+- `/outreach`
+- `/blog`
+- `/cloudflare`
+- `/oneup`
+- `/audits`
 
-### **🎨 artwork/**
+## Blog service
 
-Generates and manages podcast artwork.\
-Includes utilities and routes that render artwork programmatically to
-match episode or brand styling.
+The blog service lives under `services/blog/`.
 
-------------------------------------------------------------------------
+Current structure:
 
-### **🎙️ podcast/**
+```text
+services/blog/
+  index.js
+  routes/
+    index.js
+    rss.js
+    weekly.js
+  rss/
+    publishBlogRssFeed.js
+  utils/
+    rssFeed.js
+    slug.js
+    templates.js
+    weeklyPackage.js
+  weekly/
+    buildWeeklyBlogPost.js
+```
 
-Runs the core podcast‑generation pipeline.\
-Responsible for assembling episode components such as scripts, audio,
-and artwork.
+### Blog publication contract
 
-------------------------------------------------------------------------
+The weekly blog pipeline publishes to the blog storage bucket and uses the website's governed structure:
 
-### **📰 rss-feed-creator/**
+- manifest key: `blog/posts.json`
+- post path: `/blog/posts/<slug>/`
+- post sidecar: `/blog/posts/<slug>/post.json`
+- weekly archive route on site: `/blog/weekly/`
+- blog hub route on site: `/blog/`
 
-Creates RSS feeds for text‑based content such as articles or rewritten
-material.\
-Contains pipelines that build feed metadata, rewrite logic, startup
-routines, and feed routes.
+The blog service writes the published article and manifest first, then rebuilds the blog RSS feed from the persisted manifest.
 
-------------------------------------------------------------------------
+### Blog routes
 
-### **🎧 rss-feed-podcast/**
+#### `POST /blog/weekly/build`
 
-Generates podcast‑specific RSS feeds.\
-Responsible for constructing XML RSS structures compatible with podcast
-platforms (Apple Podcasts, Spotify, etc.).
+Builds and publishes the weekly blog post.
 
-------------------------------------------------------------------------
+What it does:
 
-### **✍️ script/**
+1. assembles the weekly package
+2. generates the blog article
+3. creates blog artwork where configured
+4. writes the article HTML to R2
+5. writes the post metadata sidecar to R2
+6. updates `blog/posts.json`
+7. rebuilds the blog RSS feed
+8. triggers the website rebuild hook
 
-Generates and processes scripts used for TTS or podcast narrative.\
-Includes route handlers and utilities that prepare written content
-before it enters audio pipelines.
+This is the normal route for publication.
 
-------------------------------------------------------------------------
+Accepted body fields are validated by `blogWeeklyBuildBodySchema`.
 
-### **🔧 shared/**
+Supported request body:
 
-Contains internal utilities shared across services.\
-Examples:\
-- HTTP client\
-- Shared helper functions\
-- Common formatting utilities\
-This ensures consistency and prevents duplication.
+```json
+{
+  "days": 7,
+  "weekId": "2026-W16"
+}
+```
 
-------------------------------------------------------------------------
+Both fields are optional. If omitted, the service builds the previous complete week.
 
-### **🗣️ tts/**
+#### `POST /blog/rss/rebuild`
 
-Text‑to‑Speech engine responsible for generating high‑quality audio from
-scripts.\
-Provides routes and utilities for voice synthesis and audio file
-creation.
+Rebuilds the **blog RSS feed only** from the persisted blog manifest in R2.
 
-------------------------------------------------------------------------
+Use this when:
 
-### **📣 oneup/**
+- a post already exists
+- the RSS feed needs repairing or refreshing
+- you do not want to create a new blog post
 
-Schedules Jonathan Harris social posts into OneUp via the public API.
-Includes seven day-specific daily lanes plus a weekly quiz series, shared prompt generation, queue guarding, dry-run previews, and weekend RSS-assisted freshness with fallback when the feed is not suitable.
+This route does **not** publish a new article.
 
-------------------------------------------------------------------------
+## Blog RSS feed
 
-# ⚙️ Installation
+The blog RSS feed is generated by:
 
-``` bash
-git clone <your-repo-url>
-cd <project-directory>
+- `services/blog/rss/publishBlogRssFeed.js`
+- `services/blog/utils/rssFeed.js`
+
+The feed is published to the dedicated blog RSS bucket, not the general rewrite RSS service.
+
+Default object key:
+
+- `feed.xml`
+
+With the current setup, the expected public URL is:
+
+- `https://blog-rss.jonathan-harris.online/feed.xml`
+
+## Environment variables relevant to blog publishing
+
+Defined in `env.template` and normalised in `scripts/envBootstrap.js`:
+
+### Blog storage
+
+- `R2_BUCKET_BLOG`
+- `R2_BUCKET_BLOG_IMAGES`
+- `R2_PUBLIC_BASE_URL_BLOG`
+- `R2_PUBLIC_BASE_URL_BLOG_IMAGES`
+- `BLOG_PREFIX` default: `blog`
+
+### Blog RSS storage
+
+- `R2_BUCKET_BLOG_RSS`
+- `R2_PUBLIC_BASE_URL_BLOG_RSS`
+- `BLOG_RSS_OBJECT_KEY` default: `feed.xml`
+- `BLOG_RSS_FEED_URL` optional override
+- `BLOG_RSS_TITLE` optional override
+- `BLOG_RSS_DESCRIPTION` optional override
+- `BLOG_RSS_IMAGE_URL` optional override
+
+### Site URL and rebuild
+
+- `SITE_BASE_URL`
+- `WEBSITE_REBUILD_HOOK`
+- `WEBSITE_REBUILD_HOOK_FALLBACK`
+
+## Install
+
+```bash
 npm install
 ```
 
-------------------------------------------------------------------------
+## Run locally
 
-# ▶️ Usage
-
-Start the development server:
-
-``` bash
-npm run dev
-```
-
-Or run in production:
-
-``` bash
+```bash
 npm start
 ```
 
-------------------------------------------------------------------------
+For a direct server start:
 
-# 🏗️ Architecture Overview
-
-This project follows a **service‑oriented architecture**, providing:
-
--   Clear separation of concerns\
--   Independent development of each service\
--   Modular pipeline execution\
--   Easy maintenance and testing
-
-```{=html}
-<!-- -->
+```bash
+npm run start:server
 ```
-    Client → API → Services (script, tts, artwork, podcast, rss) → Output
 
-------------------------------------------------------------------------
+## Test
 
-# 🧪 Testing
-
-``` bash
+```bash
 npm test
 ```
 
-------------------------------------------------------------------------
+## Basic blog operations
 
-# 📜 License
+### Publish the weekly blog post
 
-MIT License (or replace with your chosen license)
+```bash
+curl -X POST https://app.jonathan-harris.online/blog/weekly/build \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
 
-------------------------------------------------------------------------
+### Rebuild the blog RSS feed only
 
-If you'd like, I can generate a version with: - Shields/badges\
-- A visual architecture diagram\
-- API endpoint documentation\
-- Workflow examples
+```bash
+curl -X POST https://app.jonathan-harris.online/blog/rss/rebuild
+```
+
+## Expected publication flow
+
+A successful weekly publish should leave you with:
+
+- a new blog post HTML object in the blog bucket
+- a matching `post.json` sidecar
+- an updated `blog/posts.json` manifest
+- an updated blog RSS feed in the blog RSS bucket
+- a website rebuild hook call after publication succeeds
+
+## Notes
+
+- The blog RSS rebuild route is a recovery tool, not the main publishing route.
+- The weekly build route is the route that creates the article and then updates the feed.
+- Public base URLs are trimmed and normalised in the shared R2 client, including values that end with a trailing slash.
+
+## Licence
+
+Private internal project unless explicitly relicensed.
