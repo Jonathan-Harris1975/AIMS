@@ -44,6 +44,7 @@ const {
   R2_BUCKET_EDITED_AUDIO,
   R2_BUCKET_BLOG,
   R2_BUCKET_BLOG_IMAGES,
+  R2_BUCKET_BLOG_RSS,
 
   // Legacy/compat (read-only)
   R2_BUCKET_PODCAST_OUTPUT,
@@ -67,6 +68,7 @@ const {
   R2_PUBLIC_BASE_URL_EDITED_AUDIO,
   R2_PUBLIC_BASE_URL_BLOG,
   R2_PUBLIC_BASE_URL_BLOG_IMAGES,
+  R2_PUBLIC_BASE_URL_BLOG_RSS,
 
   // NEW — metasystem public URL (optional)
   R2_PUBLIC_BASE_URL_META_SYSTEM,
@@ -146,6 +148,11 @@ export const R2_BUCKETS = {
   blogimages:      R2_BUCKET_BLOG_IMAGES,
   "blog-images":   R2_BUCKET_BLOG_IMAGES,
 
+  // Blog RSS feed
+  blogRss:         R2_BUCKET_BLOG_RSS,
+  blogrss:         R2_BUCKET_BLOG_RSS,
+  "blog-rss":      R2_BUCKET_BLOG_RSS,
+
   // Legacy/compat (read-only)
   R2_BUCKET_PODCAST_OUTPUT,
 
@@ -201,6 +208,9 @@ export const BUCKET_ENV_BY_ALIAS = {
   blogImages: "R2_BUCKET_BLOG_IMAGES",
   blogimages: "R2_BUCKET_BLOG_IMAGES",
   "blog-images": "R2_BUCKET_BLOG_IMAGES",
+  blogRss: "R2_BUCKET_BLOG_RSS",
+  blogrss: "R2_BUCKET_BLOG_RSS",
+  "blog-rss": "R2_BUCKET_BLOG_RSS",
   metasystem: "R2_BUCKET_META_SYSTEM",
   metaSystem: "R2_BUCKET_META_SYSTEM",
 };
@@ -227,6 +237,9 @@ export const PUBLIC_URL_ENV_BY_ALIAS = {
   blogImages: "R2_PUBLIC_BASE_URL_BLOG_IMAGES",
   blogimages: "R2_PUBLIC_BASE_URL_BLOG_IMAGES",
   "blog-images": "R2_PUBLIC_BASE_URL_BLOG_IMAGES",
+  blogRss: "R2_PUBLIC_BASE_URL_BLOG_RSS",
+  blogrss: "R2_PUBLIC_BASE_URL_BLOG_RSS",
+  "blog-rss": "R2_PUBLIC_BASE_URL_BLOG_RSS",
   metasystem: "R2_PUBLIC_BASE_URL_META_SYSTEM",
   metaSystem: "R2_PUBLIC_BASE_URL_META_SYSTEM",
 };
@@ -262,6 +275,9 @@ export const R2_PUBLIC_URLS = {
   blogImages:      R2_PUBLIC_BASE_URL_BLOG_IMAGES,
   blogimages:      R2_PUBLIC_BASE_URL_BLOG_IMAGES,
   "blog-images":   R2_PUBLIC_BASE_URL_BLOG_IMAGES,
+  blogRss:         R2_PUBLIC_BASE_URL_BLOG_RSS,
+  blogrss:         R2_PUBLIC_BASE_URL_BLOG_RSS,
+  "blog-rss":      R2_PUBLIC_BASE_URL_BLOG_RSS,
 
   // NEW — metasystem public URL
   metasystem:      R2_PUBLIC_BASE_URL_META_SYSTEM,
@@ -299,6 +315,13 @@ export function ensureBucketKey(bucketKey) {
 }
 
 // ------------------------------------------------------------
+// 🔗 Public URL Joiner
+// ------------------------------------------------------------
+function joinPublicUrl(base, key) {
+  return `${String(base || "").replace(/\/+$/, "")}/${String(key || "").replace(/^\/+/, "")}`;
+}
+
+// ------------------------------------------------------------
 // ⚙️ Upload / Download
 // ------------------------------------------------------------
 export async function uploadBuffer(bucketKey, key, buffer, contentType = "application/octet-stream") {
@@ -319,7 +342,7 @@ export async function uploadBuffer(bucketKey, key, buffer, contentType = "applic
     throw new Error(`❌ No public URL configured for R2 bucket alias '${bucketKey}' (${envName}).`);
   }
 
-  return `${base}/${encodeURIComponent(key)}`;
+  return joinPublicUrl(base, key);
 }
 
 export async function uploadText(bucketKey, key, text, contentType = "text/plain") {
@@ -352,7 +375,7 @@ export function buildPublicUrl(bucketKey, key) {
     const envName = PUBLIC_URL_ENV_BY_ALIAS[bucketKey] || `public URL alias '${bucketKey}'`;
     throw new Error(`❌ No public URL configured for ${bucketKey} (${envName})`);
   }
-  return `${base}/${encodeURIComponent(key)}`;
+  return joinPublicUrl(base, key);
 }
 
 // ------------------------------------------------------------
