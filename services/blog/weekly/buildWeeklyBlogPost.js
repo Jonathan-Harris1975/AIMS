@@ -5,6 +5,7 @@ import { resilientRequest } from "../../shared/utils/ai-service.js";
 import { slugify } from "../utils/slug.js";
 import { pageTemplate, weeklyPostBody } from "../utils/templates.js";
 import { createBlogArtwork } from "../../artwork/createBlogArtwork.js";
+import { publishBlogRssFeed } from "../rss/publishBlogRssFeed.js";
 import {
   cleanSourceText,
   cleanSourceTitle,
@@ -62,15 +63,6 @@ function escapeHtml(str) {
     .replace(/>/g, "&gt;")
     .replace(/\"/g, "&quot;")
     .replace(/'/g, "&#39;");
-}
-
-function escapeXml(str) {
-  return String(str || "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/\"/g, "&quot;")
-    .replace(/'/g, "&apos;");
 }
 
 function formatDate(date) {
@@ -172,25 +164,33 @@ function joinUrl(base, path) {
   return `${String(base || "").replace(/\/$/, "")}/${String(path || "").replace(/^\//, "")}`;
 }
 
-function buildSiteBlogUrls(slug, prefix = "blog") {
+function buildSiteBlogBaseUrls(prefix = "blog") {
   const siteBaseUrl = String(process.env.SITE_BASE_URL || "https://jonathan-harris.online").replace(/\/$/, "");
   const normalisedPrefix = String(prefix || "blog").replace(/^\/+|\/+$/g, "") || "blog";
   const blogBasePath = `/${normalisedPrefix}`;
-  const postPath = `${blogBasePath}/posts/${encodeURIComponent(slug)}/`;
 
   return {
     siteBaseUrl,
     blogBasePath,
-    postPath,
-    postUrl: joinUrl(siteBaseUrl, postPath),
-    postMetaUrl: joinUrl(siteBaseUrl, `${postPath}post.json`),
-    postsManifestUrl: joinUrl(siteBaseUrl, `${blogBasePath}/posts.json`),
     blogHubUrl: joinUrl(siteBaseUrl, `${blogBasePath}/`),
     weeklyArchiveUrl: joinUrl(siteBaseUrl, `${blogBasePath}/weekly/`),
   };
 }
 
-async function triggerWebsiteRebuild(context = {}) {
+function buildSiteBlogUrls(slug, prefix = "blog") {
+  const baseUrls = buildSiteBlogBaseUrls(prefix);
+  const postPath = `${baseUrls.blogBasePath}/posts/${encodeURIComponent(slug)}/`;
+
+  return {
+    ...baseUrls,
+    postPath,
+    postUrl: joinUrl(baseUrls.siteBaseUrl, postPath),
+    postMetaUrl: joinUrl(baseUrls.siteBaseUrl, `${postPath}post.json`),
+    postsManifestUrl: joinUrl(baseUrls.siteBaseUrl, `${baseUrls.blogBasePath}/posts.json`),
+  };
+}
+
+async function triggerWebsiteRebuild() {
   const primaryHook = String(process.env.WEBSITE_REBUILD_HOOK || "https://hooks.jonathan-harris.online/4q1mkzkfvb566f").trim();
   const fallbackHook = String(process.env.WEBSITE_REBUILD_HOOK_FALLBACK || "").trim();
   const hooks = [primaryHook, fallbackHook].filter(Boolean);
@@ -204,14 +204,13 @@ async function triggerWebsiteRebuild(context = {}) {
   for (const hookUrl of hooks) {
     for (let attempt = 1; attempt <= 3; attempt += 1) {
       try {
-        info("blog.weekly.rebuild.start", { ...context, hookUrl, attempt });
+        info("blog.weekly.rebuild.start", { hookUrl, attempt });
         const response = await fetch(hookUrl, { method: "POST" });
         const body = await response.text().catch(() => "");
         const result = { ok: response.ok, status: response.status, hookUrl, attempt, body };
 
         if (response.ok) {
           info("blog.weekly.rebuild.success", {
-            ...context,
             hookUrl,
             attempt,
             status: response.status,
@@ -221,7 +220,6 @@ async function triggerWebsiteRebuild(context = {}) {
 
         lastError = new Error(`non-2xx response ${response.status}`);
         warn("blog.weekly.rebuild.nonOk", {
-          ...context,
           hookUrl,
           attempt,
           status: response.status,
@@ -230,7 +228,6 @@ async function triggerWebsiteRebuild(context = {}) {
       } catch (rebuildError) {
         lastError = rebuildError;
         warn("blog.weekly.rebuild.fail", {
-          ...context,
           hookUrl,
           attempt,
           error: rebuildError?.message || "Unknown rebuild trigger error",
@@ -414,28 +411,24 @@ export async function buildWeeklyBlogPost({ days, weekId } = {}) {
     });
     await putJson(outBucketKey, `${prefix}/posts.json`, mergedManifest);
 
+    const publishedManifest = await loadExistingPostsManifest(outBucketKey, `${prefix}/posts.json`);
+    const rss = await publishBlogRssFeed({
+      manifest: publishedManifest,
+      prefix,
+    });
 
     info("blog.weekly.build.success", {
       week: window.week,
-      postPath,
       postUrl,
       postMetaUrl,
       postsManifestUrl,
+      rssFeedUrl: rss.feedUrl,
       imageUrl,
       sourceCount: cleanedSources.length,
       themeCount: weeklyPackage.dominantThemes.length,
     });
 
-    const rebuild = await triggerWebsiteRebuild({ week: window.week, slug, postUrl });
-
-    if (!rebuild.ok) {
-      warn("blog.weekly.rebuild.unconfirmed", {
-        week: window.week,
-        slug,
-        postUrl,
-        error: rebuild.error || rebuild.reason || "unknown rebuild trigger outcome",
-      });
-    }
+    const rebuild = await triggerWebsiteRebuild();
 
     return {
       ok: true,
@@ -451,10 +444,13 @@ export async function buildWeeklyBlogPost({ days, weekId } = {}) {
       imageUrl,
       blogHubUrl,
       weeklyArchiveUrl,
+      rssFeedUrl: rss.feedUrl,
+      rss,
       publishedObjects: {
         postHtmlKey: `${dir}/index.html`,
         postMetaKey: `${dir}/post.json`,
         manifestKey: `${prefix}/posts.json`,
+        rssFeedKey: rss.objectKey,
       },
       rebuild,
     };
