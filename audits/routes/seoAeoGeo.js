@@ -24,6 +24,7 @@ router.post("/run", hookdeckDedupe("audits:seo-aeo-geo:run"), asyncRoute(async (
     workflowId: WORKFLOW_ID,
     body: parsed.data,
     callbackPath: "/audits/seo-aeo-geo/callback",
+    defaultExcludePatterns: [],
   });
 
   return res.status(202).json(result);
