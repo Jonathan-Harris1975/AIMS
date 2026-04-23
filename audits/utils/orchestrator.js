@@ -1,49 +1,44 @@
-import { info } from "../../logger.js";
-import {
-  failJob,
-  queueJob,
-  startJob,
-  completeJob,
-  getPublicJob,
-} from "../../services/shared/utils/jobStore.js";
+import { info, warn } from "../../logger.js";
+import { failJob, queueJob, startJob, completeJob, getPublicJob } from "../../services/shared/utils/jobStore.js";
 import { sanitizeSessionId } from "../../services/shared/utils/sessionId.js";
-import {
-  dispatchGithubWorkflow,
-  verifyGithubWorkflowRun,
-} from "./githubDispatch.js";
+import { dispatchGithubWorkflow } from "./githubDispatch.js";
 import { buildAuditPrefix, makeAuditJobType } from "./auditPaths.js";
-import { publishAuditLatest, publishAuditRequest } from "./publishAuditArtifacts.js";
+import { cleanupAuditPrefix, publishAuditLatest, publishAuditRequest } from "./publishAuditArtifacts.js";
 
 const DEFAULT_WEBSITE_URL = "https://jonathan-harris.online";
 const DEFAULT_EXCLUDE_PATTERNS = ["/podcast", "/blog"];
+const FINAL_KEEP_FILES_BY_AUDIT = {
+  "seo-aeo-geo": ["report.html", "summary.json", "coverage.json"],
+};
+
+function resolveCallbackBaseUrl() {
+  const preferred = String(process.env.AUDIT_CALLBACK_BASE_URL || "").trim();
+  if (preferred) return preferred.replace(/\/$/, "");
+
+  const fallback = String(process.env.APP_URL || "").trim();
+  return fallback ? fallback.replace(/\/$/, "") : "";
+}
 
 export async function startAuditRun({
   auditType,
   workflowId,
   body,
   callbackPath,
+  defaultExcludePatterns = DEFAULT_EXCLUDE_PATTERNS,
 }) {
-  const sessionId = sanitizeSessionId(
-    body.sessionId || `${auditType}-${Date.now()}`,
-    `AUD-${auditType.toUpperCase()}`
-  );
+  const sessionId = sanitizeSessionId(body.sessionId || `${auditType}-${Date.now()}`, `AUD-${auditType.toUpperCase()}`);
   const reportPrefix = body.reportPrefix || buildAuditPrefix(auditType, sessionId);
   const jobType = makeAuditJobType(auditType);
-  const callbackBaseUrl = String(
-    process.env.AUDIT_CALLBACK_BASE_URL || process.env.APP_URL || ""
-  )
-    .trim()
-    .replace(/\/$/, "");
+  const callbackBaseUrl = resolveCallbackBaseUrl();
   const callbackUrl = callbackBaseUrl ? `${callbackBaseUrl}${callbackPath}` : "";
 
   const payload = {
     sessionId,
     websiteUrl: body.websiteUrl || DEFAULT_WEBSITE_URL,
     reportPrefix,
-    excludePatterns:
-      Array.isArray(body.excludePatterns) && body.excludePatterns.length
-        ? body.excludePatterns
-        : DEFAULT_EXCLUDE_PATTERNS,
+    excludePatterns: Array.isArray(body.excludePatterns)
+      ? body.excludePatterns.map((value) => String(value).trim()).filter(Boolean)
+      : defaultExcludePatterns,
     requestedBy: body.requestedBy || "manual",
     notes: body.notes || "",
     workflowRef: body.workflowRef,
@@ -79,13 +74,6 @@ export async function startAuditRun({
       ref: payload.workflowRef,
     });
 
-    const workflowRun = await verifyGithubWorkflowRun({
-      workflowId,
-      ref: payload.workflowRef,
-      sessionId,
-      dispatchedAt: dispatch.dispatchedAt,
-    });
-
     await publishAuditLatest({
       auditType,
       sessionId,
@@ -94,7 +82,6 @@ export async function startAuditRun({
         reportPrefix,
         workflowId,
         websiteUrl: payload.websiteUrl,
-        workflowRunUrl: workflowRun.workflowRunUrl || null,
       },
     });
 
@@ -104,7 +91,6 @@ export async function startAuditRun({
       workflowId,
       reportPrefix,
       callbackUrl,
-      workflowRunUrl: workflowRun.workflowRunUrl || null,
     });
 
     return {
@@ -113,11 +99,7 @@ export async function startAuditRun({
       sessionId,
       status: "queued",
       reportPrefix,
-      dispatch: {
-        ...dispatch,
-        workflowRunUrl: workflowRun.workflowRunUrl || null,
-        workflowRunId: workflowRun.runId || null,
-      },
+      dispatch,
       job: getPublicJob(jobType, sessionId),
     };
   } catch (err) {
@@ -131,32 +113,26 @@ export async function startAuditRun({
 
 export async function completeAuditRun({ auditType, payload }) {
   const jobType = makeAuditJobType(auditType);
-  const sessionId = sanitizeSessionId(
-    payload.sessionId || "",
-    `AUD-${auditType.toUpperCase()}`
-  );
+  const sessionId = sanitizeSessionId(payload.sessionId || "", `AUD-${auditType.toUpperCase()}`);
   const status = String(payload.status || "completed").trim().toLowerCase();
   const jobMetadata = {
     reportPrefix: payload.reportPrefix,
     reportUrl: payload.reportUrl || null,
     summaryUrl: payload.summaryUrl || null,
+    coverageUrl: payload.coverageUrl || payload.artefacts?.["coverage.json"] || null,
     executionUrl: payload.executionUrl || payload.evidenceUrl || null,
     preflightUrl: payload.preflightUrl || payload.reconciliationUrl || null,
     workflowRunUrl: payload.workflowRunUrl || null,
     screenshotCount: payload.screenshotCount ?? null,
     mobileFailureCount: payload.mobileFailureCount ?? null,
     issueCount: payload.issueCount ?? null,
+    auditedUrlCount: payload.auditedUrlCount ?? null,
     artefacts: payload.artefacts || {},
     finishedAt: payload.finishedAt || new Date().toISOString(),
   };
 
   if (status === "failed") {
-    failJob(
-      jobType,
-      sessionId,
-      payload.message || payload.error || "Audit workflow failed",
-      jobMetadata
-    );
+    failJob(jobType, sessionId, payload.message || payload.error || "Audit workflow failed", jobMetadata);
   } else {
     completeJob(jobType, sessionId, jobMetadata);
   }
@@ -169,6 +145,22 @@ export async function completeAuditRun({ auditType, payload }) {
       ...jobMetadata,
     },
   });
+
+  if (status === "completed" && jobMetadata.reportPrefix) {
+    const keepRelativePaths = FINAL_KEEP_FILES_BY_AUDIT[auditType] || [];
+    if (keepRelativePaths.length) {
+      try {
+        await cleanupAuditPrefix({ reportPrefix: jobMetadata.reportPrefix, keepRelativePaths });
+      } catch (cleanupError) {
+        warn("audit.cleanup.failed", {
+          auditType,
+          sessionId,
+          reportPrefix: jobMetadata.reportPrefix,
+          error: cleanupError?.message || String(cleanupError),
+        });
+      }
+    }
+  }
 
   return {
     ok: true,

@@ -1,4 +1,4 @@
-import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { DeleteObjectsCommand, ListObjectsV2Command, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 
 const BRAND_ASSETS_BUCKET = String(process.env.R2_BUCKET_BRAND_ASSETS || "brand-assets").trim();
 const BRAND_ASSETS_PUBLIC_BASE = String(process.env.R2_PUBLIC_BASE_URL_BRAND_ASSETS || "").trim().replace(/\/$/, "");
@@ -18,7 +18,7 @@ function buildPublicUrl(key) {
   if (!BRAND_ASSETS_PUBLIC_BASE) {
     throw new Error("R2_PUBLIC_BASE_URL_BRAND_ASSETS is required for audit publishing");
   }
-  return `${BRAND_ASSETS_PUBLIC_BASE}/${encodeURIComponent(key)}`;
+  return `${BRAND_ASSETS_PUBLIC_BASE}/${key.split("/").map(encodeURIComponent).join("/")}`;
 }
 
 async function putJson(key, payload) {
@@ -56,7 +56,51 @@ export async function publishAuditLatest({ auditType, sessionId, payload }) {
   return { key, url };
 }
 
+export async function cleanupAuditPrefix({ reportPrefix, keepRelativePaths = [] }) {
+  const client = getClient();
+  const keepKeys = new Set(
+    keepRelativePaths
+      .map((relativePath) => String(relativePath || "").trim())
+      .filter(Boolean)
+      .map((relativePath) => `${reportPrefix.replace(/\/$/, "")}/${relativePath.replace(/^\//, "")}`)
+  );
+
+  let continuationToken;
+  const toDelete = [];
+
+  do {
+    const response = await client.send(new ListObjectsV2Command({
+      Bucket: BRAND_ASSETS_BUCKET,
+      Prefix: `${reportPrefix.replace(/\/$/, "")}/`,
+      ContinuationToken: continuationToken,
+    }));
+
+    for (const item of response.Contents || []) {
+      if (!item?.Key) continue;
+      if (keepKeys.has(item.Key)) continue;
+      toDelete.push({ Key: item.Key });
+    }
+
+    continuationToken = response.IsTruncated ? response.NextContinuationToken : undefined;
+  } while (continuationToken);
+
+  if (!toDelete.length) {
+    return { deletedCount: 0 };
+  }
+
+  while (toDelete.length) {
+    const batch = toDelete.splice(0, 1000);
+    await client.send(new DeleteObjectsCommand({
+      Bucket: BRAND_ASSETS_BUCKET,
+      Delete: { Objects: batch, Quiet: true },
+    }));
+  }
+
+  return { deletedCount: toDelete.length };
+}
+
 export default {
   publishAuditRequest,
   publishAuditLatest,
+  cleanupAuditPrefix,
 };
