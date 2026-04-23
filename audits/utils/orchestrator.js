@@ -15,7 +15,7 @@ import { buildAuditPrefix, makeAuditJobType } from "./auditPaths.js";
 import { publishAuditLatest, publishAuditRequest } from "./publishAuditArtifacts.js";
 
 const DEFAULT_WEBSITE_URL = "https://jonathan-harris.online";
-const DEFAULT_EXCLUDE_PATTERNS = ["/podcast", "/blog"];
+
 
 export async function startAuditRun({
   auditType,
