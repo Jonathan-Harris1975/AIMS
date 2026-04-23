@@ -220,6 +220,7 @@ export const auditCallbackBodySchema = z
     reportPrefix: z.string().trim().min(1).max(500),
     reportUrl: z.string().trim().url().optional(),
     summaryUrl: z.string().trim().url().optional(),
+    coverageUrl: z.string().trim().url().optional(),
     executionUrl: z.string().trim().url().optional(),
     preflightUrl: z.string().trim().url().optional(),
     evidenceUrl: z.string().trim().url().optional(),
