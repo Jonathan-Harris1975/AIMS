@@ -212,6 +212,24 @@ export const auditRunBodySchema = z
   })
   .passthrough();
 
+
+export const auditAnalysisBodySchema = z
+  .object({
+    auditType: z.string().trim().min(1).max(80).optional().default("seo-aeo-geo"),
+    sessionId: z.string().trim().min(1).max(120),
+    baseUrl: z.string().trim().url(),
+    generatedAt: z.string().trim().min(1).max(80).optional(),
+    inventory: z.record(z.string(), z.any()),
+    priorityPages: z.array(z.record(z.string(), z.any())).min(1),
+    allRoutes: z.array(z.record(z.string(), z.any())).min(1),
+    heuristicIssues: z.array(z.record(z.string(), z.any())).optional().default([]),
+    repoSignals: z.record(z.string(), z.any()),
+    liveDynamicUrls: z.array(z.record(z.string(), z.any())).optional().default([]),
+    coverage: z.array(z.record(z.string(), z.any())).optional().default([]),
+    coverageFamilies: z.array(z.record(z.string(), z.any())).optional().default([]),
+  })
+  .passthrough();
+
 export const auditCallbackBodySchema = z
   .object({
     auditType: z.string().trim().min(1).max(80),

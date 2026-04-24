@@ -35,6 +35,9 @@ export const aiConfig = {
     // Blog
     blogWeekly: ["google", "chatgpt", "deepseek"],
 
+    // Audit analysis
+    auditForensic: ["anthropic", "google", "chatgpt"],
+
     // OneUp social scheduler
     oneupDaily: ["chatgpt", "google", "deepseek"],
     oneupQuiz: ["chatgpt", "google", "deepseek"],
