@@ -1,8 +1,14 @@
 import express from "express";
 import { hookdeckDedupe } from "../../services/shared/utils/hookdeckDedupe.js";
-import { validateBody, auditCallbackBodySchema, auditRunBodySchema } from "../../services/shared/utils/requestSchemas.js";
+import {
+  validateBody,
+  auditAnalysisBodySchema,
+  auditCallbackBodySchema,
+  auditRunBodySchema,
+} from "../../services/shared/utils/requestSchemas.js";
 import { completeAuditRun, getAuditJob, startAuditRun } from "../utils/orchestrator.js";
 import { requireAuditCallbackAuth } from "../utils/callbackAuth.js";
+import { runSeoAeoGeoAnalysis } from "../utils/seoAeoGeoAnalysis.js";
 
 const router = express.Router();
 const asyncRoute = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
@@ -24,10 +30,19 @@ router.post("/run", hookdeckDedupe("audits:seo-aeo-geo:run"), asyncRoute(async (
     workflowId: WORKFLOW_ID,
     body: parsed.data,
     callbackPath: "/audits/seo-aeo-geo/callback",
-    defaultExcludePatterns: [],
   });
 
   return res.status(202).json(result);
+}));
+
+router.post("/analysis", requireAuditCallbackAuth, asyncRoute(async (req, res) => {
+  const parsed = validateBody(auditAnalysisBodySchema, req.body);
+  if (!parsed.ok) {
+    return res.status(400).json({ ok: false, error: parsed.error });
+  }
+
+  const analysis = await runSeoAeoGeoAnalysis(parsed.data);
+  return res.json({ ok: true, auditType: AUDIT_TYPE, sessionId: parsed.data.sessionId, analysis });
 }));
 
 router.post("/callback", requireAuditCallbackAuth, asyncRoute(async (req, res) => {
