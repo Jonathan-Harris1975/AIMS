@@ -44,6 +44,26 @@ const TITLE_BRAND_PATTERNS = [
     pattern: /^\s*questions\s+to\s+consider\b/i,
     message: 'Title uses banned explainer scaffold "Questions to consider..."',
   },
+  {
+    pattern: /\band\s+the\s+challenge\s+of\b/i,
+    message: 'Title uses formula scaffold "and the challenge of"',
+  },
+  {
+    pattern: /\bposes\s+significant\b/i,
+    message: 'Title uses corporate risk scaffold "poses significant"',
+  },
+  {
+    pattern: /\brequires\s+robust\b/i,
+    message: 'Title uses corporate scaffold "requires robust"',
+  },
+  {
+    pattern: /\bhampers\s+progress\b/i,
+    message: 'Title uses generic progress scaffold "hampers progress"',
+  },
+  {
+    pattern: /^\s*AI(?:'s)?\s+(?:integration|latency|agents|adoption|governance|infrastructure|strategy|progress|future)\b/i,
+    message: "Title starts with repetitive AI abstract-noun scaffold",
+  },
 ];
 
 const METADATA_LEAK_PATTERNS = [
@@ -84,6 +104,20 @@ const BANNED_SUMMARY_PHRASES = [
   "underscores",
   "showcases",
   "notably",
+  "robust data fabric",
+  "robust data infrastructure",
+  "seamless data integration",
+  "meaningful business value",
+  "deliver meaningful business value",
+  "competitive advantage",
+  "holistic approach",
+  "mainstream application",
+  "finds its footing",
+  "pivotal moment",
+  "poses significant",
+  "raises questions",
+  "the emphasis should be on",
+  "the implications of these choices",
 ];
 
 export const SYSTEM = `

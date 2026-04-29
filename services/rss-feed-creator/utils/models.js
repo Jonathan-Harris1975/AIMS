@@ -288,8 +288,14 @@ export async function generateShortTitle(item = {}) {
       throw new Error("No input content for rssShortTitle");
     }
 
-    const systemPrompt =
-      "You are an editorial assistant that creates short, catchy RSS titles for AI news items. Keep it under 10 words, no punctuation at the end, no emojis, no quotes, and output plain text only.";
+    const systemPrompt = [
+      "You create clean Jonathan Harris RSS headlines for AI news items.",
+      "Maximum 10 words.",
+      "British, plain, sceptical, and human.",
+      "No clickbait, no hype, no prefixes, no source names unless essential.",
+      "Avoid formula templates such as 'X and the challenge of Y' or 'AI\'s X requires robust Y'.",
+      "Output plain text only: no punctuation at the end, no emojis, no quotes."
+    ].join(" ");
 
     const userPrompt = [
       "Original title:",
@@ -316,12 +322,20 @@ export async function generateShortTitle(item = {}) {
       .replace(/^"|"$/g, "")
       .trim();
 
-    return shortTitle.length > 80 ? shortTitle.slice(0, 77) + "..." : shortTitle;
+    const candidate = RSS_PROMPTS.clampTitleTo12Words(shortTitle, 10);
+    const validation = RSS_PROMPTS.validateTitleBrand(candidate);
+    if (!validation.valid) {
+      throw new Error(`Generated short title failed brand validation: ${validation.errors.join("; ")}`);
+    }
+
+    return candidate.length > 80 ? `${candidate.slice(0, 77)}...` : candidate;
   } catch (err) {
     error("rss-feed-creator.shortTitle.fail", {
       route: "rssShortTitle",
       err: err?.message,
     });
-    return String(item?.title || "Untitled Article").slice(0, 80);
+    const fallback = RSS_PROMPTS.clampTitleTo12Words(item?.title || "Untitled Article", 10);
+    const fallbackValidation = RSS_PROMPTS.validateTitleBrand(fallback);
+    return fallbackValidation.valid ? fallback : "Untitled Article";
   }
 }

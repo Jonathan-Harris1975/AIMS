@@ -75,6 +75,14 @@ export async function generateFeed(bucket, rewrittenItems) {
     const totalBeforeRetention = publishableItems.length;
     const discardedCount = totalBeforeRetention - validItems.length;
 
+    debug("rss-feed-creator.generateFeed.retention", {
+      retentionDays: FEED_RETENTION_DAYS,
+      cutoff: retentionCutoff.toISOString(),
+      beforeRetention: publishableItems.length,
+      afterRetention: validItems.length,
+      discarded: discardedCount,
+    });
+
     if (validItems.length === 0) {
       debug("rss-feed-creator.generateFeed.skip", {
         reason: "no items within retention period",
@@ -168,7 +176,11 @@ async function loadExistingFeedItems(bucket) {
       link: item.link || "",
       pubDate: item.pubDate || new Date().toUTCString(),
       guid: item.guid?.["#text"] || item.guid || "",
-      rewritten: extractTextFromCDATA(item.description?.__cdata || ""),
+      rewritten: RSS_PROMPTS.clampSummaryToWindow(
+        extractTextFromCDATA(item.description?.__cdata || ""),
+        RSS_PROMPTS.MIN_SUMMARY_CHARS,
+        RSS_PROMPTS.MAX_SUMMARY_CHARS
+      ),
     }));
   } catch (err) {
     info("rss-feed-creator.loadExisting.fail", {
@@ -248,7 +260,11 @@ function normalizeItem(item, fallbackLink, now) {
   }
 
   // HARD: publish rewritten only (never fall back to source summary)
-  const rewritten = RSS_PROMPTS.normalizeSummaryText(item?.rewritten || "");
+  const rewritten = RSS_PROMPTS.clampSummaryToWindow(
+    item?.rewritten || "",
+    RSS_PROMPTS.MIN_SUMMARY_CHARS,
+    RSS_PROMPTS.MAX_SUMMARY_CHARS
+  );
 
   return { title, link, pubDate, guid, rewritten };
 }
@@ -304,6 +320,12 @@ function getPublicationIssues(item) {
   // Guard against ultra-short junk
   if (rewritten && rewritten.length < 120) {
     issues.push(`Summary too short for publication (${rewritten.length} chars)`);
+  }
+
+  if (rewritten && rewritten.length > RSS_PROMPTS.MAX_SUMMARY_CHARS) {
+    issues.push(
+      `Summary too long for publication (${rewritten.length} chars, max ${RSS_PROMPTS.MAX_SUMMARY_CHARS})`
+    );
   }
 
   return Array.from(new Set(issues));
@@ -387,16 +409,16 @@ function buildXmlFeedObject(feedState) {
       "@_version": "2.0",
       "@_xmlns:atom": "http://www.w3.org/2005/Atom",
       channel: {
-        title: escapeXml(channel.title || ""),
+        title: channel.title || "",
         link: channel.link || "",
-        description: escapeXml(channel.description || ""),
+        description: channel.description || "",
         language: channel.language || "en-gb",
         lastBuildDate: channel.lastBuildDate,
         pubDate: channel.pubDate,
         generator: channel.generator,
         "atom:link": channel["atom:link"],
         item: itemList.map((item) => ({
-          title: escapeXml(item.title || "Untitled Article"),
+          title: item.title || "Untitled Article",
           link: item.link,
           guid: item.guid,
           pubDate: item.pubDate,
@@ -416,11 +438,9 @@ function escapeHtml(str = "") {
     .replace(/'/g, "&#39;");
 }
 
-function escapeXml(str = "") {
-  return String(str)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&apos;");
-}
+export const __testing = {
+  buildXmlFeedObject,
+  getPublicationIssues,
+  normalizeItem,
+  extractTextFromCDATA,
+};
