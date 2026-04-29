@@ -85,6 +85,8 @@ Length target: ~${approxMinutes} minutes (~${approxWords} words).
 
 NON-NEGOTIABLE:
 - Plain British English. Spoken. No bullets, no numbering, no headings, no stage directions.
+- Use British spelling throughout.
+- Every paragraph must sound complete when read aloud. No dangling words, incomplete paragraphs, or broken joins.
 - Do not mention “RSS”, “feed”, “articles”, “sources”, “links”, or any internal process.
 - Do not quote large blocks of text. No “according to”. No legalese.
 - Assume the listener is smart but busy: explain the topic clearly without dumbing it down.
@@ -97,6 +99,7 @@ GOLD-STANDARD FLOW (do NOT label these steps, just do them):
 5) Sober scepticism: one controlled, Gen-X-leaning sceptical punchline or observation, then land the point with clarity.
 
 End with a clean, spoken closing line that feels complete but not like the end of the whole episode.
+Run a final assembly guard before answering: no orphan words, no cut-off paragraphs, no lowercase punctuation glitches, and no sentence that looks stitched together.
 
 RSS INPUT (for your eyes only — never reference directly):
 ${articlePreview}
@@ -115,20 +118,10 @@ export function getOutroPromptFull(book, sessionMeta) {
     .replace(/^https?:\/\//, "")
     .replace(/www\./, "")
     .replace(/\./g, " dot ")
-    .replace(/-/g, " dash ")
     .replace(/\//g, " slash ")
     .trim();
 
   const bookTitle = (book?.title || "one of my artificial intelligence ebooks").trim();
-  const bookUrl = (book?.url || "https://books.jonathan-harris.online").trim();
-  const bookSpoken = bookUrl
-    .replace(/^https?:\/\//, "")
-    .replace(/www\./, "")
-    .replace(/\./g, " dot ")
-    .replace(/-/g, " dash ")
-    .replace(/\//g, " slash ")
-    .trim();
-
 
   return `
 ${persona}
@@ -138,13 +131,16 @@ Write a tight, confident OUTRO (30–40 seconds) in a dry, witty British radio v
 MANDATORY ORDER (no bullets, no headings, just spoken flow):
 1) Value recap: one or two sentences that acknowledge the week’s intensity and why clarity matters.
 2) Newsletter CTA (SITE ONLY): Invite listeners to get the daily AI briefing at ${siteSpoken}. Keep it simple: one email, no hype, no fluff.
-3) Sponsor (BOOK ONLY): Seamlessly introduce this week's sponsor as your own book: "${bookTitle}", available at ${bookSpoken}. Frame it as a deeper dive for people who want understanding, not buzzwords.
+3) Sponsor (BOOK ONLY): Seamlessly introduce this week's sponsor as your own book: "${bookTitle}". Tell listeners it is in the eBooks section there. Do not read or invent a book-specific URL path.
 4) Close: End EXACTLY with:
 "${OUTRO_CLOSING_TAGLINE}"
 
 Rules:
 - Do NOT merge the website URL with the book URL.
 - Do NOT include more than one website mention.
+- Never speak slash paths, dash-heavy paths, tracking links, or full ebook URLs.
+- Use British spelling throughout.
+- No dangling words, incomplete final paragraphs, or broken punctuation joins.
 - No discounts, no urgency, no “limited time”.
 - Plain text only.
 

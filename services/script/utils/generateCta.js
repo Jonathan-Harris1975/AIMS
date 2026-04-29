@@ -3,14 +3,7 @@
 export default function generateCta(book) {
   const safeTitle = book?.title?.replace(/[-]/g, " ") ?? "this topic";
 
-  const rawUrl = book?.url || "https://jonathan-harris.online";
-  const spokenUrl = rawUrl
-    .replace(/^https?:\/\//, "")
-    .replace(/www\./, "")
-    .replace(/\./g, " dot ")
-    .replace(/-/g, " dash ")
-    .replace(/\//g, " slash ")
-    .trim();
+  const spokenUrl = "jonathan-harris dot online";
 
-  return `Curious to explore "${safeTitle}" and more? Head over to ${spokenUrl} — you'll find my full ebook collection, daily artificial intelligence newsletter, and plenty of sharp, spam-free insights.`;
+  return `Curious to explore "${safeTitle}" and more? Head to ${spokenUrl} and open the eBooks section. You'll also find the daily artificial intelligence briefing and plenty of sharp, spam-free insights.`;
 }

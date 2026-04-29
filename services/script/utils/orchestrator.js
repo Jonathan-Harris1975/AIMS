@@ -70,6 +70,10 @@ export async function orchestrateScript(input) {
 
     const initialValidation = validateTranscriptStructure(initialFullText);
     if (!initialValidation.ok) {
+      error("script.validation.composed.fail", {
+        sessionId: sid,
+        reasons: initialValidation.reasons,
+      });
       throw new Error(`Composed script failed structure validation: ${initialValidation.reasons.join("; ")}`);
     }
 
@@ -104,6 +108,10 @@ export async function orchestrateScript(input) {
 
     const finalValidation = validateTranscriptStructure(finalCandidate);
     if (!finalValidation.ok) {
+      error("script.validation.final.fail", {
+        sessionId: sid,
+        reasons: finalValidation.reasons,
+      });
       throw new Error(`Final script failed structure validation: ${finalValidation.reasons.join("; ")}`);
     }
 

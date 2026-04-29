@@ -3,6 +3,42 @@ import { OUTRO_CLOSING_TAGLINE } from "./promptTemplates.js";
 const MIN_TRANSCRIPT_LENGTH = 500;
 const MIN_OUTRO_LENGTH = 120;
 
+const LOWERCASE_PUNCTUATION_ABBREVIATIONS = new Set([
+  "approx",
+  "etc",
+  "e.g",
+  "i.e",
+  "vs",
+]);
+
+const DANGLING_CONNECTORS = [
+  "and",
+  "or",
+  "but",
+  "so",
+  "because",
+  "if",
+  "when",
+  "while",
+  "for",
+  "with",
+  "to",
+  "of",
+  "from",
+  "about",
+  "into",
+  "through",
+  "around",
+  "what",
+  "which",
+  "that",
+  "this",
+  "these",
+  "those",
+  "than",
+  "then",
+];
+
 function normaliseWhitespace(text = "") {
   return String(text || "").replace(/\s+/g, " ").trim();
 }
@@ -14,6 +50,39 @@ function normaliseForComparison(text = "") {
       .replace(/[’]/g, "'")
       .replace(/[‐‑‒–—]/g, "-")
   );
+}
+
+function splitParagraphs(text = "") {
+  return String(text || "")
+    .split(/\n\s*\n/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+function lastNonEmptyParagraph(text = "") {
+  const paragraphs = splitParagraphs(text);
+  return paragraphs[paragraphs.length - 1] || "";
+}
+
+function lastSentence(text = "") {
+  const trimmed = String(text || "").trim();
+  const sentences = trimmed.match(/[^.!?]+[.!?]?(?:["')\]]+)?/g) || [];
+  return (sentences[sentences.length - 1] || "").trim();
+}
+
+function words(text = "") {
+  return normaliseWhitespace(text).split(/\s+/).filter(Boolean);
+}
+
+function textBeforeOutro(text = "") {
+  const trimmed = String(text || "").trim();
+  const outro = extractOutro(trimmed);
+  if (!trimmed || !outro) return trimmed;
+
+  const idx = trimmed.lastIndexOf(outro);
+  if (idx < 0) return trimmed;
+
+  return trimmed.slice(0, idx).trim();
 }
 
 export function hasRequiredOutro(text = "") {
@@ -35,7 +104,7 @@ export function looksAbruptlyCutOff(text = "") {
 
   const tail = trimmed.slice(-180).toLowerCase();
   const abruptPatterns = [
-    /\b(and|or|but|so|because|if|when|while|for|with|to|of|from|about|into|through|around|what|which|that|this|these|those|than|then)\s*$/,
+    new RegExp(`\\b(?:${DANGLING_CONNECTORS.join("|")})\\s*$`, "i"),
     /[,;:\-–—]\s*$/,
     /\b(?:you would ask for|this means that|the point is that|what happens when)\s*$/,
   ];
@@ -43,15 +112,67 @@ export function looksAbruptlyCutOff(text = "") {
   return abruptPatterns.some((pattern) => pattern.test(tail));
 }
 
+export function findBrokenPunctuationJoins(text = "") {
+  const source = String(text || "");
+  const matches = [];
+  const pattern = /\b([a-z][a-z.]{1,14})\.\s+([a-z][a-z]{1,})\b/g;
+
+  for (const match of source.matchAll(pattern)) {
+    const before = String(match[1] || "").toLowerCase();
+    if (LOWERCASE_PUNCTUATION_ABBREVIATIONS.has(before)) continue;
+
+    matches.push({
+      fragment: match[0],
+      index: match.index || 0,
+    });
+  }
+
+  return matches;
+}
+
+export function findDanglingFragmentsBeforeOutro(text = "") {
+  const beforeOutro = textBeforeOutro(text);
+  const finalParagraph = lastNonEmptyParagraph(beforeOutro);
+  const finalSentence = lastSentence(finalParagraph);
+  const finalWords = words(finalSentence);
+  const reasons = [];
+
+  if (!finalParagraph) return reasons;
+
+  if (!endsCleanly(finalParagraph)) {
+    reasons.push("main section before outro does not end with complete punctuation");
+  }
+
+  const finalParagraphTail = normaliseWhitespace(finalParagraph).slice(-220);
+
+  if (/\.\s+[A-Z][a-z]+\.?$/.test(finalParagraphTail) && finalWords.length === 1) {
+    reasons.push(`dangling single-word fragment before outro: "${finalSentence.replace(/[.!?]+$/, "")}"`);
+  }
+
+  if (/\.\s+(?:Companies|Governments|Regulators|Executives|Vendors|Investors|Users|Workers|Developers|Models|Systems)\.?$/i.test(finalParagraphTail)) {
+    reasons.push("suspicious dangling noun after full stop before outro");
+  }
+
+  if (finalWords.length > 0) {
+    const lastWord = finalWords[finalWords.length - 1].replace(/[^a-z]/gi, "").toLowerCase();
+    if (DANGLING_CONNECTORS.includes(lastWord)) {
+      reasons.push(`main section before outro ends on unfinished connector: "${lastWord}"`);
+    }
+  }
+
+  if (finalWords.length <= 3 && finalWords.length > 0 && !endsCleanly(finalSentence)) {
+    reasons.push(`short unfinished final fragment before outro: "${normaliseWhitespace(finalSentence)}"`);
+  }
+
+  return Array.from(new Set(reasons));
+}
+
 export function extractOutro(text = "") {
   const trimmed = String(text || "").trim();
   if (!trimmed) return "";
 
   const normalisedTagline = normaliseForComparison(OUTRO_CLOSING_TAGLINE).toLowerCase();
-  const paragraphs = trimmed
-    .split(/\n\s*\n/)
-    .map((part) => part.trim())
-    .filter(Boolean);
+  const paragraphs = splitParagraphs(trimmed);
 
   if (!paragraphs.length) return "";
 
@@ -100,9 +221,16 @@ export function validateTranscriptStructure(text = "") {
     reasons.push("transcript tail looks abruptly truncated");
   }
 
+  const brokenJoins = findBrokenPunctuationJoins(trimmed);
+  if (brokenJoins.length) {
+    reasons.push(`broken lowercase punctuation join detected: "${brokenJoins[0].fragment}"`);
+  }
+
+  reasons.push(...findDanglingFragmentsBeforeOutro(trimmed));
+
   return {
     ok: reasons.length === 0,
-    reasons,
+    reasons: Array.from(new Set(reasons)),
     outro,
   };
 }

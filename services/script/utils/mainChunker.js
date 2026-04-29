@@ -91,6 +91,10 @@ Avoid or severely limit these phrases:
 - One might even ask whether
 - A broader pattern we’re seeing
 - Unintended consequences
+- The problem is
+- The immediate impact
+- The broader implications
+- This also ties into
 
 Do not use the same paragraph shape repeatedly.
 Do not keep repeating: define -> explain -> widen -> caution.
@@ -105,15 +109,19 @@ Instead vary movement naturally through:
 
 ENDING RULES
 - End the main section with a firm spoken landing
+- Every paragraph must sound complete when read aloud
 - It should sound like the main analysis has concluded
 - It must not sound like the whole episode is ending
+- Do not end on a single orphan word, unfinished connector, or dangling noun fragment
 
 QUALITY CHECK BEFORE OUTPUT
 Silently check that:
 - there are no broken joins
 - there is no bad punctuation in the middle of sentences
 - there are no mangled connectors
-- there is no repeated scaffolding
+- there is no repeated scaffolding, including "The problem is", "The immediate impact", "The broader implications", or "This also ties into"
+- every paragraph lands cleanly when read aloud
+- the final main-section paragraph is complete but not an episode sign-off
 - the language sounds spoken rather than paraphrased from reading material
 - the section flows as one coherent monologue
 
