@@ -75,7 +75,9 @@ test("getSponsor maps a featured-book API payload to the existing outro contract
   const prompt = getOutroPromptFull(sponsor, { sessionId: "TT-test", date: "2026-04-09" });
 
   assert.match(prompt, /AI in Agriculture: Revolutionizing Farming for a Sustainable Future/);
-  assert.match(prompt, /jonathan dash harris dot online slash ebooks slash agriculture slash buy dash now/);
+  assert.match(prompt, /jonathan-harris dot online/);
+  assert.match(prompt, /eBooks section there/);
+  assert.doesNotMatch(prompt, /slash ebooks slash agriculture slash buy/);
 });
 
 test("getSponsor falls back cleanly on HTTP error", async () => {

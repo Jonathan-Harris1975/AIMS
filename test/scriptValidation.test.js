@@ -44,3 +44,72 @@ test("enforceCanonicalOutro appends the canonical branded closing line when the 
   assert.match(repaired, /That’s your lot for this week’s Turing’s Torch\./);
   assert.equal(repaired.endsWith(OUTRO_CLOSING_TAGLINE), true);
 });
+
+import editAndFormat from "../services/script/utils/editAndFormat.js";
+
+function makeTranscript(mainText) {
+  const intro = `This intro is long enough to look like a real opening. It sets up a noisy week in artificial intelligence without pretending every vendor announcement is a thunderbolt from Mount Procurement. It gives the listener enough context to settle in and understand the stakes.`;
+
+  const main = `The rest of the analysis keeps the episode comfortably above the validation floor. It talks about power, money, control, risk, regulation, incentives, infrastructure, and why ordinary listeners should care when polished demos become procurement decisions. ${mainText}`;
+
+  const outroBody = `The week was noisy, the claims were louder, and the useful part was buried under the usual varnish. For the daily brief, head to jonathan-harris dot online. If you want the longer version, take a look at the related book as well.`;
+
+  return `${intro}\n\n${main}\n\n${outroBody}\n\n${OUTRO_CLOSING_TAGLINE}`;
+}
+
+test("script validation rejects a dangling fragment immediately before the outro", () => {
+  const badTranscript = makeTranscript(
+    "They dictate how artificial intelligence is used, who has access, and how it evolves. Companies"
+  );
+
+  const validation = validateTranscriptStructure(badTranscript);
+
+  assert.equal(validation.ok, false);
+  assert.ok(
+    validation.reasons.some((reason) => /dangling|before outro|unfinished/i.test(reason)),
+    validation.reasons.join("; ")
+  );
+});
+
+test("editAndFormat repairs the known lowercase punctuation glitch safely", () => {
+  const formatted = editAndFormat("That choice should sit with our. consciences, not a procurement spreadsheet.");
+
+  assert.doesNotMatch(formatted, /our\. consciences/);
+  assert.match(formatted, /our consciences/);
+});
+
+test("editAndFormat keeps the branded outro closing line intact", () => {
+  const formatted = editAndFormat(makeTranscript("The main section lands cleanly with no dangling fragment."));
+
+  assert.equal(formatted.includes(OUTRO_CLOSING_TAGLINE), true);
+});
+
+test("editAndFormat does not speak long ebook URL paths", () => {
+  const formatted = editAndFormat(
+    "This week's book is at https://jonathan-harris.online/ebooks/artificial-intelligence-and-the-future-of-work."
+  );
+
+  assert.match(formatted, /jonathan-harris dot online, under eBooks/);
+  assert.doesNotMatch(formatted, /slash|artificial-intelligence-and-the-future-of-work/);
+});
+
+test("editAndFormat normalises high-confidence British spelling", () => {
+  const formatted = editAndFormat("There was clamor around the launch.");
+
+  assert.match(formatted, /clamour/);
+  assert.doesNotMatch(formatted, /clamor/);
+});
+
+test("editAndFormat splits a clearly overlong spoken sentence without tiny fragments", () => {
+  const formatted = editAndFormat(
+    "This sentence keeps adding clauses because the source copy was bloated, and it keeps stacking detail after detail until the spoken rhythm collapses under the weight of its own procurement-friendly fog, while another needless clause keeps marching forward with a clipboard."
+  );
+
+  const sentences = formatted.match(/[^.!?]+[.!?]+/g) || [];
+  assert.ok(sentences.length > 1, formatted);
+  for (const sentence of sentences) {
+    const count = sentence.trim().split(/\s+/).length;
+    assert.ok(count > 3, `fragment created: ${sentence}`);
+    assert.ok(count <= 32, `sentence too long (${count} words): ${sentence}`);
+  }
+});
