@@ -16,6 +16,9 @@ import {
   buildPostManifestEntry,
   mergePostsManifest,
   buildWeeklyPackagePrompt,
+  buildWeeklyBrandQaPrompt,
+  parseWeeklyBrandQaResponse,
+  validateWeeklyPackageForBrand,
   hasBannedPhrases,
 } from "../utils/weeklyPackage.js";
 
@@ -242,6 +245,10 @@ async function triggerWebsiteRebuild() {
   };
 }
 
+function blogWeeklyQaEnabled() {
+  return String(process.env.BLOG_WEEKLY_QA_ENABLED || "true").trim().toLowerCase() !== "false";
+}
+
 async function generateStructuredWeeklyPackage({ sessionId, week, dateLabel, items }) {
   const prompt = buildWeeklyPackagePrompt({ week, dateLabel, items });
   const baseMessages = [
@@ -252,19 +259,27 @@ async function generateStructuredWeeklyPackage({ sessionId, week, dateLabel, ite
   let raw = await resilientRequest("blogWeekly", {
     sessionId,
     messages: baseMessages,
-    max_tokens: 2200,
-    temperature: 0.45,
+    max_tokens: 3000,
+    temperature: 0.42,
   });
 
   let parsed = parseStructuredWeeklyPackage(raw);
   let weeklyPackage = parsed.ok ? normaliseWeeklyPackage(parsed.data, { week, dateLabel, items }) : null;
   let bannedMatches = hasBannedPhrases(JSON.stringify(weeklyPackage || {}));
+  let brandCheck = weeklyPackage ? validateWeeklyPackageForBrand(weeklyPackage) : { ok: false, defects: [] };
 
-  if (!parsed.ok || bannedMatches.length) {
+  if (!parsed.ok || bannedMatches.length || !brandCheck.ok) {
+    const repairDefects = [
+      ...brandCheck.defects,
+      ...(bannedMatches.length ? [`Remove these phrases and close variants: ${bannedMatches.join(", ")}.`] : []),
+      parsed.ok ? "" : `Fix invalid JSON: ${parsed.error}`,
+    ].filter(Boolean);
+
     debug("blog.weekly.package.regen", {
       week,
-      reason: parsed.ok ? "banned-phrases" : "invalid-json",
+      reason: parsed.ok ? "brand-gate" : "invalid-json",
       bannedMatches: bannedMatches.slice(0, 5),
+      defects: repairDefects.slice(0, 8),
       parseError: parsed.ok ? undefined : parsed.error,
     });
 
@@ -274,16 +289,23 @@ async function generateStructuredWeeklyPackage({ sessionId, week, dateLabel, ite
         baseMessages[0],
         {
           role: "user",
-          content: `${prompt.user}\n\nRepair instructions:\n- Return valid JSON only\n- Remove these phrases and close variants: ${bannedMatches.length ? bannedMatches.join(", ") : "press-release filler, hype language, roundup boilerplate"}\n- Do not emit HTML, markdown, code fences, notes, or extra keys`,
+          content: `${prompt.user}
+
+Repair instructions:
+- Return valid JSON only, using exactly the required top-level keys
+- Fix these defects: ${repairDefects.length ? repairDefects.join(" | ") : "press-release filler, hype language, roundup boilerplate"}
+- Keep all claims traceable to the supplied source material
+- Do not emit HTML, markdown, code fences, notes, or extra keys`,
         },
       ],
-      max_tokens: 2200,
-      temperature: 0.35,
+      max_tokens: 3000,
+      temperature: 0.32,
     });
 
     parsed = parseStructuredWeeklyPackage(raw);
     weeklyPackage = parsed.ok ? normaliseWeeklyPackage(parsed.data, { week, dateLabel, items }) : null;
     bannedMatches = hasBannedPhrases(JSON.stringify(weeklyPackage || {}));
+    brandCheck = weeklyPackage ? validateWeeklyPackageForBrand(weeklyPackage) : { ok: false, defects: [] };
   }
 
   if (!parsed.ok) {
@@ -291,12 +313,59 @@ async function generateStructuredWeeklyPackage({ sessionId, week, dateLabel, ite
     return normaliseWeeklyPackage({}, { week, dateLabel, items });
   }
 
-  if (bannedMatches.length) {
-    warn("blog.weekly.package.bannedResidual", { week, bannedMatches: bannedMatches.slice(0, 5) });
+  if (blogWeeklyQaEnabled()) {
+    const qaPrompt = buildWeeklyBrandQaPrompt({ items, generatedJson: weeklyPackage });
+
+    try {
+      const qaRaw = await resilientRequest("blogWeekly", {
+        sessionId,
+        messages: [
+          { role: "system", content: qaPrompt.system },
+          { role: "user", content: qaPrompt.user },
+        ],
+        max_tokens: 2600,
+        temperature: 0.2,
+      });
+
+      const qa = parseWeeklyBrandQaResponse(qaRaw);
+      if (qa.ok && qa.pass) {
+        debug("blog.weekly.package.qaPass", { week });
+      } else if (qa.ok && qa.data) {
+        const correctedPackage = normaliseWeeklyPackage(qa.data, { week, dateLabel, items });
+        const correctedBannedMatches = hasBannedPhrases(JSON.stringify(correctedPackage || {}));
+        const correctedBrandCheck = validateWeeklyPackageForBrand(correctedPackage);
+
+        if (!correctedBannedMatches.length && correctedBrandCheck.defects.length <= brandCheck.defects.length) {
+          weeklyPackage = correctedPackage;
+          bannedMatches = correctedBannedMatches;
+          brandCheck = correctedBrandCheck;
+          info("blog.weekly.package.qaCorrected", { week });
+        } else {
+          warn("blog.weekly.package.qaCorrectionRejected", {
+            week,
+            bannedMatches: correctedBannedMatches.slice(0, 5),
+            defects: correctedBrandCheck.defects.slice(0, 8),
+          });
+        }
+      } else {
+        warn("blog.weekly.package.qaUnclear", { week, error: qa.error, feedback: qa.feedback?.slice(0, 500) });
+      }
+    } catch (qaError) {
+      warn("blog.weekly.package.qaFailed", { week, error: qaError?.message || "Unknown QA error" });
+    }
+  }
+
+  if (bannedMatches.length || !brandCheck.ok) {
+    warn("blog.weekly.package.brandResidual", {
+      week,
+      bannedMatches: bannedMatches.slice(0, 5),
+      defects: brandCheck.defects.slice(0, 8),
+    });
   }
 
   return weeklyPackage;
 }
+
 
 export async function buildWeeklyBlogPost({ days, weekId } = {}) {
   const prefix = process.env.BLOG_PREFIX || "blog";
@@ -345,6 +414,7 @@ export async function buildWeeklyBlogPost({ days, weekId } = {}) {
       title,
       summary: weeklyPackage.summary,
       dominantThemes: weeklyPackage.dominantThemes,
+      generatedPrompt: weeklyPackage.imagePrompt,
     });
 
     const art = await createBlogArtwork({ sessionId, prompt: imagePrompt });
