@@ -14,7 +14,7 @@ const COMMON_ENTITY_MAP = {
   hellip: "...",
 };
 
-const TITLE_PREFIX_RE = /^(?:title|headline|summary|analysis|report|study|ai|openai|update|briefing)\s*:\s*/i;
+const TITLE_PREFIX_RE = /^(?:title|headline|summary|analysis|report|study|ai|openai|update|briefing|what to know)\s*:\s*/i;
 const CODE_FENCE_RE = /^```(?:json|html|markdown|md)?\s*|```$/gim;
 const TRAILING_SOURCE_CTA_RE = /\bRead on Jonathan-Harris RSS Feed\b\.?/gi;
 const BANNED_PHRASES = [
@@ -29,7 +29,7 @@ const BANNED_PHRASES = [
   "paradigm shift",
   "unprecedented",
   "delve into",
-  "landscape",
+  "rapidly evolving landscape",
   "underscores",
   "showcases",
   "notably",
@@ -37,6 +37,19 @@ const BANNED_PHRASES = [
   "this week we explore",
   "the future of",
   "it remains to be seen",
+  "beneath the hype",
+  "the real story",
+  "the question is whether",
+  "as ai continues",
+  "as artificial intelligence continues",
+  "artificial intelligence landscape",
+  "ai landscape",
+  "pressing issue that demands",
+  "overall effectiveness",
+  "unlock value",
+  "unlocking value",
+  "seamless integration",
+  "robust data fabric",
 ];
 
 const STOP_WORDS = new Set([
@@ -267,7 +280,7 @@ export function buildFallbackWeeklyPackage({ week, dateLabel, items = [] } = {})
   }
 
   return {
-    title: `What Actually Mattered in AI: ${week}`,
+    title: "Where AI met the awkward bits",
     summary,
     dominant_themes: dominantThemes,
     image_prompt: "",
@@ -281,7 +294,7 @@ export function normaliseWeeklyPackage(data = {}, context = {}) {
   const sections = asArray(data.sections)
     .map((section, index) => normaliseSection(section, index))
     .filter((section) => section.heading && (section.paragraphs.length || section.bullets.length))
-    .slice(0, 6);
+    .slice(0, 5);
 
   const dominantThemes = dedupeStrings([
     ...asArray(data.dominant_themes),
@@ -314,10 +327,8 @@ export function renderWeeklyBodyHtml(weeklyPackage = {}, { escapeHtml } = {}) {
 
   const parts = [];
 
-  if (weeklyPackage.summary) {
-    parts.push(`<p class="standfirst">${htmlEscape(weeklyPackage.summary)}</p>`);
-  }
-
+  // The article template already renders the summary once above the generated body.
+  // Keep this renderer focused on section content so the published page does not repeat the standfirst.
   for (const section of asArray(weeklyPackage.sections)) {
     const sectionHtml = [`<section class="weekly-section">`, `<h2>${htmlEscape(section.heading)}</h2>`];
 
@@ -340,20 +351,22 @@ export function renderWeeklyBodyHtml(weeklyPackage = {}, { escapeHtml } = {}) {
   return parts.join("\n\n");
 }
 
-export function buildBlogArtworkPrompt({ week, title, summary, dominantThemes = [] } = {}) {
+export function buildBlogArtworkPrompt({ week, title, summary, dominantThemes = [], generatedPrompt = "" } = {}) {
   const themes = dominantThemes.length
     ? dominantThemes.join(", ")
     : "AI infrastructure, model competition, regulation and product reality";
 
   const summaryLine = summary ? `Editorial angle: ${summary}` : "Editorial angle: a sharp weekly AI briefing that favours signal over hype.";
+  const modelDirection = cleanParagraph(generatedPrompt);
 
   return [
     `Create a wide editorial blog hero image for Jonathan Harris's weekly AI briefing (${week}).`,
+    modelDirection ? `Use this editorial visual direction: ${modelDirection}.` : "",
     `Reflect these dominant themes from the week's coverage: ${themes}.`,
     summaryLine,
     `Visual tone: premium, sceptical, calm, modern. Dark navy or charcoal base with restrained neon teal and muted purple accents.`,
-    `Composition: landscape hero banner for a blog header, cinematic but minimal, layered depth, data-centre or interface abstractions where relevant, and motifs that hint at the themes without using logos.`,
-    `Do not include text, letters, numbers, watermarks, people, stock-photo office scenes, cartoon robots, or generic glowing-brain wallpaper.`,
+    `Composition: wide hero banner for a blog header, cinematic but minimal, layered depth, data-centre or interface abstractions where relevant, and motifs that hint at the themes without using logos.`,
+    `Do not include text, letters, numbers, watermarks, people, stock-photo office scenes, cartoon robots, glowing brains, or generic AI wallpaper.`,
     title ? `Anchor the image to this editorial title: ${title}.` : "",
   ].filter(Boolean).join(" ");
 }
@@ -557,39 +570,229 @@ export function buildPromptSourceDigest(items = []) {
     .join("\n\n");
 }
 
+function countSentences(value = "") {
+  const cleaned = cleanParagraph(value);
+  if (!cleaned) return 0;
+  const matches = cleaned.match(/[^.!?]+[.!?]+(?:\s|$)/g);
+  return matches?.length || 1;
+}
+
+function titleWordCount(value = "") {
+  return (cleanParagraph(value).match(/[A-Za-z0-9]+(?:'[A-Za-z0-9]+)?/g) || []).length;
+}
+
+export function toWeeklyPackageContract(weeklyPackage = {}) {
+  return {
+    title: cleanSourceTitle(weeklyPackage.title || ""),
+    summary: cleanParagraph(weeklyPackage.summary || ""),
+    dominant_themes: dedupeStrings([
+      ...asArray(weeklyPackage.dominant_themes),
+      ...asArray(weeklyPackage.dominantThemes),
+    ]).slice(0, 5),
+    image_prompt: cleanParagraph(weeklyPackage.image_prompt || weeklyPackage.imagePrompt || ""),
+    sections: asArray(weeklyPackage.sections)
+      .map((section, index) => normaliseSection(section, index))
+      .filter((section) => section.heading && (section.paragraphs.length || section.bullets.length))
+      .slice(0, 5),
+  };
+}
+
+export function validateWeeklyPackageForBrand(weeklyPackage = {}) {
+  const contract = toWeeklyPackageContract(weeklyPackage);
+  const defects = [];
+  const titleWords = titleWordCount(contract.title);
+
+  if (!contract.title) {
+    defects.push("Missing title.");
+  } else {
+    if (TITLE_PREFIX_RE.test(contract.title)) defects.push("Title still uses a forbidden prefix.");
+    if (titleWords < 5 || titleWords > 12) defects.push("Title should be 5 to 12 words.");
+    if (/^(how|why|what to know|everything you need to know|the future of)\b/i.test(contract.title)) {
+      defects.push("Title uses formulaic headline scaffolding.");
+    }
+  }
+
+  if (countSentences(contract.summary) !== 2) {
+    defects.push("Summary must be exactly two sentences.");
+  }
+
+  if (contract.sections.length < 3 || contract.sections.length > 5) {
+    defects.push("Weekly package should contain 3 to 5 sections.");
+  }
+
+  const bannedMatches = hasBannedPhrases(JSON.stringify({
+    title: contract.title,
+    summary: contract.summary,
+    sections: contract.sections,
+  }));
+  if (bannedMatches.length) {
+    defects.push(`Banned or stock phrasing remains: ${bannedMatches.slice(0, 5).join(", ")}.`);
+  }
+
+  return {
+    ok: defects.length === 0,
+    defects,
+    contract,
+  };
+}
+
 export function buildWeeklyPackagePrompt({ week, dateLabel, items = [] } = {}) {
   const sourceDigest = buildPromptSourceDigest(items);
 
   const system = [
-    "You build the weekly Jonathan Harris blog package from rewritten AI RSS briefs.",
-    "Voice: British English, dry, sceptical, articulate, calm, sharp, no puff.",
-    "Write like a host-editor with judgement. Signal over noise. No press release cadence. No generic roundup sludge.",
-    "Return strict JSON only. No markdown. No code fences. No commentary outside the JSON object.",
-    "All text fields must be plain text only. Do not output HTML in JSON fields.",
-    "Never use title prefixes such as Title:, AI:, OpenAI:, Report:, Study:, or Analysis:.",
-  ].join(" ");
+    "You are the senior editor for the Jonathan Harris AI ecosystem. You turn RSS-derived AI briefings into a weekly blog package that sounds like Jonathan Harris: British English, Gen-X, sharp, sceptical, dry, calm, useful, and allergic to hype.",
+    "Your job is not to summarise everything. Your job is to decide what mattered, connect the week into one coherent editorial argument, and remove anything that smells like corporate paste, newsroom filler, or generic AI middleware.",
+    "Non-negotiable rules:",
+    "- Use only the supplied source material.",
+    "- Preserve factual meaning. Do not invent facts, dates, quotes, sources, numbers, motives, or consequences.",
+    "- Write as a host-editor with judgement, not as a newswire, explainer bot, marketer, analyst report, or SEO content farm.",
+    "- Keep the tone conversational but precise. Dry wit is allowed only when it clarifies the point. No forced jokes.",
+    "- Avoid hype, fake urgency, breathless claims, vague optimism, and doom theatre.",
+    "- Avoid robotic transitions, obvious LLM phrasing, press-release cadence, and bland roundup language.",
+    "- Avoid repeating the same sentence openings, title structures, paragraph rhythm, or section templates.",
+    "- Use sentence case for titles and section headings unless a proper noun requires capitals.",
+    "- Never use title prefixes such as Title:, AI:, OpenAI:, Report:, Study:, Analysis:, Briefing:, Update:, or What to know:.",
+    "- Do not use headline scaffolding such as How..., Why..., Everything you need to know..., X as Y..., or The future of... unless the source material makes it unavoidable and the wording still sounds human.",
+    "- Return strict JSON only. No markdown. No code fences. No commentary outside the JSON object.",
+    "- All text fields must be plain text only. Do not output HTML in JSON fields.",
+  ].join("\n");
 
   const user = [
     `Build the weekly Jonathan Harris blog package for ${week}.`,
     `Window: ${dateLabel}.`,
     "Use the supplied rewritten RSS briefs as the only source material.",
-    "Synthesis goals:",
-    "- produce one coherent editorial briefing rather than a stitched digest",
-    "- highlight the dominant themes and where the hype does not survive contact with reality",
-    "- keep the writing natural, sceptical and readable",
-    "- avoid listicle rhythm, fake urgency, childlike explainers, SEO filler, and generic AI summary voice",
+    "",
+    "Editorial mission:",
+    "- Produce one coherent weekly briefing, not a stitched digest.",
+    "- Find the 3 to 5 dominant themes that genuinely connect the source items.",
+    "- Prioritise judgement over coverage completeness.",
+    "- Show what the week tells readers about artificial intelligence in practice: infrastructure, incentives, risk, business reality, regulation, jobs, power, money, product theatre, or deployment friction.",
+    "- Strip away the product page sparkle. Keep the signal.",
+    "- Explain the point in plain English, but do not spoon-feed obvious context.",
+    "- Let the writing sound spoken, informed, and human. It should read like a premium editorial briefing for grown-ups.",
+    "",
+    "Brand voice to hit:",
+    "- British English.",
+    "- Gen-X, dry, sceptical, lightly cynical where justified.",
+    "- Calm, precise, useful, and direct.",
+    "- Smart without sounding academic.",
+    "- Conversational without sounding casual or sloppy.",
+    "- No hype. No marketing sludge. No fake drama. No corporate wallpaper.",
+    "",
+    "Title requirements:",
+    "- 5 to 12 words.",
+    "- Human, concise, editorial, and specific.",
+    "- Prefer concrete nouns and a clear weekly angle.",
+    "- No prefixes, category labels, clickbait scaffolding, or SEO-slug structure.",
+    "- Avoid colon-led titles unless the colon genuinely improves the headline.",
+    "- Avoid repeating title structures used in recent posts if previous titles are supplied.",
+    "- Good title direction: specific tension, consequence, or pattern.",
+    "- Bad title direction: generic explanation, press-release wording, platform-name prefix, or listicle residue.",
+    "",
+    "Summary requirements:",
+    "- Exactly 2 sentences.",
+    "- Do not repeat the title in different clothes.",
+    "- Give the reader the real weekly angle, not a generic overview.",
+    "- It should feel like the opening judgement of a sharp editor, not a corporate abstract.",
+    "",
+    "Section requirements:",
+    "- 3 to 5 sections.",
+    "- Each section needs a short editorial heading, not a category label.",
+    "- Each section should contain 1 to 3 paragraphs.",
+    "- Bullets are optional. Use them only when they make the argument clearer.",
+    "- Each paragraph must be traceable to the supplied source material.",
+    "- Avoid monotonous rhythm. Vary sentence length naturally.",
+    "- Do not overuse stock phrases such as beneath the hype, the real story, the question is whether, it remains to be seen, in a significant development, or the rapidly evolving landscape.",
+    "",
+    "Image prompt requirements:",
+    "- Describe a premium editorial hero image tied to the dominant themes.",
+    "- Dark navy or charcoal base, restrained neon teal and muted purple accents.",
+    "- No text, letters, numbers, logos, watermarks, stock-photo office scenes, glowing brains, cartoon robots, or generic AI wallpaper.",
+    "",
     "Return a JSON object with exactly these top-level keys:",
     '{ "title": string, "summary": string, "dominant_themes": string[], "image_prompt": string, "sections": [{ "heading": string, "paragraphs": string[], "bullets": string[] }] }',
-    "Constraints:",
-    "- title: 5 to 12 words, editorial, clean, no prefixes",
-    "- summary: 2 sentences, sharp, no fluff",
-    "- dominant_themes: 3 to 5 concise theme labels",
-    "- image_prompt: describe a themed editorial hero image tied to the week, not generic AI wallpaper",
-    "- sections: 3 to 5 sections, each with 1 to 3 paragraphs, optional bullets only where useful",
-    "- paragraphs and bullets must be plain text strings, not HTML or markdown",
+    "",
+    "Before returning the JSON, silently run this brand check:",
+    "1. Would this sound at home on Jonathan-Harris.online rather than a generic AI news site?",
+    "2. Does the title avoid prefixes, SEO scaffolding, and formulaic structures?",
+    "3. Does the summary make a judgement rather than merely announce topics?",
+    "4. Are all claims grounded in the supplied source material?",
+    "5. Is there any hype leakage, corporate phrasing, fake urgency, or obvious LLM rhythm?",
+    "6. Are any phrases repeated enough to make the writing feel machine-cut?",
+    "7. Is the piece coherent as one weekly editorial briefing rather than a bundle of mini-summaries?",
+    "8. Have you avoided overexplaining obvious points?",
+    "9. Have you kept British spelling and punctuation natural?",
+    "10. Is the output strict JSON with no markdown or commentary?",
+    "",
     "Source material:",
     sourceDigest,
-  ].join("\n\n");
+  ].join("\n");
 
-  return { system, user };
+  return { system, user, sourceDigest };
+}
+
+export function buildWeeklyBrandQaPrompt({ items = [], generatedJson = {} } = {}) {
+  const sourceDigest = buildPromptSourceDigest(items);
+  const generatedPayload = JSON.stringify(toWeeklyPackageContract(generatedJson), null, 2);
+
+  const system = "Act as the brand gatekeeper for the Jonathan Harris AI ecosystem. Use evidence only. Do not rewrite unless needed to pass the gate.";
+  const user = [
+    "Review the generated weekly blog JSON below.",
+    "",
+    "Check for:",
+    "- title prefixes or formulaic headline scaffolding",
+    "- generic AI summary tone",
+    "- corporate phrasing, hype, fake urgency, or press-release cadence",
+    "- repeated sentence openings or samey section rhythm",
+    "- stitched-digest structure instead of one coherent editorial argument",
+    "- unsupported claims not traceable to the source material",
+    "- summary duplication in the first paragraph",
+    "- section headings that sound like category labels rather than editorial headings",
+    "- JSON contract violations",
+    "",
+    "Return one of:",
+    "PASS",
+    "FAIL - with a concise defect list and a corrected JSON object.",
+    "",
+    "Source material:",
+    sourceDigest,
+    "",
+    "Generated JSON:",
+    generatedPayload,
+  ].join("\n");
+
+  return { system, user, sourceDigest };
+}
+
+export function parseWeeklyBrandQaResponse(raw = "") {
+  const cleaned = stripCodeFences(raw).trim();
+  if (/^PASS\b/i.test(cleaned)) {
+    return { ok: true, pass: true, feedback: "PASS" };
+  }
+
+  const candidate = extractJsonCandidate(cleaned);
+  if (candidate) {
+    try {
+      return {
+        ok: true,
+        pass: false,
+        feedback: cleaned.slice(0, Math.max(0, cleaned.indexOf(candidate))).trim() || "FAIL",
+        data: JSON.parse(candidate),
+      };
+    } catch (parseError) {
+      return {
+        ok: false,
+        pass: false,
+        feedback: cleaned,
+        error: `Invalid corrected QA JSON: ${parseError.message}`,
+      };
+    }
+  }
+
+  return {
+    ok: false,
+    pass: false,
+    feedback: cleaned || "Empty QA response.",
+    error: "QA response did not contain PASS or corrected JSON.",
+  };
 }
