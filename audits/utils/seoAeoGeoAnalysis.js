@@ -12,7 +12,7 @@ OPERATING RULES — NON-NEGOTIABLE:
 5. Prefer exact values: current title tag text, exact canonical href, exact heading text, exact file path.
 6. When the supplied data conflicts across sources (repo vs workbook vs live), state the conflict explicitly.
 7. Do not silently skip page families. If podcast/blog/transcript data is thin in the supplied context, say so and flag it as a coverage limitation — do not pretend to have checked pages you have not seen.
-8. Score using these exact weights: Technical SEO 20, On-Page Intent 15, AEO Readiness 20, GEO Readiness 20, Entity Authority 10, Internal Linking 10, Conversion Support 5. Grade: A=90-100, B=80-89, C=70-79, D=60-69, F<60.
+8. Score using these exact weights internally, then return every executiveSummary.scores.*.score as a whole-number 0-100 percentage. Do not return raw weighted points such as 17/20. Grade must match the returned percentage: A=90-100, B=80-89, C=70-79, D=60-69, F<60.
 9. Every Critical or High issue must include an exact remediation: the corrected value, code snippet, template change, or governance rule — not a description of what to change.
 10. Use severity: Critical / High / Medium / Low. Use confidence: Confirmed / Probable / Needs verification.
 11. Honour full-estate audit rules. Blog, podcast, transcript, archive, and programmatic content are mandatory if present in the supplied context.
@@ -157,21 +157,90 @@ function requireObject(value, key) {
   }
 }
 
+function expectedGrade(score) {
+  if (score >= 90) return "A";
+  if (score >= 80) return "B";
+  if (score >= 70) return "C";
+  if (score >= 60) return "D";
+  return "F";
+}
+
+function requireNonEmptyArray(value, key) {
+  requireArray(value, key);
+  if (value.length < 1) {
+    throw new Error(`Analysis response returned empty array: ${key}`);
+  }
+}
+
+function requirePercentageScore(scoreBlock, key) {
+  requireObject(scoreBlock, `executiveSummary.scores.${key}`);
+  const score = scoreBlock.score;
+  if (typeof score !== "number" || !Number.isFinite(score) || score < 0 || score > 100) {
+    throw new Error(`Analysis response score for ${key} must be a 0-100 percentage; received ${score}`);
+  }
+  const grade = String(scoreBlock.grade || "").trim().toUpperCase().slice(0, 1);
+  const expected = expectedGrade(score);
+  if (grade && grade !== expected) {
+    throw new Error(`Analysis response grade for ${key} is ${scoreBlock.grade}; score ${score} requires grade ${expected}`);
+  }
+}
+
+function requirePopulatedRows(rows, key, requiredFields) {
+  requireNonEmptyArray(rows, key);
+  rows.forEach((row, index) => {
+    requireObject(row, `${key}[${index}]`);
+    for (const field of requiredFields) {
+      const value = row[field];
+      if (value === undefined || value === null || String(value).trim() === "") {
+        throw new Error(`Analysis response ${key}[${index}] is missing populated field: ${field}`);
+      }
+    }
+  });
+}
+
+function requireIssueFields(rows) {
+  requireNonEmptyArray(rows, "issues");
+  const required = [
+    "issueId",
+    "severity",
+    "confidence",
+    "lens",
+    "rootCauseLevel",
+    "affected",
+    "evidenceObserved",
+    "whyItMatters",
+    "exactRemediation",
+    "expectedGain",
+    "estimatedEffort",
+    "recommendedOwner",
+    "verificationMethod",
+  ];
+  rows.forEach((row, index) => {
+    requireObject(row, `issues[${index}]`);
+    for (const field of required) {
+      const value = row[field];
+      if (value === undefined || value === null || String(value).trim() === "") {
+        throw new Error(`Analysis response issues[${index}] is missing populated field: ${field}`);
+      }
+    }
+  });
+}
+
 function validateAnalysisShape(data) {
   requireObject(data, "root");
   requireObject(data.executiveSummary, "executiveSummary");
   requireObject(data.findingsByLens, "findingsByLens");
-  requireArray(data.issues, "issues");
-  requireArray(data.pageTypeFindings, "pageTypeFindings");
-  requireArray(data.priorityPageAnnex, "priorityPageAnnex");
-  requireArray(data.templateAnnex, "templateAnnex");
+  requireIssueFields(data.issues);
+  requirePopulatedRows(data.pageTypeFindings, "pageTypeFindings", ["pageType", "count", "coverageState", "score", "grade", "judgement", "keyNote"]);
+  requirePopulatedRows(data.priorityPageAnnex, "priorityPageAnnex", ["url", "pageType", "titleStatus", "metaStatus", "canonicalStatus", "schemaStatus", "aeoStatus", "geoStatus", "score", "grade", "keyNote"]);
+  requirePopulatedRows(data.templateAnnex, "templateAnnex", ["sourceFile", "area", "observedLogic", "repeatedEffect", "fixPriority"]);
   requireArray(data.codeRemediationAppendix, "codeRemediationAppendix");
-  requireArray(data.bestPracticeGapMatrix, "bestPracticeGapMatrix");
+  requirePopulatedRows(data.bestPracticeGapMatrix, "bestPracticeGapMatrix", ["pageType", "seo", "aeo", "geo", "confidence", "topMissingElement", "businessImpact"]);
   requireObject(data.implementationOrder, "implementationOrder");
 
   const scoreBlock = data.executiveSummary.scores || {};
   for (const key of ["seo", "aeo", "geo", "entityAuthority", "conversionSupport"]) {
-    requireObject(scoreBlock[key], `executiveSummary.scores.${key}`);
+    requirePercentageScore(scoreBlock[key], key);
   }
 
   for (const key of [
@@ -199,6 +268,10 @@ function validateAnalysisShape(data) {
   }
   if (data.issues.length < 5) {
     throw new Error("Analysis response returned too few ranked issues for a full-estate audit");
+  }
+  const hasCriticalOrHigh = data.issues.some((issue) => ["Critical", "High"].includes(String(issue.severity || "")));
+  if (hasCriticalOrHigh && data.codeRemediationAppendix.length < 1) {
+    throw new Error("Analysis response has Critical/High issues but no codeRemediationAppendix entries");
   }
 
   return data;
