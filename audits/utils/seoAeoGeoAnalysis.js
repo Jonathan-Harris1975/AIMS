@@ -45,7 +45,23 @@ OUTPUT SCHEMA:
     "conversionSupport": "",
     "blogPodcastTranscriptSystems": ""
   },
-  "issues": [],
+  "issues": [
+    {
+      "issueId": "",
+      "severity": "Critical / High / Medium / Low",
+      "confidence": "Confirmed / Probable / Needs verification",
+      "lens": "SEO / AEO / GEO / Entity / Technical / Schema / Internal Linking / Content / Conversion",
+      "rootCauseLevel": "template / page / system / route / content / schema / data / workbook mismatch",
+      "affected": "",
+      "evidenceObserved": "",
+      "whyItMatters": "",
+      "exactRemediation": "",
+      "expectedGain": "",
+      "estimatedEffort": "Low / Medium / High",
+      "recommendedOwner": "SEO / Content / Editorial / Frontend / Engineering / Schema / Product / Analytics",
+      "verificationMethod": ""
+    }
+  ],
   "pageTypeFindings": [],
   "priorityPageAnnex": [],
   "templateAnnex": [],
@@ -58,7 +74,7 @@ OUTPUT SCHEMA:
   }
 }`;
 
-function trimLargeArray(items, maxItems = 120) {
+function trimLargeArray(items, maxItems = 500) {
   if (!Array.isArray(items)) return [];
   return items.slice(0, maxItems);
 }
@@ -70,11 +86,11 @@ function buildUserPrompt(payload) {
     generatedAt: payload.generatedAt,
     inventory: payload.inventory,
     priorityPages: trimLargeArray(payload.priorityPages, 30),
-    allRoutes: trimLargeArray(payload.allRoutes, 140),
-    heuristicIssues: trimLargeArray(payload.heuristicIssues, 40),
+    allRoutes: trimLargeArray(payload.allRoutes, 500),
+    heuristicIssues: trimLargeArray(payload.heuristicIssues, 80),
     repoSignals: payload.repoSignals,
-    liveDynamicUrls: trimLargeArray(payload.liveDynamicUrls, 50),
-    coverage: trimLargeArray(payload.coverage, 120),
+    liveDynamicUrls: trimLargeArray(payload.liveDynamicUrls, 250),
+    coverage: trimLargeArray(payload.coverage, 1000),
     coverageFamilies: trimLargeArray(payload.coverageFamilies, 30),
     reportRequirements: {
       output: [
@@ -102,6 +118,7 @@ function buildUserPrompt(payload) {
     `Generated: ${payload.generatedAt}`,
     "",
     "Use the supplied context only. Do not invent evidence. If the supplied context is thin for a family, state that as a limitation rather than pretending full coverage.",
+    "The allRoutes and coverage arrays are the full URL ledger for this run unless the payload itself states otherwise. Do not treat the estate as sampled.",
     "Return a single JSON object only.",
     "",
     JSON.stringify(compact, null, 2),
