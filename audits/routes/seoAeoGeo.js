@@ -9,6 +9,7 @@ import {
 import { completeAuditRun, getAuditJob, startAuditRun } from "../utils/orchestrator.js";
 import { requireAuditCallbackAuth } from "../utils/callbackAuth.js";
 import { runSeoAeoGeoAnalysis } from "../utils/seoAeoGeoAnalysis.js";
+import { error as logError, info } from "../../logger.js";
 
 const router = express.Router();
 const asyncRoute = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
@@ -41,7 +42,23 @@ router.post("/analysis", requireAuditCallbackAuth, asyncRoute(async (req, res) =
     return res.status(400).json({ ok: false, error: parsed.error });
   }
 
-  const analysis = await runSeoAeoGeoAnalysis(parsed.data);
+  let analysis;
+  try {
+    analysis = await runSeoAeoGeoAnalysis(parsed.data);
+  } catch (err) {
+    logError("audit.seo-aeo-geo.analysis.failed", {
+      sessionId: parsed.data.sessionId,
+      routeCount: parsed.data.allRoutes?.length ?? 0,
+      coverageCount: parsed.data.coverage?.length ?? 0,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    throw err;
+  }
+
+  info("audit.seo-aeo-geo.analysis.completed", {
+    sessionId: parsed.data.sessionId,
+    issueCount: Array.isArray(analysis.issues) ? analysis.issues.length : 0,
+  });
   return res.json({ ok: true, auditType: AUDIT_TYPE, sessionId: parsed.data.sessionId, analysis });
 }));
 
