@@ -141,6 +141,7 @@ async function callOpenRouter({
   temperature,
   top_p,
   headers,
+  timeout_ms,
 }) {
   const payload = {
     model,
@@ -158,7 +159,8 @@ async function callOpenRouter({
   };
 
   const controller = new AbortController();
-  const to = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
+  const effectiveTimeoutMs = Number(timeout_ms || DEFAULT_TIMEOUT_MS);
+  const to = setTimeout(() => controller.abort(), effectiveTimeoutMs);
 
   try {
     const res = await fetch(ENDPOINT, {
@@ -199,6 +201,7 @@ export async function resilientRequest(
     temperature = DEFAULT_TEMPERATURE,
     top_p = DEFAULT_TOP_P,
     headers,
+    timeout_ms,
   } = {}
 ) {
   const routeKey = resolveRouteKey(routeName);
@@ -239,6 +242,7 @@ export async function resilientRequest(
           temperature,
           top_p,
           headers,
+          timeout_ms,
         });
 
         // record success for summary + warm cache
