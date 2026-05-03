@@ -1,101 +1,84 @@
-import { error as logError, info } from "../../logger.js";
-import {
-  beginJob,
-  completeJob,
-  failJob,
-  getPublicJob,
-} from "../../services/shared/utils/jobStore.js";
+import { beginJob, completeJob, failJob, getPublicJob } from "../../services/shared/utils/jobStore.js";
 import { runSeoAeoGeoAnalysis } from "./seoAeoGeoAnalysis.js";
+import { error as logError, info } from "../../logger.js";
 
-const JOB_TYPE = "audit-analysis:seo-aeo-geo";
-const activeJobs = new Set();
+const JOB_TYPE = "audit:seo-aeo-geo:analysis";
 
-function safeSessionId(payload) {
+function sessionFromPayload(payload) {
   return String(payload?.sessionId || "").trim();
 }
 
-function publicJob(sessionId) {
-  return getPublicJob(JOB_TYPE, sessionId);
+function publicShape(job) {
+  if (!job) return null;
+  return {
+    ok: true,
+    auditType: "seo-aeo-geo",
+    sessionId: job.sessionId,
+    status: job.status,
+    createdAt: job.createdAt,
+    updatedAt: job.updatedAt,
+    startedAt: job.startedAt,
+    finishedAt: job.finishedAt,
+    attempt: job.attempt,
+    analysis: job.result?.analysis,
+    error: job.error,
+  };
 }
 
-async function runInBackground(payload) {
-  const sessionId = safeSessionId(payload);
-  activeJobs.add(sessionId);
-
+async function executeAnalysisJob(payload) {
+  const sessionId = sessionFromPayload(payload);
   try {
-    info("audit.seo-aeo-geo.analysis.job.started", {
-      sessionId,
-      routeCount: Array.isArray(payload?.allRoutes) ? payload.allRoutes.length : 0,
-      coverageCount: Array.isArray(payload?.coverage) ? payload.coverage.length : 0,
-    });
-
     const analysis = await runSeoAeoGeoAnalysis(payload);
-
-    completeJob(JOB_TYPE, sessionId, {
-      auditType: "seo-aeo-geo",
+    const completed = completeJob(JOB_TYPE, sessionId, {
       result: { analysis },
-      analysis,
-      issueCount: Array.isArray(analysis?.issues) ? analysis.issues.length : 0,
+      routeCount: payload?.allRoutes?.length ?? 0,
+      coverageCount: payload?.coverage?.length ?? 0,
     });
-
-    info("audit.seo-aeo-geo.analysis.job.completed", {
+    info("audit.seo-aeo-geo.analysis.completed", {
       sessionId,
       issueCount: Array.isArray(analysis?.issues) ? analysis.issues.length : 0,
     });
+    return completed;
   } catch (err) {
-    failJob(JOB_TYPE, sessionId, err, {
-      auditType: "seo-aeo-geo",
-      routeCount: Array.isArray(payload?.allRoutes) ? payload.allRoutes.length : 0,
-      coverageCount: Array.isArray(payload?.coverage) ? payload.coverage.length : 0,
+    const failed = failJob(JOB_TYPE, sessionId, err, {
+      routeCount: payload?.allRoutes?.length ?? 0,
+      coverageCount: payload?.coverage?.length ?? 0,
     });
-
-    logError("audit.seo-aeo-geo.analysis.job.failed", {
+    logError("audit.seo-aeo-geo.analysis.failed", {
       sessionId,
-      routeCount: Array.isArray(payload?.allRoutes) ? payload.allRoutes.length : 0,
-      coverageCount: Array.isArray(payload?.coverage) ? payload.coverage.length : 0,
-      error: err instanceof Error ? err.message : String(err),
+      routeCount: payload?.allRoutes?.length ?? 0,
+      coverageCount: payload?.coverage?.length ?? 0,
+      message: err?.message || String(err),
+      status: err?.status,
+      code: err?.code,
+      attemptedProviders: err?.attemptedProviders,
     });
-  } finally {
-    activeJobs.delete(sessionId);
+    return failed;
   }
 }
 
 export function startSeoAeoGeoAnalysisJob(payload) {
-  const sessionId = safeSessionId(payload);
-  if (!sessionId) {
-    throw new Error("sessionId is required to start SEO/AEO/GEO analysis");
-  }
-
-  const existing = publicJob(sessionId);
-  if (existing?.status === "completed" || existing?.status === "failed") {
-    return { started: false, job: existing };
-  }
-
+  const sessionId = sessionFromPayload(payload);
+  if (!sessionId) throw new Error("Cannot start SEO/AEO/GEO analysis job without sessionId");
   const { started, job } = beginJob(JOB_TYPE, sessionId, {
-    auditType: "seo-aeo-geo",
-    routeCount: Array.isArray(payload?.allRoutes) ? payload.allRoutes.length : 0,
-    coverageCount: Array.isArray(payload?.coverage) ? payload.coverage.length : 0,
+    routeCount: payload?.allRoutes?.length ?? 0,
+    coverageCount: payload?.coverage?.length ?? 0,
   });
-
-  if ((started || ["queued", "running"].includes(job?.status)) && !activeJobs.has(sessionId)) {
-    setImmediate(() => {
-      runInBackground(payload).catch((err) => {
-        logError("audit.seo-aeo-geo.analysis.job.unhandled", {
+  if (started) {
+    Promise.resolve()
+      .then(() => executeAnalysisJob(payload))
+      .catch((err) => {
+        logError("audit.seo-aeo-geo.analysis.unhandled", {
           sessionId,
-          error: err instanceof Error ? err.message : String(err),
+          message: err?.message || String(err),
         });
       });
-    });
   }
-
-  return { started, job: publicJob(sessionId) || job };
+  return publicShape(job);
 }
 
 export function getSeoAeoGeoAnalysisJob(sessionId) {
-  return publicJob(String(sessionId || "").trim());
+  return publicShape(getPublicJob(JOB_TYPE, sessionId));
 }
 
-export default {
-  startSeoAeoGeoAnalysisJob,
-  getSeoAeoGeoAnalysisJob,
-};
+export default { startSeoAeoGeoAnalysisJob, getSeoAeoGeoAnalysisJob };
