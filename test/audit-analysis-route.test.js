@@ -95,11 +95,27 @@ test("/analysis returns validated forensic JSON through the shared AI route", as
       .post("/audits/seo-aeo-geo/analysis")
       .set("Authorization", "Bearer route-token")
       .send(validAnalysisPayload())
-      .expect(200);
+      .expect(202);
 
     assert.equal(response.body.ok, true);
-    assert.equal(response.body.analysis.auditCompletionState, "Complete");
-    assert.equal(response.body.analysis.rankedIssueLedger[0].issueId, "JH-SEO-001");
+    assert.equal(response.body.statusUrl.endsWith("/audits/seo-aeo-geo/analysis/route-test"), true);
+
+    let statusBody;
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const statusResponse = await request(app)
+        .get("/audits/seo-aeo-geo/analysis/route-test")
+        .set("Authorization", "Bearer route-token")
+        .expect(200);
+      statusBody = statusResponse.body;
+      if (statusBody.status === "completed") break;
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+
+    assert.equal(statusBody.ok, true);
+    assert.equal(statusBody.status, "completed");
+    assert.equal(statusBody.hasAnalysis, true);
+    assert.equal(statusBody.analysis.auditCompletionState, "Complete");
+    assert.equal(statusBody.analysis.rankedIssueLedger[0].issueId, "JH-SEO-001");
   } finally {
     for (const [name, value] of Object.entries(oldEnv)) {
       if (value === undefined) delete process.env[name];
