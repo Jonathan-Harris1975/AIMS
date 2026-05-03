@@ -8,12 +8,8 @@ import {
 } from "../../services/shared/utils/requestSchemas.js";
 import { completeAuditRun, getAuditJob, startAuditRun } from "../utils/orchestrator.js";
 import { requireAuditCallbackAuth } from "../utils/callbackAuth.js";
-import {
-  getSeoAeoGeoAnalysisJob,
-  startSeoAeoGeoAnalysisJob,
-} from "../utils/auditAnalysisJobs.js";
-import { runSeoAeoGeoAnalysis } from "../utils/seoAeoGeoAnalysis.js";
-import { error as logError, info } from "../../logger.js";
+import { getSeoAeoGeoAnalysisJob, startSeoAeoGeoAnalysisJob } from "../utils/auditAnalysisJobs.js";
+import { info } from "../../logger.js";
 
 const router = express.Router();
 const asyncRoute = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
@@ -40,150 +36,47 @@ router.post("/run", hookdeckDedupe("audits:seo-aeo-geo:run"), asyncRoute(async (
   return res.status(202).json(result);
 }));
 
-function externalBaseUrl(req) {
-  const proto = String(req.get("x-forwarded-proto") || req.protocol || "https")
-    .split(",")[0]
-    .trim();
-  const host = req.get("x-forwarded-host") || req.get("host") || "";
-  return host ? `${proto}://${host}` : "";
-}
-
-function analysisStatusPaths(req, sessionId) {
-  const relative = `${req.baseUrl}/analysis/${encodeURIComponent(sessionId)}`;
-  const base = externalBaseUrl(req);
-  return {
-    statusUrl: relative,
-    absoluteStatusUrl: base ? `${base}${relative}` : relative,
-  };
-}
-
-function shouldRunAnalysisInline() {
-  return (
-    process.env.AUDIT_ANALYSIS_INLINE === "true" ||
-    Boolean(process.env.NODE_TEST_CONTEXT)
-  );
-}
-
 router.post("/analysis", requireAuditCallbackAuth, asyncRoute(async (req, res) => {
   const parsed = validateBody(auditAnalysisBodySchema, req.body);
   if (!parsed.ok) {
     return res.status(400).json({ ok: false, error: parsed.error });
   }
 
-  if (shouldRunAnalysisInline()) {
-    const analysis = await runSeoAeoGeoAnalysis(parsed.data);
-    const job = {
-      auditType: AUDIT_TYPE,
-      sessionId: parsed.data.sessionId,
-      status: "completed",
-      result: { analysis },
-      analysis,
-    };
-
-    info("audit.seo-aeo-geo.analysis.completed.inline", {
-      sessionId: parsed.data.sessionId,
-      routeCount: parsed.data.allRoutes?.length ?? 0,
-      coverageCount: parsed.data.coverage?.length ?? 0,
-      issueCount: Array.isArray(analysis?.issues) ? analysis.issues.length : 0,
-    });
-
-    return res.json({
-      ok: true,
-      auditType: AUDIT_TYPE,
-      sessionId: parsed.data.sessionId,
-      status: "completed",
-      analysis,
-      job,
-    });
-  }
-
-  const { started, job } = startSeoAeoGeoAnalysisJob(parsed.data);
-  const paths = analysisStatusPaths(req, parsed.data.sessionId);
+  const job = startSeoAeoGeoAnalysisJob(parsed.data);
+  const statusUrl = `${req.protocol}://${req.get("host")}/audits/seo-aeo-geo/analysis/${encodeURIComponent(parsed.data.sessionId)}`;
 
   info("audit.seo-aeo-geo.analysis.accepted", {
     sessionId: parsed.data.sessionId,
-    started,
-    status: job?.status || "queued",
-    routeCount: parsed.data.allRoutes?.length ?? 0,
-    coverageCount: parsed.data.coverage?.length ?? 0,
+    status: job.status,
+    statusUrl,
   });
-
-  if (job?.status === "completed") {
-    return res.json({
-      ok: true,
-      auditType: AUDIT_TYPE,
-      sessionId: parsed.data.sessionId,
-      status: "completed",
-      analysis: job?.result?.analysis || job?.analysis,
-      job,
-    });
-  }
-
-  if (job?.status === "failed") {
-    return res.status(500).json({
-      ok: false,
-      auditType: AUDIT_TYPE,
-      sessionId: parsed.data.sessionId,
-      status: "failed",
-      error: job.error?.message || "Analysis job failed",
-      job,
-    });
-  }
 
   return res.status(202).json({
     ok: true,
     auditType: AUDIT_TYPE,
     sessionId: parsed.data.sessionId,
-    status: job?.status || "queued",
-    started,
-    ...paths,
+    status: job.status,
+    statusUrl,
     job,
   });
 }));
 
-router.get("/analysis/:sessionId", requireAuditCallbackAuth, asyncRoute(async (req, res) => {
+router.get("/analysis/:sessionId", requireAuditCallbackAuth, (req, res) => {
   const sessionId = String(req.params.sessionId || "").trim();
   const job = getSeoAeoGeoAnalysisJob(sessionId);
+
   if (!job) {
     return res.status(404).json({
       ok: false,
       auditType: AUDIT_TYPE,
       sessionId,
-      status: "not-found",
+      status: "not_found",
       error: "Analysis job not found",
     });
   }
 
-  if (job.status === "completed") {
-    return res.json({
-      ok: true,
-      auditType: AUDIT_TYPE,
-      sessionId,
-      status: "completed",
-      analysis: job?.result?.analysis || job?.analysis,
-      job,
-    });
-  }
-
-  if (job.status === "failed") {
-    return res.status(500).json({
-      ok: false,
-      auditType: AUDIT_TYPE,
-      sessionId,
-      status: "failed",
-      error: job.error?.message || "Analysis job failed",
-      job,
-    });
-  }
-
-  return res.status(202).json({
-    ok: true,
-    auditType: AUDIT_TYPE,
-    sessionId,
-    status: job.status || "queued",
-    job,
-  });
-}));
+  return res.status(200).json(job);
+});
 
 router.post("/callback", requireAuditCallbackAuth, asyncRoute(async (req, res) => {
   const parsed = validateBody(auditCallbackBodySchema, req.body);
