@@ -104,11 +104,11 @@ test("/analysis returns validated forensic JSON through the shared AI route", as
     for (let attempt = 0; attempt < 20; attempt += 1) {
       const statusResponse = await request(app)
         .get("/audits/seo-aeo-geo/analysis/route-test")
-        .set("Authorization", "Bearer route-token")
-        .expect(200);
+        .set("Authorization", "Bearer route-token");
+      assert.ok([200, 202].includes(statusResponse.status), `unexpected polling status ${statusResponse.status}: ${statusResponse.text}`);
       statusBody = statusResponse.body;
-      if (statusBody.status === "completed") break;
-      await new Promise((resolve) => setTimeout(resolve, 20));
+      if (statusResponse.status === 200 && statusBody.status === "completed") break;
+      await new Promise((resolve) => setTimeout(resolve, 30));
     }
 
     assert.equal(statusBody.ok, true);
