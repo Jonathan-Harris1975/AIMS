@@ -46,13 +46,33 @@ router.post("/analysis", requireAuditCallbackAuth, asyncRoute(async (req, res) =
   try {
     analysis = await runSeoAeoGeoAnalysis(parsed.data);
   } catch (err) {
-    logError("audit.seo-aeo-geo.analysis.failed", {
-      sessionId: parsed.data.sessionId,
+    const diagnostics = {
+      name: err?.name || "Error",
+      message: err instanceof Error ? err.message : String(err),
+      validationErrors: Array.isArray(err?.validationErrors) ? err.validationErrors.slice(0, 20) : [],
+      providerId: err?.providerId || "",
+      providerStatus: err?.status || "",
+      providerBodySnippet: err?.bodySnippet || "",
       routeCount: parsed.data.allRoutes?.length ?? 0,
       coverageCount: parsed.data.coverage?.length ?? 0,
-      error: err instanceof Error ? err.message : String(err),
+    };
+
+    logError("audit.seo-aeo-geo.analysis.failed", {
+      sessionId: parsed.data.sessionId,
+      routeCount: diagnostics.routeCount,
+      coverageCount: diagnostics.coverageCount,
+      error: diagnostics.message,
+      providerId: diagnostics.providerId,
+      providerStatus: diagnostics.providerStatus,
     });
-    throw err;
+
+    return res.status(502).json({
+      ok: false,
+      auditType: AUDIT_TYPE,
+      sessionId: parsed.data.sessionId,
+      error: "AI forensic analysis did not return validated JSON",
+      diagnostics,
+    });
   }
 
   info("audit.seo-aeo-geo.analysis.completed", {
