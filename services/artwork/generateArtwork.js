@@ -30,14 +30,14 @@ export async function generateArtwork(sessionId, prompt = "") {
   );
 
   const headers = {
-    Authorization: `Bearer ${process.env.OPENROUTER_API_KEY_ART}`,
+    Authorization: `Bearer ${process.env.OPENROUTER_API_KEY_ART_BACKUP}`,
     "Content-Type": "application/json",
     "HTTP-Referer": process.env.APP_URL || "https://jonathan-harris.online",
     "X-Title": safeTitle,
   };
 
   const body = JSON.stringify({
-    model: process.env.OPENROUTER_ART || "google/gemini-2.5-flash-image",
+    model: process.env.OPENROUTER_ART_BACKUP || "openai/gpt-5-image-mini",
     messages: [
       {
         role: "user",
