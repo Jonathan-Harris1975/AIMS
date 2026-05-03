@@ -109,16 +109,18 @@ export function generateFeedXML(episodesMeta) {
   const podcastLocked = lockedRaw === "no" ? "no" : "yes";
 
   const channel = {
-    title: envString("PODCAST_TITLE") || "Podcast",
-    link: stripQuotes(envString("PODCAST_LINK")),
-    description: envString("PODCAST_DESCRIPTION"),
+    title: envString("PODCAST_TITLE") || "Turing’s Torch: Artificial Intelligence Weekly",
+    link: stripQuotes(envString("PODCAST_LINK")) || "https://jonathan-harris.online/podcast/",
+    description:
+      envString("PODCAST_DESCRIPTION") ||
+      "A sceptical, plain-English weekly artificial intelligence podcast hosted by Jonathan Harris. Turing’s Torch separates useful signal from vendor noise, with dry British commentary on power, money, data, labour, regulation and risk.",
     language,
-    copyright: envString("PODCAST_COPYRIGHT"),
-    itunesAuthor: envString("PODCAST_AUTHOR"),
+    copyright: envString("PODCAST_COPYRIGHT") || `© ${new Date().getUTCFullYear()} Jonathan Harris`,
+    itunesAuthor: envString("PODCAST_AUTHOR") || "Jonathan Harris",
     itunesExplicit: envString("PODCAST_EXPLICIT") || "no",
     itunesType: envString("PODCAST_ITUNES_TYPE", "itunes_type") || "episodic",
     itunesKeywords: envString("PODCAST_ITUNES_KEYWORDS", "itunes_keywords"),
-    ownerName: envString("PODCAST_OWNER_NAME"),
+    ownerName: envString("PODCAST_OWNER_NAME") || "Jonathan Harris",
     ownerEmail: envString("PODCAST_OWNER_EMAIL"),
     imageUrl: envString("PODCAST_IMAGE_URL"),
     categories: [envString("PODCAST_CATEGORY_1"), envString("PODCAST_CATEGORY_2")].filter(Boolean),
@@ -157,6 +159,7 @@ function mapMetaToEpisode(meta) {
     podcastUrl,
     artUrl,
     duration,
+    plannedDurationSeconds,
     fileSize,
     pubDate,
     updatedAt,
@@ -210,7 +213,12 @@ function mapMetaToEpisode(meta) {
     link,
     enclosureUrl: podcastUrl,
     enclosureLength: fileSize || 0,
-    durationSeconds: typeof duration === "number" ? duration : null,
+    durationSeconds:
+      typeof duration === "number"
+        ? duration
+        : typeof plannedDurationSeconds === "number"
+        ? plannedDurationSeconds
+        : null,
     episodeNumber: typeof episodeNumber === "number" ? episodeNumber : undefined,
     imageUrl: artUrl || "",
     transcriptUrl: transcript.url,
