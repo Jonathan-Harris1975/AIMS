@@ -708,13 +708,17 @@ function validateAndNormaliseAnalysisShape(data, payload = {}) {
   return addCompatibilityAliases(normalised);
 }
 
+const AUDIT_FORENSIC_MAX_TOKENS = Math.max(12000, Number(process.env.AI_MAX_TOKENS || 0));
+const AUDIT_FORENSIC_TIMEOUT_MS = 120000;
+
 async function callAuditForensic({ resilientRequest, payload, messages, section }) {
   return resilientRequest("auditForensic", {
     sessionId: payload?.sessionId,
     section,
-    max_tokens: 16000,
+    max_tokens: AUDIT_FORENSIC_MAX_TOKENS,
     temperature: 0.15,
-    timeoutMs: 300000,
+    timeoutMs: AUDIT_FORENSIC_TIMEOUT_MS,
+    maxRetries: 0,
     top_p: 0.95,
     messages,
   });
