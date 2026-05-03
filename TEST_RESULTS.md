@@ -1,31 +1,30 @@
 # Test results
 
-## Commands run in container
+## Passed
 
 ```bash
+node --check services/shared/utils/ai-config.js
 node --check services/shared/utils/ai-service.js
+node --check services/shared/utils/jobStore.js
+node --check services/shared/utils/stateFile.js
 node --check audits/utils/auditAnalysisJobs.js
-node --check test/ai-service-audit-timeout.test.js
+node --check audits/utils/seoAeoGeoAnalysis.js
+node --check audits/routes/seoAeoGeo.js
 node --check test/ai-service-provider-diagnostics.test.js
 node --check test/audit-analysis-route.test.js
-node --check audits/routes/seoAeoGeo.js
+npm run build --silent
 ```
 
 Result: passed.
 
-## Commands not fully run in container
+## Not run here
 
 ```bash
-npm ci --no-audit --no-fund
 npm test
 ```
 
-Result: not completed in the container because dependency installation timed out. The uploaded CI log proves dependency installation succeeds in GitHub Actions, so the relevant CI failures were addressed in code and tests:
+Reason: dependency installation in this container exceeded the available execution window. The supplied CI log showed dependencies are available in GitHub Actions and isolated the failing contract to `test/audit-analysis-route.test.js`, where the test expected completed analysis from a `200` polling response. The test contract has been updated so polling accepts `202` for in-progress analysis and requires `200` only once the forensic JSON is present.
 
-- `test/ai-service-audit-timeout.test.js` expected `AIProviderRequestError`; OpenRouter HTTP errors now set that name.
-- `test/ai-service-provider-diagnostics.test.js` expected the previous four-provider audit route; the test now reflects the expanded Koyeb/OpenRouter route.
-- `test/audit-analysis-route.test.js` expected sync `200`; the test now follows the async `202` plus polling contract.
+## Evidence from supplied failed report
 
-## Live audit failure addressed
-
-The latest failed report shows the polling endpoint reached a `completed` state but did not expose a top-level analysis payload. This patch makes the polling response compatible with both current and legacy completed job shapes and stores the analysis in both locations for new jobs.
+The uploaded report failed at the AI forensic gate with: `completed but no analysis payload`. This patch prevents pending jobs from being returned as HTTP `200` without analysis.
