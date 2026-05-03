@@ -1,60 +1,59 @@
-const firstConfiguredEnv = (envNames = []) => {
-  for (const envName of envNames) {
-    const value = process.env[envName];
-    if (value !== undefined && String(value).trim() !== "") {
-      return { envName, value: String(value).trim() };
-    }
+function envValue(...names) {
+  for (const name of names) {
+    const value = process.env[name];
+    if (value !== undefined && value !== null && String(value).trim()) return String(value).trim();
   }
-  return { envName: envNames[0], value: undefined };
-};
+  return undefined;
+}
 
-const model = (
-  providerId,
-  modelEnv,
-  apiKeyEnv,
-  { modelEnvAliases = [], apiKeyEnvAliases = [] } = {}
-) => {
-  const modelEnvCandidates = [...modelEnvAliases, modelEnv];
-  const apiKeyEnvCandidates = [...apiKeyEnvAliases, apiKeyEnv];
-  const resolvedModel = firstConfiguredEnv(modelEnvCandidates);
-  const resolvedApiKey = firstConfiguredEnv(apiKeyEnvCandidates);
-
+function provider(modelEnvNames, keyEnvNames) {
   return {
-    providerId,
-    modelEnv,
-    apiKeyEnv,
-    modelEnvCandidates,
-    apiKeyEnvCandidates,
-    resolvedModelEnv: resolvedModel.envName,
-    resolvedApiKeyEnv: resolvedApiKey.envName,
-    name: resolvedModel.value,
-    apiKey: resolvedApiKey.value,
+    name: envValue(...modelEnvNames),
+    apiKey: envValue(...keyEnvNames),
+    modelEnvNames,
+    keyEnvNames,
   };
-};
+}
+
+const anthropic46 = provider(
+  ["OPENROUTER_ANTHROPIC_4_6", "OPENROUTER_ANTHROPIC_46", "OPENROUTER_ANTHROPIC"],
+  ["OPENROUTER_API_KEY_ANTHROPIC_4_6", "OPENROUTER_API_KEY_ANTHROPIC_46", "OPENROUTER_API_KEY_ANTHROPIC"]
+);
+
+const google25FlashLite = provider(
+  ["OPENROUTER_GOOGLE_2_5_flashlite", "OPENROUTER_GOOGLE_25_FLASHLITE", "OPENROUTER_GOOGLE"],
+  ["OPENROUTER_API_KEY_GOOGLE_2_5_flashlite", "OPENROUTER_API_KEY_GOOGLE_25_FLASHLITE", "OPENROUTER_API_KEY_GOOGLE"]
+);
+
+const chatgptMini5 = provider(
+  ["OPENROUTER_CHATGPT_mini5_", "OPENROUTER_CHATGPT_mini5", "OPENROUTER_CHATGPT_MINI5", "OPENROUTER_CHATGPT"],
+  ["OPENROUTER_API_KEY_CHATGPT_mini5", "OPENROUTER_API_KEY_CHATGPT_MINI5", "OPENROUTER_API_KEY_CHATGPT"]
+);
+
+const deepseekV4Pro = provider(
+  ["OPENROUTER_DEEPSEEK_v4_pro", "OPENROUTER_DEEPSEEK_V4_PRO", "OPENROUTER_DEEPSEEK"],
+  ["OPENROUTER_API_KEY_DEEPSEEK_v4_pro", "OPENROUTER_API_KEY_DEEPSEEK_V4_PRO", "OPENROUTER_API_KEY_DEEPSEEK"]
+);
+
+const deepseekV4Flash = provider(
+  ["OPENROUTER_DEEPSEEK_v4_flash", "OPENROUTER_DEEPSEEK_V4_FLASH"],
+  ["OPENROUTER_API_KEY_DEEPSEEK_v4_flash", "OPENROUTER_API_KEY_DEEPSEEK_V4_FLASH"]
+);
+
+const meta = provider(["OPENROUTER_META"], ["OPENROUTER_API_KEY_META"]);
 
 export const aiConfig = {
   models: {
-    google: model("google", "OPENROUTER_GOOGLE", "OPENROUTER_API_KEY_GOOGLE", {
-      modelEnvAliases: ["OPENROUTER_GOOGLE_2-5_flashlite"],
-      apiKeyEnvAliases: ["OPENROUTER_API_KEY_GOOGLE_2-5_flashlite"],
-    }),
-    chatgpt: model("chatgpt", "OPENROUTER_CHATGPT", "OPENROUTER_API_KEY_CHATGPT", {
-      modelEnvAliases: ["OPENROUTER_CHATGPT_mini-5"],
-      apiKeyEnvAliases: ["OPENROUTER_API_KEY_CHATGPT_mini5"],
-    }),
-    deepseek: model("deepseek", "OPENROUTER_DEEPSEEK", "OPENROUTER_API_KEY_DEEPSEEK", {
-      modelEnvAliases: ["OPENROUTER_DEEPSEEK_v4_pro"],
-      apiKeyEnvAliases: ["OPENROUTER_API_KEY_DEEPSEEK_v4_pro"],
-    }),
-    deepseekFlash: model("deepseekFlash", "OPENROUTER_DEEPSEEK_FLASH", "OPENROUTER_API_KEY_DEEPSEEK_FLASH", {
-      modelEnvAliases: ["OPENROUTER_DEEPSEEK_v4_flash"],
-      apiKeyEnvAliases: ["OPENROUTER_API_KEY_DEEPSEEK_v4_flash"],
-    }),
-    anthropic: model("anthropic", "OPENROUTER_ANTHROPIC", "OPENROUTER_API_KEY_ANTHROPIC", {
-      modelEnvAliases: ["OPENROUTER_ANTHROPIC_4-6"],
-      apiKeyEnvAliases: ["OPENROUTER_API_KEY_ANTHROPIC_4-6"],
-    }),
-    meta: model("meta", "OPENROUTER_META", "OPENROUTER_API_KEY_META"),
+    google: google25FlashLite,
+    chatgpt: chatgptMini5,
+    deepseek: deepseekV4Pro,
+    anthropic: anthropic46,
+    meta,
+    anthropic46,
+    google25FlashLite,
+    chatgptMini5,
+    deepseekV4Pro,
+    deepseekV4Flash,
   },
 
   routeModels: {
@@ -74,7 +73,18 @@ export const aiConfig = {
     rssRewrite: ["chatgpt", "google", "meta"],
     rssShortTitle: ["chatgpt", "google", "meta"],
     blogWeekly: ["google", "chatgpt", "deepseek"],
-    auditForensic: ["anthropic", "google", "chatgpt", "deepseek"],
+    auditForensic: [
+      "anthropic46",
+      "google25FlashLite",
+      "chatgptMini5",
+      "deepseekV4Pro",
+      "deepseekV4Flash",
+      "meta",
+      "anthropic",
+      "google",
+      "chatgpt",
+      "deepseek",
+    ],
     oneupDaily: ["chatgpt", "google", "deepseek"],
     oneupQuiz: ["chatgpt", "google", "deepseek"],
   },
@@ -83,7 +93,7 @@ export const aiConfig = {
 
   headers: {
     "HTTP-Referer": process.env.APP_URL || "http://localhost:3000",
-    "X-Title": process.env.APP_TITLE || "Podcast Script Generation",
+    "X-Title": process.env.APP_TITLE || "AI Management Suite",
   },
 };
 
