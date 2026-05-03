@@ -1,0 +1,86 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+
+import { calculateDuration } from "../services/script/utils/durationCalculator.js";
+import { getTitleDescriptionPrompt, __testing as metadataTesting } from "../services/script/utils/podcastHelper.js";
+import { generateFeedXML } from "../services/rss-feed-podcast/generateFeed.js";
+
+const sampleMain = `
+Agentic artificial intelligence systems are being pushed as independent workers, but the awkward bit is control.
+OpenAI and Anthropic are releasing new models, with benchmarks doing most of the public relations work.
+Companies are also finding that their data infrastructure is too messy for serious artificial intelligence deployment.
+Workflow automation then raises questions about surveillance, jobs, productivity, and who gets the benefit.
+`;
+
+test("duration planner honours explicit 30/45/60 minute targets", () => {
+  const shortPlan = calculateDuration("main", { sessionId: "TT-test", targetMins: 30 }, 6);
+  const longPlan = calculateDuration("main", { sessionId: "TT-test", targetMins: 60 }, 6);
+
+  assert.equal(shortPlan.targetMins, 30);
+  assert.equal(shortPlan.totalSeconds, 1800);
+  assert.equal(shortPlan.mainSeconds, 1655);
+
+  assert.equal(longPlan.targetMins, 60);
+  assert.equal(longPlan.totalSeconds, 3600);
+  assert.equal(longPlan.mainSeconds, 3415);
+});
+
+test("metadata fallback is specific, hosted, and runtime-aware", () => {
+  const plan = calculateDuration("episode", { sessionId: "TT-test", targetMins: 60 });
+  const title = metadataTesting.buildFallbackTitle(sampleMain);
+  const description = metadataTesting.buildFallbackDescription(sampleMain, plan);
+  const validation = metadataTesting.validateMetaCandidate({ title, description }, plan);
+
+  assert.equal(title, "Agentic AI, Model Hype, and Dirty Data");
+  assert.match(description, /Jonathan Harris/);
+  assert.match(description, /60-minute/);
+  assert.equal(validation.ok, true, validation.reasons.join("; "));
+});
+
+test("metadata prompt forbids generic titles and scales description length by runtime", () => {
+  const plan = calculateDuration("episode", { sessionId: "TT-test", targetMins: 30 });
+  const prompt = getTitleDescriptionPrompt(sampleMain, plan);
+
+  assert.match(prompt, /Host: Jonathan Harris/);
+  assert.match(prompt, /Planned episode length: 30 minutes/);
+  assert.match(prompt, /Description: 300-560 characters/);
+  assert.equal(metadataTesting.isLikelyGenericTitle("AI Weekly"), true);
+});
+
+test("podcast RSS channel defaults are branded, hosted, and non-generic", () => {
+  const original = {
+    PODCAST_TITLE: process.env.PODCAST_TITLE,
+    PODCAST_DESCRIPTION: process.env.PODCAST_DESCRIPTION,
+    PODCAST_AUTHOR: process.env.PODCAST_AUTHOR,
+    PODCAST_LINK: process.env.PODCAST_LINK,
+  };
+
+  process.env.PODCAST_TITLE = "";
+  process.env.PODCAST_DESCRIPTION = "";
+  process.env.PODCAST_AUTHOR = "";
+  process.env.PODCAST_LINK = "";
+
+  try {
+    const xml = generateFeedXML([
+      {
+        sessionId: "TT-2026-05-01",
+        title: "Agentic AI, Model Hype, and Dirty Data",
+        description: "Jonathan Harris cuts through the week in artificial intelligence without vendor glitter.",
+        podcastUrl: "https://podcast.jonathan-harris.online/TT-2026-05-01.mp3",
+        plannedDurationSeconds: 2700,
+        fileSize: 123,
+      },
+    ]);
+
+    assert.match(xml, /<title>Turing’s Torch: Artificial Intelligence Weekly<\/title>/);
+    assert.match(xml, /hosted by Jonathan Harris/);
+    assert.match(xml, /<itunes:author>Jonathan Harris<\/itunes:author>/);
+    assert.match(xml, /<itunes:duration>45:00<\/itunes:duration>/);
+    assert.doesNotMatch(xml, /<title>Podcast<\/title>/);
+  } finally {
+    for (const [key, value] of Object.entries(original)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
