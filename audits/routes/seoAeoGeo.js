@@ -64,22 +64,97 @@ router.post("/analysis", requireAuditCallbackAuth, asyncRoute(async (req, res) =
   });
 }));
 
+function analysisPayloadFromJob(job) {
+  if (!job || typeof job !== "object") return undefined;
+  if (job.analysis && typeof job.analysis === "object") return job.analysis;
+  if (job.result?.analysis && typeof job.result.analysis === "object") return job.result.analysis;
+  if (job.result && typeof job.result === "object" && !Array.isArray(job.result)) {
+    const looksLikeAnalysis = Boolean(
+      job.result.auditCompletionState ||
+        job.result.aiAnalysisStatus ||
+        job.result.rankedIssueLedger ||
+        job.result.issues ||
+        job.result.executiveSummary
+    );
+    if (looksLikeAnalysis) return job.result;
+  }
+  return undefined;
+}
+
 router.get("/analysis/:sessionId", requireAuditCallbackAuth, asyncRoute(async (req, res) => {
   const sessionId = String(req.params.sessionId || "").trim();
   const job = await getSeoAeoGeoAnalysisJobFresh(sessionId);
 
   if (!job) {
-    return res.status(200).json({
-      ok: false,
+    return res.status(202).json({
+      ok: true,
       auditType: AUDIT_TYPE,
       sessionId,
       status: "queued",
+      hasAnalysis: false,
       notFoundYet: true,
-      error: "Analysis job not found in local or durable state yet",
+      message: "Analysis job has not reached this worker or durable state yet",
     });
   }
 
-  return res.status(200).json(job);
+  const analysis = analysisPayloadFromJob(job);
+
+  if (job.status === "queued" || job.status === "running") {
+    return res.status(202).json({
+      ...job,
+      ok: true,
+      auditType: AUDIT_TYPE,
+      sessionId,
+      status: job.status,
+      hasAnalysis: false,
+    });
+  }
+
+  if (job.status === "completed") {
+    if (analysis) {
+      return res.status(200).json({
+        ...job,
+        ok: true,
+        auditType: AUDIT_TYPE,
+        sessionId,
+        status: "completed",
+        hasAnalysis: true,
+        analysis,
+        result: {
+          ...(job.result && typeof job.result === "object" ? job.result : {}),
+          analysis,
+        },
+        job: {
+          ...job,
+          analysis,
+          result: {
+            ...(job.result && typeof job.result === "object" ? job.result : {}),
+            analysis,
+          },
+        },
+      });
+    }
+
+    return res.status(409).json({
+      ...job,
+      ok: false,
+      auditType: AUDIT_TYPE,
+      sessionId,
+      status: "completed-without-analysis",
+      hasAnalysis: false,
+      error: "Analysis job completed without a forensic analysis payload",
+    });
+  }
+
+  return res.status(409).json({
+    ...job,
+    ok: false,
+    auditType: AUDIT_TYPE,
+    sessionId,
+    status: job.status || "failed",
+    hasAnalysis: false,
+    error: job.error || { message: "Analysis job failed before producing a forensic analysis payload" },
+  });
 }));
 
 router.post("/callback", requireAuditCallbackAuth, asyncRoute(async (req, res) => {
