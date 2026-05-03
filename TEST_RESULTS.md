@@ -3,18 +3,15 @@
 ## Commands run
 
 ```bash
-node --check audits/utils/auditAnalysisJobs.js
-node --check audits/routes/seoAeoGeo.js
-node --check audits/utils/seoAeoGeoAnalysis.js
+node --check services/shared/utils/ai-config.js
 node --check services/shared/utils/ai-service.js
-node --check audits/utils/callbackAuth.js
+node --check audits/utils/auditAnalysisJobs.js
+node --check audits/utils/seoAeoGeoAnalysis.js
+node --check audits/routes/seoAeoGeo.js
 npm run build --silent
 ```
 
-## Results
-
-- JavaScript syntax checks passed.
-- `npm run build --silent` passed and printed `Build step completed`.
+Result: passed.
 
 ## Commands not run
 
@@ -22,6 +19,6 @@ npm run build --silent
 npm test
 ```
 
-Not run in this container because the extracted repo does not include `node_modules`, and this environment does not have production secrets or deployed runtime access.
+Not run in the container because `node_modules` is not present in the uploaded repo snapshot and dependency installation was not available reliably in this environment.
 
-Live `/audits/seo-aeo-geo/run`, real OpenRouter calls, Koyeb deployment, GitHub workflow dispatch, and R2 publishing were not run here.
+Live Koyeb, OpenRouter, R2, and GitHub workflow calls were not run because production runtime access and resolved secrets are not available inside the container.
