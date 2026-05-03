@@ -26,6 +26,7 @@ const remoteStateEnabled =
 
 let warnedRemoteStateDisabled = false;
 let remoteWriteQueue = Promise.resolve();
+let lastRemoteWriteError = null;
 
 function parseBoolean(value, fallback = false) {
   if (value === undefined || value === null || value === "") return fallback;
@@ -158,9 +159,11 @@ function queueRemoteWrite(filename, value) {
   remoteWriteQueue = remoteWriteQueue
     .then(async () => {
       await putJson("metaSystem", key, snapshot);
+      lastRemoteWriteError = null;
       debug("state.remote.write.complete", { key });
     })
     .catch((err) => {
+      lastRemoteWriteError = err;
       warn("state.remote.write.fail", {
         key,
         error: err?.message || String(err),
@@ -210,4 +213,45 @@ export function writeJsonState(filename, value) {
     queueRemoteWrite(filename, value);
     return remoteStateEnabled;
   }
+}
+
+
+export async function readJsonStateFresh(filename, fallback) {
+  if (!remoteStateEnabled) {
+    return readJsonState(filename, fallback);
+  }
+
+  const key = remoteStateKey(filename);
+
+  try {
+    const raw = await getObjectAsText("metaSystem", key);
+    const trimmed = String(raw || "").trim();
+    if (!trimmed) {
+      remoteStateCache.delete(filename);
+      return cloneValue(fallback);
+    }
+
+    const parsed = JSON.parse(trimmed);
+    remoteStateCache.set(filename, parsed);
+    return cloneValue(parsed);
+  } catch (err) {
+    if (isMissingRemoteStateError(err)) {
+      remoteStateCache.delete(filename);
+      return readJsonState(filename, fallback);
+    }
+
+    warn("state.remote.read_fresh.fail", {
+      key,
+      error: err?.message || String(err),
+    });
+    return readJsonState(filename, fallback);
+  }
+}
+
+export async function flushStateWrites({ throwOnError = false } = {}) {
+  await remoteWriteQueue;
+  if (throwOnError && lastRemoteWriteError) {
+    throw lastRemoteWriteError;
+  }
+  return { ok: !lastRemoteWriteError, error: lastRemoteWriteError ? lastRemoteWriteError?.message || String(lastRemoteWriteError) : null };
 }

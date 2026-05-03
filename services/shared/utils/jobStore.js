@@ -1,4 +1,4 @@
-import { readJsonState, writeJsonState } from "./stateFile.js";
+import { flushStateWrites, readJsonState, readJsonStateFresh, writeJsonState } from "./stateFile.js";
 
 const STATE_FILE = "job-store.json";
 const JOB_TTL_MS = Number(process.env.JOB_STATUS_TTL_MS) || 24 * 60 * 60 * 1000;
@@ -49,15 +49,37 @@ export function toPublicJob(job) {
   return cloned;
 }
 
+function persistedJobsFrom(value) {
+  return Array.isArray(value?.jobs) ? value.jobs : [];
+}
+
+function isValidPersistedJob(job) {
+  return job && typeof job.type === "string" && typeof job.sessionId === "string";
+}
+
+function mergePersistedJobs(persistedJobs = []) {
+  for (const job of persistedJobs.filter(isValidPersistedJob)) {
+    const key = makeKey(job.type, job.sessionId);
+    const incoming = { ...job, error: sanitiseJobError(job.error) };
+    const existing = jobs.get(key);
+    const existingUpdated = existing?.updatedAt ? new Date(existing.updatedAt).getTime() : 0;
+    const incomingUpdated = incoming?.updatedAt ? new Date(incoming.updatedAt).getTime() : 0;
+
+    if (!existing || incomingUpdated >= existingUpdated) {
+      jobs.set(key, incoming);
+    }
+  }
+}
+
 function loadJobs() {
   const persisted = readJsonState(STATE_FILE, { jobs: [] });
-  const jobs = Array.isArray(persisted?.jobs) ? persisted.jobs : [];
+  const loaded = new Map();
 
-  return new Map(
-    jobs
-      .filter((job) => job && typeof job.type === "string" && typeof job.sessionId === "string")
-      .map((job) => [makeKey(job.type, job.sessionId), { ...job, error: sanitiseJobError(job.error) }])
-  );
+  for (const job of persistedJobsFrom(persisted).filter(isValidPersistedJob)) {
+    loaded.set(makeKey(job.type, job.sessionId), { ...job, error: sanitiseJobError(job.error) });
+  }
+
+  return loaded;
 }
 
 const jobs = loadJobs();
@@ -174,11 +196,31 @@ export function failJob(type, sessionId, err, metadata = {}) {
   });
 }
 
+export async function refreshJobStoreFromState() {
+  const persisted = await readJsonStateFresh(STATE_FILE, { jobs: [] });
+  mergePersistedJobs(persistedJobsFrom(persisted));
+  pruneExpired();
+  return true;
+}
+
+export async function flushJobStoreWrites(options = {}) {
+  return flushStateWrites(options);
+}
+
 export function getJob(type, sessionId) {
   pruneExpired();
   return cloneJob(jobs.get(makeKey(type, sessionId)));
 }
 
+export async function getJobFresh(type, sessionId) {
+  await refreshJobStoreFromState();
+  return getJob(type, sessionId);
+}
+
 export function getPublicJob(type, sessionId) {
   return toPublicJob(getJob(type, sessionId));
+}
+
+export async function getPublicJobFresh(type, sessionId) {
+  return toPublicJob(await getJobFresh(type, sessionId));
 }
