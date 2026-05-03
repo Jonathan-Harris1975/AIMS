@@ -24,6 +24,8 @@ export const OUTRO_CLOSING_TAGLINE = `That’s your lot for this week’s Turing
 // INTRO TEMPLATE
 export function getIntroPrompt({ weatherSummary, turingQuote, sessionMeta } = {}) {
   const persona = buildPersona(sessionMeta);
+  const { introSeconds, targetMins } = calculateDuration("intro", sessionMeta);
+  const introWords = Math.max(120, Math.round(introSeconds * 2.15));
   const maybeWeekday = weekdayFromDateStr(sessionMeta?.date);
   const weekdayLine = maybeWeekday
     ? ` If you reference a day, it must be "${maybeWeekday}".`
@@ -37,12 +39,16 @@ ${persona}
 
 Write a tight, confident radio-style INTRO in a dry, sceptical British voice.
 
+Episode plan: ${targetMins} minutes total. Intro target: about ${introSeconds} seconds, roughly ${introWords} spoken words.
+
 Non‑negotiable:
 - One short, wry nod to the weather using: "${weatherSummary}" (a passing line, not a segment).
 - Introduce this Alan Turing quote: "${turingQuote}" and connect it to the week’s theme: separating signal from noise.
+- Make the opening specific enough to feel hosted by Jonathan Harris, not a reusable podcast template.
 - Sound like a seasoned host who’s seen a thousand “breakthroughs” come and go.
 - No corporate optimism. No breathless hype. No “welcome to another exciting episode”.
 - No metaphors about journeys, landscapes, revolutions, or “rapidly evolving” anything.
+- Avoid filler such as “relevant thought”, “cacophony of claims”, “with every new announcement”, “delve”, and “critical lens”.
 - No stage directions, no headings, no bullet points.
 
 End EXACTLY with this line:
@@ -81,7 +87,8 @@ ${persona}
 You are writing ONE self-contained MAIN-SECTION story segment based on the RSS articles below.
 This segment will later be merged with other segments, so write it as spoken prose that stands on its own.
 
-Length target: ~${approxMinutes} minutes (~${approxWords} words).
+Length target for this segment: ~${approxMinutes} minutes (~${approxWords} words).
+Overall episode plan: ${sessionMeta?.targetMins || sessionMeta?.targetMinutes || "auto-selected"} minutes if supplied by the duration planner.
 
 NON-NEGOTIABLE:
 - Plain British English. Spoken. No bullets, no numbering, no headings, no stage directions.
@@ -90,6 +97,8 @@ NON-NEGOTIABLE:
 - Do not mention “RSS”, “feed”, “articles”, “sources”, “links”, or any internal process.
 - Do not quote large blocks of text. No “according to”. No legalese.
 - Assume the listener is smart but busy: explain the topic clearly without dumbing it down.
+- Make this sound like Jonathan Harris hosting a weekly AI commentary show, not a source rewrite with a dry joke stapled on.
+- Do not pad examples just to hit length. If the story is thin, use the extra space to explain consequences, limits, and practical trade-offs.
 
 GOLD-STANDARD FLOW (do NOT label these steps, just do them):
 1) Orientation: in 1–2 sentences, state what actually happened in plain English.
@@ -111,7 +120,8 @@ Return ONLY the finished segment as plain text.
 // OUTRO TEMPLATE – Value recap → Newsletter (site) → Sponsor (book URL) → Sign-off
 export function getOutroPromptFull(book, sessionMeta) {
   const persona = buildPersona(sessionMeta);
-  calculateDuration("outro", sessionMeta); // keep duration hook (future-proof)
+  const { outroSeconds, targetMins } = calculateDuration("outro", sessionMeta);
+  const outroWords = Math.max(90, Math.round(outroSeconds * 2.05));
 
   const siteUrl = "https://jonathan-harris.online";
   const siteSpoken = siteUrl
@@ -126,18 +136,20 @@ export function getOutroPromptFull(book, sessionMeta) {
   return `
 ${persona}
 
-Write a tight, confident OUTRO (30–40 seconds) in a dry, witty British radio voice.
+Write a tight, confident OUTRO in a dry, witty British radio voice.
+
+Episode plan: ${targetMins} minutes total. Outro target: about ${outroSeconds} seconds, roughly ${outroWords} spoken words.
 
 MANDATORY ORDER (no bullets, no headings, just spoken flow):
 1) Value recap: one or two sentences that acknowledge the week’s intensity and why clarity matters.
 2) Newsletter CTA (SITE ONLY): Invite listeners to get the daily AI briefing at ${siteSpoken}. Keep it simple: one email, no hype, no fluff.
-3) Sponsor (BOOK ONLY): Seamlessly introduce this week's sponsor as your own book: "${bookTitle}". Tell listeners it is in the eBooks section there. Do not read or invent a book-specific URL path.
+3) Sponsor (BOOK ONLY): Seamlessly introduce this week's sponsor as your own book by Jonathan Harris: "${bookTitle}". Tell listeners it is in the eBooks section there. Do not read or invent a book-specific URL path.
 4) Close: End EXACTLY with:
 "${OUTRO_CLOSING_TAGLINE}"
 
 Rules:
 - Do NOT merge the website URL with the book URL.
-- Do NOT include more than one website mention.
+- The website may be mentioned once in the CTA and once only inside the exact closing line. Do not add extra repeats.
 - Never speak slash paths, dash-heavy paths, tracking links, or full ebook URLs.
 - Use British spelling throughout.
 - No dangling words, incomplete final paragraphs, or broken punctuation joins.

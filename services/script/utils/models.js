@@ -84,11 +84,13 @@ export async function generateMain(sessionIdLike) {
     }))
     .filter((a) => a.title || a.summary);
 
-  const { mainSeconds, targetMins } = calculateDuration(
+  const durationPlan = calculateDuration(
     "main",
     sessionMeta,
     articles.length
   );
+  const { mainSeconds, targetMins } = durationPlan;
+  const generationMeta = { ...sessionMeta, ...durationPlan };
 
   debug("Main script generation (Longform Batching)", {
     articles: articles.length,
@@ -110,7 +112,7 @@ export async function generateMain(sessionIdLike) {
     );
   }
 
-  const combined = await generateMainLongform(sessionMeta, articles, mainSeconds);
+  const combined = await generateMainLongform(generationMeta, articles, mainSeconds);
   const cleaned = sanitizeOutput(combined);
 
   await sessionCache.storeTempPart(sessionMeta, "main", cleaned);

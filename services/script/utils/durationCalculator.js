@@ -1,19 +1,27 @@
 // ============================================================
 // ⏱️ Duration Calculator (Automatic Episode Length Rotation)
 // ============================================================
+//
+// Single source of truth for planned podcast length. The script
+// prompts, episode metadata, and RSS duration fallback all read from
+// this deterministic plan so 30/45/60 minute episodes do not drift.
+// ============================================================
 
-const baseDurations = {
-  introSeconds: 75,
-  outroSeconds: 85,
+const DURATION_SEQUENCE_MINS = [30, 45, 60];
+
+const DURATION_PROFILES = {
+  30: { introSeconds: 70, outroSeconds: 75 },
+  45: { introSeconds: 80, outroSeconds: 85 },
+  60: { introSeconds: 90, outroSeconds: 95 },
 };
 
 function normalizeSessionId(input) {
   if (!input) return "session-unknown";
   if (typeof input === "string") return input;
   if (typeof input === "object") {
-    const sid = String(input.sessionId || "");
-    const date = String(input.date || "");
-    return `${sid}-${date}` || "session-unknown";
+    const sid = String(input.sessionId || input.id || "").trim();
+    const date = String(input.date || "").trim();
+    return [sid, date].filter(Boolean).join("-") || "session-unknown";
   }
   return "session-unknown";
 }
@@ -24,32 +32,102 @@ function hashCode(str) {
   return Math.abs(h);
 }
 
-function autoSelectTargetMins(sessionIdNormalized) {
-  const seq = [30, 45, 60];
-  const h = hashCode(sessionIdNormalized);
-  return seq[h % seq.length];
+function numericCandidate(...values) {
+  for (const value of values) {
+    const n = Number(value);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  return null;
 }
 
-export function calculateDuration(section, sessionId, articleCount = 0) {
-  const normalized = normalizeSessionId(sessionId);
-  const targetMins = autoSelectTargetMins(normalized);
-  const h = hashCode(normalized);
-  const offset = (h % 61) - 30;
+function normaliseAllowedTargetMins(value) {
+  const n = numericCandidate(value);
+  if (!n) return null;
+
+  const exact = DURATION_SEQUENCE_MINS.find((mins) => mins === Math.round(n));
+  if (exact) return exact;
+
+  // Snap unknown values to the nearest supported runtime rather than
+  // silently creating a fourth profile the rest of the system does not know.
+  return DURATION_SEQUENCE_MINS.reduce((best, mins) =>
+    Math.abs(mins - n) < Math.abs(best - n) ? mins : best
+  );
+}
+
+function explicitTargetMins(input = {}) {
+  if (typeof input !== "object" || !input) return null;
+
+  return normaliseAllowedTargetMins(
+    input.targetMins,
+    input.targetMinutes,
+    input.durationMins,
+    input.durationMinutes,
+    input.episodeLengthMins,
+    input.episodeLengthMinutes,
+    input.runtimeMins,
+    input.runtimeMinutes
+  );
+}
+
+function envTargetMins() {
+  return normaliseAllowedTargetMins(
+    process.env.PODCAST_TARGET_MINS,
+    process.env.PODCAST_TARGET_MINUTES,
+    process.env.PODCAST_DURATION_MINS,
+    process.env.PODCAST_DURATION_MINUTES
+  );
+}
+
+function autoSelectTargetMins(sessionIdNormalized) {
+  const h = hashCode(sessionIdNormalized);
+  return DURATION_SEQUENCE_MINS[h % DURATION_SEQUENCE_MINS.length];
+}
+
+export function resolveTargetMins(sessionMeta = {}) {
+  const explicit = explicitTargetMins(sessionMeta);
+  if (explicit) return explicit;
+
+  const fromEnv = envTargetMins();
+  if (fromEnv) return fromEnv;
+
+  return autoSelectTargetMins(normalizeSessionId(sessionMeta));
+}
+
+export function buildDurationPlan(sessionMeta = {}, articleCount = 0) {
+  const targetMins = resolveTargetMins(sessionMeta);
+  const profile = DURATION_PROFILES[targetMins] || DURATION_PROFILES[45];
+  const totalSeconds = targetMins * 60;
+  const introSeconds = profile.introSeconds;
+  const outroSeconds = profile.outroSeconds;
+  const mainSeconds = Math.max(300, totalSeconds - introSeconds - outroSeconds);
+
+  return {
+    targetMins,
+    targetMinutes: targetMins,
+    targetLabel: `${targetMins} minute`,
+    totalSeconds,
+    plannedDurationSeconds: totalSeconds,
+    introSeconds,
+    mainSeconds,
+    outroSeconds,
+    articleCount: Number.isFinite(Number(articleCount)) ? Number(articleCount) : 0,
+  };
+}
+
+export function calculateDuration(section, sessionMeta = {}, articleCount = 0) {
+  const plan = buildDurationPlan(sessionMeta, articleCount);
 
   if (section === "intro") {
-    return { introSeconds: Math.max(60, baseDurations.introSeconds + offset), targetMins };
+    return { ...plan, sectionSeconds: plan.introSeconds };
   }
   if (section === "outro") {
-    return { outroSeconds: Math.max(60, baseDurations.outroSeconds + offset), targetMins };
+    return { ...plan, sectionSeconds: plan.outroSeconds };
+  }
+  if (section === "main") {
+    return { ...plan, sectionSeconds: plan.mainSeconds };
   }
 
-  const totalSeconds = targetMins * 60;
-  const introSeconds = Math.max(60, baseDurations.introSeconds);
-  const outroSeconds = Math.max(60, baseDurations.outroSeconds);
-  const baseMain = Math.max(300, totalSeconds - introSeconds - outroSeconds);
-  const mainSeconds = Math.max(300, baseMain + offset * 2);
-
-  return { mainSeconds, targetMins };
+  return plan;
 }
 
-export default { calculateDuration };
+export default { calculateDuration, buildDurationPlan, resolveTargetMins };

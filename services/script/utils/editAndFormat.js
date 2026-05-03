@@ -26,6 +26,17 @@ const HIGH_CONFIDENCE_PUNCTUATION_REPAIRS = new Set([
   "its",
 ]);
 
+
+function repairMojibake(text = "") {
+  return String(text || "")
+    .replace(/â€™/g, "'")
+    .replace(/â€˜/g, "'")
+    .replace(/â€œ|â€�/g, '"')
+    .replace(/â€“|â€”/g, " - ")
+    .replace(/â€¦/g, "...")
+    .replace(/Â/g, "");
+}
+
 function preserveCase(source, replacement) {
   if (!source) return replacement;
   if (source === source.toUpperCase()) return replacement.toUpperCase();
@@ -197,7 +208,7 @@ function expandAI(text) {
 export default function editAndFormat(text) {
   if (!text || typeof text !== "string") return "";
 
-  let out = text.trim();
+  let out = repairMojibake(text).trim();
 
   // spacing
   out = out.replace(/[ \t]+/g, " ");
@@ -225,4 +236,5 @@ export const __testing = {
   normaliseUrlSpeech,
   repairPunctuationGlitches,
   splitLongSentences,
+  repairMojibake,
 };

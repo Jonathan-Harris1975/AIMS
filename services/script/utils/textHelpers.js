@@ -7,6 +7,17 @@
 // - Provides extractMainContent (required by podcastHelper.js)
 // ============================================================
 
+
+function repairMojibake(text = "") {
+  return String(text || "")
+    .replace(/â€™/g, "'")
+    .replace(/â€˜/g, "'")
+    .replace(/â€œ|â€�/g, '"')
+    .replace(/â€“|â€”/g, " - ")
+    .replace(/â€¦/g, "...")
+    .replace(/Â/g, "");
+}
+
 /**
  * Clean transcript content:
  * - remove excessive spacing
@@ -16,7 +27,7 @@
 export function cleanTranscript(text) {
   if (!text || typeof text !== "string") return "";
 
-  return text
+  return repairMojibake(text)
     .replace(/\n{3,}/g, "\n\n")     // collapse >2 newlines
     .replace(/ {2,}/g, " ")         // collapse double spaces
     .replace(/[“”]/g, '"')          // normalize double quotes
@@ -60,8 +71,10 @@ export function normaliseKeywords(raw) {
 export function extractMainContent(text) {
   if (!text || typeof text !== "string") return "";
 
-  return text
+  return repairMojibake(text)
     .replace(/[\r\n]+/g, " ")   // unify and collapse newlines
     .replace(/\s{2,}/g, " ")    // collapse extra spacing
     .trim();
 }
+
+export const __testing = { repairMojibake };

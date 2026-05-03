@@ -29,6 +29,8 @@ function buildMainSynthesisPrompt(sessionMeta, segments, totalMainSeconds) {
   return `
 You are Jonathan Harris, host of Turing’s Torch: Artificial Intelligence Weekly.
 
+This is a planned ${minutes}-minute episode. Use the available time intelligently: deeper treatment for longer episodes, sharper selection for shorter ones.
+
 You are given several draft story segments separated by ---.
 They were written independently and may overlap.
 Your job is to turn them into ONE finished spoken-word MAIN section for the episode.
@@ -59,6 +61,8 @@ NON-NEGOTIABLE OUTPUT RULES
 - No malformed punctuation
 - No broken sentence joins
 - No stitched or machine-like phrasing
+- No generic podcast metadata language inside the narration
+- No repeated "what this means / why it matters / broader trend" scaffold paragraph after paragraph
 
 SPOKEN-WORD RULES
 - Write as native podcast narration
@@ -119,7 +123,8 @@ Silently check that:
 - there are no broken joins
 - there is no bad punctuation in the middle of sentences
 - there are no mangled connectors
-- there is no repeated scaffolding, including "The problem is", "The immediate impact", "The broader implications", or "This also ties into"
+- there is no repeated scaffolding, including "The problem is", "The immediate impact", "The broader implications", "This matters because", or "This also ties into"
+- the script sounds hosted by Jonathan Harris rather than assembled from article summaries
 - every paragraph lands cleanly when read aloud
 - the final main-section paragraph is complete but not an episode sign-off
 - the language sounds spoken rather than paraphrased from reading material
