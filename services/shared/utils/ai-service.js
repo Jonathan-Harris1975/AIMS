@@ -19,6 +19,7 @@
 import aiConfig from "./ai-config.js";
 import { safeRouteLog } from "../../../logger.js";
 import { info, error as logError } from "../../../logger.js";
+import fetch from "node-fetch";
 
 // ---------------------------------------------
 // 🔧 Config
@@ -45,25 +46,6 @@ const DEFAULT_TOP_P = Number(process.env.AI_TOP_P || 1);
 
 const MAX_RETRIES = Number(process.env.AI_MAX_RETRIES || 2);
 const RETRY_BASE_MS = Number(process.env.AI_RETRY_BASE_MS || 700);
-const MAX_ERROR_BODY_CHARS = 700;
-
-function safeBodySnippet(value) {
-  return String(value || "")
-    .replace(/Bearer\s+[A-Za-z0-9._~+\/=:-]+/gi, "Bearer [masked]")
-    .replace(/sk-or-[A-Za-z0-9._~+\/=:-]+/gi, "[masked-openrouter-key]")
-    .slice(0, MAX_ERROR_BODY_CHARS);
-}
-
-export class AIProviderRequestError extends Error {
-  constructor(message, { status = null, bodySnippet = "", providerId = "", model = "" } = {}) {
-    super(message);
-    this.name = "AIProviderRequestError";
-    this.status = status;
-    this.bodySnippet = safeBodySnippet(bodySnippet);
-    this.providerId = providerId;
-    this.model = model;
-  }
-}
 
 // ---------------------------------------------
 // 🧠 Session summary aggregation
@@ -125,7 +107,7 @@ function resolveRouteKey(routeName) {
   return routeName;
 }
 
-export function getProviderChainForRoute(routeKey) {
+function getProviderChainForRoute(routeKey) {
   const chain = aiConfig?.routeModels?.[routeKey];
 
   if (!Array.isArray(chain) || chain.length === 0) {
@@ -140,56 +122,10 @@ export function getProviderChainForRoute(routeKey) {
   return chain;
 }
 
-function configured(value) {
-  return typeof value === "string" && value.trim().length > 0;
-}
-
-export function getProviderConfig(providerId) {
+function getProviderConfig(providerId) {
   const conf = aiConfig?.models?.[providerId];
-  if (!conf || !configured(conf.name) || !configured(conf.apiKey)) return null;
+  if (!conf?.name || !conf?.apiKey) return null;
   return conf;
-}
-
-export function getProviderDiagnosticsForRoute(routeName) {
-  const routeKey = resolveRouteKey(routeName);
-  const chain = aiConfig?.routeModels?.[routeKey] || [];
-  return {
-    routeName,
-    routeKey,
-    endpoint: ENDPOINT,
-    configuredProviders: chain.map((providerId) => {
-      const conf = aiConfig?.models?.[providerId] || {};
-      const hasModel = configured(conf.name);
-      const hasApiKey = configured(conf.apiKey);
-      return {
-        providerId,
-        modelEnv: conf.modelEnv || `OPENROUTER_${String(providerId).toUpperCase()}`,
-        apiKeyEnv: conf.apiKeyEnv || `OPENROUTER_API_KEY_${String(providerId).toUpperCase()}`,
-        hasModel,
-        hasApiKey,
-        configured: hasModel && hasApiKey,
-        model: hasModel ? conf.name : "",
-      };
-    }),
-  };
-}
-
-export class AIProviderConfigurationError extends Error {
-  constructor(routeName, diagnostics) {
-    const missing = diagnostics.configuredProviders
-      .filter((provider) => !provider.configured)
-      .map((provider) => {
-        const parts = [];
-        if (!provider.hasModel) parts.push(provider.modelEnv);
-        if (!provider.hasApiKey) parts.push(provider.apiKeyEnv);
-        return `${provider.providerId}: missing ${parts.join(" + ")}`;
-      })
-      .join("; ");
-    super(`No configured AI providers for route ${diagnostics.routeKey}. ${missing || "Provider chain is empty."}`);
-    this.name = "AIProviderConfigurationError";
-    this.routeName = routeName;
-    this.diagnostics = diagnostics;
-  }
 }
 
 // ---------------------------------------------
@@ -226,11 +162,7 @@ async function callOpenRouter({
   const timeout = setTimeout(() => controller.abort(), effectiveTimeoutMs);
 
   try {
-    if (typeof globalThis.fetch !== "function") {
-      throw new Error("Global fetch is unavailable; Node.js >=20 is required for AI requests");
-    }
-
-    const res = await globalThis.fetch(ENDPOINT, {
+    const res = await fetch(ENDPOINT, {
       method: "POST",
       headers: reqHeaders,
       body: JSON.stringify(payload),
@@ -239,20 +171,16 @@ async function callOpenRouter({
 
     if (!res.ok) {
       const text = await res.text().catch(() => "");
-      const snippet = safeBodySnippet(text);
-      throw new AIProviderRequestError(
-        `OpenRouter ${res.status} for provider ${providerId}: ${snippet || "no response body"}`,
-        { status: res.status, bodySnippet: snippet, providerId, model }
-      );
+      const snippet = String(text || "").replace(/Bearer\s+[A-Za-z0-9._\-]+/g, "Bearer [masked]").slice(0, 900);
+      throw new Error(`OpenRouter ${res.status}: ${snippet}`);
     }
 
     const json = await res.json();
     return json?.choices?.[0]?.message?.content || "";
   } catch (err) {
     if (err?.name === "AbortError") {
-      throw new AIProviderRequestError(
-        `OpenRouter request timed out after ${effectiveTimeoutMs}ms for provider ${providerId}`,
-        { status: "timeout", providerId, model }
+      throw new Error(
+        `OpenRouter request timed out after ${effectiveTimeoutMs}ms for provider ${providerId}`
       );
     }
     throw err;
@@ -287,27 +215,18 @@ export async function resilientRequest(
   const chain = getProviderChainForRoute(routeKey);
 
   let lastErr;
-  let configuredProviderCount = 0;
-  const diagnostics = getProviderDiagnosticsForRoute(routeName);
 
   for (const providerId of chain) {
     const provider = getProviderConfig(providerId);
 
     if (!provider) {
-      const providerDiagnostics = diagnostics.configuredProviders.find((item) => item.providerId === providerId);
       logError("ai.provider.misconfigured", {
         routeName,
         routeKey,
         providerId,
-        modelEnv: providerDiagnostics?.modelEnv,
-        apiKeyEnv: providerDiagnostics?.apiKeyEnv,
-        hasModel: Boolean(providerDiagnostics?.hasModel),
-        hasApiKey: Boolean(providerDiagnostics?.hasApiKey),
       });
       continue;
     }
-
-    configuredProviderCount += 1;
 
     try {
       safeRouteLog({
@@ -318,7 +237,7 @@ export async function resilientRequest(
       });
     } catch {}
 
-    const effectiveMaxRetries = Math.max(0, Number(maxRetries));
+    const effectiveMaxRetries = Math.max(0, Number(maxRetries ?? MAX_RETRIES));
 
     for (let attempt = 0; attempt <= effectiveMaxRetries; attempt++) {
       try {
@@ -368,10 +287,6 @@ export async function resilientRequest(
   try {
     __maybePrintSummary(sessionId, routeName);
   } catch {}
-
-  if (configuredProviderCount === 0) {
-    throw new AIProviderConfigurationError(routeName, diagnostics);
-  }
 
   throw lastErr || new Error(`All providers failed for route: ${routeKey}`);
 }
