@@ -8,8 +8,20 @@ function sessionFromPayload(payload) {
   return String(payload?.sessionId || "").trim();
 }
 
+function resolveAnalysisPayload(job) {
+  if (!job) return undefined;
+  if (job.analysis && typeof job.analysis === "object") return job.analysis;
+  if (job.result?.analysis && typeof job.result.analysis === "object") return job.result.analysis;
+  if (job.result && typeof job.result === "object" && !Array.isArray(job.result)) {
+    const looksLikeAnalysis = Boolean(job.result.auditCompletionState || job.result.aiAnalysisStatus || job.result.rankedIssueLedger || job.result.issues);
+    if (looksLikeAnalysis) return job.result;
+  }
+  return undefined;
+}
+
 function publicShape(job) {
   if (!job) return null;
+  const analysis = resolveAnalysisPayload(job);
   return {
     ok: true,
     auditType: "seo-aeo-geo",
@@ -20,7 +32,8 @@ function publicShape(job) {
     startedAt: job.startedAt,
     finishedAt: job.finishedAt,
     attempt: job.attempt,
-    analysis: job.result?.analysis,
+    analysis,
+    hasAnalysis: Boolean(analysis && Object.keys(analysis).length),
     error: job.error,
   };
 }
@@ -30,6 +43,7 @@ async function executeAnalysisJob(payload) {
   try {
     const analysis = await runSeoAeoGeoAnalysis(payload);
     const completed = completeJob(JOB_TYPE, sessionId, {
+      analysis,
       result: { analysis },
       routeCount: payload?.allRoutes?.length ?? 0,
       coverageCount: payload?.coverage?.length ?? 0,
