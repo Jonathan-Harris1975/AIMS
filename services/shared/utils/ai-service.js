@@ -45,6 +45,25 @@ const DEFAULT_TOP_P = Number(process.env.AI_TOP_P || 1);
 
 const MAX_RETRIES = Number(process.env.AI_MAX_RETRIES || 2);
 const RETRY_BASE_MS = Number(process.env.AI_RETRY_BASE_MS || 700);
+const MAX_ERROR_BODY_CHARS = 700;
+
+function safeBodySnippet(value) {
+  return String(value || "")
+    .replace(/Bearer\s+[A-Za-z0-9._~+\/=:-]+/gi, "Bearer [masked]")
+    .replace(/sk-or-[A-Za-z0-9._~+\/=:-]+/gi, "[masked-openrouter-key]")
+    .slice(0, MAX_ERROR_BODY_CHARS);
+}
+
+export class AIProviderRequestError extends Error {
+  constructor(message, { status = null, bodySnippet = "", providerId = "", model = "" } = {}) {
+    super(message);
+    this.name = "AIProviderRequestError";
+    this.status = status;
+    this.bodySnippet = safeBodySnippet(bodySnippet);
+    this.providerId = providerId;
+    this.model = model;
+  }
+}
 
 // ---------------------------------------------
 // 🧠 Session summary aggregation
@@ -220,15 +239,20 @@ async function callOpenRouter({
 
     if (!res.ok) {
       const text = await res.text().catch(() => "");
-      throw new Error(`OpenRouter ${res.status}: ${text}`);
+      const snippet = safeBodySnippet(text);
+      throw new AIProviderRequestError(
+        `OpenRouter ${res.status} for provider ${providerId}: ${snippet || "no response body"}`,
+        { status: res.status, bodySnippet: snippet, providerId, model }
+      );
     }
 
     const json = await res.json();
     return json?.choices?.[0]?.message?.content || "";
   } catch (err) {
     if (err?.name === "AbortError") {
-      throw new Error(
-        `OpenRouter request timed out after ${effectiveTimeoutMs}ms for provider ${providerId}`
+      throw new AIProviderRequestError(
+        `OpenRouter request timed out after ${effectiveTimeoutMs}ms for provider ${providerId}`,
+        { status: "timeout", providerId, model }
       );
     }
     throw err;
@@ -256,6 +280,7 @@ export async function resilientRequest(
     top_p = DEFAULT_TOP_P,
     headers,
     timeoutMs,
+    maxRetries = MAX_RETRIES,
   } = {}
 ) {
   const routeKey = resolveRouteKey(routeName);
@@ -293,7 +318,9 @@ export async function resilientRequest(
       });
     } catch {}
 
-    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    const effectiveMaxRetries = Math.max(0, Number(maxRetries));
+
+    for (let attempt = 0; attempt <= effectiveMaxRetries; attempt++) {
       try {
         const content = await callOpenRouter({
           providerId,
@@ -331,7 +358,7 @@ export async function resilientRequest(
           message: err?.message,
         });
 
-        if (attempt < MAX_RETRIES) {
+        if (attempt < effectiveMaxRetries) {
           await sleep(wait);
         }
       }
