@@ -61,11 +61,36 @@ function looksLikeTemplatePlaceholder(value) {
   return /^\s*\{\{\s*secret\.[^}]+\}\}\s*$/i.test(String(value || ""));
 }
 
+function firstEnvValue(names = []) {
+  for (const name of names) {
+    const value = process.env[name];
+    if (value !== undefined && value !== null && String(value).trim()) {
+      return { name, value: String(value).trim() };
+    }
+  }
+  return { name: undefined, value: undefined };
+}
+
 function getProviderConfig(providerId) {
   const conf = aiConfig?.models?.[providerId];
-  if (!conf?.name || !conf?.apiKey) return null;
-  if (looksLikeTemplatePlaceholder(conf.name) || looksLikeTemplatePlaceholder(conf.apiKey)) return null;
-  return conf;
+  if (!conf) return null;
+
+  const resolvedModel = firstEnvValue(Array.isArray(conf.modelEnvNames) ? conf.modelEnvNames : []);
+  const resolvedKey = firstEnvValue(Array.isArray(conf.keyEnvNames) ? conf.keyEnvNames : []);
+  const model = resolvedModel.value || conf.name;
+  const apiKey = resolvedKey.value || conf.apiKey;
+
+  if (!model || !apiKey) return null;
+  if (looksLikeTemplatePlaceholder(model) || looksLikeTemplatePlaceholder(apiKey)) return null;
+
+  return {
+    ...conf,
+    providerId,
+    name: model,
+    apiKey,
+    modelEnv: resolvedModel.name || conf.modelEnv,
+    apiKeyEnv: resolvedKey.name || conf.apiKeyEnv,
+  };
 }
 
 function maskSecretishText(value = "") {
@@ -83,6 +108,7 @@ function safeSnippet(value = "", max = 700) {
 
 function makeOpenRouterError(status, body, providerId) {
   const err = new Error(`OpenRouter ${status} for provider ${providerId}: ${safeSnippet(body)}`);
+  err.name = "AIProviderRequestError";
   err.status = status;
   err.providerId = providerId;
   err.bodySnippet = safeSnippet(body);
@@ -142,6 +168,7 @@ export async function resilientRequest(routeName, {
   const effectiveRetryBaseMs = Number.isFinite(Number(retryBaseMs)) ? Number(retryBaseMs) : RETRY_BASE_MS;
   let lastErr;
   const attempted = [];
+  const attemptedProviderTargets = new Set();
 
   for (const providerId of chain) {
     const provider = getProviderConfig(providerId);
@@ -150,6 +177,14 @@ export async function resilientRequest(routeName, {
       logError("ai.provider.misconfigured", { routeName, routeKey, providerId, modelEnvNames: aiConfig?.models?.[providerId]?.modelEnvNames, keyEnvNames: aiConfig?.models?.[providerId]?.keyEnvNames });
       continue;
     }
+
+    const targetKey = `${provider.name}::${provider.apiKeyEnv || provider.providerId || providerId}`;
+    if (attemptedProviderTargets.has(targetKey)) {
+      attempted.push({ providerId, model: provider.name, status: "duplicate-alias-skipped" });
+      continue;
+    }
+    attemptedProviderTargets.add(targetKey);
+
     try { safeRouteLog({ routeName, routeKey, provider: providerId, model: provider.name }); } catch {}
     for (let attempt = 0; attempt <= effectiveMaxRetries; attempt++) {
       try {
@@ -186,13 +221,15 @@ export function getProviderDiagnosticsForRoute(routeName) {
     routeKey,
     configuredProviders: chain.map((providerId) => {
       const conf = aiConfig?.models?.[providerId] || {};
-      const modelValue = conf.name;
-      const keyValue = conf.apiKey;
+      const resolvedModel = firstEnvValue(Array.isArray(conf.modelEnvNames) ? conf.modelEnvNames : []);
+      const resolvedKey = firstEnvValue(Array.isArray(conf.keyEnvNames) ? conf.keyEnvNames : []);
+      const modelValue = resolvedModel.value || conf.name;
+      const keyValue = resolvedKey.value || conf.apiKey;
       return {
         providerId,
         model: modelValue || undefined,
-        modelEnv: Array.isArray(conf.modelEnvNames) ? conf.modelEnvNames.join("|") : undefined,
-        apiKeyEnv: Array.isArray(conf.keyEnvNames) ? conf.keyEnvNames.join("|") : undefined,
+        modelEnv: resolvedModel.name || (Array.isArray(conf.modelEnvNames) ? conf.modelEnvNames.join("|") : undefined),
+        apiKeyEnv: resolvedKey.name || (Array.isArray(conf.keyEnvNames) ? conf.keyEnvNames.join("|") : undefined),
         hasModel: Boolean(modelValue),
         hasApiKey: Boolean(keyValue),
         configured: Boolean(getProviderConfig(providerId)),
