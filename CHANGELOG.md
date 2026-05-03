@@ -1,18 +1,11 @@
-# Changelog
+# CHANGELOG
 
-## SEO + AEO + GEO audit live-gate reliability hardening
+## 2026-05-03 — SEO/AEO/GEO audit forensic gate hardening v3
 
-- Kept `auditForensic` provider routing on the existing shared OpenRouter configuration in `services/shared/utils/ai-config.js`.
-- Added provider request errors with masked response-body snippets so failed OpenRouter/API calls are diagnosable without exposing secrets.
-- Added per-call `maxRetries` support to the shared AI requester and used it for audit forensic calls so the website workflow is not trapped behind repeated full-length provider timeouts.
-- Reduced the audit forensic per-provider timeout to a bounded production-safe value while preserving provider fallback.
-- Changed `/audits/seo-aeo-geo/analysis` to return structured JSON diagnostics on analysis failure instead of falling through to a generic Express 500 body.
-- Preserved strict forensic JSON validation and repair flow for malformed model output.
-- Added a route-level `/analysis` integration test with a mocked OpenRouter response.
-- Added a shared-AI transport test proving audit calls honour `maxRetries=0` and mask secret-looking values in provider error bodies.
-
-## Previous hardening retained
-
-- Callback auth accepts either `AUDIT_CALLBACK_TOKEN` or `AI_SUITE_AUDIT_CALLBACK_TOKEN`.
-- The analysis route uses `auditForensic` from shared `ai-config.js` and the existing `OPENROUTER_*` model/key variables.
-- The forensic validator rejects empty issue ledgers, missing scores, missing implementation sequence, missing coverage appendices, generic remediations, and duplicated issue remediations.
+- Converted `/audits/seo-aeo-geo/analysis` from a long-running synchronous request into a fast async job handoff.
+- Added authenticated polling at `/audits/seo-aeo-geo/analysis/:sessionId` so the website workflow can wait for validated AI output without hitting Cloudflare/Koyeb gateway timeouts.
+- Added `audits/utils/auditAnalysisJobs.js` using the existing shared `jobStore` for durable job status and result persistence.
+- Kept AI provider resolution inside `services/shared/utils/ai-config.js` and `services/shared/utils/ai-service.js`.
+- Added audit-specific AI controls through existing request options: `AUDIT_AI_MAX_RETRIES`, `AUDIT_AI_TIMEOUT_MS`, `AUDIT_AI_MAX_TOKENS`, `AUDIT_AI_TEMPERATURE`, and `AUDIT_AI_TOP_P`.
+- Updated callback auth to accept either `AUDIT_CALLBACK_TOKEN` or `AI_SUITE_AUDIT_CALLBACK_TOKEN`.
+- Masked bearer-like strings in provider error snippets.
