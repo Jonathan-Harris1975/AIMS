@@ -8,7 +8,7 @@ import {
 } from "../../services/shared/utils/requestSchemas.js";
 import { completeAuditRun, getAuditJob, startAuditRun } from "../utils/orchestrator.js";
 import { requireAuditCallbackAuth } from "../utils/callbackAuth.js";
-import { getSeoAeoGeoAnalysisJob, startSeoAeoGeoAnalysisJob } from "../utils/auditAnalysisJobs.js";
+import { flushSeoAeoGeoAnalysisJobs, getSeoAeoGeoAnalysisJobFresh, startSeoAeoGeoAnalysisJob } from "../utils/auditAnalysisJobs.js";
 import { info } from "../../logger.js";
 
 const router = express.Router();
@@ -43,12 +43,14 @@ router.post("/analysis", requireAuditCallbackAuth, asyncRoute(async (req, res) =
   }
 
   const job = startSeoAeoGeoAnalysisJob(parsed.data);
+  const durableState = await flushSeoAeoGeoAnalysisJobs();
   const statusUrl = `${req.protocol}://${req.get("host")}/audits/seo-aeo-geo/analysis/${encodeURIComponent(parsed.data.sessionId)}`;
 
   info("audit.seo-aeo-geo.analysis.accepted", {
     sessionId: parsed.data.sessionId,
     status: job.status,
     statusUrl,
+    durableStateOk: durableState?.ok !== false,
   });
 
   return res.status(202).json({
@@ -57,26 +59,28 @@ router.post("/analysis", requireAuditCallbackAuth, asyncRoute(async (req, res) =
     sessionId: parsed.data.sessionId,
     status: job.status,
     statusUrl,
+    durableState,
     job,
   });
 }));
 
-router.get("/analysis/:sessionId", requireAuditCallbackAuth, (req, res) => {
+router.get("/analysis/:sessionId", requireAuditCallbackAuth, asyncRoute(async (req, res) => {
   const sessionId = String(req.params.sessionId || "").trim();
-  const job = getSeoAeoGeoAnalysisJob(sessionId);
+  const job = await getSeoAeoGeoAnalysisJobFresh(sessionId);
 
   if (!job) {
-    return res.status(404).json({
+    return res.status(200).json({
       ok: false,
       auditType: AUDIT_TYPE,
       sessionId,
-      status: "not_found",
-      error: "Analysis job not found",
+      status: "queued",
+      notFoundYet: true,
+      error: "Analysis job not found in local or durable state yet",
     });
   }
 
   return res.status(200).json(job);
-});
+}));
 
 router.post("/callback", requireAuditCallbackAuth, asyncRoute(async (req, res) => {
   const parsed = validateBody(auditCallbackBodySchema, req.body);
