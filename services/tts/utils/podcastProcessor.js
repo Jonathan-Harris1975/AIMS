@@ -155,8 +155,16 @@ async function updateMetaFile(sessionId, finalBuffer, finalPath, podcastUrl) {
     if (!isNaN(d)) duration = d;
   } catch {}
 
-  const title = existing.title || "Untitled Episode";
+  const title = existing.title || "AI Hype Hits the Plumbing";
   const episodeSlug = existing.episodeSlug || slugify(title || sessionId);
+  const durationSeconds =
+    typeof duration === "number"
+      ? duration
+      : typeof existing.duration === "number"
+      ? existing.duration
+      : typeof existing.plannedDurationSeconds === "number"
+      ? existing.plannedDurationSeconds
+      : null;
   const episodePageUrl = joinUrl(siteBaseUrl, `podcast/episodes/${episodeSlug}/`);
   const transcriptTextUrl = buildTranscriptAssetUrl(transcriptBase, sessionId, "txt");
   const transcriptHtmlUrl = buildTranscriptAssetUrl(transcriptHtmlBase, sessionId, "html");
@@ -166,6 +174,12 @@ async function updateMetaFile(sessionId, finalBuffer, finalPath, podcastUrl) {
     sessionId,
     title,
     description: existing.description || "",
+    host: existing.host || "Jonathan Harris",
+    podcastTitle: existing.podcastTitle || "Turing’s Torch: Artificial Intelligence Weekly",
+    targetMins: existing.targetMins || existing.durationPlan?.targetMins || null,
+    targetMinutes: existing.targetMinutes || existing.durationPlan?.targetMinutes || existing.targetMins || null,
+    plannedDurationSeconds: existing.plannedDurationSeconds || existing.durationPlan?.plannedDurationSeconds || null,
+    durationPlan: existing.durationPlan || null,
     keywords: existing.keywords || [],
     artworkPrompt: existing.artworkPrompt || "",
     episodeNumber: existing.episodeNumber || 1,
@@ -178,7 +192,8 @@ async function updateMetaFile(sessionId, finalBuffer, finalPath, podcastUrl) {
     transcriptHtmlUrl,
     transcriptUrl: transcriptHtmlUrl || transcriptTextUrl,
     podcastUrl,
-    duration,
+    duration: durationSeconds,
+    actualDurationSeconds: typeof duration === "number" ? duration : null,
     fileSize: finalBuffer.length,
     pubDate: new Date(sessionDate).toUTCString(),
   };
