@@ -1,4 +1,4 @@
-import { beginJob, completeJob, failJob, getPublicJob } from "../../services/shared/utils/jobStore.js";
+import { beginJob, completeJob, failJob, flushJobStoreWrites, getPublicJob, getPublicJobFresh } from "../../services/shared/utils/jobStore.js";
 import { runSeoAeoGeoAnalysis } from "./seoAeoGeoAnalysis.js";
 import { error as logError, info } from "../../logger.js";
 
@@ -81,4 +81,12 @@ export function getSeoAeoGeoAnalysisJob(sessionId) {
   return publicShape(getPublicJob(JOB_TYPE, sessionId));
 }
 
-export default { startSeoAeoGeoAnalysisJob, getSeoAeoGeoAnalysisJob };
+export async function getSeoAeoGeoAnalysisJobFresh(sessionId) {
+  return publicShape(await getPublicJobFresh(JOB_TYPE, sessionId));
+}
+
+export async function flushSeoAeoGeoAnalysisJobs(options = {}) {
+  return flushJobStoreWrites(options);
+}
+
+export default { startSeoAeoGeoAnalysisJob, getSeoAeoGeoAnalysisJob, getSeoAeoGeoAnalysisJobFresh, flushSeoAeoGeoAnalysisJobs };
