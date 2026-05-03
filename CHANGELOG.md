@@ -1,9 +1,13 @@
 # Changelog
 
-## 2026-05-03 - SEO/AEO/GEO analysis job visibility fix
+## 2026-05-03 - SEO/AEO/GEO audit analysis payload and CI hardening
 
-- Fixed `/audits/seo-aeo-geo/analysis/:sessionId` returning HTTP 404 after async analysis hand-off.
-- Added fresh durable-state reads for job polling so Koyeb cross-instance requests can see jobs written by another process.
-- Added remote write flushing after `/analysis` job creation before returning `202 Accepted`.
-- Changed transient missing analysis job polling from HTTP 404 to a JSON queued/not-found-yet state to avoid failed-gate reports caused by polling transport errors.
-- Added documentation explaining the failure mode and expected live behaviour.
+- Fixed the SEO/AEO/GEO async analysis polling response so completed jobs expose the forensic analysis payload from all supported job shapes:
+  - `job.analysis`
+  - `job.result.analysis`
+  - legacy direct `job.result` forensic payloads
+- Stored completed forensic analysis both at top level and inside `result.analysis` for compatibility across rolling Koyeb deploys and existing durable-state records.
+- Made OpenRouter provider resolution dynamic at request time instead of relying only on import-time env snapshots. This avoids stale diagnostics and CI failures when tests set env vars after earlier imports.
+- Added `AIProviderRequestError` naming to OpenRouter HTTP errors while keeping body snippets masked.
+- Added duplicate alias skipping so `anthropic46` and `anthropic` do not call the same configured model/key twice.
+- Updated audit route tests to match the async `202 Accepted` + polling contract.

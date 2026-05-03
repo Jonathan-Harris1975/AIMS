@@ -1,23 +1,31 @@
 # Test results
 
-## Commands run
+## Commands run in container
 
 ```bash
-node --check services/shared/utils/stateFile.js
-node --check services/shared/utils/jobStore.js
+node --check services/shared/utils/ai-service.js
 node --check audits/utils/auditAnalysisJobs.js
+node --check test/ai-service-audit-timeout.test.js
+node --check test/ai-service-provider-diagnostics.test.js
+node --check test/audit-analysis-route.test.js
 node --check audits/routes/seoAeoGeo.js
-npm run build --silent
 ```
 
-## Results
+Result: passed.
 
-All syntax checks passed.
+## Commands not fully run in container
 
-`npm run build --silent` passed and printed `Build step completed`.
+```bash
+npm ci --no-audit --no-fund
+npm test
+```
 
-## Not run
+Result: not completed in the container because dependency installation timed out. The uploaded CI log proves dependency installation succeeds in GitHub Actions, so the relevant CI failures were addressed in code and tests:
 
-Full `npm test` was not run because the extracted upload does not include `node_modules`, and route-level tests require runtime dependencies such as `express`, `supertest`, and AWS SDK packages.
+- `test/ai-service-audit-timeout.test.js` expected `AIProviderRequestError`; OpenRouter HTTP errors now set that name.
+- `test/ai-service-provider-diagnostics.test.js` expected the previous four-provider audit route; the test now reflects the expanded Koyeb/OpenRouter route.
+- `test/audit-analysis-route.test.js` expected sync `200`; the test now follows the async `202` plus polling contract.
 
-Live Koyeb, R2, GitHub workflow dispatch, and real OpenRouter calls were not run because production runtime access and live secrets are not available in this environment.
+## Live audit failure addressed
+
+The latest failed report shows the polling endpoint reached a `completed` state but did not expose a top-level analysis payload. This patch makes the polling response compatible with both current and legacy completed job shapes and stores the analysis in both locations for new jobs.
