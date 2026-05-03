@@ -12,6 +12,7 @@ import {
   getSeoAeoGeoAnalysisJob,
   startSeoAeoGeoAnalysisJob,
 } from "../utils/auditAnalysisJobs.js";
+import { runSeoAeoGeoAnalysis } from "../utils/seoAeoGeoAnalysis.js";
 import { error as logError, info } from "../../logger.js";
 
 const router = express.Router();
@@ -56,10 +57,44 @@ function analysisStatusPaths(req, sessionId) {
   };
 }
 
+function shouldRunAnalysisInline() {
+  return (
+    process.env.AUDIT_ANALYSIS_INLINE === "true" ||
+    Boolean(process.env.NODE_TEST_CONTEXT)
+  );
+}
+
 router.post("/analysis", requireAuditCallbackAuth, asyncRoute(async (req, res) => {
   const parsed = validateBody(auditAnalysisBodySchema, req.body);
   if (!parsed.ok) {
     return res.status(400).json({ ok: false, error: parsed.error });
+  }
+
+  if (shouldRunAnalysisInline()) {
+    const analysis = await runSeoAeoGeoAnalysis(parsed.data);
+    const job = {
+      auditType: AUDIT_TYPE,
+      sessionId: parsed.data.sessionId,
+      status: "completed",
+      result: { analysis },
+      analysis,
+    };
+
+    info("audit.seo-aeo-geo.analysis.completed.inline", {
+      sessionId: parsed.data.sessionId,
+      routeCount: parsed.data.allRoutes?.length ?? 0,
+      coverageCount: parsed.data.coverage?.length ?? 0,
+      issueCount: Array.isArray(analysis?.issues) ? analysis.issues.length : 0,
+    });
+
+    return res.json({
+      ok: true,
+      auditType: AUDIT_TYPE,
+      sessionId: parsed.data.sessionId,
+      status: "completed",
+      analysis,
+      job,
+    });
   }
 
   const { started, job } = startSeoAeoGeoAnalysisJob(parsed.data);
