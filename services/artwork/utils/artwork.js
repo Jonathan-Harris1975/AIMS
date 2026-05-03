@@ -9,8 +9,8 @@ import OpenAI from "openai";
 import { warn, error } from "../../../logger.js";
 
 const REQUIRED = [
-  "OPENROUTER_API_KEY_ART",
-  "OPENROUTER_ART",
+  "OPENROUTER_API_KEY_ART_BACKUP",
+  "OPENROUTER_ART_BACKUP",
 ];
 
 const missing = REQUIRED.filter((key) => !process.env[key] || process.env[key].trim() === "");
@@ -20,9 +20,9 @@ if (missing.length > 0) {
 }
 
 const cfg = {
-  key: process.env.OPENROUTER_API_KEY_ART || "",
+  key: process.env.OPENROUTER_API_KEY_ART_BACKUP || "",
   baseURL: "https://openrouter.ai/api/v1",
-  model: process.env.OPENROUTER_ART || "google/gemini-2.5-flash-image-preview:exp",
+  model: process.env.OPENROUTER_ART_BACKUP || "openai/gpt-5-image-mini",
 };
 
 const client = new OpenAI({
