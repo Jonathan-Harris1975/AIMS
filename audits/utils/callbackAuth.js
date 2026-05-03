@@ -5,10 +5,22 @@ export function extractBearerToken(req) {
   return match?.[1]?.trim() || null;
 }
 
-export function requireAuditCallbackAuth(req, res, next) {
-  const expectedTokens = [process.env.AUDIT_CALLBACK_TOKEN, process.env.AI_SUITE_AUDIT_CALLBACK_TOKEN]
+export function resolveExpectedAuditCallbackToken() {
+  return String(
+    process.env.AUDIT_CALLBACK_TOKEN ||
+      process.env.AI_SUITE_AUDIT_CALLBACK_TOKEN ||
+      ""
+  ).trim();
+}
+
+export function resolveExpectedAuditCallbackTokens() {
+  return [process.env.AUDIT_CALLBACK_TOKEN, process.env.AI_SUITE_AUDIT_CALLBACK_TOKEN]
     .map((value) => String(value || "").trim())
     .filter(Boolean);
+}
+
+export function requireAuditCallbackAuth(req, res, next) {
+  const expectedTokens = resolveExpectedAuditCallbackTokens();
   if (!expectedTokens.length) {
     return res.status(500).json({ ok: false, error: "AUDIT_CALLBACK_TOKEN or AI_SUITE_AUDIT_CALLBACK_TOKEN is not configured" });
   }

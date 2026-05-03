@@ -156,6 +156,36 @@ function asArray(value) {
   return Array.isArray(value) ? value : [];
 }
 
+function firstPlainObject(...values) {
+  return values.find((value) => isPlainObject(value)) || {};
+}
+
+function normalisedSourceSummary(data) {
+  if (isPlainObject(data?.executiveSummary)) {
+    return data.executiveSummary;
+  }
+
+  return {
+    overallVerdict: data?.overallVerdict || data?.executiveSummary,
+    scores: data?.scoreTable,
+    topFivePriorities: data?.topFivePriorities,
+    quickWins: data?.quickWins,
+    estateLabels: data?.estateLabels,
+  };
+}
+
+function sourceIssueRows(data) {
+  return [...asArray(data?.issues), ...asArray(data?.rankedIssueLedger)];
+}
+
+function sourceFindings(data) {
+  return firstPlainObject(data?.findingsByLens, data?.findingsByAuditLens);
+}
+
+function sourceImplementationOrder(data) {
+  return firstPlainObject(data?.implementationOrder, data?.finalVerdictAndImplementationOrder);
+}
+
 function text(value, fallback = "Not verified from supplied context") {
   const normalised = value === undefined || value === null ? "" : String(value).trim();
   return normalised || fallback;
@@ -394,7 +424,7 @@ function normalisePriorityPageAnnex(data, payload) {
 }
 
 function normaliseTemplateAnnex(data, payload) {
-  const rows = asArray(data.templateAnnex).filter(
+  const rows = [...asArray(data.templateAnnex), ...asArray(data.templateComponentGeneratorAnnex)].filter(
     (row) => isPlainObject(row) && (row.sourceFile || row.area)
   );
 
@@ -479,15 +509,47 @@ function normaliseGapMatrix(data, payload) {
   }));
 }
 
+function hasGenericRemediation(value) {
+  const normalised = String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[.!?]+$/g, "");
+
+  return new Set([
+    "improve metadata",
+    "enhance metadata",
+    "optimise metadata",
+    "optimize metadata",
+    "improve content",
+    "optimise content",
+    "optimize content",
+    "enhance structured data",
+    "improve seo",
+    "fix seo",
+  ]).has(normalised);
+}
+
+function assertSpecificRemediation(issue, issueId) {
+  if (issue?.exactRemediation === undefined) return;
+  if (!hasGenericRemediation(issue.exactRemediation)) return;
+
+  throw new Error(
+    `${issueId} exactRemediation is too generic; name the exact page, file, element, corrected value, snippet, or governance rule.`
+  );
+}
+
 function normaliseIssues(data, payload) {
-  const sourceIssues = [...asArray(data.issues), ...asArray(payload?.heuristicIssues)];
+  const sourceIssues = [...sourceIssueRows(data), ...asArray(payload?.heuristicIssues)];
   const seen = new Set();
   const issues = [];
 
   for (const issue of sourceIssues) {
     if (!isPlainObject(issue)) continue;
 
-    const affected = text(issue.affected, "Affected route family from supplied evidence");
+    const affected = text(
+      issue.affected || issue.affectedPagesTemplatesFilesOrRoutes,
+      "Affected route family from supplied evidence"
+    );
     const why = text(
       issue.whyItMatters,
       "This affects crawlability, answer extraction, retrieval, or conversion support."
@@ -500,6 +562,8 @@ function normaliseIssues(data, payload) {
       issue.issueId,
       `JH-SEO-${String(issues.length + 1).padStart(3, "0")}`
     );
+
+    assertSpecificRemediation(issue, id);
 
     const key = `${id}|${affected}|${why}`;
     if (seen.has(key)) continue;
@@ -568,7 +632,7 @@ function normaliseIssues(data, payload) {
 }
 
 function normaliseCodeRemediation(data, issues) {
-  const rows = asArray(data.codeRemediationAppendix).filter((row) =>
+  const rows = [...asArray(data.codeRemediationAppendix), ...asArray(data.codeMarkupContentRemediationAppendix)].filter((row) =>
     isPlainObject(row)
   );
 
@@ -630,12 +694,13 @@ function validateAndNormaliseAnalysisShape(data, payload) {
     throw new Error("Analysis response is not a JSON object");
   }
 
+  const sourceSummary = normalisedSourceSummary(data);
+  const findings = sourceFindings(data);
+
   const hasUsableAiContent = Boolean(
-    data?.executiveSummary?.overallVerdict ||
-      asArray(data?.issues).length ||
-      Object.values(isPlainObject(data?.findingsByLens) ? data.findingsByLens : {}).some(
-        (value) => String(value || "").trim()
-      )
+    sourceSummary?.overallVerdict ||
+      sourceIssueRows(data).length ||
+      Object.values(findings).some((value) => String(value || "").trim())
   );
 
   if (!hasUsableAiContent) {
@@ -643,7 +708,6 @@ function validateAndNormaliseAnalysisShape(data, payload) {
   }
 
   const fallback = fallbackScores(payload);
-  const sourceSummary = isPlainObject(data.executiveSummary) ? data.executiveSummary : {};
   const sourceScores = isPlainObject(sourceSummary.scores) ? sourceSummary.scores : {};
   const issues = normaliseIssues(data, payload);
 
@@ -654,6 +718,8 @@ function validateAndNormaliseAnalysisShape(data, payload) {
   const quickWins = asArray(sourceSummary.quickWins)
     .map((item) => String(item).trim())
     .filter(Boolean);
+
+  const implementationOrderSource = sourceImplementationOrder(data);
 
   const normalised = {
     executiveSummary: {
@@ -691,7 +757,7 @@ function validateAndNormaliseAnalysisShape(data, payload) {
         .filter(Boolean)
         .slice(0, 8),
     },
-    findingsByLens: normaliseFindings(data.findingsByLens),
+    findingsByLens: normaliseFindings(findings),
     issues,
     pageTypeFindings: normalisePageTypeFindings(data, payload),
     priorityPageAnnex: normalisePriorityPageAnnex(data, payload),
@@ -700,14 +766,14 @@ function validateAndNormaliseAnalysisShape(data, payload) {
     bestPracticeGapMatrix: normaliseGapMatrix(data, payload),
     implementationOrder: {
       narrative: text(
-        data?.implementationOrder?.narrative,
+        implementationOrderSource.narrative,
         sourceSummary.overallVerdict || "Implementation order derived from the ranked issue ledger."
       ),
-      steps: asArray(data?.implementationOrder?.steps).length
-        ? asArray(data.implementationOrder.steps).map(String).filter(Boolean)
+      steps: asArray(implementationOrderSource.steps).length
+        ? asArray(implementationOrderSource.steps).map(String).filter(Boolean)
         : issues.slice(0, 5).map((issue) => issue.exactRemediation),
-      expectedGains: asArray(data?.implementationOrder?.expectedGains).length
-        ? asArray(data.implementationOrder.expectedGains).map(String).filter(Boolean)
+      expectedGains: asArray(implementationOrderSource.expectedGains).length
+        ? asArray(implementationOrderSource.expectedGains).map(String).filter(Boolean)
         : issues.slice(0, 3).map((issue) => issue.expectedGain),
     },
   };
@@ -724,6 +790,23 @@ function validateAndNormaliseAnalysisShape(data, payload) {
     data,
     normalised.issues
   );
+
+  normalised.auditCompletionState = text(data.auditCompletionState, "Complete");
+  normalised.aiAnalysisStatus = text(data.aiAnalysisStatus, "valid");
+  normalised.overallVerdict = normalised.executiveSummary.overallVerdict;
+  normalised.scoreTable = normalised.executiveSummary.scores;
+  normalised.topFivePriorities = normalised.executiveSummary.topFivePriorities;
+  normalised.quickWins = normalised.executiveSummary.quickWins;
+  normalised.estateLabels = normalised.executiveSummary.estateLabels;
+  normalised.findingsByAuditLens = normalised.findingsByLens;
+  normalised.rankedIssueLedger = normalised.issues.map((issue) => ({
+    ...issue,
+    auditLens: issue.lens,
+    affectedPagesTemplatesFilesOrRoutes: issue.affected,
+  }));
+  normalised.templateComponentGeneratorAnnex = normalised.templateAnnex;
+  normalised.codeMarkupContentRemediationAppendix = normalised.codeRemediationAppendix;
+  normalised.finalVerdictAndImplementationOrder = normalised.implementationOrder;
 
   return normalised;
 }
@@ -748,5 +831,11 @@ export async function runSeoAeoGeoAnalysis(payload) {
   const parsed = extractJson(raw);
   return validateAndNormaliseAnalysisShape(parsed, payload);
 }
+
+export const __seoAeoGeoAnalysisTestHooks = {
+  buildUserPrompt,
+  extractJson,
+  validateAndNormaliseAnalysisShape,
+};
 
 export default { runSeoAeoGeoAnalysis };
