@@ -28,8 +28,7 @@ const OPENROUTER_BASE =
   process.env.OPENROUTER_API_BASE || "https://openrouter.ai/api/v1";
 const ENDPOINT = `${OPENROUTER_BASE}/chat/completions`;
 
-const DEFAULT_MAX_TOKENS = Number(process.env.AI_MAX_TOKENS ||
-  4096);
+const DEFAULT_MAX_TOKENS = Number(process.env.AI_MAX_TOKENS || 4096);
 
 const DEFAULT_TEMPERATURE = Number(
   process.env.AI_TEMPERATURE ??
@@ -45,13 +44,13 @@ const DEFAULT_TIMEOUT_MS = Number(
 
 const DEFAULT_TOP_P = Number(process.env.AI_TOP_P || 1);
 
-const MAX_RETRIES = Number(process.env.AI_MAX_RETRIES || 2); // per provider
+const MAX_RETRIES = Number(process.env.AI_MAX_RETRIES || 2);
 const RETRY_BASE_MS = Number(process.env.AI_RETRY_BASE_MS || 700);
 
 // ---------------------------------------------
-// 🧠 Session summary aggregation (console-only)
+// 🧠 Session summary aggregation
 // ---------------------------------------------
-const __aiRouteCallsBySession = new Map(); // sid -> [{ routeName, provider, model }]
+const __aiRouteCallsBySession = new Map();
 
 function __sid(sessionIdLike) {
   if (!sessionIdLike) return "unknown";
@@ -73,6 +72,7 @@ function __maybePrintSummary(sessionId, routeName) {
   const isEnd =
     routeName === "scriptOutro" ||
     routeName === "generateComposedEpisode";
+
   if (!isEnd) return;
 
   const sid = __sid(sessionId);
@@ -84,42 +84,41 @@ function __maybePrintSummary(sessionId, routeName) {
   const lines = calls.map(
     ({ routeName, provider }) => `${routeName.padEnd(18)}→ ${provider}`
   );
-  const body = [header, sep, ...lines, sep, `Total Calls: ${calls.length}`].join(
-    "\n"
-  );
 
-  info(body);
+  info([header, sep, ...lines, sep, `Total Calls: ${calls.length}`].join("\n"));
   __aiRouteCallsBySession.delete(sid);
 }
 
 // ---------------------------------------------
-// ⚡ Warm cache: last-successful provider per routeKey
+// ⚡ Warm cache: last successful provider per routeKey
 // ---------------------------------------------
-const __lastSuccessProvider = new Map(); // routeKey -> providerId
+const __lastSuccessProvider = new Map();
 
 // ---------------------------------------------
 // 🧭 Resolve routeKey and provider chain from ai-config
 // ---------------------------------------------
 function resolveRouteKey(routeName) {
   if (aiConfig.routeModels[routeName]) return routeName;
+
   if (routeName && routeName.startsWith("scriptMain-")) {
     return "scriptMain";
   }
-  // future dynamic aliases go here
+
   return routeName;
 }
 
 function getProviderChainForRoute(routeKey) {
   const chain = aiConfig?.routeModels?.[routeKey];
+
   if (!Array.isArray(chain) || chain.length === 0) {
     throw new Error(`No model route defined for: ${routeKey}`);
   }
 
   const cached = __lastSuccessProvider.get(routeKey);
   if (cached && chain.includes(cached)) {
-    const rest = chain.filter((p) => p !== cached);
-    return [cached, ...rest];
+    return [cached, ...chain.filter((provider) => provider !== cached)];
   }
+
   return chain;
 }
 
@@ -141,7 +140,7 @@ async function callOpenRouter({
   temperature,
   top_p,
   headers,
-  timeout_ms,
+  timeoutMs,
 }) {
   const payload = {
     model,
@@ -158,9 +157,9 @@ async function callOpenRouter({
     ...(headers || {}),
   };
 
+  const effectiveTimeoutMs = Number(timeoutMs || DEFAULT_TIMEOUT_MS);
   const controller = new AbortController();
-  const effectiveTimeoutMs = Number(timeout_ms || DEFAULT_TIMEOUT_MS);
-  const to = setTimeout(() => controller.abort(), effectiveTimeoutMs);
+  const timeout = setTimeout(() => controller.abort(), effectiveTimeoutMs);
 
   try {
     const res = await fetch(ENDPOINT, {
@@ -176,17 +175,23 @@ async function callOpenRouter({
     }
 
     const json = await res.json();
-    const content = json?.choices?.[0]?.message?.content || "";
-    return content;
+    return json?.choices?.[0]?.message?.content || "";
+  } catch (err) {
+    if (err?.name === "AbortError") {
+      throw new Error(
+        `OpenRouter request timed out after ${effectiveTimeoutMs}ms for provider ${providerId}`
+      );
+    }
+    throw err;
   } finally {
-    clearTimeout(to);
+    clearTimeout(timeout);
   }
 }
 
 // ---------------------------------------------
 // ⏱️ Backoff helper
 // ---------------------------------------------
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // ---------------------------------------------
 // 🔁 Public API: resilientRequest
@@ -201,7 +206,7 @@ export async function resilientRequest(
     temperature = DEFAULT_TEMPERATURE,
     top_p = DEFAULT_TOP_P,
     headers,
-    timeout_ms,
+    timeoutMs,
   } = {}
 ) {
   const routeKey = resolveRouteKey(routeName);
@@ -211,6 +216,7 @@ export async function resilientRequest(
 
   for (const providerId of chain) {
     const provider = getProviderConfig(providerId);
+
     if (!provider) {
       logError("ai.provider.misconfigured", {
         routeName,
@@ -220,7 +226,6 @@ export async function resilientRequest(
       continue;
     }
 
-    // per-call log
     try {
       safeRouteLog({
         routeName,
@@ -230,7 +235,6 @@ export async function resilientRequest(
       });
     } catch {}
 
-    // retry loop per provider
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       try {
         const content = await callOpenRouter({
@@ -242,23 +246,22 @@ export async function resilientRequest(
           temperature,
           top_p,
           headers,
-          timeout_ms,
+          timeoutMs,
         });
 
-        // record success for summary + warm cache
         try {
           __record(sessionId, routeName, providerId, provider.name);
         } catch {}
+
         __lastSuccessProvider.set(routeKey, providerId);
 
-        // if end of orchestration, print summary
         try {
           __maybePrintSummary(sessionId, routeName);
         } catch {}
 
         return content;
-      } catch (e) {
-        lastErr = e;
+      } catch (err) {
+        lastErr = err;
         const wait = RETRY_BASE_MS * Math.pow(2, attempt);
 
         logError("ai.request.retry", {
@@ -267,7 +270,7 @@ export async function resilientRequest(
           provider: providerId,
           attempt: attempt + 1,
           wait,
-          message: e?.message,
+          message: err?.message,
         });
 
         if (attempt < MAX_RETRIES) {
@@ -275,10 +278,8 @@ export async function resilientRequest(
         }
       }
     }
-    // move on to next provider in the chain
   }
 
-  // end-of-run summary even on failure
   try {
     __maybePrintSummary(sessionId, routeName);
   } catch {}
