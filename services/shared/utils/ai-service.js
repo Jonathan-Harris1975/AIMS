@@ -19,7 +19,7 @@
 import aiConfig from "./ai-config.js";
 import { safeRouteLog } from "../../../logger.js";
 import { info, error as logError } from "../../../logger.js";
-import fetch from "node-fetch";
+import nodeFetch from "node-fetch";
 
 // ---------------------------------------------
 // 🔧 Config
@@ -46,6 +46,31 @@ const DEFAULT_TOP_P = Number(process.env.AI_TOP_P || 1);
 
 const MAX_RETRIES = Number(process.env.AI_MAX_RETRIES || 2);
 const RETRY_BASE_MS = Number(process.env.AI_RETRY_BASE_MS || 700);
+
+class AIProviderRequestError extends Error {
+  constructor(message, { status, bodySnippet, providerId } = {}) {
+    super(message);
+    this.name = "AIProviderRequestError";
+    this.status = status;
+    this.bodySnippet = bodySnippet || "";
+    this.providerId = providerId;
+  }
+}
+
+function maskSecrets(value, secrets = []) {
+  let masked = String(value || "");
+  masked = masked.replace(/Bearer\s+[A-Za-z0-9._\-]+/g, "Bearer [masked]");
+  for (const secret of secrets) {
+    const clean = String(secret || "").trim();
+    if (!clean) continue;
+    masked = masked.split(clean).join("[masked]");
+  }
+  return masked;
+}
+
+function getFetch() {
+  return typeof globalThis.fetch === "function" ? globalThis.fetch : nodeFetch;
+}
 
 // ---------------------------------------------
 // 🧠 Session summary aggregation
@@ -162,7 +187,7 @@ async function callOpenRouter({
   const timeout = setTimeout(() => controller.abort(), effectiveTimeoutMs);
 
   try {
-    const res = await fetch(ENDPOINT, {
+    const res = await getFetch()(ENDPOINT, {
       method: "POST",
       headers: reqHeaders,
       body: JSON.stringify(payload),
@@ -171,8 +196,12 @@ async function callOpenRouter({
 
     if (!res.ok) {
       const text = await res.text().catch(() => "");
-      const snippet = String(text || "").replace(/Bearer\s+[A-Za-z0-9._\-]+/g, "Bearer [masked]").slice(0, 900);
-      throw new Error(`OpenRouter ${res.status}: ${snippet}`);
+      const snippet = maskSecrets(text, [apiKey]).slice(0, 900);
+      throw new AIProviderRequestError(`OpenRouter ${res.status}: ${snippet}`, {
+        status: res.status,
+        bodySnippet: snippet,
+        providerId,
+      });
     }
 
     const json = await res.json();
@@ -290,5 +319,7 @@ export async function resilientRequest(
 
   throw lastErr || new Error(`All providers failed for route: ${routeKey}`);
 }
+
+export { AIProviderRequestError };
 
 export default { resilientRequest };
