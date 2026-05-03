@@ -3,22 +3,21 @@
 ## Commands run
 
 ```bash
-node --check services/shared/utils/ai-config.js
-node --check services/shared/utils/ai-service.js
+node --check services/shared/utils/stateFile.js
+node --check services/shared/utils/jobStore.js
 node --check audits/utils/auditAnalysisJobs.js
-node --check audits/utils/seoAeoGeoAnalysis.js
 node --check audits/routes/seoAeoGeo.js
 npm run build --silent
 ```
 
-Result: passed.
+## Results
 
-## Commands not run
+All syntax checks passed.
 
-```bash
-npm test
-```
+`npm run build --silent` passed and printed `Build step completed`.
 
-Not run in the container because `node_modules` is not present in the uploaded repo snapshot and dependency installation was not available reliably in this environment.
+## Not run
 
-Live Koyeb, OpenRouter, R2, and GitHub workflow calls were not run because production runtime access and resolved secrets are not available inside the container.
+Full `npm test` was not run because the extracted upload does not include `node_modules`, and route-level tests require runtime dependencies such as `express`, `supertest`, and AWS SDK packages.
+
+Live Koyeb, R2, GitHub workflow dispatch, and real OpenRouter calls were not run because production runtime access and live secrets are not available in this environment.
