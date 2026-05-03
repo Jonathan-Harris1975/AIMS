@@ -16,6 +16,94 @@ import { info, error } from "../../../logger.js";
 const router = express.Router();
 const ARTWORK_TIMEOUT_MS = Number(process.env.ARTWORK_TIMEOUT_MS || process.env.AI_TIMEOUT) || 60_000;
 
+const OPENROUTER_BASE_URL =
+  process.env.OPENROUTER_API_BASE || "https://openrouter.ai/api/v1";
+
+function getArtworkProviders() {
+  return [
+    {
+      id: "primary",
+      keyEnv: "OPENROUTER_API_KEY_ART",
+      modelEnv: "OPENROUTER_ART",
+      key: process.env.OPENROUTER_API_KEY_ART || "",
+      model:
+        process.env.OPENROUTER_ART ||
+        "google/gemini-2.5-flash-image-preview:exp",
+    },
+    {
+      id: "backup",
+      keyEnv: "OPENROUTER_API_KEY_ART_BACKUP",
+      modelEnv: "OPENROUTER_ART_BACKUP",
+      key: process.env.OPENROUTER_API_KEY_ART_BACKUP || "",
+      model: process.env.OPENROUTER_ART_BACKUP || "openai/gpt-5-image-mini",
+    },
+  ].filter((provider) => provider.key && provider.model);
+}
+
+function extractImageBase64(json) {
+  const direct = json?.choices?.[0]?.message?.content?.[0]?.image_data;
+  if (direct) return direct;
+
+  const images = json?.choices?.[0]?.message?.images;
+  if (Array.isArray(images) && images[0]?.image_url?.url) {
+    const url = images[0].image_url.url;
+    if (url.startsWith("data:image/png;base64,")) return url.split(",")[1];
+  }
+
+  const content = json?.choices?.[0]?.message?.content;
+  if (Array.isArray(content)) {
+    const imageItem = content.find((item) => item.type === "image" && item.image_url?.url);
+    const url = imageItem?.image_url?.url;
+    if (url?.startsWith("data:image/png;base64,")) return url.split(",")[1];
+  }
+
+  const raw = JSON.stringify(json);
+  const match = raw.match(/data:image\/png;base64,([^"]+)/);
+  return match?.[1] || null;
+}
+
+async function requestArtworkFromProvider(provider, prompt, safeTitle) {
+  const headers = {
+    Authorization: `Bearer ${provider.key}`,
+    "Content-Type": "application/json",
+    "HTTP-Referer": process.env.APP_URL || "https://jonathan-harris.online",
+    "X-Title": safeTitle,
+  };
+
+  const body = JSON.stringify({
+    model: provider.model,
+    messages: [
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: prompt,
+          },
+        ],
+      },
+    ],
+  });
+
+  const res = await fetchWithTimeout(`${OPENROUTER_BASE_URL}/chat/completions`, {
+    method: "POST",
+    headers,
+    body,
+    timeout: ARTWORK_TIMEOUT_MS,
+  });
+
+  if (!res.ok) {
+    const msg = await res.text().catch(() => "");
+    throw new Error(`Artwork generation failed with ${provider.modelEnv}: ${msg.slice(0, 200) || res.status}`);
+  }
+
+  const json = await res.json();
+  const imageData = extractImageBase64(json);
+  if (!imageData) throw new Error(`No image data returned from ${provider.modelEnv}.`);
+
+  return imageData;
+}
+
 function sendRouteError(req, res, err, fallbackMessage = "Internal error") {
   const requestId = req?.id || req?.headers?.["x-request-id"] || null;
   return res.status(500).json({ ok: false, error: fallbackMessage, requestId });
@@ -25,7 +113,6 @@ function sendRouteError(req, res, err, fallbackMessage = "Internal error") {
 // Generate Artwork Function
 // ------------------------------------------------------------
 export async function generateArtwork(sessionId, prompt = "") {
-  const url = "https://openrouter.ai/api/v1/chat/completions";
   if (!prompt || !prompt.trim()) {
     prompt = `Podcast cover art for ${sessionId} — abstract AI-themed design, high-contrast, bold typography`;
   }
@@ -34,57 +121,53 @@ export async function generateArtwork(sessionId, prompt = "") {
     process.env.APP_TITLE || "Turing's Torch: AI Weekly Artwork"
   );
 
-  const headers = {
-    Authorization: `Bearer ${process.env.OPENROUTER_API_KEY_ART}`,
-    "Content-Type": "application/json",
-    "HTTP-Referer": process.env.APP_URL || "https://jonathan-harris.online",
-    "X-Title": safeTitle,
-  };
+  const providers = getArtworkProviders();
+  if (providers.length === 0) {
+    throw new Error(
+      "Artwork generation disabled: missing OpenRouter artwork env vars."
+    );
+  }
 
-  const body = JSON.stringify({
-    model: process.env.OPENROUTER_ART || "google/gemini-2.5-flash-image",
-    messages: [
-      {
-        role: "user",
-        content: [
-          {
-            type: "input_text",
-            text: prompt || `Podcast artwork for session ${sessionId}`,
-          },
-        ],
-      },
-    ],
+  let lastError;
+  let imageData;
+  let usedProvider;
+
+  for (const provider of providers) {
+    try {
+      imageData = await requestArtworkFromProvider(provider, prompt, safeTitle);
+      usedProvider = provider;
+      break;
+    } catch (err) {
+      lastError = err;
+      error("💥 Artwork provider failed", {
+        sessionId,
+        provider: provider.id,
+        modelEnv: provider.modelEnv,
+        model: provider.model,
+        error: err?.message || String(err),
+      });
+    }
+  }
+
+  if (!imageData) {
+    throw lastError || new Error("No image data returned from OpenRouter.");
+  }
+
+  const buffer = Buffer.from(imageData, "base64");
+  const key = `${sessionId}.png`;
+
+  await putObject("art", key, buffer, "image/png");
+
+  const publicUrl = `${process.env.R2_PUBLIC_BASE_URL_ART}/${encodeURIComponent(key)}`;
+  info("🎨 Artwork saved to R2", {
+    sessionId,
+    key,
+    publicUrl,
+    provider: usedProvider?.id,
+    modelEnv: usedProvider?.modelEnv,
   });
 
-  try {
-    const res = await fetchWithTimeout(url, {
-      method: "POST",
-      headers,
-      body,
-      timeout: ARTWORK_TIMEOUT_MS,
-    });
-    if (!res.ok) {
-      const msg = await res.text();
-      throw new Error(`Artwork generation failed: ${msg.slice(0, 200)}`);
-    }
-
-    const json = await res.json();
-    const imageData = json?.choices?.[0]?.message?.content?.[0]?.image_data;
-    if (!imageData) throw new Error("No image data returned from OpenRouter.");
-
-    const buffer = Buffer.from(imageData, "base64");
-    const key = `${sessionId}.png`;
-
-    await putObject("art", key, buffer, "image/png");
-
-    const publicUrl = `${process.env.R2_PUBLIC_BASE_URL_ART}/${encodeURIComponent(key)}`;
-    info("🎨 Artwork saved to R2", { sessionId, key, publicUrl });
-
-    return publicUrl;
-  } catch (err) {
-    error("💥 Artwork generation failed", { sessionId, error: err.message });
-    throw err;
-  }
+  return publicUrl;
 }
 
 // ------------------------------------------------------------
