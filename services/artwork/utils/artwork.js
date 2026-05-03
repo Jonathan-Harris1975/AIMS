@@ -3,32 +3,47 @@
 // ============================================================
 //
 // Shared image transport for podcast covers and blog hero artwork.
+// Primary artwork keeps the existing Nano Banana / Gemini image setup.
+// Backup artwork uses the spreadsheet-provided ChatGPT image model.
 // ============================================================
 
 import OpenAI from "openai";
-import { warn, error } from "../../../logger.js";
+import { warn, error, info } from "../../../logger.js";
 
-const REQUIRED = [
-  "OPENROUTER_API_KEY_ART_BACKUP",
-  "OPENROUTER_ART_BACKUP",
-];
+const OPENROUTER_BASE_URL =
+  process.env.OPENROUTER_API_BASE || "https://openrouter.ai/api/v1";
 
-const missing = REQUIRED.filter((key) => !process.env[key] || process.env[key].trim() === "");
-
-if (missing.length > 0) {
-  warn("⚠️ Artwork generator missing required environment variables", { missing });
+function getArtworkProviders() {
+  return [
+    {
+      id: "primary",
+      keyEnv: "OPENROUTER_API_KEY_ART",
+      modelEnv: "OPENROUTER_ART",
+      key: process.env.OPENROUTER_API_KEY_ART || "",
+      model:
+        process.env.OPENROUTER_ART ||
+        "google/gemini-2.5-flash-image-preview:exp",
+    },
+    {
+      id: "backup",
+      keyEnv: "OPENROUTER_API_KEY_ART_BACKUP",
+      modelEnv: "OPENROUTER_ART_BACKUP",
+      key: process.env.OPENROUTER_API_KEY_ART_BACKUP || "",
+      model: process.env.OPENROUTER_ART_BACKUP || "openai/gpt-5-image-mini",
+    },
+  ].filter((provider) => provider.key && provider.model);
 }
 
-const cfg = {
-  key: process.env.OPENROUTER_API_KEY_ART_BACKUP || "",
-  baseURL: "https://openrouter.ai/api/v1",
-  model: process.env.OPENROUTER_ART_BACKUP || "openai/gpt-5-image-mini",
-};
+const providers = getArtworkProviders();
 
-const client = new OpenAI({
-  apiKey: cfg.key,
-  baseURL: cfg.baseURL,
-});
+if (providers.length === 0) {
+  warn("⚠️ Artwork generator missing OpenRouter artwork environment variables", {
+    requiredAnyOf: [
+      ["OPENROUTER_API_KEY_ART", "OPENROUTER_ART"],
+      ["OPENROUTER_API_KEY_ART_BACKUP", "OPENROUTER_ART_BACKUP"],
+    ],
+  });
+}
 
 function buildInstruction(prompt, mode = "podcast") {
   if (mode === "blog") {
@@ -50,54 +65,92 @@ function buildInstruction(prompt, mode = "podcast") {
   ].join(" ");
 }
 
-async function generateArtworkBase64(prompt, { mode = "podcast" } = {}) {
-  if (!cfg.key || !cfg.model) {
-    throw new Error("Artwork generation disabled: missing required OpenRouter env vars.");
+function extractBase64Image(result) {
+  const images = result.choices?.[0]?.message?.images;
+  if (Array.isArray(images) && images[0]?.image_url?.url) {
+    const url = images[0].image_url.url;
+    if (url.startsWith("data:image/png;base64,")) {
+      return url.split(",")[1];
+    }
   }
 
-  try {
-    const result = await client.chat.completions.create({
-      model: cfg.model,
-      messages: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "text",
-              text: buildInstruction(prompt, mode),
-            },
-          ],
-        },
-      ],
-      max_tokens: 2048,
-    });
-
-    const images = result.choices?.[0]?.message?.images;
-    if (Array.isArray(images) && images[0]?.image_url?.url) {
-      const url = images[0].image_url.url;
-      if (url.startsWith("data:image/png;base64,")) {
-        return url.split(",")[1];
-      }
+  const content = result.choices?.[0]?.message?.content;
+  if (Array.isArray(content)) {
+    const imageItem = content.find((item) => item.type === "image" && item.image_url?.url);
+    const url = imageItem?.image_url?.url;
+    if (url && url.startsWith("data:image/png;base64,")) {
+      return url.split(",")[1];
     }
+  }
 
-    const content = result.choices?.[0]?.message?.content;
-    if (Array.isArray(content)) {
-      const imageItem = content.find((item) => item.type === "image" && item.image_url?.url);
-      const url = imageItem?.image_url?.url;
-      if (url && url.startsWith("data:image/png;base64,")) {
-        return url.split(",")[1];
-      }
-    }
+  const raw = JSON.stringify(result);
+  const match = raw.match(/data:image\/png;base64,([^"]+)/);
+  if (match) return match[1];
 
-    const raw = JSON.stringify(result);
-    const match = raw.match(/data:image\/png;base64,([^"]+)/);
-    if (match) return match[1];
+  return null;
+}
 
+async function callArtworkProvider(provider, prompt, mode) {
+  const client = new OpenAI({
+    apiKey: provider.key,
+    baseURL: OPENROUTER_BASE_URL,
+  });
+
+  const result = await client.chat.completions.create({
+    model: provider.model,
+    messages: [
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: buildInstruction(prompt, mode),
+          },
+        ],
+      },
+    ],
+    max_tokens: 2048,
+  });
+
+  const image = extractBase64Image(result);
+  if (!image) {
     throw new Error("No image data found in OpenRouter response.");
-  } catch (e) {
-    error("Artwork generation error", { error: e?.message || e, mode });
-    throw new Error(`Failed to generate artwork: ${e.message}`);
   }
+
+  return image;
+}
+
+async function generateArtworkBase64(prompt, { mode = "podcast" } = {}) {
+  if (providers.length === 0) {
+    throw new Error("Artwork generation disabled: missing OpenRouter artwork env vars.");
+  }
+
+  let lastError;
+
+  for (const provider of providers) {
+    try {
+      const image = await callArtworkProvider(provider, prompt, mode);
+      if (provider.id === "backup") {
+        info("🎨 Artwork generated with backup OpenRouter image model", {
+          modelEnv: provider.modelEnv,
+          model: provider.model,
+          mode,
+        });
+      }
+      return image;
+    } catch (e) {
+      lastError = e;
+      error("Artwork provider failed", {
+        provider: provider.id,
+        modelEnv: provider.modelEnv,
+        model: provider.model,
+        error: e?.message || e,
+        mode,
+      });
+    }
+  }
+
+  throw new Error(`Failed to generate artwork: ${lastError?.message || "all providers failed"}`);
 }
 
 export async function generatePodcastArtwork(prompt) {
