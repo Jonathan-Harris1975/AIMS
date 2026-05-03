@@ -12,7 +12,7 @@ OPERATING RULES — NON-NEGOTIABLE:
 5. Prefer exact values: current title tag text, exact canonical href, exact heading text, exact file path.
 6. When the supplied data conflicts across sources (repo vs workbook vs live), state the conflict explicitly.
 7. Do not silently skip page families. If podcast/blog/transcript data is thin in the supplied context, say so and flag it as a coverage limitation — do not pretend to have checked pages you have not seen.
-8. Score using these exact weights: Technical SEO 20, On-Page Intent 15, AEO Readiness 20, GEO Readiness 20, Entity Authority 10, Internal Linking 10, Conversion Support 5. Grade: A=90-100, B=80-89, C=70-79, D=60-69, F<60.
+8. Score using these exact weights internally, then return every executiveSummary.scores.*.score as a whole-number 0-100 percentage. Do not return raw weighted points such as 17/20. Grade must match the returned percentage: A=90-100, B=80-89, C=70-79, D=60-69, F<60.
 9. Every Critical or High issue must include an exact remediation: the corrected value, code snippet, template change, or governance rule — not a description of what to change.
 10. Use severity: Critical / High / Medium / Low. Use confidence: Confirmed / Probable / Needs verification.
 11. Honour full-estate audit rules. Blog, podcast, transcript, archive, and programmatic content are mandatory if present in the supplied context.
@@ -133,308 +133,418 @@ function stripFences(raw) {
 
 function extractJson(raw) {
   const cleaned = stripFences(raw);
+
   try {
     return JSON.parse(cleaned);
   } catch {}
 
   const start = cleaned.indexOf("{");
   const end = cleaned.lastIndexOf("}");
+
   if (start >= 0 && end > start) {
     return JSON.parse(cleaned.slice(start, end + 1));
   }
+
   throw new Error("Model response did not contain valid JSON");
 }
 
-function asArray(value) {
-  return Array.isArray(value) ? value.filter(Boolean) : [];
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-function clampScore(value) {
+function asArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+function text(value, fallback = "Not verified from supplied context") {
+  const normalised = value === undefined || value === null ? "" : String(value).trim();
+  return normalised || fallback;
+}
+
+function clampScore(value, fallback = 0) {
   const numeric = Number(value);
-  if (!Number.isFinite(numeric)) return 0;
+  if (!Number.isFinite(numeric)) {
+    return Math.max(0, Math.min(100, Math.round(fallback)));
+  }
   return Math.max(0, Math.min(100, Math.round(numeric)));
 }
 
-function gradeFor(score) {
-  const value = clampScore(score);
-  if (value >= 90) return "A";
-  if (value >= 80) return "B";
-  if (value >= 70) return "C";
-  if (value >= 60) return "D";
+function expectedGrade(score) {
+  if (score >= 90) return "A";
+  if (score >= 80) return "B";
+  if (score >= 70) return "C";
+  if (score >= 60) return "D";
   return "F";
 }
 
-function average(numbers) {
-  const clean = numbers.map(Number).filter((n) => Number.isFinite(n));
-  if (!clean.length) return 0;
-  return Math.round(clean.reduce((sum, value) => sum + value, 0) / clean.length);
+function gradeRepresentativeScore(grade) {
+  const key = String(grade || "").trim().toUpperCase().slice(0, 1);
+  return { A: 92, B: 84, C: 74, D: 64, F: 49 }[key];
 }
 
-function scoreFromRoutes(routes, getter, denominator) {
-  const analysed = asArray(routes).filter((route) => String(route.coverageState || "").startsWith("Fully") || String(route.coverageState || "").startsWith("Analysed"));
-  const source = analysed.length ? analysed : asArray(routes);
-  return average(source.map((route) => (Number(getter(route)) / denominator) * 100));
+function scoreFromRows(payload, selector, denominator) {
+  const routes = asArray(payload?.allRoutes).filter((route) => {
+    const state = String(route.coverageState || "");
+    return (
+      state === "Fully analysed" ||
+      state === "Analysed through shared template plus page-specific checks"
+    );
+  });
+
+  const scoped = routes.length ? routes : asArray(payload?.allRoutes);
+  if (!scoped.length) return 0;
+
+  const values = scoped.map(selector).filter((value) => Number.isFinite(value));
+  if (!values.length) return 0;
+
+  return Math.round(
+    (values.reduce((sum, value) => sum + value, 0) / values.length / denominator) * 100
+  );
 }
 
-function fallbackScoreBlock(payload) {
-  const routes = asArray(payload.allRoutes);
+function fallbackScores(payload) {
+  const conversionTypes = new Set([
+    "lead generation",
+    "comparison",
+    "book hub",
+    "book page",
+    "service / product",
+  ]);
+
+  const routes = asArray(payload?.allRoutes).filter((route) => {
+    const state = String(route.coverageState || "");
+    return (
+      state === "Fully analysed" ||
+      state === "Analysed through shared template plus page-specific checks"
+    );
+  });
+
+  const conversionRoutes = routes.filter((route) =>
+    conversionTypes.has(String(route.pageType || ""))
+  );
+
+  const conversionScore = conversionRoutes.length
+    ? Math.round(
+        (conversionRoutes.reduce(
+          (sum, route) => sum + Number(route.scores?.conversion || 0),
+          0
+        ) /
+          conversionRoutes.length /
+          5) *
+          100
+      )
+    : 0;
+
   return {
-    seo: {
-      score: scoreFromRoutes(routes, (route) => (Number(route.scores?.technicalSeo) || 0) + (Number(route.scores?.onPageIntent) || 0), 35),
-      headline: "Calculated from the audit evidence ledger when the model omitted or malformed the score block.",
-    },
-    aeo: {
-      score: scoreFromRoutes(routes, (route) => Number(route.scores?.aeo) || 0, 20),
-      headline: "Calculated from answer-formatting signals in the supplied crawl evidence.",
-    },
-    geo: {
-      score: scoreFromRoutes(routes, (route) => Number(route.scores?.geo) || 0, 20),
-      headline: "Calculated from entity, schema, internal-link, and passage-readiness signals in the supplied crawl evidence.",
-    },
-    entityAuthority: {
-      score: scoreFromRoutes(routes, (route) => Number(route.scores?.entity) || 0, 10),
-      headline: "Calculated from visible author/entity and schema signals in the supplied crawl evidence.",
-    },
-    conversionSupport: {
-      score: scoreFromRoutes(routes, (route) => Number(route.scores?.conversion) || 0, 5),
-      headline: "Calculated from CTA and conversion-path signals in commercial page types.",
-    },
+    seo: scoreFromRows(
+      payload,
+      (route) =>
+        Number(route.scores?.technicalSeo || 0) +
+        Number(route.scores?.onPageIntent || 0),
+      35
+    ),
+    aeo: scoreFromRows(payload, (route) => Number(route.scores?.aeo || 0), 20),
+    geo: scoreFromRows(payload, (route) => Number(route.scores?.geo || 0), 20),
+    entityAuthority: scoreFromRows(
+      payload,
+      (route) => Number(route.scores?.entity || 0),
+      10
+    ),
+    conversionSupport: conversionScore,
   };
 }
 
-function normaliseScoreBlock(data, payload) {
-  const fallback = fallbackScoreBlock(payload);
-  const input = data?.executiveSummary?.scores || {};
-  const result = {};
-  for (const key of ["seo", "aeo", "geo", "entityAuthority", "conversionSupport"]) {
-    const candidate = input[key] && typeof input[key] === "object" ? input[key] : {};
-    const score = clampScore(candidate.score ?? fallback[key].score);
-    result[key] = {
-      score,
-      grade: gradeFor(score),
-      headline: String(candidate.headline || fallback[key].headline || "Evidence-led score from supplied audit context."),
-    };
+function normaliseScoreBlock(block, key, fallback) {
+  const source = isPlainObject(block) ? block : {};
+  let score = Number(source.score);
+  const suppliedGrade = String(source.grade || "").trim().toUpperCase().slice(0, 1);
+
+  if (!Number.isFinite(score)) {
+    score = fallback;
   }
-  return result;
-}
 
-function normaliseIssue(issue, index) {
-  const issueId = String(issue.issueId || `JH-SEO-${String(index + 1).padStart(3, "0")}`);
+  if (score <= 20 && suppliedGrade && suppliedGrade !== expectedGrade(score)) {
+    score = gradeRepresentativeScore(suppliedGrade) ?? score * 5;
+  } else if (score <= 20 && score > 0 && ["seo", "aeo", "geo"].includes(key)) {
+    score *= 5;
+  }
+
+  const finalScore = clampScore(score, fallback);
+
   return {
-    issueId,
-    severity: String(issue.severity || "Medium"),
-    confidence: String(issue.confidence || "Confirmed"),
-    lens: String(issue.lens || issue.auditLens || "SEO / Technical"),
-    rootCauseLevel: String(issue.rootCauseLevel || "system"),
-    affected: String(issue.affected || "Not verified from supplied context"),
-    evidenceObserved: String(issue.evidenceObserved || "Evidence came from the supplied audit ledger; the model omitted a detailed evidence field."),
-    whyItMatters: String(issue.whyItMatters || "This weakens crawl reliability, answer extraction, or generative retrieval quality."),
-    exactRemediation: String(issue.exactRemediation || "Use the affected route, template, or file named above and rerun the audit to verify the corrected evidence state."),
-    expectedGain: String(issue.expectedGain || "Clearer crawl evidence and more reliable forensic audit output."),
-    estimatedEffort: String(issue.estimatedEffort || "Medium"),
-    recommendedOwner: String(issue.recommendedOwner || "Engineering"),
-    verificationMethod: String(issue.verificationMethod || "Rerun the SEO + AEO + GEO audit and confirm coverage.json and report.html show the corrected state."),
+    score: finalScore,
+    grade: expectedGrade(finalScore),
+    headline: text(
+      source.headline,
+      `${key} score normalised from the supplied forensic analysis and crawl ledger.`
+    ),
   };
 }
 
-function issuesFromHeuristics(payload) {
-  return asArray(payload.heuristicIssues).map((issue, index) => normaliseIssue(issue, index));
+function coverageRows(payload) {
+  return asArray(payload?.coverageFamilies).length
+    ? asArray(payload.coverageFamilies)
+    : asArray(payload?.coverage);
 }
 
-function pageTypeFindingsFromCoverage(payload) {
-  return asArray(payload.coverageFamilies).map((row) => {
-    const score = clampScore(row.averageScore || 0);
-    const failed = Number(row.failed || 0);
-    const excluded = Number(row.excluded || 0);
-    const analysed = Number(row.analysed || 0);
-    const coverageState = failed
-      ? "Partial / failed"
-      : analysed && excluded
-        ? "Analysed plus explicit exclusions"
-        : analysed
-          ? "Fully analysed"
-          : "Excluded / redirected";
+function coverageStateFromRow(row) {
+  if (Number(row.failed || 0) > 0) return "Partial / failed";
+  if (Number(row.excluded || 0) > 0 && Number(row.analysed || 0) === 0) {
+    return "Excluded / redirected";
+  }
+  if (Number(row.excluded || 0) > 0) return "Analysed plus explicit exclusions";
+  return Number(row.coveragePercent || 0) >= 100 ? "Fully analysed" : "Partial / failed";
+}
+
+function normalisePageTypeFindings(data, payload) {
+  const rows = asArray(data.pageTypeFindings).filter(
+    (row) => isPlainObject(row) && row.pageType && row.count !== undefined
+  );
+
+  if (rows.length) {
+    return rows.map((row) => {
+      const score = clampScore(row.score ?? row.averageScore, 0);
+      return {
+        pageType: text(row.pageType, "Unknown page type"),
+        count: Number(row.count || row.discovered || 0),
+        coverageState: text(row.coverageState, "Not verified from supplied context"),
+        score,
+        grade: expectedGrade(score),
+        judgement: text(
+          row.judgement,
+          "Judgement derived from supplied AI analysis and coverage ledger."
+        ),
+        keyNote: text(row.keyNote, "See coverage ledger for URL-level evidence."),
+      };
+    });
+  }
+
+  return coverageRows(payload).map((row) => {
+    const score = clampScore(row.averageScore, 0);
     return {
-      pageType: String(row.pageType || "unknown"),
+      pageType: text(row.pageType, "Unknown page type"),
       count: Number(row.discovered || 0),
-      coverageState,
+      coverageState: coverageStateFromRow(row),
       score,
-      grade: gradeFor(score),
-      judgement: failed ? "Contains unresolved live-fetch failures." : "Inventoried with explicit coverage state.",
-      keyNote: `Analysed ${analysed}, excluded ${excluded}, failed ${failed}.`,
+      grade: expectedGrade(score),
+      judgement:
+        Number(row.failed || 0) > 0
+          ? "Coverage defects remain in this family."
+          : "Family inventoried with explicit URL-level coverage states.",
+      keyNote: `Analysed ${Number(row.analysed || 0)}, excluded ${Number(
+        row.excluded || 0
+      )}, failed ${Number(row.failed || 0)}.`,
     };
   });
 }
 
-function priorityAnnexFromPages(payload) {
-  return asArray(payload.priorityPages).slice(0, 30).map((page) => ({
-    url: String(page.url || ""),
-    pageType: String(page.pageType || "unknown"),
-    templateSource: String(page.route || ""),
-    titleStatus: page.title ? "Healthy" : "Missing",
-    metaStatus: page.metaDescription ? "Healthy" : "Missing",
-    canonicalStatus: page.canonical ? "Healthy" : "Missing",
-    schemaStatus: Number(page.schemaCount || 0) > 0 ? "Healthy" : "Missing",
-    aeoStatus: Number(page.scores?.aeo || 0) >= 10 ? "Mixed" : "Weak",
-    geoStatus: Number(page.scores?.geo || 0) >= 12 ? "Mixed" : "Weak",
-    score: Number(page.total || 0),
-    grade: String(page.grade || gradeFor(page.total || 0)),
-    confirmedIssueIds: [],
-    keyNote: `Coverage state: ${page.coverageState || "not verified"}.`,
-  }));
+function statusLabelFromScore(score, good = 80, mixed = 60) {
+  if (score >= good) return "Healthy";
+  if (score >= mixed) return "Mixed";
+  return "Weak";
 }
 
-function templateAnnexFromCoverage(payload) {
-  return asArray(payload.coverageFamilies).map((row) => ({
-    sourceFile: String(row.pageType || "route family"),
-    area: String(row.pageType || "unknown"),
-    observedLogic: "Derived from crawled URL family coverage and metadata evidence.",
-    repeatedEffect: `Discovered ${row.discovered || 0}; analysed ${row.analysed || 0}; excluded ${row.excluded || 0}; failed ${row.failed || 0}.`,
-    fixPriority: Number(row.failed || 0) > 0 ? "Critical" : (Number(row.averageScore || 0) < 75 ? "High" : "Medium"),
-  }));
-}
+function normalisePriorityPageAnnex(data, payload) {
+  const rows = asArray(data.priorityPageAnnex).filter(
+    (row) => isPlainObject(row) && row.url
+  );
 
-function codeRemediationFromEvidence(payload, issues) {
-  const items = [];
-  const signals = payload.repoSignals || {};
-  const governanceText = JSON.stringify(signals.governanceScriptExcludes || []);
-  if (governanceText.includes("blog/posts") || governanceText.includes("podcast/episodes")) {
-    items.push({
-      target: "scripts/check_ungoverned_routes.py",
-      issueId: "JH-SEO-001",
-      currentPattern: "blog/posts/ and/or podcast/episodes/ are excluded from release governance.",
-      correctedPattern: "Validate generated blog/posts/* and podcast/episodes/* routes through a manifest-backed gate instead of blanket-excluding them.",
-      rationale: "Dynamic page families are high-churn SEO assets and must not drift outside the release contract.",
+  if (rows.length) {
+    return rows.map((row) => {
+      const score = clampScore(row.score, 0);
+      return {
+        url: text(row.url, ""),
+        pageType: text(row.pageType, "Unknown page type"),
+        templateSource: text(row.templateSource, "Derived from supplied route family."),
+        titleStatus: text(row.titleStatus, "Not verified"),
+        metaStatus: text(row.metaStatus, "Not verified"),
+        canonicalStatus: text(row.canonicalStatus, "Not verified"),
+        schemaStatus: text(row.schemaStatus, "Not verified"),
+        aeoStatus: text(row.aeoStatus, "Not verified"),
+        geoStatus: text(row.geoStatus, "Not verified"),
+        score,
+        grade: expectedGrade(score),
+        confirmedIssueIds: asArray(row.confirmedIssueIds),
+        keyNote: text(row.keyNote, "See URL coverage appendix for evidence."),
+      };
     });
   }
-  if (Number(signals.ebookPipelineTrimLimit || 0) > 0 && Number(signals.ebookPipelineTrimLimit) <= 80) {
-    items.push({
-      target: "scripts/ebook_pipeline.py",
-      issueId: "JH-SEO-006",
-      currentPattern: `Heading text is trimmed at ${signals.ebookPipelineTrimLimit} characters before rendering.`,
-      correctedPattern: "Remove the hard slice or replace it with a whole-word trim at a materially higher threshold; let CSS wrap headings naturally.",
-      rationale: "Hard heading truncation damages semantic clarity and answer extraction across ebook detail pages.",
-    });
-  }
-  if (String(signals.llmsScope || "") === "ebook-only") {
-    items.push({
-      target: "llms.txt and llm-index.json",
-      issueId: "JH-GEO-007",
-      currentPattern: "Machine-readable discovery is ebook-centric.",
-      correctedPattern: "Add topic guides, glossary, comparison, blog, podcast episode, and transcript URLs with concise summaries.",
-      rationale: "Generative engines need first-party explanatory assets beyond commercial book pages.",
-    });
-  }
-  for (const issue of issues) {
-    if (items.length >= 5) break;
-    if (!["Critical", "High"].includes(issue.severity)) continue;
-    if (items.some((item) => item.issueId === issue.issueId)) continue;
-    items.push({
-      target: issue.affected,
-      issueId: issue.issueId,
-      currentPattern: issue.evidenceObserved,
-      correctedPattern: issue.exactRemediation,
-      rationale: issue.whyItMatters,
-    });
-  }
-  return items;
-}
 
-function gapMatrixFromCoverage(payload) {
-  return asArray(payload.coverageFamilies).map((row) => ({
-    pageType: String(row.pageType || "unknown"),
-    seo: Number(row.failed || 0) ? "Weak" : (Number(row.averageScore || 0) >= 80 ? "Strong" : "Moderate"),
-    aeo: Number(row.averageScore || 0) >= 80 ? "Moderate" : "Weak",
-    geo: Number(row.averageScore || 0) >= 80 ? "Moderate" : "Weak",
-    confidence: "Confirmed",
-    topMissingElement: Number(row.failed || 0) ? "Live fetch or route resolution failure" : "Answer-first and citation-ready patterns",
-    businessImpact: ["book page", "podcast episode", "podcast transcript", "blog article", "homepage"].includes(row.pageType) ? "High" : "Medium",
-  }));
-}
+  return asArray(payload?.priorityPages).slice(0, 30).map((page) => {
+    const score = clampScore(page.total, 0);
+    const aeoScore = Number(page.scores?.aeo || 0);
+    const geoScore = Number(page.scores?.geo || 0);
 
-function normaliseAnalysisShape(data, payload) {
-  const root = data && typeof data === "object" && !Array.isArray(data) ? data : {};
-  const executiveSummary = root.executiveSummary && typeof root.executiveSummary === "object" ? root.executiveSummary : {};
-  const findingsByLens = root.findingsByLens && typeof root.findingsByLens === "object" ? root.findingsByLens : {};
-  const fallbackIssues = issuesFromHeuristics(payload);
-  let issues = asArray(root.issues).map((issue, index) => normaliseIssue(issue, index));
-  if (issues.length < Math.min(5, fallbackIssues.length)) {
-    const existing = new Set(issues.map((issue) => issue.issueId));
-    issues = issues.concat(fallbackIssues.filter((issue) => !existing.has(issue.issueId))).slice(0, 12);
-  }
-  if (!issues.length) {
-    throw new Error("Analysis response and heuristic context produced no issue records");
-  }
-
-  const normalised = {
-    executiveSummary: {
-      overallVerdict: String(executiveSummary.overallVerdict || "AI forensic analysis completed using the supplied route ledger and deterministic evidence normalisation. Treat any incomplete live-fetch family as a material limitation until the audit is rerun cleanly."),
-      scores: normaliseScoreBlock(root, payload),
-      topFivePriorities: asArray(executiveSummary.topFivePriorities).map(String).filter(Boolean),
-      quickWins: asArray(executiveSummary.quickWins).map(String).filter(Boolean),
-      estateLabels: asArray(executiveSummary.estateLabels).map(String).filter(Boolean),
-    },
-    findingsByLens: {
-      technicalSeo: String(findingsByLens.technicalSeo || "Technical SEO was assessed from live status, canonical, title, meta, sitemap, feed, and route reconciliation evidence in the supplied audit ledger."),
-      onPageSeo: String(findingsByLens.onPageSeo || "On-page SEO was assessed from titles, headings, opening copy, internal links, and page-family template signals in the supplied audit ledger."),
-      aeo: String(findingsByLens.aeo || "AEO readiness was assessed from answer-first summaries, question-led headings, list/table support, FAQ/schema signals, and extractable opening text."),
-      geo: String(findingsByLens.geo || "GEO readiness was assessed from entity clarity, reusable explanatory passages, schema support, internal topical links, and machine-readable discovery signals."),
-      entityAuthority: String(findingsByLens.entityAuthority || "Entity authority was assessed from visible Jonathan Harris, book, podcast, topic, and schema relationships in the supplied crawl context."),
-      structuredData: String(findingsByLens.structuredData || "Structured data was assessed from JSON-LD counts and schema signals in priority page evidence."),
-      internalLinking: String(findingsByLens.internalLinking || "Internal linking was assessed from in-scope link counts, crawlable route exposure, and page-family relationships."),
-      contentArchitecture: String(findingsByLens.contentArchitecture || "Content architecture was assessed from repo, workbook, sitemap, feed, and live-link reconciliation across static and dynamic families."),
-      conversionSupport: String(findingsByLens.conversionSupport || "Conversion support was assessed from buy-now, contact, newsletter, and CTA evidence while excluding external redirects from HTML page scoring."),
-      blogPodcastTranscriptSystems: String(findingsByLens.blogPodcastTranscriptSystems || "Blog, podcast, transcript, archive, and programmatic families were treated as mandatory audit families using the supplied URL ledger and coverage states."),
-    },
-    issues,
-    pageTypeFindings: asArray(root.pageTypeFindings).length ? asArray(root.pageTypeFindings) : pageTypeFindingsFromCoverage(payload),
-    priorityPageAnnex: asArray(root.priorityPageAnnex).length ? asArray(root.priorityPageAnnex) : priorityAnnexFromPages(payload),
-    templateAnnex: asArray(root.templateAnnex).length ? asArray(root.templateAnnex) : templateAnnexFromCoverage(payload),
-    codeRemediationAppendix: asArray(root.codeRemediationAppendix).length ? asArray(root.codeRemediationAppendix) : [],
-    bestPracticeGapMatrix: asArray(root.bestPracticeGapMatrix).length ? asArray(root.bestPracticeGapMatrix) : gapMatrixFromCoverage(payload),
-    implementationOrder: root.implementationOrder && typeof root.implementationOrder === "object" ? root.implementationOrder : {},
-  };
-
-  if (normalised.executiveSummary.topFivePriorities.length < 5) {
-    const additions = issues.map((issue) => `${issue.issueId}: ${issue.exactRemediation}`);
-    normalised.executiveSummary.topFivePriorities = normalised.executiveSummary.topFivePriorities.concat(additions).slice(0, 5);
-  }
-  if (normalised.executiveSummary.quickWins.length < 3) {
-    normalised.executiveSummary.quickWins = normalised.executiveSummary.quickWins.concat(issues.map((issue) => issue.verificationMethod)).slice(0, 3);
-  }
-  if (!normalised.executiveSummary.estateLabels.length) {
-    normalised.executiveSummary.estateLabels = ["AI-assisted", "evidence-led", "full-estate ledger"];
-  }
-  normalised.codeRemediationAppendix = asArray(normalised.codeRemediationAppendix);
-  if (!normalised.codeRemediationAppendix.length) {
-    normalised.codeRemediationAppendix = codeRemediationFromEvidence(payload, issues);
-  }
-  normalised.implementationOrder = {
-    narrative: String(normalised.implementationOrder.narrative || normalised.executiveSummary.overallVerdict),
-    steps: asArray(normalised.implementationOrder.steps).length ? asArray(normalised.implementationOrder.steps).map(String) : normalised.executiveSummary.topFivePriorities,
-    expectedGains: asArray(normalised.implementationOrder.expectedGains).length ? asArray(normalised.implementationOrder.expectedGains).map(String) : issues.slice(0, 3).map((issue) => issue.expectedGain),
-  };
-
-  return normalised;
-}
-
-export async function runSeoAeoGeoAnalysis(payload) {
-  const userPrompt = buildUserPrompt(payload);
-  const raw = await resilientRequest("auditForensic", {
-    sessionId: payload.sessionId,
-    routeName: "auditForensic",
-    max_tokens: 9000,
-    temperature: 0.25,
-    top_p: 0.95,
-    timeout_ms: Math.max(Number(process.env.AI_TIMEOUT || 0) || 0, 180000),
-    messages: [
-      { role: "system", content: SYSTEM_PROMPT },
-      { role: "user", content: userPrompt },
-    ],
+    return {
+      url: text(page.url, ""),
+      pageType: text(page.pageType, "Unknown page type"),
+      templateSource: text(page.route, "Supplied priority route"),
+      titleStatus: page.title ? "Healthy" : "Missing",
+      metaStatus: page.metaDescription ? "Healthy" : "Missing",
+      canonicalStatus: page.canonical ? "Healthy" : "Missing",
+      schemaStatus: Number(page.schemaCount || 0) > 0 ? "Healthy" : "Missing",
+      aeoStatus: statusLabelFromScore((aeoScore / 20) * 100),
+      geoStatus: statusLabelFromScore((geoScore / 20) * 100),
+      score,
+      grade: expectedGrade(score),
+      confirmedIssueIds: [],
+      keyNote: text(page.coverageState, "Priority route included from crawl ledger."),
+    };
   });
-
-  const parsed = extractJson(raw);
-  return normaliseAnalysisShape(parsed, payload);
 }
 
-export default { runSeoAeoGeoAnalysis };
+function normaliseTemplateAnnex(data, payload) {
+  const rows = asArray(data.templateAnnex).filter(
+    (row) => isPlainObject(row) && (row.sourceFile || row.area)
+  );
+
+  if (rows.length) {
+    return rows.map((row) => ({
+      sourceFile: text(row.sourceFile || row.target || row.area, "Unknown source file"),
+      area: text(row.area || row.pageFamily, "Route family"),
+      observedLogic: text(
+        row.observedLogic || row.metadataLogic,
+        "Observed from supplied route/template evidence."
+      ),
+      repeatedEffect: text(
+        row.repeatedEffect || row.repeatedDefects,
+        "Repeated family effect recorded in coverage ledger."
+      ),
+      fixPriority: text(row.fixPriority, "Medium"),
+    }));
+  }
+
+  return coverageRows(payload).map((row) => ({
+    sourceFile: text(row.sourceFile || row.pageType, "Route family"),
+    area: text(row.pageType, "Route family"),
+    observedLogic: `Family coverage: discovered ${Number(
+      row.discovered || 0
+    )}, analysed ${Number(row.analysed || 0)}, excluded ${Number(
+      row.excluded || 0
+    )}, failed ${Number(row.failed || 0)}.`,
+    repeatedEffect:
+      Number(row.failed || 0) > 0
+        ? "Unresolved fetch failures affect audit completeness."
+        : "No missing coverage state detected in this family.",
+    fixPriority:
+      Number(row.failed || 0) > 0 || Number(row.averageScore || 0) < 70
+        ? "High"
+        : "Medium",
+  }));
+}
+
+function complianceFromAverage(score) {
+  const numeric = Number(score || 0);
+  if (numeric >= 85) return "Strong";
+  if (numeric >= 70) return "Partial";
+  return "Weak";
+}
+
+function normaliseGapMatrix(data, payload) {
+  const rows = asArray(data.bestPracticeGapMatrix).filter(
+    (row) => isPlainObject(row) && row.pageType
+  );
+
+  if (rows.length) {
+    return rows.map((row) => ({
+      pageType: text(row.pageType, "Unknown page type"),
+      seo: text(row.seo, "Not verified"),
+      aeo: text(row.aeo, "Not verified"),
+      geo: text(row.geo, "Not verified"),
+      confidence: text(row.confidence, "Needs verification"),
+      topMissingElement: text(row.topMissingElement || row.topMissing, "See issue ledger"),
+      businessImpact: text(row.businessImpact, "Medium"),
+    }));
+  }
+
+  return coverageRows(payload).map((row) => ({
+    pageType: text(row.pageType, "Unknown page type"),
+    seo: complianceFromAverage(row.averageScore),
+    aeo: Number(row.averageScore || 0) >= 80 ? "Partial" : "Weak",
+    geo: complianceFromAverage(row.averageScore),
+    confidence: "Confirmed",
+    topMissingElement:
+      Number(row.failed || 0) > 0
+        ? "Fetch or redirect reliability"
+        : "Answer-first evidence blocks",
+    businessImpact: [
+      "book page",
+      "podcast episode",
+      "podcast transcript",
+      "blog article",
+      "lead generation",
+    ].includes(String(row.pageType || ""))
+      ? "High"
+      : "Medium",
+  }));
+}
+
+function normaliseIssues(data, payload) {
+  const sourceIssues = [...asArray(data.issues), ...asArray(payload?.heuristicIssues)];
+  const seen = new Set();
+  const issues = [];
+
+  for (const issue of sourceIssues) {
+    if (!isPlainObject(issue)) continue;
+
+    const affected = text(issue.affected, "Affected route family from supplied evidence");
+    const why = text(
+      issue.whyItMatters,
+      "This affects crawlability, answer extraction, retrieval, or conversion support."
+    );
+    const remediation = text(
+      issue.exactRemediation,
+      "Apply the exact template, route, or content fix described in the issue evidence."
+    );
+    const id = text(
+      issue.issueId,
+      `JH-SEO-${String(issues.length + 1).padStart(3, "0")}`
+    );
+
+    const key = `${id}|${affected}|${why}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    issues.push({
+      issueId: id,
+      severity: text(issue.severity, "Medium"),
+      confidence: text(issue.confidence, "Confirmed"),
+      lens: text(issue.lens || issue.auditLens, "SEO"),
+      rootCauseLevel: text(issue.rootCauseLevel, "system"),
+      affected,
+      evidenceObserved: text(
+        issue.evidenceObserved,
+        "Evidence observed in supplied crawl, repo, workbook, or coverage ledger."
+      ),
+      whyItMatters: why,
+      exactRemediation: remediation,
+      expectedGain: text(
+        issue.expectedGain,
+        "Improved crawl reliability, answer extraction, and generative retrieval quality."
+      ),
+      estimatedEffort: text(issue.estimatedEffort, "Medium"),
+      recommendedOwner: text(issue.recommendedOwner, "Engineering"),
+      verificationMethod: text(
+        issue.verificationMethod || issue.verification,
+        "Rerun the SEO + AEO + GEO audit and confirm the corrected evidence state in coverage.json and report.html."
+      ),
+    });
+  }
+
+  if (issues.length < 5) {
+    for (const row of coverageRows(payload)) {
+      if (issues.length >= 5) break;
+
+      const pageType = text(row.pageType, "Unknown page type");
+      const id = `JH-AEO-${String(issues.length + 1).padStart(3, "0")}`;
+
+      issues.push({
+        issueId: id,
+        severity: Number(row.averageScore || 0) < 70 ? "High" : "Medium",
+        confidence: "Confirmed",
+        lens: "AEO / GEO",
+        rootCauseLevel: "template",
+        affected: `${pageType} (${Number(row.discovered || 0)} URLs)`,
+        evidenceObserved: `Family average score ${Number(
+          row.averageScore || 0
+        )}; anal
