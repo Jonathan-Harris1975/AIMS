@@ -6,27 +6,17 @@ export function extractBearerToken(req) {
 }
 
 export function resolveExpectedAuditCallbackToken() {
-  return String(
-    process.env.AUDIT_CALLBACK_TOKEN ||
-      process.env.AI_SUITE_AUDIT_CALLBACK_TOKEN ||
-      ""
-  ).trim();
-}
-
-export function resolveExpectedAuditCallbackTokens() {
-  return [process.env.AUDIT_CALLBACK_TOKEN, process.env.AI_SUITE_AUDIT_CALLBACK_TOKEN]
-    .map((value) => String(value || "").trim())
-    .filter(Boolean);
+  return String(process.env.AUDIT_CALLBACK_TOKEN || process.env.AI_SUITE_AUDIT_CALLBACK_TOKEN || "").trim();
 }
 
 export function requireAuditCallbackAuth(req, res, next) {
-  const expectedTokens = resolveExpectedAuditCallbackTokens();
-  if (!expectedTokens.length) {
+  const expected = resolveExpectedAuditCallbackToken();
+  if (!expected) {
     return res.status(500).json({ ok: false, error: "AUDIT_CALLBACK_TOKEN or AI_SUITE_AUDIT_CALLBACK_TOKEN is not configured" });
   }
 
   const received = extractBearerToken(req) || req.get("x-audit-callback-token");
-  if (!received || !expectedTokens.includes(String(received).trim())) {
+  if (!received || String(received).trim() !== expected) {
     return res.status(401).json({ ok: false, error: "Invalid audit callback token" });
   }
 
