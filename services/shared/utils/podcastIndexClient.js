@@ -34,12 +34,17 @@ const USER_AGENT =
   process.env.PODCASTINDEX_USER_AGENT ||
   "TuringTorch/1.0 (+https://jonathan-harris.online)";
 
+export function hasPodcastIndexCredentials() {
+  return Boolean(API_KEY && API_SECRET);
+}
+
 function ensureConfig() {
-  if (!API_KEY || !API_SECRET) {
-    log.warn("podcastIndexClient: missing API key/secret", {
-      hasKey: Boolean(API_KEY),
-      hasSecret: Boolean(API_SECRET),
-    });
+  if (!hasPodcastIndexCredentials()) {
+    const err = new Error("PodcastIndex API key and secret are required for authenticated requests");
+    err.code = "PODCAST_INDEX_CREDENTIALS_MISSING";
+    err.hasKey = Boolean(API_KEY);
+    err.hasSecret = Boolean(API_SECRET);
+    throw err;
   }
 }
 
@@ -213,6 +218,7 @@ const podcastIndexClient = {
   getTrendingPodcasts,
   notifyHubByUrl,
   rawRequest,
+  hasPodcastIndexCredentials,
 };
 
 export default podcastIndexClient;
