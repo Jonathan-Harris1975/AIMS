@@ -63,6 +63,9 @@ export const ENV = {
 
   DEBUG_ROUTES: bool("DEBUG_ROUTES", false),
   AUTO_CALL: opt("AUTO_CALL", "yes"),
+  BACKFILL_TRANSCRIPT_HTML: bool("BACKFILL_TRANSCRIPT_HTML", false),
+  SITE_BASE_URL: opt("SITE_BASE_URL"),
+
 
   /* ---------------- AI runtime ---------------- */
   AI_MAX_RETRIES: num("AI_MAX_RETRIES", 5),
@@ -74,6 +77,7 @@ export const ENV = {
 
   /* ---------------- OpenRouter ---------------- */
   OPENROUTER_API_BASE: str("OPENROUTER_API_BASE"),
+  OPENROUTER_API_KEY: opt("OPENROUTER_API_KEY"),
 
   // Legacy generic names are kept as aliases. The spreadsheet-specific names below
   // are preferred by ai-config.js when present.
@@ -94,19 +98,22 @@ export const ENV = {
   OPENROUTER_API_KEY_ART_BACKUP: opt("OPENROUTER_API_KEY_ART_BACKUP"),
   OPENROUTER_ART_BACKUP: opt("OPENROUTER_ART_BACKUP"),
 
+  // Optional per-provider keys remain supported. Koyeb now normally provides
+  // the single OPENROUTER_API_KEY from the spreadsheet.
+
   OPENROUTER_API_KEY_DEEPSEEK_v4_pro: opt("OPENROUTER_API_KEY_DEEPSEEK_v4_pro"),
   OPENROUTER_DEEPSEEK_v4_pro: opt("OPENROUTER_DEEPSEEK_v4_pro"),
   OPENROUTER_API_KEY_DEEPSEEK_v4_flash: opt("OPENROUTER_API_KEY_DEEPSEEK_v4_flash"),
   OPENROUTER_DEEPSEEK_v4_flash: opt("OPENROUTER_DEEPSEEK_v4_flash"),
 
   OPENROUTER_API_KEY_CHATGPT_mini5: opt("OPENROUTER_API_KEY_CHATGPT_mini5"),
-  "OPENROUTER_CHATGPT_mini-5": opt("OPENROUTER_CHATGPT_mini-5"),
+  OPENROUTER_CHATGPT_mini5_: opt("OPENROUTER_CHATGPT_mini5_"),
 
-  "OPENROUTER_API_KEY_GOOGLE_2-5_flashlite": opt("OPENROUTER_API_KEY_GOOGLE_2-5_flashlite"),
-  "OPENROUTER_GOOGLE_2-5_flashlite": opt("OPENROUTER_GOOGLE_2-5_flashlite"),
+  OPENROUTER_API_KEY_GOOGLE_2_5_flashlite: opt("OPENROUTER_API_KEY_GOOGLE_2_5_flashlite"),
+  OPENROUTER_GOOGLE_2_5_flashlite: opt("OPENROUTER_GOOGLE_2_5_flashlite"),
 
-  "OPENROUTER_API_KEY_ANTHROPIC_4-6": opt("OPENROUTER_API_KEY_ANTHROPIC_4-6"),
-  "OPENROUTER_ANTHROPIC_4-6": opt("OPENROUTER_ANTHROPIC_4-6"),
+  OPENROUTER_API_KEY_ANTHROPIC_4_6: opt("OPENROUTER_API_KEY_ANTHROPIC_4_6"),
+  OPENROUTER_ANTHROPIC_4_6: opt("OPENROUTER_ANTHROPIC_4_6"),
 
   /* ---------------- RapidAPI ---------------- */
   RAPIDAPI_HOST: str("RAPIDAPI_HOST"),
@@ -205,6 +212,7 @@ export const ENV = {
   R2_BUCKET_BLOG: opt("R2_BUCKET_BLOG"),
   R2_BUCKET_BLOG_IMAGES: opt("R2_BUCKET_BLOG_IMAGES"),
   R2_BUCKET_BLOG_RSS: opt("R2_BUCKET_BLOG_RSS"),
+  R2_BUCKET_BRAND_ASSETS: opt("R2_BUCKET_BRAND_ASSETS"),
 
   R2_PUBLIC_BASE_URL_PODCAST: opt("R2_PUBLIC_BASE_URL_PODCAST"),
   R2_PUBLIC_BASE_URL_RAW_TEXT: opt("R2_PUBLIC_BASE_URL_RAW_TEXT"),
@@ -220,6 +228,8 @@ export const ENV = {
   R2_PUBLIC_BASE_URL_BLOG: opt("R2_PUBLIC_BASE_URL_BLOG"),
   R2_PUBLIC_BASE_URL_BLOG_IMAGES: opt("R2_PUBLIC_BASE_URL_BLOG_IMAGES"),
   R2_PUBLIC_BASE_URL_BLOG_RSS: opt("R2_PUBLIC_BASE_URL_BLOG_RSS"),
+  R2_PUBLIC_BASE_URL_BRAND_ASSETS: opt("R2_PUBLIC_BASE_URL_BRAND_ASSETS"),
+  R2_PUBLIC_BASE_URL_TRANSCRIPT_HTML: opt("R2_PUBLIC_BASE_URL_TRANSCRIPT_HTML"),
 
   /* ---------------- Google Sheets ---------------- */
   GOOGLE_CLIENT_EMAIL: str("GOOGLE_CLIENT_EMAIL"),
