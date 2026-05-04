@@ -5,6 +5,7 @@ import path from "node:path";
 const REQUIRED_ENV_KEYS = [
   "NODE_ENV",
   "OPENROUTER_API_BASE",
+  "OPENROUTER_API_KEY",
   "RAPIDAPI_HOST",
   "RAPIDAPI_KEY",
   "FEED_URL",
