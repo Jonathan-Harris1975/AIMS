@@ -2,6 +2,7 @@
 
 - `audits/routes/seoAeoGeo.js`
 - `audits/utils/auditAnalysisJobs.js`
+- `audits/utils/orchestrator.js`
 - `audits/utils/seoAeoGeoAnalysis.js`
 - `services/shared/utils/ai-config.js`
 - `services/shared/utils/ai-service.js`
@@ -10,7 +11,3 @@
 - `env.template`
 - `test/ai-service-provider-diagnostics.test.js`
 - `test/audit-analysis-route.test.js`
-- `AUDIT_ANALYSIS_POLLING_FIX.md`
-- `CHANGELOG.md`
-- `FILES_CHANGED.md`
-- `TEST_RESULTS.md`

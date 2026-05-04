@@ -1,9 +1,9 @@
 # Changelog
 
-## SEO/AEO/GEO audit forensic gate hardening
+## Audit callback + forensic analysis hardening
 
-- Fixed the `/analysis/:sessionId` polling contract so pending analysis jobs return HTTP `202`, not HTTP `200` without a payload.
-- Ensured completed polling responses expose the forensic JSON at `analysis`, `result.analysis`, and `job.analysis`.
-- Added `409` diagnostics for failed or completed-without-analysis jobs so failures are explicit rather than misread as successful empty responses.
-- Restored async analysis job handling, durable job-state refresh, Koyeb OpenRouter env-name support, and audit-specific AI timeout/retry defaults from prior patches.
-- Updated route test polling expectations to accept `202` while the job is still running and require `200` only for completed analysis.
+- Restored the asynchronous SEO/AEO/GEO `/analysis` flow so the website workflow does not sit behind a long-running synchronous request.
+- Added durable polling support for `/audits/seo-aeo-geo/analysis/:sessionId`.
+- Updated the audit workflow dispatch payload to always include both `callback_url` and `analysis_url` when `APP_URL` / `AUDIT_CALLBACK_BASE_URL` and callback auth are configured.
+- Added a hard server-side guard so `/run` fails immediately if callback URL or token configuration is missing, instead of dispatching a doomed failed-gate workflow.
+- Preserved callback authentication; no unauthenticated analysis/callback path was introduced.
