@@ -17,7 +17,7 @@ function requireEnv(name, val) {
 }
 
 export async function saveTtsChunk(audioBuffer, key) {
-  requireEnv("R2_BUCKET_RAW", process.env.R2_BUCKET_RAW);
+  requireEnv("R2_BUCKET_CHUNKS", process.env.R2_BUCKET_CHUNKS || process.env.R2_BUCKET_RAW);
   await putObject(RAW_BUCKET, key, audioBuffer, "audio/mpeg");
   info("tts.chunk.put", { bucket: RAW_BUCKET, key, bytes: audioBuffer.length });
 }
