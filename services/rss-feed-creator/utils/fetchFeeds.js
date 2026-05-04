@@ -7,17 +7,63 @@
 // ============================================================
 
 import Parser from "rss-parser";
-import { info, error,debug} from "../../../logger.js";
+import { info, warn, debug } from "../../../logger.js";
+import { fetchWithTimeout } from "../../shared/http-client.js";
 import { loadRotationState, saveFeedRotation } from "./feedRotationManager.js";
 import { readLocalOrR2File } from "./fileReader.js";
 
 const parser = new Parser();
+const FEED_FETCH_TIMEOUT_MS = Number(process.env.FEED_FETCH_TIMEOUT_MS) || 15_000;
+const FEED_ACCEPT_HEADER = "application/rss+xml, application/atom+xml, application/xml, text/xml;q=0.9, application/json;q=0.8, */*;q=0.5";
 
 // Tunables
 const MAX_RSS_FEEDS_PER_RUN = Number(process.env.MAX_RSS_FEEDS_PER_RUN) || 5;
 const MAX_URL_FEEDS_PER_RUN = Number(process.env.MAX_URL_FEEDS_PER_RUN) || 1;
 const MAX_ITEMS_PER_FEED = Number(process.env.MAX_ITEMS_PER_FEED) || 20; // safety cap
 const FEED_CUTOFF_HOURS = Number(process.env.FEED_CUTOFF_HOURS) || 48; // default 48 hours
+
+
+function escapeInvalidXmlEntities(xml = "") {
+  return String(xml).replace(/&(?!#\d+;|#x[0-9a-fA-F]+;|amp;|lt;|gt;|quot;|apos;)/g, "&amp;");
+}
+
+async function parseFeedPayload(raw, url) {
+  const text = String(raw || "");
+  try {
+    return await parser.parseString(text);
+  } catch (firstErr) {
+    const escaped = escapeInvalidXmlEntities(text);
+    if (escaped !== text) {
+      try {
+        const feed = await parser.parseString(escaped);
+        warn("rss.fetchFeeds.parse.recovered", {
+          url,
+          err: firstErr.message,
+          recovery: "escaped-invalid-xml-entities",
+        });
+        return feed;
+      } catch (secondErr) {
+        secondErr.firstParseError = firstErr;
+        throw secondErr;
+      }
+    }
+    throw firstErr;
+  }
+}
+
+async function loadFeedFromUrl(url) {
+  const response = await fetchWithTimeout(url, {
+    timeout: FEED_FETCH_TIMEOUT_MS,
+    headers: { accept: FEED_ACCEPT_HEADER },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Feed fetch failed: ${response.status} ${response.statusText}`);
+  }
+
+  const text = await response.text();
+  return parseFeedPayload(text, url);
+}
 
 function parseList(raw = "") {
   return raw
@@ -67,7 +113,7 @@ function toArticle(item) {
 
 async function fetchAndParseOne(url) {
   try {
-    const feed = await parser.parseURL(url);
+    const feed = await loadFeedFromUrl(url);
     const items = Array.isArray(feed.items) ? feed.items : [];
     const mapped = items.slice(0, MAX_ITEMS_PER_FEED).map(toArticle);
 
@@ -80,7 +126,7 @@ async function fetchAndParseOne(url) {
     const filtered = withinCutoff.length;
     const discarded = cleaned.length - filtered;
 
-    debug ("rss.fetchFeeds.parsed", {
+    debug("rss.fetchFeeds.parsed", {
       url,
       count: filtered,
       sourceItems: items.length,
@@ -90,7 +136,7 @@ async function fetchAndParseOne(url) {
 
     return withinCutoff;
   } catch (err) {
-    error("rss.fetchFeeds.parse.fail", { url, err: err.message });
+    warn("rss.fetchFeeds.parse.skipped", { url, err: err.message });
     return [];
   }
 }
