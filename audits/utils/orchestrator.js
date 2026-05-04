@@ -50,7 +50,7 @@ function requireAuditCallbackConfig(callbackPath) {
   }
 
   if (!callbackToken) {
-    throw new Error("AUDIT_CALLBACK_TOKEN or AI_SUITE_AUDIT_CALLBACK_TOKEN is required to dispatch audit workflows with a callback_token");
+    throw new Error("AUDIT_CALLBACK_TOKEN or AI_SUITE_AUDIT_CALLBACK_TOKEN is required so the website audit workflow can call back securely");
   }
 
   return {
@@ -103,7 +103,6 @@ export async function startAuditRun({
     base_url: payload.websiteUrl,
     exclude_prefixes: payload.excludePatterns.join(","),
     callback_url: callbackUrl,
-    callback_token: callbackToken,
   };
 
   try {
