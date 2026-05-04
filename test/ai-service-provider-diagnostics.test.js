@@ -49,29 +49,32 @@ function clearOpenRouterEnv() {
   for (const name of OPENROUTER_ENV_NAMES) delete process.env[name];
 }
 
-test("auditForensic route supports exact generic OpenRouter env names from the current Koyeb spreadsheet", async () => {
+test("auditForensic route supports current Koyeb spreadsheet model vars with one shared OpenRouter key", async () => {
   const snapshot = snapshotEnv(OPENROUTER_ENV_NAMES);
   clearOpenRouterEnv();
 
-  process.env.OPENROUTER_ANTHROPIC = "anthropic/claude-4.5-sonnet";
-  process.env.OPENROUTER_API_KEY_ANTHROPIC = "sk-or-test-anthropic";
-  process.env.OPENROUTER_GOOGLE = "google/gemini-2.0-flash-001";
-  process.env.OPENROUTER_API_KEY_GOOGLE = "sk-or-test-google";
+  process.env.OPENROUTER_API_KEY = "sk-or-test-shared";
+  process.env.OPENROUTER_ANTHROPIC_4_6 = "anthropic/claude-sonnet-4.6";
+  process.env.OPENROUTER_GOOGLE_2_5_flashlite = "google/gemini-2.5-flash-lite";
+  process.env.OPENROUTER_CHATGPT_mini5_ = "openai/gpt-5-mini";
 
   try {
-    const { getProviderDiagnosticsForRoute } = await import(`../services/shared/utils/ai-service.js?diag=${Date.now()}-generic`);
+    const { getProviderDiagnosticsForRoute } = await import(`../services/shared/utils/ai-service.js?diag=${Date.now()}-shared-key`);
     const diagnostics = getProviderDiagnosticsForRoute("auditForensic");
     const anthropic = diagnostics.configuredProviders.find((provider) => provider.providerId === "anthropic46");
     const google = diagnostics.configuredProviders.find((provider) => provider.providerId === "google25FlashLite");
+    const chatgpt = diagnostics.configuredProviders.find((provider) => provider.providerId === "chatgptMini5");
 
     assert.equal(diagnostics.routeKey, "auditForensic");
     assert.equal(anthropic.configured, true);
-    assert.equal(anthropic.model, "anthropic/claude-4.5-sonnet");
-    assert.equal(anthropic.modelEnv, "OPENROUTER_ANTHROPIC");
-    assert.equal(anthropic.apiKeyEnv, "OPENROUTER_API_KEY_ANTHROPIC");
+    assert.equal(anthropic.model, "anthropic/claude-sonnet-4.6");
+    assert.equal(anthropic.modelEnv, "OPENROUTER_ANTHROPIC_4_6");
+    assert.equal(anthropic.apiKeyEnv, "OPENROUTER_API_KEY");
     assert.equal(google.configured, true);
-    assert.equal(google.modelEnv, "OPENROUTER_GOOGLE");
-    assert.equal(google.apiKeyEnv, "OPENROUTER_API_KEY_GOOGLE");
+    assert.equal(google.modelEnv, "OPENROUTER_GOOGLE_2_5_flashlite");
+    assert.equal(google.apiKeyEnv, "OPENROUTER_API_KEY");
+    assert.equal(chatgpt.configured, true);
+    assert.equal(chatgpt.apiKeyEnv, "OPENROUTER_API_KEY");
   } finally {
     restoreEnv(snapshot);
   }
@@ -135,7 +138,7 @@ test("auditForensic route skips unresolved model-specific placeholders and uses 
 
   process.env.OPENROUTER_ANTHROPIC = "anthropic/claude-4.5-sonnet";
   process.env["OPENROUTER_API_KEY_ANTHROPIC_4-6"] = "{{ secret.OPENROUTER_API_KEY_ANTHROPIC_4-6 }}";
-  process.env.OPENROUTER_API_KEY_ANTHROPIC = "sk-or-real-generic";
+  process.env.OPENROUTER_API_KEY = "sk-or-real-shared";
 
   try {
     const { getProviderDiagnosticsForRoute } = await import(`../services/shared/utils/ai-service.js?diag=${Date.now()}-skip-placeholder`);
@@ -143,7 +146,7 @@ test("auditForensic route skips unresolved model-specific placeholders and uses 
     const anthropic = diagnostics.configuredProviders.find((provider) => provider.providerId === "anthropic46");
 
     assert.equal(anthropic.configured, true);
-    assert.equal(anthropic.apiKeyEnv, "OPENROUTER_API_KEY_ANTHROPIC");
+    assert.equal(anthropic.apiKeyEnv, "OPENROUTER_API_KEY");
     assert.equal(anthropic.unresolvedTemplate, false);
   } finally {
     restoreEnv(snapshot);
