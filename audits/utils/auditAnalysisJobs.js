@@ -33,7 +33,6 @@ function publicShape(job) {
     finishedAt: job.finishedAt,
     attempt: job.attempt,
     analysis,
-    result: job.result,
     hasAnalysis: Boolean(analysis && Object.keys(analysis).length),
     error: job.error,
   };
@@ -72,24 +71,6 @@ async function executeAnalysisJob(payload) {
   }
 }
 
-export async function runSeoAeoGeoAnalysisJob(payload) {
-  const sessionId = sessionFromPayload(payload);
-  if (!sessionId) throw new Error("Cannot run SEO/AEO/GEO analysis job without sessionId");
-
-  const { started, job } = beginJob(JOB_TYPE, sessionId, {
-    routeCount: payload?.allRoutes?.length ?? 0,
-    coverageCount: payload?.coverage?.length ?? 0,
-  });
-
-  if (!started) {
-    return publicShape(job);
-  }
-
-  const finished = await executeAnalysisJob(payload);
-  await flushSeoAeoGeoAnalysisJobs();
-  return publicShape(finished);
-}
-
 export function startSeoAeoGeoAnalysisJob(payload) {
   const sessionId = sessionFromPayload(payload);
   if (!sessionId) throw new Error("Cannot start SEO/AEO/GEO analysis job without sessionId");
@@ -122,10 +103,4 @@ export async function flushSeoAeoGeoAnalysisJobs(options = {}) {
   return flushJobStoreWrites(options);
 }
 
-export default {
-  runSeoAeoGeoAnalysisJob,
-  startSeoAeoGeoAnalysisJob,
-  getSeoAeoGeoAnalysisJob,
-  getSeoAeoGeoAnalysisJobFresh,
-  flushSeoAeoGeoAnalysisJobs,
-};
+export default { startSeoAeoGeoAnalysisJob, getSeoAeoGeoAnalysisJob, getSeoAeoGeoAnalysisJobFresh, flushSeoAeoGeoAnalysisJobs };

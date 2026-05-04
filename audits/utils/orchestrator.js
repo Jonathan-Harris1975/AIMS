@@ -31,34 +31,6 @@ function resolveExcludePatterns(auditType, body) {
   return DEFAULT_EXCLUDE_PATTERNS[auditType] || [];
 }
 
-function resolveAuditCallbackBaseUrl() {
-  return String(process.env.AUDIT_CALLBACK_BASE_URL || process.env.APP_URL || "")
-    .trim()
-    .replace(/\/+$/, "");
-}
-
-function resolveAuditCallbackToken() {
-  return String(process.env.AUDIT_CALLBACK_TOKEN || process.env.AI_SUITE_AUDIT_CALLBACK_TOKEN || "").trim();
-}
-
-function requireAuditCallbackConfig(callbackPath) {
-  const callbackBaseUrl = resolveAuditCallbackBaseUrl();
-  const callbackToken = resolveAuditCallbackToken();
-
-  if (!callbackBaseUrl) {
-    throw new Error("AUDIT_CALLBACK_BASE_URL or APP_URL is required to dispatch audit workflows with a callback_url");
-  }
-
-  if (!callbackToken) {
-    throw new Error("AUDIT_CALLBACK_TOKEN or AI_SUITE_AUDIT_CALLBACK_TOKEN is required so the website audit workflow can call back securely");
-  }
-
-  return {
-    callbackUrl: `${callbackBaseUrl}${callbackPath}`,
-    callbackToken,
-  };
-}
-
 export async function startAuditRun({
   auditType,
   workflowId,
@@ -71,7 +43,25 @@ export async function startAuditRun({
   );
   const reportPrefix = body.reportPrefix || buildAuditPrefix(auditType, sessionId);
   const jobType = makeAuditJobType(auditType);
-  const { callbackUrl, callbackToken } = requireAuditCallbackConfig(callbackPath);
+  const callbackBaseUrl = String(
+    process.env.AUDIT_CALLBACK_BASE_URL || process.env.APP_URL || ""
+  )
+    .trim()
+    .replace(/\/+$/, "");
+  const callbackTokenConfigured = Boolean(
+    String(process.env.AUDIT_CALLBACK_TOKEN || process.env.AI_SUITE_AUDIT_CALLBACK_TOKEN || "").trim()
+  );
+
+  if (!callbackBaseUrl) {
+    throw new Error("AUDIT_CALLBACK_BASE_URL or APP_URL is required to dispatch audit workflows with a callback_url");
+  }
+
+  if (!callbackTokenConfigured) {
+    throw new Error("AUDIT_CALLBACK_TOKEN or AI_SUITE_AUDIT_CALLBACK_TOKEN is required so the website audit workflow can call back securely");
+  }
+
+  const callbackUrl = `${callbackBaseUrl}${callbackPath}`;
+  const analysisUrl = callbackUrl.replace(/\/callback\/?$/, "/analysis");
 
   const payload = {
     sessionId,
@@ -82,7 +72,8 @@ export async function startAuditRun({
     notes: body.notes || "",
     workflowRef: body.workflowRef,
     callbackUrl,
-    callbackTokenConfigured: Boolean(callbackToken),
+    analysisUrl,
+    callbackTokenConfigured,
   };
 
   queueJob(jobType, sessionId, {
@@ -92,7 +83,8 @@ export async function startAuditRun({
     websiteUrl: payload.websiteUrl,
     excludePatterns: payload.excludePatterns,
     callbackUrl,
-    callbackTokenConfigured: true,
+    analysisUrl,
+    callbackTokenConfigured,
   });
 
   await publishAuditRequest({ auditType, sessionId, payload, reportPrefix });
@@ -103,13 +95,15 @@ export async function startAuditRun({
     base_url: payload.websiteUrl,
     exclude_prefixes: payload.excludePatterns.join(","),
     callback_url: callbackUrl,
+    analysis_url: analysisUrl,
   };
 
   try {
     startJob(jobType, sessionId, {
       dispatchStartedAt: new Date().toISOString(),
       callbackUrl,
-      callbackTokenConfigured: true,
+      analysisUrl,
+      callbackTokenConfigured,
     });
 
     const dispatch = await dispatchGithubWorkflow({
@@ -134,7 +128,8 @@ export async function startAuditRun({
         workflowId,
         websiteUrl: payload.websiteUrl,
         callbackUrl,
-        callbackTokenConfigured: true,
+        analysisUrl,
+        callbackTokenConfigured,
         workflowRunUrl: workflowRun.workflowRunUrl || null,
       },
     });
@@ -145,7 +140,8 @@ export async function startAuditRun({
       workflowId,
       reportPrefix,
       callbackUrl,
-      callbackTokenConfigured: true,
+      analysisUrl,
+      callbackTokenConfigured,
       workflowRunUrl: workflowRun.workflowRunUrl || null,
     });
 
@@ -156,7 +152,8 @@ export async function startAuditRun({
       status: "queued",
       reportPrefix,
       callbackUrl,
-      callbackTokenConfigured: true,
+      analysisUrl,
+      callbackTokenConfigured,
       dispatch: {
         ...dispatch,
         workflowRunUrl: workflowRun.workflowRunUrl || null,
@@ -169,7 +166,8 @@ export async function startAuditRun({
       reportPrefix,
       workflowId,
       callbackUrl,
-      callbackTokenConfigured: true,
+      analysisUrl,
+      callbackTokenConfigured,
     });
     throw err;
   }
