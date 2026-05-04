@@ -1,12 +1,82 @@
 import crypto from "node:crypto";
 import { resilientRequest } from "../../shared/utils/ai-service.js";
-import { info } from "../../../logger.js";
+import { info, warn } from "../../../logger.js";
 import { LANE_CONFIG, QUIZ_CONFIG, ONEUP_CATEGORY_NAME_GENERAL, ONEUP_DEFAULT_DRY_RUN, ONEUP_SOCIAL_NETWORK_ID, DEFAULT_TIMEZONE, ONEUP_QUEUE_GUARD_LOOKBACK_PAGES } from "./config.js";
 import { buildDailyPrompt, buildQuizPrompt } from "./prompts.js";
 import { addDays, nextWeekdayDateString, toScheduledDateTime } from "./date.js";
 import { loadRecentRssContext } from "./feedContext.js";
 import { getLaneHistory, recordLaneSchedule, getQuizHistory, recordQuizSchedule } from "./state.js";
 import { resolveCategory, listScheduledPosts, scheduleTextPost, scheduleImagePost } from "./oneupClient.js";
+
+
+const ONEUP_DAILY_MAX_TOKENS = Math.max(1200, Number(process.env.ONEUP_DAILY_MAX_TOKENS || 1400));
+const ONEUP_QUIZ_MAX_TOKENS = Math.max(1800, Number(process.env.ONEUP_QUIZ_MAX_TOKENS || 2200));
+
+function safeModelPreview(value = "", max = 500) {
+  const text = String(value || "")
+    .replace(/sk-or-[A-Za-z0-9_-]{8,}/g, "sk-or-***")
+    .replace(/github_pat_[A-Za-z0-9_]+/g, "github_pat_***")
+    .replace(/\s+/g, " ")
+    .trim();
+  return text.length > max ? `${text.slice(0, max)}…` : text;
+}
+
+function isJsonModelError(error) {
+  return Number(error?.statusCode) === 502 && /Invalid .* JSON from model/i.test(String(error?.message || ""));
+}
+
+async function requestStructuredOneUpJson({ routeName, sessionId, prompt, label, normalise, maxTokens, temperature }) {
+  const messages = [
+    { role: "system", content: prompt.system },
+    { role: "user", content: prompt.user },
+  ];
+
+  const raw = await resilientRequest(routeName, {
+    sessionId,
+    messages,
+    max_tokens: maxTokens,
+    temperature,
+  });
+
+  try {
+    return normalise(raw);
+  } catch (err) {
+    if (!isJsonModelError(err)) throw err;
+
+    warn("oneup.model.json.invalid.retry", {
+      sessionId,
+      label,
+      error: err.message,
+      rawPreview: safeModelPreview(raw),
+    });
+
+    const retryRaw = await resilientRequest(routeName, {
+      sessionId: `${sessionId}-JSON-RETRY`,
+      messages: [
+        ...messages,
+        {
+          role: "assistant",
+          content: safeModelPreview(raw, 900) || "The previous response was empty or truncated.",
+        },
+        {
+          role: "user",
+          content: [
+            "The previous response was invalid or truncated JSON.",
+            "Return exactly one complete JSON object now.",
+            "Use the exact required keys only.",
+            "Every value must be a plain string.",
+            "No markdown fences, no notes, no labels outside the JSON.",
+          ].join("\n"),
+        },
+      ],
+      max_tokens: maxTokens + 700,
+      temperature: 0.2,
+      maxRetries: 0,
+    });
+
+    return normalise(retryRaw);
+  }
+}
 
 function extractJsonCandidate(raw = "") {
   const text = String(raw || "").trim();
@@ -181,17 +251,15 @@ export async function buildAndScheduleDailyLane(laneKey, options = {}) {
   });
 
   const sessionId = `ONEUP-${lane.key.toUpperCase()}-${publishDate}`;
-  const raw = await resilientRequest("oneupDaily", {
+  const generated = await requestStructuredOneUpJson({
+    routeName: "oneupDaily",
     sessionId,
-    messages: [
-      { role: "system", content: prompt.system },
-      { role: "user", content: prompt.user },
-    ],
-    max_tokens: 700,
+    prompt,
+    label: `${lane.key} daily post`,
+    normalise: (raw) => normaliseDailyOutput(raw, lane),
+    maxTokens: ONEUP_DAILY_MAX_TOKENS,
     temperature: laneKey === "friday" ? 0.8 : 0.65,
   });
-
-  const generated = normaliseDailyOutput(raw, lane);
   if (!generated.content) {
     const err = new Error(`The ${lane.label} generator returned empty content.`);
     err.statusCode = 502;
@@ -267,17 +335,15 @@ export async function buildAndScheduleQuizSeries(options = {}) {
   });
 
   const sessionId = `ONEUP-QUIZ-${questionPublishDate}`;
-  const raw = await resilientRequest("oneupQuiz", {
+  const generated = await requestStructuredOneUpJson({
+    routeName: "oneupQuiz",
     sessionId,
-    messages: [
-      { role: "system", content: prompt.system },
-      { role: "user", content: prompt.user },
-    ],
-    max_tokens: 900,
+    prompt,
+    label: "quiz pair",
+    normalise: normaliseQuizOutput,
+    maxTokens: ONEUP_QUIZ_MAX_TOKENS,
     temperature: 0.55,
   });
-
-  const generated = normaliseQuizOutput(raw);
   if (!generated.questionContent || !generated.answerContent) {
     const err = new Error("The quiz generator returned empty content.");
     err.statusCode = 502;
