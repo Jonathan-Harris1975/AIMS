@@ -45,6 +45,7 @@ const {
   R2_BUCKET_BLOG,
   R2_BUCKET_BLOG_IMAGES,
   R2_BUCKET_BLOG_RSS,
+  R2_BUCKET_BRAND_ASSETS,
 
   // Legacy/compat (read-only)
   R2_BUCKET_PODCAST_OUTPUT,
@@ -69,6 +70,8 @@ const {
   R2_PUBLIC_BASE_URL_BLOG,
   R2_PUBLIC_BASE_URL_BLOG_IMAGES,
   R2_PUBLIC_BASE_URL_BLOG_RSS,
+  R2_PUBLIC_BASE_URL_BRAND_ASSETS,
+  R2_PUBLIC_BASE_URL_TRANSCRIPT_HTML,
 
   // NEW — metasystem public URL (optional)
   R2_PUBLIC_BASE_URL_META_SYSTEM,
@@ -79,6 +82,9 @@ const {
   // Legacy/compat (read-only)
   R2_PUBLIC_BASE_URL_PODCAST_OUTPUT,
 } = process.env;
+
+const RAW_AUDIO_BUCKET_NAME = R2_BUCKET_CHUNKS || R2_BUCKET_RAW;
+const TRANSCRIPT_PUBLIC_BASE_URL = R2_PUBLIC_BASE_URL_TRANSCRIPT_HTML || R2_PUBLIC_BASE_URL_TRANSCRIPT;
 
 // ------------------------------------------------------------
 // 🧠 Initialize Client
@@ -109,7 +115,7 @@ export const R2_PUBLIC_BASE_URL_RSS_RESOLVED = R2_PUBLIC_BASE_URL_RSS || R2_PUBL
 // ------------------------------------------------------------
 export const R2_BUCKETS = {
   podcast:         R2_BUCKET_PODCAST,
-  R2_BUCKET_RAW,
+  R2_BUCKET_RAW:    R2_BUCKET_RAW || RAW_AUDIO_BUCKET_NAME,
   rawtext:         R2_BUCKET_RAW_TEXT,
   rawText:         R2_BUCKET_RAW_TEXT,
   "raw-text":      R2_BUCKET_RAW_TEXT,
@@ -117,13 +123,13 @@ export const R2_BUCKETS = {
   merged:          R2_BUCKET_MERGED,
   art:             R2_BUCKET_ART,
 
-  chunks:          R2_BUCKET_CHUNKS,
-  "podcast-chunks":R2_BUCKET_CHUNKS,
+  chunks:          RAW_AUDIO_BUCKET_NAME,
+  "podcast-chunks":RAW_AUDIO_BUCKET_NAME,
 
   // Raw audio (TTS output, pre-merge)
-  rawAudio:        R2_BUCKET_CHUNKS,
-  rawaudio:        R2_BUCKET_CHUNKS,
-  "raw-audio":     R2_BUCKET_CHUNKS,
+  rawAudio:        RAW_AUDIO_BUCKET_NAME,
+  rawaudio:        RAW_AUDIO_BUCKET_NAME,
+  "raw-audio":     RAW_AUDIO_BUCKET_NAME,
 
   // Newsletter RSS feed
   rss:             R2_BUCKET_RSS_FEEDS,
@@ -152,6 +158,11 @@ export const R2_BUCKETS = {
   blogRss:         R2_BUCKET_BLOG_RSS,
   blogrss:         R2_BUCKET_BLOG_RSS,
   "blog-rss":      R2_BUCKET_BLOG_RSS,
+
+  // Brand assets / audit reports
+  brandAssets:     R2_BUCKET_BRAND_ASSETS,
+  brandassets:     R2_BUCKET_BRAND_ASSETS,
+  "brand-assets":  R2_BUCKET_BRAND_ASSETS,
 
   // Legacy/compat (read-only)
   R2_BUCKET_PODCAST_OUTPUT,
@@ -211,6 +222,9 @@ export const BUCKET_ENV_BY_ALIAS = {
   blogRss: "R2_BUCKET_BLOG_RSS",
   blogrss: "R2_BUCKET_BLOG_RSS",
   "blog-rss": "R2_BUCKET_BLOG_RSS",
+  brandAssets: "R2_BUCKET_BRAND_ASSETS",
+  brandassets: "R2_BUCKET_BRAND_ASSETS",
+  "brand-assets": "R2_BUCKET_BRAND_ASSETS",
   metasystem: "R2_BUCKET_META_SYSTEM",
   metaSystem: "R2_BUCKET_META_SYSTEM",
 };
@@ -225,8 +239,8 @@ export const PUBLIC_URL_ENV_BY_ALIAS = {
   art: "R2_PUBLIC_BASE_URL_ART",
   rss: "R2_PUBLIC_BASE_URL_RSS",
   "rss-feeds": "R2_PUBLIC_BASE_URL_RSS",
-  transcript: "R2_PUBLIC_BASE_URL_TRANSCRIPT",
-  transcripts: "R2_PUBLIC_BASE_URL_TRANSCRIPT",
+  transcript: "R2_PUBLIC_BASE_URL_TRANSCRIPT_HTML or R2_PUBLIC_BASE_URL_TRANSCRIPT",
+  transcripts: "R2_PUBLIC_BASE_URL_TRANSCRIPT_HTML or R2_PUBLIC_BASE_URL_TRANSCRIPT",
   chunks: "R2_PUBLIC_BASE_URL_CHUNKS",
   "podcast-chunks": "R2_PUBLIC_BASE_URL_CHUNKS",
   podcastRss: "R2_PUBLIC_BASE_URL_PODCAST_RSS",
@@ -240,6 +254,9 @@ export const PUBLIC_URL_ENV_BY_ALIAS = {
   blogRss: "R2_PUBLIC_BASE_URL_BLOG_RSS",
   blogrss: "R2_PUBLIC_BASE_URL_BLOG_RSS",
   "blog-rss": "R2_PUBLIC_BASE_URL_BLOG_RSS",
+  brandAssets: "R2_PUBLIC_BASE_URL_BRAND_ASSETS",
+  brandassets: "R2_PUBLIC_BASE_URL_BRAND_ASSETS",
+  "brand-assets": "R2_PUBLIC_BASE_URL_BRAND_ASSETS",
   metasystem: "R2_PUBLIC_BASE_URL_META_SYSTEM",
   metaSystem: "R2_PUBLIC_BASE_URL_META_SYSTEM",
 };
@@ -256,8 +273,8 @@ export const R2_PUBLIC_URLS = {
   "rss-feeds":     R2_PUBLIC_BASE_URL_RSS,
 
   // ✅ FIX: both singular & plural transcript aliases
-  transcript:      R2_PUBLIC_BASE_URL_TRANSCRIPT,
-  transcripts:     R2_PUBLIC_BASE_URL_TRANSCRIPT,
+  transcript:      TRANSCRIPT_PUBLIC_BASE_URL,
+  transcripts:     TRANSCRIPT_PUBLIC_BASE_URL,
 
   chunks:          R2_PUBLIC_BASE_URL_CHUNKS,
   "podcast-chunks":R2_PUBLIC_BASE_URL_CHUNKS,
@@ -278,6 +295,11 @@ export const R2_PUBLIC_URLS = {
   blogRss:         R2_PUBLIC_BASE_URL_BLOG_RSS,
   blogrss:         R2_PUBLIC_BASE_URL_BLOG_RSS,
   "blog-rss":      R2_PUBLIC_BASE_URL_BLOG_RSS,
+
+  // Brand assets / audit reports
+  brandAssets:     R2_PUBLIC_BASE_URL_BRAND_ASSETS,
+  brandassets:     R2_PUBLIC_BASE_URL_BRAND_ASSETS,
+  "brand-assets":  R2_PUBLIC_BASE_URL_BRAND_ASSETS,
 
   // NEW — metasystem public URL
   metasystem:      R2_PUBLIC_BASE_URL_META_SYSTEM,
