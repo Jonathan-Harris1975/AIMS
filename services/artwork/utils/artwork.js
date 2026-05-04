@@ -9,47 +9,11 @@
 
 import OpenAI from "openai";
 import { warn, error, info } from "../../../logger.js";
+import { getArtworkProviders } from "./openrouterProviders.js";
 
 const OPENROUTER_BASE_URL =
   process.env.OPENROUTER_API_BASE || "https://openrouter.ai/api/v1";
 
-function firstEnvValue(...names) {
-  for (const name of names) {
-    const value = process.env[name];
-    if (value !== undefined && value !== null && String(value).trim()) {
-      return { name, value: String(value).trim() };
-    }
-  }
-  return { name: undefined, value: undefined };
-}
-
-function getArtworkProviders() {
-  const primaryKey = firstEnvValue("OPENROUTER_API_KEY_ART", "OPENROUTER_API_KEY");
-  const backupKey = firstEnvValue(
-    "OPENROUTER_API_KEY_ART_BACKUP",
-    "OPENROUTER_API_KEY_ART",
-    "OPENROUTER_API_KEY"
-  );
-
-  return [
-    {
-      id: "primary",
-      keyEnv: primaryKey.name || "OPENROUTER_API_KEY_ART",
-      modelEnv: "OPENROUTER_ART",
-      key: primaryKey.value || "",
-      model:
-        process.env.OPENROUTER_ART ||
-        "google/gemini-2.5-flash-image",
-    },
-    {
-      id: "backup",
-      keyEnv: backupKey.name || "OPENROUTER_API_KEY_ART_BACKUP",
-      modelEnv: "OPENROUTER_ART_BACKUP",
-      key: backupKey.value || "",
-      model: process.env.OPENROUTER_ART_BACKUP || "openai/gpt-5-image-mini",
-    },
-  ].filter((provider) => provider.key && provider.model);
-}
 
 const providers = getArtworkProviders();
 
