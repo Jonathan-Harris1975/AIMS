@@ -12,6 +12,7 @@ function buildBaseEnv(overrides = {}) {
   return {
     NODE_ENV: "production",
     OPENROUTER_API_BASE: "https://openrouter.example",
+    OPENROUTER_API_KEY: "sk-or-test-key",
     RAPIDAPI_HOST: "weatherapi-com.p.rapidapi.com",
     RAPIDAPI_KEY: "test-key",
     FEED_URL: "https://example.com/feed.xml",
