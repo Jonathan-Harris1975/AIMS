@@ -110,7 +110,9 @@ router.post("/analysis", requireAuditCallbackAuth, asyncRoute(async (req, res) =
     return res.status(400).json({ ok: false, error: parsed.error });
   }
 
-  const runAsync = truthy(process.env.AUDIT_ANALYSIS_ASYNC);
+  const runAsync = process.env.AUDIT_ANALYSIS_ASYNC === undefined
+    ? true
+    : truthy(process.env.AUDIT_ANALYSIS_ASYNC);
 
   if (!runAsync) {
     const job = await runSeoAeoGeoAnalysisJob(parsed.data);
