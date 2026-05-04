@@ -25,6 +25,18 @@ function normaliseRef(ref) {
   return String(ref || process.env.AUDIT_WEBSITE_REPO_REF || "main").trim();
 }
 
+export function redactWorkflowInputs(inputs = {}) {
+  const redacted = {};
+  for (const [key, value] of Object.entries(inputs || {})) {
+    if (/token|secret|password|api[_-]?key/i.test(key)) {
+      redacted[key] = value ? "[configured]" : "";
+    } else {
+      redacted[key] = value;
+    }
+  }
+  return redacted;
+}
+
 async function readTextSafe(response) {
   return response.text().catch(() => "");
 }
@@ -61,7 +73,7 @@ export async function dispatchGithubWorkflow({ workflowId, inputs, ref }) {
     repo,
     ref: effectiveRef,
     workflowId,
-    inputs,
+    inputs: redactWorkflowInputs(inputs),
     dispatchedAt,
   };
 }
