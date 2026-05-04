@@ -12,7 +12,7 @@
 import { listKeys, getObjectAsText, putObject, R2_PUBLIC_URLS } from "../shared/utils/r2-client.js";
 import { info, warn, error } from "../../logger.js";
 import { generateFeedXML } from "./generateFeed.js";
-import { notifyHubByUrl } from "../shared/utils/podcastIndexClient.js";
+import { hasPodcastIndexCredentials, notifyHubByUrl } from "../shared/utils/podcastIndexClient.js";
 
 function envString(...keys) {
   for (const key of keys) {
@@ -126,6 +126,14 @@ export async function runRssFeedCreator() {
 
   if (!shouldAutoCall) {
     info("AUTO_CALL disabled — PodcastIndex Hub NOT notified.");
+    return;
+  }
+
+  if (!hasPodcastIndexCredentials()) {
+    info("PodcastIndex Hub notify skipped — API key/secret not configured.", {
+      feedUrl: FEED_URL,
+      autoCall: true,
+    });
     return;
   }
 
