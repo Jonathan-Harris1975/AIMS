@@ -48,9 +48,8 @@ export async function startAuditRun({
   )
     .trim()
     .replace(/\/+$/, "");
-  const callbackTokenConfigured = Boolean(
-    String(process.env.AUDIT_CALLBACK_TOKEN || process.env.AI_SUITE_AUDIT_CALLBACK_TOKEN || "").trim()
-  );
+  const callbackToken = String(process.env.AUDIT_CALLBACK_TOKEN || process.env.AI_SUITE_AUDIT_CALLBACK_TOKEN || "").trim();
+  const callbackTokenConfigured = Boolean(callbackToken);
 
   if (!callbackBaseUrl) {
     throw new Error("AUDIT_CALLBACK_BASE_URL or APP_URL is required to dispatch audit workflows with a callback_url");
@@ -96,6 +95,7 @@ export async function startAuditRun({
     exclude_prefixes: payload.excludePatterns.join(","),
     callback_url: callbackUrl,
     analysis_url: analysisUrl,
+    callback_token: callbackToken,
   };
 
   try {

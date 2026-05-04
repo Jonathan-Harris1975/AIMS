@@ -8,6 +8,16 @@ function requiredEnv(name) {
   return value;
 }
 
+
+function redactWorkflowInputs(inputs = {}) {
+  return Object.fromEntries(
+    Object.entries(inputs || {}).map(([key, value]) => [
+      key,
+      /token|secret|key|password/i.test(key) && value ? "***" : value,
+    ])
+  );
+}
+
 function githubApiHeaders(token) {
   return {
     Accept: "application/vnd.github+json",
@@ -23,18 +33,6 @@ function buildRepoApiBase(owner, repo) {
 
 function normaliseRef(ref) {
   return String(ref || process.env.AUDIT_WEBSITE_REPO_REF || "main").trim();
-}
-
-export function redactWorkflowInputs(inputs = {}) {
-  const redacted = {};
-  for (const [key, value] of Object.entries(inputs || {})) {
-    if (/token|secret|password|api[_-]?key/i.test(key)) {
-      redacted[key] = value ? "[configured]" : "";
-    } else {
-      redacted[key] = value;
-    }
-  }
-  return redacted;
 }
 
 async function readTextSafe(response) {
