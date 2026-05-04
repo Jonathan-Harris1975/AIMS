@@ -1,24 +1,22 @@
-# TEST RESULTS
+# Test results
 
-## Syntax checks
+## Passed
 
 ```bash
 node --check services/shared/utils/ai-config.js
 node --check services/shared/utils/ai-service.js
+node --check scripts/envBootstrap.js
+node --check audits/utils/orchestrator.js
+node --check audits/utils/githubDispatch.js
 node --check audits/routes/seoAeoGeo.js
 node --check audits/utils/auditAnalysisJobs.js
-node --check audits/utils/callbackAuth.js
-node --check audits/utils/orchestrator.js
 node --check audits/utils/seoAeoGeoAnalysis.js
-node --check scripts/envBootstrap.js
 node --check test/ai-service-provider-diagnostics.test.js
 node --check test/audit-analysis-route.test.js
 npm run build --silent
 ```
 
 Result: passed.
-
-## Targeted audit tests
 
 ```bash
 npm ci --no-audit --no-fund
@@ -27,22 +25,15 @@ node --test test/ai-service-provider-diagnostics.test.js test/audit-analysis-rou
 
 Result: passed. 5 tests passed, 0 failed.
 
-Covered:
+Coverage included:
+- Current Koyeb spreadsheet model env names with one shared `OPENROUTER_API_KEY`.
+- Legacy hyphen/dot/provider-specific aliases.
+- Rejection of unresolved `{{ secret.* }}` placeholders.
+- Use of the shared OpenRouter key when provider-specific placeholder aliases exist.
+- Async `/analysis` accepting, polling, and returning validated forensic JSON.
 
-- current Koyeb spreadsheet generic OpenRouter aliases
-- older hyphen/dot/underscore OpenRouter aliases
-- unresolved Koyeb secret placeholders rejected
-- placeholder-specific keys skipped when later generic real keys exist
-- async `/analysis` route returns validated forensic JSON through the shared AI route
+## Not run
 
-## Wider test run
+Full `npm test` was not run in the sandbox because the repo-wide suite has repeatedly exceeded the available execution window. Targeted audit/AI tests passed after dependency installation.
 
-```bash
-npm test -- --test-timeout=60000
-```
-
-Result: not completed in the sandbox. The run exceeded the 300-second tool timeout after many passing tests. No failing assertion was observed before timeout.
-
-## Live checks not run
-
-Real Koyeb deployment, R2 upload, GitHub workflow dispatch, and real OpenRouter calls were not run because production runtime access and secret values are unavailable in the sandbox.
+Live Koyeb deployment, GitHub workflow dispatch, R2 publishing, and real OpenRouter calls were not run because production runtime access and secrets are unavailable here.

@@ -1,16 +1,12 @@
-# CHANGELOG
+# Audit AI Gate Fix v12
 
-## v11 - Audit AI provider resolution hardening
+## Fixed
+- Aligned OpenRouter provider resolution with the current Koyeb spreadsheet: one shared `OPENROUTER_API_KEY` is now used for every configured OpenRouter model.
+- Kept support for existing model env names such as `OPENROUTER_ANTHROPIC_4_6`, `OPENROUTER_GOOGLE_2_5_flashlite`, `OPENROUTER_CHATGPT_mini5_`, `OPENROUTER_DEEPSEEK_v4_pro`, `OPENROUTER_DEEPSEEK_v4_flash`, and `OPENROUTER_META`.
+- Kept legacy provider-specific API key names as optional fallbacks only.
+- Added callback token dispatch from Koyeb into the GitHub workflow inputs so the website workflow does not need to own the callback secret for Koyeb-triggered runs.
+- Redacted token-like workflow inputs from the AI suite dispatch response.
+- Preserved async `/audits/seo-aeo-geo/analysis` polling behaviour and durable job-state handling.
 
-- Fixed the live audit failure shown in Koyeb logs: `AI forensic analysis unavailable: no configured auditForensic providers`.
-- Added support for the current Koyeb spreadsheet's generic OpenRouter provider names:
-  - `OPENROUTER_ANTHROPIC` / `OPENROUTER_API_KEY_ANTHROPIC`
-  - `OPENROUTER_GOOGLE` / `OPENROUTER_API_KEY_GOOGLE`
-  - `OPENROUTER_CHATGPT` / `OPENROUTER_API_KEY_CHATGPT`
-  - `OPENROUTER_DEEPSEEK` / `OPENROUTER_API_KEY_DEEPSEEK`
-  - `OPENROUTER_META` / `OPENROUTER_API_KEY_META`
-- Preserved backward compatibility with older spreadsheet aliases using hyphen, dot, and underscore naming.
-- Fixed provider resolution so unresolved `{{ secret.* }}` placeholders are skipped when a later real OpenRouter key alias exists.
-- Kept unresolved placeholders blocked when no real key is available, preventing pointless OpenRouter 401 calls.
-- Added callback-token dual support via `AUDIT_CALLBACK_TOKEN` and `AI_SUITE_AUDIT_CALLBACK_TOKEN`.
-- Updated audit/provider diagnostics tests to cover current spreadsheet names, older alias names, and unresolved placeholders.
+## Why
+The latest Koyeb log showed the workflow dispatch and callback configuration were working, but the forensic analysis failed because no `auditForensic` provider was considered configured. The spreadsheet now has one shared OpenRouter key, while the resolver was still leaning too heavily on provider-specific keys.
