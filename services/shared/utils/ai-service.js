@@ -62,13 +62,19 @@ function looksLikeTemplatePlaceholder(value) {
 }
 
 function firstEnvValue(names = []) {
+  let firstPlaceholder;
   for (const name of names) {
     const value = process.env[name];
     if (value !== undefined && value !== null && String(value).trim()) {
-      return { name, value: String(value).trim() };
+      const trimmed = String(value).trim();
+      if (looksLikeTemplatePlaceholder(trimmed)) {
+        if (!firstPlaceholder) firstPlaceholder = { name, value: trimmed };
+        continue;
+      }
+      return { name, value: trimmed };
     }
   }
-  return { name: undefined, value: undefined };
+  return firstPlaceholder || { name: undefined, value: undefined };
 }
 
 function getProviderConfig(providerId) {
