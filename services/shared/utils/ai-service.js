@@ -122,8 +122,9 @@ function makeOpenRouterError(status, body, providerId) {
   return err;
 }
 
-async function callOpenRouter({ providerId, model, apiKey, messages, max_tokens, temperature, top_p, headers, timeoutMs }) {
+async function callOpenRouter({ providerId, model, apiKey, messages, max_tokens, temperature, top_p, response_format, headers, timeoutMs }) {
   const payload = { model, messages, max_tokens, temperature, top_p };
+  if (response_format) payload.response_format = response_format;
   const reqHeaders = {
     "Content-Type": "application/json",
     Authorization: `Bearer ${apiKey}`,
@@ -164,6 +165,7 @@ export async function resilientRequest(routeName, {
   temperature = DEFAULT_TEMPERATURE,
   top_p = DEFAULT_TOP_P,
   headers,
+  response_format,
   timeoutMs,
   maxRetries,
   retryBaseMs,
@@ -194,7 +196,7 @@ export async function resilientRequest(routeName, {
     try { safeRouteLog({ routeName, routeKey, provider: providerId, model: provider.name }); } catch {}
     for (let attempt = 0; attempt <= effectiveMaxRetries; attempt++) {
       try {
-        const content = await callOpenRouter({ providerId, model: provider.name, apiKey: provider.apiKey, messages, max_tokens, temperature, top_p, headers, timeoutMs });
+        const content = await callOpenRouter({ providerId, model: provider.name, apiKey: provider.apiKey, messages, max_tokens, temperature, top_p, response_format, headers, timeoutMs });
         __record(sessionId, routeName, providerId, provider.name);
         __lastSuccessProvider.set(routeKey, providerId);
         __maybePrintSummary(sessionId, routeName);

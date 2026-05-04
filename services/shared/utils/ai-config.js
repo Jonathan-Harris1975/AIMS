@@ -62,6 +62,8 @@ const deepseekV4Flash = provider(
 
 const meta = provider("meta", ["OPENROUTER_META"], [...SHARED_OPENROUTER_KEY, "OPENROUTER_API_KEY_META"]);
 const art = provider("art", ["OPENROUTER_ART", "OPENROUTER_ART_BACKUP"], [...SHARED_OPENROUTER_KEY, ...ART_OPENROUTER_KEY_FALLBACKS]);
+const artworkPrimary = provider("artworkPrimary", ["OPENROUTER_ART"], [...SHARED_OPENROUTER_KEY, "OPENROUTER_API_KEY_ART"]);
+const artworkBackup = provider("artworkBackup", ["OPENROUTER_ART_BACKUP"], [...SHARED_OPENROUTER_KEY, "OPENROUTER_API_KEY_ART_BACKUP", "OPENROUTER_API_KEY_ART"]);
 
 export const aiConfig = {
   models: {
@@ -71,6 +73,8 @@ export const aiConfig = {
     anthropic: anthropic46,
     meta,
     art,
+    artworkPrimary,
+    artworkBackup,
     anthropic46,
     google25FlashLite,
     chatgptMini5,
@@ -92,6 +96,7 @@ export const aiConfig = {
     podcastHelper: ["chatgpt", "google", "meta"],
     seoKeywords: ["chatgpt", "google"],
     artworkPrompt: ["meta", "google"],
+    artworkImage: ["artworkPrimary", "artworkBackup"],
     rssRewrite: ["chatgpt", "google", "meta"],
     rssShortTitle: ["chatgpt", "google", "meta"],
     blogWeekly: ["google", "chatgpt", "deepseek"],
