@@ -124,3 +124,58 @@ test("/analysis returns validated forensic JSON through the shared AI route", as
     globalThis.fetch = oldFetch;
   }
 });
+
+test("/analysis completes with deterministic fallback after malformed forensic JSON", async () => {
+  const oldEnv = {
+    AUDIT_CALLBACK_TOKEN: process.env.AUDIT_CALLBACK_TOKEN,
+    OPENROUTER_ANTHROPIC: process.env.OPENROUTER_ANTHROPIC,
+    OPENROUTER_API_KEY_ANTHROPIC: process.env.OPENROUTER_API_KEY_ANTHROPIC,
+  };
+  const oldFetch = globalThis.fetch;
+
+  process.env.AUDIT_CALLBACK_TOKEN = "route-token";
+  process.env.OPENROUTER_ANTHROPIC = "anthropic/test-model";
+  process.env.OPENROUTER_API_KEY_ANTHROPIC = "test-key";
+  globalThis.fetch = async () => ({
+    ok: true,
+    json: async () => ({ choices: [{ message: { content: '{"auditCompletionState":"Complete","rankedIssueLedger":[{"issueId":"broken"' } }] }),
+  });
+
+  try {
+    const { default: router } = await import(`../audits/routes/seoAeoGeo.js?routeMalformedTest=${Date.now()}`);
+    const app = express();
+    app.use(express.json({ limit: "5mb" }));
+    app.use("/audits/seo-aeo-geo", router);
+
+    const payload = { ...validAnalysisPayload(), sessionId: "route-malformed-test" };
+    const response = await request(app)
+      .post("/audits/seo-aeo-geo/analysis")
+      .set("Authorization", "Bearer route-token")
+      .send(payload)
+      .expect(202);
+
+    assert.equal(response.body.ok, true);
+
+    let statusBody;
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const statusResponse = await request(app)
+        .get("/audits/seo-aeo-geo/analysis/route-malformed-test")
+        .set("Authorization", "Bearer route-token");
+      assert.ok([200, 202].includes(statusResponse.status), `unexpected polling status ${statusResponse.status}: ${statusResponse.text}`);
+      statusBody = statusResponse.body;
+      if (statusResponse.status === 200 && statusBody.status === "completed") break;
+      await new Promise((resolve) => setTimeout(resolve, 30));
+    }
+
+    assert.equal(statusBody.ok, true);
+    assert.equal(statusBody.status, "completed");
+    assert.equal(statusBody.analysis.aiAnalysisStatus, "valid-deterministic-fallback");
+    assert.notEqual(statusBody.analysis.rankedIssueLedger.length, 0);
+  } finally {
+    for (const [name, value] of Object.entries(oldEnv)) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+    globalThis.fetch = oldFetch;
+  }
+});

@@ -107,3 +107,26 @@ test("generic issue remediation is rejected", () => {
   });
   assert.throws(() => __seoAeoGeoAnalysisTestHooks.validateAndNormaliseAnalysisShape(bad, payload), /too generic/);
 });
+
+test("extractJson returns the first complete JSON object from fenced or trailing output", () => {
+  assert.deepEqual(
+    __seoAeoGeoAnalysisTestHooks.extractJson('```json\n{"ok":true,"items":[1,2,],}\n``` trailing commentary'),
+    { ok: true, items: [1, 2] }
+  );
+  assert.deepEqual(
+    __seoAeoGeoAnalysisTestHooks.extractJson('prefix {"outer":{"value":"brace } inside string"}} suffix'),
+    { outer: { value: "brace } inside string" } }
+  );
+});
+
+test("deterministic fallback produces a valid forensic payload when model JSON cannot be repaired", () => {
+  const fallback = __seoAeoGeoAnalysisTestHooks.buildDeterministicFallback(
+    payload,
+    new SyntaxError("Unexpected end of JSON input"),
+    new SyntaxError("Expected ',' or '}' after property value in JSON")
+  );
+  assert.equal(fallback.auditCompletionState, "Complete");
+  assert.equal(fallback.aiAnalysisStatus, "valid-deterministic-fallback");
+  assert.ok(fallback.rankedIssueLedger.length >= 1);
+  assert.ok(fallback.fullUrlCoverageAppendix.length >= 1);
+});
