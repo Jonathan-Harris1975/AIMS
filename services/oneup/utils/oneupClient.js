@@ -129,6 +129,7 @@ export async function fetchPublishedPostsHistory({ start = 0, maxPages = 4, look
     return { row, date: Number.isFinite(parsed) ? new Date(parsed) : null };
   });
 
+  const unknownDateCount = datedRows.filter(({ date }) => !date).length;
   const filtered = datedRows
     .filter(({ date }) => {
       if (!date || !lower) return true;
@@ -142,6 +143,7 @@ export async function fetchPublishedPostsHistory({ start = 0, maxPages = 4, look
     data: filtered,
     rawCount: rows.length,
     filteredCount: filtered.length,
+    unknownDateCount,
     pagesScanned: endpoints.length,
     endpoints,
   };
