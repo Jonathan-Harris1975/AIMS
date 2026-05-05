@@ -99,6 +99,54 @@ export async function listScheduledPosts({ start = 0 } = {}, apiKey) {
   return oneUpGet("getscheduledposts", { start }, apiKey);
 }
 
+export async function listPublishedPosts({ start = 0 } = {}, apiKey) {
+  return oneUpGet("getpublishedposts", { start }, apiKey);
+}
+
+export async function fetchPublishedPostsHistory({ start = 0, maxPages = 4, lookbackDays, windowStart, windowEnd } = {}, apiKey) {
+  const pageCount = Math.max(1, Math.min(20, Number(maxPages || 4)));
+  const firstStart = Math.max(0, Number(start || 0));
+  const rows = [];
+  const endpoints = [];
+
+  for (let page = 0; page < pageCount; page += 1) {
+    const pageStart = firstStart + page * 50;
+    const result = await listPublishedPosts({ start: pageStart }, apiKey);
+    endpoints.push({ endpoint: "getpublishedposts", start: pageStart, count: Array.isArray(result?.data) ? result.data.length : 0 });
+    const data = Array.isArray(result?.data) ? result.data : [];
+    rows.push(...data);
+    if (data.length < 50) break;
+  }
+
+  const lower = windowStart instanceof Date && Number.isFinite(windowStart.getTime())
+    ? windowStart
+    : Number(lookbackDays || 0) > 0
+      ? new Date(Date.now() - Number(lookbackDays) * 86400000)
+      : null;
+  const upper = windowEnd instanceof Date && Number.isFinite(windowEnd.getTime()) ? windowEnd : new Date();
+  const datedRows = rows.map((row) => {
+    const parsed = Date.parse(row?.created_at || row?.published_at || row?.publishedAt || "");
+    return { row, date: Number.isFinite(parsed) ? new Date(parsed) : null };
+  });
+
+  const filtered = datedRows
+    .filter(({ date }) => {
+      if (!date || !lower) return true;
+      return date.getTime() >= lower.getTime() && date.getTime() <= upper.getTime();
+    })
+    .map(({ row }) => row);
+
+  return {
+    message: "OK",
+    error: false,
+    data: filtered,
+    rawCount: rows.length,
+    filteredCount: filtered.length,
+    pagesScanned: endpoints.length,
+    endpoints,
+  };
+}
+
 export async function scheduleTextPost(body, apiKey) {
   return oneUpPost("scheduletextpost", body, apiKey);
 }
