@@ -7,7 +7,7 @@ import {
   oneupQuizBodySchema,
   oneupEbookWeeklyBodySchema,
 } from "../../shared/utils/requestSchemas.js";
-import { buildAndScheduleDailyLane, buildAndScheduleQuizSeries, buildAndScheduleEbookWeekly } from "../utils/socialScheduler.js";
+import { buildAndScheduleDailyLane, buildAndScheduleQuizSeries, buildAndScheduleEbookWeeklySeries } from "../utils/socialScheduler.js";
 import { fetchPublishedPostsHistory } from "../utils/oneupClient.js";
 import { LANE_CONFIG } from "../utils/config.js";
 
@@ -32,7 +32,7 @@ router.get("/health", (_req, res) => {
     service: "oneup",
     lanes: Object.keys(LANE_CONFIG),
     quizRoute: "/oneup/quiz/weekly",
-    ebooksWeeklyRoute: "/oneup/ebooks/weekly",
+    ebooksRoute: "/oneup/ebooks/weekly",
     publishedHistoryRoute: "/oneup/posts/history",
     time: new Date().toISOString(),
   });
@@ -80,6 +80,20 @@ for (const laneKey of Object.keys(LANE_CONFIG)) {
 }
 
 router.post(
+  "/ebooks/weekly",
+  hookdeckDedupe("oneup:ebooks:weekly"),
+  asyncRoute(async (req, res) => {
+    const parsed = validateBody(oneupEbookWeeklyBodySchema, req.body);
+    if (!parsed.ok) {
+      return res.status(400).json({ ok: false, error: parsed.error });
+    }
+
+    const result = await buildAndScheduleEbookWeeklySeries(parsed.data);
+    return res.json(result);
+  })
+);
+
+router.post(
   "/quiz/weekly",
   hookdeckDedupe("oneup:quiz:weekly"),
   asyncRoute(async (req, res) => {
@@ -89,20 +103,6 @@ router.post(
     }
 
     const result = await buildAndScheduleQuizSeries(parsed.data);
-    return res.json(result);
-  })
-);
-
-router.post(
-  "/ebooks/weekly",
-  hookdeckDedupe("oneup:ebooks:weekly"),
-  asyncRoute(async (req, res) => {
-    const parsed = validateBody(oneupEbookWeeklyBodySchema, req.body);
-    if (!parsed.ok) {
-      return res.status(400).json({ ok: false, error: parsed.error });
-    }
-
-    const result = await buildAndScheduleEbookWeekly(parsed.data);
     return res.json(result);
   })
 );
