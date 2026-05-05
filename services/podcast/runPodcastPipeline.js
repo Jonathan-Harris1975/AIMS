@@ -96,13 +96,23 @@ export async function runPodcastPipeline(input = {}, maybeOptions = {}) {
 
     log.info("🎨 Generating podcast artwork…");
     const artwork = await processArtwork({ sessionId, force });
-    if (!artwork?.ok) {
+    if (!artwork?.ok || !artwork?.publicUrl) {
       throw new Error(artwork?.error || "Artwork generation failed");
     }
-    log.info("🎨 Artwork generation complete", { sessionId });
+    log.info("🎨 Artwork generation complete", {
+      sessionId,
+      artworkSource: artwork.source || "generated",
+      imageUrl: artwork.publicUrl,
+    });
 
     log.info("🗣️ TTS pipeline starting…");
-    const tts = await orchestrateTTS({ sessionId, force });
+    const tts = await orchestrateTTS({
+      sessionId,
+      force,
+      artUrl: artwork.publicUrl,
+      imageGenerationStatus: artwork.imageGenerationStatus || artwork.source || "generated",
+      imageGenerationError: artwork.imageGenerationError || "",
+    });
     if (!tts?.ok) {
       throw new Error(tts?.error || "TTS pipeline failed");
     }
