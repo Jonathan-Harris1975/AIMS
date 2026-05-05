@@ -130,3 +130,60 @@ test("deterministic fallback produces a valid forensic payload when model JSON c
   assert.ok(fallback.rankedIssueLedger.length >= 1);
   assert.ok(fallback.fullUrlCoverageAppendix.length >= 1);
 });
+
+test("deterministic forensic fallback fixes transcript evidence wording and adds page-specific gap labels", () => {
+  const transcriptPayload = {
+    ...payload,
+    allRoutes: [
+      ...payload.allRoutes,
+      { url: "https://jonathan-harris.online/transcripts/TT-2026-05-01.html", pageType: "podcast transcript", coverageState: "Fully analysed", statusCode: 200, total: 68, scores: { technicalSeo: 16, onPageIntent: 10, aeo: 5, geo: 16, entity: 7, internalLinking: 6, conversion: 0 } },
+    ],
+    coverageFamilies: [
+      ...payload.coverageFamilies,
+      { pageType: "podcast transcript", discovered: 1, analysed: 1, excluded: 0, failed: 0, coveragePercent: 100, averageScore: 68 },
+    ],
+    familyDiagnostics: [
+      {
+        pageType: "podcast transcript",
+        analysedUrls: 21,
+        totalUrls: 21,
+        averageScore: 68,
+        observedTemplateEvidence: ["0 transcript pages behave as long transcript-first pages without enough above-the-fold summary or sectioning evidence."],
+        sampleUrls: [{ url: "https://jonathan-harris.online/transcripts/TT-2026-05-01.html" }],
+      },
+    ],
+  };
+
+  const fallback = __seoAeoGeoAnalysisTestHooks.buildDeterministicFallback(
+    transcriptPayload,
+    new SyntaxError("bad json"),
+    new SyntaxError("still bad")
+  );
+
+  const transcriptIssue = fallback.rankedIssueLedger.find((issue) => issue.issueId === "JH-AEO-002");
+  assert.ok(transcriptIssue);
+  assert.match(transcriptIssue.evidenceObserved, /21\/21 transcript page\(s\) lack verified above-the-fold summary/);
+  assert.doesNotMatch(transcriptIssue.evidenceObserved, /^0 transcript pages behave/);
+
+  const gap = fallback.bestPracticeGapMatrix.find((row) => row.pageType === "podcast transcript");
+  assert.equal(gap.topMissingElement, "Missing summary, entity index, timestamp/section anchors before transcript body");
+});
+
+test("weak executive fallback text is replaced with a forensic estate narrative", () => {
+  const normalised = __seoAeoGeoAnalysisTestHooks.validateAndNormaliseAnalysisShape(
+    validAnalysis({
+      executiveSummary: "Implementation order derived from the ranked issue ledger.",
+      overallVerdict: "Implementation order derived from the ranked issue ledger.",
+      finalVerdictAndImplementationOrder: {
+        narrative: "Implementation order derived from the ranked issue ledger.",
+        steps: ["Fix dynamic governance."],
+        expectedGains: ["Reduced drift."],
+      },
+    }),
+    payload
+  );
+
+  assert.doesNotMatch(normalised.executiveSummary.summary, /Implementation order derived/);
+  assert.match(normalised.executiveSummary.summary, /static estate|dynamic editorial estate|source-of-truth drift/i);
+  assert.doesNotMatch(normalised.overallVerdict, /Implementation order derived/);
+});
