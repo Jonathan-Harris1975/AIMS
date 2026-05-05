@@ -1,6 +1,6 @@
 import { XMLParser } from "fast-xml-parser";
 import { fetchPublishedPostsHistory } from "../../services/oneup/utils/oneupClient.js";
-import { getObjectAsText, listObjects, buildPublicUrl } from "../../services/shared/utils/r2-client.js";
+import * as r2Client from "../../services/shared/utils/r2-client.js";
 import { RSS_PROMPTS } from "../../services/rss-feed-creator/utils/rss-prompts.js";
 
 const REPO_FILES_INSPECTED = [
@@ -30,6 +30,27 @@ const CORPORATE_FILLER = [
 const AMERICANISMS = ["optimize", "optimized", "optimization", "center", "behavior", "color", "favorite", "analyze", "analyzed", "defense"];
 const TRANSITIONS = ["that said", "more importantly", "at the same time", "meanwhile", "in short", "ultimately"];
 const LOCAL_METADATA_LEAKS = [/\btitle\s*:/i, /\bsummary\s*:/i, /\bnote\s*:/i, /\bcharacter\s*count\s*:/i, /\bword\s*count\s*:/i];
+
+const getObjectAsText = (...args) => r2Client.getObjectAsText(...args);
+const buildPublicUrl = (...args) => r2Client.buildPublicUrl(...args);
+
+async function listObjectsCompat(bucketKey, prefix = "") {
+  if (typeof r2Client.listObjects === "function") {
+    return r2Client.listObjects(bucketKey, prefix);
+  }
+  if (typeof r2Client.listKeys === "function") {
+    const keys = await r2Client.listKeys(bucketKey, prefix);
+    return (Array.isArray(keys) ? keys : []).map((key) => ({
+      key,
+      Key: key,
+      lastModified: null,
+      LastModified: null,
+      size: null,
+      Size: null,
+    }));
+  }
+  throw new Error("R2 client does not expose listObjects or listKeys for transcript discovery.");
+}
 
 function toIso(date) {
   return date.toISOString();
@@ -221,7 +242,7 @@ export async function collectPodcastTranscriptEvidence({ include, windowStart, w
   }
 
   try {
-    const objects = await listObjects("transcript", "");
+    const objects = await listObjectsCompat("transcript", "");
     const transcriptObjects = normaliseTranscriptObjects(objects);
 
     if (!transcriptObjects.length) {
