@@ -125,3 +125,60 @@ test("/audits/on-brand/health returns ok and audit routes mount cleanly", async 
   assert.equal(response.body.ok, true);
   assert.equal(response.body.auditType, "on-brand");
 });
+
+test("OneUp client fetches historic published posts with pagination and date filtering", async () => {
+  process.env.ONEUP_API_KEY = "test-key";
+  const calls = [];
+  const originalFetch = global.fetch;
+  global.fetch = async (url) => {
+    const parsed = new URL(String(url));
+    calls.push({ pathname: parsed.pathname, start: parsed.searchParams.get("start"), apiKey: parsed.searchParams.get("apiKey") });
+    const start = Number(parsed.searchParams.get("start") || 0);
+    const rows = start === 0
+      ? Array.from({ length: 50 }, (_, index) => ({ content: `Post ${index}`, created_at: "2026-05-04 10:00:00", post_id: `A${index}` }))
+      : [
+          { content: "Older post", created_at: "2026-04-01 10:00:00", post_id: "OLD" },
+          { content: "Recent post", created_at: "2026-05-03 10:00:00", post_id: "NEW" },
+        ];
+    return new Response(JSON.stringify({ message: "OK", error: false, data: rows }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  };
+
+  try {
+    const { fetchPublishedPostsHistory } = await import(`../services/oneup/utils/oneupClient.js?published-history=${Date.now()}`);
+    const result = await fetchPublishedPostsHistory({
+      maxPages: 2,
+      windowStart: new Date("2026-05-01T00:00:00.000Z"),
+      windowEnd: new Date("2026-05-05T00:00:00.000Z"),
+    });
+
+    assert.equal(calls.length, 2);
+    assert.equal(calls[0].pathname, "/api/getpublishedposts");
+    assert.equal(calls[0].start, "0");
+    assert.equal(calls[1].start, "50");
+    assert.equal(calls[0].apiKey, "test-key");
+    assert.equal(result.rawCount, 52);
+    assert.equal(result.filteredCount, 51);
+    assert.equal(result.data.some((row) => row.post_id === "OLD"), false);
+    assert.equal(result.data.some((row) => row.post_id === "NEW"), true);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test("transcript discovery ranks latest html or txt object per session", async () => {
+  const { __testing } = await import(`../audits/utils/onBrandEvidence.js?transcript-rank=${Date.now()}`);
+  const ranked = __testing.normaliseTranscriptObjects([
+    { key: "episode-a.txt", lastModified: "2026-05-01T09:00:00.000Z", size: 100 },
+    { key: "episode-a.html", lastModified: "2026-05-01T10:00:00.000Z", size: 200 },
+    { key: "episode-b.txt", lastModified: "2026-05-02T08:00:00.000Z", size: 100 },
+    { key: "notes/readme.md", lastModified: "2026-05-05T08:00:00.000Z", size: 10 },
+  ]);
+
+  assert.equal(ranked.length, 2);
+  assert.equal(ranked[0].key, "episode-b.txt");
+  assert.equal(ranked[1].key, "episode-a.html");
+  assert.equal(ranked[1].extension, "html");
+});
