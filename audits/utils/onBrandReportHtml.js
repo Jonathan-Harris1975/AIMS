@@ -31,8 +31,10 @@ function section(title, body) {
   return `<section class="card"><h2>${escapeHtml(title)}</h2>${body}</section>`;
 }
 
+export const FUTURE_QA_CONTEXT_COPY = "This report uses historic evidence as calibration for future output. Recommendations are guardrails for future social posts, podcast transcript layouts, spoken-copy passes, and RSS feed wording. It is not asking for old posts or transcripts to be rewritten unless you choose to republish them.";
+
 function qaContextNote() {
-  return `<section class="card qa-context"><h2>How to use this QA report</h2><p>This report uses historic evidence as calibration for future output. Recommendations are guardrails for future social posts, podcast transcript layouts, spoken-copy passes, and RSS feed wording. It is not asking for old posts or transcripts to be rewritten unless you choose to republish them.</p></section>`;
+  return `<section class="card qa-context"><h2>How to use this QA report</h2><p>${escapeHtml(FUTURE_QA_CONTEXT_COPY)}</p></section>`;
 }
 
 function emptyFindingsMessage() {
