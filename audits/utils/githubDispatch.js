@@ -45,11 +45,21 @@ function sleep(ms) {
 
 function extractUnexpectedWorkflowInputs(text) {
   const body = String(text || "");
-  const match = body.match(/Unexpected inputs provided:\s*\[([^\]]+)\]/i);
+  const message = (() => {
+    try {
+      const parsed = JSON.parse(body);
+      return String(parsed?.message || body);
+    } catch {
+      return body;
+    }
+  })();
+
+  const match = message.match(/Unexpected inputs provided:\s*\[([^\]]+)\]/i);
   if (!match) return [];
+
   return match[1]
     .split(",")
-    .map((item) => item.replace(/[\"'\[\]]/g, "").trim())
+    .map((item) => item.replace(/[\\"'`\[\]]/g, "").trim())
     .filter(Boolean);
 }
 
