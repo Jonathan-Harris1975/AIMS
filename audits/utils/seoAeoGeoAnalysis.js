@@ -94,6 +94,9 @@ NON-NEGOTIABLE OPERATING RULES:
 21. Treat source ledger and source mismatch rows as evidence, not decoration. Each mismatch must carry id, severity, sources, evidence, impact, and fix fields where the payload supports them.
 22. Provide both a compact rankedIssueLedger and fullIssueRecords. The ranked ledger is for prioritisation; fullIssueRecords must preserve the full issue format in readable flowing fields.
 23. The codeMarkupContentRemediationAppendix must provide implementation-grade patterns, exact source targets, and verification steps for every Critical or High issue.
+24. Never use fallback phrases such as "Implementation order derived from the ranked issue ledger" as an executive summary or verdict. The executive summary must state the strongest estate area, weakest estate area, main root cause, and implementation theme.
+25. Transcript evidence must be numerically coherent. Do not write "0 transcript pages behave..." as evidence for a High issue; say exactly how many transcript pages lack summary-led, sectioned, entity-rich, above-the-fold transcript structure.
+26. The bestPracticeGapMatrix must use page-family-specific gaps. Do not repeat "Answer-first evidence blocks" across unrelated families when podcast, transcript, blog, book, archive, or lead-generation evidence supports a more exact missing element.
 
 MANDATORY TOP-LEVEL JSON KEYS:
 ${REQUIRED_TOP_LEVEL_KEYS.join(", ")}
@@ -426,6 +429,159 @@ function evidenceText(value) {
   return compactString(value);
 }
 
+function issueById(issues, issueId) {
+  return asArray(issues).some((issue) => compactString(issue?.issueId) === issueId);
+}
+
+function extractIsoDatesFromText(value) {
+  return [...String(value || "").matchAll(/\b20\d{2}-\d{2}-\d{2}\b/g)].map((match) => match[0]);
+}
+
+function maxIsoDate(values) {
+  return asArray(values).map(compactString).filter((value) => /^20\d{2}-\d{2}-\d{2}$/.test(value)).sort().pop() || "";
+}
+
+function routeDates(payload, pattern = /podcast|transcript/i) {
+  const dates = [];
+  for (const row of asArray(payload?.allRoutes)) {
+    const haystack = `${row?.url || ""} ${row?.path || ""} ${row?.pageType || ""}`;
+    if (!pattern.test(haystack)) continue;
+    dates.push(...extractIsoDatesFromText(haystack));
+  }
+  for (const row of asArray(payload?.liveDynamicUrls)) {
+    const haystack = `${row?.url || ""} ${row?.path || ""} ${row?.pageType || ""}`;
+    if (!pattern.test(haystack)) continue;
+    dates.push(...extractIsoDatesFromText(haystack));
+  }
+  return dates;
+}
+
+function sourceMismatchText(payload) {
+  return asArray(payload?.sourceMismatchesThatMatter || payload?.sourceConflicts)
+    .map((row) => JSON.stringify(row || {}))
+    .join("\n");
+}
+
+function freshnessDriftEvidence(payload) {
+  const signals = isPlainObject(payload?.repoSignals) ? payload.repoSignals : {};
+  const repoLatest = compactString(
+    signals.podcastLatestDate ||
+    signals.podcastManifestLatestDate ||
+    signals.repoLatestPodcastDate ||
+    signals.repoPodcastLatestDate
+  );
+  const liveLatest = compactString(
+    signals.liveLatestPodcastDate ||
+    signals.latestLivePodcastDate ||
+    signals.livePodcastLatestDate ||
+    maxIsoDate(routeDates(payload, /podcast|transcript/i))
+  );
+  const mismatch = sourceMismatchText(payload);
+  const mismatchDates = extractIsoDatesFromText(mismatch);
+  const mismatchMentionsFreshness = /live|fresh|stale|ahead|stops|newer|latest/i.test(mismatch) && /podcast|transcript/i.test(mismatch);
+
+  if (repoLatest && liveLatest && liveLatest > repoLatest) {
+    return {
+      confirmed: true,
+      repoLatest,
+      liveLatest,
+      evidence: `Live podcast/transcript routes include ${liveLatest}, while the repository podcast manifest latest date is ${repoLatest}.`,
+    };
+  }
+  if (mismatchMentionsFreshness && mismatchDates.length >= 2) {
+    return {
+      confirmed: true,
+      repoLatest: maxIsoDate(mismatchDates.slice(0, -1)),
+      liveLatest: maxIsoDate(mismatchDates),
+      evidence: compactString(mismatch).slice(0, 360),
+    };
+  }
+  if (signals.podcastFreshnessDrift || signals.livePodcastAheadOfRepo) {
+    return {
+      confirmed: true,
+      repoLatest,
+      liveLatest,
+      evidence: text(signals.podcastFreshnessDriftEvidence || signals.freshnessDriftEvidence, "Podcast/transcript freshness drift is flagged by repoSignals."),
+    };
+  }
+  return { confirmed: false, repoLatest, liveLatest, evidence: "" };
+}
+
+function transcriptDiagnosticEvidence(payload, transcript) {
+  const direct = evidenceText(transcript?.observedTemplateEvidence);
+  const total = Number(transcript?.analysedUrls || transcript?.analysed || transcript?.totalUrls || transcript?.count || 0);
+  const rawWalls = Number(transcript?.rawTranscriptWallCount ?? transcript?.rawTranscriptWalls ?? transcript?.rawWallCount);
+  const noSummary = Number(transcript?.missingSummaryLedCount ?? transcript?.noSummaryCount ?? transcript?.missingAboveFoldSummaryCount);
+  const weak = Number.isFinite(noSummary) && noSummary > 0 ? noSummary : Number.isFinite(rawWalls) && rawWalls > 0 ? rawWalls : total;
+  const sample = listSample(transcript?.sampleWeakUrls || transcript?.sampleUrls, "url", 3);
+
+  if (/^0\s+transcript pages behave/i.test(direct) || /0\s+transcript pages.*without enough/i.test(direct)) {
+    return `${weak || "Analysed"}/${total || weak || "analysed"} transcript page(s) lack verified above-the-fold summary, key-takeaway, topic-index, timestamp/section-anchor, or entity-index evidence before the transcript body${sample ? `; sample: ${sample}` : ""}.`;
+  }
+  if (direct) return direct;
+  return `${total || "Analysed"} transcript route(s) require transcript-specific checks for summary-led structure, entity index, anchors, related links, and Transcript/PodcastEpisode schema alignment${sample ? `; sample: ${sample}` : ""}.`;
+}
+
+function dynamicInternalLinkEvidence(payload) {
+  const families = [
+    findFamilyDiagnostic(payload, /podcast episode/),
+    findFamilyDiagnostic(payload, /podcast transcript/),
+    findFamilyDiagnostic(payload, /blog article/),
+  ].filter(isPlainObject);
+  const weak = families.filter((family) => {
+    const total = Number(family.analysedUrls || family.totalUrls || 0);
+    const links = Number(family.topicOrBookLinkCount || 0);
+    return total > 0 && links < total;
+  });
+  if (!weak.length) return { confirmed: false, evidence: "" };
+  return {
+    confirmed: true,
+    evidence: weak.map((family) => `${family.pageType || family.family}: ${Number(family.topicOrBookLinkCount || 0)}/${Number(family.analysedUrls || family.totalUrls || 0)} analysed pages link into topic/book/glossary assets`).join("; "),
+  };
+}
+
+function isWeakNarrative(value) {
+  const candidate = compactString(value).toLowerCase();
+  return !candidate ||
+    candidate === "implementation order derived from the ranked issue ledger." ||
+    candidate === "implementation order derived from the ranked issue ledger" ||
+    candidate.includes("forensic audit synthesis completed from supplied evidence") ||
+    candidate.includes("forensic verdict supplied from the evidence-led analysis");
+}
+
+function familyScore(payload, pattern) {
+  const row = coverageRows(payload).find((item) => pattern.test(String(item?.pageType || item?.family || "")));
+  return Number(row?.averageScore || row?.score || 0);
+}
+
+function deriveNarrative(payload, issues) {
+  const bookScore = familyScore(payload, /book page/i);
+  const podcastScore = familyScore(payload, /podcast episode/i);
+  const transcriptScore = familyScore(payload, /transcript/i);
+  const strongest = bookScore ? `book pages remain the strongest commercial layer at ${bookScore}` : "the static commercial estate is the strongest layer";
+  const weakestParts = [];
+  if (podcastScore) weakestParts.push(`podcast episodes at ${podcastScore}`);
+  if (transcriptScore) weakestParts.push(`transcripts at ${transcriptScore}`);
+  const critical = asArray(issues).filter((issue) => issue.severity === "Critical").map((issue) => issue.issueId).join(" and ");
+  return `The static estate is materially stronger than the dynamic editorial estate: ${strongest}, while ${weakestParts.join(" and ") || "podcast, transcript, and blog families carry the main risk"}. The main root cause is source-of-truth drift across repo, workbook, sitemap, feed, live routes, and generated manifests${critical ? `, led by ${critical}` : ""}. Fix governance and canonical integrity before polishing page copy.`;
+}
+
+function pageTypeSpecificGap(pageType, fallback = "See issue ledger") {
+  const type = String(pageType || "").toLowerCase();
+  if (type.includes("podcast episode")) return "Missing key takeaways, FAQPage JSON-LD, transcript preview anchors, and related topic/book CTAs";
+  if (type.includes("podcast transcript") || type.includes("transcript")) return "Missing summary, entity index, timestamp/section anchors before transcript body";
+  if (type.includes("blog article")) return "Repeated standfirst and weak question-led extraction structure";
+  if (type.includes("blog archive")) return "Archive list freshness and crawlable article-card depth need stronger server-rendered evidence";
+  if (type.includes("book page")) return "Question-led H2/H3 opportunities remain despite strong Book and FAQ schema";
+  if (type.includes("book buy")) return "Redirect/non-page route needs explicit canonical exclusion evidence";
+  if (type.includes("topic")) return "Topic guides need more question-led headings and citation-ready answer blocks";
+  if (type.includes("category") || type.includes("hub")) return "Hub pages need more extractable intent summaries and contextual next-step links";
+  if (type.includes("lead") || type.includes("newsletter") || type.includes("contact")) return "Conversion pages need answer-led objections, trust cues, and clearer next-step copy";
+  if (type.includes("homepage")) return "Homepage needs stronger question-led extraction for entity, books, podcast, and newsletter intents";
+  if (type.includes("knowledge")) return "Glossary needs richer definitions, examples, and entity relationships";
+  return fallback;
+}
+
 function duplicatePodcastEvidence(duplicates) {
   const rows = asArray(duplicates).filter(isPlainObject);
   if (!rows.length) return "Duplicate podcast page_url values were reported without row details.";
@@ -535,6 +691,24 @@ function signalIssuesFromPayload(payload) {
     }));
   }
 
+  const freshness = freshnessDriftEvidence(payload);
+  if (freshness.confirmed) {
+    issues.push(forensicIssue({
+      issueId: "JH-SEO-002",
+      severity: "High",
+      auditLens: "SEO / Freshness / Governance",
+      rootCauseLevel: "source reconciliation",
+      affectedPagesTemplatesFilesOrRoutes: "data/podcast-episodes.json; sitemap.xml; workbook Pages; live podcast episode and transcript routes",
+      evidenceObserved: freshness.evidence,
+      whyItMatters: "The live estate can move ahead of the governed repo snapshot, making release gates, sitemap checks, workbook parity, and audit coverage stale before the next deployment.",
+      exactRemediation: "Move podcast/transcript route generation into one deterministic build step that writes data/podcast-episodes.json, episode HTML, transcript route ledger, sitemap entries, and workbook/dynamic inventory together before deployment.",
+      expectedGain: "Keeps fresh podcast and transcript content discoverable, auditable, and governed from one source of truth.",
+      estimatedEffort: "Medium",
+      recommendedOwner: "Engineering / Editorial Ops",
+      verificationMethod: "Rerun the audit after the podcast build and confirm the latest live podcast/transcript date matches data/podcast-episodes.json, sitemap.xml, workbook/dynamic inventory, and coverage.json.",
+    }));
+  }
+
   if (String(signals.llmsScope || "").toLowerCase() === "ebook-only") {
     issues.push(forensicIssue({
       issueId: "JH-GEO-001",
@@ -578,7 +752,7 @@ function signalIssuesFromPayload(payload) {
       auditLens: "AEO / GEO / Transcript",
       rootCauseLevel: "template / content structure",
       affectedPagesTemplatesFilesOrRoutes: transcript.sourceFile || "transcript detail routes; functions/transcripts/[[slug]].js; transcripts/index.html",
-      evidenceObserved: evidenceText(transcript.observedTemplateEvidence) || `Transcript family average score is ${transcript.averageScore || "below target"}; sample URLs: ${listSample(transcript.sampleUrls, "url", 3)}.`,
+      evidenceObserved: transcriptDiagnosticEvidence(payload, transcript),
       whyItMatters: "Long transcript pages without summary-led chunking are harder for answer engines and LLM retrievers to cite accurately.",
       exactRemediation: "Before the transcript body, render episode summary, what changed this week, key named entities, five bullet takeaways, topic index, timestamped or sectioned anchors, related books/topics, and Transcript/PodcastEpisode schema alignment.",
       expectedGain: "Improves extractability, snippet potential, and LLM citation quality for transcript pages.",
@@ -624,6 +798,25 @@ function signalIssuesFromPayload(payload) {
     }));
   }
 
+  const internalLinking = dynamicInternalLinkEvidence(payload);
+  if (internalLinking.confirmed) {
+    issues.push(forensicIssue({
+      issueId: "JH-INTERNAL-001",
+      severity: "Medium",
+      confidence: "Probable",
+      auditLens: "Internal linking / Entity",
+      rootCauseLevel: "template / editorial graph",
+      affectedPagesTemplatesFilesOrRoutes: "podcast episode pages; transcript detail pages; blog posts; topic guides; ebook detail pages; glossary routes",
+      evidenceObserved: internalLinking.evidence,
+      whyItMatters: "The site has useful topical assets, but dynamic editorial content is not consistently feeding topic, book, glossary, and episode clusters.",
+      exactRemediation: "Generate contextual related links from extracted episode/post topics: two topic guides, two relevant ebooks, three glossary terms, prior/next episode, and the matching weekly blog/newsletter item where available.",
+      expectedGain: "Improves crawl paths, topical graph strength, entity relationships, and post-listening conversion journeys.",
+      estimatedEffort: "Medium",
+      recommendedOwner: "Editorial / Engineering",
+      verificationMethod: "Rerun the audit and confirm podcast, transcript, and blog diagnostics show full topic/book/glossary link coverage with crawlable anchors.",
+    }));
+  }
+
   return issues;
 }
 
@@ -647,7 +840,7 @@ function deterministicIssuesFromPayload(payload) {
     if (!key || seen.has(key)) continue;
     seen.add(key);
     merged.push(issue);
-    if (merged.length >= 8) break;
+    if (merged.length >= 10) break;
   }
   return merged.length ? merged : [baselineIssueFromCoverage({ pageType: "SEO + AEO + GEO audit evidence payload", averageScore: 0 }, 0)];
 }
@@ -660,11 +853,12 @@ function scoreBlock(score, headline) {
 function buildDeterministicAnalysisDraft(payload, diagnostics = {}) {
   const scores = fallbackScores(payload);
   const issues = deterministicIssuesFromPayload(payload);
+  const narrative = deriveNarrative(payload, issues);
   return {
     auditCompletionState: "Complete",
     aiAnalysisStatus: diagnostics.usedFallback ? "valid-deterministic-fallback" : "valid",
-    executiveSummary: "The forensic analysis was completed from supplied crawl, route, coverage, and heuristic evidence without trusting malformed model JSON.",
-    overallVerdict: "The audit evidence is valid for release-gate reporting, with priority work concentrated in the affected route families and template-level AEO/GEO improvements identified by the supplied coverage ledger.",
+    executiveSummary: narrative,
+    overallVerdict: narrative,
     scoreTable: {
       seo: scoreBlock(scores.seo, "Technical SEO and on-page intent were scored from supplied page evidence."),
       aeo: scoreBlock(scores.aeo, "Answer-engine readiness was scored from summaries, headings, lists, tables, and FAQ evidence."),
@@ -905,7 +1099,7 @@ function normaliseGapMatrix(data, payload) {
       aeo: text(row.aeo || row.aeoCompliance, "Not verified"),
       geo: text(row.geo || row.geoCompliance, "Not verified"),
       confidence: text(row.confidence, "Needs verification"),
-      topMissingElement: text(row.topMissingElement || row.topMissing, "See issue ledger"),
+      topMissingElement: pageTypeSpecificGap(row.pageType || row.family, text(row.topMissingElement || row.topMissing, "See issue ledger")),
       businessImpact: text(row.businessImpact, "Medium"),
     }));
   }
@@ -916,7 +1110,7 @@ function normaliseGapMatrix(data, payload) {
     aeo: Number(row.averageScore || 0) >= 80 ? "Partial" : "Weak",
     geo: Number(row.averageScore || 0) >= 80 ? "Partial" : "Weak",
     confidence: "Confirmed",
-    topMissingElement: Number(row.failed || 0) > 0 ? "Fetch or redirect reliability" : "Answer-first evidence blocks",
+    topMissingElement: Number(row.failed || 0) > 0 ? "Fetch or redirect reliability" : pageTypeSpecificGap(row.pageType || row.family, "Answer-first evidence blocks"),
     businessImpact: /book|podcast|transcript|blog|lead|conversion/i.test(String(row.pageType || "")) ? "High" : "Medium",
   }));
 }
@@ -1065,15 +1259,23 @@ function normaliseIssues(data) {
   });
 }
 
+function conciseAppendixText(value, limit = 260) {
+  const words = compactString(value).replace(/\s+/g, " ");
+  if (words.length <= limit) return words;
+  const clipped = words.slice(0, limit).replace(/\s+\S*$/, "").trim();
+  return `${clipped}...`;
+}
+
 function normaliseRemediationAppendix(data, issues) {
   const rows = asArray(data?.codeMarkupContentRemediationAppendix || data?.codeRemediationAppendix).filter(isPlainObject);
   if (rows.length) {
     return rows.map((row) => ({
       target: text(row.target || row.filePath || row.sourceFile || row.route, "Affected source path or route family"),
       issueId: text(row.issueId, "Unmapped issue"),
-      currentPattern: text(row.currentPattern || row.currentFaultyPattern || row.evidenceObserved, "See issue evidence."),
-      correctedPattern: text(row.correctedPattern || row.replacementPattern || row.exactRemediation, "Apply the issue remediation exactly."),
-      rationale: text(row.rationale || row.whyItMatters, "This change resolves the affected audit issue."),
+      currentPattern: conciseAppendixText(text(row.currentPattern || row.currentFaultyPattern || row.evidenceObserved, "See issue evidence.")),
+      correctedPattern: conciseAppendixText(text(row.correctedPattern || row.replacementPattern || row.exactRemediation, "Apply the issue remediation exactly.")),
+      rationale: conciseAppendixText(text(row.rationale || row.whyItMatters, "This change resolves the affected audit issue."), 220),
+      verificationMethod: conciseAppendixText(row.verificationMethod || row.verification || "Rerun the audit and confirm the issue-specific evidence changes in coverage.json and report.html.", 220),
     }));
   }
 
@@ -1082,20 +1284,23 @@ function normaliseRemediationAppendix(data, issues) {
     .map((issue) => ({
       target: issue.affectedPagesTemplatesFilesOrRoutes,
       issueId: issue.issueId,
-      currentPattern: issue.evidenceObserved,
-      correctedPattern: issue.exactRemediation,
-      rationale: issue.whyItMatters,
+      currentPattern: conciseAppendixText(issue.evidenceObserved),
+      correctedPattern: conciseAppendixText(issue.exactRemediation),
+      rationale: conciseAppendixText(issue.whyItMatters, 220),
+      verificationMethod: conciseAppendixText(issue.verificationMethod, 220),
     }))
     .slice(0, 15);
 }
 
-function normaliseImplementation(data, issues) {
+function normaliseImplementation(data, issues, payload = {}) {
   const source = isPlainObject(data?.finalVerdictAndImplementationOrder) ? data.finalVerdictAndImplementationOrder : isPlainObject(data?.implementationOrder) ? data.implementationOrder : {};
   const steps = asArray(source.steps || source.implementationSequence).map(String).filter(Boolean);
   const gains = asArray(source.expectedGains).map(String).filter(Boolean);
+  const suppliedNarrative = source.narrative || source.finalVerdict || data?.overallVerdict;
+  const narrative = isWeakNarrative(suppliedNarrative) ? deriveNarrative(payload, issues) : text(suppliedNarrative, deriveNarrative(payload, issues));
 
   return {
-    narrative: text(source.narrative || source.finalVerdict || data?.overallVerdict, "Implementation order derived from the ranked issue ledger."),
+    narrative,
     steps: (steps.length ? steps : issues.slice(0, 8).map((issue) => `${issue.issueId}: ${issue.exactRemediation}`)).slice(0, 12),
     expectedGains: (gains.length ? gains : issues.slice(0, 5).map((issue) => issue.expectedGain)).slice(0, 8),
   };
@@ -1194,7 +1399,7 @@ function buildFullIssueRecords(issues) {
 function buildNormalisedPayload(data, payload) {
   const scoreTable = normaliseScoreTable(data, payload);
   const issues = mergeEvidenceIssues(normaliseIssues(data), payload);
-  const implementation = normaliseImplementation(data, issues);
+  const implementation = normaliseImplementation(data, issues, payload);
   const executiveSummary = isPlainObject(data?.executiveSummary) ? data.executiveSummary : {};
   const sourceLedger = normaliseSourceLedger(data, payload);
   const sourceMismatches = normaliseSourceMismatches(data, payload);
@@ -1203,8 +1408,12 @@ function buildNormalisedPayload(data, payload) {
   return {
     auditCompletionState: text(data?.auditCompletionState, "Complete"),
     aiAnalysisStatus: text(data?.aiAnalysisStatus, "valid"),
-    executiveSummary: text(executiveSummary.summary || executiveSummary.overview || data?.executiveSummary, "Forensic audit synthesis completed from supplied evidence."),
-    overallVerdict: text(data?.overallVerdict || executiveSummary.overallVerdict || implementation.narrative, "Forensic verdict supplied from the evidence-led analysis."),
+    executiveSummary: isWeakNarrative(executiveSummary.summary || executiveSummary.overview || data?.executiveSummary)
+      ? deriveNarrative(payload, issues)
+      : text(executiveSummary.summary || executiveSummary.overview || data?.executiveSummary, deriveNarrative(payload, issues)),
+    overallVerdict: isWeakNarrative(data?.overallVerdict || executiveSummary.overallVerdict)
+      ? implementation.narrative
+      : text(data?.overallVerdict || executiveSummary.overallVerdict, implementation.narrative),
     scoreTable,
     topFivePriorities: asArray(data?.topFivePriorities || executiveSummary.topFivePriorities).map(String).filter(Boolean).slice(0, 5),
     quickWins: asArray(data?.quickWins || executiveSummary.quickWins).map(String).filter(Boolean).slice(0, 6),

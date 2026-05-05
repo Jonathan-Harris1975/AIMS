@@ -13,7 +13,11 @@ import {
 } from "./githubDispatch.js";
 import { buildAuditPrefix, makeAuditJobType } from "./auditPaths.js";
 import {
+  assertAuditArtifactUrls,
+  assertAuditR2Config,
   cleanupAuditPrefix,
+  getAuditPublicBaseUrl,
+  getAuditBucketName,
   publishAuditLatest,
   publishAuditRequest,
 } from "./publishAuditArtifacts.js";
@@ -61,6 +65,7 @@ export async function startAuditRun({
 
   const callbackUrl = `${callbackBaseUrl}${callbackPath}`;
   const analysisUrl = callbackUrl.replace(/\/callback\/?$/, "/analysis");
+  const auditR2 = assertAuditR2Config();
 
   const payload = {
     sessionId,
@@ -73,6 +78,10 @@ export async function startAuditRun({
     callbackUrl,
     analysisUrl,
     callbackTokenConfigured,
+    auditBucket: auditR2.bucket,
+    auditPublicBaseUrl: auditR2.publicBaseUrl,
+    auditBucketEnv: "R2_BUCKET_AUDITS",
+    auditPublicBaseEnv: "R2_PUBLIC_BASE_URL_AUDITS",
   };
 
   queueJob(jobType, sessionId, {
@@ -84,6 +93,8 @@ export async function startAuditRun({
     callbackUrl,
     analysisUrl,
     callbackTokenConfigured,
+    auditBucket: auditR2.bucket,
+    auditPublicBaseUrl: auditR2.publicBaseUrl,
   });
 
   await publishAuditRequest({ auditType, sessionId, payload, reportPrefix });
@@ -96,6 +107,10 @@ export async function startAuditRun({
     callback_url: callbackUrl,
     analysis_url: analysisUrl,
     callback_token: callbackToken,
+    audit_bucket: auditR2.bucket,
+    audit_public_base_url: auditR2.publicBaseUrl,
+    audit_bucket_env: "R2_BUCKET_AUDITS",
+    audit_public_base_env: "R2_PUBLIC_BASE_URL_AUDITS",
   };
 
   try {
@@ -130,6 +145,8 @@ export async function startAuditRun({
         callbackUrl,
         analysisUrl,
         callbackTokenConfigured,
+        auditBucket: auditR2.bucket,
+        auditPublicBaseUrl: auditR2.publicBaseUrl,
         workflowRunUrl: workflowRun.workflowRunUrl || null,
       },
     });
@@ -142,6 +159,8 @@ export async function startAuditRun({
       callbackUrl,
       analysisUrl,
       callbackTokenConfigured,
+      auditBucket: auditR2.bucket,
+      auditPublicBaseUrl: auditR2.publicBaseUrl,
       workflowRunUrl: workflowRun.workflowRunUrl || null,
     });
 
@@ -174,6 +193,10 @@ export async function startAuditRun({
 }
 
 export async function completeAuditRun({ auditType, payload }) {
+  if (String(payload.status || "completed").trim().toLowerCase() !== "failed") {
+    assertAuditArtifactUrls(payload);
+  }
+
   const jobType = makeAuditJobType(auditType);
   const sessionId = sanitizeSessionId(
     payload.sessionId || "",
@@ -192,6 +215,8 @@ export async function completeAuditRun({ auditType, payload }) {
     mobileFailureCount: payload.mobileFailureCount ?? null,
     issueCount: payload.issueCount ?? null,
     artefacts: payload.artefacts || {},
+    auditBucket: getAuditBucketName(),
+    auditPublicBaseUrl: getAuditPublicBaseUrl(),
     finishedAt: payload.finishedAt || new Date().toISOString(),
   };
 

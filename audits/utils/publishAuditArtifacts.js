@@ -11,21 +11,75 @@ import {
 } from "../../services/shared/utils/r2-client.js";
 
 export const AUDIT_BUCKET_ALIAS = "audits";
+const AUDIT_BUCKET_ENV = "R2_BUCKET_AUDITS";
+const AUDIT_PUBLIC_BASE_ENV = "R2_PUBLIC_BASE_URL_AUDITS";
 
 export function getAuditPublishConfig() {
   return {
     bucketAlias: AUDIT_BUCKET_ALIAS,
-    bucketEnv: "R2_BUCKET_AUDITS",
-    publicBaseEnv: "R2_PUBLIC_BASE_URL_AUDITS",
+    bucketEnv: AUDIT_BUCKET_ENV,
+    publicBaseEnv: AUDIT_PUBLIC_BASE_ENV,
   };
 }
 
+function cleanPublicBase(value) {
+  return String(value || "").trim().replace(/\/+$/, "");
+}
+
+export function getAuditPublicBaseUrl() {
+  return cleanPublicBase(process.env[AUDIT_PUBLIC_BASE_ENV]);
+}
+
+export function getAuditBucketName() {
+  return String(process.env[AUDIT_BUCKET_ENV] || "").trim();
+}
+
+export function assertAuditR2Config() {
+  const bucket = getAuditBucketName();
+  const publicBaseUrl = getAuditPublicBaseUrl();
+
+  if (!bucket) {
+    throw new Error(`${AUDIT_BUCKET_ENV} is required. Audit artefacts must be stored in the dedicated audits bucket.`);
+  }
+  if (!publicBaseUrl) {
+    throw new Error(`${AUDIT_PUBLIC_BASE_ENV} is required. Audit artefact URLs must resolve from the dedicated audits public base URL.`);
+  }
+
+  return { bucket, publicBaseUrl };
+}
+
+export function isAuditPublicUrl(url) {
+  const publicBaseUrl = getAuditPublicBaseUrl();
+  const candidate = String(url || "").trim();
+  if (!candidate || !publicBaseUrl) return false;
+  return candidate === publicBaseUrl || candidate.startsWith(`${publicBaseUrl}/`);
+}
+
+export function assertAuditArtifactUrls(payload = {}) {
+  const { publicBaseUrl } = assertAuditR2Config();
+  const entries = [];
+  for (const field of ["reportUrl", "summaryUrl", "coverageUrl", "executionUrl", "preflightUrl", "evidenceUrl", "reconciliationUrl"]) {
+    if (payload[field]) entries.push([field, payload[field]]);
+  }
+  for (const [name, value] of Object.entries(payload.artefacts || {})) {
+    if (value) entries.push([`artefacts.${name}`, value]);
+  }
+
+  const invalid = entries.filter(([, value]) => !isAuditPublicUrl(value));
+  if (invalid.length) {
+    const detail = invalid.map(([name, value]) => `${name}=${value}`).join("; ");
+    throw new Error(`Audit artefact callback contains URL(s) outside ${AUDIT_PUBLIC_BASE_ENV} (${publicBaseUrl}). Audit data must only be stored on ${AUDIT_BUCKET_ENV}. Invalid: ${detail}`);
+  }
+}
+
 async function putAuditJson(key, payload) {
+  assertAuditR2Config();
   const url = await putJson(AUDIT_BUCKET_ALIAS, key, payload);
   return url;
 }
 
 async function putAuditText(key, text, contentType = "text/plain") {
+  assertAuditR2Config();
   return uploadText(AUDIT_BUCKET_ALIAS, key, text, contentType);
 }
 
@@ -64,11 +118,13 @@ export async function publishAuditLatest({ auditType, sessionId, payload }) {
 }
 
 export function buildAuditPublicUrl(key) {
+  assertAuditR2Config();
   return buildPublicUrl(AUDIT_BUCKET_ALIAS, key);
 }
 
 export async function cleanupAuditPrefix({ reportPrefix, keepNames = [] }) {
   if (!reportPrefix) return { deleted: [] };
+  assertAuditR2Config();
   const keep = new Set(keepNames);
   const bucket = ensureBucketKey(AUDIT_BUCKET_ALIAS);
   let continuationToken;
@@ -108,6 +164,11 @@ export async function cleanupAuditPrefix({ reportPrefix, keepNames = [] }) {
 export default {
   AUDIT_BUCKET_ALIAS,
   getAuditPublishConfig,
+  getAuditPublicBaseUrl,
+  getAuditBucketName,
+  assertAuditR2Config,
+  assertAuditArtifactUrls,
+  isAuditPublicUrl,
   buildAuditPublicUrl,
   publishAuditJson,
   publishAuditText,
