@@ -67,6 +67,19 @@ function normalisePublicUrl(value) {
   return String(value || "").trim().replace(/\/+$/, "");
 }
 
+function isUsableArtefactUrl(value) {
+  if (value === undefined || value === null) return false;
+  const text = String(value).trim();
+  if (!text) return false;
+  return !["undefined", "null", "false"].includes(text.toLowerCase());
+}
+
+function flattenArtefactValues(value) {
+  if (Array.isArray(value)) return value.flatMap(flattenArtefactValues);
+  if (value && typeof value === "object") return Object.values(value).flatMap(flattenArtefactValues);
+  return [value];
+}
+
 function artefactUrlsFromPayload(payload = {}) {
   const direct = [
     payload.reportUrl,
@@ -81,12 +94,11 @@ function artefactUrlsFromPayload(payload = {}) {
     payload.latestUrl,
   ];
   const artefactValues = payload.artefacts && typeof payload.artefacts === "object"
-    ? Object.values(payload.artefacts)
+    ? flattenArtefactValues(payload.artefacts)
     : [];
   return [...direct, ...artefactValues]
-    .map(String)
-    .map((value) => value.trim())
-    .filter(Boolean);
+    .filter(isUsableArtefactUrl)
+    .map((value) => String(value).trim());
 }
 
 export function assertAuditArtifactUrls(payload = {}, { requireAny = true } = {}) {
