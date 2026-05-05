@@ -551,19 +551,23 @@ function checkTitle(findings, { title, sourceType, itemTitleOrId }) {
 function checkText(findings, { text, sourceType, itemTitleOrId, field = "copy" }) {
   const cleaned = cleanText(text);
   if (!cleaned) return;
-  for (const phrase of CORPORATE_FILLER) {
-    if (cleaned.toLowerCase().includes(phrase)) {
-      addFinding(findings, {
-        severity: ["groundbreaking", "transformative", "game-changer", "paradigm shift"].includes(phrase) ? "high" : "medium",
-        sourceType,
-        itemTitleOrId,
-        issueType: "corporate filler or hype leakage",
-        exactEvidence: phrase,
-        whyItIsOffBrand: `The ${field} uses generic AI/newsroom phrasing rather than plain, sceptical editorial judgement.`,
-        violatedRule: "No hype, no corporate wallpaper, no generic AI summary tone.",
-        exactRemediation: `For future copy, replace '${phrase}' with the concrete fact, risk, or consequence being described.`,
-      });
-    }
+  const lower = cleaned.toLowerCase();
+  const fillerPhrases = CORPORATE_FILLER.filter((phrase) => lower.includes(phrase));
+  if (fillerPhrases.length) {
+    const highRiskPhrases = new Set(["groundbreaking", "transformative", "game-changer", "paradigm shift"]);
+    const phraseList = fillerPhrases.map((phrase) => `'${phrase}'`).join(", ");
+    addFinding(findings, {
+      severity: fillerPhrases.some((phrase) => highRiskPhrases.has(phrase)) ? "high" : "medium",
+      sourceType,
+      itemTitleOrId,
+      issueType: "future anti-hype phrase guardrail",
+      exactEvidence: phraseList,
+      whyItIsOffBrand: `The ${field} contains generic AI/newsroom phrasing that should be treated as calibration evidence for future output, not as a retroactive rewrite ticket.`,
+      violatedRule: "No hype, no corporate wallpaper, no generic AI summary tone.",
+      rootCauseLevel: "validator",
+      exactRemediation: `For future ${field}, add or tighten an anti-hype guardrail covering ${phraseList}; require the generator to replace those patterns with the concrete fact, risk, or consequence being described.`,
+      verificationMethod: `Generate fresh ${field} and rerun the audit; the next outputs should not repeat the grouped anti-hype phrase pattern.`,
+    });
   }
   const metadataLeaks = [
     ...RSS_PROMPTS.findMetadataLeaks(cleaned),

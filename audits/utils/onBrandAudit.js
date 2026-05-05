@@ -113,6 +113,100 @@ function futureVerification(text = "", sourceType = "pipeline") {
   return `${cleaned} Treat historic examples as calibration evidence; verify against newly generated output.`;
 }
 
+function futureFrameText(value = "", fallback = "") {
+  let text = String(value ?? "").trim();
+  if (!text) text = String(fallback ?? "").trim();
+  if (!text) return "";
+
+  const replacements = [
+    [/\bConfirmed defects ledger\b/gi, "Future QA findings ledger"],
+    [/\bconfirmed defects?\b/gi, "future QA findings"],
+    [/\bExact fix\b/gi, "Future guardrail"],
+    [/\bexact remediation\b/gi, "future guardrail"],
+    [/\bRanked remediation plan\b/gi, "Ranked future QA refinement plan"],
+    [/\bremediation plan\b/gi, "future QA refinement plan"],
+    [/\bremediation\b/gi, "future QA refinement"],
+    [/\bneeds? editorial cleanup\b/gi, "should inform future editorial QA tightening"],
+    [/\bneeds? cleanup\b/gi, "should inform future QA tightening"],
+    [/\bcopy needs tightening before it sounds fully Jonathan Harris\b/gi, "examples provide calibration for improving future Jonathan Harris output"],
+    [/\bflagged copy needs tightening\b/gi, "flagged examples should tighten future QA guardrails"],
+    [/\bfix(?:ed|es)? the old\b/gi, "use the historic"],
+    [/\brewrite old posts?\b/gi, "calibrate future posts"],
+    [/\brewrite old transcripts?\b/gi, "calibrate future transcripts"],
+    [/\bconfirm(?:ed)?(?: that)? the exact phrase no longer appears\b/gi, "confirm fresh output avoids the pattern"],
+    [/\bno longer appears\b/gi, "does not recur in fresh output"],
+    [/\bremove the phrase from the existing copy\b/gi, "prevent the phrase recurring in future output"],
+    [/\bclean up\b/gi, "tighten future QA for"],
+  ];
+  for (const [pattern, replacement] of replacements) {
+    text = text.replace(pattern, replacement);
+  }
+  return text;
+}
+
+function extractPhraseTokens(value = "") {
+  return String(value || "")
+    .split(/[,;\n]+/)
+    .map((token) => token.trim().replace(/^['"`]+|['"`]+$/g, ""))
+    .filter(Boolean);
+}
+
+function phraseEvidenceList(issues = []) {
+  const seen = new Set();
+  const phrases = [];
+  for (const issue of issues) {
+    for (const token of extractPhraseTokens(issue.exactEvidence)) {
+      const key = token.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      phrases.push(token);
+    }
+  }
+  return phrases;
+}
+
+function groupPhraseGuardrailDefects(defects = []) {
+  const grouped = new Map();
+  const passthrough = [];
+
+  for (const issue of arr(defects)) {
+    const isPhraseIssue = /anti-hype phrase guardrail|corporate filler|hype leakage/i.test(`${issue.issueType} ${issue.violatedRule}`);
+    if (!isPhraseIssue) {
+      passthrough.push(issue);
+      continue;
+    }
+    const key = `${issue.sourceType}|${issue.itemTitleOrId}`;
+    if (!grouped.has(key)) grouped.set(key, []);
+    grouped.get(key).push(issue);
+  }
+
+  const severityRank = { critical: 0, high: 1, medium: 2, low: 3 };
+  const groupedIssues = Array.from(grouped.values()).map((issues) => {
+    const first = issues[0] || {};
+    const phrases = phraseEvidenceList(issues);
+    const phraseList = phrases.map((phrase) => `'${phrase}'`).join(", ") || first.exactEvidence || "generic hype/filler wording";
+    const worst = [...issues].sort((a, b) => (severityRank[a.severity] ?? 9) - (severityRank[b.severity] ?? 9))[0] || first;
+    return {
+      ...first,
+      issueType: "future anti-hype phrase guardrail",
+      severity: worst.severity || "medium",
+      confidence: "confirmed",
+      exactEvidence: phraseList,
+      whyItIsOffBrand: `Historic evidence contains ${phrases.length || issues.length} AI/newsroom filler pattern(s). Treat this as calibration for future output, not a retroactive copy-edit ticket.`,
+      violatedRule: "No hype, no corporate wallpaper, no generic AI summary tone.",
+      rootCauseLevel: "validator",
+      exactRemediation: `For ${futureVerb(first.sourceType)}, add or tighten a grouped anti-hype guardrail covering ${phraseList}; require the generator to replace those patterns with concrete facts, risks, or consequences.`,
+      improvedExample: "",
+      verificationMethod: `Generate fresh ${futureVerb(first.sourceType)} and rerun the audit; the grouped anti-hype pattern should not recur.`,
+    };
+  });
+
+  return [...passthrough, ...groupedIssues].map((issue, index) => ({
+    ...issue,
+    issueId: `OB-${String(index + 1).padStart(3, "0")}`,
+  }));
+}
+
 function normaliseDefect(issue = {}, index = 0) {
   return {
     issueId: cleanString(issue.issueId, `OB-${String(index + 1).padStart(3, "0")}`),
@@ -122,11 +216,11 @@ function normaliseDefect(issue = {}, index = 0) {
     itemTitleOrId: cleanString(issue.itemTitleOrId),
     issueType: cleanString(issue.issueType, "On-brand defect"),
     exactEvidence: cleanString(issue.exactEvidence),
-    whyItIsOffBrand: cleanString(issue.whyItIsOffBrand),
-    violatedRule: cleanString(issue.violatedRule),
+    whyItIsOffBrand: futureFrameText(cleanString(issue.whyItIsOffBrand)),
+    violatedRule: futureFrameText(cleanString(issue.violatedRule)),
     rootCauseLevel: normaliseRootCause(issue.rootCauseLevel),
     exactRemediation: futureRemediation(issue.exactRemediation, normaliseSourceType(issue.sourceType)),
-    improvedExample: String(issue.improvedExample || ""),
+    improvedExample: futureFrameText(String(issue.improvedExample || "")),
     verificationMethod: futureVerification(issue.verificationMethod, normaliseSourceType(issue.sourceType)),
   };
 }
@@ -141,19 +235,22 @@ function mergeDeterministicDefects(modelDefects, deterministicDefects) {
     seen.add(key);
     merged.push(normalised);
   }
-  return merged;
+  return groupPhraseGuardrailDefects(merged);
 }
 
-function normaliseObjectArray(rows, keys) {
+function normaliseObjectArray(rows, keys, { futureFrame = false } = {}) {
   return arr(rows).map((row) => {
     const out = {};
-    for (const key of keys) out[key] = cleanString(row?.[key], "");
+    for (const key of keys) {
+      const value = cleanString(row?.[key], "");
+      out[key] = futureFrame ? futureFrameText(value) : value;
+    }
     return out;
   });
 }
 
 function normaliseExistingDefects(rows = []) {
-  return arr(rows).map((issue, index) => normaliseDefect(issue, index));
+  return groupPhraseGuardrailDefects(arr(rows).map((issue, index) => normaliseDefect(issue, index)));
 }
 
 function defectsForSource(defects = [], sourceType) {
@@ -336,13 +433,13 @@ export function normaliseOnBrandReport(report, evidence, { rawModelError } = {})
         defects.length ? "Partially on-brand with systemic drift" : "Mostly on-brand with minor drift"
       ),
       summary: cleanString(
-        reportObj.executiveVerdict?.summary,
+        futureFrameText(reportObj.executiveVerdict?.summary),
         defects.length
           ? "Deterministic checks found patterns to tighten in future generated output."
           : "No deterministic future-output risks were found, but source coverage may still be partial."
       ),
       bluntAssessment: cleanString(
-        reportObj.executiveVerdict?.bluntAssessment,
+        futureFrameText(reportObj.executiveVerdict?.bluntAssessment),
         defects.length
           ? "The QA loop is working: use these historic examples to improve future social posts, podcast transcripts, and RSS wording."
           : "The available evidence does not prove a major future-output brand risk."
@@ -366,20 +463,20 @@ export function normaliseOnBrandReport(report, evidence, { rawModelError } = {})
     })(),
     confirmedDefectsLedger: defects,
     rssFindings: {
-      verdict: cleanString(reportObj.rssFindings?.verdict, rssDefaults.verdict),
-      titlePatternAnalysis: cleanString(reportObj.rssFindings?.titlePatternAnalysis, rssDefaults.titlePatternAnalysis),
-      summaryToneAnalysis: cleanString(reportObj.rssFindings?.summaryToneAnalysis, rssDefaults.summaryToneAnalysis),
+      verdict: cleanString(futureFrameText(reportObj.rssFindings?.verdict), rssDefaults.verdict),
+      titlePatternAnalysis: cleanString(futureFrameText(reportObj.rssFindings?.titlePatternAnalysis), rssDefaults.titlePatternAnalysis),
+      summaryToneAnalysis: cleanString(futureFrameText(reportObj.rssFindings?.summaryToneAnalysis), rssDefaults.summaryToneAnalysis),
       defects: arr(reportObj.rssFindings?.defects).length ? normaliseExistingDefects(reportObj.rssFindings.defects) : rssDefaults.defects,
     },
     oneUpBlogSocialFindings: {
-      verdict: cleanString(reportObj.oneUpBlogSocialFindings?.verdict, oneUpDefaults.verdict),
-      postPatternAnalysis: cleanString(reportObj.oneUpBlogSocialFindings?.postPatternAnalysis, oneUpDefaults.postPatternAnalysis),
+      verdict: cleanString(futureFrameText(reportObj.oneUpBlogSocialFindings?.verdict), oneUpDefaults.verdict),
+      postPatternAnalysis: cleanString(futureFrameText(reportObj.oneUpBlogSocialFindings?.postPatternAnalysis), oneUpDefaults.postPatternAnalysis),
       defects: arr(reportObj.oneUpBlogSocialFindings?.defects).length ? normaliseExistingDefects(reportObj.oneUpBlogSocialFindings.defects) : oneUpDefaults.defects,
     },
     podcastTranscriptFindings: {
-      verdict: cleanString(reportObj.podcastTranscriptFindings?.verdict, podcastDefaults.verdict),
-      openingStrength: cleanString(reportObj.podcastTranscriptFindings?.openingStrength, podcastDefaults.openingStrength),
-      flowAndTransitions: cleanString(reportObj.podcastTranscriptFindings?.flowAndTransitions, podcastDefaults.flowAndTransitions),
+      verdict: cleanString(futureFrameText(reportObj.podcastTranscriptFindings?.verdict), podcastDefaults.verdict),
+      openingStrength: cleanString(futureFrameText(reportObj.podcastTranscriptFindings?.openingStrength), podcastDefaults.openingStrength),
+      flowAndTransitions: cleanString(futureFrameText(reportObj.podcastTranscriptFindings?.flowAndTransitions), podcastDefaults.flowAndTransitions),
       repetitionWatchlist: arr(reportObj.podcastTranscriptFindings?.repetitionWatchlist).length
         ? arr(reportObj.podcastTranscriptFindings.repetitionWatchlist).map(String)
         : podcastDefaults.repetitionWatchlist,
@@ -394,20 +491,20 @@ export function normaliseOnBrandReport(report, evidence, { rawModelError } = {})
       repeatedSpokenProblems: arr(reportObj.patternLevelDiagnosis?.repeatedSpokenProblems).length ? arr(reportObj.patternLevelDiagnosis.repeatedSpokenProblems).map(String) : derivedPatterns.repeatedSpokenProblems,
       crossChannelBrandDrift: arr(reportObj.patternLevelDiagnosis?.crossChannelBrandDrift).length ? arr(reportObj.patternLevelDiagnosis.crossChannelBrandDrift).map(String) : derivedPatterns.crossChannelBrandDrift,
     },
-    promptLevelDiagnosis: normaliseObjectArray(reportObj.promptLevelDiagnosis, ["affectedArea", "diagnosis", "evidence", "recommendedPromptChange"]),
+    promptLevelDiagnosis: normaliseObjectArray(reportObj.promptLevelDiagnosis, ["affectedArea", "diagnosis", "evidence", "recommendedPromptChange"], { futureFrame: true }),
     pipelineLevelDiagnosis: (() => {
-      const rows = normaliseObjectArray(reportObj.pipelineLevelDiagnosis, ["affectedFileOrService", "diagnosis", "evidence", "smallestSafeFix"]);
+      const rows = normaliseObjectArray(reportObj.pipelineLevelDiagnosis, ["affectedFileOrService", "diagnosis", "evidence", "smallestSafeFix"], { futureFrame: true });
       return rows.length ? rows : derivedPipeline;
     })(),
     rankedRemediationPlan: arr(reportObj.rankedRemediationPlan).length ? arr(reportObj.rankedRemediationPlan).map((row, index) => ({
       priority: Number(row?.priority || index + 1),
       severity: cleanString(row?.severity, defects[index]?.severity || "medium"),
-      action: cleanString(row?.action, defects[index]?.exactRemediation || "Review confirmed defects and apply the smallest safe copy or validator fix."),
+      action: futureFrameText(cleanString(row?.action, defects[index]?.exactRemediation || "Use the future QA findings as guardrails for the next generated output.")),
       affectedSource: cleanString(row?.affectedSource, defects[index]?.sourceType || "pipeline"),
       affectedFilesOrServices: arr(row?.affectedFilesOrServices).map(String),
-      whyThisComesFirst: cleanString(row?.whyThisComesFirst, "It addresses confirmed future-output evidence rather than speculative rewrite work."),
-      implementationNotes: cleanString(row?.implementationNotes, "Use the exact remediation as a future-output guardrail."),
-      verificationMethod: futureVerification(cleanString(row?.verificationMethod, "Generate fresh output and rerun the on-brand audit."), cleanString(row?.affectedSource, defects[index]?.sourceType || "pipeline")),
+      whyThisComesFirst: futureFrameText(cleanString(row?.whyThisComesFirst, "It addresses future-output evidence rather than speculative rewrite work.")),
+      implementationNotes: futureFrameText(cleanString(row?.implementationNotes, "Use the future QA finding as a future-output guardrail.")),
+      verificationMethod: futureVerification(futureFrameText(cleanString(row?.verificationMethod, "Generate fresh output and rerun the on-brand audit.")), cleanString(row?.affectedSource, defects[index]?.sourceType || "pipeline")),
     })) : derivedPlan,
     doNotChange: normaliseObjectArray(reportObj.doNotChange, ["area", "reason", "evidence"]),
     limitations: Array.from(new Set(limitations.filter(Boolean))),
