@@ -249,6 +249,47 @@ function blogWeeklyQaEnabled() {
   return String(process.env.BLOG_WEEKLY_QA_ENABLED || "true").trim().toLowerCase() !== "false";
 }
 
+function getBlogFallbackImageUrl() {
+  return String(
+    process.env.BLOG_FALLBACK_IMAGE_URL
+      || process.env.BLOG_RSS_IMAGE_URL
+      || ""
+  ).trim();
+}
+
+async function resolveBlogArtwork({ sessionId, imagePrompt, week }) {
+  const art = await createBlogArtwork({ sessionId, prompt: imagePrompt });
+
+  if (art?.ok && art.publicUrl) {
+    return {
+      imageUrl: art.publicUrl,
+      imageStatus: "generated",
+      imageError: null,
+    };
+  }
+
+  const fallbackImageUrl = getBlogFallbackImageUrl();
+  const imageError = art?.error || "Unknown blog artwork error";
+
+  if (fallbackImageUrl) {
+    warn("blog.weekly.image.fallback", {
+      week,
+      sessionId,
+      imageUrl: fallbackImageUrl,
+      error: imageError,
+    });
+
+    return {
+      imageUrl: fallbackImageUrl,
+      imageStatus: "fallback",
+      imageError,
+    };
+  }
+
+  throw new Error(`Blog artwork failed and no BLOG_FALLBACK_IMAGE_URL is configured: ${imageError}`);
+}
+
+
 async function generateStructuredWeeklyPackage({ sessionId, week, dateLabel, items }) {
   const prompt = buildWeeklyPackagePrompt({ week, dateLabel, items });
   const baseMessages = [
@@ -417,8 +458,12 @@ export async function buildWeeklyBlogPost({ days, weekId } = {}) {
       generatedPrompt: weeklyPackage.imagePrompt,
     });
 
-    const art = await createBlogArtwork({ sessionId, prompt: imagePrompt });
-    const imageUrl = art?.ok ? art.publicUrl : "";
+    const artwork = await resolveBlogArtwork({
+      sessionId,
+      imagePrompt,
+      week: window.week,
+    });
+    const imageUrl = artwork.imageUrl;
 
     const { postPath, postUrl, postMetaUrl, postsManifestUrl, blogHubUrl, weeklyArchiveUrl } = buildSiteBlogUrls(slug, prefix);
 
@@ -436,6 +481,8 @@ export async function buildWeeklyBlogPost({ days, weekId } = {}) {
       bodyHtml,
       imageUrl,
       imagePrompt,
+      imageStatus: artwork.imageStatus,
+      imageError: artwork.imageError,
       dateLabel: window.dateLabel,
       postUrl,
       sources: cleanedSources,
@@ -470,6 +517,8 @@ export async function buildWeeklyBlogPost({ days, weekId } = {}) {
       schema_version: 1,
       ok: true,
       ...postEntry,
+      image_generation_status: artwork.imageStatus,
+      image_generation_error: artwork.imageError,
       days: window.days,
       window: {
         start: window.start.toISOString(),
@@ -494,6 +543,7 @@ export async function buildWeeklyBlogPost({ days, weekId } = {}) {
       postsManifestUrl,
       rssFeedUrl: rss.feedUrl,
       imageUrl,
+      imageStatus: artwork.imageStatus,
       sourceCount: cleanedSources.length,
       themeCount: weeklyPackage.dominantThemes.length,
     });
@@ -512,6 +562,8 @@ export async function buildWeeklyBlogPost({ days, weekId } = {}) {
       postMetaUrl,
       postsManifestUrl,
       imageUrl,
+      imageStatus: artwork.imageStatus,
+      imageError: artwork.imageError,
       blogHubUrl,
       weeklyArchiveUrl,
       rssFeedUrl: rss.feedUrl,
