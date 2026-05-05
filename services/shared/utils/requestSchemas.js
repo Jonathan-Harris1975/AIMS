@@ -213,6 +213,18 @@ export const auditRunBodySchema = z
   .passthrough();
 
 
+
+export const onBrandAuditRunBodySchema = z
+  .object({
+    sessionId: optionalSessionId,
+    lookbackDays: z.coerce.number().int().min(1).max(31).optional().default(7),
+    includeOneUp: booleanish.optional().default(true),
+    includePodcastTranscripts: booleanish.optional().default(true),
+    includeRss: booleanish.optional().default(true),
+    dryRun: booleanish.optional().default(false),
+  })
+  .passthrough();
+
 export const auditAnalysisBodySchema = z
   .object({
     auditType: z.string().trim().min(1).max(80).optional().default("seo-aeo-geo"),

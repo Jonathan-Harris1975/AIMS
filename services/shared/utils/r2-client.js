@@ -46,6 +46,7 @@ const {
   R2_BUCKET_BLOG_IMAGES,
   R2_BUCKET_BLOG_RSS,
   R2_BUCKET_BRAND_ASSETS,
+  R2_BUCKET_AUDITS,
 
   // Legacy/compat (read-only)
   R2_BUCKET_PODCAST_OUTPUT,
@@ -71,6 +72,7 @@ const {
   R2_PUBLIC_BASE_URL_BLOG_IMAGES,
   R2_PUBLIC_BASE_URL_BLOG_RSS,
   R2_PUBLIC_BASE_URL_BRAND_ASSETS,
+  R2_PUBLIC_BASE_URL_AUDITS,
   R2_PUBLIC_BASE_URL_TRANSCRIPT_HTML,
 
   // NEW — metasystem public URL (optional)
@@ -107,6 +109,7 @@ export const s3 = new S3Client({
 export const R2_BUCKET_RAW_AUDIO = "chunks";
 export const R2_BUCKET_RAW_TEXT_KEY = "rawtext";
 export const R2_BUCKET_PODCAST_KEY = "podcast";
+export const R2_BUCKET_AUDITS_KEY = "audits";
 export const R2_PUBLIC_BASE_URL_PODCAST_RESOLVED = R2_PUBLIC_BASE_URL_PODCAST || R2_PUBLIC_BASE_URL_PODCAST_OUTPUT;
 export const R2_PUBLIC_BASE_URL_RSS_RESOLVED = R2_PUBLIC_BASE_URL_RSS || R2_PUBLIC_BASE_URL_RSS_FEEDS;
 
@@ -159,7 +162,11 @@ export const R2_BUCKETS = {
   blogrss:         R2_BUCKET_BLOG_RSS,
   "blog-rss":      R2_BUCKET_BLOG_RSS,
 
-  // Brand assets / audit reports
+  // Audit reports
+  audits:          R2_BUCKET_AUDITS,
+  audit:           R2_BUCKET_AUDITS,
+
+  // Brand assets / legacy non-audit assets
   brandAssets:     R2_BUCKET_BRAND_ASSETS,
   brandassets:     R2_BUCKET_BRAND_ASSETS,
   "brand-assets":  R2_BUCKET_BRAND_ASSETS,
@@ -222,6 +229,8 @@ export const BUCKET_ENV_BY_ALIAS = {
   blogRss: "R2_BUCKET_BLOG_RSS",
   blogrss: "R2_BUCKET_BLOG_RSS",
   "blog-rss": "R2_BUCKET_BLOG_RSS",
+  audits: "R2_BUCKET_AUDITS",
+  audit: "R2_BUCKET_AUDITS",
   brandAssets: "R2_BUCKET_BRAND_ASSETS",
   brandassets: "R2_BUCKET_BRAND_ASSETS",
   "brand-assets": "R2_BUCKET_BRAND_ASSETS",
@@ -254,6 +263,8 @@ export const PUBLIC_URL_ENV_BY_ALIAS = {
   blogRss: "R2_PUBLIC_BASE_URL_BLOG_RSS",
   blogrss: "R2_PUBLIC_BASE_URL_BLOG_RSS",
   "blog-rss": "R2_PUBLIC_BASE_URL_BLOG_RSS",
+  audits: "R2_PUBLIC_BASE_URL_AUDITS",
+  audit: "R2_PUBLIC_BASE_URL_AUDITS",
   brandAssets: "R2_PUBLIC_BASE_URL_BRAND_ASSETS",
   brandassets: "R2_PUBLIC_BASE_URL_BRAND_ASSETS",
   "brand-assets": "R2_PUBLIC_BASE_URL_BRAND_ASSETS",
@@ -296,7 +307,11 @@ export const R2_PUBLIC_URLS = {
   blogrss:         R2_PUBLIC_BASE_URL_BLOG_RSS,
   "blog-rss":      R2_PUBLIC_BASE_URL_BLOG_RSS,
 
-  // Brand assets / audit reports
+  // Audit reports
+  audits:          R2_PUBLIC_BASE_URL_AUDITS,
+  audit:           R2_PUBLIC_BASE_URL_AUDITS,
+
+  // Brand assets / legacy non-audit assets
   brandAssets:     R2_PUBLIC_BASE_URL_BRAND_ASSETS,
   brandassets:     R2_PUBLIC_BASE_URL_BRAND_ASSETS,
   "brand-assets":  R2_PUBLIC_BASE_URL_BRAND_ASSETS,
@@ -452,6 +467,7 @@ export default {
   R2_BUCKET_RAW_AUDIO,
   R2_BUCKET_RAW_TEXT_KEY,
   R2_BUCKET_PODCAST_KEY,
+  R2_BUCKET_AUDITS_KEY,
   R2_PUBLIC_BASE_URL_PODCAST_RESOLVED,
   R2_PUBLIC_BASE_URL_RSS_RESOLVED,
   uploadBuffer,

@@ -100,6 +100,7 @@ export const aiConfig = {
     rssRewrite: ["chatgpt", "google", "meta"],
     rssShortTitle: ["chatgpt", "google", "meta"],
     blogWeekly: ["google", "chatgpt", "deepseek"],
+    onBrandAudit: ["anthropic46", "google25FlashLite", "chatgptMini5", "deepseekV4Pro", "deepseekV4Flash", "meta", "anthropic", "google", "chatgpt", "deepseek"],
     auditForensic: ["anthropic46", "google25FlashLite", "chatgptMini5", "deepseekV4Pro", "deepseekV4Flash", "meta", "anthropic", "google", "chatgpt", "deepseek"],
     oneupDaily: ["chatgpt", "google", "deepseek"],
     oneupQuiz: ["chatgpt", "google", "deepseek"],
