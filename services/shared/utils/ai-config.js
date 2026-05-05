@@ -104,6 +104,7 @@ export const aiConfig = {
     auditForensic: ["anthropic46", "google25FlashLite", "chatgptMini5", "deepseekV4Pro", "deepseekV4Flash", "meta", "anthropic", "google", "chatgpt", "deepseek"],
     oneupDaily: ["chatgpt", "google", "deepseek"],
     oneupQuiz: ["chatgpt", "google", "deepseek"],
+    oneupEbook: ["chatgpt", "google", "deepseek"],
   },
 
   commonParams: { temperature: 0.85, timeout: 45000 },
