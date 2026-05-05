@@ -182,3 +182,79 @@ test("transcript discovery ranks latest html or txt object per session", async (
   assert.equal(ranked[1].key, "episode-a.html");
   assert.equal(ranked[1].extension, "html");
 });
+
+test("transcript HTML extraction keeps audit evidence out of navigation chrome", async () => {
+  const { __testing } = await import(`../audits/utils/onBrandEvidence.js?html-extract=${Date.now()}`);
+  const html = `<!doctype html><html><body>
+    <header>Jonathan Harris Home eBooks Podcast Newsletter Topics About Resources Blog Glossary Topics Comparisons Contact Browse Books</header>
+    <main><section class="transcript-text">
+      <h2 class="transcript-heading">Full Episode Transcript</h2>
+      <p class="transcript-para">First real spoken paragraph. It contains the actual podcast copy.</p>
+      <p class="transcript-para">Second real spoken paragraph with no site navigation.</p>
+    </section></main>
+    <footer>Browse transcript archive</footer>
+  </body></html>`;
+
+  const text = __testing.extractTranscriptText(html, { isHtml: true });
+  assert.match(text, /First real spoken paragraph/);
+  assert.match(text, /Second real spoken paragraph/);
+  assert.doesNotMatch(text, /Jonathan Harris Home eBooks/);
+  assert.doesNotMatch(text, /Full Episode Transcript/);
+});
+
+test("dry-run report normalisation derives useful source sections and remediation", async () => {
+  const { __testing } = await import(`../audits/utils/onBrandAudit.js?derive-report=${Date.now()}`);
+  const evidence = {
+    metadata: {
+      sessionId: "dry-report-test",
+      windowStart: "2026-05-01T00:00:00.000Z",
+      windowEnd: "2026-05-05T00:00:00.000Z",
+      lookbackDays: 4,
+      blockedSources: [],
+      partialSources: [],
+    },
+    oneUpBlogSocial: {
+      sourceType: "oneup_blog_social",
+      status: "complete",
+      items: [{ title: "Published post" }],
+      evidenceMethod: "OneUp getpublishedposts paginated historic scan",
+      limitations: [],
+    },
+    podcastTranscripts: {
+      sourceType: "podcast_transcript",
+      status: "complete",
+      items: [{ title: "Transcript" }],
+      evidenceMethod: "R2 transcript bucket object scan, transcript-body extraction for HTML",
+      limitations: [],
+    },
+    rss: {
+      sourceType: "rss_feed",
+      status: "complete",
+      items: [{ title: "RSS item" }],
+      evidenceMethod: "R2 rss/feed.json",
+      limitations: [],
+    },
+    deterministicPreflight: [
+      {
+        issueId: "OB-001",
+        severity: "high",
+        confidence: "confirmed",
+        sourceType: "rss_feed",
+        itemTitleOrId: "RSS item",
+        issueType: "existing RSS validator finding",
+        exactEvidence: "Summary contains banned filler",
+        whyItIsOffBrand: "The validator caught filler.",
+        violatedRule: "RSS prompt and feedGenerator publication rules.",
+        rootCauseLevel: "validator",
+        exactRemediation: "Tighten the RSS rewrite retry path.",
+        verificationMethod: "Rerun audit.",
+      },
+    ],
+  };
+
+  const report = __testing.normaliseOnBrandReport({}, evidence, { rawModelError: "dryRun=true" });
+  assert.equal(report.oneUpBlogSocialFindings.postPatternAnalysis.includes("getpublishedposts"), true);
+  assert.equal(report.rssFindings.defects.length, 1);
+  assert.ok(report.confirmedStrengths.length >= 3);
+  assert.ok(report.rankedRemediationPlan.length >= 1);
+});
