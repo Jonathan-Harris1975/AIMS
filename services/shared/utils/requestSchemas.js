@@ -157,12 +157,12 @@ const optionalScheduledDateTime = z
   .trim()
   .regex(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/, "must be YYYY-MM-DD HH:MM")
   .optional();
-
-const optionalTime = z
+const optionalTimeString = z
   .string()
   .trim()
   .regex(/^\d{2}:\d{2}$/, "must be HH:MM")
   .optional();
+const oneupSocialNetworkIdSchema = z.union([z.string().trim().min(1).max(400), z.array(z.string().trim().min(1).max(200)).min(1)]).optional();
 
 export const oneupDailyBodySchema = z
   .object({
@@ -170,7 +170,7 @@ export const oneupDailyBodySchema = z
     scheduledDateTime: optionalScheduledDateTime,
     dryRun: booleanish.optional(),
     categoryName: z.string().trim().min(1).max(120).optional(),
-    socialNetworkId: z.union([z.string().trim().min(1).max(400), z.array(z.string().trim().min(1).max(200)).min(1)]).optional(),
+    socialNetworkId: oneupSocialNetworkIdSchema,
     imageUrl: z.string().trim().url().optional(),
     apiKey: z.string().trim().min(1).max(200).optional(),
   })
@@ -190,7 +190,7 @@ export const oneupQuizBodySchema = z
     answerScheduledDateTime: optionalScheduledDateTime,
     dryRun: booleanish.optional(),
     categoryName: z.string().trim().min(1).max(120).optional(),
-    socialNetworkId: z.union([z.string().trim().min(1).max(400), z.array(z.string().trim().min(1).max(200)).min(1)]).optional(),
+    socialNetworkId: oneupSocialNetworkIdSchema,
     questionImageUrl: z.string().trim().url().optional(),
     answerImageUrl: z.string().trim().url().optional(),
     apiKey: z.string().trim().min(1).max(200).optional(),
@@ -203,25 +203,24 @@ export const oneupQuizBodySchema = z
       : value.socialNetworkId,
   }));
 
-const socialNetworkIdSchema = z.union([
-  z.string().trim().min(1).max(400),
-  z.array(z.string().trim().min(1).max(200)).min(1),
-]);
 
-const featuredBookSchema = z
+const oneupEbookFeaturedBookSchema = z
   .object({
-    title: z.string().trim().min(1).max(240),
+    title: z.string().trim().min(1).max(300),
     shortDescription: z.string().trim().max(2000).optional(),
-    summary: z.string().trim().max(5000).optional(),
-    keywords: z.union([z.string().trim().max(2000), z.array(z.string().trim().min(1).max(120)).max(60)]).optional(),
+    description: z.string().trim().max(4000).optional(),
+    summary: z.string().trim().max(4000).optional(),
+    keywords: z.union([z.string().trim().max(2000), z.array(z.string().trim().min(1).max(120)).max(50)]).optional(),
+    keywordsText: z.string().trim().max(2000).optional(),
     audience: z.string().trim().max(2000).optional(),
-    whoThisBookIsFor: z.string().trim().max(3000).optional(),
-    whatThisBookCovers: z.string().trim().max(3000).optional(),
-    whatYouWillLearn: z.string().trim().max(3000).optional(),
-    whyItMatters: z.string().trim().max(3000).optional(),
+    whoThisBookIsFor: z.string().trim().max(4000).optional(),
+    whatThisBookCovers: z.string().trim().max(4000).optional(),
+    whatYouWillLearn: z.string().trim().max(4000).optional(),
+    whyItMatters: z.string().trim().max(4000).optional(),
     bookUrl: z.string().trim().url(),
     coverArtUrl: z.string().trim().url().optional(),
-    manuscriptPdfUrl: z.string().trim().url().optional(),
+    manuscriptUrl: z.string().trim().url().optional(),
+    slug: z.string().trim().min(1).max(300).optional(),
   })
   .passthrough();
 
@@ -230,15 +229,15 @@ export const oneupEbookWeeklyBodySchema = z
     weekStartDate: optionalIsoDate,
     dryRun: booleanish.optional(),
     categoryName: z.string().trim().min(1).max(120).optional(),
-    socialNetworkId: socialNetworkIdSchema.optional(),
-    featuredBook: featuredBookSchema.optional(),
-    featuredBookApiUrl: z.string().trim().url().optional(),
-    featuredBookTimeoutMs: z.coerce.number().int().min(1000).max(60000).optional(),
+    socialNetworkId: oneupSocialNetworkIdSchema,
+    imageUrl: z.string().trim().url().optional(),
+    featuredBook: oneupEbookFeaturedBookSchema.optional(),
+    usePodcastFeaturedBook: booleanish.optional(),
     publishTimes: z
       .object({
-        tuesday: optionalTime,
-        thursday: optionalTime,
-        saturday: optionalTime,
+        tuesday: optionalTimeString,
+        thursday: optionalTimeString,
+        saturday: optionalTimeString,
       })
       .partial()
       .optional(),
@@ -250,6 +249,9 @@ export const oneupEbookWeeklyBodySchema = z
       })
       .partial()
       .optional(),
+    tuesdayScheduledDateTime: optionalScheduledDateTime,
+    thursdayScheduledDateTime: optionalScheduledDateTime,
+    saturdayScheduledDateTime: optionalScheduledDateTime,
     apiKey: z.string().trim().min(1).max(200).optional(),
   })
   .passthrough()
