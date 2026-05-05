@@ -1,6 +1,6 @@
 import { XMLParser } from "fast-xml-parser";
-import { listScheduledPosts } from "../../services/oneup/utils/oneupClient.js";
-import { getObjectAsText, listKeys, buildPublicUrl } from "../../services/shared/utils/r2-client.js";
+import { fetchPublishedPostsHistory } from "../../services/oneup/utils/oneupClient.js";
+import { getObjectAsText, listObjects, buildPublicUrl } from "../../services/shared/utils/r2-client.js";
 import { RSS_PROMPTS } from "../../services/rss-feed-creator/utils/rss-prompts.js";
 
 const REPO_FILES_INSPECTED = [
@@ -94,18 +94,21 @@ function inWindow(date, windowStart, windowEnd) {
   return date.getTime() >= windowStart.getTime() && date.getTime() <= windowEnd.getTime();
 }
 
-function normaliseOneUpRow(row = {}) {
+function normaliseOneUpRow(row = {}, sourceMethod = "OneUp API") {
   const when = sourceDate(row);
   return {
-    title: cleanText(row.title || row.post_title || row.name || ""),
+    title: cleanText(row.title || row.post_title || row.name || row.category_name || ""),
     topic: cleanText(row.topic || row.category_name || row.category || ""),
     content: cleanText(row.content || row.post || row.caption || row.message || ""),
     firstComment: cleanText(row.first_comment || row.firstComment || row.comment || ""),
     platform: cleanText(row.platform || row.social_network || row.social_network_name || ""),
-    account: cleanText(row.account || row.account_name || row.social_account || ""),
-    status: cleanText(row.status || row.post_status || "scheduled"),
-    scheduledOrPublishedAt: when ? toIso(when) : cleanText(row.date_time || row.scheduled_date_time || ""),
-    sourceMethod: "OneUp getscheduledposts endpoint exposed by existing oneupClient.js",
+    account: cleanText(row.account || row.account_name || row.social_account || row.social_network_username || row.email || ""),
+    status: cleanText(row.status || row.post_status || "published"),
+    postId: cleanText(row.post_id || row.id || ""),
+    sourceUrl: cleanText(row.source_url || row.url || row.link || ""),
+    imageUrl: cleanText(row.content_image || row.image_url || row.imageUrl || ""),
+    scheduledOrPublishedAt: when ? toIso(when) : cleanText(row.created_at || row.date_time || row.scheduled_date_time || ""),
+    sourceMethod,
     rawMetadata: compactObject(row, 2500),
   };
 }
@@ -119,37 +122,37 @@ export async function collectOneUpEvidence({ include, windowStart, windowEnd, lo
   }
 
   try {
-    const rows = [];
-    for (let page = 0; page < maxPages; page += 1) {
-      const result = await listScheduledPosts({ start: page * 50 });
-      const data = Array.isArray(result?.data) ? result.data : [];
-      rows.push(...data);
-      if (data.length < 50) break;
-    }
+    const result = await fetchPublishedPostsHistory({
+      maxPages,
+      lookbackDays,
+      windowStart,
+      windowEnd,
+    });
 
-    const posts = rows
-      .map(normaliseOneUpRow)
-      .filter((post) => {
-        const date = safeDate(post.scheduledOrPublishedAt);
-        return date ? inWindow(date, windowStart, windowEnd) : true;
-      });
+    const rows = Array.isArray(result?.data) ? result.data : [];
+    const posts = rows.map((row) => normaliseOneUpRow(row, "OneUp getpublishedposts historic published-post endpoint"));
 
     return {
       sourceType: "oneup_blog_social",
-      status: "partial",
+      status: "complete",
       items: posts,
-      evidenceMethod: `OneUp getscheduledposts paginated scan for the previous ${lookbackDays} day(s).`,
+      evidenceMethod: `OneUp getpublishedposts paginated historic scan for the previous ${lookbackDays} day(s).`,
       limitations: [
-        "The existing OneUp client exposes getscheduledposts only; historic published-post retrieval is not confirmed in this repo.",
-        "Rows without parseable dates are retained as evidence but cannot be proven to sit inside the lookback window.",
+        ...(posts.length ? [] : ["OneUp getpublishedposts returned no rows inside the requested lookback window."]),
+        "Rows without parseable published dates are retained as evidence because OneUp may return older API payload shapes.",
       ],
+      pagination: {
+        pagesScanned: result?.pagesScanned || 0,
+        rawCount: result?.rawCount || 0,
+        filteredCount: result?.filteredCount || posts.length,
+      },
     };
   } catch (error) {
     return {
       sourceType: "oneup_blog_social",
       status: "blocked",
       items: [],
-      evidenceMethod: "OneUp getscheduledposts attempt failed",
+      evidenceMethod: "OneUp getpublishedposts historic scan failed",
       limitations: [error?.message || "OneUp evidence retrieval failed."],
     };
   }
@@ -168,6 +171,42 @@ function metaDate(meta = {}) {
   return safeDate(meta.pubDate || meta.date || meta.updatedAt || meta.generatedAt || meta.createdAt) || dateFromText(meta.sessionId || meta.title || "");
 }
 
+function transcriptObjectDate(object = {}) {
+  return safeDate(object.lastModified) || dateFromText(object.key || "");
+}
+
+function transcriptExtension(key = "") {
+  const match = String(key || "").match(/\.([^.]+)$/);
+  return match ? match[1].toLowerCase() : "";
+}
+
+function normaliseTranscriptObjects(objects = []) {
+  const bySession = new Map();
+  for (const object of objects || []) {
+    const key = object?.key || object?.Key || "";
+    if (!/\.(txt|html)$/i.test(key)) continue;
+    const sessionId = sessionFromTranscriptKey(key);
+    if (!sessionId) continue;
+    const date = transcriptObjectDate({ ...object, key });
+    const row = {
+      key,
+      sessionId,
+      extension: transcriptExtension(key),
+      lastModified: object?.lastModified || object?.LastModified || null,
+      size: Number.isFinite(Number(object?.size ?? object?.Size)) ? Number(object?.size ?? object?.Size) : null,
+      sortTime: date ? date.getTime() : 0,
+    };
+    const existing = bySession.get(sessionId);
+    if (!existing || row.sortTime > existing.sortTime || (row.sortTime === existing.sortTime && row.extension === "html" && existing.extension !== "html")) {
+      bySession.set(sessionId, row);
+    }
+  }
+  return [...bySession.values()].sort((a, b) => {
+    if (b.sortTime !== a.sortTime) return b.sortTime - a.sortTime;
+    return b.key.localeCompare(a.key);
+  });
+}
+
 async function readJsonMaybe(bucket, key) {
   try {
     return JSON.parse(await getObjectAsText(bucket, key));
@@ -182,30 +221,29 @@ export async function collectPodcastTranscriptEvidence({ include, windowStart, w
   }
 
   try {
-    const keys = await listKeys("transcript", "");
-    const transcriptKeys = keys
-      .filter((key) => /\.txt$/i.test(key))
-      .sort()
-      .reverse();
+    const objects = await listObjects("transcript", "");
+    const transcriptObjects = normaliseTranscriptObjects(objects);
 
-    if (!transcriptKeys.length) {
+    if (!transcriptObjects.length) {
       return {
         sourceType: "podcast_transcript",
         status: "partial",
         items: [],
-        evidenceMethod: "R2 transcript bucket key scan",
-        limitations: ["No .txt transcript objects were discovered in the transcript bucket."],
+        evidenceMethod: "R2 transcript bucket object scan with LastModified metadata",
+        limitations: ["No .html or .txt transcript objects were discovered in the transcript bucket."],
       };
     }
 
     const items = [];
-    for (const key of transcriptKeys.slice(0, 12)) {
-      const sessionId = sessionFromTranscriptKey(key);
+    for (const object of transcriptObjects.slice(0, 20)) {
+      const key = object.key;
+      const sessionId = object.sessionId;
       const meta = await readJsonMaybe("meta", `${sessionId}.json`);
-      const knownDate = metaDate(meta || { sessionId }) || dateFromText(key);
+      const knownDate = transcriptObjectDate(object) || metaDate(meta || { sessionId }) || dateFromText(key);
       if (knownDate && !inWindow(knownDate, windowStart, windowEnd)) continue;
       const text = await getObjectAsText("transcript", key);
-      const htmlKey = key.replace(/\.txt$/i, ".html");
+      const isHtml = /\.html$/i.test(key);
+      const htmlKey = isHtml ? key : key.replace(/\.txt$/i, ".html");
       const publicUrl = buildPublicUrl("transcript", key);
       const htmlUrl = buildPublicUrl("transcript", htmlKey);
       items.push({
@@ -216,20 +254,22 @@ export async function collectPodcastTranscriptEvidence({ include, windowStart, w
         publicUrl,
         htmlUrl,
         date: knownDate ? toIso(knownDate) : null,
+        lastModified: object.lastModified || null,
+        sourceFormat: isHtml ? "html" : "txt",
         textExcerpt: excerpt(text, 10000),
         textCharCount: cleanText(text).length,
-        discoveryMethod: "R2 transcript key scan plus matching meta JSON where available.",
+        discoveryMethod: "R2 transcript object scan sorted by LastModified; latest .html or .txt object wins per session.",
       });
       if (items.length >= maxTranscripts) break;
     }
 
     return {
       sourceType: "podcast_transcript",
-      status: items.length ? "partial" : "partial",
+      status: items.length ? "complete" : "partial",
       items,
-      evidenceMethod: "R2 transcript bucket key scan, transcript text read, optional meta bucket lookup.",
+      evidenceMethod: "R2 transcript bucket object scan, LastModified sort, latest .html/.txt read, optional meta bucket lookup.",
       limitations: [
-        "The shared R2 listKeys helper returns keys only, not LastModified, so transcript recency depends on session IDs or metadata dates.",
+        ...(items.length ? [] : ["Transcript objects exist, but none fell inside the requested lookback window."]),
         "Only compact transcript excerpts are included to keep the audit payload within model limits.",
       ],
     };
@@ -597,4 +637,6 @@ export const __testing = {
   collectOneUpEvidence,
   collectPodcastTranscriptEvidence,
   collectRssEvidence,
+  normaliseTranscriptObjects,
+  normaliseOneUpRow,
 };
