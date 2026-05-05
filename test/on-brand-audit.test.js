@@ -101,8 +101,8 @@ test("on-brand report normalisation preserves contract and merges deterministic 
         whyItIsOffBrand: "Prefix.",
         violatedRule: "No prefixes.",
         rootCauseLevel: "content",
-        exactRemediation: "Remove prefix.",
-        verificationMethod: "Rerun audit.",
+        exactRemediation: "For future RSS output, remove prefix.",
+        verificationMethod: "Generate fresh output and rerun audit.",
       },
     ],
   };
@@ -246,8 +246,8 @@ test("dry-run report normalisation derives useful source sections and remediatio
         whyItIsOffBrand: "The validator caught filler.",
         violatedRule: "RSS prompt and feedGenerator publication rules.",
         rootCauseLevel: "validator",
-        exactRemediation: "Tighten the RSS rewrite retry path.",
-        verificationMethod: "Rerun audit.",
+        exactRemediation: "For future RSS output, tighten the RSS rewrite retry path.",
+        verificationMethod: "Generate fresh output and rerun audit.",
       },
     ],
   };
@@ -257,4 +257,40 @@ test("dry-run report normalisation derives useful source sections and remediatio
   assert.equal(report.rssFindings.defects.length, 1);
   assert.ok(report.confirmedStrengths.length >= 3);
   assert.ok(report.rankedRemediationPlan.length >= 1);
+  assert.match(report.executiveVerdict.bluntAssessment, /future/i);
+  assert.match(report.rankedRemediationPlan[0].whyThisComesFirst, /future generated output|future-output/i);
+});
+
+
+test("on-brand report HTML frames findings as future QA guardrails", async () => {
+  const { renderOnBrandReportHtml } = await import(`../audits/utils/onBrandReportHtml.js?future-html=${Date.now()}`);
+  const html = renderOnBrandReportHtml({
+    sessionId: "future-report",
+    generatedAt: "2026-05-05T00:00:00.000Z",
+    window: { start: "2026-05-01T00:00:00.000Z", end: "2026-05-05T00:00:00.000Z" },
+    executiveVerdict: { status: "Mostly on-brand", summary: "QA calibration", bluntAssessment: "Use evidence for future output." },
+    scorecard: {},
+    sourceCoverage: [],
+    confirmedDefectsLedger: [
+      {
+        issueId: "OB-001",
+        severity: "medium",
+        sourceType: "rss_feed",
+        confidence: "confirmed",
+        issueType: "future wording risk",
+        itemTitleOrId: "RSS item",
+        exactEvidence: "the future of",
+        whyItIsOffBrand: "Filler",
+        violatedRule: "No filler",
+        exactRemediation: "For future RSS output, cut the filler.",
+        verificationMethod: "Generate fresh RSS output and rerun the audit.",
+      },
+    ],
+  });
+
+  assert.match(html, /How to use this QA report/);
+  assert.match(html, /future social posts, podcast transcript layouts, spoken-copy passes, and RSS feed wording/);
+  assert.match(html, /Future QA findings ledger/);
+  assert.match(html, /Future guardrail/);
+  assert.match(html, /Ranked future QA refinement plan/);
 });
