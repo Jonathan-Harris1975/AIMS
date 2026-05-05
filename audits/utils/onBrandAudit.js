@@ -129,12 +129,165 @@ function normaliseObjectArray(rows, keys) {
   });
 }
 
+function normaliseExistingDefects(rows = []) {
+  return arr(rows).map((issue, index) => normaliseDefect(issue, index));
+}
+
+function defectsForSource(defects = [], sourceType) {
+  return arr(defects).filter((issue) => issue.sourceType === sourceType);
+}
+
+function hasMethod(sourceCoverage = [], sourceType, fragment) {
+  const source = arr(sourceCoverage).find((row) => row.sourceType === sourceType);
+  return source?.status === "complete" && String(source.evidenceMethod || "").toLowerCase().includes(fragment.toLowerCase());
+}
+
+function deriveConfirmedStrengths(sourceCoverage = []) {
+  const strengths = [];
+  if (hasMethod(sourceCoverage, "oneup_blog_social", "getpublishedposts")) {
+    strengths.push({
+      sourceType: "oneup_blog_social",
+      evidence: "Historic published-post retrieval completed through OneUp getpublishedposts.",
+      whyItWorks: "The audit is checking real published social/blog output rather than scheduled drafts only.",
+    });
+  }
+  if (hasMethod(sourceCoverage, "podcast_transcript", "transcript-body extraction")) {
+    strengths.push({
+      sourceType: "podcast_transcript",
+      evidence: "Transcript discovery reads the latest .html or .txt object and reduces HTML pages to the transcript body.",
+      whyItWorks: "Navigation chrome and website boilerplate are kept out of the brand judgement.",
+    });
+  }
+  if (arr(sourceCoverage).some((row) => row.sourceType === "rss_feed" && row.status === "complete")) {
+    strengths.push({
+      sourceType: "rss_feed",
+      evidence: "RSS evidence was loaded successfully for the lookback window.",
+      whyItWorks: "The audit can compare public feed output against the existing RSS brand rules.",
+    });
+  }
+  return strengths;
+}
+
+function defaultRssFindings(defects, sourceCoverage) {
+  const rssDefects = defectsForSource(defects, "rss_feed");
+  return {
+    verdict: rssDefects.length
+      ? "RSS evidence was inspected and the confirmed issues below need cleanup."
+      : "RSS evidence was inspected and no deterministic RSS defects were found.",
+    titlePatternAnalysis: rssDefects.some((issue) => /title/i.test(issue.issueType))
+      ? "At least one RSS title pattern issue was confirmed in the ledger."
+      : "No deterministic RSS title pattern issues were found.",
+    summaryToneAnalysis: rssDefects.some((issue) => /summary|filler|hype|metadata|wrapper|validator/i.test(`${issue.issueType} ${issue.whyItIsOffBrand}`))
+      ? "At least one RSS summary or validator issue was confirmed in the ledger."
+      : "No deterministic RSS summary tone issues were found.",
+    defects: rssDefects,
+  };
+}
+
+function defaultOneUpFindings(defects, sourceCoverage) {
+  const oneUpDefects = defectsForSource(defects, "oneup_blog_social");
+  const historyConfirmed = hasMethod(sourceCoverage, "oneup_blog_social", "getpublishedposts");
+  return {
+    verdict: oneUpDefects.length
+      ? "OneUp/blog/social published evidence was inspected and the confirmed issues below need cleanup."
+      : "OneUp/blog/social published evidence was inspected and no deterministic defects were found.",
+    postPatternAnalysis: historyConfirmed
+      ? "Historic published OneUp retrieval is confirmed via getpublishedposts; the audit is no longer limited to scheduled posts."
+      : "Historic published OneUp retrieval was not confirmed in this run; check source coverage limitations.",
+    defects: oneUpDefects,
+  };
+}
+
+function defaultPodcastFindings(defects, sourceCoverage) {
+  const podcastDefects = defectsForSource(defects, "podcast_transcript");
+  return {
+    verdict: podcastDefects.length
+      ? "Podcast transcript evidence was inspected and the confirmed spoken-copy issues below need cleanup."
+      : "Podcast transcript evidence was inspected and no deterministic spoken-copy defects were found.",
+    openingStrength: podcastDefects.some((issue) => /opening|overlong|hype|filler/i.test(issue.issueType))
+      ? "Opening/body copy needs tightening where listed in the ledger."
+      : "No deterministic opening weakness was confirmed from the supplied excerpts.",
+    flowAndTransitions: podcastDefects.some((issue) => /transition|sequencing|overlong/i.test(issue.issueType))
+      ? "Flow issues were found where long sentences or repeated transitions appear in the ledger."
+      : "No deterministic transition or sequencing issue was confirmed from the supplied excerpts.",
+    repetitionWatchlist: podcastDefects
+      .filter((issue) => /repeated transition/i.test(issue.issueType))
+      .map((issue) => issue.exactEvidence),
+    spokenWordFixes: podcastDefects
+      .filter((issue) => /overlong podcast sentence/i.test(issue.issueType))
+      .slice(0, 5)
+      .map((issue) => ({
+        originalLine: issue.exactEvidence,
+        improvedLine: "Split this into two shorter spoken lines and cut any abstract padding.",
+        reason: issue.whyItIsOffBrand,
+      })),
+    defects: podcastDefects,
+  };
+}
+
+function derivePatternDiagnosis(defects = []) {
+  return {
+    repeatedTitleProblems: Array.from(new Set(defects.filter((issue) => /title|headline/i.test(issue.issueType)).map((issue) => issue.issueType))),
+    repeatedToneProblems: Array.from(new Set(defects.filter((issue) => /hype|filler|corporate|american/i.test(issue.issueType)).map((issue) => issue.exactEvidence))),
+    repeatedSpokenProblems: Array.from(new Set(defects.filter((issue) => issue.sourceType === "podcast_transcript").map((issue) => issue.issueType))),
+    crossChannelBrandDrift: Array.from(new Set(defects.map((issue) => issue.violatedRule).filter(Boolean))).slice(0, 6),
+  };
+}
+
+function derivePipelineDiagnosis(defects = []) {
+  const rows = [];
+  if (defects.some((issue) => issue.sourceType === "rss_feed" && /validator/i.test(issue.rootCauseLevel))) {
+    rows.push({
+      affectedFileOrService: "services/rss-feed-creator/utils/rss-prompts.js",
+      diagnosis: "The RSS validator is catching banned filler, but the generation/retry path still allowed a weak phrase into evidence.",
+      evidence: "RSS validator finding appears in the confirmed defects ledger.",
+      smallestSafeFix: "Keep the validator blocking and tighten the rewrite retry prompt only if the same phrase recurs.",
+    });
+  }
+  if (defects.some((issue) => issue.sourceType === "podcast_transcript" && /hype|filler|overlong|transition/i.test(issue.issueType))) {
+    rows.push({
+      affectedFileOrService: "services/script/utils/editAndFormat.js",
+      diagnosis: "Podcast transcript copy still contains phrases or sentence shapes that are poor for spoken delivery.",
+      evidence: "Podcast transcript issues appear in the confirmed defects ledger.",
+      smallestSafeFix: "Tighten the transcript QA/editorial pass; do not alter the wider podcast route structure.",
+    });
+  }
+  return rows;
+}
+
+function deriveRemediationPlan(defects = []) {
+  const severityRank = { critical: 0, high: 1, medium: 2, low: 3 };
+  return [...arr(defects)]
+    .sort((a, b) => (severityRank[a.severity] ?? 9) - (severityRank[b.severity] ?? 9))
+    .slice(0, 8)
+    .map((issue, index) => ({
+      priority: index + 1,
+      severity: issue.severity,
+      action: issue.exactRemediation,
+      affectedSource: issue.sourceType,
+      affectedFilesOrServices: issue.sourceType === "rss_feed"
+        ? ["services/rss-feed-creator/utils/rss-prompts.js", "services/rss-feed-creator/utils/feedGenerator.js"]
+        : issue.sourceType === "podcast_transcript"
+          ? ["services/script/utils/editAndFormat.js", "services/script/utils/promptTemplates.js"]
+          : ["services/oneup/utils/prompts.js", "services/oneup/utils/socialScheduler.js"],
+      whyThisComesFirst: "It is backed by confirmed evidence in the audit ledger, not a speculative taste call.",
+      implementationNotes: `Fix ${issue.issueId}: ${issue.issueType}.`,
+      verificationMethod: issue.verificationMethod,
+    }));
+}
+
 export function normaliseOnBrandReport(report, evidence, { rawModelError } = {}) {
   const metadata = evidence?.metadata || {};
   const sourceCoverage = sourceCoverageFromEvidence(evidence);
   const deterministicDefects = arr(evidence?.deterministicPreflight);
   const reportObj = report && typeof report === "object" ? report : {};
   const defects = mergeDeterministicDefects(reportObj.confirmedDefectsLedger, deterministicDefects);
+  const rssDefaults = defaultRssFindings(defects, sourceCoverage);
+  const oneUpDefaults = defaultOneUpFindings(defects, sourceCoverage);
+  const podcastDefaults = defaultPodcastFindings(defects, sourceCoverage);
+  const derivedPatterns = derivePatternDiagnosis(defects);
+  const derivedPipeline = derivePipelineDiagnosis(defects);
+  const derivedPlan = deriveRemediationPlan(defects);
   const blockedOrPartial = sourceCoverage.some((source) => source.status !== "complete");
   const completion = blockedOrPartial || rawModelError ? "Partial" : cleanString(reportObj.auditCompletionState, "Complete");
 
@@ -184,36 +337,46 @@ export function normaliseOnBrandReport(report, evidence, { rawModelError } = {})
       antiHypeControl: clampScore(reportObj.scorecard?.antiHypeControl, defects.some((d) => /hype|filler/i.test(d.issueType)) ? 58 : 80),
       implementationReadiness: clampScore(reportObj.scorecard?.implementationReadiness, 82),
     },
-    confirmedStrengths: normaliseObjectArray(reportObj.confirmedStrengths, ["sourceType", "evidence", "whyItWorks"]),
+    confirmedStrengths: (() => {
+      const rows = normaliseObjectArray(reportObj.confirmedStrengths, ["sourceType", "evidence", "whyItWorks"]);
+      return rows.length ? rows : deriveConfirmedStrengths(sourceCoverage);
+    })(),
     confirmedDefectsLedger: defects,
     rssFindings: {
-      verdict: cleanString(reportObj.rssFindings?.verdict, "RSS evidence was inspected where available."),
-      titlePatternAnalysis: cleanString(reportObj.rssFindings?.titlePatternAnalysis, "See confirmed defects ledger for title pattern issues."),
-      summaryToneAnalysis: cleanString(reportObj.rssFindings?.summaryToneAnalysis, "See confirmed defects ledger for summary tone issues."),
-      defects: arr(reportObj.rssFindings?.defects).map(normaliseDefect),
+      verdict: cleanString(reportObj.rssFindings?.verdict, rssDefaults.verdict),
+      titlePatternAnalysis: cleanString(reportObj.rssFindings?.titlePatternAnalysis, rssDefaults.titlePatternAnalysis),
+      summaryToneAnalysis: cleanString(reportObj.rssFindings?.summaryToneAnalysis, rssDefaults.summaryToneAnalysis),
+      defects: arr(reportObj.rssFindings?.defects).length ? normaliseExistingDefects(reportObj.rssFindings.defects) : rssDefaults.defects,
     },
     oneUpBlogSocialFindings: {
-      verdict: cleanString(reportObj.oneUpBlogSocialFindings?.verdict, "OneUp/blog/social evidence was inspected where available."),
-      postPatternAnalysis: cleanString(reportObj.oneUpBlogSocialFindings?.postPatternAnalysis, "Historic published OneUp retrieval is not confirmed by the existing client."),
-      defects: arr(reportObj.oneUpBlogSocialFindings?.defects).map(normaliseDefect),
+      verdict: cleanString(reportObj.oneUpBlogSocialFindings?.verdict, oneUpDefaults.verdict),
+      postPatternAnalysis: cleanString(reportObj.oneUpBlogSocialFindings?.postPatternAnalysis, oneUpDefaults.postPatternAnalysis),
+      defects: arr(reportObj.oneUpBlogSocialFindings?.defects).length ? normaliseExistingDefects(reportObj.oneUpBlogSocialFindings.defects) : oneUpDefaults.defects,
     },
     podcastTranscriptFindings: {
-      verdict: cleanString(reportObj.podcastTranscriptFindings?.verdict, "Podcast transcript evidence was inspected where available."),
-      openingStrength: cleanString(reportObj.podcastTranscriptFindings?.openingStrength, "Not verified from supplied evidence"),
-      flowAndTransitions: cleanString(reportObj.podcastTranscriptFindings?.flowAndTransitions, "Not verified from supplied evidence"),
-      repetitionWatchlist: arr(reportObj.podcastTranscriptFindings?.repetitionWatchlist).map(String),
-      spokenWordFixes: normaliseObjectArray(reportObj.podcastTranscriptFindings?.spokenWordFixes, ["originalLine", "improvedLine", "reason"]),
-      defects: arr(reportObj.podcastTranscriptFindings?.defects).map(normaliseDefect),
+      verdict: cleanString(reportObj.podcastTranscriptFindings?.verdict, podcastDefaults.verdict),
+      openingStrength: cleanString(reportObj.podcastTranscriptFindings?.openingStrength, podcastDefaults.openingStrength),
+      flowAndTransitions: cleanString(reportObj.podcastTranscriptFindings?.flowAndTransitions, podcastDefaults.flowAndTransitions),
+      repetitionWatchlist: arr(reportObj.podcastTranscriptFindings?.repetitionWatchlist).length
+        ? arr(reportObj.podcastTranscriptFindings.repetitionWatchlist).map(String)
+        : podcastDefaults.repetitionWatchlist,
+      spokenWordFixes: arr(reportObj.podcastTranscriptFindings?.spokenWordFixes).length
+        ? normaliseObjectArray(reportObj.podcastTranscriptFindings.spokenWordFixes, ["originalLine", "improvedLine", "reason"])
+        : podcastDefaults.spokenWordFixes,
+      defects: arr(reportObj.podcastTranscriptFindings?.defects).length ? normaliseExistingDefects(reportObj.podcastTranscriptFindings.defects) : podcastDefaults.defects,
     },
     patternLevelDiagnosis: {
-      repeatedTitleProblems: arr(reportObj.patternLevelDiagnosis?.repeatedTitleProblems).map(String),
-      repeatedToneProblems: arr(reportObj.patternLevelDiagnosis?.repeatedToneProblems).map(String),
-      repeatedSpokenProblems: arr(reportObj.patternLevelDiagnosis?.repeatedSpokenProblems).map(String),
-      crossChannelBrandDrift: arr(reportObj.patternLevelDiagnosis?.crossChannelBrandDrift).map(String),
+      repeatedTitleProblems: arr(reportObj.patternLevelDiagnosis?.repeatedTitleProblems).length ? arr(reportObj.patternLevelDiagnosis.repeatedTitleProblems).map(String) : derivedPatterns.repeatedTitleProblems,
+      repeatedToneProblems: arr(reportObj.patternLevelDiagnosis?.repeatedToneProblems).length ? arr(reportObj.patternLevelDiagnosis.repeatedToneProblems).map(String) : derivedPatterns.repeatedToneProblems,
+      repeatedSpokenProblems: arr(reportObj.patternLevelDiagnosis?.repeatedSpokenProblems).length ? arr(reportObj.patternLevelDiagnosis.repeatedSpokenProblems).map(String) : derivedPatterns.repeatedSpokenProblems,
+      crossChannelBrandDrift: arr(reportObj.patternLevelDiagnosis?.crossChannelBrandDrift).length ? arr(reportObj.patternLevelDiagnosis.crossChannelBrandDrift).map(String) : derivedPatterns.crossChannelBrandDrift,
     },
     promptLevelDiagnosis: normaliseObjectArray(reportObj.promptLevelDiagnosis, ["affectedArea", "diagnosis", "evidence", "recommendedPromptChange"]),
-    pipelineLevelDiagnosis: normaliseObjectArray(reportObj.pipelineLevelDiagnosis, ["affectedFileOrService", "diagnosis", "evidence", "smallestSafeFix"]),
-    rankedRemediationPlan: arr(reportObj.rankedRemediationPlan).map((row, index) => ({
+    pipelineLevelDiagnosis: (() => {
+      const rows = normaliseObjectArray(reportObj.pipelineLevelDiagnosis, ["affectedFileOrService", "diagnosis", "evidence", "smallestSafeFix"]);
+      return rows.length ? rows : derivedPipeline;
+    })(),
+    rankedRemediationPlan: arr(reportObj.rankedRemediationPlan).length ? arr(reportObj.rankedRemediationPlan).map((row, index) => ({
       priority: Number(row?.priority || index + 1),
       severity: cleanString(row?.severity, defects[index]?.severity || "medium"),
       action: cleanString(row?.action, defects[index]?.exactRemediation || "Review confirmed defects and apply the smallest safe copy or validator fix."),
@@ -222,7 +385,7 @@ export function normaliseOnBrandReport(report, evidence, { rawModelError } = {})
       whyThisComesFirst: cleanString(row?.whyThisComesFirst, "It addresses confirmed evidence rather than speculative rewrite work."),
       implementationNotes: cleanString(row?.implementationNotes, "Use the exact remediation in the confirmed defects ledger."),
       verificationMethod: cleanString(row?.verificationMethod, "Rerun the on-brand audit."),
-    })),
+    })) : derivedPlan,
     doNotChange: normaliseObjectArray(reportObj.doNotChange, ["area", "reason", "evidence"]),
     limitations: Array.from(new Set(limitations.filter(Boolean))),
   };

@@ -91,6 +91,80 @@ function excerpt(value = "", maxChars = 9000) {
   return text.length > maxChars ? `${text.slice(0, maxChars).trim()}...` : text;
 }
 
+function classBlockRegex(tagName, className) {
+  return new RegExp(`<${tagName}\\b(?=[^>]*\\bclass\\s*=\\s*["'][^"']*\\b${className}\\b[^"']*["'])[^>]*>([\\s\\S]*?)<\\/${tagName}>`, "gi");
+}
+
+function firstClassBlock(value = "", tagName, className) {
+  const regex = classBlockRegex(tagName, className);
+  const match = regex.exec(String(value || ""));
+  return match?.[1] || "";
+}
+
+function allClassBlocks(value = "", tagName, className) {
+  const regex = classBlockRegex(tagName, className);
+  const blocks = [];
+  let match;
+  while ((match = regex.exec(String(value || ""))) !== null) {
+    blocks.push(match[1] || "");
+  }
+  return blocks;
+}
+
+function stripTranscriptBoilerplate(value = "") {
+  let text = cleanText(value);
+  const startMarkers = [
+    "Full Episode Transcript",
+    "Full transcript",
+  ];
+  for (const marker of startMarkers) {
+    const index = text.toLowerCase().indexOf(marker.toLowerCase());
+    if (index >= 0) {
+      text = text.slice(index + marker.length).trim();
+      break;
+    }
+  }
+
+  const endMarkers = [
+    "Enjoyed this episode?",
+    "Subscribe for a sharp",
+    "Browse transcript archive",
+    "© ",
+  ];
+  const endIndexes = endMarkers
+    .map((marker) => text.toLowerCase().indexOf(marker.toLowerCase()))
+    .filter((index) => index > 0);
+  if (endIndexes.length) {
+    text = text.slice(0, Math.min(...endIndexes)).trim();
+  }
+
+  return text
+    .replace(/\bSkip to main content\b/gi, " ")
+    .replace(/\bJonathan Harris Home eBooks Podcast Newsletter Topics About Resources Blog Glossary Topics Comparisons Contact Browse Books\b/gi, " ")
+    .replace(/\bMenu Jonathan Harris Home eBooks Podcast Newsletter Topics About Resources Blog Glossary Topics Comparisons Contact Browse Books\b/gi, " ")
+    .replace(/\bBack to Podcast Transcript archive Listen to this episode Apple Podcasts Plain text version\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function extractTranscriptText(value = "", { isHtml = false } = {}) {
+  if (!isHtml) return cleanText(value);
+
+  const paragraphs = allClassBlocks(value, "p", "transcript-para");
+  if (paragraphs.length) {
+    return paragraphs.map((block) => cleanText(block)).filter(Boolean).join("\n\n");
+  }
+
+  const transcriptSection = firstClassBlock(value, "section", "transcript-text");
+  if (transcriptSection) {
+    const withoutHeading = transcriptSection.replace(/<h[1-6]\b[\s\S]*?<\/h[1-6]>/gi, " ");
+    return stripTranscriptBoilerplate(withoutHeading);
+  }
+
+  const mainMatch = String(value || "").match(/<main\b[^>]*>([\s\S]*?)<\/main>/i);
+  return stripTranscriptBoilerplate(mainMatch?.[1] || value);
+}
+
 function sourceDate(row = {}) {
   const candidates = [
     row.date_time,
@@ -160,12 +234,15 @@ export async function collectOneUpEvidence({ include, windowStart, windowEnd, lo
       evidenceMethod: `OneUp getpublishedposts paginated historic scan for the previous ${lookbackDays} day(s).`,
       limitations: [
         ...(posts.length ? [] : ["OneUp getpublishedposts returned no rows inside the requested lookback window."]),
-        "Rows without parseable published dates are retained as evidence because OneUp may return older API payload shapes.",
+        ...(Number(result?.unknownDateCount || 0) > 0
+          ? [`${Number(result.unknownDateCount)} OneUp row(s) had no parseable published date and were retained rather than silently discarded.`]
+          : []),
       ],
       pagination: {
         pagesScanned: result?.pagesScanned || 0,
         rawCount: result?.rawCount || 0,
         filteredCount: result?.filteredCount || posts.length,
+        unknownDateCount: result?.unknownDateCount || 0,
       },
     };
   } catch (error) {
@@ -262,8 +339,9 @@ export async function collectPodcastTranscriptEvidence({ include, windowStart, w
       const meta = await readJsonMaybe("meta", `${sessionId}.json`);
       const knownDate = transcriptObjectDate(object) || metaDate(meta || { sessionId }) || dateFromText(key);
       if (knownDate && !inWindow(knownDate, windowStart, windowEnd)) continue;
-      const text = await getObjectAsText("transcript", key);
+      const rawText = await getObjectAsText("transcript", key);
       const isHtml = /\.html$/i.test(key);
+      const transcriptText = extractTranscriptText(rawText, { isHtml });
       const htmlKey = isHtml ? key : key.replace(/\.txt$/i, ".html");
       const publicUrl = buildPublicUrl("transcript", key);
       const htmlUrl = buildPublicUrl("transcript", htmlKey);
@@ -277,9 +355,9 @@ export async function collectPodcastTranscriptEvidence({ include, windowStart, w
         date: knownDate ? toIso(knownDate) : null,
         lastModified: object.lastModified || null,
         sourceFormat: isHtml ? "html" : "txt",
-        textExcerpt: excerpt(text, 10000),
-        textCharCount: cleanText(text).length,
-        discoveryMethod: "R2 transcript object scan sorted by LastModified; latest .html or .txt object wins per session.",
+        textExcerpt: excerpt(transcriptText, 10000),
+        textCharCount: transcriptText.length,
+        discoveryMethod: "R2 transcript object scan sorted by LastModified; latest .html or .txt object wins per session; HTML transcript pages are reduced to the transcript body before audit.",
       });
       if (items.length >= maxTranscripts) break;
     }
@@ -288,7 +366,7 @@ export async function collectPodcastTranscriptEvidence({ include, windowStart, w
       sourceType: "podcast_transcript",
       status: items.length ? "complete" : "partial",
       items,
-      evidenceMethod: "R2 transcript bucket object scan, LastModified sort, latest .html/.txt read, optional meta bucket lookup.",
+      evidenceMethod: "R2 transcript bucket object scan, LastModified sort, latest .html/.txt read, transcript-body extraction for HTML, optional meta bucket lookup.",
       limitations: [
         ...(items.length ? [] : ["Transcript objects exist, but none fell inside the requested lookback window."]),
         "Only compact transcript excerpts are included to keep the audit payload within model limits.",
@@ -660,4 +738,5 @@ export const __testing = {
   collectRssEvidence,
   normaliseTranscriptObjects,
   normaliseOneUpRow,
+  extractTranscriptText,
 };
