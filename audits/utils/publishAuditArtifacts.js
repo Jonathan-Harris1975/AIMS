@@ -55,8 +55,7 @@ export function isAuditPublicUrl(url) {
   return candidate === publicBaseUrl || candidate.startsWith(`${publicBaseUrl}/`);
 }
 
-export function assertAuditArtifactUrls(payload = {}) {
-  const { publicBaseUrl } = assertAuditR2Config();
+function auditArtifactUrlEntries(payload = {}) {
   const entries = [];
   for (const field of ["reportUrl", "summaryUrl", "coverageUrl", "executionUrl", "preflightUrl", "evidenceUrl", "reconciliationUrl"]) {
     if (payload[field]) entries.push([field, payload[field]]);
@@ -64,12 +63,26 @@ export function assertAuditArtifactUrls(payload = {}) {
   for (const [name, value] of Object.entries(payload.artefacts || {})) {
     if (value) entries.push([`artefacts.${name}`, value]);
   }
+  return entries;
+}
+
+export function assertAuditArtifactUrls(payload = {}, { requireAny = false } = {}) {
+  const { publicBaseUrl } = assertAuditR2Config();
+  const entries = auditArtifactUrlEntries(payload);
+
+  if (requireAny && !entries.length) {
+    throw new Error(`Completed audit callback did not include any artefact URLs. Refusing to mark complete because audit data must be published to ${AUDIT_BUCKET_ENV} and exposed from ${AUDIT_PUBLIC_BASE_ENV} (${publicBaseUrl}).`);
+  }
 
   const invalid = entries.filter(([, value]) => !isAuditPublicUrl(value));
   if (invalid.length) {
     const detail = invalid.map(([name, value]) => `${name}=${value}`).join("; ");
     throw new Error(`Audit artefact callback contains URL(s) outside ${AUDIT_PUBLIC_BASE_ENV} (${publicBaseUrl}). Audit data must only be stored on ${AUDIT_BUCKET_ENV}. Invalid: ${detail}`);
   }
+}
+
+export function assertCompletedAuditArtifactUrls(payload = {}) {
+  return assertAuditArtifactUrls(payload, { requireAny: true });
 }
 
 async function putAuditJson(key, payload) {
@@ -168,6 +181,7 @@ export default {
   getAuditBucketName,
   assertAuditR2Config,
   assertAuditArtifactUrls,
+  assertCompletedAuditArtifactUrls,
   isAuditPublicUrl,
   buildAuditPublicUrl,
   publishAuditJson,

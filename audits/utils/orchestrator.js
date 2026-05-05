@@ -13,7 +13,7 @@ import {
 } from "./githubDispatch.js";
 import { buildAuditPrefix, makeAuditJobType } from "./auditPaths.js";
 import {
-  assertAuditArtifactUrls,
+  assertCompletedAuditArtifactUrls,
   assertAuditR2Config,
   cleanupAuditPrefix,
   getAuditPublicBaseUrl,
@@ -194,7 +194,7 @@ export async function startAuditRun({
 
 export async function completeAuditRun({ auditType, payload }) {
   if (String(payload.status || "completed").trim().toLowerCase() !== "failed") {
-    assertAuditArtifactUrls(payload);
+    assertCompletedAuditArtifactUrls(payload);
   }
 
   const jobType = makeAuditJobType(auditType);

@@ -549,6 +549,36 @@ function isWeakNarrative(value) {
     candidate.includes("forensic verdict supplied from the evidence-led analysis");
 }
 
+function looksLikeAuditEvidenceRequestPayload(value) {
+  if (!isPlainObject(value)) return false;
+  const hasEvidenceShape = Boolean(
+    value.workflowRequirements ||
+      (value.baseUrl && value.inventory && value.repoSignals && Array.isArray(value.allRoutes)) ||
+      (value.website && value.inventory && Array.isArray(value.allRoutes))
+  );
+  const hasAnalysisShape = Boolean(
+    value.auditCompletionState ||
+      value.aiAnalysisStatus ||
+      value.overallVerdict ||
+      value.scoreTable ||
+      value.rankedIssueLedger ||
+      value.fullIssueRecords ||
+      value.finalVerdictAndImplementationOrder
+  );
+  return hasEvidenceShape && !hasAnalysisShape;
+}
+
+function rejectAuditEvidenceRequestEcho(value) {
+  if (!looksLikeAuditEvidenceRequestPayload(value)) return;
+  const err = new Error("AI forensic provider repeated the audit evidence request instead of returning forensic analysis JSON");
+  err.code = "AUDIT_AI_PROMPT_ECHO";
+  err.validationErrors = [
+    "The provider response looked like the original audit evidence package, not the required forensic report JSON.",
+    "Do not accept echoed request payloads as analysis; repair or fall back to deterministic forensic analysis.",
+  ];
+  throw err;
+}
+
 function familyScore(payload, pattern) {
   const row = coverageRows(payload).find((item) => pattern.test(String(item?.pageType || item?.family || "")));
   return Number(row?.averageScore || row?.score || 0);
@@ -1544,6 +1574,7 @@ function addCompatibilityAliases(normalised) {
 
 function validateAndNormaliseAnalysisShape(data, payload = {}) {
   if (!isPlainObject(data)) throw new Error("Analysis response is not a JSON object");
+  rejectAuditEvidenceRequestEcho(data);
 
   const normalised = buildNormalisedPayload(data, payload);
 
@@ -1666,6 +1697,7 @@ export const __seoAeoGeoAnalysisTestHooks = {
   buildDeterministicAnalysisDraft,
   buildDeterministicFallback,
   duplicatePodcastEvidence,
+  looksLikeAuditEvidenceRequestPayload,
 };
 
 export default { runSeoAeoGeoAnalysis };
