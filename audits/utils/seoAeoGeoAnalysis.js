@@ -14,6 +14,9 @@ const REQUIRED_TOP_LEVEL_KEYS = [
   "inventoryReconciliationSummary",
   "findingsByAuditLens",
   "rankedIssueLedger",
+  "fullIssueRecords",
+  "coverageAssurance",
+  "sourceReconciliation",
   "pageTypeFindings",
   "priorityPageAnnex",
   "templateComponentGeneratorAnnex",
@@ -48,8 +51,10 @@ const REPORT_STRUCTURE = [
   "Source Ledger",
   "Source Mismatches That Matter",
   "Inventory and Reconciliation Summary",
+  "Coverage Assurance",
   "Findings by Audit Lens",
   "Ranked Issue Ledger",
+  "Full Issue Records",
   "Page-Type Findings",
   "Priority Page Annex",
   "Template / Component / Generator Annex",
@@ -86,6 +91,9 @@ NON-NEGOTIABLE OPERATING RULES:
 18. Never use generic remediations such as "Add answer-first summaries, extractable subheadings, and direct response blocks". Replace them with page-family-specific fixes that name the observed current pattern and the exact missing blocks, schema types, link targets, files, or generator logic.
 19. When evidence is present, prioritise system defects before copy polish: route governance exclusions, sitemap/workbook/repo/feed mismatches, duplicate canonicals or slugs, transcript discovery gaps, and llms.txt / llm-index coverage gaps.
 20. Podcast episode findings must distinguish title/date/summary/audio/transcript-link wrappers from retrieval-ready episode pages. Transcript findings must distinguish raw transcript walls from chunked, summary-led transcript pages.
+21. Treat source ledger and source mismatch rows as evidence, not decoration. Each mismatch must carry id, severity, sources, evidence, impact, and fix fields where the payload supports them.
+22. Provide both a compact rankedIssueLedger and fullIssueRecords. The ranked ledger is for prioritisation; fullIssueRecords must preserve the full issue format in readable flowing fields.
+23. The codeMarkupContentRemediationAppendix must provide implementation-grade patterns, exact source targets, and verification steps for every Critical or High issue.
 
 MANDATORY TOP-LEVEL JSON KEYS:
 ${REQUIRED_TOP_LEVEL_KEYS.join(", ")}
@@ -127,6 +135,9 @@ function buildUserPrompt(payload) {
     workflowRequirements: {
       dynamicFamiliesMandatory: ["blog", "podcast", "transcript", "archive", "utility", "programmatic"],
       reportStructure: REPORT_STRUCTURE,
+      requireReadableFullIssueRecords: true,
+      requireCoverageAssurance: true,
+      requireSourceReconciliation: true,
       rejectGenericAdvice: true,
       rejectSilentSampling: true,
       issueFormat: REQUIRED_ISSUE_KEYS,
@@ -410,6 +421,23 @@ function listSample(items, field = "url", maxItems = 5) {
     .join(", ");
 }
 
+function evidenceText(value) {
+  if (Array.isArray(value)) return value.map(compactString).filter(Boolean).join("; ");
+  return compactString(value);
+}
+
+function duplicatePodcastEvidence(duplicates) {
+  const rows = asArray(duplicates).filter(isPlainObject);
+  if (!rows.length) return "Duplicate podcast page_url values were reported without row details.";
+  return rows.slice(0, 3).map((row) => {
+    const pageUrl = compactString(row.pageUrl || row.page_url || row.url || row.path || row.route);
+    const count = Number(row.count || row.duplicateCount || 0);
+    const sessions = asArray(row.sessionIds || row.session_ids).map(compactString).filter(Boolean).slice(0, 8).join(", ");
+    const titles = asArray(row.titles).map(compactString).filter(Boolean).slice(0, 3).join(" | ");
+    return `${count || "Multiple"} podcast record(s) share ${pageUrl || "the same page_url"}${sessions ? `; session IDs: ${sessions}` : ""}${titles ? `; titles: ${titles}` : ""}`;
+  }).join("; ");
+}
+
 function findFamilyDiagnostic(payload, pattern) {
   return asArray(payload?.familyDiagnostics).find((row) => {
     const pageType = compactString(row?.pageType || row?.family).toLowerCase();
@@ -479,7 +507,7 @@ function signalIssuesFromPayload(payload) {
       auditLens: "Technical / Canonical / SEO",
       rootCauseLevel: "data / generator",
       affectedPagesTemplatesFilesOrRoutes: "data/podcast-episodes.json; scripts/generate_podcast_episodes.py; sitemap.xml; podcast episode canonicals",
-      evidenceObserved: `Duplicate podcast page_url values detected: ${listSample(duplicatePodcastUrls, "url", 3) || compactString(first.url)}.`,
+      evidenceObserved: duplicatePodcastEvidence(duplicatePodcastUrls),
       whyItMatters: "Multiple episodes collapsing into one canonical URL destroys episode identity and makes sitemap coverage misleading.",
       exactRemediation: "Make podcast slugs unique inside scripts/generate_podcast_episodes.py by appending session_id or ISO date whenever a title slug repeats or equals the generic artificial-intelligence-weekly slug. Regenerate data/podcast-episodes.json, episode pages, sitemap entries, workbook/dynamic inventory, and only then add intentional 301 redirects from any shared legacy URL.",
       expectedGain: "Restores one episode per URL, one canonical per episode, and clean podcast topical authority.",
@@ -532,7 +560,7 @@ function signalIssuesFromPayload(payload) {
       auditLens: "AEO / Content / Podcast",
       rootCauseLevel: "template / content",
       affectedPagesTemplatesFilesOrRoutes: podcastEpisode.sourceFile || "podcast episode routes; scripts/generate_podcast_episodes.py; functions/podcast episode renderer",
-      evidenceObserved: podcastEpisode.observedTemplateEvidence || `Podcast episode family average score is ${podcastEpisode.averageScore || "below target"}; sample URLs: ${listSample(podcastEpisode.sampleUrls, "url", 3)}.`,
+      evidenceObserved: evidenceText(podcastEpisode.observedTemplateEvidence) || `Podcast episode family average score is ${podcastEpisode.averageScore || "below target"}; sample URLs: ${listSample(podcastEpisode.sampleUrls, "url", 3)}.`,
       whyItMatters: "Episode pages that are mainly audio wrappers cannot win answer surfaces or generative citations for the topics discussed in the show.",
       exactRemediation: "Update the podcast episode template so every episode renders a 60-word answer-first summary, 3-5 key takeaways, discussed entities/topics, transcript preview anchors, related topic guides/books, PodcastEpisode JSON-LD, FAQPage JSON-LD, and a canonical transcript link.",
       expectedGain: "Turns each episode from a thin doorway into a retrieval-ready landing page.",
@@ -550,7 +578,7 @@ function signalIssuesFromPayload(payload) {
       auditLens: "AEO / GEO / Transcript",
       rootCauseLevel: "template / content structure",
       affectedPagesTemplatesFilesOrRoutes: transcript.sourceFile || "transcript detail routes; functions/transcripts/[[slug]].js; transcripts/index.html",
-      evidenceObserved: transcript.observedTemplateEvidence || `Transcript family average score is ${transcript.averageScore || "below target"}; sample URLs: ${listSample(transcript.sampleUrls, "url", 3)}.`,
+      evidenceObserved: evidenceText(transcript.observedTemplateEvidence) || `Transcript family average score is ${transcript.averageScore || "below target"}; sample URLs: ${listSample(transcript.sampleUrls, "url", 3)}.`,
       whyItMatters: "Long transcript pages without summary-led chunking are harder for answer engines and LLM retrievers to cite accurately.",
       exactRemediation: "Before the transcript body, render episode summary, what changed this week, key named entities, five bullet takeaways, topic index, timestamped or sectioned anchors, related books/topics, and Transcript/PodcastEpisode schema alignment.",
       expectedGain: "Improves extractability, snippet potential, and LLM citation quality for transcript pages.",
@@ -561,14 +589,14 @@ function signalIssuesFromPayload(payload) {
   }
 
   const blog = findFamilyDiagnostic(payload, /blog article/);
-  if (isPlainObject(blog) && Number(blog.repeatedOpeningParagraphPages || 0) > 0) {
+  if (isPlainObject(blog) && Number(blog.repeatedOpeningParagraphPages || blog.repeatedOpeningCount || 0) > 0) {
     issues.push(forensicIssue({
       issueId: "JH-AEO-003",
       severity: "High",
       auditLens: "AEO / Blog / Content",
       rootCauseLevel: "template / R2 HTML",
       affectedPagesTemplatesFilesOrRoutes: blog.sourceFile || "blog post template; functions/blog/posts/[[slug]].js; blog R2 HTML renderer",
-      evidenceObserved: `${blog.repeatedOpeningParagraphPages} blog article page(s) show repeated opening/standfirst paragraphs. Sample: ${listSample(blog.sampleUrls, "url", 3)}.`,
+      evidenceObserved: `${Number(blog.repeatedOpeningParagraphPages || blog.repeatedOpeningCount || 0)} blog article page(s) show repeated opening/standfirst paragraphs. Sample: ${listSample(blog.sampleUrls, "url", 3)}.`,
       whyItMatters: "Repeated standfirst text wastes prime extraction space and makes the page look mechanically assembled.",
       exactRemediation: "Render the standfirst once after the H1, remove duplicate summary echoes from hero/article hydration, and use a distinct TL;DR bullet block only when it adds different wording.",
       expectedGain: "Cleaner first screen, stronger snippet extraction, and less automation footprint.",
@@ -645,6 +673,9 @@ function buildDeterministicAnalysisDraft(payload, diagnostics = {}) {
       conversionSupport: scoreBlock(scores.conversionSupport, "Conversion support was scored from commercial route and CTA evidence."),
     },
     rankedIssueLedger: issues,
+    fullIssueRecords: buildFullIssueRecords(issues),
+    coverageAssurance: buildCoverageAssurance(payload, []),
+    sourceReconciliation: buildSourceReconciliation(payload, normaliseSourceLedger({}, payload), normaliseSourceMismatches({}, payload)),
     pageTypeFindings: [],
     priorityPageAnnex: [],
     templateComponentGeneratorAnnex: [],
@@ -893,13 +924,19 @@ function normaliseGapMatrix(data, payload) {
 function normaliseSourceLedger(data, payload) {
   const source = asArray(data?.sourceLedger).length ? asArray(data.sourceLedger) : asArray(payload?.sourceLedger);
   if (source.length) {
-    return source.filter(isPlainObject).map((row) => ({
-      source: text(row.source || row.name, "Unknown source"),
-      count: Number(row.count ?? row.urlCount ?? row.routes ?? 0),
-      role: text(row.role || row.sourceRole, "Discovery and reconciliation input"),
-      confidence: text(row.confidence, "Confirmed"),
-      notes: text(row.notes || row.limitation || row.detail, "Used in route reconciliation."),
-    }));
+    return source.filter(isPlainObject).map((row) => {
+      const status = text(row.status || row.confidence, "Confirmed");
+      const evidence = text(row.evidence || row.notes || row.limitation || row.detail, "Used in route reconciliation.");
+      return {
+        source: text(row.source || row.name, "Unknown source"),
+        count: Number(row.count ?? row.urlCount ?? row.routes ?? 0),
+        role: text(row.role || row.sourceRole, "Discovery and reconciliation input"),
+        status,
+        evidence,
+        confidence: status,
+        notes: evidence,
+      };
+    });
   }
 
   const counts = payload?.inventory?.sourceCounts || payload?.sourceCounts || {};
@@ -908,6 +945,8 @@ function normaliseSourceLedger(data, payload) {
       source: sourceName,
       count: Number(count || 0),
       role: "URL discovery and reconciliation evidence",
+      status: "Confirmed",
+      evidence: "Derived from the audit context package sourceCounts field.",
       confidence: "Confirmed",
       notes: "Derived from the audit context package sourceCounts field.",
     }));
@@ -916,29 +955,49 @@ function normaliseSourceLedger(data, payload) {
   return [];
 }
 
+function mismatchId(index, row) {
+  return text(row.id || row.issueId || row.mismatchId, `SRC-${String(index + 1).padStart(3, "0")}`);
+}
+
 function normaliseSourceMismatches(data, payload) {
   const source = asArray(data?.sourceMismatchesThatMatter || data?.sourceMismatches || data?.sourceConflicts).length
     ? asArray(data.sourceMismatchesThatMatter || data.sourceMismatches || data.sourceConflicts)
     : asArray(payload?.sourceMismatchesThatMatter || payload?.sourceConflicts);
 
   if (source.length) {
-    return source.filter(isPlainObject).map((row) => ({
-      mismatch: text(row.mismatch || row.type || row.name, "Source mismatch"),
-      affected: text(row.affected || row.affectedRoutes || row.sample || row.routeFamily, "Affected source or route family"),
-      evidence: text(row.evidence || row.evidenceObserved || row.detail, "Mismatch observed in supplied reconciliation context."),
-      whyItMatters: text(row.whyItMatters || row.impact, "This weakens source-of-truth integrity."),
-      requiredAction: text(row.requiredAction || row.exactRemediation || row.action, "Reconcile the affected source ledgers and rerun the audit."),
-      confidence: text(row.confidence, "Confirmed"),
-    }));
+    return source.filter(isPlainObject).map((row, index) => {
+      const id = mismatchId(index, row);
+      const sources = text(row.sources || row.affected || row.affectedRoutes || row.sample || row.routeFamily, "Affected source or route family");
+      const impact = text(row.impact || row.whyItMatters, "This weakens source-of-truth integrity.");
+      const fix = text(row.fix || row.requiredAction || row.exactRemediation || row.action, "Reconcile the affected source ledgers and rerun the audit.");
+      return {
+        id,
+        severity: text(row.severity, "High"),
+        sources,
+        evidence: text(row.evidence || row.evidenceObserved || row.detail || row.mismatch || row.type || row.name, "Mismatch observed in supplied reconciliation context."),
+        impact,
+        fix,
+        mismatch: text(row.mismatch || row.type || row.name || id, "Source mismatch"),
+        affected: sources,
+        whyItMatters: impact,
+        requiredAction: fix,
+        confidence: text(row.confidence, "Confirmed"),
+      };
+    });
   }
 
   const signals = isPlainObject(payload?.repoSignals) ? payload.repoSignals : {};
   const rows = [];
   if (asArray(signals.duplicatePodcastPageUrls).length) {
     rows.push({
+      id: "SRC-002",
+      severity: "Critical",
+      sources: "data/podcast-episodes.json vs canonical episode URL ledger",
+      evidence: duplicatePodcastEvidence(signals.duplicatePodcastPageUrls),
+      impact: "Episode-level sitemap and canonical signals become ambiguous.",
+      fix: "Regenerate unique podcast slugs and update sitemap/workbook/dynamic inventory.",
       mismatch: "Duplicate podcast canonical URLs",
-      affected: listSample(signals.duplicatePodcastPageUrls, "url", 3),
-      evidence: "data/podcast-episodes.json contains repeated page_url values.",
+      affected: listSample(signals.duplicatePodcastPageUrls, "pageUrl", 3),
       whyItMatters: "Episode-level sitemap and canonical signals become ambiguous.",
       requiredAction: "Regenerate unique podcast slugs and update sitemap/workbook/dynamic inventory.",
       confidence: "Confirmed",
@@ -946,9 +1005,14 @@ function normaliseSourceMismatches(data, payload) {
   }
   if (Number(signals.transcriptSitemapMissingCount || 0) > 0) {
     rows.push({
+      id: "SRC-003",
+      severity: "High",
+      sources: "data/podcast-episodes.json vs sitemap.xml",
+      evidence: `${Number(signals.transcriptSitemapMissingCount)} transcript URLs are present in the podcast manifest but absent from sitemap.xml.`,
+      impact: "Transcript discovery and generative retrieval coverage are weaker than the available content warrants.",
+      fix: "Generate transcript sitemap entries from the podcast manifest and feed.",
       mismatch: "Transcript URLs absent from sitemap",
       affected: `${Number(signals.transcriptSitemapMissingCount)} transcript leaves`,
-      evidence: "Transcript URLs are present in the podcast manifest but absent from sitemap.xml.",
       whyItMatters: "Transcript discovery and generative retrieval coverage are weaker than the available content warrants.",
       requiredAction: "Generate transcript sitemap entries from the podcast manifest and feed.",
       confidence: "Confirmed",
@@ -1037,11 +1101,104 @@ function normaliseImplementation(data, issues) {
   };
 }
 
+
+function issueLooksEvidenceWeak(issue) {
+  const evidence = compactString(issue?.evidenceObserved);
+  return !evidence || /detected:\s*\.?$/i.test(evidence) || /sample:\s*\.?$/i.test(evidence) || evidence.length < 24;
+}
+
+function mergeEvidenceIssues(aiIssues, payload) {
+  const deterministic = deterministicIssuesFromPayload(payload).filter((issue) => ["Critical", "High"].includes(issue.severity));
+  const byId = new Map();
+  for (const issue of aiIssues) byId.set(issue.issueId, issue);
+  for (const det of deterministic) {
+    const current = byId.get(det.issueId);
+    if (!current) {
+      byId.set(det.issueId, det);
+      continue;
+    }
+    byId.set(det.issueId, {
+      ...current,
+      evidenceObserved: issueLooksEvidenceWeak(current) ? det.evidenceObserved : current.evidenceObserved,
+      affectedPagesTemplatesFilesOrRoutes: compactString(current.affectedPagesTemplatesFilesOrRoutes) ? current.affectedPagesTemplatesFilesOrRoutes : det.affectedPagesTemplatesFilesOrRoutes,
+      exactRemediation: isGenericAdvice(current.exactRemediation) ? det.exactRemediation : current.exactRemediation,
+      whyItMatters: compactString(current.whyItMatters) ? current.whyItMatters : det.whyItMatters,
+      expectedGain: compactString(current.expectedGain) ? current.expectedGain : det.expectedGain,
+      verificationMethod: compactString(current.verificationMethod) ? current.verificationMethod : det.verificationMethod,
+    });
+  }
+  return Array.from(byId.values());
+}
+
+function buildCoverageAssurance(payload, pageTypeFindings) {
+  const totalDiscovered = asArray(payload?.allRoutes).length || Number(payload?.inventory?.discoveredRouteCount || 0);
+  const analysed = asArray(payload?.allRoutes).filter((route) => isAnalysedCoverageState(route.coverageState)).length;
+  const excluded = asArray(payload?.allRoutes).filter((route) => String(route.coverageState || "").startsWith("Excluded")).length;
+  const failed = asArray(payload?.allRoutes).filter((route) => /failed/i.test(String(route.coverageState || route.status || ""))).length;
+  const mandatoryFamilies = ["blog archive", "blog article", "podcast hub", "podcast episode", "podcast transcript", "archive / pagination / utility", "book page", "category / hub", "topic hub"];
+  const rows = asArray(pageTypeFindings);
+  const byFamily = new Map(rows.map((row) => [compactString(row.pageType).toLowerCase(), row]));
+  const incompleteMandatoryFamilies = mandatoryFamilies.filter((family) => {
+    const row = byFamily.get(family);
+    if (!row) return false;
+    return /partial|failed/i.test(String(row.coverageState || ""));
+  });
+  return {
+    totalDiscoveredUrls: totalDiscovered,
+    totalAnalysedUrls: analysed,
+    totalExcludedUrls: excluded,
+    totalFailedUrls: failed,
+    mandatoryFamilies,
+    incompleteMandatoryFamilies,
+    confirmation: incompleteMandatoryFamilies.length
+      ? `Material limitation: ${incompleteMandatoryFamilies.join(", ")} did not reach full coverage.`
+      : "Every discovered in-scope URL has an explicit coverage state; no mandatory family was reported as partially covered.",
+    routeFamiliesNotDeeplyAnalysed: rows.filter((row) => /shared template|template/i.test(String(row.coverageState || ""))).map((row) => row.pageType),
+  };
+}
+
+function isAnalysedCoverageState(state) {
+  return ["Fully analysed", "Analysed through shared template plus page-specific checks"].includes(String(state || ""));
+}
+
+function buildSourceReconciliation(payload, sourceLedger, sourceMismatches) {
+  return {
+    sourceLedger,
+    sourceMismatchesThatMatter: sourceMismatches,
+    inventory: payload?.inventory || {},
+    repoSignals: payload?.repoSignals || {},
+    judgement: sourceMismatches.length
+      ? "Source conflicts were found and must be resolved before the estate can be treated as fully governed."
+      : "No material source conflict was supplied in the audit context package.",
+  };
+}
+
+function buildFullIssueRecords(issues) {
+  return issues.map((issue) => ({
+    issueId: issue.issueId,
+    severity: issue.severity,
+    confidence: issue.confidence,
+    auditLens: issue.auditLens,
+    rootCauseLevel: issue.rootCauseLevel,
+    affectedPagesTemplatesFilesOrRoutes: issue.affectedPagesTemplatesFilesOrRoutes,
+    evidenceObserved: issue.evidenceObserved,
+    whyItMatters: issue.whyItMatters,
+    exactRemediation: issue.exactRemediation,
+    expectedGain: issue.expectedGain,
+    estimatedEffort: issue.estimatedEffort,
+    recommendedOwner: issue.recommendedOwner,
+    verificationMethod: issue.verificationMethod,
+  }));
+}
+
 function buildNormalisedPayload(data, payload) {
   const scoreTable = normaliseScoreTable(data, payload);
-  const issues = normaliseIssues(data);
+  const issues = mergeEvidenceIssues(normaliseIssues(data), payload);
   const implementation = normaliseImplementation(data, issues);
   const executiveSummary = isPlainObject(data?.executiveSummary) ? data.executiveSummary : {};
+  const sourceLedger = normaliseSourceLedger(data, payload);
+  const sourceMismatches = normaliseSourceMismatches(data, payload);
+  const pageTypeFindings = normalisePageTypeFindings(data, payload);
 
   return {
     auditCompletionState: text(data?.auditCompletionState, "Complete"),
@@ -1054,12 +1211,15 @@ function buildNormalisedPayload(data, payload) {
     majorRisks: asArray(data?.majorRisks || executiveSummary.majorRisks).map(String).filter(Boolean).slice(0, 8),
     estateLabels: asArray(data?.estateLabels || executiveSummary.estateLabels).map(String).filter(Boolean).slice(0, 10),
     scopeInputsMethod: isPlainObject(data?.scopeInputsMethod) ? data.scopeInputsMethod : { method: text(data?.scopeInputsMethod, "Evidence-led repo, workbook, sitemap, feed, route, and coverage reconciliation.") },
-    sourceLedger: normaliseSourceLedger(data, payload),
-    sourceMismatchesThatMatter: normaliseSourceMismatches(data, payload),
+    sourceLedger,
+    sourceMismatchesThatMatter: sourceMismatches,
     inventoryReconciliationSummary: isPlainObject(data?.inventoryReconciliationSummary) ? data.inventoryReconciliationSummary : { summary: text(data?.inventoryReconciliationSummary, "Inventory reconciliation derived from supplied route and coverage ledgers.") },
     findingsByAuditLens: normaliseFindings(data?.findingsByAuditLens || data?.findingsByLens),
     rankedIssueLedger: issues,
-    pageTypeFindings: normalisePageTypeFindings(data, payload),
+    fullIssueRecords: buildFullIssueRecords(issues),
+    coverageAssurance: buildCoverageAssurance(payload, pageTypeFindings),
+    sourceReconciliation: buildSourceReconciliation(payload, sourceLedger, sourceMismatches),
+    pageTypeFindings,
     priorityPageAnnex: normalisePriorityPageAnnex(data, payload),
     templateComponentGeneratorAnnex: normaliseTemplateAnnex(data, payload),
     codeMarkupContentRemediationAppendix: [],
@@ -1111,6 +1271,9 @@ function validateNormalisedAnalysis(normalised, payload) {
   }
 
   if (!asArray(normalised.rankedIssueLedger).length) errors.push("rankedIssueLedger must not be empty");
+  if (!asArray(normalised.fullIssueRecords).length) errors.push("fullIssueRecords must not be empty");
+  if (!isPlainObject(normalised.coverageAssurance)) errors.push("coverageAssurance must be present");
+  if (!isPlainObject(normalised.sourceReconciliation)) errors.push("sourceReconciliation must be present");
   if (!asArray(normalised.finalVerdictAndImplementationOrder?.steps).length) errors.push("Missing implementation sequence");
 
   const seenRemediation = new Set();
@@ -1154,6 +1317,9 @@ function addCompatibilityAliases(normalised) {
     findingsByLens: normalised.findingsByAuditLens,
     sourceMismatches: normalised.sourceMismatchesThatMatter,
     sourceConflicts: normalised.sourceMismatchesThatMatter,
+    fullIssueRecords: normalised.fullIssueRecords,
+    coverageAssurance: normalised.coverageAssurance,
+    sourceReconciliation: normalised.sourceReconciliation,
     issues: normalised.rankedIssueLedger.map((issue) => ({
       ...issue,
       lens: issue.auditLens,
@@ -1290,6 +1456,7 @@ export const __seoAeoGeoAnalysisTestHooks = {
   validateAndNormaliseAnalysisShape,
   buildDeterministicAnalysisDraft,
   buildDeterministicFallback,
+  duplicatePodcastEvidence,
 };
 
 export default { runSeoAeoGeoAnalysis };
