@@ -43,6 +43,34 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function extractUnexpectedWorkflowInputs(text) {
+  const body = String(text || "");
+  const match = body.match(/Unexpected inputs provided:\s*\[([^\]]+)\]/i);
+  if (!match) return [];
+  return match[1]
+    .split(",")
+    .map((item) => item.replace(/[\"'\[\]]/g, "").trim())
+    .filter(Boolean);
+}
+
+function stripInputs(inputs = {}, names = []) {
+  const blocked = new Set(names);
+  return Object.fromEntries(
+    Object.entries(inputs || {}).filter(([key]) => !blocked.has(key))
+  );
+}
+
+async function postWorkflowDispatch({ apiBase, workflowId, token, ref, inputs }) {
+  return fetch(
+    `${apiBase}/actions/workflows/${encodeURIComponent(workflowId)}/dispatches`,
+    {
+      method: "POST",
+      headers: githubApiHeaders(token),
+      body: JSON.stringify({ ref, inputs }),
+    }
+  );
+}
+
 export async function dispatchGithubWorkflow({ workflowId, inputs, ref }) {
   const token = requiredEnv("GITHUB_TOKEN_WEBSITE_AUDITS");
   const owner = requiredEnv("AUDIT_WEBSITE_REPO_OWNER");
@@ -51,18 +79,36 @@ export async function dispatchGithubWorkflow({ workflowId, inputs, ref }) {
   const apiBase = buildRepoApiBase(owner, repo);
   const dispatchedAt = new Date().toISOString();
 
-  const response = await fetch(
-    `${apiBase}/actions/workflows/${encodeURIComponent(workflowId)}/dispatches`,
-    {
-      method: "POST",
-      headers: githubApiHeaders(token),
-      body: JSON.stringify({ ref: effectiveRef, inputs }),
-    }
-  );
+  let effectiveInputs = { ...(inputs || {}) };
+  let strippedInputs = [];
+  let response = await postWorkflowDispatch({
+    apiBase,
+    workflowId,
+    token,
+    ref: effectiveRef,
+    inputs: effectiveInputs,
+  });
 
   if (!response.ok) {
     const text = await readTextSafe(response);
-    throw new Error(`GitHub workflow dispatch failed (${response.status}): ${text}`);
+    const unexpectedInputs = response.status === 422 ? extractUnexpectedWorkflowInputs(text) : [];
+    if (unexpectedInputs.length) {
+      strippedInputs = unexpectedInputs;
+      effectiveInputs = stripInputs(effectiveInputs, unexpectedInputs);
+      response = await postWorkflowDispatch({
+        apiBase,
+        workflowId,
+        token,
+        ref: effectiveRef,
+        inputs: effectiveInputs,
+      });
+      if (!response.ok) {
+        const retryText = await readTextSafe(response);
+        throw new Error(`GitHub workflow dispatch failed after stripping unsupported input(s) ${unexpectedInputs.join(", ")} (${response.status}): ${retryText}`);
+      }
+    } else {
+      throw new Error(`GitHub workflow dispatch failed (${response.status}): ${text}`);
+    }
   }
 
   return {
@@ -71,7 +117,8 @@ export async function dispatchGithubWorkflow({ workflowId, inputs, ref }) {
     repo,
     ref: effectiveRef,
     workflowId,
-    inputs: redactWorkflowInputs(inputs),
+    inputs: redactWorkflowInputs(effectiveInputs),
+    strippedInputs,
     dispatchedAt,
   };
 }
@@ -158,5 +205,7 @@ export async function verifyGithubWorkflowRun({
     `GitHub workflow run was not created for ${workflowId} (sessionId=${sessionId || "unknown"}, ref=${effectiveRef}) after dispatch. Recent runs: ${JSON.stringify(lastRunSummary)}`
   );
 }
+
+export { extractUnexpectedWorkflowInputs };
 
 export default dispatchGithubWorkflow;

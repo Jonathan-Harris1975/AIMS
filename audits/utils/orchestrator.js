@@ -13,12 +13,11 @@ import {
 } from "./githubDispatch.js";
 import { buildAuditPrefix, makeAuditJobType } from "./auditPaths.js";
 import {
-  assertAuditArtifactUrls,
-  assertCompletedAuditArtifactUrls,
   assertAuditR2Config,
+  assertCompletedAuditArtifactUrls,
   cleanupAuditPrefix,
-  getAuditPublicBaseUrl,
   getAuditBucketName,
+  getAuditPublicBaseUrl,
   publishAuditLatest,
   publishAuditRequest,
 } from "./publishAuditArtifacts.js";
@@ -34,6 +33,22 @@ function resolveExcludePatterns(auditType, body) {
     return body.excludePatterns;
   }
   return DEFAULT_EXCLUDE_PATTERNS[auditType] || [];
+}
+
+function buildWorkflowInputs({ sessionId, reportPrefix, websiteUrl, excludePatterns, callbackUrl, analysisUrl, callbackToken }) {
+  // Keep this list aligned with the website repo workflow_dispatch inputs.
+  // The audits bucket is enforced by AI-suite publishing/validation, not sent as
+  // workflow inputs, because older website workflow versions reject unknown keys
+  // with GitHub's "Unexpected inputs provided" 422 response.
+  return {
+    session_id: sessionId,
+    report_prefix: reportPrefix,
+    base_url: websiteUrl,
+    exclude_prefixes: excludePatterns.join(","),
+    callback_url: callbackUrl,
+    analysis_url: analysisUrl,
+    callback_token: callbackToken,
+  };
 }
 
 export async function startAuditRun({
@@ -67,12 +82,14 @@ export async function startAuditRun({
   const callbackUrl = `${callbackBaseUrl}${callbackPath}`;
   const analysisUrl = callbackUrl.replace(/\/callback\/?$/, "/analysis");
   const auditR2 = assertAuditR2Config();
+  const websiteUrl = body.websiteUrl || DEFAULT_WEBSITE_URL;
+  const excludePatterns = resolveExcludePatterns(auditType, body);
 
   const payload = {
     sessionId,
-    websiteUrl: body.websiteUrl || DEFAULT_WEBSITE_URL,
+    websiteUrl,
     reportPrefix,
-    excludePatterns: resolveExcludePatterns(auditType, body),
+    excludePatterns,
     requestedBy: body.requestedBy || "manual",
     notes: body.notes || "",
     workflowRef: body.workflowRef,
@@ -89,8 +106,8 @@ export async function startAuditRun({
     auditType,
     workflowId,
     reportPrefix,
-    websiteUrl: payload.websiteUrl,
-    excludePatterns: payload.excludePatterns,
+    websiteUrl,
+    excludePatterns,
     callbackUrl,
     analysisUrl,
     callbackTokenConfigured,
@@ -98,19 +115,15 @@ export async function startAuditRun({
     auditPublicBaseUrl: auditR2.publicBaseUrl,
   });
 
-  const inputs = {
-    session_id: sessionId,
-    report_prefix: reportPrefix,
-    base_url: payload.websiteUrl,
-    exclude_prefixes: payload.excludePatterns.join(","),
-    callback_url: callbackUrl,
-    analysis_url: analysisUrl,
-    callback_token: callbackToken,
-    audit_bucket: auditR2.bucket,
-    audit_public_base_url: auditR2.publicBaseUrl,
-    audit_bucket_env: "R2_BUCKET_AUDITS",
-    audit_public_base_env: "R2_PUBLIC_BASE_URL_AUDITS",
-  };
+  const inputs = buildWorkflowInputs({
+    sessionId,
+    reportPrefix,
+    websiteUrl,
+    excludePatterns,
+    callbackUrl,
+    analysisUrl,
+    callbackToken,
+  });
 
   try {
     startJob(jobType, sessionId, {
@@ -118,6 +131,8 @@ export async function startAuditRun({
       callbackUrl,
       analysisUrl,
       callbackTokenConfigured,
+      auditBucket: auditR2.bucket,
+      auditPublicBaseUrl: auditR2.publicBaseUrl,
     });
 
     const dispatch = await dispatchGithubWorkflow({
@@ -126,14 +141,14 @@ export async function startAuditRun({
       ref: payload.workflowRef,
     });
 
-    await publishAuditRequest({ auditType, sessionId, payload, reportPrefix });
-
     const workflowRun = await verifyGithubWorkflowRun({
       workflowId,
       ref: payload.workflowRef,
       sessionId,
       dispatchedAt: dispatch.dispatchedAt,
     });
+
+    await publishAuditRequest({ auditType, sessionId, payload, reportPrefix });
 
     await publishAuditLatest({
       auditType,
@@ -142,7 +157,7 @@ export async function startAuditRun({
         status: "queued",
         reportPrefix,
         workflowId,
-        websiteUrl: payload.websiteUrl,
+        websiteUrl,
         callbackUrl,
         analysisUrl,
         callbackTokenConfigured,
@@ -163,6 +178,7 @@ export async function startAuditRun({
       auditBucket: auditR2.bucket,
       auditPublicBaseUrl: auditR2.publicBaseUrl,
       workflowRunUrl: workflowRun.workflowRunUrl || null,
+      strippedWorkflowInputs: dispatch.strippedInputs || [],
     });
 
     return {
@@ -188,6 +204,8 @@ export async function startAuditRun({
       callbackUrl,
       analysisUrl,
       callbackTokenConfigured,
+      auditBucket: auditR2.bucket,
+      auditPublicBaseUrl: auditR2.publicBaseUrl,
     });
     throw err;
   }
@@ -230,58 +248,6 @@ export async function completeAuditRun({ auditType, payload }) {
     updatedAt: payload.finishedAt || new Date().toISOString(),
   };
 
-  if (payload.auditType && payload.auditType !== auditType) {
-    const safeError = serialiseCompletionError(
-      new Error(`Audit callback type mismatch: route expected ${auditType}, payload contained ${payload.auditType}`)
-    );
-    failJob(jobType, sessionId, safeError.message, {
-      ...jobMetadata,
-      finishedAt: payload.finishedAt || new Date().toISOString(),
-      error: safeError,
-    });
-    await publishAuditLatest({
-      auditType,
-      sessionId,
-      payload: { status: "failed", ...jobMetadata, error: safeError },
-    });
-    return {
-      ok: false,
-      auditType,
-      sessionId,
-      status: "failed",
-      error: safeError,
-      job: getPublicJob(jobType, sessionId),
-    };
-  }
-
-  try {
-    if (status === "completed") {
-      assertCompletedAuditArtifactUrls(payload);
-    } else {
-      assertAuditArtifactUrls(payload, { requireAny: false });
-    }
-  } catch (err) {
-    const safeError = serialiseCompletionError(err);
-    failJob(jobType, sessionId, safeError.message, {
-      ...jobMetadata,
-      finishedAt: payload.finishedAt || new Date().toISOString(),
-      error: safeError,
-    });
-    await publishAuditLatest({
-      auditType,
-      sessionId,
-      payload: { status: "failed", ...jobMetadata, error: safeError },
-    });
-    return {
-      ok: false,
-      auditType,
-      sessionId,
-      status: "failed",
-      error: safeError,
-      job: getPublicJob(jobType, sessionId),
-    };
-  }
-
   if (status === "queued") {
     queueJob(jobType, sessionId, jobMetadata);
   } else if (status === "running") {
@@ -295,13 +261,14 @@ export async function completeAuditRun({ auditType, payload }) {
     );
   } else {
     try {
+      assertCompletedAuditArtifactUrls(payload);
       completeJob(jobType, sessionId, {
         ...jobMetadata,
         finishedAt: payload.finishedAt || new Date().toISOString(),
       });
       await cleanupAuditPrefix({
         reportPrefix: payload.reportPrefix,
-        keepNames: ["request.json", "report.json", "report.html", "summary.json", "coverage.json", "evidence.json", "execution.json", "preflight.json", "reconciliation.json", "halt.txt"],
+        keepNames: ["request.json", "report.json", "report.html", "summary.json", "coverage.json", "evidence.json", "execution.json", "preflight.json", "reconciliation.json"],
       });
     } catch (err) {
       const safeError = serialiseCompletionError(err);
