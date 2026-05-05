@@ -32,7 +32,7 @@ function section(title, body) {
 }
 
 function qaContextNote() {
-  return `<section class="card qa-context"><h2>How to use this QA report</h2><p>This report uses historic evidence as calibration for future output. Recommendations are guardrails for the next social posts, podcast transcript layouts, spoken-copy passes, and RSS feed wording. It is not asking for old posts or transcripts to be rewritten unless you choose to republish them.</p></section>`;
+  return `<section class="card qa-context"><h2>How to use this QA report</h2><p>This report uses historic evidence as calibration for future output. Recommendations are guardrails for future social posts, podcast transcript layouts, spoken-copy passes, and RSS feed wording. It is not asking for old posts or transcripts to be rewritten unless you choose to republish them.</p></section>`;
 }
 
 function emptyFindingsMessage() {
