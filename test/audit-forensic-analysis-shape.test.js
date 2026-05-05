@@ -187,3 +187,27 @@ test("weak executive fallback text is replaced with a forensic estate narrative"
   assert.match(normalised.executiveSummary.summary, /static estate|dynamic editorial estate|source-of-truth drift/i);
   assert.doesNotMatch(normalised.overallVerdict, /Implementation order derived/);
 });
+
+test("echoed audit evidence request is rejected instead of being treated as analysis", () => {
+  const echoedRequest = {
+    ...payload,
+    workflowRequirements: {
+      requiredTopLevelKeys: ["auditCompletionState", "rankedIssueLedger"],
+    },
+  };
+
+  assert.equal(__seoAeoGeoAnalysisTestHooks.looksLikeAuditEvidenceRequestPayload(echoedRequest), true);
+  assert.throws(
+    () => __seoAeoGeoAnalysisTestHooks.validateAndNormaliseAnalysisShape(echoedRequest, payload),
+    /repeated the audit evidence request/
+  );
+
+  const fallback = __seoAeoGeoAnalysisTestHooks.buildDeterministicFallback(
+    payload,
+    new Error("AI forensic provider repeated the audit evidence request instead of returning forensic analysis JSON"),
+    new Error("repair response also repeated the request")
+  );
+  assert.equal(fallback.auditCompletionState, "Complete");
+  assert.equal(fallback.aiAnalysisStatus, "valid-deterministic-fallback");
+  assert.notEqual(fallback.rankedIssueLedger.length, 0);
+});
