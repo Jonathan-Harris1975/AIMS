@@ -5,6 +5,10 @@ import {
   S3Client,
 } from "@aws-sdk/client-s3";
 
+const AUDIT_BUCKET_ALIAS = "audits";
+const AUDIT_BUCKET_ENV = "R2_BUCKET_AUDITS";
+const AUDIT_PUBLIC_BASE_ENV = "R2_PUBLIC_BASE_URL_AUDITS";
+
 function cleanEnv(name) {
   return String(process.env[name] || "").trim();
 }
@@ -13,24 +17,34 @@ function trimTrailingSlash(value) {
   return String(value || "").trim().replace(/\/+$/, "");
 }
 
+export function getAuditPublishConfig() {
+  return {
+    bucketAlias: AUDIT_BUCKET_ALIAS,
+    bucketEnv: AUDIT_BUCKET_ENV,
+    publicBaseEnv: AUDIT_PUBLIC_BASE_ENV,
+    bucketName: getAuditBucketName(),
+    publicBaseUrl: getAuditPublicBaseUrl(),
+  };
+}
+
 export function getAuditBucketName() {
-  return cleanEnv("R2_BUCKET_AUDITS");
+  return cleanEnv(AUDIT_BUCKET_ENV);
 }
 
 export function getAuditPublicBaseUrl() {
-  return trimTrailingSlash(cleanEnv("R2_PUBLIC_BASE_URL_AUDITS"));
+  return trimTrailingSlash(cleanEnv(AUDIT_PUBLIC_BASE_ENV));
 }
 
 export function assertAuditR2Config() {
   const bucket = getAuditBucketName();
   const publicBaseUrl = getAuditPublicBaseUrl();
   const missing = [];
-  if (!bucket) missing.push("R2_BUCKET_AUDITS");
-  if (!publicBaseUrl) missing.push("R2_PUBLIC_BASE_URL_AUDITS");
+  if (!bucket) missing.push(AUDIT_BUCKET_ENV);
+  if (!publicBaseUrl) missing.push(AUDIT_PUBLIC_BASE_ENV);
   if (missing.length) {
     throw new Error(`${missing.join(" and ")} must be configured for audit artefact storage`);
   }
-  return { bucket, publicBaseUrl };
+  return { bucket, publicBaseUrl, bucketAlias: AUDIT_BUCKET_ALIAS };
 }
 
 function getClient() {
@@ -62,17 +76,23 @@ function artefactUrlsFromPayload(payload = {}) {
     payload.preflightUrl,
     payload.evidenceUrl,
     payload.reconciliationUrl,
+    payload.reportJsonUrl,
+    payload.reportHtmlUrl,
+    payload.latestUrl,
   ];
   const artefactValues = payload.artefacts && typeof payload.artefacts === "object"
     ? Object.values(payload.artefacts)
     : [];
-  return [...direct, ...artefactValues].map(String).map((value) => value.trim()).filter(Boolean);
+  return [...direct, ...artefactValues]
+    .map(String)
+    .map((value) => value.trim())
+    .filter(Boolean);
 }
 
-export function assertCompletedAuditArtifactUrls(payload = {}) {
+export function assertAuditArtifactUrls(payload = {}, { requireAny = true } = {}) {
   const { publicBaseUrl } = assertAuditR2Config();
   const urls = artefactUrlsFromPayload(payload);
-  if (!urls.length) {
+  if (requireAny && !urls.length) {
     throw new Error("Completed audit callback did not include any artefact URLs");
   }
 
@@ -80,23 +100,45 @@ export function assertCompletedAuditArtifactUrls(payload = {}) {
   const outsideBase = urls.filter((url) => !normalisePublicUrl(url).startsWith(`${normalisedBase}/`));
   if (outsideBase.length) {
     throw new Error(
-      `Completed audit artefact URL(s) are outside R2_PUBLIC_BASE_URL_AUDITS: ${outsideBase.join(", ")}`
+      `Audit artefact URL(s) are outside ${AUDIT_PUBLIC_BASE_ENV}: ${outsideBase.join(", ")}`
     );
   }
 
   return { ok: true, urls, publicBaseUrl: normalisedBase };
 }
 
-async function putJson(key, payload) {
+export function assertCompletedAuditArtifactUrls(payload = {}) {
+  return assertAuditArtifactUrls(payload, { requireAny: true });
+}
+
+async function putObject({ key, body, contentType }) {
   const { bucket } = assertAuditR2Config();
   const client = getClient();
   await client.send(new PutObjectCommand({
     Bucket: bucket,
     Key: key,
-    Body: JSON.stringify(payload, null, 2),
-    ContentType: "application/json",
+    Body: body,
+    ContentType: contentType,
   }));
-  return buildPublicUrl(key);
+  return { key, url: buildPublicUrl(key), bucketAlias: AUDIT_BUCKET_ALIAS };
+}
+
+async function putJson(key, payload) {
+  return putObject({
+    key,
+    body: JSON.stringify(payload, null, 2),
+    contentType: "application/json; charset=utf-8",
+  });
+}
+
+export async function publishAuditJson({ key, payload }) {
+  if (!key) throw new Error("publishAuditJson requires key");
+  return putJson(key, payload);
+}
+
+export async function publishAuditText({ key, text, contentType = "text/plain; charset=utf-8" }) {
+  if (!key) throw new Error("publishAuditText requires key");
+  return putObject({ key, body: String(text ?? ""), contentType });
 }
 
 export async function publishAuditRequest({ auditType, sessionId, payload, reportPrefix }) {
@@ -107,8 +149,8 @@ export async function publishAuditRequest({ auditType, sessionId, payload, repor
     generatedAt: new Date().toISOString(),
     payload,
   };
-  const url = await putJson(key, document);
-  return { key, url };
+  const published = await putJson(key, document);
+  return { key, url: published.url };
 }
 
 export async function publishAuditLatest({ auditType, sessionId, payload }) {
@@ -119,8 +161,8 @@ export async function publishAuditLatest({ auditType, sessionId, payload }) {
     updatedAt: new Date().toISOString(),
     ...payload,
   };
-  const url = await putJson(key, document);
-  return { key, url };
+  const published = await putJson(key, document);
+  return { key, url: published.url };
 }
 
 export async function cleanupAuditPrefix({ reportPrefix, keepNames = [] }) {
@@ -163,11 +205,15 @@ export async function cleanupAuditPrefix({ reportPrefix, keepNames = [] }) {
 }
 
 export default {
+  publishAuditJson,
+  publishAuditText,
   publishAuditRequest,
   publishAuditLatest,
   cleanupAuditPrefix,
   assertAuditR2Config,
+  assertAuditArtifactUrls,
   assertCompletedAuditArtifactUrls,
   getAuditBucketName,
   getAuditPublicBaseUrl,
+  getAuditPublishConfig,
 };

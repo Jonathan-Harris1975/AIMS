@@ -14,6 +14,7 @@ import {
 import { buildAuditPrefix, makeAuditJobType } from "./auditPaths.js";
 import {
   assertAuditR2Config,
+  assertAuditArtifactUrls,
   assertCompletedAuditArtifactUrls,
   cleanupAuditPrefix,
   getAuditBucketName,
@@ -35,11 +36,11 @@ function resolveExcludePatterns(auditType, body) {
   return DEFAULT_EXCLUDE_PATTERNS[auditType] || [];
 }
 
-function buildWorkflowInputs({ sessionId, reportPrefix, websiteUrl, excludePatterns, callbackUrl, analysisUrl, callbackToken }) {
-  // Keep this list aligned with the website repo workflow_dispatch inputs.
-  // The audits bucket is enforced by AI-suite publishing/validation, not sent as
-  // workflow inputs, because older website workflow versions reject unknown keys
-  // with GitHub's "Unexpected inputs provided" 422 response.
+function buildWorkflowInputs({ sessionId, reportPrefix, websiteUrl, excludePatterns, callbackUrl, analysisUrl, callbackToken, auditR2 }) {
+  // Keep this list aligned with the website repo workflow_dispatch contract.
+  // Newer website workflow revisions accept the audit bucket hints below; older
+  // revisions reject them with GitHub's "Unexpected inputs provided" response,
+  // so dispatchGithubWorkflow strips those exact keys and retries once.
   return {
     session_id: sessionId,
     report_prefix: reportPrefix,
@@ -48,6 +49,10 @@ function buildWorkflowInputs({ sessionId, reportPrefix, websiteUrl, excludePatte
     callback_url: callbackUrl,
     analysis_url: analysisUrl,
     callback_token: callbackToken,
+    audit_bucket: auditR2.bucket,
+    audit_public_base_url: auditR2.publicBaseUrl,
+    audit_bucket_env: "R2_BUCKET_AUDITS",
+    audit_public_base_env: "R2_PUBLIC_BASE_URL_AUDITS",
   };
 }
 
@@ -123,6 +128,7 @@ export async function startAuditRun({
     callbackUrl,
     analysisUrl,
     callbackToken,
+    auditR2,
   });
 
   try {
@@ -225,6 +231,11 @@ function serialiseCompletionError(err) {
 }
 
 export async function completeAuditRun({ auditType, payload }) {
+  if (payload.auditType && payload.auditType !== auditType) {
+    throw new Error(`Audit callback type mismatch: expected ${auditType}, received ${payload.auditType}`);
+  }
+  assertAuditArtifactUrls(payload, { requireAny: false });
+
   const jobType = makeAuditJobType(auditType);
   const sessionId = sanitizeSessionId(
     payload.sessionId || "",
