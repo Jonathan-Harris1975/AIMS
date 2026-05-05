@@ -418,9 +418,9 @@ export function buildPublicUrl(bucketKey, key) {
 // ------------------------------------------------------------
 // 🧰 Utilities
 // ------------------------------------------------------------
-export async function listKeys(bucketKey, prefix = "") {
+export async function listObjects(bucketKey, prefix = "") {
   const bucket = ensureBucketKey(bucketKey);
-  const keys = [];
+  const objects = [];
   let continuationToken;
 
   do {
@@ -433,13 +433,27 @@ export async function listKeys(bucketKey, prefix = "") {
     );
 
     if (response.Contents?.length) {
-      keys.push(...response.Contents.map((item) => item.Key).filter(Boolean));
+      objects.push(
+        ...response.Contents
+          .filter((item) => item?.Key)
+          .map((item) => ({
+            key: item.Key,
+            lastModified: item.LastModified instanceof Date ? item.LastModified.toISOString() : item.LastModified || null,
+            size: Number.isFinite(Number(item.Size)) ? Number(item.Size) : null,
+            eTag: item.ETag || null,
+          }))
+      );
     }
 
     continuationToken = response.IsTruncated ? response.NextContinuationToken : undefined;
   } while (continuationToken);
 
-  return keys;
+  return objects;
+}
+
+export async function listKeys(bucketKey, prefix = "") {
+  const objects = await listObjects(bucketKey, prefix);
+  return objects.map((item) => item.key).filter(Boolean);
 }
 
 export async function deleteObject(bucketKey, key) {
@@ -474,6 +488,7 @@ export default {
   uploadText,
   getObjectAsText,
   deleteObject,
+  listObjects,
   listKeys,
   putObject,
   putJson,

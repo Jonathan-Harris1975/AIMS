@@ -197,6 +197,15 @@ export const oneupQuizBodySchema = z
       : value.socialNetworkId,
   }));
 
+export const oneupPublishedHistoryBodySchema = z
+  .object({
+    start: z.coerce.number().int().min(0).max(100000).optional().default(0),
+    maxPages: z.coerce.number().int().min(1).max(20).optional().default(4),
+    lookbackDays: z.coerce.number().int().min(1).max(365).optional().default(31),
+    apiKey: z.string().trim().min(1).max(200).optional(),
+  })
+  .passthrough();
+
 
 const auditExcludePatternsSchema = z.array(z.string().trim().min(1).max(200)).max(20).optional();
 
