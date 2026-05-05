@@ -4,7 +4,9 @@ import { uploadBuffer } from "../shared/utils/r2-client.js";
 import { generateBlogArtwork } from "./utils/artwork.js";
 
 const R2_BUCKET_BLOG_IMAGES_KEY = "blogImages";
-const ARTWORK_TIMEOUT_MS = Number(process.env.ARTWORK_TIMEOUT_MS || process.env.AI_TIMEOUT) || 60_000;
+const ARTWORK_TIMEOUT_MS =
+  Number(process.env.BLOG_ARTWORK_TIMEOUT_MS || process.env.ARTWORK_TIMEOUT_MS || process.env.AI_TIMEOUT)
+  || 120_000;
 
 function withTimeout(promise, timeoutMs, label) {
   let timer;
