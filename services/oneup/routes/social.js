@@ -1,16 +1,26 @@
 import express from "express";
+import { z } from "zod";
 import { hookdeckDedupe } from "../../shared/utils/hookdeckDedupe.js";
 import {
   validateBody,
   oneupDailyBodySchema,
   oneupQuizBodySchema,
-  oneupPublishedHistoryBodySchema,
 } from "../../shared/utils/requestSchemas.js";
 import { buildAndScheduleDailyLane, buildAndScheduleQuizSeries } from "../utils/socialScheduler.js";
 import { fetchPublishedPostsHistory } from "../utils/oneupClient.js";
 import { LANE_CONFIG } from "../utils/config.js";
 
 const router = express.Router();
+
+const oneupPublishedHistoryBodySchema = z
+  .object({
+    start: z.coerce.number().int().min(0).max(100000).optional().default(0),
+    maxPages: z.coerce.number().int().min(1).max(20).optional().default(4),
+    lookbackDays: z.coerce.number().int().min(1).max(365).optional().default(31),
+    apiKey: z.string().trim().min(1).max(200).optional(),
+  })
+  .passthrough();
+
 
 const asyncRoute = (fn) => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch(next);
