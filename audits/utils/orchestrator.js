@@ -206,7 +206,7 @@ export async function completeAuditRun({ auditType, payload }) {
     completeJob(jobType, sessionId, jobMetadata);
     await cleanupAuditPrefix({
       reportPrefix: payload.reportPrefix,
-      keepNames: ["report.html", "summary.json", "coverage.json"],
+      keepNames: ["request.json", "report.json", "report.html", "summary.json", "coverage.json", "evidence.json", "execution.json", "preflight.json", "reconciliation.json"],
     });
   }
 

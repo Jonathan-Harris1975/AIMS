@@ -1,40 +1,42 @@
 import {
   DeleteObjectsCommand,
   ListObjectsV2Command,
-  PutObjectCommand,
-  S3Client,
 } from "@aws-sdk/client-s3";
+import {
+  buildPublicUrl,
+  ensureBucketKey,
+  putJson,
+  s3,
+  uploadText,
+} from "../../services/shared/utils/r2-client.js";
 
-const BRAND_ASSETS_BUCKET = String(process.env.R2_BUCKET_BRAND_ASSETS || "brand-assets").trim();
-const BRAND_ASSETS_PUBLIC_BASE = String(process.env.R2_PUBLIC_BASE_URL_BRAND_ASSETS || "").trim().replace(/\/$/, "");
+export const AUDIT_BUCKET_ALIAS = "audits";
 
-function getClient() {
-  return new S3Client({
-    region: process.env.R2_REGION || "auto",
-    endpoint: process.env.R2_ENDPOINT,
-    credentials: {
-      accessKeyId: process.env.R2_ACCESS_KEY_ID,
-      secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
-    },
-  });
+export function getAuditPublishConfig() {
+  return {
+    bucketAlias: AUDIT_BUCKET_ALIAS,
+    bucketEnv: "R2_BUCKET_AUDITS",
+    publicBaseEnv: "R2_PUBLIC_BASE_URL_AUDITS",
+  };
 }
 
-function buildPublicUrl(key) {
-  if (!BRAND_ASSETS_PUBLIC_BASE) {
-    throw new Error("R2_PUBLIC_BASE_URL_BRAND_ASSETS is required for audit publishing");
-  }
-  return `${BRAND_ASSETS_PUBLIC_BASE}/${key}`;
+async function putAuditJson(key, payload) {
+  const url = await putJson(AUDIT_BUCKET_ALIAS, key, payload);
+  return url;
 }
 
-async function putJson(key, payload) {
-  const client = getClient();
-  await client.send(new PutObjectCommand({
-    Bucket: BRAND_ASSETS_BUCKET,
-    Key: key,
-    Body: JSON.stringify(payload, null, 2),
-    ContentType: "application/json",
-  }));
-  return buildPublicUrl(key);
+async function putAuditText(key, text, contentType = "text/plain") {
+  return uploadText(AUDIT_BUCKET_ALIAS, key, text, contentType);
+}
+
+export async function publishAuditJson({ key, payload }) {
+  const url = await putAuditJson(key, payload);
+  return { key, url };
+}
+
+export async function publishAuditText({ key, text, contentType = "text/plain" }) {
+  const url = await putAuditText(key, text, contentType);
+  return { key, url };
 }
 
 export async function publishAuditRequest({ auditType, sessionId, payload, reportPrefix }) {
@@ -45,7 +47,7 @@ export async function publishAuditRequest({ auditType, sessionId, payload, repor
     generatedAt: new Date().toISOString(),
     payload,
   };
-  const url = await putJson(key, document);
+  const url = await putAuditJson(key, document);
   return { key, url };
 }
 
@@ -57,20 +59,24 @@ export async function publishAuditLatest({ auditType, sessionId, payload }) {
     updatedAt: new Date().toISOString(),
     ...payload,
   };
-  const url = await putJson(key, document);
+  const url = await putAuditJson(key, document);
   return { key, url };
+}
+
+export function buildAuditPublicUrl(key) {
+  return buildPublicUrl(AUDIT_BUCKET_ALIAS, key);
 }
 
 export async function cleanupAuditPrefix({ reportPrefix, keepNames = [] }) {
   if (!reportPrefix) return { deleted: [] };
   const keep = new Set(keepNames);
-  const client = getClient();
+  const bucket = ensureBucketKey(AUDIT_BUCKET_ALIAS);
   let continuationToken;
   const keysToDelete = [];
 
   do {
-    const response = await client.send(new ListObjectsV2Command({
-      Bucket: BRAND_ASSETS_BUCKET,
+    const response = await s3.send(new ListObjectsV2Command({
+      Bucket: bucket,
       Prefix: `${reportPrefix.replace(/\/$/, "")}/`,
       ContinuationToken: continuationToken,
     }));
@@ -91,8 +97,8 @@ export async function cleanupAuditPrefix({ reportPrefix, keepNames = [] }) {
     return { deleted: [] };
   }
 
-  await client.send(new DeleteObjectsCommand({
-    Bucket: BRAND_ASSETS_BUCKET,
+  await s3.send(new DeleteObjectsCommand({
+    Bucket: bucket,
     Delete: { Objects: keysToDelete, Quiet: true },
   }));
 
@@ -100,6 +106,11 @@ export async function cleanupAuditPrefix({ reportPrefix, keepNames = [] }) {
 }
 
 export default {
+  AUDIT_BUCKET_ALIAS,
+  getAuditPublishConfig,
+  buildAuditPublicUrl,
+  publishAuditJson,
+  publishAuditText,
   publishAuditRequest,
   publishAuditLatest,
   cleanupAuditPrefix,
