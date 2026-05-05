@@ -14,6 +14,7 @@ function normaliseTime(value, fallback) {
 export const DEFAULT_TIMEZONE = trimString(process.env.ONEUP_TIMEZONE, "Europe/London");
 export const ONEUP_API_BASE = trimString(process.env.ONEUP_API_BASE, "https://www.oneupapp.io/api").replace(/\/+$/, "");
 export const ONEUP_CATEGORY_NAME_GENERAL = trimString(process.env.ONEUP_CATEGORY_NAME_GENERAL, "General");
+export const ONEUP_CATEGORY_NAME_EBOOKS = trimString(process.env.ONEUP_CATEGORY_NAME_EBOOKS, "Ebooks");
 export const ONEUP_SOCIAL_NETWORK_ID = trimString(process.env.ONEUP_SOCIAL_NETWORK_ID, "ALL");
 export const ONEUP_DEFAULT_DRY_RUN = ["1", "true", "yes", "on"].includes(
   trimString(process.env.ONEUP_DEFAULT_DRY_RUN, "false").toLowerCase()
@@ -91,8 +92,13 @@ export const QUIZ_CONFIG = {
 };
 
 
-export const EBOOK_WEEKLY_CONFIG = {
+export const EBOOK_CONFIG = {
   key: "ebooks-weekly",
   weekdays: ["tuesday", "thursday", "saturday"],
+  tuesdayPublishTime: normaliseTime(process.env.ONEUP_EBOOK_TUESDAY_TIME || process.env.ONEUP_TUESDAY_TIME, "13:00"),
+  thursdayPublishTime: normaliseTime(process.env.ONEUP_EBOOK_THURSDAY_TIME || process.env.ONEUP_THURSDAY_TIME, "12:20"),
+  saturdayPublishTime: normaliseTime(process.env.ONEUP_EBOOK_SATURDAY_TIME || process.env.ONEUP_SATURDAY_TIME, "10:30"),
   hashtags: ["#ArtificialIntelligence", "#AIBooks", "#AIExplained", "#JonathanHarris"],
 };
+
+export const EBOOK_WEEKLY_CONFIG = EBOOK_CONFIG;
