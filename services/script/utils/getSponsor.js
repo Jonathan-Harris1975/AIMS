@@ -27,6 +27,21 @@ function cleanString(value) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function firstString(...values) {
+  for (const value of values) {
+    const cleaned = cleanString(value);
+    if (cleaned) return cleaned;
+  }
+  return "";
+}
+
+function normaliseKeywordList(value) {
+  if (Array.isArray(value)) {
+    return value.map((item) => cleanString(item)).filter(Boolean).join(", ");
+  }
+  return cleanString(value);
+}
+
 function getFeaturedBookApiUrl() {
   return cleanString(process.env.FEATURED_BOOK_API_URL) || DEFAULT_FEATURED_BOOK_API_URL;
 }
@@ -72,7 +87,17 @@ export function buildSponsorFromPayload(payload) {
     url,
     canonicalUrl: cleanString(book.canonical_url) || url,
     buyUrl: cleanString(book.buy_url) || cleanString(book.buy_route_full) || url,
-    short: cleanString(book.short),
+    short: firstString(book.short, book.short_description, book.shortDescription, book.description),
+    shortDescription: firstString(book.short_description, book.shortDescription, book.short, book.description),
+    summary: firstString(book.summary, book.long_description, book.longDescription, book.description, book.short),
+    keywords: normaliseKeywordList(book.keywords || book.keyword_list || book.tags),
+    audience: firstString(book.audience, book.target_audience, book.targetAudience),
+    whoThisBookIsFor: firstString(book.who_this_book_is_for, book.whoThisBookIsFor, book.who_for, book.for_readers),
+    whatThisBookCovers: firstString(book.what_this_book_covers, book.whatThisBookCovers, book.covers, book.coverage),
+    whatYouWillLearn: firstString(book.what_you_will_learn, book.whatYouWillLearn, book.learning_outcomes, book.outcomes),
+    whyItMatters: firstString(book.why_it_matters, book.whyItMatters, book.relevance, book.value_proposition),
+    coverArtUrl: firstString(book.cover_art_url, book.coverArtUrl, book.cover_image_url, book.coverImageUrl, book.image_url, book.imageUrl, book.cover_url, book.coverUrl, book.thumbnail_url, book.thumbnailUrl, book.cover, book.image),
+    manuscriptPdfUrl: firstString(book.manuscript_pdf_url, book.manuscriptPdfUrl, book.pdf_url, book.pdfUrl, book.google_drive_pdf_url, book.googleDrivePdfUrl, book.manuscript_url, book.manuscriptUrl),
     tags: Array.isArray(book.tags) ? book.tags.filter((tag) => typeof tag === "string") : [],
     filter: cleanString(book.filter),
     podcastSponsor:
