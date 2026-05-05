@@ -27,6 +27,11 @@ function applyBaseEnv() {
   delete process.env.OPENROUTER_DEEPSEEK;
   delete process.env.OPENROUTER_API_KEY_DEEPSEEK;
   delete process.env.ONEUP_API_KEY;
+  process.env.ONEUP_DEFAULT_DRY_RUN = "false";
+  process.env.ONEUP_CATEGORY_NAME_EBOOKS = "Ebooks";
+  process.env.ONEUP_TUESDAY_TIME = "13:00";
+  process.env.ONEUP_THURSDAY_TIME = "12:20";
+  process.env.ONEUP_SATURDAY_TIME = "10:30";
 }
 
 const mockServer = http.createServer(async (req, res) => {
@@ -41,23 +46,35 @@ const mockServer = http.createServer(async (req, res) => {
   const payload = JSON.parse(body || "{}");
   const joined = JSON.stringify(payload.messages || []);
 
-  const content = joined.includes("paired weekly AI quiz")
-    ? JSON.stringify({
-        topic: "Transformer basics",
-        questionTitle: "Weekly AI Quiz",
-        questionContent:
-          "**Which architecture made modern large language models practical?**\nA) Decision Tree\nB) Transformer\nC) K-Means\nD) Linear Regression\n\nComment your answer below and tag a friend who should try this!",
-        answerTitle: "Quiz Answer",
-        answerContent:
-          "Quiz Answer! The correct answer is B) Transformer. Transformers handle context far better than older sequence models, which is why they sit underneath most modern LLMs. Did you get it right?",
-      })
-    : JSON.stringify({
-        title: "Monday Motivation",
-        topic: "Steady systems",
-        content:
-          '"The future depends on what you do today." - Mahatma Gandhi\n\nAI work gets better when you stop chasing theatre and keep shipping the useful bits.',
-        firstComment: "",
-      });
+  let content;
+  if (joined.includes("Create one ebook social post")) {
+    const userMessage = (payload.messages || []).find((message) => message?.role === "user")?.content || "";
+    const day = userMessage.match(/Post day:\s*(Tuesday|Thursday|Saturday)/)?.[1] || "Tuesday";
+    content = JSON.stringify({
+      title: `${day} Ebook Angle`,
+      topic: `${day} book angle`,
+      content: `${day} post copy about using artificial intelligence carefully, without pretending the tools are magic. #ModelNoise`,
+      firstComment: "Featured book: Practical AI Thinking\nRead more: https://example.com/practical-ai-thinking",
+    });
+  } else if (joined.includes("paired weekly AI quiz")) {
+    content = JSON.stringify({
+      topic: "Transformer basics",
+      questionTitle: "Weekly AI Quiz",
+      questionContent:
+        "**Which architecture made modern large language models practical?**\nA) Decision Tree\nB) Transformer\nC) K-Means\nD) Linear Regression\n\nComment your answer below and tag a friend who should try this!",
+      answerTitle: "Quiz Answer",
+      answerContent:
+        "Quiz Answer! The correct answer is B) Transformer. Transformers handle context far better than older sequence models, which is why they sit underneath most modern LLMs. Did you get it right?",
+    });
+  } else {
+    content = JSON.stringify({
+      title: "Monday Motivation",
+      topic: "Steady systems",
+      content:
+        '"The future depends on what you do today." - Mahatma Gandhi\n\nAI work gets better when you stop chasing theatre and keep shipping the useful bits.',
+      firstComment: "",
+    });
+  }
 
   res.writeHead(200, { "content-type": "application/json" });
   res.end(
@@ -85,6 +102,20 @@ test.afterEach(() => {
   restoreEnv();
 });
 
+const FEATURED_BOOK = {
+  title: "Practical AI Thinking",
+  shortDescription: "A plain-English guide to using AI tools without swallowing the hype.",
+  summary: "Explains practical AI decisions, everyday workflows, and the judgement needed around modern tools.",
+  keywords: "artificial intelligence, AI literacy, workflows",
+  audience: "Curious readers, authors, creators, and small business owners",
+  whoThisBookIsFor: "Readers who want useful AI understanding without technical fog.",
+  whatThisBookCovers: "AI basics, practical workflows, risks, and better questions to ask before adopting tools.",
+  whatYouWillLearn: "How to judge AI use cases, spot weak claims, and apply tools sensibly.",
+  whyItMatters: "AI decisions are moving into ordinary work, not just technical teams.",
+  bookUrl: "https://example.com/practical-ai-thinking",
+  coverArtUrl: "https://example.com/practical-ai-thinking-cover.jpg",
+};
+
 test("OneUp request schema coerces dryRun and array socialNetworkId", async () => {
   const mod = await import(`../services/shared/utils/requestSchemas.js?oneup-schema=${Date.now()}`);
   const parsed = mod.validateBody(mod.oneupDailyBodySchema, {
@@ -96,6 +127,32 @@ test("OneUp request schema coerces dryRun and array socialNetworkId", async () =
   assert.equal(parsed.ok, true);
   assert.equal(parsed.data.dryRun, true);
   assert.equal(parsed.data.socialNetworkId, '["acc-1","acc-2"]');
+});
+
+test("OneUp ebook weekly request schema validates featured book payload and overrides", async () => {
+  const mod = await import(`../services/shared/utils/requestSchemas.js?oneup-ebook-schema=${Date.now()}`);
+  const parsed = mod.validateBody(mod.oneupEbookWeeklyBodySchema, {
+    weekStartDate: "2026-05-04",
+    dryRun: "true",
+    categoryName: "Ebooks",
+    socialNetworkId: ["fb-page", "ig-account"],
+    thursdayPublishTime: "15:45",
+    featuredBook: FEATURED_BOOK,
+  });
+
+  assert.equal(parsed.ok, true);
+  assert.equal(parsed.data.dryRun, true);
+  assert.equal(parsed.data.socialNetworkId, '["fb-page","ig-account"]');
+  assert.equal(parsed.data.featuredBook.coverArtUrl, FEATURED_BOOK.coverArtUrl);
+  assert.equal(parsed.data.thursdayPublishTime, "15:45");
+
+  const invalid = mod.validateBody(mod.oneupEbookWeeklyBodySchema, {
+    weekStartDate: "2026/05/04",
+    featuredBook: { ...FEATURED_BOOK, title: "", bookUrl: "not-a-url" },
+  });
+
+  assert.equal(invalid.ok, false);
+  assert.match(invalid.error, /weekStartDate|featuredBook\.title|featuredBook\.bookUrl/);
 });
 
 test("buildAndScheduleDailyLane returns a dry-run Monday preview with hashtags", async () => {
@@ -137,6 +194,72 @@ test("buildAndScheduleQuizSeries returns dry-run question and answer posts", asy
   assert.match(result.answer.post.content, /Did you get it right\?/);
 });
 
+
+test("buildAndScheduleEbookWeekly returns dry-run Tuesday, Thursday, and Saturday ebook posts", async () => {
+  restoreEnv();
+  applyBaseEnv();
+  process.env.OPENROUTER_API_BASE = mockBase;
+
+  const mod = await import(`../services/oneup/utils/socialScheduler.js?oneup-ebooks=${Date.now()}`);
+  const result = await mod.buildAndScheduleEbookWeekly({
+    weekStartDate: "2026-05-04",
+    dryRun: true,
+    categoryName: "Ebooks",
+    socialNetworkId: "ALL",
+    featuredBook: FEATURED_BOOK,
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.service, "oneup");
+  assert.equal(result.lane, "ebooks-weekly");
+  assert.equal(result.featuredBookTitle, FEATURED_BOOK.title);
+  assert.equal(result.dryRun, true);
+  assert.deepEqual(Object.keys(result.posts), ["tuesday", "thursday", "saturday"]);
+  assert.equal(result.posts.tuesday.publishDate, "2026-05-05");
+  assert.equal(result.posts.thursday.publishDate, "2026-05-07");
+  assert.equal(result.posts.saturday.publishDate, "2026-05-09");
+  assert.equal(result.posts.tuesday.scheduledDateTime, "2026-05-05 13:00");
+  assert.equal(result.posts.thursday.scheduledDateTime, "2026-05-07 12:20");
+  assert.equal(result.posts.saturday.scheduledDateTime, "2026-05-09 10:30");
+  assert.equal(result.posts.tuesday.scheduled, false);
+  assert.equal(result.posts.thursday.scheduled, false);
+  assert.equal(result.posts.saturday.scheduled, false);
+});
+
+test("buildAndScheduleEbookWeekly keeps one featured book, appends scheduler hashtags, and uses cover art", async () => {
+  restoreEnv();
+  applyBaseEnv();
+  process.env.OPENROUTER_API_BASE = mockBase;
+
+  const scheduler = await import(`../services/oneup/utils/socialScheduler.js?oneup-ebook-details=${Date.now()}`);
+  const prompts = await import(`../services/oneup/utils/prompts.js?oneup-ebook-prompt=${Date.now()}`);
+  const prompt = prompts.buildEbookPostPrompt({
+    day: "tuesday",
+    publishDate: "2026-05-05",
+    featuredBook: FEATURED_BOOK,
+  });
+
+  assert.match(prompt.system, /no hashtags in the model output/);
+  assert.doesNotMatch(prompt.user, /#ArtificialIntelligence|#AIBooks|#AIExplained|#JonathanHarris/);
+
+  const result = await scheduler.buildAndScheduleEbookWeekly({
+    weekStartDate: "2026-05-04",
+    dryRun: true,
+    featuredBook: FEATURED_BOOK,
+  });
+
+  for (const day of ["tuesday", "thursday", "saturday"]) {
+    const post = result.posts[day].post;
+    assert.equal(post.firstComment, `Featured book: ${FEATURED_BOOK.title}\nRead more: ${FEATURED_BOOK.bookUrl}`);
+    assert.equal(post.imageUrl, FEATURED_BOOK.coverArtUrl);
+    assert.match(post.content, /#ArtificialIntelligence/);
+    assert.match(post.content, /#AIBooks/);
+    assert.match(post.content, /#AIExplained/);
+    assert.match(post.content, /#JonathanHarris/);
+    assert.doesNotMatch(post.content, /#ModelNoise/);
+    assert.doesNotMatch(post.firstComment, /#ArtificialIntelligence|#AIBooks|#AIExplained|#JonathanHarris/);
+  }
+});
 
 test("Tuesday lane uses the updated educational hashtag set", async () => {
   restoreEnv();
