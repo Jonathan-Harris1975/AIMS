@@ -211,3 +211,17 @@ test("echoed audit evidence request is rejected instead of being treated as anal
   assert.equal(fallback.aiAnalysisStatus, "valid-deterministic-fallback");
   assert.notEqual(fallback.rankedIssueLedger.length, 0);
 });
+
+test("raw prompt/request echoes are detected before JSON repair is attempted", () => {
+  const echoedText = [
+    "FORENSIC SEO + AEO + GEO AUDIT - FULL ESTATE EVIDENCE PACKAGE",
+    "Use the evidence payload only. Do not invent evidence.",
+    JSON.stringify({ allRoutes: payload.allRoutes, repoSignals: {}, workflowRequirements: { rejectSilentSampling: true } }),
+  ].join("\n");
+
+  assert.equal(__seoAeoGeoAnalysisTestHooks.looksLikeAuditPromptEchoText(echoedText), true);
+  assert.throws(
+    () => __seoAeoGeoAnalysisTestHooks.rejectRawPromptEcho(echoedText),
+    /repeated the prompt\/request text/
+  );
+});
