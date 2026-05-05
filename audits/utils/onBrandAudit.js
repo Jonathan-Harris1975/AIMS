@@ -90,6 +90,29 @@ function normaliseRootCause(value) {
   return "unknown";
 }
 
+function futureVerb(sourceType) {
+  if (sourceType === "podcast_transcript") return "future podcast transcript output";
+  if (sourceType === "rss_feed") return "future RSS feed output";
+  if (sourceType === "oneup_blog_social") return "future OneUp/blog/social output";
+  return "future pipeline output";
+}
+
+function futureRemediation(text = "", sourceType = "pipeline") {
+  const cleaned = String(text || "").trim();
+  const fallback = `Use this evidence to tune ${futureVerb(sourceType)} and rerun the audit.`;
+  if (!cleaned) return fallback;
+  if (/\b(future|next generated|future-generated|going forward)\b/i.test(cleaned)) return cleaned;
+  return `For ${futureVerb(sourceType)}, ${cleaned.charAt(0).toLowerCase()}${cleaned.slice(1)}`;
+}
+
+function futureVerification(text = "", sourceType = "pipeline") {
+  const cleaned = String(text || "").trim();
+  const fallback = `Generate fresh ${futureVerb(sourceType)} and rerun the on-brand audit to confirm the pattern has not recurred.`;
+  if (!cleaned) return fallback;
+  if (/\b(future|fresh|newly generated|next generated)\b/i.test(cleaned)) return cleaned;
+  return `${cleaned} Treat historic examples as calibration evidence; verify against newly generated output.`;
+}
+
 function normaliseDefect(issue = {}, index = 0) {
   return {
     issueId: cleanString(issue.issueId, `OB-${String(index + 1).padStart(3, "0")}`),
@@ -102,9 +125,9 @@ function normaliseDefect(issue = {}, index = 0) {
     whyItIsOffBrand: cleanString(issue.whyItIsOffBrand),
     violatedRule: cleanString(issue.violatedRule),
     rootCauseLevel: normaliseRootCause(issue.rootCauseLevel),
-    exactRemediation: cleanString(issue.exactRemediation),
+    exactRemediation: futureRemediation(issue.exactRemediation, normaliseSourceType(issue.sourceType)),
     improvedExample: String(issue.improvedExample || ""),
-    verificationMethod: cleanString(issue.verificationMethod, "Rerun the on-brand audit and confirm the finding is gone."),
+    verificationMethod: futureVerification(issue.verificationMethod, normaliseSourceType(issue.sourceType)),
   };
 }
 
@@ -172,8 +195,8 @@ function defaultRssFindings(defects, sourceCoverage) {
   const rssDefects = defectsForSource(defects, "rss_feed");
   return {
     verdict: rssDefects.length
-      ? "RSS evidence was inspected and the confirmed issues below need cleanup."
-      : "RSS evidence was inspected and no deterministic RSS defects were found.",
+      ? "RSS evidence was inspected; the confirmed patterns should inform future feed wording and generation guardrails."
+      : "RSS evidence was inspected and no deterministic future-output risks were found.",
     titlePatternAnalysis: rssDefects.some((issue) => /title/i.test(issue.issueType))
       ? "At least one RSS title pattern issue was confirmed in the ledger."
       : "No deterministic RSS title pattern issues were found.",
@@ -189,8 +212,8 @@ function defaultOneUpFindings(defects, sourceCoverage) {
   const historyConfirmed = hasMethod(sourceCoverage, "oneup_blog_social", "getpublishedposts");
   return {
     verdict: oneUpDefects.length
-      ? "OneUp/blog/social published evidence was inspected and the confirmed issues below need cleanup."
-      : "OneUp/blog/social published evidence was inspected and no deterministic defects were found.",
+      ? "OneUp/blog/social published evidence was inspected; the confirmed patterns should inform future post generation and scheduling QA."
+      : "OneUp/blog/social published evidence was inspected and no deterministic future-output risks were found.",
     postPatternAnalysis: historyConfirmed
       ? "Historic published OneUp retrieval is confirmed via getpublishedposts; the audit is no longer limited to scheduled posts."
       : "Historic published OneUp retrieval was not confirmed in this run; check source coverage limitations.",
@@ -202,14 +225,14 @@ function defaultPodcastFindings(defects, sourceCoverage) {
   const podcastDefects = defectsForSource(defects, "podcast_transcript");
   return {
     verdict: podcastDefects.length
-      ? "Podcast transcript evidence was inspected and the confirmed spoken-copy issues below need cleanup."
-      : "Podcast transcript evidence was inspected and no deterministic spoken-copy defects were found.",
+      ? "Podcast transcript evidence was inspected; the confirmed patterns should inform future transcript layout, spoken-copy shaping, and TTS QA."
+      : "Podcast transcript evidence was inspected and no deterministic future transcript risks were found.",
     openingStrength: podcastDefects.some((issue) => /opening|overlong|hype|filler/i.test(issue.issueType))
-      ? "Opening/body copy needs tightening where listed in the ledger."
-      : "No deterministic opening weakness was confirmed from the supplied excerpts.",
+      ? "Future opening/body copy should avoid the patterns listed in the ledger."
+      : "No deterministic future opening risk was confirmed from the supplied excerpts.",
     flowAndTransitions: podcastDefects.some((issue) => /transition|sequencing|overlong/i.test(issue.issueType))
-      ? "Flow issues were found where long sentences or repeated transitions appear in the ledger."
-      : "No deterministic transition or sequencing issue was confirmed from the supplied excerpts.",
+      ? "Future scripts should tighten long sentence shapes and repeated transitions where listed in the ledger."
+      : "No deterministic future transition or sequencing risk was confirmed from the supplied excerpts.",
     repetitionWatchlist: podcastDefects
       .filter((issue) => /repeated transition/i.test(issue.issueType))
       .map((issue) => issue.exactEvidence),
@@ -218,7 +241,7 @@ function defaultPodcastFindings(defects, sourceCoverage) {
       .slice(0, 5)
       .map((issue) => ({
         originalLine: issue.exactEvidence,
-        improvedLine: "Split this into two shorter spoken lines and cut any abstract padding.",
+        improvedLine: "For future transcript output, split this into two shorter spoken lines and cut any abstract padding.",
         reason: issue.whyItIsOffBrand,
       })),
     defects: podcastDefects,
@@ -239,17 +262,17 @@ function derivePipelineDiagnosis(defects = []) {
   if (defects.some((issue) => issue.sourceType === "rss_feed" && /validator/i.test(issue.rootCauseLevel))) {
     rows.push({
       affectedFileOrService: "services/rss-feed-creator/utils/rss-prompts.js",
-      diagnosis: "The RSS validator is catching banned filler, but the generation/retry path still allowed a weak phrase into evidence.",
-      evidence: "RSS validator finding appears in the confirmed defects ledger.",
-      smallestSafeFix: "Keep the validator blocking and tighten the rewrite retry prompt only if the same phrase recurs.",
+      diagnosis: "The RSS validator is catching banned filler; use this evidence to keep future feed wording tighter.",
+      evidence: "RSS validator finding appears in the future QA findings ledger.",
+      smallestSafeFix: "Keep the validator blocking and tighten the future rewrite retry prompt only if the same phrase recurs in fresh output.",
     });
   }
   if (defects.some((issue) => issue.sourceType === "podcast_transcript" && /hype|filler|overlong|transition/i.test(issue.issueType))) {
     rows.push({
       affectedFileOrService: "services/script/utils/editAndFormat.js",
-      diagnosis: "Podcast transcript copy still contains phrases or sentence shapes that are poor for spoken delivery.",
-      evidence: "Podcast transcript issues appear in the confirmed defects ledger.",
-      smallestSafeFix: "Tighten the transcript QA/editorial pass; do not alter the wider podcast route structure.",
+      diagnosis: "Podcast transcript evidence contains phrases or sentence shapes that future scripts should avoid for spoken delivery.",
+      evidence: "Podcast transcript issues appear in the future QA findings ledger.",
+      smallestSafeFix: "Tighten the future transcript QA/editorial pass; do not alter the wider podcast route structure.",
     });
   }
   return rows;
@@ -263,16 +286,16 @@ function deriveRemediationPlan(defects = []) {
     .map((issue, index) => ({
       priority: index + 1,
       severity: issue.severity,
-      action: issue.exactRemediation,
+      action: futureRemediation(issue.exactRemediation, issue.sourceType),
       affectedSource: issue.sourceType,
       affectedFilesOrServices: issue.sourceType === "rss_feed"
         ? ["services/rss-feed-creator/utils/rss-prompts.js", "services/rss-feed-creator/utils/feedGenerator.js"]
         : issue.sourceType === "podcast_transcript"
           ? ["services/script/utils/editAndFormat.js", "services/script/utils/promptTemplates.js"]
           : ["services/oneup/utils/prompts.js", "services/oneup/utils/socialScheduler.js"],
-      whyThisComesFirst: "It is backed by confirmed evidence in the audit ledger, not a speculative taste call.",
-      implementationNotes: `Fix ${issue.issueId}: ${issue.issueType}.`,
-      verificationMethod: issue.verificationMethod,
+      whyThisComesFirst: "It is backed by confirmed evidence in the QA ledger and improves future generated output rather than rewriting history.",
+      implementationNotes: `Use ${issue.issueId} as a future-output guardrail: ${issue.issueType}.`,
+      verificationMethod: futureVerification(issue.verificationMethod, issue.sourceType),
     }));
 }
 
@@ -315,14 +338,14 @@ export function normaliseOnBrandReport(report, evidence, { rawModelError } = {})
       summary: cleanString(
         reportObj.executiveVerdict?.summary,
         defects.length
-          ? "Deterministic checks found brand drift that needs editorial cleanup."
-          : "No deterministic defects were found, but source coverage may still be partial."
+          ? "Deterministic checks found patterns to tighten in future generated output."
+          : "No deterministic future-output risks were found, but source coverage may still be partial."
       ),
       bluntAssessment: cleanString(
         reportObj.executiveVerdict?.bluntAssessment,
         defects.length
-          ? "The pipeline is usable, but the flagged copy needs tightening before it sounds fully Jonathan Harris."
-          : "The available evidence does not prove a major brand breach."
+          ? "The QA loop is working: use these historic examples to improve future social posts, podcast transcripts, and RSS wording."
+          : "The available evidence does not prove a major future-output brand risk."
       ),
     },
     sourceCoverage,
@@ -382,9 +405,9 @@ export function normaliseOnBrandReport(report, evidence, { rawModelError } = {})
       action: cleanString(row?.action, defects[index]?.exactRemediation || "Review confirmed defects and apply the smallest safe copy or validator fix."),
       affectedSource: cleanString(row?.affectedSource, defects[index]?.sourceType || "pipeline"),
       affectedFilesOrServices: arr(row?.affectedFilesOrServices).map(String),
-      whyThisComesFirst: cleanString(row?.whyThisComesFirst, "It addresses confirmed evidence rather than speculative rewrite work."),
-      implementationNotes: cleanString(row?.implementationNotes, "Use the exact remediation in the confirmed defects ledger."),
-      verificationMethod: cleanString(row?.verificationMethod, "Rerun the on-brand audit."),
+      whyThisComesFirst: cleanString(row?.whyThisComesFirst, "It addresses confirmed future-output evidence rather than speculative rewrite work."),
+      implementationNotes: cleanString(row?.implementationNotes, "Use the exact remediation as a future-output guardrail."),
+      verificationMethod: futureVerification(cleanString(row?.verificationMethod, "Generate fresh output and rerun the on-brand audit."), cleanString(row?.affectedSource, defects[index]?.sourceType || "pipeline")),
     })) : derivedPlan,
     doNotChange: normaliseObjectArray(reportObj.doNotChange, ["area", "reason", "evidence"]),
     limitations: Array.from(new Set(limitations.filter(Boolean))),

@@ -491,7 +491,7 @@ function addFinding(findings, finding) {
     rootCauseLevel: finding.rootCauseLevel || "content",
     exactRemediation: finding.exactRemediation,
     improvedExample: finding.improvedExample || "",
-    verificationMethod: finding.verificationMethod || "Rerun the on-brand audit and confirm the exact phrase no longer appears.",
+    verificationMethod: finding.verificationMethod || "Generate fresh output, rerun the on-brand audit, and confirm the exact pattern does not recur.",
   });
 }
 
@@ -517,7 +517,7 @@ function checkTitle(findings, { title, sourceType, itemTitleOrId }) {
       exactEvidence: cleaned,
       whyItIsOffBrand: "The title opens with a publisher-style label rather than a human editorial headline.",
       violatedRule: "No title prefixes or category labels.",
-      exactRemediation: `Remove the '${prefix}:' prefix and rewrite the headline as a specific editorial angle.`,
+      exactRemediation: `For future titles, remove the '${prefix}:' prefix and rewrite the headline as a specific editorial angle.`,
       improvedExample: cleaned.replace(new RegExp(`^${prefix}\\s*:\\s*`, "i"), "").trim(),
     });
   }
@@ -530,7 +530,7 @@ function checkTitle(findings, { title, sourceType, itemTitleOrId }) {
       exactEvidence: cleaned,
       whyItIsOffBrand: "The title uses explainer scaffolding that feels closer to SEO middleware than Jonathan Harris editorial judgement.",
       violatedRule: "Avoid formula starts such as Why, How, Everything you need to know, X as Y, and The future of.",
-      exactRemediation: "Re-angle the headline around the concrete tension or consequence in the item.",
+      exactRemediation: "For future titles, re-angle the headline around the concrete tension or consequence in the item.",
     });
   }
   const words = cleaned.split(/\s+/).filter(Boolean).length;
@@ -543,7 +543,7 @@ function checkTitle(findings, { title, sourceType, itemTitleOrId }) {
       exactEvidence: cleaned,
       whyItIsOffBrand: "The title is carrying too many clauses for a premium, calm editorial feed.",
       violatedRule: "Keep titles concise and specific.",
-      exactRemediation: "Cut the title to one clear angle, ideally 5 to 12 words.",
+      exactRemediation: "For future titles, cut the headline to one clear angle, ideally 5 to 12 words.",
     });
   }
 }
@@ -561,7 +561,7 @@ function checkText(findings, { text, sourceType, itemTitleOrId, field = "copy" }
         exactEvidence: phrase,
         whyItIsOffBrand: `The ${field} uses generic AI/newsroom phrasing rather than plain, sceptical editorial judgement.`,
         violatedRule: "No hype, no corporate wallpaper, no generic AI summary tone.",
-        exactRemediation: `Replace '${phrase}' with the concrete fact, risk, or consequence being described.`,
+        exactRemediation: `For future copy, replace '${phrase}' with the concrete fact, risk, or consequence being described.`,
       });
     }
   }
@@ -580,7 +580,7 @@ function checkText(findings, { text, sourceType, itemTitleOrId, field = "copy" }
       exactEvidence: leak,
       whyItIsOffBrand: "Prompt scaffolding or editorial metadata leaked into user-facing copy.",
       violatedRule: "Never output labels, notes, character counts, or prompt metadata.",
-      exactRemediation: "Strip the leaked label and add a validator gate before publication.",
+      exactRemediation: "For future output, strip leaked labels and keep a validator gate before publication.",
     });
   }
   if (/<[^>]+>/.test(String(text || ""))) {
@@ -592,7 +592,7 @@ function checkText(findings, { text, sourceType, itemTitleOrId, field = "copy" }
       exactEvidence: String(text).match(/<[^>]+>/)?.[0] || "HTML tag",
       whyItIsOffBrand: "Raw markup in editorial copy makes the output feel machine-piped rather than published.",
       violatedRule: "All audit copy fields should be plain text unless the field is intentionally HTML.",
-      exactRemediation: "Strip or render HTML before the item reaches the model or report.",
+      exactRemediation: "For future output, strip or render HTML before the item reaches the model or report.",
     });
   }
   if (/Read on Jonathan-Harris RSS Feed/i.test(cleaned)) {
@@ -604,7 +604,7 @@ function checkText(findings, { text, sourceType, itemTitleOrId, field = "copy" }
       exactEvidence: "Read on Jonathan-Harris RSS Feed",
       whyItIsOffBrand: "Wrapper CTA text is being treated as editorial evidence.",
       violatedRule: "No CTA leakage in RSS summaries or audit inputs.",
-      exactRemediation: "Strip wrapper CTA anchors before brand analysis.",
+      exactRemediation: "For future RSS audits, strip wrapper CTA anchors before brand analysis.",
     });
   }
   const american = AMERICANISMS.find((word) => new RegExp(`\\b${word}\\b`, "i").test(cleaned));
@@ -617,7 +617,7 @@ function checkText(findings, { text, sourceType, itemTitleOrId, field = "copy" }
       exactEvidence: american,
       whyItIsOffBrand: "The ecosystem standard is British English.",
       violatedRule: "British English spelling.",
-      exactRemediation: "Use the British spelling where natural, for example optimise, centre, behaviour, colour, analyse.",
+      exactRemediation: "For future output, use British spelling where natural, for example optimise, centre, behaviour, colour, analyse.",
     });
   }
 }
@@ -635,8 +635,8 @@ function checkTranscript(findings, item = {}) {
       exactEvidence: longSentence,
       whyItIsOffBrand: "The sentence is too packed for TTS and weakens the dry, conversational delivery.",
       violatedRule: "Podcast copy should be spoken, natural, and rhythmically clean.",
-      exactRemediation: "Split the line into two shorter spoken sentences and cut abstract padding.",
-      verificationMethod: "Read the sentence aloud or run the transcript QA audit; it should survive TTS without breathless pacing.",
+      exactRemediation: "For future podcast transcripts, split comparable lines into two shorter spoken sentences and cut abstract padding.",
+      verificationMethod: "Generate a fresh transcript, read the comparable sentence aloud or run the transcript QA audit; it should survive TTS without breathless pacing.",
     });
   }
   const repeated = TRANSITIONS.filter((phrase) => (text.toLowerCase().match(new RegExp(`\\b${phrase}\\b`, "g")) || []).length >= 3);
@@ -649,7 +649,7 @@ function checkTranscript(findings, item = {}) {
       exactEvidence: phrase,
       whyItIsOffBrand: "Repeated transition furniture makes the episode sound assembled from source blocks.",
       violatedRule: "Avoid repeated transitions and source-digest sequencing smell.",
-      exactRemediation: "Vary or remove the transition; connect the ideas with editorial causality instead.",
+      exactRemediation: "For future podcast scripts, vary or remove the transition and connect the ideas with editorial causality instead.",
     });
   }
   if (/\b(first|next|finally),?\s+(story|item|article)\b/i.test(text)) {
@@ -661,7 +661,7 @@ function checkTranscript(findings, item = {}) {
       exactEvidence: cleanText(text.match(/\b(first|next|finally),?\s+(story|item|article)\b[^.?!]*/i)?.[0] || "source sequencing"),
       whyItIsOffBrand: "The transcript sounds like rewritten source material being read in order rather than an editorial show.",
       violatedRule: "The podcast should feel like informed commentary, not a stitched digest.",
-      exactRemediation: "Replace source-order signposting with a thematic transition that explains why the next item matters.",
+      exactRemediation: "For future podcast scripts, replace source-order signposting with a thematic transition that explains why the next item matters.",
     });
   }
 }
@@ -687,7 +687,7 @@ export function runDeterministicPreflight(evidence) {
         whyItIsOffBrand: "The existing RSS brand validator identified a rule breach.",
         violatedRule: "RSS prompt and feedGenerator publication rules.",
         rootCauseLevel: "validator",
-        exactRemediation: "Keep the validator finding blocking and tighten the prompt or rewrite retry path if the issue recurs.",
+        exactRemediation: "For future RSS output, keep the validator finding blocking and tighten the prompt or rewrite retry path if the issue recurs.",
       });
     }
   }
