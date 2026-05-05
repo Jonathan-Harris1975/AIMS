@@ -14,6 +14,7 @@ function normaliseTime(value, fallback) {
 export const DEFAULT_TIMEZONE = trimString(process.env.ONEUP_TIMEZONE, "Europe/London");
 export const ONEUP_API_BASE = trimString(process.env.ONEUP_API_BASE, "https://www.oneupapp.io/api").replace(/\/+$/, "");
 export const ONEUP_CATEGORY_NAME_GENERAL = trimString(process.env.ONEUP_CATEGORY_NAME_GENERAL, "General");
+export const ONEUP_CATEGORY_NAME_EBOOKS = trimString(process.env.ONEUP_CATEGORY_NAME_EBOOKS, "Ebooks");
 export const ONEUP_SOCIAL_NETWORK_ID = trimString(process.env.ONEUP_SOCIAL_NETWORK_ID, "ALL");
 export const ONEUP_DEFAULT_DRY_RUN = ["1", "true", "yes", "on"].includes(
   trimString(process.env.ONEUP_DEFAULT_DRY_RUN, "false").toLowerCase()
@@ -78,6 +79,12 @@ export const LANE_CONFIG = {
     imageUrl: trimString(process.env.ONEUP_SUNDAY_IMAGE_URL, `${DAILY_IMAGE_BASE}/Sunday`),
     hashtags: ["#AISpotlight", "#AIPioneers", "#AIHistory"],
   },
+};
+
+export const EBOOK_WEEKLY_CONFIG = {
+  key: "ebooks-weekly",
+  categoryName: ONEUP_CATEGORY_NAME_EBOOKS,
+  hashtags: ["#ArtificialIntelligence", "#AIBooks", "#AIExplained", "#JonathanHarris"],
 };
 
 export const QUIZ_CONFIG = {

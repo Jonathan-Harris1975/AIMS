@@ -1,8 +1,8 @@
 import crypto from "node:crypto";
 import { resilientRequest } from "../../shared/utils/ai-service.js";
 import { info, warn } from "../../../logger.js";
-import { LANE_CONFIG, QUIZ_CONFIG, ONEUP_CATEGORY_NAME_GENERAL, ONEUP_DEFAULT_DRY_RUN, ONEUP_SOCIAL_NETWORK_ID, DEFAULT_TIMEZONE, ONEUP_QUEUE_GUARD_LOOKBACK_PAGES } from "./config.js";
-import { buildDailyPrompt, buildQuizPrompt } from "./prompts.js";
+import { LANE_CONFIG, QUIZ_CONFIG, EBOOK_WEEKLY_CONFIG, ONEUP_CATEGORY_NAME_GENERAL, ONEUP_DEFAULT_DRY_RUN, ONEUP_SOCIAL_NETWORK_ID, DEFAULT_TIMEZONE, ONEUP_QUEUE_GUARD_LOOKBACK_PAGES } from "./config.js";
+import { buildDailyPrompt, buildQuizPrompt, buildEbookPostPrompt } from "./prompts.js";
 import { addDays, nextWeekdayDateString, toScheduledDateTime } from "./date.js";
 import { loadRecentRssContext } from "./feedContext.js";
 import { getLaneHistory, recordLaneSchedule, getQuizHistory, recordQuizSchedule } from "./state.js";
@@ -11,6 +11,8 @@ import { resolveCategory, listScheduledPosts, scheduleTextPost, scheduleImagePos
 
 const ONEUP_DAILY_MAX_TOKENS = Math.max(1200, Number(process.env.ONEUP_DAILY_MAX_TOKENS || 1400));
 const ONEUP_QUIZ_MAX_TOKENS = Math.max(1800, Number(process.env.ONEUP_QUIZ_MAX_TOKENS || 2200));
+const ONEUP_EBOOK_MAX_TOKENS = Math.max(1200, Number(process.env.ONEUP_EBOOK_MAX_TOKENS || 1600));
+const EBOOK_WEEKLY_DAYS = ["tuesday", "thursday", "saturday"];
 
 function safeModelPreview(value = "", max = 500) {
   const text = String(value || "")
@@ -215,6 +217,57 @@ function normaliseDailyOutput(raw, lane) {
   };
 }
 
+
+function removeHashtagTokens(value = "") {
+  return compactText(value)
+    .replace(/(^|\s)#[A-Za-z0-9_]+/g, "$1")
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
+}
+
+function formatEbookFirstComment(featuredBook = {}) {
+  return `Featured book: ${compactText(featuredBook.title || "")}\nRead more: ${compactText(featuredBook.bookUrl || "")}`;
+}
+
+function normaliseEbookOutput(raw, dayKey, featuredBook) {
+  const parsed = parseJsonObject(raw, `${dayKey} ebook post`);
+  return {
+    title: compactText(parsed.title || `${featuredBook.title} ${dayKey}`).slice(0, 80),
+    topic: compactText(parsed.topic || featuredBook.title || "Featured ebook").slice(0, 120),
+    content: removeHashtagTokens(parsed.content || ""),
+    firstComment: formatEbookFirstComment(featuredBook),
+  };
+}
+
+function getOptionDateTimeOverride(options = {}, dayKey) {
+  return options[`${dayKey}ScheduledDateTime`] || options.scheduledDateTimes?.[dayKey] || "";
+}
+
+function getOptionPublishTimeOverride(options = {}, dayKey) {
+  return options[`${dayKey}PublishTime`] || options.publishTimes?.[dayKey] || "";
+}
+
+function getEbookWeeklyPlan(options = {}) {
+  const weekStartDate = options.weekStartDate || nextWeekdayDateString("monday", DEFAULT_TIMEZONE, new Date());
+  return {
+    weekStartDate,
+    days: {
+      tuesday: {
+        publishDate: addDays(weekStartDate, 1),
+        publishTime: getOptionPublishTimeOverride(options, "tuesday") || LANE_CONFIG.tuesday.publishTime,
+      },
+      thursday: {
+        publishDate: addDays(weekStartDate, 3),
+        publishTime: getOptionPublishTimeOverride(options, "thursday") || LANE_CONFIG.thursday.publishTime,
+      },
+      saturday: {
+        publishDate: addDays(weekStartDate, 5),
+        publishTime: getOptionPublishTimeOverride(options, "saturday") || LANE_CONFIG.saturday.publishTime,
+      },
+    },
+  };
+}
+
 function normaliseQuizOutput(raw) {
   const parsed = parseJsonObject(raw, "quiz pair");
   return {
@@ -316,6 +369,107 @@ export async function buildAndScheduleDailyLane(laneKey, options = {}) {
     warnings,
     post,
     oneUpResponse: scheduling.oneUpResponse,
+  };
+}
+
+
+export async function buildAndScheduleEbookWeekly(options = {}) {
+  const featuredBook = options.featuredBook || {};
+  const plan = getEbookWeeklyPlan(options);
+  const categoryName = options.categoryName || EBOOK_WEEKLY_CONFIG.categoryName;
+  const socialNetworkId = options.socialNetworkId || ONEUP_SOCIAL_NETWORK_ID;
+  const apiKey = options.apiKey || process.env.ONEUP_API_KEY;
+  const history = getLaneHistory(EBOOK_WEEKLY_CONFIG.key);
+  const posts = {};
+  const warnings = [];
+
+  for (const dayKey of EBOOK_WEEKLY_DAYS) {
+    const dayPlan = plan.days[dayKey];
+    const scheduledDateTime = getOptionDateTimeOverride(options, dayKey) || toScheduledDateTime(dayPlan.publishDate, dayPlan.publishTime);
+    const prompt = buildEbookPostPrompt({
+      day: dayKey,
+      publishDate: dayPlan.publishDate,
+      featuredBook,
+      history: history.topics,
+    });
+
+    const sessionId = `ONEUP-EBOOK-${featuredBook.title || "FEATURED"}-${dayKey.toUpperCase()}-${dayPlan.publishDate}`;
+    const generated = await requestStructuredOneUpJson({
+      routeName: "oneupEbook",
+      sessionId,
+      prompt,
+      label: `${dayKey} ebook post`,
+      normalise: (raw) => normaliseEbookOutput(raw, dayKey, featuredBook),
+      maxTokens: ONEUP_EBOOK_MAX_TOKENS,
+      temperature: dayKey === "saturday" ? 0.6 : 0.5,
+    });
+
+    if (!generated.content) {
+      const err = new Error(`The ${dayKey} ebook generator returned empty content.`);
+      err.statusCode = 502;
+      throw err;
+    }
+
+    const post = {
+      title: generated.title,
+      topic: generated.topic,
+      firstComment: generated.firstComment,
+      imageUrl: featuredBook.coverArtUrl || "",
+      content: ensureHashtags(generated.content, EBOOK_WEEKLY_CONFIG.hashtags),
+    };
+
+    const scheduling = await scheduleToOneUp({
+      post,
+      scheduledDateTime,
+      categoryName,
+      socialNetworkId,
+      dryRun: Boolean(options.dryRun),
+      apiKey,
+    });
+
+    const postWarnings = scheduling.warnings || [];
+    warnings.push(...postWarnings.map((warning) => `${dayKey}: ${warning}`));
+
+    if (scheduling.scheduled) {
+      recordLaneSchedule(EBOOK_WEEKLY_CONFIG.key, {
+        scheduledDateTime,
+        topic: post.topic,
+        title: post.title,
+        imageUrl: post.imageUrl,
+      });
+    }
+
+    posts[dayKey] = {
+      publishDate: dayPlan.publishDate,
+      scheduledDateTime,
+      scheduled: scheduling.scheduled,
+      dryRun: scheduling.dryRun,
+      duplicatePrevented: Boolean(scheduling.duplicatePrevented),
+      category: scheduling.category,
+      warnings: postWarnings,
+      post,
+      oneUpResponse: scheduling.oneUpResponse,
+    };
+  }
+
+  const effectiveDryRun = Object.values(posts).some((item) => item.dryRun) || Object.values(posts).every((item) => !item.scheduled);
+
+  info("oneup.ebooks.weekly.complete", {
+    weekStartDate: plan.weekStartDate,
+    featuredBookTitle: featuredBook.title,
+    dryRun: effectiveDryRun,
+    days: EBOOK_WEEKLY_DAYS,
+    contentHashes: Object.fromEntries(EBOOK_WEEKLY_DAYS.map((dayKey) => [dayKey, contentHash(posts[dayKey]?.post?.content)])),
+  });
+
+  return {
+    ok: true,
+    service: "oneup",
+    lane: EBOOK_WEEKLY_CONFIG.key,
+    featuredBookTitle: featuredBook.title || "",
+    dryRun: effectiveDryRun,
+    posts,
+    warnings: [...new Set(warnings)],
   };
 }
 

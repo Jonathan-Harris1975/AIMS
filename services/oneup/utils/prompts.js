@@ -118,6 +118,100 @@ Output rules:
   };
 }
 
+
+const EBOOK_DAY_GUIDANCE = {
+  tuesday: `Write a clear “problem and promise” post. Explain the topic the book tackles and why a normal reader should care. Keep it sharp, grounded, and no-hype. Target 55 to 85 words.`,
+  thursday: `Write a practical use-case post. Focus on one real-world application, workflow, risk, or decision point covered by the book. Make it useful and sceptical, not salesy. Target 55 to 85 words.`,
+  saturday: `Write a reflective conversation-starter post. Use the book as the springboard for a thoughtful question or tension. End with a natural invitation to comment. Target 60 to 90 words.`,
+};
+
+function cleanPromptValue(value = "") {
+  return String(value ?? "").trim();
+}
+
+function normaliseDayName(day) {
+  const key = String(day || "").trim().toLowerCase();
+  if (!Object.prototype.hasOwnProperty.call(EBOOK_DAY_GUIDANCE, key)) {
+    throw new Error(`Unsupported ebook post day '${day}'`);
+  }
+  return key;
+}
+
+function titleCaseDay(day) {
+  const key = normaliseDayName(day);
+  return `${key.slice(0, 1).toUpperCase()}${key.slice(1)}`;
+}
+
+export function buildEbookPostPrompt({ day, publishDate, featuredBook = {}, dayGuidance } = {}) {
+  const dayKey = normaliseDayName(day);
+  const guidance = cleanPromptValue(dayGuidance || EBOOK_DAY_GUIDANCE[dayKey]);
+
+  return {
+    system: `You write for Jonathan Harris, an AI author and podcast host.
+Voice rules:
+- British English
+- sharp, clear, sceptical of hype
+- conversational, intelligent, grounded
+- suitable for Facebook and Instagram
+- concise, human, and scroll-stopping
+- no corporate sludge
+- no motivational cheese
+- no jargon-heavy waffle
+- no emojis
+- no hashtags in the model output
+- no markdown fences
+- no explanations outside the requested JSON
+- keep claims grounded in the supplied featured book data
+- do not invent facts, reviews, rankings, sales numbers, reader reactions, or credentials
+- prefer one clear idea over padded filler
+- never sound like a textbook, glossary, advert, press release, Wikipedia entry, or poster slogan
+
+Return valid JSON only with exactly these keys:
+title, topic, content, firstComment
+
+Every value must be a plain string.
+Do not add extra keys.
+Do not wrap the JSON in markdown fences.`,
+    user: `Create one ebook social post for Jonathan Harris.
+
+Post day: ${titleCaseDay(dayKey)}
+Publish date: ${cleanPromptValue(publishDate)}
+
+Featured book:
+Title: ${cleanPromptValue(featuredBook.title)}
+Short description: ${cleanPromptValue(featuredBook.shortDescription)}
+Summary: ${cleanPromptValue(featuredBook.summary)}
+Keywords: ${cleanPromptValue(featuredBook.keywords)}
+Audience: ${cleanPromptValue(featuredBook.audience)}
+Who this book is for: ${cleanPromptValue(featuredBook.whoThisBookIsFor)}
+What this book covers: ${cleanPromptValue(featuredBook.whatThisBookCovers)}
+What readers will learn: ${cleanPromptValue(featuredBook.whatYouWillLearn)}
+Why it matters: ${cleanPromptValue(featuredBook.whyItMatters)}
+Book URL: ${cleanPromptValue(featuredBook.bookUrl)}
+
+Day angle:
+${guidance}
+
+Output rules:
+- title: short internal label, max 80 characters
+- topic: 2 to 6 words, specific angle, not generic
+- content: the actual post copy only
+- firstComment must be:
+Featured book: ${cleanPromptValue(featuredBook.title)}
+Read more: ${cleanPromptValue(featuredBook.bookUrl)}
+- no hashtags
+- no emojis
+- no markdown
+- no bullets
+- no fake urgency
+- no “buy now” tone
+- no “game-changing”, “revolutionary”, “transformative”, or “unlock the future”
+- mention the book naturally, not like a hard advert
+- make the post useful even to someone who does not click
+- JSON only`,
+  };
+}
+
 export function buildQuizPrompt({ questionDate, answerDate, history = [] }) {
   return {
     system: `${BRAND_VOICE}
