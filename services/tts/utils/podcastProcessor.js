@@ -31,6 +31,24 @@ function buildTranscriptAssetUrl(baseUrl, sessionId, extension) {
   return `${base}/${sid}.${ext}`;
 }
 
+function normalisePodcastProcessorInput(input) {
+  if (input && typeof input === "object" && !Array.isArray(input)) {
+    return {
+      sessionId: input.sessionId,
+      artUrl: input.artUrl,
+      imageGenerationStatus: input.imageGenerationStatus,
+      imageGenerationError: input.imageGenerationError,
+    };
+  }
+
+  return {
+    sessionId: typeof input === "string" ? input : undefined,
+    artUrl: "",
+    imageGenerationStatus: "",
+    imageGenerationError: "",
+  };
+}
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -100,7 +118,7 @@ function cleanup(files) {
   });
 }
 
-async function updateMetaFile(sessionId, finalBuffer, finalPath, podcastUrl) {
+async function updateMetaFile(sessionId, finalBuffer, finalPath, podcastUrl, artworkMeta = {}) {
   const metaKey = `${sessionId}.json`;
 
   const metaBase = process.env.R2_PUBLIC_BASE_URL_META || "";
@@ -168,6 +186,17 @@ async function updateMetaFile(sessionId, finalBuffer, finalPath, podcastUrl) {
   const episodePageUrl = joinUrl(siteBaseUrl, `podcast/episodes/${episodeSlug}/`);
   const transcriptTextUrl = buildTranscriptAssetUrl(transcriptBase, sessionId, "txt");
   const transcriptHtmlUrl = buildTranscriptAssetUrl(transcriptHtmlBase, sessionId, "html");
+  const resolvedArtUrl =
+    String(artworkMeta?.artUrl || "").trim() ||
+    String(existing.artUrl || "").trim() ||
+    (artBase ? `${artBase}/${sessionId}.png` : "");
+  const imageGenerationStatus =
+    String(artworkMeta?.imageGenerationStatus || "").trim() ||
+    String(existing.imageGenerationStatus || "").trim() ||
+    (resolvedArtUrl ? "generated" : "missing");
+  const imageGenerationError =
+    String(artworkMeta?.imageGenerationError || "").trim() ||
+    String(existing.imageGenerationError || "").trim();
 
   const updated = {
     session: { sessionId, date: sessionDate },
@@ -187,7 +216,9 @@ async function updateMetaFile(sessionId, finalBuffer, finalPath, podcastUrl) {
     episodePageUrl,
     createdAt: existing.createdAt || sessionDate,
     updatedAt: new Date().toISOString(),
-    artUrl: `${artBase}/${sessionId}.png`,
+    artUrl: resolvedArtUrl,
+    imageGenerationStatus,
+    imageGenerationError,
     transcriptTextUrl,
     transcriptHtmlUrl,
     transcriptUrl: transcriptHtmlUrl || transcriptTextUrl,
@@ -208,7 +239,14 @@ async function updateMetaFile(sessionId, finalBuffer, finalPath, podcastUrl) {
   return { metaKey, metaUrl };
 }
 
-export async function podcastProcessor(sessionId, editedPathOrBuffer) {
+export async function podcastProcessor(input, editedPathOrBuffer) {
+  const {
+    sessionId,
+    artUrl,
+    imageGenerationStatus,
+    imageGenerationError,
+  } = normalisePodcastProcessorInput(input);
+
   const introUrl = requireEnv("PODCAST_INTRO_URL");
   const outroUrl = requireEnv("PODCAST_OUTRO_URL");
   const publicBasePodcast = requireEnv("R2_PUBLIC_BASE_URL_PODCAST");
@@ -273,12 +311,19 @@ export async function podcastProcessor(sessionId, editedPathOrBuffer) {
 
     info("📡 Uploaded final podcast", { sessionId, podcastKey });
 
-    await updateMetaFile(sessionId, finalBuffer, final, podcastUrl);
+    await updateMetaFile(sessionId, finalBuffer, final, podcastUrl, {
+      artUrl,
+      imageGenerationStatus,
+      imageGenerationError,
+    });
 
     return {
       buffer: finalBuffer,
       key: podcastKey,
       url: podcastUrl,
+      artUrl,
+      imageGenerationStatus,
+      imageGenerationError,
     };
   } finally {
     cleanup(tempFiles);

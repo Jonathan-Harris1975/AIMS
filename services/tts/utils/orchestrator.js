@@ -71,10 +71,15 @@ async function loadTextChunksFromR2(sessionId) {
    🚀 Main TTS Orchestration
 ============================================================ */
 export async function orchestrateTTS(session) {
-  const sessionId =
-    typeof session === "object" && session?.sessionId
-      ? session.sessionId
-      : session;
+  const sessionInput =
+    typeof session === "object" && session
+      ? session
+      : { sessionId: session };
+
+  const sessionId = sessionInput?.sessionId;
+  const artUrl = sessionInput?.artUrl || "";
+  const imageGenerationStatus = sessionInput?.imageGenerationStatus || "";
+  const imageGenerationError = sessionInput?.imageGenerationError || "";
 
   const t0 = Date.now();
   info("🎬 Orchestration begin", { sessionId });
@@ -137,7 +142,15 @@ export async function orchestrateTTS(session) {
 
     // 5️⃣ Podcast mixdown
     const t4 = Date.now();
-    const final = await podcastProcessor(sessionId, editedPath);
+    const final = await podcastProcessor(
+      {
+        sessionId,
+        artUrl,
+        imageGenerationStatus,
+        imageGenerationError,
+      },
+      editedPath
+    );
 
     const finalBuffer = final?.buffer;
     const finalKey = final?.key || `${sessionId}_podcast.mp3`;
