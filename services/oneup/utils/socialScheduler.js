@@ -1,18 +1,25 @@
 import crypto from "node:crypto";
 import { resilientRequest } from "../../shared/utils/ai-service.js";
 import { info, warn } from "../../../logger.js";
-import { LANE_CONFIG, QUIZ_CONFIG, EBOOK_WEEKLY_CONFIG, ONEUP_CATEGORY_NAME_GENERAL, ONEUP_DEFAULT_DRY_RUN, ONEUP_SOCIAL_NETWORK_ID, DEFAULT_TIMEZONE, ONEUP_QUEUE_GUARD_LOOKBACK_PAGES } from "./config.js";
+import { LANE_CONFIG, QUIZ_CONFIG, EBOOK_CONFIG, ONEUP_CATEGORY_NAME_GENERAL, ONEUP_CATEGORY_NAME_EBOOKS, ONEUP_DEFAULT_DRY_RUN, ONEUP_SOCIAL_NETWORK_ID, DEFAULT_TIMEZONE, ONEUP_QUEUE_GUARD_LOOKBACK_PAGES } from "./config.js";
 import { buildDailyPrompt, buildQuizPrompt, buildEbookPostPrompt } from "./prompts.js";
 import { addDays, nextWeekdayDateString, toScheduledDateTime } from "./date.js";
 import { loadRecentRssContext } from "./feedContext.js";
 import { getLaneHistory, recordLaneSchedule, getQuizHistory, recordQuizSchedule } from "./state.js";
 import { resolveCategory, listScheduledPosts, scheduleTextPost, scheduleImagePost } from "./oneupClient.js";
-import { resolveFeaturedBookForEbooks } from "./featuredBook.js";
+import getSponsor from "../../script/utils/getSponsor.js";
+import { resolveFeaturedEbook } from "./ebookCatalogue.js";
 
 
 const ONEUP_DAILY_MAX_TOKENS = Math.max(1200, Number(process.env.ONEUP_DAILY_MAX_TOKENS || 1400));
 const ONEUP_QUIZ_MAX_TOKENS = Math.max(1800, Number(process.env.ONEUP_QUIZ_MAX_TOKENS || 2200));
-const ONEUP_EBOOK_MAX_TOKENS = Math.max(1400, Number(process.env.ONEUP_EBOOK_MAX_TOKENS || 1800));
+const ONEUP_EBOOK_MAX_TOKENS = Math.max(1200, Number(process.env.ONEUP_EBOOK_MAX_TOKENS || 1600));
+
+const EBOOK_POST_DAYS = [
+  { key: "tuesday", offset: 1, publishTimeKey: "tuesdayPublishTime" },
+  { key: "thursday", offset: 3, publishTimeKey: "thursdayPublishTime" },
+  { key: "saturday", offset: 5, publishTimeKey: "saturdayPublishTime" },
+];
 
 function safeModelPreview(value = "", max = 500) {
   const text = String(value || "")
@@ -119,16 +126,8 @@ function compactText(value = "") {
     .trim();
 }
 
-function stripHashtags(content) {
-  return compactText(content)
-    .replace(/(^|\s)#[A-Za-z0-9_]+/g, "")
-    .replace(/[ \t]{2,}/g, " ")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-}
-
 function ensureHashtags(content, hashtags) {
-  const base = stripHashtags(content);
+  const base = compactText(content);
   const tags = (Array.isArray(hashtags) ? hashtags : []).filter(Boolean);
   if (!tags.length) return base;
 
@@ -236,14 +235,41 @@ function normaliseQuizOutput(raw) {
   };
 }
 
-function normaliseEbookOutput(raw, featuredBook) {
-  const parsed = parseJsonObject(raw, "ebook post");
+function stripHashtags(value = "") {
+  return compactText(value)
+    .replace(/(^|\s)#[A-Za-z0-9_]+/g, "$1")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function normaliseEbookOutput(raw, featuredBook, dayKey) {
+  const parsed = parseJsonObject(raw, `${dayKey} ebook post`);
   return {
-    title: compactText(parsed.title || featuredBook.title).slice(0, 80),
+    title: compactText(parsed.title || `${featuredBook.title} ${dayKey}`).slice(0, 80),
     topic: compactText(parsed.topic || featuredBook.title).slice(0, 120),
     content: stripHashtags(parsed.content || ""),
-    firstComment: `Featured book: ${featuredBook.title}\nRead more: ${featuredBook.bookUrl}`,
+    firstComment: buildEbookFirstComment(featuredBook),
   };
+}
+
+function buildEbookFirstComment(featuredBook) {
+  return `Featured book: ${featuredBook.title}\nRead more: ${featuredBook.bookUrl}`;
+}
+
+function resolveEbookPublishTime(options, day) {
+  const override = options.publishTimes?.[day];
+  if (override && /^\d{2}:\d{2}$/.test(String(override))) return override;
+  const envKey = `${day}PublishTime`;
+  return EBOOK_CONFIG[envKey];
+}
+
+function resolveEbookScheduledDateTime(options, day, publishDate) {
+  const fromMap = options.scheduledDateTimes?.[day];
+  const fromFlat = options[`${day}ScheduledDateTime`];
+  if (fromMap) return fromMap;
+  if (fromFlat) return fromFlat;
+  return toScheduledDateTime(publishDate, resolveEbookPublishTime(options, day));
 }
 
 export async function buildAndScheduleDailyLane(laneKey, options = {}) {
@@ -339,45 +365,64 @@ export async function buildAndScheduleDailyLane(laneKey, options = {}) {
   };
 }
 
-function resolveEbookDateTime({ day, publishDate, options }) {
-  const scheduledOverrides = options?.scheduledDateTimes || {};
-  const timeOverrides = options?.publishTimes || {};
-  const lane = LANE_CONFIG[day];
-
-  return scheduledOverrides[day] || toScheduledDateTime(
-    publishDate,
-    timeOverrides[day] || lane.publishTime
-  );
-}
-
-export async function buildAndScheduleEbookWeeklySeries(options = {}) {
+export async function buildAndScheduleEbookWeekly(options = {}) {
   const weekStartDate = options.weekStartDate || nextWeekdayDateString("monday", DEFAULT_TIMEZONE, new Date());
-  const categoryName = options.categoryName || "Ebooks";
+  const categoryName = options.categoryName || ONEUP_CATEGORY_NAME_EBOOKS;
   const socialNetworkId = options.socialNetworkId || ONEUP_SOCIAL_NETWORK_ID;
+  const warnings = [];
+
+  let sponsor = null;
+  if (options.usePodcastFeaturedBook !== false && !options.featuredBook) {
+    sponsor = await getSponsor({
+      apiUrl: process.env.NODE_ENV === "test" ? options.featuredBookApiUrl : undefined,
+      timeout: options.featuredBookTimeoutMs,
+    });
+    if (sponsor?.source === "fallback") {
+      warnings.push("Podcast featured-book API was unavailable or invalid, so the local spreadsheet ebook catalogue rotation was used.");
+    }
+  }
+
+  const resolved = resolveFeaturedEbook({
+    weekStartDate,
+    featuredBook: options.featuredBook,
+    sponsor,
+    cataloguePath: process.env.NODE_ENV === "test" ? options.cataloguePath : undefined,
+  });
+
+  const featuredBook = resolved.book;
+  warnings.push(...(resolved.warnings || []));
+  if (!featuredBook.coverArtUrl) {
+    warnings.push("Featured ebook has no coverArtUrl, so OneUp will create text-only posts.");
+  }
+  if (!featuredBook.manuscriptUrl) {
+    warnings.push("Featured ebook has no manuscriptUrl in the local catalogue.");
+  }
+
   const apiKey = options.apiKey || process.env.ONEUP_API_KEY;
-  const { featuredBook, warnings: sourceWarnings } = await resolveFeaturedBookForEbooks(options);
-
   const posts = {};
-  const allWarnings = [...sourceWarnings];
 
-  for (const day of EBOOK_WEEKLY_CONFIG.weekdays) {
-    const publishDate = addDays(weekStartDate, day === "tuesday" ? 1 : day === "thursday" ? 3 : 5);
-    const scheduledDateTime = resolveEbookDateTime({ day, publishDate, options });
-    const prompt = buildEbookPostPrompt({ day, publishDate, featuredBook });
-    const sessionId = `ONEUP-EBOOK-${day.toUpperCase()}-${publishDate}-${contentHash(featuredBook.title)}`;
+  for (const dayConfig of EBOOK_POST_DAYS) {
+    const dayKey = dayConfig.key;
+    const publishDate = addDays(weekStartDate, dayConfig.offset);
+    const scheduledDateTime = resolveEbookScheduledDateTime(options, dayKey, publishDate);
+    const prompt = buildEbookPostPrompt({
+      day: dayKey,
+      publishDate,
+      featuredBook,
+    });
 
     const generated = await requestStructuredOneUpJson({
       routeName: "oneupEbook",
-      sessionId,
+      sessionId: `ONEUP-EBOOK-${dayKey.toUpperCase()}-${publishDate}`,
       prompt,
-      label: `${day} ebook post`,
-      normalise: (raw) => normaliseEbookOutput(raw, featuredBook),
+      label: `${dayKey} ebook post`,
+      normalise: (raw) => normaliseEbookOutput(raw, featuredBook, dayKey),
       maxTokens: ONEUP_EBOOK_MAX_TOKENS,
-      temperature: day === "saturday" ? 0.65 : 0.55,
+      temperature: dayKey === "saturday" ? 0.65 : 0.55,
     });
 
     if (!generated.content) {
-      const err = new Error(`The ${day} ebook generator returned empty content.`);
+      const err = new Error(`The ${dayKey} ebook generator returned empty content.`);
       err.statusCode = 502;
       throw err;
     }
@@ -385,9 +430,10 @@ export async function buildAndScheduleEbookWeeklySeries(options = {}) {
     const post = {
       title: generated.title,
       topic: generated.topic,
-      firstComment: generated.firstComment,
-      imageUrl: featuredBook.coverArtUrl || "",
-      content: ensureHashtags(generated.content, EBOOK_WEEKLY_CONFIG.hashtags),
+      firstComment: buildEbookFirstComment(featuredBook),
+      imageUrl: options.imageUrl || featuredBook.coverArtUrl || "",
+      manuscriptUrl: featuredBook.manuscriptUrl || "",
+      content: ensureHashtags(generated.content, EBOOK_CONFIG.hashtags),
     };
 
     const scheduling = await scheduleToOneUp({
@@ -399,9 +445,7 @@ export async function buildAndScheduleEbookWeeklySeries(options = {}) {
       apiKey,
     });
 
-    allWarnings.push(...(scheduling.warnings || []));
-
-    posts[day] = {
+    posts[dayKey] = {
       publishDate,
       scheduledDateTime,
       scheduled: scheduling.scheduled,
@@ -412,17 +456,19 @@ export async function buildAndScheduleEbookWeeklySeries(options = {}) {
       post,
       oneUpResponse: scheduling.oneUpResponse,
     };
+
+    warnings.push(...(scheduling.warnings || []));
   }
 
-  const dryRun = Object.values(posts).some((item) => item.dryRun) || Boolean(options.dryRun || ONEUP_DEFAULT_DRY_RUN || !apiKey);
+  const dryRun = Object.values(posts).some((item) => item.dryRun);
 
   info("oneup.ebooks.weekly.complete", {
     weekStartDate,
     featuredBookTitle: featuredBook.title,
     dryRun,
-    contentHashes: Object.fromEntries(
-      Object.entries(posts).map(([day, item]) => [day, contentHash(item.post.content)])
-    ),
+    contentHashes: Object.fromEntries(Object.entries(posts).map(([day, value]) => [day, contentHash(value.post?.content || "")])),
+    imageUrl: featuredBook.coverArtUrl,
+    selectionMethod: resolved.selection?.method,
   });
 
   return {
@@ -430,11 +476,18 @@ export async function buildAndScheduleEbookWeeklySeries(options = {}) {
     service: "oneup",
     lane: "ebooks-weekly",
     featuredBookTitle: featuredBook.title,
-    featuredBookSource: featuredBook.source,
-    weekStartDate,
+    featuredBook: {
+      title: featuredBook.title,
+      bookUrl: featuredBook.bookUrl,
+      coverArtUrl: featuredBook.coverArtUrl,
+      manuscriptUrl: featuredBook.manuscriptUrl,
+      slug: featuredBook.slug,
+      source: featuredBook.source,
+    },
+    selection: resolved.selection,
     dryRun,
     posts,
-    warnings: [...new Set(allWarnings)],
+    warnings: [...new Set(warnings.filter(Boolean))],
   };
 }
 

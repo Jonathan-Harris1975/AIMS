@@ -156,23 +156,43 @@ JSON only.`,
   };
 }
 
-
 const EBOOK_DAY_GUIDANCE = {
-  tuesday: `Write a clear “problem and promise” post. Explain the topic the book tackles and why a normal reader should care. Keep it sharp, grounded, and no-hype. Target 55 to 85 words.`,
-  thursday: `Write a practical use-case post. Focus on one real-world application, workflow, risk, or decision point covered by the book. Make it useful and sceptical, not salesy. Target 55 to 85 words.`,
-  saturday: `Write a reflective conversation-starter post. Use the book as the springboard for a thoughtful question or tension. End with a natural invitation to comment. Target 60 to 90 words.`,
+  tuesday:
+    "Write a clear problem and promise post. Explain the topic the book tackles and why a normal reader should care. Keep it sharp, grounded, and no-hype. Target 55 to 85 words.",
+  thursday:
+    "Write a practical use-case post. Focus on one real-world application, workflow, risk, or decision point covered by the book. Make it useful and sceptical, not salesy. Target 55 to 85 words.",
+  saturday:
+    "Write a reflective conversation-starter post. Use the book as the springboard for a thoughtful question or tension. End with a natural invitation to comment. Target 60 to 90 words.",
 };
 
-function plainBookField(featuredBook = {}, key) {
-  return String(featuredBook?.[key] || "").trim();
+function renderFeaturedBookBlock(featuredBook = {}) {
+  return [
+    `Title: ${featuredBook.title || ""}`,
+    `Short description: ${featuredBook.shortDescription || ""}`,
+    `Summary: ${featuredBook.summary || featuredBook.description || ""}`,
+    `Keywords: ${featuredBook.keywordsText || (Array.isArray(featuredBook.keywords) ? featuredBook.keywords.join(" | ") : "")}`,
+    `Audience: ${featuredBook.audience || ""}`,
+    `Who this book is for: ${featuredBook.whoThisBookIsFor || ""}`,
+    `What this book covers: ${featuredBook.whatThisBookCovers || ""}`,
+    `What readers will learn: ${featuredBook.whatYouWillLearn || ""}`,
+    `Why it matters: ${featuredBook.whyItMatters || ""}`,
+    `Book URL: ${featuredBook.bookUrl || ""}`,
+    `Manuscript URL: ${featuredBook.manuscriptUrl || ""}`,
+  ].join("\n");
+}
+
+function normaliseEbookDay(day) {
+  const key = String(day || "").trim().toLowerCase();
+  if (!Object.prototype.hasOwnProperty.call(EBOOK_DAY_GUIDANCE, key)) {
+    throw new Error(`Unsupported ebook post day '${day}'`);
+  }
+  return key;
 }
 
 export function buildEbookPostPrompt({ day, publishDate, featuredBook }) {
-  const dayKey = String(day || "").trim().toLowerCase();
+  const dayKey = normaliseEbookDay(day);
+  const dayLabel = dayKey.charAt(0).toUpperCase() + dayKey.slice(1);
   const dayGuidance = EBOOK_DAY_GUIDANCE[dayKey];
-  if (!dayGuidance) {
-    throw new Error(`Unsupported ebook post day '${day}'`);
-  }
 
   return {
     system: `You write for Jonathan Harris, an AI author and podcast host.
@@ -191,6 +211,7 @@ Voice rules:
 - no explanations outside the requested JSON
 - keep claims grounded in the supplied featured book data
 - do not invent facts, reviews, rankings, sales numbers, reader reactions, or credentials
+- use the supplied manuscript URL only as a reference identifier; do not claim to have read it, quote it, or infer extra facts from the link
 - prefer one clear idea over padded filler
 - never sound like a textbook, glossary, advert, press release, Wikipedia entry, or poster slogan
 
@@ -202,20 +223,11 @@ Do not add extra keys.
 Do not wrap the JSON in markdown fences.`,
     user: `Create one ebook social post for Jonathan Harris.
 
-Post day: ${dayKey}
+Post day: ${dayLabel}
 Publish date: ${publishDate}
 
 Featured book:
-Title: ${plainBookField(featuredBook, "title")}
-Short description: ${plainBookField(featuredBook, "shortDescription")}
-Summary: ${plainBookField(featuredBook, "summary")}
-Keywords: ${plainBookField(featuredBook, "keywords")}
-Audience: ${plainBookField(featuredBook, "audience")}
-Who this book is for: ${plainBookField(featuredBook, "whoThisBookIsFor")}
-What this book covers: ${plainBookField(featuredBook, "whatThisBookCovers")}
-What readers will learn: ${plainBookField(featuredBook, "whatYouWillLearn")}
-Why it matters: ${plainBookField(featuredBook, "whyItMatters")}
-Book URL: ${plainBookField(featuredBook, "bookUrl")}
+${renderFeaturedBookBlock(featuredBook)}
 
 Day angle:
 ${dayGuidance}
@@ -225,8 +237,8 @@ Output rules:
 - topic: 2 to 6 words, specific angle, not generic
 - content: the actual post copy only
 - firstComment must be:
-Featured book: ${plainBookField(featuredBook, "title")}
-Read more: ${plainBookField(featuredBook, "bookUrl")}
+Featured book: ${featuredBook.title || ""}
+Read more: ${featuredBook.bookUrl || ""}
 - no hashtags
 - no emojis
 - no markdown
