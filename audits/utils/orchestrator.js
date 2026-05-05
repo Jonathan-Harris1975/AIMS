@@ -13,6 +13,7 @@ import {
 } from "./githubDispatch.js";
 import { buildAuditPrefix, makeAuditJobType } from "./auditPaths.js";
 import {
+  assertAuditArtifactUrls,
   assertCompletedAuditArtifactUrls,
   assertAuditR2Config,
   cleanupAuditPrefix,
@@ -229,6 +230,58 @@ export async function completeAuditRun({ auditType, payload }) {
     updatedAt: payload.finishedAt || new Date().toISOString(),
   };
 
+  if (payload.auditType && payload.auditType !== auditType) {
+    const safeError = serialiseCompletionError(
+      new Error(`Audit callback type mismatch: route expected ${auditType}, payload contained ${payload.auditType}`)
+    );
+    failJob(jobType, sessionId, safeError.message, {
+      ...jobMetadata,
+      finishedAt: payload.finishedAt || new Date().toISOString(),
+      error: safeError,
+    });
+    await publishAuditLatest({
+      auditType,
+      sessionId,
+      payload: { status: "failed", ...jobMetadata, error: safeError },
+    });
+    return {
+      ok: false,
+      auditType,
+      sessionId,
+      status: "failed",
+      error: safeError,
+      job: getPublicJob(jobType, sessionId),
+    };
+  }
+
+  try {
+    if (status === "completed") {
+      assertCompletedAuditArtifactUrls(payload);
+    } else {
+      assertAuditArtifactUrls(payload, { requireAny: false });
+    }
+  } catch (err) {
+    const safeError = serialiseCompletionError(err);
+    failJob(jobType, sessionId, safeError.message, {
+      ...jobMetadata,
+      finishedAt: payload.finishedAt || new Date().toISOString(),
+      error: safeError,
+    });
+    await publishAuditLatest({
+      auditType,
+      sessionId,
+      payload: { status: "failed", ...jobMetadata, error: safeError },
+    });
+    return {
+      ok: false,
+      auditType,
+      sessionId,
+      status: "failed",
+      error: safeError,
+      job: getPublicJob(jobType, sessionId),
+    };
+  }
+
   if (status === "queued") {
     queueJob(jobType, sessionId, jobMetadata);
   } else if (status === "running") {
@@ -242,14 +295,13 @@ export async function completeAuditRun({ auditType, payload }) {
     );
   } else {
     try {
-      assertCompletedAuditArtifactUrls(payload);
       completeJob(jobType, sessionId, {
         ...jobMetadata,
         finishedAt: payload.finishedAt || new Date().toISOString(),
       });
       await cleanupAuditPrefix({
         reportPrefix: payload.reportPrefix,
-        keepNames: ["request.json", "report.json", "report.html", "summary.json", "coverage.json", "evidence.json", "execution.json", "preflight.json", "reconciliation.json"],
+        keepNames: ["request.json", "report.json", "report.html", "summary.json", "coverage.json", "evidence.json", "execution.json", "preflight.json", "reconciliation.json", "halt.txt"],
       });
     } catch (err) {
       const safeError = serialiseCompletionError(err);
