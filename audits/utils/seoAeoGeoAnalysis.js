@@ -579,6 +579,34 @@ function rejectAuditEvidenceRequestEcho(value) {
   throw err;
 }
 
+function looksLikeAuditPromptEchoText(value) {
+  const raw = compactString(value);
+  if (!raw) return false;
+  const lowered = raw.toLowerCase();
+  const requestMarkers = [
+    "forensic seo + aeo + geo audit - full estate evidence package",
+    "use the evidence payload only",
+    "mandatory top-level json keys",
+    "workflowrequirements",
+    "dynamicfamiliesmandatory",
+  ];
+  const markerCount = requestMarkers.filter((marker) => lowered.includes(marker)).length;
+  const evidenceShape = lowered.includes('"allroutes"') || lowered.includes('allroutes') || lowered.includes('"reposignals"') || lowered.includes('reposignals');
+  const analysisShape = lowered.includes('"rankedissueledger"') || lowered.includes('"fullissuerecords"') || lowered.includes('"scoretable"');
+  return markerCount >= 2 || (markerCount >= 1 && evidenceShape && !analysisShape);
+}
+
+function rejectRawPromptEcho(value) {
+  if (!looksLikeAuditPromptEchoText(value)) return;
+  const err = new Error("AI forensic provider repeated the prompt/request text instead of returning analysis JSON");
+  err.code = "AUDIT_AI_PROMPT_ECHO";
+  err.validationErrors = [
+    "The provider response repeated the request/prompt text, not forensic analysis JSON.",
+    "Skip repair for prompt echoes and use deterministic forensic fallback to avoid duplicate AI requests.",
+  ];
+  throw err;
+}
+
 function familyScore(payload, pattern) {
   const row = coverageRows(payload).find((item) => pattern.test(String(item?.pageType || item?.family || "")));
   return Number(row?.averageScore || row?.score || 0);
@@ -1662,10 +1690,15 @@ export async function runSeoAeoGeoAnalysis(payload) {
 
   let draft;
   try {
+    rejectRawPromptEcho(raw);
     draft = extractJson(raw);
     return validateAndNormaliseAnalysisShape(draft, payload);
   } catch (err) {
     const firstError = err;
+    if (err?.code === "AUDIT_AI_PROMPT_ECHO") {
+      return buildDeterministicFallback(payload, firstError, new Error("Repair skipped because the provider echoed the prompt/request."));
+    }
+
     const validationErrors = err?.validationErrors || [err instanceof Error ? err.message : String(err)];
     const repairPrompt = buildRepairPrompt({ payload, validationErrors, draft: draft || raw });
     try {
@@ -1679,6 +1712,7 @@ export async function runSeoAeoGeoAnalysis(payload) {
         ],
       });
 
+      rejectRawPromptEcho(repairedRaw);
       const repaired = extractJson(repairedRaw);
       return validateAndNormaliseAnalysisShape(repaired, payload);
     } catch (repairError) {
@@ -1698,6 +1732,8 @@ export const __seoAeoGeoAnalysisTestHooks = {
   buildDeterministicFallback,
   duplicatePodcastEvidence,
   looksLikeAuditEvidenceRequestPayload,
+  looksLikeAuditPromptEchoText,
+  rejectRawPromptEcho,
 };
 
 export default { runSeoAeoGeoAnalysis };

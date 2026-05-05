@@ -97,8 +97,6 @@ export async function startAuditRun({
     auditPublicBaseUrl: auditR2.publicBaseUrl,
   });
 
-  await publishAuditRequest({ auditType, sessionId, payload, reportPrefix });
-
   const inputs = {
     session_id: sessionId,
     report_prefix: reportPrefix,
@@ -126,6 +124,8 @@ export async function startAuditRun({
       inputs,
       ref: payload.workflowRef,
     });
+
+    await publishAuditRequest({ auditType, sessionId, payload, reportPrefix });
 
     const workflowRun = await verifyGithubWorkflowRun({
       workflowId,
@@ -192,17 +192,26 @@ export async function startAuditRun({
   }
 }
 
-export async function completeAuditRun({ auditType, payload }) {
-  if (String(payload.status || "completed").trim().toLowerCase() !== "failed") {
-    assertCompletedAuditArtifactUrls(payload);
-  }
+function normaliseWorkflowStatus(value) {
+  const status = String(value || "completed").trim().toLowerCase();
+  return ["queued", "running", "completed", "failed"].includes(status) ? status : "completed";
+}
 
+function serialiseCompletionError(err) {
+  return {
+    name: err?.name || "AuditCompletionError",
+    message: err?.message || String(err),
+    code: err?.code,
+  };
+}
+
+export async function completeAuditRun({ auditType, payload }) {
   const jobType = makeAuditJobType(auditType);
   const sessionId = sanitizeSessionId(
     payload.sessionId || "",
     `AUD-${auditType.toUpperCase()}`
   );
-  const status = String(payload.status || "completed").trim().toLowerCase();
+  const status = normaliseWorkflowStatus(payload.status);
   const jobMetadata = {
     reportPrefix: payload.reportPrefix,
     reportUrl: payload.reportUrl || null,
@@ -217,22 +226,56 @@ export async function completeAuditRun({ auditType, payload }) {
     artefacts: payload.artefacts || {},
     auditBucket: getAuditBucketName(),
     auditPublicBaseUrl: getAuditPublicBaseUrl(),
-    finishedAt: payload.finishedAt || new Date().toISOString(),
+    updatedAt: payload.finishedAt || new Date().toISOString(),
   };
 
-  if (status === "failed") {
+  if (status === "queued") {
+    queueJob(jobType, sessionId, jobMetadata);
+  } else if (status === "running") {
+    startJob(jobType, sessionId, jobMetadata);
+  } else if (status === "failed") {
     failJob(
       jobType,
       sessionId,
       payload.message || payload.error || "Audit workflow failed",
-      jobMetadata
+      { ...jobMetadata, finishedAt: payload.finishedAt || new Date().toISOString() }
     );
   } else {
-    completeJob(jobType, sessionId, jobMetadata);
-    await cleanupAuditPrefix({
-      reportPrefix: payload.reportPrefix,
-      keepNames: ["request.json", "report.json", "report.html", "summary.json", "coverage.json", "evidence.json", "execution.json", "preflight.json", "reconciliation.json"],
-    });
+    try {
+      assertCompletedAuditArtifactUrls(payload);
+      completeJob(jobType, sessionId, {
+        ...jobMetadata,
+        finishedAt: payload.finishedAt || new Date().toISOString(),
+      });
+      await cleanupAuditPrefix({
+        reportPrefix: payload.reportPrefix,
+        keepNames: ["request.json", "report.json", "report.html", "summary.json", "coverage.json", "evidence.json", "execution.json", "preflight.json", "reconciliation.json"],
+      });
+    } catch (err) {
+      const safeError = serialiseCompletionError(err);
+      failJob(jobType, sessionId, safeError.message, {
+        ...jobMetadata,
+        finishedAt: payload.finishedAt || new Date().toISOString(),
+        error: safeError,
+      });
+      await publishAuditLatest({
+        auditType,
+        sessionId,
+        payload: {
+          status: "failed",
+          ...jobMetadata,
+          error: safeError,
+        },
+      });
+      return {
+        ok: false,
+        auditType,
+        sessionId,
+        status: "failed",
+        error: safeError,
+        job: getPublicJob(jobType, sessionId),
+      };
+    }
   }
 
   await publishAuditLatest({
@@ -245,7 +288,7 @@ export async function completeAuditRun({ auditType, payload }) {
   });
 
   return {
-    ok: true,
+    ok: status !== "failed",
     auditType,
     sessionId,
     status,
