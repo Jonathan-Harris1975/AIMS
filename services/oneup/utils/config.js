@@ -14,7 +14,6 @@ function normaliseTime(value, fallback) {
 export const DEFAULT_TIMEZONE = trimString(process.env.ONEUP_TIMEZONE, "Europe/London");
 export const ONEUP_API_BASE = trimString(process.env.ONEUP_API_BASE, "https://www.oneupapp.io/api").replace(/\/+$/, "");
 export const ONEUP_CATEGORY_NAME_GENERAL = trimString(process.env.ONEUP_CATEGORY_NAME_GENERAL, "General");
-export const ONEUP_CATEGORY_NAME_EBOOKS = trimString(process.env.ONEUP_CATEGORY_NAME_EBOOKS, "Ebooks");
 export const ONEUP_SOCIAL_NETWORK_ID = trimString(process.env.ONEUP_SOCIAL_NETWORK_ID, "ALL");
 export const ONEUP_DEFAULT_DRY_RUN = ["1", "true", "yes", "on"].includes(
   trimString(process.env.ONEUP_DEFAULT_DRY_RUN, "false").toLowerCase()
@@ -81,12 +80,6 @@ export const LANE_CONFIG = {
   },
 };
 
-export const EBOOK_WEEKLY_CONFIG = {
-  key: "ebooks-weekly",
-  categoryName: ONEUP_CATEGORY_NAME_EBOOKS,
-  hashtags: ["#ArtificialIntelligence", "#AIBooks", "#AIExplained", "#JonathanHarris"],
-};
-
 export const QUIZ_CONFIG = {
   key: "quiz",
   questionPublishTime: normaliseTime(process.env.ONEUP_QUIZ_QUESTION_TIME, "12:00"),
@@ -95,4 +88,11 @@ export const QUIZ_CONFIG = {
   answerImageUrl: trimString(process.env.ONEUP_QUIZ_ANSWER_IMAGE_URL, `${DAILY_IMAGE_BASE}/Answer`),
   questionHashtags: ["#AIQuiz", "#MachineLearning", "#TechTrivia"],
   answerHashtags: ["#AIQuiz", "#AIInsights", "#MachineLearning"],
+};
+
+
+export const EBOOK_WEEKLY_CONFIG = {
+  key: "ebooks-weekly",
+  weekdays: ["tuesday", "thursday", "saturday"],
+  hashtags: ["#ArtificialIntelligence", "#AIBooks", "#AIExplained", "#JonathanHarris"],
 };
