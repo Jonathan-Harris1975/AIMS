@@ -48,6 +48,12 @@ function isCorsDeniedError(err) {
   return err?.message === "CORS origin not allowed";
 }
 
+
+function isNoisyProbePath(value) {
+  const path = String(value || "").toLowerCase();
+  return /(?:^|\/)(?:\.git\/config|xmlrpc\.php|wp-admin|wp-content|wp-includes|wlwmanifest\.xml|wordpress|cms|wp)(?:[\/?#]|$)/i.test(path);
+}
+
 const trustProxy = parseTrustProxy(process.env.TRUST_PROXY);
 app.set("trust proxy", trustProxy);
 
@@ -63,6 +69,32 @@ app.set("trust proxy", trustProxy);
 app.use("/.well-known/acme-challenge", (_req, res) => {
   res.set("Cache-Control", "public, max-age=300");
   return res.status(204).end();
+});
+
+/*
+ * Silence repetitive scanner/browser noise before it hits:
+ * - CORS
+ * - body parsers
+ * - pino-http
+ * - rate limiting
+ *
+ * Koyeb receives public internet traffic. These paths are common bot probes,
+ * not app routes. Returning before pino keeps production logs useful.
+ */
+app.use((req, res, next) => {
+  const requestPath = req.originalUrl || req.url || "";
+
+  if (requestPath === "/favicon.ico") {
+    res.set("Cache-Control", "public, max-age=86400");
+    return res.redirect(308, "https://assets.jonathan-harris.online/favicon.ico");
+  }
+
+  if (isNoisyProbePath(requestPath)) {
+    res.set("Cache-Control", "no-store");
+    return res.status(404).end();
+  }
+
+  return next();
 });
 
 const allowedOrigins = (process.env.CORS_ORIGINS || "")
