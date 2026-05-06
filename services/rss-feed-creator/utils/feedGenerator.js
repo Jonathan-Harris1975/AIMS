@@ -342,10 +342,18 @@ function normalizeUrl(url = "") {
     u.host = u.host.toLowerCase();
     // Ensure https scheme
     if (u.protocol !== "https:") u.protocol = "https:";
-    return u.href;
+    return withRssLinksIndexHtml(u).href;
   } catch {
     return "";
   }
+}
+
+function withRssLinksIndexHtml(url) {
+  const match = url.pathname.match(/^\/rss-links\/([A-Za-z0-9]{4,32})\/?$/);
+  if (match) {
+    url.pathname = `/rss-links/${match[1]}/index.html`;
+  }
+  return url;
 }
 
 function renderParagraphHtml(text = "") {
