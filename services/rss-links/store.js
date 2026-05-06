@@ -1,49 +1,82 @@
 // services/rss-links/store.js
 //
-// Thin KV-like interface over the suite's readJsonState / writeJsonState.
-// Data lives in `rss-links-store.json` inside APP_STATE_DIR and is
-// automatically shadowed to R2_BUCKET_META_SYSTEM when R2 credentials
-// are present (via the shared stateFile module).
-//
-// NOTE: rss-links-store.json is not listed in KNOWN_REMOTE_FILES inside
-// stateFile.js, so it is NOT pre-loaded from R2 at boot.  If durable
-// cross-restart state matters in production, add "rss-links-store.json"
-// to KNOWN_REMOTE_FILES in services/shared/utils/stateFile.js.
-//
-import { readJsonState, writeJsonState } from "../shared/utils/stateFile.js";
-import { debug } from "../../logger.js";
+// R2-backed storage for the self-hosted RSS link shortener.
+// All objects live in the newsletter RSS bucket alias (`rss`), which maps to
+// R2_BUCKET_RSS_FEEDS / R2_PUBLIC_BASE_URL_RSS in services/shared/utils/r2-client.js.
 
-const STATE_FILE = "rss-links-store.json";
+import { getObjectAsText, putJson, putText } from "../shared/utils/r2-client.js";
+import { debug, warn } from "../../logger.js";
 
-// Module-level in-memory cache so repeated reads within a request are O(1).
-// Seeded once from disk / remote state on first access.
-let _cache = null;
+export const RSS_LINKS_BUCKET_ALIAS = "rss";
+export const RSS_LINKS_PREFIX = "rss-links";
+export const RSS_LINKS_RECORDS_PREFIX = `${RSS_LINKS_PREFIX}/_records`;
+export const RSS_LINKS_URL_INDEX_PREFIX = `${RSS_LINKS_PREFIX}/_index/by-url`;
 
-function getCache() {
-  if (_cache === null) {
-    _cache = readJsonState(STATE_FILE, {});
-    debug("rss-links.store.loaded", { keys: Object.keys(_cache).length });
+export function recordObjectKey(key) {
+  return `${RSS_LINKS_RECORDS_PREFIX}/${key}.json`;
+}
+
+export function urlIndexObjectKey(hash) {
+  return `${RSS_LINKS_URL_INDEX_PREFIX}/${hash}.json`;
+}
+
+export function redirectPageObjectKey(key) {
+  return `${RSS_LINKS_PREFIX}/${key}/index.html`;
+}
+
+function isMissingObjectError(err) {
+  const name = err?.name || err?.Code || err?.code;
+  return name === "NoSuchKey" || name === "NotFound" || err?.$metadata?.httpStatusCode === 404;
+}
+
+async function readJsonFromR2(key) {
+  try {
+    const raw = await getObjectAsText(RSS_LINKS_BUCKET_ALIAS, key);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch (err) {
+    if (isMissingObjectError(err)) {
+      debug("rss-links.store.miss", { bucket: RSS_LINKS_BUCKET_ALIAS, key });
+      return null;
+    }
+
+    warn("rss-links.store.read.fail", {
+      bucket: RSS_LINKS_BUCKET_ALIAS,
+      key,
+      error: err?.message,
+    });
+    throw err;
   }
-  return _cache;
 }
 
-/**
- * Retrieve a value by key.
- * @param {string} key
- * @returns {string|null}
- */
-export function kvGet(key) {
-  return getCache()[key] ?? null;
+export async function readRecordByKey(key) {
+  return readJsonFromR2(recordObjectKey(key));
 }
 
-/**
- * Store a key → value pair and persist to disk (+ R2 if configured).
- * @param {string} key
- * @param {string} value
- */
-export function kvPut(key, value) {
-  const store = getCache();
-  store[key] = value;
-  writeJsonState(STATE_FILE, store);
-  debug("rss-links.store.put", { key });
+export async function readUrlIndexByHash(hash) {
+  return readJsonFromR2(urlIndexObjectKey(hash));
+}
+
+export async function writeRecord(record) {
+  const key = recordObjectKey(record.key);
+  await putJson(RSS_LINKS_BUCKET_ALIAS, key, record);
+  debug("rss-links.store.record.put", { bucket: RSS_LINKS_BUCKET_ALIAS, key });
+  return key;
+}
+
+export async function writeUrlIndex(indexRecord) {
+  const key = urlIndexObjectKey(indexRecord.urlHash);
+  await putJson(RSS_LINKS_BUCKET_ALIAS, key, indexRecord);
+  debug("rss-links.store.index.put", { bucket: RSS_LINKS_BUCKET_ALIAS, key });
+  return key;
+}
+
+export async function writeRedirectPage(key, html) {
+  const objectKey = redirectPageObjectKey(key);
+  await putText(RSS_LINKS_BUCKET_ALIAS, objectKey, html, "text/html; charset=utf-8");
+  debug("rss-links.store.redirectPage.put", {
+    bucket: RSS_LINKS_BUCKET_ALIAS,
+    key: objectKey,
+  });
+  return objectKey;
 }
