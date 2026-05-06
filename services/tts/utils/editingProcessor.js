@@ -19,8 +19,10 @@ import { log } from "../../../logger.js";
 import { startKeepAlive, stopKeepAlive } from "../../shared/utils/keepalive.js";
 import { uploadBuffer } from "../../shared/utils/r2-client.js";
 
-const TMP_DIR = "/tmp/tts_editing";
+const TMP_DIR = path.resolve(process.env.PODCAST_EDIT_TMP_DIR || path.join(process.env.APP_TMP_DIR || "/tmp", "tts_editing"));
 const VOICE_FADE_SECONDS = 3.0; // 3-second fades
+const FFMPEG_TIMEOUT_MS = Number(process.env.PODCAST_FFMPEG_TIMEOUT_MS || 900_000);
+const FFPROBE_TIMEOUT_MS = Math.min(60_000, FFMPEG_TIMEOUT_MS);
 
 function ensureTmpDir() {
   if (!fs.existsSync(TMP_DIR)) {
@@ -52,34 +54,41 @@ async function runFFmpegStage(sessionId, inputPath, outputPath, filterStr, descr
 
     let ffmpegErr = "";
     let settled = false;
+    const timeout = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      ffmpeg.kill("SIGKILL");
+      reject(new Error(`${description} timed out after ${FFMPEG_TIMEOUT_MS}ms`));
+    }, FFMPEG_TIMEOUT_MS);
+    timeout.unref?.();
+
+    const finish = (fn, value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      fn(value);
+    };
 
     ffmpeg.stderr.on("data", (d) => {
       ffmpegErr += d.toString();
     });
 
-    ffmpeg.on("error", (err) => {
-      if (settled) return;
-      settled = true;
-      reject(err);
-    });
+    ffmpeg.on("error", (err) => finish(reject, err));
 
     ffmpeg.on("close", (code) => {
-      if (settled) return;
-      settled = true;
-
       if (code !== 0) {
-        reject(new Error(`${description} failed with code ${code}: ${ffmpegErr}`));
+        finish(reject, new Error(`${description} failed with code ${code}: ${ffmpegErr}`));
         return;
       }
 
       if (!fs.existsSync(outputPath)) {
-        reject(new Error(`${description}: Output file not created`));
+        finish(reject, new Error(`${description}: Output file not created`));
         return;
       }
 
       const stats = fs.statSync(outputPath);
       if (!stats.size) {
-        reject(new Error(`${description}: Output file is empty`));
+        finish(reject, new Error(`${description}: Output file is empty`));
         return;
       }
 
@@ -88,7 +97,7 @@ async function runFFmpegStage(sessionId, inputPath, outputPath, filterStr, descr
         size: stats.size,
         outputPath,
       });
-      resolve(outputPath);
+      finish(resolve, outputPath);
     });
   });
 }
@@ -133,7 +142,7 @@ function getAudioDuration(filePath) {
       '-show_entries', 'format=duration',
       '-of', 'default=noprint_wrappers=1:nokey=1',
       filePath
-    ], { encoding: 'utf8' });
+    ], { encoding: 'utf8', timeout: FFPROBE_TIMEOUT_MS });
     
     if (probe.status === 0) {
       const duration = parseFloat(probe.stdout.trim());

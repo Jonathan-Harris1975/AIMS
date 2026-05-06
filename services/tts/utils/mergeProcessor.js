@@ -7,26 +7,33 @@ import fs from "fs";
 import path from "path";
 import { spawn } from "child_process";
 import fetch from "node-fetch";
-import { info, error, warn , debug} from "../../../logger.js";
+import { info, error, warn, debug } from "../../../logger.js";
 import { startKeepAlive, stopKeepAlive } from "../../shared/utils/keepalive.js";
 import { uploadBuffer } from "../../shared/utils/r2-client.js";
 
-const TMP_DIR = "/tmp/podcast_merge";
+const TMP_DIR = path.resolve(process.env.PODCAST_MERGE_TMP_DIR || path.join(process.env.APP_TMP_DIR || "/tmp", "podcast_merge"));
 const MERGED_BUCKET = "merged";
 
 // ------------------------------------------------------------
 // ⚙️ Environment-based tuning
 // ------------------------------------------------------------
-const DOWNLOAD_TIMEOUT_MS = Number(process.env.AI_TIMEOUT || 30000);
-const MAX_RETRIES = Number(process.env.MAX_CHUNK_RETRIES || 3);
+function positiveIntEnv(name, fallback, max = Number.POSITIVE_INFINITY) {
+  const parsed = Number(process.env[name]);
+  if (!Number.isFinite(parsed) || parsed < 1) return fallback;
+  return Math.min(Math.floor(parsed), max);
+}
+
+const DOWNLOAD_TIMEOUT_MS = positiveIntEnv("MERGE_DOWNLOAD_TIMEOUT_MS", Number(process.env.AI_TIMEOUT || 30000), 120_000);
+const FFMPEG_TIMEOUT_MS = positiveIntEnv("PODCAST_FFMPEG_TIMEOUT_MS", 900_000, 1_800_000);
+const MAX_RETRIES = positiveIntEnv("MAX_CHUNK_RETRIES", 3, 8);
 const DOWNLOAD_RETRIES = MAX_RETRIES;
 const MERGE_RETRIES = MAX_RETRIES;
-const RETRY_DELAY_MS = Number(process.env.RETRY_DELAY_MS || 2000);
-const RETRY_BACKOFF_MULTIPLIER =
-  Number(process.env.RETRY_BACKOFF_MULTIPLIER || 2);
+const RETRY_DELAY_MS = positiveIntEnv("RETRY_DELAY_MS", 2000);
+const RETRY_BACKOFF_MULTIPLIER = Number(process.env.RETRY_BACKOFF_MULTIPLIER || 2);
+const CLEANUP_DELAY_MS = positiveIntEnv("MERGE_CLEANUP_DELAY_MS", 120_000, 900_000);
 
-// Merge smaller groups recursively
-const BATCH_SIZE = 2;
+// Merge smaller groups recursively. Keep conservative on 1 vCPU Koyeb instances.
+const BATCH_SIZE = positiveIntEnv("MERGE_BATCH_SIZE", 2, 4);
 
 // ------------------------------------------------------------
 // 🛡 Create merge directory
@@ -152,20 +159,36 @@ async function streamMergeBuffers(buffers, outputPath, attempt = 1) {
     ff.stderr.on("data", (d) => (stderr += d.toString()));
 
     await new Promise((resolve, reject) => {
+      let settled = false;
+      const timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        ff.kill("SIGKILL");
+        reject(new Error(`FFmpeg merge timed out after ${FFMPEG_TIMEOUT_MS}ms`));
+      }, FFMPEG_TIMEOUT_MS);
+      timer.unref?.();
+
+      const finish = (fn, value) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        fn(value);
+      };
+
+      ff.on("error", (err) => finish(reject, err));
+      ff.on("close", (code) => {
+        if (code !== 0) {
+          finish(reject, new Error(`FFmpeg failed (code ${code}): ${stderr}`));
+          return;
+        }
+        finish(resolve);
+      });
+
       for (const buf of buffers) {
         const ok = ff.stdin.write(buf);
         if (!ok) ff.stdin.once("drain", () => {});
       }
       ff.stdin.end();
-
-      ff.on("close", (code) => {
-        if (code !== 0) {
-          return reject(
-            new Error(`FFmpeg failed (code ${code}): ${stderr}`)
-          );
-        }
-        resolve();
-      });
     });
 
     return outputPath;
@@ -308,10 +331,10 @@ export async function mergeProcessor(sessionId, chunkUrls = []) {
     });
 
     // 🧹 SCHEDULE MEMORY CLEANUP WITH SILENT DELAY
-    scheduleCleanup(finalPath, sid, 120000); // 2 minutes delay
+    scheduleCleanup(finalPath, sid, CLEANUP_DELAY_MS);
     info("🧹 Memory cleanup scheduled", { 
       sessionId: sid, 
-      cleanupIn: "2 minutes" 
+      cleanupIn: `${Math.round(CLEANUP_DELAY_MS / 1000)} seconds` 
     });
 
     stopKeepAlive(label);

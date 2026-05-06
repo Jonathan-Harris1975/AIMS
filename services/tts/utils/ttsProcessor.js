@@ -13,7 +13,7 @@ import {
   PollyClient,
   SynthesizeSpeechCommand,
 } from "@aws-sdk/client-polly";
-import { info, error, warn,debug } from "../../../logger.js";
+import { info, error, warn, debug } from "../../../logger.js";
 import { putObject, buildPublicUrl } from "../../shared/utils/r2-client.js";
 import pLimit from "p-limit";
 
@@ -24,10 +24,16 @@ const REGION = process.env.AWS_REGION;
 const VOICE_ID = process.env.POLLY_VOICE_ID;
 const CHUNKS_BUCKET_KEY = "chunks";
 
-const MAX_CHARS = Number(process.env.MAX_POLLY_NATURAL_CHUNK_CHARS) || 2500;
-const CONCURRENCY = Number(process.env.TTS_CONCURRENCY) || 3;
-const MAX_CHUNK_RETRIES = Number(process.env.MAX_CHUNK_RETRIES) || 4;
-const RETRY_DELAY_MS = Number(process.env.RETRY_DELAY_MS) || 1200;
+function positiveIntEnv(name, fallback, max = Number.POSITIVE_INFINITY) {
+  const parsed = Number(process.env[name]);
+  if (!Number.isFinite(parsed) || parsed < 1) return fallback;
+  return Math.min(Math.floor(parsed), max);
+}
+
+const MAX_CHARS = positiveIntEnv("MAX_POLLY_NATURAL_CHUNK_CHARS", 2500, 4200);
+const CONCURRENCY = positiveIntEnv("TTS_CONCURRENCY", 1, 4);
+const MAX_CHUNK_RETRIES = positiveIntEnv("MAX_CHUNK_RETRIES", 3, 8);
+const RETRY_DELAY_MS = positiveIntEnv("RETRY_DELAY_MS", 1200);
 const RETRY_BACKOFF_MULTIPLIER = Number(process.env.RETRY_BACKOFF_MULTIPLIER) || 2.1;
 
 const polly = new PollyClient({ region: REGION });

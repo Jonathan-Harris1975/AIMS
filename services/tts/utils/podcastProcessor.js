@@ -52,8 +52,9 @@ function normalisePodcastProcessorInput(input) {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const TMP_DIR = "/tmp/podcast_master";
+const TMP_DIR = path.resolve(process.env.PODCAST_MASTER_TMP_DIR || path.join(process.env.APP_TMP_DIR || "/tmp", "podcast_master"));
 const PODCAST_FETCH_TIMEOUT_MS = Number(process.env.PODCAST_FETCH_TIMEOUT_MS) || 30_000;
+const FFMPEG_TIMEOUT_MS = Number(process.env.PODCAST_FFMPEG_TIMEOUT_MS) || 900_000;
 if (!fs.existsSync(TMP_DIR)) fs.mkdirSync(TMP_DIR, { recursive: true });
 
 function requireEnv(name) {
@@ -64,15 +65,16 @@ function requireEnv(name) {
   return value;
 }
 
-function runFFmpeg(args, timeoutMs = 180000) {
+function runFFmpeg(args, timeoutMs = FFMPEG_TIMEOUT_MS) {
   return new Promise((resolve, reject) => {
     const p = spawn("ffmpeg", args);
     let stderr = "";
 
     const timer = setTimeout(() => {
       p.kill("SIGKILL");
-      reject(new Error("FFmpeg timed out"));
+      reject(new Error(`FFmpeg timed out after ${timeoutMs}ms`));
     }, timeoutMs);
+    timer.unref?.();
 
     p.stderr.on("data", (d) => (stderr += d.toString()));
     p.on("close", (code) => {
