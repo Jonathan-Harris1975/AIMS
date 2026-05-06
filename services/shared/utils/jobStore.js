@@ -217,6 +217,36 @@ export async function getJobFresh(type, sessionId) {
   return getJob(type, sessionId);
 }
 
+export function getJobsByType(type) {
+  pruneExpired();
+  return [...jobs.values()]
+    .filter((job) => job.type === type)
+    .map(cloneJob);
+}
+
+export function getPublicJobsByType(type) {
+  return getJobsByType(type).map(toPublicJob);
+}
+
+function isRecentEnough(job, maxAgeMs) {
+  if (!Number.isFinite(maxAgeMs) || maxAgeMs <= 0) return true;
+  const timestamp = Date.parse(job?.updatedAt || job?.startedAt || job?.createdAt || "");
+  return Number.isFinite(timestamp) && Date.now() - timestamp <= maxAgeMs;
+}
+
+export function getMostRecentActiveJob(type, { maxAgeMs = 20 * 60 * 1000 } = {}) {
+  pruneExpired();
+  return [...jobs.values()]
+    .filter((job) => job.type === type && isActiveStatus(job.status) && isRecentEnough(job, maxAgeMs))
+    .sort((a, b) => Date.parse(b.updatedAt || b.startedAt || b.createdAt || 0) - Date.parse(a.updatedAt || a.startedAt || a.createdAt || 0))
+    .map(toPublicJob)[0] || null;
+}
+
+export async function getMostRecentActiveJobFresh(type, options = {}) {
+  await refreshJobStoreFromState();
+  return getMostRecentActiveJob(type, options);
+}
+
 export function getPublicJob(type, sessionId) {
   return toPublicJob(getJob(type, sessionId));
 }
