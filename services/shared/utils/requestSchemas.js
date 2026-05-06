@@ -48,6 +48,17 @@ export const blogWeeklyBuildBodySchema = z
   })
   .passthrough();
 
+const optionalBlogSocialDate = z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, "must be YYYY-MM-DD").optional();
+
+export const blogSocialDailyBuildBodySchema = z
+  .object({
+    date: optionalBlogSocialDate,
+    days: z.coerce.number().int().min(1).max(7).optional().default(1),
+    dryRun: booleanish.optional().default(false),
+    force: booleanish.optional().default(false),
+  })
+  .passthrough();
+
 export const artworkGenerateBodySchema = z
   .object({
     sessionId: optionalSessionId,
