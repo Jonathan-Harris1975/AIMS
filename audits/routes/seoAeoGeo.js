@@ -42,7 +42,7 @@ router.post("/analysis", requireAuditCallbackAuth, asyncRoute(async (req, res) =
     return res.status(400).json({ ok: false, error: parsed.error });
   }
 
-  const job = startSeoAeoGeoAnalysisJob(parsed.data);
+  const job = await startSeoAeoGeoAnalysisJob(parsed.data);
   const durableState = await flushSeoAeoGeoAnalysisJobs();
   const statusUrl = `${req.protocol}://${req.get("host")}/audits/seo-aeo-geo/analysis/${encodeURIComponent(parsed.data.sessionId)}`;
 
@@ -52,6 +52,21 @@ router.post("/analysis", requireAuditCallbackAuth, asyncRoute(async (req, res) =
     statusUrl,
     durableStateOk: durableState?.ok !== false,
   });
+
+  if (job.status === "completed" && job.hasAnalysis) {
+    return res.status(200).json({
+      ok: true,
+      auditType: AUDIT_TYPE,
+      sessionId: parsed.data.sessionId,
+      status: "completed",
+      statusUrl,
+      durableState,
+      hasAnalysis: true,
+      analysis: job.analysis,
+      result: { analysis: job.analysis },
+      job,
+    });
+  }
 
   return res.status(202).json({
     ok: true,
