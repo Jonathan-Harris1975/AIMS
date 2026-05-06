@@ -96,7 +96,9 @@ NON-NEGOTIABLE OPERATING RULES:
 23. The codeMarkupContentRemediationAppendix must provide implementation-grade patterns, exact source targets, and verification steps for every Critical or High issue.
 24. Never use fallback phrases such as "Implementation order derived from the ranked issue ledger" as an executive summary or verdict. The executive summary must state the strongest estate area, weakest estate area, main root cause, and implementation theme.
 25. Transcript evidence must be numerically coherent. Do not write "0 transcript pages behave..." as evidence for a High issue; say exactly how many transcript pages lack summary-led, sectioned, entity-rich, above-the-fold transcript structure.
-26. The bestPracticeGapMatrix must use page-family-specific gaps. Do not repeat "Answer-first evidence blocks" across unrelated families when podcast, transcript, blog, book, archive, or lead-generation evidence supports a more exact missing element.
+26. The bestPracticeGapMatrix must use page-family-specific gaps. Do not repeat "Answer-first evidence blocks" across unrelated families when podcast, transcript, blog, book, archive, author, comparison, site-page, or lead-generation evidence supports a more exact missing element.
+27. Do not rank /podcast/TT-YYYY-MM-DD compatibility redirect wrappers as priority content pages. Put those in redirect/compatibility evidence only.
+28. Intentionally excluded redirect or canonical-only route families must be marked N/A, not F, in page-type findings and gap matrices.
 
 MANDATORY TOP-LEVEL JSON KEYS:
 ${REQUIRED_TOP_LEVEL_KEYS.join(", ")}
@@ -624,6 +626,26 @@ function deriveNarrative(payload, issues) {
   return `The static estate is materially stronger than the dynamic editorial estate: ${strongest}, while ${weakestParts.join(" and ") || "podcast, transcript, and blog families carry the main risk"}. The main root cause is source-of-truth drift across repo, workbook, sitemap, feed, live routes, and generated manifests${critical ? `, led by ${critical}` : ""}. Fix governance and canonical integrity before polishing page copy.`;
 }
 
+function isPodcastCompatibilityRoute(value) {
+  const raw = compactString(value);
+  return /\/podcast\/TT-\d{4}-\d{2}-\d{2}\/?$/i.test(raw);
+}
+
+function isExcludedOrRedirectFamily(pageType, coverageState = "") {
+  const type = String(pageType || "").toLowerCase();
+  const state = String(coverageState || "").toLowerCase();
+  return type.includes("buy-now") || state.includes("excluded") || state.includes("redirect");
+}
+
+function sanitiseTemplateEvidence(pageType, value, analysedCount = 0) {
+  const candidate = compactString(value);
+  if (/transcript/i.test(String(pageType || "")) && /^0 transcript pages behave/i.test(candidate)) {
+    const total = Number(analysedCount || 0);
+    return `${total}/${total} transcript page(s) lack verified above-the-fold summary, key-takeaway, topic-index, timestamp/section-anchor, or entity-index evidence before the transcript body.`;
+  }
+  return candidate;
+}
+
 function pageTypeSpecificGap(pageType, fallback = "See issue ledger") {
   const type = String(pageType || "").toLowerCase();
   if (type.includes("podcast episode")) return "Missing key takeaways, FAQPage JSON-LD, transcript preview anchors, and related topic/book CTAs";
@@ -636,8 +658,13 @@ function pageTypeSpecificGap(pageType, fallback = "See issue ledger") {
   if (type.includes("category") || type.includes("hub")) return "Hub pages need more extractable intent summaries and contextual next-step links";
   if (type.includes("lead") || type.includes("newsletter") || type.includes("contact")) return "Conversion pages need answer-led objections, trust cues, and clearer next-step copy";
   if (type.includes("homepage")) return "Homepage needs stronger question-led extraction for entity, books, podcast, and newsletter intents";
+  if (type.includes("author") || type.includes("about")) return "Missing concise AI-author entity summary, credentials block, and podcast/book cross-links";
+  if (type.includes("service") || type.includes("product")) return "Missing problem-answer structure, implementation examples, and trust proof";
+  if (type.includes("comparison")) return "Missing direct comparison answer block and decision matrix";
+  if (type.includes("archive") || type.includes("utility")) return "Missing archive purpose statement and crawlable route explanation";
+  if (type.includes("site page")) return "Missing question-led summary and internal path to books/topics/podcast";
   if (type.includes("knowledge")) return "Glossary needs richer definitions, examples, and entity relationships";
-  return fallback;
+  return fallback === "Answer-first evidence blocks" ? "Missing route-family-specific answer structure and contextual internal links" : fallback;
 }
 
 function duplicatePodcastEvidence(duplicates) {
@@ -1040,30 +1067,36 @@ function normaliseFindings(findings) {
 function normalisePageTypeFindings(data, payload) {
   const rows = asArray(data?.pageTypeFindings).filter((row) => isPlainObject(row) && (row.pageType || row.family));
   if (rows.length) {
-    return rows.map((row) => {
-      const score = clampScore(row.score ?? row.averageScore, 0);
+    return rows.filter((row) => !isPodcastCompatibilityRoute(row.url || row.filePath)).map((row) => {
+      const pageType = text(row.pageType || row.family, "Unknown page type");
+      const coverageState = text(row.coverageState, "Not verified from supplied context");
+      const excludedOrRedirect = isExcludedOrRedirectFamily(pageType, coverageState);
+      const score = excludedOrRedirect ? "N/A" : clampScore(row.score ?? row.averageScore, 0);
       return {
-        pageType: text(row.pageType || row.family, "Unknown page type"),
+        pageType,
         count: Number(row.count ?? row.discovered ?? 0),
-        coverageState: text(row.coverageState, "Not verified from supplied context"),
+        coverageState,
         score,
-        grade: expectedGrade(score),
-        judgement: text(row.judgement || row.verdict, "Judgement derived from supplied AI analysis and coverage ledger."),
-        keyNote: text(row.keyNote || row.keyFinding, "See coverage ledger for URL-level evidence."),
+        grade: excludedOrRedirect ? "N/A" : expectedGrade(score),
+        judgement: excludedOrRedirect ? "Intentional redirect/canonical path, tracked for governance but not scored as content." : text(row.judgement || row.verdict, "Judgement derived from supplied AI analysis and coverage ledger."),
+        keyNote: excludedOrRedirect ? "Redirect/non-page route, score not applicable." : text(row.keyNote || row.keyFinding, "See coverage ledger for URL-level evidence."),
       };
     });
   }
 
   return coverageRows(payload).map((row) => {
-    const score = clampScore(row.averageScore, 0);
+    const pageType = text(row.pageType || row.family, "Unknown page type");
+    const coverageState = coverageStateFromRow(row);
+    const excludedOrRedirect = isExcludedOrRedirectFamily(pageType, coverageState) && Number(row.analysed || 0) === 0;
+    const score = excludedOrRedirect ? "N/A" : clampScore(row.averageScore, 0);
     return {
-      pageType: text(row.pageType || row.family, "Unknown page type"),
+      pageType,
       count: Number(row.discovered || 0),
-      coverageState: coverageStateFromRow(row),
+      coverageState,
       score,
-      grade: expectedGrade(score),
-      judgement: Number(row.failed || 0) > 0 ? "Coverage defects remain in this family." : "Family inventoried with explicit URL-level coverage states.",
-      keyNote: `Analysed ${Number(row.analysed || 0)}, excluded ${Number(row.excluded || 0)}, failed ${Number(row.failed || 0)}.`,
+      grade: excludedOrRedirect ? "N/A" : expectedGrade(score),
+      judgement: excludedOrRedirect ? "Intentional redirect/canonical path, tracked for governance but not scored as content." : Number(row.failed || 0) > 0 ? "Coverage defects remain in this family." : "Family inventoried with explicit URL-level coverage states.",
+      keyNote: excludedOrRedirect ? `Excluded ${Number(row.excluded || 0)} redirect/non-page URL(s); content score not applicable.` : `Analysed ${Number(row.analysed || 0)}, excluded ${Number(row.excluded || 0)}, failed ${Number(row.failed || 0)}.`,
     };
   });
 }
@@ -1071,7 +1104,7 @@ function normalisePageTypeFindings(data, payload) {
 function normalisePriorityPageAnnex(data, payload) {
   const rows = asArray(data?.priorityPageAnnex).filter((row) => isPlainObject(row) && (row.url || row.filePath));
   if (rows.length) {
-    return rows.map((row) => {
+    return rows.filter((row) => !isPodcastCompatibilityRoute(row.url || row.filePath)).map((row) => {
       const score = clampScore(row.score ?? row.total, 0);
       return {
         url: text(row.url || row.filePath, ""),
@@ -1096,7 +1129,7 @@ function normalisePriorityPageAnnex(data, payload) {
     });
   }
 
-  return asArray(payload?.priorityPages).slice(0, 60).map((page) => {
+  return asArray(payload?.priorityPages).filter((page) => !isPodcastCompatibilityRoute(page?.url || page?.route || page?.path)).slice(0, 30).map((page) => {
     const score = clampScore(page.total, 0);
     const aeoScore = Number(page.scores?.aeo || 0);
     const geoScore = Number(page.scores?.geo || 0);
@@ -1129,8 +1162,8 @@ function normaliseTemplateAnnex(data, payload) {
     return rows.map((row) => ({
       sourceFile: text(row.sourceFile || row.target || row.area, "Unknown source file"),
       area: text(row.area || row.pageFamily, "Route family"),
-      observedLogic: text(row.observedLogic || row.metadataLogic || row.schemaLogic, "Observed from supplied route/template evidence."),
-      repeatedEffect: text(row.repeatedEffect || row.repeatedDefects || row.generativeSearchGaps, "Repeated family effect recorded in coverage ledger."),
+      observedLogic: text(sanitiseTemplateEvidence(row.area || row.pageFamily, row.observedLogic || row.metadataLogic || row.schemaLogic), "Observed from supplied route/template evidence."),
+      repeatedEffect: text(sanitiseTemplateEvidence(row.area || row.pageFamily, row.repeatedEffect || row.repeatedDefects || row.generativeSearchGaps), "Repeated family effect recorded in coverage ledger."),
       fixPriority: text(row.fixPriority, "Medium"),
       pagesAffected: asArray(row.pagesAffected).map(String),
       sampleCorrectedBlock: text(row.sampleCorrectedBlock, "Not supplied by AI forensic analysis"),
@@ -1151,26 +1184,34 @@ function normaliseTemplateAnnex(data, payload) {
 function normaliseGapMatrix(data, payload) {
   const rows = asArray(data?.bestPracticeGapMatrix).filter((row) => isPlainObject(row) && (row.pageType || row.family));
   if (rows.length) {
-    return rows.map((row) => ({
-      pageType: text(row.pageType || row.family, "Unknown page type"),
-      seo: text(row.seo || row.seoCompliance, "Not verified"),
-      aeo: text(row.aeo || row.aeoCompliance, "Not verified"),
-      geo: text(row.geo || row.geoCompliance, "Not verified"),
-      confidence: text(row.confidence, "Needs verification"),
-      topMissingElement: pageTypeSpecificGap(row.pageType || row.family, text(row.topMissingElement || row.topMissing, "See issue ledger")),
-      businessImpact: text(row.businessImpact, "Medium"),
-    }));
+    return rows.map((row) => {
+      const pageType = text(row.pageType || row.family, "Unknown page type");
+      const excludedOrRedirect = isExcludedOrRedirectFamily(pageType, row.coverageState);
+      return {
+        pageType,
+        seo: excludedOrRedirect ? "N/A" : text(row.seo || row.seoCompliance, "Not verified"),
+        aeo: excludedOrRedirect ? "N/A" : text(row.aeo || row.aeoCompliance, "Not verified"),
+        geo: excludedOrRedirect ? "N/A" : text(row.geo || row.geoCompliance, "Not verified"),
+        confidence: text(row.confidence, "Needs verification"),
+        topMissingElement: excludedOrRedirect ? "Intentional redirect/canonical route, verify target and exclusion evidence" : pageTypeSpecificGap(pageType, text(row.topMissingElement || row.topMissing, "See issue ledger")),
+        businessImpact: text(row.businessImpact, "Medium"),
+      };
+    });
   }
 
-  return coverageRows(payload).map((row) => ({
-    pageType: text(row.pageType || row.family, "Unknown page type"),
-    seo: Number(row.averageScore || 0) >= 80 ? "Strong" : Number(row.averageScore || 0) >= 70 ? "Partial" : "Weak",
-    aeo: Number(row.averageScore || 0) >= 80 ? "Partial" : "Weak",
-    geo: Number(row.averageScore || 0) >= 80 ? "Partial" : "Weak",
-    confidence: "Confirmed",
-    topMissingElement: Number(row.failed || 0) > 0 ? "Fetch or redirect reliability" : pageTypeSpecificGap(row.pageType || row.family, "Answer-first evidence blocks"),
-    businessImpact: /book|podcast|transcript|blog|lead|conversion/i.test(String(row.pageType || "")) ? "High" : "Medium",
-  }));
+  return coverageRows(payload).map((row) => {
+    const pageType = text(row.pageType || row.family, "Unknown page type");
+    const excludedOrRedirect = isExcludedOrRedirectFamily(pageType, coverageStateFromRow(row)) && Number(row.analysed || 0) === 0;
+    return {
+      pageType,
+      seo: excludedOrRedirect ? "N/A" : Number(row.averageScore || 0) >= 80 ? "Strong" : Number(row.averageScore || 0) >= 70 ? "Partial" : "Weak",
+      aeo: excludedOrRedirect ? "N/A" : Number(row.averageScore || 0) >= 80 ? "Partial" : "Weak",
+      geo: excludedOrRedirect ? "N/A" : Number(row.averageScore || 0) >= 80 ? "Partial" : "Weak",
+      confidence: "Confirmed",
+      topMissingElement: excludedOrRedirect ? "Intentional redirect/canonical route, verify target and exclusion evidence" : Number(row.failed || 0) > 0 ? "Fetch or redirect reliability" : pageTypeSpecificGap(pageType, "Answer-first evidence blocks"),
+      businessImpact: /book|podcast|transcript|blog|lead|conversion/i.test(String(pageType || "")) ? "High" : "Medium",
+    };
+  });
 }
 
 function normaliseSourceLedger(data, payload) {
