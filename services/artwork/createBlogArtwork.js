@@ -20,11 +20,18 @@ function withTimeout(promise, timeoutMs, label) {
   ]).finally(() => clearTimeout(timer));
 }
 
+function normaliseKeyPrefix(value = "") {
+  return String(value || "")
+    .trim()
+    .replace(/^\/+|\/+$/g, "");
+}
+
 export async function createBlogArtwork(input) {
   const sessionId = typeof input === "string" ? input : input?.sessionId;
   const prompt = typeof input === "object" ? input?.prompt : undefined;
+  const keyPrefix = typeof input === "object" ? normaliseKeyPrefix(input?.keyPrefix) : "";
 
-  const log = (stage, meta) => info(`artwork.blog.${stage}`, { sessionId, ...meta });
+  const log = (stage, meta) => info(`artwork.blog.${stage}`, { sessionId, keyPrefix: keyPrefix || undefined, ...meta });
 
   try {
     debug("artwork.blog.start", { sessionId });
@@ -38,7 +45,7 @@ export async function createBlogArtwork(input) {
     );
     const buffer = Buffer.from(base64Data, "base64");
 
-    const key = `${sessionId}.png`;
+    const key = keyPrefix ? `${keyPrefix}/${sessionId}.png` : `${sessionId}.png`;
     const publicUrl = await uploadBuffer(
       R2_BUCKET_BLOG_IMAGES_KEY,
       key,
