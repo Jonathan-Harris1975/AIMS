@@ -36,3 +36,16 @@ test("beginJob allows a rerun after completion and increments attempt count", as
   assert.equal(second.job.status, "running");
   assert.equal(second.job.attempt, 2);
 });
+
+
+test("getMostRecentActiveJobFresh is exported and returns the active job after fresh state hydration", async () => {
+  process.env.APP_STATE_DIR = makeStateDir();
+  const mod = await import(`./services/shared/utils/jobStore.js?case=active-fresh-${Date.now()}`);
+
+  mod.queueJob("audit:seo-aeo-geo", "AUD-jobstore-active", { reportPrefix: "audits/test" });
+
+  assert.equal(typeof mod.getMostRecentActiveJobFresh, "function");
+  const active = await mod.getMostRecentActiveJobFresh("audit:seo-aeo-geo", { maxAgeMs: 60_000 });
+  assert.equal(active.sessionId, "AUD-jobstore-active");
+  assert.equal(active.status, "queued");
+});
