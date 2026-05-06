@@ -7,7 +7,7 @@ import aiConfig from "./ai-config.js";
 import { safeRouteLog } from "../../../logger.js";
 import { info, error as logError } from "../../../logger.js";
 
-const OPENROUTER_BASE = process.env.OPENROUTER_API_BASE || "https://openrouter.ai/api/v1";
+const OPENROUTER_BASE = process.env.OPENROUTER_BASE_URL || process.env.OPENROUTER_API_BASE || "https://openrouter.ai/api/v1";
 const ENDPOINT = `${OPENROUTER_BASE.replace(/\/+$/, "")}/chat/completions`;
 const DEFAULT_MAX_TOKENS = Number(process.env.AI_MAX_TOKENS || 4096);
 const DEFAULT_TEMPERATURE = Number(process.env.AI_TEMPERATURE ?? aiConfig?.commonParams?.temperature ?? 0.7);
@@ -112,6 +112,64 @@ function safeSnippet(value = "", max = 700) {
   return text.length > max ? `${text.slice(0, max)}…` : text;
 }
 
+function parseBoolean(value, fallback = undefined) {
+  if (value === undefined || value === null || value === "") return fallback;
+  if (typeof value === "boolean") return value;
+  const normalised = String(value).trim().toLowerCase();
+  if (["1", "true", "yes", "on", "y"].includes(normalised)) return true;
+  if (["0", "false", "no", "off", "n"].includes(normalised)) return false;
+  return fallback;
+}
+
+function parseCsv(value) {
+  return String(value || "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function getOpenRouterProviderOptions({ response_format } = {}) {
+  const provider = {};
+  const sortBy = String(process.env.OPENROUTER_SORT_BY || "").trim().toLowerCase();
+  if (["price", "throughput", "latency"].includes(sortBy)) {
+    provider.sort = sortBy;
+  }
+
+  const order = parseCsv(process.env.OPENROUTER_PROVIDER_ORDER);
+  if (order.length > 0) provider.order = order;
+
+  const only = parseCsv(process.env.OPENROUTER_PROVIDER_ONLY);
+  if (only.length > 0) provider.only = only;
+
+  const ignore = parseCsv(process.env.OPENROUTER_PROVIDER_IGNORE);
+  if (ignore.length > 0) provider.ignore = ignore;
+
+  const fallbacks = parseBoolean(process.env.OPENROUTER_ENABLE_FALLBACKS);
+  if (fallbacks !== undefined) provider.allow_fallbacks = fallbacks;
+
+  const requireParametersOverride = parseBoolean(process.env.OPENROUTER_REQUIRE_PARAMETERS);
+  const requireParametersForJson = parseBoolean(process.env.OPENROUTER_REQUIRE_PARAMETERS_FOR_JSON, true);
+  const requireParameters = requireParametersOverride !== undefined
+    ? requireParametersOverride
+    : Boolean(response_format && requireParametersForJson);
+  if (requireParameters) provider.require_parameters = true;
+
+  const dataCollection = String(process.env.OPENROUTER_DATA_COLLECTION || "").trim().toLowerCase();
+  if (["allow", "deny"].includes(dataCollection)) provider.data_collection = dataCollection;
+
+  return Object.keys(provider).length ? provider : undefined;
+}
+
+function getServiceTier() {
+  const value = String(process.env.OPENROUTER_SERVICE_TIER || "").trim().toLowerCase();
+  if (["auto", "default", "flex", "priority"].includes(value)) return value;
+  return undefined;
+}
+
+function shouldLogUsage() {
+  return parseBoolean(process.env.AI_USAGE_LOG_ENABLED, true) !== false;
+}
+
 function makeOpenRouterError(status, body, providerId) {
   const err = new Error(`OpenRouter ${status} for provider ${providerId}: ${safeSnippet(body)}`);
   err.name = "AIProviderRequestError";
@@ -122,9 +180,32 @@ function makeOpenRouterError(status, body, providerId) {
   return err;
 }
 
+function extractMessageContent(json) {
+  const content = json?.choices?.[0]?.message?.content;
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    return content
+      .map((part) => {
+        if (typeof part === "string") return part;
+        if (typeof part?.text === "string") return part.text;
+        return "";
+      })
+      .join("")
+      .trim();
+  }
+  return "";
+}
+
 async function callOpenRouter({ providerId, model, apiKey, messages, max_tokens, temperature, top_p, response_format, headers, timeoutMs }) {
   const payload = { model, messages, max_tokens, temperature, top_p };
   if (response_format) payload.response_format = response_format;
+
+  const providerOptions = getOpenRouterProviderOptions({ response_format });
+  if (providerOptions) payload.provider = providerOptions;
+
+  const serviceTier = getServiceTier();
+  if (serviceTier) payload.service_tier = serviceTier;
+
   const reqHeaders = {
     "Content-Type": "application/json",
     Authorization: `Bearer ${apiKey}`,
@@ -134,6 +215,7 @@ async function callOpenRouter({ providerId, model, apiKey, messages, max_tokens,
   const effectiveTimeoutMs = Number(timeoutMs || DEFAULT_TIMEOUT_MS);
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), effectiveTimeoutMs);
+  const startedAt = Date.now();
   try {
     const res = await fetch(ENDPOINT, { method: "POST", headers: reqHeaders, body: JSON.stringify(payload), signal: controller.signal });
     if (!res.ok) {
@@ -141,7 +223,14 @@ async function callOpenRouter({ providerId, model, apiKey, messages, max_tokens,
       throw makeOpenRouterError(res.status, text, providerId);
     }
     const json = await res.json();
-    return json?.choices?.[0]?.message?.content || "";
+    return {
+      content: extractMessageContent(json),
+      usage: json?.usage || null,
+      id: json?.id,
+      model: json?.model || model,
+      serviceTier: json?.service_tier || serviceTier,
+      durationMs: Date.now() - startedAt,
+    };
   } catch (err) {
     if (err?.name === "AbortError") {
       const timeoutErr = new Error(`OpenRouter request timed out after ${effectiveTimeoutMs}ms for provider ${providerId}`);
@@ -196,11 +285,26 @@ export async function resilientRequest(routeName, {
     try { safeRouteLog({ routeName, routeKey, provider: providerId, model: provider.name }); } catch {}
     for (let attempt = 0; attempt <= effectiveMaxRetries; attempt++) {
       try {
-        const content = await callOpenRouter({ providerId, model: provider.name, apiKey: provider.apiKey, messages, max_tokens, temperature, top_p, response_format, headers, timeoutMs });
-        __record(sessionId, routeName, providerId, provider.name);
+        const result = await callOpenRouter({ providerId, model: provider.name, apiKey: provider.apiKey, messages, max_tokens, temperature, top_p, response_format, headers, timeoutMs });
+        if (shouldLogUsage()) {
+          info("ai.request.usage", {
+            routeName,
+            routeKey,
+            provider: providerId,
+            requestedModel: provider.name,
+            returnedModel: result.model,
+            durationMs: result.durationMs,
+            serviceTier: result.serviceTier,
+            promptTokens: result.usage?.prompt_tokens,
+            completionTokens: result.usage?.completion_tokens,
+            totalTokens: result.usage?.total_tokens,
+            cost: result.usage?.cost,
+          });
+        }
+        __record(sessionId, routeName, providerId, result.model || provider.name);
         __lastSuccessProvider.set(routeKey, providerId);
         __maybePrintSummary(sessionId, routeName);
-        return content;
+        return result.content;
       } catch (err) {
         lastErr = err;
         attempted.push({ providerId, model: provider.name, attempt: attempt + 1, status: err?.status || err?.code || "failed", message: safeSnippet(err?.message || String(err), 500) });
