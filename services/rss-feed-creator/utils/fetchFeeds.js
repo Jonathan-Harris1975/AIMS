@@ -7,12 +7,20 @@
 // ============================================================
 
 import Parser from "rss-parser";
+import pLimit from "p-limit";
 import { info, warn, debug } from "../../../logger.js";
 import { fetchWithTimeout } from "../../shared/http-client.js";
 import { loadRotationState, saveFeedRotation } from "./feedRotationManager.js";
 import { readLocalOrR2File } from "./fileReader.js";
 
 const parser = new Parser();
+
+function positiveIntEnv(name, fallback, max = Number.POSITIVE_INFINITY) {
+  const parsed = Number(process.env[name]);
+  if (!Number.isFinite(parsed) || parsed < 1) return fallback;
+  return Math.min(Math.floor(parsed), max);
+}
+
 const FEED_FETCH_TIMEOUT_MS = Number(process.env.FEED_FETCH_TIMEOUT_MS) || 15_000;
 const FEED_ACCEPT_HEADER = "application/rss+xml, application/atom+xml, application/xml, text/xml;q=0.9, application/json;q=0.8, */*;q=0.5";
 
@@ -21,6 +29,7 @@ const MAX_RSS_FEEDS_PER_RUN = Number(process.env.MAX_RSS_FEEDS_PER_RUN) || 5;
 const MAX_URL_FEEDS_PER_RUN = Number(process.env.MAX_URL_FEEDS_PER_RUN) || 1;
 const MAX_ITEMS_PER_FEED = Number(process.env.MAX_ITEMS_PER_FEED) || 20; // safety cap
 const FEED_CUTOFF_HOURS = Number(process.env.FEED_CUTOFF_HOURS) || 48; // default 48 hours
+const FEED_FETCH_CONCURRENCY = positiveIntEnv("FEED_FETCH_CONCURRENCY", 2, 4);
 
 
 function escapeInvalidXmlEntities(xml = "") {
@@ -181,10 +190,12 @@ export async function fetchAndParseFeeds() {
     urlFeeds: urlBatch.length,
     selected: selected.length,
     cutoffHours: FEED_CUTOFF_HOURS,
+    fetchConcurrency: FEED_FETCH_CONCURRENCY,
   });
 
-  // 4) Parse each selected feed into article items
-  const parsedLists = await Promise.all(selected.map(fetchAndParseOne));
+  // 4) Parse each selected feed into article items with bounded concurrency.
+  const feedFetchLimit = pLimit(FEED_FETCH_CONCURRENCY);
+  const parsedLists = await Promise.all(selected.map((url) => feedFetchLimit(() => fetchAndParseOne(url))));
   const items = parsedLists.flat();
 
   // 5) De-dupe by link (and then by title as a fallback)
