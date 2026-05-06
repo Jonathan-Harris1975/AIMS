@@ -48,6 +48,7 @@ async function executeAnalysisJob(payload) {
       routeCount: payload?.allRoutes?.length ?? 0,
       coverageCount: payload?.coverage?.length ?? 0,
     });
+    await flushJobStoreWrites({ throwOnError: false });
     info("audit.seo-aeo-geo.analysis.completed", {
       sessionId,
       issueCount: Array.isArray(analysis?.issues) ? analysis.issues.length : 0,
@@ -58,6 +59,7 @@ async function executeAnalysisJob(payload) {
       routeCount: payload?.allRoutes?.length ?? 0,
       coverageCount: payload?.coverage?.length ?? 0,
     });
+    await flushJobStoreWrites({ throwOnError: false });
     logError("audit.seo-aeo-geo.analysis.failed", {
       sessionId,
       routeCount: payload?.allRoutes?.length ?? 0,
@@ -71,9 +73,15 @@ async function executeAnalysisJob(payload) {
   }
 }
 
-export function startSeoAeoGeoAnalysisJob(payload) {
+export async function startSeoAeoGeoAnalysisJob(payload) {
   const sessionId = sessionFromPayload(payload);
   if (!sessionId) throw new Error("Cannot start SEO/AEO/GEO analysis job without sessionId");
+
+  const existing = await getPublicJobFresh(JOB_TYPE, sessionId);
+  if (existing?.status === "completed" && resolveAnalysisPayload(existing)) {
+    return publicShape(existing);
+  }
+
   const { started, job } = beginJob(JOB_TYPE, sessionId, {
     routeCount: payload?.allRoutes?.length ?? 0,
     coverageCount: payload?.coverage?.length ?? 0,

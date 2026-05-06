@@ -5,6 +5,7 @@ import {
   startJob,
   completeJob,
   getPublicJob,
+  getMostRecentActiveJobFresh,
 } from "../../services/shared/utils/jobStore.js";
 import { sanitizeSessionId } from "../../services/shared/utils/sessionId.js";
 import {
@@ -28,6 +29,13 @@ const DEFAULT_EXCLUDE_PATTERNS = {
   "mobile-ux": ["/podcast", "/blog"],
   "seo-aeo-geo": [],
 };
+const ACTIVE_RUN_REUSE_MS = Number(process.env.AUDIT_RUN_REUSE_ACTIVE_MS || 20 * 60 * 1000);
+
+function forceNewRunRequested(body = {}) {
+  const value = body.forceNewRun ?? body.force ?? body.force_new_run;
+  if (typeof value === "boolean") return value;
+  return ["1", "true", "yes", "on"].includes(String(value || "").trim().toLowerCase());
+}
 
 function resolveExcludePatterns(auditType, body) {
   if (Array.isArray(body.excludePatterns)) {
@@ -68,6 +76,33 @@ export async function startAuditRun({
   );
   const reportPrefix = body.reportPrefix || buildAuditPrefix(auditType, sessionId);
   const jobType = makeAuditJobType(auditType);
+
+  if (!body.sessionId && !forceNewRunRequested(body)) {
+    const activeJob = await getMostRecentActiveJobFresh(jobType, { maxAgeMs: ACTIVE_RUN_REUSE_MS });
+    if (activeJob) {
+      info("audit.workflow.reused_active_run", {
+        auditType,
+        requestedSessionId: sessionId,
+        reusedSessionId: activeJob.sessionId,
+        status: activeJob.status,
+        reportPrefix: activeJob.reportPrefix || null,
+      });
+      return {
+        ok: true,
+        auditType,
+        sessionId: activeJob.sessionId,
+        status: activeJob.status || "running",
+        reusedActiveRun: true,
+        message: "An audit run is already queued or running; returning the existing job instead of dispatching another workflow.",
+        reportPrefix: activeJob.reportPrefix || null,
+        callbackUrl: activeJob.callbackUrl || null,
+        analysisUrl: activeJob.analysisUrl || null,
+        workflowRunUrl: activeJob.workflowRunUrl || null,
+        job: activeJob,
+      };
+    }
+  }
+
   const callbackBaseUrl = String(
     process.env.AUDIT_CALLBACK_BASE_URL || process.env.APP_URL || ""
   )
