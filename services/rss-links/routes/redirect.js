@@ -15,7 +15,7 @@ function appendRequestQuery(target, query = {}) {
   return `${target}${target.includes("?") ? "&" : "?"}${qs}`;
 }
 
-router.get("/:key", async (req, res) => {
+async function handleRedirect(req, res) {
   const { key } = req.params;
 
   try {
@@ -34,6 +34,9 @@ router.get("/:key", async (req, res) => {
     warn("rss-links.redirect.error", { key, error: err?.message });
     return res.status(404).json({ ok: false, error: "Short link not found", key });
   }
-});
+}
+
+router.get("/:key", handleRedirect);
+router.get("/:key/index.html", handleRedirect);
 
 export default router;
