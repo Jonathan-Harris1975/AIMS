@@ -39,7 +39,7 @@ export function normaliseShortKey(key) {
 
 export function buildShortUrl(key) {
   const safeKey = normaliseShortKey(key);
-  return buildPublicUrl("rss", `rss-links/${safeKey}/`);
+  return buildPublicUrl("rss", `rss-links/${safeKey}/index.html`);
 }
 
 export async function getShortLinkRecord(key) {
@@ -50,7 +50,7 @@ export async function getShortLinkRecord(key) {
   return {
     ...record,
     key: safeKey,
-    shortUrl: record.shortUrl || buildShortUrl(safeKey),
+    shortUrl: buildShortUrl(safeKey),
   };
 }
 
@@ -121,7 +121,7 @@ function toCreateResult(record, created) {
     key: record.key,
     originalUrl: record.originalUrl,
     urlHash: record.urlHash,
-    shortUrl: record.shortUrl || buildShortUrl(record.key),
+    shortUrl: buildShortUrl(record.key),
     created,
     record,
   };
