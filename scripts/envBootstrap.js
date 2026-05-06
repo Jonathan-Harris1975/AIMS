@@ -229,9 +229,6 @@ export const ENV = {
   itunes_keywords: firstDefined("itunes_keywords", "PODCAST_ITUNES_KEYWORDS"),
   itunes_type: firstDefined("itunes_type", "PODCAST_ITUNES_TYPE"),
 
-  /* ---------------- Short.io ---------------- */
-  SHORTIO_API_KEY: opt("SHORTIO_API_KEY"),
-  SHORTIO_DOMAIN: opt("SHORTIO_DOMAIN"),
 
   /* ---------------- AWS ---------------- */
   AWS_REGION: opt("AWS_REGION", "eu-west-2"),
