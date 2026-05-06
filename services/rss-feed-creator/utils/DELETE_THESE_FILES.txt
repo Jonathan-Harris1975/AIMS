@@ -1,4 +1,0 @@
-Delete these files from the repo:
-
-services/rss-feed-creator/utils/shortio.js
-services/rss-links/utils/1
