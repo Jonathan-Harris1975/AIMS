@@ -217,6 +217,38 @@ export function weeklyPostBody({ title, summary, dateLabel, imageUrl, html, sour
 </section>`;
 }
 
+export function socialPostBody({ title, summary, dateLabel, imageUrl, html, sources = [], socialCaption = "", hashtags = [] }) {
+  const sourcesHtml = sources
+    .map((source) => {
+      const safeTitle = escapeHtml(source.title || source.link || "Source");
+      const safeLink = escapeHtml(source.link || "#");
+      const safeDate = escapeHtml(source.pubDate || "");
+      const suffix = safeDate ? ` <span class="subtle">${safeDate}</span>` : "";
+      return `<li><a href="${safeLink}" rel="noopener noreferrer" target="_blank">${safeTitle}</a>${suffix}</li>`;
+    })
+    .join("\n");
+  const hashtagsHtml = Array.isArray(hashtags) && hashtags.length
+    ? `<p class="tag u-s07">${hashtags.map((tag) => escapeHtml(tag)).join(" ")}</p>`
+    : "";
+
+  return `
+<article class="card u-s04">
+  ${imageUrl ? `<img alt="${escapeHtml(title)}" class="cover" decoding="async" fetchpriority="high" loading="eager" src="${escapeHtml(imageUrl)}"/>` : ""}
+  <div class="u-s06">
+    ${dateLabel ? `<p class="tag u-s07">${escapeHtml(dateLabel)}</p>` : ""}
+    ${summary ? `<p class="u-s09">${escapeHtml(summary)}</p>` : ""}
+    ${socialCaption ? `<p>${escapeHtml(socialCaption)}</p>` : ""}
+    ${html}
+    ${hashtagsHtml}
+  </div>
+</article>
+<section class="card u-s60">
+  <h2 class="u-s02">Sources behind this briefing</h2>
+  <p class="u-s09">These are the rewritten RSS items used to build the daily social piece. Same rule as ever: signal first, theatre last.</p>
+  <ul class="u-s09">${sourcesHtml || "<li>Source links were not available for this briefing.</li>"}</ul>
+</section>`;
+}
+
 function formatHumanDate(value) {
   const parsed = value ? new Date(value) : null;
   if (!parsed || Number.isNaN(parsed.getTime())) {
