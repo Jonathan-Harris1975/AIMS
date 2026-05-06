@@ -16,7 +16,7 @@ import crypto from "crypto";
 import { debug, error, warn } from "../../../logger.js";
 import { resilientRequest } from "../../shared/utils/ai-service.js";
 import { RSS_PROMPTS } from "./rss-prompts.js";
-import { shortenUrl } from "./shortio.js";
+import { createShortLink } from "../../rss-links/service.js";
 
 // ─────────────────────────────────────────────
 // ENV TUNABLES
@@ -209,12 +209,16 @@ export async function rewriteArticle(item = {}) {
     );
   }
 
-  // Shorten URL using Short.io (best-effort)
+  // Create a self-hosted RSS short link (best-effort).
+  // If R2-backed link creation fails, keep the original article URL and do not drop the item.
   let shortUrl = link;
-  try {
-    shortUrl = await shortenUrl(link);
-  } catch (e) {
-    warn("rss-feed-creator.shortio.fail", { message: e?.message });
+  if (link) {
+    try {
+      const shortLink = await createShortLink(link);
+      shortUrl = shortLink.shortUrl;
+    } catch (e) {
+      warn("rss-feed-creator.short-link.fail", { link, message: e?.message });
+    }
   }
 
   // GUID
