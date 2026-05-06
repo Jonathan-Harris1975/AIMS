@@ -4,7 +4,16 @@ import axios from "axios";
 import { wait } from "../../shared/utils/wait.js";
 
 const ZERO_BASE = "https://api.zerobounce.net/v2";
-const BATCH_SIZE = 50;
+
+function positiveIntEnv(name, fallback, max = Number.POSITIVE_INFINITY) {
+  const parsed = Number(process.env[name]);
+  if (!Number.isFinite(parsed) || parsed < 1) return fallback;
+  return Math.min(Math.floor(parsed), max);
+}
+
+const BATCH_SIZE = positiveIntEnv("ZEROBOUNCE_BATCH_SIZE", 25, 50);
+const ZEROBOUNCE_TIMEOUT_MS = positiveIntEnv("ZEROBOUNCE_TIMEOUT_MS", 30_000, 120_000);
+const ZEROBOUNCE_DELAY_MS = Number(process.env.ZEROBOUNCE_DELAY_MS ?? process.env.HUNTER_DELAY_MS) || 0;
 
 export async function batchValidateEmails(emails = []) {
   const resultMap = new Map();
@@ -30,7 +39,7 @@ export async function batchValidateEmails(emails = []) {
           api_key: process.env.API_ZERO_KEY,
           email_batch: batch.map((email) => ({ email_address: email })),
         },
-        { timeout: 30000 }
+        { timeout: ZEROBOUNCE_TIMEOUT_MS }
       );
 
       res.data?.email_batch?.forEach((item) => {
@@ -49,7 +58,7 @@ export async function batchValidateEmails(emails = []) {
     }
 
     if (i + BATCH_SIZE < clean.length) {
-      await wait(Number(process.env.HUNTER_DELAY_MS) || 0);
+      await wait(ZEROBOUNCE_DELAY_MS);
     }
   }
 
