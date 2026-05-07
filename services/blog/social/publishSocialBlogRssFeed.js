@@ -11,7 +11,9 @@ const DEFAULT_FEED_GENERATOR = "AI Management Suite social blog service";
 const DEFAULT_FEED_TTL = 60;
 
 function normalisePrefix(value = DEFAULT_SOCIAL_PREFIX) {
-  return String(value || DEFAULT_SOCIAL_PREFIX).trim().replace(/^\/+|\/+$/g, "") || DEFAULT_SOCIAL_PREFIX;
+  return String(value || DEFAULT_SOCIAL_PREFIX)
+    .trim()
+    .replace(/^\/+|\/+$/g, "") || DEFAULT_SOCIAL_PREFIX;
 }
 
 function cleanString(value) {
@@ -62,10 +64,36 @@ function splitUrlSuffix(value = "") {
   };
 }
 
-export function ensureSocialPostIndexUrl(value = "") {
-  const url = cleanString(value);
+function getSocialPrefix() {
+  return normalisePrefix(process.env.BLOG_SOCIAL_PREFIX || DEFAULT_SOCIAL_PREFIX);
+}
 
-  if (!url || !/\/blog\/social\/posts\//i.test(url)) return url;
+function getSocialPublicBaseUrl() {
+  const explicit = String(process.env.BLOG_SOCIAL_PUBLIC_BASE_URL || "")
+    .trim()
+    .replace(/\/$/, "");
+
+  if (explicit) return explicit;
+
+  const siteBaseUrl = String(process.env.SITE_BASE_URL || DEFAULT_SITE_BASE_URL).replace(/\/$/, "");
+  return joinUrl(siteBaseUrl, `/${getSocialPrefix()}/`);
+}
+
+function getSocialRssObjectKey() {
+  return String(process.env.BLOG_SOCIAL_RSS_OBJECT_KEY || `${getSocialPrefix()}/feed.xml`)
+    .trim()
+    .replace(/^\/+/, "") || `${DEFAULT_SOCIAL_PREFIX}/feed.xml`;
+}
+
+function extractSlugFromSocialUrl(value = "") {
+  const cleaned = cleanString(value);
+
+  return cleaned.match(/\/(?:blog\/social|social-media-blog)\/posts\/([^/?#]+)\/?(?:index\.html)?(?:[?#].*)?$/i)?.[1] || "";
+}
+
+function ensureIndexUrl(value = "") {
+  const url = cleanString(value);
+  if (!url) return "";
 
   const { base, suffix } = splitUrlSuffix(url);
 
@@ -80,31 +108,49 @@ export function ensureSocialPostIndexUrl(value = "") {
   return `${base}/index.html${suffix}`;
 }
 
-function normaliseHashtags(values = []) {
+function buildPublicPostUrl(item = {}) {
+  const rawUrl = cleanString(item?.url) ||
+    cleanString(item?.link) ||
+    cleanString(item?.canonical_url);
+
+  const rawPath = cleanString(item?.path);
+
+  const slug = cleanString(item?.slug) ||
+    extractSlugFromSocialUrl(rawUrl) ||
+    extractSlugFromSocialUrl(rawPath);
+
+  if (slug) {
+    return joinUrl(getSocialPublicBaseUrl(), `/posts/${encodeURIComponent(slug)}/index.html`);
+  }
+
+  if (/\/social-media-blog\/posts\//i.test(rawUrl)) {
+    return ensureIndexUrl(rawUrl);
+  }
+
+  if (/\/blog\/social\/posts\//i.test(rawUrl)) {
+    return ensureIndexUrl(rawUrl.replace(/\/blog\/social\/posts\//i, `/${getSocialPrefix()}/posts/`));
+  }
+
+  return ensureIndexUrl(rawUrl);
+}
+
+function normaliseList(values = []) {
   return Array.isArray(values)
     ? values.map(cleanString).filter(Boolean)
     : [];
 }
 
-function normaliseThemes(values = []) {
-  return Array.isArray(values)
-    ? values.map(cleanString).filter(Boolean)
-    : [];
-}
+function looksLikeSocialPost(item = {}, url = "") {
+  const haystack = `${url} ${cleanString(item?.path)}`;
 
-function looksLikeSocialPost({
-  url,
-  path,
-  socialCaption,
-  hook,
-  takeaway,
-} = {}) {
-  if (/\/blog\/social\/posts\//i.test(`${url || ""} ${path || ""}`)) return true;
+  if (/\/(?:blog\/social|social-media-blog)\/posts\//i.test(haystack)) {
+    return true;
+  }
 
   return Boolean(
-    cleanString(socialCaption) ||
-    cleanString(hook) ||
-    cleanString(takeaway),
+    cleanString(item?.social_caption) ||
+    cleanString(item?.hook) ||
+    cleanString(item?.takeaway),
   );
 }
 
@@ -118,30 +164,16 @@ export function normaliseSocialBlogManifestItems(payload = {}) {
   return rawItems
     .map((item) => {
       const title = cleanString(item?.title) || cleanString(item?.headline);
-      const rawUrl = cleanString(item?.url) || cleanString(item?.link) || cleanString(item?.canonical_url);
-      const url = ensureSocialPostIndexUrl(rawUrl);
-      const path = cleanString(item?.path);
-      const hook = cleanString(item?.hook);
-      const takeaway = cleanString(item?.takeaway);
-      const explicitSocialCaption = cleanString(item?.social_caption);
+      const url = buildPublicPostUrl(item);
 
-      if (!looksLikeSocialPost({
-        url,
-        path,
-        socialCaption: explicitSocialCaption,
-        hook,
-        takeaway,
-      })) {
-        return null;
-      }
-
+      if (!looksLikeSocialPost(item, url)) return null;
       if (!title || !url) return null;
 
       const summary = cleanString(item?.summary) ||
         cleanString(item?.excerpt) ||
         cleanString(item?.description);
 
-      const socialCaption = explicitSocialCaption ||
+      const socialCaption = cleanString(item?.social_caption) ||
         cleanString(item?.description) ||
         summary;
 
@@ -158,13 +190,13 @@ export function normaliseSocialBlogManifestItems(payload = {}) {
         url,
         summary,
         socialCaption,
-        hook,
+        hook: cleanString(item?.hook),
         bodyHtml,
-        takeaway,
+        takeaway: cleanString(item?.takeaway),
         publishedAt,
         imageUrl,
-        themes: normaliseThemes(item?.themes),
-        hashtags: normaliseHashtags(item?.hashtags),
+        themes: normaliseList(item?.themes),
+        hashtags: normaliseList(item?.hashtags),
       };
     })
     .filter(Boolean)
@@ -282,14 +314,6 @@ export function buildSocialBlogRssXml({
   return parts.join("\n");
 }
 
-function getSocialPrefix() {
-  return normalisePrefix(process.env.BLOG_SOCIAL_PREFIX || DEFAULT_SOCIAL_PREFIX);
-}
-
-function getSocialRssObjectKey() {
-  return String(process.env.BLOG_SOCIAL_RSS_OBJECT_KEY || `${getSocialPrefix()}/feed.xml`).trim().replace(/^\/+/, "") || `${DEFAULT_SOCIAL_PREFIX}/feed.xml`;
-}
-
 async function loadSocialPostsManifest(prefix = getSocialPrefix()) {
   const raw = await getObjectAsText("blog", `${normalisePrefix(prefix)}/posts.json`);
   return JSON.parse(raw);
@@ -301,8 +325,7 @@ export async function publishSocialBlogRssFeed({
 } = {}) {
   const rssBucketKey = "blogRss";
   const rssObjectKey = getSocialRssObjectKey();
-  const siteBaseUrl = String(process.env.SITE_BASE_URL || DEFAULT_SITE_BASE_URL).replace(/\/$/, "");
-  const channelLink = joinUrl(siteBaseUrl, "/blog/social/");
+  const channelLink = getSocialPublicBaseUrl();
   const feedUrl = buildPublicUrl(rssBucketKey, rssObjectKey);
   const items = normaliseSocialBlogManifestItems(manifest);
 
@@ -311,6 +334,7 @@ export async function publishSocialBlogRssFeed({
     rssObjectKey,
     itemCount: items.length,
     feedUrl,
+    channelLink,
   });
 
   const xml = buildSocialBlogRssXml({
@@ -330,6 +354,7 @@ export async function publishSocialBlogRssFeed({
     rssObjectKey,
     itemCount: items.length,
     feedUrl,
+    channelLink,
   });
 
   return {
