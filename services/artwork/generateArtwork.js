@@ -15,10 +15,10 @@ import { info, error } from "../../../logger.js";
 import { getArtworkProviders } from "./utils/openrouterProviders.js";
 
 const router = express.Router();
-const ARTWORK_TIMEOUT_MS = Number(process.env.ARTWORK_TIMEOUT_MS || process.env.AI_TIMEOUT) || 60_000;
+const ARTWORK_TIMEOUT_MS = Number(process.env.ARTWORK_TIMEOUT_MS || process.env.AI_TIMEOUT) || 120_000;
 
 const OPENROUTER_BASE_URL =
-  process.env.OPENROUTER_API_BASE || "https://openrouter.ai/api/v1";
+  process.env.OPENROUTER_BASE_URL || process.env.OPENROUTER_API_BASE || "https://openrouter.ai/api/v1";
 
 
 function extractImageBase64(json) {
@@ -47,8 +47,8 @@ async function requestArtworkFromProvider(provider, prompt, safeTitle) {
   const headers = {
     Authorization: `Bearer ${provider.key}`,
     "Content-Type": "application/json",
-    "HTTP-Referer": process.env.APP_URL || "https://jonathan-harris.online",
-    "X-Title": safeTitle,
+    "HTTP-Referer": process.env.OPENROUTER_SITE_URL || process.env.APP_URL || "https://jonathan-harris.online",
+    "X-OpenRouter-Title": process.env.OPENROUTER_APP_NAME || process.env.APP_TITLE || safeTitle,
   };
 
   const body = JSON.stringify({
