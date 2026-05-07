@@ -11,10 +11,10 @@ const OPENROUTER_BASE = process.env.OPENROUTER_BASE_URL || process.env.OPENROUTE
 const ENDPOINT = `${OPENROUTER_BASE.replace(/\/+$/, "")}/chat/completions`;
 const DEFAULT_MAX_TOKENS = Number(process.env.AI_MAX_TOKENS || 4096);
 const DEFAULT_TEMPERATURE = Number(process.env.AI_TEMPERATURE ?? aiConfig?.commonParams?.temperature ?? 0.7);
-const DEFAULT_TIMEOUT_MS = Number(process.env.AI_TIMEOUT ?? aiConfig?.commonParams?.timeout ?? 45000);
-const DEFAULT_TOP_P = Number(process.env.AI_TOP_P || 1);
-const MAX_RETRIES = Number(process.env.AI_MAX_RETRIES || 2);
-const RETRY_BASE_MS = Number(process.env.AI_RETRY_BASE_MS || 700);
+const DEFAULT_TIMEOUT_MS = Number(process.env.AI_TIMEOUT ?? aiConfig?.commonParams?.timeout ?? 90000);
+const DEFAULT_TOP_P = Number(process.env.AI_TOP_P ?? aiConfig?.commonParams?.top_p ?? 0.9);
+const MAX_RETRIES = Number(process.env.AI_MAX_RETRIES ?? 1);
+const RETRY_BASE_MS = Number(process.env.AI_RETRY_BASE_MS ?? 750);
 const __aiRouteCallsBySession = new Map();
 const __lastSuccessProvider = new Map();
 

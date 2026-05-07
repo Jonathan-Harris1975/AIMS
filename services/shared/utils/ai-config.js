@@ -141,11 +141,11 @@ export const aiConfig = {
     oneupEbook: routeChain(["fast", "standard", "fallback"], ["chatgpt", "google", "deepseek"]),
   },
 
-  commonParams: { temperature: 0.85, timeout: 45000 },
+  commonParams: { temperature: 0.65, top_p: 0.9, timeout: 90000 },
 
   headers: {
     "HTTP-Referer": process.env.OPENROUTER_SITE_URL || process.env.APP_URL || "http://localhost:3000",
-    "X-Title": process.env.OPENROUTER_APP_NAME || process.env.APP_TITLE || "AI Management Suite",
+    "X-OpenRouter-Title": process.env.OPENROUTER_APP_NAME || process.env.APP_TITLE || "AI Management Suite",
   },
 };
 
