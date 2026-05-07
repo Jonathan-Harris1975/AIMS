@@ -2,7 +2,8 @@ import { info } from "../../../logger.js";
 import { buildPublicUrl, getObjectAsText, putText } from "../../shared/utils/r2-client.js";
 
 const DEFAULT_SOCIAL_PREFIX = "social-media-blog";
-const DEFAULT_SITE_BASE_URL = "https://jonathan-harris.online";
+const DEFAULT_SOCIAL_PUBLIC_BASE_URL = "https://blog.jonathan-harris.online/social-media-blog";
+const DEFAULT_SOCIAL_PUBLIC_POSTS_BASE_URL = "https://blog.jonathan-harris.online/social-media-blog/posts";
 const DEFAULT_FEED_TITLE = "Jonathan Harris | Daily AI Social Briefings";
 const DEFAULT_FEED_DESCRIPTION = "Daily AI briefing posts built for social media: sharp, visual, grounded, and no-hype.";
 const DEFAULT_FEED_LANGUAGE = "en-gb";
@@ -69,14 +70,21 @@ function getSocialPrefix() {
 }
 
 function getSocialPublicBaseUrl() {
-  const explicit = String(process.env.BLOG_SOCIAL_PUBLIC_BASE_URL || "")
+  return String(
+    process.env.BLOG_SOCIAL_PUBLIC_BASE_URL ||
+    DEFAULT_SOCIAL_PUBLIC_BASE_URL,
+  )
     .trim()
     .replace(/\/$/, "");
+}
 
-  if (explicit) return explicit;
-
-  const siteBaseUrl = String(process.env.SITE_BASE_URL || DEFAULT_SITE_BASE_URL).replace(/\/$/, "");
-  return joinUrl(siteBaseUrl, `/${getSocialPrefix()}/`);
+function getSocialPublicPostsBaseUrl() {
+  return String(
+    process.env.BLOG_SOCIAL_PUBLIC_POSTS_BASE_URL ||
+    DEFAULT_SOCIAL_PUBLIC_POSTS_BASE_URL,
+  )
+    .trim()
+    .replace(/\/$/, "");
 }
 
 function getSocialRssObjectKey() {
@@ -120,7 +128,7 @@ function buildPublicPostUrl(item = {}) {
     extractSlugFromSocialUrl(rawPath);
 
   if (slug) {
-    return joinUrl(getSocialPublicBaseUrl(), `/posts/${encodeURIComponent(slug)}/index.html`);
+    return joinUrl(getSocialPublicPostsBaseUrl(), `/${encodeURIComponent(slug)}/index.html`);
   }
 
   if (/\/social-media-blog\/posts\//i.test(rawUrl)) {
@@ -128,7 +136,12 @@ function buildPublicPostUrl(item = {}) {
   }
 
   if (/\/blog\/social\/posts\//i.test(rawUrl)) {
-    return ensureIndexUrl(rawUrl.replace(/\/blog\/social\/posts\//i, `/${getSocialPrefix()}/posts/`));
+    return ensureIndexUrl(
+      rawUrl.replace(
+        /https?:\/\/[^/]+\/blog\/social\/posts\//i,
+        `${getSocialPublicPostsBaseUrl()}/`,
+      ),
+    );
   }
 
   return ensureIndexUrl(rawUrl);
