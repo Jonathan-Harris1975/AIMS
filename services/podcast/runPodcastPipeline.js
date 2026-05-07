@@ -6,6 +6,9 @@ import { runRssFeedCreator } from "../rss-feed-podcast/index.js";
 import cleanupSession from "../shared/utils/cleanupSession.js";
 import finalCleanupSession from "../shared/utils/cleanupSessionFinal.js";
 import cleanupTempMemory from "../shared/utils/cleanupTempMemory.js";
+import { fetchWithTimeout } from "../shared/http-client.js";
+
+const WEBHOOK_TIMEOUT_MS = Number(process.env.WEBHOOK_TIMEOUT_MS) || 15_000;
 
 function normalisePipelineInput(input, maybeOptions = {}) {
   if (input && typeof input === "object" && !Array.isArray(input)) {
@@ -37,7 +40,7 @@ async function triggerWebsiteRebuild(log, sessionId) {
   for (const hookUrl of hooks) {
     for (let attempt = 1; attempt <= 3; attempt += 1) {
       try {
-        const response = await fetch(hookUrl, { method: "POST" });
+        const response = await fetchWithTimeout(hookUrl, { method: "POST", timeout: WEBHOOK_TIMEOUT_MS });
         const body = await response.text().catch(() => "");
 
         if (response.ok) {
