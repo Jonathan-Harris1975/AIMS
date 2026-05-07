@@ -42,32 +42,6 @@ function cleanString(value) {
   return typeof value === "string" ? value.trim() : "";
 }
 
-function splitUrlSuffix(value = "") {
-  const match = String(value || "").match(/^([^?#]*)([?#].*)?$/);
-
-  return {
-    base: match?.[1] || "",
-    suffix: match?.[2] || "",
-  };
-}
-
-function ensureSocialPostIndexUrl(value = "") {
-  const url = cleanString(value);
-  if (!url || !/\/blog\/social\/posts\//i.test(url)) return url;
-
-  const { base, suffix } = splitUrlSuffix(url);
-
-  if (/\/index\.html$/i.test(base)) {
-    return `${base}${suffix}`;
-  }
-
-  if (base.endsWith("/")) {
-    return `${base}index.html${suffix}`;
-  }
-
-  return `${base}/index.html${suffix}`;
-}
-
 export function normaliseBlogManifestItems(payload = {}) {
   const rawItems = Array.isArray(payload?.items)
     ? payload.items
@@ -124,54 +98,51 @@ export function buildBlogRssXml({
     '  xmlns:atom="http://www.w3.org/2005/Atom"',
     '  xmlns:content="http://purl.org/rss/1.0/modules/content/">',
     '<channel>',
-    tag("title", title),
-    channelHref ? tag("link", channelHref) : "",
-    tag("description", description),
-    tag("language", language),
-    tag("lastBuildDate", lastBuildDate),
-    tag("ttl", "60"),
-    tag("generator", generator),
-    selfHref ? `<atom:link href="${escapeXml(selfHref)}" rel="self" type="application/rss+xml" />` : "",
+    tag('title', title),
+    channelHref ? tag('link', channelHref) : '',
+    tag('description', description),
+    tag('language', language),
+    tag('lastBuildDate', lastBuildDate),
+    tag('ttl', '60'),
+    tag('generator', generator),
+    selfHref ? `<atom:link href="${escapeXml(selfHref)}" rel="self" type="application/rss+xml" />` : '',
     imageUrl ? [
-      "<image>",
-      tag("url", imageUrl),
-      channelHref ? tag("link", channelHref) : "",
-      tag("title", title),
-      "</image>",
-    ].join("\n") : "",
+      '<image>',
+      tag('url', imageUrl),
+      channelHref ? tag('link', channelHref) : '',
+      tag('title', title),
+      '</image>',
+    ].join('\n') : '',
   ].filter(Boolean);
 
   for (const item of items) {
     const itemPubDate = toUtcRssDate(item.publishedAt) || lastBuildDate;
     const contentHtml = [
-      item.summary ? `<p>${escapeHtml(item.summary)}</p>` : "",
+      item.summary ? `<p>${escapeHtml(item.summary)}</p>` : '',
       `<p><a href="${escapeHtml(item.url)}">Read the full briefing</a></p>`,
-    ].filter(Boolean).join("");
+    ].filter(Boolean).join('');
 
-    parts.push("<item>");
-    parts.push(tag("title", item.title));
-    parts.push(tag("link", item.url));
+    parts.push('<item>');
+    parts.push(tag('title', item.title));
+    parts.push(tag('link', item.url));
     parts.push(`<guid isPermaLink="true">${escapeXml(item.url)}</guid>`);
-    parts.push(tag("pubDate", itemPubDate));
-
+    parts.push(tag('pubDate', itemPubDate));
     if (item.summary) {
-      parts.push(tag("description", item.summary));
+      parts.push(tag('description', item.summary));
     }
-
     parts.push(`<content:encoded>${cdata(contentHtml)}</content:encoded>`);
-
     for (const theme of item.themes) {
-      parts.push(tag("category", theme));
+      parts.push(tag('category', theme));
     }
-
-    parts.push("</item>");
+    parts.push('</item>');
   }
 
-  parts.push("</channel>");
-  parts.push("</rss>");
+  parts.push('</channel>');
+  parts.push('</rss>');
 
-  return parts.join("\n");
+  return parts.join('\n');
 }
+
 
 export function normaliseSocialBlogManifestItems(payload = {}) {
   const rawItems = Array.isArray(payload?.items)
@@ -183,8 +154,7 @@ export function normaliseSocialBlogManifestItems(payload = {}) {
   return rawItems
     .map((item) => {
       const title = cleanString(item?.title) || cleanString(item?.headline);
-      const rawUrl = cleanString(item?.url) || cleanString(item?.link) || cleanString(item?.canonical_url);
-      const url = ensureSocialPostIndexUrl(rawUrl);
+      const url = cleanString(item?.url) || cleanString(item?.canonical_url) || cleanString(item?.link);
       const path = cleanString(item?.path);
       const isSocialPath = /\/blog\/social\/posts\//i.test(`${url} ${path}`);
       const explicitSocialCaption = cleanString(item?.social_caption);
@@ -228,27 +198,12 @@ function stripHtmlForRss(value = "") {
 
 function buildSocialContentHtml(item = {}) {
   const parts = [];
-
-  if (item.imageUrl) {
-    parts.push(`<p><img src="${escapeHtml(item.imageUrl)}" alt="${escapeHtml(item.title)}" /></p>`);
-  }
-
-  if (item.hook) {
-    parts.push(`<p><strong>${escapeHtml(item.hook)}</strong></p>`);
-  }
-
-  if (item.bodyHtml) {
-    parts.push(stripHtmlForRss(item.bodyHtml));
-  } else if (item.summary) {
-    parts.push(`<p>${escapeHtml(item.summary)}</p>`);
-  }
-
-  if (item.takeaway) {
-    parts.push(`<p><strong>Takeaway:</strong> ${escapeHtml(item.takeaway)}</p>`);
-  }
-
+  if (item.imageUrl) parts.push(`<p><img src="${escapeHtml(item.imageUrl)}" alt="${escapeHtml(item.title)}" /></p>`);
+  if (item.hook) parts.push(`<p><strong>${escapeHtml(item.hook)}</strong></p>`);
+  if (item.bodyHtml) parts.push(stripHtmlForRss(item.bodyHtml));
+  else if (item.summary) parts.push(`<p>${escapeHtml(item.summary)}</p>`);
+  if (item.takeaway) parts.push(`<p><strong>Takeaway:</strong> ${escapeHtml(item.takeaway)}</p>`);
   parts.push(`<p><a href="${escapeHtml(item.url)}">Read the full daily briefing</a></p>`);
-
   return parts.filter(Boolean).join("\n");
 }
 
@@ -267,65 +222,46 @@ export function buildSocialBlogRssXml({
   const lastBuildDate = toUtcRssDate(manifest?.updated_at) || new Date().toUTCString();
   const channelHref = cleanString(channelLink);
   const selfHref = cleanString(feedUrl);
-
   const parts = [
     '<?xml version="1.0" encoding="UTF-8"?>',
     '<rss version="2.0"',
     '  xmlns:atom="http://www.w3.org/2005/Atom"',
     '  xmlns:content="http://purl.org/rss/1.0/modules/content/"',
     '  xmlns:media="http://search.yahoo.com/mrss/">',
-    "<channel>",
-    tag("title", title),
-    channelHref ? tag("link", channelHref) : "",
-    tag("description", description),
-    tag("language", language),
-    tag("lastBuildDate", lastBuildDate),
-    tag("ttl", String(ttl)),
-    tag("generator", generator),
-    selfHref ? `<atom:link href="${escapeXml(selfHref)}" rel="self" type="application/rss+xml" />` : "",
-    imageUrl ? [
-      "<image>",
-      tag("url", imageUrl),
-      channelHref ? tag("link", channelHref) : "",
-      tag("title", title),
-      "</image>",
-    ].join("\n") : "",
+    '<channel>',
+    tag('title', title),
+    channelHref ? tag('link', channelHref) : '',
+    tag('description', description),
+    tag('language', language),
+    tag('lastBuildDate', lastBuildDate),
+    tag('ttl', String(ttl)),
+    tag('generator', generator),
+    selfHref ? `<atom:link href="${escapeXml(selfHref)}" rel="self" type="application/rss+xml" />` : '',
+    imageUrl ? ['<image>', tag('url', imageUrl), channelHref ? tag('link', channelHref) : '', tag('title', title), '</image>'].join('\n') : '',
   ].filter(Boolean);
 
   for (const item of items) {
     const itemPubDate = toUtcRssDate(item.publishedAt) || lastBuildDate;
     const descriptionText = item.socialCaption || item.summary;
     const categories = [...new Set([...item.themes, ...item.hashtags].map(cleanString).filter(Boolean))];
-
-    parts.push("<item>");
-    parts.push(tag("title", item.title));
-    parts.push(tag("link", item.url));
+    parts.push('<item>');
+    parts.push(tag('title', item.title));
+    parts.push(tag('link', item.url));
     parts.push(`<guid isPermaLink="true">${escapeXml(item.url)}</guid>`);
-    parts.push(tag("pubDate", itemPubDate));
-
-    if (descriptionText) {
-      parts.push(tag("description", descriptionText));
-    }
-
+    parts.push(tag('pubDate', itemPubDate));
+    if (descriptionText) parts.push(tag('description', descriptionText));
     parts.push(`<content:encoded>${cdata(buildSocialContentHtml(item))}</content:encoded>`);
-
-    for (const category of categories) {
-      parts.push(tag("category", category));
-    }
-
+    for (const category of categories) parts.push(tag('category', category));
     if (item.imageUrl) {
       const safeImage = escapeXml(item.imageUrl);
-
       parts.push(`<enclosure url="${safeImage}" type="image/png" />`);
       parts.push(`<media:content url="${safeImage}" medium="image" type="image/png" />`);
       parts.push(`<media:thumbnail url="${safeImage}" />`);
     }
-
-    parts.push("</item>");
+    parts.push('</item>');
   }
 
-  parts.push("</channel>");
-  parts.push("</rss>");
-
-  return parts.join("\n");
+  parts.push('</channel>');
+  parts.push('</rss>');
+  return parts.join('\n');
 }
