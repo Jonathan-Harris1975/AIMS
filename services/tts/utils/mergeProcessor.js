@@ -53,16 +53,20 @@ function isRemote(input) {
 // 🌐 Remote Download w/ Timeout + Retries
 // ------------------------------------------------------------
 async function fetchWithTimeout(url) {
-  let timeoutId;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => {
+    controller.abort(new Error(`Download timeout after ${DOWNLOAD_TIMEOUT_MS}ms`));
+  }, DOWNLOAD_TIMEOUT_MS);
+  timeoutId.unref?.();
 
   try {
-    return await Promise.race([
-      fetch(url),
-      new Promise((_, reject) => {
-        timeoutId = setTimeout(() => reject(new Error(`Download timeout`)), DOWNLOAD_TIMEOUT_MS);
-        timeoutId.unref?.();
-      }),
-    ]);
+    return await fetch(url, { signal: controller.signal });
+  } catch (err) {
+    const aborted = err?.name === "AbortError" || err?.code === "ABORT_ERR";
+    if (aborted) {
+      throw new Error(`Download timeout after ${DOWNLOAD_TIMEOUT_MS}ms`);
+    }
+    throw err;
   } finally {
     clearTimeout(timeoutId);
   }
@@ -255,7 +259,7 @@ async function modularMerge(sessionId, sources) {
 // 🧹 MEMORY CLEANUP - Remove temporary files
 // ------------------------------------------------------------
 function scheduleCleanup(finalPath, sessionId, delayMs = 120000) {
-  setTimeout(() => {
+  const cleanupTimer = setTimeout(() => {
     try {
       // Clean up the final merged file
       if (fs.existsSync(finalPath)) {
@@ -288,6 +292,7 @@ function scheduleCleanup(finalPath, sessionId, delayMs = 120000) {
       });
     }
   }, delayMs);
+  cleanupTimer.unref?.();
 }
 
 // ------------------------------------------------------------

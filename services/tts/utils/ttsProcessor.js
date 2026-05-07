@@ -97,7 +97,7 @@ async function synthesizeTextWithRetry(text, retries = 3) {
 async function processChunkWithRetry(sessionId, chunk, chunkNumber, attempt = 1) {
   try {
     const cleaned = cleanText(chunk.text);
-    const audioBuffer = await synthesizeTextWithRetry(cleaned);
+    const audioBuffer = await synthesizeTextWithRetry(cleaned, 1);
 
     const key = `${sessionId}/chunk-${String(chunkNumber).padStart(3, "0")}.mp3`;
     await putObject(CHUNKS_BUCKET_KEY, key, audioBuffer, "audio/mpeg");

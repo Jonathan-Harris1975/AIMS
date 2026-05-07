@@ -325,7 +325,7 @@ export async function editingProcessor(sessionId, inputPathObj) {
     previousStagePath = stage5Path;
 
     // Stage 6: Fade In/Out - CORRECTED VERSION
-    log.info("🔍 DEBUG: Before Stage 6", {
+    log.debug("editing.stage6.precheck", {
       sessionId,
       currentInput,
       exists: fs.existsSync(currentInput),
