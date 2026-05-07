@@ -12,7 +12,10 @@ import { warn, error, info } from "../../../logger.js";
 import { getArtworkProviders } from "./openrouterProviders.js";
 
 const OPENROUTER_BASE_URL =
-  process.env.OPENROUTER_API_BASE || "https://openrouter.ai/api/v1";
+  process.env.OPENROUTER_BASE_URL || process.env.OPENROUTER_API_BASE || "https://openrouter.ai/api/v1";
+
+const ARTWORK_TIMEOUT_MS = Number(process.env.ARTWORK_TIMEOUT_MS || process.env.AI_TIMEOUT) || 120_000;
+const ARTWORK_MAX_TOKENS = Number(process.env.ARTWORK_MAX_TOKENS || 2048);
 
 
 const providers = getArtworkProviders();
@@ -77,6 +80,11 @@ async function callArtworkProvider(provider, prompt, mode) {
   const client = new OpenAI({
     apiKey: provider.key,
     baseURL: OPENROUTER_BASE_URL,
+    timeout: ARTWORK_TIMEOUT_MS,
+    defaultHeaders: {
+      "HTTP-Referer": process.env.OPENROUTER_SITE_URL || process.env.APP_URL || "https://jonathan-harris.online",
+      "X-OpenRouter-Title": process.env.OPENROUTER_APP_NAME || process.env.APP_TITLE || "AI Management Suite",
+    },
   });
 
   const result = await client.chat.completions.create({
@@ -92,7 +100,7 @@ async function callArtworkProvider(provider, prompt, mode) {
         ],
       },
     ],
-    max_tokens: 2048,
+    max_tokens: ARTWORK_MAX_TOKENS,
   });
 
   const image = extractBase64Image(result);
