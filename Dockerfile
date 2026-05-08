@@ -1,43 +1,57 @@
-# ============================================================
-# Base image
-# ============================================================
-FROM node:20-bookworm-slim
+# ──────────────────────────────────────────────────────────────────────────
+# Repo Management Suite — production Docker image
+# Multi-stage: builder installs deps, runtime runs the API server.
+# ──────────────────────────────────────────────────────────────────────────
 
-ENV NODE_ENV=production
-ENV TZ=UTC
+FROM python:3.11-slim AS builder
 
-# ============================================================
-# System dependencies (ffmpeg + runtime essentials)
-# ============================================================
+WORKDIR /build
+
+# Install build tools
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ffmpeg \
-    ca-certificates \
-    curl \
-    dumb-init \
- && rm -rf /var/lib/apt/lists/*
+        git \
+    && rm -rf /var/lib/apt/lists/*
 
-# ============================================================
-# App directory
-# ============================================================
+COPY pyproject.toml .
+COPY repo_mgmt/ ./repo_mgmt/
+
+# Install into a prefix we can copy wholesale
+RUN pip install --no-cache-dir --prefix=/install .
+
+
+# ── Runtime stage ──────────────────────────────────────────────────────────
+
+FROM python:3.11-slim AS runtime
+
+# Non-root user for security
+RUN useradd --create-home --shell /bin/bash rms
+
 WORKDIR /app
 
-# ============================================================
-# Dependencies (deterministic, production only)
-# ============================================================
-COPY package.json package-lock.json ./
+# System dependency: git (for GitPython)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        git \
+    && rm -rf /var/lib/apt/lists/*
 
-RUN npm ci --omit=dev \
- && npm cache clean --force
+# Copy installed packages from builder
+COPY --from=builder /install /usr/local
 
-# ============================================================
-# Application source
-# ============================================================
-COPY . .
+# Copy application source
+COPY --from=builder /build/repo_mgmt ./repo_mgmt/
 
-# ============================================================
-# Runtime
-# ============================================================
-EXPOSE 3000
+# Owned by non-root
+RUN chown -R rms:rms /app
+USER rms
 
-ENTRYPOINT ["dumb-init", "--"]
-CMD ["npm", "start"]
+# Environment defaults (override at runtime via --env-file or -e)
+ENV RMS_HOST=0.0.0.0
+ENV RMS_PORT=8000
+ENV LOG_LEVEL=info
+ENV RMS_DRY_RUN=true
+
+EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD python -c "import httpx; httpx.get('http://localhost:8000/health').raise_for_status()"
+
+CMD ["rms-api"]
