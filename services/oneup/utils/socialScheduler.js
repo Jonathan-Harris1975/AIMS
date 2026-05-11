@@ -5,7 +5,7 @@ import { LANE_CONFIG, QUIZ_CONFIG, EBOOK_CONFIG, ONEUP_CATEGORY_NAME_GENERAL, ON
 import { buildDailyPrompt, buildQuizPrompt, buildEbookPostPrompt } from "./prompts.js";
 import { addDays, nextWeekdayDateString, toScheduledDateTime } from "./date.js";
 import { loadRecentRssContext } from "./feedContext.js";
-import { getLaneHistory, recordLaneSchedule, getQuizHistory, recordQuizSchedule } from "./state.js";
+import { getLaneHistory, recordLaneSchedule, getQuizHistory, recordQuizSchedule, claimScheduleSlot, completeScheduleSlot, releaseScheduleSlot } from "./state.js";
 import { resolveCategory, listScheduledPosts, scheduleTextPost, scheduleImagePost } from "./oneupClient.js";
 import getSponsor from "../../script/utils/getSponsor.js";
 import { resolveFeaturedEbook } from "./ebookCatalogue.js";
@@ -161,6 +161,43 @@ function hasLikelyDuplicate(queuedPosts, { scheduledDateTime, categoryName, imag
   });
 }
 
+function isTruthyOption(value) {
+  if (value === true) return true;
+  if (typeof value === "number") return value !== 0;
+  if (typeof value === "string") return ["1", "true", "yes", "on"].includes(value.trim().toLowerCase());
+  return false;
+}
+
+function isEffectiveDryRun({ dryRun, apiKey }) {
+  return Boolean(dryRun || ONEUP_DEFAULT_DRY_RUN || !apiKey);
+}
+
+function duplicateSlotWarning(reason) {
+  return `A OneUp post for this exact schedule slot was already ${reason === "same-slot-already-running" ? "being processed" : "processed"}, so no new post was created.`;
+}
+
+async function claimOneUpSlot({ scope, scheduledDateTime, categoryName, socialNetworkId, imageUrl, dryRun, apiKey, force }) {
+  if (isEffectiveDryRun({ dryRun, apiKey }) || isTruthyOption(force)) {
+    return { claimed: false, skipped: true, duplicatePrevented: false, key: null };
+  }
+
+  return claimScheduleSlot({ scope, scheduledDateTime, categoryName, socialNetworkId, imageUrl });
+}
+
+function slotDuplicatePostResult({ publishDate, scheduledDateTime, dryRun = false, categoryName, reason }) {
+  return {
+    publishDate,
+    scheduledDateTime,
+    scheduled: false,
+    dryRun,
+    duplicatePrevented: true,
+    category: { id: null, category_name: categoryName },
+    warnings: [duplicateSlotWarning(reason)],
+    post: null,
+    oneUpResponse: null,
+  };
+}
+
 async function scheduleToOneUp({ post, scheduledDateTime, categoryName, socialNetworkId, dryRun, apiKey }) {
   const warnings = [];
   const effectiveDryRun = Boolean(dryRun || ONEUP_DEFAULT_DRY_RUN || !apiKey);
@@ -284,85 +321,142 @@ export async function buildAndScheduleDailyLane(laneKey, options = {}) {
   const scheduledDateTime = options.scheduledDateTime || toScheduledDateTime(publishDate, lane.publishTime);
   const categoryName = options.categoryName || ONEUP_CATEGORY_NAME_GENERAL;
   const socialNetworkId = options.socialNetworkId || ONEUP_SOCIAL_NETWORK_ID;
-  const laneHistory = getLaneHistory(laneKey);
-  const rssContext = laneKey === "saturday" || laneKey === "sunday"
-    ? await loadRecentRssContext({})
-    : { ok: true, items: [], warning: null };
+  const apiKey = options.apiKey || process.env.ONEUP_API_KEY;
+  const imageUrl = options.imageUrl || lane.imageUrl;
+  const dryRun = Boolean(options.dryRun);
 
-  const prompt = buildDailyPrompt({
-    lane,
-    publishDate,
-    history: laneHistory.topics,
-    rssItems: rssContext.items,
-  });
-
-  const sessionId = `ONEUP-${lane.key.toUpperCase()}-${publishDate}`;
-  const generated = await requestStructuredOneUpJson({
-    routeName: "oneupDaily",
-    sessionId,
-    prompt,
-    label: `${lane.key} daily post`,
-    normalise: (raw) => normaliseDailyOutput(raw, lane),
-    maxTokens: ONEUP_DAILY_MAX_TOKENS,
-    temperature: laneKey === "friday" ? 0.8 : 0.65,
-  });
-  if (!generated.content) {
-    const err = new Error(`The ${lane.label} generator returned empty content.`);
-    err.statusCode = 502;
-    throw err;
-  }
-
-  const post = {
-    title: generated.title,
-    topic: generated.topic,
-    firstComment: generated.firstComment,
-    imageUrl: options.imageUrl || lane.imageUrl,
-    content: ensureHashtags(generated.content, lane.hashtags),
-  };
-
-  const scheduling = await scheduleToOneUp({
-    post,
+  const slotClaim = await claimOneUpSlot({
+    scope: `daily:${laneKey}`,
     scheduledDateTime,
     categoryName,
     socialNetworkId,
-    dryRun: Boolean(options.dryRun),
-    apiKey: options.apiKey || process.env.ONEUP_API_KEY,
+    imageUrl,
+    dryRun,
+    apiKey,
+    force: options.force,
   });
 
-  const warnings = [...(rssContext.warning ? [rssContext.warning] : []), ...(scheduling.warnings || [])];
-
-  if (scheduling.scheduled) {
-    recordLaneSchedule(laneKey, {
+  if (slotClaim.duplicatePrevented) {
+    const warnings = [duplicateSlotWarning(slotClaim.reason)];
+    info("oneup.daily.duplicate_prevented", {
+      lane: laneKey,
+      publishDate,
       scheduledDateTime,
-      topic: post.topic,
-      title: post.title,
-      imageUrl: post.imageUrl,
+      slotKey: slotClaim.key,
+      reason: slotClaim.reason,
     });
+
+    return {
+      ok: true,
+      lane: laneKey,
+      publishDate,
+      scheduledDateTime,
+      dryRun: false,
+      scheduled: false,
+      duplicatePrevented: true,
+      category: { id: null, category_name: categoryName },
+      warnings,
+      post: null,
+      oneUpResponse: null,
+    };
   }
 
-  info("oneup.daily.complete", {
-    lane: laneKey,
-    publishDate,
-    scheduledDateTime,
-    dryRun: scheduling.dryRun,
-    scheduled: scheduling.scheduled,
-    topic: post.topic,
-    contentHash: contentHash(post.content),
-  });
+  try {
+    const laneHistory = getLaneHistory(laneKey);
+    const rssContext = laneKey === "saturday" || laneKey === "sunday"
+      ? await loadRecentRssContext({})
+      : { ok: true, items: [], warning: null };
 
-  return {
-    ok: true,
-    lane: laneKey,
-    publishDate,
-    scheduledDateTime,
-    dryRun: scheduling.dryRun,
-    scheduled: scheduling.scheduled,
-    duplicatePrevented: Boolean(scheduling.duplicatePrevented),
-    category: scheduling.category,
-    warnings,
-    post,
-    oneUpResponse: scheduling.oneUpResponse,
-  };
+    const prompt = buildDailyPrompt({
+      lane,
+      publishDate,
+      history: laneHistory.topics,
+      rssItems: rssContext.items,
+    });
+
+    const sessionId = `ONEUP-${lane.key.toUpperCase()}-${publishDate}`;
+    const generated = await requestStructuredOneUpJson({
+      routeName: "oneupDaily",
+      sessionId,
+      prompt,
+      label: `${lane.key} daily post`,
+      normalise: (raw) => normaliseDailyOutput(raw, lane),
+      maxTokens: ONEUP_DAILY_MAX_TOKENS,
+      temperature: laneKey === "friday" ? 0.8 : 0.65,
+    });
+    if (!generated.content) {
+      const err = new Error(`The ${lane.label} generator returned empty content.`);
+      err.statusCode = 502;
+      throw err;
+    }
+
+    const post = {
+      title: generated.title,
+      topic: generated.topic,
+      firstComment: generated.firstComment,
+      imageUrl,
+      content: ensureHashtags(generated.content, lane.hashtags),
+    };
+
+    const scheduling = await scheduleToOneUp({
+      post,
+      scheduledDateTime,
+      categoryName,
+      socialNetworkId,
+      dryRun,
+      apiKey,
+    });
+
+    const warnings = [...(rssContext.warning ? [rssContext.warning] : []), ...(scheduling.warnings || [])];
+
+    if (scheduling.scheduled) {
+      recordLaneSchedule(laneKey, {
+        scheduledDateTime,
+        topic: post.topic,
+        title: post.title,
+        imageUrl: post.imageUrl,
+      });
+    }
+
+    if (slotClaim.claimed && (scheduling.scheduled || scheduling.duplicatePrevented)) {
+      completeScheduleSlot(slotClaim, {
+        lane: laneKey,
+        scheduledDateTime,
+        topic: post.topic,
+        title: post.title,
+        duplicatePrevented: Boolean(scheduling.duplicatePrevented),
+      });
+    } else {
+      releaseScheduleSlot(slotClaim);
+    }
+
+    info("oneup.daily.complete", {
+      lane: laneKey,
+      publishDate,
+      scheduledDateTime,
+      dryRun: scheduling.dryRun,
+      scheduled: scheduling.scheduled,
+      topic: post.topic,
+      contentHash: contentHash(post.content),
+    });
+
+    return {
+      ok: true,
+      lane: laneKey,
+      publishDate,
+      scheduledDateTime,
+      dryRun: scheduling.dryRun,
+      scheduled: scheduling.scheduled,
+      duplicatePrevented: Boolean(scheduling.duplicatePrevented),
+      category: scheduling.category,
+      warnings,
+      post,
+      oneUpResponse: scheduling.oneUpResponse,
+    };
+  } catch (error) {
+    releaseScheduleSlot(slotClaim);
+    throw error;
+  }
 }
 
 export async function buildAndScheduleEbookWeekly(options = {}) {
@@ -399,73 +493,125 @@ export async function buildAndScheduleEbookWeekly(options = {}) {
   }
 
   const apiKey = options.apiKey || process.env.ONEUP_API_KEY;
+  const dryRun = Boolean(options.dryRun);
   const posts = {};
 
   for (const dayConfig of EBOOK_POST_DAYS) {
     const dayKey = dayConfig.key;
     const publishDate = addDays(weekStartDate, dayConfig.offset);
     const scheduledDateTime = resolveEbookScheduledDateTime(options, dayKey, publishDate);
-    const prompt = buildEbookPostPrompt({
-      day: dayKey,
-      publishDate,
-      featuredBook,
-    });
-
-    const generated = await requestStructuredOneUpJson({
-      routeName: "oneupEbook",
-      sessionId: `ONEUP-EBOOK-${dayKey.toUpperCase()}-${publishDate}`,
-      prompt,
-      label: `${dayKey} ebook post`,
-      normalise: (raw) => normaliseEbookOutput(raw, featuredBook, dayKey),
-      maxTokens: ONEUP_EBOOK_MAX_TOKENS,
-      temperature: dayKey === "saturday" ? 0.65 : 0.55,
-    });
-
-    if (!generated.content) {
-      const err = new Error(`The ${dayKey} ebook generator returned empty content.`);
-      err.statusCode = 502;
-      throw err;
-    }
-
-    const post = {
-      title: generated.title,
-      topic: generated.topic,
-      firstComment: buildEbookFirstComment(featuredBook),
-      imageUrl: options.imageUrl || featuredBook.coverArtUrl || "",
-      manuscriptUrl: featuredBook.manuscriptUrl || "",
-      content: ensureHashtags(generated.content, EBOOK_CONFIG.hashtags),
-    };
-
-    const scheduling = await scheduleToOneUp({
-      post,
+    const imageUrl = options.imageUrl || featuredBook.coverArtUrl || "";
+    const slotClaim = await claimOneUpSlot({
+      scope: `ebooks:${dayKey}`,
       scheduledDateTime,
       categoryName,
       socialNetworkId,
-      dryRun: Boolean(options.dryRun),
+      imageUrl,
+      dryRun,
       apiKey,
+      force: options.force,
     });
 
-    posts[dayKey] = {
-      publishDate,
-      scheduledDateTime,
-      scheduled: scheduling.scheduled,
-      dryRun: scheduling.dryRun,
-      duplicatePrevented: Boolean(scheduling.duplicatePrevented),
-      category: scheduling.category,
-      warnings: scheduling.warnings || [],
-      post,
-      oneUpResponse: scheduling.oneUpResponse,
-    };
+    if (slotClaim.duplicatePrevented) {
+      const duplicate = slotDuplicatePostResult({
+        publishDate,
+        scheduledDateTime,
+        dryRun: false,
+        categoryName,
+        reason: slotClaim.reason,
+      });
+      posts[dayKey] = duplicate;
+      warnings.push(...duplicate.warnings);
+      info("oneup.ebooks.duplicate_prevented", {
+        weekStartDate,
+        day: dayKey,
+        scheduledDateTime,
+        slotKey: slotClaim.key,
+        reason: slotClaim.reason,
+      });
+      continue;
+    }
 
-    warnings.push(...(scheduling.warnings || []));
+    try {
+      const prompt = buildEbookPostPrompt({
+        day: dayKey,
+        publishDate,
+        featuredBook,
+      });
+
+      const generated = await requestStructuredOneUpJson({
+        routeName: "oneupEbook",
+        sessionId: `ONEUP-EBOOK-${dayKey.toUpperCase()}-${publishDate}`,
+        prompt,
+        label: `${dayKey} ebook post`,
+        normalise: (raw) => normaliseEbookOutput(raw, featuredBook, dayKey),
+        maxTokens: ONEUP_EBOOK_MAX_TOKENS,
+        temperature: dayKey === "saturday" ? 0.65 : 0.55,
+      });
+
+      if (!generated.content) {
+        const err = new Error(`The ${dayKey} ebook generator returned empty content.`);
+        err.statusCode = 502;
+        throw err;
+      }
+
+      const post = {
+        title: generated.title,
+        topic: generated.topic,
+        firstComment: buildEbookFirstComment(featuredBook),
+        imageUrl,
+        manuscriptUrl: featuredBook.manuscriptUrl || "",
+        content: ensureHashtags(generated.content, EBOOK_CONFIG.hashtags),
+      };
+
+      const scheduling = await scheduleToOneUp({
+        post,
+        scheduledDateTime,
+        categoryName,
+        socialNetworkId,
+        dryRun,
+        apiKey,
+      });
+
+      posts[dayKey] = {
+        publishDate,
+        scheduledDateTime,
+        scheduled: scheduling.scheduled,
+        dryRun: scheduling.dryRun,
+        duplicatePrevented: Boolean(scheduling.duplicatePrevented),
+        category: scheduling.category,
+        warnings: scheduling.warnings || [],
+        post,
+        oneUpResponse: scheduling.oneUpResponse,
+      };
+
+      if (slotClaim.claimed && (scheduling.scheduled || scheduling.duplicatePrevented)) {
+        completeScheduleSlot(slotClaim, {
+          lane: "ebooks-weekly",
+          day: dayKey,
+          scheduledDateTime,
+          topic: post.topic,
+          title: post.title,
+          featuredBookTitle: featuredBook.title,
+          duplicatePrevented: Boolean(scheduling.duplicatePrevented),
+        });
+      } else {
+        releaseScheduleSlot(slotClaim);
+      }
+
+      warnings.push(...(scheduling.warnings || []));
+    } catch (error) {
+      releaseScheduleSlot(slotClaim);
+      throw error;
+    }
   }
 
-  const dryRun = Object.values(posts).some((item) => item.dryRun);
+  const dryRunResult = Object.values(posts).some((item) => item.dryRun);
 
   info("oneup.ebooks.weekly.complete", {
     weekStartDate,
     featuredBookTitle: featuredBook.title,
-    dryRun,
+    dryRun: dryRunResult,
     contentHashes: Object.fromEntries(Object.entries(posts).map(([day, value]) => [day, contentHash(value.post?.content || "")])),
     imageUrl: featuredBook.coverArtUrl,
     selectionMethod: resolved.selection?.method,
@@ -485,7 +631,7 @@ export async function buildAndScheduleEbookWeekly(options = {}) {
       source: featuredBook.source,
     },
     selection: resolved.selection,
-    dryRun,
+    dryRun: dryRunResult,
     posts,
     warnings: [...new Set(warnings.filter(Boolean))],
   };
@@ -498,108 +644,215 @@ export async function buildAndScheduleQuizSeries(options = {}) {
   const answerDateTime = options.answerScheduledDateTime || toScheduledDateTime(answerPublishDate, QUIZ_CONFIG.answerPublishTime);
   const categoryName = options.categoryName || ONEUP_CATEGORY_NAME_GENERAL;
   const socialNetworkId = options.socialNetworkId || ONEUP_SOCIAL_NETWORK_ID;
-  const quizHistory = getQuizHistory();
-
-  const prompt = buildQuizPrompt({
-    questionDate: questionPublishDate,
-    answerDate: answerPublishDate,
-    history: quizHistory.topics,
-  });
-
-  const sessionId = `ONEUP-QUIZ-${questionPublishDate}`;
-  const generated = await requestStructuredOneUpJson({
-    routeName: "oneupQuiz",
-    sessionId,
-    prompt,
-    label: "quiz pair",
-    normalise: normaliseQuizOutput,
-    maxTokens: ONEUP_QUIZ_MAX_TOKENS,
-    temperature: 0.55,
-  });
-  if (!generated.questionContent || !generated.answerContent) {
-    const err = new Error("The quiz generator returned empty content.");
-    err.statusCode = 502;
-    throw err;
-  }
-
-  const questionPost = {
-    title: generated.questionTitle,
-    topic: generated.topic,
-    firstComment: "",
-    imageUrl: options.questionImageUrl || QUIZ_CONFIG.questionImageUrl,
-    content: ensureHashtags(generated.questionContent, QUIZ_CONFIG.questionHashtags),
-  };
-
-  const answerPost = {
-    title: generated.answerTitle,
-    topic: generated.topic,
-    firstComment: "",
-    imageUrl: options.answerImageUrl || QUIZ_CONFIG.answerImageUrl,
-    content: ensureHashtags(generated.answerContent, QUIZ_CONFIG.answerHashtags),
-  };
-
   const apiKey = options.apiKey || process.env.ONEUP_API_KEY;
-  const questionScheduling = await scheduleToOneUp({
-    post: questionPost,
+  const dryRun = Boolean(options.dryRun);
+  const questionImageUrl = options.questionImageUrl || QUIZ_CONFIG.questionImageUrl;
+  const answerImageUrl = options.answerImageUrl || QUIZ_CONFIG.answerImageUrl;
+
+  const questionSlotClaim = await claimOneUpSlot({
+    scope: "quiz:question",
     scheduledDateTime: questionDateTime,
     categoryName,
     socialNetworkId,
-    dryRun: Boolean(options.dryRun),
+    imageUrl: questionImageUrl,
+    dryRun,
     apiKey,
+    force: options.force,
   });
-
-  const answerScheduling = await scheduleToOneUp({
-    post: answerPost,
+  const answerSlotClaim = await claimOneUpSlot({
+    scope: "quiz:answer",
     scheduledDateTime: answerDateTime,
     categoryName,
     socialNetworkId,
-    dryRun: Boolean(options.dryRun),
+    imageUrl: answerImageUrl,
+    dryRun,
     apiKey,
+    force: options.force,
   });
 
-  if (questionScheduling.scheduled || answerScheduling.scheduled) {
-    recordQuizSchedule({
-      topic: generated.topic,
-      questionDateTime,
-      answerDateTime,
-      questionTitle: questionPost.title,
-      answerTitle: answerPost.title,
-    });
-  }
-
-  info("oneup.quiz.complete", {
-    questionDateTime,
-    answerDateTime,
-    dryRun: questionScheduling.dryRun || answerScheduling.dryRun,
-    topic: generated.topic,
-    questionHash: contentHash(questionPost.content),
-    answerHash: contentHash(answerPost.content),
-  });
-
-  return {
-    ok: true,
-    lane: "quiz",
-    topic: generated.topic,
-    dryRun: questionScheduling.dryRun || answerScheduling.dryRun,
-    question: {
+  if (questionSlotClaim.duplicatePrevented && answerSlotClaim.duplicatePrevented) {
+    const question = slotDuplicatePostResult({
       publishDate: questionPublishDate,
       scheduledDateTime: questionDateTime,
-      scheduled: questionScheduling.scheduled,
-      duplicatePrevented: Boolean(questionScheduling.duplicatePrevented),
-      category: questionScheduling.category,
-      warnings: questionScheduling.warnings || [],
-      post: questionPost,
-      oneUpResponse: questionScheduling.oneUpResponse,
-    },
-    answer: {
+      dryRun: false,
+      categoryName,
+      reason: questionSlotClaim.reason,
+    });
+    const answer = slotDuplicatePostResult({
       publishDate: answerPublishDate,
       scheduledDateTime: answerDateTime,
-      scheduled: answerScheduling.scheduled,
-      duplicatePrevented: Boolean(answerScheduling.duplicatePrevented),
-      category: answerScheduling.category,
-      warnings: answerScheduling.warnings || [],
-      post: answerPost,
-      oneUpResponse: answerScheduling.oneUpResponse,
-    },
-  };
+      dryRun: false,
+      categoryName,
+      reason: answerSlotClaim.reason,
+    });
+
+    info("oneup.quiz.duplicate_prevented", {
+      questionDateTime,
+      answerDateTime,
+      questionReason: questionSlotClaim.reason,
+      answerReason: answerSlotClaim.reason,
+    });
+
+    return {
+      ok: true,
+      lane: "quiz",
+      topic: null,
+      dryRun: false,
+      duplicatePrevented: true,
+      question,
+      answer,
+    };
+  }
+
+  try {
+    const quizHistory = getQuizHistory();
+
+    const prompt = buildQuizPrompt({
+      questionDate: questionPublishDate,
+      answerDate: answerPublishDate,
+      history: quizHistory.topics,
+    });
+
+    const sessionId = `ONEUP-QUIZ-${questionPublishDate}`;
+    const generated = await requestStructuredOneUpJson({
+      routeName: "oneupQuiz",
+      sessionId,
+      prompt,
+      label: "quiz pair",
+      normalise: normaliseQuizOutput,
+      maxTokens: ONEUP_QUIZ_MAX_TOKENS,
+      temperature: 0.55,
+    });
+    if (!generated.questionContent || !generated.answerContent) {
+      const err = new Error("The quiz generator returned empty content.");
+      err.statusCode = 502;
+      throw err;
+    }
+
+    const questionPost = {
+      title: generated.questionTitle,
+      topic: generated.topic,
+      firstComment: "",
+      imageUrl: questionImageUrl,
+      content: ensureHashtags(generated.questionContent, QUIZ_CONFIG.questionHashtags),
+    };
+
+    const answerPost = {
+      title: generated.answerTitle,
+      topic: generated.topic,
+      firstComment: "",
+      imageUrl: answerImageUrl,
+      content: ensureHashtags(generated.answerContent, QUIZ_CONFIG.answerHashtags),
+    };
+
+    const questionScheduling = questionSlotClaim.duplicatePrevented
+      ? slotDuplicatePostResult({
+          publishDate: questionPublishDate,
+          scheduledDateTime: questionDateTime,
+          dryRun: false,
+          categoryName,
+          reason: questionSlotClaim.reason,
+        })
+      : await scheduleToOneUp({
+          post: questionPost,
+          scheduledDateTime: questionDateTime,
+          categoryName,
+          socialNetworkId,
+          dryRun,
+          apiKey,
+        });
+
+    const answerScheduling = answerSlotClaim.duplicatePrevented
+      ? slotDuplicatePostResult({
+          publishDate: answerPublishDate,
+          scheduledDateTime: answerDateTime,
+          dryRun: false,
+          categoryName,
+          reason: answerSlotClaim.reason,
+        })
+      : await scheduleToOneUp({
+          post: answerPost,
+          scheduledDateTime: answerDateTime,
+          categoryName,
+          socialNetworkId,
+          dryRun,
+          apiKey,
+        });
+
+    if (questionScheduling.scheduled || answerScheduling.scheduled) {
+      recordQuizSchedule({
+        topic: generated.topic,
+        questionDateTime,
+        answerDateTime,
+        questionTitle: questionPost.title,
+        answerTitle: answerPost.title,
+      });
+    }
+
+    if (questionSlotClaim.claimed && (questionScheduling.scheduled || questionScheduling.duplicatePrevented)) {
+      completeScheduleSlot(questionSlotClaim, {
+        lane: "quiz",
+        part: "question",
+        scheduledDateTime: questionDateTime,
+        topic: generated.topic,
+        title: questionPost.title,
+        duplicatePrevented: Boolean(questionScheduling.duplicatePrevented),
+      });
+    } else {
+      releaseScheduleSlot(questionSlotClaim);
+    }
+
+    if (answerSlotClaim.claimed && (answerScheduling.scheduled || answerScheduling.duplicatePrevented)) {
+      completeScheduleSlot(answerSlotClaim, {
+        lane: "quiz",
+        part: "answer",
+        scheduledDateTime: answerDateTime,
+        topic: generated.topic,
+        title: answerPost.title,
+        duplicatePrevented: Boolean(answerScheduling.duplicatePrevented),
+      });
+    } else {
+      releaseScheduleSlot(answerSlotClaim);
+    }
+
+    info("oneup.quiz.complete", {
+      questionDateTime,
+      answerDateTime,
+      dryRun: questionScheduling.dryRun || answerScheduling.dryRun,
+      topic: generated.topic,
+      questionHash: contentHash(questionPost.content),
+      answerHash: contentHash(answerPost.content),
+    });
+
+    return {
+      ok: true,
+      lane: "quiz",
+      topic: generated.topic,
+      dryRun: questionScheduling.dryRun || answerScheduling.dryRun,
+      question: {
+        publishDate: questionPublishDate,
+        scheduledDateTime: questionDateTime,
+        scheduled: questionScheduling.scheduled,
+        duplicatePrevented: Boolean(questionScheduling.duplicatePrevented),
+        category: questionScheduling.category,
+        warnings: questionScheduling.warnings || [],
+        post: questionPost,
+        oneUpResponse: questionScheduling.oneUpResponse,
+      },
+      answer: {
+        publishDate: answerPublishDate,
+        scheduledDateTime: answerDateTime,
+        scheduled: answerScheduling.scheduled,
+        duplicatePrevented: Boolean(answerScheduling.duplicatePrevented),
+        category: answerScheduling.category,
+        warnings: answerScheduling.warnings || [],
+        post: answerPost,
+        oneUpResponse: answerScheduling.oneUpResponse,
+      },
+    };
+  } catch (error) {
+    releaseScheduleSlot(questionSlotClaim);
+    releaseScheduleSlot(answerSlotClaim);
+    throw error;
+  }
 }
