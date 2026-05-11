@@ -18,9 +18,12 @@ import rssLinksRoutes from "../services/rss-links/index.js";
 
 const router = express.Router();
 
-const routeRegistry = [
-  { path: "/rss", name: "RSS Feed", routes: rssFeedRoutes },
-  { path: "/rss", name: "RSS Feed Creator", routes: rssRewriteRoutes },
+const rssRoutes = express.Router();
+rssRoutes.use("/", rssFeedRoutes);
+rssRoutes.use("/", rssRewriteRoutes);
+
+export const routeRegistry = [
+  { path: "/rss", name: "RSS", routes: rssRoutes },
   { path: "/script", name: "Script", routes: scriptRoutes },
   { path: "/tts", name: "TTS", routes: ttsRoutes },
   { path: "/artwork", name: "Artwork", routes: artworkRoutes },
