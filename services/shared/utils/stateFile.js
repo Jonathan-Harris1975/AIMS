@@ -11,7 +11,7 @@ const BASE_STATE_DIR = path.resolve(
 const REMOTE_STATE_PREFIX = String(process.env.STATE_REMOTE_PREFIX || "state")
   .replace(/^\/+/, "")
   .replace(/\/+$/, "");
-const KNOWN_REMOTE_FILES = new Set(["job-store.json", "hookdeck-dedupe.json"]);
+const KNOWN_REMOTE_FILES = new Set(["job-store.json", "hookdeck-dedupe.json", "oneup-social-state.json"]);
 const remoteStateCache = new Map();
 
 const remoteStateMode = String(process.env.STATE_BACKEND || "auto").trim().toLowerCase();

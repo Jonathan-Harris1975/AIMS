@@ -58,12 +58,18 @@ function makeKey(scope, eventId) {
   return `${scope}:${eventId}`;
 }
 
+function headerValue(req, name) {
+  const value = req.get?.(name) || req.headers?.[name.toLowerCase()];
+  if (Array.isArray(value)) return value.find((item) => String(item || "").trim());
+  return value;
+}
+
 export function getHookdeckEventId(req) {
   const raw =
-    req.get?.("x-hookdeck-eventid") ||
-    req.get?.("x-hookdeck-event-id") ||
-    req.headers?.["x-hookdeck-eventid"] ||
-    req.headers?.["x-hookdeck-event-id"];
+    headerValue(req, "x-idempotency-key") ||
+    headerValue(req, "x-trigger-run-key") ||
+    headerValue(req, "x-hookdeck-eventid") ||
+    headerValue(req, "x-hookdeck-event-id");
 
   if (typeof raw !== "string") return null;
   const eventId = raw.trim();
