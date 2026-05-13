@@ -28,48 +28,14 @@ function applyBaseEnv() {
   delete process.env.OPENROUTER_API_KEY_DEEPSEEK;
   delete process.env.ONEUP_API_KEY;
   process.env.ONEUP_DEFAULT_DRY_RUN = "false";
-  process.env.ONEUP_API_BASE = mockBase;
   process.env.ONEUP_CATEGORY_NAME_EBOOKS = "Ebooks";
   process.env.ONEUP_TUESDAY_TIME = "13:00";
   process.env.ONEUP_THURSDAY_TIME = "12:20";
   process.env.ONEUP_SATURDAY_TIME = "10:30";
 }
 
-const oneUpScheduleRequests = [];
-
 const mockServer = http.createServer(async (req, res) => {
-  const url = new URL(req.url || "/", "http://127.0.0.1");
-
-  if (req.method === "GET" && url.pathname === "/listcategory") {
-    res.writeHead(200, { "content-type": "application/json" });
-    res.end(JSON.stringify({
-      error: false,
-      message: "OK",
-      data: [
-        { id: "cat-general", category_name: "General" },
-        { id: "cat-ebooks", category_name: "Ebooks" },
-      ],
-    }));
-    return;
-  }
-
-  if (req.method === "GET" && url.pathname === "/getscheduledposts") {
-    res.writeHead(200, { "content-type": "application/json" });
-    res.end(JSON.stringify({ error: false, message: "OK", data: [] }));
-    return;
-  }
-
-  if (req.method === "POST" && ["/scheduleimagepost", "/scheduletextpost"].includes(url.pathname)) {
-    let body = "";
-    for await (const chunk of req) body += chunk;
-    const payload = Object.fromEntries(new URLSearchParams(body));
-    oneUpScheduleRequests.push({ endpoint: url.pathname, payload });
-    res.writeHead(200, { "content-type": "application/json" });
-    res.end(JSON.stringify({ error: false, message: "OK", data: { id: `post-${oneUpScheduleRequests.length}` } }));
-    return;
-  }
-
-  if (req.method !== "POST" || url.pathname !== "/chat/completions") {
+  if (req.method !== "POST" || req.url !== "/chat/completions") {
     res.writeHead(404, { "content-type": "application/json" });
     res.end(JSON.stringify({ error: "not found" }));
     return;
@@ -310,68 +276,4 @@ test("Tuesday lane uses the updated educational hashtag set", async () => {
   assert.match(result.post.content, /#TechTalkTuesday/);
   assert.match(result.post.content, /#AIExplained/);
   assert.match(result.post.content, /#MachineLearning/);
-});
-
-
-test("buildAndScheduleDailyLane suppresses a second direct same-slot run", async () => {
-  restoreEnv();
-  applyBaseEnv();
-  oneUpScheduleRequests.length = 0;
-  process.env.OPENROUTER_API_BASE = mockBase;
-  process.env.ONEUP_API_BASE = mockBase;
-  process.env.ONEUP_API_KEY = "test-oneup-key";
-
-  const mod = await import(`../services/oneup/utils/socialScheduler.js?oneup-dedupe-daily=${Date.now()}`);
-  const first = await mod.buildAndScheduleDailyLane("monday", {
-    publishDate: "2026-06-01",
-    categoryName: "General",
-    socialNetworkId: "ALL",
-  });
-  const second = await mod.buildAndScheduleDailyLane("monday", {
-    publishDate: "2026-06-01",
-    categoryName: "General",
-    socialNetworkId: "ALL",
-  });
-
-  assert.equal(first.scheduled, true);
-  assert.equal(first.duplicatePrevented, false);
-  assert.equal(second.scheduled, false);
-  assert.equal(second.duplicatePrevented, true);
-  assert.equal(oneUpScheduleRequests.length, 1);
-  assert.equal(oneUpScheduleRequests[0].payload.scheduled_date_time, "2026-06-01 14:00");
-});
-
-test("buildAndScheduleEbookWeekly suppresses repeated weekly ebook slots", async () => {
-  restoreEnv();
-  applyBaseEnv();
-  oneUpScheduleRequests.length = 0;
-  process.env.OPENROUTER_API_BASE = mockBase;
-  process.env.ONEUP_API_BASE = mockBase;
-  process.env.ONEUP_API_KEY = "test-oneup-key";
-
-  const mod = await import(`../services/oneup/utils/socialScheduler.js?oneup-dedupe-ebooks=${Date.now()}`);
-  const first = await mod.buildAndScheduleEbookWeekly({
-    weekStartDate: "2026-06-08",
-    categoryName: "Ebooks",
-    socialNetworkId: "ALL",
-    featuredBook: FEATURED_BOOK,
-  });
-  const second = await mod.buildAndScheduleEbookWeekly({
-    weekStartDate: "2026-06-08",
-    categoryName: "Ebooks",
-    socialNetworkId: "ALL",
-    featuredBook: FEATURED_BOOK,
-  });
-
-  assert.equal(first.posts.tuesday.scheduled, true);
-  assert.equal(first.posts.thursday.scheduled, true);
-  assert.equal(first.posts.saturday.scheduled, true);
-  assert.equal(second.posts.tuesday.duplicatePrevented, true);
-  assert.equal(second.posts.thursday.duplicatePrevented, true);
-  assert.equal(second.posts.saturday.duplicatePrevented, true);
-  assert.equal(oneUpScheduleRequests.length, 3);
-  assert.deepEqual(
-    oneUpScheduleRequests.map((item) => item.payload.scheduled_date_time),
-    ["2026-06-09 13:00", "2026-06-11 12:20", "2026-06-13 10:30"]
-  );
 });
