@@ -53,21 +53,6 @@ router.post("/analysis", requireAuditCallbackAuth, asyncRoute(async (req, res) =
     durableStateOk: durableState?.ok !== false,
   });
 
-  if (job.status === "completed" && job.hasAnalysis) {
-    return res.status(200).json({
-      ok: true,
-      auditType: AUDIT_TYPE,
-      sessionId: parsed.data.sessionId,
-      status: "completed",
-      statusUrl,
-      durableState,
-      hasAnalysis: true,
-      analysis: job.analysis,
-      result: { analysis: job.analysis },
-      job,
-    });
-  }
-
   return res.status(202).json({
     ok: true,
     auditType: AUDIT_TYPE,
