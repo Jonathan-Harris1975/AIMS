@@ -265,6 +265,25 @@ function serialiseCompletionError(err) {
   };
 }
 
+function optionalCompletionMetadata(payload = {}) {
+  const metadata = {};
+  for (const key of [
+    "message",
+    "error",
+    "blocked",
+    "hardGateBlocked",
+    "blockedTests",
+    "stage3Blocks",
+    "capabilities",
+    "mobileQualityScore",
+    "releaseVerdict",
+    "confidenceScore",
+  ]) {
+    if (payload[key] !== undefined) metadata[key] = payload[key];
+  }
+  return metadata;
+}
+
 export async function completeAuditRun({ auditType, payload }) {
   if (payload.auditType && payload.auditType !== auditType) {
     throw new Error(`Audit callback type mismatch: expected ${auditType}, received ${payload.auditType}`);
@@ -292,6 +311,7 @@ export async function completeAuditRun({ auditType, payload }) {
     auditBucket: getAuditBucketName(),
     auditPublicBaseUrl: getAuditPublicBaseUrl(),
     updatedAt: payload.finishedAt || new Date().toISOString(),
+    ...optionalCompletionMetadata(payload),
   };
 
   if (status === "queued") {
