@@ -43,3 +43,13 @@ test("audit artefact validation is wired to the dedicated audits bucket/public b
   assert.match(orchestrator, /assertCompletedAuditArtifactUrls\(payload\)/);
   assert.match(orchestrator, /Audit callback type mismatch/);
 });
+
+
+test("mobile UX failed callbacks preserve hard-gate diagnostic metadata in job/latest state", () => {
+  const orchestrator = fs.readFileSync("audits/utils/orchestrator.js", "utf8");
+
+  assert.match(orchestrator, /function optionalCompletionMetadata\(payload = \{\}\)/);
+  assert.match(orchestrator, /"hardGateBlocked"/);
+  assert.match(orchestrator, /"blockedTests"/);
+  assert.match(orchestrator, /\.\.\.optionalCompletionMetadata\(payload\)/);
+});
