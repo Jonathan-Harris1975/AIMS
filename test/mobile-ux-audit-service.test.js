@@ -71,15 +71,18 @@ test("mobile UX callback schema and metadata preserve production report artefact
   const publisher = fs.readFileSync("audits/utils/publishAuditArtifacts.js", "utf8");
   const schemas = fs.readFileSync("services/shared/utils/requestSchemas.js", "utf8");
 
-  for (const field of [
-    "reportJsonUrl",
-    "screenshotManifestUrl",
-    "focusedPageAppendixUrl",
-    "repositoryIssueAppendixUrl",
-    "mandatoryMobileScorecardUrl",
-    "responsiveFixAppendixUrl",
+  for (const [field, artefactName] of [
+    ["reportJsonUrl", "report.json"],
+    ["screenshotManifestUrl", "screenshot-manifest.json"],
+    ["focusedPageAppendixUrl", "focused-page-appendix.json"],
+    ["repositoryIssueAppendixUrl", "repository-issue-appendix.json"],
+    ["mandatoryMobileScorecardUrl", "mandatory-mobile-scorecard.json"],
+    ["responsiveFixAppendixUrl", "responsive-fix-appendix.json"],
   ]) {
-    assert.ok(orchestrator.includes(`${field}: payload.${field}`), `${field} missing from job metadata`);
+    assert.ok(
+      orchestrator.includes(`${field}: callbackUrlForArtefact(payload, "${field}", "${artefactName}")`),
+      `${field} missing from job metadata artefact fallback`
+    );
     assert.ok(publisher.includes(`payload.${field}`), `${field} missing from artefact URL extraction`);
     assert.ok(schemas.includes(`${field}: z.string().trim().url().optional()`), `${field} missing from callback schema`);
   }
@@ -109,4 +112,18 @@ test("completed mobile UX callbacks require the full production artefact set", (
   assert.match(orchestrator, /Completed Mobile UX callback is missing required artefact URL/);
   assert.match(orchestrator, /Completed Mobile UX callback must include screenshotCount greater than 0/);
   assert.match(orchestrator, /Completed Mobile UX callback must include mobileFailureCount/);
+});
+
+test("mobile UX job metadata preserves artefact URLs from nested artefact maps and split confidence", () => {
+  const orchestrator = fs.readFileSync("audits/utils/orchestrator.js", "utf8");
+  const schemas = fs.readFileSync("services/shared/utils/requestSchemas.js", "utf8");
+
+  assert.match(orchestrator, /callbackUrlForArtefact\(payload, "reportJsonUrl", "report\.json"\)/);
+  assert.match(orchestrator, /evidenceUrl: callbackUrlForArtefact\(payload, "evidenceUrl", "evidence\.json"\)/);
+  assert.match(orchestrator, /"confidenceModel"/);
+  assert.match(orchestrator, /"executionCoverageConfidence"/);
+  assert.match(orchestrator, /"releaseConfidence"/);
+  assert.match(orchestrator, /"rootCauseGroupCount"/);
+  assert.match(schemas, /confidenceModel: z\.record\(z\.string\(\), z\.any\(\)\)\.optional\(\)/);
+  assert.match(schemas, /rootCauseGroupCount: z\.coerce\.number\(\)\.int\(\)\.min\(0\)\.optional\(\)/);
 });
