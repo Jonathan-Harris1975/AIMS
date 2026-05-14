@@ -366,6 +366,55 @@ async function publishControlledFailureArtifacts({ auditType, sessionId, payload
   };
 }
 
+const MOBILE_UX_REQUIRED_COMPLETION_URLS = [
+  ["reportUrl", "report.html"],
+  ["reportJsonUrl", "report.json"],
+  ["summaryUrl", "summary.json"],
+  ["coverageUrl", "coverage.json"],
+  ["executionUrl", "execution.json"],
+  ["preflightUrl", "preflight.json"],
+  ["evidenceUrl", "evidence.json"],
+  ["screenshotManifestUrl", "screenshot-manifest.json"],
+  ["focusedPageAppendixUrl", "focused-page-appendix.json"],
+  ["repositoryIssueAppendixUrl", "repository-issue-appendix.json"],
+  ["mandatoryMobileScorecardUrl", "mandatory-mobile-scorecard.json"],
+  ["responsiveFixAppendixUrl", "responsive-fix-appendix.json"],
+];
+
+function isUsableCallbackUrl(value) {
+  if (value === undefined || value === null) return false;
+  const text = String(value).trim();
+  return Boolean(text) && !["undefined", "null", "false"].includes(text.toLowerCase());
+}
+
+function callbackUrlForArtefact(payload = {}, directKey, artefactName) {
+  if (isUsableCallbackUrl(payload[directKey])) return String(payload[directKey]).trim();
+  if (payload.artefacts && typeof payload.artefacts === "object" && isUsableCallbackUrl(payload.artefacts[artefactName])) {
+    return String(payload.artefacts[artefactName]).trim();
+  }
+  return null;
+}
+
+function assertCompletedMobileUxPayload(payload = {}) {
+  const missing = MOBILE_UX_REQUIRED_COMPLETION_URLS
+    .filter(([directKey, artefactName]) => !callbackUrlForArtefact(payload, directKey, artefactName))
+    .map(([, artefactName]) => artefactName);
+
+  if (missing.length) {
+    throw new Error(`Completed Mobile UX callback is missing required artefact URL(s): ${missing.join(", ")}`);
+  }
+
+  if (payload.screenshotCount === undefined || payload.screenshotCount === null || Number(payload.screenshotCount) <= 0) {
+    throw new Error("Completed Mobile UX callback must include screenshotCount greater than 0");
+  }
+
+  if (payload.mobileFailureCount === undefined || payload.mobileFailureCount === null) {
+    throw new Error("Completed Mobile UX callback must include mobileFailureCount");
+  }
+
+  return true;
+}
+
 function optionalCompletionMetadata(payload = {}) {
   const metadata = {};
   for (const key of [
@@ -401,10 +450,16 @@ export async function completeAuditRun({ auditType, payload }) {
   const jobMetadata = {
     reportPrefix: payload.reportPrefix,
     reportUrl: payload.reportUrl || null,
+    reportJsonUrl: payload.reportJsonUrl || null,
     summaryUrl: payload.summaryUrl || null,
     coverageUrl: payload.coverageUrl || null,
     executionUrl: payload.executionUrl || payload.evidenceUrl || null,
     preflightUrl: payload.preflightUrl || payload.reconciliationUrl || null,
+    screenshotManifestUrl: payload.screenshotManifestUrl || null,
+    focusedPageAppendixUrl: payload.focusedPageAppendixUrl || null,
+    repositoryIssueAppendixUrl: payload.repositoryIssueAppendixUrl || null,
+    mandatoryMobileScorecardUrl: payload.mandatoryMobileScorecardUrl || null,
+    responsiveFixAppendixUrl: payload.responsiveFixAppendixUrl || null,
     workflowRunUrl: payload.workflowRunUrl || null,
     screenshotCount: payload.screenshotCount ?? null,
     mobileFailureCount: payload.mobileFailureCount ?? null,
@@ -458,13 +513,32 @@ export async function completeAuditRun({ auditType, payload }) {
   } else {
     try {
       assertCompletedAuditArtifactUrls(payload);
+      if (auditType === "mobile-ux") {
+        assertCompletedMobileUxPayload(payload);
+      }
       completeJob(jobType, sessionId, {
         ...jobMetadata,
         finishedAt: payload.finishedAt || new Date().toISOString(),
       });
       await cleanupAuditPrefix({
         reportPrefix: payload.reportPrefix,
-        keepNames: ["request.json", "report.json", "report.html", "summary.json", "coverage.json", "evidence.json", "execution.json", "preflight.json", "reconciliation.json"],
+        keepNames: [
+          "request.json",
+          "report.json",
+          "report.html",
+          "summary.json",
+          "coverage.json",
+          "evidence.json",
+          "execution.json",
+          "preflight.json",
+          "reconciliation.json",
+          "screenshot-manifest.json",
+          "focused-page-appendix.json",
+          "repository-issue-appendix.json",
+          "mandatory-mobile-scorecard.json",
+          "responsive-fix-appendix.json",
+        ],
+        keepPrefixes: ["screenshots", "appendices", "capability-probe"],
       });
     } catch (err) {
       const safeError = serialiseCompletionError(err);

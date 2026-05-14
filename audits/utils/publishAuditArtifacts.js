@@ -83,14 +83,19 @@ function flattenArtefactValues(value) {
 function artefactUrlsFromPayload(payload = {}) {
   const direct = [
     payload.reportUrl,
+    payload.reportHtmlUrl,
+    payload.reportJsonUrl,
     payload.summaryUrl,
     payload.coverageUrl,
     payload.executionUrl,
     payload.preflightUrl,
     payload.evidenceUrl,
     payload.reconciliationUrl,
-    payload.reportJsonUrl,
-    payload.reportHtmlUrl,
+    payload.screenshotManifestUrl,
+    payload.focusedPageAppendixUrl,
+    payload.repositoryIssueAppendixUrl,
+    payload.mandatoryMobileScorecardUrl,
+    payload.responsiveFixAppendixUrl,
     payload.latestUrl,
   ];
   const artefactValues = payload.artefacts && typeof payload.artefacts === "object"
@@ -177,26 +182,39 @@ export async function publishAuditLatest({ auditType, sessionId, payload }) {
   return { key, url: published.url };
 }
 
-export async function cleanupAuditPrefix({ reportPrefix, keepNames = [] }) {
+function normaliseKeepPrefix(value) {
+  const cleaned = String(value || "").trim().replace(/^\/+/, "").replace(/\/+$/, "");
+  return cleaned ? `${cleaned}/` : "";
+}
+
+function shouldKeepAuditKey({ key, prefixRoot, keepNames, keepPrefixes }) {
+  const relative = key.slice(prefixRoot.length);
+  const leaf = relative.split("/").pop() || "";
+  if (keepNames.has(leaf)) return true;
+  return keepPrefixes.some((prefix) => relative.startsWith(prefix));
+}
+
+export async function cleanupAuditPrefix({ reportPrefix, keepNames = [], keepPrefixes = [] }) {
   if (!reportPrefix) return { deleted: [] };
   const { bucket } = assertAuditR2Config();
   const keep = new Set(keepNames);
+  const preservedPrefixes = keepPrefixes.map(normaliseKeepPrefix).filter(Boolean);
   const client = getClient();
   let continuationToken;
   const keysToDelete = [];
+  const prefixRoot = `${reportPrefix.replace(/\/$/, "")}/`;
 
   do {
     const response = await client.send(new ListObjectsV2Command({
       Bucket: bucket,
-      Prefix: `${reportPrefix.replace(/\/$/, "")}/`,
+      Prefix: prefixRoot,
       ContinuationToken: continuationToken,
     }));
 
     for (const item of response.Contents || []) {
       const key = item.Key || "";
       if (!key) continue;
-      const leaf = key.split("/").pop() || "";
-      if (!keep.has(leaf)) {
+      if (!shouldKeepAuditKey({ key, prefixRoot, keepNames: keep, keepPrefixes: preservedPrefixes })) {
         keysToDelete.push({ Key: key });
       }
     }
