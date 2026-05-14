@@ -1,25 +1,17 @@
 import "dotenv/config";
 import { spawn } from "node:child_process";
-import { once } from "node:events";
 import { info, debug, warn, error } from "../logger.js";
 
 const STEP_TIMEOUT_MS = Number(process.env.BOOTSTRAP_STEP_TIMEOUT_MS) || 120_000;
+const POST_START_STEP_TIMEOUT_MS = Number(process.env.BOOTSTRAP_POST_START_STEP_TIMEOUT_MS) || STEP_TIMEOUT_MS;
 
 function parseBoolean(value, fallback = false) {
   if (value === undefined || value === null || value === "") return fallback;
   if (typeof value === "boolean") return value;
-  const normalized = String(value).trim().toLowerCase();
-  if (["1", "true", "yes", "on"].includes(normalized)) return true;
-  if (["0", "false", "no", "off"].includes(normalized)) return false;
+  const normalised = String(value).trim().toLowerCase();
+  if (["1", "true", "yes", "on"].includes(normalised)) return true;
+  if (["0", "false", "no", "off"].includes(normalised)) return false;
   return fallback;
-}
-
-function shouldRunRssInitOnBoot() {
-  return parseBoolean(process.env.RSS_INIT_ON_BOOT, true);
-}
-
-function isRssInitRequiredBeforeListen() {
-  return parseBoolean(process.env.RSS_INIT_REQUIRED_ON_BOOT, false);
 }
 
 function runNodeScript(scriptPath, label, { optional = false, timeoutMs = STEP_TIMEOUT_MS } = {}) {
@@ -74,25 +66,54 @@ function runNodeScript(scriptPath, label, { optional = false, timeoutMs = STEP_T
   });
 }
 
-async function main() {
-  debug("bootstrap.start", { stepTimeoutMs: STEP_TIMEOUT_MS });
+function waitForListening(server, timeoutMs = Number(process.env.BOOTSTRAP_LISTEN_TIMEOUT_MS) || 30_000) {
+  if (server?.listening) return Promise.resolve();
 
-  const hasRssStorage = Boolean(process.env.R2_BUCKET_RSS_FEEDS);
-  const runRssInitOnBoot = shouldRunRssInitOnBoot() && hasRssStorage;
-  const rssInitRequiredBeforeListen = runRssInitOnBoot && isRssInitRequiredBeforeListen();
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      cleanup();
+      reject(new Error(`Server did not begin listening within ${timeoutMs}ms`));
+    }, timeoutMs);
+    timer.unref?.();
 
-  if (rssInitRequiredBeforeListen) {
+    function cleanup() {
+      clearTimeout(timer);
+      server?.off?.("listening", onListening);
+      server?.off?.("error", onError);
+    }
+
+    function onListening() {
+      cleanup();
+      resolve();
+    }
+
+    function onError(err) {
+      cleanup();
+      reject(err);
+    }
+
+    server.once("listening", onListening);
+    server.once("error", onError);
+  });
+}
+
+async function runPostStartChecks() {
+  const startupCheckRequired = parseBoolean(process.env.STARTUP_CHECK_REQUIRED_ON_BOOT, false);
+  await runNodeScript("./scripts/startupCheck.js", "Startup Check", {
+    optional: !startupCheckRequired,
+    timeoutMs: POST_START_STEP_TIMEOUT_MS,
+  });
+
+  const rssInitEnabled = parseBoolean(process.env.RSS_INIT_ON_BOOT, true);
+  if (rssInitEnabled) {
+    const rssInitRequired = parseBoolean(process.env.RSS_INIT_REQUIRED_ON_BOOT, false);
     await runNodeScript("./services/rss-feed-creator/startup/rss-init.js", "RSS Init", {
-      optional: false,
+      optional: !rssInitRequired,
+      timeoutMs: Number(process.env.RSS_INIT_POST_START_TIMEOUT_MS) || POST_START_STEP_TIMEOUT_MS,
     });
-  } else if (!hasRssStorage) {
-    warn("bootstrap.rss_init.skipped", {
-      reason: "R2_BUCKET_RSS_FEEDS not configured",
-    });
+  } else {
+    info("bootstrap.step.skipped", { label: "RSS Init", reason: "RSS_INIT_ON_BOOT=false" });
   }
-
-  await runNodeScript("./scripts/startupCheck.js", "Startup Check");
-  await runNodeScript("./scripts/tempStorage.js", "Temp Storage Check");
 
   // One-time migration: force-convert all plain-text transcripts to HTML.
   // Set BACKFILL_TRANSCRIPT_HTML=true in the deployment environment to trigger
@@ -105,29 +126,36 @@ async function main() {
       { optional: true, timeoutMs: Number(process.env.BACKFILL_TRANSCRIPT_HTML_TIMEOUT_MS) || 600_000 }
     );
   }
+}
+
+async function main() {
+  debug("bootstrap.start", {
+    stepTimeoutMs: STEP_TIMEOUT_MS,
+    postStartStepTimeoutMs: POST_START_STEP_TIMEOUT_MS,
+  });
+
+  await runNodeScript("./scripts/tempStorage.js", "Temp Storage Check", {
+    optional: false,
+    timeoutMs: Math.min(STEP_TIMEOUT_MS, 30_000),
+  });
 
   info("bootstrap.server.starting");
   const { startServer } = await import("../server.js");
   const server = startServer();
-  if (!server.listening) {
-    await Promise.race([
-      once(server, "listening"),
-      once(server, "error").then(([err]) => {
-        throw err;
-      }),
-    ]);
-  }
+  await waitForListening(server);
+  info("bootstrap.server.listening", {
+    port: process.env.PORT || 3000,
+    postStartChecks: "scheduled",
+  });
 
-  if (runRssInitOnBoot && !rssInitRequiredBeforeListen) {
-    runNodeScript("./services/rss-feed-creator/startup/rss-init.js", "RSS Init", {
-      optional: true,
-      timeoutMs: Number(process.env.RSS_INIT_POST_START_TIMEOUT_MS) || STEP_TIMEOUT_MS,
-    }).catch((err) => {
-      warn("bootstrap.rss_init.post_start.fail", {
-        error: err?.message || String(err),
-      });
+  runPostStartChecks()
+    .then(() => info("bootstrap.post_start.complete"))
+    .catch((err) => {
+      error("bootstrap.post_start.fail", { error: err?.stack || err?.message || String(err) });
+      if (parseBoolean(process.env.BOOTSTRAP_POST_START_FAILS_PROCESS, false)) {
+        process.exit(1);
+      }
     });
-  }
 
   info("bootstrap.complete");
 }
