@@ -144,11 +144,23 @@ async function hydrateRemoteState() {
   }
 }
 
-const remoteHydrationReady = hydrateRemoteState().catch((err) => {
-  warn("state.remote.hydrate.background_fail", {
-    error: err?.message || String(err),
+let remoteStateHydration = Promise.resolve(false);
+
+if (remoteStateEnabled) {
+  remoteStateHydration = hydrateRemoteState().then(() => true);
+  remoteStateHydration.catch((err) => {
+    warn("state.remote.initial_hydrate.fail", {
+      error: err?.message || String(err),
+    });
   });
-});
+} else {
+  warnIfUsingLocalOnlyState();
+}
+
+
+export async function waitForRemoteStateHydration() {
+  return remoteStateHydration;
+}
 
 function queueRemoteWrite(filename, value) {
   if (!remoteStateEnabled) {
@@ -221,8 +233,6 @@ export function writeJsonState(filename, value) {
 
 
 export async function readJsonStateFresh(filename, fallback) {
-  await remoteHydrationReady;
-
   if (!remoteStateEnabled) {
     return readJsonState(filename, fallback);
   }
@@ -255,7 +265,6 @@ export async function readJsonStateFresh(filename, fallback) {
 }
 
 export async function flushStateWrites({ throwOnError = false } = {}) {
-  await remoteHydrationReady;
   await remoteWriteQueue;
   if (throwOnError && lastRemoteWriteError) {
     throw lastRemoteWriteError;
