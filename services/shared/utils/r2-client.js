@@ -19,6 +19,12 @@ import {
   DeleteObjectCommand,
 } from "@aws-sdk/client-s3";
 import { log } from "../../../logger.js";
+import {
+  getDurableStateBucketEnvName,
+  getDurableStateBucketName,
+  getDurableStatePublicBaseUrl,
+  getDurableStatePublicUrlEnvName,
+} from "./durableStateEnv.js";
 
 // ------------------------------------------------------------
 // 🔧 Environment Variables
@@ -87,6 +93,10 @@ const {
 
 const RAW_AUDIO_BUCKET_NAME = R2_BUCKET_CHUNKS || R2_BUCKET_RAW;
 const TRANSCRIPT_PUBLIC_BASE_URL = R2_PUBLIC_BASE_URL_TRANSCRIPT_HTML || R2_PUBLIC_BASE_URL_TRANSCRIPT;
+const META_SYSTEM_BUCKET_NAME = getDurableStateBucketName(process.env);
+const META_SYSTEM_BUCKET_ENV_NAME = getDurableStateBucketEnvName(process.env);
+const META_SYSTEM_PUBLIC_BASE_URL = getDurableStatePublicBaseUrl(process.env);
+const META_SYSTEM_PUBLIC_URL_ENV_NAME = getDurableStatePublicUrlEnvName(process.env);
 
 // ------------------------------------------------------------
 // 🧠 Initialize Client
@@ -192,8 +202,8 @@ export const R2_BUCKETS = {
   R2_BUCKET_RAW_TEXT_INPUT,
 
   // NEW — metasystem bucket (episode-counter + system files)
-  metasystem:      R2_BUCKET_META_SYSTEM,
-  metaSystem:      R2_BUCKET_META_SYSTEM,
+  metasystem:      META_SYSTEM_BUCKET_NAME,
+  metaSystem:      META_SYSTEM_BUCKET_NAME,
 };
 
 // ------------------------------------------------------------
@@ -234,8 +244,8 @@ export const BUCKET_ENV_BY_ALIAS = {
   brandAssets: "R2_BUCKET_BRAND_ASSETS",
   brandassets: "R2_BUCKET_BRAND_ASSETS",
   "brand-assets": "R2_BUCKET_BRAND_ASSETS",
-  metasystem: "R2_BUCKET_META_SYSTEM",
-  metaSystem: "R2_BUCKET_META_SYSTEM",
+  metasystem: META_SYSTEM_BUCKET_ENV_NAME,
+  metaSystem: META_SYSTEM_BUCKET_ENV_NAME,
 };
 
 export const PUBLIC_URL_ENV_BY_ALIAS = {
@@ -268,8 +278,8 @@ export const PUBLIC_URL_ENV_BY_ALIAS = {
   brandAssets: "R2_PUBLIC_BASE_URL_BRAND_ASSETS",
   brandassets: "R2_PUBLIC_BASE_URL_BRAND_ASSETS",
   "brand-assets": "R2_PUBLIC_BASE_URL_BRAND_ASSETS",
-  metasystem: "R2_PUBLIC_BASE_URL_META_SYSTEM",
-  metaSystem: "R2_PUBLIC_BASE_URL_META_SYSTEM",
+  metasystem: META_SYSTEM_PUBLIC_URL_ENV_NAME,
+  metaSystem: META_SYSTEM_PUBLIC_URL_ENV_NAME,
 };
 
 export const R2_PUBLIC_URLS = {
@@ -317,14 +327,14 @@ export const R2_PUBLIC_URLS = {
   "brand-assets":  R2_PUBLIC_BASE_URL_BRAND_ASSETS,
 
   // NEW — metasystem public URL
-  metasystem:      R2_PUBLIC_BASE_URL_META_SYSTEM,
+  metasystem:      META_SYSTEM_PUBLIC_BASE_URL,
 
   // Legacy/compat (read-only)
   R2_PUBLIC_BASE_URL_RSS_FEEDS,
 
   // Legacy/compat (read-only)
   R2_PUBLIC_BASE_URL_PODCAST_OUTPUT,
-  metaSystem:      R2_PUBLIC_BASE_URL_META_SYSTEM,
+  metaSystem:      META_SYSTEM_PUBLIC_BASE_URL,
 
   // Legacy/compat (read-only)
   R2_PUBLIC_BASE_URL_RSS_FEEDS,
