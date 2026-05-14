@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 
 import { wait } from "../../shared/utils/wait.js";
+import { durableStateEnvHint, hasDurableStateEnv } from "../../shared/utils/durableStateEnv.js";
 import { info, warn } from "../../../logger.js";
 
 import { runKeyword } from "./outreachService.js";
@@ -45,12 +46,7 @@ function isProductionEnv(value = process.env.NODE_ENV) {
 }
 
 function hasDurableR2ProgressEnv() {
-  return Boolean(
-    process.env.R2_ENDPOINT &&
-      process.env.R2_ACCESS_KEY_ID &&
-      process.env.R2_SECRET_ACCESS_KEY &&
-      process.env.R2_BUCKET_META_SYSTEM
-  );
+  return hasDurableStateEnv(process.env);
 }
 
 function canUseLocalFallback() {
@@ -63,7 +59,7 @@ function ensureLocalFallbackAllowed(reason) {
   }
 
   throw new Error(
-    `${reason}. Outreach batch progress cannot fall back to local filesystem state in production. Configure R2_ENDPOINT, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, and R2_BUCKET_META_SYSTEM, or set ALLOW_EPHEMERAL_STATE=true only if you intentionally accept cursor loss across restarts.`
+    `${reason}. Outreach batch progress cannot fall back to local filesystem state in production. ${durableStateEnvHint()}`
   );
 }
 
