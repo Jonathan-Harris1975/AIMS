@@ -4,6 +4,7 @@ import { constants } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { info, error, debug } from "../logger.js";
+import { durableStateEnvHint, hasDurableStateEnv } from "../services/shared/utils/durableStateEnv.js";
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const requiredEntryModules = [
@@ -93,21 +94,14 @@ function assertProductionStateConfig() {
   const nodeEnv = String(process.env.NODE_ENV || "").trim().toLowerCase();
   const allowEphemeralState = parseBoolean(process.env.ALLOW_EPHEMERAL_STATE, false);
   const stateBackend = String(process.env.STATE_BACKEND || "auto").trim().toLowerCase();
-  const hasRemoteStateEnv = Boolean(
-    process.env.R2_ENDPOINT &&
-      process.env.R2_ACCESS_KEY_ID &&
-      process.env.R2_SECRET_ACCESS_KEY &&
-      process.env.R2_BUCKET_META_SYSTEM
-  );
+  const hasRemoteStateEnv = hasDurableStateEnv(process.env);
 
   if (nodeEnv !== "production" || allowEphemeralState) {
     return;
   }
 
   if (!hasRemoteStateEnv || stateBackend === "local") {
-    throw new Error(
-      "Production state backend is not durable. Configure R2_BUCKET_META_SYSTEM with STATE_BACKEND=auto or r2, or set ALLOW_EPHEMERAL_STATE=true only if you intentionally accept state loss across container restarts."
-    );
+    throw new Error(`Production state backend is not durable. ${durableStateEnvHint()}`);
   }
 }
 
