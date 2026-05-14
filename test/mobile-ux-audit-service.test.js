@@ -53,3 +53,60 @@ test("mobile UX failed callbacks preserve hard-gate diagnostic metadata in job/l
   assert.match(orchestrator, /"blockedTests"/);
   assert.match(orchestrator, /\.\.\.optionalCompletionMetadata\(payload\)/);
 });
+
+test("completed mobile UX cleanup preserves screenshot and appendix prefixes", () => {
+  const orchestrator = fs.readFileSync("audits/utils/orchestrator.js", "utf8");
+  const publisher = fs.readFileSync("audits/utils/publishAuditArtifacts.js", "utf8");
+
+  assert.match(orchestrator, /keepPrefixes:\s*\["screenshots", "appendices", "capability-probe"\]/);
+  assert.match(orchestrator, /"screenshot-manifest\.json"/);
+  assert.match(orchestrator, /"mandatory-mobile-scorecard\.json"/);
+  assert.match(publisher, /function shouldKeepAuditKey/);
+  assert.match(publisher, /relative\.startsWith\(prefix\)/);
+});
+
+
+test("mobile UX callback schema and metadata preserve production report artefact URLs", () => {
+  const orchestrator = fs.readFileSync("audits/utils/orchestrator.js", "utf8");
+  const publisher = fs.readFileSync("audits/utils/publishAuditArtifacts.js", "utf8");
+  const schemas = fs.readFileSync("services/shared/utils/requestSchemas.js", "utf8");
+
+  for (const field of [
+    "reportJsonUrl",
+    "screenshotManifestUrl",
+    "focusedPageAppendixUrl",
+    "repositoryIssueAppendixUrl",
+    "mandatoryMobileScorecardUrl",
+    "responsiveFixAppendixUrl",
+  ]) {
+    assert.ok(orchestrator.includes(`${field}: payload.${field}`), `${field} missing from job metadata`);
+    assert.ok(publisher.includes(`payload.${field}`), `${field} missing from artefact URL extraction`);
+    assert.ok(schemas.includes(`${field}: z.string().trim().url().optional()`), `${field} missing from callback schema`);
+  }
+});
+
+test("completed mobile UX callbacks require the full production artefact set", () => {
+  const orchestrator = fs.readFileSync("audits/utils/orchestrator.js", "utf8");
+
+  assert.match(orchestrator, /const MOBILE_UX_REQUIRED_COMPLETION_URLS = \[/);
+  for (const artefact of [
+    "report.html",
+    "report.json",
+    "summary.json",
+    "coverage.json",
+    "execution.json",
+    "preflight.json",
+    "evidence.json",
+    "screenshot-manifest.json",
+    "focused-page-appendix.json",
+    "repository-issue-appendix.json",
+    "mandatory-mobile-scorecard.json",
+    "responsive-fix-appendix.json",
+  ]) {
+    assert.ok(orchestrator.includes(artefact), `${artefact} not required`);
+  }
+  assert.match(orchestrator, /assertCompletedMobileUxPayload\(payload\)/);
+  assert.match(orchestrator, /Completed Mobile UX callback is missing required artefact URL/);
+  assert.match(orchestrator, /Completed Mobile UX callback must include screenshotCount greater than 0/);
+  assert.match(orchestrator, /Completed Mobile UX callback must include mobileFailureCount/);
+});
