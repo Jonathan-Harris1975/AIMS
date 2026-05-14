@@ -1,0 +1,11 @@
+# Koyeb/native buildpack fallback.
+# The Dockerfile remains the preferred production image, but if the service is
+# configured to use a native builder this ensures podcast audio tooling exists.
+[phases.setup]
+nixPkgs = ["nodejs_20", "ffmpeg"]
+
+[phases.install]
+cmds = ["npm ci --omit=dev"]
+
+[start]
+cmd = "npm start"
