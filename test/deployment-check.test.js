@@ -79,6 +79,16 @@ test("deployment-check CLI loads values from .env in the repository root", async
   }
 });
 
+test("deployment-check accepts legacy R2_META_BUCKET for durable state compatibility", () => {
+  const env = buildBaseEnv({
+    R2_BUCKET_META_SYSTEM: "",
+    R2_META_BUCKET: "legacy-meta-bucket",
+  });
+
+  assert.equal(getDurableStateError(env), null);
+  assert.equal(runDeploymentCheck(env), 0);
+});
+
 test("deployment-check rejects production envs without durable state configuration", () => {
   const env = buildBaseEnv({
     R2_ENDPOINT: "",
