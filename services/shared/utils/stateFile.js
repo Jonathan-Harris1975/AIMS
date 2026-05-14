@@ -23,6 +23,7 @@ const remoteStateEnabled =
 let warnedRemoteStateDisabled = false;
 let remoteWriteQueue = Promise.resolve();
 let lastRemoteWriteError = null;
+let remoteHydrationPromise = null;
 
 function parseBoolean(value, fallback = false) {
   if (value === undefined || value === null || value === "") return fallback;
@@ -137,7 +138,24 @@ async function hydrateRemoteState() {
   }
 }
 
-await hydrateRemoteState();
+function startRemoteHydration() {
+  if (!remoteStateEnabled) {
+    warnIfUsingLocalOnlyState();
+    return Promise.resolve();
+  }
+
+  if (!remoteHydrationPromise) {
+    remoteHydrationPromise = hydrateRemoteState().catch((err) => {
+      warn("state.remote.hydrate.unhandled", {
+        error: err?.message || String(err),
+      });
+    });
+  }
+
+  return remoteHydrationPromise;
+}
+
+startRemoteHydration();
 
 function queueRemoteWrite(filename, value) {
   if (!remoteStateEnabled) {
@@ -214,6 +232,8 @@ export async function readJsonStateFresh(filename, fallback) {
     return readJsonState(filename, fallback);
   }
 
+  await startRemoteHydration();
+
   const key = remoteStateKey(filename);
 
   try {
@@ -239,6 +259,10 @@ export async function readJsonStateFresh(filename, fallback) {
     });
     return readJsonState(filename, fallback);
   }
+}
+
+export async function hydrateStateFromRemote() {
+  return startRemoteHydration();
 }
 
 export async function flushStateWrites({ throwOnError = false } = {}) {
