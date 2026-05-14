@@ -113,3 +113,53 @@ test("bootstrap exposes health before optional RSS initialisation", async () => 
     await waitForExit(child, 10_000).catch(() => null);
   }
 });
+
+test("bootstrap keeps /health alive when post-start startup check fails by default", async () => {
+  const port = 44_000 + Math.floor(Math.random() * 1_000);
+  const child = spawn(process.execPath, ["scripts/bootstrap.js"], {
+    cwd: repoRoot,
+    env: {
+      ...process.env,
+      NODE_ENV: "production",
+      LOG_LEVEL: "silent",
+      PORT: String(port),
+      STARTUP_CHECK_SCRIPT: "./test/fixtures/failing-startup-check.js",
+      RSS_INIT_ON_BOOT: "false",
+      SERVER_LISTEN_TIMEOUT_MS: "5000",
+      BOOTSTRAP_STEP_TIMEOUT_MS: "1000",
+      R2_ENDPOINT: "https://example.invalid",
+      R2_ACCESS_KEY_ID: "test-access",
+      R2_SECRET_ACCESS_KEY: "test-secret",
+      R2_BUCKET_META_SYSTEM: "metasystem",
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  let stdout = "";
+  let stderr = "";
+  child.stdout.on("data", (chunk) => {
+    stdout += String(chunk);
+  });
+  child.stderr.on("data", (chunk) => {
+    stderr += String(chunk);
+  });
+
+  try {
+    let response;
+    for (let attempt = 0; attempt < 120; attempt += 1) {
+      try {
+        response = await fetch(`http://127.0.0.1:${port}/health`);
+        if (response.ok) break;
+      } catch {}
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+
+    assert.ok(response?.ok, `health did not respond before timeout; stdout=${stdout}; stderr=${stderr}`);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    assert.equal(child.exitCode, null, `bootstrap exited after optional startup check failure; stdout=${stdout}; stderr=${stderr}`);
+  } finally {
+    child.kill("SIGTERM");
+    await waitForExit(child, 10_000).catch(() => null);
+  }
+});
+
