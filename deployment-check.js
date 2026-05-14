@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import { durableStateEnvHint, hasDurableStateEnv } from "./services/shared/utils/durableStateEnv.js";
 
 const REQUIRED_ENV_KEYS = [
   "NODE_ENV",
@@ -42,23 +43,14 @@ export function getDurableStateError(env = process.env) {
   const nodeEnv = String(env.NODE_ENV || "").trim().toLowerCase();
   const allowEphemeralState = parseBoolean(env.ALLOW_EPHEMERAL_STATE, false);
   const stateBackend = String(env.STATE_BACKEND || "auto").trim().toLowerCase();
-  const hasRemoteStateEnv = Boolean(
-    env.R2_ENDPOINT &&
-      env.R2_ACCESS_KEY_ID &&
-      env.R2_SECRET_ACCESS_KEY &&
-      env.R2_BUCKET_META_SYSTEM
-  );
+  const hasRemoteStateEnv = hasDurableStateEnv(env);
 
   if (nodeEnv !== "production" || allowEphemeralState) {
     return null;
   }
 
   if (!hasRemoteStateEnv || stateBackend === "local") {
-    return (
-      "Production state backend is not durable. Configure R2_BUCKET_META_SYSTEM with " +
-      "STATE_BACKEND=auto or r2, or set ALLOW_EPHEMERAL_STATE=true only if you intentionally " +
-      "accept state loss across container restarts."
-    );
+    return `Production state backend is not durable. ${durableStateEnvHint()}`;
   }
 
   return null;
