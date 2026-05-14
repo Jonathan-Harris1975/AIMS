@@ -2,7 +2,6 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { debug, warn } from "../../../logger.js";
-import { durableStateEnvHint, hasDurableStateEnv } from "./durableStateEnv.js";
 import { getObjectAsText, putJson } from "./r2-client.js";
 
 const BASE_STATE_DIR = path.resolve(
@@ -16,14 +15,18 @@ const KNOWN_REMOTE_FILES = new Set(["job-store.json", "hookdeck-dedupe.json"]);
 const remoteStateCache = new Map();
 
 const remoteStateMode = String(process.env.STATE_BACKEND || "auto").trim().toLowerCase();
-const hasRemoteStateEnv = hasDurableStateEnv(process.env);
+const hasRemoteStateEnv = Boolean(
+  process.env.R2_ENDPOINT &&
+    process.env.R2_ACCESS_KEY_ID &&
+    process.env.R2_SECRET_ACCESS_KEY &&
+    process.env.R2_BUCKET_META_SYSTEM
+);
 const remoteStateEnabled =
   remoteStateMode === "r2" || (remoteStateMode === "auto" && hasRemoteStateEnv);
 
 let warnedRemoteStateDisabled = false;
 let remoteWriteQueue = Promise.resolve();
 let lastRemoteWriteError = null;
-let remoteHydrationPromise = null;
 
 function parseBoolean(value, fallback = false) {
   if (value === undefined || value === null || value === "") return fallback;
@@ -70,7 +73,9 @@ function assertProductionSafeStateBackend() {
     ? "The configured state directory resolves inside the container tmp filesystem."
     : "The configured state backend is local-only, which is unsafe on the target Koyeb deployment model.";
 
-  throw new Error(`${locationHint} ${durableStateEnvHint()}`);
+  throw new Error(
+    `${locationHint} Configure durable state with R2_BUCKET_META_SYSTEM and STATE_BACKEND=auto or r2, or set ALLOW_EPHEMERAL_STATE=true only if you are intentionally accepting state loss across restarts.`
+  );
 }
 
 function warnIfUsingLocalOnlyState() {
@@ -87,7 +92,8 @@ function warnIfUsingLocalOnlyState() {
   warn("state.persistence.local_only", {
     backend: remoteStateMode,
     stateDir: BASE_STATE_DIR,
-    message: `State persistence is using local ephemeral storage. ${durableStateEnvHint()}`,
+    message:
+      "State persistence is using local ephemeral storage. Configure R2_BUCKET_META_SYSTEM and set STATE_BACKEND=auto or r2 for durable job and dedupe state.",
   });
 }
 
@@ -138,24 +144,11 @@ async function hydrateRemoteState() {
   }
 }
 
-function startRemoteHydration() {
-  if (!remoteStateEnabled) {
-    warnIfUsingLocalOnlyState();
-    return Promise.resolve();
-  }
-
-  if (!remoteHydrationPromise) {
-    remoteHydrationPromise = hydrateRemoteState().catch((err) => {
-      warn("state.remote.hydrate.unhandled", {
-        error: err?.message || String(err),
-      });
-    });
-  }
-
-  return remoteHydrationPromise;
-}
-
-startRemoteHydration();
+const remoteHydrationReady = hydrateRemoteState().catch((err) => {
+  warn("state.remote.hydrate.background_fail", {
+    error: err?.message || String(err),
+  });
+});
 
 function queueRemoteWrite(filename, value) {
   if (!remoteStateEnabled) {
@@ -228,11 +221,11 @@ export function writeJsonState(filename, value) {
 
 
 export async function readJsonStateFresh(filename, fallback) {
+  await remoteHydrationReady;
+
   if (!remoteStateEnabled) {
     return readJsonState(filename, fallback);
   }
-
-  await startRemoteHydration();
 
   const key = remoteStateKey(filename);
 
@@ -261,11 +254,8 @@ export async function readJsonStateFresh(filename, fallback) {
   }
 }
 
-export async function hydrateStateFromRemote() {
-  return startRemoteHydration();
-}
-
 export async function flushStateWrites({ throwOnError = false } = {}) {
+  await remoteHydrationReady;
   await remoteWriteQueue;
   if (throwOnError && lastRemoteWriteError) {
     throw lastRemoteWriteError;
