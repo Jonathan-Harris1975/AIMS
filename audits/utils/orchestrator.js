@@ -20,8 +20,10 @@ import {
   cleanupAuditPrefix,
   getAuditBucketName,
   getAuditPublicBaseUrl,
+  publishAuditJson,
   publishAuditLatest,
   publishAuditRequest,
+  publishAuditText,
 } from "./publishAuditArtifacts.js";
 
 const DEFAULT_WEBSITE_URL = "https://jonathan-harris.online";
@@ -265,6 +267,105 @@ function serialiseCompletionError(err) {
   };
 }
 
+function safeJsonForHtml(value) {
+  return JSON.stringify(value ?? {}, null, 2)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function auditFailureReportHtml({ auditType, sessionId, message, payload }) {
+  const title = `${auditType} audit controlled failure`;
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>${title}</title>
+  <style>body{font-family:Arial,sans-serif;max-width:980px;margin:40px auto;padding:0 20px;line-height:1.55;color:#111827}code,pre{background:#f3f4f6;border-radius:8px;padding:2px 6px}pre{padding:16px;overflow:auto}.badge{display:inline-block;background:#fee2e2;color:#991b1b;border-radius:999px;padding:6px 12px;font-weight:700}</style>
+</head>
+<body>
+  <h1>${title}</h1>
+  <p><span class="badge">FAILED</span></p>
+  <p><strong>Session:</strong> <code>${sessionId}</code></p>
+  <p>${message}</p>
+  <p>This controlled failure report was written by the AI Management Suite because the external website workflow did not provide a complete published artefact set. It is not a scored Mobile UX report.</p>
+  <h2>Callback payload</h2>
+  <pre>${safeJsonForHtml(payload)}</pre>
+</body>
+</html>`;
+}
+
+async function publishControlledFailureArtifacts({ auditType, sessionId, payload, message }) {
+  const reportPrefix = String(payload.reportPrefix || buildAuditPrefix(auditType, sessionId)).replace(/\/+$/, "");
+  const now = payload.finishedAt || new Date().toISOString();
+  const block = {
+    stage: "external audit workflow",
+    blocker: message,
+    reason: payload.storageUploadError || payload.error || payload.message || "Audit workflow did not publish a complete artefact set.",
+  };
+  const coverage = {
+    ok: false,
+    auditType,
+    sessionId,
+    status: "failed",
+    reportPrefix,
+    complete: false,
+    stage3Blocks: Array.isArray(payload.stage3Blocks) ? payload.stage3Blocks : Array.isArray(payload.blockedTests) ? payload.blockedTests : [block],
+    skippedRequiredTasksCount: Array.isArray(payload.blockedTests) ? payload.blockedTests.length : 1,
+    generatedAt: now,
+  };
+  const summary = {
+    ok: false,
+    auditType,
+    sessionId,
+    status: "failed",
+    reportPrefix,
+    message,
+    blocked: payload.blocked ?? true,
+    hardGateBlocked: payload.hardGateBlocked ?? false,
+    storageUploadError: payload.storageUploadError || null,
+    mobileQualityScore: null,
+    releaseVerdict: null,
+    coverage,
+    callbackPayload: payload,
+    finishedAt: now,
+  };
+  const evidence = {
+    auditType,
+    sessionId,
+    status: "failed",
+    message,
+    callbackPayload: payload,
+    coverage,
+    generatedAt: now,
+  };
+
+  const [summaryOut, coverageOut, evidenceOut, reportOut, haltOut] = await Promise.all([
+    publishAuditJson({ key: `${reportPrefix}/summary.json`, payload: summary }),
+    publishAuditJson({ key: `${reportPrefix}/coverage.json`, payload: coverage }),
+    publishAuditJson({ key: `${reportPrefix}/evidence.json`, payload: evidence }),
+    publishAuditText({ key: `${reportPrefix}/report.html`, text: auditFailureReportHtml({ auditType, sessionId, message, payload }), contentType: "text/html; charset=utf-8" }),
+    publishAuditText({ key: `${reportPrefix}/halt.txt`, text: message }),
+  ]);
+
+  return {
+    reportPrefix,
+    reportUrl: reportOut.url,
+    summaryUrl: summaryOut.url,
+    coverageUrl: coverageOut.url,
+    evidenceUrl: evidenceOut.url,
+    haltUrl: haltOut.url,
+    artefacts: {
+      "summary.json": summaryOut.url,
+      "coverage.json": coverageOut.url,
+      "evidence.json": evidenceOut.url,
+      "report.html": reportOut.url,
+      "halt.txt": haltOut.url,
+    },
+  };
+}
+
 function optionalCompletionMetadata(payload = {}) {
   const metadata = {};
   for (const key of [
@@ -278,6 +379,7 @@ function optionalCompletionMetadata(payload = {}) {
     "mobileQualityScore",
     "releaseVerdict",
     "confidenceScore",
+    "storageUploadError",
   ]) {
     if (payload[key] !== undefined) metadata[key] = payload[key];
   }
@@ -319,10 +421,38 @@ export async function completeAuditRun({ auditType, payload }) {
   } else if (status === "running") {
     startJob(jobType, sessionId, jobMetadata);
   } else if (status === "failed") {
+    const failureMessage = payload.message || payload.error || "Audit workflow failed";
+    let fallbackArtifacts = {};
+    const hasCallbackArtefacts = assertAuditArtifactUrls(payload, { requireAny: false }).urls.length > 0;
+    if (!hasCallbackArtefacts && payload.reportPrefix) {
+      try {
+        fallbackArtifacts = await publishControlledFailureArtifacts({
+          auditType,
+          sessionId,
+          payload,
+          message: failureMessage,
+        });
+      } catch (err) {
+        info("audit.workflow.controlled_failure_publish_failed", {
+          auditType,
+          sessionId,
+          reportPrefix: payload.reportPrefix,
+          error: err?.message || String(err),
+        });
+      }
+    }
+
+    Object.assign(jobMetadata, fallbackArtifacts, {
+      artefacts: {
+        ...(jobMetadata.artefacts || {}),
+        ...(fallbackArtifacts.artefacts || {}),
+      },
+    });
+
     failJob(
       jobType,
       sessionId,
-      payload.message || payload.error || "Audit workflow failed",
+      failureMessage,
       { ...jobMetadata, finishedAt: payload.finishedAt || new Date().toISOString() }
     );
   } else {
@@ -338,6 +468,30 @@ export async function completeAuditRun({ auditType, payload }) {
       });
     } catch (err) {
       const safeError = serialiseCompletionError(err);
+      let fallbackArtifacts = {};
+      if (payload.reportPrefix) {
+        try {
+          fallbackArtifacts = await publishControlledFailureArtifacts({
+            auditType,
+            sessionId,
+            payload: { ...payload, status: "failed", error: safeError.message },
+            message: safeError.message,
+          });
+        } catch (publishErr) {
+          info("audit.workflow.controlled_failure_publish_failed", {
+            auditType,
+            sessionId,
+            reportPrefix: payload.reportPrefix,
+            error: publishErr?.message || String(publishErr),
+          });
+        }
+      }
+      Object.assign(jobMetadata, fallbackArtifacts, {
+        artefacts: {
+          ...(jobMetadata.artefacts || {}),
+          ...(fallbackArtifacts.artefacts || {}),
+        },
+      });
       failJob(jobType, sessionId, safeError.message, {
         ...jobMetadata,
         finishedAt: payload.finishedAt || new Date().toISOString(),
