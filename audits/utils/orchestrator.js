@@ -340,11 +340,35 @@ async function publishControlledFailureArtifacts({ auditType, sessionId, payload
     coverage,
     generatedAt: now,
   };
+  const reportJson = {
+    auditType,
+    sessionId,
+    schemaVersion: "controlled-mobile-ux-failure-v1",
+    status: "failed",
+    message,
+    mobileQualityScore: null,
+    releaseVerdict: null,
+    summary,
+    coverage,
+    evidence,
+    generatedAt: now,
+  };
+  const preflight = {
+    auditType,
+    sessionId,
+    status: "failed",
+    message,
+    source: "AI Management Suite controlled failure fallback",
+    reason: block.reason,
+    generatedAt: now,
+  };
 
-  const [summaryOut, coverageOut, evidenceOut, reportOut, haltOut] = await Promise.all([
+  const [summaryOut, coverageOut, evidenceOut, reportJsonOut, preflightOut, reportOut, haltOut] = await Promise.all([
     publishAuditJson({ key: `${reportPrefix}/summary.json`, payload: summary }),
     publishAuditJson({ key: `${reportPrefix}/coverage.json`, payload: coverage }),
     publishAuditJson({ key: `${reportPrefix}/evidence.json`, payload: evidence }),
+    publishAuditJson({ key: `${reportPrefix}/report.json`, payload: reportJson }),
+    publishAuditJson({ key: `${reportPrefix}/preflight.json`, payload: preflight }),
     publishAuditText({ key: `${reportPrefix}/report.html`, text: auditFailureReportHtml({ auditType, sessionId, message, payload }), contentType: "text/html; charset=utf-8" }),
     publishAuditText({ key: `${reportPrefix}/halt.txt`, text: message }),
   ]);
@@ -352,14 +376,18 @@ async function publishControlledFailureArtifacts({ auditType, sessionId, payload
   return {
     reportPrefix,
     reportUrl: reportOut.url,
+    reportJsonUrl: reportJsonOut.url,
     summaryUrl: summaryOut.url,
     coverageUrl: coverageOut.url,
     evidenceUrl: evidenceOut.url,
+    preflightUrl: preflightOut.url,
     haltUrl: haltOut.url,
     artefacts: {
       "summary.json": summaryOut.url,
       "coverage.json": coverageOut.url,
       "evidence.json": evidenceOut.url,
+      "report.json": reportJsonOut.url,
+      "preflight.json": preflightOut.url,
       "report.html": reportOut.url,
       "halt.txt": haltOut.url,
     },
