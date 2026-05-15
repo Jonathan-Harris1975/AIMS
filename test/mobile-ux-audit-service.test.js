@@ -127,3 +127,16 @@ test("mobile UX job metadata preserves artefact URLs from nested artefact maps a
   assert.match(schemas, /confidenceModel: z\.record\(z\.string\(\), z\.any\(\)\)\.optional\(\)/);
   assert.match(schemas, /rootCauseGroupCount: z\.coerce\.number\(\)\.int\(\)\.min\(0\)\.optional\(\)/);
 });
+
+
+test("controlled Mobile UX failure fallback publishes report JSON and preflight metadata", () => {
+  const orchestrator = fs.readFileSync("audits/utils/orchestrator.js", "utf8");
+
+  assert.match(orchestrator, /schemaVersion: "controlled-mobile-ux-failure-v1"/);
+  assert.match(orchestrator, /publishAuditJson\(\{ key: `\$\{reportPrefix\}\/report\.json`/);
+  assert.match(orchestrator, /publishAuditJson\(\{ key: `\$\{reportPrefix\}\/preflight\.json`/);
+  assert.match(orchestrator, /reportJsonUrl: reportJsonOut\.url/);
+  assert.match(orchestrator, /preflightUrl: preflightOut\.url/);
+  assert.match(orchestrator, /"report\.json": reportJsonOut\.url/);
+  assert.match(orchestrator, /"preflight\.json": preflightOut\.url/);
+});
