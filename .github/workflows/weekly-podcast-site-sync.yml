@@ -5,6 +5,8 @@ on:
     - cron: '0 8 * * 1'
   workflow_dispatch:
 
+permissions: {}
+
 jobs:
   trigger-website-rebuild:
     runs-on: ubuntu-latest
