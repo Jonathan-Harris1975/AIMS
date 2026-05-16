@@ -8,8 +8,8 @@
     "start": "node scripts/bootstrap.js",
     "start:server": "node server.js",
     "check:startup": "node scripts/startupCheck.js",
-    "test": "node --test job-store.test.js test/*.test.js",
-    "test:smoke": "node --test job-store.test.js test/*.test.js"
+    "test": "node --test --test-concurrency=1 job-store.test.js test/*.test.js",
+    "test:smoke": "node --test --test-concurrency=1 job-store.test.js test/*.test.js"
   },
   "engines": {
     "node": ">=20 <25"
