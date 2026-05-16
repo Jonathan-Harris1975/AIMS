@@ -21,6 +21,7 @@ const REQUIRED_TOP_LEVEL_KEYS = [
   "priorityPageAnnex",
   "templateComponentGeneratorAnnex",
   "codeMarkupContentRemediationAppendix",
+  "deterministicRemediationLedger",
   "bestPracticeGapMatrix",
   "finalVerdictAndImplementationOrder",
   "fullUrlCoverageAppendix",
@@ -99,6 +100,7 @@ NON-NEGOTIABLE OPERATING RULES:
 26. The bestPracticeGapMatrix must use page-family-specific gaps. Do not repeat "Answer-first evidence blocks" across unrelated families when podcast, transcript, blog, book, archive, author, comparison, site-page, or lead-generation evidence supports a more exact missing element.
 27. Do not rank /podcast/TT-YYYY-MM-DD compatibility redirect wrappers as priority content pages. Put those in redirect/compatibility evidence only.
 28. Intentionally excluded redirect or canonical-only route families must be marked N/A, not F, in page-type findings and gap matrices.
+29. Return deterministicRemediationLedger as { "findings": [] }. Only use classification "code_fix" when affectedPaths are exact repo-owned files, evidence is deterministic, requiredOutcome is exact, and allowedFixClass is one of meta_fix, schema_fix, sitemap_fix, internal_link_fix, robots_fix, canonical_fix. Aggregate scores, page-family trends, and R2-hosted podcast/episodes pages must remain classification "manual_review".
 
 MANDATORY TOP-LEVEL JSON KEYS:
 ${REQUIRED_TOP_LEVEL_KEYS.join(", ")}
@@ -147,6 +149,20 @@ function buildUserPrompt(payload) {
       rejectSilentSampling: true,
       issueFormat: REQUIRED_ISSUE_KEYS,
       requiredTopLevelKeys: REQUIRED_TOP_LEVEL_KEYS,
+      deterministicRemediationLedgerShape: {
+        findings: [
+          {
+            id: "SEO-001",
+            classification: "code_fix | manual_review",
+            severity: "critical | high | medium | low",
+            confidence: 0.9,
+            affectedPaths: ["index.html"],
+            allowedFixClass: "meta_fix | schema_fix | sitemap_fix | internal_link_fix | robots_fix | canonical_fix",
+            evidence: ["Exact deterministic evidence"],
+            requiredOutcome: "Specific repo-level change required",
+          },
+        ],
+      },
     },
   };
 
@@ -959,6 +975,7 @@ function buildDeterministicAnalysisDraft(payload, diagnostics = {}) {
     priorityPageAnnex: [],
     templateComponentGeneratorAnnex: [],
     codeMarkupContentRemediationAppendix: [],
+    deterministicRemediationLedger: { findings: [] },
     bestPracticeGapMatrix: [],
     fullUrlCoverageAppendix: [],
     limitations: [diagnostics.message || "AI forensic JSON required deterministic fallback after malformed model output."],
@@ -1391,6 +1408,102 @@ function normaliseRemediationAppendix(data, issues) {
     .slice(0, 15);
 }
 
+
+const DETERMINISTIC_SEO_FIX_CLASSES = new Set([
+  "meta_fix",
+  "schema_fix",
+  "sitemap_fix",
+  "internal_link_fix",
+  "robots_fix",
+  "canonical_fix",
+]);
+
+function normaliseLedgerSeverity(value) {
+  const lowered = compactString(value).toLowerCase();
+  if (["critical", "high", "medium", "low"].includes(lowered)) return lowered;
+  if (["p0", "blocker"].includes(lowered)) return "critical";
+  if (["p1", "major"].includes(lowered)) return "high";
+  if (["p2", "moderate"].includes(lowered)) return "medium";
+  return "low";
+}
+
+function normaliseLedgerConfidence(value) {
+  if (typeof value === "number" && Number.isFinite(value)) return Math.max(0, Math.min(1, Number(value)));
+  const lowered = compactString(value).toLowerCase();
+  if (["confirmed", "certain", "high"].includes(lowered)) return 0.9;
+  if (["probable", "medium", "moderate"].includes(lowered)) return 0.75;
+  if (["low", "weak", "needs verification"].includes(lowered)) return 0.5;
+  return 0.8;
+}
+
+function isExactRepoOwnedPath(value) {
+  const path = compactString(value).replace(/\\/g, "/").replace(/^\.\//, "");
+  if (!path) return false;
+  if (/^https?:\/\//i.test(path)) return false;
+  if (path.startsWith("/") || path.includes("..")) return false;
+  if (/[*{}<>|]/.test(path)) return false;
+  if (/\s/.test(path)) return false;
+  return /\.[a-z0-9]+$/i.test(path);
+}
+
+function isR2PodcastEpisodePath(value) {
+  const path = compactString(value).replace(/\\/g, "/").replace(/^\.\//, "");
+  return path === "podcast/episodes" || path.startsWith("podcast/episodes/");
+}
+
+function normaliseLedgerFinding(row, index) {
+  const rawPaths = asArray(row?.affectedPaths).map((item) => compactString(item)).filter(Boolean);
+  const affectedPaths = rawPaths.filter(isExactRepoOwnedPath);
+  const evidence = asArray(row?.evidence || row?.exactEvidence).map((item) => compactString(item)).filter(Boolean);
+  const allowedFixClass = compactString(row?.allowedFixClass || row?.fixClass);
+  const requiredOutcome = compactString(row?.requiredOutcome || row?.exactRemediation || row?.recommendation);
+  const requestedCodeFix = compactString(row?.classification).toLowerCase() === "code_fix";
+  const reasons = [];
+
+  if (rawPaths.some(isR2PodcastEpisodePath)) reasons.push("R2-hosted podcast/episodes pages are not repo-owned website patch targets.");
+  if (!affectedPaths.length) reasons.push("No exact repo-owned affectedPaths were supplied.");
+  if (!DETERMINISTIC_SEO_FIX_CLASSES.has(allowedFixClass)) reasons.push(`Unsupported or missing allowedFixClass: ${allowedFixClass || "<missing>"}.`);
+  if (!evidence.length) reasons.push("No deterministic evidence was supplied.");
+  if (!requiredOutcome) reasons.push("No exact requiredOutcome was supplied.");
+
+  const classification = requestedCodeFix && !reasons.length ? "code_fix" : "manual_review";
+
+  return {
+    id: compactString(row?.id || row?.issueId || row?.findingId) || `SEO-${String(index + 1).padStart(3, "0")}`,
+    classification,
+    severity: normaliseLedgerSeverity(row?.severity),
+    confidence: normaliseLedgerConfidence(row?.confidence),
+    affectedPaths,
+    allowedFixClass: classification === "code_fix" ? allowedFixClass : "",
+    evidence: reasons.length ? [...evidence, ...reasons] : evidence,
+    requiredOutcome: requiredOutcome || "Review the aggregate SEO/AEO/GEO evidence and create deterministic file-level remediation evidence before patching.",
+  };
+}
+
+function buildManualReviewLedgerFromIssues(issues) {
+  return asArray(issues)
+    .slice(0, 10)
+    .map((issue, index) => ({
+      id: compactString(issue.issueId) || `SEO-${String(index + 1).padStart(3, "0")}`,
+      classification: "manual_review",
+      severity: normaliseLedgerSeverity(issue.severity),
+      confidence: normaliseLedgerConfidence(issue.confidence),
+      affectedPaths: [],
+      allowedFixClass: "",
+      evidence: [compactString(issue.evidenceObserved)].filter(Boolean),
+      requiredOutcome: compactString(issue.exactRemediation) || "Review the aggregate SEO/AEO/GEO finding before creating a repo patch.",
+    }));
+}
+
+function normaliseDeterministicRemediationLedger(data, issues) {
+  const source = isPlainObject(data?.deterministicRemediationLedger) ? data.deterministicRemediationLedger : {};
+  const supplied = asArray(source.findings).filter(isPlainObject);
+  const findings = supplied.length
+    ? supplied.map((row, index) => normaliseLedgerFinding(row, index))
+    : buildManualReviewLedgerFromIssues(issues);
+  return { findings };
+}
+
 function normaliseImplementation(data, issues, payload = {}) {
   const source = isPlainObject(data?.finalVerdictAndImplementationOrder) ? data.finalVerdictAndImplementationOrder : isPlainObject(data?.implementationOrder) ? data.implementationOrder : {};
   const steps = asArray(source.steps || source.implementationSequence).map(String).filter(Boolean);
@@ -1531,6 +1644,7 @@ function buildNormalisedPayload(data, payload) {
     priorityPageAnnex: normalisePriorityPageAnnex(data, payload),
     templateComponentGeneratorAnnex: normaliseTemplateAnnex(data, payload),
     codeMarkupContentRemediationAppendix: [],
+    deterministicRemediationLedger: normaliseDeterministicRemediationLedger(data, issues),
     bestPracticeGapMatrix: normaliseGapMatrix(data, payload),
     finalVerdictAndImplementationOrder: implementation,
     fullUrlCoverageAppendix: normaliseFullCoverageAppendix(data, payload),
@@ -1635,6 +1749,7 @@ function addCompatibilityAliases(normalised) {
     })),
     templateAnnex: normalised.templateComponentGeneratorAnnex,
     codeRemediationAppendix: normalised.codeMarkupContentRemediationAppendix,
+    deterministicFindings: normalised.deterministicRemediationLedger.findings,
     implementationOrder: normalised.finalVerdictAndImplementationOrder,
   };
 
@@ -1771,6 +1886,7 @@ export const __seoAeoGeoAnalysisTestHooks = {
   validateAndNormaliseAnalysisShape,
   buildDeterministicAnalysisDraft,
   buildDeterministicFallback,
+  normaliseDeterministicRemediationLedger,
   duplicatePodcastEvidence,
   looksLikeAuditEvidenceRequestPayload,
   looksLikeAuditPromptEchoText,
