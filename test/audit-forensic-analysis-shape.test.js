@@ -96,6 +96,46 @@ test("valid forensic JSON is normalised with compatibility aliases", () => {
   assert.equal(normalised.templateAnnex[0].sourceFile, "scripts/generate-blog-from-rss.mjs");
 });
 
+
+
+test("deterministic remediation ledger only promotes exact supported code fixes", () => {
+  const normalised = __seoAeoGeoAnalysisTestHooks.validateAndNormaliseAnalysisShape(
+    validAnalysis({
+      deterministicRemediationLedger: {
+        findings: [
+          {
+            id: "SEO-001",
+            classification: "code_fix",
+            severity: "high",
+            confidence: 0.9,
+            affectedPaths: ["index.html"],
+            allowedFixClass: "meta_fix",
+            evidence: ["index.html meta description is absent in the supplied repo evidence."],
+            requiredOutcome: "Add the deterministic homepage meta description.",
+          },
+          {
+            id: "SEO-002",
+            classification: "code_fix",
+            severity: "high",
+            confidence: 0.9,
+            affectedPaths: ["podcast/episodes/example/index.html"],
+            allowedFixClass: "meta_fix",
+            evidence: ["Podcast episode metadata is thin."],
+            requiredOutcome: "Update the episode metadata.",
+          },
+        ],
+      },
+    }),
+    payload
+  );
+
+  assert.equal(normalised.deterministicRemediationLedger.findings[0].classification, "code_fix");
+  assert.equal(normalised.deterministicRemediationLedger.findings[0].allowedFixClass, "meta_fix");
+  assert.equal(normalised.deterministicRemediationLedger.findings[1].classification, "manual_review");
+  assert.match(normalised.deterministicRemediationLedger.findings[1].evidence.join(" "), /R2-hosted podcast\/episodes/);
+});
+
+
 test("generic issue remediation is rejected", () => {
   const bad = validAnalysis({
     rankedIssueLedger: [
