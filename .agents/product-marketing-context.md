@@ -7,3 +7,6 @@ Primary systems:
 - RAMS repo: Repo Automation / Management Suite for evidence-led audit-to-task conversion, patch planning, validation and report publication.
 
 Lane 1 skills are allowed to produce evidence, reports, inventories and validation artefacts. They are not allowed to make public or production changes by themselves.
+
+
+Phase 3 content automation is allowed to publish RSS, blog and social-blog content without manual review only when the committed Phase 3 quality gates pass. Failed content must be quarantined and must not update public HTML, manifests or RSS feeds.
