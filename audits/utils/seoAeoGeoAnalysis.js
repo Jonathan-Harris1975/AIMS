@@ -1,4 +1,4 @@
-import { searchVisibilityBaseline } from "./searchVisibilityBaseline.js";
+import { buildLane1SkillsBaseline } from "./lane1Skills.js";
 
 const REQUIRED_TOP_LEVEL_KEYS = [
   "auditCompletionState",
@@ -124,6 +124,7 @@ function safeJson(value, fallback = {}) {
 }
 
 function buildUserPrompt(payload) {
+  const skillsBaseline = buildLane1SkillsBaseline(payload?.skillsBaseline);
   const compact = {
     website: payload?.baseUrl,
     sessionId: payload?.sessionId,
@@ -137,8 +138,8 @@ function buildUserPrompt(payload) {
     sourceMismatchesThatMatter: trimLargeArray(payload?.sourceMismatchesThatMatter || payload?.sourceConflicts, 120),
     familyDiagnostics: trimLargeArray(payload?.familyDiagnostics, 80),
     templateDiagnostics: trimLargeArray(payload?.templateDiagnostics, 80),
-    searchVisibilityBaseline: payload?.searchVisibilityBaseline || searchVisibilityBaseline,
     dynamicRouteLedger: trimLargeArray(payload?.dynamicRouteLedger || payload?.liveDynamicUrls, 600),
+    skillsBaseline,
     liveDynamicUrls: trimLargeArray(payload?.liveDynamicUrls, 600),
     coverage: trimLargeArray(payload?.coverage, 1500),
     coverageFamilies: trimLargeArray(payload?.coverageFamilies, 80),
@@ -152,7 +153,6 @@ function buildUserPrompt(payload) {
       rejectSilentSampling: true,
       issueFormat: REQUIRED_ISSUE_KEYS,
       requiredTopLevelKeys: REQUIRED_TOP_LEVEL_KEYS,
-      searchVisibilityBaseline,
       deterministicRemediationLedgerShape: {
         findings: [
           {
@@ -178,6 +178,7 @@ function buildUserPrompt(payload) {
     "",
     "Use the evidence payload only. Do not invent evidence. If the payload is thin for a family, record that limitation.",
     "The allRoutes and coverage arrays are the URL ledger for this run unless a payload field explicitly says otherwise.",
+    "The skillsBaseline block is governance and evidence-readiness metadata only; do not treat installed skills as proof that a crawl, screenshot or monitoring run succeeded unless matching artefacts are present.",
     "Return one compact JSON object only, following the mandatory contract.",
     "Do not echo the complete route ledger; use [] for fullUrlCoverageAppendix unless a row adds unique judgement beyond allRoutes.",
     "",
