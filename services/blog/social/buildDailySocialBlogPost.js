@@ -5,6 +5,11 @@ import { slugify } from "../utils/slug.js";
 import { pageTemplate, socialPostBody } from "../utils/templates.js";
 import { createBlogArtwork } from "../../artwork/createBlogArtwork.js";
 import { publishSocialBlogRssFeed } from "./publishSocialBlogRssFeed.js";
+import {
+  buildPhase3QuarantinePayload,
+  phase3QuarantineKey,
+  runPhase3AutopublishGate,
+} from "../../content-quality/phase3Gates.js";
 import { cleanSourceText, cleanSourceTitle } from "../utils/weeklyPackage.js";
 import {
   parseStructuredSocialBlogPackage,
@@ -274,6 +279,35 @@ async function resolveSocialArtwork({ sessionId, imagePrompt, dateId, prefix }) 
   throw new Error(`Social blog artwork failed and no BLOG_SOCIAL_FALLBACK_IMAGE_URL is configured: ${imageError}`);
 }
 
+async function writeSocialPhase3Quarantine({ dateId, title, phase3Quality, socialPackage, items, imagePrompt } = {}) {
+  const key = phase3QuarantineKey({
+    contentType: "blog-social",
+    id: `${dateId}-${title || "untitled"}`,
+  });
+
+  try {
+    await putJson(OUT_BLOG_BUCKET_KEY, key, buildPhase3QuarantinePayload({
+      context: {
+        service: "blog-social-daily",
+        dateId,
+        sourceCount: items.length,
+        action: "blocked-before-publication",
+      },
+      report: phase3Quality,
+      payload: {
+        package: socialPackage,
+        imagePrompt,
+        sources: items.map((item) => ({ title: item.title, link: item.link, pubDate: item.pubDateRaw })),
+      },
+    }));
+    warn("blog.social.daily.phase3.quarantined", { dateId, key, score: phase3Quality.score });
+    return key;
+  } catch (err) {
+    error("blog.social.daily.phase3.quarantine.fail", { dateId, key, error: err?.message });
+    return null;
+  }
+}
+
 async function generateStructuredSocialPackage({ sessionId, dateLabel, items }) {
   const prompt = buildSocialPackagePrompt({ dateLabel, items });
   const baseMessages = [
@@ -472,9 +506,6 @@ export async function buildDailySocialBlogPost({
     });
 
     const title = socialPackage.title;
-    const slug = slugify(`${window.dateId}-${title}`);
-    const dir = `${prefix}/posts/${slug}`;
-    const urls = buildSiteSocialUrls(slug);
     const bodyHtml = renderSocialBodyHtml(socialPackage, { escapeHtml });
 
     const imagePrompt = buildSocialArtworkPrompt({
@@ -489,6 +520,47 @@ export async function buildDailySocialBlogPost({
       link: item.link,
       pubDate: item.pubDateRaw,
     }));
+
+    const phase3Quality = runPhase3AutopublishGate({
+      contentType: "blog-social",
+      title,
+      summary: socialPackage.summary,
+      bodyText: bodyHtml,
+      socialCaption: socialPackage.social_caption,
+      hook: socialPackage.hook,
+      takeaway: socialPackage.takeaway,
+      sections: socialPackage.body_sections,
+      imagePrompt,
+      sourceItems: items,
+      sources: cleanedSources,
+      themes: socialPackage.themes,
+      hashtags: socialPackage.hashtags,
+    });
+
+    if (!phase3Quality.ok) {
+      const quarantineKey = await writeSocialPhase3Quarantine({
+        dateId: window.dateId,
+        title,
+        phase3Quality,
+        socialPackage,
+        items,
+        imagePrompt,
+      });
+
+      return {
+        ok: false,
+        blocked: true,
+        quarantined: Boolean(quarantineKey),
+        reason: "Phase 3 auto-publish gate failed; content was not published.",
+        dateId: window.dateId,
+        phase3Quality,
+        quarantineKey,
+      };
+    }
+
+    const slug = slugify(`${window.dateId}-${title}`);
+    const dir = `${prefix}/posts/${slug}`;
+    const urls = buildSiteSocialUrls(slug);
 
     const dryRunArtwork = {
       imageUrl: getSocialFallbackImageUrl() || "",
@@ -581,6 +653,7 @@ export async function buildDailySocialBlogPost({
         imageStatus: artwork.imageStatus,
         sourceCount: cleanedSources.length,
         package: socialPackage,
+        phase3Quality,
         publishedObjects,
       };
     }
@@ -601,6 +674,7 @@ export async function buildDailySocialBlogPost({
         mode: window.mode,
       },
       created_at: createdAt,
+      phase3Quality,
     });
 
     await putJson(OUT_BLOG_BUCKET_KEY, manifestKey, mergedManifest);
@@ -620,6 +694,7 @@ export async function buildDailySocialBlogPost({
       imageStatus: artwork.imageStatus,
       sourceCount: cleanedSources.length,
       themeCount: socialPackage.themes.length,
+      phase3Score: phase3Quality.score,
     });
 
     return {
@@ -641,6 +716,7 @@ export async function buildDailySocialBlogPost({
       imageError: artwork.imageError,
       rssFeedUrl: rss.feedUrl,
       rss,
+      phase3Quality,
       publishedObjects,
       sourceCount: cleanedSources.length,
       rebuild,
