@@ -17,6 +17,10 @@ import { debug, error, warn } from "../../../logger.js";
 import { resilientRequest } from "../../shared/utils/ai-service.js";
 import { RSS_PROMPTS } from "./rss-prompts.js";
 import { createShortLink } from "../../rss-links/service.js";
+import {
+  assertPhase3AutopublishGate,
+  summarisePhase3Reports,
+} from "../../content-quality/phase3Gates.js";
 
 // ─────────────────────────────────────────────
 // ENV TUNABLES
@@ -209,6 +213,21 @@ export async function rewriteArticle(item = {}) {
     );
   }
 
+  // 4) Phase 3 auto-publish gate. This is the no-manual-review safety net:
+  // publish only when deterministic brand, source and structure gates pass.
+  const phase3Quality = assertPhase3AutopublishGate({
+    contentType: "rss-rewrite",
+    title: rewrittenTitle,
+    summary: rewrittenSummary,
+    bodyText: rewrittenSummary,
+    sourceText: `${title}
+${sourceText}`,
+    sourceItems: [item],
+    sources: [{ title, link }],
+    themes: keywords(`${title}
+${sourceText}`).slice(0, 6),
+  });
+
   // Create a self-hosted RSS short link (best-effort).
   // If R2-backed link creation fails, keep the original article URL and do not drop the item.
   let shortUrl = link;
@@ -240,6 +259,14 @@ export async function rewriteArticle(item = {}) {
     shortUrl,
     shortGuid,
     pubDate: new Date().toUTCString(),
+    phase3Quality: {
+      ok: phase3Quality.ok,
+      score: phase3Quality.score,
+      threshold: phase3Quality.threshold,
+      mode: phase3Quality.mode,
+      status: phase3Quality.status,
+      gateCount: phase3Quality.gates.length,
+    },
   };
 }
 
@@ -247,8 +274,10 @@ export async function rewriteArticle(item = {}) {
 // 🔹 Batch rewrite handler — drops failed items
 // ============================================================
 
-export async function rewriteRssFeedItems(feedItems = []) {
+export async function rewriteRssFeedItemsWithQuality(feedItems = []) {
   const results = [];
+  const droppedItems = [];
+  const qualityReports = [];
 
   for (const item of feedItems) {
     if (!item || (!item.title && !item.summary)) continue;
@@ -256,24 +285,50 @@ export async function rewriteRssFeedItems(feedItems = []) {
     try {
       const rewritten = await rewriteArticle(item);
       results.push(rewritten);
+      qualityReports.push(rewritten.phase3Quality);
     } catch (err) {
-      error("rss-feed-creator.model.item.dropped", {
-        itemTitle: item?.title || "Untitled",
+      const phase3Report = err?.phase3Report || null;
+      const dropped = {
+        title: item?.title || "Untitled",
         link: item?.link || "",
+        reason: phase3Report ? "phase3-gate" : "rewrite-error",
         message: err?.message,
+        phase3Report,
+      };
+      droppedItems.push(dropped);
+      error("rss-feed-creator.model.item.dropped", {
+        itemTitle: dropped.title,
+        link: dropped.link,
+        reason: dropped.reason,
+        message: dropped.message,
+        score: phase3Report?.score,
       });
       // HARD FAIL behaviour: do not include this item in the feed.
       continue;
     }
   }
 
+  const qualitySummary = {
+    ...summarisePhase3Reports(qualityReports),
+    sourceItems: feedItems.length,
+    rewrittenItems: results.length,
+    droppedItems: droppedItems.length,
+  };
+
   debug("rss-feed-creator.model.batch.complete", {
     totalItems: feedItems.length,
     rewrittenItems: results.length,
-    dropped: Math.max(0, (feedItems?.length || 0) - results.length),
+    dropped: droppedItems.length,
+    phase3Status: qualitySummary.status,
+    averageScore: qualitySummary.averageScore,
   });
 
-  return results;
+  return { rewrittenItems: results, droppedItems, qualitySummary };
+}
+
+export async function rewriteRssFeedItems(feedItems = []) {
+  const { rewrittenItems } = await rewriteRssFeedItemsWithQuality(feedItems);
+  return rewrittenItems;
 }
 
 // ============================================================
