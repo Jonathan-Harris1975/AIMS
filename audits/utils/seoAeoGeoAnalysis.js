@@ -1,3 +1,5 @@
+import { searchVisibilityBaseline } from "./searchVisibilityBaseline.js";
+
 const REQUIRED_TOP_LEVEL_KEYS = [
   "auditCompletionState",
   "aiAnalysisStatus",
@@ -135,6 +137,7 @@ function buildUserPrompt(payload) {
     sourceMismatchesThatMatter: trimLargeArray(payload?.sourceMismatchesThatMatter || payload?.sourceConflicts, 120),
     familyDiagnostics: trimLargeArray(payload?.familyDiagnostics, 80),
     templateDiagnostics: trimLargeArray(payload?.templateDiagnostics, 80),
+    searchVisibilityBaseline: payload?.searchVisibilityBaseline || searchVisibilityBaseline,
     dynamicRouteLedger: trimLargeArray(payload?.dynamicRouteLedger || payload?.liveDynamicUrls, 600),
     liveDynamicUrls: trimLargeArray(payload?.liveDynamicUrls, 600),
     coverage: trimLargeArray(payload?.coverage, 1500),
@@ -149,6 +152,7 @@ function buildUserPrompt(payload) {
       rejectSilentSampling: true,
       issueFormat: REQUIRED_ISSUE_KEYS,
       requiredTopLevelKeys: REQUIRED_TOP_LEVEL_KEYS,
+      searchVisibilityBaseline,
       deterministicRemediationLedgerShape: {
         findings: [
           {
