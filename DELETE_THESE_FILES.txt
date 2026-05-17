@@ -1,0 +1,6 @@
+Delete these accidental placeholder files if they exist in your working branch:
+
+- .agents/skills/lane-1-crawl-source-extraction/1
+- services/content-quality/1
+
+They are not required by Phase 3 or Lane 1. The fixed repo zip excludes them.
