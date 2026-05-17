@@ -5,12 +5,13 @@ import { slugify } from "../utils/slug.js";
 import { pageTemplate, socialPostBody } from "../utils/templates.js";
 import { createBlogArtwork } from "../../artwork/createBlogArtwork.js";
 import { publishSocialBlogRssFeed } from "./publishSocialBlogRssFeed.js";
-import {
-  buildPhase3QuarantinePayload,
-  phase3QuarantineKey,
-  runPhase3AutopublishGate,
-} from "../../content-quality/phase3Gates.js";
 import { cleanSourceText, cleanSourceTitle } from "../utils/weeklyPackage.js";
+
+import {
+  runPhase4AutonomousContentGate,
+  buildPhase4QuarantineRecord,
+  phase4QuarantineKey,
+} from "../../content-quality/phase4AutonomousGates.js";
 import {
   parseStructuredSocialBlogPackage,
   normaliseSocialBlogPackage,
@@ -232,6 +233,35 @@ async function triggerWebsiteRebuild() {
   return { ok: false, error: lastError?.message || "Unknown rebuild trigger error" };
 }
 
+async function quarantineSocialPost({ gate, dateId, socialPackage, cleanedSources, publishedObjects, context, dryRun }) {
+  const record = buildPhase4QuarantineRecord({
+    gate,
+    contentType: "social-content",
+    identifier: dateId,
+    generated: socialPackage,
+    sources: cleanedSources,
+    publishedObjects,
+    context,
+  });
+  const key = phase4QuarantineKey("social-content", dateId);
+
+  if (!dryRun) {
+    await putJson(OUT_BLOG_BUCKET_KEY, key, record);
+  }
+
+  warn("blog.social.phase4.quarantined", { dateId, key, dryRun: Boolean(dryRun), defects: gate.defects.slice(0, 12) });
+
+  return {
+    ok: false,
+    quarantined: true,
+    dryRun: Boolean(dryRun),
+    reason: "phase-4-autonomous-gate-failed",
+    dateId,
+    quarantineKey: key,
+    gate,
+  };
+}
+
 function blogSocialQaEnabled() {
   return String(process.env.BLOG_SOCIAL_QA_ENABLED || "true").trim().toLowerCase() !== "false";
 }
@@ -277,35 +307,6 @@ async function resolveSocialArtwork({ sessionId, imagePrompt, dateId, prefix }) 
   }
 
   throw new Error(`Social blog artwork failed and no BLOG_SOCIAL_FALLBACK_IMAGE_URL is configured: ${imageError}`);
-}
-
-async function writeSocialPhase3Quarantine({ dateId, title, phase3Quality, socialPackage, items, imagePrompt } = {}) {
-  const key = phase3QuarantineKey({
-    contentType: "blog-social",
-    id: `${dateId}-${title || "untitled"}`,
-  });
-
-  try {
-    await putJson(OUT_BLOG_BUCKET_KEY, key, buildPhase3QuarantinePayload({
-      context: {
-        service: "blog-social-daily",
-        dateId,
-        sourceCount: items.length,
-        action: "blocked-before-publication",
-      },
-      report: phase3Quality,
-      payload: {
-        package: socialPackage,
-        imagePrompt,
-        sources: items.map((item) => ({ title: item.title, link: item.link, pubDate: item.pubDateRaw })),
-      },
-    }));
-    warn("blog.social.daily.phase3.quarantined", { dateId, key, score: phase3Quality.score });
-    return key;
-  } catch (err) {
-    error("blog.social.daily.phase3.quarantine.fail", { dateId, key, error: err?.message });
-    return null;
-  }
 }
 
 async function generateStructuredSocialPackage({ sessionId, dateLabel, items }) {
@@ -506,6 +507,9 @@ export async function buildDailySocialBlogPost({
     });
 
     const title = socialPackage.title;
+    const slug = slugify(`${window.dateId}-${title}`);
+    const dir = `${prefix}/posts/${slug}`;
+    const urls = buildSiteSocialUrls(slug);
     const bodyHtml = renderSocialBodyHtml(socialPackage, { escapeHtml });
 
     const imagePrompt = buildSocialArtworkPrompt({
@@ -521,46 +525,12 @@ export async function buildDailySocialBlogPost({
       pubDate: item.pubDateRaw,
     }));
 
-    const phase3Quality = runPhase3AutopublishGate({
-      contentType: "blog-social",
-      title,
-      summary: socialPackage.summary,
-      bodyText: bodyHtml,
-      socialCaption: socialPackage.social_caption,
-      hook: socialPackage.hook,
-      takeaway: socialPackage.takeaway,
-      sections: socialPackage.body_sections,
-      imagePrompt,
-      sourceItems: items,
-      sources: cleanedSources,
-      themes: socialPackage.themes,
-      hashtags: socialPackage.hashtags,
-    });
-
-    if (!phase3Quality.ok) {
-      const quarantineKey = await writeSocialPhase3Quarantine({
-        dateId: window.dateId,
-        title,
-        phase3Quality,
-        socialPackage,
-        items,
-        imagePrompt,
-      });
-
-      return {
-        ok: false,
-        blocked: true,
-        quarantined: Boolean(quarantineKey),
-        reason: "Phase 3 auto-publish gate failed; content was not published.",
-        dateId: window.dateId,
-        phase3Quality,
-        quarantineKey,
-      };
-    }
-
-    const slug = slugify(`${window.dateId}-${title}`);
-    const dir = `${prefix}/posts/${slug}`;
-    const urls = buildSiteSocialUrls(slug);
+    const gateSources = items.map((item) => ({
+      title: item.title,
+      link: item.link,
+      pubDate: item.pubDateRaw,
+      rewritten: item.rewritten,
+    }));
 
     const dryRunArtwork = {
       imageUrl: getSocialFallbackImageUrl() || "",
@@ -634,6 +604,26 @@ export async function buildDailySocialBlogPost({
       imageKey: artwork.imageKey,
     };
 
+    const phase4Gate = runPhase4AutonomousContentGate({
+      contentType: "social-content",
+      generated: socialPackage,
+      html: fullHtml,
+      sources: gateSources,
+      expectedSchemaTypes: ["BlogPosting"],
+    });
+
+    if (!phase4Gate.ok) {
+      return await quarantineSocialPost({
+        gate: phase4Gate,
+        dateId: window.dateId,
+        socialPackage,
+        cleanedSources: gateSources,
+        publishedObjects,
+        context: { dateLabel: window.dateLabel, prefix, slug, postUrl: urls.postUrl },
+        dryRun,
+      });
+    }
+
     if (dryRun) {
       return {
         ok: true,
@@ -653,8 +643,8 @@ export async function buildDailySocialBlogPost({
         imageStatus: artwork.imageStatus,
         sourceCount: cleanedSources.length,
         package: socialPackage,
-        phase3Quality,
         publishedObjects,
+        phase4Gate,
       };
     }
 
@@ -674,7 +664,6 @@ export async function buildDailySocialBlogPost({
         mode: window.mode,
       },
       created_at: createdAt,
-      phase3Quality,
     });
 
     await putJson(OUT_BLOG_BUCKET_KEY, manifestKey, mergedManifest);
@@ -694,7 +683,6 @@ export async function buildDailySocialBlogPost({
       imageStatus: artwork.imageStatus,
       sourceCount: cleanedSources.length,
       themeCount: socialPackage.themes.length,
-      phase3Score: phase3Quality.score,
     });
 
     return {
@@ -716,8 +704,8 @@ export async function buildDailySocialBlogPost({
       imageError: artwork.imageError,
       rssFeedUrl: rss.feedUrl,
       rss,
-      phase3Quality,
       publishedObjects,
+      phase4Gate,
       sourceCount: cleanedSources.length,
       rebuild,
     };
