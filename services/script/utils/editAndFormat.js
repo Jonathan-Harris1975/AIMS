@@ -3,11 +3,63 @@
 // ====================================================================
 
 const BRITISH_SPELLINGS = new Map([
+  ["analyze", "analyse"],
+  ["analyzes", "analyses"],
+  ["analyzed", "analysed"],
+  ["analyzing", "analysing"],
+  ["behavior", "behaviour"],
+  ["behaviors", "behaviours"],
+  ["center", "centre"],
+  ["centers", "centres"],
+  ["centered", "centred"],
+  ["centering", "centring"],
   ["clamor", "clamour"],
   ["clamors", "clamours"],
   ["clamored", "clamoured"],
   ["clamoring", "clamouring"],
+  ["color", "colour"],
+  ["colors", "colours"],
+  ["colored", "coloured"],
+  ["customize", "customise"],
+  ["customizes", "customises"],
+  ["customized", "customised"],
+  ["customizing", "customising"],
+  ["modeling", "modelling"],
+  ["optimization", "optimisation"],
+  ["optimize", "optimise"],
+  ["optimizes", "optimises"],
+  ["optimized", "optimised"],
+  ["optimizing", "optimising"],
+  ["personalization", "personalisation"],
+  ["personalize", "personalise"],
+  ["personalized", "personalised"],
+  ["personalizes", "personalises"],
+  ["personalizing", "personalising"],
+  ["prioritize", "prioritise"],
+  ["prioritized", "prioritised"],
+  ["prioritizes", "prioritises"],
+  ["prioritizing", "prioritising"],
+  ["summarize", "summarise"],
+  ["summarized", "summarised"],
+  ["summarizes", "summarises"],
+  ["summarizing", "summarising"],
 ]);
+
+const ANTI_HYPE_REPLACEMENTS = [
+  [/\bdelve into\b/gi, "examine"],
+  [/\bdelves into\b/gi, "examines"],
+  [/\bdelving into\b/gi, "examining"],
+  [/\bgroundbreaking\b/gi, "notable"],
+  [/\blandscape\b/gi, "field"],
+  [/\blandscapes\b/gi, "fields"],
+  [/\brevolutionary\b/gi, "material"],
+  [/\brevolutionize\b/gi, "change"],
+  [/\brevolutionizes\b/gi, "changes"],
+  [/\brevolutionized\b/gi, "changed"],
+  [/\brevolutionizing\b/gi, "changing"],
+  [/\bgame-changing\b/gi, "material"],
+  [/\bcutting-edge\b/gi, "new"],
+];
 
 const HIGH_CONFIDENCE_PUNCTUATION_REPAIRS = new Set([
   "a",
@@ -52,6 +104,20 @@ function normaliseBritishSpelling(text = "") {
   for (const [american, british] of BRITISH_SPELLINGS.entries()) {
     const pattern = new RegExp(`\\b${american}\\b`, "gi");
     out = out.replace(pattern, (match) => preserveCase(match, british));
+  }
+
+  return out;
+}
+
+function replacePreservingCase(text = "", pattern, replacement) {
+  return String(text || "").replace(pattern, (match) => preserveCase(match, replacement));
+}
+
+function normaliseAntiHypePhrases(text = "") {
+  let out = String(text || "");
+
+  for (const [pattern, replacement] of ANTI_HYPE_REPLACEMENTS) {
+    out = replacePreservingCase(out, pattern, replacement);
   }
 
   return out;
@@ -117,11 +183,11 @@ function sentenceCase(text = "") {
 function splitSentenceAtBoundary(sentence = "") {
   const trimmed = String(sentence || "").trim();
   const words = trimmed.split(/\s+/).filter(Boolean);
-  if (words.length <= 32) return [trimmed];
+  if (words.length <= 26) return [trimmed];
 
-  const minWords = 9;
-  const ideal = 22;
-  const maxFirstWords = Math.min(26, words.length - minWords);
+  const minWords = 8;
+  const ideal = 18;
+  const maxFirstWords = Math.min(22, words.length - minWords);
   let bestIndex = -1;
   let bestScore = Number.POSITIVE_INFINITY;
 
@@ -160,7 +226,7 @@ function splitLongSentenceRecursive(sentence = "") {
     const current = queue.shift();
     const wordCount = current.split(/\s+/).filter(Boolean).length;
 
-    if (wordCount <= 32) {
+    if (wordCount <= 26) {
       out.push(current);
       continue;
     }
@@ -220,6 +286,7 @@ export default function editAndFormat(text) {
   // deterministic polish before sentence splitting
   out = normaliseUrlSpeech(out);
   out = repairPunctuationGlitches(out);
+  out = normaliseAntiHypePhrases(out);
   out = normaliseBritishSpelling(out);
 
   // expand AI safely
@@ -232,6 +299,7 @@ export default function editAndFormat(text) {
 }
 
 export const __testing = {
+  normaliseAntiHypePhrases,
   normaliseBritishSpelling,
   normaliseUrlSpeech,
   repairPunctuationGlitches,
