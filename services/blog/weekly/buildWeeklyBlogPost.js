@@ -7,6 +7,11 @@ import { pageTemplate, weeklyPostBody } from "../utils/templates.js";
 import { createBlogArtwork } from "../../artwork/createBlogArtwork.js";
 import { publishBlogRssFeed } from "../rss/publishBlogRssFeed.js";
 import {
+  buildPhase3QuarantinePayload,
+  phase3QuarantineKey,
+  runPhase3AutopublishGate,
+} from "../../content-quality/phase3Gates.js";
+import {
   cleanSourceText,
   cleanSourceTitle,
   parseStructuredWeeklyPackage,
@@ -290,6 +295,35 @@ async function resolveBlogArtwork({ sessionId, imagePrompt, week }) {
 }
 
 
+async function writeWeeklyPhase3Quarantine({ week, title, phase3Quality, weeklyPackage, items, imagePrompt } = {}) {
+  const key = phase3QuarantineKey({
+    contentType: "blog-weekly",
+    id: `${week}-${title || "untitled"}`,
+  });
+
+  try {
+    await putJson("blog", key, buildPhase3QuarantinePayload({
+      context: {
+        service: "blog-weekly",
+        week,
+        sourceCount: items.length,
+        action: "blocked-before-publication",
+      },
+      report: phase3Quality,
+      payload: {
+        package: weeklyPackage,
+        imagePrompt,
+        sources: items.map((item) => ({ title: item.title, link: item.link, pubDate: item.pubDateRaw })),
+      },
+    }));
+    warn("blog.weekly.phase3.quarantined", { week, key, score: phase3Quality.score });
+    return key;
+  } catch (err) {
+    error("blog.weekly.phase3.quarantine.fail", { week, key, error: err?.message });
+    return null;
+  }
+}
+
 async function generateStructuredWeeklyPackage({ sessionId, week, dateLabel, items }) {
   const prompt = buildWeeklyPackagePrompt({ week, dateLabel, items });
   const baseMessages = [
@@ -446,9 +480,6 @@ export async function buildWeeklyBlogPost({ days, weekId } = {}) {
     });
 
     const title = weeklyPackage.title;
-    const slug = slugify(`${window.week}-${title}`);
-    const dir = `${prefix}/posts/${slug}`;
-
     const bodyHtml = renderWeeklyBodyHtml(weeklyPackage, { escapeHtml });
     const imagePrompt = buildBlogArtworkPrompt({
       week: window.week,
@@ -458,6 +489,48 @@ export async function buildWeeklyBlogPost({ days, weekId } = {}) {
       generatedPrompt: weeklyPackage.imagePrompt,
     });
 
+    const cleanedSources = items.map((item) => ({
+      title: item.title,
+      link: item.link,
+      pubDate: item.pubDateRaw,
+    }));
+
+    const phase3Quality = runPhase3AutopublishGate({
+      contentType: "blog-weekly",
+      title,
+      summary: weeklyPackage.summary,
+      bodyText: bodyHtml,
+      sections: weeklyPackage.sections,
+      imagePrompt,
+      sourceItems: items,
+      sources: cleanedSources,
+      themes: weeklyPackage.dominantThemes,
+    });
+
+    if (!phase3Quality.ok) {
+      const quarantineKey = await writeWeeklyPhase3Quarantine({
+        week: window.week,
+        title,
+        phase3Quality,
+        weeklyPackage,
+        items,
+        imagePrompt,
+      });
+
+      return {
+        ok: false,
+        blocked: true,
+        quarantined: Boolean(quarantineKey),
+        reason: "Phase 3 auto-publish gate failed; content was not published.",
+        week: window.week,
+        phase3Quality,
+        quarantineKey,
+      };
+    }
+
+    const slug = slugify(`${window.week}-${title}`);
+    const dir = `${prefix}/posts/${slug}`;
+
     const artwork = await resolveBlogArtwork({
       sessionId,
       imagePrompt,
@@ -466,12 +539,6 @@ export async function buildWeeklyBlogPost({ days, weekId } = {}) {
     const imageUrl = artwork.imageUrl;
 
     const { postPath, postUrl, postMetaUrl, postsManifestUrl, blogHubUrl, weeklyArchiveUrl } = buildSiteBlogUrls(slug, prefix);
-
-    const cleanedSources = items.map((item) => ({
-      title: item.title,
-      link: item.link,
-      pubDate: item.pubDateRaw,
-    }));
 
     const postEntry = buildPostManifestEntry({
       week: window.week,
@@ -527,6 +594,7 @@ export async function buildWeeklyBlogPost({ days, weekId } = {}) {
         mode: window.mode,
       },
       created_at: createdAt,
+      phase3Quality,
     });
     await putJson(outBucketKey, `${prefix}/posts.json`, mergedManifest);
 
@@ -546,6 +614,7 @@ export async function buildWeeklyBlogPost({ days, weekId } = {}) {
       imageStatus: artwork.imageStatus,
       sourceCount: cleanedSources.length,
       themeCount: weeklyPackage.dominantThemes.length,
+      phase3Score: phase3Quality.score,
     });
 
     const rebuild = await triggerWebsiteRebuild();
@@ -568,6 +637,7 @@ export async function buildWeeklyBlogPost({ days, weekId } = {}) {
       weeklyArchiveUrl,
       rssFeedUrl: rss.feedUrl,
       rss,
+      phase3Quality,
       publishedObjects: {
         postHtmlKey: `${dir}/index.html`,
         postMetaKey: `${dir}/post.json`,
