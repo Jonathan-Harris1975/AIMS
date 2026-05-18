@@ -21,7 +21,7 @@ Provides an HTTP wrapper around Cloudflare zone cache purge with validation and 
 ## Workflow
 
 - Health route reports whether zone/token env is configured.
-- Purge route optionally checks `x-cloudflare-purge-secret`.
+- Purge route accepts either the suite-level `Authorization: Bearer <AIMS_API_KEY>` header or, for the Cloudflare purge lane only, the legacy `x-cloudflare-purge-secret` header when `CLOUDFLARE_PURGE_SHARED_SECRET` is configured.
 - Request body must contain exactly one purge mode.
 - Utility calls Cloudflare v4 purge endpoint and normalises errors.
 
@@ -47,7 +47,7 @@ No dedicated Cloudflare purge test was found.
 
 ## Common troubleshooting
 
-- 401/403: missing or invalid `x-cloudflare-purge-secret`.
+- 401/403: missing or invalid suite bearer token, or missing/invalid `x-cloudflare-purge-secret` when using the legacy purge-secret path. If the response says Cloudflare authentication failed, check `CF_purge` and its zone cache-purge permissions.
 - 500 missing config: set `CF_zone` and `CF_purge`.
 - 400 validation: supply exactly one purge mode.
 - 502/4xx from Cloudflare: check token permissions and zone ID.
