@@ -43,6 +43,34 @@ const AMERICAN_TO_BRITISH = Object.freeze([
   ["optimization", "optimisation"],
 ]);
 
+const CONTENT_TYPE_RULES = Object.freeze({
+  "weekly-blog": {
+    sentenceLimit: 65,
+    enforceArtificialIntelligence: false,
+    ttsWarningsBlock: false,
+  },
+  "social-content": {
+    sentenceLimit: 48,
+    enforceArtificialIntelligence: false,
+    ttsWarningsBlock: false,
+  },
+  "podcast": {
+    sentenceLimit: 38,
+    enforceArtificialIntelligence: true,
+    ttsWarningsBlock: true,
+  },
+  "podcast-transcript": {
+    sentenceLimit: 38,
+    enforceArtificialIntelligence: true,
+    ttsWarningsBlock: true,
+  },
+  "tts": {
+    sentenceLimit: 38,
+    enforceArtificialIntelligence: true,
+    ttsWarningsBlock: true,
+  },
+});
+
 function asArray(value) {
   if (Array.isArray(value)) return value;
   if (value == null) return [];
@@ -60,6 +88,19 @@ function cleanText(value = "") {
     .replace(/[\u2013\u2014]/g, "-")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function contentRulesFor(contentType = "content") {
+  const key = String(contentType || "content").toLowerCase();
+  if (CONTENT_TYPE_RULES[key]) return CONTENT_TYPE_RULES[key];
+  if (/podcast|transcript|tts/.test(key)) return CONTENT_TYPE_RULES.podcast;
+  if (/social/.test(key)) return CONTENT_TYPE_RULES["social-content"];
+  if (/weekly|blog/.test(key)) return CONTENT_TYPE_RULES["weekly-blog"];
+  return {
+    sentenceLimit: 56,
+    enforceArtificialIntelligence: false,
+    ttsWarningsBlock: false,
+  };
 }
 
 function textFromPackage(generated = {}) {
@@ -107,52 +148,87 @@ function numberTokens(value = "") {
   return tokens;
 }
 
-function quoteFragments(value = "") {
+function directQuoteFragments(value = "") {
   const quotes = [];
-  for (const match of String(value || "").matchAll(/["“”']([^"“”']{18,})["“”']/g)) {
+  const text = String(value || "");
+  for (const match of text.matchAll(/"([^"]{18,})"/g)) {
+    quotes.push(cleanText(match[1]).toLowerCase());
+  }
+  for (const match of text.matchAll(/\u201c([^\u201d]{18,})\u201d/g)) {
     quotes.push(cleanText(match[1]).toLowerCase());
   }
   return quotes;
 }
 
-function scoreFromDefects(defects = [], base = 100, weight = 8) {
-  return Math.max(0, base - defects.length * weight);
+function scoreFromIssues({ defects = [], warnings = [], base = 100, defectWeight = 12, warningWeight = 3 } = {}) {
+  return Math.max(0, base - defects.length * defectWeight - warnings.length * warningWeight);
 }
 
-function evaluateBrandTone(text = "") {
+function evaluateBrandTone(text = "", { contentType = "content" } = {}) {
   const lower = cleanText(text).toLowerCase();
   const defects = [];
+  const warnings = [];
+  const rules = contentRulesFor(contentType);
+
   for (const phrase of BANNED_PHRASES) {
     if (lower.includes(phrase)) defects.push(`Banned or hype phrase detected: ${phrase}`);
   }
+
   for (const [american, british] of AMERICAN_TO_BRITISH) {
     const re = new RegExp(`\\b${american}\\b`, "i");
     if (re.test(lower)) defects.push(`British English drift: use ${british} instead of ${american}`);
   }
-  if (/(?:^|\W)ai(?:\W|$)/i.test(text) && /podcast|tts|transcript/i.test(text)) {
-    defects.push("TTS copy should use artificial intelligence rather than bare AI where practical.");
-  }
-  const longSentence = cleanText(text).split(/[.!?]+/).some((sentence) => sentence.trim().split(/\s+/).filter(Boolean).length > 38);
-  if (longSentence) defects.push("Sentence length exceeds the autonomous readability limit of 38 words.");
 
-  return { name: "brandTone", score: scoreFromDefects(defects, 100, 8), defects };
+  if (rules.enforceArtificialIntelligence && /(?:^|\W)ai(?:\W|$)/i.test(text)) {
+    const issue = "TTS copy should use artificial intelligence rather than bare AI where practical.";
+    if (rules.ttsWarningsBlock) defects.push(issue);
+    else warnings.push(issue);
+  }
+
+  const maxSentenceWords = cleanText(text)
+    .split(/[.!?]+/)
+    .reduce((max, sentence) => Math.max(max, sentence.trim().split(/\s+/).filter(Boolean).length), 0);
+
+  if (maxSentenceWords > rules.sentenceLimit) {
+    const issue = `Sentence length exceeds the autonomous readability limit of ${rules.sentenceLimit} words.`;
+    if (rules.ttsWarningsBlock) defects.push(issue);
+    else warnings.push(issue);
+  }
+
+  return {
+    name: "brandTone",
+    score: scoreFromIssues({ defects, warnings, defectWeight: 12, warningWeight: 3 }),
+    defects,
+    warnings,
+    maxSentenceWords,
+    sentenceLimit: rules.sentenceLimit,
+  };
 }
 
 function evaluateSourceIntegrity(generatedText = "", sources = []) {
   const defects = [];
+  const warnings = [];
   const src = sourceText(sources).toLowerCase();
   const generatedNumbers = numberTokens(generatedText);
   const sourceNumbers = numberTokens(src);
+
   for (const token of generatedNumbers) {
     if (!sourceNumbers.has(token)) defects.push(`Unsupported number or date-like token: ${token}`);
   }
-  for (const quote of quoteFragments(generatedText)) {
+
+  for (const quote of directQuoteFragments(generatedText)) {
     if (!src.includes(quote)) defects.push(`Unsupported direct quote fragment: ${quote.slice(0, 70)}`);
   }
+
   if (asArray(sources).length === 0) defects.push("No source records supplied for source-backed publication.");
   if (generatedText.length > 300 && src.length < 80) defects.push("Source material is too thin for autonomous publication.");
 
-  return { name: "sourceIntegrity", score: scoreFromDefects(defects, 100, 12), defects };
+  return {
+    name: "sourceIntegrity",
+    score: scoreFromIssues({ defects, warnings, defectWeight: 12, warningWeight: 3 }),
+    defects,
+    warnings,
+  };
 }
 
 function parseJsonLdBlocks(html = "") {
@@ -187,6 +263,7 @@ function collectTypes(schema) {
 
 function evaluateSchemaMarkup({ html = "", schema = null, expectedTypes = ["BlogPosting"] } = {}) {
   const defects = [];
+  const warnings = [];
   const schemas = schema ? asArray(schema) : parseJsonLdBlocks(html);
   if (!schemas.length) defects.push("Missing application/ld+json structured data block.");
 
@@ -206,11 +283,18 @@ function evaluateSchemaMarkup({ html = "", schema = null, expectedTypes = ["Blog
   }
   if (primary["@context"] !== "https://schema.org") defects.push("JSON-LD @context must be https://schema.org.");
 
-  return { name: "schemaMarkup", score: scoreFromDefects(defects, 100, 10), defects, types };
+  return {
+    name: "schemaMarkup",
+    score: scoreFromIssues({ defects, warnings, defectWeight: 10, warningWeight: 3 }),
+    defects,
+    warnings,
+    types,
+  };
 }
 
 function evaluateSocialContract(generated = {}) {
   const defects = [];
+  const warnings = [];
   const caption = cleanText(generated.social_caption || generated.caption || "");
   const hashtags = asArray(generated.hashtags);
   const themes = asArray(generated.themes || generated.dominantThemes || generated.dominant_themes);
@@ -222,7 +306,12 @@ function evaluateSocialContract(generated = {}) {
     defects.push("Hashtags must be plain #CamelCase tags without punctuation or spaces.");
   }
   if (!themes.length) defects.push("Themes/topics are required for social classification.");
-  return { name: "socialContract", score: scoreFromDefects(defects, 100, 8), defects };
+  return {
+    name: "socialContract",
+    score: scoreFromIssues({ defects, warnings, defectWeight: 8, warningWeight: 3 }),
+    defects,
+    warnings,
+  };
 }
 
 function overallScore(gates = []) {
@@ -241,7 +330,7 @@ export function runPhase4AutonomousContentGate({
 } = {}) {
   const generatedText = textFromPackage(generated || {});
   const gates = [
-    evaluateBrandTone(`${generatedText} ${html}`),
+    evaluateBrandTone(generatedText, { contentType }),
     evaluateSourceIntegrity(generatedText, sources),
     evaluateSchemaMarkup({ html, schema, expectedTypes: expectedSchemaTypes }),
   ];
@@ -251,6 +340,7 @@ export function runPhase4AutonomousContentGate({
   }
 
   const defects = gates.flatMap((gate) => gate.defects.map((defect) => `${gate.name}: ${defect}`));
+  const warnings = gates.flatMap((gate) => (gate.warnings || []).map((warning) => `${gate.name}: ${warning}`));
   const scores = Object.fromEntries(gates.map((gate) => [gate.name, gate.score]));
   const score = overallScore(gates);
   const required = {
@@ -274,6 +364,7 @@ export function runPhase4AutonomousContentGate({
     scores,
     thresholds: required,
     defects,
+    warnings,
     gates,
     checkedAt: new Date().toISOString(),
   };
@@ -325,7 +416,8 @@ export function phase4SkillsSummary() {
       "Schema markup may be auto-applied only when required JSON-LD fields validate.",
       "Social content may auto-publish only when source-backed, brand-safe, and schema-valid.",
       "Engineering execution may auto-PR only when scoped diff, tests, path safety, and validation gates pass.",
-      "Any gate failure quarantines the artefact or routes the task to manual_review.",
+      "Any blocking gate failure quarantines the artefact or routes the task to manual_review.",
+      "Weekly blog readability notes are warnings unless they breach brand, schema, or source-integrity blocking gates.",
     ],
   };
 }
