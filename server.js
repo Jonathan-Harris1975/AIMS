@@ -65,6 +65,17 @@ function isNoisyProbePath(value) {
   return /(?:^|\/)(?:\.git\/config|xmlrpc\.php|wp-admin|wp-content|wp-includes|wlwmanifest\.xml|wordpress|cms|wp)(?:[\/?#]|$)/i.test(path);
 }
 
+function isQuietAccessLogRequest(req) {
+  const method = String(req?.method || "").toUpperCase();
+  if (!["GET", "HEAD"].includes(method)) return false;
+
+  const path = String(req?.originalUrl || req?.url || req?.path || "/")
+    .split("?")[0]
+    .replace(/\/+$/, "") || "/";
+
+  return path === "/" || path === "/health" || path.toLowerCase().endsWith("/health");
+}
+
 const trustProxy = parseTrustProxy(process.env.TRUST_PROXY);
 app.set("trust proxy", trustProxy);
 
@@ -133,6 +144,9 @@ app.use(
   pinoHttp({
     logger: log,
     quietReqLogger: true,
+    autoLogging: {
+      ignore: isQuietAccessLogRequest,
+    },
     genReqId(req, res) {
       const inherited =
         req.headers["x-request-id"] ||
