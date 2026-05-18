@@ -8,13 +8,17 @@ function isProductionEnv() {
   return normalise(process.env.NODE_ENV).toLowerCase() === "production";
 }
 
-
 function looksLikeSecretPlaceholder(value) {
   return /^\{\{\s*secret\.[^}]+\}\}$/i.test(normalise(value));
 }
 
 function truthy(value) {
   return ["1", "true", "yes", "y", "on"].includes(normalise(value).toLowerCase());
+}
+
+function usableSecret(value) {
+  const normalised = normalise(value);
+  return looksLikeSecretPlaceholder(normalised) ? "" : normalised;
 }
 
 function safeEqual(received, expected) {
@@ -41,18 +45,15 @@ export function isPublicHealthRequest(req) {
 }
 
 function expectedSuiteKey() {
-  const value = normalise(process.env.AIMS_API_KEY || process.env.AI_SUITE_API_KEY);
-  return looksLikeSecretPlaceholder(value) ? "" : value;
+  return usableSecret(process.env.AIMS_API_KEY || process.env.AI_SUITE_API_KEY);
 }
 
 function expectedAuditCallbackKey() {
-  const value = normalise(process.env.AUDIT_CALLBACK_TOKEN || process.env.AI_SUITE_AUDIT_CALLBACK_TOKEN);
-  return looksLikeSecretPlaceholder(value) ? "" : value;
+  return usableSecret(process.env.AUDIT_CALLBACK_TOKEN || process.env.AI_SUITE_AUDIT_CALLBACK_TOKEN);
 }
 
 function expectedCloudflarePurgeSecret() {
-  const value = normalise(process.env.CLOUDFLARE_PURGE_SHARED_SECRET);
-  return looksLikeSecretPlaceholder(value) ? "" : value;
+  return usableSecret(process.env.CLOUDFLARE_PURGE_SHARED_SECRET);
 }
 
 function allowsUnauthenticatedDevelopment() {
@@ -67,7 +68,7 @@ function isLegacyAuditCallbackPath(req) {
   );
 }
 
-function isCloudflarePurgePath(req) {
+export function isCloudflarePurgePath(req) {
   const method = String(req.method || "").toUpperCase();
   if (method !== "POST") return false;
   const path = pathWithoutQuery(req).replace(/\/+$/, "").toLowerCase();
@@ -78,10 +79,21 @@ function extractCloudflarePurgeSecret(req) {
   return normalise(req.get?.("x-cloudflare-purge-secret") || req.headers?.["x-cloudflare-purge-secret"]);
 }
 
-function hasValidCloudflarePurgeSecret(req) {
-  const expected = expectedCloudflarePurgeSecret();
-  const provided = extractCloudflarePurgeSecret(req);
-  return Boolean(expected && provided && safeEqual(provided, expected));
+function getCloudflarePurgeAuthStrategy(req) {
+  const expected = expectedSuiteKey();
+  const bearer = extractBearerToken(req);
+
+  if (expected && bearer && safeEqual(bearer, expected)) {
+    return "suite-bearer";
+  }
+
+  const purgeSecret = expectedCloudflarePurgeSecret();
+  const providedPurgeSecret = extractCloudflarePurgeSecret(req);
+  if (purgeSecret && providedPurgeSecret && safeEqual(providedPurgeSecret, purgeSecret)) {
+    return "cloudflare-purge-secret";
+  }
+
+  return "public-cloudflare-purge";
 }
 
 export function requireAimsBearerAuth(req, res, next) {
@@ -89,17 +101,7 @@ export function requireAimsBearerAuth(req, res, next) {
   if (isPublicHealthRequest(req)) return next();
 
   if (isCloudflarePurgePath(req)) {
-    const purgeExpected = expectedSuiteKey();
-    const purgeToken = extractBearerToken(req);
-
-    if (purgeExpected && purgeToken && safeEqual(purgeToken, purgeExpected)) {
-      req.aimsAuth = { strategy: "suite-bearer" };
-    } else if (hasValidCloudflarePurgeSecret(req)) {
-      req.aimsAuth = { strategy: "cloudflare-purge-secret" };
-    } else {
-      req.aimsAuth = { strategy: "public-cloudflare-purge" };
-    }
-
+    req.aimsAuth = { strategy: getCloudflarePurgeAuthStrategy(req) };
     return next();
   }
 
