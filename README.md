@@ -312,8 +312,10 @@ These files exist but are not mounted by the active root route registry:
 
 | Name | Purpose | Used by | Required | Default/template | Notes |
 |---|---|---|---|---|---|
-| `CLOUDFLARE_PURGE_SHARED_SECRET` | Cloudflare cache purge configuration. | services/cloudflare-purge | Conditional; required by purge route | `blank` | Secret value; keep in Koyeb/GitHub secret storage. |
-| `CF_EMAIL` | Cloudflare cache purge configuration. | services/cloudflare-purge | Conditional; required by purge route | `blank` | Template contains it; purge code uses bearer token, not email auth. |
+| `CF_zone` / `CLOUDFLARE_ZONE_ID` | Cloudflare zone ID for cache purge. | services/cloudflare-purge | Required for purge calls | `blank` | Prefer `CF_zone={{secret.CF_ZONE}}` in Koyeb. |
+| `CF_purge` / `CLOUDFLARE_PURGE_API_TOKEN` | Cloudflare API token used as outbound bearer auth. | services/cloudflare-purge | Required for token auth | `blank` | Prefer `CF_purge={{secret.CF_PURGE}}`; the code also strips an accidental leading `Bearer `. |
+| `CLOUDFLARE_PURGE_SHARED_SECRET` | Legacy inbound route secret. | services/cloudflare-purge | Optional | `blank` | `/cloudflare/purge` now accepts suite bearer, this secret, or no inbound auth. |
+| `CF_EMAIL` + `CF_GLOBAL_API_KEY` | Legacy Cloudflare global-key fallback. | services/cloudflare-purge | Optional fallback | `blank` | Only used if no API token env is configured. |
 
 ### Cloudflare R2
 
@@ -470,8 +472,7 @@ These files exist but are not mounted by the active root route registry:
 
 | Name | Purpose | Used by | Required | Default/template | Notes |
 |---|---|---|---|---|---|
-| `OUTREACH_KEYWORDS` | Optional inline outreach keyword list. If blank, batch mode uses `services/outreach/keywords.txt`. | services/outreach | Optional when keyword file exists | `blank` | Use env for urgent overrides; keep long lists in the repo file. |
-| `OUTREACH_KEYWORDS_FILE` | Optional path override for the outreach keyword file. | services/outreach | Optional | `services/outreach/keywords.txt` | Relative paths resolve from the repo root. |
+| `OUTREACH_KEYWORDS` | Outreach provider, score or batch setting. | services/outreach | Conditional; required by outreach routes | `blank` | Secret value; keep in Koyeb/GitHub secret storage. |
 | `OUTREACH_BATCH_SIZE` | Outreach provider, score or batch setting. | services/outreach | Conditional; required by outreach routes | `20` | Set only for services you run. |
 | `OUTREACH_MIN_LEAD_SCORE` | Outreach provider, score or batch setting. | services/outreach | Conditional; required by outreach routes | `blank` | Set only for services you run. |
 | `OUTREACH_MIN_EMAIL_SCORE` | Outreach provider, score or batch setting. | services/outreach | Conditional; required by outreach routes | `blank` | Set only for services you run. |
@@ -718,8 +719,9 @@ Evidence in `services/outreach/services/outreachCore.js` and `zeroBounceBatch.js
 ### Cloudflare purge
 
 - `services/cloudflare-purge/utils/purgeCloudflareCache.js` uses the Cloudflare v4 purge endpoint.
-- It requires `CF_zone` and `CF_purge`.
-- `CLOUDFLARE_PURGE_SHARED_SECRET` optionally protects the application route with `x-cloudflare-purge-secret`.
+- It requires a Cloudflare zone ID via `CF_zone`, `CF_ZONE`, `CLOUDFLARE_ZONE_ID`, or `CLOUDFLARE_ZONE`.
+- It requires an outbound Cloudflare API token via `CF_purge`, `CF_PURGE`, `CLOUDFLARE_PURGE_API_TOKEN`, `CLOUDFLARE_API_TOKEN`, or `CF_API_TOKEN`.
+- `/cloudflare/purge` accepts suite bearer, the legacy `x-cloudflare-purge-secret`, or no inbound auth, because it is used by webhook-style automation. The outbound Cloudflare credentials still have to be valid.
 
 ## Workflow documentation
 
@@ -848,7 +850,7 @@ Evidence: `services/outreach/routes/index.js`, `services/outreach/services/*.js`
 6. ZeroBounce batch validation validates discovered emails if configured.
 7. Leads are scored using `OUTREACH_MIN_LEAD_SCORE` and `OUTREACH_MIN_EMAIL_SCORE`.
 8. Accepted leads are appended to Google Sheets.
-9. Batch mode reads `OUTREACH_KEYWORDS` first, then falls back to `services/outreach/keywords.txt`, advances a cursor and stores progress in R2 metasystem state when available.
+9. Batch mode reads `OUTREACH_KEYWORDS`, advances a cursor and stores progress in R2 metasystem state when available.
 
 ### SEO/AEO/GEO audit workflow
 
@@ -1231,8 +1233,9 @@ Check:
 
 Check:
 
-- `CF_zone` and `CF_purge`.
-- If set, `CLOUDFLARE_PURGE_SHARED_SECRET` must match request header `x-cloudflare-purge-secret`.
+- `CF_zone={{secret.CF_ZONE}}` and `CF_purge={{secret.CF_PURGE}}` are the preferred Koyeb env shapes.
+- Avoid unresolved placeholder values such as `CF_purge={{ secret.CF-purge }}`; the service now detects these and returns a configuration error instead of sending a bad bearer token to Cloudflare.
+- The inbound purge route no longer requires `x-cloudflare-purge-secret`.
 - Request body must specify exactly one purge mode.
 - Cloudflare API token must have zone cache purge permissions.
 
