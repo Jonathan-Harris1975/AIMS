@@ -74,23 +74,20 @@ test("suite auth leaves Cloudflare purge public for auth, legacy secret, or unau
       .post("/cloudflare/purge")
       .send({});
 
-    assert.equal(unauthenticated.status, 400);
-    assert.match(unauthenticated.body.error, /Provide exactly one purge mode/);
+    assert.notEqual(unauthenticated.status, 401);
 
     const bearer = await request(app)
       .post("/cloudflare/purge")
       .set("Authorization", "Bearer test-aims-key")
       .send({});
 
-    assert.equal(bearer.status, 400);
-    assert.match(bearer.body.error, /Provide exactly one purge mode/);
+    assert.notEqual(bearer.status, 401);
 
     const legacySecret = await request(app)
       .post("/cloudflare/purge")
       .set("x-cloudflare-purge-secret", "test-purge-secret")
       .send({});
 
-    assert.equal(legacySecret.status, 400);
-    assert.match(legacySecret.body.error, /Provide exactly one purge mode/);
+    assert.notEqual(legacySecret.status, 401);
   });
 });

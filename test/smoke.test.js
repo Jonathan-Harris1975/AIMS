@@ -146,17 +146,22 @@ test("job status responses do not expose stack traces", async () => {
   assert.equal("stack" in (response.body.job.error || {}), false);
 });
 
-test("POST /cloudflare/purge rejects an empty body instead of defaulting to purge_everything", async () => {
+test("POST /cloudflare/purge treats an empty webhook body as purge everything", async () => {
   process.env.CLOUDFLARE_PURGE_SHARED_SECRET = "test-secret";
+  delete process.env.CF_purge;
+  delete process.env.CF_zone;
+  delete process.env.CLOUDFLARE_PURGE_API_TOKEN;
+  delete process.env.CLOUDFLARE_ZONE_ID;
+
   const { default: freshApp } = await import(`../server.js?cf-empty=${Date.now()}`);
   const response = await request(freshApp)
     .post("/cloudflare/purge")
     .set("x-cloudflare-purge-secret", "test-secret")
     .send({});
 
-  assert.equal(response.status, 400);
+  assert.equal(response.status, 500);
   assert.equal(response.body.ok, false);
-  assert.match(response.body.error, /Provide exactly one purge mode/);
+  assert.match(response.body.error, /Missing zone id environment variable|Missing CF_zone|not configured/i);
 });
 
 test("POST /cloudflare/purge accepts unauthenticated webhook-style requests", async () => {
