@@ -76,3 +76,34 @@ test("Phase 4 quarantine records are deterministic enough for R2 storage", () =>
   assert.match(phase4QuarantineKey("social-content", "daily-2026-05-17"), /^phase-4-quarantine\/social-content\//);
   assert.equal(phase4SkillsSummary().autonomousMode, "auto-review auto-publish fail-closed");
 });
+
+
+test("Phase 4 weekly blog gate does not quarantine apostrophes, quoted labels or long-form editorial rhythm", () => {
+  const weeklyHtml = `<!doctype html><html><head><script type="application/ld+json">{"@context":"https://schema.org","@type":"BlogPosting","headline":"Plumbing, promises and trust","description":"The useful signal is operational control.","datePublished":"2026-05-17T08:00:00Z","author":{"@type":"Person","name":"Jonathan Harris"},"mainEntityOfPage":{"@type":"WebPage","@id":"https://example.com/blog"}}</script></head><body><nav>Podcast</nav><main>Weekly blog</main></body></html>`;
+  const gate = runPhase4AutonomousContentGate({
+    contentType: "weekly-blog",
+    generated: {
+      title: "Plumbing, promises and trust",
+      summary: "Hermes's self-hosted runtime and the DataRobot 'no-slides' Build Club both point to the same boring truth: artificial intelligence projects live or die by provenance, integration and governance rather than demo glitter.",
+      sections: [
+        {
+          heading: "Plumbing beats headline models",
+          paragraphs: [
+            "The recurring point is mundane and uncomfortable: models amplify whatever the inputs contain, so provenance, versioning, coherent state and the little rules about what context to keep are the levers that determine whether a system is useful or hallucinatory."
+          ],
+        },
+      ],
+      dominantThemes: ["Data", "Governance"],
+    },
+    html: weeklyHtml,
+    sources: [
+      { title: "Hermes Agent offers self-hosted runtime for advanced agents", rewritten: "Hermes Agent offers a self-hosted runtime for advanced agents.", link: "https://example.com/hermes" },
+      { title: "DataRobot runs a no-slides agent Build Club", rewritten: "DataRobot runs a no-slides agent Build Club focused on practical implementation.", link: "https://example.com/datarobot" },
+    ],
+  });
+
+  assert.equal(gate.ok, true);
+  assert.equal(gate.decision, "auto_publish");
+  assert.equal(gate.defects.length, 0);
+});
+
