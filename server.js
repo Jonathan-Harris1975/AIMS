@@ -48,6 +48,17 @@ function isCorsDeniedError(err) {
   return err?.message === "CORS origin not allowed";
 }
 
+function normaliseErrorStatus(err) {
+  const status = Number(err?.statusCode || err?.status);
+  return Number.isInteger(status) && status >= 400 && status < 600 ? status : 500;
+}
+
+function publicErrorMessage(err, status) {
+  if (isCorsDeniedError(err)) return err.message;
+  if (status === 500) return "Internal error";
+  return err?.message || "Request failed";
+}
+
 
 function isNoisyProbePath(value) {
   const path = String(value || "").toLowerCase();
@@ -203,13 +214,16 @@ app.use((err, req, res, _next) => {
     error: err?.stack || String(err),
   });
 
-  const status = isCorsDeniedError(err) ? 403 : 500;
-  const message = isCorsDeniedError(err) ? err.message : "Internal error";
+  const status = isCorsDeniedError(err) ? 403 : normaliseErrorStatus(err);
+  const message = publicErrorMessage(err, status);
 
   res.status(status).json({
     ok: false,
     error: message,
     requestId,
+    ...(status < 500 && Array.isArray(err?.availableCategories)
+      ? { availableCategories: err.availableCategories }
+      : {}),
   });
 });
 
