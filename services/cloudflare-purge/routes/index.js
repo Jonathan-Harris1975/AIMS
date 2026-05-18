@@ -4,7 +4,7 @@ import {
   validateBody,
   cloudflarePurgeBodySchema,
 } from "../../shared/utils/requestSchemas.js";
-import { purgeCloudflareCache } from "../utils/purgeCloudflareCache.js";
+import { purgeCloudflareCache, resolveCloudflarePurgeConfig } from "../utils/purgeCloudflareCache.js";
 
 const router = express.Router();
 
@@ -32,11 +32,29 @@ function getPurgeAuthStrategy(req) {
   return req.aimsAuth?.strategy || "unauthenticated";
 }
 
+function getConfigHealth() {
+  try {
+    const config = resolveCloudflarePurgeConfig();
+    return {
+      configured: true,
+      authMode: config.authMode,
+      zoneEnvKey: config.zoneEnvKey,
+      tokenEnvKey: config.tokenEnvKey || config.globalKeyEnvKey || null,
+    };
+  } catch (err) {
+    return {
+      configured: false,
+      error: err?.message || String(err),
+      envKey: err?.details?.envKey || null,
+    };
+  }
+}
+
 router.get("/health", (_req, res) => {
   res.json({
     ok: true,
     service: "cloudflare-purge",
-    configured: Boolean(String(process.env.CF_zone || "").trim() && String(process.env.CF_purge || "").trim()),
+    ...getConfigHealth(),
     time: new Date().toISOString(),
   });
 });
@@ -62,6 +80,9 @@ router.post("/purge", asyncRoute(async (req, res) => {
 
     info("cloudflare.purge.complete", {
       mode: result.mode,
+      authMode: result.authMode,
+      zoneEnvKey: result.zoneEnvKey,
+      tokenEnvKey: result.tokenEnvKey,
       requestId: result.result?.id || null,
     });
 
@@ -76,12 +97,14 @@ router.post("/purge", asyncRoute(async (req, res) => {
     error("cloudflare.purge.fail", {
       mode,
       statusCode,
+      details: err?.details || null,
       error: err?.message || String(err),
     });
 
     return res.status(statusCode).json({
       ok: false,
       error: err?.message || "Cloudflare purge failed",
+      details: err?.details || null,
     });
   }
 }));
