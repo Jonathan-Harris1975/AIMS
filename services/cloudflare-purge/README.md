@@ -9,11 +9,23 @@ Routes are mounted under `/cloudflare`.
 
 `POST /cloudflare/purge` is intentionally callable with or without inbound AIMS auth because it may be used by webhooks and internal automation. If the suite bearer or legacy purge secret is supplied, the route records the auth strategy for diagnostics, but it does not require either one.
 
-The route still requires valid outbound Cloudflare credentials in the deployed environment.
+The route still requires valid outbound Cloudflare credentials in the deployed environment. Empty webhook-style POST bodies are treated as `{"purge_everything": true}` because this endpoint is normally used as a cache-clear trigger rather than a form submission.
 
 ## Request body
 
 Provide exactly one purge mode:
+
+```json
+{}
+```
+
+Defaults to:
+
+```json
+{ "purge_everything": true }
+```
+
+Explicit purge-all payload:
 
 ```json
 { "purge_everything": true }
@@ -21,6 +33,12 @@ Provide exactly one purge mode:
 
 ```json
 { "files": ["https://example.com/page.html"] }
+```
+
+Also accepted:
+
+```json
+{ "urls": "https://example.com/page.html, https://example.com/feed.xml" }
 ```
 
 ```json
