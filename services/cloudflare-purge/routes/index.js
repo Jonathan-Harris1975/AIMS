@@ -28,38 +28,8 @@ function getPurgeCounts(body = {}) {
   };
 }
 
-function getConfiguredSharedSecret() {
-  return String(process.env.CLOUDFLARE_PURGE_SHARED_SECRET || "").trim();
-}
-
-function requirePurgeSecret(req, res) {
-  if (req.aimsAuth?.strategy === "suite-bearer") {
-    return true;
-  }
-
-  const configuredSecret = getConfiguredSharedSecret();
-  if (!configuredSecret) {
-    return true;
-  }
-
-  const providedSecret = String(req.get("x-cloudflare-purge-secret") || "").trim();
-  if (!providedSecret) {
-    res.status(401).json({
-      ok: false,
-      error: "Missing Cloudflare purge secret.",
-    });
-    return false;
-  }
-
-  if (providedSecret !== configuredSecret) {
-    res.status(403).json({
-      ok: false,
-      error: "Invalid Cloudflare purge secret.",
-    });
-    return false;
-  }
-
-  return true;
+function getPurgeAuthStrategy(req) {
+  return req.aimsAuth?.strategy || "unauthenticated";
 }
 
 router.get("/health", (_req, res) => {
@@ -72,10 +42,6 @@ router.get("/health", (_req, res) => {
 });
 
 router.post("/purge", asyncRoute(async (req, res) => {
-  if (!requirePurgeSecret(req, res)) {
-    return;
-  }
-
   const parsed = validateBody(cloudflarePurgeBodySchema, req.body);
   if (!parsed.ok) {
     return res.status(400).json({ ok: false, error: parsed.error });
@@ -86,6 +52,7 @@ router.post("/purge", asyncRoute(async (req, res) => {
 
   info("cloudflare.purge.request", {
     mode,
+    authStrategy: getPurgeAuthStrategy(req),
     counts: getPurgeCounts(payload),
     requestId: req.id || req.headers["x-request-id"] || null,
   });
