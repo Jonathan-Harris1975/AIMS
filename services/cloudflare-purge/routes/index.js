@@ -33,6 +33,10 @@ function getConfiguredSharedSecret() {
 }
 
 function requirePurgeSecret(req, res) {
+  if (req.aimsAuth?.strategy === "suite-bearer") {
+    return true;
+  }
+
   const configuredSecret = getConfiguredSharedSecret();
   if (!configuredSecret) {
     return true;
