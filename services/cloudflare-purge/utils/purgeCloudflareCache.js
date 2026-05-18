@@ -13,6 +13,34 @@ function toNonEmptyTrimmedArray(values) {
   return cleaned.length ? cleaned : null;
 }
 
+function cleanFileEntry(value) {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    const url = value.url === undefined || value.url === null ? "" : String(value.url).trim();
+    if (!url) return null;
+
+    const output = { url };
+    if (value.headers && typeof value.headers === "object" && !Array.isArray(value.headers)) {
+      const headers = Object.fromEntries(
+        Object.entries(value.headers)
+          .map(([key, headerValue]) => [String(key).trim(), String(headerValue).trim()])
+          .filter(([key, headerValue]) => key && headerValue)
+      );
+      if (Object.keys(headers).length) output.headers = headers;
+    }
+    return output;
+  }
+
+  const url = value === undefined || value === null ? "" : String(value).trim();
+  return url ? url : null;
+}
+
+function toNonEmptyFileArray(values) {
+  if (!Array.isArray(values)) return null;
+
+  const cleaned = values.map(cleanFileEntry).filter(Boolean);
+  return cleaned.length ? cleaned : null;
+}
+
 function formatCloudflareMessages(cloudflareBody = {}) {
   const messages = [];
 
@@ -59,7 +87,7 @@ function buildPurgePayload(input = {}) {
     };
   }
 
-  const files = toNonEmptyTrimmedArray(body.files);
+  const files = toNonEmptyFileArray(body.files);
   if (files) {
     return {
       mode: "files",
@@ -152,8 +180,11 @@ export async function purgeCloudflareCache(input = {}, options = {}) {
         : `Cloudflare purge failed.${authHint}`,
       response.status >= 400 && response.status < 500 ? response.status : 502,
       {
+        source: "cloudflare-api",
         mode,
         status: response.status,
+        cloudflareErrors: Array.isArray(body?.errors) ? body.errors : [],
+        cloudflareMessages: Array.isArray(body?.messages) ? body.messages : [],
         authMode: config.authMode,
         zoneEnvKey: config.zoneEnvKey,
         tokenEnvKey: config.tokenEnvKey,
