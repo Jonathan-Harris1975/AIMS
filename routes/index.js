@@ -1,6 +1,7 @@
 // routes/index.js
 import express from "express";
 import { info, error } from "../logger.js";
+import { requireAimsBearerAuth } from "../services/shared/middleware/suiteAuth.js";
 
 // Service routes
 import rssFeedRoutes from "./rss.js";
@@ -17,6 +18,8 @@ import auditsRoutes from "../audits/index.js";
 import rssLinksRoutes from "../services/rss-links/index.js";
 
 const router = express.Router();
+
+router.use(requireAimsBearerAuth);
 
 const rssRoutes = express.Router();
 rssRoutes.use("/", rssFeedRoutes);
