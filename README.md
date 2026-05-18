@@ -470,7 +470,8 @@ These files exist but are not mounted by the active root route registry:
 
 | Name | Purpose | Used by | Required | Default/template | Notes |
 |---|---|---|---|---|---|
-| `OUTREACH_KEYWORDS` | Outreach provider, score or batch setting. | services/outreach | Conditional; required by outreach routes | `blank` | Secret value; keep in Koyeb/GitHub secret storage. |
+| `OUTREACH_KEYWORDS` | Optional inline outreach keyword list. If blank, batch mode uses `services/outreach/keywords.txt`. | services/outreach | Optional when keyword file exists | `blank` | Use env for urgent overrides; keep long lists in the repo file. |
+| `OUTREACH_KEYWORDS_FILE` | Optional path override for the outreach keyword file. | services/outreach | Optional | `services/outreach/keywords.txt` | Relative paths resolve from the repo root. |
 | `OUTREACH_BATCH_SIZE` | Outreach provider, score or batch setting. | services/outreach | Conditional; required by outreach routes | `20` | Set only for services you run. |
 | `OUTREACH_MIN_LEAD_SCORE` | Outreach provider, score or batch setting. | services/outreach | Conditional; required by outreach routes | `blank` | Set only for services you run. |
 | `OUTREACH_MIN_EMAIL_SCORE` | Outreach provider, score or batch setting. | services/outreach | Conditional; required by outreach routes | `blank` | Set only for services you run. |
@@ -847,7 +848,7 @@ Evidence: `services/outreach/routes/index.js`, `services/outreach/services/*.js`
 6. ZeroBounce batch validation validates discovered emails if configured.
 7. Leads are scored using `OUTREACH_MIN_LEAD_SCORE` and `OUTREACH_MIN_EMAIL_SCORE`.
 8. Accepted leads are appended to Google Sheets.
-9. Batch mode reads `OUTREACH_KEYWORDS`, advances a cursor and stores progress in R2 metasystem state when available.
+9. Batch mode reads `OUTREACH_KEYWORDS` first, then falls back to `services/outreach/keywords.txt`, advances a cursor and stores progress in R2 metasystem state when available.
 
 ### SEO/AEO/GEO audit workflow
 
