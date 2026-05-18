@@ -69,7 +69,7 @@ Publishes weekly AI briefing posts and daily/social blog posts from rewritten RS
 
 ## Common troubleshooting
 
-- No items found: verify `feed.json` exists and contains rewritten items in the target date window.
+- No items found: this is treated as a successful no-op (`ok:true`, `skipped:true`) to avoid noisy cron failures; verify `feed.json` if content was expected.
 - Artwork failure: configure fallback image URL or fix OpenRouter image configuration.
 - Post skipped: existing social post for date; pass `force=true` to rebuild.
 - Rebuild hook failure: check hook env and endpoint status.
