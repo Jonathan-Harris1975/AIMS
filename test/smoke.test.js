@@ -159,16 +159,19 @@ test("POST /cloudflare/purge rejects an empty body instead of defaulting to purg
   assert.match(response.body.error, /Provide exactly one purge mode/);
 });
 
-test("POST /cloudflare/purge is open to unauthenticated webhook callers", async () => {
+test("POST /cloudflare/purge accepts unauthenticated webhook-style requests", async () => {
   process.env.CLOUDFLARE_PURGE_SHARED_SECRET = "test-secret";
-  const { default: freshApp } = await import(`../server.js?cf-auth=${Date.now()}`);
+  delete process.env.CF_purge;
+  delete process.env.CF_zone;
+
+  const { default: freshApp } = await import(`../server.js?cf-public=${Date.now()}`);
   const response = await request(freshApp)
     .post("/cloudflare/purge")
-    .send({});
+    .send({ purge_everything: true });
 
-  assert.equal(response.status, 400);
+  assert.equal(response.status, 500);
   assert.equal(response.body.ok, false);
-  assert.match(response.body.error, /Provide exactly one purge mode/);
+  assert.match(response.body.error, /Missing zone id environment variable|Missing CF_zone|not configured/i);
 });
 
 test("production import fails fast when durable state is not configured and override is absent", async () => {
