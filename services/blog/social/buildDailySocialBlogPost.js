@@ -481,7 +481,7 @@ export async function buildDailySocialBlogPost({
     const items = normaliseFeedItems(JSON.parse(rawFeed), window);
 
     if (!items.length) {
-      info("blog.social.daily.noItems", {
+      debug("blog.social.daily.noItems", {
         dateId: window.dateId,
         dateLabel: window.dateLabel,
         windowStart: window.start.toISOString(),
@@ -489,8 +489,11 @@ export async function buildDailySocialBlogPost({
       });
 
       return {
-        ok: false,
+        ok: true,
+        skipped: true,
         reason: `No rewritten RSS items found for ${window.dateLabel}.`,
+        dateId: window.dateId,
+        sourceCount: 0,
         window: {
           start: window.start.toISOString(),
           end: window.end.toISOString(),
