@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 
 import { wait } from "../../shared/utils/wait.js";
+import { loadOutreachKeywords } from "../utils/keywordLoader.js";
 import { durableStateEnvHint, hasDurableStateEnv } from "../../shared/utils/durableStateEnv.js";
 import { info, warn } from "../../../logger.js";
 
@@ -22,15 +23,6 @@ const PROGRESS_FILE = path.resolve(
   process.cwd(),
   "services/outreach/data/batch-progress.json"
 );
-
-function parseKeywords(raw) {
-  if (!raw) return [];
-
-  return String(raw)
-    .split(/\r?\n|,/)
-    .map((value) => value.trim())
-    .filter(Boolean);
-}
 
 function parseBoolean(value, fallback = false) {
   if (value === undefined || value === null || value === "") return fallback;
@@ -121,11 +113,33 @@ async function saveProgress(progress) {
 ============================================================ */
 
 export async function runNextBatch() {
-  const keywords = parseKeywords(process.env.OUTREACH_KEYWORDS);
+  const keywordConfig = loadOutreachKeywords();
+  const { keywords } = keywordConfig;
+
   if (!keywords.length) {
-    info("ℹ️ No outreach keywords configured");
-    return { processed: 0, done: true };
+    info("outreach.batch.keywords.none", {
+      source: keywordConfig.source,
+      filePath: keywordConfig.filePath,
+      fileFound: keywordConfig.found,
+    });
+
+    return {
+      processed: 0,
+      done: true,
+      skipped: true,
+      reason: "NO_OUTREACH_KEYWORDS",
+      keywordSource: keywordConfig.source,
+      keywordFilePath: keywordConfig.filePath,
+      keywordFileFound: keywordConfig.found,
+      keywordCount: 0,
+    };
   }
+
+  info("outreach.batch.keywords.loaded", {
+    source: keywordConfig.source,
+    keywordCount: keywords.length,
+    filePath: keywordConfig.filePath,
+  });
 
   const progress = await loadProgress();
   let index = Number(progress.lastProcessedIndex) || 0;
@@ -134,8 +148,20 @@ export async function runNextBatch() {
   const delayMs = Number(process.env.SERP_RATE_DELAY_MS) || 0;
 
   if (batchSize <= 0) {
-    info("ℹ️ OUTREACH_BATCH_SIZE is not configured");
-    return { processed: 0, done: true, lastProcessedIndex: index };
+    info("outreach.batch.size.none", {
+      keywordSource: keywordConfig.source,
+      keywordCount: keywords.length,
+    });
+
+    return {
+      processed: 0,
+      done: true,
+      skipped: true,
+      reason: "OUTREACH_BATCH_SIZE_NOT_CONFIGURED",
+      keywordSource: keywordConfig.source,
+      keywordCount: keywords.length,
+      lastProcessedIndex: index,
+    };
   }
 
   let processed = 0;
@@ -166,6 +192,8 @@ export async function runNextBatch() {
     processed,
     done,
     lastProcessedIndex: index,
+    keywordSource: keywordConfig.source,
+    keywordCount: keywords.length,
   };
 }
 
