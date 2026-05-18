@@ -63,3 +63,34 @@ test("suite auth unresolved secret placeholders are treated as missing", async (
     assert.match(response.body.error, /AIMS_API_KEY/);
   });
 });
+
+test("suite auth leaves Cloudflare purge public for auth, legacy secret, or unauthenticated webhooks", async () => {
+  await withEnv({
+    NODE_ENV: "production",
+    AIMS_API_KEY: "test-aims-key",
+    CLOUDFLARE_PURGE_SHARED_SECRET: "test-purge-secret",
+  }, async () => {
+    const unauthenticated = await request(app)
+      .post("/cloudflare/purge")
+      .send({});
+
+    assert.equal(unauthenticated.status, 400);
+    assert.match(unauthenticated.body.error, /Provide exactly one purge mode/);
+
+    const bearer = await request(app)
+      .post("/cloudflare/purge")
+      .set("Authorization", "Bearer test-aims-key")
+      .send({});
+
+    assert.equal(bearer.status, 400);
+    assert.match(bearer.body.error, /Provide exactly one purge mode/);
+
+    const legacySecret = await request(app)
+      .post("/cloudflare/purge")
+      .set("x-cloudflare-purge-secret", "test-purge-secret")
+      .send({});
+
+    assert.equal(legacySecret.status, 400);
+    assert.match(legacySecret.body.error, /Provide exactly one purge mode/);
+  });
+});
