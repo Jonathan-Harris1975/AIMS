@@ -67,7 +67,7 @@ Scheduler state is handled by service utilities and shared state; no service-spe
 
 - Live scheduling requires `ONEUP_API_KEY`.
 - Missing API key can produce dry-run output.
-- Category errors mean the configured category name does not exist in OneUp.
+- Category/API errors are reported per post for the weekly ebook workflow so one failed day does not turn the whole route into a blunt 500. Check `failedDays` and each day’s `error` field.
 - Duplicate guard may intentionally skip a scheduled post.
 - Invalid model JSON is retried once with repair instructions.
 
