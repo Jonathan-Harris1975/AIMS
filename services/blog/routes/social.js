@@ -12,7 +12,7 @@ router.post("/daily/build", hookdeckDedupe("blog:socialDailyBuild"), asyncRoute(
   const parsed = validateBody(blogSocialDailyBuildBodySchema, req.body);
   if (!parsed.ok) return res.status(400).json({ ok: false, error: parsed.error });
   const result = await buildDailySocialBlogPost(parsed.data);
-  if (!result?.ok) return res.status(500).json(result);
+  if (!result?.ok) return res.status(result?.statusCode || 500).json(result);
   return res.json(result);
 }));
 
