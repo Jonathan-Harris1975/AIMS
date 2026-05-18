@@ -1,20 +1,7 @@
 import { fetchWithTimeout } from "../../shared/http-client.js";
+import { createStatusError, resolveCloudflarePurgeConfig } from "./purgeConfig.js";
 
 const DEFAULT_TIMEOUT_MS = Number(process.env.CLOUDFLARE_PURGE_TIMEOUT_MS) || 15000;
-
-function normaliseEnvString(value) {
-  if (value === undefined || value === null) return "";
-  return String(value).trim();
-}
-
-function createStatusError(message, statusCode = 500, details) {
-  const err = new Error(message);
-  err.statusCode = statusCode;
-  if (details !== undefined) {
-    err.details = details;
-  }
-  return err;
-}
 
 function toNonEmptyTrimmedArray(values) {
   if (!Array.isArray(values)) return null;
@@ -110,18 +97,17 @@ function buildPurgePayload(input = {}) {
   );
 }
 
-function buildAuthHeaders() {
-  const token = normaliseEnvString(process.env.CF_purge);
-
-  if (!token) {
-    throw createStatusError(
-      "Cloudflare purge is not configured. Missing CF_purge environment variable.",
-      500
-    );
+function buildAuthHeaders(config) {
+  if (config.authMode === "global-key") {
+    return {
+      "X-Auth-Email": config.email,
+      "X-Auth-Key": config.globalKey,
+      "Content-Type": "application/json",
+    };
   }
 
   return {
-    Authorization: `Bearer ${token}`,
+    Authorization: `Bearer ${config.token}`,
     "Content-Type": "application/json",
   };
 }
@@ -137,22 +123,17 @@ async function parseResponseBody(response) {
   }
 }
 
-export async function purgeCloudflareCache(input = {}, options = {}) {
-  const zoneId = normaliseEnvString(process.env.CF_zone);
-  if (!zoneId) {
-    throw createStatusError(
-      "Cloudflare purge is not configured. Missing CF_zone environment variable.",
-      500
-    );
-  }
+export { resolveCloudflarePurgeConfig } from "./purgeConfig.js";
 
+export async function purgeCloudflareCache(input = {}, options = {}) {
+  const config = resolveCloudflarePurgeConfig(options?.env || process.env);
   const { mode, payload } = buildPurgePayload(input);
-  const url = `https://api.cloudflare.com/client/v4/zones/${encodeURIComponent(zoneId)}/purge_cache`;
+  const url = `https://api.cloudflare.com/client/v4/zones/${encodeURIComponent(config.zoneId)}/purge_cache`;
 
   const response = await fetchWithTimeout(url, {
     method: "POST",
     timeout: Number(options?.timeoutMs) || DEFAULT_TIMEOUT_MS,
-    headers: buildAuthHeaders(),
+    headers: buildAuthHeaders(config),
     body: JSON.stringify(payload),
   });
 
@@ -161,12 +142,21 @@ export async function purgeCloudflareCache(input = {}, options = {}) {
 
   if (!response.ok || body?.success === false) {
     const detailMessage = cloudflareMessages.join("; ");
+    const authHint = response.status === 401
+      ? ` Check ${config.authMode === "api-token" ? config.tokenEnvKey : `${config.emailEnvKey}/${config.globalKeyEnvKey}`} and zone id env ${config.zoneEnvKey}; Cloudflare returned 401.`
+      : "";
+
     throw createStatusError(
-      detailMessage ? `Cloudflare purge failed: ${detailMessage}` : "Cloudflare purge failed.",
+      detailMessage
+        ? `Cloudflare purge failed: ${detailMessage}${authHint}`
+        : `Cloudflare purge failed.${authHint}`,
       response.status >= 400 && response.status < 500 ? response.status : 502,
       {
         mode,
         status: response.status,
+        authMode: config.authMode,
+        zoneEnvKey: config.zoneEnvKey,
+        tokenEnvKey: config.tokenEnvKey,
       }
     );
   }
@@ -174,6 +164,9 @@ export async function purgeCloudflareCache(input = {}, options = {}) {
   return {
     mode,
     request: payload,
+    authMode: config.authMode,
+    zoneEnvKey: config.zoneEnvKey,
+    tokenEnvKey: config.tokenEnvKey || config.globalKeyEnvKey || null,
     result: body?.result || null,
     errors: Array.isArray(body?.errors) ? body.errors : [],
     messages: Array.isArray(body?.messages) ? body.messages : [],
