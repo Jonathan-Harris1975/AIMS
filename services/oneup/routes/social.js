@@ -90,7 +90,7 @@ router.post(
     }
 
     const result = await buildAndScheduleEbookWeekly(parsed.data);
-    return res.json(result);
+    return res.status(result.partialFailure ? 207 : 200).json(result);
   })
 );
 
