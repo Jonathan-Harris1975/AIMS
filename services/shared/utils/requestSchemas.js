@@ -87,9 +87,19 @@ const prefixSchema = z
   .trim()
   .min(1)
   .max(1024)
-  .refine((value) => !value.includes("://") && !/\s/.test(value), {
-    message: "must be a hostname/path prefix without protocol",
+  .refine((value) => !/\s/.test(value), {
+    message: "must be a hostname/path prefix without whitespace",
   });
+
+const cloudflareFileEntrySchema = z.union([
+  z.string().trim().url(),
+  z
+    .object({
+      url: z.string().trim().url(),
+      headers: z.record(z.string().trim().min(1), z.string().trim().min(1)).optional(),
+    })
+    .passthrough(),
+]);
 
 const nonEmptyStringArray = (schema, label) =>
   z.array(schema).min(1, `${label} must contain at least one item`);
@@ -97,7 +107,7 @@ const nonEmptyStringArray = (schema, label) =>
 export const cloudflarePurgeBodySchema = z
   .object({
     purge_everything: z.literal(true).optional(),
-    files: nonEmptyStringArray(z.string().trim().url(), "files").optional(),
+    files: nonEmptyStringArray(cloudflareFileEntrySchema, "files").optional(),
     tags: nonEmptyStringArray(z.string().trim().min(1).max(1024), "tags").optional(),
     hosts: nonEmptyStringArray(hostnameSchema, "hosts").optional(),
     prefixes: nonEmptyStringArray(prefixSchema, "prefixes").optional(),
