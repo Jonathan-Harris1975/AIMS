@@ -180,6 +180,37 @@ export function releaseScheduleSlot(slotClaim) {
   writeOneUpState(state);
 }
 
+export function resetScheduleSlotClaim(input = {}) {
+  const key = buildScheduleSlotKey(input);
+  const state = readOneUpState();
+  const slotClaims = cleanSlotClaims(state.slotClaims).filter((claim) => claim.key !== key);
+  const claim = makeSlotClaim(input, "pending");
+
+  activeSlotClaims.add(key);
+  state.slotClaims = [...slotClaims, claim].slice(-MAX_SLOT_CLAIMS);
+  writeOneUpState(state);
+
+  return {
+    claimed: true,
+    duplicatePrevented: false,
+    key,
+    state: "pending",
+    claim,
+    repairedStaleCompletedSlot: true,
+  };
+}
+
+export function forgetScheduleSlot(slotClaimOrKey) {
+  const key = typeof slotClaimOrKey === "string" ? slotClaimOrKey : slotClaimOrKey?.key;
+  if (!key) return false;
+
+  activeSlotClaims.delete(key);
+  const state = readOneUpState();
+  state.slotClaims = cleanSlotClaims(state.slotClaims).filter((claim) => claim.key !== key);
+  writeOneUpState(state);
+  return true;
+}
+
 export function getLaneHistory(laneKey) {
   const state = readOneUpState();
   const lane = state.lanes?.[laneKey] || {};
