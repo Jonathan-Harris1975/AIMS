@@ -184,6 +184,35 @@ async function claimOneUpSlot({ scope, scheduledDateTime, categoryName, socialNe
   return claimScheduleSlot({ scope, scheduledDateTime, categoryName, socialNetworkId, imageUrl });
 }
 
+
+function statusCodeFromError(error) {
+  const status = Number(error?.statusCode || error?.status);
+  return Number.isInteger(status) && status >= 400 && status < 600 ? status : 500;
+}
+
+function safeErrorMessage(error) {
+  return error?.message || String(error || "Unknown error");
+}
+
+function failedEbookPostResult({ dayKey, publishDate, scheduledDateTime, dryRun, categoryName, error }) {
+  const statusCode = statusCodeFromError(error);
+  const message = `${dayKey.charAt(0).toUpperCase()}${dayKey.slice(1)} ebook post failed: ${safeErrorMessage(error)}`;
+  return {
+    publishDate,
+    scheduledDateTime,
+    scheduled: false,
+    dryRun: Boolean(dryRun),
+    duplicatePrevented: false,
+    failed: true,
+    statusCode,
+    category: { id: null, category_name: categoryName },
+    warnings: [message],
+    error: safeErrorMessage(error),
+    post: null,
+    oneUpResponse: null,
+  };
+}
+
 function slotDuplicatePostResult({ publishDate, scheduledDateTime, dryRun = false, categoryName, reason }) {
   return {
     publishDate,
@@ -602,23 +631,47 @@ export async function buildAndScheduleEbookWeekly(options = {}) {
       warnings.push(...(scheduling.warnings || []));
     } catch (error) {
       releaseScheduleSlot(slotClaim);
-      throw error;
+      const failedPost = failedEbookPostResult({
+        dayKey,
+        publishDate,
+        scheduledDateTime,
+        dryRun,
+        categoryName,
+        error,
+      });
+      posts[dayKey] = failedPost;
+      warnings.push(...failedPost.warnings);
+      warn("oneup.ebooks.day.fail", {
+        weekStartDate,
+        day: dayKey,
+        scheduledDateTime,
+        statusCode: failedPost.statusCode,
+        error: failedPost.error,
+      });
     }
   }
 
-  const dryRunResult = Object.values(posts).some((item) => item.dryRun);
+  const postValues = Object.values(posts);
+  const dryRunResult = postValues.some((item) => item.dryRun);
+  const failedDays = Object.entries(posts)
+    .filter(([, value]) => value?.failed)
+    .map(([day, value]) => ({ day, statusCode: value.statusCode, error: value.error }));
+  const hasFailures = failedDays.length > 0;
 
   info("oneup.ebooks.weekly.complete", {
     weekStartDate,
     featuredBookTitle: featuredBook.title,
     dryRun: dryRunResult,
+    ok: !hasFailures,
+    failedDays: failedDays.map((item) => item.day),
     contentHashes: Object.fromEntries(Object.entries(posts).map(([day, value]) => [day, contentHash(value.post?.content || "")])),
     imageUrl: featuredBook.coverArtUrl,
     selectionMethod: resolved.selection?.method,
   });
 
   return {
-    ok: true,
+    ok: !hasFailures,
+    partialFailure: hasFailures,
     service: "oneup",
     lane: "ebooks-weekly",
     featuredBookTitle: featuredBook.title,
@@ -633,6 +686,7 @@ export async function buildAndScheduleEbookWeekly(options = {}) {
     selection: resolved.selection,
     dryRun: dryRunResult,
     posts,
+    failedDays,
     warnings: [...new Set(warnings.filter(Boolean))],
   };
 }

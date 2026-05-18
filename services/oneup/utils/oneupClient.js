@@ -1,7 +1,11 @@
-import { ONEUP_API_BASE } from "./config.js";
+function trimString(value, fallback = "") {
+  if (value === undefined || value === null) return fallback;
+  const cleaned = String(value).trim();
+  return cleaned || fallback;
+}
 
-function trimString(value) {
-  return value === undefined || value === null ? "" : String(value).trim();
+function getOneUpApiBase() {
+  return trimString(process.env.ONEUP_API_BASE, "https://www.oneupapp.io/api").replace(/\/+$/, "");
 }
 
 function requireApiKey(apiKey) {
@@ -25,7 +29,7 @@ async function parseJsonSafe(response) {
 
 async function oneUpGet(endpoint, params = {}, apiKey) {
   const key = requireApiKey(apiKey);
-  const url = new URL(`${ONEUP_API_BASE}/${endpoint}`);
+  const url = new URL(`${getOneUpApiBase()}/${endpoint}`);
   url.searchParams.set("apiKey", key);
   Object.entries(params || {}).forEach(([param, value]) => {
     if (value === undefined || value === null || value === "") return;
@@ -61,7 +65,7 @@ async function oneUpPost(endpoint, body = {}, apiKey) {
     payload.set(param, String(value));
   });
 
-  const response = await fetch(`${ONEUP_API_BASE}/${endpoint}`, {
+  const response = await fetch(`${getOneUpApiBase()}/${endpoint}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/x-www-form-urlencoded",
