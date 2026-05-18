@@ -36,11 +36,11 @@ Runs keyword-based lead discovery by querying SERP results, filtering domains, e
 - ZeroBounce validates email batches if configured.
 - Leads are scored against env thresholds.
 - Accepted rows are appended to Google Sheets.
-- Batch mode advances a cursor through `OUTREACH_KEYWORDS`.
+- Batch mode advances a cursor through `OUTREACH_KEYWORDS` when provided, otherwise through `services/outreach/keywords.txt`.
 
 ## Environment variables
 
-- `OUTREACH_KEYWORDS`, `OUTREACH_BATCH_SIZE`, `OUTREACH_MIN_LEAD_SCORE`, `OUTREACH_MIN_EMAIL_SCORE`, `OUTREACH_PROGRESS_KEY`
+- `OUTREACH_KEYWORDS`, optional `OUTREACH_KEYWORDS_FILE`, `OUTREACH_BATCH_SIZE`, `OUTREACH_MIN_LEAD_SCORE`, `OUTREACH_MIN_EMAIL_SCORE`, `OUTREACH_PROGRESS_KEY`
 - `SERP_RATE_DELAY_MS`, `HUNTER_DELAY_MS`, `ZEROBOUNCE_*`
 - `API_SERP_KEY`, `API_OPENPAGERANK_KEY`, `API_URLSCAN_KEY`, `API_PROSPEO_KEY`, `API_HUNTER_KEY`, `API_APOLLO_KEY`, `API_ZERO_KEY`
 - `GOOGLE_CLIENT_EMAIL`, `GOOGLE_PRIVATE_KEY`, `GOOGLE_SHEET_ID`
@@ -71,7 +71,7 @@ No dedicated outreach route test was found.
 - `API_SERP_KEY missing`: configure SERP key.
 - Threshold errors: set numeric `OUTREACH_MIN_LEAD_SCORE` and `OUTREACH_MIN_EMAIL_SCORE`.
 - No rows appended: check email validation, score thresholds and Google Sheets credentials.
-- Batch does nothing: configure `OUTREACH_KEYWORDS` and `OUTREACH_BATCH_SIZE`.
+- Batch does nothing: configure `OUTREACH_BATCH_SIZE` and either `OUTREACH_KEYWORDS` or `services/outreach/keywords.txt`. The batch response reports `keywordSource`, `keywordCount`, and file path diagnostics.
 
 ## Connections to other services
 
