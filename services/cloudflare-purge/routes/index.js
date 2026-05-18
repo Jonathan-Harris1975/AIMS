@@ -5,6 +5,7 @@ import {
   cloudflarePurgeBodySchema,
 } from "../../shared/utils/requestSchemas.js";
 import { purgeCloudflareCache, resolveCloudflarePurgeConfig } from "../utils/purgeCloudflareCache.js";
+import { normaliseCloudflarePurgeRequestBody } from "../utils/purgeRequest.js";
 
 const router = express.Router();
 
@@ -60,9 +61,16 @@ router.get("/health", (_req, res) => {
 });
 
 router.post("/purge", asyncRoute(async (req, res) => {
-  const parsed = validateBody(cloudflarePurgeBodySchema, req.body);
+  const normalisedBody = normaliseCloudflarePurgeRequestBody(req.body, req.query);
+  const parsed = validateBody(cloudflarePurgeBodySchema, normalisedBody);
   if (!parsed.ok) {
-    return res.status(400).json({ ok: false, error: parsed.error });
+    return res.status(400).json({
+      ok: false,
+      source: "aims-cloudflare-purge-validation",
+      error: parsed.error,
+      receivedKeys: req.body && typeof req.body === "object" && !Array.isArray(req.body) ? Object.keys(req.body) : [],
+      normalisedKeys: Object.keys(normalisedBody),
+    });
   }
 
   const payload = parsed.data;
@@ -72,6 +80,7 @@ router.post("/purge", asyncRoute(async (req, res) => {
     mode,
     authStrategy: getPurgeAuthStrategy(req),
     counts: getPurgeCounts(payload),
+    normalisedKeys: Object.keys(payload),
     requestId: req.id || req.headers["x-request-id"] || null,
   });
 
@@ -103,6 +112,7 @@ router.post("/purge", asyncRoute(async (req, res) => {
 
     return res.status(statusCode).json({
       ok: false,
+      source: err?.details?.source || "cloudflare-purge-service",
       error: err?.message || "Cloudflare purge failed",
       details: err?.details || null,
     });
