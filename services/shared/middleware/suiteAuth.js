@@ -88,8 +88,18 @@ export function requireAimsBearerAuth(req, res, next) {
   if (String(req.method || "").toUpperCase() === "OPTIONS") return next();
   if (isPublicHealthRequest(req)) return next();
 
-  if (isCloudflarePurgePath(req) && hasValidCloudflarePurgeSecret(req)) {
-    req.aimsAuth = { strategy: "cloudflare-purge-secret" };
+  if (isCloudflarePurgePath(req)) {
+    const purgeExpected = expectedSuiteKey();
+    const purgeToken = extractBearerToken(req);
+
+    if (purgeExpected && purgeToken && safeEqual(purgeToken, purgeExpected)) {
+      req.aimsAuth = { strategy: "suite-bearer" };
+    } else if (hasValidCloudflarePurgeSecret(req)) {
+      req.aimsAuth = { strategy: "cloudflare-purge-secret" };
+    } else {
+      req.aimsAuth = { strategy: "public-cloudflare-purge" };
+    }
+
     return next();
   }
 
