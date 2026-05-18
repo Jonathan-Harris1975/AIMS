@@ -50,6 +50,11 @@ function expectedAuditCallbackKey() {
   return looksLikeSecretPlaceholder(value) ? "" : value;
 }
 
+function expectedCloudflarePurgeSecret() {
+  const value = normalise(process.env.CLOUDFLARE_PURGE_SHARED_SECRET);
+  return looksLikeSecretPlaceholder(value) ? "" : value;
+}
+
 function allowsUnauthenticatedDevelopment() {
   if (isProductionEnv()) return false;
   return truthy(process.env.AIMS_ALLOW_UNAUTHENTICATED_DEV) || !expectedSuiteKey();
@@ -62,9 +67,31 @@ function isLegacyAuditCallbackPath(req) {
   );
 }
 
+function isCloudflarePurgePath(req) {
+  const method = String(req.method || "").toUpperCase();
+  if (method !== "POST") return false;
+  const path = pathWithoutQuery(req).replace(/\/+$/, "").toLowerCase();
+  return path === "/cloudflare/purge";
+}
+
+function extractCloudflarePurgeSecret(req) {
+  return normalise(req.get?.("x-cloudflare-purge-secret") || req.headers?.["x-cloudflare-purge-secret"]);
+}
+
+function hasValidCloudflarePurgeSecret(req) {
+  const expected = expectedCloudflarePurgeSecret();
+  const provided = extractCloudflarePurgeSecret(req);
+  return Boolean(expected && provided && safeEqual(provided, expected));
+}
+
 export function requireAimsBearerAuth(req, res, next) {
   if (String(req.method || "").toUpperCase() === "OPTIONS") return next();
   if (isPublicHealthRequest(req)) return next();
+
+  if (isCloudflarePurgePath(req) && hasValidCloudflarePurgeSecret(req)) {
+    req.aimsAuth = { strategy: "cloudflare-purge-secret" };
+    return next();
+  }
 
   const expected = expectedSuiteKey();
   if (!expected) {
@@ -77,10 +104,14 @@ export function requireAimsBearerAuth(req, res, next) {
   }
 
   const token = extractBearerToken(req);
-  if (token && safeEqual(token, expected)) return next();
+  if (token && safeEqual(token, expected)) {
+    req.aimsAuth = { strategy: "suite-bearer" };
+    return next();
+  }
 
   const callbackKey = expectedAuditCallbackKey();
   if (callbackKey && isLegacyAuditCallbackPath(req) && token && safeEqual(token, callbackKey)) {
+    req.aimsAuth = { strategy: "audit-callback-bearer" };
     return next();
   }
 
