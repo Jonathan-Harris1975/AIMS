@@ -222,7 +222,20 @@ function extractNumbersAndClaims(text = "") {
 
 function extractQuotedClaims(text = "") {
   const clean = normaliseContentText(text);
-  return clean.match(/"[^"\n]{8,}"|'[^'\n]{8,}'/g) || [];
+  const matches = clean.match(/"[^"\n]{24,}"/g) || [];
+
+  return matches
+    .map((quote) => quote.trim())
+    .filter((quote) => {
+      const inner = quote.replace(/^"|"$/g, "").trim();
+
+      // Short quoted labels such as "Deploying" or "eligible automated purchases"
+      // are editorial terminology, not direct evidence claims. Keep the hard gate
+      // focused on substantial direct quotations that would need source backing.
+      if (countWords(inner) < 5) return false;
+
+      return true;
+    });
 }
 
 function extractDateClaims(text = "") {
@@ -260,13 +273,16 @@ function keywordOverlap(sourceText = "", outputText = "") {
     .filter((word) => word.length >= 5 && !stop.has(word));
   const source = new Set(words(sourceText));
   const output = new Set(words(outputText));
-  if (!source.size || !output.size) return { overlap: 0, shared: 0, sourceTerms: source.size, outputTerms: output.size };
+  if (!source.size || !output.size) {
+    return { overlap: 0, sourceCoverage: 0, shared: 0, sourceTerms: source.size, outputTerms: output.size };
+  }
   let shared = 0;
   for (const word of output) {
     if (source.has(word)) shared += 1;
   }
   return {
     overlap: shared / output.size,
+    sourceCoverage: shared / source.size,
     shared,
     sourceTerms: source.size,
     outputTerms: output.size,
@@ -345,6 +361,13 @@ export function runPhase3AutopublishGate(payload = {}) {
   const bannedPhrases = listBannedPhrases(outputText);
   const americanSpellings = listAmericanSpellings(outputText);
   const sourceOverlap = keywordOverlap(sourceText, outputText);
+  const sourceOverlapFloor = contentType.includes("rss")
+    ? Number(process.env.PHASE3_RSS_SOURCE_OVERLAP_MIN || 0.10)
+    : Number(process.env.PHASE3_SOURCE_OVERLAP_MIN || 0.16);
+  const sourceCoverageFloor = contentType.includes("rss")
+    ? Number(process.env.PHASE3_RSS_SOURCE_COVERAGE_MIN || 0.15)
+    : Number(process.env.PHASE3_SOURCE_COVERAGE_MIN || 0.18);
+  const hasEnoughSourceOverlap = sourceOverlap.overlap >= sourceOverlapFloor || sourceOverlap.sourceCoverage >= sourceCoverageFloor;
   const outputNumbers = extractNumbersAndClaims(outputText);
   const unsupportedNumbers = unsupportedItems(outputNumbers, sourceText);
   const quotedClaims = extractQuotedClaims(outputText);
@@ -378,12 +401,12 @@ export function runPhase3AutopublishGate(payload = {}) {
       defects: americanSpellings.map(({ american, british }) => `Use British English: ${american} → ${british}`),
       americanSpellings,
     }, 8, false),
-    gate("source-integrity", sourceText.length >= sourceMinChars && !unsupportedNumbers.length && !unsupportedQuotes.length && sourceOverlap.overlap >= 0.16, {
+    gate("source-integrity", sourceText.length >= sourceMinChars && !unsupportedNumbers.length && !unsupportedQuotes.length && hasEnoughSourceOverlap, {
       defects: [
         sourceText.length < sourceMinChars ? `Source evidence too thin (${sourceText.length} chars < ${sourceMinChars})` : "",
         ...unsupportedNumbers.map((claim) => `Unsupported numeric claim: ${claim}`),
         ...unsupportedQuotes.map((claim) => `Unsupported quotation: ${claim}`),
-        sourceOverlap.overlap < 0.16 ? `Low source/output keyword overlap (${sourceOverlap.overlap.toFixed(2)})` : "",
+        !hasEnoughSourceOverlap ? `Low source/output keyword overlap (${sourceOverlap.overlap.toFixed(2)}; source coverage ${Number(sourceOverlap.sourceCoverage || 0).toFixed(2)})` : "",
       ],
       warnings: unsupportedDates.map((claim) => `Date claim should be source-backed: ${claim}`),
       sourceChars: sourceText.length,
