@@ -308,11 +308,19 @@ export async function rewriteRssFeedItemsWithQuality(feedItems = []) {
     }
   }
 
+  const phase3Summary = summarisePhase3Reports(qualityReports);
   const qualitySummary = {
-    ...summarisePhase3Reports(qualityReports),
+    ...phase3Summary,
+    // For operator reporting, total/passed/failed should reflect the whole
+    // pipeline batch, not only the subset that reached Phase 3 scoring.
+    // Rewrite errors and extraction failures are still dropped content.
+    total: feedItems.length,
+    passed: results.length,
+    failed: droppedItems.length,
     sourceItems: feedItems.length,
     rewrittenItems: results.length,
     droppedItems: droppedItems.length,
+    status: droppedItems.length ? "HAS_QUARANTINED_ITEMS" : "ALL_PASSED_AUTO_PUBLISH",
   };
 
   debug("rss-feed-creator.model.batch.complete", {
