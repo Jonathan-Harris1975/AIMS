@@ -165,6 +165,46 @@ async function loadExistingPostsManifest(bucketKey, key) {
     return { schema_version: 1, updated_at: null, items: [] };
   }
 }
+async function objectExists(bucketKey, key) {
+  if (!key) return false;
+
+  try {
+    await getObjectAsText(bucketKey, key);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function buildSocialPostObjectKeys(prefix, slug) {
+  const safePrefix = normalisePrefix(prefix);
+  const safeSlug = String(slug || "").trim().replace(/^\/+|\/+$/g, "");
+
+  if (!safeSlug) {
+    return { postHtmlKey: "", postMetaKey: "" };
+  }
+
+  return {
+    postHtmlKey: `${safePrefix}/posts/${safeSlug}/index.html`,
+    postMetaKey: `${safePrefix}/posts/${safeSlug}/post.json`,
+  };
+}
+
+async function verifyExistingSocialPostObjects({ prefix, existingPost }) {
+  const keys = buildSocialPostObjectKeys(prefix, existingPost?.slug);
+  const [htmlExists, metaExists] = await Promise.all([
+    objectExists(OUT_BLOG_BUCKET_KEY, keys.postHtmlKey),
+    objectExists(OUT_BLOG_BUCKET_KEY, keys.postMetaKey),
+  ]);
+
+  return {
+    ok: Boolean(htmlExists && metaExists),
+    htmlExists,
+    metaExists,
+    ...keys,
+  };
+}
+
 
 function joinUrl(base, path) {
   return `${String(base || "").replace(/\/$/, "")}/${String(path || "").replace(/^\//, "")}`;
@@ -468,30 +508,56 @@ export async function buildDailySocialBlogPost({
     const existingPost = findExistingSocialPostForDate(existingManifest, window.dateId);
 
     if (existingPost && !force) {
-      return {
-        ok: true,
-        skipped: true,
-        reason: `Daily social blog post already exists for ${window.dateId}. Pass force:true to rebuild it.`,
-        existing: existingPost,
-        manifestKey,
-      };
+      const verification = await verifyExistingSocialPostObjects({ prefix, existingPost });
+
+      if (verification.ok) {
+        info("blog.social.daily.existing.verified", {
+          dateId: window.dateId,
+          slug: existingPost.slug,
+          postHtmlKey: verification.postHtmlKey,
+          postMetaKey: verification.postMetaKey,
+        });
+
+        return {
+          ok: true,
+          skipped: true,
+          verifiedExistingPost: true,
+          reason: `Daily social blog post already exists for ${window.dateId}. Pass force:true to rebuild it.`,
+          existing: existingPost,
+          manifestKey,
+          verification,
+        };
+      }
+
+      warn("blog.social.daily.existing.stale", {
+        dateId: window.dateId,
+        slug: existingPost.slug,
+        postHtmlKey: verification.postHtmlKey,
+        postMetaKey: verification.postMetaKey,
+        htmlExists: verification.htmlExists,
+        metaExists: verification.metaExists,
+        action: "rebuild",
+      });
     }
 
     const rawFeed = await getObjectAsText(SOURCE_RSS_BUCKET_KEY, SOURCE_RSS_FEED_KEY);
     const items = normaliseFeedItems(JSON.parse(rawFeed), window);
 
     if (!items.length) {
-      debug("blog.social.daily.noItems", {
+      warn("blog.social.daily.noItems", {
         dateId: window.dateId,
         dateLabel: window.dateLabel,
         windowStart: window.start.toISOString(),
         windowEnd: window.end.toISOString(),
+        action: "not-created",
       });
 
       return {
-        ok: true,
+        ok: false,
         skipped: true,
-        reason: `No rewritten RSS items found for ${window.dateLabel}.`,
+        created: false,
+        statusCode: 424,
+        reason: `No rewritten RSS items found for ${window.dateLabel}; social blog article and artwork were not created.`,
         dateId: window.dateId,
         sourceCount: 0,
         window: {
