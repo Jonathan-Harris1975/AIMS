@@ -139,6 +139,7 @@ export const aiConfig = {
     oneupDaily: routeChain(["fast", "standard", "fallback"], ["chatgpt", "google", "deepseek"]),
     oneupQuiz: routeChain(["fast", "standard", "fallback"], ["chatgpt", "google", "deepseek"]),
     oneupEbook: routeChain(["fast", "standard", "fallback"], ["chatgpt", "google", "deepseek"]),
+    blotatoNewsShort: routeChain(["standard", "fast", "summary", "fallback"], ["chatgpt", "google", "deepseek"]),
   },
 
   commonParams: { temperature: 0.65, top_p: 0.9, timeout: 90000 },
