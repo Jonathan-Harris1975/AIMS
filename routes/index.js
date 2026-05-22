@@ -14,6 +14,7 @@ import outreachRoutes from "../services/outreach/routes/index.js";
 import blogRoutes from "../services/blog/index.js";
 import cloudflarePurgeRoutes from "../services/cloudflare-purge/index.js";
 import oneupRoutes from "../services/oneup/index.js";
+import blotatoRoutes from "../services/blotato/index.js";
 import auditsRoutes from "../audits/index.js";
 import rssLinksRoutes from "../services/rss-links/index.js";
 
@@ -35,6 +36,7 @@ export const routeRegistry = [
   { path: "/blog", name: "Blog", routes: blogRoutes },
   { path: "/cloudflare", name: "Cloudflare Purge", routes: cloudflarePurgeRoutes },
   { path: "/oneup", name: "OneUp Social Scheduler", routes: oneupRoutes },
+  { path: "/blotato", name: "Blotato Social Video Service", routes: blotatoRoutes },
   { path: "/audits", name: "Audit Automation", routes: auditsRoutes },
   { path: "/rss-links", name: "RSS Links (URL Shortener)", routes: rssLinksRoutes },
 ];
