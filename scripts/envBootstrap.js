@@ -263,6 +263,14 @@ export const ENV = {
   itunes_type: firstDefined("itunes_type", "PODCAST_ITUNES_TYPE"),
 
 
+  /* ---------------- Blotato ---------------- */
+  Blotato_API_key: opt("Blotato_API_key"),
+  BLOTATO_API_KEY: opt("BLOTATO_API_KEY"),
+  BLOTATO_API_BASE: opt("BLOTATO_API_BASE", "https://backend.blotato.com/v2"),
+  BLOTATO_TIMEOUT_MS: num("BLOTATO_TIMEOUT_MS", 30000),
+  BLOTATO_NEWS_SHORT_MAX_TOKENS: num("BLOTATO_NEWS_SHORT_MAX_TOKENS", 2200),
+
+
   /* ---------------- AWS ---------------- */
   AWS_REGION: opt("AWS_REGION", "eu-west-2"),
   AWS_ACCESS_KEY_ID: opt("AWS_ACCESS_KEY_ID"),
