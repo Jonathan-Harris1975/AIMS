@@ -5,19 +5,11 @@ import { LANE_CONFIG, QUIZ_CONFIG, EBOOK_CONFIG, ONEUP_CATEGORY_NAME_GENERAL, ON
 import { buildDailyPrompt, buildQuizPrompt, buildEbookPostPrompt } from "./prompts.js";
 import { addDays, nextWeekdayDateString, toScheduledDateTime } from "./date.js";
 import { loadRecentRssContext } from "./feedContext.js";
-import {
-  getLaneHistory,
-  recordLaneSchedule,
-  getQuizHistory,
-  recordQuizSchedule,
-  claimScheduleSlot,
-  completeScheduleSlot,
-  releaseScheduleSlot,
-  resetScheduleSlotClaim,
-} from "./state.js";
+import { getLaneHistory, recordLaneSchedule, getQuizHistory, recordQuizSchedule, claimScheduleSlot, completeScheduleSlot, releaseScheduleSlot } from "./state.js";
 import { resolveCategory, listScheduledPosts, scheduleTextPost, scheduleImagePost } from "./oneupClient.js";
 import getSponsor from "../../script/utils/getSponsor.js";
 import { resolveFeaturedEbook } from "./ebookCatalogue.js";
+import { runPhase5OrganicGrowthGate } from "../../content-quality/phase5OrganicGrowthGates.js";
 
 
 const ONEUP_DAILY_MAX_TOKENS = Math.max(1200, Number(process.env.ONEUP_DAILY_MAX_TOKENS || 1400));
@@ -149,18 +141,6 @@ function contentHash(value) {
   return crypto.createHash("sha1").update(String(value || "")).digest("hex").slice(0, 12);
 }
 
-function oneUpResponseId(response) {
-  return (
-    response?.id ||
-    response?.post_id ||
-    response?.postId ||
-    response?.data?.id ||
-    response?.data?.post_id ||
-    response?.data?.postId ||
-    null
-  );
-}
-
 async function getQueuedPosts(apiKey) {
   const output = [];
   for (let page = 0; page < ONEUP_QUEUE_GUARD_LOOKBACK_PAGES; page += 1) {
@@ -173,60 +153,11 @@ async function getQueuedPosts(apiKey) {
   return output;
 }
 
-function oneUpRowDateTime(item = {}) {
-  return String(
-    item?.date_time ||
-      item?.scheduled_date_time ||
-      item?.scheduledDateTime ||
-      item?.scheduled_at ||
-      item?.scheduledAt ||
-      ""
-  ).trim();
-}
-
-function oneUpRowCategoryName(item = {}) {
-  return String(
-    item?.category_name ||
-      item?.categoryName ||
-      item?.category ||
-      item?.category_title ||
-      ""
-  ).trim();
-}
-
-function oneUpRowImageUrl(item = {}) {
-  return String(
-    item?.content_image ||
-      item?.image_url ||
-      item?.imageUrl ||
-      item?.post_image ||
-      item?.picture ||
-      ""
-  ).trim();
-}
-
-function imageUrlsCompatible(rowImageUrl, expectedImageUrl) {
-  const expected = String(expectedImageUrl || "").trim();
-  if (!expected) return true;
-
-  const actual = String(rowImageUrl || "").trim();
-  if (!actual) return true;
-  if (actual === expected) return true;
-
-  const expectedTail = expected.split("/").filter(Boolean).slice(-1)[0] || "";
-  return Boolean(expectedTail && actual.includes(expectedTail));
-}
-
 function hasLikelyDuplicate(queuedPosts, { scheduledDateTime, categoryName, imageUrl }) {
-  const wantedTime = String(scheduledDateTime || "").trim().slice(0, 16);
-  const wantedCategory = String(categoryName || "").trim().toLowerCase();
-
   return (Array.isArray(queuedPosts) ? queuedPosts : []).some((item) => {
-    const rowTime = oneUpRowDateTime(item).slice(0, 16);
-    const sameTime = Boolean(wantedTime && rowTime && rowTime === wantedTime);
-    const rowCategory = oneUpRowCategoryName(item).toLowerCase();
-    const sameCategory = !wantedCategory || !rowCategory || rowCategory === wantedCategory;
-    const sameImage = imageUrlsCompatible(oneUpRowImageUrl(item), imageUrl);
+    const sameTime = String(item?.date_time || "").startsWith(scheduledDateTime);
+    const sameCategory = String(item?.category_name || "").trim().toLowerCase() === String(categoryName || "").trim().toLowerCase();
+    const sameImage = !imageUrl || String(item?.content_image || "").trim() === String(imageUrl || "").trim();
     return sameTime && sameCategory && sameImage;
   });
 }
@@ -247,44 +178,11 @@ function duplicateSlotWarning(reason) {
 }
 
 async function claimOneUpSlot({ scope, scheduledDateTime, categoryName, socialNetworkId, imageUrl, dryRun, apiKey, force }) {
-  const claimInput = { scope, scheduledDateTime, categoryName, socialNetworkId, imageUrl };
-
   if (isEffectiveDryRun({ dryRun, apiKey }) || isTruthyOption(force)) {
     return { claimed: false, skipped: true, duplicatePrevented: false, key: null };
   }
 
-  const slotClaim = await claimScheduleSlot(claimInput);
-  if (!slotClaim.duplicatePrevented || slotClaim.state !== "completed") {
-    return slotClaim;
-  }
-
-  try {
-    const queuedPosts = await getQueuedPosts(apiKey);
-    if (hasLikelyDuplicate(queuedPosts, { scheduledDateTime, categoryName, imageUrl })) {
-      return { ...slotClaim, verifiedInOneUpQueue: true };
-    }
-
-    warn("oneup.slot.completed_state_stale", {
-      scope,
-      scheduledDateTime,
-      categoryName,
-      socialNetworkId,
-      imageUrl,
-      slotKey: slotClaim.key,
-      reason: slotClaim.reason,
-    });
-
-    return resetScheduleSlotClaim(claimInput);
-  } catch (error) {
-    warn("oneup.slot.completed_state_verify_failed", {
-      scope,
-      scheduledDateTime,
-      categoryName,
-      slotKey: slotClaim.key,
-      error: error?.message || String(error),
-    });
-    return { ...slotClaim, queueVerificationFailed: true };
-  }
+  return claimScheduleSlot({ scope, scheduledDateTime, categoryName, socialNetworkId, imageUrl });
 }
 
 
@@ -313,35 +211,22 @@ function failedEbookPostResult({ dayKey, publishDate, scheduledDateTime, dryRun,
     error: safeErrorMessage(error),
     post: null,
     oneUpResponse: null,
+    phase5Gate: error?.phase5Gate || null,
   };
 }
 
-function slotDuplicatePostResult({
-  publishDate,
-  scheduledDateTime,
-  dryRun = false,
-  categoryName,
-  reason,
-  verifiedInOneUpQueue = false,
-  queueVerificationFailed = false,
-}) {
+function slotDuplicatePostResult({ publishDate, scheduledDateTime, dryRun = false, categoryName, reason }) {
   return {
     publishDate,
     scheduledDateTime,
     scheduled: false,
     dryRun,
     duplicatePrevented: true,
-    verifiedInOneUpQueue,
-    queueVerificationFailed,
     category: { id: null, category_name: categoryName },
-    warnings: [
-      duplicateSlotWarning(reason),
-      queueVerificationFailed
-        ? "The completed slot could not be verified against the live OneUp queue, so the scheduler kept the local dedupe block to avoid a possible duplicate."
-        : null,
-    ].filter(Boolean),
+    warnings: [duplicateSlotWarning(reason)],
     post: null,
     oneUpResponse: null,
+    phase5Gate: null,
   };
 }
 
@@ -373,7 +258,6 @@ async function scheduleToOneUp({ post, scheduledDateTime, categoryName, socialNe
       oneUpResponse: null,
       category,
       duplicatePrevented: true,
-      verifiedInOneUpQueue: true,
     };
   }
 
@@ -660,10 +544,6 @@ export async function buildAndScheduleEbookWeekly(options = {}) {
       force: options.force,
     });
 
-    if (slotClaim.repairedStaleCompletedSlot) {
-      warnings.push(`The ${dayKey} ebook slot was marked completed locally but was not visible in the OneUp queue, so it was repaired and rescheduled.`);
-    }
-
     if (slotClaim.duplicatePrevented) {
       const duplicate = slotDuplicatePostResult({
         publishDate,
@@ -671,8 +551,6 @@ export async function buildAndScheduleEbookWeekly(options = {}) {
         dryRun: false,
         categoryName,
         reason: slotClaim.reason,
-        verifiedInOneUpQueue: Boolean(slotClaim.verifiedInOneUpQueue),
-        queueVerificationFailed: Boolean(slotClaim.queueVerificationFailed),
       });
       posts[dayKey] = duplicate;
       warnings.push(...duplicate.warnings);
@@ -682,8 +560,6 @@ export async function buildAndScheduleEbookWeekly(options = {}) {
         scheduledDateTime,
         slotKey: slotClaim.key,
         reason: slotClaim.reason,
-        verifiedInOneUpQueue: Boolean(slotClaim.verifiedInOneUpQueue),
-        queueVerificationFailed: Boolean(slotClaim.queueVerificationFailed),
       });
       continue;
     }
@@ -720,6 +596,21 @@ export async function buildAndScheduleEbookWeekly(options = {}) {
         content: ensureHashtags(generated.content, EBOOK_CONFIG.hashtags),
       };
 
+      const phase5Gate = runPhase5OrganicGrowthGate({
+        contentType: "ebook-conversion-social-post",
+        generated: post,
+        featuredBook,
+        day: dayKey,
+        platforms: ["facebook", "instagram", "tiktok"],
+      });
+
+      if (!phase5Gate.ok) {
+        const err = new Error(`Phase 5 ebook conversion gate failed (${phase5Gate.score}/88): ${phase5Gate.defects.join(" | ")}`);
+        err.statusCode = 422;
+        err.phase5Gate = phase5Gate;
+        throw err;
+      }
+
       const scheduling = await scheduleToOneUp({
         post,
         scheduledDateTime,
@@ -735,24 +626,12 @@ export async function buildAndScheduleEbookWeekly(options = {}) {
         scheduled: scheduling.scheduled,
         dryRun: scheduling.dryRun,
         duplicatePrevented: Boolean(scheduling.duplicatePrevented),
-        verifiedInOneUpQueue: Boolean(scheduling.verifiedInOneUpQueue),
-        queueVerificationFailed: Boolean(scheduling.queueVerificationFailed),
         category: scheduling.category,
         warnings: scheduling.warnings || [],
         post,
         oneUpResponse: scheduling.oneUpResponse,
+        phase5Gate,
       };
-
-      info("oneup.ebooks.day.complete", {
-        weekStartDate,
-        day: dayKey,
-        scheduledDateTime,
-        scheduled: Boolean(scheduling.scheduled),
-        duplicatePrevented: Boolean(scheduling.duplicatePrevented),
-        verifiedInOneUpQueue: Boolean(scheduling.verifiedInOneUpQueue),
-        oneUpPostId: oneUpResponseId(scheduling.oneUpResponse),
-        contentHash: contentHash(post.content),
-      });
 
       if (slotClaim.claimed && (scheduling.scheduled || scheduling.duplicatePrevented)) {
         completeScheduleSlot(slotClaim, {
@@ -796,40 +675,23 @@ export async function buildAndScheduleEbookWeekly(options = {}) {
   const failedDays = Object.entries(posts)
     .filter(([, value]) => value?.failed)
     .map(([day, value]) => ({ day, statusCode: value.statusCode, error: value.error }));
-  const scheduledDays = Object.entries(posts)
-    .filter(([, value]) => value?.scheduled)
-    .map(([day]) => day);
-  const duplicatePreventedDays = Object.entries(posts)
-    .filter(([, value]) => value?.duplicatePrevented)
-    .map(([day]) => day);
-  const unverifiedDuplicateDays = Object.entries(posts)
-    .filter(([, value]) => value?.duplicatePrevented && !value?.verifiedInOneUpQueue)
-    .map(([day]) => day);
-  const repairedStaleSlotDays = warnings
-    .map((warning) => String(warning || "").match(/^The (tuesday|thursday|saturday) ebook slot was marked completed locally/iu)?.[1])
-    .filter(Boolean);
   const hasFailures = failedDays.length > 0;
-  const hasUnverifiedDuplicates = unverifiedDuplicateDays.length > 0;
-  const ok = !hasFailures && !hasUnverifiedDuplicates;
 
   info("oneup.ebooks.weekly.complete", {
     weekStartDate,
     featuredBookTitle: featuredBook.title,
     dryRun: dryRunResult,
-    ok,
+    ok: !hasFailures,
     failedDays: failedDays.map((item) => item.day),
-    scheduledDays,
-    duplicatePreventedDays,
-    unverifiedDuplicateDays,
-    repairedStaleSlotDays,
     contentHashes: Object.fromEntries(Object.entries(posts).map(([day, value]) => [day, contentHash(value.post?.content || "")])),
     imageUrl: featuredBook.coverArtUrl,
     selectionMethod: resolved.selection?.method,
+    phase5GateScores: Object.fromEntries(Object.entries(posts).map(([day, value]) => [day, value.phase5Gate?.score ?? null])),
   });
 
   return {
-    ok,
-    partialFailure: !ok,
+    ok: !hasFailures,
+    partialFailure: hasFailures,
     service: "oneup",
     lane: "ebooks-weekly",
     featuredBookTitle: featuredBook.title,
@@ -844,10 +706,6 @@ export async function buildAndScheduleEbookWeekly(options = {}) {
     selection: resolved.selection,
     dryRun: dryRunResult,
     posts,
-    scheduledDays,
-    duplicatePreventedDays,
-    unverifiedDuplicateDays,
-    repairedStaleSlotDays,
     failedDays,
     warnings: [...new Set(warnings.filter(Boolean))],
   };
