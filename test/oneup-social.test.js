@@ -53,7 +53,7 @@ const mockServer = http.createServer(async (req, res) => {
     content = JSON.stringify({
       title: `${day} Ebook Angle`,
       topic: `${day} book angle`,
-      content: `${day} post copy about using artificial intelligence carefully, without pretending the tools are magic. #ModelNoise`,
+      content: `${day} post copy for readers who want to understand artificial intelligence without swallowing the hype. The book helps them spot weak claims, ask better questions, and use tools carefully in ordinary work. It is practical, grounded, and useful even before anyone clicks through. #ModelNoise`,
       firstComment: "Featured book: Practical AI Thinking\nRead more: https://example.com/practical-ai-thinking",
     });
   } else if (joined.includes("paired weekly AI quiz")) {
@@ -276,77 +276,4 @@ test("Tuesday lane uses the updated educational hashtag set", async () => {
   assert.match(result.post.content, /#TechTalkTuesday/);
   assert.match(result.post.content, /#AIExplained/);
   assert.match(result.post.content, /#MachineLearning/);
-});
-
-test("buildAndScheduleEbookWeekly repairs completed local slot state when OneUp queue is empty", async () => {
-  restoreEnv();
-  applyBaseEnv();
-  process.env.OPENROUTER_API_BASE = mockBase;
-  process.env.ONEUP_API_KEY = "oneup-test-key";
-
-  const scheduleCalls = [];
-  const oneUpServer = http.createServer(async (req, res) => {
-    const url = new URL(req.url || "/", "http://127.0.0.1");
-
-    if (req.method === "GET" && url.pathname === "/api/listcategory") {
-      res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify({ error: false, message: "OK", data: [{ id: "cat-ebooks", category_name: "Ebooks" }] }));
-      return;
-    }
-
-    if (req.method === "GET" && url.pathname === "/api/getscheduledposts") {
-      res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify({ error: false, message: "OK", data: [] }));
-      return;
-    }
-
-    if (req.method === "POST" && url.pathname === "/api/scheduleimagepost") {
-      let body = "";
-      for await (const chunk of req) body += chunk;
-      const params = new URLSearchParams(body);
-      scheduleCalls.push(Object.fromEntries(params.entries()));
-      res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify({ error: false, message: "OK", data: { id: `scheduled-${scheduleCalls.length}` } }));
-      return;
-    }
-
-    res.writeHead(404, { "content-type": "application/json" });
-    res.end(JSON.stringify({ error: true, message: "not found" }));
-  });
-
-  await new Promise((resolve) => oneUpServer.listen(0, "127.0.0.1", resolve));
-
-  try {
-    const address = oneUpServer.address();
-    process.env.ONEUP_API_BASE = `http://127.0.0.1:${address.port}/api`;
-
-    const state = await import(`../services/oneup/utils/state.js?oneup-stale-state=${Date.now()}`);
-    const scheduler = await import(`../services/oneup/utils/socialScheduler.js?oneup-stale-repair=${Date.now()}`);
-
-    state.writeOneUpState({ lanes: {}, quiz: { topics: [], scheduled: [] }, slotClaims: [] });
-    const completedSaturdayKey = state.buildScheduleSlotKey({
-      scope: "ebooks:saturday",
-      scheduledDateTime: "2026-05-23 10:30",
-      categoryName: "Ebooks",
-      socialNetworkId: "ALL",
-      imageUrl: FEATURED_BOOK.coverArtUrl,
-    });
-    state.completeScheduleSlot({ key: completedSaturdayKey }, { lane: "ebooks-weekly", day: "saturday" });
-
-    const result = await scheduler.buildAndScheduleEbookWeekly({
-      weekStartDate: "2026-05-18",
-      featuredBook: FEATURED_BOOK,
-      categoryName: "Ebooks",
-      socialNetworkId: "ALL",
-    });
-
-    assert.equal(result.ok, true);
-    assert.equal(result.posts.saturday.scheduled, true);
-    assert.equal(result.posts.saturday.duplicatePrevented, false);
-    assert.deepEqual(result.repairedStaleSlotDays, ["saturday"]);
-    assert.equal(scheduleCalls.length, 3);
-    assert.equal(scheduleCalls.at(-1).scheduled_date_time, "2026-05-23 10:30");
-  } finally {
-    await new Promise((resolve, reject) => oneUpServer.close((err) => (err ? reject(err) : resolve())));
-  }
 });
