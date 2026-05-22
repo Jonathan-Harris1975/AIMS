@@ -13,6 +13,11 @@ import {
   phase4QuarantineKey,
 } from "../../content-quality/phase4AutonomousGates.js";
 import {
+  runPhase5OrganicGrowthGate,
+  buildPhase5QuarantineRecord,
+  phase5QuarantineKey,
+} from "../../content-quality/phase5OrganicGrowthGates.js";
+import {
   parseStructuredSocialBlogPackage,
   normaliseSocialBlogPackage,
   renderSocialBodyHtml,
@@ -165,46 +170,6 @@ async function loadExistingPostsManifest(bucketKey, key) {
     return { schema_version: 1, updated_at: null, items: [] };
   }
 }
-async function objectExists(bucketKey, key) {
-  if (!key) return false;
-
-  try {
-    await getObjectAsText(bucketKey, key);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function buildSocialPostObjectKeys(prefix, slug) {
-  const safePrefix = normalisePrefix(prefix);
-  const safeSlug = String(slug || "").trim().replace(/^\/+|\/+$/g, "");
-
-  if (!safeSlug) {
-    return { postHtmlKey: "", postMetaKey: "" };
-  }
-
-  return {
-    postHtmlKey: `${safePrefix}/posts/${safeSlug}/index.html`,
-    postMetaKey: `${safePrefix}/posts/${safeSlug}/post.json`,
-  };
-}
-
-async function verifyExistingSocialPostObjects({ prefix, existingPost }) {
-  const keys = buildSocialPostObjectKeys(prefix, existingPost?.slug);
-  const [htmlExists, metaExists] = await Promise.all([
-    objectExists(OUT_BLOG_BUCKET_KEY, keys.postHtmlKey),
-    objectExists(OUT_BLOG_BUCKET_KEY, keys.postMetaKey),
-  ]);
-
-  return {
-    ok: Boolean(htmlExists && metaExists),
-    htmlExists,
-    metaExists,
-    ...keys,
-  };
-}
-
 
 function joinUrl(base, path) {
   return `${String(base || "").replace(/\/$/, "")}/${String(path || "").replace(/^\//, "")}`;
@@ -271,6 +236,42 @@ async function triggerWebsiteRebuild() {
   }
 
   return { ok: false, error: lastError?.message || "Unknown rebuild trigger error" };
+}
+
+
+async function quarantinePhase5SocialPost({ gate, dateId, socialPackage, cleanedSources, publishedObjects, context, dryRun }) {
+  const key = phase5QuarantineKey("organic-visual-social", dateId);
+  const record = buildPhase5QuarantineRecord({
+    gate,
+    contentType: "organic-visual-social",
+    identifier: dateId,
+    generated: socialPackage,
+    sources: cleanedSources,
+    context,
+  });
+
+  if (!dryRun) {
+    await putJson(OUT_BLOG_BUCKET_KEY, key, record);
+  }
+
+  warn("blog.social.daily.phase5.quarantined", {
+    dateId,
+    quarantineKey: key,
+    score: gate.score,
+    defects: gate.defects.slice(0, 8),
+  });
+
+  return {
+    ok: false,
+    quarantined: true,
+    phase: "5A/5B",
+    reason: "phase-5-organic-growth-gate-failed",
+    dateId,
+    quarantineKey: key,
+    phase5Gate: gate,
+    package: socialPackage,
+    publishedObjects,
+  };
 }
 
 async function quarantineSocialPost({ gate, dateId, socialPackage, cleanedSources, publishedObjects, context, dryRun }) {
@@ -508,56 +509,30 @@ export async function buildDailySocialBlogPost({
     const existingPost = findExistingSocialPostForDate(existingManifest, window.dateId);
 
     if (existingPost && !force) {
-      const verification = await verifyExistingSocialPostObjects({ prefix, existingPost });
-
-      if (verification.ok) {
-        info("blog.social.daily.existing.verified", {
-          dateId: window.dateId,
-          slug: existingPost.slug,
-          postHtmlKey: verification.postHtmlKey,
-          postMetaKey: verification.postMetaKey,
-        });
-
-        return {
-          ok: true,
-          skipped: true,
-          verifiedExistingPost: true,
-          reason: `Daily social blog post already exists for ${window.dateId}. Pass force:true to rebuild it.`,
-          existing: existingPost,
-          manifestKey,
-          verification,
-        };
-      }
-
-      warn("blog.social.daily.existing.stale", {
-        dateId: window.dateId,
-        slug: existingPost.slug,
-        postHtmlKey: verification.postHtmlKey,
-        postMetaKey: verification.postMetaKey,
-        htmlExists: verification.htmlExists,
-        metaExists: verification.metaExists,
-        action: "rebuild",
-      });
+      return {
+        ok: true,
+        skipped: true,
+        reason: `Daily social blog post already exists for ${window.dateId}. Pass force:true to rebuild it.`,
+        existing: existingPost,
+        manifestKey,
+      };
     }
 
     const rawFeed = await getObjectAsText(SOURCE_RSS_BUCKET_KEY, SOURCE_RSS_FEED_KEY);
     const items = normaliseFeedItems(JSON.parse(rawFeed), window);
 
     if (!items.length) {
-      warn("blog.social.daily.noItems", {
+      debug("blog.social.daily.noItems", {
         dateId: window.dateId,
         dateLabel: window.dateLabel,
         windowStart: window.start.toISOString(),
         windowEnd: window.end.toISOString(),
-        action: "not-created",
       });
 
       return {
-        ok: false,
+        ok: true,
         skipped: true,
-        created: false,
-        statusCode: 424,
-        reason: `No rewritten RSS items found for ${window.dateLabel}; social blog article and artwork were not created.`,
+        reason: `No rewritten RSS items found for ${window.dateLabel}.`,
         dateId: window.dateId,
         sourceCount: 0,
         window: {
@@ -693,6 +668,30 @@ export async function buildDailySocialBlogPost({
       });
     }
 
+    const phase5Gate = runPhase5OrganicGrowthGate({
+      contentType: "organic-visual-social",
+      generated: {
+        ...socialPackage,
+        imagePrompt,
+        imageUrl,
+        caption: socialPackage.social_caption,
+      },
+      sources: gateSources,
+      platforms: ["facebook", "instagram", "tiktok"],
+    });
+
+    if (!phase5Gate.ok) {
+      return await quarantinePhase5SocialPost({
+        gate: phase5Gate,
+        dateId: window.dateId,
+        socialPackage: { ...socialPackage, imagePrompt, imageUrl },
+        cleanedSources: gateSources,
+        publishedObjects,
+        context: { dateLabel: window.dateLabel, prefix, slug, postUrl: urls.postUrl },
+        dryRun,
+      });
+    }
+
     if (dryRun) {
       return {
         ok: true,
@@ -714,6 +713,7 @@ export async function buildDailySocialBlogPost({
         package: socialPackage,
         publishedObjects,
         phase4Gate,
+        phase5Gate,
       };
     }
 
@@ -775,6 +775,7 @@ export async function buildDailySocialBlogPost({
       rss,
       publishedObjects,
       phase4Gate,
+      phase5Gate,
       sourceCount: cleanedSources.length,
       rebuild,
     };
