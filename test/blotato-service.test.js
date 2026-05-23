@@ -31,6 +31,10 @@ function readJsonBody(req) {
   });
 }
 
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 const mockServer = http.createServer(async (req, res) => {
   const url = new URL(req.url, "http://127.0.0.1");
 
@@ -68,14 +72,35 @@ const mockServer = http.createServer(async (req, res) => {
   }
 
   if (req.method === "GET" && url.pathname === "/v2/users/me/accounts") {
+    const platform = url.searchParams.get("platform") || "tiktok";
     res.writeHead(200, { "content-type": "application/json" });
-    res.end(JSON.stringify({ items: [{ id: "acc-tiktok", platform: url.searchParams.get("platform") || "tiktok", username: "jh" }] }));
+    res.end(JSON.stringify({ items: [{ id: `acc-${platform}`, platform, username: "jh" }] }));
     return;
   }
 
   if (req.method === "GET" && url.pathname === "/v2/users/me/accounts/acc-facebook/subaccounts") {
     res.writeHead(200, { "content-type": "application/json" });
     res.end(JSON.stringify({ items: [{ id: "page-1", accountId: "acc-facebook", name: "Jonathan Harris" }] }));
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/v2/source-resolutions-v3") {
+    const body = await readJsonBody(req);
+    assert.equal(body.source.sourceType, "article");
+    assert.match(body.source.url, /agents-office-tasks/);
+    res.writeHead(201, { "content-type": "application/json" });
+    res.end(JSON.stringify({ id: "source-1", status: "queued" }));
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/v2/source-resolutions-v3/source-1") {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({
+      id: "source-1",
+      status: "completed",
+      title: "AI agents move from chat to office tasks",
+      content: "A new wave of AI agent tools is aimed at routine admin and workflow tasks.",
+    }));
     return;
   }
 
@@ -87,7 +112,7 @@ const mockServer = http.createServer(async (req, res) => {
 
   if (req.method === "POST" && url.pathname === "/v2/videos/from-templates") {
     const body = await readJsonBody(req);
-    assert.equal(body.templateId, "tpl-ai-video");
+    assert.ok(["tpl-ai-video", "5903fe43-514d-40ee-a060-0d6628c5f8fd"].includes(body.templateId));
     assert.equal(body.render, true);
     res.writeHead(201, { "content-type": "application/json" });
     res.end(JSON.stringify({ item: { id: "visual-1", status: "queueing" } }));
@@ -102,17 +127,31 @@ const mockServer = http.createServer(async (req, res) => {
 
   if (req.method === "POST" && url.pathname === "/v2/posts") {
     const body = await readJsonBody(req);
-    assert.equal(body.post.accountId, "acc-tiktok");
-    assert.equal(body.post.content.platform, "tiktok");
-    assert.equal(body.post.target.targetType, "tiktok");
+    const platform = body.post.content.platform;
+    assert.equal(body.post.accountId, `acc-${platform}`);
+    assert.equal(body.post.target.targetType, platform);
+
+    if (platform === "youtube") {
+      assert.equal(body.post.target.privacyStatus, "public");
+      assert.equal(body.post.target.shouldNotifySubscribers, false);
+      assert.equal(body.post.target.containsSyntheticMedia, true);
+      assert.ok(body.post.target.title);
+    }
+
+    if (platform === "instagram") {
+      assert.equal(body.post.target.mediaType, "reel");
+      assert.equal(body.post.target.shareToFeed, true);
+    }
+
     res.writeHead(201, { "content-type": "application/json" });
-    res.end(JSON.stringify({ postSubmissionId: "post-1" }));
+    res.end(JSON.stringify({ postSubmissionId: `post-${platform}` }));
     return;
   }
 
-  if (req.method === "GET" && url.pathname === "/v2/posts/post-1") {
+  if (req.method === "GET" && url.pathname.startsWith("/v2/posts/post-")) {
+    const postSubmissionId = url.pathname.split("/").pop();
     res.writeHead(200, { "content-type": "application/json" });
-    res.end(JSON.stringify({ postSubmissionId: "post-1", status: "published", publicUrl: "https://example.com/p/1" }));
+    res.end(JSON.stringify({ postSubmissionId, status: "published", publicUrl: `https://example.com/p/${postSubmissionId}` }));
     return;
   }
 
@@ -134,6 +173,13 @@ process.env.OPENROUTER_API_KEY = "test-openrouter-key";
 process.env.AI_MODEL_STANDARD = "openai/test-model";
 process.env.AI_MODEL_FAST = "openai/test-model";
 process.env.AI_MODEL_SUMMARY = "openai/test-model";
+process.env.ALLOW_EPHEMERAL_STATE = "true";
+process.env.BLOTATO_SOURCE_POLL_INTERVAL_MS = "5";
+process.env.BLOTATO_SOURCE_POLL_TIMEOUT_MS = "1000";
+process.env.BLOTATO_VISUAL_POLL_INTERVAL_MS = "5";
+process.env.BLOTATO_VISUAL_POLL_TIMEOUT_MS = "1000";
+process.env.BLOTATO_POST_POLL_INTERVAL_MS = "5";
+process.env.BLOTATO_POST_POLL_TIMEOUT_MS = "1000";
 
 const { app } = await import(`../server.js?blotato-suite=${Date.now()}`);
 
@@ -209,10 +255,10 @@ test("Blotato visual and post lifecycle routes call the API", async () => {
     });
 
   assert.equal(post.status, 201);
-  assert.equal(post.body.postSubmissionId, "post-1");
+  assert.equal(post.body.postSubmissionId, "post-tiktok");
 
   const postStatus = await request(app)
-    .get("/blotato/posts/post-1")
+    .get("/blotato/posts/post-tiktok")
     .set(auth);
 
   assert.equal(postStatus.status, 200);
@@ -257,3 +303,43 @@ test("Blotato news insight route builds a dry-run short pack", async () => {
   assert.match(response.body.visualPrompt, /Thumbnail text/);
 });
 
+
+async function waitForBlotatoJob(sessionId) {
+  for (let index = 0; index < 40; index += 1) {
+    const response = await request(app)
+      .get(`/blotato/jobs/${encodeURIComponent(sessionId)}`)
+      .set(auth);
+
+    if (response.status === 200 && ["completed", "failed"].includes(response.body.job?.status)) {
+      return response;
+    }
+
+    await delay(25);
+  }
+
+  throw new Error(`Blotato job ${sessionId} did not finish in time`);
+}
+
+test("Blotato publish-now route starts a background Instagram and YouTube post job", async () => {
+  const response = await request(app)
+    .post("/blotato/shorts/news-insight/publish-now")
+    .set(auth)
+    .send({
+      sessionId: "trial-now",
+      articleUrl: "https://example.com/agents-office-tasks",
+      theme: "what-it-means",
+      durationSeconds: 45,
+    });
+
+  assert.equal(response.status, 202);
+  assert.equal(response.body.status, "running");
+  assert.equal(response.body.sessionId, "BLT-trial-now");
+  assert.deepEqual(response.body.defaults.channels, ["instagram", "youtube"]);
+
+  const status = await waitForBlotatoJob("BLT-trial-now");
+  assert.equal(status.body.job.status, "completed");
+  assert.equal(status.body.job.result.templateId, "5903fe43-514d-40ee-a060-0d6628c5f8fd");
+  assert.equal(status.body.job.result.mediaUrl, "https://example.com/video.mp4");
+  assert.deepEqual(status.body.job.result.posts.map((post) => post.platform).sort(), ["instagram", "youtube"]);
+  assert.ok(status.body.job.result.posts.every((post) => post.status === "published"));
+});
