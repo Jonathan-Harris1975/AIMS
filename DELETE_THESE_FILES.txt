@@ -1,5 +1,0 @@
-Delete these accidental placeholder files if they exist in your branch:
-
-.agents/skills/phase-3-autonomous-content/1
-.agents/skills/phase-4-autonomous-gates/2
-services/content-quality/1
