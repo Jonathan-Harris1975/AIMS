@@ -87,6 +87,81 @@ function topicOverlapScore(sourceText, outText) {
   return { overlap, shared, srcCount: srcSet.size, outCount: outSet.size };
 }
 
+function buildPhase3RepairMessages({
+  systemPrompt,
+  userPrompt,
+  rewrittenTitle,
+  rewrittenSummary,
+  phase3Report,
+} = {}) {
+  const defects = Array.isArray(phase3Report?.defects)
+    ? phase3Report.defects.slice(0, 8)
+    : [];
+
+  return [
+    {
+      role: "system",
+      content: [
+        String(systemPrompt),
+        "",
+        "PHASE 3 REPAIR MODE:",
+        "You are repairing an RSS rewrite so it passes deterministic auto-publish gates.",
+        "Keep the Jonathan Harris voice, but fix only the listed gate defects.",
+        "Do not add new facts, numbers, rankings, dates, prices, quotes, entities or claims.",
+        "No double quotation marks anywhere in the output.",
+        "Paraphrase quoted labels and slogans instead of quoting them.",
+        "Keep numeric expressions exactly as written in the source title/text.",
+        "Split any sentence over 32 words.",
+        "Return only headline, blank line, summary.",
+      ].join("\n"),
+    },
+    {
+      role: "user",
+      content: [
+        String(userPrompt),
+        "",
+        "Current candidate that failed the gate:",
+        "Headline:",
+        String(rewrittenTitle || ""),
+        "",
+        "Summary:",
+        String(rewrittenSummary || ""),
+        "",
+        "Gate defects to fix:",
+        defects.length ? defects.map((defect) => `- ${defect}`).join("\n") : "- Unknown Phase 3 failure",
+        "",
+        "Rewrite the candidate once. Keep the same subject and source-backed facts. Return only headline, blank line, summary.",
+      ].join("\n"),
+    },
+  ];
+}
+
+function assertTopicGuardOrThrow({ title, sourceText, rewrittenTitle, rewrittenSummary } = {}) {
+  const score = topicOverlapScore(`${title}\n${sourceText}`, `${rewrittenTitle}\n${rewrittenSummary}`);
+  if (score.shared < TOPIC_GUARD_MIN_SHARED || score.overlap < TOPIC_GUARD_MIN_OVERLAP) {
+    throw new Error(
+      `Topic drift detected (shared=${score.shared}, overlap=${score.overlap.toFixed(3)}; ` +
+        `minShared=${TOPIC_GUARD_MIN_SHARED}, minOverlap=${TOPIC_GUARD_MIN_OVERLAP})`
+    );
+  }
+  return score;
+}
+
+function runPhase3Gate({ title, sourceText, item, link, rewrittenTitle, rewrittenSummary } = {}) {
+  return assertPhase3AutopublishGate({
+    contentType: "rss-rewrite",
+    title: rewrittenTitle,
+    summary: rewrittenSummary,
+    bodyText: rewrittenSummary,
+    sourceText: `${title}
+${sourceText}`,
+    sourceItems: [item],
+    sources: [{ title, link }],
+    themes: keywords(`${title}
+${sourceText}`).slice(0, 6),
+  });
+}
+
 // ============================================================
 // 🔹 Rewrite article (rssRewrite route)
 // ============================================================
@@ -205,28 +280,96 @@ export async function rewriteArticle(item = {}) {
   }
 
   // 3) Topic-consistency guard
-  const score = topicOverlapScore(`${title}\n${sourceText}`, `${rewrittenTitle}\n${rewrittenSummary}`);
-  if (score.shared < TOPIC_GUARD_MIN_SHARED || score.overlap < TOPIC_GUARD_MIN_OVERLAP) {
-    throw new Error(
-      `Topic drift detected (shared=${score.shared}, overlap=${score.overlap.toFixed(3)}; ` +
-        `minShared=${TOPIC_GUARD_MIN_SHARED}, minOverlap=${TOPIC_GUARD_MIN_OVERLAP})`
-    );
-  }
+  let score = assertTopicGuardOrThrow({ title, sourceText, rewrittenTitle, rewrittenSummary });
 
   // 4) Phase 3 auto-publish gate. This is the no-manual-review safety net:
   // publish only when deterministic brand, source and structure gates pass.
-  const phase3Quality = assertPhase3AutopublishGate({
-    contentType: "rss-rewrite",
-    title: rewrittenTitle,
-    summary: rewrittenSummary,
-    bodyText: rewrittenSummary,
-    sourceText: `${title}
-${sourceText}`,
-    sourceItems: [item],
-    sources: [{ title, link }],
-    themes: keywords(`${title}
-${sourceText}`).slice(0, 6),
-  });
+  // If the first attempt is close but shaped badly for the deterministic gate
+  // (quotes, converted numbers, long sentences), repair once before quarantine.
+  let phase3Quality;
+  try {
+    phase3Quality = runPhase3Gate({
+      title,
+      sourceText,
+      item,
+      link,
+      rewrittenTitle,
+      rewrittenSummary,
+    });
+  } catch (err) {
+    if (err?.name !== "Phase3AutopublishGateError" || !err?.phase3Report) {
+      throw err;
+    }
+
+    warn("rss-feed-creator.model.phase3Repair.start", {
+      title,
+      score: err.phase3Report.score,
+      defects: err.phase3Report.defects?.slice?.(0, 5) || [],
+    });
+
+    const repairRaw = await resilientRequest("rssRewrite", {
+      messages: buildPhase3RepairMessages({
+        systemPrompt,
+        userPrompt,
+        rewrittenTitle,
+        rewrittenSummary,
+        phase3Report: err.phase3Report,
+      }),
+      temperature: 0.35,
+      max_tokens: 900,
+    });
+
+    const repaired = RSS_PROMPTS.normalizeModelText(repairRaw);
+    const repairedTitle = RSS_PROMPTS.clampTitleTo12Words(repaired.title || rewrittenTitle, 12);
+    const repairedSummary = RSS_PROMPTS.clampSummaryToWindow(
+      repaired.summary || rewrittenSummary,
+      RSS_PROMPTS.MIN_SUMMARY_CHARS,
+      RSS_PROMPTS.MAX_SUMMARY_CHARS
+    );
+
+    const repairedValidation = RSS_PROMPTS.validateOutput(repairedTitle, repairedSummary, {
+      maxTitleWords: 12,
+      minChars: RSS_PROMPTS.MIN_SUMMARY_CHARS,
+      maxChars: RSS_PROMPTS.MAX_SUMMARY_CHARS,
+    });
+    if (!repairedValidation.valid) {
+      throw new Error(
+        `Phase 3 repair output invalid: ${repairedValidation.errors.join("; ")}; original failure: ${err.message}`
+      );
+    }
+
+    const repairedBannedPhrases = RSS_PROMPTS.findBannedSummaryPhrases(repairedSummary);
+    if (repairedBannedPhrases.length) {
+      throw new Error(
+        `Phase 3 repair still contains banned filler: ${repairedBannedPhrases.slice(0, 5).join(", ")}; original failure: ${err.message}`
+      );
+    }
+
+    score = assertTopicGuardOrThrow({
+      title,
+      sourceText,
+      rewrittenTitle: repairedTitle,
+      rewrittenSummary: repairedSummary,
+    });
+
+    phase3Quality = runPhase3Gate({
+      title,
+      sourceText,
+      item,
+      link,
+      rewrittenTitle: repairedTitle,
+      rewrittenSummary: repairedSummary,
+    });
+
+    rewrittenTitle = repairedTitle;
+    rewrittenSummary = repairedSummary;
+
+    debug("rss-feed-creator.model.phase3Repair.success", {
+      title: rewrittenTitle,
+      score: phase3Quality.score,
+      topicGuard: score,
+    });
+  }
 
   // Create a self-hosted RSS short link (best-effort).
   // If R2-backed link creation fails, keep the original article URL and do not drop the item.

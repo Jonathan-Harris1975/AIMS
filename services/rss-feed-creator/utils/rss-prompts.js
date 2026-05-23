@@ -155,6 +155,17 @@ REWRITE_ABORTED
 - Do not over-explain obvious points
 - Do not mention the source publication unless essential to the story itself
 - Summary length must be between ${MIN_SUMMARY_CHARS} and ${MAX_SUMMARY_CHARS} characters
+- Keep each sentence under 32 words where practical
+- Do not repeat the headline as the opening sentence
+
+3A. AUTOPUBLISH GATE COMPATIBILITY
+- Do not use double quotation marks anywhere in the headline or summary
+- Paraphrase labels, slogans and quoted terms instead of quoting them
+- Apostrophes in normal words are fine, but avoid direct quoted claims
+- Keep numeric claims exactly in the same form used by the source title or text
+- Do not convert 1M into 1 million, 56.6 into a rounded score, or version strings into new forms
+- Do not add unsupported numbers, rankings, dates, prices, percentages or benchmark claims
+- If the source is only a thin teaser, login page, or empty marketing shell, output exactly: REWRITE_ABORTED
 
 4. HARD BANS
 Do not use:
@@ -197,7 +208,7 @@ Do not use:
 - No HTML
 - No bullets
 - No emojis
-- No quotation marks around the headline
+- No quotation marks anywhere in the headline or summary
 - No source names unless essential to the story itself
 - No URLs
 - No read more language
@@ -242,6 +253,12 @@ export function USER_ITEM({
     "",
     "Source text:",
     cleanedText,
+    "",
+    "Autopublish guardrails:",
+    "- No double quotation marks anywhere in the output",
+    "- Keep numeric claims exactly as written in the source title/text",
+    "- Do not invent rankings, scores, dates, prices or claims",
+    "- Keep sentences short enough to pass readability checks",
     "",
     "Return only:",
     `1. headline (maximum ${maxTitleWords} words)`,
