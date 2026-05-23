@@ -48,3 +48,30 @@ test("Phase 3 RSS rewrite gate still blocks unsupported substantial direct quota
   assert.equal(gate.ok, false);
   assert.match(gate.defects.join("\n"), /Unsupported quotation/);
 });
+
+test("Phase 3 RSS rewrite gate accepts equivalent M/million numeric phrasing from source", () => {
+  const sourceText = [
+    "Qwen introduced Qwen3.7-Max with a 1M-token context window.",
+    "The source discusses extended thinking, coding workflows, debugging and long-running agent tasks.",
+    "It also mentions benchmark reporting and practical deployment questions.",
+  ].join(" ");
+
+  const summary = [
+    "Qwen introduced Qwen3.7-Max with a 1 million-token context window for long-running agent work.",
+    "The pitch is useful, but token count alone does not prove cheap, reliable long-form reasoning.",
+    "The real test is whether extended thinking handles state, memory and error recovery in practical tasks.",
+  ].join(" ");
+
+  const gate = runPhase3AutopublishGate({
+    contentType: "rss-rewrite",
+    title: "Qwen stretches agent context with Qwen3.7-Max",
+    summary,
+    bodyText: summary,
+    sourceText,
+    sources: [{ title: "Source", link: "https://example.com/qwen" }],
+    themes: ["Qwen", "Agents", "Context windows"],
+  });
+
+  assert.equal(gate.ok, true);
+  assert.deepEqual(gate.gates.find((item) => item.name === "source-integrity")?.details.unsupportedNumbers, []);
+});
