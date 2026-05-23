@@ -263,6 +263,40 @@ function unsupportedItems(generated = [], sourceText = "") {
   });
 }
 
+function sourceContainsNumericClaim(claim = "", sourceText = "") {
+  const clean = normaliseContentText(claim).toLowerCase().replace(/,/g, "").trim();
+  if (!clean) return true;
+
+  const source = toLowerText(sourceText).replace(/,/g, " ");
+  const compactSource = source.replace(/\s+/g, "");
+  const compactClaim = clean.replace(/\s+/g, "");
+
+  if (source.includes(clean) || compactSource.includes(compactClaim)) return true;
+
+  const match = clean.match(/^(£|\$|€)?(\d+(?:\.\d+)?)\s*(m|million|bn|billion|k|thousand)?$/i);
+  if (!match) return false;
+
+  const [, currency = "", number, suffix = ""] = match;
+  const lowerSuffix = suffix.toLowerCase();
+  const suffixVariants = lowerSuffix === "million" || lowerSuffix === "m"
+    ? ["m", " million"]
+    : lowerSuffix === "billion" || lowerSuffix === "bn"
+      ? ["bn", " billion"]
+      : lowerSuffix === "thousand" || lowerSuffix === "k"
+        ? ["k", " thousand"]
+        : [""];
+
+  return suffixVariants.some((variant) => {
+    const readable = `${currency}${number}${variant}`.trim();
+    const compact = readable.replace(/\s+/g, "");
+    return source.includes(readable) || compactSource.includes(compact);
+  });
+}
+
+function unsupportedNumericClaims(generated = [], sourceText = "") {
+  return [...new Set(generated)].filter((claim) => !sourceContainsNumericClaim(claim, sourceText));
+}
+
 function keywordOverlap(sourceText = "", outputText = "") {
   const stop = new Set([
     "about", "after", "again", "also", "because", "before", "being", "between", "could", "from", "have", "into", "more", "most", "much", "news", "over", "same", "some", "that", "their", "there", "these", "this", "those", "through", "what", "when", "where", "which", "while", "with", "would", "your",
@@ -369,7 +403,7 @@ export function runPhase3AutopublishGate(payload = {}) {
     : Number(process.env.PHASE3_SOURCE_COVERAGE_MIN || 0.18);
   const hasEnoughSourceOverlap = sourceOverlap.overlap >= sourceOverlapFloor || sourceOverlap.sourceCoverage >= sourceCoverageFloor;
   const outputNumbers = extractNumbersAndClaims(outputText);
-  const unsupportedNumbers = unsupportedItems(outputNumbers, sourceText);
+  const unsupportedNumbers = unsupportedNumericClaims(outputNumbers, sourceText);
   const quotedClaims = extractQuotedClaims(outputText);
   const unsupportedQuotes = unsupportedItems(quotedClaims, sourceText);
   const dateClaims = extractDateClaims(outputText);
