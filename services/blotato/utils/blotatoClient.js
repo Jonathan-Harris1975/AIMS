@@ -28,6 +28,14 @@ function getBlotatoApiBase() {
   return trimString(process.env.BLOTATO_API_BASE, DEFAULT_BLOTATO_API_BASE).replace(/\/+$/, "");
 }
 
+export function normaliseBlotatoTemplateId(value = "") {
+  const cleaned = trimString(value);
+  if (!cleaned) return cleaned;
+
+  const uuidMatch = cleaned.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+  return uuidMatch ? uuidMatch[0] : cleaned.replace(/^\/+/, "");
+}
+
 export function hasBlotatoApiKey() {
   return Boolean(firstUsableEnv(BLOTATO_KEY_ENV_NAMES).value);
 }
@@ -149,7 +157,7 @@ export async function listTemplates({ fields = "id,name,description,inputs", sea
 
 export async function createVisual({ templateId, inputs = {}, prompt, render = true, isDraft = false } = {}, apiKey) {
   const body = {
-    templateId,
+    templateId: normaliseBlotatoTemplateId(templateId),
     inputs,
     render,
     isDraft,
@@ -189,6 +197,31 @@ export async function deleteVisual(id, apiKey) {
     method: "DELETE",
     apiKey,
   });
+}
+
+export async function createSourceResolution({ source } = {}, apiKey) {
+  if (!source || typeof source !== "object") {
+    const err = new Error("source object is required");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  return blotatoRequest("source-resolutions-v3", {
+    method: "POST",
+    body: { source },
+    apiKey,
+  });
+}
+
+export async function getSourceResolutionStatus(id, apiKey) {
+  const cleaned = trimString(id);
+  if (!cleaned) {
+    const err = new Error("source resolution id is required");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  return blotatoRequest(`source-resolutions-v3/${encodeURIComponent(cleaned)}`, { apiKey });
 }
 
 function buildPostPayload({
