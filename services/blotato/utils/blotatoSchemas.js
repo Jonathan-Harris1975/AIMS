@@ -103,34 +103,6 @@ const articleSchema = z
   })
   .passthrough();
 
-const sourceResolutionSchema = z
-  .object({
-    sourceType: z.enum(["text", "article", "youtube", "twitter", "tiktok", "perplexity-query", "audio", "pdf"]),
-    url: z.string().trim().url().optional(),
-    text: z.string().trim().min(1).max(20000).optional(),
-  })
-  .passthrough()
-  .superRefine((value, ctx) => {
-    if (["article", "youtube", "twitter", "tiktok", "audio", "pdf"].includes(value.sourceType) && !value.url) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["url"],
-        message: "url is required for this sourceType",
-      });
-    }
-
-    if (["text", "perplexity-query"].includes(value.sourceType) && !value.text) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["text"],
-        message: "text is required for this sourceType",
-      });
-    }
-  });
-
-const autoPublishPlatformSchema = z.enum(["instagram", "youtube"]);
-const optionalStringMap = z.record(z.string(), z.string().trim().min(1).max(500)).optional().default({});
-
 export const newsInsightBodySchema = z
   .object({
     article: articleSchema.optional(),
@@ -169,36 +141,6 @@ export const newsInsightBodySchema = z
       });
     }
   });
-
-export const newsInsightAutoPublishBodySchema = z
-  .object({
-    sessionId: z.string().trim().min(1).max(120).optional(),
-    article: articleSchema.optional(),
-    articles: z.array(articleSchema).max(8).optional(),
-    articleUrl: z.string().trim().url().optional(),
-    source: sourceResolutionSchema.optional(),
-    theme: z
-      .enum(["ai-news-bite", "what-it-means", "workflow-tip", "podcast-angle", "reality-check", "ebook-insight"])
-      .optional()
-      .default("what-it-means"),
-    durationSeconds: z.coerce.number().int().min(20).max(90).optional().default(45),
-    cta: z.string().trim().max(500).optional(),
-    audience: z.string().trim().max(300).optional().default("curious readers, creators, authors, and small business owners"),
-    channels: z.array(autoPublishPlatformSchema).min(1).max(2).optional().default(["instagram", "youtube"]),
-    accounts: optionalStringMap,
-    templateId: z.string().trim().min(1).max(300).optional(),
-    inputs: jsonObjectSchema.optional().default({}),
-    render: booleanish.optional().default(true),
-    isDraft: booleanish.optional().default(false),
-    publish: booleanish.optional().default(true),
-    scheduledTime: isoDateTimeWithOffset,
-    useNextFreeSlot: booleanish.optional(),
-    instagram: jsonObjectSchema.optional().default({}),
-    youtube: jsonObjectSchema.optional().default({}),
-    targets: z.record(z.string(), jsonObjectSchema).optional().default({}),
-    apiKey: optionalApiKey,
-  })
-  .passthrough();
 
 export function formatZodError(error) {
   return error.issues

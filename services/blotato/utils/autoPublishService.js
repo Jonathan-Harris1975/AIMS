@@ -1,461 +1,340 @@
-import { info, error as logError } from "../../../logger.js";
-import { wait } from "../../shared/utils/wait.js";
 import {
-  createSourceResolution,
+  beginJob,
+  completeJob,
+  failJob,
+  getPublicJobFresh,
+  toPublicJob,
+} from "../../shared/utils/jobStore.js";
+import {
   createVisual,
-  getPostStatus,
-  getSourceResolutionStatus,
   getVisualStatus,
   listAccounts,
-  normaliseBlotatoTemplateId,
   publishPost,
+  getPostStatus,
 } from "./blotatoClient.js";
-import {
-  buildBlotatoVisualPrompt,
-  buildNewsInsightShortPack,
-} from "./newsShortsService.js";
-import { pickArticleFromRssFeed } from "./rssArticlePicker.js";
+import { buildBlotatoVisualPrompt, buildNewsInsightShortPack } from "./newsShortsService.js";
+import { selectRssArticleForBlotato } from "./rssArticleSource.js";
+import { info, warn } from "../../../logger.js";
 
-export const DEFAULT_AI_STORY_VIDEO_TEMPLATE_PATH =
+export const BLOTATO_PUBLISH_JOB_TYPE = "blotato-news-insight-publish";
+export const DEFAULT_AI_STORY_TEMPLATE_PATH =
   "base/v2/ai-story-video/5903fe43-514d-40ee-a060-0d6628c5f8fd/v1";
 
-const DEFAULT_CHANNELS = ["instagram", "youtube"];
-const SOURCE_POLL_TERMINAL_SUCCESS = new Set(["completed"]);
-const SOURCE_POLL_TERMINAL_FAILURE = new Set(["failed"]);
-const VISUAL_POLL_TERMINAL_SUCCESS = new Set(["done"]);
-const VISUAL_POLL_TERMINAL_FAILURE = new Set(["creation-from-template-failed", "failed"]);
-const POST_POLL_TERMINAL_SUCCESS = new Set(["published"]);
-const POST_POLL_TERMINAL_FAILURE = new Set(["failed"]);
+const VIDEO_DONE_STATUSES = new Set(["done", "completed", "complete", "success"]);
+const VIDEO_FAILED_STATUSES = new Set(["creation-from-template-failed", "failed", "error"]);
+const POST_DONE_STATUSES = new Set(["published", "completed", "complete", "success"]);
+const POST_FAILED_STATUSES = new Set(["failed", "error"]);
 
-function cleanText(value = "", max = 2500) {
-  const text = String(value || "")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-  return text.length > max ? `${text.slice(0, max).trim()}…` : text;
+function trim(value, fallback = "") {
+  if (value === undefined || value === null) return fallback;
+  const cleaned = String(value).trim();
+  return cleaned || fallback;
 }
 
-function parseCsv(value = "") {
+function parseBoolean(value, fallback = false) {
+  if (value === undefined || value === null || value === "") return fallback;
+  if (typeof value === "boolean") return value;
+  const normalised = String(value).trim().toLowerCase();
+  if (["1", "true", "yes", "on", "y"].includes(normalised)) return true;
+  if (["0", "false", "no", "off", "n"].includes(normalised)) return false;
+  return fallback;
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function normaliseTemplateId(value = DEFAULT_AI_STORY_TEMPLATE_PATH) {
+  const raw = trim(value, DEFAULT_AI_STORY_TEMPLATE_PATH);
+  const uuid = raw.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i)?.[0];
+  return uuid || raw;
+}
+
+function slugPart(value = "") {
   return String(value || "")
-    .split(",")
-    .map((item) => item.trim().toLowerCase())
-    .filter(Boolean);
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 36);
 }
 
-function uniqueChannels(channels = DEFAULT_CHANNELS) {
-  const requested = Array.isArray(channels) && channels.length ? channels : DEFAULT_CHANNELS;
-  return [...new Set(requested.map((channel) => String(channel || "").trim().toLowerCase()))]
-    .filter((channel) => DEFAULT_CHANNELS.includes(channel));
+function createSessionId(article) {
+  const base = slugPart(article?.title || "rss-article") || "rss-article";
+  return `BLT-${Date.now()}-${base}`;
 }
 
-export function getDefaultBlotatoChannels() {
-  const fromEnv = parseCsv(process.env.BLOTATO_DEFAULT_CHANNELS);
-  return uniqueChannels(fromEnv.length ? fromEnv : DEFAULT_CHANNELS);
+function publicJobUrl(req, sessionId) {
+  const proto = req.get?.("x-forwarded-proto") || req.protocol || "https";
+  const host = req.get?.("x-forwarded-host") || req.get?.("host") || "Jonathan-harris.online";
+  return `${proto}://${host}/blotato/jobs/${encodeURIComponent(sessionId)}`;
 }
 
-export function getDefaultBlotatoTemplateId() {
-  return normaliseBlotatoTemplateId(
-    process.env.BLOTATO_DEFAULT_TEMPLATE_ID || DEFAULT_AI_STORY_VIDEO_TEMPLATE_PATH
-  );
+function extractItem(payload = {}) {
+  return payload.item || payload.data || payload.visual || payload;
 }
 
-function resolvePollSettings(prefix, fallbackTimeoutMs, fallbackIntervalMs) {
-  return {
-    timeoutMs: Number(process.env[`${prefix}_TIMEOUT_MS`] || fallbackTimeoutMs),
-    intervalMs: Number(process.env[`${prefix}_INTERVAL_MS`] || fallbackIntervalMs),
-  };
+function extractVideoId(payload = {}) {
+  const item = extractItem(payload);
+  return item?.id || payload.id || payload.visualId || payload.creationId;
 }
 
-async function pollUntil({ label, request, readStatus, isSuccess, isFailure, timeoutMs, intervalMs }) {
-  const started = Date.now();
-  let last;
+function extractVideoStatus(payload = {}) {
+  const item = extractItem(payload);
+  return String(item?.status || payload.status || "").trim().toLowerCase();
+}
 
-  while (Date.now() - started <= timeoutMs) {
-    last = await request();
-    const status = String(readStatus(last) || "").toLowerCase();
-
-    if (isSuccess(status, last)) return last;
-    if (isFailure(status, last)) {
-      const err = new Error(`${label} failed with status: ${status || "unknown"}`);
-      err.statusCode = 502;
-      err.details = last;
-      throw err;
+function findMediaUrl(value, depth = 0) {
+  if (!value || depth > 5) return "";
+  if (typeof value === "string") {
+    return /^https?:\/\//i.test(value) && /\.(mp4|mov|m4v|webm)(?:[?#].*)?$/i.test(value) ? value : "";
+  }
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      const found = findMediaUrl(entry, depth + 1);
+      if (found) return found;
     }
+    return "";
+  }
+  if (typeof value !== "object") return "";
 
-    await wait(intervalMs);
+  for (const key of ["mediaUrl", "videoUrl", "url", "publicUrl", "downloadUrl", "src"]) {
+    const candidate = value[key];
+    if (typeof candidate === "string" && /^https?:\/\//i.test(candidate)) return candidate;
   }
 
-  const err = new Error(`${label} timed out after ${timeoutMs}ms`);
-  err.statusCode = 504;
-  err.details = last;
-  throw err;
-}
-
-function getItem(value = {}) {
-  return value?.item || value?.source || value?.post || value || {};
-}
-
-function getStatus(value = {}) {
-  return getItem(value).status || value?.status;
-}
-
-function getSourceId(response = {}) {
-  return response.id || response.sourceResolutionId || response.item?.id;
-}
-
-function getVisualId(response = {}) {
-  return response.item?.id || response.id || response.videoId || response.creationId;
-}
-
-function getPostSubmissionId(response = {}) {
-  return response.postSubmissionId || response.id || response.item?.postSubmissionId || response.item?.id;
-}
-
-function stringifyContent(value) {
-  if (typeof value === "string") return value;
-  if (Array.isArray(value)) return value.map(stringifyContent).filter(Boolean).join("\n");
-  if (value && typeof value === "object") {
-    return [
-      value.summary,
-      value.text,
-      value.content,
-      value.transcript,
-      value.markdown,
-      value.description,
-      value.body,
-    ]
-      .map((item) => (typeof item === "string" ? item : ""))
-      .filter(Boolean)
-      .join("\n");
+  for (const nested of Object.values(value)) {
+    const found = findMediaUrl(nested, depth + 1);
+    if (found) return found;
   }
+
   return "";
 }
 
-function sourceResultToArticle(result = {}, fallbackSource = {}) {
-  const item = getItem(result);
-  const title = cleanText(item.title || item.name || fallbackSource.url || fallbackSource.text || "Resolved Blotato source", 300);
-  const summary = cleanText(stringifyContent(item.content || item.result || item.data || item), 2500);
-
-  return {
-    title,
-    summary: summary || cleanText(fallbackSource.text || fallbackSource.url || "", 1200),
-    link: fallbackSource.url,
-    source: "Blotato source extraction",
-  };
-}
-
-async function resolveSourceArticle(options = {}, apiKey) {
-  const source = options.source || (options.articleUrl ? { sourceType: "article", url: options.articleUrl } : null);
-  if (!source) return null;
-
-  const created = await createSourceResolution({ source }, apiKey);
-  const sourceId = getSourceId(created);
-  if (!sourceId) {
-    const err = new Error("Blotato source resolution response did not include an id");
-    err.statusCode = 502;
-    err.details = created;
-    throw err;
+async function pollUntil({ label, run, isDone, isFailed, extractStatus, maxAttempts, intervalMs }) {
+  let latest = null;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    latest = await run();
+    const status = extractStatus(latest);
+    if (isDone(status)) return latest;
+    if (isFailed(status)) {
+      const err = new Error(`${label} failed with status: ${status || "unknown"}`);
+      err.statusCode = 502;
+      err.details = latest;
+      throw err;
+    }
+    await sleep(intervalMs);
   }
 
-  const { timeoutMs, intervalMs } = resolvePollSettings("BLOTATO_SOURCE_POLL", 180_000, 3_000);
-  const completed = await pollUntil({
-    label: "Blotato source extraction",
-    request: () => getSourceResolutionStatus(sourceId, apiKey),
-    readStatus: getStatus,
-    isSuccess: (status) => SOURCE_POLL_TERMINAL_SUCCESS.has(status),
-    isFailure: (status) => SOURCE_POLL_TERMINAL_FAILURE.has(status),
-    timeoutMs,
-    intervalMs,
-  });
-
-  return {
-    sourceRequest: source,
-    sourceResolutionId: sourceId,
-    sourceResolution: completed,
-    article: sourceResultToArticle(completed, source),
-  };
-}
-
-function envAccountKey(platform) {
-  return process.env[`BLOTATO_${String(platform || "").toUpperCase()}_ACCOUNT_ID`];
-}
-
-async function resolveAccountId(platform, { accounts = {}, apiKey } = {}) {
-  const supplied = accounts?.[platform] || envAccountKey(platform);
-  if (supplied) return supplied;
-
-  const result = await listAccounts({ platform }, apiKey);
-  const items = Array.isArray(result?.items) ? result.items : [];
-  const match = items.find((item) => String(item.platform || "").toLowerCase() === platform) || items[0];
-
-  if (!match?.id) {
-    const err = new Error(`No connected Blotato ${platform} account found`);
-    err.statusCode = 400;
-    err.details = { platform, accountCount: items.length };
-    throw err;
-  }
-
-  return match.id;
-}
-
-function buildInstagramPost({ accountId, caption, mediaUrl, scheduledTime, useNextFreeSlot, targetOverrides = {}, instagram = {} }) {
-  const target = {
-    targetType: "instagram",
-    mediaType: instagram.mediaType || "reel",
-    shareToFeed: instagram.shareToFeed ?? true,
-    ...targetOverrides,
-  };
-
-  return {
-    accountId,
-    platform: "instagram",
-    text: caption,
-    mediaUrls: [mediaUrl],
-    target,
-    scheduledTime,
-    useNextFreeSlot,
-  };
-}
-
-function buildYoutubePost({ accountId, pack, mediaUrl, scheduledTime, useNextFreeSlot, targetOverrides = {}, youtube = {} }) {
-  const target = {
-    targetType: "youtube",
-    title: cleanText(youtube.title || pack.youtubeTitle || pack.internalTitle, 95),
-    privacyStatus: youtube.privacyStatus || process.env.BLOTATO_YOUTUBE_PRIVACY_STATUS || "public",
-    shouldNotifySubscribers: youtube.shouldNotifySubscribers ?? false,
-    isMadeForKids: youtube.isMadeForKids ?? false,
-    containsSyntheticMedia: youtube.containsSyntheticMedia ?? true,
-    ...targetOverrides,
-  };
-
-  return {
-    accountId,
-    platform: "youtube",
-    text: youtube.description || pack.youtubeDescription || pack.instagramCaption,
-    mediaUrls: [mediaUrl],
-    target,
-    scheduledTime,
-    useNextFreeSlot,
-  };
-}
-
-function buildPublishPayload({ platform, accountId, pack, mediaUrl, options = {} }) {
-  const common = {
-    accountId,
-    mediaUrl,
-    scheduledTime: options.scheduledTime,
-    useNextFreeSlot: options.useNextFreeSlot,
-    targetOverrides: options.targets?.[platform] || {},
-  };
-
-  if (platform === "instagram") {
-    return buildInstagramPost({
-      ...common,
-      caption: options.instagram?.caption || pack.instagramCaption,
-      instagram: options.instagram || {},
-    });
-  }
-
-  if (platform === "youtube") {
-    return buildYoutubePost({
-      ...common,
-      pack,
-      youtube: options.youtube || {},
-    });
-  }
-
-  const err = new Error(`Unsupported Blotato auto-publish channel: ${platform}`);
-  err.statusCode = 400;
+  const err = new Error(`${label} did not complete before polling limit`);
+  err.statusCode = 504;
+  err.details = latest;
   throw err;
 }
 
-function extractMediaUrl(visualStatus = {}) {
-  const item = getItem(visualStatus);
-  return item.mediaUrl || item.videoUrl || item.url || item.imageUrls?.[0] || visualStatus.mediaUrl || null;
-}
-
-async function createAndPollVisual(options = {}, pack, apiKey) {
-  const templateId = normaliseBlotatoTemplateId(options.templateId || getDefaultBlotatoTemplateId());
+async function createAndWaitForVideo({ templateId, pack, apiKey }) {
   const visualPrompt = buildBlotatoVisualPrompt(pack);
-  const visualRequest = {
+  const visual = await createVisual({
     templateId,
-    inputs: options.inputs || {},
+    inputs: {},
     prompt: visualPrompt,
-    render: options.render ?? true,
-    isDraft: options.isDraft ?? false,
-  };
+    render: true,
+    isDraft: false,
+  }, apiKey);
 
-  const created = await createVisual(visualRequest, apiKey);
-  const visualId = getVisualId(created);
+  const visualId = extractVideoId(visual);
   if (!visualId) {
-    const err = new Error("Blotato visual response did not include an id");
+    const err = new Error("Blotato visual response did not include item.id");
     err.statusCode = 502;
-    err.details = created;
+    err.details = visual;
     throw err;
   }
 
-  const { timeoutMs, intervalMs } = resolvePollSettings("BLOTATO_VISUAL_POLL", 420_000, 5_000);
+  const maxAttempts = Number(process.env.BLOTATO_VIDEO_POLL_ATTEMPTS || 90);
+  const intervalMs = Number(process.env.BLOTATO_VIDEO_POLL_INTERVAL_MS || 3000);
   const completed = await pollUntil({
-    label: "Blotato visual render",
-    request: () => getVisualStatus(visualId, apiKey),
-    readStatus: getStatus,
-    isSuccess: (status) => VISUAL_POLL_TERMINAL_SUCCESS.has(status),
-    isFailure: (status) => VISUAL_POLL_TERMINAL_FAILURE.has(status),
-    timeoutMs,
+    label: "Blotato video render",
+    run: () => getVisualStatus(visualId, apiKey),
+    extractStatus: extractVideoStatus,
+    isDone: (status) => VIDEO_DONE_STATUSES.has(status),
+    isFailed: (status) => VIDEO_FAILED_STATUSES.has(status),
+    maxAttempts,
     intervalMs,
   });
 
-  const mediaUrl = extractMediaUrl(completed);
+  const mediaUrl = findMediaUrl(completed) || findMediaUrl(visual);
   if (!mediaUrl) {
-    const err = new Error("Blotato visual completed without a mediaUrl");
+    const err = new Error("Blotato video completed but no public media URL was found");
     err.statusCode = 502;
     err.details = completed;
     throw err;
   }
 
-  return { templateId, visualPrompt, visualRequest, visual: created, visualStatus: completed, visualId, mediaUrl };
+  return { visualId, visual, completed, mediaUrl, visualPrompt };
 }
 
-async function publishAndPollPlatform({ platform, pack, mediaUrl, options = {}, apiKey }) {
-  const accountId = await resolveAccountId(platform, { accounts: options.accounts || {}, apiKey });
-  const publishPayload = buildPublishPayload({ platform, accountId, pack, mediaUrl, options });
-  const submitted = await publishPost(publishPayload, apiKey);
-  const postSubmissionId = getPostSubmissionId(submitted);
+async function resolveAccountId(platform, apiKey) {
+  const specificEnv = `BLOTATO_${platform.toUpperCase()}_ACCOUNT_ID`;
+  const configured = trim(process.env[specificEnv]);
+  if (configured) return configured;
 
-  if (!postSubmissionId) {
-    const err = new Error(`Blotato ${platform} publish response did not include postSubmissionId`);
-    err.statusCode = 502;
-    err.details = submitted;
-    throw err;
-  }
+  const accounts = await listAccounts({ platform }, apiKey);
+  const items = Array.isArray(accounts?.items) ? accounts.items : [];
+  const match = items.find((item) => String(item?.platform || "").toLowerCase() === platform) || items[0];
+  const id = trim(match?.id || match?.accountId);
+  if (id) return id;
 
-  const { timeoutMs, intervalMs } = resolvePollSettings("BLOTATO_POST_POLL", 180_000, 5_000);
-  const status = await pollUntil({
-    label: `Blotato ${platform} publishing`,
-    request: () => getPostStatus(postSubmissionId, apiKey),
-    readStatus: getStatus,
-    isSuccess: (value) => POST_POLL_TERMINAL_SUCCESS.has(value),
-    isFailure: (value) => POST_POLL_TERMINAL_FAILURE.has(value),
-    timeoutMs,
-    intervalMs,
-  });
-
-  return {
-    platform,
-    accountId,
-    postSubmissionId,
-    request: publishPayload,
-    submitted,
-    status,
-    publicUrl: getItem(status).publicUrl || status.publicUrl || null,
-  };
+  const err = new Error(`No connected Blotato ${platform} account found`);
+  err.statusCode = 400;
+  err.details = accounts;
+  throw err;
 }
 
-async function ensureArticleOptions(options = {}, resolvedSource) {
-  if (resolvedSource?.article || options.article || (Array.isArray(options.articles) && options.articles.length)) {
+function buildTarget(platform, pack) {
+  if (platform === "instagram") {
     return {
-      ...options,
-      article: resolvedSource?.article || options.article,
-      articles: options.articles,
-      rssSelection: null,
+      targetType: "instagram",
+      mediaType: "reel",
+      shareToFeed: parseBoolean(process.env.BLOTATO_INSTAGRAM_SHARE_TO_FEED, true),
+      altText: pack.thumbnailText || pack.internalTitle || "AI news short",
     };
   }
 
-  const rssSelection = await pickArticleFromRssFeed();
-  return {
-    ...options,
-    article: rssSelection.article,
-    articles: [rssSelection.article],
-    rssSelection,
-  };
+  if (platform === "youtube") {
+    return {
+      targetType: "youtube",
+      title: pack.youtubeTitle || pack.internalTitle || "AI news insight",
+      privacyStatus: trim(process.env.BLOTATO_YOUTUBE_PRIVACY_STATUS, "public"),
+      shouldNotifySubscribers: parseBoolean(process.env.BLOTATO_YOUTUBE_NOTIFY_SUBSCRIBERS, false),
+      isMadeForKids: false,
+      containsSyntheticMedia: true,
+    };
+  }
+
+  return { targetType: platform };
 }
 
-export async function runBlotatoNewsInsightAutoPublish(options = {}) {
-  const apiKey = options.apiKey;
-  const channels = uniqueChannels(options.channels?.length ? options.channels : getDefaultBlotatoChannels());
+function buildPlatformText(platform, pack) {
+  if (platform === "youtube") return pack.youtubeDescription || pack.facebookCaption || pack.script;
+  if (platform === "instagram") return pack.instagramCaption || pack.tiktokCaption || pack.facebookCaption || pack.script;
+  return pack.facebookCaption || pack.tiktokCaption || pack.script;
+}
 
-  info("blotato.autopublish.start", { sessionId: options.sessionId, channels });
+async function publishAndWait({ platform, pack, mediaUrl, apiKey }) {
+  const accountId = await resolveAccountId(platform, apiKey);
+  const target = buildTarget(platform, pack);
+  const post = await publishPost({
+    accountId,
+    platform,
+    text: buildPlatformText(platform, pack),
+    mediaUrls: [mediaUrl],
+    target,
+  }, apiKey);
 
-  const resolvedSource = await resolveSourceArticle(options, apiKey);
-  const packOptions = await ensureArticleOptions(options, resolvedSource);
-  const pack = await buildNewsInsightShortPack(packOptions);
-  const visualResult = await createAndPollVisual(options, pack, apiKey);
+  const postSubmissionId = trim(post?.postSubmissionId || post?.id || post?.item?.postSubmissionId || post?.item?.id);
+  if (!postSubmissionId) {
+    const err = new Error(`Blotato ${platform} post response did not include postSubmissionId`);
+    err.statusCode = 502;
+    err.details = post;
+    throw err;
+  }
 
-  const posts = options.publish === false
-    ? []
-    : await Promise.all(channels.map((platform) => publishAndPollPlatform({
-        platform,
-        pack,
-        mediaUrl: visualResult.mediaUrl,
-        options,
-        apiKey,
-      })));
-
-  const result = {
-    ok: true,
-    service: "blotato",
-    lane: "news-insight-auto-publish",
-    sessionId: options.sessionId,
-    channels,
-    published: options.publish !== false,
-    source: resolvedSource
-      ? {
-          sourceRequest: resolvedSource.sourceRequest,
-          sourceResolutionId: resolvedSource.sourceResolutionId,
-          article: resolvedSource.article,
-        }
-      : null,
-    rss: packOptions.rssSelection
-      ? {
-          sourceType: packOptions.rssSelection.sourceType,
-          source: packOptions.rssSelection.source,
-          totalItems: packOptions.rssSelection.totalItems,
-          article: packOptions.rssSelection.article,
-          warnings: packOptions.rssSelection.warnings,
-        }
-      : null,
-    templateId: visualResult.templateId,
-    pack,
-    visualPrompt: visualResult.visualPrompt,
-    visualRequest: visualResult.visualRequest,
-    visualId: visualResult.visualId,
-    mediaUrl: visualResult.mediaUrl,
-    posts: posts.map((post) => ({
-      platform: post.platform,
-      accountId: post.accountId,
-      postSubmissionId: post.postSubmissionId,
-      publicUrl: post.publicUrl,
-      status: getStatus(post.status),
-    })),
-  };
-
-  info("blotato.autopublish.complete", {
-    sessionId: options.sessionId,
-    channels,
-    visualId: visualResult.visualId,
-    postCount: posts.length,
+  const maxAttempts = Number(process.env.BLOTATO_POST_POLL_ATTEMPTS || 60);
+  const intervalMs = Number(process.env.BLOTATO_POST_POLL_INTERVAL_MS || 3000);
+  const status = await pollUntil({
+    label: `Blotato ${platform} publish`,
+    run: () => getPostStatus(postSubmissionId, apiKey),
+    extractStatus: (payload) => String(payload?.status || payload?.item?.status || "").trim().toLowerCase(),
+    isDone: (value) => POST_DONE_STATUSES.has(value),
+    isFailed: (value) => POST_FAILED_STATUSES.has(value),
+    maxAttempts,
+    intervalMs,
   });
 
-  return result;
+  return { platform, accountId, target, postSubmissionId, post, status };
 }
 
-export function startBlotatoNewsInsightAutoPublishJob({ sessionId, options, completeJob, failJob }) {
-  void (async () => {
-    try {
-      const result = await runBlotatoNewsInsightAutoPublish({ ...options, sessionId });
-      completeJob("blotato", sessionId, { result });
-    } catch (err) {
-      logError("blotato.autopublish.fail", {
-        sessionId,
-        error: err?.stack || err?.message || String(err),
-      });
-      failJob("blotato", sessionId, err, {
-        result: {
-          service: "blotato",
-          lane: "news-insight-auto-publish",
-          sessionId,
-        },
-      });
+function getDefaultPlatforms() {
+  return trim(process.env.BLOTATO_DEFAULT_CHANNELS, "instagram,youtube")
+    .split(",")
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+async function runPublishJob({ sessionId, articleSource, apiKey }) {
+  try {
+    info("blotato.publish_now.job.start", { sessionId, rssSource: articleSource.rssSource });
+    const templateId = normaliseTemplateId(process.env.BLOTATO_NEWS_TEMPLATE_ID || DEFAULT_AI_STORY_TEMPLATE_PATH);
+    const platforms = getDefaultPlatforms();
+
+    const pack = await buildNewsInsightShortPack({
+      article: articleSource.article,
+      theme: trim(process.env.BLOTATO_NEWS_THEME, "what-it-means"),
+      durationSeconds: Number(process.env.BLOTATO_NEWS_DURATION_SECONDS || 45),
+      audience: trim(
+        process.env.BLOTATO_NEWS_AUDIENCE,
+        "curious readers, creators, authors, and small business owners"
+      ),
+      cta: trim(
+        process.env.BLOTATO_NEWS_CTA,
+        "For more straight-talking AI analysis, follow Jonathan Harris and listen to Turing's Torch AI Weekly."
+      ),
+    });
+
+    const video = await createAndWaitForVideo({ templateId, pack, apiKey });
+    const publishes = [];
+    for (const platform of platforms) {
+      publishes.push(await publishAndWait({ platform, pack, mediaUrl: video.mediaUrl, apiKey }));
     }
-  })();
+
+    const result = {
+      ok: true,
+      service: "blotato",
+      lane: "news-insight-publish-now",
+      templateId,
+      source: articleSource,
+      pack,
+      video,
+      publishes,
+    };
+
+    completeJob(BLOTATO_PUBLISH_JOB_TYPE, sessionId, { result });
+    info("blotato.publish_now.job.complete", { sessionId, platforms });
+    return result;
+  } catch (error) {
+    failJob(BLOTATO_PUBLISH_JOB_TYPE, sessionId, error);
+    warn("blotato.publish_now.job.fail", { sessionId, error: error?.message || String(error) });
+    throw error;
+  }
+}
+
+export async function triggerPublishNowJob(req = {}) {
+  const articleSource = await selectRssArticleForBlotato();
+  const sessionId = createSessionId(articleSource.article);
+  const { started, job } = beginJob(BLOTATO_PUBLISH_JOB_TYPE, sessionId, {
+    source: articleSource,
+    statusUrl: publicJobUrl(req, sessionId),
+  });
+
+  if (!started) {
+    return { started: false, job: toPublicJob(job), statusCode: 202 };
+  }
+
+  const run = () => runPublishJob({ sessionId, articleSource });
+  if (parseBoolean(process.env.BLOTATO_INLINE_PUBLISH_JOBS, false)) {
+    await run();
+  } else {
+    setImmediate(() => {
+      run().catch(() => {});
+    });
+  }
+
+  return {
+    started: true,
+    job: toPublicJob(job),
+    statusCode: 202,
+  };
+}
+
+export async function getPublishNowJob(sessionId) {
+  return getPublicJobFresh(BLOTATO_PUBLISH_JOB_TYPE, sessionId);
 }
