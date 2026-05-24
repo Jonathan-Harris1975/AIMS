@@ -14,6 +14,7 @@ import {
   buildBlotatoVisualPrompt,
   buildNewsInsightShortPack,
 } from "./newsShortsService.js";
+import { pickArticleFromRssFeed } from "./rssArticlePicker.js";
 
 export const DEFAULT_AI_STORY_VIDEO_TEMPLATE_PATH =
   "base/v2/ai-story-video/5903fe43-514d-40ee-a060-0d6628c5f8fd/v1";
@@ -350,11 +351,22 @@ async function publishAndPollPlatform({ platform, pack, mediaUrl, options = {}, 
   };
 }
 
-function buildPackOptions(options = {}, resolvedSource) {
+async function ensureArticleOptions(options = {}, resolvedSource) {
+  if (resolvedSource?.article || options.article || (Array.isArray(options.articles) && options.articles.length)) {
+    return {
+      ...options,
+      article: resolvedSource?.article || options.article,
+      articles: options.articles,
+      rssSelection: null,
+    };
+  }
+
+  const rssSelection = await pickArticleFromRssFeed();
   return {
     ...options,
-    article: resolvedSource?.article || options.article,
-    articles: options.articles,
+    article: rssSelection.article,
+    articles: [rssSelection.article],
+    rssSelection,
   };
 }
 
@@ -365,7 +377,8 @@ export async function runBlotatoNewsInsightAutoPublish(options = {}) {
   info("blotato.autopublish.start", { sessionId: options.sessionId, channels });
 
   const resolvedSource = await resolveSourceArticle(options, apiKey);
-  const pack = await buildNewsInsightShortPack(buildPackOptions(options, resolvedSource));
+  const packOptions = await ensureArticleOptions(options, resolvedSource);
+  const pack = await buildNewsInsightShortPack(packOptions);
   const visualResult = await createAndPollVisual(options, pack, apiKey);
 
   const posts = options.publish === false
@@ -390,6 +403,15 @@ export async function runBlotatoNewsInsightAutoPublish(options = {}) {
           sourceRequest: resolvedSource.sourceRequest,
           sourceResolutionId: resolvedSource.sourceResolutionId,
           article: resolvedSource.article,
+        }
+      : null,
+    rss: packOptions.rssSelection
+      ? {
+          sourceType: packOptions.rssSelection.sourceType,
+          source: packOptions.rssSelection.source,
+          totalItems: packOptions.rssSelection.totalItems,
+          article: packOptions.rssSelection.article,
+          warnings: packOptions.rssSelection.warnings,
         }
       : null,
     templateId: visualResult.templateId,

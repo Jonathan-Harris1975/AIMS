@@ -198,19 +198,7 @@ export const newsInsightAutoPublishBodySchema = z
     targets: z.record(z.string(), jsonObjectSchema).optional().default({}),
     apiKey: optionalApiKey,
   })
-  .passthrough()
-  .superRefine((value, ctx) => {
-    const articleCount = (value.article ? 1 : 0) + (Array.isArray(value.articles) ? value.articles.length : 0);
-    const hasSource = Boolean(value.articleUrl || value.source);
-
-    if (articleCount < 1 && !hasSource) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["article"],
-        message: "provide article, articles, articleUrl, or source",
-      });
-    }
-  });
+  .passthrough();
 
 export function formatZodError(error) {
   return error.issues
