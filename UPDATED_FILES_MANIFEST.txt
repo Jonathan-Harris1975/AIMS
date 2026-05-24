@@ -1,0 +1,21 @@
+Updated files only - Blotato zero-body publish/build fix
+
+env.template
+routes/index.js
+scripts/envBootstrap.js
+scripts/startupCheck.js
+services/blotato/README.md
+services/blotato/index.js
+services/blotato/routes/index.js
+services/blotato/utils/autoPublishService.js
+services/blotato/utils/blotatoClient.js
+services/blotato/utils/blotatoSchemas.js
+services/blotato/utils/newsShortsService.js
+services/blotato/utils/rssArticleSource.js
+services/content-quality/phase3Gates.js
+services/rss-feed-creator/utils/models.js
+services/rss-feed-creator/utils/rss-prompts.js
+services/shared/middleware/suiteAuth.js
+services/shared/utils/ai-config.js
+test/blotato-service.test.js
+test/phase3-rss-rewrite-gate.test.js
