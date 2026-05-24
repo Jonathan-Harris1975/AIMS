@@ -1,4 +1,6 @@
 import express from "express";
+import { sanitizeSessionId } from "../../shared/utils/sessionId.js";
+import { beginJob, completeJob, failJob, getPublicJob } from "../../shared/utils/jobStore.js";
 import { hookdeckDedupe } from "../../shared/utils/hookdeckDedupe.js";
 import {
   createVisual,
@@ -15,11 +17,18 @@ import {
   createVisualBodySchema,
   listAccountsQuerySchema,
   listTemplatesQuerySchema,
+  newsInsightAutoPublishBodySchema,
   newsInsightBodySchema,
   publishPostBodySchema,
   validatePayload,
 } from "../utils/blotatoSchemas.js";
 import { buildOrCreateNewsInsightShort } from "../utils/newsShortsService.js";
+import {
+  DEFAULT_AI_STORY_VIDEO_TEMPLATE_PATH,
+  getDefaultBlotatoChannels,
+  getDefaultBlotatoTemplateId,
+  startBlotatoNewsInsightAutoPublishJob,
+} from "../utils/autoPublishService.js";
 
 const router = express.Router();
 
@@ -44,6 +53,13 @@ router.get("/health", (_req, res) => {
       publishPost: "POST /blotato/posts",
       postStatus: "GET /blotato/posts/:postSubmissionId",
       newsInsightShort: "POST /blotato/shorts/news-insight",
+      autoPublishNewsInsightShort: "POST /blotato/shorts/news-insight/publish-now",
+      autoPublishStatus: "GET /blotato/jobs/:sessionId",
+    },
+    defaults: {
+      templatePath: DEFAULT_AI_STORY_VIDEO_TEMPLATE_PATH,
+      templateId: getDefaultBlotatoTemplateId(),
+      channels: getDefaultBlotatoChannels(),
     },
     time: new Date().toISOString(),
   });
@@ -143,5 +159,69 @@ router.post(
     return res.status(result.createdVisual ? 201 : 200).json(result);
   })
 );
+
+router.post(
+  "/shorts/news-insight/publish-now",
+  hookdeckDedupe("blotato:news-insight-auto-publish"),
+  asyncRoute(async (req, res) => {
+    const parsed = validatePayload(newsInsightAutoPublishBodySchema, req.body);
+    if (!parsed.ok) return sendValidationError(res, parsed);
+
+    const sessionId = sanitizeSessionId(parsed.data.sessionId || `blotato-${Date.now()}`, "BLT");
+    const eventId = req.hookdeckEventId || null;
+    const { apiKey, ...safeOptions } = parsed.data;
+
+    const { started, job } = beginJob("blotato", sessionId, {
+      eventId,
+      route: "blotato.newsInsight.publishNow",
+      channels: safeOptions.channels,
+      templateId: safeOptions.templateId || getDefaultBlotatoTemplateId(),
+    });
+
+    if (!started) {
+      return res.status(202).json({
+        ok: true,
+        duplicateJob: true,
+        service: "blotato",
+        sessionId,
+        status: job?.status || "running",
+        statusUrl: `/blotato/jobs/${encodeURIComponent(sessionId)}`,
+        job,
+      });
+    }
+
+    startBlotatoNewsInsightAutoPublishJob({
+      sessionId,
+      options: { ...safeOptions, apiKey },
+      completeJob,
+      failJob,
+    });
+
+    return res.status(202).json({
+      ok: true,
+      service: "blotato",
+      lane: "news-insight-auto-publish",
+      sessionId,
+      status: "running",
+      statusUrl: `/blotato/jobs/${encodeURIComponent(sessionId)}`,
+      message: "Blotato AI news short pipeline started. It will create the video and post immediately to the configured channels.",
+      defaults: {
+        templateId: safeOptions.templateId || getDefaultBlotatoTemplateId(),
+        channels: safeOptions.channels || getDefaultBlotatoChannels(),
+      },
+    });
+  })
+);
+
+router.get("/jobs/:sessionId", (req, res) => {
+  const sessionId = sanitizeSessionId(req.params.sessionId, "BLT");
+  const job = getPublicJob("blotato", sessionId);
+
+  if (!job) {
+    return res.status(404).json({ ok: false, service: "blotato", error: "No Blotato job found", sessionId });
+  }
+
+  return res.json({ ok: true, service: "blotato", job });
+});
 
 export default router;
