@@ -68,12 +68,6 @@ function isLegacyAuditCallbackPath(req) {
   );
 }
 
-export function isCloudflarePurgePath(req) {
-  const method = String(req.method || "").toUpperCase();
-  if (method !== "POST") return false;
-  const path = pathWithoutQuery(req).replace(/\/+$/, "").toLowerCase();
-  return path === "/cloudflare/purge";
-}
 
 export function isPublicBlotatoPublishPath(req) {
   const method = String(req.method || "").toUpperCase();
@@ -83,11 +77,18 @@ export function isPublicBlotatoPublishPath(req) {
     return true;
   }
 
-  if ((method === "GET" || method === "HEAD") && /^\/blotato\/jobs\/[^/]+$/.test(path)) {
+  if (["GET", "HEAD"].includes(method) && path.startsWith("/blotato/jobs/")) {
     return true;
   }
 
   return false;
+}
+
+export function isCloudflarePurgePath(req) {
+  const method = String(req.method || "").toUpperCase();
+  if (method !== "POST") return false;
+  const path = pathWithoutQuery(req).replace(/\/+$/, "").toLowerCase();
+  return path === "/cloudflare/purge";
 }
 
 function extractCloudflarePurgeSecret(req) {
@@ -114,10 +115,8 @@ function getCloudflarePurgeAuthStrategy(req) {
 export function requireAimsBearerAuth(req, res, next) {
   if (String(req.method || "").toUpperCase() === "OPTIONS") return next();
   if (isPublicHealthRequest(req)) return next();
-  if (isPublicBlotatoPublishPath(req)) {
-    req.aimsAuth = { strategy: "public-blotato-publish" };
-    return next();
-  }
+
+  if (isPublicBlotatoPublishPath(req)) return next();
 
   if (isCloudflarePurgePath(req)) {
     req.aimsAuth = { strategy: getCloudflarePurgeAuthStrategy(req) };
