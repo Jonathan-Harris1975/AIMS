@@ -39,6 +39,51 @@ function sendValidationError(res, parsed) {
   return res.status(400).json({ ok: false, error: parsed.error });
 }
 
+function looksLikeUrl(value) {
+  try {
+    const url = new URL(String(value || ""));
+    return ["http:", "https:"].includes(url.protocol);
+  } catch {
+    return false;
+  }
+}
+
+function normaliseAutoPublishBody(body = {}) {
+  if (!body || typeof body !== "object" || Array.isArray(body)) return body;
+
+  const next = { ...body };
+  const articleUrl = next.articleUrl || next.url || next.link || next.sourceUrl;
+  if (!next.articleUrl && articleUrl) next.articleUrl = articleUrl;
+
+  if (typeof next.article === "string") {
+    const articleString = next.article.trim();
+    delete next.article;
+
+    if (articleString) {
+      if (!next.articleUrl && looksLikeUrl(articleString)) {
+        next.articleUrl = articleString;
+      } else if (!next.source) {
+        next.source = { sourceType: "text", text: articleString };
+      }
+    }
+  }
+
+  if (!next.source && next.articleText) {
+    next.source = { sourceType: "text", text: String(next.articleText).trim() };
+  }
+
+  if (!next.article && next.title && (next.summary || next.content || next.description)) {
+    next.article = {
+      title: String(next.title).trim(),
+      summary: String(next.summary || next.content || next.description).trim(),
+      ...(next.articleUrl ? { link: next.articleUrl } : {}),
+      ...(next.sourceName ? { source: String(next.sourceName).trim() } : {}),
+    };
+  }
+
+  return next;
+}
+
 router.get("/health", (_req, res) => {
   res.json({
     ok: true,
@@ -60,6 +105,10 @@ router.get("/health", (_req, res) => {
       templatePath: DEFAULT_AI_STORY_VIDEO_TEMPLATE_PATH,
       templateId: getDefaultBlotatoTemplateId(),
       channels: getDefaultBlotatoChannels(),
+      rss: {
+        source: process.env.BLOTATO_NEWS_RSS_URL || process.env.BLOTATO_RSS_FEED_URL || process.env.RSS_FEED_URL || process.env.R2_PUBLIC_BASE_URL_RSS || "https://ai-news.jonathan-harris.online/feed.xml",
+        pickMode: process.env.BLOTATO_RSS_PICK_MODE || "latest",
+      },
     },
     time: new Date().toISOString(),
   });
@@ -164,7 +213,7 @@ router.post(
   "/shorts/news-insight/publish-now",
   hookdeckDedupe("blotato:news-insight-auto-publish"),
   asyncRoute(async (req, res) => {
-    const parsed = validatePayload(newsInsightAutoPublishBodySchema, req.body);
+    const parsed = validatePayload(newsInsightAutoPublishBodySchema, normaliseAutoPublishBody(req.body));
     if (!parsed.ok) return sendValidationError(res, parsed);
 
     const sessionId = sanitizeSessionId(parsed.data.sessionId || `blotato-${Date.now()}`, "BLT");
@@ -204,7 +253,7 @@ router.post(
       sessionId,
       status: "running",
       statusUrl: `/blotato/jobs/${encodeURIComponent(sessionId)}`,
-      message: "Blotato AI news short pipeline started. It will create the video and post immediately to the configured channels.",
+      message: "Blotato AI news short pipeline started. It will choose an RSS article, create the video, and post immediately to the configured channels.",
       defaults: {
         templateId: safeOptions.templateId || getDefaultBlotatoTemplateId(),
         channels: safeOptions.channels || getDefaultBlotatoChannels(),
