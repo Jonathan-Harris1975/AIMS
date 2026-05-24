@@ -38,6 +38,23 @@ function delay(ms) {
 const mockServer = http.createServer(async (req, res) => {
   const url = new URL(req.url, "http://127.0.0.1");
 
+  if (req.method === "GET" && url.pathname === "/feed.xml") {
+    res.writeHead(200, { "content-type": "application/rss+xml" });
+    res.end(`<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Jonathan Harris AI News</title>
+    <item>
+      <title>AI agents move from chat to office tasks</title>
+      <link>https://example.com/agents-office-tasks</link>
+      <description><![CDATA[A new wave of AI agent tools is aimed at routine admin and workflow tasks.]]></description>
+      <pubDate>Sun, 24 May 2026 08:00:00 GMT</pubDate>
+    </item>
+  </channel>
+</rss>`);
+    return;
+  }
+
   if (req.method === "POST" && url.pathname === "/chat/completions") {
     const payload = await readJsonBody(req);
     assert.ok(payload.messages.some((message) => String(message.content || "").includes("Create one short-form AI news insight pack")));
@@ -180,6 +197,8 @@ process.env.BLOTATO_VISUAL_POLL_INTERVAL_MS = "5";
 process.env.BLOTATO_VISUAL_POLL_TIMEOUT_MS = "1000";
 process.env.BLOTATO_POST_POLL_INTERVAL_MS = "5";
 process.env.BLOTATO_POST_POLL_TIMEOUT_MS = "1000";
+process.env.BLOTATO_NEWS_RSS_URL = `${mockBase}/feed.xml`;
+process.env.BLOTATO_RSS_PREFER_R2 = "false";
 
 const { app } = await import(`../server.js?blotato-suite=${Date.now()}`);
 
@@ -201,6 +220,12 @@ test("Blotato health endpoint is public and reports configured API key", async (
   assert.equal(response.body.ok, true);
   assert.equal(response.body.service, "blotato");
   assert.equal(response.body.apiKeyConfigured, true);
+});
+
+test("Blotato admin routes remain protected without AIMS bearer auth", async () => {
+  const response = await request(app).get("/blotato/accounts?platform=tiktok");
+  assert.equal(response.status, 401);
+  assert.equal(response.body.ok, false);
 });
 
 test("Blotato account and template routes call the API", async () => {
@@ -307,8 +332,7 @@ test("Blotato news insight route builds a dry-run short pack", async () => {
 async function waitForBlotatoJob(sessionId) {
   for (let index = 0; index < 40; index += 1) {
     const response = await request(app)
-      .get(`/blotato/jobs/${encodeURIComponent(sessionId)}`)
-      .set(auth);
+      .get(`/blotato/jobs/${encodeURIComponent(sessionId)}`);
 
     if (response.status === 200 && ["completed", "failed"].includes(response.body.job?.status)) {
       return response;
@@ -320,26 +344,22 @@ async function waitForBlotatoJob(sessionId) {
   throw new Error(`Blotato job ${sessionId} did not finish in time`);
 }
 
-test("Blotato publish-now route starts a background Instagram and YouTube post job", async () => {
+test("Blotato publish-now route is public, accepts no body, pulls RSS, and posts to Instagram and YouTube", async () => {
   const response = await request(app)
-    .post("/blotato/shorts/news-insight/publish-now")
-    .set(auth)
-    .send({
-      sessionId: "trial-now",
-      articleUrl: "https://example.com/agents-office-tasks",
-      theme: "what-it-means",
-      durationSeconds: 45,
-    });
+    .post("/blotato/shorts/news-insight/publish-now");
 
   assert.equal(response.status, 202);
   assert.equal(response.body.status, "running");
-  assert.equal(response.body.sessionId, "BLT-trial-now");
+  assert.match(response.body.sessionId, /^BLT-blotato-/);
   assert.deepEqual(response.body.defaults.channels, ["instagram", "youtube"]);
+  assert.match(response.body.statusUrl, /\/blotato\/jobs\/BLT-blotato-/);
 
-  const status = await waitForBlotatoJob("BLT-trial-now");
+  const status = await waitForBlotatoJob(response.body.sessionId);
   assert.equal(status.body.job.status, "completed");
   assert.equal(status.body.job.result.templateId, "5903fe43-514d-40ee-a060-0d6628c5f8fd");
   assert.equal(status.body.job.result.mediaUrl, "https://example.com/video.mp4");
+  assert.equal(status.body.job.result.rss.source, `${mockBase}/feed.xml`);
+  assert.equal(status.body.job.result.rss.article.link, "https://example.com/agents-office-tasks");
   assert.deepEqual(status.body.job.result.posts.map((post) => post.platform).sort(), ["instagram", "youtube"]);
   assert.ok(status.body.job.result.posts.every((post) => post.status === "published"));
 });
