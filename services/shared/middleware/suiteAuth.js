@@ -75,6 +75,21 @@ export function isCloudflarePurgePath(req) {
   return path === "/cloudflare/purge";
 }
 
+export function isPublicBlotatoPublishPath(req) {
+  const method = String(req.method || "").toUpperCase();
+  const path = pathWithoutQuery(req).replace(/\/+$/, "").toLowerCase();
+
+  if (method === "POST" && path === "/blotato/shorts/news-insight/publish-now") {
+    return true;
+  }
+
+  if ((method === "GET" || method === "HEAD") && /^\/blotato\/jobs\/[^/]+$/.test(path)) {
+    return true;
+  }
+
+  return false;
+}
+
 function extractCloudflarePurgeSecret(req) {
   return normalise(req.get?.("x-cloudflare-purge-secret") || req.headers?.["x-cloudflare-purge-secret"]);
 }
@@ -99,6 +114,10 @@ function getCloudflarePurgeAuthStrategy(req) {
 export function requireAimsBearerAuth(req, res, next) {
   if (String(req.method || "").toUpperCase() === "OPTIONS") return next();
   if (isPublicHealthRequest(req)) return next();
+  if (isPublicBlotatoPublishPath(req)) {
+    req.aimsAuth = { strategy: "public-blotato-publish" };
+    return next();
+  }
 
   if (isCloudflarePurgePath(req)) {
     req.aimsAuth = { strategy: getCloudflarePurgeAuthStrategy(req) };
