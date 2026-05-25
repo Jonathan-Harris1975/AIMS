@@ -313,7 +313,7 @@ async function runPublishJob({ sessionId, articleSource, apiKey }) {
       defaults,
       templateId,
       rss: buildRssSummary(articleSource),
-      source: buildRssSummary(articleSource),
+      source: articleSource,
       pack,
       visualId: video.visualId,
       mediaUrl: video.mediaUrl,
