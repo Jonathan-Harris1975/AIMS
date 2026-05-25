@@ -24,9 +24,10 @@ WORKDIR /app
 # ============================================================
 # Dependencies (deterministic, production only)
 # ============================================================
-COPY package.json package-lock.json .npmrc ./
+COPY .npmrc package.json package-lock.json ./
 
-RUN npm ci --omit=dev --no-audit --no-fund \
+RUN npm config set registry https://registry.npmjs.org/ \
+ && npm ci --omit=dev --no-audit --no-fund \
  && npm cache clean --force
 
 # ============================================================

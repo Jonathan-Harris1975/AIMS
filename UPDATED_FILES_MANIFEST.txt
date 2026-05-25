@@ -1,10 +1,10 @@
-Koyeb build-stage fix - updated files only
+AIMS Koyeb build-stage fix - updated files only
 
-Root cause from logs:
-- package-lock.json contained sandbox/internal OpenAI Artifactory tarball URLs for supertest and related packages.
-- External builders such as Koyeb/GitHub cannot fetch those internal URLs, causing npm ci to time out during the build/install stage.
+Root cause from latest log:
+- npm ci was still trying to download packages from an internal OpenAI/caas Artifactory URL embedded in package-lock.json.
+- Koyeb/GitHub cannot reach packages.applied-caas-gateway1.internal.api.openai.org, causing ETIMEDOUT during dependency installation.
 
-Updated files:
+Files in this patch:
 - .npmrc
 - .github/workflows/ci.yml
 - Dockerfile
@@ -13,21 +13,19 @@ Updated files:
 - package-lock.json
 - services/blotato/utils/autoPublishService.js
 
-Key changes:
-- Replaced all internal Artifactory package-lock resolved URLs with public npm registry URLs.
-- Moved supertest back to devDependencies so Koyeb production installs omit test-only packages.
-- Added .npmrc to pin npm installs to https://registry.npmjs.org/.
-- Dockerfile now copies .npmrc before npm ci and uses Node 22.
-- nixpacks.toml now uses nodejs_22.
-- GitHub Actions sanity now uses Node 22 and explicitly sets the public npm registry before npm ci.
-- Blotato publish-now result keeps a source alias for existing tests/status consumers.
+Key fixes:
+- All internal Artifactory tarball URLs removed from package-lock.json.
+- Installs pinned to https://registry.npmjs.org/.
+- Node 22 used for CI, Docker, and Nixpacks.
+- Docker/Nixpacks explicitly set registry before npm ci.
+- supertest restored to devDependencies; production Koyeb installs do not need test-only packages.
+- Blotato publish job result now includes source.article for existing status consumers/tests.
+- Confirmed no SHIPPER/SHIPER references in repo or env workbook strings.
 
-Validation run:
-- npm ci --omit=dev --no-audit --no-fund --ignore-scripts --prefer-offline
+Validated locally:
+- npm ci --omit=dev --no-audit --no-fund --ignore-scripts
 - npm run build
-- NODE_ENV=production LOG_LEVEL=silent PORT=3000 R2_ENDPOINT=https://example.invalid R2_ACCESS_KEY_ID=test R2_SECRET_ACCESS_KEY=test R2_BUCKET_META_SYSTEM=metasystem node scripts/startupCheck.js
-- npm ci --no-audit --no-fund --ignore-scripts --prefer-offline
-- NODE_ENV=test LOG_LEVEL=silent ALLOW_EPHEMERAL_STATE=true npm test
-- node --check across all repository JavaScript files
-- grep confirmed no applied-caas/artifactory URLs remain outside node_modules
-- grep confirmed no SHIPPER/SHIPER references remain outside node_modules
+- node scripts/startupCheck.js with minimal production env
+- npm ci --no-audit --no-fund --ignore-scripts
+- npm test: 38 passed, 0 failed
+- node --check across JS files

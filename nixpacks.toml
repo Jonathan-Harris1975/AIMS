@@ -5,7 +5,7 @@
 nixPkgs = ["nodejs_22", "ffmpeg"]
 
 [phases.install]
-cmds = ["npm ci --omit=dev --no-audit --no-fund"]
+cmds = ["npm config set registry https://registry.npmjs.org/", "npm ci --omit=dev --no-audit --no-fund"]
 
 [start]
 cmd = "npm start"
