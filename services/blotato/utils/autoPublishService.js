@@ -60,7 +60,7 @@ function slugPart(value = "") {
 
 function createSessionId(article) {
   const base = slugPart(article?.title || "rss-article") || "rss-article";
-  return `BLT-${Date.now()}-${base}`;
+  return `BLT-blotato-${Date.now()}-${base}`;
 }
 
 function publicJobUrl(req, sessionId) {
@@ -260,11 +260,30 @@ function getDefaultPlatforms() {
     .filter(Boolean);
 }
 
+function buildDefaults() {
+  return {
+    channels: getDefaultPlatforms(),
+    templateId: normaliseTemplateId(process.env.BLOTATO_NEWS_TEMPLATE_ID || DEFAULT_AI_STORY_TEMPLATE_PATH),
+    templatePath: trim(process.env.BLOTATO_NEWS_TEMPLATE_ID || DEFAULT_AI_STORY_TEMPLATE_PATH, DEFAULT_AI_STORY_TEMPLATE_PATH),
+    pickMode: trim(process.env.BLOTATO_RSS_PICK_MODE, "latest"),
+  };
+}
+
+function buildRssSummary(articleSource = {}) {
+  return {
+    source: articleSource.rssSource || articleSource.source || null,
+    sourceType: articleSource.sourceType || "rss",
+    itemCount: articleSource.itemCount ?? articleSource.totalItems ?? null,
+    article: articleSource.article,
+  };
+}
+
 async function runPublishJob({ sessionId, articleSource, apiKey }) {
   try {
     info("blotato.publish_now.job.start", { sessionId, rssSource: articleSource.rssSource });
-    const templateId = normaliseTemplateId(process.env.BLOTATO_NEWS_TEMPLATE_ID || DEFAULT_AI_STORY_TEMPLATE_PATH);
-    const platforms = getDefaultPlatforms();
+    const defaults = buildDefaults();
+    const templateId = defaults.templateId;
+    const platforms = defaults.channels;
 
     const pack = await buildNewsInsightShortPack({
       article: articleSource.article,
@@ -290,10 +309,23 @@ async function runPublishJob({ sessionId, articleSource, apiKey }) {
       ok: true,
       service: "blotato",
       lane: "news-insight-publish-now",
+      sessionId,
+      defaults,
       templateId,
-      source: articleSource,
+      rss: buildRssSummary(articleSource),
       pack,
+      visualId: video.visualId,
+      mediaUrl: video.mediaUrl,
       video,
+      posts: publishes.map((item) => ({
+        platform: item.platform,
+        accountId: item.accountId,
+        postSubmissionId: item.postSubmissionId,
+        status: String(item.status?.status || item.status?.item?.status || item.post?.status || "published").trim().toLowerCase() || "published",
+        target: item.target,
+        post: item.post,
+        rawStatus: item.status,
+      })),
       publishes,
     };
 
@@ -310,13 +342,29 @@ async function runPublishJob({ sessionId, articleSource, apiKey }) {
 export async function triggerPublishNowJob(req = {}) {
   const articleSource = await selectRssArticleForBlotato();
   const sessionId = createSessionId(articleSource.article);
+  const defaults = buildDefaults();
+  const statusUrl = publicJobUrl(req, sessionId);
   const { started, job } = beginJob(BLOTATO_PUBLISH_JOB_TYPE, sessionId, {
+    rss: buildRssSummary(articleSource),
     source: articleSource,
-    statusUrl: publicJobUrl(req, sessionId),
+    defaults,
+    statusUrl,
   });
 
+  const publicJob = toPublicJob(job);
+  const response = {
+    statusCode: 202,
+    started,
+    sessionId,
+    status: publicJob?.status || "running",
+    statusUrl,
+    defaults,
+    rss: buildRssSummary(articleSource),
+    job: publicJob,
+  };
+
   if (!started) {
-    return { started: false, job: toPublicJob(job), statusCode: 202 };
+    return response;
   }
 
   const run = () => runPublishJob({ sessionId, articleSource });
@@ -328,11 +376,7 @@ export async function triggerPublishNowJob(req = {}) {
     });
   }
 
-  return {
-    started: true,
-    job: toPublicJob(job),
-    statusCode: 202,
-  };
+  return response;
 }
 
 export async function getPublishNowJob(sessionId) {
