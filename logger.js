@@ -75,10 +75,7 @@ function wrapLogger(instance) {
   });
 }
 
-const isProd =
-  isProductionEnv() ||
-  parseBoolean(process.env.SHIPPER) ||
-  parseBoolean(process.env.SHIPER);
+const isProd = isProductionEnv();
 
 let loggerInstance = globalThis.__AI_PODCAST_LOGGER__;
 

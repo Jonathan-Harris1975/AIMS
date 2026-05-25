@@ -159,7 +159,7 @@ Expected high-level response:
 
 | Concern | Evidence | Behaviour |
 |---|---|---|
-| Logging | `logger.js`, `server.js` | Pino logger. Production logging is JSON. Development uses `pino-pretty`. `SHIPPER` and typo-compatible `SHIPER` force production-style logging. |
+| Logging | `logger.js`, `server.js` | Pino logger. Production logging is JSON when `NODE_ENV=production`; development uses `pino-pretty`. |
 | Request IDs | `server.js` | Uses `x-request-id`, Hookdeck event headers, or `crypto.randomUUID()`. Response header `x-request-id` is set. |
 | CORS | `server.js` | `CORS_ORIGINS` comma-separated allow-list. Without configured origins, non-production allows loopback origins. Server-to-server/no-origin requests are allowed. |
 | Body limits | `server.js` | `JSON_BODY_LIMIT` and `URLENCODED_BODY_LIMIT`, default `10mb`. |
@@ -277,7 +277,6 @@ These files exist but are not mounted by the active root route registry:
 | `PORT` | HTTP listener port. | server.js, scripts/*, shared utilities | Core | `3000` | Set only for services you run. |
 | `LOG_LEVEL` | Pino log level. | server.js, scripts/*, shared utilities | Optional/conditional | `info` | Set only for services you run. |
 | `NODE_OPTIONS` | Node runtime memory/options hint for hosted deployments. | server.js, scripts/*, shared utilities | Optional/conditional | `--max-old-space-size=1536` | Set only for services you run. |
-| `SHIPPER` | Forces production-style logger mode. | server.js, scripts/*, shared utilities | Optional/conditional | `true` | Set only for services you run. |
 | `APP_TITLE` | Application title used in AI/OpenRouter headers and metadata. | server.js, scripts/*, shared utilities | Optional/conditional | `AI Management Suite` | Set only for services you run. |
 | `APP_URL` | Public base URL for callbacks and defaults. | server.js, scripts/*, shared utilities | Core | `https://example.com` | Set only for services you run. |
 | `CORS_ORIGINS` | Comma-separated browser origins allowed by CORS. | server.js, scripts/*, shared utilities | Optional/conditional | `blank` | Set only for services you run. |
@@ -631,7 +630,6 @@ These names were found in runtime code or deployment checks but are not present 
 | `SITE_BASE_URL` | blog/podcast | Canonical website base used for post, episode and transcript links. | Optional | Defaults to jonathan-harris.online in code. |
 | `WEBSITE_REBUILD_HOOK` | blog/podcast/CI | Webhook called after publishing workflows to rebuild the website. | Conditional | Should be stored as a secret. |
 | `WEBSITE_REBUILD_HOOK_FALLBACK` | blog/podcast | Fallback rebuild webhook URL. | Optional | Secret if it embeds private hook tokens. |
-| `SHIPER` | logger | Typo-compatible production logger flag. | Legacy/optional | Prefer SHIPPER. |
 
 ### Appears unused, legacy, or template-ahead-of-code
 
