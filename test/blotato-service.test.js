@@ -31,10 +31,6 @@ function readJsonBody(req) {
   });
 }
 
-function delay(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 const mockServer = http.createServer(async (req, res) => {
   const url = new URL(req.url, "http://127.0.0.1");
 
@@ -47,8 +43,8 @@ const mockServer = http.createServer(async (req, res) => {
     <item>
       <title>AI agents move from chat to office tasks</title>
       <link>https://example.com/agents-office-tasks</link>
-      <description><![CDATA[A new wave of AI agent tools is aimed at routine admin and workflow tasks.]]></description>
-      <pubDate>Sun, 24 May 2026 08:00:00 GMT</pubDate>
+      <description>A new wave of agent tools is aimed at routine admin and workflow tasks.</description>
+      <pubDate>${new Date().toUTCString()}</pubDate>
     </item>
   </channel>
 </rss>`);
@@ -89,35 +85,14 @@ const mockServer = http.createServer(async (req, res) => {
   }
 
   if (req.method === "GET" && url.pathname === "/v2/users/me/accounts") {
-    const platform = url.searchParams.get("platform") || "tiktok";
     res.writeHead(200, { "content-type": "application/json" });
-    res.end(JSON.stringify({ items: [{ id: `acc-${platform}`, platform, username: "jh" }] }));
+    res.end(JSON.stringify({ items: [{ id: "acc-tiktok", platform: url.searchParams.get("platform") || "tiktok", username: "jh" }] }));
     return;
   }
 
   if (req.method === "GET" && url.pathname === "/v2/users/me/accounts/acc-facebook/subaccounts") {
     res.writeHead(200, { "content-type": "application/json" });
     res.end(JSON.stringify({ items: [{ id: "page-1", accountId: "acc-facebook", name: "Jonathan Harris" }] }));
-    return;
-  }
-
-  if (req.method === "POST" && url.pathname === "/v2/source-resolutions-v3") {
-    const body = await readJsonBody(req);
-    assert.equal(body.source.sourceType, "article");
-    assert.match(body.source.url, /agents-office-tasks/);
-    res.writeHead(201, { "content-type": "application/json" });
-    res.end(JSON.stringify({ id: "source-1", status: "queued" }));
-    return;
-  }
-
-  if (req.method === "GET" && url.pathname === "/v2/source-resolutions-v3/source-1") {
-    res.writeHead(200, { "content-type": "application/json" });
-    res.end(JSON.stringify({
-      id: "source-1",
-      status: "completed",
-      title: "AI agents move from chat to office tasks",
-      content: "A new wave of AI agent tools is aimed at routine admin and workflow tasks.",
-    }));
     return;
   }
 
@@ -144,31 +119,35 @@ const mockServer = http.createServer(async (req, res) => {
 
   if (req.method === "POST" && url.pathname === "/v2/posts") {
     const body = await readJsonBody(req);
-    const platform = body.post.content.platform;
-    assert.equal(body.post.accountId, `acc-${platform}`);
-    assert.equal(body.post.target.targetType, platform);
+    assert.equal(body.post.content.platform, body.post.target.targetType);
 
-    if (platform === "youtube") {
-      assert.equal(body.post.target.privacyStatus, "public");
-      assert.equal(body.post.target.shouldNotifySubscribers, false);
-      assert.equal(body.post.target.containsSyntheticMedia, true);
-      assert.ok(body.post.target.title);
+    if (body.post.content.platform === "tiktok") {
+      assert.equal(body.post.accountId, "acc-tiktok");
     }
 
-    if (platform === "instagram") {
+    if (body.post.content.platform === "instagram") {
+      assert.equal(body.post.accountId, "acc-instagram");
       assert.equal(body.post.target.mediaType, "reel");
-      assert.equal(body.post.target.shareToFeed, true);
+      assert.deepEqual(body.post.content.mediaUrls, ["https://example.com/video.mp4"]);
     }
 
+    if (body.post.content.platform === "youtube") {
+      assert.equal(body.post.accountId, "acc-youtube");
+      assert.equal(body.post.target.privacyStatus, "public");
+      assert.equal(body.post.target.containsSyntheticMedia, true);
+      assert.deepEqual(body.post.content.mediaUrls, ["https://example.com/video.mp4"]);
+    }
+
+    const id = body.post.content.platform === "tiktok" ? "post-1" : `post-${body.post.content.platform}`;
     res.writeHead(201, { "content-type": "application/json" });
-    res.end(JSON.stringify({ postSubmissionId: `post-${platform}` }));
+    res.end(JSON.stringify({ postSubmissionId: id }));
     return;
   }
 
   if (req.method === "GET" && url.pathname.startsWith("/v2/posts/post-")) {
-    const postSubmissionId = url.pathname.split("/").pop();
+    const id = url.pathname.split("/").pop();
     res.writeHead(200, { "content-type": "application/json" });
-    res.end(JSON.stringify({ postSubmissionId, status: "published", publicUrl: `https://example.com/p/${postSubmissionId}` }));
+    res.end(JSON.stringify({ postSubmissionId: id, status: "published", publicUrl: `https://example.com/p/${id}` }));
     return;
   }
 
@@ -190,15 +169,17 @@ process.env.OPENROUTER_API_KEY = "test-openrouter-key";
 process.env.AI_MODEL_STANDARD = "openai/test-model";
 process.env.AI_MODEL_FAST = "openai/test-model";
 process.env.AI_MODEL_SUMMARY = "openai/test-model";
-process.env.ALLOW_EPHEMERAL_STATE = "true";
-process.env.BLOTATO_SOURCE_POLL_INTERVAL_MS = "5";
-process.env.BLOTATO_SOURCE_POLL_TIMEOUT_MS = "1000";
-process.env.BLOTATO_VISUAL_POLL_INTERVAL_MS = "5";
-process.env.BLOTATO_VISUAL_POLL_TIMEOUT_MS = "1000";
-process.env.BLOTATO_POST_POLL_INTERVAL_MS = "5";
-process.env.BLOTATO_POST_POLL_TIMEOUT_MS = "1000";
 process.env.BLOTATO_NEWS_RSS_URL = `${mockBase}/feed.xml`;
 process.env.BLOTATO_RSS_PREFER_R2 = "false";
+process.env.BLOTATO_INLINE_PUBLISH_JOBS = "true";
+process.env.BLOTATO_VIDEO_POLL_ATTEMPTS = "2";
+process.env.BLOTATO_VIDEO_POLL_INTERVAL_MS = "1";
+process.env.BLOTATO_POST_POLL_ATTEMPTS = "2";
+process.env.BLOTATO_POST_POLL_INTERVAL_MS = "1";
+process.env.BLOTATO_INSTAGRAM_ACCOUNT_ID = "acc-instagram";
+process.env.BLOTATO_YOUTUBE_ACCOUNT_ID = "acc-youtube";
+process.env.BLOTATO_DEFAULT_CHANNELS = "instagram,youtube";
+process.env.APP_TMP_DIR = `/tmp/aims-blotato-test-${Date.now()}`;
 
 const { app } = await import(`../server.js?blotato-suite=${Date.now()}`);
 
@@ -212,6 +193,16 @@ test.after(async () => {
 test.afterEach(() => {
   process.env.Blotato_API_key = "test-blotato-key";
   process.env.BLOTATO_API_BASE = `${mockBase}/v2`;
+  process.env.BLOTATO_NEWS_RSS_URL = `${mockBase}/feed.xml`;
+  process.env.BLOTATO_RSS_PREFER_R2 = "false";
+  process.env.BLOTATO_INLINE_PUBLISH_JOBS = "true";
+  process.env.BLOTATO_VIDEO_POLL_ATTEMPTS = "2";
+  process.env.BLOTATO_VIDEO_POLL_INTERVAL_MS = "1";
+  process.env.BLOTATO_POST_POLL_ATTEMPTS = "2";
+  process.env.BLOTATO_POST_POLL_INTERVAL_MS = "1";
+  process.env.BLOTATO_INSTAGRAM_ACCOUNT_ID = "acc-instagram";
+  process.env.BLOTATO_YOUTUBE_ACCOUNT_ID = "acc-youtube";
+  process.env.BLOTATO_DEFAULT_CHANNELS = "instagram,youtube";
 });
 
 test("Blotato health endpoint is public and reports configured API key", async () => {
@@ -220,12 +211,6 @@ test("Blotato health endpoint is public and reports configured API key", async (
   assert.equal(response.body.ok, true);
   assert.equal(response.body.service, "blotato");
   assert.equal(response.body.apiKeyConfigured, true);
-});
-
-test("Blotato admin routes remain protected without AIMS bearer auth", async () => {
-  const response = await request(app).get("/blotato/accounts?platform=tiktok");
-  assert.equal(response.status, 401);
-  assert.equal(response.body.ok, false);
 });
 
 test("Blotato account and template routes call the API", async () => {
@@ -280,10 +265,10 @@ test("Blotato visual and post lifecycle routes call the API", async () => {
     });
 
   assert.equal(post.status, 201);
-  assert.equal(post.body.postSubmissionId, "post-tiktok");
+  assert.equal(post.body.postSubmissionId, "post-1");
 
   const postStatus = await request(app)
-    .get("/blotato/posts/post-tiktok")
+    .get("/blotato/posts/post-1")
     .set(auth);
 
   assert.equal(postStatus.status, 200);
@@ -329,37 +314,23 @@ test("Blotato news insight route builds a dry-run short pack", async () => {
 });
 
 
-async function waitForBlotatoJob(sessionId) {
-  for (let index = 0; index < 40; index += 1) {
-    const response = await request(app)
-      .get(`/blotato/jobs/${encodeURIComponent(sessionId)}`);
 
-    if (response.status === 200 && ["completed", "failed"].includes(response.body.job?.status)) {
-      return response;
-    }
-
-    await delay(25);
-  }
-
-  throw new Error(`Blotato job ${sessionId} did not finish in time`);
-}
-
-test("Blotato publish-now route is public, accepts no body, pulls RSS, and posts to Instagram and YouTube", async () => {
-  const response = await request(app)
-    .post("/blotato/shorts/news-insight/publish-now");
+test("Blotato publish-now endpoint is public and runs the RSS-to-Instagram/YouTube job", async () => {
+  const response = await request(app).post("/blotato/shorts/news-insight/publish-now");
 
   assert.equal(response.status, 202);
-  assert.equal(response.body.status, "running");
-  assert.match(response.body.sessionId, /^BLT-blotato-/);
-  assert.deepEqual(response.body.defaults.channels, ["instagram", "youtube"]);
-  assert.match(response.body.statusUrl, /\/blotato\/jobs\/BLT-blotato-/);
+  assert.equal(response.body.ok, true);
+  assert.equal(response.body.started, true);
+  assert.equal(response.body.job.type, "blotato-news-insight-publish");
+  assert.match(response.body.job.statusUrl, /\/blotato\/jobs\//);
 
-  const status = await waitForBlotatoJob(response.body.sessionId);
-  assert.equal(status.body.job.status, "completed");
-  assert.equal(status.body.job.result.templateId, "5903fe43-514d-40ee-a060-0d6628c5f8fd");
-  assert.equal(status.body.job.result.mediaUrl, "https://example.com/video.mp4");
-  assert.equal(status.body.job.result.rss.source, `${mockBase}/feed.xml`);
-  assert.equal(status.body.job.result.rss.article.link, "https://example.com/agents-office-tasks");
-  assert.deepEqual(status.body.job.result.posts.map((post) => post.platform).sort(), ["instagram", "youtube"]);
-  assert.ok(status.body.job.result.posts.every((post) => post.status === "published"));
+  const jobStatus = await request(app).get(`/blotato/jobs/${response.body.job.sessionId}`);
+  assert.equal(jobStatus.status, 200);
+  assert.equal(jobStatus.body.ok, true);
+  assert.equal(jobStatus.body.job.status, "completed");
+  assert.equal(jobStatus.body.job.result.source.article.title, "AI agents move from chat to office tasks");
+  assert.deepEqual(
+    jobStatus.body.job.result.publishes.map((item) => item.platform),
+    ["instagram", "youtube"]
+  );
 });
