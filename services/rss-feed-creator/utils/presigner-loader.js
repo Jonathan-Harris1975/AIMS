@@ -1,6 +1,6 @@
 import { warn } from "../../../logger.js";
 import {s3, R2_BUCKETS, uploadBuffer, listKeys, getObjectAsText} from "../../shared/utils/r2-client.js";
-// Fully isolated — not visible to Shiper build resolver
+// Fully isolated — not visible to legacy build resolver
 export async function getSignedUrl(r2Client, bucket, key, expiresIn) {
   try {
     // hide the import string from static scanners
