@@ -2,7 +2,7 @@
 # The Dockerfile remains the preferred production image, but if the service is
 # configured to use a native builder this ensures podcast audio tooling exists.
 [phases.setup]
-nixPkgs = ["nodejs_20", "ffmpeg"]
+nixPkgs = ["nodejs_22", "ffmpeg"]
 
 [phases.install]
 cmds = ["npm ci --omit=dev --no-audit --no-fund"]

@@ -1,21 +1,33 @@
-Updated files only - Blotato zero-body publish/build fix
+Koyeb build-stage fix - updated files only
 
-env.template
-routes/index.js
-scripts/envBootstrap.js
-scripts/startupCheck.js
-services/blotato/README.md
-services/blotato/index.js
-services/blotato/routes/index.js
-services/blotato/utils/autoPublishService.js
-services/blotato/utils/blotatoClient.js
-services/blotato/utils/blotatoSchemas.js
-services/blotato/utils/newsShortsService.js
-services/blotato/utils/rssArticleSource.js
-services/content-quality/phase3Gates.js
-services/rss-feed-creator/utils/models.js
-services/rss-feed-creator/utils/rss-prompts.js
-services/shared/middleware/suiteAuth.js
-services/shared/utils/ai-config.js
-test/blotato-service.test.js
-test/phase3-rss-rewrite-gate.test.js
+Root cause from logs:
+- package-lock.json contained sandbox/internal OpenAI Artifactory tarball URLs for supertest and related packages.
+- External builders such as Koyeb/GitHub cannot fetch those internal URLs, causing npm ci to time out during the build/install stage.
+
+Updated files:
+- .npmrc
+- .github/workflows/ci.yml
+- Dockerfile
+- nixpacks.toml
+- package.json
+- package-lock.json
+- services/blotato/utils/autoPublishService.js
+
+Key changes:
+- Replaced all internal Artifactory package-lock resolved URLs with public npm registry URLs.
+- Moved supertest back to devDependencies so Koyeb production installs omit test-only packages.
+- Added .npmrc to pin npm installs to https://registry.npmjs.org/.
+- Dockerfile now copies .npmrc before npm ci and uses Node 22.
+- nixpacks.toml now uses nodejs_22.
+- GitHub Actions sanity now uses Node 22 and explicitly sets the public npm registry before npm ci.
+- Blotato publish-now result keeps a source alias for existing tests/status consumers.
+
+Validation run:
+- npm ci --omit=dev --no-audit --no-fund --ignore-scripts --prefer-offline
+- npm run build
+- NODE_ENV=production LOG_LEVEL=silent PORT=3000 R2_ENDPOINT=https://example.invalid R2_ACCESS_KEY_ID=test R2_SECRET_ACCESS_KEY=test R2_BUCKET_META_SYSTEM=metasystem node scripts/startupCheck.js
+- npm ci --no-audit --no-fund --ignore-scripts --prefer-offline
+- NODE_ENV=test LOG_LEVEL=silent ALLOW_EPHEMERAL_STATE=true npm test
+- node --check across all repository JavaScript files
+- grep confirmed no applied-caas/artifactory URLs remain outside node_modules
+- grep confirmed no SHIPPER/SHIPER references remain outside node_modules

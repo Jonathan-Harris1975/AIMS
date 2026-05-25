@@ -1,7 +1,7 @@
 # ============================================================
 # Base image
 # ============================================================
-FROM node:20-bookworm-slim
+FROM node:22-bookworm-slim
 
 ENV NODE_ENV=production
 ENV TZ=UTC
@@ -24,7 +24,7 @@ WORKDIR /app
 # ============================================================
 # Dependencies (deterministic, production only)
 # ============================================================
-COPY package.json package-lock.json ./
+COPY package.json package-lock.json .npmrc ./
 
 RUN npm ci --omit=dev --no-audit --no-fund \
  && npm cache clean --force
