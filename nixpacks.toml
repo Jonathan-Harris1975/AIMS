@@ -5,7 +5,7 @@
 nixPkgs = ["nodejs_20", "ffmpeg"]
 
 [phases.install]
-cmds = ["npm ci --omit=dev"]
+cmds = ["npm ci --omit=dev --no-audit --no-fund"]
 
 [start]
 cmd = "npm start"
