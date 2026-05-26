@@ -179,11 +179,7 @@ test("POST /cloudflare/purge accepts unauthenticated webhook-style requests", as
   assert.match(response.body.error, /Missing zone id environment variable|Missing CF_zone|not configured/i);
 });
 
-test("production import falls back to local state when durable state is missing in auto mode", async () => {
-  process.env.NODE_ENV = "production";
-  process.env.ALLOW_EPHEMERAL_STATE = "false";
-  process.env.STATE_BACKEND = "auto";
-  delete process.env.REQUIRE_DURABLE_STATE;
+function clearDurableStateEnv() {
   delete process.env.R2_ENDPOINT;
   delete process.env.R2_ACCESS_KEY_ID;
   delete process.env.R2_SECRET_ACCESS_KEY;
@@ -192,35 +188,38 @@ test("production import falls back to local state when durable state is missing 
   delete process.env.R2_BUCKET_METASYSTEM;
   delete process.env.R2_META_BUCKET;
   delete process.env.R2_BUCKET_META;
+  delete process.env.REQUIRE_DURABLE_STATE;
+}
 
-  const stateFile = await import(`../services/shared/utils/stateFile.js?prod-fallback=${Date.now()}`);
-  assert.equal(typeof stateFile.readJsonState, "function");
-
+function restoreTestEnv() {
   process.env.NODE_ENV = "test";
+  process.env.STATE_BACKEND = "auto";
   process.env.ALLOW_EPHEMERAL_STATE = "true";
-  delete process.env.STATE_BACKEND;
+  delete process.env.REQUIRE_DURABLE_STATE;
+}
+
+test("production import falls back to local state when durable state is missing in auto mode", async () => {
+  process.env.NODE_ENV = "production";
+  process.env.STATE_BACKEND = "auto";
+  process.env.ALLOW_EPHEMERAL_STATE = "false";
+  clearDurableStateEnv();
+
+  const mod = await import(`../services/shared/utils/stateFile.js?prod-auto-fallback=${Date.now()}`);
+  assert.equal(typeof mod.readJsonState, "function");
+
+  restoreTestEnv();
 });
 
 test("production import fails fast when durable state is explicitly required", async () => {
   process.env.NODE_ENV = "production";
-  process.env.ALLOW_EPHEMERAL_STATE = "false";
   process.env.STATE_BACKEND = "r2";
-  delete process.env.REQUIRE_DURABLE_STATE;
-  delete process.env.R2_ENDPOINT;
-  delete process.env.R2_ACCESS_KEY_ID;
-  delete process.env.R2_SECRET_ACCESS_KEY;
-  delete process.env.R2_BUCKET_META_SYSTEM;
-  delete process.env.R2_META_SYSTEM_BUCKET;
-  delete process.env.R2_BUCKET_METASYSTEM;
-  delete process.env.R2_META_BUCKET;
-  delete process.env.R2_BUCKET_META;
+  process.env.ALLOW_EPHEMERAL_STATE = "false";
+  clearDurableStateEnv();
 
   await assert.rejects(
-    () => import(`../services/shared/utils/stateFile.js?prod-guard=${Date.now()}`),
-    /configured state directory resolves inside the container tmp filesystem|Configure R2 credentials/i
+    () => import(`../services/shared/utils/stateFile.js?prod-r2-required=${Date.now()}`),
+    /Production state backend is not durable|Configure R2 credentials/i
   );
 
-  process.env.NODE_ENV = "test";
-  process.env.ALLOW_EPHEMERAL_STATE = "true";
-  delete process.env.STATE_BACKEND;
+  restoreTestEnv();
 });
