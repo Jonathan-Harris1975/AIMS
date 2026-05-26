@@ -101,8 +101,16 @@ function assertProductionStateConfig() {
     return;
   }
 
-  if (!hasRemoteStateEnv || stateBackend === "local") {
+  const requireDurableState = parseBoolean(process.env.REQUIRE_DURABLE_STATE, false);
+  const explicitlyRemoteState = stateBackend === "r2" || requireDurableState;
+  const explicitlyLocalState = ["local", "file", "filesystem"].includes(stateBackend);
+
+  if (explicitlyRemoteState && !hasRemoteStateEnv) {
     throw new Error(`Production state backend is not durable. ${durableStateEnvHint()}`);
+  }
+
+  if (explicitlyLocalState) {
+    throw new Error(`Production state backend is explicitly local. ${durableStateEnvHint()}`);
   }
 }
 
