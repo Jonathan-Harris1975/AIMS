@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { debug, warn } from "../../../logger.js";
 import { getObjectAsText, putJson } from "./r2-client.js";
+import { durableStateEnvHint, hasDurableStateEnv } from "./durableStateEnv.js";
 
 const BASE_STATE_DIR = path.resolve(
   process.env.APP_STATE_DIR ||
@@ -15,14 +16,9 @@ const KNOWN_REMOTE_FILES = new Set(["job-store.json", "hookdeck-dedupe.json"]);
 const remoteStateCache = new Map();
 
 const remoteStateMode = String(process.env.STATE_BACKEND || "auto").trim().toLowerCase();
-const hasRemoteStateEnv = Boolean(
-  process.env.R2_ENDPOINT &&
-    process.env.R2_ACCESS_KEY_ID &&
-    process.env.R2_SECRET_ACCESS_KEY &&
-    process.env.R2_BUCKET_META_SYSTEM
-);
+const hasRemoteStateEnv = hasDurableStateEnv(process.env);
 const remoteStateEnabled =
-  remoteStateMode === "r2" || (remoteStateMode === "auto" && hasRemoteStateEnv);
+  hasRemoteStateEnv && (remoteStateMode === "r2" || remoteStateMode === "auto");
 
 let warnedRemoteStateDisabled = false;
 let remoteWriteQueue = Promise.resolve();
@@ -64,6 +60,8 @@ function isLikelyEphemeralStateDir(dirPath) {
 function assertProductionSafeStateBackend() {
   const inProduction = String(process.env.NODE_ENV || "").trim().toLowerCase() === "production";
   const allowEphemeralState = parseBoolean(process.env.ALLOW_EPHEMERAL_STATE, false);
+  const requireDurableState =
+    remoteStateMode === "r2" || parseBoolean(process.env.REQUIRE_DURABLE_STATE, false);
 
   if (!inProduction || allowEphemeralState || remoteStateEnabled) {
     return;
@@ -73,9 +71,16 @@ function assertProductionSafeStateBackend() {
     ? "The configured state directory resolves inside the container tmp filesystem."
     : "The configured state backend is local-only, which is unsafe on the target Koyeb deployment model.";
 
-  throw new Error(
-    `${locationHint} Configure durable state with R2_BUCKET_META_SYSTEM and STATE_BACKEND=auto or r2, or set ALLOW_EPHEMERAL_STATE=true only if you are intentionally accepting state loss across restarts.`
-  );
+  if (!requireDurableState) {
+    warn("state.persistence.local_fallback", {
+      backend: remoteStateMode,
+      stateDir: BASE_STATE_DIR,
+      message: `${locationHint} ${durableStateEnvHint()} Continuing with local state so the web service can boot. Set STATE_BACKEND=r2 or REQUIRE_DURABLE_STATE=true to make this a hard failure.`,
+    });
+    return;
+  }
+
+  throw new Error(`${locationHint} ${durableStateEnvHint()}`);
 }
 
 function warnIfUsingLocalOnlyState() {
