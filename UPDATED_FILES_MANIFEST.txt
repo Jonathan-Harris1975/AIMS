@@ -1,41 +1,34 @@
-AIMS Koyeb deployment/build-stage fix - updated files only
+AIMS CI + Koyeb durable-state deployment fix - updated files only
 
-Root cause fixed in this patch:
-- The app could exit before listening in production when Koyeb did not expose the durable-state R2 variables exactly as expected.
-- services/shared/utils/stateFile.js claimed compatibility with legacy durable-state env names, but its own remote-state detection only checked R2_BUCKET_META_SYSTEM directly.
-- STATE_BACKEND=r2 incorrectly enabled remote state even when the required R2 env was missing, leading to noisy hydrate failures rather than a clean guard.
-- RSS init defaulted to running on boot, which could delay post-start checks and muddy Koyeb health/deploy diagnostics.
-- Docker/Nixpacks install steps had no explicit bounded network timeouts, so remote builder network trouble could look like an endless build phase.
+Root cause from ci error log:
+- The smoke test expected STATE_BACKEND=auto to allow production boot when durable R2 state is missing.
+- services/shared/utils/stateFile.js still hard-failed in production for auto/local fallback.
+- The explicit durable mode path was also inverted: STATE_BACKEND=r2 could pass import far enough to fail later via R2 alias lookup rather than failing cleanly at boot.
+- scripts/startupCheck.js was still stricter than the runtime bootstrap path, so an optional or required startup check could mark a deploy unhealthy even after the HTTP server was already listening.
 
 Files in this patch:
-- .dockerignore
-- .npmrc
-- Dockerfile
-- KOYEB_DEPLOYMENT_FIX.md
-- nixpacks.toml
-- package.json
-- scripts/bootstrap.js
-- scripts/buildCheck.js
-- scripts/deploySmoke.js
 - services/shared/utils/stateFile.js
+- scripts/startupCheck.js
 - test/smoke.test.js
+- KOYEB_DEPLOYMENT_FIX.md
+- UPDATED_FILES_MANIFEST.txt
 
 Key fixes:
-- Dockerfile and Nixpacks force npm registry to https://registry.npmjs.org/.
-- Dockerfile/Nixpacks use npm ci --omit=dev --ignore-scripts --no-audit --no-fund.
-- npm and apt fetch operations now have explicit retries/timeouts.
-- Docker image includes a /health HEALTHCHECK.
-- RSS_INIT_ON_BOOT now defaults to false.
-- Durable state now honours all aliases from durableStateEnv.js, including R2_META_BUCKET.
-- Missing durable state in STATE_BACKEND=auto logs a warning and allows the web service to boot.
-- STATE_BACKEND=r2 or REQUIRE_DURABLE_STATE=true still fails fast if durable state is explicitly required.
-- Added npm run build as a safe build check that does not need production secrets.
-- Added npm run deploy:smoke for quick local/Koyeb-style startup verification.
-- Updated smoke tests for the new resilient startup behaviour.
+- STATE_BACKEND=auto now falls back to local state with a warning when R2 durable-state env is missing.
+- STATE_BACKEND=r2 and REQUIRE_DURABLE_STATE=true still fail fast when R2 durable-state env is missing.
+- Durable-state detection now uses all supported env aliases via durableStateEnv.js, not only R2_BUCKET_META_SYSTEM.
+- startupCheck now matches runtime behaviour: auto warns, explicit r2/local fails.
+- Smoke tests now lock the intended behaviour so CI cannot regress this again.
 
 Validated locally:
-- npm ci --omit=dev --ignore-scripts --no-audit --no-fund
+- npm ci --no-audit --no-fund
 - npm run build
-- npm run deploy:smoke
 - npm test
 - node --check across all JavaScript files
+- NODE_ENV=production STATE_BACKEND=auto ALLOW_EPHEMERAL_STATE=false STARTUP_CHECK_REQUIRED_POST_START=true npm start, then GET /health returned {"ok":true,"status":"ok"}
+- NODE_ENV=production STATE_BACKEND=r2 ALLOW_EPHEMERAL_STATE=false node scripts/startupCheck.js exits 1 as expected
+
+Recommended Koyeb env while stabilising:
+- STATE_BACKEND=auto
+- RSS_INIT_ON_BOOT=false
+- Do not set REQUIRE_DURABLE_STATE=true until R2 durable-state env is confirmed present.
