@@ -179,19 +179,48 @@ test("POST /cloudflare/purge accepts unauthenticated webhook-style requests", as
   assert.match(response.body.error, /Missing zone id environment variable|Missing CF_zone|not configured/i);
 });
 
-test("production import fails fast when durable state is not configured and override is absent", async () => {
+test("production import falls back to local state when durable state is missing in auto mode", async () => {
   process.env.NODE_ENV = "production";
   process.env.ALLOW_EPHEMERAL_STATE = "false";
+  process.env.STATE_BACKEND = "auto";
+  delete process.env.REQUIRE_DURABLE_STATE;
   delete process.env.R2_ENDPOINT;
   delete process.env.R2_ACCESS_KEY_ID;
   delete process.env.R2_SECRET_ACCESS_KEY;
   delete process.env.R2_BUCKET_META_SYSTEM;
+  delete process.env.R2_META_SYSTEM_BUCKET;
+  delete process.env.R2_BUCKET_METASYSTEM;
+  delete process.env.R2_META_BUCKET;
+  delete process.env.R2_BUCKET_META;
+
+  const stateFile = await import(`../services/shared/utils/stateFile.js?prod-fallback=${Date.now()}`);
+  assert.equal(typeof stateFile.readJsonState, "function");
+
+  process.env.NODE_ENV = "test";
+  process.env.ALLOW_EPHEMERAL_STATE = "true";
+  delete process.env.STATE_BACKEND;
+});
+
+test("production import fails fast when durable state is explicitly required", async () => {
+  process.env.NODE_ENV = "production";
+  process.env.ALLOW_EPHEMERAL_STATE = "false";
+  process.env.STATE_BACKEND = "r2";
+  delete process.env.REQUIRE_DURABLE_STATE;
+  delete process.env.R2_ENDPOINT;
+  delete process.env.R2_ACCESS_KEY_ID;
+  delete process.env.R2_SECRET_ACCESS_KEY;
+  delete process.env.R2_BUCKET_META_SYSTEM;
+  delete process.env.R2_META_SYSTEM_BUCKET;
+  delete process.env.R2_BUCKET_METASYSTEM;
+  delete process.env.R2_META_BUCKET;
+  delete process.env.R2_BUCKET_META;
 
   await assert.rejects(
     () => import(`../services/shared/utils/stateFile.js?prod-guard=${Date.now()}`),
-    /Production state backend is not durable|configured state directory resolves inside the container tmp filesystem/i
+    /configured state directory resolves inside the container tmp filesystem|Configure R2 credentials/i
   );
 
   process.env.NODE_ENV = "test";
   process.env.ALLOW_EPHEMERAL_STATE = "true";
+  delete process.env.STATE_BACKEND;
 });
