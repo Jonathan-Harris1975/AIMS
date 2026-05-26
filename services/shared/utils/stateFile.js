@@ -17,8 +17,13 @@ const remoteStateCache = new Map();
 
 const remoteStateMode = String(process.env.STATE_BACKEND || "auto").trim().toLowerCase();
 const hasRemoteStateEnv = hasDurableStateEnv(process.env);
+const requireDurableState = parseBoolean(process.env.REQUIRE_DURABLE_STATE, false);
+const explicitlyLocalState = ["local", "file", "filesystem"].includes(remoteStateMode);
+const explicitlyRemoteState = remoteStateMode === "r2" || requireDurableState;
 const remoteStateEnabled =
-  hasRemoteStateEnv && (remoteStateMode === "r2" || remoteStateMode === "auto");
+  hasRemoteStateEnv &&
+  !explicitlyLocalState &&
+  (remoteStateMode === "r2" || remoteStateMode === "auto" || requireDurableState);
 
 let warnedRemoteStateDisabled = false;
 let remoteWriteQueue = Promise.resolve();
@@ -60,28 +65,26 @@ function isLikelyEphemeralStateDir(dirPath) {
 function assertProductionSafeStateBackend() {
   const inProduction = String(process.env.NODE_ENV || "").trim().toLowerCase() === "production";
   const allowEphemeralState = parseBoolean(process.env.ALLOW_EPHEMERAL_STATE, false);
-  const requireDurableState =
-    remoteStateMode === "r2" || parseBoolean(process.env.REQUIRE_DURABLE_STATE, false);
 
   if (!inProduction || allowEphemeralState || remoteStateEnabled) {
     return;
   }
 
-  const locationHint = isLikelyEphemeralStateDir(BASE_STATE_DIR)
-    ? "The configured state directory resolves inside the container tmp filesystem."
-    : "The configured state backend is local-only, which is unsafe on the target Koyeb deployment model.";
-
-  if (!requireDurableState) {
-    warn("state.persistence.local_fallback", {
-      backend: remoteStateMode,
-      stateDir: BASE_STATE_DIR,
-      message: `${locationHint} ${durableStateEnvHint()} Continuing with local state so the web service can boot. Set STATE_BACKEND=r2 or REQUIRE_DURABLE_STATE=true to make this a hard failure.`,
-    });
-    return;
+  if (explicitlyRemoteState) {
+    throw new Error(`Production state backend is not durable. ${durableStateEnvHint()}`);
   }
 
-  throw new Error(`${locationHint} ${durableStateEnvHint()}`);
+  if (explicitlyLocalState) {
+    const locationHint = isLikelyEphemeralStateDir(BASE_STATE_DIR)
+      ? "The configured state directory resolves inside the container tmp filesystem."
+      : "The configured state backend is local-only, which is unsafe on the target Koyeb deployment model.";
+
+    throw new Error(
+      `${locationHint} ${durableStateEnvHint()}`
+    );
+  }
 }
+
 
 function warnIfUsingLocalOnlyState() {
   if (warnedRemoteStateDisabled) return;
@@ -98,7 +101,7 @@ function warnIfUsingLocalOnlyState() {
     backend: remoteStateMode,
     stateDir: BASE_STATE_DIR,
     message:
-      "State persistence is using local ephemeral storage. Configure R2_BUCKET_META_SYSTEM and set STATE_BACKEND=auto or r2 for durable job and dedupe state.",
+      `State persistence is using local ephemeral storage. ${durableStateEnvHint()}`,
   });
 }
 
