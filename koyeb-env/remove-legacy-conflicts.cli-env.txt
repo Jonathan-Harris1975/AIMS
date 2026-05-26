@@ -1,0 +1,5 @@
+!CF_purge
+!CF_zone
+!CLOUDFLARE_PURGE_API_TOKEN
+!CLOUDFLARE_ZONE_ID
+!Blotato_API_key
