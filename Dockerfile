@@ -1,4 +1,3 @@
-# syntax=docker/dockerfile:1
 # ============================================================
 # AI Management Suite — Koyeb production image
 # ============================================================
@@ -19,10 +18,10 @@ WORKDIR /app
 
 # Runtime essentials. Keep network operations bounded so remote builders fail fast
 # instead of sitting in Koyeb's build phase with no useful signal.
-RUN apt-get -o Acquire::Retries=3 \
+RUN timeout 300s apt-get -o Acquire::Retries=3 \
     -o Acquire::http::Timeout=30 \
     -o Acquire::https::Timeout=30 update \
- && apt-get install -y --no-install-recommends \
+ && timeout 420s apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
     dumb-init \
@@ -31,7 +30,7 @@ RUN apt-get -o Acquire::Retries=3 \
 
 # Install production dependencies before copying the app for better build caching.
 COPY .npmrc package.json package-lock.json ./
-RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund \
+RUN timeout 600s npm ci --omit=dev --ignore-scripts --no-audit --no-fund \
  && npm cache clean --force
 
 COPY . .

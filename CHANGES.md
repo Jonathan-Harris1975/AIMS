@@ -1,34 +1,54 @@
-# AIMS production-readiness patch
+# Koyeb environment build unblock patch
 
 ## Changed files
 
-### `.dockerignore`
-- Replaced the broad `Dockerfile*` ignore pattern with `Dockerfile.*` and explicitly unignored the root `Dockerfile`.
-- Why safe: this only affects build-context packaging. It does not alter runtime code, environment contracts, routes, storage keys, prompts, or API shapes.
-- Production reason: the repository documentation and Koyeb deployment path expect the root `Dockerfile` to remain visible to Dockerfile-based builders.
+### Dockerfile
+- Removed the optional BuildKit frontend directive so Koyeb's Docker builder does not need to fetch an external Dockerfile frontend before normal build output appears.
+- Added bounded `timeout` wrappers around the network-heavy `apt-get` and `npm ci` build steps so remote builds fail loudly instead of remaining in a silent build state.
 
-### `scripts/buildCheck.js`
-- Added a deployment sanity check that fails `npm run build` if `.dockerignore` hides the root `Dockerfile` through `Dockerfile` or `Dockerfile*`.
-- Added `.dockerignore` to the files asserted by the build check.
-- Why safe: the check is read-only and runs only during the existing build validation path. It preserves existing lockfile registry validation and startup-entry file checks.
+### package.json
+- Added `env:audit` and `env:audit:file` scripts for Koyeb environment validation.
+
+### scripts/koyebEnvAudit.js
+- Added a dependency-free Koyeb bulk environment audit script.
+- Fails on duplicate env keys, invalid env variable names, non-portable Koyeb secret reference names, and unresolved runtime placeholders.
+- Redacts secret-like values from output.
+
+### docs/koyeb/Koyeb_Environment_Fix.md
+- Documents the confirmed environment issues found in the supplied workbook and the exact replacement values.
+
+### koyeb-env/aims.bulk-env.cleaned.txt
+- Cleaned AIMS bulk-edit environment file.
+- Replaces `CF_purge={{ secret.CF-purge }}` with `CF_PURGE={{ secret.CF_PURGE }}`.
+- Replaces `CF_zone={{ secret.CF_zone }}` with `CF_ZONE={{ secret.CF_ZONE }}`.
+- Removes duplicate `AUDIT_ANALYSIS_MAX_WAIT_SECONDS`.
+- Removes duplicated Blotato secret-reference account IDs and keeps the later literal account IDs to preserve current effective values.
+
+### koyeb-env/rams.bulk-env.cleaned.txt
+- Cleaned RAMS bulk-edit environment file.
+- Trims the trailing space from `RMS_LIVE_WRITE_ENABLED=true`.
+
+## Why this patch is safe
+
+- No runtime route, request, response, R2 key, bucket, prompt, model, scheduling, or storage contract was changed.
+- The Cloudflare purge code already supports the uppercase `CF_PURGE` and `CF_ZONE` aliases.
+- The Blotato duplicate cleanup preserves the effective final values from the supplied list if interpreted in last-wins order.
+- The new audit script is opt-in and does not run during application startup.
 
 ## Validation run
 
-- `npm ci --ignore-scripts --no-audit --no-fund` ✅
-- `node --check scripts/buildCheck.js` ✅
-- `npm run build` ✅
-- `npm ci --omit=dev --ignore-scripts --no-audit --no-fund` ✅
-- `npm run deploy:smoke` ✅
-- `npm test` ✅
-- `node --test --test-concurrency=1 --test-timeout=120000 --test-force-exit test/*.test.js job-store.test.js` ✅, 171 passing
-
-## Deployment note
-
-Keep Koyeb on the Dockerfile builder where possible:
-
-- Builder: Dockerfile
-- Dockerfile path: `Dockerfile`
-- Exposed port: `3000`
-- Start command: blank, or image default `npm start`
-
-The smoke run still logs expected warnings when real production secrets are not present locally, notably R2 durable state and artwork OpenRouter env warnings. These were not changed because the supplied Koyeb env workbook contains the relevant production env rows and the local sandbox does not have real secrets.
+```bash
+npm ci --ignore-scripts --no-audit --no-fund
+node --check scripts/koyebEnvAudit.js
+node scripts/koyebEnvAudit.js /tmp/aims.original.env   # intentionally failed on the supplied workbook issues
+node scripts/koyebEnvAudit.js koyeb-env/aims.bulk-env.cleaned.txt
+node scripts/koyebEnvAudit.js koyeb-env/rams.bulk-env.cleaned.txt
+npm run build
+npm run deploy:smoke
+npm test
+npm ci --omit=dev --ignore-scripts --no-audit --no-fund
+npm run build
+npm run deploy:smoke
+npm run env:audit:file -- koyeb-env/aims.bulk-env.cleaned.txt
+npm run env:audit:file -- koyeb-env/rams.bulk-env.cleaned.txt
+```
