@@ -1,17 +1,17 @@
 {
   "name": "AI-management-suite",
-  "version": "2.6.3",
+  "version": "2.6.2",
   "type": "module",
   "main": "server.js",
   "scripts": {
-    "build": "node deployment-check.js --build-sanity",
+    "build": "node scripts/buildCheck.js",
     "start": "node scripts/bootstrap.js",
     "start:server": "node server.js",
     "check:startup": "node scripts/startupCheck.js",
     "test": "for f in job-store.test.js test/blotato-service.test.js test/deployment-check.test.js test/durable-state-env.test.js test/route-registry.test.js test/smoke.test.js test/suite-auth.test.js; do echo \"\u25b6 $f\"; APP_TMP_DIR=\"${APP_TMP_DIR:-/tmp/aims-test}-$(date +%s%N)\" node --test --test-concurrency=1 --test-force-exit --test-timeout=60000 \"$f\" || exit $?; done",
     "test:smoke": "for f in job-store.test.js test/blotato-service.test.js test/deployment-check.test.js test/durable-state-env.test.js test/route-registry.test.js test/smoke.test.js test/suite-auth.test.js; do echo \"\u25b6 $f\"; APP_TMP_DIR=\"${APP_TMP_DIR:-/tmp/aims-test}-$(date +%s%N)\" node --test --test-concurrency=1 --test-force-exit --test-timeout=60000 \"$f\" || exit $?; done",
     "deploy:install": "npm ci --omit=dev --ignore-scripts --no-audit --no-fund",
-    "deploy:smoke": "node scripts/startupCheck.js"
+    "deploy:smoke": "node scripts/deploySmoke.js"
   },
   "engines": {
     "node": ">=20 <25"
@@ -41,6 +41,5 @@
   "private": true,
   "devDependencies": {
     "supertest": "^7.2.2"
-  },
-  "packageManager": "npm@10.9.2"
+  }
 }

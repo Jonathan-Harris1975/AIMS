@@ -1,31 +1,41 @@
-AIMS Koyeb build-stage fix - updated files only
+AIMS Koyeb deployment/build-stage fix - updated files only
 
-Root cause from latest log:
-- npm ci was still trying to download packages from an internal OpenAI/caas Artifactory URL embedded in package-lock.json.
-- Koyeb/GitHub cannot reach packages.applied-caas-gateway1.internal.api.openai.org, causing ETIMEDOUT during dependency installation.
+Root cause fixed in this patch:
+- The app could exit before listening in production when Koyeb did not expose the durable-state R2 variables exactly as expected.
+- services/shared/utils/stateFile.js claimed compatibility with legacy durable-state env names, but its own remote-state detection only checked R2_BUCKET_META_SYSTEM directly.
+- STATE_BACKEND=r2 incorrectly enabled remote state even when the required R2 env was missing, leading to noisy hydrate failures rather than a clean guard.
+- RSS init defaulted to running on boot, which could delay post-start checks and muddy Koyeb health/deploy diagnostics.
+- Docker/Nixpacks install steps had no explicit bounded network timeouts, so remote builder network trouble could look like an endless build phase.
 
 Files in this patch:
+- .dockerignore
 - .npmrc
-- .github/workflows/ci.yml
 - Dockerfile
+- KOYEB_DEPLOYMENT_FIX.md
 - nixpacks.toml
 - package.json
-- package-lock.json
-- services/blotato/utils/autoPublishService.js
+- scripts/bootstrap.js
+- scripts/buildCheck.js
+- scripts/deploySmoke.js
+- services/shared/utils/stateFile.js
+- test/smoke.test.js
 
 Key fixes:
-- All internal Artifactory tarball URLs removed from package-lock.json.
-- Installs pinned to https://registry.npmjs.org/.
-- Node 22 used for CI, Docker, and Nixpacks.
-- Docker/Nixpacks explicitly set registry before npm ci.
-- supertest restored to devDependencies; production Koyeb installs do not need test-only packages.
-- Blotato publish job result now includes source.article for existing status consumers/tests.
-- Confirmed no SHIPPER/SHIPER references in repo or env workbook strings.
+- Dockerfile and Nixpacks force npm registry to https://registry.npmjs.org/.
+- Dockerfile/Nixpacks use npm ci --omit=dev --ignore-scripts --no-audit --no-fund.
+- npm and apt fetch operations now have explicit retries/timeouts.
+- Docker image includes a /health HEALTHCHECK.
+- RSS_INIT_ON_BOOT now defaults to false.
+- Durable state now honours all aliases from durableStateEnv.js, including R2_META_BUCKET.
+- Missing durable state in STATE_BACKEND=auto logs a warning and allows the web service to boot.
+- STATE_BACKEND=r2 or REQUIRE_DURABLE_STATE=true still fails fast if durable state is explicitly required.
+- Added npm run build as a safe build check that does not need production secrets.
+- Added npm run deploy:smoke for quick local/Koyeb-style startup verification.
+- Updated smoke tests for the new resilient startup behaviour.
 
 Validated locally:
-- npm ci --omit=dev --no-audit --no-fund --ignore-scripts
+- npm ci --omit=dev --ignore-scripts --no-audit --no-fund
 - npm run build
-- node scripts/startupCheck.js with minimal production env
-- npm ci --no-audit --no-fund --ignore-scripts
-- npm test: 38 passed, 0 failed
-- node --check across JS files
+- npm run deploy:smoke
+- npm test
+- node --check across all JavaScript files

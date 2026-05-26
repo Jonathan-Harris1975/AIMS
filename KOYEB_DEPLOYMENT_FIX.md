@@ -1,30 +1,38 @@
-# Koyeb deployment build fix
+# Koyeb deployment fix
 
-This patch hardens the AIMS deployment path for Koyeb after the previous `npm ci` blocker involving an internal OpenAI/caas registry URL.
+This patch removes the two common causes of the service appearing stuck during Koyeb deployment:
 
-## What changed
+1. **Build/network stalls** are bounded with npm and apt fetch timeouts/retries. The Dockerfile and Nixpacks fallback both use the public npm registry and `npm ci --omit=dev --ignore-scripts --no-audit --no-fund`.
+2. **Runtime startup hard-fail** is removed when durable state env is missing. If R2 durable state is configured, the app still uses it. If Koyeb misses those variables, the app logs a warning and boots with local state rather than failing before `/health` is available.
 
-- `package-lock.json` is still clean: all tarball URLs resolve to `registry.npmjs.org`.
-- `.npmrc`, `Dockerfile`, and `nixpacks.toml` now force the public npm registry and short, deterministic fetch retry settings.
-- Production installs use `npm ci --omit=dev --ignore-scripts --no-audit --no-fund`.
-- `.dockerignore` no longer hides `Dockerfile*`, so Koyeb and other remote builders can always see the root Dockerfile.
-- The Docker image now has a `/health` healthcheck using the Koyeb-provided `PORT` value.
-- `npm run build` now performs a build-sanity check without requiring production secrets.
-- `RSS_INIT_ON_BOOT` now defaults to `false` to stop deployment health being delayed by optional R2/RSS initialisation work.
-
-## Koyeb settings to use
+## Required Koyeb service settings
 
 - Builder: Dockerfile
 - Dockerfile path: `Dockerfile`
 - Exposed port: `3000`
-- Start command: leave blank, or use the image default `npm start`
+- Start command: leave blank, or `npm start`
 
-## Useful validation commands
+## Durable state
+
+Preferred production settings:
+
+```text
+STATE_BACKEND=auto
+R2_ENDPOINT=...
+R2_ACCESS_KEY_ID=...
+R2_SECRET_ACCESS_KEY=...
+R2_BUCKET_META_SYSTEM=metasystem
+R2_PUBLIC_BASE_URL_META_SYSTEM=...
+RSS_INIT_ON_BOOT=false
+```
+
+`STATE_BACKEND=r2` or `REQUIRE_DURABLE_STATE=true` makes missing durable state a hard failure again. Leave them unset while stabilising Koyeb deployment.
+
+## Local verification commands
 
 ```bash
 npm ci --omit=dev --ignore-scripts --no-audit --no-fund
 npm run build
 npm run deploy:smoke
-npm ci --ignore-scripts --no-audit --no-fund
-npm test
+node --check server.js
 ```

@@ -7,7 +7,7 @@ node_modules
 .yarn
 
 # Do NOT ignore .npmrc if you use it for registries
-# .npmrc
+!.npmrc
 
 # ============================================================
 # Logs
@@ -92,9 +92,8 @@ npm-shrinkwrap.json
 # ============================================================
 # Docker metadata
 # ============================================================
-# Keep Dockerfile visible to Koyeb/cloud builders. It is small and harmless in
-# the build context; hiding it can confuse non-standard remote builder wrappers.
 docker-compose*
+Dockerfile*
 !.dockerignore
 
 # ============================================================
