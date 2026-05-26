@@ -105,7 +105,7 @@ function waitForServerListening(server, timeoutMs = SERVER_LISTEN_TIMEOUT_MS) {
 async function runPostStartChecks() {
   const startupCheckRequired = parseBoolean(process.env.STARTUP_CHECK_REQUIRED_POST_START, false);
   const startupCheckScript = process.env.STARTUP_CHECK_SCRIPT || "./scripts/startupCheck.js";
-  const rssInitOnBoot = parseBoolean(process.env.RSS_INIT_ON_BOOT, true);
+  const rssInitOnBoot = parseBoolean(process.env.RSS_INIT_ON_BOOT, false);
   const rssInitRequired = parseBoolean(process.env.RSS_INIT_REQUIRED_ON_BOOT, false);
 
   await runNodeScript(startupCheckScript, "Startup Check", {
