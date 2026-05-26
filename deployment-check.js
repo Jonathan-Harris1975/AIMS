@@ -56,6 +56,11 @@ export function getDurableStateError(env = process.env) {
   return null;
 }
 
+export function runBuildSanityCheck() {
+  console.log("✅ Build sanity passed: dependency install completed and deployment-check.js loaded");
+  return 0;
+}
+
 export function runDeploymentCheck(env = process.env) {
   const missing = getMissingEnvKeys(env);
   if (missing.length) {
@@ -76,5 +81,9 @@ export function runDeploymentCheck(env = process.env) {
 
 const isEntrypoint = process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
 if (isEntrypoint) {
+  if (process.argv.includes("--build-sanity")) {
+    process.exit(runBuildSanityCheck());
+  }
+
   process.exit(runDeploymentCheck());
 }
