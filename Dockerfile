@@ -1,7 +1,7 @@
 # ============================================================
 # Base image
 # ============================================================
-FROM node:22-bookworm-slim
+FROM node:22-bookworm-slim AS runtime
 
 ENV NODE_ENV=production
 ENV TZ=UTC

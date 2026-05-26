@@ -12,9 +12,12 @@ services:
     env_file:
       - .env
     ports:
-      - "8000:8000"
+      # Port aligned with Dockerfile EXPOSE 3000 and server.js default.
+      # Override via PORT env var if you need a different host port.
+      - "3000:3000"
     volumes:
-      # Mount local repo clones so the service can read/write them
+      # Mount local repo clones so the service can read/write them.
+      # Remove or comment these out if not running locally with cloned repos.
       - type: bind
         source: ${RMS_SEO_REPO_PATH}
         target: /repos/seo
@@ -27,9 +30,10 @@ services:
       - RMS_SEO_REPO_PATH=/repos/seo
       - RMS_WEBSITE_REPO_PATH=/repos/website
     healthcheck:
-      test: ["CMD", "python", "-c",
-             "import httpx; httpx.get('http://localhost:8000/health').raise_for_status()"]
+      # Uses curl (installed in the Dockerfile) instead of python/httpx
+      # which is not present in the node:22-bookworm-slim image.
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 10s
+      start_period: 15s
