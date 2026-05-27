@@ -1,33 +1,43 @@
-AIMS Koyeb build-stage hardening patch - updated files only
+AIMS Koyeb build unblock - truncated env paste-file hardening
 
-Confirmed defects fixed:
-- Checked-in AIMS Koyeb env paste files contained literal truncated values ending in `...`.
-- scripts/koyebEnvDoctor.js accepted those values, so a broken paste file could still be described as valid.
-- npm run build did not validate repo-owned Koyeb env artefacts, so this class of deployment breakage could recur unnoticed.
+Confirmed findings:
+- The latest narrowed Blotato/state env group validates and does not fail local build or deploy smoke.
+- The checked-in AIMS Koyeb bulk paste files contained unresolved literal three-dot truncation markers from the spreadsheet/export layer.
+- The previous env doctor only caught the truncated Blotato template ID and allowed other truncated paste-ready values through.
+- Build validation did not scan repository Koyeb env paste files, so bad env artefacts could still ship.
 
 Files in this patch:
-- scripts/koyebEnvDoctor.js
-- scripts/buildCheck.js
-- koyeb-env/aims.bulk-env.canonical.txt
-- koyeb-env/aims.bulk-env.safe-no-google-private-key.txt
-- test/koyeb-env-doctor.test.js
-- docs/koyeb/STUCK_BUILD_ENV_RUNBOOK.md
 - CHANGES.md
 - UPDATED_FILES_MANIFEST.txt
+- docs/koyeb/TRUNCATED_ENV_PASTE_FILE_FIX.md
+- koyeb-env/aims.bulk-env.canonical.txt
+- koyeb-env/aims.bulk-env.canonical.txt.omitted-truncated-values.md
+- koyeb-env/aims.bulk-env.safe-no-google-private-key.txt
+- koyeb-env/aims.bulk-env.safe-no-google-private-key.txt.omitted-truncated-values.md
+- scripts/buildCheck.js
+- scripts/koyebEnvDoctor.js
+- test/build-check.test.js
+- test/koyeb-env-doctor.test.js
 
-Validation completed locally:
+Key fixes:
+- Generic truncated env values containing literal three-dot markers are now rejected.
+- npm run build validates checked-in Koyeb env paste files.
+- Koyeb CLI delete-directive files using !KEY now validate cleanly.
+- Bulk AIMS env files no longer contain unresolved truncated values.
+- Omitted keys are documented instead of guessed.
+
+Validated locally:
 - npm ci --ignore-scripts --no-audit --no-fund
+- node --check scripts/koyebEnvDoctor.js
+- node --check scripts/buildCheck.js
 - npm run env:doctor:file -- koyeb-env/aims.bulk-env.canonical.txt
 - npm run env:doctor:file -- koyeb-env/aims.bulk-env.safe-no-google-private-key.txt
-- npm run env:doctor:file -- koyeb-env/rams.bulk-env.canonical.txt
-- npm run env:doctor:file -- koyeb-env/blotato-state-corrected.env
-- npm run env:doctor:file -- koyeb-env/blotato-state-with-api-key.env
-- npm run build
-- npm run deploy:smoke
+- npm run env:doctor:file -- koyeb-env/remove-legacy-conflicts.cli-env.txt
+- npm run env:doctor:file -- /tmp/user-blotato.env
+- npm run build with the latest narrowed Blotato/state env group
+- npm run deploy:smoke with the latest narrowed Blotato/state env group
 - npm test
-- node --check across all JavaScript files
 
-Deployment note:
-- Use koyeb-env/aims.bulk-env.safe-no-google-private-key.txt first while Koyeb is stuck in Building.
-- Recreate GOOGLE_PRIVATE_KEY as an escaped one-line secret before using the canonical file.
-- Any optional value removed from the paste files must be restored only with the complete original string, never a value ending in `...`.
+Recommended deploy action:
+- Use koyeb-env/blotato-state-with-api-key.env for this Blotato/state unblock.
+- Keep existing Koyeb values for the omitted long URL/text keys unless verified full replacements are supplied.

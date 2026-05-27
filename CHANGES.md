@@ -2,33 +2,39 @@
 
 ## scripts/koyebEnvDoctor.js
 
-- Added a generic guard that rejects Koyeb env values containing literal `...` truncation markers.
-- Kept existing secret-reference, numeric, boolean, URL, template and enum checks intact.
-- This prevents spreadsheet-display truncation from being accepted as a deployable value.
+- Rejects any paste-ready env value containing a literal three-dot truncation marker.
+- Keeps accepting both Koyeb secret reference styles: `{{ secret.NAME }}` and `{{secret.NAME}}`.
+- Accepts Koyeb CLI delete directives such as `!CF_purge` for the legacy-env removal helper.
+- Preserves existing validation for Blotato numbers, booleans, channels, template IDs, URLs, and state backend values.
 
 ## scripts/buildCheck.js
 
-- Added build-time validation for checked-in Koyeb env paste files.
-- The build still ignores runtime-only process env values, so malformed live Koyeb variables cannot poison image construction.
-- The build now fails only when repo-owned env artefacts are invalid.
+- Adds a build-time guard that validates every repository Koyeb env paste file in `koyeb-env/`.
+- Keeps runtime Koyeb env isolated from the build itself, but now prevents broken checked-in paste files from shipping unnoticed.
 
 ## koyeb-env/aims.bulk-env.canonical.txt
 
-- Removed confirmed truncated optional values ending in `...`.
-- Replaced truncated social RSS and podcast descriptions with complete on-repo defaults.
-- Preserved the full canonical `GOOGLE_PRIVATE_KEY={{ secret.GOOGLE_PRIVATE_KEY }}` contract.
+- Removed unresolved values that were exported with literal three-dot truncation markers.
+- No known-good env values were guessed.
 
 ## koyeb-env/aims.bulk-env.safe-no-google-private-key.txt
 
-- Removed confirmed truncated optional values ending in `...`.
-- Replaced truncated social RSS and podcast descriptions with complete on-repo defaults.
-- Preserved the safe build-unblock purpose by keeping `GOOGLE_PRIVATE_KEY` excluded.
+- Removed the same unresolved truncated values from the safer no-Google-private-key paste file.
+- Preserved the safe Google private key omission strategy.
+
+## koyeb-env/*.omitted-truncated-values.md
+
+- Added companion lists of omitted keys so the existing Koyeb values can be retained or replaced only with verified full values.
 
 ## test/koyeb-env-doctor.test.js
 
-- Added regression coverage for generic truncated Koyeb paste values.
-- Added coverage that checked-in Koyeb env files pass the env doctor.
+- Added regression coverage for generic truncated env values.
+- Added regression coverage for Koyeb CLI delete directives.
 
-## docs/koyeb/STUCK_BUILD_ENV_RUNBOOK.md
+## test/build-check.test.js
 
-- Updated the Koyeb build-stage runbook to explain the new truncation guard and the missing optional values rule.
+- Added regression coverage that `npm run build` validates repository Koyeb env paste files.
+
+## docs/koyeb/TRUNCATED_ENV_PASTE_FILE_FIX.md
+
+- Added the production diagnosis, deployment instruction, and validation commands for this fix.
