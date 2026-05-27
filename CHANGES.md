@@ -1,62 +1,51 @@
-# Koyeb env processing unblock patch
+# Production readiness changes — Koyeb Blotato/state env unblock
+
+## Confirmed issue fixed
+
+The supplied Koyeb env workbook contained a truncated Blotato template value:
+
+```env
+BLOTATO_NEWS_TEMPLATE_ID=base/v2/ai-story-video/5903fe43-514d-40ee-a060-0d662...
+```
+
+That literal ellipsis is not a valid production template identifier. The corrected value is:
+
+```env
+BLOTATO_NEWS_TEMPLATE_ID=base/v2/ai-story-video/5903fe43-514d-40ee-a060-0d6628c5f8fd/v1
+```
 
 ## Changed files
 
-### package.json
-- Preserves the existing `env:audit` and `env:audit:file` commands, but points them at the new checked-in env doctor script instead of a missing script path.
-- Adds explicit `env:doctor`, `env:doctor:file`, and `env:doctor:live` commands.
+- `.dockerignore`
+  - Stops ignoring the root `Dockerfile` while still ignoring variant Dockerfiles.
+  - Safe because Koyeb Dockerfile deployments need the root Dockerfile available in the build context.
 
-### scripts/koyebEnvDoctor.js
-- Adds a dependency-free Koyeb environment validator.
-- Checks bulk env files and live process envs for duplicate keys, invalid names, malformed Koyeb interpolation, raw multiline values, and build/platform-sensitive variables.
-- Redacts values by design and never prints secret contents.
+- `Dockerfile`
+  - Removes optional external BuildKit syntax frontend line.
+  - Adds explicit timeouts around apt and npm install steps so remote builds fail loudly instead of appearing stuck.
+  - Safe because the image contents and start command remain unchanged.
 
-### koyeb-env/aims.bulk-env.canonical.txt
-- Provides a canonical paste-ready AIMS env block.
-- Fixes `API_SECRET_PODCAST_INDEX` so it references `{{ secret.API_SECRET_PODCAST_INDEX }}` instead of the API key secret.
-- Uses the existing supported uppercase alias `BLOTATO_API_KEY={{ secret.BLOTATO_API_KEY }}` to avoid mixed-case env/secret handling in Koyeb.
-- Normalises all secret references to `{{ secret.NAME }}`.
+- `package.json`
+  - Adds `env:doctor` and `env:doctor:file` scripts.
+  - Includes the new env doctor test in the existing enumerated test script.
 
-### koyeb-env/aims.bulk-env.safe-no-google-private-key.txt
-- Same as canonical AIMS env, but excludes `GOOGLE_PRIVATE_KEY`.
-- This is the first deploy unblock file when Koyeb sticks during env processing. It isolates the only expected multiline secret.
+- `scripts/buildCheck.js`
+  - Runs critical env validation during build when those env values are present.
+  - Safe because valid env values pass unchanged; invalid values now fail with a clear message.
 
-### koyeb-env/rams.bulk-env.canonical.txt
-- Provides a canonical paste-ready RAMS env block with normalised secret reference formatting.
+- `scripts/koyebEnvDoctor.js`
+  - Adds file/process env validation for Koyeb bulk env blocks.
+  - Catches duplicate keys, malformed secret references, invalid booleans/numbers/enums, unsupported default channels, and truncated `BLOTATO_NEWS_TEMPLATE_ID`.
 
-### koyeb-env/remove-legacy-conflicts.cli-env.txt
-- Lists old conflict keys to remove when using Koyeb CLI style env updates.
+- `test/koyeb-env-doctor.test.js`
+  - Locks the regression: truncated Blotato template values fail, the full value passes.
 
-### docs/koyeb/STUCK_BUILD_ENV_RUNBOOK.md
-- Documents the exact deployment sequence for the stuck-building failure.
-- Calls out the private-key handling rule and the corrected secret names.
+- `koyeb-env/blotato-state-corrected.env`
+  - Paste-ready corrected narrowed env group supplied by the user.
 
-## Confirmed defects fixed
+- `docs/koyeb/BLOTATO_ENV_BUILD_FIX.md`
+  - Documents the confirmed defect and deployment order.
 
-1. `package.json` referenced a missing `scripts/koyebEnvAudit.js` script.
-2. `API_SECRET_PODCAST_INDEX` was mapped to the wrong Koyeb secret reference.
-3. The AIMS env block used the mixed-case `Blotato_API_key` name even though the app already supports the uppercase `BLOTATO_API_KEY` fallback.
-4. The full env set has one likely Koyeb processing hazard: `GOOGLE_PRIVATE_KEY`, if the live Koyeb secret is stored as raw multiline text instead of escaped `\n` text.
+## External contracts preserved
 
-## Why this patch is safe
-
-- No route, API response, R2 bucket/key, prompt, model, scheduling, storage layout, or runtime contract was changed.
-- `BLOTATO_API_KEY` is already supported by the existing Blotato client as a fallback alias.
-- The env doctor is opt-in and does not run during app startup.
-- The safe env file removes only `GOOGLE_PRIVATE_KEY`; the canonical env file keeps the full production contract.
-
-## Validation run
-
-```bash
-npm ci --ignore-scripts --no-audit --no-fund
-node --check scripts/koyebEnvDoctor.js
-npm run env:doctor:file -- koyeb-env/aims.bulk-env.canonical.txt
-npm run env:doctor:file -- koyeb-env/aims.bulk-env.safe-no-google-private-key.txt
-npm run env:doctor:file -- koyeb-env/rams.bulk-env.canonical.txt
-npm run build
-npm run deploy:smoke
-npm test
-npm ci --omit=dev --ignore-scripts --no-audit --no-fund
-npm run build
-npm run deploy:smoke
-```
+No route paths, request/response JSON shapes, R2 bucket names, webhook contracts, model routing, prompt tone, publication flow, or runtime service names were changed.

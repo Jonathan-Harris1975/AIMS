@@ -8,15 +8,12 @@
     "start": "node scripts/bootstrap.js",
     "start:server": "node server.js",
     "check:startup": "node scripts/startupCheck.js",
-    "test": "for f in job-store.test.js test/blotato-service.test.js test/deployment-check.test.js test/durable-state-env.test.js test/route-registry.test.js test/smoke.test.js test/suite-auth.test.js; do echo \"\u25b6 $f\"; APP_TMP_DIR=\"${APP_TMP_DIR:-/tmp/aims-test}-$(date +%s%N)\" node --test --test-concurrency=1 --test-force-exit --test-timeout=60000 \"$f\" || exit $?; done",
-    "test:smoke": "for f in job-store.test.js test/blotato-service.test.js test/deployment-check.test.js test/durable-state-env.test.js test/route-registry.test.js test/smoke.test.js test/suite-auth.test.js; do echo \"\u25b6 $f\"; APP_TMP_DIR=\"${APP_TMP_DIR:-/tmp/aims-test}-$(date +%s%N)\" node --test --test-concurrency=1 --test-force-exit --test-timeout=60000 \"$f\" || exit $?; done",
+    "test": "for f in job-store.test.js test/blotato-service.test.js test/deployment-check.test.js test/koyeb-env-doctor.test.js test/durable-state-env.test.js test/route-registry.test.js test/smoke.test.js test/suite-auth.test.js; do echo \"\u25b6 $f\"; APP_TMP_DIR=\"${APP_TMP_DIR:-/tmp/aims-test}-$(date +%s%N)\" node --test --test-concurrency=1 --test-force-exit --test-timeout=60000 \"$f\" || exit $?; done",
+    "test:smoke": "for f in job-store.test.js test/blotato-service.test.js test/deployment-check.test.js test/koyeb-env-doctor.test.js test/durable-state-env.test.js test/route-registry.test.js test/smoke.test.js test/suite-auth.test.js; do echo \"\u25b6 $f\"; APP_TMP_DIR=\"${APP_TMP_DIR:-/tmp/aims-test}-$(date +%s%N)\" node --test --test-concurrency=1 --test-force-exit --test-timeout=60000 \"$f\" || exit $?; done",
     "deploy:install": "npm ci --omit=dev --ignore-scripts --no-audit --no-fund",
     "deploy:smoke": "node scripts/deploySmoke.js",
-    "env:audit": "node scripts/koyebEnvDoctor.js",
-    "env:audit:file": "node scripts/koyebEnvDoctor.js",
     "env:doctor": "node scripts/koyebEnvDoctor.js",
-    "env:doctor:file": "node scripts/koyebEnvDoctor.js",
-    "env:doctor:live": "node scripts/koyebEnvDoctor.js --live"
+    "env:doctor:file": "node scripts/koyebEnvDoctor.js"
   },
   "engines": {
     "node": ">=20 <25"
