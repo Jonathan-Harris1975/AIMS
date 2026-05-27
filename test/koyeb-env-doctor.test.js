@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parseEnvLines, validateEnvEntries, validateEnvObject } from "../scripts/koyebEnvDoctor.js";
+import { readdir } from "node:fs/promises";
+import path from "node:path";
+import { parseEnvLines, validateEnvEntries, validateEnvFile, validateEnvObject } from "../scripts/koyebEnvDoctor.js";
 
 test("koyeb env doctor accepts Koyeb bulk-edit secret references", () => {
   const { entries } = parseEnvLines("BLOTATO_API_KEY={{ secret.BLOTATO_API_KEY }}\n");
@@ -28,8 +30,33 @@ test("koyeb env doctor rejects truncated Blotato template ids", () => {
   );
   const errors = validateEnvEntries(entries);
 
+  assert.ok(errors.length >= 1);
+  assert.match(errors.map((error) => error.message).join("\n"), /truncated/i);
+});
+
+
+test("koyeb env doctor rejects generic truncated paste values", () => {
+  const { entries } = parseEnvLines(
+    "PODCAST_RSS_FEED_URL=https://podcast-rss-feeds.jonathan-harris.online/turing-...\n"
+  );
+  const errors = validateEnvEntries(entries);
+
   assert.equal(errors.length, 1);
-  assert.match(errors[0].message, /truncated/i);
+  assert.match(errors[0].message, /truncated value marker/i);
+});
+
+test("koyeb env files checked into the repo pass env doctor", async () => {
+  const envDir = path.join(process.cwd(), "koyeb-env");
+  const files = (await readdir(envDir))
+    .filter((file) => /\.(?:txt|env)$/i.test(file))
+    .filter((file) => file !== "remove-legacy-conflicts.cli-env.txt");
+
+  assert.ok(files.length > 0, "expected Koyeb env files to be present");
+
+  for (const file of files) {
+    const result = await validateEnvFile(path.join(envDir, file));
+    assert.deepEqual(result.errors, [], `${file} should pass env doctor`);
+  }
 });
 
 test("koyeb env doctor validates the narrowed Blotato/state env set", () => {
