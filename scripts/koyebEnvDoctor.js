@@ -48,6 +48,7 @@ const VALID_STATE_BACKENDS = new Set(["auto", "r2", "local", "file", "filesystem
 const VALID_CHANNELS = new Set(["instagram", "youtube", "tiktok", "facebook", "linkedin", "threads", "twitter"]);
 const VALID_YOUTUBE_PRIVACY = new Set(["public", "private", "unlisted"]);
 const VALID_RSS_PICK_MODES = new Set(["latest", "random"]);
+const TRUNCATED_VALUE_MARKER = "...";
 
 function clean(value) {
   return String(value ?? "").trim();
@@ -91,6 +92,19 @@ export function parseEnvLines(raw) {
     });
 
   return { entries, errors };
+}
+
+
+function validateNotTruncated({ key, value, line }, errors) {
+  const raw = clean(value);
+  if (!raw.includes(TRUNCATED_VALUE_MARKER)) return;
+
+  errors.push({
+    line,
+    key,
+    message:
+      `${key} appears to contain a truncated value marker (...). Replace it with the full value, move it to a Koyeb Secret, or remove the optional env line.`,
+  });
 }
 
 function validateSecretReference({ key, value, line }, errors) {
@@ -201,6 +215,7 @@ export function validateEnvEntries(entries) {
   const errors = [];
 
   for (const entry of entries) {
+    validateNotTruncated(entry, errors);
     validateSecretReference(entry, errors);
     validateNumber(entry, errors);
     validateBoolean(entry, errors);
