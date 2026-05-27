@@ -1,27 +1,34 @@
 # Changes
 
-## Dockerfile
+## scripts/koyebEnvDoctor.js
 
-- Isolated production dependency installation with `env -i` so Koyeb runtime env vars cannot affect Docker image construction.
-- Added `npm run build` to the Docker image build, also under a minimal build-only environment.
-- Preserved runtime command, health check, port, dependencies, and public contracts.
-
-## nixpacks.toml
-
-- Applied the same `env -i` isolation to the buildpack fallback install/build commands.
-- Dockerfile remains the preferred builder; this only prevents the fallback path from inheriting runtime Blotato/R2/API env values.
+- Added a generic guard that rejects Koyeb env values containing literal `...` truncation markers.
+- Kept existing secret-reference, numeric, boolean, URL, template and enum checks intact.
+- This prevents spreadsheet-display truncation from being accepted as a deployable value.
 
 ## scripts/buildCheck.js
 
-- Added a guard that fails the build if Dockerfile or Nixpacks build commands are no longer isolated from runtime env values.
-- Kept the existing filesystem and lockfile checks.
+- Added build-time validation for checked-in Koyeb env paste files.
+- The build still ignores runtime-only process env values, so malformed live Koyeb variables cannot poison image construction.
+- The build now fails only when repo-owned env artefacts are invalid.
 
-## services/shared/utils/r2-client.js
+## koyeb-env/aims.bulk-env.canonical.txt
 
-- Added abort-backed R2 request timeouts using `R2_REQUEST_TIMEOUT_MS`, defaulting to 15000ms.
-- Routed R2 get/put/list/delete calls through the timeout wrapper.
-- This prevents remote state/R2 calls from hanging indefinitely during startup/background hydration.
+- Removed confirmed truncated optional values ending in `...`.
+- Replaced truncated social RSS and podcast descriptions with complete on-repo defaults.
+- Preserved the full canonical `GOOGLE_PRIVATE_KEY={{ secret.GOOGLE_PRIVATE_KEY }}` contract.
 
-## docs/koyeb/BUILD_STAGE_ENV_ISOLATION_FIX.md
+## koyeb-env/aims.bulk-env.safe-no-google-private-key.txt
 
-- Added the deployment diagnosis, preserved runtime env contract, and validation commands.
+- Removed confirmed truncated optional values ending in `...`.
+- Replaced truncated social RSS and podcast descriptions with complete on-repo defaults.
+- Preserved the safe build-unblock purpose by keeping `GOOGLE_PRIVATE_KEY` excluded.
+
+## test/koyeb-env-doctor.test.js
+
+- Added regression coverage for generic truncated Koyeb paste values.
+- Added coverage that checked-in Koyeb env files pass the env doctor.
+
+## docs/koyeb/STUCK_BUILD_ENV_RUNBOOK.md
+
+- Updated the Koyeb build-stage runbook to explain the new truncation guard and the missing optional values rule.

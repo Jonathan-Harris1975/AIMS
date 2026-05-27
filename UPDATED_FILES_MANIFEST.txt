@@ -1,34 +1,33 @@
-AIMS CI + Koyeb durable-state deployment fix - updated files only
+AIMS Koyeb build-stage hardening patch - updated files only
 
-Root cause from ci error log:
-- The smoke test expected STATE_BACKEND=auto to allow production boot when durable R2 state is missing.
-- services/shared/utils/stateFile.js still hard-failed in production for auto/local fallback.
-- The explicit durable mode path was also inverted: STATE_BACKEND=r2 could pass import far enough to fail later via R2 alias lookup rather than failing cleanly at boot.
-- scripts/startupCheck.js was still stricter than the runtime bootstrap path, so an optional or required startup check could mark a deploy unhealthy even after the HTTP server was already listening.
+Confirmed defects fixed:
+- Checked-in AIMS Koyeb env paste files contained literal truncated values ending in `...`.
+- scripts/koyebEnvDoctor.js accepted those values, so a broken paste file could still be described as valid.
+- npm run build did not validate repo-owned Koyeb env artefacts, so this class of deployment breakage could recur unnoticed.
 
 Files in this patch:
-- services/shared/utils/stateFile.js
-- scripts/startupCheck.js
-- test/smoke.test.js
-- KOYEB_DEPLOYMENT_FIX.md
+- scripts/koyebEnvDoctor.js
+- scripts/buildCheck.js
+- koyeb-env/aims.bulk-env.canonical.txt
+- koyeb-env/aims.bulk-env.safe-no-google-private-key.txt
+- test/koyeb-env-doctor.test.js
+- docs/koyeb/STUCK_BUILD_ENV_RUNBOOK.md
+- CHANGES.md
 - UPDATED_FILES_MANIFEST.txt
 
-Key fixes:
-- STATE_BACKEND=auto now falls back to local state with a warning when R2 durable-state env is missing.
-- STATE_BACKEND=r2 and REQUIRE_DURABLE_STATE=true still fail fast when R2 durable-state env is missing.
-- Durable-state detection now uses all supported env aliases via durableStateEnv.js, not only R2_BUCKET_META_SYSTEM.
-- startupCheck now matches runtime behaviour: auto warns, explicit r2/local fails.
-- Smoke tests now lock the intended behaviour so CI cannot regress this again.
-
-Validated locally:
-- npm ci --no-audit --no-fund
+Validation completed locally:
+- npm ci --ignore-scripts --no-audit --no-fund
+- npm run env:doctor:file -- koyeb-env/aims.bulk-env.canonical.txt
+- npm run env:doctor:file -- koyeb-env/aims.bulk-env.safe-no-google-private-key.txt
+- npm run env:doctor:file -- koyeb-env/rams.bulk-env.canonical.txt
+- npm run env:doctor:file -- koyeb-env/blotato-state-corrected.env
+- npm run env:doctor:file -- koyeb-env/blotato-state-with-api-key.env
 - npm run build
+- npm run deploy:smoke
 - npm test
 - node --check across all JavaScript files
-- NODE_ENV=production STATE_BACKEND=auto ALLOW_EPHEMERAL_STATE=false STARTUP_CHECK_REQUIRED_POST_START=true npm start, then GET /health returned {"ok":true,"status":"ok"}
-- NODE_ENV=production STATE_BACKEND=r2 ALLOW_EPHEMERAL_STATE=false node scripts/startupCheck.js exits 1 as expected
 
-Recommended Koyeb env while stabilising:
-- STATE_BACKEND=auto
-- RSS_INIT_ON_BOOT=false
-- Do not set REQUIRE_DURABLE_STATE=true until R2 durable-state env is confirmed present.
+Deployment note:
+- Use koyeb-env/aims.bulk-env.safe-no-google-private-key.txt first while Koyeb is stuck in Building.
+- Recreate GOOGLE_PRIVATE_KEY as an escaped one-line secret before using the canonical file.
+- Any optional value removed from the paste files must be restored only with the complete original string, never a value ending in `...`.
