@@ -34,12 +34,12 @@ async function assertPublicRegistryLockfile() {
 
 function assertBuildEnvironment() {
   const errors = validateEnvObject(process.env);
-  if (errors.length) {
-    const formatted = errors
-      .map((err) => `${err.key || "process.env"}: ${err.message}`)
-      .join("\n");
-    throw new Error(`Blocking build environment issue(s):\n${formatted}`);
-  }
+  if (!errors.length) return;
+
+  const formatted = errors
+    .map((err) => `${err.key || "process.env"}: ${err.message}`)
+    .join("\n");
+  throw new Error(`Blocking build environment issue(s):\n${formatted}`);
 }
 
 async function main() {

@@ -3,38 +3,51 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
 const ENV_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
-const SECRET_REFERENCE_PATTERN = /^\{\{\s*secret\.([A-Za-z0-9_]+)\s*\}\}$/;
-const BAD_SECRET_REFERENCE_PATTERN = /^\{\{\s*secret\.([^}]+)\s*\}\}$/;
-const BLOTATO_DEFAULT_TEMPLATE_PATH =
-  "base/v2/ai-story-video/5903fe43-514d-40ee-a060-0d6628c5f8fd/v1";
+const SECRET_REFERENCE_PATTERN = /^\{\{secret\.([A-Za-z0-9_]+)\}\}$/;
+const LOOSE_SECRET_REFERENCE_PATTERN = /^\{\{\s*secret\.([^}]+?)\s*\}\}$/;
 const BLOTATO_TEMPLATE_UUID_PATTERN =
   /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+const BLOTATO_DEFAULT_TEMPLATE_PATH =
+  "base/v2/ai-story-video/5903fe43-514d-40ee-a060-0d6628c5f8fd/v1";
 
 const NUMERIC_ENVS = new Set([
-  "BLOTATO_TIMEOUT_MS",
-  "BLOTATO_NEWS_SHORT_MAX_TOKENS",
-  "BLOTATO_VIDEO_POLL_ATTEMPTS",
-  "BLOTATO_VIDEO_POLL_INTERVAL_MS",
-  "BLOTATO_POST_POLL_ATTEMPTS",
-  "BLOTATO_POST_POLL_INTERVAL_MS",
   "PHASE3_AUTOPUBLISH_MIN_SCORE",
   "PHASE3_SOURCE_MIN_CHARS",
   "PHASE3_MAX_SENTENCE_WORDS",
   "PHASE3_MAX_PODCAST_SENTENCE_WORDS",
+  "BLOTATO_VIDEO_POLL_ATTEMPTS",
+  "BLOTATO_VIDEO_POLL_INTERVAL_MS",
+  "BLOTATO_POST_POLL_ATTEMPTS",
+  "BLOTATO_POST_POLL_INTERVAL_MS",
+  "BLOTATO_TIMEOUT_MS",
+  "BLOTATO_NEWS_SHORT_MAX_TOKENS",
+]);
+
+const POSITIVE_INTEGER_ENVS = new Set([
+  "PHASE3_SOURCE_MIN_CHARS",
+  "PHASE3_MAX_SENTENCE_WORDS",
+  "PHASE3_MAX_PODCAST_SENTENCE_WORDS",
+  "BLOTATO_VIDEO_POLL_ATTEMPTS",
+  "BLOTATO_VIDEO_POLL_INTERVAL_MS",
+  "BLOTATO_POST_POLL_ATTEMPTS",
+  "BLOTATO_POST_POLL_INTERVAL_MS",
+  "BLOTATO_TIMEOUT_MS",
+  "BLOTATO_NEWS_SHORT_MAX_TOKENS",
 ]);
 
 const BOOLEAN_ENVS = new Set([
-  "BLOTATO_RSS_PREFER_R2",
+  "ALLOW_EPHEMERAL_STATE",
   "BLOTATO_YOUTUBE_NOTIFY_SUBSCRIBERS",
   "BLOTATO_INSTAGRAM_SHARE_TO_FEED",
-  "ALLOW_EPHEMERAL_STATE",
+  "BLOTATO_RSS_PREFER_R2",
 ]);
 
+const URL_ENVS = new Set(["BLOTATO_API_BASE", "BLOTATO_NEWS_RSS_URL"]);
 const VALID_BOOLEAN_VALUES = new Set(["1", "0", "true", "false", "yes", "no", "on", "off"]);
 const VALID_STATE_BACKENDS = new Set(["auto", "r2", "local", "file", "filesystem"]);
-const VALID_RSS_PICK_MODES = new Set(["latest", "random"]);
 const VALID_CHANNELS = new Set(["instagram", "youtube", "tiktok", "facebook", "linkedin", "threads", "twitter"]);
 const VALID_YOUTUBE_PRIVACY = new Set(["public", "private", "unlisted"]);
+const VALID_RSS_PICK_MODES = new Set(["latest", "random"]);
 
 function clean(value) {
   return String(value ?? "").trim();
@@ -81,23 +94,35 @@ export function parseEnvLines(raw) {
 }
 
 function validateSecretReference({ key, value, line }, errors) {
-  const badSecretMatch = clean(value).match(BAD_SECRET_REFERENCE_PATTERN);
-  if (!badSecretMatch) return;
+  const cleaned = clean(value);
+  if (!LOOSE_SECRET_REFERENCE_PATTERN.test(cleaned)) return;
 
-  if (!SECRET_REFERENCE_PATTERN.test(clean(value))) {
+  if (!SECRET_REFERENCE_PATTERN.test(cleaned)) {
     errors.push({
       line,
       key,
-      message: `Invalid Koyeb secret reference for ${key}; use {{ secret.SECRET_NAME }} with letters, numbers and underscores only`,
+      message:
+        `Invalid Koyeb secret reference for ${key}; use {{secret.SECRET_NAME}} with no spaces and letters, numbers or underscores only`,
     });
   }
 }
 
 function validateNumber({ key, value, line }, errors) {
   if (!NUMERIC_ENVS.has(key)) return;
-  const number = Number(clean(value));
+  const raw = clean(value);
+  const number = Number(raw);
+
   if (!Number.isFinite(number)) {
     errors.push({ line, key, message: `${key} must be numeric` });
+    return;
+  }
+
+  if (POSITIVE_INTEGER_ENVS.has(key) && (!Number.isInteger(number) || number <= 0)) {
+    errors.push({ line, key, message: `${key} must be a positive integer` });
+  }
+
+  if (key === "PHASE3_AUTOPUBLISH_MIN_SCORE" && (number < 0 || number > 100)) {
+    errors.push({ line, key, message: `${key} must be between 0 and 100` });
   }
 }
 
@@ -108,49 +133,58 @@ function validateBoolean({ key, value, line }, errors) {
   }
 }
 
-function validateBlotatoTemplate({ key, value, line }, errors) {
+function validateUrl({ key, value, line }, errors) {
+  if (!URL_ENVS.has(key)) return;
+  const raw = clean(value);
+  if (!raw) return;
+
+  try {
+    const parsed = new URL(raw);
+    if (!/^https?:$/.test(parsed.protocol)) {
+      errors.push({ line, key, message: `${key} must use http or https` });
+    }
+  } catch {
+    errors.push({ line, key, message: `${key} must be a valid URL` });
+  }
+}
+
+function validateTemplate({ key, value, line }, errors) {
   if (key !== "BLOTATO_NEWS_TEMPLATE_ID") return;
-  const template = clean(value);
+  const raw = clean(value);
+  if (!raw) return;
 
-  if (!template) return;
-
-  if (template.includes("...")) {
+  if (raw.includes("...")) {
     errors.push({
       line,
       key,
-      message:
-        `${key} is truncated. Use the full value: ${BLOTATO_DEFAULT_TEMPLATE_PATH}`,
+      message: `${key} is truncated. Use the full value: ${BLOTATO_DEFAULT_TEMPLATE_PATH}`,
     });
     return;
   }
 
-  if (!BLOTATO_TEMPLATE_UUID_PATTERN.test(template)) {
-    errors.push({
-      line,
-      key,
-      message: `${key} must include a Blotato template UUID`,
-    });
+  if (!BLOTATO_TEMPLATE_UUID_PATTERN.test(raw)) {
+    errors.push({ line, key, message: `${key} must include a Blotato template UUID` });
   }
 }
 
 function validateEnum({ key, value, line }, errors) {
-  const normalised = clean(value).toLowerCase();
-  if (!normalised) return;
+  const raw = clean(value).toLowerCase();
+  if (!raw) return;
 
-  if (key === "STATE_BACKEND" && !VALID_STATE_BACKENDS.has(normalised)) {
+  if (key === "STATE_BACKEND" && !VALID_STATE_BACKENDS.has(raw)) {
     errors.push({ line, key, message: `${key} must be one of: ${[...VALID_STATE_BACKENDS].join(", ")}` });
   }
 
-  if (key === "BLOTATO_RSS_PICK_MODE" && !VALID_RSS_PICK_MODES.has(normalised)) {
-    errors.push({ line, key, message: `${key} must be one of: ${[...VALID_RSS_PICK_MODES].join(", ")}` });
-  }
-
-  if (key === "BLOTATO_YOUTUBE_PRIVACY_STATUS" && !VALID_YOUTUBE_PRIVACY.has(normalised)) {
+  if (key === "BLOTATO_YOUTUBE_PRIVACY_STATUS" && !VALID_YOUTUBE_PRIVACY.has(raw)) {
     errors.push({ line, key, message: `${key} must be one of: ${[...VALID_YOUTUBE_PRIVACY].join(", ")}` });
   }
 
+  if (key === "BLOTATO_RSS_PICK_MODE" && !VALID_RSS_PICK_MODES.has(raw)) {
+    errors.push({ line, key, message: `${key} must be one of: ${[...VALID_RSS_PICK_MODES].join(", ")}` });
+  }
+
   if (key === "BLOTATO_DEFAULT_CHANNELS") {
-    const channels = normalised.split(",").map((item) => item.trim()).filter(Boolean);
+    const channels = raw.split(",").map((item) => item.trim()).filter(Boolean);
     if (!channels.length) {
       errors.push({ line, key, message: `${key} must include at least one channel` });
       return;
@@ -170,7 +204,8 @@ export function validateEnvEntries(entries) {
     validateSecretReference(entry, errors);
     validateNumber(entry, errors);
     validateBoolean(entry, errors);
-    validateBlotatoTemplate(entry, errors);
+    validateUrl(entry, errors);
+    validateTemplate(entry, errors);
     validateEnum(entry, errors);
   }
 
