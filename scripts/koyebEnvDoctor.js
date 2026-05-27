@@ -48,7 +48,6 @@ const VALID_STATE_BACKENDS = new Set(["auto", "r2", "local", "file", "filesystem
 const VALID_CHANNELS = new Set(["instagram", "youtube", "tiktok", "facebook", "linkedin", "threads", "twitter"]);
 const VALID_YOUTUBE_PRIVACY = new Set(["public", "private", "unlisted"]);
 const VALID_RSS_PICK_MODES = new Set(["latest", "random"]);
-const TRUNCATED_VALUE_MARKER = "...";
 
 function clean(value) {
   return String(value ?? "").trim();
@@ -69,6 +68,22 @@ export function parseEnvLines(raw) {
     .forEach((line, index) => {
       const lineNumber = index + 1;
       if (isCommentOrBlank(line)) return;
+
+      if (line.trim().startsWith("!")) {
+        const key = line.trim().slice(1).trim();
+        entries.push({ line: lineNumber, key, value: "", raw: line, deleteDirective: true });
+
+        if (!ENV_KEY_PATTERN.test(key)) {
+          errors.push({ line: lineNumber, key, message: `Invalid env delete key: ${key}` });
+        }
+
+        if (seen.has(key)) {
+          errors.push({ line: lineNumber, key, message: `Duplicate env key also seen on line ${seen.get(key)}` });
+        } else {
+          seen.set(key, lineNumber);
+        }
+        return;
+      }
 
       const eqIndex = line.indexOf("=");
       if (eqIndex < 1) {
@@ -94,16 +109,15 @@ export function parseEnvLines(raw) {
   return { entries, errors };
 }
 
-
-function validateNotTruncated({ key, value, line }, errors) {
+function validateNoLiteralEllipsis({ key, value, line }, errors) {
   const raw = clean(value);
-  if (!raw.includes(TRUNCATED_VALUE_MARKER)) return;
+  if (!raw.includes("...")) return;
 
   errors.push({
     line,
     key,
     message:
-      `${key} appears to contain a truncated value marker (...). Replace it with the full value, move it to a Koyeb Secret, or remove the optional env line.`,
+      `${key} appears truncated. Do not paste literal ... into Koyeb; keep the existing value or supply the verified full value.`,
   });
 }
 
@@ -168,11 +182,6 @@ function validateTemplate({ key, value, line }, errors) {
   if (!raw) return;
 
   if (raw.includes("...")) {
-    errors.push({
-      line,
-      key,
-      message: `${key} is truncated. Use the full value: ${BLOTATO_DEFAULT_TEMPLATE_PATH}`,
-    });
     return;
   }
 
@@ -215,7 +224,8 @@ export function validateEnvEntries(entries) {
   const errors = [];
 
   for (const entry of entries) {
-    validateNotTruncated(entry, errors);
+    if (entry.deleteDirective) continue;
+    validateNoLiteralEllipsis(entry, errors);
     validateSecretReference(entry, errors);
     validateNumber(entry, errors);
     validateBoolean(entry, errors);

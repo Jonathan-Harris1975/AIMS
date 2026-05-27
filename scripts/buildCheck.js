@@ -1,18 +1,11 @@
-import { access, readFile } from "node:fs/promises";
+import { access, readFile, readdir } from "node:fs/promises";
 import { constants } from "node:fs";
-import { validateEnvFile } from "./koyebEnvDoctor.js";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { validateEnvFile } from "./koyebEnvDoctor.js";
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const npmRegistry = "https://registry.npmjs.org/";
-const koyebEnvFiles = [
-  "koyeb-env/aims.bulk-env.canonical.txt",
-  "koyeb-env/aims.bulk-env.safe-no-google-private-key.txt",
-  "koyeb-env/rams.bulk-env.canonical.txt",
-  "koyeb-env/blotato-state-corrected.env",
-  "koyeb-env/blotato-state-with-api-key.env",
-];
 
 async function assertFile(relativePath) {
   await access(path.join(projectRoot, relativePath), constants.R_OK);
@@ -39,34 +32,6 @@ async function assertPublicRegistryLockfile() {
   }
 }
 
-
-async function assertKoyebEnvFilesAreValid() {
-  const failures = [];
-
-  for (const relativePath of koyebEnvFiles) {
-    const absolutePath = path.join(projectRoot, relativePath);
-
-    try {
-      await access(absolutePath, constants.R_OK);
-    } catch {
-      continue;
-    }
-
-    const result = await validateEnvFile(absolutePath);
-    if (result.errors.length) {
-      failures.push(
-        `${relativePath}: ${result.errors
-          .map((err) => `line ${err.line || "?"}${err.key ? ` ${err.key}` : ""} ${err.message}`)
-          .join("; ")}`
-      );
-    }
-  }
-
-  if (failures.length) {
-    throw new Error(`Koyeb env file validation failed: ${failures.join(" | ")}`);
-  }
-}
-
 async function assertKoyebBuildCommandsAreRuntimeEnvIsolated() {
   const dockerfile = await readFile(path.join(projectRoot, "Dockerfile"), "utf8");
   const nixpacks = await readFile(path.join(projectRoot, "nixpacks.toml"), "utf8");
@@ -85,6 +50,37 @@ async function assertKoyebBuildCommandsAreRuntimeEnvIsolated() {
   }
 }
 
+async function assertKoyebEnvFilesArePasteSafe() {
+  const envDir = path.join(projectRoot, "koyeb-env");
+  let files = [];
+
+  try {
+    files = await readdir(envDir);
+  } catch {
+    return;
+  }
+
+  const envFiles = files
+    .filter((file) => /\.(env|txt)$/i.test(file))
+    .sort();
+
+  const failures = [];
+  for (const file of envFiles) {
+    const result = await validateEnvFile(path.join(envDir, file));
+    for (const error of result.errors) {
+      const location = error.line ? `line ${error.line}` : "process.env";
+      const key = error.key ? ` ${error.key}` : "";
+      failures.push(`${file} ${location}${key}: ${error.message}`);
+    }
+  }
+
+  if (failures.length) {
+    throw new Error(
+      `Koyeb env paste files are not production-safe:\n${failures.map((item) => ` - ${item}`).join("\n")}`
+    );
+  }
+}
+
 async function main() {
   await Promise.all([
     assertFile("server.js"),
@@ -95,8 +91,8 @@ async function main() {
   ]);
 
   await assertPublicRegistryLockfile();
-  await assertKoyebEnvFilesAreValid();
   await assertKoyebBuildCommandsAreRuntimeEnvIsolated();
+  await assertKoyebEnvFilesArePasteSafe();
   console.log("✅ Build check passed");
 }
 
