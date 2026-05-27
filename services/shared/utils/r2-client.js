@@ -110,6 +110,20 @@ export const s3 = new S3Client({
   },
 });
 
+const R2_REQUEST_TIMEOUT_MS = Number(process.env.R2_REQUEST_TIMEOUT_MS || 15_000);
+
+async function sendR2Command(command, { timeoutMs = R2_REQUEST_TIMEOUT_MS } = {}) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  timer.unref?.();
+
+  try {
+    return await s3.send(command, { abortSignal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 
 // ------------------------------------------------------------
 // 🎧 Canonical bucket key exports (wire-only)
@@ -374,7 +388,7 @@ function joinPublicUrl(base, key) {
 export async function uploadBuffer(bucketKey, key, buffer, contentType = "application/octet-stream") {
   const bucket = ensureBucketKey(bucketKey);
 
-  await s3.send(
+  await sendR2Command(
     new PutObjectCommand({
       Bucket: bucket,
       Key: key,
@@ -398,7 +412,7 @@ export async function uploadText(bucketKey, key, text, contentType = "text/plain
 
 export async function getObjectAsText(bucketKey, key) {
   const bucket = ensureBucketKey(bucketKey);
-  const response = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+  const response = await sendR2Command(new GetObjectCommand({ Bucket: bucket, Key: key }));
   const chunks = [];
   for await (const chunk of response.Body) chunks.push(chunk);
   return Buffer.concat(chunks).toString("utf-8");
@@ -434,7 +448,7 @@ export async function listObjects(bucketKey, prefix = "") {
   let continuationToken;
 
   do {
-    const response = await s3.send(
+    const response = await sendR2Command(
       new ListObjectsV2Command({
         Bucket: bucket,
         Prefix: prefix,
@@ -468,7 +482,7 @@ export async function listKeys(bucketKey, prefix = "") {
 
 export async function deleteObject(bucketKey, key) {
   const bucket = ensureBucketKey(bucketKey);
-  await s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
+  await sendR2Command(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
   log.info("🗑️ R2 object deleted", { bucket, key });
 }
 
