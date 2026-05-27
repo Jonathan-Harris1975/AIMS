@@ -1,4 +1,4 @@
-import "dotenv/config";
+import "./config/loadEnv.js";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { durableStateEnvHint, hasDurableStateEnv } from "./services/shared/utils/durableStateEnv.js";
