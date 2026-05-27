@@ -1,40 +1,21 @@
-# Changes
+# AIMS Blotato build/sanity unblock patch
 
-## scripts/koyebEnvDoctor.js
+## Changed files
 
-- Rejects any paste-ready env value containing a literal three-dot truncation marker.
-- Keeps accepting both Koyeb secret reference styles: `{{ secret.NAME }}` and `{{secret.NAME}}`.
-- Accepts Koyeb CLI delete directives such as `!CF_purge` for the legacy-env removal helper.
-- Preserves existing validation for Blotato numbers, booleans, channels, template IDs, URLs, and state backend values.
+### test/koyeb-env-doctor.test.js
+- Updated the generic truncated env paste-value assertion to match the validator's current production error wording.
+- Keeps the same behavioural contract: values containing literal `...` are still rejected before they can be pasted into Koyeb.
+- This fixes the uploaded sanity/build-stage failure without changing runtime routes, environment names, request/response shapes, Blotato API behaviour, storage layout, model routing, or production service code.
 
-## scripts/buildCheck.js
+## Evidence
+- Uploaded logs showed the only failing step was `test/koyeb-env-doctor.test.js`, subtest `koyeb env doctor rejects generic truncated paste values`.
+- The validator already rejected the bad value correctly; the assertion was pinned to stale wording: `/truncated value marker/i`.
+- The patched assertion now checks the active message for `appears truncated` and `literal ...`.
 
-- Adds a build-time guard that validates every repository Koyeb env paste file in `koyeb-env/`.
-- Keeps runtime Koyeb env isolated from the build itself, but now prevents broken checked-in paste files from shipping unnoticed.
-
-## koyeb-env/aims.bulk-env.canonical.txt
-
-- Removed unresolved values that were exported with literal three-dot truncation markers.
-- No known-good env values were guessed.
-
-## koyeb-env/aims.bulk-env.safe-no-google-private-key.txt
-
-- Removed the same unresolved truncated values from the safer no-Google-private-key paste file.
-- Preserved the safe Google private key omission strategy.
-
-## koyeb-env/*.omitted-truncated-values.md
-
-- Added companion lists of omitted keys so the existing Koyeb values can be retained or replaced only with verified full values.
-
-## test/koyeb-env-doctor.test.js
-
-- Added regression coverage for generic truncated env values.
-- Added regression coverage for Koyeb CLI delete directives.
-
-## test/build-check.test.js
-
-- Added regression coverage that `npm run build` validates repository Koyeb env paste files.
-
-## docs/koyeb/TRUNCATED_ENV_PASTE_FILE_FIX.md
-
-- Added the production diagnosis, deployment instruction, and validation commands for this fix.
+## Validation
+- `npm test` passed.
+- `npm run build` passed.
+- `npm run deploy:smoke` passed.
+- `node --check` passed across repository JavaScript files.
+- `npm run env:doctor:file` passed for all checked-in Koyeb env paste files, excluding the delete-directive helper file.
+- The exact user-provided Blotato/state env block passed `env:doctor:file` and `npm run build`.
