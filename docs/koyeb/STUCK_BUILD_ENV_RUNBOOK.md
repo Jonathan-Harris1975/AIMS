@@ -12,6 +12,7 @@ Koyeb exposes configured environment variables during both build and runtime. A 
 - `Blotato_API_key` was replaced in the Koyeb paste file with the already-supported uppercase fallback `BLOTATO_API_KEY={{ secret.BLOTATO_API_KEY }}`.
 - All Koyeb Secret references are normalised to `{{ secret.NAME }}`.
 - A safe AIMS env block is supplied without `GOOGLE_PRIVATE_KEY` to isolate the one expected multi-line Secret.
+- Paste-ready env files are now checked for literal `...` truncation markers. Truncated optional values were removed rather than shipped as corrupt runtime overrides.
 
 ## Files to use
 
@@ -29,7 +30,9 @@ Use this after all referenced Secrets are confirmed to exist and `GOOGLE_PRIVATE
 koyeb-env/aims.bulk-env.safe-no-google-private-key.txt
 ```
 
-Use this first if Koyeb still sticks in Building. It removes only `GOOGLE_PRIVATE_KEY`, leaving the rest of the service env intact. If this builds, recreate the `GOOGLE_PRIVATE_KEY` Secret as a one-line escaped value and then switch back to the full canonical file.
+Use this first if Koyeb still sticks in Building. It removes `GOOGLE_PRIVATE_KEY` and no longer carries any known truncated `...` values from spreadsheet display cells. If this builds, recreate the `GOOGLE_PRIVATE_KEY` Secret as a one-line escaped value and then switch back to the full canonical file.
+
+Some optional service values that were only available in truncated form are deliberately absent from the paste files. Re-add them in Koyeb only when you have the complete value, or store them as exact Koyeb Secrets. Do not paste values ending in `...`.
 
 ### RAMS canonical env
 
@@ -90,6 +93,8 @@ npm ci --ignore-scripts --no-audit --no-fund
 npm run env:doctor:file -- koyeb-env/aims.bulk-env.canonical.txt
 npm run env:doctor:file -- koyeb-env/aims.bulk-env.safe-no-google-private-key.txt
 npm run env:doctor:file -- koyeb-env/rams.bulk-env.canonical.txt
+npm run env:doctor:file -- koyeb-env/blotato-state-corrected.env
+npm run env:doctor:file -- koyeb-env/blotato-state-with-api-key.env
 npm run build
 npm run deploy:smoke
 npm test
@@ -106,6 +111,7 @@ npm test
 4. Paste `koyeb-env/aims.bulk-env.safe-no-google-private-key.txt` first.
 5. If it builds, recreate `GOOGLE_PRIVATE_KEY` as escaped `\n` text and deploy with `koyeb-env/aims.bulk-env.canonical.txt`.
 6. If the safe file still sticks, one of the remaining live Secrets is malformed or not granted to the service. Recreate the Secrets listed above with exact uppercase names.
+7. Restore optional values that were removed from the env files only after you have their complete strings. The env doctor now rejects literal `...` values before build validation passes.
 
 ## Notes
 
