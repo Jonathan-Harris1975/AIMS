@@ -30,10 +30,32 @@ RUN timeout 300s apt-get -o Acquire::Retries=3 \
 
 # Install production dependencies before copying the app for better build caching.
 COPY .npmrc package.json package-lock.json ./
-RUN timeout 600s npm ci --omit=dev --ignore-scripts --no-audit --no-fund \
- && npm cache clean --force
+RUN env -i \
+    PATH="$PATH" \
+    HOME=/root \
+    NODE_ENV=production \
+    NPM_CONFIG_REGISTRY=https://registry.npmjs.org/ \
+    NPM_CONFIG_AUDIT=false \
+    NPM_CONFIG_FUND=false \
+    NPM_CONFIG_FETCH_RETRIES=2 \
+    NPM_CONFIG_FETCH_RETRY_MINTIMEOUT=10000 \
+    NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT=30000 \
+    NPM_CONFIG_FETCH_TIMEOUT=60000 \
+    sh -c 'timeout 600s npm ci --omit=dev --ignore-scripts --no-audit --no-fund && npm cache clean --force'
 
 COPY . .
+
+# Keep build validation deterministic. Koyeb can expose runtime env vars during
+# image construction; do not allow Blotato/R2/API runtime settings to affect the
+# Docker build stage. Runtime env is validated explicitly with npm run env:doctor.
+RUN env -i \
+    PATH="$PATH" \
+    HOME=/root \
+    NODE_ENV=production \
+    NPM_CONFIG_REGISTRY=https://registry.npmjs.org/ \
+    NPM_CONFIG_AUDIT=false \
+    NPM_CONFIG_FUND=false \
+    npm run build
 
 EXPOSE 3000
 

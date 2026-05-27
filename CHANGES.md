@@ -1,36 +1,27 @@
 # Changes
 
-## CI test-file synchronisation
+## Dockerfile
 
-### `test/build-check.test.js`
-- Restores the test file referenced by `package.json`.
-- Verifies `scripts/buildCheck.js` does not validate runtime-only Koyeb environment variables during build.
-- Fixes the confirmed CI error: `Could not find 'test/build-check.test.js'`.
+- Isolated production dependency installation with `env -i` so Koyeb runtime env vars cannot affect Docker image construction.
+- Added `npm run build` to the Docker image build, also under a minimal build-only environment.
+- Preserved runtime command, health check, port, dependencies, and public contracts.
 
-### `test/koyeb-env-doctor.test.js`
-- Keeps the env-doctor contract aligned with Koyeb-supported secret syntax.
-- Confirms the narrowed Blotato/state env set validates successfully.
+## nixpacks.toml
 
-### `scripts/buildCheck.js`
-- Keeps build validation limited to build artefacts and lockfile registry sanity.
-- Does not validate runtime-only Koyeb env vars during image build.
+- Applied the same `env -i` isolation to the buildpack fallback install/build commands.
+- Dockerfile remains the preferred builder; this only prevents the fallback path from inheriting runtime Blotato/R2/API env values.
 
-### `scripts/koyebEnvDoctor.js`
-- Keeps env validation available as an explicit diagnostic command.
-- Accepts both Koyeb bulk-edit and compact secret reference syntax.
+## scripts/buildCheck.js
 
-### `package.json`
-- Keeps the CI test script aligned with the restored test files.
+- Added a guard that fails the build if Dockerfile or Nixpacks build commands are no longer isolated from runtime env values.
+- Kept the existing filesystem and lockfile checks.
 
-## Validation
+## services/shared/utils/r2-client.js
 
-Validated locally against the uploaded repository:
+- Added abort-backed R2 request timeouts using `R2_REQUEST_TIMEOUT_MS`, defaulting to 15000ms.
+- Routed R2 get/put/list/delete calls through the timeout wrapper.
+- This prevents remote state/R2 calls from hanging indefinitely during startup/background hydration.
 
-```bash
-npm ci --no-audit --no-fund
-npm test
-npm run build
-npm run deploy:smoke
-```
+## docs/koyeb/BUILD_STAGE_ENV_ISOLATION_FIX.md
 
-All commands passed.
+- Added the deployment diagnosis, preserved runtime env contract, and validation commands.
