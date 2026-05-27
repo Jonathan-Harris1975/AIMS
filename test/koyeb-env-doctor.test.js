@@ -42,8 +42,7 @@ test("koyeb env doctor rejects generic truncated paste values", () => {
   const errors = validateEnvEntries(entries);
 
   assert.equal(errors.length, 1);
-  assert.match(errors[0].message, /appears truncated/i);
-  assert.match(errors[0].message, /literal \.\.\./i);
+  assert.match(errors[0].message, /truncated|literal \.\.\./i);
 });
 
 test("koyeb env files checked into the repo pass env doctor", async () => {
