@@ -1,13 +1,36 @@
 # Changes
 
-## Fixed CI and Koyeb build-stage environment blocking
+## CI test-file synchronisation
 
-- Updated `scripts/buildCheck.js` so `npm run build` no longer validates runtime-only Koyeb environment variables from `process.env`.
-- Preserved explicit environment validation through `scripts/koyebEnvDoctor.js` and the existing `env:doctor` / `env:doctor:file` package scripts.
-- Added `test/build-check.test.js` to prove the build check does not fail just because runtime-only Koyeb variables are present or malformed.
-- Kept `test/koyeb-env-doctor.test.js` aligned with Koyeb bulk-edit secret syntax so `{{ secret.BLOTATO_API_KEY }}` and `{{secret.BLOTATO_API_KEY}}` are both accepted.
-- Documented the CI/build-stage fix in `docs/ci/BUILD_ENV_VALIDATION_FIX.md`.
+### `test/build-check.test.js`
+- Restores the test file referenced by `package.json`.
+- Verifies `scripts/buildCheck.js` does not validate runtime-only Koyeb environment variables during build.
+- Fixes the confirmed CI error: `Could not find 'test/build-check.test.js'`.
 
-## Why this is safe
+### `test/koyeb-env-doctor.test.js`
+- Keeps the env-doctor contract aligned with Koyeb-supported secret syntax.
+- Confirms the narrowed Blotato/state env set validates successfully.
 
-Koyeb injects service environment variables during the build and runtime phases. Build validation should only check build artefacts and dependency integrity. Runtime environment validation remains available as an explicit diagnostic command, so no runtime contract is weakened and no public API behaviour changes.
+### `scripts/buildCheck.js`
+- Keeps build validation limited to build artefacts and lockfile registry sanity.
+- Does not validate runtime-only Koyeb env vars during image build.
+
+### `scripts/koyebEnvDoctor.js`
+- Keeps env validation available as an explicit diagnostic command.
+- Accepts both Koyeb bulk-edit and compact secret reference syntax.
+
+### `package.json`
+- Keeps the CI test script aligned with the restored test files.
+
+## Validation
+
+Validated locally against the uploaded repository:
+
+```bash
+npm ci --no-audit --no-fund
+npm test
+npm run build
+npm run deploy:smoke
+```
+
+All commands passed.
