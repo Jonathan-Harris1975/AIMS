@@ -1,4 +1,4 @@
-import "dotenv/config";
+import "../config/loadEnv.js";
 import { spawn } from "node:child_process";
 import { info, debug, warn, error } from "../logger.js";
 

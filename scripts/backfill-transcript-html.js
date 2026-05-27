@@ -9,7 +9,7 @@
 //   node scripts/backfill-transcript-html.js --skip-rss
 // ============================================================
 
-import "dotenv/config";
+import "../config/loadEnv.js";
 import {
   listKeys,
   getObjectAsText,

@@ -81,6 +81,29 @@ async function assertKoyebEnvFilesArePasteSafe() {
   }
 }
 
+
+async function assertProductionDefaultsAreSafe() {
+  const defaultsPath = path.join(projectRoot, "config", "production.defaults.env");
+  const raw = await readFile(defaultsPath, "utf8");
+
+  if (/\{\{\s*secret\./i.test(raw)) {
+    throw new Error("config/production.defaults.env must not contain Koyeb secret references; keep secrets in koyeb-env/aims.secrets-only.txt");
+  }
+
+  const result = await validateEnvFile(defaultsPath);
+  if (result.errors.length) {
+    throw new Error(
+      `config/production.defaults.env is not production-safe:\n${result.errors
+        .map((error) => {
+          const location = error.line ? `line ${error.line}` : "process.env";
+          const key = error.key ? ` ${error.key}` : "";
+          return ` - ${location}${key}: ${error.message}`;
+        })
+        .join("\n")}`
+    );
+  }
+}
+
 async function main() {
   await Promise.all([
     assertFile("server.js"),
@@ -88,11 +111,14 @@ async function main() {
     assertFile("routes/index.js"),
     assertFile("Dockerfile"),
     assertFile("package-lock.json"),
+    assertFile("config/loadEnv.js"),
+    assertFile("config/production.defaults.env"),
   ]);
 
   await assertPublicRegistryLockfile();
   await assertKoyebBuildCommandsAreRuntimeEnvIsolated();
   await assertKoyebEnvFilesArePasteSafe();
+  await assertProductionDefaultsAreSafe();
   console.log("✅ Build check passed");
 }
 

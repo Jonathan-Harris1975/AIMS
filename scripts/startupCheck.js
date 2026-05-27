@@ -1,4 +1,4 @@
-import "dotenv/config";
+import "../config/loadEnv.js";
 import { access, readFile } from "node:fs/promises";
 import { constants } from "node:fs";
 import path from "node:path";

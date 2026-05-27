@@ -1,4 +1,4 @@
-import "dotenv/config";
+import "../config/loadEnv.js";
 
 const port = Number(process.env.PORT || 0) || 0;
 process.env.NODE_ENV = process.env.NODE_ENV || "production";
