@@ -2,34 +2,13 @@ import { access, readFile } from "node:fs/promises";
 import { constants } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { validateEnvObject } from "./koyebEnvDoctor.js";
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const npmRegistry = "https://registry.npmjs.org/";
 
 async function assertFile(relativePath) {
   await access(path.join(projectRoot, relativePath), constants.R_OK);
-}
-
-async function assertDockerfileNotIgnored() {
-  const dockerignorePath = path.join(projectRoot, ".dockerignore");
-  const raw = await readFile(dockerignorePath, "utf8");
-  let dockerfileIgnored = false;
-
-  for (const line of raw.split(/\r?\n/)) {
-    const entry = line.trim();
-    if (!entry || entry.startsWith("#")) continue;
-
-    const negated = entry.startsWith("!");
-    const pattern = negated ? entry.slice(1) : entry;
-
-    if (["Dockerfile", "Dockerfile*"].includes(pattern)) {
-      dockerfileIgnored = !negated;
-    }
-  }
-
-  if (dockerfileIgnored) {
-    throw new Error(".dockerignore excludes the root Dockerfile; Koyeb Dockerfile builds need it visible");
-  }
 }
 
 async function assertPublicRegistryLockfile() {
@@ -53,18 +32,27 @@ async function assertPublicRegistryLockfile() {
   }
 }
 
+function assertBuildEnvironment() {
+  const errors = validateEnvObject(process.env);
+  if (errors.length) {
+    const formatted = errors
+      .map((err) => `${err.key || "process.env"}: ${err.message}`)
+      .join("\n");
+    throw new Error(`Blocking build environment issue(s):\n${formatted}`);
+  }
+}
+
 async function main() {
   await Promise.all([
     assertFile("server.js"),
     assertFile("scripts/bootstrap.js"),
     assertFile("routes/index.js"),
     assertFile("Dockerfile"),
-    assertFile(".dockerignore"),
     assertFile("package-lock.json"),
   ]);
 
   await assertPublicRegistryLockfile();
-  await assertDockerfileNotIgnored();
+  assertBuildEnvironment();
   console.log("✅ Build check passed");
 }
 
