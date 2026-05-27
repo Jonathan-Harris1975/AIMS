@@ -1,0 +1,13 @@
+Repository validation: passed
+- npm ci --no-audit --no-fund
+- npm run build
+- npm test
+- npm ci --omit=dev --ignore-scripts --no-audit --no-fund
+- env-isolated npm run build
+- npm run deploy:smoke
+- node --check across repository JavaScript files
+
+Workbook validation:
+- Original workbook AIMS bulk sheets contained 18 literal truncation markers each.
+- Build-safe workbook AIMS bulk sheets contain 0 literal truncation markers.
+- Extracted build-safe workbook env files pass scripts/koyebEnvDoctor.js.
