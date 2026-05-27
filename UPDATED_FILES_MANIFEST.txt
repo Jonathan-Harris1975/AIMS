@@ -1,2 +1,2 @@
-CHANGES.md
 test/koyeb-env-doctor.test.js
+CHANGES.md

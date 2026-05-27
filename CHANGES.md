@@ -1,21 +1,13 @@
-# AIMS Blotato build/sanity unblock patch
+# Koyeb Sanity Final Fix
 
 ## Changed files
 
-### test/koyeb-env-doctor.test.js
-- Updated the generic truncated env paste-value assertion to match the validator's current production error wording.
-- Keeps the same behavioural contract: values containing literal `...` are still rejected before they can be pasted into Koyeb.
-- This fixes the uploaded sanity/build-stage failure without changing runtime routes, environment names, request/response shapes, Blotato API behaviour, storage layout, model routing, or production service code.
+### `test/koyeb-env-doctor.test.js`
+- Broadened the generic truncated env value assertion so it accepts either the explicit phrase `truncated value marker` or the older validator wording that mentions `truncated` / literal `...`.
+- This fixes the GitHub Actions sanity failure shown in `logs_71080628627.zip` without changing runtime code, env contracts, routes, Blotato behaviour, or build commands.
 
-## Evidence
-- Uploaded logs showed the only failing step was `test/koyeb-env-doctor.test.js`, subtest `koyeb env doctor rejects generic truncated paste values`.
-- The validator already rejected the bad value correctly; the assertion was pinned to stale wording: `/truncated value marker/i`.
-- The patched assertion now checks the active message for `appears truncated` and `literal ...`.
+## Why this patch is safe
 
-## Validation
-- `npm test` passed.
-- `npm run build` passed.
-- `npm run deploy:smoke` passed.
-- `node --check` passed across repository JavaScript files.
-- `npm run env:doctor:file` passed for all checked-in Koyeb env paste files, excluding the delete-directive helper file.
-- The exact user-provided Blotato/state env block passed `env:doctor:file` and `npm run build`.
+- Test-only change.
+- Preserves the actual regression being tested: generic pasted env values containing literal `...` must still be rejected.
+- Prevents CI from failing because the validator wording changed while the semantic behaviour remained correct.
