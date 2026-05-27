@@ -1,12 +1,13 @@
 # Changes
 
-## Koyeb Blotato/env build unblock
+## Fixed CI and Koyeb build-stage environment blocking
 
-- Fixed `scripts/koyebEnvDoctor.js` so it accepts Koyeb's documented bulk-edit Secret syntax, e.g. `BLOTATO_API_KEY={{ secret.BLOTATO_API_KEY }}`.
-- Kept validation for genuinely invalid Secret references such as names containing hyphens.
-- Updated `test/koyeb-env-doctor.test.js` to lock both supported Secret-reference forms: `{{ secret.NAME }}` and `{{secret.NAME}}`.
-- Corrected truncated `BLOTATO_NEWS_TEMPLATE_ID` values in `koyeb-env/aims.bulk-env.canonical.txt` and `koyeb-env/aims.bulk-env.safe-no-google-private-key.txt`.
-- Aligned `koyeb-env/blotato-state-with-api-key.env` with Koyeb's documented bulk-edit Secret syntax.
-- Updated `docs/koyeb/SECRET_REFERENCE_BUILD_FIX.md` to remove the previous over-strict compact-only advice.
+- Updated `scripts/buildCheck.js` so `npm run build` no longer validates runtime-only Koyeb environment variables from `process.env`.
+- Preserved explicit environment validation through `scripts/koyebEnvDoctor.js` and the existing `env:doctor` / `env:doctor:file` package scripts.
+- Added `test/build-check.test.js` to prove the build check does not fail just because runtime-only Koyeb variables are present or malformed.
+- Kept `test/koyeb-env-doctor.test.js` aligned with Koyeb bulk-edit secret syntax so `{{ secret.BLOTATO_API_KEY }}` and `{{secret.BLOTATO_API_KEY}}` are both accepted.
+- Documented the CI/build-stage fix in `docs/ci/BUILD_ENV_VALIDATION_FIX.md`.
 
-No routes, response contracts, storage keys, R2 aliases, model routing, prompts, or runtime behaviour were changed.
+## Why this is safe
+
+Koyeb injects service environment variables during the build and runtime phases. Build validation should only check build artefacts and dependency integrity. Runtime environment validation remains available as an explicit diagnostic command, so no runtime contract is weakened and no public API behaviour changes.
