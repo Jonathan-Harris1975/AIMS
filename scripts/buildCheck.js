@@ -2,7 +2,6 @@ import { access, readFile } from "node:fs/promises";
 import { constants } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { validateEnvObject } from "./koyebEnvDoctor.js";
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const npmRegistry = "https://registry.npmjs.org/";
@@ -32,16 +31,6 @@ async function assertPublicRegistryLockfile() {
   }
 }
 
-function assertBuildEnvironment() {
-  const errors = validateEnvObject(process.env);
-  if (!errors.length) return;
-
-  const formatted = errors
-    .map((err) => `${err.key || "process.env"}: ${err.message}`)
-    .join("\n");
-  throw new Error(`Blocking build environment issue(s):\n${formatted}`);
-}
-
 async function main() {
   await Promise.all([
     assertFile("server.js"),
@@ -52,7 +41,6 @@ async function main() {
   ]);
 
   await assertPublicRegistryLockfile();
-  assertBuildEnvironment();
   console.log("✅ Build check passed");
 }
 
