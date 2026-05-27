@@ -2,18 +2,24 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { parseEnvLines, validateEnvEntries, validateEnvObject } from "../scripts/koyebEnvDoctor.js";
 
-test("koyeb env doctor rejects spaced secret references", () => {
+test("koyeb env doctor accepts Koyeb bulk-edit secret references", () => {
   const { entries } = parseEnvLines("BLOTATO_API_KEY={{ secret.BLOTATO_API_KEY }}\n");
-  const errors = validateEnvEntries(entries);
 
-  assert.equal(errors.length, 1);
-  assert.match(errors[0].message, /no spaces/i);
+  assert.deepEqual(validateEnvEntries(entries), []);
 });
 
-test("koyeb env doctor accepts compact secret references", () => {
+test("koyeb env doctor accepts compact CLI secret references", () => {
   const { entries } = parseEnvLines("BLOTATO_API_KEY={{secret.BLOTATO_API_KEY}}\n");
 
   assert.deepEqual(validateEnvEntries(entries), []);
+});
+
+test("koyeb env doctor rejects invalid secret names", () => {
+  const { entries } = parseEnvLines("BLOTATO_API_KEY={{ secret.BLOTATO-API-KEY }}\n");
+  const errors = validateEnvEntries(entries);
+
+  assert.equal(errors.length, 1);
+  assert.match(errors[0].message, /Invalid Koyeb secret reference/i);
 });
 
 test("koyeb env doctor rejects truncated Blotato template ids", () => {
@@ -45,7 +51,7 @@ test("koyeb env doctor validates the narrowed Blotato/state env set", () => {
     BLOTATO_POST_POLL_INTERVAL_MS: "3000",
     BLOTATO_INSTAGRAM_ACCOUNT_ID: "48812",
     BLOTATO_YOUTUBE_ACCOUNT_ID: "37622",
-    BLOTATO_API_KEY: "{{secret.BLOTATO_API_KEY}}",
+    BLOTATO_API_KEY: "{{ secret.BLOTATO_API_KEY }}",
     BLOTATO_API_BASE: "https://backend.blotato.com/v2",
     BLOTATO_TIMEOUT_MS: "30000",
     BLOTATO_NEWS_SHORT_MAX_TOKENS: "2200",
