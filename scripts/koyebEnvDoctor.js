@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
 const ENV_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
-const SECRET_REFERENCE_PATTERN = /^\{\{secret\.([A-Za-z0-9_]+)\}\}$/;
+const SECRET_REFERENCE_PATTERN = /^\{\{\s*secret\.([A-Za-z0-9_]+)\s*\}\}$/;
 const LOOSE_SECRET_REFERENCE_PATTERN = /^\{\{\s*secret\.([^}]+?)\s*\}\}$/;
 const BLOTATO_TEMPLATE_UUID_PATTERN =
   /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
@@ -102,7 +102,7 @@ function validateSecretReference({ key, value, line }, errors) {
       line,
       key,
       message:
-        `Invalid Koyeb secret reference for ${key}; use {{secret.SECRET_NAME}} with no spaces and letters, numbers or underscores only`,
+        `Invalid Koyeb secret reference for ${key}; use {{ secret.SECRET_NAME }} or {{secret.SECRET_NAME}} with letters, numbers or underscores only`,
     });
   }
 }
