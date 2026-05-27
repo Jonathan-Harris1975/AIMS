@@ -1,51 +1,41 @@
-# Production readiness changes — Koyeb Blotato/state env unblock
+# CI smoke-test unblock patch
 
-## Confirmed issue fixed
+## Confirmed issue from uploaded CI log
 
-The supplied Koyeb env workbook contained a truncated Blotato template value:
+GitHub Actions failed in the `Run smoke tests` step because `package.json` enumerated `test/koyeb-env-doctor.test.js`, but that file was not present in the branch checked out by CI.
 
-```env
-BLOTATO_NEWS_TEMPLATE_ID=base/v2/ai-story-video/5903fe43-514d-40ee-a060-0d662...
-```
-
-That literal ellipsis is not a valid production template identifier. The corrected value is:
-
-```env
-BLOTATO_NEWS_TEMPLATE_ID=base/v2/ai-story-video/5903fe43-514d-40ee-a060-0d6628c5f8fd/v1
+```text
+▶ test/koyeb-env-doctor.test.js
+Could not find 'test/koyeb-env-doctor.test.js'
+Process completed with exit code 1.
 ```
 
 ## Changed files
 
-- `.dockerignore`
-  - Stops ignoring the root `Dockerfile` while still ignoring variant Dockerfiles.
-  - Safe because Koyeb Dockerfile deployments need the root Dockerfile available in the build context.
-
-- `Dockerfile`
-  - Removes optional external BuildKit syntax frontend line.
-  - Adds explicit timeouts around apt and npm install steps so remote builds fail loudly instead of appearing stuck.
-  - Safe because the image contents and start command remain unchanged.
-
-- `package.json`
-  - Adds `env:doctor` and `env:doctor:file` scripts.
-  - Includes the new env doctor test in the existing enumerated test script.
-
-- `scripts/buildCheck.js`
-  - Runs critical env validation during build when those env values are present.
-  - Safe because valid env values pass unchanged; invalid values now fail with a clear message.
+- `test/koyeb-env-doctor.test.js`
+  - Adds the missing test file referenced by the existing npm test command.
+  - Locks the env regression already being guarded: truncated Blotato template IDs fail, the full template ID passes, malformed Koyeb secret references fail, and the narrowed Blotato/state env group passes validation.
 
 - `scripts/koyebEnvDoctor.js`
-  - Adds file/process env validation for Koyeb bulk env blocks.
-  - Catches duplicate keys, malformed secret references, invalid booleans/numbers/enums, unsupported default channels, and truncated `BLOTATO_NEWS_TEMPLATE_ID`.
+  - Includes the helper imported by the missing test.
+  - Validates Koyeb env files and process env values for duplicate keys, malformed secret references, invalid number/boolean/enum values, unsupported Blotato channels, and truncated `BLOTATO_NEWS_TEMPLATE_ID`.
 
-- `test/koyeb-env-doctor.test.js`
-  - Locks the regression: truncated Blotato template values fail, the full value passes.
+- `scripts/buildCheck.js`
+  - Keeps build-time validation wired to the env doctor so invalid Koyeb env values fail loudly.
 
-- `koyeb-env/blotato-state-corrected.env`
-  - Paste-ready corrected narrowed env group supplied by the user.
+- `package.json`
+  - Kept aligned with the test list and `env:doctor` scripts.
 
-- `docs/koyeb/BLOTATO_ENV_BUILD_FIX.md`
-  - Documents the confirmed defect and deployment order.
+## Safety notes
 
-## External contracts preserved
+- No runtime routes, public request/response shapes, R2 bucket names, webhook contracts, model routing, prompt behaviour, or storage layout are changed.
+- This patch fixes the CI contract mismatch: the test runner references a file that must be committed with the repo.
 
-No route paths, request/response JSON shapes, R2 bucket names, webhook contracts, model routing, prompt tone, publication flow, or runtime service names were changed.
+## Validation run locally
+
+- `npm ci --no-audit --no-fund`
+- CI envBootstrap grep check
+- `node --check` across all JavaScript files
+- `npm test`
+- `npm run build`
+- `npm run deploy:smoke`
