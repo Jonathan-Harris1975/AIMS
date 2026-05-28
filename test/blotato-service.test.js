@@ -65,9 +65,10 @@ const mockServer = http.createServer(async (req, res) => {
     capturedChatRequests.push(payload);
     const isRepair = payload.messages.some((message) => String(message.content || "").includes("Repair malformed JSON"));
     if (!isRepair) {
-      assert.ok(payload.messages.some((message) => String(message.content || "").includes("Create one short-form AI news insight pack")));
+      assert.ok(payload.messages.some((message) => String(message.content || "").includes("Create one short-form AI social video pack")));
       assert.ok(payload.messages.some((message) => String(message.content || "").includes("Spartan and informative")));
       assert.ok(payload.messages.some((message) => String(message.content || "").includes("Instagram must have no more than 5 hashtags")));
+      assert.ok(payload.messages.some((message) => String(message.content || "").includes("Target duration: 45 seconds minimum")));
       assert.equal(Object.hasOwn(payload, "response_format"), false);
     }
     res.writeHead(200, { "content-type": "application/json" });
@@ -164,21 +165,27 @@ const mockServer = http.createServer(async (req, res) => {
     assert.equal(body.post.content.platform, body.post.target.targetType);
 
     if (body.post.content.platform === "tiktok") {
-      assert.equal(body.post.accountId, "acc-tiktok");
+      assert.ok([process.env.BLOTATO_TIKTOK_ACCOUNT_ID || "acc-tiktok", "acc-tiktok"].includes(body.post.accountId));
+      assert.ok(countHashtags(body.post.content.text) <= 5);
     }
 
     if (body.post.content.platform === "instagram") {
-      assert.equal(body.post.accountId, "acc-instagram");
+      assert.equal(body.post.accountId, process.env.BLOTATO_INSTAGRAM_ACCOUNT_ID || "acc-instagram");
       assert.equal(body.post.target.mediaType, "reel");
       assert.deepEqual(body.post.content.mediaUrls, ["https://example.com/video.mp4"]);
       assert.ok(countHashtags(body.post.content.text) <= 5);
     }
 
     if (body.post.content.platform === "youtube") {
-      assert.equal(body.post.accountId, "acc-youtube");
+      assert.equal(body.post.accountId, process.env.BLOTATO_YOUTUBE_ACCOUNT_ID || "acc-youtube");
       assert.equal(body.post.target.privacyStatus, "public");
       assert.equal(body.post.target.containsSyntheticMedia, true);
       assert.deepEqual(body.post.content.mediaUrls, ["https://example.com/video.mp4"]);
+    }
+
+    if (body.post.content.platform === "facebook") {
+      assert.equal(body.post.accountId, process.env.BLOTATO_FACEBOOK_ACCOUNT_ID || "acc-facebook");
+      assert.equal(body.post.target.pageId, process.env.BLOTATO_FACEBOOK_PAGE_ID || "page-1");
     }
 
     const id = body.post.content.platform === "tiktok" ? "post-1" : `post-${body.post.content.platform}`;
@@ -219,9 +226,12 @@ process.env.BLOTATO_VIDEO_POLL_ATTEMPTS = "2";
 process.env.BLOTATO_VIDEO_POLL_INTERVAL_MS = "1";
 process.env.BLOTATO_POST_POLL_ATTEMPTS = "2";
 process.env.BLOTATO_POST_POLL_INTERVAL_MS = "1";
-process.env.BLOTATO_INSTAGRAM_ACCOUNT_ID = "acc-instagram";
-process.env.BLOTATO_YOUTUBE_ACCOUNT_ID = "acc-youtube";
-process.env.BLOTATO_DEFAULT_CHANNELS = "instagram,youtube";
+process.env.BLOTATO_INSTAGRAM_ACCOUNT_ID = "48812";
+process.env.BLOTATO_YOUTUBE_ACCOUNT_ID = "37622";
+process.env.BLOTATO_TIKTOK_ACCOUNT_ID = "44263";
+process.env.BLOTATO_FACEBOOK_ACCOUNT_ID = "34013";
+process.env.BLOTATO_FACEBOOK_PAGE_ID = "562160556971997";
+process.env.BLOTATO_DEFAULT_CHANNELS = "instagram,youtube,tiktok,facebook";
 process.env.BLOTATO_NEWS_TEMPLATE_ID = AI_STORY_TEMPLATE_PATH;
 process.env.APP_TMP_DIR = `/tmp/aims-blotato-test-${Date.now()}`;
 
@@ -244,9 +254,12 @@ test.afterEach(() => {
   process.env.BLOTATO_VIDEO_POLL_INTERVAL_MS = "1";
   process.env.BLOTATO_POST_POLL_ATTEMPTS = "2";
   process.env.BLOTATO_POST_POLL_INTERVAL_MS = "1";
-  process.env.BLOTATO_INSTAGRAM_ACCOUNT_ID = "acc-instagram";
-  process.env.BLOTATO_YOUTUBE_ACCOUNT_ID = "acc-youtube";
-  process.env.BLOTATO_DEFAULT_CHANNELS = "instagram,youtube";
+  process.env.BLOTATO_INSTAGRAM_ACCOUNT_ID = "48812";
+  process.env.BLOTATO_YOUTUBE_ACCOUNT_ID = "37622";
+  process.env.BLOTATO_TIKTOK_ACCOUNT_ID = "44263";
+  process.env.BLOTATO_FACEBOOK_ACCOUNT_ID = "34013";
+  process.env.BLOTATO_FACEBOOK_PAGE_ID = "562160556971997";
+  process.env.BLOTATO_DEFAULT_CHANNELS = "instagram,youtube,tiktok,facebook";
   process.env.BLOTATO_NEWS_TEMPLATE_ID = AI_STORY_TEMPLATE_PATH;
 });
 
@@ -336,6 +349,20 @@ test("Blotato publish schema rejects target/platform mismatch", async () => {
   assert.match(response.body.error, /must match platform/);
 });
 
+test("Blotato lane registry exposes the five weekly short formats", async () => {
+  const response = await request(app)
+    .get("/blotato/shorts/lanes")
+    .set(auth);
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(
+    response.body.lanes.map((lane) => lane.slug),
+    ["news-insight", "model-verdict", "ai-at-work", "reality-check", "ai-playbook"]
+  );
+  assert.equal(response.body.lanes[0].weekday, "Monday");
+  assert.equal(response.body.lanes[4].weekday, "Friday");
+});
+
 test("Blotato news insight route builds a dry-run short pack", async () => {
   const response = await request(app)
     .post("/blotato/shorts/news-insight")
@@ -361,9 +388,29 @@ test("Blotato news insight route builds a dry-run short pack", async () => {
   assert.ok(Array.isArray(response.body.visualInputs.scenes));
 });
 
+test("Blotato generic weekly lane route builds a model-verdict dry-run pack", async () => {
+  const response = await request(app)
+    .post("/blotato/shorts/model-verdict")
+    .set(auth)
+    .send({
+      dryRun: true,
+      article: {
+        title: "New AI model improves long task handling",
+        summary: "The model is aimed at coding and longer workflow tasks.",
+        link: "https://example.com/model-long-tasks",
+      },
+      templateId: "tpl-ai-video",
+    });
+
+  assert.equal(response.status, 200);
+  assert.equal(response.body.ok, true);
+  assert.equal(response.body.lane, "model-verdict-short");
+  assert.equal(response.body.pack.lane, "model-verdict");
+  assert.match(response.body.visualPrompt, /AI Tool or Model Verdict/);
+});
 
 
-test("Blotato publish-now endpoint is public and runs the RSS-to-Instagram/YouTube job", async () => {
+test("Blotato publish-now endpoint is public and runs the RSS-to-all configured social job", async () => {
   const response = await request(app).post("/blotato/shorts/news-insight/publish-now");
 
   assert.equal(response.status, 202);
@@ -379,11 +426,19 @@ test("Blotato publish-now endpoint is public and runs the RSS-to-Instagram/YouTu
   assert.equal(jobStatus.body.job.result.source.article.title, "AI agents move from chat to office tasks");
   assert.deepEqual(
     jobStatus.body.job.result.publishes.map((item) => item.platform),
-    ["instagram", "youtube"]
+    ["instagram", "youtube", "tiktok", "facebook"]
   );
   assert.equal(jobStatus.body.job.result.templateId, AI_STORY_TEMPLATE_PATH);
   assert.ok(jobStatus.body.job.result.video.visualInputs.scenes.length >= 3);
-  const instagramPost = capturedPostRequests.find((item) => item.post.content.platform === "instagram");
+  const instagramPost = capturedPostRequests.filter((item) => item.post.content.platform === "instagram").at(-1);
   assert.ok(instagramPost);
   assert.ok(countHashtags(instagramPost.post.content.text) <= 5);
+  const tiktokPost = capturedPostRequests.filter((item) => item.post.content.platform === "tiktok").at(-1);
+  assert.ok(tiktokPost);
+  assert.equal(tiktokPost.post.accountId, "44263");
+  assert.ok(countHashtags(tiktokPost.post.content.text) <= 5);
+  const facebookPost = capturedPostRequests.filter((item) => item.post.content.platform === "facebook").at(-1);
+  assert.ok(facebookPost);
+  assert.equal(facebookPost.post.accountId, "34013");
+  assert.equal(facebookPost.post.target.pageId, "562160556971997");
 });

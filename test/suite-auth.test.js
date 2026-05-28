@@ -91,3 +91,25 @@ test("suite auth leaves Cloudflare purge public for auth, legacy secret, or unau
     assert.notEqual(legacySecret.status, 401);
   });
 });
+
+import { isPublicBlotatoPublishPath } from "../services/shared/middleware/suiteAuth.js";
+
+test("suite auth treats all weekly Blotato publish-now lane triggers as public hooks", () => {
+  for (const lane of ["news-insight", "model-verdict", "ai-at-work", "reality-check", "ai-playbook"]) {
+    assert.equal(
+      isPublicBlotatoPublishPath({ method: "POST", originalUrl: `/blotato/shorts/${lane}/publish-now` }),
+      true,
+      lane
+    );
+  }
+
+  assert.equal(
+    isPublicBlotatoPublishPath({ method: "POST", originalUrl: "/blotato/shorts/not-a-lane/publish-now" }),
+    false
+  );
+
+  assert.equal(
+    isPublicBlotatoPublishPath({ method: "POST", originalUrl: "/blotato/shorts/model-verdict" }),
+    false
+  );
+});
