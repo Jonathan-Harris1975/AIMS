@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { BLOTATO_SHORT_LANE_SLUGS } from "./shortLanes.js";
 
 export const BLOTATO_PLATFORMS = [
   "twitter",
@@ -23,6 +24,7 @@ const booleanish = z
 
 const optionalApiKey = z.string().trim().min(1).max(500).optional();
 const platformSchema = z.enum(BLOTATO_PLATFORMS);
+export const shortLaneSchema = z.enum(BLOTATO_SHORT_LANE_SLUGS);
 const jsonObjectSchema = z.record(z.string(), z.any());
 const isoDateTimeWithOffset = z
   .string()
@@ -107,11 +109,11 @@ export const newsInsightBodySchema = z
   .object({
     article: articleSchema.optional(),
     articles: z.array(articleSchema).max(8).optional(),
+    lane: shortLaneSchema.optional(),
     theme: z
-      .enum(["ai-news-bite", "what-it-means", "workflow-tip", "podcast-angle", "reality-check", "ebook-insight"])
-      .optional()
-      .default("what-it-means"),
-    durationSeconds: z.coerce.number().int().min(20).max(90).optional().default(45),
+      .enum(["ai-news-bite", "what-it-means", "workflow-tip", "podcast-angle", "reality-check", "ebook-insight", "tool-or-model-verdict", "ai-at-work", "risk-and-reality-check", "practical-ai-playbook", "what-happened-and-why-it-matters"])
+      .optional(),
+    durationSeconds: z.coerce.number().int().min(30).max(90).optional().default(45),
     cta: z.string().trim().max(500).optional(),
     audience: z.string().trim().max(300).optional().default("curious readers, creators, authors, and small business owners"),
     dryRun: booleanish.optional().default(true),

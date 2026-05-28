@@ -12,7 +12,8 @@ import {
   publishPost,
   getPostStatus,
 } from "./blotatoClient.js";
-import { buildBlotatoVideoInputs, buildBlotatoVisualPrompt, buildNewsInsightShortPack } from "./newsShortsService.js";
+import { buildBlotatoVideoInputs, buildBlotatoVisualPrompt, buildShortLanePack } from "./newsShortsService.js";
+import { DEFAULT_BLOTATO_SHORT_LANE, getShortLaneJobTypes, requireShortLaneConfig } from "./shortLanes.js";
 import { selectRssArticleForBlotato } from "./rssArticleSource.js";
 import { info, warn } from "../../../logger.js";
 
@@ -57,9 +58,10 @@ function slugPart(value = "") {
     .slice(0, 36);
 }
 
-function createSessionId(article) {
+function createSessionId(article, laneSlug = DEFAULT_BLOTATO_SHORT_LANE) {
   const base = slugPart(article?.title || "rss-article") || "rss-article";
-  return `BLT-blotato-${Date.now()}-${base}`;
+  const lanePrefix = laneSlug === DEFAULT_BLOTATO_SHORT_LANE ? "" : `${laneSlug}-`;
+  return `BLT-blotato-${lanePrefix}${Date.now()}-${base}`;
 }
 
 function publicJobUrl(req, sessionId) {
@@ -210,6 +212,14 @@ function buildTarget(platform, pack) {
     };
   }
 
+  if (platform === "facebook") {
+    const pageId = trim(process.env.BLOTATO_FACEBOOK_PAGE_ID || process.env.BLOTATO_FACEBOOK_SUBACCOUNT_ID);
+    return {
+      targetType: "facebook",
+      ...(pageId ? { pageId } : {}),
+    };
+  }
+
   return { targetType: platform };
 }
 
@@ -232,6 +242,10 @@ function buildPlatformText(platform, pack) {
   if (platform === "instagram") {
     return limitHashtags(pack.instagramCaption || pack.tiktokCaption || pack.facebookCaption || pack.script, 5);
   }
+  if (platform === "tiktok") {
+    return limitHashtags(pack.tiktokCaption || pack.instagramCaption || pack.facebookCaption || pack.script, 5);
+  }
+  if (platform === "facebook") return pack.facebookCaption || pack.tiktokCaption || pack.script;
   return pack.facebookCaption || pack.tiktokCaption || pack.script;
 }
 
@@ -270,18 +284,23 @@ async function publishAndWait({ platform, pack, mediaUrl, apiKey }) {
 }
 
 function getDefaultPlatforms() {
-  return trim(process.env.BLOTATO_DEFAULT_CHANNELS, "instagram,youtube")
+  return trim(process.env.BLOTATO_DEFAULT_CHANNELS, "instagram,youtube,tiktok,facebook")
     .split(",")
     .map((item) => item.trim().toLowerCase())
     .filter(Boolean);
 }
 
-function buildDefaults() {
+function buildDefaults(laneSlug = DEFAULT_BLOTATO_SHORT_LANE) {
+  const lane = requireShortLaneConfig(laneSlug);
   return {
+    lane: lane.slug,
+    laneLabel: lane.label,
+    weekday: lane.weekday,
     channels: getDefaultPlatforms(),
     templateId: normaliseTemplateId(process.env.BLOTATO_NEWS_TEMPLATE_ID || DEFAULT_AI_STORY_TEMPLATE_PATH),
     templatePath: trim(process.env.BLOTATO_NEWS_TEMPLATE_ID || DEFAULT_AI_STORY_TEMPLATE_PATH, DEFAULT_AI_STORY_TEMPLATE_PATH),
     pickMode: trim(process.env.BLOTATO_RSS_PICK_MODE, "latest"),
+    minDurationSeconds: 30,
   };
 }
 
@@ -294,17 +313,19 @@ function buildRssSummary(articleSource = {}) {
   };
 }
 
-async function runPublishJob({ sessionId, articleSource, apiKey }) {
+async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOTATO_SHORT_LANE, apiKey }) {
+  const lane = requireShortLaneConfig(laneSlug);
   try {
-    info("blotato.publish_now.job.start", { sessionId, rssSource: articleSource.rssSource });
-    const defaults = buildDefaults();
+    info("blotato.publish_now.job.start", { sessionId, lane: lane.slug, rssSource: articleSource.rssSource });
+    const defaults = buildDefaults(lane.slug);
     const templateId = defaults.templateId;
     const platforms = defaults.channels;
 
-    const pack = await buildNewsInsightShortPack({
+    const pack = await buildShortLanePack({
       article: articleSource.article,
-      theme: trim(process.env.BLOTATO_NEWS_THEME, "what-it-means"),
-      durationSeconds: Number(process.env.BLOTATO_NEWS_DURATION_SECONDS || 45),
+      lane: lane.slug,
+      theme: trim(process.env.BLOTATO_NEWS_THEME, lane.theme),
+      durationSeconds: Math.max(30, Number(process.env.BLOTATO_NEWS_DURATION_SECONDS || 45)),
       audience: trim(
         process.env.BLOTATO_NEWS_AUDIENCE,
         "curious readers, creators, authors, and small business owners"
@@ -324,7 +345,7 @@ async function runPublishJob({ sessionId, articleSource, apiKey }) {
     const result = {
       ok: true,
       service: "blotato",
-      lane: "news-insight-publish-now",
+      lane: `${lane.slug}-publish-now`,
       sessionId,
       defaults,
       templateId,
@@ -346,25 +367,27 @@ async function runPublishJob({ sessionId, articleSource, apiKey }) {
       publishes,
     };
 
-    completeJob(BLOTATO_PUBLISH_JOB_TYPE, sessionId, { result });
-    info("blotato.publish_now.job.complete", { sessionId, platforms });
+    completeJob(lane.jobType, sessionId, { result });
+    info("blotato.publish_now.job.complete", { sessionId, lane: lane.slug, platforms });
     return result;
   } catch (error) {
-    failJob(BLOTATO_PUBLISH_JOB_TYPE, sessionId, error);
+    failJob(lane.jobType, sessionId, error);
     warn("blotato.publish_now.job.fail", { sessionId, error: error?.message || String(error) });
     throw error;
   }
 }
 
-export async function triggerPublishNowJob(req = {}) {
+export async function triggerPublishNowJob(req = {}, laneSlug = DEFAULT_BLOTATO_SHORT_LANE) {
+  const lane = requireShortLaneConfig(laneSlug);
   const articleSource = await selectRssArticleForBlotato();
-  const sessionId = createSessionId(articleSource.article);
-  const defaults = buildDefaults();
+  const sessionId = createSessionId(articleSource.article, lane.slug);
+  const defaults = buildDefaults(lane.slug);
   const statusUrl = publicJobUrl(req, sessionId);
-  const { started, job } = beginJob(BLOTATO_PUBLISH_JOB_TYPE, sessionId, {
+  const { started, job } = beginJob(lane.jobType, sessionId, {
     rss: buildRssSummary(articleSource),
     source: articleSource,
     defaults,
+    lane: lane.slug,
     statusUrl,
   });
 
@@ -384,7 +407,7 @@ export async function triggerPublishNowJob(req = {}) {
     return response;
   }
 
-  const run = () => runPublishJob({ sessionId, articleSource });
+  const run = () => runPublishJob({ sessionId, articleSource, laneSlug: lane.slug });
   if (parseBoolean(process.env.BLOTATO_INLINE_PUBLISH_JOBS, false)) {
     await run();
   } else {
@@ -397,5 +420,9 @@ export async function triggerPublishNowJob(req = {}) {
 }
 
 export async function getPublishNowJob(sessionId) {
-  return getPublicJobFresh(BLOTATO_PUBLISH_JOB_TYPE, sessionId);
+  for (const jobType of getShortLaneJobTypes()) {
+    const job = await getPublicJobFresh(jobType, sessionId);
+    if (job) return job;
+  }
+  return null;
 }
