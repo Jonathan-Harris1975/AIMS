@@ -41,7 +41,7 @@ It does everything itself:
 
 1. Selects the latest usable article from the RSS feed.
 2. Builds an AI news insight short pack.
-3. Creates a Blotato video using `/base/v2/ai-story-video/5903fe43-514d-40ee-a060-0d6628c5f8fd/v1`.
+3. Creates a Blotato video using `base/v2/ai-story-video/5903fe43-514d-40ee-a060-0d6628c5f8fd/v1`.
 4. Polls Blotato until the video render is complete.
 5. Publishes immediately to Instagram and YouTube.
 6. Stores job status under `GET /blotato/jobs/:sessionId`.
