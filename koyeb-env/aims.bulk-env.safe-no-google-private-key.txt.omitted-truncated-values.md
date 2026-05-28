@@ -5,20 +5,18 @@ These keys were removed from the paste-ready AIMS env blocks because the supplie
 ## Count impact
 
 - Spreadsheet `AIMS_Env`: 254 unique keys.
-- Repo `aims.bulk-env.canonical.txt`: 243 unique keys because 16 truncated values are omitted and 5 repo-only service keys are retained.
+- Repo `aims.bulk-env.canonical.txt`: 245 unique keys because 14 unresolved truncated values are omitted and 5 repo-only service keys are retained.
 - Spreadsheet `AIMS_Bulk_SAFE_NO_GOOGLE`: 253 unique keys.
-- Repo `aims.bulk-env.safe-no-google-private-key.txt`: 242 unique keys because the same 16 truncated values and `GOOGLE_PRIVATE_KEY` are omitted, while 5 repo-only service keys are retained.
+- Repo `aims.bulk-env.safe-no-google-private-key.txt`: 244 unique keys because the same 14 unresolved truncated values and `GOOGLE_PRIVATE_KEY` are omitted, while 5 repo-only service keys are retained.
 
 ## Omitted keys
 
 - `BLOG_FALLBACK_IMAGE_URL`
 - `BLOG_SOCIAL_FALLBACK_IMAGE_URL`
 - `GOOGLE_SHEET_ID`
-- `PODCAST_DESCRIPTION`
 - `PODCAST_FALLBACK_IMAGE_URL`
 - `PODCAST_FUNDING_TEXT`
 - `PODCAST_INTRO_URL`
-- `PODCAST_ITUNES_KEYWORDS`
 - `PODCAST_OUTRO_URL`
 - `PODCAST_RSS_FEED_URL`
 - `R2_PUBLIC_BASE_URL_BLOG_IMAGES`

@@ -9,24 +9,22 @@ Source checked: `Koyeb_Env_Master_RAMS_blotato_fixed.xlsm`
 | Spreadsheet `AIMS_Env` | 254 | Production reference set |
 | Spreadsheet `AIMS_Bulk_CANONICAL` | 254 | Production paste source, contains truncated values that must not be pasted |
 | Spreadsheet `AIMS_Bulk_SAFE_NO_GOOGLE` | 253 | Same as canonical, without `GOOGLE_PRIVATE_KEY` |
-| Repo `koyeb-env/aims.bulk-env.canonical.txt` | 243 | Paste-ready file with unsafe truncated values omitted |
-| Repo `koyeb-env/aims.bulk-env.safe-no-google-private-key.txt` | 242 | Paste-ready safe file with unsafe truncated values and `GOOGLE_PRIVATE_KEY` omitted |
+| Repo `koyeb-env/aims.bulk-env.canonical.txt` | 245 | Paste-ready file with unsafe truncated values omitted |
+| Repo `koyeb-env/aims.bulk-env.safe-no-google-private-key.txt` | 244 | Paste-ready safe file with unsafe truncated values and `GOOGLE_PRIVATE_KEY` omitted |
 | Spreadsheet/Repo RAMS canonical | 39 | Matched |
 
-The AIMS count difference is deliberate. The spreadsheet contains 16 keys whose supplied values include a literal `...` truncation marker. Those values are not safe to paste into Koyeb because they would overwrite working production values with broken partial strings.
+The AIMS count difference is deliberate. The spreadsheet contains 16 keys whose supplied values include a literal `...` truncation marker; 2 of those podcast metadata values are now verified and restored in the repo paste files. Those values are not safe to paste into Koyeb because they would overwrite working production values with broken partial strings.
 
 ## Omitted AIMS keys awaiting verified full values
 
-Keep the existing production Koyeb values for these keys until the full values are copied from Koyeb or another verified source:
+`PODCAST_DESCRIPTION` and `PODCAST_ITUNES_KEYWORDS` have now been restored using the verified PodSEO values. Keep the existing production Koyeb values for the remaining keys until the full values are copied from Koyeb or another verified source:
 
 - `BLOG_FALLBACK_IMAGE_URL`
 - `BLOG_SOCIAL_FALLBACK_IMAGE_URL`
 - `GOOGLE_SHEET_ID`
-- `PODCAST_DESCRIPTION`
 - `PODCAST_FALLBACK_IMAGE_URL`
 - `PODCAST_FUNDING_TEXT`
 - `PODCAST_INTRO_URL`
-- `PODCAST_ITUNES_KEYWORDS`
 - `PODCAST_OUTRO_URL`
 - `PODCAST_RSS_FEED_URL`
 - `R2_PUBLIC_BASE_URL_BLOG_IMAGES`
