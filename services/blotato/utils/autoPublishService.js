@@ -24,6 +24,8 @@ const VIDEO_DONE_STATUSES = new Set(["done", "completed", "complete", "success"]
 const VIDEO_FAILED_STATUSES = new Set(["creation-from-template-failed", "failed", "error"]);
 const POST_DONE_STATUSES = new Set(["published", "completed", "complete", "success"]);
 const POST_FAILED_STATUSES = new Set(["failed", "error"]);
+const INSTAGRAM_HASHTAG_LIMIT = 5;
+const HASHTAG_RE = /(^|[\s([{])#[A-Za-z0-9_]+/g;
 
 function trim(value, fallback = "") {
   if (value === undefined || value === null) return fallback;
@@ -221,9 +223,26 @@ function buildTarget(platform, pack) {
   return { targetType: platform };
 }
 
+function limitHashtags(text = "", max = INSTAGRAM_HASHTAG_LIMIT) {
+  let count = 0;
+  return String(text || "")
+    .replace(HASHTAG_RE, (match, prefix = "") => {
+      count += 1;
+      return count <= max ? match : prefix;
+    })
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/\s+([,.!?;:])/g, "$1")
+    .trim();
+}
+
 function buildPlatformText(platform, pack) {
   if (platform === "youtube") return pack.youtubeDescription || pack.facebookCaption || pack.script;
-  if (platform === "instagram") return pack.instagramCaption || pack.tiktokCaption || pack.facebookCaption || pack.script;
+  if (platform === "instagram") {
+    return limitHashtags(
+      pack.instagramCaption || pack.tiktokCaption || pack.facebookCaption || pack.script,
+      INSTAGRAM_HASHTAG_LIMIT
+    );
+  }
   return pack.facebookCaption || pack.tiktokCaption || pack.script;
 }
 

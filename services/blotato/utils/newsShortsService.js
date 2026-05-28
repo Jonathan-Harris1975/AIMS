@@ -64,7 +64,7 @@ Return exactly one JSON object with these keys:
   "youtubeTitle": "YouTube Shorts title, max 70 chars",
   "youtubeDescription": "short description with a light CTA and 3 to 5 hashtags",
   "tiktokCaption": "caption with 4 to 6 relevant hashtags",
-  "instagramCaption": "caption with 6 to 10 relevant hashtags",
+  "instagramCaption": "caption with up to 5 relevant hashtags",
   "facebookCaption": "caption suitable for Facebook Reels",
   "qualityNotes": "one short note on why this angle should work"
 }
@@ -72,6 +72,7 @@ Return exactly one JSON object with these keys:
 Output rules:
 - The script must avoid phrases like "game changer", "AI is changing everything", "you won't believe", and "the future is here".
 - Hashtags must be relevant to artificial intelligence, business, tools, work, podcast/news, or the article topic.
+- Instagram captions must contain no more than 5 hashtags.
 - Keep captions platform-specific rather than copy-pasted.
 - Do not add any text outside the JSON.`,
   };
