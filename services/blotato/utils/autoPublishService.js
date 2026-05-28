@@ -18,7 +18,7 @@ import { info, warn } from "../../../logger.js";
 
 export const BLOTATO_PUBLISH_JOB_TYPE = "blotato-news-insight-publish";
 export const DEFAULT_AI_STORY_TEMPLATE_PATH =
-  "base/v2/ai-story-video/5903fe43-514d-40ee-a060-0d6628c5f8fd/v1";
+  "/base/v2/ai-story-video/5903fe43-514d-40ee-a060-0d6628c5f8fd/v1";
 
 const VIDEO_DONE_STATUSES = new Set(["done", "completed", "complete", "success"]);
 const VIDEO_FAILED_STATUSES = new Set(["creation-from-template-failed", "failed", "error"]);
@@ -46,8 +46,16 @@ function sleep(ms) {
 
 function normaliseTemplateId(value = DEFAULT_AI_STORY_TEMPLATE_PATH) {
   const raw = trim(value, DEFAULT_AI_STORY_TEMPLATE_PATH);
-  const uuid = raw.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i)?.[0];
-  return uuid || raw;
+
+  if (raw === "5903fe43-514d-40ee-a060-0d6628c5f8fd") {
+    return DEFAULT_AI_STORY_TEMPLATE_PATH;
+  }
+
+  if (raw === DEFAULT_AI_STORY_TEMPLATE_PATH.slice(1)) {
+    return DEFAULT_AI_STORY_TEMPLATE_PATH;
+  }
+
+  return raw.startsWith("base/") ? `/${raw}` : raw;
 }
 
 function slugPart(value = "") {
