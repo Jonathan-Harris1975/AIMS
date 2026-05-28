@@ -24,6 +24,8 @@ const NUMERIC_ENVS = new Set([
   "BLOTATO_FACEBOOK_PAGE_ID",
   "BLOTATO_FACEBOOK_ACCOUNT_ID",
   "BLOTATO_TIKTOK_ACCOUNT_ID",
+  "BLOTATO_INSTAGRAM_ACCOUNT_ID",
+  "BLOTATO_YOUTUBE_ACCOUNT_ID",
   "BLOTATO_NEWS_DURATION_SECONDS",
 ]);
 
@@ -40,11 +42,14 @@ const POSITIVE_INTEGER_ENVS = new Set([
   "BLOTATO_FACEBOOK_PAGE_ID",
   "BLOTATO_FACEBOOK_ACCOUNT_ID",
   "BLOTATO_TIKTOK_ACCOUNT_ID",
+  "BLOTATO_INSTAGRAM_ACCOUNT_ID",
+  "BLOTATO_YOUTUBE_ACCOUNT_ID",
   "BLOTATO_NEWS_DURATION_SECONDS",
 ]);
 
 const BOOLEAN_ENVS = new Set([
   "ALLOW_EPHEMERAL_STATE",
+  "BLOTATO_INLINE_PUBLISH_JOBS",
   "BLOTATO_YOUTUBE_NOTIFY_SUBSCRIBERS",
   "BLOTATO_INSTAGRAM_SHARE_TO_FEED",
   "BLOTATO_RSS_PREFER_R2",
@@ -113,6 +118,17 @@ function validateSecretReference({ key, value, line }, errors) {
         `Invalid Koyeb secret reference for ${key}; use {{ secret.SECRET_NAME }} or {{secret.SECRET_NAME}} with letters, numbers or underscores only`,
     });
   }
+}
+
+function validateNoTruncatedValue({ key, value, line }, errors) {
+  const raw = clean(value);
+  if (!raw.includes("...")) return;
+
+  errors.push({
+    line,
+    key,
+    message: `${key} contains a literal truncation marker (...). Keep the existing Koyeb value or replace it only with a verified full value.`,
+  });
 }
 
 function validateNumber({ key, value, line }, errors) {
@@ -222,6 +238,7 @@ export function validateEnvEntries(entries) {
   const errors = [];
 
   for (const entry of entries) {
+    validateNoTruncatedValue(entry, errors);
     validateSecretReference(entry, errors);
     validateNumber(entry, errors);
     validateBoolean(entry, errors);
