@@ -133,7 +133,7 @@ export const aiConfig = {
     rssRewrite: routeChain(["standard", "fast", "fallback"], ["chatgpt", "google", "meta"]),
     rssShortTitle: routeChain(["fast", "summary", "fallback"], ["chatgpt", "google", "meta"]),
     blogWeekly: routeChain(["standard", "summary", "fallback"], ["google", "chatgpt", "deepseek"]),
-    blogSocial: routeChain(["standard", "summary", "fast", "fallback"], ["google", "chatgpt", "deepseek"]),
+    blogSocial: routeChain(["summary", "fast", "standard", "fallback"], ["google", "chatgpt", "deepseek"]),
     onBrandAudit: routeChain(["audit", "highQuality", "standard", "fallback"], ["anthropic46", "google25FlashLite", "chatgptMini5", "deepseekV4Pro", "deepseekV4Flash", "meta", "anthropic", "google", "chatgpt", "deepseek"]),
     auditForensic: routeChain(["audit", "highQuality", "standard", "fallback"], ["anthropic46", "google25FlashLite", "chatgptMini5", "deepseekV4Pro", "deepseekV4Flash", "meta", "anthropic", "google", "chatgpt", "deepseek"]),
     oneupDaily: routeChain(["fast", "standard", "fallback"], ["chatgpt", "google", "deepseek"]),
