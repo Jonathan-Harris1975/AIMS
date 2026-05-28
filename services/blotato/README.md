@@ -9,7 +9,7 @@ Blotato_API_key=
 BLOTATO_API_BASE=https://backend.blotato.com/v2
 BLOTATO_TIMEOUT_MS=30000
 BLOTATO_NEWS_SHORT_MAX_TOKENS=2200
-BLOTATO_NEWS_TEMPLATE_ID=base/v2/ai-story-video/5903fe43-514d-40ee-a060-0d6628c5f8fd/v1
+BLOTATO_NEWS_TEMPLATE_ID=/base/v2/ai-story-video/5903fe43-514d-40ee-a060-0d6628c5f8fd/v1
 BLOTATO_NEWS_RSS_URL=https://ai-news.jonathan-harris.online/feed.xml
 BLOTATO_RSS_PREFER_R2=true
 BLOTATO_RSS_BUCKET_ALIAS=rss
@@ -41,7 +41,7 @@ It does everything itself:
 
 1. Selects the latest usable article from the RSS feed.
 2. Builds an AI news insight short pack.
-3. Creates a Blotato video using `base/v2/ai-story-video/5903fe43-514d-40ee-a060-0d6628c5f8fd/v1`.
+3. Creates a Blotato video using `/base/v2/ai-story-video/5903fe43-514d-40ee-a060-0d6628c5f8fd/v1`.
 4. Polls Blotato until the video render is complete.
 5. Publishes immediately to Instagram and YouTube.
 6. Stores job status under `GET /blotato/jobs/:sessionId`.
