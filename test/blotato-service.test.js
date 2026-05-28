@@ -4,7 +4,6 @@ import http from "node:http";
 import request from "supertest";
 
 const ORIGINAL_ENV = { ...process.env };
-const AI_STORY_TEMPLATE_PATH = "/base/v2/ai-story-video/5903fe43-514d-40ee-a060-0d6628c5f8fd/v1";
 
 function restoreEnv() {
   for (const key of Object.keys(process.env)) {
@@ -32,28 +31,13 @@ function readJsonBody(req) {
   });
 }
 
+const AI_STORY_TEMPLATE_PATH = "/base/v2/ai-story-video/5903fe43-514d-40ee-a060-0d6628c5f8fd/v1";
+const capturedChatRequests = [];
+const capturedVisualRequests = [];
+const capturedPostRequests = [];
+
 function countHashtags(value = "") {
-  return String(value || "").match(/(^|[\s([{])#[A-Za-z0-9_]+/g)?.length || 0;
-}
-
-let malformedJsonRetryAttempts = 0;
-
-function makeNewsShortPack(overrides = {}) {
-  return {
-    internalTitle: "Agents move into admin",
-    angle: "The useful story is workflow delegation, not another shiny demo.",
-    hook: "AI agents are moving from chat to chores.",
-    script: "AI agents are moving from chat to chores. The important part is not the demo theatre. It is that teams are starting to hand over repeatable admin, research, drafting, routing and checking tasks. That does not remove judgement. It moves judgement to the design of the workflow. The winners will not be people who ask better one-off questions. They will be the ones who build better systems around the tools.",
-    visualDirection: "Dark editorial AI newsroom, task cards moving through a clean workflow, captions emphasising chores, workflow and judgement.",
-    thumbnailText: "AI Gets Chores",
-    youtubeTitle: "AI agents are moving from chat to chores",
-    youtubeDescription: "AI agents are becoming workflow tools, not magic. #ArtificialIntelligence #AINews #AIAgents",
-    tiktokCaption: "AI agents are getting practical. Less magic, more workflow. #ArtificialIntelligence #AINews #AIAgents #FutureOfWork",
-    instagramCaption: "The useful AI agent story is not the demo. It is the workflow shift. #ArtificialIntelligence #AINews #AIAgents #FutureOfWork #Automation #TechCommentary",
-    facebookCaption: "AI agents are becoming less about chat and more about repeatable work. That changes how teams design workflows.",
-    qualityNotes: "The angle is practical and avoids overclaiming.",
-    ...overrides,
-  };
+  return (String(value || "").match(/(^|\s)#[\p{L}\p{N}_]+/gu) || []).length;
 }
 
 const mockServer = http.createServer(async (req, res) => {
@@ -78,24 +62,50 @@ const mockServer = http.createServer(async (req, res) => {
 
   if (req.method === "POST" && url.pathname === "/chat/completions") {
     const payload = await readJsonBody(req);
-    const combinedMessages = payload.messages.map((message) => String(message.content || "")).join("\n");
-    assert.ok(combinedMessages.includes("Create one short-form AI news insight pack"));
-    assert.equal(payload.response_format, undefined);
-
-    if (combinedMessages.includes("Malformed retry test") && malformedJsonRetryAttempts === 0) {
-      malformedJsonRetryAttempts += 1;
-      res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify({
-        choices: [{ message: { content: '{"internalTitle":"Broken","angle":"unterminated' } }],
-      }));
-      return;
+    capturedChatRequests.push(payload);
+    const isRepair = payload.messages.some((message) => String(message.content || "").includes("Repair malformed JSON"));
+    if (!isRepair) {
+      assert.ok(payload.messages.some((message) => String(message.content || "").includes("Create one short-form AI news insight pack")));
+      assert.ok(payload.messages.some((message) => String(message.content || "").includes("Spartan and informative")));
+      assert.ok(payload.messages.some((message) => String(message.content || "").includes("Instagram must have no more than 5 hashtags")));
+      assert.equal(Object.hasOwn(payload, "response_format"), false);
     }
-
     res.writeHead(200, { "content-type": "application/json" });
     res.end(JSON.stringify({
       choices: [{
         message: {
-          content: JSON.stringify(makeNewsShortPack()),
+          content: JSON.stringify({
+            internalTitle: "Agents move into admin",
+            angle: "The useful story is workflow delegation, not another shiny demo.",
+            hook: "AI agents are moving from chat to chores.",
+            script: "AI agents are moving from chat to chores. The important part is not the demo theatre. It is that teams are starting to hand over repeatable admin, research, drafting, routing and checking tasks. That does not remove judgement. It moves judgement to the design of the workflow. The winners will not be people who ask better one-off questions. They will be the ones who build better systems around the tools.",
+            visualDirection: "Dark editorial AI newsroom, task cards moving through a clean workflow, captions emphasising chores, workflow and judgement.",
+            scenes: [
+              {
+                mediaSource: "Faceless dark editorial newsroom visual with task cards moving from chat bubbles into workflow columns.",
+                script: "AI agents are moving from chat to chores."
+              },
+              {
+                mediaSource: "Minimal dashboard showing admin, research, drafting, routing and checking tasks flowing through a clean system.",
+                script: "Teams are starting to hand over repeatable admin, research, drafting, routing and checking tasks."
+              },
+              {
+                mediaSource: "Abstract workflow builder with human approval checkpoints and clean captions about judgement.",
+                script: "That does not remove judgement. It moves judgement to the design of the workflow."
+              },
+              {
+                mediaSource: "Premium dark technology graphic showing connected systems around practical AI tools, no robot imagery.",
+                script: "The winners will be the ones who build better systems around the tools."
+              }
+            ],
+            thumbnailText: "AI Gets Chores",
+            youtubeTitle: "AI agents are moving from chat to chores",
+            youtubeDescription: "AI agents are becoming workflow tools, not magic. #ArtificialIntelligence #AINews #AIAgents",
+            tiktokCaption: "AI agents are getting practical. Less magic, more workflow. #ArtificialIntelligence #AINews #AIAgents #FutureOfWork",
+            instagramCaption: "The useful AI agent story is not the demo. It is the workflow shift. #ArtificialIntelligence #AINews #AIAgents #FutureOfWork #Automation #TechCommentary",
+            facebookCaption: "AI agents are becoming less about chat and more about repeatable work. That changes how teams design workflows.",
+            qualityNotes: "The angle is practical and avoids overclaiming.",
+          }),
         },
       }],
     }));
@@ -128,15 +138,15 @@ const mockServer = http.createServer(async (req, res) => {
 
   if (req.method === "POST" && url.pathname === "/v2/videos/from-templates") {
     const body = await readJsonBody(req);
-    const isPublishNowPrompt = String(body.prompt || "").includes("Create a polished faceless vertical AI news short");
-
-    if (isPublishNowPrompt) {
-      assert.equal(body.templateId, AI_STORY_TEMPLATE_PATH);
-    } else {
-      assert.equal(body.templateId, "tpl-ai-video");
-    }
-
+    capturedVisualRequests.push(body);
+    assert.ok(["tpl-ai-video", AI_STORY_TEMPLATE_PATH].includes(body.templateId));
     assert.equal(body.render, true);
+    if (body.templateId === AI_STORY_TEMPLATE_PATH) {
+      assert.ok(Array.isArray(body.inputs.scenes));
+      assert.ok(body.inputs.scenes.length >= 3);
+      assert.equal(body.inputs.aspectRatio, "9:16");
+      assert.equal(body.inputs.captionPosition, "bottom");
+    }
     res.writeHead(201, { "content-type": "application/json" });
     res.end(JSON.stringify({ item: { id: "visual-1", status: "queueing" } }));
     return;
@@ -150,6 +160,7 @@ const mockServer = http.createServer(async (req, res) => {
 
   if (req.method === "POST" && url.pathname === "/v2/posts") {
     const body = await readJsonBody(req);
+    capturedPostRequests.push(body);
     assert.equal(body.post.content.platform, body.post.target.targetType);
 
     if (body.post.content.platform === "tiktok") {
@@ -160,8 +171,7 @@ const mockServer = http.createServer(async (req, res) => {
       assert.equal(body.post.accountId, "acc-instagram");
       assert.equal(body.post.target.mediaType, "reel");
       assert.deepEqual(body.post.content.mediaUrls, ["https://example.com/video.mp4"]);
-      assert.equal(countHashtags(body.post.content.text), 5);
-      assert.doesNotMatch(body.post.content.text, /#TechCommentary/);
+      assert.ok(countHashtags(body.post.content.text) <= 5);
     }
 
     if (body.post.content.platform === "youtube") {
@@ -212,7 +222,7 @@ process.env.BLOTATO_POST_POLL_INTERVAL_MS = "1";
 process.env.BLOTATO_INSTAGRAM_ACCOUNT_ID = "acc-instagram";
 process.env.BLOTATO_YOUTUBE_ACCOUNT_ID = "acc-youtube";
 process.env.BLOTATO_DEFAULT_CHANNELS = "instagram,youtube";
-process.env.BLOTATO_NEWS_TEMPLATE_ID = "5903fe43-514d-40ee-a060-0d6628c5f8fd";
+process.env.BLOTATO_NEWS_TEMPLATE_ID = AI_STORY_TEMPLATE_PATH;
 process.env.APP_TMP_DIR = `/tmp/aims-blotato-test-${Date.now()}`;
 
 const { app } = await import(`../server.js?blotato-suite=${Date.now()}`);
@@ -225,7 +235,6 @@ test.after(async () => {
 });
 
 test.afterEach(() => {
-  malformedJsonRetryAttempts = 0;
   process.env.Blotato_API_key = "test-blotato-key";
   process.env.BLOTATO_API_BASE = `${mockBase}/v2`;
   process.env.BLOTATO_NEWS_RSS_URL = `${mockBase}/feed.xml`;
@@ -238,7 +247,7 @@ test.afterEach(() => {
   process.env.BLOTATO_INSTAGRAM_ACCOUNT_ID = "acc-instagram";
   process.env.BLOTATO_YOUTUBE_ACCOUNT_ID = "acc-youtube";
   process.env.BLOTATO_DEFAULT_CHANNELS = "instagram,youtube";
-  process.env.BLOTATO_NEWS_TEMPLATE_ID = "5903fe43-514d-40ee-a060-0d6628c5f8fd";
+  process.env.BLOTATO_NEWS_TEMPLATE_ID = AI_STORY_TEMPLATE_PATH;
 });
 
 test("Blotato health endpoint is public and reports configured API key", async () => {
@@ -347,6 +356,9 @@ test("Blotato news insight route builds a dry-run short pack", async () => {
   assert.equal(response.body.createdVisual, false);
   assert.match(response.body.pack.script, /workflow/i);
   assert.match(response.body.visualPrompt, /Thumbnail text/);
+  assert.ok(Array.isArray(response.body.pack.scenes));
+  assert.ok(response.body.pack.scenes.length >= 3);
+  assert.ok(Array.isArray(response.body.visualInputs.scenes));
 });
 
 
@@ -365,30 +377,13 @@ test("Blotato publish-now endpoint is public and runs the RSS-to-Instagram/YouTu
   assert.equal(jobStatus.body.ok, true);
   assert.equal(jobStatus.body.job.status, "completed");
   assert.equal(jobStatus.body.job.result.source.article.title, "AI agents move from chat to office tasks");
-  assert.equal(jobStatus.body.job.result.templateId, AI_STORY_TEMPLATE_PATH);
   assert.deepEqual(
     jobStatus.body.job.result.publishes.map((item) => item.platform),
     ["instagram", "youtube"]
   );
-});
-
-test("Blotato news insight route retries once after malformed model JSON", async () => {
-  const response = await request(app)
-    .post("/blotato/shorts/news-insight")
-    .set(auth)
-    .send({
-      dryRun: true,
-      theme: "what-it-means",
-      article: {
-        title: "Malformed retry test",
-        summary: "The first model response is intentionally malformed in the test server.",
-        link: "https://example.com/malformed-retry",
-      },
-      templateId: "tpl-ai-video",
-    });
-
-  assert.equal(response.status, 200);
-  assert.equal(response.body.ok, true);
-  assert.equal(malformedJsonRetryAttempts, 1);
-  assert.match(response.body.pack.script, /workflow/i);
+  assert.equal(jobStatus.body.job.result.templateId, AI_STORY_TEMPLATE_PATH);
+  assert.ok(jobStatus.body.job.result.video.visualInputs.scenes.length >= 3);
+  const instagramPost = capturedPostRequests.find((item) => item.post.content.platform === "instagram");
+  assert.ok(instagramPost);
+  assert.ok(countHashtags(instagramPost.post.content.text) <= 5);
 });

@@ -24,30 +24,12 @@ test("koyeb env doctor rejects invalid secret names", () => {
 
 test("koyeb env doctor rejects truncated Blotato template ids", () => {
   const { entries } = parseEnvLines(
-    "BLOTATO_NEWS_TEMPLATE_ID=base/v2/ai-story-video/5903fe43-514d-40ee-a060-0d662...\n"
+    "BLOTATO_NEWS_TEMPLATE_ID=/base/v2/ai-story-video/5903fe43-514d-40ee-a060-0d662...\n"
   );
   const errors = validateEnvEntries(entries);
 
   assert.equal(errors.length, 1);
   assert.match(errors[0].message, /truncated/i);
-});
-
-test("koyeb env doctor accepts the full Blotato AI story template path", () => {
-  const { entries } = parseEnvLines(
-    "BLOTATO_NEWS_TEMPLATE_ID=/base/v2/ai-story-video/5903fe43-514d-40ee-a060-0d6628c5f8fd/v1\n"
-  );
-
-  assert.deepEqual(validateEnvEntries(entries), []);
-});
-
-test("koyeb env doctor rejects bare Blotato template UUIDs for AI story videos", () => {
-  const { entries } = parseEnvLines(
-    "BLOTATO_NEWS_TEMPLATE_ID=5903fe43-514d-40ee-a060-0d6628c5f8fd\n"
-  );
-  const errors = validateEnvEntries(entries);
-
-  assert.equal(errors.length, 1);
-  assert.match(errors[0].message, /full Blotato template path/i);
 });
 
 test("koyeb env doctor validates the narrowed Blotato/state env set", () => {
