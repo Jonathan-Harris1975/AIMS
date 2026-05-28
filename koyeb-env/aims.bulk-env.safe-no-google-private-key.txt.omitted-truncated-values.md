@@ -4,8 +4,6 @@ These keys were removed from the paste-ready env block because the supplied sour
 
 - `BLOG_FALLBACK_IMAGE_URL`
 - `BLOG_SOCIAL_FALLBACK_IMAGE_URL`
-- `BLOG_SOCIAL_PUBLIC_POSTS_BASE_URL`
-- `BLOG_SOCIAL_RSS_DESCRIPTION`
 - `GOOGLE_SHEET_ID`
 - `PODCAST_DESCRIPTION`
 - `PODCAST_FALLBACK_IMAGE_URL`
@@ -20,3 +18,5 @@ These keys were removed from the paste-ready env block because the supplied sour
 - `R2_PUBLIC_BASE_URL_TRANSCRIPT`
 - `R2_PUBLIC_BASE_URL_TRANSCRIPT_HTML`
 - `RSS_FEED_DESCRIPTION`
+
+Known safe blog social defaults have been restored in the paste-ready files. `R2_PUBLIC_BASE_URL_BLOG_IMAGES` remains omitted until the full public bucket URL is verified; the blog artwork code now falls back to the public `blog` bucket so this omission no longer blocks post publication.
