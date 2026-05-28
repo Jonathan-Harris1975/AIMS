@@ -1,5 +1,6 @@
 import { resilientRequest } from "../../shared/utils/ai-service.js";
 import { createVisual } from "./blotatoClient.js";
+import { warn } from "../../../logger.js";
 
 const NEWS_SHORT_MAX_TOKENS = Math.max(1800, Number(process.env.BLOTATO_NEWS_SHORT_MAX_TOKENS || 2200));
 
@@ -151,20 +152,61 @@ export function buildBlotatoVisualPrompt(pack = {}) {
   ].join("\n");
 }
 
-export async function buildNewsInsightShortPack(options = {}) {
-  const prompt = buildNewsShortPrompt(options);
-  const raw = await resilientRequest("blotatoNewsShort", {
-    sessionId: `blotato-news-${Date.now()}`,
+function buildRepairPrompt({ prompt, raw, parseError }) {
+  const rawPreview = String(raw || "").slice(0, 1200);
+  return {
+    system: `${prompt.system}
+You are repairing a previous invalid response. Return one complete, valid JSON object only.`,
+    user: `The previous response failed JSON parsing: ${parseError?.message || "invalid JSON"}
+
+Previous response preview:
+${rawPreview}
+
+Recreate the requested JSON object from the same source article context below. Use exactly the requested keys. Do not include markdown fences, comments, or extra text.
+
+${prompt.user}`,
+  };
+}
+
+async function requestNewsShortPack(prompt, { sessionId, temperature = 0.55 } = {}) {
+  return resilientRequest("blotatoNewsShort", {
+    sessionId,
     messages: [
       { role: "system", content: prompt.system },
       { role: "user", content: prompt.user },
     ],
     max_tokens: NEWS_SHORT_MAX_TOKENS,
-    temperature: 0.55,
-    response_format: { type: "json_object" },
+    temperature,
   });
+}
 
-  return normalisePack(parseJsonObject(raw));
+export async function buildNewsInsightShortPack(options = {}) {
+  const prompt = buildNewsShortPrompt(options);
+  const sessionId = `blotato-news-${Date.now()}`;
+  const raw = await requestNewsShortPack(prompt, { sessionId });
+
+  try {
+    return normalisePack(parseJsonObject(raw));
+  } catch (firstError) {
+    warn("blotato.news_short.json_retry", {
+      error: firstError?.message || String(firstError),
+      rawPreview: firstError?.rawPreview,
+    });
+
+    const repairPrompt = buildRepairPrompt({ prompt, raw, parseError: firstError });
+    const repairRaw = await requestNewsShortPack(repairPrompt, {
+      sessionId: `${sessionId}-repair`,
+      temperature: 0.2,
+    });
+
+    try {
+      return normalisePack(parseJsonObject(repairRaw));
+    } catch (repairError) {
+      repairError.message = `${repairError.message}; repair attempt also failed after initial error: ${firstError.message}`;
+      repairError.firstRawPreview = firstError?.rawPreview;
+      throw repairError;
+    }
+  }
 }
 
 export async function buildOrCreateNewsInsightShort(options = {}) {
