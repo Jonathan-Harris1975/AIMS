@@ -197,23 +197,9 @@ export const R2_BUCKETS = {
 
   // Legacy/compat (read-only)
   R2_BUCKET_PODCAST_OUTPUT,
-
-  // Legacy/compat (read-only)
   R2_BUCKET_RAW_TEXT_INPUT,
   editedAudio:     R2_BUCKET_EDITED_AUDIO,
-
-  // Legacy/compat (read-only)
-  R2_BUCKET_PODCAST_OUTPUT,
-
-  // Legacy/compat (read-only)
-  R2_BUCKET_RAW_TEXT_INPUT,
   "edited-audio":  R2_BUCKET_EDITED_AUDIO,
-
-  // Legacy/compat (read-only)
-  R2_BUCKET_PODCAST_OUTPUT,
-
-  // Legacy/compat (read-only)
-  R2_BUCKET_RAW_TEXT_INPUT,
 
   // NEW — metasystem bucket (episode-counter + system files)
   metasystem:      META_SYSTEM_BUCKET_NAME,
@@ -342,12 +328,6 @@ export const R2_PUBLIC_URLS = {
 
   // NEW — metasystem public URL
   metasystem:      META_SYSTEM_PUBLIC_BASE_URL,
-
-  // Legacy/compat (read-only)
-  R2_PUBLIC_BASE_URL_RSS_FEEDS,
-
-  // Legacy/compat (read-only)
-  R2_PUBLIC_BASE_URL_PODCAST_OUTPUT,
   metaSystem:      META_SYSTEM_PUBLIC_BASE_URL,
 
   // Legacy/compat (read-only)
