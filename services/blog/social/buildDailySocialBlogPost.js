@@ -325,6 +325,7 @@ async function resolveSocialArtwork({ sessionId, imagePrompt, dateId, prefix }) 
       imageStatus: "generated",
       imageError: null,
       imageKey: art.key,
+      imageBucketKey: art.bucketKey || null,
     };
   }
 
@@ -344,10 +345,24 @@ async function resolveSocialArtwork({ sessionId, imagePrompt, dateId, prefix }) 
       imageStatus: "fallback",
       imageError,
       imageKey: null,
+      imageBucketKey: null,
     };
   }
 
-  throw new Error(`Social blog artwork failed and no BLOG_SOCIAL_FALLBACK_IMAGE_URL is configured: ${imageError}`);
+  warn("blog.social.daily.image.unavailable", {
+    dateId,
+    sessionId,
+    error: imageError,
+    reason: "artwork-failed-no-fallback-configured",
+  });
+
+  return {
+    imageUrl: "",
+    imageStatus: "unavailable",
+    imageError,
+    imageKey: null,
+    imageBucketKey: null,
+  };
 }
 
 async function generateStructuredSocialPackage({ sessionId, dateLabel, items }) {
@@ -581,6 +596,7 @@ export async function buildDailySocialBlogPost({
       imageStatus: "dry_run",
       imageError: null,
       imageKey: null,
+      imageBucketKey: null,
     };
 
     const artwork = dryRun
@@ -610,6 +626,7 @@ export async function buildDailySocialBlogPost({
       imagePrompt,
       imageStatus: artwork.imageStatus,
       imageError: artwork.imageError,
+      imageBucketKey: artwork.imageBucketKey,
       dateLabel: window.dateId,
       themes: socialPackage.themes,
       hashtags: socialPackage.hashtags,
@@ -646,6 +663,7 @@ export async function buildDailySocialBlogPost({
       manifestKey,
       rssFeedKey: process.env.BLOG_SOCIAL_RSS_OBJECT_KEY || `${prefix}/feed.xml`,
       imageKey: artwork.imageKey,
+      imageBucketKey: artwork.imageBucketKey,
     };
 
     const phase4Gate = runPhase4AutonomousContentGate({
@@ -709,6 +727,8 @@ export async function buildDailySocialBlogPost({
         postsManifestUrl: urls.postsManifestUrl,
         imagePrompt,
         imageStatus: artwork.imageStatus,
+        imageError: artwork.imageError,
+        imageBucketKey: artwork.imageBucketKey,
         sourceCount: cleanedSources.length,
         package: socialPackage,
         publishedObjects,
@@ -725,6 +745,7 @@ export async function buildDailySocialBlogPost({
       ...postEntry,
       image_generation_status: artwork.imageStatus,
       image_generation_error: artwork.imageError,
+      image_bucket_key: artwork.imageBucketKey,
       days: window.days,
       window: {
         start: window.start.toISOString(),
@@ -771,6 +792,7 @@ export async function buildDailySocialBlogPost({
       imageUrl,
       imageStatus: artwork.imageStatus,
       imageError: artwork.imageError,
+      imageBucketKey: artwork.imageBucketKey,
       rssFeedUrl: rss.feedUrl,
       rss,
       publishedObjects,
