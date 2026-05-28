@@ -1,2 +1,4 @@
-test/koyeb-env-doctor.test.js
+services/blotato/utils/autoPublishService.js
+services/blotato/utils/newsShortsService.js
+test/blotato-service.test.js
 CHANGES.md

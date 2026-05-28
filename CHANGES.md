@@ -1,27 +1,16 @@
 # CHANGES
 
-## scripts/buildCheck.js
+## services/blotato/utils/autoPublishService.js
+- Added a publish-time Instagram hashtag limiter.
+- Instagram generated captions are now clamped to 5 hashtags before calling Blotato `/v2/posts`.
+- YouTube, TikTok, Facebook and manual visual routes are left unchanged.
 
-- Excludes `*.cli-env.txt` helper files from Koyeb paste-safe env validation.
-- Safe because `remove-legacy-conflicts.cli-env.txt` is not a pasteable `KEY=VALUE` env file; it is a CLI/helper removal list. Real `.env` and `.txt` Koyeb paste files remain validated.
+## services/blotato/utils/newsShortsService.js
+- Updated the Blotato news-short prompt so `instagramCaption` asks for no more than 5 hashtags.
+- Added an explicit output rule matching Instagram's 5-hashtag ceiling.
 
-## config/production.defaults.env
+## test/blotato-service.test.js
+- Added regression coverage proving the auto publish flow sends exactly 5 Instagram hashtags and drops the sixth generated tag.
 
-- Corrected `BLOTATO_NEWS_TEMPLATE_ID` to `/base/v2/ai-story-video/5903fe43-514d-40ee-a060-0d6628c5f8fd/v1`.
-- Safe because it aligns defaults with the validator and the Blotato template path required by the service.
-
-## koyeb-env/repo_aims.bulk-env.canonical.txt
-
-- Corrected `BLOTATO_NEWS_TEMPLATE_ID` to the full path with the leading slash.
-
-## koyeb-env/repo_aims.bulk-env.safe-no-google-private-key.txt
-
-- Corrected `BLOTATO_NEWS_TEMPLATE_ID` to the full path with the leading slash.
-
-## koyeb-env/workbook_aims_canonical.env
-
-- Corrected `BLOTATO_NEWS_TEMPLATE_ID` to the full path with the leading slash.
-
-## koyeb-env/workbook_aims_safe.env
-
-- Corrected `BLOTATO_NEWS_TEMPLATE_ID` to the full path with the leading slash.
+## Safety
+- No route names, payload shapes, env names, account ids, template ids, storage paths, or scheduling behaviour were changed.
