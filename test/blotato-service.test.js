@@ -215,6 +215,7 @@ process.env.AIMS_API_KEY = "suite-key";
 process.env.Blotato_API_key = "test-blotato-key";
 process.env.BLOTATO_API_BASE = `${mockBase}/v2`;
 process.env.OPENROUTER_API_BASE = mockBase;
+process.env.OPENROUTER_BASE_URL = mockBase;
 process.env.OPENROUTER_API_KEY = "test-openrouter-key";
 process.env.AI_MODEL_STANDARD = "openai/test-model";
 process.env.AI_MODEL_FAST = "openai/test-model";
@@ -261,6 +262,8 @@ test.afterEach(() => {
   process.env.BLOTATO_FACEBOOK_PAGE_ID = "562160556971997";
   process.env.BLOTATO_DEFAULT_CHANNELS = "instagram,youtube,tiktok,facebook";
   process.env.BLOTATO_NEWS_TEMPLATE_ID = AI_STORY_TEMPLATE_PATH;
+  process.env.OPENROUTER_API_BASE = mockBase;
+  process.env.OPENROUTER_BASE_URL = mockBase;
 });
 
 test("Blotato health endpoint is public and reports configured API key", async () => {
