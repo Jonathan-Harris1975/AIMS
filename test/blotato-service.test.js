@@ -32,6 +32,10 @@ function readJsonBody(req) {
   });
 }
 
+function countHashtags(value = "") {
+  return String(value || "").match(/(^|[\s([{])#[A-Za-z0-9_]+/g)?.length || 0;
+}
+
 const mockServer = http.createServer(async (req, res) => {
   const url = new URL(req.url, "http://127.0.0.1");
 
@@ -137,6 +141,8 @@ const mockServer = http.createServer(async (req, res) => {
       assert.equal(body.post.accountId, "acc-instagram");
       assert.equal(body.post.target.mediaType, "reel");
       assert.deepEqual(body.post.content.mediaUrls, ["https://example.com/video.mp4"]);
+      assert.equal(countHashtags(body.post.content.text), 5);
+      assert.doesNotMatch(body.post.content.text, /#TechCommentary/);
     }
 
     if (body.post.content.platform === "youtube") {
