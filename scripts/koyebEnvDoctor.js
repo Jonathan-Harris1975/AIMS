@@ -24,8 +24,6 @@ const NUMERIC_ENVS = new Set([
   "BLOTATO_FACEBOOK_PAGE_ID",
   "BLOTATO_FACEBOOK_ACCOUNT_ID",
   "BLOTATO_TIKTOK_ACCOUNT_ID",
-  "BLOTATO_INSTAGRAM_ACCOUNT_ID",
-  "BLOTATO_YOUTUBE_ACCOUNT_ID",
   "BLOTATO_NEWS_DURATION_SECONDS",
 ]);
 
@@ -42,20 +40,59 @@ const POSITIVE_INTEGER_ENVS = new Set([
   "BLOTATO_FACEBOOK_PAGE_ID",
   "BLOTATO_FACEBOOK_ACCOUNT_ID",
   "BLOTATO_TIKTOK_ACCOUNT_ID",
-  "BLOTATO_INSTAGRAM_ACCOUNT_ID",
-  "BLOTATO_YOUTUBE_ACCOUNT_ID",
   "BLOTATO_NEWS_DURATION_SECONDS",
 ]);
 
 const BOOLEAN_ENVS = new Set([
   "ALLOW_EPHEMERAL_STATE",
-  "BLOTATO_INLINE_PUBLISH_JOBS",
   "BLOTATO_YOUTUBE_NOTIFY_SUBSCRIBERS",
   "BLOTATO_INSTAGRAM_SHARE_TO_FEED",
   "BLOTATO_RSS_PREFER_R2",
 ]);
 
-const URL_ENVS = new Set(["BLOTATO_API_BASE", "BLOTATO_NEWS_RSS_URL"]);
+const URL_ENVS = new Set([
+  "APP_URL",
+  "BLOTATO_API_BASE",
+  "BLOTATO_NEWS_RSS_URL",
+  "BLOG_FALLBACK_IMAGE_URL",
+  "BLOG_SOCIAL_FALLBACK_IMAGE_URL",
+  "BLOG_SOCIAL_PUBLIC_BASE_URL",
+  "BLOG_SOCIAL_PUBLIC_POSTS_BASE_URL",
+  "FEED_URL",
+  "GOOGLE_SHEET_ID",
+  "ONEUP_API_BASE",
+  "OPENROUTER_API_BASE",
+  "OPENROUTER_BASE_URL",
+  "OPENROUTER_SITE_URL",
+  "PODCAST_EPISODE_BASE_URL",
+  "PODCAST_FALLBACK_IMAGE_URL",
+  "PODCAST_FUNDING_URL",
+  "PODCAST_IMAGE_URL",
+  "PODCAST_INTRO_URL",
+  "PODCAST_LINK",
+  "PODCAST_OUTRO_URL",
+  "PODCAST_RSS_FEED_URL",
+  "PODCAST_TRANSCRIPT_HTML_BASE_URL",
+  "R2_ENDPOINT",
+  "R2_PUBLIC_BASE_URL_ART",
+  "R2_PUBLIC_BASE_URL_AUDITS",
+  "R2_PUBLIC_BASE_URL_BLOG",
+  "R2_PUBLIC_BASE_URL_BLOG_IMAGES",
+  "R2_PUBLIC_BASE_URL_BLOG_RSS",
+  "R2_PUBLIC_BASE_URL_BRAND_ASSETS",
+  "R2_PUBLIC_BASE_URL_CHUNKS",
+  "R2_PUBLIC_BASE_URL_EDITED_AUDIO",
+  "R2_PUBLIC_BASE_URL_MERGE",
+  "R2_PUBLIC_BASE_URL_META",
+  "R2_PUBLIC_BASE_URL_META_SYSTEM",
+  "R2_PUBLIC_BASE_URL_PODCAST",
+  "R2_PUBLIC_BASE_URL_PODCAST_RSS",
+  "R2_PUBLIC_BASE_URL_RAW_TEXT",
+  "R2_PUBLIC_BASE_URL_RSS",
+  "R2_PUBLIC_BASE_URL_TRANSCRIPT",
+  "R2_PUBLIC_BASE_URL_TRANSCRIPT_HTML",
+  "SITE_BASE_URL",
+]);
 const VALID_BOOLEAN_VALUES = new Set(["1", "0", "true", "false", "yes", "no", "on", "off"]);
 const VALID_STATE_BACKENDS = new Set(["auto", "r2", "local", "file", "filesystem"]);
 const VALID_CHANNELS = new Set(["instagram", "youtube", "tiktok", "facebook", "linkedin", "threads", "twitter"]);
@@ -106,6 +143,20 @@ export function parseEnvLines(raw) {
   return { entries, errors };
 }
 
+function validateNotTruncated({ key, value, line }, errors) {
+  const raw = clean(value);
+  if (!raw.includes("...")) return;
+
+  errors.push({
+    line,
+    key,
+    message:
+      key === "BLOTATO_NEWS_TEMPLATE_ID"
+        ? `${key} is truncated. Use the full value: ${BLOTATO_DEFAULT_TEMPLATE_PATH}`
+        : `${key} appears truncated because it contains literal ...; use the verified full value`,
+  });
+}
+
 function validateSecretReference({ key, value, line }, errors) {
   const cleaned = clean(value);
   if (!LOOSE_SECRET_REFERENCE_PATTERN.test(cleaned)) return;
@@ -118,17 +169,6 @@ function validateSecretReference({ key, value, line }, errors) {
         `Invalid Koyeb secret reference for ${key}; use {{ secret.SECRET_NAME }} or {{secret.SECRET_NAME}} with letters, numbers or underscores only`,
     });
   }
-}
-
-function validateNoTruncatedValue({ key, value, line }, errors) {
-  const raw = clean(value);
-  if (!raw.includes("...")) return;
-
-  errors.push({
-    line,
-    key,
-    message: `${key} contains a literal truncation marker (...). Keep the existing Koyeb value or replace it only with a verified full value.`,
-  });
 }
 
 function validateNumber({ key, value, line }, errors) {
@@ -171,6 +211,10 @@ function validateUrl({ key, value, line }, errors) {
     if (!/^https?:$/.test(parsed.protocol)) {
       errors.push({ line, key, message: `${key} must use http or https` });
     }
+
+    if (parsed.hostname && !/^[A-Za-z0-9.-]+$/.test(parsed.hostname)) {
+      errors.push({ line, key, message: `${key} has an invalid URL hostname` });
+    }
   } catch {
     errors.push({ line, key, message: `${key} must be a valid URL` });
   }
@@ -180,15 +224,6 @@ function validateTemplate({ key, value, line }, errors) {
   if (key !== "BLOTATO_NEWS_TEMPLATE_ID") return;
   const raw = clean(value);
   if (!raw) return;
-
-  if (raw.includes("...")) {
-    errors.push({
-      line,
-      key,
-      message: `${key} is truncated. Use the full value: ${BLOTATO_DEFAULT_TEMPLATE_PATH}`,
-    });
-    return;
-  }
 
   if (!BLOTATO_TEMPLATE_UUID_PATTERN.test(raw)) {
     errors.push({ line, key, message: `${key} must include a Blotato template UUID` });
@@ -238,7 +273,11 @@ export function validateEnvEntries(entries) {
   const errors = [];
 
   for (const entry of entries) {
-    validateNoTruncatedValue(entry, errors);
+    if (clean(entry.value).includes("...")) {
+      validateNotTruncated(entry, errors);
+      continue;
+    }
+
     validateSecretReference(entry, errors);
     validateNumber(entry, errors);
     validateBoolean(entry, errors);
