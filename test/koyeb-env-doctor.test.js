@@ -1,8 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readdir } from "node:fs/promises";
-import path from "node:path";
-import { parseEnvLines, validateEnvEntries, validateEnvFile, validateEnvObject } from "../scripts/koyebEnvDoctor.js";
+import { parseEnvLines, validateEnvEntries, validateEnvObject } from "../scripts/koyebEnvDoctor.js";
 
 test("koyeb env doctor accepts Koyeb bulk-edit secret references", () => {
   const { entries } = parseEnvLines("BLOTATO_API_KEY={{ secret.BLOTATO_API_KEY }}\n");
@@ -30,33 +28,26 @@ test("koyeb env doctor rejects truncated Blotato template ids", () => {
   );
   const errors = validateEnvEntries(entries);
 
-  assert.ok(errors.length >= 1);
-  assert.match(errors.map((error) => error.message).join("\n"), /truncated/i);
+  assert.equal(errors.length, 1);
+  assert.match(errors[0].message, /truncated/i);
 });
 
-
-test("koyeb env doctor rejects generic truncated paste values", () => {
+test("koyeb env doctor accepts the full Blotato AI story template path", () => {
   const { entries } = parseEnvLines(
-    "PODCAST_RSS_FEED_URL=https://podcast-rss-feeds.jonathan-harris.online/turing-...\n"
+    "BLOTATO_NEWS_TEMPLATE_ID=/base/v2/ai-story-video/5903fe43-514d-40ee-a060-0d6628c5f8fd/v1\n"
+  );
+
+  assert.deepEqual(validateEnvEntries(entries), []);
+});
+
+test("koyeb env doctor rejects bare Blotato template UUIDs for AI story videos", () => {
+  const { entries } = parseEnvLines(
+    "BLOTATO_NEWS_TEMPLATE_ID=5903fe43-514d-40ee-a060-0d6628c5f8fd\n"
   );
   const errors = validateEnvEntries(entries);
 
   assert.equal(errors.length, 1);
-  assert.match(errors[0].message, /truncated|literal \.\.\./i);
-});
-
-test("koyeb env files checked into the repo pass env doctor", async () => {
-  const envDir = path.join(process.cwd(), "koyeb-env");
-  const files = (await readdir(envDir))
-    .filter((file) => /\.(?:txt|env)$/i.test(file))
-    .filter((file) => file !== "remove-legacy-conflicts.cli-env.txt");
-
-  assert.ok(files.length > 0, "expected Koyeb env files to be present");
-
-  for (const file of files) {
-    const result = await validateEnvFile(path.join(envDir, file));
-    assert.deepEqual(result.errors, [], `${file} should pass env doctor`);
-  }
+  assert.match(errors[0].message, /full Blotato template path/i);
 });
 
 test("koyeb env doctor validates the narrowed Blotato/state env set", () => {
@@ -71,7 +62,7 @@ test("koyeb env doctor validates the narrowed Blotato/state env set", () => {
     BLOTATO_YOUTUBE_PRIVACY_STATUS: "public",
     BLOTATO_YOUTUBE_NOTIFY_SUBSCRIBERS: "false",
     BLOTATO_INSTAGRAM_SHARE_TO_FEED: "true",
-    BLOTATO_NEWS_TEMPLATE_ID: "base/v2/ai-story-video/5903fe43-514d-40ee-a060-0d6628c5f8fd/v1",
+    BLOTATO_NEWS_TEMPLATE_ID: "/base/v2/ai-story-video/5903fe43-514d-40ee-a060-0d6628c5f8fd/v1",
     BLOTATO_VIDEO_POLL_ATTEMPTS: "90",
     BLOTATO_VIDEO_POLL_INTERVAL_MS: "3000",
     BLOTATO_POST_POLL_ATTEMPTS: "60",

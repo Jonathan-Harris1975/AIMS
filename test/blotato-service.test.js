@@ -4,6 +4,7 @@ import http from "node:http";
 import request from "supertest";
 
 const ORIGINAL_ENV = { ...process.env };
+const AI_STORY_TEMPLATE_PATH = "/base/v2/ai-story-video/5903fe43-514d-40ee-a060-0d6628c5f8fd/v1";
 
 function restoreEnv() {
   for (const key of Object.keys(process.env)) {
@@ -104,7 +105,14 @@ const mockServer = http.createServer(async (req, res) => {
 
   if (req.method === "POST" && url.pathname === "/v2/videos/from-templates") {
     const body = await readJsonBody(req);
-    assert.ok(["tpl-ai-video", "5903fe43-514d-40ee-a060-0d6628c5f8fd"].includes(body.templateId));
+    const isPublishNowPrompt = String(body.prompt || "").includes("Create a polished faceless vertical AI news short");
+
+    if (isPublishNowPrompt) {
+      assert.equal(body.templateId, AI_STORY_TEMPLATE_PATH);
+    } else {
+      assert.equal(body.templateId, "tpl-ai-video");
+    }
+
     assert.equal(body.render, true);
     res.writeHead(201, { "content-type": "application/json" });
     res.end(JSON.stringify({ item: { id: "visual-1", status: "queueing" } }));
@@ -179,6 +187,7 @@ process.env.BLOTATO_POST_POLL_INTERVAL_MS = "1";
 process.env.BLOTATO_INSTAGRAM_ACCOUNT_ID = "acc-instagram";
 process.env.BLOTATO_YOUTUBE_ACCOUNT_ID = "acc-youtube";
 process.env.BLOTATO_DEFAULT_CHANNELS = "instagram,youtube";
+process.env.BLOTATO_NEWS_TEMPLATE_ID = "5903fe43-514d-40ee-a060-0d6628c5f8fd";
 process.env.APP_TMP_DIR = `/tmp/aims-blotato-test-${Date.now()}`;
 
 const { app } = await import(`../server.js?blotato-suite=${Date.now()}`);
@@ -203,6 +212,7 @@ test.afterEach(() => {
   process.env.BLOTATO_INSTAGRAM_ACCOUNT_ID = "acc-instagram";
   process.env.BLOTATO_YOUTUBE_ACCOUNT_ID = "acc-youtube";
   process.env.BLOTATO_DEFAULT_CHANNELS = "instagram,youtube";
+  process.env.BLOTATO_NEWS_TEMPLATE_ID = "5903fe43-514d-40ee-a060-0d6628c5f8fd";
 });
 
 test("Blotato health endpoint is public and reports configured API key", async () => {
@@ -329,6 +339,7 @@ test("Blotato publish-now endpoint is public and runs the RSS-to-Instagram/YouTu
   assert.equal(jobStatus.body.ok, true);
   assert.equal(jobStatus.body.job.status, "completed");
   assert.equal(jobStatus.body.job.result.source.article.title, "AI agents move from chat to office tasks");
+  assert.equal(jobStatus.body.job.result.templateId, AI_STORY_TEMPLATE_PATH);
   assert.deepEqual(
     jobStatus.body.job.result.publishes.map((item) => item.platform),
     ["instagram", "youtube"]
