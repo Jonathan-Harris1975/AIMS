@@ -73,7 +73,7 @@ export function isPublicBlotatoPublishPath(req) {
   const method = String(req.method || "").toUpperCase();
   const path = pathWithoutQuery(req).replace(/\/+$/, "").toLowerCase();
 
-  if (method === "POST" && path === "/blotato/shorts/news-insight/publish-now") {
+  if (method === "POST" && /^\/blotato\/shorts\/(news-insight|model-verdict|ai-at-work|reality-check|ai-playbook)\/publish-now$/.test(path)) {
     return true;
   }
 
