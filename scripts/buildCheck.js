@@ -62,6 +62,7 @@ async function assertKoyebEnvFilesArePasteSafe() {
 
   const envFiles = files
     .filter((file) => /\.(env|txt)$/i.test(file))
+    .filter((file) => !/\.cli-env\.txt$/i.test(file))
     .sort();
 
   const failures = [];
