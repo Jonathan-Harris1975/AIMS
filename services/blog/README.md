@@ -29,7 +29,7 @@ Publishes weekly AI briefing posts and daily/social blog posts from rewritten RS
 - Filter items by requested window.
 - Generate structured package through OpenRouter.
 - Run local brand validation and optional QA.
-- Generate artwork or use fallback.
+- Generate artwork, use configured fallback art, or continue publishing without blocking if artwork is unavailable.
 - Write HTML, sidecar JSON and manifest to R2 alias `blog`.
 - Publish RSS to R2 alias `blogRss`.
 - Trigger website rebuild hook.
@@ -39,7 +39,7 @@ Publishes weekly AI briefing posts and daily/social blog posts from rewritten RS
 - `BLOG_PREFIX`, `BLOG_RSS_OBJECT_KEY`, `BLOG_RSS_FEED_URL`, `BLOG_RSS_TITLE`, `BLOG_RSS_DESCRIPTION`, `BLOG_RSS_IMAGE_URL`
 - `BLOG_SOCIAL_PREFIX`, `BLOG_SOCIAL_RSS_OBJECT_KEY`, `BLOG_SOCIAL_RSS_TITLE`, `BLOG_SOCIAL_RSS_DESCRIPTION`, `BLOG_SOCIAL_FALLBACK_IMAGE_URL`, `BLOG_SOCIAL_QA_ENABLED`
 - `BLOG_SOCIAL_PUBLIC_BASE_URL`, `BLOG_SOCIAL_PUBLIC_POSTS_BASE_URL`
-- `BLOG_WEEKLY_QA_ENABLED`, `BLOG_FALLBACK_IMAGE_URL`
+- `BLOG_WEEKLY_QA_ENABLED`, `BLOG_FALLBACK_IMAGE_URL`, `BLOG_ARTWORK_BUCKET_ALIAS`
 - `SITE_BASE_URL`, `WEBSITE_REBUILD_HOOK`, `WEBSITE_REBUILD_HOOK_FALLBACK`
 - R2 aliases: `rss`, `blog`, `blogImages`, `blogRss`
 - OpenRouter route keys: `blogWeekly`, `blogSocial`
