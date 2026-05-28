@@ -113,7 +113,7 @@ export function generateFeedXML(episodesMeta) {
     link: stripQuotes(envString("PODCAST_LINK")) || "https://jonathan-harris.online/podcast/",
     description:
       envString("PODCAST_DESCRIPTION") ||
-      "A sceptical, plain-English weekly artificial intelligence podcast hosted by Jonathan Harris. Turing’s Torch separates useful signal from vendor noise, with dry British commentary on power, money, data, labour, regulation and risk.",
+      "Hosted by Jonathan Harris, Turing's Torch AI Weekly brings you cutting-edge AI innovation updates and deep dives into AI ethics. This technology podcast blends smart analysis with humor and a Gen X voice to keep you ahead of AI breakthroughs and controversies. Tune in every Friday for your essential tech insights.",
     language,
     copyright: envString("PODCAST_COPYRIGHT") || `© ${new Date().getUTCFullYear()} Jonathan Harris`,
     itunesAuthor: envString("PODCAST_AUTHOR") || "Jonathan Harris",
