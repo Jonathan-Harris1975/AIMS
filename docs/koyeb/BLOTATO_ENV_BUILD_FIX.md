@@ -5,7 +5,7 @@
 The supplied Koyeb env workbook contained a truncated Blotato template value:
 
 ```env
-BLOTATO_NEWS_TEMPLATE_ID=base/v2/ai-story-video/5903fe43-514d-40ee-a060-0d662...
+BLOTATO_NEWS_TEMPLATE_ID=/base/v2/ai-story-video/5903fe43-514d-40ee-a060-0d662...
 ```
 
 That is not a valid production value. Use the full template path:
