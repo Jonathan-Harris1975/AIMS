@@ -12,7 +12,7 @@ import {
   publishPost,
   getPostStatus,
 } from "./blotatoClient.js";
-import { buildBlotatoVisualPrompt, buildNewsInsightShortPack } from "./newsShortsService.js";
+import { buildBlotatoVideoInputs, buildBlotatoVisualPrompt, buildNewsInsightShortPack } from "./newsShortsService.js";
 import { selectRssArticleForBlotato } from "./rssArticleSource.js";
 import { info, warn } from "../../../logger.js";
 
@@ -24,8 +24,6 @@ const VIDEO_DONE_STATUSES = new Set(["done", "completed", "complete", "success"]
 const VIDEO_FAILED_STATUSES = new Set(["creation-from-template-failed", "failed", "error"]);
 const POST_DONE_STATUSES = new Set(["published", "completed", "complete", "success"]);
 const POST_FAILED_STATUSES = new Set(["failed", "error"]);
-const INSTAGRAM_HASHTAG_LIMIT = 5;
-const HASHTAG_RE = /(^|[\s([{])#[A-Za-z0-9_]+/g;
 
 function trim(value, fallback = "") {
   if (value === undefined || value === null) return fallback;
@@ -48,16 +46,7 @@ function sleep(ms) {
 
 function normaliseTemplateId(value = DEFAULT_AI_STORY_TEMPLATE_PATH) {
   const raw = trim(value, DEFAULT_AI_STORY_TEMPLATE_PATH);
-
-  if (raw === "5903fe43-514d-40ee-a060-0d6628c5f8fd") {
-    return DEFAULT_AI_STORY_TEMPLATE_PATH;
-  }
-
-  if (raw === DEFAULT_AI_STORY_TEMPLATE_PATH.slice(1)) {
-    return DEFAULT_AI_STORY_TEMPLATE_PATH;
-  }
-
-  return raw.startsWith("base/") ? `/${raw}` : raw;
+  return raw.startsWith("base/v2/") ? `/${raw}` : raw;
 }
 
 function slugPart(value = "") {
@@ -143,9 +132,10 @@ async function pollUntil({ label, run, isDone, isFailed, extractStatus, maxAttem
 
 async function createAndWaitForVideo({ templateId, pack, apiKey }) {
   const visualPrompt = buildBlotatoVisualPrompt(pack);
+  const visualInputs = buildBlotatoVideoInputs(pack);
   const visual = await createVisual({
     templateId,
-    inputs: {},
+    inputs: visualInputs,
     prompt: visualPrompt,
     render: true,
     isDraft: false,
@@ -179,7 +169,7 @@ async function createAndWaitForVideo({ templateId, pack, apiKey }) {
     throw err;
   }
 
-  return { visualId, visual, completed, mediaUrl, visualPrompt };
+  return { visualId, visual, completed, mediaUrl, visualPrompt, visualInputs };
 }
 
 async function resolveAccountId(platform, apiKey) {
@@ -223,25 +213,24 @@ function buildTarget(platform, pack) {
   return { targetType: platform };
 }
 
-function limitHashtags(text = "", max = INSTAGRAM_HASHTAG_LIMIT) {
-  let count = 0;
-  return String(text || "")
-    .replace(HASHTAG_RE, (match, prefix = "") => {
-      count += 1;
-      return count <= max ? match : prefix;
+function limitHashtags(text = "", max = 5) {
+  const source = String(text || "");
+  let seen = 0;
+  return source
+    .replace(/(^|\s)(#[\p{L}\p{N}_]+)/gu, (match, prefix, tag) => {
+      seen += 1;
+      return seen <= max ? `${prefix}${tag}` : "";
     })
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
     .replace(/[ \t]{2,}/g, " ")
-    .replace(/\s+([,.!?;:])/g, "$1")
     .trim();
 }
 
 function buildPlatformText(platform, pack) {
   if (platform === "youtube") return pack.youtubeDescription || pack.facebookCaption || pack.script;
   if (platform === "instagram") {
-    return limitHashtags(
-      pack.instagramCaption || pack.tiktokCaption || pack.facebookCaption || pack.script,
-      INSTAGRAM_HASHTAG_LIMIT
-    );
+    return limitHashtags(pack.instagramCaption || pack.tiktokCaption || pack.facebookCaption || pack.script, 5);
   }
   return pack.facebookCaption || pack.tiktokCaption || pack.script;
 }

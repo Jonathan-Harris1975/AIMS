@@ -1,8 +1,14 @@
+import { warn } from "../../../logger.js";
 import { resilientRequest } from "../../shared/utils/ai-service.js";
 import { createVisual } from "./blotatoClient.js";
-import { warn } from "../../../logger.js";
 
 const NEWS_SHORT_MAX_TOKENS = Math.max(1800, Number(process.env.BLOTATO_NEWS_SHORT_MAX_TOKENS || 2200));
+const AI_STORY_VOICE = process.env.BLOTATO_NEWS_VOICE_NAME || "Daniel (British, authoritative)";
+const AI_STORY_HIGHLIGHT = process.env.BLOTATO_NEWS_HIGHLIGHT_COLOR || "#00E5FF";
+const AI_STORY_CAPTION_POSITION = process.env.BLOTATO_NEWS_CAPTION_POSITION || "bottom";
+const AI_STORY_TRANSITION = process.env.BLOTATO_NEWS_TRANSITION || "fade";
+const AI_STORY_ASPECT_RATIO = process.env.BLOTATO_NEWS_ASPECT_RATIO || "9:16";
+const MAX_SCENES = 5;
 
 function cleanText(value = "", max = 2000) {
   const text = String(value || "")
@@ -34,16 +40,40 @@ function buildNewsShortPrompt({ article, articles, theme, durationSeconds, cta, 
 
   return {
     system: `You create short-form video packs for Jonathan Harris, an AI author and podcast host.
-Voice rules:
-- British English
-- current, sceptical, clear, and useful
-- sound like an informed human editor, not a hype account
-- no corporate filler
-- no recycled template language
-- no invented facts, quotes, statistics, dates, or claims
-- make the insight the centre of the short
-- do not use markdown fences
-- return valid JSON only`,
+
+Context:
+- Infer the useful topic from the source article.
+- Build a faceless vertical AI news short for Blotato.
+- Treat the source as the evidence floor. Do not invent facts, quotes, numbers, dates, company claims, or product details.
+
+Writing style:
+- British English.
+- Spartan and informative.
+- Clear, simple language.
+- Short sentences.
+- Active voice.
+- Practical and specific.
+- Sceptical, not cynical.
+- Human editorial judgement, not hype.
+- Use "you" and "your" when useful.
+- No emojis.
+- No semicolons.
+- No markdown fences.
+- No corporate filler.
+- No generic setup language.
+- No metaphors or clichés.
+
+Avoid these words and phrases unless they appear inside a product name or quoted source text:
+can, may, just, very, really, literally, actually, certainly, probably, basically, could, maybe, delve, embark, enlightening, esteemed, shed light, craft, crafting, imagine, realm, game-changer, unlock, discover, skyrocket, abyss, you're not alone, in a world where, revolutionize, disruptive, utilize, utilizing, dive deep, tapestry, illuminate, unveil, pivotal, enrich, intricate, elucidate, hence, furthermore, however, harness, exciting, groundbreaking, cutting-edge, remarkable, it remains to be seen, glimpse into, navigating, landscape, stark, testament, in summary, in conclusion, moreover, boost, bustling, opened up, powerful, inquiries, ever-evolving.
+
+Planning structure:
+1. Identify the specific problem or shift in the source.
+2. Explain why it matters.
+3. Show the consequence for developers, creators, businesses, or workers.
+4. Give the practical takeaway.
+5. Close with the CTA.
+
+Return valid JSON only.`,
     user: `Create one short-form AI news insight pack.
 
 Theme: ${theme}
@@ -58,22 +88,39 @@ Return exactly one JSON object with these keys:
 {
   "internalTitle": "short working title, max 80 chars",
   "angle": "one sentence explaining the editorial angle",
-  "hook": "first 2 seconds, max 18 words",
-  "script": "35 to 90 second short script in natural spoken British English",
-  "visualDirection": "specific visual plan suitable for a faceless AI/news short",
+  "hook": "first 2 seconds, max 16 words",
+  "script": "35 to 75 second spoken short in natural British English",
+  "scenes": [
+    {
+      "mediaSource": "specific AI image/video prompt for this scene, faceless, premium editorial, dark technology palette",
+      "script": "voiceover text for this scene, one or two short sentences"
+    }
+  ],
+  "visualDirection": "specific visual plan for a faceless AI/news short",
   "thumbnailText": "3 to 5 punchy words, no clickbait",
   "youtubeTitle": "YouTube Shorts title, max 70 chars",
-  "youtubeDescription": "short description with a light CTA and 3 to 5 hashtags",
-  "tiktokCaption": "caption with 4 to 6 relevant hashtags",
-  "instagramCaption": "caption with up to 5 relevant hashtags",
-  "facebookCaption": "caption suitable for Facebook Reels",
-  "qualityNotes": "one short note on why this angle should work"
+  "youtubeDescription": "short description with a light CTA and 3 to 5 hashtags, no emoji",
+  "tiktokCaption": "caption with 4 to 6 relevant hashtags, no emoji",
+  "instagramCaption": "caption with 3 to 5 relevant hashtags, no emoji",
+  "facebookCaption": "caption suitable for Facebook Reels, no emoji",
+  "qualityNotes": "one short note explaining why this angle should work"
 }
 
+Scene rules:
+- Provide 3 to 5 scenes.
+- Each scene must include a mediaSource and script.
+- Each mediaSource must describe a specific visual, not a generic instruction.
+- Use faceless editorial visuals: code, interfaces, dashboards, workflow cards, newsroom graphics, data maps, product screenshots represented abstractly.
+- Avoid gimmicky robot clichés.
+- Avoid text-heavy visuals.
+- The first scene must support the hook.
+- The final scene must support the CTA or practical takeaway.
+
 Output rules:
-- The script must avoid phrases like "game changer", "AI is changing everything", "you won't believe", and "the future is here".
+- Keep the script specific to the source.
+- Do not use phrases like "game changer", "AI is changing everything", "you won't believe", "the future is here", or "this changes everything".
 - Hashtags must be relevant to artificial intelligence, business, tools, work, podcast/news, or the article topic.
-- Instagram captions must contain no more than 5 hashtags.
+- Instagram must have no more than 5 hashtags.
 - Keep captions platform-specific rather than copy-pasted.
 - Do not add any text outside the JSON.`,
   };
@@ -111,6 +158,63 @@ function parseJsonObject(raw, label = "Blotato news short") {
   }
 }
 
+function splitSentences(value = "") {
+  return String(value || "")
+    .replace(/\s+/g, " ")
+    .split(/(?<=[.!?])\s+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function chunkSentences(sentences = [], targetCount = 4) {
+  const chunks = [];
+  const safeCount = Math.max(1, Math.min(MAX_SCENES, targetCount));
+  const chunkSize = Math.max(1, Math.ceil(sentences.length / safeCount));
+  for (let index = 0; index < sentences.length && chunks.length < MAX_SCENES; index += chunkSize) {
+    chunks.push(sentences.slice(index, index + chunkSize).join(" "));
+  }
+  return chunks.filter(Boolean);
+}
+
+function normaliseScene(scene = {}, fallbackScript = "", fallbackVisual = "") {
+  const mediaSource = cleanText(scene.mediaSource || scene.visual || scene.imagePrompt || fallbackVisual, 900);
+  const script = cleanText(scene.script || scene.voiceover || fallbackScript, 700);
+  if (!mediaSource || !script) return null;
+  return { mediaSource, script };
+}
+
+function deriveScenesFromPack(pack = {}) {
+  const scriptSentences = splitSentences(pack.script);
+  const chunks = chunkSentences(scriptSentences, scriptSentences.length >= 6 ? 5 : 4);
+  const visualBase = cleanText(pack.visualDirection, 700);
+  const title = cleanText(pack.thumbnailText || pack.internalTitle || "AI news insight", 120);
+
+  return chunks.map((chunk, index) => {
+    const phase = index === 0
+      ? "opening hook"
+      : index === chunks.length - 1
+        ? "closing takeaway"
+        : `supporting point ${index + 1}`;
+    return {
+      mediaSource: `${visualBase}. Scene ${index + 1}: ${phase}. Faceless premium editorial technology visual, dark navy and charcoal palette, clean captions, subtle motion, no robot cliché. Topic text: ${title}.`,
+      script: chunk,
+    };
+  });
+}
+
+function normaliseScenes(scenes, pack = {}) {
+  const inputScenes = Array.isArray(scenes) ? scenes : [];
+  const normalised = inputScenes
+    .slice(0, MAX_SCENES)
+    .map((scene) => normaliseScene(scene))
+    .filter(Boolean);
+
+  if (normalised.length >= 3) return normalised;
+
+  const derived = deriveScenesFromPack(pack);
+  return derived.length ? derived : normalised;
+}
+
 function normalisePack(pack = {}) {
   const required = [
     "internalTitle",
@@ -138,83 +242,85 @@ function normalisePack(pack = {}) {
     throw err;
   }
 
+  output.scenes = normaliseScenes(pack.scenes, output);
+  if (!output.scenes.length) {
+    const err = new Error("Model response did not include usable scenes and scenes could not be derived");
+    err.statusCode = 502;
+    throw err;
+  }
+
   return output;
 }
 
 export function buildBlotatoVisualPrompt(pack = {}) {
   return [
     `Create a polished faceless vertical AI news short for Jonathan Harris.`,
+    `Use the supplied scenes as the source of truth.`,
     `Thumbnail text: ${pack.thumbnailText}`,
     `Opening hook: ${pack.hook}`,
+    `Editorial angle: ${pack.angle}`,
     `Script: ${pack.script}`,
     `Visual direction: ${pack.visualDirection}`,
     `Style: premium editorial, dark technology palette, clean captions, no gimmicky robot clichés, British AI news commentary tone.`,
   ].join("\n");
 }
 
-function buildRepairPrompt({ prompt, raw, parseError }) {
-  const rawPreview = String(raw || "").slice(0, 1200);
+export function buildBlotatoVideoInputs(pack = {}) {
+  const scenes = normaliseScenes(pack.scenes, pack);
   return {
-    system: `${prompt.system}
-You are repairing a previous invalid response. Return one complete, valid JSON object only.`,
-    user: `The previous response failed JSON parsing: ${parseError?.message || "invalid JSON"}
-
-Previous response preview:
-${rawPreview}
-
-Recreate the requested JSON object from the same source article context below. Use exactly the requested keys. Do not include markdown fences, comments, or extra text.
-
-${prompt.user}`,
+    scenes,
+    voiceName: AI_STORY_VOICE,
+    captionPosition: AI_STORY_CAPTION_POSITION,
+    highlightColor: AI_STORY_HIGHLIGHT,
+    transition: AI_STORY_TRANSITION,
+    aspectRatio: AI_STORY_ASPECT_RATIO,
+    animateAiImages: true,
+    trimToVoiceover: true,
   };
 }
 
-async function requestNewsShortPack(prompt, { sessionId, temperature = 0.55 } = {}) {
+async function requestNewsShortJson(prompt, { repairRaw } = {}) {
+  const messages = repairRaw
+    ? [
+        { role: "system", content: "Repair malformed JSON. Return valid JSON only. Do not add commentary." },
+        { role: "user", content: `The following model output was meant to be the Blotato news short JSON object. Repair only the JSON syntax. Preserve the same keys and meaning.\n\n${repairRaw}` },
+      ]
+    : [
+        { role: "system", content: prompt.system },
+        { role: "user", content: prompt.user },
+      ];
+
   return resilientRequest("blotatoNewsShort", {
-    sessionId,
-    messages: [
-      { role: "system", content: prompt.system },
-      { role: "user", content: prompt.user },
-    ],
+    sessionId: `blotato-news-${Date.now()}`,
+    messages,
     max_tokens: NEWS_SHORT_MAX_TOKENS,
-    temperature,
+    temperature: repairRaw ? 0.1 : 0.55,
   });
 }
 
 export async function buildNewsInsightShortPack(options = {}) {
   const prompt = buildNewsShortPrompt(options);
-  const sessionId = `blotato-news-${Date.now()}`;
-  const raw = await requestNewsShortPack(prompt, { sessionId });
+  const raw = await requestNewsShortJson(prompt);
 
   try {
     return normalisePack(parseJsonObject(raw));
-  } catch (firstError) {
+  } catch (error) {
     warn("blotato.news_short.json_retry", {
-      error: firstError?.message || String(firstError),
-      rawPreview: firstError?.rawPreview,
+      error: error?.message || String(error),
+      rawPreview: error?.rawPreview || String(raw || "").slice(0, 300),
     });
-
-    const repairPrompt = buildRepairPrompt({ prompt, raw, parseError: firstError });
-    const repairRaw = await requestNewsShortPack(repairPrompt, {
-      sessionId: `${sessionId}-repair`,
-      temperature: 0.2,
-    });
-
-    try {
-      return normalisePack(parseJsonObject(repairRaw));
-    } catch (repairError) {
-      repairError.message = `${repairError.message}; repair attempt also failed after initial error: ${firstError.message}`;
-      repairError.firstRawPreview = firstError?.rawPreview;
-      throw repairError;
-    }
+    const repaired = await requestNewsShortJson(prompt, { repairRaw: raw });
+    return normalisePack(parseJsonObject(repaired, "repaired Blotato news short"));
   }
 }
 
 export async function buildOrCreateNewsInsightShort(options = {}) {
   const pack = await buildNewsInsightShortPack(options);
   const visualPrompt = buildBlotatoVisualPrompt(pack);
+  const visualInputs = buildBlotatoVideoInputs(pack);
   const visualRequest = {
     templateId: options.templateId,
-    inputs: options.inputs || {},
+    inputs: options.inputs || visualInputs,
     prompt: visualPrompt,
     render: options.render ?? true,
     isDraft: options.isDraft ?? false,
@@ -229,6 +335,7 @@ export async function buildOrCreateNewsInsightShort(options = {}) {
       createdVisual: false,
       pack,
       visualPrompt,
+      visualInputs,
       visualRequest: options.templateId ? visualRequest : null,
     };
   }
@@ -242,6 +349,7 @@ export async function buildOrCreateNewsInsightShort(options = {}) {
     createdVisual: true,
     pack,
     visualPrompt,
+    visualInputs,
     visualRequest,
     visual,
   };
