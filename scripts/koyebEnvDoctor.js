@@ -8,7 +8,7 @@ const LOOSE_SECRET_REFERENCE_PATTERN = /^\{\{\s*secret\.([^}]+?)\s*\}\}$/;
 const BLOTATO_TEMPLATE_UUID_PATTERN =
   /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
 const BLOTATO_DEFAULT_TEMPLATE_PATH =
-  "base/v2/ai-story-video/5903fe43-514d-40ee-a060-0d6628c5f8fd/v1";
+  "/base/v2/ai-story-video/5903fe43-514d-40ee-a060-0d6628c5f8fd/v1";
 
 const NUMERIC_ENVS = new Set([
   "PHASE3_AUTOPUBLISH_MIN_SCORE",
@@ -69,22 +69,6 @@ export function parseEnvLines(raw) {
       const lineNumber = index + 1;
       if (isCommentOrBlank(line)) return;
 
-      if (line.trim().startsWith("!")) {
-        const key = line.trim().slice(1).trim();
-        entries.push({ line: lineNumber, key, value: "", raw: line, deleteDirective: true });
-
-        if (!ENV_KEY_PATTERN.test(key)) {
-          errors.push({ line: lineNumber, key, message: `Invalid env delete key: ${key}` });
-        }
-
-        if (seen.has(key)) {
-          errors.push({ line: lineNumber, key, message: `Duplicate env key also seen on line ${seen.get(key)}` });
-        } else {
-          seen.set(key, lineNumber);
-        }
-        return;
-      }
-
       const eqIndex = line.indexOf("=");
       if (eqIndex < 1) {
         errors.push({ line: lineNumber, key: null, message: "Env line must use KEY=VALUE format" });
@@ -107,18 +91,6 @@ export function parseEnvLines(raw) {
     });
 
   return { entries, errors };
-}
-
-function validateNoLiteralEllipsis({ key, value, line }, errors) {
-  const raw = clean(value);
-  if (!raw.includes("...")) return;
-
-  errors.push({
-    line,
-    key,
-    message:
-      `${key} appears truncated. Do not paste literal ... into Koyeb; keep the existing value or supply the verified full value.`,
-  });
 }
 
 function validateSecretReference({ key, value, line }, errors) {
@@ -182,11 +154,25 @@ function validateTemplate({ key, value, line }, errors) {
   if (!raw) return;
 
   if (raw.includes("...")) {
+    errors.push({
+      line,
+      key,
+      message: `${key} is truncated. Use the full value: ${BLOTATO_DEFAULT_TEMPLATE_PATH}`,
+    });
     return;
   }
 
   if (!BLOTATO_TEMPLATE_UUID_PATTERN.test(raw)) {
     errors.push({ line, key, message: `${key} must include a Blotato template UUID` });
+    return;
+  }
+
+  if (!raw.startsWith("/base/v2/")) {
+    errors.push({
+      line,
+      key,
+      message: `${key} must use the full Blotato template path, for example ${BLOTATO_DEFAULT_TEMPLATE_PATH}`,
+    });
   }
 }
 
@@ -224,8 +210,6 @@ export function validateEnvEntries(entries) {
   const errors = [];
 
   for (const entry of entries) {
-    if (entry.deleteDirective) continue;
-    validateNoLiteralEllipsis(entry, errors);
     validateSecretReference(entry, errors);
     validateNumber(entry, errors);
     validateBoolean(entry, errors);
