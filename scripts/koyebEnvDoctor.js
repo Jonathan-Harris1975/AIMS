@@ -21,6 +21,10 @@ const NUMERIC_ENVS = new Set([
   "BLOTATO_POST_POLL_INTERVAL_MS",
   "BLOTATO_TIMEOUT_MS",
   "BLOTATO_NEWS_SHORT_MAX_TOKENS",
+  "BLOTATO_FACEBOOK_PAGE_ID",
+  "BLOTATO_FACEBOOK_ACCOUNT_ID",
+  "BLOTATO_TIKTOK_ACCOUNT_ID",
+  "BLOTATO_NEWS_DURATION_SECONDS",
 ]);
 
 const POSITIVE_INTEGER_ENVS = new Set([
@@ -33,6 +37,10 @@ const POSITIVE_INTEGER_ENVS = new Set([
   "BLOTATO_POST_POLL_INTERVAL_MS",
   "BLOTATO_TIMEOUT_MS",
   "BLOTATO_NEWS_SHORT_MAX_TOKENS",
+  "BLOTATO_FACEBOOK_PAGE_ID",
+  "BLOTATO_FACEBOOK_ACCOUNT_ID",
+  "BLOTATO_TIKTOK_ACCOUNT_ID",
+  "BLOTATO_NEWS_DURATION_SECONDS",
 ]);
 
 const BOOLEAN_ENVS = new Set([
@@ -123,6 +131,10 @@ function validateNumber({ key, value, line }, errors) {
 
   if (key === "PHASE3_AUTOPUBLISH_MIN_SCORE" && (number < 0 || number > 100)) {
     errors.push({ line, key, message: `${key} must be between 0 and 100` });
+  }
+
+  if (key === "BLOTATO_NEWS_DURATION_SECONDS" && (number < 30 || number > 90)) {
+    errors.push({ line, key, message: `${key} must be between 30 and 90` });
   }
 }
 
