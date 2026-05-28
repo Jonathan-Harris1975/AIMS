@@ -1,16 +1,11 @@
-# CHANGES
-
-## services/blotato/utils/autoPublishService.js
-- Added a publish-time Instagram hashtag limiter.
-- Instagram generated captions are now clamped to 5 hashtags before calling Blotato `/v2/posts`.
-- YouTube, TikTok, Facebook and manual visual routes are left unchanged.
+# AIMS Blotato Runtime JSON Fix
 
 ## services/blotato/utils/newsShortsService.js
-- Updated the Blotato news-short prompt so `instagramCaption` asks for no more than 5 hashtags.
-- Added an explicit output rule matching Instagram's 5-hashtag ceiling.
+- Removed the Blotato news-short request's strict `response_format` payload. Production logs showed OpenRouter returning a 404 for the standard provider because no endpoint could handle the requested parameters.
+- Added one controlled JSON repair retry when the model response is malformed. The retry reuses the same source article context, lowers temperature, and still fails loudly if the repaired output is invalid.
+- Added a warning log `blotato.news_short.json_retry` with a short raw preview for operational diagnosis.
 
 ## test/blotato-service.test.js
-- Added regression coverage proving the auto publish flow sends exactly 5 Instagram hashtags and drops the sixth generated tag.
-
-## Safety
-- No route names, payload shapes, env names, account ids, template ids, storage paths, or scheduling behaviour were changed.
+- Added coverage proving Blotato news-short generation does not send `response_format` to OpenRouter.
+- Added coverage proving malformed model JSON is retried once and then normalised into the expected short-pack contract.
+- Preserved existing Instagram 5-hashtag protection and publish-now coverage.
