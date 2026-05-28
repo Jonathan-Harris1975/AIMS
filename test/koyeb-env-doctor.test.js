@@ -28,19 +28,25 @@ test("koyeb env doctor rejects truncated Blotato template ids", () => {
   );
   const errors = validateEnvEntries(entries);
 
-  assert.equal(errors.length, 2);
-  assert.match(errors.map((error) => error.message).join("\n"), /truncated/i);
-  assert.match(errors.map((error) => error.message).join("\n"), /truncation marker/i);
+  assert.equal(errors.length, 1);
+  assert.match(errors[0].message, /truncated/i);
 });
 
-test("koyeb env doctor rejects any literal ellipsis-truncated value", () => {
-  const { entries } = parseEnvLines(
-    "R2_PUBLIC_BASE_URL_BLOG_IMAGES=https://pub-0990b7b0871040f8ac0b8c7f91f6c2b9.r...\n"
-  );
+
+test("koyeb env doctor rejects generic truncated env values", () => {
+  const { entries } = parseEnvLines("PODCAST_RSS_FEED_URL=https://podcast-rss-feeds.jonathan-harris.online/turing-...\n");
   const errors = validateEnvEntries(entries);
 
   assert.equal(errors.length, 1);
-  assert.match(errors[0].message, /truncation marker/i);
+  assert.match(errors[0].message, /truncated/i);
+});
+
+test("koyeb env doctor rejects malformed URL hostnames", () => {
+  const { entries } = parseEnvLines("R2_PUBLIC_BASE_URL_META_SYSTEM=https://pub-f1af4f)6cf4c14d58abaf43112176431b.r2.dev\n");
+  const errors = validateEnvEntries(entries);
+
+  assert.equal(errors.length, 1);
+  assert.match(errors[0].message, /invalid URL hostname/i);
 });
 
 test("koyeb env doctor validates the narrowed Blotato/state env set", () => {
@@ -66,7 +72,6 @@ test("koyeb env doctor validates the narrowed Blotato/state env set", () => {
     BLOTATO_API_BASE: "https://backend.blotato.com/v2",
     BLOTATO_TIMEOUT_MS: "30000",
     BLOTATO_NEWS_SHORT_MAX_TOKENS: "2200",
-    BLOTATO_NEWS_DURATION_SECONDS: "45",
     BLOTATO_NEWS_RSS_URL: "https://ai-news.jonathan-harris.online/feed.xml",
     BLOTATO_RSS_PREFER_R2: "true",
     BLOTATO_RSS_BUCKET_ALIAS: "rss",
