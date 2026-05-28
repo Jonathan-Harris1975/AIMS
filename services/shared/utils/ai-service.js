@@ -7,8 +7,13 @@ import aiConfig from "./ai-config.js";
 import { safeRouteLog } from "../../../logger.js";
 import { info, error as logError } from "../../../logger.js";
 
-const OPENROUTER_BASE = process.env.OPENROUTER_BASE_URL || process.env.OPENROUTER_API_BASE || "https://openrouter.ai/api/v1";
-const ENDPOINT = `${OPENROUTER_BASE.replace(/\/+$/, "")}/chat/completions`;
+function getOpenRouterBaseUrl() {
+  return process.env.OPENROUTER_BASE_URL || process.env.OPENROUTER_API_BASE || "https://openrouter.ai/api/v1";
+}
+
+function getOpenRouterChatEndpoint() {
+  return `${getOpenRouterBaseUrl().replace(/\/+$/, "")}/chat/completions`;
+}
 const DEFAULT_MAX_TOKENS = Number(process.env.AI_MAX_TOKENS || 4096);
 const DEFAULT_TEMPERATURE = Number(process.env.AI_TEMPERATURE ?? aiConfig?.commonParams?.temperature ?? 0.7);
 const DEFAULT_TIMEOUT_MS = Number(process.env.AI_TIMEOUT ?? aiConfig?.commonParams?.timeout ?? 90000);
@@ -217,7 +222,7 @@ async function callOpenRouter({ providerId, model, apiKey, messages, max_tokens,
   const timeout = setTimeout(() => controller.abort(), effectiveTimeoutMs);
   const startedAt = Date.now();
   try {
-    const res = await fetch(ENDPOINT, { method: "POST", headers: reqHeaders, body: JSON.stringify(payload), signal: controller.signal });
+    const res = await fetch(getOpenRouterChatEndpoint(), { method: "POST", headers: reqHeaders, body: JSON.stringify(payload), signal: controller.signal });
     if (!res.ok) {
       const text = await res.text().catch(() => "");
       throw makeOpenRouterError(res.status, text, providerId);
