@@ -36,6 +36,26 @@ function countHashtags(value = "") {
   return String(value || "").match(/(^|[\s([{])#[A-Za-z0-9_]+/g)?.length || 0;
 }
 
+let malformedJsonRetryAttempts = 0;
+
+function makeNewsShortPack(overrides = {}) {
+  return {
+    internalTitle: "Agents move into admin",
+    angle: "The useful story is workflow delegation, not another shiny demo.",
+    hook: "AI agents are moving from chat to chores.",
+    script: "AI agents are moving from chat to chores. The important part is not the demo theatre. It is that teams are starting to hand over repeatable admin, research, drafting, routing and checking tasks. That does not remove judgement. It moves judgement to the design of the workflow. The winners will not be people who ask better one-off questions. They will be the ones who build better systems around the tools.",
+    visualDirection: "Dark editorial AI newsroom, task cards moving through a clean workflow, captions emphasising chores, workflow and judgement.",
+    thumbnailText: "AI Gets Chores",
+    youtubeTitle: "AI agents are moving from chat to chores",
+    youtubeDescription: "AI agents are becoming workflow tools, not magic. #ArtificialIntelligence #AINews #AIAgents",
+    tiktokCaption: "AI agents are getting practical. Less magic, more workflow. #ArtificialIntelligence #AINews #AIAgents #FutureOfWork",
+    instagramCaption: "The useful AI agent story is not the demo. It is the workflow shift. #ArtificialIntelligence #AINews #AIAgents #FutureOfWork #Automation #TechCommentary",
+    facebookCaption: "AI agents are becoming less about chat and more about repeatable work. That changes how teams design workflows.",
+    qualityNotes: "The angle is practical and avoids overclaiming.",
+    ...overrides,
+  };
+}
+
 const mockServer = http.createServer(async (req, res) => {
   const url = new URL(req.url, "http://127.0.0.1");
 
@@ -58,25 +78,24 @@ const mockServer = http.createServer(async (req, res) => {
 
   if (req.method === "POST" && url.pathname === "/chat/completions") {
     const payload = await readJsonBody(req);
-    assert.ok(payload.messages.some((message) => String(message.content || "").includes("Create one short-form AI news insight pack")));
+    const combinedMessages = payload.messages.map((message) => String(message.content || "")).join("\n");
+    assert.ok(combinedMessages.includes("Create one short-form AI news insight pack"));
+    assert.equal(payload.response_format, undefined);
+
+    if (combinedMessages.includes("Malformed retry test") && malformedJsonRetryAttempts === 0) {
+      malformedJsonRetryAttempts += 1;
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({
+        choices: [{ message: { content: '{"internalTitle":"Broken","angle":"unterminated' } }],
+      }));
+      return;
+    }
+
     res.writeHead(200, { "content-type": "application/json" });
     res.end(JSON.stringify({
       choices: [{
         message: {
-          content: JSON.stringify({
-            internalTitle: "Agents move into admin",
-            angle: "The useful story is workflow delegation, not another shiny demo.",
-            hook: "AI agents are moving from chat to chores.",
-            script: "AI agents are moving from chat to chores. The important part is not the demo theatre. It is that teams are starting to hand over repeatable admin, research, drafting, routing and checking tasks. That does not remove judgement. It moves judgement to the design of the workflow. The winners will not be people who ask better one-off questions. They will be the ones who build better systems around the tools.",
-            visualDirection: "Dark editorial AI newsroom, task cards moving through a clean workflow, captions emphasising chores, workflow and judgement.",
-            thumbnailText: "AI Gets Chores",
-            youtubeTitle: "AI agents are moving from chat to chores",
-            youtubeDescription: "AI agents are becoming workflow tools, not magic. #ArtificialIntelligence #AINews #AIAgents",
-            tiktokCaption: "AI agents are getting practical. Less magic, more workflow. #ArtificialIntelligence #AINews #AIAgents #FutureOfWork",
-            instagramCaption: "The useful AI agent story is not the demo. It is the workflow shift. #ArtificialIntelligence #AINews #AIAgents #FutureOfWork #Automation #TechCommentary",
-            facebookCaption: "AI agents are becoming less about chat and more about repeatable work. That changes how teams design workflows.",
-            qualityNotes: "The angle is practical and avoids overclaiming.",
-          }),
+          content: JSON.stringify(makeNewsShortPack()),
         },
       }],
     }));
@@ -206,6 +225,7 @@ test.after(async () => {
 });
 
 test.afterEach(() => {
+  malformedJsonRetryAttempts = 0;
   process.env.Blotato_API_key = "test-blotato-key";
   process.env.BLOTATO_API_BASE = `${mockBase}/v2`;
   process.env.BLOTATO_NEWS_RSS_URL = `${mockBase}/feed.xml`;
@@ -350,4 +370,25 @@ test("Blotato publish-now endpoint is public and runs the RSS-to-Instagram/YouTu
     jobStatus.body.job.result.publishes.map((item) => item.platform),
     ["instagram", "youtube"]
   );
+});
+
+test("Blotato news insight route retries once after malformed model JSON", async () => {
+  const response = await request(app)
+    .post("/blotato/shorts/news-insight")
+    .set(auth)
+    .send({
+      dryRun: true,
+      theme: "what-it-means",
+      article: {
+        title: "Malformed retry test",
+        summary: "The first model response is intentionally malformed in the test server.",
+        link: "https://example.com/malformed-retry",
+      },
+      templateId: "tpl-ai-video",
+    });
+
+  assert.equal(response.status, 200);
+  assert.equal(response.body.ok, true);
+  assert.equal(malformedJsonRetryAttempts, 1);
+  assert.match(response.body.pack.script, /workflow/i);
 });
