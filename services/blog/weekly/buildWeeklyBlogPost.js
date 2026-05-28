@@ -271,6 +271,7 @@ async function resolveBlogArtwork({ sessionId, imagePrompt, week }) {
       imageUrl: art.publicUrl,
       imageStatus: "generated",
       imageError: null,
+      imageBucketKey: art.bucketKey || null,
     };
   }
 
@@ -289,10 +290,23 @@ async function resolveBlogArtwork({ sessionId, imagePrompt, week }) {
       imageUrl: fallbackImageUrl,
       imageStatus: "fallback",
       imageError,
+      imageBucketKey: null,
     };
   }
 
-  throw new Error(`Blog artwork failed and no BLOG_FALLBACK_IMAGE_URL is configured: ${imageError}`);
+  warn("blog.weekly.image.unavailable", {
+    week,
+    sessionId,
+    error: imageError,
+    reason: "artwork-failed-no-fallback-configured",
+  });
+
+  return {
+    imageUrl: "",
+    imageStatus: "unavailable",
+    imageError,
+    imageBucketKey: null,
+  };
 }
 
 async function quarantineWeeklyPost({ gate, week, weeklyPackage, cleanedSources, publishedObjects, context }) {
@@ -551,6 +565,7 @@ export async function buildWeeklyBlogPost({ days, weekId } = {}) {
       postMetaKey: `${dir}/post.json`,
       manifestKey: `${prefix}/posts.json`,
       rssFeedKey: process.env.BLOG_RSS_OBJECT_KEY || `${prefix}/feed.xml`,
+      imageBucketKey: artwork.imageBucketKey,
     };
 
     const phase4Gate = runPhase4AutonomousContentGate({
@@ -582,6 +597,7 @@ export async function buildWeeklyBlogPost({ days, weekId } = {}) {
       ...postEntry,
       image_generation_status: artwork.imageStatus,
       image_generation_error: artwork.imageError,
+      image_bucket_key: artwork.imageBucketKey,
       days: window.days,
       window: {
         start: window.start.toISOString(),
@@ -627,6 +643,7 @@ export async function buildWeeklyBlogPost({ days, weekId } = {}) {
       imageUrl,
       imageStatus: artwork.imageStatus,
       imageError: artwork.imageError,
+      imageBucketKey: artwork.imageBucketKey,
       blogHubUrl,
       weeklyArchiveUrl,
       rssFeedUrl: rss.feedUrl,
