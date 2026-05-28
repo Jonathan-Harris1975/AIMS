@@ -1,31 +1,22 @@
-# Omitted unresolved truncated env values
+# Previously omitted truncated AIMS env values — resolved
 
-These keys were removed from the paste-ready AIMS env blocks because the supplied source value contained a literal three-dot truncation marker. Do not paste truncated values into Koyeb. Keep the existing Koyeb value or replace it only with a verified full value.
+The 18 workbook entries that previously contained `...` truncation markers have now been reconciled into the repo env handoff files.
 
-## Count impact
+Updated files:
 
-- Spreadsheet `AIMS_Env`: 254 unique keys.
-- Repo `aims.bulk-env.canonical.txt`: 245 unique keys because 14 unresolved truncated values are omitted and 5 repo-only service keys are retained.
-- Spreadsheet `AIMS_Bulk_SAFE_NO_GOOGLE`: 253 unique keys.
-- Repo `aims.bulk-env.safe-no-google-private-key.txt`: 244 unique keys because the same 14 unresolved truncated values and `GOOGLE_PRIVATE_KEY` are omitted, while 5 repo-only service keys are retained.
+- `koyeb-env/aims.bulk-env.canonical.txt`
+- `koyeb-env/aims.bulk-env.safe-no-google-private-key.txt`
+- `koyeb-env/repo_aims.bulk-env.canonical.txt`
+- `koyeb-env/repo_aims.bulk-env.safe-no-google-private-key.txt`
+- `koyeb-env/workbook_aims_canonical.env`
+- `koyeb-env/workbook_aims_safe.env`
+- `env.template`
+- `config/production.defaults.env`
 
-## Omitted keys
+Resolution notes:
 
-- `BLOG_FALLBACK_IMAGE_URL`
-- `BLOG_SOCIAL_FALLBACK_IMAGE_URL`
-- `GOOGLE_SHEET_ID`
-- `PODCAST_FALLBACK_IMAGE_URL`
-- `PODCAST_FUNDING_TEXT`
-- `PODCAST_INTRO_URL`
-- `PODCAST_OUTRO_URL`
-- `PODCAST_RSS_FEED_URL`
-- `R2_PUBLIC_BASE_URL_BLOG_IMAGES`
-- `R2_PUBLIC_BASE_URL_EDITED_AUDIO`
-- `R2_PUBLIC_BASE_URL_META_SYSTEM`
-- `R2_PUBLIC_BASE_URL_TRANSCRIPT`
-- `R2_PUBLIC_BASE_URL_TRANSCRIPT_HTML`
-- `RSS_FEED_DESCRIPTION`
+- The corrected workbook supplied full values for the original 16 omitted AIMS env keys plus the 2 social-blog values already present locally.
+- `R2_PUBLIC_BASE_URL_META_SYSTEM` contained a stray `)` in the corrected workbook value. The repo uses the original verified prefix from the Koyeb master workbook and the completed `.r2.dev` suffix: `https://pub-f1af4f6cf4c14d58abaf43112176431b.r2.dev`.
+- `scripts/koyebEnvDoctor.js` now blocks literal `...` truncation markers in any env value, not just Blotato template IDs.
 
-Known safe blog/social-blog defaults have been restored in the repo where possible. `R2_PUBLIC_BASE_URL_BLOG_IMAGES` remains omitted until the full public bucket URL is verified; the blog artwork code falls back to the public `blog` bucket so this omission no longer blocks post publication.
-
-See `koyeb-env/AIMS_ENV_RECONCILIATION.md` for the full reconciliation and safe deletion list.
+This file can be deleted after the corrected env files have been copied into Koyeb and verified.
