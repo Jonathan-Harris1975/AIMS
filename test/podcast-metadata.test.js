@@ -73,7 +73,7 @@ test("podcast RSS channel defaults are branded, hosted, and non-generic", () => 
     ]);
 
     assert.match(xml, /<title>Turing’s Torch: Artificial Intelligence Weekly<\/title>/);
-    assert.match(xml, /hosted by Jonathan Harris/);
+    assert.match(xml, /Hosted by Jonathan Harris/);
     assert.match(xml, /<itunes:author>Jonathan Harris<\/itunes:author>/);
     assert.match(xml, /<itunes:duration>45:00<\/itunes:duration>/);
     assert.doesNotMatch(xml, /<title>Podcast<\/title>/);
