@@ -34,8 +34,68 @@ function applyBaseEnv() {
   process.env.ONEUP_SATURDAY_TIME = "10:30";
 }
 
+const scheduledRequests = [];
+
 const mockServer = http.createServer(async (req, res) => {
-  if (req.method !== "POST" || req.url !== "/chat/completions") {
+  const url = new URL(req.url, "http://127.0.0.1");
+
+  if (req.method === "GET" && url.pathname === "/listcategory") {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({
+      message: "OK",
+      error: false,
+      data: [
+        { id: 1, category_name: "General", isPaused: 0 },
+        { id: 2, category_name: "Ebooks", isPaused: 0 },
+      ],
+    }));
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/listcategoryaccount") {
+    const categoryId = url.searchParams.get("category_id");
+    const data = categoryId === "1"
+      ? [
+          { category_id: 1, social_network_name: "Jonathan Harris", social_network_id: "fb-page-1", social_network_type: "Facebook" },
+          { category_id: 1, social_network_name: "AI Book Shelf", social_network_id: "ig-account-1", social_network_type: "Instagram" },
+        ]
+      : [
+          { category_id: 2, social_network_name: "AI Book Shelf", social_network_id: "ig-account-1", social_network_type: "Instagram" },
+        ];
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({ message: "OK", error: false, data }));
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/listsocialaccounts") {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({
+      message: "OK",
+      error: false,
+      data: [
+        { username: "Jonathan Harris", social_account_id: "fb-page-1", social_network_type: "Facebook", is_expired: 0, need_refresh: false },
+      ],
+    }));
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/getscheduledposts") {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({ message: "OK", error: false, data: [] }));
+    return;
+  }
+
+  if (req.method === "POST" && ["/scheduleimagepost", "/scheduletextpost"].includes(url.pathname)) {
+    let body = "";
+    for await (const chunk of req) body += chunk;
+    const params = new URLSearchParams(body);
+    scheduledRequests.push({ endpoint: url.pathname, body: Object.fromEntries(params.entries()) });
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({ message: "1 new Posts Scheduled.", error: false, data: [] }));
+    return;
+  }
+
+  if (req.method !== "POST" || url.pathname !== "/chat/completions") {
     res.writeHead(404, { "content-type": "application/json" });
     res.end(JSON.stringify({ error: "not found" }));
     return;
@@ -99,6 +159,7 @@ test.after(async () => {
 });
 
 test.afterEach(() => {
+  scheduledRequests.length = 0;
   restoreEnv();
 });
 
@@ -259,6 +320,65 @@ test("buildAndScheduleEbookWeekly keeps one featured book, appends scheduler has
     assert.doesNotMatch(post.content, /#ModelNoise/);
     assert.doesNotMatch(post.firstComment, /#ArtificialIntelligence|#AIBooks|#AIExplained|#JonathanHarris/);
   }
+});
+
+
+
+test("OneUp social network IDs are normalised for API scheduling", async () => {
+  const mod = await import(`../services/oneup/utils/config.js?oneup-config=${Date.now()}`);
+
+  assert.equal(mod.normaliseOneUpSocialNetworkId("ALL"), "ALL");
+  assert.equal(mod.normaliseOneUpSocialNetworkId("fb-page-1"), '["fb-page-1"]');
+  assert.equal(mod.normaliseOneUpSocialNetworkId("fb-page-1,ig-account-1"), '["fb-page-1","ig-account-1"]');
+  assert.equal(mod.normaliseOneUpSocialNetworkId('["fb-page-1","ig-account-1"]'), '["fb-page-1","ig-account-1"]');
+});
+
+test("buildAndScheduleDailyLane validates Facebook targeting before live scheduling", async () => {
+  restoreEnv();
+  applyBaseEnv();
+  process.env.OPENROUTER_API_BASE = mockBase;
+  process.env.ONEUP_API_BASE = mockBase;
+  process.env.ONEUP_API_KEY = "oneup-key";
+  process.env.ONEUP_REQUIRED_NETWORK_TYPES = "Facebook";
+  process.env.ONEUP_VALIDATE_TARGET_ACCOUNTS = "true";
+
+  const mod = await import(`../services/oneup/utils/socialScheduler.js?oneup-live-fb=${Date.now()}`);
+  const result = await mod.buildAndScheduleDailyLane("monday", {
+    publishDate: "2026-04-13",
+    categoryName: "General",
+    socialNetworkId: "fb-page-1",
+    force: true,
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.scheduled, true);
+  assert.equal(result.targeting.ok, true);
+  assert.equal(result.targeting.targetedAccounts[0].social_network_type, "Facebook");
+  assert.equal(scheduledRequests.at(-1).body.social_network_id, '["fb-page-1"]');
+});
+
+test("buildAndScheduleDailyLane fails loudly when required Facebook targeting is missing", async () => {
+  restoreEnv();
+  applyBaseEnv();
+  process.env.OPENROUTER_API_BASE = mockBase;
+  process.env.ONEUP_API_BASE = mockBase;
+  process.env.ONEUP_API_KEY = "oneup-key";
+  process.env.ONEUP_REQUIRED_NETWORK_TYPES = "Facebook";
+  process.env.ONEUP_VALIDATE_TARGET_ACCOUNTS = "true";
+
+  const mod = await import(`../services/oneup/utils/socialScheduler.js?oneup-missing-fb=${Date.now()}`);
+
+  await assert.rejects(
+    () => mod.buildAndScheduleDailyLane("monday", {
+      publishDate: "2026-04-13",
+      categoryName: "Ebooks",
+      socialNetworkId: "ALL",
+      force: true,
+    }),
+    /OneUp target setup failed.*Facebook/
+  );
+
+  assert.equal(scheduledRequests.length, 0);
 });
 
 test("Tuesday lane uses the updated educational hashtag set", async () => {
