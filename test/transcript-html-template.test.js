@@ -16,6 +16,8 @@ test('generateTranscriptHtml uses on-brand header, governed scripts, and square 
       episodePageUrl: 'https://jonathan-harris.online/podcast/episodes/openai-four-day-week-ai-governance-and-memory-problems/',
       transcriptHtmlUrl: 'https://jonathan-harris.online/transcripts/TT-2026-04-10.html',
       transcriptTextUrl: 'https://transcripts.jonathan-harris.online/TT-2026-04-10.txt',
+      plannedDurationSeconds: 1800,
+      keywords: ['ai governance', 'artificial intelligence', 'ai podcast'],
     },
     'https://jonathan-harris.online/transcripts'
   );
@@ -30,6 +32,10 @@ test('generateTranscriptHtml uses on-brand header, governed scripts, and square 
   assert.match(html, /data-jh-header-reveal-anchor/);
   assert.match(html, /Browse Books/);
   assert.match(html, /Full Episode Transcript/);
+  assert.match(html, /<script type="application\/ld\+json">/);
+  assert.match(html, /"@type": "PodcastEpisode"/);
+  assert.match(html, /"contentUrl": "https:\/\/pub.example.com\/TT-2026-04-10.mp3"/);
+  assert.match(html, /<meta name="keywords" content="ai governance, artificial intelligence, ai podcast"\/>/);
 });
 
 

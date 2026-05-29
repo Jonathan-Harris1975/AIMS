@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { calculateDuration } from "../services/script/utils/durationCalculator.js";
-import { getTitleDescriptionPrompt, __testing as metadataTesting } from "../services/script/utils/podcastHelper.js";
+import { getTitleDescriptionPrompt, getSEOKeywordsPrompt, __testing as metadataTesting } from "../services/script/utils/podcastHelper.js";
 import { generateFeedXML } from "../services/rss-feed-podcast/generateFeed.js";
 
 const sampleMain = `
@@ -45,6 +45,42 @@ test("metadata prompt forbids generic titles and scales description length by ru
   assert.match(prompt, /Planned episode length: 30 minutes/);
   assert.match(prompt, /Description: 300-560 characters/);
   assert.equal(metadataTesting.isLikelyGenericTitle("AI Weekly"), true);
+});
+
+
+test("metadata prompt surfaces natural SEO keyword candidates", () => {
+  const plan = calculateDuration("episode", { sessionId: "TT-test", targetMins: 45 });
+  const candidates = metadataTesting.detectSeoKeywordCandidates(sampleMain);
+  const prompt = getTitleDescriptionPrompt(sampleMain, plan);
+
+  assert.ok(candidates.includes("agentic AI"));
+  assert.ok(candidates.includes("AI governance"));
+  assert.match(prompt, /SEO keyword candidates/);
+  assert.match(prompt, /agentic AI/);
+  assert.match(prompt, /Do not keyword-stuff/);
+
+  const fallbackTitle = metadataTesting.buildFallbackTitle(sampleMain);
+  const fallbackDescription = metadataTesting.buildFallbackDescription(sampleMain, plan);
+  const validation = metadataTesting.validateMetaCandidate(
+    { title: fallbackTitle, description: fallbackDescription },
+    plan,
+    candidates
+  );
+
+  assert.equal(validation.ok, true, validation.reasons.join("; "));
+});
+
+test("SEO keyword prompt uses title, description and main content", () => {
+  const prompt = getSEOKeywordsPrompt({
+    title: "Agentic AI, Model Hype, and Dirty Data",
+    description: "Jonathan Harris cuts through artificial intelligence governance and AI automation without vendor fireworks.",
+    mainOnly: sampleMain,
+    keywordCandidates: ["agentic AI", "AI governance", "AI automation"],
+  });
+
+  assert.match(prompt, /Candidate phrases already detected: agentic AI, AI governance, AI automation/);
+  assert.match(prompt, /Title: Agentic AI, Model Hype, and Dirty Data/);
+  assert.match(prompt, /Main content excerpt:/);
 });
 
 test("podcast RSS channel defaults are branded, hosted, and non-generic", () => {

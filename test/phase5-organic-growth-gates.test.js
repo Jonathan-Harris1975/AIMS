@@ -63,6 +63,8 @@ test("Phase 5 summary keeps paid ads and analytics parked", () => {
   const summary = phase5SkillsSummary();
   assert.match(summary.parked.paidAds, /organic/i);
   assert.match(summary.parked.analyticsTracking, /Metricool|Google Analytics/i);
+  assert.deepEqual(summary.skills.podcastSeo, ["podcast-seo"]);
+  assert.match(summary.rules.join(" "), /Podcast SEO enrichment/);
 });
 
 
