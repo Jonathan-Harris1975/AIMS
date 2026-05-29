@@ -593,6 +593,35 @@ export async function runOnBrandAudit(options = {}) {
 
   const reportJsonPublish = await publishAuditJson({ key: `${reportPrefix}/report.json`, payload: report });
   const reportHtmlPublish = await publishAuditText({ key: `${reportPrefix}/report.html`, text: html, contentType: "text/html; charset=utf-8" });
+
+  // summary.json and coverage.json are required by the RAMS audit_reader
+  // _PIPELINE_ARTEFACT_PRIORITIES["on-brand"] list. Omitting them causes
+  // silent artefactErrors gaps in RAMS finding dereferencing.
+  const summaryPayload = {
+    auditType: AUDIT_TYPE,
+    sessionId,
+    generatedAt: nowIso(),
+    reportPrefix,
+    auditCompletionState: report.auditCompletionState,
+    executiveVerdict: report.executiveVerdict,
+    scorecard: report.scorecard,
+    defectCount: report.confirmedDefectsLedger.length,
+    partial: report.auditCompletionState !== "Complete",
+  };
+  const coveragePayload = {
+    auditType: AUDIT_TYPE,
+    sessionId,
+    generatedAt: nowIso(),
+    reportPrefix,
+    sourceCoverage: report.sourceCoverage,
+    limitations: report.limitations,
+    partial: report.auditCompletionState !== "Complete",
+  };
+  const [summaryPublish, coveragePublish] = await Promise.all([
+    publishAuditJson({ key: `${reportPrefix}/summary.json`, payload: summaryPayload }),
+    publishAuditJson({ key: `${reportPrefix}/coverage.json`, payload: coveragePayload }),
+  ]);
+
   const latestPayload = {
     auditType: AUDIT_TYPE,
     sessionId,
@@ -601,6 +630,8 @@ export async function runOnBrandAudit(options = {}) {
     reportJsonUrl: reportJsonPublish.url,
     reportHtmlUrl: reportHtmlPublish.url,
     evidenceUrl: evidencePublish.url,
+    summaryUrl: summaryPublish.url,
+    coverageUrl: coveragePublish.url,
     sourceCoverage: report.sourceCoverage,
     executiveVerdict: report.executiveVerdict,
     partial: report.auditCompletionState !== "Complete",
@@ -622,6 +653,8 @@ export async function runOnBrandAudit(options = {}) {
     reportJsonUrl: reportJsonPublish.url,
     reportHtmlUrl: reportHtmlPublish.url,
     evidenceUrl: evidencePublish.url,
+    summaryUrl: summaryPublish.url,
+    coverageUrl: coveragePublish.url,
     latestUrl: latestPublish.url,
     sourceCoverage: report.sourceCoverage,
     executiveVerdict: report.executiveVerdict,
