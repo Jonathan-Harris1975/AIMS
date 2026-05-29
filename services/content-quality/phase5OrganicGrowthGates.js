@@ -96,22 +96,59 @@ function wordCount(value = "") {
   return text ? text.split(/\s+/).filter(Boolean).length : 0;
 }
 
-function textFrom(value) {
+const NON_CLAIM_FIELD_PATTERN = /(?:^|_)(?:url|uri|href|link|image|cover|thumbnail|key|bucket|path|slug|id|status|error)(?:$|_)/i;
+
+function textFrom(value, { claimsOnly = false } = {}) {
   const parts = [];
-  const walk = (node) => {
+  const walk = (node, key = "") => {
     if (node == null) return;
+    if (claimsOnly && NON_CLAIM_FIELD_PATTERN.test(String(key || ""))) return;
+
     if (typeof node === "string" || typeof node === "number") {
       parts.push(String(node));
       return;
     }
     if (Array.isArray(node)) {
-      node.forEach(walk);
+      node.forEach((item) => walk(item, key));
       return;
     }
-    if (typeof node === "object") Object.values(node).forEach(walk);
+    if (typeof node === "object") {
+      Object.entries(node).forEach(([childKey, childValue]) => walk(childValue, childKey));
+    }
   };
   walk(value);
   return cleanText(parts.join(" "));
+}
+
+function isDateOrTechnicalNumber(text = "", index = 0, value = "") {
+  const before = text.slice(Math.max(0, index - 12), index);
+  const after = text.slice(index + String(value).length, index + String(value).length + 12);
+  const context = `${before}${value}${after}`;
+
+  // ISO dates and URL/file-name date fragments such as 2026-05-28 are
+  // publication metadata, not social proof claims.
+  if (/\b\d{4}[-/]\d{2}[-/]\d{2}\b/.test(context)) return true;
+
+  // Times and aspect-ratio hints can appear in visual prompts and artefact
+  // metadata; do not treat their pieces as unsupported editorial metrics.
+  if (/\b\d{1,2}:\d{2}\b/.test(context)) return true;
+  if (/\b\d{1,2}:\d{1,2}\b/.test(context)) return true;
+
+  return false;
+}
+
+function extractClaimNumbers(text = "") {
+  const source = String(text || "");
+  const matches = [];
+
+  for (const match of source.matchAll(/\b\d{2,}(?:[,.]\d+)?%?\b/g)) {
+    const value = match[0];
+    const index = match.index || 0;
+    if (isDateOrTechnicalNumber(source, index, value)) continue;
+    matches.push(value);
+  }
+
+  return matches;
 }
 
 function normaliseUrl(value = "") {
@@ -177,7 +214,7 @@ function evaluateEbookConversion({ generated = {}, featuredBook = {}, day = "" }
 function evaluateSourceSafety({ generated = {}, sources = [], featuredBook = {} } = {}) {
   const defects = [];
   const warnings = [];
-  const text = textFrom(generated);
+  const text = textFrom(generated, { claimsOnly: true });
   const sourceText = cleanText([
     featuredBook.title,
     featuredBook.shortDescription,
@@ -192,7 +229,7 @@ function evaluateSourceSafety({ generated = {}, sources = [], featuredBook = {} 
     ...asArray(sources).map((source) => textFrom(source)),
   ].filter(Boolean).join(" ")).toLowerCase();
 
-  const numbers = [...text.matchAll(/\b\d{2,}(?:[,.]\d+)?%?\b/g)].map((match) => match[0]);
+  const numbers = extractClaimNumbers(text);
   for (const number of numbers) {
     if (!sourceText.includes(number.toLowerCase())) defects.push(`Unsupported number or metric: ${number}`);
   }
