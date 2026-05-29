@@ -11,14 +11,60 @@ function normaliseTime(value, fallback) {
   return /^\d{2}:\d{2}$/.test(cleaned) ? cleaned : fallback;
 }
 
+function parseCsv(value = "") {
+  return String(value || "")
+    .split(/[;,]/g)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+export function normaliseOneUpSocialNetworkId(value, fallback = "ALL") {
+  const cleaned = trimString(value, fallback);
+  if (!cleaned || /^all$/i.test(cleaned)) return "ALL";
+
+  try {
+    const parsed = JSON.parse(cleaned);
+    if (Array.isArray(parsed)) {
+      const ids = parsed.map((item) => trimString(item)).filter(Boolean);
+      return ids.length ? JSON.stringify([...new Set(ids)]) : "ALL";
+    }
+  } catch {}
+
+  const ids = parseCsv(cleaned);
+  return ids.length ? JSON.stringify([...new Set(ids)]) : "ALL";
+}
+
+export function parseNetworkTypes(value = "") {
+  return parseCsv(value)
+    .map((item) => item.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+}
+
+function boolFromEnv(value, fallback = false) {
+  const cleaned = trimString(value, fallback ? "true" : "false").toLowerCase();
+  return ["1", "true", "yes", "on"].includes(cleaned);
+}
+
 export const DEFAULT_TIMEZONE = trimString(process.env.ONEUP_TIMEZONE, "Europe/London");
 export const ONEUP_API_BASE = trimString(process.env.ONEUP_API_BASE, "https://www.oneupapp.io/api").replace(/\/+$/, "");
 export const ONEUP_CATEGORY_NAME_GENERAL = trimString(process.env.ONEUP_CATEGORY_NAME_GENERAL, "General");
 export const ONEUP_CATEGORY_NAME_EBOOKS = trimString(process.env.ONEUP_CATEGORY_NAME_EBOOKS, "Ebooks");
-export const ONEUP_SOCIAL_NETWORK_ID = trimString(process.env.ONEUP_SOCIAL_NETWORK_ID, "ALL");
-export const ONEUP_DEFAULT_DRY_RUN = ["1", "true", "yes", "on"].includes(
-  trimString(process.env.ONEUP_DEFAULT_DRY_RUN, "false").toLowerCase()
-);
+export function getOneUpSocialNetworkId() {
+  return normaliseOneUpSocialNetworkId(process.env.ONEUP_SOCIAL_NETWORK_ID, "ALL");
+}
+
+export function getOneUpRequiredNetworkTypes() {
+  return parseNetworkTypes(process.env.ONEUP_REQUIRED_NETWORK_TYPES || "Facebook");
+}
+
+export function shouldValidateOneUpTargetAccounts() {
+  return boolFromEnv(process.env.ONEUP_VALIDATE_TARGET_ACCOUNTS, true);
+}
+
+export const ONEUP_SOCIAL_NETWORK_ID = getOneUpSocialNetworkId();
+export const ONEUP_REQUIRED_NETWORK_TYPES = getOneUpRequiredNetworkTypes();
+export const ONEUP_VALIDATE_TARGET_ACCOUNTS = shouldValidateOneUpTargetAccounts();
+export const ONEUP_DEFAULT_DRY_RUN = boolFromEnv(process.env.ONEUP_DEFAULT_DRY_RUN, false);
 export const ONEUP_RSS_LOOKBACK_DAYS = Number(process.env.ONEUP_RSS_LOOKBACK_DAYS || 7);
 export const ONEUP_QUEUE_GUARD_LOOKBACK_PAGES = Math.max(1, Number(process.env.ONEUP_QUEUE_GUARD_LOOKBACK_PAGES || 2));
 

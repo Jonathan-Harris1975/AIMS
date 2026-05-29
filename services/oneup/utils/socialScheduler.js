@@ -1,12 +1,12 @@
 import crypto from "node:crypto";
 import { resilientRequest } from "../../shared/utils/ai-service.js";
 import { info, warn } from "../../../logger.js";
-import { LANE_CONFIG, QUIZ_CONFIG, EBOOK_CONFIG, ONEUP_CATEGORY_NAME_GENERAL, ONEUP_CATEGORY_NAME_EBOOKS, ONEUP_DEFAULT_DRY_RUN, ONEUP_SOCIAL_NETWORK_ID, DEFAULT_TIMEZONE, ONEUP_QUEUE_GUARD_LOOKBACK_PAGES } from "./config.js";
+import { LANE_CONFIG, QUIZ_CONFIG, EBOOK_CONFIG, ONEUP_CATEGORY_NAME_GENERAL, ONEUP_CATEGORY_NAME_EBOOKS, ONEUP_DEFAULT_DRY_RUN, DEFAULT_TIMEZONE, ONEUP_QUEUE_GUARD_LOOKBACK_PAGES, getOneUpRequiredNetworkTypes, getOneUpSocialNetworkId, normaliseOneUpSocialNetworkId, shouldValidateOneUpTargetAccounts } from "./config.js";
 import { buildDailyPrompt, buildQuizPrompt, buildEbookPostPrompt } from "./prompts.js";
 import { addDays, nextWeekdayDateString, toScheduledDateTime } from "./date.js";
 import { loadRecentRssContext } from "./feedContext.js";
 import { getLaneHistory, recordLaneSchedule, getQuizHistory, recordQuizSchedule, claimScheduleSlot, completeScheduleSlot, releaseScheduleSlot } from "./state.js";
-import { resolveCategory, listScheduledPosts, scheduleTextPost, scheduleImagePost } from "./oneupClient.js";
+import { resolveCategory, inspectOneUpTargeting, listScheduledPosts, scheduleTextPost, scheduleImagePost } from "./oneupClient.js";
 import getSponsor from "../../script/utils/getSponsor.js";
 import { resolveFeaturedEbook } from "./ebookCatalogue.js";
 import { runPhase5OrganicGrowthGate } from "../../content-quality/phase5OrganicGrowthGates.js";
@@ -232,6 +232,8 @@ function slotDuplicatePostResult({ publishDate, scheduledDateTime, dryRun = fals
 
 async function scheduleToOneUp({ post, scheduledDateTime, categoryName, socialNetworkId, dryRun, apiKey }) {
   const warnings = [];
+  const normalisedSocialNetworkId = normaliseOneUpSocialNetworkId(socialNetworkId, getOneUpSocialNetworkId());
+  const requiredNetworkTypes = getOneUpRequiredNetworkTypes();
   const effectiveDryRun = Boolean(dryRun || ONEUP_DEFAULT_DRY_RUN || !apiKey);
   if (!apiKey) {
     warnings.push("ONEUP_API_KEY is missing, so this run was returned as a dry run preview.");
@@ -244,10 +246,27 @@ async function scheduleToOneUp({ post, scheduledDateTime, categoryName, socialNe
       warnings,
       oneUpResponse: null,
       category: { id: null, category_name: categoryName },
+      targeting: { checked: false, socialNetworkId: normalisedSocialNetworkId },
     };
   }
 
-  const category = await resolveCategory({ categoryName }, apiKey);
+  const targeting = shouldValidateOneUpTargetAccounts() || requiredNetworkTypes.length
+    ? await inspectOneUpTargeting({
+        categoryName,
+        socialNetworkId: normalisedSocialNetworkId,
+        requiredNetworkTypes,
+      }, apiKey)
+    : { ok: true, category: await resolveCategory({ categoryName }, apiKey), warnings: [], socialNetworkId: normalisedSocialNetworkId };
+
+  if (!targeting.ok) {
+    const err = new Error(`OneUp target setup failed for category '${categoryName}': ${(targeting.warnings || []).join(" | ") || "no eligible accounts found"}`);
+    err.statusCode = 409;
+    err.oneUpTargeting = targeting;
+    throw err;
+  }
+
+  warnings.push(...(targeting.warnings || []));
+  const category = targeting.category;
   const queuedPosts = await getQueuedPosts(apiKey);
   if (hasLikelyDuplicate(queuedPosts, { scheduledDateTime, categoryName: category.category_name, imageUrl: post.imageUrl })) {
     warnings.push("A likely duplicate post is already scheduled for this date/time/category, so no new post was created.");
@@ -258,12 +277,13 @@ async function scheduleToOneUp({ post, scheduledDateTime, categoryName, socialNe
       oneUpResponse: null,
       category,
       duplicatePrevented: true,
+      targeting,
     };
   }
 
   const payload = {
     category_id: category.id,
-    social_network_id: socialNetworkId,
+    social_network_id: normalisedSocialNetworkId,
     scheduled_date_time: scheduledDateTime,
     title: post.title || "",
     content: post.content,
@@ -280,6 +300,7 @@ async function scheduleToOneUp({ post, scheduledDateTime, categoryName, socialNe
     warnings,
     oneUpResponse,
     category,
+    targeting,
   };
 }
 
@@ -352,7 +373,7 @@ export async function buildAndScheduleDailyLane(laneKey, options = {}) {
   const publishDate = options.publishDate || nextWeekdayDateString(laneKey, DEFAULT_TIMEZONE, new Date());
   const scheduledDateTime = options.scheduledDateTime || toScheduledDateTime(publishDate, lane.publishTime);
   const categoryName = options.categoryName || ONEUP_CATEGORY_NAME_GENERAL;
-  const socialNetworkId = options.socialNetworkId || ONEUP_SOCIAL_NETWORK_ID;
+  const socialNetworkId = normaliseOneUpSocialNetworkId(options.socialNetworkId || getOneUpSocialNetworkId());
   const apiKey = options.apiKey || process.env.ONEUP_API_KEY;
   const imageUrl = options.imageUrl || lane.imageUrl;
   const dryRun = Boolean(options.dryRun);
@@ -484,6 +505,7 @@ export async function buildAndScheduleDailyLane(laneKey, options = {}) {
       warnings,
       post,
       oneUpResponse: scheduling.oneUpResponse,
+      targeting: scheduling.targeting || null,
     };
   } catch (error) {
     releaseScheduleSlot(slotClaim);
@@ -494,7 +516,7 @@ export async function buildAndScheduleDailyLane(laneKey, options = {}) {
 export async function buildAndScheduleEbookWeekly(options = {}) {
   const weekStartDate = options.weekStartDate || nextWeekdayDateString("monday", DEFAULT_TIMEZONE, new Date());
   const categoryName = options.categoryName || ONEUP_CATEGORY_NAME_EBOOKS;
-  const socialNetworkId = options.socialNetworkId || ONEUP_SOCIAL_NETWORK_ID;
+  const socialNetworkId = normaliseOneUpSocialNetworkId(options.socialNetworkId || getOneUpSocialNetworkId());
   const warnings = [];
 
   let sponsor = null;
@@ -630,6 +652,7 @@ export async function buildAndScheduleEbookWeekly(options = {}) {
         warnings: scheduling.warnings || [],
         post,
         oneUpResponse: scheduling.oneUpResponse,
+        targeting: scheduling.targeting || null,
         phase5Gate,
       };
 
@@ -717,7 +740,7 @@ export async function buildAndScheduleQuizSeries(options = {}) {
   const questionDateTime = options.questionScheduledDateTime || toScheduledDateTime(questionPublishDate, QUIZ_CONFIG.questionPublishTime);
   const answerDateTime = options.answerScheduledDateTime || toScheduledDateTime(answerPublishDate, QUIZ_CONFIG.answerPublishTime);
   const categoryName = options.categoryName || ONEUP_CATEGORY_NAME_GENERAL;
-  const socialNetworkId = options.socialNetworkId || ONEUP_SOCIAL_NETWORK_ID;
+  const socialNetworkId = normaliseOneUpSocialNetworkId(options.socialNetworkId || getOneUpSocialNetworkId());
   const apiKey = options.apiKey || process.env.ONEUP_API_KEY;
   const dryRun = Boolean(options.dryRun);
   const questionImageUrl = options.questionImageUrl || QUIZ_CONFIG.questionImageUrl;
@@ -912,6 +935,7 @@ export async function buildAndScheduleQuizSeries(options = {}) {
         warnings: questionScheduling.warnings || [],
         post: questionPost,
         oneUpResponse: questionScheduling.oneUpResponse,
+        targeting: questionScheduling.targeting || null,
       },
       answer: {
         publishDate: answerPublishDate,
@@ -922,6 +946,7 @@ export async function buildAndScheduleQuizSeries(options = {}) {
         warnings: answerScheduling.warnings || [],
         post: answerPost,
         oneUpResponse: answerScheduling.oneUpResponse,
+        targeting: answerScheduling.targeting || null,
       },
     };
   } catch (error) {

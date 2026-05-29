@@ -27,6 +27,47 @@ async function parseJsonSafe(response) {
   }
 }
 
+function normaliseList(value) {
+  if (Array.isArray(value)) return value.map((item) => trimString(item)).filter(Boolean);
+  const cleaned = trimString(value);
+  if (!cleaned) return [];
+  try {
+    const parsed = JSON.parse(cleaned);
+    if (Array.isArray(parsed)) return parsed.map((item) => trimString(item)).filter(Boolean);
+  } catch {}
+  return cleaned
+    .split(/[;,]/g)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function parseSocialNetworkTarget(socialNetworkId = "ALL") {
+  const cleaned = trimString(socialNetworkId, "ALL");
+  if (/^all$/i.test(cleaned)) return { mode: "all", ids: [] };
+  return { mode: "specific", ids: [...new Set(normaliseList(cleaned))] };
+}
+
+function networkTypeMatches(actual = "", required = "") {
+  const current = trimString(actual).toLowerCase();
+  const wanted = trimString(required).toLowerCase();
+  if (!current || !wanted) return false;
+  return current === wanted || current.includes(wanted) || wanted.includes(current);
+}
+
+function accountId(account) {
+  return trimString(account?.social_network_id || account?.social_account_id || account?.id);
+}
+
+function compactAccount(account) {
+  return {
+    social_network_id: accountId(account),
+    social_network_name: account?.social_network_name || account?.full_name || account?.username || null,
+    social_network_type: account?.social_network_type || null,
+    is_expired: account?.is_expired ?? null,
+    need_refresh: account?.need_refresh ?? null,
+  };
+}
+
 async function oneUpGet(endpoint, params = {}, apiKey) {
   const key = requireApiKey(apiKey);
   const url = new URL(`${getOneUpApiBase()}/${endpoint}`);
@@ -97,6 +138,10 @@ export async function listCategories(apiKey) {
 
 export async function listCategoryAccounts(categoryId, apiKey) {
   return oneUpGet("listcategoryaccount", { category_id: categoryId }, apiKey);
+}
+
+export async function listSocialAccounts(apiKey) {
+  return oneUpGet("listsocialaccounts", {}, apiKey);
 }
 
 export async function listScheduledPosts({ start = 0 } = {}, apiKey) {
@@ -175,4 +220,77 @@ export async function resolveCategory({ categoryName }, apiKey) {
   }
 
   return match;
+}
+
+
+export async function inspectOneUpTargeting({
+  categoryName,
+  socialNetworkId = "ALL",
+  requiredNetworkTypes = [],
+  includeGlobalAccounts = false,
+} = {}, apiKey) {
+  const category = await resolveCategory({ categoryName }, apiKey);
+  const categoryAccountResult = await listCategoryAccounts(category.id, apiKey);
+  const categoryAccounts = Array.isArray(categoryAccountResult?.data) ? categoryAccountResult.data : [];
+  const target = parseSocialNetworkTarget(socialNetworkId);
+  const targetIds = new Set(target.ids.map((id) => String(id)));
+  const targetedAccounts = target.mode === "all"
+    ? categoryAccounts
+    : categoryAccounts.filter((account) => targetIds.has(accountId(account)));
+  const missingTargetIds = target.mode === "specific"
+    ? [...targetIds].filter((id) => !categoryAccounts.some((account) => accountId(account) === id))
+    : [];
+  const requiredTypes = Array.isArray(requiredNetworkTypes)
+    ? requiredNetworkTypes.map((item) => trimString(item)).filter(Boolean)
+    : normaliseList(requiredNetworkTypes);
+  const missingRequiredNetworkTypes = requiredTypes.filter(
+    (required) => !targetedAccounts.some((account) => networkTypeMatches(account?.social_network_type, required))
+  );
+
+  let globalAccounts = [];
+  let globalAccountWarnings = [];
+  if (includeGlobalAccounts) {
+    try {
+      const globalResult = await listSocialAccounts(apiKey);
+      globalAccounts = Array.isArray(globalResult?.data) ? globalResult.data : [];
+      const staleRequired = globalAccounts
+        .filter((account) => requiredTypes.some((required) => networkTypeMatches(account?.social_network_type, required)))
+        .filter((account) => Number(account?.is_expired) === 1 || account?.need_refresh === true);
+      if (staleRequired.length) {
+        globalAccountWarnings.push(
+          `${staleRequired.length} required OneUp social account(s) appear expired or need refresh.`
+        );
+      }
+    } catch (error) {
+      globalAccountWarnings.push(`Could not fetch global OneUp social accounts: ${error.message}`);
+    }
+  }
+
+  const warnings = [];
+  if (!categoryAccounts.length) {
+    warnings.push(`OneUp category '${categoryName}' has no connected accounts.`);
+  }
+  if (missingTargetIds.length) {
+    warnings.push(`Configured OneUp social_network_id value(s) not found in category '${categoryName}': ${missingTargetIds.join(", ")}`);
+  }
+  if (missingRequiredNetworkTypes.length) {
+    warnings.push(`OneUp category '${categoryName}' is not targeting required network type(s): ${missingRequiredNetworkTypes.join(", ")}`);
+  }
+  warnings.push(...globalAccountWarnings);
+
+  return {
+    ok: missingTargetIds.length === 0 && missingRequiredNetworkTypes.length === 0 && categoryAccounts.length > 0,
+    category,
+    socialNetworkId,
+    targetMode: target.mode,
+    requiredNetworkTypes: requiredTypes,
+    categoryAccountCount: categoryAccounts.length,
+    targetedAccountCount: targetedAccounts.length,
+    categoryAccounts: categoryAccounts.map(compactAccount),
+    targetedAccounts: targetedAccounts.map(compactAccount),
+    missingTargetIds,
+    missingRequiredNetworkTypes,
+    globalAccountCount: globalAccounts.length,
+    warnings,
+  };
 }
