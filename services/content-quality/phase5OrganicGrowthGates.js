@@ -15,6 +15,7 @@ const PHASE_5_SKILLS = Object.freeze({
     "content-repurposing",
   ],
   accessibilityMobileUx: ["accessibility-audit"],
+  podcastSeo: ["podcast-seo"],
 });
 
 const DEFAULT_THRESHOLDS = Object.freeze({
@@ -370,7 +371,7 @@ export function phase5QuarantineKey(contentType, identifier, now = new Date()) {
 
 export function phase5SkillsSummary() {
   return {
-    phase: "5A/5B/5C",
+    phase: "5A/5B/5C/5D",
     mode: "organic-only automation with fail-closed gates",
     skills: PHASE_5_SKILLS,
     parked: {
@@ -383,6 +384,7 @@ export function phase5SkillsSummary() {
     rules: [
       "Ebook posts may auto-schedule only when the book title, URL, reader benefit, brand tone, and source-safety checks pass.",
       "Organic FB/IG/TikTok visual posts may auto-publish only when visual prompts are brand-safe, non-cluttered, and source-backed.",
+      "Podcast SEO enrichment is post-production only: metadata, transcript HTML, structured data, and RSS quality may improve without touching audio processing.",
       "No paid-ad, cold-email, analytics-tracking, lead-magnet, or programmatic-SEO automation is activated in Phase 5.",
       "Failed artefacts are quarantined; they are not published or queued.",
     ],
