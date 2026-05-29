@@ -78,14 +78,15 @@ export async function orchestrateScript(input) {
     }
 
     // ============================================================
-    // 3) Editorial Pass (humanisation, variety, tone consistency)
+    // 3) Editorial Pass (main-section only, outro kept deterministic)
     // ============================================================
-    const editorialText = await runEditorialPass(
-      { sessionId: sid, ...sessionMeta },
-      initialFullText
+    const editorialMain = await runEditorialPass(
+      { sessionId: sid, ...sessionMeta, section: "main" },
+      main
     );
 
-    const editorialCandidate = (editorialText && editorialText.trim()) || initialFullText;
+    const mainCandidate = (editorialMain && editorialMain.trim()) || main;
+    const editorialCandidate = [intro, mainCandidate, outro].filter(Boolean).join("\n\n");
     const editorialValidation = validateTranscriptStructure(editorialCandidate);
     const safeEditorialText = editorialValidation.ok ? editorialCandidate : initialFullText;
 
@@ -93,6 +94,7 @@ export async function orchestrateScript(input) {
       info("editorialPass.fallback.initialScript", {
         sessionId: sid,
         reasons: editorialValidation.reasons,
+        preservedOutro: true,
       });
     }
 
