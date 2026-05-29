@@ -30,16 +30,65 @@ function escapeHtml(str) {
     .replace(/"/g, "&quot;");
 }
 
+function normaliseWhitespace(value = "") {
+  return String(value || "").replace(/\s+/g, " ").trim();
+}
+
+function truncateForMeta(value = "", max = 160) {
+  const cleaned = normaliseWhitespace(value);
+  if (cleaned.length <= max) return cleaned;
+  return `${cleaned.slice(0, max - 1).replace(/[\s,;:.]+$/, "")}…`;
+}
+
+function escapeJsonForScript(value) {
+  return JSON.stringify(value, null, 2).replace(/<\/script/gi, "<\\/script");
+}
+
+function formatIsoDuration(totalSeconds) {
+  const seconds = Number(totalSeconds);
+  if (!Number.isFinite(seconds) || seconds <= 0) return "";
+
+  const sec = Math.max(0, Math.round(seconds));
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+
+  return `PT${h ? `${h}H` : ""}${m ? `${m}M` : ""}${s || (!h && !m) ? `${s}S` : ""}`;
+}
+
+function listFromValue(value) {
+  if (Array.isArray(value)) {
+    return value.map((item) => normaliseWhitespace(item)).filter(Boolean);
+  }
+
+  return String(value || "")
+    .split(",")
+    .map((item) => normaliseWhitespace(item))
+    .filter(Boolean);
+}
+
 function formatPubDate(pubDateStr) {
   if (!pubDateStr) return "";
   try {
-    return new Date(pubDateStr).toLocaleDateString("en-GB", {
+    const date = new Date(pubDateStr);
+    if (Number.isNaN(date.getTime())) return "";
+    return date.toLocaleDateString("en-GB", {
       day: "numeric",
       month: "long",
       year: "numeric",
     });
   } catch {
-    return pubDateStr;
+    return "";
+  }
+}
+
+function toIsoDate(value) {
+  if (!value) return undefined;
+  try {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
+  } catch {
+    return undefined;
   }
 }
 
@@ -164,6 +213,55 @@ function renderFooter() {
 </footer>`;
 }
 
+function buildPodcastEpisodeJsonLd({
+  title,
+  description,
+  artUrl,
+  htmlUrl,
+  audioUrl,
+  episodePageUrl,
+  episodeNumber,
+  pubDateRaw,
+  durationSeconds,
+  keywords = [],
+}) {
+  const url = htmlUrl || episodePageUrl || "https://jonathan-harris.online/podcast/";
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "PodcastEpisode",
+    name: title,
+    description,
+    url,
+    transcript: htmlUrl || undefined,
+    image: artUrl || undefined,
+    episodeNumber: episodeNumber || undefined,
+    datePublished: toIsoDate(pubDateRaw),
+    duration: formatIsoDuration(durationSeconds),
+    keywords: keywords.length ? keywords.join(", ") : undefined,
+    associatedMedia: audioUrl
+      ? {
+          "@type": "AudioObject",
+          contentUrl: audioUrl,
+          encodingFormat: "audio/mpeg",
+        }
+      : undefined,
+    partOfSeries: {
+      "@type": "PodcastSeries",
+      name: "Turing's Torch: AI Weekly",
+      url: "https://jonathan-harris.online/podcast/",
+    },
+    author: {
+      "@type": "Person",
+      name: "Jonathan Harris",
+      url: "https://jonathan-harris.online/bio/",
+    },
+  };
+
+  return Object.fromEntries(
+    Object.entries(jsonLd).filter(([, value]) => value !== undefined && value !== "")
+  );
+}
+
 /**
  * @param {string} sessionId    - e.g. "TT-2026-04-10"
  * @param {string} transcriptText - raw plain-text content
@@ -176,18 +274,34 @@ export function generateTranscriptHtml(sessionId, transcriptText, meta, transcri
   const description = meta?.description || "A sharp, no-hype take on the latest in artificial intelligence.";
   const artUrl = meta?.artUrl || "https://podcast-coverart.jonathan-harris.online/cover-art.png";
   const episodeNum = meta?.episodeNumber ? `Episode ${meta.episodeNumber}` : "";
-  const pubDate = formatPubDate(meta?.pubDate || meta?.session?.date || "");
+  const pubDateRaw = meta?.pubDate || meta?.session?.date || "";
+  const pubDate = formatPubDate(pubDateRaw);
+  const keywords = listFromValue(meta?.keywords || meta?.seoKeywordCandidates).slice(0, 14);
+  const metaDescription = truncateForMeta(description || `Full transcript: ${title}. Turing's Torch: AI Weekly, hosted by Jonathan Harris.`, 160);
   const siteBaseUrl = String(meta?.siteBaseUrl || process.env.SITE_BASE_URL || "https://jonathan-harris.online").replace(/\/$/, "");
   const htmlBase = String(transcriptHtmlBaseUrl || "").replace(/\/$/, "");
   const rawTranscriptBase = String(process.env.R2_PUBLIC_BASE_URL_TRANSCRIPT || "").replace(/\/$/, "");
   const archiveUrl = `${siteBaseUrl}/transcripts/`;
   const htmlUrl = absoluteUrl(meta?.transcriptHtmlUrl, htmlBase ? `${htmlBase}/${sessionId}.html` : `${archiveUrl}${sessionId}.html`);
-  const listenUrl = absoluteUrl(meta?.podcastUrl, "https://open.spotify.com/show/4NluRPjuAIGK59vVf7GcoF");
+  const audioUrl = absoluteUrl(meta?.podcastUrl, "");
+  const listenUrl = audioUrl || "https://open.spotify.com/show/4NluRPjuAIGK59vVf7GcoF";
   const episodePageUrl = absoluteUrl(meta?.episodePageUrl, `${siteBaseUrl}/podcast/`);
   const transcriptTextUrl = absoluteUrl(meta?.transcriptTextUrl, rawTranscriptBase ? `${rawTranscriptBase}/${sessionId}.txt` : "");
 
   const metaDate = pubDate ? `${episodeNum}${episodeNum && pubDate ? " · " : ""}${pubDate}` : episodeNum;
   const paragraphs = textToParagraphs(transcriptText);
+  const podcastEpisodeJsonLd = buildPodcastEpisodeJsonLd({
+    title,
+    description,
+    artUrl,
+    htmlUrl,
+    audioUrl,
+    episodePageUrl,
+    episodeNumber: meta?.episodeNumber,
+    pubDateRaw,
+    durationSeconds: meta?.duration || meta?.plannedDurationSeconds,
+    keywords,
+  });
 
   return `<!DOCTYPE html>
 <html lang="en-GB">
@@ -195,17 +309,19 @@ export function generateTranscriptHtml(sessionId, transcriptText, meta, transcri
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0, viewport-fit=cover" name="viewport"/>
 <title>${escapeHtml(title)} – Transcript | Turing's Torch: AI Weekly</title>
-<meta name="description" content="Full transcript: ${escapeHtml(title)}. Turing's Torch: AI Weekly, hosted by Jonathan Harris."/>
+<meta name="description" content="${escapeHtml(metaDescription)}"/>
+${keywords.length ? `<meta name="keywords" content="${escapeHtml(keywords.join(", "))}"/>` : ""}
 <meta name="robots" content="index,follow"/>
 <meta name="theme-color" content="#0D1420"/>
 ${htmlUrl ? `<link rel="canonical" href="${escapeHtml(htmlUrl)}"/>` : ""}
 <meta property="og:type" content="article"/>
 <meta property="og:title" content="${escapeHtml(title)} – Transcript"/>
-<meta property="og:description" content="Full transcript: ${escapeHtml(title)}. Turing's Torch: AI Weekly."/>
+<meta property="og:description" content="${escapeHtml(metaDescription)}"/>
 <meta property="og:image" content="${escapeHtml(artUrl)}"/>
 ${htmlUrl ? `<meta property="og:url" content="${escapeHtml(htmlUrl)}"/>` : ""}
 <meta name="twitter:card" content="summary_large_image"/>
 <meta name="twitter:title" content="${escapeHtml(title)} – Transcript"/>
+<meta name="twitter:description" content="${escapeHtml(metaDescription)}"/>
 <meta name="twitter:image" content="${escapeHtml(artUrl)}"/>
 <link href="https://assets.jonathan-harris.online/favicon.ico" rel="icon" type="image/x-icon"/>
 <link href="https://images.jonathan-harris.online" rel="preconnect"/>
@@ -374,6 +490,7 @@ ${htmlUrl ? `<meta property="og:url" content="${escapeHtml(htmlUrl)}"/>` : ""}
 <!-- CookieYes -->
 <script async="" id="cookieyes" src="https://cdn-cookieyes.com/client_data/c981d18033783598d2216add/script.js" type="text/javascript"></script>
 <script defer="" data-cookieyes="ignore" data-cookieconsent="ignore" src="https://jonathan-harris.online/assets/js/script-governance.min.js"></script>
+<script type="application/ld+json">${escapeJsonForScript(podcastEpisodeJsonLd)}</script>
 </head>
 <body class="page-podcast page-podcast-transcript">
 ${renderPrimaryHeader()}

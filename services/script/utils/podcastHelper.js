@@ -15,35 +15,50 @@ const TOPIC_RULES = [
   {
     label: "Agentic AI",
     pattern: /\b(agentic|autonomous agents?|operate largely on their own|constant human direction)\b/i,
+    keywords: ["agentic AI", "AI agents", "autonomous agents"],
   },
   {
     label: "Model Hype",
     pattern: /\b(openai|anthropic|claude|gpt|opus|model releases?|benchmarks?|point releases?)\b/i,
+    keywords: ["AI models", "OpenAI", "Anthropic", "AI benchmarks"],
   },
   {
     label: "MCP and Agent Skills",
     pattern: /\b(mcp|agent skills|chatbots?|modular conversational)\b/i,
+    keywords: ["MCP", "AI agent skills", "AI chatbots"],
   },
   {
     label: "Retail Edge AI",
     pattern: /\b(retail|lstm|edge deployment|inventory|demand forecasts?|compressing.*models?)\b/i,
+    keywords: ["edge AI", "retail AI", "AI demand forecasting"],
   },
   {
     label: "Dirty Data",
     pattern: /\b(data infrastructure|data governance|siloed databases|data management|database|data reform)\b/i,
+    keywords: ["AI data governance", "data infrastructure", "AI deployment"],
   },
   {
     label: "Workflow Automation",
     pattern: /\b(workflows?|automation|job displacement|productivity|surveillance|keystroke|workers?)\b/i,
+    keywords: ["AI automation", "workflow automation", "AI at work"],
   },
   {
     label: "AI Governance",
     pattern: /\b(regulation|transparency|bias|accountability|control|security|ethical use|values)\b/i,
+    keywords: ["AI governance", "AI regulation", "AI accountability", "AI ethics"],
   },
   {
     label: "AI Costs",
     pattern: /\b(cost|expensive|investment|environmental impact|resources|required|cloud computing)\b/i,
+    keywords: ["AI costs", "AI infrastructure", "AI investment"],
   },
+];
+
+const EVERGREEN_PODCAST_SEO_TERMS = [
+  "artificial intelligence",
+  "AI podcast",
+  "AI news",
+  "AI analysis",
 ];
 
 function normaliseWhitespace(value = "") {
@@ -66,6 +81,62 @@ function detectTopics(text = "") {
   }
 
   return found.slice(0, 5);
+}
+
+function uniqueKeywordList(items = []) {
+  const seen = new Set();
+  const out = [];
+
+  for (const item of items) {
+    const keyword = normaliseWhitespace(item);
+    const key = keyword.toLowerCase();
+    if (!keyword || seen.has(key)) continue;
+    seen.add(key);
+    out.push(keyword);
+  }
+
+  return out;
+}
+
+function detectSeoKeywordCandidates(text = "") {
+  const haystack = String(text || "");
+  const found = [];
+
+  for (const rule of TOPIC_RULES) {
+    if (rule.pattern.test(haystack)) {
+      found.push(...(rule.keywords || []));
+      found.push(rule.label);
+    }
+  }
+
+  if (/\b(ai|artificial intelligence)\b/i.test(haystack)) {
+    found.push(...EVERGREEN_PODCAST_SEO_TERMS);
+  }
+
+  if (/\b(news|weekly|latest|announc(?:e|ed|ement)|release|launched?)\b/i.test(haystack)) {
+    found.push("artificial intelligence news", "AI weekly podcast");
+  }
+
+  return uniqueKeywordList(found).slice(0, 14);
+}
+
+function textUsesSeoKeyword(text = "", keywordCandidates = []) {
+  const haystack = normaliseWhitespace(text).toLowerCase();
+  if (!haystack) return false;
+
+  return keywordCandidates.some((keyword) => {
+    const needle = normaliseWhitespace(keyword).toLowerCase();
+    return needle.length >= 3 && haystack.includes(needle);
+  });
+}
+
+function buildSeoKeywordBrief(mainOnly = "") {
+  const candidates = detectSeoKeywordCandidates(mainOnly);
+  if (candidates.length === 0) {
+    return "No forced keyword target. Use specific subjects from the main content only.";
+  }
+
+  return candidates.slice(0, 10).join(", ");
 }
 
 function oxfordJoin(items = []) {
@@ -170,12 +241,13 @@ function descriptionMentionsHost(description = "") {
   return /\bjonathan\s+harris\b/i.test(description);
 }
 
-function validateMetaCandidate({ title, description } = {}, durationPlan = {}) {
+function validateMetaCandidate({ title, description } = {}, durationPlan = {}, seoKeywordCandidates = []) {
   const out = { ok: true, reasons: [] };
   const bounds = getMetadataDescriptionBounds(durationPlan?.targetMins || durationPlan?.targetMinutes);
 
   const tt = String(title || "").trim();
   const dd = String(description || "").trim();
+  const keywordCandidates = uniqueKeywordList(seoKeywordCandidates).slice(0, 14);
 
   if (tt.length < 10 || tt.length > 80) {
     out.ok = false;
@@ -216,6 +288,11 @@ function validateMetaCandidate({ title, description } = {}, durationPlan = {}) {
     out.reasons.push("description does not mention Jonathan Harris");
   }
 
+  if (keywordCandidates.length > 0 && !textUsesSeoKeyword(`${tt} ${dd}`, keywordCandidates)) {
+    out.ok = false;
+    out.reasons.push("metadata misses available SEO keyword candidates");
+  }
+
   return out;
 }
 
@@ -226,6 +303,7 @@ function validateMetaCandidate({ title, description } = {}, durationPlan = {}) {
 export function getTitleDescriptionPrompt(mainOnly, durationPlan = {}) {
   const targetMins = Number(durationPlan?.targetMins || durationPlan?.targetMinutes || 45);
   const bounds = getMetadataDescriptionBounds(targetMins);
+  const seoKeywordBrief = buildSeoKeywordBrief(mainOnly);
 
   return `
 You are writing episode metadata for the podcast:
@@ -234,6 +312,7 @@ You are writing episode metadata for the podcast:
 Host: ${HOST_NAME}.
 Planned episode length: ${targetMins} minutes.
 Description length must fit this runtime: ${bounds.min}-${bounds.max} characters.
+SEO keyword candidates from the main content: ${seoKeywordBrief}.
 
 VOICE (non-negotiable):
 - British Gen-X
@@ -245,6 +324,7 @@ HARD RULES:
 - Output MUST be STRICT JSON ONLY (no markdown, no commentary).
 - Title: 10-80 characters.
   - Build it from the specific subjects in the main content.
+  - Where it genuinely fits, include ONE natural SEO phrase from the candidates above.
   - Do not use the podcast name as the title.
   - Punchy and specific.
   - Avoid colons unless absolutely necessary.
@@ -252,11 +332,13 @@ HARD RULES:
   - No bland titles like "AI Weekly", "Artificial Intelligence News", "This Week in AI", or "Latest AI Developments".
 - Description: ${bounds.min}-${bounds.max} characters.
   - Mention Jonathan Harris once as the host or editorial voice.
+  - Include 1-3 suitable SEO phrases from the candidates above only when they read naturally.
   - Match the planned ${targetMins}-minute length: shorter episode means tighter description; longer episode can cover more themes.
   - 2 short paragraphs.
   - Say what happened, what matters, and what is probably noise.
   - Never use clichés like "In this episode", "we explore", "groundbreaking", "rapidly evolving", "landscape".
-  - Do not mention sources, websites, URLs, RSS, feeds, or internal process.
+  - Do not mention sources, websites, URLs, RSS, feeds, transcripts, audio files, or internal process.
+  - Do not keyword-stuff. Human clarity beats search-engine confetti.
 
 Return STRICT JSON ONLY:
 {"title":"","description":""}
@@ -270,16 +352,23 @@ ${mainOnly}
  * SEO Keywords Prompt (Supportive, not spammy)
  * -----------------------------------------------------------
  */
-export function getSEOKeywordsPrompt(description) {
+export function getSEOKeywordsPrompt({ title = "", description = "", mainOnly = "", keywordCandidates = [] } = {}) {
+  const candidateBrief = uniqueKeywordList(keywordCandidates).slice(0, 14).join(", ") || "none";
+
   return `
 Generate 10-14 SEO keywords that a real person might search for.
 Lowercase, comma-separated.
 No hashtags.
 No duplication.
 No generic filler.
+Prefer specific artificial intelligence topics over broad noise.
 
-Base them ONLY on this description:
-${description}
+Candidate phrases already detected: ${candidateBrief}
+
+Base them ONLY on this episode metadata and main-content excerpt:
+Title: ${title}
+Description: ${description}
+Main content excerpt: ${String(mainOnly || "").slice(0, 2400)}
 
 Return ONLY the keywords.
 `.trim();
@@ -350,6 +439,7 @@ export async function generateEpisodeMetaLLM(rawTranscript, sessionMeta = {}) {
   }
 
   const durationPlan = calculateDuration("episode", sessionMeta);
+  const seoKeywordCandidates = detectSeoKeywordCandidates(mainOnly);
 
   // On-brand fallbacks. These are used only if the model output fails validation.
   let title = buildFallbackTitle(mainOnly);
@@ -376,7 +466,7 @@ export async function generateEpisodeMetaLLM(rawTranscript, sessionMeta = {}) {
       description: parsed?.description ? String(parsed.description).trim() : "",
     };
 
-    const v = validateMetaCandidate(candidate, durationPlan);
+    const v = validateMetaCandidate(candidate, durationPlan, seoKeywordCandidates);
     if (v.ok) {
       title = candidate.title;
       description = candidate.description;
@@ -392,7 +482,7 @@ export async function generateEpisodeMetaLLM(rawTranscript, sessionMeta = {}) {
   try {
     const kw = await resilientRequest("seoKeywords", {
       sessionId,
-      messages: [{ role: "user", content: getSEOKeywordsPrompt(description) }],
+      messages: [{ role: "user", content: getSEOKeywordsPrompt({ title, description, mainOnly, keywordCandidates: seoKeywordCandidates }) }],
     });
 
     keywords = String(kw)
@@ -401,8 +491,18 @@ export async function generateEpisodeMetaLLM(rawTranscript, sessionMeta = {}) {
       .filter(Boolean)
       .slice(0, 14);
   } catch {
-    keywords = ["artificial intelligence", "ai governance", "ai podcast", "jonathan harris"];
+    keywords = uniqueKeywordList([
+      ...seoKeywordCandidates,
+      "artificial intelligence",
+      "ai governance",
+      "ai podcast",
+      "jonathan harris",
+    ]).map((k) => k.toLowerCase()).slice(0, 14);
   }
+
+  keywords = uniqueKeywordList([...keywords, ...seoKeywordCandidates])
+    .map((k) => k.toLowerCase())
+    .slice(0, 14);
 
   /* Artwork Prompt */
   let artworkPrompt = getArtworkPrompt(description);
@@ -435,6 +535,7 @@ export async function generateEpisodeMetaLLM(rawTranscript, sessionMeta = {}) {
     plannedDurationSeconds: durationPlan.plannedDurationSeconds,
     durationPlan,
     keywords,
+    seoKeywordCandidates,
     artworkPrompt,
     createdAt: new Date().toISOString(),
   };
@@ -449,6 +550,8 @@ export const __testing = {
   buildFallbackTitle,
   buildFallbackDescription,
   detectTopics,
+  detectSeoKeywordCandidates,
+  textUsesSeoKeyword,
   getMetadataDescriptionBounds,
   validateMetaCandidate,
   isLikelyGenericTitle,
