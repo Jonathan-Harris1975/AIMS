@@ -1,0 +1,38 @@
+[
+  {
+    "id": "drucker-results",
+    "quote": "There is nothing so useless as doing efficiently that which should not be done at all.",
+    "author": "Peter Drucker",
+    "context": "useful work, pruning bad automation, avoiding performative productivity"
+  },
+  {
+    "id": "deming-system",
+    "quote": "A bad system will beat a good person every time.",
+    "author": "W. Edwards Deming",
+    "context": "systems thinking, workflow quality, automation with guardrails"
+  },
+  {
+    "id": "lamport-thinking",
+    "quote": "Thinking is not the ability to manipulate language; it's the ability to manipulate concepts.",
+    "author": "Leslie Lamport",
+    "context": "AI literacy, clear concepts, not confusing fluency with reasoning"
+  },
+  {
+    "id": "weizenbaum-judgement",
+    "quote": "The computer programmer is a creator of universes for which he alone is responsible.",
+    "author": "Joseph Weizenbaum",
+    "context": "responsibility, software decisions, AI systems with consequences"
+  },
+  {
+    "id": "shannon-information",
+    "quote": "Information is the resolution of uncertainty.",
+    "author": "Claude Shannon",
+    "context": "signal, noise, information quality, practical AI outputs"
+  },
+  {
+    "id": "gall-working-system",
+    "quote": "A complex system that works is invariably found to have evolved from a simple system that worked.",
+    "author": "John Gall",
+    "context": "building small, avoiding over-engineering, automation maturity"
+  }
+]
