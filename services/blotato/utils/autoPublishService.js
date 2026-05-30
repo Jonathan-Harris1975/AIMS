@@ -240,6 +240,16 @@ function limitHashtags(text = "", max = 5) {
     .trim();
 }
 
+
+function normalisePackForPublish(pack = {}) {
+  return {
+    ...pack,
+    instagramCaption: limitHashtags(pack.instagramCaption || pack.tiktokCaption || pack.facebookCaption || pack.script, 5),
+    tiktokCaption: limitHashtags(pack.tiktokCaption || pack.instagramCaption || pack.facebookCaption || pack.script, 5),
+    youtubeDescription: limitHashtags(pack.youtubeDescription || pack.facebookCaption || pack.script, 5),
+  };
+}
+
 function buildPlatformText(platform, pack) {
   if (platform === "youtube") return pack.youtubeDescription || pack.facebookCaption || pack.script;
   if (platform === "instagram") {
@@ -324,7 +334,7 @@ async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOT
     const templateId = defaults.templateId;
     const platforms = defaults.channels;
 
-    const pack = await buildShortLanePack({
+    const generatedPack = await buildShortLanePack({
       article: articleSource.article,
       lane: lane.slug,
       theme: trim(process.env.BLOTATO_NEWS_THEME, lane.theme),
@@ -338,6 +348,7 @@ async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOT
         "For more straight-talking AI analysis, follow Jonathan Harris and listen to Turing's Torch AI Weekly."
       ),
     });
+    const pack = normalisePackForPublish(generatedPack);
 
     const blotatoShortGate = runBlotatoShortGate({
       pack,
