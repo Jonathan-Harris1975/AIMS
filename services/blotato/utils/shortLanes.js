@@ -95,6 +95,44 @@ export const BLOTATO_SHORT_LANES = Object.freeze([
       "Result",
     ],
   },
+  {
+    slug: "ethics-brief",
+    label: "AI Ethics Brief",
+    weekday: "Saturday",
+    theme: "ai-ethics-trade-off",
+    jobType: "blotato-ethics-brief-publish",
+    routeName: "ethics-brief-short",
+    promptFocus:
+      "Frame one AI ethics or policy tension in plain English without turning it into a lecture.",
+    sourceStrategy:
+      "Use the source only when it gives a clear evidence floor for the trade-off; avoid generic risk theatre.",
+    structure: [
+      "The tension",
+      "Why it matters",
+      "Who carries the risk",
+      "The practical question",
+      "CTA",
+    ],
+  },
+  {
+    slug: "ai-spotlight-video",
+    label: "AI Spotlight Video",
+    weekday: "Sunday",
+    theme: "ai-person-spotlight",
+    jobType: "blotato-ai-spotlight-video-publish",
+    routeName: "ai-spotlight-video-short",
+    promptFocus:
+      "Spotlight one credible AI figure, contribution, or historical lesson that still matters now.",
+    sourceStrategy:
+      "Prefer a timely source-backed person; if the source is weak, keep the spotlight evergreen and avoid repeated famous names.",
+    structure: [
+      "Who they are",
+      "What they changed",
+      "Why it still matters",
+      "The lesson",
+      "CTA",
+    ],
+  },
 ]);
 
 export const BLOTATO_SHORT_LANE_SLUGS = Object.freeze(BLOTATO_SHORT_LANES.map((lane) => lane.slug));

@@ -16,6 +16,7 @@ import { buildBlotatoVideoInputs, buildBlotatoVisualPrompt, buildShortLanePack }
 import { DEFAULT_BLOTATO_SHORT_LANE, getShortLaneJobTypes, requireShortLaneConfig } from "./shortLanes.js";
 import { selectRssArticleForBlotato } from "./rssArticleSource.js";
 import { info, warn } from "../../../logger.js";
+import { recordUsedSocialSource } from "../../oneup/utils/state.js";
 
 export const BLOTATO_PUBLISH_JOB_TYPE = "blotato-news-insight-publish";
 export const DEFAULT_AI_STORY_TEMPLATE_PATH =
@@ -341,6 +342,14 @@ async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOT
     for (const platform of platforms) {
       publishes.push(await publishAndWait({ platform, pack, mediaUrl: video.mediaUrl, apiKey }));
     }
+
+    recordUsedSocialSource({
+      lane: `blotato:${lane.slug}`,
+      title: articleSource.article?.title,
+      link: articleSource.article?.link,
+      pubDate: articleSource.article?.pubDate,
+      scheduledDateTime: new Date().toISOString(),
+    });
 
     const result = {
       ok: true,
