@@ -17,6 +17,8 @@ import { DEFAULT_BLOTATO_SHORT_LANE, getShortLaneJobTypes, requireShortLaneConfi
 import { selectRssArticleForBlotato } from "./rssArticleSource.js";
 import { info, warn } from "../../../logger.js";
 import { recordUsedSocialSource } from "../../oneup/utils/state.js";
+import { buildBlotatoGateError, runBlotatoShortGate } from "./shortGate.js";
+import { completeEditorialReservation, releaseEditorialReservation, reserveEditorialSource } from "../../social/editorialLedger.js";
 
 export const BLOTATO_PUBLISH_JOB_TYPE = "blotato-news-insight-publish";
 export const DEFAULT_AI_STORY_TEMPLATE_PATH =
@@ -314,7 +316,7 @@ function buildRssSummary(articleSource = {}) {
   };
 }
 
-async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOTATO_SHORT_LANE, apiKey }) {
+async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOTATO_SHORT_LANE, apiKey, editorialReservation = null }) {
   const lane = requireShortLaneConfig(laneSlug);
   try {
     info("blotato.publish_now.job.start", { sessionId, lane: lane.slug, rssSource: articleSource.rssSource });
@@ -337,6 +339,13 @@ async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOT
       ),
     });
 
+    const blotatoShortGate = runBlotatoShortGate({
+      pack,
+      article: articleSource.article,
+      lane: lane.slug,
+    });
+    if (!blotatoShortGate.ok) throw buildBlotatoGateError(blotatoShortGate);
+
     const video = await createAndWaitForVideo({ templateId, pack, apiKey });
     const publishes = [];
     for (const platform of platforms) {
@@ -350,6 +359,18 @@ async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOT
       pubDate: articleSource.article?.pubDate,
       scheduledDateTime: new Date().toISOString(),
     });
+    if (editorialReservation) {
+      completeEditorialReservation(editorialReservation, {
+        pipeline: "blotato",
+        lane: lane.slug,
+        source: articleSource.article,
+        audienceIntent: lane.theme,
+        angle: pack.angle || pack.internalTitle,
+        scheduledDateTime: new Date().toISOString(),
+        text: pack.script,
+        meta: { contentType: "blotato-short", platforms },
+      });
+    }
 
     const result = {
       ok: true,
@@ -361,6 +382,7 @@ async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOT
       rss: buildRssSummary(articleSource),
       source: articleSource,
       pack,
+      blotatoShortGate,
       visualId: video.visualId,
       mediaUrl: video.mediaUrl,
       video,
@@ -380,6 +402,7 @@ async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOT
     info("blotato.publish_now.job.complete", { sessionId, lane: lane.slug, platforms });
     return result;
   } catch (error) {
+    if (editorialReservation) releaseEditorialReservation(editorialReservation);
     failJob(lane.jobType, sessionId, error);
     warn("blotato.publish_now.job.fail", { sessionId, error: error?.message || String(error) });
     throw error;
@@ -389,6 +412,20 @@ async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOT
 export async function triggerPublishNowJob(req = {}, laneSlug = DEFAULT_BLOTATO_SHORT_LANE) {
   const lane = requireShortLaneConfig(laneSlug);
   const articleSource = await selectRssArticleForBlotato();
+  const reservationResult = await reserveEditorialSource({
+    pipeline: "blotato",
+    lane: lane.slug,
+    source: articleSource.article,
+    audienceIntent: lane.theme,
+    angle: lane.label,
+    scheduledDateTime: new Date().toISOString(),
+  });
+  if (reservationResult.duplicatePrevented) {
+    const err = new Error(`Selected RSS article is already reserved for another social pipeline: ${articleSource.article?.title || "untitled"}`);
+    err.statusCode = 409;
+    throw err;
+  }
+  const editorialReservation = reservationResult.reservation || null;
   const sessionId = createSessionId(articleSource.article, lane.slug);
   const defaults = buildDefaults(lane.slug);
   const statusUrl = publicJobUrl(req, sessionId);
@@ -398,6 +435,7 @@ export async function triggerPublishNowJob(req = {}, laneSlug = DEFAULT_BLOTATO_
     defaults,
     lane: lane.slug,
     statusUrl,
+    editorialReservation,
   });
 
   const publicJob = toPublicJob(job);
@@ -409,14 +447,16 @@ export async function triggerPublishNowJob(req = {}, laneSlug = DEFAULT_BLOTATO_
     statusUrl,
     defaults,
     rss: buildRssSummary(articleSource),
+    editorialReservation,
     job: publicJob,
   };
 
   if (!started) {
+    if (editorialReservation) releaseEditorialReservation(editorialReservation);
     return response;
   }
 
-  const run = () => runPublishJob({ sessionId, articleSource, laneSlug: lane.slug });
+  const run = () => runPublishJob({ sessionId, articleSource, laneSlug: lane.slug, editorialReservation });
   if (parseBoolean(process.env.BLOTATO_INLINE_PUBLISH_JOBS, false)) {
     await run();
   } else {

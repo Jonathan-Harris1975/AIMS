@@ -3,6 +3,7 @@ import { fetchWithTimeout } from "../../shared/http-client.js";
 import { getObjectAsText } from "../../shared/utils/r2-client.js";
 import { debug, warn } from "../../../logger.js";
 import { hasRecentSocialSource } from "../../oneup/utils/state.js";
+import { hasRecentEditorialSource } from "../../social/editorialLedger.js";
 
 const parser = new Parser();
 const DEFAULT_PUBLIC_RSS_URL = "https://ai-news.jonathan-harris.online/feed.xml";
@@ -177,7 +178,7 @@ function pickItem(items = []) {
 
   if (!usable.length) return null;
 
-  const unused = usable.filter((item) => !hasRecentSocialSource(item));
+  const unused = usable.filter((item) => !hasRecentSocialSource(item) && !hasRecentEditorialSource(item));
   const candidates = unused.length ? unused : usable;
   const mode = trim(process.env.BLOTATO_RSS_PICK_MODE, "latest").toLowerCase();
   if (mode === "random") {
