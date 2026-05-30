@@ -3,6 +3,9 @@ import { readJsonState, readJsonStateFresh, writeJsonState } from "../../shared/
 const STATE_FILE = "oneup-social-state.json";
 const MAX_HISTORY = 12;
 const MAX_SLOT_CLAIMS = 240;
+const MAX_LEDGER = 80;
+const MAX_SOURCE_HISTORY = 120;
+const MAX_SPOTLIGHT_PEOPLE = 24;
 const PENDING_SLOT_TTL_MS = Number(process.env.ONEUP_SLOT_PENDING_TTL_MS || 2 * 60 * 60 * 1000);
 const COMPLETED_SLOT_TTL_MS = Number(process.env.ONEUP_SLOT_COMPLETED_TTL_MS || 90 * 24 * 60 * 60 * 1000);
 const activeSlotClaims = new Set();
@@ -15,6 +18,9 @@ function emptyState() {
       scheduled: [],
     },
     slotClaims: [],
+    weeklyLedger: [],
+    spotlightPeople: [],
+    usedSocialSources: [],
   };
 }
 
@@ -31,6 +37,9 @@ function normaliseState(raw) {
       scheduled: ensureArray(state?.quiz?.scheduled),
     },
     slotClaims: ensureArray(state?.slotClaims),
+    weeklyLedger: ensureArray(state?.weeklyLedger),
+    spotlightPeople: ensureArray(state?.spotlightPeople),
+    usedSocialSources: ensureArray(state?.usedSocialSources),
   };
 }
 
@@ -236,6 +245,18 @@ export function recordLaneSchedule(laneKey, entry) {
   ]);
 
   state.lanes[laneKey] = { topics, scheduled };
+  if (entry?.topic || entry?.title) {
+    state.weeklyLedger = trimHistory([
+      ...ensureArray(state.weeklyLedger),
+      {
+        lane: laneKey,
+        topic: entry?.topic || null,
+        title: entry?.title || null,
+        scheduledDateTime: entry?.scheduledDateTime || null,
+        recordedAt: new Date().toISOString(),
+      },
+    ]).slice(-MAX_LEDGER);
+  }
   writeOneUpState(state);
   return state.lanes[laneKey];
 }
@@ -264,6 +285,97 @@ export function recordQuizSchedule(entry) {
       },
     ]),
   };
+
+  if (entry?.topic || entry?.questionTitle || entry?.answerTitle) {
+    state.weeklyLedger = trimHistory([
+      ...ensureArray(state.weeklyLedger),
+      {
+        lane: "quiz",
+        topic: entry?.topic || null,
+        title: entry?.questionTitle || entry?.answerTitle || null,
+        scheduledDateTime: entry?.questionDateTime || null,
+        recordedAt: new Date().toISOString(),
+      },
+    ]).slice(-MAX_LEDGER);
+  }
+
   writeOneUpState(state);
   return state.quiz;
+}
+
+
+function normaliseIdentity(value = "") {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function socialSourceKey({ title = "", link = "" } = {}) {
+  const normalisedLink = String(link || "").trim().replace(/\/$/, "").toLowerCase();
+  return normalisedLink || normaliseIdentity(title).slice(0, 180);
+}
+
+export function getWeeklyTopicLedger() {
+  const state = readOneUpState();
+  const entries = ensureArray(state.weeklyLedger).slice(-MAX_LEDGER);
+  return {
+    topics: entries.map((entry) => [entry.lane, entry.topic || entry.title].filter(Boolean).join(": ")).filter(Boolean).slice(-12),
+    entries,
+  };
+}
+
+export function isRecentSpotlightPerson(person) {
+  const key = normaliseIdentity(person);
+  if (!key) return false;
+  const state = readOneUpState();
+  return ensureArray(state.spotlightPeople).slice(-12).some((entry) => normaliseIdentity(entry?.person) === key);
+}
+
+export function recordSpotlightPerson(person, context = {}) {
+  const cleaned = String(person || "").trim();
+  if (!cleaned) return readOneUpState().spotlightPeople || [];
+  const state = readOneUpState();
+  const key = normaliseIdentity(cleaned);
+  state.spotlightPeople = [
+    ...ensureArray(state.spotlightPeople).filter((entry) => normaliseIdentity(entry?.person) !== key),
+    {
+      person: cleaned,
+      topic: context.topic || null,
+      title: context.title || null,
+      scheduledDateTime: context.scheduledDateTime || null,
+      recordedAt: new Date().toISOString(),
+    },
+  ].slice(-MAX_SPOTLIGHT_PEOPLE);
+  writeOneUpState(state);
+  return state.spotlightPeople;
+}
+
+export function hasRecentSocialSource(source = {}) {
+  const key = socialSourceKey(source);
+  if (!key) return false;
+  const state = readOneUpState();
+  return ensureArray(state.usedSocialSources).some((entry) => entry?.key === key);
+}
+
+export function recordUsedSocialSource(source = {}) {
+  const key = socialSourceKey(source);
+  if (!key) return readOneUpState().usedSocialSources || [];
+  const state = readOneUpState();
+  state.usedSocialSources = [
+    ...ensureArray(state.usedSocialSources).filter((entry) => entry?.key !== key),
+    {
+      key,
+      lane: source.lane || null,
+      title: source.title || null,
+      link: source.link || null,
+      pubDate: source.pubDate || null,
+      scheduledDateTime: source.scheduledDateTime || null,
+      recordedAt: new Date().toISOString(),
+    },
+  ].slice(-MAX_SOURCE_HISTORY);
+  writeOneUpState(state);
+  return state.usedSocialSources;
 }

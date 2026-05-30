@@ -39,12 +39,13 @@ Voice rules:
 - prefer one clear idea over padded filler
 - never sound like a textbook, glossary, press release, Wikipedia entry, or poster slogan`;
 
-export function buildDailyPrompt({ lane, publishDate, history = [], rssItems = [] }) {
+export function buildDailyPrompt({ lane, publishDate, history = [], rssItems = [], weeklyHistory = [], verifiedQuote = null, buildContext = "" }) {
   const laneGuidance = {
-    monday: `Write a Monday post built around one real quote from a recognised figure in technology, science, philosophy, literature, or business.
-Use the quote as a springboard for a brief, sharp reflection tied to AI, discipline, useful work, or craft.
+    monday: `Write a Monday post built around the verified quote supplied below.
+Use the exact quote and author. Do not alter the wording, attribution, or punctuation of the quote.
+Use it as a springboard for a brief, sharp reflection tied to AI, discipline, useful work, or craft.
 Keep it grounded rather than preachy.
-Do not invent quotes.
+Do not add any other quote.
 Do not explain the person's full biography.
 Content target: 45 to 75 words.`,
     tuesday: `Write a Tuesday concept post that explains one AI, machine learning, or computing idea in plain English.
@@ -62,9 +63,10 @@ Pick a real sector and one concrete task where AI helps: triage, forecasting, do
 Keep the tone modest and useful.
 Do not oversell, futurise, or make broad industry claims.
 Content target: 45 to 75 words.`,
-    friday: `Write a Friday build-in-public post in first person from Jonathan Harris's perspective.
-It must feel like a genuine maker update.
-Include at least one specific detail such as a bottleneck, bug, workflow tweak, decision, lesson, metric, failed approach, or small win.
+    friday: `Write a Friday build-in-public post.
+If verified build context is supplied below, use only that context for any first-person detail.
+If no verified build context is supplied, write a neutral build note about the discipline of improving systems without claiming a specific bug, metric, deployment, decision, or private work item.
+Do not invent first-person specifics.
 Keep it honest and grounded.
 Do not use vague phrases such as "exciting things", "big moves", or "game-changing".
 Content target: 35 to 65 words.`,
@@ -101,6 +103,16 @@ ${laneGuidance[lane.key]}
 
 Recent lane history to avoid repeating:
 ${renderHistoryBlock(history)}
+
+Verified Monday quote source:
+${verifiedQuote ? `"${verifiedQuote.quote}" — ${verifiedQuote.author}
+Context: ${verifiedQuote.context || ""}` : "No verified quote supplied. Do not generate a Monday quote without a verified quote source."}
+
+Verified Friday build context:
+${String(buildContext || "").trim() || "No verified build context supplied. Avoid first-person factual specifics."}
+
+Cross-lane weekly history to avoid same-week repetition:
+${renderHistoryBlock(weeklyHistory)}
 
 RSS context for weekend-aware lanes:
 ${renderRssBlock(rssItems)}
@@ -146,6 +158,7 @@ Requirements:
 - Wrong answers must be plausible but clearly wrong once explained
 - Avoid trick questions, vague wording, and giveaway joke answers
 - End the question post with: Comment your answer below.
+- Do not ask readers to tag friends, follow, share, or like the post.
 - Answer post content target: 35 to 65 words
 - Start the answer post with: Quiz Answer!
 - State the correct option clearly in the first sentence
@@ -170,8 +183,8 @@ function renderFeaturedBookBlock(featuredBook = {}) {
     `Title: ${featuredBook.title || ""}`,
     `Short description: ${featuredBook.shortDescription || ""}`,
     `Summary: ${featuredBook.summary || featuredBook.description || ""}`,
-    `Keywords: ${featuredBook.keywordsText || (Array.isArray(featuredBook.keywords) ? featuredBook.keywords.join(" | ") : "")}`,
-    `Audience: ${featuredBook.audience || ""}`,
+    `Keywords for discovery only, not claim evidence: ${featuredBook.keywordsText || (Array.isArray(featuredBook.keywords) ? featuredBook.keywords.join(" | ") : "")}`,
+    `Audience for targeting only, not claim evidence: ${featuredBook.audience || ""}`,
     `Who this book is for: ${featuredBook.whoThisBookIsFor || ""}`,
     `What this book covers: ${featuredBook.whatThisBookCovers || ""}`,
     `What readers will learn: ${featuredBook.whatYouWillLearn || ""}`,
@@ -209,7 +222,8 @@ Voice rules:
 - no hashtags in the model output
 - no markdown fences
 - no explanations outside the requested JSON
-- keep claims grounded in the supplied featured book data
+- keep claims grounded only in Summary, Who this book is for, What this book covers, What readers will learn, and Why it matters
+- use title, keywords, and audience for framing only; do not turn them into claims about the book content
 - do not invent facts, reviews, rankings, sales numbers, reader reactions, or credentials
 - use the supplied manuscript URL only as a reference identifier; do not claim to have read it, quote it, or infer extra facts from the link
 - prefer one clear idea over padded filler

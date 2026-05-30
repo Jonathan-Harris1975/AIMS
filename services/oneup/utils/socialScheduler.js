@@ -1,20 +1,140 @@
 import crypto from "node:crypto";
+import { readFileSync } from "node:fs";
 import { resilientRequest } from "../../shared/utils/ai-service.js";
 import { info, warn } from "../../../logger.js";
 import { LANE_CONFIG, QUIZ_CONFIG, EBOOK_CONFIG, ONEUP_CATEGORY_NAME_GENERAL, ONEUP_CATEGORY_NAME_EBOOKS, ONEUP_DEFAULT_DRY_RUN, DEFAULT_TIMEZONE, ONEUP_QUEUE_GUARD_LOOKBACK_PAGES, getOneUpRequiredNetworkTypes, getOneUpSocialNetworkId, normaliseOneUpSocialNetworkId, shouldValidateOneUpTargetAccounts } from "./config.js";
 import { buildDailyPrompt, buildQuizPrompt, buildEbookPostPrompt } from "./prompts.js";
 import { addDays, nextWeekdayDateString, toScheduledDateTime } from "./date.js";
 import { loadRecentRssContext } from "./feedContext.js";
-import { getLaneHistory, recordLaneSchedule, getQuizHistory, recordQuizSchedule, claimScheduleSlot, completeScheduleSlot, releaseScheduleSlot } from "./state.js";
+import { getLaneHistory, getWeeklyTopicLedger, recordLaneSchedule, getQuizHistory, recordQuizSchedule, claimScheduleSlot, completeScheduleSlot, releaseScheduleSlot, isRecentSpotlightPerson, recordSpotlightPerson, recordUsedSocialSource } from "./state.js";
 import { resolveCategory, inspectOneUpTargeting, listScheduledPosts, scheduleTextPost, scheduleImagePost } from "./oneupClient.js";
 import getSponsor from "../../script/utils/getSponsor.js";
 import { resolveFeaturedEbook } from "./ebookCatalogue.js";
 import { runPhase5OrganicGrowthGate } from "../../content-quality/phase5OrganicGrowthGates.js";
+import { BANNED_PROMO_PATTERNS, ENGAGEMENT_BAIT_PATTERNS, INFLATED_EBOOK_CLAIM_PATTERNS, findAmericanSpellings, findPatternBreaches } from "../../content-quality/brandLexicon.js";
 
 
 const ONEUP_DAILY_MAX_TOKENS = Math.max(1200, Number(process.env.ONEUP_DAILY_MAX_TOKENS || 1400));
 const ONEUP_QUIZ_MAX_TOKENS = Math.max(1800, Number(process.env.ONEUP_QUIZ_MAX_TOKENS || 2200));
 const ONEUP_EBOOK_MAX_TOKENS = Math.max(1200, Number(process.env.ONEUP_EBOOK_MAX_TOKENS || 1600));
+
+
+const VERIFIED_QUOTES = Object.freeze(JSON.parse(readFileSync(new URL("../data/verified-quotes.json", import.meta.url), "utf8")));
+
+function stableIndex(value = "", length = 1) {
+  const total = Math.max(1, Number(length) || 1);
+  let hash = 0;
+  for (const char of String(value || "")) {
+    hash = ((hash * 31) + char.charCodeAt(0)) >>> 0;
+  }
+  return hash % total;
+}
+
+function selectVerifiedQuote(publishDate = "") {
+  return VERIFIED_QUOTES[stableIndex(publishDate, VERIFIED_QUOTES.length)] || VERIFIED_QUOTES[0];
+}
+
+function normaliseSimple(value = "") {
+  return String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function extractHashtags(value = "") {
+  return [...String(value || "").matchAll(/(^|\s)(#[A-Za-z0-9_]+)/g)].map((match) => match[2]);
+}
+
+function wordCount(value = "") {
+  const text = compactText(value).replace(/(^|\s)#[A-Za-z0-9_]+/g, " ").trim();
+  return text ? text.split(/\s+/).filter(Boolean).length : 0;
+}
+
+function scoreFromGate(defects = [], warnings = []) {
+  return Math.max(0, 100 - defects.length * 18 - warnings.length * 5);
+}
+
+function buildGateError(gate, label = "OneUp social gate") {
+  const err = new Error(`${label} failed (${gate.score}/86): ${gate.defects.join(" | ")}`);
+  err.statusCode = 422;
+  err.oneUpSocialGate = gate;
+  return err;
+}
+
+function detectSpotlightPerson(post = {}) {
+  const text = `${post.topic || ""} ${post.title || ""}`.trim();
+  const candidate = text.match(/\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3}\b/)?.[0];
+  return candidate || String(post.topic || "").replace(/^(spotlight|profile|figure):?\s*/i, "").trim();
+}
+
+function runOneUpSocialGate({ contentType = "oneup-social", laneKey = "", post = {}, verifiedQuote = null, buildContext = "" } = {}) {
+  const defects = [];
+  const warnings = [];
+  const text = compactText([post.title, post.topic, post.content, post.firstComment].filter(Boolean).join("\n"));
+  const content = compactText(post.content || "");
+  const hashtags = extractHashtags(content);
+  const words = wordCount(content);
+
+  if (!content) defects.push("Post content is empty.");
+  if (hashtags.length > 3) defects.push("Post has more than three hashtags.");
+  if (/```|\*\*|^\s*[-*]\s+/m.test(content)) defects.push("Post contains markdown or bullet formatting.");
+  if (/\p{Extended_Pictographic}/u.test(content)) defects.push("Post contains emoji despite brand rules.");
+
+  for (const breach of findPatternBreaches(text, BANNED_PROMO_PATTERNS)) {
+    defects.push(`Brand tone breach: ${breach}`);
+  }
+  for (const { american, british } of findAmericanSpellings(text)) {
+    defects.push(`British English drift: use ${british} instead of ${american}`);
+  }
+
+  const baitCheckText = content.replace(/Comment your answer below\.?/gi, "");
+  for (const breach of findPatternBreaches(baitCheckText, ENGAGEMENT_BAIT_PATTERNS)) {
+    defects.push(`Engagement bait detected: ${breach}`);
+  }
+
+  if (/quiz-question/i.test(contentType)) {
+    if (!/A\)/.test(content) || !/B\)/.test(content) || !/C\)/.test(content) || !/D\)/.test(content)) {
+      defects.push("Quiz question must include A), B), C), and D) options.");
+    }
+    if (content.split("\n").some((line) => line.length > 140)) warnings.push("Quiz contains a long line that may be weak on static-image layouts.");
+    if (words > 90) warnings.push("Quiz post is long for a static-image quiz card.");
+  } else if (/quiz-answer/i.test(contentType)) {
+    if (!/Quiz Answer!/i.test(content)) defects.push("Quiz answer must start with the answer marker.");
+    if (words > 80) warnings.push("Quiz answer is long for a static-image answer card.");
+  } else if (words > 130) {
+    warnings.push("OneUp post is long for organic static social copy.");
+  }
+
+  if (laneKey === "monday") {
+    const quote = verifiedQuote?.quote || "";
+    const author = verifiedQuote?.author || "";
+    if (!quote || !author) defects.push("Monday post requires a verified quote source.");
+    if (quote && !normaliseSimple(content).includes(normaliseSimple(quote))) defects.push("Monday post does not include the exact verified quote.");
+    if (author && !normaliseSimple(content).includes(normaliseSimple(author))) defects.push("Monday post does not include the verified quote author.");
+  }
+
+  if (laneKey === "friday" && !String(buildContext || "").trim()) {
+    if (/\b(I|I've|I'm|my|we|we've|we're|our)\b/i.test(content)) {
+      defects.push("Friday post has first-person specifics without verified build context.");
+    }
+    if (/\bbug|metric|deployed|deployment|failed|fixed|shipped|Koyeb|R2|Hookdeck|API|endpoint|workflow tweak\b/i.test(content)) {
+      defects.push("Friday post claims specific build work without verified build context.");
+    }
+  }
+
+  if (/ebook/i.test(contentType)) {
+    for (const breach of findPatternBreaches(content, INFLATED_EBOOK_CLAIM_PATTERNS)) {
+      defects.push(`Inflated ebook claim detected: ${breach}`);
+    }
+  }
+
+  return {
+    ok: defects.length === 0 && scoreFromGate(defects, warnings) >= 86,
+    score: scoreFromGate(defects, warnings),
+    contentType,
+    laneKey,
+    defects,
+    warnings,
+    checkedAt: new Date().toISOString(),
+  };
+}
 
 const EBOOK_POST_DAYS = [
   { key: "tuesday", offset: 1, publishTimeKey: "tuesdayPublishTime" },
@@ -153,12 +273,15 @@ async function getQueuedPosts(apiKey) {
   return output;
 }
 
-function hasLikelyDuplicate(queuedPosts, { scheduledDateTime, categoryName, imageUrl }) {
+function hasLikelyDuplicate(queuedPosts, { scheduledDateTime, categoryName, imageUrl, content }) {
+  const expectedHash = content ? contentHash(content) : "";
   return (Array.isArray(queuedPosts) ? queuedPosts : []).some((item) => {
     const sameTime = String(item?.date_time || "").startsWith(scheduledDateTime);
     const sameCategory = String(item?.category_name || "").trim().toLowerCase() === String(categoryName || "").trim().toLowerCase();
     const sameImage = !imageUrl || String(item?.content_image || "").trim() === String(imageUrl || "").trim();
-    return sameTime && sameCategory && sameImage;
+    const queuedContent = item?.content || item?.post_content || item?.content_text || item?.caption || "";
+    const sameContent = expectedHash && queuedContent ? contentHash(queuedContent) === expectedHash : false;
+    return sameTime && sameCategory && (sameImage || sameContent);
   });
 }
 
@@ -230,7 +353,7 @@ function slotDuplicatePostResult({ publishDate, scheduledDateTime, dryRun = fals
   };
 }
 
-async function scheduleToOneUp({ post, scheduledDateTime, categoryName, socialNetworkId, dryRun, apiKey }) {
+async function scheduleToOneUp({ post, scheduledDateTime, categoryName, socialNetworkId, dryRun, apiKey, preflightOnly = false }) {
   const warnings = [];
   const normalisedSocialNetworkId = normaliseOneUpSocialNetworkId(socialNetworkId, getOneUpSocialNetworkId());
   const requiredNetworkTypes = getOneUpRequiredNetworkTypes();
@@ -268,7 +391,7 @@ async function scheduleToOneUp({ post, scheduledDateTime, categoryName, socialNe
   warnings.push(...(targeting.warnings || []));
   const category = targeting.category;
   const queuedPosts = await getQueuedPosts(apiKey);
-  if (hasLikelyDuplicate(queuedPosts, { scheduledDateTime, categoryName: category.category_name, imageUrl: post.imageUrl })) {
+  if (hasLikelyDuplicate(queuedPosts, { scheduledDateTime, categoryName: category.category_name, imageUrl: post.imageUrl, content: post.content })) {
     warnings.push("A likely duplicate post is already scheduled for this date/time/category, so no new post was created.");
     return {
       scheduled: false,
@@ -277,6 +400,18 @@ async function scheduleToOneUp({ post, scheduledDateTime, categoryName, socialNe
       oneUpResponse: null,
       category,
       duplicatePrevented: true,
+      targeting,
+    };
+  }
+
+  if (preflightOnly) {
+    return {
+      scheduled: false,
+      dryRun: false,
+      preflightOnly: true,
+      warnings,
+      oneUpResponse: null,
+      category,
       targeting,
     };
   }
@@ -416,6 +551,9 @@ export async function buildAndScheduleDailyLane(laneKey, options = {}) {
 
   try {
     const laneHistory = getLaneHistory(laneKey);
+    const weeklyHistory = getWeeklyTopicLedger();
+    const verifiedQuote = laneKey === "monday" ? selectVerifiedQuote(publishDate) : null;
+    const buildContext = laneKey === "friday" ? String(options.buildContext || process.env.ONEUP_FRIDAY_BUILD_CONTEXT || "").trim() : "";
     const rssContext = laneKey === "saturday" || laneKey === "sunday"
       ? await loadRecentRssContext({})
       : { ok: true, items: [], warning: null };
@@ -424,7 +562,10 @@ export async function buildAndScheduleDailyLane(laneKey, options = {}) {
       lane,
       publishDate,
       history: laneHistory.topics,
+      weeklyHistory: weeklyHistory.topics,
       rssItems: rssContext.items,
+      verifiedQuote,
+      buildContext,
     });
 
     const sessionId = `ONEUP-${lane.key.toUpperCase()}-${publishDate}`;
@@ -451,6 +592,25 @@ export async function buildAndScheduleDailyLane(laneKey, options = {}) {
       content: ensureHashtags(generated.content, lane.hashtags),
     };
 
+    const oneUpSocialGate = runOneUpSocialGate({
+      contentType: `oneup-daily-${laneKey}`,
+      laneKey,
+      post,
+      verifiedQuote,
+      buildContext,
+    });
+    if (!oneUpSocialGate.ok) throw buildGateError(oneUpSocialGate, `${lane.label} social gate`);
+
+    if (laneKey === "sunday") {
+      const spotlightPerson = detectSpotlightPerson(post);
+      if (spotlightPerson && isRecentSpotlightPerson(spotlightPerson)) {
+        const err = new Error(`Sunday spotlight repetition guard blocked recent person: ${spotlightPerson}`);
+        err.statusCode = 422;
+        err.oneUpSocialGate = { ...oneUpSocialGate, defects: [...oneUpSocialGate.defects, err.message] };
+        throw err;
+      }
+    }
+
     const scheduling = await scheduleToOneUp({
       post,
       scheduledDateTime,
@@ -469,6 +629,10 @@ export async function buildAndScheduleDailyLane(laneKey, options = {}) {
         title: post.title,
         imageUrl: post.imageUrl,
       });
+      if (laneKey === "sunday") recordSpotlightPerson(detectSpotlightPerson(post), { scheduledDateTime, topic: post.topic, title: post.title });
+      for (const item of Array.isArray(rssContext.items) ? rssContext.items.slice(0, 1) : []) {
+        recordUsedSocialSource({ lane: `oneup:${laneKey}`, title: item.title, link: item.link, pubDate: item.pubDate, scheduledDateTime });
+      }
     }
 
     if (slotClaim.claimed && (scheduling.scheduled || scheduling.duplicatePrevented)) {
@@ -506,6 +670,7 @@ export async function buildAndScheduleDailyLane(laneKey, options = {}) {
       post,
       oneUpResponse: scheduling.oneUpResponse,
       targeting: scheduling.targeting || null,
+      oneUpSocialGate,
     };
   } catch (error) {
     releaseScheduleSlot(slotClaim);
@@ -633,6 +798,13 @@ export async function buildAndScheduleEbookWeekly(options = {}) {
         throw err;
       }
 
+      const oneUpSocialGate = runOneUpSocialGate({
+        contentType: "oneup-ebook-conversion",
+        laneKey: `ebook-${dayKey}`,
+        post,
+      });
+      if (!oneUpSocialGate.ok) throw buildGateError(oneUpSocialGate, `${dayKey} ebook social gate`);
+
       const scheduling = await scheduleToOneUp({
         post,
         scheduledDateTime,
@@ -654,7 +826,17 @@ export async function buildAndScheduleEbookWeekly(options = {}) {
         oneUpResponse: scheduling.oneUpResponse,
         targeting: scheduling.targeting || null,
         phase5Gate,
+        oneUpSocialGate,
       };
+
+      if (scheduling.scheduled) {
+        recordLaneSchedule("ebooks-weekly", {
+          scheduledDateTime,
+          topic: post.topic,
+          title: `${featuredBook.title} ${dayKey}`,
+          imageUrl: post.imageUrl,
+        });
+      }
 
       if (slotClaim.claimed && (scheduling.scheduled || scheduling.duplicatePrevented)) {
         completeScheduleSlot(slotClaim, {
@@ -842,7 +1024,17 @@ export async function buildAndScheduleQuizSeries(options = {}) {
       content: ensureHashtags(generated.answerContent, QUIZ_CONFIG.answerHashtags),
     };
 
-    const questionScheduling = questionSlotClaim.duplicatePrevented
+    const questionGate = runOneUpSocialGate({ contentType: "oneup-quiz-question", laneKey: "quiz-question", post: questionPost });
+    if (!questionGate.ok) throw buildGateError(questionGate, "Quiz question social gate");
+    const answerGate = runOneUpSocialGate({ contentType: "oneup-quiz-answer", laneKey: "quiz-answer", post: answerPost });
+    if (!answerGate.ok) throw buildGateError(answerGate, "Quiz answer social gate");
+
+    if (!dryRun && apiKey && !questionSlotClaim.duplicatePrevented && !answerSlotClaim.duplicatePrevented) {
+      await scheduleToOneUp({ post: questionPost, scheduledDateTime: questionDateTime, categoryName, socialNetworkId, dryRun, apiKey, preflightOnly: true });
+      await scheduleToOneUp({ post: answerPost, scheduledDateTime: answerDateTime, categoryName, socialNetworkId, dryRun, apiKey, preflightOnly: true });
+    }
+
+    let questionScheduling = questionSlotClaim.duplicatePrevented
       ? slotDuplicatePostResult({
           publishDate: questionPublishDate,
           scheduledDateTime: questionDateTime,
@@ -859,22 +1051,42 @@ export async function buildAndScheduleQuizSeries(options = {}) {
           apiKey,
         });
 
-    const answerScheduling = answerSlotClaim.duplicatePrevented
-      ? slotDuplicatePostResult({
-          publishDate: answerPublishDate,
-          scheduledDateTime: answerDateTime,
-          dryRun: false,
-          categoryName,
-          reason: answerSlotClaim.reason,
-        })
-      : await scheduleToOneUp({
-          post: answerPost,
-          scheduledDateTime: answerDateTime,
-          categoryName,
-          socialNetworkId,
-          dryRun,
-          apiKey,
-        });
+    let answerScheduling;
+    try {
+      answerScheduling = answerSlotClaim.duplicatePrevented
+        ? slotDuplicatePostResult({
+            publishDate: answerPublishDate,
+            scheduledDateTime: answerDateTime,
+            dryRun: false,
+            categoryName,
+            reason: answerSlotClaim.reason,
+          })
+        : await scheduleToOneUp({
+            post: answerPost,
+            scheduledDateTime: answerDateTime,
+            categoryName,
+            socialNetworkId,
+            dryRun,
+            apiKey,
+          });
+    } catch (error) {
+      answerScheduling = {
+        publishDate: answerPublishDate,
+        scheduledDateTime: answerDateTime,
+        scheduled: false,
+        dryRun: Boolean(dryRun),
+        duplicatePrevented: false,
+        failed: true,
+        statusCode: statusCodeFromError(error),
+        category: { id: null, category_name: categoryName },
+        warnings: [`Quiz answer post failed after question scheduling attempt: ${safeErrorMessage(error)}`],
+        error: safeErrorMessage(error),
+        post: answerPost,
+        oneUpResponse: null,
+        targeting: error?.oneUpTargeting || null,
+        oneUpSocialGate: error?.oneUpSocialGate || answerGate,
+      };
+    }
 
     if (questionScheduling.scheduled || answerScheduling.scheduled) {
       recordQuizSchedule({
@@ -922,10 +1134,12 @@ export async function buildAndScheduleQuizSeries(options = {}) {
     });
 
     return {
-      ok: true,
+      ok: !answerScheduling.failed,
+      partialFailure: Boolean(answerScheduling.failed),
       lane: "quiz",
       topic: generated.topic,
       dryRun: questionScheduling.dryRun || answerScheduling.dryRun,
+      warnings: [...new Set([...(questionScheduling.warnings || []), ...(answerScheduling.warnings || [])].filter(Boolean))],
       question: {
         publishDate: questionPublishDate,
         scheduledDateTime: questionDateTime,
@@ -936,6 +1150,7 @@ export async function buildAndScheduleQuizSeries(options = {}) {
         post: questionPost,
         oneUpResponse: questionScheduling.oneUpResponse,
         targeting: questionScheduling.targeting || null,
+        oneUpSocialGate: questionGate,
       },
       answer: {
         publishDate: answerPublishDate,
@@ -947,6 +1162,9 @@ export async function buildAndScheduleQuizSeries(options = {}) {
         post: answerPost,
         oneUpResponse: answerScheduling.oneUpResponse,
         targeting: answerScheduling.targeting || null,
+        failed: Boolean(answerScheduling.failed),
+        error: answerScheduling.error || null,
+        oneUpSocialGate: answerGate,
       },
     };
   } catch (error) {
