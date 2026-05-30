@@ -1,4 +1,5 @@
 import { cleanSourceText, cleanSourceTitle, hasBannedPhrases, buildPromptSourceDigest } from "./weeklyPackage.js";
+import { GENERIC_HASHTAGS, SOCIAL_BLOG_BANNED_PHRASES } from "../../content-quality/brandLexicon.js";
 
 const CODE_FENCE_RE = /^```(?:json|html|markdown|md)?\s*|```$/gim;
 const TITLE_PREFIX_RE = /^(?:title|headline|summary|analysis|report|study|ai|openai|update|briefing|daily brief|social caption)\s*:\s*/i;
@@ -17,44 +18,9 @@ const IMAGE_REQUIRED = [
   /no watermarks|without watermarks/i,
 ];
 
-const BANNED = [
-  "in a significant development",
-  "game changer",
-  "game-changing",
-  "paradigm shift",
-  "rapidly evolving",
-  "transformative",
-  "revolutionary",
-  "groundbreaking",
-  "cutting-edge",
-  "ai is transforming everything",
-  "unlock value",
-  "unlocking value",
-  "seamless integration",
-  "robust ecosystem",
-  "this is huge",
-  "you need to know",
-  "don't miss",
-  "don’t miss",
-  "must read",
-  "it remains to be seen",
-  "beneath the hype",
-  "the real story",
-  "as ai continues",
-  "as artificial intelligence continues",
-  "artificial intelligence landscape",
-  "ai landscape",
-];
+const BANNED = SOCIAL_BLOG_BANNED_PHRASES;
 
-const GENERIC_TAGS = new Set([
-  "#ai",
-  "#artificialintelligence",
-  "#technology",
-  "#tech",
-  "#innovation",
-  "#future",
-  "#news",
-]);
+const GENERIC_TAGS = new Set(GENERIC_HASHTAGS);
 
 function stripCodeFences(value = "") {
   return String(value || "").replace(CODE_FENCE_RE, "").trim();
@@ -361,6 +327,8 @@ export function buildFallbackSocialBlogPackage({ items = [], dateLabel } = {}) {
     image_prompt: "Create high-impact premium editorial tech artwork for a daily AI briefing, dark navy and charcoal base, controlled neon teal and muted purple accents, strong contrast, cinematic composition, layered abstract infrastructure forms, grounded Gen X energy, no text, no letters, no numbers, no logos, no watermarks, no glowing brains, no cartoon robots, no stock office scenes, no generic AI wallpaper.",
     themes,
     date_label: dateLabel,
+    qa_mode: "fallback-package",
+    qa_reason: "model-output-unavailable-or-repaired-to-fallback",
   };
 }
 
@@ -725,13 +693,13 @@ export function buildSocialPackagePrompt({ dateLabel, items = [] } = {}) {
     "You are the senior social-blog editor for the Jonathan Harris AI ecosystem.",
     "Turn rewritten RSS material into one short daily blog package for social media posting: British English, Gen-X grounded, sharp, sceptical, useful, readable, and allergic to hype.",
     "Use only the supplied source material. Preserve factual meaning. Do not invent facts, numbers, quotes, sources, consequences, dates, motives, market impact, or claims.",
-    "Write like a host-editor with judgement, not a marketer, newswire, LinkedIn guru, analyst report, or SEO content mill.",
+    "Write like a host-editor with judgement, not a marketer, newswire, platform guru, analyst report, or SEO content mill.",
     "Return strict JSON only. No markdown, code fences, comments, or extra keys. Plain text fields only.",
   ].join("\n");
 
   const user = [
     `Build one daily Jonathan Harris social-blog package for ${dateLabel}.`,
-    "This is for Facebook, Instagram, LinkedIn-style sharing, RSS-to-social tools, and newsletter-friendly readers.",
+    "This is for Facebook, Instagram, TikTok/photo-post-adjacent captions, RSS-to-social tools, and newsletter-friendly readers.",
     "Use the supplied rewritten RSS briefs as the only source material.",
     "",
     "Required JSON object with exactly these top-level keys:",
