@@ -12,7 +12,7 @@ import * as sessionCache from "./sessionCache.js";
 import { attachEpisodeNumberIfNeeded } from "./episodeCounter.js";
 import editAndFormat from "./editAndFormat.js";
 import { runEditorialPass } from "./editorialPass.js";
-import { validateTranscriptStructure } from "./scriptValidation.js";
+import { validateTranscriptSourceIntegrity, validateTranscriptStructure } from "./scriptValidation.js";
 
 const {
   generateIntro,
@@ -117,6 +117,21 @@ export async function orchestrateScript(input) {
       throw new Error(`Final script failed structure validation: ${finalValidation.reasons.join("; ")}`);
     }
 
+    const transcriptSourceIntegrity = validateTranscriptSourceIntegrity(finalCandidate, sessionMeta);
+    if (!transcriptSourceIntegrity.ok) {
+      error("script.validation.sourceIntegrity.fail", {
+        sessionId: sid,
+        defects: transcriptSourceIntegrity.defects,
+      });
+      throw new Error(`Final script failed source-integrity validation: ${transcriptSourceIntegrity.defects.join("; ")}`);
+    }
+    if (transcriptSourceIntegrity.warnings.length) {
+      info("script.validation.sourceIntegrity.warn", {
+        sessionId: sid,
+        warnings: transcriptSourceIntegrity.warnings,
+      });
+    }
+
     const finalFullText = finalCandidate;
 
     // ============================================================
@@ -190,6 +205,9 @@ export async function orchestrateScript(input) {
       fullText: finalFullText,
       chunks: uploadedChunks,
       metadata: meta,
+      quality: {
+        transcriptSourceIntegrity,
+      },
     };
 
   } catch (err) {

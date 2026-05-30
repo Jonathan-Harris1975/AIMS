@@ -1,3 +1,9 @@
+import {
+  BANNED_PROMO_PATTERNS,
+  cleanLexiconText,
+  findAmericanSpellings,
+  findPatternBreaches,
+} from "../../content-quality/brandLexicon.js";
 import { OUTRO_CLOSING_TAGLINE } from "./promptTemplates.js";
 
 const MIN_TRANSCRIPT_LENGTH = 500;
@@ -232,5 +238,109 @@ export function validateTranscriptStructure(text = "") {
     ok: reasons.length === 0,
     reasons: Array.from(new Set(reasons)),
     outro,
+  };
+}
+
+
+const SOURCE_TERM_STOPWORDS = new Set([
+  "a", "an", "the", "and", "or", "but", "if", "then", "else", "when", "while",
+  "for", "to", "of", "in", "on", "at", "by", "from", "with", "as", "is", "are",
+  "was", "were", "be", "been", "being", "it", "this", "that", "these", "those", "its",
+  "their", "they", "them", "we", "you", "your", "our", "us", "into", "over", "under",
+  "about", "after", "before", "between", "during", "than", "too", "can", "could", "may",
+  "might", "will", "would", "should", "must", "also", "just", "more", "most", "less",
+  "least", "much", "many", "some", "any", "new", "news", "update", "today", "episode",
+  "podcast", "artificial", "intelligence", "ai", "said", "says", "report", "reports",
+  "reported",
+]);
+
+function collectSourceMaterial(value, depth = 0) {
+  if (!value || depth > 4) return [];
+  if (typeof value === "string") return [value];
+  if (Array.isArray(value)) return value.flatMap((item) => collectSourceMaterial(item, depth + 1));
+  if (typeof value === "object") {
+    const fields = [
+      "title",
+      "summary",
+      "description",
+      "text",
+      "content",
+      "rewritten",
+      "shortTitle",
+      "sourceText",
+      "source_title",
+      "source_summary",
+    ];
+    return fields.flatMap((field) => collectSourceMaterial(value[field], depth + 1));
+  }
+  return [];
+}
+
+function extractSourceTextFromSession(sessionMeta = {}) {
+  const sourceBuckets = [
+    sessionMeta.sources,
+    sessionMeta.sourceItems,
+    sessionMeta.articles,
+    sessionMeta.feedItems,
+    sessionMeta.rssItems,
+    sessionMeta.rssContext,
+    sessionMeta.selectedArticles,
+  ];
+  return collectSourceMaterial(sourceBuckets)
+    .map((part) => cleanLexiconText(part))
+    .filter((part) => part.length >= 20)
+    .join("\n");
+}
+
+function extractConcreteTerms(text = "") {
+  return [...new Set(
+    cleanLexiconText(text)
+      .toLowerCase()
+      .split(/[^a-z0-9]+/g)
+      .filter((word) => word.length >= 4 && !SOURCE_TERM_STOPWORDS.has(word))
+  )];
+}
+
+export function validateTranscriptSourceIntegrity(text = "", sessionMeta = {}) {
+  const transcript = cleanLexiconText(text);
+  const sourceText = extractSourceTextFromSession(sessionMeta);
+  const defects = [];
+  const warnings = [];
+
+  const bannedPromo = findPatternBreaches(transcript, BANNED_PROMO_PATTERNS);
+  if (bannedPromo.length) {
+    defects.push(`transcript contains banned promotional language: ${bannedPromo.slice(0, 5).join(", ")}`);
+  }
+
+  const americanSpellings = findAmericanSpellings(transcript);
+  if (americanSpellings.length) {
+    warnings.push(
+      `possible American spellings: ${americanSpellings
+        .slice(0, 8)
+        .map(({ american, british }) => `${american}->${british}`)
+        .join(", ")}`
+    );
+  }
+
+  if (!sourceText) {
+    warnings.push("no source material supplied for deterministic transcript-source overlap check");
+  } else {
+    const sourceTerms = extractConcreteTerms(sourceText);
+    const transcriptTerms = new Set(extractConcreteTerms(transcript));
+    const sharedTerms = sourceTerms.filter((term) => transcriptTerms.has(term));
+    const minSharedTerms = Number(process.env.PODCAST_TRANSCRIPT_MIN_SOURCE_TERMS || 3);
+
+    if (sourceTerms.length >= minSharedTerms && sharedTerms.length < minSharedTerms) {
+      defects.push(
+        `transcript keeps only ${sharedTerms.length} concrete source term(s); minimum is ${minSharedTerms}`
+      );
+    }
+  }
+
+  return {
+    ok: defects.length === 0,
+    defects: Array.from(new Set(defects)),
+    warnings: Array.from(new Set(warnings)),
+    sourceChecked: Boolean(sourceText),
   };
 }
