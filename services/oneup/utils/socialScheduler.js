@@ -11,7 +11,8 @@ import { resolveCategory, inspectOneUpTargeting, listScheduledPosts, scheduleTex
 import getSponsor from "../../script/utils/getSponsor.js";
 import { resolveFeaturedEbook } from "./ebookCatalogue.js";
 import { runPhase5OrganicGrowthGate } from "../../content-quality/phase5OrganicGrowthGates.js";
-import { BANNED_PROMO_PATTERNS, ENGAGEMENT_BAIT_PATTERNS, INFLATED_EBOOK_CLAIM_PATTERNS, findAmericanSpellings, findPatternBreaches } from "../../content-quality/brandLexicon.js";
+import { BANNED_PROMO_PATTERNS, ENGAGEMENT_BAIT_PATTERNS, GENERIC_HASHTAGS, INFLATED_EBOOK_CLAIM_PATTERNS, findAmericanSpellings, findPatternBreaches } from "../../content-quality/brandLexicon.js";
+import { buildIntentHash, completeEditorialReservation, hasRecentAudienceIntent, recordEditorialEvent, releaseEditorialReservation, reserveEditorialSource } from "../../social/editorialLedger.js";
 
 
 const ONEUP_DAILY_MAX_TOKENS = Math.max(1200, Number(process.env.ONEUP_DAILY_MAX_TOKENS || 1400));
@@ -20,6 +21,19 @@ const ONEUP_EBOOK_MAX_TOKENS = Math.max(1200, Number(process.env.ONEUP_EBOOK_MAX
 
 
 const VERIFIED_QUOTES = Object.freeze(JSON.parse(readFileSync(new URL("../data/verified-quotes.json", import.meta.url), "utf8")));
+
+function validateVerifiedQuotes(quotes = []) {
+  const missing = quotes
+    .filter((item) => !item?.quote || !item?.author || !(item?.sourceUrl || item?.sourceTitle || item?.sourceNote))
+    .map((item) => item?.id || item?.author || "unknown");
+  if (missing.length) {
+    const err = new Error(`Verified quote ledger entries missing provenance fields: ${missing.join(", ")}`);
+    err.statusCode = 500;
+    throw err;
+  }
+}
+
+validateVerifiedQuotes(VERIFIED_QUOTES);
 
 function stableIndex(value = "", length = 1) {
   const total = Math.max(1, Number(length) || 1);
@@ -32,6 +46,46 @@ function stableIndex(value = "", length = 1) {
 
 function selectVerifiedQuote(publishDate = "") {
   return VERIFIED_QUOTES[stableIndex(publishDate, VERIFIED_QUOTES.length)] || VERIFIED_QUOTES[0];
+}
+
+function resolveVerifiedBuildContext(options = {}) {
+  const raw = options.buildContext ?? process.env.ONEUP_FRIDAY_BUILD_CONTEXT ?? "";
+  const warnings = [];
+  if (!String(raw || "").trim()) return { text: "", warnings };
+
+  let parsed = null;
+  if (typeof raw === "object" && raw !== null) {
+    parsed = raw;
+  } else {
+    try {
+      parsed = JSON.parse(String(raw));
+    } catch {
+      parsed = null;
+    }
+  }
+
+  if (!parsed) {
+    warnings.push("Friday build context is plain text. Prefer JSON with text, source, date, and ttlDays so stale first-person detail can be rejected.");
+    return { text: String(raw || "").trim(), warnings };
+  }
+
+  const text = String(parsed.text || parsed.summary || parsed.context || "").trim();
+  const source = String(parsed.source || parsed.sourceUrl || parsed.commit || parsed.deployment || "").trim();
+  const dateValue = parsed.date || parsed.createdAt || parsed.updatedAt || parsed.deployedAt;
+  const ttlDays = Math.max(1, Number(parsed.ttlDays || process.env.ONEUP_FRIDAY_BUILD_CONTEXT_TTL_DAYS || 14));
+  const dateMs = Date.parse(dateValue || "");
+
+  if (!text) return { text: "", warnings: ["Friday build context JSON did not include a text/summary/context field."] };
+  if (!source) warnings.push("Friday build context JSON has no source field. Treating it as lower-trust context.");
+  if (!Number.isFinite(dateMs)) warnings.push("Friday build context JSON has no valid date. Treating it as lower-trust context.");
+  if (Number.isFinite(dateMs) && Date.now() - dateMs > ttlDays * 86400000) {
+    return {
+      text: "",
+      warnings: [`Friday build context is older than ${ttlDays} days, so first-person specifics were disabled.`],
+    };
+  }
+
+  return { text, warnings };
 }
 
 function normaliseSimple(value = "") {
@@ -59,6 +113,8 @@ function buildGateError(gate, label = "OneUp social gate") {
 }
 
 function detectSpotlightPerson(post = {}) {
+  const supplied = compactText(post.spotlightPerson || "");
+  if (supplied) return supplied;
   const text = `${post.topic || ""} ${post.title || ""}`.trim();
   const candidate = text.match(/\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3}\b/)?.[0];
   return candidate || String(post.topic || "").replace(/^(spotlight|profile|figure):?\s*/i, "").trim();
@@ -74,6 +130,8 @@ function runOneUpSocialGate({ contentType = "oneup-social", laneKey = "", post =
 
   if (!content) defects.push("Post content is empty.");
   if (hashtags.length > 3) defects.push("Post has more than three hashtags.");
+  const genericTags = hashtags.filter((tag) => GENERIC_HASHTAGS.includes(String(tag).toLowerCase()));
+  if (genericTags.length > 1) warnings.push("Post uses more than one generic hashtag; keep premium channels tidy.");
   if (/```|\*\*|^\s*[-*]\s+/m.test(content)) defects.push("Post contains markdown or bullet formatting.");
   if (/\p{Extended_Pictographic}/u.test(content)) defects.push("Post contains emoji despite brand rules.");
 
@@ -247,12 +305,20 @@ function compactText(value = "") {
     .trim();
 }
 
-function ensureHashtags(content, hashtags) {
+function escapeRegExp(value = "") {
+  return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function ensureHashtags(content, hashtags, { maxTags = 3 } = {}) {
   const base = compactText(content);
-  const tags = (Array.isArray(hashtags) ? hashtags : []).filter(Boolean);
+  const tags = (Array.isArray(hashtags) ? hashtags : [])
+    .map((tag) => String(tag || "").trim())
+    .filter(Boolean)
+    .filter((tag, index, array) => array.findIndex((item) => item.toLowerCase() === tag.toLowerCase()) === index)
+    .slice(0, Math.max(0, Number(maxTags || 3)));
   if (!tags.length) return base;
 
-  const missing = tags.filter((tag) => !base.includes(tag));
+  const missing = tags.filter((tag) => !new RegExp(`(^|\\s)${escapeRegExp(tag)}(?=\\s|$)`, "i").test(base));
   if (!missing.length) return base;
   return `${base}\n\n${missing.join(" ")}`;
 }
@@ -300,12 +366,12 @@ function duplicateSlotWarning(reason) {
   return `A OneUp post for this exact schedule slot was already ${reason === "same-slot-already-running" ? "being processed" : "processed"}, so no new post was created.`;
 }
 
-async function claimOneUpSlot({ scope, scheduledDateTime, categoryName, socialNetworkId, imageUrl, dryRun, apiKey, force }) {
+async function claimOneUpSlot({ scope, scheduledDateTime, categoryName, socialNetworkId, imageUrl, dryRun, apiKey, force, sourceIntentHash }) {
   if (isEffectiveDryRun({ dryRun, apiKey }) || isTruthyOption(force)) {
     return { claimed: false, skipped: true, duplicatePrevented: false, key: null };
   }
 
-  return claimScheduleSlot({ scope, scheduledDateTime, categoryName, socialNetworkId, imageUrl });
+  return claimScheduleSlot({ scope, scheduledDateTime, categoryName, socialNetworkId, imageUrl, sourceIntentHash });
 }
 
 
@@ -389,6 +455,15 @@ async function scheduleToOneUp({ post, scheduledDateTime, categoryName, socialNe
   }
 
   warnings.push(...(targeting.warnings || []));
+  info("oneup.targeting.coverage", {
+    categoryName,
+    socialNetworkId: normalisedSocialNetworkId,
+    requiredNetworkTypes,
+    connectedNetworkTypes: [...new Set((targeting.categoryAccounts || []).map((account) => account.social_network_type).filter(Boolean))],
+    targetedNetworkTypes: [...new Set((targeting.targetedAccounts || []).map((account) => account.social_network_type).filter(Boolean))],
+    missingRequiredNetworkTypes: targeting.missingRequiredNetworkTypes || [],
+    targetedAccountCount: targeting.targetedAccountCount,
+  });
   const category = targeting.category;
   const queuedPosts = await getQueuedPosts(apiKey);
   if (hasLikelyDuplicate(queuedPosts, { scheduledDateTime, categoryName: category.category_name, imageUrl: post.imageUrl, content: post.content })) {
@@ -446,6 +521,7 @@ function normaliseDailyOutput(raw, lane) {
     topic: compactText(parsed.topic || lane.label).slice(0, 120),
     content: compactText(parsed.content || ""),
     firstComment: compactText(parsed.firstComment || ""),
+    spotlightPerson: compactText(parsed.spotlightPerson || "").slice(0, 80),
   };
 }
 
@@ -522,6 +598,7 @@ export async function buildAndScheduleDailyLane(laneKey, options = {}) {
     dryRun,
     apiKey,
     force: options.force,
+    sourceIntentHash: buildIntentHash({ audienceIntent: lane.audienceIntent, angle: laneKey }),
   });
 
   if (slotClaim.duplicatePrevented) {
@@ -549,14 +626,36 @@ export async function buildAndScheduleDailyLane(laneKey, options = {}) {
     };
   }
 
+  let editorialReservation = null;
+
   try {
     const laneHistory = getLaneHistory(laneKey);
     const weeklyHistory = getWeeklyTopicLedger();
     const verifiedQuote = laneKey === "monday" ? selectVerifiedQuote(publishDate) : null;
-    const buildContext = laneKey === "friday" ? String(options.buildContext || process.env.ONEUP_FRIDAY_BUILD_CONTEXT || "").trim() : "";
+    const buildContextResolved = laneKey === "friday" ? resolveVerifiedBuildContext(options) : { text: "", warnings: [] };
+    const buildContext = buildContextResolved.text;
     const rssContext = laneKey === "saturday" || laneKey === "sunday"
       ? await loadRecentRssContext({})
       : { ok: true, items: [], warning: null };
+    const audienceIntentWarning = hasRecentAudienceIntent(lane.audienceIntent, { excludePipeline: "oneup" })
+      ? `Recent cross-pipeline post already used audience intent '${lane.audienceIntent}'. Review angle before publishing.`
+      : null;
+    if (!dryRun && apiKey && Array.isArray(rssContext.items) && rssContext.items[0]) {
+      const reservation = await reserveEditorialSource({
+        pipeline: "oneup",
+        lane: laneKey,
+        source: rssContext.items[0],
+        audienceIntent: lane.audienceIntent,
+        angle: lane.label,
+        scheduledDateTime,
+      });
+      if (reservation.duplicatePrevented) {
+        const err = new Error(`Editorial source already reserved for another social pipeline: ${rssContext.items[0].title}`);
+        err.statusCode = 409;
+        throw err;
+      }
+      editorialReservation = reservation.reservation;
+    }
 
     const prompt = buildDailyPrompt({
       lane,
@@ -590,6 +689,7 @@ export async function buildAndScheduleDailyLane(laneKey, options = {}) {
       firstComment: generated.firstComment,
       imageUrl,
       content: ensureHashtags(generated.content, lane.hashtags),
+      spotlightPerson: generated.spotlightPerson || "",
     };
 
     const oneUpSocialGate = runOneUpSocialGate({
@@ -603,6 +703,12 @@ export async function buildAndScheduleDailyLane(laneKey, options = {}) {
 
     if (laneKey === "sunday") {
       const spotlightPerson = detectSpotlightPerson(post);
+      if (!spotlightPerson) {
+        const err = new Error("Sunday spotlight requires a canonical spotlightPerson value.");
+        err.statusCode = 422;
+        err.oneUpSocialGate = { ...oneUpSocialGate, defects: [...oneUpSocialGate.defects, err.message] };
+        throw err;
+      }
       if (spotlightPerson && isRecentSpotlightPerson(spotlightPerson)) {
         const err = new Error(`Sunday spotlight repetition guard blocked recent person: ${spotlightPerson}`);
         err.statusCode = 422;
@@ -620,7 +726,12 @@ export async function buildAndScheduleDailyLane(laneKey, options = {}) {
       apiKey,
     });
 
-    const warnings = [...(rssContext.warning ? [rssContext.warning] : []), ...(scheduling.warnings || [])];
+    const warnings = [
+      ...(rssContext.warning ? [rssContext.warning] : []),
+      ...(buildContextResolved.warnings || []),
+      ...(audienceIntentWarning ? [audienceIntentWarning] : []),
+      ...(scheduling.warnings || []),
+    ];
 
     if (scheduling.scheduled) {
       recordLaneSchedule(laneKey, {
@@ -632,6 +743,28 @@ export async function buildAndScheduleDailyLane(laneKey, options = {}) {
       if (laneKey === "sunday") recordSpotlightPerson(detectSpotlightPerson(post), { scheduledDateTime, topic: post.topic, title: post.title });
       for (const item of Array.isArray(rssContext.items) ? rssContext.items.slice(0, 1) : []) {
         recordUsedSocialSource({ lane: `oneup:${laneKey}`, title: item.title, link: item.link, pubDate: item.pubDate, scheduledDateTime });
+      }
+      if (editorialReservation) {
+        completeEditorialReservation(editorialReservation, {
+          pipeline: "oneup",
+          lane: laneKey,
+          source: Array.isArray(rssContext.items) ? rssContext.items[0] : null,
+          audienceIntent: lane.audienceIntent,
+          angle: post.topic || post.title,
+          scheduledDateTime,
+          text: post.content,
+          meta: { contentType: "oneup-daily" },
+        });
+      } else {
+        recordEditorialEvent({
+          pipeline: "oneup",
+          lane: laneKey,
+          audienceIntent: lane.audienceIntent,
+          angle: post.topic || post.title,
+          scheduledDateTime,
+          text: post.content,
+          meta: { contentType: "oneup-daily", dryRun: Boolean(scheduling.dryRun) },
+        });
       }
     }
 
@@ -674,6 +807,7 @@ export async function buildAndScheduleDailyLane(laneKey, options = {}) {
     };
   } catch (error) {
     releaseScheduleSlot(slotClaim);
+    if (editorialReservation) releaseEditorialReservation(editorialReservation);
     throw error;
   }
 }
@@ -729,6 +863,7 @@ export async function buildAndScheduleEbookWeekly(options = {}) {
       dryRun,
       apiKey,
       force: options.force,
+      sourceIntentHash: buildIntentHash({ audienceIntent: EBOOK_CONFIG.audienceIntent, angle: `${featuredBook.title}:${dayKey}` }),
     });
 
     if (slotClaim.duplicatePrevented) {
@@ -937,6 +1072,7 @@ export async function buildAndScheduleQuizSeries(options = {}) {
     dryRun,
     apiKey,
     force: options.force,
+    sourceIntentHash: buildIntentHash({ audienceIntent: QUIZ_CONFIG.audienceIntent, angle: questionPublishDate }),
   });
   const answerSlotClaim = await claimOneUpSlot({
     scope: "quiz:answer",
@@ -947,6 +1083,7 @@ export async function buildAndScheduleQuizSeries(options = {}) {
     dryRun,
     apiKey,
     force: options.force,
+    sourceIntentHash: buildIntentHash({ audienceIntent: QUIZ_CONFIG.audienceIntent, angle: answerPublishDate }),
   });
 
   if (questionSlotClaim.duplicatePrevented && answerSlotClaim.duplicatePrevented) {
@@ -1034,23 +1171,6 @@ export async function buildAndScheduleQuizSeries(options = {}) {
       await scheduleToOneUp({ post: answerPost, scheduledDateTime: answerDateTime, categoryName, socialNetworkId, dryRun, apiKey, preflightOnly: true });
     }
 
-    let questionScheduling = questionSlotClaim.duplicatePrevented
-      ? slotDuplicatePostResult({
-          publishDate: questionPublishDate,
-          scheduledDateTime: questionDateTime,
-          dryRun: false,
-          categoryName,
-          reason: questionSlotClaim.reason,
-        })
-      : await scheduleToOneUp({
-          post: questionPost,
-          scheduledDateTime: questionDateTime,
-          categoryName,
-          socialNetworkId,
-          dryRun,
-          apiKey,
-        });
-
     let answerScheduling;
     try {
       answerScheduling = answerSlotClaim.duplicatePrevented
@@ -1079,7 +1199,7 @@ export async function buildAndScheduleQuizSeries(options = {}) {
         failed: true,
         statusCode: statusCodeFromError(error),
         category: { id: null, category_name: categoryName },
-        warnings: [`Quiz answer post failed after question scheduling attempt: ${safeErrorMessage(error)}`],
+        warnings: [`Quiz answer post failed before the question was scheduled: ${safeErrorMessage(error)}`],
         error: safeErrorMessage(error),
         post: answerPost,
         oneUpResponse: null,
@@ -1088,6 +1208,40 @@ export async function buildAndScheduleQuizSeries(options = {}) {
       };
     }
 
+    let questionScheduling = answerScheduling.failed
+      ? {
+          publishDate: questionPublishDate,
+          scheduledDateTime: questionDateTime,
+          scheduled: false,
+          dryRun: Boolean(dryRun),
+          duplicatePrevented: false,
+          failed: true,
+          statusCode: 424,
+          category: { id: null, category_name: categoryName },
+          warnings: ["Quiz question was not scheduled because the answer post failed pre-question. This prevents an unanswered public quiz."],
+          error: "answer-scheduling-failed-before-question",
+          post: questionPost,
+          oneUpResponse: null,
+          targeting: null,
+          oneUpSocialGate: questionGate,
+        }
+      : questionSlotClaim.duplicatePrevented
+        ? slotDuplicatePostResult({
+            publishDate: questionPublishDate,
+            scheduledDateTime: questionDateTime,
+            dryRun: false,
+            categoryName,
+            reason: questionSlotClaim.reason,
+          })
+        : await scheduleToOneUp({
+            post: questionPost,
+            scheduledDateTime: questionDateTime,
+            categoryName,
+            socialNetworkId,
+            dryRun,
+            apiKey,
+          });
+
     if (questionScheduling.scheduled || answerScheduling.scheduled) {
       recordQuizSchedule({
         topic: generated.topic,
@@ -1095,6 +1249,17 @@ export async function buildAndScheduleQuizSeries(options = {}) {
         answerDateTime,
         questionTitle: questionPost.title,
         answerTitle: answerPost.title,
+      });
+      recordEditorialEvent({
+        pipeline: "oneup",
+        lane: "quiz",
+        audienceIntent: QUIZ_CONFIG.audienceIntent,
+        angle: generated.topic,
+        scheduledDateTime: questionDateTime,
+        text: `${questionPost.content}
+
+${answerPost.content}`,
+        meta: { contentType: "quiz-pair", answerScheduled: Boolean(answerScheduling.scheduled) },
       });
     }
 

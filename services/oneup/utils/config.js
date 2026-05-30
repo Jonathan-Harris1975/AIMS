@@ -76,6 +76,7 @@ export const LANE_CONFIG = {
     publishTime: normaliseTime(process.env.ONEUP_MONDAY_TIME, "14:00"),
     imageUrl: trimString(process.env.ONEUP_MONDAY_IMAGE_URL, `${DAILY_IMAGE_BASE}/Monday`),
     hashtags: ["#ArtificialIntelligence", "#PracticalAI", "#AIForWork"],
+    audienceIntent: "operator-discipline",
   },
   tuesday: {
     key: "tuesday",
@@ -84,6 +85,7 @@ export const LANE_CONFIG = {
     publishTime: normaliseTime(process.env.ONEUP_TUESDAY_TIME, "13:00"),
     imageUrl: trimString(process.env.ONEUP_TUESDAY_IMAGE_URL, `${DAILY_IMAGE_BASE}/Tuesday`),
     hashtags: ["#AIExplained", "#ArtificialIntelligence", "#PracticalAI"],
+    audienceIntent: "plain-english-ai-literacy",
   },
   wednesday: {
     key: "wednesday",
@@ -92,6 +94,7 @@ export const LANE_CONFIG = {
     publishTime: normaliseTime(process.env.ONEUP_WEDNESDAY_TIME, "12:20"),
     imageUrl: trimString(process.env.ONEUP_WEDNESDAY_IMAGE_URL, `${DAILY_IMAGE_BASE}/Wednesday`),
     hashtags: ["#AIForWriters", "#PracticalAI", "#ArtificialIntelligence"],
+    audienceIntent: "creator-workflow-help",
   },
   thursday: {
     key: "thursday",
@@ -100,6 +103,7 @@ export const LANE_CONFIG = {
     publishTime: normaliseTime(process.env.ONEUP_THURSDAY_TIME, "12:20"),
     imageUrl: trimString(process.env.ONEUP_THURSDAY_IMAGE_URL, `${DAILY_IMAGE_BASE}/Thursday`),
     hashtags: ["#AIForWork", "#PracticalAI", "#ArtificialIntelligence"],
+    audienceIntent: "industry-practical-use",
   },
   friday: {
     key: "friday",
@@ -108,6 +112,7 @@ export const LANE_CONFIG = {
     publishTime: normaliseTime(process.env.ONEUP_FRIDAY_TIME, "11:20"),
     imageUrl: trimString(process.env.ONEUP_FRIDAY_IMAGE_URL, `${DAILY_IMAGE_BASE}/Friday`),
     hashtags: ["#BuildInPublic", "#PracticalAI", "#AIAutomation"],
+    audienceIntent: "build-in-public-operator-note",
   },
   saturday: {
     key: "saturday",
@@ -116,6 +121,7 @@ export const LANE_CONFIG = {
     publishTime: normaliseTime(process.env.ONEUP_SATURDAY_TIME, "10:30"),
     imageUrl: trimString(process.env.ONEUP_SATURDAY_IMAGE_URL, `${DAILY_IMAGE_BASE}/Saturday`),
     hashtags: ["#AIEthics", "#ResponsibleAI", "#ArtificialIntelligence"],
+    audienceIntent: "ai-ethics-discussion",
   },
   sunday: {
     key: "sunday",
@@ -124,6 +130,7 @@ export const LANE_CONFIG = {
     publishTime: normaliseTime(process.env.ONEUP_SUNDAY_TIME, "18:00"),
     imageUrl: trimString(process.env.ONEUP_SUNDAY_IMAGE_URL, `${DAILY_IMAGE_BASE}/Sunday`),
     hashtags: ["#AIHistory", "#ArtificialIntelligence", "#AIExplained"],
+    audienceIntent: "ai-person-spotlight",
   },
 };
 
@@ -134,6 +141,7 @@ export const QUIZ_CONFIG = {
   questionImageUrl: trimString(process.env.ONEUP_QUIZ_IMAGE_URL, `${DAILY_IMAGE_BASE}/Quiz`),
   answerImageUrl: trimString(process.env.ONEUP_QUIZ_ANSWER_IMAGE_URL, `${DAILY_IMAGE_BASE}/Answer`),
   questionHashtags: ["#AIQuiz", "#AIExplained", "#ArtificialIntelligence"],
+  audienceIntent: "ai-literacy-quiz",
   answerHashtags: ["#AIQuiz", "#AIExplained", "#ArtificialIntelligence"],
 };
 
@@ -145,6 +153,7 @@ export const EBOOK_CONFIG = {
   thursdayPublishTime: normaliseTime(process.env.ONEUP_EBOOK_THURSDAY_TIME, "15:30"),
   saturdayPublishTime: normaliseTime(process.env.ONEUP_EBOOK_SATURDAY_TIME, "14:30"),
   hashtags: ["#ArtificialIntelligence", "#AIBooks", "#AIExplained"],
+  audienceIntent: "ebook-conversion",
 };
 
 export const EBOOK_WEEKLY_CONFIG = EBOOK_CONFIG;

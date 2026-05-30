@@ -88,7 +88,7 @@ Content target: 55 to 85 words.`,
 
   return {
     system: `${BRAND_VOICE}
-Return valid JSON only with exactly these keys: title, topic, content, firstComment.
+Return valid JSON only with exactly these keys: title, topic, content, firstComment${lane.key === "sunday" ? ", spotlightPerson" : ""}.
 No extra keys.
 Every value must be a plain string.
 firstComment should usually be an empty string unless a short, genuinely useful follow-up comment adds value.
@@ -120,6 +120,7 @@ ${renderRssBlock(rssItems)}
 Output rules:
 - title: short internal label, max 80 chars, plain text only
 - topic: 2 to 6 words, specific angle, not generic
+- spotlightPerson: for Sunday only, the canonical person name featured in the post
 - content: the actual post copy only
 - firstComment: usually empty
 - content must stand alone without hashtags
@@ -249,6 +250,7 @@ ${dayGuidance}
 Output rules:
 - title: short internal label, max 80 characters
 - topic: 2 to 6 words, specific angle, not generic
+- spotlightPerson: for Sunday only, the canonical person name featured in the post
 - content: the actual post copy only
 - firstComment must be:
 Featured book: ${featuredBook.title || ""}

@@ -66,13 +66,14 @@ function normaliseSlotPart(value) {
     .replace(/\s+/g, " ");
 }
 
-export function buildScheduleSlotKey({ scope, scheduledDateTime, categoryName, socialNetworkId, imageUrl }) {
+export function buildScheduleSlotKey({ scope, scheduledDateTime, categoryName, socialNetworkId, imageUrl, sourceIntentHash }) {
   return [
     normaliseSlotPart(scope || "oneup"),
     normaliseSlotPart(scheduledDateTime),
     normaliseSlotPart(categoryName),
     normaliseSlotPart(socialNetworkId),
     normaliseSlotPart(imageUrl),
+    normaliseSlotPart(sourceIntentHash),
   ].join("|");
 }
 
@@ -99,6 +100,7 @@ function makeSlotClaim(input, state = "pending") {
     categoryName: input.categoryName || null,
     socialNetworkId: input.socialNetworkId || null,
     imageUrl: input.imageUrl || null,
+    sourceIntentHash: input.sourceIntentHash || null,
     state,
     createdAt: new Date(now).toISOString(),
     updatedAt: new Date(now).toISOString(),
