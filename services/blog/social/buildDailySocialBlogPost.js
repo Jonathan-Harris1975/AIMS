@@ -6,6 +6,7 @@ import { pageTemplate, socialPostBody } from "../utils/templates.js";
 import { createBlogArtwork } from "../../artwork/createBlogArtwork.js";
 import { publishSocialBlogRssFeed } from "./publishSocialBlogRssFeed.js";
 import { cleanSourceText, cleanSourceTitle } from "../utils/weeklyPackage.js";
+import { recordEditorialEvent } from "../../social/editorialLedger.js";
 
 import {
   runPhase4AutonomousContentGate,
@@ -711,6 +712,17 @@ export async function buildDailySocialBlogPost({
     }
 
     if (dryRun) {
+      recordEditorialEvent({
+        pipeline: "blog-social",
+        lane: "daily-social-blog",
+        audienceIntent: "daily-social-blog-briefing",
+        source: cleanedSources[0],
+        angle: socialPackage.themes?.[0] || title,
+        scheduledDateTime: createdAt,
+        text: socialPackage.social_caption,
+        meta: { contentType: "daily-social-blog", dryRun: true, qaMode: socialPackage.qa_mode || "model-package" },
+      });
+
       return {
         ok: true,
         dryRun: true,
@@ -761,6 +773,17 @@ export async function buildDailySocialBlogPost({
     const publishedManifest = await loadExistingPostsManifest(OUT_BLOG_BUCKET_KEY, manifestKey);
     const rss = await publishSocialBlogRssFeed({ manifest: publishedManifest, prefix });
     const rebuild = await triggerWebsiteRebuild();
+
+    recordEditorialEvent({
+      pipeline: "blog-social",
+      lane: "daily-social-blog",
+      audienceIntent: "daily-social-blog-briefing",
+      source: cleanedSources[0],
+      angle: socialPackage.themes?.[0] || title,
+      scheduledDateTime: createdAt,
+      text: socialPackage.social_caption,
+      meta: { contentType: "daily-social-blog", postUrl: urls.postUrl, qaMode: socialPackage.qa_mode || "model-package" },
+    });
 
     info("blog.social.daily.build.success", {
       dateId: window.dateId,
