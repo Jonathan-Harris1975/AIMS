@@ -1,8 +1,8 @@
-# OneUp Facebook setup check
+# OneUp platform setup check
 
 ## What changed
 
-The OneUp scheduler now validates the target OneUp category before live scheduling. This prevents AIMS from reporting a successful OneUp schedule while Facebook is absent from the selected category.
+The OneUp scheduler now validates the target OneUp category before live scheduling. This prevents AIMS from reporting a successful OneUp schedule while Facebook, Instagram, or TikTok is absent from the selected category.
 
 ## Why this matters
 
@@ -11,7 +11,7 @@ The OneUp scheduler now validates the target OneUp category before live scheduli
 ## New env defaults
 
 ```env
-ONEUP_REQUIRED_NETWORK_TYPES=Facebook
+ONEUP_REQUIRED_NETWORK_TYPES=Facebook,Instagram,TikTok
 ONEUP_VALIDATE_TARGET_ACCOUNTS=true
 ```
 
@@ -40,11 +40,11 @@ Example body:
 {
   "categoryNames": ["General", "Ebooks"],
   "socialNetworkId": "ALL",
-  "requiredNetworkTypes": ["Facebook"],
+  "requiredNetworkTypes": ["Facebook", "Instagram", "TikTok"],
   "includeGlobalAccounts": true
 }
 ```
 
-Expected result: `ok: true` for each category that should create Facebook posts.
+Expected result: `ok: true` for each category that should create the intended Facebook, Instagram, and TikTok posts.
 
-If the result is `409`, check the returned `warnings`. The likely cause is that the Facebook Page is not connected to the OneUp category used by AIMS, or the Facebook account needs refreshing in OneUp.
+If the result is `409`, check the returned `warnings`. The likely cause is that one of the required platform accounts is not connected to the OneUp category used by AIMS, or one of the required accounts needs refreshing in OneUp.
