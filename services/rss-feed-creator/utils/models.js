@@ -279,6 +279,16 @@ export async function rewriteArticle(item = {}) {
     throw new Error(`Rewrite format invalid: ${v.errors.join("; ")}`);
   }
 
+  let sourceOverlap = RSS_PROMPTS.validateSourceOverlap({
+    sourceTitle: title,
+    sourceText,
+    rewrittenTitle,
+    rewrittenSummary,
+  });
+  if (!sourceOverlap.valid) {
+    throw new Error(`Rewrite source overlap invalid: ${(sourceOverlap.errors || []).join("; ")}`);
+  }
+
   // 3) Topic-consistency guard
   let score = assertTopicGuardOrThrow({ title, sourceText, rewrittenTitle, rewrittenSummary });
 
@@ -338,6 +348,18 @@ export async function rewriteArticle(item = {}) {
       );
     }
 
+    sourceOverlap = RSS_PROMPTS.validateSourceOverlap({
+      sourceTitle: title,
+      sourceText,
+      rewrittenTitle: repairedTitle,
+      rewrittenSummary: repairedSummary,
+    });
+    if (!sourceOverlap.valid) {
+      throw new Error(
+        `Phase 3 repair source overlap invalid: ${(sourceOverlap.errors || []).join("; ")}; original failure: ${err.message}`
+      );
+    }
+
     const repairedBannedPhrases = RSS_PROMPTS.findBannedSummaryPhrases(repairedSummary);
     if (repairedBannedPhrases.length) {
       throw new Error(
@@ -392,6 +414,7 @@ export async function rewriteArticle(item = {}) {
     shortUrl,
     guid: shortGuid,
     topicGuard: score,
+    sourceOverlap,
   });
 
   return {

@@ -9,6 +9,7 @@
 // ============================================================
 
 import { warn } from "../../../logger.js";
+import { RSS_BANNED_SUMMARY_PHRASES } from "../../content-quality/brandLexicon.js";
 import { buildRssPersona } from "./toneSetter.js";
 
 const MIN_SUMMARY_CHARS =
@@ -76,49 +77,7 @@ const METADATA_LEAK_PATTERNS = [
   { pattern: /(^|\n)\s*title\s*:/i, message: 'Contains metadata leak "Title:"' },
 ];
 
-const BANNED_SUMMARY_PHRASES = [
-  "in a significant development",
-  "in a move that",
-  "as we move forward",
-  "the implications are significant",
-  "in today's rapidly evolving landscape",
-  "this highlights the importance of",
-  "this underscores",
-  "this showcases",
-  "it remains to be seen",
-  "the future of",
-  "this could pave the way",
-  "it will be interesting to see",
-  "one might wonder",
-  "in a world where",
-  "rapidly evolving",
-  "transformative",
-  "groundbreaking",
-  "revolutionary",
-  "cutting-edge",
-  "game-changer",
-  "paradigm shift",
-  "unprecedented",
-  "delve into",
-  "landscape",
-  "underscores",
-  "showcases",
-  "notably",
-  "robust data fabric",
-  "robust data infrastructure",
-  "seamless data integration",
-  "meaningful business value",
-  "deliver meaningful business value",
-  "competitive advantage",
-  "holistic approach",
-  "mainstream application",
-  "finds its footing",
-  "pivotal moment",
-  "poses significant",
-  "raises questions",
-  "the emphasis should be on",
-  "the implications of these choices",
-];
+const BANNED_SUMMARY_PHRASES = RSS_BANNED_SUMMARY_PHRASES;
 
 export const SYSTEM = `
 ${buildRssPersona()}
@@ -259,6 +218,7 @@ export function USER_ITEM({
     "- Keep numeric claims exactly as written in the source title/text",
     "- Do not invent rankings, scores, dates, prices or claims",
     "- Keep sentences short enough to pass readability checks",
+    "- Keep at least two concrete topic terms from the source title/text unless doing so would distort meaning",
     "",
     "Return only:",
     `1. headline (maximum ${maxTitleWords} words)`,
@@ -377,6 +337,60 @@ export function hasMetadataLeak(text = "") {
   return findMetadataLeaks(text).length > 0;
 }
 
+
+const SOURCE_OVERLAP_STOPWORDS = new Set([
+  "a", "an", "the", "and", "or", "but", "if", "then", "else", "when", "while",
+  "for", "to", "of", "in", "on", "at", "by", "from", "with", "as", "is",
+  "are", "was", "were", "be", "been", "being", "it", "this", "that", "these",
+  "those", "its", "their", "they", "them", "we", "you", "your", "our", "into",
+  "over", "under", "about", "after", "before", "between", "during", "than", "too",
+  "can", "could", "may", "might", "will", "would", "should", "must", "also",
+  "just", "more", "most", "less", "least", "much", "many", "some", "any", "new",
+  "news", "update", "today", "said", "says", "report", "reports", "reported",
+]);
+
+export function extractConcreteTopicTerms(text = "") {
+  const normalised = normalizePlainText(text).toLowerCase();
+  const parts = normalised.split(/[^a-z0-9]+/g).filter(Boolean);
+  const terms = [];
+  for (const part of parts) {
+    if (part.length < 4) continue;
+    if (SOURCE_OVERLAP_STOPWORDS.has(part)) continue;
+    terms.push(part);
+  }
+  return [...new Set(terms)];
+}
+
+export function validateSourceOverlap({
+  sourceTitle = "",
+  sourceText = "",
+  rewrittenTitle = "",
+  rewrittenSummary = "",
+  minSharedTerms = 2,
+} = {}) {
+  const sourceTerms = extractConcreteTopicTerms(`${sourceTitle} ${sourceText}`);
+  const outputTerms = new Set(extractConcreteTopicTerms(`${rewrittenTitle} ${rewrittenSummary}`));
+
+  if (sourceTerms.length < minSharedTerms) {
+    return {
+      valid: true,
+      warning: "Source too thin for deterministic topic-term overlap check",
+      sharedTerms: [],
+      sourceTermCount: sourceTerms.length,
+    };
+  }
+
+  const sharedTerms = sourceTerms.filter((term) => outputTerms.has(term));
+  return {
+    valid: sharedTerms.length >= minSharedTerms,
+    errors: sharedTerms.length >= minSharedTerms ? [] : [
+      `RSS rewrite keeps only ${sharedTerms.length} concrete source topic term(s); minimum is ${minSharedTerms}`,
+    ],
+    sharedTerms,
+    sourceTermCount: sourceTerms.length,
+  };
+}
+
 export function findBannedSummaryPhrases(summary = "") {
   const lowered = normalizeSummaryText(summary).toLowerCase();
   return BANNED_SUMMARY_PHRASES.filter((phrase) => lowered.includes(phrase));
@@ -482,6 +496,8 @@ const RSS_PROMPTS = {
   findMetadataLeaks,
   hasMetadataLeak,
   findBannedSummaryPhrases,
+  extractConcreteTopicTerms,
+  validateSourceOverlap,
   TITLE_BRAND_PATTERNS,
   METADATA_LEAK_PATTERNS,
   BANNED_SUMMARY_PHRASES,
