@@ -103,10 +103,13 @@ test("suite auth treats all weekly Blotato publish-now lane triggers as public h
     );
   }
 
-  assert.equal(
-    isPublicBlotatoPublishPath({ method: "POST", originalUrl: "/blotato/shorts/not-a-lane/publish-now" }),
-    false
-  );
+  for (const lane of ["ethics-brief", "ai-spotlight-video", "not-a-lane"]) {
+    assert.equal(
+      isPublicBlotatoPublishPath({ method: "POST", originalUrl: `/blotato/shorts/${lane}/publish-now` }),
+      false,
+      lane
+    );
+  }
 
   assert.equal(
     isPublicBlotatoPublishPath({ method: "POST", originalUrl: "/blotato/shorts/model-verdict" }),

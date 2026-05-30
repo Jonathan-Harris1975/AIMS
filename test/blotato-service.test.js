@@ -79,7 +79,7 @@ const mockServer = http.createServer(async (req, res) => {
             internalTitle: "Agents move into admin",
             angle: "The useful story is workflow delegation, not another shiny demo.",
             hook: "AI agents are moving from chat to chores.",
-            script: "AI agents are moving from chat to chores. The important part is not the demo theatre. It is that teams are starting to hand over repeatable admin, research, drafting, routing and checking tasks. That does not remove judgement. It moves judgement to the design of the workflow. The winners will not be people who ask better one-off questions. They will be the ones who build better systems around the tools.",
+            script: "AI agents are moving from chat to chores. The important part is not the demo theatre. It is that teams are starting to hand over repeatable admin, research, drafting, routing and checking tasks. That does not remove judgement. It moves judgement to the design of the workflow. The useful move is boring on purpose: choose one repeatable task, set clear checks, review the result, then widen the workflow only when it behaves. The winners will not be people who ask better one-off questions. They will be the ones who build better systems around the tools.",
             visualDirection: "Dark editorial AI newsroom, task cards moving through a clean workflow, captions emphasising chores, workflow and judgement.",
             scenes: [
               {
@@ -352,7 +352,7 @@ test("Blotato publish schema rejects target/platform mismatch", async () => {
   assert.match(response.body.error, /must match platform/);
 });
 
-test("Blotato lane registry exposes the seven weekly short formats", async () => {
+test("Blotato lane registry exposes the five weekday short formats", async () => {
   const response = await request(app)
     .get("/blotato/shorts/lanes")
     .set(auth);
@@ -360,12 +360,10 @@ test("Blotato lane registry exposes the seven weekly short formats", async () =>
   assert.equal(response.status, 200);
   assert.deepEqual(
     response.body.lanes.map((lane) => lane.slug),
-    ["news-insight", "model-verdict", "ai-at-work", "reality-check", "ai-playbook", "ethics-brief", "ai-spotlight-video"]
+    ["news-insight", "model-verdict", "ai-at-work", "reality-check", "ai-playbook"]
   );
   assert.equal(response.body.lanes[0].weekday, "Monday");
   assert.equal(response.body.lanes[4].weekday, "Friday");
-  assert.equal(response.body.lanes[5].weekday, "Saturday");
-  assert.equal(response.body.lanes[6].weekday, "Sunday");
 });
 
 test("Blotato news insight route builds a dry-run short pack", async () => {
