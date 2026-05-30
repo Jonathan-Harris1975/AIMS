@@ -56,6 +56,114 @@ export const AMERICAN_TO_BRITISH = Object.freeze([
   ["programs", "programmes"],
   ["traveling", "travelling"],
   ["traveled", "travelled"],
+  ["artifact", "artefact"],
+  ["artifacts", "artefacts"],
+  ["catalog", "catalogue"],
+  ["catalogs", "catalogues"],
+  ["cataloged", "catalogued"],
+  ["cataloging", "cataloguing"],
+  ["defense", "defence"],
+  ["gray", "grey"],
+  ["fueled", "fuelled"],
+  ["fueling", "fuelling"],
+  ["skillful", "skilful"],
+  ["toward", "towards"],
+  ["checkmark", "tick"],
+  ["airplane", "aeroplane"],
+  ["dialog", "dialogue"],
+  ["dialogs", "dialogues"],
+  ["analog", "analogue"],
+  ["authorize", "authorise"],
+  ["authorized", "authorised"],
+  ["authorizing", "authorising"],
+  ["authorization", "authorisation"],
+  ["summarize", "summarise"],
+  ["summarized", "summarised"],
+  ["summarizing", "summarising"],
+  ["customize", "customise"],
+  ["customized", "customised"],
+  ["customizing", "customising"],
+  ["minimize", "minimise"],
+  ["minimized", "minimised"],
+  ["minimizing", "minimising"],
+  ["maximize", "maximise"],
+  ["maximized", "maximised"],
+  ["maximizing", "maximising"],
+  ["specialize", "specialise"],
+  ["specialized", "specialised"],
+  ["specializing", "specialising"],
+]);
+
+
+
+export const GENERIC_HASHTAGS = Object.freeze([
+  "#ai",
+  "#artificialintelligence",
+  "#technology",
+  "#tech",
+  "#innovation",
+  "#future",
+  "#news",
+]);
+
+export const SOCIAL_BLOG_BANNED_PHRASES = Object.freeze([
+  "in a significant development",
+  "game changer",
+  "game-changing",
+  "paradigm shift",
+  "rapidly evolving",
+  "transformative",
+  "revolutionary",
+  "groundbreaking",
+  "cutting-edge",
+  "ai is transforming everything",
+  "unlock value",
+  "unlocking value",
+  "seamless integration",
+  "robust ecosystem",
+  "this is huge",
+  "you need to know",
+  "don't miss",
+  "don’t miss",
+  "must read",
+  "it remains to be seen",
+  "beneath the hype",
+  "the real story",
+  "as ai continues",
+  "as artificial intelligence continues",
+  "artificial intelligence landscape",
+  "ai landscape",
+]);
+
+export const RSS_BANNED_SUMMARY_PHRASES = Object.freeze([
+  "in a significant development",
+  "in a move that",
+  "as we move forward",
+  "the implications are significant",
+  "in today's rapidly evolving landscape",
+  "this highlights the importance of",
+  "this underscores",
+  "this showcases",
+  "it remains to be seen",
+  "the future of",
+  "this could pave the way",
+  "it will be interesting to see",
+  "one might wonder",
+  "in a world where",
+  "rapidly evolving",
+  "transformative",
+  "groundbreaking",
+  "revolutionary",
+  "cutting-edge",
+  "game-changer",
+  "paradigm shift",
+  "unprecedented",
+  "delve into",
+  "landscape",
+  "realm",
+  "notably",
+  "underscores",
+  "showcases",
 ]);
 
 export const ENGAGEMENT_BAIT_PATTERNS = Object.freeze([
@@ -94,9 +202,13 @@ export function cleanLexiconText(value = "") {
 export function findPatternBreaches(text = "", patterns = []) {
   const source = cleanLexiconText(text);
   return patterns
-    .filter((pattern) => pattern.test(source))
+    .filter((pattern) => {
+      pattern.lastIndex = 0;
+      return pattern.test(source);
+    })
     .map((pattern) => pattern.source.replace(/\\b|\\s\+|\\s\?|\(\?:|\)/g, " ").replace(/\\/g, "").trim());
 }
+
 
 export function findAmericanSpellings(text = "") {
   const source = cleanLexiconText(text);

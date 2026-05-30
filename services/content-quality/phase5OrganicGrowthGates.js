@@ -193,19 +193,23 @@ function evaluateSourceSafety({ generated = {}, sources = [], featuredBook = {} 
   const defects = [];
   const warnings = [];
   const text = textFrom(generated, { claimsOnly: true });
-  const sourceText = cleanText([
+  const evidenceText = cleanText([
     featuredBook.title,
     featuredBook.shortDescription,
     featuredBook.summary,
     featuredBook.description,
-    featuredBook.keywordsText,
-    featuredBook.audience,
     featuredBook.whoThisBookIsFor,
     featuredBook.whatThisBookCovers,
     featuredBook.whatYouWillLearn,
     featuredBook.whyItMatters,
     ...asArray(sources).map((source) => textFrom(source)),
   ].filter(Boolean).join(" ")).toLowerCase();
+  const positioningText = cleanText([
+    featuredBook.keywordsText,
+    Array.isArray(featuredBook.keywords) ? featuredBook.keywords.join(" ") : featuredBook.keywords,
+    featuredBook.audience,
+  ].filter(Boolean).join(" ")).toLowerCase();
+  const sourceText = evidenceText;
 
   const numbers = extractClaimNumbers(text);
   for (const number of numbers) {
@@ -219,6 +223,25 @@ function evaluateSourceSafety({ generated = {}, sources = [], featuredBook = {} 
 
   if (/\baward[-\s]?winning\b|\bbestseller\b|\bnumber\s+one\b|\bproven\s+results\b/i.test(text)) {
     defects.push("Unsupported social proof claim detected.");
+  }
+
+  const softInferencePatterns = [
+    /\bperfect\s+for\b/i,
+    /\bideal\s+for\b/i,
+    /\bbest\s+for\b/i,
+    /\beverything\s+you\s+need\b/i,
+    /\bguaranteed\s+to\b/i,
+    /\bwill\s+make\s+you\b/i,
+  ];
+  for (const pattern of softInferencePatterns) {
+    const match = text.match(pattern)?.[0];
+    if (match && !evidenceText.includes(match.toLowerCase())) {
+      defects.push(`Soft unsupported ebook positioning claim detected: ${match}`);
+    }
+  }
+
+  if (positioningText && !evidenceText && text.length > 120) {
+    defects.push("Only positioning metadata was supplied; factual ebook claims need evidence fields.");
   }
   if (!sourceText && text.length > 200) defects.push("No source material supplied for autonomous content validation.");
 
