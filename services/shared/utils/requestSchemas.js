@@ -193,6 +193,7 @@ export const oneupDailyBodySchema = z
     categoryName: z.string().trim().min(1).max(120).optional(),
     socialNetworkId: oneupSocialNetworkIdSchema,
     imageUrl: z.string().trim().url().optional(),
+    buildContext: z.string().trim().max(2000).optional(),
     apiKey: z.string().trim().min(1).max(200).optional(),
   })
   .passthrough()
