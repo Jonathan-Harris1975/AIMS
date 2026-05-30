@@ -352,7 +352,7 @@ test("Blotato publish schema rejects target/platform mismatch", async () => {
   assert.match(response.body.error, /must match platform/);
 });
 
-test("Blotato lane registry exposes the five weekly short formats", async () => {
+test("Blotato lane registry exposes the seven weekly short formats", async () => {
   const response = await request(app)
     .get("/blotato/shorts/lanes")
     .set(auth);
@@ -360,10 +360,12 @@ test("Blotato lane registry exposes the five weekly short formats", async () => 
   assert.equal(response.status, 200);
   assert.deepEqual(
     response.body.lanes.map((lane) => lane.slug),
-    ["news-insight", "model-verdict", "ai-at-work", "reality-check", "ai-playbook"]
+    ["news-insight", "model-verdict", "ai-at-work", "reality-check", "ai-playbook", "ethics-brief", "ai-spotlight-video"]
   );
   assert.equal(response.body.lanes[0].weekday, "Monday");
   assert.equal(response.body.lanes[4].weekday, "Friday");
+  assert.equal(response.body.lanes[5].weekday, "Saturday");
+  assert.equal(response.body.lanes[6].weekday, "Sunday");
 });
 
 test("Blotato news insight route builds a dry-run short pack", async () => {

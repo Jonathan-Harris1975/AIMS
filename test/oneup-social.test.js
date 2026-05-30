@@ -121,7 +121,7 @@ const mockServer = http.createServer(async (req, res) => {
       topic: "Transformer basics",
       questionTitle: "Weekly AI Quiz",
       questionContent:
-        "**Which architecture made modern large language models practical?**\nA) Decision Tree\nB) Transformer\nC) K-Means\nD) Linear Regression\n\nComment your answer below and tag a friend who should try this!",
+        "Which architecture made modern large language models practical?\nA) Decision Tree\nB) Transformer\nC) K-Means\nD) Linear Regression\n\nComment your answer below.",
       answerTitle: "Quiz Answer",
       answerContent:
         "Quiz Answer! The correct answer is B) Transformer. Transformers handle context far better than older sequence models, which is why they sit underneath most modern LLMs. Did you get it right?",
@@ -131,7 +131,7 @@ const mockServer = http.createServer(async (req, res) => {
       title: "Monday Motivation",
       topic: "Steady systems",
       content:
-        '"The future depends on what you do today." - Mahatma Gandhi\n\nAI work gets better when you stop chasing theatre and keep shipping the useful bits.',
+        '"There is nothing so useless as doing efficiently that which should not be done at all." - Peter Drucker\n\nAI work gets better when you stop chasing theatre and keep shipping the useful bits.',
       firstComment: "",
     });
   }
@@ -231,7 +231,7 @@ test("buildAndScheduleDailyLane returns a dry-run Monday preview with hashtags",
   assert.equal(result.dryRun, true);
   assert.equal(result.scheduled, false);
   assert.equal(result.publishDate, "2026-04-13");
-  assert.match(result.post.content, /#MondayMotivation/);
+  assert.match(result.post.content, /#ArtificialIntelligence/);
   assert.match(result.post.content, /shipping the useful bits/i);
 });
 
@@ -279,9 +279,9 @@ test("buildAndScheduleEbookWeekly returns dry-run Tuesday, Thursday, and Saturda
   assert.equal(result.posts.tuesday.publishDate, "2026-05-05");
   assert.equal(result.posts.thursday.publishDate, "2026-05-07");
   assert.equal(result.posts.saturday.publishDate, "2026-05-09");
-  assert.equal(result.posts.tuesday.scheduledDateTime, "2026-05-05 13:00");
-  assert.equal(result.posts.thursday.scheduledDateTime, "2026-05-07 12:20");
-  assert.equal(result.posts.saturday.scheduledDateTime, "2026-05-09 10:30");
+  assert.equal(result.posts.tuesday.scheduledDateTime, "2026-05-05 16:00");
+  assert.equal(result.posts.thursday.scheduledDateTime, "2026-05-07 15:30");
+  assert.equal(result.posts.saturday.scheduledDateTime, "2026-05-09 14:30");
   assert.equal(result.posts.tuesday.scheduled, false);
   assert.equal(result.posts.thursday.scheduled, false);
   assert.equal(result.posts.saturday.scheduled, false);
@@ -316,7 +316,7 @@ test("buildAndScheduleEbookWeekly keeps one featured book, appends scheduler has
     assert.match(post.content, /#ArtificialIntelligence/);
     assert.match(post.content, /#AIBooks/);
     assert.match(post.content, /#AIExplained/);
-    assert.match(post.content, /#JonathanHarris/);
+    assert.doesNotMatch(post.content, /#JonathanHarris/);
     assert.doesNotMatch(post.content, /#ModelNoise/);
     assert.doesNotMatch(post.firstComment, /#ArtificialIntelligence|#AIBooks|#AIExplained|#JonathanHarris/);
   }
@@ -381,7 +381,7 @@ test("buildAndScheduleDailyLane fails loudly when required Facebook targeting is
   assert.equal(scheduledRequests.length, 0);
 });
 
-test("Tuesday lane uses the updated educational hashtag set", async () => {
+test("Tuesday lane uses the updated brand-safe hashtag set", async () => {
   restoreEnv();
   applyBaseEnv();
   process.env.OPENROUTER_API_BASE = mockBase;
@@ -393,7 +393,8 @@ test("Tuesday lane uses the updated educational hashtag set", async () => {
   });
 
   assert.equal(result.ok, true);
-  assert.match(result.post.content, /#TechTalkTuesday/);
+  assert.doesNotMatch(result.post.content, /#TechTalkTuesday/);
   assert.match(result.post.content, /#AIExplained/);
-  assert.match(result.post.content, /#MachineLearning/);
+  assert.match(result.post.content, /#ArtificialIntelligence/);
+  assert.match(result.post.content, /#PracticalAI/);
 });
