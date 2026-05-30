@@ -1,3 +1,4 @@
+import { AMERICAN_TO_BRITISH, BANNED_PROMO_PATTERNS, ENGAGEMENT_BAIT_PATTERNS, INFLATED_EBOOK_CLAIM_PATTERNS } from "./brandLexicon.js";
 const PHASE_5_SKILLS = Object.freeze({
   ebookConversion: [
     "copywriting",
@@ -24,30 +25,6 @@ const DEFAULT_THRESHOLDS = Object.freeze({
   brandSafety: 90,
   sourceSafety: 92,
 });
-
-const BANNED_PROMO_PATTERNS = Object.freeze([
-  /\bbuy\s+now\b/i,
-  /\blimited\s+time\b/i,
-  /\bdon'?t\s+miss\s+out\b/i,
-  /\bguaranteed\b/i,
-  /\bmake\s+money\s+fast\b/i,
-  /\bget\s+rich\b/i,
-  /\bsecret\s+formula\b/i,
-  /\bunlock\s+the\s+future\b/i,
-  /\brevolutionary\b/i,
-  /\bgame[-\s]?changing\b/i,
-  /\bgroundbreaking\b/i,
-  /\bcutting[-\s]?edge\b/i,
-]);
-
-const AMERICAN_SPELLINGS = Object.freeze([
-  ["analyze", "analyse"],
-  ["behavior", "behaviour"],
-  ["color", "colour"],
-  ["center", "centre"],
-  ["optimization", "optimisation"],
-  ["personalization", "personalisation"],
-]);
 
 const BENEFIT_MARKERS = Object.freeze([
   "learn",
@@ -166,7 +143,7 @@ function evaluateBrandSafety(text = "") {
   for (const pattern of BANNED_PROMO_PATTERNS) {
     if (pattern.test(text)) defects.push(`Organic tone breach: ${pattern.source.replace(/\\b|\\s\+|\\s\?|\(\?:|\)/g, " ").trim()}`);
   }
-  for (const [american, british] of AMERICAN_SPELLINGS) {
+  for (const [american, british] of AMERICAN_TO_BRITISH) {
     if (new RegExp(`\\b${american}\\b`, "i").test(text)) {
       defects.push(`British English drift: use ${british} instead of ${american}`);
     }
