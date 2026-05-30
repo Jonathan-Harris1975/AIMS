@@ -68,9 +68,9 @@ Scheduler state is handled by service utilities and shared state; no service-spe
 ## Common troubleshooting
 
 - Live scheduling requires `ONEUP_API_KEY`.
-- Run `POST /oneup/setup/check` to verify that the selected `General` and `Ebooks` categories actually include the required Facebook target before live scheduling.
+- Run `POST /oneup/setup/check` to verify that the selected `General` and `Ebooks` categories actually include the required Facebook, Instagram, and TikTok targets before live scheduling.
 - Missing API key can produce dry-run output.
-- `ONEUP_SOCIAL_NETWORK_ID=ALL` targets every account in the selected category only. If Facebook is missing from that category, Facebook posts will not be created.
+- `ONEUP_SOCIAL_NETWORK_ID=ALL` targets every account in the selected category only. If Facebook, Instagram, or TikTok is missing from that category, the intended cross-platform OneUp coverage will not be created.
 - A bare account ID such as `fb-page-123` is normalised to the OneUp-required JSON-array format `["fb-page-123"]`.
 - Category/API errors are reported per post for the weekly ebook workflow so one failed day does not turn the whole route into a blunt 500. Check `failedDays` and each day’s `error` field.
 - Duplicate guard may intentionally skip a scheduled post.
