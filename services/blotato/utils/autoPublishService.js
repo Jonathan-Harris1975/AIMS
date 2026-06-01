@@ -24,8 +24,8 @@ export const BLOTATO_PUBLISH_JOB_TYPE = "blotato-news-insight-publish";
 export const DEFAULT_AI_STORY_TEMPLATE_PATH =
   "/base/v2/ai-story-video/5903fe43-514d-40ee-a060-0d6628c5f8fd/v1";
 
-const VIDEO_DONE_STATUSES = new Set(["done", "completed", "complete", "success"]);
-const VIDEO_FAILED_STATUSES = new Set(["creation-from-template-failed", "failed", "error"]);
+const VIDEO_DONE_STATUSES = new Set(["done", "completed", "complete", "success", "ready", "finished", "rendered", "processed", "available"]);
+const VIDEO_FAILED_STATUSES = new Set(["creation-from-template-failed", "failed", "error", "cancelled", "canceled", "timed-out", "timeout"]);
 const POST_DONE_STATUSES = new Set(["published", "completed", "complete", "success"]);
 const POST_FAILED_STATUSES = new Set(["failed", "error"]);
 
@@ -114,12 +114,12 @@ function findMediaUrl(value, depth = 0) {
   return "";
 }
 
-async function pollUntil({ label, run, isDone, isFailed, extractStatus, maxAttempts, intervalMs }) {
+async function pollUntil({ label, run, isDone, isDonePayload, isFailed, extractStatus, maxAttempts, intervalMs }) {
   let latest = null;
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     latest = await run();
     const status = extractStatus(latest);
-    if (isDone(status)) return latest;
+    if (isDone(status) || isDonePayload?.(latest, status)) return latest;
     if (isFailed(status)) {
       const err = new Error(`${label} failed with status: ${status || "unknown"}`);
       err.statusCode = 502;
@@ -154,13 +154,14 @@ async function createAndWaitForVideo({ templateId, pack, apiKey }) {
     throw err;
   }
 
-  const maxAttempts = Number(process.env.BLOTATO_VIDEO_POLL_ATTEMPTS || 90);
-  const intervalMs = Number(process.env.BLOTATO_VIDEO_POLL_INTERVAL_MS || 3000);
+  const maxAttempts = Number(process.env.BLOTATO_VIDEO_POLL_ATTEMPTS || 150);
+  const intervalMs = Number(process.env.BLOTATO_VIDEO_POLL_INTERVAL_MS || 4000);
   const completed = await pollUntil({
     label: "Blotato video render",
     run: () => getVisualStatus(visualId, apiKey),
     extractStatus: extractVideoStatus,
     isDone: (status) => VIDEO_DONE_STATUSES.has(status),
+    isDonePayload: (payload) => Boolean(findMediaUrl(payload)),
     isFailed: (status) => VIDEO_FAILED_STATUSES.has(status),
     maxAttempts,
     intervalMs,
