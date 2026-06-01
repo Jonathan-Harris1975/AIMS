@@ -115,7 +115,7 @@ async function loadSourceBundle(label, latestKey) {
   const latest = obj(latestResult.value);
   const reportResult = latest.reportJsonUrl ? await readUrlIfPresent(latest.reportJsonUrl) : { ok: false, key: "", error: "missing reportJsonUrl", value: null };
   const summaryResult = latest.summaryUrl ? await readUrlIfPresent(latest.summaryUrl) : { ok: false, key: "", error: "missing summaryUrl", value: null };
-  const coverageResult = latest.coverageUrl ? await readUrlIfPresent(latest.coverageUrl) : { ok: false, key: "", error: "missing coverageUrl", value: null };
+  const coverageResult = latest.coverageUrl ? await readUrlIfPresent(latest.coverageUrl) : { ok: false, key: "", error: "missing coverageUrl", value: null, optional: true };
   return {
     label,
     latestKey,
@@ -128,8 +128,11 @@ async function loadSourceBundle(label, latestKey) {
     summary: obj(summaryResult.value),
     coverage: obj(coverageResult.value),
     errors: [latestResult, reportResult, summaryResult, coverageResult]
-      .filter((item) => !item.ok)
+      .filter((item) => !item.ok && !item.optional)
       .map((item) => ({ key: item.key, error: item.error })),
+    warnings: [coverageResult]
+      .filter((item) => !item.ok && item.optional)
+      .map((item) => ({ key: item.key, warning: item.error })),
   };
 }
 
@@ -194,7 +197,28 @@ function buildOnBrandFindings(report, findings) {
     }));
   }
 
-  for (const [index, defect] of defects.slice(0, 6).entries()) {
+  const grouped = [];
+  const seenGroups = new Map();
+  for (const defect of defects.slice(0, 18)) {
+    const key = [
+      trim(defect.sourceType || "pipeline"),
+      trim(defect.issueType || defect.violatedRule || "On-brand future QA finding").toLowerCase(),
+      trim(defect.violatedRule || "").toLowerCase(),
+      trim(defect.exactRemediation || "").toLowerCase().slice(0, 180),
+    ].join("|");
+    if (!seenGroups.has(key)) {
+      const group = { defect, count: 0, examples: [] };
+      seenGroups.set(key, group);
+      grouped.push(group);
+    }
+    const group = seenGroups.get(key);
+    group.count += 1;
+    const evidence = firstText(defect.exactEvidence, defect.itemTitleOrId);
+    if (evidence && group.examples.length < 3) group.examples.push(evidence);
+  }
+
+  for (const [index, group] of grouped.slice(0, 6).entries()) {
+    const defect = group.defect;
     const sourceType = trim(defect.sourceType || "pipeline");
     const owner = sourceType === "oneup_blog_social"
       ? "oneup_scheduler"
@@ -212,9 +236,10 @@ function buildOnBrandFindings(report, findings) {
       automationReadiness: "future_prompt_guardrail",
       evidence: [
         `sourceType: ${sourceType}`,
-        `evidence: ${firstText(defect.exactEvidence, defect.itemTitleOrId)}`,
+        group.count > 1 ? `occurrences: ${group.count}` : "",
+        `evidence: ${group.examples.join(" || ") || firstText(defect.exactEvidence, defect.itemTitleOrId)}`,
         `rule: ${trim(defect.violatedRule)}`,
-      ],
+      ].filter(Boolean),
       requiredOutcome: firstText(defect.exactRemediation, "Use this evidence to tighten future generated output."),
       verificationMethod: firstText(defect.verificationMethod, "Generate fresh output and rerun the on-brand audit."),
     }));
@@ -291,18 +316,37 @@ function buildSocialFindings(report, findings) {
   }
 
   for (const [index, rec] of arr(report.recommendations).slice(0, 5).entries()) {
+    const priority = trim(rec.priority) || "social_tuning";
     findings.push(makeFinding({
       id: `BSC-SOC-${String(index + 4).padStart(3, "0")}`,
       title: firstText(rec.title, "Social performance recommendation"),
       severity: "medium",
       councilMember: "Social Performance Analyst",
       sourceOwner: "aims_content_pipeline",
-      automationReadiness: trim(rec.priority) || "social_tuning",
+      automationReadiness: priority,
       evidence: [firstText(rec.detail, rec.priority)],
-      requiredOutcome: firstText(rec.detail, "Use this recommendation to tune future post generation and scheduling."),
+      requiredOutcome: socialRecommendationOutcome(rec, priority),
       verificationMethod: "Rerun the social-performance report and compare platform/lane metrics against the prior month.",
     }));
   }
+}
+
+function socialRecommendationOutcome(rec = {}, priority = "") {
+  const title = firstText(rec.title).toLowerCase();
+  const detail = firstText(rec.detail, "Use this recommendation to tune future post generation and scheduling.");
+  if (priority === "platform_tuning" || title.includes("youtube") || title.includes("creative packaging")) {
+    return "Run a one-month platform packaging test: compare opening line, caption length, title/thumbnail promise and first-frame clarity against the strongest platform pattern. Do not change automation weights until the next report confirms the signal.";
+  }
+  if (priority === "content_lane_weighting" || title.includes("ebook")) {
+    return "Give the detected winning lane a small extra test allocation next month, then confirm whether the improvement holds with meaningful reach/views before adjusting long-term scheduling.";
+  }
+  if (priority === "tracking_hygiene" || title.includes("content-lane")) {
+    return "Add durable lane/source attribution to AIMS logs and captions where appropriate so OneUp, RSS social blog, podcast, Blotato and quiz posts are separated cleanly in future reports.";
+  }
+  if (priority === "observe_and_amplify") {
+    return "Use the strongest platform as a reference pattern for next-month hook and CTA tests, but treat tiny reach/view samples as directional only.";
+  }
+  return detail;
 }
 
 function buildThumbnailFindings(report, findings) {
@@ -316,7 +360,7 @@ function buildThumbnailFindings(report, findings) {
       sourceOwner: "blotato_video_pipeline",
       automationReadiness: "thumbnail_evidence_gap",
       evidence: [thumbnailAudit.reason || "Thumbnail evidence collection disabled or unavailable."],
-      requiredOutcome: "Enable thumbnail auditing for a bounded sample of YouTube/TikTok shorts when Playwright or metadata fetch is stable, so packaging recommendations are based on visual evidence rather than captions alone.",
+      requiredOutcome: "Enable thumbnail auditing for a bounded sample of Facebook, Instagram, YouTube and TikTok shorts when Playwright or metadata fetch is stable, so packaging recommendations are based on visual evidence rather than captions alone.",
       verificationMethod: "Run the social-performance report with thumbnail auditing enabled and confirm thumbnail-audit.json is published.",
     }));
     return;
@@ -358,6 +402,7 @@ function buildCouncilReport({ sessionId, reportPrefix, onBrandBundle, socialBund
       reportJsonUrl: onBrandBundle.latest.reportJsonUrl || null,
       summaryUrl: onBrandBundle.latest.summaryUrl || null,
       errors: onBrandBundle.errors,
+      warnings: onBrandBundle.warnings || [],
     },
     socialPerformance: {
       latestKey: socialBundle.latestKey,
@@ -367,6 +412,7 @@ function buildCouncilReport({ sessionId, reportPrefix, onBrandBundle, socialBund
       reportJsonUrl: socialBundle.latest.reportJsonUrl || null,
       summaryUrl: socialBundle.latest.summaryUrl || null,
       errors: socialBundle.errors,
+      warnings: socialBundle.warnings || [],
     },
   };
 
@@ -412,6 +458,7 @@ function buildCouncilReport({ sessionId, reportPrefix, onBrandBundle, socialBund
         socialPerformance: sourceReports.socialPerformance.loaded,
       },
       sourceErrors: [...onBrandBundle.errors.map((error) => ({ source: "on-brand", ...error })), ...socialBundle.errors.map((error) => ({ source: "social-performance", ...error }))],
+      sourceWarnings: [...arr(onBrandBundle.warnings).map((warning) => ({ source: "on-brand", ...warning })), ...arr(socialBundle.warnings).map((warning) => ({ source: "social-performance", ...warning }))],
       partial: !sourceReports.onBrand.loaded || !sourceReports.socialPerformance.loaded,
     },
   };

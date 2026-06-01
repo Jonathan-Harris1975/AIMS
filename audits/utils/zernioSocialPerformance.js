@@ -281,6 +281,11 @@ function flattenRecord(record, context) {
     const metrics = metricsFromRecord(merged);
     const publishedAt = merged.publishedAt || merged.scheduledFor || null;
     const content = trim(record.content || record.message || "");
+    const attribution = inferPostAttribution({
+      platform: row.platform || record.platform || context.platform,
+      mediaType: record.mediaType,
+      content,
+    });
     return {
       accountGroup: context.accountId,
       accountLabel: context.accountLabel,
@@ -293,8 +298,8 @@ function flattenRecord(record, context) {
       status: row.status || record.status || null,
       syncStatus: row.syncStatus || record.syncStatus || null,
       isExternal: Boolean(record.isExternal),
-      sourcePipeline: inferSourcePipeline({ platform: row.platform || context.platform, mediaType: record.mediaType, content }),
-      contentLane: inferContentLane(content),
+      sourcePipeline: attribution.sourcePipeline,
+      contentLane: attribution.contentLane,
       mediaType: record.mediaType || null,
       publishedAt,
       content,
@@ -304,27 +309,50 @@ function flattenRecord(record, context) {
   });
 }
 
-function inferSourcePipeline({ platform, mediaType, content }) {
-  const text = content.toLowerCase();
-  const plat = String(platform || "").toLowerCase();
-  const type = String(mediaType || "").toLowerCase();
-  if (["youtube", "tiktok"].includes(plat) || type.includes("video")) return "blotato_or_video";
-  if (/\b(book|ebook|kindle|amazon|catalogue|readers?)\b/.test(text)) return "oneup_ebook_or_static";
-  if (/\bquiz\b/.test(text)) return "oneup_quiz";
-  if (/\bnewsletter\b/.test(text)) return "newsletter_cta";
-  return "oneup_or_manual_social";
+function hasPodcastSignals(text = "") {
+  return /\b(turing'?s torch|podcast|episode|weekly ai|artificial intelligence weekly|listen to|spotify|apple podcasts|amazon music)\b/i.test(text);
 }
 
-function inferContentLane(content = "") {
-  const text = content.toLowerCase();
-  if (/\bebook|book|kindle|amazon\b/.test(text)) return "ebook";
-  if (/\bquiz\b/.test(text)) return "quiz";
-  if (/\breality check\b/.test(text)) return "reality-check";
-  if (/\bplaybook\b/.test(text)) return "ai-playbook";
-  if (/\bwork\b/.test(text)) return "ai-at-work";
-  if (/\bmodel\b/.test(text)) return "model-verdict";
-  if (/\bnews|regulator|launch|study|report\b/.test(text)) return "news-insight";
-  return "unclassified";
+function hasRssSocialBlogSignals(text = "") {
+  return /\b(today'?s ai brief|ai brief|weekly roundup|rss feed|source material points|source material points to|read the full brief|daily ai|this week in ai|ai promises meet real plumbing)\b/i.test(text);
+}
+
+function inferBlotatoLane(text = "") {
+  const source = String(text || "").toLowerCase();
+  if (/\breality check\b|\bwhat it does not mean\b|\bhype\b|\brisk\b/.test(source)) return "blotato_reality_check";
+  if (/\bplaybook\b|\bstep\s?1\b|\bhow to\b|\bworkflow\b|\buse this\b/.test(source)) return "blotato_ai_playbook";
+  if (/\bwork\b|\bworkplace\b|\bteam\b|\bsmall business\b|\bworkflow\b/.test(source)) return "blotato_ai_at_work";
+  if (/\bmodel\b|\btool\b|\bverdict\b|\bclaude\b|\bchatgpt\b|\bgemini\b|\bopenai\b/.test(source)) return "blotato_model_verdict";
+  if (/\bnews\b|\bregulator\b|\bstudy\b|\breport\b|\blaunch\b|\btoday\b/.test(source)) return "blotato_news_insight";
+  return "blotato_unclassified";
+}
+
+function inferPostAttribution({ platform, mediaType, content }) {
+  const text = String(content || "");
+  const lower = text.toLowerCase();
+  const plat = String(platform || "").toLowerCase();
+  const type = String(mediaType || "").toLowerCase();
+  const looksVideo = ["youtube", "tiktok"].includes(plat) || type.includes("video") || type.includes("reel") || type.includes("short");
+
+  if (hasPodcastSignals(text)) {
+    return { sourcePipeline: plat === "youtube" ? "youtube_weekly_podcast" : "podcast_social", contentLane: "podcast" };
+  }
+  if (hasRssSocialBlogSignals(text)) {
+    return { sourcePipeline: "rss_social_blog", contentLane: "rss_social_blog" };
+  }
+  if (/\b(book|ebook|kindle|amazon|catalogue|readers?)\b/.test(lower)) {
+    return { sourcePipeline: "oneup_ebook_or_static", contentLane: "ebook" };
+  }
+  if (/\bquiz\b/.test(lower)) {
+    return { sourcePipeline: "oneup_quiz", contentLane: "quiz" };
+  }
+  if (/\bnewsletter\b/.test(lower)) {
+    return { sourcePipeline: "newsletter_cta", contentLane: "newsletter" };
+  }
+  if (looksVideo) {
+    return { sourcePipeline: "blotato_short_video", contentLane: inferBlotatoLane(text) };
+  }
+  return { sourcePipeline: "oneup_or_manual_social", contentLane: "unclassified" };
 }
 
 function emptyMetrics() {

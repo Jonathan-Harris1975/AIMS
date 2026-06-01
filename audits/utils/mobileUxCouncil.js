@@ -64,22 +64,88 @@ function sourceReports(bundle) {
   };
 }
 
+function severityText(item = {}) {
+  return String(item.severity || item.priority || item.level || "").trim().toLowerCase();
+}
+
+function countSeverity(items = [], wanted = []) {
+  const wantedSet = new Set(wanted.map((value) => String(value).toLowerCase()));
+  return arr(items).filter((item) => wantedSet.has(severityText(item))).length;
+}
+
+function numberFromText(regex, ...values) {
+  for (const value of values) {
+    const text = typeof value === "string" ? value : JSON.stringify(value || "");
+    const match = text.match(regex);
+    if (match) return toNumber(match[1]);
+  }
+  return null;
+}
+
 function scoreSnapshot(report, summary, coverage, latest) {
+  const themes = [
+    ...arr(report.executiveBlockerThemes),
+    ...arr(report.blockerThemes),
+    ...arr(report.executiveThemes),
+    ...arr(report.criticalBlockers),
+    ...arr(summary.executiveBlockerThemes),
+    ...arr(summary.blockerThemes),
+    ...arr(summary.executiveThemes),
+    ...arr(summary.criticalBlockers),
+  ];
+  const candidates = [
+    ...themes,
+    ...arr(report.technicalRootCauseGroups),
+    ...arr(report.rootCauseGroups),
+    ...arr(report.findings),
+    ...arr(report.issues),
+    ...arr(summary.technicalRootCauseGroups),
+    ...arr(summary.rootCauseGroups),
+    ...arr(summary.findings),
+    ...arr(summary.issues),
+    ...arr(coverage.technicalRootCauseGroups),
+    ...arr(coverage.rootCauseGroups),
+  ];
+  const p0FromThemes = countSeverity(themes, ["p0", "critical"]);
+  const p1FromThemes = countSeverity(themes, ["p1", "high"]);
+  const p0FromCandidates = countSeverity(candidates, ["p0", "critical"]);
+  const p1FromCandidates = countSeverity(candidates, ["p1", "high"]);
+  const p0FromText = numberFromText(/P0\s+technical\s+groups?:?\s*(\d+)/i, report.executiveSummary, summary.executiveSummary, report.summary, summary.summary);
+  const p1FromText = numberFromText(/P1\s+technical\s+groups?:?\s*(\d+)/i, report.executiveSummary, summary.executiveSummary, report.summary, summary.summary);
+  const inferredP0Groups = p0FromText ?? (p0FromThemes || p0FromCandidates || 0);
+  const inferredP1Groups = p1FromText ?? (p1FromThemes || p1FromCandidates || 0);
   return {
-    mobileQualityScore: toNumber(report.mobileQualityScore ?? summary.mobileQualityScore ?? latest.mobileQualityScore),
-    releaseVerdict: firstText(report.releaseVerdict, summary.releaseVerdict, latest.releaseVerdict, report.commercialDecision, "unknown"),
+    mobileQualityScore: toNumber(report.mobileQualityScore ?? report.score ?? summary.mobileQualityScore ?? summary.score ?? latest.mobileQualityScore),
+    releaseVerdict: firstText(report.releaseVerdict, summary.releaseVerdict, latest.releaseVerdict, report.commercialDecision, summary.commercialDecision, report.verdict, summary.verdict, "unknown"),
     renderedUrls: toNumber(report.renderedUrlsChecked ?? report.renderedMobileUrlsChecked ?? summary.renderedUrlsChecked ?? coverage.renderedUrlsChecked),
     viewportRuns: toNumber(report.viewportRuns ?? summary.viewportRuns ?? coverage.viewportRuns),
     failingRecords: toNumber(report.failingViewportRecords ?? report.mobileFailureCount ?? summary.mobileFailureCount ?? latest.mobileFailureCount),
     issueCount: toNumber(report.issueCount ?? summary.issueCount ?? latest.issueCount),
-    p0Groups: toNumber(report.p0TechnicalGroups ?? summary.p0TechnicalGroups ?? latest.p0TechnicalGroups),
-    p1Groups: toNumber(report.p1TechnicalGroups ?? summary.p1TechnicalGroups ?? latest.p1TechnicalGroups),
+    p0Groups: toNumber(report.p0TechnicalGroups ?? report.p0Groups ?? summary.p0TechnicalGroups ?? summary.p0Groups ?? latest.p0TechnicalGroups ?? inferredP0Groups),
+    p1Groups: toNumber(report.p1TechnicalGroups ?? report.p1Groups ?? summary.p1TechnicalGroups ?? summary.p1Groups ?? latest.p1TechnicalGroups ?? inferredP1Groups),
     screenshotCount: toNumber(latest.screenshotCount ?? report.screenshotCount ?? summary.screenshotCount),
   };
 }
 
+function formatEvidenceValue(value) {
+  if (value === undefined || value === null || value === "") return "";
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return String(value);
+  if (Array.isArray(value)) {
+    const strings = value.map(formatEvidenceValue).filter(Boolean);
+    return strings.length ? strings.join(", ") : `${value.length} item(s)`;
+  }
+  if (typeof value === "object") {
+    const useful = [value.path, value.file, value.url, value.label, value.name, value.id, value.href]
+      .map((item) => trim(item))
+      .filter(Boolean);
+    if (useful.length) return useful.join(", ");
+    return JSON.stringify(value).slice(0, 240);
+  }
+  return String(value);
+}
+
 function pathsFromCandidate(candidate, check, text) {
-  const explicit = normalisePathList(candidate.affectedPaths);
+  const explicit = explicitPathsFromCandidate(candidate);
   if (explicit.length) return explicit;
   const source = firstText(candidate.bestAvailableAnchor, candidate.selectorComponentCodeAnchor, candidate.anchor, candidate.source, candidate.filePathOrUrl, candidate.path);
   if (source && !/^https?:\/\//i.test(source) && source.includes("/")) return normalisePathList([source]);
@@ -87,6 +153,30 @@ function pathsFromCandidate(candidate, check, text) {
   if (haystack.includes("hamburger") || haystack.includes("mobile nav") || haystack.includes("jh-mobile-nav") || haystack.includes("header")) return ["assets/partials/header.html", "assets/css/site.css", "assets/js/site-ui.min.js"];
   if (haystack.includes("overflow") || haystack.includes("responsive") || haystack.includes("typography") || haystack.includes("image") || haystack.includes("touch target")) return ["assets/css/site.css"];
   return [];
+}
+
+function explicitPathsFromCandidate(candidate = {}) {
+  const values = [
+    ...arr(candidate.affectedPaths),
+    candidate.affectedPath,
+    candidate.filePath,
+    candidate.file,
+    candidate.path,
+    candidate.sourceFile,
+    candidate.sourcePath,
+    candidate.filePathOrUrl,
+  ];
+  return normalisePathList(values).filter((path) => path && !path.startsWith("/") && isWebsiteRepoPath(path));
+}
+
+function hasPatchBlockingEvidence(text = "") {
+  const haystack = String(text || "").toLowerCase();
+  return [
+    "exact replacement code is unavailable",
+    "cannot be deterministically mapped",
+    "no line number or replacement code has been invented",
+    "best available manual patch instruction",
+  ].some((needle) => haystack.includes(needle));
 }
 
 function fixClassFor(check, text, paths) {
@@ -116,14 +206,20 @@ function mapExistingFinding(candidate, index) {
   const remediation = firstText(candidate.requiredOutcome, candidate.exactRemediation, candidate.remediation, candidate.recommendation, candidate.acceptanceCriteria);
   const description = firstText(candidate.description, candidate.defectDescription, candidate.consequence, candidate.executiveConsequence);
   const text = [title, remediation, description, ...arr(candidate.evidence)].join(" ");
+  const explicitPaths = explicitPathsFromCandidate(candidate);
   const paths = pathsFromCandidate(candidate, check, text);
   const fixClass = firstText(candidate.allowedFixClass, candidate.fixClass, candidate.fix_class) || fixClassFor(check, text, paths);
-  const deterministic = paths.length > 0 && paths.every(isWebsiteRepoPath) && Boolean(fixClass) && Boolean(remediation || description);
+  const deterministic = explicitPaths.length > 0
+    && paths.length > 0
+    && paths.every(isWebsiteRepoPath)
+    && Boolean(fixClass)
+    && Boolean(remediation || description)
+    && !hasPatchBlockingEvidence(text);
   const evidence = [
     ...arr(candidate.evidence).map(String),
     firstText(candidate.route) ? `route: ${firstText(candidate.route)}` : "",
     firstText(candidate.viewport) ? `viewport: ${firstText(candidate.viewport)}` : "",
-    firstText(candidate.screenshotRefs) ? `screenshotRefs: ${firstText(candidate.screenshotRefs)}` : "",
+    formatEvidenceValue(candidate.screenshotRefs) ? `screenshotRefs: ${formatEvidenceValue(candidate.screenshotRefs)}` : "",
     firstText(candidate.selectorComponentCodeAnchor, candidate.bestAvailableAnchor) ? `anchor: ${firstText(candidate.selectorComponentCodeAnchor, candidate.bestAvailableAnchor)}` : "",
   ].filter(Boolean);
   return makeCouncilFinding({
@@ -196,27 +292,29 @@ function buildAggregateFindings({ bundle, scores }) {
       classification: "manual_review",
       automationReadiness: "manual_review_only",
       evidence: [`releaseVerdict: ${scores.releaseVerdict}`, `mobileQualityScore: ${scores.mobileQualityScore}`, `P0 groups: ${scores.p0Groups}`],
-      requiredOutcome: "Resolve P0 Mobile UX groups before considering the site release-ready. Only deterministic website-owned findings should be handed to RAMS as code fixes.",
+      requiredOutcome: "Resolve the blocking Mobile UX groups before considering the site release-ready. Only deterministic website-owned findings should be handed to RAMS as code fixes.",
       verificationMethod: "Rerun the Mobile UX hard-gate and confirm release verdict is no longer BLOCKED and P0 group count is zero.",
     }));
   }
   for (const [index, theme] of executiveThemes(bundle).slice(0, 8).entries()) {
     const title = firstText(theme.title, theme.theme, theme.name, `Mobile UX blocker theme ${index + 1}`);
     const text = [title, theme.executiveConsequence, theme.remediationProgramme, theme.metrics].join(" ");
+    const explicitPaths = explicitPathsFromCandidate(theme);
     const paths = pathsFromCandidate(theme, firstText(theme.metrics), text);
     const fixClass = fixClassFor(firstText(theme.metrics), text, paths);
+    const deterministic = explicitPaths.length > 0 && paths.length > 0 && paths.every(isWebsiteRepoPath) && Boolean(fixClass) && !hasPatchBlockingEvidence(text);
     findings.push(makeCouncilFinding({
       id: firstText(theme.themeId, theme.id, theme.groupId) || `MUXC-THEME-${String(index + 1).padStart(3, "0")}`,
       title,
       severity: String(theme.severity || "medium").toUpperCase() === "P0" ? "critical" : String(theme.severity || "medium").toUpperCase() === "P1" ? "high" : theme.severity || "medium",
       pipeline: PIPELINE,
       sourceType: "mobile_ux_council",
-      sourceOwner: paths.length ? "website_repo" : "manual_review",
+      sourceOwner: deterministic ? "website_repo" : "manual_review",
       councilMember: councilMemberFor(firstText(theme.metrics), text),
-      classification: paths.length && fixClass ? "code_fix" : "manual_review",
-      automationReadiness: paths.length && fixClass ? "auto_patch_ready" : "manual_review_only",
+      classification: deterministic ? "code_fix" : "manual_review",
+      automationReadiness: deterministic ? "auto_patch_ready" : "manual_review_only",
       fixClass,
-      allowedFixClass: paths.length && fixClass ? fixClass : "",
+      allowedFixClass: deterministic ? fixClass : "",
       affectedPaths: paths,
       evidence: [`metrics: ${firstText(theme.metrics)}`, `urls: ${theme.urls ?? "unknown"}`, `viewportRange: ${firstText(theme.viewportRange)}`, `technicalGroups: ${theme.technicalGroups ?? "unknown"}`],
       requiredOutcome: firstText(theme.remediationProgramme, "Resolve this systemic Mobile UX blocker and verify it with a fresh rendered audit."),

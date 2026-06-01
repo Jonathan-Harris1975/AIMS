@@ -125,18 +125,27 @@ function artefactUrlFromLatest(latest, field, fallbackName) {
   return "";
 }
 
-export async function loadAuditBundle(label, latestKey) {
+const DEFAULT_AUDIT_CHILDREN = Object.freeze([
+  ["report", "reportJsonUrl", "report.json"],
+  ["summary", "summaryUrl", "summary.json"],
+  ["coverage", "coverageUrl", "coverage.json"],
+  ["evidence", "evidenceUrl", "evidence.json"],
+  ["repositoryIssueAppendix", "repositoryIssueAppendixUrl", "repository-issue-appendix.json"],
+  ["mandatoryMobileScorecard", "mandatoryMobileScorecardUrl", "mandatory-mobile-scorecard.json"],
+  ["responsiveFixAppendix", "responsiveFixAppendixUrl", "responsive-fix-appendix.json"],
+]);
+
+export async function loadAuditBundle(label, latestKey, options = {}) {
+  const wantedChildren = new Set(arr(options.children).length ? arr(options.children) : DEFAULT_AUDIT_CHILDREN.map(([childLabel]) => childLabel));
+  const optionalChildren = new Set(arr(options.optionalChildren));
   const latestResult = await readJsonIfPresent(latestKey);
   const latest = obj(latestResult.value);
-  const childRequests = [
-    ["report", artefactUrlFromLatest(latest, "reportJsonUrl", "report.json")],
-    ["summary", artefactUrlFromLatest(latest, "summaryUrl", "summary.json")],
-    ["coverage", artefactUrlFromLatest(latest, "coverageUrl", "coverage.json")],
-    ["evidence", artefactUrlFromLatest(latest, "evidenceUrl", "evidence.json")],
-    ["repositoryIssueAppendix", artefactUrlFromLatest(latest, "repositoryIssueAppendixUrl", "repository-issue-appendix.json")],
-    ["mandatoryMobileScorecard", artefactUrlFromLatest(latest, "mandatoryMobileScorecardUrl", "mandatory-mobile-scorecard.json")],
-    ["responsiveFixAppendix", artefactUrlFromLatest(latest, "responsiveFixAppendixUrl", "responsive-fix-appendix.json")],
-  ];
+  const childRequests = DEFAULT_AUDIT_CHILDREN
+    .filter(([childLabel]) => wantedChildren.has(childLabel))
+    .map(([childLabel, directField, fallbackName]) => [
+      childLabel,
+      artefactUrlFromLatest(latest, directField, fallbackName),
+    ]);
   const childResults = await Promise.all(
     childRequests.map(async ([childLabel, url]) => {
       if (!url) return [childLabel, { ok: false, key: "", error: `missing ${childLabel} URL`, value: null }];
@@ -146,7 +155,12 @@ export async function loadAuditBundle(label, latestKey) {
   const children = Object.fromEntries(childResults.map(([childLabel, result]) => [childLabel, obj(result.value)]));
   const loaded = Object.fromEntries(childResults.map(([childLabel, result]) => [childLabel, result.ok]));
   const errors = [latestResult, ...childResults.map(([, result]) => result)]
-    .filter((item) => !item.ok)
+    .filter((item, index) => {
+      if (item.ok) return false;
+      if (index === 0) return true;
+      const childLabel = childResults[index - 1]?.[0];
+      return !optionalChildren.has(childLabel);
+    })
     .map((item) => ({ key: item.key, error: item.error }));
   return {
     label,

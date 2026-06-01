@@ -66,26 +66,35 @@ function sourceReports(bundle) {
 }
 
 function getScore(report, summary, key, fallback = 0) {
+  const scoreTable = obj(report?.scoreTable || summary?.scoreTable);
+  const executiveScores = obj(report?.executiveSummary?.scores || summary?.executiveSummary?.scores);
+  const scoreBlock = obj(scoreTable?.[key] || scoreTable?.[key.toUpperCase?.()] || executiveScores?.[key] || executiveScores?.[key.toUpperCase?.()]);
   return clampScore(
     report?.scores?.[key]
       ?? report?.scorecard?.[key]
+      ?? scoreBlock.score
+      ?? scoreBlock.value
+      ?? scoreBlock.total
       ?? summary?.scores?.[key]
+      ?? summary?.scorecard?.[key]
       ?? summary?.[key],
     fallback
   );
 }
 
 function scoreSnapshot(report, summary, coverage) {
-  const control = obj(report.reportControl || report.controlBlock || summary.reportControl || summary.controlBlock);
+  const assurance = obj(report.coverageAssurance || summary.coverageAssurance);
+  const reconciliation = obj(report.inventoryReconciliationSummary || summary.inventoryReconciliationSummary);
+  const control = obj(report.reportControl || report.controlBlock || summary.reportControl || summary.controlBlock || assurance || reconciliation);
   return {
     seo: getScore(report, summary, "seo", 0),
     aeo: getScore(report, summary, "aeo", 0),
     geo: getScore(report, summary, "geo", 0),
     entityAuthority: getScore(report, summary, "entityAuthority", 0),
     conversionSupport: getScore(report, summary, "conversionSupport", 0),
-    discoveredUrls: toNumber(control.totalDiscoveredUrls ?? summary.totalDiscoveredUrls ?? coverage.totalDiscoveredUrls),
-    analysedUrls: toNumber(control.totalAnalysedUrls ?? summary.totalAnalysedUrls ?? coverage.totalAnalysedUrls),
-    failedUrls: toNumber(control.totalFailedUrls ?? summary.totalFailedUrls ?? coverage.totalFailedUrls),
+    discoveredUrls: toNumber(control.totalDiscoveredUrls ?? control.discoveredUrls ?? summary.totalDiscoveredUrls ?? coverage.totalDiscoveredUrls),
+    analysedUrls: toNumber(control.totalAnalysedUrls ?? control.analysedUrls ?? summary.totalAnalysedUrls ?? coverage.totalAnalysedUrls),
+    failedUrls: toNumber(control.totalFailedUrls ?? control.failedUrls ?? summary.totalFailedUrls ?? coverage.totalFailedUrls),
     coveragePercent: toNumber(control.coveragePercent ?? summary.coveragePercent ?? coverage.coveragePercent),
   };
 }
@@ -187,8 +196,12 @@ function familyRows(report, summary, coverage) {
     ...arr(report.pageTypes),
     ...arr(report.pageTypeFindings),
     ...arr(report.familyCoverage),
+    ...arr(summary.pageTypes),
+    ...arr(summary.pageTypeFindings),
     ...arr(summary.familyCoverage),
     ...arr(coverage.familyCoverage),
+    ...arr(coverage.pageTypes),
+    ...arr(coverage.pageTypeFindings),
     ...arr(report.inventory?.families),
   ].filter((item) => item && typeof item === "object" && !Array.isArray(item));
 }
@@ -356,7 +369,10 @@ export function renderSeoAeoGeoCouncilHtml(report) {
 export async function runSeoAeoGeoCouncilReport(options = {}) {
   const sessionId = trim(options.sessionId) || newCouncilSessionId("seo-aeo-geo-council");
   const reportPrefix = reportPrefixFor(AUDIT_TYPE, sessionId);
-  const bundle = await loadAuditBundle("seo-aeo-geo", SOURCE_LATEST_KEY);
+  const bundle = await loadAuditBundle("seo-aeo-geo", SOURCE_LATEST_KEY, {
+    children: ["report", "summary", "coverage", "evidence", "repositoryIssueAppendix"],
+    optionalChildren: ["report", "evidence", "repositoryIssueAppendix"],
+  });
   const report = buildCouncilReport({ sessionId, reportPrefix, bundle });
   const html = renderSeoAeoGeoCouncilHtml(report);
   return publishCouncilReport({ auditType: AUDIT_TYPE, pipeline: PIPELINE, sessionId, reportPrefix, report, html });
