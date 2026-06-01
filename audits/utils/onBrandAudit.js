@@ -170,7 +170,7 @@ function groupPhraseGuardrailDefects(defects = []) {
   const passthrough = [];
 
   for (const issue of arr(defects)) {
-    const isPhraseIssue = /anti-hype phrase guardrail|corporate filler|hype leakage/i.test(`${issue.issueType} ${issue.violatedRule}`);
+    const isPhraseIssue = /anti-hype phrase guardrail|anti-hype hedging|hedging phrase|corporate filler|hype leakage/i.test(`${issue.issueType} ${issue.violatedRule}`);
     if (!isPhraseIssue) {
       passthrough.push(issue);
       continue;

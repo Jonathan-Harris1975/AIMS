@@ -386,8 +386,8 @@ function issueIdForFallback(index, lens = "SEO") {
 
 function representativeSourceFromFamily(pageType) {
   const key = String(pageType || "").toLowerCase();
-  if (key.includes("podcast episode")) return "scripts/generate_podcast_episodes.py";
-  if (key.includes("podcast transcript")) return "scripts/sync_podcast_transcripts.py and transcripts/index.html";
+  if (key.includes("podcast episode")) return "services/rss-feed-podcast/generateFeed.js; services/tts/utils/podcastProcessor.js; R2 podcast episode route manifest";
+  if (key.includes("podcast transcript")) return "services/script/utils/generateTranscriptHtml.js; transcript R2 bucket";
   if (key.includes("blog")) return "blog templates and blog/*.html";
   if (key.includes("topic")) return "topics/index.html and topic templates";
   if (key.includes("book")) return "ebooks/index.html and ebook templates";
@@ -833,21 +833,41 @@ function signalIssuesFromPayload(payload) {
   }
 
   const podcastEpisode = findFamilyDiagnostic(payload, /podcast episode/);
-  if (isPlainObject(podcastEpisode) && Number(podcastEpisode.averageScore || podcastEpisode.score || 100) < 70) {
-    issues.push(forensicIssue({
-      issueId: "JH-AEO-001",
-      severity: "High",
-      auditLens: "AEO / Content / Podcast",
-      rootCauseLevel: "template / content",
-      affectedPagesTemplatesFilesOrRoutes: podcastEpisode.sourceFile || "podcast episode routes; scripts/generate_podcast_episodes.py; functions/podcast episode renderer",
-      evidenceObserved: evidenceText(podcastEpisode.observedTemplateEvidence) || `Podcast episode family average score is ${podcastEpisode.averageScore || "below target"}; sample URLs: ${listSample(podcastEpisode.sampleUrls, "url", 3)}.`,
-      whyItMatters: "Episode pages that are mainly audio wrappers cannot win answer surfaces or generative citations for the topics discussed in the show.",
-      exactRemediation: "Update the podcast episode template so every episode renders a 60-word answer-first summary, 3-5 key takeaways, discussed entities/topics, transcript preview anchors, related topic guides/books, PodcastEpisode JSON-LD, FAQPage JSON-LD, and a canonical transcript link.",
-      expectedGain: "Turns each episode from a thin doorway into a retrieval-ready landing page.",
-      estimatedEffort: "Medium",
-      recommendedOwner: "Content / Engineering",
-      verificationMethod: "Rerun the audit and confirm podcast episode priority pages show takeaways, topic/book links, FAQPage schema, and improved AEO/GEO evidence.",
-    }));
+  if (isPlainObject(podcastEpisode)) {
+    const analysed = Number(podcastEpisode.analysed || podcastEpisode.count || podcastEpisode.totalAnalysed || 0);
+    const failed = Number(podcastEpisode.failed || podcastEpisode.failedCount || 0);
+    const score = Number(podcastEpisode.averageScore || podcastEpisode.score || 100);
+    if (analysed <= 0 && failed > 0) {
+      issues.push(forensicIssue({
+        issueId: "JH-TECH-000",
+        severity: "Critical",
+        auditLens: "Technical / Crawl / Coverage",
+        rootCauseLevel: "route / source-owner mapping",
+        affectedPagesTemplatesFilesOrRoutes: "R2 podcast episode routes; podcast RSS feed; legacy /podcast/TT-* compatibility URLs; workbook Pages source",
+        evidenceObserved: `${failed} podcast episode URL(s) failed or were not mapped to the current R2 podcast source. Episode page quality was not scored because no episode page was successfully analysed.`,
+        whyItMatters: "Failed or mis-owned podcast URLs prevent full-estate verification and create crawl reliability risk.",
+        exactRemediation: "Map current podcast episode URLs through the AIMS/R2 podcast source, redirect or retire legacy /podcast/TT-* URLs, and remove stale workbook rows unless they remain intentionally public.",
+        expectedGain: "Restores honest podcast coverage without asking the website repo to patch R2-owned pages.",
+        estimatedEffort: "Medium",
+        recommendedOwner: "AIMS / SEO / Redirect governance",
+        verificationMethod: "Rerun the SEO + AEO + GEO audit and confirm podcast episode routes are either analysed through the R2 source or listed as explicit redirect/exclusion evidence.",
+      }));
+    } else if (score < 70) {
+      issues.push(forensicIssue({
+        issueId: "JH-AEO-001",
+        severity: "High",
+        auditLens: "AEO / Content / Podcast",
+        rootCauseLevel: "AIMS/R2 template / content",
+        affectedPagesTemplatesFilesOrRoutes: podcastEpisode.sourceFile || "services/rss-feed-podcast/generateFeed.js; services/tts/utils/podcastProcessor.js; R2 podcast episode pages",
+        evidenceObserved: evidenceText(podcastEpisode.observedTemplateEvidence) || `Podcast episode family average score is ${podcastEpisode.averageScore || "below target"}; sample URLs: ${listSample(podcastEpisode.sampleUrls, "url", 3)}.`,
+        whyItMatters: "Episode pages that are mainly audio wrappers cannot win answer surfaces or generative citations for the topics discussed in the show.",
+        exactRemediation: "Update the R2 episode template so every episode renders a 60-word answer-first summary, 3-5 key takeaways, discussed entities/topics, transcript preview anchors, related topic guides/books, PodcastEpisode JSON-LD, FAQPage JSON-LD, and a canonical transcript link.",
+        expectedGain: "Turns each episode from a thin doorway into a retrieval-ready landing page.",
+        estimatedEffort: "Medium",
+        recommendedOwner: "Content / AIMS Engineering",
+        verificationMethod: "Rerun the audit and confirm podcast episode priority pages show takeaways, topic/book links, FAQPage schema, and improved AEO/GEO evidence.",
+      }));
+    }
   }
 
   const transcript = findFamilyDiagnostic(payload, /transcript/);
@@ -857,7 +877,7 @@ function signalIssuesFromPayload(payload) {
       severity: "High",
       auditLens: "AEO / GEO / Transcript",
       rootCauseLevel: "template / content structure",
-      affectedPagesTemplatesFilesOrRoutes: transcript.sourceFile || "transcript detail routes; functions/transcripts/[[slug]].js; transcripts/index.html",
+      affectedPagesTemplatesFilesOrRoutes: transcript.sourceFile || "services/script/utils/generateTranscriptHtml.js; transcript R2 bucket; /transcripts/TT-*.html",
       evidenceObserved: transcriptDiagnosticEvidence(payload, transcript),
       whyItMatters: "Long transcript pages without summary-led chunking are harder for answer engines and LLM retrievers to cite accurately.",
       exactRemediation: "Before the transcript body, render episode summary, what changed this week, key named entities, five bullet takeaways, topic index, timestamped or sectioned anchors, related books/topics, and Transcript/PodcastEpisode schema alignment.",
@@ -1456,6 +1476,75 @@ function isR2PodcastEpisodePath(value) {
   return path === "podcast/episodes" || path.startsWith("podcast/episodes/");
 }
 
+
+function classifySourceOwner(value = "") {
+  const raw = compactString(value).replace(/\\/g, "/").toLowerCase();
+  if (!raw) return "manual_review";
+  if (/\/podcast\/tt-20\d{2}-\d{2}-\d{2}/i.test(raw) || raw.includes("legacy") || raw.includes("compatibility")) return "redirect_governance";
+  if (raw.includes("podcast/episodes") || raw.includes("podcast episode") || raw.includes("rss-feed-podcast") || raw.includes("podcastprocessor")) return "aims_r2_podcast";
+  if (raw.includes("transcripts/") || raw.includes("podcast transcript") || raw.includes("generatetranscripthtml") || raw.includes("transcript r2")) return "aims_r2_transcript";
+  if (raw.includes("blog/posts") || raw.includes("blog article") || raw.includes("weekly blog") || raw.includes("social-media-blog")) return "aims_r2_blog";
+  if (raw.includes("redirect") || raw.includes("canonicalised exclusion")) return "redirect_governance";
+  if (/^(assets|catalogue|ebooks|topics|blog|bio|contact|newsletter|privacy-policy|terms-of-use|glossary|compare|index\.html|404\.html)\b/.test(raw)) return "website_repo";
+  if (raw.endsWith(".html") || raw.endsWith(".css") || raw.endsWith(".js") || raw.endsWith(".xml") || raw.endsWith(".json")) return "website_repo";
+  return "manual_review";
+}
+
+function sourceOwnerFromFinding(row = {}) {
+  const supplied = compactString(row?.sourceOwner || row?.owner || row?.source_owner);
+  if (supplied) return supplied;
+  const haystack = [
+    row?.route,
+    row?.url,
+    row?.affectedPagesTemplatesFilesOrRoutes,
+    row?.sourceFile,
+    row?.source,
+    ...asArray(row?.affectedPaths),
+    ...asArray(row?.evidence),
+  ].join(" ");
+  return classifySourceOwner(haystack);
+}
+
+function automationReadinessForOwner(owner = "", classification = "manual_review") {
+  const normalised = compactString(owner).toLowerCase();
+  if (classification === "code_fix" && normalised === "website_repo") return "auto_patch_ready";
+  if (normalised === "aims_r2_blog") return "r2_generator_fix";
+  if (normalised === "aims_r2_podcast" || normalised === "aims_r2_transcript") return "r2_generator_fix";
+  if (normalised === "redirect_governance") return "redirect_governance_fix";
+  if (normalised === "future_guidance") return "future_guidance";
+  return "manual_review_only";
+}
+
+function ramsRoutingHintForOwner(owner = "") {
+  const normalised = compactString(owner).toLowerCase();
+  if (normalised === "website_repo") return "website_repo_patch_candidate";
+  if (normalised === "aims_r2_blog") return "route_to_aims_blog_generator";
+  if (normalised === "aims_r2_podcast") return "route_to_aims_podcast_r2_generator";
+  if (normalised === "aims_r2_transcript") return "route_to_transcript_generator";
+  if (normalised === "redirect_governance") return "route_to_redirect_governance";
+  return "manual_review";
+}
+
+function buildSourceOwnerMap(payload = {}) {
+  const rows = [
+    ...asArray(payload?.allRoutes),
+    ...asArray(payload?.coverageRows),
+    ...asArray(payload?.priorityPages),
+  ];
+  const map = {};
+  for (const row of rows) {
+    const key = compactString(row?.url || row?.route || row?.path || row?.pageType || row?.family);
+    if (!key) continue;
+    const owner = classifySourceOwner(`${key} ${row?.pageType || ""} ${row?.sourceFile || ""}`);
+    map[key] = {
+      owner,
+      pageType: compactString(row?.pageType || row?.family),
+      patchRoute: ramsRoutingHintForOwner(owner),
+    };
+  }
+  return map;
+}
+
 function normaliseLedgerFinding(row, index) {
   const rawPaths = asArray(row?.affectedPaths).map((item) => compactString(item)).filter(Boolean);
   const affectedPaths = rawPaths.filter(isExactRepoOwnedPath);
@@ -1463,8 +1552,10 @@ function normaliseLedgerFinding(row, index) {
   const allowedFixClass = compactString(row?.allowedFixClass || row?.fixClass);
   const requiredOutcome = compactString(row?.requiredOutcome || row?.exactRemediation || row?.recommendation);
   const requestedCodeFix = compactString(row?.classification).toLowerCase() === "code_fix";
+  const sourceOwner = sourceOwnerFromFinding(row);
   const reasons = [];
 
+  if (sourceOwner !== "website_repo" && requestedCodeFix) reasons.push(`Source owner ${sourceOwner} is not a website repo auto-patch target.`);
   if (rawPaths.some(isR2PodcastEpisodePath)) reasons.push("R2-hosted podcast/episodes pages are not repo-owned website patch targets.");
   if (!affectedPaths.length) reasons.push("No exact repo-owned affectedPaths were supplied.");
   if (!DETERMINISTIC_SEO_FIX_CLASSES.has(allowedFixClass)) reasons.push(`Unsupported or missing allowedFixClass: ${allowedFixClass || "<missing>"}.`);
@@ -1482,6 +1573,9 @@ function normaliseLedgerFinding(row, index) {
     allowedFixClass: classification === "code_fix" ? allowedFixClass : "",
     evidence: reasons.length ? [...evidence, ...reasons] : evidence,
     requiredOutcome: requiredOutcome || "Review the aggregate SEO/AEO/GEO evidence and create deterministic file-level remediation evidence before patching.",
+    sourceOwner,
+    automationReadiness: automationReadinessForOwner(sourceOwner, classification),
+    ramsRoutingHint: ramsRoutingHintForOwner(sourceOwner),
   };
 }
 
@@ -1497,6 +1591,9 @@ function buildManualReviewLedgerFromIssues(issues) {
       allowedFixClass: "",
       evidence: [compactString(issue.evidenceObserved)].filter(Boolean),
       requiredOutcome: compactString(issue.exactRemediation) || "Review the aggregate SEO/AEO/GEO finding before creating a repo patch.",
+      sourceOwner: sourceOwnerFromFinding(issue),
+      automationReadiness: automationReadinessForOwner(sourceOwnerFromFinding(issue), "manual_review"),
+      ramsRoutingHint: ramsRoutingHintForOwner(sourceOwnerFromFinding(issue)),
     }));
 }
 
@@ -1645,6 +1742,7 @@ function buildNormalisedPayload(data, payload) {
     fullIssueRecords: buildFullIssueRecords(issues),
     coverageAssurance: buildCoverageAssurance(payload, pageTypeFindings),
     sourceReconciliation: buildSourceReconciliation(payload, sourceLedger, sourceMismatches),
+    sourceOwnerMap: buildSourceOwnerMap(payload),
     pageTypeFindings,
     priorityPageAnnex: normalisePriorityPageAnnex(data, payload),
     templateComponentGeneratorAnnex: normaliseTemplateAnnex(data, payload),
