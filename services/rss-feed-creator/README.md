@@ -38,7 +38,7 @@ Fetches configured feed sources, rewrites eligible items through OpenRouter, app
 ## Environment variables
 
 - `RSS_OBJECT_KEY`, `RSS_FEED_TITLE`, `RSS_FEED_DESCRIPTION`, `FEED_URL`
-- `FEED_CUTOFF_HOURS`, `FEED_RETENTION_DAYS`, `MAX_RSS_FEEDS_PER_RUN`, `MAX_URL_FEEDS_PER_RUN`, `MAX_ITEMS_PER_FEED`, `FEED_FETCH_CONCURRENCY`
+- `FEED_CUTOFF_HOURS`, `FEED_RETENTION_DAYS`, `MAX_RSS_FEEDS_PER_RUN`, `MAX_URL_FEEDS_PER_RUN`, `MAX_ITEMS_PER_FEED`, `FEED_FETCH_CONCURRENCY`, `RSS_EMPTY_BATCH_ADVANCE_ATTEMPTS`
 - `RSS_MIN_SOURCE_CHARS`, `RSS_TOPIC_GUARD_MIN_SHARED`, `RSS_TOPIC_GUARD_MIN_OVERLAP`, `MIN_SUMMARY_CHARS`, `MAX_SUMMARY_CHARS`
 - R2 alias `rss` env: `R2_BUCKET_RSS_FEEDS`, `R2_PUBLIC_BASE_URL_RSS`
 - OpenRouter route keys `rssRewrite`, `rssShortTitle`
@@ -71,3 +71,8 @@ Fetches configured feed sources, rewrites eligible items through OpenRouter, app
 ## Connections to other services
 
 Feeds blog publishing, OneUp RSS context and RSS short-link creation.
+
+
+## Empty-batch rotation
+
+When a selected feed batch produces no fresh items within the configured cutoff window, the rewrite fetcher can now advance to the next rotation batch within the same run. `RSS_EMPTY_BATCH_ADVANCE_ATTEMPTS` controls how many batches it will try before returning an empty result.
