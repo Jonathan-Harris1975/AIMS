@@ -35,6 +35,8 @@ function applyBaseEnv() {
 }
 
 const scheduledRequests = [];
+let oneUpScheduleFailuresRemaining = 0;
+let oneUpScheduleAttempts = 0;
 
 const mockServer = http.createServer(async (req, res) => {
   const url = new URL(req.url, "http://127.0.0.1");
@@ -86,8 +88,15 @@ const mockServer = http.createServer(async (req, res) => {
   }
 
   if (req.method === "POST" && ["/scheduleimagepost", "/scheduletextpost"].includes(url.pathname)) {
+    oneUpScheduleAttempts += 1;
     let body = "";
     for await (const chunk of req) body += chunk;
+    if (oneUpScheduleFailuresRemaining > 0) {
+      oneUpScheduleFailuresRemaining -= 1;
+      res.writeHead(503, { "content-type": "application/json" });
+      res.end(JSON.stringify({ message: "temporary OneUp outage", error: true }));
+      return;
+    }
     const params = new URLSearchParams(body);
     scheduledRequests.push({ endpoint: url.pathname, body: Object.fromEntries(params.entries()) });
     res.writeHead(200, { "content-type": "application/json" });
@@ -160,6 +169,8 @@ test.after(async () => {
 
 test.afterEach(() => {
   scheduledRequests.length = 0;
+  oneUpScheduleFailuresRemaining = 0;
+  oneUpScheduleAttempts = 0;
   restoreEnv();
 });
 
@@ -356,6 +367,35 @@ test("buildAndScheduleDailyLane validates Facebook targeting before live schedul
   assert.equal(result.targeting.targetedAccounts[0].social_network_type, "Facebook");
   assert.equal(scheduledRequests.at(-1).body.social_network_id, '["fb-page-1"]');
 });
+
+test("buildAndScheduleDailyLane retries a transient OneUp scheduling failure", async () => {
+  restoreEnv();
+  applyBaseEnv();
+  process.env.OPENROUTER_API_BASE = mockBase;
+  process.env.ONEUP_API_BASE = mockBase;
+  process.env.ONEUP_API_KEY = "oneup-key";
+  process.env.ONEUP_REQUIRED_NETWORK_TYPES = "Facebook";
+  process.env.ONEUP_VALIDATE_TARGET_ACCOUNTS = "true";
+  process.env.ONEUP_API_RETRY_ATTEMPTS = "2";
+  process.env.ONEUP_API_RETRY_BASE_MS = "1";
+  process.env.ONEUP_API_RETRY_MAX_MS = "5";
+  oneUpScheduleFailuresRemaining = 1;
+
+  const mod = await import(`../services/oneup/utils/socialScheduler.js?oneup-live-retry=${Date.now()}`);
+  const result = await mod.buildAndScheduleDailyLane("monday", {
+    publishDate: "2026-04-13",
+    categoryName: "General",
+    socialNetworkId: "fb-page-1",
+    force: true,
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.scheduled, true);
+  assert.equal(oneUpScheduleAttempts, 2);
+  assert.equal(scheduledRequests.length, 1);
+  assert.deepEqual(result.oneUpResponse._oneUpRetry, { attempts: 2, recovered: true, operation: "POST scheduleimagepost" });
+});
+
 
 test("buildAndScheduleDailyLane fails loudly when required Facebook targeting is missing", async () => {
   restoreEnv();
