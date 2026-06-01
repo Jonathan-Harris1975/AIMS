@@ -18,6 +18,68 @@ function requireApiKey(apiKey) {
   return key;
 }
 
+function retryNumber(name, fallback, { min = 0, max = 10 } = {}) {
+  const parsed = Number(process.env[name]);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(max, Math.max(min, parsed));
+}
+
+function getOneUpRetryConfig() {
+  return {
+    attempts: retryNumber("ONEUP_API_RETRY_ATTEMPTS", 3, { min: 1, max: 6 }),
+    baseDelayMs: retryNumber("ONEUP_API_RETRY_BASE_MS", 800, { min: 100, max: 30000 }),
+    maxDelayMs: retryNumber("ONEUP_API_RETRY_MAX_MS", 6000, { min: 500, max: 60000 }),
+  };
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, Math.max(0, Number(ms) || 0)));
+}
+
+function isRetryableStatus(statusCode) {
+  const code = Number(statusCode);
+  return code === 408 || code === 425 || code === 429 || (code >= 500 && code <= 599);
+}
+
+function isRetryableMessage(message = "") {
+  return /timeout|timed out|temporar|rate limit|too many requests|try again|busy|unavailable|reset|socket|network|ECONNRESET|ETIMEDOUT|EAI_AGAIN/i.test(String(message || ""));
+}
+
+function isRetryableOneUpError(error) {
+  if (error?.retryable === true) return true;
+  if (isRetryableStatus(error?.statusCode || error?.status)) return true;
+  return !error?.statusCode && isRetryableMessage(error?.message || "");
+}
+
+function retryDelayMs(attempt, config) {
+  const exponential = config.baseDelayMs * (2 ** Math.max(0, attempt - 1));
+  const jitter = Math.floor(Math.random() * Math.min(250, config.baseDelayMs));
+  return Math.min(config.maxDelayMs, exponential + jitter);
+}
+
+async function withOneUpRetry(operation, fn) {
+  const config = getOneUpRetryConfig();
+  let lastError;
+
+  for (let attempt = 1; attempt <= config.attempts; attempt += 1) {
+    try {
+      const result = await fn(attempt);
+      if (result && typeof result === "object" && attempt > 1) {
+        result._oneUpRetry = { attempts: attempt, recovered: true, operation };
+      }
+      return result;
+    } catch (error) {
+      lastError = error;
+      const retryable = isRetryableOneUpError(error);
+      error.oneUpRetry = { attempts: attempt, maxAttempts: config.attempts, retryable, operation };
+      if (!retryable || attempt >= config.attempts) throw error;
+      await sleep(retryDelayMs(attempt, config));
+    }
+  }
+
+  throw lastError;
+}
+
 async function parseJsonSafe(response) {
   const text = await response.text();
   try {
@@ -69,67 +131,73 @@ function compactAccount(account) {
 }
 
 async function oneUpGet(endpoint, params = {}, apiKey) {
-  const key = requireApiKey(apiKey);
-  const url = new URL(`${getOneUpApiBase()}/${endpoint}`);
-  url.searchParams.set("apiKey", key);
-  Object.entries(params || {}).forEach(([param, value]) => {
-    if (value === undefined || value === null || value === "") return;
-    url.searchParams.set(param, String(value));
+  return withOneUpRetry(`GET ${endpoint}`, async () => {
+    const key = requireApiKey(apiKey);
+    const url = new URL(`${getOneUpApiBase()}/${endpoint}`);
+    url.searchParams.set("apiKey", key);
+    Object.entries(params || {}).forEach(([param, value]) => {
+      if (value === undefined || value === null || value === "") return;
+      url.searchParams.set(param, String(value));
+    });
+
+    const response = await fetch(url, { method: "GET" });
+    const payload = await parseJsonSafe(response);
+
+    if (!response.ok) {
+      const err = new Error(payload.json?.message || payload.text || `OneUp GET ${endpoint} failed with ${response.status}`);
+      err.statusCode = response.status || 502;
+      err.details = payload.json;
+      throw err;
+    }
+
+    if (payload.json?.error) {
+      const err = new Error(payload.json?.message || `OneUp GET ${endpoint} returned an error`);
+      err.statusCode = 502;
+      err.details = payload.json;
+      err.retryable = isRetryableMessage(err.message);
+      throw err;
+    }
+
+    return payload.json;
   });
-
-  const response = await fetch(url, { method: "GET" });
-  const payload = await parseJsonSafe(response);
-
-  if (!response.ok) {
-    const err = new Error(payload.json?.message || payload.text || `OneUp GET ${endpoint} failed with ${response.status}`);
-    err.statusCode = response.status || 502;
-    err.details = payload.json;
-    throw err;
-  }
-
-  if (payload.json?.error) {
-    const err = new Error(payload.json?.message || `OneUp GET ${endpoint} returned an error`);
-    err.statusCode = 502;
-    err.details = payload.json;
-    throw err;
-  }
-
-  return payload.json;
 }
 
 async function oneUpPost(endpoint, body = {}, apiKey) {
-  const key = requireApiKey(apiKey);
-  const payload = new URLSearchParams();
-  payload.set("apiKey", key);
-  Object.entries(body || {}).forEach(([param, value]) => {
-    if (value === undefined || value === null || value === "") return;
-    payload.set(param, String(value));
+  return withOneUpRetry(`POST ${endpoint}`, async () => {
+    const key = requireApiKey(apiKey);
+    const payload = new URLSearchParams();
+    payload.set("apiKey", key);
+    Object.entries(body || {}).forEach(([param, value]) => {
+      if (value === undefined || value === null || value === "") return;
+      payload.set(param, String(value));
+    });
+
+    const response = await fetch(`${getOneUpApiBase()}/${endpoint}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: payload.toString(),
+    });
+
+    const parsed = await parseJsonSafe(response);
+    if (!response.ok) {
+      const err = new Error(parsed.json?.message || parsed.text || `OneUp POST ${endpoint} failed with ${response.status}`);
+      err.statusCode = response.status || 502;
+      err.details = parsed.json;
+      throw err;
+    }
+
+    if (parsed.json?.error) {
+      const err = new Error(parsed.json?.message || `OneUp POST ${endpoint} returned an error`);
+      err.statusCode = 502;
+      err.details = parsed.json;
+      err.retryable = isRetryableMessage(err.message);
+      throw err;
+    }
+
+    return parsed.json;
   });
-
-  const response = await fetch(`${getOneUpApiBase()}/${endpoint}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body: payload.toString(),
-  });
-
-  const parsed = await parseJsonSafe(response);
-  if (!response.ok) {
-    const err = new Error(parsed.json?.message || parsed.text || `OneUp POST ${endpoint} failed with ${response.status}`);
-    err.statusCode = response.status || 502;
-    err.details = parsed.json;
-    throw err;
-  }
-
-  if (parsed.json?.error) {
-    const err = new Error(parsed.json?.message || `OneUp POST ${endpoint} returned an error`);
-    err.statusCode = 502;
-    err.details = parsed.json;
-    throw err;
-  }
-
-  return parsed.json;
 }
 
 export async function listCategories(apiKey) {

@@ -433,9 +433,27 @@ function safeErrorMessage(error) {
   return error?.message || String(error || "Unknown error");
 }
 
+function retrySummaryFromError(error) {
+  const retry = error?.oneUpRetry;
+  if (!retry) return null;
+  return {
+    attempts: retry.attempts,
+    maxAttempts: retry.maxAttempts,
+    retryable: retry.retryable,
+    operation: retry.operation || null,
+  };
+}
+
+function retryWarningFromError(error) {
+  const retry = retrySummaryFromError(error);
+  if (!retry) return null;
+  return `OneUp API retry attempts used: ${retry.attempts}/${retry.maxAttempts}${retry.operation ? ` (${retry.operation})` : ""}.`;
+}
+
 function failedEbookPostResult({ dayKey, publishDate, scheduledDateTime, dryRun, categoryName, error }) {
   const statusCode = statusCodeFromError(error);
   const message = `${dayKey.charAt(0).toUpperCase()}${dayKey.slice(1)} ebook post failed: ${safeErrorMessage(error)}`;
+  const retryWarning = retryWarningFromError(error);
   return {
     publishDate,
     scheduledDateTime,
@@ -445,8 +463,9 @@ function failedEbookPostResult({ dayKey, publishDate, scheduledDateTime, dryRun,
     failed: true,
     statusCode,
     category: { id: null, category_name: categoryName },
-    warnings: [message],
+    warnings: [message, retryWarning].filter(Boolean),
     error: safeErrorMessage(error),
+    retry: retrySummaryFromError(error),
     post: null,
     oneUpResponse: null,
     phase5Gate: error?.phase5Gate || null,
@@ -1249,8 +1268,9 @@ export async function buildAndScheduleQuizSeries(options = {}) {
         failed: true,
         statusCode: statusCodeFromError(error),
         category: { id: null, category_name: categoryName },
-        warnings: [`Quiz answer post failed before the question was scheduled: ${safeErrorMessage(error)}`],
+        warnings: [`Quiz answer post failed before the question was scheduled: ${safeErrorMessage(error)}`, retryWarningFromError(error)].filter(Boolean),
         error: safeErrorMessage(error),
+        retry: retrySummaryFromError(error),
         post: answerPost,
         oneUpResponse: null,
         targeting: error?.oneUpTargeting || null,
