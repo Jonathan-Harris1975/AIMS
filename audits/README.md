@@ -59,6 +59,7 @@ Dispatches external GitHub Actions audits for Mobile UX and SEO/AEO/GEO, receive
 - `AI_MODEL_AUDIT`, `AUDIT_AI_*`, `ON_BRAND_AUDIT_*`
 - `ZERNIO_META_API_KEY`, `ZERNIO_VIDEO_API_KEY`
 - Optional Zernio settings: `ZERNIO_META_PLATFORMS`, `ZERNIO_VIDEO_PLATFORMS`, `ZERNIO_API_BASE_URL`, `ZERNIO_ANALYTICS_SOURCE`, `ZERNIO_ANALYTICS_PAGE_SIZE`, `ZERNIO_ANALYTICS_MAX_PAGES`, `ZERNIO_ANALYTICS_TIMEOUT_MS`
+- Optional shorts thumbnail audit: `ZERNIO_THUMBNAIL_AUDIT_ENABLED=true`, `ZERNIO_THUMBNAIL_AUDIT_MAX_POSTS`, `ZERNIO_THUMBNAIL_AUDIT_REQUIRE_PLAYWRIGHT`, `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH`
 
 ## External integrations
 
@@ -72,7 +73,7 @@ Dispatches external GitHub Actions audits for Mobile UX and SEO/AEO/GEO, receive
 
 - Audit requests: `<reportPrefix>/request.json`.
 - Latest pointers: `audits/<auditType>/latest.json`.
-- Zernio reports: `audits/social-performance/<timestamp>-<sessionId>/report.html`, `report.json`, and `summary.json`.
+- Zernio reports: `audits/social-performance/<timestamp>-<sessionId>/report.html`, `report.json`, and `summary.json`. If thumbnail auditing is enabled, `thumbnail-audit.json` is also written beside the report.
 - Analysis/report artefacts are written under the audit report prefix in the R2 audits bucket.
 - Job state uses shared durable state when configured.
 
