@@ -79,3 +79,14 @@ Scheduler state is handled by service utilities and shared state; no service-spe
 ## Connections to other services
 
 Consumes RSS context from rss-feed-creator output and featured-book/sponsor data from script utilities. Uses shared AI and state utilities.
+
+
+## OneUp API retry guard
+
+Transient OneUp API failures are retried automatically for schedule/list calls. Configure with:
+
+- `ONEUP_API_RETRY_ATTEMPTS` default `3`
+- `ONEUP_API_RETRY_BASE_MS` default `800`
+- `ONEUP_API_RETRY_MAX_MS` default `6000`
+
+Only network errors, HTTP 408/425/429, and 5xx responses are retried. Auth, validation, duplicate and targeting failures still fail immediately.
