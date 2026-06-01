@@ -73,6 +73,9 @@ Dispatches external GitHub Actions audits for Mobile UX and SEO/AEO/GEO, receive
 
 - Audit requests: `<reportPrefix>/request.json`.
 - Latest pointers: `audits/<auditType>/latest.json`.
+
+- SEO/AEO/GEO council reports: `audits/seo-aeo-geo-council/<timestamp>-<sessionId>/report.html`, `report.json`, `summary.json`, `coverage.json`, and `repository-issue-appendix.json`; latest pointer: `audits/seo-aeo-geo-council/latest.json`. RAMS should prefer this as the `seo-aeo-geo` master report and only patch deterministic website-owned `code_fix` findings.
+- Mobile UX council reports: `audits/mobile-ux-council/<timestamp>-<sessionId>/report.html`, `report.json`, `summary.json`, `coverage.json`, and `repository-issue-appendix.json`; latest pointer: `audits/mobile-ux-council/latest.json`. RAMS should prefer this as the `mobile-ux` master report and only patch deterministic website-owned rendered UX findings.
 - Brand-social council reports: `audits/brand-social-council/<timestamp>-<sessionId>/report.html`, `report.json`, `summary.json`, `coverage.json`, and `repository-issue-appendix.json`; latest pointer: `audits/brand-social-council/latest.json`. RAMS may read this as the on-brand master report, but it remains future-guidance/manual-review only unless deterministic file-level evidence is later published.
 - Zernio reports: `audits/social-performance/<timestamp>-<sessionId>/report.html`, `report.json`, and `summary.json`. If thumbnail auditing is enabled, `thumbnail-audit.json` is also written beside the report.
 - Analysis/report artefacts are written under the audit report prefix in the R2 audits bucket.
@@ -108,3 +111,14 @@ Routes:
 The council combines the latest on-brand and Zernio social-performance reports into one RAMS-readable master report. It adds Brand Editor, Social Performance Analyst, Hook Analyst, Thumbnail & Visual Packaging Expert, Repurposing Lead, Comments & Replies Auditor, Cross-Platform Coherence Lead, Podcast & Transcript Lead, Commercial Lead, and Automation Safety Lead decisions.
 
 Set `BRAND_SOCIAL_COUNCIL_RUN_AFTER_SOCIAL=true` to run it automatically after the monthly social-performance report. Leave false to run it as a separate monthly service.
+### SEO/AEO/GEO Council and Mobile UX Council
+
+Routes:
+
+- `GET /audits/seo-aeo-geo-council/health`
+- `POST /audits/seo-aeo-geo-council/run`
+- `GET /audits/mobile-ux-council/health`
+- `POST /audits/mobile-ux-council/run`
+
+The SEO/AEO/GEO council runs automatically after the SEO/AEO/GEO callback when `SEO_AEO_GEO_COUNCIL_RUN_AFTER_AUDIT=true`. The Mobile UX council runs automatically after the Mobile UX callback when `MOBILE_UX_COUNCIL_RUN_AFTER_AUDIT=true`. Both reports are RAMS master inputs, not uncontrolled patch triggers. RAMS may only patch council findings with exact website-owned affected paths, deterministic evidence, an approved fix class and validation requirements.
+
