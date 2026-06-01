@@ -6,7 +6,7 @@
 
 ## Purpose
 
-Dispatches external GitHub Actions audits for Mobile UX and SEO/AEO/GEO, receives secure callbacks, runs SEO/AEO/GEO AI analysis jobs, and runs a local on-brand audit over generated content evidence.
+Dispatches external GitHub Actions audits for Mobile UX and SEO/AEO/GEO, receives secure callbacks, runs SEO/AEO/GEO AI analysis jobs, runs a local on-brand audit over generated content evidence, and can publish a monthly Zernio social-performance report for analysis-only social metrics.
 
 ## Routes
 
@@ -22,16 +22,19 @@ Dispatches external GitHub Actions audits for Mobile UX and SEO/AEO/GEO, receive
 - `GET /audits/seo-aeo-geo/jobs/:sessionId`
 - `GET /audits/on-brand/health`
 - `POST /audits/on-brand/run`
+- `GET /audits/social-performance/health`
+- `POST /audits/social-performance/run`
 
 ## Main files
 
 - `audits/index.js` mounts audit routers.
-- `audits/routes/mobileUx.js`, `seoAeoGeo.js`, `onBrand.js` define route behaviour.
+- `audits/routes/mobileUx.js`, `seoAeoGeo.js`, `onBrand.js`, `socialPerformance.js` define route behaviour.
 - `audits/utils/orchestrator.js` dispatches GitHub workflows and tracks jobs.
 - `audits/utils/githubDispatch.js` calls GitHub workflow dispatch and verifies workflow runs.
 - `audits/utils/publishAuditArtifacts.js` writes audit request/latest/report objects to R2.
 - `audits/utils/seoAeoGeoAnalysis.js` performs forensic AI analysis.
 - `audits/utils/onBrandAudit.js` and `onBrandEvidence.js` collect and report on-brand evidence.
+- `audits/utils/zernioSocialPerformance.js` collects Zernio analytics and writes monthly social-performance JSON/HTML reports to the R2 audits bucket.
 - `audits/utils/callbackAuth.js` protects callback/analysis endpoints.
 
 ## Workflow
@@ -43,6 +46,7 @@ Dispatches external GitHub Actions audits for Mobile UX and SEO/AEO/GEO, receive
 - Callbacks require bearer token or `x-audit-callback-token`.
 - Completed audit artefact URLs are checked against `R2_PUBLIC_BASE_URL_AUDITS`.
 - On-brand audits run inside this application and publish JSON/HTML outputs unless dry-run mode is used.
+- Social-performance reports are analysis-only. They do not post content and set `ramsPolicy.shouldTriggerRams=false` in report outputs.
 
 ## Environment variables
 
@@ -53,6 +57,8 @@ Dispatches external GitHub Actions audits for Mobile UX and SEO/AEO/GEO, receive
 - `R2_BUCKET_AUDITS`, `R2_PUBLIC_BASE_URL_AUDITS`
 - Shared R2 credentials and `R2_BUCKET_META_SYSTEM` for durable state
 - `AI_MODEL_AUDIT`, `AUDIT_AI_*`, `ON_BRAND_AUDIT_*`
+- `ZERNIO_META_API_KEY`, `ZERNIO_VIDEO_API_KEY`
+- Optional Zernio settings: `ZERNIO_META_PLATFORMS`, `ZERNIO_VIDEO_PLATFORMS`, `ZERNIO_API_BASE_URL`, `ZERNIO_ANALYTICS_SOURCE`, `ZERNIO_ANALYTICS_PAGE_SIZE`, `ZERNIO_ANALYTICS_MAX_PAGES`, `ZERNIO_ANALYTICS_TIMEOUT_MS`
 
 ## External integrations
 
@@ -60,11 +66,13 @@ Dispatches external GitHub Actions audits for Mobile UX and SEO/AEO/GEO, receive
 - OpenRouter through shared AI service
 - Cloudflare R2 audits bucket
 - OneUp API for on-brand evidence when enabled
+- Zernio Analytics API for monthly social-performance evidence
 
 ## Storage
 
 - Audit requests: `<reportPrefix>/request.json`.
 - Latest pointers: `audits/<auditType>/latest.json`.
+- Zernio reports: `audits/social-performance/<timestamp>-<sessionId>/report.html`, `report.json`, and `summary.json`.
 - Analysis/report artefacts are written under the audit report prefix in the R2 audits bucket.
 - Job state uses shared durable state when configured.
 
@@ -81,6 +89,7 @@ Dispatches external GitHub Actions audits for Mobile UX and SEO/AEO/GEO, receive
 - 401 on callback: token mismatch or missing token env.
 - Dispatch failure: check GitHub token, repo owner/name, workflow ID and ref.
 - Analysis not visible: check job status endpoint and R2 audit artefacts.
+- Empty Zernio report: confirm both Zernio accounts are connected, API keys are set, and the report date range contains platform posts/analytics.
 - Artefact rejected: URL is outside `R2_PUBLIC_BASE_URL_AUDITS`.
 
 ## Connections to other services
