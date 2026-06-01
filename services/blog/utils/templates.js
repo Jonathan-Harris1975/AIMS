@@ -209,7 +209,6 @@ export function weeklyPostBody({ title, summary, dateLabel, imageUrl, html, sour
   ${imageUrl ? `<img alt="${escapeHtml(title)}" class="cover" decoding="async" fetchpriority="high" loading="eager" src="${escapeHtml(imageUrl)}"/>` : ""}
   <div class="u-s06">
     ${dateLabel ? `<p class="tag u-s07">${escapeHtml(dateLabel)}</p>` : ""}
-    ${summary ? `<p class="u-s09">${escapeHtml(summary)}</p>` : ""}
     ${html}
   </div>
 </article>
@@ -240,7 +239,6 @@ export function socialPostBody({ title, summary, dateLabel, imageUrl, html, sour
   ${imageUrl ? `<img alt="${escapeHtml(title)}" class="cover" decoding="async" fetchpriority="high" loading="eager" src="${escapeHtml(imageUrl)}"/>` : ""}
   <div class="u-s06">
     ${dateLabel ? `<p class="tag u-s07">${escapeHtml(dateLabel)}</p>` : ""}
-    ${summary ? `<p class="u-s09">${escapeHtml(summary)}</p>` : ""}
     ${socialCaption ? `<p>${escapeHtml(socialCaption)}</p>` : ""}
     ${html}
     ${hashtagsHtml}
