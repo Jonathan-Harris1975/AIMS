@@ -30,7 +30,49 @@ const MAX_URL_FEEDS_PER_RUN = Number(process.env.MAX_URL_FEEDS_PER_RUN) || 1;
 const MAX_ITEMS_PER_FEED = Number(process.env.MAX_ITEMS_PER_FEED) || 20; // safety cap
 const FEED_CUTOFF_HOURS = Number(process.env.FEED_CUTOFF_HOURS) || 48; // default 48 hours
 const FEED_FETCH_CONCURRENCY = positiveIntEnv("FEED_FETCH_CONCURRENCY", 2, 4);
+const RSS_EMPTY_BATCH_ADVANCE_ATTEMPTS = positiveIntEnv("RSS_EMPTY_BATCH_ADVANCE_ATTEMPTS", 3, 20);
 
+function normaliseIndex(index, length) {
+  if (!length) return 0;
+  const parsed = Number(index);
+  if (!Number.isFinite(parsed)) return 0;
+  return ((Math.floor(parsed) % length) + length) % length;
+}
+
+function selectRotatingBatch(list, startIndex, requestedCount) {
+  if (!Array.isArray(list) || list.length === 0) return [];
+  const count = Math.min(Math.max(1, requestedCount), list.length);
+  const start = normaliseIndex(startIndex, list.length);
+  const batch = [];
+  for (let i = 0; i < count; i += 1) {
+    batch.push(list[(start + i) % list.length]);
+  }
+  return batch;
+}
+
+function advanceIndex(index, count, length) {
+  if (!length) return 0;
+  return normaliseIndex(index + Math.min(Math.max(1, count), length), length);
+}
+
+function dedupeArticles(items = []) {
+  const seen = new Set();
+  const deduped = [];
+  for (const it of items) {
+    const key = it.link || `title:${it.title}`;
+    if (key && !seen.has(key)) {
+      seen.add(key);
+      deduped.push(it);
+    }
+  }
+  return deduped;
+}
+
+async function parseSelectedFeeds(selected) {
+  const feedFetchLimit = pLimit(FEED_FETCH_CONCURRENCY);
+  const parsedLists = await Promise.all(selected.map((url) => feedFetchLimit(() => fetchAndParseOne(url))));
+  return parsedLists.flat();
+}
 
 function escapeInvalidXmlEntities(xml = "") {
   return String(xml).replace(/&(?!#\d+;|#x[0-9a-fA-F]+;|amp;|lt;|gt;|quot;|apos;)/g, "&amp;");
@@ -162,60 +204,91 @@ export async function fetchAndParseFeeds() {
     throw new Error("No feeds available in rss-feeds.txt or url-feeds.txt");
   }
 
-  // 2) Rotation state → pick the next batch
-  const { rssIndex = 0, urlIndex = 0 } = await loadRotationState();
-
-  const rssBatch = rssFeedsAll.slice(
-    rssIndex,
-    rssIndex + Math.min(MAX_RSS_FEEDS_PER_RUN, rssFeedsAll.length)
+  const rssBatchSize = Math.min(MAX_RSS_FEEDS_PER_RUN, Math.max(1, rssFeedsAll.length));
+  const urlBatchSize = Math.min(MAX_URL_FEEDS_PER_RUN, Math.max(1, urlFeedsAll.length));
+  const maxPossibleAttempts = Math.max(
+    rssFeedsAll.length ? Math.ceil(rssFeedsAll.length / rssBatchSize) : 0,
+    urlFeedsAll.length ? Math.ceil(urlFeedsAll.length / urlBatchSize) : 0,
+    1
   );
-  const urlBatch = urlFeedsAll.slice(
-    urlIndex,
-    urlIndex + Math.min(MAX_URL_FEEDS_PER_RUN, urlFeedsAll.length)
-  );
+  const attemptsToRun = Math.min(RSS_EMPTY_BATCH_ADVANCE_ATTEMPTS, maxPossibleAttempts);
 
-  // 3) Advance rotation and persist
-  const nextRssIndex =
-    (rssIndex + Math.min(MAX_RSS_FEEDS_PER_RUN, Math.max(1, rssFeedsAll.length))) %
-    Math.max(1, rssFeedsAll.length);
-  const nextUrlIndex =
-    (urlIndex + Math.min(MAX_URL_FEEDS_PER_RUN, Math.max(1, urlFeedsAll.length))) %
-    Math.max(1, urlFeedsAll.length);
+  // 2) Rotation state → pick the next batch. If a batch has no fresh items,
+  // move on within the same run rather than stopping the rewrite pipeline empty.
+  const initialRotation = await loadRotationState();
+  let currentRssIndex = normaliseIndex(initialRotation.rssIndex ?? 0, rssFeedsAll.length);
+  let currentUrlIndex = normaliseIndex(initialRotation.urlIndex ?? 0, urlFeedsAll.length);
+  let latestNextRssIndex = currentRssIndex;
+  let latestNextUrlIndex = currentUrlIndex;
+  let lastParsedTotal = 0;
 
-  await saveFeedRotation({ rssIndex: nextRssIndex, urlIndex: nextUrlIndex });
+  for (let attempt = 1; attempt <= attemptsToRun; attempt += 1) {
+    const rssBatch = selectRotatingBatch(rssFeedsAll, currentRssIndex, MAX_RSS_FEEDS_PER_RUN);
+    const urlBatch = selectRotatingBatch(urlFeedsAll, currentUrlIndex, MAX_URL_FEEDS_PER_RUN);
+    const selected = [...rssBatch, ...urlBatch];
 
-  const selected = [...rssBatch, ...urlBatch];
-  debug("rss.fetchFeeds.rotation.enabled", {
-    rssFeeds: rssBatch.length,
-    urlFeeds: urlBatch.length,
-    selected: selected.length,
-    cutoffHours: FEED_CUTOFF_HOURS,
-    fetchConcurrency: FEED_FETCH_CONCURRENCY,
-  });
+    latestNextRssIndex = advanceIndex(currentRssIndex, MAX_RSS_FEEDS_PER_RUN, rssFeedsAll.length);
+    latestNextUrlIndex = advanceIndex(currentUrlIndex, MAX_URL_FEEDS_PER_RUN, urlFeedsAll.length);
 
-  // 4) Parse each selected feed into article items with bounded concurrency.
-  const feedFetchLimit = pLimit(FEED_FETCH_CONCURRENCY);
-  const parsedLists = await Promise.all(selected.map((url) => feedFetchLimit(() => fetchAndParseOne(url))));
-  const items = parsedLists.flat();
+    await saveFeedRotation({ rssIndex: latestNextRssIndex, urlIndex: latestNextUrlIndex });
 
-  // 5) De-dupe by link (and then by title as a fallback)
-  const seen = new Set();
-  const deduped = [];
-  for (const it of items) {
-    const key = it.link || `title:${it.title}`;
-    if (key && !seen.has(key)) {
-      seen.add(key);
-      deduped.push(it);
+    debug("rss.fetchFeeds.rotation.enabled", {
+      attempt,
+      attemptsToRun,
+      rssIndex: currentRssIndex,
+      urlIndex: currentUrlIndex,
+      rssFeeds: rssBatch.length,
+      urlFeeds: urlBatch.length,
+      selected: selected.length,
+      cutoffHours: FEED_CUTOFF_HOURS,
+      fetchConcurrency: FEED_FETCH_CONCURRENCY,
+    });
+
+    const items = await parseSelectedFeeds(selected);
+    lastParsedTotal += items.length;
+    const deduped = dedupeArticles(items);
+
+    debug("rss.fetchFeeds.items.ready", {
+      attempt,
+      parsedTotal: items.length,
+      deduped: deduped.length,
+      cutoffHours: FEED_CUTOFF_HOURS,
+    });
+
+    if (deduped.length > 0) {
+      if (attempt > 1) {
+        info("rss.fetchFeeds.emptyBatch.recovered", {
+          attempt,
+          rssIndex: currentRssIndex,
+          urlIndex: currentUrlIndex,
+          deduped: deduped.length,
+        });
+      }
+      return deduped;
+    }
+
+    if (attempt < attemptsToRun) {
+      info("rss.fetchFeeds.emptyBatch.advance", {
+        attempt,
+        attemptsToRun,
+        nextRssIndex: latestNextRssIndex,
+        nextUrlIndex: latestNextUrlIndex,
+        reason: "no fresh feed items in selected batch",
+      });
+      currentRssIndex = latestNextRssIndex;
+      currentUrlIndex = latestNextUrlIndex;
     }
   }
 
-  debug("rss.fetchFeeds.items.ready", {
-    parsedTotal: items.length,
-    deduped: deduped.length,
+  warn("rss.fetchFeeds.emptyBatch.exhausted", {
+    attemptsToRun,
+    parsedTotal: lastParsedTotal,
     cutoffHours: FEED_CUTOFF_HOURS,
+    nextRssIndex: latestNextRssIndex,
+    nextUrlIndex: latestNextUrlIndex,
   });
 
-  return deduped;
+  return [];
 }
 
 export default { fetchAndParseFeeds };
