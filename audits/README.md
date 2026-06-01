@@ -73,6 +73,7 @@ Dispatches external GitHub Actions audits for Mobile UX and SEO/AEO/GEO, receive
 
 - Audit requests: `<reportPrefix>/request.json`.
 - Latest pointers: `audits/<auditType>/latest.json`.
+- Brand-social council reports: `audits/brand-social-council/<timestamp>-<sessionId>/report.html`, `report.json`, `summary.json`, `coverage.json`, and `repository-issue-appendix.json`; latest pointer: `audits/brand-social-council/latest.json`. RAMS may read this as the on-brand master report, but it remains future-guidance/manual-review only unless deterministic file-level evidence is later published.
 - Zernio reports: `audits/social-performance/<timestamp>-<sessionId>/report.html`, `report.json`, and `summary.json`. If thumbnail auditing is enabled, `thumbnail-audit.json` is also written beside the report.
 - Analysis/report artefacts are written under the audit report prefix in the R2 audits bucket.
 - Job state uses shared durable state when configured.
@@ -96,3 +97,14 @@ Dispatches external GitHub Actions audits for Mobile UX and SEO/AEO/GEO, receive
 ## Connections to other services
 
 Uses shared job store, shared request schemas, shared OpenRouter AI service, shared R2 client and OneUp/RSS/transcript evidence sources for on-brand audits.
+
+### Brand & Social Media Performance Council
+
+Routes:
+
+- `GET /audits/brand-social-council/health`
+- `POST /audits/brand-social-council/run`
+
+The council combines the latest on-brand and Zernio social-performance reports into one RAMS-readable master report. It adds Brand Editor, Social Performance Analyst, Hook Analyst, Thumbnail & Visual Packaging Expert, Repurposing Lead, Comments & Replies Auditor, Cross-Platform Coherence Lead, Podcast & Transcript Lead, Commercial Lead, and Automation Safety Lead decisions.
+
+Set `BRAND_SOCIAL_COUNCIL_RUN_AFTER_SOCIAL=true` to run it automatically after the monthly social-performance report. Leave false to run it as a separate monthly service.
