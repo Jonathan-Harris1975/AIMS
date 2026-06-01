@@ -121,12 +121,15 @@ export const SOCIAL_BLOG_BANNED_PHRASES = Object.freeze([
   "unlocking value",
   "seamless integration",
   "robust ecosystem",
+  "robust data fabric",
   "this is huge",
   "you need to know",
   "don't miss",
   "don’t miss",
   "must read",
   "it remains to be seen",
+  "only time will tell",
+  "worth watching",
   "beneath the hype",
   "the real story",
   "as ai continues",
@@ -144,7 +147,14 @@ export const RSS_BANNED_SUMMARY_PHRASES = Object.freeze([
   "this highlights the importance of",
   "this underscores",
   "this showcases",
+  "robust data fabric",
+  "seamless data integration",
+  "meaningful business value",
+  "competitive advantage",
+  "holistic approach",
   "it remains to be seen",
+  "only time will tell",
+  "worth watching",
   "the future of",
   "this could pave the way",
   "it will be interesting to see",
@@ -184,6 +194,30 @@ export const INFLATED_EBOOK_CLAIM_PATTERNS = Object.freeze([
   /\beverything\s+you\s+need\b/i,
   /\bdefinitive\s+guide\b/i,
   /\bultimate\s+guide\b/i,
+]);
+
+export const ANTI_HYPE_HEDGING_PHRASES = Object.freeze([
+  "it remains to be seen",
+  "only time will tell",
+  "worth watching",
+  "watch this space",
+]);
+
+export const MOTIVATIONAL_HASHTAGS = Object.freeze([
+  "#mondaymotivation",
+  "#aiinspiration",
+  "#techleadership",
+  "#buildinpublic",
+  "#motivation",
+  "#inspiration",
+]);
+
+export const MOTIVATIONAL_TONE_PATTERNS = Object.freeze([
+  /\banother week, another\b/i,
+  /\bsmall win(?:s)?\b/i,
+  /\bkeep pushing\b/i,
+  /\bbuilding in public\b/i,
+  /\bturn dreams into\b/i,
 ]);
 
 export function cleanLexiconText(value = "") {
