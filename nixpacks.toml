@@ -11,7 +11,7 @@ NPM_CONFIG_FETCH_TIMEOUT = "60000"
 RSS_INIT_ON_BOOT = "false"
 
 [phases.setup]
-nixPkgs = ["nodejs_22", "ffmpeg"]
+nixPkgs = ["nodejs_22", "ffmpeg", "chromium"]
 
 [phases.install]
 cmds = [

@@ -26,6 +26,7 @@ RUN timeout 300s apt-get -o Acquire::Retries=3 \
     curl \
     dumb-init \
     ffmpeg \
+    chromium \
  && rm -rf /var/lib/apt/lists/*
 
 # Install production dependencies before copying the app for better build caching.
