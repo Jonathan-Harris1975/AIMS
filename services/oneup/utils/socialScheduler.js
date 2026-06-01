@@ -11,7 +11,7 @@ import { resolveCategory, inspectOneUpTargeting, listScheduledPosts, scheduleTex
 import getSponsor from "../../script/utils/getSponsor.js";
 import { resolveFeaturedEbook } from "./ebookCatalogue.js";
 import { runPhase5OrganicGrowthGate } from "../../content-quality/phase5OrganicGrowthGates.js";
-import { BANNED_PROMO_PATTERNS, ENGAGEMENT_BAIT_PATTERNS, GENERIC_HASHTAGS, INFLATED_EBOOK_CLAIM_PATTERNS, findAmericanSpellings, findPatternBreaches } from "../../content-quality/brandLexicon.js";
+import { ANTI_HYPE_HEDGING_PHRASES, BANNED_PROMO_PATTERNS, ENGAGEMENT_BAIT_PATTERNS, GENERIC_HASHTAGS, INFLATED_EBOOK_CLAIM_PATTERNS, MOTIVATIONAL_HASHTAGS, MOTIVATIONAL_TONE_PATTERNS, findAmericanSpellings, findPatternBreaches } from "../../content-quality/brandLexicon.js";
 import { buildIntentHash, completeEditorialReservation, hasRecentAudienceIntent, recordEditorialEvent, releaseEditorialReservation, reserveEditorialSource } from "../../social/editorialLedger.js";
 
 
@@ -101,6 +101,31 @@ function wordCount(value = "") {
   return text ? text.split(/\s+/).filter(Boolean).length : 0;
 }
 
+function findPlainPhraseBreaches(text = "", phrases = []) {
+  const source = compactText(text).toLowerCase();
+  return (Array.isArray(phrases) ? phrases : [])
+    .map((phrase) => String(phrase || "").trim())
+    .filter(Boolean)
+    .filter((phrase) => source.includes(phrase.toLowerCase()));
+}
+
+function imageUrlHostWarning(imageUrl = "") {
+  const raw = String(imageUrl || "").trim();
+  if (!raw) return [];
+  const allowedHosts = String(process.env.ONEUP_CANONICAL_IMAGE_HOSTS || "images.jonathan-harris.online,pub-f6b6cfd7d07e46f695d08e4a8dc3bd6b.r2.dev")
+    .split(",")
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean);
+  try {
+    const host = new URL(raw).hostname.toLowerCase();
+    return allowedHosts.length && !allowedHosts.includes(host)
+      ? [`Image URL host '${host}' is outside the configured canonical image host list.`]
+      : [];
+  } catch {
+    return ["Image URL is not a valid absolute URL."];
+  }
+}
+
 function scoreFromGate(defects = [], warnings = []) {
   return Math.max(0, 100 - defects.length * 18 - warnings.length * 5);
 }
@@ -132,6 +157,14 @@ function runOneUpSocialGate({ contentType = "oneup-social", laneKey = "", post =
   if (hashtags.length > 3) defects.push("Post has more than three hashtags.");
   const genericTags = hashtags.filter((tag) => GENERIC_HASHTAGS.includes(String(tag).toLowerCase()));
   if (genericTags.length > 1) warnings.push("Post uses more than one generic hashtag; keep premium channels tidy.");
+  const motivationalTags = hashtags.filter((tag) => MOTIVATIONAL_HASHTAGS.includes(String(tag).toLowerCase()));
+  if (motivationalTags.length) defects.push(`Motivational hashtag(s) do not fit the brand: ${motivationalTags.join(", ")}`);
+  for (const phrase of findPlainPhraseBreaches(text, ANTI_HYPE_HEDGING_PHRASES)) {
+    defects.push(`Generic hedging phrase detected: ${phrase}`);
+  }
+  for (const breach of findPatternBreaches(text, MOTIVATIONAL_TONE_PATTERNS)) {
+    defects.push(`Motivational tone drift: ${breach}`);
+  }
   if (/```|\*\*|^\s*[-*]\s+/m.test(content)) defects.push("Post contains markdown or bullet formatting.");
   if (/\p{Extended_Pictographic}/u.test(content)) defects.push("Post contains emoji despite brand rules.");
 
@@ -339,14 +372,30 @@ async function getQueuedPosts(apiKey) {
   return output;
 }
 
-function hasLikelyDuplicate(queuedPosts, { scheduledDateTime, categoryName, imageUrl, content }) {
+function parseScheduleTime(value = "") {
+  const text = String(value || "").trim();
+  if (!text) return NaN;
+  return Date.parse(text.replace(" ", "T"));
+}
+
+function isWithinDuplicateWindow(first = "", second = "", hours = 48) {
+  const a = parseScheduleTime(first);
+  const b = parseScheduleTime(second);
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return false;
+  return Math.abs(a - b) <= Math.max(1, Number(hours || 48)) * 3600000;
+}
+
+function hasLikelyDuplicate(queuedPosts, { scheduledDateTime, categoryName, imageUrl, content, allowCrosspost = false }) {
   const expectedHash = content ? contentHash(content) : "";
+  const crosspostWindowHours = Math.max(1, Number(process.env.ONEUP_CROSSPOST_DEDUPE_HOURS || 48));
   return (Array.isArray(queuedPosts) ? queuedPosts : []).some((item) => {
-    const sameTime = String(item?.date_time || "").startsWith(scheduledDateTime);
+    const itemDateTime = item?.date_time || item?.scheduled_date_time || item?.publish_at || "";
+    const sameTime = String(itemDateTime || "").startsWith(scheduledDateTime);
     const sameCategory = String(item?.category_name || "").trim().toLowerCase() === String(categoryName || "").trim().toLowerCase();
     const sameImage = !imageUrl || String(item?.content_image || "").trim() === String(imageUrl || "").trim();
     const queuedContent = item?.content || item?.post_content || item?.content_text || item?.caption || "";
     const sameContent = expectedHash && queuedContent ? contentHash(queuedContent) === expectedHash : false;
+    if (!allowCrosspost && sameContent && isWithinDuplicateWindow(itemDateTime, scheduledDateTime, crosspostWindowHours)) return true;
     return sameTime && sameCategory && (sameImage || sameContent);
   });
 }
@@ -455,6 +504,7 @@ async function scheduleToOneUp({ post, scheduledDateTime, categoryName, socialNe
   }
 
   warnings.push(...(targeting.warnings || []));
+  warnings.push(...imageUrlHostWarning(post.imageUrl));
   info("oneup.targeting.coverage", {
     categoryName,
     socialNetworkId: normalisedSocialNetworkId,
@@ -466,8 +516,8 @@ async function scheduleToOneUp({ post, scheduledDateTime, categoryName, socialNe
   });
   const category = targeting.category;
   const queuedPosts = await getQueuedPosts(apiKey);
-  if (hasLikelyDuplicate(queuedPosts, { scheduledDateTime, categoryName: category.category_name, imageUrl: post.imageUrl, content: post.content })) {
-    warnings.push("A likely duplicate post is already scheduled for this date/time/category, so no new post was created.");
+  if (hasLikelyDuplicate(queuedPosts, { scheduledDateTime, categoryName: category.category_name, imageUrl: post.imageUrl, content: post.content, allowCrosspost: Boolean(post.crosspost) })) {
+    warnings.push("A likely duplicate post is already scheduled in the guarded window, so no new post was created.");
     return {
       scheduled: false,
       dryRun: false,

@@ -37,14 +37,16 @@ Voice rules:
 - no explanations outside the requested JSON
 - keep claims grounded, concrete, and specific
 - prefer one clear idea over padded filler
-- never sound like a textbook, glossary, press release, Wikipedia entry, or poster slogan`;
+- never sound like a textbook, glossary, press release, Wikipedia entry, or poster slogan
+- never use stock hedges such as "it remains to be seen", "only time will tell", or "worth watching"
+- never use motivational hashtags or motivational-poster framing such as #MondayMotivation, #AIInspiration, #TechLeadership, or #BuildInPublic`;
 
 export function buildDailyPrompt({ lane, publishDate, history = [], rssItems = [], weeklyHistory = [], verifiedQuote = null, buildContext = "" }) {
   const laneGuidance = {
     monday: `Write a Monday post built around the verified quote supplied below.
 Use the exact quote and author. Do not alter the wording, attribution, or punctuation of the quote.
 Use it as a springboard for a brief, sharp reflection tied to AI, discipline, useful work, or craft.
-Keep it grounded rather than preachy.
+Keep it grounded rather than preachy. Treat the quote as a critical lens, not a motivational poster.
 Do not add any other quote.
 Do not explain the person's full biography.
 Content target: 45 to 75 words.`,
@@ -68,7 +70,7 @@ If verified build context is supplied below, use only that context for any first
 If no verified build context is supplied, write a neutral build note about the discipline of improving systems without claiming a specific bug, metric, deployment, decision, or private work item.
 Do not invent first-person specifics.
 Keep it honest and grounded.
-Do not use vague phrases such as "exciting things", "big moves", or "game-changing".
+Do not use vague phrases such as "exciting things", "big moves", "another week, another", "small win", or "game-changing".
 Content target: 35 to 65 words.`,
     saturday: `Write a Saturday AI ethics or policy post in plain English.
 Frame it around one thoughtful question, tension, or trade-off that a normal reader can grasp quickly.
