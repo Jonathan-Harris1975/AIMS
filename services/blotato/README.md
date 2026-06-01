@@ -36,8 +36,8 @@ BLOTATO_YOUTUBE_ACCOUNT_ID=37622
 BLOTATO_TIKTOK_ACCOUNT_ID=44263
 BLOTATO_FACEBOOK_ACCOUNT_ID=34013
 BLOTATO_FACEBOOK_PAGE_ID=562160556971997
-BLOTATO_VIDEO_POLL_ATTEMPTS=90
-BLOTATO_VIDEO_POLL_INTERVAL_MS=3000
+BLOTATO_VIDEO_POLL_ATTEMPTS=150
+BLOTATO_VIDEO_POLL_INTERVAL_MS=4000
 BLOTATO_POST_POLL_ATTEMPTS=60
 BLOTATO_POST_POLL_INTERVAL_MS=3000
 BLOTATO_YOUTUBE_PRIVACY_STATUS=public
@@ -46,6 +46,7 @@ BLOTATO_INSTAGRAM_SHARE_TO_FEED=true
 ```
 
 `Blotato_API_key` is the canonical key name used by this service. `BLOTATO_API_KEY` is accepted only as a fallback alias.
+Video render polling also treats a returned media URL as completion evidence, so slower Blotato renders are less likely to fail just because the status label is delayed.
 
 ## Public one-call triggers
 
