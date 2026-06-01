@@ -4,6 +4,8 @@ import seoAeoGeoRoutes from "./seoAeoGeo.js";
 import onBrandRoutes from "./onBrand.js";
 import socialPerformanceRoutes from "./socialPerformance.js";
 import brandSocialCouncilRoutes from "./brandSocialCouncil.js";
+import seoAeoGeoCouncilRoutes from "./seoAeoGeoCouncil.js";
+import mobileUxCouncilRoutes from "./mobileUxCouncil.js";
 
 const router = express.Router();
 
@@ -12,5 +14,7 @@ router.use("/seo-aeo-geo", seoAeoGeoRoutes);
 router.use("/on-brand", onBrandRoutes);
 router.use("/social-performance", socialPerformanceRoutes);
 router.use("/brand-social-council", brandSocialCouncilRoutes);
+router.use("/seo-aeo-geo-council", seoAeoGeoCouncilRoutes);
+router.use("/mobile-ux-council", mobileUxCouncilRoutes);
 
 export default router;

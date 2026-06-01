@@ -10,6 +10,7 @@ import { completeAuditRun, getAuditJob, startAuditRun } from "../utils/orchestra
 import { requireAuditCallbackAuth } from "../utils/callbackAuth.js";
 import { flushSeoAeoGeoAnalysisJobs, getSeoAeoGeoAnalysisJobFresh, startSeoAeoGeoAnalysisJob } from "../utils/auditAnalysisJobs.js";
 import { info } from "../../logger.js";
+import { runSeoAeoGeoCouncilReport } from "../utils/seoAeoGeoCouncil.js";
 
 const router = express.Router();
 const asyncRoute = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
@@ -157,6 +158,28 @@ router.get("/analysis/:sessionId", requireAuditCallbackAuth, asyncRoute(async (r
   });
 }));
 
+function shouldRunSeoAeoGeoCouncil(body = {}) {
+  if (body.runCouncil === true || body.runSeoAeoGeoCouncil === true) return true;
+  if (body.runCouncil === false || body.runSeoAeoGeoCouncil === false) return false;
+  return String(process.env.SEO_AEO_GEO_COUNCIL_RUN_AFTER_AUDIT || "true").trim().toLowerCase() !== "false";
+}
+
+async function maybeRunSeoAeoGeoCouncil({ result, payload }) {
+  if (!result?.ok || result.status === "failed" || !shouldRunSeoAeoGeoCouncil(payload)) return null;
+  try {
+    return await runSeoAeoGeoCouncilReport({
+      sessionId: `seo-aeo-geo-council-after-${result.sessionId}`,
+      sourceTrigger: "seo-aeo-geo-callback",
+    });
+  } catch (error) {
+    info("audit.seo-aeo-geo.council.failed", {
+      sessionId: result.sessionId,
+      error: error?.message || String(error),
+    });
+    return { ok: false, auditType: "seo-aeo-geo-council", error: error?.message || String(error) };
+  }
+}
+
 router.post("/callback", requireAuditCallbackAuth, asyncRoute(async (req, res) => {
   const parsed = validateBody(auditCallbackBodySchema, req.body);
   if (!parsed.ok) {
@@ -164,7 +187,8 @@ router.post("/callback", requireAuditCallbackAuth, asyncRoute(async (req, res) =
   }
 
   const result = await completeAuditRun({ auditType: AUDIT_TYPE, payload: parsed.data });
-  return res.json(result);
+  const council = await maybeRunSeoAeoGeoCouncil({ result, payload: parsed.data });
+  return res.json(council ? { ...result, council } : result);
 }));
 
 router.get("/jobs/:sessionId", (req, res) => {
