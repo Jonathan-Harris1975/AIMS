@@ -666,6 +666,17 @@ export async function runZernioSocialPerformanceReport(options = {}) {
     },
   });
 
+  let council = null;
+  const runCouncil = options.runCouncil === true
+    || String(process.env.BRAND_SOCIAL_COUNCIL_RUN_AFTER_SOCIAL || "").trim().toLowerCase() === "true";
+  if (runCouncil) {
+    const { runBrandSocialCouncilReport } = await import("./brandSocialCouncil.js");
+    council = await runBrandSocialCouncilReport({
+      sessionId: `brand-social-council-after-${sessionId}`,
+      sourceTrigger: "social-performance",
+    });
+  }
+
   return {
     ok: true,
     auditType: AUDIT_TYPE,
@@ -679,6 +690,7 @@ export async function runZernioSocialPerformanceReport(options = {}) {
     totals: report.totals,
     recommendations: report.recommendations,
     ramsPolicy: report.ramsPolicy,
+    council,
   };
 }
 

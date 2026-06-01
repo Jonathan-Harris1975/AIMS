@@ -1,5 +1,6 @@
 import {
   DeleteObjectsCommand,
+  GetObjectCommand,
   ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
@@ -128,6 +129,41 @@ export function assertCompletedAuditArtifactUrls(payload = {}) {
   return assertAuditArtifactUrls(payload, { requireAny: true });
 }
 
+
+async function bodyToString(body) {
+  if (body === undefined || body === null) return "";
+  if (typeof body === "string") return body;
+  if (body instanceof Uint8Array) return Buffer.from(body).toString("utf8");
+  if (typeof body.transformToString === "function") return body.transformToString();
+  const chunks = [];
+  for await (const chunk of body) chunks.push(Buffer.from(chunk));
+  return Buffer.concat(chunks).toString("utf8");
+}
+
+export function auditKeyFromPublicUrl(value) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  if (!/^https?:\/\//i.test(text)) return text.replace(/^\/+/, "");
+  const { publicBaseUrl } = assertAuditR2Config();
+  const base = normalisePublicUrl(publicBaseUrl);
+  const normalised = normalisePublicUrl(text);
+  if (!normalised.startsWith(`${base}/`)) return "";
+  return decodeURIComponent(normalised.slice(base.length + 1)).replace(/^\/+/, "");
+}
+
+export async function readAuditText({ key }) {
+  if (!key) throw new Error("readAuditText requires key");
+  const { bucket } = assertAuditR2Config();
+  const client = getClient();
+  const response = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+  return bodyToString(response.Body);
+}
+
+export async function readAuditJson({ key }) {
+  const text = await readAuditText({ key });
+  return JSON.parse(text);
+}
+
 async function putObject({ key, body, contentType }) {
   const { bucket } = assertAuditR2Config();
   const client = getClient();
@@ -239,6 +275,9 @@ export default {
   publishAuditText,
   publishAuditRequest,
   publishAuditLatest,
+  readAuditJson,
+  readAuditText,
+  auditKeyFromPublicUrl,
   cleanupAuditPrefix,
   assertAuditR2Config,
   assertAuditArtifactUrls,
