@@ -259,9 +259,12 @@ function normalizeItem(item, fallbackLink, now) {
     guid = `ai-news-${randomId}`;
   }
 
-  // HARD: publish rewritten only (never fall back to source summary)
+  // HARD: publish rewritten only (never fall back to source summary).
+  // The RSS item title already carries the headline, so strip accidental
+  // title echoes from the opening of the summary before publication.
+  const titleSafeSummary = RSS_PROMPTS.stripLeadingTitleFromSummary(title, item?.rewritten || "");
   const rewritten = RSS_PROMPTS.clampSummaryToWindow(
-    item?.rewritten || "",
+    titleSafeSummary,
     RSS_PROMPTS.MIN_SUMMARY_CHARS,
     RSS_PROMPTS.MAX_SUMMARY_CHARS
   );
@@ -271,19 +274,19 @@ function normalizeItem(item, fallbackLink, now) {
 
 function buildDescriptionHtml(title, rewrittenText, link) {
   const safeTitle = escapeHtml(normalizeCanonicalTitle(title));
-  const body = renderParagraphHtml(rewrittenText);
+  const body = renderParagraphHtml(RSS_PROMPTS.stripLeadingTitleFromSummary(safeTitle, rewrittenText));
 
   if (!body) {
-    return `<strong>${safeTitle}</strong>`;
+    return safeTitle ? `<p>${safeTitle}</p>` : "";
   }
 
   if (!INCLUDE_WRAPPER_CTA || !link) {
-    return `<strong>${safeTitle}</strong>${body}`;
+    return body;
   }
 
   const safeLink = escapeHtml(link);
   const anchor = `<p><a href="${safeLink}">Read on Jonathan-Harris RSS Feed</a></p>`;
-  return `<strong>${safeTitle}</strong>${body}${anchor}`;
+  return `${body}${anchor}`;
 }
 
 function getPublicationIssues(item) {
@@ -316,6 +319,9 @@ function getPublicationIssues(item) {
   if (bannedPhrases.length) {
     issues.push(`Summary contains banned filler: ${bannedPhrases.slice(0, 5).join(", ")}`);
   }
+
+  const summaryStyle = RSS_PROMPTS.findRssSummaryStyleIssues(title, rewritten);
+  issues.push(...summaryStyle.errors);
 
   // Guard against ultra-short junk
   if (rewritten && rewritten.length < 120) {

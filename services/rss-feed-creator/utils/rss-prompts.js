@@ -9,7 +9,7 @@
 // ============================================================
 
 import { warn } from "../../../logger.js";
-import { RSS_BANNED_SUMMARY_PHRASES } from "../../content-quality/brandLexicon.js";
+import { ANTI_HYPE_HEDGING_PHRASES, RSS_BANNED_SUMMARY_PHRASES } from "../../content-quality/brandLexicon.js";
 import { buildRssPersona } from "./toneSetter.js";
 
 const MIN_SUMMARY_CHARS =
@@ -77,7 +77,7 @@ const METADATA_LEAK_PATTERNS = [
   { pattern: /(^|\n)\s*title\s*:/i, message: 'Contains metadata leak "Title:"' },
 ];
 
-const BANNED_SUMMARY_PHRASES = RSS_BANNED_SUMMARY_PHRASES;
+const BANNED_SUMMARY_PHRASES = Object.freeze([...new Set([...RSS_BANNED_SUMMARY_PHRASES, ...ANTI_HYPE_HEDGING_PHRASES])]);
 
 export const SYSTEM = `
 ${buildRssPersona()}
@@ -396,6 +396,44 @@ export function findBannedSummaryPhrases(summary = "") {
   return BANNED_SUMMARY_PHRASES.filter((phrase) => lowered.includes(phrase));
 }
 
+export function summaryWordCount(summary = "") {
+  const normalized = normalizeSummaryText(summary);
+  return normalized ? normalized.split(/\s+/).filter(Boolean).length : 0;
+}
+
+function normaliseForComparison(value = "") {
+  return normalizePlainText(value).toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim();
+}
+
+export function stripLeadingTitleFromSummary(title = "", summary = "") {
+  const normalizedSummary = normalizeSummaryText(summary);
+  const normalizedTitle = normalizePlainText(title);
+  if (!normalizedSummary || !normalizedTitle) return normalizedSummary;
+
+  const escapedTitle = normalizedTitle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const titlePattern = new RegExp(`^${escapedTitle}\\s*[-:—–]?\\s*`, "i");
+  const stripped = normalizedSummary.replace(titlePattern, "").trim();
+  if (stripped && normaliseForComparison(stripped) !== normaliseForComparison(normalizedSummary)) {
+    return normalizeSummaryText(stripped);
+  }
+  return normalizedSummary;
+}
+
+export function findRssSummaryStyleIssues(title = "", summary = "") {
+  const errors = [];
+  const warnings = [];
+  const normalizedSummary = normalizeSummaryText(summary);
+  const normalizedTitle = normalizePlainText(title);
+  const wordCount = summaryWordCount(normalizedSummary);
+  if (normalizedTitle && normaliseForComparison(normalizedSummary).startsWith(normaliseForComparison(normalizedTitle))) {
+    errors.push("Summary repeats the headline as its opening text");
+  }
+  if (wordCount > 85) errors.push(`Summary is over 85 words (${wordCount}); tighten to one clear judgement`);
+  if (wordCount > 60) warnings.push(`Summary is over the preferred 60-word editorial brief (${wordCount})`);
+  if (wordCount > 0 && wordCount < 30) warnings.push(`Summary is under the preferred 30-word editorial brief (${wordCount})`);
+  return { errors, warnings, wordCount };
+}
+
 export function validateTitleBrand(title = "") {
   const cleanedTitle = normalizePlainText(title);
   const errors = [];
@@ -470,6 +508,10 @@ export function validateOutput(title = "", summary = "", config = {}) {
     );
   }
 
+  const summaryStyle = findRssSummaryStyleIssues(normalizedTitle, normalizedSummary);
+  errors.push(...summaryStyle.errors);
+  warnings.push(...summaryStyle.warnings);
+
   return {
     valid: errors.length === 0,
     errors,
@@ -496,6 +538,9 @@ const RSS_PROMPTS = {
   findMetadataLeaks,
   hasMetadataLeak,
   findBannedSummaryPhrases,
+  findRssSummaryStyleIssues,
+  stripLeadingTitleFromSummary,
+  summaryWordCount,
   extractConcreteTopicTerms,
   validateSourceOverlap,
   TITLE_BRAND_PATTERNS,
