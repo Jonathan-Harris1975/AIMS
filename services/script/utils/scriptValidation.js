@@ -202,6 +202,29 @@ export function enforceCanonicalOutro(text = "") {
   return `${base}\n\n${OUTRO_CLOSING_TAGLINE}`.trim();
 }
 
+
+export function findLongSpokenSentences(text = "", { maxWords = 25 } = {}) {
+  const limit = Math.max(12, Number(maxWords || 25));
+  return String(text || "")
+    .replace(/\s+/g, " ")
+    .split(/(?<=[.!?])\s+/)
+    .map((sentence) => normaliseWhitespace(sentence))
+    .filter(Boolean)
+    .map((sentence) => ({ sentence, wordCount: words(sentence).length }))
+    .filter((item) => item.wordCount > limit);
+}
+
+export function validateSpokenCopy(text = "", { maxSentenceWords = 25 } = {}) {
+  const longSentences = findLongSpokenSentences(text, { maxWords: maxSentenceWords });
+  return {
+    ok: longSentences.length === 0,
+    defects: longSentences.length
+      ? [`${longSentences.length} sentence(s) exceed ${Math.max(12, Number(maxSentenceWords || 25))} spoken words; split or cut abstract padding`]
+      : [],
+    examples: longSentences.slice(0, 3),
+  };
+}
+
 export function validateTranscriptStructure(text = "") {
   const trimmed = String(text || "").trim();
   const reasons = [];
@@ -233,6 +256,9 @@ export function validateTranscriptStructure(text = "") {
   }
 
   reasons.push(...findDanglingFragmentsBeforeOutro(trimmed));
+
+  const spokenCopy = validateSpokenCopy(trimmed, { maxSentenceWords: Number(process.env.PODCAST_TRANSCRIPT_MAX_SENTENCE_WORDS || 25) });
+  reasons.push(...spokenCopy.defects);
 
   return {
     ok: reasons.length === 0,

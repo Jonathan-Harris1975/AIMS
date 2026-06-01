@@ -67,6 +67,84 @@ function listFromValue(value) {
     .filter(Boolean);
 }
 
+
+function sentenceCandidates(text = "") {
+  return normaliseWhitespace(text)
+    .split(/(?<=[.!?])\s+/)
+    .map((item) => item.trim())
+    .filter((item) => item.length > 25);
+}
+
+function deriveTranscriptTakeaways(meta = {}, description = "", transcriptText = "") {
+  const supplied = listFromValue(meta?.takeaways || meta?.keyTakeaways || meta?.summaryBullets || meta?.bulletTakeaways).slice(0, 5);
+  if (supplied.length) return supplied;
+  const fallback = sentenceCandidates(`${description}. ${transcriptText}`).slice(0, 5);
+  return fallback.length ? fallback : [description].filter(Boolean);
+}
+
+function deriveTranscriptEntities(meta = {}, keywords = []) {
+  return [
+    ...listFromValue(meta?.entities || meta?.namedEntities || meta?.people || ""),
+    ...listFromValue(meta?.topics || meta?.topicIndex || ""),
+    ...keywords,
+  ]
+    .map((item) => normaliseWhitespace(item))
+    .filter(Boolean)
+    .filter((item, index, array) => array.findIndex((candidate) => candidate.toLowerCase() === item.toLowerCase()) === index)
+    .slice(0, 12);
+}
+
+function renderListItems(items = []) {
+  return items.map((item) => `<li>${escapeHtml(item)}</li>`).join("\n");
+}
+
+function renderTranscriptAeoBlock({ summary, takeaways, entities, topicIndex }) {
+  const safeSummary = normaliseWhitespace(summary);
+  const hasTakeaways = Array.isArray(takeaways) && takeaways.length;
+  const hasEntities = Array.isArray(entities) && entities.length;
+  const hasTopics = Array.isArray(topicIndex) && topicIndex.length;
+  if (!safeSummary && !hasTakeaways && !hasEntities && !hasTopics) return "";
+
+  return `<section aria-label="Episode summary, takeaways and topics" class="transcript-aeo" id="episode-summary">
+    <h2>Episode summary</h2>
+    ${safeSummary ? `<p>${escapeHtml(safeSummary)}</p>` : ""}
+    ${hasTakeaways ? `<h3>Key takeaways</h3>
+    <ul>${renderListItems(takeaways)}</ul>` : ""}
+    ${hasEntities ? `<h3>Discussed entities and topics</h3>
+    <ul>${renderListItems(entities)}</ul>` : ""}
+    ${hasTopics ? `<h3>Transcript index</h3>
+    <ul>${topicIndex.map((item) => `<li><a href="#full-transcript">${escapeHtml(item)}</a></li>`).join("\n")}</ul>` : ""}
+  </section>`;
+}
+
+function buildTranscriptFaqJsonLd({ title, summary, takeaways = [], htmlUrl }) {
+  const firstTakeaway = takeaways[0] || summary;
+  if (!firstTakeaway) return null;
+  return {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: [
+      {
+        "@type": "Question",
+        name: `What does ${title} cover?`,
+        acceptedAnswer: {
+          "@type": "Answer",
+          text: summary || firstTakeaway,
+        },
+      },
+      {
+        "@type": "Question",
+        name: "What is the main takeaway?",
+        acceptedAnswer: {
+          "@type": "Answer",
+          text: firstTakeaway,
+        },
+      },
+    ].filter((item) => item.acceptedAnswer.text),
+    url: htmlUrl || undefined,
+  };
+}
+
 function formatPubDate(pubDateStr) {
   if (!pubDateStr) return "";
   try {
@@ -287,6 +365,16 @@ export function generateTranscriptHtml(sessionId, transcriptText, meta, transcri
   const listenUrl = audioUrl || "https://open.spotify.com/show/4NluRPjuAIGK59vVf7GcoF";
   const episodePageUrl = absoluteUrl(meta?.episodePageUrl, `${siteBaseUrl}/podcast/`);
   const transcriptTextUrl = absoluteUrl(meta?.transcriptTextUrl, rawTranscriptBase ? `${rawTranscriptBase}/${sessionId}.txt` : "");
+  const episodeSummary = normaliseWhitespace(meta?.summary || meta?.episodeSummary || meta?.shortSummary || description);
+  const episodeTakeaways = deriveTranscriptTakeaways(meta, description, transcriptText);
+  const episodeEntities = deriveTranscriptEntities(meta, keywords);
+  const topicIndex = listFromValue(meta?.topicIndex || meta?.topics || meta?.sections || meta?.chapters || keywords).slice(0, 8);
+  const transcriptAeoBlock = renderTranscriptAeoBlock({
+    summary: episodeSummary,
+    takeaways: episodeTakeaways,
+    entities: episodeEntities,
+    topicIndex,
+  });
 
   const metaDate = pubDate ? `${episodeNum}${episodeNum && pubDate ? " · " : ""}${pubDate}` : episodeNum;
   const paragraphs = textToParagraphs(transcriptText);
@@ -301,6 +389,15 @@ export function generateTranscriptHtml(sessionId, transcriptText, meta, transcri
     pubDateRaw,
     durationSeconds: meta?.duration || meta?.plannedDurationSeconds,
     keywords,
+  });
+  if (episodeEntities.length) {
+    podcastEpisodeJsonLd.about = episodeEntities.map((name) => ({ "@type": "Thing", name }));
+  }
+  const transcriptFaqJsonLd = buildTranscriptFaqJsonLd({
+    title,
+    summary: episodeSummary,
+    takeaways: episodeTakeaways,
+    htmlUrl,
   });
 
   return `<!DOCTYPE html>
@@ -407,6 +504,18 @@ ${htmlUrl ? `<meta property="og:url" content="${escapeHtml(htmlUrl)}"/>` : ""}
     min-height: 38px;
   }
   .transcript-nav a:hover { background: #eef2ff; text-decoration: none; }
+  .transcript-aeo {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 18px;
+    box-shadow: 0 10px 26px rgba(0,0,0,0.06);
+    padding: 24px;
+    margin-bottom: 24px;
+  }
+  .transcript-aeo h2 { margin: 0 0 12px; color: #312e81; }
+  .transcript-aeo h3 { margin: 18px 0 8px; color: #4f46e5; }
+  .transcript-aeo p, .transcript-aeo li { color: #374151; line-height: 1.7; }
+  .transcript-aeo ul { margin: 0; padding-left: 1.25rem; }
   .transcript-description {
     background: #fff;
     border: 1px solid #e5e7eb;
@@ -491,6 +600,7 @@ ${htmlUrl ? `<meta property="og:url" content="${escapeHtml(htmlUrl)}"/>` : ""}
 <script async="" id="cookieyes" src="https://cdn-cookieyes.com/client_data/c981d18033783598d2216add/script.js" type="text/javascript"></script>
 <script defer="" data-cookieyes="ignore" data-cookieconsent="ignore" src="https://jonathan-harris.online/assets/js/script-governance.min.js"></script>
 <script type="application/ld+json">${escapeJsonForScript(podcastEpisodeJsonLd)}</script>
+${transcriptFaqJsonLd ? `<script type="application/ld+json">${escapeJsonForScript(transcriptFaqJsonLd)}</script>` : ""}
 </head>
 <body class="page-podcast page-podcast-transcript">
 ${renderPrimaryHeader()}
@@ -522,6 +632,8 @@ ${metaDate ? `<p class="meta-line">${escapeHtml(metaDate)}</p>` : ""}
     ${transcriptTextUrl ? `<a href="${escapeHtml(transcriptTextUrl)}" rel="noopener noreferrer" target="_blank">Plain text version</a>` : ""}
   </nav>
 
+  ${transcriptAeoBlock}
+
   <div class="transcript-description">
     <p>${escapeHtml(description)}</p>
     <div class="listen-row">
@@ -531,7 +643,7 @@ ${metaDate ? `<p class="meta-line">${escapeHtml(metaDate)}</p>` : ""}
     </div>
   </div>
 
-  <section aria-label="Transcript text" class="transcript-text">
+  <section aria-label="Transcript text" class="transcript-text" id="full-transcript">
     <h2 class="transcript-heading">
       <svg aria-hidden="true" fill="none" height="18" stroke="currentColor" stroke-width="2" viewbox="0 0 24 24" width="18" xmlns="http://www.w3.org/2000/svg"><path d="M4 6h16M4 10h16M4 14h10"/></svg>
       Full Episode Transcript
