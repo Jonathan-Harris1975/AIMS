@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { buildAuditPrefix } from "./auditPaths.js";
 import { publishAuditJson, publishAuditLatest, publishAuditText } from "./publishAuditArtifacts.js";
+import { auditShortsThumbnails, getSocialThumbnailAuditStatus } from "./socialThumbnailAudit.js";
 
 const AUDIT_TYPE = "social-performance";
 const DEFAULT_BASE_URL = "https://zernio.com/api/v1";
@@ -137,6 +138,7 @@ export function getZernioConfigStatus(env = process.env) {
     pageSize: config.pageSize,
     maxPages: config.maxPages,
     accounts,
+    thumbnailAudit: getSocialThumbnailAuditStatus(env),
   };
 }
 
@@ -487,6 +489,7 @@ function buildSocialPerformanceSummary({ collections, missingAccounts, dateRange
         platforms: account.platforms,
       })),
     },
+    thumbnailAudit: null,
     coverage: {
       configuredAccounts: config.accounts.filter((account) => account.apiKey).length,
       missingAccounts,
@@ -556,6 +559,20 @@ function postRows(rows = []) {
   return rows.map((row) => `<tr><td>${escapeHtml(row.platform)}</td><td>${escapeHtml(row.contentLane)}</td><td>${escapeHtml(row.sourcePipeline)}</td><td>${escapeHtml(row.publishedAt || "")}</td><td>${escapeHtml(row.contentPreview)}</td><td>${formatNumber(Math.max(row.metrics.reach, row.metrics.views, row.metrics.impressions))}</td><td>${formatNumber(row.metrics.clicks)}</td><td>${toNumber(row.metrics.engagementRate).toFixed(2)}%</td></tr>`).join("\n");
 }
 
+function thumbnailAuditRows(audit = {}) {
+  const results = Array.isArray(audit.results) ? audit.results : [];
+  if (!audit.enabled) return `<p><span class="pill warn">disabled</span> ${escapeHtml(audit.reason || "Thumbnail evidence collection is disabled.")}</p>`;
+  if (!results.length) return `<p><span class="pill warn">no candidates</span> ${escapeHtml(audit.reason || "No short/video post URLs were available for thumbnail checks.")}</p>`;
+  return `<table><thead><tr><th>Platform</th><th>Lane</th><th>Post</th><th>Thumbnail evidence</th><th>Status</th></tr></thead><tbody>${results.map((item) => {
+    const post = item.post || {};
+    const thumb = item.thumbnailUrl
+      ? `<a href="${escapeHtml(item.thumbnailUrl)}"><img src="${escapeHtml(item.thumbnailUrl)}" alt="Short thumbnail evidence" loading="lazy" style="max-width:160px;border-radius:10px;border:1px solid #e5e7eb"></a><br><code>${escapeHtml(item.method || "")}</code>`
+      : `<span>${escapeHtml(item.error || "No thumbnail URL found")}</span><br><code>${escapeHtml(item.method || "")}</code>`;
+    const status = item.ok ? '<span class="pill ok">found</span>' : '<span class="pill warn">missing</span>';
+    return `<tr><td>${escapeHtml(post.platform || "")}</td><td>${escapeHtml(post.contentLane || "")}</td><td><a href="${escapeHtml(post.url || "#")}">${escapeHtml(post.contentPreview || post.platformPostId || post.postId || "open post")}</a></td><td>${thumb}</td><td>${status}</td></tr>`;
+  }).join("\n")}</tbody></table>`;
+}
+
 export function renderSocialPerformanceHtml(report) {
   const generatedAt = escapeHtml(report.generatedAt);
   const title = escapeHtml(report.reportName || "Monthly Social Performance Report");
@@ -572,7 +589,7 @@ export function renderSocialPerformanceHtml(report) {
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${title}</title>
 <style>
-body{font-family:Arial,Helvetica,sans-serif;margin:0;background:#f4f7fb;color:#111827;line-height:1.55}header{background:#0d1420;color:#fff;padding:28px 24px}main{max-width:1180px;margin:0 auto;padding:32px 20px 64px}section{background:#fff;border:1px solid #e5e7eb;border-radius:18px;padding:22px;margin:18px 0;box-shadow:0 12px 30px rgba(13,20,32,.06)}table{width:100%;border-collapse:collapse;font-size:13px}th,td{border-bottom:1px solid #e5e7eb;padding:9px 7px;text-align:left;vertical-align:top}th{background:#f8fafc}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px}.kpi{background:#0d1420;color:#fff;border-radius:16px;padding:16px}.kpi strong{font-size:24px;display:block}code{background:#f3f4f6;border-radius:6px;padding:2px 5px}.pill{display:inline-block;border-radius:999px;padding:5px 10px;background:#eef2ff;color:#4338ca;font-weight:700;font-size:12px}.warn{background:#fef3c7;color:#92400e}.ok{background:#dcfce7;color:#166534}li{margin:.5rem 0}span{color:#4b5563}@media print{section{break-inside:avoid;page-break-inside:avoid}}
+body{font-family:Arial,Helvetica,sans-serif;margin:0;background:#f4f7fb;color:#111827;line-height:1.55}header{background:#0d1420;color:#fff;padding:28px 24px}main{max-width:1180px;margin:0 auto;padding:32px 20px 64px}section{background:#fff;border:1px solid #e5e7eb;border-radius:18px;padding:22px;margin:18px 0;box-shadow:0 12px 30px rgba(13,20,32,.06)}table{width:100%;border-collapse:collapse;font-size:13px}th,td{border-bottom:1px solid #e5e7eb;padding:9px 7px;text-align:left;vertical-align:top}th{background:#f8fafc}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px}.kpi{background:#0d1420;color:#fff;border-radius:16px;padding:16px}.kpi strong{font-size:24px;display:block}code{background:#f3f4f6;border-radius:6px;padding:2px 5px}.pill{display:inline-block;border-radius:999px;padding:5px 10px;background:#eef2ff;color:#4338ca;font-weight:700;font-size:12px}.warn{background:#fef3c7;color:#92400e}.ok{background:#dcfce7;color:#166534}li{margin:.5rem 0}span{color:#4b5563}img{background:#f8fafc;object-fit:cover}@media print{section{break-inside:avoid;page-break-inside:avoid}}
 </style>
 </head>
 <body>
@@ -581,6 +598,7 @@ body{font-family:Arial,Helvetica,sans-serif;margin:0;background:#f4f7fb;color:#1
 <section><h2>Control block</h2><p><span class="pill ok">analysis only</span> <span class="pill">monthly</span> <span class="pill">R2 audits bucket</span> ${errorCount ? `<span class="pill warn">${errorCount} collection issue(s)</span>` : ""}</p><p>${escapeHtml(report.ramsPolicy.reason)}</p></section>
 <section><h2>Executive metrics</h2><div class="grid"><div class="kpi"><span>Posts analysed</span><strong>${formatNumber(report.totals.posts)}</strong></div><div class="kpi"><span>Impressions</span><strong>${formatNumber(report.totals.metrics.impressions)}</strong></div><div class="kpi"><span>Reach</span><strong>${formatNumber(report.totals.metrics.reach)}</strong></div><div class="kpi"><span>Views</span><strong>${formatNumber(report.totals.metrics.views)}</strong></div><div class="kpi"><span>Clicks</span><strong>${formatNumber(report.totals.metrics.clicks)}</strong></div><div class="kpi"><span>Avg engagement</span><strong>${toNumber(report.totals.metrics.engagementRateAvg).toFixed(2)}%</strong></div></div></section>
 <section><h2>Recommendations</h2><ol>${recommendations}</ol></section>
+<section><h2>Shorts thumbnail evidence</h2>${thumbnailAuditRows(report.thumbnailAudit || {})}</section>
 <section><h2>Performance by platform</h2><table><thead><tr><th>Platform</th><th>Posts</th><th>Impressions</th><th>Reach</th><th>Views</th><th>Likes</th><th>Comments</th><th>Shares</th><th>Saves</th><th>Clicks</th><th>Avg engagement</th></tr></thead><tbody>${aggregateRows(report.byPlatform)}</tbody></table></section>
 <section><h2>Performance by source pipeline</h2><table><thead><tr><th>Pipeline</th><th>Posts</th><th>Impressions</th><th>Reach</th><th>Views</th><th>Likes</th><th>Comments</th><th>Shares</th><th>Saves</th><th>Clicks</th><th>Avg engagement</th></tr></thead><tbody>${aggregateRows(report.bySourcePipeline)}</tbody></table></section>
 <section><h2>Performance by content lane</h2><table><thead><tr><th>Lane</th><th>Posts</th><th>Impressions</th><th>Reach</th><th>Views</th><th>Likes</th><th>Comments</th><th>Shares</th><th>Saves</th><th>Clicks</th><th>Avg engagement</th></tr></thead><tbody>${aggregateRows(report.byLane)}</tbody></table></section>
@@ -598,6 +616,7 @@ export async function runZernioSocialPerformanceReport(options = {}) {
   const reportPrefix = buildAuditPrefix(AUDIT_TYPE, sessionId);
   const collected = await collectZernioAnalytics(config, dateRange);
   const report = buildSocialPerformanceSummary({ ...collected, dateRange, config });
+  report.thumbnailAudit = await auditShortsThumbnails({ rows: report.rawRows, reportPrefix });
   const html = renderSocialPerformanceHtml(report);
 
   const reportJson = await publishAuditJson({ key: `${reportPrefix}/report.json`, payload: report });
@@ -613,6 +632,12 @@ export async function runZernioSocialPerformanceReport(options = {}) {
       bySourcePipeline: report.bySourcePipeline,
       byLane: report.byLane,
       recommendations: report.recommendations,
+      thumbnailAudit: report.thumbnailAudit ? {
+        enabled: report.thumbnailAudit.enabled,
+        mode: report.thumbnailAudit.mode || null,
+        summary: report.thumbnailAudit.summary || null,
+        artefact: report.thumbnailAudit.artefact || null,
+      } : null,
       ramsPolicy: report.ramsPolicy,
     },
   });
@@ -631,6 +656,12 @@ export async function runZernioSocialPerformanceReport(options = {}) {
       summaryUrl: summaryJson.url,
       period: report.period,
       totals: report.totals,
+      thumbnailAudit: report.thumbnailAudit ? {
+        enabled: report.thumbnailAudit.enabled,
+        mode: report.thumbnailAudit.mode || null,
+        summary: report.thumbnailAudit.summary || null,
+        artefact: report.thumbnailAudit.artefact || null,
+      } : null,
       ramsPolicy: report.ramsPolicy,
     },
   });
