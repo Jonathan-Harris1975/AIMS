@@ -25,9 +25,9 @@ export const DEFAULT_AI_STORY_TEMPLATE_PATH =
   "/base/v2/ai-story-video/5903fe43-514d-40ee-a060-0d6628c5f8fd/v1";
 
 const VIDEO_DONE_STATUSES = new Set(["done", "completed", "complete", "success", "ready", "finished", "rendered", "processed", "available"]);
-const VIDEO_FAILED_STATUSES = new Set(["creation-from-template-failed", "failed", "error", "cancelled", "canceled", "timed-out", "timeout"]);
+const VIDEO_FAILED_STATUSES = new Set(["creation-from-template-failed", "failed", "error", "cancelled", "canceled", "timed-out", "timeout", "insufficient-credits", "insufficient_credits", "no-credits", "payment-required", "payment_required", "billing-error"]);
 const POST_DONE_STATUSES = new Set(["published", "completed", "complete", "success"]);
-const POST_FAILED_STATUSES = new Set(["failed", "error"]);
+const POST_FAILED_STATUSES = new Set(["failed", "error", "insufficient-credits", "insufficient_credits", "payment-required", "payment_required"]);
 
 function trim(value, fallback = "") {
   if (value === undefined || value === null) return fallback;

@@ -54,6 +54,16 @@ function hasSomeSourceOverlap(pack = {}, source = {}) {
   return false;
 }
 
+function positiveIntEnv(name, fallback, max = Number.POSITIVE_INFINITY) {
+  const parsed = Number(process.env[name]);
+  if (!Number.isFinite(parsed) || parsed < 1) return fallback;
+  return Math.min(Math.floor(parsed), max);
+}
+
+function sceneVoiceoverWordCount(scenes = []) {
+  return asArray(scenes).reduce((total, scene) => total + wordCount(scene?.script || ""), 0);
+}
+
 function scoreFrom(defects = [], warnings = []) {
   return Math.max(0, 100 - defects.length * 18 - warnings.length * 5);
 }
@@ -64,12 +74,16 @@ export function runBlotatoShortGate({ pack = {}, article = {}, lane = "" } = {})
   const text = cleanLexiconText(textFromPack(pack));
   const scriptWords = wordCount(pack.script || "");
   const sceneCount = asArray(pack.scenes).length;
+  const sceneVoiceWords = sceneVoiceoverWordCount(pack.scenes);
+  const minScriptWords = positiveIntEnv("BLOTATO_NEWS_MIN_SCRIPT_WORDS", 95, 140);
+  const minSceneWords = positiveIntEnv("BLOTATO_NEWS_MIN_SCENE_WORDS", 90, 160);
 
   if (!pack.script) defects.push("Blotato pack has no script.");
   if (!pack.hook) defects.push("Blotato pack has no hook.");
-  if (scriptWords < 75) defects.push("Blotato script is too thin for a 30-second short.");
+  if (scriptWords < minScriptWords) defects.push(`Blotato script is too thin for a 30-second short (${scriptWords}/${minScriptWords} words).`);
   if (scriptWords > 145) warnings.push("Blotato script may run long for the target short duration.");
-  if (sceneCount < 3) defects.push("Blotato pack needs at least three usable scenes.");
+  if (sceneCount < 4) defects.push("Blotato pack needs at least four usable scenes.");
+  if (sceneVoiceWords < minSceneWords) defects.push(`Blotato scene voiceover is too thin for a 30-second short (${sceneVoiceWords}/${minSceneWords} words).`);
   if (/\p{Extended_Pictographic}/u.test(text)) defects.push("Blotato pack contains emoji despite brand rules.");
   if (/```|^\s*[-*]\s+/m.test(text)) defects.push("Blotato pack contains markdown or bullet formatting.");
 

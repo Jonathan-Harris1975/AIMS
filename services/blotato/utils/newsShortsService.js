@@ -3,7 +3,11 @@ import { resilientRequest } from "../../shared/utils/ai-service.js";
 import { createVisual } from "./blotatoClient.js";
 import { DEFAULT_BLOTATO_SHORT_LANE, requireShortLaneConfig } from "./shortLanes.js";
 
-const NEWS_SHORT_MAX_TOKENS = Math.max(1800, Number(process.env.BLOTATO_NEWS_SHORT_MAX_TOKENS || 2200));
+const NEWS_SHORT_MAX_TOKENS = Math.max(2600, Number(process.env.BLOTATO_NEWS_SHORT_MAX_TOKENS || 3600));
+const MIN_SCRIPT_WORDS = Math.max(85, Number(process.env.BLOTATO_NEWS_MIN_SCRIPT_WORDS || 95));
+const TARGET_SCRIPT_WORDS = Math.max(MIN_SCRIPT_WORDS, Number(process.env.BLOTATO_NEWS_TARGET_SCRIPT_WORDS || 110));
+const MAX_SCRIPT_WORDS = Math.max(TARGET_SCRIPT_WORDS, Number(process.env.BLOTATO_NEWS_MAX_SCRIPT_WORDS || 135));
+const MIN_SCENE_VOICEOVER_WORDS = Math.max(75, Number(process.env.BLOTATO_NEWS_MIN_SCENE_WORDS || 90));
 const AI_STORY_VOICE = process.env.BLOTATO_NEWS_VOICE_NAME || "Daniel (British, authoritative)";
 const AI_STORY_HIGHLIGHT = process.env.BLOTATO_NEWS_HIGHLIGHT_COLOR || "#00E5FF";
 const AI_STORY_CAPTION_POSITION = process.env.BLOTATO_NEWS_CAPTION_POSITION || "bottom";
@@ -28,6 +32,17 @@ function cleanText(value = "", max = 2000) {
     .replace(/\s+/g, " ")
     .trim();
   return text.length > max ? `${text.slice(0, max).trim()}…` : text;
+}
+
+function wordCount(value = "") {
+  const text = cleanText(value, 10_000);
+  return text ? text.split(/\s+/).filter(Boolean).length : 0;
+}
+
+function trimToWordCount(value = "", maxWords = MAX_SCRIPT_WORDS) {
+  const words = cleanText(value, 10_000).split(/\s+/).filter(Boolean);
+  if (words.length <= maxWords) return words.join(" ");
+  return `${words.slice(0, maxWords).join(" ").replace(/[,:;]+$/g, "")}.`;
 }
 
 function renderArticles({ article, articles = [] } = {}) {
@@ -106,7 +121,7 @@ Return exactly one JSON object with these keys:
   "lane": "${laneConfig.slug}",
   "angle": "one sentence explaining the editorial angle",
   "hook": "first 2 seconds, max 16 words",
-  "script": "minimum 30 second spoken short in natural British English, target 85 to 125 words",
+  "script": "minimum 30 second spoken short in natural British English, target 95 to 125 words",
   "scenes": [
     {
       "mediaSource": "specific AI image/video prompt for this scene, faceless, premium editorial, dark technology palette",
@@ -124,7 +139,7 @@ Return exactly one JSON object with these keys:
 }
 
 Scene rules:
-- Provide 4 to 5 scenes unless the source is too thin.
+- Provide exactly 5 scenes. If the source is thin, use a clearer practical explainer instead of making the script shorter.
 - Each scene must include a mediaSource and script.
 - Each mediaSource must describe a specific visual, not a generic instruction.
 - Use faceless editorial visuals: code, interfaces, dashboards, workflow cards, newsroom graphics, data maps, product screenshots represented abstractly.
@@ -132,10 +147,13 @@ Scene rules:
 - Avoid text-heavy visuals.
 - The first scene must support the hook.
 - The final scene must support the CTA or practical takeaway.
-- The combined scene scripts must support at least 30 seconds of voiceover.
+- The combined scene scripts must contain enough spoken copy for at least 30 seconds of voiceover. Never return a thin script.
+- The main script must be at least 95 words and should land between 95 and 125 words.
 
 Output rules:
 - Keep the script specific to the source.
+- Write a complete usable voiceover, not a summary stub.
+- Include a hook, the practical meaning, one clear risk or limitation, one useful action, and a soft CTA.
 - Do not use phrases like "game changer", "AI is changing everything", "you won't believe", "the future is here", or "this changes everything".
 - Hashtags must be relevant to artificial intelligence, business, tools, work, podcast/news, or the article topic.
 - Instagram must have no more than 5 hashtags.
@@ -306,6 +324,115 @@ function firstSentence(value = "") {
   return splitSentences(value)[0] || cleanText(value, 180);
 }
 
+function ensureSentence(value = "") {
+  const cleaned = cleanText(value, 700).replace(/[;]+/g, ".").trim();
+  if (!cleaned) return "";
+  return /[.!?]$/.test(cleaned) ? cleaned : `${cleaned}.`;
+}
+
+function uniqueSentences(items = []) {
+  const seen = new Set();
+  const output = [];
+  for (const item of items) {
+    const sentences = splitSentences(item).length ? splitSentences(item) : [item];
+    for (const sentence of sentences) {
+      const cleaned = ensureSentence(sentence);
+      if (!cleaned || wordCount(cleaned) < 4) continue;
+      const key = cleaned.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().slice(0, 100);
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      output.push(cleaned);
+    }
+  }
+  return output;
+}
+
+function laneSpecificScriptLine(laneConfig = {}) {
+  switch (laneConfig.slug) {
+    case "model-verdict":
+      return "Treat it as a verdict, not a launch parade: useful where it saves effort, risky where it hides uncertainty.";
+    case "ai-at-work":
+      return "Start with one boring process, add a human checkpoint, then measure whether time or clarity improves.";
+    case "reality-check":
+      return "The boring checks matter: cost, accuracy, liability, data rights and who owns the final call.";
+    case "ai-playbook":
+      return "Turn it into a small workflow: define the task, set the guardrail, test the output, then decide whether it earns a place.";
+    case "news-insight":
+    default:
+      return "The useful question is who changes a workflow this week, and who still signs off the decision.";
+  }
+}
+
+function defaultCta(value = "") {
+  return cleanText(value, 240) || "For more straight-talking artificial intelligence analysis, follow Jonathan Harris and listen to Turing's Torch AI Weekly.";
+}
+
+function buildDurationSafeScript({ pack = {}, article = {}, laneConfig = {}, cta = "" } = {}) {
+  const title = cleanText(article.title || pack.internalTitle || "AI news update", 180);
+  const summary = cleanText(article.summary || article.description || "", 900);
+  const sourceSentence = firstSentence(summary);
+  const softCta = defaultCta(cta);
+  const core = uniqueSentences([
+    pack.hook || title,
+    pack.angle,
+    pack.script,
+    sourceSentence,
+    laneSpecificScriptLine(laneConfig),
+    "For Jonathan Harris, the useful test stays simple: does this make work clearer, safer or less wasteful?",
+    softCta,
+  ]);
+
+  const padding = [
+    "Ignore the theatre and look at the operating detail.",
+    "Where the workflow touches customers, data or money, keep a human decision point in the loop.",
+    "That is the difference between a useful artificial intelligence tool and another noisy demo.",
+  ];
+
+  let script = core.join(" ");
+  for (const line of padding) {
+    if (wordCount(script) >= MIN_SCRIPT_WORDS) break;
+    script = `${script} ${line}`.trim();
+  }
+
+  if (wordCount(script) < MIN_SCRIPT_WORDS && title) {
+    script = `${script} The story to watch is ${ensureSentence(title)}`.trim();
+  }
+
+  if (wordCount(script) > MAX_SCRIPT_WORDS) return trimToWordCount(script, MAX_SCRIPT_WORDS);
+  if (wordCount(script) < TARGET_SCRIPT_WORDS && wordCount(`${script} ${softCta}`) <= MAX_SCRIPT_WORDS) {
+    script = `${script} ${softCta}`;
+  }
+  return trimToWordCount(script, MAX_SCRIPT_WORDS);
+}
+
+function combinedSceneWordCount(scenes = []) {
+  return (Array.isArray(scenes) ? scenes : []).reduce((total, scene) => total + wordCount(scene?.script || ""), 0);
+}
+
+function makeScenePackDurationSafe(pack = {}) {
+  const derived = deriveScenesFromPack(pack);
+  return derived.length >= 4 ? derived.slice(0, MAX_SCENES) : normaliseScenes(pack.scenes, pack);
+}
+
+function enhancePackForBlotatoDuration(pack = {}, options = {}, laneConfig = {}) {
+  const output = { ...pack };
+  const beforeWords = wordCount(output.script);
+  if (beforeWords < MIN_SCRIPT_WORDS || beforeWords > MAX_SCRIPT_WORDS) {
+    output.script = buildDurationSafeScript({ pack: output, article: options.article, laneConfig, cta: options.cta });
+  }
+
+  output.scenes = normaliseScenes(output.scenes, output);
+  if (output.scenes.length < 4 || combinedSceneWordCount(output.scenes) < MIN_SCENE_VOICEOVER_WORDS) {
+    output.scenes = makeScenePackDurationSafe(output);
+  }
+
+  output.qualityNotes = cleanText(
+    output.qualityNotes || `Duration-safe ${laneConfig.label || "Blotato"} pack prepared with enough spoken copy for a 30 second short.`,
+    500
+  );
+  return output;
+}
+
 function buildFallbackShortPack(options = {}, laneConfig) {
   const article = options.article || {};
   const sourceTitle = cleanText(article.title || "AI news update", 100);
@@ -340,7 +467,7 @@ function buildFallbackShortPack(options = {}, laneConfig) {
     },
   ];
 
-  return normalisePack({
+  return enhancePackForBlotatoDuration(normalisePack({
     lane: laneConfig.slug,
     internalTitle: sourceTitle.slice(0, 80),
     angle: `A practical ${laneConfig.label.toLowerCase()} reading of ${sourceTitle}.`,
@@ -355,7 +482,7 @@ function buildFallbackShortPack(options = {}, laneConfig) {
     instagramCaption: `A practical artificial intelligence brief, without the hype. #ArtificialIntelligence #AINews #AIWeekly`,
     facebookCaption: `A practical artificial intelligence brief from Jonathan Harris, without the hype.`,
     qualityNotes: "Deterministic fallback pack used after model JSON repair failed.",
-  });
+  }), options, laneConfig);
 }
 
 async function requestNewsShortJson(prompt, { repairRaw } = {}) {
@@ -369,14 +496,13 @@ async function requestNewsShortJson(prompt, { repairRaw } = {}) {
         { role: "user", content: prompt.user },
       ];
 
+  const useJsonResponseFormat = parseBoolean(process.env.BLOTATO_NEWS_JSON_RESPONSE_FORMAT, false);
   return resilientRequest("blotatoNewsShort", {
     sessionId: `blotato-news-${Date.now()}`,
     messages,
     max_tokens: NEWS_SHORT_MAX_TOKENS,
     temperature: repairRaw ? 0.1 : 0.55,
-    response_format: parseBoolean(process.env.BLOTATO_NEWS_JSON_RESPONSE_FORMAT, true)
-      ? { type: "json_object" }
-      : undefined,
+    response_format: useJsonResponseFormat ? { type: "json_object" } : undefined,
   });
 }
 
@@ -386,7 +512,7 @@ export async function buildShortLanePack(options = {}) {
   const raw = await requestNewsShortJson(prompt);
 
   try {
-    return normalisePack({ ...parseJsonObject(raw), lane: laneConfig.slug });
+    return enhancePackForBlotatoDuration(normalisePack({ ...parseJsonObject(raw), lane: laneConfig.slug }), options, laneConfig);
   } catch (error) {
     warn("blotato.news_short.json_retry", {
       error: error?.message || String(error),
@@ -395,7 +521,7 @@ export async function buildShortLanePack(options = {}) {
 
     try {
       const repaired = await requestNewsShortJson(prompt, { repairRaw: raw });
-      return normalisePack({ ...parseJsonObject(repaired, "repaired Blotato news short"), lane: laneConfig.slug });
+      return enhancePackForBlotatoDuration(normalisePack({ ...parseJsonObject(repaired, "repaired Blotato news short"), lane: laneConfig.slug }), options, laneConfig);
     } catch (repairError) {
       warn("blotato.news_short.fallback_pack", {
         lane: laneConfig.slug,
