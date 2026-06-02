@@ -1,0 +1,46 @@
+AIMS Blotato Script Quality Update
+Generated: 2026-06-02
+
+Purpose
+- Stop Blotato jobs failing because the model returns a thin short script.
+- Give Blotato a complete, duration-safe spoken script and scene voiceover pack before video rendering.
+- Avoid OpenRouter JSON-parameter routing failures on providers that do not support strict response_format.
+- Fail fast when Blotato reports insufficient credits instead of polling until timeout.
+
+Updated files
+- services/blotato/utils/newsShortsService.js
+- services/blotato/utils/shortGate.js
+- services/blotato/utils/autoPublishService.js
+- services/blotato/README.md
+- env.template
+- config/production.defaults.env
+- test/blotato-service.test.js
+
+Key changes
+- BLOTATO_NEWS_SHORT_MAX_TOKENS default increased from 2200 to 3600.
+- BLOTATO_NEWS_JSON_RESPONSE_FORMAT now defaults false to preserve provider availability.
+- Added deterministic duration normalisation for Blotato short packs.
+- Thin model scripts are expanded to 95-135 spoken words using source-safe editorial framing.
+- Scene voiceover is rebuilt from the final script when scene scripts are too short.
+- Gate now checks both main script length and combined scene voiceover length.
+- Gate now requires at least four usable scenes.
+- Blotato render/post polling treats insufficient-credits and related billing states as fast failures.
+
+Recommended env
+BLOTATO_NEWS_SHORT_MAX_TOKENS=3600
+BLOTATO_NEWS_DURATION_SECONDS=45
+BLOTATO_NEWS_MIN_SCRIPT_WORDS=95
+BLOTATO_NEWS_TARGET_SCRIPT_WORDS=110
+BLOTATO_NEWS_MAX_SCRIPT_WORDS=135
+BLOTATO_NEWS_MIN_SCENE_WORDS=90
+BLOTATO_NEWS_JSON_RESPONSE_FORMAT=false
+
+Validation run
+- npm ci --ignore-scripts --no-audit --no-fund
+- node --check all JavaScript files: 264 checked, 0 failures
+- node --test test/blotato-service.test.js: 8 passed
+- npm run build: passed
+- npm test: passed
+
+Notes
+- If Blotato returns insufficient-credits, AIMS will now fail clearly. That still requires account/billing/credit action inside Blotato.
