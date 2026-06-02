@@ -22,8 +22,12 @@ All lanes target at least 30 seconds of voiceover, structured Blotato scenes, fa
 Blotato_API_key=
 BLOTATO_API_BASE=https://backend.blotato.com/v2
 BLOTATO_TIMEOUT_MS=30000
-BLOTATO_NEWS_SHORT_MAX_TOKENS=2200
+BLOTATO_NEWS_SHORT_MAX_TOKENS=3600
 BLOTATO_NEWS_DURATION_SECONDS=45
+BLOTATO_NEWS_MIN_SCRIPT_WORDS=95
+BLOTATO_NEWS_TARGET_SCRIPT_WORDS=110
+BLOTATO_NEWS_MAX_SCRIPT_WORDS=135
+BLOTATO_NEWS_MIN_SCENE_WORDS=90
 BLOTATO_NEWS_TEMPLATE_ID=/base/v2/ai-story-video/5903fe43-514d-40ee-a060-0d6628c5f8fd/v1
 BLOTATO_NEWS_RSS_URL=https://ai-news.jonathan-harris.online/feed.xml
 BLOTATO_RSS_PREFER_R2=true
@@ -44,7 +48,7 @@ BLOTATO_API_RETRY_ATTEMPTS=3
 BLOTATO_API_RETRY_BASE_MS=1000
 BLOTATO_API_RETRY_MAX_MS=12000
 BLOTATO_REQUIRE_ALL_CHANNELS=false
-BLOTATO_NEWS_JSON_RESPONSE_FORMAT=true
+BLOTATO_NEWS_JSON_RESPONSE_FORMAT=false
 BLOTATO_POST_POLL_ATTEMPTS=90
 BLOTATO_POST_POLL_INTERVAL_MS=3000
 BLOTATO_YOUTUBE_PRIVACY_STATUS=public
@@ -53,7 +57,9 @@ BLOTATO_INSTAGRAM_SHARE_TO_FEED=true
 ```
 
 `Blotato_API_key` is the canonical key name used by this service. `BLOTATO_API_KEY` is accepted only as a fallback alias.
-Video render polling also treats a returned media URL as completion evidence, waits much longer for slow renders, performs a final grace check, and retries transient Blotato API failures. If one social platform publish fails but at least one configured platform succeeds, the job completes as partial unless `BLOTATO_REQUIRE_ALL_CHANNELS=true`.
+Video render polling also treats a returned media URL as completion evidence, waits much longer for slow renders, performs a final grace check, and retries transient Blotato API failures. It now fails fast with a clear billing/credits error if Blotato reports `insufficient-credits`, rather than sitting in a long poll loop. If one social platform publish fails but at least one configured platform succeeds, the job completes as partial unless `BLOTATO_REQUIRE_ALL_CHANNELS=true`.
+
+Short packs are duration-normalised before rendering. AIMS now expands thin model output into a complete 95-135 word spoken script, rebuilds scene voiceover when scenes are too light, and defaults `BLOTATO_NEWS_JSON_RESPONSE_FORMAT=false` so OpenRouter can choose higher-quality providers that do not support strict JSON parameters. Malformed JSON is still repaired, and a deterministic fallback pack remains available.
 
 ## Public one-call triggers
 
