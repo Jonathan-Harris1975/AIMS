@@ -116,3 +116,31 @@ test("suite auth treats all weekly Blotato publish-now lane triggers as public h
     false
   );
 });
+
+test("ops pretrigger health is public but preflight and warmup require suite auth", async () => {
+  await withEnv({ NODE_ENV: "production", AIMS_API_KEY: "test-aims-key" }, async () => {
+    const health = await request(app).get("/ops/health?service=blog&sourceJob=blog-daily-social-build&targetPath=/blog/social/daily/build");
+    assert.equal(health.status, 200);
+    assert.equal(health.body.ok, true);
+    assert.equal(health.body.stage, "health");
+    assert.equal(health.body.checkedService, "blog");
+
+    const unauthenticatedPreflight = await request(app).get("/ops/preflight?service=blog&sourceJob=blog-daily-social-build&targetPath=/blog/social/daily/build");
+    assert.equal(unauthenticatedPreflight.status, 401);
+
+    const preflight = await request(app)
+      .get("/ops/preflight?service=blog&sourceJob=blog-daily-social-build&targetPath=/blog/social/daily/build")
+      .set("Authorization", "Bearer test-aims-key");
+    assert.equal(preflight.status, 200);
+    assert.equal(preflight.body.ok, true);
+    assert.equal(preflight.body.stage, "preflight");
+
+    const warmup = await request(app)
+      .get("/ops/warmup?service=blog&sourceJob=blog-daily-social-build&targetPath=/blog/social/daily/build&deep=true")
+      .set("Authorization", "Bearer test-aims-key");
+    assert.equal(warmup.status, 200);
+    assert.equal(warmup.body.ok, true);
+    assert.equal(warmup.body.stage, "warmup");
+    assert.equal(warmup.body.deep, true);
+  });
+});
