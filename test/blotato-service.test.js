@@ -69,7 +69,7 @@ const mockServer = http.createServer(async (req, res) => {
       assert.ok(payload.messages.some((message) => String(message.content || "").includes("Spartan and informative")));
       assert.ok(payload.messages.some((message) => String(message.content || "").includes("Instagram must have no more than 5 hashtags")));
       assert.ok(payload.messages.some((message) => String(message.content || "").includes("Target duration: 45 seconds minimum")));
-      assert.equal(Object.hasOwn(payload, "response_format"), false);
+      assert.deepEqual(payload.response_format, { type: "json_object" });
     }
     res.writeHead(200, { "content-type": "application/json" });
     res.end(JSON.stringify({
