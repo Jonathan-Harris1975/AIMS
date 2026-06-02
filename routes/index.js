@@ -17,6 +17,7 @@ import oneupRoutes from "../services/oneup/index.js";
 import blotatoRoutes from "../services/blotato/index.js";
 import auditsRoutes from "../audits/index.js";
 import rssLinksRoutes from "../services/rss-links/index.js";
+import opsRoutes from "../services/ops/index.js";
 
 const router = express.Router();
 
@@ -39,6 +40,7 @@ export const routeRegistry = [
   { path: "/blotato", name: "Blotato Social Video Service", routes: blotatoRoutes },
   { path: "/audits", name: "Audit Automation", routes: auditsRoutes },
   { path: "/rss-links", name: "RSS Links (URL Shortener)", routes: rssLinksRoutes },
+  { path: "/ops", name: "Operational Preflight", routes: opsRoutes },
 ];
 
 try {
