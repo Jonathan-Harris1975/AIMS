@@ -1,3 +1,10 @@
+
+## Operational pretrigger endpoints
+
+- Added `/ops/health`, `/ops/preflight`, and `/ops/warmup` for MAST event-aware checks.
+- Mounted the Ops service in the central route registry.
+- Added `AIMS_OPS_PREFLIGHT_STRICT=false` default so checks warn by default instead of blocking scheduled jobs.
+
 # AIMS Blotato Weekly Social Video Lanes
 
 ## Summary

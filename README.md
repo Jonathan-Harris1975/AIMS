@@ -1309,3 +1309,15 @@ This documentation was prepared against the supplied repository structure and th
 - `env.template`
 
 Routes in this README are active only when they are mounted through `routes/index.js` or root `server.js`. Features marked present but not wired should not be treated as available HTTP endpoints until they are mounted and tested.
+
+### Operational pretrigger endpoints
+
+MAST calls these lightweight endpoints before timed AIMS jobs. They are designed for event-aware health, preflight and warmup checks, not for running the heavy service work.
+
+| Method | Path | Auth | Purpose |
+|---|---|---|---|
+| `GET` | `/ops/health` | Public health bypass | T-3h liveness and target-service context check. |
+| `GET` | `/ops/preflight` | AIMS bearer | T-2h service-context and configuration warning check. |
+| `GET` | `/ops/warmup` | AIMS bearer | T-30m bounded warmup/readiness check. |
+
+Set `AIMS_OPS_PREFLIGHT_STRICT=true` only if you want missing configuration hints to return HTTP 503. Default is warning-only so scheduled jobs are not blocked by a cautious preflight check.
