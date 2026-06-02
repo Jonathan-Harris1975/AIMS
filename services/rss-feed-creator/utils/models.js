@@ -136,6 +136,77 @@ function buildPhase3RepairMessages({
   ];
 }
 
+function buildValidationRepairMessages({
+  systemPrompt,
+  userPrompt,
+  rewrittenTitle,
+  rewrittenSummary,
+  defects = [],
+} = {}) {
+  const defectList = Array.isArray(defects) && defects.length
+    ? defects.slice(0, 10).map((defect) => `- ${defect}`).join("\n")
+    : "- Candidate failed deterministic RSS rewrite validation";
+
+  return [
+    {
+      role: "system",
+      content: [
+        String(systemPrompt),
+        "",
+        "RSS VALIDATION REPAIR MODE:",
+        "Repair the candidate so it passes deterministic publication checks.",
+        "Keep the same source-backed subject and facts.",
+        "Do not add new facts, numbers, rankings, dates, prices, quotes, entities or claims.",
+        "No double quotation marks anywhere.",
+        "No banned filler phrases.",
+        "Summary must be 45 to 70 words where possible and never over 85 words.",
+        "Return only headline, blank line, summary.",
+      ].join("\n"),
+    },
+    {
+      role: "user",
+      content: [
+        String(userPrompt),
+        "",
+        "Candidate headline:",
+        String(rewrittenTitle || ""),
+        "",
+        "Candidate summary:",
+        String(rewrittenSummary || ""),
+        "",
+        "Validation defects to fix:",
+        defectList,
+        "",
+        "Rewrite once. Do not output labels, notes or metadata.",
+      ].join("\n"),
+    },
+  ];
+}
+
+async function repairRewriteForValidation({ systemPrompt, userPrompt, rewrittenTitle, rewrittenSummary, defects = [] } = {}) {
+  const repairRaw = await resilientRequest("rssRewrite", {
+    messages: buildValidationRepairMessages({
+      systemPrompt,
+      userPrompt,
+      rewrittenTitle,
+      rewrittenSummary,
+      defects,
+    }),
+    temperature: 0.25,
+    max_tokens: 700,
+  });
+
+  const repaired = RSS_PROMPTS.normalizeModelText(repairRaw);
+  return {
+    title: RSS_PROMPTS.clampTitleTo12Words(repaired.title || rewrittenTitle, 12),
+    summary: RSS_PROMPTS.clampSummaryToWindow(
+      repaired.summary || rewrittenSummary,
+      RSS_PROMPTS.MIN_SUMMARY_CHARS,
+      RSS_PROMPTS.MAX_SUMMARY_CHARS
+    ),
+  };
+}
+
 function assertTopicGuardOrThrow({ title, sourceText, rewrittenTitle, rewrittenSummary } = {}) {
   const score = topicOverlapScore(`${title}\n${sourceText}`, `${rewrittenTitle}\n${rewrittenSummary}`);
   if (score.shared < TOPIC_GUARD_MIN_SHARED || score.overlap < TOPIC_GUARD_MIN_OVERLAP) {
@@ -263,20 +334,47 @@ export async function rewriteArticle(item = {}) {
 
     bannedPhrases = RSS_PROMPTS.findBannedSummaryPhrases(rewrittenSummary);
     if (bannedPhrases.length) {
-      throw new Error(
-        `Rewrite contains banned filler after retry: ${bannedPhrases.slice(0, 5).join(", ")}`
-      );
+      const repaired = await repairRewriteForValidation({
+        systemPrompt,
+        userPrompt,
+        rewrittenTitle,
+        rewrittenSummary,
+        defects: [`Summary contains banned filler after retry: ${bannedPhrases.slice(0, 5).join(", ")}`],
+      });
+      rewrittenTitle = repaired.title;
+      rewrittenSummary = repaired.summary;
     }
   }
 
-  // Validate format + brand constraints
-  const v = RSS_PROMPTS.validateOutput(rewrittenTitle, rewrittenSummary, {
+  // Validate format + brand constraints. If the model output is close but too long,
+  // labelled, or still carrying filler, perform one deterministic repair before quarantine.
+  let v = RSS_PROMPTS.validateOutput(rewrittenTitle, rewrittenSummary, {
     maxTitleWords: 12,
     minChars: RSS_PROMPTS.MIN_SUMMARY_CHARS,
     maxChars: RSS_PROMPTS.MAX_SUMMARY_CHARS,
   });
   if (!v.valid) {
-    throw new Error(`Rewrite format invalid: ${v.errors.join("; ")}`);
+    warn("rss-feed-creator.model.validationRepair.start", {
+      title,
+      errors: v.errors.slice(0, 6),
+    });
+    const repaired = await repairRewriteForValidation({
+      systemPrompt,
+      userPrompt,
+      rewrittenTitle,
+      rewrittenSummary,
+      defects: v.errors,
+    });
+    rewrittenTitle = repaired.title;
+    rewrittenSummary = repaired.summary;
+    v = RSS_PROMPTS.validateOutput(rewrittenTitle, rewrittenSummary, {
+      maxTitleWords: 12,
+      minChars: RSS_PROMPTS.MIN_SUMMARY_CHARS,
+      maxChars: RSS_PROMPTS.MAX_SUMMARY_CHARS,
+    });
+  }
+  if (!v.valid) {
+    throw new Error(`Rewrite format invalid after validation repair: ${v.errors.join("; ")}`);
   }
 
   let sourceOverlap = RSS_PROMPTS.validateSourceOverlap({

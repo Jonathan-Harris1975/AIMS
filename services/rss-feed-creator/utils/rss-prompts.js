@@ -106,9 +106,10 @@ REWRITE_ABORTED
 
 3. SUMMARY RULES
 - Write one short editorial brief in plain text prose
-- Aim for 2 to 4 short paragraphs
+- Aim for 1 to 2 short paragraphs
+- Target 45 to 70 words, and never exceed 85 words
 - Sound spoken, not editorial
-- Be direct and clear about what happened, why it matters, and what feels overblown, missing, risky, or worth watching
+- Be direct and clear about what happened, why it matters, and where the practical catch, uncertainty, or genuine risk sits
 - Mild wit is welcome
 - Dry scepticism is welcome
 - Do not over-explain obvious points
@@ -223,7 +224,7 @@ export function USER_ITEM({
     "Return only:",
     `1. headline (maximum ${maxTitleWords} words)`,
     "2. blank line",
-    `3. summary (${minChars}-${maxChars} characters)`,
+    `3. summary (${minChars}-${maxChars} characters, 45-70 words preferred, 85 words maximum)`,
   ]
     .filter(Boolean)
     .join("\n");
