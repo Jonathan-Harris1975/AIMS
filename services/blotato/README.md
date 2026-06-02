@@ -36,9 +36,16 @@ BLOTATO_YOUTUBE_ACCOUNT_ID=37622
 BLOTATO_TIKTOK_ACCOUNT_ID=44263
 BLOTATO_FACEBOOK_ACCOUNT_ID=34013
 BLOTATO_FACEBOOK_PAGE_ID=562160556971997
-BLOTATO_VIDEO_POLL_ATTEMPTS=150
-BLOTATO_VIDEO_POLL_INTERVAL_MS=4000
-BLOTATO_POST_POLL_ATTEMPTS=60
+BLOTATO_VIDEO_POLL_ATTEMPTS=480
+BLOTATO_VIDEO_POLL_INTERVAL_MS=5000
+BLOTATO_VIDEO_FINAL_GRACE_MS=15000
+BLOTATO_VIDEO_POLL_PROGRESS_EVERY=30
+BLOTATO_API_RETRY_ATTEMPTS=3
+BLOTATO_API_RETRY_BASE_MS=1000
+BLOTATO_API_RETRY_MAX_MS=12000
+BLOTATO_REQUIRE_ALL_CHANNELS=false
+BLOTATO_NEWS_JSON_RESPONSE_FORMAT=true
+BLOTATO_POST_POLL_ATTEMPTS=90
 BLOTATO_POST_POLL_INTERVAL_MS=3000
 BLOTATO_YOUTUBE_PRIVACY_STATUS=public
 BLOTATO_YOUTUBE_NOTIFY_SUBSCRIBERS=false
@@ -46,7 +53,7 @@ BLOTATO_INSTAGRAM_SHARE_TO_FEED=true
 ```
 
 `Blotato_API_key` is the canonical key name used by this service. `BLOTATO_API_KEY` is accepted only as a fallback alias.
-Video render polling also treats a returned media URL as completion evidence, so slower Blotato renders are less likely to fail just because the status label is delayed.
+Video render polling also treats a returned media URL as completion evidence, waits much longer for slow renders, performs a final grace check, and retries transient Blotato API failures. If one social platform publish fails but at least one configured platform succeeds, the job completes as partial unless `BLOTATO_REQUIRE_ALL_CHANNELS=true`.
 
 ## Public one-call triggers
 
@@ -67,7 +74,7 @@ Each trigger does the full flow:
 3. Creates a structured Blotato video using `/base/v2/ai-story-video/5903fe43-514d-40ee-a060-0d6628c5f8fd/v1`.
 4. Polls Blotato until the video render is complete.
 5. Publishes immediately to Instagram, YouTube, TikTok, and Facebook.
-6. Stores job status under `GET /blotato/jobs/:sessionId`.
+6. Stores job status under `GET /blotato/jobs/:sessionId`, including any partial platform failures.
 
 The trigger returns quickly with a queued/running job. The heavy Blotato work runs in the background unless `BLOTATO_INLINE_PUBLISH_JOBS=true`.
 
