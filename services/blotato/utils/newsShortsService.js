@@ -13,6 +13,15 @@ const MAX_SCENES = 5;
 const MIN_DURATION_SECONDS = 30;
 const DEFAULT_DURATION_SECONDS = 45;
 
+function parseBoolean(value, fallback = false) {
+  if (value === undefined || value === null || value === "") return fallback;
+  if (typeof value === "boolean") return value;
+  const normalised = String(value).trim().toLowerCase();
+  if (["1", "true", "yes", "on", "y"].includes(normalised)) return true;
+  if (["0", "false", "no", "off", "n"].includes(normalised)) return false;
+  return fallback;
+}
+
 function cleanText(value = "", max = 2000) {
   const text = String(value || "")
     .replace(/<[^>]+>/g, " ")
@@ -75,7 +84,7 @@ can, may, just, very, really, literally, actually, certainly, probably, basicall
 Lane planning structure:
 ${structure}
 
-Return valid JSON only.`,
+Return valid JSON only. The response must be one complete JSON object with double-quoted keys and no trailing text.`,
     user: `Create one short-form AI social video pack.
 
 Lane: ${laneConfig.slug}
@@ -132,7 +141,8 @@ Output rules:
 - Instagram must have no more than 5 hashtags.
 - TikTok must have no more than 5 hashtags.
 - Keep captions platform-specific rather than copy-pasted.
-- Do not add any text outside the JSON.`,
+- Do not add any text outside the JSON.
+- Do not truncate the JSON. Close every array and object.`,
   };
 }
 
@@ -292,6 +302,62 @@ export function buildBlotatoVideoInputs(pack = {}) {
   };
 }
 
+function firstSentence(value = "") {
+  return splitSentences(value)[0] || cleanText(value, 180);
+}
+
+function buildFallbackShortPack(options = {}, laneConfig) {
+  const article = options.article || {};
+  const sourceTitle = cleanText(article.title || "AI news update", 100);
+  const summary = cleanText(article.summary || sourceTitle, 700);
+  const hook = cleanText(firstSentence(sourceTitle).replace(/[.!?]+$/g, ""), 95) || "AI news needs a practical read";
+  const usefulPoint = cleanText(firstSentence(summary), 180) || sourceTitle;
+  const script = [
+    `${hook}.`,
+    `The useful point is not the headline noise. It is what this means for real work, publishing and small business decisions.`,
+    `${usefulPoint}.`,
+    `The sensible move is to treat this as a signal, not a prophecy. Check the workflow, the risk, the cost and the human approval step before building around it.`,
+    `That is where artificial intelligence becomes useful: not magic, not panic, but a tool with limits you have to manage.`,
+    `For more straight-talking artificial intelligence analysis, follow Jonathan Harris and listen to Turing's Torch AI Weekly.`,
+  ].join(" ");
+  const visualDirection = `Faceless editorial AI news short about ${sourceTitle}. Dark navy and charcoal technology palette, clean dashboard cards, subtle motion, no robot cliché.`;
+  const scenes = [
+    {
+      mediaSource: `${visualDirection} Opening scene with a clean headline card and abstract interface glow.`,
+      script: `${hook}. The useful point is not the headline noise.`,
+    },
+    {
+      mediaSource: `${visualDirection} Workflow cards showing risk, cost, approval and deployment checks.`,
+      script: `It is what this means for real work, publishing and small business decisions.`,
+    },
+    {
+      mediaSource: `${visualDirection} Human review checkpoint beside a simple artificial intelligence workflow.`,
+      script: `${usefulPoint}.`,
+    },
+    {
+      mediaSource: `${visualDirection} Closing scene with calm analysis graphics and a podcast waveform motif.`,
+      script: `Treat this as a signal, not a prophecy. Check the workflow, the risk, the cost and the human approval step before building around it.`,
+    },
+  ];
+
+  return normalisePack({
+    lane: laneConfig.slug,
+    internalTitle: sourceTitle.slice(0, 80),
+    angle: `A practical ${laneConfig.label.toLowerCase()} reading of ${sourceTitle}.`,
+    hook,
+    script,
+    scenes,
+    visualDirection,
+    thumbnailText: cleanText(sourceTitle.split(/\s+/).slice(0, 5).join(" "), 55) || "AI Reality Check",
+    youtubeTitle: cleanText(sourceTitle, 70),
+    youtubeDescription: `A practical artificial intelligence brief from Jonathan Harris. #ArtificialIntelligence #AINews #AIWeekly`,
+    tiktokCaption: `A practical artificial intelligence brief. #ArtificialIntelligence #AINews #AIWeekly`,
+    instagramCaption: `A practical artificial intelligence brief, without the hype. #ArtificialIntelligence #AINews #AIWeekly`,
+    facebookCaption: `A practical artificial intelligence brief from Jonathan Harris, without the hype.`,
+    qualityNotes: "Deterministic fallback pack used after model JSON repair failed.",
+  });
+}
+
 async function requestNewsShortJson(prompt, { repairRaw } = {}) {
   const messages = repairRaw
     ? [
@@ -308,6 +374,9 @@ async function requestNewsShortJson(prompt, { repairRaw } = {}) {
     messages,
     max_tokens: NEWS_SHORT_MAX_TOKENS,
     temperature: repairRaw ? 0.1 : 0.55,
+    response_format: parseBoolean(process.env.BLOTATO_NEWS_JSON_RESPONSE_FORMAT, true)
+      ? { type: "json_object" }
+      : undefined,
   });
 }
 
@@ -323,8 +392,17 @@ export async function buildShortLanePack(options = {}) {
       error: error?.message || String(error),
       rawPreview: error?.rawPreview || String(raw || "").slice(0, 300),
     });
-    const repaired = await requestNewsShortJson(prompt, { repairRaw: raw });
-    return normalisePack({ ...parseJsonObject(repaired, "repaired Blotato news short"), lane: laneConfig.slug });
+
+    try {
+      const repaired = await requestNewsShortJson(prompt, { repairRaw: raw });
+      return normalisePack({ ...parseJsonObject(repaired, "repaired Blotato news short"), lane: laneConfig.slug });
+    } catch (repairError) {
+      warn("blotato.news_short.fallback_pack", {
+        lane: laneConfig.slug,
+        error: repairError?.message || String(repairError),
+      });
+      return buildFallbackShortPack(options, laneConfig);
+    }
   }
 }
 

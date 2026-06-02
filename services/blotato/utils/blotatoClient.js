@@ -5,6 +5,26 @@ const DEFAULT_TIMEOUT_MS = 30_000;
 
 const BLOTATO_KEY_ENV_NAMES = ["Blotato_API_key", "BLOTATO_API_KEY"];
 
+function positiveIntEnv(name, fallback, max = Number.POSITIVE_INFINITY) {
+  const parsed = Number(process.env[name]);
+  if (!Number.isFinite(parsed) || parsed < 1) return fallback;
+  return Math.min(Math.floor(parsed), max);
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isRetryableStatus(status) {
+  const code = Number(status);
+  return code === 408 || code === 425 || code === 429 || code >= 500;
+}
+
+function isRetryableNetworkError(error) {
+  const message = String(error?.message || error || "").toLowerCase();
+  return /timeout|timed out|econnreset|etimedout|eai_again|socket hang up|network|fetch failed/.test(message);
+}
+
 function trimString(value, fallback = "") {
   if (value === undefined || value === null) return fallback;
   const cleaned = String(value).trim();
@@ -98,29 +118,50 @@ async function blotatoRequest(endpoint, {
   timeoutMs = Number(process.env.BLOTATO_TIMEOUT_MS || DEFAULT_TIMEOUT_MS),
 } = {}) {
   const key = getBlotatoApiKey(apiKey);
-  const url = new URL(joinEndpoint(endpoint));
-  addQueryParams(url, params);
+  const attempts = positiveIntEnv("BLOTATO_API_RETRY_ATTEMPTS", 3, 8);
+  const baseDelayMs = positiveIntEnv("BLOTATO_API_RETRY_BASE_MS", 1000, 30_000);
+  const maxDelayMs = positiveIntEnv("BLOTATO_API_RETRY_MAX_MS", 12_000, 120_000);
+  let lastError;
 
-  const headers = {
-    accept: "application/json",
-    "content-type": "application/json",
-    "blotato-api-key": key,
-  };
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    const url = new URL(joinEndpoint(endpoint));
+    addQueryParams(url, params);
 
-  const response = await fetchWithTimeout(url.toString(), {
-    method,
-    timeout: timeoutMs,
-    headers,
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-  });
+    const headers = {
+      accept: "application/json",
+      "content-type": "application/json",
+      "blotato-api-key": key,
+    };
 
-  const parsed = await parseResponseBody(response);
-  if (!response.ok) {
-    throw makeBlotatoError({ response, parsed, endpoint });
+    try {
+      const response = await fetchWithTimeout(url.toString(), {
+        method,
+        timeout: timeoutMs,
+        headers,
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      });
+
+      const parsed = await parseResponseBody(response);
+      if (!response.ok) {
+        const err = makeBlotatoError({ response, parsed, endpoint });
+        err.retryable = isRetryableStatus(response.status);
+        throw err;
+      }
+
+      return parsed.json ?? { raw: parsed.text };
+    } catch (error) {
+      lastError = error;
+      const retryable = Boolean(error?.retryable || isRetryableNetworkError(error));
+      if (!retryable || attempt >= attempts) throw error;
+
+      const waitMs = Math.min(maxDelayMs, baseDelayMs * Math.pow(2, attempt - 1));
+      await sleep(waitMs);
+    }
   }
 
-  return parsed.json ?? { raw: parsed.text };
+  throw lastError || new Error(`Blotato ${endpoint} request failed`);
 }
+
 
 export async function listAccounts({ platform } = {}, apiKey) {
   return blotatoRequest("users/me/accounts", {

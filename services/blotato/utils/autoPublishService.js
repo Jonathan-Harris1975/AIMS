@@ -48,6 +48,12 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function positiveIntEnv(name, fallback, max = Number.POSITIVE_INFINITY) {
+  const parsed = Number(process.env[name]);
+  if (!Number.isFinite(parsed) || parsed < 1) return fallback;
+  return Math.min(Math.floor(parsed), max);
+}
+
 function normaliseTemplateId(value = DEFAULT_AI_STORY_TEMPLATE_PATH) {
   const raw = trim(value, DEFAULT_AI_STORY_TEMPLATE_PATH);
   return raw.startsWith("base/v2/") ? `/${raw}` : raw;
@@ -114,7 +120,7 @@ function findMediaUrl(value, depth = 0) {
   return "";
 }
 
-async function pollUntil({ label, run, isDone, isDonePayload, isFailed, extractStatus, maxAttempts, intervalMs }) {
+async function pollUntil({ label, run, isDone, isDonePayload, isFailed, extractStatus, maxAttempts, intervalMs, progressEvery = 30, finalGraceMs = 0 }) {
   let latest = null;
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     latest = await run();
@@ -126,7 +132,23 @@ async function pollUntil({ label, run, isDone, isDonePayload, isFailed, extractS
       err.details = latest;
       throw err;
     }
+    if (progressEvery > 0 && attempt % progressEvery === 0) {
+      info("blotato.poll.still_waiting", { label, attempt, maxAttempts, status: status || "unknown" });
+    }
     await sleep(intervalMs);
+  }
+
+  if (finalGraceMs > 0) {
+    await sleep(finalGraceMs);
+    latest = await run();
+    const status = extractStatus(latest);
+    if (isDone(status) || isDonePayload?.(latest, status)) return latest;
+    if (isFailed(status)) {
+      const err = new Error(`${label} failed with status: ${status || "unknown"}`);
+      err.statusCode = 502;
+      err.details = latest;
+      throw err;
+    }
   }
 
   const err = new Error(`${label} did not complete before polling limit`);
@@ -154,8 +176,9 @@ async function createAndWaitForVideo({ templateId, pack, apiKey }) {
     throw err;
   }
 
-  const maxAttempts = Number(process.env.BLOTATO_VIDEO_POLL_ATTEMPTS || 150);
-  const intervalMs = Number(process.env.BLOTATO_VIDEO_POLL_INTERVAL_MS || 4000);
+  const maxAttempts = positiveIntEnv("BLOTATO_VIDEO_POLL_ATTEMPTS", 480, 1440);
+  const intervalMs = positiveIntEnv("BLOTATO_VIDEO_POLL_INTERVAL_MS", 5000, 60_000);
+  const finalGraceMs = positiveIntEnv("BLOTATO_VIDEO_FINAL_GRACE_MS", 15_000, 180_000);
   const completed = await pollUntil({
     label: "Blotato video render",
     run: () => getVisualStatus(visualId, apiKey),
@@ -165,6 +188,8 @@ async function createAndWaitForVideo({ templateId, pack, apiKey }) {
     isFailed: (status) => VIDEO_FAILED_STATUSES.has(status),
     maxAttempts,
     intervalMs,
+    finalGraceMs,
+    progressEvery: positiveIntEnv("BLOTATO_VIDEO_POLL_PROGRESS_EVERY", 30, 240),
   });
 
   const mediaUrl = findMediaUrl(completed) || findMediaUrl(visual);
@@ -282,8 +307,8 @@ async function publishAndWait({ platform, pack, mediaUrl, apiKey }) {
     throw err;
   }
 
-  const maxAttempts = Number(process.env.BLOTATO_POST_POLL_ATTEMPTS || 60);
-  const intervalMs = Number(process.env.BLOTATO_POST_POLL_INTERVAL_MS || 3000);
+  const maxAttempts = positiveIntEnv("BLOTATO_POST_POLL_ATTEMPTS", 90, 720);
+  const intervalMs = positiveIntEnv("BLOTATO_POST_POLL_INTERVAL_MS", 3000, 60_000);
   const status = await pollUntil({
     label: `Blotato ${platform} publish`,
     run: () => getPostStatus(postSubmissionId, apiKey),
@@ -359,9 +384,35 @@ async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOT
     if (!blotatoShortGate.ok) throw buildBlotatoGateError(blotatoShortGate);
 
     const video = await createAndWaitForVideo({ templateId, pack, apiKey });
-    const publishes = [];
-    for (const platform of platforms) {
-      publishes.push(await publishAndWait({ platform, pack, mediaUrl: video.mediaUrl, apiKey }));
+    const settledPublishes = await Promise.allSettled(
+      platforms.map((platform) => publishAndWait({ platform, pack, mediaUrl: video.mediaUrl, apiKey }))
+    );
+    const publishes = settledPublishes
+      .filter((item) => item.status === "fulfilled")
+      .map((item) => item.value);
+    const failedPublishes = settledPublishes
+      .map((item, index) => ({ platform: platforms[index], result: item }))
+      .filter((item) => item.result.status === "rejected")
+      .map((item) => ({
+        platform: item.platform,
+        error: item.result.reason?.message || String(item.result.reason),
+        statusCode: item.result.reason?.statusCode || item.result.reason?.status || null,
+      }));
+
+    if (failedPublishes.length) {
+      warn("blotato.publish_now.platform_failures", { sessionId, lane: lane.slug, failedPublishes });
+    }
+
+    const requireAllChannels = parseBoolean(process.env.BLOTATO_REQUIRE_ALL_CHANNELS, false);
+    if (!publishes.length || (requireAllChannels && failedPublishes.length)) {
+      const err = new Error(
+        !publishes.length
+          ? "Blotato media rendered but publishing failed on every configured channel"
+          : `Blotato publishing failed on required channels: ${failedPublishes.map((item) => item.platform).join(", ")}`
+      );
+      err.statusCode = 502;
+      err.failedPublishes = failedPublishes;
+      throw err;
     }
 
     recordUsedSocialSource({
@@ -398,6 +449,8 @@ async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOT
       visualId: video.visualId,
       mediaUrl: video.mediaUrl,
       video,
+      partial: failedPublishes.length > 0,
+      failedPublishes,
       posts: publishes.map((item) => ({
         platform: item.platform,
         accountId: item.accountId,
