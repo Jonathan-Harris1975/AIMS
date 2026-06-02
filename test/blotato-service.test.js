@@ -69,7 +69,7 @@ const mockServer = http.createServer(async (req, res) => {
       assert.ok(payload.messages.some((message) => String(message.content || "").includes("Spartan and informative")));
       assert.ok(payload.messages.some((message) => String(message.content || "").includes("Instagram must have no more than 5 hashtags")));
       assert.ok(payload.messages.some((message) => String(message.content || "").includes("Target duration: 45 seconds minimum")));
-      assert.deepEqual(payload.response_format, { type: "json_object" });
+      assert.equal(payload.response_format, undefined);
     }
     res.writeHead(200, { "content-type": "application/json" });
     res.end(JSON.stringify({
@@ -385,6 +385,7 @@ test("Blotato news insight route builds a dry-run short pack", async () => {
   assert.equal(response.body.ok, true);
   assert.equal(response.body.createdVisual, false);
   assert.match(response.body.pack.script, /workflow/i);
+  assert.ok(response.body.pack.script.split(/\s+/).length >= 95);
   assert.match(response.body.visualPrompt, /Thumbnail text/);
   assert.ok(Array.isArray(response.body.pack.scenes));
   assert.ok(response.body.pack.scenes.length >= 3);
