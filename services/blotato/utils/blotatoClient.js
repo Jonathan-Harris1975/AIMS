@@ -189,12 +189,20 @@ export async function listTemplates({ fields = "id,name,description,inputs", sea
 }
 
 export async function createVisual({ templateId, inputs = {}, prompt, render = true, isDraft = false } = {}, apiKey) {
+  // text_to_image_model and image_to_video_model must be top-level body fields.
+  // Blotato ignores them when nested inside inputs, which causes it to fall back
+  // to the template default model (10 credits/image instead of ~1 for flux-schnell).
+  const { text_to_image_model, image_to_video_model, ...sceneInputs } = inputs;
+
   const body = {
     templateId,
-    inputs,
+    inputs: sceneInputs,
     render,
     isDraft,
   };
+
+  if (text_to_image_model) body.text_to_image_model = text_to_image_model;
+  if (image_to_video_model) body.image_to_video_model = image_to_video_model;
 
   if (prompt !== undefined && prompt !== null && String(prompt).trim()) {
     body.prompt = String(prompt).trim();
