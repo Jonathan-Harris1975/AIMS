@@ -369,10 +369,9 @@ async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOT
         process.env.BLOTATO_NEWS_AUDIENCE,
         "curious readers, creators, authors, and small business owners"
       ),
-      cta: trim(
-        process.env.BLOTATO_NEWS_CTA,
-        "For more straight-talking AI analysis, follow Jonathan Harris and listen to Turing's Torch AI Weekly."
-      ),
+      // CTA is resolved lane-by-lane inside newsShortsService (Thursday gets a soft podcast plug,
+      // all other lanes use the standard follow CTA). BLOTATO_NEWS_CTA overrides all lanes if set.
+      cta: trim(process.env.BLOTATO_NEWS_CTA, ""),
     });
     const pack = normalisePackForPublish(generatedPack);
 

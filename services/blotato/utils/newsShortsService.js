@@ -4,18 +4,47 @@ import { createVisual } from "./blotatoClient.js";
 import { DEFAULT_BLOTATO_SHORT_LANE, requireShortLaneConfig } from "./shortLanes.js";
 
 const NEWS_SHORT_MAX_TOKENS = Math.max(2600, Number(process.env.BLOTATO_NEWS_SHORT_MAX_TOKENS || 3600));
-const MIN_SCRIPT_WORDS = Math.max(85, Number(process.env.BLOTATO_NEWS_MIN_SCRIPT_WORDS || 95));
-const TARGET_SCRIPT_WORDS = Math.max(MIN_SCRIPT_WORDS, Number(process.env.BLOTATO_NEWS_TARGET_SCRIPT_WORDS || 110));
-const MAX_SCRIPT_WORDS = Math.max(TARGET_SCRIPT_WORDS, Number(process.env.BLOTATO_NEWS_MAX_SCRIPT_WORDS || 135));
+const MIN_SCRIPT_WORDS = Math.max(85, Number(process.env.BLOTATO_NEWS_MIN_SCRIPT_WORDS || 105));
+const TARGET_SCRIPT_WORDS = Math.max(MIN_SCRIPT_WORDS, Number(process.env.BLOTATO_NEWS_TARGET_SCRIPT_WORDS || 120));
+const MAX_SCRIPT_WORDS = Math.max(TARGET_SCRIPT_WORDS, Number(process.env.BLOTATO_NEWS_MAX_SCRIPT_WORDS || 140));
 const MIN_SCENE_VOICEOVER_WORDS = Math.max(75, Number(process.env.BLOTATO_NEWS_MIN_SCENE_WORDS || 90));
-const AI_STORY_VOICE = process.env.BLOTATO_NEWS_VOICE_NAME || "Daniel (British, authoritative)";
-const AI_STORY_HIGHLIGHT = process.env.BLOTATO_NEWS_HIGHLIGHT_COLOR || "#00E5FF";
-const AI_STORY_CAPTION_POSITION = process.env.BLOTATO_NEWS_CAPTION_POSITION || "bottom";
-const AI_STORY_TRANSITION = process.env.BLOTATO_NEWS_TRANSITION || "fade";
-const AI_STORY_ASPECT_RATIO = process.env.BLOTATO_NEWS_ASPECT_RATIO || "9:16";
+
+// Brand kit — all visual and audio identity settings are env-configurable.
+const AI_STORY_VOICE = process.env.BLOTATO_BRAND_VOICE_NAME || "Daniel (British, authoritative)";
+const AI_STORY_HIGHLIGHT = process.env.BLOTATO_BRAND_HIGHLIGHT_COLOR || "#00E5FF";
+const AI_STORY_CAPTION_POSITION = process.env.BLOTATO_BRAND_CAPTION_POSITION || "bottom";
+const AI_STORY_TRANSITION = process.env.BLOTATO_BRAND_TRANSITION || "fade";
+const AI_STORY_ASPECT_RATIO = process.env.BLOTATO_BRAND_ASPECT_RATIO || "9:16";
+const AI_STORY_ANIMATE_IMAGES = process.env.BLOTATO_BRAND_ANIMATE_IMAGES !== "false";
+const AI_STORY_TRIM_TO_VOICEOVER = process.env.BLOTATO_BRAND_TRIM_TO_VOICEOVER !== "false";
+
+// Media generation models — set via env to control cost and quality without code deploys.
+const BLOTATO_TEXT_TO_IMAGE_MODEL = process.env.BLOTATO_TEXT_TO_IMAGE_MODEL || "replicate/flux-schnell";
+const BLOTATO_IMAGE_TO_VIDEO_MODEL = process.env.BLOTATO_IMAGE_TO_VIDEO_MODEL || "fal-ai/framepack";
+
 const MAX_SCENES = 5;
 const MIN_DURATION_SECONDS = 30;
 const DEFAULT_DURATION_SECONDS = 45;
+
+// The Thursday (reality-check) lane includes a soft podcast plug. All other lanes use the
+// standard follow CTA. The podcast plug avoids "tomorrow" so the video stays evergreen if
+// republished outside its scheduled day.
+const THURSDAY_PODCAST_PLUG =
+  process.env.BLOTATO_THURSDAY_PODCAST_PLUG ||
+  "Turing's Torch AI Weekly is out every Friday — follow Jonathan Harris wherever you listen to podcasts.";
+
+const DEFAULT_FOLLOW_CTA =
+  process.env.BLOTATO_DEFAULT_FOLLOW_CTA ||
+  "Follow Jonathan Harris for more straight-talking artificial intelligence analysis.";
+
+function isThursdayLane(laneSlug = "") {
+  return laneSlug === "reality-check";
+}
+
+function ctaForLane(laneSlug = "", overrideCta = "") {
+  if (overrideCta) return overrideCta;
+  return isThursdayLane(laneSlug) ? THURSDAY_PODCAST_PLUG : DEFAULT_FOLLOW_CTA;
+}
 
 function parseBoolean(value, fallback = false) {
   if (value === undefined || value === null || value === "") return fallback;
@@ -64,7 +93,7 @@ function renderArticles({ article, articles = [] } = {}) {
 function buildNewsShortPrompt({ article, articles, theme, durationSeconds, cta, audience, lane = DEFAULT_BLOTATO_SHORT_LANE }) {
   const laneConfig = requireShortLaneConfig(lane);
   const articleBlock = renderArticles({ article, articles });
-  const fallbackCta = cta || "For more straight-talking AI analysis, follow Jonathan Harris and listen to Turing's Torch AI Weekly.";
+  const resolvedCta = ctaForLane(laneConfig.slug, cta);
   const targetDuration = Math.max(MIN_DURATION_SECONDS, Number(durationSeconds || DEFAULT_DURATION_SECONDS));
   const structure = laneConfig.structure.map((item, index) => `${index + 1}. ${item}`).join("\n");
 
@@ -110,7 +139,7 @@ Source strategy: ${laneConfig.sourceStrategy}
 Theme: ${theme || laneConfig.theme}
 Target duration: ${targetDuration} seconds minimum
 Audience: ${audience}
-CTA: ${fallbackCta}
+CTA: ${resolvedCta}
 
 Source article context:
 ${articleBlock}
@@ -120,8 +149,8 @@ Return exactly one JSON object with these keys:
   "internalTitle": "short working title, max 80 chars",
   "lane": "${laneConfig.slug}",
   "angle": "one sentence explaining the editorial angle",
-  "hook": "first 2 seconds, max 16 words",
-  "script": "minimum 30 second spoken short in natural British English, target 95 to 125 words",
+  "hook": "opening line, 8 to 16 words, specific and direct — no hype, no question, no generic setup",
+  "script": "minimum spoken short in natural British English, target ${TARGET_SCRIPT_WORDS} words, minimum ${MIN_SCRIPT_WORDS} words",
   "scenes": [
     {
       "mediaSource": "specific AI image/video prompt for this scene, faceless, premium editorial, dark technology palette",
@@ -135,7 +164,7 @@ Return exactly one JSON object with these keys:
   "tiktokCaption": "caption with 3 to 5 relevant hashtags, no emoji",
   "instagramCaption": "caption with 3 to 5 relevant hashtags, no emoji",
   "facebookCaption": "caption suitable for Facebook Reels, no emoji",
-  "qualityNotes": "one short note explaining why this angle should work"
+  "qualityNotes": "one short note explaining why this angle should work for the ${laneConfig.label} lane"
 }
 
 Scene rules:
@@ -148,7 +177,7 @@ Scene rules:
 - The first scene must support the hook.
 - The final scene must support the CTA or practical takeaway.
 - The combined scene scripts must contain enough spoken copy for at least 30 seconds of voiceover. Never return a thin script.
-- The main script must be at least 95 words and should land between 95 and 125 words.
+- The main script must be at least ${MIN_SCRIPT_WORDS} words and should land between ${MIN_SCRIPT_WORDS} and ${MAX_SCRIPT_WORDS} words.
 
 Output rules:
 - Keep the script specific to the source.
@@ -315,8 +344,10 @@ export function buildBlotatoVideoInputs(pack = {}) {
     highlightColor: AI_STORY_HIGHLIGHT,
     transition: AI_STORY_TRANSITION,
     aspectRatio: AI_STORY_ASPECT_RATIO,
-    animateAiImages: true,
-    trimToVoiceover: true,
+    animateAiImages: AI_STORY_ANIMATE_IMAGES,
+    trimToVoiceover: AI_STORY_TRIM_TO_VOICEOVER,
+    text_to_image_model: BLOTATO_TEXT_TO_IMAGE_MODEL,
+    image_to_video_model: BLOTATO_IMAGE_TO_VIDEO_MODEL,
   };
 }
 
@@ -363,15 +394,15 @@ function laneSpecificScriptLine(laneConfig = {}) {
   }
 }
 
-function defaultCta(value = "") {
-  return cleanText(value, 240) || "For more straight-talking artificial intelligence analysis, follow Jonathan Harris and listen to Turing's Torch AI Weekly.";
+function defaultCta(laneSlug = "", overrideCta = "") {
+  return cleanText(overrideCta, 240) || ctaForLane(laneSlug);
 }
 
 function buildDurationSafeScript({ pack = {}, article = {}, laneConfig = {}, cta = "" } = {}) {
   const title = cleanText(article.title || pack.internalTitle || "AI news update", 180);
   const summary = cleanText(article.summary || article.description || "", 900);
   const sourceSentence = firstSentence(summary);
-  const softCta = defaultCta(cta);
+  const softCta = defaultCta(laneConfig.slug, cta);
   const core = uniqueSentences([
     pack.hook || title,
     pack.angle,
@@ -427,7 +458,7 @@ function enhancePackForBlotatoDuration(pack = {}, options = {}, laneConfig = {})
   }
 
   output.qualityNotes = cleanText(
-    output.qualityNotes || `Duration-safe ${laneConfig.label || "Blotato"} pack prepared with enough spoken copy for a 30 second short.`,
+    output.qualityNotes || `Duration-safe ${laneConfig.label || "Blotato"} pack prepared with enough spoken copy for a 45-second short.`,
     500
   );
   return output;
@@ -439,13 +470,14 @@ function buildFallbackShortPack(options = {}, laneConfig) {
   const summary = cleanText(article.summary || sourceTitle, 700);
   const hook = cleanText(firstSentence(sourceTitle).replace(/[.!?]+$/g, ""), 95) || "AI news needs a practical read";
   const usefulPoint = cleanText(firstSentence(summary), 180) || sourceTitle;
+  const fallbackCta = ctaForLane(laneConfig.slug, options.cta || "");
   const script = [
     `${hook}.`,
     `The useful point is not the headline noise. It is what this means for real work, publishing and small business decisions.`,
     `${usefulPoint}.`,
     `The sensible move is to treat this as a signal, not a prophecy. Check the workflow, the risk, the cost and the human approval step before building around it.`,
     `That is where artificial intelligence becomes useful: not magic, not panic, but a tool with limits you have to manage.`,
-    `For more straight-talking artificial intelligence analysis, follow Jonathan Harris and listen to Turing's Torch AI Weekly.`,
+    fallbackCta,
   ].join(" ");
   const visualDirection = `Faceless editorial AI news short about ${sourceTitle}. Dark navy and charcoal technology palette, clean dashboard cards, subtle motion, no robot cliché.`;
   const scenes = [
@@ -462,7 +494,7 @@ function buildFallbackShortPack(options = {}, laneConfig) {
       script: `${usefulPoint}.`,
     },
     {
-      mediaSource: `${visualDirection} Closing scene with calm analysis graphics and a podcast waveform motif.`,
+      mediaSource: `${visualDirection} Closing scene with calm analysis graphics and subtle motion.`,
       script: `Treat this as a signal, not a prophecy. Check the workflow, the risk, the cost and the human approval step before building around it.`,
     },
   ];
@@ -577,7 +609,6 @@ export async function buildOrCreateShortLane(options = {}) {
     visual,
   };
 }
-
 
 export async function buildOrCreateNewsInsightShort(options = {}) {
   return buildOrCreateShortLane({ ...options, lane: "news-insight" });
