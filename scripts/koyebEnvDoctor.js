@@ -25,6 +25,7 @@ const NUMERIC_ENVS = new Set([
   "BLOTATO_FACEBOOK_ACCOUNT_ID",
   "BLOTATO_TIKTOK_ACCOUNT_ID",
   "BLOTATO_NEWS_DURATION_SECONDS",
+  "BLOTATO_VIDEO_SCENE_COUNT",
 ]);
 
 const POSITIVE_INTEGER_ENVS = new Set([
@@ -41,6 +42,7 @@ const POSITIVE_INTEGER_ENVS = new Set([
   "BLOTATO_FACEBOOK_ACCOUNT_ID",
   "BLOTATO_TIKTOK_ACCOUNT_ID",
   "BLOTATO_NEWS_DURATION_SECONDS",
+  "BLOTATO_VIDEO_SCENE_COUNT",
 ]);
 
 const BOOLEAN_ENVS = new Set([
@@ -49,6 +51,7 @@ const BOOLEAN_ENVS = new Set([
   "BLOTATO_INSTAGRAM_SHARE_TO_FEED",
   "BLOTATO_RSS_PREFER_R2",
   "ONEUP_VALIDATE_TARGET_ACCOUNTS",
+  "BLOTATO_TEMPLATE_VERIFY",
 ]);
 
 const URL_ENVS = new Set([
@@ -231,11 +234,11 @@ function validateTemplate({ key, value, line }, errors) {
     return;
   }
 
-  if (!raw.startsWith("/base/v2/")) {
+  if (raw.includes("/") && !raw.startsWith("/base/v2/")) {
     errors.push({
       line,
       key,
-      message: `${key} must use the full Blotato template path, for example ${BLOTATO_DEFAULT_TEMPLATE_PATH}`,
+      message: `${key} must be either a bare Blotato template UUID or a full /base/v2/... template path`,
     });
   }
 }
