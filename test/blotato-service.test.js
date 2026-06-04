@@ -32,6 +32,7 @@ function readJsonBody(req) {
 }
 
 const AI_STORY_TEMPLATE_PATH = "/base/v2/ai-story-video/5903fe43-514d-40ee-a060-0d6628c5f8fd/v1";
+const AI_STORY_TEMPLATE_UUID = "5903fe43-514d-40ee-a060-0d6628c5f8fd";
 const capturedChatRequests = [];
 const capturedVisualRequests = [];
 const capturedPostRequests = [];
@@ -69,7 +70,8 @@ const mockServer = http.createServer(async (req, res) => {
       assert.ok(payload.messages.some((message) => String(message.content || "").includes("Spartan and informative")));
       assert.ok(payload.messages.some((message) => String(message.content || "").includes("Instagram must have no more than 5 hashtags")));
       assert.ok(payload.messages.some((message) => String(message.content || "").includes("Target duration: 45 seconds minimum")));
-      assert.equal(payload.response_format, undefined);
+      assert.deepEqual(payload.response_format, { type: "json_object" });
+      assert.ok(payload.messages.some((message) => String(message.content || "").includes("Provide exactly 7 scenes")));
     }
     res.writeHead(200, { "content-type": "application/json" });
     res.end(JSON.stringify({
@@ -140,13 +142,22 @@ const mockServer = http.createServer(async (req, res) => {
   if (req.method === "POST" && url.pathname === "/v2/videos/from-templates") {
     const body = await readJsonBody(req);
     capturedVisualRequests.push(body);
-    assert.ok(["tpl-ai-video", AI_STORY_TEMPLATE_PATH].includes(body.templateId));
+    assert.ok(["tpl-ai-video", AI_STORY_TEMPLATE_PATH, AI_STORY_TEMPLATE_UUID].includes(body.templateId));
     assert.equal(body.render, true);
+    assert.equal(body.text_to_image_model, undefined);
+    assert.equal(body.image_to_video_model, undefined);
+    assert.equal(body.textToImageModel, undefined);
+    assert.equal(body.imageToVideoModel, undefined);
+    assert.equal(body.useBrandKit, undefined);
     if (body.templateId === AI_STORY_TEMPLATE_PATH) {
       assert.ok(Array.isArray(body.inputs.scenes));
       assert.ok(body.inputs.scenes.length >= 3);
       assert.equal(body.inputs.aspectRatio, "9:16");
       assert.equal(body.inputs.captionPosition, "bottom");
+    }
+    if (body.templateId === AI_STORY_TEMPLATE_UUID) {
+      assert.deepEqual(body.inputs, {});
+      assert.match(body.prompt, /Cost guard/i);
     }
     res.writeHead(201, { "content-type": "application/json" });
     res.end(JSON.stringify({ item: { id: "visual-1", status: "queueing" } }));
@@ -167,6 +178,15 @@ const mockServer = http.createServer(async (req, res) => {
     if (body.post.content.platform === "tiktok") {
       assert.ok([process.env.BLOTATO_TIKTOK_ACCOUNT_ID || "acc-tiktok", "acc-tiktok"].includes(body.post.accountId));
       assert.ok(countHashtags(body.post.content.text) <= 5);
+      if (body.post.accountId === process.env.BLOTATO_TIKTOK_ACCOUNT_ID) {
+        assert.equal(body.post.target.privacyLevel, "PUBLIC_TO_EVERYONE");
+        assert.equal(body.post.target.disabledComments, false);
+        assert.equal(body.post.target.disabledDuet, false);
+        assert.equal(body.post.target.disabledStitch, false);
+        assert.equal(body.post.target.isBrandedContent, false);
+        assert.equal(body.post.target.isYourBrand, false);
+        assert.equal(body.post.target.isAiGenerated, true);
+      }
     }
 
     if (body.post.content.platform === "instagram") {
@@ -234,6 +254,11 @@ process.env.BLOTATO_FACEBOOK_ACCOUNT_ID = "34013";
 process.env.BLOTATO_FACEBOOK_PAGE_ID = "562160556971997";
 process.env.BLOTATO_DEFAULT_CHANNELS = "instagram,youtube,tiktok,facebook";
 process.env.BLOTATO_NEWS_TEMPLATE_ID = AI_STORY_TEMPLATE_PATH;
+process.env.BLOTATO_TEMPLATE_ID_MODE = "uuid";
+process.env.BLOTATO_USE_MANUAL_TEMPLATE_INPUTS = "false";
+process.env.BLOTATO_VIDEO_SCENE_COUNT = "7";
+process.env.BLOTATO_MAX_EXPECTED_CREDITS = "70";
+process.env.BLOTATO_NEWS_JSON_RESPONSE_FORMAT = "true";
 process.env.APP_TMP_DIR = `/tmp/aims-blotato-test-${Date.now()}`;
 
 const { app } = await import(`../server.js?blotato-suite=${Date.now()}`);
@@ -262,6 +287,11 @@ test.afterEach(() => {
   process.env.BLOTATO_FACEBOOK_PAGE_ID = "562160556971997";
   process.env.BLOTATO_DEFAULT_CHANNELS = "instagram,youtube,tiktok,facebook";
   process.env.BLOTATO_NEWS_TEMPLATE_ID = AI_STORY_TEMPLATE_PATH;
+  process.env.BLOTATO_TEMPLATE_ID_MODE = "uuid";
+  process.env.BLOTATO_USE_MANUAL_TEMPLATE_INPUTS = "false";
+  process.env.BLOTATO_VIDEO_SCENE_COUNT = "7";
+  process.env.BLOTATO_MAX_EXPECTED_CREDITS = "70";
+  process.env.BLOTATO_NEWS_JSON_RESPONSE_FORMAT = "true";
   process.env.OPENROUTER_API_BASE = mockBase;
   process.env.OPENROUTER_BASE_URL = mockBase;
 });
@@ -432,7 +462,8 @@ test("Blotato publish-now endpoint is public and runs the RSS-to-all configured 
     jobStatus.body.job.result.publishes.map((item) => item.platform),
     ["instagram", "youtube", "tiktok", "facebook"]
   );
-  assert.equal(jobStatus.body.job.result.templateId, AI_STORY_TEMPLATE_PATH);
+  assert.equal(jobStatus.body.job.result.templateId, AI_STORY_TEMPLATE_UUID);
+  assert.equal(jobStatus.body.job.result.video.creditBudget.expectedCredits <= 70, true);
   assert.ok(jobStatus.body.job.result.video.visualInputs.scenes.length >= 3);
   const instagramPost = capturedPostRequests.filter((item) => item.post.content.platform === "instagram").at(-1);
   assert.ok(instagramPost);
@@ -441,6 +472,8 @@ test("Blotato publish-now endpoint is public and runs the RSS-to-all configured 
   assert.ok(tiktokPost);
   assert.equal(tiktokPost.post.accountId, "44263");
   assert.ok(countHashtags(tiktokPost.post.content.text) <= 5);
+  assert.equal(tiktokPost.post.target.privacyLevel, "PUBLIC_TO_EVERYONE");
+  assert.equal(tiktokPost.post.target.isAiGenerated, true);
   const facebookPost = capturedPostRequests.filter((item) => item.post.content.platform === "facebook").at(-1);
   assert.ok(facebookPost);
   assert.equal(facebookPost.post.accountId, "34013");
