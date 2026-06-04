@@ -44,7 +44,14 @@ const MODEL_CREDIT_HINTS = Object.freeze({
 });
 
 const TEMPLATE_LIST_FIELDS = "id,name,description,inputs";
-const DEFAULT_TEMPLATE_SEARCH = "AI Story Video";
+const DEFAULT_TEMPLATE_SEARCH = "AI Video with AI Voice";
+const FALLBACK_TEMPLATE_SEARCHES = Object.freeze([
+  "AI Video with AI Voice",
+  "AI Story Video",
+  "AI Voice",
+  "Story Video",
+  "AI Video",
+]);
 
 function trim(value, fallback = "") {
   if (value === undefined || value === null) return fallback;
@@ -92,12 +99,59 @@ function templateDashboardUrl(id = "") {
   return cleaned ? `https://my.blotato.com/videos/${encodeURIComponent(cleaned)}` : "";
 }
 
+function looksLikeTemplateItem(item = {}) {
+  if (!item || typeof item !== "object" || Array.isArray(item)) return false;
+  const id = item.id || item.templateId || item.uuid || item.path || item.slug;
+  if (!id) return false;
+  return Boolean(item.name || item.title || item.description || item.inputs || item.category || item.type);
+}
+
+function collectTemplateItems(payload, depth = 0) {
+  if (!payload || depth > 6) return [];
+  if (Array.isArray(payload)) {
+    return payload.flatMap((entry) => collectTemplateItems(entry, depth + 1));
+  }
+  if (typeof payload !== "object") return [];
+  if (looksLikeTemplateItem(payload)) return [payload];
+
+  const directContainers = [payload.items, payload.data, payload.templates, payload.item, payload.results].filter(Boolean);
+  const found = directContainers.flatMap((entry) => collectTemplateItems(entry, depth + 1));
+  if (found.length) return found;
+
+  return Object.entries(payload)
+    .filter(([key]) => !["inputs", "schema", "properties", "examples"].includes(key))
+    .flatMap(([, value]) => collectTemplateItems(value, depth + 1));
+}
+
 function asArrayFromTemplateResponse(payload = {}) {
-  if (Array.isArray(payload)) return payload;
-  if (Array.isArray(payload.items)) return payload.items;
-  if (Array.isArray(payload.data)) return payload.data;
-  if (Array.isArray(payload.templates)) return payload.templates;
-  return [];
+  const seen = new Set();
+  return collectTemplateItems(payload).filter((item) => {
+    const id = templateItemId(item);
+    if (!id || seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+}
+
+function splitSearchTerms(value = "") {
+  return String(value || "")
+    .split(/[|,\n]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function uniqueSearchTerms(...groups) {
+  const seen = new Set();
+  const terms = [];
+  for (const group of groups) {
+    for (const term of Array.isArray(group) ? group : splitSearchTerms(group)) {
+      const key = term.toLowerCase();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      terms.push(term);
+    }
+  }
+  return terms;
 }
 
 function templateItemId(item = {}) {
@@ -137,11 +191,26 @@ async function fetchTemplateItems(query = {}, apiKey) {
   return asArrayFromTemplateResponse(payload);
 }
 
+function pickPreferredTemplate(items = [], { requested = "", searchTerms = [] } = {}) {
+  const requestedUuid = extractUuid(requested);
+  const wantedLabels = uniqueSearchTerms(searchTerms, FALLBACK_TEMPLATE_SEARCHES).map(normaliseSimple).filter(Boolean);
+  return (
+    items.find((item) => templateMatchesRequested(item, requested)) ||
+    items.find((item) => requestedUuid && extractUuid(templateItemId(item)).toLowerCase() === requestedUuid.toLowerCase()) ||
+    items.find((item) => requestedUuid && normaliseSimple(templateLabel(item)).includes(requestedUuid.toLowerCase())) ||
+    items.find((item) => wantedLabels.some((term) => normaliseSimple(templateLabel(item)).includes(term))) ||
+    items.find((item) => normaliseSimple(templateLabel(item)).includes("ai") && normaliseSimple(templateLabel(item)).includes("voice")) ||
+    items.find((item) => normaliseSimple(templateLabel(item)).includes("story") && normaliseSimple(templateLabel(item)).includes("video")) ||
+    items[0]
+  );
+}
+
 async function resolveVideoTemplateId({ requestedTemplateId, apiKey }) {
   const requested = trim(requestedTemplateId, normaliseTemplateId(DEFAULT_AI_STORY_TEMPLATE_PATH));
   const verify = parseBoolean(process.env.BLOTATO_TEMPLATE_VERIFY, true);
   const autoDiscovery = parseBoolean(process.env.BLOTATO_TEMPLATE_AUTO_DISCOVERY, true);
-  const search = trim(process.env.BLOTATO_NEWS_TEMPLATE_SEARCH || process.env.BLOTATO_TEMPLATE_SEARCH, DEFAULT_TEMPLATE_SEARCH);
+  const configuredSearch = process.env.BLOTATO_NEWS_TEMPLATE_SEARCH || process.env.BLOTATO_TEMPLATE_SEARCH || DEFAULT_TEMPLATE_SEARCH;
+  const searchTerms = uniqueSearchTerms(configuredSearch, DEFAULT_TEMPLATE_SEARCH, FALLBACK_TEMPLATE_SEARCHES);
 
   if (!verify && !autoDiscovery) return { templateId: requested, verified: false, source: "configured-unverified" };
 
@@ -160,49 +229,66 @@ async function resolveVideoTemplateId({ requestedTemplateId, apiKey }) {
   }
 
   if (!autoDiscovery) {
-    const err = new Error(`Configured Blotato template was not found: ${requested}`);
-    err.statusCode = 422;
-    err.templatesChecked = summariseTemplates(idItems);
-    throw err;
+    warn("blotato.template.configured_not_listed", {
+      requestedTemplateId: requested,
+      templatesChecked: summariseTemplates(idItems),
+    });
+    return { templateId: requested, verified: false, source: "configured-not-listed", templatesChecked: summariseTemplates(idItems) };
   }
 
-  let searchItems = [];
+  const searchItems = [];
+  const searchErrors = [];
+  for (const search of searchTerms) {
+    try {
+      const items = await fetchTemplateItems({ search }, apiKey);
+      searchItems.push(...items);
+      const preferred = pickPreferredTemplate(items, { requested, searchTerms: [search] });
+      const resolvedId = templateItemId(preferred);
+      if (resolvedId) {
+        warn("blotato.template.auto_discovered", {
+          requestedTemplateId: requested,
+          resolvedTemplateId: resolvedId,
+          search,
+          templateName: trim(preferred.name || preferred.title),
+        });
+        return { templateId: resolvedId, verified: true, source: "auto-discovered", template: preferred, requestedTemplateId: requested, search, searchTerms };
+      }
+    } catch (error) {
+      searchErrors.push({ search, error: error?.message || String(error), statusCode: error?.statusCode || error?.status || null });
+    }
+  }
+
   try {
-    searchItems = await fetchTemplateItems({ search }, apiKey);
+    const allItems = await fetchTemplateItems({}, apiKey);
+    searchItems.push(...allItems);
+    const preferred = pickPreferredTemplate(allItems, { requested, searchTerms });
+    const resolvedId = templateItemId(preferred);
+    if (resolvedId) {
+      warn("blotato.template.auto_discovered", {
+        requestedTemplateId: requested,
+        resolvedTemplateId: resolvedId,
+        search: "<all-templates>",
+        templateName: trim(preferred.name || preferred.title),
+      });
+      return { templateId: resolvedId, verified: true, source: "auto-discovered-all", template: preferred, requestedTemplateId: requested, search: "<all-templates>", searchTerms };
+    }
   } catch (error) {
-    const err = new Error(`Configured Blotato template was not found and template search failed: ${error?.message || String(error)}`);
-    err.statusCode = error?.statusCode || 502;
-    err.requestedTemplateId = requested;
-    err.templateSearch = search;
-    throw err;
+    searchErrors.push({ search: "<all-templates>", error: error?.message || String(error), statusCode: error?.statusCode || error?.status || null });
   }
 
-  const requestedUuid = extractUuid(requested);
-  const searchNormalised = normaliseSimple(search);
-  const preferred =
-    searchItems.find((item) => templateMatchesRequested(item, requested)) ||
-    searchItems.find((item) => requestedUuid && normaliseSimple(templateLabel(item)).includes(requestedUuid.toLowerCase())) ||
-    searchItems.find((item) => searchNormalised && normaliseSimple(templateLabel(item)).includes(searchNormalised)) ||
-    searchItems[0];
-
-  const resolvedId = templateItemId(preferred);
-  if (!resolvedId) {
-    const err = new Error(`No usable Blotato template found for search '${search}'. Update BLOTATO_NEWS_TEMPLATE_ID from /blotato/templates.`);
-    err.statusCode = 422;
-    err.requestedTemplateId = requested;
-    err.templateSearch = search;
-    err.templatesChecked = summariseTemplates(searchItems);
-    throw err;
-  }
-
-  warn("blotato.template.auto_discovered", {
-    requestedTemplateId: requested,
-    resolvedTemplateId: resolvedId,
-    search,
-    templateName: trim(preferred.name || preferred.title),
-  });
-
-  return { templateId: resolvedId, verified: true, source: "auto-discovered", template: preferred, requestedTemplateId: requested, search };
+  const checked = summariseTemplates(searchItems);
+  const searchSummary = searchTerms.join(" | ");
+  const err = new Error(
+    checked.length
+      ? `No usable Blotato template found. Tried '${searchSummary}'. Candidates: ${checked.map((item) => `${item.name || "unnamed"} (${item.id})`).join("; ")}.`
+      : `No usable Blotato template found. Tried '${searchSummary}' and an unfiltered template list. Set BLOTATO_NEWS_TEMPLATE_ID to a UUID from GET /blotato/templates.`
+  );
+  err.statusCode = 422;
+  err.requestedTemplateId = requested;
+  err.templateSearch = searchSummary;
+  err.templateSearchErrors = searchErrors;
+  err.templatesChecked = checked;
+  throw err;
 }
 
 function creditLookup(kind, label, fallback) {
