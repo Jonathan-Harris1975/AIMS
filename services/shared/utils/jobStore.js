@@ -196,6 +196,10 @@ export function failJob(type, sessionId, err, metadata = {}) {
   });
 }
 
+export function updateJob(type, sessionId, metadata = {}) {
+  return upsertJob(type, sessionId, metadata);
+}
+
 export async function refreshJobStoreFromState() {
   const persisted = await readJsonStateFresh(STATE_FILE, { jobs: [] });
   mergePersistedJobs(persistedJobsFrom(persisted));
