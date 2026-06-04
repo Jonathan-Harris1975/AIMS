@@ -1,4 +1,0 @@
-services/blotato/utils/autoPublishService.js
-services/blotato/utils/newsShortsService.js
-test/blotato-service.test.js
-CHANGES.md
