@@ -573,9 +573,20 @@ export async function buildOrCreateShortLane(options = {}) {
   const pack = await buildShortLanePack({ ...options, lane: laneConfig.slug });
   const visualPrompt = buildBlotatoVisualPrompt(pack);
   const visualInputs = buildBlotatoVideoInputs(pack);
+  // Always build visualInputs from the pack so model fields are always set.
+  // Shallow-merge any explicit caller inputs overrides, but never let an empty
+  // default object {} (from the schema) discard the model selection fields.
+  const callerInputs = options.inputs && Object.keys(options.inputs).length > 0 ? options.inputs : {};
+  const mergedInputs = {
+    ...visualInputs,
+    ...callerInputs,
+    // Model fields are env-controlled — never allow caller to accidentally blank them.
+    text_to_image_model: visualInputs.text_to_image_model,
+    image_to_video_model: visualInputs.image_to_video_model,
+  };
   const visualRequest = {
     templateId: options.templateId,
-    inputs: options.inputs || visualInputs,
+    inputs: mergedInputs,
     prompt: visualPrompt,
     render: options.render ?? true,
     isDraft: options.isDraft ?? false,
