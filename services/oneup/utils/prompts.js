@@ -65,11 +65,12 @@ Pick a real sector and one concrete task where AI helps: triage, forecasting, do
 Keep the tone modest and useful.
 Do not oversell, futurise, or make broad industry claims.
 Content target: 45 to 75 words.`,
-    friday: `Write a Friday build-in-public post.
+    friday: `Write a Friday operator note about the discipline of improving practical AI systems.
 If verified build context is supplied below, use only that context for any first-person detail.
-If no verified build context is supplied, write a neutral build note about the discipline of improving systems without claiming a specific bug, metric, deployment, decision, or private work item.
+If no verified build context is supplied, write a neutral systems note without using I, I've, I'm, my, we, we've, we're, our, or claiming a specific bug, metric, deployment, decision, endpoint, workflow change, or private work item.
 Do not invent first-person specifics.
 Keep it honest and grounded.
+Do not use the phrase "build in public" or "building in public".
 Do not use vague phrases such as "exciting things", "big moves", "another week, another", "small win", or "game-changing".
 Content target: 35 to 65 words.`,
     saturday: `Write a Saturday AI ethics or policy post in plain English.

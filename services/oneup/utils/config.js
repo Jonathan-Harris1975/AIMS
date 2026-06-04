@@ -107,12 +107,12 @@ export const LANE_CONFIG = {
   },
   friday: {
     key: "friday",
-    label: "Friday Build In Public",
-    promptTheme: "Friday Build In Public",
+    label: "Friday Operator Notes",
+    promptTheme: "Friday Operator Notes",
     publishTime: normaliseTime(process.env.ONEUP_FRIDAY_TIME, "11:20"),
     imageUrl: trimString(process.env.ONEUP_FRIDAY_IMAGE_URL, `${DAILY_IMAGE_BASE}/Friday`),
-    hashtags: ["#BuildInPublic", "#PracticalAI", "#AIAutomation"],
-    audienceIntent: "build-in-public-operator-note",
+    hashtags: ["#AIOperations", "#PracticalAI", "#AIAutomation"],
+    audienceIntent: "operator-note-ai-systems",
   },
   saturday: {
     key: "saturday",

@@ -744,7 +744,7 @@ export async function buildAndScheduleDailyLane(laneKey, options = {}) {
       label: `${lane.key} daily post`,
       normalise: (raw) => normaliseDailyOutput(raw, lane),
       maxTokens: ONEUP_DAILY_MAX_TOKENS,
-      temperature: laneKey === "friday" ? 0.8 : 0.65,
+      temperature: laneKey === "friday" ? 0.35 : 0.65,
     });
     if (!generated.content) {
       const err = new Error(`The ${lane.label} generator returned empty content.`);
