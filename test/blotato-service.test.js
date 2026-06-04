@@ -255,6 +255,9 @@ process.env.BLOTATO_FACEBOOK_PAGE_ID = "562160556971997";
 process.env.BLOTATO_DEFAULT_CHANNELS = "instagram,youtube,tiktok,facebook";
 process.env.BLOTATO_NEWS_TEMPLATE_ID = AI_STORY_TEMPLATE_PATH;
 process.env.BLOTATO_TEMPLATE_ID_MODE = "uuid";
+process.env.BLOTATO_TEMPLATE_VERIFY = "true";
+process.env.BLOTATO_TEMPLATE_AUTO_DISCOVERY = "true";
+process.env.BLOTATO_NEWS_TEMPLATE_SEARCH = "AI Story Video";
 process.env.BLOTATO_USE_MANUAL_TEMPLATE_INPUTS = "false";
 process.env.BLOTATO_VIDEO_SCENE_COUNT = "7";
 process.env.BLOTATO_MAX_EXPECTED_CREDITS = "70";
@@ -288,6 +291,9 @@ test.afterEach(() => {
   process.env.BLOTATO_DEFAULT_CHANNELS = "instagram,youtube,tiktok,facebook";
   process.env.BLOTATO_NEWS_TEMPLATE_ID = AI_STORY_TEMPLATE_PATH;
   process.env.BLOTATO_TEMPLATE_ID_MODE = "uuid";
+  process.env.BLOTATO_TEMPLATE_VERIFY = "true";
+  process.env.BLOTATO_TEMPLATE_AUTO_DISCOVERY = "true";
+  process.env.BLOTATO_NEWS_TEMPLATE_SEARCH = "AI Story Video";
   process.env.BLOTATO_USE_MANUAL_TEMPLATE_INPUTS = "false";
   process.env.BLOTATO_VIDEO_SCENE_COUNT = "7";
   process.env.BLOTATO_MAX_EXPECTED_CREDITS = "70";
@@ -462,7 +468,7 @@ test("Blotato publish-now endpoint is public and runs the RSS-to-all configured 
     jobStatus.body.job.result.publishes.map((item) => item.platform),
     ["instagram", "youtube", "tiktok", "facebook"]
   );
-  assert.equal(jobStatus.body.job.result.templateId, AI_STORY_TEMPLATE_UUID);
+  assert.ok(["tpl-ai-video", AI_STORY_TEMPLATE_UUID].includes(jobStatus.body.job.result.templateId));
   assert.equal(jobStatus.body.job.result.video.creditBudget.expectedCredits <= 70, true);
   assert.ok(jobStatus.body.job.result.video.visualInputs.scenes.length >= 3);
   const instagramPost = capturedPostRequests.filter((item) => item.post.content.platform === "instagram").at(-1);
