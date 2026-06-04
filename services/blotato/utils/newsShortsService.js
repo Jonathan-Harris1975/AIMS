@@ -18,13 +18,12 @@ const AI_STORY_ASPECT_RATIO = process.env.BLOTATO_BRAND_ASPECT_RATIO || "9:16";
 const AI_STORY_ANIMATE_IMAGES = process.env.BLOTATO_BRAND_ANIMATE_IMAGES !== "false";
 const AI_STORY_TRIM_TO_VOICEOVER = process.env.BLOTATO_BRAND_TRIM_TO_VOICEOVER !== "false";
 
-// Media generation models — set via env to control cost and quality without code deploys.
-const BLOTATO_TEXT_TO_IMAGE_MODEL = process.env.BLOTATO_TEXT_TO_IMAGE_MODEL || "replicate/flux-schnell";
-const BLOTATO_IMAGE_TO_VIDEO_MODEL = process.env.BLOTATO_IMAGE_TO_VIDEO_MODEL || "fal-ai/framepack";
-
-const MAX_SCENES = 5;
+// Media generation cost preference labels. Current Blotato template requests are steered through prompt + template settings, not unsupported top-level model fields.
+const MAX_SCENES = Math.max(4, Math.min(9, Number(process.env.BLOTATO_VIDEO_SCENE_COUNT || 7)));
 const MIN_DURATION_SECONDS = 30;
 const DEFAULT_DURATION_SECONDS = 45;
+const LOW_COST_IMAGE_MODEL_LABEL = process.env.BLOTATO_LOW_COST_IMAGE_MODEL_LABEL || "flux schnell";
+const LOW_COST_VIDEO_MODEL_LABEL = process.env.BLOTATO_LOW_COST_VIDEO_MODEL_LABEL || "framepack";
 
 // The Thursday (reality-check) lane includes a soft podcast plug. All other lanes use the
 // standard follow CTA. The podcast plug avoids "tomorrow" so the video stays evergreen if
@@ -168,10 +167,13 @@ Return exactly one JSON object with these keys:
 }
 
 Scene rules:
-- Provide exactly 5 scenes. If the source is thin, use a clearer practical explainer instead of making the script shorter.
+- Provide exactly ${MAX_SCENES} scenes. If the source is thin, use a clearer practical explainer instead of making the script shorter.
 - Each scene must include a mediaSource and script.
 - Each mediaSource must describe a specific visual, not a generic instruction.
 - Use faceless editorial visuals: code, interfaces, dashboards, workflow cards, newsroom graphics, data maps, product screenshots represented abstractly.
+- Cost guard: select the lowest-cost generation settings available, specifically ${LOW_COST_IMAGE_MODEL_LABEL} for images and ${LOW_COST_VIDEO_MODEL_LABEL} for video if Blotato offers those choices.
+- Do not use premium video models such as Kling, Luma, Runway, Veo, Minimax, or any other high-credit video option.
+- Do not generate extra unused images, duplicate scenes, B-roll packs, or alternate takes.
 - Avoid gimmicky robot clichés.
 - Avoid text-heavy visuals.
 - The first scene must support the hook.
@@ -331,6 +333,7 @@ export function buildBlotatoVisualPrompt(pack = {}) {
     `Editorial angle: ${pack.angle}`,
     `Script: ${pack.script}`,
     `Visual direction: ${pack.visualDirection}`,
+    `Cost guard: use the cheapest suitable generation settings available, preferably ${LOW_COST_IMAGE_MODEL_LABEL} for images and ${LOW_COST_VIDEO_MODEL_LABEL} for video. Do not use premium video models.`,
     `Style: premium editorial, dark technology palette, clean captions, no gimmicky robot clichés, British AI news commentary tone.`,
   ].join("\n");
 }
@@ -346,8 +349,6 @@ export function buildBlotatoVideoInputs(pack = {}) {
     aspectRatio: AI_STORY_ASPECT_RATIO,
     animateAiImages: AI_STORY_ANIMATE_IMAGES,
     trimToVoiceover: AI_STORY_TRIM_TO_VOICEOVER,
-    text_to_image_model: BLOTATO_TEXT_TO_IMAGE_MODEL,
-    image_to_video_model: BLOTATO_IMAGE_TO_VIDEO_MODEL,
   };
 }
 
@@ -528,7 +529,7 @@ async function requestNewsShortJson(prompt, { repairRaw } = {}) {
         { role: "user", content: prompt.user },
       ];
 
-  const useJsonResponseFormat = parseBoolean(process.env.BLOTATO_NEWS_JSON_RESPONSE_FORMAT, false);
+  const useJsonResponseFormat = parseBoolean(process.env.BLOTATO_NEWS_JSON_RESPONSE_FORMAT, true);
   return resilientRequest("blotatoNewsShort", {
     sessionId: `blotato-news-${Date.now()}`,
     messages,
@@ -573,16 +574,13 @@ export async function buildOrCreateShortLane(options = {}) {
   const pack = await buildShortLanePack({ ...options, lane: laneConfig.slug });
   const visualPrompt = buildBlotatoVisualPrompt(pack);
   const visualInputs = buildBlotatoVideoInputs(pack);
-  // Always build visualInputs from the pack so model fields are always set.
-  // Shallow-merge any explicit caller inputs overrides, but never let an empty
-  // default object {} (from the schema) discard the model selection fields.
+  // Always build visualInputs from the pack. Keep model choice out of the inputs
+  // object unless Blotato exposes it in the template schema; unsupported fields
+  // are easy for the API to ignore, which creates silent credit burn.
   const callerInputs = options.inputs && Object.keys(options.inputs).length > 0 ? options.inputs : {};
   const mergedInputs = {
     ...visualInputs,
     ...callerInputs,
-    // Model fields are env-controlled — never allow caller to accidentally blank them.
-    text_to_image_model: visualInputs.text_to_image_model,
-    image_to_video_model: visualInputs.image_to_video_model,
   };
   const visualRequest = {
     templateId: options.templateId,

@@ -4,6 +4,7 @@ import {
   failJob,
   getPublicJobFresh,
   toPublicJob,
+  updateJob,
 } from "../../shared/utils/jobStore.js";
 import {
   createVisual,
@@ -28,6 +29,18 @@ const VIDEO_DONE_STATUSES = new Set(["done", "completed", "complete", "success",
 const VIDEO_FAILED_STATUSES = new Set(["creation-from-template-failed", "failed", "error", "cancelled", "canceled", "timed-out", "timeout", "insufficient-credits", "insufficient_credits", "no-credits", "payment-required", "payment_required", "billing-error"]);
 const POST_DONE_STATUSES = new Set(["published", "completed", "complete", "success"]);
 const POST_FAILED_STATUSES = new Set(["failed", "error", "insufficient-credits", "insufficient_credits", "payment-required", "payment_required"]);
+const DEFAULT_AI_STORY_TEMPLATE_UUID = "5903fe43-514d-40ee-a060-0d6628c5f8fd";
+const MODEL_CREDIT_HINTS = Object.freeze({
+  image: {
+    "flux schnell": 1,
+    "flux-schnell": 1,
+    "replicate/flux-schnell": 1,
+  },
+  video: {
+    framepack: 55,
+    "fal-ai/framepack": 55,
+  },
+});
 
 function trim(value, fallback = "") {
   if (value === undefined || value === null) return fallback;
@@ -54,9 +67,42 @@ function positiveIntEnv(name, fallback, max = Number.POSITIVE_INFINITY) {
   return Math.min(Math.floor(parsed), max);
 }
 
+function extractUuid(value = "") {
+  const match = String(value || "").match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+  return match ? match[0] : "";
+}
+
 function normaliseTemplateId(value = DEFAULT_AI_STORY_TEMPLATE_PATH) {
   const raw = trim(value, DEFAULT_AI_STORY_TEMPLATE_PATH);
-  return raw.startsWith("base/v2/") ? `/${raw}` : raw;
+  const mode = trim(process.env.BLOTATO_TEMPLATE_ID_MODE, "uuid").toLowerCase();
+  if (mode === "path") return raw.startsWith("base/v2/") ? `/${raw}` : raw;
+  return extractUuid(raw) || DEFAULT_AI_STORY_TEMPLATE_UUID;
+}
+
+function templateDashboardUrl(id = "") {
+  const cleaned = trim(id);
+  return cleaned ? `https://my.blotato.com/videos/${encodeURIComponent(cleaned)}` : "";
+}
+
+function creditLookup(kind, label, fallback) {
+  const key = String(label || "").trim().toLowerCase();
+  return MODEL_CREDIT_HINTS[kind]?.[key] ?? fallback;
+}
+
+function expectedCreditBudget(pack = {}) {
+  const imageModel = trim(process.env.BLOTATO_LOW_COST_IMAGE_MODEL_LABEL || process.env.BLOTATO_TEXT_TO_IMAGE_MODEL, "flux schnell");
+  const videoModel = trim(process.env.BLOTATO_LOW_COST_VIDEO_MODEL_LABEL || process.env.BLOTATO_IMAGE_TO_VIDEO_MODEL, "framepack");
+  const sceneCount = Array.isArray(pack.scenes) ? pack.scenes.length : 0;
+  const imageCredits = creditLookup("image", imageModel, 1);
+  const videoCredits = creditLookup("video", videoModel, 55);
+  return {
+    sceneCount,
+    imageModel,
+    videoModel,
+    imageCreditsEach: imageCredits,
+    videoCredits,
+    expectedCredits: sceneCount * imageCredits + videoCredits,
+  };
 }
 
 function slugPart(value = "") {
@@ -157,12 +203,30 @@ async function pollUntil({ label, run, isDone, isDonePayload, isFailed, extractS
   throw err;
 }
 
-async function createAndWaitForVideo({ templateId, pack, apiKey }) {
+async function createAndWaitForVideo({ templateId, pack, apiKey, onVisualCreated }) {
   const visualPrompt = buildBlotatoVisualPrompt(pack);
   const visualInputs = buildBlotatoVideoInputs(pack);
+  const creditBudget = expectedCreditBudget(pack);
+  const maxExpectedCredits = positiveIntEnv("BLOTATO_MAX_EXPECTED_CREDITS", 70, 10_000);
+  if (creditBudget.expectedCredits > maxExpectedCredits) {
+    const err = new Error(`Blotato expected credit budget too high: ${creditBudget.expectedCredits}/${maxExpectedCredits}`);
+    err.statusCode = 422;
+    err.creditBudget = creditBudget;
+    throw err;
+  }
+
+  info("blotato.video.create.request", {
+    templateId,
+    sceneCount: creditBudget.sceneCount,
+    expectedCredits: creditBudget.expectedCredits,
+    imageModel: creditBudget.imageModel,
+    videoModel: creditBudget.videoModel,
+  });
+
+  const useManualInputs = parseBoolean(process.env.BLOTATO_USE_MANUAL_TEMPLATE_INPUTS, false);
   const visual = await createVisual({
     templateId,
-    inputs: visualInputs,
+    inputs: useManualInputs ? visualInputs : {},
     prompt: visualPrompt,
     render: true,
     isDraft: false,
@@ -176,7 +240,9 @@ async function createAndWaitForVideo({ templateId, pack, apiKey }) {
     throw err;
   }
 
-  const maxAttempts = positiveIntEnv("BLOTATO_VIDEO_POLL_ATTEMPTS", 480, 1440);
+  onVisualCreated?.({ visualId, visual, visualInputs, visualPrompt, creditBudget, dashboardUrl: templateDashboardUrl(visualId) });
+
+  const maxAttempts = positiveIntEnv("BLOTATO_VIDEO_POLL_ATTEMPTS", 720, 2880);
   const intervalMs = positiveIntEnv("BLOTATO_VIDEO_POLL_INTERVAL_MS", 5000, 60_000);
   const finalGraceMs = positiveIntEnv("BLOTATO_VIDEO_FINAL_GRACE_MS", 15_000, 180_000);
   const completed = await pollUntil({
@@ -200,7 +266,7 @@ async function createAndWaitForVideo({ templateId, pack, apiKey }) {
     throw err;
   }
 
-  return { visualId, visual, completed, mediaUrl, visualPrompt, visualInputs };
+  return { visualId, visual, completed, mediaUrl, visualPrompt, visualInputs, creditBudget, dashboardUrl: templateDashboardUrl(visualId) };
 }
 
 async function resolveAccountId(platform, apiKey) {
@@ -238,6 +304,19 @@ function buildTarget(platform, pack) {
       shouldNotifySubscribers: parseBoolean(process.env.BLOTATO_YOUTUBE_NOTIFY_SUBSCRIBERS, false),
       isMadeForKids: false,
       containsSyntheticMedia: true,
+    };
+  }
+
+  if (platform === "tiktok") {
+    return {
+      targetType: "tiktok",
+      privacyLevel: trim(process.env.BLOTATO_TIKTOK_PRIVACY_LEVEL, "PUBLIC_TO_EVERYONE"),
+      disabledComments: parseBoolean(process.env.BLOTATO_TIKTOK_DISABLED_COMMENTS, false),
+      disabledDuet: parseBoolean(process.env.BLOTATO_TIKTOK_DISABLED_DUET, false),
+      disabledStitch: parseBoolean(process.env.BLOTATO_TIKTOK_DISABLED_STITCH, false),
+      isBrandedContent: parseBoolean(process.env.BLOTATO_TIKTOK_IS_BRANDED_CONTENT, false),
+      isYourBrand: parseBoolean(process.env.BLOTATO_TIKTOK_IS_YOUR_BRAND, false),
+      isAiGenerated: parseBoolean(process.env.BLOTATO_TIKTOK_IS_AI_GENERATED, true),
     };
   }
 
@@ -338,6 +417,7 @@ function buildDefaults(laneSlug = DEFAULT_BLOTATO_SHORT_LANE) {
     channels: getDefaultPlatforms(),
     templateId: normaliseTemplateId(process.env.BLOTATO_NEWS_TEMPLATE_ID || DEFAULT_AI_STORY_TEMPLATE_PATH),
     templatePath: trim(process.env.BLOTATO_NEWS_TEMPLATE_ID || DEFAULT_AI_STORY_TEMPLATE_PATH, DEFAULT_AI_STORY_TEMPLATE_PATH),
+    templateIdMode: trim(process.env.BLOTATO_TEMPLATE_ID_MODE, "uuid"),
     pickMode: trim(process.env.BLOTATO_RSS_PICK_MODE, "latest"),
     minDurationSeconds: 30,
   };
@@ -382,7 +462,28 @@ async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOT
     });
     if (!blotatoShortGate.ok) throw buildBlotatoGateError(blotatoShortGate);
 
-    const video = await createAndWaitForVideo({ templateId, pack, apiKey });
+    const video = await createAndWaitForVideo({
+      templateId,
+      pack,
+      apiKey,
+      onVisualCreated: (visualMeta) => {
+        updateJob(lane.jobType, sessionId, {
+          phase: "video-rendering",
+          videoId: visualMeta.visualId,
+          videoDashboardUrl: visualMeta.dashboardUrl,
+          creditBudget: visualMeta.creditBudget,
+          templateId,
+        });
+      },
+    });
+    updateJob(lane.jobType, sessionId, {
+      phase: "publishing",
+      videoId: video.visualId,
+      videoDashboardUrl: video.dashboardUrl,
+      creditBudget: video.creditBudget,
+      mediaUrl: video.mediaUrl,
+    });
+
     const settledPublishes = await Promise.allSettled(
       platforms.map((platform) => publishAndWait({ platform, pack, mediaUrl: video.mediaUrl, apiKey }))
     );
