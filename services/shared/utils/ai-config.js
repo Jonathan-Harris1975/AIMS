@@ -148,7 +148,7 @@ export const aiConfig = {
     oneupEbook: routeChain(["fast", "standard", "fallback"], ["chatgpt", "google", "deepseek"]),
     // Blotato script quality is production-critical. Do not fall back to the ultra-cheap fast lane by default;
     // weak scripts cost more downstream when Blotato grades or publishes a poor video.
-    blotatoNewsShort: routeChain(["blotatoScript", "standard", "highQuality", "summary"], ["chatgptMini5", "anthropic46", "deepseekV4Pro"]),
+    blotatoNewsShort: routeChain(["blotatoScript", "standard", "highQuality"], ["chatgptMini5", "anthropic46", "deepseekV4Pro"]),
   },
 
   commonParams: { temperature: 0.65, top_p: 0.9, timeout: 90000 },
