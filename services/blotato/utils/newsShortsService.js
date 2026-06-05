@@ -39,7 +39,10 @@ const BLOTATO_NEWS_SHORT_JSON_SCHEMA = Object.freeze({
       script: { type: "string" },
       scenes: {
         type: "array",
-        minItems: 3,
+        // Keep the OpenRouter schema broadly provider-compatible. Some providers
+        // reject array minItems above 1; the stricter scene count is enforced
+        // locally by normalise/enhance/gate after the model returns JSON.
+        minItems: 1,
         items: {
           type: "object",
           additionalProperties: false,

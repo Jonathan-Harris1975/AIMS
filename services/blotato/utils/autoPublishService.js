@@ -101,6 +101,23 @@ function normaliseTemplateIdForApi(value = DEFAULT_AI_STORY_TEMPLATE_PATH) {
   return normaliseTemplateId(value);
 }
 
+function uniqueTemplateIds(...groups) {
+  const seen = new Set();
+  const ids = [];
+  for (const group of groups) {
+    const values = Array.isArray(group) ? group : [group];
+    for (const value of values) {
+      const cleaned = trim(value);
+      if (!cleaned) continue;
+      const key = cleaned.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      ids.push(cleaned);
+    }
+  }
+  return ids;
+}
+
 function templateDashboardUrl(id = "") {
   const cleaned = trim(id);
   return cleaned ? `https://my.blotato.com/videos/${encodeURIComponent(cleaned)}` : "";
@@ -231,8 +248,16 @@ async function resolveVideoTemplateId({ requestedTemplateId, apiKey }) {
 
   const directMatch = idItems.find((item) => templateMatchesRequested(item, requested));
   if (directMatch) {
-    const id = normaliseTemplateIdForApi(templateItemId(directMatch) || requested);
-    return { templateId: id, verified: true, source: "configured-id", template: directMatch };
+    const rawId = templateItemId(directMatch) || requested;
+    const id = normaliseTemplateIdForApi(rawId);
+    return {
+      templateId: id,
+      rawTemplateId: rawId,
+      templateIdCandidates: uniqueTemplateIds(id, rawId, requested),
+      verified: true,
+      source: "configured-id",
+      template: directMatch,
+    };
   }
 
   if (!autoDiscovery) {
@@ -260,7 +285,17 @@ async function resolveVideoTemplateId({ requestedTemplateId, apiKey }) {
           search,
           templateName: trim(preferred.name || preferred.title),
         });
-        return { templateId: apiTemplateId, rawTemplateId: resolvedId, verified: true, source: "auto-discovered", template: preferred, requestedTemplateId: requested, search, searchTerms };
+        return {
+          templateId: apiTemplateId,
+          rawTemplateId: resolvedId,
+          templateIdCandidates: uniqueTemplateIds(apiTemplateId, resolvedId, requested, DEFAULT_AI_STORY_TEMPLATE_PATH),
+          verified: true,
+          source: "auto-discovered",
+          template: preferred,
+          requestedTemplateId: requested,
+          search,
+          searchTerms,
+        };
       }
     } catch (error) {
       searchErrors.push({ search, error: error?.message || String(error), statusCode: error?.statusCode || error?.status || null });
@@ -281,7 +316,17 @@ async function resolveVideoTemplateId({ requestedTemplateId, apiKey }) {
         search: "<all-templates>",
         templateName: trim(preferred.name || preferred.title),
       });
-      return { templateId: apiTemplateId, rawTemplateId: resolvedId, verified: true, source: "auto-discovered-all", template: preferred, requestedTemplateId: requested, search: "<all-templates>", searchTerms };
+      return {
+        templateId: apiTemplateId,
+        rawTemplateId: resolvedId,
+        templateIdCandidates: uniqueTemplateIds(apiTemplateId, resolvedId, requested, DEFAULT_AI_STORY_TEMPLATE_PATH),
+        verified: true,
+        source: "auto-discovered-all",
+        template: preferred,
+        requestedTemplateId: requested,
+        search: "<all-templates>",
+        searchTerms,
+      };
     }
   } catch (error) {
     searchErrors.push({ search: "<all-templates>", error: error?.message || String(error), statusCode: error?.statusCode || error?.status || null });
@@ -421,7 +466,7 @@ async function pollUntil({ label, run, isDone, isDonePayload, isFailed, extractS
   throw err;
 }
 
-async function createAndWaitForVideo({ templateId, pack, apiKey, onVisualCreated }) {
+async function createAndWaitForVideo({ templateId, templateIdCandidates = [], pack, apiKey, onVisualCreated }) {
   const visualPrompt = buildBlotatoVisualPrompt(pack);
   const visualInputs = buildBlotatoVideoInputs(pack);
   const creditBudget = expectedCreditBudget(pack);
@@ -445,24 +490,47 @@ async function createAndWaitForVideo({ templateId, pack, apiKey, onVisualCreated
   });
 
   const useManualInputs = parseBoolean(process.env.BLOTATO_USE_MANUAL_TEMPLATE_INPUTS, false);
+  const candidates = uniqueTemplateIds(templateId, templateIdCandidates);
   let visual;
-  try {
-    visual = await createVisual({
-      templateId,
-      inputs: useManualInputs ? visualInputs : {},
-      prompt: visualPrompt,
-      render: true,
-      isDraft: false,
-    }, apiKey);
-  } catch (error) {
-    if (isUnknownTemplateError(error)) {
-      const err = new Error(`Blotato rejected template ID '${templateId}'. The account/API does not expose this template. Use /blotato/templates?search=${encodeURIComponent(DEFAULT_TEMPLATE_SEARCH)} and update BLOTATO_NEWS_TEMPLATE_ID, or enable BLOTATO_TEMPLATE_AUTO_DISCOVERY=true.`);
+  let usedTemplateId = templateId;
+  const rejectedTemplateIds = [];
+
+  for (const candidateTemplateId of candidates) {
+    try {
+      visual = await createVisual({
+        templateId: candidateTemplateId,
+        inputs: useManualInputs ? visualInputs : {},
+        prompt: visualPrompt,
+        render: true,
+        isDraft: false,
+      }, apiKey);
+      usedTemplateId = candidateTemplateId;
+      if (candidateTemplateId !== templateId) {
+        warn("blotato.video.create.template_fallback_used", {
+          primaryTemplateId: templateId,
+          usedTemplateId,
+          rejectedTemplateIds,
+        });
+      }
+      break;
+    } catch (error) {
+      if (!isUnknownTemplateError(error)) throw error;
+      rejectedTemplateIds.push(candidateTemplateId);
+      const nextTemplateId = candidates.find((item) => !rejectedTemplateIds.includes(item));
+      warn("blotato.video.create.template_retry", {
+        rejectedTemplateId: candidateTemplateId,
+        nextTemplateId: nextTemplateId || null,
+        error: error?.message || String(error),
+      });
+      if (nextTemplateId) continue;
+
+      const err = new Error(`Blotato rejected every resolved template ID. Tried: ${rejectedTemplateIds.join(", ")}. Use /blotato/templates?search=${encodeURIComponent(DEFAULT_TEMPLATE_SEARCH)} and set BLOTATO_NEWS_TEMPLATE_ID to the ID value returned by Blotato for this account.`);
       err.statusCode = error?.statusCode || 422;
       err.cause = error;
       err.details = error?.details || null;
+      err.rejectedTemplateIds = rejectedTemplateIds;
       throw err;
     }
-    throw error;
   }
 
   const visualId = extractVideoId(visual);
@@ -473,7 +541,7 @@ async function createAndWaitForVideo({ templateId, pack, apiKey, onVisualCreated
     throw err;
   }
 
-  onVisualCreated?.({ visualId, visual, visualInputs, visualPrompt, creditBudget, dashboardUrl: templateDashboardUrl(visualId) });
+  onVisualCreated?.({ visualId, visual, visualInputs, visualPrompt, creditBudget, dashboardUrl: templateDashboardUrl(visualId), templateId: usedTemplateId, templateIdCandidates: candidates, rejectedTemplateIds });
 
   const maxAttempts = positiveIntEnv("BLOTATO_VIDEO_POLL_ATTEMPTS", 720, 2880);
   const intervalMs = positiveIntEnv("BLOTATO_VIDEO_POLL_INTERVAL_MS", 5000, 60_000);
@@ -499,7 +567,7 @@ async function createAndWaitForVideo({ templateId, pack, apiKey, onVisualCreated
     throw err;
   }
 
-  return { visualId, visual, completed, mediaUrl, visualPrompt, visualInputs, creditBudget, dashboardUrl: templateDashboardUrl(visualId) };
+  return { visualId, visual, completed, mediaUrl, visualPrompt, visualInputs, creditBudget, dashboardUrl: templateDashboardUrl(visualId), templateId: usedTemplateId, templateIdCandidates: candidates, rejectedTemplateIds };
 }
 
 
@@ -918,6 +986,13 @@ async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOT
 
     const video = await createAndWaitForVideo({
       templateId,
+      templateIdCandidates: templateResolution.templateIdCandidates || [
+        templateResolution.rawTemplateId,
+        templateResolution.template?.id,
+        templateResolution.template?.templateId,
+        templateResolution.template?.path,
+        defaults.templatePath,
+      ],
       pack,
       apiKey,
       onVisualCreated: (visualMeta) => {
@@ -929,7 +1004,10 @@ async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOT
           creditEstimateOnly: true,
           actualCreditsUsed: "not_available_from_aims",
           creditSourceOfTruth: "Blotato dashboard",
-          templateId,
+          templateId: visualMeta.templateId || templateId,
+          requestedTemplateId: templateId,
+          templateIdCandidates: visualMeta.templateIdCandidates,
+          rejectedTemplateIds: visualMeta.rejectedTemplateIds,
           templateResolution,
           channelPreflight,
         });
@@ -944,7 +1022,10 @@ async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOT
       actualCreditsUsed: "not_available_from_aims",
       creditSourceOfTruth: "Blotato dashboard",
       mediaUrl: video.mediaUrl,
-      templateId,
+      templateId: video.templateId || templateId,
+      requestedTemplateId: templateId,
+      templateIdCandidates: video.templateIdCandidates,
+      rejectedTemplateIds: video.rejectedTemplateIds,
       templateResolution,
       channelPreflight,
     });
@@ -1009,8 +1090,11 @@ async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOT
       service: "blotato",
       lane: `${lane.slug}-publish-now`,
       sessionId,
-      defaults: { ...defaults, resolvedTemplateId: templateId, templateResolution },
-      templateId,
+      defaults: { ...defaults, resolvedTemplateId: video.templateId || templateId, requestedTemplateId: templateId, templateResolution },
+      templateId: video.templateId || templateId,
+      requestedTemplateId: templateId,
+      templateIdCandidates: video.templateIdCandidates,
+      rejectedTemplateIds: video.rejectedTemplateIds,
       templateResolution,
       channelPreflight,
       rss: buildRssSummary(articleSource),
