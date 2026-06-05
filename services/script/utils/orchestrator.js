@@ -12,11 +12,23 @@ import * as sessionCache from "./sessionCache.js";
 import { attachEpisodeNumberIfNeeded } from "./episodeCounter.js";
 import editAndFormat from "./editAndFormat.js";
 import { runEditorialPass } from "./editorialPass.js";
-import { validateTranscriptSourceIntegrity, validateTranscriptStructure } from "./scriptValidation.js";
+import { findLongSpokenSentences, validateTranscriptSourceIntegrity, validateTranscriptStructure } from "./scriptValidation.js";
 
 function hasOnlyRepairableSpokenLengthDefects(validation = {}) {
   const reasons = Array.isArray(validation.reasons) ? validation.reasons : [];
   return reasons.length > 0 && reasons.every((reason) => /sentence\(s\) exceed/i.test(String(reason || "")));
+}
+
+function hardSentenceLimit() {
+  const soft = Number(process.env.PODCAST_TRANSCRIPT_MAX_SENTENCE_WORDS || 25);
+  const configured = Number(process.env.PODCAST_TRANSCRIPT_HARD_MAX_SENTENCE_WORDS || 40);
+  const base = Number.isFinite(soft) && soft >= 12 ? soft : 25;
+  return Number.isFinite(configured) && configured >= base ? Math.floor(configured) : Math.max(40, base + 12);
+}
+
+function getHardLongSentenceDefects(text = "") {
+  const limit = hardSentenceLimit();
+  return findLongSpokenSentences(text, { maxWords: limit });
 }
 
 
@@ -123,11 +135,23 @@ export async function orchestrateScript(input) {
 
     const finalValidation = validateTranscriptStructure(finalCandidate);
     if (!finalValidation.ok) {
-      error("script.validation.final.fail", {
-        sessionId: sid,
-        reasons: finalValidation.reasons,
-      });
-      throw new Error(`Final script failed structure validation: ${finalValidation.reasons.join("; ")}`);
+      const repairableSpokenLength = hasOnlyRepairableSpokenLengthDefects(finalValidation);
+      const hardLongSentences = repairableSpokenLength ? getHardLongSentenceDefects(finalCandidate) : [];
+      if (repairableSpokenLength && hardLongSentences.length === 0) {
+        info("script.validation.final.soft_warn", {
+          sessionId: sid,
+          reasons: finalValidation.reasons,
+          softMaxSentenceWords: Number(process.env.PODCAST_TRANSCRIPT_MAX_SENTENCE_WORDS || 25),
+          hardMaxSentenceWords: hardSentenceLimit(),
+        });
+      } else {
+        error("script.validation.final.fail", {
+          sessionId: sid,
+          reasons: finalValidation.reasons,
+          hardLongSentenceExamples: hardLongSentences.slice(0, 3),
+        });
+        throw new Error(`Final script failed structure validation: ${finalValidation.reasons.join("; ")}`);
+      }
     }
 
     const transcriptSourceIntegrity = validateTranscriptSourceIntegrity(finalCandidate, sessionMeta);
