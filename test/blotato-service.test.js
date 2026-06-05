@@ -70,7 +70,8 @@ const mockServer = http.createServer(async (req, res) => {
       assert.ok(payload.messages.some((message) => String(message.content || "").includes("Spartan and informative")));
       assert.ok(payload.messages.some((message) => String(message.content || "").includes("Instagram must have no more than 5 hashtags")));
       assert.ok(payload.messages.some((message) => String(message.content || "").includes("Target duration: 45 seconds minimum")));
-      assert.deepEqual(payload.response_format, { type: "json_object" });
+      assert.equal(payload.response_format?.type, "json_schema");
+      assert.equal(payload.response_format?.json_schema?.name, "blotato_news_short_pack");
       assert.ok(payload.messages.some((message) => String(message.content || "").includes("Provide exactly 7 scenes")));
     }
     res.writeHead(200, { "content-type": "application/json" });
@@ -121,15 +122,28 @@ const mockServer = http.createServer(async (req, res) => {
     return;
   }
 
-  if (req.method === "GET" && url.pathname === "/v2/users/me/accounts") {
+  if (req.method === "GET" && url.pathname === "/v2/users/me") {
     res.writeHead(200, { "content-type": "application/json" });
-    res.end(JSON.stringify({ items: [{ id: "acc-tiktok", platform: url.searchParams.get("platform") || "tiktok", username: "jh" }] }));
+    res.end(JSON.stringify({ id: "user-1", email: "john@example.com" }));
     return;
   }
 
-  if (req.method === "GET" && url.pathname === "/v2/users/me/accounts/acc-facebook/subaccounts") {
+  if (req.method === "GET" && url.pathname === "/v2/users/me/accounts") {
+    const platform = url.searchParams.get("platform") || "tiktok";
+    const ids = {
+      instagram: process.env.BLOTATO_INSTAGRAM_ACCOUNT_ID || "acc-instagram",
+      youtube: process.env.BLOTATO_YOUTUBE_ACCOUNT_ID || "acc-youtube",
+      tiktok: process.env.BLOTATO_TIKTOK_ACCOUNT_ID || "acc-tiktok",
+      facebook: process.env.BLOTATO_FACEBOOK_ACCOUNT_ID || "acc-facebook",
+    };
     res.writeHead(200, { "content-type": "application/json" });
-    res.end(JSON.stringify({ items: [{ id: "page-1", accountId: "acc-facebook", name: "Jonathan Harris" }] }));
+    res.end(JSON.stringify({ items: [{ id: ids[platform] || `acc-${platform}`, platform, username: "jh" }] }));
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === `/v2/users/me/accounts/${process.env.BLOTATO_FACEBOOK_ACCOUNT_ID || "acc-facebook"}/subaccounts`) {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({ items: [{ id: process.env.BLOTATO_FACEBOOK_PAGE_ID || "page-1", accountId: process.env.BLOTATO_FACEBOOK_ACCOUNT_ID || "acc-facebook", name: "Jonathan Harris" }] }));
     return;
   }
 
@@ -206,6 +220,7 @@ const mockServer = http.createServer(async (req, res) => {
     if (body.post.content.platform === "facebook") {
       assert.equal(body.post.accountId, process.env.BLOTATO_FACEBOOK_ACCOUNT_ID || "acc-facebook");
       assert.equal(body.post.target.pageId, process.env.BLOTATO_FACEBOOK_PAGE_ID || "page-1");
+      assert.equal(body.post.target.mediaType, "reel");
     }
 
     const id = body.post.content.platform === "tiktok" ? "post-1" : `post-${body.post.content.platform}`;
@@ -262,6 +277,17 @@ process.env.BLOTATO_USE_MANUAL_TEMPLATE_INPUTS = "false";
 process.env.BLOTATO_VIDEO_SCENE_COUNT = "7";
 process.env.BLOTATO_MAX_EXPECTED_CREDITS = "70";
 process.env.BLOTATO_NEWS_JSON_RESPONSE_FORMAT = "true";
+process.env.BLOTATO_NEWS_RESPONSE_FORMAT_MODE = "json_schema";
+process.env.BLOTATO_STEP0_PREFLIGHT_ENABLED = "true";
+process.env.BLOTATO_PREFLIGHT_REQUIRE_LISTED_ACCOUNTS = "true";
+process.env.BLOTATO_PREFLIGHT_REQUIRE_LISTED_SUBACCOUNTS = "true";
+process.env.BLOTATO_FACEBOOK_MEDIA_TYPE = "reel";
+process.env.BLOTATO_KEEPALIVE_ENABLED = "false";
+process.env.BLOTATO_PUBLISH_SEQUENTIAL = "true";
+process.env.BLOTATO_PUBLISH_STAGGER_MS = "1";
+process.env.BLOTATO_API_RETRY_ATTEMPTS = "2";
+process.env.BLOTATO_API_RETRY_MAX_MS = "10";
+process.env.BLOTATO_SCRIPT_MODEL = "openai/test-model";
 process.env.APP_TMP_DIR = `/tmp/aims-blotato-test-${Date.now()}`;
 
 const { app } = await import(`../server.js?blotato-suite=${Date.now()}`);
@@ -298,6 +324,17 @@ test.afterEach(() => {
   process.env.BLOTATO_VIDEO_SCENE_COUNT = "7";
   process.env.BLOTATO_MAX_EXPECTED_CREDITS = "70";
   process.env.BLOTATO_NEWS_JSON_RESPONSE_FORMAT = "true";
+  process.env.BLOTATO_NEWS_RESPONSE_FORMAT_MODE = "json_schema";
+  process.env.BLOTATO_STEP0_PREFLIGHT_ENABLED = "true";
+  process.env.BLOTATO_PREFLIGHT_REQUIRE_LISTED_ACCOUNTS = "true";
+  process.env.BLOTATO_PREFLIGHT_REQUIRE_LISTED_SUBACCOUNTS = "true";
+  process.env.BLOTATO_FACEBOOK_MEDIA_TYPE = "reel";
+  process.env.BLOTATO_KEEPALIVE_ENABLED = "false";
+  process.env.BLOTATO_PUBLISH_SEQUENTIAL = "true";
+  process.env.BLOTATO_PUBLISH_STAGGER_MS = "1";
+  process.env.BLOTATO_API_RETRY_ATTEMPTS = "2";
+  process.env.BLOTATO_API_RETRY_MAX_MS = "10";
+  process.env.BLOTATO_SCRIPT_MODEL = "openai/test-model";
   process.env.OPENROUTER_API_BASE = mockBase;
   process.env.OPENROUTER_BASE_URL = mockBase;
 });
@@ -316,15 +353,15 @@ test("Blotato account and template routes call the API", async () => {
     .set(auth);
 
   assert.equal(accounts.status, 200);
-  assert.equal(accounts.body.items[0].id, "acc-tiktok");
+  assert.equal(accounts.body.items[0].id, process.env.BLOTATO_TIKTOK_ACCOUNT_ID || "acc-tiktok");
   assert.equal(accounts.body.items[0].platform, "tiktok");
 
   const subaccounts = await request(app)
-    .get("/blotato/accounts/acc-facebook/subaccounts")
+    .get(`/blotato/accounts/${process.env.BLOTATO_FACEBOOK_ACCOUNT_ID || "acc-facebook"}/subaccounts`)
     .set(auth);
 
   assert.equal(subaccounts.status, 200);
-  assert.equal(subaccounts.body.items[0].id, "page-1");
+  assert.equal(subaccounts.body.items[0].id, process.env.BLOTATO_FACEBOOK_PAGE_ID || "page-1");
 
   const templates = await request(app)
     .get("/blotato/templates?search=AI")
@@ -484,4 +521,10 @@ test("Blotato publish-now endpoint is public and runs the RSS-to-all configured 
   assert.ok(facebookPost);
   assert.equal(facebookPost.post.accountId, "34013");
   assert.equal(facebookPost.post.target.pageId, "562160556971997");
+  assert.equal(facebookPost.post.target.mediaType, "reel");
+  assert.equal(jobStatus.body.job.result.channelPreflight.ready, true);
+  assert.deepEqual(
+    jobStatus.body.job.result.channelPreflight.platforms.map((item) => item.platform),
+    ["instagram", "youtube", "tiktok", "facebook"]
+  );
 });
