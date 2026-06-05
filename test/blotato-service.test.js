@@ -41,7 +41,7 @@ function countHashtags(value = "") {
   return (String(value || "").match(/(^|\s)#[\p{L}\p{N}_]+/gu) || []).length;
 }
 
-const mockServer = http.createServer(async (req, res) => {
+async function handleMockRequest(req, res) {
   const url = new URL(req.url, "http://127.0.0.1");
 
   if (req.method === "GET" && url.pathname === "/feed.xml") {
@@ -238,6 +238,23 @@ const mockServer = http.createServer(async (req, res) => {
 
   res.writeHead(404, { "content-type": "application/json" });
   res.end(JSON.stringify({ message: "not found" }));
+}
+
+const mockServer = http.createServer((req, res) => {
+  handleMockRequest(req, res).catch((error) => {
+    const payload = JSON.stringify({
+      message: "mock server error",
+      error: error?.message || String(error),
+    });
+
+    if (res.headersSent) {
+      res.destroy(error);
+      return;
+    }
+
+    res.writeHead(500, { "content-type": "application/json" });
+    res.end(payload);
+  });
 });
 
 await new Promise((resolve) => mockServer.listen(0, "127.0.0.1", resolve));
