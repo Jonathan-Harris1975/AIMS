@@ -575,10 +575,10 @@ function buildFallbackShortPack(options = {}, laneConfig) {
 }
 
 function getNewsShortResponseFormat() {
-  const enabled = parseBoolean(process.env.BLOTATO_NEWS_JSON_RESPONSE_FORMAT, true);
+  const enabled = parseBoolean(process.env.BLOTATO_NEWS_JSON_RESPONSE_FORMAT, false);
   if (!enabled) return undefined;
 
-  const mode = String(process.env.BLOTATO_NEWS_RESPONSE_FORMAT_MODE || "json_schema").trim().toLowerCase();
+  const mode = String(process.env.BLOTATO_NEWS_RESPONSE_FORMAT_MODE || "json_object").trim().toLowerCase();
   if (mode === "json_object") return { type: "json_object" };
   return { type: "json_schema", json_schema: BLOTATO_NEWS_SHORT_JSON_SCHEMA };
 }
