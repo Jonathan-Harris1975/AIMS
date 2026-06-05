@@ -70,8 +70,7 @@ async function handleMockRequest(req, res) {
       assert.ok(payload.messages.some((message) => String(message.content || "").includes("Spartan and informative")));
       assert.ok(payload.messages.some((message) => String(message.content || "").includes("Instagram must have no more than 5 hashtags")));
       assert.ok(payload.messages.some((message) => String(message.content || "").includes("Target duration: 45 seconds minimum")));
-      assert.equal(payload.response_format?.type, "json_schema");
-      assert.equal(payload.response_format?.json_schema?.name, "blotato_news_short_pack");
+      assert.equal(payload.response_format, undefined);
       assert.ok(payload.messages.some((message) => String(message.content || "").includes("Provide exactly 7 scenes")));
     }
     res.writeHead(200, { "content-type": "application/json" });
@@ -293,8 +292,8 @@ process.env.BLOTATO_NEWS_TEMPLATE_SEARCH = "AI Video with AI Voice,AI Story Vide
 process.env.BLOTATO_USE_MANUAL_TEMPLATE_INPUTS = "false";
 process.env.BLOTATO_VIDEO_SCENE_COUNT = "7";
 process.env.BLOTATO_MAX_EXPECTED_CREDITS = "70";
-process.env.BLOTATO_NEWS_JSON_RESPONSE_FORMAT = "true";
-process.env.BLOTATO_NEWS_RESPONSE_FORMAT_MODE = "json_schema";
+process.env.BLOTATO_NEWS_JSON_RESPONSE_FORMAT = "false";
+process.env.BLOTATO_NEWS_RESPONSE_FORMAT_MODE = "json_object";
 process.env.BLOTATO_STEP0_PREFLIGHT_ENABLED = "true";
 process.env.BLOTATO_PREFLIGHT_REQUIRE_LISTED_ACCOUNTS = "true";
 process.env.BLOTATO_PREFLIGHT_REQUIRE_LISTED_SUBACCOUNTS = "true";
@@ -340,8 +339,8 @@ test.afterEach(() => {
   process.env.BLOTATO_USE_MANUAL_TEMPLATE_INPUTS = "false";
   process.env.BLOTATO_VIDEO_SCENE_COUNT = "7";
   process.env.BLOTATO_MAX_EXPECTED_CREDITS = "70";
-  process.env.BLOTATO_NEWS_JSON_RESPONSE_FORMAT = "true";
-  process.env.BLOTATO_NEWS_RESPONSE_FORMAT_MODE = "json_schema";
+  process.env.BLOTATO_NEWS_JSON_RESPONSE_FORMAT = "false";
+  process.env.BLOTATO_NEWS_RESPONSE_FORMAT_MODE = "json_object";
   process.env.BLOTATO_STEP0_PREFLIGHT_ENABLED = "true";
   process.env.BLOTATO_PREFLIGHT_REQUIRE_LISTED_ACCOUNTS = "true";
   process.env.BLOTATO_PREFLIGHT_REQUIRE_LISTED_SUBACCOUNTS = "true";
