@@ -180,14 +180,20 @@ function sentenceCase(text = "") {
   return String(text || "").replace(/^([a-z])/, (m) => m.toUpperCase());
 }
 
+function maxSentenceWords() {
+  const parsed = Number(process.env.PODCAST_TRANSCRIPT_MAX_SENTENCE_WORDS || 25);
+  return Number.isFinite(parsed) && parsed >= 12 ? Math.floor(parsed) : 25;
+}
+
 function splitSentenceAtBoundary(sentence = "") {
   const trimmed = String(sentence || "").trim();
   const words = trimmed.split(/\s+/).filter(Boolean);
-  if (words.length <= 26) return [trimmed];
+  const limit = maxSentenceWords();
+  if (words.length <= limit) return [trimmed];
 
   const minWords = 8;
-  const ideal = 18;
-  const maxFirstWords = Math.min(22, words.length - minWords);
+  const ideal = Math.min(18, Math.max(14, limit - 7));
+  const maxFirstWords = Math.min(Math.max(minWords, limit - 3), words.length - minWords);
   let bestIndex = -1;
   let bestScore = Number.POSITIVE_INFINITY;
 
@@ -226,7 +232,7 @@ function splitLongSentenceRecursive(sentence = "") {
     const current = queue.shift();
     const wordCount = current.split(/\s+/).filter(Boolean).length;
 
-    if (wordCount <= 26) {
+    if (wordCount <= maxSentenceWords()) {
       out.push(current);
       continue;
     }
@@ -304,5 +310,6 @@ export const __testing = {
   normaliseUrlSpeech,
   repairPunctuationGlitches,
   splitLongSentences,
+  maxSentenceWords,
   repairMojibake,
 };

@@ -14,6 +14,12 @@ import editAndFormat from "./editAndFormat.js";
 import { runEditorialPass } from "./editorialPass.js";
 import { validateTranscriptSourceIntegrity, validateTranscriptStructure } from "./scriptValidation.js";
 
+function hasOnlyRepairableSpokenLengthDefects(validation = {}) {
+  const reasons = Array.isArray(validation.reasons) ? validation.reasons : [];
+  return reasons.length > 0 && reasons.every((reason) => /sentence\(s\) exceed/i.test(String(reason || "")));
+}
+
+
 const {
   generateIntro,
   generateMain,
@@ -70,11 +76,18 @@ export async function orchestrateScript(input) {
 
     const initialValidation = validateTranscriptStructure(initialFullText);
     if (!initialValidation.ok) {
-      error("script.validation.composed.fail", {
+      const repairableSpokenLength = hasOnlyRepairableSpokenLengthDefects(initialValidation);
+      const logPayload = {
         sessionId: sid,
         reasons: initialValidation.reasons,
-      });
-      throw new Error(`Composed script failed structure validation: ${initialValidation.reasons.join("; ")}`);
+        repairableSpokenLength,
+      };
+      if (repairableSpokenLength) {
+        info("script.validation.composed.repairable", logPayload);
+      } else {
+        error("script.validation.composed.fail", logPayload);
+        throw new Error(`Composed script failed structure validation: ${initialValidation.reasons.join("; ")}`);
+      }
     }
 
     // ============================================================
