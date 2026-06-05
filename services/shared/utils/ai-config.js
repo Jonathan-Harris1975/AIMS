@@ -57,6 +57,12 @@ const chatgptMini5 = provider(
   [...SHARED_OPENROUTER_KEY, "OPENROUTER_API_KEY_CHATGPT_mini5", "OPENROUTER_API_KEY_CHATGPT_mini-5", "OPENROUTER_API_KEY_CHATGPT_MINI5", "OPENROUTER_API_KEY_CHATGPT"]
 );
 
+const blotatoScript = provider(
+  "blotatoScript",
+  ["BLOTATO_SCRIPT_MODEL", "BLOTATO_NEWS_SCRIPT_MODEL", "OPENROUTER_BLOTATO_SCRIPT_MODEL"],
+  [...SHARED_OPENROUTER_KEY, "OPENROUTER_API_KEY_BLOTATO_SCRIPT"]
+);
+
 const deepseekV4Pro = provider(
   "deepseekV4Pro",
   ["OPENROUTER_DEEPSEEK_v4_pro", "OPENROUTER_DEEPSEEK_V4_PRO", "OPENROUTER_DEEPSEEK"],
@@ -85,6 +91,7 @@ const modelRegistry = {
   image,
   google: google25FlashLite,
   chatgpt: chatgptMini5,
+  blotatoScript,
   deepseek: deepseekV4Pro,
   anthropic: anthropic46,
   meta,
@@ -139,7 +146,9 @@ export const aiConfig = {
     oneupDaily: routeChain(["fast", "standard", "fallback"], ["chatgpt", "google", "deepseek"]),
     oneupQuiz: routeChain(["fast", "standard", "fallback"], ["chatgpt", "google", "deepseek"]),
     oneupEbook: routeChain(["fast", "standard", "fallback"], ["chatgpt", "google", "deepseek"]),
-    blotatoNewsShort: routeChain(["standard", "fast", "summary", "fallback"], ["chatgpt", "google", "deepseek"]),
+    // Blotato script quality is production-critical. Do not fall back to the ultra-cheap fast lane by default;
+    // weak scripts cost more downstream when Blotato grades or publishes a poor video.
+    blotatoNewsShort: routeChain(["blotatoScript", "standard", "highQuality", "summary"], ["chatgptMini5", "anthropic46", "deepseekV4Pro"]),
   },
 
   commonParams: { temperature: 0.65, top_p: 0.9, timeout: 90000 },
