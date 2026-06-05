@@ -65,7 +65,7 @@ test("koyeb env doctor validates the narrowed Blotato/state env set", () => {
     BLOTATO_TEMPLATE_ID_MODE: "uuid",
     BLOTATO_TEMPLATE_VERIFY: "true",
     BLOTATO_TEMPLATE_AUTO_DISCOVERY: "true",
-    BLOTATO_NEWS_TEMPLATE_SEARCH: "AI Story Video",
+    BLOTATO_NEWS_TEMPLATE_SEARCH: "AI Video with AI Voice,AI Story Video,AI Voice,Story Video",
     BLOTATO_USE_MANUAL_TEMPLATE_INPUTS: "false",
     BLOTATO_VIDEO_SCENE_COUNT: "7",
     BLOTATO_LOW_COST_IMAGE_MODEL_LABEL: "flux schnell",
