@@ -95,6 +95,25 @@ async function parseResponseBody(response) {
   }
 }
 
+function parseRetryAfterMs(response, parsed) {
+  const rawHeader = response?.headers?.get?.("retry-after");
+  if (rawHeader) {
+    const seconds = Number(rawHeader);
+    if (Number.isFinite(seconds) && seconds >= 0) return Math.max(1000, Math.ceil(seconds * 1000));
+
+    const dateMs = Date.parse(rawHeader);
+    if (Number.isFinite(dateMs)) return Math.max(1000, dateMs - Date.now());
+  }
+
+  const text = [parsed?.json?.message, parsed?.json?.error, parsed?.json?.errorMessage, parsed?.text]
+    .filter(Boolean)
+    .join(" ");
+  const secondsMatch = text.match(/retry\s+in\s+(\d+(?:\.\d+)?)\s*(?:s|sec|second|seconds)?/i);
+  if (secondsMatch) return Math.max(1000, Math.ceil(Number(secondsMatch[1]) * 1000));
+
+  return 0;
+}
+
 function makeBlotatoError({ response, parsed, endpoint }) {
   const message =
     parsed.json?.message ||
@@ -107,6 +126,7 @@ function makeBlotatoError({ response, parsed, endpoint }) {
   err.statusCode = response.status || 502;
   err.details = parsed.json || parsed.text || null;
   err.endpoint = endpoint;
+  err.retryAfterMs = parseRetryAfterMs(response, parsed);
   return err;
 }
 
@@ -154,7 +174,8 @@ async function blotatoRequest(endpoint, {
       const retryable = Boolean(error?.retryable || isRetryableNetworkError(error));
       if (!retryable || attempt >= attempts) throw error;
 
-      const waitMs = Math.min(maxDelayMs, baseDelayMs * Math.pow(2, attempt - 1));
+      const hintedWaitMs = Number(error?.retryAfterMs || 0);
+      const waitMs = Math.min(maxDelayMs, Math.max(hintedWaitMs, baseDelayMs * Math.pow(2, attempt - 1)));
       await sleep(waitMs);
     }
   }
@@ -162,6 +183,10 @@ async function blotatoRequest(endpoint, {
   throw lastError || new Error(`Blotato ${endpoint} request failed`);
 }
 
+
+export async function getUser(apiKey) {
+  return blotatoRequest("users/me", { apiKey });
+}
 
 export async function listAccounts({ platform } = {}, apiKey) {
   return blotatoRequest("users/me/accounts", {

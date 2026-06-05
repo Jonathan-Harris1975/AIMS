@@ -25,6 +25,59 @@ const DEFAULT_DURATION_SECONDS = 45;
 const LOW_COST_IMAGE_MODEL_LABEL = process.env.BLOTATO_LOW_COST_IMAGE_MODEL_LABEL || "flux schnell";
 const LOW_COST_VIDEO_MODEL_LABEL = process.env.BLOTATO_LOW_COST_VIDEO_MODEL_LABEL || "framepack";
 
+const BLOTATO_NEWS_SHORT_JSON_SCHEMA = Object.freeze({
+  name: "blotato_news_short_pack",
+  strict: true,
+  schema: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      internalTitle: { type: "string" },
+      lane: { type: "string" },
+      angle: { type: "string" },
+      hook: { type: "string" },
+      script: { type: "string" },
+      scenes: {
+        type: "array",
+        minItems: 3,
+        items: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            mediaSource: { type: "string" },
+            script: { type: "string" },
+          },
+          required: ["mediaSource", "script"],
+        },
+      },
+      visualDirection: { type: "string" },
+      thumbnailText: { type: "string" },
+      youtubeTitle: { type: "string" },
+      youtubeDescription: { type: "string" },
+      tiktokCaption: { type: "string" },
+      instagramCaption: { type: "string" },
+      facebookCaption: { type: "string" },
+      qualityNotes: { type: "string" },
+    },
+    required: [
+      "internalTitle",
+      "lane",
+      "angle",
+      "hook",
+      "script",
+      "scenes",
+      "visualDirection",
+      "thumbnailText",
+      "youtubeTitle",
+      "youtubeDescription",
+      "tiktokCaption",
+      "instagramCaption",
+      "facebookCaption",
+      "qualityNotes",
+    ],
+  },
+});
+
 // The Thursday (reality-check) lane includes a soft podcast plug. All other lanes use the
 // standard follow CTA. The podcast plug avoids "tomorrow" so the video stays evergreen if
 // republished outside its scheduled day.
@@ -518,6 +571,15 @@ function buildFallbackShortPack(options = {}, laneConfig) {
   }), options, laneConfig);
 }
 
+function getNewsShortResponseFormat() {
+  const enabled = parseBoolean(process.env.BLOTATO_NEWS_JSON_RESPONSE_FORMAT, true);
+  if (!enabled) return undefined;
+
+  const mode = String(process.env.BLOTATO_NEWS_RESPONSE_FORMAT_MODE || "json_schema").trim().toLowerCase();
+  if (mode === "json_object") return { type: "json_object" };
+  return { type: "json_schema", json_schema: BLOTATO_NEWS_SHORT_JSON_SCHEMA };
+}
+
 async function requestNewsShortJson(prompt, { repairRaw } = {}) {
   const messages = repairRaw
     ? [
@@ -529,13 +591,13 @@ async function requestNewsShortJson(prompt, { repairRaw } = {}) {
         { role: "user", content: prompt.user },
       ];
 
-  const useJsonResponseFormat = parseBoolean(process.env.BLOTATO_NEWS_JSON_RESPONSE_FORMAT, true);
   return resilientRequest("blotatoNewsShort", {
     sessionId: `blotato-news-${Date.now()}`,
     messages,
     max_tokens: NEWS_SHORT_MAX_TOKENS,
-    temperature: repairRaw ? 0.1 : 0.55,
-    response_format: useJsonResponseFormat ? { type: "json_object" } : undefined,
+    temperature: repairRaw ? 0.1 : 0.5,
+    response_format: getNewsShortResponseFormat(),
+    timeoutMs: Number(process.env.BLOTATO_SCRIPT_TIMEOUT_MS || process.env.AI_TIMEOUT || 120000),
   });
 }
 

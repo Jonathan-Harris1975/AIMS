@@ -8,8 +8,10 @@ import {
 } from "../../shared/utils/jobStore.js";
 import {
   createVisual,
+  getUser,
   getVisualStatus,
   listAccounts,
+  listSubaccounts,
   listTemplates,
   publishPost,
   getPostStatus,
@@ -21,6 +23,7 @@ import { info, warn } from "../../../logger.js";
 import { recordUsedSocialSource } from "../../oneup/utils/state.js";
 import { buildBlotatoGateError, runBlotatoShortGate } from "./shortGate.js";
 import { completeEditorialReservation, releaseEditorialReservation, reserveEditorialSource } from "../../social/editorialLedger.js";
+import { startKeepAlive, stopKeepAlive } from "../../shared/utils/keepalive.js";
 
 export const BLOTATO_PUBLISH_JOB_TYPE = "blotato-news-insight-publish";
 export const DEFAULT_AI_STORY_TEMPLATE_PATH =
@@ -92,6 +95,10 @@ function normaliseTemplateId(value = DEFAULT_AI_STORY_TEMPLATE_PATH) {
   const mode = trim(process.env.BLOTATO_TEMPLATE_ID_MODE, "uuid").toLowerCase();
   if (mode === "path") return raw.startsWith("base/v2/") ? `/${raw}` : raw;
   return extractUuid(raw) || DEFAULT_AI_STORY_TEMPLATE_UUID;
+}
+
+function normaliseTemplateIdForApi(value = DEFAULT_AI_STORY_TEMPLATE_PATH) {
+  return normaliseTemplateId(value);
 }
 
 function templateDashboardUrl(id = "") {
@@ -224,7 +231,7 @@ async function resolveVideoTemplateId({ requestedTemplateId, apiKey }) {
 
   const directMatch = idItems.find((item) => templateMatchesRequested(item, requested));
   if (directMatch) {
-    const id = templateItemId(directMatch) || requested;
+    const id = normaliseTemplateIdForApi(templateItemId(directMatch) || requested);
     return { templateId: id, verified: true, source: "configured-id", template: directMatch };
   }
 
@@ -244,14 +251,16 @@ async function resolveVideoTemplateId({ requestedTemplateId, apiKey }) {
       searchItems.push(...items);
       const preferred = pickPreferredTemplate(items, { requested, searchTerms: [search] });
       const resolvedId = templateItemId(preferred);
-      if (resolvedId) {
+      const apiTemplateId = normaliseTemplateIdForApi(resolvedId);
+      if (apiTemplateId) {
         warn("blotato.template.auto_discovered", {
           requestedTemplateId: requested,
-          resolvedTemplateId: resolvedId,
+          resolvedTemplateId: apiTemplateId,
+          rawTemplateId: resolvedId,
           search,
           templateName: trim(preferred.name || preferred.title),
         });
-        return { templateId: resolvedId, verified: true, source: "auto-discovered", template: preferred, requestedTemplateId: requested, search, searchTerms };
+        return { templateId: apiTemplateId, rawTemplateId: resolvedId, verified: true, source: "auto-discovered", template: preferred, requestedTemplateId: requested, search, searchTerms };
       }
     } catch (error) {
       searchErrors.push({ search, error: error?.message || String(error), statusCode: error?.statusCode || error?.status || null });
@@ -263,14 +272,16 @@ async function resolveVideoTemplateId({ requestedTemplateId, apiKey }) {
     searchItems.push(...allItems);
     const preferred = pickPreferredTemplate(allItems, { requested, searchTerms });
     const resolvedId = templateItemId(preferred);
-    if (resolvedId) {
+    const apiTemplateId = normaliseTemplateIdForApi(resolvedId);
+    if (apiTemplateId) {
       warn("blotato.template.auto_discovered", {
         requestedTemplateId: requested,
-        resolvedTemplateId: resolvedId,
+        resolvedTemplateId: apiTemplateId,
+        rawTemplateId: resolvedId,
         search: "<all-templates>",
         templateName: trim(preferred.name || preferred.title),
       });
-      return { templateId: resolvedId, verified: true, source: "auto-discovered-all", template: preferred, requestedTemplateId: requested, search: "<all-templates>", searchTerms };
+      return { templateId: apiTemplateId, rawTemplateId: resolvedId, verified: true, source: "auto-discovered-all", template: preferred, requestedTemplateId: requested, search: "<all-templates>", searchTerms };
     }
   } catch (error) {
     searchErrors.push({ search: "<all-templates>", error: error?.message || String(error), statusCode: error?.statusCode || error?.status || null });
@@ -422,10 +433,13 @@ async function createAndWaitForVideo({ templateId, pack, apiKey, onVisualCreated
     throw err;
   }
 
-  info("blotato.video.create.request", {
+  info("blotato.video.create.credit_estimate", {
     templateId,
+    creditEstimateOnly: true,
+    estimatedMaxCredits: creditBudget.expectedCredits,
+    actualCreditsUsed: "not_available_from_aims",
+    creditSourceOfTruth: "Blotato dashboard",
     sceneCount: creditBudget.sceneCount,
-    expectedCredits: creditBudget.expectedCredits,
     imageModel: creditBudget.imageModel,
     videoModel: creditBudget.videoModel,
   });
@@ -488,6 +502,185 @@ async function createAndWaitForVideo({ templateId, pack, apiKey, onVisualCreated
   return { visualId, visual, completed, mediaUrl, visualPrompt, visualInputs, creditBudget, dashboardUrl: templateDashboardUrl(visualId) };
 }
 
+
+function listItems(payload = {}) {
+  if (Array.isArray(payload)) return payload;
+  for (const key of ["items", "data", "accounts", "results"]) {
+    if (Array.isArray(payload?.[key])) return payload[key];
+  }
+  return [];
+}
+
+function platformAccountEnvName(platform = "") {
+  return `BLOTATO_${String(platform || "").toUpperCase()}_ACCOUNT_ID`;
+}
+
+function itemId(item = {}) {
+  return trim(item.id || item.accountId || item.socialAccountId);
+}
+
+function itemPlatform(item = {}) {
+  return trim(item.platform || item.targetType || item.provider).toLowerCase();
+}
+
+function accountMatchesPlatform(item = {}, platform = "") {
+  const actual = itemPlatform(item);
+  return !actual || actual === String(platform || "").toLowerCase();
+}
+
+function publicAccountSummary(item = {}) {
+  return {
+    id: itemId(item),
+    platform: itemPlatform(item) || null,
+    username: trim(item.username || item.handle) || null,
+    fullname: trim(item.fullname || item.name || item.displayName) || null,
+  };
+}
+
+function parseCsvEnv(name = "") {
+  return String(process.env[name] || "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+async function resolveChannelAccount({ platform, apiKey }) {
+  const configuredAccountId = trim(process.env[platformAccountEnvName(platform)]);
+  const payload = await listAccounts({ platform }, apiKey);
+  const items = listItems(payload).filter((item) => accountMatchesPlatform(item, platform));
+  const listedMatch = configuredAccountId
+    ? items.find((item) => itemId(item) === configuredAccountId)
+    : items.find((item) => itemId(item));
+  const requireListed = parseBoolean(process.env.BLOTATO_PREFLIGHT_REQUIRE_LISTED_ACCOUNTS, true);
+
+  if (configuredAccountId && !listedMatch && !requireListed) {
+    return {
+      platform,
+      accountId: configuredAccountId,
+      configuredAccountId,
+      accountListed: false,
+      ready: true,
+      warning: `Configured ${platform} account was not present in GET /users/me/accounts?platform=${platform}; proceeding because BLOTATO_PREFLIGHT_REQUIRE_LISTED_ACCOUNTS=false.`,
+      rawAccountCandidates: items.map(publicAccountSummary),
+    };
+  }
+
+  const accountId = trim(configuredAccountId || itemId(listedMatch));
+  if (!accountId || (configuredAccountId && !listedMatch)) {
+    const err = new Error(
+      configuredAccountId
+        ? `Blotato Step 0 failed: configured ${platform} account '${configuredAccountId}' was not returned by /users/me/accounts.`
+        : `Blotato Step 0 failed: no connected ${platform} account was returned by /users/me/accounts.`
+    );
+    err.statusCode = 422;
+    err.platform = platform;
+    err.configuredAccountId = configuredAccountId || null;
+    err.accountCandidates = items.map(publicAccountSummary);
+    throw err;
+  }
+
+  return {
+    platform,
+    accountId,
+    configuredAccountId: configuredAccountId || null,
+    accountListed: Boolean(listedMatch),
+    account: publicAccountSummary(listedMatch || { id: accountId, platform }),
+    ready: true,
+  };
+}
+
+async function enrichFacebookChannel(channel = {}, apiKey) {
+  if (!channel?.accountId) return channel;
+  const configuredPageId = trim(process.env.BLOTATO_FACEBOOK_PAGE_ID || process.env.BLOTATO_FACEBOOK_SUBACCOUNT_ID);
+  const subaccounts = await listSubaccounts(channel.accountId, apiKey);
+  const items = listItems(subaccounts);
+  const matchedPage = configuredPageId
+    ? items.find((item) => itemId(item) === configuredPageId)
+    : items.find((item) => itemId(item));
+  const pageId = trim(configuredPageId || itemId(matchedPage));
+
+  if (!pageId || (configuredPageId && !matchedPage && parseBoolean(process.env.BLOTATO_PREFLIGHT_REQUIRE_LISTED_SUBACCOUNTS, true))) {
+    const err = new Error(
+      configuredPageId
+        ? `Blotato Step 0 failed: configured Facebook page '${configuredPageId}' was not returned by /users/me/accounts/${channel.accountId}/subaccounts.`
+        : `Blotato Step 0 failed: no Facebook pageId was returned for account '${channel.accountId}'.`
+    );
+    err.statusCode = 422;
+    err.platform = "facebook";
+    err.configuredPageId = configuredPageId || null;
+    err.subaccountCandidates = items.map(publicAccountSummary);
+    throw err;
+  }
+
+  return {
+    ...channel,
+    pageId,
+    subaccountListed: Boolean(matchedPage),
+    subaccount: publicAccountSummary(matchedPage || { id: pageId, platform: "facebook" }),
+  };
+}
+
+async function enrichYoutubeChannel(channel = {}, apiKey) {
+  const playlistIds = parseCsvEnv("BLOTATO_YOUTUBE_PLAYLIST_IDS");
+  if (!playlistIds.length || !channel?.accountId) return channel;
+  const subaccounts = await listSubaccounts(channel.accountId, apiKey);
+  const items = listItems(subaccounts);
+  const listedIds = new Set(items.map(itemId).filter(Boolean));
+  const missing = playlistIds.filter((id) => !listedIds.has(id));
+  if (missing.length && parseBoolean(process.env.BLOTATO_PREFLIGHT_REQUIRE_LISTED_SUBACCOUNTS, true)) {
+    const err = new Error(`Blotato Step 0 failed: YouTube playlist ID(s) not returned by subaccounts: ${missing.join(", ")}.`);
+    err.statusCode = 422;
+    err.platform = "youtube";
+    err.missingPlaylistIds = missing;
+    err.subaccountCandidates = items.map(publicAccountSummary);
+    throw err;
+  }
+  return { ...channel, playlistIds, playlistIdsListed: missing.length === 0 };
+}
+
+function channelMapFromStatuses(statuses = []) {
+  return Object.fromEntries(statuses.map((status) => [status.platform, status]));
+}
+
+async function runBlotatoStep0Preflight({ platforms = [], apiKey }) {
+  if (!parseBoolean(process.env.BLOTATO_STEP0_PREFLIGHT_ENABLED, true)) {
+    return { enabled: false, ready: true, platforms, channelMap: {} };
+  }
+
+  const user = await getUser(apiKey);
+  const statuses = [];
+  for (const platform of platforms) {
+    let status = await resolveChannelAccount({ platform, apiKey });
+    if (platform === "facebook") status = await enrichFacebookChannel(status, apiKey);
+    if (platform === "youtube") status = await enrichYoutubeChannel(status, apiKey);
+    statuses.push(status);
+  }
+
+  const preflight = {
+    enabled: true,
+    ready: statuses.every((status) => status.ready),
+    checkedAt: new Date().toISOString(),
+    user: {
+      id: trim(user?.id || user?.item?.id || user?.user?.id) || null,
+      emailPresent: Boolean(user?.email || user?.item?.email || user?.user?.email),
+    },
+    platforms: statuses,
+    channelMap: channelMapFromStatuses(statuses),
+  };
+
+  info("blotato.step0.channel_preflight.complete", {
+    platforms: statuses.map((status) => ({
+      platform: status.platform,
+      accountId: status.accountId,
+      accountListed: status.accountListed,
+      pageId: status.pageId || undefined,
+      subaccountListed: status.subaccountListed,
+      ready: status.ready,
+    })),
+  });
+  return preflight;
+}
+
 async function resolveAccountId(platform, apiKey) {
   const specificEnv = `BLOTATO_${platform.toUpperCase()}_ACCOUNT_ID`;
   const configured = trim(process.env[specificEnv]);
@@ -505,7 +698,7 @@ async function resolveAccountId(platform, apiKey) {
   throw err;
 }
 
-function buildTarget(platform, pack) {
+function buildTarget(platform, pack, channel = {}) {
   if (platform === "instagram") {
     return {
       targetType: "instagram",
@@ -523,6 +716,7 @@ function buildTarget(platform, pack) {
       shouldNotifySubscribers: parseBoolean(process.env.BLOTATO_YOUTUBE_NOTIFY_SUBSCRIBERS, false),
       isMadeForKids: false,
       containsSyntheticMedia: true,
+      ...(Array.isArray(channel.playlistIds) && channel.playlistIds.length ? { playlistIds: channel.playlistIds } : {}),
     };
   }
 
@@ -540,9 +734,10 @@ function buildTarget(platform, pack) {
   }
 
   if (platform === "facebook") {
-    const pageId = trim(process.env.BLOTATO_FACEBOOK_PAGE_ID || process.env.BLOTATO_FACEBOOK_SUBACCOUNT_ID);
+    const pageId = trim(channel.pageId || process.env.BLOTATO_FACEBOOK_PAGE_ID || process.env.BLOTATO_FACEBOOK_SUBACCOUNT_ID);
     return {
       targetType: "facebook",
+      mediaType: trim(process.env.BLOTATO_FACEBOOK_MEDIA_TYPE, "reel"),
       ...(pageId ? { pageId } : {}),
     };
   }
@@ -586,9 +781,10 @@ function buildPlatformText(platform, pack) {
   return pack.facebookCaption || pack.tiktokCaption || pack.script;
 }
 
-async function publishAndWait({ platform, pack, mediaUrl, apiKey }) {
-  const accountId = await resolveAccountId(platform, apiKey);
-  const target = buildTarget(platform, pack);
+async function publishAndWait({ platform, pack, mediaUrl, apiKey, channelPreflight }) {
+  const channel = channelPreflight?.channelMap?.[platform] || {};
+  const accountId = trim(channel.accountId) || await resolveAccountId(platform, apiKey);
+  const target = buildTarget(platform, pack, channel);
   const post = await publishPost({
     accountId,
     platform,
@@ -618,6 +814,31 @@ async function publishAndWait({ platform, pack, mediaUrl, apiKey }) {
   });
 
   return { platform, accountId, target, postSubmissionId, post, status };
+}
+
+
+async function publishPlatforms({ platforms = [], pack, mediaUrl, apiKey, channelPreflight }) {
+  const settled = [];
+  const staggerMs = Number(process.env.BLOTATO_PUBLISH_STAGGER_MS || 2500);
+  const sequential = parseBoolean(process.env.BLOTATO_PUBLISH_SEQUENTIAL, true);
+
+  if (!sequential) {
+    return Promise.allSettled(
+      platforms.map((platform) => publishAndWait({ platform, pack, mediaUrl, apiKey, channelPreflight }))
+    );
+  }
+
+  for (const platform of platforms) {
+    try {
+      const value = await publishAndWait({ platform, pack, mediaUrl, apiKey, channelPreflight });
+      settled.push({ status: "fulfilled", value });
+    } catch (reason) {
+      settled.push({ status: "rejected", reason });
+    }
+    if (staggerMs > 0 && platform !== platforms.at(-1)) await sleep(Math.min(staggerMs, 60_000));
+  }
+
+  return settled;
 }
 
 function getDefaultPlatforms() {
@@ -656,13 +877,23 @@ function buildRssSummary(articleSource = {}) {
 
 async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOTATO_SHORT_LANE, apiKey, editorialReservation = null }) {
   const lane = requireShortLaneConfig(laneSlug);
+  const keepAliveLabel = `blotato:${lane.slug}:${sessionId}`;
+  const keepAliveEnabled = parseBoolean(process.env.BLOTATO_KEEPALIVE_ENABLED, true);
+  if (keepAliveEnabled) startKeepAlive(keepAliveLabel, positiveIntEnv("BLOTATO_KEEPALIVE_INTERVAL_MS", 20_000, 120_000));
+
   try {
     info("blotato.publish_now.job.start", { sessionId, lane: lane.slug, rssSource: articleSource.rssSource });
     const defaults = buildDefaults(lane.slug);
-    const templateResolution = await resolveVideoTemplateId({ requestedTemplateId: defaults.templateId, apiKey });
-    const templateId = templateResolution.templateId;
     const platforms = defaults.channels;
 
+    updateJob(lane.jobType, sessionId, { phase: "step-0-channel-preflight", defaults });
+    const channelPreflight = await runBlotatoStep0Preflight({ platforms, apiKey });
+
+    updateJob(lane.jobType, sessionId, { phase: "template-resolution", channelPreflight });
+    const templateResolution = await resolveVideoTemplateId({ requestedTemplateId: defaults.templateId, apiKey });
+    const templateId = templateResolution.templateId;
+
+    updateJob(lane.jobType, sessionId, { phase: "script-generation", channelPreflight, templateId, templateResolution });
     const generatedPack = await buildShortLanePack({
       article: articleSource.article,
       lane: lane.slug,
@@ -695,8 +926,12 @@ async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOT
           videoId: visualMeta.visualId,
           videoDashboardUrl: visualMeta.dashboardUrl,
           creditBudget: visualMeta.creditBudget,
+          creditEstimateOnly: true,
+          actualCreditsUsed: "not_available_from_aims",
+          creditSourceOfTruth: "Blotato dashboard",
           templateId,
           templateResolution,
+          channelPreflight,
         });
       },
     });
@@ -705,14 +940,22 @@ async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOT
       videoId: video.visualId,
       videoDashboardUrl: video.dashboardUrl,
       creditBudget: video.creditBudget,
+      creditEstimateOnly: true,
+      actualCreditsUsed: "not_available_from_aims",
+      creditSourceOfTruth: "Blotato dashboard",
       mediaUrl: video.mediaUrl,
       templateId,
       templateResolution,
+      channelPreflight,
     });
 
-    const settledPublishes = await Promise.allSettled(
-      platforms.map((platform) => publishAndWait({ platform, pack, mediaUrl: video.mediaUrl, apiKey }))
-    );
+    const settledPublishes = await publishPlatforms({
+      platforms,
+      pack,
+      mediaUrl: video.mediaUrl,
+      apiKey,
+      channelPreflight,
+    });
     const publishes = settledPublishes
       .filter((item) => item.status === "fulfilled")
       .map((item) => item.value);
@@ -733,8 +976,8 @@ async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOT
     if (!publishes.length || (requireAllChannels && failedPublishes.length)) {
       const err = new Error(
         !publishes.length
-          ? "Blotato media rendered but publishing failed on every configured channel"
-          : `Blotato publishing failed on required channels: ${failedPublishes.map((item) => item.platform).join(", ")}`
+          ? "Blotato media rendered but no platform reached a confirmed published status after retries and polling"
+          : `Blotato publishing failed on required channels after retries: ${failedPublishes.map((item) => item.platform).join(", ")}`
       );
       err.statusCode = 502;
       err.failedPublishes = failedPublishes;
@@ -757,7 +1000,7 @@ async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOT
         angle: pack.angle || pack.internalTitle,
         scheduledDateTime: new Date().toISOString(),
         text: pack.script,
-        meta: { contentType: "blotato-short", platforms },
+        meta: { contentType: "blotato-short", platforms, channelPreflight },
       });
     }
 
@@ -769,6 +1012,7 @@ async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOT
       defaults: { ...defaults, resolvedTemplateId: templateId, templateResolution },
       templateId,
       templateResolution,
+      channelPreflight,
       rss: buildRssSummary(articleSource),
       source: articleSource,
       pack,
@@ -776,6 +1020,9 @@ async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOT
       visualId: video.visualId,
       mediaUrl: video.mediaUrl,
       video,
+      creditEstimateOnly: true,
+      actualCreditsUsed: "not_available_from_aims",
+      creditSourceOfTruth: "Blotato dashboard",
       partial: failedPublishes.length > 0,
       failedPublishes,
       posts: publishes.map((item) => ({
@@ -798,6 +1045,8 @@ async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOT
     failJob(lane.jobType, sessionId, error);
     warn("blotato.publish_now.job.fail", { sessionId, error: error?.message || String(error) });
     throw error;
+  } finally {
+    if (keepAliveEnabled) stopKeepAlive(keepAliveLabel);
   }
 }
 
