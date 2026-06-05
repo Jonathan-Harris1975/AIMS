@@ -37,19 +37,31 @@ function wordCount(value = "") {
   return text ? text.split(/\s+/).filter(Boolean).length : 0;
 }
 
+function compactToken(value = "") {
+  return String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
 function sourceTokens(source = {}) {
   const text = cleanLexiconText([source.title, source.summary, source.source].filter(Boolean).join(" ")).toLowerCase();
-  return new Set((text.match(/[a-z][a-z0-9-]{4,}/g) || []).filter((word) => !["artificial", "intelligence", "about", "their", "there", "which", "would", "could", "should", "using"].includes(word)));
+  const stopWords = new Set([
+    "artificial", "intelligence", "about", "their", "there", "which", "would", "could",
+    "should", "using", "system", "systems", "model", "models", "video", "story", "source",
+  ]);
+  return new Set((text.match(/[a-z][a-z0-9-]{4,}/g) || []).filter((word) => !stopWords.has(word)));
 }
 
 function hasSomeSourceOverlap(pack = {}, source = {}) {
-  const tokens = sourceTokens(source);
-  if (!tokens.size) return true;
+  const tokens = Array.from(sourceTokens(source));
+  if (!tokens.length) return true;
   const packText = cleanLexiconText(textFromPack(pack)).toLowerCase();
+  const packCompact = compactToken(packText);
+  const minHits = Math.min(2, tokens.length);
   let hits = 0;
   for (const token of tokens) {
-    if (packText.includes(token)) hits += 1;
-    if (hits >= 2) return true;
+    const tokenCompact = compactToken(token);
+    if (!tokenCompact) continue;
+    if (packText.includes(token) || packCompact.includes(tokenCompact)) hits += 1;
+    if (hits >= minHits) return true;
   }
   return false;
 }

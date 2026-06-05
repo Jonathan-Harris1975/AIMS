@@ -1,4 +1,5 @@
 import { warn } from "../../../logger.js";
+import { AMERICAN_TO_BRITISH } from "../../content-quality/brandLexicon.js";
 import { resilientRequest } from "../../shared/utils/ai-service.js";
 import { createVisual } from "./blotatoClient.js";
 import { DEFAULT_BLOTATO_SHORT_LANE, requireShortLaneConfig } from "./shortLanes.js";
@@ -127,6 +128,72 @@ function trimToWordCount(value = "", maxWords = MAX_SCRIPT_WORDS) {
   const words = cleanText(value, 10_000).split(/\s+/).filter(Boolean);
   if (words.length <= maxWords) return words.join(" ");
   return `${words.slice(0, maxWords).join(" ").replace(/[,:;]+$/g, "")}.`;
+}
+
+function preserveReplacementCase(original = "", replacement = "") {
+  if (!original) return replacement;
+  if (original === original.toUpperCase()) return replacement.toUpperCase();
+  if (original[0] === original[0].toUpperCase()) {
+    return `${replacement[0].toUpperCase()}${replacement.slice(1)}`;
+  }
+  return replacement;
+}
+
+function toBritishEnglishText(value = "") {
+  let output = String(value || "");
+  for (const [american, british] of AMERICAN_TO_BRITISH) {
+    const pattern = new RegExp(`\\b${american}\\b`, "gi");
+    output = output.replace(pattern, (match) => preserveReplacementCase(match, british));
+  }
+  return output;
+}
+
+function normaliseEvidenceToken(value = "") {
+  return String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+function sourceEvidenceTokens(article = {}) {
+  const text = cleanText([article.title, article.summary, article.source].filter(Boolean).join(" "), 2400).toLowerCase();
+  const stopWords = new Set([
+    "about", "after", "again", "against", "artificial", "because", "brief", "intelligence",
+    "their", "there", "these", "those", "which", "where", "would", "could", "should",
+    "using", "through", "system", "systems", "model", "models", "video", "story", "source",
+  ]);
+  return Array.from(new Set((text.match(/[a-z][a-z0-9-]{4,}/g) || [])
+    .map((token) => token.replace(/^-+|-+$/g, ""))
+    .filter((token) => token && !stopWords.has(token))));
+}
+
+function sourceEvidenceHitCount(pack = {}, article = {}) {
+  const tokens = sourceEvidenceTokens(article);
+  if (!tokens.length) return 2;
+  const text = cleanText([
+    pack.internalTitle,
+    pack.angle,
+    pack.hook,
+    pack.script,
+    pack.visualDirection,
+    pack.thumbnailText,
+    pack.qualityNotes,
+    ...(Array.isArray(pack.scenes) ? pack.scenes.flatMap((scene) => [scene?.script, scene?.mediaSource]) : []),
+  ].filter(Boolean).join(" "), 12_000).toLowerCase();
+  const compact = normaliseEvidenceToken(text);
+  let hits = 0;
+  for (const token of tokens) {
+    const tokenCompact = normaliseEvidenceToken(token);
+    if (!tokenCompact) continue;
+    if (text.includes(token.toLowerCase()) || compact.includes(tokenCompact)) hits += 1;
+    if (hits >= Math.min(2, tokens.length)) return hits;
+  }
+  return hits;
+}
+
+function sourceEvidenceLine(article = {}) {
+  const title = cleanText(article.title || "", 140);
+  const summary = firstSentence(article.summary || "");
+  const parts = [title, summary].filter(Boolean);
+  if (!parts.length) return "";
+  return ensureSentence(parts.join(". "));
 }
 
 function renderArticles({ article, articles = [] } = {}) {
@@ -378,6 +445,63 @@ function normalisePack(pack = {}) {
   return output;
 }
 
+function applyBritishEnglishPack(pack = {}) {
+  const output = { ...pack };
+  for (const key of [
+    "internalTitle",
+    "angle",
+    "hook",
+    "script",
+    "visualDirection",
+    "thumbnailText",
+    "youtubeTitle",
+    "youtubeDescription",
+    "tiktokCaption",
+    "instagramCaption",
+    "facebookCaption",
+    "qualityNotes",
+  ]) {
+    if (typeof output[key] === "string") output[key] = cleanText(toBritishEnglishText(output[key]), key === "script" ? 4000 : 1400);
+  }
+
+  output.scenes = Array.isArray(output.scenes)
+    ? output.scenes.map((scene) => ({
+        ...scene,
+        mediaSource: cleanText(toBritishEnglishText(scene?.mediaSource || ""), 900),
+        script: cleanText(toBritishEnglishText(scene?.script || ""), 700),
+      })).filter((scene) => scene.mediaSource && scene.script)
+    : [];
+  return output;
+}
+
+function reinforceSourceGrounding(pack = {}, article = {}) {
+  const output = { ...pack };
+  const tokens = sourceEvidenceTokens(article);
+  const requiredHits = Math.min(2, tokens.length);
+  if (!requiredHits || sourceEvidenceHitCount(output, article) >= requiredHits) return output;
+
+  const evidence = sourceEvidenceLine(article);
+  if (!evidence) return output;
+
+  const shortEvidence = trimToWordCount(evidence, 24);
+  const candidateScript = `${output.script} ${shortEvidence}`.trim();
+  if (wordCount(candidateScript) <= MAX_SCRIPT_WORDS) {
+    output.script = trimToWordCount(candidateScript, MAX_SCRIPT_WORDS);
+  }
+
+  output.visualDirection = cleanText(`${output.visualDirection} Ground visuals in: ${shortEvidence}`, 1400);
+  output.qualityNotes = cleanText(`Grounded in RSS source: ${shortEvidence} ${output.qualityNotes || ""}`, 700);
+  output.scenes = Array.isArray(output.scenes) && output.scenes.length
+    ? output.scenes.map((scene, index) => index === 0
+        ? {
+            ...scene,
+            mediaSource: cleanText(`${scene.mediaSource} Source-grounding cue: ${shortEvidence}`, 900),
+          }
+        : scene)
+    : output.scenes;
+  return output;
+}
+
 export function buildBlotatoVisualPrompt(pack = {}) {
   const laneConfig = requireShortLaneConfig(pack.lane || DEFAULT_BLOTATO_SHORT_LANE);
   return [
@@ -518,7 +642,8 @@ function enhancePackForBlotatoDuration(pack = {}, options = {}, laneConfig = {})
     output.qualityNotes || `Duration-safe ${laneConfig.label || "Blotato"} pack prepared with enough spoken copy for a 45-second short.`,
     500
   );
-  return output;
+
+  return applyBritishEnglishPack(reinforceSourceGrounding(output, options.article));
 }
 
 function buildFallbackShortPack(options = {}, laneConfig) {
