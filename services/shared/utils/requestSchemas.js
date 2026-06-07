@@ -317,6 +317,7 @@ export const onBrandAuditRunBodySchema = z
     includeOneUp: booleanish.optional().default(true),
     includePodcastTranscripts: booleanish.optional().default(true),
     includeRss: booleanish.optional().default(true),
+    runPodcastWebsiteReports: booleanish.optional().default(true),
     dryRun: booleanish.optional().default(false),
   })
   .passthrough();
