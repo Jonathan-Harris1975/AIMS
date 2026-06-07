@@ -102,7 +102,8 @@ export const ENV = {
   // Current Koyeb spreadsheet model names. One shared OPENROUTER_API_KEY is used for all models.
   OPENROUTER_ANTHROPIC_4_6: opt("OPENROUTER_ANTHROPIC_4_6"),
   OPENROUTER_GOOGLE_2_5_flashlite: opt("OPENROUTER_GOOGLE_2_5_flashlite"),
-  OPENROUTER_CHATGPT_mini5_: opt("OPENROUTER_CHATGPT_mini5_"),
+  OPENROUTER_CHATGPT_MINI5: opt("OPENROUTER_CHATGPT_MINI5"),
+  OPENROUTER_CHATGPT_mini5_: opt("OPENROUTER_CHATGPT_mini5_"), // legacy alias — kept for existing Koyeb secrets
   OPENROUTER_DEEPSEEK_v4_pro: opt("OPENROUTER_DEEPSEEK_v4_pro"),
   OPENROUTER_DEEPSEEK_v4_flash: opt("OPENROUTER_DEEPSEEK_v4_flash"),
 
