@@ -274,7 +274,12 @@ function normalizeItem(item, fallbackLink, now) {
 
 function buildDescriptionHtml(title, rewrittenText, link) {
   const safeTitle = escapeHtml(normalizeCanonicalTitle(title));
-  const body = renderParagraphHtml(RSS_PROMPTS.stripLeadingTitleFromSummary(safeTitle, rewrittenText));
+  const body = renderParagraphHtml(
+    RSS_PROMPTS.clampSummaryToPreferredBrief(
+      RSS_PROMPTS.stripLeadingTitleFromSummary(safeTitle, rewrittenText),
+      RSS_PROMPTS.PREFERRED_SUMMARY_WORDS
+    )
+  );
 
   if (!body) {
     return safeTitle ? `<p>${safeTitle}</p>` : "";

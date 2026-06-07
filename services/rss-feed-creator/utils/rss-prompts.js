@@ -22,6 +22,16 @@ const MAX_SUMMARY_CHARS =
     ? Number(process.env.MAX_SUMMARY_CHARS)
     : 1100;
 
+const PREFERRED_SUMMARY_WORDS =
+  Number(process.env.RSS_PREFERRED_SUMMARY_WORDS) > 0
+    ? Number(process.env.RSS_PREFERRED_SUMMARY_WORDS)
+    : 60;
+
+const ABSOLUTE_SUMMARY_WORDS =
+  Number(process.env.RSS_ABSOLUTE_SUMMARY_WORDS) > 0
+    ? Number(process.env.RSS_ABSOLUTE_SUMMARY_WORDS)
+    : 85;
+
 const TITLE_BRAND_PATTERNS = [
   { pattern: /^\s*title\s*:/i, message: 'Title uses banned prefix "Title:"' },
   { pattern: /^\s*ai\s*:/i, message: 'Title uses banned prefix "AI:"' },
@@ -107,7 +117,7 @@ REWRITE_ABORTED
 3. SUMMARY RULES
 - Write one short editorial brief in plain text prose
 - Aim for 1 to 2 short paragraphs
-- Target 45 to 70 words, and never exceed 85 words
+- Target 45 to 60 words, and never exceed 60 words in published RSS output
 - Sound spoken, not editorial
 - Be direct and clear about what happened, why it matters, and where the practical catch, uncertainty, or genuine risk sits
 - Mild wit is welcome
@@ -218,13 +228,14 @@ export function USER_ITEM({
     "- No double quotation marks anywhere in the output",
     "- Keep numeric claims exactly as written in the source title/text",
     "- Do not invent rankings, scores, dates, prices or claims",
+    "- Keep summaries at or below 60 words so the RSS brand validator stays clean",
     "- Keep sentences short enough to pass readability checks",
     "- Keep at least two concrete topic terms from the source title/text unless doing so would distort meaning",
     "",
     "Return only:",
     `1. headline (maximum ${maxTitleWords} words)`,
     "2. blank line",
-    `3. summary (${minChars}-${maxChars} characters, 45-70 words preferred, 85 words maximum)`,
+    `3. summary (${minChars}-${maxChars} characters, 45-60 words preferred, 60 words maximum for published RSS)`,
   ]
     .filter(Boolean)
     .join("\n");
@@ -299,32 +310,52 @@ export function clampSummaryToWindow(
   min = MIN_SUMMARY_CHARS,
   max = MAX_SUMMARY_CHARS
 ) {
-  const normalized = normalizeSummaryText(summary);
+  let normalized = normalizeSummaryText(summary);
 
   if (!normalized) return "";
 
   if (normalized.length < min) {
     warn("rss.summary.tooShort", { length: normalized.length, min });
-    return normalized;
   }
 
-  if (normalized.length <= max) return normalized;
+  if (normalized.length > max) {
+    const cutoffPeriod = normalized.lastIndexOf(".", max);
+    const cutoffQuestion = normalized.lastIndexOf("?", max);
+    const cutoffExclaim = normalized.lastIndexOf("!", max);
+    const cutoff = Math.max(cutoffPeriod, cutoffQuestion, cutoffExclaim);
 
-  const cutoffPeriod = normalized.lastIndexOf(".", max);
-  const cutoffQuestion = normalized.lastIndexOf("?", max);
-  const cutoffExclaim = normalized.lastIndexOf("!", max);
-  const cutoff = Math.max(cutoffPeriod, cutoffQuestion, cutoffExclaim);
-
-  if (cutoff > min) {
-    return normalizeSummaryText(normalized.slice(0, cutoff + 1));
+    if (cutoff > min) {
+      normalized = normalizeSummaryText(normalized.slice(0, cutoff + 1));
+    } else {
+      const lastSpace = normalized.lastIndexOf(" ", max);
+      normalized = lastSpace > min
+        ? normalizeSummaryText(normalized.slice(0, lastSpace)) + "…"
+        : normalizeSummaryText(normalized.slice(0, max - 1)) + "…";
+    }
   }
 
-  const lastSpace = normalized.lastIndexOf(" ", max);
-  if (lastSpace > min) {
-    return normalizeSummaryText(normalized.slice(0, lastSpace)) + "…";
+  return clampSummaryToPreferredBrief(normalized, PREFERRED_SUMMARY_WORDS);
+}
+
+export function clampSummaryToPreferredBrief(summary = "", maxWords = PREFERRED_SUMMARY_WORDS) {
+  const normalized = normalizeSummaryText(summary);
+  const limit = Math.max(30, Number(maxWords) || PREFERRED_SUMMARY_WORDS);
+  const words = normalized.split(/\s+/).filter(Boolean);
+
+  if (!normalized || words.length <= limit) return normalized;
+
+  const sentences = normalized.match(/[^.!?]+[.!?]+(?:\s+|$)|[^.!?]+$/g) || [normalized];
+  let candidate = "";
+  for (const sentence of sentences) {
+    const next = normalizeSummaryText(`${candidate} ${sentence}`);
+    if (summaryWordCount(next) > limit) break;
+    candidate = next;
   }
 
-  return normalizeSummaryText(normalized.slice(0, max - 1)) + "…";
+  if (summaryWordCount(candidate) >= 35) return candidate;
+
+  const trimmed = words.slice(0, limit).join(" ").replace(/[\s,;:.]+$/, "");
+  return `${trimmed}…`;
 }
 
 export function findMetadataLeaks(text = "") {
@@ -429,8 +460,8 @@ export function findRssSummaryStyleIssues(title = "", summary = "") {
   if (normalizedTitle && normaliseForComparison(normalizedSummary).startsWith(normaliseForComparison(normalizedTitle))) {
     errors.push("Summary repeats the headline as its opening text");
   }
-  if (wordCount > 85) errors.push(`Summary is over 85 words (${wordCount}); tighten to one clear judgement`);
-  if (wordCount > 60) warnings.push(`Summary is over the preferred 60-word editorial brief (${wordCount})`);
+  if (wordCount > ABSOLUTE_SUMMARY_WORDS) errors.push(`Summary is over ${ABSOLUTE_SUMMARY_WORDS} words (${wordCount}); tighten to one clear judgement`);
+  if (wordCount > PREFERRED_SUMMARY_WORDS) warnings.push(`Summary is over the preferred ${PREFERRED_SUMMARY_WORDS}-word editorial brief (${wordCount})`);
   if (wordCount > 0 && wordCount < 30) warnings.push(`Summary is under the preferred 30-word editorial brief (${wordCount})`);
   return { errors, warnings, wordCount };
 }
@@ -534,6 +565,7 @@ const RSS_PROMPTS = {
   normalizeModelText,
   clampTitleTo12Words,
   clampSummaryToWindow,
+  clampSummaryToPreferredBrief,
   validateTitleBrand,
   validateOutput,
   findMetadataLeaks,
@@ -549,6 +581,8 @@ const RSS_PROMPTS = {
   BANNED_SUMMARY_PHRASES,
   MIN_SUMMARY_CHARS,
   MAX_SUMMARY_CHARS,
+  PREFERRED_SUMMARY_WORDS,
+  ABSOLUTE_SUMMARY_WORDS,
 };
 
 export { RSS_PROMPTS };
