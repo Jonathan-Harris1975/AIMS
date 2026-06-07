@@ -7,6 +7,7 @@ import * as sessionCache from "./sessionCache.js";
 import { info, error, debug, warn } from "../../../logger.js";
 import { extractMainContent } from "./textHelpers.js";
 import { calculateDuration } from "./durationCalculator.js";
+import { buildPodcastDiscoveryMetadata } from "../../rss-feed-podcast/discoveryMetadata.js";
 
 const PODCAST_TITLE = "Turing’s Torch: Artificial Intelligence Weekly";
 const HOST_NAME = "Jonathan Harris";
@@ -107,6 +108,10 @@ function detectSeoKeywordCandidates(text = "") {
       found.push(...(rule.keywords || []));
       found.push(rule.label);
     }
+  }
+
+  if (/\b(regulation|transparency|bias|accountability|control|security|ethical use|values)\b/i.test(haystack)) {
+    found.unshift("AI governance");
   }
 
   if (/\b(ai|artificial intelligence)\b/i.test(haystack)) {
@@ -504,6 +509,18 @@ export async function generateEpisodeMetaLLM(rawTranscript, sessionMeta = {}) {
     .map((k) => k.toLowerCase())
     .slice(0, 14);
 
+  const discoveryMetadata = buildPodcastDiscoveryMetadata({
+    title,
+    description,
+    mainOnly,
+    keywords,
+    keywordCandidates: seoKeywordCandidates,
+  });
+
+  // Keep the public episode keyword list natural and specific. The old iTunes
+  // keyword field is retained as a short legacy compatibility string only.
+  keywords = discoveryMetadata.episodeTerms.map((k) => k.toLowerCase()).slice(0, 14);
+
   /* Artwork Prompt */
   let artworkPrompt = getArtworkPrompt(description);
   try {
@@ -536,6 +553,8 @@ export async function generateEpisodeMetaLLM(rawTranscript, sessionMeta = {}) {
     durationPlan,
     keywords,
     seoKeywordCandidates,
+    discoveryMetadata,
+    itunesKeywords: discoveryMetadata.legacy.itunesKeywordsCsv,
     artworkPrompt,
     createdAt: new Date().toISOString(),
   };
