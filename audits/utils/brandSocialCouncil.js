@@ -12,6 +12,8 @@ const AUDIT_TYPE = "brand-social-council";
 const SOURCE_LATEST_KEYS = {
   onBrand: "audits/on-brand/latest.json",
   socialPerformance: "audits/social-performance/latest.json",
+  podcastEpisode: "audits/podcast-episode/latest.json",
+  podcastTranscript: "audits/podcast-transcript/latest.json",
 };
 
 function trim(value) {
@@ -246,6 +248,34 @@ function buildOnBrandFindings(report, findings) {
   }
 }
 
+
+function buildPodcastWebsiteFindings(bundle, findings, { sourceOwner, councilMember, prefix }) {
+  const sourceFindings = [
+    ...arr(bundle.report?.findings),
+    ...arr(bundle.summary?.findings),
+    ...arr(bundle.coverage?.findings),
+  ].filter((item) => item && typeof item === "object" && !Array.isArray(item));
+
+  for (const [index, finding] of sourceFindings.slice(0, 8).entries()) {
+    findings.push(makeFinding({
+      id: `${prefix}-${String(index + 1).padStart(3, "0")}`,
+      title: firstText(finding.title, finding.issueType, "Podcast website report finding"),
+      severity: finding.severity || "medium",
+      councilMember,
+      sourceOwner: finding.sourceOwner || sourceOwner,
+      automationReadiness: finding.automationReadiness || "generator_review",
+      evidence: [
+        `sourceReport: ${bundle.label}`,
+        ...arr(finding.evidence),
+        firstText(finding.exactEvidence),
+      ].filter(Boolean),
+      requiredOutcome: firstText(finding.requiredOutcome, finding.exactRemediation, "Use the separate podcast website report as the source-owner evidence for future AIMS/R2 generator work."),
+      verificationMethod: firstText(finding.verificationMethod, "Rerun the podcast website report and confirm the finding has cleared."),
+      classification: finding.classification === "manual_review" ? "manual_review" : "future_guidance",
+    }));
+  }
+}
+
 function findAggregate(rows, key) {
   return arr(rows).find((row) => row?.key === key) || null;
 }
@@ -384,7 +414,7 @@ function buildThumbnailFindings(report, findings) {
   }
 }
 
-function buildCouncilReport({ sessionId, reportPrefix, onBrandBundle, socialBundle }) {
+function buildCouncilReport({ sessionId, reportPrefix, onBrandBundle, socialBundle, podcastEpisodeBundle = {}, podcastTranscriptBundle = {} }) {
   const onBrandReport = obj(onBrandBundle.report);
   const socialReport = obj(socialBundle.report);
   const generatedAt = new Date().toISOString();
@@ -392,6 +422,16 @@ function buildCouncilReport({ sessionId, reportPrefix, onBrandBundle, socialBund
   buildOnBrandFindings(onBrandReport, findings);
   buildSocialFindings(socialReport, findings);
   buildThumbnailFindings(socialReport, findings);
+  buildPodcastWebsiteFindings(podcastEpisodeBundle, findings, {
+    sourceOwner: "aims_r2_podcast",
+    councilMember: "Podcast & Transcript Lead",
+    prefix: "BSC-PODCAST-EPISODE",
+  });
+  buildPodcastWebsiteFindings(podcastTranscriptBundle, findings, {
+    sourceOwner: "podcast_transcript_pipeline",
+    councilMember: "Podcast & Transcript Lead",
+    prefix: "BSC-PODCAST-TRANSCRIPT",
+  });
 
   const sourceReports = {
     onBrand: {
@@ -414,6 +454,26 @@ function buildCouncilReport({ sessionId, reportPrefix, onBrandBundle, socialBund
       errors: socialBundle.errors,
       warnings: socialBundle.warnings || [],
     },
+    podcastEpisode: {
+      latestKey: podcastEpisodeBundle.latestKey || SOURCE_LATEST_KEYS.podcastEpisode,
+      loaded: Boolean(podcastEpisodeBundle.latestLoaded && podcastEpisodeBundle.reportLoaded),
+      sessionId: podcastEpisodeBundle.latest?.sessionId || podcastEpisodeBundle.report?.sessionId || null,
+      reportUrl: podcastEpisodeBundle.latest?.reportHtmlUrl || podcastEpisodeBundle.latest?.reportUrl || null,
+      reportJsonUrl: podcastEpisodeBundle.latest?.reportJsonUrl || null,
+      summaryUrl: podcastEpisodeBundle.latest?.summaryUrl || null,
+      errors: podcastEpisodeBundle.errors || [],
+      warnings: podcastEpisodeBundle.warnings || [],
+    },
+    podcastTranscript: {
+      latestKey: podcastTranscriptBundle.latestKey || SOURCE_LATEST_KEYS.podcastTranscript,
+      loaded: Boolean(podcastTranscriptBundle.latestLoaded && podcastTranscriptBundle.reportLoaded),
+      sessionId: podcastTranscriptBundle.latest?.sessionId || podcastTranscriptBundle.report?.sessionId || null,
+      reportUrl: podcastTranscriptBundle.latest?.reportHtmlUrl || podcastTranscriptBundle.latest?.reportUrl || null,
+      reportJsonUrl: podcastTranscriptBundle.latest?.reportJsonUrl || null,
+      summaryUrl: podcastTranscriptBundle.latest?.summaryUrl || null,
+      errors: podcastTranscriptBundle.errors || [],
+      warnings: podcastTranscriptBundle.warnings || [],
+    },
   };
 
   const scores = {
@@ -422,6 +482,8 @@ function buildCouncilReport({ sessionId, reportPrefix, onBrandBundle, socialBund
     socialViews: toNumber(socialReport?.totals?.metrics?.views),
     socialClicks: toNumber(socialReport?.totals?.metrics?.clicks),
     socialEngagementRateAvg: toNumber(socialReport?.totals?.metrics?.engagementRateAvg),
+    podcastEpisodeScore: toNumber(podcastEpisodeBundle.report?.score || podcastEpisodeBundle.summary?.score),
+    podcastTranscriptScore: toNumber(podcastTranscriptBundle.report?.score || podcastTranscriptBundle.summary?.score),
   };
 
   const highFindings = findings.filter((finding) => ["critical", "high"].includes(finding.severity)).length;
@@ -450,15 +512,28 @@ function buildCouncilReport({ sessionId, reportPrefix, onBrandBundle, socialBund
       oneup: findings.filter((item) => ["oneup_scheduler", "rss_social_pipeline"].includes(item.sourceOwner)).map((item) => item.title),
       blotato: findings.filter((item) => item.sourceOwner === "blotato_video_pipeline").map((item) => item.title),
       aims: findings.filter((item) => item.sourceOwner === "aims_content_pipeline").map((item) => item.title),
+      podcast: findings.filter((item) => ["aims_r2_podcast", "podcast_transcript_pipeline"].includes(item.sourceOwner)).map((item) => item.title),
       rams: ["Consume this master report as on-brand future_guidance/manual_review only. Do not create repo patches from council findings without deterministic file-level evidence."],
     },
     coverage: {
       sourcesLoaded: {
         onBrand: sourceReports.onBrand.loaded,
         socialPerformance: sourceReports.socialPerformance.loaded,
+        podcastEpisode: sourceReports.podcastEpisode.loaded,
+        podcastTranscript: sourceReports.podcastTranscript.loaded,
       },
-      sourceErrors: [...onBrandBundle.errors.map((error) => ({ source: "on-brand", ...error })), ...socialBundle.errors.map((error) => ({ source: "social-performance", ...error }))],
-      sourceWarnings: [...arr(onBrandBundle.warnings).map((warning) => ({ source: "on-brand", ...warning })), ...arr(socialBundle.warnings).map((warning) => ({ source: "social-performance", ...warning }))],
+      sourceErrors: [
+        ...onBrandBundle.errors.map((error) => ({ source: "on-brand", ...error })),
+        ...socialBundle.errors.map((error) => ({ source: "social-performance", ...error })),
+        ...arr(podcastEpisodeBundle.errors).map((error) => ({ source: "podcast-episode", ...error })),
+        ...arr(podcastTranscriptBundle.errors).map((error) => ({ source: "podcast-transcript", ...error })),
+      ],
+      sourceWarnings: [
+        ...arr(onBrandBundle.warnings).map((warning) => ({ source: "on-brand", ...warning })),
+        ...arr(socialBundle.warnings).map((warning) => ({ source: "social-performance", ...warning })),
+        ...arr(podcastEpisodeBundle.warnings).map((warning) => ({ source: "podcast-episode", ...warning })),
+        ...arr(podcastTranscriptBundle.warnings).map((warning) => ({ source: "podcast-transcript", ...warning })),
+      ],
       partial: !sourceReports.onBrand.loaded || !sourceReports.socialPerformance.loaded,
     },
   };
@@ -490,7 +565,7 @@ body{font-family:Arial,Helvetica,sans-serif;margin:0;background:#f4f7fb;color:#1
 <header><h1>Brand & Social Media Performance Council</h1><p>Generated ${escapeHtml(report.generatedAt)} · ${escapeHtml(report.executiveVerdict.status)}</p></header>
 <main>
 <section><h2>Executive verdict</h2><p>${escapeHtml(report.executiveVerdict.summary)}</p><p><span class="pill ok">R2 audits bucket</span><span class="pill">RAMS-readable</span><span class="pill warn">no direct code patching</span></p></section>
-<section><h2>Score snapshot</h2><div class="grid"><div class="kpi"><span>Brand fit</span><strong>${formatNumber(scores.brandFit)}</strong></div><div class="kpi"><span>Social posts</span><strong>${formatNumber(scores.socialPosts)}</strong></div><div class="kpi"><span>Views</span><strong>${formatNumber(scores.socialViews)}</strong></div><div class="kpi"><span>Clicks</span><strong>${formatNumber(scores.socialClicks)}</strong></div><div class="kpi"><span>Avg engagement</span><strong>${percentage(scores.socialEngagementRateAvg)}</strong></div></div></section>
+<section><h2>Score snapshot</h2><div class="grid"><div class="kpi"><span>Brand fit</span><strong>${formatNumber(scores.brandFit)}</strong></div><div class="kpi"><span>Social posts</span><strong>${formatNumber(scores.socialPosts)}</strong></div><div class="kpi"><span>Views</span><strong>${formatNumber(scores.socialViews)}</strong></div><div class="kpi"><span>Clicks</span><strong>${formatNumber(scores.socialClicks)}</strong></div><div class="kpi"><span>Avg engagement</span><strong>${percentage(scores.socialEngagementRateAvg)}</strong></div><div class="kpi"><span>Podcast episodes</span><strong>${formatNumber(scores.podcastEpisodeScore)}</strong></div><div class="kpi"><span>Transcripts</span><strong>${formatNumber(scores.podcastTranscriptScore)}</strong></div></div></section>
 <section><h2>Council members</h2><table><thead><tr><th>Role</th><th>Remit</th></tr></thead><tbody>${report.councilMembers.map((member) => `<tr><td>${escapeHtml(member.role)}</td><td>${escapeHtml(member.remit)}</td></tr>`).join("\n")}</tbody></table></section>
 <section><h2>RAMS policy</h2><p>${escapeHtml(report.ramsPolicy.reason)}</p></section>
 <section><h2>RAMS-readable findings</h2>${renderFindings(report.findings)}</section>
@@ -514,11 +589,13 @@ function repositoryIssueAppendix(report) {
 export async function runBrandSocialCouncilReport(options = {}) {
   const sessionId = trim(options.sessionId) || `brand-social-council-${crypto.randomUUID()}`;
   const reportPrefix = buildAuditPrefix(AUDIT_TYPE, sessionId);
-  const [onBrandBundle, socialBundle] = await Promise.all([
+  const [onBrandBundle, socialBundle, podcastEpisodeBundle, podcastTranscriptBundle] = await Promise.all([
     loadSourceBundle("on-brand", SOURCE_LATEST_KEYS.onBrand),
     loadSourceBundle("social-performance", SOURCE_LATEST_KEYS.socialPerformance),
+    loadSourceBundle("podcast-episode", SOURCE_LATEST_KEYS.podcastEpisode),
+    loadSourceBundle("podcast-transcript", SOURCE_LATEST_KEYS.podcastTranscript),
   ]);
-  const report = buildCouncilReport({ sessionId, reportPrefix, onBrandBundle, socialBundle });
+  const report = buildCouncilReport({ sessionId, reportPrefix, onBrandBundle, socialBundle, podcastEpisodeBundle, podcastTranscriptBundle });
   const html = renderBrandSocialCouncilHtml(report);
   const appendix = repositoryIssueAppendix(report);
   const summary = {

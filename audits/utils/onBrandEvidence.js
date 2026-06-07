@@ -342,6 +342,12 @@ export async function collectPodcastTranscriptEvidence({ include, windowStart, w
       const rawText = await getObjectAsText("transcript", key);
       const isHtml = /\.html$/i.test(key);
       const transcriptText = extractTranscriptText(rawText, { isHtml });
+      const htmlFeatureFlags = isHtml ? {
+        hasAeoSummaryBlock: /class=["'][^"']*transcript-aeo/i.test(rawText) || /id=["']episode-summary["']/i.test(rawText),
+        hasFullTranscriptAnchor: /id=["']full-transcript["']/i.test(rawText),
+        hasFaqJsonLd: /FAQPage/i.test(rawText),
+        hasPodcastEpisodeJsonLd: /PodcastEpisode/i.test(rawText),
+      } : null;
       const htmlKey = isHtml ? key : key.replace(/\.txt$/i, ".html");
       const publicUrl = buildPublicUrl("transcript", key);
       const htmlUrl = buildPublicUrl("transcript", htmlKey);
@@ -357,6 +363,7 @@ export async function collectPodcastTranscriptEvidence({ include, windowStart, w
         sourceFormat: isHtml ? "html" : "txt",
         textExcerpt: excerpt(transcriptText, 10000),
         textCharCount: transcriptText.length,
+        htmlFeatureFlags,
         discoveryMethod: "R2 transcript object scan sorted by LastModified; latest .html or .txt object wins per session; HTML transcript pages are reduced to the transcript body before audit.",
       });
       if (items.length >= maxTranscripts) break;

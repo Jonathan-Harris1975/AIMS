@@ -4,6 +4,7 @@ import { buildAuditPrefix, buildLatestKey } from "./auditPaths.js";
 import { collectOnBrandEvidence } from "./onBrandEvidence.js";
 import { buildOnBrandAuditMessages, buildOnBrandRepairMessages } from "./onBrandPrompts.js";
 import { renderOnBrandReportHtml } from "./onBrandReportHtml.js";
+import { runPodcastWebsiteReports } from "./podcastWebsiteReports.js";
 import { publishAuditJson, publishAuditText } from "./publishAuditArtifacts.js";
 import { info, warn } from "../../logger.js";
 
@@ -566,6 +567,7 @@ function requestDocument({ sessionId, options, reportPrefix }) {
       includeOneUp: options.includeOneUp,
       includePodcastTranscripts: options.includePodcastTranscripts,
       includeRss: options.includeRss,
+      runPodcastWebsiteReports: options.runPodcastWebsiteReports,
       dryRun: options.dryRun,
     },
   };
@@ -579,6 +581,7 @@ export async function runOnBrandAudit(options = {}) {
     includeOneUp: options.includeOneUp !== false,
     includePodcastTranscripts: options.includePodcastTranscripts !== false,
     includeRss: options.includeRss !== false,
+    runPodcastWebsiteReports: options.runPodcastWebsiteReports !== false,
     dryRun: Boolean(options.dryRun),
   };
   const reportPrefix = buildAuditPrefix(AUDIT_TYPE, sessionId);
@@ -638,11 +641,32 @@ export async function runOnBrandAudit(options = {}) {
   };
   const latestPublish = await publishAuditJson({ key: buildLatestKey(AUDIT_TYPE), payload: latestPayload });
 
+  let podcastWebsiteReports = null;
+  if (runOptions.runPodcastWebsiteReports) {
+    try {
+      podcastWebsiteReports = await runPodcastWebsiteReports({
+        sessionId: `${sessionId}-podcast-website`,
+        lookbackDays,
+      });
+    } catch (error) {
+      podcastWebsiteReports = {
+        ok: false,
+        auditType: "podcast-website",
+        error: error?.message || String(error),
+      };
+      warn("audit.on-brand.podcast-website-reports.failed", {
+        sessionId,
+        error: podcastWebsiteReports.error,
+      });
+    }
+  }
+
   info("audit.on-brand.complete", {
     sessionId,
     partial: latestPayload.partial,
     reportPrefix,
     defects: report.confirmedDefectsLedger.length,
+    podcastWebsiteReportsOk: podcastWebsiteReports ? podcastWebsiteReports.ok : null,
   });
 
   return {
@@ -656,6 +680,7 @@ export async function runOnBrandAudit(options = {}) {
     summaryUrl: summaryPublish.url,
     coverageUrl: coveragePublish.url,
     latestUrl: latestPublish.url,
+    podcastWebsiteReports: podcastWebsiteReports || undefined,
     sourceCoverage: report.sourceCoverage,
     executiveVerdict: report.executiveVerdict,
   };
