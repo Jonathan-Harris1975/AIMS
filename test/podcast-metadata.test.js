@@ -120,3 +120,37 @@ test("podcast RSS channel defaults are branded, hosted, and non-generic", () => 
     }
   }
 });
+
+
+test("podcast discovery metadata keeps keywords useful but not stuffed", async () => {
+  const {
+    buildLegacyItunesKeywordsCsv,
+    buildPodcastDiscoveryMetadata,
+    normaliseDiscoveryTerm,
+  } = await import("../services/rss-feed-podcast/discoveryMetadata.js");
+
+  assert.equal(normaliseDiscoveryTerm("aartificial intelligence"), "artificial intelligence");
+
+  const discovery = buildPodcastDiscoveryMetadata({
+    title: "Agentic AI, Model Hype, and Dirty Data",
+    description: "Jonathan Harris cuts through artificial intelligence governance, agentic AI and dirty data without vendor fireworks.",
+    mainOnly: sampleMain,
+    keywordCandidates: ["agentic AI", "AI governance", "AI automation", "artificial intelligence", "AI news"],
+    keywords: ["AI", "weekly", "agentic AI", "dirty data", "AI governance"],
+    categories: ["Technology", "Tech News"],
+  });
+
+  assert.equal(discovery.strategy, "supportive_metadata_not_keyword_stuffing");
+  assert.ok(discovery.primaryTerms.includes("agentic AI"));
+  assert.ok(discovery.episodeTerms.length <= 14);
+  assert.ok(discovery.legacy.itunesKeywordsCsv.length <= 255);
+  assert.doesNotMatch(discovery.legacy.itunesKeywordsCsv, /aartificial/i);
+
+  const legacy = buildLegacyItunesKeywordsCsv(
+    "aartificial intelligence, tech news, machine learning, AI podcast, Gen X, AI roundup, chatbot advancements, ai jobs impact, open ai news, ai bias, autonomous systems, llm updates, ai policy, gpt news, ai safety",
+    { context: sampleMain }
+  );
+  assert.ok(legacy.length <= 255);
+  assert.ok(legacy.split(",").length <= 12);
+  assert.doesNotMatch(legacy, /aartificial/i);
+});

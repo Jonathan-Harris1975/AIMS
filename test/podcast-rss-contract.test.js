@@ -31,3 +31,38 @@ test("generateFeedXML keeps episode page, audio enclosure, and transcript URLs d
   assert.match(xml, /<podcast:transcript url="https:\/\/jonathan-harris\.online\/transcripts\/TT-2026-04-17\.html" type="text\/html" \/>/);
   assert.doesNotMatch(xml, /<link>https:\/\/transcripts\.jonathan-harris\.online\/TT-2026-04-17\.txt<\/link>/);
 });
+
+
+test("generateFeedXML emits concise legacy iTunes keywords instead of stuffed keyword dumps", () => {
+  const original = process.env.PODCAST_ITUNES_KEYWORDS;
+  process.env.PODCAST_ITUNES_KEYWORDS = "aartificial intelligence, tech news, machine learning, AI podcast, Gen X, AI roundup, chatgpt, chatbot advancements, ai jobs impact, open ai news, ai bias, autonomous systems, llm updates, ai policy, gpt news, ai safety, tech culture, neural networks explained, ai companies, deepfake detection, ai weekly, ai news, ai breakthroughs";
+
+  try {
+    const xml = generateFeedXML([
+      {
+        sessionId: "TT-2026-04-24",
+        title: "Agentic AI and Governance Drift",
+        description: "Jonathan Harris explains why artificial intelligence agents, AI governance and messy data are becoming a practical control problem rather than a vendor fireworks show.",
+        episodeSlug: "agentic-ai-and-governance-drift",
+        podcastUrl: "https://podcast.jonathan-harris.online/TT-2026-04-24.mp3",
+        pubDate: "Fri, 24 Apr 2026 00:00:00 GMT",
+        duration: 1800,
+        fileSize: 123456,
+        keywords: ["agentic AI", "AI governance", "AI agents", "artificial intelligence", "AI"],
+      },
+    ]);
+
+    const channelKeywords = xml.match(/<channel>[\s\S]*?<itunes:keywords>([^<]+)<\/itunes:keywords>/)?.[1] || "";
+    const itemKeywords = xml.match(/<item>[\s\S]*?<itunes:keywords>([^<]+)<\/itunes:keywords>/)?.[1] || "";
+
+    assert.ok(channelKeywords.length <= 255);
+    assert.ok(channelKeywords.split(",").length <= 12);
+    assert.ok(itemKeywords.length <= 255);
+    assert.ok(itemKeywords.split(",").length <= 12);
+    assert.doesNotMatch(xml, /aartificial/i);
+    assert.match(itemKeywords, /agentic AI|AI governance/);
+  } finally {
+    if (original === undefined) delete process.env.PODCAST_ITUNES_KEYWORDS;
+    else process.env.PODCAST_ITUNES_KEYWORDS = original;
+  }
+});
