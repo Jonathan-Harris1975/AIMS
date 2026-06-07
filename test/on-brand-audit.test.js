@@ -330,3 +330,77 @@ test("/audits/podcast-website/health mounts the separate podcast and transcript 
   assert.equal(response.body.auditType, "podcast-website");
   assert.deepEqual(response.body.outputAuditTypes, ["podcast-episode", "podcast-transcript"]);
 });
+
+test("AIMS applies selected SEO/GEO skills as deterministic report lenses", async () => {
+  const { AIMS_AUDIT_SKILL_LENSES, buildSkillLensSummary } = await import(`../audits/utils/seoGeoSkillLenses.js?skill-lenses=${Date.now()}`);
+  const names = AIMS_AUDIT_SKILL_LENSES.map((lens) => lens.name);
+  for (const expected of [
+    "content-quality-auditor",
+    "geo-content-optimizer",
+    "schema-markup-generator",
+    "entity-optimizer",
+    "internal-linking-optimizer",
+    "on-page-seo-auditor",
+    "technical-seo-checker",
+    "meta-tags-optimizer",
+    "content-refresher",
+    "performance-reporter",
+  ]) {
+    assert.ok(names.includes(expected), `${expected} should be registered as an AIMS audit lens`);
+  }
+
+  const summary = buildSkillLensSummary({
+    reportKind: "podcast-transcript",
+    evidence: {
+      sourceType: "podcast_transcript",
+      status: "complete",
+      items: [{
+        sourceFormat: "html",
+        date: "2026-06-01T00:00:00.000Z",
+        htmlFeatureFlags: {
+          hasAeoSummaryBlock: false,
+          hasCanonicalLink: false,
+          hasFaqJsonLd: false,
+          hasPodcastEpisodeJsonLd: false,
+          hasInternalLink: false,
+        },
+      }],
+    },
+  });
+
+  assert.equal(summary.mode.includes("deterministic/report-first"), true);
+  assert.equal(summary.measuredSignals.itemsInspected, 1);
+  assert.equal(summary.safetyPolicy.historicContentRewriteAllowed, false);
+});
+
+test("podcast transcript skill lenses create source-owner gated findings", async () => {
+  const { __podcastWebsiteReportsTestHooks } = await import(`../audits/utils/podcastWebsiteReports.js?skill-findings=${Date.now()}`);
+  const findings = __podcastWebsiteReportsTestHooks.buildTranscriptSkillLensFindings({
+    status: "complete",
+    items: [{
+      title: "Fixture transcript",
+      sessionId: "fixture-transcript",
+      sourceFormat: "html",
+      textExcerpt: "Short transcript body about AI.",
+      textCharCount: 120,
+      date: "2026-06-01T00:00:00.000Z",
+      htmlFeatureFlags: {
+        hasAeoSummaryBlock: false,
+        hasFullTranscriptAnchor: false,
+        hasFaqJsonLd: false,
+        hasPodcastEpisodeJsonLd: false,
+        hasCanonicalLink: false,
+        hasMetaDescription: false,
+        hasRelatedBookLink: false,
+        hasTopicLink: false,
+      },
+    }],
+  }, __podcastWebsiteReportsTestHooks.makeFinding);
+
+  assert.ok(findings.length >= 6);
+  assert.ok(findings.some((finding) => /GEO lens/.test(finding.title)));
+  assert.ok(findings.some((finding) => /Schema lens/.test(finding.title)));
+  assert.ok(findings.some((finding) => /Internal linking lens/.test(finding.title)));
+  assert.ok(findings.every((finding) => finding.sourceOwner === "podcast_transcript_pipeline"));
+  assert.ok(findings.every((finding) => finding.ramsPolicy?.codePatchAllowed === false));
+});
