@@ -294,3 +294,39 @@ test("on-brand report HTML frames findings as future QA guardrails", async () =>
   assert.match(html, /Future guardrail/);
   assert.match(html, /Ranked future QA refinement plan/);
 });
+
+test("podcast website report lane produces RAMS-readable source-owner findings without static repo patches", async () => {
+  const { __podcastWebsiteReportsTestHooks } = await import(`../audits/utils/podcastWebsiteReports.js?podcast-report=${Date.now()}`);
+  const findings = __podcastWebsiteReportsTestHooks.buildEpisodeFindings({
+    status: "complete",
+    evidenceMethod: "fixture podcast RSS",
+    limitations: [],
+    items: [
+      {
+        title: "Fixture episode",
+        guid: "TT-2026-06-01",
+        link: "",
+        enclosureUrl: "https://audio.example/episode.mp3",
+        transcriptUrl: "",
+        description: "Short.",
+      },
+    ],
+  });
+
+  assert.ok(findings.length >= 2);
+  assert.ok(findings.every((finding) => finding.sourceOwner === "aims_r2_podcast"));
+  assert.ok(findings.every((finding) => Array.isArray(finding.affectedPaths) && finding.affectedPaths.length === 0));
+  assert.ok(findings.every((finding) => finding.ramsPolicy?.codePatchAllowed === false));
+});
+
+test("/audits/podcast-website/health mounts the separate podcast and transcript report lane", async () => {
+  const { default: router } = await import(`../audits/routes/index.js?podcast-report-route=${Date.now()}`);
+  const app = express();
+  app.use(express.json());
+  app.use("/audits", router);
+
+  const response = await request(app).get("/audits/podcast-website/health").expect(200);
+  assert.equal(response.body.ok, true);
+  assert.equal(response.body.auditType, "podcast-website");
+  assert.deepEqual(response.body.outputAuditTypes, ["podcast-episode", "podcast-transcript"]);
+});

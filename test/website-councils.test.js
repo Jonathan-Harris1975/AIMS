@@ -4,6 +4,7 @@ import fs from "node:fs";
 
 import { __seoAeoGeoCouncilTestHooks } from "../audits/utils/seoAeoGeoCouncil.js";
 import { __mobileUxCouncilTestHooks } from "../audits/utils/mobileUxCouncil.js";
+import { __brandSocialCouncilTestHooks } from "../audits/utils/brandSocialCouncil.js";
 
 test("SEO/AEO/GEO council exposes RAMS-readable source-ownership findings", () => {
   const bundle = {
@@ -67,6 +68,40 @@ test("audit routes mount the website council endpoints and callbacks run council
   const mobileRoute = fs.readFileSync("audits/routes/mobileUx.js", "utf8");
   assert.match(routeIndex, /seo-aeo-geo-council/);
   assert.match(routeIndex, /mobile-ux-council/);
+  assert.match(routeIndex, /podcast-website/);
   assert.match(seoRoute, /SEO_AEO_GEO_COUNCIL_RUN_AFTER_AUDIT/);
   assert.match(mobileRoute, /MOBILE_UX_COUNCIL_RUN_AFTER_AUDIT/);
+});
+
+
+test("Brand social council includes separate podcast episode and transcript reports when present", () => {
+  const report = __brandSocialCouncilTestHooks.buildCouncilReport({
+    sessionId: "brand-council-podcast-test",
+    reportPrefix: "audits/brand-social-council/test",
+    onBrandBundle: { latestLoaded: true, reportLoaded: true, latest: {}, report: { scorecard: { overallBrandFit: 86 }, confirmedDefectsLedger: [] }, errors: [], warnings: [] },
+    socialBundle: { latestLoaded: true, reportLoaded: true, latest: {}, report: { totals: { posts: 0, metrics: {} } }, errors: [], warnings: [] },
+    podcastEpisodeBundle: {
+      label: "podcast-episode",
+      latestLoaded: true,
+      reportLoaded: true,
+      latest: {},
+      report: { score: 72, findings: [{ title: "Missing episode link", severity: "high", sourceOwner: "aims_r2_podcast", evidence: ["link missing"], requiredOutcome: "Fix future episode metadata." }] },
+      errors: [],
+      warnings: [],
+    },
+    podcastTranscriptBundle: {
+      label: "podcast-transcript",
+      latestLoaded: true,
+      reportLoaded: true,
+      latest: {},
+      report: { score: 80, findings: [{ title: "Transcript AEO block missing", severity: "medium", sourceOwner: "podcast_transcript_pipeline", evidence: ["block missing"], requiredOutcome: "Fix future transcript HTML." }] },
+      errors: [],
+      warnings: [],
+    },
+  });
+
+  assert.equal(report.sourceReports.podcastEpisode.loaded, true);
+  assert.equal(report.sourceReports.podcastTranscript.loaded, true);
+  assert.ok(report.findings.some((finding) => finding.sourceOwner === "aims_r2_podcast"));
+  assert.ok(report.findings.some((finding) => finding.sourceOwner === "podcast_transcript_pipeline"));
 });
