@@ -3,6 +3,7 @@
 // ============================================================
 
 import { buildRssXml } from "./xmlBuilder.js";
+import { buildLegacyItunesKeywordsCsv, buildPodcastDiscoveryMetadata, normaliseDiscoveryTerms } from "./discoveryMetadata.js";
 import { R2_PUBLIC_BASE_URL_RSS_RESOLVED } from "../shared/utils/r2-client.js";
 import { info, warn } from "../../logger.js";
 
@@ -108,22 +109,32 @@ export function generateFeedXML(episodesMeta) {
   const lockedRaw = (envString("PODCAST_LOCKED") || "yes").toLowerCase();
   const podcastLocked = lockedRaw === "no" ? "no" : "yes";
 
+  const channelTitle = envString("PODCAST_TITLE") || "Turing’s Torch: Artificial Intelligence Weekly";
+  const channelDescription =
+    envString("PODCAST_DESCRIPTION") ||
+    "Hosted by Jonathan Harris, Turing's Torch AI Weekly cuts through artificial intelligence news, AI governance, automation and model hype with sceptical, plain-English analysis for people who would rather not swallow the vendor confetti.";
+  const channelCategories = [envString("PODCAST_CATEGORY_1"), envString("PODCAST_CATEGORY_2")].filter(Boolean);
+  const channelDiscovery = buildPodcastDiscoveryMetadata({
+    title: channelTitle,
+    description: channelDescription,
+    channelKeywords: envString("PODCAST_ITUNES_KEYWORDS", "itunes_keywords"),
+    categories: channelCategories,
+  });
+
   const channel = {
-    title: envString("PODCAST_TITLE") || "Turing’s Torch: Artificial Intelligence Weekly",
+    title: channelTitle,
     link: stripQuotes(envString("PODCAST_LINK")) || "https://jonathan-harris.online/podcast/",
-    description:
-      envString("PODCAST_DESCRIPTION") ||
-      "Hosted by Jonathan Harris, Turing's Torch AI Weekly brings you cutting-edge AI innovation updates and deep dives into AI ethics. This technology podcast blends smart analysis with humor and a Gen X voice to keep you ahead of AI breakthroughs and controversies. Tune in every Friday for your essential tech insights.",
+    description: channelDescription,
     language,
     copyright: envString("PODCAST_COPYRIGHT") || `© ${new Date().getUTCFullYear()} Jonathan Harris`,
     itunesAuthor: envString("PODCAST_AUTHOR") || "Jonathan Harris",
     itunesExplicit: envString("PODCAST_EXPLICIT") || "no",
     itunesType: envString("PODCAST_ITUNES_TYPE", "itunes_type") || "episodic",
-    itunesKeywords: envString("PODCAST_ITUNES_KEYWORDS", "itunes_keywords"),
+    itunesKeywords: channelDiscovery.legacy.itunesKeywordsCsv,
     ownerName: envString("PODCAST_OWNER_NAME") || "Jonathan Harris",
     ownerEmail: envString("PODCAST_OWNER_EMAIL"),
     imageUrl: envString("PODCAST_IMAGE_URL"),
-    categories: [envString("PODCAST_CATEGORY_1"), envString("PODCAST_CATEGORY_2")].filter(Boolean),
+    categories: channelCategories,
     fundingUrl: envString("PODCAST_FUNDING_URL", "funding_url"),
     fundingText: envString("PODCAST_FUNDING_TEXT", "funding_text"),
     rssSelfLink:
@@ -140,7 +151,7 @@ export function generateFeedXML(episodesMeta) {
       "Turing Podcast Suite (Node.js, PSP-1 compatible)",
   };
 
-  const items = sorted.map(mapMetaToEpisode).filter(Boolean);
+  const items = sorted.map((meta) => mapMetaToEpisode(meta, channelDiscovery)).filter(Boolean);
 
   if (items.length === 0) {
     warn("⚠️ RSS generated with ZERO valid episode items.");
@@ -151,7 +162,7 @@ export function generateFeedXML(episodesMeta) {
   return buildRssXml(channel, items);
 }
 
-function mapMetaToEpisode(meta) {
+function mapMetaToEpisode(meta, channelDiscovery = {}) {
   const sessionId = meta.sessionId || meta.session?.sessionId || null;
   const {
     title,
@@ -186,11 +197,19 @@ function mapMetaToEpisode(meta) {
     ? new Date(updatedAt).toUTCString()
     : new Date().toUTCString();
 
-  const keywordsCsv = Array.isArray(keywords)
-    ? keywords.join(", ")
-    : typeof keywords === "string"
-    ? keywords
-    : "";
+  const discoveryMetadata = meta.discoveryMetadata || buildPodcastDiscoveryMetadata({
+    title,
+    description: description || "",
+    keywords,
+    keywordCandidates: meta.seoKeywordCandidates || [],
+    channelKeywords: channelDiscovery.primaryTerms || [],
+  });
+  const keywordsCsv = buildLegacyItunesKeywordsCsv(
+    meta.itunesKeywords,
+    discoveryMetadata.legacy?.itunesKeywordsCsv,
+    normaliseDiscoveryTerms(keywords, meta.seoKeywordCandidates),
+    { context: `${title} ${description || ""}`, fallback: false }
+  );
 
   const transcript = resolveTranscript(meta, sessionId);
   const episodePageUrl = buildEpisodePageUrl(meta, sessionId);
@@ -224,5 +243,6 @@ function mapMetaToEpisode(meta) {
     transcriptUrl: transcript.url,
     transcriptType: transcript.type,
     keywordsCsv,
+    discoveryMetadata,
   };
 }
