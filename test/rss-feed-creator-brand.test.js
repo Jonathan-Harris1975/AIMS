@@ -107,3 +107,24 @@ test("feed normalisation clamps rewritten summaries before publication", () => {
 
   assert.ok(item.rewritten.length <= RSS_PROMPTS.MAX_SUMMARY_CHARS);
 });
+
+test("RSS summaries are capped to the preferred 60-word editorial brief", () => {
+  const summary = Array.from({ length: 72 }, (_, index) => `word${index + 1}`).join(" ");
+  const clamped = RSS_PROMPTS.clampSummaryToPreferredBrief(summary);
+  assert.ok(RSS_PROMPTS.summaryWordCount(clamped) <= 60, clamped);
+});
+
+test("feed normalisation publishes RSS summaries at or below 60 words", () => {
+  const item = feedGeneratorTesting.normalizeItem(
+    {
+      title: "Sharper RSS summaries keep brand drift down",
+      link: "https://example.com/story-two",
+      rewritten: Array.from({ length: 76 }, (_, index) => `word${index + 1}`).join(" "),
+      pubDate: new Date("2026-04-29T08:00:00Z").toUTCString(),
+    },
+    "https://jonathan-harris.online",
+    new Date("2026-04-29T08:00:00Z")
+  );
+
+  assert.ok(RSS_PROMPTS.summaryWordCount(item.rewritten) <= 60, item.rewritten);
+});

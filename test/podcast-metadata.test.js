@@ -154,3 +154,26 @@ test("podcast discovery metadata keeps keywords useful but not stuffed", async (
   assert.ok(legacy.split(",").length <= 12);
   assert.doesNotMatch(legacy, /aartificial/i);
 });
+
+test("podcast metadata helpers derive AEO-ready summary, takeaways and entity fields", async () => {
+  const { __testing } = await import("../services/script/utils/podcastHelper.js");
+  const summary = __testing.deriveEpisodeSummary(
+    "What matters is that AI governance has moved from policy theatre into workflow control.",
+    "OpenAI and Anthropic are both dealing with AI governance, costs and model deployment pressure."
+  );
+  const takeaways = __testing.deriveEpisodeTakeaways({
+    description: summary,
+    mainOnly: "OpenAI and Anthropic are both dealing with AI governance, costs and model deployment pressure.",
+    topics: ["AI Governance", "Model Hype"],
+  });
+  const entities = __testing.deriveEpisodeEntities({
+    keywords: ["AI governance"],
+    topics: ["AI Governance"],
+    mainOnly: "OpenAI and Anthropic are both dealing with AI governance.",
+  });
+
+  assert.ok(summary.split(/\s+/).length <= 60);
+  assert.ok(takeaways.length >= 3);
+  assert.ok(entities.includes("Jonathan Harris"));
+  assert.ok(entities.some((entity) => /OpenAI/i.test(entity)));
+});

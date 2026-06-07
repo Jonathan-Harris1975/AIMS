@@ -66,3 +66,20 @@ test("generateFeedXML emits concise legacy iTunes keywords instead of stuffed ke
     else process.env.PODCAST_ITUNES_KEYWORDS = original;
   }
 });
+
+test("generateFeedXML emits item itunes summary for podcast directory discovery", () => {
+  const xml = generateFeedXML([
+    {
+      sessionId: "TT-2026-05-01",
+      title: "AI Governance and Workflow Automation",
+      description: "What matters is that AI governance and workflow automation are now practical control problems, not just vendor theatre.",
+      episodeSlug: "ai-governance-and-workflow-automation",
+      podcastUrl: "https://podcast.jonathan-harris.online/TT-2026-05-01.mp3",
+      pubDate: "Fri, 01 May 2026 00:00:00 GMT",
+      duration: 1800,
+      fileSize: 123456,
+    },
+  ]);
+
+  assert.match(xml, /<itunes:summary>What matters is that AI governance/);
+});
