@@ -185,10 +185,16 @@ function buildFallbackDescription(mainOnly = "", durationPlan = {}) {
     ? oxfordJoin(topics.slice(0, targetMins >= 60 ? 5 : 4))
     : "the week’s loudest artificial intelligence claims";
 
-  return [
-    `${HOST_NAME} cuts through ${topicLine} in this ${targetMins}-minute ${PODCAST_TITLE} briefing. The point is not to cheer every announcement from the pavement. It is to work out what is useful, what is undercooked, and who carries the risk once the demo glow wears off.`,
+  const paragraphs = [
+    `${HOST_NAME} cuts through ${topicLine} in this ${targetMins}-minute ${PODCAST_TITLE} briefing. What matters is simple: what is useful, what is undercooked, and who carries the risk once the demo glow wears off.`,
     "Expect plain-English context on power, money, data, labour and control, with the usual vendor fireworks left outside where they belong.",
-  ].join("\n\n");
+  ];
+
+  if (targetMins >= 60) {
+    paragraphs[1] += " Longer episodes also leave room for the awkward plumbing: incentives, security assumptions, governance gaps, and the budget line nobody wanted to read.";
+  }
+
+  return paragraphs.join("\n\n");
 }
 
 function isLikelyGenericTitle(title = "") {
@@ -336,6 +342,7 @@ HARD RULES:
   - No "Episode", no numbers, no emojis.
   - No bland titles like "AI Weekly", "Artificial Intelligence News", "This Week in AI", or "Latest AI Developments".
 - Description: ${bounds.min}-${bounds.max} characters.
+  - Start with a concise answer-first angle using natural wording such as What matters is... or The practical issue is...
   - Mention Jonathan Harris once as the host or editorial voice.
   - Include 1-3 suitable SEO phrases from the candidates above only when they read naturally.
   - Match the planned ${targetMins}-minute length: shorter episode means tighter description; longer episode can cover more themes.
@@ -429,6 +436,60 @@ export function getArtworkPrompt(description) {
   ].join(" ").slice(0, 500);
 }
 
+
+function firstSentences(text = "", limit = 2) {
+  const sentences = normaliseWhitespace(text)
+    .split(/(?<=[.!?])\s+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  return sentences.slice(0, limit).join(" ");
+}
+
+function deriveEpisodeSummary(description = "", mainOnly = "") {
+  const candidate = firstSentences(description, 2) || firstSentences(mainOnly, 2);
+  const words = normaliseWhitespace(candidate).split(/\s+/).filter(Boolean);
+  return words.slice(0, 60).join(" ").replace(/[\s,;:.]+$/, ".");
+}
+
+function deriveEpisodeTakeaways({ description = "", mainOnly = "", topics = [] } = {}) {
+  const topicText = topics.length ? oxfordJoin(topics.slice(0, 3)) : "the week’s AI story";
+  const base = [
+    `What changed: ${firstSentences(description, 1) || `${topicText} moved from headline noise into practical judgement.`}`,
+    `Why it matters: listeners get the useful signal, the unresolved risk, and the power or money question underneath ${topicText}.`,
+    "What to watch: whether the claims survive deployment, governance, cost, data and security pressure outside the launch deck.",
+  ];
+
+  const extra = normaliseWhitespace(mainOnly)
+    .split(/(?<=[.!?])\s+/)
+    .filter((line) => line.length > 80 && line.length < 220)
+    .slice(0, 2);
+
+  return uniqueKeywordList([...base, ...extra]).slice(0, 5);
+}
+
+function deriveEpisodeEntities({ keywords = [], topics = [], mainOnly = "" } = {}) {
+  const candidateEntities = (mainOnly.match(/\b(?:OpenAI|Anthropic|Google|Microsoft|NVIDIA|Meta|Apple|Amazon|Gemini|Claude|GPT|LLM|AI governance|agentic AI|robotics|finance AI|healthcare AI)\b/gi) || [])
+    .map((item) => item.replace(/\s+/g, " ").trim());
+  return uniqueKeywordList([
+    "Jonathan Harris",
+    "Turing's Torch",
+    "artificial intelligence",
+    ...topics,
+    ...candidateEntities,
+    ...keywords,
+  ]).slice(0, 12);
+}
+
+function deriveTopicIndex({ topics = [], keywords = [] } = {}) {
+  return uniqueKeywordList([
+    ...topics,
+    ...keywords.filter((keyword) => /ai|artificial|governance|agent|model|automation|data|security|robot|finance|health/i.test(keyword)),
+    "AI governance",
+    "AI costs",
+    "workflow automation",
+  ]).slice(0, 8);
+}
+
 /* -----------------------------------------------------------
  * Episode Meta Generator
  * -----------------------------------------------------------
@@ -509,6 +570,12 @@ export async function generateEpisodeMetaLLM(rawTranscript, sessionMeta = {}) {
     .map((k) => k.toLowerCase())
     .slice(0, 14);
 
+  const detectedTopics = detectTopics(mainOnly);
+  const episodeSummary = deriveEpisodeSummary(description, mainOnly);
+  const keyTakeaways = deriveEpisodeTakeaways({ description, mainOnly, topics: detectedTopics });
+  const entities = deriveEpisodeEntities({ keywords, topics: detectedTopics, mainOnly });
+  const topicIndex = deriveTopicIndex({ topics: detectedTopics, keywords });
+
   const discoveryMetadata = buildPodcastDiscoveryMetadata({
     title,
     description,
@@ -553,6 +620,14 @@ export async function generateEpisodeMetaLLM(rawTranscript, sessionMeta = {}) {
     durationPlan,
     keywords,
     seoKeywordCandidates,
+    topics: detectedTopics,
+    summary: episodeSummary,
+    episodeSummary,
+    shortSummary: episodeSummary,
+    keyTakeaways,
+    takeaways: keyTakeaways,
+    entities,
+    topicIndex,
     discoveryMetadata,
     itunesKeywords: discoveryMetadata.legacy.itunesKeywordsCsv,
     artworkPrompt,
@@ -574,6 +649,10 @@ export const __testing = {
   getMetadataDescriptionBounds,
   validateMetaCandidate,
   isLikelyGenericTitle,
+  deriveEpisodeSummary,
+  deriveEpisodeTakeaways,
+  deriveEpisodeEntities,
+  deriveTopicIndex,
 };
 
 export default {
