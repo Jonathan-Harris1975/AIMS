@@ -2,6 +2,7 @@ import { XMLParser } from "fast-xml-parser";
 import { fetchPublishedPostsHistory } from "../../services/oneup/utils/oneupClient.js";
 import * as r2Client from "../../services/shared/utils/r2-client.js";
 import { RSS_PROMPTS } from "../../services/rss-feed-creator/utils/rss-prompts.js";
+import { buildOnBrandSkillPreflightFindings } from "./seoGeoSkillLenses.js";
 
 const REPO_FILES_INSPECTED = [
   "services/oneup/utils/oneupClient.js",
@@ -342,11 +343,27 @@ export async function collectPodcastTranscriptEvidence({ include, windowStart, w
       const rawText = await getObjectAsText("transcript", key);
       const isHtml = /\.html$/i.test(key);
       const transcriptText = extractTranscriptText(rawText, { isHtml });
+      const canonicalMatch = rawText.match(/<link\b(?=[^>]*rel=["']canonical["'])(?=[^>]*href=["']([^"']+)["'])[^>]*>/i);
+      const metaDescriptionMatch = rawText.match(/<meta\b(?=[^>]*name=["']description["'])(?=[^>]*content=["']([^"']+)["'])[^>]*>/i);
+      const titleMatch = rawText.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+      const h1Matches = rawText.match(/<h1\b/gi) || [];
       const htmlFeatureFlags = isHtml ? {
         hasAeoSummaryBlock: /class=["'][^"']*transcript-aeo/i.test(rawText) || /id=["']episode-summary["']/i.test(rawText),
         hasFullTranscriptAnchor: /id=["']full-transcript["']/i.test(rawText),
         hasFaqJsonLd: /FAQPage/i.test(rawText),
         hasPodcastEpisodeJsonLd: /PodcastEpisode/i.test(rawText),
+        hasJsonLd: /application\/ld\+json/i.test(rawText),
+        hasBreadcrumbJsonLd: /BreadcrumbList/i.test(rawText),
+        hasCanonicalLink: Boolean(canonicalMatch),
+        canonicalHref: canonicalMatch?.[1] || "",
+        hasMetaDescription: Boolean(metaDescriptionMatch),
+        metaDescriptionLength: cleanText(metaDescriptionMatch?.[1] || "").length,
+        titleTagText: cleanText(titleMatch?.[1] || ""),
+        h1Count: h1Matches.length,
+        hasRelatedBookLink: /href=["'][^"']*\/(ebooks|books|book)\b/i.test(rawText) || /related\s+(book|ebook)/i.test(rawText),
+        hasTopicLink: /href=["'][^"']*\/(topics|topic|glossary)\b/i.test(rawText),
+        hasNewsletterCta: /newsletter/i.test(rawText),
+        hasInternalLink: /href=["'](?:https?:\/\/jonathan-harris\.online|\/)(?!\/)/i.test(rawText),
       } : null;
       const htmlKey = isHtml ? key : key.replace(/\.txt$/i, ".html");
       const publicUrl = buildPublicUrl("transcript", key);
@@ -737,7 +754,11 @@ export async function collectOnBrandEvidence(options = {}) {
     podcastTranscripts,
     rss,
   };
-  evidence.deterministicPreflight = runDeterministicPreflight(evidence);
+  evidence.skillLensPreflight = buildOnBrandSkillPreflightFindings(evidence);
+  evidence.deterministicPreflight = [
+    ...runDeterministicPreflight(evidence),
+    ...evidence.skillLensPreflight,
+  ];
   return evidence;
 }
 

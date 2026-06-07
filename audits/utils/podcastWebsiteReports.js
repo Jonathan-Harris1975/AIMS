@@ -3,6 +3,12 @@ import { XMLParser } from "fast-xml-parser";
 import { buildAuditPrefix, buildLatestKey } from "./auditPaths.js";
 import { publishAuditJson, publishAuditText } from "./publishAuditArtifacts.js";
 import { collectPodcastTranscriptEvidence } from "./onBrandEvidence.js";
+import {
+  AIMS_AUDIT_SKILL_LENSES,
+  buildEpisodeSkillLensFindings,
+  buildSkillLensSummary,
+  buildTranscriptSkillLensFindings,
+} from "./seoGeoSkillLenses.js";
 import * as r2Client from "../../services/shared/utils/r2-client.js";
 import { info } from "../../logger.js";
 
@@ -400,7 +406,7 @@ function severityCounts(findings = []) {
   }, { critical: 0, high: 0, medium: 0, low: 0 });
 }
 
-function reportSummary({ auditType, sessionId, generatedAt, evidence, findings, score }) {
+function reportSummary({ auditType, sessionId, generatedAt, evidence, findings, score, skillLensSummary }) {
   return {
     auditType,
     pipeline: PIPELINE,
@@ -417,10 +423,11 @@ function reportSummary({ auditType, sessionId, generatedAt, evidence, findings, 
       evidenceMethod: evidence.evidenceMethod,
       limitations: arr(evidence.limitations),
     },
+    skillLensSummary,
   };
 }
 
-function reportCoverage({ auditType, sessionId, generatedAt, evidence }) {
+function reportCoverage({ auditType, sessionId, generatedAt, evidence, skillLensSummary }) {
   return {
     auditType,
     pipeline: PIPELINE,
@@ -434,6 +441,7 @@ function reportCoverage({ auditType, sessionId, generatedAt, evidence }) {
       evidenceMethod: evidence.evidenceMethod,
       limitations: arr(evidence.limitations),
     },
+    skillLensSummary,
     items: arr(evidence.items).map((item) => ({
       title: item.title || null,
       sessionId: item.sessionId || null,
@@ -463,6 +471,8 @@ function repositoryIssueAppendix({ auditType, sessionId, generatedAt, findings, 
 
 function renderReportHtml({ title, report }) {
   const findings = arr(report.findings);
+  const lensRows = arr(report.appliedSkillLenses).map((lens) => `<tr><td>${escapeHtml(lens.name)}</td><td>${escapeHtml(lens.adoption)}</td><td>${escapeHtml(lens.mode)}</td><td>${escapeHtml(arr(lens.checks).join("; "))}</td></tr>`).join("\n");
+  const skillLensHtml = `<section><h2>Applied SEO/GEO skill lenses</h2><p>These are deterministic AIMS adaptations of the attached skills repo. They enrich the report without enabling blind static-site patching.</p><table><thead><tr><th>Skill</th><th>Adoption</th><th>Mode</th><th>Checks used</th></tr></thead><tbody>${lensRows}</tbody></table><h3>Measured signals</h3><pre>${escapeHtml(JSON.stringify(report.skillLensSummary?.measuredSignals || {}, null, 2))}</pre></section>`;
   const findingHtml = findings.length
     ? findings.map((finding) => `<article class="finding"><h3>${escapeHtml(finding.issueId)} · ${escapeHtml(finding.title)}</h3><p><span class="pill ${finding.severity === "critical" || finding.severity === "high" ? "bad" : finding.severity === "medium" ? "warn" : "ok"}">${escapeHtml(finding.severity)}</span> <span class="pill">${escapeHtml(finding.sourceOwner)}</span> <span class="pill">${escapeHtml(finding.classification)}</span></p><p><strong>Evidence:</strong> ${escapeHtml(arr(finding.evidence).join(" | "))}</p><p><strong>Outcome:</strong> ${escapeHtml(finding.requiredOutcome)}</p><p><strong>Verification:</strong> ${escapeHtml(finding.verificationMethod)}</p></article>`).join("\n")
     : "<p>No material findings were generated.</p>";
@@ -472,13 +482,14 @@ function renderReportHtml({ title, report }) {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${escapeHtml(title)}</title>
-<style>body{font-family:Arial,Helvetica,sans-serif;margin:0;background:#f4f7fb;color:#111827;line-height:1.55}header{background:#0d1420;color:#fff;padding:30px 24px}main{max-width:1180px;margin:0 auto;padding:32px 20px 64px}section,.finding{background:#fff;border:1px solid #e5e7eb;border-radius:18px;padding:22px;margin:18px 0;box-shadow:0 12px 30px rgba(13,20,32,.06)}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px}.kpi{background:#0d1420;color:#fff;border-radius:16px;padding:16px}.kpi strong{font-size:24px;display:block}.pill{display:inline-block;border-radius:999px;padding:5px 10px;background:#eef2ff;color:#4338ca;font-weight:700;font-size:12px;margin:0 4px 4px 0}.ok{background:#dcfce7;color:#166534}.warn{background:#fef3c7;color:#92400e}.bad{background:#fee2e2;color:#991b1b}pre{white-space:pre-wrap;word-break:break-word;background:#f3f4f6;border-radius:12px;padding:14px;font-size:12px}@media print{section,.finding{break-inside:avoid;page-break-inside:avoid}}</style>
+<style>body{font-family:Arial,Helvetica,sans-serif;margin:0;background:#f4f7fb;color:#111827;line-height:1.55}header{background:#0d1420;color:#fff;padding:30px 24px}main{max-width:1180px;margin:0 auto;padding:32px 20px 64px}section,.finding{background:#fff;border:1px solid #e5e7eb;border-radius:18px;padding:22px;margin:18px 0;box-shadow:0 12px 30px rgba(13,20,32,.06)}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px}.kpi{background:#0d1420;color:#fff;border-radius:16px;padding:16px}.kpi strong{font-size:24px;display:block}.pill{display:inline-block;border-radius:999px;padding:5px 10px;background:#eef2ff;color:#4338ca;font-weight:700;font-size:12px;margin:0 4px 4px 0}.ok{background:#dcfce7;color:#166534}.warn{background:#fef3c7;color:#92400e}.bad{background:#fee2e2;color:#991b1b}table{width:100%;border-collapse:collapse;font-size:13px}th,td{border-bottom:1px solid #e5e7eb;padding:9px 7px;text-align:left;vertical-align:top}th{background:#f8fafc}pre{white-space:pre-wrap;word-break:break-word;background:#f3f4f6;border-radius:12px;padding:14px;font-size:12px}@media print{section,.finding{break-inside:avoid;page-break-inside:avoid}}</style>
 </head>
 <body>
 <header><h1>${escapeHtml(title)}</h1><p>Generated ${escapeHtml(report.generatedAt)} · ${escapeHtml(report.executiveVerdict.status)}</p></header>
 <main>
 <section><h2>Executive verdict</h2><p>${escapeHtml(report.executiveVerdict.summary)}</p><p><span class="pill ok">AIMS/R2-owned</span><span class="pill">RAMS-readable</span><span class="pill warn">no direct static website patching</span></p></section>
 <section><h2>Score snapshot</h2><div class="grid"><div class="kpi"><span>Score</span><strong>${escapeHtml(report.score)}</strong></div><div class="kpi"><span>Items inspected</span><strong>${escapeHtml(report.sourceCoverage.itemsInspected)}</strong></div><div class="kpi"><span>Findings</span><strong>${escapeHtml(findings.length)}</strong></div><div class="kpi"><span>Status</span><strong>${escapeHtml(report.sourceCoverage.status)}</strong></div></div></section>
+${skillLensHtml}
 <section><h2>RAMS-readable findings</h2>${findingHtml}</section>
 <section><h2>Source coverage</h2><pre>${escapeHtml(JSON.stringify(report.sourceCoverage, null, 2))}</pre></section>
 </main>
@@ -499,6 +510,7 @@ async function publishPodcastReport({ auditType, sourceOwner, sessionId, evidenc
     evidenceMethod: evidence.evidenceMethod,
     limitations: arr(evidence.limitations),
   };
+  const skillLensSummary = buildSkillLensSummary({ evidence, reportKind: auditType });
   const report = {
     auditType,
     pipeline: PIPELINE,
@@ -507,6 +519,8 @@ async function publishPodcastReport({ auditType, sourceOwner, sessionId, evidenc
     reportPrefix,
     cadence: "monthly_or_after_on_brand_run",
     sourceOwner,
+    appliedSkillLenses: AIMS_AUDIT_SKILL_LENSES,
+    skillLensSummary,
     executiveVerdict: {
       status: counts.critical || counts.high ? "Action required in AIMS/R2 generator lane" : findings.length ? "Monitor future-output guardrails" : "No material AIMS/R2 findings",
       summary: findings.length
@@ -519,8 +533,8 @@ async function publishPodcastReport({ auditType, sourceOwner, sessionId, evidenc
     findings,
   };
   const html = renderReportHtml({ title, report });
-  const summary = reportSummary({ auditType, sessionId, generatedAt, evidence, findings, score });
-  const coverage = reportCoverage({ auditType, sessionId, generatedAt, evidence });
+  const summary = reportSummary({ auditType, sessionId, generatedAt, evidence, findings, score, skillLensSummary });
+  const coverage = reportCoverage({ auditType, sessionId, generatedAt, evidence, skillLensSummary });
   const appendix = repositoryIssueAppendix({ auditType, sessionId, generatedAt, findings, sourceOwner });
   const [reportJson, summaryJson, coverageJson, appendixJson, reportHtml] = await Promise.all([
     publishAuditJson({ key: `${reportPrefix}/report.json`, payload: report }),
@@ -543,6 +557,8 @@ async function publishPodcastReport({ auditType, sourceOwner, sessionId, evidenc
     coverageUrl: coverageJson.url,
     repositoryIssueAppendixUrl: appendixJson.url,
     sourceCoverage,
+    appliedSkillLenses: AIMS_AUDIT_SKILL_LENSES,
+    skillLensSummary,
     executiveVerdict: report.executiveVerdict,
     findingCount: findings.length,
     ramsPolicy: report.ramsPolicy,
@@ -561,6 +577,8 @@ async function publishPodcastReport({ auditType, sourceOwner, sessionId, evidenc
     repositoryIssueAppendixUrl: appendixJson.url,
     latestUrl: latestJson.url,
     sourceCoverage,
+    appliedSkillLenses: AIMS_AUDIT_SKILL_LENSES,
+    skillLensSummary,
     executiveVerdict: report.executiveVerdict,
     findingCount: findings.length,
     ramsPolicy: report.ramsPolicy,
@@ -573,7 +591,10 @@ export async function runPodcastEpisodeWebsiteReport(options = {}) {
     lookbackDays: options.lookbackDays || DEFAULT_LOOKBACK_DAYS,
     maxItems: options.maxItems || DEFAULT_MAX_ITEMS,
   });
-  const findings = buildEpisodeFindings(evidence);
+  const findings = [
+    ...buildEpisodeFindings(evidence),
+    ...buildEpisodeSkillLensFindings(evidence, makeFinding),
+  ];
   const result = await publishPodcastReport({
     auditType: EPISODE_AUDIT_TYPE,
     sourceOwner: "aims_r2_podcast",
@@ -597,7 +618,10 @@ export async function runPodcastTranscriptWebsiteReport(options = {}) {
     windowEnd,
     maxTranscripts: options.maxItems || DEFAULT_MAX_ITEMS,
   });
-  const findings = buildTranscriptFindings(evidence);
+  const findings = [
+    ...buildTranscriptFindings(evidence),
+    ...buildTranscriptSkillLensFindings(evidence, makeFinding),
+  ];
   const result = await publishPodcastReport({
     auditType: TRANSCRIPT_AUDIT_TYPE,
     sourceOwner: "podcast_transcript_pipeline",
@@ -634,6 +658,7 @@ export function getPodcastWebsiteReportStatus() {
     outputAuditTypes: [EPISODE_AUDIT_TYPE, TRANSCRIPT_AUDIT_TYPE],
     latestKeys: [buildLatestKey(EPISODE_AUDIT_TYPE), buildLatestKey(TRANSCRIPT_AUDIT_TYPE)],
     routes: ["GET /audits/podcast-website/health", "POST /audits/podcast-website/run"],
+    appliedSkillLenses: AIMS_AUDIT_SKILL_LENSES,
     ramsPolicy: sourceOwnerPolicy("aims_r2_podcast"),
   };
 }
@@ -641,6 +666,9 @@ export function getPodcastWebsiteReportStatus() {
 export const __podcastWebsiteReportsTestHooks = {
   buildEpisodeFindings,
   buildTranscriptFindings,
+  buildEpisodeSkillLensFindings,
+  buildSkillLensSummary,
+  buildTranscriptSkillLensFindings,
   collectPodcastEpisodeEvidence,
   makeFinding,
   normaliseEpisodeItem,
