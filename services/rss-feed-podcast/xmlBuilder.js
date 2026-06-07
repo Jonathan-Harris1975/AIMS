@@ -95,7 +95,10 @@ export function buildRssXml(channel, items) {
     parts.push("<item>");
 
     if (ep.title) parts.push(tag("title", ep.title));
-    if (ep.description) parts.push(tag("description", ep.description));
+    if (ep.description) {
+      parts.push(tag("description", ep.description));
+      parts.push(tag("itunes:summary", ep.description));
+    }
     if (ep.guid) {
       const permaLinkAttr = ep.guidIsPermaLink === false ? ' isPermaLink="false"' : "";
       parts.push(`<guid${permaLinkAttr}>${escapeXml(ep.guid)}</guid>`);
