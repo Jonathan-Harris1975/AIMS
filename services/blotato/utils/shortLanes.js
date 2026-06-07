@@ -17,6 +17,15 @@ export const BLOTATO_SHORT_LANES = Object.freeze([
       "The practical takeaway",
       "CTA",
     ],
+    // Per-lane RSS env key (Gap 4) — falls back to BLOTATO_NEWS_RSS_URL if unset
+    rssEnvKey: "BLOTATO_NEWS_INSIGHT_RSS_URL",
+    // Lane-specific hook pattern (Gap 2 / Faceless skill)
+    hookPattern: "The Stat Drop or Contrast Cut — open with the event and its immediate implication in one declarative statement. No question. No generic setup.",
+    hookExample: "OpenAI just cut the price of GPT-4 by sixty per cent.",
+    // Lane visual signature (Gap 3)
+    visualSignature: "Newsroom-style graphics, clean headline cards, timeline overlays, and abstract interface glows. Slow push-in or horizontal card reveal. No text on generated images.",
+    // Sound direction (from faceless skill)
+    soundMap: "Hook: single low impact hit. Setup and body: dark ambient electronic bed. Resolution: slight lift. CTA: fade to near-silence.",
   },
   {
     slug: "model-verdict",
@@ -36,6 +45,11 @@ export const BLOTATO_SHORT_LANES = Object.freeze([
       "Who should care",
       "Verdict",
     ],
+    rssEnvKey: "BLOTATO_MODEL_VERDICT_RSS_URL",
+    hookPattern: "Open with the verdict first, then name the tool — state the conclusion before the premise. No question. No generic intro.",
+    hookExample: "GPT-5 writes faster than GPT-4, but it hallucinates more on specialised tasks.",
+    visualSignature: "Split-panel comparisons, UI mockup overlays, benchmark-style data cards on dark backgrounds. Horizontal card reveal. No text on generated images.",
+    soundMap: "Hook: silence for 1s then driving mid-tempo electronic beat. Body: consistent driving bed. Resolution and CTA: slight tempo drop, fade out.",
   },
   {
     slug: "ai-at-work",
@@ -55,6 +69,11 @@ export const BLOTATO_SHORT_LANES = Object.freeze([
       "The risk",
       "The practical takeaway",
     ],
+    rssEnvKey: "BLOTATO_AI_AT_WORK_RSS_URL",
+    hookPattern: "Open with the specific work problem being solved or worsened. Name the problem before naming the tool.",
+    hookExample: "Teams using AI for customer replies are missing escalation signals their human staff caught.",
+    visualSignature: "Workspace environments, workflow diagrams, desk and office abstractions, process flowcharts. Slow push-in. No text on generated images.",
+    soundMap: "Hook: warm lo-fi piano enters softly. Body: consistent lo-fi bed. Resolution: music lifts slightly. CTA: fade out.",
   },
   {
     slug: "reality-check",
@@ -74,6 +93,11 @@ export const BLOTATO_SHORT_LANES = Object.freeze([
       "The risk",
       "The opportunity",
     ],
+    rssEnvKey: "BLOTATO_REALITY_CHECK_RSS_URL",
+    hookPattern: "Open with the overclaim or misleading headline, then immediately undercut it — a correction, not a question. The Contrast Cut pattern.",
+    hookExample: "That AI model did not beat human doctors. It beat one benchmark, on one dataset.",
+    visualSignature: "Headline-vs-reality contrast layouts, redlined documents, signal-vs-noise split graphics on dark backgrounds. Hard cut between two contrasting visuals. No text on generated images.",
+    soundMap: "Hook: silence. Setup: dark ambient electronic. Body: same bed, subtle tension. Resolution: resolves to slightly warmer tone. CTA: fade.",
   },
   {
     slug: "ai-playbook",
@@ -94,7 +118,12 @@ export const BLOTATO_SHORT_LANES = Object.freeze([
       "Avoid this mistake",
       "Result",
     ],
-  }
+    rssEnvKey: "BLOTATO_AI_PLAYBOOK_RSS_URL",
+    hookPattern: "Open with the outcome the viewer wants, not the tool name. Lead with the benefit or result, then reveal the method.",
+    hookExample: "Here is how to cut your email triage time by half using one AI rule.",
+    visualSignature: "Numbered step cards, process diagrams, checklist visuals, clean workflow boards. Horizontal card reveal, one card per step. No text on generated images.",
+    soundMap: "Hook: warm lo-fi piano or upbeat mid-tempo beat. Body: driving but not hectic. Resolution: upbeat lift. CTA: energetic fade.",
+  },
 ]);
 
 export const BLOTATO_SHORT_LANE_SLUGS = Object.freeze(BLOTATO_SHORT_LANES.map((lane) => lane.slug));
@@ -129,4 +158,12 @@ export function listShortLaneConfigs() {
 
 export function getShortLaneJobTypes() {
   return BLOTATO_SHORT_LANES.map((lane) => lane.jobType);
+}
+
+/**
+ * Returns the per-lane RSS URL env var name for the given lane slug.
+ * Callers should fall back to the default feed if the env var is unset.
+ */
+export function getLaneRssEnvKey(laneSlug = DEFAULT_BLOTATO_SHORT_LANE) {
+  return getShortLaneConfig(laneSlug)?.rssEnvKey || null;
 }

@@ -1136,7 +1136,7 @@ async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOT
 
 export async function triggerPublishNowJob(req = {}, laneSlug = DEFAULT_BLOTATO_SHORT_LANE) {
   const lane = requireShortLaneConfig(laneSlug);
-  const articleSource = await selectRssArticleForBlotato();
+  const articleSource = await selectRssArticleForBlotato({ laneSlug: lane.slug });
   const reservationResult = await reserveEditorialSource({
     pipeline: "blotato",
     lane: lane.slug,

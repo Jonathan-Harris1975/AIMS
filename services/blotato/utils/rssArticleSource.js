@@ -3,7 +3,8 @@ import { fetchWithTimeout } from "../../shared/http-client.js";
 import { getObjectAsText } from "../../shared/utils/r2-client.js";
 import { debug, warn } from "../../../logger.js";
 import { hasRecentSocialSource } from "../../oneup/utils/state.js";
-import { hasRecentEditorialSource } from "../../social/editorialLedger.js";
+import { hasRecentEditorialSource, hasBeenUsedCrossLaneToday } from "../../social/editorialLedger.js";
+import { getLaneRssEnvKey } from "../utils/shortLanes.js";
 
 const parser = new Parser();
 const DEFAULT_PUBLIC_RSS_URL = "https://ai-news.jonathan-harris.online/feed.xml";
@@ -118,11 +119,16 @@ async function parseFeedPayload(raw, sourceLabel) {
     .filter(Boolean);
 }
 
-function getHttpFeedUrls() {
+function getHttpFeedUrls(laneSlug = "") {
   const publicBase = trim(process.env.R2_PUBLIC_BASE_URL_RSS).replace(/\/+$/, "");
   const fromPublicBase = publicBase ? `${publicBase}/${trim(process.env.RSS_OBJECT_KEY, DEFAULT_RSS_XML_KEY)}` : "";
 
+  // Gap 4: check for a per-lane RSS URL first, then fall back to the shared feed chain.
+  const laneRssEnvKey = laneSlug ? getLaneRssEnvKey(laneSlug) : null;
+  const laneRssUrl = laneRssEnvKey ? trim(process.env[laneRssEnvKey]) : "";
+
   return [
+    laneRssUrl,
     process.env.BLOTATO_NEWS_RSS_URL,
     process.env.BLOTATO_RSS_FEED_URL,
     process.env.RSS_FEED_URL,
@@ -135,25 +141,33 @@ function getHttpFeedUrls() {
     .filter((value, index, array) => array.indexOf(value) === index);
 }
 
-function getLoaders() {
+function getLoaders(laneSlug = "") {
   const preferR2 = parseBoolean(process.env.BLOTATO_RSS_PREFER_R2, true);
   const bucketAlias = trim(process.env.BLOTATO_RSS_BUCKET_ALIAS, DEFAULT_RSS_BUCKET_ALIAS);
   const jsonKey = trim(process.env.BLOTATO_RSS_JSON_KEY, DEFAULT_RSS_JSON_KEY);
   const xmlKey = trim(process.env.RSS_OBJECT_KEY, DEFAULT_RSS_XML_KEY);
 
-  const r2Loaders = [
-    {
-      label: `r2://${bucketAlias}/${jsonKey}`,
-      run: async () => parseFeedPayload(await getObjectAsText(bucketAlias, jsonKey), `r2:${jsonKey}`),
-    },
-    {
-      label: `r2://${bucketAlias}/${xmlKey}`,
-      run: async () => parseFeedPayload(await getObjectAsText(bucketAlias, xmlKey), `r2:${xmlKey}`),
-    },
-  ];
+  // When a per-lane RSS URL is configured, skip the shared R2 bucket for that lane
+  // and go straight to the lane-specific HTTP URL, preserving the R2 fallback only
+  // when the lane has no dedicated feed override.
+  const laneRssEnvKey = laneSlug ? getLaneRssEnvKey(laneSlug) : null;
+  const hasLaneRssOverride = laneRssEnvKey && Boolean(trim(process.env[laneRssEnvKey]));
+
+  const r2Loaders = hasLaneRssOverride
+    ? [] // skip shared R2 bucket when the lane has its own HTTP feed
+    : [
+        {
+          label: `r2://${bucketAlias}/${jsonKey}`,
+          run: async () => parseFeedPayload(await getObjectAsText(bucketAlias, jsonKey), `r2:${jsonKey}`),
+        },
+        {
+          label: `r2://${bucketAlias}/${xmlKey}`,
+          run: async () => parseFeedPayload(await getObjectAsText(bucketAlias, xmlKey), `r2:${xmlKey}`),
+        },
+      ];
 
   const timeout = Number(process.env.FEED_FETCH_TIMEOUT_MS || process.env.BLOTATO_RSS_FETCH_TIMEOUT_MS || 15_000);
-  const httpLoaders = getHttpFeedUrls().map((url) => ({
+  const httpLoaders = getHttpFeedUrls(laneSlug).map((url) => ({
     label: url,
     run: async () => {
       const response = await fetchWithTimeout(url, {
@@ -178,7 +192,14 @@ function pickItem(items = []) {
 
   if (!usable.length) return null;
 
-  const unused = usable.filter((item) => !hasRecentSocialSource(item) && !hasRecentEditorialSource(item));
+  // Gap 4: exclude items used by any lane today (cross-lane daily lock)
+  // as well as the existing per-session and per-lookback-window checks.
+  const unused = usable.filter(
+    (item) =>
+      !hasRecentSocialSource(item) &&
+      !hasRecentEditorialSource(item) &&
+      !hasBeenUsedCrossLaneToday(item)
+  );
   const candidates = unused.length ? unused : usable;
   const mode = trim(process.env.BLOTATO_RSS_PICK_MODE, "latest").toLowerCase();
   if (mode === "random") {
@@ -188,32 +209,32 @@ function pickItem(items = []) {
   return candidates[0];
 }
 
-export async function selectRssArticleForBlotato() {
-  const loaders = getLoaders();
+export async function selectRssArticleForBlotato({ laneSlug = "" } = {}) {
+  const loaders = getLoaders(laneSlug);
   let lastError = null;
 
   for (const loader of loaders) {
     try {
-      debug("blotato.rss.load.start", { source: loader.label });
+      debug("blotato.rss.load.start", { source: loader.label, lane: laneSlug || "default" });
       const items = await loader.run();
       const article = pickItem(items);
       if (article) {
         delete article._pubDateMs;
-        debug("blotato.rss.load.complete", { source: loader.label, title: article.title });
+        debug("blotato.rss.load.complete", { source: loader.label, lane: laneSlug || "default", title: article.title });
         return {
           article,
           rssSource: loader.label,
           itemCount: items.length,
         };
       }
-      warn("blotato.rss.no_usable_items", { source: loader.label, itemCount: items.length });
+      warn("blotato.rss.no_usable_items", { source: loader.label, lane: laneSlug || "default", itemCount: items.length });
     } catch (error) {
       lastError = error;
-      warn("blotato.rss.load.fail", { source: loader.label, error: error?.message || String(error) });
+      warn("blotato.rss.load.fail", { source: loader.label, lane: laneSlug || "default", error: error?.message || String(error) });
     }
   }
 
-  const err = new Error(`No usable RSS article found for Blotato${lastError ? `: ${lastError.message}` : ""}`);
+  const err = new Error(`No usable RSS article found for Blotato${laneSlug ? ` (lane: ${laneSlug})` : ""}${lastError ? `: ${lastError.message}` : ""}`);
   err.statusCode = 502;
   throw err;
 }

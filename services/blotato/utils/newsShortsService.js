@@ -2,13 +2,13 @@ import { warn } from "../../../logger.js";
 import { AMERICAN_TO_BRITISH } from "../../content-quality/brandLexicon.js";
 import { resilientRequest } from "../../shared/utils/ai-service.js";
 import { createVisual } from "./blotatoClient.js";
-import { DEFAULT_BLOTATO_SHORT_LANE, requireShortLaneConfig } from "./shortLanes.js";
+import { DEFAULT_BLOTATO_SHORT_LANE, requireShortLaneConfig, getShortLaneConfig } from "./shortLanes.js";
 
 const NEWS_SHORT_MAX_TOKENS = Math.max(2600, Number(process.env.BLOTATO_NEWS_SHORT_MAX_TOKENS || 3600));
-const MIN_SCRIPT_WORDS = Math.max(85, Number(process.env.BLOTATO_NEWS_MIN_SCRIPT_WORDS || 105));
-const TARGET_SCRIPT_WORDS = Math.max(MIN_SCRIPT_WORDS, Number(process.env.BLOTATO_NEWS_TARGET_SCRIPT_WORDS || 120));
-const MAX_SCRIPT_WORDS = Math.max(TARGET_SCRIPT_WORDS, Number(process.env.BLOTATO_NEWS_MAX_SCRIPT_WORDS || 140));
-const MIN_SCENE_VOICEOVER_WORDS = Math.max(75, Number(process.env.BLOTATO_NEWS_MIN_SCENE_WORDS || 90));
+const MIN_SCRIPT_WORDS = Math.max(85, Number(process.env.BLOTATO_NEWS_MIN_SCRIPT_WORDS || 110));
+const TARGET_SCRIPT_WORDS = Math.max(MIN_SCRIPT_WORDS, Number(process.env.BLOTATO_NEWS_TARGET_SCRIPT_WORDS || 145));
+const MAX_SCRIPT_WORDS = Math.max(TARGET_SCRIPT_WORDS, Number(process.env.BLOTATO_NEWS_MAX_SCRIPT_WORDS || 165));
+const MIN_SCENE_VOICEOVER_WORDS = Math.max(75, Number(process.env.BLOTATO_NEWS_MIN_SCENE_WORDS || 110));
 
 // Brand kit — all visual and audio identity settings are env-configurable.
 const AI_STORY_VOICE = process.env.BLOTATO_BRAND_VOICE_NAME || "Daniel (British, authoritative)";
@@ -20,11 +20,15 @@ const AI_STORY_ANIMATE_IMAGES = process.env.BLOTATO_BRAND_ANIMATE_IMAGES !== "fa
 const AI_STORY_TRIM_TO_VOICEOVER = process.env.BLOTATO_BRAND_TRIM_TO_VOICEOVER !== "false";
 
 // Media generation cost preference labels. Current Blotato template requests are steered through prompt + template settings, not unsupported top-level model fields.
-const MAX_SCENES = Math.max(4, Math.min(9, Number(process.env.BLOTATO_VIDEO_SCENE_COUNT || 7)));
+const MAX_SCENES = Math.max(4, Math.min(9, Number(process.env.BLOTATO_VIDEO_SCENE_COUNT || 5)));
 const MIN_DURATION_SECONDS = 30;
 const DEFAULT_DURATION_SECONDS = 45;
 const LOW_COST_IMAGE_MODEL_LABEL = process.env.BLOTATO_LOW_COST_IMAGE_MODEL_LABEL || "flux schnell";
 const LOW_COST_VIDEO_MODEL_LABEL = process.env.BLOTATO_LOW_COST_VIDEO_MODEL_LABEL || "framepack";
+
+// Gap 5: automated hook expert review. Set BLOTATO_HOOK_VARIANTS=2 to request an alternate
+// hook candidate and run an automated strength comparison. Zero manual interaction required.
+const HOOK_VARIANTS = Math.max(1, Math.min(2, Number(process.env.BLOTATO_HOOK_VARIANTS || 1)));
 
 const BLOTATO_NEWS_SHORT_JSON_SCHEMA = Object.freeze({
   name: "blotato_news_short_pack",
@@ -37,6 +41,7 @@ const BLOTATO_NEWS_SHORT_JSON_SCHEMA = Object.freeze({
       lane: { type: "string" },
       angle: { type: "string" },
       hook: { type: "string" },
+      hookAlt: { type: "string" },
       script: { type: "string" },
       scenes: {
         type: "array",
@@ -68,6 +73,7 @@ const BLOTATO_NEWS_SHORT_JSON_SCHEMA = Object.freeze({
       "lane",
       "angle",
       "hook",
+      "hookAlt",
       "script",
       "scenes",
       "visualDirection",
@@ -218,16 +224,20 @@ function buildNewsShortPrompt({ article, articles, theme, durationSeconds, cta, 
   const resolvedCta = ctaForLane(laneConfig.slug, cta);
   const targetDuration = Math.max(MIN_DURATION_SECONDS, Number(durationSeconds || DEFAULT_DURATION_SECONDS));
   const structure = laneConfig.structure.map((item, index) => `${index + 1}. ${item}`).join("\n");
+  const requestHookAlt = HOOK_VARIANTS >= 2;
 
   return {
     system: `You create short-form video packs for Jonathan Harris, an AI author and podcast host.
 
-Context:
-- Infer the useful topic from the source article.
-- Build a faceless vertical AI short for Blotato.
-- Treat the source as the evidence floor. Do not invent facts, quotes, numbers, dates, company claims, or product details.
+# Role — Faceless Script Specialist
+You write narration-driven, voiceover-based AI short-form video scripts. No face appears on camera. The narration carries the entire story. Every scene must be visualisable without text overlays on generated imagery.
 
-Writing style:
+# Faceless Video Laws
+1. The narration carries the story. Every line must inform, intrigue, or advance the story — no filler.
+2. Every mediaSource must describe a visual that can be generated without text. No text, captions, labels, or overlays on generated images.
+3. The hook is non-negotiable. The first 3 seconds must scroll-stop on ${["Facebook", "Instagram", "YouTube Shorts", "TikTok"].join(", ")}.
+
+# Writing style
 - British English.
 - Spartan and informative.
 - Clear, simple language.
@@ -243,11 +253,26 @@ Writing style:
 - No corporate filler.
 - No generic setup language.
 - No metaphors or clichés.
+- Write for speaking, not reading. Contractions allowed. No academic language.
+- One idea per sentence. Never stack two concepts.
+- Rhythm matters: alternate short punchy lines with slightly longer ones.
+- Do not say what the visual already shows — say what it means.
 
-Avoid these words and phrases unless they appear inside a product name or quoted source text:
+# Avoid these words and phrases unless they appear inside a product name or quoted source text:
 can, may, just, very, really, literally, actually, certainly, probably, basically, could, maybe, delve, embark, enlightening, esteemed, shed light, craft, crafting, imagine, realm, game-changer, unlock, discover, skyrocket, abyss, you're not alone, in a world where, revolutionize, disruptive, utilize, utilizing, dive deep, tapestry, illuminate, unveil, pivotal, enrich, intricate, elucidate, hence, furthermore, however, harness, exciting, groundbreaking, cutting-edge, remarkable, it remains to be seen, glimpse into, navigating, landscape, stark, testament, in summary, in conclusion, moreover, boost, bustling, opened up, powerful, inquiries, ever-evolving.
 
-Lane planning structure:
+# Lane: ${laneConfig.slug}
+## Hook rule for this lane
+${laneConfig.hookPattern}
+Example hook: "${laneConfig.hookExample}"
+
+## Visual signature for this lane
+${laneConfig.visualSignature}
+
+## Sound direction for this lane
+${laneConfig.soundMap}
+
+# Lane planning structure
 ${structure}
 
 Return valid JSON only. The response must be one complete JSON object with double-quoted keys and no trailing text.`,
@@ -271,15 +296,16 @@ Return exactly one JSON object with these keys:
   "internalTitle": "short working title, max 80 chars",
   "lane": "${laneConfig.slug}",
   "angle": "one sentence explaining the editorial angle",
-  "hook": "opening line, 8 to 16 words, specific and direct — no hype, no question, no generic setup",
+  "hook": "opening line following the ${laneConfig.slug} hook rule — see system prompt. No word-count restriction. Content determines length.",
+  ${requestHookAlt ? `"hookAlt": "a second candidate hook for the same lane using a different hook pattern from the system prompt — do not repeat the primary hook structure",` : `"hookAlt": "",`}
   "script": "minimum spoken short in natural British English, target ${TARGET_SCRIPT_WORDS} words, minimum ${MIN_SCRIPT_WORDS} words",
   "scenes": [
     {
-      "mediaSource": "specific AI image/video prompt for this scene, faceless, premium editorial, dark technology palette",
-      "script": "voiceover text for this scene, one or two short sentences"
+      "mediaSource": "AI image/video generation prompt for this scene. Faceless. No text, labels, captions, or typography on the generated image. Describe subject, environment, movement, lighting temperature. Use the lane visual signature. Avoid generic robot clichés.",
+      "script": "voiceover text for this scene — one or two short sentences"
     }
   ],
-  "visualDirection": "specific visual plan for a faceless AI/news short",
+  "visualDirection": "specific visual plan for a faceless AI/news short using the lane visual signature",
   "thumbnailText": "3 to 5 punchy words, no clickbait",
   "youtubeTitle": "YouTube Shorts title, max 70 chars",
   "youtubeDescription": "short description with a light CTA and 3 to 5 hashtags, no emoji",
@@ -293,12 +319,12 @@ Scene rules:
 - Provide exactly ${MAX_SCENES} scenes. If the source is thin, use a clearer practical explainer instead of making the script shorter.
 - Each scene must include a mediaSource and script.
 - Each mediaSource must describe a specific visual, not a generic instruction.
-- Use faceless editorial visuals: code, interfaces, dashboards, workflow cards, newsroom graphics, data maps, product screenshots represented abstractly.
+- CRITICAL: mediaSource prompts must not contain any text, words, numbers, captions, labels, or typographic elements on the generated image. Visual composition only: subject, environment, motion, light.
+- Use the lane visual signature: ${laneConfig.visualSignature}
 - Cost guard: select the lowest-cost generation settings available, specifically ${LOW_COST_IMAGE_MODEL_LABEL} for images and ${LOW_COST_VIDEO_MODEL_LABEL} for video if Blotato offers those choices.
 - Do not use premium video models such as Kling, Luma, Runway, Veo, Minimax, or any other high-credit video option.
 - Do not generate extra unused images, duplicate scenes, B-roll packs, or alternate takes.
 - Avoid gimmicky robot clichés.
-- Avoid text-heavy visuals.
 - The first scene must support the hook.
 - The final scene must support the CTA or practical takeaway.
 - The combined scene scripts must contain enough spoken copy for at least 30 seconds of voiceover. Never return a thin script.
@@ -379,7 +405,19 @@ function deriveScenesFromPack(pack = {}) {
   const scriptSentences = splitSentences(pack.script);
   const chunks = chunkSentences(scriptSentences, scriptSentences.length >= 6 ? 5 : 4);
   const visualBase = cleanText(pack.visualDirection, 700);
-  const title = cleanText(pack.thumbnailText || pack.internalTitle || "AI news insight", 120);
+  const laneSlug = pack.lane || DEFAULT_BLOTATO_SHORT_LANE;
+  const laneConfig = getShortLaneConfig(laneSlug);
+  const visualSignature = laneConfig?.visualSignature || "Faceless premium editorial technology visual, dark navy and charcoal palette, subtle motion, no robot cliché.";
+
+  // Gap 6: phase-specific compositional styles rather than identical visual bases per scene.
+  // Gap 3 / Faceless skill: no text or labels on generated images.
+  const phaseCompositions = [
+    `Wide establishing shot, single focal point, high contrast lighting, slow push-in`,
+    `Medium shot, abstract workflow or process visual, ambient motion`,
+    `Close-up detail, tight framing, dramatic directional light`,
+    `Overhead or isometric view, layered complexity, data or network abstraction`,
+    `Clean minimal frame, single key element centred, slight pull-back, calm resolution`,
+  ];
 
   return chunks.map((chunk, index) => {
     const phase = index === 0
@@ -387,8 +425,9 @@ function deriveScenesFromPack(pack = {}) {
       : index === chunks.length - 1
         ? "closing takeaway"
         : `supporting point ${index + 1}`;
+    const composition = phaseCompositions[index % phaseCompositions.length];
     return {
-      mediaSource: `${visualBase}. Scene ${index + 1}: ${phase}. Faceless premium editorial technology visual, dark navy and charcoal palette, clean captions, subtle motion, no robot cliché. Topic text: ${title}.`,
+      mediaSource: `${visualBase}. ${visualSignature} Scene ${index + 1} (${phase}): ${composition}. No text, labels, captions, or typography on the generated image. Faceless.`,
       script: chunk,
     };
   });
@@ -514,7 +553,8 @@ export function buildBlotatoVisualPrompt(pack = {}) {
     `Script: ${pack.script}`,
     `Visual direction: ${pack.visualDirection}`,
     `Cost guard: use the cheapest suitable generation settings available, preferably ${LOW_COST_IMAGE_MODEL_LABEL} for images and ${LOW_COST_VIDEO_MODEL_LABEL} for video. Do not use premium video models.`,
-    `Style: premium editorial, dark technology palette, clean captions, no gimmicky robot clichés, British AI news commentary tone.`,
+    `Style: premium editorial, dark technology palette, clean composition, no gimmicky robot clichés, British AI news commentary tone.`,
+    `CRITICAL — No text rule: generated images must not contain any text, labels, captions, numbers, or typographic elements. Narration and captions are added by the Blotato TTS layer. Keep all generated visuals text-free.`,
   ].join("\n");
 }
 
@@ -729,13 +769,112 @@ async function requestNewsShortJson(prompt, { repairRaw } = {}) {
   });
 }
 
+/**
+ * Gap 5 — Automated smart hook review by a hook expert.
+ * Zero manual interaction. Runs only when BLOTATO_HOOK_VARIANTS=2.
+ *
+ * Given two hook candidates for the same lane, selects the stronger one using
+ * a heuristic scoring model grounded in short-form hook research:
+ *   1. Specificity — concrete nouns, numbers, named entities score higher
+ *   2. Immediacy — present tense and active verbs score higher
+ *   3. Scroll-stop pattern match — checks the lane hook pattern
+ *   4. Length fit — neither too short (vague) nor too long (loses scroll-stop window)
+ *   5. Banned phrase penalty — generic setup language is penalised
+ *
+ * If the heuristic cannot separate the two candidates, it falls back to `hook`
+ * (the primary). The review adds no latency — both hooks came from the same
+ * API call. No secondary request is made.
+ */
+function hookExpertScore(hook = "", laneConfig = {}) {
+  const text = cleanText(hook, 400);
+  if (!text) return 0;
+
+  let score = 0;
+
+  // Specificity: numbers, percentages, named products, version references
+  const specificityMatches = (text.match(/\b\d[\d,.%]+\b|\bv\d+\b|GPT|Claude|Gemini|OpenAI|Google|Meta|Microsoft|Apple|Amazon|Tesla/gi) || []).length;
+  score += Math.min(specificityMatches * 8, 24);
+
+  // Immediacy: present-tense action verbs and contractions
+  const immediacyMatches = (text.match(/\b(is|has|cuts|beats|fails|drops|fires|launches|blocks|breaks|saves|costs|takes|gives|puts|hits)\b/gi) || []).length;
+  score += Math.min(immediacyMatches * 6, 18);
+
+  // Lane pattern match — bonus if hook follows the lane hook pattern
+  const laneSlug = laneConfig?.slug || "";
+  if (laneSlug === "model-verdict" && /\bbut\b|\bhowever\b|,\s*(but|not)/i.test(text)) score += 12;
+  if (laneSlug === "reality-check" && /\bnot\b|\bdid not\b|\bdoes not\b|\bonly\b/i.test(text)) score += 12;
+  if (laneSlug === "ai-playbook" && /\bhow to\b|\bsteps?\b|\bin \d+/i.test(text)) score += 12;
+  if (laneSlug === "ai-at-work" && /\bteams?\b|\bworkers?\b|\bstaff\b|\bclients?\b|\bworkflow\b/i.test(text)) score += 12;
+  if (laneSlug === "news-insight" && /\bjust\b|\bnow\b|\bthis week\b|\bannounced\b|\breleased\b/i.test(text)) score += 10;
+
+  // Length fit: best range is 8–22 words for scroll-stop platform hooks
+  const words = text.split(/\s+/).filter(Boolean).length;
+  if (words >= 8 && words <= 22) score += 10;
+  else if (words < 5 || words > 30) score -= 10;
+
+  // Banned phrase penalty — generic openers that describe without landing
+  const genericPhrases = [
+    /^(artificial intelligence|ai) (is|has|can|may)/i,
+    /^(in this video|today we)/i,
+    /^(here is|here's) (why|how|what)/i,
+    /^(the future of)/i,
+    /^(everything you need)/i,
+  ];
+  for (const pattern of genericPhrases) {
+    if (pattern.test(text)) score -= 15;
+  }
+
+  // Question penalty (faceless skill: questions allowed as hook pattern, but
+  // only reality-check and ai-at-work lanes benefit; others prefer declaratives)
+  if (/\?$/.test(text.trim()) && !["reality-check", "ai-at-work"].includes(laneSlug)) score -= 8;
+
+  return score;
+}
+
+/**
+ * Selects the stronger hook from the pack using automated hook expert scoring.
+ * Mutates pack.hook in place; logs which hook won and the score margin.
+ * Returns the (possibly updated) pack.
+ */
+function applyHookExpertReview(pack = {}, laneConfig = {}) {
+  if (HOOK_VARIANTS < 2) return pack;
+  const hookAlt = cleanText(pack.hookAlt || "", 400);
+  if (!hookAlt) return pack;
+
+  const primaryScore = hookExpertScore(pack.hook, laneConfig);
+  const altScore = hookExpertScore(hookAlt, laneConfig);
+
+  if (altScore > primaryScore) {
+    warn("blotato.hook_expert.alt_selected", {
+      lane: laneConfig.slug,
+      selected: "hookAlt",
+      hookAlt,
+      hookPrimary: pack.hook,
+      scoreMargin: altScore - primaryScore,
+    });
+    pack.hook = hookAlt;
+  } else {
+    warn("blotato.hook_expert.primary_selected", {
+      lane: laneConfig.slug,
+      selected: "hook",
+      hook: pack.hook,
+      hookAlt,
+      scoreMargin: primaryScore - altScore,
+    });
+  }
+
+  return pack;
+}
+
 export async function buildShortLanePack(options = {}) {
   const laneConfig = requireShortLaneConfig(options.lane || DEFAULT_BLOTATO_SHORT_LANE);
   const prompt = buildNewsShortPrompt({ ...options, lane: laneConfig.slug });
   const raw = await requestNewsShortJson(prompt);
 
   try {
-    return enhancePackForBlotatoDuration(normalisePack({ ...parseJsonObject(raw), lane: laneConfig.slug }), options, laneConfig);
+    const parsed = normalisePack({ ...parseJsonObject(raw), lane: laneConfig.slug });
+    applyHookExpertReview(parsed, laneConfig);
+    return enhancePackForBlotatoDuration(parsed, options, laneConfig);
   } catch (error) {
     warn("blotato.news_short.json_retry", {
       error: error?.message || String(error),
@@ -744,7 +883,9 @@ export async function buildShortLanePack(options = {}) {
 
     try {
       const repaired = await requestNewsShortJson(prompt, { repairRaw: raw });
-      return enhancePackForBlotatoDuration(normalisePack({ ...parseJsonObject(repaired, "repaired Blotato news short"), lane: laneConfig.slug }), options, laneConfig);
+      const parsed = normalisePack({ ...parseJsonObject(repaired, "repaired Blotato news short"), lane: laneConfig.slug });
+      applyHookExpertReview(parsed, laneConfig);
+      return enhancePackForBlotatoDuration(parsed, options, laneConfig);
     } catch (repairError) {
       warn("blotato.news_short.fallback_pack", {
         lane: laneConfig.slug,
