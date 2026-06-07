@@ -243,3 +243,40 @@ export function buildIntentHash(input = {}) {
   const angle = normaliseKey(input.angle || input.topic || input.title || "");
   return shortHash([sourceKey, intentKey, angle].filter(Boolean).join("|"));
 }
+
+/**
+ * Gap 4 — Cross-lane daily source lock.
+ *
+ * Returns true if the given source article has already been used by ANY lane
+ * today (UTC calendar day). This prevents two different lanes on the same day
+ * from picking adjacent articles on the same shared feed and covering the same
+ * story from different angles — which would undermine lane differentiation
+ * without triggering the existing per-session dedup check.
+ *
+ * The check uses the same sourceKey logic as hasRecentEditorialSource but
+ * restricts the lookback window to the current UTC calendar day rather than
+ * the configured intent lookback period.
+ */
+export function hasBeenUsedCrossLaneToday(source = {}) {
+  const key = buildEditorialSourceKey(source);
+  if (!key) return false;
+
+  // Start of today in UTC (midnight)
+  const todayStart = new Date();
+  todayStart.setUTCHours(0, 0, 0, 0);
+  const cutoffMs = todayStart.getTime();
+
+  const state = readEditorialLedger();
+
+  // Check committed events for today
+  const inEvents = asArray(state.events).some((event) => {
+    if (event.sourceKey !== key) return false;
+    const created = Date.parse(event.createdAt || "");
+    return Number.isFinite(created) && created >= cutoffMs;
+  });
+  if (inEvents) return true;
+
+  // Check active (non-expired) reservations — any lane may have reserved it
+  const activeReservations = cleanExpiredReservations(state.reservations);
+  return activeReservations.some((entry) => entry.key === key);
+}
