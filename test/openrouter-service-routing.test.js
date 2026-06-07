@@ -7,13 +7,15 @@ const OPENROUTER_ENV_NAMES = [
   "OPENROUTER_DEEPSEEK_v4_flash",
   "OPENROUTER_DEEPSEEK_v4_pro",
   "OPENROUTER_ANTHROPIC_4_6",
-  "OPENROUTER_CHATGPT_mini5_",
+  "OPENROUTER_CHATGPT_MINI5",
+  "OPENROUTER_CHATGPT_mini5_", // legacy alias
   "OPENROUTER_GOOGLE_2_5_flashlite",
   "OPENROUTER_API_BASE",
   "OPENROUTER_API_KEY",
   "OPENROUTER_ART",
   "OPENROUTER_API_KEY_ART",
   "OPENROUTER_API_KEY_ART_BACKUP",
+  "BLOTATO_SCRIPT_MODEL",
 ];
 
 function snapshotEnv(names) {
@@ -33,11 +35,13 @@ function applySpreadsheetOpenRouterEnv() {
   process.env.OPENROUTER_DEEPSEEK_v4_flash = "deepseek/deepseek-v4-flash";
   process.env.OPENROUTER_DEEPSEEK_v4_pro = "deepseek/deepseek-v4-pro";
   process.env.OPENROUTER_ANTHROPIC_4_6 = "anthropic/claude-sonnet-4.6";
-  process.env.OPENROUTER_CHATGPT_mini5_ = "openai/gpt-5-mini";
+  process.env.OPENROUTER_CHATGPT_MINI5 = "openai/gpt-5-mini";
   process.env.OPENROUTER_GOOGLE_2_5_flashlite = "google/gemini-2.5-flash-lite";
   process.env.OPENROUTER_API_BASE = "https://openrouter.ai/api/v1";
   process.env.OPENROUTER_API_KEY = "sk-or-global-test-value";
   process.env.OPENROUTER_ART = "google/gemini-2.5-flash-image";
+  process.env.BLOTATO_SCRIPT_MODEL = "anthropic/claude-sonnet-4-5";
+  delete process.env.OPENROUTER_CHATGPT_mini5_;
   delete process.env.OPENROUTER_API_KEY_ART;
   delete process.env.OPENROUTER_API_KEY_ART_BACKUP;
 }
@@ -49,15 +53,16 @@ test("OpenRouter text routes used by blog, OneUp, RSS and audits resolve spreads
   try {
     const { getProviderDiagnosticsForRoute } = await import(`../services/shared/utils/ai-service.js?openrouterRoutes=${Date.now()}`);
     const expectedRoutes = {
-      blogWeekly: ["OPENROUTER_GOOGLE_2_5_flashlite", "OPENROUTER_CHATGPT_mini5_", "OPENROUTER_DEEPSEEK_v4_pro"],
-      oneupDaily: ["OPENROUTER_CHATGPT_mini5_", "OPENROUTER_GOOGLE_2_5_flashlite", "OPENROUTER_DEEPSEEK_v4_pro"],
-      oneupQuiz: ["OPENROUTER_CHATGPT_mini5_", "OPENROUTER_GOOGLE_2_5_flashlite", "OPENROUTER_DEEPSEEK_v4_pro"],
-      rssRewrite: ["OPENROUTER_CHATGPT_mini5_", "OPENROUTER_GOOGLE_2_5_flashlite", "OPENROUTER_META"],
-      rssShortTitle: ["OPENROUTER_CHATGPT_mini5_", "OPENROUTER_GOOGLE_2_5_flashlite", "OPENROUTER_META"],
+      // deepseekV4Flash replaces meta in these routes
+      blogWeekly: ["OPENROUTER_GOOGLE_2_5_flashlite", "OPENROUTER_CHATGPT_MINI5", "OPENROUTER_DEEPSEEK_v4_pro"],
+      oneupDaily: ["OPENROUTER_CHATGPT_MINI5", "OPENROUTER_GOOGLE_2_5_flashlite", "OPENROUTER_DEEPSEEK_v4_flash"],
+      oneupQuiz: ["OPENROUTER_CHATGPT_MINI5", "OPENROUTER_GOOGLE_2_5_flashlite", "OPENROUTER_DEEPSEEK_v4_flash"],
+      rssRewrite: ["OPENROUTER_CHATGPT_MINI5", "OPENROUTER_GOOGLE_2_5_flashlite", "OPENROUTER_DEEPSEEK_v4_flash"],
+      rssShortTitle: ["OPENROUTER_CHATGPT_MINI5", "OPENROUTER_GOOGLE_2_5_flashlite"],
       auditForensic: [
         "OPENROUTER_ANTHROPIC_4_6",
         "OPENROUTER_GOOGLE_2_5_flashlite",
-        "OPENROUTER_CHATGPT_mini5_",
+        "OPENROUTER_CHATGPT_MINI5",
         "OPENROUTER_DEEPSEEK_v4_pro",
         "OPENROUTER_DEEPSEEK_v4_flash",
         "OPENROUTER_META",
@@ -76,6 +81,29 @@ test("OpenRouter text routes used by blog, OneUp, RSS and audits resolve spreads
         );
       }
     }
+  } finally {
+    restoreEnv(oldEnv);
+  }
+});
+
+test("blotatoNewsShort route resolves with highQuality before standard in fallback chain", async () => {
+  const oldEnv = snapshotEnv(OPENROUTER_ENV_NAMES);
+  applySpreadsheetOpenRouterEnv();
+
+  try {
+    const { getProviderDiagnosticsForRoute } = await import(`../services/shared/utils/ai-service.js?blotatoChain=${Date.now()}`);
+    const diagnostics = getProviderDiagnosticsForRoute("blotatoNewsShort");
+    const configured = diagnostics.configuredProviders.filter((p) => p.configured);
+
+    // blotatoScript (BLOTATO_SCRIPT_MODEL) must be first
+    assert.equal(configured[0]?.providerId, "blotatoScript", "blotatoScript should be first in chain");
+    assert.equal(configured[0]?.model, "anthropic/claude-sonnet-4-5");
+
+    // highQuality (anthropic46) must appear before standard (chatgptMini5)
+    const hqIdx = configured.findIndex((p) => p.providerId === "anthropic46" || p.providerId === "highQuality");
+    const stdIdx = configured.findIndex((p) => p.providerId === "chatgptMini5" || p.providerId === "standard");
+    assert.ok(hqIdx !== -1, "highQuality/anthropic46 should be present in blotatoNewsShort chain");
+    assert.ok(hqIdx < stdIdx || stdIdx === -1, "highQuality must appear before standard in blotatoNewsShort chain");
   } finally {
     restoreEnv(oldEnv);
   }
@@ -109,3 +137,23 @@ test("OpenRouter artwork image providers resolve through shared ai-config", asyn
     restoreEnv(oldEnv);
   }
 });
+
+test("legacy OPENROUTER_CHATGPT_mini5_ still resolves chatgptMini5 for existing Koyeb secrets", async () => {
+  const oldEnv = snapshotEnv(OPENROUTER_ENV_NAMES);
+  applySpreadsheetOpenRouterEnv();
+  // Simulate old secret still in place, new key not yet set
+  delete process.env.OPENROUTER_CHATGPT_MINI5;
+  process.env.OPENROUTER_CHATGPT_mini5_ = "openai/gpt-5-mini";
+
+  try {
+    const { getProviderDiagnosticsForRoute } = await import(`../services/shared/utils/ai-service.js?legacyChatgpt=${Date.now()}`);
+    const diagnostics = getProviderDiagnosticsForRoute("oneupDaily");
+    const configured = diagnostics.configuredProviders.filter((p) => p.configured);
+    const chatgpt = configured.find((p) => p.providerId === "chatgptMini5");
+    assert.ok(chatgpt?.configured, "chatgptMini5 should resolve via legacy OPENROUTER_CHATGPT_mini5_ alias");
+    assert.equal(chatgpt?.model, "openai/gpt-5-mini");
+  } finally {
+    restoreEnv(oldEnv);
+  }
+});
+
