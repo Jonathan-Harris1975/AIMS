@@ -53,8 +53,10 @@ const google25FlashLite = provider(
 
 const chatgptMini5 = provider(
   "chatgptMini5",
-  ["OPENROUTER_CHATGPT_mini5_", "OPENROUTER_CHATGPT_mini-5", "OPENROUTER_CHATGPT_mini5", "OPENROUTER_CHATGPT_MINI5", "OPENROUTER_CHATGPT"],
-  [...SHARED_OPENROUTER_KEY, "OPENROUTER_API_KEY_CHATGPT_mini5", "OPENROUTER_API_KEY_CHATGPT_mini-5", "OPENROUTER_API_KEY_CHATGPT_MINI5", "OPENROUTER_API_KEY_CHATGPT"]
+  // Primary is now the clean name. The trailing-underscore variant (OPENROUTER_CHATGPT_mini5_)
+  // is kept as the first alias so existing Koyeb secrets continue to resolve without a redeploy.
+  ["OPENROUTER_CHATGPT_MINI5", "OPENROUTER_CHATGPT_mini5_", "OPENROUTER_CHATGPT_mini-5", "OPENROUTER_CHATGPT_mini5", "OPENROUTER_CHATGPT"],
+  [...SHARED_OPENROUTER_KEY, "OPENROUTER_API_KEY_CHATGPT_MINI5", "OPENROUTER_API_KEY_CHATGPT_mini5", "OPENROUTER_API_KEY_CHATGPT_mini-5", "OPENROUTER_API_KEY_CHATGPT"]
 );
 
 const blotatoScript = provider(
@@ -137,18 +139,19 @@ export const aiConfig = {
     seoKeywords: routeChain(["summary", "fast", "fallback"], ["chatgpt", "google"]),
     artworkPrompt: routeChain(["summary", "fast", "fallback"], ["meta", "google"]),
     artworkImage: routeChain(["image"], ["artworkPrimary", "artworkBackup"]),
-    rssRewrite: routeChain(["standard", "fast", "fallback"], ["chatgpt", "google", "meta"]),
-    rssShortTitle: routeChain(["fast", "summary", "fallback"], ["chatgpt", "google", "meta"]),
+    rssRewrite: routeChain(["standard", "fast", "fallback"], ["chatgpt", "google", "deepseekV4Flash"]),
+    rssShortTitle: routeChain(["fast", "summary", "fallback"], ["chatgpt", "google"]),
     blogWeekly: routeChain(["standard", "summary", "fallback"], ["google", "chatgpt", "deepseek"]),
-    blogSocial: routeChain(["summary", "fast", "standard", "fallback"], ["google", "chatgpt", "deepseek"]),
+    blogSocial: routeChain(["summary", "fast", "standard", "fallback"], ["google", "chatgpt", "deepseekV4Flash"]),
     onBrandAudit: routeChain(["audit", "highQuality", "standard", "fallback"], ["anthropic46", "google25FlashLite", "chatgptMini5", "deepseekV4Pro", "deepseekV4Flash", "meta", "anthropic", "google", "chatgpt", "deepseek"]),
     auditForensic: routeChain(["audit", "highQuality", "standard", "fallback"], ["anthropic46", "google25FlashLite", "chatgptMini5", "deepseekV4Pro", "deepseekV4Flash", "meta", "anthropic", "google", "chatgpt", "deepseek"]),
-    oneupDaily: routeChain(["fast", "standard", "fallback"], ["chatgpt", "google", "deepseek"]),
-    oneupQuiz: routeChain(["fast", "standard", "fallback"], ["chatgpt", "google", "deepseek"]),
+    oneupDaily: routeChain(["fast", "standard", "fallback"], ["chatgpt", "google", "deepseekV4Flash"]),
+    oneupQuiz: routeChain(["fast", "standard", "fallback"], ["chatgpt", "google", "deepseekV4Flash"]),
     oneupEbook: routeChain(["fast", "standard", "fallback"], ["chatgpt", "google", "deepseek"]),
-    // Blotato script quality is production-critical. Do not fall back to the ultra-cheap fast lane by default;
-    // weak scripts cost more downstream when Blotato grades or publishes a poor video.
-    blotatoNewsShort: routeChain(["blotatoScript", "standard", "highQuality"], ["chatgptMini5", "anthropic46", "deepseekV4Pro"]),
+    // Blotato script quality is production-critical. highQuality sits above standard so Claude 4.6
+    // is the first fallback after the dedicated blotatoScript provider, not gpt-5-mini.
+    // deepseekV4Pro is last-resort; do not fall back to the ultra-cheap fast lane by default.
+    blotatoNewsShort: routeChain(["blotatoScript", "highQuality", "standard", "fallback"], ["anthropic46", "deepseekV4Pro", "chatgptMini5"]),
   },
 
   commonParams: { temperature: 0.65, top_p: 0.9, timeout: 90000 },
