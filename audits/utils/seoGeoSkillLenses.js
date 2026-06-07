@@ -125,6 +125,11 @@ function hasQuestionPattern(text = "") {
   return /\b(what|why|how|when|where|who|which)\b[^.?!]{0,80}\?/i.test(cleanText(text));
 }
 
+function hasAnswerFriendlyCue(text = "") {
+  const cleaned = cleanText(text);
+  return hasQuestionPattern(cleaned) || /\b(short answer|what matters|why it matters|the practical issue|the catch|the risk|what changed|who carries the risk|useful signal|under the launch deck|what to watch)\b/i.test(cleaned);
+}
+
 function namedEntityCount(text = "") {
   const cleaned = cleanText(text);
   const matches = cleaned.match(/\b(?:[A-Z][a-z0-9'’.-]+|AI|ML|LLM|GPT|NVIDIA|OpenAI|Google|Microsoft|Anthropic)(?:\s+(?:[A-Z][a-z0-9'’.-]+|AI|ML|LLM|GPT))*\b/g) || [];
@@ -260,13 +265,13 @@ export function buildEpisodeSkillLensFindings(evidence = {}, makeFinding) {
       });
     }
 
-    if (!hasQuestionPattern(item.description) && descWords >= 35) {
+    if (!hasAnswerFriendlyCue(item.description) && descWords >= 35) {
       addEpisodeFinding(findings, makeFinding, {
         id: findingId("PODCAST-SKILL-GEO-ANSWER", n),
         title: "GEO lens: episode description lacks an explicit answer-friendly angle",
         severity: "low",
         itemTitleOrId: label,
-        evidence: [`skill: geo-content-optimizer`, "questionLedOrAnswerFirstCue: missing"],
+        evidence: [`skill: geo-content-optimizer`, "answerFriendlyCue: missing"],
         requiredOutcome: "For future episode descriptions, add one concise answer-first sentence that says what changed, why it matters, and who is affected.",
         verificationMethod: "Rerun the podcast episode report and confirm the GEO lens sees an answer-friendly summary cue.",
       });
