@@ -5,6 +5,7 @@ import {
   getPodcastWebsiteReportStatus,
   runPodcastWebsiteReports,
 } from "../utils/podcastWebsiteReports.js";
+import { getAsyncAuditRouteJobFresh, startAsyncAuditRouteJob } from "../utils/asyncAuditRouteJobs.js";
 
 const router = express.Router();
 const AUDIT_TYPE = "podcast-website";
@@ -23,17 +24,20 @@ router.post("/run", hookdeckDedupe("audits:podcast-website:run"), asyncRoute(asy
     return res.status(400).json({ ok: false, auditType: AUDIT_TYPE, error: parsed.error });
   }
 
-  try {
-    const result = await runPodcastWebsiteReports(parsed.data);
-    return res.json(result);
-  } catch (error) {
-    return res.status(500).json({
-      ok: false,
-      auditType: AUDIT_TYPE,
-      sessionId: parsed.data?.sessionId || null,
-      error: error?.message || String(error),
-    });
-  }
+  const job = await startAsyncAuditRouteJob({
+    auditType: AUDIT_TYPE,
+    payload: parsed.data,
+    req,
+    runner: runPodcastWebsiteReports,
+    metadata: { route: "audits.podcast-website.run" },
+  });
+  return res.status(202).json(job);
+}));
+
+router.get("/jobs/:sessionId", asyncRoute(async (req, res) => {
+  const job = await getAsyncAuditRouteJobFresh(AUDIT_TYPE, req.params.sessionId, req);
+  if (!job) return res.status(404).json({ ok: false, auditType: AUDIT_TYPE, error: "Audit job not found" });
+  return res.json(job);
 }));
 
 export default router;

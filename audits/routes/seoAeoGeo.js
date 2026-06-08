@@ -11,6 +11,7 @@ import { requireAuditCallbackAuth } from "../utils/callbackAuth.js";
 import { flushSeoAeoGeoAnalysisJobs, getSeoAeoGeoAnalysisJobFresh, startSeoAeoGeoAnalysisJob } from "../utils/auditAnalysisJobs.js";
 import { info } from "../../logger.js";
 import { runSeoAeoGeoCouncilReport } from "../utils/seoAeoGeoCouncil.js";
+import { startAsyncAuditRouteJob } from "../utils/asyncAuditRouteJobs.js";
 
 const router = express.Router();
 const asyncRoute = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
@@ -164,20 +165,24 @@ function shouldRunSeoAeoGeoCouncil(body = {}) {
   return String(process.env.SEO_AEO_GEO_COUNCIL_RUN_AFTER_AUDIT || "true").trim().toLowerCase() !== "false";
 }
 
-async function maybeRunSeoAeoGeoCouncil({ result, payload }) {
+async function maybeRunSeoAeoGeoCouncil({ result, payload, req }) {
   if (!result?.ok || result.status === "failed" || !shouldRunSeoAeoGeoCouncil(payload)) return null;
-  try {
-    return await runSeoAeoGeoCouncilReport({
+  const councilJob = await startAsyncAuditRouteJob({
+    auditType: "seo-aeo-geo-council",
+    payload: {
       sessionId: `seo-aeo-geo-council-after-${result.sessionId}`,
       sourceTrigger: "seo-aeo-geo-callback",
-    });
-  } catch (error) {
-    info("audit.seo-aeo-geo.council.failed", {
-      sessionId: result.sessionId,
-      error: error?.message || String(error),
-    });
-    return { ok: false, auditType: "seo-aeo-geo-council", error: error?.message || String(error) };
-  }
+    },
+    req,
+    runner: runSeoAeoGeoCouncilReport,
+    metadata: { route: "audits.seo-aeo-geo.callback.council" },
+  });
+  info("audit.seo-aeo-geo.council.accepted", {
+    sessionId: result.sessionId,
+    councilSessionId: councilJob.sessionId,
+    statusUrl: councilJob.statusUrl,
+  });
+  return councilJob;
 }
 
 router.post("/callback", requireAuditCallbackAuth, asyncRoute(async (req, res) => {
@@ -187,8 +192,8 @@ router.post("/callback", requireAuditCallbackAuth, asyncRoute(async (req, res) =
   }
 
   const result = await completeAuditRun({ auditType: AUDIT_TYPE, payload: parsed.data });
-  const council = await maybeRunSeoAeoGeoCouncil({ result, payload: parsed.data });
-  return res.json(council ? { ...result, council } : result);
+  const councilJob = await maybeRunSeoAeoGeoCouncil({ result, payload: parsed.data, req });
+  return res.json(councilJob ? { ...result, councilJob } : result);
 }));
 
 router.get("/jobs/:sessionId", (req, res) => {

@@ -4,6 +4,7 @@ import {
   getBrandSocialCouncilStatus,
   runBrandSocialCouncilReport,
 } from "../utils/brandSocialCouncil.js";
+import { getAsyncAuditRouteJobFresh, startAsyncAuditRouteJob } from "../utils/asyncAuditRouteJobs.js";
 
 const router = express.Router();
 const AUDIT_TYPE = "brand-social-council";
@@ -18,16 +19,20 @@ router.get("/health", (_req, res) => {
 });
 
 router.post("/run", hookdeckDedupe("audits:brand-social-council:run"), asyncRoute(async (req, res) => {
-  try {
-    const result = await runBrandSocialCouncilReport(req.body || {});
-    return res.json(result);
-  } catch (error) {
-    return res.status(500).json({
-      ok: false,
-      auditType: AUDIT_TYPE,
-      error: error?.message || String(error),
-    });
-  }
+  const job = await startAsyncAuditRouteJob({
+    auditType: AUDIT_TYPE,
+    payload: req.body || {},
+    req,
+    runner: runBrandSocialCouncilReport,
+    metadata: { route: "audits.brand-social-council.run" },
+  });
+  return res.status(202).json(job);
+}));
+
+router.get("/jobs/:sessionId", asyncRoute(async (req, res) => {
+  const job = await getAsyncAuditRouteJobFresh(AUDIT_TYPE, req.params.sessionId, req);
+  if (!job) return res.status(404).json({ ok: false, auditType: AUDIT_TYPE, error: "Audit job not found" });
+  return res.json(job);
 }));
 
 export default router;

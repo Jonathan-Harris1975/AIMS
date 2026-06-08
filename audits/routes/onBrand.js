@@ -2,6 +2,7 @@ import express from "express";
 import { hookdeckDedupe } from "../../services/shared/utils/hookdeckDedupe.js";
 import { validateBody, onBrandAuditRunBodySchema } from "../../services/shared/utils/requestSchemas.js";
 import { runOnBrandAudit } from "../utils/onBrandAudit.js";
+import { getAsyncAuditRouteJobFresh, startAsyncAuditRouteJob } from "../utils/asyncAuditRouteJobs.js";
 
 const router = express.Router();
 const AUDIT_TYPE = "on-brand";
@@ -22,17 +23,20 @@ router.post("/run", hookdeckDedupe("audits:on-brand:run"), asyncRoute(async (req
     return res.status(400).json({ ok: false, auditType: AUDIT_TYPE, error: parsed.error });
   }
 
-  try {
-    const result = await runOnBrandAudit(parsed.data);
-    return res.json(result);
-  } catch (error) {
-    return res.status(500).json({
-      ok: false,
-      auditType: AUDIT_TYPE,
-      sessionId: parsed.data?.sessionId || null,
-      error: error?.message || String(error),
-    });
-  }
+  const job = await startAsyncAuditRouteJob({
+    auditType: AUDIT_TYPE,
+    payload: parsed.data,
+    req,
+    runner: runOnBrandAudit,
+    metadata: { route: "audits.on-brand.run" },
+  });
+  return res.status(202).json(job);
+}));
+
+router.get("/jobs/:sessionId", asyncRoute(async (req, res) => {
+  const job = await getAsyncAuditRouteJobFresh(AUDIT_TYPE, req.params.sessionId, req);
+  if (!job) return res.status(404).json({ ok: false, auditType: AUDIT_TYPE, error: "Audit job not found" });
+  return res.json(job);
 }));
 
 export default router;

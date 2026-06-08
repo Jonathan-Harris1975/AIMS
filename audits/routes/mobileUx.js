@@ -5,6 +5,7 @@ import { completeAuditRun, getAuditJob, startAuditRun } from "../utils/orchestra
 import { requireAuditCallbackAuth } from "../utils/callbackAuth.js";
 import { runMobileUxCouncilReport } from "../utils/mobileUxCouncil.js";
 import { info } from "../../logger.js";
+import { startAsyncAuditRouteJob } from "../utils/asyncAuditRouteJobs.js";
 
 const router = express.Router();
 const asyncRoute = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
@@ -37,20 +38,24 @@ function shouldRunMobileUxCouncil(body = {}) {
   return String(process.env.MOBILE_UX_COUNCIL_RUN_AFTER_AUDIT || "true").trim().toLowerCase() !== "false";
 }
 
-async function maybeRunMobileUxCouncil({ result, payload }) {
+async function maybeRunMobileUxCouncil({ result, payload, req }) {
   if (!result?.ok || result.status === "failed" || !shouldRunMobileUxCouncil(payload)) return null;
-  try {
-    return await runMobileUxCouncilReport({
+  const councilJob = await startAsyncAuditRouteJob({
+    auditType: "mobile-ux-council",
+    payload: {
       sessionId: `mobile-ux-council-after-${result.sessionId}`,
       sourceTrigger: "mobile-ux-callback",
-    });
-  } catch (error) {
-    info("audit.mobile-ux.council.failed", {
-      sessionId: result.sessionId,
-      error: error?.message || String(error),
-    });
-    return { ok: false, auditType: "mobile-ux-council", error: error?.message || String(error) };
-  }
+    },
+    req,
+    runner: runMobileUxCouncilReport,
+    metadata: { route: "audits.mobile-ux.callback.council" },
+  });
+  info("audit.mobile-ux.council.accepted", {
+    sessionId: result.sessionId,
+    councilSessionId: councilJob.sessionId,
+    statusUrl: councilJob.statusUrl,
+  });
+  return councilJob;
 }
 
 router.post("/callback", requireAuditCallbackAuth, asyncRoute(async (req, res) => {
@@ -60,8 +65,8 @@ router.post("/callback", requireAuditCallbackAuth, asyncRoute(async (req, res) =
   }
 
   const result = await completeAuditRun({ auditType: AUDIT_TYPE, payload: parsed.data });
-  const council = await maybeRunMobileUxCouncil({ result, payload: parsed.data });
-  return res.json(council ? { ...result, council } : result);
+  const councilJob = await maybeRunMobileUxCouncil({ result, payload: parsed.data, req });
+  return res.json(councilJob ? { ...result, councilJob } : result);
 }));
 
 router.get("/jobs/:sessionId", (req, res) => {
