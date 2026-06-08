@@ -12,6 +12,7 @@ import {
   buildPhase4QuarantineRecord,
   phase4QuarantineKey,
 } from "../../content-quality/phase4AutonomousGates.js";
+import { runReviewCouncilGate, buildHousekeepingPlan } from "../../content-quality/reviewCouncil.js";
 import {
   cleanSourceText,
   cleanSourceTitle,
@@ -482,19 +483,19 @@ export async function buildWeeklyBlogPost({ days, weekId } = {}) {
       };
     }
 
-    const weeklyPackage = await generateStructuredWeeklyPackage({
+    let weeklyPackage = await generateStructuredWeeklyPackage({
       sessionId,
       week: window.week,
       dateLabel: window.dateLabel,
       items,
     });
 
-    const title = weeklyPackage.title;
-    const slug = slugify(`${window.week}-${title}`);
-    const dir = `${prefix}/posts/${slug}`;
+    let title = weeklyPackage.title;
+    let slug = slugify(`${window.week}-${title}`);
+    let dir = `${prefix}/posts/${slug}`;
 
-    const bodyHtml = renderWeeklyBodyHtml(weeklyPackage, { escapeHtml });
-    const imagePrompt = buildBlogArtworkPrompt({
+    let bodyHtml = renderWeeklyBodyHtml(weeklyPackage, { escapeHtml });
+    let imagePrompt = buildBlogArtworkPrompt({
       week: window.week,
       title,
       summary: weeklyPackage.summary,
@@ -524,7 +525,7 @@ export async function buildWeeklyBlogPost({ days, weekId } = {}) {
       rewritten: item.rewritten,
     }));
 
-    const postEntry = buildPostManifestEntry({
+    let postEntry = buildPostManifestEntry({
       week: window.week,
       slug,
       title,
@@ -541,7 +542,7 @@ export async function buildWeeklyBlogPost({ days, weekId } = {}) {
       publishedAt: createdAt,
     });
 
-    const contentHtml = weeklyPostBody({
+    let contentHtml = weeklyPostBody({
       title,
       summary: weeklyPackage.summary,
       dateLabel: window.dateLabel,
@@ -550,7 +551,7 @@ export async function buildWeeklyBlogPost({ days, weekId } = {}) {
       sources: cleanedSources,
     });
 
-    const fullHtml = pageTemplate({
+    let fullHtml = pageTemplate({
       title,
       description: weeklyPackage.summary,
       canonicalUrl: postUrl,
@@ -560,7 +561,7 @@ export async function buildWeeklyBlogPost({ days, weekId } = {}) {
       contentHtml,
     });
 
-    const publishedObjects = {
+    let publishedObjects = {
       postHtmlKey: `${dir}/index.html`,
       postMetaKey: `${dir}/post.json`,
       manifestKey: `${prefix}/posts.json`,
@@ -568,7 +569,7 @@ export async function buildWeeklyBlogPost({ days, weekId } = {}) {
       imageBucketKey: artwork.imageBucketKey,
     };
 
-    const phase4Gate = runPhase4AutonomousContentGate({
+    let phase4Gate = runPhase4AutonomousContentGate({
       contentType: "weekly-blog",
       generated: weeklyPackage,
       html: fullHtml,
@@ -577,14 +578,103 @@ export async function buildWeeklyBlogPost({ days, weekId } = {}) {
     });
 
     if (!phase4Gate.ok) {
-      return await quarantineWeeklyPost({
+      const reviewed = await runReviewCouncilGate({
+        councilKey: "blog-phase45",
         gate: phase4Gate,
-        week: window.week,
-        weeklyPackage,
-        cleanedSources: gateSources,
-        publishedObjects,
-        context: { dateLabel: window.dateLabel, prefix, slug, postUrl },
+        artifact: weeklyPackage,
+        contentType: "weekly-blog",
+        validate: (candidatePackage) => {
+          const candidateBodyHtml = renderWeeklyBodyHtml(candidatePackage, { escapeHtml });
+          const candidateFullHtml = pageTemplate({
+            title: candidatePackage.title,
+            description: candidatePackage.summary,
+            canonicalUrl: postUrl,
+            imageUrl,
+            publishedAt: createdAt,
+            dateLabel: window.dateLabel,
+            contentHtml: weeklyPostBody({
+              title: candidatePackage.title,
+              summary: candidatePackage.summary,
+              dateLabel: window.dateLabel,
+              imageUrl,
+              html: candidateBodyHtml,
+              sources: cleanedSources,
+            }),
+          });
+          return runPhase4AutonomousContentGate({
+            contentType: "weekly-blog",
+            generated: candidatePackage,
+            html: candidateFullHtml,
+            sources: gateSources,
+            expectedSchemaTypes: ["BlogPosting"],
+          });
+        },
       });
+
+      if (!reviewed.ok) {
+        return await quarantineWeeklyPost({
+          gate: reviewed.gate,
+          week: window.week,
+          weeklyPackage: reviewed.artifact,
+          cleanedSources: gateSources,
+          publishedObjects,
+          context: { dateLabel: window.dateLabel, prefix, slug, postUrl, housekeeping: buildHousekeepingPlan({ lane: "weekly-blog", artefacts: Object.values(publishedObjects).filter(Boolean) }) },
+        });
+      }
+
+      weeklyPackage = reviewed.artifact;
+      title = weeklyPackage.title;
+      // Keep the already-resolved URL/slug stable after council repair so manifests,
+      // R2 keys and public URLs do not drift mid-run.
+      bodyHtml = renderWeeklyBodyHtml(weeklyPackage, { escapeHtml });
+      imagePrompt = buildBlogArtworkPrompt({
+        week: window.week,
+        title,
+        summary: weeklyPackage.summary,
+        dominantThemes: weeklyPackage.dominantThemes,
+        generatedPrompt: weeklyPackage.imagePrompt,
+      });
+      postEntry = buildPostManifestEntry({
+        week: window.week,
+        slug,
+        title,
+        summary: weeklyPackage.summary,
+        bodyHtml,
+        imageUrl,
+        imagePrompt,
+        imageStatus: artwork.imageStatus,
+        imageError: artwork.imageError,
+        dateLabel: window.dateLabel,
+        postUrl,
+        sources: cleanedSources,
+        dominantThemes: weeklyPackage.dominantThemes,
+        publishedAt: createdAt,
+      });
+      contentHtml = weeklyPostBody({
+        title,
+        summary: weeklyPackage.summary,
+        dateLabel: window.dateLabel,
+        imageUrl,
+        html: bodyHtml,
+        sources: cleanedSources,
+      });
+      fullHtml = pageTemplate({
+        title,
+        description: weeklyPackage.summary,
+        canonicalUrl: postUrl,
+        imageUrl,
+        publishedAt: createdAt,
+        dateLabel: window.dateLabel,
+        contentHtml,
+      });
+      publishedObjects = {
+        postHtmlKey: `${dir}/index.html`,
+        postMetaKey: `${dir}/post.json`,
+        manifestKey: `${prefix}/posts.json`,
+        rssFeedKey: process.env.BLOG_RSS_OBJECT_KEY || `${prefix}/feed.xml`,
+        imageBucketKey: artwork.imageBucketKey,
+      };
+      phase4Gate = reviewed.gate;
     }
 
     const existingManifest = await loadExistingPostsManifest(outBucketKey, `${prefix}/posts.json`);
