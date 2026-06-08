@@ -37,6 +37,7 @@ function applyBaseEnv() {
 const scheduledRequests = [];
 let oneUpScheduleFailuresRemaining = 0;
 let oneUpScheduleAttempts = 0;
+let quizAnswerContentOverride = null;
 
 const mockServer = http.createServer(async (req, res) => {
   const url = new URL(req.url, "http://127.0.0.1");
@@ -133,7 +134,7 @@ const mockServer = http.createServer(async (req, res) => {
         "Which architecture made modern large language models practical?\nA) Decision Tree\nB) Transformer\nC) K-Means\nD) Linear Regression\n\nComment your answer below.",
       answerTitle: "Quiz Answer",
       answerContent:
-        "Quiz Answer! The correct answer is B) Transformer. Transformers handle context far better than older sequence models, which is why they sit underneath most modern LLMs. Did you get it right?",
+        quizAnswerContentOverride ?? "Quiz Answer! The correct answer is B) Transformer. Transformers handle context far better than older sequence models, which is why they sit underneath most modern LLMs. Did you get it right?",
     });
   } else {
     content = JSON.stringify({
@@ -171,6 +172,7 @@ test.afterEach(() => {
   scheduledRequests.length = 0;
   oneUpScheduleFailuresRemaining = 0;
   oneUpScheduleAttempts = 0;
+  quizAnswerContentOverride = null;
   restoreEnv();
 });
 
@@ -264,6 +266,25 @@ test("buildAndScheduleQuizSeries returns dry-run question and answer posts", asy
   assert.equal(result.answer.scheduled, false);
   assert.match(result.question.post.content, /#AIQuiz/);
   assert.match(result.answer.post.content, /Did you get it right\?/);
+});
+
+test("buildAndScheduleQuizSeries repairs a missing answer marker before the gate runs", async () => {
+  restoreEnv();
+  applyBaseEnv();
+  process.env.OPENROUTER_API_BASE = mockBase;
+  quizAnswerContentOverride =
+    "The correct answer is B) Transformer. Transformers use attention to track context across a sequence, which is why they became the backbone of modern LLMs. Did you get it right?";
+
+  const mod = await import(`../services/oneup/utils/socialScheduler.js?oneup-quiz-marker=${Date.now()}`);
+  const result = await mod.buildAndScheduleQuizSeries({
+    questionPublishDate: "2026-04-22",
+    answerPublishDate: "2026-04-23",
+    dryRun: true,
+  });
+
+  assert.equal(result.ok, true);
+  assert.match(result.answer.post.content, /^Quiz Answer! The correct answer is B\) Transformer/);
+  assert.match(result.answer.post.content, /#AIQuiz/);
 });
 
 
