@@ -11,6 +11,7 @@ import { resolveCategory, inspectOneUpTargeting, listScheduledPosts, scheduleTex
 import getSponsor from "../../script/utils/getSponsor.js";
 import { resolveFeaturedEbook } from "./ebookCatalogue.js";
 import { runPhase5OrganicGrowthGate } from "../../content-quality/phase5OrganicGrowthGates.js";
+import { repairOneUpPostForReviewCouncil, runReviewCouncilGate } from "../../content-quality/reviewCouncil.js";
 import { ANTI_HYPE_HEDGING_PHRASES, BANNED_PROMO_PATTERNS, ENGAGEMENT_BAIT_PATTERNS, GENERIC_HASHTAGS, INFLATED_EBOOK_CLAIM_PATTERNS, MOTIVATIONAL_HASHTAGS, MOTIVATIONAL_TONE_PATTERNS, findAmericanSpellings, findPatternBreaches } from "../../content-quality/brandLexicon.js";
 import { buildIntentHash, completeEditorialReservation, hasRecentAudienceIntent, recordEditorialEvent, releaseEditorialReservation, reserveEditorialSource } from "../../social/editorialLedger.js";
 
@@ -225,6 +226,47 @@ function runOneUpSocialGate({ contentType = "oneup-social", laneKey = "", post =
     warnings,
     checkedAt: new Date().toISOString(),
   };
+}
+
+async function reviewOneUpGateOrThrow({ councilKey = "oneup-social-copy", gate, post, contentType, laneKey = "", featuredBook = null, label = "OneUp social gate", validate }) {
+  const review = await runReviewCouncilGate({
+    councilKey,
+    gate,
+    artifact: post,
+    contentType,
+    repairArtifact: (candidate) => repairOneUpPostForReviewCouncil(candidate, { contentType, featuredBook }),
+    validate: (candidate) => validate
+      ? validate(candidate)
+      : runOneUpSocialGate({ contentType, laneKey, post: candidate }),
+    logger: warn,
+  });
+
+  if (review.ok) return { post: review.artifact, gate: review.gate, reviewCouncil: review.reviewCouncil };
+  throw buildGateError(review.gate, label);
+}
+
+async function reviewPhase5GateOrThrow({ gate, post, featuredBook, dayKey, label = "Phase 5 ebook conversion gate" }) {
+  const review = await runReviewCouncilGate({
+    councilKey: "oneup-social-copy",
+    gate,
+    artifact: post,
+    contentType: "oneup-ebook-conversion",
+    repairArtifact: (candidate) => repairOneUpPostForReviewCouncil(candidate, { contentType: "oneup-ebook-conversion", featuredBook }),
+    validate: (candidate) => runPhase5OrganicGrowthGate({
+      contentType: "ebook-conversion-social-post",
+      generated: candidate,
+      featuredBook,
+      day: dayKey,
+      platforms: ["facebook", "instagram", "tiktok"],
+    }),
+    logger: warn,
+  });
+
+  if (review.ok) return { post: review.artifact, gate: review.gate, reviewCouncil: review.reviewCouncil };
+  const err = new Error(`${label} failed after council review (${review.gate.score}/88): ${review.gate.defects.join(" | ")}`);
+  err.statusCode = 422;
+  err.phase5Gate = review.gate;
+  throw err;
 }
 
 const EBOOK_POST_DAYS = [
@@ -775,14 +817,32 @@ export async function buildAndScheduleDailyLane(laneKey, options = {}) {
       spotlightPerson: generated.spotlightPerson || "",
     };
 
-    const oneUpSocialGate = runOneUpSocialGate({
+    let oneUpSocialGate = runOneUpSocialGate({
       contentType: `oneup-daily-${laneKey}`,
       laneKey,
       post,
       verifiedQuote,
       buildContext,
     });
-    if (!oneUpSocialGate.ok) throw buildGateError(oneUpSocialGate, `${lane.label} social gate`);
+    if (!oneUpSocialGate.ok) {
+      const reviewed = await reviewOneUpGateOrThrow({
+        councilKey: "oneup-social-copy",
+        gate: oneUpSocialGate,
+        post,
+        contentType: `oneup-daily-${laneKey}`,
+        laneKey,
+        label: `${lane.label} social gate`,
+        validate: (candidate) => runOneUpSocialGate({
+          contentType: `oneup-daily-${laneKey}`,
+          laneKey,
+          post: candidate,
+          verifiedQuote,
+          buildContext,
+        }),
+      });
+      Object.assign(post, reviewed.post);
+      oneUpSocialGate = reviewed.gate;
+    }
 
     if (laneKey === "sunday") {
       const spotlightPerson = detectSpotlightPerson(post);
@@ -1001,7 +1061,7 @@ export async function buildAndScheduleEbookWeekly(options = {}) {
         content: ensureHashtags(generated.content, EBOOK_CONFIG.hashtags),
       };
 
-      const phase5Gate = runPhase5OrganicGrowthGate({
+      let phase5Gate = runPhase5OrganicGrowthGate({
         contentType: "ebook-conversion-social-post",
         generated: post,
         featuredBook,
@@ -1010,18 +1070,34 @@ export async function buildAndScheduleEbookWeekly(options = {}) {
       });
 
       if (!phase5Gate.ok) {
-        const err = new Error(`Phase 5 ebook conversion gate failed (${phase5Gate.score}/88): ${phase5Gate.defects.join(" | ")}`);
-        err.statusCode = 422;
-        err.phase5Gate = phase5Gate;
-        throw err;
+        const reviewed = await reviewPhase5GateOrThrow({
+          gate: phase5Gate,
+          post,
+          featuredBook,
+          dayKey,
+        });
+        Object.assign(post, reviewed.post);
+        phase5Gate = reviewed.gate;
       }
 
-      const oneUpSocialGate = runOneUpSocialGate({
+      let oneUpSocialGate = runOneUpSocialGate({
         contentType: "oneup-ebook-conversion",
         laneKey: `ebook-${dayKey}`,
         post,
       });
-      if (!oneUpSocialGate.ok) throw buildGateError(oneUpSocialGate, `${dayKey} ebook social gate`);
+      if (!oneUpSocialGate.ok) {
+        const reviewed = await reviewOneUpGateOrThrow({
+          councilKey: "oneup-social-copy",
+          gate: oneUpSocialGate,
+          post,
+          contentType: "oneup-ebook-conversion",
+          laneKey: `ebook-${dayKey}`,
+          featuredBook,
+          label: `${dayKey} ebook social gate`,
+        });
+        Object.assign(post, reviewed.post);
+        oneUpSocialGate = reviewed.gate;
+      }
 
       const scheduling = await scheduleToOneUp({
         post,
@@ -1244,10 +1320,32 @@ export async function buildAndScheduleQuizSeries(options = {}) {
       content: ensureHashtags(generated.answerContent, QUIZ_CONFIG.answerHashtags),
     };
 
-    const questionGate = runOneUpSocialGate({ contentType: "oneup-quiz-question", laneKey: "quiz-question", post: questionPost });
-    if (!questionGate.ok) throw buildGateError(questionGate, "Quiz question social gate");
-    const answerGate = runOneUpSocialGate({ contentType: "oneup-quiz-answer", laneKey: "quiz-answer", post: answerPost });
-    if (!answerGate.ok) throw buildGateError(answerGate, "Quiz answer social gate");
+    let questionGate = runOneUpSocialGate({ contentType: "oneup-quiz-question", laneKey: "quiz-question", post: questionPost });
+    if (!questionGate.ok) {
+      const reviewed = await reviewOneUpGateOrThrow({
+        councilKey: "quiz-logic",
+        gate: questionGate,
+        post: questionPost,
+        contentType: "oneup-quiz-question",
+        laneKey: "quiz-question",
+        label: "Quiz question social gate",
+      });
+      Object.assign(questionPost, reviewed.post);
+      questionGate = reviewed.gate;
+    }
+    let answerGate = runOneUpSocialGate({ contentType: "oneup-quiz-answer", laneKey: "quiz-answer", post: answerPost });
+    if (!answerGate.ok) {
+      const reviewed = await reviewOneUpGateOrThrow({
+        councilKey: "quiz-logic",
+        gate: answerGate,
+        post: answerPost,
+        contentType: "oneup-quiz-answer",
+        laneKey: "quiz-answer",
+        label: "Quiz answer social gate",
+      });
+      Object.assign(answerPost, reviewed.post);
+      answerGate = reviewed.gate;
+    }
 
     if (!dryRun && apiKey && !questionSlotClaim.duplicatePrevented && !answerSlotClaim.duplicatePrevented) {
       await scheduleToOneUp({ post: questionPost, scheduledDateTime: questionDateTime, categoryName, socialNetworkId, dryRun, apiKey, preflightOnly: true });
