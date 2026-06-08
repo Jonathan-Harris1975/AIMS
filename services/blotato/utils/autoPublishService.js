@@ -22,6 +22,7 @@ import { selectRssArticleForBlotato } from "./rssArticleSource.js";
 import { info, warn } from "../../../logger.js";
 import { recordUsedSocialSource } from "../../oneup/utils/state.js";
 import { buildBlotatoGateError, runBlotatoShortGate } from "./shortGate.js";
+import { runReviewCouncilGate, repairArtifactForReviewCouncil } from "../../content-quality/reviewCouncil.js";
 import { completeEditorialReservation, releaseEditorialReservation, reserveEditorialSource } from "../../social/editorialLedger.js";
 import { startKeepAlive, stopKeepAlive } from "../../shared/utils/keepalive.js";
 
@@ -977,12 +978,29 @@ async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOT
     });
     const pack = normalisePackForPublish(generatedPack);
 
-    const blotatoShortGate = runBlotatoShortGate({
+    let blotatoShortGate = runBlotatoShortGate({
       pack,
       article: articleSource.article,
       lane: lane.slug,
     });
-    if (!blotatoShortGate.ok) throw buildBlotatoGateError(blotatoShortGate);
+    if (!blotatoShortGate.ok) {
+      const reviewed = await runReviewCouncilGate({
+        councilKey: "blotato-script-quality",
+        gate: blotatoShortGate,
+        artifact: pack,
+        contentType: "blotato-short",
+        repairArtifact: (candidate) => repairArtifactForReviewCouncil(candidate, { contentType: "blotato-short" }),
+        validate: (candidate) => runBlotatoShortGate({
+          pack: candidate,
+          article: articleSource.article,
+          lane: lane.slug,
+        }),
+        logger: warn,
+      });
+      if (!reviewed.ok) throw buildBlotatoGateError(reviewed.gate);
+      Object.assign(pack, reviewed.artifact);
+      blotatoShortGate = reviewed.gate;
+    }
 
     const video = await createAndWaitForVideo({
       templateId,
