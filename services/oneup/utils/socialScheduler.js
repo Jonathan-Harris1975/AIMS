@@ -187,7 +187,7 @@ function runOneUpSocialGate({ contentType = "oneup-social", laneKey = "", post =
     if (content.split("\n").some((line) => line.length > 140)) warnings.push("Quiz contains a long line that may be weak on static-image layouts.");
     if (words > 90) warnings.push("Quiz post is long for a static-image quiz card.");
   } else if (/quiz-answer/i.test(contentType)) {
-    if (!/Quiz Answer!/i.test(content)) defects.push("Quiz answer must start with the answer marker.");
+    if (!/^Quiz Answer!/i.test(content)) defects.push("Quiz answer must start with the answer marker.");
     if (words > 80) warnings.push("Quiz answer is long for a static-image answer card.");
   } else if (words > 130) {
     warnings.push("OneUp post is long for organic static social copy.");
@@ -336,6 +336,20 @@ function compactText(value = "") {
     .replace(/\r\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+}
+
+function ensureQuizAnswerMarker(value = "") {
+  const text = compactText(value);
+  if (!text) return "";
+
+  const normalised = text
+    .replace(/^\s*(?:quiz\s+answer|answer)\s*[:.!-]\s*/i, "Quiz Answer! ")
+    .replace(/^\s*Quiz Answer!\s*/i, "Quiz Answer! ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+
+  if (/^Quiz Answer!/i.test(normalised)) return normalised;
+  return `Quiz Answer! ${normalised}`;
 }
 
 function escapeRegExp(value = "") {
@@ -601,7 +615,7 @@ function normaliseQuizOutput(raw) {
     questionTitle: compactText(parsed.questionTitle || "Weekly AI Quiz").slice(0, 80),
     questionContent: compactText(parsed.questionContent || ""),
     answerTitle: compactText(parsed.answerTitle || "Quiz Answer").slice(0, 80),
-    answerContent: compactText(parsed.answerContent || ""),
+    answerContent: ensureQuizAnswerMarker(parsed.answerContent || ""),
   };
 }
 

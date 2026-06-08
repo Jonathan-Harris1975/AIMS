@@ -164,7 +164,8 @@ Requirements:
 - End the question post with: Comment your answer below.
 - Do not ask readers to tag friends, follow, share, or like the post.
 - Answer post content target: 35 to 65 words
-- Start the answer post with: Quiz Answer!
+- answerContent must start exactly with: Quiz Answer!
+- Do not start answerContent with Answer:, Correct answer:, The answer is, or any other marker
 - State the correct option clearly in the first sentence
 - Explain why in plain English, quickly and cleanly
 - End the answer post with: Did you get it right?
