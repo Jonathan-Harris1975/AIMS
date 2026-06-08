@@ -18,6 +18,7 @@ import {
   buildPhase5QuarantineRecord,
   phase5QuarantineKey,
 } from "../../content-quality/phase5OrganicGrowthGates.js";
+import { runReviewCouncilGate, buildHousekeepingPlan } from "../../content-quality/reviewCouncil.js";
 import {
   parseStructuredSocialBlogPackage,
   normaliseSocialBlogPackage,
@@ -560,19 +561,19 @@ export async function buildDailySocialBlogPost({
       };
     }
 
-    const socialPackage = await generateStructuredSocialPackage({
+    let socialPackage = await generateStructuredSocialPackage({
       sessionId,
       dateLabel: window.dateLabel,
       items,
     });
 
-    const title = socialPackage.title;
-    const slug = slugify(`${window.dateId}-${title}`);
-    const dir = `${prefix}/posts/${slug}`;
-    const urls = buildSiteSocialUrls(slug);
-    const bodyHtml = renderSocialBodyHtml(socialPackage, { escapeHtml });
+    let title = socialPackage.title;
+    let slug = slugify(`${window.dateId}-${title}`);
+    let dir = `${prefix}/posts/${slug}`;
+    let urls = buildSiteSocialUrls(slug);
+    let bodyHtml = renderSocialBodyHtml(socialPackage, { escapeHtml });
 
-    const imagePrompt = buildSocialArtworkPrompt({
+    let imagePrompt = buildSocialArtworkPrompt({
       title,
       summary: socialPackage.summary,
       themes: socialPackage.themes,
@@ -611,7 +612,7 @@ export async function buildDailySocialBlogPost({
 
     const imageUrl = artwork.imageUrl;
 
-    const postEntry = buildSocialPostManifestEntry({
+    let postEntry = buildSocialPostManifestEntry({
       id: `daily-${window.dateId}`,
       slug,
       title,
@@ -635,7 +636,7 @@ export async function buildDailySocialBlogPost({
       publishedAt: createdAt,
     });
 
-    const contentHtml = socialPostBody({
+    let contentHtml = socialPostBody({
       title,
       summary: socialPackage.summary,
       dateLabel: window.dateLabel,
@@ -646,7 +647,7 @@ export async function buildDailySocialBlogPost({
       hashtags: socialPackage.hashtags,
     });
 
-    const fullHtml = pageTemplate({
+    let fullHtml = pageTemplate({
       title,
       description: socialPackage.summary,
       canonicalUrl: urls.canonicalUrl,
@@ -656,9 +657,9 @@ export async function buildDailySocialBlogPost({
       contentHtml,
     });
 
-    const mergedManifest = mergeSocialPostsManifest(existingManifest, postEntry);
+    let mergedManifest = mergeSocialPostsManifest(existingManifest, postEntry);
 
-    const publishedObjects = {
+    let publishedObjects = {
       postHtmlKey: `${dir}/index.html`,
       postMetaKey: `${dir}/post.json`,
       manifestKey,
@@ -667,7 +668,7 @@ export async function buildDailySocialBlogPost({
       imageBucketKey: artwork.imageBucketKey,
     };
 
-    const phase4Gate = runPhase4AutonomousContentGate({
+    let phase4Gate = runPhase4AutonomousContentGate({
       contentType: "social-content",
       generated: socialPackage,
       html: fullHtml,
@@ -676,18 +677,121 @@ export async function buildDailySocialBlogPost({
     });
 
     if (!phase4Gate.ok) {
-      return await quarantineSocialPost({
+      const reviewed = await runReviewCouncilGate({
+        councilKey: "blog-phase45",
         gate: phase4Gate,
-        dateId: window.dateId,
-        socialPackage,
-        cleanedSources: gateSources,
-        publishedObjects,
-        context: { dateLabel: window.dateLabel, prefix, slug, postUrl: urls.postUrl },
-        dryRun,
+        artifact: socialPackage,
+        contentType: "social-content",
+        validate: (candidatePackage) => {
+          const candidateBodyHtml = renderSocialBodyHtml(candidatePackage, { escapeHtml });
+          const candidateContentHtml = socialPostBody({
+            title: candidatePackage.title,
+            summary: candidatePackage.summary,
+            dateLabel: window.dateLabel,
+            imageUrl,
+            html: candidateBodyHtml,
+            sources: cleanedSources,
+            socialCaption: candidatePackage.social_caption,
+            hashtags: candidatePackage.hashtags,
+          });
+          const candidateFullHtml = pageTemplate({
+            title: candidatePackage.title,
+            description: candidatePackage.summary,
+            canonicalUrl: urls.canonicalUrl,
+            imageUrl,
+            publishedAt: createdAt,
+            dateLabel: window.dateLabel,
+            contentHtml: candidateContentHtml,
+          });
+          return runPhase4AutonomousContentGate({
+            contentType: "social-content",
+            generated: candidatePackage,
+            html: candidateFullHtml,
+            sources: gateSources,
+            expectedSchemaTypes: ["BlogPosting"],
+          });
+        },
       });
+
+      if (!reviewed.ok) {
+        return await quarantineSocialPost({
+          gate: reviewed.gate,
+          dateId: window.dateId,
+          socialPackage: reviewed.artifact,
+          cleanedSources: gateSources,
+          publishedObjects,
+          context: { dateLabel: window.dateLabel, prefix, slug, postUrl: urls.postUrl, housekeeping: buildHousekeepingPlan({ lane: "daily-social-blog", artefacts: Object.values(publishedObjects).filter(Boolean) }) },
+          dryRun,
+        });
+      }
+
+      socialPackage = reviewed.artifact;
+      title = socialPackage.title;
+      slug = slugify(`${window.dateId}-${title}`);
+      dir = `${prefix}/posts/${slug}`;
+      urls = buildSiteSocialUrls(slug);
+      bodyHtml = renderSocialBodyHtml(socialPackage, { escapeHtml });
+      imagePrompt = buildSocialArtworkPrompt({
+        title,
+        summary: socialPackage.summary,
+        themes: socialPackage.themes,
+        generatedPrompt: socialPackage.image_prompt,
+      });
+      postEntry = buildSocialPostManifestEntry({
+        id: `daily-${window.dateId}`,
+        slug,
+        title,
+        summary: socialPackage.summary,
+        socialCaption: socialPackage.social_caption,
+        hook: socialPackage.hook,
+        bodyHtml,
+        takeaway: socialPackage.takeaway,
+        postUrl: urls.postUrl,
+        canonicalUrl: urls.canonicalUrl,
+        path: urls.postPath,
+        imageUrl,
+        imagePrompt,
+        imageStatus: artwork.imageStatus,
+        imageError: artwork.imageError,
+        imageBucketKey: artwork.imageBucketKey,
+        dateLabel: window.dateId,
+        themes: socialPackage.themes,
+        hashtags: socialPackage.hashtags,
+        sources: cleanedSources,
+        publishedAt: createdAt,
+      });
+      contentHtml = socialPostBody({
+        title,
+        summary: socialPackage.summary,
+        dateLabel: window.dateLabel,
+        imageUrl,
+        html: bodyHtml,
+        sources: cleanedSources,
+        socialCaption: socialPackage.social_caption,
+        hashtags: socialPackage.hashtags,
+      });
+      fullHtml = pageTemplate({
+        title,
+        description: socialPackage.summary,
+        canonicalUrl: urls.canonicalUrl,
+        imageUrl,
+        publishedAt: createdAt,
+        dateLabel: window.dateLabel,
+        contentHtml,
+      });
+      mergedManifest = mergeSocialPostsManifest(existingManifest, postEntry);
+      publishedObjects = {
+        postHtmlKey: `${dir}/index.html`,
+        postMetaKey: `${dir}/post.json`,
+        manifestKey,
+        rssFeedKey: process.env.BLOG_SOCIAL_RSS_OBJECT_KEY || `${prefix}/feed.xml`,
+        imageKey: artwork.imageKey,
+        imageBucketKey: artwork.imageBucketKey,
+      };
+      phase4Gate = reviewed.gate;
     }
 
-    const phase5Gate = runPhase5OrganicGrowthGate({
+    let phase5Gate = runPhase5OrganicGrowthGate({
       contentType: "organic-visual-social",
       generated: {
         ...socialPackage,
@@ -700,15 +804,33 @@ export async function buildDailySocialBlogPost({
     });
 
     if (!phase5Gate.ok) {
-      return await quarantinePhase5SocialPost({
+      const reviewed = await runReviewCouncilGate({
+        councilKey: "blog-phase45",
         gate: phase5Gate,
-        dateId: window.dateId,
-        socialPackage: { ...socialPackage, imagePrompt, imageUrl },
-        cleanedSources: gateSources,
-        publishedObjects,
-        context: { dateLabel: window.dateLabel, prefix, slug, postUrl: urls.postUrl },
-        dryRun,
+        artifact: { ...socialPackage, imagePrompt, imageUrl, caption: socialPackage.social_caption },
+        contentType: "organic-visual-social",
+        validate: (candidate) => runPhase5OrganicGrowthGate({
+          contentType: "organic-visual-social",
+          generated: candidate,
+          sources: gateSources,
+          platforms: ["facebook", "instagram", "tiktok"],
+        }),
       });
+
+      if (!reviewed.ok) {
+        return await quarantinePhase5SocialPost({
+          gate: reviewed.gate,
+          dateId: window.dateId,
+          socialPackage: reviewed.artifact,
+          cleanedSources: gateSources,
+          publishedObjects,
+          context: { dateLabel: window.dateLabel, prefix, slug, postUrl: urls.postUrl, housekeeping: buildHousekeepingPlan({ lane: "daily-social-blog-phase5", artefacts: Object.values(publishedObjects).filter(Boolean) }) },
+          dryRun,
+        });
+      }
+
+      socialPackage = { ...socialPackage, ...reviewed.artifact };
+      phase5Gate = reviewed.gate;
     }
 
     if (dryRun) {
