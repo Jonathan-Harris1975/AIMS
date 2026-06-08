@@ -4,14 +4,19 @@ import { publishAuditJson } from "./publishAuditArtifacts.js";
 
 const DEFAULT_VIDEO_PLATFORMS = new Set(["youtube", "tiktok"]);
 const DEFAULT_MAX_POSTS = 12;
-const DEFAULT_TIMEOUT_MS = 12000;
+const DEFAULT_TIMEOUT_MS = 7000;
+const DEFAULT_CONCURRENCY = 3;
 
 function trim(value) {
   return String(value || "").trim();
 }
 
-function isEnabled(value) {
-  return ["1", "true", "yes", "on"].includes(trim(value).toLowerCase());
+function isEnabled(value, fallback = false) {
+  const raw = trim(value).toLowerCase();
+  if (!raw) return fallback;
+  if (["1", "true", "yes", "on"].includes(raw)) return true;
+  if (["0", "false", "no", "off"].includes(raw)) return false;
+  return fallback;
 }
 
 function toNumber(value, fallback = 0) {
@@ -58,14 +63,19 @@ function selectThumbnailCandidates(rows = [], limit = DEFAULT_MAX_POSTS) {
 }
 
 export function getSocialThumbnailAuditConfig(env = process.env) {
-  const enabled = isEnabled(env.ZERNIO_THUMBNAIL_AUDIT_ENABLED);
-  const requirePlaywright = isEnabled(env.ZERNIO_THUMBNAIL_AUDIT_REQUIRE_PLAYWRIGHT);
+  const enabled = isEnabled(env.ZERNIO_THUMBNAIL_AUDIT_ENABLED, true);
+  const requirePlaywright = isEnabled(env.ZERNIO_THUMBNAIL_AUDIT_REQUIRE_PLAYWRIGHT, false);
+  const metadataFirst = isEnabled(env.ZERNIO_THUMBNAIL_AUDIT_METADATA_FIRST, true);
+  const blockHeavyAssets = isEnabled(env.ZERNIO_THUMBNAIL_AUDIT_BLOCK_HEAVY_ASSETS, true);
   return {
     enabled,
     requirePlaywright,
+    metadataFirst,
+    blockHeavyAssets,
+    concurrency: Math.max(1, Math.min(6, toNumber(env.ZERNIO_THUMBNAIL_AUDIT_CONCURRENCY, DEFAULT_CONCURRENCY))),
     maxPosts: Math.max(1, Math.min(40, toNumber(env.ZERNIO_THUMBNAIL_AUDIT_MAX_POSTS, DEFAULT_MAX_POSTS))),
     timeoutMs: Math.max(3000, toNumber(env.ZERNIO_THUMBNAIL_AUDIT_TIMEOUT_MS, DEFAULT_TIMEOUT_MS)),
-    waitAfterLoadMs: Math.max(0, Math.min(5000, toNumber(env.ZERNIO_THUMBNAIL_AUDIT_WAIT_MS, 800))),
+    waitAfterLoadMs: Math.max(0, Math.min(5000, toNumber(env.ZERNIO_THUMBNAIL_AUDIT_WAIT_MS, 150))),
     userAgent: trim(env.ZERNIO_THUMBNAIL_AUDIT_USER_AGENT)
       || "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36",
     chromiumExecutablePath: trim(env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH),
@@ -79,6 +89,10 @@ export function getSocialThumbnailAuditStatus(env = process.env) {
     requirePlaywright: config.requirePlaywright,
     maxPosts: config.maxPosts,
     timeoutMs: config.timeoutMs,
+    waitAfterLoadMs: config.waitAfterLoadMs,
+    concurrency: config.concurrency,
+    metadataFirst: config.metadataFirst,
+    blockHeavyAssets: config.blockHeavyAssets,
     chromiumExecutablePath: config.chromiumExecutablePath || "auto",
   };
 }
@@ -190,12 +204,16 @@ async function fetchMetadataFallback(row, config) {
   }
 }
 
-async function fetchMetadataWithPlaywright(browser, row, config) {
-  const page = await browser.newPage({
-    viewport: { width: 390, height: 844, isMobile: true },
-    userAgent: config.userAgent,
-  });
+async function fetchMetadataWithPlaywright(context, row, config) {
+  const page = await context.newPage();
   try {
+    if (config.blockHeavyAssets) {
+      await page.route("**/*", (route) => {
+        const type = route.request().resourceType();
+        if (["image", "media", "font", "stylesheet"].includes(type)) return route.abort();
+        return route.continue();
+      }).catch(() => {});
+    }
     await page.goto(row.url, { waitUntil: "domcontentloaded", timeout: config.timeoutMs });
     if (config.waitAfterLoadMs) await page.waitForTimeout(config.waitAfterLoadMs);
     const meta = await page.evaluate(() => {
@@ -254,6 +272,36 @@ function compactCandidate(row) {
   };
 }
 
+async function mapWithConcurrency(items, concurrency, worker) {
+  const results = new Array(items.length);
+  let index = 0;
+
+  async function runNext() {
+    while (index < items.length) {
+      const current = index;
+      index += 1;
+      results[current] = await worker(items[current], current);
+    }
+  }
+
+  const workers = Array.from({ length: Math.min(Math.max(1, concurrency), items.length) }, runNext);
+  await Promise.all(workers);
+  return results;
+}
+
+async function collectThumbnailEvidence(row, { browserContext, config }) {
+  if (config.metadataFirst && !config.requirePlaywright) {
+    const metadata = await fetchMetadataFallback(row, config);
+    if (metadata.ok && metadata.thumbnailUrl) return metadata;
+  }
+
+  if (browserContext) {
+    return fetchMetadataWithPlaywright(browserContext, row, config);
+  }
+
+  return fetchMetadataFallback(row, config);
+}
+
 export async function auditShortsThumbnails({ rows = [], reportPrefix = "" } = {}) {
   const config = getSocialThumbnailAuditConfig();
   if (!config.enabled) {
@@ -294,31 +342,50 @@ export async function auditShortsThumbnails({ rows = [], reportPrefix = "" } = {
   }
 
   let browser = null;
-  const results = [];
+  let context = null;
+  let results = [];
   try {
     if (canUsePlaywright) {
       browser = await playwright.chromium.launch({
         executablePath,
         headless: true,
-        args: ["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
+        args: [
+          "--no-sandbox",
+          "--disable-dev-shm-usage",
+          "--disable-gpu",
+          "--disable-extensions",
+          "--disable-background-networking",
+          "--disable-default-apps",
+          "--disable-sync",
+          "--no-first-run",
+          "--no-zygote",
+        ],
       });
+      context = await browser.newContext({
+        viewport: { width: 390, height: 844, isMobile: true },
+        userAgent: config.userAgent,
+      });
+      context.setDefaultNavigationTimeout(config.timeoutMs);
+      context.setDefaultTimeout(config.timeoutMs);
     }
 
-    for (const row of candidates) {
-      const evidence = browser
-        ? await fetchMetadataWithPlaywright(browser, row, config)
-        : await fetchMetadataFallback(row, config);
-      results.push({ post: compactCandidate(row), ...evidence });
-    }
+    results = await mapWithConcurrency(candidates, config.concurrency, async (row) => {
+      const evidence = await collectThumbnailEvidence(row, { browserContext: context, config });
+      return { post: compactCandidate(row), ...evidence };
+    });
   } finally {
+    if (context) await context.close().catch(() => {});
     if (browser) await browser.close().catch(() => {});
   }
 
   const result = {
     enabled: true,
-    mode: browser ? "playwright" : "metadata_fetch_fallback",
+    mode: browser ? (config.metadataFirst && !config.requirePlaywright ? "metadata_first_with_playwright_fallback" : "playwright") : "metadata_fetch_fallback",
     playwrightModule: playwright?.moduleName || null,
     chromiumExecutablePath: executablePath || null,
+    concurrency: config.concurrency,
+    metadataFirst: config.metadataFirst,
+    blockHeavyAssets: config.blockHeavyAssets,
     candidates: candidates.length,
     summary: {
       checked: results.length,
