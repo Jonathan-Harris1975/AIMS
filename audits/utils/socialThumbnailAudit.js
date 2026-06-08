@@ -1,11 +1,12 @@
 import { existsSync } from "node:fs";
 import { execFileSync } from "node:child_process";
+import { availableParallelism, cpus } from "node:os";
 import { publishAuditJson } from "./publishAuditArtifacts.js";
 
 const DEFAULT_VIDEO_PLATFORMS = new Set(["youtube", "tiktok"]);
 const DEFAULT_MAX_POSTS = 12;
 const DEFAULT_TIMEOUT_MS = 7000;
-const DEFAULT_CONCURRENCY = 3;
+const DEFAULT_CONCURRENCY = Math.max(2, Math.min(4, Number(availableParallelism?.() || cpus().length || 2)));
 
 function trim(value) {
   return String(value || "").trim();
@@ -62,6 +63,14 @@ function selectThumbnailCandidates(rows = [], limit = DEFAULT_MAX_POSTS) {
     .slice(0, Math.max(1, Number(limit || DEFAULT_MAX_POSTS)));
 }
 
+
+function optimalPlaywrightConcurrency(env = process.env) {
+  const cpuCount = Math.max(1, Number(availableParallelism?.() || cpus().length || 2));
+  const explicit = toNumber(env.ZERNIO_THUMBNAIL_AUDIT_CONCURRENCY, 0);
+  const defaultLimit = Math.max(2, Math.min(4, Math.floor(cpuCount * 0.75) || DEFAULT_CONCURRENCY));
+  return Math.max(1, Math.min(6, explicit || defaultLimit));
+}
+
 export function getSocialThumbnailAuditConfig(env = process.env) {
   const enabled = isEnabled(env.ZERNIO_THUMBNAIL_AUDIT_ENABLED, true);
   const requirePlaywright = isEnabled(env.ZERNIO_THUMBNAIL_AUDIT_REQUIRE_PLAYWRIGHT, false);
@@ -72,7 +81,8 @@ export function getSocialThumbnailAuditConfig(env = process.env) {
     requirePlaywright,
     metadataFirst,
     blockHeavyAssets,
-    concurrency: Math.max(1, Math.min(6, toNumber(env.ZERNIO_THUMBNAIL_AUDIT_CONCURRENCY, DEFAULT_CONCURRENCY))),
+    concurrency: optimalPlaywrightConcurrency(env),
+    navRetries: Math.max(0, Math.min(3, toNumber(env.ZERNIO_THUMBNAIL_AUDIT_NAV_RETRIES, 1))),
     maxPosts: Math.max(1, Math.min(40, toNumber(env.ZERNIO_THUMBNAIL_AUDIT_MAX_POSTS, DEFAULT_MAX_POSTS))),
     timeoutMs: Math.max(3000, toNumber(env.ZERNIO_THUMBNAIL_AUDIT_TIMEOUT_MS, DEFAULT_TIMEOUT_MS)),
     waitAfterLoadMs: Math.max(0, Math.min(5000, toNumber(env.ZERNIO_THUMBNAIL_AUDIT_WAIT_MS, 150))),
@@ -93,6 +103,7 @@ export function getSocialThumbnailAuditStatus(env = process.env) {
     concurrency: config.concurrency,
     metadataFirst: config.metadataFirst,
     blockHeavyAssets: config.blockHeavyAssets,
+    navRetries: config.navRetries,
     chromiumExecutablePath: config.chromiumExecutablePath || "auto",
   };
 }
@@ -205,57 +216,79 @@ async function fetchMetadataFallback(row, config) {
 }
 
 async function fetchMetadataWithPlaywright(context, row, config) {
-  const page = await context.newPage();
-  try {
-    if (config.blockHeavyAssets) {
-      await page.route("**/*", (route) => {
-        const type = route.request().resourceType();
-        if (["image", "media", "font", "stylesheet"].includes(type)) return route.abort();
-        return route.continue();
-      }).catch(() => {});
-    }
-    await page.goto(row.url, { waitUntil: "domcontentloaded", timeout: config.timeoutMs });
-    if (config.waitAfterLoadMs) await page.waitForTimeout(config.waitAfterLoadMs);
-    const meta = await page.evaluate(() => {
-      const read = (...selectors) => {
-        for (const selector of selectors) {
-          const element = document.querySelector(selector);
-          const value = element?.getAttribute("content") || element?.getAttribute("href") || "";
-          if (value.trim()) return value.trim();
-        }
-        return "";
-      };
+  const attempts = Math.max(1, Number(config.navRetries || 0) + 1);
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    const page = await context.newPage();
+    try {
+      if (config.blockHeavyAssets) {
+        await page.route("**/*", (route) => {
+          const type = route.request().resourceType();
+          if (["image", "media", "font", "stylesheet"].includes(type)) return route.abort();
+          return route.continue();
+        }).catch(() => {});
+      }
+      const timeout = Math.max(2500, Math.round(config.timeoutMs / attempt));
+      await page.goto(row.url, { waitUntil: attempt === 1 ? "domcontentloaded" : "commit", timeout });
+      if (config.waitAfterLoadMs) await page.waitForTimeout(config.waitAfterLoadMs);
+      const meta = await page.evaluate(() => {
+        const read = (...selectors) => {
+          for (const selector of selectors) {
+            const element = document.querySelector(selector);
+            const value = element?.getAttribute("content") || element?.getAttribute("href") || "";
+            if (value.trim()) return value.trim();
+          }
+          return "";
+        };
+        return {
+          title: document.title || "",
+          description: read('meta[property="og:description"]', 'meta[name="twitter:description"]', 'meta[name="description"]'),
+          thumbnailUrl: read('meta[property="og:image"]', 'meta[property="og:image:url"]', 'meta[name="twitter:image"]', 'meta[name="twitter:image:src"]', 'link[rel="image_src"]'),
+          finalUrl: location.href,
+        };
+      });
       return {
-        title: document.title || "",
-        description: read('meta[property="og:description"]', 'meta[name="twitter:description"]', 'meta[name="description"]'),
-        thumbnailUrl: read('meta[property="og:image"]', 'meta[property="og:image:url"]', 'meta[name="twitter:image"]', 'meta[name="twitter:image:src"]', 'link[rel="image_src"]'),
-        finalUrl: location.href,
+        ok: Boolean(meta.thumbnailUrl),
+        method: attempt === 1 ? "playwright_meta" : "playwright_meta_retry",
+        attempt,
+        status: null,
+        finalUrl: meta.finalUrl || row.url,
+        title: meta.title || "",
+        description: meta.description || "",
+        thumbnailUrl: absolutiseUrl(meta.thumbnailUrl || "", meta.finalUrl || row.url),
+        error: meta.thumbnailUrl ? null : "No recognised thumbnail meta tag found after rendered load.",
       };
-    });
-    return {
-      ok: Boolean(meta.thumbnailUrl),
-      method: "playwright_meta",
-      status: null,
-      finalUrl: meta.finalUrl || row.url,
-      title: meta.title || "",
-      description: meta.description || "",
-      thumbnailUrl: absolutiseUrl(meta.thumbnailUrl || "", meta.finalUrl || row.url),
-      error: meta.thumbnailUrl ? null : "No recognised thumbnail meta tag found after rendered load.",
-    };
-  } catch (error) {
-    return {
-      ok: false,
-      method: "playwright_meta",
-      status: null,
-      finalUrl: row.url,
-      title: "",
-      description: "",
-      thumbnailUrl: "",
-      error: error?.message || String(error),
-    };
-  } finally {
-    await page.close().catch(() => {});
+    } catch (error) {
+      lastError = error;
+      if (attempt >= attempts) {
+        return {
+          ok: false,
+          method: "playwright_meta",
+          attempt,
+          status: null,
+          finalUrl: row.url,
+          title: "",
+          description: "",
+          thumbnailUrl: "",
+          error: error?.message || String(error),
+        };
+      }
+    } finally {
+      await page.close().catch(() => {});
+    }
   }
+
+  return {
+    ok: false,
+    method: "playwright_meta",
+    status: null,
+    finalUrl: row.url,
+    title: "",
+    description: "",
+    thumbnailUrl: "",
+    error: lastError?.message || "Playwright thumbnail lookup failed",
+  };
 }
 
 function compactCandidate(row) {
@@ -359,11 +392,15 @@ export async function auditShortsThumbnails({ rows = [], reportPrefix = "" } = {
           "--disable-sync",
           "--no-first-run",
           "--no-zygote",
+          "--disable-features=Translate,BackForwardCache,AcceptCHFrame,MediaRouter",
         ],
       });
       context = await browser.newContext({
         viewport: { width: 390, height: 844, isMobile: true },
         userAgent: config.userAgent,
+        serviceWorkers: "block",
+        reducedMotion: "reduce",
+        bypassCSP: true,
       });
       context.setDefaultNavigationTimeout(config.timeoutMs);
       context.setDefaultTimeout(config.timeoutMs);
@@ -386,6 +423,8 @@ export async function auditShortsThumbnails({ rows = [], reportPrefix = "" } = {
     concurrency: config.concurrency,
     metadataFirst: config.metadataFirst,
     blockHeavyAssets: config.blockHeavyAssets,
+    navRetries: config.navRetries,
+    optimumConcurrencyBasis: "availableParallelism/cpu capped at six",
     candidates: candidates.length,
     summary: {
       checked: results.length,
