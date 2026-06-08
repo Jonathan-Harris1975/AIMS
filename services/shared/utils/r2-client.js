@@ -111,17 +111,58 @@ export const s3 = new S3Client({
 });
 
 const R2_REQUEST_TIMEOUT_MS = Number(process.env.R2_REQUEST_TIMEOUT_MS || 15_000);
+const R2_UPLOAD_RETRIES = Math.max(0, Math.min(8, Number(process.env.R2_UPLOAD_RETRIES ?? process.env.R2_RETRY_ATTEMPTS ?? 3)));
+const R2_RETRY_BASE_MS = Math.max(100, Math.min(10_000, Number(process.env.R2_RETRY_BASE_MS || 400)));
+const R2_RETRY_MAX_MS = Math.max(R2_RETRY_BASE_MS, Math.min(30_000, Number(process.env.R2_RETRY_MAX_MS || 5_000)));
 
-async function sendR2Command(command, { timeoutMs = R2_REQUEST_TIMEOUT_MS } = {}) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  timer.unref?.();
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
-  try {
-    return await s3.send(command, { abortSignal: controller.signal });
-  } finally {
-    clearTimeout(timer);
+function isRetryableR2Error(error) {
+  const status = Number(error?.$metadata?.httpStatusCode || error?.statusCode || error?.status || 0);
+  const name = String(error?.name || error?.code || "").toLowerCase();
+  const message = String(error?.message || error || "").toLowerCase();
+  if ([408, 425, 429, 500, 502, 503, 504].includes(status)) return true;
+  return /abort|timeout|timed out|throttl|slowdown|temporar|rate|busy|unavailable|reset|socket|network|econnreset|etimedout|eai_again/.test(`${name} ${message}`);
+}
+
+function r2RetryDelayMs(retryIndex) {
+  const jitter = Math.floor(Math.random() * 150);
+  return Math.min(R2_RETRY_MAX_MS, R2_RETRY_BASE_MS * (2 ** Math.max(0, retryIndex - 1))) + jitter;
+}
+
+async function sendR2Command(command, { timeoutMs = R2_REQUEST_TIMEOUT_MS, retries = R2_UPLOAD_RETRIES } = {}) {
+  const maxAttempts = Math.max(1, Number(retries || 0) + 1);
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    timer.unref?.();
+
+    try {
+      return await s3.send(command, { abortSignal: controller.signal });
+    } catch (error) {
+      lastError = error;
+      const retryable = isRetryableR2Error(error);
+      if (!retryable || attempt >= maxAttempts) throw error;
+      const delayMs = r2RetryDelayMs(attempt);
+      log.warn("r2.command.retry", {
+        attempt,
+        maxAttempts,
+        delayMs,
+        command: command?.constructor?.name || "R2Command",
+        statusCode: error?.$metadata?.httpStatusCode || error?.statusCode || error?.status || null,
+        message: error?.message || String(error),
+      });
+      await sleep(delayMs);
+    } finally {
+      clearTimeout(timer);
+    }
   }
+
+  throw lastError || new Error("R2 command failed without an error object");
 }
 
 
