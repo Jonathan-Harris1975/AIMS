@@ -8,6 +8,7 @@ import {
   oneupEbookWeeklyBodySchema,
 } from "../../shared/utils/requestSchemas.js";
 import { buildAndScheduleDailyLane, buildAndScheduleQuizSeries, buildAndScheduleEbookWeekly } from "../utils/socialScheduler.js";
+import { getAsyncServiceRouteJobFresh, shouldRunAsyncServiceRoute, startAsyncServiceRouteJob } from "../../shared/utils/asyncServiceRouteJobs.js";
 import { fetchPublishedPostsHistory, inspectOneUpTargeting } from "../utils/oneupClient.js";
 import { LANE_CONFIG, ONEUP_CATEGORY_NAME_GENERAL, ONEUP_CATEGORY_NAME_EBOOKS, getOneUpRequiredNetworkTypes, getOneUpSocialNetworkId, normaliseOneUpSocialNetworkId, parseNetworkTypes } from "../utils/config.js";
 
@@ -62,6 +63,12 @@ router.get("/health", (_req, res) => {
     time: new Date().toISOString(),
   });
 });
+
+router.get("/jobs/:lane/:sessionId", asyncRoute(async (req, res) => {
+  const job = await getAsyncServiceRouteJobFresh("oneup", req.params.lane, req.params.sessionId, req);
+  if (!job) return res.status(404).json({ ok: false, service: "oneup", error: "OneUp async job not found", lane: req.params.lane, sessionId: req.params.sessionId });
+  return res.json(job);
+}));
 
 
 router.post(
@@ -151,6 +158,18 @@ for (const laneKey of Object.keys(LANE_CONFIG)) {
         return res.status(400).json({ ok: false, error: parsed.error });
       }
 
+      if (shouldRunAsyncServiceRoute(req)) {
+        const job = await startAsyncServiceRouteJob({
+          service: "oneup",
+          lane: `daily-${laneKey}`,
+          payload: parsed.data,
+          req,
+          runner: (payload) => buildAndScheduleDailyLane(laneKey, payload),
+          metadata: { route: `/oneup/daily/${laneKey}` },
+        });
+        return res.status(202).json(job);
+      }
+
       const result = await buildAndScheduleDailyLane(laneKey, parsed.data);
       return res.json(result);
     })
@@ -167,6 +186,18 @@ router.post(
       return res.status(400).json({ ok: false, error: parsed.error });
     }
 
+    if (shouldRunAsyncServiceRoute(req)) {
+      const job = await startAsyncServiceRouteJob({
+        service: "oneup",
+        lane: "ebooks-weekly",
+        payload: parsed.data,
+        req,
+        runner: buildAndScheduleEbookWeekly,
+        metadata: { route: "/oneup/ebooks/weekly" },
+      });
+      return res.status(202).json(job);
+    }
+
     const result = await buildAndScheduleEbookWeekly(parsed.data);
     return res.status(result.partialFailure ? 207 : 200).json(result);
   })
@@ -179,6 +210,18 @@ router.post(
     const parsed = validateBody(oneupQuizBodySchema, req.body);
     if (!parsed.ok) {
       return res.status(400).json({ ok: false, error: parsed.error });
+    }
+
+    if (shouldRunAsyncServiceRoute(req)) {
+      const job = await startAsyncServiceRouteJob({
+        service: "oneup",
+        lane: "quiz-weekly",
+        payload: parsed.data,
+        req,
+        runner: buildAndScheduleQuizSeries,
+        metadata: { route: "/oneup/quiz/weekly" },
+      });
+      return res.status(202).json(job);
     }
 
     const result = await buildAndScheduleQuizSeries(parsed.data);
