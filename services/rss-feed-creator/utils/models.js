@@ -21,6 +21,7 @@ import {
   assertPhase3AutopublishGate,
   summarisePhase3Reports,
 } from "../../content-quality/phase3Gates.js";
+import { runReviewCouncilGate, repairArtifactForReviewCouncil } from "../../content-quality/reviewCouncil.js";
 
 // ─────────────────────────────────────────────
 // ENV TUNABLES
@@ -231,6 +232,15 @@ ${sourceText}`,
     themes: keywords(`${title}
 ${sourceText}`).slice(0, 6),
   });
+}
+
+function evaluatePhase3Gate({ title, sourceText, item, link, rewrittenTitle, rewrittenSummary } = {}) {
+  try {
+    return runPhase3Gate({ title, sourceText, item, link, rewrittenTitle, rewrittenSummary });
+  } catch (err) {
+    if (err?.name === "Phase3AutopublishGateError" && err?.phase3Report) return err.phase3Report;
+    throw err;
+  }
 }
 
 // ============================================================
@@ -472,7 +482,7 @@ export async function rewriteArticle(item = {}) {
       rewrittenSummary: repairedSummary,
     });
 
-    phase3Quality = runPhase3Gate({
+    phase3Quality = evaluatePhase3Gate({
       title,
       sourceText,
       item,
@@ -481,13 +491,49 @@ export async function rewriteArticle(item = {}) {
       rewrittenSummary: repairedSummary,
     });
 
-    rewrittenTitle = repairedTitle;
-    rewrittenSummary = repairedSummary;
+    if (!phase3Quality.ok) {
+      const reviewed = await runReviewCouncilGate({
+        councilKey: "rss-rewrite-quarantine",
+        gate: phase3Quality,
+        artifact: { title: repairedTitle, summary: repairedSummary },
+        contentType: "rss-rewrite",
+        repairArtifact: (candidate) => repairArtifactForReviewCouncil(candidate, { contentType: "rss-rewrite" }),
+        validate: (candidate) => evaluatePhase3Gate({
+          title,
+          sourceText,
+          item,
+          link,
+          rewrittenTitle: candidate.title || repairedTitle,
+          rewrittenSummary: candidate.summary || repairedSummary,
+        }),
+        logger: warn,
+      });
+
+      if (!reviewed.ok) {
+        const councilErr = new Error(`Phase 3 repair still failed after RSS review council (${reviewed.gate.score}/${reviewed.gate.threshold}): ${reviewed.gate.defects.join(" | ")}; original failure: ${err.message}`);
+        councilErr.name = "Phase3AutopublishGateError";
+        councilErr.statusCode = 422;
+        councilErr.phase3Report = reviewed.gate;
+        throw councilErr;
+      }
+
+      rewrittenTitle = RSS_PROMPTS.clampTitleTo12Words(reviewed.artifact.title || repairedTitle, 12);
+      rewrittenSummary = RSS_PROMPTS.clampSummaryToWindow(
+        reviewed.artifact.summary || repairedSummary,
+        RSS_PROMPTS.MIN_SUMMARY_CHARS,
+        RSS_PROMPTS.MAX_SUMMARY_CHARS
+      );
+      phase3Quality = reviewed.gate;
+    } else {
+      rewrittenTitle = repairedTitle;
+      rewrittenSummary = repairedSummary;
+    }
 
     debug("rss-feed-creator.model.phase3Repair.success", {
       title: rewrittenTitle,
       score: phase3Quality.score,
       topicGuard: score,
+      councilReviewed: Boolean(phase3Quality.reviewCouncil),
     });
   }
 
