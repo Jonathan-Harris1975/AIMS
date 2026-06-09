@@ -2,15 +2,41 @@ import express from "express";
 import { getObjectAsText } from "../services/shared/utils/r2-client.js";
 import { endToEndRewrite } from "../services/rss-feed-creator/rewrite-pipeline.js";
 import { error } from "../logger.js";
+import { hookdeckDedupe } from "../services/shared/utils/hookdeckDedupe.js";
+import {
+  getAsyncServiceRouteJobFresh,
+  shouldRunAsyncServiceRoute,
+  startAsyncServiceRouteJob,
+} from "../services/shared/utils/asyncServiceRouteJobs.js";
 
 const router = express.Router();
 const RSS_OBJECT_KEY = process.env.RSS_OBJECT_KEY || "feed.xml";
+const asyncRoute = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
 function requestIdFor(req) {
   return req?.id || req?.headers?.["x-request-id"] || null;
 }
 
-router.get("/", async (req, res) => {
+function rssRewritePayload(req) {
+  const body = req?.body && typeof req.body === "object" && !Array.isArray(req.body) ? req.body : {};
+  return {
+    ...body,
+    sessionId: body.sessionId || req?.hookdeckEventId || req?.headers?.["x-request-id"] || req?.id,
+  };
+}
+
+async function startRssRewriteJob(req) {
+  return startAsyncServiceRouteJob({
+    service: "rss",
+    lane: "rewrite",
+    payload: rssRewritePayload(req),
+    req,
+    runner: () => endToEndRewrite(),
+    metadata: { route: req?.originalUrl || "/rss" },
+  });
+}
+
+router.get("/", asyncRoute(async (req, res) => {
   try {
     const xml = await getObjectAsText("rss", RSS_OBJECT_KEY);
     res.set("Content-Type", "application/rss+xml");
@@ -30,12 +56,36 @@ router.get("/", async (req, res) => {
       requestId,
     });
   }
-});
+}));
 
-router.post("/", async (req, res) => {
+router.get("/jobs/:lane/:sessionId", asyncRoute(async (req, res) => {
+  const job = await getAsyncServiceRouteJobFresh("rss", req.params.lane, req.params.sessionId, req);
+  if (!job) {
+    return res.status(404).json({
+      ok: false,
+      service: "rss",
+      lane: req.params.lane,
+      sessionId: req.params.sessionId,
+      error: "RSS async job not found",
+    });
+  }
+
+  return res.json(job);
+}));
+
+router.post("/", hookdeckDedupe("rss:rebuild"), asyncRoute(async (req, res) => {
+  if (shouldRunAsyncServiceRoute(req)) {
+    const job = await startRssRewriteJob(req);
+    return res.status(202).json({
+      ...job,
+      route: "rss",
+      message: "RSS feed rebuild accepted. Poll the status URL for completion.",
+    });
+  }
+
   try {
     const result = await endToEndRewrite();
-    res.status(200).json({
+    return res.status(200).json({
       ok: true,
       route: "rss",
       message: "RSS feed rebuild completed successfully.",
@@ -48,13 +98,13 @@ router.post("/", async (req, res) => {
       error: err?.stack || err?.message || String(err),
     });
 
-    res.status(500).json({
+    return res.status(500).json({
       ok: false,
       route: "rss",
       message: "RSS feed rebuild failed.",
       requestId,
     });
   }
-});
+}));
 
 export default router;
