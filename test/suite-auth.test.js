@@ -144,3 +144,28 @@ test("ops pretrigger health is public but preflight and warmup require suite aut
     assert.equal(warmup.body.deep, true);
   });
 });
+
+
+test("scanner probe paths are dropped before suite auth", async () => {
+  await withEnv({ NODE_ENV: "production", AIMS_API_KEY: "test-aims-key" }, async () => {
+    for (const path of [
+      "/config/keys.json",
+      "/internal/secrets.json",
+      "/logs/error.log",
+      "/.vscode/settings.json",
+      "/.ssh/id_rsa",
+    ]) {
+      const response = await request(app).get(path);
+      assert.equal(response.status, 404, path);
+      assert.equal(response.text, "", path);
+    }
+  });
+});
+
+test("robots.txt stays quiet and public on the API service", async () => {
+  await withEnv({ NODE_ENV: "production", AIMS_API_KEY: "test-aims-key" }, async () => {
+    const response = await request(app).get("/robots.txt");
+    assert.equal(response.status, 204);
+    assert.equal(response.text, "");
+  });
+});
