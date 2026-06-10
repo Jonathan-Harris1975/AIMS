@@ -61,8 +61,37 @@ function publicErrorMessage(err, status) {
 
 
 function isNoisyProbePath(value) {
-  const path = String(value || "").toLowerCase();
-  return /(?:^|\/)(?:\.git\/config|xmlrpc\.php|wp-admin|wp-content|wp-includes|wlwmanifest\.xml|wordpress|cms|wp)(?:[\/?#]|$)/i.test(path);
+  const rawPath = String(value || "").split("?")[0].toLowerCase();
+  const path = rawPath.replace(/\/+/g, "/").replace(/\/+$/, "") || "/";
+
+  if (
+    /(?:^|\/)(?:\.git\/config|xmlrpc\.php|wp-admin|wp-content|wp-includes|wlwmanifest\.xml|wordpress|cms|wp)(?:[\/?#]|$)/i.test(path)
+  ) {
+    return true;
+  }
+
+  /*
+   * Public Koyeb services attract automated probes for framework config,
+   * CI files, local editor folders, private keys and logs. These are not AIMS
+   * routes, so reject them before pino-http and the rate limiter to avoid
+   * noisy 401/429 log bursts.
+   */
+  if (
+    /^(?:\/(?:config|internal|private|deploy|settings|core|project)(?:\/|$))/.test(path) ||
+    /^(?:\/(?:app|application|system)\/config(?:\/|$))/.test(path) ||
+    /^(?:\/(?:storage\/logs|logs?|bootstrap\/cache)(?:\/|$))/.test(path) ||
+    /^(?:\/(?:web-inf|meta-inf)(?:\/|$))/.test(path) ||
+    /^(?:\/(?:\.idea|\.vscode|\.circleci|\.github|\.buildkite)(?:\/|$))/.test(path) ||
+    /^\/(?:\.gitlab-ci\.ya?ml|\.travis\.yml|\.drone\.ya?ml|azure-pipelines\.yml|bitbucket-pipelines\.yml|jenkinsfile|jenkins\/jenkinsfile)$/.test(path) ||
+    /^\/(?:debug|app|application|error|laravel|server|access|trace)\.log$/.test(path) ||
+    /^\/(?:web\.config|nginx\.conf|nginx\.config|server\.xml|local-config\.php|wp-config\.(?:bak|txt))$/.test(path) ||
+    /^\/(?:\.htpasswd|\.htaccess|\.gitconfig|\.netrc|\.npmrc|\.bash_history|\.pypirc|id_rsa|private\.key|private_key\.pem|server\.pem|server\.key)(?:\/|$)/.test(path) ||
+    /^\/\.ssh(?:\/|$)/.test(path)
+  ) {
+    return true;
+  }
+
+  return false;
 }
 
 function isQuietAccessLogRequest(req) {
@@ -109,6 +138,12 @@ app.use((req, res, next) => {
   if (requestPath === "/favicon.ico") {
     res.set("Cache-Control", "public, max-age=86400");
     return res.redirect(308, "https://assets.jonathan-harris.online/favicon.ico");
+  }
+
+  if (requestPath === "/robots.txt") {
+    res.type("text/plain");
+    res.set("Cache-Control", "public, max-age=86400");
+    return res.status(204).end();
   }
 
   if (isNoisyProbePath(requestPath)) {
