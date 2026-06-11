@@ -1,48 +1,53 @@
-# Blog service
+# Weekly blog builder
 
 ## Status
 
-**Implemented.** This page documents behaviour backed by files in `services/blog/`.
+**Implemented.** This page documents the weekly blog builder under `services/blog/weekly/`.
 
 ## Purpose
 
-Publishes weekly AI briefing posts and daily/social blog posts from rewritten RSS evidence, maintains manifests, publishes RSS feeds and triggers website rebuild hooks.
+Builds a weekly AI briefing blog post from rewritten RSS evidence, applies local validation, requests artwork, publishes the post package to Cloudflare R2, rebuilds the weekly blog RSS feed and triggers the website rebuild hook.
+
+For the wider blog service, see [Blog service](../README.md).
 
 ## Routes
 
+Mounted through the parent blog service:
+
 - `POST /blog/weekly/build`
-- `POST /blog/rss/rebuild`
-- `POST /blog/social/daily/build`
-- `POST /blog/social/rss/rebuild`
 
 ## Main files
 
-- `weekly/buildWeeklyBlogPost.js`
-- `social/buildDailySocialBlogPost.js`
-- `rss/publishBlogRssFeed.js`
-- `social/publishSocialBlogRssFeed.js`
-- `utils/weeklyPackage.js`, `utils/socialBlogPackage.js`, `utils/templates.js`
+- `buildWeeklyBlogPost.js`
 
 ## Workflow
 
 - Load rewritten RSS JSON from R2 alias `rss`.
-- Filter items by requested window.
-- Generate structured package through OpenRouter.
+- Build a date window from `weekId`, `days`, or the previous complete ISO week.
+- Normalise source items inside that window.
+- Generate the weekly blog package through the shared OpenRouter route key `blogWeekly`.
 - Run local brand validation and optional QA.
-- Generate artwork, use configured fallback art, or continue publishing without blocking if artwork is unavailable.
-- Write HTML, sidecar JSON and manifest to R2 alias `blog`.
-- Publish RSS to R2 alias `blogRss`.
-- Trigger website rebuild hook.
+- Generate blog artwork or use the configured fallback image.
+- Write post HTML, sidecar `post.json`, and the weekly posts manifest to R2 alias `blog` under `BLOG_PREFIX`.
+- Publish the weekly blog RSS feed to R2 alias `blogRss`.
+- Trigger the website rebuild hook.
 
 ## Environment variables
 
-- `BLOG_PREFIX`, `BLOG_RSS_OBJECT_KEY`, `BLOG_RSS_FEED_URL`, `BLOG_RSS_TITLE`, `BLOG_RSS_DESCRIPTION`, `BLOG_RSS_IMAGE_URL`
-- `BLOG_SOCIAL_PREFIX`, `BLOG_SOCIAL_RSS_OBJECT_KEY`, `BLOG_SOCIAL_RSS_TITLE`, `BLOG_SOCIAL_RSS_DESCRIPTION`, `BLOG_SOCIAL_FALLBACK_IMAGE_URL`, `BLOG_SOCIAL_QA_ENABLED`
-- `BLOG_SOCIAL_PUBLIC_BASE_URL`, `BLOG_SOCIAL_PUBLIC_POSTS_BASE_URL`
-- `BLOG_WEEKLY_QA_ENABLED`, `BLOG_FALLBACK_IMAGE_URL`, `BLOG_ARTWORK_BUCKET_ALIAS`
-- `SITE_BASE_URL`, `WEBSITE_REBUILD_HOOK`, `WEBSITE_REBUILD_HOOK_FALLBACK`
+- `BLOG_PREFIX`
+- `BLOG_RSS_OBJECT_KEY`
+- `BLOG_RSS_FEED_URL`
+- `BLOG_RSS_TITLE`
+- `BLOG_RSS_DESCRIPTION`
+- `BLOG_RSS_IMAGE_URL`
+- `BLOG_WEEKLY_QA_ENABLED`
+- `BLOG_FALLBACK_IMAGE_URL`
+- `BLOG_ARTWORK_BUCKET_ALIAS`
+- `SITE_BASE_URL`
+- `WEBSITE_REBUILD_HOOK`
+- `WEBSITE_REBUILD_HOOK_FALLBACK`
 - R2 aliases: `rss`, `blog`, `blogImages`, `blogRss`
-- OpenRouter route keys: `blogWeekly`, `blogSocial`
+- OpenRouter route key: `blogWeekly`
 
 ## External integrations
 
@@ -54,26 +59,22 @@ Publishes weekly AI briefing posts and daily/social blog posts from rewritten RS
 ## Storage
 
 - Weekly manifest: `<BLOG_PREFIX>/posts.json`.
-- Weekly posts: `<BLOG_PREFIX>/posts/<slug>/index.html` and `post.json`.
-- Social manifest: `<BLOG_SOCIAL_PREFIX>/posts.json`.
-- Social posts: `<BLOG_SOCIAL_PREFIX>/posts/<slug>/index.html` and `post.json`.
-- RSS XML: `BLOG_RSS_OBJECT_KEY` and `BLOG_SOCIAL_RSS_OBJECT_KEY` in R2 alias `blogRss`.
+- Weekly post HTML: `<BLOG_PREFIX>/posts/<slug>/index.html`.
+- Weekly sidecar JSON: `<BLOG_PREFIX>/posts/<slug>/post.json`.
+- Weekly RSS XML: `BLOG_RSS_OBJECT_KEY` in R2 alias `blogRss`.
 
 ## Tests
 
-- `test/blog-rss-feed.test.js`
-- `test/blog-social-package.test.js`
-- `test/blog-social-rss-feed.test.js`
-- `test/blog-social-schema.test.js`
 - `test/blog-weekly-package.test.js`
+- `test/blog-rss-feed.test.js`
 
 ## Common troubleshooting
 
-- No items found: this is treated as a successful no-op (`ok:true`, `skipped:true`) to avoid noisy cron failures; verify `feed.json` if content was expected.
-- Artwork failure: configure fallback image URL or fix OpenRouter image configuration.
-- Post skipped: existing social post for date; pass `force=true` to rebuild.
-- Rebuild hook failure: check hook env and endpoint status.
+- No items found: this is treated as a successful no-op to avoid noisy cron failures.
+- Weak package output: inspect OpenRouter route configuration for `blogWeekly` and the source RSS payload.
+- Artwork unavailable: configure `BLOG_FALLBACK_IMAGE_URL` or inspect artwork/OpenRouter image settings.
+- Website did not update: check `WEBSITE_REBUILD_HOOK` and the website deployment logs.
 
 ## Connections to other services
 
-Consumes RSS output from rss-feed-creator, calls artwork helpers, uses shared AI/R2 utilities and triggers external website rebuild.
+Consumes RSS output from `services/rss-feed-creator/`, calls artwork helpers, uses shared OpenRouter/R2 utilities and triggers the external website rebuild.
