@@ -1,9 +1,0 @@
-Delete these local skill-library paths from the AIMS repo after applying this patch:
-
-.agents/
-audits/skills/
-scripts/setup-batch-1-skills.sh
-scripts/setup-lane-1-skills.sh
-scripts/setup-phase-3-skills.sh
-
-Reason: AIMS now consumes skill metadata from the central HIVE/R2 shared skill pool. HIVE controls discovery, search, orchestration and execution.
