@@ -1,0 +1,36 @@
+{
+  "schema_version": "aims.hive_skills.central_r2.v1",
+  "repo": "AIMS",
+  "status": "centralised",
+  "r2": {
+    "public_base_url_env": "R2_PUBLIC_BASE_URL_HIVE_SKILLS",
+    "public_base_url_default": "https://pub-da50a6512f164566955a3076a1c795ef.r2.dev",
+    "bucket_env": "R2_BUCKET_HIVE_SKILLS",
+    "bucket_default": "hive-skills",
+    "manifest_path": "manifests/aims-skills-manifest.json",
+    "skills_index_path": "index/skills-index.json",
+    "search_documents_path": "index/search-documents.json"
+  },
+  "policy": {
+    "local_agents_folder_required": false,
+    "local_skill_install_scripts_required": false,
+    "direct_skill_execution_allowed": false,
+    "execution_owner": "HIVE",
+    "repo_access_model": "read-only manifest consumer",
+    "llm_direct_access_required": false,
+    "default_mode": "discover/read_metadata/dry_run/request_hive_api"
+  },
+  "recommended_improvements_applied": [
+    "AIMS skill discovery now points at the central HIVE R2 manifest instead of .agents JSON files.",
+    "Lane 1 skill baselines use central descriptor URLs and no longer advertise local Skills.sh install commands.",
+    "Phase 4 and Phase 5 gate summaries include the central skill pool contract for audit/report traceability.",
+    "Parked skills stay registry-only in the central pool and are not activated locally."
+  ],
+  "delete_local_paths": [
+    ".agents/",
+    "audits/skills/",
+    "scripts/setup-batch-1-skills.sh",
+    "scripts/setup-lane-1-skills.sh",
+    "scripts/setup-phase-3-skills.sh"
+  ]
+}
