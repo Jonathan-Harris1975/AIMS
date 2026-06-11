@@ -1,6 +1,6 @@
 # AI Management Suite
 
-AI Management Suite is a modular Node/Express application for Jonathan Harris’s content automation workflows. The repository currently combines podcast generation, RSS/newsletter rewriting, script generation, text-to-speech processing, artwork generation, blog publishing, OneUp social scheduling, outreach lead discovery, audit orchestration, Cloudflare cache purge support, self-hosted RSS short links, shared Cloudflare R2 storage utilities, shared OpenRouter routing, and deployment/test tooling.
+AI Management Suite is a modular Node/Express application for Jonathan Harris’s content automation workflows. The repository currently combines podcast generation, RSS/newsletter rewriting, script generation, text-to-speech processing, artwork generation, blog publishing, OneUp social scheduling, outreach lead discovery, audit orchestration, Cloudflare cache purge support, self-hosted RSS short links, shared Cloudflare R2 storage utilities, shared OpenRouter routing, central HIVE/R2 shared skills pool access, and deployment/test tooling.
 
 This README documents the repository as it exists in code. It separates **implemented**, **partially implemented**, and **present but not wired** areas so maintainers are not chasing phantom routes through the boiler-room fog. 🛠️
 
@@ -18,6 +18,7 @@ This README documents the repository as it exists in code. It separates **implem
 - [RSS links](services/rss-links/README.md)
 - [Script generation](services/script/README.md)
 - [Shared utilities](services/shared/README.md)
+- [HIVE shared skills](docs/hive-shared-skills.md)
 - [TTS](services/tts/README.md)
 - [API aggregator status](services/api/README.md)
 

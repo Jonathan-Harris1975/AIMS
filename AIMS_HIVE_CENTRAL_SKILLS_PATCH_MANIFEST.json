@@ -1,0 +1,48 @@
+{
+  "schema_version": "aims.hive_central_skills.patch.v1",
+  "generated_at": "2026-06-11T00:00:00Z",
+  "repo": "AIMS",
+  "purpose": "Upgrade AIMS to consume the central HIVE/R2 shared skill pool and remove local skill-library references.",
+  "r2": {
+    "public_base_url": "https://pub-da50a6512f164566955a3076a1c795ef.r2.dev",
+    "bucket": "hive-skills",
+    "aims_manifest": "manifests/aims-skills-manifest.json"
+  },
+  "files_included": [
+    "README.md",
+    "env.template",
+    "config/production.defaults.env",
+    "config/hive-skills.json",
+    "scripts/koyebEnvDoctor.js",
+    "audits/utils/lane1Skills.js",
+    "audits/utils/searchVisibilityBaseline.js",
+    "services/shared/hiveSkillPool.js",
+    "services/content-quality/phase4AutonomousGates.js",
+    "services/content-quality/phase5OrganicGrowthGates.js",
+    "docs/hive-shared-skills.md",
+    "test/lane1-skills.test.js",
+    "test/hive-skill-pool.test.js",
+    "AIMS_HIVE_CENTRAL_SKILLS_DELETION_LIST.txt",
+    "AIMS_HIVE_CENTRAL_SKILLS_PATCH_NOTES.md",
+    "HIVE_skills_availability_register_v5_all_repos_r2_centralised.xlsx",
+    "AIMS_HIVE_CENTRAL_SKILLS_PATCH_MANIFEST.json"
+  ],
+  "files_to_delete": [
+    ".agents/",
+    "audits/skills/",
+    "scripts/setup-batch-1-skills.sh",
+    "scripts/setup-lane-1-skills.sh",
+    "scripts/setup-phase-3-skills.sh"
+  ],
+  "verification": {
+    "node_check_all_js": "passed",
+    "focused_node_tests_without_external_package_imports": "20 passed",
+    "full_npm_test": "not run to completion in sandbox because package dependencies are not installed; npm test fails immediately on missing packages such as pino/dotenv before patched application logic can complete",
+    "spreadsheet_formula_error_scan": "0 matches"
+  },
+  "notes": [
+    "AIMS now uses services/shared/hiveSkillPool.js for the central read-only skill pool contract.",
+    "Local .agents files and skill install scripts are obsolete and should be removed from the repo.",
+    "HIVE remains the owner of AI search, model routing, orchestration and execution decisions."
+  ]
+}
