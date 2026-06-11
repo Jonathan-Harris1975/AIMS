@@ -1,3 +1,4 @@
+import { getCentralSkillReference, getHiveSkillPoolConfig } from "../shared/hiveSkillPool.js";
 import { AMERICAN_TO_BRITISH, BANNED_PROMO_PATTERNS, ENGAGEMENT_BAIT_PATTERNS, INFLATED_EBOOK_CLAIM_PATTERNS } from "./brandLexicon.js";
 const PHASE_5_SKILLS = Object.freeze({
   ebookConversion: [
@@ -18,6 +19,15 @@ const PHASE_5_SKILLS = Object.freeze({
   accessibilityMobileUx: ["accessibility-audit"],
   podcastSeo: ["podcast-seo"],
 });
+
+
+function phase5CentralSkillReferences() {
+  const entries = Object.entries(PHASE_5_SKILLS).map(([group, names]) => [
+    group,
+    names.map((name) => getCentralSkillReference(name)),
+  ]);
+  return Object.fromEntries(entries);
+}
 
 const DEFAULT_THRESHOLDS = Object.freeze({
   ebookConversion: 88,
@@ -326,6 +336,10 @@ export function runPhase5OrganicGrowthGate({
     skills: /ebook|book-conversion/.test(type)
       ? PHASE_5_SKILLS.ebookConversion
       : PHASE_5_SKILLS.visualSocial,
+    skillPool: getHiveSkillPoolConfig(),
+    skillReferences: /ebook|book-conversion/.test(type)
+      ? PHASE_5_SKILLS.ebookConversion.map((name) => getCentralSkillReference(name))
+      : PHASE_5_SKILLS.visualSocial.map((name) => getCentralSkillReference(name)),
     thresholds,
     gates,
     platforms,
@@ -373,7 +387,10 @@ export function phase5SkillsSummary() {
   return {
     phase: "5A/5B/5C/5D",
     mode: "organic-only automation with fail-closed gates",
+    skillSource: "central HIVE R2 shared skill pool",
+    skillPool: getHiveSkillPoolConfig(),
     skills: PHASE_5_SKILLS,
+    skillReferences: phase5CentralSkillReferences(),
     parked: {
       paidAds: "Parked: fully organic growth only for now.",
       analyticsTracking: "Deferred until Metricool/Google Analytics are re-enabled.",

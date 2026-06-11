@@ -1,3 +1,4 @@
+import { getCentralSkillReference, getHiveSkillPoolConfig } from "../shared/hiveSkillPool.js";
 const DEFAULT_THRESHOLDS = Object.freeze({
   overall: 85,
   brand: 85,
@@ -9,10 +10,16 @@ const DEFAULT_THRESHOLDS = Object.freeze({
 const PHASE_4_SKILLS = Object.freeze({
   schema: "schema-markup",
   social: "social-content",
-  planning: "writing-plans",
+  planning: "phase-4-autonomous-gates",
   debugging: "systematic-debugging",
-  execution: "executing-plans",
+  execution: "phase-4-engineering-auto-pr",
 });
+
+function phase4CentralSkillReferences() {
+  return Object.fromEntries(
+    Object.entries(PHASE_4_SKILLS).map(([key, name]) => [key, getCentralSkillReference(name)])
+  );
+}
 
 const BANNED_PHRASES = Object.freeze([
   "in today's fast-paced world",
@@ -359,6 +366,11 @@ export function runPhase4AutonomousContentGate({
     decision: ok ? "auto_publish" : "quarantine",
     phase: "4A/4B",
     skills: [PHASE_4_SKILLS.schema, PHASE_4_SKILLS.social],
+    skillPool: getHiveSkillPoolConfig(),
+    skillReferences: {
+      schema: getCentralSkillReference(PHASE_4_SKILLS.schema),
+      social: getCentralSkillReference(PHASE_4_SKILLS.social),
+    },
     contentType,
     score,
     scores,
@@ -411,7 +423,10 @@ export function phase4SkillsSummary() {
   return {
     phase: "4A/4B/4C",
     autonomousMode: "auto-review auto-publish fail-closed",
+    skillSource: "central HIVE R2 shared skill pool",
+    skillPool: getHiveSkillPoolConfig(),
     skills: PHASE_4_SKILLS,
+    skillReferences: phase4CentralSkillReferences(),
     rules: [
       "Schema markup may be auto-applied only when required JSON-LD fields validate.",
       "Social content may auto-publish only when source-backed, brand-safe, and schema-valid.",
