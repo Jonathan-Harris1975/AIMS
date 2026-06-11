@@ -1,5 +1,5 @@
 {
-  "schema_version": "aims.hive_skills.central_r2.v1",
+  "schema_version": "aims.hive_skills.central_r2.v3",
   "repo": "AIMS",
   "status": "centralised",
   "r2": {
@@ -9,28 +9,40 @@
     "bucket_default": "hive-skills",
     "manifest_path": "manifests/aims-skills-manifest.json",
     "skills_index_path": "index/skills-index.json",
-    "search_documents_path": "index/search-documents.json"
+    "search_documents_path": "index/search-documents.json",
+    "audit_skill_documents_index_path": "index/audit-skill-documents.json"
   },
+  "audit_skill_documents": [
+    {
+      "name": "brand-social-council",
+      "skill_id": "S202",
+      "object_key": "skills/S202_brand-social-council.json",
+      "mime_type": "application/json",
+      "source_format": "embedded_markdown"
+    },
+    {
+      "name": "mobile-ux-council",
+      "skill_id": "S203",
+      "object_key": "skills/S203_mobile-ux-council.json",
+      "mime_type": "application/json",
+      "source_format": "embedded_markdown"
+    },
+    {
+      "name": "seo-aeo-geo-council",
+      "skill_id": "S204",
+      "object_key": "skills/S204_seo-aeo-geo-council.json",
+      "mime_type": "application/json",
+      "source_format": "embedded_markdown"
+    }
+  ],
   "policy": {
     "local_agents_folder_required": false,
+    "local_skill_files_required": false,
     "local_skill_install_scripts_required": false,
     "direct_skill_execution_allowed": false,
     "execution_owner": "HIVE",
     "repo_access_model": "read-only manifest consumer",
     "llm_direct_access_required": false,
     "default_mode": "discover/read_metadata/dry_run/request_hive_api"
-  },
-  "recommended_improvements_applied": [
-    "AIMS skill discovery now points at the central HIVE R2 manifest instead of .agents JSON files.",
-    "Lane 1 skill baselines use central descriptor URLs and no longer advertise local Skills.sh install commands.",
-    "Phase 4 and Phase 5 gate summaries include the central skill pool contract for audit/report traceability.",
-    "Parked skills stay registry-only in the central pool and are not activated locally."
-  ],
-  "delete_local_paths": [
-    ".agents/",
-    "audits/skills/",
-    "scripts/setup-batch-1-skills.sh",
-    "scripts/setup-lane-1-skills.sh",
-    "scripts/setup-phase-3-skills.sh"
-  ]
+  }
 }
