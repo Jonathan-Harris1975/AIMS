@@ -1,0 +1,28 @@
+{
+  "patch_name": "AIMS README tidy and root documentation index update",
+  "created_for": "AIMS central HIVE/R2 shared skills documentation tidy",
+  "repo": "AIMS",
+  "summary": [
+    "Root README now links to every README.md file in the repository.",
+    "Root README route/service inventory now includes Blotato and operational preflight routes.",
+    "Root README test command now matches package.json.",
+    "Weekly blog README is now specific to the weekly builder instead of duplicating the parent blog README.",
+    "Shared utilities README now documents the HIVE/R2 shared skill-pool helper.",
+    "Added README for mounted services/ops route.",
+    "Removed duplicate sentence from docs/hive-shared-skills.md."
+  ],
+  "files_updated_or_added": [
+    "README.md",
+    "services/blog/weekly/README.md",
+    "services/shared/README.md",
+    "services/ops/README.md",
+    "docs/hive-shared-skills.md"
+  ],
+  "files_to_delete": [],
+  "validation": {
+    "readme_files_found_after_patch": 18,
+    "root_readme_links_to_all_sub_readmes": true,
+    "broken_local_markdown_links_found": 0,
+    "local_skill_library_guidance": "AIMS remains documented as using the central HIVE/R2 skill pool and should not keep .agents or audits/skills as local skill libraries."
+  }
+}

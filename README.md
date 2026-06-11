@@ -1,16 +1,22 @@
 # AI Management Suite
 
-AI Management Suite is a modular Node/Express application for Jonathan Harris’s content automation workflows. The repository currently combines podcast generation, RSS/newsletter rewriting, script generation, text-to-speech processing, artwork generation, blog publishing, OneUp social scheduling, outreach lead discovery, audit orchestration, Cloudflare cache purge support, self-hosted RSS short links, shared Cloudflare R2 storage utilities, shared OpenRouter routing, central HIVE/R2 shared skills pool access, and deployment/test tooling.
+AI Management Suite is a modular Node/Express application for Jonathan Harris’s content automation workflows. The repository currently combines podcast generation, RSS/newsletter rewriting, script generation, text-to-speech processing, artwork generation, blog publishing, OneUp social scheduling, Blotato short-video publishing, outreach lead discovery, audit orchestration, Cloudflare cache purge support, self-hosted RSS short links, operational preflight checks, shared Cloudflare R2 storage utilities, shared OpenRouter routing, central HIVE/R2 shared skills pool access, and deployment/test tooling.
 
 This README documents the repository as it exists in code. It separates **implemented**, **partially implemented**, and **present but not wired** areas so maintainers are not chasing phantom routes through the boiler-room fog. 🛠️
 
 ## Documentation index
 
+All repository-level and service-level README files are linked here so the root README remains the central map rather than a dusty corridor with missing signs.
+
 - [Audits](audits/README.md)
+- [API aggregator status](services/api/README.md)
 - [Artwork](services/artwork/README.md)
 - [Blog](services/blog/README.md)
+- [Weekly blog builder](services/blog/weekly/README.md)
+- [Blotato social video service](services/blotato/README.md)
 - [Cloudflare purge](services/cloudflare-purge/README.md)
 - [OneUp](services/oneup/README.md)
+- [Operational preflight](services/ops/README.md)
 - [Outreach](services/outreach/README.md)
 - [Podcast](services/podcast/README.md)
 - [RSS feed creator](services/rss-feed-creator/README.md)
@@ -18,9 +24,8 @@ This README documents the repository as it exists in code. It separates **implem
 - [RSS links](services/rss-links/README.md)
 - [Script generation](services/script/README.md)
 - [Shared utilities](services/shared/README.md)
-- [HIVE shared skills](docs/hive-shared-skills.md)
 - [TTS](services/tts/README.md)
-- [API aggregator status](services/api/README.md)
+- [HIVE shared skills](docs/hive-shared-skills.md)
 
 ## Project overview
 
@@ -35,10 +40,12 @@ The application supports these business/content workflows:
 - **Artwork generation**: generate podcast/blog/direct artwork through OpenRouter image-capable models and store the output in R2.
 - **Blog publishing**: build weekly AI briefing posts and daily/social blog posts from rewritten RSS material, generate images, update manifests, publish RSS feeds and trigger website rebuilds.
 - **OneUp scheduling**: generate and optionally schedule daily posts, weekly quiz posts and weekly ebook posts to OneUp.
+- **Blotato video publishing**: build and publish weekly AI short-video lanes to Instagram, YouTube, TikTok and Facebook through Blotato.
 - **Outreach**: scan SERP results for keywords, filter domains, enrich contacts, validate emails, score leads and append accepted rows to Google Sheets.
 - **Audits**: dispatch external GitHub Actions for Mobile UX and SEO/AEO/GEO audits, accept secure callbacks, run SEO/AEO/GEO analysis, and run an internal on-brand audit.
 - **Cloudflare purge**: purge a Cloudflare zone cache using a bearer token, with optional application-level shared-secret protection.
 - **RSS short links**: create R2-backed short links and redirect pages for RSS/feed links.
+- **Operational preflight**: provide lightweight health, readiness and warmup endpoints for scheduled AIMS jobs.
 
 ### Runtime model
 
@@ -48,6 +55,7 @@ The application supports these business/content workflows:
 - Services are isolated under `services/*` and `audits/*`, with shared concerns under `services/shared/*`.
 - Async long-running jobs use the shared in-process job store with durable persistence when R2 metasystem state is configured.
 - Storage-backed services use `services/shared/utils/r2-client.js` and bucket aliases rather than raw bucket names in service code.
+- Skills are centrally controlled through the HIVE R2 pool. AIMS should not keep a local `.agents` or `audits/skills` skill library.
 
 ## Quick start
 
@@ -96,7 +104,7 @@ npm test
 The test command in `package.json` is:
 
 ```bash
-node --test job-store.test.js test/*.test.js
+for f in job-store.test.js test/build-check.test.js test/blotato-service.test.js test/deployment-check.test.js test/koyeb-env-doctor.test.js test/durable-state-env.test.js test/production-env-defaults.test.js test/route-registry.test.js test/smoke.test.js test/suite-auth.test.js; do echo "▶ $f"; APP_TMP_DIR="${APP_TMP_DIR:-/tmp/aims-test}-$(date +%s%N)" node --test --test-concurrency=1 --test-force-exit --test-timeout=60000 "$f" || exit $?; done
 ```
 
 ### Health check
@@ -142,8 +150,7 @@ Expected high-level response:
 `routes/index.js` mounts active routers:
 
 ```text
-/rss                  routes/rss.js
-/rss                  services/rss-feed-creator/routes/rewrite.js
+/rss                  routes/rss.js + services/rss-feed-creator/routes/rewrite.js
 /script               services/script/routes/index.js
 /tts                  services/tts/routes/tts.js
 /artwork              services/artwork/index.js
@@ -152,8 +159,10 @@ Expected high-level response:
 /blog                 services/blog/index.js
 /cloudflare           services/cloudflare-purge/index.js
 /oneup                services/oneup/index.js
+/blotato              services/blotato/index.js
 /audits               audits/index.js
 /rss-links            services/rss-links/index.js
+/ops                  services/ops/index.js
 ```
 
 ### Middleware and operational behaviour
@@ -179,11 +188,13 @@ Expected high-level response:
 | blog | `services/blog/` | Implemented | Weekly AI briefing posts, social/daily posts, blog RSS publishing and rebuild hooks. | `/blog/weekly/build, /blog/rss/rebuild, /blog/social/*` | weekly/buildWeeklyBlogPost.js, social/buildDailySocialBlogPost.js, rss/publishBlogRssFeed.js | OpenRouter, R2, website rebuild webhook | blog, blogImages, blogRss buckets | blog-*.test.js |
 | cloudflare-purge | `services/cloudflare-purge/` | Implemented | Cloudflare zone cache purge API wrapper with optional shared-secret header. | `/cloudflare/health, /cloudflare/purge` | routes/index.js, utils/purgeCloudflareCache.js | Cloudflare API | None | Covered by route/runtime tests only if added later |
 | oneup | `services/oneup/` | Implemented | Daily lane, weekly quiz, weekly ebook and published-history workflows for OneUp. | `/oneup/*` | routes/social.js, utils/socialScheduler.js, utils/oneupClient.js | OneUp API, OpenRouter, RSS context, local ebook catalogue | Durable scheduler state through shared state utilities | oneup-social.test.js |
+| blotato | `services/blotato/` | Implemented | AI short-video pack building, Blotato rendering, polling and multi-platform publish/status workflows. | `/blotato/*` | routes/index.js, utils/autoPublishService.js, utils/newsShortsService.js, utils/blotatoClient.js | Blotato API, OpenRouter, RSS context, R2 | Shared job state and Blotato media/post records | blotato-service.test.js |
 | outreach | `services/outreach/` | Implemented | SERP discovery, domain filtering, enrichment, email validation, scoring and Google Sheets append. | `/outreach/*` | routes/index.js, services/outreachCore.js, services/serp-OutreachService.js, services/batchService.js | SERP API, Hunter, Prospeo, Apollo, ZeroBounce, urlscan, OpenPageRank, Google Sheets | R2 metasystem for batch cursor | No dedicated route test found |
 | podcast | `services/podcast/` | Implemented | End-to-end podcast pipeline wrapper: script, artwork, TTS, podcast RSS, cleanup and rebuild hook. | `/podcast/run, /podcast/status/:sessionId, /podcast/health` | index.js, runPodcastPipeline.js | Script, Artwork, TTS, Podcast RSS, R2 | Job store plus podcast/audio/meta buckets | podcast-*.test.js |
 | rss-feed-creator | `services/rss-feed-creator/` | Implemented | Fetches configured RSS/URL sources, rewrites items with AI, emits newsletter RSS and JSON. | `/rss, /rss/rewrite` | rewrite-pipeline.js, utils/fetchFeeds.js, utils/models.js, utils/feedGenerator.js | OpenRouter, R2, rss-parser | rss bucket: feed.xml, feed.json, rotation data | rss-feed-creator-brand.test.js, feed-fetching.test.js |
 | rss-feed-podcast | `services/rss-feed-podcast/` | Implemented as callable module | Builds podcast RSS from episode metadata and optionally notifies PodcastIndex. | `Called by podcast pipeline; not mounted directly` | index.js, generateFeed.js, xmlBuilder.js | R2, PodcastIndex | podcastRss bucket, meta bucket | podcast-rss-contract.test.js |
 | rss-links | `services/rss-links/` | Implemented | Self-hosted RSS short-link creation and redirect storage. | `/rss-links/shorten, /rss-links/:key` | service.js, store.js, routes/*.js | R2 | rss bucket under rss-links/ | No dedicated test found |
+| ops | `services/ops/` | Implemented | Lightweight scheduler-facing health, preflight and warmup checks. | `/ops/health, /ops/preflight, /ops/warmup` | index.js | Express, selected env hints | None | route-registry.test.js, smoke coverage |
 | script | `services/script/` | Implemented | Podcast script generation, composition, editorial pass, chunking, transcript and metadata upload. | `/script/*` | routes/index.js, utils/orchestrator.js, utils/promptTemplates.js, utils/editAndFormat.js | OpenRouter, Weather/RapidAPI, R2 | rawtext, transcript, meta, metasystem buckets | scriptValidation.test.js, transcript-html-template.test.js, getSponsor.test.js |
 | shared | `services/shared/` | Implemented | Common HTTP, OpenRouter, R2, durable state, job store, dedupe, rate limit and schemas. | `Used by all services` | utils/ai-service.js, utils/r2-client.js, utils/stateFile.js, middleware/rateLimit.js | OpenRouter, R2 | metasystem durable state | durable-state.test.js, openrouter-service-routing.test.js |
 | tts | `services/tts/` | Implemented | TTS orchestration with Polly, R2 chunk output, FFmpeg merge/edit and final podcast mastering. | `/tts/orchestrate, /tts/status/:sessionId, /tts/health` | routes/tts.js, utils/ttsProcessor.js, utils/mergeProcessor.js, utils/editingProcessor.js, utils/podcastProcessor.js | AWS Polly, FFmpeg, R2 | chunks, merged, edited, podcast, meta buckets | merge-processor.test.js |
@@ -229,6 +240,19 @@ The table below is built from the active mounted routers in `routes/index.js` an
 | `POST` | `/oneup/daily/:laneKey` | oneup | Builds and schedules a daily lane post. Lane keys: monday-sunday. | Optional `publishDate`, `scheduledDateTime`, `dryRun`, `categoryName`, `socialNetworkId`, `imageUrl`, `apiKey`. | Hookdeck dedupe `oneup:<laneKey>`. | JSON with generated post and scheduling status. |
 | `POST` | `/oneup/ebooks/weekly` | oneup | Builds/schedules Tuesday, Thursday and Saturday ebook posts. | Optional `weekStartDate`, `featuredBook`, `usePodcastFeaturedBook`, `publishTimes`, `scheduledDateTimes`, `dryRun`, category/network/image/api fields. | Hookdeck dedupe `oneup:ebooks:weekly`. | JSON with featured book, per-day posts, warnings. |
 | `POST` | `/oneup/quiz/weekly` | oneup | Builds/schedules weekly quiz question and answer posts. | Optional question/answer dates or scheduled datetimes, `dryRun`, category/network/image/api fields. | Hookdeck dedupe `oneup:quiz:weekly`. | JSON with question/answer scheduling results. |
+| `GET` | `/blotato/health` | blotato | Blotato config and route health check. | None | Public route. | JSON route/config summary; no Blotato API call. |
+| `GET` | `/blotato/shorts/lanes` | blotato | Lists weekly short-video lanes. | None | AIMS bearer. | JSON lane definitions. |
+| `POST` | `/blotato/shorts/:lane` | blotato | Builds a short-video lane pack and can optionally create a Blotato visual. | Lane path plus optional build/render fields. | AIMS bearer. | JSON pack/build result. |
+| `POST` | `/blotato/shorts/:lane/publish-now` | blotato | Triggers the one-call Blotato publish flow for a weekly lane. | Lane path. | Public controlled trigger. | Queued/running job response with status URL. |
+| `GET` | `/blotato/jobs/:sessionId` | blotato | Reads a Blotato publish-now job. | Path `sessionId`. | Public job status route. | JSON job status or 404. |
+| `GET` | `/blotato/accounts` | blotato | Lists connected Blotato social accounts. | Optional `platform`, optional `apiKey`. | AIMS bearer. | JSON Blotato account response. |
+| `GET` | `/blotato/accounts/:accountId/subaccounts` | blotato | Lists Blotato account subaccounts, such as Facebook pages. | Path `accountId`, optional `apiKey`. | AIMS bearer. | JSON Blotato subaccount response. |
+| `GET` | `/blotato/templates` | blotato | Searches Blotato visual templates. | Query `search`, `fields`, optional `apiKey`. | AIMS bearer. | JSON Blotato template response. |
+| `POST` | `/blotato/visuals` | blotato | Creates a Blotato visual from a template. | Template and input payload. | AIMS bearer. | JSON visual creation response. |
+| `GET` | `/blotato/visuals/:id` | blotato | Polls Blotato visual creation status. | Path visual id. | AIMS bearer. | JSON visual status. |
+| `DELETE` | `/blotato/visuals/:id` | blotato | Deletes a Blotato visual creation. | Path visual id. | AIMS bearer. | JSON delete result. |
+| `POST` | `/blotato/posts` | blotato | Publishes or schedules a Blotato social post. | Platform/account/media/text payload. | AIMS bearer. | JSON post submission response. |
+| `GET` | `/blotato/posts/:postSubmissionId` | blotato | Polls Blotato post publish status. | Path post submission id. | AIMS bearer. | JSON post status. |
 | `GET` | `/audits/mobile-ux/health` | audits | Mobile UX audit health. | None | None | JSON health. |
 | `POST` | `/audits/mobile-ux/run` | audits | Dispatches website Mobile UX audit workflow. | Optional `sessionId`, `websiteUrl`, `reportPrefix`, `workflowRef`, `requestedBy`, `notes`, `excludePatterns`. | Hookdeck dedupe; GitHub token required in env. | 202 with queued job and dispatch metadata. |
 | `POST` | `/audits/mobile-ux/callback` | audits | Receives Mobile UX audit workflow callback. | Audit callback schema: `auditType`, `sessionId`, `status`, `reportPrefix`, artefact URLs. | Bearer token or `x-audit-callback-token`. | JSON completion result. |
@@ -244,6 +268,9 @@ The table below is built from the active mounted routers in `routes/index.js` an
 | `POST` | `/rss-links/shorten` | rss-links | Creates or reuses an RSS short link. | Required `url` absolute http/https URL. | None | 201 if new, 200 if reused. |
 | `GET` | `/rss-links/:key` | rss-links | Redirects a short key to original URL. | Path `key` 4-32 alphanumeric. | None | 302 redirect; query string preserved. |
 | `GET` | `/rss-links/:key/index.html` | rss-links | Redirect page URL variant. | Path `key` 4-32 alphanumeric. | None | 302 redirect; query string preserved. |
+| `GET` | `/ops/health` | ops | Scheduler-facing liveness and target-service context check. | Optional query context fields. | Public health bypass. | JSON readiness/check summary. |
+| `GET` | `/ops/preflight` | ops | Service-context and configuration warning check before scheduled jobs. | Optional query context fields. | AIMS bearer. | JSON readiness/check summary; strict mode can return 503. |
+| `GET` | `/ops/warmup` | ops | Lightweight bounded warmup/readiness check before scheduled jobs. | Optional query context fields. | AIMS bearer. | JSON readiness/check summary. |
 
 ## Present but not wired or legacy route files
 
