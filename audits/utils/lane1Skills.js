@@ -1,50 +1,44 @@
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { getHiveSkillPoolConfig, getLane1SkillReferences } from "../../services/shared/hiveSkillPool.js";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const REPO_ROOT = path.resolve(__dirname, "..", "..");
-const REGISTRY_PATH = path.join(REPO_ROOT, ".agents", "lane-1-skills.json");
+const LANE_1_GOVERNANCE = Object.freeze({
+  mode: "reports-only",
+  skillSource: "central HIVE R2 shared skill pool",
+  blockedActions: Object.freeze(["auto-deploy", "direct-push", "secret-write", "blind-browser-action"]),
+  requiredGates: Object.freeze(["dry-run", "evidence-capture", "manual-review-before-write"]),
+});
 
-function readRegistry() {
-  try {
-    const parsed = JSON.parse(fs.readFileSync(REGISTRY_PATH, "utf8"));
-    return parsed && typeof parsed === "object" ? parsed : { schemaVersion: "invalid", governance: {}, skills: [] };
-  } catch {
-    return { schemaVersion: "missing", governance: {}, skills: [] };
-  }
-}
-
-export function buildLane1SkillsBaseline(upstreamBaseline = undefined) {
-  const registry = readRegistry();
-  const skills = Array.isArray(registry.skills) ? registry.skills.filter((item) => item && typeof item === "object") : [];
-  const batchCounts = skills.reduce((acc, skill) => {
-    const batch = String(skill.batch || "Unbatched");
-    acc[batch] = (acc[batch] || 0) + 1;
-    return acc;
-  }, {});
+export function buildLane1SkillsBaseline(upstreamBaseline = undefined, env = process.env) {
+  const pool = getHiveSkillPoolConfig(env);
+  const skills = getLane1SkillReferences(env);
+  const batchCounts = { "Central R2 AIMS manifest": skills.length };
 
   return {
     generatedAt: new Date().toISOString(),
-    schemaVersion: registry.schemaVersion || "unknown",
+    schemaVersion: "hive.manifest.aims.v1",
     lane: "Lane 1 - Autonomous",
-    repoSideSetup: true,
-    externalInstallRequired: true,
+    repoSideSetup: false,
+    centralSkillPool: true,
+    externalInstallRequired: false,
+    localAgentsRequired: false,
     upstreamBaselinePresent: Boolean(upstreamBaseline && typeof upstreamBaseline === "object"),
     upstreamSkillCount: Number(upstreamBaseline?.skillCount || 0),
+    r2Bucket: pool.r2Bucket,
+    manifestUrl: pool.manifestUrl,
+    skillsIndexUrl: pool.skillsIndexUrl,
     skillCount: skills.length,
     skills: skills.map((skill) => ({
-      skill: skill.displayName || skill.skill,
-      slug: skill.skill,
-      batch: skill.batch,
-      priority: skill.priority,
-      repository: skill.repository,
-      ecosystemFit: skill.ecosystemFit,
-      manualCheckpoint: skill.manualCheckpoint,
+      skill: skill.name,
+      slug: skill.slug,
+      referencePrefix: skill.referencePrefix,
+      descriptorUrl: skill.descriptorUrl,
+      batch: "Central R2 AIMS manifest",
+      priority: skill.referencePrefix ? "manifest-allowed" : "manifest-lookup-required",
+      repository: "HIVE shared skill pool",
+      ecosystemFit: "AIMS consumes the shared descriptor; HIVE owns execution and orchestration.",
+      manualCheckpoint: "Review required before any write, deploy, browser or token-bearing action.",
     })),
     batchCounts,
-    governance: registry.governance || {},
+    governance: LANE_1_GOVERNANCE,
   };
 }
 
