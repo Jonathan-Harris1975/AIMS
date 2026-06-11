@@ -1,0 +1,43 @@
+{
+  "patch": "AIMS council skill descriptor R2 object-key tidy",
+  "version": "v6-council-skills-in-skills-folder",
+  "date": "2026-06-11",
+  "decision": "Store the three AIMS council skill descriptors under hive-skills/skills/ using S### reference-prefix JSON filenames.",
+  "r2_public_base_url": "https://pub-da50a6512f164566955a3076a1c795ef.r2.dev",
+  "r2_bucket": "hive-skills",
+  "new_skill_descriptors": [
+    {
+      "id": "S202",
+      "slug": "brand-social-council",
+      "object_key": "skills/S202_brand-social-council.json",
+      "url": "https://pub-da50a6512f164566955a3076a1c795ef.r2.dev/skills/S202_brand-social-council.json",
+      "size": 9509,
+      "sha": "1f24e267f539d07ddc9b39770a0329d9e798061f10614c49e1abe5bf237d6dd8"
+    },
+    {
+      "id": "S203",
+      "slug": "mobile-ux-council",
+      "object_key": "skills/S203_mobile-ux-council.json",
+      "url": "https://pub-da50a6512f164566955a3076a1c795ef.r2.dev/skills/S203_mobile-ux-council.json",
+      "size": 7569,
+      "sha": "ab77e09e741f632c462068b86180709a36588ff4e3eaad00a3ad7e3ea2e12085"
+    },
+    {
+      "id": "S204",
+      "slug": "seo-aeo-geo-council",
+      "object_key": "skills/S204_seo-aeo-geo-council.json",
+      "url": "https://pub-da50a6512f164566955a3076a1c795ef.r2.dev/skills/S204_seo-aeo-geo-council.json",
+      "size": 7903,
+      "sha": "995c6fb7b441d8ab5b9b7e811bea63db5f2e3fa126da439635d19e7a6a78e946"
+    }
+  ],
+  "deprecated_r2_object_keys": [
+    "audits/skills/brandSocialCouncil.md",
+    "audits/skills/mobileUxCouncil.md",
+    "audits/skills/seoAeoGeoCouncil.md"
+  ],
+  "spreadsheet_update": "V6 workbook adds S202-S204 and updates R2 URL listing/counts.",
+  "files_for_deletion_from_aims_repo": [
+    "audits/skills/"
+  ]
+}
