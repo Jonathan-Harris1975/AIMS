@@ -14,6 +14,8 @@ const LOWERCASE_PUNCTUATION_ABBREVIATIONS = new Set([
   "etc",
   "e.g",
   "i.e",
+  "a.m",
+  "p.m",
   "vs",
 ]);
 
