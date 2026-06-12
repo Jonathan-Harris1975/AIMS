@@ -5,6 +5,7 @@ import {
   hasRequiredOutro,
   extractOutro,
   enforceCanonicalOutro,
+  findBrokenPunctuationJoins,
   validateTranscriptStructure,
 } from "../services/script/utils/scriptValidation.js";
 import { OUTRO_CLOSING_TAGLINE } from "../services/script/utils/promptTemplates.js";
@@ -69,6 +70,11 @@ test("script validation rejects a dangling fragment immediately before the outro
     validation.reasons.some((reason) => /dangling|before outro|unfinished/i.test(reason)),
     validation.reasons.join("; ")
   );
+});
+
+test("script validation does not mistake a.m. or p.m. for broken lowercase punctuation joins", () => {
+  const joins = findBrokenPunctuationJoins("The service runs from 9 a.m. to 5 p.m. on weekdays.");
+  assert.deepEqual(joins, []);
 });
 
 test("editAndFormat repairs the known lowercase punctuation glitch safely", () => {
