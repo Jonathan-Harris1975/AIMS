@@ -683,7 +683,7 @@ export function findExistingSocialPostForDate(manifest = {}, dateId = "") {
     .filter(Boolean)
     .find((entry) => entry.id === `daily-${dateId}` ||
       entry.date_label === dateId ||
-      String(entry.published_at || "").startsWith(dateId));
+      String(entry.slug || "").startsWith(`${dateId}-`));
 }
 
 export function buildSocialPackagePrompt({ dateLabel, items = [] } = {}) {
