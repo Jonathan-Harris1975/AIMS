@@ -10,6 +10,7 @@
 import OpenAI from "openai";
 import { warn, error, info } from "../../../logger.js";
 import { getArtworkProviders } from "./openrouterProviders.js";
+import { applyArtworkPromptPolicy } from "./artworkPromptPolicy.js";
 
 const OPENROUTER_BASE_URL =
   process.env.OPENROUTER_BASE_URL || process.env.OPENROUTER_API_BASE || "https://openrouter.ai/api/v1";
@@ -31,23 +32,26 @@ if (providers.length === 0) {
   });
 }
 
-function buildInstruction(prompt, mode = "podcast") {
+export function buildInstruction(prompt, mode = "podcast", date) {
+  const policyPrompt = applyArtworkPromptPolicy(prompt, { date, mode });
+
   if (mode === "blog") {
     return [
       "Create a wide editorial blog hero image.",
       "Composition: cinematic landscape banner, clearly usable as a website article header.",
-      "Style: premium, modern, restrained, atmospheric, no text.",
-      `Theme: "${prompt}".`,
+      "Style: premium, modern, restrained, atmospheric and editorial rather than promotional.",
+      `Creative direction: ${policyPrompt}`,
+      "Final compliance check: inspect the whole composition and remove every accidental letter-like, number-like, logo-like or watermark-like mark before returning the image.",
     ].join(" ");
   }
 
   return [
     "Create a 1400x1400 premium editorial podcast cover art image for an adult AI news show.",
-    "Mood: sharp, sceptical, intelligent, cinematic, grounded, modern, minimal.",
-    "Palette: deep navy, charcoal, restrained neon teal, muted purple, soft metallic highlights.",
-    "Style: abstract technological realism, subtle data motifs, clean negative space, premium magazine illustration, no text.",
-    `Theme: "${prompt}".`,
-    "Avoid pastel fantasy, dreamy clouds, magical orb imagery, childlike sci-fi, cartoon softness, playful candy colours, whimsical storybook visuals, cute illustration, or anything toy-like.",
+    "Mood: sharp, sceptical, intelligent, cinematic, grounded, modern and minimal.",
+    "Style: abstract technological realism, subtle data motifs, clean negative space and premium magazine illustration.",
+    `Creative direction: ${policyPrompt}`,
+    "Avoid pastel fantasy, dreamy clouds, magical orb imagery, childlike sci-fi, cartoon softness, playful candy colours, whimsical storybook visuals, cute illustration or anything toy-like.",
+    "Final compliance check: inspect the whole composition and remove every accidental letter-like, number-like, logo-like or watermark-like mark before returning the image.",
   ].join(" ");
 }
 
@@ -76,7 +80,7 @@ function extractBase64Image(result) {
   return null;
 }
 
-async function callArtworkProvider(provider, prompt, mode) {
+async function callArtworkProvider(provider, prompt, mode, date) {
   const client = new OpenAI({
     apiKey: provider.key,
     baseURL: OPENROUTER_BASE_URL,
@@ -95,7 +99,7 @@ async function callArtworkProvider(provider, prompt, mode) {
         content: [
           {
             type: "text",
-            text: buildInstruction(prompt, mode),
+            text: buildInstruction(prompt, mode, date),
           },
         ],
       },
@@ -111,7 +115,7 @@ async function callArtworkProvider(provider, prompt, mode) {
   return image;
 }
 
-async function generateArtworkBase64(prompt, { mode = "podcast" } = {}) {
+async function generateArtworkBase64(prompt, { mode = "podcast", date } = {}) {
   if (providers.length === 0) {
     throw new Error("Artwork generation disabled: missing OpenRouter artwork env vars.");
   }
@@ -120,7 +124,7 @@ async function generateArtworkBase64(prompt, { mode = "podcast" } = {}) {
 
   for (const provider of providers) {
     try {
-      const image = await callArtworkProvider(provider, prompt, mode);
+      const image = await callArtworkProvider(provider, prompt, mode, date);
       if (provider.id === "backup") {
         info("🎨 Artwork generated with backup OpenRouter image model", {
           modelEnv: provider.modelEnv,
@@ -144,10 +148,10 @@ async function generateArtworkBase64(prompt, { mode = "podcast" } = {}) {
   throw new Error(`Failed to generate artwork: ${lastError?.message || "all providers failed"}`);
 }
 
-export async function generatePodcastArtwork(prompt) {
-  return generateArtworkBase64(prompt, { mode: "podcast" });
+export async function generatePodcastArtwork(prompt, options = {}) {
+  return generateArtworkBase64(prompt, { ...options, mode: "podcast" });
 }
 
-export async function generateBlogArtwork(prompt) {
-  return generateArtworkBase64(prompt, { mode: "blog" });
+export async function generateBlogArtwork(prompt, options = {}) {
+  return generateArtworkBase64(prompt, { ...options, mode: "blog" });
 }
