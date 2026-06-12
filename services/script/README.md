@@ -74,7 +74,7 @@ Generates podcast episode scripts, applies editorial shaping, chunks text for TT
 
 - 400 schema errors: inspect accepted fields in `utils/schemas.js`.
 - Empty or malformed model output: inspect OpenRouter provider chain and route logs.
-- Transcript validation failure: generated script is missing required structure.
+- Transcript validation failure: generated script is missing required structure. Normal spoken time abbreviations such as `a.m.` and `p.m.` are accepted by the punctuation-join guard.
 - R2 upload failure: check bucket aliases and public URLs.
 
 ## Connections to other services
