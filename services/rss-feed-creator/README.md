@@ -80,3 +80,7 @@ When a selected feed batch produces no fresh items within the configured cutoff 
 ## Quarantine fallback rotation
 
 Phase 3 still fails closed per item: quarantined rewrites are never published. If more than `RSS_QUARANTINE_FALLBACK_THRESHOLD` item is quarantined in a rewrite batch, `rewrite-pipeline.js` automatically advances to the next available feed rotation batch up to `RSS_REWRITE_BATCH_ADVANCE_ATTEMPTS`. Safe rewritten items can still be published after fallback exhaustion as long as at least `RSS_REWRITE_MIN_PUBLISHABLE_ITEMS` passed all gates.
+
+## Shared tone control
+
+RSS rewriting, validation repair, short-title generation and the final relevance classifier now use the shared AIMS tone governor in `services/script/utils/toneSetter.js`. The RSS lane keeps the common Jonathan Harris voice while retaining its own concise feed-specific format rules.
