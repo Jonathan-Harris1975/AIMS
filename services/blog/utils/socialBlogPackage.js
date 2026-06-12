@@ -1,5 +1,7 @@
 import { cleanSourceText, cleanSourceTitle, hasBannedPhrases, buildPromptSourceDigest } from "./weeklyPackage.js";
 import { GENERIC_HASHTAGS, SOCIAL_BLOG_BANNED_PHRASES } from "../../content-quality/brandLexicon.js";
+import { buildSocialBlogPersona } from "../../script/utils/toneSetter.js";
+import { getSeasonalPaletteDirection, STRICT_TEXT_FREE_RULE } from "../../artwork/utils/artworkPromptPolicy.js";
 
 const CODE_FENCE_RE = /^```(?:json|html|markdown|md)?\s*|```$/gim;
 const TITLE_PREFIX_RE = /^(?:title|headline|summary|analysis|report|study|ai|openai|update|briefing|daily brief|social caption)\s*:\s*/i;
@@ -7,9 +9,9 @@ const TITLE_PREFIX_RE = /^(?:title|headline|summary|analysis|report|study|ai|ope
 const IMAGE_REQUIRED = [
   /high[-\s]?impact/i,
   /editorial/i,
-  /dark navy|charcoal/i,
-  /neon teal/i,
-  /muted purple/i,
+  /dark navy|charcoal|seasonal palette/i,
+  /teal|cyan|sage|amber|copper/i,
+  /purple|violet|lilac|coral|plum|silver/i,
   /cinematic|strong contrast|premium/i,
   /no text|without text/i,
   /no letters|without letters/i,
@@ -324,7 +326,7 @@ export function buildFallbackSocialBlogPackage({ items = [], dateLabel } = {}) {
     ],
     takeaway: "Judge the AI story by delivery, cost, and control, not the stage lighting.",
     hashtags: normaliseHashtags([], themes),
-    image_prompt: "Create high-impact premium editorial tech artwork for a daily AI briefing, dark navy and charcoal base, controlled neon teal and muted purple accents, strong contrast, cinematic composition, layered abstract infrastructure forms, grounded Gen X energy, no text, no letters, no numbers, no logos, no watermarks, no glowing brains, no cartoon robots, no stock office scenes, no generic AI wallpaper.",
+    image_prompt: `Create high-impact premium editorial tech artwork for a daily AI briefing. ${getSeasonalPaletteDirection(dateLabel)} Strong contrast, cinematic composition and layered abstract infrastructure forms. ${STRICT_TEXT_FREE_RULE} No glowing brains, cartoon robots, stock office scenes or generic AI wallpaper.`,
     themes,
     date_label: dateLabel,
     qa_mode: "fallback-package",
@@ -474,6 +476,7 @@ export function buildSocialArtworkPrompt({
   summary,
   themes = [],
   generatedPrompt = "",
+  date,
 } = {}) {
   const themeLine = themes.length
     ? `Reflect these themes from the source material: ${themes.join(", ")}.`
@@ -485,9 +488,11 @@ export function buildSocialArtworkPrompt({
     title ? `Anchor the visual angle to this headline: ${title}.` : "",
     summary ? `Editorial angle: ${summary}.` : "",
     themeLine,
-    "Style: visually appealing, high energy, Gen X grounded rather than neon teenager chaos, dark navy and charcoal base, controlled neon teal and muted purple accents, strong contrast, cinematic composition, layered depth.",
+    "Style: visually appealing, energetic but adult, premium editorial composition with strong contrast, cinematic lighting and layered depth.",
+    getSeasonalPaletteDirection(date),
     "Use abstract infrastructure, data-flow, interface, circuitry or policy-pressure motifs only where they serve the source themes.",
-    "No text, no letters, no numbers, no logos, no watermarks, no glowing brains, no cartoon robots, no stock office scenes, no generic AI wallpaper.",
+    STRICT_TEXT_FREE_RULE,
+    "No glowing brains, cartoon robots, stock office scenes or generic AI wallpaper.",
   ].filter(Boolean).join(" ");
 }
 
@@ -690,6 +695,7 @@ export function buildSocialPackagePrompt({ dateLabel, items = [] } = {}) {
   const sourceDigest = buildPromptSourceDigest(items);
 
   const system = [
+    buildSocialBlogPersona(),
     "You are the senior social-blog editor for the Jonathan Harris AI ecosystem.",
     "Turn rewritten RSS material into one short daily blog package for social media posting: British English, Gen-X grounded, sharp, sceptical, useful, readable, and allergic to hype.",
     "Use only the supplied source material. Preserve factual meaning. Do not invent facts, numbers, quotes, sources, consequences, dates, motives, market impact, or claims.",
@@ -713,7 +719,7 @@ export function buildSocialPackagePrompt({ dateLabel, items = [] } = {}) {
     "- body_sections: 2 to 4 short sections, each with 1 to 2 tight paragraphs.",
     "- takeaway: one clear closing judgement.",
     "- hashtags: 3 to 6 relevant tags, no spam, no generic hashtag soup.",
-    "- image_prompt: high-impact, premium editorial tech style, dark navy/charcoal base, controlled neon teal and muted purple accents, strong contrast, cinematic composition, no text, no letters, no numbers, no logos, no watermarks, no glowing brains, no cartoon robots, no stock office scenes, no generic AI wallpaper.",
+    `- image_prompt: high-impact premium editorial tech style. ${getSeasonalPaletteDirection(dateLabel)} ${STRICT_TEXT_FREE_RULE} No glowing brains, cartoon robots, stock office scenes or generic AI wallpaper.`,
     "",
     "Source material:",
     sourceDigest,
@@ -730,7 +736,7 @@ export function buildSocialBrandQaPrompt({ items = [], generatedJson = {} } = {}
   const sourceDigest = buildPromptSourceDigest(items);
 
   return {
-    system: "Act as the brand QA gatekeeper for Jonathan Harris daily social-blog posts. Use evidence only. Do not rewrite unless needed to pass the gate.",
+    system: `${buildSocialBlogPersona()}\n\nAct as the brand QA gatekeeper for Jonathan Harris daily social-blog posts. Use evidence only. Do not rewrite unless needed to pass the gate.`,
     user: [
       "Review the generated daily social-blog JSON below.",
       "Reject unsupported claims, invented facts, hype language, fake urgency, corporate sludge, generic AI filler, weak social_caption, weak image_prompt, or contract violations.",

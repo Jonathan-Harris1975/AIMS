@@ -1,3 +1,6 @@
+import { buildBlogPersona } from "../../script/utils/toneSetter.js";
+import { getSeasonalPaletteDirection, STRICT_TEXT_FREE_RULE } from "../../artwork/utils/artworkPromptPolicy.js";
+
 const COMMON_ENTITY_MAP = {
   amp: "&",
   lt: "<",
@@ -351,7 +354,7 @@ export function renderWeeklyBodyHtml(weeklyPackage = {}, { escapeHtml } = {}) {
   return parts.join("\n\n");
 }
 
-export function buildBlogArtworkPrompt({ week, title, summary, dominantThemes = [], generatedPrompt = "" } = {}) {
+export function buildBlogArtworkPrompt({ week, date, title, summary, dominantThemes = [], generatedPrompt = "" } = {}) {
   const themes = dominantThemes.length
     ? dominantThemes.join(", ")
     : "AI infrastructure, model competition, regulation and product reality";
@@ -364,9 +367,11 @@ export function buildBlogArtworkPrompt({ week, title, summary, dominantThemes = 
     modelDirection ? `Use this editorial visual direction: ${modelDirection}.` : "",
     `Reflect these dominant themes from the week's coverage: ${themes}.`,
     summaryLine,
-    `Visual tone: premium, sceptical, calm, modern. Dark navy or charcoal base with restrained neon teal and muted purple accents.`,
+    `Visual tone: premium, sceptical, calm and modern.`,
+    getSeasonalPaletteDirection(date || week),
     `Composition: wide hero banner for a blog header, cinematic but minimal, layered depth, data-centre or interface abstractions where relevant, and motifs that hint at the themes without using logos.`,
-    `Do not include text, letters, numbers, watermarks, people, stock-photo office scenes, cartoon robots, glowing brains, or generic AI wallpaper.`,
+    STRICT_TEXT_FREE_RULE,
+    `Also avoid people, stock-photo office scenes, cartoon robots, glowing brains, or generic AI wallpaper.`,
     title ? `Anchor the image to this editorial title: ${title}.` : "",
   ].filter(Boolean).join(" ");
 }
@@ -646,6 +651,7 @@ export function buildWeeklyPackagePrompt({ week, dateLabel, items = [] } = {}) {
   const sourceDigest = buildPromptSourceDigest(items);
 
   const system = [
+    buildBlogPersona(),
     "You are the senior editor for the Jonathan Harris AI ecosystem. You turn RSS-derived AI briefings into a weekly blog package that sounds like Jonathan Harris: British English, Gen-X, sharp, sceptical, dry, calm, useful, and allergic to hype.",
     "Your job is not to summarise everything. Your job is to decide what mattered, connect the week into one coherent editorial argument, and remove anything that smells like corporate paste, newsroom filler, or generic AI middleware.",
     "Non-negotiable rules:",
@@ -712,8 +718,9 @@ export function buildWeeklyPackagePrompt({ week, dateLabel, items = [] } = {}) {
     "",
     "Image prompt requirements:",
     "- Describe a premium editorial hero image tied to the dominant themes.",
-    "- Dark navy or charcoal base, restrained neon teal and muted purple accents.",
-    "- No text, letters, numbers, logos, watermarks, stock-photo office scenes, glowing brains, cartoon robots, or generic AI wallpaper.",
+    `- ${getSeasonalPaletteDirection(dateLabel || week)}`,
+    `- ${STRICT_TEXT_FREE_RULE}`,
+    "- No stock-photo office scenes, glowing brains, cartoon robots or generic AI wallpaper.",
     "",
     "Return a JSON object with exactly these top-level keys:",
     '{ "title": string, "summary": string, "dominant_themes": string[], "image_prompt": string, "sections": [{ "heading": string, "paragraphs": string[], "bullets": string[] }] }',
@@ -741,7 +748,7 @@ export function buildWeeklyBrandQaPrompt({ items = [], generatedJson = {} } = {}
   const sourceDigest = buildPromptSourceDigest(items);
   const generatedPayload = JSON.stringify(toWeeklyPackageContract(generatedJson), null, 2);
 
-  const system = "Act as the brand gatekeeper for the Jonathan Harris AI ecosystem. Use evidence only. Do not rewrite unless needed to pass the gate.";
+  const system = `${buildBlogPersona()}\n\nAct as the brand gatekeeper for the Jonathan Harris AI ecosystem. Use evidence only. Do not rewrite unless needed to pass the gate.`;
   const user = [
     "Review the generated weekly blog JSON below.",
     "",
