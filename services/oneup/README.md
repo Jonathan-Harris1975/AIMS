@@ -90,3 +90,7 @@ Transient OneUp API failures are retried automatically for schedule/list calls. 
 - `ONEUP_API_RETRY_MAX_MS` default `6000`
 
 Only network errors, HTTP 408/425/429, and 5xx responses are retried. Auth, validation, duplicate and targeting failures still fail immediately.
+
+## Shared tone control
+
+Daily posts, quizzes and ebook social posts now build their system instructions from `services/script/utils/toneSetter.js`. Lane-specific format and evidence rules remain local, while voice, British English, anti-hype behaviour and factual discipline come from the shared governor.
