@@ -16,6 +16,7 @@ import crypto from "crypto";
 import { debug, error, warn } from "../../../logger.js";
 import { resilientRequest } from "../../shared/utils/ai-service.js";
 import { RSS_PROMPTS } from "./rss-prompts.js";
+import { buildRssPersona } from "../../script/utils/toneSetter.js";
 import { createShortLink } from "../../rss-links/service.js";
 import {
   assertPhase3AutopublishGate,
@@ -666,6 +667,7 @@ export async function generateShortTitle(item = {}) {
     }
 
     const systemPrompt = [
+      buildRssPersona(),
       "You create clean Jonathan Harris RSS headlines for AI news items.",
       "Maximum 10 words.",
       "British, plain, sceptical, and human.",

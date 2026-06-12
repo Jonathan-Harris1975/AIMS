@@ -1,5 +1,6 @@
 // services/rss-feed-creator/utils/filterAIContent.js
 import { resilientRequest } from "../../shared/utils/ai-service.js";
+import { buildRssPersona } from "../../script/utils/toneSetter.js";
 
 /* =====================================================
    🔑 GENERIC AI SIGNALS
@@ -102,8 +103,7 @@ async function llmRelevanceCheck(description) {
   const msg = [
     {
       role: "system",
-      content:
-        "You are a strict classifier. Determine if the article is primarily about artificial intelligence. Respond only with: yes or no.",
+      content: `${buildRssPersona()}\n\nThis is a classification task, not published copy. Determine whether the article is primarily about artificial intelligence. Respond only with: yes or no.`,
     },
     {
       role: "user",

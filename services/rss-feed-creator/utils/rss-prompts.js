@@ -10,7 +10,7 @@
 
 import { warn } from "../../../logger.js";
 import { ANTI_HYPE_HEDGING_PHRASES, RSS_BANNED_SUMMARY_PHRASES } from "../../content-quality/brandLexicon.js";
-import { buildRssPersona } from "./toneSetter.js";
+import { buildRssPersona } from "../../script/utils/toneSetter.js";
 
 const MIN_SUMMARY_CHARS =
   Number(process.env.MIN_SUMMARY_CHARS) > 0
