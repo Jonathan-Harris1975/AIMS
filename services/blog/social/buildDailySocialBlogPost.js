@@ -526,10 +526,20 @@ export async function buildDailySocialBlogPost({
     const existingPost = findExistingSocialPostForDate(existingManifest, window.dateId);
 
     if (existingPost && !force) {
+      const reason = `Daily social blog post already exists for ${window.dateId}. Pass force:true to rebuild it.`;
+      info("blog.social.daily.build.skipped", {
+        dateId: window.dateId,
+        reason: "existing-post",
+        existingId: existingPost.id,
+        existingDateLabel: existingPost.date_label,
+        existingPublishedAt: existingPost.published_at,
+        manifestKey,
+      });
+
       return {
         ok: true,
         skipped: true,
-        reason: `Daily social blog post already exists for ${window.dateId}. Pass force:true to rebuild it.`,
+        reason,
         existing: existingPost,
         manifestKey,
       };
@@ -539,11 +549,14 @@ export async function buildDailySocialBlogPost({
     const items = normaliseFeedItems(JSON.parse(rawFeed), window);
 
     if (!items.length) {
-      debug("blog.social.daily.noItems", {
+      info("blog.social.daily.build.skipped", {
         dateId: window.dateId,
         dateLabel: window.dateLabel,
+        reason: "no-feed-items-in-window",
         windowStart: window.start.toISOString(),
         windowEnd: window.end.toISOString(),
+        rssBucketKey: SOURCE_RSS_BUCKET_KEY,
+        feedKey: SOURCE_RSS_FEED_KEY,
       });
 
       return {
