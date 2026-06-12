@@ -4,9 +4,12 @@
 
 import { resilientRequest } from "../../shared/utils/ai-service.js";
 import { info, warn, error } from "../../../logger.js";
+import { buildPersona } from "./toneSetter.js";
 
-function buildEditorialPrompt(scriptText) {
+function buildEditorialPrompt(scriptText, meta = {}) {
   return `
+${buildPersona(meta)}
+
 You are performing the final spoken-word quality control pass on a podcast transcript.
 
 Your job is not to rewrite for style.
@@ -71,7 +74,7 @@ export async function runEditorialPass(meta = {}, scriptText = "") {
   const sessionId = meta.sessionId || "session";
 
   try {
-    const prompt = buildEditorialPrompt(scriptText);
+    const prompt = buildEditorialPrompt(scriptText, meta);
 
     const refined = await resilientRequest("editorialPass", {
       sessionId,

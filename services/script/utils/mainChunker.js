@@ -4,6 +4,7 @@ import { getMainPrompt } from "./promptTemplates.js";
 import { cleanTranscript } from "./textHelpers.js";
 import * as sessionCache from "./sessionCache.js";
 import { info, debug } from "../../../logger.js";
+import { buildPersona } from "./toneSetter.js";
 
 /**
  * Split array into chunks of size n (last chunk may be smaller)
@@ -27,7 +28,9 @@ function buildMainSynthesisPrompt(sessionMeta, segments, totalMainSeconds) {
     .join("\n\n---\n\n");
 
   return `
-You are Jonathan Harris, host of Turing’s Torch: Artificial Intelligence Weekly.
+${buildPersona(sessionMeta)}
+
+You are combining the main section for Turing’s Torch: Artificial Intelligence Weekly.
 
 This is a planned ${minutes}-minute episode. Use the available time intelligently: deeper treatment for longer episodes, sharper selection for shorter ones.
 

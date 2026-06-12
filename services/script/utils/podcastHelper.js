@@ -8,6 +8,8 @@ import { info, error, debug, warn } from "../../../logger.js";
 import { extractMainContent } from "./textHelpers.js";
 import { calculateDuration } from "./durationCalculator.js";
 import { buildPodcastDiscoveryMetadata } from "../../rss-feed-podcast/discoveryMetadata.js";
+import { buildPodcastMetadataPersona, buildPodcastArtworkPersona } from "./toneSetter.js";
+import { applyArtworkPromptPolicy, getSeasonalPaletteDirection, STRICT_TEXT_FREE_RULE } from "../../artwork/utils/artworkPromptPolicy.js";
 
 const PODCAST_TITLE = "Turing’s Torch: Artificial Intelligence Weekly";
 const HOST_NAME = "Jonathan Harris";
@@ -317,6 +319,8 @@ export function getTitleDescriptionPrompt(mainOnly, durationPlan = {}) {
   const seoKeywordBrief = buildSeoKeywordBrief(mainOnly);
 
   return `
+${buildPodcastMetadataPersona()}
+
 You are writing episode metadata for the podcast:
 "${PODCAST_TITLE}".
 
@@ -368,6 +372,8 @@ export function getSEOKeywordsPrompt({ title = "", description = "", mainOnly = 
   const candidateBrief = uniqueKeywordList(keywordCandidates).slice(0, 14).join(", ") || "none";
 
   return `
+${buildPodcastMetadataPersona()}
+
 Generate 10-14 SEO keywords that a real person might search for.
 Lowercase, comma-separated.
 No hashtags.
@@ -423,17 +429,18 @@ function isOffBrandArtworkPrompt(text = "") {
   return ARTWORK_BANNED_TERMS.some((term) => lowered.includes(term));
 }
 
-export function getArtworkPrompt(description) {
+export function getArtworkPrompt(description, date) {
   const theme = sanitiseThemeText(description);
 
   return [
     "Premium editorial AI podcast cover art.",
     "Mood: sharp, sceptical, cinematic, adult, intelligent, grounded.",
-    "Palette: deep navy, charcoal, restrained teal, muted purple, soft metallic highlights.",
-    "Style: abstract technological realism, clean geometry, subtle data motifs, negative space, no text.",
+    getSeasonalPaletteDirection(date),
+    "Style: abstract technological realism, clean geometry, subtle data motifs and negative space.",
+    STRICT_TEXT_FREE_RULE,
     "Avoid: pastel fantasy, dreamy clouds, magical orb, cute or childlike sci-fi, cartoon softness.",
     `Themes: ${theme || "AI systems, governance, power, risk, work, security."}`,
-  ].join(" ").slice(0, 500);
+  ].join(" ").slice(0, 1600);
 }
 
 
@@ -589,16 +596,16 @@ export async function generateEpisodeMetaLLM(rawTranscript, sessionMeta = {}) {
   keywords = discoveryMetadata.episodeTerms.map((k) => k.toLowerCase()).slice(0, 14);
 
   /* Artwork Prompt */
-  let artworkPrompt = getArtworkPrompt(description);
+  let artworkPrompt = applyArtworkPromptPolicy(getArtworkPrompt(description, sessionId), { date: sessionId, mode: "podcast" });
   try {
     const candidatePrompt = await resilientRequest("artworkPrompt", {
       sessionId,
-      messages: [{ role: "user", content: getArtworkPrompt(description) }],
+      messages: [{ role: "user", content: `${buildPodcastArtworkPersona()}\n\nCreate only an image-generation prompt.\n${getArtworkPrompt(description, sessionId)}` }],
     });
 
     const cleanedCandidate = String(candidatePrompt || "").replace(/\s+/g, " ").trim().slice(0, 500);
     if (cleanedCandidate && !isOffBrandArtworkPrompt(cleanedCandidate)) {
-      artworkPrompt = cleanedCandidate;
+      artworkPrompt = applyArtworkPromptPolicy(cleanedCandidate, { date: sessionId, mode: "podcast" });
     } else if (cleanedCandidate) {
       warn("meta.artwork.offbrand", { sessionId, candidatePrompt: cleanedCandidate });
     }
