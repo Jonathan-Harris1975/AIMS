@@ -78,3 +78,9 @@ Publishes weekly AI briefing posts and daily/social blog posts from rewritten RS
 ## Connections to other services
 
 Consumes RSS output from rss-feed-creator, calls artwork helpers, uses shared AI/R2 utilities and triggers external website rebuild.
+
+## Shared tone and artwork controls
+
+Weekly blog and daily social-blog generation now import their lane persona directly from `services/script/utils/toneSetter.js`. Generation, repair and QA prompts retain the same dry, sceptical British editorial voice.
+
+Artwork prompts also include the shared seasonal palette direction and absolute text-free policy. The same policy is applied again inside the artwork transport before the provider request.
