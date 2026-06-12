@@ -71,7 +71,8 @@ Publishes weekly AI briefing posts and daily/social blog posts from rewritten RS
 
 - No items found: this is treated as a successful no-op (`ok:true`, `skipped:true`) to avoid noisy cron failures; verify `feed.json` if content was expected.
 - Artwork failure: configure fallback image URL or fix OpenRouter image configuration.
-- Post skipped: existing social post for date; pass `force=true` to rebuild.
+- Post skipped: existing social post for the content date; pass `force=true` to rebuild. Duplicate detection uses the post ID, `date_label`, or date-prefixed slug, never the later publication timestamp.
+- Async Koyeb completion logs include `outcome`, `skipped`, `quarantined` and `reason` so a no-op cannot masquerade as a published post.
 - Rebuild hook failure: check hook env and endpoint status.
 
 ## Connections to other services
