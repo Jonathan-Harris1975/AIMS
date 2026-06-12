@@ -153,3 +153,9 @@ Most routes are mounted behind the suite auth middleware. The public exceptions 
 ```
 
 For Facebook Pages, include `target.pageId` from the subaccounts endpoint. This repo defaults to `562160556971997`.
+
+## Shared tone and text-free visuals
+
+Blotato short-script generation uses the shared lane-aware persona from `services/script/utils/toneSetter.js`.
+
+Generated scene prompts are normalised before being sent to Blotato. Every scene carries an absolute prohibition on text, pseudo-text, numbers, captions, labels, interface copy, logos and watermarks. Thumbnail copy remains a separate Blotato layer and is no longer embedded in the visual-generation prompt. Lane visual signatures use unlabelled objects and geometry rather than headline cards, numbered cards or document layouts.
