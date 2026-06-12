@@ -1,3 +1,5 @@
+import { buildOneUpPersona } from "../../script/utils/toneSetter.js";
+
 function renderHistoryBlock(history = []) {
   const cleaned = Array.isArray(history)
     ? history.map((item) => String(item || "").trim()).filter(Boolean).slice(-8)
@@ -21,25 +23,7 @@ function renderRssBlock(rssItems = []) {
     .join("\n");
 }
 
-const BRAND_VOICE = `You write for Jonathan Harris, an AI author and podcast host.
-Voice rules:
-- British English
-- sharp, clear, sceptical of hype
-- conversational, intelligent, grounded
-- readable for Facebook and Instagram
-- concise, human, and scroll-stopping
-- no corporate sludge
-- no motivational cheese
-- no jargon-heavy waffle
-- no emojis
-- no hashtags in the model output
-- no markdown fences
-- no explanations outside the requested JSON
-- keep claims grounded, concrete, and specific
-- prefer one clear idea over padded filler
-- never sound like a textbook, glossary, press release, Wikipedia entry, or poster slogan
-- never use stock hedges such as "it remains to be seen", "only time will tell", or "worth watching"
-- never use motivational hashtags or motivational-poster framing such as #MondayMotivation, #AIInspiration, #TechLeadership, or #BuildInPublic`;
+const BRAND_VOICE = buildOneUpPersona();
 
 export function buildDailyPrompt({ lane, publishDate, history = [], rssItems = [], weeklyHistory = [], verifiedQuote = null, buildContext = "" }) {
   const laneGuidance = {
@@ -213,8 +197,9 @@ export function buildEbookPostPrompt({ day, publishDate, featuredBook }) {
   const dayGuidance = EBOOK_DAY_GUIDANCE[dayKey];
 
   return {
-    system: `You write for Jonathan Harris, an AI author and podcast host.
-Voice rules:
+    system: `${buildOneUpPersona()}
+
+Additional ebook-post rules:
 - British English
 - sharp, clear, sceptical of hype
 - conversational, intelligent, grounded
