@@ -264,8 +264,8 @@ function getBlogFallbackImageUrl() {
   ).trim();
 }
 
-async function resolveBlogArtwork({ sessionId, imagePrompt, week }) {
-  const art = await createBlogArtwork({ sessionId, prompt: imagePrompt });
+async function resolveBlogArtwork({ sessionId, imagePrompt, week, dateLabel }) {
+  const art = await createBlogArtwork({ sessionId, prompt: imagePrompt, week, date: dateLabel });
 
   if (art?.ok && art.publicUrl) {
     return {
@@ -501,12 +501,14 @@ export async function buildWeeklyBlogPost({ days, weekId } = {}) {
       summary: weeklyPackage.summary,
       dominantThemes: weeklyPackage.dominantThemes,
       generatedPrompt: weeklyPackage.imagePrompt,
+      date: window.dateLabel,
     });
 
     const artwork = await resolveBlogArtwork({
       sessionId,
       imagePrompt,
       week: window.week,
+      dateLabel: window.dateLabel,
     });
     const imageUrl = artwork.imageUrl;
 
@@ -633,6 +635,7 @@ export async function buildWeeklyBlogPost({ days, weekId } = {}) {
         summary: weeklyPackage.summary,
         dominantThemes: weeklyPackage.dominantThemes,
         generatedPrompt: weeklyPackage.imagePrompt,
+        date: window.dateLabel,
       });
       postEntry = buildPostManifestEntry({
         week: window.week,
