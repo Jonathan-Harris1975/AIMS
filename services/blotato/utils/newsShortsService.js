@@ -3,6 +3,7 @@ import { AMERICAN_TO_BRITISH } from "../../content-quality/brandLexicon.js";
 import { resilientRequest } from "../../shared/utils/ai-service.js";
 import { createVisual } from "./blotatoClient.js";
 import { DEFAULT_BLOTATO_SHORT_LANE, requireShortLaneConfig, getShortLaneConfig } from "./shortLanes.js";
+import { buildBlotatoPersona } from "../../script/utils/toneSetter.js";
 
 const NEWS_SHORT_MAX_TOKENS = Math.max(2600, Number(process.env.BLOTATO_NEWS_SHORT_MAX_TOKENS || 3600));
 const MIN_SCRIPT_WORDS = Math.max(85, Number(process.env.BLOTATO_NEWS_MIN_SCRIPT_WORDS || 110));
@@ -29,6 +30,18 @@ const LOW_COST_VIDEO_MODEL_LABEL = process.env.BLOTATO_LOW_COST_VIDEO_MODEL_LABE
 // Gap 5: automated hook expert review. Set BLOTATO_HOOK_VARIANTS=2 to request an alternate
 // hook candidate and run an automated strength comparison. Zero manual interaction required.
 const HOOK_VARIANTS = Math.max(1, Math.min(2, Number(process.env.BLOTATO_HOOK_VARIANTS || 1)));
+
+export const BLOTATO_STRICT_NO_TEXT_RULE = [
+  "ABSOLUTE TEXT-FREE GENERATED VISUAL.",
+  "No readable text, pseudo-text, gibberish lettering, words, letters, numerals, punctuation, glyphs, captions, labels, interface copy, code, signage, logos, trademarks, watermarks, badges, seals or typography-shaped marks.",
+  "Do not visualise words from the hook, script, title, source article or thumbnail copy.",
+  "Use objects, environments, lighting, movement, geometry and texture only.",
+].join(" ");
+
+function enforceTextFreeVisualPrompt(value = "", maxLength = 900) {
+  const base = cleanText(value, Math.max(100, maxLength - BLOTATO_STRICT_NO_TEXT_RULE.length - 2));
+  return cleanText(`${base}. ${BLOTATO_STRICT_NO_TEXT_RULE}`, maxLength);
+}
 
 const BLOTATO_NEWS_SHORT_JSON_SCHEMA = Object.freeze({
   name: "blotato_news_short_pack",
@@ -218,7 +231,7 @@ function renderArticles({ article, articles = [] } = {}) {
     .join("\n\n");
 }
 
-function buildNewsShortPrompt({ article, articles, theme, durationSeconds, cta, audience, lane = DEFAULT_BLOTATO_SHORT_LANE }) {
+export function buildNewsShortPrompt({ article, articles, theme, durationSeconds, cta, audience, lane = DEFAULT_BLOTATO_SHORT_LANE }) {
   const laneConfig = requireShortLaneConfig(lane);
   const articleBlock = renderArticles({ article, articles });
   const resolvedCta = ctaForLane(laneConfig.slug, cta);
@@ -227,14 +240,16 @@ function buildNewsShortPrompt({ article, articles, theme, durationSeconds, cta, 
   const requestHookAlt = HOOK_VARIANTS >= 2;
 
   return {
-    system: `You create short-form video packs for Jonathan Harris, an AI author and podcast host.
+    system: `${buildBlotatoPersona()}
+
+You create short-form video packs for Jonathan Harris, an AI author and podcast host.
 
 # Role — Faceless Script Specialist
 You write narration-driven, voiceover-based AI short-form video scripts. No face appears on camera. The narration carries the entire story. Every scene must be visualisable without text overlays on generated imagery.
 
 # Faceless Video Laws
 1. The narration carries the story. Every line must inform, intrigue, or advance the story — no filler.
-2. Every mediaSource must describe a visual that can be generated without text. No text, captions, labels, or overlays on generated images.
+2. Every mediaSource must obey this absolute rule: ${BLOTATO_STRICT_NO_TEXT_RULE}
 3. The hook is non-negotiable. The first 3 seconds must scroll-stop on ${["Facebook", "Instagram", "YouTube Shorts", "TikTok"].join(", ")}.
 
 # Writing style
@@ -319,7 +334,7 @@ Scene rules:
 - Provide exactly ${MAX_SCENES} scenes. If the source is thin, use a clearer practical explainer instead of making the script shorter.
 - Each scene must include a mediaSource and script.
 - Each mediaSource must describe a specific visual, not a generic instruction.
-- CRITICAL: mediaSource prompts must not contain any text, words, numbers, captions, labels, or typographic elements on the generated image. Visual composition only: subject, environment, motion, light.
+- CRITICAL: every mediaSource must obey this absolute rule: ${BLOTATO_STRICT_NO_TEXT_RULE}
 - Use the lane visual signature: ${laneConfig.visualSignature}
 - Cost guard: select the lowest-cost generation settings available, specifically ${LOW_COST_IMAGE_MODEL_LABEL} for images and ${LOW_COST_VIDEO_MODEL_LABEL} for video if Blotato offers those choices.
 - Do not use premium video models such as Kling, Luma, Runway, Veo, Minimax, or any other high-credit video option.
@@ -395,7 +410,7 @@ function chunkSentences(sentences = [], targetCount = 4) {
 }
 
 function normaliseScene(scene = {}, fallbackScript = "", fallbackVisual = "") {
-  const mediaSource = cleanText(scene.mediaSource || scene.visual || scene.imagePrompt || fallbackVisual, 900);
+  const mediaSource = enforceTextFreeVisualPrompt(scene.mediaSource || scene.visual || scene.imagePrompt || fallbackVisual, 900);
   const script = cleanText(scene.script || scene.voiceover || fallbackScript, 700);
   if (!mediaSource || !script) return null;
   return { mediaSource, script };
@@ -427,7 +442,7 @@ function deriveScenesFromPack(pack = {}) {
         : `supporting point ${index + 1}`;
     const composition = phaseCompositions[index % phaseCompositions.length];
     return {
-      mediaSource: `${visualBase}. ${visualSignature} Scene ${index + 1} (${phase}): ${composition}. No text, labels, captions, or typography on the generated image. Faceless.`,
+      mediaSource: enforceTextFreeVisualPrompt(`${visualBase}. ${visualSignature} Scene ${index + 1} (${phase}): ${composition}. Faceless.`, 900),
       script: chunk,
     };
   });
@@ -547,14 +562,16 @@ export function buildBlotatoVisualPrompt(pack = {}) {
     `Create a polished faceless vertical AI social video for Jonathan Harris.`,
     `Lane: ${laneConfig.label}.`,
     `Use the supplied scenes as the source of truth.`,
-    `Thumbnail text: ${pack.thumbnailText}`,
     `Opening hook: ${pack.hook}`,
     `Editorial angle: ${pack.angle}`,
     `Script: ${pack.script}`,
     `Visual direction: ${pack.visualDirection}`,
     `Cost guard: use the cheapest suitable generation settings available, preferably ${LOW_COST_IMAGE_MODEL_LABEL} for images and ${LOW_COST_VIDEO_MODEL_LABEL} for video. Do not use premium video models.`,
     `Style: premium editorial, dark technology palette, clean composition, no gimmicky robot clichés, British AI news commentary tone.`,
-    `CRITICAL — No text rule: generated images must not contain any text, labels, captions, numbers, or typographic elements. Narration and captions are added by the Blotato TTS layer. Keep all generated visuals text-free.`,
+    BLOTATO_STRICT_NO_TEXT_RULE,
+    `Thumbnail text is handled separately by Blotato and must never be rendered into generated visuals.`,
+    `Narration and captions are also handled separately. Never bake them into generated images or video frames.`,
+    `Final visual compliance check: remove any accidental letter-like, number-like, logo-like or watermark-like marks before rendering.`,
   ].join("\n");
 }
 
