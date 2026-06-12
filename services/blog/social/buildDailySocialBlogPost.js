@@ -319,7 +319,7 @@ function getSocialFallbackImageUrl() {
 }
 
 async function resolveSocialArtwork({ sessionId, imagePrompt, dateId, prefix }) {
-  const art = await createBlogArtwork({ sessionId, prompt: imagePrompt, keyPrefix: prefix });
+  const art = await createBlogArtwork({ sessionId, prompt: imagePrompt, keyPrefix: prefix, date: dateId });
 
   if (art?.ok && art.publicUrl) {
     return {
@@ -591,6 +591,7 @@ export async function buildDailySocialBlogPost({
       summary: socialPackage.summary,
       themes: socialPackage.themes,
       generatedPrompt: socialPackage.image_prompt,
+      date: window.dateId,
     });
 
     const cleanedSources = items.map((item) => ({
@@ -749,6 +750,7 @@ export async function buildDailySocialBlogPost({
         summary: socialPackage.summary,
         themes: socialPackage.themes,
         generatedPrompt: socialPackage.image_prompt,
+        date: window.dateId,
       });
       postEntry = buildSocialPostManifestEntry({
         id: `daily-${window.dateId}`,
