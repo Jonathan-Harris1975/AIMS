@@ -1,0 +1,49 @@
+AIMS cumulative Koyeb, tone-setter and artwork-control update
+Generated: 2026-06-12
+
+This patch overlays the supplied AIMS-main repository.
+It includes the previous Koyeb blog-social and podcast repairs plus the new shared tone, strict text-free artwork and seasonal-palette controls.
+
+Validation:
+- npm run build: PASS
+- focused cross-service tests: 57 passed, 0 failed
+- full repository npm test: PASS
+
+Modified files (28):
+- services/artwork/README.md
+- services/artwork/createBlogArtwork.js
+- services/artwork/createPodcastArtwork.js
+- services/artwork/utils/artwork.js
+- services/blog/README.md
+- services/blog/social/buildDailySocialBlogPost.js
+- services/blog/utils/socialBlogPackage.js
+- services/blog/utils/weeklyPackage.js
+- services/blog/weekly/buildWeeklyBlogPost.js
+- services/blotato/README.md
+- services/blotato/utils/newsShortsService.js
+- services/blotato/utils/shortLanes.js
+- services/oneup/README.md
+- services/oneup/utils/prompts.js
+- services/rss-feed-creator/README.md
+- services/rss-feed-creator/utils/filterAIContent.js
+- services/rss-feed-creator/utils/models.js
+- services/rss-feed-creator/utils/rss-prompts.js
+- services/rss-feed-creator/utils/toneSetter.js
+- services/script/README.md
+- services/script/utils/editorialPass.js
+- services/script/utils/mainChunker.js
+- services/script/utils/podcastHelper.js
+- services/script/utils/scriptValidation.js
+- services/script/utils/toneSetter.js
+- services/shared/utils/asyncServiceRouteJobs.js
+- test/blog-social-package.test.js
+- test/scriptValidation.test.js
+
+New files before this manifest (4):
+- AIMS_TONE_ARTWORK_UPDATE_NOTES.md
+- KOYEB_BLOG_PODCAST_FIX_NOTES.md
+- services/artwork/utils/artworkPromptPolicy.js
+- test/tone-artwork-policy.test.js
+
+Deleted files (0):
+- None
