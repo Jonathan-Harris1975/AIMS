@@ -81,6 +81,46 @@ function countSentences(value = "") {
   return cleaned.match(/[^.!?]+[.!?]+(?:\s|$)/g)?.length || 1;
 }
 
+function splitSentences(value = "") {
+  const cleaned = clean(value);
+  if (!cleaned) return [];
+
+  return (cleaned.match(/[^.!?]+[.!?]+(?:["')\]]+)?(?=\s+|$)|[^.!?]+$/g) || [])
+    .map((sentence) => clean(sentence))
+    .filter(Boolean)
+    .map((sentence) => /[.!?]["')\]]?$/.test(sentence) ? sentence : `${sentence}.`);
+}
+
+function normaliseTwoSentenceSummary(value = "", fallback = "") {
+  const candidates = [
+    ...splitSentences(value),
+    ...splitSentences(fallback),
+    "The practical question is what works, what breaks, and who carries the cost.",
+  ];
+  const seen = new Set();
+  const selected = [];
+
+  for (const sentence of candidates) {
+    const key = sentence.toLowerCase();
+    if (!sentence || seen.has(key)) continue;
+    seen.add(key);
+    selected.push(sentence);
+    if (selected.length === 2) break;
+  }
+
+  return selected.join(" ");
+}
+
+function normaliseSocialImagePrompt(value = "", fallback = "") {
+  const prompt = clean(value);
+  const complete = prompt
+    && wordCount(prompt) >= 35
+    && IMAGE_REQUIRED.every((pattern) => pattern.test(prompt));
+
+  if (complete) return prompt;
+  return dedupeStrings([prompt, fallback]).join(" ");
+}
+
 function firstSentence(value = "", max = 180) {
   const cleaned = clean(value);
   if (!cleaned) return "";
@@ -349,15 +389,25 @@ export function normaliseSocialBlogPackage(data = {}, context = {}) {
     .filter((section) => section.heading && section.paragraphs.length)
     .slice(0, 4);
 
+  const summary = normaliseTwoSentenceSummary(
+    data.summary || data.standfirst || "",
+    fallback.summary,
+  );
+
+  const imagePrompt = normaliseSocialImagePrompt(
+    data.image_prompt || data.imagePrompt || "",
+    fallback.image_prompt,
+  );
+
   return {
     title: normaliseTitle(data.title || data.headline || fallback.title, fallback.title),
-    summary: clean(data.summary || data.standfirst || fallback.summary),
+    summary,
     social_caption: clean(data.social_caption || data.socialCaption || data.description || fallback.social_caption),
     hook: clean(data.hook || fallback.hook),
     body_sections: sections.length ? sections : fallback.body_sections,
     takeaway: clean(data.takeaway || data.closing || fallback.takeaway),
     hashtags: normaliseHashtags(data.hashtags, themes),
-    image_prompt: clean(data.image_prompt || data.imagePrompt || fallback.image_prompt),
+    image_prompt: imagePrompt,
     themes,
   };
 }
