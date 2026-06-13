@@ -204,14 +204,22 @@ export function enforceCanonicalOutro(text = "") {
   return `${base}\n\n${OUTRO_CLOSING_TAGLINE}`.trim();
 }
 
+export function splitSpokenSentences(text = "") {
+  const normalised = String(text || "").replace(/\s+/g, " ").trim();
+  if (!normalised) return [];
+
+  // Sentence punctuation is often followed by a closing quote or bracket.
+  // A plain `(?<=[.!?])\s+` split misses those boundaries and can merge
+  // several valid spoken sentences into one artificial overlong sentence.
+  return (normalised.match(/[^.!?]+[.!?]+(?:["')\]]+)?(?=\s+|$)|[^.!?]+$/g) || [])
+    .map((sentence) => normaliseWhitespace(sentence))
+    .filter(Boolean);
+}
+
 
 export function findLongSpokenSentences(text = "", { maxWords = 25 } = {}) {
   const limit = Math.max(12, Number(maxWords || 25));
-  return String(text || "")
-    .replace(/\s+/g, " ")
-    .split(/(?<=[.!?])\s+/)
-    .map((sentence) => normaliseWhitespace(sentence))
-    .filter(Boolean)
+  return splitSpokenSentences(text)
     .map((sentence) => ({ sentence, wordCount: words(sentence).length }))
     .filter((item) => item.wordCount > limit);
 }
