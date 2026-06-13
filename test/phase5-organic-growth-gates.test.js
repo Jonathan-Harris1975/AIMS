@@ -59,6 +59,38 @@ test("Phase 5 visual social gate favours branded non-cluttered prompts", () => {
   assert.equal(gate.ok, true);
 });
 
+test("Phase 5 does not mistake a negated guarantee for promotional hype", () => {
+  const gate = runPhase5OrganicGrowthGate({
+    contentType: "organic-visual-social",
+    generated: {
+      social_caption: "Reliable artificial intelligence performance is not guaranteed. The useful work is monitoring failures, testing assumptions and keeping a human checkpoint where the risk warrants one.",
+      hashtags: ["#AIReality", "#AIGovernance", "#PracticalAI"],
+      imagePrompt: "Create high-impact premium editorial artwork with a dark navy and charcoal base, electric teal and muted coral accents, cinematic strong contrast, no text, no letters, no numbers, no logos, no watermarks, portrait 4:5 composition.",
+    },
+    sources: [{ title: "Source", rewritten: "Reliable artificial intelligence performance is not guaranteed and requires monitoring." }],
+    platforms: ["facebook", "instagram", "tiktok"],
+  });
+
+  assert.equal(gate.ok, true, gate.defects.join(" | "));
+  assert.doesNotMatch(gate.defects.join(" | "), /Organic tone breach: guaranteed/i);
+});
+
+test("Phase 5 still blocks a positive guarantee claim", () => {
+  const gate = runPhase5OrganicGrowthGate({
+    contentType: "organic-visual-social",
+    generated: {
+      social_caption: "This system delivers guaranteed results for every team, which is exactly the sort of claim the organic gate should reject before publication.",
+      hashtags: ["#AIReality", "#AIGovernance", "#PracticalAI"],
+      imagePrompt: "Create high-impact premium editorial artwork with a dark navy and charcoal base, electric teal and muted coral accents, cinematic strong contrast, no text, no letters, no numbers, no logos, no watermarks, portrait 4:5 composition.",
+    },
+    sources: [{ title: "Source", rewritten: "The system requires testing and monitoring." }],
+    platforms: ["facebook", "instagram", "tiktok"],
+  });
+
+  assert.equal(gate.ok, false);
+  assert.match(gate.defects.join(" | "), /Organic tone breach: guaranteed/i);
+});
+
 test("Phase 5 summary keeps paid ads and analytics parked", () => {
   const summary = phase5SkillsSummary();
   assert.match(summary.parked.paidAds, /organic/i);

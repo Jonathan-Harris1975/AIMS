@@ -6,6 +6,8 @@ import {
   extractOutro,
   enforceCanonicalOutro,
   findBrokenPunctuationJoins,
+  findLongSpokenSentences,
+  splitSpokenSentences,
   validateTranscriptStructure,
 } from "../services/script/utils/scriptValidation.js";
 import { OUTRO_CLOSING_TAGLINE } from "../services/script/utils/promptTemplates.js";
@@ -118,4 +120,20 @@ test("editAndFormat splits a clearly overlong spoken sentence without tiny fragm
     assert.ok(count > 3, `fragment created: ${sentence}`);
     assert.ok(count <= 32, `sentence too long (${count} words): ${sentence}`);
   }
+});
+
+test("spoken sentence parsing respects punctuation followed by closing quotes", () => {
+  const quoted = `It's enough to make one recall Alan Turing himself, who once observed, and I'm paraphrasing slightly for clarity, that "The original question, 'Can machines think?' I believe to be too meaningless to deserve discussion." It's a sentiment that seems particularly pertinent when sifting through the sheer volume of what's being presented to us each week.`;
+
+  const sentences = splitSpokenSentences(quoted);
+  assert.equal(sentences.length, 3, sentences.join(" | "));
+  assert.deepEqual(findLongSpokenSentences(quoted, { maxWords: 25 }), []);
+});
+
+test("spoken sentence validation still catches a genuinely overlong sentence", () => {
+  const genuinelyLong = "This deliberately long sentence keeps adding one clause after another while avoiding all useful punctuation so the validator can prove that genuine spoken-word bloat still triggers the hard quality control instead of slipping through unnoticed during production.";
+
+  const defects = findLongSpokenSentences(genuinelyLong, { maxWords: 25 });
+  assert.equal(defects.length, 1);
+  assert.ok(defects[0].wordCount > 25);
 });

@@ -9,6 +9,29 @@ test("normaliseSocialBlogPackage returns the required social-blog contract", () 
   assert.equal(pkg.hashtags.length, 3);
 });
 
+test("normaliseSocialBlogPackage deterministically repairs a one-sentence summary and weak image prompt", () => {
+  const pkg = normaliseSocialBlogPackage({
+    title: "AI deployment meets operational reality",
+    summary: "This week's stories show that dependable artificial intelligence remains difficult operational work.",
+    social_caption: "The practical story is not a shiny launch. It is the steady work of testing systems, checking data, monitoring failures and deciding where human review still belongs. That is less glamorous than a stage demo, but it is where reliability is won or lost. Teams that skip those details usually discover the bill later, complete with interest and an awkward meeting. The stronger habit is to test the claim against evidence, ownership and failure handling before treating it as production-ready. That keeps the post useful without turning it into launch-day confetti.",
+    hook: "The demo was the easy bit.",
+    body_sections: [
+      { heading: "Delivery pressure", paragraphs: ["The sources point to deployment friction and operational trade-offs."] },
+      { heading: "Reliability work", paragraphs: ["Monitoring and governance remain part of the product rather than optional decoration."] },
+    ],
+    takeaway: "Judge the system by how it behaves after the demo ends.",
+    hashtags: ["#AIReality", "#AIOperations", "#AIGovernance"],
+    image_prompt: "Abstract geometric technology scene in navy and teal with no text.",
+    themes: ["Deployment", "Reliability"],
+  }, { dateLabel: "2026-06-12", items: [] });
+
+  const check = validateSocialBlogPackageForBrand(pkg);
+  assert.equal(check.ok, true, check.defects.join(" | "));
+  assert.equal((pkg.summary.match(/[.!?]+/g) || []).length, 2);
+  assert.match(pkg.image_prompt, /no watermarks/i);
+  assert.match(pkg.image_prompt, /cinematic|strong contrast/i);
+});
+
 test("mergeSocialPostsManifest does not mix weekly posts into the social manifest", () => {
   const merged = mergeSocialPostsManifest({ items: [{ title: "Weekly post should not travel", url: "https://jonathan-harris.online/blog/posts/2026-w18-weekly-post/", path: "/blog/posts/2026-w18-weekly-post/", summary: "Weekly summary.", published_at: "2026-05-05T08:00:00.000Z" }, { id: "daily-2026-05-05", slug: "2026-05-05-social-post", title: "Yesterday's social post survives", summary: "First sentence. Second sentence.", social_caption: "Useful caption.", hook: "A hook.", takeaway: "A judgement.", url: "https://jonathan-harris.online/blog/social/posts/2026-05-05-social-post/", path: "/blog/social/posts/2026-05-05-social-post/", published_at: "2026-05-05T08:00:00.000Z", hashtags: ["#AIReality", "#AIBusiness", "#AIRegulation"] }] }, { id: "daily-2026-05-06", slug: "2026-05-06-social-post", title: "Today's social post arrives", summary: "First sentence. Second sentence.", social_caption: "Useful caption.", hook: "A hook.", takeaway: "A judgement.", url: "https://jonathan-harris.online/blog/social/posts/2026-05-06-social-post/", path: "/blog/social/posts/2026-05-06-social-post/", published_at: "2026-05-06T08:00:00.000Z", hashtags: ["#AIReality", "#AIBusiness", "#AIRegulation"] });
   assert.equal(merged.items.length, 2);
