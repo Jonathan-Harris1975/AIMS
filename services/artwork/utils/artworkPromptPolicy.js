@@ -9,6 +9,7 @@ const SEASONAL_PALETTES = Object.freeze({
 
 export const STRICT_TEXT_FREE_RULE = [
   "ABSOLUTE TEXT-FREE OUTPUT.",
+  "No text. No letters. No numbers. No logos. No watermarks.",
   "Do not include text of any kind. Do not render readable text, pseudo-text, gibberish text, letters, words, numerals, punctuation, glyphs, captions, headlines, labels, code, interface copy, signage, logos, trademarks, watermarks, badges, seals or typography-shaped marks anywhere in the image.",
   "Do not turn the supplied title, theme, quotation, script or metadata into visible writing.",
   "Represent every concept through composition, objects, light, texture, geometry and atmosphere only.",
