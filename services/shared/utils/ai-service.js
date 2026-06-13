@@ -313,9 +313,23 @@ export async function resilientRequest(routeName, {
       } catch (err) {
         lastErr = err;
         attempted.push({ providerId, model: provider.name, attempt: attempt + 1, status: err?.status || err?.code || "failed", message: safeSnippet(err?.message || String(err), 500) });
-        const retryable = !err?.nonRetryable && attempt < effectiveMaxRetries;
+        // A request that has already consumed the full timeout window should
+        // fail over to the next configured provider instead of repeating the
+        // same slow target for another full timeout cycle.
+        const timedOut = err?.code === "OPENROUTER_TIMEOUT";
+        const retryable = !timedOut && !err?.nonRetryable && attempt < effectiveMaxRetries;
         const wait = effectiveRetryBaseMs * Math.pow(2, attempt);
-        logError("ai.request.retry", { routeName, routeKey, provider: providerId, attempt: attempt + 1, wait: retryable ? wait : 0, retryable, status: err?.status, message: safeSnippet(err?.message || String(err), 500) });
+        logError(timedOut ? "ai.request.provider_failover" : "ai.request.retry", {
+          routeName,
+          routeKey,
+          provider: providerId,
+          attempt: attempt + 1,
+          wait: retryable ? wait : 0,
+          retryable,
+          failover: timedOut,
+          status: err?.status,
+          message: safeSnippet(err?.message || String(err), 500),
+        });
         if (!retryable) break;
         await sleep(wait);
       }
