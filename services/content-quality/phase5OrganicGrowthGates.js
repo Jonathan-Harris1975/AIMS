@@ -147,11 +147,36 @@ function scoreFrom(defects = [], warnings = [], base = 100) {
   return Math.max(0, base - defects.length * 14 - warnings.length * 4);
 }
 
+function isNegatedPromoMatch(text = "", index = 0) {
+  const prefix = String(text || "")
+    .slice(Math.max(0, Number(index || 0) - 56), Number(index || 0))
+    .toLowerCase();
+
+  // "Not only guaranteed" is still promotional, so do not treat that
+  // construction as a genuine negation.
+  if (/\bnot\s+only\s*$/.test(prefix)) return false;
+
+  return /(?:\bnot\b|\bnever\b|\bno\b|\bwithout\b|\bcannot\b|\bcan'?t\b|\bisn'?t\b|\baren'?t\b|\bwasn'?t\b|\bweren'?t\b|\bfar\s+from\b)(?:\s+[a-z'-]+){0,2}\s*$/.test(prefix);
+}
+
+function hasUnnegatedPatternMatch(text = "", pattern) {
+  const flags = pattern.flags.includes("g") ? pattern.flags : `${pattern.flags}g`;
+  const matcher = new RegExp(pattern.source, flags);
+
+  for (const match of String(text || "").matchAll(matcher)) {
+    if (!isNegatedPromoMatch(text, match.index || 0)) return true;
+  }
+
+  return false;
+}
+
 function evaluateBrandSafety(text = "") {
   const defects = [];
   const warnings = [];
   for (const pattern of BANNED_PROMO_PATTERNS) {
-    if (pattern.test(text)) defects.push(`Organic tone breach: ${pattern.source.replace(/\\b|\\s\+|\\s\?|\(\?:|\)/g, " ").trim()}`);
+    if (hasUnnegatedPatternMatch(text, pattern)) {
+      defects.push(`Organic tone breach: ${pattern.source.replace(/\\b|\\s\+|\\s\?|\(\?:|\)/g, " ").trim()}`);
+    }
   }
   for (const [american, british] of AMERICAN_TO_BRITISH) {
     if (new RegExp(`\\b${american}\\b`, "i").test(text)) {
