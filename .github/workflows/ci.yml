@@ -1,45 +1,43 @@
-name: CI - install and syntax sanity
+name: AIMS CI
 
 on:
   push:
-    branches: ["main"]
+    branches: [main]
   pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aims-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  sanity:
+  verify:
     runs-on: ubuntu-latest
-
+    timeout-minutes: 20
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-
-      - name: Install dependencies
-        run: npm config set registry https://registry.npmjs.org/ && npm ci --no-audit --no-fund
-
-      - name: Verify envBootstrap wrapper is not imported by app code
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Reject legacy envBootstrap imports
         run: |
-          echo "🔍 Checking for leftover envBootstrap imports"
-          if grep -RInE 'scripts/envBootstrap\.js|import[[:space:]]+[^;]*\bENV\b[^;]*from' \
-            deployment-check.js scripts services routes server.js \
-            --exclude='envBootstrap.js'; then
-            echo "❌ Found leftover envBootstrap usage in application code"
+          if grep -RInE 'scripts/envBootstrap\.js|import[[:space:]]+[^;]*\bENV\b[^;]*from' deployment-check.js scripts services routes server.js --exclude='envBootstrap.js'; then
             exit 1
           fi
-          echo "✅ No leftover envBootstrap imports found"
+      - name: Syntax check
+        run: find . -name '*.js' -not -path './node_modules/*' -print0 | xargs -0 -n1 node --check
+      - run: npm run verify
+      - run: npm audit --omit=dev --audit-level=critical
 
-      - name: Syntax check JavaScript files
-        run: |
-          echo "🔎 Running node --check across repository"
-          find . -name '*.js' -not -path './node_modules/*' -print0 | while IFS= read -r -d '' file; do
-            node --check "$file"
-          done
-          echo "✅ Syntax checks passed"
-
-      - name: Run smoke tests
-        run: npm test
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t aims:ci .
+      - run: docker run --rm aims:ci node --version
