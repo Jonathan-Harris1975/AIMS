@@ -1,3 +1,7 @@
+> **Document status:** Production reference  
+> **Last reviewed:** 16 June 2026  
+> **Operational authority:** Current repository README, SECURITY policy and operations guide.
+
 # Blotato Service
 
 AIMS integration layer for Blotato social publishing, visual generation, and one-call AI short-video publishing.
