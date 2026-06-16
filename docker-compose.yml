@@ -32,7 +32,7 @@ services:
     healthcheck:
       # Uses curl (installed in the Dockerfile) instead of python/httpx
       # which is not present in the node:22-bookworm-slim image.
-      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:3000/livez"]
       interval: 30s
       timeout: 10s
       retries: 3
