@@ -44,7 +44,9 @@ RUN env -i \
     NPM_CONFIG_FETCH_TIMEOUT=60000 \
     sh -c 'timeout 600s npm ci --omit=dev --ignore-scripts --no-audit --no-fund && npm cache clean --force'
 
-COPY . .
+COPY --chown=node:node . .
+
+RUN mkdir -p /app/local-data && chown -R node:node /app/local-data
 
 # Keep build validation deterministic. Koyeb can expose runtime env vars during
 # image construction; do not allow Blotato/R2/API runtime settings to affect the
@@ -62,6 +64,8 @@ EXPOSE 3000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=45s --retries=3 \
   CMD curl -fsS http://127.0.0.1:${PORT:-3000}/health || exit 1
+
+USER node
 
 ENTRYPOINT ["dumb-init", "--"]
 CMD ["npm", "start"]

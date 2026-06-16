@@ -154,6 +154,52 @@ app.use((req, res, next) => {
   return next();
 });
 
+app.disable("x-powered-by");
+
+app.use((_req, res, next) => {
+  res.set({
+    "Cache-Control": "no-store, max-age=0",
+    "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'",
+    "Cross-Origin-Resource-Policy": "same-origin",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
+    "Referrer-Policy": "no-referrer",
+    "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "X-Robots-Tag": "noindex, nofollow, noarchive",
+  });
+  next();
+});
+
+function usableSecret(value) {
+  const text = normaliseEnvString(value);
+  return Boolean(text && !/^\{\{\s*secret\.[^}]+\}\}$/i.test(text));
+}
+
+function productionReadiness() {
+  const production = isProductionEnv();
+  const checks = [
+    { name: "process", ok: true, detail: "AIMS process is responding." },
+    { name: "suite_auth", ok: !production || usableSecret(process.env.AIMS_API_KEY || process.env.ADMIN_BEARER_TOKEN), detail: usableSecret(process.env.AIMS_API_KEY || process.env.ADMIN_BEARER_TOKEN) ? "configured" : "missing" },
+    {
+      name: "durable_state",
+      ok:
+        !production ||
+        process.env.ALLOW_EPHEMERAL_STATE === "true" ||
+        (usableSecret(process.env.R2_ACCESS_KEY_ID) &&
+          usableSecret(process.env.R2_SECRET_ACCESS_KEY) &&
+          Boolean(normaliseEnvString(process.env.R2_BUCKET_META_SYSTEM || process.env.R2_META_SYSTEM_BUCKET || process.env.R2_BUCKET_METASYSTEM))),
+      detail:
+        usableSecret(process.env.R2_ACCESS_KEY_ID) && usableSecret(process.env.R2_SECRET_ACCESS_KEY)
+          ? "R2 credentials configured"
+          : "ephemeral or incomplete R2 configuration",
+    },
+    { name: "openrouter", ok: !production || usableSecret(process.env.OPENROUTER_API_KEY), detail: usableSecret(process.env.OPENROUTER_API_KEY) ? "configured" : "missing" },
+  ];
+  const ready = checks.every((check) => check.ok);
+  return { ready, status: ready ? "ready" : "degraded", checks };
+}
+
 const allowedOrigins = (process.env.CORS_ORIGINS || "")
   .split(",")
   .map((value) => value.trim())
@@ -222,8 +268,31 @@ app.use(createRateLimitMiddleware());
 app.get("/", (_req, res) => res.status(200).send("OK"));
 
 app.get("/health", (_req, res) =>
-  res.status(200).json({ ok: true, status: "ok", trustProxy })
+  res.status(200).json({
+    ok: true,
+    status: "ok",
+    service: "AIMS",
+    version: process.env.APP_VERSION || "2.7.0",
+    env: process.env.APP_ENV || process.env.NODE_ENV || "development",
+    trustProxy,
+    time: new Date().toISOString(),
+  })
 );
+
+app.get("/livez", (_req, res) =>
+  res.status(200).json({ ok: true, status: "alive", service: "AIMS" })
+);
+
+app.get("/readyz", (_req, res) => {
+  const report = productionReadiness();
+  return res.status(report.ready ? 200 : 503).json({
+    ok: report.ready,
+    service: "AIMS",
+    version: process.env.APP_VERSION || "2.7.0",
+    ...report,
+    time: new Date().toISOString(),
+  });
+});
 
 app.use("/", routes);
 

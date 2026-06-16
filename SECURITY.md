@@ -1,21 +1,10 @@
-# Security Policy
+# AIMS security policy
 
-## Supported Versions
+**Status:** Production-controlled  
+**Last reviewed:** 16 June 2026
 
-Use this section to tell people about which versions of your project are
-currently being supported with security updates.
+AIMS is an authenticated background API. Store all API keys, provider tokens, webhook secrets and R2 credentials in Koyeb Secrets. Do not expose them through client-side JavaScript, logs or committed environment files.
 
-| Version | Supported          |
-| ------- | ------------------ |
-| 5.1.x   | :white_check_mark: |
-| 5.0.x   | :x:                |
-| 4.0.x   | :white_check_mark: |
-| < 4.0   | :x:                |
+Production controls include suite authentication, CORS allow-listing, request-rate and body limits, durable-state checks, non-root containers, build-stage environment isolation, secure response headers and CI secret scanning.
 
-## Reporting a Vulnerability
-
-Use this section to tell people how to report a vulnerability.
-
-Tell them where to go, how often they can expect to get an update on a
-reported vulnerability, what to expect if the vulnerability is accepted or
-declined, etc.
+Webhook routes must validate their documented shared secret or bearer token. Cloudflare R2 credentials should be bucket-scoped and rotated after suspected exposure. Report vulnerabilities privately to the repository owner with endpoint, impact and reproducible evidence.
