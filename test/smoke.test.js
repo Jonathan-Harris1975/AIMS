@@ -223,3 +223,16 @@ test("production import fails fast when durable state is explicitly required", a
 
   restoreTestEnv();
 });
+
+
+test("GET /livez and /readyz expose production health contracts", async () => {
+  const live = await request(app).get("/livez");
+  assert.equal(live.status, 200);
+  assert.equal(live.body.status, "alive");
+  assert.equal(live.headers["x-content-type-options"], "nosniff");
+
+  const ready = await request(app).get("/readyz");
+  assert.equal([200, 503].includes(ready.status), true);
+  assert.equal(typeof ready.body.ready, "boolean");
+  assert.equal(Array.isArray(ready.body.checks), true);
+});
