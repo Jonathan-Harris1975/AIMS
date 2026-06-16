@@ -18,8 +18,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: npm
@@ -32,12 +32,12 @@ jobs:
       - name: Syntax check
         run: find . -name '*.js' -not -path './node_modules/*' -print0 | xargs -0 -n1 node --check
       - run: npm run verify
-      - run: npm audit --omit=dev --audit-level=critical
+      - run: npm audit --omit=dev --audit-level=high
 
   docker:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - run: docker build -t aims:ci .
       - run: docker run --rm aims:ci node --version
