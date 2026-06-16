@@ -1,3 +1,7 @@
+> **Document status:** Historical implementation record  
+> **Last reviewed:** 16 June 2026  
+> **Operational authority:** Current repository README, SECURITY policy and operations guide.
+
 # Koyeb secret reference build fix
 
 ## Confirmed issue

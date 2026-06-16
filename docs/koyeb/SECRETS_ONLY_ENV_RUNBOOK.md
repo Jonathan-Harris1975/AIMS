@@ -1,3 +1,7 @@
+> **Document status:** Production reference  
+> **Last reviewed:** 16 June 2026  
+> **Operational authority:** Current repository README, SECURITY policy and operations guide.
+
 # Koyeb secrets-only environment runbook
 
 Use this mode when Koyeb bulk environment editing is suspected of blocking builds or startup.

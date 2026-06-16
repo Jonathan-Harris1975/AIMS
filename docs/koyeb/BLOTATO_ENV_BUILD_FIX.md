@@ -1,3 +1,7 @@
+> **Document status:** Historical implementation record  
+> **Last reviewed:** 16 June 2026  
+> **Operational authority:** Current repository README, SECURITY policy and operations guide.
+
 # Koyeb Blotato/state env build unblock
 
 ## Confirmed issue
