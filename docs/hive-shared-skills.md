@@ -1,3 +1,7 @@
+> **Document status:** Production reference  
+> **Last reviewed:** 16 June 2026  
+> **Operational authority:** Current repository README, SECURITY policy and operations guide.
+
 # AIMS HIVE shared skills integration
 
 AIMS now treats HIVE as the controller for shared skills. The repository should not install or execute local skill bundles.
