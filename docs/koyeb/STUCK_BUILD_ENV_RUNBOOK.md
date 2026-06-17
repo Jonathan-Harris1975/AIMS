@@ -83,7 +83,7 @@ WEB_API_KEY
 `GOOGLE_PRIVATE_KEY` should not be pasted into the Koyeb bulk env block as raw multi-line text. Store it as a Koyeb Secret, preferably as one line with escaped newlines:
 
 ```text
------BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n
+-----BEGIN [REDACTED KEY TYPE]-----\n...\n-----END [REDACTED KEY TYPE]-----\n
 ```
 
 The code already converts escaped `\n` back to real newlines at runtime.
