@@ -1,4 +1,5 @@
 import { flushStateWrites, readJsonState, readJsonStateFresh, writeJsonState } from "./stateFile.js";
+import { recordJobTransition } from "./operationalExcellence.js";
 
 const STATE_FILE = "job-store.json";
 const JOB_TTL_MS = Number(process.env.JOB_STATUS_TTL_MS) || 24 * 60 * 60 * 1000;
@@ -129,6 +130,7 @@ function upsertJob(type, sessionId, patch = {}) {
 
   jobs.set(key, next);
   persistJobs();
+  recordJobTransition(existing, next);
   return cloneJob(next);
 }
 

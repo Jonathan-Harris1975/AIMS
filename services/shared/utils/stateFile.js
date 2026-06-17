@@ -12,7 +12,12 @@ const BASE_STATE_DIR = path.resolve(
 const REMOTE_STATE_PREFIX = String(process.env.STATE_REMOTE_PREFIX || "state")
   .replace(/^\/+/, "")
   .replace(/\/+$/, "");
-const KNOWN_REMOTE_FILES = new Set(["job-store.json", "hookdeck-dedupe.json", "social-editorial-ledger.json"]);
+const KNOWN_REMOTE_FILES = new Set([
+  "job-store.json",
+  "hookdeck-dedupe.json",
+  "social-editorial-ledger.json",
+  "professional-excellence.json",
+]);
 const remoteStateCache = new Map();
 
 const remoteStateMode = String(process.env.STATE_BACKEND || "auto").trim().toLowerCase();

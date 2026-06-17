@@ -6,6 +6,7 @@
 import aiConfig from "./ai-config.js";
 import { safeRouteLog } from "../../../logger.js";
 import { info, error as logError } from "../../../logger.js";
+import { recordProviderOutcome } from "./operationalExcellence.js";
 
 function getOpenRouterBaseUrl() {
   return process.env.OPENROUTER_BASE_URL || process.env.OPENROUTER_API_BASE || "https://openrouter.ai/api/v1";
@@ -306,12 +307,14 @@ export async function resilientRequest(routeName, {
             cost: result.usage?.cost,
           });
         }
+        recordProviderOutcome({ routeKey, provider: providerId, ok: true, durationMs: result.durationMs, status: "success" });
         __record(sessionId, routeName, providerId, result.model || provider.name);
         __lastSuccessProvider.set(routeKey, providerId);
         __maybePrintSummary(sessionId, routeName);
         return result.content;
       } catch (err) {
         lastErr = err;
+        recordProviderOutcome({ routeKey, provider: providerId, ok: false, durationMs: 0, status: err?.status || err?.code || "failed" });
         attempted.push({ providerId, model: provider.name, attempt: attempt + 1, status: err?.status || err?.code || "failed", message: safeSnippet(err?.message || String(err), 500) });
         // A request that has already consumed the full timeout window should
         // fail over to the next configured provider instead of repeating the
