@@ -38,3 +38,7 @@ Use the root Dockerfile with Node.js 22. The container runs as the non-root `nod
 AIMS should be treated as an internal API. CORS is allow-listed, request bodies are bounded, noisy probes are rejected early and production responses carry restrictive security headers.
 
 See [`SECURITY.md`](SECURITY.md), [`docs/OPERATIONS.md`](docs/OPERATIONS.md) and the service-level READMEs under `services/`.
+
+## Professional operations
+
+`/ops/excellence` reports durable job outcomes, retry recovery and provider latency/failure aggregates. Repeated workflow failures and CI/Koyeb deployment failures are delivered to HIVE-UI Ops. See [`docs/OPERATIONAL_ALERTING.md`](docs/OPERATIONAL_ALERTING.md).
