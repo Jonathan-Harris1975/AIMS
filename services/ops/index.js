@@ -1,4 +1,5 @@
 import express from "express";
+import { getOperationalExcellenceSnapshot } from "../shared/utils/operationalExcellence.js";
 
 const router = express.Router();
 
@@ -100,5 +101,8 @@ function sendStage(stage) {
 router.get("/health", sendStage("health"));
 router.get("/preflight", sendStage("preflight"));
 router.get("/warmup", sendStage("warmup"));
+router.get("/excellence", (_req, res) => {
+  res.status(200).json({ ok: true, ...getOperationalExcellenceSnapshot() });
+});
 
 export default router;
