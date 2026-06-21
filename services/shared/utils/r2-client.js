@@ -397,10 +397,52 @@ export function ensureBucketKey(bucketKey) {
 }
 
 // ------------------------------------------------------------
+// 🔐 Object key safety
+// ------------------------------------------------------------
+export function normaliseR2ObjectKey(key, { allowEmpty = false, label = "R2 object key" } = {}) {
+  const raw = String(key ?? "").trim();
+
+  if (!raw) {
+    if (allowEmpty) return "";
+    throw new Error(`${label} is required`);
+  }
+
+  const normalised = raw.replace(/\\+/g, "/").replace(/^\/+/, "");
+  const segments = normalised.split("/");
+
+  if (raw.startsWith("/")) {
+    throw new Error(`${label} must be relative, not absolute`);
+  }
+
+  if (segments.some((segment) => segment === ".." || segment === ".")) {
+    throw new Error(`${label} contains unsafe path traversal segment`);
+  }
+
+  if (/[\x00-\x1F\x7F]/.test(normalised)) {
+    throw new Error(`${label} contains control characters`);
+  }
+
+  if (/[?#]/.test(normalised)) {
+    throw new Error(`${label} must not contain URL query or fragment characters`);
+  }
+
+  if (normalised.length > 1024) {
+    throw new Error(`${label} exceeds the 1024 byte S3/R2 object key limit`);
+  }
+
+  return normalised;
+}
+
+export function assertSafeR2ObjectKey(key, options = {}) {
+  return normaliseR2ObjectKey(key, options);
+}
+
+// ------------------------------------------------------------
 // 🔗 Public URL Joiner
 // ------------------------------------------------------------
 function joinPublicUrl(base, key) {
-  return `${String(base || "").replace(/\/+$/, "")}/${String(key || "").replace(/^\/+/, "")}`;
+  const safeKey = normaliseR2ObjectKey(key);
+  return `${String(base || "").replace(/\/+$/, "")}/${safeKey}`;
 }
 
 // ------------------------------------------------------------
@@ -408,11 +450,12 @@ function joinPublicUrl(base, key) {
 // ------------------------------------------------------------
 export async function uploadBuffer(bucketKey, key, buffer, contentType = "application/octet-stream") {
   const bucket = ensureBucketKey(bucketKey);
+  const safeKey = normaliseR2ObjectKey(key);
 
   await sendR2Command(
     new PutObjectCommand({
       Bucket: bucket,
-      Key: key,
+      Key: safeKey,
       Body: buffer,
       ContentType: contentType,
     })
@@ -424,7 +467,7 @@ export async function uploadBuffer(bucketKey, key, buffer, contentType = "applic
     throw new Error(`❌ No public URL configured for R2 bucket alias '${bucketKey}' (${envName}).`);
   }
 
-  return joinPublicUrl(base, key);
+  return joinPublicUrl(base, safeKey);
 }
 
 export async function uploadText(bucketKey, key, text, contentType = "text/plain") {
@@ -433,7 +476,8 @@ export async function uploadText(bucketKey, key, text, contentType = "text/plain
 
 export async function getObjectAsText(bucketKey, key) {
   const bucket = ensureBucketKey(bucketKey);
-  const response = await sendR2Command(new GetObjectCommand({ Bucket: bucket, Key: key }));
+  const safeKey = normaliseR2ObjectKey(key);
+  const response = await sendR2Command(new GetObjectCommand({ Bucket: bucket, Key: safeKey }));
   const chunks = [];
   for await (const chunk of response.Body) chunks.push(chunk);
   return Buffer.concat(chunks).toString("utf-8");
@@ -465,6 +509,7 @@ export function buildPublicUrl(bucketKey, key) {
 // ------------------------------------------------------------
 export async function listObjects(bucketKey, prefix = "") {
   const bucket = ensureBucketKey(bucketKey);
+  const safePrefix = normaliseR2ObjectKey(prefix, { allowEmpty: true, label: "R2 list prefix" });
   const objects = [];
   let continuationToken;
 
@@ -472,7 +517,7 @@ export async function listObjects(bucketKey, prefix = "") {
     const response = await sendR2Command(
       new ListObjectsV2Command({
         Bucket: bucket,
-        Prefix: prefix,
+        Prefix: safePrefix,
         ContinuationToken: continuationToken,
       })
     );
@@ -503,8 +548,9 @@ export async function listKeys(bucketKey, prefix = "") {
 
 export async function deleteObject(bucketKey, key) {
   const bucket = ensureBucketKey(bucketKey);
-  await sendR2Command(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
-  log.info("🗑️ R2 object deleted", { bucket, key });
+  const safeKey = normaliseR2ObjectKey(key);
+  await sendR2Command(new DeleteObjectCommand({ Bucket: bucket, Key: safeKey }));
+  log.info("🗑️ R2 object deleted", { bucket, key: safeKey });
 }
 
 // ------------------------------------------------------------
@@ -539,6 +585,8 @@ export default {
   putJson,
   putText,
   buildPublicUrl,
+  normaliseR2ObjectKey,
+  assertSafeR2ObjectKey,
   getObject,
   r2Put,
   r2Get,
