@@ -70,6 +70,8 @@ const BOOLEAN_ENVS = new Set([
   "BLOTATO_KEEPALIVE_ENABLED",
   "BLOTATO_PUBLISH_SEQUENTIAL",
   "BLOTATO_REQUIRE_ALL_CHANNELS",
+  "BLOTATO_ALLOW_PUBLIC_PUBLISH_HOOKS",
+  "CLOUDFLARE_PURGE_ALLOW_PUBLIC",
   "BLOTATO_TIKTOK_DISABLED_COMMENTS",
   "BLOTATO_TIKTOK_DISABLED_DUET",
   "BLOTATO_TIKTOK_DISABLED_STITCH",
@@ -203,6 +205,7 @@ function validateSecretReference({ key, value, line }, errors) {
 function validateNumber({ key, value, line }, errors) {
   if (!NUMERIC_ENVS.has(key)) return;
   const raw = clean(value);
+  if (!raw) return;
   const number = Number(raw);
 
   if (!Number.isFinite(number)) {
