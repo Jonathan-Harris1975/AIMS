@@ -1,5 +1,5 @@
 > **Document status:** Production reference  
-> **Last reviewed:** 16 June 2026  
+> **Last reviewed:** 21 June 2026  
 > **Operational authority:** Current repository README, SECURITY policy and operations guide.
 
 # Blotato Service
@@ -52,6 +52,8 @@ BLOTATO_API_RETRY_ATTEMPTS=3
 BLOTATO_API_RETRY_BASE_MS=1000
 BLOTATO_API_RETRY_MAX_MS=12000
 BLOTATO_REQUIRE_ALL_CHANNELS=false
+BLOTATO_PUBLISH_WEBHOOK_SECRET=
+BLOTATO_ALLOW_PUBLIC_PUBLISH_HOOKS=false
 BLOTATO_NEWS_JSON_RESPONSE_FORMAT=false
 BLOTATO_POST_POLL_ATTEMPTS=90
 BLOTATO_POST_POLL_INTERVAL_MS=3000
@@ -65,16 +67,16 @@ Video render polling also treats a returned media URL as completion evidence, wa
 
 Short packs are duration-normalised before rendering. AIMS now expands thin model output into a complete 95-135 word spoken script, rebuilds scene voiceover when scenes are too light, and defaults `BLOTATO_NEWS_JSON_RESPONSE_FORMAT=false` so OpenRouter can choose higher-quality providers that do not support strict JSON parameters. Malformed JSON is still repaired, and a deterministic fallback pack remains available.
 
-## Public one-call triggers
+## Governed one-call triggers
 
-These routes are intentionally public so controlled hooks can trigger them without an AIMS bearer token:
+In production these routes require either the AIMS bearer token or `x-blotato-publish-secret: <BLOTATO_PUBLISH_WEBHOOK_SECRET>`. `BLOTATO_ALLOW_PUBLIC_PUBLISH_HOOKS=true` is a deliberate legacy escape hatch and should not be used for paid production.
 
 ```bash
-curl -X POST "https://Jonathan-harris.online/blotato/shorts/news-insight/publish-now"
-curl -X POST "https://Jonathan-harris.online/blotato/shorts/model-verdict/publish-now"
-curl -X POST "https://Jonathan-harris.online/blotato/shorts/ai-at-work/publish-now"
-curl -X POST "https://Jonathan-harris.online/blotato/shorts/reality-check/publish-now"
-curl -X POST "https://Jonathan-harris.online/blotato/shorts/ai-playbook/publish-now"
+curl -X POST "https://<aims-service>/blotato/shorts/news-insight/publish-now" \
+  -H "Authorization: Bearer $AIMS_API_KEY"
+
+curl -X POST "https://<aims-service>/blotato/shorts/model-verdict/publish-now" \
+  -H "x-blotato-publish-secret: $BLOTATO_PUBLISH_WEBHOOK_SECRET"
 ```
 
 Each trigger does the full flow:
@@ -90,14 +92,14 @@ The trigger returns quickly with a queued/running job. The heavy Blotato work ru
 
 ## Routes
 
-Most routes are mounted behind the suite auth middleware. The public exceptions are the publish-now triggers and the job status route.
+Most routes are mounted behind the suite auth middleware. The public exception is the job status route. Production publish-now triggers require the AIMS bearer token or the Blotato publish hook secret.
 
 | Route | Auth | Purpose |
 |---|---|---|
 | `GET /blotato/health` | Public | Local config and route check. Does not call Blotato. |
 | `GET /blotato/shorts/lanes` | AIMS bearer | List the five weekly short-video lanes. |
-| `POST /blotato/shorts/news-insight/publish-now` | Public | Backwards-compatible Monday trigger. |
-| `POST /blotato/shorts/:lane/publish-now` | Public | Trigger any weekly lane. |
+| `POST /blotato/shorts/news-insight/publish-now` | AIMS bearer or publish hook secret | Backwards-compatible Monday trigger. |
+| `POST /blotato/shorts/:lane/publish-now` | AIMS bearer or publish hook secret | Trigger any weekly lane. |
 | `GET /blotato/jobs/:sessionId` | Public | Read publish-now job status. |
 | `GET /blotato/accounts?platform=tiktok` | AIMS bearer | Fetch connected social account IDs. |
 | `GET /blotato/accounts/:accountId/subaccounts` | AIMS bearer | Fetch Facebook or LinkedIn page IDs. |
