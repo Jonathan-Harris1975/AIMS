@@ -1,5 +1,5 @@
 > **Document status:** Production reference  
-> **Last reviewed:** 16 June 2026  
+> **Last reviewed:** 21 June 2026  
 > **Operational authority:** Current repository README, SECURITY policy and operations guide.
 
 # Cloudflare purge service
@@ -11,7 +11,7 @@ Routes are mounted under `/cloudflare`.
 - `GET /cloudflare/health`
 - `POST /cloudflare/purge`
 
-`POST /cloudflare/purge` is intentionally callable with or without inbound AIMS auth because it may be used by webhooks and internal automation. If the suite bearer or legacy purge secret is supplied, the route records the auth strategy for diagnostics, but it does not require either one.
+`POST /cloudflare/purge` requires the AIMS bearer token or `x-cloudflare-purge-secret: <CLOUDFLARE_PURGE_SHARED_SECRET>` in production. `CLOUDFLARE_PURGE_ALLOW_PUBLIC=true` is an explicit legacy escape hatch and should not be used for paid production.
 
 The route still requires valid outbound Cloudflare credentials in the deployed environment. Empty webhook-style POST bodies are treated as `{"purge_everything": true}` because this endpoint is normally used as a cache-clear trigger rather than a form submission.
 
@@ -63,6 +63,8 @@ Preferred names:
 
 - `CF_zone` or `CLOUDFLARE_ZONE_ID`
 - `CF_purge` or `CLOUDFLARE_PURGE_API_TOKEN`
+- `CLOUDFLARE_PURGE_SHARED_SECRET`, optional hook secret for non-bearer callers
+- `CLOUDFLARE_PURGE_ALLOW_PUBLIC=false`, keep closed in production
 - `CLOUDFLARE_PURGE_TIMEOUT_MS`, optional, default `15000`
 
 Supported aliases:
@@ -80,6 +82,8 @@ Use a clean secret reference without spaces or hyphens in the secret name where 
 ```text
 CF_purge={{secret.CF_PURGE}}
 CF_zone={{secret.CF_ZONE}}
+CLOUDFLARE_PURGE_SHARED_SECRET={{secret.CLOUDFLARE_PURGE_SHARED_SECRET}}
+CLOUDFLARE_PURGE_ALLOW_PUBLIC=false
 ```
 
 Avoid this shape for the token because it can remain unresolved and Cloudflare will reject it as a bad bearer token:
