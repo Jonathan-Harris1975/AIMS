@@ -1,5 +1,5 @@
 > **Document status:** Production reference  
-> **Last reviewed:** 16 June 2026  
+> **Last reviewed:** 21 June 2026  
 > **Operational authority:** Current repository README, SECURITY policy and operations guide.
 
 # Shared utilities
@@ -36,7 +36,7 @@ No direct Express route is mounted from `services/shared`. It is imported by ser
 
 - Rate limit requests.
 - Route OpenRouter calls to configured provider chains.
-- Read/write/list/delete Cloudflare R2 objects through aliases.
+- Read/write/list/delete Cloudflare R2 objects through aliases, with object-key normalisation and traversal/query/fragment rejection.
 - Resolve central HIVE/R2 shared skill-pool URLs and repo manifest metadata without keeping local skill descriptors in AIMS.
 - Persist state locally or in R2 metasystem.
 - Track async job lifecycle.
@@ -66,6 +66,7 @@ Durable state uses local files under `APP_STATE_DIR` or R2 alias `metasystem` un
 ## Tests
 
 - `test/durable-state.test.js`
+- `test/r2-key-safety.test.js`
 - `test/openrouter-service-routing.test.js`
 - `test/ai-service-provider-diagnostics.test.js`
 - `test/ai-service-audit-timeout.test.js`
@@ -74,6 +75,7 @@ Durable state uses local files under `APP_STATE_DIR` or R2 alias `metasystem` un
 
 - State backend failure: configure R2 metasystem or allow ephemeral state intentionally.
 - R2 alias missing: set the bucket env for the alias shown in the error.
+- R2 key rejected: remove absolute paths, `.`/`..` segments, control characters, `?` or `#` from the object key.
 - HIVE skill descriptor lookup wrong: check the HIVE public base URL, AIMS manifest path and reference-prefix descriptor path under `skills/`.
 - OpenRouter all providers failed: inspect provider diagnostics and model/key env.
 - Dedupe not working: Hookdeck event ID header must be present.
