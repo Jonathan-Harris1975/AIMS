@@ -14,6 +14,7 @@ function buildBaseEnv(overrides = {}) {
     OPENROUTER_API_BASE: "https://openrouter.example",
     OPENROUTER_API_KEY: "sk-or-test-key",
     APP_URL: "https://app.example.invalid",
+    AIMS_API_KEY: "aims-suite-test-key",
     AUDIT_CALLBACK_TOKEN: "audit-callback-token",
     AUDIT_WEBSITE_REPO_OWNER: "test-owner",
     AUDIT_WEBSITE_REPO_NAME: "test-repo",
