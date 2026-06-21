@@ -7,6 +7,7 @@ import { info, debug, error, log } from "./logger.js";
 import routes from "./routes/index.js";
 import { fileURLToPath } from "node:url";
 import { createRateLimitMiddleware } from "./services/shared/middleware/rateLimit.js";
+import { hasDurableStateEnv, durableStateEnvHint } from "./services/shared/utils/durableStateEnv.js";
 
 export const app = express();
 
@@ -180,19 +181,16 @@ function productionReadiness() {
   const production = isProductionEnv();
   const checks = [
     { name: "process", ok: true, detail: "AIMS process is responding." },
-    { name: "suite_auth", ok: !production || usableSecret(process.env.AIMS_API_KEY || process.env.ADMIN_BEARER_TOKEN), detail: usableSecret(process.env.AIMS_API_KEY || process.env.ADMIN_BEARER_TOKEN) ? "configured" : "missing" },
+    { name: "suite_auth", ok: !production || usableSecret(process.env.AIMS_API_KEY || process.env.AI_SUITE_API_KEY), detail: usableSecret(process.env.AIMS_API_KEY || process.env.AI_SUITE_API_KEY) ? "configured" : "missing" },
     {
       name: "durable_state",
       ok:
         !production ||
         process.env.ALLOW_EPHEMERAL_STATE === "true" ||
-        (usableSecret(process.env.R2_ACCESS_KEY_ID) &&
-          usableSecret(process.env.R2_SECRET_ACCESS_KEY) &&
-          Boolean(normaliseEnvString(process.env.R2_BUCKET_META_SYSTEM || process.env.R2_META_SYSTEM_BUCKET || process.env.R2_BUCKET_METASYSTEM))),
-      detail:
-        usableSecret(process.env.R2_ACCESS_KEY_ID) && usableSecret(process.env.R2_SECRET_ACCESS_KEY)
-          ? "R2 credentials configured"
-          : "ephemeral or incomplete R2 configuration",
+        hasDurableStateEnv(process.env),
+      detail: hasDurableStateEnv(process.env)
+        ? "R2 durable state configured"
+        : `ephemeral or incomplete durable state configuration. ${durableStateEnvHint()}`,
     },
     { name: "openrouter", ok: !production || usableSecret(process.env.OPENROUTER_API_KEY), detail: usableSecret(process.env.OPENROUTER_API_KEY) ? "configured" : "missing" },
   ];

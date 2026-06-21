@@ -6,6 +6,7 @@ import { durableStateEnvHint, hasDurableStateEnv } from "./services/shared/utils
 const REQUIRED_ENV_KEYS = [
   "NODE_ENV",
   "APP_URL",
+  "AIMS_API_KEY",
   "OPENROUTER_API_BASE",
   "OPENROUTER_API_KEY",
   "AUDIT_CALLBACK_TOKEN",
