@@ -32,6 +32,7 @@ jobs:
       - name: Syntax check
         run: find . -name '*.js' -not -path './node_modules/*' -print0 | xargs -0 -n1 node --check
       - run: npm run verify
+      - run: npm run deploy:smoke
       - run: npm audit --omit=dev --audit-level=high
 
   docker:
