@@ -56,6 +56,20 @@ function expectedCloudflarePurgeSecret() {
   return usableSecret(process.env.CLOUDFLARE_PURGE_SHARED_SECRET);
 }
 
+function expectedBlotatoPublishSecret() {
+  return usableSecret(process.env.BLOTATO_PUBLISH_WEBHOOK_SECRET || process.env.BLOTATO_WEBHOOK_SECRET);
+}
+
+function allowsPublicCloudflarePurge() {
+  if (!isProductionEnv()) return true;
+  return truthy(process.env.CLOUDFLARE_PURGE_ALLOW_PUBLIC);
+}
+
+function allowsPublicBlotatoPublishHooks() {
+  if (!isProductionEnv()) return true;
+  return truthy(process.env.BLOTATO_ALLOW_PUBLIC_PUBLISH_HOOKS);
+}
+
 function allowsUnauthenticatedDevelopment() {
   if (isProductionEnv()) return false;
   return truthy(process.env.AIMS_ALLOW_UNAUTHENTICATED_DEV) || !expectedSuiteKey();
@@ -69,13 +83,18 @@ function isLegacyAuditCallbackPath(req) {
 }
 
 
+export function isBlotatoPublishTriggerPath(req) {
+  const method = String(req.method || "").toUpperCase();
+  const path = pathWithoutQuery(req).replace(/\/+$/, "").toLowerCase();
+
+  return method === "POST" && /^\/blotato\/shorts\/(news-insight|model-verdict|ai-at-work|reality-check|ai-playbook)\/publish-now$/.test(path);
+}
+
 export function isPublicBlotatoPublishPath(req) {
   const method = String(req.method || "").toUpperCase();
   const path = pathWithoutQuery(req).replace(/\/+$/, "").toLowerCase();
 
-  if (method === "POST" && /^\/blotato\/shorts\/(news-insight|model-verdict|ai-at-work|reality-check|ai-playbook)\/publish-now$/.test(path)) {
-    return true;
-  }
+  if (isBlotatoPublishTriggerPath(req)) return true;
 
   if (["GET", "HEAD"].includes(method) && path.startsWith("/blotato/jobs/")) {
     return true;
@@ -95,7 +114,16 @@ function extractCloudflarePurgeSecret(req) {
   return normalise(req.get?.("x-cloudflare-purge-secret") || req.headers?.["x-cloudflare-purge-secret"]);
 }
 
-function getCloudflarePurgeAuthStrategy(req) {
+function extractBlotatoPublishSecret(req) {
+  return normalise(
+    req.get?.("x-blotato-publish-secret") ||
+      req.get?.("x-aims-webhook-secret") ||
+      req.headers?.["x-blotato-publish-secret"] ||
+      req.headers?.["x-aims-webhook-secret"]
+  );
+}
+
+export function getCloudflarePurgeAuthStrategy(req) {
   const expected = expectedSuiteKey();
   const bearer = extractBearerToken(req);
 
@@ -109,18 +137,62 @@ function getCloudflarePurgeAuthStrategy(req) {
     return "cloudflare-purge-secret";
   }
 
-  return "public-cloudflare-purge";
+  if (allowsPublicCloudflarePurge()) {
+    return "public-cloudflare-purge";
+  }
+
+  return null;
+}
+
+export function getBlotatoPublishAuthStrategy(req) {
+  const expected = expectedSuiteKey();
+  const bearer = extractBearerToken(req);
+
+  if (expected && bearer && safeEqual(bearer, expected)) {
+    return "suite-bearer";
+  }
+
+  const publishSecret = expectedBlotatoPublishSecret();
+  const providedSecret = extractBlotatoPublishSecret(req);
+  if (publishSecret && providedSecret && safeEqual(providedSecret, publishSecret)) {
+    return "blotato-publish-secret";
+  }
+
+  if (allowsPublicBlotatoPublishHooks()) {
+    return "public-blotato-publish-hook";
+  }
+
+  return null;
 }
 
 export function requireAimsBearerAuth(req, res, next) {
   if (String(req.method || "").toUpperCase() === "OPTIONS") return next();
   if (isPublicHealthRequest(req)) return next();
 
+  if (isBlotatoPublishTriggerPath(req)) {
+    const strategy = getBlotatoPublishAuthStrategy(req);
+    if (strategy) {
+      req.aimsAuth = { strategy };
+      return next();
+    }
+    return res
+      .status(401)
+      .set("WWW-Authenticate", "Bearer")
+      .json({ ok: false, error: "unauthorized", hint: "Set BLOTATO_PUBLISH_WEBHOOK_SECRET or use the AIMS bearer token for publish-now triggers." });
+  }
+
   if (isPublicBlotatoPublishPath(req)) return next();
 
   if (isCloudflarePurgePath(req)) {
-    req.aimsAuth = { strategy: getCloudflarePurgeAuthStrategy(req) };
-    return next();
+    const strategy = getCloudflarePurgeAuthStrategy(req);
+    if (strategy) {
+      req.aimsAuth = { strategy };
+      return next();
+    }
+    return res
+      .status(401)
+      .set("WWW-Authenticate", "Bearer")
+      .json({ ok: false, error: "unauthorized", hint: "Use the AIMS bearer token or CLOUDFLARE_PURGE_SHARED_SECRET for purge requests." });
   }
 
   const expected = expectedSuiteKey();

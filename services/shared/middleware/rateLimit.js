@@ -49,8 +49,9 @@ function getClientId(req) {
 }
 
 function shouldSkip(req) {
-  if (req.path === "/" || req.path === "/health") return true;
-  return false;
+  const path = String(req.path || req.originalUrl || req.url || "/").split("?")[0].replace(/\/+$/, "") || "/";
+  if (["/", "/health", "/livez", "/readyz"].includes(path)) return true;
+  return path.toLowerCase().endsWith("/health");
 }
 
 export function createRateLimitMiddleware(options = {}) {
