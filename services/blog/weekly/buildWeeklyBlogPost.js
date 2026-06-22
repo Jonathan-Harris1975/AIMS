@@ -347,6 +347,7 @@ async function generateStructuredWeeklyPackage({ sessionId, week, dateLabel, ite
     messages: baseMessages,
     max_tokens: 3000,
     temperature: 0.42,
+    response_format: process.env.BLOG_WEEKLY_JSON_RESPONSE_FORMAT === "false" ? undefined : { type: "json_object" },
   });
 
   let parsed = parseStructuredWeeklyPackage(raw);
@@ -386,6 +387,7 @@ Repair instructions:
       ],
       max_tokens: 3000,
       temperature: 0.32,
+      response_format: process.env.BLOG_WEEKLY_JSON_RESPONSE_FORMAT === "false" ? undefined : { type: "json_object" },
     });
 
     parsed = parseStructuredWeeklyPackage(raw);
