@@ -3,27 +3,39 @@
 // ============================================================
 //
 // Shared image transport for podcast covers and blog hero artwork.
-// Primary artwork keeps the existing Nano Banana / Gemini image setup.
-// Backup artwork uses the spreadsheet-provided ChatGPT image model.
+// Uses OpenRouter chat/completions image-output models. The request
+// must explicitly ask for image output with modalities, otherwise some
+// providers can close the response before returning usable image data.
 // ============================================================
 
-import OpenAI from "openai";
 import { warn, error, info } from "../../../logger.js";
+import { fetchWithTimeout } from "../../shared/http-client.js";
 import { getArtworkProviders } from "./openrouterProviders.js";
 import { applyArtworkPromptPolicy } from "./artworkPromptPolicy.js";
+import {
+  artworkRetryDelayMs,
+  buildArtworkChatPayload,
+  extractBase64Image,
+  getArtworkProviderAttempts,
+  getArtworkRequestTimeoutMs,
+  isTransientArtworkError,
+  makeArtworkHttpError,
+  safeSnippet,
+} from "./openrouterImagePayload.js";
 
 const OPENROUTER_BASE_URL =
   process.env.OPENROUTER_BASE_URL || process.env.OPENROUTER_API_BASE || "https://openrouter.ai/api/v1";
 
 const ARTWORK_TIMEOUT_MS = Number(process.env.ARTWORK_TIMEOUT_MS || process.env.AI_TIMEOUT) || 120_000;
+const ARTWORK_REQUEST_TIMEOUT_MS = getArtworkRequestTimeoutMs(ARTWORK_TIMEOUT_MS);
 const ARTWORK_MAX_TOKENS = Number(process.env.ARTWORK_MAX_TOKENS || 2048);
-
 
 const providers = getArtworkProviders();
 
 if (providers.length === 0) {
   warn("⚠️ Artwork generator missing OpenRouter artwork environment variables", {
     requiredAnyOf: [
+      ["OPENROUTER_API_KEY", "AI_MODEL_IMAGE"],
       ["OPENROUTER_API_KEY", "OPENROUTER_ART"],
       ["OPENROUTER_API_KEY", "OPENROUTER_ART_BACKUP"],
       ["OPENROUTER_API_KEY_ART", "OPENROUTER_ART"],
@@ -55,64 +67,74 @@ export function buildInstruction(prompt, mode = "podcast", date) {
   ].join(" ");
 }
 
-function extractBase64Image(result) {
-  const images = result.choices?.[0]?.message?.images;
-  if (Array.isArray(images) && images[0]?.image_url?.url) {
-    const url = images[0].image_url.url;
-    if (url.startsWith("data:image/png;base64,")) {
-      return url.split(",")[1];
-    }
-  }
-
-  const content = result.choices?.[0]?.message?.content;
-  if (Array.isArray(content)) {
-    const imageItem = content.find((item) => item.type === "image" && item.image_url?.url);
-    const url = imageItem?.image_url?.url;
-    if (url && url.startsWith("data:image/png;base64,")) {
-      return url.split(",")[1];
-    }
-  }
-
-  const raw = JSON.stringify(result);
-  const match = raw.match(/data:image\/png;base64,([^"]+)/);
-  if (match) return match[1];
-
-  return null;
+async function sleep(ms) {
+  await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function callArtworkProvider(provider, prompt, mode, date) {
-  const client = new OpenAI({
-    apiKey: provider.key,
-    baseURL: OPENROUTER_BASE_URL,
-    timeout: ARTWORK_TIMEOUT_MS,
-    defaultHeaders: {
-      "HTTP-Referer": process.env.OPENROUTER_SITE_URL || process.env.APP_URL || "https://jonathan-harris.online",
-      "X-OpenRouter-Title": process.env.OPENROUTER_APP_NAME || process.env.APP_TITLE || "AI Management Suite",
-    },
-  });
-
-  const result = await client.chat.completions.create({
+async function requestArtworkFromProvider(provider, prompt, mode, date) {
+  const instruction = buildInstruction(prompt, mode, date);
+  const payload = buildArtworkChatPayload({
     model: provider.model,
-    messages: [
-      {
-        role: "user",
-        content: [
-          {
-            type: "text",
-            text: buildInstruction(prompt, mode, date),
-          },
-        ],
-      },
-    ],
-    max_tokens: ARTWORK_MAX_TOKENS,
+    instruction,
+    maxTokens: ARTWORK_MAX_TOKENS,
+    mode,
   });
 
-  const image = extractBase64Image(result);
-  if (!image) {
-    throw new Error("No image data found in OpenRouter response.");
+  const headers = {
+    Authorization: `Bearer ${provider.key}`,
+    "Content-Type": "application/json",
+    "HTTP-Referer": process.env.OPENROUTER_SITE_URL || process.env.APP_URL || "https://jonathan-harris.online",
+    "X-OpenRouter-Title": process.env.OPENROUTER_APP_NAME || process.env.APP_TITLE || "AI Management Suite",
+  };
+
+  const attempts = getArtworkProviderAttempts();
+  let lastError;
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      const res = await fetchWithTimeout(`${OPENROUTER_BASE_URL.replace(/\/+$/, "")}/chat/completions`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(payload),
+        timeout: ARTWORK_REQUEST_TIMEOUT_MS,
+      });
+
+      if (!res.ok) {
+        const msg = await res.text().catch(() => "");
+        throw makeArtworkHttpError(res.status, msg, provider);
+      }
+
+      const json = await res.json();
+      const image = extractBase64Image(json);
+      if (!image) {
+        const err = new Error(`No image data found in OpenRouter response from ${provider.modelEnv}.`);
+        err.responseSnippet = safeSnippet(JSON.stringify(json || {}), 500);
+        throw err;
+      }
+
+      return image;
+    } catch (err) {
+      lastError = err;
+
+      if (attempt >= attempts || !isTransientArtworkError(err)) {
+        throw err;
+      }
+
+      warn("Artwork provider transient failure; retrying", {
+        provider: provider.id,
+        modelEnv: provider.modelEnv,
+        model: provider.model,
+        attempt,
+        attempts,
+        error: err?.message || String(err),
+        mode,
+      });
+
+      await sleep(artworkRetryDelayMs(attempt));
+    }
   }
 
-  return image;
+  throw lastError || new Error(`No image data returned from ${provider.modelEnv}.`);
 }
 
 async function generateArtworkBase64(prompt, { mode = "podcast", date } = {}) {
@@ -124,7 +146,7 @@ async function generateArtworkBase64(prompt, { mode = "podcast", date } = {}) {
 
   for (const provider of providers) {
     try {
-      const image = await callArtworkProvider(provider, prompt, mode, date);
+      const image = await requestArtworkFromProvider(provider, prompt, mode, date);
       if (provider.id === "backup") {
         info("🎨 Artwork generated with backup OpenRouter image model", {
           modelEnv: provider.modelEnv,
@@ -139,6 +161,7 @@ async function generateArtworkBase64(prompt, { mode = "podcast", date } = {}) {
         provider: provider.id,
         modelEnv: provider.modelEnv,
         model: provider.model,
+        status: e?.status,
         error: e?.message || e,
         mode,
       });
