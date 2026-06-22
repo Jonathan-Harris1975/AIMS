@@ -157,3 +157,62 @@ test("legacy OPENROUTER_CHATGPT_mini5_ still resolves chatgptMini5 for existing 
   }
 });
 
+
+test("OpenRouter artwork payload explicitly requests image output modalities", async () => {
+  const oldEnv = snapshotEnv([
+    "ARTWORK_MODALITIES",
+    "OPENROUTER_ARTWORK_MODALITIES",
+    "ARTWORK_IMAGE_CONFIG_ENABLED",
+    "ARTWORK_IMAGE_ASPECT_RATIO",
+    "BLOG_ARTWORK_ASPECT_RATIO",
+    "PODCAST_ARTWORK_ASPECT_RATIO",
+  ]);
+
+  try {
+    delete process.env.ARTWORK_MODALITIES;
+    delete process.env.OPENROUTER_ARTWORK_MODALITIES;
+    delete process.env.ARTWORK_IMAGE_ASPECT_RATIO;
+    delete process.env.BLOG_ARTWORK_ASPECT_RATIO;
+    delete process.env.PODCAST_ARTWORK_ASPECT_RATIO;
+    delete process.env.ARTWORK_IMAGE_CONFIG_ENABLED;
+
+    const { buildArtworkChatPayload, extractBase64Image } = await import(`../services/artwork/utils/openrouterImagePayload.js?payload=${Date.now()}`);
+
+    const blogPayload = buildArtworkChatPayload({
+      model: "google/gemini-2.5-flash-image",
+      instruction: "Create a text-free blog hero.",
+      maxTokens: 512,
+      mode: "blog",
+    });
+
+    assert.deepEqual(blogPayload.modalities, ["image", "text"]);
+    assert.equal(blogPayload.stream, false);
+    assert.equal(blogPayload.max_tokens, 512);
+    assert.equal(blogPayload.image_config, undefined);
+
+    process.env.ARTWORK_IMAGE_CONFIG_ENABLED = "true";
+    const podcastPayload = buildArtworkChatPayload({
+      model: "openai/gpt-5-image-mini",
+      instruction: "Create a text-free podcast square.",
+      mode: "podcast",
+    });
+
+    assert.deepEqual(podcastPayload.modalities, ["image", "text"]);
+    assert.equal(podcastPayload.image_config.aspect_ratio, "1:1");
+
+    process.env.ARTWORK_MODALITIES = "image";
+    const imageOnlyPayload = buildArtworkChatPayload({
+      model: "some/image-only-model",
+      instruction: "Create a text-free image.",
+      mode: "blog",
+    });
+    assert.deepEqual(imageOnlyPayload.modalities, ["image"]);
+
+    assert.equal(
+      extractBase64Image({ choices: [{ message: { images: [{ image_url: { url: "data:image/png;base64,abc123" } }] } }] }),
+      "abc123"
+    );
+  } finally {
+    restoreEnv(oldEnv);
+  }
+});
