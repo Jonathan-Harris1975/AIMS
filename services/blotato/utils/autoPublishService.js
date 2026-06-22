@@ -973,7 +973,7 @@ async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOT
         "curious readers, creators, authors, and small business owners"
       ),
       // CTA is resolved lane-by-lane inside newsShortsService (Thursday gets a soft podcast plug,
-      // all other lanes use the standard follow CTA). BLOTATO_NEWS_CTA overrides all lanes if set.
+      // all other lanes use a non-bait evergreen CTA). BLOTATO_NEWS_CTA overrides all lanes if set.
       cta: trim(process.env.BLOTATO_NEWS_CTA, ""),
     });
     const pack = normalisePackForPublish(generatedPack);

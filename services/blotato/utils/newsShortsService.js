@@ -101,8 +101,8 @@ const BLOTATO_NEWS_SHORT_JSON_SCHEMA = Object.freeze({
   },
 });
 
-// The Thursday (reality-check) lane includes a soft podcast plug. All other lanes use the
-// standard follow CTA. The podcast plug avoids "tomorrow" so the video stays evergreen if
+// The Thursday (reality-check) lane includes a soft podcast plug. All other lanes use a
+// non-bait evergreen CTA. The podcast plug avoids "tomorrow" so the video stays evergreen if
 // republished outside its scheduled day.
 const THURSDAY_PODCAST_PLUG =
   process.env.BLOTATO_THURSDAY_PODCAST_PLUG ||
@@ -110,7 +110,7 @@ const THURSDAY_PODCAST_PLUG =
 
 const DEFAULT_FOLLOW_CTA =
   process.env.BLOTATO_DEFAULT_FOLLOW_CTA ||
-  "Follow Jonathan Harris for more straight-talking artificial intelligence analysis.";
+  "For straight-talking artificial intelligence analysis, keep Jonathan Harris on your radar.";
 
 function isThursdayLane(laneSlug = "") {
   return laneSlug === "reality-check";
@@ -165,6 +165,25 @@ function toBritishEnglishText(value = "") {
     output = output.replace(pattern, (match) => preserveReplacementCase(match, british));
   }
   return output;
+}
+
+const ENGAGEMENT_BAIT_REPLACEMENTS = Object.freeze([
+  [/\bfollow\s+for\s+more\b/gi, "keep Jonathan Harris on your radar"],
+  [/\bplease\s+share\b/gi, "pass this on if it helps"],
+  [/\bsmash\s+the\s+like\b/gi, "use this as a practical checkpoint"],
+  [/\btag\s+a\s+friend\b/gi, "send this to a colleague"],
+  [/\bshare\s+this\s+with\b/gi, "pass this to"],
+  [/\bcomment\s+yes\b/gi, "treat this as a working note"],
+]);
+
+function removeEngagementBaitText(value = "", max = 2000) {
+  let output = cleanText(value, max);
+  for (const [pattern, replacement] of ENGAGEMENT_BAIT_REPLACEMENTS) {
+    output = output.replace(pattern, replacement);
+  }
+  return cleanText(output
+    .replace(/\s+([,.!?])/g, "$1")
+    .replace(/\s{2,}/g, " "), max);
 }
 
 function normaliseEvidenceToken(value = "") {
@@ -349,6 +368,7 @@ Output rules:
 - Keep the script specific to the source.
 - Write a complete usable voiceover, not a summary stub.
 - Include a hook, the practical meaning, one clear risk or limitation, one useful action, and a soft CTA.
+- Never use engagement-bait CTA wording, including "follow for more", "please share", "smash the like", "tag a friend", "share this with", or "comment yes".
 - Do not use phrases like "game changer", "AI is changing everything", "you won't believe", "the future is here", or "this changes everything".
 - Hashtags must be relevant to artificial intelligence, business, tools, work, podcast/news, or the article topic.
 - Instagram must have no more than 5 hashtags.
@@ -515,14 +535,17 @@ function applyBritishEnglishPack(pack = {}) {
     "facebookCaption",
     "qualityNotes",
   ]) {
-    if (typeof output[key] === "string") output[key] = cleanText(toBritishEnglishText(output[key]), key === "script" ? 4000 : 1400);
+    if (typeof output[key] === "string") {
+      const max = key === "script" ? 4000 : 1400;
+      output[key] = removeEngagementBaitText(toBritishEnglishText(output[key]), max);
+    }
   }
 
   output.scenes = Array.isArray(output.scenes)
     ? output.scenes.map((scene) => ({
         ...scene,
-        mediaSource: cleanText(toBritishEnglishText(scene?.mediaSource || ""), 900),
-        script: cleanText(toBritishEnglishText(scene?.script || ""), 700),
+        mediaSource: removeEngagementBaitText(toBritishEnglishText(scene?.mediaSource || ""), 900),
+        script: removeEngagementBaitText(toBritishEnglishText(scene?.script || ""), 700),
       })).filter((scene) => scene.mediaSource && scene.script)
     : [];
   return output;
