@@ -23,7 +23,7 @@ export const BLOTATO_SHORT_LANES = Object.freeze([
     hookPattern: "The Stat Drop or Contrast Cut — open with the event and its immediate implication in one declarative statement. No question. No generic setup.",
     hookExample: "OpenAI just cut the price of GPT-4 by sixty per cent.",
     // Lane visual signature (Gap 3)
-    visualSignature: "Newsroom-style composition using unlabelled geometric panels, abstract timeline motion and interface glows without UI copy. Slow push-in or horizontal panel reveal. No text, pseudo-text, numbers, logos or typographic marks on generated images.",
+    visualSignature: "Human-centred newsroom composition with a believable adult analyst or viewer reacting in the first frame, plus unlabelled geometric panels, abstract timeline motion and interface glows without UI copy. Slow push-in or horizontal panel reveal. No text, pseudo-text, numbers, logos or typographic marks on generated images.",
     // Sound direction (from faceless skill)
     soundMap: "Hook: single low impact hit. Setup and body: dark ambient electronic bed. Resolution: slight lift. CTA: fade to near-silence.",
   },
@@ -48,7 +48,7 @@ export const BLOTATO_SHORT_LANES = Object.freeze([
     rssEnvKey: "BLOTATO_MODEL_VERDICT_RSS_URL",
     hookPattern: "Open with the verdict first, then name the tool — state the conclusion before the premise. No question. No generic intro.",
     hookExample: "GPT-5 writes faster than GPT-4, but it hallucinates more on specialised tasks.",
-    visualSignature: "Split-panel comparisons, unlabelled interface abstractions and purely visual benchmark contrasts on dark backgrounds. Horizontal panel reveal. No text, pseudo-text, numbers, logos or typographic marks on generated images.",
+    visualSignature: "Human-centred split-panel comparisons with an adult user, analyst or operator visibly choosing between tools, plus unlabelled interface abstractions and purely visual benchmark contrasts on dark backgrounds. Horizontal panel reveal. No text, pseudo-text, numbers, logos or typographic marks on generated images.",
     soundMap: "Hook: silence for 1s then driving mid-tempo electronic beat. Body: consistent driving bed. Resolution and CTA: slight tempo drop, fade out.",
   },
   {
@@ -72,7 +72,7 @@ export const BLOTATO_SHORT_LANES = Object.freeze([
     rssEnvKey: "BLOTATO_AI_AT_WORK_RSS_URL",
     hookPattern: "Open with the specific work problem being solved or worsened. Name the problem before naming the tool.",
     hookExample: "Teams using AI for customer replies are missing escalation signals their human staff caught.",
-    visualSignature: "Workspace environments, object-based workflow paths, desk abstractions and text-free process geometry. Slow push-in. No text, pseudo-text, numbers, logos or typographic marks on generated images.",
+    visualSignature: "Workspace environments with believable adult workers, hands on devices, body language and human checkpoints, supported by object-based workflow paths, desk abstractions and text-free process geometry. Slow push-in. No text, pseudo-text, numbers, logos or typographic marks on generated images.",
     soundMap: "Hook: warm lo-fi piano enters softly. Body: consistent lo-fi bed. Resolution: music lifts slightly. CTA: fade out.",
   },
   {
@@ -96,7 +96,7 @@ export const BLOTATO_SHORT_LANES = Object.freeze([
     rssEnvKey: "BLOTATO_REALITY_CHECK_RSS_URL",
     hookPattern: "Open with the overclaim or misleading headline, then immediately undercut it — a correction, not a question. The Contrast Cut pattern.",
     hookExample: "That AI model did not beat human doctors. It beat one benchmark, on one dataset.",
-    visualSignature: "Claim-vs-reality contrast layouts using opposing objects, crossed visual motifs and signal-vs-noise geometry on dark backgrounds. Hard cut between two contrasting visuals. No documents, text, pseudo-text, numbers, logos or typographic marks on generated images.",
+    visualSignature: "Claim-vs-reality contrast layouts using an expressive adult reaction or over-shoulder human review moment, opposing objects, crossed visual motifs and signal-vs-noise geometry on dark backgrounds. Hard cut between two contrasting visuals. No documents, text, pseudo-text, numbers, logos or typographic marks on generated images.",
     soundMap: "Hook: silence. Setup: dark ambient electronic. Body: same bed, subtle tension. Resolution: resolves to slightly warmer tone. CTA: fade.",
   },
   {
@@ -121,7 +121,7 @@ export const BLOTATO_SHORT_LANES = Object.freeze([
     rssEnvKey: "BLOTATO_AI_PLAYBOOK_RSS_URL",
     hookPattern: "Open with the outcome the viewer wants, not the tool name. Lead with the benefit or result, then reveal the method.",
     hookExample: "Here is how to cut your email triage time by half using one AI rule.",
-    visualSignature: "Sequential object-based process scenes, unlabelled checklist symbols and clean workflow geometry. Horizontal reveal, one visual stage per step. No text, pseudo-text, numbers, logos or typographic marks on generated images.",
+    visualSignature: "Sequential human-workflow process scenes with adult hands, posture and practical decision moments, supported by unlabelled checklist symbols and clean workflow geometry. Horizontal reveal, one visual stage per step. No text, pseudo-text, numbers, logos or typographic marks on generated images.",
     soundMap: "Hook: warm lo-fi piano or upbeat mid-tempo beat. Body: driving but not hectic. Resolution: upbeat lift. CTA: energetic fade.",
   },
 ]);

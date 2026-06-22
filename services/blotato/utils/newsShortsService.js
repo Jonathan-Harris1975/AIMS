@@ -21,7 +21,7 @@ const AI_STORY_ANIMATE_IMAGES = process.env.BLOTATO_BRAND_ANIMATE_IMAGES !== "fa
 const AI_STORY_TRIM_TO_VOICEOVER = process.env.BLOTATO_BRAND_TRIM_TO_VOICEOVER !== "false";
 
 // Media generation cost preference labels. Current Blotato template requests are steered through prompt + template settings, not unsupported top-level model fields.
-const MAX_SCENES = Math.max(4, Math.min(9, Number(process.env.BLOTATO_VIDEO_SCENE_COUNT || 5)));
+const MAX_SCENES = Math.max(4, Math.min(9, Number(process.env.BLOTATO_VIDEO_SCENE_COUNT || 7)));
 const MIN_DURATION_SECONDS = 30;
 const DEFAULT_DURATION_SECONDS = 45;
 const LOW_COST_IMAGE_MODEL_LABEL = process.env.BLOTATO_LOW_COST_IMAGE_MODEL_LABEL || "flux schnell";
@@ -29,7 +29,19 @@ const LOW_COST_VIDEO_MODEL_LABEL = process.env.BLOTATO_LOW_COST_VIDEO_MODEL_LABE
 
 // Gap 5: automated hook expert review. Set BLOTATO_HOOK_VARIANTS=2 to request an alternate
 // hook candidate and run an automated strength comparison. Zero manual interaction required.
-const HOOK_VARIANTS = Math.max(1, Math.min(2, Number(process.env.BLOTATO_HOOK_VARIANTS || 1)));
+const HOOK_VARIANTS = Math.max(1, Math.min(2, Number(process.env.BLOTATO_HOOK_VARIANTS || 2)));
+
+const HUMAN_VISUALS_ENABLED = String(process.env.BLOTATO_HUMAN_VISUALS_ENABLED || "true").trim().toLowerCase() !== "false";
+const HUMAN_VISUAL_MIN_SCENES = Math.max(1, Math.min(MAX_SCENES, Number(process.env.BLOTATO_HUMAN_VISUAL_MIN_SCENES || 3)));
+const THUMBNAIL_TEXT_WORDS = Math.max(3, Math.min(6, Number(process.env.BLOTATO_THUMBNAIL_TEXT_WORDS || 4)));
+
+const BLOTATO_HUMAN_VISUAL_RULE = [
+  "HUMAN-CENTRED SOCIAL VISUALS.",
+  "Use believable adult human presence in the first scenes: expressive face, hands, body language, desk posture, presenter silhouette, analyst, creator, operator, customer or worker context.",
+  "Do not create a Jonathan Harris likeness, celebrity likeness, child, distorted face, uncanny hands or stock-photo grin.",
+  "People should make the idea emotionally readable; the narration still carries the argument."
+].join(" ");
+
 
 export const BLOTATO_STRICT_NO_TEXT_RULE = [
   "ABSOLUTE TEXT-FREE GENERATED VISUAL.",
@@ -263,13 +275,15 @@ export function buildNewsShortPrompt({ article, articles, theme, durationSeconds
 
 You create short-form video packs for Jonathan Harris, an AI author and podcast host.
 
-# Role — Faceless Script Specialist
-You write narration-driven, voiceover-based AI short-form video scripts. No face appears on camera. The narration carries the entire story. Every scene must be visualisable without text overlays on generated imagery.
+# Role — Human-centred Shorts Creative Director
+You write narration-driven, voiceover-based AI short-form video scripts. Jonathan Harris is not on camera, but generated generic adults, faces, hands and bodies are allowed when they make the idea more watchable. The narration carries the story. Every scene must be visualisable without text overlays on generated imagery.
 
-# Faceless Video Laws
-1. The narration carries the story. Every line must inform, intrigue, or advance the story — no filler.
-2. Every mediaSource must obey this absolute rule: ${BLOTATO_STRICT_NO_TEXT_RULE}
-3. The hook is non-negotiable. The first 3 seconds must scroll-stop on ${["Facebook", "Instagram", "YouTube Shorts", "TikTok"].join(", ")}.
+# Social Video Laws
+1. The first frame must show a human-readable situation, tension or reaction, not decorative AI wallpaper.
+2. The narration carries the story. Every line must inform, intrigue, or advance the story — no filler.
+3. Every mediaSource must obey this absolute rule: ${BLOTATO_STRICT_NO_TEXT_RULE}
+4. ${HUMAN_VISUALS_ENABLED ? BLOTATO_HUMAN_VISUAL_RULE : "Human subjects are optional for this run."}
+5. The hook is non-negotiable. The first 3 seconds must scroll-stop on ${["Facebook", "Instagram", "YouTube Shorts", "TikTok"].join(", ")}.
 
 # Writing style
 - British English.
@@ -340,7 +354,7 @@ Return exactly one JSON object with these keys:
     }
   ],
   "visualDirection": "specific visual plan for a faceless AI/news short using the lane visual signature",
-  "thumbnailText": "3 to 5 punchy words, no clickbait",
+  "thumbnailText": "3 to 5 punchy words, concrete and curiosity-led, no clickbait",
   "youtubeTitle": "YouTube Shorts title, max 70 chars",
   "youtubeDescription": "short description with a light CTA and 3 to 5 hashtags, no emoji",
   "tiktokCaption": "caption with 3 to 5 relevant hashtags, no emoji",
@@ -355,6 +369,9 @@ Scene rules:
 - Each mediaSource must describe a specific visual, not a generic instruction.
 - CRITICAL: every mediaSource must obey this absolute rule: ${BLOTATO_STRICT_NO_TEXT_RULE}
 - Use the lane visual signature: ${laneConfig.visualSignature}
+- ${HUMAN_VISUALS_ENABLED ? `At least ${HUMAN_VISUAL_MIN_SCENES} scenes must include believable adult human presence through face, hands, body language, posture or a clearly human workplace/customer/creator moment. Do not use Jonathan Harris, celebrities or children.` : "Human subjects are optional for this run."}
+- First frame rule: the first scene must contain a human visual anchor plus the story tension. No object-only opener.
+- Thumbnail rule: thumbnailText must be ${THUMBNAIL_TEXT_WORDS} punchy words, concrete, curiosity-led and readable at phone size. No generic AI News wording.
 - Cost guard: select the lowest-cost generation settings available, specifically ${LOW_COST_IMAGE_MODEL_LABEL} for images and ${LOW_COST_VIDEO_MODEL_LABEL} for video if Blotato offers those choices.
 - Do not use premium video models such as Kling, Luma, Runway, Veo, Minimax, or any other high-credit video option.
 - Do not generate extra unused images, duplicate scenes, B-roll packs, or alternate takes.
@@ -429,8 +446,30 @@ function chunkSentences(sentences = [], targetCount = 4) {
   return chunks.filter(Boolean);
 }
 
-function normaliseScene(scene = {}, fallbackScript = "", fallbackVisual = "") {
-  const mediaSource = enforceTextFreeVisualPrompt(scene.mediaSource || scene.visual || scene.imagePrompt || fallbackVisual, 900);
+function hasHumanVisualCue(value = "") {
+  return /\b(person|people|human|adult|face|faces|hands?|body|bodies|worker|workers|creator|creators|author|founder|editor|staff|professional|operator|analyst|reader|customer|client|silhouette|portrait|shoulder|desk posture|expression|gesture|commuter|team|teams)\b/i.test(String(value || ""));
+}
+
+function humanVisualPromptSuffix(index = 0) {
+  if (!HUMAN_VISUALS_ENABLED || index >= HUMAN_VISUAL_MIN_SCENES) return "";
+  const cues = [
+    "Include a believable adult human face or upper body reacting to the situation, editorial lighting, natural expression, not a stock-photo grin.",
+    "Include adult hands using a laptop or phone beside the AI workflow, clear body language and human decision tension.",
+    "Include a professional adult silhouette or over-shoulder view showing the work context and the consequence of the AI decision.",
+  ];
+  return cues[index % cues.length];
+}
+
+function addHumanVisualCue(value = "", index = 0) {
+  const base = cleanText(value, 760);
+  const suffix = humanVisualPromptSuffix(index);
+  if (!suffix || hasHumanVisualCue(base)) return base;
+  return cleanText(`${base}. ${suffix}`, 860);
+}
+
+function normaliseScene(scene = {}, fallbackScript = "", fallbackVisual = "", index = 0) {
+  const rawVisual = addHumanVisualCue(scene.mediaSource || scene.visual || scene.imagePrompt || fallbackVisual, index);
+  const mediaSource = enforceTextFreeVisualPrompt(rawVisual, 900);
   const script = cleanText(scene.script || scene.voiceover || fallbackScript, 700);
   if (!mediaSource || !script) return null;
   return { mediaSource, script };
@@ -447,11 +486,11 @@ function deriveScenesFromPack(pack = {}) {
   // Gap 6: phase-specific compositional styles rather than identical visual bases per scene.
   // Gap 3 / Faceless skill: no text or labels on generated images.
   const phaseCompositions = [
-    `Wide establishing shot, single focal point, high contrast lighting, slow push-in`,
-    `Medium shot, abstract workflow or process visual, ambient motion`,
-    `Close-up detail, tight framing, dramatic directional light`,
-    `Overhead or isometric view, layered complexity, data or network abstraction`,
-    `Clean minimal frame, single key element centred, slight pull-back, calm resolution`,
+    `Wide establishing shot with a believable adult human face or upper body as the emotional anchor, high contrast lighting, slow push-in`,
+    `Medium shot with adult hands, laptop or phone interaction and visible workplace tension, ambient motion`,
+    `Close-up detail of human hands or face beside the AI workflow consequence, tight framing, dramatic directional light`,
+    `Over-shoulder or isometric view mixing human posture with layered process complexity, data or network abstraction`,
+    `Clean minimal frame with a professional adult silhouette and one key visual consequence, slight pull-back, calm resolution`,
   ];
 
   return chunks.map((chunk, index) => {
@@ -462,7 +501,7 @@ function deriveScenesFromPack(pack = {}) {
         : `supporting point ${index + 1}`;
     const composition = phaseCompositions[index % phaseCompositions.length];
     return {
-      mediaSource: enforceTextFreeVisualPrompt(`${visualBase}. ${visualSignature} Scene ${index + 1} (${phase}): ${composition}. Faceless.`, 900),
+      mediaSource: enforceTextFreeVisualPrompt(addHumanVisualCue(`${visualBase}. ${visualSignature} Scene ${index + 1} (${phase}): ${composition}.`, index), 900),
       script: chunk,
     };
   });
@@ -472,7 +511,7 @@ function normaliseScenes(scenes, pack = {}) {
   const inputScenes = Array.isArray(scenes) ? scenes : [];
   const normalised = inputScenes
     .slice(0, MAX_SCENES)
-    .map((scene) => normaliseScene(scene))
+    .map((scene, index) => normaliseScene(scene, "", "", index))
     .filter(Boolean);
 
   if (normalised.length >= 3) return normalised;
@@ -590,8 +629,10 @@ export function buildBlotatoVisualPrompt(pack = {}) {
     `Script: ${pack.script}`,
     `Visual direction: ${pack.visualDirection}`,
     `Cost guard: use the cheapest suitable generation settings available, preferably ${LOW_COST_IMAGE_MODEL_LABEL} for images and ${LOW_COST_VIDEO_MODEL_LABEL} for video. Do not use premium video models.`,
-    `Style: premium editorial, dark technology palette, clean composition, no gimmicky robot clichés, British AI news commentary tone.`,
+    `Style: premium editorial, human-centred social video, dark technology palette, clean composition, no gimmicky robot clichés, British AI news commentary tone.`,
+    HUMAN_VISUALS_ENABLED ? BLOTATO_HUMAN_VISUAL_RULE : "Human subjects optional.",
     BLOTATO_STRICT_NO_TEXT_RULE,
+    `Thumbnail concept: ${pack.thumbnailText || pack.hook || pack.internalTitle}. Use this only as cover/metadata direction if the template has a separate thumbnail field. Do not render it inside generated images.`,
     `Thumbnail text is handled separately by Blotato and must never be rendered into generated visuals.`,
     `Narration and captions are also handled separately. Never bake them into generated images or video frames.`,
     `Final visual compliance check: remove any accidental letter-like, number-like, logo-like or watermark-like marks before rendering.`,
@@ -609,6 +650,10 @@ export function buildBlotatoVideoInputs(pack = {}) {
     aspectRatio: AI_STORY_ASPECT_RATIO,
     animateAiImages: AI_STORY_ANIMATE_IMAGES,
     trimToVoiceover: AI_STORY_TRIM_TO_VOICEOVER,
+    hook: cleanText(pack.hook || "", 180),
+    title: cleanText(pack.youtubeTitle || pack.internalTitle || "", 90),
+    thumbnailText: cleanText(pack.thumbnailText || pack.hook || pack.internalTitle || "", 60),
+    visualStyle: HUMAN_VISUALS_ENABLED ? "human-centred premium editorial AI short" : "premium editorial AI short",
   };
 }
 
@@ -741,22 +786,22 @@ function buildFallbackShortPack(options = {}, laneConfig) {
     `That is where artificial intelligence becomes useful: not magic, not panic, but a tool with limits you have to manage.`,
     fallbackCta,
   ].join(" ");
-  const visualDirection = `Faceless editorial AI news short about ${sourceTitle}. Dark navy and charcoal technology palette, clean dashboard cards, subtle motion, no robot cliché.`;
+  const visualDirection = `Human-centred editorial AI news short about ${sourceTitle}. Dark navy and charcoal technology palette, believable adult professionals, expressive faces, hands on devices, subtle motion, no robot cliché.`;
   const scenes = [
     {
-      mediaSource: `${visualDirection} Opening scene with a clean headline card and abstract interface glow.`,
+      mediaSource: `${visualDirection} Opening scene with a professional adult face reacting to the AI workflow shift, dramatic phone-screen glow without readable text.`,
       script: `${hook}. The useful point is not the headline noise.`,
     },
     {
-      mediaSource: `${visualDirection} Workflow cards showing risk, cost, approval and deployment checks.`,
+      mediaSource: `${visualDirection} Adult hands moving between laptop, notebook and phone, showing risk, cost, approval and deployment checks without any text.`,
       script: `It is what this means for real work, publishing and small business decisions.`,
     },
     {
-      mediaSource: `${visualDirection} Human review checkpoint beside a simple artificial intelligence workflow.`,
+      mediaSource: `${visualDirection} Over-shoulder human review checkpoint beside a simple artificial intelligence workflow, no interface copy.`,
       script: `${usefulPoint}.`,
     },
     {
-      mediaSource: `${visualDirection} Closing scene with calm analysis graphics and subtle motion.`,
+      mediaSource: `${visualDirection} Closing scene with a professional silhouette and calm analysis graphics in motion, no lettering.`,
       script: `Treat this as a signal, not a prophecy. Check the workflow, the risk, the cost and the human approval step before building around it.`,
     },
   ];
