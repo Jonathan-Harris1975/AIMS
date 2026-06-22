@@ -70,6 +70,8 @@ async function handleMockRequest(req, res) {
       assert.ok(payload.messages.some((message) => String(message.content || "").includes("Spartan and informative")));
       assert.ok(payload.messages.some((message) => String(message.content || "").includes("Instagram must have no more than 5 hashtags")));
       assert.ok(payload.messages.some((message) => String(message.content || "").includes("Target duration: 45 seconds minimum")));
+      assert.ok(payload.messages.some((message) => String(message.content || "").includes("HUMAN-CENTRED SOCIAL VISUALS")));
+      assert.ok(payload.messages.some((message) => String(message.content || "").includes("First frame rule")));
       assert.ok(payload.messages.some((message) => String(message.content || "").includes("CTA: For straight-talking artificial intelligence analysis, keep Jonathan Harris on your radar.")));
       assert.ok(!payload.messages.some((message) => String(message.content || "").includes("CTA: Follow Jonathan Harris for more")));
       assert.equal(payload.response_format, undefined);
@@ -84,22 +86,22 @@ async function handleMockRequest(req, res) {
             angle: "The useful story is workflow delegation, not another shiny demo.",
             hook: "AI agents are moving from chat to chores.",
             script: "AI agents are moving from chat to chores. The important part is not the demo theatre. It is that teams are starting to hand over repeatable admin, research, drafting, routing and checking tasks. That does not remove judgement. It moves judgement to the design of the workflow. The useful move is boring on purpose: choose one repeatable task, set clear checks, review the result, then widen the workflow only when it behaves. The winners will not be people who ask better one-off questions. They will be the ones who build better systems around the tools.",
-            visualDirection: "Dark editorial AI newsroom, task cards moving through a clean workflow, captions emphasising chores, workflow and judgement.",
+            visualDirection: "Human-centred dark editorial AI newsroom, adult analyst reaction, task cards moving through a clean workflow, visual emphasis on chores, workflow and judgement.",
             scenes: [
               {
-                mediaSource: "Faceless dark editorial newsroom visual with task cards moving from chat bubbles into workflow columns.",
+                mediaSource: "Human-centred dark editorial newsroom visual with an adult analyst face reacting as task cards move from chat bubbles into workflow columns.",
                 script: "AI agents are moving from chat to chores."
               },
               {
-                mediaSource: "Minimal dashboard showing admin, research, drafting, routing and checking tasks flowing through a clean system.",
+                mediaSource: "Adult hands using a laptop beside a minimal dashboard showing admin, research, drafting, routing and checking tasks flowing through a clean system.",
                 script: "Teams are starting to hand over repeatable admin, research, drafting, routing and checking tasks."
               },
               {
-                mediaSource: "Abstract workflow builder with human approval checkpoints and clean captions about judgement.",
+                mediaSource: "Over-shoulder view of a professional adult checking an abstract workflow builder with human approval checkpoints and no readable text.",
                 script: "That does not remove judgement. It moves judgement to the design of the workflow."
               },
               {
-                mediaSource: "Premium dark technology graphic showing connected systems around practical AI tools, no robot imagery.",
+                mediaSource: "Professional adult silhouette in premium dark technology scene showing connected systems around practical AI tools, no robot imagery.",
                 script: "The winners will be the ones who build better systems around the tools."
               }
             ],
@@ -169,6 +171,9 @@ async function handleMockRequest(req, res) {
       assert.ok(body.inputs.scenes.length >= 3);
       assert.equal(body.inputs.aspectRatio, "9:16");
       assert.equal(body.inputs.captionPosition, "bottom");
+      assert.equal(body.inputs.thumbnailText, "AI Gets Chores");
+      assert.match(body.inputs.visualStyle, /human-centred/);
+      assert.ok(body.inputs.scenes.filter((scene) => /adult|human|hands|face|silhouette|professional/i.test(scene.mediaSource)).length >= 3);
     }
     if (body.templateId === AI_STORY_TEMPLATE_UUID) {
       assert.deepEqual(body.inputs, {});
@@ -481,6 +486,9 @@ test("Blotato news insight route builds a dry-run short pack", async () => {
   assert.ok(Array.isArray(response.body.pack.scenes));
   assert.ok(response.body.pack.scenes.length >= 3);
   assert.ok(Array.isArray(response.body.visualInputs.scenes));
+  assert.equal(response.body.visualInputs.thumbnailText, "AI Gets Chores");
+  assert.match(response.body.visualPrompt, /human-centred social video/i);
+  assert.ok(response.body.visualInputs.scenes.filter((scene) => /adult|human|hands|face|silhouette|professional/i.test(scene.mediaSource)).length >= 3);
 });
 
 test("Blotato generic weekly lane route builds a model-verdict dry-run pack", async () => {
@@ -526,6 +534,8 @@ test("Blotato publish-now endpoint is public and runs the RSS-to-all configured 
   assert.ok(["tpl-ai-video", AI_STORY_TEMPLATE_UUID].includes(jobStatus.body.job.result.templateId));
   assert.equal(jobStatus.body.job.result.video.creditBudget.expectedCredits <= 70, true);
   assert.ok(jobStatus.body.job.result.video.visualInputs.scenes.length >= 3);
+  assert.equal(jobStatus.body.job.result.video.visualInputs.thumbnailText, "AI Gets Chores");
+  assert.ok(jobStatus.body.job.result.video.visualInputs.scenes.filter((scene) => /adult|human|hands|face|silhouette|professional/i.test(scene.mediaSource)).length >= 3);
   const instagramPost = capturedPostRequests.filter((item) => item.post.content.platform === "instagram").at(-1);
   assert.ok(instagramPost);
   assert.ok(countHashtags(instagramPost.post.content.text) <= 5);
