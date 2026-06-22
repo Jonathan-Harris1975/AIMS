@@ -61,6 +61,7 @@ function resolveBlogArtworkBucketKey() {
 export async function createBlogArtwork(input) {
   const sessionId = typeof input === "string" ? input : input?.sessionId;
   const prompt = typeof input === "object" ? input?.prompt : undefined;
+  const artworkDate = typeof input === "object" ? (input?.date || input?.week) : undefined;
   const keyPrefix = typeof input === "object" ? normaliseKeyPrefix(input?.keyPrefix) : "";
   const { bucketKey, reason: bucketReason } = resolveBlogArtworkBucketKey();
 
@@ -78,7 +79,7 @@ export async function createBlogArtwork(input) {
     const theme = prompt || `Blog header artwork for AI Weekly ${sessionId}`;
 
     const base64Data = await withTimeout(
-      generateBlogArtwork(theme),
+      generateBlogArtwork(theme, { date: artworkDate }),
       ARTWORK_TIMEOUT_MS,
       "Blog artwork generation"
     );
