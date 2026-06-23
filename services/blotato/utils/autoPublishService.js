@@ -16,7 +16,12 @@ import {
   publishPost,
   getPostStatus,
 } from "./blotatoClient.js";
-import { buildBlotatoVideoInputs, buildBlotatoVisualPrompt, buildShortLanePack } from "./newsShortsService.js";
+import {
+  buildBlotatoVideoInputs,
+  buildBlotatoVisualPrompt,
+  buildShortLanePack,
+  repairShortPackForBlotatoGate,
+} from "./newsShortsService.js";
 import { DEFAULT_BLOTATO_SHORT_LANE, getShortLaneJobTypes, requireShortLaneConfig } from "./shortLanes.js";
 import { selectRssArticleForBlotato } from "./rssArticleSource.js";
 import { info, warn } from "../../../logger.js";
@@ -962,8 +967,7 @@ async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOT
     const templateResolution = await resolveVideoTemplateId({ requestedTemplateId: defaults.templateId, apiKey });
     const templateId = templateResolution.templateId;
 
-    updateJob(lane.jobType, sessionId, { phase: "script-generation", channelPreflight, templateId, templateResolution });
-    const generatedPack = await buildShortLanePack({
+    const scriptOptions = {
       article: articleSource.article,
       lane: lane.slug,
       theme: trim(process.env.BLOTATO_NEWS_THEME, lane.theme),
@@ -975,31 +979,153 @@ async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOT
       // CTA is resolved lane-by-lane inside newsShortsService (Thursday gets a soft podcast plug,
       // all other lanes use a non-bait evergreen CTA). BLOTATO_NEWS_CTA overrides all lanes if set.
       cta: trim(process.env.BLOTATO_NEWS_CTA, ""),
-    });
-    const pack = normalisePackForPublish(generatedPack);
+    };
+    const maxQualityAttempts = positiveIntEnv("BLOTATO_QUALITY_RETRY_ATTEMPTS", 3, 5);
+    const qualityAttempts = [];
+    let priorGate = null;
+    let bestRejected = null;
+    let pack = null;
+    let blotatoShortGate = null;
 
-    let blotatoShortGate = runBlotatoShortGate({
-      pack,
-      article: articleSource.article,
-      lane: lane.slug,
-    });
-    if (!blotatoShortGate.ok) {
-      const reviewed = await runReviewCouncilGate({
-        councilKey: "blotato-script-quality",
-        gate: blotatoShortGate,
-        artifact: pack,
-        contentType: "blotato-short",
-        repairArtifact: (candidate) => repairArtifactForReviewCouncil(candidate, { contentType: "blotato-short" }),
-        validate: (candidate) => runBlotatoShortGate({
-          pack: candidate,
+    for (let qualityAttempt = 1; qualityAttempt <= maxQualityAttempts; qualityAttempt += 1) {
+      updateJob(lane.jobType, sessionId, {
+        phase: "script-generation",
+        channelPreflight,
+        templateId,
+        templateResolution,
+        qualityAttempt,
+        maxQualityAttempts,
+        previousDefects: priorGate?.defects || [],
+        previousPerformance: priorGate?.performance || null,
+      });
+
+      const generatedPack = await buildShortLanePack({
+        ...scriptOptions,
+        qualityAttempt,
+        qualityRetry: qualityAttempt > 1,
+        priorGate,
+        priorDefects: priorGate?.defects || [],
+      });
+      pack = normalisePackForPublish(generatedPack);
+
+      blotatoShortGate = runBlotatoShortGate({
+        pack,
+        article: articleSource.article,
+        lane: lane.slug,
+      });
+
+      if (!blotatoShortGate.ok) {
+        const repairedPack = normalisePackForPublish(repairShortPackForBlotatoGate(pack, {
           article: articleSource.article,
           lane: lane.slug,
-        }),
-        logger: warn,
+          gate: blotatoShortGate,
+          cta: scriptOptions.cta,
+          qualityAttempt,
+        }));
+        const repairedGate = runBlotatoShortGate({
+          pack: repairedPack,
+          article: articleSource.article,
+          lane: lane.slug,
+        });
+        const originalScore = Number(blotatoShortGate.score || 0);
+        const repairedScore = Number(repairedGate.score || 0);
+        if (repairedGate.ok || repairedScore > originalScore || repairedGate.defects.length < blotatoShortGate.defects.length) {
+          warn("blotato.publish_now.quality_deterministic_repair", {
+            sessionId,
+            lane: lane.slug,
+            qualityAttempt,
+            originalScore,
+            repairedScore,
+            originalDefects: blotatoShortGate.defects?.slice?.(0, 6) || [],
+            repairedDefects: repairedGate.defects?.slice?.(0, 6) || [],
+            performance: repairedGate.performance,
+          });
+          pack = repairedPack;
+          blotatoShortGate = repairedGate;
+        }
+      }
+
+      if (!blotatoShortGate.ok) {
+        const reviewed = await runReviewCouncilGate({
+          councilKey: "blotato-script-quality",
+          gate: blotatoShortGate,
+          artifact: pack,
+          contentType: "blotato-short",
+          repairArtifact: (candidate) => repairShortPackForBlotatoGate(
+            repairArtifactForReviewCouncil(candidate, { contentType: "blotato-short" }),
+            {
+              article: articleSource.article,
+              lane: lane.slug,
+              gate: blotatoShortGate,
+              cta: scriptOptions.cta,
+              qualityAttempt,
+            }
+          ),
+          validate: (candidate) => runBlotatoShortGate({
+            pack: candidate,
+            article: articleSource.article,
+            lane: lane.slug,
+          }),
+          logger: warn,
+        });
+        if (reviewed.ok) {
+          pack = normalisePackForPublish(reviewed.artifact);
+          blotatoShortGate = reviewed.gate;
+        } else {
+          blotatoShortGate = reviewed.gate;
+        }
+      }
+
+      qualityAttempts.push({
+        attempt: qualityAttempt,
+        ok: Boolean(blotatoShortGate?.ok),
+        score: blotatoShortGate?.score ?? null,
+        defects: blotatoShortGate?.defects?.slice?.(0, 8) || [],
+        warnings: blotatoShortGate?.warnings?.slice?.(0, 8) || [],
+        performance: blotatoShortGate?.performance || null,
       });
-      if (!reviewed.ok) throw buildBlotatoGateError(reviewed.gate);
-      Object.assign(pack, reviewed.artifact);
-      blotatoShortGate = reviewed.gate;
+
+      if (blotatoShortGate.ok) {
+        info("blotato.publish_now.quality_gate.passed", {
+          sessionId,
+          lane: lane.slug,
+          qualityAttempt,
+          maxQualityAttempts,
+          score: blotatoShortGate.score,
+          performance: blotatoShortGate.performance,
+        });
+        break;
+      }
+
+      if (!bestRejected || Number(blotatoShortGate.score || 0) > Number(bestRejected.gate?.score || 0)) {
+        bestRejected = { gate: blotatoShortGate, pack };
+      }
+      priorGate = blotatoShortGate;
+
+      warn("blotato.publish_now.quality_retry", {
+        sessionId,
+        lane: lane.slug,
+        qualityAttempt,
+        maxQualityAttempts,
+        score: blotatoShortGate.score,
+        defects: blotatoShortGate.defects?.slice?.(0, 8) || [],
+        performance: blotatoShortGate.performance,
+      });
+    }
+
+    updateJob(lane.jobType, sessionId, {
+      phase: blotatoShortGate?.ok ? "script-approved" : "script-quality-failed",
+      channelPreflight,
+      templateId,
+      templateResolution,
+      qualityAttempts,
+      finalGate: blotatoShortGate,
+    });
+
+    if (!blotatoShortGate?.ok) {
+      const errorGate = bestRejected?.gate || blotatoShortGate;
+      errorGate.qualityAttempts = qualityAttempts;
+      throw buildBlotatoGateError(errorGate);
     }
 
     const video = await createAndWaitForVideo({

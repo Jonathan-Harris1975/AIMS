@@ -262,13 +262,34 @@ function renderArticles({ article, articles = [] } = {}) {
     .join("\n\n");
 }
 
-export function buildNewsShortPrompt({ article, articles, theme, durationSeconds, cta, audience, lane = DEFAULT_BLOTATO_SHORT_LANE }) {
+export function buildNewsShortPrompt({
+  article,
+  articles,
+  theme,
+  durationSeconds,
+  cta,
+  audience,
+  lane = DEFAULT_BLOTATO_SHORT_LANE,
+  qualityAttempt = 1,
+  qualityRetry = false,
+  priorGate = null,
+  priorDefects = [],
+}) {
   const laneConfig = requireShortLaneConfig(lane);
   const articleBlock = renderArticles({ article, articles });
   const resolvedCta = ctaForLane(laneConfig.slug, cta);
   const targetDuration = Math.max(MIN_DURATION_SECONDS, Number(durationSeconds || DEFAULT_DURATION_SECONDS));
   const structure = laneConfig.structure.map((item, index) => `${index + 1}. ${item}`).join("\n");
   const requestHookAlt = HOOK_VARIANTS >= 2;
+  const previousDefects = [
+    ...new Set([
+      ...(Array.isArray(priorDefects) ? priorDefects : []),
+      ...(Array.isArray(priorGate?.defects) ? priorGate.defects : []),
+    ].map((item) => cleanText(item, 220)).filter(Boolean)),
+  ];
+  const retryBrief = qualityRetry
+    ? `\n# Quality retry brief\nThis is generation attempt ${qualityAttempt}. The previous attempt failed quality gate checks. Do not repeat the same hook pattern. Fix these exact failures:\n${previousDefects.map((item) => `- ${item}`).join("\n") || "- Improve hook strength, thumbnail clarity, human visual coverage and spoken density."}\nPrevious performance: hook ${priorGate?.performance?.hookScore ?? "unknown"}/100, thumbnail ${priorGate?.performance?.thumbnailScore ?? "unknown"}/100. The next hook must be concrete, contrast-led, source-specific, and viewer-relevant.`
+    : "";
 
   return {
     system: `${buildBlotatoPersona()}
@@ -323,6 +344,8 @@ ${laneConfig.soundMap}
 # Lane planning structure
 ${structure}
 
+${retryBrief}
+
 Return valid JSON only. The response must be one complete JSON object with double-quoted keys and no trailing text.`,
     user: `Create one short-form AI social video pack.
 
@@ -371,6 +394,7 @@ Scene rules:
 - Use the lane visual signature: ${laneConfig.visualSignature}
 - ${HUMAN_VISUALS_ENABLED ? `At least ${HUMAN_VISUAL_MIN_SCENES} scenes must include believable adult human presence through face, hands, body language, posture or a clearly human workplace/customer/creator moment. Do not use Jonathan Harris, celebrities or children.` : "Human subjects are optional for this run."}
 - First frame rule: the first scene must contain a human visual anchor plus the story tension. No object-only opener.
+- Hook performance rule: the hook must be 6 to 18 words, name the tool/model/source anchor where possible, include contrast or risk language such as "but", "risk", "fails", "cost", "cuts" or "changes", and make the viewer consequence clear with "your", "teams", "workers", "customers", "workflow", "people" or "business". Weak descriptive hooks will be rejected before video rendering.
 - Thumbnail rule: thumbnailText must be ${THUMBNAIL_TEXT_WORDS} punchy words, concrete, curiosity-led and readable at phone size. No generic AI News wording.
 - Cost guard: select the lowest-cost generation settings available, specifically ${LOW_COST_IMAGE_MODEL_LABEL} for images and ${LOW_COST_VIDEO_MODEL_LABEL} for video if Blotato offers those choices.
 - Do not use premium video models such as Kling, Luma, Runway, Veo, Minimax, or any other high-credit video option.
@@ -632,7 +656,7 @@ export function buildBlotatoVisualPrompt(pack = {}) {
     `Style: premium editorial, human-centred social video, dark technology palette, clean composition, no gimmicky robot clichés, British AI news commentary tone.`,
     HUMAN_VISUALS_ENABLED ? BLOTATO_HUMAN_VISUAL_RULE : "Human subjects optional.",
     BLOTATO_STRICT_NO_TEXT_RULE,
-    `Thumbnail concept: ${pack.thumbnailText || pack.hook || pack.internalTitle}. Use this only as cover/metadata direction if the template has a separate thumbnail field. Do not render it inside generated images.`,
+    `Thumbnail copy is supplied separately in the template inputs. Treat it as metadata only and never render that wording inside generated images.`,
     `Thumbnail text is handled separately by Blotato and must never be rendered into generated visuals.`,
     `Narration and captions are also handled separately. Never bake them into generated images or video frames.`,
     `Final visual compliance check: remove any accidental letter-like, number-like, logo-like or watermark-like marks before rendering.`,
@@ -769,6 +793,142 @@ function enhancePackForBlotatoDuration(pack = {}, options = {}, laneConfig = {})
   );
 
   return applyBritishEnglishPack(reinforceSourceGrounding(output, options.article));
+}
+
+const KNOWN_AI_ANCHORS = Object.freeze([
+  "GPT-5",
+  "GPT-4",
+  "ChatGPT",
+  "Claude",
+  "Gemini",
+  "OpenAI",
+  "Anthropic",
+  "Google",
+  "Meta",
+  "Microsoft",
+  "Apple",
+  "Amazon",
+  "Nvidia",
+  "Cisco",
+]);
+
+function sourceAnchor(article = {}, pack = {}) {
+  const text = cleanText([
+    article.title,
+    article.summary,
+    article.source,
+    pack.internalTitle,
+    pack.angle,
+  ].filter(Boolean).join(" "), 1400);
+
+  for (const anchor of KNOWN_AI_ANCHORS) {
+    const escaped = anchor.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    if (new RegExp(`\\b${escaped}\\b`, "i").test(text)) return anchor;
+  }
+  if (/\bagents?\b/i.test(text)) return "AI agents";
+  if (/\btools?\b/i.test(text)) return "this AI tool";
+  if (/\bmodels?\b/i.test(text)) return "this AI model";
+  return "this AI model";
+}
+
+function buildPerformanceHook({ pack = {}, article = {}, laneConfig = {} } = {}) {
+  const anchor = sourceAnchor(article, pack);
+  switch (laneConfig.slug) {
+    case "model-verdict":
+      return cleanText(`${anchor} looks useful, but your workflow still owns the risk.`, 140);
+    case "ai-at-work":
+      return cleanText(`${anchor} cuts work friction, but your team still owns the handoff.`, 140);
+    case "reality-check":
+      return cleanText(`${anchor} did not remove the risk. It moved where people must look.`, 140);
+    case "ai-playbook":
+      return cleanText(`Use ${anchor} to cut one workflow, then keep a human checkpoint.`, 140);
+    case "news-insight":
+    default:
+      return cleanText(`${anchor} is moving now, but people still own the decision.`, 140);
+  }
+}
+
+function buildPerformanceThumbnail({ pack = {}, article = {}, laneConfig = {} } = {}) {
+  const anchor = sourceAnchor(article, pack);
+  const shortAnchor = anchor
+    .replace(/^this\s+/i, "AI ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(" ")
+    .slice(0, 2)
+    .join(" ");
+
+  switch (laneConfig.slug) {
+    case "model-verdict":
+      return cleanText(`${shortAnchor} Risk Verdict`, 50);
+    case "ai-at-work":
+      return cleanText(`${shortAnchor} Work Risk`, 50);
+    case "reality-check":
+      return cleanText(`${shortAnchor} Reality Check`, 50);
+    case "ai-playbook":
+      return cleanText(`${shortAnchor} Workflow Rule`, 50);
+    case "news-insight":
+    default:
+      return cleanText(`${shortAnchor} Workflow Shift`, 50);
+  }
+}
+
+function shouldRepairGateText(gate = {}, pattern) {
+  return (gate?.defects || []).some((defect) => pattern.test(String(defect || "")));
+}
+
+export function repairShortPackForBlotatoGate(pack = {}, {
+  article = {},
+  lane = DEFAULT_BLOTATO_SHORT_LANE,
+  gate = null,
+  cta = "",
+} = {}) {
+  const laneConfig = requireShortLaneConfig(lane || pack.lane || DEFAULT_BLOTATO_SHORT_LANE);
+  const output = { ...pack, lane: laneConfig.slug };
+
+  const repairHook = !output.hook || shouldRepairGateText(gate, /hook performance|no hook/i);
+  const repairThumbnail = !output.thumbnailText || shouldRepairGateText(gate, /thumbnail performance/i);
+  const repairScenes = shouldRepairGateText(gate, /human visual coverage|scene voiceover|at least four usable scenes|thin/i);
+  const repairScript = !output.script || shouldRepairGateText(gate, /script is too thin|scene voiceover is too thin|no script/i);
+
+  if (repairHook) {
+    const newHook = buildPerformanceHook({ pack: output, article, laneConfig });
+    output.hook = newHook;
+    const script = cleanText(output.script || "", 4000);
+    if (!script.toLowerCase().includes(newHook.toLowerCase())) {
+      output.script = trimToWordCount(`${newHook} ${script}`, MAX_SCRIPT_WORDS);
+    }
+  }
+
+  if (repairThumbnail) {
+    output.thumbnailText = buildPerformanceThumbnail({ pack: output, article, laneConfig });
+  }
+
+  if (repairScript) {
+    output.script = buildDurationSafeScript({ pack: output, article, laneConfig, cta });
+  }
+
+  if (repairScenes || repairHook) {
+    output.scenes = makeScenePackDurationSafe(output);
+    if (Array.isArray(output.scenes) && output.scenes.length) {
+      output.scenes[0] = {
+        ...output.scenes[0],
+        script: ensureSentence(output.hook),
+        mediaSource: enforceTextFreeVisualPrompt(addHumanVisualCue(
+          `${output.visualDirection || laneConfig.visualSignature}. Opening frame with a believable adult human face or upper body reacting to the practical risk in ${sourceAnchor(article, output)}. High contrast editorial lighting, phone-first composition, immediate human tension.`,
+          0
+        ), 900),
+      };
+    }
+  }
+
+  output.qualityNotes = cleanText([
+    output.qualityNotes,
+    repairHook ? "Hook was strengthened before render after quality-gate feedback." : "",
+    repairThumbnail ? "Thumbnail text was tightened before render." : "",
+  ].filter(Boolean).join(" "), 700);
+
+  return enhancePackForBlotatoDuration(normalisePack(output), { article, cta }, laneConfig);
 }
 
 function buildFallbackShortPack(options = {}, laneConfig) {
