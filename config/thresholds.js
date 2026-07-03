@@ -1,0 +1,80 @@
+// ============================================================
+// ⚙️ Central production thresholds
+// ============================================================
+//
+// Single source of truth for tunable numeric/boolean thresholds that were
+// previously hard-coded (or scattered across individual `process.env.X`
+// reads) throughout the scheduler, validators and podcast pipeline.
+//
+// Every value here still resolves from an environment variable so existing
+// deployments keep working with zero config changes (backwards compatible
+// defaults match the previous hard-coded behaviour unless a specific
+// production-hardening fix required a new default — those are called out
+// below and documented in docs/production-hardening.md).
+//
+// Extension point: add new thresholds here rather than inlining
+// `Number(process.env.X || fallback)` in feature code, so every knob is
+// discoverable and documented in one place.
+// ============================================================
+
+function num(name, fallback) {
+  const parsed = Number(process.env[name]);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function bool(name, fallback) {
+  const raw = process.env[name];
+  if (raw === undefined || raw === null || raw === "") return fallback;
+  return ["1", "true", "yes", "on"].includes(String(raw).trim().toLowerCase());
+}
+
+export const THRESHOLDS = Object.freeze({
+  scheduler: Object.freeze({
+    // Window in hours within which identical content (by content hash) posted
+    // to more than one account/category is treated as an accidental duplicate.
+    // OB-001 / BSC-OB-002.
+    dedupeWindowHours: num("ONEUP_CROSSPOST_DEDUPE_HOURS", 48),
+    // Number of OneUp queue pages scanned when checking for duplicates.
+    queueGuardLookbackPages: Math.max(1, num("ONEUP_QUEUE_GUARD_LOOKBACK_PAGES", 2)),
+  }),
+  validators: Object.freeze({
+    // Anti-hype validator: fraction of generated samples allowed to contain a
+    // flagged generic-abstraction phrase before the pipeline should be
+    // treated as regressing. BSC-OB-003 verification target: <3%.
+    antiHypeMaxFlaggedShare: num("VALIDATOR_ANTI_HYPE_MAX_FLAGGED_SHARE", 0.03),
+    // Entity validator: below this word count, a summary with too few named
+    // entities should trigger a regeneration pass. OB-003 / BSC-OB-004.
+    entityMinWordsForCheck: Math.max(1, num("VALIDATOR_ENTITY_MIN_WORDS_FOR_CHECK", 40)),
+    // Minimum distinct named entities a qualifying summary must retain.
+    entityMinCount: Math.max(0, num("VALIDATOR_ENTITY_MIN_COUNT", 1)),
+    // Podcast/RSS discovery metadata: maximum curated keyword terms.
+    // OB-005 / BSC-OB-006 asks for 4-6; default trimmed from the previous
+    // hard-coded 12 down to 6.
+    metadataMaxKeywords: Math.max(1, num("VALIDATOR_METADATA_MAX_KEYWORDS", 6)),
+    // Spoken-cadence validator: informational clauses longer than this many
+    // words should be flagged for a pause/break. OB-006.
+    spokenMaxClauseWords: Math.max(4, num("VALIDATOR_SPOKEN_MAX_CLAUSE_WORDS", 22)),
+    // Spoken-cadence validator: number of consecutive list-style items before
+    // requiring a worked example between them.
+    spokenMaxBareListItems: Math.max(1, num("VALIDATOR_SPOKEN_MAX_BARE_LIST_ITEMS", 2)),
+  }),
+  podcastArtwork: Object.freeze({
+    // Number of full-prompt generation attempts before falling back to a
+    // trimmed prompt retry. OB-004 / BSC-OB-005.
+    retryCount: Math.max(1, num("PODCAST_ARTWORK_RETRY_COUNT", 2)),
+    // Whether a shortened prompt retry pass should run after the normal
+    // provider attempts are exhausted, before using branded fallback art.
+    shortPromptRetryEnabled: bool("PODCAST_ARTWORK_SHORT_PROMPT_RETRY", true),
+  }),
+  logging: Object.freeze({
+    // Whether validators/scheduler emit structured QA optimisation events
+    // (in addition to normal info/warn logs).
+    qaEventsEnabled: bool("QA_EVENTS_ENABLED", true),
+    // Optional webhook to receive high-severity QA alerts (e.g. repeated
+    // artwork generation failures). Empty disables webhook delivery; the
+    // structured log event is always emitted regardless.
+    alertWebhookUrl: String(process.env.QA_ALERT_WEBHOOK_URL || "").trim(),
+  }),
+});
+
+export default THRESHOLDS;
