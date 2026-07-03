@@ -9,7 +9,7 @@
 // ============================================================
 
 import { warn } from "../../../logger.js";
-import { ANTI_HYPE_HEDGING_PHRASES, RSS_BANNED_SUMMARY_PHRASES } from "../../content-quality/brandLexicon.js";
+import { ANTI_HYPE_HEDGING_PHRASES, GENERIC_ABSTRACTION_TERMS, RSS_BANNED_SUMMARY_PHRASES } from "../../content-quality/brandLexicon.js";
 import { buildRssPersona } from "../../script/utils/toneSetter.js";
 
 const MIN_SUMMARY_CHARS =
@@ -87,7 +87,7 @@ const METADATA_LEAK_PATTERNS = [
   { pattern: /(^|\n)\s*title\s*:/i, message: 'Contains metadata leak "Title:"' },
 ];
 
-const BANNED_SUMMARY_PHRASES = Object.freeze([...new Set([...RSS_BANNED_SUMMARY_PHRASES, ...ANTI_HYPE_HEDGING_PHRASES])]);
+const BANNED_SUMMARY_PHRASES = Object.freeze([...new Set([...RSS_BANNED_SUMMARY_PHRASES, ...ANTI_HYPE_HEDGING_PHRASES, ...GENERIC_ABSTRACTION_TERMS])]);
 
 export const SYSTEM = `
 ${buildRssPersona()}

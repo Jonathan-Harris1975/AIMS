@@ -18,6 +18,8 @@ import { resilientRequest } from "../../shared/utils/ai-service.js";
 import { RSS_PROMPTS } from "./rss-prompts.js";
 import { buildRssPersona } from "../../script/utils/toneSetter.js";
 import { createShortLink } from "../../rss-links/service.js";
+import { requiresEntityRegeneration, extractNamedEntities } from "../../content-quality/validators/entityValidator.js";
+import { emitQaEvent } from "../../shared/utils/qaEvents.js";
 import {
   assertPhase3AutopublishGate,
   summarisePhase3Reports,
@@ -354,6 +356,66 @@ export async function rewriteArticle(item = {}) {
       });
       rewrittenTitle = repaired.title;
       rewrittenSummary = repaired.summary;
+    }
+  }
+
+  // Entity preservation guard (one retry): short, generic summaries that
+  // drop every named organisation/person/technology from the source read as
+  // thin rewrites. OB-003 / OB-007-009 / BSC-OB-004.
+  let entityCheck = requiresEntityRegeneration(rewrittenSummary);
+  if (entityCheck.needsRegeneration) {
+    debug("rss-feed-creator.model.output.thinEntityContext", {
+      title,
+      wordCount: entityCheck.wordCount,
+      entityCount: entityCheck.entityCount,
+    });
+
+    const sourceEntities = extractNamedEntities(sourceText).slice(0, 6);
+    const entityRetryMessages = [
+      { role: "system", content: String(systemPrompt) },
+      {
+        role: "user",
+        content:
+          String(userPrompt) +
+          "\n\nYour previous summary was too generic — it named no specific organisation, person, or technology. " +
+          "Which organisation, person or technology matters here? Rewrite the summary to name at least one of these " +
+          `explicitly if they are genuinely central to the story: ${sourceEntities.join(", ") || "(use the source text to identify one)"}.`,
+      },
+    ];
+
+    const entityRetryRaw = await resilientRequest("rssRewrite", {
+      messages: entityRetryMessages,
+      temperature: 0.5,
+      max_tokens: 900,
+    });
+
+    const entityRetryParsed = RSS_PROMPTS.normalizeModelText(entityRetryRaw);
+    const entityRetryTitle = RSS_PROMPTS.clampTitleTo12Words(entityRetryParsed.title || rewrittenTitle, 12);
+    const entityRetrySummary = RSS_PROMPTS.clampSummaryToWindow(
+      entityRetryParsed.summary || rewrittenSummary,
+      RSS_PROMPTS.MIN_SUMMARY_CHARS,
+      RSS_PROMPTS.MAX_SUMMARY_CHARS
+    );
+
+    if (entityRetrySummary && entityRetrySummary.length >= RSS_PROMPTS.MIN_SUMMARY_CHARS) {
+      const retryCheck = requiresEntityRegeneration(entityRetrySummary);
+      // Only accept the retry if it actually improved entity coverage; a
+      // still-thin retry keeps the original rather than risking a worse rewrite.
+      if (!retryCheck.needsRegeneration || retryCheck.entityCount >= entityCheck.entityCount) {
+        rewrittenTitle = entityRetryTitle;
+        rewrittenSummary = entityRetrySummary;
+        entityCheck = retryCheck;
+      }
+    }
+
+    if (entityCheck.needsRegeneration) {
+      emitQaEvent({
+        source: "validator.entity.rss-feed-creator",
+        type: "thin_entity_context_unresolved",
+        severity: "low",
+        message: `Summary for "${title}" still has ${entityCheck.entityCount} named entit${entityCheck.entityCount === 1 ? "y" : "ies"} after regeneration retry`,
+        detail: { title, link, entityCount: entityCheck.entityCount, wordCount: entityCheck.wordCount },
+      });
     }
   }
 
