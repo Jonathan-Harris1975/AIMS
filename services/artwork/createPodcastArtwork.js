@@ -2,6 +2,7 @@
 import { info, warn, error, debug } from "../../logger.js";
 import { uploadBuffer } from "../shared/utils/r2-client.js";
 import { generatePodcastArtwork } from "./utils/artwork.js";
+import { emitQaEvent } from "../shared/utils/qaEvents.js";
 
 const R2_BUCKET_ART_KEY = "art";
 const PODCAST_ARTWORK_TIMEOUT_MS =
@@ -10,11 +11,37 @@ const PODCAST_ARTWORK_TIMEOUT_MS =
       process.env.ARTWORK_TIMEOUT_MS ||
       process.env.AI_TIMEOUT
   ) || 120_000;
+
+// Deterministic branded fallback rotation (OB-004 / BSC-OB-005): supports a
+// comma-separated list of pre-approved branded fallback images via
+// PODCAST_FALLBACK_IMAGE_URLS, so repeated failures in the same window don't
+// all publish the exact same fallback cover. Falls back to the single-URL
+// env vars for backwards compatibility if the list var isn't set.
+const PODCAST_FALLBACK_IMAGE_URLS = String(process.env.PODCAST_FALLBACK_IMAGE_URLS || "")
+  .split(",")
+  .map((url) => url.trim())
+  .filter(Boolean);
 const PODCAST_FALLBACK_IMAGE_URL = String(
   process.env.PODCAST_FALLBACK_IMAGE_URL ||
     process.env.PODCAST_FALLBACK_EPISODE_IMAGE_URL ||
     ""
 ).trim();
+
+function stableIndex(value = "", length = 1) {
+  let hash = 0;
+  for (const char of String(value || "")) hash = ((hash * 31) + char.charCodeAt(0)) >>> 0;
+  return length > 0 ? hash % length : 0;
+}
+
+function pickDeterministicFallbackUrl(sessionId) {
+  const pool = PODCAST_FALLBACK_IMAGE_URLS.length
+    ? PODCAST_FALLBACK_IMAGE_URLS
+    : PODCAST_FALLBACK_IMAGE_URL
+      ? [PODCAST_FALLBACK_IMAGE_URL]
+      : [];
+  if (!pool.length) return "";
+  return pool[stableIndex(sessionId, pool.length)];
+}
 
 function withTimeout(promise, timeoutMs, label) {
   let timer;
@@ -76,18 +103,32 @@ export async function createPodcastArtwork(input) {
 
     error("artwork.fail", { sessionId, error: message });
 
-    if (PODCAST_FALLBACK_IMAGE_URL) {
+    // Failure alert: every exhausted artwork generation attempt raises a
+    // structured, persisted QA event so repeated failures are visible
+    // without having to grep logs. OB-004 / BSC-OB-005.
+    emitQaEvent({
+      source: "podcast.artwork",
+      type: "artwork_generation_failed",
+      severity: "high",
+      message: `Podcast artwork generation failed for session ${sessionId}: ${message}`,
+      detail: { sessionId, error: message },
+      persist: true,
+    });
+
+    const fallbackUrl = pickDeterministicFallbackUrl(sessionId);
+    if (fallbackUrl) {
       warn("artwork.podcast.fallback", {
         sessionId,
         error: message,
-        fallbackUrl: PODCAST_FALLBACK_IMAGE_URL,
+        fallbackUrl,
+        fallbackPoolSize: PODCAST_FALLBACK_IMAGE_URLS.length || (PODCAST_FALLBACK_IMAGE_URL ? 1 : 0),
       });
 
       return {
         ok: true,
         key: null,
-        url: PODCAST_FALLBACK_IMAGE_URL,
-        publicUrl: PODCAST_FALLBACK_IMAGE_URL,
+        url: fallbackUrl,
+        publicUrl: fallbackUrl,
         source: "fallback",
         imageGenerationStatus: "fallback",
         imageGenerationError: message,
