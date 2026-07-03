@@ -114,8 +114,68 @@ Output rules:
 - no markdown, no bullets, no labels, no quote marks around the full post
 - avoid textbook tone, Wikipedia tone, corporate tone, and motivational-poster tone
 - avoid opening with bland templates such as "Here is", "Did you know", or "AI is transforming"
+- never use generic abstraction words as a substitute for a real point: "landscape", "revolution", "paradigm", "game-changer", "transform", "unprecedented"
+- if you would reach for one of those words, name the concrete effect instead (what specifically changes: who is affected, what changes for them, or the measurable impact)
+- name at least one specific organisation, product, person, or technology where the topic supports it, rather than describing "AI" in the abstract
 - JSON only`,
   };
+}
+
+// ------------------------------------------------------------
+// Account-specific post variants
+// ------------------------------------------------------------
+// Deterministic (no LLM call) light rewrite used when the same canonical
+// post is cross-posted to more than one account/category, so secondary
+// accounts do not publish byte-identical copy. Kept intentionally simple
+// and dependency-free: swap a small set of safe synonyms and vary the
+// opening/closing framing based on a stable per-account seed, rather than
+// generating wholly new copy (which would need a second LLM round trip and
+// risk drifting off the reviewed, gate-passed canonical content).
+const VARIANT_SYNONYMS = [
+  [/\bhelps\b/gi, "makes it easier to"],
+  [/\bshows\b/gi, "makes clear"],
+  [/\buses\b/gi, "relies on"],
+  [/\bbuild\b/gi, "put together"],
+  [/\bstart\b/gi, "begin"],
+  [/\bquickly\b/gi, "fast"],
+  [/\bimportant\b/gi, "worth knowing"],
+];
+
+const VARIANT_OPENERS = [
+  "",
+  "Worth repeating for a different crowd: ",
+  "Cross-posting this because it holds up here too: ",
+];
+
+function stableSeed(value = "") {
+  let hash = 0;
+  for (const char of String(value || "")) hash = ((hash * 31) + char.charCodeAt(0)) >>> 0;
+  return hash;
+}
+
+/**
+ * Produce a light, deterministic rewrite of an already-approved post for a
+ * secondary account, so cross-posted content is not byte-identical.
+ *
+ * @param {string} canonicalContent - The reviewed, gate-passed post content.
+ * @param {object} [options]
+ * @param {number} [options.variantIndex] - 1-based index among secondary accounts.
+ * @param {string} [options.accountLabel] - Category/account name, used as part of the seed.
+ */
+export function buildAccountVariant(canonicalContent = "", { variantIndex = 1, accountLabel = "" } = {}) {
+  let text = String(canonicalContent || "");
+  const seed = stableSeed(`${accountLabel}:${variantIndex}`);
+
+  VARIANT_SYNONYMS.forEach(([pattern, replacement], index) => {
+    // Only apply roughly half of the available swaps, chosen deterministically
+    // per account, so different accounts don't all get identical rewrites.
+    if ((seed + index) % 2 === 0) text = text.replace(pattern, replacement);
+  });
+
+  const opener = VARIANT_OPENERS[seed % VARIANT_OPENERS.length];
+  if (opener && !text.startsWith(opener)) text = `${opener}${text}`;
+
+  return text;
 }
 
 export function buildQuizPrompt({ questionDate, answerDate, history = [] }) {

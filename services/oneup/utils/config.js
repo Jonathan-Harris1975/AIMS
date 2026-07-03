@@ -1,3 +1,5 @@
+import { THRESHOLDS } from "../../../config/thresholds.js";
+
 const DAILY_IMAGE_BASE = "https://images.jonathan-harris.online";
 
 function trimString(value, fallback = "") {
@@ -66,7 +68,11 @@ export const ONEUP_REQUIRED_NETWORK_TYPES = getOneUpRequiredNetworkTypes();
 export const ONEUP_VALIDATE_TARGET_ACCOUNTS = shouldValidateOneUpTargetAccounts();
 export const ONEUP_DEFAULT_DRY_RUN = boolFromEnv(process.env.ONEUP_DEFAULT_DRY_RUN, false);
 export const ONEUP_RSS_LOOKBACK_DAYS = Number(process.env.ONEUP_RSS_LOOKBACK_DAYS || 7);
-export const ONEUP_QUEUE_GUARD_LOOKBACK_PAGES = Math.max(1, Number(process.env.ONEUP_QUEUE_GUARD_LOOKBACK_PAGES || 2));
+// Sourced from config/thresholds.js so the scheduler, docs and this config
+// module never disagree about the duplicate window. ONEUP_CROSSPOST_DEDUPE_HOURS
+// and ONEUP_QUEUE_GUARD_LOOKBACK_PAGES remain the supported env var names.
+export const ONEUP_CROSSPOST_DEDUPE_HOURS = THRESHOLDS.scheduler.dedupeWindowHours;
+export const ONEUP_QUEUE_GUARD_LOOKBACK_PAGES = THRESHOLDS.scheduler.queueGuardLookbackPages;
 
 export const LANE_CONFIG = {
   monday: {

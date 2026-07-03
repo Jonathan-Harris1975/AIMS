@@ -2,8 +2,8 @@ import crypto from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resilientRequest } from "../../shared/utils/ai-service.js";
 import { info, warn } from "../../../logger.js";
-import { LANE_CONFIG, QUIZ_CONFIG, EBOOK_CONFIG, ONEUP_CATEGORY_NAME_GENERAL, ONEUP_CATEGORY_NAME_EBOOKS, ONEUP_DEFAULT_DRY_RUN, DEFAULT_TIMEZONE, ONEUP_QUEUE_GUARD_LOOKBACK_PAGES, getOneUpRequiredNetworkTypes, getOneUpSocialNetworkId, normaliseOneUpSocialNetworkId, shouldValidateOneUpTargetAccounts } from "./config.js";
-import { buildDailyPrompt, buildQuizPrompt, buildEbookPostPrompt } from "./prompts.js";
+import { LANE_CONFIG, QUIZ_CONFIG, EBOOK_CONFIG, ONEUP_CATEGORY_NAME_GENERAL, ONEUP_CATEGORY_NAME_EBOOKS, ONEUP_DEFAULT_DRY_RUN, ONEUP_CROSSPOST_DEDUPE_HOURS, DEFAULT_TIMEZONE, ONEUP_QUEUE_GUARD_LOOKBACK_PAGES, getOneUpRequiredNetworkTypes, getOneUpSocialNetworkId, normaliseOneUpSocialNetworkId, shouldValidateOneUpTargetAccounts } from "./config.js";
+import { buildDailyPrompt, buildQuizPrompt, buildEbookPostPrompt, buildAccountVariant } from "./prompts.js";
 import { addDays, nextWeekdayDateString, toScheduledDateTime } from "./date.js";
 import { loadRecentRssContext } from "./feedContext.js";
 import { getLaneHistory, getWeeklyTopicLedger, recordLaneSchedule, getQuizHistory, recordQuizSchedule, claimScheduleSlot, completeScheduleSlot, releaseScheduleSlot, isRecentSpotlightPerson, recordSpotlightPerson, recordUsedSocialSource } from "./state.js";
@@ -12,8 +12,9 @@ import getSponsor from "../../script/utils/getSponsor.js";
 import { resolveFeaturedEbook } from "./ebookCatalogue.js";
 import { runPhase5OrganicGrowthGate } from "../../content-quality/phase5OrganicGrowthGates.js";
 import { repairOneUpPostForReviewCouncil, runReviewCouncilGate } from "../../content-quality/reviewCouncil.js";
-import { ANTI_HYPE_HEDGING_PHRASES, BANNED_PROMO_PATTERNS, ENGAGEMENT_BAIT_PATTERNS, GENERIC_HASHTAGS, INFLATED_EBOOK_CLAIM_PATTERNS, MOTIVATIONAL_HASHTAGS, MOTIVATIONAL_TONE_PATTERNS, findAmericanSpellings, findPatternBreaches } from "../../content-quality/brandLexicon.js";
+import { ANTI_HYPE_HEDGING_PHRASES, BANNED_PROMO_PATTERNS, ENGAGEMENT_BAIT_PATTERNS, GENERIC_HASHTAGS, INFLATED_EBOOK_CLAIM_PATTERNS, MOTIVATIONAL_HASHTAGS, MOTIVATIONAL_TONE_PATTERNS, findAmericanSpellings, findGenericAbstractionBreaches, findPatternBreaches } from "../../content-quality/brandLexicon.js";
 import { buildIntentHash, completeEditorialReservation, hasRecentAudienceIntent, recordEditorialEvent, releaseEditorialReservation, reserveEditorialSource } from "../../social/editorialLedger.js";
+import { emitQaEvent } from "../../shared/utils/qaEvents.js";
 
 
 const ONEUP_DAILY_MAX_TOKENS = Math.max(1200, Number(process.env.ONEUP_DAILY_MAX_TOKENS || 1400));
@@ -172,6 +173,11 @@ function runOneUpSocialGate({ contentType = "oneup-social", laneKey = "", post =
   for (const breach of findPatternBreaches(text, BANNED_PROMO_PATTERNS)) {
     defects.push(`Brand tone breach: ${breach}`);
   }
+  for (const term of findGenericAbstractionBreaches(text)) {
+    defects.push(
+      `Generic abstraction phrase detected: "${term}". Replace with a concrete effect (what specifically changes: who/what/impact).`
+    );
+  }
   for (const { american, british } of findAmericanSpellings(text)) {
     defects.push(`British English drift: use ${british} instead of ${american}`);
   }
@@ -217,9 +223,20 @@ function runOneUpSocialGate({ contentType = "oneup-social", laneKey = "", post =
     }
   }
 
+  const score = scoreFromGate(defects, warnings);
+  if (defects.length) {
+    emitQaEvent({
+      source: `scheduler.gate.${laneKey || contentType}`,
+      type: "gate_defects",
+      severity: score < 86 ? "medium" : "low",
+      message: `${defects.length} defect(s) found in ${contentType} gate`,
+      detail: { defects, warnings, score, laneKey, contentType },
+    });
+  }
+
   return {
-    ok: defects.length === 0 && scoreFromGate(defects, warnings) >= 86,
-    score: scoreFromGate(defects, warnings),
+    ok: defects.length === 0 && score >= 86,
+    score,
     contentType,
     laneKey,
     defects,
@@ -441,10 +458,13 @@ function isWithinDuplicateWindow(first = "", second = "", hours = 48) {
   return Math.abs(a - b) <= Math.max(1, Number(hours || 48)) * 3600000;
 }
 
-function hasLikelyDuplicate(queuedPosts, { scheduledDateTime, categoryName, imageUrl, content, allowCrosspost = false }) {
+function hasLikelyDuplicate(queuedPosts, { scheduledDateTime, categoryName, imageUrl, content, allowCrosspost = false, windowHours, laneKey = "", contentType = "" } = {}) {
   const expectedHash = content ? contentHash(content) : "";
-  const crosspostWindowHours = Math.max(1, Number(process.env.ONEUP_CROSSPOST_DEDUPE_HOURS || 48));
-  return (Array.isArray(queuedPosts) ? queuedPosts : []).some((item) => {
+  // Configurable duplicate window: per-call `windowHours` override takes
+  // precedence, otherwise falls back to ONEUP_CROSSPOST_DEDUPE_HOURS
+  // (see config/thresholds.js). OB-001 / BSC-OB-002.
+  const crosspostWindowHours = Math.max(1, Number(windowHours || ONEUP_CROSSPOST_DEDUPE_HOURS || 48));
+  const match = (Array.isArray(queuedPosts) ? queuedPosts : []).find((item) => {
     const itemDateTime = item?.date_time || item?.scheduled_date_time || item?.publish_at || "";
     const sameTime = String(itemDateTime || "").startsWith(scheduledDateTime);
     const sameCategory = String(item?.category_name || "").trim().toLowerCase() === String(categoryName || "").trim().toLowerCase();
@@ -454,6 +474,20 @@ function hasLikelyDuplicate(queuedPosts, { scheduledDateTime, categoryName, imag
     if (!allowCrosspost && sameContent && isWithinDuplicateWindow(itemDateTime, scheduledDateTime, crosspostWindowHours)) return true;
     return sameTime && sameCategory && (sameImage || sameContent);
   });
+
+  if (match) {
+    emitQaEvent({
+      source: `scheduler.dedupe.${laneKey || contentType || "unknown"}`,
+      type: allowCrosspost ? "duplicate_allowed_by_override" : "duplicate_blocked",
+      severity: allowCrosspost ? "info" : "medium",
+      message: allowCrosspost
+        ? "Identical content scheduled to another slot; allowDuplicate override permitted it."
+        : "Blocked scheduling identical content hash within the dedupe window.",
+      detail: { categoryName, scheduledDateTime, windowHours: crosspostWindowHours, contentHash: expectedHash },
+    });
+  }
+
+  return Boolean(match);
 }
 
 function isTruthyOption(value) {
@@ -543,7 +577,7 @@ function slotDuplicatePostResult({ publishDate, scheduledDateTime, dryRun = fals
   };
 }
 
-async function scheduleToOneUp({ post, scheduledDateTime, categoryName, socialNetworkId, dryRun, apiKey, preflightOnly = false }) {
+async function scheduleToOneUp({ post, scheduledDateTime, categoryName, socialNetworkId, dryRun, apiKey, preflightOnly = false, laneKey = "", dedupeWindowHours }) {
   const warnings = [];
   const normalisedSocialNetworkId = normaliseOneUpSocialNetworkId(socialNetworkId, getOneUpSocialNetworkId());
   const requiredNetworkTypes = getOneUpRequiredNetworkTypes();
@@ -591,7 +625,18 @@ async function scheduleToOneUp({ post, scheduledDateTime, categoryName, socialNe
   });
   const category = targeting.category;
   const queuedPosts = await getQueuedPosts(apiKey);
-  if (hasLikelyDuplicate(queuedPosts, { scheduledDateTime, categoryName: category.category_name, imageUrl: post.imageUrl, content: post.content, allowCrosspost: Boolean(post.crosspost) })) {
+  // `allowDuplicate` is the explicit, documented override; `crosspost` is
+  // kept as a backwards-compatible alias for any existing callers.
+  const allowDuplicateOverride = Boolean(post.allowDuplicate ?? post.crosspost ?? false);
+  if (hasLikelyDuplicate(queuedPosts, {
+    scheduledDateTime,
+    categoryName: category.category_name,
+    imageUrl: post.imageUrl,
+    content: post.content,
+    allowCrosspost: allowDuplicateOverride,
+    windowHours: dedupeWindowHours,
+    laneKey,
+  })) {
     warnings.push("A likely duplicate post is already scheduled in the guarded window, so no new post was created.");
     return {
       scheduled: false,
@@ -815,6 +860,9 @@ export async function buildAndScheduleDailyLane(laneKey, options = {}) {
       imageUrl,
       content: ensureHashtags(generated.content, lane.hashtags),
       spotlightPerson: generated.spotlightPerson || "",
+      // Explicit duplicate-window override for intentional cross-posting.
+      // `crosspost` remains supported for backwards compatibility.
+      allowDuplicate: Boolean(options.allowDuplicate ?? options.crosspost ?? false),
     };
 
     let oneUpSocialGate = runOneUpSocialGate({
@@ -867,6 +915,8 @@ export async function buildAndScheduleDailyLane(laneKey, options = {}) {
       socialNetworkId,
       dryRun,
       apiKey,
+      laneKey,
+      dedupeWindowHours: options.dedupeWindowHours,
     });
 
     const warnings = [
@@ -953,6 +1003,73 @@ export async function buildAndScheduleDailyLane(laneKey, options = {}) {
     if (editorialReservation) releaseEditorialReservation(editorialReservation);
     throw error;
   }
+}
+
+// ------------------------------------------------------------
+// Automatic account-specific post variants
+// ------------------------------------------------------------
+// Opt-in composition on top of buildAndScheduleDailyLane: when the caller
+// supplies more than one target category/account, the canonical post is
+// scheduled to the first as before (zero behaviour change for existing
+// single-account callers), then a lightly reworded, deterministic variant
+// is generated per additional account and scheduled with the duplicate
+// override explicitly set, since the cross-post is intentional and tracked.
+// OB-001 "no explicit instruction to vary copy when cross-posting".
+export async function buildAndScheduleDailyLaneAccountVariants(laneKey, options = {}) {
+  const categoryNames = Array.isArray(options.categoryNames) && options.categoryNames.length
+    ? [...new Set(options.categoryNames.map((name) => String(name || "").trim()).filter(Boolean))]
+    : [String(options.categoryName || ONEUP_CATEGORY_NAME_GENERAL).trim()];
+
+  const [primaryCategoryName, ...variantCategoryNames] = categoryNames;
+  const primaryResult = await buildAndScheduleDailyLane(laneKey, { ...options, categoryName: primaryCategoryName });
+
+  const variantResults = [];
+  for (const [index, categoryName] of variantCategoryNames.entries()) {
+    const variantContent = buildAccountVariant(primaryResult.post?.content || "", {
+      variantIndex: index + 1,
+      accountLabel: categoryName,
+    });
+    const variantPost = {
+      ...primaryResult.post,
+      content: variantContent,
+      allowDuplicate: true,
+    };
+    const gate = runOneUpSocialGate({
+      contentType: `oneup-daily-${laneKey}-variant`,
+      laneKey,
+      post: variantPost,
+    });
+
+    const scheduling = await scheduleToOneUp({
+      post: variantPost,
+      scheduledDateTime: primaryResult.scheduledDateTime,
+      categoryName,
+      socialNetworkId: normaliseOneUpSocialNetworkId(options.socialNetworkId || getOneUpSocialNetworkId()),
+      dryRun: Boolean(options.dryRun),
+      apiKey: options.apiKey || process.env.ONEUP_API_KEY,
+      laneKey,
+      dedupeWindowHours: options.dedupeWindowHours,
+    });
+
+    emitQaEvent({
+      source: `scheduler.account-variant.${laneKey}`,
+      type: "account_variant_scheduled",
+      severity: "info",
+      message: `Account-specific variant ${index + 1} ${scheduling.scheduled ? "scheduled" : "skipped"} for category '${categoryName}'`,
+      detail: { categoryName, gateOk: gate.ok, scheduled: scheduling.scheduled, contentHash: contentHash(variantContent) },
+    });
+
+    variantResults.push({
+      categoryName,
+      scheduled: scheduling.scheduled,
+      duplicatePrevented: Boolean(scheduling.duplicatePrevented),
+      oneUpSocialGate: gate,
+      post: variantPost,
+      warnings: scheduling.warnings || [],
+    });
+  }
+
+  return { ...primaryResult, accountVariants: variantResults };
 }
 
 export async function buildAndScheduleEbookWeekly(options = {}) {
