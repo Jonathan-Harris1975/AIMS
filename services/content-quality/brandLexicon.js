@@ -17,6 +17,31 @@ export const BANNED_PROMO_PATTERNS = Object.freeze([
   /\bgame\s+changer\b/i,
 ]);
 
+// Grouped anti-hype abstraction list from the on-brand audit (OB-002 / OB-010 /
+// BSC-OB-003). These are generic newsroom/PR abstractions that read as filler
+// unless immediately anchored to a concrete effect ("what specifically
+// changes: who/what/impact"). Kept separate from BANNED_PROMO_PATTERNS so
+// callers can report a distinct "generic abstraction" defect type and surface
+// the audit's exact remediation copy.
+export const GENERIC_ABSTRACTION_TERMS = Object.freeze([
+  "landscape",
+  "revolution",
+  "paradigm",
+  "game-changer",
+  "game changer",
+  "transform",
+  "unprecedented",
+]);
+
+export const GENERIC_ABSTRACTION_PATTERNS = Object.freeze(
+  GENERIC_ABSTRACTION_TERMS.map((term) => new RegExp(`\\b${term.replace(/[-\s]+/g, "[-\\s]?")}\\b`, "i"))
+);
+
+// "reality" used as empty shorthand ("AI's messy reality") rather than a
+// concrete noun phrase. Matched narrowly to avoid flagging legitimate uses
+// such as "the reality of deploying this in production".
+export const GENERIC_REALITY_SHORTHAND_PATTERN = /\b(?:messy|quiet|real)\s+reality\b|\breality\s+(?:check)?\s*$/i;
+
 export const AMERICAN_TO_BRITISH = Object.freeze([
   ["analyze", "analyse"],
   ["analyzed", "analysed"],
@@ -243,6 +268,21 @@ export function findPatternBreaches(text = "", patterns = []) {
     .map((pattern) => pattern.source.replace(/\\b|\\s\+|\\s\?|\(\?:|\)/g, " ").replace(/\\/g, "").trim());
 }
 
+
+// Returns matched generic-abstraction terms (deduplicated), or [] if clean.
+// Mirrors findPatternBreaches but reports the plain matched term so calling
+// validators/gates can render the audit's fix instruction:
+// "what specifically changes: e.g. inventory ranking, supply chain opacity, compute cost"
+export function findGenericAbstractionBreaches(text = "") {
+  const source = cleanLexiconText(text);
+  const found = new Set();
+  GENERIC_ABSTRACTION_PATTERNS.forEach((pattern, index) => {
+    pattern.lastIndex = 0;
+    if (pattern.test(source)) found.add(GENERIC_ABSTRACTION_TERMS[index]);
+  });
+  if (GENERIC_REALITY_SHORTHAND_PATTERN.test(source)) found.add("reality (empty shorthand)");
+  return [...found];
+}
 
 export function findAmericanSpellings(text = "") {
   const source = cleanLexiconText(text);
