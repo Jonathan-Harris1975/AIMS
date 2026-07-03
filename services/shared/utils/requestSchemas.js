@@ -191,10 +191,24 @@ export const oneupDailyBodySchema = z
     scheduledDateTime: optionalScheduledDateTime,
     dryRun: booleanish.optional(),
     categoryName: z.string().trim().min(1).max(120).optional(),
+    // Opt-in: when provided, buildAndScheduleDailyLaneAccountVariants schedules
+    // the canonical post to the first entry, then an automatically varied
+    // copy of it to each remaining account/category.
+    categoryNames: z.union([
+      z.string().trim().min(1).max(120),
+      z.array(z.string().trim().min(1).max(120)).min(1).max(10),
+    ]).optional(),
     socialNetworkId: oneupSocialNetworkIdSchema,
     imageUrl: z.string().trim().url().optional(),
     buildContext: z.string().trim().max(2000).optional(),
     apiKey: z.string().trim().min(1).max(200).optional(),
+    // Explicit override to permit scheduling content that matches the
+    // recent-duplicate content hash window (config/thresholds.js
+    // scheduler.dedupeWindowHours). `crosspost` accepted as a back-compat alias.
+    allowDuplicate: booleanish.optional(),
+    crosspost: booleanish.optional(),
+    // Per-request override of the duplicate-detection window, in hours.
+    dedupeWindowHours: z.coerce.number().int().min(1).max(720).optional(),
   })
   .passthrough()
   .transform((value) => ({
@@ -202,6 +216,11 @@ export const oneupDailyBodySchema = z
     socialNetworkId: Array.isArray(value.socialNetworkId)
       ? JSON.stringify(value.socialNetworkId)
       : value.socialNetworkId,
+    categoryNames: Array.isArray(value.categoryNames)
+      ? value.categoryNames
+      : typeof value.categoryNames === "string"
+        ? value.categoryNames.split(/[,;]/g).map((item) => item.trim()).filter(Boolean)
+        : value.categoryNames,
   }));
 
 export const oneupQuizBodySchema = z
