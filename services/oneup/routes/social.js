@@ -7,7 +7,7 @@ import {
   oneupQuizBodySchema,
   oneupEbookWeeklyBodySchema,
 } from "../../shared/utils/requestSchemas.js";
-import { buildAndScheduleDailyLane, buildAndScheduleQuizSeries, buildAndScheduleEbookWeekly } from "../utils/socialScheduler.js";
+import { buildAndScheduleDailyLane, buildAndScheduleDailyLaneAccountVariants, buildAndScheduleQuizSeries, buildAndScheduleEbookWeekly } from "../utils/socialScheduler.js";
 import { getAsyncServiceRouteJobFresh, shouldRunAsyncServiceRoute, startAsyncServiceRouteJob } from "../../shared/utils/asyncServiceRouteJobs.js";
 import { fetchPublishedPostsHistory, inspectOneUpTargeting } from "../utils/oneupClient.js";
 import { LANE_CONFIG, ONEUP_CATEGORY_NAME_GENERAL, ONEUP_CATEGORY_NAME_EBOOKS, getOneUpRequiredNetworkTypes, getOneUpSocialNetworkId, normaliseOneUpSocialNetworkId, parseNetworkTypes } from "../utils/config.js";
@@ -149,6 +149,13 @@ router.post(
 );
 
 for (const laneKey of Object.keys(LANE_CONFIG)) {
+  // categoryNames (2+) opts into automatic per-account post variants;
+  // omitting it keeps the original single-account behaviour unchanged.
+  const runDailyLane = (payload) =>
+    Array.isArray(payload.categoryNames) && payload.categoryNames.length > 1
+      ? buildAndScheduleDailyLaneAccountVariants(laneKey, payload)
+      : buildAndScheduleDailyLane(laneKey, payload);
+
   router.post(
     `/daily/${laneKey}`,
     hookdeckDedupe(`oneup:${laneKey}`),
@@ -164,13 +171,13 @@ for (const laneKey of Object.keys(LANE_CONFIG)) {
           lane: `daily-${laneKey}`,
           payload: parsed.data,
           req,
-          runner: (payload) => buildAndScheduleDailyLane(laneKey, payload),
+          runner: runDailyLane,
           metadata: { route: `/oneup/daily/${laneKey}` },
         });
         return res.status(202).json(job);
       }
 
-      const result = await buildAndScheduleDailyLane(laneKey, parsed.data);
+      const result = await runDailyLane(parsed.data);
       return res.json(result);
     })
   );
