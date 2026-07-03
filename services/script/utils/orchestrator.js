@@ -13,6 +13,7 @@ import { attachEpisodeNumberIfNeeded } from "./episodeCounter.js";
 import editAndFormat from "./editAndFormat.js";
 import { runEditorialPass } from "./editorialPass.js";
 import { findLongSpokenSentences, validateTranscriptSourceIntegrity, validateTranscriptStructure } from "./scriptValidation.js";
+import { validateSpokenCadence } from "../../content-quality/validators/spokenCadenceValidator.js";
 
 function hasOnlyRepairableSpokenLengthDefects(validation = {}) {
   const reasons = Array.isArray(validation.reasons) ? validation.reasons : [];
@@ -167,6 +168,14 @@ export async function orchestrateScript(input) {
         sessionId: sid,
         warnings: transcriptSourceIntegrity.warnings,
       });
+    }
+
+    // Non-blocking: flag dense "list of three" enumerations with no worked
+    // example between items (audit OB-006). This informs future shaping
+    // passes without failing an otherwise-valid episode.
+    const spokenCadence = validateSpokenCadence(finalCandidate, { source: "podcast-orchestrator", emit: true });
+    if (!spokenCadence.ok) {
+      info("script.validation.spokenCadence.warn", { sessionId: sid, defects: spokenCadence.defects });
     }
 
     const finalFullText = finalCandidate;
