@@ -12,6 +12,7 @@ import { warn, error, info } from "../../../logger.js";
 import { fetchWithTimeout } from "../../shared/http-client.js";
 import { getArtworkProviders } from "./openrouterProviders.js";
 import { applyArtworkPromptPolicy } from "./artworkPromptPolicy.js";
+import { THRESHOLDS } from "../../../config/thresholds.js";
 import {
   artworkRetryDelayMs,
   buildArtworkChatPayload,
@@ -67,12 +68,28 @@ export function buildInstruction(prompt, mode = "podcast", date) {
   ].join(" ");
 }
 
+// Shortened fallback prompt used only after every normal attempt across
+// every provider has failed. Some providers reject or silently drop overly
+// long prompts; this keeps only the essential creative direction and text-
+// free compliance instruction, on the theory that prompt length/complexity
+// may itself be a contributing failure cause. OB-004 / BSC-OB-005.
+export function buildShortInstruction(prompt, mode = "podcast", date) {
+  const policyPrompt = applyArtworkPromptPolicy(prompt, { date, mode });
+  const trimmedDirection = String(policyPrompt || "").split(/\s+/).slice(0, 24).join(" ");
+
+  if (mode === "blog") {
+    return `Editorial blog hero image, cinematic landscape banner, premium and restrained. ${trimmedDirection} No text, letters, numbers, logos or watermarks.`;
+  }
+
+  return `Premium editorial podcast cover art, abstract technological realism, minimal. ${trimmedDirection} No text, letters, numbers, logos or watermarks.`;
+}
+
 async function sleep(ms) {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function requestArtworkFromProvider(provider, prompt, mode, date) {
-  const instruction = buildInstruction(prompt, mode, date);
+async function requestArtworkFromProvider(provider, prompt, mode, date, { useShortInstruction = false } = {}) {
+  const instruction = useShortInstruction ? buildShortInstruction(prompt, mode, date) : buildInstruction(prompt, mode, date);
   const payload = buildArtworkChatPayload({
     model: provider.model,
     instruction,
@@ -165,6 +182,34 @@ async function generateArtworkBase64(prompt, { mode = "podcast", date } = {}) {
         error: e?.message || e,
         mode,
       });
+    }
+  }
+
+  // Every provider failed with the full-length prompt. As a last resort,
+  // sweep the providers again with a much shorter prompt in case prompt
+  // length/complexity contributed to the failures. OB-004 / BSC-OB-005.
+  if (THRESHOLDS.podcastArtwork.shortPromptRetryEnabled) {
+    warn("🎨 All artwork providers failed with full prompt; retrying with shortened prompt", { mode });
+    for (const provider of providers) {
+      try {
+        const image = await requestArtworkFromProvider(provider, prompt, mode, date, { useShortInstruction: true });
+        info("🎨 Artwork generated with shortened prompt after full-prompt failures", {
+          provider: provider.id,
+          modelEnv: provider.modelEnv,
+          mode,
+        });
+        return image;
+      } catch (e) {
+        lastError = e;
+        error("Artwork provider failed on shortened-prompt retry", {
+          provider: provider.id,
+          modelEnv: provider.modelEnv,
+          model: provider.model,
+          status: e?.status,
+          error: e?.message || e,
+          mode,
+        });
+      }
     }
   }
 
