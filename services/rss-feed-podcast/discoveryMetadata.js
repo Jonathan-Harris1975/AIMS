@@ -5,6 +5,9 @@
 // RSS directories and Podcasting 2.0 consumers. This is deliberately
 // supportive metadata, not keyword-stuffing or platform-specific magic.
 
+import { THRESHOLDS } from "../../config/thresholds.js";
+import { validatePodcastMetadata } from "../content-quality/validators/metadataValidator.js";
+
 const DEFAULT_CHANNEL_TERMS = [
   "artificial intelligence",
   "AI podcast",
@@ -31,7 +34,10 @@ const GENERIC_OR_NOISY_TERMS = new Set([
   "gen x",
 ]);
 
-const MAX_LEGACY_ITUNES_TERMS = 12;
+// Previously hard-coded at 12; sourced from config/thresholds.js so the cap
+// is a single documented knob (VALIDATOR_METADATA_MAX_KEYWORDS). Default
+// trimmed to 6 curated terms per audit OB-005 / BSC-OB-006.
+const MAX_LEGACY_ITUNES_TERMS = THRESHOLDS.validators.metadataMaxKeywords;
 const MAX_LEGACY_ITUNES_CHARS = 255;
 
 function normaliseWhitespace(value = "") {
@@ -159,6 +165,12 @@ export function buildPodcastDiscoveryMetadata({
   });
   const normalisedCategories = normaliseDiscoveryTerms(categories).slice(0, 4);
   const warnings = [];
+
+  const metadataCheck = validatePodcastMetadata({
+    itunesKeywords: legacyItunesKeywordsCsv,
+    source: "rss-feed-podcast",
+  });
+  warnings.push(...metadataCheck.defects, ...metadataCheck.warnings);
 
   if (episodeTerms.length < 6) {
     warnings.push("Low keyword coverage: title, description and transcript content should expose more specific episode subjects.");
