@@ -19,6 +19,7 @@ import {
   findPatternBreaches,
 } from "../brandLexicon.js";
 import { emitQaEvent } from "../../shared/utils/qaEvents.js";
+import { recordAntiHypeSample } from "./antiHypeBatchTracker.js";
 
 function findPlainPhraseBreaches(text = "", phrases = []) {
   const source = String(text || "").toLowerCase();
@@ -58,6 +59,13 @@ export function validateAntiHype(text = "", { source = "unknown", checkBritishSp
     defects,
     genericAbstractions,
   };
+
+  if (emit) {
+    // Batch-level flagged-share tracking (BSC-OB-003 target: <3% of samples
+    // flagged) needs every sample, including clean ones, to compute a real
+    // ratio — not just the ones with defects.
+    recordAntiHypeSample({ flagged: defects.length > 0, source });
+  }
 
   if (emit && defects.length) {
     emitQaEvent({
