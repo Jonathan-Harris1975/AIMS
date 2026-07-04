@@ -1,44 +1,58 @@
-# AIMS Fix Package — 1 file, 1 change
+> **Document status:** Production reference  
+> **Last reviewed:** 21 June 2026  
+> **Operational authority:** Current repository README, SECURITY policy and operations guide.
 
-## What's in here
+# AI Management Suite (AIMS)
 
-This review found exactly **one** file that needs updating: a broken,
-dead compatibility shim. The fix is a **deletion**, not an edit, so
-there's no "new version" of the file to ship — instead this package
-gives you two ways to apply it.
+AIMS is the production orchestration API for content, podcast, outreach, social publishing, audits and operational automation. It runs as a Node.js service on Koyeb and is triggered by MAST, Hookdeck and governed operator workflows.
 
-## The file
+## Production responsibilities
 
-`services/shared/utils/hiveSkillPool.js`
+- Podcast composition, TTS, artwork, metadata and publishing workflows.
+- Blog, RSS and social-content generation with brand and quarantine gates.
+- OneUp and Blotato publishing lanes.
+- Outreach processing and repository/audit dispatch.
+- Durable operational state in Cloudflare R2.
+- Operational health and warm-up endpoints consumed by HIVE.
 
-## Why it needs to go
+## Health contract
 
-- The real implementation lives at `services/shared/hiveSkillPool.js` (247 lines).
-- This file was meant to be a thin re-export shim, but it re-exports from
-  `./utils/hiveSkillPool.js` — which, from its own location
-  (`services/shared/utils/`), resolves to the non-existent
-  `services/shared/utils/utils/hiveSkillPool.js`.
-- Confirmed via `node --check` and a direct `import()`: this module throws
-  `Cannot find module` if anything ever imports it.
-- Nothing currently imports it (all real call sites correctly import
-  `services/shared/hiveSkillPool.js` directly), so it's inert today — but
-  it's dead weight and a landmine for the next person who imports it by
-  the "obvious" `utils/` path.
+| Endpoint | Purpose |
+|---|---|
+| `GET /health` | Public service health |
+| `GET /livez` | Liveness probe |
+| `GET /readyz` | Dependency/configuration readiness |
+| `GET /ops/health` | Deeper authenticated operational status where configured |
 
-## How to apply
+## Local verification
 
-**Option A — apply the patch:**
 ```bash
-cd AIMS-main
-git apply remove-broken-hiveSkillPool-shim.patch
+npm ci --ignore-scripts --no-audit --no-fund
+npm run build
+npm test
+npm run verify
+npm audit --omit=dev --audit-level=high
+npm run deploy:smoke
 ```
 
-**Option B — do it by hand:**
-```bash
-cd AIMS-main
-rm services/shared/utils/hiveSkillPool.js
-```
+## Production deployment
 
-Either way, nothing else needs to change. After applying, re-run your
-existing CI (`npm test`) to confirm — this file wasn't referenced by
-anything, so no test should be affected.
+Use the root Dockerfile with Node.js 22. The container runs as the non-root `node` user, validates the build without production secrets, and uses `dumb-init` for signal handling. Keep runtime secrets in Koyeb Secrets and validate them with `npm run env:doctor` before deployment.
+
+AIMS should be treated as an internal API. CORS is allow-listed, request bodies are bounded, noisy probes are rejected early and production responses carry restrictive security headers. Production publish-now and purge triggers are not public by default: use the suite bearer token or the documented hook secrets.
+
+See [`SECURITY.md`](SECURITY.md), [`docs/OPERATIONS.md`](docs/OPERATIONS.md) and the service-level READMEs under `services/`.
+
+## Professional operations
+
+`/ops/excellence` reports durable job outcomes, retry recovery and provider latency/failure aggregates. Repeated workflow failures and CI/Koyeb deployment failures are delivered to HIVE-UI Ops. See [`docs/OPERATIONAL_ALERTING.md`](docs/OPERATIONAL_ALERTING.md).
+
+
+## Production hardening notes
+
+- `npm test` runs the full deterministic Node test sweep, including job-store and every `test/*.test.js` file.
+- `/readyz` fails closed in production when `AIMS_API_KEY` or durable R2-backed state is missing.
+- `POST /cloudflare/purge` requires AIMS bearer auth or `CLOUDFLARE_PURGE_SHARED_SECRET` in production unless `CLOUDFLARE_PURGE_ALLOW_PUBLIC=true` is deliberately set.
+- `POST /blotato/shorts/:lane/publish-now` requires AIMS bearer auth or `BLOTATO_PUBLISH_WEBHOOK_SECRET` in production unless `BLOTATO_ALLOW_PUBLIC_PUBLISH_HOOKS=true` is deliberately set.
+- R2 object keys are rejected when they contain traversal, absolute paths, query strings, fragments or control characters.
+- AIMS consumes the central HIVE R2 skill pool; it does not auto-deploy local skill descriptors.
