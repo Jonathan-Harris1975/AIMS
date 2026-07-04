@@ -40,7 +40,9 @@ export const THRESHOLDS = Object.freeze({
   validators: Object.freeze({
     // Anti-hype validator: fraction of generated samples allowed to contain a
     // flagged generic-abstraction phrase before the pipeline should be
-    // treated as regressing. BSC-OB-003 verification target: <3%.
+    // treated as regressing. BSC-OB-003 verification target: <3%. Enforced
+    // as a rolling daily batch check in antiHypeBatchTracker.js, which emits
+    // a QA event when the day's flagged share exceeds this value.
     antiHypeMaxFlaggedShare: num("VALIDATOR_ANTI_HYPE_MAX_FLAGGED_SHARE", 0.03),
     // Entity validator: below this word count, a summary with too few named
     // entities should trigger a regeneration pass. OB-003 / BSC-OB-004.
