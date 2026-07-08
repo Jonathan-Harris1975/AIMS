@@ -8,6 +8,8 @@ import routes from "./routes/index.js";
 import { fileURLToPath } from "node:url";
 import { createRateLimitMiddleware } from "./services/shared/middleware/rateLimit.js";
 import { hasDurableStateEnv, durableStateEnvHint } from "./services/shared/utils/durableStateEnv.js";
+import * as lifecycle from "./services/shared/utils/lifecycle.js";
+import { requireAimsBearerAuth } from "./services/shared/middleware/suiteAuth.js";
 
 export const app = express();
 
@@ -261,6 +263,13 @@ app.use(
   })
 );
 
+app.use((req, res, next) => {
+  lifecycle.requestStarted();
+  res.on("finish", () => lifecycle.requestFinished());
+  res.on("close", () => lifecycle.requestFinished());
+  next();
+});
+
 app.use(createRateLimitMiddleware());
 
 app.get("/", (_req, res) => res.status(200).send("OK"));
@@ -274,22 +283,34 @@ app.get("/health", (_req, res) =>
     env: process.env.APP_ENV || process.env.NODE_ENV || "development",
     trustProxy,
     time: new Date().toISOString(),
+    lifecycle: lifecycle.computeState({ dependenciesReady: true }),
   })
 );
 
 app.get("/livez", (_req, res) =>
-  res.status(200).json({ ok: true, status: "alive", service: "AIMS" })
+  res.status(200).json({ ok: true, status: "alive", service: "AIMS", lifecycle: lifecycle.snapshot() })
 );
 
 app.get("/readyz", (_req, res) => {
   const report = productionReadiness();
-  return res.status(report.ready ? 200 : 503).json({
+  const lifecycleState = lifecycle.computeState({ dependenciesReady: report.ready });
+  return res.status(report.ready && lifecycleState.state !== "maintenance" ? 200 : 503).json({
     ok: report.ready,
     service: "AIMS",
     version: process.env.APP_VERSION || "2.7.1",
     ...report,
+    lifecycle: lifecycleState,
     time: new Date().toISOString(),
   });
+});
+
+app.get("/admin/lifecycle", requireAimsBearerAuth, (_req, res) => res.status(200).json(lifecycle.snapshot()));
+
+app.post("/admin/lifecycle/maintenance", requireAimsBearerAuth, (req, res) => {
+  const on = Boolean(req.body?.on);
+  const reason = typeof req.body?.reason === "string" ? req.body.reason.slice(0, 500) : undefined;
+  const snapshot = on ? lifecycle.enterMaintenance(reason) : lifecycle.exitMaintenance(reason);
+  return res.status(200).json(snapshot);
 });
 
 app.use("/", routes);
