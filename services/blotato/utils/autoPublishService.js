@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import {
   beginJob,
   completeJob,
@@ -385,7 +386,14 @@ function slugPart(value = "") {
 function createSessionId(article, laneSlug = DEFAULT_BLOTATO_SHORT_LANE) {
   const base = slugPart(article?.title || "rss-article") || "rss-article";
   const lanePrefix = laneSlug === DEFAULT_BLOTATO_SHORT_LANE ? "" : `${laneSlug}-`;
-  return `BLT-blotato-${lanePrefix}${Date.now()}-${base}`;
+  // GET /blotato/jobs/:sessionId is intentionally unauthenticated (see
+  // isPublicBlotatoPublishPath) so a caller can poll for their own job's
+  // result without holding a bearer token. That only stays safe if sessionId
+  // itself is unguessable. Article title and trigger time are both public
+  // (visible in the source RSS feed), so a random suffix is required here —
+  // without it, sessionId could be reconstructed from public data alone.
+  const nonce = randomBytes(6).toString("hex");
+  return `BLT-blotato-${lanePrefix}${Date.now()}-${base}-${nonce}`;
 }
 
 function publicJobUrl(req, sessionId) {
