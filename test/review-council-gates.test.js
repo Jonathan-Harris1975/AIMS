@@ -19,7 +19,7 @@ test("Blotato script quality council is disabled by default", () => {
 });
 
 test("quiz answer repair restores the required answer marker", () => {
-  assert.match(repairTextForReviewCouncil("Answer: B is correct", { contentType: "oneup-quiz-answer" }), /^Quiz Answer!/);
+  assert.match(repairTextForReviewCouncil("Answer: B is correct", { contentType: "zernio-quiz-answer" }), /^Quiz Answer!/);
 });
 
 test("gate review repairs then revalidates before quarantine", async () => {
@@ -28,7 +28,7 @@ test("gate review repairs then revalidates before quarantine", async () => {
     councilKey: "quiz-logic",
     gate,
     artifact: { content: "Answer: C is correct" },
-    contentType: "oneup-quiz-answer",
+    contentType: "zernio-quiz-answer",
     validate: (candidate) => ({
       ok: /^Quiz Answer!/.test(candidate.content),
       score: /^Quiz Answer!/.test(candidate.content) ? 92 : 70,

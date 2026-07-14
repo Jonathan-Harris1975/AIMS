@@ -5,7 +5,7 @@ import {
   buildBlogPersona,
   buildSocialBlogPersona,
   buildRssPersona,
-  buildOneUpPersona,
+  buildZernioPersona,
   buildBlotatoPersona,
   buildPersona,
   buildPodcastMetadataPersona,
@@ -19,7 +19,7 @@ import {
 import { buildBlogArtworkPrompt, buildWeeklyPackagePrompt } from "../services/blog/utils/weeklyPackage.js";
 import { buildSocialArtworkPrompt, buildSocialPackagePrompt } from "../services/blog/utils/socialBlogPackage.js";
 import { SYSTEM as RSS_SYSTEM } from "../services/rss-feed-creator/utils/rss-prompts.js";
-import { buildDailyPrompt } from "../services/oneup/utils/prompts.js";
+import { buildDailyPrompt } from "../services/zernio/utils/prompts.js";
 import { buildBlotatoVideoInputs, buildBlotatoVisualPrompt, buildNewsShortPrompt } from "../services/blotato/utils/newsShortsService.js";
 import { getIntroPrompt } from "../services/script/utils/promptTemplates.js";
 import { getTitleDescriptionPrompt } from "../services/script/utils/podcastHelper.js";
@@ -37,7 +37,7 @@ test("shared tone setter exposes every governed AIMS lane", () => {
     buildBlogPersona(),
     buildSocialBlogPersona(),
     buildRssPersona(),
-    buildOneUpPersona(),
+    buildZernioPersona(),
     buildBlotatoPersona(),
   ]) {
     assertUsesToneSetter(persona);
@@ -88,14 +88,14 @@ test("blog and social-blog prompts use tone setter, seasonal palette and strict 
   }
 });
 
-test("RSS, OneUp and podcast prompts all carry the shared tone setter", () => {
+test("RSS, Zernio and podcast prompts all carry the shared tone setter", () => {
   assertUsesToneSetter(RSS_SYSTEM);
 
-  const oneUp = buildDailyPrompt({
+  const zernio = buildDailyPrompt({
     lane: { key: "tuesday", label: "Tuesday concept" },
     publishDate: "2026-06-16",
   });
-  assertUsesToneSetter(oneUp.system);
+  assertUsesToneSetter(zernio.system);
 
   const intro = getIntroPrompt({
     weatherSummary: "cloudy in London",

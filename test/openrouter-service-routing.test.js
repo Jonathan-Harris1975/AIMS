@@ -46,7 +46,7 @@ function applySpreadsheetOpenRouterEnv() {
   delete process.env.OPENROUTER_API_KEY_ART_BACKUP;
 }
 
-test("OpenRouter text routes used by blog, OneUp, RSS and audits resolve spreadsheet env names", async () => {
+test("OpenRouter text routes used by blog, Zernio, RSS and audits resolve spreadsheet env names", async () => {
   const oldEnv = snapshotEnv(OPENROUTER_ENV_NAMES);
   applySpreadsheetOpenRouterEnv();
 
@@ -55,8 +55,8 @@ test("OpenRouter text routes used by blog, OneUp, RSS and audits resolve spreads
     const expectedRoutes = {
       // deepseekV4Flash replaces meta in these routes
       blogWeekly: ["OPENROUTER_GOOGLE_2_5_flashlite", "OPENROUTER_CHATGPT_MINI5", "OPENROUTER_DEEPSEEK_v4_pro"],
-      oneupDaily: ["OPENROUTER_CHATGPT_MINI5", "OPENROUTER_GOOGLE_2_5_flashlite", "OPENROUTER_DEEPSEEK_v4_flash"],
-      oneupQuiz: ["OPENROUTER_CHATGPT_MINI5", "OPENROUTER_GOOGLE_2_5_flashlite", "OPENROUTER_DEEPSEEK_v4_flash"],
+      zernioDaily: ["OPENROUTER_CHATGPT_MINI5", "OPENROUTER_GOOGLE_2_5_flashlite", "OPENROUTER_DEEPSEEK_v4_flash"],
+      zernioQuiz: ["OPENROUTER_CHATGPT_MINI5", "OPENROUTER_GOOGLE_2_5_flashlite", "OPENROUTER_DEEPSEEK_v4_flash"],
       rssRewrite: ["OPENROUTER_CHATGPT_MINI5", "OPENROUTER_GOOGLE_2_5_flashlite", "OPENROUTER_DEEPSEEK_v4_flash"],
       rssShortTitle: ["OPENROUTER_CHATGPT_MINI5", "OPENROUTER_GOOGLE_2_5_flashlite"],
       auditForensic: [
@@ -147,7 +147,7 @@ test("legacy OPENROUTER_CHATGPT_mini5_ still resolves chatgptMini5 for existing 
 
   try {
     const { getProviderDiagnosticsForRoute } = await import(`../services/shared/utils/ai-service.js?legacyChatgpt=${Date.now()}`);
-    const diagnostics = getProviderDiagnosticsForRoute("oneupDaily");
+    const diagnostics = getProviderDiagnosticsForRoute("zernioDaily");
     const configured = diagnostics.configuredProviders.filter((p) => p.configured);
     const chatgpt = configured.find((p) => p.providerId === "chatgptMini5");
     assert.ok(chatgpt?.configured, "chatgptMini5 should resolve via legacy OPENROUTER_CHATGPT_mini5_ alias");

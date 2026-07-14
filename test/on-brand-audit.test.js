@@ -39,7 +39,7 @@ test("on-brand deterministic preflight catches key brand defects", async () => {
   const { __testing } = await import(`../audits/utils/onBrandEvidence.js?preflight=${Date.now()}`);
   const longSentence = Array.from({ length: 42 }, (_, index) => `word${index}`).join(" ") + ".";
   const findings = __testing.runDeterministicPreflight({
-    oneUpBlogSocial: {
+    zernioBlogSocial: {
       items: [
         {
           title: "Title: AI changes everything",
@@ -84,9 +84,9 @@ test("on-brand report normalisation preserves contract and merges deterministic 
       windowEnd: "2026-05-05T00:00:00.000Z",
       lookbackDays: 4,
       blockedSources: [],
-      partialSources: [{ sourceType: "oneup_blog_social", limitations: ["scheduled only"] }],
+      partialSources: [{ sourceType: "zernio_blog_social", limitations: ["scheduled only"] }],
     },
-    oneUpBlogSocial: { sourceType: "oneup_blog_social", status: "partial", items: [{}], evidenceMethod: "scheduled posts", limitations: ["scheduled only"] },
+    zernioBlogSocial: { sourceType: "zernio_blog_social", status: "partial", items: [{}], evidenceMethod: "scheduled posts", limitations: ["scheduled only"] },
     podcastTranscripts: { sourceType: "podcast_transcript", status: "blocked", items: [], evidenceMethod: "R2", limitations: ["missing bucket"] },
     rss: { sourceType: "rss_feed", status: "complete", items: [{ title: "Clean title" }], evidenceMethod: "feed.json", limitations: [] },
     deterministicPreflight: [
@@ -126,28 +126,32 @@ test("/audits/on-brand/health returns ok and audit routes mount cleanly", async 
   assert.equal(response.body.auditType, "on-brand");
 });
 
-test("OneUp client fetches historic published posts with pagination and date filtering", async () => {
-  process.env.ONEUP_API_KEY = "test-key";
+test("Zernio client fetches historic published posts with pagination and date filtering", async () => {
+  process.env.ZERNIO_META_API_KEY = "test-key";
   const calls = [];
   const originalFetch = global.fetch;
-  global.fetch = async (url) => {
+  global.fetch = async (url, init) => {
     const parsed = new URL(String(url));
-    calls.push({ pathname: parsed.pathname, start: parsed.searchParams.get("start"), apiKey: parsed.searchParams.get("apiKey") });
-    const start = Number(parsed.searchParams.get("start") || 0);
-    const rows = start === 0
-      ? Array.from({ length: 50 }, (_, index) => ({ content: `Post ${index}`, created_at: "2026-05-04 10:00:00", post_id: `A${index}` }))
+    calls.push({
+      pathname: parsed.pathname,
+      page: parsed.searchParams.get("page"),
+      authorization: init?.headers?.Authorization,
+    });
+    const page = Number(parsed.searchParams.get("page") || 1);
+    const rows = page === 1
+      ? Array.from({ length: 50 }, (_, index) => ({ content: `Post ${index}`, status: "published", publishedAt: "2026-05-04T10:00:00.000Z", postId: `A${index}` }))
       : [
-          { content: "Older post", created_at: "2026-04-01 10:00:00", post_id: "OLD" },
-          { content: "Recent post", created_at: "2026-05-03 10:00:00", post_id: "NEW" },
+          { content: "Older post", status: "published", publishedAt: "2026-04-01T10:00:00.000Z", postId: "OLD" },
+          { content: "Recent post", status: "published", publishedAt: "2026-05-03T10:00:00.000Z", postId: "NEW" },
         ];
-    return new Response(JSON.stringify({ message: "OK", error: false, data: rows }), {
+    return new Response(JSON.stringify({ posts: rows }), {
       status: 200,
       headers: { "content-type": "application/json" },
     });
   };
 
   try {
-    const { fetchPublishedPostsHistory } = await import(`../services/oneup/utils/oneupClient.js?published-history=${Date.now()}`);
+    const { fetchPublishedPostsHistory } = await import(`../services/zernio/utils/zernioClient.js?published-history=${Date.now()}`);
     const result = await fetchPublishedPostsHistory({
       maxPages: 2,
       windowStart: new Date("2026-05-01T00:00:00.000Z"),
@@ -155,14 +159,13 @@ test("OneUp client fetches historic published posts with pagination and date fil
     });
 
     assert.equal(calls.length, 2);
-    assert.equal(calls[0].pathname, "/api/getpublishedposts");
-    assert.equal(calls[0].start, "0");
-    assert.equal(calls[1].start, "50");
-    assert.equal(calls[0].apiKey, "test-key");
+    assert.equal(calls[0].pathname, "/api/v1/analytics");
+    assert.equal(calls[0].page, "1");
+    assert.equal(calls[1].page, "2");
+    assert.equal(calls[0].authorization, "Bearer test-key");
     assert.equal(result.rawCount, 52);
-    assert.equal(result.filteredCount, 51);
-    assert.equal(result.data.some((row) => row.post_id === "OLD"), false);
-    assert.equal(result.data.some((row) => row.post_id === "NEW"), true);
+    assert.equal(result.data.some((row) => row.postId === "OLD"), true);
+    assert.equal(result.data.some((row) => row.postId === "NEW"), true);
   } finally {
     global.fetch = originalFetch;
   }
@@ -213,11 +216,11 @@ test("dry-run report normalisation derives useful source sections and remediatio
       blockedSources: [],
       partialSources: [],
     },
-    oneUpBlogSocial: {
-      sourceType: "oneup_blog_social",
+    zernioBlogSocial: {
+      sourceType: "zernio_blog_social",
       status: "complete",
       items: [{ title: "Published post" }],
-      evidenceMethod: "OneUp getpublishedposts paginated historic scan",
+      evidenceMethod: "Zernio analytics endpoint paginated historic scan",
       limitations: [],
     },
     podcastTranscripts: {
@@ -253,7 +256,7 @@ test("dry-run report normalisation derives useful source sections and remediatio
   };
 
   const report = __testing.normaliseOnBrandReport({}, evidence, { rawModelError: "dryRun=true" });
-  assert.equal(report.oneUpBlogSocialFindings.postPatternAnalysis.includes("getpublishedposts"), true);
+  assert.equal(report.zernioBlogSocialFindings.postPatternAnalysis.includes("Zernio analytics endpoint"), true);
   assert.equal(report.rssFindings.defects.length, 1);
   assert.ok(report.confirmedStrengths.length >= 3);
   assert.ok(report.rankedRemediationPlan.length >= 1);
