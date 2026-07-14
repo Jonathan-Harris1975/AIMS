@@ -2,7 +2,7 @@ import Parser from "rss-parser";
 import { fetchWithTimeout } from "../../shared/http-client.js";
 import { getObjectAsText } from "../../shared/utils/r2-client.js";
 import { debug, warn } from "../../../logger.js";
-import { hasRecentSocialSource } from "../../oneup/utils/state.js";
+import { hasRecentSocialSource } from "../../zernio/utils/state.js";
 import { hasRecentEditorialSource, hasBeenUsedCrossLaneToday } from "../../social/editorialLedger.js";
 import { getLaneRssEnvKey } from "../utils/shortLanes.js";
 

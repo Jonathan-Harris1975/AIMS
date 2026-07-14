@@ -26,7 +26,7 @@ import {
 import { DEFAULT_BLOTATO_SHORT_LANE, getShortLaneJobTypes, requireShortLaneConfig } from "./shortLanes.js";
 import { selectRssArticleForBlotato } from "./rssArticleSource.js";
 import { info, warn } from "../../../logger.js";
-import { recordUsedSocialSource } from "../../oneup/utils/state.js";
+import { recordUsedSocialSource } from "../../zernio/utils/state.js";
 import { buildBlotatoGateError, runBlotatoShortGate } from "./shortGate.js";
 import { runReviewCouncilGate, repairArtifactForReviewCouncil } from "../../content-quality/reviewCouncil.js";
 import { completeEditorialReservation, releaseEditorialReservation, reserveEditorialSource } from "../../social/editorialLedger.js";
