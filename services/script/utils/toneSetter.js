@@ -70,7 +70,7 @@ const LANE_PROFILES = Object.freeze({
       "Do not include calls to action, source plugs or metadata leakage",
     ],
   },
-  oneup: {
+  zernio: {
     identity: "Jonathan Harris, British AI author and podcast host",
     medium: "concise social posts for Facebook and Instagram",
     rules: [
@@ -158,8 +158,8 @@ export function buildRssPersona() {
   return buildToneSetter({ lane: "rss" });
 }
 
-export function buildOneUpPersona() {
-  return buildToneSetter({ lane: "oneup" });
+export function buildZernioPersona() {
+  return buildToneSetter({ lane: "zernio" });
 }
 
 export function buildBlotatoPersona() {
@@ -175,6 +175,6 @@ export default {
   buildBlogPersona,
   buildSocialBlogPersona,
   buildRssPersona,
-  buildOneUpPersona,
+  buildZernioPersona,
   buildBlotatoPersona,
 };
