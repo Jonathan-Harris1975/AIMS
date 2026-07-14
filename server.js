@@ -385,7 +385,7 @@ export function startServer(port = PORT, host = "0.0.0.0") {
         "/outreach",
         "/blog",
         "/cloudflare",
-        "/oneup",
+        "/zernio",
         "/audits",
       ],
     });

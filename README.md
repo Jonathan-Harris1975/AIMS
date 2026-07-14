@@ -10,7 +10,7 @@ AIMS is the production orchestration API for content, podcast, outreach, social 
 
 - Podcast composition, TTS, artwork, metadata and publishing workflows.
 - Blog, RSS and social-content generation with brand and quarantine gates.
-- OneUp and Blotato publishing lanes.
+- Zernio and Blotato publishing lanes.
 - Outreach processing and repository/audit dispatch.
 - Durable operational state in Cloudflare R2.
 - Operational health and warm-up endpoints consumed by HIVE.
