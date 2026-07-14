@@ -34,7 +34,7 @@ export {
  *
  * @example
  * runValidators({
- *   source: "oneup-daily-monday",
+ *   source: "zernio-daily-monday",
  *   text: post.content,
  *   antiHype: {},
  *   brand: {},

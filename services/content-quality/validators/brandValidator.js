@@ -4,10 +4,10 @@
 // Modular wrapper around the existing brand-lexicon checks (British
 // spelling, banned promo patterns, motivational tone, engagement bait,
 // generic/motivational hashtags) so any pipeline stage — not just the
-// OneUp social gate — can run the same brand checks consistently.
+// Zernio social gate — can run the same brand checks consistently.
 //
-// This does not change the behaviour of the existing OneUp gate
-// (runOneUpSocialGate in socialScheduler.js keeps its own inline checks for
+// This does not change the behaviour of the existing Zernio gate
+// (runZernioSocialGate in socialScheduler.js keeps its own inline checks for
 // backwards compatibility); it gives new and future call sites a single
 // reusable entry point instead of re-implementing the same regex sweeps.
 // ============================================================

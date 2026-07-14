@@ -6,7 +6,7 @@
 // BANNED_PROMO_PATTERNS/hedging-phrase lists, per audit findings OB-002,
 // OB-010, BSC-OB-003.
 //
-// Modular by design: this validator can be called from the OneUp social
+// Modular by design: this validator can be called from the Zernio social
 // gate, the RSS rewrite pipeline, or the podcast script gate without any of
 // them needing to know about each other.
 // ============================================================
