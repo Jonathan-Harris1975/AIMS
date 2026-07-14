@@ -87,6 +87,6 @@ Feeds TTS orchestration, podcast pipeline and podcast RSS metadata. Uses shared 
 
 ## Ecosystem tone governor
 
-`utils/toneSetter.js` is the shared editorial governor for AIMS. It exposes lane-aware profiles for podcast narration, podcast metadata, podcast artwork direction, weekly blog, social blog, RSS, OneUp and Blotato.
+`utils/toneSetter.js` is the shared editorial governor for AIMS. It exposes lane-aware profiles for podcast narration, podcast metadata, podcast artwork direction, weekly blog, social blog, RSS, Zernio and Blotato.
 
 Podcast intro, main segments, main synthesis, outro, final editorial pass, metadata, SEO keywords and artwork-prompt generation all use the shared tone setter. Format-specific prompts may narrow the output contract but do not replace the common voice rules.
