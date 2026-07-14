@@ -74,7 +74,7 @@ Fetches configured feed sources, rewrites eligible items through OpenRouter, app
 
 ## Connections to other services
 
-Feeds blog publishing, OneUp RSS context and RSS short-link creation.
+Feeds blog publishing, Zernio RSS context and RSS short-link creation.
 
 
 ## Empty-batch rotation
