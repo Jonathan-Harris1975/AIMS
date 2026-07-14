@@ -38,7 +38,7 @@ function booleanEnvFromValue(value, fallback = false) {
 }
 
 const SERVICE_ENV_HINTS = {
-  oneup: ["ONEUP_API_KEY"],
+  zernio: ["ZERNIO_META_API_KEY"],
   blotato: ["BLOTATO_API_KEY"],
   audits: ["R2_BUCKET_AUDITS", "R2_PUBLIC_BASE_URL_AUDITS"],
   podcast: ["R2_BUCKET_PODCAST"],

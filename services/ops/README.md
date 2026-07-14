@@ -38,7 +38,7 @@ The service is intentionally small. It does not run the heavy job, call external
 
 - `AIMS_OPS_PREFLIGHT_STRICT`
 - Service hints currently checked by code:
-  - `ONEUP_API_KEY`
+  - `ZERNIO_META_API_KEY`
   - `BLOTATO_API_KEY`
   - `R2_BUCKET_AUDITS`
   - `R2_PUBLIC_BASE_URL_AUDITS`
