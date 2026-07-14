@@ -183,22 +183,22 @@ const optionalTimeString = z
   .trim()
   .regex(/^\d{2}:\d{2}$/, "must be HH:MM")
   .optional();
-const oneupSocialNetworkIdSchema = z.union([z.string().trim().min(1).max(400), z.array(z.string().trim().min(1).max(200)).min(1)]).optional();
+const zernioAccountIdSchema = z.union([z.string().trim().min(1).max(400), z.array(z.string().trim().min(1).max(200)).min(1)]).optional();
 
-export const oneupDailyBodySchema = z
+export const zernioDailyBodySchema = z
   .object({
     publishDate: optionalIsoDate,
     scheduledDateTime: optionalScheduledDateTime,
     dryRun: booleanish.optional(),
-    categoryName: z.string().trim().min(1).max(120).optional(),
+    profileName: z.string().trim().min(1).max(120).optional(),
     // Opt-in: when provided, buildAndScheduleDailyLaneAccountVariants schedules
     // the canonical post to the first entry, then an automatically varied
     // copy of it to each remaining account/category.
-    categoryNames: z.union([
+    profileNames: z.union([
       z.string().trim().min(1).max(120),
       z.array(z.string().trim().min(1).max(120)).min(1).max(10),
     ]).optional(),
-    socialNetworkId: oneupSocialNetworkIdSchema,
+    accountId: zernioAccountIdSchema,
     imageUrl: z.string().trim().url().optional(),
     buildContext: z.string().trim().max(2000).optional(),
     apiKey: z.string().trim().min(1).max(200).optional(),
@@ -213,25 +213,25 @@ export const oneupDailyBodySchema = z
   .passthrough()
   .transform((value) => ({
     ...value,
-    socialNetworkId: Array.isArray(value.socialNetworkId)
-      ? JSON.stringify(value.socialNetworkId)
-      : value.socialNetworkId,
-    categoryNames: Array.isArray(value.categoryNames)
-      ? value.categoryNames
-      : typeof value.categoryNames === "string"
-        ? value.categoryNames.split(/[,;]/g).map((item) => item.trim()).filter(Boolean)
-        : value.categoryNames,
+    accountId: Array.isArray(value.accountId)
+      ? JSON.stringify(value.accountId)
+      : value.accountId,
+    profileNames: Array.isArray(value.profileNames)
+      ? value.profileNames
+      : typeof value.profileNames === "string"
+        ? value.profileNames.split(/[,;]/g).map((item) => item.trim()).filter(Boolean)
+        : value.profileNames,
   }));
 
-export const oneupQuizBodySchema = z
+export const zernioQuizBodySchema = z
   .object({
     questionPublishDate: optionalIsoDate,
     answerPublishDate: optionalIsoDate,
     questionScheduledDateTime: optionalScheduledDateTime,
     answerScheduledDateTime: optionalScheduledDateTime,
     dryRun: booleanish.optional(),
-    categoryName: z.string().trim().min(1).max(120).optional(),
-    socialNetworkId: oneupSocialNetworkIdSchema,
+    profileName: z.string().trim().min(1).max(120).optional(),
+    accountId: zernioAccountIdSchema,
     questionImageUrl: z.string().trim().url().optional(),
     answerImageUrl: z.string().trim().url().optional(),
     apiKey: z.string().trim().min(1).max(200).optional(),
@@ -239,13 +239,13 @@ export const oneupQuizBodySchema = z
   .passthrough()
   .transform((value) => ({
     ...value,
-    socialNetworkId: Array.isArray(value.socialNetworkId)
-      ? JSON.stringify(value.socialNetworkId)
-      : value.socialNetworkId,
+    accountId: Array.isArray(value.accountId)
+      ? JSON.stringify(value.accountId)
+      : value.accountId,
   }));
 
 
-const oneupEbookFeaturedBookSchema = z
+const zernioEbookFeaturedBookSchema = z
   .object({
     title: z.string().trim().min(1).max(300),
     shortDescription: z.string().trim().max(2000).optional(),
@@ -265,14 +265,14 @@ const oneupEbookFeaturedBookSchema = z
   })
   .passthrough();
 
-export const oneupEbookWeeklyBodySchema = z
+export const zernioEbookWeeklyBodySchema = z
   .object({
     weekStartDate: optionalIsoDate,
     dryRun: booleanish.optional(),
-    categoryName: z.string().trim().min(1).max(120).optional(),
-    socialNetworkId: oneupSocialNetworkIdSchema,
+    profileName: z.string().trim().min(1).max(120).optional(),
+    accountId: zernioAccountIdSchema,
     imageUrl: z.string().trim().url().optional(),
-    featuredBook: oneupEbookFeaturedBookSchema.optional(),
+    featuredBook: zernioEbookFeaturedBookSchema.optional(),
     usePodcastFeaturedBook: booleanish.optional(),
     publishTimes: z
       .object({
@@ -298,12 +298,12 @@ export const oneupEbookWeeklyBodySchema = z
   .passthrough()
   .transform((value) => ({
     ...value,
-    socialNetworkId: Array.isArray(value.socialNetworkId)
-      ? JSON.stringify(value.socialNetworkId)
-      : value.socialNetworkId,
+    accountId: Array.isArray(value.accountId)
+      ? JSON.stringify(value.accountId)
+      : value.accountId,
   }));
 
-export const oneupPublishedHistoryBodySchema = z
+export const zernioPublishedHistoryBodySchema = z
   .object({
     start: z.coerce.number().int().min(0).max(100000).optional().default(0),
     maxPages: z.coerce.number().int().min(1).max(20).optional().default(4),
@@ -333,7 +333,7 @@ export const onBrandAuditRunBodySchema = z
   .object({
     sessionId: optionalSessionId,
     lookbackDays: z.coerce.number().int().min(1).max(31).optional().default(7),
-    includeOneUp: booleanish.optional().default(true),
+    includeZernio: booleanish.optional().default(true),
     includePodcastTranscripts: booleanish.optional().default(true),
     includeRss: booleanish.optional().default(true),
     runPodcastWebsiteReports: booleanish.optional().default(true),

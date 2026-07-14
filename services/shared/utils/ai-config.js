@@ -145,9 +145,9 @@ export const aiConfig = {
     blogSocial: routeChain(["summary", "fast", "standard", "fallback"], ["google25FlashLite", "chatgptMini5", "deepseekV4Flash"]),
     onBrandAudit: routeChain(["audit", "highQuality", "standard", "fallback"], ["anthropic46", "google25FlashLite", "chatgptMini5", "deepseekV4Pro", "deepseekV4Flash", "meta"]),
     auditForensic: routeChain(["audit", "highQuality", "standard", "fallback"], ["anthropic46", "google25FlashLite", "chatgptMini5", "deepseekV4Pro", "deepseekV4Flash", "meta"]),
-    oneupDaily: routeChain(["fast", "standard", "fallback"], ["chatgptMini5", "google25FlashLite", "deepseekV4Flash"]),
-    oneupQuiz: routeChain(["fast", "standard", "fallback"], ["chatgptMini5", "google25FlashLite", "deepseekV4Flash"]),
-    oneupEbook: routeChain(["fast", "standard", "fallback"], ["chatgptMini5", "google25FlashLite", "deepseekV4Pro"]),
+    zernioDaily: routeChain(["fast", "standard", "fallback"], ["chatgptMini5", "google25FlashLite", "deepseekV4Flash"]),
+    zernioQuiz: routeChain(["fast", "standard", "fallback"], ["chatgptMini5", "google25FlashLite", "deepseekV4Flash"]),
+    zernioEbook: routeChain(["fast", "standard", "fallback"], ["chatgptMini5", "google25FlashLite", "deepseekV4Pro"]),
     // Blotato script quality is production-critical. highQuality sits above standard so Claude 4.6
     // is the first fallback after the dedicated blotatoScript provider, not gpt-5-mini.
     // deepseekV4Pro is last-resort; do not fall back to the ultra-cheap fast lane by default.
