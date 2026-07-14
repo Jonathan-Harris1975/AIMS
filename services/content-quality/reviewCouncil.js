@@ -85,11 +85,11 @@ export const REVIEW_COUNCILS = Object.freeze({
       "Publishing Readiness Chair",
     ],
   },
-  "oneup-social-copy": {
-    env: "REVIEW_COUNCIL_ONEUP_SOCIAL_ENABLED",
+  "zernio-social-copy": {
+    env: "REVIEW_COUNCIL_ZERNIO_SOCIAL_ENABLED",
     defaultEnabled: true,
     members: [
-      "OneUp Copy Editor",
+      "Zernio Copy Editor",
       "Brand Safety Reviewer",
       "CTA Reviewer",
       "British English Reviewer",
@@ -230,7 +230,7 @@ export function repairArtifactForReviewCouncil(artifact, options = {}) {
   return deepRepairStrings(cloneJson(artifact), options);
 }
 
-export function repairOneUpPostForReviewCouncil(post = {}, { contentType = "oneup-social", featuredBook = null } = {}) {
+export function repairZernioPostForReviewCouncil(post = {}, { contentType = "zernio-social", featuredBook = null } = {}) {
   const repaired = repairArtifactForReviewCouncil(post, { contentType, maxHashtags: /ebook/i.test(contentType) ? 3 : 3 });
   if (featuredBook?.title && featuredBook?.bookUrl && /ebook/i.test(contentType)) {
     const firstComment = String(repaired.firstComment || "");
@@ -347,7 +347,7 @@ export default {
   getReviewCouncilMembers,
   repairTextForReviewCouncil,
   repairArtifactForReviewCouncil,
-  repairOneUpPostForReviewCouncil,
+  repairZernioPostForReviewCouncil,
   runReviewCouncilGate,
   buildHousekeepingPlan,
 };
