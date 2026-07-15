@@ -28,6 +28,7 @@ Mounted at `/zernio` (see `../../routes/index.js`):
 - `POST /zernio/setup/check` — validates profile/account/platform targeting without posting.
 - `POST /zernio/posts/history` — historic published-post scan via the Zernio analytics endpoint.
 - `POST /zernio/daily/:laneKey` — one route per day-of-week lane in `LANE_CONFIG`.
+- `POST /zernio/blog-rss/daily` — reposts the newest unused item from the blog service's public social RSS feed (see below).
 - `POST /zernio/ebooks/weekly`
 - `POST /zernio/quiz/weekly`
 - `GET /zernio/jobs/:lane/:sessionId` — async job status (Hookdeck-backed routes).
@@ -58,12 +59,34 @@ rather than inventing an endpoint or field:
   from the analytics endpoint, so both the queue-duplication guard and the
   historic published-post scan (`fetchPublishedPostsHistory`) go through
   `GET /v1/analytics`.
+- **No native RSS import.** Zernio has no way to pull content from an RSS
+  feed on its own, so the blog daily-briefing repost lane (below) fetches
+  and parses the feed on the AIMS side instead.
+
+## Blog daily briefing repost (`/zernio/blog-rss/daily`)
+
+Zernio doesn't support posting directly from an RSS feed, so this lane
+fetches the blog service's own public "social media blog" RSS feed —
+`https://blog-rss.jonathan-harris.online/social-media-blog/feed.xml` (or
+`ZERNIO_BLOG_RSS_FEED_URL`) — over plain HTTP, picks the newest item not
+already posted (tracked via `hasRecentSocialSource`/`recordUsedSocialSource`
+in `utils/state.js`), and schedules it to Zernio using the item's own
+title, social caption, link, and image. This is read-only against the blog
+service: `services/blog` (and its RSS/R2 internals) are never imported,
+called, or modified by this lane — only the public feed URL is fetched.
+
+Unlike the other daily lanes, this content is not AI-generated — the blog
+service already writes each feed item's caption for social use — so this
+lane skips prompt generation and the review-council gate and posts the feed
+item close to verbatim (with hashtags derived from the feed's `<category>`
+tags and the article link appended).
 
 ## Files
 
 - `utils/zernioClient.js` — REST client for the documented Zernio endpoints (profiles, accounts, posts, analytics).
 - `utils/config.js` — env-driven configuration and lane schedule.
-- `utils/socialScheduler.js` — content generation + Zernio scheduling for daily lanes, the weekly quiz, and the weekly ebook promo.
+- `utils/socialScheduler.js` — content generation + Zernio scheduling for daily lanes, the weekly quiz, the weekly ebook promo, and the blog RSS repost.
+- `utils/blogRssFeed.js` — fetches and parses the blog service's public social RSS feed over HTTP.
 - `utils/state.js` — local slot-claim ledger (duplicate/idempotency guard independent of the Zernio API).
 - `utils/prompts.js`, `utils/date.js`, `utils/feedContext.js`, `utils/ebookCatalogue.js`, `utils/featuredBook.js` — supporting utilities, migrated unchanged in behaviour from the former `services/oneup`.
 - `routes/social.js`, `routes/index.js`, `index.js` — Express routes.
