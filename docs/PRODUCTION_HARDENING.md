@@ -4,7 +4,7 @@
 **Last reviewed:** 3 July 2026
 
 This document covers the production-hardening work carried out against the
-future-facing recommendations from the OneUp scheduler, on-brand content,
+future-facing recommendations from the Zernio scheduler, on-brand content,
 and podcast-pipeline audits. Every change here is additive: existing
 modules, request shapes and environment variables keep working unchanged
 unless explicitly noted.
@@ -17,8 +17,8 @@ change env vars to keep its current behaviour:
 
 | Threshold | Env var | Default | Used by |
 |---|---|---:|---|
-| Dedupe window (hours) | `ONEUP_CROSSPOST_DEDUPE_HOURS` | 48 | OneUp scheduler content-hash dedupe |
-| Queue guard lookback pages | `ONEUP_QUEUE_GUARD_LOOKBACK_PAGES` | 2 | OneUp scheduler duplicate scan |
+| Dedupe window (hours) | `ZERNIO_CROSSPOST_DEDUPE_HOURS` | 48 | Zernio scheduler content-hash dedupe |
+| Queue guard lookback pages | `ZERNIO_QUEUE_GUARD_LOOKBACK_PAGES` | 2 | Zernio scheduler duplicate scan |
 | Anti-hype max flagged share | `VALIDATOR_ANTI_HYPE_MAX_FLAGGED_SHARE` | 0.03 | Anti-hype validator (reporting target, not a hard gate) |
 | Entity min words for check | `VALIDATOR_ENTITY_MIN_WORDS_FOR_CHECK` | 40 | Entity validator |
 | Entity min count | `VALIDATOR_ENTITY_MIN_COUNT` | 1 | Entity validator |
@@ -63,7 +63,7 @@ or via the barrel `services/content-quality/validators/index.js`:
 - **`antiHypeValidator.js`** — flags the existing banned-promo/hedging
   phrase lists plus a new grouped generic-abstraction list ("landscape",
   "revolution", "paradigm", "game-changer", "transform", "unprecedented").
-  Wired into the OneUp social gate (`runOneUpSocialGate`) and the RSS
+  Wired into the Zernio social gate (`runZernioSocialGate`) and the RSS
   rewrite pipeline's banned-phrase retry.
 - **`entityValidator.js`** — lightweight, dependency-free named-entity
   heuristic (`extractNamedEntities`) used to catch summaries that dropped
@@ -82,20 +82,20 @@ or via the barrel `services/content-quality/validators/index.js`:
 - **`brandValidator.js`** — reusable wrapper around the existing brand
   lexicon checks (British spelling, banned promo patterns, motivational
   tone, engagement bait, hashtag rules) for any pipeline stage that isn't
-  the OneUp gate.
+  the Zernio gate.
 
 **Extension point:** add a new validator file to this directory and
 re-export it from `index.js`. Compose validators for a given call site with
 `runValidators({ source, text, antiHype: {}, brand: {} })` rather than
 importing every validator directly.
 
-## 4. Scheduler improvements (`services/oneup/utils/socialScheduler.js`)
+## 4. Scheduler improvements (`services/zernio/utils/socialScheduler.js`)
 
 - **Content hash dedupe** — unchanged mechanism (`contentHash` + queue scan),
   now sourced from `config/thresholds.js` instead of an inline env read.
 - **Configurable duplicate window** — `hasLikelyDuplicate()` accepts a
   per-call `windowHours` override; requests can pass `dedupeWindowHours` to
-  `POST /oneup/daily/:laneKey`.
+  `POST /zernio/daily/:laneKey`.
 - **`allowDuplicate` override** — explicit, documented field
   (`post.allowDuplicate`, request body `allowDuplicate`). `crosspost` is
   kept as a backwards-compatible alias. Every duplicate check now emits a
@@ -108,7 +108,7 @@ importing every validator directly.
   reworded variant (`buildAccountVariant()` in `prompts.js`) with
   `allowDuplicate: true`, since the cross-post is intentional and tracked.
   Existing single-account callers are unaffected.
-- **QA event logging** — the OneUp gate (`runOneUpSocialGate`) now emits a
+- **QA event logging** — the Zernio gate (`runZernioSocialGate`) now emits a
   `scheduler.gate.*` QA event whenever it finds defects, in addition to its
   existing return value.
 
@@ -122,7 +122,7 @@ importing every validator directly.
   only replaces the summary if it measurably improves entity coverage,
   otherwise the original stands.
 - **Account-specific prompt variation** — `buildAccountVariant()` in
-  `services/oneup/utils/prompts.js` (deterministic, no extra LLM call).
+  `services/zernio/utils/prompts.js` (deterministic, no extra LLM call).
 
 ## 6. Podcast pipeline
 
@@ -146,7 +146,7 @@ importing every validator directly.
 
 ## 7. Request schema additions (`services/shared/utils/requestSchemas.js`)
 
-`oneupDailyBodySchema` gained, all optional and backwards compatible:
+`zernioDailyBodySchema` gained, all optional and backwards compatible:
 
 - `categoryNames` — string or array of 1-10 account/category names.
 - `allowDuplicate` — explicit duplicate-window override.

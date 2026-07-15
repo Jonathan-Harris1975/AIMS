@@ -38,7 +38,7 @@ AIMS runs as one non-root Koyeb Web Service with durable R2-backed state and fai
 | GitHub audit dispatch | `GITHUB_TOKEN_WEBSITE_AUDITS` |
 | Cloudflare purge | `CF_zone`/`CLOUDFLARE_ZONE_ID`, `CF_purge`/`CLOUDFLARE_PURGE_API_TOKEN`, optionally `CLOUDFLARE_PURGE_SHARED_SECRET` for webhook callers |
 | Blotato | `Blotato_API_key`, optionally `BLOTATO_PUBLISH_WEBHOOK_SECRET` for scheduler hooks |
-| OneUp | `ONEUP_API_KEY` |
+| Zernio | `ZERNIO_META_API_KEY` |
 | Zernio | `ZERNIO_API_KEY_META`, `ZERNIO_API_KEY_VIDEO` where monthly reports are enabled |
 | Podcast/TTS | AWS/Polly credentials and podcast-index credentials where those lanes are enabled |
 | Outreach | Apollo, Hunter, SERP, URLScan and ZeroBounce keys where outreach is enabled |
@@ -92,7 +92,7 @@ curl -fsS -H "Authorization: Bearer $AIMS_API_KEY" https://<aims-service>/ops/ex
 1. Roll back to the last known-good Koyeb deployment image or Git commit.
 2. Keep the same R2 state buckets unless state corruption is the cause.
 3. Re-run `/readyz` and `/ops/health`.
-4. Check Blotato, OneUp, audit dispatch and outreach queues for duplicate side effects before replay.
+4. Check Blotato, Zernio, audit dispatch and outreach queues for duplicate side effects before replay.
 5. Record the rollback in the production evidence report.
 
 Deployment notification and recovery details are in [`OPERATIONAL_ALERTING.md`](OPERATIONAL_ALERTING.md).

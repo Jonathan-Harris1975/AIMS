@@ -45,5 +45,5 @@ This pass hardened AIMS around the areas most likely to be challenged by senior 
 - Authenticated `/ops/health` and `/ops/excellence` against the live service.
 - Live R2 read/write/list/delete against production buckets.
 - Live OpenRouter provider routing and fallback with production API key.
-- Live Blotato, OneUp, Zernio, Cloudflare purge, GitHub audit dispatch and podcast/TTS credentials where those lanes are enabled.
+- Live Blotato, Zernio, Cloudflare purge, GitHub audit dispatch and podcast/TTS credentials where those lanes are enabled.
 - Docker build/run in GitHub Actions or another Docker-capable runner.

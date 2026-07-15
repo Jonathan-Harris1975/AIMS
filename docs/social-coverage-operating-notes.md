@@ -8,7 +8,7 @@ _Last updated: 2026-05-30_
 
 ## LinkedIn
 
-LinkedIn is not required for the current Jonathan Harris social automation setup. Do not add LinkedIn to the required OneUp network list or Blotato default channel list unless a future review explicitly changes the channel strategy.
+LinkedIn is not required for the current Jonathan Harris social automation setup. Do not add LinkedIn to the required Zernio platform list or Blotato default channel list unless a future review explicitly changes the channel strategy.
 
 ## Weekend Blotato coverage
 
