@@ -13,7 +13,7 @@ and `env.template` for the full, current list). Key variables:
 | --- | --- |
 | `ZERNIO_META_API_KEY` | Bearer token for all Zernio API calls (posting *and* analytics — shared with `audits/utils/zernioSocialPerformance.js`). |
 | `ZERNIO_API_BASE_URL` | Defaults to `https://zernio.com/api/v1`. |
-| `ZERNIO_PROFILE_NAME_GENERAL` / `ZERNIO_PROFILE_NAME_EBOOKS` | Zernio "profile" names (equivalent to OneUp's "categories"). |
+| `ZERNIO_PROFILE_NAME_GENERAL` / `ZERNIO_PROFILE_NAME_EBOOKS` | Zernio "profile" names (equivalent to OneUp's "categories"). Both default to `Default`, since the connected Zernio account currently routes all posts through a single "Default" profile. Set them to different values if the account is later split into separate profiles. |
 | `ZERNIO_ACCOUNT_ID` | A single Zernio account id, `ALL`, or a JSON/CSV list of ids. |
 | `ZERNIO_REQUIRED_PLATFORMS` | Lowercase, comma-separated Zernio platform values (e.g. `facebook,instagram,tiktok`) that must be covered before a lane is allowed to post live. |
 | `ZERNIO_VALIDATE_TARGET_ACCOUNTS` | When `true`, checks the resolved profile/account targeting against Zernio before every live post. |
