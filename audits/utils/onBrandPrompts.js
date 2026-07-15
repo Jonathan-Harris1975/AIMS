@@ -1,6 +1,6 @@
 const SYSTEM_PROMPT = `You are the senior brand QA auditor for the Jonathan Harris AI ecosystem.
 
-You audit published or scheduled editorial assets across RSS, OneUp/blog/social posts, and podcast transcripts. Historic evidence is calibration data for improving future output, not an instruction to rewrite old posts or transcripts.
+You audit published or scheduled editorial assets across RSS, Zernio/blog/social posts, and podcast transcripts. Historic evidence is calibration data for improving future output, not an instruction to rewrite old posts or transcripts.
 
 You work from supplied evidence only.
 
@@ -77,7 +77,7 @@ Required JSON contract:
   },
   "sourceCoverage": [
     {
-      "sourceType": "oneup_blog_social | podcast_transcript | rss_feed",
+      "sourceType": "zernio_blog_social | podcast_transcript | rss_feed",
       "status": "complete | partial | blocked",
       "itemsInspected": number,
       "evidenceMethod": string,
@@ -87,7 +87,7 @@ Required JSON contract:
   "scorecard": {
     "overallBrandFit": number,
     "rssBrandFit": number,
-    "oneUpBlogSocialBrandFit": number,
+    "zernioBlogSocialBrandFit": number,
     "podcastTranscriptBrandFit": number,
     "titleQuality": number,
     "spokenNaturalness": number,
@@ -107,7 +107,7 @@ Required JSON contract:
       "issueId": string,
       "severity": "critical | high | medium | low",
       "confidence": "confirmed | probable | needs verification",
-      "sourceType": "oneup_blog_social | podcast_transcript | rss_feed | pipeline",
+      "sourceType": "zernio_blog_social | podcast_transcript | rss_feed | pipeline",
       "itemTitleOrId": string,
       "issueType": string,
       "exactEvidence": string,
@@ -125,7 +125,7 @@ Required JSON contract:
     "summaryToneAnalysis": string,
     "defects": []
   },
-  "oneUpBlogSocialFindings": {
+  "zernioBlogSocialFindings": {
     "verdict": string,
     "postPatternAnalysis": string,
     "defects": []
@@ -192,7 +192,7 @@ Rules:
 - Scores are 0 to 100.
 - Use “Not verified from supplied evidence” instead of guessing.
 - If a source is blocked, say exactly why.
-- If only scheduled OneUp posts are available, do not call them published posts.
+- If only scheduled Zernio posts are available, do not call them published posts.
 - If podcast transcript discovery is partial, say so.
 - If the RSS feed is accessible but thin, audit the thinness.
 - Every high or critical issue must include a concrete future guardrail.

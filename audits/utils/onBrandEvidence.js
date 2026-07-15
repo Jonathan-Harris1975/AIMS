@@ -1,14 +1,14 @@
 import { XMLParser } from "fast-xml-parser";
-import { fetchPublishedPostsHistory } from "../../services/oneup/utils/oneupClient.js";
+import { fetchPublishedPostsHistory } from "../../services/zernio/utils/zernioClient.js";
 import * as r2Client from "../../services/shared/utils/r2-client.js";
 import { RSS_PROMPTS } from "../../services/rss-feed-creator/utils/rss-prompts.js";
 import { buildOnBrandSkillPreflightFindings } from "./seoGeoSkillLenses.js";
 
 const REPO_FILES_INSPECTED = [
-  "services/oneup/utils/oneupClient.js",
-  "services/oneup/utils/socialScheduler.js",
-  "services/oneup/utils/state.js",
-  "services/oneup/routes/social.js",
+  "services/zernio/utils/zernioClient.js",
+  "services/zernio/utils/socialScheduler.js",
+  "services/zernio/utils/state.js",
+  "services/zernio/routes/social.js",
   "services/script/routes/composeScript.js",
   "services/script/utils/generateTranscriptHtml.js",
   "services/podcast/",
@@ -190,31 +190,37 @@ function inWindow(date, windowStart, windowEnd) {
   return date.getTime() >= windowStart.getTime() && date.getTime() <= windowEnd.getTime();
 }
 
-function normaliseOneUpRow(row = {}, sourceMethod = "OneUp API") {
+// LIMITATION (see migration notes): Zernio's documented analytics/posts
+// listing does not expose a per-post title, first-comment, or profile/category
+// name the way OneUp's getpublishedposts did — only content, status,
+// scheduledFor/publishedAt, and per-platform analytics rows. Fields with no
+// documented Zernio equivalent are left blank rather than guessed.
+function normaliseZernioRow(row = {}, sourceMethod = "Zernio API") {
   const when = sourceDate(row);
+  const firstPlatform = Array.isArray(row.platformAnalytics) ? row.platformAnalytics[0] : null;
   return {
-    title: cleanText(row.title || row.post_title || row.name || row.category_name || ""),
-    topic: cleanText(row.topic || row.category_name || row.category || ""),
-    content: cleanText(row.content || row.post || row.caption || row.message || ""),
-    firstComment: cleanText(row.first_comment || row.firstComment || row.comment || ""),
-    platform: cleanText(row.platform || row.social_network || row.social_network_name || ""),
-    account: cleanText(row.account || row.account_name || row.social_account || row.social_network_username || row.email || ""),
-    status: cleanText(row.status || row.post_status || "published"),
-    postId: cleanText(row.post_id || row.id || ""),
-    sourceUrl: cleanText(row.source_url || row.url || row.link || ""),
-    imageUrl: cleanText(row.content_image || row.image_url || row.imageUrl || ""),
-    scheduledOrPublishedAt: when ? toIso(when) : cleanText(row.created_at || row.date_time || row.scheduled_date_time || ""),
+    title: "",
+    topic: "",
+    content: cleanText(row.content || ""),
+    firstComment: "",
+    platform: cleanText(row.platform || firstPlatform?.platform || ""),
+    account: cleanText(firstPlatform?.accountUsername || firstPlatform?.accountId || ""),
+    status: cleanText(row.status || "published"),
+    postId: cleanText(row.postId || ""),
+    sourceUrl: cleanText(row.platformPostUrl || firstPlatform?.platformPostUrl || ""),
+    imageUrl: "",
+    scheduledOrPublishedAt: when ? toIso(when) : cleanText(row.publishedAt || row.scheduledFor || ""),
     sourceMethod,
     rawMetadata: compactObject(row, 2500),
   };
 }
 
-export async function collectOneUpEvidence({ include, windowStart, windowEnd, lookbackDays, maxPages = 4 } = {}) {
+export async function collectZernioEvidence({ include, windowStart, windowEnd, lookbackDays, maxPages = 4 } = {}) {
   if (!include) {
-    return { sourceType: "oneup_blog_social", status: "blocked", items: [], evidenceMethod: "disabled by request", limitations: ["includeOneUp was false."] };
+    return { sourceType: "zernio_blog_social", status: "blocked", items: [], evidenceMethod: "disabled by request", limitations: ["includeZernio was false."] };
   }
-  if (!process.env.ONEUP_API_KEY) {
-    return { sourceType: "oneup_blog_social", status: "blocked", items: [], evidenceMethod: "OneUp API not called", limitations: ["ONEUP_API_KEY is not configured, so OneUp evidence could not be retrieved."] };
+  if (!process.env.ZERNIO_META_API_KEY) {
+    return { sourceType: "zernio_blog_social", status: "blocked", items: [], evidenceMethod: "Zernio API not called", limitations: ["ZERNIO_META_API_KEY is not configured, so Zernio evidence could not be retrieved."] };
   }
 
   try {
@@ -226,17 +232,17 @@ export async function collectOneUpEvidence({ include, windowStart, windowEnd, lo
     });
 
     const rows = Array.isArray(result?.data) ? result.data : [];
-    const posts = rows.map((row) => normaliseOneUpRow(row, "OneUp getpublishedposts historic published-post endpoint"));
+    const posts = rows.map((row) => normaliseZernioRow(row, "Zernio analytics historic published-post listing"));
 
     return {
-      sourceType: "oneup_blog_social",
+      sourceType: "zernio_blog_social",
       status: "complete",
       items: posts,
-      evidenceMethod: `OneUp getpublishedposts paginated historic scan for the previous ${lookbackDays} day(s).`,
+      evidenceMethod: `Zernio analytics paginated historic scan for the previous ${lookbackDays} day(s).`,
       limitations: [
-        ...(posts.length ? [] : ["OneUp getpublishedposts returned no rows inside the requested lookback window."]),
+        ...(posts.length ? [] : ["Zernio analytics returned no rows inside the requested lookback window."]),
         ...(Number(result?.unknownDateCount || 0) > 0
-          ? [`${Number(result.unknownDateCount)} OneUp row(s) had no parseable published date and were retained rather than silently discarded.`]
+          ? [`${Number(result.unknownDateCount)} Zernio row(s) had no parseable published date and were retained rather than silently discarded.`]
           : []),
       ],
       pagination: {
@@ -248,11 +254,11 @@ export async function collectOneUpEvidence({ include, windowStart, windowEnd, lo
     };
   } catch (error) {
     return {
-      sourceType: "oneup_blog_social",
+      sourceType: "zernio_blog_social",
       status: "blocked",
       items: [],
-      evidenceMethod: "OneUp getpublishedposts historic scan failed",
-      limitations: [error?.message || "OneUp evidence retrieval failed."],
+      evidenceMethod: "Zernio analytics historic scan failed",
+      limitations: [error?.message || "Zernio evidence retrieval failed."],
     };
   }
 }
@@ -696,10 +702,10 @@ function checkTranscript(findings, item = {}) {
 
 export function runDeterministicPreflight(evidence) {
   const findings = [];
-  for (const item of evidence?.oneUpBlogSocial?.items || []) {
-    const id = item.title || item.topic || item.scheduledOrPublishedAt || "OneUp post";
-    checkTitle(findings, { title: item.title, sourceType: "oneup_blog_social", itemTitleOrId: id });
-    checkText(findings, { text: `${item.content}\n${item.firstComment}`, sourceType: "oneup_blog_social", itemTitleOrId: id, field: "post" });
+  for (const item of evidence?.zernioBlogSocial?.items || []) {
+    const id = item.title || item.topic || item.scheduledOrPublishedAt || "Zernio post";
+    checkTitle(findings, { title: item.title, sourceType: "zernio_blog_social", itemTitleOrId: id });
+    checkText(findings, { text: `${item.content}\n${item.firstComment}`, sourceType: "zernio_blog_social", itemTitleOrId: id, field: "post" });
   }
   for (const item of evidence?.rss?.items || []) {
     const id = item.title || item.guid || item.link || "RSS item";
@@ -731,13 +737,13 @@ export async function collectOnBrandEvidence(options = {}) {
   const windowEnd = options.windowEnd ? new Date(options.windowEnd) : new Date();
   const windowStart = options.windowStart ? new Date(options.windowStart) : new Date(windowEnd.getTime() - lookbackDays * 86400000);
 
-  const [oneUpBlogSocial, podcastTranscripts, rss] = await Promise.all([
-    collectOneUpEvidence({ include: options.includeOneUp !== false, windowStart, windowEnd, lookbackDays }),
+  const [zernioBlogSocial, podcastTranscripts, rss] = await Promise.all([
+    collectZernioEvidence({ include: options.includeZernio !== false, windowStart, windowEnd, lookbackDays }),
     collectPodcastTranscriptEvidence({ include: options.includePodcastTranscripts !== false, windowStart, windowEnd }),
     collectRssEvidence({ include: options.includeRss !== false, lookbackDays }),
   ]);
 
-  const sourceReports = [oneUpBlogSocial, podcastTranscripts, rss];
+  const sourceReports = [zernioBlogSocial, podcastTranscripts, rss];
   const evidence = {
     metadata: {
       sessionId: options.sessionId,
@@ -750,7 +756,7 @@ export async function collectOnBrandEvidence(options = {}) {
       partialSources: sourceReports.filter((source) => source.status === "partial").map((source) => ({ sourceType: source.sourceType, limitations: source.limitations || [] })),
       repoFilesInspected: REPO_FILES_INSPECTED,
     },
-    oneUpBlogSocial,
+    zernioBlogSocial,
     podcastTranscripts,
     rss,
   };
@@ -765,10 +771,10 @@ export async function collectOnBrandEvidence(options = {}) {
 export const __testing = {
   cleanText,
   runDeterministicPreflight,
-  collectOneUpEvidence,
+  collectZernioEvidence,
   collectPodcastTranscriptEvidence,
   collectRssEvidence,
   normaliseTranscriptObjects,
-  normaliseOneUpRow,
+  normaliseZernioRow,
   extractTranscriptText,
 };

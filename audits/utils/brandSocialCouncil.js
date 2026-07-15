@@ -194,7 +194,7 @@ function buildOnBrandFindings(report, findings) {
       councilMember: "Brand Editor",
       sourceOwner: "aims_content_pipeline",
       evidence: [`overallBrandFit: ${score}`, `defectCount: ${defects.length}`],
-      requiredOutcome: "Tighten future RSS, OneUp, social and podcast prompt guardrails before the next monthly run; do not rewrite historic posts unless deliberately republishing.",
+      requiredOutcome: "Tighten future RSS, Zernio, social and podcast prompt guardrails before the next monthly run; do not rewrite historic posts unless deliberately republishing.",
       verificationMethod: "Rerun the on-brand audit and confirm overall brand fit is at least 80 with fewer repeated future-QA findings.",
     }));
   }
@@ -222,8 +222,8 @@ function buildOnBrandFindings(report, findings) {
   for (const [index, group] of grouped.slice(0, 6).entries()) {
     const defect = group.defect;
     const sourceType = trim(defect.sourceType || "pipeline");
-    const owner = sourceType === "oneup_blog_social"
-      ? "oneup_scheduler"
+    const owner = sourceType === "zernio_blog_social"
+      ? "zernio_scheduler"
       : sourceType === "rss_feed"
         ? "rss_social_pipeline"
         : sourceType === "podcast_transcript"
@@ -301,7 +301,7 @@ function buildSocialFindings(report, findings) {
       sourceOwner: "zernio_analysis",
       automationReadiness: "analysis_hygiene",
       evidence: [`postsAnalysed: ${totalPosts}`, `unclassifiedPosts: ${unclassifiedPosts}`, `unclassifiedShare: ${percentage((unclassifiedPosts / totalPosts) * 100)}`],
-      requiredOutcome: "Add durable content-lane/source-pipeline markers in AIMS scheduling logs and/or generated captions so future Zernio reports can separate OneUp, Blotato, quiz, ebook and manual posts cleanly.",
+      requiredOutcome: "Add durable content-lane/source-pipeline markers in AIMS scheduling logs and/or generated captions so future Zernio reports can separate Zernio, Blotato, quiz, ebook and manual posts cleanly.",
       verificationMethod: "Rerun the social-performance report and confirm unclassified posts fall below 25% of the monthly total.",
     }));
   }
@@ -371,7 +371,7 @@ function socialRecommendationOutcome(rec = {}, priority = "") {
     return "Give the detected winning lane a small extra test allocation next month, then confirm whether the improvement holds with meaningful reach/views before adjusting long-term scheduling.";
   }
   if (priority === "tracking_hygiene" || title.includes("content-lane")) {
-    return "Add durable lane/source attribution to AIMS logs and captions where appropriate so OneUp, RSS social blog, podcast, Blotato and quiz posts are separated cleanly in future reports.";
+    return "Add durable lane/source attribution to AIMS logs and captions where appropriate so Zernio, RSS social blog, podcast, Blotato and quiz posts are separated cleanly in future reports.";
   }
   if (priority === "observe_and_amplify") {
     return "Use the strongest platform as a reference pattern for next-month hook and CTA tests, but treat tiny reach/view samples as directional only.";
@@ -509,7 +509,7 @@ function buildCouncilReport({ sessionId, reportPrefix, onBrandBundle, socialBund
     scores,
     findings,
     decisions: {
-      oneup: findings.filter((item) => ["oneup_scheduler", "rss_social_pipeline"].includes(item.sourceOwner)).map((item) => item.title),
+      zernio: findings.filter((item) => ["zernio_scheduler", "rss_social_pipeline"].includes(item.sourceOwner)).map((item) => item.title),
       blotato: findings.filter((item) => item.sourceOwner === "blotato_video_pipeline").map((item) => item.title),
       aims: findings.filter((item) => item.sourceOwner === "aims_content_pipeline").map((item) => item.title),
       podcast: findings.filter((item) => ["aims_r2_podcast", "podcast_transcript_pipeline"].includes(item.sourceOwner)).map((item) => item.title),

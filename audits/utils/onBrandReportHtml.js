@@ -51,7 +51,7 @@ function renderScorecard(scorecard = {}) {
   const labels = [
     ["overallBrandFit", "Overall brand fit"],
     ["rssBrandFit", "RSS brand fit"],
-    ["oneUpBlogSocialBrandFit", "OneUp/blog/social brand fit"],
+    ["zernioBlogSocialBrandFit", "Zernio/blog/social brand fit"],
     ["podcastTranscriptBrandFit", "Podcast transcript brand fit"],
     ["titleQuality", "Title quality"],
     ["spokenNaturalness", "Spoken naturalness"],
@@ -133,7 +133,7 @@ ${section("Scorecard", renderScorecard(report.scorecard))}
 ${section("Confirmed strengths", renderObjects(report.confirmedStrengths, [{key:"sourceType",label:"Source"},{key:"evidence",label:"Evidence"},{key:"whyItWorks",label:"Why it works"}]))}
 ${section("Future QA findings ledger", renderDefects(report.confirmedDefectsLedger))}
 ${section("RSS future wording QA", `<p><b>Verdict:</b> ${escapeHtml(report.rssFindings?.verdict || "")}</p><p><b>Title guardrails:</b> ${escapeHtml(report.rssFindings?.titlePatternAnalysis || "")}</p><p><b>Summary wording guardrails:</b> ${escapeHtml(report.rssFindings?.summaryToneAnalysis || "")}</p><h3>Linked future QA findings</h3>${renderFindingSummary(report.rssFindings?.defects)}`)}
-${section("OneUp/blog/social future-post QA", `<p><b>Verdict:</b> ${escapeHtml(report.oneUpBlogSocialFindings?.verdict || "")}</p><p>${escapeHtml(report.oneUpBlogSocialFindings?.postPatternAnalysis || "")}</p><h3>Linked future QA findings</h3>${renderFindingSummary(report.oneUpBlogSocialFindings?.defects)}`)}
+${section("Zernio/blog/social future-post QA", `<p><b>Verdict:</b> ${escapeHtml(report.zernioBlogSocialFindings?.verdict || "")}</p><p>${escapeHtml(report.zernioBlogSocialFindings?.postPatternAnalysis || "")}</p><h3>Linked future QA findings</h3>${renderFindingSummary(report.zernioBlogSocialFindings?.defects)}`)}
 ${section("Podcast transcript future-layout QA", `<p><b>Verdict:</b> ${escapeHtml(report.podcastTranscriptFindings?.verdict || "")}</p><p><b>Future opening guardrail:</b> ${escapeHtml(report.podcastTranscriptFindings?.openingStrength || "")}</p><p><b>Future flow guardrail:</b> ${escapeHtml(report.podcastTranscriptFindings?.flowAndTransitions || "")}</p><h3>Future repetition watchlist</h3>${list(report.podcastTranscriptFindings?.repetitionWatchlist)}<h3>Future spoken-word shaping examples</h3>${renderObjects(report.podcastTranscriptFindings?.spokenWordFixes, [{key:"originalLine",label:"Historic evidence"},{key:"improvedLine",label:"Future shaping rule"},{key:"reason",label:"Reason"}])}<h3>Linked future QA findings</h3>${renderFindingSummary(report.podcastTranscriptFindings?.defects)}`)}
 ${section("Prompt-level diagnosis", renderObjects(report.promptLevelDiagnosis, [{key:"affectedArea",label:"Area"},{key:"diagnosis",label:"Diagnosis"},{key:"evidence",label:"Evidence"},{key:"recommendedPromptChange",label:"Prompt change"}]))}
 ${section("Pipeline-level diagnosis", renderObjects(report.pipelineLevelDiagnosis, [{key:"affectedFileOrService",label:"File/service"},{key:"diagnosis",label:"Diagnosis"},{key:"evidence",label:"Evidence"},{key:"smallestSafeFix",label:"Smallest safe fix"}]))}

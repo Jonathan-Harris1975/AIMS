@@ -53,7 +53,7 @@ function parseJsonObject(raw) {
 }
 
 function sourceCoverageFromEvidence(evidence) {
-  return [evidence?.oneUpBlogSocial, evidence?.podcastTranscripts, evidence?.rss]
+  return [evidence?.zernioBlogSocial, evidence?.podcastTranscripts, evidence?.rss]
     .filter(Boolean)
     .map((source) => ({
       sourceType: source.sourceType,
@@ -77,7 +77,7 @@ function normaliseConfidence(value) {
 
 function normaliseSourceType(value) {
   const v = String(value || "").trim();
-  if (["oneup_blog_social", "podcast_transcript", "rss_feed", "pipeline"].includes(v)) return v;
+  if (["zernio_blog_social", "podcast_transcript", "rss_feed", "pipeline"].includes(v)) return v;
   return "pipeline";
 }
 
@@ -94,7 +94,7 @@ function normaliseRootCause(value) {
 function futureVerb(sourceType) {
   if (sourceType === "podcast_transcript") return "future podcast transcript output";
   if (sourceType === "rss_feed") return "future RSS feed output";
-  if (sourceType === "oneup_blog_social") return "future OneUp/blog/social output";
+  if (sourceType === "zernio_blog_social") return "future Zernio/blog/social output";
   return "future pipeline output";
 }
 
@@ -265,10 +265,10 @@ function hasMethod(sourceCoverage = [], sourceType, fragment) {
 
 function deriveConfirmedStrengths(sourceCoverage = []) {
   const strengths = [];
-  if (hasMethod(sourceCoverage, "oneup_blog_social", "getpublishedposts")) {
+  if (hasMethod(sourceCoverage, "zernio_blog_social", "Zernio analytics endpoint")) {
     strengths.push({
-      sourceType: "oneup_blog_social",
-      evidence: "Historic published-post retrieval completed through OneUp getpublishedposts.",
+      sourceType: "zernio_blog_social",
+      evidence: "Historic published-post retrieval completed through the Zernio analytics endpoint.",
       whyItWorks: "The audit is checking real published social/blog output rather than scheduled drafts only.",
     });
   }
@@ -305,17 +305,17 @@ function defaultRssFindings(defects, sourceCoverage) {
   };
 }
 
-function defaultOneUpFindings(defects, sourceCoverage) {
-  const oneUpDefects = defectsForSource(defects, "oneup_blog_social");
-  const historyConfirmed = hasMethod(sourceCoverage, "oneup_blog_social", "getpublishedposts");
+function defaultZernioFindings(defects, sourceCoverage) {
+  const zernioDefects = defectsForSource(defects, "zernio_blog_social");
+  const historyConfirmed = hasMethod(sourceCoverage, "zernio_blog_social", "Zernio analytics endpoint");
   return {
-    verdict: oneUpDefects.length
-      ? "OneUp/blog/social published evidence was inspected; the confirmed patterns should inform future post generation and scheduling QA."
-      : "OneUp/blog/social published evidence was inspected and no deterministic future-output risks were found.",
+    verdict: zernioDefects.length
+      ? "Zernio/blog/social published evidence was inspected; the confirmed patterns should inform future post generation and scheduling QA."
+      : "Zernio/blog/social published evidence was inspected and no deterministic future-output risks were found.",
     postPatternAnalysis: historyConfirmed
-      ? "Historic published OneUp retrieval is confirmed via getpublishedposts; the audit is no longer limited to scheduled posts."
-      : "Historic published OneUp retrieval was not confirmed in this run; check source coverage limitations.",
-    defects: oneUpDefects,
+      ? "Historic published Zernio retrieval is confirmed via Zernio analytics endpoint; the audit is no longer limited to scheduled posts."
+      : "Historic published Zernio retrieval was not confirmed in this run; check source coverage limitations.",
+    defects: zernioDefects,
   };
 }
 
@@ -390,7 +390,7 @@ function deriveRemediationPlan(defects = []) {
         ? ["services/rss-feed-creator/utils/rss-prompts.js", "services/rss-feed-creator/utils/feedGenerator.js"]
         : issue.sourceType === "podcast_transcript"
           ? ["services/script/utils/editAndFormat.js", "services/script/utils/promptTemplates.js"]
-          : ["services/oneup/utils/prompts.js", "services/oneup/utils/socialScheduler.js"],
+          : ["services/zernio/utils/prompts.js", "services/zernio/utils/socialScheduler.js"],
       whyThisComesFirst: "It is backed by confirmed evidence in the QA ledger and improves future generated output rather than rewriting history.",
       implementationNotes: `Use ${issue.issueId} as a future-output guardrail: ${issue.issueType}.`,
       verificationMethod: futureVerification(issue.verificationMethod, issue.sourceType),
@@ -404,7 +404,7 @@ export function normaliseOnBrandReport(report, evidence, { rawModelError } = {})
   const reportObj = report && typeof report === "object" ? report : {};
   const defects = mergeDeterministicDefects(reportObj.confirmedDefectsLedger, deterministicDefects);
   const rssDefaults = defaultRssFindings(defects, sourceCoverage);
-  const oneUpDefaults = defaultOneUpFindings(defects, sourceCoverage);
+  const zernioDefaults = defaultZernioFindings(defects, sourceCoverage);
   const podcastDefaults = defaultPodcastFindings(defects, sourceCoverage);
   const derivedPatterns = derivePatternDiagnosis(defects);
   const derivedPipeline = derivePipelineDiagnosis(defects);
@@ -450,7 +450,7 @@ export function normaliseOnBrandReport(report, evidence, { rawModelError } = {})
     scorecard: {
       overallBrandFit: clampScore(reportObj.scorecard?.overallBrandFit, defects.length ? 68 : 82),
       rssBrandFit: clampScore(reportObj.scorecard?.rssBrandFit, 70),
-      oneUpBlogSocialBrandFit: clampScore(reportObj.scorecard?.oneUpBlogSocialBrandFit, 70),
+      zernioBlogSocialBrandFit: clampScore(reportObj.scorecard?.zernioBlogSocialBrandFit, 70),
       podcastTranscriptBrandFit: clampScore(reportObj.scorecard?.podcastTranscriptBrandFit, 70),
       titleQuality: clampScore(reportObj.scorecard?.titleQuality, defects.some((d) => /title/i.test(d.issueType)) ? 60 : 78),
       spokenNaturalness: clampScore(reportObj.scorecard?.spokenNaturalness, defects.some((d) => d.sourceType === "podcast_transcript") ? 62 : 78),
@@ -469,10 +469,10 @@ export function normaliseOnBrandReport(report, evidence, { rawModelError } = {})
       summaryToneAnalysis: cleanString(futureFrameText(reportObj.rssFindings?.summaryToneAnalysis), rssDefaults.summaryToneAnalysis),
       defects: arr(reportObj.rssFindings?.defects).length ? normaliseExistingDefects(reportObj.rssFindings.defects) : rssDefaults.defects,
     },
-    oneUpBlogSocialFindings: {
-      verdict: cleanString(futureFrameText(reportObj.oneUpBlogSocialFindings?.verdict), oneUpDefaults.verdict),
-      postPatternAnalysis: cleanString(futureFrameText(reportObj.oneUpBlogSocialFindings?.postPatternAnalysis), oneUpDefaults.postPatternAnalysis),
-      defects: arr(reportObj.oneUpBlogSocialFindings?.defects).length ? normaliseExistingDefects(reportObj.oneUpBlogSocialFindings.defects) : oneUpDefaults.defects,
+    zernioBlogSocialFindings: {
+      verdict: cleanString(futureFrameText(reportObj.zernioBlogSocialFindings?.verdict), zernioDefaults.verdict),
+      postPatternAnalysis: cleanString(futureFrameText(reportObj.zernioBlogSocialFindings?.postPatternAnalysis), zernioDefaults.postPatternAnalysis),
+      defects: arr(reportObj.zernioBlogSocialFindings?.defects).length ? normaliseExistingDefects(reportObj.zernioBlogSocialFindings.defects) : zernioDefaults.defects,
     },
     podcastTranscriptFindings: {
       verdict: cleanString(futureFrameText(reportObj.podcastTranscriptFindings?.verdict), podcastDefaults.verdict),
@@ -564,7 +564,7 @@ function requestDocument({ sessionId, options, reportPrefix }) {
     reportPrefix,
     options: {
       lookbackDays: options.lookbackDays,
-      includeOneUp: options.includeOneUp,
+      includeZernio: options.includeZernio,
       includePodcastTranscripts: options.includePodcastTranscripts,
       includeRss: options.includeRss,
       runPodcastWebsiteReports: options.runPodcastWebsiteReports,
@@ -578,7 +578,7 @@ export async function runOnBrandAudit(options = {}) {
   const lookbackDays = Math.max(1, Math.min(31, Number(options.lookbackDays || DEFAULT_LOOKBACK_DAYS)));
   const runOptions = {
     lookbackDays,
-    includeOneUp: options.includeOneUp !== false,
+    includeZernio: options.includeZernio !== false,
     includePodcastTranscripts: options.includePodcastTranscripts !== false,
     includeRss: options.includeRss !== false,
     runPodcastWebsiteReports: options.runPodcastWebsiteReports !== false,

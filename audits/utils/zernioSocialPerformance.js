@@ -341,10 +341,10 @@ function inferPostAttribution({ platform, mediaType, content }) {
     return { sourcePipeline: "rss_social_blog", contentLane: "rss_social_blog" };
   }
   if (/\b(book|ebook|kindle|amazon|catalogue|readers?)\b/.test(lower)) {
-    return { sourcePipeline: "oneup_ebook_or_static", contentLane: "ebook" };
+    return { sourcePipeline: "zernio_ebook_or_static", contentLane: "ebook" };
   }
   if (/\bquiz\b/.test(lower)) {
-    return { sourcePipeline: "oneup_quiz", contentLane: "quiz" };
+    return { sourcePipeline: "zernio_quiz", contentLane: "quiz" };
   }
   if (/\bnewsletter\b/.test(lower)) {
     return { sourcePipeline: "newsletter_cta", contentLane: "newsletter" };
@@ -352,7 +352,7 @@ function inferPostAttribution({ platform, mediaType, content }) {
   if (looksVideo) {
     return { sourcePipeline: "blotato_short_video", contentLane: inferBlotatoLane(text) };
   }
-  return { sourcePipeline: "oneup_or_manual_social", contentLane: "unclassified" };
+  return { sourcePipeline: "zernio_or_manual_social", contentLane: "unclassified" };
 }
 
 function emptyMetrics() {
@@ -462,7 +462,7 @@ function buildRecommendations({ byPlatform, byLane, rows }) {
     recommendations.push({
       priority: "content_lane_weighting",
       title: `Give ${bestLane.key} slightly more testing weight`,
-      detail: `${bestLane.key} is the strongest detected lane this month. Use the signal for future OneUp/Blotato prompt tuning rather than immediate automation changes.`,
+      detail: `${bestLane.key} is the strongest detected lane this month. Use the signal for future Zernio/Blotato prompt tuning rather than immediate automation changes.`,
     });
   }
 
@@ -470,7 +470,7 @@ function buildRecommendations({ byPlatform, byLane, rows }) {
     recommendations.push({
       priority: "tracking_hygiene",
       title: "Add content-lane markers to generated captions",
-      detail: "Some posts could not be classified from the text alone. Add lightweight hidden/internal metadata in AIMS logs so future reports can separate OneUp ebooks, quiz posts, Blotato lanes, and manual posts cleanly.",
+      detail: "Some posts could not be classified from the text alone. Add lightweight hidden/internal metadata in AIMS logs so future reports can separate Zernio ebooks, quiz posts, Blotato lanes, and manual posts cleanly.",
     });
   }
 
