@@ -7,7 +7,7 @@ import {
   zernioQuizBodySchema,
   zernioEbookWeeklyBodySchema,
 } from "../../shared/utils/requestSchemas.js";
-import { buildAndScheduleDailyLane, buildAndScheduleDailyLaneAccountVariants, buildAndScheduleQuizSeries, buildAndScheduleEbookWeekly } from "../utils/socialScheduler.js";
+import { buildAndScheduleDailyLane, buildAndScheduleDailyLaneAccountVariants, buildAndScheduleQuizSeries, buildAndScheduleEbookWeekly, buildAndScheduleBlogRssDaily } from "../utils/socialScheduler.js";
 import { getAsyncServiceRouteJobFresh, shouldRunAsyncServiceRoute, startAsyncServiceRouteJob } from "../../shared/utils/asyncServiceRouteJobs.js";
 import { fetchPublishedPostsHistory, inspectZernioTargeting } from "../utils/zernioClient.js";
 import { LANE_CONFIG, ZERNIO_PROFILE_NAME_GENERAL, ZERNIO_PROFILE_NAME_EBOOKS, getZernioRequiredPlatforms, getZernioAccountId, normaliseZernioAccountId, parsePlatforms } from "../utils/config.js";
@@ -58,6 +58,7 @@ router.get("/health", (_req, res) => {
     lanes: Object.keys(LANE_CONFIG),
     quizRoute: "/zernio/quiz/weekly",
     ebookWeeklyRoute: "/zernio/ebooks/weekly",
+    blogRssDailyRoute: "/zernio/blog-rss/daily",
     publishedHistoryRoute: "/zernio/posts/history",
     time: new Date().toISOString(),
   });
@@ -181,6 +182,32 @@ for (const laneKey of Object.keys(LANE_CONFIG)) {
     })
   );
 }
+
+router.post(
+  "/blog-rss/daily",
+  hookdeckDedupe("zernio:blog-rss:daily"),
+  asyncRoute(async (req, res) => {
+    const parsed = validateBody(zernioDailyBodySchema, req.body);
+    if (!parsed.ok) {
+      return res.status(400).json({ ok: false, error: parsed.error });
+    }
+
+    if (shouldRunAsyncServiceRoute(req)) {
+      const job = await startAsyncServiceRouteJob({
+        service: "zernio",
+        lane: "blog-rss-daily",
+        payload: parsed.data,
+        req,
+        runner: buildAndScheduleBlogRssDaily,
+        metadata: { route: "/zernio/blog-rss/daily" },
+      });
+      return res.status(202).json(job);
+    }
+
+    const result = await buildAndScheduleBlogRssDaily(parsed.data);
+    return res.json(result);
+  })
+);
 
 
 router.post(
