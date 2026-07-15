@@ -695,7 +695,7 @@ async function scheduleToZernio({ post, scheduledDateTime, profileName, accountI
   // LIMITATION (see migration notes): OneUp's scheduletextpost/
   // scheduleimagepost accepted a separate `title` field and a `first_comment`
   // field. Zernio's documented POST /v1/posts schema (content, platforms[],
-  // scheduledFor, timezone, mediaUrls, publishNow) has no documented title
+  // scheduledFor, timezone, mediaItems, publishNow) has no documented title
   // field, and no confirmed first-comment field, even though Zernio's
   // marketing pages mention first-comment automation as a feature. Rather
   // than fabricate an undocumented field name, the title is folded into the
@@ -714,7 +714,14 @@ async function scheduleToZernio({ post, scheduledDateTime, profileName, accountI
     scheduledFor: scheduledDateTime.replace(" ", "T"),
     timezone: DEFAULT_TIMEZONE,
     platforms: targetedAccounts.map((account) => ({ platform: account.platform, accountId: account.accountId })),
-    ...(post.imageUrl ? { mediaUrls: [post.imageUrl] } : {}),
+    // Our lane images are served from clean, extensionless URLs (e.g.
+    // https://images.jonathan-harris.online/Monday). Zernio's `mediaUrls`
+    // shorthand appears to infer media type from the URL itself, which
+    // fails for URLs with no file extension and was causing posts to
+    // schedule with no image attached. `mediaItems` with an explicit
+    // `type` sidesteps that inference entirely and is the field Zernio's
+    // own API guide and reference examples use for this exact case.
+    ...(post.imageUrl ? { mediaItems: [{ type: "image", url: post.imageUrl }] } : {}),
   };
 
   const zernioResponse = await createPost(payload, apiKey);
