@@ -66,7 +66,7 @@ export function getZernioAccountId() {
 // Zernio platform values are lowercase (twitter, instagram, tiktok, ...),
 // unlike OneUp's capitalised "Facebook,Instagram,TikTok" network type names.
 export function getZernioRequiredPlatforms() {
-  return parsePlatforms(process.env.ZERNIO_REQUIRED_PLATFORMS || "facebook,instagram,tiktok");
+  return parsePlatforms(process.env.ZERNIO_REQUIRED_PLATFORMS || "facebook,instagram");
 }
 
 export function shouldValidateZernioTargetAccounts() {
