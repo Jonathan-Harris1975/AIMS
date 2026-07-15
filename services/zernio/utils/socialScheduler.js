@@ -2,11 +2,12 @@ import crypto from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resilientRequest } from "../../shared/utils/ai-service.js";
 import { info, warn } from "../../../logger.js";
-import { LANE_CONFIG, QUIZ_CONFIG, EBOOK_CONFIG, ZERNIO_PROFILE_NAME_GENERAL, ZERNIO_PROFILE_NAME_EBOOKS, ZERNIO_DEFAULT_DRY_RUN, ZERNIO_CROSSPOST_DEDUPE_HOURS, DEFAULT_TIMEZONE, ZERNIO_QUEUE_GUARD_LOOKBACK_PAGES, getZernioRequiredPlatforms, getZernioAccountId, normaliseZernioAccountId, shouldValidateZernioTargetAccounts } from "./config.js";
+import { LANE_CONFIG, QUIZ_CONFIG, EBOOK_CONFIG, BLOG_RSS_CONFIG, ZERNIO_PROFILE_NAME_GENERAL, ZERNIO_PROFILE_NAME_EBOOKS, ZERNIO_DEFAULT_DRY_RUN, ZERNIO_CROSSPOST_DEDUPE_HOURS, DEFAULT_TIMEZONE, ZERNIO_QUEUE_GUARD_LOOKBACK_PAGES, getZernioRequiredPlatforms, getZernioAccountId, normaliseZernioAccountId, shouldValidateZernioTargetAccounts } from "./config.js";
 import { buildDailyPrompt, buildQuizPrompt, buildEbookPostPrompt, buildAccountVariant } from "./prompts.js";
-import { addDays, nextWeekdayDateString, toScheduledDateTime } from "./date.js";
+import { addDays, nextWeekdayDateString, toScheduledDateTime, zonedDateString } from "./date.js";
 import { loadRecentRssContext } from "./feedContext.js";
-import { getLaneHistory, getWeeklyTopicLedger, recordLaneSchedule, getQuizHistory, recordQuizSchedule, claimScheduleSlot, completeScheduleSlot, releaseScheduleSlot, isRecentSpotlightPerson, recordSpotlightPerson, recordUsedSocialSource } from "./state.js";
+import { fetchBlogRssItems } from "./blogRssFeed.js";
+import { getLaneHistory, getWeeklyTopicLedger, recordLaneSchedule, getQuizHistory, recordQuizSchedule, claimScheduleSlot, completeScheduleSlot, releaseScheduleSlot, isRecentSpotlightPerson, recordSpotlightPerson, hasRecentSocialSource, recordUsedSocialSource } from "./state.js";
 import { resolveProfile, inspectZernioTargeting, listPostsWithAnalytics, createPost } from "./zernioClient.js";
 import getSponsor from "../../script/utils/getSponsor.js";
 import { resolveFeaturedEbook } from "./ebookCatalogue.js";
@@ -1053,6 +1054,158 @@ export async function buildAndScheduleDailyLane(laneKey, options = {}) {
   } catch (error) {
     releaseScheduleSlot(slotClaim);
     if (editorialReservation) releaseEditorialReservation(editorialReservation);
+    throw error;
+  }
+}
+
+// ------------------------------------------------------------
+// Blog daily briefing repost (Zernio has no native RSS import)
+// ------------------------------------------------------------
+// Reposts the newest not-yet-used item from the blog service's public
+// "social media blog" RSS feed. Unlike the other lanes, the post text
+// comes directly from the feed item (already written for social use by
+// the blog service) rather than being generated fresh here, so this
+// skips the AI content-generation and review-council gate steps.
+export async function buildAndScheduleBlogRssDaily(options = {}) {
+  const publishDate = options.publishDate || zonedDateString(new Date(), DEFAULT_TIMEZONE);
+  const scheduledDateTime = options.scheduledDateTime || toScheduledDateTime(publishDate, BLOG_RSS_CONFIG.publishTime);
+  const profileName = options.profileName || ZERNIO_PROFILE_NAME_GENERAL;
+  const accountId = normaliseZernioAccountId(options.accountId || getZernioAccountId());
+  const apiKey = options.apiKey || process.env.ZERNIO_META_API_KEY;
+  const dryRun = Boolean(options.dryRun);
+
+  const { url: feedUrl, items } = await fetchBlogRssItems({});
+  const unused = items.filter((item) => !hasRecentSocialSource(item));
+  const candidates = unused.length ? unused : items;
+  const article = candidates[0];
+
+  if (!article) {
+    const err = new Error(`No usable items found in the blog social RSS feed (${feedUrl}).`);
+    err.statusCode = 502;
+    throw err;
+  }
+
+  const imageUrl = article.imageUrl || BLOG_RSS_CONFIG.fallbackImageUrl;
+
+  const slotClaim = await claimZernioSlot({
+    scope: "blog-rss:daily",
+    scheduledDateTime,
+    profileName,
+    accountId,
+    imageUrl,
+    dryRun,
+    apiKey,
+    force: options.force,
+    sourceIntentHash: buildIntentHash({ audienceIntent: BLOG_RSS_CONFIG.audienceIntent, angle: article.link }),
+  });
+
+  if (slotClaim.duplicatePrevented) {
+    const warnings = [duplicateSlotWarning(slotClaim.reason)];
+    info("zernio.blogRss.duplicate_prevented", {
+      publishDate,
+      scheduledDateTime,
+      slotKey: slotClaim.key,
+      reason: slotClaim.reason,
+    });
+
+    return {
+      ok: true,
+      lane: "blog-rss",
+      publishDate,
+      scheduledDateTime,
+      dryRun: false,
+      scheduled: false,
+      duplicatePrevented: true,
+      profile: { id: null, name: profileName },
+      warnings,
+      post: null,
+      source: { title: article.title, link: article.link, feedUrl },
+      zernioResponse: null,
+    };
+  }
+
+  try {
+    const content = ensureHashtags(
+      `${article.caption}\n\nRead the full daily briefing: ${article.link}`,
+      article.hashtags,
+      { maxTags: BLOG_RSS_CONFIG.hashtagLimit }
+    );
+
+    const post = {
+      topic: article.title,
+      content,
+      imageUrl,
+      // Explicit duplicate-window override for intentional cross-posting.
+      // `crosspost` remains supported for backwards compatibility.
+      allowDuplicate: Boolean(options.allowDuplicate ?? options.crosspost ?? false),
+    };
+
+    const scheduling = await scheduleToZernio({
+      post,
+      scheduledDateTime,
+      profileName,
+      accountId,
+      dryRun,
+      apiKey,
+      laneKey: "blog-rss",
+      dedupeWindowHours: options.dedupeWindowHours,
+    });
+
+    const warnings = [...(scheduling.warnings || [])];
+
+    if (scheduling.scheduled) {
+      recordUsedSocialSource({ lane: "zernio:blog-rss", title: article.title, link: article.link, pubDate: article.pubDate, scheduledDateTime });
+      recordEditorialEvent({
+        pipeline: "zernio",
+        lane: "blog-rss",
+        audienceIntent: BLOG_RSS_CONFIG.audienceIntent,
+        angle: article.title,
+        scheduledDateTime,
+        text: post.content,
+        meta: { contentType: "zernio-blog-rss", dryRun: Boolean(scheduling.dryRun) },
+      });
+    }
+
+    if (slotClaim.claimed && (scheduling.scheduled || scheduling.duplicatePrevented)) {
+      completeScheduleSlot(slotClaim, {
+        lane: "blog-rss",
+        scheduledDateTime,
+        topic: article.title,
+        title: article.title,
+        duplicatePrevented: Boolean(scheduling.duplicatePrevented),
+      });
+    } else {
+      releaseScheduleSlot(slotClaim);
+    }
+
+    info("zernio.blogRss.complete", {
+      publishDate,
+      scheduledDateTime,
+      dryRun: scheduling.dryRun,
+      scheduled: scheduling.scheduled,
+      title: article.title,
+      link: article.link,
+      feedUrl,
+      contentHash: contentHash(post.content),
+    });
+
+    return {
+      ok: true,
+      lane: "blog-rss",
+      publishDate,
+      scheduledDateTime,
+      dryRun: scheduling.dryRun,
+      scheduled: scheduling.scheduled,
+      duplicatePrevented: Boolean(scheduling.duplicatePrevented),
+      profile: scheduling.profile,
+      warnings,
+      post,
+      source: { title: article.title, link: article.link, pubDate: article.pubDate || null, feedUrl },
+      zernioResponse: scheduling.zernioResponse,
+      targeting: scheduling.targeting || null,
+    };
+  } catch (error) {
+    releaseScheduleSlot(slotClaim);
     throw error;
   }
 }

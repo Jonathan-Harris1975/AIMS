@@ -84,6 +84,24 @@ export const ZERNIO_RSS_LOOKBACK_DAYS = Number(process.env.ZERNIO_RSS_LOOKBACK_D
 export const ZERNIO_CROSSPOST_DEDUPE_HOURS = THRESHOLDS.scheduler.dedupeWindowHours;
 export const ZERNIO_QUEUE_GUARD_LOOKBACK_PAGES = THRESHOLDS.scheduler.queueGuardLookbackPages;
 
+// Zernio has no built-in RSS import, so the blog service's own public
+// "social media blog" RSS feed is fetched over HTTP and reposted daily.
+// This only ever reads that public URL — the blog service itself
+// (services/blog) is never touched by this lane.
+export const ZERNIO_BLOG_RSS_FEED_URL = trimString(
+  process.env.ZERNIO_BLOG_RSS_FEED_URL,
+  "https://blog-rss.jonathan-harris.online/social-media-blog/feed.xml"
+);
+
+export const BLOG_RSS_CONFIG = {
+  key: "blog-rss",
+  label: "Blog Daily Briefing Repost",
+  publishTime: normaliseTime(process.env.ZERNIO_BLOG_RSS_TIME, "09:15"),
+  fallbackImageUrl: trimString(process.env.ZERNIO_BLOG_RSS_IMAGE_URL, `${DAILY_IMAGE_BASE}/BlogDaily`),
+  hashtagLimit: Math.max(0, Number(process.env.ZERNIO_BLOG_RSS_HASHTAG_LIMIT || 3)),
+  audienceIntent: "blog-daily-briefing-repost",
+};
+
 export const LANE_CONFIG = {
   monday: {
     key: "monday",
