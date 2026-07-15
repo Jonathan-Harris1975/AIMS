@@ -52,8 +52,12 @@ function boolFromEnv(value, fallback = false) {
 
 export const DEFAULT_TIMEZONE = trimString(process.env.ZERNIO_TIMEZONE, "Europe/London");
 export const ZERNIO_API_BASE_URL = trimString(process.env.ZERNIO_API_BASE_URL, "https://zernio.com/api/v1").replace(/\/+$/, "");
-export const ZERNIO_PROFILE_NAME_GENERAL = trimString(process.env.ZERNIO_PROFILE_NAME_GENERAL, "General");
-export const ZERNIO_PROFILE_NAME_EBOOKS = trimString(process.env.ZERNIO_PROFILE_NAME_EBOOKS, "Ebooks");
+// All Zernio posts currently go through a single "Default" profile in the
+// connected Zernio account (there is no separate ebooks profile). Both
+// constants are kept distinct — rather than collapsed into one — so a
+// future split back into separate profiles only requires an env var change.
+export const ZERNIO_PROFILE_NAME_GENERAL = trimString(process.env.ZERNIO_PROFILE_NAME_GENERAL, "Default");
+export const ZERNIO_PROFILE_NAME_EBOOKS = trimString(process.env.ZERNIO_PROFILE_NAME_EBOOKS, "Default");
 
 export function getZernioAccountId() {
   return normaliseZernioAccountId(process.env.ZERNIO_ACCOUNT_ID, "ALL");
