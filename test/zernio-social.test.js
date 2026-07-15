@@ -38,6 +38,54 @@ const scheduledRequests = [];
 let zernioScheduleFailuresRemaining = 0;
 let zernioScheduleAttempts = 0;
 let quizAnswerContentOverride = null;
+let mockBlogRssItems = null;
+
+function defaultMockBlogRssItems() {
+  return [
+    {
+      title: "Why AI Agents Still Need Human Judgement",
+      link: "https://blog.jonathan-harris.online/social-media-blog/posts/ai-agents-human-judgement/index.html",
+      pubDate: "Wed, 15 Jul 2026 07:00:00 GMT",
+      description: "Agents are good at steps, not judgement calls. Here's where the line still sits today.",
+      image: "https://images.jonathan-harris.online/ai-agents-human-judgement",
+      categories: ["Artificial Intelligence", "AI Agents"],
+    },
+    {
+      title: "The Quiet Cost of Prompt Sprawl",
+      link: "https://blog.jonathan-harris.online/social-media-blog/posts/prompt-sprawl/index.html",
+      pubDate: "Tue, 14 Jul 2026 07:00:00 GMT",
+      description: "Every team ends up with a junk drawer of prompts. Here's a cleaner way to manage them.",
+      image: "https://images.jonathan-harris.online/prompt-sprawl",
+      categories: ["Practical AI"],
+    },
+  ];
+}
+
+function mockBlogRssXml() {
+  const items = mockBlogRssItems || defaultMockBlogRssItems();
+  const itemXml = items
+    .map(
+      (item) => `
+    <item>
+      <title>${item.title}</title>
+      <link>${item.link}</link>
+      <guid isPermaLink="true">${item.link}</guid>
+      <pubDate>${item.pubDate}</pubDate>
+      <description>${item.description}</description>
+      ${(item.categories || []).map((category) => `<category>${category}</category>`).join("\n      ")}
+      <enclosure url="${item.image}" type="image/png" />
+    </item>`
+    )
+    .join("\n");
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel>
+  <title>Jonathan Harris | Daily AI Social Briefings</title>
+  <link>https://blog.jonathan-harris.online/social-media-blog</link>
+  <description>Daily AI briefing posts built for social media.</description>
+  ${itemXml}
+</channel></rss>`;
+}
 
 // Mock server shaped after the documented Zernio REST API
 // (https://docs.zernio.com/): GET /profiles, GET /accounts, GET /analytics,
@@ -93,6 +141,12 @@ const mockServer = http.createServer(async (req, res) => {
     scheduledRequests.push({ endpoint: url.pathname, body: parsed });
     res.writeHead(200, { "content-type": "application/json" });
     res.end(JSON.stringify({ post: { _id: "post_abc123", status: "scheduled" } }));
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/blog-rss-feed.xml") {
+    res.writeHead(200, { "content-type": "application/rss+xml; charset=utf-8" });
+    res.end(mockBlogRssXml());
     return;
   }
 
@@ -164,6 +218,7 @@ test.afterEach(() => {
   zernioScheduleFailuresRemaining = 0;
   zernioScheduleAttempts = 0;
   quizAnswerContentOverride = null;
+  mockBlogRssItems = null;
   restoreEnv();
 });
 
@@ -458,4 +513,82 @@ test("Tuesday lane uses the updated brand-safe hashtag set", async () => {
   assert.match(result.post.content, /#AIExplained/);
   assert.match(result.post.content, /#ArtificialIntelligence/);
   assert.match(result.post.content, /#PracticalAI/);
+});
+
+test("buildAndScheduleBlogRssDaily builds a dry-run post from the newest blog RSS item", async () => {
+  restoreEnv();
+  applyBaseEnv();
+  process.env.OPENROUTER_API_BASE = mockBase;
+  process.env.ZERNIO_BLOG_RSS_FEED_URL = `${mockBase}/blog-rss-feed.xml`;
+
+  const mod = await import(`../services/zernio/utils/socialScheduler.js?zernio-blog-rss-dry=${Date.now()}`);
+  const result = await mod.buildAndScheduleBlogRssDaily({
+    publishDate: "2026-07-16",
+    dryRun: true,
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.lane, "blog-rss");
+  assert.equal(result.dryRun, true);
+  assert.equal(result.scheduled, false);
+  assert.equal(result.source.title, "Why AI Agents Still Need Human Judgement");
+  assert.equal(result.source.link, "https://blog.jonathan-harris.online/social-media-blog/posts/ai-agents-human-judgement/index.html");
+  assert.match(result.post.content, /Agents are good at steps, not judgement calls/);
+  assert.match(result.post.content, /Read the full daily briefing: https:\/\/blog\.jonathan-harris\.online/);
+  assert.match(result.post.content, /#ArtificialIntelligence/);
+  assert.match(result.post.content, /#AIAgents/);
+  assert.equal(result.post.imageUrl, "https://images.jonathan-harris.online/ai-agents-human-judgement");
+});
+
+test("buildAndScheduleBlogRssDaily skips items already posted and schedules live via mediaItems", async () => {
+  restoreEnv();
+  applyBaseEnv();
+  process.env.OPENROUTER_API_BASE = mockBase;
+  process.env.ZERNIO_BLOG_RSS_FEED_URL = `${mockBase}/blog-rss-feed.xml`;
+  process.env.ZERNIO_API_BASE_URL = mockBase;
+  process.env.ZERNIO_META_API_KEY = "zernio-key";
+  process.env.ZERNIO_REQUIRED_PLATFORMS = "facebook";
+  process.env.ZERNIO_VALIDATE_TARGET_ACCOUNTS = "true";
+
+  const mod = await import(`../services/zernio/utils/socialScheduler.js?zernio-blog-rss-live=${Date.now()}`);
+
+  // First run consumes the newest item.
+  const first = await mod.buildAndScheduleBlogRssDaily({
+    publishDate: "2026-07-16",
+    profileName: "General",
+    accountId: "fb-page-1",
+    force: true,
+  });
+  assert.equal(first.scheduled, true);
+  assert.equal(first.source.title, "Why AI Agents Still Need Human Judgement");
+
+  // Second run (feed unchanged) must fall through to the next unused item.
+  const second = await mod.buildAndScheduleBlogRssDaily({
+    publishDate: "2026-07-17",
+    profileName: "General",
+    accountId: "fb-page-1",
+    force: true,
+  });
+  assert.equal(second.scheduled, true);
+  assert.equal(second.source.title, "The Quiet Cost of Prompt Sprawl");
+
+  assert.equal(scheduledRequests.length, 2);
+  assert.deepEqual(scheduledRequests[0].body.mediaItems, [
+    { type: "image", url: "https://images.jonathan-harris.online/ai-agents-human-judgement" },
+  ]);
+});
+
+test("buildAndScheduleBlogRssDaily raises a clear error when the feed has no usable items", async () => {
+  restoreEnv();
+  applyBaseEnv();
+  process.env.OPENROUTER_API_BASE = mockBase;
+  process.env.ZERNIO_BLOG_RSS_FEED_URL = `${mockBase}/blog-rss-feed.xml`;
+  mockBlogRssItems = [];
+
+  const mod = await import(`../services/zernio/utils/socialScheduler.js?zernio-blog-rss-empty=${Date.now()}`);
+
+  await assert.rejects(
+    () => mod.buildAndScheduleBlogRssDaily({ publishDate: "2026-07-16", dryRun: true }),
+    /No usable items found in the blog social RSS feed/
+  );
 });
