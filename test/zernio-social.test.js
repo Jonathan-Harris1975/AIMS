@@ -378,6 +378,15 @@ test("buildAndScheduleDailyLane validates Facebook targeting before live schedul
   assert.equal(result.targeting.ok, true);
   assert.equal(result.targeting.targetedAccounts[0].platform, "facebook");
   assert.deepEqual(scheduledRequests.at(-1).body.platforms, [{ platform: "facebook", accountId: "fb-page-1" }]);
+  // Regression test: lane images are served from extensionless URLs
+  // (e.g. https://images.jonathan-harris.online/Monday). Zernio's
+  // `mediaUrls` shorthand infers media type from the URL and silently
+  // drops images with no file extension, so the request must use
+  // `mediaItems` with an explicit `type` instead.
+  assert.equal(scheduledRequests.at(-1).body.mediaUrls, undefined);
+  assert.deepEqual(scheduledRequests.at(-1).body.mediaItems, [
+    { type: "image", url: "https://images.jonathan-harris.online/Monday" },
+  ]);
 });
 
 test("buildAndScheduleDailyLane retries a transient Zernio scheduling failure", async () => {
