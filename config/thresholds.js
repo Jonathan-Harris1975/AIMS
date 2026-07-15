@@ -33,9 +33,9 @@ export const THRESHOLDS = Object.freeze({
     // Window in hours within which identical content (by content hash) posted
     // to more than one account/category is treated as an accidental duplicate.
     // OB-001 / BSC-OB-002.
-    dedupeWindowHours: num("ONEUP_CROSSPOST_DEDUPE_HOURS", 48),
-    // Number of OneUp queue pages scanned when checking for duplicates.
-    queueGuardLookbackPages: Math.max(1, num("ONEUP_QUEUE_GUARD_LOOKBACK_PAGES", 2)),
+    dedupeWindowHours: num("ZERNIO_CROSSPOST_DEDUPE_HOURS", 48),
+    // Number of Zernio queue pages scanned when checking for duplicates.
+    queueGuardLookbackPages: Math.max(1, num("ZERNIO_QUEUE_GUARD_LOOKBACK_PAGES", 2)),
   }),
   validators: Object.freeze({
     // Anti-hype validator: fraction of generated samples allowed to contain a
