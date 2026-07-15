@@ -70,7 +70,7 @@ Dispatches external GitHub Actions audits for Mobile UX and SEO/AEO/GEO, receive
 - GitHub Actions API
 - OpenRouter through shared AI service
 - Cloudflare R2 audits bucket
-- OneUp API for on-brand evidence when enabled
+- Zernio API for on-brand evidence when enabled
 - Zernio Analytics API for monthly social-performance evidence
 
 ## Storage
@@ -103,7 +103,7 @@ Dispatches external GitHub Actions audits for Mobile UX and SEO/AEO/GEO, receive
 
 ## Connections to other services
 
-Uses shared job store, shared request schemas, shared OpenRouter AI service, shared R2 client and OneUp/RSS/transcript evidence sources for on-brand audits.
+Uses shared job store, shared request schemas, shared OpenRouter AI service, shared R2 client and Zernio/RSS/transcript evidence sources for on-brand audits.
 
 ### Brand & Social Media Performance Council
 
