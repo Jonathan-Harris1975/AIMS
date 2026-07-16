@@ -50,6 +50,22 @@ export const blogWeeklyBuildBodySchema = z
 
 const optionalBlogSocialDate = z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, "must be YYYY-MM-DD").optional();
 
+export const newsletterGenerateBodySchema = z
+  .object({
+    profileId: z.string().trim().min(1).max(100).optional(),
+    sessionId: z.string().trim().min(1).max(150).optional(),
+  })
+  .passthrough();
+
+export const newsletterSendBodySchema = z
+  .object({
+    profileId: z.string().trim().min(1).max(100).optional(),
+    sessionId: z.string().trim().min(1).max(150),
+    date: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, "must be YYYY-MM-DD").optional(),
+    scheduledFor: z.string().trim().min(1).max(60).optional(),
+  })
+  .passthrough();
+
 export const blogSocialDailyBuildBodySchema = z
   .object({
     date: optionalBlogSocialDate,

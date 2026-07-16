@@ -152,6 +152,14 @@ export const aiConfig = {
     // is the first fallback after the dedicated blotatoScript provider, not gpt-5-mini.
     // deepseekV4Pro is last-resort; do not fall back to the ultra-cheap fast lane by default.
     blotatoNewsShort: routeChain(["blotatoScript", "highQuality", "standard", "fallback"], ["anthropic46", "deepseekV4Pro", "chatgptMini5"]),
+    // Newsletter engine (services/newsletter). Composition needs the same
+    // editorial quality bar as the blog; QA review is intentionally routed
+    // through a different provider than composition so the reviewer isn't
+    // just re-approving its own output.
+    newsletterCompose: routeChain(["standard", "highQuality", "fallback"], ["google25FlashLite", "chatgptMini5", "deepseekV4Pro"]),
+    newsletterSubject: routeChain(["fast", "summary", "fallback"], ["chatgptMini5", "google25FlashLite"]),
+    newsletterQaReview: routeChain(["highQuality", "audit", "standard", "fallback"], ["anthropic46", "chatgptMini5", "deepseekV4Pro"]),
+    newsletterHeroPrompt: routeChain(["summary", "fast", "fallback"], ["meta", "google25FlashLite"]),
   },
 
   commonParams: { temperature: 0.65, top_p: 0.9, timeout: 90000 },
