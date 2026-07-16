@@ -7,6 +7,22 @@ process.env.AI_MAX_RETRIES = "0";
 process.env.NEWSLETTER_MAX_REWRITE_ITERATIONS = "2";
 process.env.NEWSLETTER_QA_PASS_THRESHOLD = "85";
 
+// The newsletter AI routes (config/ai-config.js) resolve each provider's
+// model name purely from env — there is no static fallback — so every
+// provider that appears in newsletterCompose / newsletterQaReview /
+// newsletterSubject's chains must be stubbed here. Without this, a
+// provider with no model env var resolves to `null` in getProviderConfig()
+// and is silently skipped as "misconfigured" *before* any HTTP request is
+// made, so the local mock server below is never reached — regardless of
+// OPENROUTER_BASE_URL — and resilientRequest throws "All providers failed"
+// once every provider in the chain has been skipped this way. Relying on
+// whatever model env vars happen to be set in the ambient CI environment
+// made this test non-deterministic; stubbing them all here makes it not.
+process.env.OPENROUTER_ANTHROPIC_4_6 = "mock/anthropic-46";
+process.env.OPENROUTER_GOOGLE_2_5_flashlite = "mock/google-25-flashlite";
+process.env.OPENROUTER_CHATGPT_MINI5 = "mock/chatgpt-mini5";
+process.env.OPENROUTER_DEEPSEEK_v4_pro = "mock/deepseek-v4-pro";
+
 let server;
 let reviewScores = []; // one score consumed per AI review call, in order
 let reviewCallCount = 0;
