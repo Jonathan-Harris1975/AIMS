@@ -1,7 +1,7 @@
 // services/newsletter/config/profiles.js
 //
 // Newsletter profile registry. A "profile" is one editorial newsletter
-// (source feeds, brand voice, EmailOctopus list, send schedule). AI Edge is
+// (source feeds, brand voice, Brevo list/sender, send schedule). AI Edge is
 // the first profile; adding a second newsletter should mean adding a new
 // profile entry here (or via env override), not touching engine code.
 //
@@ -46,16 +46,13 @@ const aiEdge = Object.freeze({
   ),
   feedUrls: envList("NEWSLETTER_AI_EDGE_FEED_URLS", []),
 
-  // EmailOctopus delivery target.
-  emailOctopus: Object.freeze({
-    listId: env("NEWSLETTER_AI_EDGE_LIST_ID", env("EMAILOCTOPUS_LIST_ID")),
+  // Brevo delivery target. AIMS owns list/folder creation (no pre-existing
+  // list ID is assumed) — see services/newsletter/brevo/audience.js.
+  brevo: Object.freeze({
+    listName: env("NEWSLETTER_AI_EDGE_BREVO_LIST_NAME", `${env("NEWSLETTER_AI_EDGE_NAME", "The AI Edge")} Subscribers`),
+    folderName: env("NEWSLETTER_AI_EDGE_BREVO_FOLDER_NAME", "AIMS Newsletters"),
     fromName: env("NEWSLETTER_AI_EDGE_FROM_NAME", "Jonathan Harris — The AI Edge"),
-    fromEmail: env("NEWSLETTER_AI_EDGE_FROM_EMAIL", env("EMAILOCTOPUS_FROM_EMAIL")),
-    // Optional pre-built EmailOctopus Automation (trigger: "Started via
-    // API") used as the delivery mechanism where campaign creation isn't
-    // available via the documented API. See services/newsletter/README.md.
-    automationId: env("NEWSLETTER_AI_EDGE_AUTOMATION_ID", ""),
-    audienceTag: env("NEWSLETTER_AI_EDGE_AUDIENCE_TAG", "ai-edge-subscriber"),
+    fromEmail: env("NEWSLETTER_AI_EDGE_FROM_EMAIL", env("BREVO_FROM_EMAIL")),
   }),
 
   // R2 storage layout — reuses the existing blog / blog-images buckets
