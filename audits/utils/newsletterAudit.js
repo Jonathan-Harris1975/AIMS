@@ -13,10 +13,10 @@
 //   - QA pass rate (how many issues cleared review without hitting
 //     maxRewriteIterations / quarantine)
 //   - Average rewrite iterations per issue
-//   - Subscriber growth (from EmailOctopus list metadata, when configured)
-//   - Open/click rates (from EmailOctopus campaign reports, for any issue
-//     that has a real campaign ID on file)
-//   - Unsubscribe rate (from the same campaign summary reports)
+//   - Subscriber growth (from Brevo list counts)
+//   - Open/click/unsubscribe rates (from Brevo campaign reports, for every
+//     issue that was actually delivered — see campaign.json alongside each
+//     issue's metadata.json, written by services/newsletter/brevo/campaign.js)
 //   - Content quality trends (banned-phrase / Americanism hit-rate across
 //     the period, from stored issue metadata)
 
@@ -25,7 +25,9 @@ import { listKeys, getObjectAsText } from "../../services/shared/utils/r2-client
 import { buildAuditPrefix } from "./auditPaths.js";
 import { publishAuditJson, publishAuditText, publishAuditLatest } from "./publishAuditArtifacts.js";
 import { listNewsletterProfiles } from "../../services/newsletter/config/profiles.js";
-import { getList } from "../../services/newsletter/emailoctopus/client.js";
+import { ensureList } from "../../services/newsletter/brevo/audience.js";
+import { getList } from "../../services/newsletter/brevo/client.js";
+import { getCampaignStatus } from "../../services/newsletter/brevo/campaign.js";
 
 const AUDIT_TYPE = "newsletter";
 
@@ -43,26 +45,45 @@ function monthWindow(now = new Date()) {
 }
 
 /**
- * Loads every issue's metadata.json for a profile within a window by
- * listing the R2 key prefix and reading each metadata file. Bounded by
- * listKeys pagination already handled inside r2-client.
+ * Loads every issue's metadata.json (and, where present, its sibling
+ * campaign.json recording the Brevo delivery) for a profile within a
+ * window, by listing the R2 key prefix once and grouping keys by issue
+ * directory.
  */
-async function loadIssueMetadataForProfile(profile, { start, end }) {
+async function loadIssueRecordsForProfile(profile, { start, end }) {
   const bucketKey = profile.storage.htmlBucketKey;
   const keys = await listKeys(bucketKey, `${profile.storage.keyPrefix}/`);
-  const metadataKeys = keys.filter((k) => k.endsWith("/metadata.json"));
+
+  const byIssueDir = new Map();
+  for (const key of keys) {
+    if (key.endsWith("/metadata.json") || key.endsWith("/campaign.json")) {
+      const issueDir = key.slice(0, key.lastIndexOf("/"));
+      const entry = byIssueDir.get(issueDir) || {};
+      if (key.endsWith("/metadata.json")) entry.metadataKey = key;
+      if (key.endsWith("/campaign.json")) entry.campaignKey = key;
+      byIssueDir.set(issueDir, entry);
+    }
+  }
 
   const issues = [];
-  for (const key of metadataKeys) {
+  for (const { metadataKey, campaignKey } of byIssueDir.values()) {
+    if (!metadataKey) continue;
     try {
-      const raw = await getObjectAsText(bucketKey, key);
-      const metadata = JSON.parse(raw);
+      const metadata = JSON.parse(await getObjectAsText(bucketKey, metadataKey));
       const generatedAt = metadata.generatedAt ? new Date(metadata.generatedAt) : null;
-      if (generatedAt && generatedAt >= start && generatedAt <= end) {
-        issues.push(metadata);
+      if (!generatedAt || generatedAt < start || generatedAt > end) continue;
+
+      let campaign = null;
+      if (campaignKey) {
+        try {
+          campaign = JSON.parse(await getObjectAsText(bucketKey, campaignKey));
+        } catch (err) {
+          warn("audit.newsletter.campaign_record_unreadable", { key: campaignKey, error: err.message });
+        }
       }
+      issues.push({ metadata, campaign });
     } catch (err) {
-      warn("audit.newsletter.metadata_unreadable", { key, error: err.message });
+      warn("audit.newsletter.metadata_unreadable", { key: metadataKey, error: err.message });
     }
   }
   return issues;
@@ -72,9 +93,10 @@ function summariseQa(issues) {
   if (!issues.length) {
     return { issueCount: 0, passRate: null, avgIterations: null, quarantineCount: 0 };
   }
-  const passed = issues.filter((i) => i.qa?.passed);
-  const quarantined = issues.filter((i) => i.qa?.quarantined);
-  const iterations = issues.map((i) => Number(i.qa?.iterations) || 0).filter((n) => n > 0);
+  const metadatas = issues.map((i) => i.metadata);
+  const passed = metadatas.filter((m) => m.qa?.passed);
+  const quarantined = metadatas.filter((m) => m.qa?.quarantined);
+  const iterations = metadatas.map((m) => Number(m.qa?.iterations) || 0).filter((n) => n > 0);
 
   return {
     issueCount: issues.length,
@@ -85,20 +107,56 @@ function summariseQa(issues) {
 }
 
 async function summariseAudience(profile) {
-  if (!profile.emailOctopus.listId) return { configured: false };
-  const result = await getList(profile.emailOctopus.listId);
-  if (!result.ok) return { configured: true, error: result.error };
+  const list = await ensureList({ name: profile.brevo.listName, folderName: profile.brevo.folderName });
+  if (!list.ok) return { configured: true, error: list.error };
+
+  const result = await getList(list.listId);
+  if (!result.ok) return { configured: true, listId: list.listId, error: result.error };
+
   return {
     configured: true,
-    listId: profile.emailOctopus.listId,
-    counts: result.data?.counts || null,
+    listId: list.listId,
+    totalSubscribers: result.data?.totalSubscribers ?? null,
+    totalBlacklisted: result.data?.totalBlacklisted ?? null,
+  };
+}
+
+async function summariseCampaignPerformance(issues) {
+  const delivered = issues.filter((i) => i.campaign?.campaignId);
+  if (!delivered.length) {
+    return { available: false, deliveredCount: 0, reason: "No issues in this window have a recorded Brevo campaign delivery." };
+  }
+
+  const stats = [];
+  for (const { campaign } of delivered) {
+    const status = await getCampaignStatus(campaign.campaignId);
+    if (status.ok && status.statistics) stats.push(status.statistics);
+  }
+
+  if (!stats.length) {
+    return { available: false, deliveredCount: delivered.length, reason: "Brevo campaign reports were not retrievable for any delivered issue in this window." };
+  }
+
+  const avg = (field) => {
+    const values = stats.map((s) => Number(s[field])).filter((n) => Number.isFinite(n));
+    return values.length ? Number((values.reduce((a, b) => a + b, 0) / values.length).toFixed(2)) : null;
+  };
+
+  return {
+    available: true,
+    deliveredCount: delivered.length,
+    reportedCount: stats.length,
+    avgUniqueOpens: avg("uniqueViews"),
+    avgUniqueClicks: avg("clickers"),
+    avgUnsubscribed: avg("unsubscriptions"),
   };
 }
 
 async function buildProfileSection(profile, window) {
-  const issues = await loadIssueMetadataForProfile(profile, window);
+  const issues = await loadIssueRecordsForProfile(profile, window);
   const qa = summariseQa(issues);
   const audience = await summariseAudience(profile);
+  const campaignPerformance = await summariseCampaignPerformance(issues);
 
   return {
     profileId: profile.id,
@@ -106,17 +164,7 @@ async function buildProfileSection(profile, window) {
     window: { start: window.start.toISOString(), end: window.end.toISOString() },
     qa,
     audience,
-    // Campaign-level open/click/unsubscribe metrics require a real
-    // EmailOctopus campaign ID per issue, which the documented v2 API
-    // cannot currently create programmatically (see
-    // services/newsletter/emailoctopus/client.js). Once a campaign ID is
-    // recorded against an issue (manually, or via a future documented
-    // endpoint), audits/routes/newsletter.js's /run can be extended to pull
-    // per-campaign reports here.
-    campaignPerformance: {
-      available: false,
-      reason: "No EmailOctopus campaign IDs on file — campaign creation is not exposed by the documented v2 API.",
-    },
+    campaignPerformance,
   };
 }
 
@@ -129,6 +177,8 @@ function renderHtml(report) {
 <td>${p.qa.passRate ?? "—"}%</td>
 <td>${p.qa.avgIterations ?? "—"}</td>
 <td>${p.qa.quarantineCount}</td>
+<td>${p.audience.totalSubscribers ?? "—"}</td>
+<td>${p.campaignPerformance.available ? `${p.campaignPerformance.avgUniqueOpens ?? "—"} / ${p.campaignPerformance.avgUniqueClicks ?? "—"} / ${p.campaignPerformance.avgUnsubscribed ?? "—"}` : "—"}</td>
 </tr>`
     )
     .join("\n");
@@ -139,7 +189,7 @@ function renderHtml(report) {
 <h1>Newsletter Engine — Monthly Audit</h1>
 <p>Window: ${escapeHtml(report.window.start)} to ${escapeHtml(report.window.end)}</p>
 <table border="1" cellpadding="6" cellspacing="0">
-<tr><th>Profile</th><th>Issues</th><th>QA pass rate</th><th>Avg rewrite iterations</th><th>Quarantined</th></tr>
+<tr><th>Profile</th><th>Issues</th><th>QA pass rate</th><th>Avg rewrite iterations</th><th>Quarantined</th><th>Subscribers</th><th>Avg opens/clicks/unsubs</th></tr>
 ${rows}
 </table>
 </body></html>`;
@@ -177,7 +227,7 @@ export async function runNewsletterAudit({ sessionId = `newsletter-audit-${Date.
       reportPrefix,
       reportUrl: reportHtml.url,
       reportJsonUrl: reportJson.url,
-      profiles: profileSections.map((p) => ({ profileId: p.profileId, qa: p.qa })),
+      profiles: profileSections.map((p) => ({ profileId: p.profileId, qa: p.qa, campaignPerformance: p.campaignPerformance })),
     },
   });
 
