@@ -79,7 +79,7 @@ export const THRESHOLDS = Object.freeze({
   }),
   // Newsletter engine (services/newsletter) — AI Edge and future profiles.
   // Single source of truth for the editorial QA review loop, story
-  // selection, RSS ingestion window and EmailOctopus delivery behaviour.
+  // selection, RSS ingestion window and Brevo delivery behaviour.
   newsletter: Object.freeze({
     // Rolling ingestion window: only articles published within this many
     // hours of "now" are eligible for selection. Spec: previous 24 hours.
@@ -94,22 +94,10 @@ export const THRESHOLDS = Object.freeze({
     rssFetchRetries: Math.max(0, num("NEWSLETTER_RSS_FETCH_RETRIES", 3)),
     rssFetchRetryBaseMs: Math.max(100, num("NEWSLETTER_RSS_FETCH_RETRY_BASE_MS", 500)),
     rssFetchTimeoutMs: Math.max(1000, num("NEWSLETTER_RSS_FETCH_TIMEOUT_MS", 15000)),
-    // EmailOctopus API client retry/backoff.
-    emailOctopusRetries: Math.max(0, num("EMAILOCTOPUS_RETRIES", 3)),
-    emailOctopusRetryBaseMs: Math.max(100, num("EMAILOCTOPUS_RETRY_BASE_MS", 500)),
-    emailOctopusTimeoutMs: Math.max(1000, num("EMAILOCTOPUS_TIMEOUT_MS", 15000)),
-    // Send schedule, IANA timezone so BST/GMT transitions are handled
-    // automatically by Intl rather than a fixed UTC offset.
-    sendTimeZone: String(process.env.NEWSLETTER_SEND_TIMEZONE || "Europe/London").trim(),
-    sendHourLocal: Math.max(0, Math.min(23, num("NEWSLETTER_SEND_HOUR_LOCAL", 10))),
-    sendMinuteLocal: Math.max(0, Math.min(59, num("NEWSLETTER_SEND_MINUTE_LOCAL", 0))),
-    // Whether the "attempt campaign creation via API" code path is even
-    // tried. EmailOctopus v2 does not currently document a create-campaign
-    // endpoint (verified against https://emailoctopus.com/api-documentation/v2
-    // on 2026-07-15); this defaults to false so AIMS always falls back to
-    // the documented, working "pending campaign packet in R2" handoff
-    // instead of guessing at an undocumented endpoint shape.
-    attemptUndocumentedCampaignCreate: bool("EMAILOCTOPUS_ATTEMPT_CAMPAIGN_CREATE", false),
+    // Brevo API client retry/backoff.
+    brevoRetries: Math.max(0, num("BREVO_RETRIES", 3)),
+    brevoRetryBaseMs: Math.max(100, num("BREVO_RETRY_BASE_MS", 500)),
+    brevoTimeoutMs: Math.max(1000, num("BREVO_TIMEOUT_MS", 15000)),
   }),
 });
 
