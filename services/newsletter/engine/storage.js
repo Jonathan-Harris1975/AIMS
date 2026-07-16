@@ -33,16 +33,16 @@ export async function storeNewsletterIssue({ profile, sessionId, html, plaintext
 }
 
 /**
- * Stores a "pending campaign" packet — the complete, ready-to-send payload
- * — for the manual-handoff delivery path used because EmailOctopus v2 does
- * not document a campaign-creation endpoint. See services/newsletter/README.md
- * and emailoctopus/campaign.js.
+ * Records that an issue was handed off to Brevo for delivery — written
+ * alongside the issue's html/text/metadata so the monthly audit can later
+ * pull real open/click/unsubscribe stats for that specific campaign (see
+ * audits/utils/newsletterAudit.js).
  */
-export async function storePendingCampaignPacket({ profile, sessionId, packet, date = new Date() }) {
-  const prefix = `${profile.storage.keyPrefix}/pending-campaigns`;
-  const key = `${prefix}/${dateKey(date)}-${sessionId}.json`;
-  const url = await putJson(profile.storage.htmlBucketKey, key, packet);
+export async function recordCampaignDelivery({ profile, sessionId, campaignId, listId, sentAt, date = new Date() }) {
+  const prefix = buildIssueKeyPrefix(profile, { date, sessionId });
+  const key = `${prefix}/campaign.json`;
+  const url = await putJson(profile.storage.htmlBucketKey, key, { campaignId, listId, sentAt, provider: "brevo" });
   return { key, url };
 }
 
-export default { buildIssueKeyPrefix, storeNewsletterIssue, storePendingCampaignPacket };
+export default { buildIssueKeyPrefix, storeNewsletterIssue, recordCampaignDelivery };
