@@ -3,16 +3,16 @@
   "skill_id": "S094",
   "skill_name": "newsletter-composer",
   "adapted_by": "AIMS services/newsletter",
-  "adapted_at": "2026-07-15",
+  "adapted_at": "2026-07-16",
   "note": [
     "config/hive-skills.json documents that AIMS's skill catalogue (S001-S2xx) is centralised in the",
-    "'hive-skills' R2 bucket with execution_owner: HIVE — i.e. HIVE, not AIMS, is the runtime owner",
+    "'hive-skills' R2 bucket with execution_owner: HIVE \u2014 i.e. HIVE, not AIMS, is the runtime owner",
     "and executor of that canonical skill registry. The newsletter engine specification requires the",
     "implementation to remain completely independent of HIVE at runtime, which rules out AIMS calling",
     "back into HIVE (or its R2 skill registry) to execute S094 live.",
     "",
     "This file is therefore NOT a copy of the canonical S094 definition and does not attempt to be one",
-    "— AIMS has no read access to the canonical document from this change, and guessing at its contents",
+    "\u2014 AIMS has no read access to the canonical document from this change, and guessing at its contents",
     "would misrepresent HIVE-owned material. Instead, this is a local record of what AIMS built,",
     "expressed in S094's terms, so that whoever next updates HIVE's central skill index can reconcile",
     "the two deliberately rather than by accident.",
@@ -23,9 +23,11 @@
     "",
     "Action for a future HIVE-side change: bump S094 in the central registry to reference this AIMS",
     "capability (engine version below) if/when HIVE's skill index is updated to describe AIMS-hosted",
-    "capabilities. That is out of scope here because it requires HIVE repository access."
+    "capabilities. That is out of scope here because it requires HIVE repository access.",
+    "",
+    "2026-07-16 update: delivery provider switched from EmailOctopus to Brevo (https://developers.brevo.com/reference/quickstart-reference), which documents full campaign creation and immediate sending, removing the manual-handoff fallback the EmailOctopus integration needed. AIMS now creates/manages the Brevo list itself; scheduling remains owned entirely by MAST."
   ],
-  "engine_version": "2026.07.1",
+  "engine_version": "2026.07.2",
   "capabilities": [
     "rss_ingestion_24h_window",
     "story_ranking_and_selection",
@@ -34,12 +36,14 @@
     "deterministic_and_ai_qa_review_loop",
     "bounded_rewrite_with_quarantine",
     "multi_profile_configuration",
-    "emailoctopus_documented_api_delivery"
+    "brevo_documented_api_delivery"
   ],
-  "profiles": ["ai-edge"],
+  "profiles": [
+    "ai-edge"
+  ],
   "entry_points": {
     "generate": "services/newsletter/engine/buildNewsletter.js#buildNewsletter",
-    "deliver": "services/newsletter/emailoctopus/campaign.js#deliverNewsletterIssue",
+    "deliver": "services/newsletter/brevo/campaign.js#deliverNewsletterIssue",
     "audit": "audits/utils/newsletterAudit.js#runNewsletterAudit"
   },
   "http_routes": [
