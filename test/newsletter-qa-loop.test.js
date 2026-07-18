@@ -6,6 +6,13 @@ process.env.OPENROUTER_API_KEY = "test-key";
 process.env.AI_MAX_RETRIES = "0";
 process.env.NEWSLETTER_MAX_REWRITE_ITERATIONS = "2";
 process.env.NEWSLETTER_QA_PASS_THRESHOLD = "85";
+// draftNewsletter() below fixtures exactly 2 stories. THRESHOLDS.newsletter
+// .storyCount defaults to 10, and runQaLoop's deterministic validator
+// checks the newsletter's actual story count against it — so without this
+// override, validateStructuralCompleteness always reports "story_count_short"
+// regardless of AI review score, and every subtest falls through to
+// quarantine no matter what reviewScores says.
+process.env.NEWSLETTER_STORY_COUNT = "2";
 
 // The newsletter AI routes (config/ai-config.js) resolve each provider's
 // model name purely from env — there is no static fallback — so every
