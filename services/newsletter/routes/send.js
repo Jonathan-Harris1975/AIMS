@@ -4,7 +4,7 @@ import { getObjectAsText, buildPublicUrl } from "../../shared/utils/r2-client.js
 import { hookdeckDedupe } from "../../shared/utils/hookdeckDedupe.js";
 import { validateBody, newsletterSendBodySchema } from "../../shared/utils/requestSchemas.js";
 import { getNewsletterProfile } from "../config/profiles.js";
-import { buildIssueKeyPrefix } from "../engine/storage.js";
+import { buildIssueKeyPrefix, findLatestIssueSessionId } from "../engine/storage.js";
 import { deliverNewsletterIssue, getCampaignStatus } from "../brevo/campaign.js";
 
 const router = express.Router();
@@ -36,12 +36,29 @@ async function loadStoredIssue(profile, sessionId, date) {
 // Brevo. Scheduling is owned entirely by MAST (a separate repository): this
 // route creates the Brevo campaign and sends it immediately (sendNow) the
 // moment MAST calls it — there is no internal scheduledAt.
+//
+// sessionId is optional. MAST triggers /newsletter/generate and this route
+// as two independently scheduled jobs (09:20 and 10:00) with no mechanism to
+// pass generate's timestamp-based sessionId into send's static request body,
+// so when sessionId is omitted this resolves "today's most recently built
+// issue" for the profile itself (see engine/storage.js#findLatestIssueSessionId).
 router.post("/send", hookdeckDedupe("newsletter:send"), asyncRoute(async (req, res) => {
   const parsed = validateBody(newsletterSendBodySchema, req.body);
   if (!parsed.ok) return res.status(400).json({ ok: false, error: parsed.error });
 
-  const { profileId, sessionId, date } = parsed.data;
+  const { profileId, date } = parsed.data;
+  let { sessionId } = parsed.data;
   const profile = getNewsletterProfile(profileId);
+
+  if (!sessionId) {
+    sessionId = await findLatestIssueSessionId(profile, { date: date ? new Date(date) : new Date() });
+    if (!sessionId) {
+      return res.status(404).json({
+        ok: false,
+        error: `No built issue found for profile '${profile.id}' on ${date || "today"}. Run POST /newsletter/generate first.`,
+      });
+    }
+  }
 
   let buildResult;
   try {
