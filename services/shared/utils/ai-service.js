@@ -172,6 +172,21 @@ function getServiceTier() {
   return undefined;
 }
 
+// Reasoning models (e.g. openai/gpt-5-mini) spend part of max_tokens on
+// internal "reasoning" tokens before writing any visible content. If
+// max_tokens is tight, the reasoning step can consume the entire budget and
+// the API returns HTTP 200 with a *successful* response whose message.content
+// is simply "" (usage.completion_tokens still shows the reasoning spend).
+// Capping reasoning effort keeps headroom free for the actual answer.
+function getReasoningOptions() {
+  const raw = String(process.env.OPENROUTER_REASONING_EFFORT || "low").trim().toLowerCase();
+  if (!raw || raw === "none" || raw === "off") return undefined;
+  if (["minimal", "low", "medium", "high"].includes(raw)) return { effort: raw };
+  const maxTokens = Number(raw);
+  if (Number.isFinite(maxTokens) && maxTokens > 0) return { max_tokens: maxTokens };
+  return { effort: "low" };
+}
+
 function shouldLogUsage() {
   return parseBoolean(process.env.AI_USAGE_LOG_ENABLED, true) !== false;
 }
@@ -212,6 +227,9 @@ async function callOpenRouter({ providerId, model, apiKey, messages, max_tokens,
   const serviceTier = getServiceTier();
   if (serviceTier) payload.service_tier = serviceTier;
 
+  const reasoning = getReasoningOptions();
+  if (reasoning) payload.reasoning = reasoning;
+
   const reqHeaders = {
     "Content-Type": "application/json",
     Authorization: `Bearer ${apiKey}`,
@@ -229,9 +247,29 @@ async function callOpenRouter({ providerId, model, apiKey, messages, max_tokens,
       throw makeOpenRouterError(res.status, text, providerId);
     }
     const json = await res.json();
+    const content = extractMessageContent(json);
+    const usage = json?.usage || null;
+
+    if (!content) {
+      const finishReason = json?.choices?.[0]?.finish_reason;
+      const reasonNote =
+        finishReason === "length"
+          ? "the model's reasoning consumed the entire max_tokens budget before producing visible output"
+          : "the model returned no visible completion content";
+      const emptyErr = new Error(
+        `OpenRouter returned an empty completion for provider ${providerId} (model ${model}): ${reasonNote} ` +
+          `[finish_reason=${finishReason || "unknown"}, completion_tokens=${usage?.completion_tokens ?? "unknown"}]`
+      );
+      emptyErr.name = "AIEmptyCompletionError";
+      emptyErr.providerId = providerId;
+      emptyErr.status = "empty_completion";
+      emptyErr.nonRetryable = false;
+      throw emptyErr;
+    }
+
     return {
-      content: extractMessageContent(json),
-      usage: json?.usage || null,
+      content,
+      usage,
       id: json?.id,
       model: json?.model || model,
       serviceTier: json?.service_tier || serviceTier,
