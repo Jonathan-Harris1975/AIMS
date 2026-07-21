@@ -82,7 +82,7 @@ export async function composeLeadArticle({ profile, lead, sessionId }) {
     },
   ];
 
-  const raw = await resilientRequest("newsletterCompose", { sessionId, messages, max_tokens: 700 });
+  const raw = await resilientRequest("newsletterCompose", { sessionId, messages, max_tokens: 1400 });
   const parsed = parseJsonResponse(raw, "composeLeadArticle");
   if (!parsed.ok) {
     warn("newsletter.compose.lead_parse_failed", { sessionId, error: parsed.error });
@@ -115,7 +115,7 @@ export async function composeStorySummaries({ profile, stories, sessionId }) {
     { role: "user", content: sourcesBlock(stories) },
   ];
 
-  const raw = await resilientRequest("newsletterCompose", { sessionId, messages, max_tokens: 900 });
+  const raw = await resilientRequest("newsletterCompose", { sessionId, messages, max_tokens: 1700 });
   const parsed = parseJsonResponse(raw, "composeStorySummaries");
   if (!parsed.ok || !Array.isArray(parsed.data?.summaries)) {
     warn("newsletter.compose.summaries_parse_failed", { sessionId, error: parsed.error });
@@ -148,7 +148,7 @@ export async function composeSubjectAndPreview({ profile, heroHeadline, sessionI
     { role: "user", content: `Today's lead headline: ${heroHeadline}` },
   ];
 
-  const raw = await resilientRequest("newsletterSubject", { sessionId, messages, max_tokens: 200 });
+  const raw = await resilientRequest("newsletterSubject", { sessionId, messages, max_tokens: 500 });
   const parsed = parseJsonResponse(raw, "composeSubjectAndPreview");
   if (!parsed.ok) {
     warn("newsletter.compose.subject_parse_failed", { sessionId, error: parsed.error });
