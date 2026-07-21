@@ -1,8 +1,0 @@
-No additional files need deleting for this CI fix.
-
-Keep the earlier AIMS centralisation deletions from the previous patch if not already applied:
-.agents/
-audits/skills/
-scripts/setup-batch-1-skills.sh
-scripts/setup-lane-1-skills.sh
-scripts/setup-phase-3-skills.sh
