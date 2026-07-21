@@ -1,58 +1,37 @@
-> **Document status:** Production reference  
-> **Last reviewed:** 21 June 2026  
-> **Operational authority:** Current repository README, SECURITY policy and operations guide.
+# Newsletter fix — empty AI completion from openai/gpt-5-mini
 
-# AI Management Suite (AIMS)
+## Root cause
+`AI_MODEL_STANDARD=openai/gpt-5-mini` is a reasoning model. Under load it was
+spending its entire `max_tokens` budget on internal reasoning tokens before
+writing any visible output, so OpenRouter returned HTTP 200 with
+`message.content: ""` (while `usage.completion_tokens` still showed spend,
+e.g. 640 tokens for nothing visible).
 
-AIMS is the production orchestration API for content, podcast, outreach, social publishing, audits and operational automation. It runs as a Node.js service on Koyeb and is triggered by MAST, Hookdeck and governed operator workflows.
+`ai-service.js` treated any 200 response as a success and returned the empty
+string straight through — it never retried or failed over to the next
+provider (highQuality / fallback). `compose.js` then failed to parse the
+empty string as JSON, logged `newsletter.compose.lead_parse_failed`, and the
+route threw a 500. Because `/newsletter/generate` never produced a stored
+issue, the scheduled `/newsletter/send` call 30 minutes later correctly (by
+its own design) found nothing to send and returned 404 — that 404 is a
+downstream symptom, not a separate bug.
 
-## Production responsibilities
+## Fix (2 files)
+- `services/shared/utils/ai-service.js`
+  - Sends `reasoning: { effort: "low" }` to OpenRouter by default (configurable
+    via `OPENROUTER_REASONING_EFFORT`, set to `none`/`off` to disable) so
+    reasoning models leave headroom for actual output.
+  - If a provider still returns empty `message.content`, this is now thrown
+    as a retryable error instead of returned as a "successful" empty string —
+    so `resilientRequest` retries and then fails over to the next provider in
+    the route chain (`highQuality`, `fallback`, etc.) exactly like any other
+    provider failure.
+- `services/newsletter/engine/compose.js`
+  - Raised `max_tokens` headroom for the three newsletter compose calls
+    (700→1400, 900→1700, 200→500) so there's room left for visible content
+    even after reasoning tokens.
 
-- Podcast composition, TTS, artwork, metadata and publishing workflows.
-- Blog, RSS and social-content generation with brand and quarantine gates.
-- Zernio and Blotato publishing lanes.
-- Outreach processing and repository/audit dispatch.
-- Durable operational state in Cloudflare R2.
-- Operational health and warm-up endpoints consumed by HIVE.
-
-## Health contract
-
-| Endpoint | Purpose |
-|---|---|
-| `GET /health` | Public service health |
-| `GET /livez` | Liveness probe |
-| `GET /readyz` | Dependency/configuration readiness |
-| `GET /ops/health` | Deeper authenticated operational status where configured |
-
-## Local verification
-
-```bash
-npm ci --ignore-scripts --no-audit --no-fund
-npm run build
-npm test
-npm run verify
-npm audit --omit=dev --audit-level=high
-npm run deploy:smoke
-```
-
-## Production deployment
-
-Use the root Dockerfile with Node.js 22. The container runs as the non-root `node` user, validates the build without production secrets, and uses `dumb-init` for signal handling. Keep runtime secrets in Koyeb Secrets and validate them with `npm run env:doctor` before deployment.
-
-AIMS should be treated as an internal API. CORS is allow-listed, request bodies are bounded, noisy probes are rejected early and production responses carry restrictive security headers. Production publish-now and purge triggers are not public by default: use the suite bearer token or the documented hook secrets.
-
-See [`SECURITY.md`](SECURITY.md), [`docs/OPERATIONS.md`](docs/OPERATIONS.md) and the service-level READMEs under `services/`.
-
-## Professional operations
-
-`/ops/excellence` reports durable job outcomes, retry recovery and provider latency/failure aggregates. Repeated workflow failures and CI/Koyeb deployment failures are delivered to HIVE-UI Ops. See [`docs/OPERATIONAL_ALERTING.md`](docs/OPERATIONAL_ALERTING.md).
-
-
-## Production hardening notes
-
-- `npm test` runs the full deterministic Node test sweep, including job-store and every `test/*.test.js` file.
-- `/readyz` fails closed in production when `AIMS_API_KEY` or durable R2-backed state is missing.
-- `POST /cloudflare/purge` requires AIMS bearer auth or `CLOUDFLARE_PURGE_SHARED_SECRET` in production unless `CLOUDFLARE_PURGE_ALLOW_PUBLIC=true` is deliberately set.
-- `POST /blotato/shorts/:lane/publish-now` requires AIMS bearer auth or `BLOTATO_PUBLISH_WEBHOOK_SECRET` in production unless `BLOTATO_ALLOW_PUBLIC_PUBLISH_HOOKS=true` is deliberately set.
-- R2 object keys are rejected when they contain traversal, absolute paths, query strings, fragments or control characters.
-- AIMS consumes the central HIVE R2 skill pool; it does not auto-deploy local skill descriptors.
+## Deploy
+Drop these two files into the matching paths in the repo and redeploy the
+Koyeb service. No env var changes are required (optional:
+`OPENROUTER_REASONING_EFFORT` if you want a different default than `low`).
