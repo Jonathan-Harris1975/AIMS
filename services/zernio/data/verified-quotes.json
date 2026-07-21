@@ -1,5 +1,299 @@
 [
   {
+    "id": "jobs-innovation-leader",
+    "quote": "Innovation distinguishes between a leader and a follower.",
+    "author": "Steve Jobs",
+    "context": "leadership, standing out, product vision",
+    "sourceNote": "One of Jobs's most widely corroborated quotes; consistent across Inc., US Chamber of Commerce and multiple quote archives."
+  },
+  {
+    "id": "turing-short-distance",
+    "quote": "We can only see a short distance ahead, but we can see plenty there that needs to be done.",
+    "author": "Alan Turing",
+    "context": "taking the next step, vision, incremental progress",
+    "sourceNote": "From 'Computing Machinery and Intelligence' (Mind, 1950). Corroborated across the Turing Digital Archive, MacTutor and multiple independent quote-verification sites."
+  },
+  {
+    "id": "jobs-faith-in-people",
+    "quote": "Technology is nothing. What's important is that you have a faith in people, that they're basically good and smart, and if you give them tools, they'll do wonderful things with them.",
+    "author": "Steve Jobs",
+    "context": "trusting your audience, tools over control, empowerment",
+    "sourceNote": "Corroborated across Medium, LinkedIn and LifeHack quote collections with consistent wording."
+  },
+  {
+    "id": "minsky-learn-more-than-one-way",
+    "quote": "You don't understand anything until you learn it more than one way.",
+    "author": "Marvin Minsky",
+    "context": "deep learning of concepts, persistence in understanding",
+    "sourceNote": "Corroborated across BrainyQuote, Goodreads and QuoteFancy with consistent wording."
+  },
+  {
+    "id": "jobs-courage-heart",
+    "quote": "Have the courage to follow your heart and intuition. They somehow already know what you truly want to become.",
+    "author": "Steve Jobs",
+    "context": "self-belief, decision-making, following conviction",
+    "sourceNote": "Corroborated across multiple independent quote-verification sites with consistent wording."
+  },
+  {
+    "id": "turing-surprise",
+    "quote": "Machines take me by surprise with great frequency.",
+    "author": "Alan Turing",
+    "context": "curiosity, embracing the unexpected, creative discovery",
+    "sourceNote": "From 'Computing Machinery and Intelligence' (Mind, 1950). Corroborated across the Turing Digital Archive, MacTutor and multiple independent quote-verification sites."
+  },
+  {
+    "id": "jobs-wonderful",
+    "quote": "Being the richest man in the cemetery doesn't matter to me. Going to bed at night saying we've done something wonderful, that's what matters to me.",
+    "author": "Steve Jobs",
+    "context": "purpose over profit, meaningful work",
+    "sourceNote": "Corroborated across multiple independent quote-verification sites with consistent wording."
+  },
+  {
+    "id": "minsky-aware",
+    "quote": "No computer has ever been designed that is ever aware of what it's doing; but most of the time, we aren't either.",
+    "author": "Marvin Minsky",
+    "context": "humility about intelligence, human and machine cognition",
+    "sourceNote": "Corroborated across BrainyQuote and QuoteFancy with consistent wording."
+  },
+  {
+    "id": "jobs-saying-no",
+    "quote": "I'm as proud of many of the things we haven't done as the things we have done. Innovation is saying no to a thousand things.",
+    "author": "Steve Jobs",
+    "context": "focus, prioritisation, discipline in building",
+    "sourceNote": "Corroborated across LifeHack and Fortune-sourced quote archives with consistent wording."
+  },
+  {
+    "id": "li-responsibility",
+    "quote": "Technology could benefit or hurt people, so the usage of tech is the responsibility of humanity as a whole, not just the discoverer. I am a person before I'm an AI technologist.",
+    "author": "Fei-Fei Li",
+    "context": "shared responsibility, humanity before technology, ethics",
+    "sourceNote": "Corroborated by BrainyQuote with consistent wording."
+  },
+  {
+    "id": "jobs-dent-universe",
+    "quote": "We're here to put a dent in the universe. Otherwise why else even be here?",
+    "author": "Steve Jobs",
+    "context": "ambition, purpose, building something that matters",
+    "sourceNote": "Cited to Wired (1997) across multiple independent quote archives with consistent wording."
+  },
+  {
+    "id": "kurzweil-exponential",
+    "quote": "Our intuition about the future is linear. But the reality of information technology is exponential, and that makes a profound difference.",
+    "author": "Ray Kurzweil",
+    "context": "thinking bigger, exponential growth, long-term vision",
+    "sourceNote": "Corroborated by BrainyQuote with consistent wording."
+  },
+  {
+    "id": "jobs-make-better",
+    "quote": "My job is not to be easy on people. My job is to make them better.",
+    "author": "Steve Jobs",
+    "context": "high standards, mentorship, pushing for excellence",
+    "sourceNote": "Cited to Fortune (2008) across multiple independent quote archives with consistent wording."
+  },
+  {
+    "id": "turing-altered-opinion",
+    "quote": "I believe that at the end of the century the use of words and general educated opinion will have altered so much that one will be able to speak of machines thinking without expecting to be contradicted.",
+    "author": "Alan Turing",
+    "context": "long-term vision, challenging conventional wisdom",
+    "sourceNote": "From 'Computing Machinery and Intelligence' (Mind, 1950). Corroborated across the Turing Digital Archive, MacTutor and multiple independent quote-verification sites."
+  },
+  {
+    "id": "jobs-getting-fired",
+    "quote": "I didn't see it then, but it turned out that getting fired from Apple was the best thing that could have ever happened to me.",
+    "author": "Steve Jobs",
+    "context": "resilience, setbacks as opportunity, reinvention",
+    "sourceNote": "From the 2005 Stanford commencement address; widely corroborated primary source."
+  },
+  {
+    "id": "minsky-no-trick",
+    "quote": "What magical trick makes us intelligent? The trick is that there is no trick. The power of intelligence stems from our vast diversity, not from any single, perfect principle.",
+    "author": "Marvin Minsky",
+    "context": "valuing diverse skills, no single shortcut to mastery",
+    "sourceNote": "From 'The Society of Mind'; corroborated across QuoteFancy and Goodreads with consistent wording."
+  },
+  {
+    "id": "jobs-keep-looking",
+    "quote": "If you haven't found it yet, keep looking. Don't settle.",
+    "author": "Steve Jobs",
+    "context": "persistence, finding meaningful work, not settling",
+    "sourceNote": "From the 2005 Stanford commencement address; widely corroborated primary source."
+  },
+  {
+    "id": "li-healthcare",
+    "quote": "The day healthcare can fully embrace AI is the day we have a revolution in terms of cutting costs and improving care.",
+    "author": "Fei-Fei Li",
+    "context": "real-world impact, healthcare, tangible benefit of AI",
+    "sourceNote": "Corroborated by BrainyQuote with consistent wording."
+  },
+  {
+    "id": "jobs-connecting-dots",
+    "quote": "You can't connect the dots looking forward; you can only connect them looking backwards.",
+    "author": "Steve Jobs",
+    "context": "trusting the process, career winding paths, hindsight",
+    "sourceNote": "From the 2005 Stanford commencement address; widely corroborated primary source."
+  },
+  {
+    "id": "kurzweil-find-idea",
+    "quote": "No matter what problem you encounter, whether it's a grand challenge for humanity or a personal problem of your own, there's an idea out there that can overcome it. And you can find that idea.",
+    "author": "Ray Kurzweil",
+    "context": "problem-solving optimism, perseverance, resourcefulness",
+    "sourceNote": "Corroborated by BrainyQuote with consistent wording."
+  },
+  {
+    "id": "ng-electricity",
+    "quote": "AI is like electricity. Just as electricity transformed every major industry a century ago, AI is now poised to do the same.",
+    "author": "Andrew Ng",
+    "context": "scale of opportunity, transformative technology, industry-wide impact",
+    "sourceNote": "One of Ng's most widely corroborated public statements (originally from a Harvard Business Review interview), consistent across many independent sources."
+  },
+  {
+    "id": "hassabis-solve-problems",
+    "quote": "AI will have the power to enable us to solve some of humanity's most challenging problems.",
+    "author": "Demis Hassabis",
+    "context": "optimism, big ambitions, real-world problem solving",
+    "sourceNote": "Attributed in AI-quote roundups (e.g. AI for Social Good); exact primary interview source not independently confirmed here \u2014 verify before production use."
+  },
+  {
+    "id": "jobs-stay-hungry",
+    "quote": "Stay hungry, stay foolish.",
+    "author": "Steve Jobs",
+    "context": "closing motivational line, ambition, willingness to look naive",
+    "sourceNote": "From the 2005 Stanford commencement address (originally quoting the Whole Earth Catalog); widely corroborated primary source."
+  },
+  {
+    "id": "turing-conjectures",
+    "quote": "Conjectures are of great importance since they suggest useful lines of research.",
+    "author": "Alan Turing",
+    "context": "hypothesis-driven work, research mindset, not fearing being wrong",
+    "sourceNote": "Corroborated by the Turing Digital Archive (King's College, Cambridge)."
+  },
+  {
+    "id": "minsky-smarter-machine",
+    "quote": "We humans are not the end of evolution, so if we can make a machine that's as smart as a person, we can probably also make one that's much smarter.",
+    "author": "Marvin Minsky",
+    "context": "ambition, pushing past current limits, long-term vision",
+    "sourceNote": "Corroborated by BrainyQuote with consistent wording."
+  },
+  {
+    "id": "li-diverse-world",
+    "quote": "This is the world where our children will live, and technology should reflect that diverse world.",
+    "author": "Fei-Fei Li",
+    "context": "inclusive design, building for the next generation",
+    "sourceNote": "Corroborated by BrainyQuote with consistent wording."
+  },
+  {
+    "id": "kurzweil-use-it",
+    "quote": "Our brain is entirely like any of our physical muscles: use it or lose it.",
+    "author": "Ray Kurzweil",
+    "context": "continuous learning, mental fitness, discipline",
+    "sourceNote": "Corroborated by QuoteFancy with consistent wording."
+  },
+  {
+    "id": "lovelace-brain",
+    "quote": "That brain of mine is something more than merely mortal; as time will show.",
+    "author": "Ada Lovelace",
+    "context": "self-belief, legacy, confidence in one's ideas",
+    "sourceNote": "Widely corroborated as a genuine Lovelace letter quotation, cross-referenced across Ada Lovelace Day retrospectives."
+  },
+  {
+    "id": "karpathy-english",
+    "quote": "The hottest new programming language is English.",
+    "author": "Andrej Karpathy",
+    "context": "accessibility of building with AI, natural language as a tool",
+    "sourceNote": "Widely reported public statement (2023), cross-referenced across multiple technology outlets."
+  },
+  {
+    "id": "ng-explorer",
+    "quote": "You don't have to be an AI expert, but you must be an AI explorer.",
+    "author": "Andrew Ng",
+    "context": "accessibility of AI, encouraging curiosity over credentials",
+    "sourceNote": "Attributed in AI-quote roundups (e.g. JD Meier); exact primary interview source not independently confirmed here \u2014 verify before production use."
+  },
+  {
+    "id": "hassabis-evolution",
+    "quote": "Artificial intelligence is the next stage in the evolution of life.",
+    "author": "Demis Hassabis",
+    "context": "long-term significance, framing AI's place in history",
+    "sourceNote": "Attributed in AI-quote roundups (e.g. AI for Social Good); exact primary interview source not independently confirmed here \u2014 verify before production use."
+  },
+  {
+    "id": "bengio-steer",
+    "quote": "We need to think about how to steer AI. How do we transform today's buggy and hackable AI systems into systems we can really trust and make sure they really do what we want?",
+    "author": "Yoshua Bengio",
+    "context": "trustworthy systems, building for reliability",
+    "sourceNote": "Attributed in AI-quote roundups (e.g. Medium); exact primary interview source not independently confirmed here \u2014 verify before production use."
+  },
+  {
+    "id": "jobs-beatles-model",
+    "quote": "My model for business is The Beatles: they were four guys that kept each other's negative tendencies in check; they balanced each other.",
+    "author": "Steve Jobs",
+    "context": "teamwork, collaboration, balancing strengths",
+    "sourceNote": "Cited to a 60 Minutes interview across multiple quote archives with consistent wording."
+  },
+  {
+    "id": "turing-deceive",
+    "quote": "A computer would deserve to be called intelligent if it could deceive a human into believing that it was human.",
+    "author": "Alan Turing",
+    "context": "defining the Turing Test, ambition in AI design",
+    "sourceNote": "Widely cited paraphrase of the 1950 imitation-game criterion; corroborated across multiple quote-verification sites, though exact original phrasing should be checked against the Mind (1950) paper before production use."
+  },
+  {
+    "id": "minsky-common-sense",
+    "quote": "Common sense is not a simple thing. Instead, it is an immense society of hard-earned practical ideas, of multitudes of life-learned rules and exceptions, dispositions and tendencies, balances and checks.",
+    "author": "Marvin Minsky",
+    "context": "respecting hard-earned experience, complexity of expertise",
+    "sourceNote": "From 'The Society of Mind'; corroborated by QuoteFancy with consistent wording."
+  },
+  {
+    "id": "li-civilization-cusp",
+    "quote": "I believe our civilization stands on the cusp of a technological revolution with the power to reshape life as we know it.",
+    "author": "Fei-Fei Li",
+    "context": "scale of change, historical moment, responsibility",
+    "sourceNote": "Attributed in AI-quote roundups (e.g. Medium); exact primary source (book or interview) not independently confirmed here \u2014 verify before production use."
+  },
+  {
+    "id": "kurzweil-shooting-skeet",
+    "quote": "Launching a breakthrough idea is like shooting skeet.",
+    "author": "Ray Kurzweil",
+    "context": "timing, anticipation, innovation strategy",
+    "sourceNote": "Attributed by QuoteFancy; original speech context not independently confirmed here \u2014 verify before production use."
+  },
+  {
+    "id": "lovelace-poetical-science",
+    "quote": "If you can't give me poetry, can't you give me poetical science?",
+    "author": "Ada Lovelace",
+    "context": "creativity meeting technical work, imagination in computing",
+    "sourceNote": "Widely corroborated as a genuine Lovelace letter quotation, cross-referenced across Ada Lovelace Day retrospectives."
+  },
+  {
+    "id": "karpathy-software2",
+    "quote": "With AI now, we are able to write new programs that we could never hope to write by hand before.",
+    "author": "Andrej Karpathy",
+    "context": "new possibilities, expanding what's buildable",
+    "sourceNote": "From his 'Software 2.0' writing, corroborated via a quotation collected by Simon Willison (November 2025)."
+  },
+  {
+    "id": "ng-define-imagine",
+    "quote": "AI can do anything that we are able to understand and specify. But it's limited to what we can define and imagine.",
+    "author": "Andrew Ng",
+    "context": "the role of human imagination and clarity in AI progress",
+    "sourceNote": "Attributed in AI-quote roundups (e.g. JD Meier); exact primary interview source not independently confirmed here \u2014 verify before production use."
+  },
+  {
+    "id": "hassabis-help-solve",
+    "quote": "AI is going to be a part of our lives and will help us solve many problems, but only if we let it.",
+    "author": "Demis Hassabis",
+    "context": "openness to change, willingness to adopt new tools",
+    "sourceNote": "Attributed in AI-quote roundups (e.g. JD Meier); exact primary interview source not independently confirmed here \u2014 verify before production use."
+  },
+  {
+    "id": "bengio-more-to-learn",
+    "quote": "The more we learn about AI, the more we realize how far it still has to go.",
+    "author": "Yoshua Bengio",
+    "context": "humility, continuous learning, growth mindset",
+    "sourceNote": "Attributed in AI-quote roundups (e.g. JD Meier); exact primary interview source not independently confirmed here \u2014 verify before production use."
+  },
+  {
     "id": "drucker-results",
     "quote": "There is nothing so useless as doing efficiently that which should not be done at all.",
     "author": "Peter Drucker",
@@ -40,5 +334,47 @@
     "author": "John Gall",
     "context": "building small, avoiding over-engineering, automation maturity",
     "sourceNote": "Provenance required in curated quote ledger before production use; retained as locally verified wording."
+  },
+  {
+    "id": "hinton-alignment",
+    "quote": "There is no chance of stopping AI's development. But we need to ensure alignment, to ensure it is beneficial to us.",
+    "author": "Geoffrey Hinton",
+    "context": "responsible progress, steering technology toward good outcomes",
+    "sourceNote": "Attributed in AI-quote roundups (e.g. Medium); exact primary interview source not independently confirmed here \u2014 verify before production use."
+  },
+  {
+    "id": "lecun-surpass",
+    "quote": "AI is not just about replicating human intelligence; it's about creating intelligent systems that can surpass human limitations.",
+    "author": "Yann LeCun",
+    "context": "ambition, going beyond imitation, pushing capability",
+    "sourceNote": "Attributed in AI-quote roundups (e.g. Medium); exact primary interview source not independently confirmed here \u2014 verify before production use."
+  },
+  {
+    "id": "gates-optimistic",
+    "quote": "I'm optimistic about AI, but cautiously so.",
+    "author": "Bill Gates",
+    "context": "balanced optimism, measured confidence in new technology",
+    "sourceNote": "Attributed in AI-quote roundups (e.g. Finest of the Fine); exact primary interview source not independently confirmed here \u2014 verify before production use."
+  },
+  {
+    "id": "nadella-fail-innovate",
+    "quote": "You have to be willing to fail to innovate.",
+    "author": "Satya Nadella",
+    "context": "risk-taking, resilience, culture of experimentation",
+    "sourceNote": "Attributed in AI-quote roundups (e.g. JD Meier); exact primary interview source not independently confirmed here \u2014 verify before production use."
+  },
+  {
+    "id": "altman-best-worst",
+    "quote": "AI will be the best or worst thing ever for humanity.",
+    "author": "Sam Altman",
+    "context": "stakes of the work, responsibility, high ambition",
+    "sourceNote": "Attributed in AI-quote roundups (e.g. Finest of the Fine); exact primary interview source not independently confirmed here \u2014 verify before production use."
+  },
+  {
+    "id": "rometty-transform",
+    "quote": "Artificial intelligence will transform the relationship between people and technology, charging our creativity and skills.",
+    "author": "Ginni Rometty",
+    "context": "human-AI collaboration, creativity augmented by technology",
+    "sourceNote": "Attributed in AI-quote roundups (e.g. JD Meier); exact primary interview source not independently confirmed here \u2014 verify before production use."
   }
 ]
