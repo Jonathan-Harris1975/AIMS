@@ -1,4 +1,4 @@
-import { buildOneUpPersona } from "../../script/utils/toneSetter.js";
+import { buildZernioPersona } from "../../script/utils/toneSetter.js";
 
 function renderHistoryBlock(history = []) {
   const cleaned = Array.isArray(history)
@@ -23,7 +23,7 @@ function renderRssBlock(rssItems = []) {
     .join("\n");
 }
 
-const BRAND_VOICE = buildOneUpPersona();
+const BRAND_VOICE = buildZernioPersona();
 
 export function buildDailyPrompt({ lane, publishDate, history = [], rssItems = [], weeklyHistory = [], verifiedQuote = null, buildContext = "" }) {
   const laneGuidance = {
@@ -257,7 +257,7 @@ export function buildEbookPostPrompt({ day, publishDate, featuredBook }) {
   const dayGuidance = EBOOK_DAY_GUIDANCE[dayKey];
 
   return {
-    system: `${buildOneUpPersona()}
+    system: `${buildZernioPersona()}
 
 Additional ebook-post rules:
 - British English
