@@ -781,6 +781,19 @@ function buildEbookFirstComment(featuredBook) {
   return `Featured book: ${featuredBook.title}\nRead more: ${featuredBook.bookUrl}`;
 }
 
+// Zernio's documented Posts API has no confirmed first-comment field, so
+// `firstComment` (built above) is dropped before the post is sent — see the
+// LIMITATION note in scheduleToZernio. Ebook posts must still surface the
+// book link somewhere Zernio actually publishes, so it's folded into the
+// main content itself rather than relying on a comment that never gets sent.
+function appendEbookLink(content, featuredBook) {
+  const base = compactText(content);
+  const url = compactText(featuredBook?.bookUrl || "");
+  if (!url) return base;
+  if (base.toLowerCase().includes(url.toLowerCase())) return base;
+  return `${base}\n\nRead more: ${url}`;
+}
+
 function resolveEbookPublishTime(options, day) {
   const override = options.publishTimes?.[day];
   if (override && /^\d{2}:\d{2}$/.test(String(override))) return override;
@@ -1380,7 +1393,7 @@ export async function buildAndScheduleEbookWeekly(options = {}) {
         firstComment: buildEbookFirstComment(featuredBook),
         imageUrl,
         manuscriptUrl: featuredBook.manuscriptUrl || "",
-        content: ensureHashtags(generated.content, EBOOK_CONFIG.hashtags),
+        content: ensureHashtags(appendEbookLink(generated.content, featuredBook), EBOOK_CONFIG.hashtags),
       };
 
       let phase5Gate = runPhase5OrganicGrowthGate({
