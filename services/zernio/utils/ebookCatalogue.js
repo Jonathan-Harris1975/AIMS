@@ -39,7 +39,7 @@ function slugFromUrl(value) {
 
 function pathFromOption(pathOption) {
   if (pathOption) return path.resolve(String(pathOption));
-  if (process.env.ZERNIO_EBOOK_CATALOGUE_PATH) return path.resolve(process.env.ZERNIO_EBOOK_CATALOGUE_PATH);
+  if (process.env.ONEUP_EBOOK_CATALOGUE_PATH) return path.resolve(process.env.ONEUP_EBOOK_CATALOGUE_PATH);
   return fileURLToPath(DEFAULT_CATALOGUE_URL);
 }
 
