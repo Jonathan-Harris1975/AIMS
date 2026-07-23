@@ -118,7 +118,7 @@ export const REVIEW_COUNCILS = Object.freeze({
       "Episode Metadata Reviewer",
       "RSS Wording Reviewer",
       "Brand Continuity Reviewer",
-      "Future QA Chair",
+      "Podcast Publishing Chair",
     ],
   },
   "social-performance": {
@@ -156,7 +156,12 @@ function boolEnv(name, fallback = false, env = process.env) {
 }
 
 function getCouncilConfig(councilKey) {
-  return REVIEW_COUNCILS[councilKey] || REVIEW_COUNCILS["blog-phase45"];
+  const council = REVIEW_COUNCILS[councilKey];
+  if (!council) {
+    warn?.("review_council.unknown_council_key", { councilKey, fallback: "blog-phase45" });
+    return REVIEW_COUNCILS["blog-phase45"];
+  }
+  return council;
 }
 
 export function isReviewCouncilEnabled(councilKey, env = process.env) {
@@ -166,8 +171,9 @@ export function isReviewCouncilEnabled(councilKey, env = process.env) {
 
 export function getReviewCouncilMembers(councilKey) {
   const members = getCouncilConfig(councilKey).members || [];
-  if (members.length >= 6) return members.slice(0, Math.max(6, members.length));
-  return [...members, ...REVIEW_COUNCILS.housekeeping.members].slice(0, 6);
+  if (members.length >= 6) return members;
+  const padded = [...members, ...REVIEW_COUNCILS.housekeeping.members.filter((name) => !members.includes(name))];
+  return padded.slice(0, 6);
 }
 
 function compactText(value = "") {
@@ -231,7 +237,7 @@ export function repairArtifactForReviewCouncil(artifact, options = {}) {
 }
 
 export function repairZernioPostForReviewCouncil(post = {}, { contentType = "zernio-social", featuredBook = null } = {}) {
-  const repaired = repairArtifactForReviewCouncil(post, { contentType, maxHashtags: /ebook/i.test(contentType) ? 3 : 3 });
+  const repaired = repairArtifactForReviewCouncil(post, { contentType, maxHashtags: /ebook/i.test(contentType) ? 2 : 3 });
   if (featuredBook?.title && featuredBook?.bookUrl && /ebook/i.test(contentType)) {
     const firstComment = String(repaired.firstComment || "");
     if (!firstComment.includes(featuredBook.title) || !firstComment.includes(featuredBook.bookUrl)) {
