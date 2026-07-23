@@ -66,6 +66,7 @@ export const REVIEW_COUNCILS = Object.freeze({
     defaultEnabled: true,
     members: [
       "Brand Tone Chair",
+      "British English Stylist",
       "Source Evidence Reviewer",
       "Schema Integrity Reviewer",
       "Mobile UX Reader",
@@ -78,6 +79,7 @@ export const REVIEW_COUNCILS = Object.freeze({
     defaultEnabled: false,
     members: [
       "Shorts Script Editor",
+      "British English Stylist",
       "Source Fidelity Reviewer",
       "Scene Flow Reviewer",
       "Platform Fit Reviewer",
@@ -90,6 +92,7 @@ export const REVIEW_COUNCILS = Object.freeze({
     defaultEnabled: true,
     members: [
       "Zernio Copy Editor",
+      "British English Stylist",
       "Brand Safety Reviewer",
       "CTA Reviewer",
       "British English Reviewer",
@@ -105,6 +108,7 @@ export const REVIEW_COUNCILS = Object.freeze({
       "Answer Consistency Reviewer",
       "Options Format Reviewer",
       "Audience Level Reviewer",
+      "British English Stylist",
       "Static Card Readability Reviewer",
       "Quiz Publishing Chair",
     ],
@@ -114,6 +118,7 @@ export const REVIEW_COUNCILS = Object.freeze({
     defaultEnabled: true,
     members: [
       "Podcast Voice Reviewer",
+      "British English Stylist",
       "Transcript Layout Reviewer",
       "Episode Metadata Reviewer",
       "RSS Wording Reviewer",
