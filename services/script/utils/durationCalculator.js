@@ -7,6 +7,8 @@
 // this deterministic plan so 30/45/60 minute episodes do not drift.
 // ============================================================
 
+import { rotateDurations } from "./durationRotator.js";
+
 const DURATION_SEQUENCE_MINS = [30, 45, 60];
 
 const DURATION_PROFILES = {
@@ -40,8 +42,8 @@ function numericCandidate(...values) {
   return null;
 }
 
-function normaliseAllowedTargetMins(value) {
-  const n = numericCandidate(value);
+function normaliseAllowedTargetMins(...values) {
+  const n = numericCandidate(...values);
   if (!n) return null;
 
   const exact = DURATION_SEQUENCE_MINS.find((mins) => mins === Math.round(n));
@@ -97,9 +99,21 @@ export function buildDurationPlan(sessionMeta = {}, articleCount = 0) {
   const targetMins = resolveTargetMins(sessionMeta);
   const profile = DURATION_PROFILES[targetMins] || DURATION_PROFILES[45];
   const totalSeconds = targetMins * 60;
-  const introSeconds = profile.introSeconds;
-  const outroSeconds = profile.outroSeconds;
-  const mainSeconds = Math.max(300, totalSeconds - introSeconds - outroSeconds);
+
+  // Raw split before normalization. mainSeconds has a 300s floor so very
+  // short/misconfigured profiles never collapse the main section — but that
+  // floor can push the raw sum above the target, so run it through
+  // rotateDurations() to rescale intro/main/outro back to fit exactly.
+  const rawIntro = profile.introSeconds;
+  const rawOutro = profile.outroSeconds;
+  const rawMain = Math.max(300, totalSeconds - rawIntro - rawOutro);
+
+  const rotated = rotateDurations({
+    targetMins,
+    introSeconds: rawIntro,
+    mainSeconds: rawMain,
+    outroSeconds: rawOutro,
+  });
 
   return {
     targetMins,
@@ -107,9 +121,9 @@ export function buildDurationPlan(sessionMeta = {}, articleCount = 0) {
     targetLabel: `${targetMins} minute`,
     totalSeconds,
     plannedDurationSeconds: totalSeconds,
-    introSeconds,
-    mainSeconds,
-    outroSeconds,
+    introSeconds: rotated.introSeconds,
+    mainSeconds: rotated.mainSeconds,
+    outroSeconds: rotated.outroSeconds,
     articleCount: Number.isFinite(Number(articleCount)) ? Number(articleCount) : 0,
   };
 }

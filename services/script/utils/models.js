@@ -22,7 +22,6 @@ import * as sessionCache from "./sessionCache.js";
 import { generateEpisodeMetaLLM } from "./podcastHelper.js";
 import getSponsor from "./getSponsor.js";
 import { info, error, debug } from "../../../logger.js";
-import { enforceCanonicalOutro } from "./scriptValidation.js";
 
 function toPlainText(s) {
   if (!s) return "";
@@ -39,13 +38,30 @@ function sanitizeOutput(s) {
   return cleanTranscript(toPlainText(s));
 }
 
+const DURATION_OVERRIDE_KEYS = [
+  "targetMins",
+  "targetMinutes",
+  "durationMins",
+  "durationMinutes",
+  "episodeLengthMins",
+  "episodeLengthMinutes",
+  "runtimeMins",
+  "runtimeMinutes",
+];
+
 function normalizeSessionMeta(sessionIdLike) {
   if (typeof sessionIdLike === "string") {
     const m = sessionIdLike.match(/\d{4}-\d{2}-\d{2}/);
     return { sessionId: sessionIdLike, date: m ? m[0] : undefined };
   }
   if (typeof sessionIdLike === "object" && sessionIdLike) {
-    return { sessionId: sessionIdLike.sessionId || "", date: sessionIdLike.date };
+    const meta = { sessionId: sessionIdLike.sessionId || "", date: sessionIdLike.date };
+    // Carry through any explicit duration override so calculateDuration()
+    // can honour it instead of always falling back to hash-based rotation.
+    for (const key of DURATION_OVERRIDE_KEYS) {
+      if (sessionIdLike[key] !== undefined) meta[key] = sessionIdLike[key];
+    }
+    return meta;
   }
   return { sessionId: "unknown", date: undefined };
 }
@@ -70,7 +86,7 @@ export async function generateIntro(sessionIdLike) {
 // MAIN – Longform via batching + synthesis (Option B)
 export async function generateMain(sessionIdLike) {
   const sessionMeta = normalizeSessionMeta(sessionIdLike);
-  const { items, feedUrl, source } = await fetchFeedArticles();
+  const { items } = await fetchFeedArticles();
 
   const articles = (items || [])
     .map((it) => ({
@@ -84,13 +100,11 @@ export async function generateMain(sessionIdLike) {
     }))
     .filter((a) => a.title || a.summary);
 
-  const durationPlan = calculateDuration(
+  const { mainSeconds, targetMins } = calculateDuration(
     "main",
     sessionMeta,
     articles.length
   );
-  const { mainSeconds, targetMins } = durationPlan;
-  const generationMeta = { ...sessionMeta, ...durationPlan };
 
   debug("Main script generation (Longform Batching)", {
     articles: articles.length,
@@ -99,20 +113,14 @@ export async function generateMain(sessionIdLike) {
   });
 
   if (!articles.length) {
-    const failureDetails = {
+    debug("No articles available for MAIN – returning empty main section", {
       sessionId: sessionMeta.sessionId,
-      feedUrl: feedUrl || null,
-      source: source || null,
-    };
-
+    });
     await sessionCache.storeTempPart(sessionMeta, "main", "");
-
-    throw new Error(
-      `Main section generation aborted: no recent feed articles available from ${feedUrl || source || "configured sources"}`
-    );
+    return "";
   }
 
-  const combined = await generateMainLongform(generationMeta, articles, mainSeconds);
+  const combined = await generateMainLongform(sessionMeta, articles, mainSeconds);
   const cleaned = sanitizeOutput(combined);
 
   await sessionCache.storeTempPart(sessionMeta, "main", cleaned);
@@ -133,16 +141,13 @@ export async function generateOutro(sessionIdLike) {
   });
 
   const cleaned = sanitizeOutput(res);
-  const finalOutro = enforceCanonicalOutro(cleaned);
-
-  await sessionCache.storeTempPart(sessionMeta, "outro", finalOutro);
+  await sessionCache.storeTempPart(sessionMeta, "outro", cleaned);
   debug("Outro generated with sponsor", {
     sessionId: sessionMeta.sessionId,
     sponsorTitle: book?.title,
     sponsorUrl: book?.url,
-    canonicalClosingApplied: finalOutro !== cleaned,
   });
-  return finalOutro;
+  return cleaned;
 }
 
 export async function generateComposedEpisode(sessionIdLike) {
