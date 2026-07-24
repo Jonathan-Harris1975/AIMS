@@ -57,6 +57,18 @@ const gpt56Luna = provider(
   [...SHARED_OPENROUTER_KEY, "OPENROUTER_API_KEY_GPT_5_6_LUNA", "OPENROUTER_API_KEY_GPT56_LUNA"]
 );
 
+const claudeSonnet5 = provider(
+  "claudeSonnet5",
+  ["OPENROUTER_CLAUDE_SONNET_5", "OPENROUTER_ANTHROPIC_SONNET_5", "AI_MODEL_HIGH_QUALITY"],
+  [...SHARED_OPENROUTER_KEY, "OPENROUTER_API_KEY_CLAUDE_SONNET_5", "OPENROUTER_API_KEY_ANTHROPIC_SONNET_5"]
+);
+
+const gpt56Sol = provider(
+  "gpt56Sol",
+  ["OPENROUTER_GPT_5_6_SOL", "OPENROUTER_GPT56_SOL"],
+  [...SHARED_OPENROUTER_KEY, "OPENROUTER_API_KEY_GPT_5_6_SOL", "OPENROUTER_API_KEY_GPT56_SOL"]
+);
+
 const blotatoScript = provider(
   "blotatoScript",
   ["BLOTATO_SCRIPT_MODEL", "BLOTATO_NEWS_SCRIPT_MODEL", "OPENROUTER_BLOTATO_SCRIPT_MODEL"],
@@ -101,6 +113,8 @@ const modelRegistry = {
   anthropic46,
   google25FlashLite,
   gpt56Luna,
+  claudeSonnet5,
+  gpt56Sol,
   deepseekV4Pro,
   deepseekV4Flash,
 };
@@ -128,10 +142,10 @@ export const aiConfig = {
     outro: routeChain(["fast", "standard", "fallback"], ["google25FlashLite", "gpt56Luna", "meta"]),
     scriptIntro: routeChain(["gpt56Luna", "standard", "fallback"], ["google25FlashLite", "meta"]),
     scriptMain: routeChain(["gpt56Luna", "standard", "fallback"], ["google25FlashLite", "deepseekV4Pro"]),
-    scriptMainSynthesis: routeChain(["highQuality", "anthropic46", "gpt56Luna", "standard", "fallback"], ["deepseekV4Pro"]),
+    scriptMainSynthesis: routeChain(["claudeSonnet5", "highQuality", "gpt56Sol"], ["anthropic46", "deepseekV4Pro"]),
     scriptOutro: routeChain(["gpt56Luna", "standard", "fallback"], ["google25FlashLite", "meta"]),
     compose: routeChain(["highQuality", "standard", "fallback"], ["deepseekV4Pro", "anthropic46", "google25FlashLite"]),
-    editorialPass: routeChain(["highQuality", "anthropic46", "gpt56Luna", "standard", "fallback"], ["deepseekV4Pro"]),
+    editorialPass: routeChain(["claudeSonnet5", "highQuality", "gpt56Sol"], ["anthropic46", "deepseekV4Pro"]),
     editAndFormat: routeChain(["standard", "fast", "fallback"], ["gpt56Luna", "google25FlashLite", "deepseekV4Pro"]),
     metadata: routeChain(["summary", "json", "fast", "fallback"], ["google25FlashLite", "gpt56Luna", "deepseekV4Pro"]),
     podcastHelper: routeChain(["summary", "fast", "fallback"], ["gpt56Luna", "google25FlashLite", "meta"]),
