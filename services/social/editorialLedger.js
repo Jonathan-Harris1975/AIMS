@@ -38,7 +38,7 @@ function normaliseKey(value = "") {
 }
 
 function shortHash(value = "") {
-  return crypto.createHash("sha1").update(String(value || "")).digest("hex").slice(0, 14);
+  return crypto.createHash("sha256").update(String(value || "")).digest("hex").slice(0, 14);
 }
 
 export function buildEditorialSourceKey(source = {}) {
