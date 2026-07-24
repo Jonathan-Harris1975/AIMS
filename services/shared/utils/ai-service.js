@@ -21,7 +21,7 @@ const DEFAULT_TIMEOUT_MS = Number(process.env.AI_TIMEOUT ?? aiConfig?.commonPara
 const DEFAULT_TOP_P = Number(process.env.AI_TOP_P ?? aiConfig?.commonParams?.top_p ?? 0.9);
 // 4 retries + the initial attempt = 5 total attempts per provider before
 // failover/failure, in line with the platform-wide 5-attempt floor.
-const MAX_RETRIES = Number(process.env.AI_MAX_RETRIES ?? 4);
+const MAX_RETRIES = Math.max(4, Number(process.env.AI_MAX_RETRIES ?? 4));
 const RETRY_BASE_MS = Number(process.env.AI_RETRY_BASE_MS ?? 750);
 const __aiRouteCallsBySession = new Map();
 const __lastSuccessProvider = new Map();
@@ -199,7 +199,9 @@ function makeOpenRouterError(status, body, providerId) {
   err.status = status;
   err.providerId = providerId;
   err.bodySnippet = safeSnippet(body);
-  err.nonRetryable = [400, 401, 403, 404].includes(Number(status));
+  const numericStatus = Number(status);
+  const transientHttp = [408, 409, 425, 429].includes(numericStatus) || numericStatus >= 500;
+  err.nonRetryable = Number.isFinite(numericStatus) && !transientHttp;
   return err;
 }
 
@@ -307,7 +309,8 @@ export async function resilientRequest(routeName, {
 } = {}) {
   const routeKey = resolveRouteKey(routeName);
   const chain = getProviderChainForRoute(routeKey);
-  const effectiveMaxRetries = Number.isFinite(Number(maxRetries)) ? Number(maxRetries) : MAX_RETRIES;
+  const requestedMaxRetries = Number.isFinite(Number(maxRetries)) ? Number(maxRetries) : MAX_RETRIES;
+  const effectiveMaxRetries = Math.max(4, requestedMaxRetries);
   const effectiveRetryBaseMs = Number.isFinite(Number(retryBaseMs)) ? Number(retryBaseMs) : RETRY_BASE_MS;
   let lastErr;
   const attempted = [];
@@ -361,7 +364,9 @@ export async function resilientRequest(routeName, {
         // same slow target for another full timeout cycle.
         const timedOut = err?.code === "OPENROUTER_TIMEOUT";
         const retryable = !timedOut && !err?.nonRetryable && attempt < effectiveMaxRetries;
-        const wait = effectiveRetryBaseMs * Math.pow(2, attempt);
+        const exponentialWait = effectiveRetryBaseMs * Math.pow(2, attempt);
+        const jitter = Math.floor(exponentialWait * (0.15 * Math.random()));
+        const wait = exponentialWait + jitter;
         logError(timedOut ? "ai.request.provider_failover" : "ai.request.retry", {
           routeName,
           routeKey,
