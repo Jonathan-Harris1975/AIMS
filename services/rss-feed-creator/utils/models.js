@@ -15,6 +15,7 @@
 import crypto from "crypto";
 import { debug, error, warn } from "../../../logger.js";
 import { resilientRequest } from "../../shared/utils/ai-service.js";
+import { fetchWithTimeout } from "../../shared/http-client.js";
 import { RSS_PROMPTS } from "./rss-prompts.js";
 import { buildRssPersona } from "../../script/utils/toneSetter.js";
 import { createShortLink } from "../../rss-links/service.js";
@@ -36,6 +37,57 @@ const TOPIC_GUARD_MIN_SHARED = Number(process.env.RSS_TOPIC_GUARD_MIN_SHARED || 
 // ─────────────────────────────────────────────
 // LIGHT HTML → TEXT NORMALISER
 // ─────────────────────────────────────────────
+async function recoverThinSourceText(link = "", currentText = "") {
+  const original = stripHtml(currentText);
+  if (!link || original.length >= MIN_SOURCE_CHARS) return original;
+
+  const maxAttempts = 5;
+  const baseMs = Math.max(150, Number(process.env.RSS_SOURCE_RECOVERY_RETRY_BASE_MS || 500));
+  const timeout = Math.max(3000, Number(process.env.RSS_SOURCE_RECOVERY_TIMEOUT_MS || 12000));
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      const response = await fetchWithTimeout(link, { timeout });
+      if (!response.ok) {
+        const status = Number(response.status);
+        const transient = [408, 409, 425, 429].includes(status) || status >= 500;
+        const err = new Error(`source recovery HTTP ${status}`);
+        err.transient = transient;
+        throw err;
+      }
+      const html = await response.text();
+      const meta = [...html.matchAll(/<meta[^>]+(?:name|property)=["'](?:description|og:description|twitter:description)["'][^>]+content=["']([^"']+)["'][^>]*>/gi)]
+        .map((m) => m[1])
+        .join(" ");
+      const paragraphs = [...html.matchAll(/<p[^>]*>([\s\S]*?)<\/p>/gi)]
+        .slice(0, 8)
+        .map((m) => stripHtml(m[1]))
+        .join(" ");
+      const recovered = stripHtml(`${original} ${meta} ${paragraphs}`);
+      if (recovered.length >= MIN_SOURCE_CHARS) {
+        debug("rss-feed-creator.sourceRecovery.success", { link, attempt, chars: recovered.length });
+        return recovered;
+      }
+      // A successful HTTP response with persistently thin content is not a
+      // transient network failure. Further identical requests are unlikely
+      // to improve it, so stop rather than burning calls.
+      warn("rss-feed-creator.sourceRecovery.permanentThinSource", { link, attempt, chars: recovered.length });
+      return recovered;
+    } catch (err) {
+      lastError = err;
+      const transient = err?.transient !== false && (err?.name === "AbortError" || err?.code || err?.transient === true || /fetch|network|timeout/i.test(String(err?.message || "")));
+      warn("rss-feed-creator.sourceRecovery.attemptFailed", { link, attempt, maxAttempts, transient, error: err?.message });
+      if (!transient || attempt >= maxAttempts) break;
+      const wait = baseMs * Math.pow(2, attempt - 1) + Math.floor(baseMs * 0.2 * Math.random());
+      await new Promise((resolve) => setTimeout(resolve, wait));
+    }
+  }
+
+  if (lastError) warn("rss-feed-creator.sourceRecovery.exhausted", { link, error: lastError?.message });
+  return original;
+}
+
 function stripHtml(input = "") {
   return String(input)
     .replace(/<script[\s\S]*?<\/script>/gi, " ")
@@ -256,14 +308,17 @@ export async function rewriteArticle(item = {}) {
   const summaryRaw = String(item?.summary || "").trim();
 
   // 1) Hard-fail: do NOT feed placeholders to the model.
-  const sourceText = stripHtml(summaryRaw);
+  let sourceText = stripHtml(summaryRaw);
   if (!title && !sourceText) {
     throw new Error("Invalid feed item — missing title and summary");
   }
   if (!sourceText || sourceText.length < MIN_SOURCE_CHARS) {
-    throw new Error(
-      `Article extraction too thin (${sourceText?.length || 0} chars < ${MIN_SOURCE_CHARS})`
-    );
+    sourceText = await recoverThinSourceText(link, sourceText);
+  }
+  if (!sourceText || sourceText.length < MIN_SOURCE_CHARS) {
+    const thinErr = new Error(`Article extraction too thin after source recovery (${sourceText?.length || 0} chars < ${MIN_SOURCE_CHARS})`);
+    thinErr.failureClass = "permanent";
+    throw thinErr;
   }
 
   // 2) Locked prompt (topic fidelity)
@@ -560,7 +615,29 @@ export async function rewriteArticle(item = {}) {
         gate: phase3Quality,
         artifact: { title: repairedTitle, summary: repairedSummary },
         contentType: "rss-rewrite",
-        repairArtifact: (candidate) => repairArtifactForReviewCouncil(candidate, { contentType: "rss-rewrite" }),
+        repairArtifact: async (candidate, { gate, attempt } = {}) => {
+          const deterministic = repairArtifactForReviewCouncil(candidate, { contentType: "rss-rewrite" });
+          const repairRaw = await resilientRequest("rssRewrite", {
+            messages: buildPhase3RepairMessages({
+              systemPrompt,
+              userPrompt,
+              rewrittenTitle: deterministic.title || repairedTitle,
+              rewrittenSummary: deterministic.summary || repairedSummary,
+              phase3Report: gate || phase3Quality,
+            }),
+            temperature: Math.max(0.18, 0.34 - ((Number(attempt) || 1) * 0.03)),
+            max_tokens: 900,
+          });
+          const parsedRepair = RSS_PROMPTS.normalizeModelText(repairRaw);
+          return {
+            title: RSS_PROMPTS.clampTitleTo12Words(parsedRepair.title || deterministic.title || repairedTitle, 12),
+            summary: RSS_PROMPTS.clampSummaryToWindow(
+              parsedRepair.summary || deterministic.summary || repairedSummary,
+              RSS_PROMPTS.MIN_SUMMARY_CHARS,
+              RSS_PROMPTS.MAX_SUMMARY_CHARS
+            ),
+          };
+        },
         validate: (candidate) => evaluatePhase3Gate({
           title,
           sourceText,
