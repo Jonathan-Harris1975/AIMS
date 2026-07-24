@@ -2,6 +2,7 @@ import { fetchWithTimeout } from "../../shared/http-client.js";
 
 const DEFAULT_BLOTATO_API_BASE = "https://backend.blotato.com/v2";
 const DEFAULT_TIMEOUT_MS = 30_000;
+const MAX_SLEEP_MS = 120_000;
 
 const BLOTATO_KEY_ENV_NAMES = ["Blotato_API_key", "BLOTATO_API_KEY"];
 
@@ -12,7 +13,9 @@ function positiveIntEnv(name, fallback, max = Number.POSITIVE_INFINITY) {
 }
 
 function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+  const parsedMs = Number(ms);
+  const safeMs = Number.isFinite(parsedMs) ? Math.min(MAX_SLEEP_MS, Math.max(0, Math.floor(parsedMs))) : 0;
+  return new Promise((resolve) => setTimeout(resolve, safeMs));
 }
 
 function isRetryableStatus(status) {
