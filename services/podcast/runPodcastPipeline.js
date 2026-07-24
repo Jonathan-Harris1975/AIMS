@@ -98,7 +98,12 @@ export async function runPodcastPipeline(input = {}, maybeOptions = {}) {
     log.info("📝 Podcast script ready", { sessionId });
 
     log.info("🎨 Generating podcast artwork…");
-    const artwork = await processArtwork({ sessionId, force });
+    const artworkPrompt = String(script?.metadata?.artworkPrompt || "").trim();
+    const artwork = await processArtwork({
+      sessionId,
+      force,
+      prompt: artworkPrompt || undefined,
+    });
     if (!artwork?.ok || !artwork?.publicUrl) {
       throw new Error(artwork?.error || "Artwork generation failed");
     }
