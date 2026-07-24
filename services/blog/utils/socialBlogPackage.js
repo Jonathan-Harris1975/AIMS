@@ -366,7 +366,7 @@ export function buildFallbackSocialBlogPackage({ items = [], dateLabel } = {}) {
     ],
     takeaway: "Judge the AI story by delivery, cost, and control, not the stage lighting.",
     hashtags: normaliseHashtags([], themes),
-    image_prompt: `Create high-impact premium editorial tech artwork for a daily AI briefing. ${getSeasonalPaletteDirection(dateLabel)} Strong contrast, cinematic composition and layered abstract infrastructure forms. ${STRICT_TEXT_FREE_RULE} No glowing brains, cartoon robots, stock office scenes or generic AI wallpaper.`,
+    image_prompt: `Create high-impact premium editorial tech artwork for a daily AI briefing. ${getSeasonalPaletteDirection(dateLabel)} Strong contrast, cinematic lighting, bold controlled colour, emotional storytelling, magazine-quality thumbnail composition and one clear focal subject tied to the post. ${STRICT_TEXT_FREE_RULE} No glowing brains, cartoon robots, stock office scenes or generic AI wallpaper.`,
     themes,
     date_label: dateLabel,
     qa_mode: "fallback-package",
@@ -538,11 +538,11 @@ export function buildSocialArtworkPrompt({
     title ? `Anchor the visual angle to this headline: ${title}.` : "",
     summary ? `Editorial angle: ${summary}.` : "",
     themeLine,
-    "Style: visually appealing, energetic but adult, premium editorial composition with strong contrast, cinematic lighting and layered depth.",
+    "Style: visually immediate, energetic but adult, magazine-quality editorial composition with cinematic lighting, bold controlled colour, strong contrast, emotional resonance and layered depth.",
     getSeasonalPaletteDirection(date),
-    "Use abstract infrastructure, data-flow, interface, circuitry or policy-pressure motifs only where they serve the source themes.",
+    "Tell one clear visual story from the source themes. Prefer a concrete scene, object, consequence or natural human-scale moment. Use infrastructure, interfaces or circuitry only when the story genuinely calls for them, never as default AI decoration.",
     STRICT_TEXT_FREE_RULE,
-    "No glowing brains, cartoon robots, stock office scenes or generic AI wallpaper.",
+    "Avoid corporate stock-photo scenes, handshakes, staged office teams, generic data-centre glamour, floating dashboards, polygon networks, glowing brains, cartoon robots and generic AI wallpaper. Do not default to geometric abstraction.",
   ].filter(Boolean).join(" ");
 }
 
@@ -769,7 +769,7 @@ export function buildSocialPackagePrompt({ dateLabel, items = [] } = {}) {
     "- body_sections: 2 to 4 short sections, each with 1 to 2 tight paragraphs.",
     "- takeaway: one clear closing judgement.",
     "- hashtags: 3 to 6 relevant tags, no spam, no generic hashtag soup.",
-    `- image_prompt: high-impact premium editorial tech style. ${getSeasonalPaletteDirection(dateLabel)} ${STRICT_TEXT_FREE_RULE} No glowing brains, cartoon robots, stock office scenes or generic AI wallpaper.`,
+    `- image_prompt: high-impact magazine-quality editorial style with cinematic lighting, emotional storytelling, bold controlled colour, strong contrast, modern YouTube-thumbnail focal hierarchy and a concrete visual angle tied to the post. ${getSeasonalPaletteDirection(dateLabel)} ${STRICT_TEXT_FREE_RULE} Avoid corporate stock-photo scenes, staged offices, generic data centres, floating dashboards, polygon networks, glowing brains, cartoon robots and generic AI wallpaper.`,
     "",
     "Source material:",
     sourceDigest,
