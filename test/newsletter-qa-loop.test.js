@@ -27,7 +27,7 @@ process.env.NEWSLETTER_STORY_COUNT = "2";
 // made this test non-deterministic; stubbing them all here makes it not.
 process.env.OPENROUTER_ANTHROPIC_4_6 = "mock/anthropic-46";
 process.env.OPENROUTER_GOOGLE_2_5_flashlite = "mock/google-25-flashlite";
-process.env.OPENROUTER_CHATGPT_MINI5 = "mock/chatgpt-mini5";
+process.env.OPENROUTER_GPT_5_6_LUNA = "mock/gpt-5.6-luna";
 process.env.OPENROUTER_DEEPSEEK_v4_pro = "mock/deepseek-v4-pro";
 
 let server;

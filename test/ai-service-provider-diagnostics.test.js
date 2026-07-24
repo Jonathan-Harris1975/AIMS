@@ -34,9 +34,8 @@ const OPENROUTER_ENV_NAMES = [
   "OPENROUTER_API_KEY_GOOGLE_2_5_flashlite",
   "OPENROUTER_CHATGPT",
   "OPENROUTER_API_KEY_CHATGPT",
-  "OPENROUTER_CHATGPT_mini-5",
-  "OPENROUTER_CHATGPT_mini5_",
-  "OPENROUTER_API_KEY_CHATGPT_mini5",
+  "OPENROUTER_GPT_5_6_LUNA",
+  "OPENROUTER_API_KEY_GPT_5_6_LUNA",
   "OPENROUTER_DEEPSEEK",
   "OPENROUTER_API_KEY_DEEPSEEK",
   "OPENROUTER_DEEPSEEK_v4_pro",
@@ -56,14 +55,14 @@ test("auditForensic route supports current Koyeb spreadsheet model vars with one
   process.env.OPENROUTER_API_KEY = "sk-or-test-shared";
   process.env.OPENROUTER_ANTHROPIC_4_6 = "anthropic/claude-sonnet-4.6";
   process.env.OPENROUTER_GOOGLE_2_5_flashlite = "google/gemini-2.5-flash-lite";
-  process.env.OPENROUTER_CHATGPT_mini5_ = "openai/gpt-5-mini";
+  process.env.OPENROUTER_GPT_5_6_LUNA = "openai/gpt-5.6-luna";
 
   try {
     const { getProviderDiagnosticsForRoute } = await import(`../services/shared/utils/ai-service.js?diag=${Date.now()}-shared-key`);
     const diagnostics = getProviderDiagnosticsForRoute("auditForensic");
     const anthropic = diagnostics.configuredProviders.find((provider) => provider.providerId === "anthropic46");
     const google = diagnostics.configuredProviders.find((provider) => provider.providerId === "google25FlashLite");
-    const chatgpt = diagnostics.configuredProviders.find((provider) => provider.providerId === "chatgptMini5");
+    const luna = diagnostics.configuredProviders.find((provider) => provider.providerId === "gpt56Luna");
 
     assert.equal(diagnostics.routeKey, "auditForensic");
     assert.equal(anthropic.configured, true);
@@ -73,14 +72,14 @@ test("auditForensic route supports current Koyeb spreadsheet model vars with one
     assert.equal(google.configured, true);
     assert.equal(google.modelEnv, "OPENROUTER_GOOGLE_2_5_flashlite");
     assert.equal(google.apiKeyEnv, "OPENROUTER_API_KEY");
-    assert.equal(chatgpt.configured, true);
-    assert.equal(chatgpt.apiKeyEnv, "OPENROUTER_API_KEY");
+    assert.equal(luna.configured, true);
+    assert.equal(luna.apiKeyEnv, "OPENROUTER_API_KEY");
   } finally {
     restoreEnv(snapshot);
   }
 });
 
-test("auditForensic route supports hyphen and dot aliases from older Koyeb spreadsheet rows", async () => {
+test("auditForensic route supports provider-specific key aliases alongside Luna", async () => {
   const snapshot = snapshotEnv(OPENROUTER_ENV_NAMES);
   clearOpenRouterEnv();
 
@@ -88,15 +87,15 @@ test("auditForensic route supports hyphen and dot aliases from older Koyeb sprea
   process.env["OPENROUTER_API_KEY_ANTHROPIC_4.6"] = "sk-or-test-anthropic-dot";
   process.env["OPENROUTER_GOOGLE_2-5_flashlite"] = "google/test-model";
   process.env["OPENROUTER_API_KEY_GOOGLE_2.5_flashlite"] = "sk-or-test-google-dot";
-  process.env["OPENROUTER_CHATGPT_mini-5"] = "openai/test-model";
-  process.env.OPENROUTER_API_KEY_CHATGPT_mini5 = "sk-or-test-openai";
+  process.env["OPENROUTER_GPT_5_6_LUNA"] = "openai/test-model";
+  process.env.OPENROUTER_API_KEY_GPT_5_6_LUNA = "sk-or-test-openai";
 
   try {
     const { getProviderDiagnosticsForRoute } = await import(`../services/shared/utils/ai-service.js?diag=${Date.now()}-aliases`);
     const diagnostics = getProviderDiagnosticsForRoute("auditForensic");
     const anthropic = diagnostics.configuredProviders.find((provider) => provider.providerId === "anthropic46");
     const google = diagnostics.configuredProviders.find((provider) => provider.providerId === "google25FlashLite");
-    const chatgpt = diagnostics.configuredProviders.find((provider) => provider.providerId === "chatgptMini5");
+    const luna = diagnostics.configuredProviders.find((provider) => provider.providerId === "gpt56Luna");
 
     assert.equal(anthropic.configured, true);
     assert.equal(anthropic.modelEnv, "OPENROUTER_ANTHROPIC_4-6");
@@ -104,8 +103,8 @@ test("auditForensic route supports hyphen and dot aliases from older Koyeb sprea
     assert.equal(google.configured, true);
     assert.equal(google.modelEnv, "OPENROUTER_GOOGLE_2-5_flashlite");
     assert.equal(google.apiKeyEnv, "OPENROUTER_API_KEY_GOOGLE_2.5_flashlite");
-    assert.equal(chatgpt.configured, true);
-    assert.equal(chatgpt.modelEnv, "OPENROUTER_CHATGPT_mini-5");
+    assert.equal(luna.configured, true);
+    assert.equal(luna.modelEnv, "OPENROUTER_GPT_5_6_LUNA");
   } finally {
     restoreEnv(snapshot);
   }

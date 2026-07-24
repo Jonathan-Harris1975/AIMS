@@ -5,6 +5,7 @@ import {
   hasRequiredOutro,
   extractOutro,
   enforceCanonicalOutro,
+  enforceLockedOutro,
   findBrokenPunctuationJoins,
   findLongSpokenSentences,
   splitSpokenSentences,
@@ -46,6 +47,19 @@ test("enforceCanonicalOutro appends the canonical branded closing line when the 
   assert.equal(hasRequiredOutro(repaired), true);
   assert.match(repaired, /That’s your lot for this week’s Turing’s Torch\./);
   assert.equal(repaired.endsWith(OUTRO_CLOSING_TAGLINE), true);
+});
+
+
+test("enforceLockedOutro restores the exact generated outro after an altered outro is detected", () => {
+  const lockedOutro = `The week was noisy, but that is enough for today.\n\n${OUTRO_CLOSING_TAGLINE}`;
+  const alteredOutro = `A replacement ending that should not survive.\n\n${OUTRO_CLOSING_TAGLINE}`;
+  const modelDamaged = `Intro stays here.\n\nMain analysis stays here.\n\n${alteredOutro}`;
+
+  const repaired = enforceLockedOutro(modelDamaged, lockedOutro);
+
+  assert.equal(repaired.endsWith(lockedOutro), true);
+  assert.equal(hasRequiredOutro(repaired), true);
+  assert.doesNotMatch(repaired, /replacement ending that should not survive/);
 });
 
 import editAndFormat from "../services/script/utils/editAndFormat.js";

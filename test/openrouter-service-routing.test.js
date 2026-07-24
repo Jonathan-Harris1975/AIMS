@@ -7,8 +7,9 @@ const OPENROUTER_ENV_NAMES = [
   "OPENROUTER_DEEPSEEK_v4_flash",
   "OPENROUTER_DEEPSEEK_v4_pro",
   "OPENROUTER_ANTHROPIC_4_6",
-  "OPENROUTER_CHATGPT_MINI5",
-  "OPENROUTER_CHATGPT_mini5_", // legacy alias
+  "OPENROUTER_GPT_5_6_LUNA",
+  "AI_MODEL_STANDARD",
+  "AI_MODEL_HIGH_QUALITY",
   "OPENROUTER_GOOGLE_2_5_flashlite",
   "OPENROUTER_API_BASE",
   "OPENROUTER_API_KEY",
@@ -35,13 +36,12 @@ function applySpreadsheetOpenRouterEnv() {
   process.env.OPENROUTER_DEEPSEEK_v4_flash = "deepseek/deepseek-v4-flash";
   process.env.OPENROUTER_DEEPSEEK_v4_pro = "deepseek/deepseek-v4-pro";
   process.env.OPENROUTER_ANTHROPIC_4_6 = "anthropic/claude-sonnet-4.6";
-  process.env.OPENROUTER_CHATGPT_MINI5 = "openai/gpt-5-mini";
+  process.env.OPENROUTER_GPT_5_6_LUNA = "openai/gpt-5.6-luna";
   process.env.OPENROUTER_GOOGLE_2_5_flashlite = "google/gemini-2.5-flash-lite";
   process.env.OPENROUTER_API_BASE = "https://openrouter.ai/api/v1";
   process.env.OPENROUTER_API_KEY = "sk-or-global-test-value";
   process.env.OPENROUTER_ART = "google/gemini-2.5-flash-image";
   process.env.BLOTATO_SCRIPT_MODEL = "anthropic/claude-sonnet-4-5";
-  delete process.env.OPENROUTER_CHATGPT_mini5_;
   delete process.env.OPENROUTER_API_KEY_ART;
   delete process.env.OPENROUTER_API_KEY_ART_BACKUP;
 }
@@ -54,15 +54,15 @@ test("OpenRouter text routes used by blog, Zernio, RSS and audits resolve spread
     const { getProviderDiagnosticsForRoute } = await import(`../services/shared/utils/ai-service.js?openrouterRoutes=${Date.now()}`);
     const expectedRoutes = {
       // deepseekV4Flash replaces meta in these routes
-      blogWeekly: ["OPENROUTER_GOOGLE_2_5_flashlite", "OPENROUTER_CHATGPT_MINI5", "OPENROUTER_DEEPSEEK_v4_pro"],
-      zernioDaily: ["OPENROUTER_CHATGPT_MINI5", "OPENROUTER_GOOGLE_2_5_flashlite", "OPENROUTER_DEEPSEEK_v4_flash"],
-      zernioQuiz: ["OPENROUTER_CHATGPT_MINI5", "OPENROUTER_GOOGLE_2_5_flashlite", "OPENROUTER_DEEPSEEK_v4_flash"],
-      rssRewrite: ["OPENROUTER_CHATGPT_MINI5", "OPENROUTER_GOOGLE_2_5_flashlite", "OPENROUTER_DEEPSEEK_v4_flash"],
-      rssShortTitle: ["OPENROUTER_CHATGPT_MINI5", "OPENROUTER_GOOGLE_2_5_flashlite"],
+      blogWeekly: ["OPENROUTER_GOOGLE_2_5_flashlite", "OPENROUTER_GPT_5_6_LUNA", "OPENROUTER_DEEPSEEK_v4_pro"],
+      zernioDaily: ["OPENROUTER_GPT_5_6_LUNA", "OPENROUTER_GOOGLE_2_5_flashlite", "OPENROUTER_DEEPSEEK_v4_flash"],
+      zernioQuiz: ["OPENROUTER_GPT_5_6_LUNA", "OPENROUTER_GOOGLE_2_5_flashlite", "OPENROUTER_DEEPSEEK_v4_flash"],
+      rssRewrite: ["OPENROUTER_GPT_5_6_LUNA", "OPENROUTER_GOOGLE_2_5_flashlite", "OPENROUTER_DEEPSEEK_v4_flash"],
+      rssShortTitle: ["OPENROUTER_GPT_5_6_LUNA", "OPENROUTER_GOOGLE_2_5_flashlite"],
       auditForensic: [
         "OPENROUTER_ANTHROPIC_4_6",
         "OPENROUTER_GOOGLE_2_5_flashlite",
-        "OPENROUTER_CHATGPT_MINI5",
+        "OPENROUTER_GPT_5_6_LUNA",
         "OPENROUTER_DEEPSEEK_v4_pro",
         "OPENROUTER_DEEPSEEK_v4_flash",
         "OPENROUTER_META",
@@ -99,9 +99,9 @@ test("blotatoNewsShort route resolves with highQuality before standard in fallba
     assert.equal(configured[0]?.providerId, "blotatoScript", "blotatoScript should be first in chain");
     assert.equal(configured[0]?.model, "anthropic/claude-sonnet-4-5");
 
-    // highQuality (anthropic46) must appear before standard (chatgptMini5)
+    // highQuality (anthropic46) must appear before the general Luna/standard lane
     const hqIdx = configured.findIndex((p) => p.providerId === "anthropic46" || p.providerId === "highQuality");
-    const stdIdx = configured.findIndex((p) => p.providerId === "chatgptMini5" || p.providerId === "standard");
+    const stdIdx = configured.findIndex((p) => p.providerId === "gpt56Luna" || p.providerId === "standard");
     assert.ok(hqIdx !== -1, "highQuality/anthropic46 should be present in blotatoNewsShort chain");
     assert.ok(hqIdx < stdIdx || stdIdx === -1, "highQuality must appear before standard in blotatoNewsShort chain");
   } finally {
@@ -133,25 +133,6 @@ test("OpenRouter artwork image providers resolve through shared ai-config", asyn
     assert.equal(backup?.modelEnv, "OPENROUTER_ART_BACKUP");
     assert.equal(backup?.apiKeyEnv, "OPENROUTER_API_KEY");
     assert.equal(backup?.model, "openai/gpt-5-image-mini");
-  } finally {
-    restoreEnv(oldEnv);
-  }
-});
-
-test("legacy OPENROUTER_CHATGPT_mini5_ still resolves chatgptMini5 for existing Koyeb secrets", async () => {
-  const oldEnv = snapshotEnv(OPENROUTER_ENV_NAMES);
-  applySpreadsheetOpenRouterEnv();
-  // Simulate old secret still in place, new key not yet set
-  delete process.env.OPENROUTER_CHATGPT_MINI5;
-  process.env.OPENROUTER_CHATGPT_mini5_ = "openai/gpt-5-mini";
-
-  try {
-    const { getProviderDiagnosticsForRoute } = await import(`../services/shared/utils/ai-service.js?legacyChatgpt=${Date.now()}`);
-    const diagnostics = getProviderDiagnosticsForRoute("zernioDaily");
-    const configured = diagnostics.configuredProviders.filter((p) => p.configured);
-    const chatgpt = configured.find((p) => p.providerId === "chatgptMini5");
-    assert.ok(chatgpt?.configured, "chatgptMini5 should resolve via legacy OPENROUTER_CHATGPT_mini5_ alias");
-    assert.equal(chatgpt?.model, "openai/gpt-5-mini");
   } finally {
     restoreEnv(oldEnv);
   }
@@ -212,6 +193,29 @@ test("OpenRouter artwork payload explicitly requests image output modalities", a
       extractBase64Image({ choices: [{ message: { images: [{ image_url: { url: "data:image/png;base64,abc123" } }] } }] }),
       "abc123"
     );
+  } finally {
+    restoreEnv(oldEnv);
+  }
+});
+
+
+test("podcast script routes use Luna for drafting and Claude for synthesis/editorial", async () => {
+  const oldEnv = snapshotEnv(OPENROUTER_ENV_NAMES);
+  applySpreadsheetOpenRouterEnv();
+  process.env.AI_MODEL_STANDARD = "openai/gpt-5.6-luna";
+  process.env.AI_MODEL_HIGH_QUALITY = "anthropic/claude-sonnet-4.6";
+
+  try {
+    const { getProviderDiagnosticsForRoute } = await import(`../services/shared/utils/ai-service.js?podcastQuality=${Date.now()}`);
+    for (const routeName of ["scriptIntro", "scriptMain", "scriptOutro"]) {
+      const configured = getProviderDiagnosticsForRoute(routeName).configuredProviders.filter((p) => p.configured);
+      assert.equal(configured[0]?.model, "openai/gpt-5.6-luna", `${routeName} should draft with GPT-5.6 Luna`);
+    }
+
+    for (const routeName of ["scriptMainSynthesis", "editorialPass"]) {
+      const configured = getProviderDiagnosticsForRoute(routeName).configuredProviders.filter((p) => p.configured);
+      assert.equal(configured[0]?.model, "anthropic/claude-sonnet-4.6", `${routeName} should lead with Claude Sonnet 4.6`);
+    }
   } finally {
     restoreEnv(oldEnv);
   }
