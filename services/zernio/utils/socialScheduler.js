@@ -431,7 +431,7 @@ function ensureHashtags(content, hashtags, { maxTags = 3 } = {}) {
 }
 
 function contentHash(value) {
-  return crypto.createHash("sha1").update(String(value || "")).digest("hex").slice(0, 12);
+  return crypto.createHash("sha256").update(String(value || "")).digest("hex").slice(0, 12);
 }
 
 // LIMITATION (see migration notes): OneUp's getscheduledposts endpoint
