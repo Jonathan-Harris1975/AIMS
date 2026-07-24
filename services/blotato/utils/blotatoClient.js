@@ -138,7 +138,7 @@ async function blotatoRequest(endpoint, {
   timeoutMs = Number(process.env.BLOTATO_TIMEOUT_MS || DEFAULT_TIMEOUT_MS),
 } = {}) {
   const key = getBlotatoApiKey(apiKey);
-  const attempts = positiveIntEnv("BLOTATO_API_RETRY_ATTEMPTS", 3, 8);
+  const attempts = positiveIntEnv("BLOTATO_API_RETRY_ATTEMPTS", 5, 8);
   const baseDelayMs = positiveIntEnv("BLOTATO_API_RETRY_BASE_MS", 1000, 30_000);
   const maxDelayMs = positiveIntEnv("BLOTATO_API_RETRY_MAX_MS", 12_000, 120_000);
   let lastError;
