@@ -335,6 +335,38 @@ async function quarantineWeeklyPost({ gate, week, weeklyPackage, cleanedSources,
   };
 }
 
+async function repairWeeklyPackageForCouncil({ sessionId, week, dateLabel, items, candidate, gate, attempt }) {
+  const defects = Array.isArray(gate?.defects) ? gate.defects.slice(0, 10) : [];
+  const evidence = (items || []).slice(0, 30).map((item, index) => ({
+    index: index + 1,
+    title: cleanSourceTitle(item?.title || ""),
+    summary: cleanSourceText(item?.summary || item?.description || item?.contentSnippet || "").slice(0, 900),
+  }));
+  const raw = await resilientRequest("blogWeekly", {
+    sessionId,
+    messages: [
+      { role: "system", content: "You are the repair editor for a premium British AI industry blog. Preserve strong copy. Fix only the listed QA defects. Never invent facts, numbers, dates, entities or quotations. Keep a confident, sceptical, commercially literate Gen-X voice. Return valid JSON only using the same schema as the candidate." },
+      { role: "user", content: `Repair attempt ${attempt || 1}.
+
+QA defects:
+${defects.map((d) => `- ${d}`).join("\n") || "- Unspecified gate failure"}
+
+Current candidate:
+${JSON.stringify(candidate)}
+
+Source evidence:
+${JSON.stringify(evidence)}
+
+Make the smallest changes needed to pass. Remove an unsupported claim rather than guessing it.` },
+    ],
+    max_tokens: 3000,
+    temperature: 0.18,
+    response_format: process.env.BLOG_WEEKLY_JSON_RESPONSE_FORMAT === "false" ? undefined : { type: "json_object" },
+  });
+  const parsed = parseStructuredWeeklyPackage(raw);
+  return parsed.ok ? normaliseWeeklyPackage(parsed.data, { week, dateLabel, items }) : candidate;
+}
+
 async function generateStructuredWeeklyPackage({ sessionId, week, dateLabel, items }) {
   const prompt = buildWeeklyPackagePrompt({ week, dateLabel, items });
   const baseMessages = [
@@ -587,6 +619,15 @@ export async function buildWeeklyBlogPost({ days, weekId } = {}) {
         gate: phase4Gate,
         artifact: weeklyPackage,
         contentType: "weekly-blog",
+        repairArtifact: (candidatePackage, { gate, attempt } = {}) => repairWeeklyPackageForCouncil({
+          sessionId,
+          week: window.week,
+          dateLabel: window.dateLabel,
+          items: cleanedSources,
+          candidate: candidatePackage,
+          gate,
+          attempt,
+        }),
         validate: (candidatePackage) => {
           const candidateBodyHtml = renderWeeklyBodyHtml(candidatePackage, { escapeHtml });
           const candidateFullHtml = pageTemplate({
