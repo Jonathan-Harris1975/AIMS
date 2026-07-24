@@ -448,9 +448,10 @@ function joinPublicUrl(base, key) {
 // ------------------------------------------------------------
 // ⚙️ Upload / Download
 // ------------------------------------------------------------
-export async function uploadBuffer(bucketKey, key, buffer, contentType = "application/octet-stream") {
+export async function uploadBuffer(bucketKey, key, buffer, contentType = "application/octet-stream", options = {}) {
   const bucket = ensureBucketKey(bucketKey);
   const safeKey = normaliseR2ObjectKey(key);
+  const cacheControl = String(options?.cacheControl || "").trim();
 
   await sendR2Command(
     new PutObjectCommand({
@@ -458,6 +459,7 @@ export async function uploadBuffer(bucketKey, key, buffer, contentType = "applic
       Key: safeKey,
       Body: buffer,
       ContentType: contentType,
+      ...(cacheControl ? { CacheControl: cacheControl } : {}),
     })
   );
 
@@ -470,8 +472,8 @@ export async function uploadBuffer(bucketKey, key, buffer, contentType = "applic
   return joinPublicUrl(base, safeKey);
 }
 
-export async function uploadText(bucketKey, key, text, contentType = "text/plain") {
-  return uploadBuffer(bucketKey, key, Buffer.from(text, "utf-8"), contentType);
+export async function uploadText(bucketKey, key, text, contentType = "text/plain", options = {}) {
+  return uploadBuffer(bucketKey, key, Buffer.from(text, "utf-8"), contentType, options);
 }
 
 export async function getObjectAsText(bucketKey, key) {
