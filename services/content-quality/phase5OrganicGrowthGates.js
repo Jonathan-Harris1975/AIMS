@@ -193,19 +193,17 @@ function evaluateEbookConversion({ generated = {}, featuredBook = {}, day = "" }
   const defects = [];
   const warnings = [];
   const content = cleanText(generated.content || generated.social_caption || generated.caption || "");
-  const firstComment = cleanText(generated.firstComment || "");
-  const title = cleanText(featuredBook.title || "");
   const bookUrl = normaliseUrl(featuredBook.bookUrl || featuredBook.url || "");
   const wc = wordCount(content);
 
   if (!content) defects.push("Ebook post content is empty.");
   if (wc < 45) defects.push("Ebook post is too thin for conversion-focused organic posting.");
   if (wc > 125) defects.push("Ebook post is too long for the autonomous ebook conversion lane.");
-  if (title && !firstComment.toLowerCase().includes(title.toLowerCase())) {
-    defects.push("First comment must include the exact featured book title.");
-  }
-  if (bookUrl && !normaliseUrl(firstComment).includes(bookUrl)) {
-    defects.push("First comment must include the exact featured book URL.");
+  // Zernio's documented Posts API has no confirmed first-comment field. The
+  // conversion link therefore has to live in the main post content, which is
+  // the only location we can guarantee Zernio will publish.
+  if (bookUrl && !normaliseUrl(content).includes(bookUrl)) {
+    defects.push("Main ebook post must include the exact featured book URL.");
   }
   if (!bookUrl) defects.push("Featured book URL is missing, so the post cannot be conversion-tracked safely.");
   if (!generated.imageUrl && !featuredBook.coverArtUrl) warnings.push("No cover image is available; conversion post may be weaker visually.");

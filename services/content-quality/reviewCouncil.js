@@ -266,6 +266,15 @@ export function repairArtifactForReviewCouncil(artifact, options = {}) {
 export function repairZernioPostForReviewCouncil(post = {}, { contentType = "zernio-social", featuredBook = null } = {}) {
   const repaired = repairArtifactForReviewCouncil(post, { contentType, maxHashtags: /ebook/i.test(contentType) ? 2 : 3 });
   if (featuredBook?.title && featuredBook?.bookUrl && /ebook/i.test(contentType)) {
+    // Zernio does not expose a confirmed first-comment field in the documented
+    // Posts API, so the URL must survive every council repair in main content.
+    const content = String(repaired.content || "").trim();
+    if (!content.includes(featuredBook.bookUrl)) {
+      repaired.content = `${content}\n\nRead more: ${featuredBook.bookUrl}`.trim();
+    }
+
+    // Retain firstComment as internal metadata for backwards compatibility,
+    // but publication correctness must never depend on it.
     const firstComment = String(repaired.firstComment || "");
     if (!firstComment.includes(featuredBook.title) || !firstComment.includes(featuredBook.bookUrl)) {
       repaired.firstComment = `Featured book: ${featuredBook.title}\nRead more: ${featuredBook.bookUrl}`;
