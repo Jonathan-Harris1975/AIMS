@@ -71,7 +71,8 @@ router.get(
 router.get(
   "/accounts/:accountId/subaccounts",
   asyncRoute(async (req, res) => {
-    const result = await listSubaccounts(req.params.accountId, req.query?.apiKey);
+    const apiKey = req.get("x-api-key") || req.get("authorization");
+    const result = await listSubaccounts(req.params.accountId, apiKey);
     return res.json({ ok: true, service: "blotato", accountId: req.params.accountId, ...result });
   })
 );
