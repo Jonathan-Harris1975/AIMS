@@ -248,9 +248,9 @@ async function handleMockRequest(req, res) {
 
 const mockServer = http.createServer((req, res) => {
   handleMockRequest(req, res).catch((error) => {
+    console.error("mock server error", error);
     const payload = JSON.stringify({
       message: "mock server error",
-      error: error?.message || String(error),
     });
 
     if (res.headersSent) {
