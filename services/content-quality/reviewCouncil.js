@@ -40,6 +40,8 @@ const BRITISH_REPLACEMENTS = Object.freeze([
   [/\bfavorite\b/gi, "favourite"],
   [/\borganization\b/gi, "organisation"],
   [/\borganizations\b/gi, "organisations"],
+  [/\bartifact\b/gi, "artefact"],
+  [/\bartifacts\b/gi, "artefacts"],
   [/\boptimize\b/gi, "optimise"],
   [/\boptimized\b/gi, "optimised"],
   [/\boptimization\b/gi, "optimisation"],
@@ -99,6 +101,19 @@ export const REVIEW_COUNCILS = Object.freeze({
       "British English Reviewer",
       "Platform Fit Reviewer",
       "Scheduling Readiness Chair",
+    ],
+  },
+  "zernio-ebook-conversion": {
+    env: "REVIEW_COUNCIL_ZERNIO_EBOOK_ENABLED",
+    defaultEnabled: true,
+    members: [
+      "eBook Editorial Director",
+      "Online Digital Marketing Expert",
+      "Conversion Copy Reviewer",
+      "British English Stylist",
+      "Source and Claims Reviewer",
+      "Audience Value Reviewer",
+      "CTA and Link Integrity Chair",
     ],
   },
   "quiz-logic": {
