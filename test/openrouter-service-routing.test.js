@@ -4,8 +4,6 @@ import assert from "node:assert/strict";
 const OPENROUTER_ENV_NAMES = [
   "OPENROUTER_ART_BACKUP",
   "OPENROUTER_META",
-  "OPENROUTER_DEEPSEEK_v4_flash",
-  "OPENROUTER_DEEPSEEK_v4_pro",
   "OPENROUTER_ANTHROPIC_4_6",
   "OPENROUTER_GPT_5_6_LUNA",
   "OPENROUTER_CLAUDE_SONNET_5",
@@ -36,8 +34,6 @@ function restoreEnv(snapshot) {
 function applySpreadsheetOpenRouterEnv() {
   process.env.OPENROUTER_ART_BACKUP = "bytedance-seed/seedream-4.5";
   process.env.OPENROUTER_META = "meta-llama/llama-4-scout";
-  process.env.OPENROUTER_DEEPSEEK_v4_flash = "deepseek/deepseek-v4-flash";
-  process.env.OPENROUTER_DEEPSEEK_v4_pro = "deepseek/deepseek-v4-pro";
   process.env.OPENROUTER_ANTHROPIC_4_6 = "anthropic/claude-sonnet-4.6";
   process.env.OPENROUTER_GPT_5_6_LUNA = "openai/gpt-5.6-luna";
   process.env.OPENROUTER_CLAUDE_SONNET_5 = "anthropic/claude-sonnet-4.6";
@@ -59,21 +55,16 @@ test("OpenRouter text routes used by blog, Zernio, RSS and audits resolve spread
   try {
     const { getProviderDiagnosticsForRoute } = await import(`../services/shared/utils/ai-service.js?openrouterRoutes=${Date.now()}`);
     const expectedRoutes = {
-      // deepseekV4Flash replaces meta in these routes
-      blogWeekly: ["OPENROUTER_GOOGLE_2_5_flashlite", "OPENROUTER_GPT_5_6_LUNA", "OPENROUTER_DEEPSEEK_v4_pro"],
-      zernioDaily: ["OPENROUTER_GPT_5_6_LUNA", "OPENROUTER_GOOGLE_2_5_flashlite", "OPENROUTER_DEEPSEEK_v4_flash"],
-      zernioQuiz: ["OPENROUTER_GPT_5_6_LUNA", "OPENROUTER_GOOGLE_2_5_flashlite", "OPENROUTER_DEEPSEEK_v4_flash"],
-      rssRewrite: ["OPENROUTER_GPT_5_6_LUNA", "OPENROUTER_GOOGLE_2_5_flashlite", "OPENROUTER_DEEPSEEK_v4_flash"],
+      blogWeekly: ["OPENROUTER_GOOGLE_2_5_flashlite", "OPENROUTER_GPT_5_6_LUNA", "OPENROUTER_GPT_5_6_SOL"],
+      zernioDaily: ["OPENROUTER_GPT_5_6_LUNA", "OPENROUTER_GOOGLE_2_5_flashlite", "OPENROUTER_GPT_5_6_SOL"],
+      zernioQuiz: ["OPENROUTER_GPT_5_6_LUNA", "OPENROUTER_GOOGLE_2_5_flashlite", "OPENROUTER_GPT_5_6_SOL"],
+      rssRewrite: ["OPENROUTER_GPT_5_6_LUNA", "OPENROUTER_GOOGLE_2_5_flashlite", "OPENROUTER_GPT_5_6_SOL"],
       rssShortTitle: ["OPENROUTER_GPT_5_6_LUNA", "OPENROUTER_GOOGLE_2_5_flashlite"],
       auditForensic: [
         "OPENROUTER_ANTHROPIC_4_6",
+        "OPENROUTER_GPT_5_6_SOL",
         "OPENROUTER_GOOGLE_2_5_flashlite",
         "OPENROUTER_GPT_5_6_LUNA",
-  "OPENROUTER_CLAUDE_SONNET_5",
-  "OPENROUTER_CLAUDE_OPUS_4_7",
-  "OPENROUTER_GPT_5_6_SOL",
-        "OPENROUTER_DEEPSEEK_v4_pro",
-        "OPENROUTER_DEEPSEEK_v4_flash",
         "OPENROUTER_META",
       ],
     };
@@ -228,6 +219,22 @@ test("podcast script routes use Luna for drafting and Claude for synthesis/edito
     const editorial = getProviderDiagnosticsForRoute("editorialPass").configuredProviders.filter((p) => p.configured);
     assert.equal(editorial[0]?.model, "anthropic/claude-opus-4.7", "editorial/repair should lead with Claude Opus 4.7");
     assert.equal(editorial[1]?.model, "openai/gpt-5.6-sol", "editorial/repair should use GPT-5.6 Sol as the independent premium backup");
+  } finally {
+    restoreEnv(oldEnv);
+  }
+});
+
+
+test("retired DeepSeek model cannot be selected through stale generic fallback env", async () => {
+  const oldEnv = snapshotEnv([...OPENROUTER_ENV_NAMES, "AI_MODEL_FALLBACK"]);
+  applySpreadsheetOpenRouterEnv();
+  process.env.AI_MODEL_FALLBACK = "deepseek/deepseek-v4-pro";
+
+  try {
+    const { getProviderDiagnosticsForRoute } = await import(`../services/shared/utils/ai-service.js?retiredDeepseek=${Date.now()}`);
+    const diagnostics = getProviderDiagnosticsForRoute("blogWeekly");
+    const configured = diagnostics.configuredProviders.filter((p) => p.configured);
+    assert.equal(configured.some((p) => String(p.model || "").startsWith("deepseek/")), false);
   } finally {
     restoreEnv(oldEnv);
   }

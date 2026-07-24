@@ -36,10 +36,6 @@ const OPENROUTER_ENV_NAMES = [
   "OPENROUTER_API_KEY_CHATGPT",
   "OPENROUTER_GPT_5_6_LUNA",
   "OPENROUTER_API_KEY_GPT_5_6_LUNA",
-  "OPENROUTER_DEEPSEEK",
-  "OPENROUTER_API_KEY_DEEPSEEK",
-  "OPENROUTER_DEEPSEEK_v4_pro",
-  "OPENROUTER_API_KEY_DEEPSEEK_v4_pro",
   "OPENROUTER_META",
   "OPENROUTER_API_KEY_META",
 ];
@@ -110,22 +106,16 @@ test("auditForensic route supports provider-specific key aliases alongside Luna"
   }
 });
 
-test("auditForensic route rejects unresolved Koyeb secret placeholders instead of calling OpenRouter with them", async () => {
+test("auditForensic route does not expose retired DeepSeek providers", async () => {
   const snapshot = snapshotEnv(OPENROUTER_ENV_NAMES);
   clearOpenRouterEnv();
-
-  process.env.OPENROUTER_DEEPSEEK = "deepseek/deepseek-chat";
-  process.env.OPENROUTER_API_KEY_DEEPSEEK = "{{ secret.OPENROUTER_API_KEY_DEEPSEEK }}";
+  process.env.OPENROUTER_API_KEY = "sk-or-test-shared";
+  process.env.OPENROUTER_GPT_5_6_SOL = "openai/gpt-5.6-sol";
 
   try {
-    const { getProviderDiagnosticsForRoute } = await import(`../services/shared/utils/ai-service.js?diag=${Date.now()}-placeholder`);
+    const { getProviderDiagnosticsForRoute } = await import(`../services/shared/utils/ai-service.js?diag=${Date.now()}-retired`);
     const diagnostics = getProviderDiagnosticsForRoute("auditForensic");
-    const deepseek = diagnostics.configuredProviders.find((provider) => provider.providerId === "deepseekV4Pro");
-
-    assert.equal(deepseek.hasModel, true);
-    assert.equal(deepseek.hasApiKey, true);
-    assert.equal(deepseek.unresolvedTemplate, true);
-    assert.equal(deepseek.configured, false);
+    assert.equal(diagnostics.configuredProviders.some((provider) => String(provider.model || "").startsWith("deepseek/")), false);
   } finally {
     restoreEnv(snapshot);
   }
