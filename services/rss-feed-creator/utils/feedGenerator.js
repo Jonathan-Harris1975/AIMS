@@ -10,7 +10,7 @@ import { r2Put, r2Get } from "../../shared/utils/r2-client.js";
 import { info, error, debug } from "../../../logger.js";
 import { RSS_PROMPTS } from "./rss-prompts.js";
 
-const FEED_RETENTION_DAYS = Number(process.env.FEED_RETENTION_DAYS) || 7; // default 7 days
+const FEED_RETENTION_DAYS = Number(process.env.FEED_RETENTION_DAYS) || 60; // keep enough history for weekly recovery/backfill
 const INCLUDE_WRAPPER_CTA = /^(1|true|yes|on)$/i.test(
   String(process.env.RSS_INCLUDE_WRAPPER_CTA || "")
 );
