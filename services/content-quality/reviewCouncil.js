@@ -62,6 +62,7 @@ export const REVIEW_COUNCILS = Object.freeze({
       "Anti-Hype Reviewer",
       "AEO Clarity Reviewer",
       "Publication Safety Chair",
+      "Expert Insight Editor",
     ],
   },
   "blog-phase45": {
@@ -75,6 +76,8 @@ export const REVIEW_COUNCILS = Object.freeze({
       "Mobile UX Reader",
       "Organic Growth Editor",
       "Quarantine Arbiter",
+      "Expert Authority Editor",
+      "Digital Content Performance Reviewer",
     ],
   },
   "blotato-script-quality": {
@@ -140,6 +143,9 @@ export const REVIEW_COUNCILS = Object.freeze({
       "RSS Wording Reviewer",
       "Brand Continuity Reviewer",
       "Podcast Publishing Chair",
+      "Long-form Editorial Director",
+      "Source Integrity Reviewer",
+      "Audience Retention Reviewer",
     ],
   },
   "social-performance": {
