@@ -25,8 +25,18 @@ function pickFirstEnv(...names) {
   return undefined;
 }
 
-export function getArtworkModalities() {
-  return parseModalities(process.env.OPENROUTER_ARTWORK_MODALITIES || process.env.ARTWORK_MODALITIES);
+export function getArtworkModalities(model) {
+  const configured = process.env.OPENROUTER_ARTWORK_MODALITIES || process.env.ARTWORK_MODALITIES;
+  if (configured) return parseModalities(configured);
+
+  // Seedream 4.5 is image-output-only on OpenRouter. Asking it for text as
+  // an additional modality makes a healthy backup look broken. Keep the
+  // generic default for models that support mixed image/text output.
+  if (String(model || "").toLowerCase().startsWith("bytedance-seed/seedream-4.5")) {
+    return ["image"];
+  }
+
+  return [...DEFAULT_ARTWORK_MODALITIES];
 }
 
 export function getArtworkImageConfig(mode = "podcast") {
@@ -62,7 +72,7 @@ export function buildArtworkChatPayload({ model, instruction, maxTokens, mode = 
         ],
       },
     ],
-    modalities: getArtworkModalities(),
+    modalities: getArtworkModalities(model),
     stream: false,
   };
 

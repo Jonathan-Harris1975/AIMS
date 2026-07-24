@@ -29,7 +29,7 @@ const OPENROUTER_BASE_URL =
 
 const ARTWORK_TIMEOUT_MS = Number(process.env.ARTWORK_TIMEOUT_MS || process.env.AI_TIMEOUT) || 120_000;
 const ARTWORK_REQUEST_TIMEOUT_MS = getArtworkRequestTimeoutMs(ARTWORK_TIMEOUT_MS);
-const ARTWORK_MAX_TOKENS = Number(process.env.ARTWORK_MAX_TOKENS || 2048);
+const ARTWORK_MAX_TOKENS = Number(process.env.ARTWORK_MAX_TOKENS || 4096);
 
 const providers = getArtworkProviders();
 
