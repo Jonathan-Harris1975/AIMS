@@ -20,7 +20,7 @@ test("Phase 5 allows source-backed organic ebook conversion posts", () => {
       title: "Practical AI Thinking angle",
       topic: "Practical AI judgement",
       imageUrl: FEATURED_BOOK.coverArtUrl,
-      content: "For readers trying to understand artificial intelligence without buying the theatre, this book gives a practical way to spot weak claims, ask better questions and decide where the tools actually help. It keeps the promise grounded, which is usually where the useful work begins. Readers get a calmer route through the noise before they commit time, money or trust.",
+      content: `For readers trying to understand artificial intelligence without buying the theatre, this book gives a practical way to spot weak claims, ask better questions and decide where the tools actually help. It keeps the promise grounded, which is usually where the useful work begins. Readers get a calmer route through the noise before they commit time, money or trust.\n\nRead more: ${FEATURED_BOOK.bookUrl}`,
       firstComment: `Featured book: ${FEATURED_BOOK.title}\nRead more: ${FEATURED_BOOK.bookUrl}`,
     },
   });
@@ -41,7 +41,25 @@ test("Phase 5 blocks hard-sell ebook posts with unsupported conversion claims", 
   });
 
   assert.equal(gate.ok, false);
-  assert.match(gate.defects.join(" | "), /Organic tone breach|exact featured book URL|Unsupported social proof/i);
+  assert.match(gate.defects.join(" | "), /Organic tone breach|Main ebook post must include the exact featured book URL|Unsupported social proof/i);
+});
+
+test("Phase 5 requires the ebook URL in the main Zernio post, not only first-comment metadata", () => {
+  const gate = runPhase5OrganicGrowthGate({
+    contentType: "ebook-conversion-social-post",
+    featuredBook: FEATURED_BOOK,
+    day: "tuesday",
+    generated: {
+      title: "Practical AI Thinking angle",
+      topic: "Practical AI judgement",
+      imageUrl: FEATURED_BOOK.coverArtUrl,
+      content: "For readers trying to understand artificial intelligence without buying the theatre, this book gives a practical way to spot weak claims, ask better questions and decide where tools actually help. The point is useful judgement before committing time, money or trust, with enough practical detail to apply the ideas rather than merely admire them.",
+      firstComment: `Featured book: ${FEATURED_BOOK.title}\nRead more: ${FEATURED_BOOK.bookUrl}`,
+    },
+  });
+
+  assert.equal(gate.ok, false);
+  assert.match(gate.defects.join(" | "), /Main ebook post must include the exact featured book URL/i);
 });
 
 test("Phase 5 visual social gate favours branded non-cluttered prompts", () => {
