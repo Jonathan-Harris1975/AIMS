@@ -1,4 +1,5 @@
 import { warn } from "../../logger.js";
+import { THRESHOLDS } from "../../config/thresholds.js";
 
 const BOOLEAN_TRUE = new Set(["1", "true", "yes", "on"]);
 const BOOLEAN_FALSE = new Set(["0", "false", "no", "off"]);
@@ -284,6 +285,7 @@ export async function runReviewCouncilGate({
   contentType = "content",
   repairArtifact = repairArtifactForReviewCouncil,
   validate,
+  maxAttempts = THRESHOLDS.reviewCouncil.maxAttempts,
   logger = warn,
 } = {}) {
   if (!gate || gate.ok) {
@@ -303,24 +305,63 @@ export async function runReviewCouncilGate({
     return { ok: false, gate: { ...gate, reviewCouncil: disabledReview }, artifact, reviewCouncil: disabledReview, repaired: false };
   }
 
-  const repairedArtifact = await repairArtifact(artifact, { contentType, gate });
-  const repairedGate = validate ? await validate(repairedArtifact) : gate;
+  const effectiveMaxAttempts = Math.max(1, Number(maxAttempts) || THRESHOLDS.reviewCouncil.maxAttempts);
+  const attemptLog = [];
+  let currentArtifact = artifact;
+  let currentGate = gate;
+  let repairedArtifact = artifact;
+  let repairedGate = gate;
+
+  for (let attempt = 1; attempt <= effectiveMaxAttempts; attempt += 1) {
+    repairedArtifact = await repairArtifact(currentArtifact, { contentType, gate: currentGate, attempt });
+    repairedGate = validate ? await validate(repairedArtifact) : currentGate;
+
+    attemptLog.push({
+      attempt,
+      maxAttempts: effectiveMaxAttempts,
+      score: repairedGate?.score ?? null,
+      approved: Boolean(repairedGate?.ok),
+    });
+
+    logger?.("review_council.gate_attempt", {
+      councilKey,
+      attempt,
+      maxAttempts: effectiveMaxAttempts,
+      approved: Boolean(repairedGate?.ok),
+      score: repairedGate?.score ?? null,
+    });
+
+    if (repairedGate?.ok) break;
+
+    // Feed the (still-imperfect) repaired artefact back in as the input to
+    // the next attempt so successive passes compound rather than repeat the
+    // same fix against the untouched original.
+    currentArtifact = repairedArtifact;
+    currentGate = repairedGate;
+  }
+
   const reviewCouncil = reviewDecision({
     councilKey,
     enabled,
     originalGate: gate,
     repairedGate,
     attempts: [
+      `${attemptLog.length} of ${effectiveMaxAttempts} minimum repair-and-revalidate attempts used`,
       "deterministic text repair",
       "gate re-validation",
       "six-member council arbitration",
-      repairedGate?.ok ? "approved repaired artefact" : "quarantine only after review",
+      repairedGate?.ok ? "approved repaired artefact" : `quarantine only after ${attemptLog.length} reviewed attempts`,
     ],
   });
+  reviewCouncil.attemptLog = attemptLog;
+  reviewCouncil.attemptsUsed = attemptLog.length;
+  reviewCouncil.minimumAttemptsRequired = effectiveMaxAttempts;
 
   logger?.("review_council.gate_review", {
     councilKey,
     approved: reviewCouncil.approved,
+    attemptsUsed: attemptLog.length,
+    minimumAttemptsRequired: effectiveMaxAttempts,
     originalScore: reviewCouncil.originalScore,
     repairedScore: reviewCouncil.repairedScore,
     remainingDefects: reviewCouncil.defectsRemaining?.slice?.(0, 8) || [],
