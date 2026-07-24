@@ -8,6 +8,9 @@ const OPENROUTER_ENV_NAMES = [
   "OPENROUTER_DEEPSEEK_v4_pro",
   "OPENROUTER_ANTHROPIC_4_6",
   "OPENROUTER_GPT_5_6_LUNA",
+  "OPENROUTER_CLAUDE_SONNET_5",
+  "OPENROUTER_CLAUDE_OPUS_4_7",
+  "OPENROUTER_GPT_5_6_SOL",
   "AI_MODEL_STANDARD",
   "AI_MODEL_HIGH_QUALITY",
   "OPENROUTER_GOOGLE_2_5_flashlite",
@@ -37,6 +40,9 @@ function applySpreadsheetOpenRouterEnv() {
   process.env.OPENROUTER_DEEPSEEK_v4_pro = "deepseek/deepseek-v4-pro";
   process.env.OPENROUTER_ANTHROPIC_4_6 = "anthropic/claude-sonnet-4.6";
   process.env.OPENROUTER_GPT_5_6_LUNA = "openai/gpt-5.6-luna";
+  process.env.OPENROUTER_CLAUDE_SONNET_5 = "anthropic/claude-sonnet-4.6";
+  process.env.OPENROUTER_CLAUDE_OPUS_4_7 = "anthropic/claude-opus-4.7";
+  process.env.OPENROUTER_GPT_5_6_SOL = "openai/gpt-5.6-sol";
   process.env.OPENROUTER_GOOGLE_2_5_flashlite = "google/gemini-2.5-flash-lite";
   process.env.OPENROUTER_API_BASE = "https://openrouter.ai/api/v1";
   process.env.OPENROUTER_API_KEY = "sk-or-global-test-value";
@@ -63,6 +69,9 @@ test("OpenRouter text routes used by blog, Zernio, RSS and audits resolve spread
         "OPENROUTER_ANTHROPIC_4_6",
         "OPENROUTER_GOOGLE_2_5_flashlite",
         "OPENROUTER_GPT_5_6_LUNA",
+  "OPENROUTER_CLAUDE_SONNET_5",
+  "OPENROUTER_CLAUDE_OPUS_4_7",
+  "OPENROUTER_GPT_5_6_SOL",
         "OPENROUTER_DEEPSEEK_v4_pro",
         "OPENROUTER_DEEPSEEK_v4_flash",
         "OPENROUTER_META",
@@ -212,10 +221,13 @@ test("podcast script routes use Luna for drafting and Claude for synthesis/edito
       assert.equal(configured[0]?.model, "openai/gpt-5.6-luna", `${routeName} should draft with GPT-5.6 Luna`);
     }
 
-    for (const routeName of ["scriptMainSynthesis", "editorialPass"]) {
-      const configured = getProviderDiagnosticsForRoute(routeName).configuredProviders.filter((p) => p.configured);
-      assert.equal(configured[0]?.model, "anthropic/claude-sonnet-4.6", `${routeName} should lead with Claude Sonnet 4.6`);
-    }
+    const synthesis = getProviderDiagnosticsForRoute("scriptMainSynthesis").configuredProviders.filter((p) => p.configured);
+    assert.equal(synthesis[0]?.model, "anthropic/claude-sonnet-4.6", "synthesis should lead with Claude Sonnet 4.6");
+    assert.equal(synthesis[1]?.model, "openai/gpt-5.6-sol", "synthesis should use GPT-5.6 Sol as the independent premium backup");
+
+    const editorial = getProviderDiagnosticsForRoute("editorialPass").configuredProviders.filter((p) => p.configured);
+    assert.equal(editorial[0]?.model, "anthropic/claude-opus-4.7", "editorial/repair should lead with Claude Opus 4.7");
+    assert.equal(editorial[1]?.model, "openai/gpt-5.6-sol", "editorial/repair should use GPT-5.6 Sol as the independent premium backup");
   } finally {
     restoreEnv(oldEnv);
   }
