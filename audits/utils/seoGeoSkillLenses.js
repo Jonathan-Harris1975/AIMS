@@ -85,7 +85,7 @@ function trim(value) {
 function cleanText(value = "") {
   return String(value ?? "")
     .replace(/<!\[CDATA\[|\]\]>/g, "")
-    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script\b[^>]*>/gi, " ")
     .replace(/<style[\s\S]*?<\/style>/gi, " ")
     .replace(/<[^>]+>/g, " ")
     .replace(/&nbsp;/gi, " ")
