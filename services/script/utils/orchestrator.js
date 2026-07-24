@@ -113,6 +113,38 @@ function scheduleCleanup(sessionId) {
   }, 4 * 60 * 1000);
 }
 
+
+function normalisedSpokenWords(text = "") {
+  return String(text || "").toLowerCase().replace(/[’']/g, "").match(/[a-z0-9]+/g) || [];
+}
+
+function stripLeadingIntroEcho(main = "", intro = "") {
+  const body = String(main || "").trim();
+  const introText = String(intro || "").trim();
+  if (!body || !introText) return body;
+
+  const introWords = normalisedSpokenWords(introText);
+  const bodyWords = normalisedSpokenWords(body);
+  const probeLength = Math.min(60, introWords.length, bodyWords.length);
+  if (probeLength < 20) return body;
+
+  let matches = 0;
+  for (let i = 0; i < probeLength; i += 1) {
+    if (introWords[i] === bodyWords[i]) matches += 1;
+  }
+  if (matches / probeLength < 0.9) return body;
+
+  const tokenRe = /[A-Za-z0-9]+/g;
+  let match, count = 0, cut = 0;
+  while ((match = tokenRe.exec(body)) !== null && count < introWords.length) {
+    count += 1;
+    cut = tokenRe.lastIndex;
+  }
+  const tail = body.slice(cut);
+  const boundary = tail.match(/^[\s,;:.\-–—!?]*(?:\n\s*)*/);
+  return body.slice(cut + (boundary?.[0]?.length || 0)).trim();
+}
+
 export async function orchestrateScript(input) {
   // Support both legacy string version and meta-object version
   const sessionMeta =
@@ -136,7 +168,11 @@ export async function orchestrateScript(input) {
     // 1) Generate intro, main, outro (using updated Option A models)
     // ============================================================
     const intro = await generateIntro(sid);
-    const main = await generateMain(sid);
+    const generatedMain = await generateMain(sid);
+    const main = stripLeadingIntroEcho(generatedMain, intro);
+    if (main !== String(generatedMain || "").trim()) {
+      info("script.main.intro_echo_removed", { sessionId: sid });
+    }
     const outro = await generateOutro(sid);
 
     // ============================================================

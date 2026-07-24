@@ -436,7 +436,7 @@ export function getArtworkPrompt(description, date) {
     "Premium editorial AI podcast cover art.",
     "Mood: sharp, sceptical, cinematic, adult, intelligent, grounded.",
     getSeasonalPaletteDirection(date),
-    "Style: cinematic magazine-cover storytelling with one strong focal subject, emotional resonance, bold controlled colour, high contrast and clean negative space. Use people, hands, objects or real-world environments when they genuinely express the episode theme. Do not default to abstract geometry, data motifs or generic AI infrastructure.",
+    "Style: cinematic magazine-cover storytelling with one strong, recognisable focal subject drawn from the actual episode. Prefer concrete people, hands, semiconductor hardware, power infrastructure, security work, healthcare technology, scientific research, robotics, developer environments or other real-world subjects explicitly supported by the episode. The cover should make a listener curious about this week’s stories before they know the title. Do not default to abstract geometry, data motifs, generic AI infrastructure, symmetrical emblems, digital snowflakes, circuit mandalas, neural-network flowers, floating polygons or decorative technology patterns.",
     STRICT_TEXT_FREE_RULE,
     "Avoid: pastel fantasy, dreamy clouds, magical orb, cute or childlike sci-fi, cartoon softness.",
     `Themes: ${theme || "AI systems, governance, power, risk, work, security."}`,
