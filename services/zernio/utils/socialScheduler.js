@@ -705,7 +705,7 @@ async function scheduleToZernio({ post, scheduledDateTime, profileName, accountI
     warnings.push("Zernio's documented Posts API has no separate title field; the title was folded into the post content.");
   }
   if (post.firstComment) {
-    warnings.push("Zernio's documented Posts API does not confirm a first-comment field; the first comment was not sent and must be added manually if required.");
+    warnings.push("Zernio's documented Posts API does not confirm a first-comment field; the first comment was not sent. Ebook URLs are therefore carried in the main post content.");
   }
 
   const content = [post.title, post.content].filter(Boolean).join("\n\n") || post.content;
@@ -792,6 +792,54 @@ function appendEbookLink(content, featuredBook) {
   if (!url) return base;
   if (base.toLowerCase().includes(url.toLowerCase())) return base;
   return `${base}\n\nRead more: ${url}`;
+}
+
+function enforceEbookMainPostUrl(post, featuredBook, { dayKey = "" } = {}) {
+  const url = compactText(featuredBook?.bookUrl || "");
+  if (!url) {
+    const err = new Error("Featured ebook URL is missing; refusing to publish an incomplete Zernio ebook post.");
+    err.statusCode = 422;
+    emitQaEvent({
+      source: `scheduler.gate.ebook-${dayKey || "unknown"}`,
+      type: "ebook_url_missing",
+      severity: "high",
+      message: err.message,
+      detail: { dayKey, title: featuredBook?.title || post?.title || "" },
+    });
+    throw err;
+  }
+
+  try {
+    const parsed = new URL(url);
+    if (!/^https?:$/.test(parsed.protocol)) throw new Error("unsupported protocol");
+  } catch {
+    const err = new Error(`Featured ebook URL is invalid; refusing to publish: ${url}`);
+    err.statusCode = 422;
+    emitQaEvent({
+      source: `scheduler.gate.ebook-${dayKey || "unknown"}`,
+      type: "ebook_url_invalid",
+      severity: "high",
+      message: err.message,
+      detail: { dayKey, title: featuredBook?.title || post?.title || "", url },
+    });
+    throw err;
+  }
+
+  post.content = appendEbookLink(post.content, featuredBook);
+  if (!post.content.includes(url)) {
+    const err = new Error("Featured ebook URL was lost during QA repair; refusing to publish incomplete Zernio content.");
+    err.statusCode = 422;
+    emitQaEvent({
+      source: `scheduler.gate.ebook-${dayKey || "unknown"}`,
+      type: "ebook_url_missing_after_repair",
+      severity: "high",
+      message: err.message,
+      detail: { dayKey, title: featuredBook?.title || post?.title || "", url },
+    });
+    throw err;
+  }
+
+  return post;
 }
 
 function resolveEbookPublishTime(options, day) {
@@ -1433,6 +1481,10 @@ export async function buildAndScheduleEbookWeekly(options = {}) {
         Object.assign(post, reviewed.post);
         zernioSocialGate = reviewed.gate;
       }
+
+      // Councils are allowed to rewrite content, so re-assert the one business
+      // rule Zernio cannot recover for us: the ebook URL must be in main copy.
+      enforceEbookMainPostUrl(post, featuredBook, { dayKey });
 
       const scheduling = await scheduleToZernio({
         post,
