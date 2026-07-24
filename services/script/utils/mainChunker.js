@@ -198,8 +198,9 @@ export async function generateMainLongform(sessionMeta, articles, totalMainSecon
     section: "main-synthesis",
     messages: [{ role: "system", content: synthesisPrompt }],
     // Long-form synthesis needs enough visible-output headroom for a 60-minute episode.
-    max_tokens: Number(process.env.PODCAST_SYNTHESIS_MAX_TOKENS || 16000),
-    timeoutMs: Number(process.env.PODCAST_SYNTHESIS_TIMEOUT_MS || 600000),
+    max_tokens: Number(process.env.PODCAST_SYNTHESIS_MAX_TOKENS || 24000),
+    timeoutMs: Number(process.env.PODCAST_SYNTHESIS_TIMEOUT_MS || 900000),
+    reasoning: { effort: process.env.PODCAST_SYNTHESIS_REASONING_EFFORT || "low", exclude: true },
   });
 
   const finalCombined = cleanTranscript(String(synthesisRes || parts.join("\n\n")));

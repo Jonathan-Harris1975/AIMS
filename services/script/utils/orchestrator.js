@@ -72,7 +72,8 @@ ${mainText}`,
     }],
     temperature: Math.max(0.12, 0.22 - ((Number(attempt) || 1) * 0.02)),
     max_tokens: Number(process.env.PODCAST_REPAIR_MAX_TOKENS || 16000),
-    timeoutMs: Number(process.env.PODCAST_REPAIR_TIMEOUT_MS || 600000),
+    timeoutMs: Number(process.env.PODCAST_REPAIR_TIMEOUT_MS || 900000),
+    reasoning: { effort: process.env.PODCAST_REPAIR_REASONING_EFFORT || "none", exclude: true },
   });
   const repairedMain = String(raw || mainText).trim() || mainText;
   // Never trust an LLM repair to preserve deterministic brand blocks. Reattach them here.
