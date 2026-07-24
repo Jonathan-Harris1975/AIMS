@@ -14,6 +14,49 @@ import editAndFormat from "./editAndFormat.js";
 import { runEditorialPass } from "./editorialPass.js";
 import { findLongSpokenSentences, validateTranscriptSourceIntegrity, validateTranscriptStructure } from "./scriptValidation.js";
 import { validateSpokenCadence } from "../../content-quality/validators/spokenCadenceValidator.js";
+import { runReviewCouncilGate } from "../../content-quality/reviewCouncil.js";
+import { resilientRequest } from "../../shared/utils/ai-service.js";
+
+function evaluatePodcastTranscriptGate(text = "", sessionMeta = {}) {
+  const structure = validateTranscriptStructure(text);
+  const sourceIntegrity = validateTranscriptSourceIntegrity(text, sessionMeta);
+  const defects = [
+    ...(structure.ok ? [] : structure.reasons || []),
+    ...(sourceIntegrity.ok ? [] : sourceIntegrity.defects || []),
+  ];
+  const warnings = [...(sourceIntegrity.warnings || [])];
+  return {
+    ok: defects.length === 0,
+    score: Math.max(0, 100 - (defects.length * 12)),
+    threshold: 88,
+    defects,
+    warnings,
+  };
+}
+
+async function repairPodcastTranscriptForCouncil(candidate = {}, { gate, attempt, sessionMeta } = {}) {
+  const text = String(candidate?.text || "").trim();
+  const defects = Array.isArray(gate?.defects) ? gate.defects.slice(0, 10) : [];
+  const raw = await resilientRequest("editorialPass", {
+    sessionId: sessionMeta?.sessionId,
+    section: `transcript-repair-${attempt || 1}`,
+    messages: [{
+      role: "user",
+      content: `You are the final review editor for Turing's Torch, hosted by a recognised British AI industry expert.
+
+Repair only the listed transcript defects. Preserve all supported facts, the existing argument, episode structure, length and dry Gen-X voice. Use British English. Do not add facts, numbers, quotations, names or claims that are not already in the transcript. If a claim is flagged as unsupported, remove or soften it rather than guessing. Keep the result natural for spoken delivery. Return plain transcript text only.
+
+Repair attempt: ${attempt || 1}
+Defects:
+${defects.map((d) => `- ${d}`).join("\n") || "- Transcript quality gate failed"}
+
+TRANSCRIPT:
+${text}`,
+    }],
+    temperature: Math.max(0.12, 0.22 - ((Number(attempt) || 1) * 0.02)),
+  });
+  return { text: String(raw || text).trim() || text };
+}
 
 function hasOnlyRepairableSpokenLengthDefects(validation = {}) {
   const reasons = Array.isArray(validation.reasons) ? validation.reasons : [];
@@ -98,8 +141,7 @@ export async function orchestrateScript(input) {
       if (repairableSpokenLength) {
         info("script.validation.composed.repairable", logPayload);
       } else {
-        error("script.validation.composed.fail", logPayload);
-        throw new Error(`Composed script failed structure validation: ${initialValidation.reasons.join("; ")}`);
+        error("script.validation.composed.needs_repair", logPayload);
       }
     }
 
@@ -129,10 +171,36 @@ export async function orchestrateScript(input) {
     // ============================================================
     const formattedText = editAndFormat(safeEditorialText);
 
-    const finalCandidate =
+    let finalCandidate =
       (formattedText && formattedText.trim()) ||
       safeEditorialText ||
       initialFullText;
+
+    let transcriptGate = evaluatePodcastTranscriptGate(finalCandidate, sessionMeta);
+    if (!transcriptGate.ok) {
+      const reviewed = await runReviewCouncilGate({
+        councilKey: "podcast-on-brand",
+        gate: transcriptGate,
+        artifact: { text: finalCandidate },
+        contentType: "podcast-transcript",
+        repairArtifact: (candidate, context = {}) => repairPodcastTranscriptForCouncil(candidate, {
+          ...context,
+          sessionMeta: { ...sessionMeta, sessionId: sid },
+        }),
+        validate: (candidate) => evaluatePodcastTranscriptGate(candidate?.text || "", sessionMeta),
+        logger: error,
+      });
+      if (!reviewed.ok) {
+        throw new Error(`Podcast transcript failed after review council: ${(reviewed.gate?.defects || []).join("; ")}`);
+      }
+      finalCandidate = String(reviewed.artifact?.text || finalCandidate).trim();
+      transcriptGate = reviewed.gate;
+      info("script.validation.reviewCouncil.approved", {
+        sessionId: sid,
+        attemptsUsed: reviewed.reviewCouncil?.attemptsUsed,
+        score: reviewed.gate?.score,
+      });
+    }
 
     const finalValidation = validateTranscriptStructure(finalCandidate);
     if (!finalValidation.ok) {
