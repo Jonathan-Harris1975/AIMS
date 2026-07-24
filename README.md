@@ -434,7 +434,7 @@ These files exist but are not mounted by the active root route registry:
 | `RSS_FEED_DESCRIPTION` | Newsletter RSS fetch/rewrite/feed configuration. | routes/rss.js, services/rss-feed-creator | Optional/conditional | `blank` | Set only for services you run. |
 | `FEED_URL` | Newsletter RSS fetch/rewrite/feed configuration. | routes/rss.js, services/rss-feed-creator | Optional/conditional | `blank` | Set only for services you run. |
 | `FEED_CUTOFF_HOURS` | Newsletter RSS fetch/rewrite/feed configuration. | routes/rss.js, services/rss-feed-creator | Optional/conditional | `48` | Set only for services you run. |
-| `FEED_RETENTION_DAYS` | Newsletter RSS fetch/rewrite/feed configuration. | routes/rss.js, services/rss-feed-creator | Optional/conditional | `7` | Set only for services you run. |
+| `FEED_RETENTION_DAYS` | Newsletter RSS fetch/rewrite/feed configuration. | routes/rss.js, services/rss-feed-creator | Optional/conditional | `60` | Retain enough rewritten history for weekly blog recovery and backfill. |
 | `MAX_RSS_FEEDS_PER_RUN` | Newsletter RSS fetch/rewrite/feed configuration. | routes/rss.js, services/rss-feed-creator | Optional/conditional | `5` | Set only for services you run. |
 | `MAX_URL_FEEDS_PER_RUN` | Newsletter RSS fetch/rewrite/feed configuration. | routes/rss.js, services/rss-feed-creator | Optional/conditional | `1` | Set only for services you run. |
 | `MAX_ITEMS_PER_FEED` | Newsletter RSS fetch/rewrite/feed configuration. | server.js, scripts/*, shared utilities | Optional/conditional | `20` | Set only for services you run. |
@@ -581,6 +581,9 @@ These names were found in runtime code or deployment checks but are not present 
 | `BLOG_RSS_TITLE` | blog | Weekly blog RSS channel title. | Optional | Default in code. |
 | `BLOG_RSS_DESCRIPTION` | blog | Weekly blog RSS channel description. | Optional | Default in code. |
 | `BLOG_RSS_IMAGE_URL` | blog/artwork | Weekly/blog RSS image and fallback image source. | Optional | Default in code or blank fallback. |
+| `BLOG_RSS_PUBLIC_VERIFY_ATTEMPTS` | blog | Public RSS verification attempts before the website rebuild hook is allowed to run. | Optional | `5` | Cache-busted fail-closed publication handoff. |
+| `BLOG_RSS_PUBLIC_VERIFY_BASE_MS` | blog | Base delay for exponential public RSS verification retries. | Optional | `750` | Milliseconds. |
+| `BLOG_RSS_PUBLIC_VERIFY_TIMEOUT_MS` | blog | Per-attempt timeout while verifying the newly published post is visible in public RSS. | Optional | `10000` | Milliseconds. |
 | `BLOG_SOCIAL_PUBLIC_BASE_URL` | blog social | Public base URL for social blog hub/feed links. | Optional | Default in code. |
 | `BLOG_SOCIAL_PUBLIC_POSTS_BASE_URL` | blog social | Public base URL for social blog post links. | Optional | Default in code. |
 | `BLOG_WEEKLY_QA_ENABLED` | blog weekly | Enables/disables extra weekly blog brand QA pass. | Optional | Defaults to true. |
