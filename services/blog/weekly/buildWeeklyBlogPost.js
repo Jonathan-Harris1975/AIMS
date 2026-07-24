@@ -5,7 +5,7 @@ import { resilientRequest } from "../../shared/utils/ai-service.js";
 import { slugify } from "../utils/slug.js";
 import { pageTemplate, weeklyPostBody } from "../utils/templates.js";
 import { createBlogArtwork } from "../../artwork/createBlogArtwork.js";
-import { publishBlogRssFeed } from "../rss/publishBlogRssFeed.js";
+import { publishBlogRssFeed, verifyPublicBlogRssFeed } from "../rss/publishBlogRssFeed.js";
 
 import {
   runPhase4AutonomousContentGate,
@@ -750,6 +750,10 @@ export async function buildWeeklyBlogPost({ days, weekId } = {}) {
       manifest: publishedManifest,
       prefix,
     });
+    const feedVerification = await verifyPublicBlogRssFeed({
+      feedUrl: rss.feedUrl,
+      expectedPostUrl: postUrl,
+    });
 
     info("blog.weekly.build.success", {
       week: window.week,
@@ -761,9 +765,25 @@ export async function buildWeeklyBlogPost({ days, weekId } = {}) {
       imageStatus: artwork.imageStatus,
       sourceCount: cleanedSources.length,
       themeCount: weeklyPackage.dominantThemes.length,
+      publicFeedVerified: feedVerification.ok,
     });
 
-    const rebuild = await triggerWebsiteRebuild();
+    let rebuild;
+    if (feedVerification.ok) {
+      rebuild = await triggerWebsiteRebuild();
+    } else {
+      warn("blog.weekly.rebuild.skipped.unverifiedFeed", {
+        week: window.week,
+        feedUrl: rss.feedUrl,
+        postUrl,
+        feedVerification,
+      });
+      rebuild = {
+        ok: false,
+        skipped: true,
+        reason: "public-rss-verification-failed",
+      };
+    }
 
     return {
       ok: true,
@@ -784,6 +804,7 @@ export async function buildWeeklyBlogPost({ days, weekId } = {}) {
       weeklyArchiveUrl,
       rssFeedUrl: rss.feedUrl,
       rss,
+      feedVerification,
       phase4Gate,
       publishedObjects: {
         ...publishedObjects,
