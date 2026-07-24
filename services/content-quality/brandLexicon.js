@@ -247,8 +247,8 @@ export const MOTIVATIONAL_TONE_PATTERNS = Object.freeze([
 
 export function cleanLexiconText(value = "") {
   return String(value || "")
-    .replace(/<script\b[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style\b[\s\S]*?<\/style>/gi, " ")
+    .replace(/<script\b[\s\S]*?<\/script\b[^>]*>/gi, " ")
+    .replace(/<style\b[\s\S]*?<\/style\b[^>]*>/gi, " ")
     .replace(/<[^>]+>/g, " ")
     .replace(/&(?:nbsp|amp|quot|apos|lt|gt);/gi, " ")
     .replace(/[\u2018\u2019]/g, "'")
