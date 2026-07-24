@@ -277,6 +277,9 @@ Additional ebook-post rules:
 - do not invent facts, reviews, rankings, sales numbers, reader reactions, or credentials
 - use the supplied manuscript URL only as a reference identifier; do not claim to have read it, quote it, or infer extra facts from the link
 - prefer one clear idea over padded filler
+- write at the standard of a recognised, commercially successful AI expert: authoritative without chest-beating, useful without teaching the obvious
+- the post must contain a reason to care, a practical consequence, or a non-obvious judgement; a generic book summary is not enough
+- keep the Gen X character implicit through scepticism, economy and dry judgement; never label the voice as Gen X in the post
 - never sound like a textbook, glossary, advert, press release, Wikipedia entry, or poster slogan
 
 Return valid JSON only with exactly these keys:

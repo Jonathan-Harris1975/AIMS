@@ -265,7 +265,7 @@ async function reviewZernioGateOrThrow({ councilKey = "zernio-social-copy", gate
 
 async function reviewPhase5GateOrThrow({ gate, post, featuredBook, dayKey, label = "Phase 5 ebook conversion gate" }) {
   const review = await runReviewCouncilGate({
-    councilKey: "zernio-social-copy",
+    councilKey: "zernio-ebook-conversion",
     gate,
     artifact: post,
     contentType: "zernio-ebook-conversion",
@@ -1422,7 +1422,7 @@ export async function buildAndScheduleEbookWeekly(options = {}) {
       });
       if (!zernioSocialGate.ok) {
         const reviewed = await reviewZernioGateOrThrow({
-          councilKey: "zernio-social-copy",
+          councilKey: "zernio-ebook-conversion",
           gate: zernioSocialGate,
           post,
           contentType: "zernio-ebook-conversion",
