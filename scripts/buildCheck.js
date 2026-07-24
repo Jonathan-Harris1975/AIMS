@@ -27,7 +27,60 @@ async function assertPublicRegistryLockfile() {
     }
   }
 
-  if (!raw.includes(npmRegistry)) {
+  let lockJson;
+  try {
+    lockJson = JSON.parse(raw);
+  } catch {
+    throw new Error("package-lock.json is not valid JSON");
+  }
+
+  const allowedHost = "registry.npmjs.org";
+  const resolvedUrls = [];
+
+  if (lockJson && typeof lockJson === "object") {
+    if (lockJson.packages && typeof lockJson.packages === "object") {
+      for (const pkg of Object.values(lockJson.packages)) {
+        if (pkg && typeof pkg === "object" && typeof pkg.resolved === "string") {
+          resolvedUrls.push(pkg.resolved);
+        }
+      }
+    }
+
+    if (lockJson.dependencies && typeof lockJson.dependencies === "object") {
+      const stack = [lockJson.dependencies];
+      while (stack.length) {
+        const deps = stack.pop();
+        for (const dep of Object.values(deps)) {
+          if (!dep || typeof dep !== "object") continue;
+          if (typeof dep.resolved === "string") {
+            resolvedUrls.push(dep.resolved);
+          }
+          if (dep.dependencies && typeof dep.dependencies === "object") {
+            stack.push(dep.dependencies);
+          }
+        }
+      }
+    }
+  }
+
+  let foundPublicRegistry = false;
+  for (const resolved of resolvedUrls) {
+    let parsed;
+    try {
+      parsed = new URL(resolved);
+    } catch {
+      continue;
+    }
+
+    if (parsed.protocol === "https:" && parsed.hostname === allowedHost) {
+      foundPublicRegistry = true;
+      continue;
+    }
+
+    throw new Error(`package-lock.json contains non-public resolved URL: ${resolved}`);
+  }
+
+  if (!foundPublicRegistry) {
     throw new Error(`package-lock.json does not reference ${npmRegistry}`);
   }
 }
