@@ -177,8 +177,7 @@ async function blotatoRequest(endpoint, {
       const retryable = Boolean(error?.retryable || isRetryableNetworkError(error));
       if (!retryable || attempt >= attempts) throw error;
 
-      const hintedWaitMs = Number(error?.retryAfterMs || 0);
-      const waitMs = Math.min(maxDelayMs, Math.max(hintedWaitMs, baseDelayMs * Math.pow(2, attempt - 1)));
+      const waitMs = Math.min(maxDelayMs, baseDelayMs * Math.pow(2, attempt - 1));
       await sleep(waitMs);
     }
   }
