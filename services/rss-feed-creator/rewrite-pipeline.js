@@ -40,7 +40,7 @@ export async function endToEndRewrite() {
   try {
     info("rss-feed-creator.pipeline.start");
 
-    const maxBatchAttempts = positiveIntEnv("RSS_REWRITE_BATCH_ADVANCE_ATTEMPTS", 4, 20);
+    const maxBatchAttempts = Math.max(5, positiveIntEnv("RSS_REWRITE_BATCH_ADVANCE_ATTEMPTS", 5, 20));
     const quarantineFallbackThreshold = Math.max(
       0,
       Number.isFinite(Number(process.env.RSS_QUARANTINE_FALLBACK_THRESHOLD))
