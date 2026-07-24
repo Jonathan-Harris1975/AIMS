@@ -63,9 +63,19 @@ export function getSeasonalPaletteDirection(value) {
 
 export function applyArtworkPromptPolicy(prompt = "", { date, mode = "editorial" } = {}) {
   const cleanPrompt = String(prompt || "").replace(/\s+/g, " ").trim();
+  const topicalPodcastRule = mode === "podcast"
+    ? [
+        "TOPICAL EDITORIAL REQUIREMENT: the image must visibly communicate one or two concrete subjects from this specific episode, not merely the idea of AI.",
+        "Choose recognisable real-world visual storytelling such as semiconductor hardware, data-centre power infrastructure, security work, healthcare technology, scientific research, robotics, developers or other episode-specific objects and environments when supported by the prompt.",
+        "Create a strong magazine-cover focal scene with depth, tension and human or physical context where appropriate.",
+        "Do not default to a symmetrical abstract emblem, digital snowflake, neural-network flower, generic circuit mandala, floating polygon, glowing brain, anonymous data web or decorative geometry.",
+        "Abstract geometry may only be a minor supporting texture, never the main subject.",
+      ].join(" ")
+    : "";
   return [
     cleanPrompt,
     `Artwork mode: ${mode}.`,
+    topicalPodcastRule,
     getSeasonalPaletteDirection(date),
     STRICT_TEXT_FREE_RULE,
   ].filter(Boolean).join(" ");
