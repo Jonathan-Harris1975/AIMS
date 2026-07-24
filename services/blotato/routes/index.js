@@ -115,7 +115,8 @@ router.delete(
   "/visuals/:id",
   hookdeckDedupe("blotato:delete-visual"),
   asyncRoute(async (req, res) => {
-    const result = await deleteVisual(req.params.id, req.query?.apiKey || req.body?.apiKey);
+    const apiKey = req.get("x-api-key") || req.get("authorization") || req.body?.apiKey;
+    const result = await deleteVisual(req.params.id, apiKey);
     return res.json({ ok: true, service: "blotato", ...result });
   })
 );
