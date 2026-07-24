@@ -65,6 +65,10 @@ function getProviderChainForRoute(routeKey) {
   return chain;
 }
 
+function isRetiredModel(value) {
+  return /^deepseek\//i.test(String(value || "").trim());
+}
+
 function looksLikeTemplatePlaceholder(value) {
   return /^\s*\{\{\s*secret\.[^}]+\}\}\s*$/i.test(String(value || ""));
 }
@@ -94,6 +98,9 @@ function getProviderConfig(providerId) {
   const model = resolvedModel.value || conf.name;
   const apiKey = resolvedKey.value || conf.apiKey;
 
+  // DeepSeek has been retired from AIMS production routing. This hard guard
+  // also neutralises stale Koyeb/process env values left behind from older deployments.
+  if (isRetiredModel(model)) return null;
   if (!model || !apiKey) return null;
   if (looksLikeTemplatePlaceholder(model) || looksLikeTemplatePlaceholder(apiKey)) return null;
 
