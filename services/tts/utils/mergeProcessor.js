@@ -25,7 +25,7 @@ function positiveIntEnv(name, fallback, max = Number.POSITIVE_INFINITY) {
 
 const DOWNLOAD_TIMEOUT_MS = positiveIntEnv("MERGE_DOWNLOAD_TIMEOUT_MS", Number(process.env.AI_TIMEOUT || 30000), 120_000);
 const FFMPEG_TIMEOUT_MS = positiveIntEnv("PODCAST_FFMPEG_TIMEOUT_MS", 900_000, 1_800_000);
-const MAX_RETRIES = positiveIntEnv("MAX_CHUNK_RETRIES", 3, 8);
+const MAX_RETRIES = positiveIntEnv("MAX_CHUNK_RETRIES", 5, 8);
 const DOWNLOAD_RETRIES = MAX_RETRIES;
 const MERGE_RETRIES = MAX_RETRIES;
 const RETRY_DELAY_MS = positiveIntEnv("RETRY_DELAY_MS", 2000);

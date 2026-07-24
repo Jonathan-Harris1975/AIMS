@@ -32,7 +32,7 @@ function positiveIntEnv(name, fallback, max = Number.POSITIVE_INFINITY) {
 
 const MAX_CHARS = positiveIntEnv("MAX_POLLY_NATURAL_CHUNK_CHARS", 2500, 4200);
 const CONCURRENCY = positiveIntEnv("TTS_CONCURRENCY", 1, 4);
-const MAX_CHUNK_RETRIES = positiveIntEnv("MAX_CHUNK_RETRIES", 3, 8);
+const MAX_CHUNK_RETRIES = positiveIntEnv("MAX_CHUNK_RETRIES", 5, 8);
 const RETRY_DELAY_MS = positiveIntEnv("RETRY_DELAY_MS", 1200);
 const RETRY_BACKOFF_MULTIPLIER = Number(process.env.RETRY_BACKOFF_MULTIPLIER) || 2.1;
 
