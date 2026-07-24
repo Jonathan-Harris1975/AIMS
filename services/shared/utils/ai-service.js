@@ -19,7 +19,9 @@ const DEFAULT_MAX_TOKENS = Number(process.env.AI_MAX_TOKENS || 4096);
 const DEFAULT_TEMPERATURE = Number(process.env.AI_TEMPERATURE ?? aiConfig?.commonParams?.temperature ?? 0.7);
 const DEFAULT_TIMEOUT_MS = Number(process.env.AI_TIMEOUT ?? aiConfig?.commonParams?.timeout ?? 90000);
 const DEFAULT_TOP_P = Number(process.env.AI_TOP_P ?? aiConfig?.commonParams?.top_p ?? 0.9);
-const MAX_RETRIES = Number(process.env.AI_MAX_RETRIES ?? 1);
+// 4 retries + the initial attempt = 5 total attempts per provider before
+// failover/failure, in line with the platform-wide 5-attempt floor.
+const MAX_RETRIES = Number(process.env.AI_MAX_RETRIES ?? 4);
 const RETRY_BASE_MS = Number(process.env.AI_RETRY_BASE_MS ?? 750);
 const __aiRouteCallsBySession = new Map();
 const __lastSuccessProvider = new Map();

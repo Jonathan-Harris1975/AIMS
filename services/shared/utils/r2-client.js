@@ -111,7 +111,7 @@ export const s3 = new S3Client({
 });
 
 const R2_REQUEST_TIMEOUT_MS = Number(process.env.R2_REQUEST_TIMEOUT_MS || 15_000);
-const R2_UPLOAD_RETRIES = Math.max(0, Math.min(8, Number(process.env.R2_UPLOAD_RETRIES ?? process.env.R2_RETRY_ATTEMPTS ?? 3)));
+const R2_UPLOAD_RETRIES = Math.max(0, Math.min(8, Number(process.env.R2_UPLOAD_RETRIES ?? process.env.R2_RETRY_ATTEMPTS ?? 4)));
 const R2_RETRY_BASE_MS = Math.max(100, Math.min(10_000, Number(process.env.R2_RETRY_BASE_MS || 400)));
 const R2_RETRY_MAX_MS = Math.max(R2_RETRY_BASE_MS, Math.min(30_000, Number(process.env.R2_RETRY_MAX_MS || 5_000)));
 
