@@ -31,7 +31,7 @@ function restoreEnv(snapshot) {
 }
 
 function applySpreadsheetOpenRouterEnv() {
-  process.env.OPENROUTER_ART_BACKUP = "openai/gpt-5-image-mini";
+  process.env.OPENROUTER_ART_BACKUP = "bytedance-seed/seedream-4.5";
   process.env.OPENROUTER_META = "meta-llama/llama-4-scout";
   process.env.OPENROUTER_DEEPSEEK_v4_flash = "deepseek/deepseek-v4-flash";
   process.env.OPENROUTER_DEEPSEEK_v4_pro = "deepseek/deepseek-v4-pro";
@@ -40,7 +40,7 @@ function applySpreadsheetOpenRouterEnv() {
   process.env.OPENROUTER_GOOGLE_2_5_flashlite = "google/gemini-2.5-flash-lite";
   process.env.OPENROUTER_API_BASE = "https://openrouter.ai/api/v1";
   process.env.OPENROUTER_API_KEY = "sk-or-global-test-value";
-  process.env.OPENROUTER_ART = "google/gemini-2.5-flash-image";
+  process.env.OPENROUTER_ART = "recraft/recraft-v4.1";
   process.env.BLOTATO_SCRIPT_MODEL = "anthropic/claude-sonnet-4-5";
   delete process.env.OPENROUTER_API_KEY_ART;
   delete process.env.OPENROUTER_API_KEY_ART_BACKUP;
@@ -126,13 +126,13 @@ test("OpenRouter artwork image providers resolve through shared ai-config", asyn
     assert.equal(primary?.configured, true);
     assert.equal(primary?.modelEnv, "OPENROUTER_ART");
     assert.equal(primary?.apiKeyEnv, "OPENROUTER_API_KEY");
-    assert.equal(primary?.model, "google/gemini-2.5-flash-image");
+    assert.equal(primary?.model, "recraft/recraft-v4.1");
 
     const backup = diagnostics.find((provider) => provider.providerId === "artworkBackup");
     assert.equal(backup?.configured, true);
     assert.equal(backup?.modelEnv, "OPENROUTER_ART_BACKUP");
     assert.equal(backup?.apiKeyEnv, "OPENROUTER_API_KEY");
-    assert.equal(backup?.model, "openai/gpt-5-image-mini");
+    assert.equal(backup?.model, "bytedance-seed/seedream-4.5");
   } finally {
     restoreEnv(oldEnv);
   }
@@ -160,7 +160,7 @@ test("OpenRouter artwork payload explicitly requests image output modalities", a
     const { buildArtworkChatPayload, extractBase64Image } = await import(`../services/artwork/utils/openrouterImagePayload.js?payload=${Date.now()}`);
 
     const blogPayload = buildArtworkChatPayload({
-      model: "google/gemini-2.5-flash-image",
+      model: "recraft/recraft-v4.1",
       instruction: "Create a text-free blog hero.",
       maxTokens: 512,
       mode: "blog",
@@ -173,12 +173,12 @@ test("OpenRouter artwork payload explicitly requests image output modalities", a
 
     process.env.ARTWORK_IMAGE_CONFIG_ENABLED = "true";
     const podcastPayload = buildArtworkChatPayload({
-      model: "openai/gpt-5-image-mini",
+      model: "bytedance-seed/seedream-4.5",
       instruction: "Create a text-free podcast square.",
       mode: "podcast",
     });
 
-    assert.deepEqual(podcastPayload.modalities, ["image", "text"]);
+    assert.deepEqual(podcastPayload.modalities, ["image"]);
     assert.equal(podcastPayload.image_config.aspect_ratio, "1:1");
 
     process.env.ARTWORK_MODALITIES = "image";
