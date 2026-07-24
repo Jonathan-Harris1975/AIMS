@@ -82,8 +82,8 @@ export async function runEditorialPass(meta = {}, scriptText = "") {
       messages: [{ role: "user", content: prompt }],
       temperature: 0.25,
       // 4096 was repeatedly exhausted by reasoning/long-form output.
-      max_tokens: Number(process.env.PODCAST_EDITORIAL_MAX_TOKENS || 12000),
-      timeoutMs: Number(process.env.PODCAST_EDITORIAL_TIMEOUT_MS || 180000),
+      max_tokens: Number(process.env.PODCAST_EDITORIAL_MAX_TOKENS || 16000),
+      timeoutMs: Number(process.env.PODCAST_EDITORIAL_TIMEOUT_MS || 600000),
     });
 
     if (!refined || refined.length < scriptText.length * 0.6) {

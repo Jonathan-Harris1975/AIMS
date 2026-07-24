@@ -20,11 +20,18 @@ import { resilientRequest } from "../../shared/utils/ai-service.js";
 function evaluatePodcastTranscriptGate(text = "", sessionMeta = {}) {
   const structure = validateTranscriptStructure(text);
   const sourceIntegrity = validateTranscriptSourceIntegrity(text, sessionMeta);
+  const structureReasons = structure.ok ? [] : (structure.reasons || []);
+  const cadenceOnly = structureReasons.length > 0 && structureReasons.every((reason) => /sentence\(s\) exceed/i.test(String(reason || "")));
+  const hardCadenceDefects = cadenceOnly ? getHardLongSentenceDefects(text) : [];
+  const softCadenceOnly = cadenceOnly && hardCadenceDefects.length === 0;
   const defects = [
-    ...(structure.ok ? [] : structure.reasons || []),
+    ...(softCadenceOnly ? [] : structureReasons),
     ...(sourceIntegrity.ok ? [] : sourceIntegrity.defects || []),
   ];
-  const warnings = [...(sourceIntegrity.warnings || [])];
+  const warnings = [
+    ...(sourceIntegrity.warnings || []),
+    ...(softCadenceOnly ? structureReasons : []),
+  ];
   return {
     ok: defects.length === 0,
     score: Math.max(0, 100 - (defects.length * 12)),
@@ -64,8 +71,8 @@ MAIN BODY:
 ${mainText}`,
     }],
     temperature: Math.max(0.12, 0.22 - ((Number(attempt) || 1) * 0.02)),
-    max_tokens: Number(process.env.PODCAST_REPAIR_MAX_TOKENS || 12000),
-    timeoutMs: Number(process.env.PODCAST_REPAIR_TIMEOUT_MS || 180000),
+    max_tokens: Number(process.env.PODCAST_REPAIR_MAX_TOKENS || 16000),
+    timeoutMs: Number(process.env.PODCAST_REPAIR_TIMEOUT_MS || 600000),
   });
   const repairedMain = String(raw || mainText).trim() || mainText;
   // Never trust an LLM repair to preserve deterministic brand blocks. Reattach them here.
