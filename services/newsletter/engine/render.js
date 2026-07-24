@@ -135,7 +135,13 @@ export function renderNewsletterPlaintext({ profile, newsletter }) {
 }
 
 function stripHtml(html = "") {
-  return String(html || "").replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
+  let input = String(html || "");
+  let previous;
+  do {
+    previous = input;
+    input = input.replace(/<[^>]+>/g, "");
+  } while (input !== previous);
+  return input.replace(/\s+/g, " ").trim();
 }
 
 export function buildNewsletterMetadata({ profile, newsletter, qaResult, generatedAt }) {
