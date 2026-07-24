@@ -367,6 +367,38 @@ async function resolveSocialArtwork({ sessionId, imagePrompt, dateId, prefix }) 
   };
 }
 
+async function repairSocialPackageForCouncil({ sessionId, dateLabel, items, candidate, gate, attempt }) {
+  const defects = Array.isArray(gate?.defects) ? gate.defects.slice(0, 10) : [];
+  const evidence = (items || []).slice(0, 20).map((item, index) => ({
+    index: index + 1,
+    title: cleanSourceTitle(item?.title || ""),
+    summary: cleanSourceText(item?.summary || item?.description || item?.contentSnippet || "").slice(0, 800),
+  }));
+  const raw = await resilientRequest("blogSocial", {
+    sessionId,
+    messages: [
+      { role: "system", content: "You are the repair editor for premium social content from a recognised British AI industry expert. Preserve strong copy. Fix only the listed QA defects. Never invent facts, numbers, dates, entities, quotations or statistics. Keep the voice direct, sceptical, commercially literate and Gen-X rather than corporate. Return valid JSON only using the same schema as the candidate." },
+      { role: "user", content: `Repair attempt ${attempt || 1}.
+
+QA defects:
+${defects.map((d) => `- ${d}`).join("\n") || "- Unspecified gate failure"}
+
+Current candidate:
+${JSON.stringify(candidate)}
+
+Source evidence:
+${JSON.stringify(evidence)}
+
+Make the smallest changes needed to pass. Remove unsupported claims rather than guessing.` },
+    ],
+    max_tokens: 2600,
+    temperature: 0.16,
+    response_format: { type: "json_object" },
+  });
+  const parsed = parseStructuredSocialBlogPackage(raw);
+  return parsed.ok ? normaliseSocialBlogPackage(parsed.data, { dateLabel, items }) : candidate;
+}
+
 async function generateStructuredSocialPackage({ sessionId, dateLabel, items }) {
   const prompt = buildSocialPackagePrompt({ dateLabel, items });
   const baseMessages = [
@@ -696,6 +728,14 @@ export async function buildDailySocialBlogPost({
         gate: phase4Gate,
         artifact: socialPackage,
         contentType: "social-content",
+        repairArtifact: (candidatePackage, { gate, attempt } = {}) => repairSocialPackageForCouncil({
+          sessionId,
+          dateLabel: window.dateLabel,
+          items: cleanedSources,
+          candidate: candidatePackage,
+          gate,
+          attempt,
+        }),
         validate: (candidatePackage) => {
           const candidateBodyHtml = renderSocialBodyHtml(candidatePackage, { escapeHtml });
           const candidateContentHtml = socialPostBody({
@@ -824,6 +864,14 @@ export async function buildDailySocialBlogPost({
         gate: phase5Gate,
         artifact: { ...socialPackage, imagePrompt, imageUrl, caption: socialPackage.social_caption },
         contentType: "organic-visual-social",
+        repairArtifact: (candidate, { gate, attempt } = {}) => repairSocialPackageForCouncil({
+          sessionId,
+          dateLabel: window.dateLabel,
+          items: cleanedSources,
+          candidate,
+          gate,
+          attempt,
+        }),
         validate: (candidate) => runPhase5OrganicGrowthGate({
           contentType: "organic-visual-social",
           generated: candidate,
