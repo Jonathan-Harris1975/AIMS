@@ -653,7 +653,7 @@ export function buildBlotatoVisualPrompt(pack = {}) {
     `Script: ${pack.script}`,
     `Visual direction: ${pack.visualDirection}`,
     `Cost guard: use the cheapest suitable generation settings available, preferably ${LOW_COST_IMAGE_MODEL_LABEL} for images and ${LOW_COST_VIDEO_MODEL_LABEL} for video. Do not use premium video models.`,
-    `Style: premium editorial, human-centred social video, dark technology palette, clean composition, no gimmicky robot clichés, British AI news commentary tone.`,
+    `Style: premium magazine/editorial social video with cinematic lighting, bold controlled colour, high contrast, emotional storytelling and a modern YouTube-thumbnail visual hierarchy. Keep it human-centred and visually immediate. Avoid corporate stock staging, generic data-centre glamour, floating dashboards, polygon networks and gimmicky robot clichés. Preserve the configured seasonal palette direction where supplied. British AI news commentary tone.`,
     HUMAN_VISUALS_ENABLED ? BLOTATO_HUMAN_VISUAL_RULE : "Human subjects optional.",
     BLOTATO_STRICT_NO_TEXT_RULE,
     `Thumbnail copy is supplied separately in the template inputs. Treat it as metadata only and never render that wording inside generated images.`,
