@@ -29,6 +29,19 @@ function bool(name, fallback) {
 }
 
 export const THRESHOLDS = Object.freeze({
+  // Cross-cutting floor: every retry/attempt knob in this file defaults to
+  // at least this many total attempts before a pipeline is allowed to
+  // quarantine an artefact or fail a QA gate. Individual knobs below may be
+  // raised above this floor for slower/flakier upstreams, but must not be
+  // set below it without an explicit, documented reason.
+  minRetryAttemptsFloor: Math.max(1, num("MIN_RETRY_ATTEMPTS_FLOOR", 5)),
+  reviewCouncil: Object.freeze({
+    // Number of repair -> revalidate cycles the review council runs against
+    // a failing artefact before it is quarantined. Applies to every caller
+    // of runReviewCouncilGate() (RSS rewrite, blog phase4/5, Blotato script
+    // quality, Zernio social posts).
+    maxAttempts: Math.max(1, num("REVIEW_COUNCIL_MAX_ATTEMPTS", 5)),
+  }),
   scheduler: Object.freeze({
     // Window in hours within which identical content (by content hash) posted
     // to more than one account/category is treated as an accidental duplicate.
@@ -62,8 +75,11 @@ export const THRESHOLDS = Object.freeze({
   }),
   podcastArtwork: Object.freeze({
     // Number of full-prompt generation attempts before falling back to a
-    // trimmed prompt retry. OB-004 / BSC-OB-005.
-    retryCount: Math.max(1, num("PODCAST_ARTWORK_RETRY_COUNT", 2)),
+    // trimmed prompt retry. OB-004 / BSC-OB-005. The actual per-provider
+    // attempt count is read from ARTWORK_PROVIDER_ATTEMPTS by
+    // getArtworkProviderAttempts() in openrouterImagePayload.js — keep that
+    // default/cap in sync with this value.
+    retryCount: Math.max(1, num("PODCAST_ARTWORK_RETRY_COUNT", 5)),
     // Whether a shortened prompt retry pass should run after the normal
     // provider attempts are exhausted, before using branded fallback art.
     shortPromptRetryEnabled: bool("PODCAST_ARTWORK_SHORT_PROMPT_RETRY", true),
@@ -89,13 +105,19 @@ export const THRESHOLDS = Object.freeze({
     // QA review loop: minimum composite score (0-100) required to publish.
     qaPassThreshold: Math.max(0, Math.min(100, num("NEWSLETTER_QA_PASS_THRESHOLD", 85))),
     // QA review loop: hard ceiling on rewrite iterations before quarantine.
-    maxRewriteIterations: Math.max(1, num("NEWSLETTER_MAX_REWRITE_ITERATIONS", 3)),
+    // Kept at/above THRESHOLDS.minRetryAttemptsFloor — a newsletter is only
+    // quarantined after at least 5 compose->validate passes.
+    maxRewriteIterations: Math.max(1, num("NEWSLETTER_MAX_REWRITE_ITERATIONS", 5)),
     // RSS retrieval retry/backoff for transient upstream feed failures.
-    rssFetchRetries: Math.max(0, num("NEWSLETTER_RSS_FETCH_RETRIES", 3)),
+    // rss.js treats this as additional retries after the first attempt, so
+    // 4 here yields 5 total attempts.
+    rssFetchRetries: Math.max(0, num("NEWSLETTER_RSS_FETCH_RETRIES", 4)),
     rssFetchRetryBaseMs: Math.max(100, num("NEWSLETTER_RSS_FETCH_RETRY_BASE_MS", 500)),
     rssFetchTimeoutMs: Math.max(1000, num("NEWSLETTER_RSS_FETCH_TIMEOUT_MS", 15000)),
-    // Brevo API client retry/backoff.
-    brevoRetries: Math.max(0, num("BREVO_RETRIES", 3)),
+    // Brevo API client retry/backoff. brevo/client.js treats this as
+    // additional retries after the first attempt, so 4 here yields 5 total
+    // attempts.
+    brevoRetries: Math.max(0, num("BREVO_RETRIES", 4)),
     brevoRetryBaseMs: Math.max(100, num("BREVO_RETRY_BASE_MS", 500)),
     brevoTimeoutMs: Math.max(1000, num("BREVO_TIMEOUT_MS", 15000)),
   }),
