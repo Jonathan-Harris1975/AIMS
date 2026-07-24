@@ -38,7 +38,7 @@ function retryNumber(name, fallback, { min = 0, max = 10 } = {}) {
 
 function getZernioRetryConfig() {
   return {
-    attempts: retryNumber("ZERNIO_API_RETRY_ATTEMPTS", 3, { min: 1, max: 6 }),
+    attempts: retryNumber("ZERNIO_API_RETRY_ATTEMPTS", 5, { min: 1, max: 6 }),
     baseDelayMs: retryNumber("ZERNIO_API_RETRY_BASE_MS", 800, { min: 100, max: 30000 }),
     maxDelayMs: retryNumber("ZERNIO_API_RETRY_MAX_MS", 6000, { min: 500, max: 60000 }),
   };
