@@ -7,8 +7,22 @@ const SEASONAL_PALETTES = Object.freeze({
   autumn: "Keep the brand's deep navy and charcoal base, with restrained copper, burnt amber and muted plum accents.",
 });
 
+
+export const DEFAULT_ARTWORK_STYLE = [
+  "Default visual direction: cinematic editorial storytelling, not generic technology wallpaper.",
+  "Build the image around one clear story, tension, consequence or human-scale moment drawn from the supplied content.",
+  "Favour emotional resonance, visual curiosity and a strong focal subject over decorative geometry.",
+  "Use cinematic lighting, bold but controlled colour, deep contrast, purposeful depth and magazine-cover-level art direction.",
+  "Compose for modern high-performing YouTube/editorial thumbnails: immediate focal hierarchy, readable silhouette at small size, clean negative space and visual drama without clickbait.",
+  "Where people or hands genuinely fit the story, use natural editorial human presence rather than posed corporate stock imagery.",
+  "Avoid generic corporate visuals, boardrooms, handshake imagery, staged office teams, sterile stock-photo scenes, generic data-centre glamour, floating dashboards, random circuitry, abstract polygon networks, glowing orbs and decorative AI geometry unless the source theme specifically requires them.",
+  "Do not default to dark navy geometric abstraction simply because the subject is AI; let the story determine the scene, subject and composition.",
+  "Aim for distinctive, premium, high-emotion editorial photography or illustration that could plausibly lead a serious magazine feature.",
+].join(" ");
+
 export const STRICT_TEXT_FREE_RULE = [
   "ABSOLUTE TEXT-FREE OUTPUT.",
+  "No text. No letters. No numbers. No logos. No watermarks.",
   "Do not include text of any kind. Do not render readable text, pseudo-text, gibberish text, letters, words, numerals, punctuation, glyphs, captions, headlines, labels, code, interface copy, signage, logos, trademarks, watermarks, badges, seals or typography-shaped marks anywhere in the image.",
   "Do not turn the supplied title, theme, quotation, script or metadata into visible writing.",
   "Represent every concept through composition, objects, light, texture, geometry and atmosphere only.",
@@ -65,6 +79,7 @@ export function applyArtworkPromptPolicy(prompt = "", { date, mode = "editorial"
   return [
     cleanPrompt,
     `Artwork mode: ${mode}.`,
+    DEFAULT_ARTWORK_STYLE,
     getSeasonalPaletteDirection(date),
     STRICT_TEXT_FREE_RULE,
   ].filter(Boolean).join(" ");
@@ -72,6 +87,7 @@ export function applyArtworkPromptPolicy(prompt = "", { date, mode = "editorial"
 
 export default {
   STRICT_TEXT_FREE_RULE,
+  DEFAULT_ARTWORK_STYLE,
   resolveArtworkDate,
   getArtworkSeason,
   getSeasonalPaletteDirection,
