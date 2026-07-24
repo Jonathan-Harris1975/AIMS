@@ -104,7 +104,8 @@ router.post(
 router.get(
   "/visuals/:id",
   asyncRoute(async (req, res) => {
-    const result = await getVisualStatus(req.params.id, req.query?.apiKey);
+    const apiKey = req.get("x-api-key");
+    const result = await getVisualStatus(req.params.id, apiKey);
     return res.json({ ok: true, service: "blotato", ...result });
   })
 );
@@ -134,7 +135,8 @@ router.post(
 router.get(
   "/posts/:postSubmissionId",
   asyncRoute(async (req, res) => {
-    const result = await getPostStatus(req.params.postSubmissionId, req.query?.apiKey);
+    const apiKey = req.get("x-api-key");
+    const result = await getPostStatus(req.params.postSubmissionId, apiKey);
     return res.json({ ok: true, service: "blotato", ...result });
   })
 );
