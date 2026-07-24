@@ -34,8 +34,18 @@ function evaluatePodcastTranscriptGate(text = "", sessionMeta = {}) {
   };
 }
 
-async function repairPodcastTranscriptForCouncil(candidate = {}, { gate, attempt, sessionMeta } = {}) {
-  const text = String(candidate?.text || "").trim();
+function extractRepairableMain(text = "", lockedIntro = "", lockedOutro = "", fallbackMain = "") {
+  let body = String(text || "").trim();
+  const intro = String(lockedIntro || "").trim();
+  const outro = String(lockedOutro || "").trim();
+  if (intro && body.startsWith(intro)) body = body.slice(intro.length).trim();
+  if (outro && body.endsWith(outro)) body = body.slice(0, -outro.length).trim();
+  return body || String(fallbackMain || "").trim();
+}
+
+async function repairPodcastTranscriptForCouncil(candidate = {}, { gate, attempt, sessionMeta, lockedIntro, lockedOutro, fallbackMain } = {}) {
+  const fullText = String(candidate?.text || "").trim();
+  const mainText = extractRepairableMain(fullText, lockedIntro, lockedOutro, fallbackMain);
   const defects = Array.isArray(gate?.defects) ? gate.defects.slice(0, 10) : [];
   const raw = await resilientRequest("editorialPass", {
     sessionId: sessionMeta?.sessionId,
@@ -44,18 +54,22 @@ async function repairPodcastTranscriptForCouncil(candidate = {}, { gate, attempt
       role: "user",
       content: `You are the final review editor for Turing's Torch, hosted by a recognised British AI industry expert.
 
-Repair only the listed transcript defects. Preserve all supported facts, the existing argument, episode structure, length and dry Gen-X voice. Use British English. Do not add facts, numbers, quotations, names or claims that are not already in the transcript. If a claim is flagged as unsupported, remove or soften it rather than guessing. Keep the result natural for spoken delivery. Return plain transcript text only.
+Repair only the listed defects in the MAIN BODY below. The intro and branded outro are locked by code and will be reattached after your repair, so DO NOT create an intro or outro. Preserve all supported facts, the existing argument, approximate length and dry Gen-X voice. Use British English. Do not add facts, numbers, quotations, names or claims that are not already in the text. If a claim is flagged as unsupported, remove or soften it rather than guessing. Keep the result natural for spoken delivery. Return the repaired MAIN BODY only as plain transcript text.
 
 Repair attempt: ${attempt || 1}
 Defects:
 ${defects.map((d) => `- ${d}`).join("\n") || "- Transcript quality gate failed"}
 
-TRANSCRIPT:
-${text}`,
+MAIN BODY:
+${mainText}`,
     }],
     temperature: Math.max(0.12, 0.22 - ((Number(attempt) || 1) * 0.02)),
+    max_tokens: Number(process.env.PODCAST_REPAIR_MAX_TOKENS || 12000),
+    timeoutMs: Number(process.env.PODCAST_REPAIR_TIMEOUT_MS || 180000),
   });
-  return { text: String(raw || text).trim() || text };
+  const repairedMain = String(raw || mainText).trim() || mainText;
+  // Never trust an LLM repair to preserve deterministic brand blocks. Reattach them here.
+  return { text: [lockedIntro, repairedMain, lockedOutro].filter(Boolean).join("\n\n").trim() };
 }
 
 function hasOnlyRepairableSpokenLengthDefects(validation = {}) {
@@ -186,6 +200,9 @@ export async function orchestrateScript(input) {
         repairArtifact: (candidate, context = {}) => repairPodcastTranscriptForCouncil(candidate, {
           ...context,
           sessionMeta: { ...sessionMeta, sessionId: sid },
+          lockedIntro: intro,
+          lockedOutro: outro,
+          fallbackMain: mainCandidate,
         }),
         validate: (candidate) => evaluatePodcastTranscriptGate(candidate?.text || "", sessionMeta),
         logger: error,
