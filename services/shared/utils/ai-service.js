@@ -174,7 +174,7 @@ function getServiceTier() {
   return undefined;
 }
 
-// Reasoning models (e.g. openai/gpt-5-mini) spend part of max_tokens on
+// Reasoning-capable models (for example openai/gpt-5.6-luna) spend part of max_tokens on
 // internal "reasoning" tokens before writing any visible content. If
 // max_tokens is tight, the reasoning step can consume the entire budget and
 // the API returns HTTP 200 with a *successful* response whose message.content

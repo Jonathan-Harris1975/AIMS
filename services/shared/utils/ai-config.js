@@ -51,12 +51,10 @@ const google25FlashLite = provider(
   [...SHARED_OPENROUTER_KEY, "OPENROUTER_API_KEY_GOOGLE_2_5_flashlite", "OPENROUTER_API_KEY_GOOGLE_2-5_flashlite", "OPENROUTER_API_KEY_GOOGLE_2.5_flashlite", "OPENROUTER_API_KEY_GOOGLE_25_FLASHLITE", "OPENROUTER_API_KEY_GOOGLE"]
 );
 
-const chatgptMini5 = provider(
-  "chatgptMini5",
-  // Primary is now the clean name. The trailing-underscore variant (OPENROUTER_CHATGPT_mini5_)
-  // is kept as the first alias so existing Koyeb secrets continue to resolve without a redeploy.
-  ["OPENROUTER_CHATGPT_MINI5", "OPENROUTER_CHATGPT_mini5_", "OPENROUTER_CHATGPT_mini-5", "OPENROUTER_CHATGPT_mini5", "OPENROUTER_CHATGPT"],
-  [...SHARED_OPENROUTER_KEY, "OPENROUTER_API_KEY_CHATGPT_MINI5", "OPENROUTER_API_KEY_CHATGPT_mini5", "OPENROUTER_API_KEY_CHATGPT_mini-5", "OPENROUTER_API_KEY_CHATGPT"]
+const gpt56Luna = provider(
+  "gpt56Luna",
+  ["OPENROUTER_GPT_5_6_LUNA", "OPENROUTER_GPT56_LUNA"],
+  [...SHARED_OPENROUTER_KEY, "OPENROUTER_API_KEY_GPT_5_6_LUNA", "OPENROUTER_API_KEY_GPT56_LUNA"]
 );
 
 const blotatoScript = provider(
@@ -92,7 +90,7 @@ const modelRegistry = {
   audit,
   image,
   google: google25FlashLite,
-  chatgpt: chatgptMini5,
+  chatgpt: gpt56Luna,
   blotatoScript,
   deepseek: deepseekV4Pro,
   anthropic: anthropic46,
@@ -102,7 +100,7 @@ const modelRegistry = {
   artworkBackup,
   anthropic46,
   google25FlashLite,
-  chatgptMini5,
+  gpt56Luna,
   deepseekV4Pro,
   deepseekV4Flash,
 };
@@ -125,40 +123,41 @@ export const aiConfig = {
   models: modelRegistry,
 
   routeModels: {
-    intro: routeChain(["fast", "standard", "fallback"], ["chatgptMini5", "google25FlashLite", "meta"]),
-    main: routeChain(["standard", "fast", "fallback"], ["google25FlashLite", "chatgptMini5", "deepseekV4Pro"]),
-    outro: routeChain(["fast", "standard", "fallback"], ["google25FlashLite", "chatgptMini5", "meta"]),
-    scriptIntro: routeChain(["fast", "standard", "fallback"], ["chatgptMini5", "google25FlashLite", "meta"]),
-    scriptMain: routeChain(["standard", "fast", "fallback"], ["google25FlashLite", "chatgptMini5", "deepseekV4Pro"]),
-    scriptOutro: routeChain(["fast", "standard", "fallback"], ["google25FlashLite", "chatgptMini5", "meta"]),
+    intro: routeChain(["fast", "standard", "fallback"], ["gpt56Luna", "google25FlashLite", "meta"]),
+    main: routeChain(["standard", "fast", "fallback"], ["google25FlashLite", "gpt56Luna", "deepseekV4Pro"]),
+    outro: routeChain(["fast", "standard", "fallback"], ["google25FlashLite", "gpt56Luna", "meta"]),
+    scriptIntro: routeChain(["gpt56Luna", "standard", "fallback"], ["google25FlashLite", "meta"]),
+    scriptMain: routeChain(["gpt56Luna", "standard", "fallback"], ["google25FlashLite", "deepseekV4Pro"]),
+    scriptMainSynthesis: routeChain(["highQuality", "anthropic46", "gpt56Luna", "standard", "fallback"], ["deepseekV4Pro"]),
+    scriptOutro: routeChain(["gpt56Luna", "standard", "fallback"], ["google25FlashLite", "meta"]),
     compose: routeChain(["highQuality", "standard", "fallback"], ["deepseekV4Pro", "anthropic46", "google25FlashLite"]),
-    editorialPass: routeChain(["standard", "highQuality", "fallback"], ["chatgptMini5"]),
-    editAndFormat: routeChain(["standard", "fast", "fallback"], ["chatgptMini5", "google25FlashLite", "deepseekV4Pro"]),
-    metadata: routeChain(["summary", "json", "fast", "fallback"], ["google25FlashLite", "chatgptMini5", "deepseekV4Pro"]),
-    podcastHelper: routeChain(["summary", "fast", "fallback"], ["chatgptMini5", "google25FlashLite", "meta"]),
-    seoKeywords: routeChain(["summary", "fast", "fallback"], ["chatgptMini5", "google25FlashLite"]),
+    editorialPass: routeChain(["highQuality", "anthropic46", "gpt56Luna", "standard", "fallback"], ["deepseekV4Pro"]),
+    editAndFormat: routeChain(["standard", "fast", "fallback"], ["gpt56Luna", "google25FlashLite", "deepseekV4Pro"]),
+    metadata: routeChain(["summary", "json", "fast", "fallback"], ["google25FlashLite", "gpt56Luna", "deepseekV4Pro"]),
+    podcastHelper: routeChain(["summary", "fast", "fallback"], ["gpt56Luna", "google25FlashLite", "meta"]),
+    seoKeywords: routeChain(["summary", "fast", "fallback"], ["gpt56Luna", "google25FlashLite"]),
     artworkPrompt: routeChain(["summary", "fast", "fallback"], ["meta", "google25FlashLite"]),
     artworkImage: routeChain(["image"], ["artworkPrimary", "artworkBackup"]),
-    rssRewrite: routeChain(["standard", "fast", "fallback"], ["chatgptMini5", "google25FlashLite", "deepseekV4Flash"]),
-    rssShortTitle: routeChain(["fast", "summary", "fallback"], ["chatgptMini5", "google25FlashLite"]),
-    blogWeekly: routeChain(["standard", "summary", "fallback"], ["google25FlashLite", "chatgptMini5", "deepseekV4Pro"]),
-    blogSocial: routeChain(["summary", "fast", "standard", "fallback"], ["google25FlashLite", "chatgptMini5", "deepseekV4Flash"]),
-    onBrandAudit: routeChain(["audit", "highQuality", "standard", "fallback"], ["anthropic46", "google25FlashLite", "chatgptMini5", "deepseekV4Pro", "deepseekV4Flash", "meta"]),
-    auditForensic: routeChain(["audit", "highQuality", "standard", "fallback"], ["anthropic46", "google25FlashLite", "chatgptMini5", "deepseekV4Pro", "deepseekV4Flash", "meta"]),
-    zernioDaily: routeChain(["fast", "standard", "fallback"], ["chatgptMini5", "google25FlashLite", "deepseekV4Flash"]),
-    zernioQuiz: routeChain(["fast", "standard", "fallback"], ["chatgptMini5", "google25FlashLite", "deepseekV4Flash"]),
-    zernioEbook: routeChain(["fast", "standard", "fallback"], ["chatgptMini5", "google25FlashLite", "deepseekV4Pro"]),
+    rssRewrite: routeChain(["standard", "fast", "fallback"], ["gpt56Luna", "google25FlashLite", "deepseekV4Flash"]),
+    rssShortTitle: routeChain(["fast", "summary", "fallback"], ["gpt56Luna", "google25FlashLite"]),
+    blogWeekly: routeChain(["standard", "summary", "fallback"], ["google25FlashLite", "gpt56Luna", "deepseekV4Pro"]),
+    blogSocial: routeChain(["summary", "fast", "standard", "fallback"], ["google25FlashLite", "gpt56Luna", "deepseekV4Flash"]),
+    onBrandAudit: routeChain(["audit", "highQuality", "standard", "fallback"], ["anthropic46", "google25FlashLite", "gpt56Luna", "deepseekV4Pro", "deepseekV4Flash", "meta"]),
+    auditForensic: routeChain(["audit", "highQuality", "standard", "fallback"], ["anthropic46", "google25FlashLite", "gpt56Luna", "deepseekV4Pro", "deepseekV4Flash", "meta"]),
+    zernioDaily: routeChain(["fast", "standard", "fallback"], ["gpt56Luna", "google25FlashLite", "deepseekV4Flash"]),
+    zernioQuiz: routeChain(["fast", "standard", "fallback"], ["gpt56Luna", "google25FlashLite", "deepseekV4Flash"]),
+    zernioEbook: routeChain(["fast", "standard", "fallback"], ["gpt56Luna", "google25FlashLite", "deepseekV4Pro"]),
     // Blotato script quality is production-critical. highQuality sits above standard so Claude 4.6
-    // is the first fallback after the dedicated blotatoScript provider, not gpt-5-mini.
+    // is the first fallback after the dedicated blotatoScript provider, ahead of the general Luna lane.
     // deepseekV4Pro is last-resort; do not fall back to the ultra-cheap fast lane by default.
-    blotatoNewsShort: routeChain(["blotatoScript", "highQuality", "standard", "fallback"], ["anthropic46", "deepseekV4Pro", "chatgptMini5"]),
+    blotatoNewsShort: routeChain(["blotatoScript", "highQuality", "standard", "fallback"], ["anthropic46", "deepseekV4Pro", "gpt56Luna"]),
     // Newsletter engine (services/newsletter). Composition needs the same
     // editorial quality bar as the blog; QA review is intentionally routed
     // through a different provider than composition so the reviewer isn't
     // just re-approving its own output.
-    newsletterCompose: routeChain(["standard", "highQuality", "fallback"], ["google25FlashLite", "chatgptMini5", "deepseekV4Pro"]),
-    newsletterSubject: routeChain(["fast", "summary", "fallback"], ["chatgptMini5", "google25FlashLite"]),
-    newsletterQaReview: routeChain(["highQuality", "audit", "standard", "fallback"], ["anthropic46", "chatgptMini5", "deepseekV4Pro"]),
+    newsletterCompose: routeChain(["standard", "highQuality", "fallback"], ["google25FlashLite", "gpt56Luna", "deepseekV4Pro"]),
+    newsletterSubject: routeChain(["fast", "summary", "fallback"], ["gpt56Luna", "google25FlashLite"]),
+    newsletterQaReview: routeChain(["highQuality", "audit", "standard", "fallback"], ["anthropic46", "gpt56Luna", "deepseekV4Pro"]),
     newsletterHeroPrompt: routeChain(["summary", "fast", "fallback"], ["meta", "google25FlashLite"]),
   },
 
