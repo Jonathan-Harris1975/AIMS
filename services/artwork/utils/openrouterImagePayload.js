@@ -148,9 +148,9 @@ export function artworkRetryDelayMs(attempt) {
 }
 
 export function getArtworkProviderAttempts() {
-  const raw = Number(process.env.ARTWORK_PROVIDER_ATTEMPTS || process.env.ARTWORK_PROVIDER_RETRIES || 2);
-  if (!Number.isFinite(raw)) return 2;
-  return Math.min(Math.max(Math.floor(raw), 1), 4);
+  const raw = Number(process.env.ARTWORK_PROVIDER_ATTEMPTS || process.env.ARTWORK_PROVIDER_RETRIES || 5);
+  if (!Number.isFinite(raw)) return 5;
+  return Math.min(Math.max(Math.floor(raw), 1), 8);
 }
 
 export function getArtworkRequestTimeoutMs(fallbackTimeoutMs) {
