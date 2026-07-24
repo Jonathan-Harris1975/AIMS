@@ -63,6 +63,12 @@ const claudeSonnet5 = provider(
   [...SHARED_OPENROUTER_KEY, "OPENROUTER_API_KEY_CLAUDE_SONNET_5", "OPENROUTER_API_KEY_ANTHROPIC_SONNET_5"]
 );
 
+const claudeOpus47 = provider(
+  "claudeOpus47",
+  ["OPENROUTER_CLAUDE_OPUS_4_7", "OPENROUTER_ANTHROPIC_OPUS_4_7"],
+  [...SHARED_OPENROUTER_KEY, "OPENROUTER_API_KEY_CLAUDE_OPUS_4_7", "OPENROUTER_API_KEY_ANTHROPIC_OPUS_4_7"]
+);
+
 const gpt56Sol = provider(
   "gpt56Sol",
   ["OPENROUTER_GPT_5_6_SOL", "OPENROUTER_GPT56_SOL"],
@@ -114,6 +120,7 @@ const modelRegistry = {
   google25FlashLite,
   gpt56Luna,
   claudeSonnet5,
+  claudeOpus47,
   gpt56Sol,
   deepseekV4Pro,
   deepseekV4Flash,
@@ -142,10 +149,10 @@ export const aiConfig = {
     outro: routeChain(["fast", "standard", "fallback"], ["google25FlashLite", "gpt56Luna", "meta"]),
     scriptIntro: routeChain(["gpt56Luna", "standard", "fallback"], ["google25FlashLite", "meta"]),
     scriptMain: routeChain(["gpt56Luna", "standard", "fallback"], ["google25FlashLite", "deepseekV4Pro"]),
-    scriptMainSynthesis: routeChain(["claudeSonnet5", "highQuality", "gpt56Sol"], ["anthropic46", "deepseekV4Pro"]),
+    scriptMainSynthesis: routeChain(["claudeSonnet5", "gpt56Sol"], ["claudeOpus47"]),
     scriptOutro: routeChain(["gpt56Luna", "standard", "fallback"], ["google25FlashLite", "meta"]),
     compose: routeChain(["highQuality", "standard", "fallback"], ["deepseekV4Pro", "anthropic46", "google25FlashLite"]),
-    editorialPass: routeChain(["claudeSonnet5", "highQuality", "gpt56Sol"], ["anthropic46", "deepseekV4Pro"]),
+    editorialPass: routeChain(["claudeOpus47", "gpt56Sol"], ["claudeSonnet5"]),
     editAndFormat: routeChain(["standard", "fast", "fallback"], ["gpt56Luna", "google25FlashLite", "deepseekV4Pro"]),
     metadata: routeChain(["summary", "json", "fast", "fallback"], ["google25FlashLite", "gpt56Luna", "deepseekV4Pro"]),
     podcastHelper: routeChain(["summary", "fast", "fallback"], ["gpt56Luna", "google25FlashLite", "meta"]),

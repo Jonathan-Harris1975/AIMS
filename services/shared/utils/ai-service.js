@@ -221,7 +221,7 @@ function extractMessageContent(json) {
   return "";
 }
 
-async function callOpenRouter({ providerId, model, apiKey, messages, max_tokens, temperature, top_p, response_format, headers, timeoutMs }) {
+async function callOpenRouter({ providerId, model, apiKey, messages, max_tokens, temperature, top_p, response_format, headers, timeoutMs, reasoning }) {
   const payload = { model, messages, max_tokens, temperature, top_p };
   if (response_format) payload.response_format = response_format;
 
@@ -231,8 +231,8 @@ async function callOpenRouter({ providerId, model, apiKey, messages, max_tokens,
   const serviceTier = getServiceTier();
   if (serviceTier) payload.service_tier = serviceTier;
 
-  const reasoning = getReasoningOptions();
-  if (reasoning) payload.reasoning = reasoning;
+  const effectiveReasoning = reasoning === undefined ? getReasoningOptions() : reasoning;
+  if (effectiveReasoning) payload.reasoning = effectiveReasoning;
 
   const reqHeaders = {
     "Content-Type": "application/json",
@@ -306,6 +306,7 @@ export async function resilientRequest(routeName, {
   timeoutMs,
   maxRetries,
   retryBaseMs,
+  reasoning,
 } = {}) {
   const routeKey = resolveRouteKey(routeName);
   const chain = getProviderChainForRoute(routeKey);
@@ -334,7 +335,7 @@ export async function resilientRequest(routeName, {
     try { safeRouteLog({ routeName, routeKey, provider: providerId, model: provider.name }); } catch {}
     for (let attempt = 0; attempt <= effectiveMaxRetries; attempt++) {
       try {
-        const result = await callOpenRouter({ providerId, model: provider.name, apiKey: provider.apiKey, messages, max_tokens, temperature, top_p, response_format, headers, timeoutMs });
+        const result = await callOpenRouter({ providerId, model: provider.name, apiKey: provider.apiKey, messages, max_tokens, temperature, top_p, response_format, headers, timeoutMs, reasoning });
         if (shouldLogUsage()) {
           info("ai.request.usage", {
             routeName,
