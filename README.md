@@ -35,7 +35,7 @@ The application supports these business/content workflows:
 - **Blog publishing**: build weekly AI briefing posts and daily/social blog posts from rewritten RSS material, generate images, update manifests, publish RSS feeds and trigger website rebuilds.
 - **OneUp scheduling**: generate and optionally schedule daily posts, weekly quiz posts and weekly ebook posts to OneUp.
 - **Outreach**: scan SERP results for keywords, filter domains, enrich contacts, validate emails, score leads and append accepted rows to Google Sheets.
-- **Audits**: dispatch external GitHub Actions for Mobile UX and SEO/AEO/GEO audits, accept secure callbacks, run SEO/AEO/GEO analysis, and run an internal on-brand audit.
+- **Audits**: AIMS orchestrates the website audit pipeline end-to-end (Digital Growth -> SEO/AEO/GEO -> Mobile UX -> 24-seat expert council -> one final PDF -> temporary artefact cleanup), while retaining standalone audit routes and the internal on-brand audit.
 - **Cloudflare purge**: purge a Cloudflare zone cache using a bearer token, with optional application-level shared-secret protection.
 - **RSS short links**: create R2-backed short links and redirect pages for RSS/feed links.
 
