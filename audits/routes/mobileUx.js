@@ -6,6 +6,7 @@ import { requireAuditCallbackAuth } from "../utils/callbackAuth.js";
 import { runMobileUxCouncilReport } from "../utils/mobileUxCouncil.js";
 import { info } from "../../logger.js";
 import { startAsyncAuditRouteJob } from "../utils/asyncAuditRouteJobs.js";
+import { resumeWebsiteAuditPipelineFromChild } from "../utils/websiteAuditPipeline.js";
 
 const router = express.Router();
 const asyncRoute = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
@@ -39,6 +40,7 @@ function shouldRunMobileUxCouncil(body = {}) {
 }
 
 async function maybeRunMobileUxCouncil({ result, payload, req }) {
+  if (result?.job?.pipelineSessionId) return null;
   if (!result?.ok || result.status === "failed" || !shouldRunMobileUxCouncil(payload)) return null;
   const councilJob = await startAsyncAuditRouteJob({
     auditType: "mobile-ux-council",
@@ -65,8 +67,9 @@ router.post("/callback", requireAuditCallbackAuth, asyncRoute(async (req, res) =
   }
 
   const result = await completeAuditRun({ auditType: AUDIT_TYPE, payload: parsed.data });
+  const pipeline = await resumeWebsiteAuditPipelineFromChild({ auditType: AUDIT_TYPE, result });
   const councilJob = await maybeRunMobileUxCouncil({ result, payload: parsed.data, req });
-  return res.json(councilJob ? { ...result, councilJob } : result);
+  return res.json({ ...result, ...(pipeline ? { pipeline } : {}), ...(councilJob ? { councilJob } : {}) });
 }));
 
 router.get("/jobs/:sessionId", (req, res) => {

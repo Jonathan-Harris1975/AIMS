@@ -12,6 +12,7 @@ import { flushSeoAeoGeoAnalysisJobs, getSeoAeoGeoAnalysisJobFresh, startSeoAeoGe
 import { info } from "../../logger.js";
 import { runSeoAeoGeoCouncilReport } from "../utils/seoAeoGeoCouncil.js";
 import { startAsyncAuditRouteJob } from "../utils/asyncAuditRouteJobs.js";
+import { resumeWebsiteAuditPipelineFromChild } from "../utils/websiteAuditPipeline.js";
 
 const router = express.Router();
 const asyncRoute = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
@@ -166,6 +167,7 @@ function shouldRunSeoAeoGeoCouncil(body = {}) {
 }
 
 async function maybeRunSeoAeoGeoCouncil({ result, payload, req }) {
+  if (result?.job?.pipelineSessionId) return null;
   if (!result?.ok || result.status === "failed" || !shouldRunSeoAeoGeoCouncil(payload)) return null;
   const councilJob = await startAsyncAuditRouteJob({
     auditType: "seo-aeo-geo-council",
@@ -192,8 +194,9 @@ router.post("/callback", requireAuditCallbackAuth, asyncRoute(async (req, res) =
   }
 
   const result = await completeAuditRun({ auditType: AUDIT_TYPE, payload: parsed.data });
+  const pipeline = await resumeWebsiteAuditPipelineFromChild({ auditType: AUDIT_TYPE, result });
   const councilJob = await maybeRunSeoAeoGeoCouncil({ result, payload: parsed.data, req });
-  return res.json(councilJob ? { ...result, councilJob } : result);
+  return res.json({ ...result, ...(pipeline ? { pipeline } : {}), ...(councilJob ? { councilJob } : {}) });
 }));
 
 router.get("/jobs/:sessionId", (req, res) => {
