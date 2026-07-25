@@ -194,6 +194,14 @@ export async function publishAuditText({ key, text, contentType = "text/plain; c
   return putObject({ key, body: String(text ?? ""), contentType });
 }
 
+export async function publishAuditBuffer({ key, body, contentType = "application/octet-stream" }) {
+  if (!key) throw new Error("publishAuditBuffer requires key");
+  if (!(body instanceof Uint8Array) && !Buffer.isBuffer(body)) {
+    throw new Error("publishAuditBuffer requires a Buffer or Uint8Array body");
+  }
+  return putObject({ key, body, contentType });
+}
+
 export async function publishAuditRequest({ auditType, sessionId, payload, reportPrefix }) {
   const key = `${reportPrefix}/request.json`;
   const document = {
@@ -259,20 +267,50 @@ export async function cleanupAuditPrefix({ reportPrefix, keepNames = [], keepPre
   } while (continuationToken);
 
   if (!keysToDelete.length) {
-    return { deleted: [] };
+    return { deleted: [], remaining: [] };
   }
 
-  await client.send(new DeleteObjectsCommand({
-    Bucket: bucket,
-    Delete: { Objects: keysToDelete, Quiet: true },
-  }));
+  const deleted = [];
+  for (let index = 0; index < keysToDelete.length; index += 1000) {
+    const batch = keysToDelete.slice(index, index + 1000);
+    await client.send(new DeleteObjectsCommand({
+      Bucket: bucket,
+      Delete: { Objects: batch, Quiet: true },
+    }));
+    deleted.push(...batch.map((item) => item.Key));
+  }
 
-  return { deleted: keysToDelete.map((item) => item.Key) };
+  const remaining = [];
+  continuationToken = undefined;
+  do {
+    const response = await client.send(new ListObjectsV2Command({
+      Bucket: bucket,
+      Prefix: prefixRoot,
+      ContinuationToken: continuationToken,
+    }));
+    for (const item of response.Contents || []) {
+      const key = item.Key || "";
+      if (!key) continue;
+      if (!shouldKeepAuditKey({ key, prefixRoot, keepNames: keep, keepPrefixes: preservedPrefixes })) {
+        remaining.push(key);
+      }
+    }
+    continuationToken = response.IsTruncated ? response.NextContinuationToken : undefined;
+  } while (continuationToken);
+
+  if (remaining.length) {
+    const err = new Error(`Audit cleanup left ${remaining.length} object(s) under ${reportPrefix}`);
+    err.remainingKeys = remaining.slice(0, 50);
+    throw err;
+  }
+
+  return { deleted, remaining };
 }
 
 export default {
   publishAuditJson,
   publishAuditText,
+  publishAuditBuffer,
   publishAuditRequest,
   publishAuditLatest,
   readAuditJson,

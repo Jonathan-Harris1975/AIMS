@@ -5,6 +5,7 @@ import {
   startJob,
   completeJob,
   getPublicJob,
+  getPublicJobFresh,
   getMostRecentActiveJobFresh,
 } from "../../services/shared/utils/jobStore.js";
 import { sanitizeSessionId } from "../../services/shared/utils/sessionId.js";
@@ -78,6 +79,34 @@ export async function startAuditRun({
   );
   const reportPrefix = body.reportPrefix || buildAuditPrefix(auditType, sessionId);
   const jobType = makeAuditJobType(auditType);
+  const pipelineSessionId = String(body.pipelineSessionId || "").trim() || null;
+  const suppressLatest = body.suppressLatest === true || body.temporaryArtifacts === true || Boolean(pipelineSessionId);
+  const temporaryArtifacts = body.temporaryArtifacts === true || Boolean(pipelineSessionId);
+
+  if (body.sessionId && !forceNewRunRequested(body)) {
+    const existing = await getPublicJobFresh(jobType, sessionId);
+    if (existing && ["queued", "running", "completed"].includes(existing.status)) {
+      info("audit.workflow.reused_explicit_run", {
+        auditType,
+        sessionId,
+        status: existing.status,
+        reportPrefix: existing.reportPrefix || reportPrefix,
+        pipelineSessionId: existing.pipelineSessionId || pipelineSessionId,
+      });
+      return {
+        ok: existing.status !== "failed",
+        auditType,
+        sessionId,
+        status: existing.status,
+        reusedExplicitRun: true,
+        reportPrefix: existing.reportPrefix || reportPrefix,
+        callbackUrl: existing.callbackUrl || null,
+        analysisUrl: existing.analysisUrl || null,
+        workflowRunUrl: existing.workflowRunUrl || null,
+        job: existing,
+      };
+    }
+  }
 
   if (!body.sessionId && !forceNewRunRequested(body)) {
     const activeJob = await getMostRecentActiveJobFresh(jobType, { maxAgeMs: ACTIVE_RUN_REUSE_MS });
@@ -142,6 +171,9 @@ export async function startAuditRun({
     auditPublicBaseUrl: auditR2.publicBaseUrl,
     auditBucketEnv: "R2_BUCKET_AUDITS",
     auditPublicBaseEnv: "R2_PUBLIC_BASE_URL_AUDITS",
+    pipelineSessionId,
+    suppressLatest,
+    temporaryArtifacts,
   };
 
   queueJob(jobType, sessionId, {
@@ -155,6 +187,9 @@ export async function startAuditRun({
     callbackTokenConfigured,
     auditBucket: auditR2.bucket,
     auditPublicBaseUrl: auditR2.publicBaseUrl,
+    pipelineSessionId,
+    suppressLatest,
+    temporaryArtifacts,
   });
 
   const inputs = buildWorkflowInputs({
@@ -176,6 +211,9 @@ export async function startAuditRun({
       callbackTokenConfigured,
       auditBucket: auditR2.bucket,
       auditPublicBaseUrl: auditR2.publicBaseUrl,
+      pipelineSessionId,
+      suppressLatest,
+      temporaryArtifacts,
     });
 
     const dispatch = await dispatchGithubWorkflow({
@@ -193,22 +231,24 @@ export async function startAuditRun({
 
     await publishAuditRequest({ auditType, sessionId, payload, reportPrefix });
 
-    await publishAuditLatest({
-      auditType,
-      sessionId,
-      payload: {
-        status: "queued",
-        reportPrefix,
-        workflowId,
-        websiteUrl,
-        callbackUrl,
-        analysisUrl,
-        callbackTokenConfigured,
-        auditBucket: auditR2.bucket,
-        auditPublicBaseUrl: auditR2.publicBaseUrl,
-        workflowRunUrl: workflowRun.workflowRunUrl || null,
-      },
-    });
+    if (!suppressLatest) {
+      await publishAuditLatest({
+        auditType,
+        sessionId,
+        payload: {
+          status: "queued",
+          reportPrefix,
+          workflowId,
+          websiteUrl,
+          callbackUrl,
+          analysisUrl,
+          callbackTokenConfigured,
+          auditBucket: auditR2.bucket,
+          auditPublicBaseUrl: auditR2.publicBaseUrl,
+          workflowRunUrl: workflowRun.workflowRunUrl || null,
+        },
+      });
+    }
 
     info("audit.workflow.dispatched", {
       auditType,
@@ -249,6 +289,9 @@ export async function startAuditRun({
       callbackTokenConfigured,
       auditBucket: auditR2.bucket,
       auditPublicBaseUrl: auditR2.publicBaseUrl,
+      pipelineSessionId,
+      suppressLatest,
+      temporaryArtifacts,
     });
     throw err;
   }
@@ -289,7 +332,7 @@ function auditFailureReportHtml({ auditType, sessionId, message, payload }) {
   <p><span class="badge">FAILED</span></p>
   <p><strong>Session:</strong> <code>${sessionId}</code></p>
   <p>${message}</p>
-  <p>This controlled failure report was written by the AI Management Suite because the external website workflow did not provide a complete published artefact set. It is not a scored Mobile UX report.</p>
+  <p>This controlled failure report was written by the AI Management Suite because the external website workflow did not provide a complete published artefact set. It is a controlled failure record, not a successful scored audit report.</p>
   <h2>Callback payload</h2>
   <pre>${safeJsonForHtml(payload)}</pre>
 </body>
@@ -343,7 +386,7 @@ async function publishControlledFailureArtifacts({ auditType, sessionId, payload
   const reportJson = {
     auditType,
     sessionId,
-    schemaVersion: "controlled-mobile-ux-failure-v1",
+    schemaVersion: "controlled-audit-failure-v1",
     status: "failed",
     message,
     mobileQualityScore: null,
@@ -479,6 +522,10 @@ export async function completeAuditRun({ auditType, payload }) {
     payload.sessionId || "",
     `AUD-${auditType.toUpperCase()}`
   );
+  const existingJob = await getPublicJobFresh(jobType, sessionId);
+  const pipelineSessionId = existingJob?.pipelineSessionId || null;
+  const suppressLatest = existingJob?.suppressLatest === true || existingJob?.temporaryArtifacts === true || Boolean(pipelineSessionId);
+  const temporaryArtifacts = existingJob?.temporaryArtifacts === true || Boolean(pipelineSessionId);
   const status = normaliseWorkflowStatus(payload.status);
   const jobMetadata = {
     reportPrefix: payload.reportPrefix,
@@ -501,6 +548,9 @@ export async function completeAuditRun({ auditType, payload }) {
     artefacts: payload.artefacts || {},
     auditBucket: getAuditBucketName(),
     auditPublicBaseUrl: getAuditPublicBaseUrl(),
+    pipelineSessionId,
+    suppressLatest,
+    temporaryArtifacts,
     updatedAt: payload.finishedAt || new Date().toISOString(),
     ...optionalCompletionMetadata(payload),
   };
@@ -605,15 +655,17 @@ export async function completeAuditRun({ auditType, payload }) {
         finishedAt: payload.finishedAt || new Date().toISOString(),
         error: safeError,
       });
-      await publishAuditLatest({
-        auditType,
-        sessionId,
-        payload: {
-          status: "failed",
-          ...jobMetadata,
-          error: safeError,
-        },
-      });
+      if (!suppressLatest) {
+        await publishAuditLatest({
+          auditType,
+          sessionId,
+          payload: {
+            status: "failed",
+            ...jobMetadata,
+            error: safeError,
+          },
+        });
+      }
       return {
         ok: false,
         auditType,
@@ -625,14 +677,16 @@ export async function completeAuditRun({ auditType, payload }) {
     }
   }
 
-  await publishAuditLatest({
-    auditType,
-    sessionId,
-    payload: {
-      status,
-      ...jobMetadata,
-    },
-  });
+  if (!suppressLatest) {
+    await publishAuditLatest({
+      auditType,
+      sessionId,
+      payload: {
+        status,
+        ...jobMetadata,
+      },
+    });
+  }
 
   return {
     ok: status !== "failed",
