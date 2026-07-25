@@ -173,7 +173,7 @@ Expected high-level response:
 
 | Service | Path | Status | Purpose | Mounted route(s) | Key files | Main dependencies | Storage | Tests |
 |---|---|---|---|---|---|---|---|---|
-| audits | `audits/` | Implemented | GitHub-dispatched Mobile UX and SEO/AEO/GEO audits plus local on-brand audit reporting. | `/audits/*` | audits/routes/*.js, audits/utils/*.js | OpenRouter, GitHub Actions, Cloudflare R2 | R2 audits bucket, durable job state | audit-*.test.js, mobile-ux-audit-service.test.js, on-brand-audit.test.js |
+| audits | `audits/` | Implemented | AIMS-owned website audit orchestration plus standalone Digital Growth, Mobile UX, SEO/AEO/GEO and local on-brand reporting. | `/audits/*` | audits/routes/*.js, audits/utils/*.js | OpenRouter, GitHub Actions, Cloudflare R2 | R2 audits bucket, durable job state | audit-*.test.js, mobile-ux-audit-service.test.js, on-brand-audit.test.js |
 | artwork | `services/artwork/` | Implemented | OpenRouter image generation for podcast, blog and direct artwork requests. | `/artwork/create, /artwork/generate` | routes/generateArtwork.js, createBlogArtwork.js, createPodcastArtwork.js | OpenRouter, R2 | art, blogImages buckets | Indirect via blog/podcast tests |
 | blog | `services/blog/` | Implemented | Weekly AI briefing posts, social/daily posts, blog RSS publishing and rebuild hooks. | `/blog/weekly/build, /blog/rss/rebuild, /blog/social/*` | weekly/buildWeeklyBlogPost.js, social/buildDailySocialBlogPost.js, rss/publishBlogRssFeed.js | OpenRouter, R2, website rebuild webhook | blog, blogImages, blogRss buckets | blog-*.test.js |
 | cloudflare-purge | `services/cloudflare-purge/` | Implemented | Cloudflare zone cache purge API wrapper with optional shared-secret header. | `/cloudflare/health, /cloudflare/purge` | routes/index.js, utils/purgeCloudflareCache.js | Cloudflare API | None | Covered by route/runtime tests only if added later |
@@ -228,6 +228,13 @@ The table below is built from the active mounted routers in `routes/index.js` an
 | `POST` | `/oneup/daily/:laneKey` | oneup | Builds and schedules a daily lane post. Lane keys: monday-sunday. | Optional `publishDate`, `scheduledDateTime`, `dryRun`, `categoryName`, `socialNetworkId`, `imageUrl`, `apiKey`. | Hookdeck dedupe `oneup:<laneKey>`. | JSON with generated post and scheduling status. |
 | `POST` | `/oneup/ebooks/weekly` | oneup | Builds/schedules Tuesday, Thursday and Saturday ebook posts. | Optional `weekStartDate`, `featuredBook`, `usePodcastFeaturedBook`, `publishTimes`, `scheduledDateTimes`, `dryRun`, category/network/image/api fields. | Hookdeck dedupe `oneup:ebooks:weekly`. | JSON with featured book, per-day posts, warnings. |
 | `POST` | `/oneup/quiz/weekly` | oneup | Builds/schedules weekly quiz question and answer posts. | Optional question/answer dates or scheduled datetimes, `dryRun`, category/network/image/api fields. | Hookdeck dedupe `oneup:quiz:weekly`. | JSON with question/answer scheduling results. |
+| `GET` | `/audits/website/health` | audits | Unified website-audit pipeline health and retention policy. | None | None | JSON health. |
+| `POST` | `/audits/website/run` | audits | Starts the single AIMS-owned website pipeline: Digital Growth -> SEO/AEO/GEO -> Mobile UX -> expert council -> final PDF -> temporary cleanup. | Standard audit-run body. | Hookdeck dedupe; AIMS owns all child orchestration. | 202 with parent pipeline job. |
+| `GET` | `/audits/website/jobs/:sessionId` | audits | Reads parent website-audit pipeline state and final PDF URL when complete. | Path `sessionId`. | None | 200 public job or 404. |
+| `GET` | `/audits/digital-growth/health` | audits | Digital Growth audit health. | None | None | JSON health. |
+| `POST` | `/audits/digital-growth/run` | audits | Dispatches the Digital Growth and Monetisation audit workflow; normally called only by the website pipeline. | Standard audit-run body. | Hookdeck dedupe; GitHub token required. | 202 queued child job. |
+| `POST` | `/audits/digital-growth/analysis` | audits | Runs Stage 1 AI analysis over verified live/repository evidence. | Audit analysis schema. | Audit callback auth. | 202 async analysis job. |
+| `POST` | `/audits/digital-growth/callback` | audits | Receives Digital Growth stage completion and resumes the parent pipeline when present. | Audit callback schema. | Audit callback auth. | JSON stage result and pipeline transition. |
 | `GET` | `/audits/mobile-ux/health` | audits | Mobile UX audit health. | None | None | JSON health. |
 | `POST` | `/audits/mobile-ux/run` | audits | Dispatches website Mobile UX audit workflow. | Optional `sessionId`, `websiteUrl`, `reportPrefix`, `workflowRef`, `requestedBy`, `notes`, `excludePatterns`. | Hookdeck dedupe; GitHub token required in env. | 202 with queued job and dispatch metadata. |
 | `POST` | `/audits/mobile-ux/callback` | audits | Receives Mobile UX audit workflow callback. | Audit callback schema: `auditType`, `sessionId`, `status`, `reportPrefix`, artefact URLs. | Bearer token or `x-audit-callback-token`. | JSON completion result. |
@@ -850,6 +857,18 @@ Evidence: `services/outreach/routes/index.js`, `services/outreach/services/*.js`
 7. Leads are scored using `OUTREACH_MIN_LEAD_SCORE` and `OUTREACH_MIN_EMAIL_SCORE`.
 8. Accepted leads are appended to Google Sheets.
 9. Batch mode reads `OUTREACH_KEYWORDS`, advances a cursor and stores progress in R2 metasystem state when available.
+
+### Unified website audit pipeline
+
+Evidence: `audits/routes/website.js`, `audits/routes/digitalGrowth.js`, `audits/utils/websiteAuditPipeline.js`, `audits/utils/websiteAuditCouncil.js`.
+
+1. MAST calls `POST /audits/website/run` once.
+2. AIMS dispatches Digital Growth, SEO/AEO/GEO and Mobile UX sequentially. Child outputs use `audits/_tmp/website/<pipeline-session>/...` and suppress standalone `latest.json` writes.
+3. Each child callback resumes the next stage. A blocked stage is frozen as evidence; AIMS does not invent completion.
+4. After Mobile UX, a 24-seat multidisciplinary council consolidates the three evidence bundles.
+5. AIMS renders one final PDF in memory and stores it at `audits/website/YYYY-MM/<pipeline-session>/website-audit.pdf`.
+6. Only after successful PDF publication, AIMS recursively deletes the whole temporary pipeline prefix and verifies no temporary objects remain. No parent `request.json`, `latest.json`, HTML, JSON, screenshots or intermediate council file is retained in the audits bucket.
+7. Parent job state is kept in the existing durable job store, outside the final audit artefact prefix.
 
 ### SEO/AEO/GEO audit workflow
 
