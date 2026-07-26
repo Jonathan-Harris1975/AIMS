@@ -7,6 +7,14 @@ const SEASONAL_PALETTES = Object.freeze({
   autumn: "Keep the brand's deep navy and charcoal base, with restrained copper, burnt amber and muted plum accents.",
 });
 
+export const QUIZ_TEXT_RULE = [
+  "QUIZ CARD TEXT REQUIREMENT.",
+  "Visible text is required for quiz artwork.",
+  "Render only the exact supplied quiz wording and answer labels. Do not invent, paraphrase, shorten, translate, localise, spell-correct, or add extra copy.",
+  "Prioritise mobile readability: large type, generous spacing, short lines, strong hierarchy and high contrast.",
+  "Do not add logos, watermarks, pseudo-text, decorative labels, fake UI copy or unrelated words.",
+].join(" ");
+
 export const STRICT_TEXT_FREE_RULE = [
   "ABSOLUTE TEXT-FREE OUTPUT.",
   "No text. No letters. No numbers. No logos. No watermarks.",
@@ -82,17 +90,32 @@ export function applyArtworkPromptPolicy(prompt = "", { date, mode = "editorial"
       ].join(" ")
     : "";
 
+  const quizRule = mode === "quiz"
+    ? [
+        "QUIZ SOCIAL REQUIREMENT: design for interaction first.",
+        "Question cards must make all four answer choices A, B, C and D immediately scannable on a phone.",
+        "Give each answer choice its own distinct visual panel and a simple topic-relevant diagram or icon treatment where useful.",
+        "Do not visually reveal the correct answer on the question card.",
+        "Answer cards must clearly reveal the correct option, keep all four options visible for continuity, and strongly highlight only the correct option.",
+        "On answer cards, use a subtle semi-transparent topic-relevant visual in the background behind the explanation area, never behind the main answer text.",
+        "Use cinematic lighting, bold controlled colour, high contrast, polished magazine/YouTube-thumbnail composition and clean negative space.",
+        "Avoid generic corporate styling, decorative abstract AI wallpaper, clutter and tiny text.",
+      ].join(" ")
+    : "";
+
   return [
     cleanPrompt,
     `Artwork mode: ${mode}.`,
     topicalPodcastRule,
     socialRule,
+    quizRule,
     getSeasonalPaletteDirection(date),
-    STRICT_TEXT_FREE_RULE,
+    mode === "quiz" ? QUIZ_TEXT_RULE : STRICT_TEXT_FREE_RULE,
   ].filter(Boolean).join(" ");
 }
 
 export default {
+  QUIZ_TEXT_RULE,
   STRICT_TEXT_FREE_RULE,
   resolveArtworkDate,
   getArtworkSeason,

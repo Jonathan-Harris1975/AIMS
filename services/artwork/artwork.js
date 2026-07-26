@@ -59,6 +59,16 @@ export function buildInstruction(prompt, mode = "podcast", date) {
   }
 
 
+  if (mode === "quiz") {
+    return [
+      "Create a premium square AI quiz card for social media.",
+      "The supplied wording is the design content and must remain exact.",
+      "Optimise for phone viewing: bold hierarchy, readable type, strong separation between answer choices and uncluttered composition.",
+      `Creative direction: ${policyPrompt}`,
+    ].join(" ");
+  }
+
+
   if (mode === "social") {
     return [
       "Create a premium square editorial social-media image.",
@@ -90,6 +100,11 @@ export function buildShortInstruction(prompt, mode = "podcast", date) {
 
   if (mode === "blog") {
     return `Editorial blog hero image, cinematic landscape banner, premium magazine storytelling, bold controlled colour, high contrast and one clear focal subject. ${trimmedDirection} No text, letters, numbers, logos or watermarks.`;
+  }
+
+
+  if (mode === "quiz") {
+    return `Square social AI quiz card. Keep every supplied answer label and visible phrase exact. Large readable typography, four clear answer panels, high contrast, polished editorial design. ${trimmedDirection}`;
   }
 
 
@@ -242,4 +257,8 @@ export async function generateBlogArtwork(prompt, options = {}) {
 
 export async function generateSocialArtwork(prompt, options = {}) {
   return generateArtworkBase64(prompt, { ...options, mode: "social" });
+}
+
+export async function generateQuizArtwork(prompt, options = {}) {
+  return generateArtworkBase64(prompt, { ...options, mode: "quiz" });
 }
