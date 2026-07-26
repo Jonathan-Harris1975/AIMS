@@ -19,20 +19,6 @@
       "object_key": "skills/S202_brand-social-council.json",
       "mime_type": "application/json",
       "source_format": "embedded_markdown"
-    },
-    {
-      "name": "mobile-ux-council",
-      "skill_id": "S203",
-      "object_key": "skills/S203_mobile-ux-council.json",
-      "mime_type": "application/json",
-      "source_format": "embedded_markdown"
-    },
-    {
-      "name": "seo-aeo-geo-council",
-      "skill_id": "S204",
-      "object_key": "skills/S204_seo-aeo-geo-council.json",
-      "mime_type": "application/json",
-      "source_format": "embedded_markdown"
     }
   ],
   "policy": {
