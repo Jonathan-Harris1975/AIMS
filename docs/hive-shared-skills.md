@@ -14,14 +14,12 @@ R2_BUCKET_HIVE_SKILLS=hive-skills
 HIVE_SKILLS_AIMS_MANIFEST_PATH=manifests/aims-skills-manifest.json
 ```
 
-AIMS reads metadata from the AIMS manifest, skill descriptor URLs, and the three council skill descriptors stored in the same `skills/` folder as the rest of the HIVE skill pool.
+AIMS reads metadata from the AIMS manifest, skill descriptor URLs, and the Brand & Social council descriptor stored in the shared HIVE skill pool. The website audit now uses its built-in 24-seat council and no longer depends on the retired S203/S204 standalone council descriptors.
 
-## R2 council skill descriptor object keys
+## R2 council skill descriptor object key
 
 ```text
 skills/S202_brand-social-council.json
-skills/S203_mobile-ux-council.json
-skills/S204_seo-aeo-geo-council.json
 ```
 
 The original Markdown guidance is embedded inside these JSON descriptors. These are R2 object keys, not repo-local runtime files.
