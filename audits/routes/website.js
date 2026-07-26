@@ -3,6 +3,7 @@ import { hookdeckDedupe } from "../../services/shared/utils/hookdeckDedupe.js";
 import { validateBody, auditRunBodySchema } from "../../services/shared/utils/requestSchemas.js";
 import {
   getWebsiteAuditPipelineJobFresh,
+  retryWebsiteAuditRamsDispatch,
   startWebsiteAuditPipeline,
 } from "../utils/websiteAuditPipeline.js";
 
@@ -14,8 +15,8 @@ router.get("/health", (_req, res) => {
     ok: true,
     auditType: "website",
     orchestration: "AIMS",
-    stages: ["digital-growth", "seo-aeo-geo", "mobile-ux", "expert-council", "final-pdf", "temporary-cleanup"],
-    retentionPolicy: "final-pdf-only",
+    stages: ["digital-growth", "seo-aeo-geo", "mobile-ux", "expert-council", "final-report-set", "temporary-cleanup", "rams-website"],
+    retentionPolicy: "final-pdf-html-json-only",
     time: new Date().toISOString(),
   });
 });
@@ -25,6 +26,12 @@ router.post("/run", hookdeckDedupe("audits:website:run"), asyncRoute(async (req,
   if (!parsed.ok) return res.status(400).json({ ok: false, error: parsed.error });
   const result = await startWebsiteAuditPipeline(parsed.data);
   return res.status(202).json(result);
+}));
+
+
+router.post("/jobs/:sessionId/rams/retry", hookdeckDedupe("audits:website:rams:retry"), asyncRoute(async (req, res) => {
+  const job = await retryWebsiteAuditRamsDispatch(req.params.sessionId);
+  return res.status(202).json({ ok: true, auditType: "website", job });
 }));
 
 router.get("/jobs/:sessionId", asyncRoute(async (req, res) => {
