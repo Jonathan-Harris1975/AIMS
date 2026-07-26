@@ -28,12 +28,14 @@ const BRAND_VOICE = buildZernioPersona();
 export function buildDailyPrompt({ lane, publishDate, history = [], rssItems = [], weeklyHistory = [], verifiedQuote = null, buildContext = "" }) {
   const laneGuidance = {
     monday: `Write a Monday post built around the verified quote supplied below.
-Use the exact quote and author. Do not alter the wording, attribution, or punctuation of the quote.
-Use it as a springboard for a brief, sharp reflection tied to AI, discipline, useful work, or craft.
-Keep it grounded rather than preachy. Treat the quote as a critical lens, not a motivational poster.
-Do not add any other quote.
+Use the exact quote and author once only. Do not alter, British-localise, paraphrase, repeat, retype, modernise, or "correct" any word, punctuation, dash, spelling, or attribution inside the sourced quote.
+After the quote, add one sharp Jonathan Harris-style editorial observation, not a bland paraphrase of what the quote already says.
+The commentary must add a distinct idea: a practical consequence, tension, uncomfortable implication, operator lesson, commercial reality, or sceptical counterpoint.
+Make it sound like a high-level AI practitioner who has seen enough hype to ask what actually changes in practice.
+Avoid motivational language, generic encouragement, corporate filler, and phrases such as "this is about", "the key is", "what matters is", or "the future of".
 Do not explain the person's full biography.
-Content target: 45 to 75 words.`,
+Do not add any other quote.
+Content target: 55 to 85 words including the verified quote.`,
     tuesday: `Write a Tuesday concept post that explains one AI, machine learning, or computing idea in plain English.
 Use one concrete example or analogy so it feels useful, not abstract.
 It should read like a smart person explaining something clearly, not like a glossary entry.
@@ -121,6 +123,9 @@ Output rules:
 - if you would reach for one of those words, name the concrete effect instead (what specifically changes: who is affected, what changes for them, or the measurable impact)
 - name at least one specific organisation, product, person, or technology where the topic supports it, rather than describing "AI" in the abstract
 - stay strictly inside the named lane brief; if RSS context conflicts with the lane, ignore the RSS context
+- make the reader stop for a point of view, not merely receive a competent summary
+- every post must contain at least one concrete implication, tension, consequence, or judgement beyond describing the topic
+- for Monday, the verified quote is immutable source evidence and must appear once only; British English applies only to your surrounding commentary
 - JSON only`,
   };
 }

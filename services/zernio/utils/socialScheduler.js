@@ -16,6 +16,7 @@ import { repairZernioPostForReviewCouncil, runReviewCouncilGate } from "../../co
 import { ANTI_HYPE_HEDGING_PHRASES, BANNED_PROMO_PATTERNS, ENGAGEMENT_BAIT_PATTERNS, GENERIC_HASHTAGS, INFLATED_EBOOK_CLAIM_PATTERNS, MOTIVATIONAL_HASHTAGS, MOTIVATIONAL_TONE_PATTERNS, findAmericanSpellings, findGenericAbstractionBreaches, findPatternBreaches } from "../../content-quality/brandLexicon.js";
 import { buildIntentHash, completeEditorialReservation, hasRecentAudienceIntent, recordEditorialEvent, releaseEditorialReservation, reserveEditorialSource } from "../../social/editorialLedger.js";
 import { emitQaEvent } from "../../shared/utils/qaEvents.js";
+import { createSocialArtwork } from "../../artwork/createSocialArtwork.js";
 
 
 const ZERNIO_DAILY_MAX_TOKENS = Math.max(1200, Number(process.env.ZERNIO_DAILY_MAX_TOKENS || 1400));
@@ -149,25 +150,52 @@ function detectSpotlightPerson(post = {}) {
 }
 
 
+function quoteWordSet(value = "") {
+  return new Set(
+    normaliseSimple(value)
+      .split(/\s+/)
+      .filter((word) => word.length > 2)
+  );
+}
+
+function quoteSimilarity(candidate = "", quote = "") {
+  const quoteWords = quoteWordSet(quote);
+  const candidateWords = quoteWordSet(candidate);
+  if (!quoteWords.size || !candidateWords.size) return 0;
+
+  let overlap = 0;
+  for (const word of quoteWords) {
+    if (candidateWords.has(word)) overlap += 1;
+  }
+  return overlap / quoteWords.size;
+}
+
 function ensureMondayVerifiedQuote(post = {}, verifiedQuote = null) {
   if (!verifiedQuote?.quote || !verifiedQuote?.author) return post;
+
   const exactLine = `"${verifiedQuote.quote}" — ${verifiedQuote.author}`;
-  const content = compactText(post.content || "");
   const quoteNormalised = normaliseSimple(verifiedQuote.quote);
   const authorNormalised = normaliseSimple(verifiedQuote.author);
-  const hasQuote = quoteNormalised && normaliseSimple(content).includes(quoteNormalised);
-  const hasAuthor = authorNormalised && normaliseSimple(content).includes(authorNormalised);
+  const rawContent = compactText(post.content || "");
 
-  if (hasQuote && hasAuthor) {
-    // Council repairs may legitimately British-localise surrounding copy, but
-    // a sourced quotation is immutable evidence. Restore its exact ledger text.
-    const lines = content.split("\n");
-    const firstBodyLine = lines.findIndex((line) => normaliseSimple(line).includes(quoteNormalised));
-    if (firstBodyLine >= 0) lines[firstBodyLine] = exactLine;
-    return { ...post, content: lines.join("\n").trim() };
-  }
+  const blocks = rawContent
+    .split(/\n{2,}/)
+    .map((block) => block.trim())
+    .filter(Boolean);
 
-  return { ...post, content: `${exactLine}\n\n${content}`.trim() };
+  const bodyBlocks = blocks.filter((block) => {
+    const normalised = normaliseSimple(block);
+    const hasAuthor = authorNormalised && normalised.includes(authorNormalised);
+    const exactQuote = quoteNormalised && normalised.includes(quoteNormalised);
+    const likelyQuoteVariant = quoteSimilarity(block, verifiedQuote.quote) >= 0.72;
+    return !(exactQuote || (hasAuthor && likelyQuoteVariant));
+  });
+
+  const body = bodyBlocks.join("\n\n").trim();
+  return {
+    ...post,
+    content: `${exactLine}${body ? `\n\n${body}` : ""}`,
+  };
 }
 
 function looksLikePersonName(value = "") {
@@ -283,6 +311,26 @@ function runZernioSocialGate({ contentType = "zernio-social", laneKey = "", post
     if (!quote || !author) defects.push("Monday post requires a verified quote source.");
     if (quote && !normaliseSimple(content).includes(normaliseSimple(quote))) defects.push("Monday post does not include the exact verified quote.");
     if (author && !normaliseSimple(content).includes(normaliseSimple(author))) defects.push("Monday post does not include the verified quote author.");
+
+    const quoteOccurrences = quote
+      ? normaliseSimple(content).split(normaliseSimple(quote)).length - 1
+      : 0;
+    if (quoteOccurrences > 1) defects.push("Monday post repeats the verified quote; it must appear once only.");
+
+    const commentary = content
+      .split(/\n{2,}/)
+      .filter((block) => quoteSimilarity(block, quote) < 0.72)
+      .join(" ")
+      .replace(/(^|\s)#[A-Za-z0-9_]+/g, " ")
+      .trim();
+
+    if (wordCount(commentary) < 22) {
+      defects.push("Monday commentary is too thin; add a distinct expert implication, tension, consequence, or judgement after the quote.");
+    }
+
+    if (/\b(this (?:is|isn't) (?:about|just about)|the key is|what matters is|the future of|shifting the frontier|genuinely useful outcomes|new possibilities)\b/i.test(commentary)) {
+      defects.push("Monday commentary reads like generic explanatory filler rather than a distinctive expert observation.");
+    }
   }
 
   if (laneKey === "friday" && !String(buildContext || "").trim()) {
@@ -938,6 +986,24 @@ function resolveEbookScheduledDateTime(options, day, publishDate) {
   return toScheduledDateTime(publishDate, resolveEbookPublishTime(options, day));
 }
 
+function buildMondayArtworkPrompt({ verifiedQuote, post } = {}) {
+  const author = compactText(verifiedQuote?.author || "");
+  const quote = compactText(verifiedQuote?.quote || "");
+  const topic = compactText(post?.topic || post?.title || "artificial intelligence");
+
+  return [
+    `Editorial portrait-led social artwork inspired by a verified quotation from ${author}.`,
+    `Primary subject: ${author}, depicted as the clear human focal point in a credible modern editorial portrait.`,
+    `Theme: ${topic}.`,
+    `Quotation context, for visual meaning only and never as visible text: ${quote}`,
+    "Show the person in an intelligent computing or AI context appropriate to the subject, with subtle programming, research or technical environment cues when relevant.",
+    "The person's presence must dominate the composition; technology is supporting context, not the subject.",
+    "Aim for the visual authority of a serious magazine profile or premium documentary thumbnail.",
+    "Avoid generic corporate portraits, anonymous business people, handshake imagery, glowing brains, abstract network art, circuit mandalas, digital snowflakes and decorative geometry.",
+    "No visible words, quotation marks, code, labels, logos or typography.",
+  ].join(" ");
+}
+
 export async function buildAndScheduleDailyLane(laneKey, options = {}) {
   const lane = LANE_CONFIG[laneKey];
   if (!lane) {
@@ -951,7 +1017,7 @@ export async function buildAndScheduleDailyLane(laneKey, options = {}) {
   const profileName = options.profileName || ZERNIO_PROFILE_NAME_GENERAL;
   const accountId = normaliseZernioAccountId(options.accountId || getZernioAccountId());
   const apiKey = options.apiKey || process.env.ZERNIO_META_API_KEY;
-  const imageUrl = options.imageUrl || lane.imageUrl;
+  let imageUrl = options.imageUrl || lane.imageUrl;
   const dryRun = Boolean(options.dryRun);
 
   const slotClaim = await claimZernioSlot({
@@ -1088,6 +1154,29 @@ export async function buildAndScheduleDailyLane(laneKey, options = {}) {
       });
       Object.assign(post, reviewed.post);
       zernioSocialGate = reviewed.gate;
+    }
+
+    if (laneKey === "monday" && !options.imageUrl && !dryRun) {
+      const artwork = await createSocialArtwork({
+        sessionId: `ZERNIO-MONDAY-${publishDate}`,
+        lane: "monday",
+        date: publishDate,
+        prompt: buildMondayArtworkPrompt({ verifiedQuote, post }),
+        fallbackUrl: lane.imageUrl,
+      });
+
+      if (artwork.publicUrl) {
+        imageUrl = artwork.publicUrl;
+        post.imageUrl = artwork.publicUrl;
+      }
+
+      if (!artwork.ok) {
+        warn("zernio.monday.artwork.fallback", {
+          publishDate,
+          fallbackUrl: lane.imageUrl,
+          error: artwork.error,
+        });
+      }
     }
 
     if (laneKey === "sunday") {
