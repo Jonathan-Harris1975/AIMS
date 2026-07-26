@@ -7,7 +7,7 @@
 // is the same thing every other "*-council" module in this directory owns:
 // producing a RAMS-readable report.json/latest.json in the R2 audits bucket
 // that RAMS's monthly pass reads, exactly like brand-social-council,
-// seo-aeo-geo-council and mobile-ux-council already do.
+// the unified website audit and brand-social council already do.
 //
 // Metrics covered (per the newsletter engine spec):
 //   - QA pass rate (how many issues cleared review without hitting
@@ -251,7 +251,7 @@ export function getNewsletterAuditStatus() {
     auditType: AUDIT_TYPE,
     profiles: listNewsletterProfiles().map((p) => p.id),
     output: ["report.html", "report.json", "latest.json"],
-    note: "Feeds the monthly RAMS audit pass, same as brand-social-council / seo-aeo-geo-council / mobile-ux-council.",
+    note: "Feeds the monthly RAMS audit pass, same governance lane as brand-social-council and the unified website audit.",
   };
 }
 

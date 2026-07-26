@@ -45,6 +45,11 @@ Non-negotiable rules:
 - Prefer fixes that improve several objectives at once.
 - Prioritise confirmed blockers, then high-impact Quick Wins, then medium lifts, then strategic investments.
 - Recommendations must be executable by a small team and include exact change, owner, acceptance criterion and verification method.
+- The masterIssueLedger is the machine-readable remediation contract consumed by RAMS. Build it deliberately rather than copying prose rows.
+- Mark a masterIssueLedger row classification="code_fix" ONLY when ALL of these are true: confidence is exactly Confirmed; the source audits explicitly name one or more exact repository-relative files; affectedPaths contains only those verbatim observed file paths; sourceFindingIds is non-empty; exactRemediation is deterministic; and fixClass is one of the allowed website fix classes in the required JSON shape.
+- Never infer a repository file from a URL, route, selector, template family or likely implementation. Never invent affectedPaths. When the source evidence names only a URL/route, use classification="manual_review" and leave affectedPaths empty.
+- Use classification="future_guidance" for editorial, strategic or content recommendations that are not a deterministic repository patch. Use classification="manual_review" for anything else that lacks the full code_fix evidence contract.
+- R2/AIMS-owned generated podcast or transcript content must not be presented as a static website repository code_fix unless the source evidence explicitly identifies a governed website source file that actually controls the defect.
 - Do not repeat the three reports. Synthesize them.
 - Use British English and direct language.
 - Return JSON only. No markdown fences. No private chain-of-thought.
@@ -85,7 +90,25 @@ Required JSON shape:
   "implementationProgramme":{"days0to14":[],"days15to30":[],"days31to60":[],"days61to90":[]},
   "measurementPlan":[{"objective":"...","metric":"...","eventOrSource":"...","baseline":"Not supplied|...","successCriterion":"..."}],
   "gapMatrix":[{"area":"...","currentState":"...","targetState":"...","priority":"...","owner":"..."}],
-  "masterIssueLedger":[],
+  "masterIssueLedger":[{
+    "findingId":"U-001",
+    "title":"...",
+    "rootCause":"...",
+    "severity":"Critical|High|Medium|Low",
+    "confidence":"Confirmed|Probable|Needs Verification",
+    "classification":"code_fix|manual_review|future_guidance",
+    "fixClass":"html_fix|css_fix|meta_fix|schema_fix|structured_data_fix|canonical_fix|redirect_fix|crawler_fix|sitemap_fix|robots_fix|llms_fix|accessibility_fix|template_fix|partial_fix|internal_link_fix|viewport_fix|",
+    "affected":["URL, route, template or human-readable scope"],
+    "affectedPaths":["exact/repo-relative/file.ext"],
+    "evidence":["specific observed evidence"],
+    "exactRemediation":"...",
+    "expectedGain":"...",
+    "effort":"Quick Win|Medium Lift|Strategic Investment",
+    "owner":"...",
+    "acceptanceCriterion":"...",
+    "verificationMethod":"...",
+    "sourceFindingIds":["source-audit-finding-id"]
+  }],
   "councilRecord":{"seats":[{"seat":1,"role":"...","reviewNote":"..."}],"majorVotes":[{"decision":"...","outcome":"..."}],"dissent":[],"rejectedAssumptions":[],"unresolvedVerificationItems":[]},
   "definitionOfDone":[]
 }`;
@@ -427,7 +450,7 @@ export function buildWebsiteAuditHtml({ websiteUrl, sessionId, generatedAt = new
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Website Growth, Search & Mobile Audit</title><style>
     @page{size:A4;margin:16mm 12mm 18mm}*{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;color:#172033;margin:0;font-size:9.5pt;line-height:1.45}h1{font-size:27pt;line-height:1.05;margin:0 0 8mm}h2{font-size:17pt;margin:9mm 0 4mm;border-bottom:2px solid #172033;padding-bottom:2mm}h3{font-size:12pt;margin:6mm 0 2mm}p{margin:0 0 3mm}.cover{min-height:245mm;display:flex;flex-direction:column;justify-content:center;page-break-after:always}.kicker{font-size:10pt;text-transform:uppercase;letter-spacing:.12em;font-weight:700}.subtitle{font-size:14pt;max-width:145mm}.meta{margin-top:14mm;padding:5mm;border:1px solid #cbd5e1;border-radius:3mm}.section{break-inside:auto}.pagebreak{page-break-before:always}.callout{padding:4mm 5mm;border-left:4px solid #172033;background:#f1f5f9;margin:4mm 0}.muted{color:#64748b}.chips span{display:inline-block;border:1px solid #cbd5e1;border-radius:99px;padding:1.2mm 2.5mm;margin:0 1mm 1mm 0;font-size:8pt}table{width:100%;border-collapse:collapse;margin:3mm 0 5mm;table-layout:fixed}th,td{border:1px solid #d8dee8;padding:2.2mm;vertical-align:top;word-break:break-word}th{background:#eef2f7;text-align:left;font-size:8.2pt}td{font-size:8pt}ul{margin:2mm 0 4mm 5mm;padding-left:4mm}li{margin:0 0 1.6mm}.small{font-size:8pt}.avoid{break-inside:avoid}.toc li{margin-bottom:1mm}.ledger td:nth-child(1){width:8%}.coverage{font-size:7pt}.coverage td,.coverage th{font-size:6.7pt;padding:1.3mm}.status{font-weight:700}.footer-note{margin-top:8mm;font-size:7.5pt;color:#64748b}
   </style></head><body>
-  <section class="cover"><div class="kicker">Unified Website Audit</div><h1>Digital Growth + Full-Estate SEO/AEO/GEO + Mobile UX</h1><p class="subtitle">One evidence-led council report for ${esc(websiteUrl)}. Three audit lenses, one implementation order, one retained PDF.</p><div class="meta"><p><strong>Session:</strong> ${esc(sessionId)}</p><p><strong>Generated:</strong> ${esc(generatedAt)}</p><p><strong>Council:</strong> ${WEBSITE_AUDIT_COUNCIL_MEMBERS.length} specialist seats</p><p><strong>Synthesis state:</strong> ${esc(council.synthesisState)}</p>${sourceState.map(([name,status])=>`<p><strong>${esc(name)}:</strong> ${esc(status)}</p>`).join("")}</div></section>
+  <section class="cover"><div class="kicker">Unified Website Audit</div><h1>Digital Growth + Full-Estate SEO/AEO/GEO + Mobile UX</h1><p class="subtitle">One evidence-led council report for ${esc(websiteUrl)}. Three audit lenses, one implementation order, one retained report set in PDF, HTML and JSON.</p><div class="meta"><p><strong>Session:</strong> ${esc(sessionId)}</p><p><strong>Generated:</strong> ${esc(generatedAt)}</p><p><strong>Council:</strong> ${WEBSITE_AUDIT_COUNCIL_MEMBERS.length} specialist seats</p><p><strong>Synthesis state:</strong> ${esc(council.synthesisState)}</p>${sourceState.map(([name,status])=>`<p><strong>${esc(name)}:</strong> ${esc(status)}</p>`).join("")}</div></section>
 
   <section><h2>1. Executive Scorecard</h2>${scorecardHtml(council.scorecard)}<div class="callout"><strong>Executive synthesis.</strong> ${esc(council.executiveSummary)}</div></section>
   <section><h2>2. Council Verdict</h2><p><strong>Overall diagnosis:</strong> ${esc(verdict.overallDiagnosis || "")}</p><p><strong>Biggest structural weakness:</strong> ${esc(verdict.biggestStructuralWeakness || "")}</p><p><strong>Biggest commercial opportunity:</strong> ${esc(verdict.biggestCommercialOpportunity || "")}</p><p><strong>Biggest search opportunity:</strong> ${esc(verdict.biggestSearchOpportunity || "")}</p><p><strong>Biggest mobile risk:</strong> ${esc(verdict.biggestMobileRisk || "")}</p><p><strong>Greatest cross-objective lever:</strong> ${esc(verdict.greatestCrossObjectiveLever || "")}</p><h3>Strongest assets</h3>${listHtml(verdict.strongestAssets)}</section>
@@ -443,7 +466,7 @@ export function buildWebsiteAuditHtml({ websiteUrl, sessionId, generatedAt = new
   <section><h2>12. Master Issue Ledger</h2>${table(["ID","Severity","Confidence","Issue","Affected","Remediation","Effort","Owner"], findingRows(council.masterIssueLedger))}</section>
   <section class="pagebreak"><h2>13. Full URL Coverage Appendix</h2><p class="small">Deterministic URL coverage is taken directly from the SEO/AEO/GEO audit evidence rather than regenerated by the council.</p>${seoCoverage.length ? `<table class="coverage"><thead><tr><th>URL</th><th>Page type</th><th>Status</th><th>Canonical</th><th>Indexability</th><th>Coverage state</th><th>Verdict / score</th></tr></thead><tbody>${seoCoverage.map(row=>`<tr>${row.map(c=>`<td>${c}</td>`).join("")}</tr>`).join("")}</tbody></table>` : "<p class='muted'>Full URL ledger was not available from the SEO stage.</p>"}</section>
   <section class="pagebreak"><h2>14. Council Record</h2><p>The council uses independent specialist review, contradiction analysis, root-cause clustering, prioritisation and final deliberation. Notes below are decision summaries, not private reasoning.</p>${table(["Seat","Role","Review note"], seats)}<h3>Major decisions</h3>${listHtml(council.councilRecord?.majorVotes, (i)=>typeof i==="string"?i:`${i.decision || "Decision"}: ${i.outcome || ""}`)}<h3>Dissent</h3>${listHtml(council.councilRecord?.dissent, (i)=>typeof i==="string"?i:i.note||i.dissent||i.position)}<h3>Rejected assumptions</h3>${listHtml(council.councilRecord?.rejectedAssumptions)}<h3>Unresolved verification items</h3>${listHtml(council.councilRecord?.unresolvedVerificationItems)}</section>
-  <section><h2>15. Definition of Done</h2>${listHtml(council.definitionOfDone)}<p class="footer-note">Retention contract: the final PDF is the only audit artefact retained by the website audit pipeline. Stage artefacts are temporary working evidence and are deleted after successful final report publication.</p></section>
+  <section><h2>15. Definition of Done</h2>${listHtml(council.definitionOfDone)}<p class="footer-note">Retention contract: only the final PDF, HTML and JSON representations are retained by the website audit pipeline. Stage artefacts are temporary working evidence and are deleted after successful final report-set publication.</p></section>
   </body></html>`;
 }
 
