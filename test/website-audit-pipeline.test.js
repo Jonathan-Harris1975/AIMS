@@ -11,18 +11,23 @@ test("unified website audit routes are mounted and MAST-facing run endpoint exis
   assert.match(index, /router\.use\("\/website", websiteRoutes\)/);
   assert.match(index, /router\.use\("\/digital-growth", digitalGrowthRoutes\)/);
   assert.match(website, /router\.post\("\/run", hookdeckDedupe\("audits:website:run"\)/);
-  assert.match(website, /retentionPolicy: "final-pdf-only"/);
+  assert.match(website, /retentionPolicy: "final-pdf-html-json-only"/);
   assert.match(digital, /WORKFLOW_ID = "digital-growth-audit\.yml"/);
 });
 
-test("AIMS owns the sequential website audit stages and one final PDF retention contract", () => {
+test("AIMS owns the sequential website audit stages and the three-format final report retention contract", () => {
   const pipeline = read("audits/utils/websiteAuditPipeline.js");
   assert.match(pipeline, /auditType: "digital-growth"/);
   assert.match(pipeline, /auditType: "seo-aeo-geo"/);
   assert.match(pipeline, /auditType: "mobile-ux"/);
   assert.match(pipeline, /audits\/_tmp\/website/);
   assert.match(pipeline, /website-audit\.pdf/);
-  assert.match(pipeline, /retainedArtefacts: \[finalReportUrl\]/);
+  assert.match(pipeline, /website-audit\.html/);
+  assert.match(pipeline, /website-audit\.json/);
+  assert.match(pipeline, /final-pdf-html-json-only/);
+  assert.match(pipeline, /retainedArtefacts = \[pdf\.url, htmlReport\.url, jsonReport\.url\]/);
+  assert.match(pipeline, /dispatchWebsiteAuditToRams/);
+  assert.match(pipeline, /remediationContractVersion: "rams-website\/v1"/);
   assert.match(pipeline, /strictTemporaryCleanup/);
   assert.match(pipeline, /cleanupAuditPrefix\(\{ reportPrefix: tempPrefix \}\)/);
   assert.match(pipeline, /stale child callback/);
@@ -35,10 +40,10 @@ test("pipeline child audits suppress standalone latest pointers and legacy counc
   const mobile = read("audits/routes/mobileUx.js");
   assert.match(orchestrator, /const suppressLatest = body\.suppressLatest === true \|\| body\.temporaryArtifacts === true \|\| Boolean\(pipelineSessionId\)/);
   assert.match(orchestrator, /if \(!suppressLatest\) \{/);
-  assert.match(seo, /if \(result\?\.job\?\.pipelineSessionId\) return null/);
-  assert.match(mobile, /if \(result\?\.job\?\.pipelineSessionId\) return null/);
   assert.match(seo, /resumeWebsiteAuditPipelineFromChild/);
   assert.match(mobile, /resumeWebsiteAuditPipelineFromChild/);
+  assert.doesNotMatch(seo, /maybeRunSeoAeoGeoCouncil|seoAeoGeoCouncil/);
+  assert.doesNotMatch(mobile, /maybeRunMobileUxCouncil|mobileUxCouncil/);
 });
 
 test("final website council has 24 specialist seats and rendered Mobile UX remains hard-gated", () => {
@@ -49,6 +54,10 @@ test("final website council has 24 specialist seats and rendered Mobile UX remai
   assert.match(council, /Not Scored - Evidence Gate Not Met/);
   assert.match(council, /renderWebsiteAuditPdf/);
   assert.match(council, /playwright-core/);
+  assert.match(council, /masterIssueLedger is the machine-readable remediation contract consumed by RAMS/);
+  assert.match(council, /classification=\"code_fix\" ONLY/);
+  assert.match(council, /affectedPaths contains only those verbatim observed file paths/);
+  assert.match(council, /sourceFindingIds/);
 });
 
 test("audit publisher supports binary final PDFs and verified recursive temporary cleanup", () => {
@@ -57,4 +66,18 @@ test("audit publisher supports binary final PDFs and verified recursive temporar
   assert.match(publisher, /index \+= 1000/);
   assert.match(publisher, /Audit cleanup left \$\{remaining\.length\} object/);
   assert.match(publisher, /remaining/);
+});
+
+
+test("AIMS dispatches RAMS website remediation by exact final JSON key with retry endpoint", () => {
+  const dispatch = read("audits/utils/ramsWebsiteDispatch.js");
+  const routes = read("audits/routes/website.js");
+  const index = read("audits/routes/index.js");
+  assert.match(dispatch, /\/rebuild\/website\/run/);
+  assert.match(dispatch, /audit_json_key: auditJsonKey/);
+  assert.match(dispatch, /x-idempotency-key/);
+  assert.match(routes, /\/jobs\/:sessionId\/rams\/retry/);
+  assert.match(read("audits/utils/websiteAuditPipeline.js"), /Preserve the pipeline invariant on retries too/);
+  assert.match(read("audits/utils/websiteAuditPipeline.js"), /cleanupRequired: false/);
+  assert.doesNotMatch(index, /seo-aeo-geo-council|mobile-ux-council/);
 });
