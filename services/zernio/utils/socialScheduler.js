@@ -17,6 +17,7 @@ import { ANTI_HYPE_HEDGING_PHRASES, BANNED_PROMO_PATTERNS, ENGAGEMENT_BAIT_PATTE
 import { buildIntentHash, completeEditorialReservation, hasRecentAudienceIntent, recordEditorialEvent, releaseEditorialReservation, reserveEditorialSource } from "../../social/editorialLedger.js";
 import { emitQaEvent } from "../../shared/utils/qaEvents.js";
 import { createSocialArtwork } from "../../artwork/createSocialArtwork.js";
+import { createQuizArtwork } from "../../artwork/createQuizArtwork.js";
 
 
 const ZERNIO_DAILY_MAX_TOKENS = Math.max(1200, Number(process.env.ZERNIO_DAILY_MAX_TOKENS || 1400));
@@ -1770,6 +1771,82 @@ export async function buildAndScheduleEbookWeekly(options = {}) {
   };
 }
 
+function parseQuizQuestionCard(content = "") {
+  const clean = stripHashtags(content);
+  const lines = clean.split(/\n+/).map((line) => line.trim()).filter(Boolean);
+  const optionLines = lines.filter((line) => /^[A-D]\)\s+/i.test(line));
+
+  const options = optionLines.slice(0, 4).map((line) => ({
+    letter: line.slice(0, 1).toUpperCase(),
+    text: line.replace(/^[A-D]\)\s*/i, "").trim(),
+  }));
+
+  const question = lines
+    .filter((line) => !/^[A-D]\)\s+/i.test(line))
+    .filter((line) => !/^Comment your answer below\.?$/i.test(line))
+    .join(" ")
+    .trim();
+
+  return { question, options };
+}
+
+function parseQuizCorrectAnswer(answerContent = "", options = []) {
+  const clean = stripHashtags(answerContent)
+    .replace(/^Quiz Answer!\s*/i, "")
+    .trim();
+
+  const match = clean.match(/\b([A-D])\)\s*([^.!?\n]+)/i);
+  const letter = match?.[1]?.toUpperCase() || "";
+  const option = options.find((item) => item.letter === letter);
+
+  const firstSentenceEnd = clean.search(/[.!?](?:\s|$)/);
+  const explanation = (firstSentenceEnd >= 0 ? clean.slice(firstSentenceEnd + 1) : clean)
+    .replace(/Did you get it right\??/gi, "")
+    .trim();
+
+  return {
+    letter,
+    text: option?.text || compactText(match?.[2] || ""),
+    explanation,
+  };
+}
+
+function buildQuizQuestionArtworkPrompt({ title, question, options } = {}) {
+  const optionBlock = options.map(({ letter, text }) => `${letter}) ${text}`).join("\n");
+
+  return [
+    "QUESTION CARD.",
+    `Header text: ${compactText(title || "AI Quiz")}`,
+    `Question text: ${compactText(question)}`,
+    "Render these four answer choices exactly, each in its own large horizontal panel:",
+    optionBlock,
+    "Do not highlight, tick, colour-code, enlarge or otherwise reveal which answer is correct.",
+    "Give every option equal visual weight.",
+    "Use a small simple diagram or icon beside each option where it improves recognition.",
+    'Footer text: "Comment your answer below."',
+    "Keep the design highly readable on a phone and visually energetic enough to encourage comments.",
+  ].join("\n");
+}
+
+function buildQuizAnswerArtworkPrompt({ title, question, options, correct } = {}) {
+  const optionBlock = options.map(({ letter, text }) => `${letter}) ${text}`).join("\n");
+
+  return [
+    "ANSWER REVEAL CARD.",
+    `Small header text: ${compactText(title || "AI Quiz Answer")}`,
+    `Question context: ${compactText(question)}`,
+    "Keep all four original options visible:",
+    optionBlock,
+    `Correct answer: ${correct.letter}) ${correct.text}`,
+    `Short explanation: ${compactText(correct.explanation).slice(0, 260)}`,
+    `Strongly highlight only ${correct.letter}) ${correct.text} with a clear correct-answer treatment.`,
+    "Keep the three incorrect options visible but visually quieter.",
+    "Place one subtle semi-transparent topic-relevant diagram or visual motif behind the explanation area, with enough contrast that all text remains easy to read.",
+    "Do not add extra slogans, invented facts, fake labels or unrelated words.",
+    'Footer text: "Did you get it right?"',
+  ].join("\n");
+}
+
 export async function buildAndScheduleQuizSeries(options = {}) {
   const questionPublishDate = options.questionPublishDate || nextWeekdayDateString("wednesday", DEFAULT_TIMEZONE, new Date());
   const answerPublishDate = options.answerPublishDate || addDays(questionPublishDate, 1);
@@ -1779,8 +1856,8 @@ export async function buildAndScheduleQuizSeries(options = {}) {
   const accountId = normaliseZernioAccountId(options.accountId || getZernioAccountId());
   const apiKey = options.apiKey || process.env.ZERNIO_META_API_KEY;
   const dryRun = Boolean(options.dryRun);
-  const questionImageUrl = options.questionImageUrl || QUIZ_CONFIG.questionImageUrl;
-  const answerImageUrl = options.answerImageUrl || QUIZ_CONFIG.answerImageUrl;
+  let questionImageUrl = options.questionImageUrl || QUIZ_CONFIG.questionImageUrl;
+  let answerImageUrl = options.answerImageUrl || QUIZ_CONFIG.answerImageUrl;
 
   const questionSlotClaim = await claimZernioSlot({
     scope: "quiz:question",
@@ -1905,6 +1982,59 @@ export async function buildAndScheduleQuizSeries(options = {}) {
       });
       Object.assign(answerPost, reviewed.post);
       answerGate = reviewed.gate;
+    }
+
+    if (!dryRun) {
+      const parsedQuiz = parseQuizQuestionCard(questionPost.content);
+      const correct = parseQuizCorrectAnswer(answerPost.content, parsedQuiz.options);
+
+      if (parsedQuiz.options.length !== 4 || !correct.letter || !correct.text) {
+        warn("zernio.quiz.artwork.static_fallback", {
+          questionPublishDate,
+          reason: "quiz-structure-not-safe-for-image-generation",
+          parsedOptionCount: parsedQuiz.options.length,
+          correctLetter: correct.letter || null,
+        });
+      } else {
+        if (!options.questionImageUrl) {
+          const questionArtwork = await createQuizArtwork({
+            sessionId: `ZERNIO-QUIZ-${questionPublishDate}`,
+            cardType: "question",
+            date: questionPublishDate,
+            prompt: buildQuizQuestionArtworkPrompt({
+              title: questionPost.title,
+              question: parsedQuiz.question,
+              options: parsedQuiz.options,
+            }),
+            fallbackUrl: QUIZ_CONFIG.questionImageUrl,
+          });
+
+          if (questionArtwork.publicUrl) {
+            questionImageUrl = questionArtwork.publicUrl;
+            questionPost.imageUrl = questionArtwork.publicUrl;
+          }
+        }
+
+        if (!options.answerImageUrl) {
+          const answerArtwork = await createQuizArtwork({
+            sessionId: `ZERNIO-QUIZ-${questionPublishDate}`,
+            cardType: "answer",
+            date: answerPublishDate,
+            prompt: buildQuizAnswerArtworkPrompt({
+              title: answerPost.title,
+              question: parsedQuiz.question,
+              options: parsedQuiz.options,
+              correct,
+            }),
+            fallbackUrl: QUIZ_CONFIG.answerImageUrl,
+          });
+
+          if (answerArtwork.publicUrl) {
+            answerImageUrl = answerArtwork.publicUrl;
+            answerPost.imageUrl = answerArtwork.publicUrl;
+          }
+        }
+      }
     }
 
     if (!dryRun && apiKey && !questionSlotClaim.duplicatePrevented && !answerSlotClaim.duplicatePrevented) {

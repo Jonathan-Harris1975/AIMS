@@ -205,7 +205,8 @@ ${renderHistoryBlock(history)}
 
 Requirements:
 - Topic must be AI, machine learning, or computing literacy
-- Make the question feel clean, quick to read, and genuinely answerable
+- Make the question feel clean, quick to read, genuinely answerable, and interesting enough to stop a social scroll
+- Prefer questions that test practical AI understanding rather than obscure trivia
 - Use plain text only, not markdown
 - Question post content target: 45 to 75 words
 - Ask one clear question on the first line
@@ -214,14 +215,16 @@ Requirements:
 - Exactly one option must be correct
 - Wrong answers must be plausible but clearly wrong once explained
 - Avoid trick questions, vague wording, and giveaway joke answers
-- End the question post with: Comment your answer below.
+- End the question post with exactly: Comment your answer below.
+- The question should create genuine curiosity without clickbait or trick wording
 - Do not ask readers to tag friends, follow, share, or like the post.
 - Answer post content target: 35 to 65 words
 - answerContent must start exactly with: Quiz Answer!
 - Do not start answerContent with Answer:, Correct answer:, The answer is, or any other marker
-- State the correct option clearly in the first sentence
+- State the correct option clearly in the first sentence, including its letter and answer label
 - Explain why in plain English, quickly and cleanly
-- End the answer post with: Did you get it right?
+- Add one useful contrast explaining why the most plausible wrong option is not correct when space allows
+- End the answer post with exactly: Did you get it right?
 
 JSON only.`,
   };
