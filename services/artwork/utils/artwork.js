@@ -58,6 +58,17 @@ export function buildInstruction(prompt, mode = "podcast", date) {
     ].join(" ");
   }
 
+
+  if (mode === "social") {
+    return [
+      "Create a premium square editorial social-media image.",
+      "Composition: strong single focal subject, instantly readable at thumbnail size, cinematic depth, high contrast, modern magazine-quality framing.",
+      "Style: intelligent, contemporary, human, engaging and editorial rather than corporate or stock-photo-like.",
+      `Creative direction: ${policyPrompt}`,
+      "Final compliance check: inspect the whole composition and remove every accidental letter-like, number-like, logo-like or watermark-like mark before returning the image.",
+    ].join(" ");
+  }
+
   return [
     "Create a 1400x1400 premium editorial podcast cover art image for an adult AI news show.",
     "Mood: sharp, sceptical, intelligent, cinematic, grounded, modern and minimal.",
@@ -79,6 +90,11 @@ export function buildShortInstruction(prompt, mode = "podcast", date) {
 
   if (mode === "blog") {
     return `Editorial blog hero image, cinematic landscape banner, premium and restrained. ${trimmedDirection} No text, letters, numbers, logos or watermarks.`;
+  }
+
+
+  if (mode === "social") {
+    return `Premium square editorial social image, one strong recognisable focal subject, cinematic, high contrast and engaging. ${trimmedDirection} No text, letters, numbers, logos or watermarks.`;
   }
 
   return `Premium editorial podcast cover art, abstract technological realism, minimal. ${trimmedDirection} No text, letters, numbers, logos or watermarks.`;
@@ -222,4 +238,8 @@ export async function generatePodcastArtwork(prompt, options = {}) {
 
 export async function generateBlogArtwork(prompt, options = {}) {
   return generateArtworkBase64(prompt, { ...options, mode: "blog" });
+}
+
+export async function generateSocialArtwork(prompt, options = {}) {
+  return generateArtworkBase64(prompt, { ...options, mode: "social" });
 }
