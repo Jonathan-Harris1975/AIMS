@@ -148,11 +148,87 @@ function detectSpotlightPerson(post = {}) {
   return candidate || String(post.topic || "").replace(/^(spotlight|profile|figure):?\s*/i, "").trim();
 }
 
+
+function ensureMondayVerifiedQuote(post = {}, verifiedQuote = null) {
+  if (!verifiedQuote?.quote || !verifiedQuote?.author) return post;
+  const exactLine = `"${verifiedQuote.quote}" — ${verifiedQuote.author}`;
+  const content = compactText(post.content || "");
+  const quoteNormalised = normaliseSimple(verifiedQuote.quote);
+  const authorNormalised = normaliseSimple(verifiedQuote.author);
+  const hasQuote = quoteNormalised && normaliseSimple(content).includes(quoteNormalised);
+  const hasAuthor = authorNormalised && normaliseSimple(content).includes(authorNormalised);
+
+  if (hasQuote && hasAuthor) {
+    // Council repairs may legitimately British-localise surrounding copy, but
+    // a sourced quotation is immutable evidence. Restore its exact ledger text.
+    const lines = content.split("\n");
+    const firstBodyLine = lines.findIndex((line) => normaliseSimple(line).includes(quoteNormalised));
+    if (firstBodyLine >= 0) lines[firstBodyLine] = exactLine;
+    return { ...post, content: lines.join("\n").trim() };
+  }
+
+  return { ...post, content: `${exactLine}\n\n${content}`.trim() };
+}
+
+function looksLikePersonName(value = "") {
+  const text = compactText(value);
+  if (!text || text.length > 80) return false;
+  const words = text.split(/\s+/).filter(Boolean);
+  if (words.length < 2 || words.length > 5) return false;
+  if (/\b(ai|artificial|intelligence|identity|lifecycle|management|system|systems|model|models|network|networks|learning|ethics|policy|governance|technology|tech|future|history)\b/i.test(text)) return false;
+  return words.every((word) => /^[A-Z][A-Za-z'’.-]*$/.test(word));
+}
+
+function addDailyLaneAlignmentChecks({ laneKey = "", post = {}, defects = [] } = {}) {
+  const content = compactText(post.content || "");
+  if (!content) return defects;
+
+  if (laneKey === "tuesday" && !/\b(model|models|token|tokens|transformer|embedding|embeddings|inference|training|neural|algorithm|machine learning|context window|prompt|agent|agents|vector|retrieval|RAG|computer vision|classification|fine[- ]?tun|quantis|reasoning)\b/i.test(content)) {
+    defects.push("Tuesday post drifted away from explaining a concrete AI, machine-learning, or computing concept.");
+  }
+
+  if (laneKey === "wednesday" && !/\b(writer|writers|author|authors|draft|drafting|edit|editing|outline|research|story|stories|content|repurpos|manuscript)\b/i.test(content)) {
+    defects.push("Wednesday post drifted away from practical work for writers, authors, or content creators.");
+  }
+
+  if (laneKey === "thursday") {
+    const hasSector = /\b(bank|banking|finance|financial|healthcare|hospital|clinical|retail|manufactur|factory|legal|law firm|insurance|logistics|supply chain|education|school|university|energy|utility|agriculture|media|telecom|public sector|government|cybersecurity|security operations)\b/i.test(content);
+    const hasTask = /\b(triage|forecast|document|quality check|routing|fraud|admin|review|detect|classification|schedule|maintenance|inspection|claims|diagnos|inventory|support|monitor|analyse|analysis|search|summaris|extract)\b/i.test(content);
+    if (!hasSector || !hasTask) defects.push("Thursday post must name a believable industry and one concrete task where AI helps.");
+  }
+
+  if (laneKey === "saturday") {
+    if (!/\b(ethic|policy|risk|fairness|bias|privacy|accountability|governance|consent|safety|rights|responsib|trade[- ]?off)\b/i.test(content)) {
+      defects.push("Saturday post drifted away from a clear AI ethics or policy tension.");
+    }
+    if (!/[?]/.test(content) && !/\b(comment|what do you think|where would you draw|how should|should we)\b/i.test(content)) {
+      defects.push("Saturday post needs a natural reader question or invitation to discuss the ethical trade-off.");
+    }
+  }
+
+  if (laneKey === "sunday") {
+    const person = compactText(post.spotlightPerson || "");
+    if (!looksLikePersonName(person)) {
+      defects.push("Sunday spotlight must identify a real-looking canonical person name in spotlightPerson; concepts and topic labels are not valid people.");
+    } else if (!normaliseSimple(content).includes(normaliseSimple(person))) {
+      defects.push("Sunday spotlight content must name the supplied spotlightPerson.");
+    }
+    if (!/\b(created|developed|introduced|pioneered|invented|founded|research|researcher|work|contribution|contributed|known for|helped build|designed|proposed|published)\b/i.test(content)) {
+      defects.push("Sunday spotlight must explain the person's concrete contribution, not merely discuss an AI topic.");
+    }
+  }
+
+  return defects;
+}
+
 function runZernioSocialGate({ contentType = "zernio-social", laneKey = "", post = {}, verifiedQuote = null, buildContext = "" } = {}) {
   const defects = [];
   const warnings = [];
   const text = compactText([post.title, post.topic, post.content, post.firstComment].filter(Boolean).join("\n"));
   const content = compactText(post.content || "");
+  const styleText = laneKey === "monday" && verifiedQuote?.quote
+    ? text.replace(verifiedQuote.quote, "").replace(verifiedQuote.author || "", "")
+    : text;
   const hashtags = extractHashtags(content);
   const words = wordCount(content);
 
@@ -162,24 +238,24 @@ function runZernioSocialGate({ contentType = "zernio-social", laneKey = "", post
   if (genericTags.length > 1) warnings.push("Post uses more than one generic hashtag; keep premium channels tidy.");
   const motivationalTags = hashtags.filter((tag) => MOTIVATIONAL_HASHTAGS.includes(String(tag).toLowerCase()));
   if (motivationalTags.length) defects.push(`Motivational hashtag(s) do not fit the brand: ${motivationalTags.join(", ")}`);
-  for (const phrase of findPlainPhraseBreaches(text, ANTI_HYPE_HEDGING_PHRASES)) {
+  for (const phrase of findPlainPhraseBreaches(styleText, ANTI_HYPE_HEDGING_PHRASES)) {
     defects.push(`Generic hedging phrase detected: ${phrase}`);
   }
-  for (const breach of findPatternBreaches(text, MOTIVATIONAL_TONE_PATTERNS)) {
+  for (const breach of findPatternBreaches(styleText, MOTIVATIONAL_TONE_PATTERNS)) {
     defects.push(`Motivational tone drift: ${breach}`);
   }
   if (/```|\*\*|^\s*[-*]\s+/m.test(content)) defects.push("Post contains markdown or bullet formatting.");
   if (/\p{Extended_Pictographic}/u.test(content)) defects.push("Post contains emoji despite brand rules.");
 
-  for (const breach of findPatternBreaches(text, BANNED_PROMO_PATTERNS)) {
+  for (const breach of findPatternBreaches(styleText, BANNED_PROMO_PATTERNS)) {
     defects.push(`Brand tone breach: ${breach}`);
   }
-  for (const term of findGenericAbstractionBreaches(text)) {
+  for (const term of findGenericAbstractionBreaches(styleText)) {
     defects.push(
       `Generic abstraction phrase detected: "${term}". Replace with a concrete effect (what specifically changes: who/what/impact).`
     );
   }
-  for (const { american, british } of findAmericanSpellings(text)) {
+  for (const { american, british } of findAmericanSpellings(styleText)) {
     defects.push(`British English drift: use ${british} instead of ${american}`);
   }
 
@@ -218,6 +294,8 @@ function runZernioSocialGate({ contentType = "zernio-social", laneKey = "", post
     }
   }
 
+  addDailyLaneAlignmentChecks({ laneKey, post, defects });
+
   if (/ebook/i.test(contentType)) {
     for (const breach of findPatternBreaches(content, INFLATED_EBOOK_CLAIM_PATTERNS)) {
       defects.push(`Inflated ebook claim detected: ${breach}`);
@@ -246,13 +324,16 @@ function runZernioSocialGate({ contentType = "zernio-social", laneKey = "", post
   };
 }
 
-async function reviewZernioGateOrThrow({ councilKey = "zernio-social-copy", gate, post, contentType, laneKey = "", featuredBook = null, label = "Zernio social gate", validate }) {
+async function reviewZernioGateOrThrow({ councilKey = "zernio-social-copy", gate, post, contentType, laneKey = "", featuredBook = null, verifiedQuote = null, label = "Zernio social gate", validate }) {
   const review = await runReviewCouncilGate({
     councilKey,
     gate,
     artifact: post,
     contentType,
-    repairArtifact: (candidate) => repairZernioPostForReviewCouncil(candidate, { contentType, featuredBook }),
+    repairArtifact: (candidate) => {
+      const repaired = repairZernioPostForReviewCouncil(candidate, { contentType, featuredBook });
+      return laneKey === "monday" ? ensureMondayVerifiedQuote(repaired, verifiedQuote) : repaired;
+    },
     validate: (candidate) => validate
       ? validate(candidate)
       : runZernioSocialGate({ contentType, laneKey, post: candidate }),
@@ -979,6 +1060,8 @@ export async function buildAndScheduleDailyLane(laneKey, options = {}) {
       allowDuplicate: Boolean(options.allowDuplicate ?? options.crosspost ?? false),
     };
 
+    if (laneKey === "monday") Object.assign(post, ensureMondayVerifiedQuote(post, verifiedQuote));
+
     let zernioSocialGate = runZernioSocialGate({
       contentType: `zernio-daily-${laneKey}`,
       laneKey,
@@ -993,6 +1076,7 @@ export async function buildAndScheduleDailyLane(laneKey, options = {}) {
         post,
         contentType: `zernio-daily-${laneKey}`,
         laneKey,
+        verifiedQuote,
         label: `${lane.label} social gate`,
         validate: (candidate) => runZernioSocialGate({
           contentType: `zernio-daily-${laneKey}`,
@@ -1007,9 +1091,9 @@ export async function buildAndScheduleDailyLane(laneKey, options = {}) {
     }
 
     if (laneKey === "sunday") {
-      const spotlightPerson = detectSpotlightPerson(post);
-      if (!spotlightPerson) {
-        const err = new Error("Sunday spotlight requires a canonical spotlightPerson value.");
+      const spotlightPerson = compactText(post.spotlightPerson || "");
+      if (!looksLikePersonName(spotlightPerson)) {
+        const err = new Error("Sunday spotlight requires a valid canonical spotlightPerson value from the generator.");
         err.statusCode = 422;
         err.zernioSocialGate = { ...zernioSocialGate, defects: [...zernioSocialGate.defects, err.message] };
         throw err;

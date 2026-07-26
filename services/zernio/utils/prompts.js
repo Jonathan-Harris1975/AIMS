@@ -67,8 +67,11 @@ Content target: 50 to 80 words.`,
 Cover who they are, what they contributed, and why that still matters now.
 Write it as natural prose, not a list.
 Do not produce comma-chained biography fragments, CV shorthand, bullet-style structure, or metadata-style summaries.
-Use the RSS context only if it clearly surfaces a credible and timely person worth featuring.
-If the RSS context is weak, irrelevant, or thin, ignore it and write a strong standalone spotlight.
+Use the RSS context only if it clearly surfaces a credible and timely named person worth featuring.
+Never turn a concept, product, security topic, governance issue, or generic AI theme into the Sunday spotlight.
+spotlightPerson must contain the canonical name of the human being featured, never a topic label.
+The content must name that person and explain at least one concrete contribution they made.
+If the RSS context does not contain a suitable named person, ignore it and write a strong standalone spotlight about a genuine AI figure.
 End with a brief reflection or natural reader prompt.
 Content target: 55 to 85 words.`,
   };
@@ -117,6 +120,7 @@ Output rules:
 - never use generic abstraction words as a substitute for a real point: "landscape", "revolution", "paradigm", "game-changer", "transform", "unprecedented"
 - if you would reach for one of those words, name the concrete effect instead (what specifically changes: who is affected, what changes for them, or the measurable impact)
 - name at least one specific organisation, product, person, or technology where the topic supports it, rather than describing "AI" in the abstract
+- stay strictly inside the named lane brief; if RSS context conflicts with the lane, ignore the RSS context
 - JSON only`,
   };
 }
