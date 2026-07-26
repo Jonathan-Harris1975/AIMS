@@ -181,6 +181,15 @@ const mockServer = http.createServer(async (req, res) => {
       answerContent:
         quizAnswerContentOverride ?? "Quiz Answer! The correct answer is B) Transformer. Transformers handle context far better than older sequence models, which is why they sit underneath most modern LLMs. Did you get it right?",
     });
+  } else if (joined.includes("Lane: Sunday AI Spotlight")) {
+    content = JSON.stringify({
+      title: "Sunday AI Spotlight",
+      topic: "Fei-Fei Li and ImageNet",
+      content:
+        "Fei-Fei Li helped create ImageNet, the large labelled image dataset that accelerated progress in computer vision. Her research helped make image recognition benchmarks practical at scale, while her later work has kept human-centred AI firmly in the conversation. The useful legacy is not a slogan: better data changed what machines could learn to see.",
+      firstComment: "",
+      spotlightPerson: "Fei-Fei Li",
+    });
   } else {
     content = JSON.stringify({
       title: "Monday Motivation",
@@ -513,6 +522,24 @@ test("Tuesday lane uses the updated brand-safe hashtag set", async () => {
   assert.match(result.post.content, /#AIExplained/);
   assert.match(result.post.content, /#ArtificialIntelligence/);
   assert.match(result.post.content, /#PracticalAI/);
+});
+
+test("Sunday spotlight rejects topic labels masquerading as people", async () => {
+  restoreEnv();
+  applyBaseEnv();
+  process.env.OPENROUTER_API_BASE = mockBase;
+
+  const mod = await import(`../services/zernio/utils/socialScheduler.js?zernio-sunday-valid=${Date.now()}`);
+  const result = await mod.buildAndScheduleDailyLane("sunday", {
+    publishDate: "2026-07-26",
+    dryRun: true,
+    force: true,
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.post.spotlightPerson, "Fei-Fei Li");
+  assert.match(result.post.content, /Fei-Fei Li/);
+  assert.match(result.post.content, /ImageNet/);
 });
 
 test("buildAndScheduleBlogRssDaily builds a dry-run post from the newest blog RSS item", async () => {
