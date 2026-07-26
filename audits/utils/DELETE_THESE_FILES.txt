@@ -1,8 +1,0 @@
-Delete these obsolete files from the repository before/when applying this upgrade:
-
-audits/routes/mobileUxCouncil.js
-audits/routes/seoAeoGeoCouncil.js
-audits/utils/mobileUxCouncil.js
-audits/utils/seoAeoGeoCouncil.js
-audits/utils/siteCouncilShared.js
-test/website-councils.test.js
