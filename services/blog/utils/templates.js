@@ -1,5 +1,7 @@
 // services/blog/utils/templates.js
 
+import { mainSiteUrl } from "./mainSiteLinks.js";
+
 export function pageTemplate({
   title,
   description,
@@ -58,7 +60,7 @@ ${blogCriticalCss()}
 <a class="skip-link" href="#main">Skip to main content</a>
 <header aria-label="Primary site header" class="jh-header" id="site-primary-nav" role="banner">
 <div class="jh-header__inner">
-<a aria-label="Jonathan Harris – home" class="jh-brand" href="/">
+<a aria-label="Jonathan Harris – home" class="jh-brand" href="${mainSiteUrl("/")}">
 <span aria-hidden="true" class="jh-logo-wrap">
 <img alt="" aria-hidden="true" class="jh-header__logo" decoding="async" fetchpriority="high" height="32" loading="eager" src="https://images.jonathan-harris.online/site-logo" width="32"/>
 </span>
@@ -66,51 +68,51 @@ ${blogCriticalCss()}
 </a>
 <nav aria-label="Primary navigation">
 <ul class="jh-topnav">
-<li><a href="/">Home</a></li>
-<li><a href="/ebooks/">eBooks</a></li>
-<li><a href="/podcast/">Podcast</a></li>
-<li><a href="/newsletter/">Newsletter</a></li>
-<li><a href="/topics/">Topics</a></li>
-<li><a href="/bio/">About</a></li>
+<li><a href="${mainSiteUrl("/")}">Home</a></li>
+<li><a href="${mainSiteUrl("/ebooks/")}">eBooks</a></li>
+<li><a href="${mainSiteUrl("/podcast/")}">Podcast</a></li>
+<li><a href="${mainSiteUrl("/newsletter/")}">Newsletter</a></li>
+<li><a href="${mainSiteUrl("/topics/")}">Topics</a></li>
+<li><a href="${mainSiteUrl("/bio/")}">About</a></li>
 <li class="jh-nav-dropdown">
 <button aria-expanded="false" aria-haspopup="true" class="jh-nav-dropdown__btn" type="button">Resources <svg aria-hidden="true" fill="none" focusable="false" height="10" viewBox="0 0 10 6" width="10" xmlns="http://www.w3.org/2000/svg"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"></path></svg></button>
 <ul class="jh-nav-dropdown__menu" role="menu">
-<li role="none"><a href="/blog/" role="menuitem">Blog</a></li>
-<li role="none"><a href="/glossary/" role="menuitem">Glossary</a></li>
-<li role="none"><a href="/topics/" role="menuitem">Topics</a></li>
-<li role="none"><a href="/compare/" role="menuitem">Comparisons</a></li>
+<li role="none"><a href="${mainSiteUrl("/blog/")}" role="menuitem">Blog</a></li>
+<li role="none"><a href="${mainSiteUrl("/glossary/")}" role="menuitem">Glossary</a></li>
+<li role="none"><a href="${mainSiteUrl("/topics/")}" role="menuitem">Topics</a></li>
+<li role="none"><a href="${mainSiteUrl("/compare/")}" role="menuitem">Comparisons</a></li>
 </ul>
 </li>
-<li><a href="/contact/">Contact</a></li>
-<li><a class="jh-topnav__cta" href="/ebooks/">Browse Books</a></li>
+<li><a href="${mainSiteUrl("/contact/")}">Contact</a></li>
+<li><a class="jh-topnav__cta" href="${mainSiteUrl("/ebooks/")}">Browse Books</a></li>
 </ul>
 </nav>
 <button aria-controls="jh-mobile-nav" aria-expanded="false" aria-label="Open navigation menu" class="jh-hamburger" type="button"><svg aria-hidden="true" fill="none" focusable="false" height="20" stroke="currentColor" stroke-linecap="round" stroke-width="2.5" viewBox="0 0 24 24" width="20" xmlns="http://www.w3.org/2000/svg"><line x1="3" x2="21" y1="6" y2="6"></line><line x1="3" x2="21" y1="12" y2="12"></line><line x1="3" x2="21" y1="18" y2="18"></line></svg> <span class="jh-hamburger__label">Menu</span></button>
 </div>
 <nav aria-label="Mobile navigation" class="jh-mobile-nav" hidden="" id="jh-mobile-nav">
-<a aria-label="Jonathan Harris – home" class="jh-mobile-nav__brand" href="/">
+<a aria-label="Jonathan Harris – home" class="jh-mobile-nav__brand" href="${mainSiteUrl("/")}">
 <span aria-hidden="true" class="jh-logo-wrap">
 <img alt="" aria-hidden="true" class="jh-mobile-nav__brand-logo" decoding="async" height="32" loading="lazy" src="https://images.jonathan-harris.online/site-logo" width="32"/>
 </span>
 <span class="jh-mobile-nav__brand-text">Jonathan Harris</span>
 </a>
-<a href="/">Home</a>
-<a href="/ebooks/">eBooks</a>
-<a href="/podcast/">Podcast</a>
-<a href="/newsletter/">Newsletter</a>
-<a href="/topics/">Topics</a>
-<a href="/bio/">About</a>
+<a href="${mainSiteUrl("/")}">Home</a>
+<a href="${mainSiteUrl("/ebooks/")}">eBooks</a>
+<a href="${mainSiteUrl("/podcast/")}">Podcast</a>
+<a href="${mainSiteUrl("/newsletter/")}">Newsletter</a>
+<a href="${mainSiteUrl("/topics/")}">Topics</a>
+<a href="${mainSiteUrl("/bio/")}">About</a>
 <div class="jh-mobile-nav__group">
 <span class="jh-mobile-nav__group-label">Resources</span>
 <div class="jh-mobile-nav__group-links">
-<a href="/blog/">Blog</a>
-<a href="/glossary/">Glossary</a>
-<a href="/topics/">Topics</a>
-<a href="/compare/">Comparisons</a>
+<a href="${mainSiteUrl("/blog/")}">Blog</a>
+<a href="${mainSiteUrl("/glossary/")}">Glossary</a>
+<a href="${mainSiteUrl("/topics/")}">Topics</a>
+<a href="${mainSiteUrl("/compare/")}">Comparisons</a>
 </div>
 </div>
-<a href="/contact/">Contact</a>
-<a class="jh-mobile-nav__cta" href="/ebooks/">Browse Books</a>
+<a href="${mainSiteUrl("/contact/")}">Contact</a>
+<a class="jh-mobile-nav__cta" href="${mainSiteUrl("/ebooks/")}">Browse Books</a>
 </nav>
 </header>
 <header class="hero hero--has-fixed-nav" role="region">
@@ -119,8 +121,8 @@ ${blogCriticalCss()}
 <h1 class="u-s59">${safeTitle}</h1>
 <p class="muted">${safeDesc}</p>
 <div class="cta-row">
-<a class="button secondary" href="/blog/weekly/">Weekly briefings</a>
-<a class="button" href="/newsletter/">Get AI Edge</a>
+<a class="button secondary" href="${mainSiteUrl("/blog/weekly/")}">Weekly briefings</a>
+<a class="button" href="${mainSiteUrl("/newsletter/")}">Get AI Edge</a>
 </div>
 </div>
 </header>
@@ -130,9 +132,9 @@ ${contentHtml}
 <h2 class="u-s02">Keep going without the AI pageant</h2>
 <p>The blog is the fast read. The newsletter keeps pace through the week, the podcast handles the audio version, and the topic pages give you the longer route when a briefing is not enough.</p>
 <div class="cta-row">
-<a class="button secondary" href="/newsletter/">Newsletter</a>
-<a class="button secondary" href="/podcast/">Podcast</a>
-<a class="button secondary" href="/topics/">Topics</a>
+<a class="button secondary" href="${mainSiteUrl("/newsletter/")}">Newsletter</a>
+<a class="button secondary" href="${mainSiteUrl("/podcast/")}">Podcast</a>
+<a class="button secondary" href="${mainSiteUrl("/topics/")}">Topics</a>
 </div>
 </section>
 </main>
@@ -140,24 +142,24 @@ ${contentHtml}
 <div class="wrap footer-shell">
 <div class="footer-grid">
 <section aria-label="Brand summary" class="footer-panel footer-panel--brand">
-<a class="footer-brand" href="/">Jonathan Harris</a>
+<a class="footer-brand" href="${mainSiteUrl("/")}">Jonathan Harris</a>
 <p class="footer-copy">AI analysis for grown-ups. eBooks, podcast episodes, and a daily weekday newsletter built for readers who prefer signal over noise.</p>
 <div aria-label="Core site areas" class="footer-badges">
-<a href="/ebooks/">36 eBooks</a>
-<a href="/podcast/">Weekly podcast</a>
-<a href="/newsletter/">Daily AI newsletter</a>
+<a href="${mainSiteUrl("/ebooks/")}">36 eBooks</a>
+<a href="${mainSiteUrl("/podcast/")}">Weekly podcast</a>
+<a href="${mainSiteUrl("/newsletter/")}">Daily AI newsletter</a>
 </div>
 </section>
 <nav aria-label="Navigate" class="footer-panel">
 <h2>Navigate</h2>
 <ul class="footer-links">
-<li><a href="/">Home</a></li>
-<li><a href="/ebooks/">Browse eBooks</a></li>
-<li><a href="/podcast/">Listen to the podcast</a></li>
-<li><a href="/newsletter/">Join the newsletter</a></li>
-<li><a href="/topics/">Explore AI topics</a></li>
-<li><a href="/bio/">About Jonathan Harris</a></li>
-<li><a href="/contact/">Contact</a></li>
+<li><a href="${mainSiteUrl("/")}">Home</a></li>
+<li><a href="${mainSiteUrl("/ebooks/")}">Browse eBooks</a></li>
+<li><a href="${mainSiteUrl("/podcast/")}">Listen to the podcast</a></li>
+<li><a href="${mainSiteUrl("/newsletter/")}">Join the newsletter</a></li>
+<li><a href="${mainSiteUrl("/topics/")}">Explore AI topics</a></li>
+<li><a href="${mainSiteUrl("/bio/")}">About Jonathan Harris</a></li>
+<li><a href="${mainSiteUrl("/contact/")}">Contact</a></li>
 </ul>
 </nav>
 <nav aria-label="Discover" class="footer-panel footer-panel--discover">
@@ -165,21 +167,21 @@ ${contentHtml}
 <div class="footer-link-group">
 <p class="footer-panel__label">Explore the catalogue</p>
 <ul class="footer-links">
-<li><a href="/glossary/">Glossary</a></li>
-<li><a href="/topics/">Topics</a></li>
-<li><a href="/compare/">Comparisons</a></li>
-<li><a href="/catalogue/artificial-intelligence/">Artificial Intelligence</a></li>
-<li><a href="/catalogue/healthcare/">Healthcare</a></li>
-<li><a href="/catalogue/ethics/">Ethics</a></li>
-<li><a href="/catalogue/law/">Law</a></li>
+<li><a href="${mainSiteUrl("/glossary/")}">Glossary</a></li>
+<li><a href="${mainSiteUrl("/topics/")}">Topics</a></li>
+<li><a href="${mainSiteUrl("/compare/")}">Comparisons</a></li>
+<li><a href="${mainSiteUrl("/catalogue/artificial-intelligence/")}">Artificial Intelligence</a></li>
+<li><a href="${mainSiteUrl("/catalogue/healthcare/")}">Healthcare</a></li>
+<li><a href="${mainSiteUrl("/catalogue/ethics/")}">Ethics</a></li>
+<li><a href="${mainSiteUrl("/catalogue/law/")}">Law</a></li>
 </ul>
 </div>
 </nav>
 <section aria-label="Legal" class="footer-panel">
 <h2>Legal</h2>
 <ul class="footer-links footer-links--legal">
-<li><a href="/privacy-policy/">Privacy Policy</a></li>
-<li><a href="/terms-of-use/">Terms of Use</a></li>
+<li><a href="${mainSiteUrl("/privacy-policy/")}">Privacy Policy</a></li>
+<li><a href="${mainSiteUrl("/terms-of-use/")}">Terms of Use</a></li>
 </ul>
 </section>
 </div>
