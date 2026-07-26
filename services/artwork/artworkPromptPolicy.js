@@ -72,10 +72,21 @@ export function applyArtworkPromptPolicy(prompt = "", { date, mode = "editorial"
         "Abstract geometry may only be a minor supporting texture, never the main subject.",
       ].join(" ")
     : "";
+  const socialRule = mode === "social"
+    ? [
+        "SOCIAL EDITORIAL REQUIREMENT: make the image immediately engaging and clearly related to the supplied post topic.",
+        "Prefer a concrete person, object, workplace, real-world environment or physical consequence over decorative abstract AI symbolism.",
+        "For a named public figure or quote-author brief, make that person the clear editorial focal subject and use only subtle topic-relevant visual context around them.",
+        "Avoid anonymous corporate people, handshake imagery, generic office teams, glowing brains, floating polygons, circuit mandalas, digital snowflakes, abstract neural flowers and stock-photo staging.",
+        "Use cinematic lighting, emotional presence, bold but controlled colour, high contrast and modern magazine or YouTube-thumbnail composition.",
+      ].join(" ")
+    : "";
+
   return [
     cleanPrompt,
     `Artwork mode: ${mode}.`,
     topicalPodcastRule,
+    socialRule,
     getSeasonalPaletteDirection(date),
     STRICT_TEXT_FREE_RULE,
   ].filter(Boolean).join(" ");
