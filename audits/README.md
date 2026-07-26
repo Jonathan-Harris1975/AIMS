@@ -10,10 +10,14 @@
 
 ## Purpose
 
-Dispatches external GitHub Actions audits for Mobile UX and SEO/AEO/GEO, receives secure callbacks, runs SEO/AEO/GEO AI analysis jobs, runs a local on-brand audit over generated content evidence, and can publish a monthly Zernio social-performance report for analysis-only social metrics.
+Owns the unified website audit pipeline (Digital Growth -> SEO/AEO/GEO -> rendered Mobile UX -> 24-seat council -> PDF/HTML/JSON -> cleanup -> RAMS), while also retaining standalone source-audit routes, the local on-brand audit and monthly Zernio social-performance reporting.
 
 ## Routes
 
+- `GET /audits/website/health`
+- `POST /audits/website/run`
+- `GET /audits/website/jobs/:sessionId`
+- `POST /audits/website/jobs/:sessionId/rams/retry`
 - `GET /audits/mobile-ux/health`
 - `POST /audits/mobile-ux/run`
 - `POST /audits/mobile-ux/callback` with audit callback token
@@ -78,8 +82,7 @@ Dispatches external GitHub Actions audits for Mobile UX and SEO/AEO/GEO, receive
 - Audit requests: `<reportPrefix>/request.json`.
 - Latest pointers: `audits/<auditType>/latest.json`.
 
-- SEO/AEO/GEO council reports: `audits/seo-aeo-geo-council/<timestamp>-<sessionId>/report.html`, `report.json`, `summary.json`, `coverage.json`, and `repository-issue-appendix.json`; latest pointer: `audits/seo-aeo-geo-council/latest.json`. RAMS should prefer this as the `seo-aeo-geo` master report and only patch deterministic website-owned `code_fix` findings.
-- Mobile UX council reports: `audits/mobile-ux-council/<timestamp>-<sessionId>/report.html`, `report.json`, `summary.json`, `coverage.json`, and `repository-issue-appendix.json`; latest pointer: `audits/mobile-ux-council/latest.json`. RAMS should prefer this as the `mobile-ux` master report and only patch deterministic website-owned rendered UX findings.
+- Unified website report set: `audits/website/YYYY-MM/<pipeline-session>/website-audit.pdf`, `website-audit.html`, and `website-audit.json`. These are the only permanent website-audit artefacts. AIMS passes the exact JSON key to RAMS after verified temporary cleanup.
 - Brand-social council reports: `audits/brand-social-council/<timestamp>-<sessionId>/report.html`, `report.json`, `summary.json`, `coverage.json`, and `repository-issue-appendix.json`; latest pointer: `audits/brand-social-council/latest.json`. RAMS may read this as the on-brand master report, but it remains future-guidance/manual-review only unless deterministic file-level evidence is later published.
 - Zernio reports: `audits/social-performance/<timestamp>-<sessionId>/report.html`, `report.json`, and `summary.json`. If thumbnail auditing is enabled, `thumbnail-audit.json` is also written beside the report.
 - Analysis/report artefacts are written under the audit report prefix in the R2 audits bucket.
@@ -115,14 +118,8 @@ Routes:
 The council combines the latest on-brand and Zernio social-performance reports into one RAMS-readable master report. It adds Brand Editor, Social Performance Analyst, Hook Analyst, Thumbnail & Visual Packaging Expert, Repurposing Lead, Comments & Replies Auditor, Cross-Platform Coherence Lead, Podcast & Transcript Lead, Commercial Lead, and Automation Safety Lead decisions.
 
 Set `BRAND_SOCIAL_COUNCIL_RUN_AFTER_SOCIAL=true` to run it automatically after the monthly social-performance report. Leave false to run it as a separate monthly service.
-### SEO/AEO/GEO Council and Mobile UX Council
+### Unified Website Audit Council and RAMS handoff
 
-Routes:
+The former standalone SEO/AEO/GEO and Mobile UX councils are retired. Their evidence now feeds the single 24-seat website council inside `websiteAuditCouncil.js`. The source audit callbacks only resume the AIMS parent pipeline; they do not launch separate councils.
 
-- `GET /audits/seo-aeo-geo-council/health`
-- `POST /audits/seo-aeo-geo-council/run`
-- `GET /audits/mobile-ux-council/health`
-- `POST /audits/mobile-ux-council/run`
-
-The SEO/AEO/GEO council runs automatically after the SEO/AEO/GEO callback when `SEO_AEO_GEO_COUNCIL_RUN_AFTER_AUDIT=true`. The Mobile UX council runs automatically after the Mobile UX callback when `MOBILE_UX_COUNCIL_RUN_AFTER_AUDIT=true`. Both reports are RAMS master inputs, not uncontrolled patch triggers. RAMS may only patch council findings with exact website-owned affected paths, deterministic evidence, an approved fix class and validation requirements.
-
+The retained website report set is exactly PDF, HTML and JSON. Once all three are published and the temporary evidence prefix is verified empty, AIMS dispatches RAMS pipeline `website` with the exact final JSON R2 key.
