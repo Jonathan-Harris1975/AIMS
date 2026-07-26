@@ -26,7 +26,7 @@ jobs:
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Reject legacy envBootstrap imports
         run: |
-          if grep -RInE 'scripts/envBootstrap\.js|import[[:space:]]+[^;]*\bENV\b[^;]*from' deployment-check.js scripts services routes server.js --exclude='envBootstrap.js'; then
+          if grep -RInE 'scripts/envBootstrap\.js|import[[:space:]]+[^;]*\bENV\b[^;]*from' deployment-check.js scripts services routes server.js --exclude='envBootstrap.js' --exclude='*.md'; then
             exit 1
           fi
       - name: Syntax check
@@ -50,7 +50,7 @@ jobs:
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Send redacted HIVE operational event
         env:
           OPS_ALERT_WEBHOOK_URL: ${{ secrets.OPS_ALERT_WEBHOOK_URL }}
