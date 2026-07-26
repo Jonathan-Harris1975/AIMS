@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -618,4 +619,19 @@ test("buildAndScheduleBlogRssDaily raises a clear error when the feed has no usa
     () => mod.buildAndScheduleBlogRssDaily({ publishDate: "2026-07-16", dryRun: true }),
     /No usable items found in the blog social RSS feed/
   );
+});
+
+
+test("Monday verified quote is kept once and localised duplicate is removed", async () => {
+  const source = await readFile(new URL("../services/zernio/utils/socialScheduler.js", import.meta.url), "utf8");
+  assert.match(source, /quoteSimilarity\(block, verifiedQuote\.quote\) >= 0\.72/);
+  assert.match(source, /Monday post repeats the verified quote; it must appear once only/);
+  assert.match(source, /Monday commentary is too thin/);
+});
+
+test("Monday lane generates portrait-led dynamic artwork with static fallback", async () => {
+  const source = await readFile(new URL("../services/zernio/utils/socialScheduler.js", import.meta.url), "utf8");
+  assert.match(source, /Primary subject: \$\{author\}, depicted as the clear human focal point/);
+  assert.match(source, /createSocialArtwork\(/);
+  assert.match(source, /fallbackUrl: lane\.imageUrl/);
 });
