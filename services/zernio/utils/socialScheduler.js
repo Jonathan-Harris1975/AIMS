@@ -230,8 +230,14 @@ function addDailyLaneAlignmentChecks({ laneKey = "", post = {}, defects = [] } =
     if (!/\b(ethic|policy|risk|fairness|bias|privacy|accountability|governance|consent|safety|rights|responsib|trade[- ]?off)\b/i.test(content)) {
       defects.push("Saturday post drifted away from a clear AI ethics or policy tension.");
     }
-    if (!/[?]/.test(content) && !/\b(comment|what do you think|where would you draw|how should|should we)\b/i.test(content)) {
-      defects.push("Saturday post needs a natural reader question or invitation to discuss the ethical trade-off.");
+    if (!/[?]/.test(content) || !/\b(what do you think|where would you draw|how should|should we|which matters more|what would you accept|where is the line|why)\b/i.test(content)) {
+      defects.push("Saturday post needs one direct, open debate question that invites readers to explain their reasoning.");
+    }
+    if (!/\b(but|while|yet|on the other hand|trade[- ]?off|case for|case against|benefit|risk|argument|tension)\b/i.test(content)) {
+      defects.push("Saturday post should show a genuine two-sided tension before asking for debate.");
+    }
+    if (/\b(agree or disagree|comment yes|comment no|drop a yes|drop a no|tag someone|share if|like if)\b/i.test(content)) {
+      defects.push("Saturday debate prompt uses shallow engagement bait instead of inviting a reasoned discussion.");
     }
   }
 
@@ -1005,6 +1011,70 @@ function buildMondayArtworkPrompt({ verifiedQuote, post } = {}) {
   ].join(" ");
 }
 
+function buildDailyLaneArtworkPrompt({ laneKey = "", post = {}, verifiedQuote = null } = {}) {
+  if (laneKey === "monday") return buildMondayArtworkPrompt({ verifiedQuote, post });
+
+  const topic = compactText(post?.topic || post?.title || "artificial intelligence");
+  const content = compactText(post?.content || "").replace(/#[A-Za-z0-9_]+/g, "").trim();
+
+  const common = [
+    `Topic: ${topic}.`,
+    `Post context, for visual meaning only and never as visible text: ${content.slice(0, 700)}`,
+    "Create premium square social artwork with one immediately readable focal idea at phone-thumbnail size.",
+    "Use the seasonal brand palette while keeping the scene natural, vivid and editorial.",
+    "No visible words, labels, logos, interface copy, pseudo-text or watermarks.",
+  ];
+
+  const directions = {
+    tuesday: [
+      "TUESDAY — CONCEPT EXPLAINER.",
+      "Choose the clearest visual treatment for the concept: either a clean editorial concept card made from purely visual objects and diagram-like relationships, or a concrete conceptual scene.",
+      "Show two to four distinct visual components, stages or contrasts when that genuinely clarifies the concept.",
+      "The image should make the underlying mechanism easier to grasp before the caption is read.",
+      "Avoid generic robots, glowing brains and decorative circuitry.",
+    ],
+    wednesday: [
+      "WEDNESDAY — HUMAN WORKFLOW.",
+      "Show a believable writer, author, researcher or content creator doing the actual work described in the post.",
+      "Use hands, posture, desk objects, drafts, audio gear, research materials or editing context as visual storytelling, but never legible document text.",
+      "Make the human decision point or before-and-after workflow friction visible.",
+      "Avoid smiling-at-laptop stock photography and anonymous corporate office teams.",
+    ],
+    thursday: [
+      "THURSDAY — REAL-WORLD CASE STUDY.",
+      "Show the named industry or operational environment and the concrete task from the post.",
+      "Prefer authentic physical context: hospital, factory, bank operations, logistics, laboratory, retail, energy, legal or other sector-specific environments when supported by the copy.",
+      "A before-and-after or comparison composition is allowed when it explains the operational improvement more clearly.",
+      "Keep AI as supporting machinery, not a floating abstract symbol.",
+    ],
+    friday: [
+      "FRIDAY — SYSTEMS / OPERATOR VISUAL.",
+      "Show the practical system lesson from the post: routing, monitoring, retries, evaluation, infrastructure, source integrity, cost control or failure recovery.",
+      "Use sophisticated technical visual storytelling such as hardware, operations consoles without legible text, connected components, physical infrastructure or a clean systems diagram made from visual shapes.",
+      "Prefer cause-and-effect and operational clarity over science-fiction aesthetics.",
+      "Avoid meaningless data webs and generic server-room glamour shots.",
+    ],
+    saturday: [
+      "SATURDAY — EDITORIAL DEBATE.",
+      "Create a provocative but intelligent magazine-opinion image that makes the ethical or policy trade-off visually obvious.",
+      "Show two credible sides in tension through people, consequences, opposing environments, choices, boundaries or competing interests.",
+      "Human emotion, responsibility and real-world stakes should dominate over abstract technology.",
+      "The composition should make viewers pause and form an opinion before reading the caption.",
+      "Do not visually tell the viewer which side is correct. Avoid rage-bait, dystopian clichés and political campaign aesthetics.",
+    ],
+    sunday: [
+      "SUNDAY — PERSON SPOTLIGHT.",
+      `Primary subject: ${compactText(post?.spotlightPerson || topic)}, shown as the clear human focal point in an editorial portrait.`,
+      "Connect the portrait to the person's real contribution through subtle environmental or object-based context supported by the post.",
+      "Aim for the visual authority of a magazine profile rather than a corporate headshot.",
+      "Avoid anonymous substitutes, generic business portraits and decorative AI wallpaper.",
+    ],
+  };
+
+  return [...(directions[laneKey] || directions.thursday), ...common].join(" ");
+}
+
+
 export async function buildAndScheduleDailyLane(laneKey, options = {}) {
   const lane = LANE_CONFIG[laneKey];
   if (!lane) {
@@ -1157,12 +1227,12 @@ export async function buildAndScheduleDailyLane(laneKey, options = {}) {
       zernioSocialGate = reviewed.gate;
     }
 
-    if (laneKey === "monday" && !options.imageUrl && !dryRun) {
+    if (!options.imageUrl && !dryRun) {
       const artwork = await createSocialArtwork({
-        sessionId: `ZERNIO-MONDAY-${publishDate}`,
-        lane: "monday",
+        sessionId: `ZERNIO-${laneKey.toUpperCase()}-${publishDate}`,
+        lane: laneKey,
         date: publishDate,
-        prompt: buildMondayArtworkPrompt({ verifiedQuote, post }),
+        prompt: buildDailyLaneArtworkPrompt({ laneKey, post, verifiedQuote }),
         fallbackUrl: lane.imageUrl,
       });
 
@@ -1172,7 +1242,8 @@ export async function buildAndScheduleDailyLane(laneKey, options = {}) {
       }
 
       if (!artwork.ok) {
-        warn("zernio.monday.artwork.fallback", {
+        warn("zernio.daily.artwork.fallback", {
+          lane: laneKey,
           publishDate,
           fallbackUrl: lane.imageUrl,
           error: artwork.error,

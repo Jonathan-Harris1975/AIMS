@@ -37,36 +37,43 @@ Do not explain the person's full biography.
 Do not add any other quote.
 Content target: 55 to 85 words including the verified quote.`,
     tuesday: `Write a Tuesday concept post that explains one AI, machine learning, or computing idea in plain English.
-Use one concrete example or analogy so it feels useful, not abstract.
-It should read like a smart person explaining something clearly, not like a glossary entry.
+Use one concrete example, contrast, or simple mental model so the reader understands what changes in practice.
+It should feel like a useful mini explainer, not a glossary entry.
+Give the reader one reason the concept matters when choosing, using, or judging AI systems.
 Do not drift into history, biography, or generic "AI is changing everything" filler.
-Content target: 45 to 70 words.`,
+Content target: 45 to 75 words.`,
     wednesday: `Write a Wednesday post for writers, authors, or content creators.
-Focus on one practical way AI can help with the work: planning, drafting, editing, structuring, research, repurposing, or workflow cleanup.
-Name the tangible benefit.
+Focus on one recognisable piece of work: planning, drafting, editing, structuring, research, repurposing, or workflow cleanup.
+Show the before-and-after friction clearly and name the tangible benefit.
+Include one sensible human checkpoint or limitation so it reads like experienced workflow advice rather than tool promotion.
 Do not ramble about authenticity, creativity, or the future in vague terms.
-Content target: 40 to 70 words.`,
+Content target: 45 to 75 words.`,
     thursday: `Write a Thursday post about one believable industry use case for AI.
 Pick a real sector and one concrete task where AI helps: triage, forecasting, document handling, quality checks, routing, fraud review, admin reduction, or similar.
+Show the real-world setting and the operational consequence, including what improves and where human judgement still matters.
 Keep the tone modest and useful.
 Do not oversell, futurise, or make broad industry claims.
-Content target: 45 to 75 words.`,
+Content target: 45 to 80 words.`,
     friday: `Write a Friday operator note about the discipline of improving practical AI systems.
 If verified build context is supplied below, use only that context for any first-person detail.
 If no verified build context is supplied, write a neutral systems note without using I, I've, I'm, my, we, we've, we're, our, or claiming a specific bug, metric, deployment, decision, endpoint, workflow change, or private work item.
+Focus on one practical systems lesson: observability, retries, routing, evaluation, failure recovery, cost control, source integrity, or operational simplicity.
 Do not invent first-person specifics.
 Keep it honest and grounded.
 Do not use the phrase "build in public" or "building in public".
 Do not use vague phrases such as "exciting things", "big moves", "another week, another", "small win", or "game-changing".
-Content target: 35 to 65 words.`,
-    saturday: `Write a Saturday AI ethics or policy post in plain English.
-Frame it around one thoughtful question, tension, or trade-off that a normal reader can grasp quickly.
-Use the RSS context only if it clearly makes the post sharper, more timely, and more specific.
-If the RSS context is weak, irrelevant, thin, or repetitive, ignore it and write a strong standalone evergreen post.
-End with a natural invitation for readers to comment.
-Content target: 50 to 80 words.`,
+Content target: 40 to 70 words.`,
+    saturday: `Write a Saturday AI ethics or policy post designed to start a thoughtful public debate.
+Frame one specific tension or trade-off that reasonable people could genuinely disagree about.
+Briefly present both credible sides before giving Jonathan's own measured view or the point he thinks deserves more scrutiny.
+Ask one direct, open question that invites readers to explain *why* they disagree or where they would draw the line.
+The discussion must feel intelligent rather than engagement-baiting. Never ask for likes, tags, shares, one-word answers, or "agree/disagree".
+Use the RSS context only if it clearly makes the debate sharper, more timely, and more specific.
+If the RSS context is weak, irrelevant, thin, or repetitive, ignore it and write a strong standalone evergreen debate.
+Content target: 60 to 90 words.`,
     sunday: `Write a Sunday spotlight post about one AI figure.
-Cover who they are, what they contributed, and why that still matters now.
+Cover who they are, one concrete contribution they made, and why that contribution still matters now.
+Make the person feel present rather than reducing them to a CV summary: connect their work to something people now use, debate, build, or take for granted.
 Write it as natural prose, not a list.
 Do not produce comma-chained biography fragments, CV shorthand, bullet-style structure, or metadata-style summaries.
 Use the RSS context only if it clearly surfaces a credible and timely named person worth featuring.
