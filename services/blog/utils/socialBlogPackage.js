@@ -3,6 +3,7 @@ import { GENERIC_HASHTAGS, SOCIAL_BLOG_BANNED_PHRASES } from "../../content-qual
 import { buildSocialBlogPersona } from "../../script/utils/toneSetter.js";
 import { getSeasonalPaletteDirection, STRICT_TEXT_FREE_RULE } from "../../artwork/utils/artworkPromptPolicy.js";
 import { britishEnglishPromptGuidance } from "../../content-quality/britishEnglish.js";
+import { jonathanVoicePrompt } from "../../content-quality/jonathanVoice.js";
 
 const CODE_FENCE_RE = /^```(?:json|html|markdown|md)?\s*|```$/gim;
 const TITLE_PREFIX_RE = /^(?:title|headline|summary|analysis|report|study|ai|openai|update|briefing|daily brief|social caption)\s*:\s*/i;
@@ -747,6 +748,7 @@ export function buildSocialPackagePrompt({ dateLabel, items = [] } = {}) {
 
   const system = [
     buildSocialBlogPersona(),
+    jonathanVoicePrompt({ format: "daily social blog" }),
     "You are the senior social-blog editor for the Jonathan Harris AI ecosystem.",
     "Turn rewritten RSS material into one short daily blog package for social media posting: British English, Gen-X grounded, sharp, sceptical, useful, readable, and allergic to hype.",
     `Language standard: ${britishEnglishPromptGuidance()}`,

@@ -1,6 +1,7 @@
 import { buildBlogPersona } from "../../script/utils/toneSetter.js";
 import { getSeasonalPaletteDirection, STRICT_TEXT_FREE_RULE } from "../../artwork/utils/artworkPromptPolicy.js";
 import { britishEnglishPromptGuidance } from "../../content-quality/britishEnglish.js";
+import { findJonathanVoiceDrift, jonathanVoicePrompt } from "../../content-quality/jonathanVoice.js";
 
 const COMMON_ENTITY_MAP = {
   amp: "&",
@@ -641,6 +642,22 @@ export function validateWeeklyPackageForBrand(weeklyPackage = {}) {
     defects.push(`Banned or stock phrasing remains: ${bannedMatches.slice(0, 5).join(", ")}.`);
   }
 
+  const voiceDrift = findJonathanVoiceDrift(JSON.stringify({
+    title: contract.title,
+    summary: contract.summary,
+    sections: contract.sections,
+  }));
+  if (voiceDrift.length) {
+    defects.push(`Generic editorial voice remains: ${voiceDrift.slice(0, 5).join(", ")}.`);
+  }
+
+  const sectionParagraphs = contract.sections.flatMap((section) => section.paragraphs || []);
+  if (sectionParagraphs.length && sectionParagraphs.every((paragraph) =>
+    !/\b(means|matters|because|so |but |yet |instead|in practice|the point|the test|the problem|the useful|the cost|the risk)\b/i.test(paragraph)
+  )) {
+    defects.push("Weekly article reports source material without enough explicit interpretation or judgement.");
+  }
+
   return {
     ok: defects.length === 0,
     defects,
@@ -653,6 +670,7 @@ export function buildWeeklyPackagePrompt({ week, dateLabel, items = [] } = {}) {
 
   const system = [
     buildBlogPersona(),
+    jonathanVoicePrompt({ format: "weekly AI editorial" }),
     "You are the senior editor for the Jonathan Harris AI ecosystem. You turn RSS-derived AI briefings into a weekly blog package that sounds like Jonathan Harris: British English, Gen-X, sharp, sceptical, dry, calm, useful, and allergic to hype.",
     `Language standard: ${britishEnglishPromptGuidance()}`,
     "Your job is not to summarise everything. Your job is to decide what mattered, connect the week into one coherent editorial argument, and remove anything that smells like corporate paste, newsroom filler, or generic AI middleware.",
@@ -677,13 +695,18 @@ export function buildWeeklyPackagePrompt({ week, dateLabel, items = [] } = {}) {
     "Use the supplied rewritten RSS briefs as the only source material.",
     "",
     "Editorial mission:",
-    "- Produce one coherent weekly briefing, not a stitched digest.",
-    "- Find the 3 to 5 dominant themes that genuinely connect the source items.",
+    "- Produce one coherent weekly editorial argument, not a stitched digest.",
+    "- Before drafting, silently write a one-sentence thesis answering: what does this week's evidence actually prove, expose, or change?",
+    "- Every section must advance that thesis from a different evidence-backed angle. If a theme does not strengthen the argument, leave it out.",
+    "- Find 3 to 5 dominant themes only after choosing the thesis; themes serve the argument, not the other way round.",
     "- Prioritise judgement over coverage completeness.",
     "- Show what the week tells readers about artificial intelligence in practice: infrastructure, incentives, risk, business reality, regulation, jobs, power, money, product theatre, or deployment friction.",
     "- Strip away the product page sparkle. Keep the signal.",
     "- Explain the point in plain English, but do not spoon-feed obvious context.",
-    "- Let the writing sound spoken, informed, and human. It should read like a premium editorial briefing for grown-ups.",
+    "- Make the Jonathan layer unmistakable: after important evidence, tell the reader what it means in practice and what deserves scepticism.",
+    "- At least once per section, move beyond reporting into an evidence-backed judgement, practical consequence, test or boundary.",
+    "- Let the writing sound spoken, informed, and human. It should read like Jonathan has read the week's noise, discarded most of it, and kept the bits worth an adult's time.",
+    "- The final paragraph must land a clear judgement or practical test. Never finish by summarising the preceding sections.",
     "",
     "Brand voice to hit:",
     "- British English.",
@@ -738,6 +761,9 @@ export function buildWeeklyPackagePrompt({ week, dateLabel, items = [] } = {}) {
     "8. Have you avoided overexplaining obvious points?",
     "9. Have you kept British spelling and punctuation natural?",
     "10. Is the output strict JSON with no markdown or commentary?",
+    "11. Could a competent generic technology publication have written this almost unchanged? If yes, rewrite it.",
+    "12. Does every section advance one central thesis rather than merely describe another topic?",
+    "13. Does the final paragraph land Jonathan's judgement rather than recap?",
     "",
     "Source material:",
     sourceDigest,
@@ -763,6 +789,10 @@ export function buildWeeklyBrandQaPrompt({ items = [], generatedJson = {} } = {}
     "- unsupported claims not traceable to the source material",
     "- summary duplication in the first paragraph",
     "- section headings that sound like category labels rather than editorial headings",
+    "- generic editorial language that could belong to any technology publication",
+    "- reporting without interpretation, consequence or judgement",
+    "- sections that reset into separate mini-summaries instead of advancing one thesis",
+    "- a final paragraph that merely recaps instead of landing a judgement",
     "- JSON contract violations",
     "",
     "Return one of:",
