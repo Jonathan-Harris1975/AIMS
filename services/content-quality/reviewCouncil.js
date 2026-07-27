@@ -93,6 +93,22 @@ export const REVIEW_COUNCILS = Object.freeze({
       "Scheduling Readiness Chair",
     ],
   },
+  "zernio-mini-series": {
+    env: "REVIEW_COUNCIL_ZERNIO_MINI_SERIES_ENABLED",
+    defaultEnabled: true,
+    members: [
+      "British English Language Expert",
+      "Grammar, Spelling and Punctuation Expert",
+      "Jonathan Harris Voice Editor",
+      "Source Integrity Reviewer",
+      "Topical Relevance Editor",
+      "Practical AI Authority Reviewer",
+      "Social Engagement Editor",
+      "Platform Fit Reviewer",
+      "Series Continuity Reviewer",
+      "Publishing Readiness Chair",
+    ],
+  },
   "zernio-ebook-conversion": {
     env: "REVIEW_COUNCIL_ZERNIO_EBOOK_ENABLED",
     defaultEnabled: true,
