@@ -90,3 +90,48 @@ tags and the article link appended).
 - `utils/state.js` — local slot-claim ledger (duplicate/idempotency guard independent of the Zernio API).
 - `utils/prompts.js`, `utils/date.js`, `utils/feedContext.js`, `utils/ebookCatalogue.js`, `utils/featuredBook.js` — supporting utilities, migrated unchanged in behaviour from the former `services/oneup`.
 - `routes/social.js`, `routes/index.js`, `index.js` — Express routes.
+
+## Weekday-composed Zernio work
+
+The normal daily weekday endpoints remain the MAST-facing triggers. AIMS composes
+additional Zernio work inside those runs so MAST does not need extra triggers.
+
+### Monday
+
+`POST /zernio/daily/monday`
+
+Runs the normal Monday lane, then runs the weekly topical mini-series decision:
+
+1. Research Panel reviews the current AIMS RSS evidence.
+2. If no topic reaches the configured suitability/authority/audience thresholds,
+   the mini-series returns a successful `skipped` result and publishes nothing.
+3. Articles Theme Panel turns an approved topic into 3-6 distinct angles and
+   topic-specific hashtags.
+4. Each post passes the `zernio-mini-series` review council before scheduling.
+5. Approved parts are scheduled Tuesday-Sunday. Artwork is generated per part
+   under the existing `blogImages/zernio/mini-series/` R2 path, with fallback art.
+
+Manual/testing route:
+
+`POST /zernio/mini-series/weekly`
+
+The manual route may optionally supply `topicSeed` and `sourceItems`. Automatic
+Monday operation does not require them.
+
+### Thursday
+
+`POST /zernio/daily/thursday`
+
+Runs the normal Thursday lane and the Turing's Torch Friday preview. The preview
+is static social content only. All Turing's Torch audio remains owned by the
+podcast production pipeline to prevent voice mismatch.
+
+Manual/testing route:
+
+`POST /zernio/podcast/thursday-promo`
+
+### Future
+
+A newsletter sign-up promotional lane is intentionally deferred until Brevo is
+fully configured and production-ready.
+
