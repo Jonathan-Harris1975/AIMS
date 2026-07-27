@@ -5,6 +5,7 @@
 import { buildPersona } from "./toneSetter.js";
 import { calculateDuration } from "./durationCalculator.js";
 import { britishEnglishPromptGuidance } from "../../content-quality/britishEnglish.js";
+import { jonathanVoicePrompt } from "../../content-quality/jonathanVoice.js";
 
 function weekdayFromDateStr(dateStr) {
   try {
@@ -99,6 +100,7 @@ NON-NEGOTIABLE:
 - Do not quote large blocks of text. No “according to”. No legalese.
 - Assume the listener is smart but busy: explain the topic clearly without dumbing it down.
 - Make this sound like Jonathan Harris hosting a weekly AI commentary show, not a source rewrite with a dry joke stapled on.
+${jonathanVoicePrompt({ format: "Turing’s Torch podcast script" })}
 - Do not pad examples just to hit length. If the story is thin, use the extra space to explain consequences, limits, and practical trade-offs.
 
 GOLD-STANDARD FLOW (do NOT label these steps, just do them):
