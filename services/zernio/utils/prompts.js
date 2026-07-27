@@ -1,5 +1,6 @@
 import { buildZernioPersona } from "../../script/utils/toneSetter.js";
 import { britishEnglishPromptGuidance } from "../../content-quality/britishEnglish.js";
+import { jonathanVoicePrompt } from "../../content-quality/jonathanVoice.js";
 
 function renderHistoryBlock(history = []) {
   const cleaned = Array.isArray(history)
@@ -24,7 +25,7 @@ function renderRssBlock(rssItems = []) {
     .join("\n");
 }
 
-const BRAND_VOICE = buildZernioPersona();
+const BRAND_VOICE = `${buildZernioPersona()}\n\n${jonathanVoicePrompt({ format: "Zernio social and eBook content" })}`;
 
 export function buildDailyPrompt({ lane, publishDate, history = [], rssItems = [], weeklyHistory = [], verifiedQuote = null, buildContext = "" }) {
   const laneGuidance = {
