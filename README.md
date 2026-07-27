@@ -1310,3 +1310,15 @@ This documentation was prepared against the supplied repository structure and th
 - `env.template`
 
 Routes in this README are active only when they are mounted through `routes/index.js` or root `server.js`. Features marked present but not wired should not be treated as available HTTP endpoints until they are mounted and tested.
+
+### Consolidated MAST operation windows
+
+MAST may call `POST /ops/run/:window` for the ten normal weekday operating
+windows (`monday-am` through `friday-am`, plus `monday-pm` through
+`friday-pm`). AIMS owns task-level orchestration inside each window. Monday AM
+includes the weekly blog, Zernio ebooks, weekly quiz and the normal Monday
+Zernio lane (which also owns the topical mini-series). Thursday's Zernio lane
+owns the Turing's Torch promotion. Friday PM runs the evening Blotato lane,
+podcast pipeline and schedules both weekend Zernio posts before standby.
+Newsletter generation/sending is present but feature-gated by
+`AIMS_OPERATION_NEWSLETTER_ENABLED=false` until Brevo is production-ready.
