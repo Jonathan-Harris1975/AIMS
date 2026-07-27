@@ -236,10 +236,12 @@ function pickPreferredTemplate(items = [], { requested = "", searchTerms = [] } 
   );
 }
 
-async function resolveVideoTemplateId({ requestedTemplateId, apiKey }) {
+async function resolveVideoTemplateId({ requestedTemplateId, apiKey, autoDiscoveryOverride = null }) {
   const requested = trim(requestedTemplateId, normaliseTemplateId(DEFAULT_AI_STORY_TEMPLATE_PATH));
   const verify = parseBoolean(process.env.BLOTATO_TEMPLATE_VERIFY, true);
-  const autoDiscovery = parseBoolean(process.env.BLOTATO_TEMPLATE_AUTO_DISCOVERY, true);
+  const autoDiscovery = autoDiscoveryOverride === null
+    ? parseBoolean(process.env.BLOTATO_TEMPLATE_AUTO_DISCOVERY, true)
+    : Boolean(autoDiscoveryOverride);
   const configuredSearch = process.env.BLOTATO_NEWS_TEMPLATE_SEARCH || process.env.BLOTATO_TEMPLATE_SEARCH || DEFAULT_TEMPLATE_SEARCH;
   const searchTerms = uniqueSearchTerms(configuredSearch, DEFAULT_TEMPLATE_SEARCH, FALLBACK_TEMPLATE_SEARCHES);
 
@@ -958,7 +960,7 @@ function buildRssSummary(articleSource = {}) {
   };
 }
 
-async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOTATO_SHORT_LANE, apiKey, editorialReservation = null }) {
+async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOTATO_SHORT_LANE, apiKey, editorialReservation = null, templateIdOverride = null, publishMode = "evening-lane" }) {
   const lane = requireShortLaneConfig(laneSlug);
   const keepAliveLabel = `blotato:${lane.slug}:${sessionId}`;
   const keepAliveEnabled = parseBoolean(process.env.BLOTATO_KEEPALIVE_ENABLED, true);
@@ -967,13 +969,19 @@ async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOT
   try {
     info("blotato.publish_now.job.start", { sessionId, lane: lane.slug, rssSource: articleSource.rssSource });
     const defaults = buildDefaults(lane.slug);
+    if (templateIdOverride) {
+      defaults.templateId = normaliseTemplateId(templateIdOverride);
+      defaults.templatePath = templateIdOverride;
+      defaults.templateAutoDiscovery = false;
+    }
+    defaults.publishMode = publishMode;
     const platforms = defaults.channels;
 
     updateJob(lane.jobType, sessionId, { phase: "step-0-channel-preflight", defaults });
     const channelPreflight = await runBlotatoStep0Preflight({ platforms, apiKey });
 
     updateJob(lane.jobType, sessionId, { phase: "template-resolution", channelPreflight });
-    const templateResolution = await resolveVideoTemplateId({ requestedTemplateId: defaults.templateId, apiKey });
+    const templateResolution = await resolveVideoTemplateId({ requestedTemplateId: defaults.templateId, apiKey, autoDiscoveryOverride: templateIdOverride ? false : null });
     const templateId = templateResolution.templateId;
 
     const scriptOptions = {
@@ -1287,7 +1295,7 @@ async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOT
   }
 }
 
-export async function triggerPublishNowJob(req = {}, laneSlug = DEFAULT_BLOTATO_SHORT_LANE) {
+export async function triggerPublishNowJob(req = {}, laneSlug = DEFAULT_BLOTATO_SHORT_LANE, options = {}) {
   const lane = requireShortLaneConfig(laneSlug);
   const articleSource = await selectRssArticleForBlotato({ laneSlug: lane.slug });
   const reservationResult = await reserveEditorialSource({
@@ -1306,6 +1314,12 @@ export async function triggerPublishNowJob(req = {}, laneSlug = DEFAULT_BLOTATO_
   const editorialReservation = reservationResult.reservation || null;
   const sessionId = createSessionId(articleSource.article, lane.slug);
   const defaults = buildDefaults(lane.slug);
+  if (options.templateId) {
+    defaults.templateId = normaliseTemplateId(options.templateId);
+    defaults.templatePath = options.templateId;
+    defaults.templateAutoDiscovery = false;
+  }
+  defaults.publishMode = options.publishMode || "evening-lane";
   const statusUrl = publicJobUrl(req, sessionId);
   const { started, job } = beginJob(lane.jobType, sessionId, {
     rss: buildRssSummary(articleSource),
@@ -1334,7 +1348,14 @@ export async function triggerPublishNowJob(req = {}, laneSlug = DEFAULT_BLOTATO_
     return response;
   }
 
-  const run = () => runPublishJob({ sessionId, articleSource, laneSlug: lane.slug, editorialReservation });
+  const run = () => runPublishJob({
+    sessionId,
+    articleSource,
+    laneSlug: lane.slug,
+    editorialReservation,
+    templateIdOverride: options.templateId || null,
+    publishMode: options.publishMode || "evening-lane",
+  });
   if (parseBoolean(process.env.BLOTATO_INLINE_PUBLISH_JOBS, false)) {
     await run();
   } else {
