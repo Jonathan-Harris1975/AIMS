@@ -165,3 +165,12 @@ For Facebook Pages, include `target.pageId` from the subaccounts endpoint. This 
 Blotato short-script generation uses the shared lane-aware persona from `services/script/utils/toneSetter.js`.
 
 Generated scene prompts are normalised before being sent to Blotato. Every scene carries an absolute prohibition on text, pseudo-text, numbers, captions, labels, interface copy, logos and watermarks. Thumbnail copy remains a separate Blotato layer and is no longer embedded in the visual-generation prompt. Lane visual signatures use unlabelled objects and geometry rather than headline cards, numbered cards or document layouts.
+
+## AutoShorts-style morning lane
+
+`POST /blotato/autoshorts/publish-now` is the additional weekday morning short.
+It reuses the weekday editorial lane for source/quality policy but selects the
+Blotato visual template from a governed 48-template rotation. Set exactly 48
+comma-separated UUIDs in `BLOTATO_AUTOSHORT_TEMPLATE_IDS`; AIMS advances one
+style every `BLOTATO_AUTOSHORT_ROTATION_DAYS` (default 12). The existing five
+weekday short lanes remain the evening product and are not replaced.
