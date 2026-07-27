@@ -1,3 +1,4 @@
+import { findAmericanSpellings as findBritishEnglishDrift } from "./britishEnglish.js";
 // ============================================================
 // 🧷 Phase 3 Autonomous Content Gates
 // ============================================================
@@ -19,37 +20,7 @@ const DEFAULT_MAX_PODCAST_SENTENCE_WORDS = 26;
 
 export const PHASE3_MODE = "auto-review-auto-publish-fail-closed";
 
-const BRITISH_SPELLINGS = [
-  ["analyze", "analyse"],
-  ["analyzed", "analysed"],
-  ["analyzing", "analysing"],
-  ["behavior", "behaviour"],
-  ["behaviors", "behaviours"],
-  ["center", "centre"],
-  ["centered", "centred"],
-  ["color", "colour"],
-  ["colors", "colours"],
-  ["favor", "favour"],
-  ["favorite", "favourite"],
-  ["honor", "honour"],
-  ["labor", "labour"],
-  ["organization", "organisation"],
-  ["organizations", "organisations"],
-  ["organize", "organise"],
-  ["organized", "organised"],
-  ["organizing", "organising"],
-  ["optimize", "optimise"],
-  ["optimized", "optimised"],
-  ["optimizing", "optimising"],
-  ["prioritize", "prioritise"],
-  ["prioritized", "prioritised"],
-  ["program", "programme"],
-  ["programs", "programmes"],
-  ["realize", "realise"],
-  ["realized", "realised"],
-  ["recognize", "recognise"],
-  ["recognized", "recognised"],
-];
+
 
 const BANNED_PHRASES = [
   "in a significant development",
@@ -209,10 +180,7 @@ function listBannedPhrases(text = "") {
 }
 
 function listAmericanSpellings(text = "") {
-  const lowered = ` ${toLowerText(text)} `;
-  return BRITISH_SPELLINGS
-    .filter(([american]) => new RegExp(`\\b${american}\\b`, "i").test(lowered))
-    .map(([american, british]) => ({ american, british }));
+  return findBritishEnglishDrift(text);
 }
 
 function extractNumbersAndClaims(text = "") {

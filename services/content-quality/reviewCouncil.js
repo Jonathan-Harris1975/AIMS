@@ -1,5 +1,6 @@
 import { warn } from "../../logger.js";
 import { THRESHOLDS } from "../../config/thresholds.js";
+import { applyBritishEnglishReplacements } from "./britishEnglish.js";
 
 const BOOLEAN_TRUE = new Set(["1", "true", "yes", "on"]);
 const BOOLEAN_FALSE = new Set(["0", "false", "no", "off"]);
@@ -27,35 +28,15 @@ const TEXT_REPLACEMENTS = Object.freeze([
   [/\brobust data fabric\b/gi, "reliable data setup"],
 ]);
 
-const BRITISH_REPLACEMENTS = Object.freeze([
-  [/\banalyze\b/gi, "analyse"],
-  [/\banalyzed\b/gi, "analysed"],
-  [/\banalyzing\b/gi, "analysing"],
-  [/\bbehavior\b/gi, "behaviour"],
-  [/\bbehaviors\b/gi, "behaviours"],
-  [/\bcenter\b/gi, "centre"],
-  [/\bcentered\b/gi, "centred"],
-  [/\bcolor\b/gi, "colour"],
-  [/\bcolors\b/gi, "colours"],
-  [/\bfavorite\b/gi, "favourite"],
-  [/\borganization\b/gi, "organisation"],
-  [/\borganizations\b/gi, "organisations"],
-  [/\bartifact\b/gi, "artefact"],
-  [/\bartifacts\b/gi, "artefacts"],
-  [/\boptimize\b/gi, "optimise"],
-  [/\boptimized\b/gi, "optimised"],
-  [/\boptimization\b/gi, "optimisation"],
-  [/\bprioritize\b/gi, "prioritise"],
-  [/\bprioritized\b/gi, "prioritised"],
-  [/\bprogram\b/gi, "programme"],
-  [/\bprograms\b/gi, "programmes"],
-]);
+
 
 export const REVIEW_COUNCILS = Object.freeze({
   "rss-rewrite-quarantine": {
     env: "REVIEW_COUNCIL_RSS_REWRITE_ENABLED",
     defaultEnabled: true,
     members: [
+      "British English Language Expert",
+      "Grammar, Spelling and Punctuation Expert",
       "Source Integrity Reviewer",
       "RSS Rewrite Editor",
       "British English Stylist",
@@ -69,6 +50,8 @@ export const REVIEW_COUNCILS = Object.freeze({
     env: "REVIEW_COUNCIL_BLOG_PHASE45_ENABLED",
     defaultEnabled: true,
     members: [
+      "British English Language Expert",
+      "Grammar, Spelling and Punctuation Expert",
       "Brand Tone Chair",
       "British English Stylist",
       "Source Evidence Reviewer",
@@ -84,6 +67,8 @@ export const REVIEW_COUNCILS = Object.freeze({
     env: "REVIEW_COUNCIL_BLOTATO_SCRIPT_ENABLED",
     defaultEnabled: false,
     members: [
+      "British English Language Expert",
+      "Grammar, Spelling and Punctuation Expert",
       "Shorts Script Editor",
       "British English Stylist",
       "Source Fidelity Reviewer",
@@ -97,6 +82,8 @@ export const REVIEW_COUNCILS = Object.freeze({
     env: "REVIEW_COUNCIL_ZERNIO_SOCIAL_ENABLED",
     defaultEnabled: true,
     members: [
+      "British English Language Expert",
+      "Grammar, Spelling and Punctuation Expert",
       "Zernio Copy Editor",
       "British English Stylist",
       "Brand Safety Reviewer",
@@ -110,6 +97,8 @@ export const REVIEW_COUNCILS = Object.freeze({
     env: "REVIEW_COUNCIL_ZERNIO_EBOOK_ENABLED",
     defaultEnabled: true,
     members: [
+      "British English Language Expert",
+      "Grammar, Spelling and Punctuation Expert",
       "eBook Editorial Director",
       "Online Digital Marketing Expert",
       "Conversion Copy Reviewer",
@@ -123,6 +112,8 @@ export const REVIEW_COUNCILS = Object.freeze({
     env: "REVIEW_COUNCIL_QUIZ_LOGIC_ENABLED",
     defaultEnabled: true,
     members: [
+      "British English Language Expert",
+      "Grammar, Spelling and Punctuation Expert",
       "Question Clarity Reviewer",
       "Answer Consistency Reviewer",
       "Options Format Reviewer",
@@ -136,6 +127,8 @@ export const REVIEW_COUNCILS = Object.freeze({
     env: "REVIEW_COUNCIL_PODCAST_ON_BRAND_ENABLED",
     defaultEnabled: true,
     members: [
+      "British English Language Expert",
+      "Grammar, Spelling and Punctuation Expert",
       "Podcast Voice Reviewer",
       "British English Stylist",
       "Transcript Layout Reviewer",
@@ -220,7 +213,7 @@ function compactText(value = "") {
 export function repairTextForReviewCouncil(value = "", { contentType = "", maxHashtags = 3 } = {}) {
   let text = compactText(value);
   for (const [pattern, replacement] of TEXT_REPLACEMENTS) text = text.replace(pattern, replacement);
-  for (const [pattern, replacement] of BRITISH_REPLACEMENTS) text = text.replace(pattern, replacement);
+  text = applyBritishEnglishReplacements(text);
 
   if (/quiz-answer/i.test(contentType)) {
     text = text

@@ -1,3 +1,5 @@
+import { AMERICAN_TO_BRITISH, findAmericanSpellings as findCanonicalAmericanSpellings } from "./britishEnglish.js";
+
 export const BANNED_PROMO_PATTERNS = Object.freeze([
   /\bbuy\s+now\b/i,
   /\blimited\s+time\b/i,
@@ -42,82 +44,8 @@ export const GENERIC_ABSTRACTION_PATTERNS = Object.freeze(
 // such as "the reality of deploying this in production".
 export const GENERIC_REALITY_SHORTHAND_PATTERN = /\b(?:messy|quiet|real)\s+reality\b|\breality\s+(?:check)?\s*$/i;
 
-export const AMERICAN_TO_BRITISH = Object.freeze([
-  ["analyze", "analyse"],
-  ["analyzed", "analysed"],
-  ["analyzing", "analysing"],
-  ["behavior", "behaviour"],
-  ["behaviors", "behaviours"],
-  ["color", "colour"],
-  ["colors", "colours"],
-  ["colored", "coloured"],
-  ["center", "centre"],
-  ["centered", "centred"],
-  ["centering", "centring"],
-  ["favorite", "favourite"],
-  ["favorites", "favourites"],
-  ["honor", "honour"],
-  ["honors", "honours"],
-  ["labor", "labour"],
-  ["license", "licence"],
-  ["modeled", "modelled"],
-  ["modeling", "modelling"],
-  ["optimize", "optimise"],
-  ["optimized", "optimised"],
-  ["optimizing", "optimising"],
-  ["optimization", "optimisation"],
-  ["organize", "organise"],
-  ["organized", "organised"],
-  ["organizing", "organising"],
-  ["organization", "organisation"],
-  ["organizations", "organisations"],
-  ["personalization", "personalisation"],
-  ["personalize", "personalise"],
-  ["personalized", "personalised"],
-  ["prioritize", "prioritise"],
-  ["prioritized", "prioritised"],
-  ["prioritizing", "prioritising"],
-  ["program", "programme"],
-  ["programs", "programmes"],
-  ["traveling", "travelling"],
-  ["traveled", "travelled"],
-  ["artifact", "artefact"],
-  ["artifacts", "artefacts"],
-  ["catalog", "catalogue"],
-  ["catalogs", "catalogues"],
-  ["cataloged", "catalogued"],
-  ["cataloging", "cataloguing"],
-  ["defense", "defence"],
-  ["gray", "grey"],
-  ["fueled", "fuelled"],
-  ["fueling", "fuelling"],
-  ["skillful", "skilful"],
-  ["toward", "towards"],
-  ["checkmark", "tick"],
-  ["airplane", "aeroplane"],
-  ["dialog", "dialogue"],
-  ["dialogs", "dialogues"],
-  ["analog", "analogue"],
-  ["authorize", "authorise"],
-  ["authorized", "authorised"],
-  ["authorizing", "authorising"],
-  ["authorization", "authorisation"],
-  ["summarize", "summarise"],
-  ["summarized", "summarised"],
-  ["summarizing", "summarising"],
-  ["customize", "customise"],
-  ["customized", "customised"],
-  ["customizing", "customising"],
-  ["minimize", "minimise"],
-  ["minimized", "minimised"],
-  ["minimizing", "minimising"],
-  ["maximize", "maximise"],
-  ["maximized", "maximised"],
-  ["maximizing", "maximising"],
-  ["specialize", "specialise"],
-  ["specialized", "specialised"],
-  ["specializing", "specialising"],
-]);
+export { AMERICAN_TO_BRITISH } from "./britishEnglish.js";
+
 
 
 
@@ -285,8 +213,5 @@ export function findGenericAbstractionBreaches(text = "") {
 }
 
 export function findAmericanSpellings(text = "") {
-  const source = cleanLexiconText(text);
-  return AMERICAN_TO_BRITISH
-    .filter(([american]) => new RegExp(`\\b${american}\\b`, "i").test(source))
-    .map(([american, british]) => ({ american, british }));
+  return findCanonicalAmericanSpellings(text);
 }

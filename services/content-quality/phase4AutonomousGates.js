@@ -1,4 +1,5 @@
 import { getCentralSkillReference, getHiveSkillPoolConfig } from "../shared/hiveSkillPool.js";
+import { AMERICAN_TO_BRITISH } from "./britishEnglish.js";
 const DEFAULT_THRESHOLDS = Object.freeze({
   overall: 85,
   brand: 85,
@@ -38,17 +39,7 @@ const BANNED_PHRASES = Object.freeze([
   "robust data fabric",
 ]);
 
-const AMERICAN_TO_BRITISH = Object.freeze([
-  ["analyze", "analyse"],
-  ["analyzing", "analysing"],
-  ["behavior", "behaviour"],
-  ["center", "centre"],
-  ["color", "colour"],
-  ["favorite", "favourite"],
-  ["personalization", "personalisation"],
-  ["prioritize", "prioritise"],
-  ["optimization", "optimisation"],
-]);
+
 
 const CONTENT_TYPE_RULES = Object.freeze({
   "weekly-blog": {
