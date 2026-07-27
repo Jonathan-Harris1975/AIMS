@@ -156,6 +156,9 @@ export const aiConfig = {
     zernioQuiz: routeChain(["fast", "standard", "fallback"], ["gpt56Luna", "google25FlashLite", "gpt56Sol"]),
     zernioEbook: routeChain(["fast", "standard", "fallback"], ["gpt56Luna", "google25FlashLite", "gpt56Sol"]),
     zernioPodcastPromo: routeChain(["highQuality", "standard", "fallback"], ["gpt56Sol", "google25FlashLite"]),
+    zernioMiniSeriesResearch: routeChain(["highQuality", "audit", "standard", "fallback"], ["gpt56Sol", "google25FlashLite"]),
+    zernioMiniSeriesTheme: routeChain(["highQuality", "standard", "fallback"], ["gpt56Sol", "google25FlashLite"]),
+    zernioMiniSeriesPost: routeChain(["highQuality", "standard", "fallback"], ["gpt56Sol", "google25FlashLite"]),
     // Blotato script quality is production-critical. highQuality sits above standard so Claude 4.6
     // is the first fallback after the dedicated blotatoScript provider, ahead of the general Luna lane.
     blotatoNewsShort: routeChain(["blotatoScript", "highQuality", "standard", "fallback"], ["anthropic46", "gpt56Sol", "gpt56Luna"]),

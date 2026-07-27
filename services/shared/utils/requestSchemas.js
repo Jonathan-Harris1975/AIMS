@@ -238,6 +238,32 @@ export const zernioDailyBodySchema = z
         : value.profileNames,
   }));
 
+
+const zernioMiniSeriesSourceSchema = z.object({
+  title: z.string().trim().min(1).max(500),
+  summary: z.string().trim().min(1).max(5000),
+  link: z.string().trim().url(),
+  pubDate: z.union([z.string().trim().min(1).max(120), z.number()]).optional(),
+}).passthrough();
+
+export const zernioMiniSeriesBodySchema = z
+  .object({
+    weekStartDate: optionalIsoDate,
+    dryRun: booleanish.optional(),
+    profileName: z.string().trim().min(1).max(120).optional(),
+    accountId: zernioAccountIdSchema,
+    apiKey: z.string().trim().min(1).max(200).optional(),
+    topicSeed: z.string().trim().max(500).optional(),
+    sourceItems: z.array(zernioMiniSeriesSourceSchema).min(1).max(20).optional(),
+    force: booleanish.optional(),
+    minimumSuitabilityScore: z.coerce.number().int().min(0).max(100).optional(),
+  })
+  .passthrough()
+  .transform((value) => ({
+    ...value,
+    accountId: Array.isArray(value.accountId) ? JSON.stringify(value.accountId) : value.accountId,
+  }));
+
 export const zernioPodcastPromoBodySchema = z
   .object({
     publishDate: optionalIsoDate,
