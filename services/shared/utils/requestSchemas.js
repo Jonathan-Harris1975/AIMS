@@ -238,6 +238,24 @@ export const zernioDailyBodySchema = z
         : value.profileNames,
   }));
 
+export const zernioPodcastPromoBodySchema = z
+  .object({
+    publishDate: optionalIsoDate,
+    scheduledDateTime: optionalScheduledDateTime,
+    dryRun: booleanish.optional(),
+    profileName: z.string().trim().min(1).max(120).optional(),
+    accountId: zernioAccountIdSchema,
+    imageUrl: z.string().trim().url().optional(),
+    feedUrl: z.string().trim().url().optional(),
+    apiKey: z.string().trim().min(1).max(200).optional(),
+    force: booleanish.optional(),
+  })
+  .passthrough()
+  .transform((value) => ({
+    ...value,
+    accountId: Array.isArray(value.accountId) ? JSON.stringify(value.accountId) : value.accountId,
+  }));
+
 export const zernioQuizBodySchema = z
   .object({
     questionPublishDate: optionalIsoDate,
