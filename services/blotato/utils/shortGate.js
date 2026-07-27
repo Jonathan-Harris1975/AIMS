@@ -16,6 +16,8 @@ function textFromPack(pack = {}) {
     pack.angle,
     pack.hook,
     pack.script,
+    pack.narrativeArc,
+    pack.visualContinuity,
     pack.visualDirection,
     pack.thumbnailText,
     pack.youtubeTitle,
@@ -130,6 +132,29 @@ function thumbnailPerformanceScore(value = "") {
   return Math.max(0, Math.min(100, score));
 }
 
+
+function sceneFragmentCount(scenes = []) {
+  return asArray(scenes).reduce((total, scene, index) => {
+    const words = wordCount(scene?.script || "");
+    const minWords = index === 0 ? 6 : 9;
+    return words > 0 && words < minWords ? total + 1 : total;
+  }, 0);
+}
+
+function sceneFlowScore(pack = {}) {
+  const scenes = asArray(pack.scenes);
+  if (scenes.length < 4) return 0;
+  let score = 40;
+  const fragments = sceneFragmentCount(scenes);
+  score -= fragments * 18;
+  if (cleanLexiconText(pack.narrativeArc || "").split(/\s+/).filter(Boolean).length >= 8) score += 20;
+  if (cleanLexiconText(pack.visualContinuity || "").split(/\s+/).filter(Boolean).length >= 8) score += 20;
+  const scripts = scenes.map((scene) => cleanLexiconText(scene?.script || "")).filter(Boolean);
+  if (scripts.length === scenes.length && scripts.every((script) => /[.!?]$/.test(script))) score += 10;
+  if (scenes.length >= 4 && scenes.length <= 6) score += 10;
+  return Math.max(0, Math.min(100, score));
+}
+
 function scoreFrom(defects = [], warnings = []) {
   return Math.max(0, 100 - defects.length * 18 - warnings.length * 5);
 }
@@ -141,20 +166,29 @@ export function runBlotatoShortGate({ pack = {}, article = {}, lane = "" } = {})
   const scriptWords = wordCount(pack.script || "");
   const sceneCount = asArray(pack.scenes).length;
   const sceneVoiceWords = sceneVoiceoverWordCount(pack.scenes);
-  const minScriptWords = positiveIntEnv("BLOTATO_NEWS_MIN_SCRIPT_WORDS", 95, 140);
+  const minScriptWords = positiveIntEnv("BLOTATO_NEWS_MIN_SCRIPT_WORDS", 85, 190);
   const minSceneWords = positiveIntEnv("BLOTATO_NEWS_MIN_SCENE_WORDS", 90, 160);
   const humanVisualsEnabled = boolEnv("BLOTATO_HUMAN_VISUALS_ENABLED", true);
   const minHumanScenes = positiveIntEnv("BLOTATO_HUMAN_VISUAL_MIN_SCENES", 2, 5);
   const humanScenes = humanVisualSceneCount(pack.scenes);
   const hookScore = hookPerformanceScore(pack.hook || "", lane);
   const thumbnailScore = thumbnailPerformanceScore(pack.thumbnailText || "");
+  const fragmentScenes = sceneFragmentCount(pack.scenes);
+  const flowScore = sceneFlowScore(pack);
 
   if (!pack.script) defects.push("Blotato pack has no script.");
   if (!pack.hook) defects.push("Blotato pack has no hook.");
-  if (scriptWords < minScriptWords) defects.push(`Blotato script is too thin for a 30-second short (${scriptWords}/${minScriptWords} words).`);
-  if (scriptWords > 145) warnings.push("Blotato script may run long for the target short duration.");
+  if (scriptWords < minScriptWords) defects.push(`Blotato script is too thin for the 35-second minimum (${scriptWords}/${minScriptWords} words).`);
+  if (scriptWords > 190) defects.push("Blotato script is likely to exceed the 80-second maximum.");
+  else if (scriptWords > 175) warnings.push("Blotato script is near the upper end of the 80-second short range.");
   if (sceneCount < 4) defects.push("Blotato pack needs at least four usable scenes.");
-  if (sceneVoiceWords < minSceneWords) defects.push(`Blotato scene voiceover is too thin for a 30-second short (${sceneVoiceWords}/${minSceneWords} words).`);
+  if (sceneVoiceWords < minSceneWords) defects.push(`Blotato scene voiceover is too thin for the 35-second minimum (${sceneVoiceWords}/${minSceneWords} words).`);
+  if (!pack.narrativeArc) defects.push("Blotato pack has no whole-video narrative arc.");
+  if (!pack.visualContinuity) defects.push("Blotato pack has no visual continuity anchor.");
+  if (fragmentScenes > 0) defects.push(`Scene flow contains ${fragmentScenes} caption-like or fragmentary voiceover scene(s).`);
+  if (flowScore < 70) defects.push(`Narrative/visual flow score too low (${flowScore}/100).`);
+  else if (flowScore < 85) warnings.push(`Narrative/visual flow could be stronger (${flowScore}/100).`);
+  if (sceneCount > 6) warnings.push("Too many scenes may make the short feel visually disjointed; prefer 4-6 coherent beats.");
   if (humanVisualsEnabled && humanScenes < Math.min(minHumanScenes, sceneCount || minHumanScenes)) {
     defects.push(`Human visual coverage too low for social short (${humanScenes}/${Math.min(minHumanScenes, sceneCount || minHumanScenes)} scenes).`);
   }
@@ -190,6 +224,8 @@ export function runBlotatoShortGate({ pack = {}, article = {}, lane = "" } = {})
     performance: {
       hookScore,
       thumbnailScore,
+      flowScore,
+      fragmentScenes,
       humanVisualScenes: humanScenes,
       minHumanVisualScenes: humanVisualsEnabled ? Math.min(minHumanScenes, sceneCount || minHumanScenes) : 0,
     },

@@ -7,9 +7,9 @@ import { buildBlotatoPersona } from "../../script/utils/toneSetter.js";
 import { jonathanVoicePrompt } from "../../content-quality/jonathanVoice.js";
 
 const NEWS_SHORT_MAX_TOKENS = Math.max(2600, Number(process.env.BLOTATO_NEWS_SHORT_MAX_TOKENS || 3600));
-const MIN_SCRIPT_WORDS = Math.max(85, Number(process.env.BLOTATO_NEWS_MIN_SCRIPT_WORDS || 110));
-const TARGET_SCRIPT_WORDS = Math.max(MIN_SCRIPT_WORDS, Number(process.env.BLOTATO_NEWS_TARGET_SCRIPT_WORDS || 145));
-const MAX_SCRIPT_WORDS = Math.max(TARGET_SCRIPT_WORDS, Number(process.env.BLOTATO_NEWS_MAX_SCRIPT_WORDS || 165));
+const MIN_SCRIPT_WORDS = Math.max(75, Number(process.env.BLOTATO_NEWS_MIN_SCRIPT_WORDS || 85));
+const TARGET_SCRIPT_WORDS = Math.max(MIN_SCRIPT_WORDS, Number(process.env.BLOTATO_NEWS_TARGET_SCRIPT_WORDS || 135));
+const MAX_SCRIPT_WORDS = Math.max(TARGET_SCRIPT_WORDS, Number(process.env.BLOTATO_NEWS_MAX_SCRIPT_WORDS || 190));
 const MIN_SCENE_VOICEOVER_WORDS = Math.max(75, Number(process.env.BLOTATO_NEWS_MIN_SCENE_WORDS || 110));
 
 // Brand kit — all visual and audio identity settings are env-configurable.
@@ -22,9 +22,10 @@ const AI_STORY_ANIMATE_IMAGES = process.env.BLOTATO_BRAND_ANIMATE_IMAGES !== "fa
 const AI_STORY_TRIM_TO_VOICEOVER = process.env.BLOTATO_BRAND_TRIM_TO_VOICEOVER !== "false";
 
 // Media generation cost preference labels. Current Blotato template requests are steered through prompt + template settings, not unsupported top-level model fields.
-const MAX_SCENES = Math.max(4, Math.min(9, Number(process.env.BLOTATO_VIDEO_SCENE_COUNT || 7)));
-const MIN_DURATION_SECONDS = 30;
-const DEFAULT_DURATION_SECONDS = 45;
+const MAX_SCENES = Math.max(4, Math.min(9, Number(process.env.BLOTATO_VIDEO_SCENE_COUNT || 5)));
+const MIN_DURATION_SECONDS = 35;
+const MAX_DURATION_SECONDS = 80;
+const DEFAULT_DURATION_SECONDS = 55;
 const LOW_COST_IMAGE_MODEL_LABEL = process.env.BLOTATO_LOW_COST_IMAGE_MODEL_LABEL || "flux schnell";
 const LOW_COST_VIDEO_MODEL_LABEL = process.env.BLOTATO_LOW_COST_VIDEO_MODEL_LABEL || "framepack";
 
@@ -69,6 +70,8 @@ const BLOTATO_NEWS_SHORT_JSON_SCHEMA = Object.freeze({
       hook: { type: "string" },
       hookAlt: { type: "string" },
       script: { type: "string" },
+      narrativeArc: { type: "string" },
+      visualContinuity: { type: "string" },
       scenes: {
         type: "array",
         // Keep the OpenRouter schema broadly provider-compatible. Some providers
@@ -101,6 +104,8 @@ const BLOTATO_NEWS_SHORT_JSON_SCHEMA = Object.freeze({
       "hook",
       "hookAlt",
       "script",
+      "narrativeArc",
+      "visualContinuity",
       "scenes",
       "visualDirection",
       "thumbnailText",
@@ -279,7 +284,8 @@ export function buildNewsShortPrompt({
   const laneConfig = requireShortLaneConfig(lane);
   const articleBlock = renderArticles({ article, articles });
   const resolvedCta = ctaForLane(laneConfig.slug, cta);
-  const targetDuration = Math.max(MIN_DURATION_SECONDS, Number(durationSeconds || DEFAULT_DURATION_SECONDS));
+  const targetDuration = Math.min(MAX_DURATION_SECONDS, Math.max(MIN_DURATION_SECONDS, Number(durationSeconds || DEFAULT_DURATION_SECONDS)));
+  const targetScriptWords = Math.min(MAX_SCRIPT_WORDS, Math.max(MIN_SCRIPT_WORDS, Math.round(targetDuration * 2.35)));
   const structure = laneConfig.structure.map((item, index) => `${index + 1}. ${item}`).join("\n");
   const requestHookAlt = HOOK_VARIANTS >= 2;
   const previousDefects = [
@@ -299,14 +305,17 @@ You create short-form video packs for Jonathan Harris, an AI author and podcast 
 ${jonathanVoicePrompt({ format: "short-form social video", includeArgumentArc: false })}
 
 # Role — Human-centred Shorts Creative Director
-You write narration-driven, voiceover-based AI short-form video scripts. Jonathan Harris is not on camera, but generated generic adults, faces, hands and bodies are allowed when they make the idea more watchable. The narration carries the story. Every scene must be visualisable without text overlays on generated imagery.
+You design the complete short as one continuous mini-story before writing individual scenes. You write narration-driven, voiceover-based AI short-form video scripts. Jonathan Harris is not on camera, but generated generic adults, faces, hands and bodies are allowed when they make the idea more watchable. The narration carries the story. Every scene must be visualisable without text overlays on generated imagery.
 
 # Social Video Laws
 1. The first frame must show a human-readable situation, tension or reaction, not decorative AI wallpaper.
-2. The narration carries the story. Every line must inform, intrigue, or advance the story — no filler.
+2. The narration carries one story. Every line must cause the next line to make sense. No isolated slogan fragments, stitched-together observations or filler.
 3. Every mediaSource must obey this absolute rule: ${BLOTATO_STRICT_NO_TEXT_RULE}
 4. ${HUMAN_VISUALS_ENABLED ? BLOTATO_HUMAN_VISUAL_RULE : "Human subjects are optional for this run."}
 5. The hook is non-negotiable. The first 3 seconds must scroll-stop on ${["Facebook", "Instagram", "YouTube Shorts", "TikTok"].join(", ")}.
+6. STORYBOARD FIRST. Decide the complete narrative arc and visual continuity before creating any scene. The scenes are chapters of one short, not independent illustrations of sentences.
+7. CONTINUITY. Reuse one coherent visual world: the same type of protagonist, setting, lighting language, palette and camera grammar unless the story itself requires a deliberate change. Do not randomly switch between unrelated people, abstract graphics, offices and devices.
+8. FLOW. Use this arc unless the lane demands a tighter variant: Hook → context/problem → consequence → practical meaning/action → takeaway. Each scene must hand the viewer naturally into the next.
 
 # Writing style
 - British English.
@@ -357,7 +366,7 @@ Weekday slot: ${laneConfig.weekday}
 Lane focus: ${laneConfig.promptFocus}
 Source strategy: ${laneConfig.sourceStrategy}
 Theme: ${theme || laneConfig.theme}
-Target duration: ${targetDuration} seconds minimum
+Target duration: about ${targetDuration} seconds. Allowed finished range: ${MIN_DURATION_SECONDS}-${MAX_DURATION_SECONDS} seconds. Let the story earn its length rather than padding to the maximum.
 Audience: ${audience}
 CTA: ${resolvedCta}
 
@@ -371,7 +380,9 @@ Return exactly one JSON object with these keys:
   "angle": "one sentence explaining the editorial angle",
   "hook": "opening line following the ${laneConfig.slug} hook rule — see system prompt. No word-count restriction. Content determines length.",
   ${requestHookAlt ? `"hookAlt": "a second candidate hook for the same lane using a different hook pattern from the system prompt — do not repeat the primary hook structure",` : `"hookAlt": "",`}
-  "script": "minimum spoken short in natural British English, target ${TARGET_SCRIPT_WORDS} words, minimum ${MIN_SCRIPT_WORDS} words",
+  "script": "one continuous spoken story in natural British English, aim for about ${targetScriptWords} words for this story, while staying between ${MIN_SCRIPT_WORDS} and ${MAX_SCRIPT_WORDS} words",
+  "narrativeArc": "one sentence describing the complete hook-to-takeaway progression",
+  "visualContinuity": "one sentence defining the recurring protagonist type, setting, palette, lighting and camera language shared across scenes",
   "scenes": [
     {
       "mediaSource": "AI image/video generation prompt for this scene. Faceless. No text, labels, captions, or typography on the generated image. Describe subject, environment, movement, lighting temperature. Use the lane visual signature. Avoid generic robot clichés.",
@@ -391,6 +402,10 @@ Return exactly one JSON object with these keys:
 Scene rules:
 - Provide exactly ${MAX_SCENES} scenes. If the source is thin, use a clearer practical explainer instead of making the script shorter.
 - Each scene must include a mediaSource and script.
+- Write the full narrative arc first, then divide it into scenes. Never generate scenes as independent sentence illustrations.
+- Scene scripts must be complete spoken thoughts, normally 12-30 words each. Do not output caption-like fragments such as "and communication", "now baseline" or "candidates".
+- Scene 1 = hook/tension. Middle scenes = context, consequence and practical meaning. Final scene = takeaway/action.
+- Every mediaSource must inherit visualContinuity so the same visual world persists across the short. Deliberate scene changes must still preserve palette, lighting and camera grammar.
 - Each mediaSource must describe a specific visual, not a generic instruction.
 - CRITICAL: every mediaSource must obey this absolute rule: ${BLOTATO_STRICT_NO_TEXT_RULE}
 - Use the lane visual signature: ${laneConfig.visualSignature}
@@ -404,7 +419,7 @@ Scene rules:
 - Avoid gimmicky robot clichés.
 - The first scene must support the hook.
 - The final scene must support the CTA or practical takeaway.
-- The combined scene scripts must contain enough spoken copy for at least 30 seconds of voiceover. Never return a thin script.
+- The combined scene scripts must contain enough spoken copy for at least 35 seconds of voiceover. Never return a thin script.
 - The main script must be at least ${MIN_SCRIPT_WORDS} words and should land between ${MIN_SCRIPT_WORDS} and ${MAX_SCRIPT_WORDS} words.
 
 Output rules:
@@ -652,7 +667,9 @@ export function buildBlotatoVisualPrompt(pack = {}) {
     `Use the supplied scenes as the source of truth.`,
     `Opening hook: ${pack.hook}`,
     `Editorial angle: ${pack.angle}`,
+    `Narrative arc: ${pack.narrativeArc || "Hook to consequence to practical takeaway"}`,
     `Script: ${pack.script}`,
+    `Visual continuity anchor: ${pack.visualContinuity || pack.visualDirection}`,
     `Visual direction: ${pack.visualDirection}`,
     `Cost guard: use the cheapest suitable generation settings available, preferably ${LOW_COST_IMAGE_MODEL_LABEL} for images and ${LOW_COST_VIDEO_MODEL_LABEL} for video. Do not use premium video models.`,
     `Style: premium magazine/editorial social video with cinematic lighting, bold controlled colour, high contrast, emotional storytelling and a modern YouTube-thumbnail visual hierarchy. Keep it human-centred and visually immediate. Avoid corporate stock staging, generic data-centre glamour, floating dashboards, polygon networks and gimmicky robot clichés. Preserve the configured seasonal palette direction where supplied. British AI news commentary tone.`,
@@ -790,7 +807,7 @@ function enhancePackForBlotatoDuration(pack = {}, options = {}, laneConfig = {})
   }
 
   output.qualityNotes = cleanText(
-    output.qualityNotes || `Duration-safe ${laneConfig.label || "Blotato"} pack prepared with enough spoken copy for a 45-second short.`,
+    output.qualityNotes || `Duration-safe ${laneConfig.label || "Blotato"} pack prepared for a coherent 35-80 second short.`,
     500
   );
 
@@ -974,6 +991,8 @@ function buildFallbackShortPack(options = {}, laneConfig) {
     angle: `A practical ${laneConfig.label.toLowerCase()} reading of ${sourceTitle}.`,
     hook,
     script,
+    narrativeArc: "Open on the source-specific tension, explain the practical consequence, show the human decision point, then land one useful takeaway.",
+    visualContinuity: "One believable adult professional in a consistent dark editorial workplace world, navy-charcoal palette, cyan practical-light accents, cinematic directional lighting and restrained slow camera movement.",
     scenes,
     visualDirection,
     thumbnailText: cleanText(sourceTitle.split(/\s+/).slice(0, 5).join(" "), 55) || "AI Reality Check",

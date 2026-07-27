@@ -944,7 +944,8 @@ function buildDefaults(laneSlug = DEFAULT_BLOTATO_SHORT_LANE) {
     templateAutoDiscovery: parseBoolean(process.env.BLOTATO_TEMPLATE_AUTO_DISCOVERY, true),
     templateSearch: trim(process.env.BLOTATO_NEWS_TEMPLATE_SEARCH || process.env.BLOTATO_TEMPLATE_SEARCH, DEFAULT_TEMPLATE_SEARCH),
     pickMode: trim(process.env.BLOTATO_RSS_PICK_MODE, "latest"),
-    minDurationSeconds: 30,
+    minDurationSeconds: 35,
+    maxDurationSeconds: 80,
   };
 }
 
@@ -979,7 +980,7 @@ async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOT
       article: articleSource.article,
       lane: lane.slug,
       theme: trim(process.env.BLOTATO_NEWS_THEME, lane.theme),
-      durationSeconds: Math.max(30, Number(process.env.BLOTATO_NEWS_DURATION_SECONDS || 45)),
+      durationSeconds: Math.min(80, Math.max(35, Number(process.env.BLOTATO_NEWS_DURATION_SECONDS || 55))),
       audience: trim(
         process.env.BLOTATO_NEWS_AUDIENCE,
         "curious readers, creators, authors, and small business owners"
