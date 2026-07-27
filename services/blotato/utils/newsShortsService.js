@@ -4,6 +4,7 @@ import { resilientRequest } from "../../shared/utils/ai-service.js";
 import { createVisual } from "./blotatoClient.js";
 import { DEFAULT_BLOTATO_SHORT_LANE, requireShortLaneConfig, getShortLaneConfig } from "./shortLanes.js";
 import { buildBlotatoPersona } from "../../script/utils/toneSetter.js";
+import { jonathanVoicePrompt } from "../../content-quality/jonathanVoice.js";
 
 const NEWS_SHORT_MAX_TOKENS = Math.max(2600, Number(process.env.BLOTATO_NEWS_SHORT_MAX_TOKENS || 3600));
 const MIN_SCRIPT_WORDS = Math.max(85, Number(process.env.BLOTATO_NEWS_MIN_SCRIPT_WORDS || 110));
@@ -295,6 +296,7 @@ export function buildNewsShortPrompt({
     system: `${buildBlotatoPersona()}
 
 You create short-form video packs for Jonathan Harris, an AI author and podcast host.
+${jonathanVoicePrompt({ format: "short-form social video", includeArgumentArc: false })}
 
 # Role — Human-centred Shorts Creative Director
 You write narration-driven, voiceover-based AI short-form video scripts. Jonathan Harris is not on camera, but generated generic adults, faces, hands and bodies are allowed when they make the idea more watchable. The narration carries the story. Every scene must be visualisable without text overlays on generated imagery.
