@@ -4,6 +4,7 @@
 
 import { buildPersona } from "./toneSetter.js";
 import { calculateDuration } from "./durationCalculator.js";
+import { britishEnglishPromptGuidance } from "../../content-quality/britishEnglish.js";
 
 function weekdayFromDateStr(dateStr) {
   try {
@@ -92,7 +93,7 @@ Overall episode plan: ${sessionMeta?.targetMins || sessionMeta?.targetMinutes ||
 
 NON-NEGOTIABLE:
 - Plain British English. Spoken. No bullets, no numbering, no headings, no stage directions.
-- Use British spelling throughout.
+- Use British spelling throughout. ${britishEnglishPromptGuidance()}
 - Every paragraph must sound complete when read aloud. No dangling words, incomplete paragraphs, or broken joins.
 - Do not mention “RSS”, “feed”, “articles”, “sources”, “links”, or any internal process.
 - Do not quote large blocks of text. No “according to”. No legalese.
@@ -151,7 +152,7 @@ Rules:
 - Do NOT merge the website URL with the book URL.
 - The website may be mentioned once in the CTA and once only inside the exact closing line. Do not add extra repeats.
 - Never speak slash paths, dash-heavy paths, tracking links, or full ebook URLs.
-- Use British spelling throughout.
+- Use British spelling throughout. ${britishEnglishPromptGuidance()}
 - No dangling words, incomplete final paragraphs, or broken punctuation joins.
 - No discounts, no urgency, no “limited time”.
 - Plain text only.
