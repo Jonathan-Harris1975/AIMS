@@ -22,6 +22,7 @@ import {
 import { buildOrCreateNewsInsightShort, buildOrCreateShortLane } from "../utils/newsShortsService.js";
 import { listShortLaneConfigs, requireShortLaneConfig } from "../utils/shortLanes.js";
 import { getPublishNowJob, triggerPublishNowJob } from "../utils/autoPublishService.js";
+import { getAutoShortStyleConfigSummary, getAutoShortStyleRotation } from "../utils/autoShortStyles.js";
 
 const router = express.Router();
 
@@ -50,8 +51,10 @@ router.get("/health", (_req, res) => {
       laneShort: "POST /blotato/shorts/:lane",
       publishNow: "POST /blotato/shorts/news-insight/publish-now",
       lanePublishNow: "POST /blotato/shorts/:lane/publish-now",
+      autoShortStylePublishNow: "POST /blotato/autoshorts/publish-now",
       jobStatus: "GET /blotato/jobs/:sessionId",
     },
+    autoShortStyles: getAutoShortStyleConfigSummary(),
     time: new Date().toISOString(),
   });
 });
@@ -152,6 +155,27 @@ router.get("/shorts/lanes", (_req, res) => {
     lanes: listShortLaneConfigs(),
   });
 });
+
+router.post(
+  "/autoshorts/publish-now",
+  asyncRoute(async (req, res) => {
+    const now = new Date();
+    const weekday = new Intl.DateTimeFormat("en-GB", { weekday: "long", timeZone: "Europe/London" }).format(now).toLowerCase();
+    const laneByWeekday = { monday: "news-insight", tuesday: "model-verdict", wednesday: "ai-at-work", thursday: "reality-check", friday: "ai-playbook" };
+    const laneSlug = laneByWeekday[weekday] || "news-insight";
+    const style = getAutoShortStyleRotation(now);
+    const result = await triggerPublishNowJob(req, laneSlug, { templateId: style.templateId, publishMode: "autoshorts-style" });
+    return res.status(result.statusCode || 202).json({
+      ok: true,
+      service: "blotato",
+      lane: "autoshorts-style-publish-now",
+      style,
+      sourceLane: laneSlug,
+      message: `Blotato AutoShort style ${style.styleNumber}/${style.styleCount} publish job accepted.`,
+      ...result,
+    });
+  })
+);
 
 router.post(
   "/shorts/news-insight/publish-now",
