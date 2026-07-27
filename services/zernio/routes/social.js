@@ -6,8 +6,10 @@ import {
   zernioDailyBodySchema,
   zernioQuizBodySchema,
   zernioEbookWeeklyBodySchema,
+  zernioPodcastPromoBodySchema,
+  zernioMiniSeriesBodySchema,
 } from "../../shared/utils/requestSchemas.js";
-import { buildAndScheduleDailyLane, buildAndScheduleDailyLaneAccountVariants, buildAndScheduleQuizSeries, buildAndScheduleEbookWeekly, buildAndScheduleBlogRssDaily } from "../utils/socialScheduler.js";
+import { buildAndScheduleDailyLane, buildAndScheduleDailyLaneAccountVariants, buildAndScheduleQuizSeries, buildAndScheduleEbookWeekly, buildAndScheduleBlogRssDaily, buildAndSchedulePodcastThursdayPromo, buildAndScheduleWeeklyMiniSeries } from "../utils/socialScheduler.js";
 import { getAsyncServiceRouteJobFresh, shouldRunAsyncServiceRoute, startAsyncServiceRouteJob } from "../../shared/utils/asyncServiceRouteJobs.js";
 import { fetchPublishedPostsHistory, inspectZernioTargeting } from "../utils/zernioClient.js";
 import { LANE_CONFIG, ZERNIO_PROFILE_NAME_GENERAL, ZERNIO_PROFILE_NAME_EBOOKS, getZernioRequiredPlatforms, getZernioAccountId, normaliseZernioAccountId, parsePlatforms } from "../utils/config.js";
@@ -59,6 +61,8 @@ router.get("/health", (_req, res) => {
     quizRoute: "/zernio/quiz/weekly",
     ebookWeeklyRoute: "/zernio/ebooks/weekly",
     blogRssDailyRoute: "/zernio/blog-rss/daily",
+    weeklyMiniSeriesRoute: "/zernio/mini-series/weekly",
+    podcastThursdayPromoRoute: "/zernio/podcast/thursday-promo",
     publishedHistoryRoute: "/zernio/posts/history",
     time: new Date().toISOString(),
   });
@@ -151,10 +155,47 @@ router.post(
 for (const laneKey of Object.keys(LANE_CONFIG)) {
   // profileNames (2+) opts into automatic per-account post variants;
   // omitting it keeps the original single-account behaviour unchanged.
-  const runDailyLane = (payload) =>
+  const runDailyLaneBase = (payload) =>
     Array.isArray(payload.profileNames) && payload.profileNames.length > 1
       ? buildAndScheduleDailyLaneAccountVariants(laneKey, payload)
       : buildAndScheduleDailyLane(laneKey, payload);
+
+  const runDailyLane = async (payload) => {
+    const daily = await runDailyLaneBase(payload);
+    const extras = {};
+
+    // MAST does not need extra weekday triggers. The existing Monday and
+    // Thursday Zernio runs open the door; AIMS composes the extra weekly work.
+    if (laneKey === "monday") {
+      try {
+        extras.weeklyMiniSeries = await buildAndScheduleWeeklyMiniSeries({
+          weekStartDate: payload.publishDate,
+          dryRun: payload.dryRun,
+          profileName: payload.profileName,
+          accountId: payload.accountId,
+          apiKey: payload.apiKey,
+        });
+      } catch (error) {
+        extras.weeklyMiniSeries = { ok: false, failed: true, error: error?.message || String(error) };
+      }
+    }
+
+    if (laneKey === "thursday") {
+      try {
+        extras.podcastPromotion = await buildAndSchedulePodcastThursdayPromo({
+          publishDate: payload.publishDate,
+          dryRun: payload.dryRun,
+          profileName: payload.profileName,
+          accountId: payload.accountId,
+          apiKey: payload.apiKey,
+        });
+      } catch (error) {
+        extras.podcastPromotion = { ok: false, failed: true, error: error?.message || String(error) };
+      }
+    }
+
+    return { ...daily, extras };
+  };
 
   router.post(
     `/daily/${laneKey}`,
@@ -210,11 +251,61 @@ router.post(
 );
 
 
+
+router.post(
+  "/mini-series/weekly",
+  hookdeckDedupe("zernio:mini-series:weekly"),
+  asyncRoute(async (req, res) => {
+    const parsed = validateBody(zernioMiniSeriesBodySchema, req.body);
+    if (!parsed.ok) return res.status(400).json({ ok: false, error: parsed.error });
+
+    if (shouldRunAsyncServiceRoute(req)) {
+      const job = await startAsyncServiceRouteJob({
+        service: "zernio",
+        lane: "weekly-mini-series",
+        payload: parsed.data,
+        req,
+        runner: buildAndScheduleWeeklyMiniSeries,
+        metadata: { route: "/zernio/mini-series/weekly" },
+      });
+      return res.status(202).json(job);
+    }
+
+    const result = await buildAndScheduleWeeklyMiniSeries(parsed.data);
+    return res.status(result.partialFailure ? 207 : 200).json(result);
+  })
+);
+
+router.post(
+  "/podcast/thursday-promo",
+  hookdeckDedupe("zernio:podcast:thursday-promo"),
+  asyncRoute(async (req, res) => {
+    const parsed = validateBody(zernioPodcastPromoBodySchema, req.body);
+    if (!parsed.ok) return res.status(400).json({ ok: false, error: parsed.error });
+
+    if (shouldRunAsyncServiceRoute(req)) {
+      const job = await startAsyncServiceRouteJob({
+        service: "zernio",
+        lane: "podcast-thursday-promo",
+        payload: parsed.data,
+        req,
+        runner: buildAndSchedulePodcastThursdayPromo,
+        metadata: { route: "/zernio/podcast/thursday-promo" },
+      });
+      return res.status(202).json(job);
+    }
+
+    return res.json(await buildAndSchedulePodcastThursdayPromo(parsed.data));
+  })
+);
+
 router.post(
   "/ebooks/weekly",
   hookdeckDedupe("zernio:ebooks:weekly"),
   asyncRoute(async (req, res) => {
-    const parsed = validateBody(zernioEbookWeeklyBodySchema, req.body);
+    const parsed = validateBody(zernioEbookWeeklyBodySchema,
+  zernioPodcastPromoBodySchema,
+  zernioMiniSeriesBodySchema, req.body);
     if (!parsed.ok) {
       return res.status(400).json({ ok: false, error: parsed.error });
     }
