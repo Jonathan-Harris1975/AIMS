@@ -85,6 +85,10 @@ const blotatoScript = provider(
 
 const meta = provider("meta", ["OPENROUTER_META"], [...SHARED_OPENROUTER_KEY, "OPENROUTER_API_KEY_META"]);
 const art = provider("art", ["OPENROUTER_ART", "OPENROUTER_ART_BACKUP"], [...SHARED_OPENROUTER_KEY, ...ART_OPENROUTER_KEY_FALLBACKS]);
+// Seedream 4.5 is the production artwork primary. FLUX.2 Pro is the
+// deliberately different backup family; Recraft V4.1 was removed after
+// repeated production 404s, and Nano Banana is avoided for this artwork
+// route because its observed output skewed too corporate for the brand.
 const artworkPrimary = provider("artworkPrimary", ["OPENROUTER_ART"], [...SHARED_OPENROUTER_KEY, "OPENROUTER_API_KEY_ART"]);
 const artworkBackup = provider("artworkBackup", ["OPENROUTER_ART_BACKUP"], [...SHARED_OPENROUTER_KEY, "OPENROUTER_API_KEY_ART_BACKUP", "OPENROUTER_API_KEY_ART"]);
 
@@ -156,9 +160,6 @@ export const aiConfig = {
     zernioQuiz: routeChain(["fast", "standard", "fallback"], ["gpt56Luna", "google25FlashLite", "gpt56Sol"]),
     zernioEbook: routeChain(["fast", "standard", "fallback"], ["gpt56Luna", "google25FlashLite", "gpt56Sol"]),
     zernioPodcastPromo: routeChain(["highQuality", "standard", "fallback"], ["gpt56Sol", "google25FlashLite"]),
-    zernioMiniSeriesResearch: routeChain(["highQuality", "audit", "standard", "fallback"], ["gpt56Sol", "google25FlashLite"]),
-    zernioMiniSeriesTheme: routeChain(["highQuality", "standard", "fallback"], ["gpt56Sol", "google25FlashLite"]),
-    zernioMiniSeriesPost: routeChain(["highQuality", "standard", "fallback"], ["gpt56Sol", "google25FlashLite"]),
     // Blotato script quality is production-critical. highQuality sits above standard so Claude 4.6
     // is the first fallback after the dedicated blotatoScript provider, ahead of the general Luna lane.
     blotatoNewsShort: routeChain(["blotatoScript", "highQuality", "standard", "fallback"], ["anthropic46", "gpt56Sol", "gpt56Luna"]),
