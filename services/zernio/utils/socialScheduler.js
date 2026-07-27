@@ -2,11 +2,12 @@ import crypto from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resilientRequest } from "../../shared/utils/ai-service.js";
 import { info, warn } from "../../../logger.js";
-import { LANE_CONFIG, QUIZ_CONFIG, EBOOK_CONFIG, BLOG_RSS_CONFIG, ZERNIO_PROFILE_NAME_GENERAL, ZERNIO_PROFILE_NAME_EBOOKS, ZERNIO_DEFAULT_DRY_RUN, ZERNIO_CROSSPOST_DEDUPE_HOURS, DEFAULT_TIMEZONE, ZERNIO_QUEUE_GUARD_LOOKBACK_PAGES, getZernioRequiredPlatforms, getZernioAccountId, normaliseZernioAccountId, shouldValidateZernioTargetAccounts } from "./config.js";
-import { buildDailyPrompt, buildQuizPrompt, buildEbookPostPrompt, buildAccountVariant } from "./prompts.js";
+import { LANE_CONFIG, QUIZ_CONFIG, EBOOK_CONFIG, BLOG_RSS_CONFIG, PODCAST_PROMO_CONFIG, ZERNIO_PROFILE_NAME_GENERAL, ZERNIO_PROFILE_NAME_EBOOKS, ZERNIO_DEFAULT_DRY_RUN, ZERNIO_CROSSPOST_DEDUPE_HOURS, DEFAULT_TIMEZONE, ZERNIO_QUEUE_GUARD_LOOKBACK_PAGES, getZernioRequiredPlatforms, getZernioAccountId, normaliseZernioAccountId, shouldValidateZernioTargetAccounts } from "./config.js";
+import { buildDailyPrompt, buildQuizPrompt, buildEbookPostPrompt, buildPodcastPromoPrompt, buildAccountVariant } from "./prompts.js";
 import { addDays, nextWeekdayDateString, toScheduledDateTime, zonedDateString } from "./date.js";
 import { loadRecentRssContext } from "./feedContext.js";
 import { fetchBlogRssItems } from "./blogRssFeed.js";
+import { fetchLatestPodcastEpisode } from "./podcastRssFeed.js";
 import { getLaneHistory, getWeeklyTopicLedger, recordLaneSchedule, getQuizHistory, recordQuizSchedule, claimScheduleSlot, completeScheduleSlot, releaseScheduleSlot, isRecentSpotlightPerson, recordSpotlightPerson, hasRecentSocialSource, recordUsedSocialSource } from "./state.js";
 import { resolveProfile, inspectZernioTargeting, listPostsWithAnalytics, createPost } from "./zernioClient.js";
 import getSponsor from "../../script/utils/getSponsor.js";
@@ -22,6 +23,7 @@ import { createQuizArtwork } from "../../artwork/createQuizArtwork.js";
 
 const ZERNIO_DAILY_MAX_TOKENS = Math.max(1200, Number(process.env.ZERNIO_DAILY_MAX_TOKENS || 1400));
 const ZERNIO_QUIZ_MAX_TOKENS = Math.max(1800, Number(process.env.ZERNIO_QUIZ_MAX_TOKENS || 2200));
+const ZERNIO_PODCAST_PROMO_MAX_TOKENS = Math.max(1200, Number(process.env.ZERNIO_PODCAST_PROMO_MAX_TOKENS || 1600));
 const ZERNIO_EBOOK_MAX_TOKENS = Math.max(1200, Number(process.env.ZERNIO_EBOOK_MAX_TOKENS || 1600));
 
 
@@ -903,6 +905,16 @@ function stripHashtags(value = "") {
     .trim();
 }
 
+function normalisePodcastPromoOutput(raw, episode) {
+  const parsed = parseJsonObject(raw, "Thursday podcast promotion");
+  return {
+    title: compactText(parsed.title || episode.title || "Turing's Torch Friday preview").slice(0, 80),
+    topic: compactText(parsed.topic || episode.title || "Turing's Torch").slice(0, 120),
+    content: stripHashtags(parsed.content || ""),
+    imagePrompt: compactText(parsed.imagePrompt || ""),
+  };
+}
+
 function normaliseEbookOutput(raw, featuredBook, dayKey) {
   const parsed = parseJsonObject(raw, `${dayKey} ebook post`);
   return {
@@ -1581,6 +1593,96 @@ export async function buildAndScheduleDailyLaneAccountVariants(laneKey, options 
   }
 
   return { ...primaryResult, accountVariants: variantResults };
+}
+
+export async function buildAndSchedulePodcastThursdayPromo(options = {}) {
+  const publishDate = options.publishDate || nextWeekdayDateString("thursday", DEFAULT_TIMEZONE, new Date());
+  const scheduledDateTime = options.scheduledDateTime || toScheduledDateTime(publishDate, PODCAST_PROMO_CONFIG.publishTime);
+  const profileName = options.profileName || ZERNIO_PROFILE_NAME_GENERAL;
+  const accountId = normaliseZernioAccountId(options.accountId || getZernioAccountId());
+  const dryRun = Boolean(options.dryRun);
+  const apiKey = options.apiKey || process.env.ZERNIO_META_API_KEY;
+  const feedUrl = options.feedUrl || PODCAST_PROMO_CONFIG.feedUrl;
+  const sessionId = `ZERNIO-PODCAST-PROMO-${publishDate}`;
+  const episode = await fetchLatestPodcastEpisode({ feedUrl });
+
+  const generated = await requestStructuredZernioJson({
+    routeName: "zernioPodcastPromo",
+    sessionId,
+    prompt: buildPodcastPromoPrompt({ publishDate, episode }),
+    label: "Thursday podcast promotion",
+    normalise: (raw) => normalisePodcastPromoOutput(raw, episode),
+    maxTokens: ZERNIO_PODCAST_PROMO_MAX_TOKENS,
+    temperature: 0.36,
+  });
+
+  const destination = episode.link || feedUrl;
+  const post = {
+    title: generated.title,
+    topic: generated.topic,
+    content: ensureHashtags(`${generated.content}\n\nFriday episode: ${destination}`, PODCAST_PROMO_CONFIG.hashtags, { maxTags: 3 }),
+    imageUrl: options.imageUrl || "",
+  };
+
+  const gate = runZernioSocialGate({ contentType: "zernio-podcast-promo", laneKey: "podcast-thursday-promo", post });
+  if (gate.defects?.length) {
+    const err = new Error(`Thursday podcast promotion failed brand gate: ${gate.defects.join(" | ")}`);
+    err.statusCode = 422;
+    emitQaEvent({ source: "scheduler.gate.podcast-thursday-promo", type: "podcast_promo_brand_gate_failed", severity: "high", message: err.message, detail: { publishDate, episodeTitle: episode.title } });
+    throw err;
+  }
+
+  if (!post.imageUrl) {
+    const artwork = await createSocialArtwork({
+      sessionId,
+      lane: "podcast-thursday-promo",
+      date: publishDate,
+      prompt: [generated.imagePrompt, `Episode title for context only, do not render text: ${episode.title}.`, "Turing's Torch: AI Weekly promotion artwork. No presenter or guest unless verified source imagery is supplied. No text, captions, logos or typography."].filter(Boolean).join("\n"),
+      fallbackUrl: episode.imageUrl || PODCAST_PROMO_CONFIG.fallbackImageUrl,
+    });
+    post.imageUrl = artwork.publicUrl || episode.imageUrl || PODCAST_PROMO_CONFIG.fallbackImageUrl;
+  }
+
+  const slotClaim = claimScheduleSlot({
+    scope: "podcast:thursday-promo",
+    scheduledDateTime,
+    profileName,
+    accountId,
+    force: options.force,
+    sourceIntentHash: buildIntentHash({ audienceIntent: PODCAST_PROMO_CONFIG.audienceIntent, angle: episode.link || episode.title }),
+  });
+  if (slotClaim.duplicatePrevented) return slotDuplicatePostResult({ publishDate, scheduledDateTime, dryRun, profileName, reason: slotClaim.reason });
+
+  try {
+    const scheduling = await scheduleToZernio({ post, scheduledDateTime, profileName, accountId, dryRun, apiKey, laneKey: "podcast-thursday-promo" });
+    if (scheduling.scheduled) {
+      recordEditorialEvent({
+        pipeline: "zernio",
+        lane: "podcast-thursday-promo",
+        audienceIntent: PODCAST_PROMO_CONFIG.audienceIntent,
+        angle: episode.title,
+        scheduledDateTime,
+        text: post.content,
+        meta: { contentType: "zernio-podcast-thursday-promo", episodeLink: destination, audioGenerated: false, audioPolicy: "podcast-pipeline-only" },
+      });
+    }
+    if (slotClaim.claimed && (scheduling.scheduled || scheduling.duplicatePrevented)) {
+      completeScheduleSlot(slotClaim, { lane: "podcast-thursday-promo", scheduledDateTime, topic: episode.title, title: generated.title, duplicatePrevented: Boolean(scheduling.duplicatePrevented) });
+    } else {
+      releaseScheduleSlot(slotClaim);
+    }
+    return {
+      ok: true, lane: "podcast-thursday-promo", publishDate, scheduledDateTime,
+      scheduled: scheduling.scheduled, dryRun: scheduling.dryRun,
+      duplicatePrevented: Boolean(scheduling.duplicatePrevented), post, episode,
+      audioGenerated: false,
+      audioPolicy: "All Turing's Torch audio remains in the podcast production pipeline.",
+      warnings: scheduling.warnings || [], zernioResponse: scheduling.zernioResponse, targeting: scheduling.targeting || null,
+    };
+  } catch (error) {
+    releaseScheduleSlot(slotClaim);
+    throw error;
+  }
 }
 
 export async function buildAndScheduleEbookWeekly(options = {}) {

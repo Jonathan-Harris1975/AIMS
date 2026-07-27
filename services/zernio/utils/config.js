@@ -180,6 +180,16 @@ export const QUIZ_CONFIG = {
 };
 
 
+export const PODCAST_PROMO_CONFIG = {
+  key: "podcast-thursday-promo",
+  label: "Turing's Torch Thursday Preview",
+  publishTime: normaliseTime(process.env.ZERNIO_PODCAST_PROMO_TIME, "18:30"),
+  feedUrl: trimString(process.env.ZERNIO_PODCAST_RSS_FEED_URL || process.env.PODCAST_RSS_FEED_URL, "https://podcast-rss-feeds.jonathan-harris.online/turing-torch.xml"),
+  fallbackImageUrl: trimString(process.env.ZERNIO_PODCAST_PROMO_IMAGE_URL, `${DAILY_IMAGE_BASE}/Podcast`),
+  audienceIntent: "podcast-friday-preview",
+  hashtags: ["#TuringsTorch", "#ArtificialIntelligence", "#AIPodcast"],
+};
+
 export const EBOOK_CONFIG = {
   key: "ebooks-weekly",
   weekdays: ["tuesday", "thursday", "saturday"],

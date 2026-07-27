@@ -1,6 +1,5 @@
 import { buildZernioPersona } from "../../script/utils/toneSetter.js";
 import { britishEnglishPromptGuidance } from "../../content-quality/britishEnglish.js";
-import { jonathanVoicePrompt } from "../../content-quality/jonathanVoice.js";
 
 function renderHistoryBlock(history = []) {
   const cleaned = Array.isArray(history)
@@ -25,7 +24,7 @@ function renderRssBlock(rssItems = []) {
     .join("\n");
 }
 
-const BRAND_VOICE = `${buildZernioPersona()}\n\n${jonathanVoicePrompt({ format: "Zernio social and eBook content" })}`;
+const BRAND_VOICE = buildZernioPersona();
 
 export function buildDailyPrompt({ lane, publishDate, history = [], rssItems = [], weeklyHistory = [], verifiedQuote = null, buildContext = "" }) {
   const laneGuidance = {
@@ -337,6 +336,40 @@ Read more: ${featuredBook.bookUrl || ""}
 - no “game-changing”, “revolutionary”, “transformative”, or “unlock the future”
 - mention the book naturally, not like a hard advert
 - make the post useful even to someone who does not click
+- JSON only`,
+  };
+}
+
+
+export function buildPodcastPromoPrompt({ publishDate, episode = {} } = {}) {
+  return {
+    system: `${buildZernioPersona()}
+
+You are writing the Thursday preview for Turing's Torch: AI Weekly.
+This is a static social promotion post, not a second podcast performance.
+Do not write a voiceover, spoken script, narration, dialogue, or text-to-speech instructions.
+The podcast audio identity belongs exclusively to the podcast production pipeline. Zernio must never synthesise or replace the programme voice.
+Use only supplied episode metadata. Use British English. Be sharp, sceptical, useful and concise.
+No invented guests, claims, quotes, topics, release details or conclusions. No hype, fake urgency, emojis, markdown or hashtags.
+Do not say the episode is available now. It lands Friday.
+Return valid JSON only with exactly: title, topic, content, imagePrompt.`,
+    user: `Create the Thursday social preview for Friday's Turing's Torch: AI Weekly episode.
+
+Promotion date: ${publishDate}
+Episode title: ${episode.title || ""}
+Episode description: ${episode.description || ""}
+Episode number: ${episode.episodeNumber || ""}
+Episode page/link: ${episode.link || ""}
+Episode publication date from RSS: ${episode.pubDate || ""}
+
+Requirements:
+- content target: 65 to 105 words
+- open with the strongest concrete tension, consequence or question supported by the episode description
+- mention Turing's Torch: AI Weekly naturally
+- make clear the episode lands Friday
+- include the episode title once
+- finish with a restrained reason to listen, not engagement bait
+- imagePrompt: premium topic-specific podcast promotion artwork; cinematic editorial composition, strong focal subject, high contrast, no corporate stock imagery, no generic glowing brain/robot/network wallpaper, no invented people, and no rendered text
 - JSON only`,
   };
 }
