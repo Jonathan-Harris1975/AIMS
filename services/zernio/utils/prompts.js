@@ -1,4 +1,5 @@
 import { buildZernioPersona } from "../../script/utils/toneSetter.js";
+import { britishEnglishPromptGuidance } from "../../content-quality/britishEnglish.js";
 
 function renderHistoryBlock(history = []) {
   const cleaned = Array.isArray(history)
@@ -279,7 +280,7 @@ export function buildEbookPostPrompt({ day, publishDate, featuredBook }) {
     system: `${buildZernioPersona()}
 
 Additional ebook-post rules:
-- British English
+- ${britishEnglishPromptGuidance()}
 - sharp, clear, sceptical of hype
 - conversational, intelligent, grounded
 - suitable for Facebook and Instagram
