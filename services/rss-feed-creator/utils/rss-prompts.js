@@ -11,6 +11,7 @@
 import { warn } from "../../../logger.js";
 import { ANTI_HYPE_HEDGING_PHRASES, GENERIC_ABSTRACTION_TERMS, RSS_BANNED_SUMMARY_PHRASES } from "../../content-quality/brandLexicon.js";
 import { buildRssPersona } from "../../script/utils/toneSetter.js";
+import { jonathanVoicePrompt } from "../../content-quality/jonathanVoice.js";
 
 const MIN_SUMMARY_CHARS =
   Number(process.env.MIN_SUMMARY_CHARS) > 0
@@ -216,6 +217,7 @@ export function USER_ITEM({
   const cleanedText = clean(text) || "(No description provided)";
 
   return [
+    jonathanVoicePrompt({ format: "RSS AI briefing", includeArgumentArc: false }),
     "Rewrite this AI news item for the Jonathan Harris RSS feed.",
     "",
     `Source title: ${cleanedTitle}`,
