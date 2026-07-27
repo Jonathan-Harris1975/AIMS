@@ -180,6 +180,27 @@ export const QUIZ_CONFIG = {
 };
 
 
+
+export const MINI_SERIES_CONFIG = {
+  key: "weekly-mini-series",
+  label: "Weekly Topical Mini-Series",
+  audienceIntent: "topical-authority-mini-series",
+  minPosts: Math.max(3, Number(process.env.ZERNIO_MINI_SERIES_MIN_POSTS || 3)),
+  maxPosts: Math.min(6, Math.max(3, Number(process.env.ZERNIO_MINI_SERIES_MAX_POSTS || 6))),
+  minimumSuitabilityScore: Math.max(0, Math.min(100, Number(process.env.ZERNIO_MINI_SERIES_MIN_SCORE || 78))),
+  researchLookbackDays: Math.max(2, Number(process.env.ZERNIO_MINI_SERIES_LOOKBACK_DAYS || 7)),
+  researchMaxItems: Math.max(4, Number(process.env.ZERNIO_MINI_SERIES_MAX_SOURCE_ITEMS || 12)),
+  fallbackImageUrl: trimString(process.env.ZERNIO_MINI_SERIES_IMAGE_URL, `${DAILY_IMAGE_BASE}/MiniSeries`),
+  publishTimes: {
+    tuesday: normaliseTime(process.env.ZERNIO_MINI_SERIES_TUESDAY_TIME, "19:30"),
+    wednesday: normaliseTime(process.env.ZERNIO_MINI_SERIES_WEDNESDAY_TIME, "19:30"),
+    thursday: normaliseTime(process.env.ZERNIO_MINI_SERIES_THURSDAY_TIME, "20:00"),
+    friday: normaliseTime(process.env.ZERNIO_MINI_SERIES_FRIDAY_TIME, "19:30"),
+    saturday: normaliseTime(process.env.ZERNIO_MINI_SERIES_SATURDAY_TIME, "19:30"),
+    sunday: normaliseTime(process.env.ZERNIO_MINI_SERIES_SUNDAY_TIME, "19:30"),
+  },
+};
+
 export const PODCAST_PROMO_CONFIG = {
   key: "podcast-thursday-promo",
   label: "Turing's Torch Thursday Preview",

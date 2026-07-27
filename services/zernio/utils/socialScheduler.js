@@ -2,8 +2,8 @@ import crypto from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resilientRequest } from "../../shared/utils/ai-service.js";
 import { info, warn } from "../../../logger.js";
-import { LANE_CONFIG, QUIZ_CONFIG, EBOOK_CONFIG, BLOG_RSS_CONFIG, PODCAST_PROMO_CONFIG, ZERNIO_PROFILE_NAME_GENERAL, ZERNIO_PROFILE_NAME_EBOOKS, ZERNIO_DEFAULT_DRY_RUN, ZERNIO_CROSSPOST_DEDUPE_HOURS, DEFAULT_TIMEZONE, ZERNIO_QUEUE_GUARD_LOOKBACK_PAGES, getZernioRequiredPlatforms, getZernioAccountId, normaliseZernioAccountId, shouldValidateZernioTargetAccounts } from "./config.js";
-import { buildDailyPrompt, buildQuizPrompt, buildEbookPostPrompt, buildPodcastPromoPrompt, buildAccountVariant } from "./prompts.js";
+import { LANE_CONFIG, QUIZ_CONFIG, EBOOK_CONFIG, BLOG_RSS_CONFIG, PODCAST_PROMO_CONFIG, MINI_SERIES_CONFIG, ZERNIO_PROFILE_NAME_GENERAL, ZERNIO_PROFILE_NAME_EBOOKS, ZERNIO_DEFAULT_DRY_RUN, ZERNIO_CROSSPOST_DEDUPE_HOURS, DEFAULT_TIMEZONE, ZERNIO_QUEUE_GUARD_LOOKBACK_PAGES, getZernioRequiredPlatforms, getZernioAccountId, normaliseZernioAccountId, shouldValidateZernioTargetAccounts } from "./config.js";
+import { buildDailyPrompt, buildQuizPrompt, buildEbookPostPrompt, buildPodcastPromoPrompt, buildMiniSeriesResearchPrompt, buildMiniSeriesThemePrompt, buildMiniSeriesPostPrompt, buildAccountVariant } from "./prompts.js";
 import { addDays, nextWeekdayDateString, toScheduledDateTime, zonedDateString } from "./date.js";
 import { loadRecentRssContext } from "./feedContext.js";
 import { fetchBlogRssItems } from "./blogRssFeed.js";
@@ -23,6 +23,9 @@ import { createQuizArtwork } from "../../artwork/createQuizArtwork.js";
 
 const ZERNIO_DAILY_MAX_TOKENS = Math.max(1200, Number(process.env.ZERNIO_DAILY_MAX_TOKENS || 1400));
 const ZERNIO_QUIZ_MAX_TOKENS = Math.max(1800, Number(process.env.ZERNIO_QUIZ_MAX_TOKENS || 2200));
+const ZERNIO_MINI_SERIES_RESEARCH_MAX_TOKENS = Math.max(1600, Number(process.env.ZERNIO_MINI_SERIES_RESEARCH_MAX_TOKENS || 2200));
+const ZERNIO_MINI_SERIES_THEME_MAX_TOKENS = Math.max(1800, Number(process.env.ZERNIO_MINI_SERIES_THEME_MAX_TOKENS || 2600));
+const ZERNIO_MINI_SERIES_POST_MAX_TOKENS = Math.max(1200, Number(process.env.ZERNIO_MINI_SERIES_POST_MAX_TOKENS || 1600));
 const ZERNIO_PODCAST_PROMO_MAX_TOKENS = Math.max(1200, Number(process.env.ZERNIO_PODCAST_PROMO_MAX_TOKENS || 1600));
 const ZERNIO_EBOOK_MAX_TOKENS = Math.max(1200, Number(process.env.ZERNIO_EBOOK_MAX_TOKENS || 1600));
 
@@ -905,6 +908,66 @@ function stripHashtags(value = "") {
     .trim();
 }
 
+function normaliseMiniSeriesResearch(raw) {
+  const parsed = parseJsonObject(raw, "mini-series research panel");
+  const decision = String(parsed.decision || "").trim().toLowerCase() === "create" ? "create" : "skip";
+  return {
+    decision,
+    topic: compactText(parsed.topic || "").slice(0, 200),
+    rationale: compactText(parsed.rationale || "").slice(0, 1200),
+    suitabilityScore: Math.max(0, Math.min(100, Number(parsed.suitabilityScore || 0))),
+    authorityScore: Math.max(0, Math.min(100, Number(parsed.authorityScore || 0))),
+    audienceValueScore: Math.max(0, Math.min(100, Number(parsed.audienceValueScore || 0))),
+    suggestedPostCount: decision === "create" ? Math.max(3, Math.min(6, Number(parsed.suggestedPostCount || 3))) : 0,
+    sourceUrls: Array.isArray(parsed.sourceUrls) ? parsed.sourceUrls.map((url) => String(url || "").trim()).filter(Boolean) : [],
+  };
+}
+
+function normaliseMiniSeriesTheme(raw, research) {
+  const parsed = parseJsonObject(raw, "mini-series theme panel");
+  const posts = Array.isArray(parsed.posts) ? parsed.posts : [];
+  return {
+    seriesTitle: compactText(parsed.seriesTitle || research.topic || "Weekly AI mini-series").slice(0, 120),
+    seriesSummary: compactText(parsed.seriesSummary || research.rationale || "").slice(0, 1200),
+    hashtags: Array.isArray(parsed.hashtags)
+      ? parsed.hashtags.map((tag) => String(tag || "").trim()).filter((tag) => /^#[A-Za-z0-9_]{2,50}$/.test(tag)).slice(0, 3)
+      : [],
+    posts: posts.slice(0, 6).map((post, index) => ({
+      title: compactText(post?.title || `Part ${index + 1}`).slice(0, 100),
+      angle: compactText(post?.angle || "").slice(0, 300),
+      brief: compactText(post?.brief || "").slice(0, 1200),
+      sourceUrls: Array.isArray(post?.sourceUrls) ? post.sourceUrls.map((url) => String(url || "").trim()).filter(Boolean) : [],
+    })),
+  };
+}
+
+function normaliseMiniSeriesPost(raw, postPlan) {
+  const parsed = parseJsonObject(raw, "mini-series post");
+  return {
+    title: compactText(parsed.title || postPlan.title || "Weekly mini-series").slice(0, 80),
+    topic: compactText(parsed.topic || postPlan.angle || postPlan.title || "AI").slice(0, 120),
+    content: stripHashtags(parsed.content || ""),
+    imagePrompt: compactText(parsed.imagePrompt || "").slice(0, 1400),
+  };
+}
+
+function validMiniSeriesSourceUrls(urls = [], sourceItems = []) {
+  const allowed = new Set(sourceItems.map((item) => String(item?.link || "").trim()).filter(Boolean));
+  return (Array.isArray(urls) ? urls : []).filter((url) => allowed.has(String(url || "").trim()));
+}
+
+function miniSeriesPublishSlots(weekStartDate, count) {
+  const weekdays = ["tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
+  return weekdays.slice(0, Math.max(0, Math.min(6, Number(count || 0)))).map((day, index) => {
+    const publishDate = addDays(weekStartDate, index + 1);
+    return {
+      day,
+      publishDate,
+      scheduledDateTime: toScheduledDateTime(publishDate, MINI_SERIES_CONFIG.publishTimes[day]),
+    };
+  });
+}
+
 function normalisePodcastPromoOutput(raw, episode) {
   const parsed = parseJsonObject(raw, "Thursday podcast promotion");
   return {
@@ -1593,6 +1656,327 @@ export async function buildAndScheduleDailyLaneAccountVariants(laneKey, options 
   }
 
   return { ...primaryResult, accountVariants: variantResults };
+}
+
+export async function buildAndScheduleWeeklyMiniSeries(options = {}) {
+  const weekStartDate = options.weekStartDate || nextWeekdayDateString("monday", DEFAULT_TIMEZONE, new Date());
+  const profileName = options.profileName || ZERNIO_PROFILE_NAME_GENERAL;
+  const accountId = normaliseZernioAccountId(options.accountId || getZernioAccountId());
+  const dryRun = Boolean(options.dryRun);
+  const apiKey = options.apiKey || process.env.ZERNIO_META_API_KEY;
+  const minimumScore = Number(options.minimumSuitabilityScore ?? MINI_SERIES_CONFIG.minimumSuitabilityScore);
+  const sessionId = `ZERNIO-MINI-SERIES-${weekStartDate}`;
+
+  const loaded = Array.isArray(options.sourceItems) && options.sourceItems.length
+    ? { ok: true, items: options.sourceItems, warning: null }
+    : await loadRecentRssContext({
+        days: MINI_SERIES_CONFIG.researchLookbackDays,
+        maxItems: MINI_SERIES_CONFIG.researchMaxItems,
+      });
+
+  const sourceItems = (loaded.items || []).map((item) => ({
+    title: compactText(item.title || ""),
+    summary: compactText(item.summary || ""),
+    link: String(item.link || "").trim(),
+    pubDate: typeof item.pubDate === "number" ? item.pubDate : (Date.parse(item.pubDate || "") || null),
+  })).filter((item) => item.title && item.summary && item.link);
+
+  if (sourceItems.length < 2) {
+    info("zernio.mini_series.skipped", { weekStartDate, reason: "insufficient-source-evidence", sourceCount: sourceItems.length });
+    return {
+      ok: true,
+      lane: "weekly-mini-series",
+      skipped: true,
+      reason: "insufficient-source-evidence",
+      sourceCount: sourceItems.length,
+      warnings: [loaded.warning].filter(Boolean),
+      posts: [],
+    };
+  }
+
+  const research = await requestStructuredZernioJson({
+    routeName: "zernioMiniSeriesResearch",
+    sessionId: `${sessionId}-RESEARCH`,
+    prompt: buildMiniSeriesResearchPrompt({ weekStartDate, sourceItems, topicSeed: options.topicSeed || "" }),
+    label: "mini-series research panel",
+    normalise: normaliseMiniSeriesResearch,
+    maxTokens: ZERNIO_MINI_SERIES_RESEARCH_MAX_TOKENS,
+    temperature: 0.18,
+  });
+
+  research.sourceUrls = validMiniSeriesSourceUrls(research.sourceUrls, sourceItems);
+  const researchApproved =
+    research.decision === "create" &&
+    research.suitabilityScore >= minimumScore &&
+    research.authorityScore >= 70 &&
+    research.audienceValueScore >= 70 &&
+    research.sourceUrls.length >= 2;
+
+  if (!researchApproved) {
+    const reason = research.decision === "skip" ? "research-panel-skip" : "research-threshold-not-met";
+    info("zernio.mini_series.skipped", {
+      weekStartDate,
+      reason,
+      topic: research.topic || null,
+      suitabilityScore: research.suitabilityScore,
+      authorityScore: research.authorityScore,
+      audienceValueScore: research.audienceValueScore,
+      sourceCount: research.sourceUrls.length,
+    });
+    return {
+      ok: true,
+      lane: "weekly-mini-series",
+      skipped: true,
+      reason,
+      research,
+      posts: [],
+      warnings: [loaded.warning].filter(Boolean),
+    };
+  }
+
+  const theme = await requestStructuredZernioJson({
+    routeName: "zernioMiniSeriesTheme",
+    sessionId: `${sessionId}-THEME`,
+    prompt: buildMiniSeriesThemePrompt({ weekStartDate, research, sourceItems }),
+    label: "mini-series articles theme panel",
+    normalise: (raw) => normaliseMiniSeriesTheme(raw, research),
+    maxTokens: ZERNIO_MINI_SERIES_THEME_MAX_TOKENS,
+    temperature: 0.26,
+  });
+
+  const desiredCount = Math.max(
+    MINI_SERIES_CONFIG.minPosts,
+    Math.min(MINI_SERIES_CONFIG.maxPosts, research.suggestedPostCount, theme.posts.length)
+  );
+  theme.posts = theme.posts.slice(0, desiredCount).map((post) => ({
+    ...post,
+    sourceUrls: validMiniSeriesSourceUrls(post.sourceUrls, sourceItems),
+  }));
+
+  const broadTags = new Set(["#ai", "#artificialintelligence", "#technology", "#tech", "#innovation", "#future"]);
+  const specificTags = theme.hashtags.filter((tag) => !broadTags.has(tag.toLowerCase()));
+  if (theme.posts.length < MINI_SERIES_CONFIG.minPosts || specificTags.length < 1) {
+    info("zernio.mini_series.skipped", {
+      weekStartDate,
+      reason: "theme-panel-insufficient-series",
+      topic: research.topic,
+      plannedPosts: theme.posts.length,
+      hashtags: theme.hashtags,
+    });
+    return {
+      ok: true,
+      lane: "weekly-mini-series",
+      skipped: true,
+      reason: "theme-panel-insufficient-series",
+      research,
+      theme,
+      posts: [],
+    };
+  }
+
+  const slots = miniSeriesPublishSlots(weekStartDate, theme.posts.length);
+  const prepared = [];
+
+  // Build and review the whole series before scheduling any part. One weak
+  // post should not leave a half-built public series behind.
+  for (const [index, postPlan] of theme.posts.entries()) {
+    const slot = slots[index];
+    const generated = await requestStructuredZernioJson({
+      routeName: "zernioMiniSeriesPost",
+      sessionId: `${sessionId}-PART-${index + 1}`,
+      prompt: buildMiniSeriesPostPrompt({
+        weekStartDate,
+        series: theme,
+        postPlan,
+        index,
+        total: theme.posts.length,
+        sourceItems,
+      }),
+      label: `mini-series part ${index + 1}`,
+      normalise: (raw) => normaliseMiniSeriesPost(raw, postPlan),
+      maxTokens: ZERNIO_MINI_SERIES_POST_MAX_TOKENS,
+      temperature: 0.38,
+    });
+
+    let post = {
+      title: generated.title,
+      topic: generated.topic,
+      content: ensureHashtags(
+        `Part ${index + 1}/${theme.posts.length} — ${theme.seriesTitle}\n\n${generated.content}`,
+        theme.hashtags,
+        { maxTags: 3 }
+      ),
+      imageUrl: "",
+    };
+
+    let gate = runZernioSocialGate({
+      contentType: "zernio-mini-series",
+      laneKey: "weekly-mini-series",
+      post,
+    });
+
+    if (!gate.ok) {
+      const reviewed = await reviewZernioGateOrThrow({
+        councilKey: "zernio-mini-series",
+        gate,
+        post,
+        contentType: "zernio-mini-series",
+        laneKey: "weekly-mini-series",
+        label: `Mini-series part ${index + 1} review`,
+      });
+      post = reviewed.post;
+      gate = reviewed.gate;
+    }
+
+    if (!options.imageUrl && !dryRun) {
+      const artwork = await createSocialArtwork({
+        sessionId: `${sessionId}-PART-${index + 1}`,
+        lane: "mini-series",
+        date: slot.publishDate,
+        prompt: [
+          generated.imagePrompt,
+          `Series theme for context only: ${theme.seriesTitle}.`,
+          `Part angle for context only: ${postPlan.angle}.`,
+          "Create a distinct image for this part while retaining a coherent editorial family across the series.",
+          "No visible text, labels, logos or typography.",
+        ].join("\n"),
+        fallbackUrl: MINI_SERIES_CONFIG.fallbackImageUrl,
+      });
+      post.imageUrl = artwork.publicUrl || MINI_SERIES_CONFIG.fallbackImageUrl;
+    } else {
+      post.imageUrl = options.imageUrl || MINI_SERIES_CONFIG.fallbackImageUrl;
+    }
+
+    prepared.push({ index, slot, postPlan, post, gate });
+  }
+
+  if (!dryRun && apiKey) {
+    for (const item of prepared) {
+      await scheduleToZernio({
+        post: item.post,
+        scheduledDateTime: item.slot.scheduledDateTime,
+        profileName,
+        accountId,
+        dryRun,
+        apiKey,
+        preflightOnly: true,
+        laneKey: "weekly-mini-series",
+      });
+    }
+  }
+
+  const results = [];
+  for (const item of prepared) {
+    const slotClaim = claimScheduleSlot({
+      scope: `mini-series:${item.index + 1}`,
+      scheduledDateTime: item.slot.scheduledDateTime,
+      profileName,
+      accountId,
+      force: options.force,
+      sourceIntentHash: buildIntentHash({
+        audienceIntent: MINI_SERIES_CONFIG.audienceIntent,
+        angle: `${research.topic}:${item.postPlan.angle}`,
+      }),
+    });
+
+    if (slotClaim.duplicatePrevented) {
+      results.push({
+        ...item.slot,
+        scheduled: false,
+        duplicatePrevented: true,
+        post: item.post,
+        warning: duplicateSlotWarning(slotClaim.reason),
+      });
+      continue;
+    }
+
+    try {
+      const scheduling = await scheduleToZernio({
+        post: item.post,
+        scheduledDateTime: item.slot.scheduledDateTime,
+        profileName,
+        accountId,
+        dryRun,
+        apiKey,
+        laneKey: "weekly-mini-series",
+      });
+
+      if (scheduling.scheduled) {
+        recordEditorialEvent({
+          pipeline: "zernio",
+          lane: "weekly-mini-series",
+          audienceIntent: MINI_SERIES_CONFIG.audienceIntent,
+          angle: item.postPlan.angle,
+          scheduledDateTime: item.slot.scheduledDateTime,
+          text: item.post.content,
+          meta: {
+            contentType: "zernio-weekly-mini-series",
+            seriesTitle: theme.seriesTitle,
+            part: item.index + 1,
+            totalParts: prepared.length,
+            sourceUrls: item.postPlan.sourceUrls,
+          },
+        });
+      }
+
+      if (slotClaim.claimed && (scheduling.scheduled || scheduling.duplicatePrevented)) {
+        completeScheduleSlot(slotClaim, {
+          lane: "weekly-mini-series",
+          scheduledDateTime: item.slot.scheduledDateTime,
+          topic: item.post.topic,
+          title: item.post.title,
+          duplicatePrevented: Boolean(scheduling.duplicatePrevented),
+        });
+      } else {
+        releaseScheduleSlot(slotClaim);
+      }
+
+      results.push({
+        ...item.slot,
+        scheduled: scheduling.scheduled,
+        dryRun: scheduling.dryRun,
+        duplicatePrevented: Boolean(scheduling.duplicatePrevented),
+        post: item.post,
+        zernioResponse: scheduling.zernioResponse,
+      });
+    } catch (error) {
+      releaseScheduleSlot(slotClaim);
+      results.push({
+        ...item.slot,
+        scheduled: false,
+        failed: true,
+        post: item.post,
+        error: safeErrorMessage(error),
+        retry: retrySummaryFromError(error),
+      });
+    }
+  }
+
+  const failedCount = results.filter((item) => item.failed).length;
+  const scheduledCount = results.filter((item) => item.scheduled).length;
+  info("zernio.mini_series.complete", {
+    weekStartDate,
+    topic: research.topic,
+    seriesTitle: theme.seriesTitle,
+    postCount: results.length,
+    scheduledCount,
+    failedCount,
+    skipped: false,
+  });
+
+  return {
+    ok: failedCount === 0,
+    partialFailure: failedCount > 0,
+    lane: "weekly-mini-series",
+    skipped: false,
+    weekStartDate,
+    research,
+    theme,
+    scheduledCount,
+    failedCount,
+    posts: results,
+    warnings: [loaded.warning].filter(Boolean),
+  };
 }
 
 export async function buildAndSchedulePodcastThursdayPromo(options = {}) {

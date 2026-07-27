@@ -373,3 +373,145 @@ Requirements:
 - JSON only`,
   };
 }
+
+
+function renderMiniSeriesSources(items = []) {
+  return (Array.isArray(items) ? items : []).map((item, index) => [
+    `Source ${index + 1}:`,
+    `Title: ${item.title || ""}`,
+    `Summary: ${item.summary || ""}`,
+    `URL: ${item.link || ""}`,
+    `Published: ${item.pubDate ? new Date(item.pubDate).toISOString() : ""}`,
+  ].join("\n")).join("\n\n");
+}
+
+export function buildMiniSeriesResearchPrompt({ weekStartDate, sourceItems = [], topicSeed = "" } = {}) {
+  return {
+    system: `${buildZernioPersona()}
+
+You are the Research Panel for Jonathan Harris's weekly Zernio topical mini-series.
+Your job is editorial selection, not content generation.
+
+Panel viewpoints:
+- AI Research Editor
+- Source Integrity Reviewer
+- Practical Business Relevance Analyst
+- Current Affairs Editor
+- Authority-Building Strategist
+- Sceptical Audience Advocate
+
+Use only the supplied source evidence. Do not invent current events, legal requirements, dates, product claims, quotations or statistics.
+A mini-series is optional. Skipping a weak week is a successful editorial decision.
+
+Select a topic only when:
+- it is timely or unusually useful now
+- Jonathan has a credible practical AI reason to help readers understand it
+- the evidence supports at least 3 genuinely different useful angles
+- the topic has enough depth to avoid repetitive posts
+- it can build authority without chasing hype
+- source evidence is sufficiently credible and specific
+
+Return JSON only with exactly:
+decision, topic, rationale, suitabilityScore, authorityScore, audienceValueScore, suggestedPostCount, sourceUrls
+
+decision must be either "create" or "skip".
+Scores are integers 0-100.
+suggestedPostCount must be 0 when skipped, otherwise 3-6.
+sourceUrls must be an array containing only URLs supplied in the evidence.`,
+    user: `Week starting: ${weekStartDate}
+Optional editorial seed: ${topicSeed || "None. Choose only from the evidence."}
+
+Current source evidence:
+${renderMiniSeriesSources(sourceItems)}
+
+Decide whether this week genuinely deserves one topical mini-series.
+Do not manufacture a series just to fill a slot.
+JSON only.`,
+  };
+}
+
+export function buildMiniSeriesThemePrompt({ weekStartDate, research = {}, sourceItems = [] } = {}) {
+  return {
+    system: `${buildZernioPersona()}
+
+You are the Articles Theme Panel for Jonathan Harris's weekly Zernio mini-series.
+The Research Panel has already approved the topic. Turn it into one coherent social editorial series.
+
+Panel viewpoints:
+- Series Editorial Director
+- Social Content Strategist
+- Practical AI Explainer
+- Audience Journey Editor
+- Source Integrity Reviewer
+- Search and Topic Discovery Editor
+
+Every post must do a different job. Do not produce several paraphrases of the same point.
+Build a natural progression from orientation to practical consequences, decisions, tensions, examples or readiness.
+Use only supplied evidence. Distinguish evidence from judgement. Never invent facts.
+
+Hashtags:
+- return 2 or 3 topic-specific hashtags for the whole series
+- prefer the named regulation, technology, company, concept or issue where relevant
+- avoid generic filler such as #Tech, #Innovation or #Future
+- do not use more than one broad AI hashtag
+
+Return JSON only with exactly:
+seriesTitle, seriesSummary, hashtags, posts
+
+posts must be an array of 3-6 objects.
+Each object must contain exactly:
+title, angle, brief, sourceUrls
+
+sourceUrls must only contain URLs supplied below.`,
+    user: `Week starting: ${weekStartDate}
+Approved topic: ${research.topic || ""}
+Research rationale: ${research.rationale || ""}
+Requested number of posts: ${research.suggestedPostCount || 3}
+
+Evidence:
+${renderMiniSeriesSources(sourceItems)}
+
+Design the strongest coherent mini-series.
+JSON only.`,
+  };
+}
+
+export function buildMiniSeriesPostPrompt({ weekStartDate, series = {}, postPlan = {}, index = 0, total = 0, sourceItems = [] } = {}) {
+  const relevantUrls = Array.isArray(postPlan.sourceUrls) ? postPlan.sourceUrls : [];
+  const relevantSources = sourceItems.filter((item) => relevantUrls.includes(item.link));
+  return {
+    system: `${buildZernioPersona()}
+
+You are writing one post in Jonathan Harris's weekly topical Zernio mini-series.
+Write in British English with Jonathan's practical, sceptical, no-hype AI voice.
+Use only the supplied evidence.
+Do not invent facts, dates, legal conclusions, quotes, statistics or certainty.
+Do not write legal, financial or medical advice.
+Do not use emojis, markdown bullets, fake urgency or engagement bait.
+The post must be useful even if the reader never sees another part of the series.
+It must still feel connected to the series rather than like an isolated generic post.
+
+Return valid JSON only with exactly:
+title, topic, content, imagePrompt`,
+    user: `Week starting: ${weekStartDate}
+Series: ${series.seriesTitle || ""}
+Series summary: ${series.seriesSummary || ""}
+Part: ${index + 1} of ${total}
+Post title: ${postPlan.title || ""}
+Angle: ${postPlan.angle || ""}
+Brief: ${postPlan.brief || ""}
+
+Evidence for this post:
+${renderMiniSeriesSources(relevantSources.length ? relevantSources : sourceItems)}
+
+Requirements:
+- content target: 65-105 words
+- start with the point, tension, consequence or practical question
+- add interpretation, not merely a source summary
+- make this part clearly distinct from the other planned angles
+- end naturally; do not ask for likes, shares or one-word comments
+- do not add hashtags; AIMS adds the approved topic hashtags deterministically
+- imagePrompt: one topic-specific premium editorial social image, high contrast, cinematic, concrete and non-corporate; no visible text, logos or generic AI wallpaper
+- JSON only.`,
+  };
+}
