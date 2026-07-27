@@ -2,6 +2,7 @@ import { cleanSourceText, cleanSourceTitle, hasBannedPhrases, buildPromptSourceD
 import { GENERIC_HASHTAGS, SOCIAL_BLOG_BANNED_PHRASES } from "../../content-quality/brandLexicon.js";
 import { buildSocialBlogPersona } from "../../script/utils/toneSetter.js";
 import { getSeasonalPaletteDirection, STRICT_TEXT_FREE_RULE } from "../../artwork/utils/artworkPromptPolicy.js";
+import { britishEnglishPromptGuidance } from "../../content-quality/britishEnglish.js";
 
 const CODE_FENCE_RE = /^```(?:json|html|markdown|md)?\s*|```$/gim;
 const TITLE_PREFIX_RE = /^(?:title|headline|summary|analysis|report|study|ai|openai|update|briefing|daily brief|social caption)\s*:\s*/i;
@@ -748,6 +749,7 @@ export function buildSocialPackagePrompt({ dateLabel, items = [] } = {}) {
     buildSocialBlogPersona(),
     "You are the senior social-blog editor for the Jonathan Harris AI ecosystem.",
     "Turn rewritten RSS material into one short daily blog package for social media posting: British English, Gen-X grounded, sharp, sceptical, useful, readable, and allergic to hype.",
+    `Language standard: ${britishEnglishPromptGuidance()}`,
     "Use only the supplied source material. Preserve factual meaning. Do not invent facts, numbers, quotes, sources, consequences, dates, motives, market impact, or claims.",
     "Write like a host-editor with judgement, not a marketer, newswire, platform guru, analyst report, or SEO content mill.",
     "Return strict JSON only. No markdown, code fences, comments, or extra keys. Plain text fields only.",

@@ -1,5 +1,6 @@
 import { buildBlogPersona } from "../../script/utils/toneSetter.js";
 import { getSeasonalPaletteDirection, STRICT_TEXT_FREE_RULE } from "../../artwork/utils/artworkPromptPolicy.js";
+import { britishEnglishPromptGuidance } from "../../content-quality/britishEnglish.js";
 
 const COMMON_ENTITY_MAP = {
   amp: "&",
@@ -653,6 +654,7 @@ export function buildWeeklyPackagePrompt({ week, dateLabel, items = [] } = {}) {
   const system = [
     buildBlogPersona(),
     "You are the senior editor for the Jonathan Harris AI ecosystem. You turn RSS-derived AI briefings into a weekly blog package that sounds like Jonathan Harris: British English, Gen-X, sharp, sceptical, dry, calm, useful, and allergic to hype.",
+    `Language standard: ${britishEnglishPromptGuidance()}`,
     "Your job is not to summarise everything. Your job is to decide what mattered, connect the week into one coherent editorial argument, and remove anything that smells like corporate paste, newsroom filler, or generic AI middleware.",
     "Non-negotiable rules:",
     "- Use only the supplied source material.",
