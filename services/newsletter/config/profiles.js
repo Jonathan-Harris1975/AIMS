@@ -72,15 +72,15 @@ const aiEdge = Object.freeze({
       "'game-changing' or 'revolutionary' filler — just what happened and why it matters."
   ),
 
-  // Featured content / CTA slot — fully config-driven per the spec.
-  featuredContent: Object.freeze({
-    enabled: ["1", "true", "yes", "on"].includes(env("NEWSLETTER_AI_EDGE_FEATURED_ENABLED", "true").toLowerCase()),
-    type: env("NEWSLETTER_AI_EDGE_FEATURED_TYPE", "book"), // book | podcast | course | custom
-    title: env("NEWSLETTER_AI_EDGE_FEATURED_TITLE", ""),
-    url: env("NEWSLETTER_AI_EDGE_FEATURED_URL", ""),
-    blurb: env("NEWSLETTER_AI_EDGE_FEATURED_BLURB", ""),
-    imageUrl: env("NEWSLETTER_AI_EDGE_FEATURED_IMAGE_URL", ""),
-    ctaLabel: env("NEWSLETTER_AI_EDGE_FEATURED_CTA_LABEL", "Take a look"),
+  // Thursday house promotion. Tuesday's featured book is resolved from the
+  // canonical featured-book API at build time so it stays aligned with the
+  // rest of the AIMS content ecosystem.
+  podcastPromotion: Object.freeze({
+    title: env("NEWSLETTER_AI_EDGE_PODCAST_TITLE", "Turing's Torch: AI Weekly"),
+    url: env("NEWSLETTER_AI_EDGE_PODCAST_URL", "https://jonathan-harris.online/podcast/"),
+    blurb: env("NEWSLETTER_AI_EDGE_PODCAST_BLURB", ""),
+    imageUrl: env("NEWSLETTER_AI_EDGE_PODCAST_IMAGE_URL", ""),
+    ctaLabel: env("NEWSLETTER_AI_EDGE_PODCAST_CTA_LABEL", "Follow Turing's Torch"),
   }),
 });
 
