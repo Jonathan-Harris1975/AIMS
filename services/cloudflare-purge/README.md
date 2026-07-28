@@ -1,121 +1,28 @@
-> **Document status:** Production reference  
-> **Last reviewed:** 21 June 2026  
-> **Operational authority:** Current repository README, SECURITY policy and operations guide.
+# Cloudflare service
 
-# Cloudflare purge service
+**Live route prefix:** `/cloudflare`
 
-Routes are mounted under `/cloudflare`.
+Performs authenticated Cloudflare cache operations and synchronises the shared website shell when required.
 
-## Endpoints
+## HTTP contract
 
-- `GET /cloudflare/health`
-- `POST /cloudflare/purge`
-- `POST /cloudflare/site-shell/sync` (internal deployment bridge; not a public website API)
+- `GET /cloudflare/health` — credential/config readiness without exposing secret values.
+- `POST /cloudflare/purge` — purge configured cache targets.
+- `POST /cloudflare/site-shell/sync` — synchronise site-shell assets/content for the configured deployment workflow.
 
-`POST /cloudflare/purge` requires the AIMS bearer token or `x-cloudflare-purge-secret: <CLOUDFLARE_PURGE_SHARED_SECRET>` in production. `CLOUDFLARE_PURGE_ALLOW_PUBLIC=true` is an explicit legacy escape hatch and should not be used for paid production.
+## Behaviour
 
-The route still requires valid outbound Cloudflare credentials in the deployed environment. Empty webhook-style POST bodies are treated as `{"purge_everything": true}` because this endpoint is normally used as a cache-clear trigger rather than a form submission.
+Production calls use AIMS bearer authentication and can additionally require `CLOUDFLARE_PURGE_SHARED_SECRET`. Configure zone/account/API credentials, `CLOUDFLARE_PURGE_TIMEOUT_MS` and site-shell settings in the deployment environment.
 
+## Implementation
 
-## Site-shell synchronisation
+The service entry point, route modules and domain utilities are contained in this directory. Calls from AIMS operational windows use the same authenticated HTTP contract as external suite triggers, which keeps job logging, validation and failure handling consistent.
 
-`POST /cloudflare/site-shell/sync` is the internal deployment bridge used after the website release has been confirmed live and the staged purge sequence has completed. It is intentionally **not** part of the public website API documentation.
+## Operational rules
 
-The request provides the exact deployed release SHA and the versioned static manifest URL published by the website repository:
-
-```json
-{
-  "event": "site_shell_sync",
-  "release_sha": "<commit-sha>",
-  "manifest_url": "https://jonathan-harris.online/assets/site-shell/<commit-sha>/manifest.json"
-}
-```
-
-AIMS verifies the release SHA and SHA-256 hashes for the canonical header/footer, then synchronises managed HTML in the `blog` and `transcript` R2 buckets. `email.html` newsletter delivery artefacts are deliberately excluded because email clients require inline, email-safe markup; the public newsletter `index.html` uses the website shell. The last-known-good shell is also persisted in `metasystem` for generation resilience.
-
-The endpoint is an internal deployment bridge and is never opened by `CLOUDFLARE_PURGE_ALLOW_PUBLIC`. It accepts the AIMS bearer token or `x-cloudflare-purge-secret`, validated against `SITE_SHELL_SYNC_SHARED_SECRET` with `CLOUDFLARE_PURGE_SHARED_SECRET` as the backwards-compatible fallback.
-
-Site-shell consumer settings:
-
-- `SITE_SHELL_MANIFEST_URL=https://jonathan-harris.online/assets/site-shell/manifest.json`
-- `SITE_SHELL_ALLOWED_HOSTS=jonathan-harris.online`
-- `SITE_SHELL_SYNC_SHARED_SECRET=<deployment bridge secret>`
-
-## Request body
-
-Provide exactly one purge mode:
-
-```json
-{}
-```
-
-Defaults to:
-
-```json
-{ "purge_everything": true }
-```
-
-Explicit purge-all payload:
-
-```json
-{ "purge_everything": true }
-```
-
-```json
-{ "files": ["https://example.com/page.html"] }
-```
-
-Also accepted:
-
-```json
-{ "urls": "https://example.com/page.html, https://example.com/feed.xml" }
-```
-
-```json
-{ "tags": ["tag-name"] }
-```
-
-```json
-{ "hosts": ["example.com"] }
-```
-
-```json
-{ "prefixes": ["https://example.com/blog/"] }
-```
-
-## Environment variables
-
-Preferred names:
-
-- `CF_zone` or `CLOUDFLARE_ZONE_ID`
-- `CF_purge` or `CLOUDFLARE_PURGE_API_TOKEN`
-- `CLOUDFLARE_PURGE_SHARED_SECRET`, optional hook secret for non-bearer callers
-- `CLOUDFLARE_PURGE_ALLOW_PUBLIC=false`, keep closed in production
-- `CLOUDFLARE_PURGE_TIMEOUT_MS`, optional, default `15000`
-
-Supported aliases:
-
-- Zone: `CF_zone`, `CF_ZONE`, `CLOUDFLARE_ZONE_ID`, `CLOUDFLARE_ZONE`
-- API token: `CF_purge`, `CF_PURGE`, `CLOUDFLARE_PURGE_API_TOKEN`, `CLOUDFLARE_API_TOKEN`, `CF_API_TOKEN`
-- Legacy global key fallback: `CF_EMAIL` plus one of `CF_GLOBAL_API_KEY`, `CLOUDFLARE_GLOBAL_API_KEY`, `CF_API_KEY`
-
-The code strips a leading `Bearer ` prefix from token values, so either a raw token or `Bearer <token>` will work.
-
-## Koyeb note
-
-Use a clean secret reference without spaces or hyphens in the secret name where possible:
-
-```text
-CF_purge={{secret.CF_PURGE}}
-CF_zone={{secret.CF_ZONE}}
-CLOUDFLARE_PURGE_SHARED_SECRET={{secret.CLOUDFLARE_PURGE_SHARED_SECRET}}
-CLOUDFLARE_PURGE_ALLOW_PUBLIC=false
-```
-
-Avoid this shape for the token because it can remain unresolved and Cloudflare will reject it as a bad bearer token:
-
-```text
-CF_purge={{ secret.CF-purge }}
-```
-
-The health route now reports whether the Cloudflare credential variables resolved, and identifies the env key used without exposing secret values.
+- Treat `config/production.defaults.env`, `env.template`, `config/thresholds.js` and the relevant service config module as the configuration sources of truth.
+- Secrets belong in the deployment secret store and must not be committed.
+- Production HTTP access is protected by the AIMS bearer-auth middleware unless a route explicitly implements a narrower public status/redirect contract.
+- Retries are for transient failures only; validation, policy and source-integrity failures fail closed.
+- Generated public content must pass its content-quality gates before publication or delivery.
+- Durable artefacts and job state use the configured R2/state utilities rather than process memory where a durable store is required.
