@@ -1,178 +1,157 @@
 // services/newsletter/engine/compose.js
 //
-// Turns ranked candidate stories into the editorial content pieces for one
-// newsletter send: subject line, preview text, hero headline, lead article,
-// top-N story summaries and a footer. Each AI call is narrowly scoped and
-// returns structured JSON so downstream rendering/QA stays deterministic.
+// Produces the benchmarked AI Edge issue format: opening note, Big Three,
+// Worth Using, On the Radar, Reality Check and reader question. The model is
+// only allowed to express supplied source material; source titles/links are
+// reattached deterministically after generation.
 
 import { resilientRequest } from "../../shared/utils/ai-service.js";
 import { warn } from "../../../logger.js";
 
 function stripCodeFences(raw = "") {
-  return String(raw || "")
-    .replace(/^```(?:json)?\s*/i, "")
-    .replace(/```\s*$/i, "")
-    .trim();
+  return String(raw || "").replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
 }
 
 function extractJsonCandidate(raw = "") {
   const stripped = stripCodeFences(raw);
   if (!stripped) return "";
-  try {
-    JSON.parse(stripped);
-    return stripped;
-  } catch {}
+  try { JSON.parse(stripped); return stripped; } catch {}
   const first = stripped.indexOf("{");
   const last = stripped.lastIndexOf("}");
-  if (first >= 0 && last > first) return stripped.slice(first, last + 1);
-  return stripped;
+  return first >= 0 && last > first ? stripped.slice(first, last + 1) : stripped;
 }
 
 function parseJsonResponse(raw, label) {
   const candidate = extractJsonCandidate(raw);
   if (!candidate) return { ok: false, error: `${label}: model returned an empty response` };
-  try {
-    return { ok: true, data: JSON.parse(candidate) };
-  } catch (err) {
-    return { ok: false, error: `${label}: invalid JSON (${err.message})` };
-  }
+  try { return { ok: true, data: JSON.parse(candidate) }; }
+  catch (err) { return { ok: false, error: `${label}: invalid JSON (${err.message})` }; }
 }
 
 function brandGuardrails(profile) {
   return [
     `Brand voice: ${profile.brandVoice}`,
-    "British English spelling throughout (analyse, colour, organisation, favourite).",
-    "Never invent facts, quotes, or statistics that are not present in the supplied source material.",
-    "Never use these banned phrases or close variants: 'game-changing', 'revolutionary', 'groundbreaking', " +
-      "'cutting-edge', 'in today's fast-paced world', 'delve', 'unlock the power of', 'paradigm shift'.",
-    "No emoji. No exclamation-mark stacking. No clickbait framing ('You won't believe...').",
+    "Write in Jonathan Harris's first-person editorial voice where an opinion is requested.",
+    "British English spelling throughout.",
+    "Be sceptical, practical and specific. Separate evidence from interpretation.",
+    "Never invent facts, quotes, statistics, product capabilities or conclusions not supported by the supplied source material.",
+    "Avoid generic AI-newsletter filler and corporate PR language.",
+    "Never use: game-changing, revolutionary, groundbreaking, cutting-edge, delve, paradigm shift, unlock the power of.",
+    "No emoji, clickbait, breathless hype or exclamation-mark stacking.",
   ].join("\n");
 }
 
-function sourcesBlock(stories) {
-  return stories
-    .map(
-      (s, i) =>
-        `[${i + 1}] "${s.title}" — ${s.summary || "(no summary supplied)"}\nSource: ${s.link}`
-    )
-    .join("\n\n");
+function sourceBlock(lead, stories) {
+  return [lead, ...stories].map((s, i) =>
+    `[${i}] ${s.title}\nSummary: ${s.summary || "(none supplied)"}\nSource: ${s.link}`
+  ).join("\n\n");
 }
 
-/**
- * Generates the lead article + hero headline from the top-ranked story.
- */
-export async function composeLeadArticle({ profile, lead, sessionId }) {
-  if (!lead) return { ok: false, error: "No lead story available to compose." };
-
-  const messages = [
-    {
-      role: "system",
-      content:
-        "You are the lead editor for the AI Edge newsletter. You write a short, punchy lead " +
-        "article (120-180 words) grounded strictly in the supplied source material, plus a " +
-        "hero headline (under 65 characters).\n\n" +
-        brandGuardrails(profile) +
-        "\n\nRespond with ONLY valid JSON: " +
-        '{"heroHeadline": string, "leadArticleHtml": string}. ' +
-        "leadArticleHtml must be 1-3 short <p> paragraphs, no headings, no markdown.",
-    },
-    {
-      role: "user",
-      content: `Source story:\nTitle: ${lead.title}\nSummary: ${lead.summary || "(none supplied)"}\nLink: ${lead.link}`,
-    },
-  ];
-
-  const raw = await resilientRequest("newsletterCompose", { sessionId, messages, max_tokens: 1400 });
-  const parsed = parseJsonResponse(raw, "composeLeadArticle");
-  if (!parsed.ok) {
-    warn("newsletter.compose.lead_parse_failed", { sessionId, error: parsed.error });
-    return { ok: false, error: parsed.error };
-  }
-
+function attachSource(copy = {}, source = {}) {
   return {
-    ok: true,
-    heroHeadline: String(parsed.data.heroHeadline || lead.title).trim(),
-    leadArticleHtml: String(parsed.data.leadArticleHtml || "").trim(),
-    sourceLink: lead.link,
+    title: source.title || "",
+    link: source.link || "",
+    whatHappened: String(copy.whatHappened || source.summary || "").trim(),
+    whyItMatters: String(copy.whyItMatters || "").trim(),
+    jonathanTake: String(copy.jonathanTake || "").trim(),
   };
 }
 
-/**
- * Generates a one/two-sentence summary for each of the top-N stories.
- */
-export async function composeStorySummaries({ profile, stories, sessionId }) {
-  if (!Array.isArray(stories) || stories.length === 0) return { ok: true, items: [] };
+export async function composeIssueSections({ profile, lead, stories, sessionId }) {
+  const bigSources = [lead, ...stories.slice(0, 2)].filter(Boolean);
+  const worthSource = stories[2] || null;
+  const radarSources = stories.slice(3, 9);
 
   const messages = [
     {
       role: "system",
       content:
-        "You write one- or two-sentence summaries for a daily AI news digest, one per numbered " +
-        "source below. Each summary must be grounded strictly in its own source and under 40 words.\n\n" +
+        `You are the senior editor writing "${profile.displayName}". The reader promise is: ` +
+        "we filtered the noise and kept only what deserves attention. Build a compact five-minute issue.\n\n" +
         brandGuardrails(profile) +
-        '\n\nRespond with ONLY valid JSON: {"summaries": [string, ...]} in the same order as the sources.',
+        "\n\nUse sources [0]-[2] for the Big Three in exactly that order. Use source [3] for Worth Using/Watching " +
+        "only if it is genuinely useful or practically relevant; otherwise frame it as 'Worth Watching'. Use the remaining sources for On the Radar. " +
+        "Reality Check must interrogate one claim or implication from source [0], clearly distinguishing known facts from interpretation. " +
+        "The opening note is 35-65 words and sounds like Jonathan, not a masthead. The reader question should invite a substantive response.\n\n" +
+        "Respond with ONLY valid JSON using this shape: " +
+        '{"heroHeadline":string,"openingNoteHtml":string,"bigThree":[{"whatHappened":string,"whyItMatters":string,"jonathanTake":string}],"worthUsing":{"label":string,"summary":string,"whyUseful":string},"onRadar":[string],"realityCheck":{"claim":string,"assessment":string},"yourTurn":string}. ' +
+        "openingNoteHtml must be one <p> paragraph. No other field may contain HTML.",
     },
-    { role: "user", content: sourcesBlock(stories) },
+    { role: "user", content: sourceBlock(lead, stories) },
   ];
 
-  const raw = await resilientRequest("newsletterCompose", { sessionId, messages, max_tokens: 1700 });
-  const parsed = parseJsonResponse(raw, "composeStorySummaries");
-  if (!parsed.ok || !Array.isArray(parsed.data?.summaries)) {
-    warn("newsletter.compose.summaries_parse_failed", { sessionId, error: parsed.error });
-    return { ok: false, error: parsed.error || "summaries missing from response" };
+  const raw = await resilientRequest("newsletterCompose", { sessionId, messages, max_tokens: 3200 });
+  const parsed = parseJsonResponse(raw, "composeIssueSections");
+  if (!parsed.ok) {
+    warn("newsletter.compose.issue_parse_failed", { sessionId, error: parsed.error });
+    return { ok: false, error: parsed.error };
   }
 
-  const items = stories.map((story, i) => ({
-    title: story.title,
-    link: story.link,
-    summary: String(parsed.data.summaries[i] || story.summary || "").trim(),
+  const data = parsed.data || {};
+  const bigCopy = Array.isArray(data.bigThree) ? data.bigThree : [];
+  const bigThree = bigSources.map((source, i) => attachSource(bigCopy[i], source));
+  const radarCopy = Array.isArray(data.onRadar) ? data.onRadar : [];
+  const onRadar = radarSources.map((source, i) => ({
+    title: source.title,
+    link: source.link,
+    summary: String(radarCopy[i] || source.summary || "").trim(),
   }));
 
-  return { ok: true, items };
+  const worthUsing = worthSource ? {
+    title: worthSource.title,
+    link: worthSource.link,
+    label: String(data.worthUsing?.label || "Worth Watching").trim(),
+    summary: String(data.worthUsing?.summary || worthSource.summary || "").trim(),
+    whyUseful: String(data.worthUsing?.whyUseful || "").trim(),
+  } : null;
+
+  return {
+    ok: true,
+    heroHeadline: String(data.heroHeadline || lead.title).trim(),
+    openingNoteHtml: String(data.openingNoteHtml || "").trim(),
+    bigThree,
+    worthUsing,
+    onRadar,
+    realityCheck: {
+      claim: String(data.realityCheck?.claim || lead.title || "").trim(),
+      assessment: String(data.realityCheck?.assessment || "").trim(),
+      link: lead.link,
+    },
+    yourTurn: String(data.yourTurn || "Which of these developments deserves a closer look next?").trim(),
+  };
 }
 
-/**
- * Generates the subject line and preview (preheader) text.
- */
-export async function composeSubjectAndPreview({ profile, heroHeadline, sessionId }) {
+export async function composeSubjectAndPreview({ profile, heroHeadline, bigThree = [], sessionId }) {
   const messages = [
     {
       role: "system",
       content:
-        `You write email subject lines and preview text for "${profile.displayName}".\n\n` +
+        `Write the email subject and preview text for "${profile.displayName}".\n\n` +
         brandGuardrails(profile) +
-        "\nSubject line: under 60 characters, no emoji, no clickbait, states the actual lead story. " +
-        "Preview text: under 100 characters, complements (does not repeat) the subject.\n\n" +
-        'Respond with ONLY valid JSON: {"subject": string, "previewText": string}.',
+        "\nSubject: under 60 characters, led by the strongest real story, no generic issue numbering. " +
+        "Preview: under 100 characters and adds a second useful reason to open.\n\n" +
+        'Respond with ONLY valid JSON: {"subject":string,"previewText":string}.',
     },
-    { role: "user", content: `Today's lead headline: ${heroHeadline}` },
+    {
+      role: "user",
+      content: JSON.stringify({ heroHeadline, headlines: bigThree.map((item) => item.title) }),
+    },
   ];
 
   const raw = await resilientRequest("newsletterSubject", { sessionId, messages, max_tokens: 500 });
   const parsed = parseJsonResponse(raw, "composeSubjectAndPreview");
-  if (!parsed.ok) {
-    warn("newsletter.compose.subject_parse_failed", { sessionId, error: parsed.error });
-    return { ok: false, error: parsed.error };
-  }
-
+  if (!parsed.ok) return { ok: false, error: parsed.error };
   return {
     ok: true,
-    subject: String(parsed.data.subject || heroHeadline).trim().slice(0, 100),
-    previewText: String(parsed.data.previewText || "").trim().slice(0, 150),
+    subject: String(parsed.data.subject || heroHeadline).trim().slice(0, 78),
+    previewText: String(parsed.data.previewText || "").trim().slice(0, 120),
   };
 }
 
 export function composeFooter(profile) {
   return {
-    text:
-      `You're receiving this because you subscribed to ${profile.displayName}. ` +
-      "Practical AI coverage, no hype, published by Jonathan Harris.",
+    text: `You're receiving this because you subscribed to ${profile.displayName}. Practical AI coverage, no hype, published by Jonathan Harris.`,
   };
 }
 
-export default {
-  composeLeadArticle,
-  composeStorySummaries,
-  composeSubjectAndPreview,
-  composeFooter,
-};
+export default { composeIssueSections, composeSubjectAndPreview, composeFooter };
