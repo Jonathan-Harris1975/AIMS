@@ -1,70 +1,29 @@
-> **Document status:** Production reference  
-> **Last reviewed:** 16 June 2026  
-> **Operational authority:** Current repository README, SECURITY policy and operations guide.
-
 # Artwork service
 
-## Status
+**Live route prefix:** `/artwork`
 
-**Implemented.** This page documents behaviour backed by files in `services/artwork/`.
+Generates editorial artwork through OpenRouter-compatible image models and stores/publishes outputs through the configured R2 artwork paths.
 
-## Purpose
+## HTTP contract
 
-Generates and stores image assets for direct artwork requests, podcast episodes and blog posts using OpenRouter image-capable providers.
+- `POST /artwork/create` — create artwork through the service-level creation flow.
+- `POST /artwork/generate` — direct generation route used by content pipelines.
 
-## Routes
+Blog and podcast callers provide format-specific prompts and target metadata. The service applies bounded model timeouts and returns the generated asset metadata required by the parent workflow.
 
-- `POST /artwork/create` stores a JSON request in R2.
-- `POST /artwork/generate` generates a PNG and stores it in R2.
+## Behaviour
 
-## Main files
+Key controls: `OPENROUTER_ART`, `OPENROUTER_ART_BACKUP`, `ARTWORK_MAX_TOKENS`, `ARTWORK_TIMEOUT_MS`, `BLOG_ARTWORK_TIMEOUT_MS`, `PODCAST_ARTWORK_TIMEOUT_MS`, R2 art/blog-image bucket settings.
 
-- `routes/createArtwork.js`
-- `routes/generateArtwork.js`
-- `createBlogArtwork.js`
-- `createPodcastArtwork.js`
-- `utils/artwork.js`
-- `utils/openrouterProviders.js`
+## Implementation
 
-## Workflow
+The service entry point, route modules and domain utilities are contained in this directory. Calls from AIMS operational windows use the same authenticated HTTP contract as external suite triggers, which keeps job logging, validation and failure handling consistent.
 
-- Resolve provider/model chain from shared `ai-config.js`.
-- Send image prompt to OpenRouter chat/completions endpoint.
-- Extract base64 image data from provider response.
-- Upload PNG to the correct R2 alias.
-- Podcast artwork can return a configured fallback URL if generation fails.
+## Operational rules
 
-## Environment variables
-
-- `OPENROUTER_API_KEY`, `OPENROUTER_API_KEY_ART`, `OPENROUTER_API_KEY_ART_BACKUP`
-- `AI_MODEL_IMAGE`, `OPENROUTER_ART`, `OPENROUTER_ART_BACKUP`
-- `OPENROUTER_BASE_URL` or `OPENROUTER_API_BASE`
-- `ARTWORK_TIMEOUT_MS`, `BLOG_ARTWORK_TIMEOUT_MS`, `PODCAST_ARTWORK_TIMEOUT_MS`
-- `R2_BUCKET_ART`, `R2_PUBLIC_BASE_URL_ART`
-- `R2_BUCKET_BLOG_IMAGES`, `R2_PUBLIC_BASE_URL_BLOG_IMAGES`
-- `PODCAST_FALLBACK_IMAGE_URL`, `PODCAST_FALLBACK_EPISODE_IMAGE_URL`, `BLOG_FALLBACK_IMAGE_URL`
-
-## External integrations
-
-- OpenRouter image-capable models
-- Cloudflare R2
-
-## Storage
-
-- Direct and podcast images: R2 alias `art`, key `<sessionId>.png`.
-- Blog images: R2 alias `blogImages`, key optionally prefixed by the caller.
-- Artwork create requests: R2 alias `art`, key `artwork/requests/<timestamp>.json`.
-
-## Tests
-
-No dedicated artwork test file was found. Artwork behaviour is indirectly exercised by blog and podcast flows where tests cover surrounding package logic.
-
-## Common troubleshooting
-
-- No providers configured: set at least one image model and API key.
-- No image data returned: inspect provider response shape and model capability.
-- R2 upload failure: check bucket/public URL env for `art` or `blogImages`.
-
-## Connections to other services
-
-Used by podcast pipeline and blog weekly/social publishing. Shared AI config controls provider selection.
+- Treat `config/production.defaults.env`, `env.template`, `config/thresholds.js` and the relevant service config module as the configuration sources of truth.
+- Secrets belong in the deployment secret store and must not be committed.
+- Production HTTP access is protected by the AIMS bearer-auth middleware unless a route explicitly implements a narrower public status/redirect contract.
+- Retries are for transient failures only; validation, policy and source-integrity failures fail closed.
+- Generated public content must pass its content-quality gates before publication or delivery.
+- Durable artefacts and job state use the configured R2/state utilities rather than process memory where a durable store is required.
