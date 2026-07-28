@@ -130,6 +130,41 @@ function templateDashboardUrl(id = "") {
   return cleaned ? `https://my.blotato.com/videos/${encodeURIComponent(cleaned)}` : "";
 }
 
+function sanitiseBlotatoFailure(value, depth = 0) {
+  if (depth > 5) return "[truncated]";
+  if (value === null || value === undefined) return value;
+  if (Array.isArray(value)) return value.slice(0, 25).map((item) => sanitiseBlotatoFailure(item, depth + 1));
+  if (typeof value !== "object") {
+    const text = String(value);
+    return text.length > 2_000 ? `${text.slice(0, 2_000)}…` : value;
+  }
+
+  const result = {};
+  for (const [key, item] of Object.entries(value)) {
+    if (/api[-_]?key|authorization|token|secret|credential|password/i.test(key)) {
+      result[key] = "[redacted]";
+      continue;
+    }
+    result[key] = sanitiseBlotatoFailure(item, depth + 1);
+  }
+  return result;
+}
+
+function extractBlotatoFailureMessage(payload = {}) {
+  const candidates = [
+    payload?.message,
+    payload?.error,
+    payload?.errorMessage,
+    payload?.item?.message,
+    payload?.item?.error,
+    payload?.item?.errorMessage,
+    payload?.data?.message,
+    payload?.data?.error,
+    payload?.data?.errorMessage,
+  ];
+  return candidates.map((value) => trim(value)).find(Boolean) || "";
+}
+
 function looksLikeTemplateItem(item = {}) {
   if (!item || typeof item !== "object" || Array.isArray(item)) return false;
   const id = item.id || item.templateId || item.uuid || item.path || item.slug;
@@ -562,18 +597,44 @@ async function createAndWaitForVideo({ templateId, templateIdCandidates = [], pa
   const maxAttempts = positiveIntEnv("BLOTATO_VIDEO_POLL_ATTEMPTS", 720, 2880);
   const intervalMs = positiveIntEnv("BLOTATO_VIDEO_POLL_INTERVAL_MS", 5000, 60_000);
   const finalGraceMs = positiveIntEnv("BLOTATO_VIDEO_FINAL_GRACE_MS", 15_000, 180_000);
-  const completed = await pollUntil({
-    label: "Blotato video render",
-    run: () => getVisualStatus(visualId, apiKey),
-    extractStatus: extractVideoStatus,
-    isDone: (status) => VIDEO_DONE_STATUSES.has(status),
-    isDonePayload: (payload) => Boolean(findMediaUrl(payload)),
-    isFailed: (status) => VIDEO_FAILED_STATUSES.has(status),
-    maxAttempts,
-    intervalMs,
-    finalGraceMs,
-    progressEvery: positiveIntEnv("BLOTATO_VIDEO_POLL_PROGRESS_EVERY", 30, 240),
-  });
+  let completed;
+  try {
+    completed = await pollUntil({
+      label: "Blotato video render",
+      run: () => getVisualStatus(visualId, apiKey),
+      extractStatus: extractVideoStatus,
+      isDone: (status) => VIDEO_DONE_STATUSES.has(status),
+      isDonePayload: (payload) => Boolean(findMediaUrl(payload)),
+      isFailed: (status) => VIDEO_FAILED_STATUSES.has(status),
+      maxAttempts,
+      intervalMs,
+      finalGraceMs,
+      progressEvery: positiveIntEnv("BLOTATO_VIDEO_POLL_PROGRESS_EVERY", 30, 240),
+    });
+  } catch (error) {
+    const safeDetails = sanitiseBlotatoFailure(error?.details || null);
+    const providerMessage = extractBlotatoFailureMessage(error?.details || {});
+    const status = extractVideoStatus(error?.details || {});
+
+    error.blotatoFailure = {
+      visualId,
+      dashboardUrl: templateDashboardUrl(visualId),
+      templateId: usedTemplateId,
+      status: status || "unknown",
+      providerMessage: providerMessage || null,
+      details: safeDetails,
+      creditAssessment: "not-determined-by-aims",
+    };
+
+    warn("blotato.video.render.failed", error.blotatoFailure);
+
+    if (status && VIDEO_FAILED_STATUSES.has(status)) {
+      error.message = providerMessage
+        ? `Blotato video render failed with status ${status}: ${providerMessage}`
+        : `Blotato video render failed with status ${status}`;
+    }
+    throw error;
+  }
 
   const mediaUrl = findMediaUrl(completed) || findMediaUrl(visual);
   if (!mediaUrl) {
@@ -1288,7 +1349,12 @@ async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOT
   } catch (error) {
     if (editorialReservation) releaseEditorialReservation(editorialReservation);
     failJob(lane.jobType, sessionId, error);
-    warn("blotato.publish_now.job.fail", { sessionId, error: error?.message || String(error) });
+    warn("blotato.publish_now.job.fail", {
+      sessionId,
+      error: error?.message || String(error),
+      statusCode: error?.statusCode || null,
+      blotatoFailure: error?.blotatoFailure || null,
+    });
     throw error;
   } finally {
     if (keepAliveEnabled) stopKeepAlive(keepAliveLabel);
