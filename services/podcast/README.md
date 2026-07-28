@@ -1,74 +1,28 @@
-> **Document status:** Production reference  
-> **Last reviewed:** 16 June 2026  
-> **Operational authority:** Current repository README, SECURITY policy and operations guide.
+# Podcast pipeline
 
-# Podcast service
+**Live route prefix:** `/podcast`
 
-## Status
+Runs the end-to-end Turing's Torch: AI Weekly production workflow. It coordinates source preparation, script generation, editorial QA, TTS, audio processing, artwork, transcript, metadata and podcast RSS publication.
 
-**Implemented.** This page documents behaviour backed by files in `services/podcast/`.
+## HTTP contract
 
-## Purpose
+- `POST /podcast/run` — start a full episode pipeline.
+- `GET /podcast/status/:sessionId` — inspect pipeline state.
+- `GET /podcast/health` — readiness/health.
 
-Coordinates the full podcast production pipeline by calling script generation, artwork generation, TTS/audio processing, podcast RSS generation, cleanup and website rebuild hook logic.
+## Behaviour
 
-## Routes
+The pipeline is intentionally the longest weekly operation and runs in the Friday PM sequence after Blotato. Script and transcript content use the shared Jonathan Harris voice plus podcast-specific editorial/retention checks. TTS uses AWS Polly and FFmpeg processing. Output uses the configured podcast, transcript, metadata, artwork and RSS R2 buckets. Key controls include `PODCAST_*`, `POLLY_*`, `AWS_REGION`, FFmpeg timeout settings and OpenRouter editorial/repair/synthesis model settings.
 
-- `GET /podcast/health`
-- `POST /podcast/run`
-- `GET /podcast/status/:sessionId`
+## Implementation
 
-## Main files
+The service entry point, route modules and domain utilities are contained in this directory. Calls from AIMS operational windows use the same authenticated HTTP contract as external suite triggers, which keeps job logging, validation and failure handling consistent.
 
-- `index.js` route/job wrapper
-- `runPodcastPipeline.js` pipeline implementation
+## Operational rules
 
-## Workflow
-
-- Validate or default session ID.
-- Create/reuse async job.
-- Generate or retrieve script assets.
-- Generate podcast artwork.
-- Run TTS orchestration.
-- Rebuild podcast RSS feed.
-- Clean temporary/session artefacts.
-- Trigger website rebuild hook.
-- Store job completion/failure state.
-
-## Environment variables
-
-- `PODCAST_*` feed and processing variables
-- `PODCAST_INTRO_URL`, `PODCAST_OUTRO_URL`
-- R2 podcast/audio/meta/transcript/art buckets and public URLs
-- `WEBSITE_REBUILD_HOOK`, `WEBSITE_REBUILD_HOOK_FALLBACK`
-- OpenRouter, AWS Polly and PodcastIndex env through child services
-
-## External integrations
-
-- Script service
-- Artwork service
-- TTS service
-- Podcast RSS service
-- Cloudflare R2
-- Website rebuild webhook
-
-## Storage
-
-Uses shared job store. Output spans script chunks/transcripts/metadata/art/audio/podcast RSS buckets depending on pipeline stage.
-
-## Tests
-
-- `test/podcast-metadata.test.js`
-- `test/podcast-rss-contract.test.js`
-
-## Common troubleshooting
-
-- 202 returned but no completion: inspect `/podcast/status/:sessionId`.
-- Script failure: check OpenRouter model routing and RSS/weather inputs.
-- Artwork failure: check image model env or fallback image.
-- TTS failure: check AWS/R2/FFmpeg settings.
-- RSS rebuild failure: inspect episode metadata JSON in R2 alias `meta`.
-
-## Connections to other services
-
-This is an orchestration layer over script, artwork, TTS, rss-feed-podcast and shared cleanup utilities.
+- Treat `config/production.defaults.env`, `env.template`, `config/thresholds.js` and the relevant service config module as the configuration sources of truth.
+- Secrets belong in the deployment secret store and must not be committed.
+- Production HTTP access is protected by the AIMS bearer-auth middleware unless a route explicitly implements a narrower public status/redirect contract.
+- Retries are for transient failures only; validation, policy and source-integrity failures fail closed.
+- Generated public content must pass its content-quality gates before publication or delivery.
+- Durable artefacts and job state use the configured R2/state utilities rather than process memory where a durable store is required.
