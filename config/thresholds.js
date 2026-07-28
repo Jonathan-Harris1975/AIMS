@@ -116,6 +116,9 @@ export const THRESHOLDS = Object.freeze({
     rssFetchRetries: Math.max(0, num("NEWSLETTER_RSS_FETCH_RETRIES", 4)),
     rssFetchRetryBaseMs: Math.max(100, num("NEWSLETTER_RSS_FETCH_RETRY_BASE_MS", 500)),
     rssFetchTimeoutMs: Math.max(1000, num("NEWSLETTER_RSS_FETCH_TIMEOUT_MS", 15000)),
+    // Tuesday featured-book lookup follows the same 5-attempt policy.
+    featuredBookRetries: Math.max(0, num("NEWSLETTER_FEATURED_BOOK_RETRIES", 4)),
+    featuredBookRetryBaseMs: Math.max(100, num("NEWSLETTER_FEATURED_BOOK_RETRY_BASE_MS", 500)),
     // Brevo API client retry/backoff. brevo/client.js treats this as
     // additional retries after the first attempt, so 4 here yields 5 total
     // attempts.
