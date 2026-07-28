@@ -99,6 +99,42 @@ function sendStage(stage) {
 }
 
 
+
+const operationJobs = new Map();
+
+function operationDelayMs(windowName) {
+  const isPm = String(windowName || "").endsWith("-pm");
+  const envName = isPm ? "AIMS_OPERATION_PM_DELAY_MS" : "AIMS_OPERATION_AM_DELAY_MS";
+  const fallback = isPm ? 600_000 : 300_000;
+  return Math.max(0, Number(process.env[envName] || fallback));
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, Math.max(0, Number(ms || 0))));
+}
+
+function operationJobId(windowName) {
+  const date = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/London", year: "numeric", month: "2-digit", day: "2-digit",
+  }).format(new Date());
+  return `${date}:${windowName}`;
+}
+
+function publicJob(job) {
+  if (!job) return null;
+  return {
+    id: job.id,
+    window: job.window,
+    status: job.status,
+    startedAt: job.startedAt,
+    finishedAt: job.finishedAt || null,
+    currentTask: job.currentTask || null,
+    delayMs: job.delayMs,
+    results: job.results,
+    failures: job.failures,
+  };
+}
+
 const OPERATION_WINDOWS = Object.freeze({
   "monday-am": [
     ["rss-rewrite", "/rss/rewrite", { batchSize: 5 }],
@@ -189,20 +225,74 @@ async function runInternalTask([name, path, body = {}, feature = null, addWeekSt
 }
 
 router.get("/windows", (_req, res) => {
-  res.json({ ok: true, service: "ops", newsletterEnabled: operationNewsletterEnabled(), windows: Object.fromEntries(Object.entries(OPERATION_WINDOWS).map(([key, tasks]) => [key, tasks.map(([name, path, _body, feature]) => ({ name, path, enabled: feature !== "newsletter" || operationNewsletterEnabled() }))])) });
+  res.json({ ok: true, service: "ops", newsletterEnabled: operationNewsletterEnabled(), windows: Object.fromEntries(Object.entries(OPERATION_WINDOWS).map(([key, tasks]) => [key, { delayMs: operationDelayMs(key), tasks: tasks.map(([name, path, _body, feature]) => ({ name, path, enabled: feature !== "newsletter" || operationNewsletterEnabled() })) }])) });
 });
+
+async function executeOperationWindow(job, tasks, req) {
+  job.status = "running";
+  for (let index = 0; index < tasks.length; index += 1) {
+    if (index > 0 && job.delayMs > 0) {
+      job.currentTask = { name: "delay", before: tasks[index][0], delayMs: job.delayMs };
+      await sleep(job.delayMs);
+    }
+    job.currentTask = { name: tasks[index][0], path: tasks[index][1], index: index + 1, total: tasks.length };
+    const result = await runInternalTask(tasks[index], req);
+    job.results.push(result);
+    if (!result.ok) job.failures += 1;
+  }
+  job.currentTask = null;
+  job.finishedAt = new Date().toISOString();
+  job.status = job.failures ? "completed-with-failures" : "completed";
+}
 
 router.post("/run/:window", async (req, res, next) => {
   try {
     const windowName = normalise(req.params.window).toLowerCase();
     const tasks = OPERATION_WINDOWS[windowName];
     if (!tasks) return res.status(404).json({ ok: false, error: "unknown-operation-window", window: windowName, available: Object.keys(OPERATION_WINDOWS) });
-    const startedAt = new Date().toISOString();
-    const results = [];
-    for (const task of tasks) results.push(await runInternalTask(task, req));
-    const failures = results.filter((item) => !item.ok);
-    return res.status(failures.length ? 207 : 200).json({ ok: failures.length === 0, service: "ops", window: windowName, startedAt, finishedAt: new Date().toISOString(), newsletterEnabled: operationNewsletterEnabled(), results, failures: failures.length });
+
+    const id = operationJobId(windowName);
+    const existing = operationJobs.get(id);
+    if (existing && ["accepted", "running"].includes(existing.status)) {
+      return res.status(202).json({ ok: true, service: "ops", duplicatePrevented: true, job: publicJob(existing) });
+    }
+
+    const job = {
+      id,
+      window: windowName,
+      status: "accepted",
+      startedAt: new Date().toISOString(),
+      finishedAt: null,
+      currentTask: null,
+      delayMs: operationDelayMs(windowName),
+      results: [],
+      failures: 0,
+    };
+    operationJobs.set(id, job);
+
+    void executeOperationWindow(job, tasks, req).catch((error) => {
+      job.status = "failed";
+      job.finishedAt = new Date().toISOString();
+      job.currentTask = null;
+      job.failures += 1;
+      job.results.push({ name: "operation-window", ok: false, error: error?.message || String(error) });
+    });
+
+    return res.status(202).json({
+      ok: true,
+      accepted: true,
+      service: "ops",
+      window: windowName,
+      newsletterEnabled: operationNewsletterEnabled(),
+      job: publicJob(job),
+    });
   } catch (error) { next(error); }
+});
+
+router.get("/jobs/:id", (req, res) => {
+  const job = operationJobs.get(normalise(req.params.id));
+  if (!job) return res.status(404).json({ ok: false, error: "operation-job-not-found" });
+  return res.json({ ok: true, service: "ops", job: publicJob(job) });
 });
 
 router.get("/health", sendStage("health"));
