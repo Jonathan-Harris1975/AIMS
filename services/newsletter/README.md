@@ -52,9 +52,8 @@ Monthly audit (mirrors the existing `*-council` audit pattern, feeds RAMS):
 ## Delivery: Brevo
 
 The engine uses [Brevo's v3 API](https://developers.brevo.com/reference/quickstart-reference)
-(`api-key` header auth, `BREVO_API_KEY`). Unlike the EmailOctopus integration
-this replaced, Brevo documents full campaign creation and immediate sending,
-so `POST /newsletter/send` is a straightforward flow:
+(`api-key` header auth, `BREVO_API_KEY`). Brevo supports full campaign creation
+and immediate sending, so `POST /newsletter/send` is a straightforward flow:
 
 1. **Sender check** — Brevo requires a sender to complete one-time OTP
    verification (emailed to that address) before it can send. AIMS creates
