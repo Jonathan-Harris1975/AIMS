@@ -71,5 +71,8 @@ test("Blotato quality repair strengthens a weak model-verdict hook before render
   assert.match(repaired.hook, /Claude/i);
   assert.match(repaired.hook, /but|risk/i);
   assert.match(repaired.hook, /your workflow/i);
+  assert.ok(String(repaired.narrativeArc || "").split(/\s+/).filter(Boolean).length >= 8);
+  assert.ok(String(repaired.visualContinuity || "").split(/\s+/).filter(Boolean).length >= 8);
+  assert.ok(repaired.scenes.every((scene) => /navy|charcoal|cinematic|professional|continuity/i.test(scene.mediaSource)));
   assert.ok(repaired.scenes.filter((scene) => /adult|human|hands|face|shoulder|professional/i.test(scene.mediaSource)).length >= 3);
 });
