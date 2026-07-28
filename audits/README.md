@@ -141,3 +141,10 @@ The former standalone SEO/AEO/GEO and Mobile UX councils are retired. Their evid
 The retained website report set is exactly PDF, HTML and JSON. Once all three are published and the temporary evidence prefix is verified empty, AIMS dispatches RAMS pipeline `website` with the exact final JSON R2 key.
 
 The final report also carries the compact website policy and a `targetAssessment` block so RAMS and humans can see which areas meet the 8.5 target, which are below target and which remain unscored because required evidence was not supplied.
+
+
+### Unified Content Editorial Audit and RAMS handoff
+
+`POST /audits/content-master/run` consolidates the latest AIMS-owned on-brand, Zernio/social-performance, newsletter, podcast-episode, podcast-transcript and brand-social evidence into one 36-seat editorial council. The board covers overall content quality, Zernio social, Blotato shorts, ebook conversion, dynamic/static hashtags, weekly blog, blog social, podcast transcript engagement, podcast keywords and AI Edge newsletter quality.
+
+The permanent output contract is exactly `content-audit.pdf`, `content-audit.html` and `content-audit.json` under `audits/content-master/YYYY-MM/<session>/`, plus the standard `audits/content-master/latest.json` pointer. The JSON uses remediation contract `rams-content/v1` and a five-total-attempt targeted-repair policy. RAMS dispatch is intentionally gated by `CONTENT_AUDIT_TRIGGER_RAMS=false` until RAMS exposes `POST /rebuild/content/run`; once that endpoint is live the same final JSON key is handed to RAMS with retry and idempotency protection.
