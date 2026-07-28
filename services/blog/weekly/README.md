@@ -1,84 +1,31 @@
-> **Document status:** Production reference  
-> **Last reviewed:** 16 June 2026  
-> **Operational authority:** Current repository README, SECURITY policy and operations guide.
+# Weekly blog pipeline
 
-# Weekly blog builder
+This module implements the weekly long-form blog generation lane used by `POST /blog/weekly/build`.
 
-## Status
+## Responsibilities
 
-**Implemented.** This page documents the weekly blog builder under `services/blog/weekly/`.
+1. Determine the target week and gather eligible source/context material.
+2. Select a coherent editorial angle rather than concatenate unrelated feed items.
+3. Generate the article in the shared Jonathan Harris voice.
+4. Apply long-form editorial, source-integrity, structure, readability and content-quality checks.
+5. Generate/associate suitable artwork.
+6. Store the article in the configured blog R2 location.
+7. Update the blog RSS/publication artefacts required by the website.
+8. Persist job state for `/blog/weekly/jobs/:lane/:sessionId`.
 
-## Purpose
+## Editorial standard
 
-Builds a weekly AI briefing blog post from rewritten RSS evidence, applies local validation, requests artwork, publishes the post package to Cloudflare R2, rebuilds the weekly blog RSS feed and triggers the website rebuild hook.
+The article must provide original judgement, not merely restate source summaries. Openings must establish the argument quickly; sections must advance it; conclusions must leave a clear takeaway. Unsupported factual claims fail closed. British English and the shared Jonathan voice are mandatory.
 
-For the wider blog service, see [Blog service](../README.md).
+## Configuration
 
-## Routes
+Use the blog, artwork, OpenRouter, RSS and R2 variables documented in `services/blog/README.md` and the production environment templates.
 
-Mounted through the parent blog service:
+## Operational rules
 
-- `POST /blog/weekly/build`
-
-## Main files
-
-- `buildWeeklyBlogPost.js`
-
-## Workflow
-
-- Load rewritten RSS JSON from R2 alias `rss`.
-- Build a date window from `weekId`, `days`, or the previous complete ISO week.
-- Normalise source items inside that window.
-- Generate the weekly blog package through the shared OpenRouter route key `blogWeekly`.
-- Run local brand validation and optional QA.
-- Generate blog artwork or use the configured fallback image.
-- Write post HTML, sidecar `post.json`, and the weekly posts manifest to R2 alias `blog` under `BLOG_PREFIX`.
-- Publish the weekly blog RSS feed to R2 alias `blogRss`.
-- Trigger the website rebuild hook.
-
-## Environment variables
-
-- `BLOG_PREFIX`
-- `BLOG_RSS_OBJECT_KEY`
-- `BLOG_RSS_FEED_URL`
-- `BLOG_RSS_TITLE`
-- `BLOG_RSS_DESCRIPTION`
-- `BLOG_RSS_IMAGE_URL`
-- `BLOG_WEEKLY_QA_ENABLED`
-- `BLOG_FALLBACK_IMAGE_URL`
-- `BLOG_ARTWORK_BUCKET_ALIAS`
-- `SITE_BASE_URL`
-- `WEBSITE_REBUILD_HOOK`
-- `WEBSITE_REBUILD_HOOK_FALLBACK`
-- R2 aliases: `rss`, `blog`, `blogImages`, `blogRss`
-- OpenRouter route key: `blogWeekly`
-
-## External integrations
-
-- OpenRouter
-- Cloudflare R2
-- Website rebuild webhook
-- Artwork service
-
-## Storage
-
-- Weekly manifest: `<BLOG_PREFIX>/posts.json`.
-- Weekly post HTML: `<BLOG_PREFIX>/posts/<slug>/index.html`.
-- Weekly sidecar JSON: `<BLOG_PREFIX>/posts/<slug>/post.json`.
-- Weekly RSS XML: `BLOG_RSS_OBJECT_KEY` in R2 alias `blogRss`.
-
-## Tests
-
-- `test/blog-weekly-package.test.js`
-- `test/blog-rss-feed.test.js`
-
-## Common troubleshooting
-
-- No items found: this is treated as a successful no-op to avoid noisy cron failures.
-- Weak package output: inspect OpenRouter route configuration for `blogWeekly` and the source RSS payload.
-- Artwork unavailable: configure `BLOG_FALLBACK_IMAGE_URL` or inspect artwork/OpenRouter image settings.
-- Website did not update: check `WEBSITE_REBUILD_HOOK` and the website deployment logs.
-
-## Connections to other services
-
-Consumes RSS output from `services/rss-feed-creator/`, calls artwork helpers, uses shared OpenRouter/R2 utilities and triggers the external website rebuild.
+- Treat `config/production.defaults.env`, `env.template`, `config/thresholds.js` and the relevant service config module as the configuration sources of truth.
+- Secrets belong in the deployment secret store and must not be committed.
+- Production HTTP access is protected by the AIMS bearer-auth middleware unless a route explicitly implements a narrower public status/redirect contract.
+- Retries are for transient failures only; validation, policy and source-integrity failures fail closed.
+- Generated public content must pass its content-quality gates before publication or delivery.
+- Durable artefacts and job state use the configured R2/state utilities rather than process memory where a durable store is required.
