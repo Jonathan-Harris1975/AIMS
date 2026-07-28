@@ -960,7 +960,7 @@ function buildRssSummary(articleSource = {}) {
   };
 }
 
-async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOTATO_SHORT_LANE, apiKey, editorialReservation = null, templateIdOverride = null, publishMode = "evening-lane" }) {
+async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOTATO_SHORT_LANE, apiKey, editorialReservation = null, templateIdOverride = null, publishMode = "evening-lane", creativeStyle = "" }) {
   const lane = requireShortLaneConfig(laneSlug);
   const keepAliveLabel = `blotato:${lane.slug}:${sessionId}`;
   const keepAliveEnabled = parseBoolean(process.env.BLOTATO_KEEPALIVE_ENABLED, true);
@@ -987,7 +987,7 @@ async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOT
     const scriptOptions = {
       article: articleSource.article,
       lane: lane.slug,
-      theme: trim(process.env.BLOTATO_NEWS_THEME, lane.theme),
+      theme: [trim(process.env.BLOTATO_NEWS_THEME, lane.theme), creativeStyle ? `AutoShort visual treatment: ${creativeStyle}. Keep the whole short visually coherent in this treatment.` : ""].filter(Boolean).join(" "),
       durationSeconds: Math.min(80, Math.max(35, Number(process.env.BLOTATO_NEWS_DURATION_SECONDS || 55))),
       audience: trim(
         process.env.BLOTATO_NEWS_AUDIENCE,
@@ -1355,6 +1355,7 @@ export async function triggerPublishNowJob(req = {}, laneSlug = DEFAULT_BLOTATO_
     editorialReservation,
     templateIdOverride: options.templateId || null,
     publishMode: options.publishMode || "evening-lane",
+    creativeStyle: options.creativeStyle || "",
   });
   if (parseBoolean(process.env.BLOTATO_INLINE_PUBLISH_JOBS, false)) {
     await run();
