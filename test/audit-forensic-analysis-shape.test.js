@@ -171,24 +171,24 @@ test("deterministic fallback produces a valid forensic payload when model JSON c
   assert.ok(fallback.fullUrlCoverageAppendix.length >= 1);
 });
 
-test("deterministic forensic fallback fixes transcript evidence wording and adds page-specific gap labels", () => {
+test("deterministic forensic fallback treats transcript pages as delegated R2 audit scope", () => {
   const transcriptPayload = {
     ...payload,
     allRoutes: [
       ...payload.allRoutes,
-      { url: "https://jonathan-harris.online/transcripts/TT-2026-05-01.html", pageType: "podcast transcript", coverageState: "Fully analysed", statusCode: 200, total: 68, scores: { technicalSeo: 16, onPageIntent: 10, aeo: 5, geo: 16, entity: 7, internalLinking: 6, conversion: 0 } },
+      { url: "https://jonathan-harris.online/transcripts/TT-2026-05-01.html", pageType: "podcast transcript", coverageState: "Excluded - delegated R2 audit", statusCode: 200, total: 68, scores: { technicalSeo: 16, onPageIntent: 10, aeo: 5, geo: 16, entity: 7, internalLinking: 6, conversion: 0 } },
     ],
     coverageFamilies: [
       ...payload.coverageFamilies,
-      { pageType: "podcast transcript", discovered: 1, analysed: 1, excluded: 0, failed: 0, coveragePercent: 100, averageScore: 68 },
+      { pageType: "podcast transcript", discovered: 1, analysed: 0, excluded: 1, failed: 0, coveragePercent: 100, averageScore: 0 },
     ],
     familyDiagnostics: [
       {
         pageType: "podcast transcript",
-        analysedUrls: 21,
-        totalUrls: 21,
-        averageScore: 68,
-        observedTemplateEvidence: ["0 transcript pages behave as long transcript-first pages without enough above-the-fold summary or sectioning evidence."],
+        analysedUrls: 0,
+        totalUrls: 1,
+        averageScore: 0,
+        observedTemplateEvidence: ["Delegated to dedicated R2 transcript audit pipeline."],
         sampleUrls: [{ url: "https://jonathan-harris.online/transcripts/TT-2026-05-01.html" }],
       },
     ],
@@ -200,13 +200,11 @@ test("deterministic forensic fallback fixes transcript evidence wording and adds
     new SyntaxError("still bad")
   );
 
-  const transcriptIssue = fallback.rankedIssueLedger.find((issue) => issue.issueId === "JH-AEO-002");
-  assert.ok(transcriptIssue);
-  assert.match(transcriptIssue.evidenceObserved, /21\/21 transcript page\(s\) lack verified above-the-fold summary/);
-  assert.doesNotMatch(transcriptIssue.evidenceObserved, /^0 transcript pages behave/);
+  const transcriptIssue = fallback.rankedIssueLedger.find((issue) => /transcript/i.test(issue.issueId) || /transcript/i.test(issue.affectedPagesTemplatesFilesOrRoutes));
+  assert.equal(transcriptIssue, undefined);
 
   const gap = fallback.bestPracticeGapMatrix.find((row) => row.pageType === "podcast transcript");
-  assert.equal(gap.topMissingElement, "Missing summary, entity index, timestamp/section anchors before transcript body");
+  assert.equal(gap.topMissingElement, "Delegated to the dedicated R2 podcast/transcript audit pipeline");
 });
 
 test("weak executive fallback text is replaced with a forensic estate narrative", () => {

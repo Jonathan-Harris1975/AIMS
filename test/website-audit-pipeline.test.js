@@ -81,3 +81,20 @@ test("AIMS dispatches RAMS website remediation by exact final JSON key with retr
   assert.match(read("audits/utils/websiteAuditPipeline.js"), /cleanupRequired: false/);
   assert.doesNotMatch(index, /seo-aeo-geo-council|mobile-ux-council/);
 });
+
+test("unified website audit carries delegated-scope policy, target assessment and evidence-gated technical scores", () => {
+  const pipeline = read("audits/utils/websiteAuditPipeline.js");
+  const orchestrator = read("audits/utils/orchestrator.js");
+  const council = read("audits/utils/websiteAuditCouncil.js");
+
+  assert.match(pipeline, /compactWebsiteAuditPolicy/);
+  assert.match(pipeline, /websiteAuditPolicy/);
+  assert.match(pipeline, /targetAssessment/);
+  assert.match(orchestrator, /websiteAuditDefaultExclusions/);
+  assert.match(council, /securityPlatformHygiene/);
+  assert.match(council, /Not Scored - Field Evidence Not Supplied/);
+  assert.match(council, /Not Scored - Accessibility Evidence Not Supplied/);
+  assert.match(council, /Not Scored - Visual Evidence Not Supplied/);
+  assert.match(council, /Not Scored - Security Evidence Not Supplied/);
+  assert.match(council, /Not Scored - Release SHA Not Verified/);
+});

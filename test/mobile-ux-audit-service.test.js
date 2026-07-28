@@ -140,3 +140,23 @@ test("controlled Mobile UX failure fallback publishes report JSON and preflight 
   assert.match(orchestrator, /"report\.json": reportJsonOut\.url/);
   assert.match(orchestrator, /"preflight\.json": preflightOut\.url/);
 });
+
+test("mobile UX callbacks preserve evidence needed for current website technical-quality scoring", () => {
+  const orchestrator = fs.readFileSync("audits/utils/orchestrator.js", "utf8");
+  const schemas = fs.readFileSync("services/shared/utils/requestSchemas.js", "utf8");
+
+  for (const field of [
+    "sourceRevisionSha",
+    "liveReleaseSha",
+    "liveReleaseMarkerUrl",
+    "liveSourceParity",
+    "accessibilityEvidence",
+    "visualDesignEvidence",
+    "performanceEvidence",
+    "searchConsoleEvidence",
+    "securityEvidence",
+  ]) {
+    assert.ok(orchestrator.includes(`"${field}"`), `${field} missing from callback metadata preservation`);
+    assert.ok(schemas.includes(`${field}:`), `${field} missing from callback schema`);
+  }
+});
