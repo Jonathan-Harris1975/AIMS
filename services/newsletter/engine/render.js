@@ -4,6 +4,7 @@
 //  - Email-safe HTML (table layout, inline CSS — no external stylesheet,
 //    no flexbox/grid, since major email clients strip <style> blocks and
 //    don't support modern CSS layout).
+//  - A website archive page using the canonical versioned site shell.
 //  - A plaintext fallback (required for deliverability/spam scoring).
 //  - A metadata JSON object for R2 storage / the audit trail.
 
@@ -116,6 +117,64 @@ ${heroImageUrl ? `<tr><td><img src="${escapeHtml(heroImageUrl)}" alt="" width="6
 </html>`;
 }
 
+
+function renderWebFeatured(featured) {
+  if (!featured?.enabled || !featured.title) return "";
+  return `<section class="card">
+    <p class="tag">Featured</p>
+    <h2>${escapeHtml(featured.title)}</h2>
+    ${featured.imageUrl ? `<img class="cover" src="${escapeHtml(featured.imageUrl)}" alt="${escapeHtml(featured.title)}" loading="lazy" decoding="async"/>` : ""}
+    ${featured.blurb ? `<p>${escapeHtml(featured.blurb)}</p>` : ""}
+    ${featured.url ? `<p><a class="button" href="${escapeHtml(featured.url)}">${escapeHtml(featured.ctaLabel || "Take a look")}</a></p>` : ""}
+  </section>`;
+}
+
+export function renderNewsletterWebHtml({ profile, newsletter, siteShell }) {
+  if (!siteShell?.manifest?.releaseSha || !siteShell?.headerHtml || !siteShell?.footerHtml) {
+    throw new Error("A canonical site shell is required to render the newsletter web archive.");
+  }
+  const { subject, heroHeadline, leadArticleHtml, heroImageUrl, sourceLink, stories } = newsletter;
+  const storyCards = (stories || []).map((story) => `<article class="card">
+    <h2><a href="${escapeHtml(story.link)}">${escapeHtml(story.title)}</a></h2>
+    <p>${escapeHtml(story.summary)}</p>
+  </article>`).join("\n");
+
+  return `<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+<meta name="jh-site-shell-version" content="${escapeHtml(siteShell.manifest.releaseSha)}"/>
+<title>${escapeHtml(subject)} | ${escapeHtml(profile.displayName)}</title>
+<meta name="robots" content="index,follow"/>
+<link href="${escapeHtml(siteShell.manifest.stylesheetUrl)}" rel="stylesheet"/>
+</head>
+<body class="page-newsletter jh-growth-page">
+${siteShell.headerHtml}
+<section class="hero jh-page-hero" data-jh-header-reveal-anchor aria-label="AI Edge issue">
+  <div class="wrap">
+    <p class="tag">${escapeHtml(profile.displayName)}</p>
+    <h1>${escapeHtml(heroHeadline)}</h1>
+    ${heroImageUrl ? `<img class="cover" src="${escapeHtml(heroImageUrl)}" alt="" loading="eager" decoding="async"/>` : ""}
+  </div>
+</section>
+<main class="main" id="main" role="main">
+  <div class="wrap">
+    <article class="card">
+      <h2>${escapeHtml(heroHeadline)}</h2>
+      <div>${leadArticleHtml}</div>
+      ${sourceLink ? `<p><a class="button" href="${escapeHtml(sourceLink)}">Read the source</a></p>` : ""}
+    </article>
+    ${storyCards}
+    ${renderWebFeatured(profile.featuredContent)}
+  </div>
+</main>
+${siteShell.footerHtml}
+<script defer src="${escapeHtml(siteShell.manifest.siteUiScriptUrl)}"></script>
+</body>
+</html>`;
+}
+
 export function renderNewsletterPlaintext({ profile, newsletter }) {
   const lines = [
     profile.displayName,
@@ -144,7 +203,7 @@ function stripHtml(html = "") {
   return input.replace(/\s+/g, " ").trim();
 }
 
-export function buildNewsletterMetadata({ profile, newsletter, qaResult, generatedAt }) {
+export function buildNewsletterMetadata({ profile, newsletter, qaResult, generatedAt, siteShellReleaseSha = "" }) {
   return {
     profileId: profile.id,
     subject: newsletter.subject,
@@ -153,6 +212,7 @@ export function buildNewsletterMetadata({ profile, newsletter, qaResult, generat
     heroImageUrl: newsletter.heroImageUrl,
     storyCount: (newsletter.stories || []).length,
     sourceLinks: [newsletter.sourceLink, ...(newsletter.stories || []).map((s) => s.link)].filter(Boolean),
+    siteShellReleaseSha: siteShellReleaseSha || null,
     qa: {
       passed: qaResult.ok,
       quarantined: qaResult.quarantined,
@@ -163,4 +223,4 @@ export function buildNewsletterMetadata({ profile, newsletter, qaResult, generat
   };
 }
 
-export default { renderNewsletterHtml, renderNewsletterPlaintext, buildNewsletterMetadata };
+export default { renderNewsletterHtml, renderNewsletterWebHtml, renderNewsletterPlaintext, buildNewsletterMetadata };

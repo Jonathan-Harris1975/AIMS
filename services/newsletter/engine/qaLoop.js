@@ -54,7 +54,7 @@ export async function runAiEditorialReview({ profile, newsletter, sessionId }) {
     {
       role: "system",
       content:
-        `You are the editorial QA reviewer for "${profile.displayName}", a daily AI newsletter. ` +
+        `You are the editorial QA reviewer for "${profile.displayName}", the AI Edge newsletter. ` +
         "Score the draft below from 0-100 on: factual grounding (does every claim trace to the " +
         "supplied source material?), tone (matches a clear, practical, no-hype, Gen-X, British-English " +
         "voice), and cohesion (does it read as one coherent issue, not disconnected fragments). " +

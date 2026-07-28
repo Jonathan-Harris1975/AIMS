@@ -10,13 +10,14 @@
 import { info, warn, error as logError } from "../../../logger.js";
 import { THRESHOLDS } from "../../../config/thresholds.js";
 import { sanitizeSessionId } from "../../shared/utils/sessionId.js";
+import { loadSiteShell } from "../../shared/utils/siteShell.js";
 import { getNewsletterProfile } from "../config/profiles.js";
 import { collectCandidateStories } from "./rss.js";
 import { rankAndSelectStories } from "./rank.js";
 import { composeLeadArticle, composeStorySummaries, composeSubjectAndPreview, composeFooter } from "./compose.js";
 import { generateHeroImage } from "./heroImage.js";
 import { runQaLoop } from "./qaLoop.js";
-import { renderNewsletterHtml, renderNewsletterPlaintext, buildNewsletterMetadata } from "./render.js";
+import { renderNewsletterHtml, renderNewsletterWebHtml, renderNewsletterPlaintext, buildNewsletterMetadata } from "./render.js";
 import { storeNewsletterIssue } from "./storage.js";
 
 export async function buildNewsletter({ profileId = "ai-edge", sessionId: requestedSessionId, now = new Date() } = {}) {
@@ -101,11 +102,19 @@ export async function buildNewsletter({ profileId = "ai-edge", sessionId: reques
   }
 
   // 6. Render + store.
-  const html = renderNewsletterHtml({ profile, newsletter: qaResult.newsletter });
+  const siteShell = await loadSiteShell();
+  const emailHtml = renderNewsletterHtml({ profile, newsletter: qaResult.newsletter });
+  const html = renderNewsletterWebHtml({ profile, newsletter: qaResult.newsletter, siteShell });
   const plaintext = renderNewsletterPlaintext({ profile, newsletter: qaResult.newsletter });
-  const metadata = buildNewsletterMetadata({ profile, newsletter: qaResult.newsletter, qaResult, generatedAt: now.toISOString() });
+  const metadata = buildNewsletterMetadata({
+    profile,
+    newsletter: qaResult.newsletter,
+    qaResult,
+    generatedAt: now.toISOString(),
+    siteShellReleaseSha: siteShell.manifest.releaseSha,
+  });
 
-  const stored = await storeNewsletterIssue({ profile, sessionId, html, plaintext, metadata, date: now });
+  const stored = await storeNewsletterIssue({ profile, sessionId, html, emailHtml, plaintext, metadata, date: now });
 
   info("newsletter.build.complete", {
     sessionId,

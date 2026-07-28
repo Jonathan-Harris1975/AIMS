@@ -19,7 +19,7 @@ export async function buildHeroImagePrompt({ profile, heroHeadline, sessionId })
       role: "system",
       content:
         "You write a single concise image-generation prompt (1-2 sentences) for the hero " +
-        "illustration of a daily AI newsletter. Build one visually immediate story from the lead headline. " +
+        "illustration for the AI Edge newsletter. Build one visually immediate story from the lead headline. " +
         "Use cinematic lighting, emotional resonance, bold controlled colour, high contrast and magazine-quality thumbnail composition. " +
         "Prefer a concrete scene, object, consequence or human-scale moment over generic abstract AI geometry. Avoid corporate stock-photo language, " +
         "boardrooms, handshakes, staged office teams, generic data centres, floating dashboards, polygon networks and glowing AI orbs unless the headline genuinely requires them. " +

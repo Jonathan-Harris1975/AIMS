@@ -68,7 +68,7 @@ export async function composeLeadArticle({ profile, lead, sessionId }) {
     {
       role: "system",
       content:
-        "You are the lead editor for a daily AI newsletter. You write a short, punchy lead " +
+        "You are the lead editor for the AI Edge newsletter. You write a short, punchy lead " +
         "article (120-180 words) grounded strictly in the supplied source material, plus a " +
         "hero headline (under 65 characters).\n\n" +
         brandGuardrails(profile) +

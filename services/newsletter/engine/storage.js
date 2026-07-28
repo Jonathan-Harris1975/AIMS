@@ -57,17 +57,18 @@ export async function findLatestIssueSessionId(profile, { date = new Date() } = 
  * Stores the HTML, plaintext and metadata for one issue under a single key
  * prefix so an issue's artefacts are easy to locate/audit together.
  */
-export async function storeNewsletterIssue({ profile, sessionId, html, plaintext, metadata, date = new Date() }) {
+export async function storeNewsletterIssue({ profile, sessionId, html, emailHtml, plaintext, metadata, date = new Date() }) {
   const prefix = buildIssueKeyPrefix(profile, { date, sessionId });
   const bucketKey = profile.storage.htmlBucketKey;
 
-  const [htmlUrl, textUrl, metaUrl] = await Promise.all([
+  const [htmlUrl, emailUrl, textUrl, metaUrl] = await Promise.all([
     uploadText(bucketKey, `${prefix}/index.html`, html, "text/html; charset=utf-8"),
+    uploadText(bucketKey, `${prefix}/email.html`, emailHtml || html, "text/html; charset=utf-8"),
     uploadText(bucketKey, `${prefix}/index.txt`, plaintext, "text/plain; charset=utf-8"),
     putJson(bucketKey, `${prefix}/metadata.json`, metadata),
   ]);
 
-  return { prefix, htmlUrl, textUrl, metaUrl };
+  return { prefix, htmlUrl, emailUrl, textUrl, metaUrl };
 }
 
 /**
