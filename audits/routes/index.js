@@ -9,6 +9,7 @@ import brandSocialCouncilRoutes from "./brandSocialCouncil.js";
 import podcastWebsiteRoutes from "./podcastWebsite.js";
 import newsletterAuditRoutes from "./newsletter.js";
 import contentMasterRoutes from "./contentMaster.js";
+import monthlyRoutes from "./monthly.js";
 
 const router = express.Router();
 
@@ -22,5 +23,6 @@ router.use("/brand-social-council", brandSocialCouncilRoutes);
 router.use("/podcast-website", podcastWebsiteRoutes);
 router.use("/newsletter", newsletterAuditRoutes);
 router.use("/content-master", contentMasterRoutes);
+router.use("/monthly", monthlyRoutes);
 
 export default router;
