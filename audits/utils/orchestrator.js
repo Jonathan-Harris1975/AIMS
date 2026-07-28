@@ -14,6 +14,7 @@ import {
   verifyGithubWorkflowRun,
 } from "./githubDispatch.js";
 import { buildAuditPrefix, makeAuditJobType } from "./auditPaths.js";
+import { websiteAuditDefaultExclusions } from "./websiteAuditPolicy.js";
 import {
   assertAuditR2Config,
   assertAuditArtifactUrls,
@@ -28,10 +29,6 @@ import {
 } from "./publishAuditArtifacts.js";
 
 const DEFAULT_WEBSITE_URL = "https://jonathan-harris.online";
-const DEFAULT_EXCLUDE_PATTERNS = {
-  "mobile-ux": ["/podcast", "/blog"],
-  "seo-aeo-geo": [],
-};
 const ACTIVE_RUN_REUSE_MS = Number(process.env.AUDIT_RUN_REUSE_ACTIVE_MS || 20 * 60 * 1000);
 
 function forceNewRunRequested(body = {}) {
@@ -44,7 +41,7 @@ function resolveExcludePatterns(auditType, body) {
   if (Array.isArray(body.excludePatterns)) {
     return body.excludePatterns;
   }
-  return DEFAULT_EXCLUDE_PATTERNS[auditType] || [];
+  return websiteAuditDefaultExclusions(auditType);
 }
 
 function buildWorkflowInputs({ sessionId, reportPrefix, websiteUrl, excludePatterns, callbackUrl, analysisUrl, callbackToken, auditR2 }) {
@@ -503,6 +500,15 @@ function optionalCompletionMetadata(payload = {}) {
     "findingConfidence",
     "scoringConfidence",
     "releaseConfidence",
+    "sourceRevisionSha",
+    "liveReleaseSha",
+    "liveReleaseMarkerUrl",
+    "liveSourceParity",
+    "accessibilityEvidence",
+    "visualDesignEvidence",
+    "performanceEvidence",
+    "searchConsoleEvidence",
+    "securityEvidence",
     "rootCauseGroupCount",
     "storageUploadError",
   ]) {

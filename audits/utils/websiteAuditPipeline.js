@@ -26,6 +26,7 @@ import {
   runWebsiteAuditCouncil,
 } from "./websiteAuditCouncil.js";
 import { dispatchWebsiteAuditToRams } from "./ramsWebsiteDispatch.js";
+import { compactWebsiteAuditPolicy, websiteAuditDefaultExclusions } from "./websiteAuditPolicy.js";
 
 export const WEBSITE_PIPELINE_AUDIT_TYPE = "website";
 export const WEBSITE_PIPELINE_JOB_TYPE = makeAuditJobType(WEBSITE_PIPELINE_AUDIT_TYPE);
@@ -134,7 +135,8 @@ async function dispatchStage(parentSessionId, stage, parentJob) {
         websiteUrl,
         reportPrefix: child.reportPrefix,
         requestedBy: "AIMS website audit pipeline",
-        notes: `Temporary child stage of website audit pipeline ${parentSessionId}. AIMS owns sequencing and final retention.`,
+        notes: `Temporary child stage of website audit pipeline ${parentSessionId}. AIMS owns sequencing and final retention. Blog and transcript routes are delegated to their dedicated R2 audit pipelines; podcast routes remain in scope.`,
+        excludePatterns: websiteAuditDefaultExclusions(stage.auditType),
         pipelineSessionId: parentSessionId,
         temporaryArtifacts: true,
         suppressLatest: true,
@@ -211,6 +213,7 @@ export async function startWebsiteAuditPipeline(body = {}) {
     finalReportKey: finalReportKeys.pdf,
     finalReportKeys,
     retentionPolicy: "final-pdf-html-json-only",
+    websiteAuditPolicy: compactWebsiteAuditPolicy(),
     stages: {},
   });
   startJob(WEBSITE_PIPELINE_JOB_TYPE, sessionId, {
@@ -224,6 +227,7 @@ export async function startWebsiteAuditPipeline(body = {}) {
     finalReportKey: finalReportKeys.pdf,
     finalReportKeys,
     retentionPolicy: "final-pdf-html-json-only",
+    websiteAuditPolicy: compactWebsiteAuditPolicy(),
     stages: {},
   });
   await flushJobStoreWrites({ throwOnError: false });
@@ -287,6 +291,15 @@ async function loadChildStage(parentSessionId, stage, parentJob) {
     releaseVerdict: childJob.releaseVerdict ?? report.releaseVerdict ?? summary?.releaseVerdict ?? null,
     screenshotCount: childJob.screenshotCount ?? report.screenshotCount ?? summary?.screenshotCount ?? null,
     mobileFailureCount: childJob.mobileFailureCount ?? report.mobileFailureCount ?? summary?.mobileFailureCount ?? null,
+    sourceRevisionSha: childJob.sourceRevisionSha ?? report.sourceRevisionSha ?? execution?.sourceRevisionSha ?? null,
+    liveReleaseSha: childJob.liveReleaseSha ?? report.liveReleaseSha ?? execution?.liveReleaseSha ?? null,
+    liveReleaseMarkerUrl: childJob.liveReleaseMarkerUrl ?? report.liveReleaseMarkerUrl ?? execution?.liveReleaseMarkerUrl ?? null,
+    liveSourceParity: childJob.liveSourceParity ?? report.liveSourceParity ?? execution?.liveSourceParity ?? "unverified",
+    accessibilityEvidence: childJob.accessibilityEvidence ?? report.accessibilityEvidence ?? evidence?.accessibilityEvidence ?? null,
+    visualDesignEvidence: childJob.visualDesignEvidence ?? report.visualDesignEvidence ?? evidence?.visualDesignEvidence ?? null,
+    performanceEvidence: childJob.performanceEvidence ?? report.performanceEvidence ?? evidence?.performanceEvidence ?? null,
+    searchConsoleEvidence: childJob.searchConsoleEvidence ?? report.searchConsoleEvidence ?? evidence?.searchConsoleEvidence ?? null,
+    securityEvidence: childJob.securityEvidence ?? report.securityEvidence ?? evidence?.securityEvidence ?? null,
     jobError: childJob.error || null,
   };
 }
@@ -349,6 +362,7 @@ export async function finaliseWebsiteAuditPipeline(parentSessionId) {
       websiteUrl: current.websiteUrl || DEFAULT_WEBSITE_URL,
       generatedAt,
       retentionPolicy: "final-pdf-html-json-only",
+      websiteAuditPolicy: compactWebsiteAuditPolicy(),
       sourceStages: compactWebsiteAuditInputs(stageReports),
       council,
       reportSet: {
@@ -361,6 +375,7 @@ export async function finaliseWebsiteAuditPipeline(parentSessionId) {
         temporaryEvidencePrefix: current.tempPrefix || websitePipelineTempPrefix(parentSessionId),
         temporaryEvidenceRetention: "deleted-after-complete-final-report-set-publication",
         ramsPipeline: "website",
+        delegatedAuditFamilies: compactWebsiteAuditPolicy().delegatedAuditFamilies,
       },
     };
     const jsonReport = await publishAuditJson({ key: finalReportKeys.json, payload: jsonPayload });
@@ -396,6 +411,7 @@ export async function finaliseWebsiteAuditPipeline(parentSessionId) {
       cleanupRequired: false,
       ramsDispatch,
       synthesisState: council.synthesisState,
+      targetAssessment: council.targetAssessment || null,
       stageStatuses: {
         digitalGrowth: digitalGrowth.status,
         seoAeoGeo: seoAeoGeo.status,

@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import { spawnSync } from "node:child_process";
 import { chromium } from "playwright-core";
+import { compactWebsiteAuditPolicy } from "./websiteAuditPolicy.js";
 
 export const WEBSITE_AUDIT_COUNCIL_MEMBERS = Object.freeze([
   { seat: 1, role: "Council Chair / Systems Integrator", remit: "Reconcile all three audits, resolve dependencies and produce one implementation order." },
@@ -33,7 +34,7 @@ const SYSTEM_PROMPT = `You chair a 24-seat expert council consolidating three co
 
 Council seats are supplied in the input and must all be represented. The source audits are:
 1. Digital Growth & Monetisation.
-2. Full-Estate SEO + AEO + GEO.
+2. Website-estate SEO + AEO + GEO, with /blog and /transcripts delegated to their dedicated R2 pipelines.
 3. Mobile UX rendered hard-gate.
 
 Non-negotiable rules:
@@ -50,6 +51,18 @@ Non-negotiable rules:
 - Never infer a repository file from a URL, route, selector, template family or likely implementation. Never invent affectedPaths. When the source evidence names only a URL/route, use classification="manual_review" and leave affectedPaths empty.
 - Use classification="future_guidance" for editorial, strategic or content recommendations that are not a deterministic repository patch. Use classification="manual_review" for anything else that lacks the full code_fix evidence contract.
 - R2/AIMS-owned generated podcast or transcript content must not be presented as a static website repository code_fix unless the source evidence explicitly identifies a governed website source file that actually controls the defect.
+- The supplied websiteAuditPolicy is binding governance. /blog and /transcripts are deliberately delegated to their dedicated R2 audit pipelines. Their absence from this website audit is NOT a coverage defect and must not reduce website-audit scores. /podcast remains in scope and must be audited as a website route.
+- Treat the policy minimumTargetScore (8.5/10) as an acceptance target, never as a score floor. Never inflate a score to meet the target. Explicitly identify any scored area below target or any required area that is unscored because evidence is missing.
+- Require live/source deployment parity evidence before merging live-production observations with repository-readiness observations. If /release.json or equivalent SHA parity is missing or mismatched, separate the two states and mark live parity as unverified or below target rather than blending evidence.
+- Accessibility assessment must distinguish WCAG 2.2 AA minimum target size (24 CSS px subject to its exceptions) from the preferred 44 CSS px usability target. Require evidence for text contrast, UI component contrast, keyboard use, visible focus, Focus Not Obscured (Minimum), 200% zoom/reflow and text-spacing resilience before claiming strong accessibility.
+- Visual/design-system assessment must explicitly cover card/page surface separation, text and button contrast, consistent component radii, template-family spacing/padding, branded hero/header presence, floating-menu lifecycle, third-party embed clipping and typography-system consistency. Do not recommend centre-aligning long-form body text; centralise the typography system, not every paragraph.
+- Do not award strong accessibility or visual/design-system scores without structured rendered evidence. If those evidence blocks are missing, leave the corresponding score unscored rather than extrapolating from source HTML.
+- Core Web Vitals must prefer field evidence. Good thresholds are LCP <= 2500 ms, INP <= 200 ms and CLS <= 0.1 at the 75th percentile. Lighthouse/lab evidence is diagnostic and must not be presented as field proof.
+- For Google AI search features, do not treat llms.txt or special AI markup as ranking requirements. Standard crawl/index eligibility, useful textual content, internal linking and visible-content/structured-data alignment remain primary. llms.txt may be scored only as optional supporting infrastructure. Check OAI-SearchBot crawlability when evidence is supplied.
+- Recommend FAQPage schema only when a real visible FAQ/Q&A block exists and the schema matches it. Do not add FAQ schema merely to improve AEO.
+- Where Search Console evidence is supplied, use query/page performance and the Generative AI performance report when available. Its absence is a measurement limitation, not an audit failure.
+- Validate the governed Jotform and Elfsight contracts from websiteAuditPolicy when rendered evidence is available, including iframe visibility/height, fallback-link hierarchy and exactly-one loader/widget rules.
+- Security/platform hygiene must use supplied evidence rather than assumption. Check HTTPS, mixed content, Content-Security-Policy, Strict-Transport-Security, Referrer-Policy, Permissions-Policy, third-party script inventory, iframe permissions and form/privacy surfaces. If this evidence is absent, keep the security/platform score unscored rather than inferring safety from a successful page load.
 - Do not repeat the three reports. Synthesize them.
 - Use British English and direct language.
 - Return JSON only. No markdown fences. No private chain-of-thought.
@@ -76,6 +89,13 @@ Required JSON shape:
     "geo":{"score":1,"basis":"...","status":"Scored"},
     "entityAuthority":{"score":1,"basis":"...","status":"Scored"},
     "internalLinkingIa":{"score":1,"basis":"...","status":"Scored"},
+    "accessibility":{"score":1,"basis":"...","status":"Scored"},
+    "visualDesignSystemConsistency":{"score":1,"basis":"...","status":"Scored"},
+    "coreWebVitalsPerformance":{"score":null,"basis":"...","status":"Not Scored - Evidence Not Supplied"},
+    "structuredData":{"score":1,"basis":"...","status":"Scored"},
+    "deploymentLiveParity":{"score":1,"basis":"...","status":"Scored"},
+    "linkConversionRouteIntegrity":{"score":1,"basis":"...","status":"Scored"},
+    "securityPlatformHygiene":{"score":null,"basis":"...","status":"Not Scored - Evidence Not Supplied"},
     "mobileUx":{"score":null,"basis":"...","status":"Not Scored - Evidence Gate Not Met"},
     "councilConfidence":{"score":1,"basis":"...","status":"Scored"}
   },
@@ -183,6 +203,14 @@ function compactDigital(report = {}) {
     dynamicKeywordStrategy: arr(analysis.dynamicKeywordStrategy || source.dynamicKeywordStrategy).slice(0, 40),
     highValueOpportunities: arr(analysis.highValueOpportunities || source.highValueOpportunities).slice(0, 30),
     limitations: arr(analysis.limitations || source.limitations || evidence.limitations).slice(0, 30),
+    sourceRevisionSha: source.sourceRevisionSha || evidence.sourceRevisionSha || null,
+    liveReleaseSha: source.liveReleaseSha || evidence.liveReleaseSha || null,
+    liveSourceParity: source.liveSourceParity || evidence.liveSourceParity || "unverified",
+    searchConsoleEvidence: source.searchConsoleEvidence || evidence.searchConsoleEvidence || null,
+    accessibilityEvidence: source.accessibilityEvidence || evidence.accessibilityEvidence || null,
+    visualDesignEvidence: source.visualDesignEvidence || evidence.visualDesignEvidence || null,
+    performanceEvidence: source.performanceEvidence || evidence.performanceEvidence || null,
+    securityEvidence: source.securityEvidence || evidence.securityEvidence || null,
     evidenceSummary: {
       inventory: evidence.inventory || source.inventory || {},
       priorityPages: arr(evidence.priorityPages || source.priorityPages).slice(0, 25).map((page) => ({
@@ -213,6 +241,14 @@ function compactSeo(report = {}) {
     familyDiagnostics: arr(source.familyDiagnostics || coverage.familyDiagnostics).slice(0, 60),
     coverageSummary: arr(coverage.pageFamilyCoverage || source.pageFamilyCoverage).slice(0, 60),
     limitations: arr(analysis.limitations || source.limitations).slice(0, 40),
+    sourceRevisionSha: source.sourceRevisionSha || null,
+    liveReleaseSha: source.liveReleaseSha || null,
+    liveSourceParity: source.liveSourceParity || "unverified",
+    searchConsoleEvidence: source.searchConsoleEvidence || null,
+    accessibilityEvidence: source.accessibilityEvidence || null,
+    visualDesignEvidence: source.visualDesignEvidence || null,
+    performanceEvidence: source.performanceEvidence || null,
+    securityEvidence: source.securityEvidence || null,
   };
 }
 
@@ -229,6 +265,14 @@ function compactMobile(report = {}) {
     screenshotCount: source.screenshotCount ?? summary.screenshotCount ?? control.screenshotCount ?? null,
     mobileFailureCount: source.mobileFailureCount ?? summary.mobileFailureCount ?? control.mobileFailuresCount ?? null,
     capabilities: source.capabilities || summary.capabilities || {},
+    sourceRevisionSha: source.sourceRevisionSha || summary.sourceRevisionSha || null,
+    liveReleaseSha: source.liveReleaseSha || summary.liveReleaseSha || null,
+    liveReleaseMarkerUrl: source.liveReleaseMarkerUrl || summary.liveReleaseMarkerUrl || null,
+    liveSourceParity: source.liveSourceParity || summary.liveSourceParity || "unverified",
+    accessibilityEvidence: source.accessibilityEvidence || summary.accessibilityEvidence || null,
+    visualDesignEvidence: source.visualDesignEvidence || summary.visualDesignEvidence || null,
+    performanceEvidence: source.performanceEvidence || summary.performanceEvidence || null,
+    securityEvidence: source.securityEvidence || summary.securityEvidence || null,
     stage3Blocks: arr(source.stage3Blocks || summary.stage3Blocks || coverage.stage3Blocks).slice(0, 40),
     criticalBlockers: arr(source.criticalBlockers || summary.criticalBlockers).slice(0, 60),
     rootCauseGroups: arr(source.technicalRootCauseGroups || source.rootCauseGroups || summary.technicalRootCauseGroups || summary.rootCauseGroups).slice(0, 80),
@@ -249,6 +293,7 @@ function compactMobile(report = {}) {
 export function compactWebsiteAuditInputs(stageReports = {}) {
   return {
     councilMembers: WEBSITE_AUDIT_COUNCIL_MEMBERS,
+    websiteAuditPolicy: compactWebsiteAuditPolicy(),
     digitalGrowth: compactDigital(stageReports.digitalGrowth),
     seoAeoGeo: compactSeo(stageReports.seoAeoGeo),
     mobileUx: compactMobile(stageReports.mobileUx),
@@ -265,17 +310,68 @@ function normaliseScoreRow(row, allowNull = true) {
   };
 }
 
+function buildTargetAssessment(scorecard) {
+  const target = Number(compactWebsiteAuditPolicy().minimumTargetScore || 8.5);
+  const areas = Object.entries(scorecard || {}).map(([key, row]) => {
+    const hasScore = row?.score !== null && row?.score !== undefined && row?.score !== "" && Number.isFinite(Number(row.score));
+    return {
+      key,
+      score: hasScore ? Number(row.score) : null,
+      status: row?.status || "Not Scored",
+      meetsTarget: hasScore ? Number(row.score) >= target : false,
+    };
+  });
+  return {
+    target,
+    areas,
+    belowTarget: areas.filter((row) => row.score !== null && row.score < target).map((row) => row.key),
+    unscored: areas.filter((row) => row.score === null).map((row) => row.key),
+    overallMeetsTarget: areas.length > 0 && areas.every((row) => row.score !== null && row.meetsTarget),
+  };
+}
+
 function normaliseCouncil(data, stageReports) {
   const source = obj(data);
   const input = compactWebsiteAuditInputs(stageReports);
   const mobile = input.mobileUx;
   const mobileScorable = mobile.status === "completed" && !mobile.hardGateBlocked && Number.isFinite(Number(mobile.mobileQualityScore));
   const score = obj(source.scorecard);
-  const keys = ["trafficGrowth", "newsletterSignUp", "podcastClickThrough", "llmDiscoverability", "ebookSalesPath", "technicalSeo", "aeo", "geo", "entityAuthority", "internalLinkingIa", "councilConfidence"];
+  const keys = ["trafficGrowth", "newsletterSignUp", "podcastClickThrough", "llmDiscoverability", "ebookSalesPath", "technicalSeo", "aeo", "geo", "entityAuthority", "internalLinkingIa", "accessibility", "visualDesignSystemConsistency", "coreWebVitalsPerformance", "structuredData", "deploymentLiveParity", "linkConversionRouteIntegrity", "securityPlatformHygiene", "councilConfidence"];
   const scorecard = Object.fromEntries(keys.map((key) => [key, normaliseScoreRow(score[key])]));
   scorecard.mobileUx = mobileScorable
     ? { ...normaliseScoreRow(score.mobileUx), score: clamp(score.mobileUx?.score ?? mobile.mobileQualityScore / 10, 1, 10, 1) }
     : { score: null, basis: "Rendered Mobile UX evidence gate did not complete with a score; council scoring is prohibited.", status: "Not Scored - Evidence Gate Not Met" };
+
+  const hasAccessibilityEvidence = Boolean(input.mobileUx.accessibilityEvidence || input.digitalGrowth.accessibilityEvidence || input.seoAeoGeo.accessibilityEvidence);
+  if (!hasAccessibilityEvidence) {
+    scorecard.accessibility = { score: null, basis: "No structured WCAG 2.2 rendered accessibility evidence was supplied. Accessibility must not be inferred from markup or a successful mobile render alone.", status: "Not Scored - Accessibility Evidence Not Supplied" };
+  }
+
+  const hasVisualDesignEvidence = Boolean(input.mobileUx.visualDesignEvidence || input.digitalGrowth.visualDesignEvidence || input.seoAeoGeo.visualDesignEvidence);
+  if (!hasVisualDesignEvidence) {
+    scorecard.visualDesignSystemConsistency = { score: null, basis: "No structured rendered design-system evidence was supplied for surfaces, contrast, spacing, radii, hero/header state, floating-menu lifecycle or embedded content.", status: "Not Scored - Visual Evidence Not Supplied" };
+  }
+
+  const parityStates = [input.digitalGrowth.liveSourceParity, input.seoAeoGeo.liveSourceParity, input.mobileUx.liveSourceParity]
+    .map((value) => text(value).toLowerCase())
+    .filter((value) => ["matched", "mismatched"].includes(value));
+  if (parityStates.includes("mismatched")) {
+    scorecard.deploymentLiveParity = { score: 1, basis: "At least one source audit reports a live /release.json SHA that does not match the audited source revision. Live and repository findings must remain separate.", status: "Scored - Mismatched" };
+  } else if (parityStates.length && parityStates.every((value) => value === "matched")) {
+    scorecard.deploymentLiveParity = { score: 10, basis: "Available source audits confirm the live release marker matches the audited source revision.", status: "Scored - Matched" };
+  } else {
+    scorecard.deploymentLiveParity = { score: null, basis: "Release-marker SHA parity was not verified in the supplied audit evidence; live and repository observations must not be blended.", status: "Not Scored - Release SHA Not Verified" };
+  }
+
+  const hasPerformanceEvidence = Boolean(input.mobileUx.performanceEvidence || input.digitalGrowth.performanceEvidence || input.seoAeoGeo.performanceEvidence);
+  if (!hasPerformanceEvidence) {
+    scorecard.coreWebVitalsPerformance = { score: null, basis: "No field Core Web Vitals evidence was supplied. Lighthouse/lab diagnostics alone are not field proof.", status: "Not Scored - Field Evidence Not Supplied" };
+  }
+
+  const hasSecurityEvidence = Boolean(input.mobileUx.securityEvidence || input.digitalGrowth.securityEvidence || input.seoAeoGeo.securityEvidence);
+  if (!hasSecurityEvidence) {
+    scorecard.securityPlatformHygiene = { score: null, basis: "No security/platform header and mixed-content evidence was supplied. A successful page load is not proof of a sound security-header posture.", status: "Not Scored - Security Evidence Not Supplied" };
+  }
 
   const record = obj(source.councilRecord);
   const returnedSeats = arr(record.seats);
@@ -288,6 +384,7 @@ function normaliseCouncil(data, stageReports) {
     synthesisState: text(source.synthesisState) || "Complete",
     executiveSummary: text(source.executiveSummary) || "The three audit stages were consolidated into one evidence-led implementation programme.",
     scorecard,
+    targetAssessment: buildTargetAssessment(scorecard),
     councilVerdict: obj(source.councilVerdict),
     topActions: arr(source.topActions).slice(0, 20),
     quickWins: arr(source.quickWins).slice(0, 30),
@@ -318,7 +415,7 @@ function deterministicFallback(stageReports, errorMessage) {
     const row = obj(compact.digitalGrowth.scorecard[key]);
     return row.score !== null && row.score !== undefined && row.score !== "" && Number.isFinite(Number(row.score)) ? clamp(row.score, 1, 10, 1) : null;
   };
-  return {
+  const fallback = {
     synthesisState: "Incomplete",
     executiveSummary: "The audit stages completed or froze their available evidence, but the multidisciplinary AI council synthesis was unavailable. This fallback preserves evidence without inventing council conclusions.",
     scorecard: {
@@ -332,6 +429,13 @@ function deterministicFallback(stageReports, errorMessage) {
       geo: { score: null, basis: "Council synthesis unavailable; raw SEO evidence is retained below.", status: "Not Scored" },
       entityAuthority: { score: null, basis: "Council synthesis unavailable.", status: "Not Scored" },
       internalLinkingIa: { score: null, basis: "Council synthesis unavailable.", status: "Not Scored" },
+      accessibility: { score: null, basis: "Council synthesis unavailable; use rendered accessibility evidence on rerun.", status: "Not Scored" },
+      visualDesignSystemConsistency: { score: null, basis: "Council synthesis unavailable; use rendered design-system evidence on rerun.", status: "Not Scored" },
+      coreWebVitalsPerformance: { score: null, basis: "No council synthesis/field performance judgement available.", status: "Not Scored - Evidence Not Supplied" },
+      structuredData: { score: null, basis: "Council synthesis unavailable.", status: "Not Scored" },
+      deploymentLiveParity: { score: null, basis: "Council synthesis unavailable; release-marker parity must be verified.", status: "Not Scored" },
+      linkConversionRouteIntegrity: { score: null, basis: "Council synthesis unavailable.", status: "Not Scored" },
+      securityPlatformHygiene: { score: null, basis: "No council synthesis/security-platform evidence available.", status: "Not Scored - Evidence Not Supplied" },
       mobileUx: mobileScorable ? { score: clamp(compact.mobileUx.mobileQualityScore / 10, 1, 10, 1), basis: "Stage 3 rendered score only.", status: "Stage 3 score only" } : { score: null, basis: "Rendered Mobile UX evidence gate not met.", status: "Not Scored - Evidence Gate Not Met" },
       councilConfidence: { score: 1, basis: `Council synthesis unavailable: ${text(errorMessage) || "unknown error"}`, status: "Incomplete" },
     },
@@ -344,6 +448,8 @@ function deterministicFallback(stageReports, errorMessage) {
     },
     definitionOfDone: ["Rerun the council synthesis successfully before treating cross-audit priorities as final."],
   };
+  fallback.targetAssessment = buildTargetAssessment(fallback.scorecard);
+  return fallback;
 }
 
 export async function runWebsiteAuditCouncil(stageReports) {
@@ -386,7 +492,10 @@ function scorecardHtml(scorecard = {}) {
   const labels = {
     trafficGrowth: "Traffic Growth", newsletterSignUp: "Newsletter Sign-Up", podcastClickThrough: "Podcast Click-Through",
     llmDiscoverability: "LLM Discoverability", ebookSalesPath: "Ebook Sales Path", technicalSeo: "Technical SEO", aeo: "AEO", geo: "GEO",
-    entityAuthority: "Entity Authority", internalLinkingIa: "Internal Linking / IA", mobileUx: "Mobile UX", councilConfidence: "Council Confidence",
+    entityAuthority: "Entity Authority", internalLinkingIa: "Internal Linking / IA", accessibility: "Accessibility",
+    visualDesignSystemConsistency: "Visual / Design-System Consistency", coreWebVitalsPerformance: "Core Web Vitals / Performance",
+    structuredData: "Structured Data", deploymentLiveParity: "Deployment / Live Parity", linkConversionRouteIntegrity: "Link / Conversion Route Integrity",
+    securityPlatformHygiene: "Security / Platform Hygiene", mobileUx: "Mobile UX", councilConfidence: "Council Confidence",
   };
   const rows = Object.entries(labels).map(([key, label]) => {
     const row = obj(scorecard[key]);
@@ -450,12 +559,12 @@ export function buildWebsiteAuditHtml({ websiteUrl, sessionId, generatedAt = new
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Website Growth, Search & Mobile Audit</title><style>
     @page{size:A4;margin:16mm 12mm 18mm}*{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;color:#172033;margin:0;font-size:9.5pt;line-height:1.45}h1{font-size:27pt;line-height:1.05;margin:0 0 8mm}h2{font-size:17pt;margin:9mm 0 4mm;border-bottom:2px solid #172033;padding-bottom:2mm}h3{font-size:12pt;margin:6mm 0 2mm}p{margin:0 0 3mm}.cover{min-height:245mm;display:flex;flex-direction:column;justify-content:center;page-break-after:always}.kicker{font-size:10pt;text-transform:uppercase;letter-spacing:.12em;font-weight:700}.subtitle{font-size:14pt;max-width:145mm}.meta{margin-top:14mm;padding:5mm;border:1px solid #cbd5e1;border-radius:3mm}.section{break-inside:auto}.pagebreak{page-break-before:always}.callout{padding:4mm 5mm;border-left:4px solid #172033;background:#f1f5f9;margin:4mm 0}.muted{color:#64748b}.chips span{display:inline-block;border:1px solid #cbd5e1;border-radius:99px;padding:1.2mm 2.5mm;margin:0 1mm 1mm 0;font-size:8pt}table{width:100%;border-collapse:collapse;margin:3mm 0 5mm;table-layout:fixed}th,td{border:1px solid #d8dee8;padding:2.2mm;vertical-align:top;word-break:break-word}th{background:#eef2f7;text-align:left;font-size:8.2pt}td{font-size:8pt}ul{margin:2mm 0 4mm 5mm;padding-left:4mm}li{margin:0 0 1.6mm}.small{font-size:8pt}.avoid{break-inside:avoid}.toc li{margin-bottom:1mm}.ledger td:nth-child(1){width:8%}.coverage{font-size:7pt}.coverage td,.coverage th{font-size:6.7pt;padding:1.3mm}.status{font-weight:700}.footer-note{margin-top:8mm;font-size:7.5pt;color:#64748b}
   </style></head><body>
-  <section class="cover"><div class="kicker">Unified Website Audit</div><h1>Digital Growth + Full-Estate SEO/AEO/GEO + Mobile UX</h1><p class="subtitle">One evidence-led council report for ${esc(websiteUrl)}. Three audit lenses, one implementation order, one retained report set in PDF, HTML and JSON.</p><div class="meta"><p><strong>Session:</strong> ${esc(sessionId)}</p><p><strong>Generated:</strong> ${esc(generatedAt)}</p><p><strong>Council:</strong> ${WEBSITE_AUDIT_COUNCIL_MEMBERS.length} specialist seats</p><p><strong>Synthesis state:</strong> ${esc(council.synthesisState)}</p>${sourceState.map(([name,status])=>`<p><strong>${esc(name)}:</strong> ${esc(status)}</p>`).join("")}</div></section>
+  <section class="cover"><div class="kicker">Unified Website Audit</div><h1>Digital Growth + Website SEO/AEO/GEO + Mobile UX</h1><p class="subtitle">One evidence-led council report for ${esc(websiteUrl)}. Three audit lenses, one implementation order, one retained report set in PDF, HTML and JSON.</p><div class="meta"><p><strong>Session:</strong> ${esc(sessionId)}</p><p><strong>Generated:</strong> ${esc(generatedAt)}</p><p><strong>Council:</strong> ${WEBSITE_AUDIT_COUNCIL_MEMBERS.length} specialist seats</p><p><strong>Synthesis state:</strong> ${esc(council.synthesisState)}</p>${sourceState.map(([name,status])=>`<p><strong>${esc(name)}:</strong> ${esc(status)}</p>`).join("")}</div></section>
 
-  <section><h2>1. Executive Scorecard</h2>${scorecardHtml(council.scorecard)}<div class="callout"><strong>Executive synthesis.</strong> ${esc(council.executiveSummary)}</div></section>
+  <section><h2>1. Executive Scorecard</h2>${scorecardHtml(council.scorecard)}<div class="callout"><strong>Target:</strong> ${esc(council.targetAssessment?.target ?? 8.5)}/10 minimum. <strong>Below target:</strong> ${esc((council.targetAssessment?.belowTarget || []).join(", ") || "None")} &nbsp; <strong>Unscored:</strong> ${esc((council.targetAssessment?.unscored || []).join(", ") || "None")}.</div><div class="callout"><strong>Executive synthesis.</strong> ${esc(council.executiveSummary)}</div></section>
   <section><h2>2. Council Verdict</h2><p><strong>Overall diagnosis:</strong> ${esc(verdict.overallDiagnosis || "")}</p><p><strong>Biggest structural weakness:</strong> ${esc(verdict.biggestStructuralWeakness || "")}</p><p><strong>Biggest commercial opportunity:</strong> ${esc(verdict.biggestCommercialOpportunity || "")}</p><p><strong>Biggest search opportunity:</strong> ${esc(verdict.biggestSearchOpportunity || "")}</p><p><strong>Biggest mobile risk:</strong> ${esc(verdict.biggestMobileRisk || "")}</p><p><strong>Greatest cross-objective lever:</strong> ${esc(verdict.greatestCrossObjectiveLever || "")}</p><h3>Strongest assets</h3>${listHtml(verdict.strongestAssets)}</section>
   <section><h2>3. Top Priorities</h2>${table(["Rank","ID","Exact change","Objectives","Impact","Effort","Confidence","Owner","Acceptance criterion","Verification"], actionRows(council.topActions))}<h3>Quick Wins</h3>${listHtml(council.quickWins, (item)=>typeof item === "string" ? item : item.exactChange || item.action || item.title)}<h3>Release / Evidence Blockers</h3>${listHtml(council.blockers, (item)=>typeof item === "string" ? item : item.title || item.blocker || item.description)}</section>
-  <section class="pagebreak"><h2>4. Source Audit Evidence Summary</h2><h3>Digital Growth & Monetisation</h3><p><strong>Status:</strong> ${esc(sourceEvidence.digitalGrowth.status)}</p><p>${esc(sourceEvidence.digitalGrowth.overallVerdict || "")}</p>${table(["ID","Severity","Confidence","Finding","Location","Exact change","Effort","Owner"], findingRows(sourceEvidence.digitalGrowth.findings.slice(0,30)))}<h3>Full-Estate SEO / AEO / GEO</h3><p><strong>Status:</strong> ${esc(sourceEvidence.seoAeoGeo.status)}</p>${table(["ID","Severity","Confidence","Finding","Affected","Exact remediation","Effort","Owner"], findingRows(sourceEvidence.seoAeoGeo.rankedIssueLedger.slice(0,40)))}<h3>Rendered Mobile UX Hard-Gate</h3><p><strong>Status:</strong> ${esc(sourceEvidence.mobileUx.status)} &nbsp; <strong>Release verdict:</strong> ${esc(sourceEvidence.mobileUx.releaseVerdict || "Not available")} &nbsp; <strong>Mobile score:</strong> ${sourceEvidence.mobileUx.mobileQualityScore == null ? "Not scored" : esc(sourceEvidence.mobileUx.mobileQualityScore)}</p>${sourceEvidence.mobileUx.hardGateBlocked ? "<div class='callout'><strong>Mobile evidence gate blocked.</strong> No council Mobile UX score may be fabricated.</div>" : ""}${table(["ID","Severity","Confidence","Finding","Affected","Exact remediation","Effort","Owner"], findingRows([...sourceEvidence.mobileUx.rootCauseGroups, ...sourceEvidence.mobileUx.findings].slice(0,40)))}</section>
+  <section class="pagebreak"><h2>4. Source Audit Evidence Summary</h2><h3>Digital Growth & Monetisation</h3><p><strong>Status:</strong> ${esc(sourceEvidence.digitalGrowth.status)}</p><p>${esc(sourceEvidence.digitalGrowth.overallVerdict || "")}</p>${table(["ID","Severity","Confidence","Finding","Location","Exact change","Effort","Owner"], findingRows(sourceEvidence.digitalGrowth.findings.slice(0,30)))}<h3>Website SEO / AEO / GEO</h3><p><strong>Status:</strong> ${esc(sourceEvidence.seoAeoGeo.status)}</p>${table(["ID","Severity","Confidence","Finding","Affected","Exact remediation","Effort","Owner"], findingRows(sourceEvidence.seoAeoGeo.rankedIssueLedger.slice(0,40)))}<h3>Rendered Mobile UX Hard-Gate</h3><p><strong>Status:</strong> ${esc(sourceEvidence.mobileUx.status)} &nbsp; <strong>Release verdict:</strong> ${esc(sourceEvidence.mobileUx.releaseVerdict || "Not available")} &nbsp; <strong>Mobile score:</strong> ${sourceEvidence.mobileUx.mobileQualityScore == null ? "Not scored" : esc(sourceEvidence.mobileUx.mobileQualityScore)}</p>${sourceEvidence.mobileUx.hardGateBlocked ? "<div class='callout'><strong>Mobile evidence gate blocked.</strong> No council Mobile UX score may be fabricated.</div>" : ""}${table(["ID","Severity","Confidence","Finding","Affected","Exact remediation","Effort","Owner"], findingRows([...sourceEvidence.mobileUx.rootCauseGroups, ...sourceEvidence.mobileUx.findings].slice(0,40)))}</section>
   <section class="pagebreak"><h2>5. Unified Root-Cause Findings</h2><table class="ledger"><thead><tr><th>ID</th><th>Severity</th><th>Confidence</th><th>Root cause</th><th>Affected</th><th>Exact remediation</th><th>Effort</th><th>Owner</th></tr></thead><tbody>${findingRows(council.unifiedFindings).map(row=>`<tr>${row.map(c=>`<td>${c}</td>`).join("")}</tr>`).join("")}</tbody></table></section>
   <section><h2>6. Cross-Audit Conflict Register</h2>${table(["Topic","Positions","Resolution","Confidence"], conflicts)}</section>
   <section><h2>7. Funnel & Monetisation Map</h2>${table(["Journey","Current friction","Exact change","Measurement"], funnel)}</section>

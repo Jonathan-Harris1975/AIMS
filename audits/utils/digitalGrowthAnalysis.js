@@ -1,3 +1,5 @@
+import { compactWebsiteAuditPolicy } from "./websiteAuditPolicy.js";
+
 const OBJECTIVES = [
   ["trafficGrowth", "Traffic Growth"],
   ["newsletterSignUpRate", "Newsletter Sign-Up Rate"],
@@ -28,6 +30,10 @@ Rules:
 - Impact must be Very High, High, Medium or Low.
 - Prioritise verified blockers, then high-impact Quick Wins.
 - Scores are 1-10 and must have a one-line evidence rationale.
+- The websiteAuditPolicy target of 8.5/10 is an acceptance target, not a score floor. Never inflate a score to meet it.
+- /blog and /transcripts are intentionally excluded from this website audit because their R2 content is audited by dedicated pipelines. Do not penalise this audit for their absence. /podcast remains in scope.
+- Respect the governed newsletter, Contribute, podcast, accessibility, visual-design, deployment-parity and link-integrity contracts in websiteAuditPolicy whenever matching evidence is supplied.
+- Do not treat llms.txt or special AI markup as a Google AI-search requirement. Treat llms.txt as optional supporting infrastructure and prioritise crawl/index eligibility, textual usefulness, internal linking, entity clarity, and structured-data/visible-content alignment.
 - Do not claim checkout, analytics or revenue performance unless it was supplied.
 - If evidence is missing, say what is unverified and define the measurement/event needed.
 - Return JSON only. Do not return markdown fences, the prompt, private reasoning or chain-of-thought.
@@ -205,6 +211,7 @@ function compactPayload(payload) {
     conversionEvidence: input.conversionEvidence || {},
     navigationEvidence: input.navigationEvidence || {},
     measurementAvailability: input.measurementAvailability || {},
+    websiteAuditPolicy: compactWebsiteAuditPolicy(),
   };
 }
 
