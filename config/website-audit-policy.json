@@ -1,0 +1,148 @@
+{
+  "schemaVersion": "website-audit-policy/v2",
+  "website": "https://jonathan-harris.online",
+  "minimumTargetScore": 8.5,
+  "delegatedAuditFamilies": [
+    {
+      "name": "Blog",
+      "prefix": "/blog",
+      "storage": "R2",
+      "auditedBy": "dedicated blog audit pipeline",
+      "reason": "Blog content is generated/stored outside the static website estate and has its own audit pipeline."
+    },
+    {
+      "name": "Podcast transcripts",
+      "prefix": "/transcripts",
+      "storage": "R2",
+      "auditedBy": "dedicated podcast/transcript audit pipeline",
+      "reason": "Transcript content is generated/stored in R2 and has its own audit pipeline."
+    }
+  ],
+  "websiteAuditIncludedRoutes": [
+    "/",
+    "/ebooks",
+    "/newsletter",
+    "/podcast",
+    "/contact",
+    "/contribute",
+    "/book-finder",
+    "/evidence",
+    "/resources",
+    "/bundles",
+    "/for-teams",
+    "/media",
+    "/methodology",
+    "/compare"
+  ],
+  "forms": {
+    "newsletter": {
+      "brand": "AI Edge",
+      "provider": "Jotform",
+      "formId": "260277027608054",
+      "singleCollectorRequired": true,
+      "directFallbackBelowEmbed": true,
+      "timeOrCadenceClaimsAllowed": false
+    },
+    "contribute": {
+      "provider": "Jotform",
+      "formId": "262063136008044",
+      "directFallbackBelowEmbed": true
+    }
+  },
+  "podcast": {
+    "canonicalName": "Turing's Torch: AI Weekly",
+    "hubRoute": "/podcast",
+    "transcriptsDelegated": true,
+    "elfsightWidgetId": "76cc65a0-0bcf-4dc0-ad36-1046c5a20e3d",
+    "exactlyOneElfsightLoader": true,
+    "exactlyOneElfsightWidget": true,
+    "promotionalTimeReferencesAllowed": false
+  },
+  "accessibility": {
+    "standard": "WCAG 2.2 AA",
+    "normalTextContrast": 4.5,
+    "largeTextContrast": 3.0,
+    "uiComponentContrast": 3.0,
+    "targetSizeAaCssPx": 24,
+    "preferredPrimaryControlCssPx": 44,
+    "requireKeyboardNavigation": true,
+    "requireVisibleFocus": true,
+    "requireFocusNotObscuredAa": true,
+    "require200PercentZoomReflow": true,
+    "requireTextSpacingResilience": true
+  },
+  "visualDesign": {
+    "requireConsistentTypographySystem": true,
+    "centreAllBodyText": false,
+    "longFormTextAlignment": "left",
+    "requireConsistentCardRadiusByComponentFamily": true,
+    "requireConsistentSectionSpacingByTemplateFamily": true,
+    "requireDistinctCardAndPageSurfaces": true,
+    "requireButtonSurfaceContrast": true,
+    "requireBrandedHeroOnGovernedNewPageFamilies": true,
+    "floatingMenuVisibleOnlyAfterHeroLeavesViewport": true,
+    "requireThirdPartyEmbedViewportChecks": true
+  },
+  "performance": {
+    "fieldEvidencePreferred": true,
+    "lighthouseIsDiagnosticNotFieldProof": true,
+    "coreWebVitals": {
+      "percentile": 75,
+      "lcpGoodMs": 2500,
+      "inpGoodMs": 200,
+      "clsGood": 0.1
+    }
+  },
+  "searchAndAiDiscovery": {
+    "llmsTxtIsOptionalSupportingInfrastructure": true,
+    "googleAiFeaturesRequireSpecialAiMarkup": false,
+    "requireStructuredDataToMatchVisibleContent": true,
+    "faqSchemaOnlyWhenVisibleFaqExists": true,
+    "checkOaiSearchBotCrawlability": true,
+    "searchConsoleGenerativeAiReportOptionalWhenAvailable": true
+  },
+  "deployment": {
+    "releaseMarkerPath": "/release.json",
+    "requireLiveSourceShaParityBeforeLiveScoring": true,
+    "separateLiveAndRepositoryFindingsWhenParityFails": true,
+    "cloudflarePurge": {
+      "passes": 3,
+      "waitSecondsBetweenPasses": 300,
+      "firstPassOnlyAfterExactReleaseConfirmedLive": true
+    }
+  },
+  "scoring": {
+    "neverInflateToTarget": true,
+    "technicalQualityPanel": [
+      "accessibility",
+      "visualDesignSystemConsistency",
+      "coreWebVitalsPerformance",
+      "technicalSeo",
+      "structuredData",
+      "internalLinkingIa",
+      "deploymentLiveParity",
+      "linkConversionRouteIntegrity",
+      "mobileUx",
+      "securityPlatformHygiene"
+    ]
+  },
+  "securityPlatform": {
+    "requireHttps": true,
+    "checkMixedContent": true,
+    "checkContentSecurityPolicy": true,
+    "checkStrictTransportSecurity": true,
+    "checkReferrerPolicy": true,
+    "checkPermissionsPolicy": true,
+    "inventoryThirdPartyScripts": true,
+    "reviewFormPrivacySurfaces": true,
+    "reviewIframePermissions": true,
+    "treatMissingEvidenceAsUnscored": true
+  },
+  "evidenceGates": {
+    "accessibility": "accessibilityEvidence",
+    "visualDesignSystemConsistency": "visualDesignEvidence",
+    "coreWebVitalsPerformance": "performanceEvidence",
+    "securityPlatformHygiene": "securityEvidence",
+    "deploymentLiveParity": "liveSourceParity"
+  }
+}
