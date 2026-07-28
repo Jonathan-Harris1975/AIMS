@@ -1,18 +1,10 @@
-> **Document status:** Production reference  
-> **Last reviewed:** 16 June 2026  
-> **Operational authority:** Current repository README, SECURITY policy and operations guide.
+# Podcast script service
 
-# Script generation service
+**Live route prefix:** `/script`
 
-## Status
+Creates the written episode components used by the podcast pipeline: intro, main sections, synthesis/composition, outro, final editorial pass, transcript and metadata.
 
-**Implemented.** This page documents behaviour backed by files in `services/script/`.
-
-## Purpose
-
-Generates podcast episode scripts, applies editorial shaping, chunks text for TTS, publishes transcripts and writes episode metadata.
-
-## Routes
+## HTTP contract
 
 - `GET /script/health`
 - `POST /script/intro`
@@ -21,72 +13,21 @@ Generates podcast episode scripts, applies editorial shaping, chunks text for TT
 - `POST /script/compose`
 - `POST /script/orchestrate`
 
-## Main files
+The production router is `services/script/routes/index.js`.
 
-- `routes/index.js`
-- `utils/orchestrator.js`
-- `utils/models.js`
-- `utils/promptTemplates.js`
-- `utils/editorialPass.js`
-- `utils/editAndFormat.js`
-- `utils/chunkText.js`
-- `utils/podcastHelper.js`
-- `utils/episodeCounter.js`
-- `utils/generateTranscriptHtml.js`
-- `utils/getWeatherSummary.js`
+## Behaviour
 
-## Workflow
+All major generation stages use the shared tone setter plus podcast-specific prompt contracts. The service applies source grounding, sentence/length controls, metadata/keyword generation and final editorial review before downstream TTS. Outputs are written to the configured raw-text, transcript, metadata and metasystem storage paths.
 
-- Validate route payload through script Zod schemas.
-- Generate intro/main/outro through OpenRouter route chains.
-- Compose full episode.
-- Validate transcript structure before and after editorial work.
-- Run AI editorial pass and local formatting.
-- Chunk text and upload TTS chunks to R2.
-- Upload text and HTML transcripts.
-- Generate metadata and episode number.
+## Implementation
 
-## Environment variables
+The service entry point, route modules and domain utilities are contained in this directory. Calls from AIMS operational windows use the same authenticated HTTP contract as external suite triggers, which keeps job logging, validation and failure handling consistent.
 
-- OpenRouter/AI vars, especially role model vars and `AI_*` controls
-- `RAPIDAPI_HOST`, `RAPIDAPI_KEY` for weather summary utility
-- `PODCAST_RSS_EP`, `PODCAST_TARGET_MINUTES` and compatibility duration vars
-- `SITE_BASE_URL`, `PODCAST_TRANSCRIPT_HTML_BASE_URL`
-- R2 aliases `rawtext`, `transcript`, `meta`, `metasystem`
+## Operational rules
 
-## External integrations
-
-- OpenRouter
-- Weather/RapidAPI
-- Cloudflare R2
-
-## Storage
-
-- Chunks: `rawtext/<sessionId>/chunk-###.txt`.
-- Text transcript: `transcript/<sessionId>.txt`.
-- HTML transcript: `transcript/<sessionId>.html`.
-- Episode metadata: `meta/<sessionId>.json`.
-- Episode counter/system files use metasystem where implemented.
-
-## Tests
-
-- `test/scriptValidation.test.js`
-- `test/transcript-html-template.test.js`
-- `test/getSponsor.test.js`
-
-## Common troubleshooting
-
-- 400 schema errors: inspect accepted fields in `utils/schemas.js`.
-- Empty or malformed model output: inspect OpenRouter provider chain and route logs.
-- Transcript validation failure: generated script is missing required structure. Normal spoken time abbreviations such as `a.m.` and `p.m.` are accepted by the punctuation-join guard.
-- R2 upload failure: check bucket aliases and public URLs.
-
-## Connections to other services
-
-Feeds TTS orchestration, podcast pipeline and podcast RSS metadata. Uses shared AI, R2, state and session ID utilities.
-
-## Ecosystem tone governor
-
-`utils/toneSetter.js` is the shared editorial governor for AIMS. It exposes lane-aware profiles for podcast narration, podcast metadata, podcast artwork direction, weekly blog, social blog, RSS, Zernio and Blotato.
-
-Podcast intro, main segments, main synthesis, outro, final editorial pass, metadata, SEO keywords and artwork-prompt generation all use the shared tone setter. Format-specific prompts may narrow the output contract but do not replace the common voice rules.
+- Treat `config/production.defaults.env`, `env.template`, `config/thresholds.js` and the relevant service config module as the configuration sources of truth.
+- Secrets belong in the deployment secret store and must not be committed.
+- Production HTTP access is protected by the AIMS bearer-auth middleware unless a route explicitly implements a narrower public status/redirect contract.
+- Retries are for transient failures only; validation, policy and source-integrity failures fail closed.
+- Generated public content must pass its content-quality gates before publication or delivery.
+- Durable artefacts and job state use the configured R2/state utilities rather than process memory where a durable store is required.
