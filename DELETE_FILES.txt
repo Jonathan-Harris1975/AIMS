@@ -1,2 +1,0 @@
-test/newsletter-emailoctopus-client.test.js
-test/newsletter-scheduling.test.js
