@@ -8,6 +8,7 @@ import socialPerformanceRoutes from "./socialPerformance.js";
 import brandSocialCouncilRoutes from "./brandSocialCouncil.js";
 import podcastWebsiteRoutes from "./podcastWebsite.js";
 import newsletterAuditRoutes from "./newsletter.js";
+import contentMasterRoutes from "./contentMaster.js";
 
 const router = express.Router();
 
@@ -20,5 +21,6 @@ router.use("/social-performance", socialPerformanceRoutes);
 router.use("/brand-social-council", brandSocialCouncilRoutes);
 router.use("/podcast-website", podcastWebsiteRoutes);
 router.use("/newsletter", newsletterAuditRoutes);
+router.use("/content-master", contentMasterRoutes);
 
 export default router;
