@@ -162,6 +162,21 @@ export const REVIEW_COUNCILS = Object.freeze({
       "Audience Retention Reviewer",
     ],
   },
+  "newsletter-editorial": {
+    env: "REVIEW_COUNCIL_NEWSLETTER_ENABLED",
+    defaultEnabled: true,
+    members: [
+      "Source Integrity and Fact-Checking Reviewer",
+      "Jonathan Harris Voice Editor",
+      "British English Language Expert",
+      "Newsletter Structure and Scanability Editor",
+      "Audience Value and Retention Reviewer",
+      "Subject Line and Open-Rate Reviewer",
+      "Reality Check Scepticism Reviewer",
+      "Book and Podcast Promotion Balance Reviewer",
+      "Publishing Readiness Chair",
+    ],
+  },
   "social-performance": {
     env: "REVIEW_COUNCIL_SOCIAL_PERFORMANCE_ENABLED",
     defaultEnabled: true,
