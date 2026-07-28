@@ -10,10 +10,36 @@ Routes are mounted under `/cloudflare`.
 
 - `GET /cloudflare/health`
 - `POST /cloudflare/purge`
+- `POST /cloudflare/site-shell/sync` (internal deployment bridge; not a public website API)
 
 `POST /cloudflare/purge` requires the AIMS bearer token or `x-cloudflare-purge-secret: <CLOUDFLARE_PURGE_SHARED_SECRET>` in production. `CLOUDFLARE_PURGE_ALLOW_PUBLIC=true` is an explicit legacy escape hatch and should not be used for paid production.
 
 The route still requires valid outbound Cloudflare credentials in the deployed environment. Empty webhook-style POST bodies are treated as `{"purge_everything": true}` because this endpoint is normally used as a cache-clear trigger rather than a form submission.
+
+
+## Site-shell synchronisation
+
+`POST /cloudflare/site-shell/sync` is the internal deployment bridge used after the website release has been confirmed live and the staged purge sequence has completed. It is intentionally **not** part of the public website API documentation.
+
+The request provides the exact deployed release SHA and the versioned static manifest URL published by the website repository:
+
+```json
+{
+  "event": "site_shell_sync",
+  "release_sha": "<commit-sha>",
+  "manifest_url": "https://jonathan-harris.online/assets/site-shell/<commit-sha>/manifest.json"
+}
+```
+
+AIMS verifies the release SHA and SHA-256 hashes for the canonical header/footer, then synchronises managed HTML in the `blog` and `transcript` R2 buckets. `email.html` newsletter delivery artefacts are deliberately excluded because email clients require inline, email-safe markup; the public newsletter `index.html` uses the website shell. The last-known-good shell is also persisted in `metasystem` for generation resilience.
+
+The endpoint is an internal deployment bridge and is never opened by `CLOUDFLARE_PURGE_ALLOW_PUBLIC`. It accepts the AIMS bearer token or `x-cloudflare-purge-secret`, validated against `SITE_SHELL_SYNC_SHARED_SECRET` with `CLOUDFLARE_PURGE_SHARED_SECRET` as the backwards-compatible fallback.
+
+Site-shell consumer settings:
+
+- `SITE_SHELL_MANIFEST_URL=https://jonathan-harris.online/assets/site-shell/manifest.json`
+- `SITE_SHELL_ALLOWED_HOSTS=jonathan-harris.online`
+- `SITE_SHELL_SYNC_SHARED_SECRET=<deployment bridge secret>`
 
 ## Request body
 
