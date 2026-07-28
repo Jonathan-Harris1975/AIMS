@@ -1,176 +1,38 @@
-> **Document status:** Production reference  
-> **Last reviewed:** 21 June 2026  
-> **Operational authority:** Current repository README, SECURITY policy and operations guide.
+# Blotato service
 
-# Blotato Service
+**Live route prefix:** `/blotato`
 
-AIMS integration layer for Blotato social publishing, visual generation, and one-call AI short-video publishing.
+Produces and publishes short-form video content using Blotato rendering/social APIs, AIMS-generated scripts and lane-specific visual/story rules.
 
-## Weekly short-video lanes
+## HTTP contract
 
-The automated social-video week uses five lanes:
+Core endpoints:
+- `GET /blotato/health`
+- `GET /blotato/accounts` and `/accounts/:accountId/subaccounts`
+- `GET /blotato/templates`
+- `POST /blotato/visuals`, `GET/DELETE /blotato/visuals/:id`
+- `POST /blotato/posts`, `GET /blotato/posts/:postSubmissionId`
+- `GET /blotato/shorts/lanes`
+- `POST /blotato/autoshorts/publish-now`
+- `POST /blotato/shorts/news-insight/publish-now`
+- `POST /blotato/shorts/:lane/publish-now`
+- `POST /blotato/shorts/news-insight`
+- `POST /blotato/shorts/:lane`
+- `GET /blotato/jobs/:sessionId`
 
-| Day | Lane | Purpose |
-|---|---|---|
-| Monday | `news-insight` | Current AI news item, why it matters, who it affects, practical takeaway. |
-| Tuesday | `model-verdict` | Practical verdict on one AI model, tool, feature, or release. |
-| Wednesday | `ai-at-work` | What the AI story changes for real workflows, creators, teams, or small businesses. |
-| Thursday | `reality-check` | What the headline means, what it does not mean, risk and opportunity. |
-| Friday | `ai-playbook` | Practical how-to or mini workflow the audience can use. |
+## Behaviour
 
-All lanes target at least 30 seconds of voiceover, structured Blotato scenes, faceless editorial visuals, and platform-safe captions.
+The quality layer checks hook strength, script length, narrative continuity, visual relevance, thumbnail text, source relationship and publish readiness. Rendering/publishing uses bounded polling and retry controls. Production publishing can be sequential and staggered across configured channel accounts. Friday PM uses the `ai-playbook` lane before the podcast pipeline. Configure through the `BLOTATO_*` family plus OpenRouter model variables.
 
-## Environment
+## Implementation
 
-```bash
-Blotato_API_key=
-BLOTATO_API_BASE=https://backend.blotato.com/v2
-BLOTATO_TIMEOUT_MS=30000
-BLOTATO_NEWS_SHORT_MAX_TOKENS=3600
-BLOTATO_NEWS_DURATION_SECONDS=45
-BLOTATO_NEWS_MIN_SCRIPT_WORDS=95
-BLOTATO_NEWS_TARGET_SCRIPT_WORDS=110
-BLOTATO_NEWS_MAX_SCRIPT_WORDS=135
-BLOTATO_NEWS_MIN_SCENE_WORDS=90
-BLOTATO_NEWS_TEMPLATE_ID=/base/v2/ai-story-video/5903fe43-514d-40ee-a060-0d6628c5f8fd/v1
-BLOTATO_NEWS_RSS_URL=https://ai-news.jonathan-harris.online/feed.xml
-BLOTATO_RSS_PREFER_R2=true
-BLOTATO_RSS_BUCKET_ALIAS=rss
-BLOTATO_RSS_JSON_KEY=feed.json
-BLOTATO_RSS_PICK_MODE=latest
-BLOTATO_DEFAULT_CHANNELS=instagram,youtube,tiktok,facebook
-BLOTATO_INSTAGRAM_ACCOUNT_ID=48812
-BLOTATO_YOUTUBE_ACCOUNT_ID=37622
-BLOTATO_TIKTOK_ACCOUNT_ID=44263
-BLOTATO_FACEBOOK_ACCOUNT_ID=34013
-BLOTATO_FACEBOOK_PAGE_ID=562160556971997
-BLOTATO_VIDEO_POLL_ATTEMPTS=480
-BLOTATO_VIDEO_POLL_INTERVAL_MS=5000
-BLOTATO_VIDEO_FINAL_GRACE_MS=15000
-BLOTATO_VIDEO_POLL_PROGRESS_EVERY=30
-BLOTATO_API_RETRY_ATTEMPTS=3
-BLOTATO_API_RETRY_BASE_MS=1000
-BLOTATO_API_RETRY_MAX_MS=12000
-BLOTATO_REQUIRE_ALL_CHANNELS=false
-BLOTATO_PUBLISH_WEBHOOK_SECRET=
-BLOTATO_ALLOW_PUBLIC_PUBLISH_HOOKS=false
-BLOTATO_NEWS_JSON_RESPONSE_FORMAT=false
-BLOTATO_POST_POLL_ATTEMPTS=90
-BLOTATO_POST_POLL_INTERVAL_MS=3000
-BLOTATO_YOUTUBE_PRIVACY_STATUS=public
-BLOTATO_YOUTUBE_NOTIFY_SUBSCRIBERS=false
-BLOTATO_INSTAGRAM_SHARE_TO_FEED=true
-```
+The service entry point, route modules and domain utilities are contained in this directory. Calls from AIMS operational windows use the same authenticated HTTP contract as external suite triggers, which keeps job logging, validation and failure handling consistent.
 
-`Blotato_API_key` is the canonical key name used by this service. `BLOTATO_API_KEY` is accepted only as a fallback alias.
-Video render polling also treats a returned media URL as completion evidence, waits much longer for slow renders, performs a final grace check, and retries transient Blotato API failures. It now fails fast with a clear billing/credits error if Blotato reports `insufficient-credits`, rather than sitting in a long poll loop. If one social platform publish fails but at least one configured platform succeeds, the job completes as partial unless `BLOTATO_REQUIRE_ALL_CHANNELS=true`.
+## Operational rules
 
-Short packs are duration-normalised before rendering. AIMS now expands thin model output into a complete 95-135 word spoken script, rebuilds scene voiceover when scenes are too light, and defaults `BLOTATO_NEWS_JSON_RESPONSE_FORMAT=false` so OpenRouter can choose higher-quality providers that do not support strict JSON parameters. Malformed JSON is still repaired, and a deterministic fallback pack remains available.
-
-## Governed one-call triggers
-
-In production these routes require either the AIMS bearer token or `x-blotato-publish-secret: <BLOTATO_PUBLISH_WEBHOOK_SECRET>`. `BLOTATO_ALLOW_PUBLIC_PUBLISH_HOOKS=true` is a deliberate legacy escape hatch and should not be used for paid production.
-
-```bash
-curl -X POST "https://<aims-service>/blotato/shorts/news-insight/publish-now" \
-  -H "Authorization: Bearer $AIMS_API_KEY"
-
-curl -X POST "https://<aims-service>/blotato/shorts/model-verdict/publish-now" \
-  -H "x-blotato-publish-secret: $BLOTATO_PUBLISH_WEBHOOK_SECRET"
-```
-
-Each trigger does the full flow:
-
-1. Selects the latest usable article from the RSS feed.
-2. Builds the selected weekly lane pack.
-3. Creates a structured Blotato video using `/base/v2/ai-story-video/5903fe43-514d-40ee-a060-0d6628c5f8fd/v1`.
-4. Polls Blotato until the video render is complete.
-5. Publishes immediately to Instagram, YouTube, TikTok, and Facebook.
-6. Stores job status under `GET /blotato/jobs/:sessionId`, including any partial platform failures.
-
-The trigger returns quickly with a queued/running job. The heavy Blotato work runs in the background unless `BLOTATO_INLINE_PUBLISH_JOBS=true`.
-
-## Routes
-
-Most routes are mounted behind the suite auth middleware. The public exception is the job status route. Production publish-now triggers require the AIMS bearer token or the Blotato publish hook secret.
-
-| Route | Auth | Purpose |
-|---|---|---|
-| `GET /blotato/health` | Public | Local config and route check. Does not call Blotato. |
-| `GET /blotato/shorts/lanes` | AIMS bearer | List the five weekly short-video lanes. |
-| `POST /blotato/shorts/news-insight/publish-now` | AIMS bearer or publish hook secret | Backwards-compatible Monday trigger. |
-| `POST /blotato/shorts/:lane/publish-now` | AIMS bearer or publish hook secret | Trigger any weekly lane. |
-| `GET /blotato/jobs/:sessionId` | Public | Read publish-now job status. |
-| `GET /blotato/accounts?platform=tiktok` | AIMS bearer | Fetch connected social account IDs. |
-| `GET /blotato/accounts/:accountId/subaccounts` | AIMS bearer | Fetch Facebook or LinkedIn page IDs. |
-| `GET /blotato/templates?search=AI&fields=id,name,description,inputs` | AIMS bearer | Fetch visual templates and expected inputs. |
-| `POST /blotato/visuals` | AIMS bearer | Create a Blotato visual from a template. |
-| `GET /blotato/visuals/:id` | AIMS bearer | Poll visual creation status. |
-| `DELETE /blotato/visuals/:id` | AIMS bearer | Delete a visual creation. |
-| `POST /blotato/posts` | AIMS bearer | Publish or schedule a social post. |
-| `GET /blotato/posts/:postSubmissionId` | AIMS bearer | Poll publish status. |
-| `POST /blotato/shorts/news-insight` | AIMS bearer | Build a current AI-news short pack, optionally create the Blotato visual. |
-| `POST /blotato/shorts/:lane` | AIMS bearer | Build any weekly lane pack, optionally create the Blotato visual. |
-
-## Trial flow
-
-1. Set `Blotato_API_key` as a Koyeb secret.
-2. Keep the non-secret defaults in `config/production.defaults.env`.
-3. Connect Instagram, YouTube, TikTok, and Facebook inside Blotato.
-4. Keep the configured IDs:
-   - TikTok account: `44263`
-   - Facebook account: `34013`
-   - Facebook Page: `562160556971997`
-5. Trigger one lane manually.
-6. Check the returned status URL until the job becomes `completed` or `failed`.
-7. Review the created Blotato visual before enabling unattended scheduling.
-
-## Example visual request
-
-```json
-{
-  "templateId": "/base/v2/ai-story-video/5903fe43-514d-40ee-a060-0d6628c5f8fd/v1",
-  "inputs": {
-    "scenes": [
-      {
-        "mediaSource": "Faceless dark editorial AI newsroom with workflow cards moving through a clean dashboard.",
-        "script": "AI agents are moving from chat to chores."
-      }
-    ],
-    "aspectRatio": "9:16",
-    "captionPosition": "bottom"
-  },
-  "prompt": "Create a polished faceless vertical AI social video...",
-  "render": true,
-  "isDraft": false
-}
-```
-
-## Example post request
-
-```json
-{
-  "accountId": "44263",
-  "platform": "tiktok",
-  "text": "AI news, minus the fog. #ArtificialIntelligence #AINews",
-  "mediaUrls": ["https://example.com/video.mp4"],
-  "target": { "targetType": "tiktok" }
-}
-```
-
-For Facebook Pages, include `target.pageId` from the subaccounts endpoint. This repo defaults to `562160556971997`.
-
-## Shared tone and text-free visuals
-
-Blotato short-script generation uses the shared lane-aware persona from `services/script/utils/toneSetter.js`.
-
-Generated scene prompts are normalised before being sent to Blotato. Every scene carries an absolute prohibition on text, pseudo-text, numbers, captions, labels, interface copy, logos and watermarks. Thumbnail copy remains a separate Blotato layer and is no longer embedded in the visual-generation prompt. Lane visual signatures use unlabelled objects and geometry rather than headline cards, numbered cards or document layouts.
-
-## AutoShorts-style morning lane
-
-`POST /blotato/autoshorts/publish-now` is the additional weekday morning short.
-It reuses the weekday editorial lane for source/quality policy but selects the
-Blotato visual template from a governed 48-template rotation. Set exactly 48
-comma-separated UUIDs in `BLOTATO_AUTOSHORT_TEMPLATE_IDS`; AIMS advances one
-style every `BLOTATO_AUTOSHORT_ROTATION_DAYS` (default 12). The existing five
-weekday short lanes remain the evening product and are not replaced.
+- Treat `config/production.defaults.env`, `env.template`, `config/thresholds.js` and the relevant service config module as the configuration sources of truth.
+- Secrets belong in the deployment secret store and must not be committed.
+- Production HTTP access is protected by the AIMS bearer-auth middleware unless a route explicitly implements a narrower public status/redirect contract.
+- Retries are for transient failures only; validation, policy and source-integrity failures fail closed.
+- Generated public content must pass its content-quality gates before publication or delivery.
+- Durable artefacts and job state use the configured R2/state utilities rather than process memory where a durable store is required.
