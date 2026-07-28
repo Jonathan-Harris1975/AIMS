@@ -1,48 +1,14 @@
-# API aggregator
+# API composition module
 
-## Status
+`services/api/index.js` exports an internal Express router that groups podcast, script, TTS and artwork routers.
 
-**Present but not wired.** This page documents behaviour backed by files in `services/api/`.
+The production server does not mount this aggregate router. `routes/index.js` mounts the live service routers individually so each service has an explicit top-level prefix and route-registry entry.
 
-## Purpose
+## Exported composition
 
-Contains an Express router that mounts podcast, script, TTS and artwork routers under one aggregator path, but the current root route registry does not mount this router.
+- `/podcast` → podcast router
+- `/script` → script router
+- `/tts` → TTS router
+- `/artwork` → artwork router
 
-## Routes
-
-No active HTTP route. `routes/index.js` mounts those services directly instead.
-
-## Main files
-
-- `services/api/index.js`
-
-## Workflow
-
-- Imports podcast, script, TTS and artwork routers.
-- Exports `router` and default router.
-- No current caller was found in the active server route registry.
-
-## Environment variables
-
-No service-specific env vars.
-
-## External integrations
-
-Express only; child routers have their own integrations.
-
-## Storage
-
-No storage.
-
-## Tests
-
-No dedicated test found.
-
-## Common troubleshooting
-
-- Do not document `/api/*` as active until this router is mounted.
-- If mounting it later, add tests and update the root route map.
-
-## Connections to other services
-
-Aggregator for services that are currently mounted directly at root-level paths.
+Use the production prefixes documented in the repository root README for live HTTP calls.
