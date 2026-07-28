@@ -1,100 +1,29 @@
-# Newsletter Engine (`services/newsletter`)
+# AI Edge newsletter service
 
-Config-driven, multi-profile daily/weekly newsletter engine. Ships with one
-profile — **AI Edge** — a five-minute AI-news filter in Jonathan Harris's brand
-voice. A second newsletter should mean a new entry in
-`services/newsletter/config/profiles.js`, not new engine code.
+**Live route prefix:** `/newsletter`
 
-Independent of HIVE at runtime: nothing in this directory calls out to HIVE
-or its skill registry. See `config/skills/S094-newsletter-composer.local.json`
-for how this relates to HIVE's centrally-owned skill index.
+Generates, reviews, stores and sends AI Edge through Brevo. The editorial format prioritises a small number of important stories, Jonathan Harris analysis, useful tools/workflows, radar items, a reality-check section and cross-channel promotion.
 
-Triggering and scheduling are entirely out of scope here — MAST (a separate
-repository) calls the HTTP endpoints below exactly when an issue should be
-built and, later, sent; the engine has no internal clock or scheduledAt.
+## HTTP contract
 
-## Pipeline
+- `POST /newsletter/generate` — build and QA an issue.
+- `GET /newsletter/jobs/:lane/:sessionId` — inspect generation job state.
+- `POST /newsletter/send` — deliver a previously generated QA-passed issue through Brevo.
+- `GET /newsletter/campaigns/:campaignId/status` — query Brevo campaign state.
 
-```
-RSS ingestion (24h window, dedupe, retry/backoff)
-        -> ranking (recency + topical relevance + source diversity)
-        -> composition (opening note, Big Three, Worth Using/Watching,
-                         On the Radar, Reality Check, Your Turn, subject/preview)
-        -> day-aware house promotion:
-             Tuesday -> canonical featured book (5-attempt lookup)
-             Thursday -> Turing's Torch Friday preview
-        -> hero image (ONE per issue, never per-story)
-        -> QA loop:
-             deterministic validators
-             + multi-model editorial council:
-                  source integrity / fact checking
-                  Jonathan Harris voice / British English
-                  audience value / newsletter performance
-                  independent publishing-readiness chair
-             -> up to 5 full rewrite-and-council passes
-             -> quarantine if still failing after the last pass
-        -> render (email-safe table/inline-CSS HTML + plaintext fallback)
-        -> store in R2 (reuses the existing `blog` / `blog-images` buckets)
-        -> [later, on MAST's signal] Brevo: create campaign + sendNow
-```
+## Behaviour
 
-## HTTP endpoints (mounted at `/newsletter`)
+Generation uses a specialist council covering source/fact integrity, Jonathan voice, newsletter/audience performance and a final chair. The service enforces a minimum QA pass count and bounded correction attempts. Tuesday issues can promote the featured ebook; Thursday issues can promote Turing's Torch. Delivery finds or creates the configured Brevo list/folder and requires a valid sender. Operational execution is controlled by `AIMS_OPERATION_NEWSLETTER_ENABLED`. Key variables: `BREVO_*`, `NEWSLETTER_*`, sender/list/profile settings and OpenRouter council/editorial model settings.
 
-| Method | Path | Purpose |
-| --- | --- | --- |
-| POST | `/newsletter/generate` | Build one issue. Body: `{ profileId?, sessionId? }`. Runs async (returns a job) when called via the async-job convention already used elsewhere in AIMS; otherwise runs synchronously and returns the full result. |
-| GET | `/newsletter/jobs/:lane/:sessionId` | Poll an async generate job. |
-| POST | `/newsletter/send` | Deliver a previously-built, QA-passed issue via Brevo — creates the campaign and sends it immediately. Body: `{ profileId?, sessionId, date? }`. |
-| GET | `/newsletter/campaigns/:campaignId/status` | Poll Brevo for a real campaign's status/performance. |
+## Implementation
 
-Monthly audit (mirrors the existing `*-council` audit pattern, feeds RAMS):
+The service entry point, route modules and domain utilities are contained in this directory. Calls from AIMS operational windows use the same authenticated HTTP contract as external suite triggers, which keeps job logging, validation and failure handling consistent.
 
-| Method | Path | Purpose |
-| --- | --- | --- |
-| POST | `/audits/newsletter/run` | Compute the newsletter section of the monthly audit and publish it to the R2 audits bucket. |
-| GET | `/audits/newsletter/health` | Status/health check. |
-| GET | `/audits/newsletter/jobs/:sessionId` | Poll an async audit job. |
+## Operational rules
 
-## Delivery: Brevo
-
-The engine uses [Brevo's v3 API](https://developers.brevo.com/reference/quickstart-reference)
-(`api-key` header auth, `BREVO_API_KEY`). Brevo supports full campaign creation
-and immediate sending, so `POST /newsletter/send` is a straightforward flow:
-
-1. **Sender check** — Brevo requires a sender to complete one-time OTP
-   verification (emailed to that address) before it can send. AIMS creates
-   the sender via the API on first use, but **cannot complete OTP
-   verification itself** (that requires reading an inbox). Until that's
-   done, `/newsletter/send` returns `status: "sender_pending_validation"`
-   (HTTP 409) with the sender ID and a clear next step, rather than
-   attempting a send that would fail.
-2. **List check** — AIMS owns list creation. `ensureList()`
-   (`brevo/audience.js`) looks up the profile's configured list name and
-   creates it (in a matching folder) on first run; no pre-existing list ID
-   is required. Safe to call on every send — idempotent by name.
-3. **Create + send** — `POST /emailCampaigns` with the issue's subject and
-   `htmlUrl` (pointing at the already-public R2 copy, avoiding Brevo's 1MB
-   inline-content ceiling), targeted at the resolved list, then
-   `POST /emailCampaigns/{id}/sendNow`. No `scheduledAt` is ever set —
-   MAST decides *when* by deciding *when it calls this endpoint*.
-4. **Delivery record** — on success, `{campaignId, listId, sentAt}` is
-   written to `campaign.json` alongside the issue's `metadata.json` in R2,
-   so the monthly audit can pull real open/click/unsubscribe stats per
-   issue via `GET /emailCampaigns/{id}?statistics=globalStats`.
-
-## Configuration
-
-All engine-wide behaviour (QA threshold, rewrite ceiling, RSS window, Brevo
-retry/timeout) lives in `config/thresholds.js` under `THRESHOLDS.newsletter`,
-resolved from environment variables — see `env.template` for the full list.
-Per-profile settings (feeds, brand voice, Brevo list/folder/sender name,
-featured-content CTA) live in `services/newsletter/config/profiles.js`.
-
-## Adding a second newsletter profile
-
-1. Add an entry to the `PROFILE_REGISTRY` in `config/profiles.js` (copy the
-   `aiEdge` shape, including its own `brevo.listName` / `brevo.fromEmail`).
-2. Add its env vars to `env.template`.
-3. Verify its sender's OTP in Brevo once (see above).
-4. Nothing else changes — `buildNewsletter({ profileId })` and the routes
-   already take `profileId` as a parameter.
+- Treat `config/production.defaults.env`, `env.template`, `config/thresholds.js` and the relevant service config module as the configuration sources of truth.
+- Secrets belong in the deployment secret store and must not be committed.
+- Production HTTP access is protected by the AIMS bearer-auth middleware unless a route explicitly implements a narrower public status/redirect contract.
+- Retries are for transient failures only; validation, policy and source-integrity failures fail closed.
+- Generated public content must pass its content-quality gates before publication or delivery.
+- Durable artefacts and job state use the configured R2/state utilities rather than process memory where a durable store is required.
