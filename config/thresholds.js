@@ -28,13 +28,15 @@ function bool(name, fallback) {
   return ["1", "true", "yes", "on"].includes(String(raw).trim().toLowerCase());
 }
 
+const MIN_RETRY_ATTEMPTS_FLOOR = Math.max(1, num("MIN_RETRY_ATTEMPTS_FLOOR", 5));
+
 export const THRESHOLDS = Object.freeze({
   // Cross-cutting floor: every retry/attempt knob in this file defaults to
   // at least this many total attempts before a pipeline is allowed to
   // quarantine an artefact or fail a QA gate. Individual knobs below may be
   // raised above this floor for slower/flakier upstreams, but must not be
   // set below it without an explicit, documented reason.
-  minRetryAttemptsFloor: Math.max(1, num("MIN_RETRY_ATTEMPTS_FLOOR", 5)),
+  minRetryAttemptsFloor: MIN_RETRY_ATTEMPTS_FLOOR,
   reviewCouncil: Object.freeze({
     // Number of repair -> revalidate cycles the review council runs against
     // a failing artefact before it is quarantined. Applies to every caller
@@ -107,7 +109,7 @@ export const THRESHOLDS = Object.freeze({
     // QA review loop: hard ceiling on rewrite iterations before quarantine.
     // Kept at/above THRESHOLDS.minRetryAttemptsFloor — a newsletter is only
     // quarantined after at least 5 compose->validate passes.
-    maxRewriteIterations: Math.max(1, num("NEWSLETTER_MAX_REWRITE_ITERATIONS", 5)),
+    maxRewriteIterations: Math.max(MIN_RETRY_ATTEMPTS_FLOOR, num("NEWSLETTER_MAX_REWRITE_ITERATIONS", 5)),
     // RSS retrieval retry/backoff for transient upstream feed failures.
     // rss.js treats this as additional retries after the first attempt, so
     // 4 here yields 5 total attempts.
