@@ -2,6 +2,16 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { generateTranscriptHtml } from '../services/script/utils/generateTranscriptHtml.js';
 
+const siteShell = {
+  manifest: {
+    releaseSha: "abc1234567",
+    stylesheetUrl: "https://jonathan-harris.online/assets/css/site.css?v=abc1234567",
+    siteUiScriptUrl: "https://jonathan-harris.online/assets/js/site-ui.min.js?v=abc1234567",
+  },
+  headerHtml: '<!-- JH_SITE_SHELL_HEADER_START release=abc1234567 --><a class="skip-link" href="#main">Skip</a><header class="jh-header" id="site-primary-nav"><span class="jh-logo-wrap"><img class="jh-header__logo" alt=""/></span><a href="https://jonathan-harris.online/ebooks/">Browse Books</a></header><!-- JH_SITE_SHELL_HEADER_END -->',
+  footerHtml: '<!-- JH_SITE_SHELL_FOOTER_START release=abc1234567 --><footer class="site-footer"><a href="https://jonathan-harris.online/blog/">Read the blog</a></footer><!-- JH_SITE_SHELL_FOOTER_END -->',
+};
+
 test('generateTranscriptHtml uses on-brand header, governed scripts, and square logo shell', () => {
   const html = generateTranscriptHtml(
     'TT-2026-04-10',
@@ -19,7 +29,8 @@ test('generateTranscriptHtml uses on-brand header, governed scripts, and square 
       plannedDurationSeconds: 1800,
       keywords: ['ai governance', 'artificial intelligence', 'ai podcast'],
     },
-    'https://jonathan-harris.online/transcripts'
+    'https://jonathan-harris.online/transcripts',
+    siteShell
   );
 
   assert.match(html, /class="jh-header"/);
@@ -36,6 +47,8 @@ test('generateTranscriptHtml uses on-brand header, governed scripts, and square 
   assert.match(html, /"@type": "PodcastEpisode"/);
   assert.match(html, /"contentUrl": "https:\/\/pub.example.com\/TT-2026-04-10.mp3"/);
   assert.match(html, /<meta name="keywords" content="ai governance, artificial intelligence, ai podcast"\/>/);
+  assert.doesNotMatch(html, /36 eBooks|Daily AI newsletter|every Friday/);
+  assert.match(html, /jh-site-shell-version/);
 });
 
 
@@ -48,7 +61,8 @@ test('generateTranscriptHtml prefers canonical main-domain transcript URL and ar
       transcriptHtmlUrl: 'https://jonathan-harris.online/transcripts/TT-2026-04-11.html',
       transcriptTextUrl: 'https://transcripts.jonathan-harris.online/TT-2026-04-11.txt',
     },
-    'https://transcripts.jonathan-harris.online'
+    'https://transcripts.jonathan-harris.online',
+    siteShell
   );
 
   assert.match(html, /rel="canonical" href="https:\/\/jonathan-harris\.online\/transcripts\/TT-2026-04-11\.html"/);
