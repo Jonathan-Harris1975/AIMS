@@ -1,6 +1,7 @@
 // services/blog/weekly/buildWeeklyBlogPost.js
 import { info, error, debug, warn } from "../../../logger.js";
 import { getObjectAsText, putText, putJson } from "../../shared/utils/r2-client.js";
+import { loadSiteShell, applySiteShellToHtml } from "../../shared/utils/siteShell.js";
 import { resilientRequest } from "../../shared/utils/ai-service.js";
 import { slugify } from "../utils/slug.js";
 import { pageTemplate, weeklyPostBody } from "../utils/templates.js";
@@ -64,6 +65,10 @@ function parseIsoWeekId(weekId) {
 function parsePubDate(value) {
   const parsed = Date.parse(value);
   return Number.isFinite(parsed) ? new Date(parsed) : null;
+}
+
+function renderPageWithSiteShell(siteShell, options) {
+  return applySiteShellToHtml(pageTemplate(options), siteShell);
 }
 
 function escapeHtml(str) {
@@ -517,6 +522,8 @@ export async function buildWeeklyBlogPost({ days, weekId } = {}) {
       };
     }
 
+    const siteShell = await loadSiteShell();
+
     let weeklyPackage = await generateStructuredWeeklyPackage({
       sessionId,
       week: window.week,
@@ -587,7 +594,7 @@ export async function buildWeeklyBlogPost({ days, weekId } = {}) {
       sources: cleanedSources,
     });
 
-    let fullHtml = pageTemplate({
+    let fullHtml = renderPageWithSiteShell(siteShell, {
       title,
       description: weeklyPackage.summary,
       canonicalUrl: postUrl,
@@ -630,7 +637,7 @@ export async function buildWeeklyBlogPost({ days, weekId } = {}) {
         }),
         validate: (candidatePackage) => {
           const candidateBodyHtml = renderWeeklyBodyHtml(candidatePackage, { escapeHtml });
-          const candidateFullHtml = pageTemplate({
+          const candidateFullHtml = renderPageWithSiteShell(siteShell, {
             title: candidatePackage.title,
             description: candidatePackage.summary,
             canonicalUrl: postUrl,
@@ -704,7 +711,7 @@ export async function buildWeeklyBlogPost({ days, weekId } = {}) {
         html: bodyHtml,
         sources: cleanedSources,
       });
-      fullHtml = pageTemplate({
+      fullHtml = renderPageWithSiteShell(siteShell, {
         title,
         description: weeklyPackage.summary,
         canonicalUrl: postUrl,
