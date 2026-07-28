@@ -1321,4 +1321,4 @@ Zernio lane (which also owns the topical mini-series). Thursday's Zernio lane
 owns the Turing's Torch promotion. Friday PM runs the evening Blotato lane,
 podcast pipeline and schedules both weekend Zernio posts before standby.
 Newsletter generation/sending is present but feature-gated by
-`AIMS_OPERATION_NEWSLETTER_ENABLED=false` until Brevo is production-ready.
+`AIMS_OPERATION_NEWSLETTER_ENABLED=true` until Brevo is production-ready.
