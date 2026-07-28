@@ -1,69 +1,32 @@
-> **Document status:** Production reference  
-> **Last reviewed:** 16 June 2026  
-> **Operational authority:** Current repository README, SECURITY policy and operations guide.
+# Operations service
 
-# Operational preflight service
+**Live route prefix:** `/ops`
 
-## Status
+Owns AIMS weekday AM/PM task sequences and operational readiness endpoints. MAST calls these windows; AIMS executes the individual internal service tasks sequentially.
 
-**Implemented.** This page documents behaviour backed by files in `services/ops/`.
+## HTTP contract
 
-## Purpose
+- `GET /ops/windows` — list available operation windows.
+- `POST /ops/run/:window` — run a named window.
+- `GET /ops/jobs/:id` — inspect operation job state.
+- `GET /ops/health` — service health.
+- `GET /ops/preflight` — readiness checks for a target service/path.
+- `GET /ops/warmup` — warmup-stage readiness.
+- `GET /ops/excellence` — operational-excellence snapshot.
 
-Provides lightweight scheduler-facing checks before timed AIMS jobs run. These endpoints confirm that the AIMS process is alive, that the scheduler supplied target context, and that obvious service-specific environment hints are present.
+## Behaviour
 
-The service is intentionally small. It does not run the heavy job, call external publishing APIs, mutate R2, or spend OpenRouter credits.
+AM and PM task spacing use `AIMS_OPERATION_AM_DELAY_MS` and `AIMS_OPERATION_PM_DELAY_MS`; task execution uses `AIMS_OPERATION_TASK_TIMEOUT_MS`. `AIMS_OPS_PREFLIGHT_STRICT` controls whether missing readiness inputs become hard failures. Friday PM runs Blotato `ai-playbook`, then podcast, then Saturday and Sunday Zernio scheduling.
 
-## Routes
+## Implementation
 
-- `GET /ops/health`
-- `GET /ops/preflight`
-- `GET /ops/warmup`
+The service entry point, route modules and domain utilities are contained in this directory. Calls from AIMS operational windows use the same authenticated HTTP contract as external suite triggers, which keeps job logging, validation and failure handling consistent.
 
-## Main files
+## Operational rules
 
-- `index.js`
-
-## Workflow
-
-- Read scheduler context from query string or trigger headers.
-- Identify the target service using `service` query value, defaulting to `suite`.
-- Check basic process readiness.
-- Check that `targetPath` was supplied by the scheduler.
-- Check selected service environment hints where configured.
-- Return warning-only readiness by default.
-- Return HTTP `503` for missing required hints only when `AIMS_OPS_PREFLIGHT_STRICT=true`.
-
-## Environment variables
-
-- `AIMS_OPS_PREFLIGHT_STRICT`
-- Service hints currently checked by code:
-  - `ZERNIO_META_API_KEY`
-  - `BLOTATO_API_KEY`
-  - `R2_BUCKET_AUDITS`
-  - `R2_PUBLIC_BASE_URL_AUDITS`
-  - `R2_BUCKET_PODCAST`
-  - `R2_BUCKET_RAW_TEXT`
-  - `R2_BUCKET_BLOG`
-
-## External integrations
-
-None. This service performs local process/env checks only.
-
-## Storage
-
-No storage.
-
-## Tests
-
-Covered indirectly by route-registry and smoke/startup checks.
-
-## Common troubleshooting
-
-- `ready-with-warnings`: the service is responding, but scheduler context or one of the configured env hints is missing.
-- `503` from preflight/warmup: strict mode is enabled and at least one configured check failed.
-- Missing target path: confirm the scheduler is passing `targetPath` or `x-trigger-source-path`.
-
-## Connections to other services
-
-Used by external schedulers such as MAST before running heavier AIMS routes. It should remain low-cost and side-effect free.
+- Treat `config/production.defaults.env`, `env.template`, `config/thresholds.js` and the relevant service config module as the configuration sources of truth.
+- Secrets belong in the deployment secret store and must not be committed.
+- Production HTTP access is protected by the AIMS bearer-auth middleware unless a route explicitly implements a narrower public status/redirect contract.
+- Retries are for transient failures only; validation, policy and source-integrity failures fail closed.
+- Generated public content must pass its content-quality gates before publication or delivery.
+- Durable artefacts and job state use the configured R2/state utilities rather than process memory where a durable store is required.
