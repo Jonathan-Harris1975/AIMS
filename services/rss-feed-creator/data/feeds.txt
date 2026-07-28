@@ -5,7 +5,6 @@ https://analyticsvidhya.com/feed
 https://ai2people.com/feed
 https://metadevo.com/feed
 https://cogitotech.com/feed
-https://nyheter.aitool.se/feed
 https://spritle.com/blog/feed
 https://yatter.in/feed
 https://shaip.com/feed
