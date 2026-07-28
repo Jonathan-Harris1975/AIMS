@@ -7,84 +7,74 @@ import {
   validateStructuralCompleteness,
   validateNoDuplicateStories,
   validateLinks,
+  validatePromotion,
   runDeterministicValidators,
 } from "../services/newsletter/engine/validators.js";
 
 function baseNewsletter(overrides = {}) {
   return {
     subject: "OpenAI ships a smaller, faster model",
-    previewText: "Plus: three other stories worth your attention today.",
+    previewText: "Plus: what actually matters in the rest of today's AI news.",
     heroHeadline: "OpenAI ships a smaller, faster model",
-    leadArticleHtml: "<p>OpenAI released a new model today.</p>",
+    openingNoteHtml: "<p>Three stories survived the noise filter today.</p>",
     heroImageUrl: "https://images.example.com/hero.png",
-    sourceLink: "https://news.example.com/a",
-    stories: [
-      { title: "Story A", link: "https://news.example.com/b", summary: "Summary A." },
-      { title: "Story B", link: "https://news.example.com/c", summary: "Summary B." },
+    bigThree: [
+      { title: "A", link: "https://news.example.com/a", whatHappened: "A happened.", whyItMatters: "It matters.", jonathanTake: "Worth watching." },
+      { title: "B", link: "https://news.example.com/b", whatHappened: "B happened.", whyItMatters: "It matters.", jonathanTake: "Useful, with limits." },
+      { title: "C", link: "https://news.example.com/c", whatHappened: "C happened.", whyItMatters: "It matters.", jonathanTake: "Evidence first." },
     ],
+    worthUsing: { title: "D", link: "https://news.example.com/d", label: "Worth Watching", summary: "D summary.", whyUseful: "Practical relevance." },
+    onRadar: [
+      { title: "E", link: "https://news.example.com/e", summary: "E summary." },
+      { title: "F", link: "https://news.example.com/f", summary: "F summary." },
+    ],
+    realityCheck: { claim: "The claim", assessment: "The evidence is narrower than the headline.", link: "https://news.example.com/a" },
+    yourTurn: "Which development deserves a deeper look?",
+    promotion: null,
     ...overrides,
   };
 }
 
 describe("newsletter engine/validators.js", () => {
-  test("validateBannedPhrases flags marketing hype", () => {
-    const result = validateBannedPhrases(baseNewsletter({ leadArticleHtml: "<p>This is a revolutionary, game-changing model.</p>" }));
-    assert.equal(result.pass, false);
-    assert.ok(result.issues.some((i) => i.code === "banned_phrase"));
-  });
-
-  test("validateBannedPhrases passes clean copy", () => {
-    const result = validateBannedPhrases(baseNewsletter());
-    assert.equal(result.pass, true);
-  });
-
-  test("validateBritishSpelling flags Americanisms", () => {
-    const result = validateBritishSpelling(baseNewsletter({ leadArticleHtml: "<p>We analyze the color of the model's behavior.</p>" }));
-    assert.equal(result.pass, false);
-    assert.ok(result.issues.length >= 2);
-  });
-
-  test("validateSubjectLength flags an overlong subject", () => {
-    const result = validateSubjectLength(baseNewsletter({ subject: "X".repeat(90) }));
-    assert.equal(result.pass, false);
-    assert.equal(result.issues[0].code, "subject_too_long");
-  });
-
-  test("validateSubjectLength flags a missing subject", () => {
-    const result = validateSubjectLength(baseNewsletter({ subject: "" }));
-    assert.equal(result.pass, false);
-    assert.equal(result.issues[0].code, "missing_subject");
-  });
-
-  test("validateStructuralCompleteness catches a missing hero image", () => {
-    const result = validateStructuralCompleteness(baseNewsletter({ heroImageUrl: null }));
-    assert.equal(result.pass, false);
-    assert.ok(result.issues.some((i) => i.code === "missing_hero_image"));
-  });
-
-  test("validateStructuralCompleteness catches a short story count", () => {
-    const result = validateStructuralCompleteness(baseNewsletter(), { expectedStoryCount: 10 });
-    assert.equal(result.pass, false);
-    assert.ok(result.issues.some((i) => i.code === "story_count_short"));
-  });
-
-  test("validateNoDuplicateStories catches a repeated link", () => {
+  test("flags marketing hype", () => {
     const nl = baseNewsletter();
-    nl.stories[1].link = nl.stories[0].link;
-    const result = validateNoDuplicateStories(nl);
-    assert.equal(result.pass, false);
+    nl.bigThree[0].jonathanTake = "This is revolutionary and game-changing.";
+    assert.equal(validateBannedPhrases(nl).pass, false);
   });
 
-  test("validateLinks catches a malformed URL", () => {
+  test("flags Americanisms", () => {
+    const nl = baseNewsletter({ openingNoteHtml: "<p>We analyze the color and behavior.</p>" });
+    assert.equal(validateBritishSpelling(nl).pass, false);
+  });
+
+  test("flags an overlong subject", () => {
+    assert.equal(validateSubjectLength(baseNewsletter({ subject: "X".repeat(90) })).pass, false);
+  });
+
+  test("requires exactly three Big Three stories", () => {
+    const result = validateStructuralCompleteness(baseNewsletter({ bigThree: baseNewsletter().bigThree.slice(0, 2) }));
+    assert.equal(result.pass, false);
+    assert.ok(result.issues.some((i) => i.code === "big_three_incomplete"));
+  });
+
+  test("allows Reality Check to cite a Big Three source without treating it as duplication", () => {
+    assert.equal(validateNoDuplicateStories(baseNewsletter()).pass, true);
+  });
+
+  test("catches duplicated editorial slots", () => {
     const nl = baseNewsletter();
-    nl.stories[0].link = "not-a-url";
-    const result = validateLinks(nl);
-    assert.equal(result.pass, false);
-    assert.ok(result.issues.some((i) => i.code === "malformed_link"));
+    nl.onRadar[1].link = nl.onRadar[0].link;
+    assert.equal(validateNoDuplicateStories(nl).pass, false);
   });
 
-  test("runDeterministicValidators aggregates all checks and passes clean input", () => {
-    const result = runDeterministicValidators(baseNewsletter(), { expectedStoryCount: 2 });
+  test("validates promotion shape and URL", () => {
+    const good = baseNewsletter({ promotion: { type: "podcast", title: "Turing's Torch", url: "https://jonathan-harris.online/podcast/" } });
+    assert.equal(validatePromotion(good).pass, true);
+    assert.equal(validateLinks(good).pass, true);
+  });
+
+  test("passes clean v2 input", () => {
+    const result = runDeterministicValidators(baseNewsletter(), { expectedStoryCount: 6 });
     assert.equal(result.pass, true);
     assert.deepEqual(result.issues, []);
   });

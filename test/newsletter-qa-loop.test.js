@@ -3,39 +3,27 @@ import assert from "node:assert/strict";
 import http from "node:http";
 
 process.env.OPENROUTER_API_KEY = "test-key";
-process.env.AI_MAX_RETRIES = "0";
-process.env.NEWSLETTER_MAX_REWRITE_ITERATIONS = "2";
+process.env.NEWSLETTER_MAX_REWRITE_ITERATIONS = "5";
 process.env.NEWSLETTER_QA_PASS_THRESHOLD = "85";
-// draftNewsletter() below fixtures exactly 2 stories. THRESHOLDS.newsletter
-// .storyCount defaults to 10, and runQaLoop's deterministic validator
-// checks the newsletter's actual story count against it — so without this
-// override, validateStructuralCompleteness always reports "story_count_short"
-// regardless of AI review score, and every subtest falls through to
-// quarantine no matter what reviewScores says.
-process.env.NEWSLETTER_STORY_COUNT = "2";
-
-// The newsletter AI routes (config/ai-config.js) resolve each provider's
-// model name purely from env — there is no static fallback — so every
-// provider that appears in newsletterCompose / newsletterQaReview /
-// newsletterSubject's chains must be stubbed here. Without this, a
-// provider with no model env var resolves to `null` in getProviderConfig()
-// and is silently skipped as "misconfigured" *before* any HTTP request is
-// made, so the local mock server below is never reached — regardless of
-// OPENROUTER_BASE_URL — and resilientRequest throws "All providers failed"
-// once every provider in the chain has been skipped this way. Relying on
-// whatever model env vars happen to be set in the ambient CI environment
-// made this test non-deterministic; stubbing them all here makes it not.
-process.env.OPENROUTER_ANTHROPIC_4_6 = "mock/anthropic-46";
-process.env.OPENROUTER_GOOGLE_2_5_flashlite = "mock/google-25-flashlite";
-process.env.OPENROUTER_GPT_5_6_LUNA = "mock/gpt-5.6-luna";
-process.env.OPENROUTER_DEEPSEEK_v4_pro = "mock/deepseek-v4-pro";
+process.env.NEWSLETTER_STORY_COUNT = "6";
+process.env.NEWSLETTER_MODEL_EDITORIAL = "mock/sonnet";
+process.env.OPENROUTER_GPT_5_6_SOL = "mock/sol";
+process.env.OPENROUTER_GPT_5_6_LUNA = "mock/luna";
+process.env.AI_MODEL_HIGH_QUALITY = "mock/high";
+process.env.AI_MODEL_AUDIT = "mock/audit";
+process.env.AI_MODEL_FAST = "mock/fast";
+process.env.AI_MODEL_SUMMARY = "mock/summary";
 
 let server;
-let reviewScores = []; // one score consumed per AI review call, in order
-let reviewCallCount = 0;
+let iterationScores = [];
+let chairCallCount = 0;
 
-function chatCompletionResponse(content) {
+function chat(content) {
   return { choices: [{ message: { content } }] };
+}
+
+function reviewResponse(score) {
+  return JSON.stringify({ score, verdict: score >= 85 ? "pass" : "revise", issues: score >= 85 ? [] : ["needs work"], strengths: ["clear"] });
 }
 
 before(async () => {
@@ -45,107 +33,108 @@ before(async () => {
     req.on("end", () => {
       let parsed = {};
       try { parsed = JSON.parse(body); } catch {}
-      const systemMsg = parsed.messages?.[0]?.content || "";
-
+      const system = parsed.messages?.[0]?.content || "";
+      const score = iterationScores[Math.min(chairCallCount, iterationScores.length - 1)] ?? 90;
       res.writeHead(200, { "Content-Type": "application/json" });
 
-      if (systemMsg.includes("editorial QA reviewer")) {
-        const score = reviewScores[Math.min(reviewCallCount, reviewScores.length - 1)];
-        reviewCallCount += 1;
-        const verdict = score >= 85 ? "pass" : "revise";
-        res.end(JSON.stringify(chatCompletionResponse(JSON.stringify({ score, issues: verdict === "pass" ? [] : ["needs tightening"], verdict }))));
+      if (system.includes("Source Integrity and Fact-Checking Reviewer") ||
+          system.includes("Jonathan Harris Voice and Editorial Reviewer") ||
+          system.includes("Audience Value and Newsletter Performance Reviewer")) {
+        res.end(JSON.stringify(chat(reviewResponse(score))));
         return;
       }
 
-      if (systemMsg.includes("lead editor")) {
-        res.end(JSON.stringify(chatCompletionResponse(JSON.stringify({
-          heroHeadline: "A revised, tighter headline",
-          leadArticleHtml: "<p>A revised lead paragraph grounded in the source.</p>",
+      if (system.includes("chair the AI Edge editorial council")) {
+        chairCallCount += 1;
+        res.end(JSON.stringify(chat(JSON.stringify({ score, verdict: score >= 85 ? "pass" : "revise", issues: score >= 85 ? [] : ["chair says revise"], priorityFixes: [] }))));
+        return;
+      }
+
+      if (system.includes("senior editor writing")) {
+        res.end(JSON.stringify(chat(JSON.stringify({
+          heroHeadline: "A revised headline",
+          openingNoteHtml: "<p>A revised opening note with practical judgement.</p>",
+          bigThree: [
+            { whatHappened: "A happened.", whyItMatters: "A matters.", jonathanTake: "A take." },
+            { whatHappened: "B happened.", whyItMatters: "B matters.", jonathanTake: "B take." },
+            { whatHappened: "C happened.", whyItMatters: "C matters.", jonathanTake: "C take." },
+          ],
+          worthUsing: { label: "Worth Watching", summary: "D summary.", whyUseful: "D useful." },
+          onRadar: ["E summary.", "F summary."],
+          realityCheck: { claim: "A claim", assessment: "The evidence is narrower." },
+          yourTurn: "Which deserves a deeper look?",
         }))));
         return;
       }
 
-      if (systemMsg.includes("daily AI news digest")) {
-        res.end(JSON.stringify(chatCompletionResponse(JSON.stringify({ summaries: ["Revised summary one.", "Revised summary two."] }))));
+      if (system.includes("email subject and preview")) {
+        res.end(JSON.stringify(chat(JSON.stringify({ subject: "Revised subject", previewText: "Revised preview" }))));
         return;
       }
 
-      if (systemMsg.includes("subject lines")) {
-        res.end(JSON.stringify(chatCompletionResponse(JSON.stringify({ subject: "Revised subject", previewText: "Revised preview" }))));
-        return;
-      }
-
-      res.end(JSON.stringify(chatCompletionResponse("{}")));
+      res.end(JSON.stringify(chat("{}")));
     });
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   process.env.OPENROUTER_BASE_URL = `http://127.0.0.1:${server.address().port}`;
 });
 
-after(async () => {
-  await new Promise((resolve) => server.close(resolve));
-});
+after(async () => { await new Promise((resolve) => server.close(resolve)); });
+beforeEach(() => { chairCallCount = 0; });
 
-beforeEach(() => {
-  reviewCallCount = 0;
-});
+const lead = { title: "A", link: "https://news.example.com/a", summary: "A source summary." };
+const stories = [
+  { title: "B", link: "https://news.example.com/b", summary: "B source." },
+  { title: "C", link: "https://news.example.com/c", summary: "C source." },
+  { title: "D", link: "https://news.example.com/d", summary: "D source." },
+  { title: "E", link: "https://news.example.com/e", summary: "E source." },
+  { title: "F", link: "https://news.example.com/f", summary: "F source." },
+];
 
 function draftNewsletter() {
   return {
     subject: "Draft subject",
     previewText: "Draft preview",
     heroHeadline: "Draft headline",
-    leadArticleHtml: "<p>Draft lead paragraph.</p>",
+    openingNoteHtml: "<p>Draft opening note.</p>",
     heroImageUrl: "https://images.example.com/hero.png",
-    sourceLink: "https://news.example.com/lead",
-    stories: [
-      { title: "Story A", link: "https://news.example.com/a", summary: "Summary A" },
-      { title: "Story B", link: "https://news.example.com/b", summary: "Summary B" },
-    ],
+    bigThree: [lead, ...stories.slice(0, 2)].map((s) => ({ ...s, whatHappened: "Happened.", whyItMatters: "Matters.", jonathanTake: "Take." })),
+    worthUsing: { ...stories[2], label: "Worth Watching", summary: "Summary.", whyUseful: "Useful." },
+    onRadar: stories.slice(3).map((s) => ({ ...s, summary: "Summary." })),
+    realityCheck: { claim: "Claim", assessment: "Assessment.", link: lead.link },
+    yourTurn: "Question?",
+    promotion: null,
     footer: { text: "footer" },
   };
 }
 
-const profile = {
-  id: "test-profile",
-  displayName: "Test Newsletter",
-  brandVoice: "Clear and practical.",
-};
+const profile = { id: "test-profile", displayName: "AI Edge", brandVoice: "Clear and practical." };
 
-describe("newsletter engine/qaLoop.js — runQaLoop", () => {
-  test("passes immediately when the first review scores above threshold", async () => {
+describe("newsletter engine/qaLoop.js", () => {
+  test("passes immediately when every council specialist and chair clears the threshold", async () => {
     const { runQaLoop } = await import("../services/newsletter/engine/qaLoop.js");
-    reviewScores = [92];
-    const result = await runQaLoop({
-      profile, newsletter: draftNewsletter(), lead: { title: "Lead", link: "https://news.example.com/lead", summary: "s" },
-      stories: draftNewsletter().stories, sessionId: "test-pass",
-    });
+    iterationScores = [92];
+    const result = await runQaLoop({ profile, newsletter: draftNewsletter(), lead, stories, sessionId: "test-pass" });
     assert.equal(result.ok, true);
-    assert.equal(result.quarantined, false);
     assert.equal(result.iterations, 1);
+    assert.equal(result.council.reviews.length, 3);
   });
 
-  test("rewrites once then passes when the second review clears the threshold", async () => {
+  test("rewrites and re-runs the full council before approval", async () => {
     const { runQaLoop } = await import("../services/newsletter/engine/qaLoop.js");
-    reviewScores = [60, 90];
-    const result = await runQaLoop({
-      profile, newsletter: draftNewsletter(), lead: { title: "Lead", link: "https://news.example.com/lead", summary: "s" },
-      stories: draftNewsletter().stories, sessionId: "test-rewrite",
-    });
+    iterationScores = [70, 91];
+    const result = await runQaLoop({ profile, newsletter: draftNewsletter(), lead, stories, sessionId: "test-rewrite" });
     assert.equal(result.ok, true);
     assert.equal(result.iterations, 2);
-    assert.equal(result.newsletter.heroHeadline, "A revised, tighter headline");
+    assert.equal(result.newsletter.heroHeadline, "A revised headline");
   });
 
-  test("quarantines after exhausting the max rewrite iterations", async () => {
+  test("quarantines after five failed council passes", async () => {
     const { runQaLoop } = await import("../services/newsletter/engine/qaLoop.js");
-    reviewScores = [40, 45]; // NEWSLETTER_MAX_REWRITE_ITERATIONS=2, never passes
-    const result = await runQaLoop({
-      profile, newsletter: draftNewsletter(), lead: { title: "Lead", link: "https://news.example.com/lead", summary: "s" },
-      stories: draftNewsletter().stories, sessionId: "test-quarantine",
-    });
+    iterationScores = [60, 60, 60, 60, 60];
+    const result = await runQaLoop({ profile, newsletter: draftNewsletter(), lead, stories, sessionId: "test-quarantine" });
     assert.equal(result.ok, false);
     assert.equal(result.quarantined, true);
-    assert.equal(result.iterations, 2);
+    assert.equal(result.iterations, 5);
   });
 });
