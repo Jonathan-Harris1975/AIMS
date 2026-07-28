@@ -19,13 +19,13 @@
     "",
     "Concretely: services/newsletter/* is a native AIMS implementation (not a call-out to HIVE) of the",
     "newsletter-composer capability, extended for a second, config-driven use case (multiple newsletter",
-    "profiles) and a documented-API-only EmailOctopus delivery layer.",
+    "profiles) and a documented-API-only Brevo delivery layer.",
     "",
     "Action for a future HIVE-side change: bump S094 in the central registry to reference this AIMS",
     "capability (engine version below) if/when HIVE's skill index is updated to describe AIMS-hosted",
     "capabilities. That is out of scope here because it requires HIVE repository access.",
     "",
-    "2026-07-16 update: delivery provider switched from EmailOctopus to Brevo (https://developers.brevo.com/reference/quickstart-reference), which documents full campaign creation and immediate sending, removing the manual-handoff fallback the EmailOctopus integration needed. AIMS now creates/manages the Brevo list itself; scheduling remains owned entirely by MAST."
+    "Delivery uses Brevo's documented v3 API for campaign creation and immediate sending. AIMS creates/manages the Brevo list itself; scheduling remains owned entirely by MAST."
   ],
   "engine_version": "2026.07.2",
   "capabilities": [
