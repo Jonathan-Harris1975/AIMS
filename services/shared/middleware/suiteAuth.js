@@ -56,6 +56,10 @@ function expectedCloudflarePurgeSecret() {
   return usableSecret(process.env.CLOUDFLARE_PURGE_SHARED_SECRET);
 }
 
+function expectedSiteShellSyncSecret() {
+  return usableSecret(process.env.SITE_SHELL_SYNC_SHARED_SECRET) || expectedCloudflarePurgeSecret();
+}
+
 function expectedBlotatoPublishSecret() {
   return usableSecret(process.env.BLOTATO_PUBLISH_WEBHOOK_SECRET || process.env.BLOTATO_WEBHOOK_SECRET);
 }
@@ -110,6 +114,13 @@ export function isCloudflarePurgePath(req) {
   return path === "/cloudflare/purge";
 }
 
+export function isSiteShellSyncPath(req) {
+  const method = String(req.method || "").toUpperCase();
+  if (method !== "POST") return false;
+  const path = pathWithoutQuery(req).replace(/\/+$/, "").toLowerCase();
+  return path === "/cloudflare/site-shell/sync";
+}
+
 function extractCloudflarePurgeSecret(req) {
   return normalise(req.get?.("x-cloudflare-purge-secret") || req.headers?.["x-cloudflare-purge-secret"]);
 }
@@ -141,6 +152,26 @@ export function getCloudflarePurgeAuthStrategy(req) {
     return "public-cloudflare-purge";
   }
 
+  return null;
+}
+
+
+export function getSiteShellSyncAuthStrategy(req) {
+  const expected = expectedSuiteKey();
+  const bearer = extractBearerToken(req);
+
+  if (expected && bearer && safeEqual(bearer, expected)) {
+    return "suite-bearer";
+  }
+
+  const syncSecret = expectedSiteShellSyncSecret();
+  const providedSyncSecret = extractCloudflarePurgeSecret(req);
+  if (syncSecret && providedSyncSecret && safeEqual(providedSyncSecret, syncSecret)) {
+    return "site-shell-sync-secret";
+  }
+
+  // This deployment bridge is intentionally never public, even when the
+  // legacy Cloudflare purge route has been explicitly opened.
   return null;
 }
 
@@ -183,6 +214,18 @@ export function requireAimsBearerAuth(req, res, next) {
 
   if (isPublicBlotatoPublishPath(req)) return next();
 
+  if (isSiteShellSyncPath(req)) {
+    const strategy = getSiteShellSyncAuthStrategy(req);
+    if (strategy) {
+      req.aimsAuth = { strategy };
+      return next();
+    }
+    return res
+      .status(401)
+      .set("WWW-Authenticate", "Bearer")
+      .json({ ok: false, error: "unauthorized", hint: "Use the AIMS bearer token or SITE_SHELL_SYNC_SHARED_SECRET for the internal site-shell deployment bridge." });
+  }
+
   if (isCloudflarePurgePath(req)) {
     const strategy = getCloudflarePurgeAuthStrategy(req);
     if (strategy) {
@@ -192,7 +235,7 @@ export function requireAimsBearerAuth(req, res, next) {
     return res
       .status(401)
       .set("WWW-Authenticate", "Bearer")
-      .json({ ok: false, error: "unauthorized", hint: "Use the AIMS bearer token or CLOUDFLARE_PURGE_SHARED_SECRET for purge requests." });
+      .json({ ok: false, error: "unauthorized", hint: "Use the AIMS bearer token or CLOUDFLARE_PURGE_SHARED_SECRET for Cloudflare purge requests." });
   }
 
   const expected = expectedSuiteKey();
