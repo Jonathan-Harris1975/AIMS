@@ -1,5 +1,5 @@
 > **Document status:** Production reference  
-> **Last reviewed:** 16 June 2026  
+> **Last reviewed:** 28 July 2026  
 > **Operational authority:** Current repository README, SECURITY policy and operations guide.
 
 # Audits service
@@ -38,6 +38,7 @@ Owns the unified website audit pipeline (Digital Growth -> SEO/AEO/GEO -> render
 - `audits/index.js` mounts audit routers.
 - `audits/routes/mobileUx.js`, `seoAeoGeo.js`, `onBrand.js`, `socialPerformance.js` define route behaviour.
 - `audits/utils/orchestrator.js` dispatches GitHub workflows and tracks jobs.
+- `config/website-audit-policy.json` is the machine-readable website audit governance contract; `audits/utils/websiteAuditPolicy.js` exposes it to the three source audits and final council.
 - `audits/utils/githubDispatch.js` calls GitHub workflow dispatch and verifies workflow runs.
 - `audits/utils/publishAuditArtifacts.js` writes audit request/latest/report objects to R2.
 - `audits/utils/seoAeoGeoAnalysis.js` performs forensic AI analysis.
@@ -55,6 +56,19 @@ Owns the unified website audit pipeline (Digital Growth -> SEO/AEO/GEO -> render
 - Completed audit artefact URLs are checked against `R2_PUBLIC_BASE_URL_AUDITS`.
 - On-brand audits run inside this application and publish JSON/HTML outputs unless dry-run mode is used.
 - Social-performance reports are analysis-only. They do not post content and set `ramsPolicy.shouldTriggerRams=false` in report outputs.
+
+### Website audit scope and evidence policy
+
+- The main website audit deliberately excludes `/blog` and `/transcripts`. Both families are stored/governed in R2 and are audited by their dedicated pipelines; their exclusion is **not** a website coverage defect.
+- `/podcast` is part of the main website audit and must be covered by Digital Growth, SEO/AEO/GEO and rendered Mobile UX evidence.
+- The policy target is **8.5/10** per scored area. This is an acceptance target, never a score floor; AIMS must not inflate weak or unverified evidence to meet it.
+- Live findings must not be blended with repository-readiness findings until the production `/release.json` SHA is verified against the audited source revision. Mismatched states remain separate.
+- Accessibility governance uses WCAG 2.2 AA as the compliance baseline, including the 24 CSS px Target Size (Minimum) rule and its exceptions. A 44 CSS px target remains the preferred usability target for important controls.
+- Core Web Vitals are judged from field evidence where supplied: LCP <= 2.5 s, INP <= 200 ms and CLS <= 0.1 at the 75th percentile. Lighthouse/lab results are diagnostic, not field proof.
+- Visual-system evidence must cover card/page surface separation, text/button contrast, component radii, spacing/padding by template family, branded heroes, floating-menu lifecycle, embedded-form/player clipping and typography consistency.
+- AI/search governance does not treat `llms.txt` or special AI markup as Google ranking requirements. `llms.txt` is optional supporting discovery infrastructure; structured data must match visible content and FAQ schema is expected only where a visible FAQ/Q&A exists.
+- Governed Jotform/Elfsight contracts, link/conversion routes, Search Console evidence (including Generative AI reporting when available), security headers/mixed content and third-party embed/script posture may be supplied as structured audit callback evidence. Missing evidence leaves the corresponding score unscored rather than guessed.
+- Security/platform evidence covers HTTPS, mixed content, CSP, HSTS, Referrer-Policy, Permissions-Policy, third-party scripts, iframe permissions and form/privacy surfaces.
 
 ## Environment variables
 
@@ -94,6 +108,8 @@ Owns the unified website audit pipeline (Digital Growth -> SEO/AEO/GEO -> render
 - `test/audit-callback-auth.test.js`
 - `test/audit-forensic-analysis-shape.test.js`
 - `test/mobile-ux-audit-service.test.js`
+- `test/website-audit-policy.test.js`
+- `test/website-audit-pipeline.test.js`
 - `test/on-brand-audit.test.js`
 
 ## Common troubleshooting
@@ -123,3 +139,5 @@ Set `BRAND_SOCIAL_COUNCIL_RUN_AFTER_SOCIAL=true` to run it automatically after t
 The former standalone SEO/AEO/GEO and Mobile UX councils are retired. Their evidence now feeds the single 24-seat website council inside `websiteAuditCouncil.js`. The source audit callbacks only resume the AIMS parent pipeline; they do not launch separate councils.
 
 The retained website report set is exactly PDF, HTML and JSON. Once all three are published and the temporary evidence prefix is verified empty, AIMS dispatches RAMS pipeline `website` with the exact final JSON R2 key.
+
+The final report also carries the compact website policy and a `targetAssessment` block so RAMS and humans can see which areas meet the 8.5 target, which are below target and which remain unscored because required evidence was not supplied.
