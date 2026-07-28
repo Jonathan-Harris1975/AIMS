@@ -1,9 +1,8 @@
 // services/newsletter/brevo/campaign.js
 //
-// Turns a QA-passed, rendered newsletter issue into a Brevo send. Unlike
-// the EmailOctopus integration this replaces, Brevo's v3 API documents full
-// campaign creation and immediate sending, so this is a straight
-// create -> sendNow flow rather than a manual-handoff fallback.
+// Turns a QA-passed, rendered newsletter issue into a Brevo send. Brevo's
+// v3 API supports full campaign creation and immediate sending, so delivery
+// is a straight create -> sendNow flow.
 //
 // Scheduling is owned entirely by MAST (a separate repository): this module
 // never sets Brevo's own `scheduledAt` — POST /newsletter/send is called

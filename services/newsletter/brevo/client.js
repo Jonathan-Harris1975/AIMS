@@ -13,9 +13,8 @@
 //   - POST /emailCampaigns/{id}/sendNow                 (send immediately)
 //   - GET  /emailCampaigns/{id}                          (status/report)
 //
-// Unlike EmailOctopus, Brevo's v3 API documents full campaign creation and
-// immediate sending, so there is no manual-handoff fallback here — see
-// services/newsletter/brevo/campaign.js.
+// Brevo's v3 API supports full campaign creation and immediate sending;
+// see services/newsletter/brevo/campaign.js for the delivery workflow.
 
 import axios from "axios";
 import { info, warn, error as logError } from "../../../logger.js";
