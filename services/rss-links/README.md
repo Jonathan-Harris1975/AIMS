@@ -1,65 +1,28 @@
-> **Document status:** Production reference  
-> **Last reviewed:** 16 June 2026  
-> **Operational authority:** Current repository README, SECURITY policy and operations guide.
-
 # RSS links service
 
-## Status
+**Live route prefix:** `/rss-links`
 
-**Implemented.** This page documents behaviour backed by files in `services/rss-links/`.
+Creates compact R2-backed redirect keys for outbound links used by feed/content workflows.
 
-## Purpose
+## HTTP contract
 
-Creates and serves self-hosted short links backed by R2 objects in the newsletter RSS bucket.
+- `POST /rss-links/` — create/store a short link.
+- `GET /rss-links/:key` — redirect to the stored destination.
+- `GET /rss-links/:key/index.html` — equivalent redirect path for static/object-hosting compatibility.
 
-## Routes
+## Behaviour
 
-- `POST /rss-links/shorten`
-- `GET /rss-links/:key`
-- `GET /rss-links/:key/index.html`
+The service stores redirect records under the configured RSS bucket/path and validates destination/key inputs before persistence. Public redirect access is intentional; creation remains behind the AIMS route authentication layer.
 
-## Main files
+## Implementation
 
-- `service.js`
-- `store.js`
-- `routes/shorten.js`
-- `routes/redirect.js`
-- `utils/randomString.js`, `utils/sha512.js`, `utils/checkURL.js`
+The service entry point, route modules and domain utilities are contained in this directory. Calls from AIMS operational windows use the same authenticated HTTP contract as external suite triggers, which keeps job logging, validation and failure handling consistent.
 
-## Workflow
+## Operational rules
 
-- Validate original URL as absolute HTTP/HTTPS.
-- Hash URL with SHA-512.
-- Return existing record for the same URL hash.
-- Generate unique short key for new URLs.
-- Write record, URL index and static redirect page to R2.
-- Redirect route reads record and sends HTTP 302 to original URL.
-
-## Environment variables
-
-- Current code uses R2 alias `rss`: `R2_BUCKET_RSS_FEEDS`, `R2_PUBLIC_BASE_URL_RSS`.
-- `RSS_LINKS_BASE_URL`, `RSS_LINKS_PATH_PREFIX` and `RSS_LINKS_UNIQUE` exist in env.template but are not read by current code.
-
-## External integrations
-
-Cloudflare R2.
-
-## Storage
-
-- Record: `rss-links/_records/<key>.json`.
-- URL index: `rss-links/_index/by-url/<sha512>.json`.
-- Redirect page: `rss-links/<key>/index.html`.
-
-## Tests
-
-No dedicated RSS links test was found.
-
-## Common troubleshooting
-
-- 400 invalid URL: provide absolute `http` or `https` URL.
-- 404 redirect: record missing or invalid key.
-- Short URL domain wrong: current code uses `R2_PUBLIC_BASE_URL_RSS`, not `RSS_LINKS_BASE_URL`.
-
-## Connections to other services
-
-RSS feed creator can call `createShortLink` during rewrite output generation.
+- Treat `config/production.defaults.env`, `env.template`, `config/thresholds.js` and the relevant service config module as the configuration sources of truth.
+- Secrets belong in the deployment secret store and must not be committed.
+- Production HTTP access is protected by the AIMS bearer-auth middleware unless a route explicitly implements a narrower public status/redirect contract.
+- Retries are for transient failures only; validation, policy and source-integrity failures fail closed.
+- Generated public content must pass its content-quality gates before publication or delivery.
+- Durable artefacts and job state use the configured R2/state utilities rather than process memory where a durable store is required.
