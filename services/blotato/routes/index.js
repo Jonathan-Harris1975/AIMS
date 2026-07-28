@@ -164,7 +164,7 @@ router.post(
     const laneByWeekday = { monday: "news-insight", tuesday: "model-verdict", wednesday: "ai-at-work", thursday: "reality-check", friday: "ai-playbook" };
     const laneSlug = laneByWeekday[weekday] || "news-insight";
     const style = getAutoShortStyleRotation(now);
-    const result = await triggerPublishNowJob(req, laneSlug, { templateId: style.templateId, publishMode: "autoshorts-style" });
+    const result = await triggerPublishNowJob(req, laneSlug, { creativeStyle: style.creativeStyle, publishMode: "autoshorts-style" });
     return res.status(result.statusCode || 202).json({
       ok: true,
       service: "blotato",
