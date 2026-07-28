@@ -1,5 +1,6 @@
 import express from "express";
 import { info, error } from "../../../logger.js";
+import { syncPublishedSiteShell } from "../../shared/utils/siteShellSync.js";
 import {
   validateBody,
   cloudflarePurgeBodySchema,
@@ -115,6 +116,40 @@ router.post("/purge", asyncRoute(async (req, res) => {
       source: err?.details?.source || "cloudflare-purge-service",
       error: err?.message || "Cloudflare purge failed",
       details: err?.details || null,
+    });
+  }
+}));
+
+router.post("/site-shell/sync", asyncRoute(async (req, res) => {
+  const releaseSha = String(req.body?.release_sha || req.body?.releaseSha || "").trim();
+  const manifestUrl = String(req.body?.manifest_url || req.body?.manifestUrl || "").trim();
+  const dryRun = Boolean(req.body?.dry_run || req.body?.dryRun);
+
+  if (!/^[A-Za-z0-9._-]{7,128}$/.test(releaseSha)) {
+    return res.status(400).json({ ok: false, error: "A valid release_sha is required." });
+  }
+  if (!manifestUrl) {
+    return res.status(400).json({ ok: false, error: "manifest_url is required." });
+  }
+
+  info("siteShell.sync.request", {
+    releaseSha,
+    manifestUrl,
+    dryRun,
+    authStrategy: getPurgeAuthStrategy(req),
+    requestId: req.id || req.headers["x-request-id"] || null,
+  });
+
+  try {
+    const result = await syncPublishedSiteShell({ manifestUrl, releaseSha, dryRun });
+    return res.status(result.ok ? 200 : 207).json({ service: "site-shell-sync", ...result });
+  } catch (err) {
+    error("siteShell.sync.fail", { releaseSha, manifestUrl, error: err?.message || String(err) });
+    return res.status(502).json({
+      ok: false,
+      service: "site-shell-sync",
+      releaseSha,
+      error: err?.message || "Site-shell synchronisation failed",
     });
   }
 }));
