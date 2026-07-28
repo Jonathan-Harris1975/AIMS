@@ -1,5 +1,6 @@
 import { info, error, debug, warn } from "../../../logger.js";
 import { getObjectAsText, putText, putJson } from "../../shared/utils/r2-client.js";
+import { loadSiteShell, applySiteShellToHtml } from "../../shared/utils/siteShell.js";
 import { resilientRequest } from "../../shared/utils/ai-service.js";
 import { slugify } from "../utils/slug.js";
 import { pageTemplate, socialPostBody } from "../utils/templates.js";
@@ -46,6 +47,10 @@ function normalisePrefix(value = DEFAULT_SOCIAL_PREFIX) {
 function parsePubDate(value) {
   const parsed = Date.parse(value);
   return Number.isFinite(parsed) ? new Date(parsed) : null;
+}
+
+function renderPageWithSiteShell(siteShell, options) {
+  return applySiteShellToHtml(pageTemplate(options), siteShell);
 }
 
 function escapeHtml(str) {
@@ -606,6 +611,8 @@ export async function buildDailySocialBlogPost({
       };
     }
 
+    const siteShell = await loadSiteShell();
+
     let socialPackage = await generateStructuredSocialPackage({
       sessionId,
       dateLabel: window.dateLabel,
@@ -693,7 +700,7 @@ export async function buildDailySocialBlogPost({
       hashtags: socialPackage.hashtags,
     });
 
-    let fullHtml = pageTemplate({
+    let fullHtml = renderPageWithSiteShell(siteShell, {
       title,
       description: socialPackage.summary,
       canonicalUrl: urls.canonicalUrl,
@@ -748,7 +755,7 @@ export async function buildDailySocialBlogPost({
             socialCaption: candidatePackage.social_caption,
             hashtags: candidatePackage.hashtags,
           });
-          const candidateFullHtml = pageTemplate({
+          const candidateFullHtml = renderPageWithSiteShell(siteShell, {
             title: candidatePackage.title,
             description: candidatePackage.summary,
             canonicalUrl: urls.canonicalUrl,
@@ -825,7 +832,7 @@ export async function buildDailySocialBlogPost({
         socialCaption: socialPackage.social_caption,
         hashtags: socialPackage.hashtags,
       });
-      fullHtml = pageTemplate({
+      fullHtml = renderPageWithSiteShell(siteShell, {
         title,
         description: socialPackage.summary,
         canonicalUrl: urls.canonicalUrl,
