@@ -32,7 +32,7 @@ const aiEdge = Object.freeze({
   id: "ai-edge",
   displayName: env("NEWSLETTER_AI_EDGE_NAME", "The AI Edge"),
   description:
-    "A daily digest of the AI stories that actually matter — curated, ranked and " +
+    "A digest of the AI stories that actually matter — curated, ranked and " +
     "summarised in Jonathan Harris's clear, practical, no-hype voice.",
 
   // Source RSS feeds this profile draws from. Defaults to the same curated
