@@ -30,7 +30,7 @@ function envList(name, fallback = []) {
 // ------------------------------------------------------------
 const aiEdge = Object.freeze({
   id: "ai-edge",
-  displayName: env("NEWSLETTER_AI_EDGE_NAME", "The AI Edge"),
+  displayName: env("NEWSLETTER_AI_EDGE_NAME", "AI Edge"),
   description:
     "A digest of the AI stories that actually matter — curated, ranked and " +
     "summarised in Jonathan Harris's clear, practical, no-hype voice.",
@@ -49,9 +49,9 @@ const aiEdge = Object.freeze({
   // Brevo delivery target. AIMS owns list/folder creation (no pre-existing
   // list ID is assumed) — see services/newsletter/brevo/audience.js.
   brevo: Object.freeze({
-    listName: env("NEWSLETTER_AI_EDGE_BREVO_LIST_NAME", `${env("NEWSLETTER_AI_EDGE_NAME", "The AI Edge")} Subscribers`),
+    listName: env("NEWSLETTER_AI_EDGE_BREVO_LIST_NAME", `${env("NEWSLETTER_AI_EDGE_NAME", "AI Edge")} Subscribers`),
     folderName: env("NEWSLETTER_AI_EDGE_BREVO_FOLDER_NAME", "AIMS Newsletters"),
-    fromName: env("NEWSLETTER_AI_EDGE_FROM_NAME", "Jonathan Harris — The AI Edge"),
+    fromName: env("NEWSLETTER_AI_EDGE_FROM_NAME", "Jonathan Harris — AI Edge"),
     fromEmail: env("NEWSLETTER_AI_EDGE_FROM_EMAIL", env("BREVO_FROM_EMAIL")),
   }),
 
