@@ -1068,12 +1068,12 @@ async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOT
           gate: blotatoShortGate,
           artifact: pack,
           contentType: "blotato-short",
-          repairArtifact: (candidate) => repairShortPackForBlotatoGate(
+          repairArtifact: (candidate, reviewContext = {}) => repairShortPackForBlotatoGate(
             repairArtifactForReviewCouncil(candidate, { contentType: "blotato-short" }),
             {
               article: articleSource.article,
               lane: lane.slug,
-              gate: blotatoShortGate,
+              gate: reviewContext.gate || blotatoShortGate,
               cta: scriptOptions.cta,
               qualityAttempt,
             }

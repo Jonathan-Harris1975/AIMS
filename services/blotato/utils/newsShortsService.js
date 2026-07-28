@@ -567,6 +567,8 @@ function normalisePack(pack = {}) {
     "angle",
     "hook",
     "script",
+    "narrativeArc",
+    "visualContinuity",
     "visualDirection",
     "thumbnailText",
     "youtubeTitle",
@@ -606,6 +608,8 @@ function applyBritishEnglishPack(pack = {}) {
     "angle",
     "hook",
     "script",
+    "narrativeArc",
+    "visualContinuity",
     "visualDirection",
     "thumbnailText",
     "youtubeTitle",
@@ -907,8 +911,31 @@ export function repairShortPackForBlotatoGate(pack = {}, {
 
   const repairHook = !output.hook || shouldRepairGateText(gate, /hook performance|no hook/i);
   const repairThumbnail = !output.thumbnailText || shouldRepairGateText(gate, /thumbnail performance/i);
-  const repairScenes = shouldRepairGateText(gate, /human visual coverage|scene voiceover|at least four usable scenes|thin/i);
+  const repairNarrativeArc = !cleanText(output.narrativeArc || "", 1400)
+    || shouldRepairGateText(gate, /whole-video narrative arc|narrative arc/i);
+  const repairVisualContinuity = !cleanText(output.visualContinuity || "", 1400)
+    || shouldRepairGateText(gate, /visual continuity anchor|visual continuity/i);
+  const repairFlow = shouldRepairGateText(gate, /narrative\/visual flow score too low|flow score/i);
+  const repairScenes = repairFlow
+    || shouldRepairGateText(gate, /human visual coverage|scene voiceover|at least four usable scenes|thin/i);
   const repairScript = !output.script || shouldRepairGateText(gate, /script is too thin|scene voiceover is too thin|no script/i);
+
+
+  if (repairNarrativeArc) {
+    const anchor = sourceAnchor(article, output);
+    output.narrativeArc = cleanText(
+      `Open on the practical tension around ${anchor}, establish what changed, show the consequence for real people or workflows, explain the human decision point, then land one specific action or takeaway.`,
+      1400
+    );
+  }
+
+  if (repairVisualContinuity) {
+    const baseDirection = cleanText(output.visualDirection || laneConfig.visualSignature || "", 700);
+    output.visualContinuity = cleanText(
+      `Keep one believable adult professional as the recurring human anchor in a consistent ${baseDirection || "dark editorial workplace"}; preserve the same navy-charcoal palette, cyan practical-light accents, directional cinematic lighting, phone-first framing and restrained camera movement across every scene.`,
+      1400
+    );
+  }
 
   if (repairHook) {
     const newHook = buildPerformanceHook({ pack: output, article, laneConfig });
@@ -927,14 +954,22 @@ export function repairShortPackForBlotatoGate(pack = {}, {
     output.script = buildDurationSafeScript({ pack: output, article, laneConfig, cta });
   }
 
-  if (repairScenes || repairHook) {
+  if (repairScenes || repairHook || repairNarrativeArc || repairVisualContinuity) {
     output.scenes = makeScenePackDurationSafe(output);
     if (Array.isArray(output.scenes) && output.scenes.length) {
+      const continuity = cleanText(output.visualContinuity || output.visualDirection || laneConfig.visualSignature, 700);
+      output.scenes = output.scenes.map((scene, index) => ({
+        ...scene,
+        mediaSource: enforceTextFreeVisualPrompt(addHumanVisualCue(
+          `${continuity}. ${cleanText(scene.mediaSource || "", 700)}`,
+          index
+        ), 900),
+      }));
       output.scenes[0] = {
         ...output.scenes[0],
         script: ensureSentence(output.hook),
         mediaSource: enforceTextFreeVisualPrompt(addHumanVisualCue(
-          `${output.visualDirection || laneConfig.visualSignature}. Opening frame with a believable adult human face or upper body reacting to the practical risk in ${sourceAnchor(article, output)}. High contrast editorial lighting, phone-first composition, immediate human tension.`,
+          `${continuity}. Opening frame with a believable adult human face or upper body reacting to the practical risk in ${sourceAnchor(article, output)}. High contrast editorial lighting, phone-first composition, immediate human tension.`,
           0
         ), 900),
       };
@@ -945,6 +980,9 @@ export function repairShortPackForBlotatoGate(pack = {}, {
     output.qualityNotes,
     repairHook ? "Hook was strengthened before render after quality-gate feedback." : "",
     repairThumbnail ? "Thumbnail text was tightened before render." : "",
+    repairNarrativeArc ? "Narrative arc was restored from quality-gate feedback." : "",
+    repairVisualContinuity ? "Visual continuity was restored and propagated across scenes." : "",
+    repairFlow ? "Scene flow was rebuilt as one continuous hook-to-takeaway story." : "",
   ].filter(Boolean).join(" "), 700);
 
   return enhancePackForBlotatoDuration(normalisePack(output), { article, cta }, laneConfig);
