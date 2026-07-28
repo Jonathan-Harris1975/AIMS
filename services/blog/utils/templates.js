@@ -57,64 +57,6 @@ ${blogCriticalCss()}
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BlogPosting","headline":${jsonString(title || "Blog")},"description":${jsonString(description || "")},"image":${jsonString(imageUrl || "https://images.jonathan-harris.online/site-logo")},"datePublished":${jsonString(publishedAt || "")},"dateModified":${jsonString(publishedAt || "")},"author":{"@type":"Person","@id":"https://jonathan-harris.online/#person","name":"Jonathan Harris"},"publisher":{"@type":"Person","@id":"https://jonathan-harris.online/#person","name":"Jonathan Harris"},"mainEntityOfPage":{"@type":"WebPage","@id":${jsonString(canonicalUrl || "")}}}</script>
 </head>
 <body class="page-blog page-blog-post">
-<a class="skip-link" href="#main">Skip to main content</a>
-<header aria-label="Primary site header" class="jh-header" id="site-primary-nav" role="banner">
-<div class="jh-header__inner">
-<a aria-label="Jonathan Harris – home" class="jh-brand" href="${mainSiteUrl("/")}">
-<span aria-hidden="true" class="jh-logo-wrap">
-<img alt="" aria-hidden="true" class="jh-header__logo" decoding="async" fetchpriority="high" height="32" loading="eager" src="https://images.jonathan-harris.online/site-logo" width="32"/>
-</span>
-<span class="jh-brand__text">Jonathan Harris</span>
-</a>
-<nav aria-label="Primary navigation">
-<ul class="jh-topnav">
-<li><a href="${mainSiteUrl("/")}">Home</a></li>
-<li><a href="${mainSiteUrl("/ebooks/")}">eBooks</a></li>
-<li><a href="${mainSiteUrl("/podcast/")}">Podcast</a></li>
-<li><a href="${mainSiteUrl("/newsletter/")}">Newsletter</a></li>
-<li><a href="${mainSiteUrl("/topics/")}">Topics</a></li>
-<li><a href="${mainSiteUrl("/bio/")}">About</a></li>
-<li class="jh-nav-dropdown">
-<button aria-expanded="false" aria-haspopup="true" class="jh-nav-dropdown__btn" type="button">Resources <svg aria-hidden="true" fill="none" focusable="false" height="10" viewBox="0 0 10 6" width="10" xmlns="http://www.w3.org/2000/svg"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"></path></svg></button>
-<ul class="jh-nav-dropdown__menu" role="menu">
-<li role="none"><a href="${mainSiteUrl("/blog/")}" role="menuitem">Blog</a></li>
-<li role="none"><a href="${mainSiteUrl("/glossary/")}" role="menuitem">Glossary</a></li>
-<li role="none"><a href="${mainSiteUrl("/topics/")}" role="menuitem">Topics</a></li>
-<li role="none"><a href="${mainSiteUrl("/compare/")}" role="menuitem">Comparisons</a></li>
-</ul>
-</li>
-<li><a href="${mainSiteUrl("/contact/")}">Contact</a></li>
-<li><a class="jh-topnav__cta" href="${mainSiteUrl("/ebooks/")}">Browse Books</a></li>
-</ul>
-</nav>
-<button aria-controls="jh-mobile-nav" aria-expanded="false" aria-label="Open navigation menu" class="jh-hamburger" type="button"><svg aria-hidden="true" fill="none" focusable="false" height="20" stroke="currentColor" stroke-linecap="round" stroke-width="2.5" viewBox="0 0 24 24" width="20" xmlns="http://www.w3.org/2000/svg"><line x1="3" x2="21" y1="6" y2="6"></line><line x1="3" x2="21" y1="12" y2="12"></line><line x1="3" x2="21" y1="18" y2="18"></line></svg> <span class="jh-hamburger__label">Menu</span></button>
-</div>
-<nav aria-label="Mobile navigation" class="jh-mobile-nav" hidden="" id="jh-mobile-nav">
-<a aria-label="Jonathan Harris – home" class="jh-mobile-nav__brand" href="${mainSiteUrl("/")}">
-<span aria-hidden="true" class="jh-logo-wrap">
-<img alt="" aria-hidden="true" class="jh-mobile-nav__brand-logo" decoding="async" height="32" loading="lazy" src="https://images.jonathan-harris.online/site-logo" width="32"/>
-</span>
-<span class="jh-mobile-nav__brand-text">Jonathan Harris</span>
-</a>
-<a href="${mainSiteUrl("/")}">Home</a>
-<a href="${mainSiteUrl("/ebooks/")}">eBooks</a>
-<a href="${mainSiteUrl("/podcast/")}">Podcast</a>
-<a href="${mainSiteUrl("/newsletter/")}">Newsletter</a>
-<a href="${mainSiteUrl("/topics/")}">Topics</a>
-<a href="${mainSiteUrl("/bio/")}">About</a>
-<div class="jh-mobile-nav__group">
-<span class="jh-mobile-nav__group-label">Resources</span>
-<div class="jh-mobile-nav__group-links">
-<a href="${mainSiteUrl("/blog/")}">Blog</a>
-<a href="${mainSiteUrl("/glossary/")}">Glossary</a>
-<a href="${mainSiteUrl("/topics/")}">Topics</a>
-<a href="${mainSiteUrl("/compare/")}">Comparisons</a>
-</div>
-</div>
-<a href="${mainSiteUrl("/contact/")}">Contact</a>
-<a class="jh-mobile-nav__cta" href="${mainSiteUrl("/ebooks/")}">Browse Books</a>
-</nav>
-</header>
 <header class="hero hero--has-fixed-nav" role="region">
 <div class="wrap">
 <p class="tag u-s58">${safeDateLabel}</p>
@@ -130,67 +72,14 @@ ${blogCriticalCss()}
 ${contentHtml}
 <section class="card u-s60">
 <h2 class="u-s02">Keep going without the AI pageant</h2>
-<p>The blog is the fast read. The newsletter keeps pace through the week, the podcast handles the audio version, and the topic pages give you the longer route when a briefing is not enough.</p>
+<p>The blog is the fast read. AI Edge follows the moving story, the podcast handles the audio version, and the topic pages give you the longer route when a briefing is not enough.</p>
 <div class="cta-row">
-<a class="button secondary" href="${mainSiteUrl("/newsletter/")}">Newsletter</a>
+<a class="button secondary" href="${mainSiteUrl("/newsletter/")}">AI Edge</a>
 <a class="button secondary" href="${mainSiteUrl("/podcast/")}">Podcast</a>
 <a class="button secondary" href="${mainSiteUrl("/topics/")}">Topics</a>
 </div>
 </section>
 </main>
-<footer aria-label="Website footer" class="site-footer" role="contentinfo">
-<div class="wrap footer-shell">
-<div class="footer-grid">
-<section aria-label="Brand summary" class="footer-panel footer-panel--brand">
-<a class="footer-brand" href="${mainSiteUrl("/")}">Jonathan Harris</a>
-<p class="footer-copy">AI analysis for grown-ups. eBooks, podcast episodes, and a daily weekday newsletter built for readers who prefer signal over noise.</p>
-<div aria-label="Core site areas" class="footer-badges">
-<a href="${mainSiteUrl("/ebooks/")}">36 eBooks</a>
-<a href="${mainSiteUrl("/podcast/")}">Weekly podcast</a>
-<a href="${mainSiteUrl("/newsletter/")}">Daily AI newsletter</a>
-</div>
-</section>
-<nav aria-label="Navigate" class="footer-panel">
-<h2>Navigate</h2>
-<ul class="footer-links">
-<li><a href="${mainSiteUrl("/")}">Home</a></li>
-<li><a href="${mainSiteUrl("/ebooks/")}">Browse eBooks</a></li>
-<li><a href="${mainSiteUrl("/podcast/")}">Listen to the podcast</a></li>
-<li><a href="${mainSiteUrl("/newsletter/")}">Join the newsletter</a></li>
-<li><a href="${mainSiteUrl("/topics/")}">Explore AI topics</a></li>
-<li><a href="${mainSiteUrl("/bio/")}">About Jonathan Harris</a></li>
-<li><a href="${mainSiteUrl("/contact/")}">Contact</a></li>
-</ul>
-</nav>
-<nav aria-label="Discover" class="footer-panel footer-panel--discover">
-<h2>Discover</h2>
-<div class="footer-link-group">
-<p class="footer-panel__label">Explore the catalogue</p>
-<ul class="footer-links">
-<li><a href="${mainSiteUrl("/glossary/")}">Glossary</a></li>
-<li><a href="${mainSiteUrl("/topics/")}">Topics</a></li>
-<li><a href="${mainSiteUrl("/compare/")}">Comparisons</a></li>
-<li><a href="${mainSiteUrl("/catalogue/artificial-intelligence/")}">Artificial Intelligence</a></li>
-<li><a href="${mainSiteUrl("/catalogue/healthcare/")}">Healthcare</a></li>
-<li><a href="${mainSiteUrl("/catalogue/ethics/")}">Ethics</a></li>
-<li><a href="${mainSiteUrl("/catalogue/law/")}">Law</a></li>
-</ul>
-</div>
-</nav>
-<section aria-label="Legal" class="footer-panel">
-<h2>Legal</h2>
-<ul class="footer-links footer-links--legal">
-<li><a href="${mainSiteUrl("/privacy-policy/")}">Privacy Policy</a></li>
-<li><a href="${mainSiteUrl("/terms-of-use/")}">Terms of Use</a></li>
-</ul>
-</section>
-</div>
-<div class="footer-meta">© 2026 Jonathan Harris. All rights reserved.</div>
-</div>
-</footer>
-<script>
-${blogInlineScript()}
-</script>
 </body>
 </html>`;
 }
@@ -341,197 +230,6 @@ ul {
   margin-inline: auto;
 }
 
-.skip-link {
-  position: absolute;
-  left: 12px;
-  top: 12px;
-  z-index: 999;
-  transform: translateY(-150%);
-  padding: 10px 14px;
-  border-radius: 999px;
-  background: var(--jh-teal);
-  color: #031018;
-  font-weight: 800;
-}
-
-.skip-link:focus {
-  transform: translateY(0);
-}
-
-.jh-header {
-  position: sticky;
-  top: 0;
-  z-index: 80;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.18);
-  background: rgba(7, 17, 29, 0.92);
-  backdrop-filter: blur(18px);
-  box-shadow: 0 10px 35px rgba(0, 0, 0, 0.22);
-}
-
-.jh-header__inner {
-  width: min(1180px, calc(100% - 32px));
-  min-height: 72px;
-  margin-inline: auto;
-  display: flex;
-  align-items: center;
-  gap: 18px;
-  justify-content: space-between;
-}
-
-.jh-brand,
-.jh-mobile-nav__brand {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  color: #FFFFFF;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-}
-
-.jh-brand:hover,
-.jh-mobile-nav__brand:hover {
-  text-decoration: none;
-}
-
-.jh-logo-wrap {
-  width: 36px;
-  height: 36px;
-  display: grid;
-  place-items: center;
-  border-radius: 12px;
-  background: linear-gradient(135deg, rgba(56, 232, 209, .22), rgba(143, 122, 255, .24));
-  border: 1px solid rgba(255, 255, 255, 0.14);
-}
-
-.jh-header__logo,
-.jh-mobile-nav__brand-logo {
-  width: 28px;
-  height: 28px;
-  object-fit: contain;
-}
-
-.jh-topnav {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.jh-topnav a,
-.jh-nav-dropdown__btn {
-  min-height: 40px;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 11px;
-  border: 0;
-  border-radius: 999px;
-  color: #D7E2F1;
-  background: transparent;
-  font: inherit;
-  font-size: 0.92rem;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.jh-topnav a:hover,
-.jh-nav-dropdown__btn:hover {
-  color: #FFFFFF;
-  background: rgba(255, 255, 255, 0.08);
-  text-decoration: none;
-}
-
-.jh-topnav__cta,
-.jh-mobile-nav__cta {
-  color: #031018 !important;
-  background: linear-gradient(135deg, var(--jh-teal), var(--jh-purple-2)) !important;
-  box-shadow: 0 12px 32px rgba(56, 232, 209, 0.18);
-}
-
-.jh-nav-dropdown {
-  position: relative;
-}
-
-.jh-nav-dropdown__menu {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 10px);
-  min-width: 190px;
-  display: none;
-  margin: 0;
-  padding: 8px;
-  list-style: none;
-  border: 1px solid var(--jh-border);
-  border-radius: 18px;
-  background: rgba(8, 17, 29, 0.98);
-  box-shadow: var(--jh-shadow);
-}
-
-.jh-nav-dropdown:hover .jh-nav-dropdown__menu,
-.jh-nav-dropdown:focus-within .jh-nav-dropdown__menu {
-  display: block;
-}
-
-.jh-nav-dropdown__menu a {
-  width: 100%;
-  justify-content: flex-start;
-}
-
-.jh-hamburger {
-  display: none;
-  align-items: center;
-  gap: 8px;
-  min-height: 42px;
-  padding: 8px 12px;
-  border: 1px solid var(--jh-border);
-  border-radius: 999px;
-  color: #FFFFFF;
-  background: rgba(255, 255, 255, 0.08);
-  font: inherit;
-  font-weight: 800;
-}
-
-.jh-mobile-nav {
-  width: min(1180px, calc(100% - 32px));
-  margin: 0 auto 14px;
-  padding: 16px;
-  border: 1px solid var(--jh-border);
-  border-radius: 22px;
-  background: rgba(8, 17, 29, 0.98);
-  box-shadow: var(--jh-shadow);
-}
-
-.jh-mobile-nav a,
-.jh-mobile-nav__group-label {
-  display: block;
-  padding: 10px 12px;
-  border-radius: 14px;
-  color: #D7E2F1;
-  font-weight: 750;
-}
-
-.jh-mobile-nav a:hover {
-  background: rgba(255, 255, 255, 0.08);
-  text-decoration: none;
-}
-
-.jh-mobile-nav__group {
-  padding: 6px 0;
-}
-
-.jh-mobile-nav__group-label {
-  color: var(--jh-faint);
-  text-transform: uppercase;
-  font-size: .78rem;
-  letter-spacing: .08em;
-}
-
-.jh-mobile-nav__group-links {
-  display: grid;
-  gap: 2px;
-}
 
 .hero {
   position: relative;
@@ -720,123 +418,18 @@ section + .card {
   margin-bottom: 0;
 }
 
-.site-footer {
-  border-top: 1px solid rgba(148, 163, 184, .18);
-  background: #050B14;
-  padding: 42px 0 28px;
-}
-
-.footer-shell {
-  color: var(--jh-muted);
-}
-
-.footer-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.35fr) repeat(3, minmax(0, 1fr));
-  gap: 22px;
-}
-
-.footer-panel {
-  padding: 20px;
-  border: 1px solid rgba(148, 163, 184, .15);
-  border-radius: 22px;
-  background: rgba(255, 255, 255, .035);
-}
-
-.footer-brand {
-  display: inline-block;
-  margin-bottom: 10px;
-  color: #FFFFFF;
-  font-size: 1.25rem;
-  font-weight: 850;
-}
-
-.footer-copy {
-  color: var(--jh-muted);
-}
-
-.footer-badges {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 18px;
-}
-
-.footer-badges a {
-  padding: 7px 10px;
-  border-radius: 999px;
-  color: #DDFDF8;
-  background: rgba(56, 232, 209, .10);
-  border: 1px solid rgba(56, 232, 209, .22);
-  font-size: .82rem;
-  font-weight: 800;
-}
-
-.footer-panel h2 {
-  margin: 0 0 12px;
-  color: #FFFFFF;
-  font-size: .98rem;
-}
-
-.footer-links {
-  display: grid;
-  gap: 8px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.footer-links a {
-  color: var(--jh-muted);
-}
-
-.footer-links a:hover {
-  color: #FFFFFF;
-}
-
-.footer-panel__label {
-  margin: 0 0 8px;
-  color: var(--jh-faint);
-  font-size: .8rem;
-  font-weight: 800;
-  letter-spacing: .06em;
-  text-transform: uppercase;
-}
-
-.footer-meta {
-  margin-top: 22px;
-  color: var(--jh-faint);
-  font-size: .9rem;
-}
 
 @media (max-width: 900px) {
-  .jh-topnav {
-    display: none;
-  }
-
-  .jh-hamburger {
-    display: inline-flex;
-  }
-
   .hero .wrap {
     padding-top: 48px;
     padding-bottom: 42px;
   }
 
-  .footer-grid {
-    grid-template-columns: 1fr;
-  }
 }
 
 @media (max-width: 640px) {
-  .wrap,
-  .jh-header__inner,
-  .jh-mobile-nav {
+  .wrap {
     width: min(100% - 24px, 1120px);
-  }
-
-  .jh-brand__text {
-    font-size: .98rem;
   }
 
   .hero h1 {
@@ -864,29 +457,6 @@ section + .card {
 `.trim();
 }
 
-function blogInlineScript() {
-  return `
-(() => {
-  const menuButton = document.querySelector(".jh-hamburger");
-  const mobileNav = document.getElementById("jh-mobile-nav");
-
-  if (menuButton && mobileNav) {
-    menuButton.addEventListener("click", () => {
-      const expanded = menuButton.getAttribute("aria-expanded") === "true";
-      menuButton.setAttribute("aria-expanded", String(!expanded));
-      mobileNav.hidden = expanded;
-    });
-  }
-
-  document.querySelectorAll(".jh-nav-dropdown__btn").forEach((button) => {
-    button.addEventListener("click", () => {
-      const expanded = button.getAttribute("aria-expanded") === "true";
-      button.setAttribute("aria-expanded", String(!expanded));
-    });
-  });
-})();
-`.trim();
-}
 
 function formatHumanDate(value) {
   const parsed = value ? new Date(value) : null;
