@@ -1,7 +1,7 @@
 # Newsletter Engine (`services/newsletter`)
 
 Config-driven, multi-profile daily/weekly newsletter engine. Ships with one
-profile — **AI Edge** — a daily AI-news digest in Jonathan Harris's brand
+profile — **AI Edge** — a five-minute AI-news filter in Jonathan Harris's brand
 voice. A second newsletter should mean a new entry in
 `services/newsletter/config/profiles.js`, not new engine code.
 
@@ -18,15 +18,21 @@ built and, later, sent; the engine has no internal clock or scheduledAt.
 ```
 RSS ingestion (24h window, dedupe, retry/backoff)
         -> ranking (recency + topical relevance + source diversity)
-        -> composition (subject, preview, hero headline, lead article,
-                         top-N story summaries, footer) — AI, structured JSON
+        -> composition (opening note, Big Three, Worth Using/Watching,
+                         On the Radar, Reality Check, Your Turn, subject/preview)
+        -> day-aware house promotion:
+             Tuesday -> canonical featured book (5-attempt lookup)
+             Thursday -> Turing's Torch Friday preview
         -> hero image (ONE per issue, never per-story)
         -> QA loop:
-             deterministic validators (banned phrases, British spelling,
-             structural completeness, duplicate/malformed links)
-             + AI editorial review (factual grounding / tone / cohesion, 0-100)
-             -> bounded rewrite (config/thresholds.js: maxRewriteIterations)
-             -> quarantine if still failing after the last attempt
+             deterministic validators
+             + multi-model editorial council:
+                  source integrity / fact checking
+                  Jonathan Harris voice / British English
+                  audience value / newsletter performance
+                  independent publishing-readiness chair
+             -> up to 5 full rewrite-and-council passes
+             -> quarantine if still failing after the last pass
         -> render (email-safe table/inline-CSS HTML + plaintext fallback)
         -> store in R2 (reuses the existing `blog` / `blog-images` buckets)
         -> [later, on MAST's signal] Brevo: create campaign + sendNow
