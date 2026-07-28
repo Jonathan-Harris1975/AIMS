@@ -1,76 +1,28 @@
-> **Document status:** Production reference  
-> **Last reviewed:** 16 June 2026  
-> **Operational authority:** Current repository README, SECURITY policy and operations guide.
-
 # TTS service
 
-## Status
+**Live route prefix:** `/tts`
 
-**Implemented.** This page documents behaviour backed by files in `services/tts/`.
+Turns approved podcast scripts into mastered audio. It performs chunking, AWS Polly synthesis, retry handling, chunk storage, FFmpeg merge/edit processing and final podcast asset publication.
 
-## Purpose
-
-Synthesises script chunks with AWS Polly, stores audio chunks, merges and edits them with FFmpeg, appends intro/outro audio and uploads the final podcast MP3.
-
-## Routes
+## HTTP contract
 
 - `GET /tts/health`
-- `POST /tts/orchestrate`
-- `GET /tts/status/:sessionId`
+- `POST /tts/orchestrate` — run the full TTS/audio pipeline.
+- `GET /tts/status/:sessionId` — inspect processing state.
 
-## Main files
+## Behaviour
 
-- `routes/tts.js`
-- `utils/orchestrator.js`
-- `utils/ttsProcessor.js`
-- `utils/mergeProcessor.js`
-- `utils/editingProcessor.js`
-- `utils/podcastProcessor.js`
-- `utils/io.js`, `utils/audio.js`
+Chunk sizing honours Polly/SSML limits. Failed chunks use bounded retries. Merge and editing stages use configurable FFmpeg/download timeouts and cleanup controls. Outputs use dedicated chunks, merged, edited and final podcast R2 buckets. Configure with `AWS_REGION`, Polly credentials/voice, `POLLY_VOICE_ID`, `MAX_CHUNK_RETRIES`, chunk-size limits, merge controls and podcast intro/outro asset URLs.
 
-## Workflow
+## Implementation
 
-- Load text chunks from R2 alias `rawtext`.
-- Send chunks to AWS Polly using neural MP3 synthesis.
-- Upload chunk MP3s to R2 alias `chunks`.
-- Merge chunks with FFmpeg into R2 alias `merged`.
-- Edit/master audio with FFmpeg into R2 alias `edited` or local path.
-- Download intro/outro files and concatenate final podcast.
-- Upload final MP3 to R2 alias `podcast`.
-- Update episode metadata in R2 alias `meta`.
+The service entry point, route modules and domain utilities are contained in this directory. Calls from AIMS operational windows use the same authenticated HTTP contract as external suite triggers, which keeps job logging, validation and failure handling consistent.
 
-## Environment variables
+## Operational rules
 
-- `AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `POLLY_VOICE_ID`
-- `MAX_POLLY_NATURAL_CHUNK_CHARS`, `TTS_CONCURRENCY`, `MAX_CHUNK_RETRIES`, `RETRY_DELAY_MS`, `RETRY_BACKOFF_MULTIPLIER`
-- `PODCAST_INTRO_URL`, `PODCAST_OUTRO_URL`, `PODCAST_FFMPEG_TIMEOUT_MS`, `PODCAST_FETCH_TIMEOUT_MS`, `PODCAST_MERGE_TMP_DIR`, `PODCAST_EDIT_TMP_DIR`, `PODCAST_MASTER_TMP_DIR`
-- R2 aliases: `rawtext`, `chunks`, `merged`, `edited`, `podcast`, `meta`, transcript public URLs
-
-## External integrations
-
-- AWS Polly
-- Cloudflare R2
-- FFmpeg/FFprobe
-
-## Storage
-
-- Text input: `rawtext/<sessionId>/chunk-###.txt`.
-- Polly chunks: `chunks/<sessionId>/chunk-###.mp3`.
-- Final podcast: `podcast/<sessionId>.mp3`.
-- Updated metadata: `meta/<sessionId>.json`.
-
-## Tests
-
-`test/merge-processor.test.js`
-
-## Common troubleshooting
-
-- No text chunks found: run script orchestration first.
-- Polly errors: check voice, region, AWS credentials and chunk size.
-- FFmpeg timeout: increase timeout or inspect corrupted chunks.
-- Intro/outro download failure: check public URLs.
-- Metadata update failure: check `R2_PUBLIC_BASE_URL_META` and meta object.
-
-## Connections to other services
-
-Consumes script output and feeds podcast pipeline/podcast RSS metadata.
+- Treat `config/production.defaults.env`, `env.template`, `config/thresholds.js` and the relevant service config module as the configuration sources of truth.
+- Secrets belong in the deployment secret store and must not be committed.
+- Production HTTP access is protected by the AIMS bearer-auth middleware unless a route explicitly implements a narrower public status/redirect contract.
+- Retries are for transient failures only; validation, policy and source-integrity failures fail closed.
+- Generated public content must pass its content-quality gates before publication or delivery.
+- Durable artefacts and job state use the configured R2/state utilities rather than process memory where a durable store is required.
