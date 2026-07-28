@@ -55,12 +55,11 @@ export async function deliverNewsletterIssue({ profile, sessionId, buildResult }
     return { ok: false, status: "list_error", error: list.error };
   }
 
-  // Prefer htmlUrl (the issue is already public in R2) to avoid Brevo's 1MB
-  // inline-content ceiling; fall back to fetching + inlining if no public
-  // URL is available for some reason.
-  let contentField = storage?.htmlUrl ? { htmlUrl: storage.htmlUrl } : null;
+  // The public index.html uses the full website shell and is not email-safe.
+  // Brevo must receive the dedicated inline-CSS email.html artefact.
+  let contentField = storage?.emailUrl ? { htmlUrl: storage.emailUrl } : null;
   if (!contentField) {
-    const html = await getObjectAsText(profile.storage.htmlBucketKey, `${storage?.prefix}/index.html`);
+    const html = await getObjectAsText(profile.storage.htmlBucketKey, `${storage?.prefix}/email.html`);
     contentField = { htmlContent: html };
   }
 
