@@ -75,6 +75,12 @@ const gpt56Sol = provider(
   [...SHARED_OPENROUTER_KEY, "OPENROUTER_API_KEY_GPT_5_6_SOL", "OPENROUTER_API_KEY_GPT56_SOL"]
 );
 
+const newsletterEditorial = provider(
+  "newsletterEditorial",
+  ["NEWSLETTER_MODEL_EDITORIAL"],
+  SHARED_OPENROUTER_KEY
+);
+
 const blotatoScript = provider(
   "blotatoScript",
   ["BLOTATO_SCRIPT_MODEL", "BLOTATO_NEWS_SCRIPT_MODEL", "OPENROUTER_BLOTATO_SCRIPT_MODEL"],
@@ -115,6 +121,7 @@ const modelRegistry = {
   claudeSonnet5,
   claudeOpus47,
   gpt56Sol,
+  newsletterEditorial,
 };
 
 function providerIsConfigured(providerId) {
@@ -167,9 +174,16 @@ export const aiConfig = {
     // editorial quality bar as the blog; QA review is intentionally routed
     // through a different provider than composition so the reviewer isn't
     // just re-approving its own output.
-    newsletterCompose: routeChain(["standard", "highQuality", "fallback"], ["google25FlashLite", "gpt56Luna", "gpt56Sol"]),
-    newsletterSubject: routeChain(["fast", "summary", "fallback"], ["gpt56Luna", "google25FlashLite"]),
-    newsletterQaReview: routeChain(["highQuality", "audit", "standard", "fallback"], ["anthropic46", "gpt56Sol", "gpt56Luna"]),
+    // AI Edge uses task-specific routes. Sonnet 5 handles editorial writing/voice,
+    // GPT-5.6 Sol handles source-integrity and final arbitration, while Luna
+    // handles low-latency subject/audience work. Each route retains provider
+    // failover through the shared resilient requester.
+    newsletterCompose: routeChain(["newsletterEditorial", "highQuality"], ["gpt56Sol", "gpt56Luna"]),
+    newsletterSubject: routeChain(["gpt56Luna", "fast", "summary"], ["google25FlashLite", "gpt56Sol"]),
+    newsletterFactCheck: routeChain(["gpt56Sol", "audit"], ["claudeSonnet5", "gpt56Luna"]),
+    newsletterVoiceReview: routeChain(["newsletterEditorial", "highQuality"], ["gpt56Sol", "anthropic46"]),
+    newsletterAudienceReview: routeChain(["gpt56Luna", "highQuality"], ["claudeSonnet5", "gpt56Sol"]),
+    newsletterCouncilChair: routeChain(["gpt56Sol", "audit"], ["claudeSonnet5", "gpt56Luna"]),
     newsletterHeroPrompt: routeChain(["summary", "fast", "fallback"], ["meta", "google25FlashLite"]),
   },
 
