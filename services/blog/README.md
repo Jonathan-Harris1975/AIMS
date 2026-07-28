@@ -1,90 +1,31 @@
-> **Document status:** Production reference  
-> **Last reviewed:** 16 June 2026  
-> **Operational authority:** Current repository README, SECURITY policy and operations guide.
-
 # Blog service
 
-## Status
+**Live route prefix:** `/blog`
 
-**Implemented.** This page documents behaviour backed by files in `services/blog/`.
+Builds the weekly long-form article, daily social posts that drive traffic to blog content, and the public blog RSS feed.
 
-## Purpose
+## HTTP contract
 
-Publishes weekly AI briefing posts and daily/social blog posts from rewritten RSS evidence, maintains manifests, publishes RSS feeds and triggers website rebuild hooks.
+- `POST /blog/weekly/build` — generate and publish the weekly article.
+- `GET /blog/weekly/jobs/:lane/:sessionId` — inspect weekly job state.
+- `POST /blog/social/daily/build` — build daily blog-social content.
+- `GET /blog/social/jobs/:lane/:sessionId` — inspect social job state.
+- `POST /blog/social/rss/rebuild` — rebuild blog-social RSS.
+- `POST /blog/rss/rebuild` — rebuild the main blog RSS.
 
-## Routes
+## Behaviour
 
-- `POST /blog/weekly/build`
-- `POST /blog/rss/rebuild`
-- `POST /blog/social/daily/build`
-- `POST /blog/social/rss/rebuild`
+Generation uses the shared Jonathan Harris voice and content-quality gates. Weekly output is source-grounded, structured for search/readability and published only after validation. Blog-social output is judged for hook, article fidelity, CTA/link integrity and platform suitability. Relevant controls include `BLOG_WEEK_DAYS`, `BLOG_PREFIX`, `BLOG_SOCIAL_*`, RSS publication settings and blog R2 bucket/public-base variables.
 
-## Main files
+## Implementation
 
-- `weekly/buildWeeklyBlogPost.js`
-- `social/buildDailySocialBlogPost.js`
-- `rss/publishBlogRssFeed.js`
-- `social/publishSocialBlogRssFeed.js`
-- `utils/weeklyPackage.js`, `utils/socialBlogPackage.js`, `utils/templates.js`
+The service entry point, route modules and domain utilities are contained in this directory. Calls from AIMS operational windows use the same authenticated HTTP contract as external suite triggers, which keeps job logging, validation and failure handling consistent.
 
-## Workflow
+## Operational rules
 
-- Load rewritten RSS JSON from R2 alias `rss`.
-- Filter items by requested window.
-- Generate structured package through OpenRouter.
-- Run local brand validation and optional QA.
-- Generate artwork, use configured fallback art, or continue publishing without blocking if artwork is unavailable.
-- Write HTML, sidecar JSON and manifest to R2 alias `blog`.
-- Publish RSS to R2 alias `blogRss`.
-- Trigger website rebuild hook.
-
-## Environment variables
-
-- `BLOG_PREFIX`, `BLOG_RSS_OBJECT_KEY`, `BLOG_RSS_FEED_URL`, `BLOG_RSS_TITLE`, `BLOG_RSS_DESCRIPTION`, `BLOG_RSS_IMAGE_URL`
-- `BLOG_SOCIAL_PREFIX`, `BLOG_SOCIAL_RSS_OBJECT_KEY`, `BLOG_SOCIAL_RSS_TITLE`, `BLOG_SOCIAL_RSS_DESCRIPTION`, `BLOG_SOCIAL_FALLBACK_IMAGE_URL`, `BLOG_SOCIAL_QA_ENABLED`
-- `BLOG_SOCIAL_PUBLIC_BASE_URL`, `BLOG_SOCIAL_PUBLIC_POSTS_BASE_URL`
-- `BLOG_WEEKLY_QA_ENABLED`, `BLOG_FALLBACK_IMAGE_URL`, `BLOG_ARTWORK_BUCKET_ALIAS`
-- `SITE_BASE_URL`, `WEBSITE_REBUILD_HOOK`, `WEBSITE_REBUILD_HOOK_FALLBACK`
-- R2 aliases: `rss`, `blog`, `blogImages`, `blogRss`
-- OpenRouter route keys: `blogWeekly`, `blogSocial`
-
-## External integrations
-
-- OpenRouter
-- Cloudflare R2
-- Website rebuild webhook
-- Artwork service
-
-## Storage
-
-- Weekly manifest: `<BLOG_PREFIX>/posts.json`.
-- Weekly posts: `<BLOG_PREFIX>/posts/<slug>/index.html` and `post.json`.
-- Social manifest: `<BLOG_SOCIAL_PREFIX>/posts.json`.
-- Social posts: `<BLOG_SOCIAL_PREFIX>/posts/<slug>/index.html` and `post.json`.
-- RSS XML: `BLOG_RSS_OBJECT_KEY` and `BLOG_SOCIAL_RSS_OBJECT_KEY` in R2 alias `blogRss`.
-
-## Tests
-
-- `test/blog-rss-feed.test.js`
-- `test/blog-social-package.test.js`
-- `test/blog-social-rss-feed.test.js`
-- `test/blog-social-schema.test.js`
-- `test/blog-weekly-package.test.js`
-
-## Common troubleshooting
-
-- No items found: this is treated as a successful no-op (`ok:true`, `skipped:true`) to avoid noisy cron failures; verify `feed.json` if content was expected.
-- Artwork failure: configure fallback image URL or fix OpenRouter image configuration.
-- Post skipped: existing social post for the content date; pass `force=true` to rebuild. Duplicate detection uses the post ID, `date_label`, or date-prefixed slug, never the later publication timestamp.
-- Async Koyeb completion logs include `outcome`, `skipped`, `quarantined` and `reason` so a no-op cannot masquerade as a published post.
-- Rebuild hook failure: check hook env and endpoint status.
-
-## Connections to other services
-
-Consumes RSS output from rss-feed-creator, calls artwork helpers, uses shared AI/R2 utilities and triggers external website rebuild.
-
-## Shared tone and artwork controls
-
-Weekly blog and daily social-blog generation now import their lane persona directly from `services/script/utils/toneSetter.js`. Generation, repair and QA prompts retain the same dry, sceptical British editorial voice.
-
-Artwork prompts also include the shared seasonal palette direction and absolute text-free policy. The same policy is applied again inside the artwork transport before the provider request.
+- Treat `config/production.defaults.env`, `env.template`, `config/thresholds.js` and the relevant service config module as the configuration sources of truth.
+- Secrets belong in the deployment secret store and must not be committed.
+- Production HTTP access is protected by the AIMS bearer-auth middleware unless a route explicitly implements a narrower public status/redirect contract.
+- Retries are for transient failures only; validation, policy and source-integrity failures fail closed.
+- Generated public content must pass its content-quality gates before publication or delivery.
+- Durable artefacts and job state use the configured R2/state utilities rather than process memory where a durable store is required.
