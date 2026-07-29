@@ -223,12 +223,12 @@ export async function createVisual({
   isDraft = false,
   useBrandKit = false,
 } = {}, apiKey) {
+  void useBrandKit;
   const body = {
     templateId,
     inputs,
     render,
     isDraft,
-    useBrandKit,
   };
 
   if (prompt !== undefined && prompt !== null && String(prompt).trim()) {
@@ -261,7 +261,7 @@ export async function deleteVisual(id, apiKey) {
     throw err;
   }
 
-  return blotatoRequest(`videos/${encodeURIComponent(cleaned)}`, {
+  return blotatoRequest(`videos/creations/${encodeURIComponent(cleaned)}`, {
     method: "DELETE",
     apiKey,
   });

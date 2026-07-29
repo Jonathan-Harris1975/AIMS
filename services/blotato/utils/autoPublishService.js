@@ -99,13 +99,12 @@ function extractUuid(value = "") {
 
 function normaliseTemplateId(value = DEFAULT_AI_STORY_TEMPLATE_PATH) {
   const raw = trim(value, DEFAULT_AI_STORY_TEMPLATE_PATH);
-  return raw.startsWith("base/v2/") ? `/${raw}` : raw;
+  const mode = trim(process.env.BLOTATO_TEMPLATE_ID_MODE, "uuid").toLowerCase();
+  if (mode === "path") return raw.startsWith("base/v2/") ? `/${raw}` : raw;
+  return extractUuid(raw) || DEFAULT_AI_STORY_TEMPLATE_UUID;
 }
 
 function normaliseTemplateIdForApi(value = DEFAULT_AI_STORY_TEMPLATE_PATH) {
-  // Blotato owns the template identifier contract. When /videos/templates
-  // returns an id, send that exact id back to /videos/from-templates. Do not
-  // strip UUIDs or manufacture alternate identifiers.
   return normaliseTemplateId(value);
 }
 
@@ -481,36 +480,10 @@ function findMediaUrl(value, depth = 0) {
   return "";
 }
 
-function isTransientPollError(error) {
-  const status = Number(error?.statusCode || error?.status || 0);
-  const message = String(error?.message || error?.details?.message || "").toLowerCase();
-  return [408, 409, 425, 429].includes(status)
-    || status >= 500
-    || /not complete|still generating|queue|temporar|timeout|timed out|rate limit|try again|server error/.test(message);
-}
-
-async function pollUntil({ label, run, isDone, isDonePayload, isFailed, extractStatus, maxAttempts, intervalMs, progressEvery = 30, finalGraceMs = 0, maxConsecutiveErrors = 8 }) {
+async function pollUntil({ label, run, isDone, isDonePayload, isFailed, extractStatus, maxAttempts, intervalMs, progressEvery = 30, finalGraceMs = 0 }) {
   let latest = null;
-  let consecutiveErrors = 0;
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    try {
-      latest = await run();
-      consecutiveErrors = 0;
-    } catch (error) {
-      consecutiveErrors += 1;
-      if (!isTransientPollError(error) || consecutiveErrors > maxConsecutiveErrors) throw error;
-      warn("blotato.poll.transient_error", {
-        label,
-        attempt,
-        maxAttempts,
-        consecutiveErrors,
-        maxConsecutiveErrors,
-        statusCode: error?.statusCode || error?.status || null,
-        error: error?.message || String(error),
-      });
-      await sleep(intervalMs);
-      continue;
-    }
+    latest = await run();
     const status = extractStatus(latest);
     if (isDone(status) || isDonePayload?.(latest, status)) return latest;
     if (isFailed(status)) {
@@ -621,10 +594,8 @@ async function createAndWaitForVideo({ templateId, templateIdCandidates = [], pa
 
   onVisualCreated?.({ visualId, visual, visualInputs, visualPrompt, creditBudget, dashboardUrl: templateDashboardUrl(visualId), templateId: usedTemplateId, templateIdCandidates: candidates, rejectedTemplateIds });
 
+  const maxAttempts = positiveIntEnv("BLOTATO_VIDEO_POLL_ATTEMPTS", 720, 2880);
   const intervalMs = positiveIntEnv("BLOTATO_VIDEO_POLL_INTERVAL_MS", 5000, 60_000);
-  const configuredAttempts = positiveIntEnv("BLOTATO_VIDEO_POLL_ATTEMPTS", 720, 2880);
-  const minimumWaitMs = positiveIntEnv("BLOTATO_VIDEO_MIN_WAIT_MS", 900_000, 3_600_000);
-  const maxAttempts = Math.max(configuredAttempts, Math.ceil(minimumWaitMs / intervalMs));
   const finalGraceMs = positiveIntEnv("BLOTATO_VIDEO_FINAL_GRACE_MS", 15_000, 180_000);
   let completed;
   try {
@@ -639,7 +610,6 @@ async function createAndWaitForVideo({ templateId, templateIdCandidates = [], pa
       intervalMs,
       finalGraceMs,
       progressEvery: positiveIntEnv("BLOTATO_VIDEO_POLL_PROGRESS_EVERY", 30, 240),
-      maxConsecutiveErrors: positiveIntEnv("BLOTATO_VIDEO_POLL_MAX_CONSECUTIVE_ERRORS", 8, 30),
     });
   } catch (error) {
     const safeDetails = sanitiseBlotatoFailure(error?.details || null);
@@ -1032,7 +1002,7 @@ function buildDefaults(laneSlug = DEFAULT_BLOTATO_SHORT_LANE) {
     channels: getDefaultPlatforms(),
     templateId: normaliseTemplateId(process.env.BLOTATO_NEWS_TEMPLATE_ID || DEFAULT_AI_STORY_TEMPLATE_PATH),
     templatePath: trim(process.env.BLOTATO_NEWS_TEMPLATE_ID || DEFAULT_AI_STORY_TEMPLATE_PATH, DEFAULT_AI_STORY_TEMPLATE_PATH),
-    templateIdMode: trim(process.env.BLOTATO_TEMPLATE_ID_MODE, "path"),
+    templateIdMode: trim(process.env.BLOTATO_TEMPLATE_ID_MODE, "uuid"),
     templateVerify: parseBoolean(process.env.BLOTATO_TEMPLATE_VERIFY, true),
     templateAutoDiscovery: parseBoolean(process.env.BLOTATO_TEMPLATE_AUTO_DISCOVERY, true),
     templateSearch: trim(process.env.BLOTATO_NEWS_TEMPLATE_SEARCH || process.env.BLOTATO_TEMPLATE_SEARCH, DEFAULT_TEMPLATE_SEARCH),
