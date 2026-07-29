@@ -105,7 +105,7 @@ export async function buildNewsletter({ profileId = "ai-edge", sessionId: reques
 
   const finalNewsletter = { ...qaResult.newsletter, heroImageUrl: heroImageResult.imageUrl };
   const finalValidation = runDeterministicValidators(finalNewsletter, {
-    expectedStoryCount: Math.min(10, 1 + stories.length),
+    expectedStoryCount: Math.min(9, 1 + stories.length),
     requireHeroImage: true,
   });
   if (!finalValidation.pass) {

@@ -58,9 +58,7 @@ function attachSource(copy = {}, source = {}) {
 }
 
 export async function composeIssueSections({ profile, lead, stories, sessionId, repairContext = [] }) {
-  const bigSources = [lead, ...stories.slice(0, 2)].filter(Boolean);
-  const worthSource = stories[2] || null;
-  const radarSources = stories.slice(3, 9);
+  const allSources = [lead, ...stories].filter(Boolean);
 
   const messages = [
     {
@@ -69,13 +67,13 @@ export async function composeIssueSections({ profile, lead, stories, sessionId, 
         `You are the senior editor writing "${profile.displayName}". The reader promise is: ` +
         "we filtered the noise and kept only what deserves attention. Build a compact five-minute issue.\n\n" +
         brandGuardrails(profile) +
-        "\n\nUse sources S0-S2 for the Big Three in exactly that order. Use source S3 for Worth Using/Watching " +
-        "only if it is genuinely useful or practically relevant; otherwise frame it as 'Worth Watching'. Use S4 onward for On the Radar. " +
-        "Every On the Radar item MUST carry the sourceId it summarises. Never reorder a summary onto a different source. " +
-        "Reality Check may interrogate one supplied source, but MUST return that sourceId so its link can be attached deterministically. " +
+        "\n\nChoose exactly three Big Three stories from the supplied sources. They should form the strongest coherent editorial theme available rather than simply taking the first three ranked items. " +
+        "Each Big Three item MUST return the exact sourceId it uses. Choose one different source for Worth Using/Watching only when it offers genuine practical value; otherwise use Worth Watching. " +
+        "Use no more than five additional unused sources for On the Radar. Every On the Radar item MUST carry the exact sourceId it summarises. Never attach a summary to a different source. " +
+        "Reality Check may interrogate any supplied source, including a Big Three source, but MUST return that sourceId so its link can be attached deterministically. " +
         "The opening note is 35-65 words and sounds like Jonathan, not a masthead. The reader question should invite a substantive response.\n\n" +
         "Respond with ONLY valid JSON using this shape: " +
-        '{"heroHeadline":string,"openingNoteHtml":string,"bigThree":[{"whatHappened":string,"whyItMatters":string,"jonathanTake":string}],"worthUsing":{"label":string,"summary":string,"whyUseful":string},"onRadar":[{"sourceId":string,"summary":string}],"realityCheck":{"sourceId":string,"claim":string,"assessment":string},"yourTurn":string}. ' +
+        '{"heroHeadline":string,"openingNoteHtml":string,"bigThree":[{"sourceId":string,"whatHappened":string,"whyItMatters":string,"jonathanTake":string}],"worthUsing":{"sourceId":string,"label":string,"summary":string,"whyUseful":string},"onRadar":[{"sourceId":string,"summary":string}],"realityCheck":{"sourceId":string,"claim":string,"assessment":string},"yourTurn":string}. ' +
         "openingNoteHtml must be one <p> paragraph. No other field may contain HTML.",
     },
     {
@@ -97,33 +95,84 @@ export async function composeIssueSections({ profile, lead, stories, sessionId, 
   }
 
   const data = parsed.data || {};
+  const sourceMap = new Map(allSources.map((source, index) => [`S${index}`, source]));
+  const used = new Set();
+  const resolveSource = (sourceId) => {
+    const id = String(sourceId || "").trim().toUpperCase();
+    return sourceMap.has(id) ? { id, source: sourceMap.get(id) } : null;
+  };
+
   const bigCopy = Array.isArray(data.bigThree) ? data.bigThree : [];
-  const bigThree = bigSources.map((source, i) => attachSource(bigCopy[i], source));
+  const bigThree = [];
+  for (const copy of bigCopy) {
+    const resolved = resolveSource(copy?.sourceId);
+    if (!resolved || used.has(resolved.id)) continue;
+    used.add(resolved.id);
+    bigThree.push({ ...attachSource(copy, resolved.source), sourceId: resolved.id });
+    if (bigThree.length === 3) break;
+  }
+  for (let index = 0; bigThree.length < 3 && index < allSources.length; index += 1) {
+    const id = `S${index}`;
+    if (used.has(id)) continue;
+    used.add(id);
+    bigThree.push({ ...attachSource({}, allSources[index]), sourceId: id });
+  }
+
+  let worthUsing = null;
+  const worthResolved = resolveSource(data.worthUsing?.sourceId);
+  if (worthResolved && !used.has(worthResolved.id)) {
+    used.add(worthResolved.id);
+    worthUsing = {
+      sourceId: worthResolved.id,
+      title: worthResolved.source.title,
+      link: worthResolved.source.link,
+      label: String(data.worthUsing?.label || "Worth Watching").trim(),
+      summary: String(data.worthUsing?.summary || worthResolved.source.summary || "").trim(),
+      whyUseful: String(data.worthUsing?.whyUseful || "").trim(),
+    };
+  } else {
+    const fallbackIndex = allSources.findIndex((_, index) => !used.has(`S${index}`));
+    if (fallbackIndex >= 0) {
+      const fallbackId = `S${fallbackIndex}`;
+      const fallbackSource = allSources[fallbackIndex];
+      used.add(fallbackId);
+      worthUsing = {
+        sourceId: fallbackId,
+        title: fallbackSource.title,
+        link: fallbackSource.link,
+        label: "Worth Watching",
+        summary: String(fallbackSource.summary || "").trim(),
+        whyUseful: "Worth keeping on the radar because it adds a distinct practical or strategic angle to this issue.",
+      };
+    }
+  }
+
   const radarCopy = Array.isArray(data.onRadar) ? data.onRadar : [];
-  const radarBySourceId = new Map(
-    radarCopy
-      .filter((item) => item && typeof item === "object")
-      .map((item) => [String(item.sourceId || "").trim().toUpperCase(), item])
-      .filter(([sourceId]) => /^S\d+$/.test(sourceId))
-  );
-  const onRadar = radarSources.map((source, i) => {
-    const sourceId = `S${i + 4}`;
-    const copy = radarBySourceId.get(sourceId);
-    return {
-      sourceId,
+  const onRadar = [];
+  for (const copy of radarCopy) {
+    const resolved = resolveSource(copy?.sourceId);
+    if (!resolved || used.has(resolved.id)) continue;
+    used.add(resolved.id);
+    onRadar.push({
+      sourceId: resolved.id,
+      title: resolved.source.title,
+      link: resolved.source.link,
+      summary: String(copy?.summary || resolved.source.summary || "").trim(),
+    });
+    if (onRadar.length === 5) break;
+  }
+  for (let index = 0; onRadar.length < 5 && index < allSources.length; index += 1) {
+    const id = `S${index}`;
+    if (used.has(id)) continue;
+    used.add(id);
+    const source = allSources[index];
+    onRadar.push({
+      sourceId: id,
       title: source.title,
       link: source.link,
-      summary: String(copy?.summary || source.summary || "").trim(),
-    };
-  });
-
-  const worthUsing = worthSource ? {
-    title: worthSource.title,
-    link: worthSource.link,
-    label: String(data.worthUsing?.label || "Worth Watching").trim(),
-    summary: String(data.worthUsing?.summary || worthSource.summary || "").trim(),
-    whyUseful: String(data.worthUsing?.whyUseful || "").trim(),
-  } : null;
+      summary: String(source.summary || "").trim(),
+    });
+  }
 
   return {
     ok: true,
@@ -133,7 +182,6 @@ export async function composeIssueSections({ profile, lead, stories, sessionId, 
     worthUsing,
     onRadar,
     realityCheck: (() => {
-      const allSources = [lead, ...stories];
       const requestedSourceId = String(data.realityCheck?.sourceId || "S0").trim().toUpperCase();
       const match = requestedSourceId.match(/^S(\d+)$/);
       const index = match ? Number(match[1]) : 0;

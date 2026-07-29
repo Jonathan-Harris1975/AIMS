@@ -25,9 +25,8 @@ function sectionLabel(label) {
   return `<tr><td style="padding:24px 24px 8px;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6B7280;">${escapeHtml(label)}</td></tr>`;
 }
 
-function renderBigStory(story, index) {
+function renderBigStory(story) {
   return `<tr><td style="padding:16px 24px;border-top:1px solid #E5E7EB;">
-    <div style="font-size:12px;font-weight:700;color:#9CA3AF;padding-bottom:4px;">${index + 1}</div>
     <a href="${escapeHtml(story.link)}" style="font-family:Georgia,'Times New Roman',serif;font-size:19px;font-weight:700;color:#0D1420;text-decoration:none;">${escapeHtml(story.title)}</a>
     <div style="font-size:14px;line-height:1.55;color:#1F2937;padding-top:10px;"><strong>What happened:</strong> ${escapeHtml(story.whatHappened)}</div>
     <div style="font-size:14px;line-height:1.55;color:#1F2937;padding-top:6px;"><strong>Why it matters:</strong> ${escapeHtml(story.whyItMatters)}</div>
@@ -79,8 +78,8 @@ ${sectionLabel("Your Turn")}
 </table></td></tr></table></body></html>`;
 }
 
-function webStory(story, index) {
-  return `<article class="card"><p class="tag">${index + 1}</p><h2><a href="${escapeHtml(story.link)}">${escapeHtml(story.title)}</a></h2><p><strong>What happened:</strong> ${escapeHtml(story.whatHappened)}</p><p><strong>Why it matters:</strong> ${escapeHtml(story.whyItMatters)}</p><p><strong>Jonathan's take:</strong> ${escapeHtml(story.jonathanTake)}</p></article>`;
+function webStory(story) {
+  return `<article class="card"><h2><a href="${escapeHtml(story.link)}">${escapeHtml(story.title)}</a></h2><p><strong>What happened:</strong> ${escapeHtml(story.whatHappened)}</p><p><strong>Why it matters:</strong> ${escapeHtml(story.whyItMatters)}</p><p><strong>Jonathan's take:</strong> ${escapeHtml(story.jonathanTake)}</p></article>`;
 }
 
 export function renderNewsletterWebHtml({ profile, newsletter, siteShell }) {
@@ -98,7 +97,7 @@ ${newsletter.promotion ? `<section class="card"><p class="tag">${escapeHtml(news
 
 export function renderNewsletterPlaintext({ profile, newsletter }) {
   const lines = [profile.displayName, "", newsletter.heroHeadline, "", stripHtml(newsletter.openingNoteHtml), "", "THE BIG THREE", ""];
-  (newsletter.bigThree || []).forEach((story, i) => lines.push(`${i + 1}. ${story.title}\nWhat happened: ${story.whatHappened}\nWhy it matters: ${story.whyItMatters}\nJonathan's take: ${story.jonathanTake}\n${story.link}\n`));
+  (newsletter.bigThree || []).forEach((story) => lines.push(`${story.title}\nWhat happened: ${story.whatHappened}\nWhy it matters: ${story.whyItMatters}\nJonathan's take: ${story.jonathanTake}\n${story.link}\n`));
   if (newsletter.worthUsing) lines.push((newsletter.worthUsing.label || "WORTH USING").toUpperCase(), "", `${newsletter.worthUsing.title}\n${newsletter.worthUsing.summary}\n${newsletter.worthUsing.whyUseful}\n${newsletter.worthUsing.link}`, "");
   lines.push("ON THE RADAR", "");
   (newsletter.onRadar || []).forEach((story) => lines.push(`${story.title}\n${story.summary}\n${story.link}\n`));

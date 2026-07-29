@@ -35,7 +35,7 @@ async function regenerateContent({ profile, lead, stories, promotion, sessionId,
 
 export async function runQaLoop({ profile, newsletter, lead, stories, promotion = null, sessionId }) {
   const maxIterations = THRESHOLDS.newsletter.maxRewriteIterations;
-  const expectedStoryCount = Math.min(10, 1 + stories.length);
+  const expectedStoryCount = Math.min(9, 1 + stories.length);
   let current = { ...newsletter };
   const history = [];
 
