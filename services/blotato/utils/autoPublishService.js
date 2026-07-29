@@ -99,12 +99,13 @@ function extractUuid(value = "") {
 
 function normaliseTemplateId(value = DEFAULT_AI_STORY_TEMPLATE_PATH) {
   const raw = trim(value, DEFAULT_AI_STORY_TEMPLATE_PATH);
-  const mode = trim(process.env.BLOTATO_TEMPLATE_ID_MODE, "uuid").toLowerCase();
-  if (mode === "path") return raw.startsWith("base/v2/") ? `/${raw}` : raw;
-  return extractUuid(raw) || DEFAULT_AI_STORY_TEMPLATE_UUID;
+  return raw.startsWith("base/v2/") ? `/${raw}` : raw;
 }
 
 function normaliseTemplateIdForApi(value = DEFAULT_AI_STORY_TEMPLATE_PATH) {
+  // Blotato owns the template identifier contract. When /videos/templates
+  // returns an id, send that exact id back to /videos/from-templates. Do not
+  // strip UUIDs or manufacture alternate identifiers.
   return normaliseTemplateId(value);
 }
 
@@ -128,6 +129,41 @@ function uniqueTemplateIds(...groups) {
 function templateDashboardUrl(id = "") {
   const cleaned = trim(id);
   return cleaned ? `https://my.blotato.com/videos/${encodeURIComponent(cleaned)}` : "";
+}
+
+function sanitiseBlotatoFailure(value, depth = 0) {
+  if (depth > 5) return "[truncated]";
+  if (value === null || value === undefined) return value;
+  if (Array.isArray(value)) return value.slice(0, 25).map((item) => sanitiseBlotatoFailure(item, depth + 1));
+  if (typeof value !== "object") {
+    const text = String(value);
+    return text.length > 2_000 ? `${text.slice(0, 2_000)}…` : value;
+  }
+
+  const result = {};
+  for (const [key, item] of Object.entries(value)) {
+    if (/api[-_]?key|authorization|token|secret|credential|password/i.test(key)) {
+      result[key] = "[redacted]";
+      continue;
+    }
+    result[key] = sanitiseBlotatoFailure(item, depth + 1);
+  }
+  return result;
+}
+
+function extractBlotatoFailureMessage(payload = {}) {
+  const candidates = [
+    payload?.message,
+    payload?.error,
+    payload?.errorMessage,
+    payload?.item?.message,
+    payload?.item?.error,
+    payload?.item?.errorMessage,
+    payload?.data?.message,
+    payload?.data?.error,
+    payload?.data?.errorMessage,
+  ];
+  return candidates.map((value) => trim(value)).find(Boolean) || "";
 }
 
 function looksLikeTemplateItem(item = {}) {
@@ -236,10 +272,12 @@ function pickPreferredTemplate(items = [], { requested = "", searchTerms = [] } 
   );
 }
 
-async function resolveVideoTemplateId({ requestedTemplateId, apiKey }) {
+async function resolveVideoTemplateId({ requestedTemplateId, apiKey, autoDiscoveryOverride = null }) {
   const requested = trim(requestedTemplateId, normaliseTemplateId(DEFAULT_AI_STORY_TEMPLATE_PATH));
   const verify = parseBoolean(process.env.BLOTATO_TEMPLATE_VERIFY, true);
-  const autoDiscovery = parseBoolean(process.env.BLOTATO_TEMPLATE_AUTO_DISCOVERY, true);
+  const autoDiscovery = autoDiscoveryOverride === null
+    ? parseBoolean(process.env.BLOTATO_TEMPLATE_AUTO_DISCOVERY, true)
+    : Boolean(autoDiscoveryOverride);
   const configuredSearch = process.env.BLOTATO_NEWS_TEMPLATE_SEARCH || process.env.BLOTATO_TEMPLATE_SEARCH || DEFAULT_TEMPLATE_SEARCH;
   const searchTerms = uniqueSearchTerms(configuredSearch, DEFAULT_TEMPLATE_SEARCH, FALLBACK_TEMPLATE_SEARCHES);
 
@@ -443,10 +481,36 @@ function findMediaUrl(value, depth = 0) {
   return "";
 }
 
-async function pollUntil({ label, run, isDone, isDonePayload, isFailed, extractStatus, maxAttempts, intervalMs, progressEvery = 30, finalGraceMs = 0 }) {
+function isTransientPollError(error) {
+  const status = Number(error?.statusCode || error?.status || 0);
+  const message = String(error?.message || error?.details?.message || "").toLowerCase();
+  return [408, 409, 425, 429].includes(status)
+    || status >= 500
+    || /not complete|still generating|queue|temporar|timeout|timed out|rate limit|try again|server error/.test(message);
+}
+
+async function pollUntil({ label, run, isDone, isDonePayload, isFailed, extractStatus, maxAttempts, intervalMs, progressEvery = 30, finalGraceMs = 0, maxConsecutiveErrors = 8 }) {
   let latest = null;
+  let consecutiveErrors = 0;
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    latest = await run();
+    try {
+      latest = await run();
+      consecutiveErrors = 0;
+    } catch (error) {
+      consecutiveErrors += 1;
+      if (!isTransientPollError(error) || consecutiveErrors > maxConsecutiveErrors) throw error;
+      warn("blotato.poll.transient_error", {
+        label,
+        attempt,
+        maxAttempts,
+        consecutiveErrors,
+        maxConsecutiveErrors,
+        statusCode: error?.statusCode || error?.status || null,
+        error: error?.message || String(error),
+      });
+      await sleep(intervalMs);
+      continue;
+    }
     const status = extractStatus(latest);
     if (isDone(status) || isDonePayload?.(latest, status)) return latest;
     if (isFailed(status)) {
@@ -557,21 +621,50 @@ async function createAndWaitForVideo({ templateId, templateIdCandidates = [], pa
 
   onVisualCreated?.({ visualId, visual, visualInputs, visualPrompt, creditBudget, dashboardUrl: templateDashboardUrl(visualId), templateId: usedTemplateId, templateIdCandidates: candidates, rejectedTemplateIds });
 
-  const maxAttempts = positiveIntEnv("BLOTATO_VIDEO_POLL_ATTEMPTS", 720, 2880);
   const intervalMs = positiveIntEnv("BLOTATO_VIDEO_POLL_INTERVAL_MS", 5000, 60_000);
+  const configuredAttempts = positiveIntEnv("BLOTATO_VIDEO_POLL_ATTEMPTS", 720, 2880);
+  const minimumWaitMs = positiveIntEnv("BLOTATO_VIDEO_MIN_WAIT_MS", 900_000, 3_600_000);
+  const maxAttempts = Math.max(configuredAttempts, Math.ceil(minimumWaitMs / intervalMs));
   const finalGraceMs = positiveIntEnv("BLOTATO_VIDEO_FINAL_GRACE_MS", 15_000, 180_000);
-  const completed = await pollUntil({
-    label: "Blotato video render",
-    run: () => getVisualStatus(visualId, apiKey),
-    extractStatus: extractVideoStatus,
-    isDone: (status) => VIDEO_DONE_STATUSES.has(status),
-    isDonePayload: (payload) => Boolean(findMediaUrl(payload)),
-    isFailed: (status) => VIDEO_FAILED_STATUSES.has(status),
-    maxAttempts,
-    intervalMs,
-    finalGraceMs,
-    progressEvery: positiveIntEnv("BLOTATO_VIDEO_POLL_PROGRESS_EVERY", 30, 240),
-  });
+  let completed;
+  try {
+    completed = await pollUntil({
+      label: "Blotato video render",
+      run: () => getVisualStatus(visualId, apiKey),
+      extractStatus: extractVideoStatus,
+      isDone: (status) => VIDEO_DONE_STATUSES.has(status),
+      isDonePayload: (payload) => Boolean(findMediaUrl(payload)),
+      isFailed: (status) => VIDEO_FAILED_STATUSES.has(status),
+      maxAttempts,
+      intervalMs,
+      finalGraceMs,
+      progressEvery: positiveIntEnv("BLOTATO_VIDEO_POLL_PROGRESS_EVERY", 30, 240),
+      maxConsecutiveErrors: positiveIntEnv("BLOTATO_VIDEO_POLL_MAX_CONSECUTIVE_ERRORS", 8, 30),
+    });
+  } catch (error) {
+    const safeDetails = sanitiseBlotatoFailure(error?.details || null);
+    const providerMessage = extractBlotatoFailureMessage(error?.details || {});
+    const status = extractVideoStatus(error?.details || {});
+
+    error.blotatoFailure = {
+      visualId,
+      dashboardUrl: templateDashboardUrl(visualId),
+      templateId: usedTemplateId,
+      status: status || "unknown",
+      providerMessage: providerMessage || null,
+      details: safeDetails,
+      creditAssessment: "not-determined-by-aims",
+    };
+
+    warn("blotato.video.render.failed", error.blotatoFailure);
+
+    if (status && VIDEO_FAILED_STATUSES.has(status)) {
+      error.message = providerMessage
+        ? `Blotato video render failed with status ${status}: ${providerMessage}`
+        : `Blotato video render failed with status ${status}`;
+    }
+    throw error;
+  }
 
   const mediaUrl = findMediaUrl(completed) || findMediaUrl(visual);
   if (!mediaUrl) {
@@ -939,12 +1032,13 @@ function buildDefaults(laneSlug = DEFAULT_BLOTATO_SHORT_LANE) {
     channels: getDefaultPlatforms(),
     templateId: normaliseTemplateId(process.env.BLOTATO_NEWS_TEMPLATE_ID || DEFAULT_AI_STORY_TEMPLATE_PATH),
     templatePath: trim(process.env.BLOTATO_NEWS_TEMPLATE_ID || DEFAULT_AI_STORY_TEMPLATE_PATH, DEFAULT_AI_STORY_TEMPLATE_PATH),
-    templateIdMode: trim(process.env.BLOTATO_TEMPLATE_ID_MODE, "uuid"),
+    templateIdMode: trim(process.env.BLOTATO_TEMPLATE_ID_MODE, "path"),
     templateVerify: parseBoolean(process.env.BLOTATO_TEMPLATE_VERIFY, true),
     templateAutoDiscovery: parseBoolean(process.env.BLOTATO_TEMPLATE_AUTO_DISCOVERY, true),
     templateSearch: trim(process.env.BLOTATO_NEWS_TEMPLATE_SEARCH || process.env.BLOTATO_TEMPLATE_SEARCH, DEFAULT_TEMPLATE_SEARCH),
     pickMode: trim(process.env.BLOTATO_RSS_PICK_MODE, "latest"),
-    minDurationSeconds: 30,
+    minDurationSeconds: 35,
+    maxDurationSeconds: 80,
   };
 }
 
@@ -957,7 +1051,7 @@ function buildRssSummary(articleSource = {}) {
   };
 }
 
-async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOTATO_SHORT_LANE, apiKey, editorialReservation = null }) {
+async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOTATO_SHORT_LANE, apiKey, editorialReservation = null, templateIdOverride = null, publishMode = "evening-lane", creativeStyle = "" }) {
   const lane = requireShortLaneConfig(laneSlug);
   const keepAliveLabel = `blotato:${lane.slug}:${sessionId}`;
   const keepAliveEnabled = parseBoolean(process.env.BLOTATO_KEEPALIVE_ENABLED, true);
@@ -966,20 +1060,26 @@ async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOT
   try {
     info("blotato.publish_now.job.start", { sessionId, lane: lane.slug, rssSource: articleSource.rssSource });
     const defaults = buildDefaults(lane.slug);
+    if (templateIdOverride) {
+      defaults.templateId = normaliseTemplateId(templateIdOverride);
+      defaults.templatePath = templateIdOverride;
+      defaults.templateAutoDiscovery = false;
+    }
+    defaults.publishMode = publishMode;
     const platforms = defaults.channels;
 
     updateJob(lane.jobType, sessionId, { phase: "step-0-channel-preflight", defaults });
     const channelPreflight = await runBlotatoStep0Preflight({ platforms, apiKey });
 
     updateJob(lane.jobType, sessionId, { phase: "template-resolution", channelPreflight });
-    const templateResolution = await resolveVideoTemplateId({ requestedTemplateId: defaults.templateId, apiKey });
+    const templateResolution = await resolveVideoTemplateId({ requestedTemplateId: defaults.templateId, apiKey, autoDiscoveryOverride: templateIdOverride ? false : null });
     const templateId = templateResolution.templateId;
 
     const scriptOptions = {
       article: articleSource.article,
       lane: lane.slug,
-      theme: trim(process.env.BLOTATO_NEWS_THEME, lane.theme),
-      durationSeconds: Math.max(30, Number(process.env.BLOTATO_NEWS_DURATION_SECONDS || 45)),
+      theme: [trim(process.env.BLOTATO_NEWS_THEME, lane.theme), creativeStyle ? `AutoShort visual treatment: ${creativeStyle}. Keep the whole short visually coherent in this treatment.` : ""].filter(Boolean).join(" "),
+      durationSeconds: Math.min(80, Math.max(35, Number(process.env.BLOTATO_NEWS_DURATION_SECONDS || 55))),
       audience: trim(
         process.env.BLOTATO_NEWS_AUDIENCE,
         "curious readers, creators, authors, and small business owners"
@@ -1059,12 +1159,12 @@ async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOT
           gate: blotatoShortGate,
           artifact: pack,
           contentType: "blotato-short",
-          repairArtifact: (candidate) => repairShortPackForBlotatoGate(
+          repairArtifact: (candidate, reviewContext = {}) => repairShortPackForBlotatoGate(
             repairArtifactForReviewCouncil(candidate, { contentType: "blotato-short" }),
             {
               article: articleSource.article,
               lane: lane.slug,
-              gate: blotatoShortGate,
+              gate: reviewContext.gate || blotatoShortGate,
               cta: scriptOptions.cta,
               qualityAttempt,
             }
@@ -1279,14 +1379,19 @@ async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOT
   } catch (error) {
     if (editorialReservation) releaseEditorialReservation(editorialReservation);
     failJob(lane.jobType, sessionId, error);
-    warn("blotato.publish_now.job.fail", { sessionId, error: error?.message || String(error) });
+    warn("blotato.publish_now.job.fail", {
+      sessionId,
+      error: error?.message || String(error),
+      statusCode: error?.statusCode || null,
+      blotatoFailure: error?.blotatoFailure || null,
+    });
     throw error;
   } finally {
     if (keepAliveEnabled) stopKeepAlive(keepAliveLabel);
   }
 }
 
-export async function triggerPublishNowJob(req = {}, laneSlug = DEFAULT_BLOTATO_SHORT_LANE) {
+export async function triggerPublishNowJob(req = {}, laneSlug = DEFAULT_BLOTATO_SHORT_LANE, options = {}) {
   const lane = requireShortLaneConfig(laneSlug);
   const articleSource = await selectRssArticleForBlotato({ laneSlug: lane.slug });
   const reservationResult = await reserveEditorialSource({
@@ -1305,6 +1410,12 @@ export async function triggerPublishNowJob(req = {}, laneSlug = DEFAULT_BLOTATO_
   const editorialReservation = reservationResult.reservation || null;
   const sessionId = createSessionId(articleSource.article, lane.slug);
   const defaults = buildDefaults(lane.slug);
+  if (options.templateId) {
+    defaults.templateId = normaliseTemplateId(options.templateId);
+    defaults.templatePath = options.templateId;
+    defaults.templateAutoDiscovery = false;
+  }
+  defaults.publishMode = options.publishMode || "evening-lane";
   const statusUrl = publicJobUrl(req, sessionId);
   const { started, job } = beginJob(lane.jobType, sessionId, {
     rss: buildRssSummary(articleSource),
@@ -1333,7 +1444,15 @@ export async function triggerPublishNowJob(req = {}, laneSlug = DEFAULT_BLOTATO_
     return response;
   }
 
-  const run = () => runPublishJob({ sessionId, articleSource, laneSlug: lane.slug, editorialReservation });
+  const run = () => runPublishJob({
+    sessionId,
+    articleSource,
+    laneSlug: lane.slug,
+    editorialReservation,
+    templateIdOverride: options.templateId || null,
+    publishMode: options.publishMode || "evening-lane",
+    creativeStyle: options.creativeStyle || "",
+  });
   if (parseBoolean(process.env.BLOTATO_INLINE_PUBLISH_JOBS, false)) {
     await run();
   } else {
