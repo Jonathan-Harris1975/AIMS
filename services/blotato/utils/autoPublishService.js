@@ -99,12 +99,13 @@ function extractUuid(value = "") {
 
 function normaliseTemplateId(value = DEFAULT_AI_STORY_TEMPLATE_PATH) {
   const raw = trim(value, DEFAULT_AI_STORY_TEMPLATE_PATH);
-  const mode = trim(process.env.BLOTATO_TEMPLATE_ID_MODE, "uuid").toLowerCase();
-  if (mode === "path") return raw.startsWith("base/v2/") ? `/${raw}` : raw;
-  return extractUuid(raw) || DEFAULT_AI_STORY_TEMPLATE_UUID;
+  return raw.startsWith("base/v2/") ? `/${raw}` : raw;
 }
 
 function normaliseTemplateIdForApi(value = DEFAULT_AI_STORY_TEMPLATE_PATH) {
+  // Blotato owns the template identifier contract. When /videos/templates
+  // returns an id, send that exact id back to /videos/from-templates. Do not
+  // strip UUIDs or manufacture alternate identifiers.
   return normaliseTemplateId(value);
 }
 
@@ -1031,7 +1032,7 @@ function buildDefaults(laneSlug = DEFAULT_BLOTATO_SHORT_LANE) {
     channels: getDefaultPlatforms(),
     templateId: normaliseTemplateId(process.env.BLOTATO_NEWS_TEMPLATE_ID || DEFAULT_AI_STORY_TEMPLATE_PATH),
     templatePath: trim(process.env.BLOTATO_NEWS_TEMPLATE_ID || DEFAULT_AI_STORY_TEMPLATE_PATH, DEFAULT_AI_STORY_TEMPLATE_PATH),
-    templateIdMode: trim(process.env.BLOTATO_TEMPLATE_ID_MODE, "uuid"),
+    templateIdMode: trim(process.env.BLOTATO_TEMPLATE_ID_MODE, "path"),
     templateVerify: parseBoolean(process.env.BLOTATO_TEMPLATE_VERIFY, true),
     templateAutoDiscovery: parseBoolean(process.env.BLOTATO_TEMPLATE_AUTO_DISCOVERY, true),
     templateSearch: trim(process.env.BLOTATO_NEWS_TEMPLATE_SEARCH || process.env.BLOTATO_TEMPLATE_SEARCH, DEFAULT_TEMPLATE_SEARCH),
