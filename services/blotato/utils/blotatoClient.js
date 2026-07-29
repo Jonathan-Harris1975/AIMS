@@ -2,7 +2,6 @@ import { fetchWithTimeout } from "../../shared/http-client.js";
 
 const DEFAULT_BLOTATO_API_BASE = "https://backend.blotato.com/v2";
 const DEFAULT_TIMEOUT_MS = 30_000;
-const MAX_SLEEP_MS = 120_000;
 
 const BLOTATO_KEY_ENV_NAMES = ["Blotato_API_key", "BLOTATO_API_KEY"];
 
@@ -13,9 +12,7 @@ function positiveIntEnv(name, fallback, max = Number.POSITIVE_INFINITY) {
 }
 
 function sleep(ms) {
-  const parsedMs = Number(ms);
-  const safeMs = Number.isFinite(parsedMs) ? Math.min(MAX_SLEEP_MS, Math.max(0, Math.floor(parsedMs))) : 0;
-  return new Promise((resolve) => setTimeout(resolve, safeMs));
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function isRetryableStatus(status) {
@@ -141,7 +138,7 @@ async function blotatoRequest(endpoint, {
   timeoutMs = Number(process.env.BLOTATO_TIMEOUT_MS || DEFAULT_TIMEOUT_MS),
 } = {}) {
   const key = getBlotatoApiKey(apiKey);
-  const attempts = positiveIntEnv("BLOTATO_API_RETRY_ATTEMPTS", 5, 8);
+  const attempts = positiveIntEnv("BLOTATO_API_RETRY_ATTEMPTS", 3, 8);
   const baseDelayMs = positiveIntEnv("BLOTATO_API_RETRY_BASE_MS", 1000, 30_000);
   const maxDelayMs = positiveIntEnv("BLOTATO_API_RETRY_MAX_MS", 12_000, 120_000);
   let lastError;
@@ -177,7 +174,8 @@ async function blotatoRequest(endpoint, {
       const retryable = Boolean(error?.retryable || isRetryableNetworkError(error));
       if (!retryable || attempt >= attempts) throw error;
 
-      const waitMs = Math.min(maxDelayMs, baseDelayMs * Math.pow(2, attempt - 1));
+      const hintedWaitMs = Number(error?.retryAfterMs || 0);
+      const waitMs = Math.min(maxDelayMs, Math.max(hintedWaitMs, baseDelayMs * Math.pow(2, attempt - 1)));
       await sleep(waitMs);
     }
   }
@@ -223,12 +221,12 @@ export async function createVisual({
   isDraft = false,
   useBrandKit = false,
 } = {}, apiKey) {
+  void useBrandKit;
   const body = {
     templateId,
     inputs,
     render,
     isDraft,
-    useBrandKit,
   };
 
   if (prompt !== undefined && prompt !== null && String(prompt).trim()) {
@@ -261,7 +259,7 @@ export async function deleteVisual(id, apiKey) {
     throw err;
   }
 
-  return blotatoRequest(`videos/${encodeURIComponent(cleaned)}`, {
+  return blotatoRequest(`videos/creations/${encodeURIComponent(cleaned)}`, {
     method: "DELETE",
     apiKey,
   });
