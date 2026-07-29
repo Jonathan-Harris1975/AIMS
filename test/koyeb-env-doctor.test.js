@@ -62,7 +62,7 @@ test("koyeb env doctor validates the narrowed Blotato/state env set", () => {
     BLOTATO_YOUTUBE_NOTIFY_SUBSCRIBERS: "false",
     BLOTATO_INSTAGRAM_SHARE_TO_FEED: "true",
     BLOTATO_NEWS_TEMPLATE_ID: "/base/v2/ai-story-video/5903fe43-514d-40ee-a060-0d6628c5f8fd/v1",
-    BLOTATO_TEMPLATE_ID_MODE: "uuid",
+    BLOTATO_TEMPLATE_ID_MODE: "path",
     BLOTATO_TEMPLATE_VERIFY: "true",
     BLOTATO_TEMPLATE_AUTO_DISCOVERY: "true",
     BLOTATO_NEWS_TEMPLATE_SEARCH: "AI Video with AI Voice,AI Story Video,AI Voice,Story Video",
