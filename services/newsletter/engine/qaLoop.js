@@ -11,8 +11,8 @@ import { runDeterministicValidators } from "./validators.js";
 import { composeIssueSections, composeSubjectAndPreview, composeFooter } from "./compose.js";
 import { runNewsletterEditorialCouncil } from "./editorialCouncil.js";
 
-async function regenerateContent({ profile, lead, stories, promotion, sessionId }) {
-  const issue = await composeIssueSections({ profile, lead, stories, sessionId });
+async function regenerateContent({ profile, lead, stories, promotion, sessionId, repairContext = [] }) {
+  const issue = await composeIssueSections({ profile, lead, stories, sessionId, repairContext });
   if (!issue.ok) return issue;
 
   const subject = await composeSubjectAndPreview({
@@ -40,7 +40,7 @@ export async function runQaLoop({ profile, newsletter, lead, stories, promotion 
   const history = [];
 
   for (let iteration = 1; iteration <= maxIterations; iteration += 1) {
-    const deterministic = runDeterministicValidators(current, { expectedStoryCount });
+    const deterministic = runDeterministicValidators(current, { expectedStoryCount, requireHeroImage: false });
     const council = await runNewsletterEditorialCouncil({ profile, newsletter: current, lead, stories, sessionId });
     const passed = deterministic.pass && council.ok;
 
@@ -98,7 +98,11 @@ export async function runQaLoop({ profile, newsletter, lead, stories, promotion 
       };
     }
 
-    const regenerated = await regenerateContent({ profile, lead, stories, promotion, sessionId });
+    const repairContext = [
+      ...deterministic.issues.map((issue) => issue.message || issue.code || String(issue)),
+      ...(council.issues || []),
+    ];
+    const regenerated = await regenerateContent({ profile, lead, stories, promotion, sessionId, repairContext });
     if (!regenerated.ok) {
       warn("newsletter.qa.regeneration_failed", { sessionId, iteration, error: regenerated.error });
       return {
@@ -112,9 +116,7 @@ export async function runQaLoop({ profile, newsletter, lead, stories, promotion 
       };
     }
 
-    // Preserve the original hero image across editorial rewrites. Image
-    // generation is expensive and is reviewed independently by its own route.
-    current = { ...regenerated, heroImageUrl: current.heroImageUrl };
+    current = { ...regenerated, heroImageUrl: null };
   }
 
   return { ok: false, newsletter: current, iterations: maxIterations, finalScore: 0, quarantined: true, history };

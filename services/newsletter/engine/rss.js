@@ -21,6 +21,14 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function isPermanentFeedError(err) {
+  const message = String(err?.message || "");
+  const statusMatch = message.match(/status code\s+(\d{3})/i);
+  const status = statusMatch ? Number(statusMatch[1]) : null;
+  if (status && status >= 400 && status < 500 && ![408, 409, 425, 429].includes(status)) return true;
+  return /attribute without value|invalid xml|unexpected close tag|non-whitespace before first tag|feed not recognized/i.test(message);
+}
+
 // ------------------------------------------------------------
 // Feed list resolution
 // ------------------------------------------------------------
@@ -78,6 +86,10 @@ export async function fetchFeedResilient(feedUrl, {
         maxAttempts: retries + 1,
         error: err.message,
       });
+      if (isPermanentFeedError(err)) {
+        warn("newsletter.rss.fetch_permanent_failure", { feedUrl, attempt: attempt + 1, error: err.message });
+        break;
+      }
       if (attempt < retries) {
         await sleep(retryBaseMs * 2 ** attempt);
       }

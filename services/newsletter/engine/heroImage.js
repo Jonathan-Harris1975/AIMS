@@ -21,8 +21,9 @@ export async function buildHeroImagePrompt({ profile, heroHeadline, sessionId })
         "You write a single concise image-generation prompt (1-2 sentences) for the hero " +
         "illustration for the AI Edge newsletter. Build one visually immediate story from the lead headline. " +
         "Use cinematic lighting, emotional resonance, bold controlled colour, high contrast and magazine-quality thumbnail composition. " +
-        "Prefer a concrete scene, object, consequence or human-scale moment over generic abstract AI geometry. Avoid corporate stock-photo language, " +
-        "boardrooms, handshakes, staged office teams, generic data centres, floating dashboards, polygon networks and glowing AI orbs unless the headline genuinely requires them. " +
+        "Prefer a concrete human-scale scene, real-world object, consequence or workplace moment over generic abstract AI geometry. Use believable adult humans when a person helps tell the story. " +
+        "Do not depict humanoid robots, cyborgs, androids, chrome people, synthetic heads or robot substitutes unless the lead story is specifically about physical robotics. " +
+        "Avoid corporate stock-photo language, boardrooms, handshakes, staged office teams, generic data centres, floating dashboards, polygon networks and glowing AI orbs unless the headline genuinely requires them. " +
         "Seasonal colour direction is applied downstream, so do not fight it. No text or logos in the image and no depictions of real named people. " +
         "Respond with ONLY the prompt text, nothing else.",
     },
@@ -37,7 +38,7 @@ export async function buildHeroImagePrompt({ profile, heroHeadline, sessionId })
     warn("newsletter.hero.prompt_generation_failed", { sessionId, error: err.message });
   }
 
-  return `Cinematic magazine-quality editorial story image with a strong focal subject, emotional tension, bold controlled colour and high contrast, themed specifically around: ${heroHeadline}. Avoid generic corporate or abstract AI imagery.`;
+  return `Cinematic magazine-quality editorial story image with a strong focal subject, emotional tension, bold controlled colour and high contrast, themed specifically around: ${heroHeadline}. Avoid generic corporate or abstract AI imagery, humanoid robots, cyborgs and androids unless the story is explicitly about robotics.`;
 }
 
 /**

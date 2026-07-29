@@ -59,11 +59,11 @@ export function validateSubjectLength(newsletter) {
   return { pass: issues.length === 0, issues };
 }
 
-export function validateStructuralCompleteness(newsletter, { expectedStoryCount } = {}) {
+export function validateStructuralCompleteness(newsletter, { expectedStoryCount, requireHeroImage = true } = {}) {
   const issues = [];
   if (!newsletter.heroHeadline) issues.push({ code: "missing_hero_headline", message: "Hero headline is missing." });
   if (!newsletter.openingNoteHtml) issues.push({ code: "missing_opening_note", message: "Opening note is missing." });
-  if (!newsletter.heroImageUrl) issues.push({ code: "missing_hero_image", message: "Hero image URL is missing." });
+  if (requireHeroImage && !newsletter.heroImageUrl) issues.push({ code: "missing_hero_image", message: "Hero image URL is missing." });
   if (!Array.isArray(newsletter.bigThree) || newsletter.bigThree.length !== 3) issues.push({ code: "big_three_incomplete", message: "The Big Three must contain exactly three stories." });
   if (!newsletter.realityCheck?.assessment) issues.push({ code: "missing_reality_check", message: "Reality Check is missing." });
   if (!newsletter.yourTurn) issues.push({ code: "missing_reader_question", message: "Your Turn reader question is missing." });
@@ -111,9 +111,9 @@ export function validatePromotion(newsletter) {
 
 const ALL_VALIDATORS = [validateBannedPhrases, validateBritishSpelling, validateSubjectLength, validateStructuralCompleteness, validateNoDuplicateStories, validateLinks, validatePromotion];
 
-export function runDeterministicValidators(newsletter, { expectedStoryCount } = {}) {
+export function runDeterministicValidators(newsletter, { expectedStoryCount, requireHeroImage = true } = {}) {
   const issues = [];
-  for (const validator of ALL_VALIDATORS) issues.push(...validator(newsletter, { expectedStoryCount }).issues);
+  for (const validator of ALL_VALIDATORS) issues.push(...validator(newsletter, { expectedStoryCount, requireHeroImage }).issues);
   return { pass: issues.length === 0, issues };
 }
 

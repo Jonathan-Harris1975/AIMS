@@ -15,6 +15,7 @@ import { composeIssueSections, composeSubjectAndPreview, composeFooter } from ".
 import { resolveIssuePromotion, weekdayInLondon } from "./promotion.js";
 import { generateHeroImage } from "./heroImage.js";
 import { runQaLoop } from "./qaLoop.js";
+import { runDeterministicValidators } from "./validators.js";
 import { renderNewsletterHtml, renderNewsletterWebHtml, renderNewsletterPlaintext, buildNewsletterMetadata } from "./render.js";
 import { storeNewsletterIssue } from "./storage.js";
 
@@ -54,16 +55,11 @@ export async function buildNewsletter({ profileId = "ai-edge", sessionId: reques
     };
   }
 
-  const heroImageResult = await generateHeroImage({ profile, heroHeadline: issue.heroHeadline, sessionId });
-  if (!heroImageResult.ok) {
-    warn("newsletter.build.hero_image_missing", { sessionId, profileId: profile.id, error: heroImageResult.error });
-  }
-
   const draft = {
     ...issue,
     subject: subject.subject,
     previewText: subject.previewText,
-    heroImageUrl: heroImageResult.ok ? heroImageResult.imageUrl : null,
+    heroImageUrl: null,
     promotion,
     footer: composeFooter(profile),
   };
@@ -87,13 +83,50 @@ export async function buildNewsletter({ profileId = "ai-edge", sessionId: reques
     };
   }
 
+  // Only spend image-generation credits after the editorial issue has passed.
+  // A failed council run must not leave behind a misleading orphan hero image.
+  const heroImageResult = await generateHeroImage({
+    profile,
+    heroHeadline: qaResult.newsletter.heroHeadline,
+    sessionId,
+  });
+  if (!heroImageResult.ok) {
+    warn("newsletter.build.hero_image_missing", { sessionId, profileId: profile.id, error: heroImageResult.error });
+    return {
+      ok: false,
+      sessionId,
+      profileId: profile.id,
+      quarantined: true,
+      qa: qaResult,
+      newsletter: qaResult.newsletter,
+      error: `Newsletter editorial content passed but hero image generation failed: ${heroImageResult.error}`,
+    };
+  }
+
+  const finalNewsletter = { ...qaResult.newsletter, heroImageUrl: heroImageResult.imageUrl };
+  const finalValidation = runDeterministicValidators(finalNewsletter, {
+    expectedStoryCount: Math.min(10, 1 + stories.length),
+    requireHeroImage: true,
+  });
+  if (!finalValidation.pass) {
+    return {
+      ok: false,
+      sessionId,
+      profileId: profile.id,
+      quarantined: true,
+      qa: qaResult,
+      newsletter: finalNewsletter,
+      error: `Newsletter final validation failed after hero creation: ${finalValidation.issues.map((issue) => issue.message).join(" | ")}`,
+    };
+  }
+
   const siteShell = await loadSiteShell();
-  const emailHtml = renderNewsletterHtml({ profile, newsletter: qaResult.newsletter });
-  const html = renderNewsletterWebHtml({ profile, newsletter: qaResult.newsletter, siteShell });
-  const plaintext = renderNewsletterPlaintext({ profile, newsletter: qaResult.newsletter });
+  const emailHtml = renderNewsletterHtml({ profile, newsletter: finalNewsletter });
+  const html = renderNewsletterWebHtml({ profile, newsletter: finalNewsletter, siteShell });
+  const plaintext = renderNewsletterPlaintext({ profile, newsletter: finalNewsletter });
   const metadata = buildNewsletterMetadata({
     profile,
-    newsletter: qaResult.newsletter,
+    newsletter: finalNewsletter,
     qaResult,
     generatedAt: now.toISOString(),
     siteShellReleaseSha: siteShell.manifest.releaseSha,
@@ -117,7 +150,7 @@ export async function buildNewsletter({ profileId = "ai-edge", sessionId: reques
     profileId: profile.id,
     quarantined: false,
     qa: qaResult,
-    newsletter: qaResult.newsletter,
+    newsletter: finalNewsletter,
     storage: stored,
     metadata,
     generatedAt: now.toISOString(),

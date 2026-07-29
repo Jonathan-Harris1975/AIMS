@@ -45,10 +45,32 @@ function sourcePayload(lead, stories) {
   }));
 }
 
+async function requestCouncilJson(route, { sessionId, messages, maxTokens = 900 } = {}) {
+  let lastError = null;
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    const raw = await resilientRequest(route, {
+      sessionId,
+      max_tokens: maxTokens,
+      temperature: attempt === 1 ? 0.15 : 0,
+      response_format: { type: "json_object" },
+      messages: attempt === 1
+        ? messages
+        : [
+            messages[0],
+            {
+              role: "user",
+              content: `${messages[1]?.content || ""}\n\nYour previous response was not parseable JSON. Return one valid JSON object only, with no code fence or commentary.`,
+            },
+          ],
+    });
+    try { return parseJson(raw); } catch (error) { lastError = error; }
+  }
+  throw lastError || new Error("Council response was not valid JSON.");
+}
+
 async function runReviewer(route, role, instructions, payload, sessionId) {
-  const raw = await resilientRequest(route, {
+  const data = await requestCouncilJson(route, {
     sessionId,
-    max_tokens: 900,
     messages: [
       {
         role: "system",
@@ -60,7 +82,6 @@ async function runReviewer(route, role, instructions, payload, sessionId) {
       { role: "user", content: JSON.stringify(payload, null, 2) },
     ],
   });
-  const data = parseJson(raw);
   return {
     role,
     score: boundedScore(data.score),
@@ -113,9 +134,8 @@ export async function runNewsletterEditorialCouncil({ profile, newsletter, lead,
     );
 
     const reports = [sourceReview, voiceReview, readerReview];
-    const chairRaw = await resilientRequest("newsletterCouncilChair", {
+    const chair = await requestCouncilJson("newsletterCouncilChair", {
       sessionId,
-      max_tokens: 900,
       messages: [
         {
           role: "system",
@@ -128,7 +148,6 @@ export async function runNewsletterEditorialCouncil({ profile, newsletter, lead,
         { role: "user", content: JSON.stringify({ reports, draft }, null, 2) },
       ],
     });
-    const chair = parseJson(chairRaw);
     const chairScore = boundedScore(chair.score);
     const specialistsPass = reports.every(
       (review) => review.verdict === "pass" && review.score >= THRESHOLDS.newsletter.qaPassThreshold

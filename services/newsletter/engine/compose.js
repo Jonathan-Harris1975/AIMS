@@ -43,7 +43,7 @@ function brandGuardrails(profile) {
 
 function sourceBlock(lead, stories) {
   return [lead, ...stories].map((s, i) =>
-    `[${i}] ${s.title}\nSummary: ${s.summary || "(none supplied)"}\nSource: ${s.link}`
+    `[S${i}] ${s.title}\nSummary: ${s.summary || "(none supplied)"}\nSource: ${s.link}`
   ).join("\n\n");
 }
 
@@ -57,7 +57,7 @@ function attachSource(copy = {}, source = {}) {
   };
 }
 
-export async function composeIssueSections({ profile, lead, stories, sessionId }) {
+export async function composeIssueSections({ profile, lead, stories, sessionId, repairContext = [] }) {
   const bigSources = [lead, ...stories.slice(0, 2)].filter(Boolean);
   const worthSource = stories[2] || null;
   const radarSources = stories.slice(3, 9);
@@ -69,15 +69,24 @@ export async function composeIssueSections({ profile, lead, stories, sessionId }
         `You are the senior editor writing "${profile.displayName}". The reader promise is: ` +
         "we filtered the noise and kept only what deserves attention. Build a compact five-minute issue.\n\n" +
         brandGuardrails(profile) +
-        "\n\nUse sources [0]-[2] for the Big Three in exactly that order. Use source [3] for Worth Using/Watching " +
-        "only if it is genuinely useful or practically relevant; otherwise frame it as 'Worth Watching'. Use the remaining sources for On the Radar. " +
-        "Reality Check must interrogate one claim or implication from source [0], clearly distinguishing known facts from interpretation. " +
+        "\n\nUse sources S0-S2 for the Big Three in exactly that order. Use source S3 for Worth Using/Watching " +
+        "only if it is genuinely useful or practically relevant; otherwise frame it as 'Worth Watching'. Use S4 onward for On the Radar. " +
+        "Every On the Radar item MUST carry the sourceId it summarises. Never reorder a summary onto a different source. " +
+        "Reality Check may interrogate one supplied source, but MUST return that sourceId so its link can be attached deterministically. " +
         "The opening note is 35-65 words and sounds like Jonathan, not a masthead. The reader question should invite a substantive response.\n\n" +
         "Respond with ONLY valid JSON using this shape: " +
-        '{"heroHeadline":string,"openingNoteHtml":string,"bigThree":[{"whatHappened":string,"whyItMatters":string,"jonathanTake":string}],"worthUsing":{"label":string,"summary":string,"whyUseful":string},"onRadar":[string],"realityCheck":{"claim":string,"assessment":string},"yourTurn":string}. ' +
+        '{"heroHeadline":string,"openingNoteHtml":string,"bigThree":[{"whatHappened":string,"whyItMatters":string,"jonathanTake":string}],"worthUsing":{"label":string,"summary":string,"whyUseful":string},"onRadar":[{"sourceId":string,"summary":string}],"realityCheck":{"sourceId":string,"claim":string,"assessment":string},"yourTurn":string}. ' +
         "openingNoteHtml must be one <p> paragraph. No other field may contain HTML.",
     },
-    { role: "user", content: sourceBlock(lead, stories) },
+    {
+      role: "user",
+      content: [
+        sourceBlock(lead, stories),
+        repairContext.length
+          ? `\n\nPRIOR COUNCIL DEFECTS TO FIX IN THIS REVISION:\n${repairContext.slice(0, 18).map((issue) => `- ${issue}`).join("\n")}`
+          : "",
+      ].filter(Boolean).join(""),
+    },
   ];
 
   const raw = await resilientRequest("newsletterCompose", { sessionId, messages, max_tokens: 3200 });
@@ -91,11 +100,22 @@ export async function composeIssueSections({ profile, lead, stories, sessionId }
   const bigCopy = Array.isArray(data.bigThree) ? data.bigThree : [];
   const bigThree = bigSources.map((source, i) => attachSource(bigCopy[i], source));
   const radarCopy = Array.isArray(data.onRadar) ? data.onRadar : [];
-  const onRadar = radarSources.map((source, i) => ({
-    title: source.title,
-    link: source.link,
-    summary: String(radarCopy[i] || source.summary || "").trim(),
-  }));
+  const radarBySourceId = new Map(
+    radarCopy
+      .filter((item) => item && typeof item === "object")
+      .map((item) => [String(item.sourceId || "").trim().toUpperCase(), item])
+      .filter(([sourceId]) => /^S\d+$/.test(sourceId))
+  );
+  const onRadar = radarSources.map((source, i) => {
+    const sourceId = `S${i + 4}`;
+    const copy = radarBySourceId.get(sourceId);
+    return {
+      sourceId,
+      title: source.title,
+      link: source.link,
+      summary: String(copy?.summary || source.summary || "").trim(),
+    };
+  });
 
   const worthUsing = worthSource ? {
     title: worthSource.title,
@@ -112,11 +132,20 @@ export async function composeIssueSections({ profile, lead, stories, sessionId }
     bigThree,
     worthUsing,
     onRadar,
-    realityCheck: {
-      claim: String(data.realityCheck?.claim || lead.title || "").trim(),
-      assessment: String(data.realityCheck?.assessment || "").trim(),
-      link: lead.link,
-    },
+    realityCheck: (() => {
+      const allSources = [lead, ...stories];
+      const requestedSourceId = String(data.realityCheck?.sourceId || "S0").trim().toUpperCase();
+      const match = requestedSourceId.match(/^S(\d+)$/);
+      const index = match ? Number(match[1]) : 0;
+      const source = allSources[index] || lead;
+      return {
+        sourceId: `S${allSources.indexOf(source)}`,
+        sourceTitle: source.title,
+        claim: String(data.realityCheck?.claim || source.title || "").trim(),
+        assessment: String(data.realityCheck?.assessment || "").trim(),
+        link: source.link,
+      };
+    })(),
     yourTurn: String(data.yourTurn || "Which of these developments deserves a closer look next?").trim(),
   };
 }
