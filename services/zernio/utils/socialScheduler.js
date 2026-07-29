@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resilientRequest } from "../../shared/utils/ai-service.js";
 import { info, warn } from "../../../logger.js";
-import { LANE_CONFIG, QUIZ_CONFIG, EBOOK_CONFIG, BLOG_RSS_CONFIG, PODCAST_PROMO_CONFIG, MINI_SERIES_CONFIG, ZERNIO_PROFILE_NAME_GENERAL, ZERNIO_PROFILE_NAME_EBOOKS, ZERNIO_DEFAULT_DRY_RUN, ZERNIO_CROSSPOST_DEDUPE_HOURS, DEFAULT_TIMEZONE, ZERNIO_QUEUE_GUARD_LOOKBACK_PAGES, getZernioRequiredPlatforms, getZernioAccountId, normaliseZernioAccountId, shouldValidateZernioTargetAccounts } from "./config.js";
+import { LANE_CONFIG, QUIZ_CONFIG, EBOOK_CONFIG, BLOG_RSS_CONFIG, PODCAST_PROMO_CONFIG, MINI_SERIES_CONFIG, ZERNIO_POST_MAX_CHARACTERS, ZERNIO_PROFILE_NAME_GENERAL, ZERNIO_PROFILE_NAME_EBOOKS, ZERNIO_DEFAULT_DRY_RUN, ZERNIO_CROSSPOST_DEDUPE_HOURS, DEFAULT_TIMEZONE, ZERNIO_QUEUE_GUARD_LOOKBACK_PAGES, getZernioRequiredPlatforms, getZernioAccountId, normaliseZernioAccountId, shouldValidateZernioTargetAccounts } from "./config.js";
 import { buildDailyPrompt, buildQuizPrompt, buildEbookPostPrompt, buildPodcastPromoPrompt, buildMiniSeriesResearchPrompt, buildMiniSeriesThemePrompt, buildMiniSeriesPostPrompt, buildAccountVariant } from "./prompts.js";
 import { addDays, nextWeekdayDateString, toScheduledDateTime, zonedDateString } from "./date.js";
 import { loadRecentRssContext } from "./feedContext.js";
@@ -313,8 +313,12 @@ function runZernioSocialGate({ contentType = "zernio-social", laneKey = "", post
   } else if (/quiz-answer/i.test(contentType)) {
     if (!/^Quiz Answer!/i.test(content)) defects.push("Quiz answer must start with the answer marker.");
     if (words > 80) warnings.push("Quiz answer is long for a static-image answer card.");
-  } else if (words > 130) {
-    warnings.push("Zernio post is long for organic static social copy.");
+  } else {
+    if (content.length > ZERNIO_POST_MAX_CHARACTERS) {
+      defects.push(`Zernio post exceeds the ${ZERNIO_POST_MAX_CHARACTERS}-character publication ceiling.`);
+    } else if (words > 220) {
+      warnings.push("Zernio post is unusually long; keep the extra space only when it adds real editorial value.");
+    }
   }
 
   if (laneKey === "monday") {

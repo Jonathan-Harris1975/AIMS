@@ -78,6 +78,10 @@ export const ZERNIO_REQUIRED_PLATFORMS = getZernioRequiredPlatforms();
 export const ZERNIO_VALIDATE_TARGET_ACCOUNTS = shouldValidateZernioTargetAccounts();
 export const ZERNIO_DEFAULT_DRY_RUN = boolFromEnv(process.env.ZERNIO_DEFAULT_DRY_RUN, false);
 export const ZERNIO_RSS_LOOKBACK_DAYS = Number(process.env.ZERNIO_RSS_LOOKBACK_DAYS || 7);
+// Platform-safe ceiling for normal Zernio social copy. Editorial prompts target
+// substantially less than this, so the limit prevents accidental essays without
+// forcing good posts into artificially short summaries.
+export const ZERNIO_POST_MAX_CHARACTERS = Math.max(1200, Math.min(2200, Number(process.env.ZERNIO_POST_MAX_CHARACTERS || 1800)));
 // Sourced from config/thresholds.js so the scheduler, docs and this config
 // module never disagree about the duplicate window. ZERNIO_CROSSPOST_DEDUPE_HOURS
 // and ZERNIO_QUEUE_GUARD_LOOKBACK_PAGES remain the supported env var names.

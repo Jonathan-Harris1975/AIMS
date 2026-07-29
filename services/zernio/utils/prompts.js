@@ -1,5 +1,6 @@
 import { buildZernioPersona } from "../../script/utils/toneSetter.js";
 import { britishEnglishPromptGuidance } from "../../content-quality/britishEnglish.js";
+import { ZERNIO_POST_MAX_CHARACTERS } from "./config.js";
 
 function renderHistoryBlock(history = []) {
   const cleaned = Array.isArray(history)
@@ -36,25 +37,25 @@ Make it sound like a high-level AI practitioner who has seen enough hype to ask 
 Avoid motivational language, generic encouragement, corporate filler, and phrases such as "this is about", "the key is", "what matters is", or "the future of".
 Do not explain the person's full biography.
 Do not add any other quote.
-Content target: 55 to 85 words including the verified quote.`,
+Content target: 100 to 160 words including the verified quote.`,
     tuesday: `Write a Tuesday concept post that explains one AI, machine learning, or computing idea in plain English.
 Use one concrete example, contrast, or simple mental model so the reader understands what changes in practice.
 It should feel like a useful mini explainer, not a glossary entry.
 Give the reader one reason the concept matters when choosing, using, or judging AI systems.
 Do not drift into history, biography, or generic "AI is changing everything" filler.
-Content target: 45 to 75 words.`,
+Content target: 100 to 150 words.`,
     wednesday: `Write a Wednesday post for writers, authors, or content creators.
 Focus on one recognisable piece of work: planning, drafting, editing, structuring, research, repurposing, or workflow cleanup.
 Show the before-and-after friction clearly and name the tangible benefit.
 Include one sensible human checkpoint or limitation so it reads like experienced workflow advice rather than tool promotion.
 Do not ramble about authenticity, creativity, or the future in vague terms.
-Content target: 45 to 75 words.`,
+Content target: 100 to 150 words.`,
     thursday: `Write a Thursday post about one believable industry use case for AI.
 Pick a real sector and one concrete task where AI helps: triage, forecasting, document handling, quality checks, routing, fraud review, admin reduction, or similar.
 Show the real-world setting and the operational consequence, including what improves and where human judgement still matters.
 Keep the tone modest and useful.
 Do not oversell, futurise, or make broad industry claims.
-Content target: 45 to 80 words.`,
+Content target: 100 to 160 words.`,
     friday: `Write a Friday operator note about the discipline of improving practical AI systems.
 If verified build context is supplied below, use only that context for any first-person detail.
 If no verified build context is supplied, write a neutral systems note without using I, I've, I'm, my, we, we've, we're, our, or claiming a specific bug, metric, deployment, decision, endpoint, workflow change, or private work item.
@@ -63,7 +64,7 @@ Do not invent first-person specifics.
 Keep it honest and grounded.
 Do not use the phrase "build in public" or "building in public".
 Do not use vague phrases such as "exciting things", "big moves", "another week, another", "small win", or "game-changing".
-Content target: 40 to 70 words.`,
+Content target: 90 to 150 words.`,
     saturday: `Write a Saturday AI ethics or policy post designed to start a thoughtful public debate.
 Frame one specific tension or trade-off that reasonable people could genuinely disagree about.
 Briefly present both credible sides before giving Jonathan's own measured view or the point he thinks deserves more scrutiny.
@@ -71,7 +72,7 @@ Ask one direct, open question that invites readers to explain *why* they disagre
 The discussion must feel intelligent rather than engagement-baiting. Never ask for likes, tags, shares, one-word answers, or "agree/disagree".
 Use the RSS context only if it clearly makes the debate sharper, more timely, and more specific.
 If the RSS context is weak, irrelevant, thin, or repetitive, ignore it and write a strong standalone evergreen debate.
-Content target: 60 to 90 words.`,
+Content target: 110 to 170 words.`,
     sunday: `Write a Sunday spotlight post about one AI figure.
 Cover who they are, one concrete contribution they made, and why that contribution still matters now.
 Make the person feel present rather than reducing them to a CV summary: connect their work to something people now use, debate, build, or take for granted.
@@ -83,7 +84,7 @@ spotlightPerson must contain the canonical name of the human being featured, nev
 The content must name that person and explain at least one concrete contribution they made.
 If the RSS context does not contain a suitable named person, ignore it and write a strong standalone spotlight about a genuine AI figure.
 End with a brief reflection or natural reader prompt.
-Content target: 55 to 85 words.`,
+Content target: 100 to 160 words.`,
   };
 
   return {
@@ -122,6 +123,7 @@ Output rules:
 - topic: 2 to 6 words, specific angle, not generic
 - spotlightPerson: for Sunday only, the canonical person name featured in the post
 - content: the actual post copy only
+- content must never exceed ${ZERNIO_POST_MAX_CHARACTERS} characters including spaces; use the extra room for substance, not padding
 - firstComment: usually empty
 - content must stand alone without hashtags
 - no markdown, no bullets, no labels, no quote marks around the full post
@@ -240,11 +242,11 @@ JSON only.`,
 
 const EBOOK_DAY_GUIDANCE = {
   tuesday:
-    "Write a clear problem and promise post. Explain the topic the book tackles and why a normal reader should care. Keep it sharp, grounded, and no-hype. Target 55 to 85 words.",
+    "Write a clear problem and promise post. Explain the topic the book tackles and why a normal reader should care. Keep it sharp, grounded, and no-hype. Target 100 to 160 words.",
   thursday:
-    "Write a practical use-case post. Focus on one real-world application, workflow, risk, or decision point covered by the book. Make it useful and sceptical, not salesy. Target 55 to 85 words.",
+    "Write a practical use-case post. Focus on one real-world application, workflow, risk, or decision point covered by the book. Make it useful and sceptical, not salesy. Target 100 to 160 words.",
   saturday:
-    "Write a reflective conversation-starter post. Use the book as the springboard for a thoughtful question or tension. End with a natural invitation to comment. Target 60 to 90 words.",
+    "Write a reflective conversation-starter post. Use the book as the springboard for a thoughtful question or tension. End with a natural invitation to comment. Target 110 to 170 words.",
 };
 
 function renderFeaturedBookBlock(featuredBook = {}) {
@@ -327,6 +329,7 @@ Output rules:
 - firstComment must be:
 Featured book: ${featuredBook.title || ""}
 Read more: ${featuredBook.bookUrl || ""}
+- content must never exceed ${ZERNIO_POST_MAX_CHARACTERS} characters including spaces; use the extra room for substance, not padding
 - no hashtags
 - no emojis
 - no markdown
@@ -363,7 +366,8 @@ Episode page/link: ${episode.link || ""}
 Episode publication date from RSS: ${episode.pubDate || ""}
 
 Requirements:
-- content target: 65 to 105 words
+- content target: 100 to 160 words
+- content must never exceed ${ZERNIO_POST_MAX_CHARACTERS} characters including spaces
 - open with the strongest concrete tension, consequence or question supported by the episode description
 - mention Turing's Torch: AI Weekly naturally
 - make clear the episode lands Friday
@@ -505,7 +509,8 @@ Evidence for this post:
 ${renderMiniSeriesSources(relevantSources.length ? relevantSources : sourceItems)}
 
 Requirements:
-- content target: 65-105 words
+- content target: 100-160 words
+- content must never exceed ${ZERNIO_POST_MAX_CHARACTERS} characters including spaces
 - start with the point, tension, consequence or practical question
 - add interpretation, not merely a source summary
 - make this part clearly distinct from the other planned angles
