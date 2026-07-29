@@ -61,7 +61,7 @@ async function recoverThinSourceText(link = "", currentText = "") {
       const meta = [...html.matchAll(/<meta[^>]+(?:name|property)=["'](?:description|og:description|twitter:description)["'][^>]+content=["']([^"']+)["'][^>]*>/gi)]
         .map((m) => m[1])
         .join(" ");
-      const paragraphs = [...html.matchAll(/<p[^>]*>([\s\S]*?)<\/p>/gi)]
+      const paragraphs = [...html.matchAll(/<p\b[^>]*>([\s\S]*?)<\/p>/gi)]
         .slice(0, 8)
         .map((m) => stripHtml(m[1]))
         .join(" ");
@@ -216,7 +216,7 @@ function buildValidationRepairMessages({
         "Do not add new facts, numbers, rankings, dates, prices, quotes, entities or claims.",
         "No double quotation marks anywhere.",
         "No banned filler phrases.",
-        "Summary must be 45 to 70 words where possible and never over 85 words.",
+        "Summary must be 70 to 90 words where possible, must clear the configured minimum character count, and must never exceed 110 words.",
         "Return only headline, blank line, summary.",
       ].join("\n"),
     },
@@ -234,6 +234,7 @@ function buildValidationRepairMessages({
         "Validation defects to fix:",
         defectList,
         "",
+        `Length requirement: the repaired summary must be at least ${RSS_PROMPTS.MIN_SUMMARY_CHARS} characters and should normally be 70-90 words.`,
         "Rewrite once. Do not output labels, notes or metadata.",
       ].join("\n"),
     },
