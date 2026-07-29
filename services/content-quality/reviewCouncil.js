@@ -236,6 +236,84 @@ export const REVIEW_COUNCILS = Object.freeze({
   },
 });
 
+const COUNCIL_PROTOCOLS = Object.freeze({
+  "rss-rewrite-quarantine": {
+    purpose: "Recover source-faithful RSS rewrites without lowering publication standards.",
+    hardGates: ["source fidelity", "minimum useful summary depth", "British English", "no unsupported claims", "publication-safe formatting"],
+    decisionRule: "Approve only after the repaired item passes the deterministic RSS gate; otherwise quarantine the individual item, not the whole feed.",
+  },
+  "blog-phase45": {
+    purpose: "Protect long-form and social-blog editorial quality, evidence, discoverability and conversion without broad rewrites.",
+    hardGates: ["source evidence", "schema integrity", "brand voice", "reader value", "SEO/AEO fit", "link integrity"],
+    decisionRule: "Repair only failed components, revalidate the complete package, and quarantine if any hard gate remains unresolved.",
+  },
+  "blotato-script-quality": {
+    purpose: "Approve short-form scripts and storyboards only when hook, narrative, visual continuity, source fidelity and platform fitness work together.",
+    hardGates: ["source fidelity", "whole-video narrative arc", "visual continuity", "retention", "human-centred visual coverage", "publishing readiness"],
+    decisionRule: "Use targeted micro-repairs first; if the same defect persists without measurable improvement, escalate to a fresh model generation rather than repeating an identical repair.",
+  },
+  "zernio-social-copy": {
+    purpose: "Keep daily social posts useful, readable, platform-native and recognisably Jonathan Harris.",
+    hardGates: ["source/angle integrity", "hook quality", "CTA quality", "platform fit", "visual-copy alignment", "link correctness"],
+    decisionRule: "Approve only when the repaired post passes deterministic platform and brand checks for every targeted channel.",
+  },
+  "zernio-mini-series": {
+    purpose: "Maintain topical relevance, continuity and authority across linked Zernio mini-series posts.",
+    hardGates: ["source integrity", "series continuity", "practical value", "voice", "publishing readiness"],
+    decisionRule: "Repair the failing episode/post only; never rewrite earlier approved series entries to mask a local defect.",
+  },
+  "zernio-ebook-conversion": {
+    purpose: "Turn ebook promotion into credible, benefit-led conversion copy with working purchase routes.",
+    hardGates: ["book/link integrity", "claim integrity", "reader benefit", "CTA clarity", "purchase friction", "brand voice"],
+    decisionRule: "A missing or invalid book URL is an immediate publication block; copy repair may not invent urgency or social proof.",
+  },
+  "quiz-logic": {
+    purpose: "Keep quizzes unambiguous, correctly answerable and visually publishable.",
+    hardGates: ["question clarity", "answer correctness", "option consistency", "audience level", "card readability"],
+    decisionRule: "Any answer-consistency defect blocks publication until the question and all options revalidate together.",
+  },
+  "podcast-on-brand": {
+    purpose: "Protect long-form spoken quality from opening hook through transcript, TTS, metadata and discoverability.",
+    hardGates: ["source integrity", "opening retention", "narrative progression", "spoken naturalness", "TTS readiness", "metadata/keyword fidelity"],
+    decisionRule: "Apply surgical passage-level repair where possible; factual or source defects remain hard quarantine until corrected.",
+  },
+  "newsletter-editorial": {
+    purpose: "Deliver a trustworthy five-minute AI Edge issue with correct story-source pairing and clear Jonathan Harris judgement.",
+    hardGates: ["source/title/link alignment", "fact integrity", "scanability", "Jonathan voice", "reader value", "promotion balance"],
+    decisionRule: "Every specialist hard gate must pass; retries must carry forward exact prior defects and correct only the affected sections.",
+  },
+  "social-performance": {
+    purpose: "Turn measured channel performance into bounded, evidence-led recommendations.",
+    hardGates: ["platform evidence", "thumbnail evidence", "metric provenance", "recommendation specificity"],
+    decisionRule: "Do not infer performance from missing metrics; mark gaps for verification rather than inventing conclusions.",
+  },
+  housekeeping: {
+    purpose: "Remove temporary artefacts without deleting published evidence, manifests or quarantine records.",
+    hardGates: ["published artefact protection", "manifest consistency", "R2 key hygiene", "audit evidence retention"],
+    decisionRule: "Deletion is allowed only for confirmed temporary or duplicate artefacts; uncertain objects are retained.",
+  },
+});
+
+function inferCouncilRemit(role = "") {
+  const text = String(role || "").toLowerCase();
+  if (/source|fact|evidence|claims/.test(text)) return "Verify every claim against supplied evidence and block unsupported certainty or source drift.";
+  if (/british|grammar|spelling|punctuation|stylist|language/.test(text)) return "Enforce polished British English, natural phrasing and publication-grade language mechanics.";
+  if (/voice|brand/.test(text)) return "Protect Jonathan Harris voice, tone consistency, restraint and recognisable editorial judgement.";
+  if (/hook|opening|first-frame|thumbnail/.test(text)) return "Strengthen first-impression stopping power without clickbait or unsupported sensationalism.";
+  if (/retention|pacing|narrative|continuity|storyboard/.test(text)) return "Check progression, pacing and continuity so the content develops as one coherent piece.";
+  if (/seo|aeo|keyword|metadata|internal linking|organic growth/.test(text)) return "Improve discoverability and answer utility while keeping metadata faithful to the actual content.";
+  if (/cta|conversion|marketing|commercial|purchase|promotion|open-rate/.test(text)) return "Improve conversion and action clarity without weakening trust or overstating urgency.";
+  if (/platform|facebook|instagram|tiktok|youtube|social|engagement|hashtag|caption/.test(text)) return "Check platform-native formatting, engagement quality and channel-specific publishing fitness.";
+  if (/schema|manifest|r2|artefact|temporary|duplicate|cleanup|completion/.test(text)) return "Protect technical publication integrity, artefact hygiene and safe completion of the workflow.";
+  if (/chair|arbiter|director|lead/.test(text)) return "Integrate specialist findings, enforce hard gates and make the final bounded publish-or-quarantine decision.";
+  return `Provide an independent specialist review for ${role}, focused on concrete defects and bounded corrections.`;
+}
+
+function detailedCouncilMembers(councilKey) {
+  const council = getCouncilConfig(councilKey);
+  return (council.members || []).map((role, index) => ({ seat: index + 1, role, remit: inferCouncilRemit(role) }));
+}
+
 function boolEnv(name, fallback = false, env = process.env) {
   const raw = String(env[name] ?? "").trim().toLowerCase();
   if (!raw) return fallback;
@@ -263,6 +341,21 @@ export function getReviewCouncilMembers(councilKey) {
   if (members.length >= 6) return members;
   const padded = [...members, ...REVIEW_COUNCILS.housekeeping.members.filter((name) => !members.includes(name))];
   return padded.slice(0, 6);
+}
+
+export function getReviewCouncilDefinition(councilKey) {
+  const council = getCouncilConfig(councilKey);
+  const protocol = COUNCIL_PROTOCOLS[councilKey] || COUNCIL_PROTOCOLS["blog-phase45"];
+  return {
+    councilKey,
+    env: council.env,
+    enabledByDefault: council.defaultEnabled,
+    purpose: protocol.purpose,
+    hardGates: [...protocol.hardGates],
+    decisionRule: protocol.decisionRule,
+    minimumMembersRequired: 6,
+    members: detailedCouncilMembers(councilKey),
+  };
 }
 
 function compactText(value = "") {
@@ -347,6 +440,7 @@ export function repairZernioPostForReviewCouncil(post = {}, { contentType = "zer
 
 function reviewDecision({ councilKey, enabled, originalGate, repairedGate, attempts = [] }) {
   const members = getReviewCouncilMembers(councilKey);
+  const definition = getReviewCouncilDefinition(councilKey);
   const originalDefects = originalGate?.defects || [];
   const repairedDefects = repairedGate?.defects || [];
   const improved = Number(repairedGate?.score || 0) > Number(originalGate?.score || 0) || repairedDefects.length < originalDefects.length;
@@ -356,8 +450,12 @@ function reviewDecision({ councilKey, enabled, originalGate, repairedGate, attem
     councilKey,
     enabled,
     attempted: enabled,
-    minimumMembersRequired: 6,
+    minimumMembersRequired: definition.minimumMembersRequired,
+    purpose: definition.purpose,
+    hardGates: definition.hardGates,
+    decisionRule: definition.decisionRule,
     members,
+    memberDetails: definition.members,
     memberCount: members.length,
     attempts,
     originalScore: originalGate?.score ?? null,
@@ -390,6 +488,10 @@ export async function runReviewCouncilGate({
       enabled: false,
       attempted: false,
       members: getReviewCouncilMembers(councilKey),
+      memberDetails: getReviewCouncilDefinition(councilKey).members,
+      purpose: getReviewCouncilDefinition(councilKey).purpose,
+      hardGates: getReviewCouncilDefinition(councilKey).hardGates,
+      decisionRule: getReviewCouncilDefinition(councilKey).decisionRule,
       memberCount: getReviewCouncilMembers(councilKey).length,
       decision: "disabled_hard_gate_retained",
       reviewedAt: new Date().toISOString(),
@@ -441,8 +543,9 @@ export async function runReviewCouncilGate({
       `${attemptLog.length} of ${effectiveMaxAttempts} minimum repair-and-revalidate attempts used`,
       "deterministic text repair",
       "gate re-validation",
-      "six-member council arbitration",
-      repairedGate?.ok ? "approved repaired artefact" : `quarantine only after ${attemptLog.length} reviewed attempts`,
+      "specialist-seat protocol and hard-gate arbitration",
+      "micro-surgery rule: repair only failed components, then revalidate",
+      repairedGate?.ok ? "chair outcome: approved repaired artefact" : `chair outcome: quarantine after ${attemptLog.length} reviewed attempts`,
     ],
   });
   reviewCouncil.attemptLog = attemptLog;
@@ -469,10 +572,15 @@ export async function runReviewCouncilGate({
 }
 
 export function buildHousekeepingPlan({ lane = "content", artefacts = [] } = {}) {
+  const definition = getReviewCouncilDefinition("housekeeping");
   return {
     councilKey: "housekeeping",
     enabled: isReviewCouncilEnabled("housekeeping"),
+    purpose: definition.purpose,
+    hardGates: definition.hardGates,
+    decisionRule: definition.decisionRule,
     members: getReviewCouncilMembers("housekeeping"),
+    memberDetails: definition.members,
     lane,
     actions: [
       "remove temporary generated files after successful publication",
@@ -489,6 +597,7 @@ export default {
   REVIEW_COUNCILS,
   isReviewCouncilEnabled,
   getReviewCouncilMembers,
+  getReviewCouncilDefinition,
   repairTextForReviewCouncil,
   repairArtifactForReviewCouncil,
   repairZernioPostForReviewCouncil,
