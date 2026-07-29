@@ -183,19 +183,29 @@ function joinUrl(base, path) {
 }
 
 function buildSiteSocialUrls(slug) {
-  const siteBaseUrl = String(process.env.SITE_BASE_URL || "https://jonathan-harris.online").replace(/\/$/, "");
-  const postPath = `/blog/social/posts/${encodeURIComponent(slug)}/`;
-  const canonicalUrl = joinUrl(siteBaseUrl, postPath);
-  const postUrl = joinUrl(siteBaseUrl, `${postPath}index.html`);
+  const publicBaseUrl = String(
+    process.env.BLOG_SOCIAL_PUBLIC_BASE_URL ||
+    "https://blog.jonathan-harris.online/social-media-blog"
+  ).replace(/\/$/, "");
+  const publicPostsBaseUrl = String(
+    process.env.BLOG_SOCIAL_PUBLIC_POSTS_BASE_URL ||
+    `${publicBaseUrl}/posts`
+  ).replace(/\/$/, "");
+  const encodedSlug = encodeURIComponent(slug);
+  const postPath = `/blog/social/posts/${encodedSlug}/`;
+  const postUrl = `${publicPostsBaseUrl}/${encodedSlug}/index.html`;
 
+  // The public URL must point at content that exists now. The main website may
+  // later ingest the same manifest, but AIMS must never report an unbuilt alias
+  // as a successful post URL.
   return {
-    siteBaseUrl,
-    socialHubUrl: joinUrl(siteBaseUrl, "/blog/social/"),
+    siteBaseUrl: publicBaseUrl,
+    socialHubUrl: publicBaseUrl,
     postPath,
-    canonicalUrl,
+    canonicalUrl: postUrl,
     postUrl,
-    postMetaUrl: joinUrl(siteBaseUrl, `${postPath}post.json`),
-    postsManifestUrl: joinUrl(siteBaseUrl, "/blog/social/posts.json"),
+    postMetaUrl: `${publicPostsBaseUrl}/${encodedSlug}/post.json`,
+    postsManifestUrl: `${publicBaseUrl}/posts.json`,
   };
 }
 
