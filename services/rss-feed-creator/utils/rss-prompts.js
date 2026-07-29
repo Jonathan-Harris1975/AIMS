@@ -26,12 +26,12 @@ const MAX_SUMMARY_CHARS =
 const PREFERRED_SUMMARY_WORDS =
   Number(process.env.RSS_PREFERRED_SUMMARY_WORDS) > 0
     ? Number(process.env.RSS_PREFERRED_SUMMARY_WORDS)
-    : 60;
+    : 80;
 
 const ABSOLUTE_SUMMARY_WORDS =
   Number(process.env.RSS_ABSOLUTE_SUMMARY_WORDS) > 0
     ? Number(process.env.RSS_ABSOLUTE_SUMMARY_WORDS)
-    : 85;
+    : 110;
 
 const TITLE_BRAND_PATTERNS = [
   { pattern: /^\s*title\s*:/i, message: 'Title uses banned prefix "Title:"' },
@@ -99,8 +99,7 @@ NON-NEGOTIABLE RULES
 - Stay on the exact subject of the provided source content.
 - Do not invent facts.
 - Do not widen the piece into generic AI commentary.
-- If the content is empty, too thin, broken, or clearly mismatched with the title, output exactly:
-REWRITE_ABORTED
+- Source extraction and thin-content rejection are handled before this prompt. Do not output sentinel values or abort labels.
 
 2. TITLE RULES
 - Output one clean headline only
@@ -118,7 +117,7 @@ REWRITE_ABORTED
 3. SUMMARY RULES
 - Write one short editorial brief in plain text prose
 - Aim for 1 to 2 short paragraphs
-- Target 45 to 60 words, and never exceed 60 words in published RSS output
+- Target 70 to 90 words, and never exceed 110 words in published RSS output
 - Sound spoken, not editorial
 - Be direct and clear about what happened, why it matters, and where the practical catch, uncertainty, or genuine risk sits
 - Mild wit is welcome
@@ -136,7 +135,7 @@ REWRITE_ABORTED
 - Keep numeric claims exactly in the same form used by the source title or text
 - Do not convert 1M into 1 million, 56.6 into a rounded score, or version strings into new forms
 - Do not add unsupported numbers, rankings, dates, prices, percentages or benchmark claims
-- If the source is only a thin teaser, login page, or empty marketing shell, output exactly: REWRITE_ABORTED
+- If the supplied source is imperfect, stay strictly within what is actually supported; do not invent missing facts
 
 4. HARD BANS
 Do not use:
@@ -230,14 +229,14 @@ export function USER_ITEM({
     "- No double quotation marks anywhere in the output",
     "- Keep numeric claims exactly as written in the source title/text",
     "- Do not invent rankings, scores, dates, prices or claims",
-    "- Keep summaries at or below 60 words so the RSS brand validator stays clean",
+    "- Aim for 70-90 words so the summary has enough substance while remaining concise",
     "- Keep sentences short enough to pass readability checks",
     "- Keep at least two concrete topic terms from the source title/text unless doing so would distort meaning",
     "",
     "Return only:",
     `1. headline (maximum ${maxTitleWords} words)`,
     "2. blank line",
-    `3. summary (${minChars}-${maxChars} characters, 45-60 words preferred, 60 words maximum for published RSS)`,
+    `3. summary (${minChars}-${maxChars} characters, 70-90 words preferred, 110 words maximum for published RSS)`,
   ]
     .filter(Boolean)
     .join("\n");
@@ -464,7 +463,7 @@ export function findRssSummaryStyleIssues(title = "", summary = "") {
   }
   if (wordCount > ABSOLUTE_SUMMARY_WORDS) errors.push(`Summary is over ${ABSOLUTE_SUMMARY_WORDS} words (${wordCount}); tighten to one clear judgement`);
   if (wordCount > PREFERRED_SUMMARY_WORDS) warnings.push(`Summary is over the preferred ${PREFERRED_SUMMARY_WORDS}-word editorial brief (${wordCount})`);
-  if (wordCount > 0 && wordCount < 30) warnings.push(`Summary is under the preferred 30-word editorial brief (${wordCount})`);
+  if (wordCount > 0 && wordCount < 55) warnings.push(`Summary is under the preferred 55-word editorial brief (${wordCount})`);
   return { errors, warnings, wordCount };
 }
 
