@@ -7,7 +7,7 @@ import { buildDailyPrompt, buildQuizPrompt, buildEbookPostPrompt, buildPodcastPr
 import { addDays, nextWeekdayDateString, toScheduledDateTime, zonedDateString } from "./date.js";
 import { loadRecentRssContext } from "./feedContext.js";
 import { fetchBlogRssItems } from "./blogRssFeed.js";
-import { fetchLatestPodcastEpisode } from "./podcastRssFeed.js";
+import { fetchPodcastPromoEpisode } from "./podcastRssFeed.js";
 import { getLaneHistory, getWeeklyTopicLedger, recordLaneSchedule, getQuizHistory, recordQuizSchedule, claimScheduleSlot, completeScheduleSlot, releaseScheduleSlot, isRecentSpotlightPerson, recordSpotlightPerson, hasRecentSocialSource, recordUsedSocialSource } from "./state.js";
 import { resolveProfile, inspectZernioTargeting, listPostsWithAnalytics, createPost } from "./zernioClient.js";
 import getSponsor from "../../script/utils/getSponsor.js";
@@ -1992,7 +1992,7 @@ export async function buildAndSchedulePodcastThursdayPromo(options = {}) {
   const apiKey = options.apiKey || process.env.ZERNIO_META_API_KEY;
   const feedUrl = options.feedUrl || PODCAST_PROMO_CONFIG.feedUrl;
   const sessionId = `ZERNIO-PODCAST-PROMO-${publishDate}`;
-  const episode = await fetchLatestPodcastEpisode({ feedUrl });
+  const episode = await fetchPodcastPromoEpisode({ feedUrl });
 
   const generated = await requestStructuredZernioJson({
     routeName: "zernioPodcastPromo",
