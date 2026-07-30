@@ -53,6 +53,7 @@ const {
   R2_BUCKET_BLOG_RSS,
   R2_BUCKET_BRAND_ASSETS,
   R2_BUCKET_AUDITS,
+  R2_BUCKET_COMMS_HUB,
 
   // Legacy/compat (read-only)
   R2_BUCKET_PODCAST_OUTPUT,
@@ -79,6 +80,7 @@ const {
   R2_PUBLIC_BASE_URL_BLOG_RSS,
   R2_PUBLIC_BASE_URL_BRAND_ASSETS,
   R2_PUBLIC_BASE_URL_AUDITS,
+  R2_PUBLIC_BASE_URL_COMMS_HUB,
   R2_PUBLIC_BASE_URL_TRANSCRIPT_HTML,
 
   // NEW — metasystem public URL (optional)
@@ -242,6 +244,11 @@ export const R2_BUCKETS = {
   editedAudio:     R2_BUCKET_EDITED_AUDIO,
   "edited-audio":  R2_BUCKET_EDITED_AUDIO,
 
+  // Comms Hub integrity receipts (public bucket: never store message content or attachments)
+  commsHub:        R2_BUCKET_COMMS_HUB,
+  commshub:        R2_BUCKET_COMMS_HUB,
+  "comms-hub":     R2_BUCKET_COMMS_HUB,
+
   // NEW — metasystem bucket (episode-counter + system files)
   metasystem:      META_SYSTEM_BUCKET_NAME,
   metaSystem:      META_SYSTEM_BUCKET_NAME,
@@ -285,6 +292,9 @@ export const BUCKET_ENV_BY_ALIAS = {
   brandAssets: "R2_BUCKET_BRAND_ASSETS",
   brandassets: "R2_BUCKET_BRAND_ASSETS",
   "brand-assets": "R2_BUCKET_BRAND_ASSETS",
+  commsHub: "R2_BUCKET_COMMS_HUB",
+  commshub: "R2_BUCKET_COMMS_HUB",
+  "comms-hub": "R2_BUCKET_COMMS_HUB",
   metasystem: META_SYSTEM_BUCKET_ENV_NAME,
   metaSystem: META_SYSTEM_BUCKET_ENV_NAME,
 };
@@ -319,6 +329,9 @@ export const PUBLIC_URL_ENV_BY_ALIAS = {
   brandAssets: "R2_PUBLIC_BASE_URL_BRAND_ASSETS",
   brandassets: "R2_PUBLIC_BASE_URL_BRAND_ASSETS",
   "brand-assets": "R2_PUBLIC_BASE_URL_BRAND_ASSETS",
+  commsHub: "R2_PUBLIC_BASE_URL_COMMS_HUB",
+  commshub: "R2_PUBLIC_BASE_URL_COMMS_HUB",
+  "comms-hub": "R2_PUBLIC_BASE_URL_COMMS_HUB",
   metasystem: META_SYSTEM_PUBLIC_URL_ENV_NAME,
   metaSystem: META_SYSTEM_PUBLIC_URL_ENV_NAME,
 };
@@ -366,6 +379,11 @@ export const R2_PUBLIC_URLS = {
   brandAssets:     R2_PUBLIC_BASE_URL_BRAND_ASSETS,
   brandassets:     R2_PUBLIC_BASE_URL_BRAND_ASSETS,
   "brand-assets":  R2_PUBLIC_BASE_URL_BRAND_ASSETS,
+
+  // Comms Hub redacted integrity receipts
+  commsHub:        R2_PUBLIC_BASE_URL_COMMS_HUB,
+  commshub:        R2_PUBLIC_BASE_URL_COMMS_HUB,
+  "comms-hub":     R2_PUBLIC_BASE_URL_COMMS_HUB,
 
   // NEW — metasystem public URL
   metasystem:      META_SYSTEM_PUBLIC_BASE_URL,
