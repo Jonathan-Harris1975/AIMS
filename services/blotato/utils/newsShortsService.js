@@ -305,17 +305,18 @@ You create short-form video packs for Jonathan Harris, an AI author and podcast 
 ${jonathanVoicePrompt({ format: "short-form social video", includeArgumentArc: false })}
 
 # Role — Human-centred Shorts Creative Director
-You design the complete short as one continuous mini-story before writing individual scenes. You write narration-driven, voiceover-based AI short-form video scripts. Jonathan Harris is not on camera, but generated generic adults, faces, hands and bodies are allowed when they make the idea more watchable. The narration carries the story. Every scene must be visualisable without text overlays on generated imagery.
+You design the complete short as one continuous mini-story before writing individual scenes. You write narration-driven, voiceover-based AI short-form video scripts. Jonathan Harris is not on camera. Generated generic adults, faces and bodies are allowed when they make the idea more watchable, but visible hands and fingers are prohibited because the image generator does not render them reliably. Frame people from shoulders-up, behind objects, or with hands fully outside the crop. The narration carries the story. Every scene must be visualisable without text overlays on generated imagery.
 
 # Social Video Laws
 1. The first frame must show a human-readable situation, tension or reaction, not decorative AI wallpaper.
 2. The narration carries one story. Every line must cause the next line to make sense. No isolated slogan fragments, stitched-together observations or filler.
 3. Every mediaSource must obey this absolute rule: ${BLOTATO_STRICT_NO_TEXT_RULE}
 4. ${HUMAN_VISUALS_ENABLED ? BLOTATO_HUMAN_VISUAL_RULE : "Human subjects are optional for this run."}
-5. The hook is non-negotiable. The first 3 seconds must scroll-stop on ${["Facebook", "Instagram", "YouTube Shorts", "TikTok"].join(", ")}.
+5. The hook is non-negotiable. The first 3 seconds must scroll-stop on ${["Facebook", "Instagram", "YouTube Shorts", "TikTok"].join(", ")}. Target a hook performance score of at least 75/100, with a concrete source anchor, contrast/risk and a clear viewer consequence.
 6. STORYBOARD FIRST. Decide the complete narrative arc and visual continuity before creating any scene. The scenes are chapters of one short, not independent illustrations of sentences.
 7. CONTINUITY. Reuse one coherent visual world: the same type of protagonist, setting, lighting language, palette and camera grammar unless the story itself requires a deliberate change. Do not randomly switch between unrelated people, abstract graphics, offices and devices.
 8. FLOW. Use this arc unless the lane demands a tighter variant: Hook → context/problem → consequence → practical meaning/action → takeaway. Each scene must hand the viewer naturally into the next.
+9. HAND SAFETY. Never request visible hands, fingers, typing hands, pointing hands, phones held in hands, handshakes or close-up gestures. If a human is shown, crop below the shoulders or place hands completely outside frame.
 
 # Writing style
 - British English.
@@ -412,7 +413,7 @@ Scene rules:
 - ${HUMAN_VISUALS_ENABLED ? `At least ${HUMAN_VISUAL_MIN_SCENES} scenes must include believable adult human presence through face, hands, body language, posture or a clearly human workplace/customer/creator moment. Do not use Jonathan Harris, celebrities or children.` : "Human subjects are optional for this run."}
 - First frame rule: the first scene must contain a human visual anchor plus the story tension. No object-only opener.
 - Hook performance rule: the hook must be 6 to 18 words, name the tool/model/source anchor where possible, include contrast or risk language such as "but", "risk", "fails", "cost", "cuts" or "changes", and make the viewer consequence clear with "your", "teams", "workers", "customers", "workflow", "people" or "business". Weak descriptive hooks will be rejected before video rendering.
-- Thumbnail rule: thumbnailText must be ${THUMBNAIL_TEXT_WORDS} punchy words, concrete, curiosity-led and readable at phone size. No generic AI News wording.
+- Thumbnail rule: thumbnailText must be ${THUMBNAIL_TEXT_WORDS} punchy words, concrete, curiosity-led and readable at phone size. Aim for >=85/100: use a specific model/tool/company/number where supported plus a clear risk, cost, mistake, rule or contrast. No generic AI News wording.
 - Cost guard: select the lowest-cost generation settings available, specifically ${LOW_COST_IMAGE_MODEL_LABEL} for images and ${LOW_COST_VIDEO_MODEL_LABEL} for video if Blotato offers those choices.
 - Do not use premium video models such as Kling, Luma, Runway, Veo, Minimax, or any other high-credit video option.
 - Do not generate extra unused images, duplicate scenes, B-roll packs, or alternate takes.
@@ -494,15 +495,21 @@ function hasHumanVisualCue(value = "") {
 function humanVisualPromptSuffix(index = 0) {
   if (!HUMAN_VISUALS_ENABLED || index >= HUMAN_VISUAL_MIN_SCENES) return "";
   const cues = [
-    "Include a believable adult human face or upper body reacting to the situation, editorial lighting, natural expression, not a stock-photo grin.",
-    "Include adult hands using a laptop or phone beside the AI workflow, clear body language and human decision tension.",
-    "Include a professional adult silhouette or over-shoulder view showing the work context and the consequence of the AI decision.",
+    "Include a believable adult human face or upper body reacting to the situation, editorial lighting, natural expression, not a stock-photo grin; crop hands and fingers fully outside frame.",
+    "Include a professional adult shown shoulders-up beside the AI workflow, with hands and fingers completely outside frame and clear human decision tension.",
+    "Include a professional adult silhouette or over-shoulder view showing the work context and consequence, composed so hands and fingers are not visible.",
   ];
   return cues[index % cues.length];
 }
 
+function removeHandVisualRequests(value = "") {
+  return cleanText(String(value || "")
+    .replace(/\b(adult\s+)?hands?\s+(using|holding|typing|on|with|beside|over)\b[^,.]*/gi, "upper-body composition with hands fully outside frame")
+    .replace(/\b(fingers?|fingertips?|palms?|thumbs?)\b/gi, "hands outside frame"), 820);
+}
+
 function addHumanVisualCue(value = "", index = 0) {
-  const base = cleanText(value, 760);
+  const base = removeHandVisualRequests(cleanText(value, 760));
   const suffix = humanVisualPromptSuffix(index);
   if (!suffix || hasHumanVisualCue(base)) return base;
   return cleanText(`${base}. ${suffix}`, 860);

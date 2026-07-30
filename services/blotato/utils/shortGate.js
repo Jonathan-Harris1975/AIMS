@@ -128,6 +128,8 @@ function thumbnailPerformanceScore(value = "") {
   else if (words.length >= 2 && words.length <= 6) score += 15;
   if (text.length <= 32) score += 20;
   if (/\bAI|agent|agents|model|models|tool|tools|risk|work|workflow|cost|mistake|verdict|problem|shift|rule\b/i.test(text)) score += 25;
+  if (/\bbut|not|risk|cost|fails?|problem|mistake|rule|shift|versus|vs\.?\b/i.test(text)) score += 10;
+  if (/\b\d[\d,.%]*\b|\bGPT|Claude|Gemini|OpenAI|Google|Meta|Microsoft|Apple|Amazon|Nvidia|Anthropic\b/i.test(text)) score += 10;
   if (/\bnews update|ai news|must watch|shocking|insane|viral|you won't believe\b/i.test(text)) score -= 30;
   return Math.max(0, Math.min(100, score));
 }
@@ -192,10 +194,13 @@ export function runBlotatoShortGate({ pack = {}, article = {}, lane = "" } = {})
   if (humanVisualsEnabled && humanScenes < Math.min(minHumanScenes, sceneCount || minHumanScenes)) {
     defects.push(`Human visual coverage too low for social short (${humanScenes}/${Math.min(minHumanScenes, sceneCount || minHumanScenes)} scenes).`);
   }
-  if (hookScore < 40) defects.push(`Hook performance score too low (${hookScore}/100).`);
-  else if (hookScore < 55) warnings.push(`Hook performance score could be stronger (${hookScore}/100).`);
-  if (thumbnailScore < 40) defects.push(`Thumbnail performance score too low (${thumbnailScore}/100).`);
-  else if (thumbnailScore < 60) warnings.push(`Thumbnail performance score could be stronger (${thumbnailScore}/100).`);
+  if (hookScore < 65) defects.push(`Hook performance score too low (${hookScore}/100; target >=65).`);
+  else if (hookScore < 75) warnings.push(`Hook performance score could be stronger (${hookScore}/100; preferred >=75).`);
+  if (thumbnailScore < 70) defects.push(`Thumbnail performance score too low (${thumbnailScore}/100; target >=70).`);
+  else if (thumbnailScore < 85) warnings.push(`Thumbnail performance score could be stronger (${thumbnailScore}/100; preferred >=85).`);
+
+  const handVisualScenes = asArray(pack.scenes).filter((scene) => /\b(hands?|fingers?|fingertips?|palms?|thumbs?)\b/i.test(String(scene?.mediaSource || ""))).length;
+  if (handVisualScenes > 0) defects.push(`Generated scene prompts mention visible hands/fingers in ${handVisualScenes} scene(s); crop them out or use another composition.`);
   if (/\p{Extended_Pictographic}/u.test(text)) defects.push("Blotato pack contains emoji despite brand rules.");
   if (/```|^\s*[-*]\s+/m.test(text)) defects.push("Blotato pack contains markdown or bullet formatting.");
 
