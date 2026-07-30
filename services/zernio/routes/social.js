@@ -303,9 +303,7 @@ router.post(
   "/ebooks/weekly",
   hookdeckDedupe("zernio:ebooks:weekly"),
   asyncRoute(async (req, res) => {
-    const parsed = validateBody(zernioEbookWeeklyBodySchema,
-  zernioPodcastPromoBodySchema,
-  zernioMiniSeriesBodySchema, req.body);
+    const parsed = validateBody(zernioEbookWeeklyBodySchema, req.body);
     if (!parsed.ok) {
       return res.status(400).json({ ok: false, error: parsed.error });
     }
