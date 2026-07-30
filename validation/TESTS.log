@@ -1,0 +1,138 @@
+TAP version 13
+# Subtest: archive worker uploads only a redacted integrity receipt and completes the leased job
+ok 1 - archive worker uploads only a redacted integrity receipt and completes the leased job
+  ---
+  duration_ms: 1.948572
+  type: 'test'
+  ...
+# Subtest: archive worker classifies temporary upload failure and releases the lease for retry
+ok 2 - archive worker classifies temporary upload failure and releases the lease for retry
+  ---
+  duration_ms: 0.90308
+  type: 'test'
+  ...
+# Subtest: D1 client reuses the Cloudflare query API batch contract and bearer token
+ok 3 - D1 client reuses the Cloudflare query API batch contract and bearer token
+  ---
+  duration_ms: 1.508719
+  type: 'test'
+  ...
+# Subtest: Jotform client verifies both submission and form identity
+ok 4 - Jotform client verifies both submission and form identity
+  ---
+  duration_ms: 0.813497
+  type: 'test'
+  ...
+# Subtest: Comms Hub accepts only the three registered Jotforms
+ok 5 - Comms Hub accepts only the three registered Jotforms
+  ---
+  duration_ms: 0.952233
+  type: 'test'
+  ...
+# Subtest: Comms Hub parses Jotform multipart webhook identifiers without accepting uploaded file parts
+ok 6 - Comms Hub parses Jotform multipart webhook identifiers without accepting uploaded file parts
+  ---
+  duration_ms: 1.057429
+  type: 'test'
+  ...
+# Subtest: verified Jotform intake uses control types, preserves attachment references in D1 payload, and keeps public receipt redacted
+ok 7 - verified Jotform intake uses control types, preserves attachment references in D1 payload, and keeps public receipt redacted
+  ---
+  duration_ms: 2.169179
+  type: 'test'
+  ...
+# Subtest: conversation, message and event identifiers are deterministic across webhook retries
+ok 8 - conversation, message and event identifiers are deterministic across webhook retries
+  ---
+  duration_ms: 0.57933
+  type: 'test'
+  ...
+# Subtest: parsed JSON and URL-encoded webhook bodies obey the Comms Hub byte limit even without Content-Length
+ok 9 - parsed JSON and URL-encoded webhook bodies obey the Comms Hub byte limit even without Content-Length
+  ---
+  duration_ms: 0.366003
+  type: 'test'
+  ...
+# Subtest: intake service verifies the provider before writing the event
+ok 10 - intake service verifies the provider before writing the event
+  ---
+  duration_ms: 2.216139
+  type: 'test'
+  ...
+# Subtest: intake service never persists when provider verification fails
+ok 11 - intake service never persists when provider verification fails
+  ---
+  duration_ms: 0.324491
+  type: 'test'
+  ...
+# Subtest: Comms Hub is additive to the AIMS route registry and owns no replacement server or package
+ok 12 - Comms Hub is additive to the AIMS route registry and owns no replacement server or package
+  ---
+  duration_ms: 4.274042
+  type: 'test'
+  ...
+# Subtest: central auth exposes the exact Jotform ingress and keeps operational routes protected
+ok 13 - central auth exposes the exact Jotform ingress and keeps operational routes protected
+  ---
+  duration_ms: 1.535308
+  type: 'test'
+  ...
+# Subtest: AIMS lifecycle starts, checks and stops the Comms Hub runtime
+ok 14 - AIMS lifecycle starts, checks and stops the Comms Hub runtime
+  ---
+  duration_ms: 2.633308
+  type: 'test'
+  ...
+# Subtest: D1 schema is migration-governed and never created by request or runtime startup
+ok 15 - D1 schema is migration-governed and never created by request or runtime startup
+  ---
+  duration_ms: 2.94503
+  type: 'test'
+  ...
+# Subtest: R2 shared client has the Comms Hub alias and public receipts are explicitly redacted
+ok 16 - R2 shared client has the Comms Hub alias and public receipts are explicitly redacted
+  ---
+  duration_ms: 1.962903
+  type: 'test'
+  ...
+# (node:6963) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: D1 migration creates governed Comms Hub tables and constraints
+ok 17 - D1 migration creates governed Comms Hub tables and constraints
+  ---
+  duration_ms: 4.436783
+  type: 'test'
+  ...
+# Subtest: repository persists the complete vertical slice and makes duplicate webhook delivery idempotent
+ok 18 - repository persists the complete vertical slice and makes duplicate webhook delivery idempotent
+  ---
+  duration_ms: 4.342844
+  type: 'test'
+  ...
+# Subtest: archive queue uses a lease so two AIMS instances cannot claim the same event
+ok 19 - archive queue uses a lease so two AIMS instances cannot claim the same event
+  ---
+  duration_ms: 2.140627
+  type: 'test'
+  ...
+# Subtest: the same numeric submission ID remains unique per registered Jotform
+ok 20 - the same numeric submission ID remains unique per registered Jotform
+  ---
+  duration_ms: 2.069571
+  type: 'test'
+  ...
+# Subtest: schema readiness requires the governed migration ledger entry
+ok 21 - schema readiness requires the governed migration ledger entry
+  ---
+  duration_ms: 2.077002
+  type: 'test'
+  ...
+1..21
+# tests 21
+# suites 0
+# pass 21
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 280.56842
