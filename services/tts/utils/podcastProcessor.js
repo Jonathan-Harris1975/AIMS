@@ -227,6 +227,12 @@ async function updateMetaFile(sessionId, finalBuffer, finalPath, podcastUrl, art
     episodeNumber: existing.episodeNumber || 1,
     episodeSlug,
     episodePageUrl,
+    // This is the publication gate used by the public RSS and website. It is
+    // written only after the final mastered audio has been uploaded successfully.
+    productionComplete: true,
+    productionCompletedAt: new Date().toISOString(),
+    episodePublicationReady: true,
+    episodePublicationReadyAt: new Date().toISOString(),
     createdAt: existing.createdAt || sessionDate,
     updatedAt: new Date().toISOString(),
     artUrl: resolvedArtUrl,
