@@ -140,6 +140,7 @@ const OPERATION_WINDOWS = Object.freeze({
     ["rss-rewrite", "/rss/rewrite", { batchSize: 5 }],
     ["outreach", "/outreach/batch/next", {}],
     ["blog-social", "/blog/social/daily/build", {}],
+    ["zernio-blog-social", "/zernio/blog-rss/daily", {}],
     ["weekly-blog", "/blog/weekly/build", {}],
     ["newsletter-generate", "/newsletter/generate", { profileId: "ai-edge" }, "newsletter"],
     ["newsletter-send", "/newsletter/send", { profileId: "ai-edge" }, "newsletter"],
@@ -150,25 +151,25 @@ const OPERATION_WINDOWS = Object.freeze({
   ],
   "tuesday-am": [
     ["rss-rewrite", "/rss/rewrite", { batchSize: 5 }], ["outreach", "/outreach/batch/next", {}],
-    ["blog-social", "/blog/social/daily/build", {}], ["newsletter-generate", "/newsletter/generate", { profileId: "ai-edge" }, "newsletter"],
+    ["blog-social", "/blog/social/daily/build", {}], ["zernio-blog-social", "/zernio/blog-rss/daily", {}], ["newsletter-generate", "/newsletter/generate", { profileId: "ai-edge" }, "newsletter"],
     ["newsletter-send", "/newsletter/send", { profileId: "ai-edge" }, "newsletter"], ["zernio-tuesday", "/zernio/daily/tuesday", {}],
     ["blotato-autoshorts", "/blotato/autoshorts/publish-now", {}],
   ],
   "wednesday-am": [
     ["rss-rewrite", "/rss/rewrite", { batchSize: 5 }], ["outreach", "/outreach/batch/next", {}],
-    ["blog-social", "/blog/social/daily/build", {}], ["newsletter-generate", "/newsletter/generate", { profileId: "ai-edge" }, "newsletter"],
+    ["blog-social", "/blog/social/daily/build", {}], ["zernio-blog-social", "/zernio/blog-rss/daily", {}], ["newsletter-generate", "/newsletter/generate", { profileId: "ai-edge" }, "newsletter"],
     ["newsletter-send", "/newsletter/send", { profileId: "ai-edge" }, "newsletter"], ["zernio-wednesday", "/zernio/daily/wednesday", {}],
     ["blotato-autoshorts", "/blotato/autoshorts/publish-now", {}],
   ],
   "thursday-am": [
     ["rss-rewrite", "/rss/rewrite", { batchSize: 5 }], ["outreach", "/outreach/batch/next", {}],
-    ["blog-social", "/blog/social/daily/build", {}], ["newsletter-generate", "/newsletter/generate", { profileId: "ai-edge" }, "newsletter"],
+    ["blog-social", "/blog/social/daily/build", {}], ["zernio-blog-social", "/zernio/blog-rss/daily", {}], ["newsletter-generate", "/newsletter/generate", { profileId: "ai-edge" }, "newsletter"],
     ["newsletter-send", "/newsletter/send", { profileId: "ai-edge" }, "newsletter"], ["zernio-thursday", "/zernio/daily/thursday", {}],
     ["blotato-autoshorts", "/blotato/autoshorts/publish-now", {}],
   ],
   "friday-am": [
     ["rss-rewrite", "/rss/rewrite", { batchSize: 5 }], ["outreach", "/outreach/batch/next", {}],
-    ["blog-social", "/blog/social/daily/build", {}], ["newsletter-generate", "/newsletter/generate", { profileId: "ai-edge" }, "newsletter"],
+    ["blog-social", "/blog/social/daily/build", {}], ["zernio-blog-social", "/zernio/blog-rss/daily", {}], ["newsletter-generate", "/newsletter/generate", { profileId: "ai-edge" }, "newsletter"],
     ["newsletter-send", "/newsletter/send", { profileId: "ai-edge" }, "newsletter"], ["zernio-friday", "/zernio/daily/friday", {}],
     ["blotato-autoshorts", "/blotato/autoshorts/publish-now", {}],
   ],
@@ -184,18 +185,33 @@ const OPERATION_WINDOWS = Object.freeze({
   ],
 });
 
-function assertMorningBlogSocialCoverage() {
-  const weekdayMorningWindows = ["monday-am", "tuesday-am", "wednesday-am", "thursday-am", "friday-am"];
-  for (const windowName of weekdayMorningWindows) {
+function assertContentOperationWindows() {
+  const weekdayWindows = ["monday-am", "tuesday-am", "wednesday-am", "thursday-am", "friday-am"];
+  for (const windowName of weekdayWindows) {
     const tasks = OPERATION_WINDOWS[windowName] || [];
-    const hasBlogSocial = tasks.some(([name, path]) => name === "blog-social" && path === "/blog/social/daily/build");
-    if (!hasBlogSocial) {
-      throw new Error(`Operational schedule invariant failed: ${windowName} must include /blog/social/daily/build`);
+    const paths = tasks.map((task) => task[1]);
+    const blogBuildIndex = paths.indexOf("/blog/social/daily/build");
+    const zernioBlogIndex = paths.indexOf("/zernio/blog-rss/daily");
+    if (blogBuildIndex < 0 || zernioBlogIndex !== blogBuildIndex + 1) {
+      throw new Error(`${windowName} must run /zernio/blog-rss/daily immediately after /blog/social/daily/build`);
     }
+  }
+
+  const mondayPaths = OPERATION_WINDOWS["monday-am"].map((task) => task[1]);
+  for (const required of ["/zernio/daily/monday", "/zernio/ebooks/weekly", "/zernio/quiz/weekly"]) {
+    if (!mondayPaths.includes(required)) throw new Error(`monday-am missing required content task ${required}`);
+  }
+
+  const thursdayPaths = OPERATION_WINDOWS["thursday-am"].map((task) => task[1]);
+  if (!thursdayPaths.includes("/zernio/daily/thursday")) throw new Error("thursday-am missing Zernio Thursday lane/podcast promo trigger");
+
+  const fridayPmPaths = OPERATION_WINDOWS["friday-pm"].map((task) => task[1]);
+  for (const required of ["/podcast/run", "/zernio/daily/saturday", "/zernio/daily/sunday"]) {
+    if (!fridayPmPaths.includes(required)) throw new Error(`friday-pm missing required weekend/podcast task ${required}`);
   }
 }
 
-assertMorningBlogSocialCoverage();
+assertContentOperationWindows();
 
 function operationNewsletterEnabled() {
   return booleanEnv("AIMS_OPERATION_NEWSLETTER_ENABLED", false);
