@@ -26,6 +26,7 @@ async function loadStoredIssue(profile, sessionId, date) {
     storage: {
       prefix,
       htmlUrl: buildPublicUrl(bucketKey, `${prefix}/index.html`),
+      emailUrl: buildPublicUrl(bucketKey, `${prefix}/email.html`),
       textUrl: buildPublicUrl(bucketKey, `${prefix}/index.txt`),
       metaUrl: buildPublicUrl(bucketKey, `${prefix}/metadata.json`),
     },
