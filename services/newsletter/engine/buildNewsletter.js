@@ -88,6 +88,8 @@ export async function buildNewsletter({ profileId = "ai-edge", sessionId: reques
   const heroImageResult = await generateHeroImage({
     profile,
     heroHeadline: qaResult.newsletter.heroHeadline,
+    leadStory: lead,
+    bigThree: qaResult.newsletter.bigThree,
     sessionId,
   });
   if (!heroImageResult.ok) {
