@@ -1983,6 +1983,26 @@ export async function buildAndScheduleWeeklyMiniSeries(options = {}) {
   };
 }
 
+
+const PODCAST_PROMO_RURAL_VISUAL_PATTERN = /\b(?:countryside|rural|moorland|field|forest|mountain|beach|road|path|crossroads?|signpost|direction sign|wooden sign|trail|fork in (?:the )?road|doorway|open door)\b/i;
+
+function buildPodcastPromoArtworkBrief({ episode = {}, generatedPrompt = "" } = {}) {
+  const candidate = compactText(generatedPrompt || "");
+  const rejected = PODCAST_PROMO_RURAL_VISUAL_PATTERN.test(candidate);
+  const episodeContext = [episode.title, episode.description].map((value) => compactText(value || "")).filter(Boolean).join(" — ");
+  const technicalFallback = [
+    "Create premium editorial technology artwork for Turing's Torch: AI Weekly.",
+    `Episode context: ${episodeContext || "practical artificial-intelligence infrastructure, governance and deployment"}.`,
+    "Build one cinematic, unmistakably technical scene using concrete AI compute infrastructure: dark data-centre racks, accelerator hardware, network security equipment, model-evaluation instrumentation, developer tooling or another subject directly supported by the episode context.",
+    "Show tension through lighting, scale, physical systems and operational consequences, not through symbolic travel or lifestyle imagery.",
+  ].join(" ");
+
+  return {
+    prompt: rejected || !candidate ? technicalFallback : `${candidate} ${technicalFallback}`,
+    rejectedGeneratedPrompt: rejected,
+  };
+}
+
 export async function buildAndSchedulePodcastThursdayPromo(options = {}) {
   const publishDate = options.publishDate || nextWeekdayDateString("thursday", DEFAULT_TIMEZONE, new Date());
   const scheduledDateTime = options.scheduledDateTime || toScheduledDateTime(publishDate, PODCAST_PROMO_CONFIG.publishTime);
@@ -2021,18 +2041,27 @@ export async function buildAndSchedulePodcastThursdayPromo(options = {}) {
   }
 
   if (!post.imageUrl) {
+    const artworkBrief = buildPodcastPromoArtworkBrief({ episode, generatedPrompt: generated.imagePrompt });
+    if (artworkBrief.rejectedGeneratedPrompt) {
+      info("zernio.podcast_promo.image_prompt.rejected", {
+        sessionId,
+        reason: "rural-or-generic-directional-metaphor",
+        generatedPrompt: generated.imagePrompt,
+      });
+    }
     const artwork = await createSocialArtwork({
       sessionId,
       lane: "podcast-thursday-promo",
       date: publishDate,
       prompt: [
-        generated.imagePrompt,
+        artworkBrief.prompt,
         `Episode title for context only, never render it: ${episode.title}.`,
-        "Turing's Torch: AI Weekly promotion artwork. Create one premium editorial visual metaphor for the episode theme, not a magazine cover or title card.",
-        "Use a single strong focal object or environment, cinematic lighting, bold seasonal colour contrast and generous negative space.",
-        "No presenter, guest, humanoid robot, android, cyborg, human hands, fingers or close-up anatomy unless verified source imagery is supplied.",
+        "The result must read immediately as serious AI, compute, cybersecurity, governance or developer-infrastructure editorial artwork.",
+        "No outdoor landscape, countryside, field, forest, mountain, beach, road, path, crossroads, arrow, signpost, direction sign, door or travel metaphor.",
+        "Use a single strong technical focal system or environment, cinematic lighting, bold seasonal colour contrast and generous negative space.",
+        "No presenter, guest, humanoid robot, android, cyborg, human hands, fingers or close-up anatomy.",
         "ABSOLUTELY NO visible words, letters, numbers, captions, logos, labels, signage, UI text, pseudo-text, typographic shapes or invented magazine mastheads anywhere in the image.",
-        "Avoid generic glowing brains, circuit-head silhouettes, floating networks, stock-office scenes and decorative AI wallpaper.",
+        "Avoid generic glowing brains, circuit-head silhouettes, floating decorative networks, stock-office scenes and decorative AI wallpaper.",
       ].filter(Boolean).join("\n"),
       fallbackUrl: episode.imageUrl || PODCAST_PROMO_CONFIG.fallbackImageUrl,
     });

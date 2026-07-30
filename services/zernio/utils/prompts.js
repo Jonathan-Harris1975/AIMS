@@ -373,7 +373,7 @@ Requirements:
 - make clear the episode lands Friday
 - include the episode title once
 - finish with a restrained reason to listen, not engagement bait
-- imagePrompt: describe one premium topic-specific editorial visual metaphor with a single strong focal object or environment, cinematic lighting, bold seasonal colour contrast and negative space. Do not design a magazine cover or title card. No people, humanoid robots, androids, cyborgs, hands or fingers. No visible words, letters, numbers, captions, logos, labels, signage, UI, pseudo-text or typographic shapes. Avoid generic glowing brains, circuit-head silhouettes, networks and corporate stock imagery.
+- imagePrompt: describe one premium, unmistakably technology-focused editorial scene grounded in the supplied episode title and description. Use concrete AI infrastructure, compute hardware, data-centre systems, cybersecurity equipment, model evaluation environments, developer tooling or another episode-specific technical setting. The image must look like podcast/editorial technology artwork at first glance, not a generic life-choice metaphor. Use cinematic lighting, bold seasonal colour contrast, depth and negative space. Do not design a magazine cover or title card. No people, humanoid robots, androids, cyborgs, hands or fingers. No visible words, letters, numbers, captions, logos, labels, signage, UI, pseudo-text or typographic shapes. Never use countryside, rural landscapes, moorland, fields, forests, mountains, beaches, roads, paths, crossroads, arrows, direction signs, signposts, doors or forks in a road as the main metaphor. Avoid generic glowing brains, circuit-head silhouettes, decorative networks and corporate stock imagery.
 - JSON only`,
   };
 }
