@@ -2,7 +2,7 @@
 
 **Live route prefix:** `/ops`
 
-Owns AIMS weekday AM/PM task sequences and operational readiness endpoints. MAST calls these windows; AIMS executes the individual internal service tasks sequentially.
+Owns AIMS weekday morning task sequences, the Friday podcast window and operational readiness endpoints. MAST calls these windows; AIMS executes the individual internal service tasks sequentially.
 
 ## HTTP contract
 
@@ -16,7 +16,7 @@ Owns AIMS weekday AM/PM task sequences and operational readiness endpoints. MAST
 
 ## Behaviour
 
-AM and PM task spacing use `AIMS_OPERATION_AM_DELAY_MS` and `AIMS_OPERATION_PM_DELAY_MS`; task execution uses `AIMS_OPERATION_TASK_TIMEOUT_MS`. `AIMS_OPS_PREFLIGHT_STRICT` controls whether missing readiness inputs become hard failures. Friday PM runs Blotato `ai-playbook`, then podcast, then Saturday and Sunday Zernio scheduling.
+Morning task spacing uses `AIMS_OPERATION_AM_DELAY_MS`; the Friday podcast window uses `AIMS_OPERATION_PM_DELAY_MS`. Task execution uses `AIMS_OPERATION_TASK_TIMEOUT_MS`. `AIMS_OPS_PREFLIGHT_STRICT` controls whether missing readiness inputs become hard failures. Friday AM prepares both Blotato schedule slots and Saturday/Sunday Zernio content. Friday PM runs only the podcast pipeline.
 
 ## Implementation
 
