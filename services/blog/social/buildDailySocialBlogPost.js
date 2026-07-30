@@ -209,6 +209,53 @@ function buildSiteSocialUrls(slug) {
   };
 }
 
+async function triggerWebsiteRebuild() {
+  const hooks = [
+    String(process.env.WEBSITE_REBUILD_HOOK || "https://hooks.jonathan-harris.online/4q1mkzkfvb566f").trim(),
+    String(process.env.WEBSITE_REBUILD_HOOK_FALLBACK || "").trim(),
+  ].filter(Boolean);
+
+  if (!hooks.length) {
+    return { ok: false, skipped: true, reason: "missing-hook-url" };
+  }
+
+  let lastError = null;
+
+  for (const hookUrl of hooks) {
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        info("blog.social.rebuild.start", { hookUrl, attempt });
+
+        const response = await fetch(hookUrl, { method: "POST" });
+        const body = await response.text().catch(() => "");
+
+        if (response.ok) {
+          info("blog.social.rebuild.success", { hookUrl, attempt, status: response.status });
+          return { ok: true, status: response.status, hookUrl, attempt, body };
+        }
+
+        lastError = new Error(`non-2xx response ${response.status}`);
+        warn("blog.social.rebuild.nonOk", {
+          hookUrl,
+          attempt,
+          status: response.status,
+          body: body.slice(0, 500),
+        });
+      } catch (rebuildError) {
+        lastError = rebuildError;
+        warn("blog.social.rebuild.fail", {
+          hookUrl,
+          attempt,
+          error: rebuildError?.message || "Unknown rebuild trigger error",
+        });
+      }
+    }
+  }
+
+  return { ok: false, error: lastError?.message || "Unknown rebuild trigger error" };
+}
+
+
 async function quarantinePhase5SocialPost({ gate, dateId, socialPackage, cleanedSources, publishedObjects, context, dryRun }) {
   const key = phase5QuarantineKey("organic-visual-social", dateId);
   const record = buildPhase5QuarantineRecord({
@@ -927,13 +974,7 @@ export async function buildDailySocialBlogPost({
 
     const publishedManifest = await loadExistingPostsManifest(OUT_BLOG_BUCKET_KEY, manifestKey);
     const rss = await publishSocialBlogRssFeed({ manifest: publishedManifest, prefix });
-    // Blog Social is published directly to the R2-backed blog surface.
-    // It must never trigger a Website rebuild; the Website repository is a separate deployment surface.
-    const rebuild = {
-      ok: true,
-      skipped: true,
-      reason: "blog-social-r2-publish-no-website-rebuild",
-    };
+    const rebuild = { ok: true, skipped: true, reason: "blog-social-r2-rss-does-not-require-website-rebuild" };
 
     recordEditorialEvent({
       pipeline: "blog-social",
