@@ -148,41 +148,39 @@ const OPERATION_WINDOWS = Object.freeze({
     ["zernio-ebooks", "/zernio/ebooks/weekly", { dryRun: false, profileName: "Default", accountId: "ALL", usePodcastFeaturedBook: true }, null, true],
     ["zernio-quiz", "/zernio/quiz/weekly", {}],
     ["blotato-autoshorts", "/blotato/autoshorts/schedule", {}],
+    ["blotato-evening", "/blotato/shorts/news-insight/schedule", {}],
   ],
   "tuesday-am": [
     ["rss-rewrite", "/rss/rewrite", { batchSize: 5 }], ["outreach", "/outreach/batch/next", {}],
     ["blog-social", "/blog/social/daily/build", {}], ["zernio-blog-social", "/zernio/blog-rss/daily", {}], ["newsletter-generate", "/newsletter/generate", { profileId: "ai-edge" }, "newsletter"],
     ["newsletter-send", "/newsletter/send", { profileId: "ai-edge" }, "newsletter"], ["zernio-tuesday", "/zernio/daily/tuesday", {}],
     ["blotato-autoshorts", "/blotato/autoshorts/schedule", {}],
+    ["blotato-evening", "/blotato/shorts/model-verdict/schedule", {}],
   ],
   "wednesday-am": [
     ["rss-rewrite", "/rss/rewrite", { batchSize: 5 }], ["outreach", "/outreach/batch/next", {}],
     ["blog-social", "/blog/social/daily/build", {}], ["zernio-blog-social", "/zernio/blog-rss/daily", {}], ["newsletter-generate", "/newsletter/generate", { profileId: "ai-edge" }, "newsletter"],
     ["newsletter-send", "/newsletter/send", { profileId: "ai-edge" }, "newsletter"], ["zernio-wednesday", "/zernio/daily/wednesday", {}],
     ["blotato-autoshorts", "/blotato/autoshorts/schedule", {}],
+    ["blotato-evening", "/blotato/shorts/ai-at-work/schedule", {}],
   ],
   "thursday-am": [
     ["rss-rewrite", "/rss/rewrite", { batchSize: 5 }], ["outreach", "/outreach/batch/next", {}],
     ["blog-social", "/blog/social/daily/build", {}], ["zernio-blog-social", "/zernio/blog-rss/daily", {}], ["newsletter-generate", "/newsletter/generate", { profileId: "ai-edge" }, "newsletter"],
     ["newsletter-send", "/newsletter/send", { profileId: "ai-edge" }, "newsletter"], ["zernio-thursday", "/zernio/daily/thursday", {}],
     ["blotato-autoshorts", "/blotato/autoshorts/schedule", {}],
+    ["blotato-evening", "/blotato/shorts/reality-check/schedule", {}],
   ],
   "friday-am": [
     ["rss-rewrite", "/rss/rewrite", { batchSize: 5 }], ["outreach", "/outreach/batch/next", {}],
     ["blog-social", "/blog/social/daily/build", {}], ["zernio-blog-social", "/zernio/blog-rss/daily", {}], ["newsletter-generate", "/newsletter/generate", { profileId: "ai-edge" }, "newsletter"],
     ["newsletter-send", "/newsletter/send", { profileId: "ai-edge" }, "newsletter"], ["zernio-friday", "/zernio/daily/friday", {}],
     ["blotato-autoshorts", "/blotato/autoshorts/schedule", {}],
-  ],
-  "monday-pm": [["blotato-evening", "/blotato/shorts/news-insight/schedule", {}]],
-  "tuesday-pm": [["blotato-evening", "/blotato/shorts/model-verdict/schedule", {}]],
-  "wednesday-pm": [["blotato-evening", "/blotato/shorts/ai-at-work/schedule", {}]],
-  "thursday-pm": [["blotato-evening", "/blotato/shorts/reality-check/schedule", {}]],
-  "friday-pm": [
     ["blotato-evening", "/blotato/shorts/ai-playbook/schedule", {}],
-    ["podcast", "/podcast/run", {}],
     ["zernio-saturday", "/zernio/daily/saturday", {}],
     ["zernio-sunday", "/zernio/daily/sunday", {}],
   ],
+  "friday-pm": [["podcast", "/podcast/run", {}]],
 });
 
 function assertContentOperationWindows() {
@@ -205,9 +203,26 @@ function assertContentOperationWindows() {
   const thursdayPaths = OPERATION_WINDOWS["thursday-am"].map((task) => task[1]);
   if (!thursdayPaths.includes("/zernio/daily/thursday")) throw new Error("thursday-am missing Zernio Thursday lane/podcast promo trigger");
 
+  const eveningByDay = {
+    monday: "/blotato/shorts/news-insight/schedule",
+    tuesday: "/blotato/shorts/model-verdict/schedule",
+    wednesday: "/blotato/shorts/ai-at-work/schedule",
+    thursday: "/blotato/shorts/reality-check/schedule",
+    friday: "/blotato/shorts/ai-playbook/schedule",
+  };
+  for (const [day, required] of Object.entries(eveningByDay)) {
+    const paths = OPERATION_WINDOWS[`${day}-am`].map((task) => task[1]);
+    if (!paths.includes(required)) throw new Error(`${day}-am missing scheduled Blotato PM task ${required}`);
+  }
+
+  const fridayAmPaths = OPERATION_WINDOWS["friday-am"].map((task) => task[1]);
+  for (const required of ["/zernio/daily/saturday", "/zernio/daily/sunday"]) {
+    if (!fridayAmPaths.includes(required)) throw new Error(`friday-am missing weekend Zernio preparation task ${required}`);
+  }
+
   const fridayPmPaths = OPERATION_WINDOWS["friday-pm"].map((task) => task[1]);
-  for (const required of ["/podcast/run", "/zernio/daily/saturday", "/zernio/daily/sunday"]) {
-    if (!fridayPmPaths.includes(required)) throw new Error(`friday-pm missing required weekend/podcast task ${required}`);
+  if (fridayPmPaths.length !== 1 || fridayPmPaths[0] !== "/podcast/run") {
+    throw new Error("friday-pm must contain only /podcast/run");
   }
 }
 
