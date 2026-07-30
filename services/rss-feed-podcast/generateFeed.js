@@ -38,6 +38,23 @@ function joinUrl(base, segment) {
   return `${String(base || "").replace(/\/$/, "")}/${String(segment || "").replace(/^\//, "")}`;
 }
 
+function hasPositiveNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0;
+}
+
+function isEpisodePublicationReady(meta = {}) {
+  if (meta.episodePublicationReady === true || meta.productionComplete === true) return true;
+
+  // Backwards compatibility for older, genuinely produced episodes that pre-date
+  // the explicit lifecycle marker. Planned metadata must not satisfy this gate.
+  return (
+    isAbsoluteHttpUrl(meta.podcastUrl) &&
+    hasPositiveNumber(meta.fileSize) &&
+    (hasPositiveNumber(meta.actualDurationSeconds) || hasPositiveNumber(meta.duration))
+  );
+}
+
 function buildEpisodePageUrl(meta, sessionId) {
   const explicitPageUrl = stripQuotes(meta.episodePageUrl || "");
   if (isAbsoluteHttpUrl(explicitPageUrl)) {
@@ -186,6 +203,20 @@ function mapMetaToEpisode(meta, channelDiscovery = {}) {
       hasSessionId: !!sessionId,
       rawSessionId: meta.sessionId,
       nestedSessionId: meta.session?.sessionId,
+    });
+    return null;
+  }
+
+  if (!isEpisodePublicationReady(meta)) {
+    warn("podcast.rss.episode_not_produced.skipped", {
+      sessionId,
+      title,
+      episodeNumber: meta.episodeNumber || null,
+      episodePublicationReady: meta.episodePublicationReady === true,
+      productionComplete: meta.productionComplete === true,
+      hasPodcastUrl: isAbsoluteHttpUrl(meta.podcastUrl),
+      fileSize: Number(meta.fileSize || 0),
+      actualDurationSeconds: Number(meta.actualDurationSeconds || 0),
     });
     return null;
   }
