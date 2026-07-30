@@ -1,0 +1,3062 @@
+--- a/.env.example
++++ b/.env.example
+@@ -185,3 +185,31 @@
+ OPS_ALERT_WEBHOOK_URL=
+ OPS_ALERT_WEBHOOK_TOKEN=
+ OPS_ALERT_TIMEOUT_MS=8000
++
++# ------------------------------------------------------------------
++# AIMS Comms Hub
++# ------------------------------------------------------------------
++# Enable only after `npm run comms:migrate` succeeds.
++COMMS_HUB_ENABLED=false
++D1_UUID=
++D1_API_KEY=
++JOTFORM_API_KEY=
++JOTFORM_API_BASE_URL=https://api.jotform.com
++R2_BUCKET_COMMS_HUB=comms-hub
++R2_PUBLIC_BASE_URL_COMMS_HUB=https://pub-92a1942f120c461ca539518f52806ac5.r2.dev
++COMMS_HUB_MAX_WEBHOOK_BYTES=1048576
++COMMS_HUB_JOTFORM_TIMEOUT_MS=10000
++COMMS_HUB_D1_TIMEOUT_MS=15000
++COMMS_HUB_PROVIDER_RETRY_ATTEMPTS=4
++COMMS_HUB_PROVIDER_RETRY_BASE_MS=500
++COMMS_HUB_PROVIDER_RETRY_MAX_MS=8000
++COMMS_HUB_ARCHIVE_WORKER_ENABLED=true
++COMMS_HUB_ARCHIVE_POLL_MS=60000
++COMMS_HUB_ARCHIVE_BATCH_SIZE=10
++COMMS_HUB_ARCHIVE_LEASE_MS=120000
++COMMS_HUB_ARCHIVE_MAX_ATTEMPTS=10
++# Reserved for the later one.com email adapter. Do not load these into the
++# Jotform-only runtime until that adapter is deployed.
++ONECOM_INFO_PASSWORD=
++ONECOM_NEWSLETTER_PASSWORD=
++ONECOM_ADMIN_PASSWORD=
+--- a/README.md
++++ b/README.md
+@@ -1,6 +1,6 @@
+ # AI Management Suite
+ 
+-AI Management Suite is a modular Node/Express application for Jonathan Harris’s content automation workflows. The repository currently combines podcast generation, RSS/newsletter rewriting, script generation, text-to-speech processing, artwork generation, blog publishing, OneUp social scheduling, outreach lead discovery, audit orchestration, Cloudflare cache purge support, self-hosted RSS short links, shared Cloudflare R2 storage utilities, shared OpenRouter routing, and deployment/test tooling.
++AI Management Suite is a modular Node/Express application for Jonathan Harris’s content automation workflows. The repository currently combines podcast generation, RSS/newsletter rewriting, script generation, text-to-speech processing, artwork generation, blog publishing, social scheduling, outreach lead discovery, audit orchestration, the AIMS Comms Hub, Cloudflare cache purge support, self-hosted RSS short links, shared Cloudflare R2 storage utilities, shared OpenRouter routing, and deployment/test tooling.
+ 
+ This README documents the repository as it exists in code. It separates **implemented**, **partially implemented**, and **present but not wired** areas so maintainers are not chasing phantom routes through the boiler-room fog. 🛠️
+ 
+@@ -10,6 +10,7 @@
+ - [Artwork](services/artwork/README.md)
+ - [Blog](services/blog/README.md)
+ - [Cloudflare purge](services/cloudflare-purge/README.md)
++- [Comms Hub](services/comms-hub/README.md)
+ - [OneUp](services/oneup/README.md)
+ - [Outreach](services/outreach/README.md)
+ - [Podcast](services/podcast/README.md)
+@@ -153,6 +154,7 @@
+ /oneup                services/oneup/index.js
+ /audits               audits/index.js
+ /rss-links            services/rss-links/index.js
++/comms-hub            services/comms-hub/index.js
+ ```
+ 
+ ### Middleware and operational behaviour
+@@ -177,6 +179,7 @@
+ | artwork | `services/artwork/` | Implemented | OpenRouter image generation for podcast, blog and direct artwork requests. | `/artwork/create, /artwork/generate` | routes/generateArtwork.js, createBlogArtwork.js, createPodcastArtwork.js | OpenRouter, R2 | art, blogImages buckets | Indirect via blog/podcast tests |
+ | blog | `services/blog/` | Implemented | Weekly AI briefing posts, social/daily posts, blog RSS publishing and rebuild hooks. | `/blog/weekly/build, /blog/rss/rebuild, /blog/social/*` | weekly/buildWeeklyBlogPost.js, social/buildDailySocialBlogPost.js, rss/publishBlogRssFeed.js | OpenRouter, R2, website rebuild webhook | blog, blogImages, blogRss buckets | blog-*.test.js |
+ | cloudflare-purge | `services/cloudflare-purge/` | Implemented | Cloudflare zone cache purge API wrapper with optional shared-secret header. | `/cloudflare/health, /cloudflare/purge` | routes/index.js, utils/purgeCloudflareCache.js | Cloudflare API | None | Covered by route/runtime tests only if added later |
++| comms-hub | `services/comms-hub/` | Implemented first production slice | Verifies the three registered Jotform submissions, persists contacts/conversations/messages to D1 and archives redacted integrity receipts through a leased R2 queue. | `/comms-hub/*` | routes/index.js, intakeService.js, repositories/commsRepository.js, workers/archiveWorker.js | Jotform API, Cloudflare D1, shared R2 client | D1 plus `comms-hub` R2 receipts | comms-hub-*.test.js |
+ | oneup | `services/oneup/` | Implemented | Daily lane, weekly quiz, weekly ebook and published-history workflows for OneUp. | `/oneup/*` | routes/social.js, utils/socialScheduler.js, utils/oneupClient.js | OneUp API, OpenRouter, RSS context, local ebook catalogue | Durable scheduler state through shared state utilities | oneup-social.test.js |
+ | outreach | `services/outreach/` | Implemented | SERP discovery, domain filtering, enrichment, email validation, scoring and Google Sheets append. | `/outreach/*` | routes/index.js, services/outreachCore.js, services/serp-OutreachService.js, services/batchService.js | SERP API, Hunter, Prospeo, Apollo, ZeroBounce, urlscan, OpenPageRank, Google Sheets | R2 metasystem for batch cursor | No dedicated route test found |
+ | podcast | `services/podcast/` | Implemented | End-to-end podcast pipeline wrapper: script, artwork, TTS, podcast RSS, cleanup and rebuild hook. | `/podcast/run, /podcast/status/:sessionId, /podcast/health` | index.js, runPodcastPipeline.js | Script, Artwork, TTS, Podcast RSS, R2 | Job store plus podcast/audio/meta buckets | podcast-*.test.js |
+@@ -243,6 +246,12 @@
+ | `POST` | `/rss-links/shorten` | rss-links | Creates or reuses an RSS short link. | Required `url` absolute http/https URL. | None | 201 if new, 200 if reused. |
+ | `GET` | `/rss-links/:key` | rss-links | Redirects a short key to original URL. | Path `key` 4-32 alphanumeric. | None | 302 redirect; query string preserved. |
+ | `GET` | `/rss-links/:key/index.html` | rss-links | Redirect page URL variant. | Path `key` 4-32 alphanumeric. | None | 302 redirect; query string preserved. |
++| `GET` | `/comms-hub/health` | comms-hub | Reports sanitised Comms Hub configuration and runtime readiness. | None | Public health path. | 200 when ready or disabled; 503 when enabled but not ready. |
++| `POST` | `/comms-hub/intake/jotform` | comms-hub | Accepts a Jotform webhook, re-fetches the submission through Jotform API, verifies form/submission identity and persists the event atomically. | `formID`, `submissionID`; JSON, URL-encoded or multipart identifiers. | Exact public path only; Jotform API re-verification; global rate limit; 1 MB service limit. | 202 accepted, 200 duplicate, 4xx rejected, 5xx provider/storage failure. |
++| `GET` | `/comms-hub/diagnostics` | comms-hub | Returns migration and archive-queue status. | None | AIMS bearer token. | 200 when schema is ready, otherwise 503. |
++| `GET` | `/comms-hub/conversations/:conversationId` | comms-hub | Reads one persisted conversation with contact, messages and attachment references. | Path `conversationId`. | AIMS bearer token. | 200, 400 or 404. |
++| `GET` | `/comms-hub/archive/status` | comms-hub | Returns archive queue counts by state. | None | AIMS bearer token. | 200 JSON. |
++| `POST` | `/comms-hub/archive/drain` | comms-hub | Runs one bounded archive drain using distributed D1 leases. | Optional `limit`. | AIMS bearer token. | 200 with processed/completed/failed counts. |
+ 
+ ## Present but not wired or legacy route files
+ 
+@@ -306,6 +315,21 @@
+ | `CLOUDFLARE_PURGE_TIMEOUT_MS` | Timeout, delay or TTL control in milliseconds. | services/cloudflare-purge | Optional/conditional | `15000` | Set only for services you run. |
+ | `RSS_OBJECT_KEY` | Newsletter RSS fetch/rewrite/feed configuration. | routes/rss.js, services/rss-feed-creator | Optional/conditional | `feed.xml` | Secret value; keep in Koyeb/GitHub secret storage. |
+ | `ALLOW_EPHEMERAL_STATE` | Durable/local state backend and paths. | server.js, scripts/*, shared utilities | Optional/conditional | `false` | Set only for services you run. |
++
++### AIMS Comms Hub
++
++| Name | Purpose | Used by | Required | Default/template | Notes |
++|---|---|---|---|---|---|
++| `COMMS_HUB_ENABLED` | Enables service runtime and readiness enforcement. | services/comms-hub, server.js | Required switch | `false` | Keep false until `npm run comms:migrate` succeeds. |
++| `D1_UUID` | Cloudflare D1 database UUID. | services/comms-hub/clients/d1Client.js | Required when enabled | `blank` | Koyeb secret-backed value. |
++| `D1_API_KEY` | Cloudflare API token with D1 read/write access. | services/comms-hub/clients/d1Client.js | Required when enabled | `blank` | Koyeb secret-backed value. |
++| `JOTFORM_API_KEY` | Re-fetches and verifies webhook submissions. | services/comms-hub/clients/jotformClient.js | Required when enabled | `blank` | Koyeb secret-backed value. |
++| `JOTFORM_API_BASE_URL` | Jotform API origin. | services/comms-hub/clients/jotformClient.js | Conditional | `https://api.jotform.com` | Override for the account’s Jotform region when required. |
++| `R2_BUCKET_COMMS_HUB` | R2 bucket for redacted integrity receipts. | shared R2 client, archive worker | Required when enabled | `comms-hub` | Message content and attachments are not written to this public bucket. |
++| `R2_PUBLIC_BASE_URL_COMMS_HUB` | Public receipt URL base required by the shared R2 uploader. | shared R2 client | Required when enabled | supplied `r2.dev` URL | No trailing slash preferred. |
++| `COMMS_HUB_MAX_WEBHOOK_BYTES` | Service-specific webhook size cap. | domain/webhook.js, server.js | Optional | `1048576` | Enforced for parsed and streaming bodies. |
++| `COMMS_HUB_ARCHIVE_WORKER_ENABLED` | Enables the leased receipt worker. | runtime.js, archiveWorker.js | Optional | `true` | D1 remains the authoritative private store. |
++| `ONECOM_INFO_PASSWORD`, `ONECOM_NEWSLETTER_PASSWORD`, `ONECOM_ADMIN_PASSWORD` | Reserved env mappings for the later one.com email adapter. | Not loaded by the Jotform slice | Not yet required | `blank` | Map to the supplied Koyeb secrets only when the email adapter is implemented. |
+ 
+ ### Cloudflare purge
+ 
+--- a/config/production.defaults.env
++++ b/config/production.defaults.env
+@@ -627,3 +627,25 @@
+ CONTENT_MASTER_COUNCIL_TIMEOUT_MS=300000
+ CONTENT_MASTER_COUNCIL_MAX_RETRIES=2
+ RAMS_DISPATCH_MAX_ATTEMPTS=5
++
++# -----------------------------------------------------------------------------
++# AIMS COMMS HUB — non-secret production defaults
++# Run `npm run comms:migrate` before setting COMMS_HUB_ENABLED=true.
++# D1_UUID, D1_API_KEY and JOTFORM_API_KEY remain Koyeb secret-backed values.
++# The public R2 bucket is restricted to redacted integrity receipts.
++# -----------------------------------------------------------------------------
++COMMS_HUB_ENABLED=false
++JOTFORM_API_BASE_URL=https://api.jotform.com
++R2_BUCKET_COMMS_HUB=comms-hub
++R2_PUBLIC_BASE_URL_COMMS_HUB=https://pub-92a1942f120c461ca539518f52806ac5.r2.dev
++COMMS_HUB_MAX_WEBHOOK_BYTES=1048576
++COMMS_HUB_JOTFORM_TIMEOUT_MS=10000
++COMMS_HUB_D1_TIMEOUT_MS=15000
++COMMS_HUB_PROVIDER_RETRY_ATTEMPTS=4
++COMMS_HUB_PROVIDER_RETRY_BASE_MS=500
++COMMS_HUB_PROVIDER_RETRY_MAX_MS=8000
++COMMS_HUB_ARCHIVE_WORKER_ENABLED=true
++COMMS_HUB_ARCHIVE_POLL_MS=60000
++COMMS_HUB_ARCHIVE_BATCH_SIZE=10
++COMMS_HUB_ARCHIVE_LEASE_MS=120000
++COMMS_HUB_ARCHIVE_MAX_ATTEMPTS=10
+--- a/deployment-check.js
++++ b/deployment-check.js
+@@ -2,6 +2,7 @@
+ import { fileURLToPath } from "node:url";
+ import path from "node:path";
+ import { durableStateEnvHint, hasDurableStateEnv } from "./services/shared/utils/durableStateEnv.js";
++import { getCommsHubMissingEnv } from "./services/comms-hub/config.js";
+ 
+ const REQUIRED_ENV_KEYS = [
+   "NODE_ENV",
+@@ -39,10 +40,11 @@
+ }
+ 
+ export function getMissingEnvKeys(env = process.env) {
+-  return REQUIRED_ENV_KEYS.filter((key) => {
++  const missing = REQUIRED_ENV_KEYS.filter((key) => {
+     const value = env[key];
+     return value === undefined || String(value).trim() === "";
+   });
++  return [...new Set([...missing, ...getCommsHubMissingEnv(env)])];
+ }
+ 
+ export function getDurableStateError(env = process.env) {
+--- a/env.template
++++ b/env.template
+@@ -640,3 +640,35 @@
+ PODCAST_SYNTHESIS_REASONING_EFFORT=low
+ PODCAST_EDITORIAL_REASONING_EFFORT=none
+ PODCAST_REPAIR_REASONING_EFFORT=none
++
++# ------------------------------------------------------------------
++# AIMS Comms Hub
++# Exact Jotforms are enforced in services/comms-hub/config.js:
++# contact 260281179574362; case study 262063136008044;
++# podcast enquiry 262097861889073.
++# ------------------------------------------------------------------
++COMMS_HUB_ENABLED=false
++D1_UUID=
++D1_API_KEY=
++JOTFORM_API_KEY=
++JOTFORM_API_BASE_URL=https://api.jotform.com
++R2_BUCKET_COMMS_HUB=comms-hub
++R2_PUBLIC_BASE_URL_COMMS_HUB=https://pub-92a1942f120c461ca539518f52806ac5.r2.dev
++COMMS_HUB_MAX_WEBHOOK_BYTES=1048576
++COMMS_HUB_JOTFORM_TIMEOUT_MS=10000
++COMMS_HUB_D1_TIMEOUT_MS=15000
++COMMS_HUB_PROVIDER_RETRY_ATTEMPTS=4
++COMMS_HUB_PROVIDER_RETRY_BASE_MS=500
++COMMS_HUB_PROVIDER_RETRY_MAX_MS=8000
++COMMS_HUB_ARCHIVE_WORKER_ENABLED=true
++COMMS_HUB_ARCHIVE_POLL_MS=60000
++COMMS_HUB_ARCHIVE_BATCH_SIZE=10
++COMMS_HUB_ARCHIVE_LEASE_MS=120000
++COMMS_HUB_ARCHIVE_MAX_ATTEMPTS=10
++# Koyeb secret-name mapping for the later one.com email adapter:
++# ONECOM_INFO_PASSWORD       -> info-Jonathan-harris
++# ONECOM_NEWSLETTER_PASSWORD -> newsletter-Jonathan-harris
++# ONECOM_ADMIN_PASSWORD      -> admin-Jonathan-harris
++ONECOM_INFO_PASSWORD=
++ONECOM_NEWSLETTER_PASSWORD=
++ONECOM_ADMIN_PASSWORD=
+--- a/package.json
++++ b/package.json
+@@ -16,7 +16,9 @@
+     "env:doctor:file": "node scripts/koyebEnvDoctor.js",
+     "verify": "npm test && npm run build",
+     "blog:repair-links:check": "node scripts/backfill-blog-main-site-links.js",
+-    "blog:repair-links:apply": "node scripts/backfill-blog-main-site-links.js --apply"
++    "blog:repair-links:apply": "node scripts/backfill-blog-main-site-links.js --apply",
++    "comms:migrate": "node scripts/commsHubMigrate.js",
++    "comms:migrate:status": "node scripts/commsHubMigrate.js --status"
+   },
+   "engines": {
+     "node": "22.x",
+--- a/routes/index.js
++++ b/routes/index.js
+@@ -19,6 +19,7 @@
+ import rssLinksRoutes from "../services/rss-links/index.js";
+ import opsRoutes from "../services/ops/index.js";
+ import newsletterRoutes from "../services/newsletter/index.js";
++import commsHubRoutes from "../services/comms-hub/index.js";
+ 
+ const router = express.Router();
+ 
+@@ -43,6 +44,7 @@
+   { path: "/rss-links", name: "RSS Links (URL Shortener)", routes: rssLinksRoutes },
+   { path: "/ops", name: "Operational Preflight", routes: opsRoutes },
+   { path: "/newsletter", name: "Newsletter Engine (AI Edge)", routes: newsletterRoutes },
++  { path: "/comms-hub", name: "AIMS Comms Hub", routes: commsHubRoutes },
+ ];
+ 
+ try {
+--- a/scripts/commsHubMigrate.js
++++ b/scripts/commsHubMigrate.js
+@@ -0,0 +1,99 @@
++import "../config/loadEnv.js";
++import { createHash } from "node:crypto";
++import { readdir, readFile } from "node:fs/promises";
++import path from "node:path";
++import { fileURLToPath } from "node:url";
++import { loadCommsHubConfig } from "../services/comms-hub/config.js";
++import { D1Client } from "../services/comms-hub/clients/d1Client.js";
++import { COMMS_HUB_REQUIRED_MIGRATIONS } from "../services/comms-hub/migrations/manifest.js";
++
++const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
++const migrationDir = path.join(root, "services", "comms-hub", "migrations");
++const migrationTableSql = `CREATE TABLE IF NOT EXISTS comms_hub_schema_migrations (
++  version TEXT PRIMARY KEY,
++  checksum TEXT NOT NULL,
++  applied_at TEXT NOT NULL
++)`;
++
++function checksum(content) {
++  return createHash("sha256").update(content).digest("hex");
++}
++
++function splitSqlStatements(sql) {
++  return String(sql || "")
++    .split(/;\s*(?:\r?\n|$)/)
++    .map((statement) => statement.replace(/^\s*--.*$/gm, "").trim())
++    .filter(Boolean);
++}
++
++async function loadMigrations() {
++  const names = (await readdir(migrationDir))
++    .filter((name) => /^\d+_[a-z0-9_-]+\.sql$/i.test(name))
++    .sort();
++  const migrations = [];
++  for (const name of names) {
++    const sql = await readFile(path.join(migrationDir, name), "utf8");
++    migrations.push({ version: name.replace(/\.sql$/i, ""), name, sql, checksum: checksum(sql) });
++  }
++  return migrations;
++}
++
++async function main() {
++  const statusOnly = process.argv.includes("--status");
++  const config = loadCommsHubConfig({ ...process.env, COMMS_HUB_ENABLED: "true" }, { requireEnabled: true });
++  const d1 = new D1Client(config);
++  await d1.query(migrationTableSql);
++  const appliedResult = await d1.query(
++    `SELECT version, checksum, applied_at FROM comms_hub_schema_migrations ORDER BY version ASC`
++  );
++  const applied = new Map((appliedResult.results || []).map((row) => [row.version, row]));
++  const migrations = await loadMigrations();
++  const discoveredVersions = new Set(migrations.map((migration) => migration.version));
++  const missingFiles = COMMS_HUB_REQUIRED_MIGRATIONS.filter((version) => !discoveredVersions.has(version));
++  if (missingFiles.length) {
++    throw new Error(`Required Comms Hub migration files are missing: ${missingFiles.join(", ")}`);
++  }
++
++  for (const migration of migrations) {
++    const existing = applied.get(migration.version);
++    if (existing && existing.checksum !== migration.checksum) {
++      throw new Error(`Migration checksum mismatch for ${migration.name}. Applied migrations are immutable.`);
++    }
++  }
++
++  if (statusOnly) {
++    console.log(JSON.stringify({
++      ok: true,
++      databaseId: config.d1DatabaseId,
++      migrations: migrations.map((migration) => ({
++        version: migration.version,
++        checksum: migration.checksum,
++        status: applied.has(migration.version) ? "applied" : "pending",
++        appliedAt: applied.get(migration.version)?.applied_at || null,
++      })),
++    }, null, 2));
++    return;
++  }
++
++  let appliedCount = 0;
++  for (const migration of migrations) {
++    if (applied.has(migration.version)) continue;
++    const appliedAt = new Date().toISOString();
++    await d1.batch([
++      ...splitSqlStatements(migration.sql).map((sql) => ({ sql })),
++      {
++        sql: `INSERT INTO comms_hub_schema_migrations (version, checksum, applied_at) VALUES (?, ?, ?)`,
++        params: [migration.version, migration.checksum, appliedAt],
++      },
++    ]);
++    appliedCount += 1;
++    console.log(`Applied ${migration.name}`);
++  }
++
++  console.log(JSON.stringify({ ok: true, applied: appliedCount, total: migrations.length }));
++}
++
++main().catch((error) => {
++  console.error(error?.stack || error?.message || String(error));
++  process.exit(1);
++});
+--- a/scripts/koyebEnvDoctor.js
++++ b/scripts/koyebEnvDoctor.js
+@@ -31,6 +31,16 @@
+   "BLOTATO_KEEPALIVE_INTERVAL_MS",
+   "BLOTATO_PUBLISH_STAGGER_MS",
+   "BLOTATO_SCRIPT_TIMEOUT_MS",
++  "COMMS_HUB_MAX_WEBHOOK_BYTES",
++  "COMMS_HUB_JOTFORM_TIMEOUT_MS",
++  "COMMS_HUB_D1_TIMEOUT_MS",
++  "COMMS_HUB_PROVIDER_RETRY_ATTEMPTS",
++  "COMMS_HUB_PROVIDER_RETRY_BASE_MS",
++  "COMMS_HUB_PROVIDER_RETRY_MAX_MS",
++  "COMMS_HUB_ARCHIVE_POLL_MS",
++  "COMMS_HUB_ARCHIVE_BATCH_SIZE",
++  "COMMS_HUB_ARCHIVE_LEASE_MS",
++  "COMMS_HUB_ARCHIVE_MAX_ATTEMPTS",
+ ]);
+ 
+ const POSITIVE_INTEGER_ENVS = new Set([
+@@ -53,6 +63,16 @@
+   "BLOTATO_KEEPALIVE_INTERVAL_MS",
+   "BLOTATO_PUBLISH_STAGGER_MS",
+   "BLOTATO_SCRIPT_TIMEOUT_MS",
++  "COMMS_HUB_MAX_WEBHOOK_BYTES",
++  "COMMS_HUB_JOTFORM_TIMEOUT_MS",
++  "COMMS_HUB_D1_TIMEOUT_MS",
++  "COMMS_HUB_PROVIDER_RETRY_ATTEMPTS",
++  "COMMS_HUB_PROVIDER_RETRY_BASE_MS",
++  "COMMS_HUB_PROVIDER_RETRY_MAX_MS",
++  "COMMS_HUB_ARCHIVE_POLL_MS",
++  "COMMS_HUB_ARCHIVE_BATCH_SIZE",
++  "COMMS_HUB_ARCHIVE_LEASE_MS",
++  "COMMS_HUB_ARCHIVE_MAX_ATTEMPTS",
+ ]);
+ 
+ const BOOLEAN_ENVS = new Set([
+@@ -78,6 +98,8 @@
+   "BLOTATO_TIKTOK_IS_BRANDED_CONTENT",
+   "BLOTATO_TIKTOK_IS_YOUR_BRAND",
+   "BLOTATO_TIKTOK_IS_AI_GENERATED",
++  "COMMS_HUB_ENABLED",
++  "COMMS_HUB_ARCHIVE_WORKER_ENABLED",
+ ]);
+ 
+ const URL_ENVS = new Set([
+@@ -122,6 +144,8 @@
+   "R2_PUBLIC_BASE_URL_RSS",
+   "R2_PUBLIC_BASE_URL_TRANSCRIPT",
+   "R2_PUBLIC_BASE_URL_TRANSCRIPT_HTML",
++  "R2_PUBLIC_BASE_URL_COMMS_HUB",
++  "JOTFORM_API_BASE_URL",
+   "SITE_BASE_URL",
+ ]);
+ const VALID_BOOLEAN_VALUES = new Set(["1", "0", "true", "false", "yes", "no", "on", "off"]);
+--- a/scripts/startupCheck.js
++++ b/scripts/startupCheck.js
+@@ -18,6 +18,7 @@
+   "services/blog/index.js",
+   "services/rss-feed-creator/index.js",
+   "services/blotato/index.js",
++  "services/comms-hub/index.js",
+ ];
+ 
+ const importPattern = /(?:import\s+(?:[^'"()]+?\s+from\s+)?|export\s+[^'"()]+?\s+from\s+|import\()(["'])(\.{1,2}\/[^'"()]+)\1/g;
+--- a/server.js
++++ b/server.js
+@@ -10,6 +10,8 @@
+ import { hasDurableStateEnv, durableStateEnvHint } from "./services/shared/utils/durableStateEnv.js";
+ import * as lifecycle from "./services/shared/utils/lifecycle.js";
+ import { requireAimsBearerAuth } from "./services/shared/middleware/suiteAuth.js";
++import { getCommsHubReadiness } from "./services/comms-hub/config.js";
++import { getCommsHubRuntimeReadiness, startCommsHubRuntime, stopCommsHubRuntime } from "./services/comms-hub/runtime.js";
+ 
+ export const app = express();
+ 
+@@ -195,6 +197,15 @@
+         : `ephemeral or incomplete durable state configuration. ${durableStateEnvHint()}`,
+     },
+     { name: "openrouter", ok: !production || usableSecret(process.env.OPENROUTER_API_KEY), detail: usableSecret(process.env.OPENROUTER_API_KEY) ? "configured" : "missing" },
++    (() => {
++      const configuration = getCommsHubReadiness();
++      const runtime = getCommsHubRuntimeReadiness();
++      return {
++        name: "comms_hub",
++        ok: configuration.ready && runtime.ready,
++        detail: runtime.status,
++      };
++    })(),
+   ];
+   const ready = checks.every((check) => check.ok);
+   return { ready, status: ready ? "ready" : "degraded", checks };
+@@ -204,6 +215,21 @@
+   .split(",")
+   .map((value) => value.trim())
+   .filter(Boolean);
++
++function isCommsHubJotformIntakeRequest(req) {
++  const method = String(req?.method || "").toUpperCase();
++  const path = String(req?.originalUrl || req?.url || "")
++    .split("?")[0]
++    .replace(/\/+$/, "")
++    .toLowerCase();
++  return method === "POST" && path === "/comms-hub/intake/jotform";
++}
++
++function recordCommsHubParsedBodyBytes(req, _res, buffer) {
++  if (isCommsHubJotformIntakeRequest(req)) {
++    req.aimsParsedBodyBytes = Buffer.isBuffer(buffer) ? buffer.length : 0;
++  }
++}
+ 
+ app.use(
+   cors({
+@@ -218,8 +244,8 @@
+   })
+ );
+ 
+-app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || "10mb" }));
+-app.use(express.urlencoded({ extended: true, limit: process.env.URLENCODED_BODY_LIMIT || "10mb" }));
++app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || "10mb", verify: recordCommsHubParsedBodyBytes }));
++app.use(express.urlencoded({ extended: true, limit: process.env.URLENCODED_BODY_LIMIT || "10mb", verify: recordCommsHubParsedBodyBytes }));
+ 
+ app.use(
+   pinoHttp({
+@@ -387,10 +413,13 @@
+         "/cloudflare",
+         "/zernio",
+         "/audits",
++        "/comms-hub",
+       ],
+     });
+     debug("server.trustProxy", { trustProxy });
+   });
++
++  void startCommsHubRuntime();
+ 
+   if (!processHandlersBound) {
+     processHandlersBound = true;
+@@ -425,6 +454,7 @@
+     });
+   });
+ 
++  await stopCommsHubRuntime();
+   server = undefined;
+ }
+ 
+@@ -441,10 +471,17 @@
+     if (err) {
+       error("server.shutdown.fail", { signal, error: err.message });
+       process.exit(1);
++      return;
+     }
+ 
+-    info("server.shutdown.complete", { signal });
+-    process.exit(signal === "uncaughtException" ? 1 : 0);
++    void stopCommsHubRuntime()
++      .catch((runtimeError) => {
++        error("commsHub.runtime.stopFailed", { signal, error: runtimeError?.message || String(runtimeError) });
++      })
++      .finally(() => {
++        info("server.shutdown.complete", { signal });
++        process.exit(signal === "uncaughtException" ? 1 : 0);
++      });
+   });
+ 
+   setTimeout(() => {
+--- a/services/comms-hub/README.md
++++ b/services/comms-hub/README.md
+@@ -0,0 +1,48 @@
++# AIMS Comms Hub
++
++Comms Hub is service 15 inside the existing AIMS process. It is mounted at `/comms-hub`; it does not own a second server, package, Docker image or process lifecycle.
++
++## Implemented first slice
++
++`POST /comms-hub/intake/jotform` accepts only these forms:
++
++| Form | Jotform ID | Workflow |
++|---|---:|---|
++| Contact me | 260281179574362 | `contact_intake` |
++| Case study | 262063136008044 | `case_study_intake` |
++| Podcast enquiry | 262097861889073 | `podcast_enquiry_intake` |
++
++The public webhook is accepted by the central AIMS authentication middleware only for that exact method and path. Every event is then re-fetched from the Jotform API and the returned form/submission identifiers must match before anything is written.
++
++The verified submission is persisted to D1 as a contact, conversation, inbound message, attachment references and an idempotent intake event. A distributed D1 lease queue writes a redacted integrity receipt to the `comms-hub` R2 bucket. Because the supplied `r2.dev` bucket is public, names, email addresses, telephone numbers, answers, message bodies, file URLs and uploaded files are never written to R2.
++
++## Operational constraint
++
++This Jotform-only slice uses Cloudflare's authenticated D1 REST query endpoint because AIMS runs on Koyeb rather than inside a Cloudflare Worker. Keep this transport limited to the three low-volume forms. Before adding one.com mailbox ingestion or Zernio social event volume, place D1 behind a constrained Cloudflare Worker API or another purpose-built data-plane adapter. The repository and service layers are separated so that transport can be replaced without rewriting conversation logic.
++
++The supplied `r2.dev` address is a public development endpoint. The archive worker therefore writes redacted integrity receipts only. A private bucket or controlled custom domain should be used before any non-redacted archive is introduced.
++
++## Deployment order
++
++1. Configure `D1_UUID`, `D1_API_KEY`, `JOTFORM_API_KEY`, the existing R2 credentials and the Comms Hub bucket values.
++2. Keep `COMMS_HUB_ENABLED=false`.
++3. Run `npm run comms:migrate:status`.
++4. Run `npm run comms:migrate`.
++5. Set `COMMS_HUB_ENABLED=true` and redeploy AIMS.
++6. Verify `/readyz`, `/comms-hub/health` and authenticated `/comms-hub/diagnostics`.
++7. Point each Jotform webhook at `https://<AIMS_HOST>/comms-hub/intake/jotform`.
++
++Migrations are explicit and immutable. Runtime startup never creates or alters D1 tables.
++
++## Routes
++
++- `GET /comms-hub/health` public configuration health.
++- `POST /comms-hub/intake/jotform` public exact-path webhook with API re-verification.
++- `GET /comms-hub/diagnostics` AIMS bearer token required.
++- `GET /comms-hub/conversations/:conversationId` AIMS bearer token required.
++- `GET /comms-hub/archive/status` AIMS bearer token required.
++- `POST /comms-hub/archive/drain` AIMS bearer token required.
++
++## Deliberate boundaries
++
++Zernio remains the configuration owner for Facebook, Instagram and YouTube DMs/comments. one.com remains the email host. Their ingestion adapters are later Comms Hub slices and are not pretended into existence here. The three password variables are reserved in the env templates but are not loaded by this Jotform service.
+--- a/services/comms-hub/clients/d1Client.js
++++ b/services/comms-hub/clients/d1Client.js
+@@ -0,0 +1,157 @@
++import { CommsHubError } from "../errors.js";
++import { withRetry } from "./retry.js";
++async function logRetry(event, data) {
++  const { log } = await import("../../../logger.js");
++  log.warn(event, data);
++}
++
++
++async function sharedFetchWithTimeout(url, options) {
++  const { fetchWithTimeout } = await import("../../shared/http-client.js");
++  return fetchWithTimeout(url, options);
++}
++
++
++function responseMessages(payload) {
++  const entries = [...(Array.isArray(payload?.errors) ? payload.errors : []), ...(Array.isArray(payload?.messages) ? payload.messages : [])];
++  return entries.map((entry) => String(entry?.message || "").trim()).filter(Boolean).join("; ").slice(0, 1000);
++}
++
++async function parseCloudflareJson(response, operation) {
++  let payload;
++  try {
++    payload = await response.json();
++  } catch (cause) {
++    throw new CommsHubError(502, "cloudflare_response_invalid", `${operation} returned invalid JSON.`, {
++      cause,
++      retryable: true,
++      failureClass: "temporary",
++      publicMessage: "Cloudflare storage is temporarily unavailable.",
++    });
++  }
++  if (!response.ok || payload?.success !== true) {
++    const detail = responseMessages(payload);
++    const status = Number(response.status) || 502;
++    throw new CommsHubError(status === 401 || status === 403 ? 503 : 502, "cloudflare_api_failed", `${operation} failed${detail ? `: ${detail}` : ` with status ${status}`}.`, {
++      retryable: [408, 425, 429, 500, 502, 503, 504].includes(status),
++      failureClass: status >= 500 || status === 429 ? "temporary" : "permanent",
++      publicMessage: "Cloudflare storage operation failed.",
++    });
++  }
++  return payload;
++}
++
++export class D1Client {
++  constructor(config, { fetchImpl = sharedFetchWithTimeout } = {}) {
++    this.config = config;
++    this.fetchImpl = fetchImpl;
++    this.accountId = config.cloudflareAccountId || "";
++  }
++
++  async request(url, init = {}) {
++    return this.fetchImpl(url, {
++      ...init,
++      timeout: this.config.d1TimeoutMs,
++      headers: {
++        authorization: `Bearer ${this.config.d1ApiToken}`,
++        accept: "application/json",
++        ...(init.headers || {}),
++      },
++    });
++  }
++
++  async resolveAccountId() {
++    if (this.accountId) return this.accountId;
++    const accountsResponse = await this.request(`${this.config.cloudflareApiBaseUrl}/accounts?per_page=50`);
++    const accountsPayload = await parseCloudflareJson(accountsResponse, "Cloudflare account discovery");
++    const accounts = Array.isArray(accountsPayload.result) ? accountsPayload.result : [];
++    if (!accounts.length) {
++      throw new CommsHubError(503, "cloudflare_account_missing", "No Cloudflare account is accessible to D1_API_KEY.", {
++        failureClass: "permanent",
++        publicMessage: "Cloudflare account configuration is invalid.",
++      });
++    }
++
++    for (const account of accounts) {
++      if (!account?.id) continue;
++      const response = await this.request(`${this.config.cloudflareApiBaseUrl}/accounts/${account.id}/d1/database/${this.config.d1DatabaseId}`);
++      if (!response.ok) continue;
++      const payload = await response.json().catch(() => null);
++      if (payload?.success === true) {
++        this.accountId = String(account.id);
++        return this.accountId;
++      }
++    }
++
++    throw new CommsHubError(503, "d1_database_unresolved", "D1_UUID was not found in any account accessible to D1_API_KEY.", {
++      failureClass: "permanent",
++      publicMessage: "D1 configuration is invalid.",
++    });
++  }
++
++  async execute(body, operation) {
++    return withRetry(async () => {
++      const accountId = await this.resolveAccountId();
++      let response;
++      try {
++        response = await this.request(
++          `${this.config.cloudflareApiBaseUrl}/accounts/${accountId}/d1/database/${this.config.d1DatabaseId}/query`,
++          {
++            method: "POST",
++            headers: { "content-type": "application/json" },
++            body: JSON.stringify(body),
++          }
++        );
++      } catch (cause) {
++        throw new CommsHubError(502, "d1_unreachable", `${operation} could not reach D1.`, {
++          cause,
++          retryable: true,
++          failureClass: "temporary",
++          publicMessage: "Comms Hub storage is temporarily unavailable.",
++        });
++      }
++      const payload = await parseCloudflareJson(response, operation);
++      const results = Array.isArray(payload.result) ? payload.result : [];
++      if (!results.length || results.some((entry) => entry?.success !== true)) {
++        throw new CommsHubError(502, "d1_query_failed", `${operation} returned an incomplete D1 result.`, {
++          retryable: false,
++          failureClass: "recoverable",
++          publicMessage: "Comms Hub storage operation failed.",
++        });
++      }
++      return results;
++    }, {
++      attempts: this.config.providerRetryAttempts,
++      baseMs: this.config.providerRetryBaseMs,
++      maxMs: this.config.providerRetryMaxMs,
++      onRetry: ({ attempt, maxAttempts, delayMs, error }) => logRetry("commsHub.d1.retry", {
++        attempt,
++        maxAttempts,
++        delayMs,
++        code: error?.code || null,
++        statusCode: error?.statusCode || null,
++      }),
++    });
++  }
++
++  async query(sql, params = []) {
++    const [result] = await this.execute({ sql, params }, "D1 query");
++    return result;
++  }
++
++  async batch(statements) {
++    if (!Array.isArray(statements) || statements.length === 0) {
++      throw new TypeError("D1 batch requires at least one statement.");
++    }
++    const results = await this.execute({ batch: statements.map(({ sql, params = [] }) => ({ sql, params })) }, "D1 batch");
++    if (results.length !== statements.length) {
++      throw new CommsHubError(502, "d1_batch_incomplete", "D1 returned fewer batch results than statements.", {
++        failureClass: "recoverable",
++        publicMessage: "Comms Hub storage operation failed.",
++      });
++    }
++    return results;
++  }
++}
++
++export default D1Client;
+--- a/services/comms-hub/clients/jotformClient.js
++++ b/services/comms-hub/clients/jotformClient.js
+@@ -0,0 +1,109 @@
++import { CommsHubError } from "../errors.js";
++import { withRetry } from "./retry.js";
++async function logRetry(event, data) {
++  const { log } = await import("../../../logger.js");
++  log.warn(event, data);
++}
++
++
++async function sharedFetchWithTimeout(url, options) {
++  const { fetchWithTimeout } = await import("../../shared/http-client.js");
++  return fetchWithTimeout(url, options);
++}
++
++
++function numericId(value) {
++  const text = String(value ?? "").trim();
++  return /^\d+$/.test(text) ? text : "";
++}
++
++async function parsePayload(response) {
++  try {
++    return await response.json();
++  } catch (cause) {
++    throw new CommsHubError(502, "jotform_response_invalid", "Jotform returned invalid JSON.", {
++      cause,
++      retryable: true,
++      failureClass: "temporary",
++      publicMessage: "Jotform verification is temporarily unavailable.",
++    });
++  }
++}
++
++export class JotformClient {
++  constructor(config, { fetchImpl = sharedFetchWithTimeout } = {}) {
++    this.config = config;
++    this.fetchImpl = fetchImpl;
++  }
++
++  async getSubmission(submissionId) {
++    const endpoint = `${this.config.jotformApiBaseUrl}/submission/${encodeURIComponent(submissionId)}`;
++    return withRetry(async () => {
++      let response;
++      try {
++        response = await this.fetchImpl(endpoint, {
++          method: "GET",
++          timeout: this.config.jotformTimeoutMs,
++          headers: { accept: "application/json", APIKEY: this.config.jotformApiKey },
++        });
++      } catch (cause) {
++        throw new CommsHubError(502, "jotform_unreachable", "Jotform submission verification could not be reached.", {
++          cause,
++          retryable: true,
++          failureClass: "temporary",
++          publicMessage: "Jotform verification is temporarily unavailable.",
++        });
++      }
++
++      const payload = await parsePayload(response);
++      if (!response.ok || Number(payload?.responseCode) !== 200) {
++        const status = Number(response.status) || 502;
++        throw new CommsHubError(status === 404 ? 404 : 502, "jotform_verification_failed", `Jotform verification returned ${status}.`, {
++          retryable: [408, 425, 429, 500, 502, 503, 504].includes(status),
++          failureClass: status >= 500 || status === 429 ? "temporary" : "permanent",
++          publicMessage: status === 404 ? "Jotform submission not found." : "Jotform verification failed.",
++        });
++      }
++      if (!payload.content || typeof payload.content !== "object" || Array.isArray(payload.content)) {
++        throw new CommsHubError(502, "jotform_submission_missing", "Jotform did not return a submission object.", {
++          retryable: true,
++          failureClass: "temporary",
++          publicMessage: "Jotform verification failed.",
++        });
++      }
++      return payload.content;
++    }, {
++      attempts: this.config.providerRetryAttempts,
++      baseMs: this.config.providerRetryBaseMs,
++      maxMs: this.config.providerRetryMaxMs,
++      onRetry: ({ attempt, maxAttempts, delayMs, error }) => logRetry("commsHub.jotform.retry", {
++        attempt,
++        maxAttempts,
++        delayMs,
++        code: error?.code || null,
++        statusCode: error?.statusCode || null,
++      }),
++    });
++  }
++
++  async verifySubmission({ formId, submissionId }) {
++    const submission = await this.getSubmission(submissionId);
++    const verifiedSubmissionId = numericId(submission.id || submission.submission_id || submission.submissionID);
++    const verifiedFormId = numericId(submission.form_id || submission.formID || submission.formId);
++    if (verifiedSubmissionId !== submissionId) {
++      throw new CommsHubError(403, "jotform_submission_mismatch", "Verified Jotform submission ID does not match the webhook.", {
++        failureClass: "permanent",
++        publicMessage: "Jotform submission verification failed.",
++      });
++    }
++    if (verifiedFormId !== formId) {
++      throw new CommsHubError(403, "jotform_form_mismatch", "Verified Jotform form ID does not match the webhook.", {
++        failureClass: "permanent",
++        publicMessage: "Jotform form verification failed.",
++      });
++    }
++    return submission;
++  }
++}
++
++export default JotformClient;
+--- a/services/comms-hub/clients/retry.js
++++ b/services/comms-hub/clients/retry.js
+@@ -0,0 +1,27 @@
++export function retryableStatus(status) {
++  return [408, 425, 429, 500, 502, 503, 504].includes(Number(status));
++}
++
++export function retryableError(error) {
++  const status = Number(error?.statusCode || error?.status || 0);
++  if (retryableStatus(status)) return true;
++  const haystack = `${error?.name || ""} ${error?.code || ""} ${error?.message || error || ""}`.toLowerCase();
++  return /abort|timeout|timed out|temporar|throttl|rate|busy|unavailable|network|socket|reset|econnreset|etimedout|eai_again/.test(haystack);
++}
++
++export async function withRetry(operation, { attempts = 4, baseMs = 500, maxMs = 8000, onRetry = null } = {}) {
++  let lastError;
++  const maxAttempts = Math.max(1, Number(attempts) || 1);
++  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
++    try {
++      return await operation(attempt);
++    } catch (error) {
++      lastError = error;
++      if (attempt >= maxAttempts || !retryableError(error)) throw error;
++      const delayMs = Math.min(maxMs, baseMs * (2 ** (attempt - 1))) + Math.floor(Math.random() * 150);
++      await onRetry?.({ attempt, maxAttempts, delayMs, error });
++      await new Promise((resolve) => setTimeout(resolve, delayMs));
++    }
++  }
++  throw lastError;
++}
+--- a/services/comms-hub/config.js
++++ b/services/comms-hub/config.js
+@@ -0,0 +1,150 @@
++import { CommsHubError } from "./errors.js";
++
++export const COMMS_HUB_FORM_ROUTES = Object.freeze({
++  "260281179574362": Object.freeze({
++    key: "contact",
++    workflow: "contact_intake",
++    subject: "Contact form submission",
++  }),
++  "262063136008044": Object.freeze({
++    key: "case_study",
++    workflow: "case_study_intake",
++    subject: "Case study submission",
++  }),
++  "262097861889073": Object.freeze({
++    key: "podcast_enquiry",
++    workflow: "podcast_enquiry_intake",
++    subject: "Podcast enquiry",
++  }),
++});
++
++const REQUIRED_WHEN_ENABLED = Object.freeze([
++  "D1_UUID",
++  "D1_API_KEY",
++  "JOTFORM_API_KEY",
++  "R2_ENDPOINT",
++  "R2_ACCESS_KEY_ID",
++  "R2_SECRET_ACCESS_KEY",
++  "R2_BUCKET_COMMS_HUB",
++  "R2_PUBLIC_BASE_URL_COMMS_HUB",
++]);
++
++function normalise(value) {
++  return value === undefined || value === null ? "" : String(value).trim();
++}
++
++function isPlaceholder(value) {
++  return /^\{\{\s*secret\.[^}]+\}\}$/i.test(normalise(value));
++}
++
++export function usableEnvValue(value) {
++  const text = normalise(value);
++  return text && !isPlaceholder(text) ? text : "";
++}
++
++function booleanValue(value, fallback = false) {
++  const text = normalise(value).toLowerCase();
++  if (!text) return fallback;
++  if (["1", "true", "yes", "y", "on"].includes(text)) return true;
++  if (["0", "false", "no", "n", "off"].includes(text)) return false;
++  return fallback;
++}
++
++function positiveInteger(value, fallback, name, { min = 1, max = Number.MAX_SAFE_INTEGER } = {}) {
++  const text = normalise(value);
++  if (!text) return fallback;
++  const parsed = Number(text);
++  if (!Number.isInteger(parsed) || parsed < min || parsed > max) {
++    throw new CommsHubError(503, "comms_hub_configuration_invalid", `${name} must be an integer between ${min} and ${max}.`);
++  }
++  return parsed;
++}
++
++function normaliseBaseUrl(value, fallback) {
++  const text = normalise(value) || fallback;
++  let parsed;
++  try {
++    parsed = new URL(text);
++  } catch {
++    throw new CommsHubError(503, "comms_hub_configuration_invalid", `Invalid URL configured: ${text}`);
++  }
++  if (!/^https?:$/.test(parsed.protocol)) {
++    throw new CommsHubError(503, "comms_hub_configuration_invalid", `Only HTTP(S) URLs are supported: ${text}`);
++  }
++  return parsed.toString().replace(/\/+$/, "");
++}
++
++export function extractAccountIdFromR2Endpoint(value) {
++  const text = usableEnvValue(value);
++  if (!text) return "";
++  try {
++    const hostname = new URL(text).hostname.toLowerCase();
++    const match = hostname.match(/^([a-f0-9]{32})\.r2\.cloudflarestorage\.com$/i);
++    return match ? match[1] : "";
++  } catch {
++    return "";
++  }
++}
++
++export function getCommsHubMissingEnv(env = process.env) {
++  if (!booleanValue(env.COMMS_HUB_ENABLED, false)) return [];
++  return REQUIRED_WHEN_ENABLED.filter((name) => !usableEnvValue(env[name]));
++}
++
++export function getCommsHubReadiness(env = process.env) {
++  const enabled = booleanValue(env.COMMS_HUB_ENABLED, false);
++  const missing = getCommsHubMissingEnv(env);
++  return {
++    enabled,
++    ready: !enabled || missing.length === 0,
++    status: !enabled ? "disabled" : missing.length ? "misconfigured" : "configured",
++    missing,
++    forms: Object.keys(COMMS_HUB_FORM_ROUTES).length,
++  };
++}
++
++export function loadCommsHubConfig(env = process.env, { requireEnabled = false } = {}) {
++  const readiness = getCommsHubReadiness(env);
++  if (requireEnabled && !readiness.enabled) {
++    throw new CommsHubError(503, "comms_hub_disabled", "Comms Hub is disabled.", {
++      publicMessage: "Comms Hub is not enabled.",
++    });
++  }
++  if (readiness.enabled && readiness.missing.length) {
++    throw new CommsHubError(
++      503,
++      "comms_hub_configuration_missing",
++      `Missing Comms Hub environment variables: ${readiness.missing.join(", ")}.`,
++      { publicMessage: "Comms Hub is not ready." }
++    );
++  }
++
++  const accountId = usableEnvValue(env.CLOUDFLARE_ACCOUNT_ID)
++    || usableEnvValue(env.CF_ACCOUNT_ID)
++    || extractAccountIdFromR2Endpoint(env.R2_ENDPOINT);
++
++  return Object.freeze({
++    enabled: readiness.enabled,
++    d1DatabaseId: usableEnvValue(env.D1_UUID),
++    d1ApiToken: usableEnvValue(env.D1_API_KEY),
++    cloudflareAccountId: accountId,
++    cloudflareApiBaseUrl: normaliseBaseUrl(env.CLOUDFLARE_API_BASE_URL, "https://api.cloudflare.com/client/v4"),
++    jotformApiKey: usableEnvValue(env.JOTFORM_API_KEY),
++    jotformApiBaseUrl: normaliseBaseUrl(env.JOTFORM_API_BASE_URL, "https://api.jotform.com"),
++    r2BucketAlias: "commsHub",
++    r2BucketName: usableEnvValue(env.R2_BUCKET_COMMS_HUB) || "comms-hub",
++    maxWebhookBytes: positiveInteger(env.COMMS_HUB_MAX_WEBHOOK_BYTES, 1_048_576, "COMMS_HUB_MAX_WEBHOOK_BYTES", { max: 10_485_760 }),
++    jotformTimeoutMs: positiveInteger(env.COMMS_HUB_JOTFORM_TIMEOUT_MS, 10_000, "COMMS_HUB_JOTFORM_TIMEOUT_MS", { min: 1_000, max: 25_000 }),
++    d1TimeoutMs: positiveInteger(env.COMMS_HUB_D1_TIMEOUT_MS, 15_000, "COMMS_HUB_D1_TIMEOUT_MS", { min: 1_000, max: 30_000 }),
++    providerRetryAttempts: positiveInteger(env.COMMS_HUB_PROVIDER_RETRY_ATTEMPTS, 4, "COMMS_HUB_PROVIDER_RETRY_ATTEMPTS", { max: 8 }),
++    providerRetryBaseMs: positiveInteger(env.COMMS_HUB_PROVIDER_RETRY_BASE_MS, 500, "COMMS_HUB_PROVIDER_RETRY_BASE_MS", { min: 100, max: 10_000 }),
++    providerRetryMaxMs: positiveInteger(env.COMMS_HUB_PROVIDER_RETRY_MAX_MS, 8_000, "COMMS_HUB_PROVIDER_RETRY_MAX_MS", { min: 500, max: 30_000 }),
++    archiveWorkerEnabled: booleanValue(env.COMMS_HUB_ARCHIVE_WORKER_ENABLED, true),
++    archivePollMs: positiveInteger(env.COMMS_HUB_ARCHIVE_POLL_MS, 60_000, "COMMS_HUB_ARCHIVE_POLL_MS", { min: 5_000, max: 3_600_000 }),
++    archiveBatchSize: positiveInteger(env.COMMS_HUB_ARCHIVE_BATCH_SIZE, 10, "COMMS_HUB_ARCHIVE_BATCH_SIZE", { max: 100 }),
++    archiveLeaseMs: positiveInteger(env.COMMS_HUB_ARCHIVE_LEASE_MS, 120_000, "COMMS_HUB_ARCHIVE_LEASE_MS", { min: 30_000, max: 900_000 }),
++    archiveMaxAttempts: positiveInteger(env.COMMS_HUB_ARCHIVE_MAX_ATTEMPTS, 10, "COMMS_HUB_ARCHIVE_MAX_ATTEMPTS", { max: 50 }),
++  });
++}
++
++export default loadCommsHubConfig;
+--- a/services/comms-hub/domain/ids.js
++++ b/services/comms-hub/domain/ids.js
+@@ -0,0 +1,42 @@
++import { createHash, randomUUID } from "node:crypto";
++
++const BASE32_ALPHABET = "0123456789abcdefghjkmnpqrstvwxyz";
++
++export function sha256Hex(value) {
++  return createHash("sha256").update(String(value)).digest("hex");
++}
++
++function base32(buffer) {
++  let bits = 0;
++  let value = 0;
++  let output = "";
++
++  for (const byte of buffer) {
++    value = (value << 8) | byte;
++    bits += 8;
++    while (bits >= 5) {
++      output += BASE32_ALPHABET[(value >>> (bits - 5)) & 31];
++      bits -= 5;
++    }
++  }
++
++  if (bits > 0) {
++    output += BASE32_ALPHABET[(value << (5 - bits)) & 31];
++  }
++
++  return output;
++}
++
++export function stableId(prefix, ...parts) {
++  if (!/^[a-z][a-z0-9]{1,7}$/.test(String(prefix || ""))) {
++    throw new TypeError("Stable ID prefix must be 2-8 lowercase alphanumeric characters beginning with a letter.");
++  }
++  const digest = createHash("sha256")
++    .update(parts.map((part) => String(part ?? "")).join("\u001f"))
++    .digest();
++  return `${prefix}_${base32(digest).slice(0, 26)}`;
++}
++
++export function newCorrelationId() {
++  return randomUUID();
++}
+--- a/services/comms-hub/domain/redaction.js
++++ b/services/comms-hub/domain/redaction.js
+@@ -0,0 +1,22 @@
++const EMAIL_PATTERN = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
++const TOKEN_PATTERN = /\b(?:bearer\s+)?[A-Za-z0-9_-]{24,}\b/gi;
++const PHONE_PATTERN = /(?<!\w)(?:\+?\d[\d\s().-]{7,}\d)(?!\w)/g;
++
++export function redactDiagnosticText(value) {
++  return String(value ?? "")
++    .replace(EMAIL_PATTERN, "[redacted-email]")
++    .replace(PHONE_PATTERN, "[redacted-phone]")
++    .replace(TOKEN_PATTERN, "[redacted-token]")
++    .slice(0, 1000);
++}
++
++export function safeErrorLog(error) {
++  return {
++    name: String(error?.name || "Error").slice(0, 100),
++    code: String(error?.code || "unknown").slice(0, 120),
++    statusCode: Number(error?.statusCode || error?.status || 0) || null,
++    retryable: Boolean(error?.retryable),
++    failureClass: error?.failureClass || null,
++    message: redactDiagnosticText(error?.message || error),
++  };
++}
+--- a/services/comms-hub/domain/submission.js
++++ b/services/comms-hub/domain/submission.js
+@@ -0,0 +1,211 @@
++import { stableId, sha256Hex } from "./ids.js";
++
++const IDENTITY_TYPES = new Set(["control_email", "control_phone", "control_fullname", "control_address"]);
++const FILE_TYPES = new Set(["control_fileupload"]);
++
++function cleanText(value, max = 100_000) {
++  return String(value ?? "").replace(/\u0000/g, "").trim().slice(0, max);
++}
++
++function normaliseValue(value, depth = 0) {
++  if (value === null || value === undefined) return null;
++  if (depth > 5) return cleanText(value, 2000);
++  if (["string", "number", "boolean"].includes(typeof value)) return value;
++  if (Array.isArray(value)) return value.slice(0, 100).map((item) => normaliseValue(item, depth + 1));
++  if (typeof value === "object") {
++    return Object.fromEntries(
++      Object.entries(value)
++        .slice(0, 100)
++        .map(([key, item]) => [cleanText(key, 100), normaliseValue(item, depth + 1)])
++    );
++  }
++  return cleanText(value);
++}
++
++function displayValue(value) {
++  if (value === null || value === undefined) return "";
++  if (typeof value === "string") return cleanText(value);
++  if (typeof value === "number" || typeof value === "boolean") return String(value);
++  if (Array.isArray(value)) return value.map(displayValue).filter(Boolean).join(", ");
++  if (typeof value === "object") {
++    return Object.values(value).map(displayValue).filter(Boolean).join(" ");
++  }
++  return cleanText(value);
++}
++
++function semantic(answer) {
++  return `${answer.name || ""} ${answer.label || ""} ${answer.type || ""}`.toLowerCase();
++}
++
++export function normaliseJotformAnswers(submission) {
++  const source = submission?.answers;
++  if (!source || typeof source !== "object" || Array.isArray(source)) return [];
++  return Object.entries(source)
++    .map(([questionId, answer]) => ({
++      questionId: cleanText(questionId, 50),
++      name: cleanText(answer?.name, 200) || null,
++      label: cleanText(answer?.text, 500) || null,
++      type: cleanText(answer?.type, 100).toLowerCase() || null,
++      value: normaliseValue(answer?.answer ?? answer?.prettyFormat ?? null),
++    }))
++    .filter((answer) => answer.questionId)
++    .sort((left, right) => {
++      const a = Number(left.questionId);
++      const b = Number(right.questionId);
++      if (Number.isFinite(a) && Number.isFinite(b)) return a - b;
++      return left.questionId.localeCompare(right.questionId);
++    });
++}
++
++function fullName(value) {
++  if (typeof value === "string") return cleanText(value, 300);
++  if (!value || typeof value !== "object" || Array.isArray(value)) return "";
++  return [value.prefix, value.first, value.middle, value.last, value.suffix]
++    .map((part) => cleanText(part, 100))
++    .filter(Boolean)
++    .join(" ")
++    .slice(0, 300);
++}
++
++function firstAnswer(answers, predicate) {
++  return answers.find((answer) => predicate(answer) && displayValue(answer.value));
++}
++
++export function extractJotformContact(answers) {
++  const emailAnswer = firstAnswer(answers, (answer) => answer.type === "control_email");
++  const phoneAnswer = firstAnswer(answers, (answer) => answer.type === "control_phone");
++  const nameAnswer = firstAnswer(answers, (answer) => answer.type === "control_fullname");
++
++  const email = displayValue(emailAnswer?.value).toLowerCase().slice(0, 320) || null;
++  const phone = displayValue(phoneAnswer?.value).slice(0, 100) || null;
++  const name = (nameAnswer?.type === "control_fullname" ? fullName(nameAnswer.value) : displayValue(nameAnswer?.value).slice(0, 300)) || null;
++  return Object.freeze({ email, phone, name });
++}
++
++function safeUrl(value) {
++  const raw = cleanText(value, 4000);
++  if (!raw) return null;
++  try {
++    const parsed = new URL(raw);
++    if (!["http:", "https:"].includes(parsed.protocol)) return null;
++    return parsed.toString();
++  } catch {
++    return null;
++  }
++}
++
++export function extractJotformAttachments(answers) {
++  const attachments = [];
++  for (const answer of answers.filter((item) => FILE_TYPES.has(item.type))) {
++    const values = Array.isArray(answer.value) ? answer.value : [answer.value];
++    for (const value of values) {
++      const url = safeUrl(typeof value === "object" ? value?.url || value?.link : value);
++      if (!url) continue;
++      attachments.push({
++        id: stableId("att", answer.questionId, url),
++        questionId: answer.questionId,
++        label: answer.label || answer.name || `Question ${answer.questionId}`,
++        providerUrl: url,
++        filename: (() => {
++          const rawName = new URL(url).pathname.split("/").pop() || "attachment";
++          try { return cleanText(decodeURIComponent(rawName), 500); } catch { return cleanText(rawName, 500); }
++        })(),
++      });
++    }
++  }
++  return attachments;
++}
++
++export function extractJotformMessage(answers, route) {
++  const subjectAnswer = firstAnswer(answers, (answer) => /subject|title|topic/.test(semantic(answer)));
++  const bodyLines = [];
++
++  for (const answer of answers) {
++    if (IDENTITY_TYPES.has(answer.type) || FILE_TYPES.has(answer.type)) continue;
++    const value = displayValue(answer.value);
++    if (!value) continue;
++    const label = answer.label || answer.name || `Question ${answer.questionId}`;
++    bodyLines.push(`${label}: ${value}`);
++  }
++
++  return Object.freeze({
++    subject: displayValue(subjectAnswer?.value).slice(0, 500) || route.subject,
++    bodyText: (bodyLines.join("\n\n") || route.subject).slice(0, 500_000),
++  });
++}
++
++function submittedAt(submission, fallback) {
++  const raw = cleanText(submission?.created_at || submission?.createdAt, 100);
++  if (!raw) return fallback;
++  const candidate = raw.includes("T") ? raw : `${raw.replace(" ", "T")}Z`;
++  const date = new Date(candidate);
++  return Number.isNaN(date.valueOf()) ? fallback : date.toISOString();
++}
++
++export function buildJotformIntake({ formId, submissionId, route, submission, correlationId, now = new Date() }) {
++  const processedAt = now.toISOString();
++  const receivedAt = submittedAt(submission, processedAt);
++  const answers = normaliseJotformAnswers(submission);
++  const contact = extractJotformContact(answers);
++  const attachments = extractJotformAttachments(answers);
++  const message = extractJotformMessage(answers, route);
++  const contactSeed = contact.email || `${formId}:${submissionId}`;
++  const contactId = stableId("ctc", "jotform", contactSeed);
++  const conversationId = stableId("cnv", "jotform", formId, submissionId);
++  const messageId = stableId("msg", "jotform", formId, submissionId);
++  const eventId = stableId("evt", "jotform", formId, submissionId);
++  const archiveKey = `receipts/${processedAt.slice(0, 10).replaceAll("-", "/")}/${eventId}.json`;
++  const sourceReference = `jotform:${formId}:${submissionId}`;
++
++  const payload = {
++    schemaVersion: 1,
++    source: {
++      provider: "jotform",
++      formId,
++      submissionId,
++      status: cleanText(submission?.status, 100) || null,
++      submittedAt: cleanText(submission?.created_at, 100) || null,
++      updatedAt: cleanText(submission?.updated_at, 100) || null,
++    },
++    route: { key: route.key, workflow: route.workflow },
++    contact,
++    message,
++    attachments,
++    answers,
++  };
++  const payloadJson = JSON.stringify(payload);
++  const payloadSha256 = sha256Hex(payloadJson);
++  const receipt = {
++    schemaVersion: 1,
++    eventId,
++    conversationId,
++    provider: "jotform",
++    sourceReferenceSha256: sha256Hex(sourceReference),
++    workflow: route.workflow,
++    receivedAt,
++    processedAt,
++    payloadSha256,
++    attachmentCount: attachments.length,
++  };
++
++  return Object.freeze({
++    eventId,
++    sourceReference,
++    contactId,
++    conversationId,
++    messageId,
++    archiveKey,
++    payloadJson,
++    payloadSha256,
++    receiptJson: JSON.stringify(receipt, null, 2),
++    processedAt,
++    receivedAt,
++    contact,
++    message,
++    attachments,
++    route,
++    formId,
++    submissionId,
++    correlationId,
++  });
++}
+--- a/services/comms-hub/domain/webhook.js
++++ b/services/comms-hub/domain/webhook.js
+@@ -0,0 +1,179 @@
++import { COMMS_HUB_FORM_ROUTES } from "../config.js";
++import { CommsHubError } from "../errors.js";
++
++const DIGITS_ONLY = /^\d+$/;
++const SUPPORTED_CONTENT_TYPES = new Set([
++  "application/json",
++  "application/x-www-form-urlencoded",
++  "multipart/form-data",
++]);
++
++function text(value) {
++  return value === undefined || value === null ? "" : String(value).trim();
++}
++
++function digits(value) {
++  const candidate = text(value);
++  return DIGITS_ONLY.test(candidate) ? candidate : "";
++}
++
++function parseRawRequest(value) {
++  if (value && typeof value === "object" && !Array.isArray(value)) return value;
++  const raw = text(value);
++  if (!raw) return {};
++  try {
++    const parsed = JSON.parse(raw);
++    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
++      throw new TypeError("rawRequest must contain an object");
++    }
++    return parsed;
++  } catch (cause) {
++    throw new CommsHubError(400, "jotform_raw_request_invalid", "Jotform rawRequest is not valid JSON.", {
++      cause,
++      publicMessage: "Invalid Jotform webhook payload.",
++    });
++  }
++}
++
++function contentTypeBase(req) {
++  return text(req.get?.("content-type") || req.headers?.["content-type"])
++    .split(";")[0]
++    .trim()
++    .toLowerCase();
++}
++
++function contentLength(req) {
++  const value = Number(req.get?.("content-length") || req.headers?.["content-length"] || 0);
++  return Number.isFinite(value) && value >= 0 ? value : 0;
++}
++
++async function readStream(req, maxBytes) {
++  const declared = contentLength(req);
++  if (declared > maxBytes) {
++    throw new CommsHubError(413, "jotform_webhook_too_large", "Jotform webhook exceeds the configured size limit.", {
++      publicMessage: "Webhook payload too large.",
++    });
++  }
++
++  const chunks = [];
++  let total = 0;
++  for await (const chunk of req) {
++    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
++    total += buffer.length;
++    if (total > maxBytes) {
++      throw new CommsHubError(413, "jotform_webhook_too_large", "Jotform webhook exceeds the configured size limit.", {
++        publicMessage: "Webhook payload too large.",
++      });
++    }
++    chunks.push(buffer);
++  }
++  return Buffer.concat(chunks);
++}
++
++function parseMultipartBoundary(contentType) {
++  const match = String(contentType || "").match(/boundary=(?:"([^"]+)"|([^;]+))/i);
++  const boundary = text(match?.[1] || match?.[2]);
++  if (!boundary || boundary.length > 200 || /[\r\n]/.test(boundary)) {
++    throw new CommsHubError(400, "jotform_multipart_boundary_invalid", "Multipart webhook boundary is missing or invalid.", {
++      publicMessage: "Invalid Jotform webhook payload.",
++    });
++  }
++  return boundary;
++}
++
++export function parseMultipartFields(buffer, contentType) {
++  const boundary = parseMultipartBoundary(contentType);
++  const delimiter = `--${boundary}`;
++  const body = buffer.toString("latin1");
++  const fields = {};
++
++  for (const part of body.split(delimiter)) {
++    if (!part || part === "--\r\n" || part === "--" || part === "\r\n") continue;
++    const trimmed = part.replace(/^\r\n/, "").replace(/\r\n--$/, "").replace(/\r\n$/, "");
++    const headerEnd = trimmed.indexOf("\r\n\r\n");
++    if (headerEnd < 0) continue;
++    const headerText = trimmed.slice(0, headerEnd);
++    const valueBytes = Buffer.from(trimmed.slice(headerEnd + 4), "latin1");
++    const disposition = headerText
++      .split("\r\n")
++      .find((line) => /^content-disposition:/i.test(line));
++    const nameMatch = disposition?.match(/\bname="([^"]+)"/i);
++    const filenameMatch = disposition?.match(/\bfilename="([^"]*)"/i);
++    if (!nameMatch || filenameMatch) continue;
++    const name = nameMatch[1];
++    if (!["formID", "formId", "form_id", "submissionID", "submissionId", "submission_id", "rawRequest", "raw_request"].includes(name)) {
++      continue;
++    }
++    fields[name] = valueBytes.toString("utf8").trim();
++  }
++
++  return fields;
++}
++
++function normaliseBodyObject(body) {
++  if (!body || typeof body !== "object" || Array.isArray(body)) {
++    throw new CommsHubError(400, "jotform_webhook_invalid", "Jotform webhook payload must be an object.", {
++      publicMessage: "Invalid Jotform webhook payload.",
++    });
++  }
++  return body;
++}
++
++export async function readJotformWebhookEnvelope(req, maxBytes) {
++  const baseType = contentTypeBase(req);
++  if (!SUPPORTED_CONTENT_TYPES.has(baseType)) {
++    throw new CommsHubError(415, "jotform_content_type_unsupported", `Unsupported Jotform webhook content type: ${baseType || "missing"}.`, {
++      publicMessage: "Unsupported webhook content type.",
++    });
++  }
++
++  if (baseType === "multipart/form-data") {
++    const raw = await readStream(req, maxBytes);
++    return parseMultipartFields(raw, req.get?.("content-type") || req.headers?.["content-type"]);
++  }
++
++  const declared = contentLength(req);
++  const parsedBytes = Number(req.aimsParsedBodyBytes || 0);
++  if (declared > maxBytes || parsedBytes > maxBytes) {
++    throw new CommsHubError(413, "jotform_webhook_too_large", "Jotform webhook exceeds the configured size limit.", {
++      publicMessage: "Webhook payload too large.",
++    });
++  }
++
++  if (baseType === "application/json") {
++    return normaliseBodyObject(req.body);
++  }
++
++  return normaliseBodyObject(req.body);
++}
++
++export function resolveJotformWebhook(envelope) {
++  const body = normaliseBodyObject(envelope);
++  const rawRequest = parseRawRequest(body.rawRequest ?? body.raw_request);
++  const formId = [body.formID, body.formId, body.form_id, rawRequest.formID, rawRequest.formId, rawRequest.form_id]
++    .map(digits)
++    .find(Boolean) || "";
++  const submissionId = [
++    body.submissionID,
++    body.submissionId,
++    body.submission_id,
++    rawRequest.submissionID,
++    rawRequest.submissionId,
++    rawRequest.submission_id,
++  ].map(digits).find(Boolean) || "";
++
++  if (!formId || !submissionId) {
++    throw new CommsHubError(400, "jotform_identifiers_missing", "Jotform formID and submissionID are required.", {
++      publicMessage: "Webhook identifiers are missing.",
++    });
++  }
++
++  const route = COMMS_HUB_FORM_ROUTES[formId];
++  if (!route) {
++    throw new CommsHubError(403, "jotform_form_not_allowed", `Jotform ${formId} is not registered for Comms Hub intake.`, {
++      publicMessage: "This form is not registered for Comms Hub.",
++    });
++  }
++
++  return Object.freeze({ formId, submissionId, route });
++}
+--- a/services/comms-hub/errors.js
++++ b/services/comms-hub/errors.js
+@@ -0,0 +1,26 @@
++export class CommsHubError extends Error {
++  constructor(statusCode, code, message, options = {}) {
++    super(message, options);
++    this.name = "CommsHubError";
++    this.statusCode = Number(statusCode) || 500;
++    this.code = String(code || "comms_hub_error");
++    this.retryable = Boolean(options.retryable);
++    this.failureClass = options.failureClass || null;
++    this.publicMessage = options.publicMessage || null;
++  }
++}
++
++export function toCommsHubError(error, fallback = {}) {
++  if (error instanceof CommsHubError) return error;
++  return new CommsHubError(
++    fallback.statusCode || 500,
++    fallback.code || "comms_hub_internal_error",
++    error?.message || fallback.message || "Comms Hub operation failed.",
++    {
++      cause: error,
++      retryable: Boolean(fallback.retryable),
++      failureClass: fallback.failureClass || null,
++      publicMessage: fallback.publicMessage || null,
++    }
++  );
++}
+--- a/services/comms-hub/index.js
++++ b/services/comms-hub/index.js
+@@ -0,0 +1,7 @@
++import express from "express";
++import routes from "./routes/index.js";
++
++const router = express.Router();
++router.use("/", routes);
++
++export default router;
+--- a/services/comms-hub/intakeService.js
++++ b/services/comms-hub/intakeService.js
+@@ -0,0 +1,12 @@
++import { buildJotformIntake } from "./domain/submission.js";
++import { resolveJotformWebhook } from "./domain/webhook.js";
++
++export async function processJotformIntake({ envelope, correlationId, context, now = new Date() }) {
++  const identifiers = resolveJotformWebhook(envelope);
++  const submission = await context.jotform.verifySubmission(identifiers);
++  const intake = buildJotformIntake({ ...identifiers, submission, correlationId, now });
++  const persistence = await context.repository.persistJotformIntake(intake);
++  return { identifiers, intake, persistence };
++}
++
++export default processJotformIntake;
+--- a/services/comms-hub/migrations/0001_comms_hub.sql
++++ b/services/comms-hub/migrations/0001_comms_hub.sql
+@@ -0,0 +1,100 @@
++PRAGMA foreign_keys = ON;
++
++CREATE TABLE IF NOT EXISTS comms_hub_contacts (
++  id TEXT PRIMARY KEY,
++  primary_email TEXT,
++  display_name TEXT,
++  phone TEXT,
++  created_at TEXT NOT NULL,
++  updated_at TEXT NOT NULL
++);
++
++CREATE UNIQUE INDEX IF NOT EXISTS idx_comms_hub_contacts_email
++  ON comms_hub_contacts(primary_email)
++  WHERE primary_email IS NOT NULL AND primary_email <> '';
++
++CREATE TABLE IF NOT EXISTS comms_hub_conversations (
++  id TEXT PRIMARY KEY,
++  channel TEXT NOT NULL,
++  provider TEXT NOT NULL,
++  workflow TEXT NOT NULL,
++  status TEXT NOT NULL CHECK(status IN ('open', 'pending', 'closed', 'quarantined')),
++  contact_id TEXT NOT NULL,
++  subject TEXT NOT NULL,
++  source_reference TEXT NOT NULL UNIQUE,
++  created_at TEXT NOT NULL,
++  updated_at TEXT NOT NULL,
++  last_message_at TEXT NOT NULL,
++  metadata_json TEXT NOT NULL,
++  FOREIGN KEY(contact_id) REFERENCES comms_hub_contacts(id)
++);
++
++CREATE INDEX IF NOT EXISTS idx_comms_hub_conversations_status_updated
++  ON comms_hub_conversations(status, updated_at DESC);
++
++CREATE INDEX IF NOT EXISTS idx_comms_hub_conversations_contact
++  ON comms_hub_conversations(contact_id, updated_at DESC);
++
++CREATE TABLE IF NOT EXISTS comms_hub_messages (
++  id TEXT PRIMARY KEY,
++  conversation_id TEXT NOT NULL,
++  direction TEXT NOT NULL CHECK(direction IN ('inbound', 'outbound')),
++  sender TEXT,
++  recipients_json TEXT NOT NULL,
++  subject TEXT NOT NULL,
++  body_text TEXT NOT NULL,
++  body_html TEXT,
++  provider_message_id TEXT NOT NULL UNIQUE,
++  received_at TEXT NOT NULL,
++  created_at TEXT NOT NULL,
++  metadata_json TEXT NOT NULL,
++  FOREIGN KEY(conversation_id) REFERENCES comms_hub_conversations(id)
++);
++
++CREATE INDEX IF NOT EXISTS idx_comms_hub_messages_conversation_time
++  ON comms_hub_messages(conversation_id, received_at ASC);
++
++CREATE TABLE IF NOT EXISTS comms_hub_attachments (
++  id TEXT PRIMARY KEY,
++  message_id TEXT NOT NULL,
++  provider TEXT NOT NULL,
++  provider_url TEXT NOT NULL,
++  filename TEXT NOT NULL,
++  status TEXT NOT NULL CHECK(status IN ('reference_only', 'private_archived', 'failed', 'quarantined')),
++  created_at TEXT NOT NULL,
++  metadata_json TEXT NOT NULL,
++  FOREIGN KEY(message_id) REFERENCES comms_hub_messages(id)
++);
++
++CREATE INDEX IF NOT EXISTS idx_comms_hub_attachments_message
++  ON comms_hub_attachments(message_id, created_at ASC);
++
++CREATE TABLE IF NOT EXISTS comms_hub_intake_events (
++  event_id TEXT PRIMARY KEY,
++  conversation_id TEXT NOT NULL,
++  provider TEXT NOT NULL,
++  form_id TEXT NOT NULL,
++  submission_id TEXT NOT NULL,
++  correlation_id TEXT NOT NULL,
++  received_at TEXT NOT NULL,
++  processed_at TEXT NOT NULL,
++  payload_sha256 TEXT NOT NULL,
++  payload_json TEXT NOT NULL,
++  archive_status TEXT NOT NULL CHECK(archive_status IN ('pending', 'leased', 'complete', 'failed', 'quarantined')),
++  archive_key TEXT NOT NULL,
++  archive_attempts INTEGER NOT NULL DEFAULT 0 CHECK(archive_attempts >= 0),
++  archive_next_attempt_at TEXT NOT NULL,
++  archive_lease_owner TEXT,
++  archive_lease_expires_at TEXT,
++  archive_completed_at TEXT,
++  archive_failure_class TEXT,
++  archive_error TEXT,
++  FOREIGN KEY(conversation_id) REFERENCES comms_hub_conversations(id),
++  UNIQUE(provider, form_id, submission_id)
++);
++
++CREATE INDEX IF NOT EXISTS idx_comms_hub_archive_queue
++  ON comms_hub_intake_events(archive_status, archive_next_attempt_at, archive_lease_expires_at, processed_at ASC);
++
++CREATE INDEX IF NOT EXISTS idx_comms_hub_intake_conversation
++  ON comms_hub_intake_events(conversation_id, processed_at DESC);
+--- a/services/comms-hub/migrations/manifest.js
++++ b/services/comms-hub/migrations/manifest.js
+@@ -0,0 +1,5 @@
++export const COMMS_HUB_REQUIRED_MIGRATIONS = Object.freeze([
++  "0001_comms_hub",
++]);
++
++export default COMMS_HUB_REQUIRED_MIGRATIONS;
+--- a/services/comms-hub/repositories/commsRepository.js
++++ b/services/comms-hub/repositories/commsRepository.js
+@@ -0,0 +1,260 @@
++import { CommsHubError } from "../errors.js";
++import { COMMS_HUB_REQUIRED_MIGRATIONS } from "../migrations/manifest.js";
++
++function json(value) {
++  return JSON.stringify(value);
++}
++
++function rows(result) {
++  return Array.isArray(result?.results) ? result.results : [];
++}
++
++export class CommsHubRepository {
++  constructor(d1) {
++    this.d1 = d1;
++  }
++
++  async persistJotformIntake(intake) {
++    const sourceMetadata = json({
++      provider: "jotform",
++      formId: intake.formId,
++      submissionId: intake.submissionId,
++      route: intake.route.key,
++    });
++    const statements = [
++      {
++        sql: `INSERT INTO comms_hub_contacts
++          (id, primary_email, display_name, phone, created_at, updated_at)
++          VALUES (?, ?, ?, ?, ?, ?)
++          ON CONFLICT(id) DO UPDATE SET
++            primary_email = COALESCE(NULLIF(excluded.primary_email, ''), comms_hub_contacts.primary_email),
++            display_name = COALESCE(NULLIF(excluded.display_name, ''), comms_hub_contacts.display_name),
++            phone = COALESCE(NULLIF(excluded.phone, ''), comms_hub_contacts.phone),
++            updated_at = excluded.updated_at`,
++        params: [
++          intake.contactId,
++          intake.contact.email,
++          intake.contact.name,
++          intake.contact.phone,
++          intake.processedAt,
++          intake.processedAt,
++        ],
++      },
++      {
++        sql: `INSERT OR IGNORE INTO comms_hub_conversations
++          (id, channel, provider, workflow, status, contact_id, subject, source_reference,
++           created_at, updated_at, last_message_at, metadata_json)
++          VALUES (?, 'form', 'jotform', ?, 'open', ?, ?, ?, ?, ?, ?, ?)`,
++        params: [
++          intake.conversationId,
++          intake.route.workflow,
++          intake.contactId,
++          intake.message.subject,
++          intake.sourceReference,
++          intake.processedAt,
++          intake.processedAt,
++          intake.receivedAt,
++          sourceMetadata,
++        ],
++      },
++      {
++        sql: `INSERT OR IGNORE INTO comms_hub_messages
++          (id, conversation_id, direction, sender, recipients_json, subject, body_text, body_html,
++           provider_message_id, received_at, created_at, metadata_json)
++          VALUES (?, ?, 'inbound', ?, '[]', ?, ?, NULL, ?, ?, ?, ?)`,
++        params: [
++          intake.messageId,
++          intake.conversationId,
++          intake.contact.email,
++          intake.message.subject,
++          intake.message.bodyText,
++          intake.sourceReference,
++          intake.receivedAt,
++          intake.processedAt,
++          sourceMetadata,
++        ],
++      },
++      ...intake.attachments.map((attachment) => ({
++        sql: `INSERT OR IGNORE INTO comms_hub_attachments
++          (id, message_id, provider, provider_url, filename, status, created_at, metadata_json)
++          VALUES (?, ?, 'jotform', ?, ?, 'reference_only', ?, ?)`,
++        params: [
++          attachment.id,
++          intake.messageId,
++          attachment.providerUrl,
++          attachment.filename,
++          intake.processedAt,
++          json({ questionId: attachment.questionId, label: attachment.label }),
++        ],
++      })),
++      {
++        sql: `INSERT OR IGNORE INTO comms_hub_intake_events
++          (event_id, conversation_id, provider, form_id, submission_id, correlation_id,
++           received_at, processed_at, payload_sha256, payload_json, archive_status,
++           archive_key, archive_attempts, archive_next_attempt_at)
++          VALUES (?, ?, 'jotform', ?, ?, ?, ?, ?, ?, ?, 'pending', ?, 0, ?)
++          RETURNING event_id`,
++        params: [
++          intake.eventId,
++          intake.conversationId,
++          intake.formId,
++          intake.submissionId,
++          intake.correlationId,
++          intake.receivedAt,
++          intake.processedAt,
++          intake.payloadSha256,
++          intake.payloadJson,
++          intake.archiveKey,
++          intake.processedAt,
++        ],
++      },
++    ];
++
++    const results = await this.d1.batch(statements);
++    const inserted = rows(results.at(-1)).some((row) => row?.event_id === intake.eventId);
++    return { duplicate: !inserted };
++  }
++
++  async getConversation(conversationId) {
++    const conversationResult = await this.d1.query(
++      `SELECT id, channel, provider, workflow, status, contact_id, subject, source_reference,
++              created_at, updated_at, last_message_at, metadata_json
++         FROM comms_hub_conversations
++        WHERE id = ?`,
++      [conversationId]
++    );
++    const conversation = rows(conversationResult)[0] || null;
++    if (!conversation) return null;
++
++    const [contactResult, messagesResult, attachmentsResult] = await Promise.all([
++      this.d1.query(
++        `SELECT id, primary_email, display_name, phone, created_at, updated_at
++           FROM comms_hub_contacts WHERE id = ?`,
++        [conversation.contact_id]
++      ),
++      this.d1.query(
++        `SELECT id, direction, sender, recipients_json, subject, body_text, body_html,
++                provider_message_id, received_at, created_at, metadata_json
++           FROM comms_hub_messages
++          WHERE conversation_id = ?
++          ORDER BY received_at ASC`,
++        [conversationId]
++      ),
++      this.d1.query(
++        `SELECT a.id, a.message_id, a.provider, a.provider_url, a.filename, a.status, a.created_at, a.metadata_json
++           FROM comms_hub_attachments a
++           JOIN comms_hub_messages m ON m.id = a.message_id
++          WHERE m.conversation_id = ?
++          ORDER BY a.created_at ASC`,
++        [conversationId]
++      ),
++    ]);
++
++    return {
++      ...conversation,
++      contact: rows(contactResult)[0] || null,
++      messages: rows(messagesResult),
++      attachments: rows(attachmentsResult),
++    };
++  }
++
++  async getArchiveCounts() {
++    const result = await this.d1.query(
++      `SELECT archive_status AS status, COUNT(*) AS count
++         FROM comms_hub_intake_events
++        GROUP BY archive_status
++        ORDER BY archive_status`
++    );
++    return Object.fromEntries(rows(result).map((row) => [row.status, Number(row.count) || 0]));
++  }
++
++  async claimArchiveJob({ workerId, now, leaseExpiresAt, maxAttempts }) {
++    const result = await this.d1.query(
++      `UPDATE comms_hub_intake_events
++          SET archive_status = 'leased',
++              archive_attempts = archive_attempts + 1,
++              archive_lease_owner = ?,
++              archive_lease_expires_at = ?,
++              archive_failure_class = NULL,
++              archive_error = NULL
++        WHERE event_id = (
++          SELECT event_id
++            FROM comms_hub_intake_events
++           WHERE archive_attempts < ?
++             AND archive_next_attempt_at <= ?
++             AND (
++               archive_status IN ('pending', 'failed')
++               OR (archive_status = 'leased' AND (archive_lease_expires_at IS NULL OR archive_lease_expires_at <= ?))
++             )
++           ORDER BY processed_at ASC
++           LIMIT 1
++        )
++        RETURNING event_id, conversation_id, provider, form_id, submission_id, received_at, processed_at,
++                  payload_sha256, archive_key, archive_attempts`,
++      [workerId, leaseExpiresAt, maxAttempts, now, now]
++    );
++    return rows(result)[0] || null;
++  }
++
++  async completeArchiveJob({ eventId, workerId, completedAt }) {
++    const result = await this.d1.query(
++      `UPDATE comms_hub_intake_events
++          SET archive_status = 'complete',
++              archive_completed_at = COALESCE(archive_completed_at, ?),
++              archive_lease_owner = NULL,
++              archive_lease_expires_at = NULL,
++              archive_failure_class = NULL,
++              archive_error = NULL
++        WHERE event_id = ?
++          AND (
++            (archive_status = 'leased' AND archive_lease_owner = ?)
++            OR archive_status = 'complete'
++          )
++        RETURNING event_id`,
++      [completedAt, eventId, workerId]
++    );
++    if (!rows(result).length) {
++      throw new CommsHubError(409, "archive_lease_lost", "Archive job lease was lost before completion.", {
++        failureClass: "recoverable",
++        publicMessage: "Archive job lease was lost.",
++      });
++    }
++  }
++
++  async failArchiveJob({ eventId, workerId, status, failureClass, errorMessage, nextAttemptAt }) {
++    const result = await this.d1.query(
++      `UPDATE comms_hub_intake_events
++          SET archive_status = ?,
++              archive_next_attempt_at = ?,
++              archive_lease_owner = NULL,
++              archive_lease_expires_at = NULL,
++              archive_failure_class = ?,
++              archive_error = ?
++        WHERE event_id = ? AND archive_status = 'leased' AND archive_lease_owner = ?
++        RETURNING event_id`,
++      [status, nextAttemptAt, failureClass, errorMessage, eventId, workerId]
++    );
++    return Boolean(rows(result).length);
++  }
++
++  async schemaStatus() {
++    try {
++      const result = await this.d1.query(
++        `SELECT version, checksum, applied_at
++           FROM comms_hub_schema_migrations
++          ORDER BY version ASC`
++      );
++      const migrations = rows(result);
++      const applied = new Set(migrations.map((migration) => String(migration.version || "")));
++      const missing = COMMS_HUB_REQUIRED_MIGRATIONS.filter((version) => !applied.has(version));
++      return { available: missing.length === 0, migrations, missing };
++    } catch (error) {
++      if (/no such table/i.test(String(error?.message || ""))) {
++        return { available: false, migrations: [], missing: [...COMMS_HUB_REQUIRED_MIGRATIONS] };
++      }
++      throw error;
++    }
++  }
++}
++
++export default CommsHubRepository;
+--- a/services/comms-hub/routes/index.js
++++ b/services/comms-hub/routes/index.js
+@@ -0,0 +1,193 @@
++import express from "express";
++import { log } from "../../../logger.js";
++import { recordProviderOutcome } from "../../shared/utils/operationalExcellence.js";
++import { getCommsHubReadiness, loadCommsHubConfig } from "../config.js";
++import { newCorrelationId } from "../domain/ids.js";
++import { readJotformWebhookEnvelope } from "../domain/webhook.js";
++import { safeErrorLog } from "../domain/redaction.js";
++import { CommsHubError, toCommsHubError } from "../errors.js";
++import { getCommsHubContext, getCommsHubRuntimeReadiness, kickCommsHubArchiveDrain } from "../runtime.js";
++import { processJotformIntake } from "../intakeService.js";
++
++function publicError(error) {
++  const normalised = toCommsHubError(error, {
++    statusCode: 500,
++    code: "comms_hub_internal_error",
++    publicMessage: "Comms Hub could not process the request.",
++  });
++  return {
++    statusCode: normalised.statusCode >= 400 && normalised.statusCode <= 599 ? normalised.statusCode : 500,
++    body: {
++      ok: false,
++      error: normalised.code,
++      message: normalised.publicMessage || (normalised.statusCode < 500 ? normalised.message : "Comms Hub could not process the request."),
++    },
++    normalised,
++  };
++}
++
++function validConversationId(value) {
++  const candidate = String(value || "").trim();
++  return /^cnv_[0-9a-hjkmnp-tv-z]{26}$/.test(candidate) ? candidate : "";
++}
++
++export function createCommsHubRouter({
++  contextProvider = getCommsHubContext,
++  kickArchive = kickCommsHubArchiveDrain,
++  runtimeReadinessProvider = getCommsHubRuntimeReadiness,
++} = {}) {
++  const router = express.Router();
++
++  router.get("/health", (_req, res) => {
++    const configuration = getCommsHubReadiness();
++    const runtime = runtimeReadinessProvider();
++    const ready = configuration.ready && runtime.ready;
++    return res.status(ready ? 200 : 503).json({
++      ok: ready,
++      service: "comms-hub",
++      configuration: {
++        enabled: configuration.enabled,
++        status: configuration.status,
++        forms: configuration.forms,
++      },
++      runtime: {
++        status: runtime.status,
++        ready: runtime.ready,
++        detail: runtime.detail,
++      },
++      channels: {
++        jotform: ["contact", "case_study", "podcast_enquiry"],
++        socialConfigurationOwner: "zernio",
++        emailHost: "one.com",
++      },
++    });
++  });
++
++  router.post("/intake/jotform", async (req, res) => {
++    const startedAt = Date.now();
++    const correlationId = String(req.id || req.get?.("x-request-id") || newCorrelationId());
++    let identifiers = null;
++    try {
++      const config = loadCommsHubConfig(process.env, { requireEnabled: true });
++      const runtime = runtimeReadinessProvider();
++      if (!runtime.ready) {
++        throw new CommsHubError(503, "comms_hub_not_ready", `Comms Hub runtime is not ready: ${runtime.status || "unknown"}.`, {
++          retryable: true,
++          failureClass: "temporary",
++          publicMessage: "Comms Hub is not ready.",
++        });
++      }
++      const envelope = await readJotformWebhookEnvelope(req, config.maxWebhookBytes);
++      const active = contextProvider();
++      const processed = await processJotformIntake({ envelope, correlationId, context: active });
++      identifiers = processed.identifiers;
++      const intake = processed.intake;
++      const result = processed.persistence;
++      kickArchive();
++      recordProviderOutcome({
++        routeKey: "comms-hub:jotform-intake",
++        provider: "jotform",
++        ok: true,
++        durationMs: Date.now() - startedAt,
++        status: result.duplicate ? "duplicate" : "accepted",
++      });
++      log.info("commsHub.intake.accepted", {
++        correlationId,
++        eventId: intake.eventId,
++        conversationId: intake.conversationId,
++        workflow: intake.route.workflow,
++        duplicate: result.duplicate,
++        attachmentCount: intake.attachments.length,
++      });
++      return res.status(result.duplicate ? 200 : 202).json({
++        ok: true,
++        accepted: true,
++        duplicate: result.duplicate,
++        correlationId,
++      });
++    } catch (error) {
++      const output = publicError(error);
++      recordProviderOutcome({
++        routeKey: "comms-hub:jotform-intake",
++        provider: "jotform",
++        ok: false,
++        durationMs: Date.now() - startedAt,
++        status: output.normalised.code,
++      });
++      log[output.statusCode >= 500 ? "error" : "warn"]("commsHub.intake.rejected", {
++        correlationId,
++        formId: identifiers?.formId || null,
++        submissionIdHashPresent: Boolean(identifiers?.submissionId),
++        error: safeErrorLog(output.normalised),
++      });
++      return res.status(output.statusCode).json({ ...output.body, correlationId });
++    }
++  });
++
++  router.get("/diagnostics", async (_req, res, next) => {
++    try {
++      const active = contextProvider();
++      const [schema, archive] = await Promise.all([
++        active.repository.schemaStatus(),
++        active.repository.getArchiveCounts(),
++      ]);
++      return res.status(schema.available ? 200 : 503).json({
++        ok: schema.available,
++        service: "comms-hub",
++        schema,
++        archive,
++        configuration: {
++          forms: 3,
++          r2Bucket: active.config.r2BucketName,
++          archiveWorkerEnabled: active.config.archiveWorkerEnabled,
++        },
++      });
++    } catch (error) {
++      next(error);
++    }
++  });
++
++  router.get("/conversations/:conversationId", async (req, res, next) => {
++    try {
++      const conversationId = validConversationId(req.params.conversationId);
++      if (!conversationId) {
++        throw new CommsHubError(400, "conversation_id_invalid", "Conversation ID is invalid.", {
++          publicMessage: "Conversation ID is invalid.",
++        });
++      }
++      const conversation = await contextProvider().repository.getConversation(conversationId);
++      if (!conversation) {
++        return res.status(404).json({ ok: false, error: "conversation_not_found" });
++      }
++      return res.status(200).json({ ok: true, service: "comms-hub", conversation });
++    } catch (error) {
++      next(error);
++    }
++  });
++
++  router.get("/archive/status", async (_req, res, next) => {
++    try {
++      const counts = await contextProvider().repository.getArchiveCounts();
++      return res.status(200).json({ ok: true, service: "comms-hub", counts });
++    } catch (error) {
++      next(error);
++    }
++  });
++
++  router.post("/archive/drain", async (req, res, next) => {
++    try {
++      const requested = Number(req.body?.limit || 0);
++      const limit = Number.isInteger(requested) && requested > 0
++        ? Math.min(requested, contextProvider().config.archiveBatchSize)
++        : contextProvider().config.archiveBatchSize;
++      const result = await contextProvider().archiveWorker.runOnce({ limit });
++      return res.status(200).json({ ok: true, service: "comms-hub", ...result });
++    } catch (error) {
++      next(error);
++    }
++  });
++
++  return router;
++}
++
++export default createCommsHubRouter();
+--- a/services/comms-hub/runtime.js
++++ b/services/comms-hub/runtime.js
+@@ -0,0 +1,86 @@
++import { uploadText } from "../shared/utils/r2-client.js";
++import { log } from "../../logger.js";
++import { loadCommsHubConfig, getCommsHubReadiness } from "./config.js";
++import { D1Client } from "./clients/d1Client.js";
++import { JotformClient } from "./clients/jotformClient.js";
++import { CommsHubRepository } from "./repositories/commsRepository.js";
++import { CommsHubArchiveWorker } from "./workers/archiveWorker.js";
++import { safeErrorLog } from "./domain/redaction.js";
++
++let context = null;
++let runtimeState = { status: "idle", ready: false, detail: "not_started" };
++
++export function createCommsHubContext({ env = process.env, fetchImpl, r2UploadText = uploadText } = {}) {
++  const config = loadCommsHubConfig(env, { requireEnabled: true });
++  const d1 = new D1Client(config, fetchImpl ? { fetchImpl } : undefined);
++  const jotform = new JotformClient(config, fetchImpl ? { fetchImpl } : undefined);
++  const repository = new CommsHubRepository(d1);
++  const archiveWorker = new CommsHubArchiveWorker({ repository, uploadText: r2UploadText, config });
++  return Object.freeze({ config, d1, jotform, repository, archiveWorker });
++}
++
++export function getCommsHubContext() {
++  if (!context) context = createCommsHubContext();
++  return context;
++}
++
++export function getCommsHubRuntimeReadiness() {
++  const configuration = getCommsHubReadiness();
++  if (!configuration.enabled) return { status: "disabled", ready: true, detail: "service_disabled" };
++  if (!configuration.ready) return { status: "misconfigured", ready: false, detail: "missing_environment" };
++  return { ...runtimeState };
++}
++
++export async function startCommsHubRuntime() {
++  const readiness = getCommsHubReadiness();
++  if (!readiness.enabled) {
++    runtimeState = { status: "disabled", ready: true, detail: "service_disabled" };
++    log.info("commsHub.runtime.disabled");
++    return { started: false, reason: "disabled" };
++  }
++  if (!readiness.ready) {
++    runtimeState = { status: "misconfigured", ready: false, detail: "missing_environment", missing: readiness.missing };
++    log.error("commsHub.runtime.misconfigured", { missing: readiness.missing });
++    return { started: false, reason: "misconfigured", missing: readiness.missing };
++  }
++
++  runtimeState = { status: "starting", ready: false, detail: "checking_schema" };
++  try {
++    const active = getCommsHubContext();
++    const schema = await active.repository.schemaStatus();
++    if (!schema.available) {
++      runtimeState = { status: "schema_missing", ready: false, detail: "run_npm_comms_migrate" };
++      log.error("commsHub.runtime.schemaMissing", { action: "npm run comms:migrate", missing: schema.missing || [] });
++      return { started: false, reason: "schema_missing" };
++    }
++    const workerStarted = active.archiveWorker.start();
++    runtimeState = { status: "ready", ready: true, detail: workerStarted ? "worker_started" : "worker_disabled" };
++    log.info("commsHub.runtime.started", { workerStarted, forms: readiness.forms });
++    return { started: true, workerStarted };
++  } catch (error) {
++    runtimeState = { status: "failed", ready: false, detail: error?.code || error?.name || "runtime_start_failed" };
++    log.error("commsHub.runtime.startFailed", { error: safeErrorLog(error) });
++    return { started: false, reason: "failed" };
++  }
++}
++
++export async function stopCommsHubRuntime() {
++  if (context) await context.archiveWorker.stop();
++  context = null;
++  runtimeState = { status: "stopped", ready: false, detail: "runtime_stopped" };
++}
++
++export function kickCommsHubArchiveDrain() {
++  if (!context || !context.config.archiveWorkerEnabled || runtimeState.status !== "ready") return false;
++  queueMicrotask(() => {
++    void context.archiveWorker.runOnce().catch((error) => {
++      log.error("commsHub.archive.kickFailed", { error: safeErrorLog(error) });
++    });
++  });
++  return true;
++}
++
++export function resetCommsHubRuntimeForTests() {
++  context = null;
++  runtimeState = { status: "idle", ready: false, detail: "not_started" };
++}
+--- a/services/comms-hub/workers/archiveWorker.js
++++ b/services/comms-hub/workers/archiveWorker.js
+@@ -0,0 +1,152 @@
++import { randomUUID } from "node:crypto";
++import { safeErrorLog, redactDiagnosticText } from "../domain/redaction.js";
++import { sha256Hex } from "../domain/ids.js";
++
++function classifyFailure(error) {
++  if (error?.failureClass) return error.failureClass;
++  const status = Number(error?.statusCode || error?.status || error?.$metadata?.httpStatusCode || 0);
++  if ([408, 425, 429, 500, 502, 503, 504].includes(status)) return "temporary";
++  const text = `${error?.name || ""} ${error?.code || ""} ${error?.message || error || ""}`.toLowerCase();
++  if (/timeout|abort|temporar|throttl|rate|busy|unavailable|network|socket|reset/.test(text)) return "temporary";
++  if (/credential|unauthor|forbidden|access denied|invalidaccesskey|signature/.test(text)) return "permanent";
++  return "recoverable";
++}
++
++function nextAttemptAt(attempt, now = Date.now()) {
++  const base = Math.min(6 * 60 * 60 * 1000, 30_000 * (2 ** Math.max(0, attempt - 1)));
++  return new Date(now + base + Math.floor(Math.random() * 5_000)).toISOString();
++}
++
++function receiptFor(job) {
++  return JSON.stringify({
++    schemaVersion: 1,
++    eventId: job.event_id,
++    conversationId: job.conversation_id,
++    provider: job.provider,
++    sourceReferenceSha256: sha256Hex(`jotform:${job.form_id}:${job.submission_id}`),
++    receivedAt: job.received_at,
++    processedAt: job.processed_at,
++    payloadSha256: job.payload_sha256,
++  }, null, 2);
++}
++
++export class CommsHubArchiveWorker {
++  constructor({ repository, uploadText, config, workerId = `aims-${randomUUID()}`, logger = null }) {
++    this.repository = repository;
++    this.uploadText = uploadText;
++    this.config = config;
++    this.workerId = workerId;
++    this.logger = logger;
++    this.timer = null;
++    this.running = false;
++    this.stopping = false;
++  }
++
++  async writeLog(level, event, data) {
++    try {
++      if (this.logger?.[level]) {
++        this.logger[level](event, data);
++        return;
++      }
++      const { log } = await import("../../../logger.js");
++      log[level](event, data);
++    } catch {
++      // Logging must never change queue state or retry behaviour.
++    }
++  }
++
++  async processJob(job) {
++    try {
++      await this.uploadText(
++        this.config.r2BucketAlias,
++        job.archive_key,
++        receiptFor(job),
++        "application/json; charset=utf-8",
++        { cacheControl: "no-store, max-age=0" }
++      );
++      await this.repository.completeArchiveJob({
++        eventId: job.event_id,
++        workerId: this.workerId,
++        completedAt: new Date().toISOString(),
++      });
++      void this.writeLog("info", "commsHub.archive.complete", {
++        eventId: job.event_id,
++        conversationId: job.conversation_id,
++        attempt: job.archive_attempts,
++      });
++      return { ok: true };
++    } catch (error) {
++      const failureClass = classifyFailure(error);
++      const exhausted = Number(job.archive_attempts) >= this.config.archiveMaxAttempts;
++      const permanent = failureClass === "permanent";
++      const status = exhausted || permanent ? "quarantined" : "failed";
++      const retryAt = status === "quarantined" ? new Date().toISOString() : nextAttemptAt(job.archive_attempts);
++      await this.repository.failArchiveJob({
++        eventId: job.event_id,
++        workerId: this.workerId,
++        status,
++        failureClass,
++        errorMessage: redactDiagnosticText(error?.message || error).slice(0, 500),
++        nextAttemptAt: retryAt,
++      });
++      void this.writeLog(status === "quarantined" ? "error" : "warn", "commsHub.archive.failed", {
++        eventId: job.event_id,
++        conversationId: job.conversation_id,
++        attempt: job.archive_attempts,
++        status,
++        error: safeErrorLog(error),
++      });
++      return { ok: false, status, failureClass };
++    }
++  }
++
++  async runOnce({ limit = this.config.archiveBatchSize } = {}) {
++    if (this.running || this.stopping) return { skipped: true, processed: 0 };
++    this.running = true;
++    let processed = 0;
++    let completed = 0;
++    let failed = 0;
++    try {
++      for (let index = 0; index < limit; index += 1) {
++        const now = new Date();
++        const job = await this.repository.claimArchiveJob({
++          workerId: this.workerId,
++          now: now.toISOString(),
++          leaseExpiresAt: new Date(now.valueOf() + this.config.archiveLeaseMs).toISOString(),
++          maxAttempts: this.config.archiveMaxAttempts,
++        });
++        if (!job) break;
++        processed += 1;
++        const result = await this.processJob(job);
++        if (result.ok) completed += 1;
++        else failed += 1;
++      }
++      return { skipped: false, processed, completed, failed };
++    } finally {
++      this.running = false;
++    }
++  }
++
++  start() {
++    if (!this.config.archiveWorkerEnabled || this.timer || this.stopping) return false;
++    this.timer = setInterval(() => {
++      void this.runOnce().catch((error) => this.writeLog("error", "commsHub.archive.tickFailed", { error: safeErrorLog(error) }));
++    }, this.config.archivePollMs);
++    this.timer.unref?.();
++    void this.runOnce().catch((error) => this.writeLog("error", "commsHub.archive.initialRunFailed", { error: safeErrorLog(error) }));
++    void this.writeLog("info", "commsHub.archive.started", { workerId: this.workerId, pollMs: this.config.archivePollMs });
++    return true;
++  }
++
++  async stop() {
++    this.stopping = true;
++    if (this.timer) clearInterval(this.timer);
++    this.timer = null;
++    while (this.running) {
++      await new Promise((resolve) => setTimeout(resolve, 25));
++    }
++    void this.writeLog("info", "commsHub.archive.stopped", { workerId: this.workerId });
++  }
++}
++
++export default CommsHubArchiveWorker;
+--- a/services/shared/middleware/suiteAuth.js
++++ b/services/shared/middleware/suiteAuth.js
+@@ -105,6 +105,12 @@
+   }
+ 
+   return false;
++}
++
++export function isPublicCommsHubIntakePath(req) {
++  const method = String(req.method || "").toUpperCase();
++  const path = pathWithoutQuery(req).replace(/\/+$/, "").toLowerCase();
++  return method === "POST" && path === "/comms-hub/intake/jotform";
+ }
+ 
+ export function isCloudflarePurgePath(req) {
+@@ -199,6 +205,11 @@
+ export function requireAimsBearerAuth(req, res, next) {
+   if (String(req.method || "").toUpperCase() === "OPTIONS") return next();
+   if (isPublicHealthRequest(req)) return next();
++
++  if (isPublicCommsHubIntakePath(req)) {
++    req.aimsAuth = { strategy: "jotform-api-reverification" };
++    return next();
++  }
+ 
+   if (isBlotatoPublishTriggerPath(req)) {
+     const strategy = getBlotatoPublishAuthStrategy(req);
+--- a/services/shared/utils/r2-client.js
++++ b/services/shared/utils/r2-client.js
+@@ -53,6 +53,7 @@
+   R2_BUCKET_BLOG_RSS,
+   R2_BUCKET_BRAND_ASSETS,
+   R2_BUCKET_AUDITS,
++  R2_BUCKET_COMMS_HUB,
+ 
+   // Legacy/compat (read-only)
+   R2_BUCKET_PODCAST_OUTPUT,
+@@ -79,6 +80,7 @@
+   R2_PUBLIC_BASE_URL_BLOG_RSS,
+   R2_PUBLIC_BASE_URL_BRAND_ASSETS,
+   R2_PUBLIC_BASE_URL_AUDITS,
++  R2_PUBLIC_BASE_URL_COMMS_HUB,
+   R2_PUBLIC_BASE_URL_TRANSCRIPT_HTML,
+ 
+   // NEW — metasystem public URL (optional)
+@@ -241,6 +243,11 @@
+   R2_BUCKET_RAW_TEXT_INPUT,
+   editedAudio:     R2_BUCKET_EDITED_AUDIO,
+   "edited-audio":  R2_BUCKET_EDITED_AUDIO,
++
++  // Comms Hub integrity receipts (public bucket: never store message content or attachments)
++  commsHub:        R2_BUCKET_COMMS_HUB,
++  commshub:        R2_BUCKET_COMMS_HUB,
++  "comms-hub":     R2_BUCKET_COMMS_HUB,
+ 
+   // NEW — metasystem bucket (episode-counter + system files)
+   metasystem:      META_SYSTEM_BUCKET_NAME,
+@@ -285,6 +292,9 @@
+   brandAssets: "R2_BUCKET_BRAND_ASSETS",
+   brandassets: "R2_BUCKET_BRAND_ASSETS",
+   "brand-assets": "R2_BUCKET_BRAND_ASSETS",
++  commsHub: "R2_BUCKET_COMMS_HUB",
++  commshub: "R2_BUCKET_COMMS_HUB",
++  "comms-hub": "R2_BUCKET_COMMS_HUB",
+   metasystem: META_SYSTEM_BUCKET_ENV_NAME,
+   metaSystem: META_SYSTEM_BUCKET_ENV_NAME,
+ };
+@@ -319,6 +329,9 @@
+   brandAssets: "R2_PUBLIC_BASE_URL_BRAND_ASSETS",
+   brandassets: "R2_PUBLIC_BASE_URL_BRAND_ASSETS",
+   "brand-assets": "R2_PUBLIC_BASE_URL_BRAND_ASSETS",
++  commsHub: "R2_PUBLIC_BASE_URL_COMMS_HUB",
++  commshub: "R2_PUBLIC_BASE_URL_COMMS_HUB",
++  "comms-hub": "R2_PUBLIC_BASE_URL_COMMS_HUB",
+   metasystem: META_SYSTEM_PUBLIC_URL_ENV_NAME,
+   metaSystem: META_SYSTEM_PUBLIC_URL_ENV_NAME,
+ };
+@@ -366,6 +379,11 @@
+   brandAssets:     R2_PUBLIC_BASE_URL_BRAND_ASSETS,
+   brandassets:     R2_PUBLIC_BASE_URL_BRAND_ASSETS,
+   "brand-assets":  R2_PUBLIC_BASE_URL_BRAND_ASSETS,
++
++  // Comms Hub redacted integrity receipts
++  commsHub:        R2_PUBLIC_BASE_URL_COMMS_HUB,
++  commshub:        R2_PUBLIC_BASE_URL_COMMS_HUB,
++  "comms-hub":     R2_PUBLIC_BASE_URL_COMMS_HUB,
+ 
+   // NEW — metasystem public URL
+   metasystem:      META_SYSTEM_PUBLIC_BASE_URL,
+--- a/test/comms-hub-archive-worker.test.js
++++ b/test/comms-hub-archive-worker.test.js
+@@ -0,0 +1,91 @@
++import test from "node:test";
++import assert from "node:assert/strict";
++import { CommsHubArchiveWorker } from "../services/comms-hub/workers/archiveWorker.js";
++
++const config = {
++  r2BucketAlias: "commsHub",
++  archiveBatchSize: 10,
++  archiveLeaseMs: 120000,
++  archiveMaxAttempts: 3,
++  archiveWorkerEnabled: true,
++  archivePollMs: 60000,
++};
++
++function jobFixture(overrides = {}) {
++  return {
++    event_id: "evt_01k1f5qfh0t3qp98y50v6x42p2",
++    conversation_id: "cnv_01k1f5qfh0t3qp98y50v6x42p2",
++    provider: "jotform",
++    form_id: "260281179574362",
++    submission_id: "700000000000099",
++    received_at: "2026-07-30T21:00:00.000Z",
++    processed_at: "2026-07-30T21:01:00.000Z",
++    payload_sha256: "a".repeat(64),
++    archive_key: "receipts/2026/07/30/evt_test.json",
++    archive_attempts: 1,
++    ...overrides,
++  };
++}
++
++test("archive worker uploads only a redacted integrity receipt and completes the leased job", async () => {
++  const job = jobFixture();
++  const calls = [];
++  let claimed = false;
++  const repository = {
++    claimArchiveJob: async () => {
++      if (claimed) return null;
++      claimed = true;
++      return job;
++    },
++    completeArchiveJob: async (value) => calls.push(["complete", value]),
++    failArchiveJob: async (value) => calls.push(["fail", value]),
++  };
++  const worker = new CommsHubArchiveWorker({
++    repository,
++    config,
++    workerId: "worker-test",
++    logger: { info() {}, warn() {}, error() {} },
++    uploadText: async (...args) => calls.push(["upload", args]),
++  });
++
++  const result = await worker.runOnce({ limit: 2 });
++  assert.deepEqual(result, { skipped: false, processed: 1, completed: 1, failed: 0 });
++  const receipt = calls.find(([name]) => name === "upload")[1][2];
++  assert.doesNotMatch(receipt, /260281179574362|700000000000099/);
++  assert.match(receipt, /sourceReferenceSha256/);
++  assert.equal(calls.some(([name]) => name === "complete"), true);
++  assert.equal(calls.some(([name]) => name === "fail"), false);
++});
++
++test("archive worker classifies temporary upload failure and releases the lease for retry", async () => {
++  const job = jobFixture();
++  let claimed = false;
++  let failure = null;
++  const repository = {
++    claimArchiveJob: async () => {
++      if (claimed) return null;
++      claimed = true;
++      return job;
++    },
++    completeArchiveJob: async () => assert.fail("completion must not run"),
++    failArchiveJob: async (value) => { failure = value; return true; },
++  };
++  const worker = new CommsHubArchiveWorker({
++    repository,
++    config,
++    workerId: "worker-test",
++    logger: { info() {}, warn() {}, error() {} },
++    uploadText: async () => {
++      const error = new Error("temporary failure for ada@example.com");
++      error.statusCode = 503;
++      throw error;
++    },
++  });
++
++  const result = await worker.runOnce({ limit: 1 });
++  assert.deepEqual(result, { skipped: false, processed: 1, completed: 0, failed: 1 });
++  assert.equal(failure.status, "failed");
++  assert.equal(failure.failureClass, "temporary");
++  assert.doesNotMatch(failure.errorMessage, /ada@example\.com/);
++  assert.match(failure.errorMessage, /redacted-email/);
++});
+--- a/test/comms-hub-clients.test.js
++++ b/test/comms-hub-clients.test.js
+@@ -0,0 +1,53 @@
++import test from "node:test";
++import assert from "node:assert/strict";
++import { D1Client } from "../services/comms-hub/clients/d1Client.js";
++import { JotformClient } from "../services/comms-hub/clients/jotformClient.js";
++
++function response(status, body) {
++  return { ok: status >= 200 && status < 300, status, json: async () => body };
++}
++
++const config = {
++  d1DatabaseId: "database-id",
++  d1ApiToken: "d1-token",
++  cloudflareAccountId: "account-id",
++  cloudflareApiBaseUrl: "https://api.cloudflare.test/client/v4",
++  d1TimeoutMs: 15000,
++  jotformApiKey: "jotform-key",
++  jotformApiBaseUrl: "https://api.jotform.test",
++  jotformTimeoutMs: 10000,
++  providerRetryAttempts: 1,
++  providerRetryBaseMs: 1,
++  providerRetryMaxMs: 1,
++};
++
++test("D1 client reuses the Cloudflare query API batch contract and bearer token", async () => {
++  let call;
++  const client = new D1Client(config, { fetchImpl: async (url, init) => {
++    call = { url, init };
++    return response(200, { success: true, result: [
++      { success: true, results: [], meta: {} },
++      { success: true, results: [{ event_id: "evt_1" }], meta: {} },
++    ] });
++  } });
++  const statements = [{ sql: "SELECT ?", params: ["a"] }, { sql: "SELECT ?", params: ["b"] }];
++  const result = await client.batch(statements);
++  assert.equal(result.length, 2);
++  assert.match(call.url, /accounts\/account-id\/d1\/database\/database-id\/query$/);
++  assert.equal(call.init.headers.authorization, "Bearer d1-token");
++  assert.deepEqual(JSON.parse(call.init.body), { batch: statements });
++});
++
++test("Jotform client verifies both submission and form identity", async () => {
++  const client = new JotformClient(config, { fetchImpl: async (url, init) => {
++    assert.match(url, /submission\/700000000000003$/);
++    assert.equal(init.headers.APIKEY, "jotform-key");
++    return response(200, { responseCode: 200, content: { id: "700000000000003", form_id: "262097861889073", answers: {} } });
++  } });
++  const submission = await client.verifySubmission({ formId: "262097861889073", submissionId: "700000000000003" });
++  assert.equal(submission.id, "700000000000003");
++  await assert.rejects(
++    () => client.verifySubmission({ formId: "260281179574362", submissionId: "700000000000003" }),
++    (error) => error.code === "jotform_form_mismatch" && error.statusCode === 403
++  );
++});
+--- a/test/comms-hub-domain.test.js
++++ b/test/comms-hub-domain.test.js
+@@ -0,0 +1,96 @@
++import test from "node:test";
++import assert from "node:assert/strict";
++import { COMMS_HUB_FORM_ROUTES } from "../services/comms-hub/config.js";
++import { buildJotformIntake } from "../services/comms-hub/domain/submission.js";
++import { parseMultipartFields, readJotformWebhookEnvelope, resolveJotformWebhook } from "../services/comms-hub/domain/webhook.js";
++
++const contactRoute = COMMS_HUB_FORM_ROUTES["260281179574362"];
++
++function submissionFixture() {
++  return {
++    id: "700000000000001",
++    form_id: "260281179574362",
++    created_at: "2026-07-30 21:00:00",
++    status: "ACTIVE",
++    answers: {
++      3: { type: "control_fullname", name: "identity", text: "Who are you?", answer: { first: "Ada", last: "Lovelace" } },
++      4: { type: "control_email", name: "returnAddress", text: "Where should we reply?", answer: "ada@example.com" },
++      5: { type: "control_phone", name: "number", text: "Telephone", answer: "+44 20 7000 0000" },
++      6: { type: "control_textarea", name: "question", text: "Your message", answer: "Please contact me about AIMS." },
++      7: { type: "control_fileupload", name: "evidence", text: "Evidence", answer: ["https://www.jotform.com/uploads/example/evidence.pdf"] },
++    },
++  };
++}
++
++test("Comms Hub accepts only the three registered Jotforms", () => {
++  for (const formId of ["260281179574362", "262063136008044", "262097861889073"]) {
++    const result = resolveJotformWebhook({ formID: formId, submissionID: "700000000000001" });
++    assert.equal(result.formId, formId);
++    assert.equal(result.route, COMMS_HUB_FORM_ROUTES[formId]);
++  }
++  assert.throws(
++    () => resolveJotformWebhook({ formID: "999999999999999", submissionID: "700000000000001" }),
++    (error) => error.code === "jotform_form_not_allowed" && error.statusCode === 403
++  );
++});
++
++test("Comms Hub parses Jotform multipart webhook identifiers without accepting uploaded file parts", () => {
++  const boundary = "----jotform-boundary";
++  const body = [
++    `--${boundary}\r\nContent-Disposition: form-data; name="formID"\r\n\r\n260281179574362\r\n`,
++    `--${boundary}\r\nContent-Disposition: form-data; name="submissionID"\r\n\r\n700000000000001\r\n`,
++    `--${boundary}\r\nContent-Disposition: form-data; name="ignored"; filename="payload.bin"\r\nContent-Type: application/octet-stream\r\n\r\nsecret\r\n`,
++    `--${boundary}--\r\n`,
++  ].join("");
++  const parsed = parseMultipartFields(Buffer.from(body), `multipart/form-data; boundary=${boundary}`);
++  assert.deepEqual(parsed, { formID: "260281179574362", submissionID: "700000000000001" });
++});
++
++test("verified Jotform intake uses control types, preserves attachment references in D1 payload, and keeps public receipt redacted", () => {
++  const intake = buildJotformIntake({
++    formId: "260281179574362",
++    submissionId: "700000000000001",
++    route: contactRoute,
++    submission: submissionFixture(),
++    correlationId: "correlation-test",
++    now: new Date("2026-07-30T21:01:00.000Z"),
++  });
++
++  assert.equal(intake.contact.name, "Ada Lovelace");
++  assert.equal(intake.contact.email, "ada@example.com");
++  assert.equal(intake.attachments.length, 1);
++  assert.match(intake.payloadJson, /ada@example\.com/);
++  assert.match(intake.payloadJson, /evidence\.pdf/);
++  assert.doesNotMatch(intake.receiptJson, /Ada|ada@example\.com|Please contact|evidence\.pdf|700000000000001/);
++  assert.match(intake.receiptJson, /sourceReferenceSha256/);
++});
++
++test("conversation, message and event identifiers are deterministic across webhook retries", () => {
++  const input = {
++    formId: "260281179574362",
++    submissionId: "700000000000001",
++    route: contactRoute,
++    submission: submissionFixture(),
++    correlationId: "first",
++    now: new Date("2026-07-30T21:01:00.000Z"),
++  };
++  const first = buildJotformIntake(input);
++  const second = buildJotformIntake({ ...input, correlationId: "second", now: new Date("2026-07-30T22:01:00.000Z") });
++  assert.equal(first.conversationId, second.conversationId);
++  assert.equal(first.messageId, second.messageId);
++  assert.equal(first.eventId, second.eventId);
++});
++
++
++test("parsed JSON and URL-encoded webhook bodies obey the Comms Hub byte limit even without Content-Length", async () => {
++  const req = {
++    body: { formID: "260281179574362", submissionID: "700000000000001" },
++    headers: { "content-type": "application/json" },
++    get(name) { return this.headers[String(name).toLowerCase()]; },
++    aimsParsedBodyBytes: 2049,
++  };
++  await assert.rejects(
++    () => readJotformWebhookEnvelope(req, 2048),
++    (error) => error.code === "jotform_webhook_too_large" && error.statusCode === 413
++  );
++});
+--- a/test/comms-hub-intake-service.test.js
++++ b/test/comms-hub-intake-service.test.js
+@@ -0,0 +1,50 @@
++import test from "node:test";
++import assert from "node:assert/strict";
++import { processJotformIntake } from "../services/comms-hub/intakeService.js";
++
++function contextFixture({ duplicate = false, verifiedFormId = "262097861889073" } = {}) {
++  const calls = [];
++  return {
++    calls,
++    jotform: {
++      verifySubmission: async (identifiers) => {
++        calls.push(["verify", identifiers]);
++        if (verifiedFormId !== identifiers.formId) {
++          const error = new Error("mismatch");
++          error.code = "jotform_form_mismatch";
++          throw error;
++        }
++        return { id: identifiers.submissionId, form_id: identifiers.formId, created_at: "2026-07-30 21:20:00", answers: {} };
++      },
++    },
++    repository: {
++      persistJotformIntake: async (intake) => {
++        calls.push(["persist", intake.eventId]);
++        return { duplicate };
++      },
++    },
++  };
++}
++
++test("intake service verifies the provider before writing the event", async () => {
++  const context = contextFixture();
++  const result = await processJotformIntake({
++    envelope: { formID: "262097861889073", submissionID: "700000000000004" },
++    correlationId: "correlation",
++    context,
++    now: new Date("2026-07-30T21:21:00.000Z"),
++  });
++  assert.equal(result.persistence.duplicate, false);
++  assert.equal(result.intake.route.workflow, "podcast_enquiry_intake");
++  assert.deepEqual(context.calls.map(([name]) => name), ["verify", "persist"]);
++});
++
++test("intake service never persists when provider verification fails", async () => {
++  const context = contextFixture({ verifiedFormId: "different" });
++  await assert.rejects(() => processJotformIntake({
++    envelope: { formID: "262097861889073", submissionID: "700000000000004" },
++    correlationId: "correlation",
++    context,
++  }));
++  assert.deepEqual(context.calls.map(([name]) => name), ["verify"]);
++});
+--- a/test/comms-hub-integration-contract.test.js
++++ b/test/comms-hub-integration-contract.test.js
+@@ -0,0 +1,57 @@
++import test from "node:test";
++import assert from "node:assert/strict";
++import { readFile } from "node:fs/promises";
++
++async function source(path) {
++  return readFile(new URL(`../${path}`, import.meta.url), "utf8");
++}
++
++test("Comms Hub is additive to the AIMS route registry and owns no replacement server or package", async () => {
++  const routes = await source("routes/index.js");
++  const serviceFiles = await Promise.all([
++    source("services/comms-hub/index.js"),
++    source("services/comms-hub/routes/index.js"),
++  ]);
++  assert.match(routes, /path:\s*"\/comms-hub"/);
++  assert.match(routes, /AIMS Comms Hub/);
++  assert.doesNotMatch(serviceFiles.join("\n"), /app\.listen|createServer\(|process\.on\(|new S3Client/);
++});
++
++test("central auth exposes the exact Jotform ingress and keeps operational routes protected", async () => {
++  const auth = await source("services/shared/middleware/suiteAuth.js");
++  assert.match(auth, /method === "POST" && path === "\/comms-hub\/intake\/jotform"/);
++  assert.match(auth, /strategy: "jotform-api-reverification"/);
++  assert.doesNotMatch(auth, /path\.startsWith\("\/comms-hub"\)/);
++});
++
++test("AIMS lifecycle starts, checks and stops the Comms Hub runtime", async () => {
++  const [server, runtime] = await Promise.all([source("server.js"), source("services/comms-hub/runtime.js")]);
++  assert.match(server, /getCommsHubRuntimeReadiness/);
++  assert.match(server, /void startCommsHubRuntime\(\)/);
++  assert.match(server, /await stopCommsHubRuntime\(\)/);
++  assert.match(server, /name: "comms_hub"/);
++  assert.match(server, /aimsParsedBodyBytes/);
++  assert.match(runtime, /status: "idle", ready: false/);
++  const routes = await source("services/comms-hub/routes/index.js");
++  assert.match(routes, /comms_hub_not_ready/);
++});
++
++test("D1 schema is migration-governed and never created by request or runtime startup", async () => {
++  const runtime = await source("services/comms-hub/runtime.js");
++  const routes = await source("services/comms-hub/routes/index.js");
++  const migrationScript = await source("scripts/commsHubMigrate.js");
++  assert.doesNotMatch(runtime + routes, /CREATE TABLE|ALTER TABLE/);
++  assert.match(migrationScript, /comms_hub_schema_migrations/);
++  assert.match(migrationScript, /COMMS_HUB_REQUIRED_MIGRATIONS/);
++  assert.match(migrationScript, /checksum mismatch/i);
++});
++
++test("R2 shared client has the Comms Hub alias and public receipts are explicitly redacted", async () => {
++  const r2 = await source("services/shared/utils/r2-client.js");
++  const worker = await source("services/comms-hub/workers/archiveWorker.js");
++  const submission = await source("services/comms-hub/domain/submission.js");
++  assert.match(r2, /commsHub:\s+R2_BUCKET_COMMS_HUB/);
++  assert.match(r2, /commsHub:\s+R2_PUBLIC_BASE_URL_COMMS_HUB/);
++  assert.doesNotMatch(worker, /payload_json|body_text|primary_email|provider_url/);
++  assert.match(submission, /sourceReferenceSha256/);
++});
+--- a/test/comms-hub-repository.test.js
++++ b/test/comms-hub-repository.test.js
+@@ -0,0 +1,150 @@
++import test from "node:test";
++import assert from "node:assert/strict";
++import { readFile } from "node:fs/promises";
++import { DatabaseSync } from "node:sqlite";
++import { COMMS_HUB_FORM_ROUTES } from "../services/comms-hub/config.js";
++import { buildJotformIntake } from "../services/comms-hub/domain/submission.js";
++import { CommsHubRepository } from "../services/comms-hub/repositories/commsRepository.js";
++
++class SqliteD1 {
++  constructor(database) { this.database = database; }
++  query(sql, params = []) {
++    const statement = this.database.prepare(sql);
++    const isReturning = /\bRETURNING\b/i.test(sql);
++    const isSelect = /^\s*SELECT\b/i.test(sql);
++    if (isReturning || isSelect) return Promise.resolve({ success: true, results: statement.all(...params), meta: {} });
++    const result = statement.run(...params);
++    return Promise.resolve({ success: true, results: [], meta: { changes: result.changes } });
++  }
++  async batch(statements) {
++    this.database.exec("BEGIN");
++    try {
++      const results = [];
++      for (const statement of statements) results.push(await this.query(statement.sql, statement.params || []));
++      this.database.exec("COMMIT");
++      return results;
++    } catch (error) {
++      this.database.exec("ROLLBACK");
++      throw error;
++    }
++  }
++}
++
++async function setup() {
++  const database = new DatabaseSync(":memory:");
++  database.exec(await readFile(new URL("../services/comms-hub/migrations/0001_comms_hub.sql", import.meta.url), "utf8"));
++  return { database, repository: new CommsHubRepository(new SqliteD1(database)) };
++}
++
++function intakeFixture() {
++  return buildJotformIntake({
++    formId: "262063136008044",
++    submissionId: "700000000000002",
++    route: COMMS_HUB_FORM_ROUTES["262063136008044"],
++    correlationId: "repository-test",
++    now: new Date("2026-07-30T21:10:00.000Z"),
++    submission: {
++      id: "700000000000002",
++      form_id: "262063136008044",
++      created_at: "2026-07-30 21:09:00",
++      answers: {
++        1: { type: "control_fullname", answer: { first: "Grace", last: "Hopper" } },
++        2: { type: "control_email", answer: "grace@example.com" },
++        3: { type: "control_textarea", text: "Case study", answer: "Compiler evidence" },
++        4: { type: "control_fileupload", text: "Document", answer: "https://www.jotform.com/uploads/example/case-study.pdf" },
++      },
++    },
++  });
++}
++
++test("D1 migration creates governed Comms Hub tables and constraints", async () => {
++  const { database } = await setup();
++  const names = database.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").all().map((row) => row.name);
++  for (const expected of [
++    "comms_hub_contacts",
++    "comms_hub_conversations",
++    "comms_hub_messages",
++    "comms_hub_attachments",
++    "comms_hub_intake_events",
++  ]) assert.ok(names.includes(expected), expected);
++  assert.throws(() => database.prepare("INSERT INTO comms_hub_conversations (id,channel,provider,workflow,status,contact_id,subject,source_reference,created_at,updated_at,last_message_at,metadata_json) VALUES ('x','form','jotform','x','bad','missing','x','x','x','x','x','{}')").run());
++});
++
++test("repository persists the complete vertical slice and makes duplicate webhook delivery idempotent", async () => {
++  const { database, repository } = await setup();
++  const intake = intakeFixture();
++  assert.deepEqual(await repository.persistJotformIntake(intake), { duplicate: false });
++  assert.deepEqual(await repository.persistJotformIntake({ ...intake, correlationId: "retry" }), { duplicate: true });
++
++  assert.equal(database.prepare("SELECT COUNT(*) AS count FROM comms_hub_contacts").get().count, 1);
++  assert.equal(database.prepare("SELECT COUNT(*) AS count FROM comms_hub_conversations").get().count, 1);
++  assert.equal(database.prepare("SELECT COUNT(*) AS count FROM comms_hub_messages").get().count, 1);
++  assert.equal(database.prepare("SELECT COUNT(*) AS count FROM comms_hub_attachments").get().count, 1);
++  assert.equal(database.prepare("SELECT COUNT(*) AS count FROM comms_hub_intake_events").get().count, 1);
++
++  const conversation = await repository.getConversation(intake.conversationId);
++  assert.equal(conversation.contact.primary_email, "grace@example.com");
++  assert.equal(conversation.messages.length, 1);
++  assert.equal(conversation.attachments.length, 1);
++});
++
++test("archive queue uses a lease so two AIMS instances cannot claim the same event", async () => {
++  const { repository } = await setup();
++  const intake = intakeFixture();
++  await repository.persistJotformIntake(intake);
++  const now = "2026-07-30T21:11:00.000Z";
++  const first = await repository.claimArchiveJob({ workerId: "worker-a", now, leaseExpiresAt: "2026-07-30T21:13:00.000Z", maxAttempts: 10 });
++  const second = await repository.claimArchiveJob({ workerId: "worker-b", now, leaseExpiresAt: "2026-07-30T21:13:00.000Z", maxAttempts: 10 });
++  assert.equal(first.event_id, intake.eventId);
++  assert.equal(second, null);
++  await repository.completeArchiveJob({ eventId: intake.eventId, workerId: "worker-a", completedAt: "2026-07-30T21:12:00.000Z" });
++  await repository.completeArchiveJob({ eventId: intake.eventId, workerId: "worker-a", completedAt: "2026-07-30T21:12:30.000Z" });
++  assert.deepEqual(await repository.getArchiveCounts(), { complete: 1 });
++});
++
++
++test("the same numeric submission ID remains unique per registered Jotform", async () => {
++  const { database, repository } = await setup();
++  const first = intakeFixture();
++  const second = buildJotformIntake({
++    formId: "262097861889073",
++    submissionId: first.submissionId,
++    route: COMMS_HUB_FORM_ROUTES["262097861889073"],
++    correlationId: "cross-form-test",
++    now: new Date("2026-07-30T21:15:00.000Z"),
++    submission: {
++      id: first.submissionId,
++      form_id: "262097861889073",
++      created_at: "2026-07-30 21:14:00",
++      answers: {
++        1: { type: "control_email", answer: "grace@example.com" },
++        2: { type: "control_textarea", text: "Podcast enquiry", answer: "A separate workflow" },
++      },
++    },
++  });
++
++  assert.deepEqual(await repository.persistJotformIntake(first), { duplicate: false });
++  assert.deepEqual(await repository.persistJotformIntake(second), { duplicate: false });
++  assert.equal(database.prepare("SELECT COUNT(*) AS count FROM comms_hub_intake_events").get().count, 2);
++  assert.equal(database.prepare("SELECT COUNT(*) AS count FROM comms_hub_conversations").get().count, 2);
++});
++
++
++test("schema readiness requires the governed migration ledger entry", async () => {
++  const { database, repository } = await setup();
++  database.exec(`CREATE TABLE comms_hub_schema_migrations (
++    version TEXT PRIMARY KEY,
++    checksum TEXT NOT NULL,
++    applied_at TEXT NOT NULL
++  )`);
++  assert.deepEqual(await repository.schemaStatus(), {
++    available: false,
++    migrations: [],
++    missing: ["0001_comms_hub"],
++  });
++  database.prepare("INSERT INTO comms_hub_schema_migrations (version, checksum, applied_at) VALUES (?, ?, ?)")
++    .run("0001_comms_hub", "test-checksum", "2026-07-30T21:00:00.000Z");
++  const ready = await repository.schemaStatus();
++  assert.equal(ready.available, true);
++  assert.deepEqual(ready.missing, []);
++});
+--- a/test/comms-hub-routes.test.js
++++ b/test/comms-hub-routes.test.js
+@@ -0,0 +1,102 @@
++import test from "node:test";
++import assert from "node:assert/strict";
++import express from "express";
++import request from "supertest";
++import { createCommsHubRouter } from "../services/comms-hub/routes/index.js";
++
++function withEnv(values, fn) {
++  const previous = {};
++  for (const [key, value] of Object.entries(values)) {
++    previous[key] = process.env[key];
++    if (value === undefined) delete process.env[key]; else process.env[key] = value;
++  }
++  return Promise.resolve().then(fn).finally(() => {
++    for (const [key, value] of Object.entries(previous)) {
++      if (value === undefined) delete process.env[key]; else process.env[key] = value;
++    }
++  });
++}
++
++const enabledEnv = {
++  COMMS_HUB_ENABLED: "true",
++  D1_UUID: "database-id",
++  D1_API_KEY: "d1-key",
++  JOTFORM_API_KEY: "jotform-key",
++  R2_ENDPOINT: "https://0123456789abcdef0123456789abcdef.r2.cloudflarestorage.com",
++  R2_ACCESS_KEY_ID: "r2-access",
++  R2_SECRET_ACCESS_KEY: "r2-secret",
++  R2_BUCKET_COMMS_HUB: "comms-hub",
++  R2_PUBLIC_BASE_URL_COMMS_HUB: "https://pub.example.invalid",
++};
++
++function testApp(overrides = {}) {
++  const calls = { verified: 0, persisted: 0, kicked: 0 };
++  const context = {
++    jotform: {
++      verifySubmission: async ({ formId, submissionId }) => {
++        calls.verified += 1;
++        return { id: submissionId, form_id: formId, created_at: "2026-07-30 21:20:00", answers: {} };
++      },
++    },
++    repository: {
++      persistJotformIntake: async () => { calls.persisted += 1; return { duplicate: false }; },
++    },
++    ...overrides,
++  };
++  const app = express();
++  app.use(express.json());
++  app.use(express.urlencoded({ extended: true }));
++  app.use("/comms-hub", createCommsHubRouter({
++    contextProvider: () => context,
++    kickArchive: () => { calls.kicked += 1; return true; },
++    runtimeReadinessProvider: () => ({ status: "ready", ready: true, detail: "test" }),
++  }));
++  return { app, calls };
++}
++
++test("Jotform route performs API re-verification before persistence", async () => {
++  await withEnv(enabledEnv, async () => {
++    const { app, calls } = testApp();
++    const result = await request(app).post("/comms-hub/intake/jotform").type("form").send({ formID: "262097861889073", submissionID: "700000000000004" });
++    assert.equal(result.status, 202);
++    assert.equal(result.body.accepted, true);
++    assert.equal(result.body.conversationId, undefined);
++    assert.equal(result.body.eventId, undefined);
++    assert.equal(result.body.workflow, undefined);
++    assert.deepEqual(calls, { verified: 1, persisted: 1, kicked: 1 });
++  });
++});
++
++test("unregistered Jotforms are rejected before external verification or D1 writes", async () => {
++  await withEnv(enabledEnv, async () => {
++    const { app, calls } = testApp();
++    const result = await request(app).post("/comms-hub/intake/jotform").send({ formID: "999999999999999", submissionID: "700000000000004" });
++    assert.equal(result.status, 403);
++    assert.equal(result.body.error, "jotform_form_not_allowed");
++    assert.deepEqual(calls, { verified: 0, persisted: 0, kicked: 0 });
++  });
++});
++
++
++test("Jotform intake fails closed until the Comms Hub runtime and schema are ready", async () => {
++  await withEnv(enabledEnv, async () => {
++    const calls = { verified: 0, persisted: 0 };
++    const context = {
++      jotform: { verifySubmission: async () => { calls.verified += 1; } },
++      repository: { persistJotformIntake: async () => { calls.persisted += 1; } },
++    };
++    const app = express();
++    app.use(express.json());
++    app.use("/comms-hub", createCommsHubRouter({
++      contextProvider: () => context,
++      runtimeReadinessProvider: () => ({ status: "schema_missing", ready: false, detail: "run_npm_comms_migrate" }),
++    }));
++    const result = await request(app).post("/comms-hub/intake/jotform").send({
++      formID: "260281179574362",
++      submissionID: "700000000000004",
++    });
++    assert.equal(result.status, 503);
++    assert.equal(result.body.error, "comms_hub_not_ready");
++    assert.deepEqual(calls, { verified: 0, persisted: 0 });
++  });
++});
+--- a/test/suite-auth.test.js
++++ b/test/suite-auth.test.js
+@@ -212,3 +212,19 @@
+     assert.equal(response.text, "");
+   });
+ });
++
++import { isPublicCommsHubIntakePath } from "../services/shared/middleware/suiteAuth.js";
++
++test("suite auth exposes only the exact Comms Hub Jotform intake method and path", () => {
++  assert.equal(isPublicCommsHubIntakePath({ method: "POST", originalUrl: "/comms-hub/intake/jotform" }), true);
++  assert.equal(isPublicCommsHubIntakePath({ method: "GET", originalUrl: "/comms-hub/intake/jotform" }), false);
++  assert.equal(isPublicCommsHubIntakePath({ method: "POST", originalUrl: "/comms-hub/intake/jotform/extra" }), false);
++  assert.equal(isPublicCommsHubIntakePath({ method: "POST", originalUrl: "/comms-hub/archive/drain" }), false);
++});
++
++test("Comms Hub diagnostics remain protected by the AIMS bearer token", async () => {
++  await withEnv({ NODE_ENV: "production", AIMS_API_KEY: "test-aims-key", COMMS_HUB_ENABLED: "false" }, async () => {
++    const unauthenticated = await request(app).get("/comms-hub/diagnostics");
++    assert.equal(unauthenticated.status, 401);
++  });
++});

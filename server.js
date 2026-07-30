@@ -10,6 +10,8 @@ import { createRateLimitMiddleware } from "./services/shared/middleware/rateLimi
 import { hasDurableStateEnv, durableStateEnvHint } from "./services/shared/utils/durableStateEnv.js";
 import * as lifecycle from "./services/shared/utils/lifecycle.js";
 import { requireAimsBearerAuth } from "./services/shared/middleware/suiteAuth.js";
+import { getCommsHubReadiness } from "./services/comms-hub/config.js";
+import { getCommsHubRuntimeReadiness, startCommsHubRuntime, stopCommsHubRuntime } from "./services/comms-hub/runtime.js";
 
 export const app = express();
 
@@ -195,6 +197,15 @@ function productionReadiness() {
         : `ephemeral or incomplete durable state configuration. ${durableStateEnvHint()}`,
     },
     { name: "openrouter", ok: !production || usableSecret(process.env.OPENROUTER_API_KEY), detail: usableSecret(process.env.OPENROUTER_API_KEY) ? "configured" : "missing" },
+    (() => {
+      const configuration = getCommsHubReadiness();
+      const runtime = getCommsHubRuntimeReadiness();
+      return {
+        name: "comms_hub",
+        ok: configuration.ready && runtime.ready,
+        detail: runtime.status,
+      };
+    })(),
   ];
   const ready = checks.every((check) => check.ok);
   return { ready, status: ready ? "ready" : "degraded", checks };
@@ -204,6 +215,21 @@ const allowedOrigins = (process.env.CORS_ORIGINS || "")
   .split(",")
   .map((value) => value.trim())
   .filter(Boolean);
+
+function isCommsHubJotformIntakeRequest(req) {
+  const method = String(req?.method || "").toUpperCase();
+  const path = String(req?.originalUrl || req?.url || "")
+    .split("?")[0]
+    .replace(/\/+$/, "")
+    .toLowerCase();
+  return method === "POST" && path === "/comms-hub/intake/jotform";
+}
+
+function recordCommsHubParsedBodyBytes(req, _res, buffer) {
+  if (isCommsHubJotformIntakeRequest(req)) {
+    req.aimsParsedBodyBytes = Buffer.isBuffer(buffer) ? buffer.length : 0;
+  }
+}
 
 app.use(
   cors({
@@ -218,8 +244,8 @@ app.use(
   })
 );
 
-app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || "10mb" }));
-app.use(express.urlencoded({ extended: true, limit: process.env.URLENCODED_BODY_LIMIT || "10mb" }));
+app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || "10mb", verify: recordCommsHubParsedBodyBytes }));
+app.use(express.urlencoded({ extended: true, limit: process.env.URLENCODED_BODY_LIMIT || "10mb", verify: recordCommsHubParsedBodyBytes }));
 
 app.use(
   pinoHttp({
@@ -387,10 +413,13 @@ export function startServer(port = PORT, host = "0.0.0.0") {
         "/cloudflare",
         "/zernio",
         "/audits",
+        "/comms-hub",
       ],
     });
     debug("server.trustProxy", { trustProxy });
   });
+
+  void startCommsHubRuntime();
 
   if (!processHandlersBound) {
     processHandlersBound = true;
@@ -425,6 +454,7 @@ export async function stopServer() {
     });
   });
 
+  await stopCommsHubRuntime();
   server = undefined;
 }
 
@@ -441,10 +471,17 @@ function shutdown(signal) {
     if (err) {
       error("server.shutdown.fail", { signal, error: err.message });
       process.exit(1);
+      return;
     }
 
-    info("server.shutdown.complete", { signal });
-    process.exit(signal === "uncaughtException" ? 1 : 0);
+    void stopCommsHubRuntime()
+      .catch((runtimeError) => {
+        error("commsHub.runtime.stopFailed", { signal, error: runtimeError?.message || String(runtimeError) });
+      })
+      .finally(() => {
+        info("server.shutdown.complete", { signal });
+        process.exit(signal === "uncaughtException" ? 1 : 0);
+      });
   });
 
   setTimeout(() => {

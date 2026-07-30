@@ -2,6 +2,7 @@ import "./config/loadEnv.js";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { durableStateEnvHint, hasDurableStateEnv } from "./services/shared/utils/durableStateEnv.js";
+import { getCommsHubMissingEnv } from "./services/comms-hub/config.js";
 
 const REQUIRED_ENV_KEYS = [
   "NODE_ENV",
@@ -39,10 +40,11 @@ function parseBoolean(value, fallback = false) {
 }
 
 export function getMissingEnvKeys(env = process.env) {
-  return REQUIRED_ENV_KEYS.filter((key) => {
+  const missing = REQUIRED_ENV_KEYS.filter((key) => {
     const value = env[key];
     return value === undefined || String(value).trim() === "";
   });
+  return [...new Set([...missing, ...getCommsHubMissingEnv(env)])];
 }
 
 export function getDurableStateError(env = process.env) {

@@ -1,0 +1,264 @@
+{
+  "artifact": "AIMS Comms Hub service 15 additive integration",
+  "generatedAt": "2026-07-30T22:36:41.243964+00:00",
+  "sourceArchive": "AIMS-main.zip",
+  "sourceSha256": "25acbed471b6d252d162e40635c381248676c2b4cd719e5b0fdb962ee219083e",
+  "changedPathCount": 39,
+  "added": 26,
+  "modified": 13,
+  "deleted": 0,
+  "validation": {
+    "dependencyFreeTests": {
+      "passed": 21,
+      "failed": 0
+    },
+    "buildCheck": "passed",
+    "syntaxChecks": {
+      "files": 32,
+      "status": "passed"
+    },
+    "relativeImportGraph": {
+      "files": 17,
+      "status": "passed"
+    },
+    "placeholderScan": "clean",
+    "embeddedSecretAssignmentScan": "clean",
+    "fullDependencySuite": "not run: uploaded node_modules contains 0 files and offline npm cache is incomplete"
+  },
+  "files": [
+    {
+      "path": ".env.example",
+      "status": "modified",
+      "sha256": "eaead9f75440a5f19d81bc0523dcd268d454ca4e0656322a643eda40550cbcfc",
+      "bytes": 8165
+    },
+    {
+      "path": "README.md",
+      "status": "modified",
+      "sha256": "0dc5d3e9ec5a434a1a04d8e5c2e9d1347901256803029618ab6970e397f41026",
+      "bytes": 117401
+    },
+    {
+      "path": "config/production.defaults.env",
+      "status": "modified",
+      "sha256": "ac7b051c562998ffb336c40920c121c190341b3d295c42b416fb3b541eaa8203",
+      "bytes": 27701
+    },
+    {
+      "path": "deployment-check.js",
+      "status": "modified",
+      "sha256": "08d4c650272946c609186e85df297051bdf9900de54f430407bd9040f1131dc2",
+      "bytes": 3158
+    },
+    {
+      "path": "env.template",
+      "status": "modified",
+      "sha256": "f686f3c360fc793255e43cc222926477d6ce534895ff98d5b4a4a4c8c3d7b370",
+      "bytes": 27233
+    },
+    {
+      "path": "package.json",
+      "status": "modified",
+      "sha256": "ca1af24ac2b5411131193d9a20122560295e366bc999db67903a70f3dc5fbdfe",
+      "bytes": 1879
+    },
+    {
+      "path": "routes/index.js",
+      "status": "modified",
+      "sha256": "acb2a50a0f68cbe09ab6e4718f5fa5b079d2c68a0080a59457647b5ad589a90c",
+      "bytes": 2757
+    },
+    {
+      "path": "scripts/commsHubMigrate.js",
+      "status": "added",
+      "sha256": "35ae59d419d265eec6db583375c4de56c7c00cd8a3e751cdc8347f1133f13a40",
+      "bytes": 3750
+    },
+    {
+      "path": "scripts/koyebEnvDoctor.js",
+      "status": "modified",
+      "sha256": "dbad6da290c94923c0fb3886e0c0f80a3c4edcfc7ec28b59655928f69b1774ba",
+      "bytes": 12426
+    },
+    {
+      "path": "scripts/startupCheck.js",
+      "status": "modified",
+      "sha256": "4b599ec27dbd6a97618003d7229f4aef8814b08804cb4aace715a5d313dd7f0a",
+      "bytes": 5069
+    },
+    {
+      "path": "server.js",
+      "status": "modified",
+      "sha256": "360e7dd8610afade0ba366178d6f7e34b0f7ebb25722bd2593c5d38605ae09c3",
+      "bytes": 15212
+    },
+    {
+      "path": "services/comms-hub/README.md",
+      "status": "added",
+      "sha256": "6735ebfdabdf7dcf5a8bdaf72fedca86c78e774631461817270f874761ee2e24",
+      "bytes": 3233
+    },
+    {
+      "path": "services/comms-hub/clients/d1Client.js",
+      "status": "added",
+      "sha256": "b4ebc8b74529e9e8e63b6f060260cd5712b6ad588669476594f96b885f5e82d5",
+      "bytes": 5896
+    },
+    {
+      "path": "services/comms-hub/clients/jotformClient.js",
+      "status": "added",
+      "sha256": "7be60387179b2519ddade0e29e873b7691e28be5c138e20d7000efc0f23de441",
+      "bytes": 4121
+    },
+    {
+      "path": "services/comms-hub/clients/retry.js",
+      "status": "added",
+      "sha256": "b47604bcb42b4d6074ecc5657418505e09b53dd078881817aae516c644f46f7c",
+      "bytes": 1210
+    },
+    {
+      "path": "services/comms-hub/config.js",
+      "status": "added",
+      "sha256": "207e28cb69bb374c91d4f44e45b6ceba5bad9f25459cfc72b4e302b5bb680f39",
+      "bytes": 5988
+    },
+    {
+      "path": "services/comms-hub/domain/ids.js",
+      "status": "added",
+      "sha256": "2296d4ae7c569faa89eb7e11f5054d27ab69abbe09c543f90133b4483d5d802b",
+      "bytes": 1059
+    },
+    {
+      "path": "services/comms-hub/domain/redaction.js",
+      "status": "added",
+      "sha256": "e4c37c027052fd8d073aa91dce2308a0e26e0b578f552d299aed013fc3de7ccd",
+      "bytes": 834
+    },
+    {
+      "path": "services/comms-hub/domain/submission.js",
+      "status": "added",
+      "sha256": "6989df30cc6671e29786bc293d68c401f9bf056077aaf598de74fd186fef243b",
+      "bytes": 7753
+    },
+    {
+      "path": "services/comms-hub/domain/webhook.js",
+      "status": "added",
+      "sha256": "9c4cfceb31dc4b5a6224e8a6eece43a83f75a64b64a9691597529e6bdd0ea539",
+      "bytes": 6267
+    },
+    {
+      "path": "services/comms-hub/errors.js",
+      "status": "added",
+      "sha256": "78fbfef175b3bfb28df91c2e536ebf5c429a8740e1c5826359374837869fee7d",
+      "bytes": 907
+    },
+    {
+      "path": "services/comms-hub/index.js",
+      "status": "added",
+      "sha256": "3568948c6b56452ff1747cb3de5ea18297ccb0fd9e11dc7273b11777b99b6696",
+      "bytes": 154
+    },
+    {
+      "path": "services/comms-hub/intakeService.js",
+      "status": "added",
+      "sha256": "b350ca480cc548902507768953ab89cb4e74e45ea00fa9552e5a87b0e3a669e1",
+      "bytes": 606
+    },
+    {
+      "path": "services/comms-hub/migrations/0001_comms_hub.sql",
+      "status": "added",
+      "sha256": "a17e2a2999d2b087c7ae4b92c8acd338a8c7ac226851b2a982984eb426bbb22b",
+      "bytes": 3469
+    },
+    {
+      "path": "services/comms-hub/migrations/manifest.js",
+      "status": "added",
+      "sha256": "949c75766eff33a8430ab5e722cdb2661ce3d5b0bdf622ae8b6705dfe840f482",
+      "bytes": 132
+    },
+    {
+      "path": "services/comms-hub/repositories/commsRepository.js",
+      "status": "added",
+      "sha256": "5323d872ff2a6101ff1950a4083be5e8dbedf03180893412e59ea4b3b0c49774",
+      "bytes": 9506
+    },
+    {
+      "path": "services/comms-hub/routes/index.js",
+      "status": "added",
+      "sha256": "2ceb8c0eca264382fb351bcaa878f8e6d74d9fbbc9fe6d94b79e3540171bf272",
+      "bytes": 6917
+    },
+    {
+      "path": "services/comms-hub/runtime.js",
+      "status": "added",
+      "sha256": "73026189d3b50adfd1a44585b7890ad991147148fc9da6cbd7ac8f95dc3bf390",
+      "bytes": 3965
+    },
+    {
+      "path": "services/comms-hub/workers/archiveWorker.js",
+      "status": "added",
+      "sha256": "ba0414208d2aaaf26160f11bd2cd95d2ace2a90c8468b57a7cb6a06c28c46887",
+      "bytes": 5609
+    },
+    {
+      "path": "services/shared/middleware/suiteAuth.js",
+      "status": "modified",
+      "sha256": "8ac8850e02e7e9ebaa721b8263ab243df726f7463ee2422e53ddf7644ea433f7",
+      "bytes": 8970
+    },
+    {
+      "path": "services/shared/utils/r2-client.js",
+      "status": "modified",
+      "sha256": "8436fb924b732bcccd23c7614c30ae5ffcfe6f3166c5d7b93c7eadc224021f2b",
+      "bytes": 21245
+    },
+    {
+      "path": "test/comms-hub-archive-worker.test.js",
+      "status": "added",
+      "sha256": "aba8591a3a0e0537ddbb130dbb18871967dc23786be790f3b9272c5e62ebede9",
+      "bytes": 3107
+    },
+    {
+      "path": "test/comms-hub-clients.test.js",
+      "status": "added",
+      "sha256": "8c9415c3e849a4b22869f054b7117b0dc5a2c3b5458327526e7758d68f4e6ecc",
+      "bytes": 2312
+    },
+    {
+      "path": "test/comms-hub-domain.test.js",
+      "status": "added",
+      "sha256": "3a8bf8ab054d17e40ef5dd3eada7eba1f57a10903098422c73adf09bc7c1b6dd",
+      "bytes": 4585
+    },
+    {
+      "path": "test/comms-hub-intake-service.test.js",
+      "status": "added",
+      "sha256": "cf2478229acce05d9aba4210eb4858dce7fc93ff82ce777d383152126d12b207",
+      "bytes": 1847
+    },
+    {
+      "path": "test/comms-hub-integration-contract.test.js",
+      "status": "added",
+      "sha256": "93f998f88d26fd77ab9037f5f028f86404799d0c6e07091acebc7d6ca2be0614",
+      "bytes": 2911
+    },
+    {
+      "path": "test/comms-hub-repository.test.js",
+      "status": "added",
+      "sha256": "4311d20b5a23f527b40a30abc7c9c483df3b186267e8b0a90f92b227c07f8f63",
+      "bytes": 7165
+    },
+    {
+      "path": "test/comms-hub-routes.test.js",
+      "status": "added",
+      "sha256": "b308325c1b242d0e758206ac2a8ff27e32edc520054654aa9dea3ff230fd6208",
+      "bytes": 4027
+    },
+    {
+      "path": "test/suite-auth.test.js",
+      "status": "modified",
+      "sha256": "f63f44a2f43b7aee67db3f78b8b2bc3ed057ab9cd7532eb56d12dc5941ded3a3",
+      "bytes": 8781
+    }
+  ]
+}

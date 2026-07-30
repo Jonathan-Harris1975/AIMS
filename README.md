@@ -1,6 +1,6 @@
 # AI Management Suite
 
-AI Management Suite is a modular Node/Express application for Jonathan Harris’s content automation workflows. The repository currently combines podcast generation, RSS/newsletter rewriting, script generation, text-to-speech processing, artwork generation, blog publishing, OneUp social scheduling, outreach lead discovery, audit orchestration, Cloudflare cache purge support, self-hosted RSS short links, shared Cloudflare R2 storage utilities, shared OpenRouter routing, and deployment/test tooling.
+AI Management Suite is a modular Node/Express application for Jonathan Harris’s content automation workflows. The repository currently combines podcast generation, RSS/newsletter rewriting, script generation, text-to-speech processing, artwork generation, blog publishing, social scheduling, outreach lead discovery, audit orchestration, the AIMS Comms Hub, Cloudflare cache purge support, self-hosted RSS short links, shared Cloudflare R2 storage utilities, shared OpenRouter routing, and deployment/test tooling.
 
 This README documents the repository as it exists in code. It separates **implemented**, **partially implemented**, and **present but not wired** areas so maintainers are not chasing phantom routes through the boiler-room fog. 🛠️
 
@@ -10,6 +10,7 @@ This README documents the repository as it exists in code. It separates **implem
 - [Artwork](services/artwork/README.md)
 - [Blog](services/blog/README.md)
 - [Cloudflare purge](services/cloudflare-purge/README.md)
+- [Comms Hub](services/comms-hub/README.md)
 - [OneUp](services/oneup/README.md)
 - [Outreach](services/outreach/README.md)
 - [Podcast](services/podcast/README.md)
@@ -153,6 +154,7 @@ Expected high-level response:
 /oneup                services/oneup/index.js
 /audits               audits/index.js
 /rss-links            services/rss-links/index.js
+/comms-hub            services/comms-hub/index.js
 ```
 
 ### Middleware and operational behaviour
@@ -177,6 +179,7 @@ Expected high-level response:
 | artwork | `services/artwork/` | Implemented | OpenRouter image generation for podcast, blog and direct artwork requests. | `/artwork/create, /artwork/generate` | routes/generateArtwork.js, createBlogArtwork.js, createPodcastArtwork.js | OpenRouter, R2 | art, blogImages buckets | Indirect via blog/podcast tests |
 | blog | `services/blog/` | Implemented | Weekly AI briefing posts, social/daily posts, blog RSS publishing and rebuild hooks. | `/blog/weekly/build, /blog/rss/rebuild, /blog/social/*` | weekly/buildWeeklyBlogPost.js, social/buildDailySocialBlogPost.js, rss/publishBlogRssFeed.js | OpenRouter, R2, website rebuild webhook | blog, blogImages, blogRss buckets | blog-*.test.js |
 | cloudflare-purge | `services/cloudflare-purge/` | Implemented | Cloudflare zone cache purge API wrapper with optional shared-secret header. | `/cloudflare/health, /cloudflare/purge` | routes/index.js, utils/purgeCloudflareCache.js | Cloudflare API | None | Covered by route/runtime tests only if added later |
+| comms-hub | `services/comms-hub/` | Implemented first production slice | Verifies the three registered Jotform submissions, persists contacts/conversations/messages to D1 and archives redacted integrity receipts through a leased R2 queue. | `/comms-hub/*` | routes/index.js, intakeService.js, repositories/commsRepository.js, workers/archiveWorker.js | Jotform API, Cloudflare D1, shared R2 client | D1 plus `comms-hub` R2 receipts | comms-hub-*.test.js |
 | oneup | `services/oneup/` | Implemented | Daily lane, weekly quiz, weekly ebook and published-history workflows for OneUp. | `/oneup/*` | routes/social.js, utils/socialScheduler.js, utils/oneupClient.js | OneUp API, OpenRouter, RSS context, local ebook catalogue | Durable scheduler state through shared state utilities | oneup-social.test.js |
 | outreach | `services/outreach/` | Implemented | SERP discovery, domain filtering, enrichment, email validation, scoring and Google Sheets append. | `/outreach/*` | routes/index.js, services/outreachCore.js, services/serp-OutreachService.js, services/batchService.js | SERP API, Hunter, Prospeo, Apollo, ZeroBounce, urlscan, OpenPageRank, Google Sheets | R2 metasystem for batch cursor | No dedicated route test found |
 | podcast | `services/podcast/` | Implemented | End-to-end podcast pipeline wrapper: script, artwork, TTS, podcast RSS, cleanup and rebuild hook. | `/podcast/run, /podcast/status/:sessionId, /podcast/health` | index.js, runPodcastPipeline.js | Script, Artwork, TTS, Podcast RSS, R2 | Job store plus podcast/audio/meta buckets | podcast-*.test.js |
@@ -243,6 +246,12 @@ The table below is built from the active mounted routers in `routes/index.js` an
 | `POST` | `/rss-links/shorten` | rss-links | Creates or reuses an RSS short link. | Required `url` absolute http/https URL. | None | 201 if new, 200 if reused. |
 | `GET` | `/rss-links/:key` | rss-links | Redirects a short key to original URL. | Path `key` 4-32 alphanumeric. | None | 302 redirect; query string preserved. |
 | `GET` | `/rss-links/:key/index.html` | rss-links | Redirect page URL variant. | Path `key` 4-32 alphanumeric. | None | 302 redirect; query string preserved. |
+| `GET` | `/comms-hub/health` | comms-hub | Reports sanitised Comms Hub configuration and runtime readiness. | None | Public health path. | 200 when ready or disabled; 503 when enabled but not ready. |
+| `POST` | `/comms-hub/intake/jotform` | comms-hub | Accepts a Jotform webhook, re-fetches the submission through Jotform API, verifies form/submission identity and persists the event atomically. | `formID`, `submissionID`; JSON, URL-encoded or multipart identifiers. | Exact public path only; Jotform API re-verification; global rate limit; 1 MB service limit. | 202 accepted, 200 duplicate, 4xx rejected, 5xx provider/storage failure. |
+| `GET` | `/comms-hub/diagnostics` | comms-hub | Returns migration and archive-queue status. | None | AIMS bearer token. | 200 when schema is ready, otherwise 503. |
+| `GET` | `/comms-hub/conversations/:conversationId` | comms-hub | Reads one persisted conversation with contact, messages and attachment references. | Path `conversationId`. | AIMS bearer token. | 200, 400 or 404. |
+| `GET` | `/comms-hub/archive/status` | comms-hub | Returns archive queue counts by state. | None | AIMS bearer token. | 200 JSON. |
+| `POST` | `/comms-hub/archive/drain` | comms-hub | Runs one bounded archive drain using distributed D1 leases. | Optional `limit`. | AIMS bearer token. | 200 with processed/completed/failed counts. |
 
 ## Present but not wired or legacy route files
 
@@ -306,6 +315,21 @@ These files exist but are not mounted by the active root route registry:
 | `CLOUDFLARE_PURGE_TIMEOUT_MS` | Timeout, delay or TTL control in milliseconds. | services/cloudflare-purge | Optional/conditional | `15000` | Set only for services you run. |
 | `RSS_OBJECT_KEY` | Newsletter RSS fetch/rewrite/feed configuration. | routes/rss.js, services/rss-feed-creator | Optional/conditional | `feed.xml` | Secret value; keep in Koyeb/GitHub secret storage. |
 | `ALLOW_EPHEMERAL_STATE` | Durable/local state backend and paths. | server.js, scripts/*, shared utilities | Optional/conditional | `false` | Set only for services you run. |
+
+### AIMS Comms Hub
+
+| Name | Purpose | Used by | Required | Default/template | Notes |
+|---|---|---|---|---|---|
+| `COMMS_HUB_ENABLED` | Enables service runtime and readiness enforcement. | services/comms-hub, server.js | Required switch | `false` | Keep false until `npm run comms:migrate` succeeds. |
+| `D1_UUID` | Cloudflare D1 database UUID. | services/comms-hub/clients/d1Client.js | Required when enabled | `blank` | Koyeb secret-backed value. |
+| `D1_API_KEY` | Cloudflare API token with D1 read/write access. | services/comms-hub/clients/d1Client.js | Required when enabled | `blank` | Koyeb secret-backed value. |
+| `JOTFORM_API_KEY` | Re-fetches and verifies webhook submissions. | services/comms-hub/clients/jotformClient.js | Required when enabled | `blank` | Koyeb secret-backed value. |
+| `JOTFORM_API_BASE_URL` | Jotform API origin. | services/comms-hub/clients/jotformClient.js | Conditional | `https://api.jotform.com` | Override for the account’s Jotform region when required. |
+| `R2_BUCKET_COMMS_HUB` | R2 bucket for redacted integrity receipts. | shared R2 client, archive worker | Required when enabled | `comms-hub` | Message content and attachments are not written to this public bucket. |
+| `R2_PUBLIC_BASE_URL_COMMS_HUB` | Public receipt URL base required by the shared R2 uploader. | shared R2 client | Required when enabled | supplied `r2.dev` URL | No trailing slash preferred. |
+| `COMMS_HUB_MAX_WEBHOOK_BYTES` | Service-specific webhook size cap. | domain/webhook.js, server.js | Optional | `1048576` | Enforced for parsed and streaming bodies. |
+| `COMMS_HUB_ARCHIVE_WORKER_ENABLED` | Enables the leased receipt worker. | runtime.js, archiveWorker.js | Optional | `true` | D1 remains the authoritative private store. |
+| `ONECOM_INFO_PASSWORD`, `ONECOM_NEWSLETTER_PASSWORD`, `ONECOM_ADMIN_PASSWORD` | Reserved env mappings for the later one.com email adapter. | Not loaded by the Jotform slice | Not yet required | `blank` | Map to the supplied Koyeb secrets only when the email adapter is implemented. |
 
 ### Cloudflare purge
 
