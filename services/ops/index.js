@@ -184,6 +184,19 @@ const OPERATION_WINDOWS = Object.freeze({
   ],
 });
 
+function assertMorningBlogSocialCoverage() {
+  const weekdayMorningWindows = ["monday-am", "tuesday-am", "wednesday-am", "thursday-am", "friday-am"];
+  for (const windowName of weekdayMorningWindows) {
+    const tasks = OPERATION_WINDOWS[windowName] || [];
+    const hasBlogSocial = tasks.some(([name, path]) => name === "blog-social" && path === "/blog/social/daily/build");
+    if (!hasBlogSocial) {
+      throw new Error(`Operational schedule invariant failed: ${windowName} must include /blog/social/daily/build`);
+    }
+  }
+}
+
+assertMorningBlogSocialCoverage();
+
 function operationNewsletterEnabled() {
   return booleanEnv("AIMS_OPERATION_NEWSLETTER_ENABLED", false);
 }
