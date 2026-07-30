@@ -18,6 +18,7 @@ const requiredEntryModules = [
   "services/blog/index.js",
   "services/rss-feed-creator/index.js",
   "services/blotato/index.js",
+  "services/comms-hub/index.js",
 ];
 
 const importPattern = /(?:import\s+(?:[^'"()]+?\s+from\s+)?|export\s+[^'"()]+?\s+from\s+|import\()(["'])(\.{1,2}\/[^'"()]+)\1/g;
