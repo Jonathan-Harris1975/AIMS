@@ -1,14 +1,52 @@
 {
-  "name": "aims-comms-hub",
-  "version": "0.1.0",
-  "private": true,
+  "name": "AI-management-suite",
+  "version": "2.7.1",
   "type": "module",
-  "engines": {
-    "node": ">=22"
-  },
+  "main": "server.js",
   "scripts": {
-    "start": "node src/server.js",
-    "test": "node --test test/*.test.js",
-    "check": "node --check src/server.js && node --test test/*.test.js"
-  }
+    "build": "node scripts/buildCheck.js",
+    "start": "node scripts/bootstrap.js",
+    "start:server": "node server.js",
+    "check:startup": "node scripts/startupCheck.js",
+    "test": "node --test --test-concurrency=1 --test-force-exit --test-timeout=60000 job-store.test.js test/*.test.js",
+    "test:smoke": "node --test --test-concurrency=1 --test-force-exit --test-timeout=60000 job-store.test.js test/*.test.js",
+    "deploy:install": "npm ci --omit=dev --ignore-scripts --no-audit --no-fund",
+    "deploy:smoke": "node scripts/deploySmoke.js",
+    "env:doctor": "node scripts/koyebEnvDoctor.js",
+    "env:doctor:file": "node scripts/koyebEnvDoctor.js",
+    "verify": "npm test && npm run build",
+    "blog:repair-links:check": "node scripts/backfill-blog-main-site-links.js",
+    "blog:repair-links:apply": "node scripts/backfill-blog-main-site-links.js --apply"
+  },
+  "engines": {
+    "node": "22.x",
+    "npm": "10.x"
+  },
+  "dependencies": {
+    "@aws-sdk/client-polly": "^3.663.0",
+    "@aws-sdk/client-s3": "^3.663.0",
+    "@google/generative-ai": "0.10.0",
+    "axios": "^1.6.7",
+    "cors": "^2.8.5",
+    "dotenv": "^16.6.1",
+    "express": "^4.19.2",
+    "fast-xml-parser": "^5.2.5",
+    "googleapis": "^173.0.0",
+    "nanoid": "^5.0.7",
+    "node-fetch": "^3.3.2",
+    "openai": "^4.56.0",
+    "p-limit": "^4.0.0",
+    "pino": "^9.2.0",
+    "pino-http": "^9.0.0",
+    "pino-pretty": "^11.2.2",
+    "playwright-core": "^1.60.0",
+    "rss-parser": "^3.13.0",
+    "undici": "^6.19.8",
+    "zod": "^3.23.8"
+  },
+  "private": true,
+  "devDependencies": {
+    "supertest": "^7.2.2"
+  },
+  "packageManager": "npm@10.9.2"
 }
