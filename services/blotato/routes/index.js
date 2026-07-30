@@ -156,6 +156,29 @@ router.get("/shorts/lanes", (_req, res) => {
   });
 });
 
+
+router.post(
+  "/autoshorts/schedule",
+  asyncRoute(async (req, res) => {
+    const now = new Date();
+    const weekday = new Intl.DateTimeFormat("en-GB", { weekday: "long", timeZone: "Europe/London" }).format(now).toLowerCase();
+    const laneByWeekday = { monday: "news-insight", tuesday: "model-verdict", wednesday: "ai-at-work", thursday: "reality-check", friday: "ai-playbook" };
+    const laneSlug = laneByWeekday[weekday] || "news-insight";
+    const style = getAutoShortStyleRotation(now);
+    const result = await triggerPublishNowJob(req, laneSlug, { creativeStyle: style.creativeStyle, publishMode: "autoshorts-scheduled", scheduleSlot: "am" });
+    return res.status(result.statusCode || 202).json({ ok: true, service: "blotato", lane: "autoshorts-scheduled", style, sourceLane: laneSlug, message: "Blotato AM scheduled-post job accepted.", ...result });
+  })
+);
+
+router.post(
+  "/shorts/:lane/schedule",
+  asyncRoute(async (req, res) => {
+    const lane = requireShortLaneConfig(req.params.lane);
+    const result = await triggerPublishNowJob(req, lane.slug, { publishMode: "evening-scheduled", scheduleSlot: "pm" });
+    return res.status(result.statusCode || 202).json({ ok: true, service: "blotato", lane: `${lane.slug}-scheduled`, message: `Blotato ${lane.label} scheduled-post job accepted.`, ...result });
+  })
+);
+
 router.post(
   "/autoshorts/publish-now",
   asyncRoute(async (req, res) => {
