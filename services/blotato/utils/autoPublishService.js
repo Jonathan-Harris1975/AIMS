@@ -926,7 +926,7 @@ function buildPlatformText(platform, pack) {
   return pack.facebookCaption || pack.tiktokCaption || pack.script;
 }
 
-async function publishAndWait({ platform, pack, mediaUrl, apiKey, channelPreflight }) {
+async function publishAndWait({ platform, pack, mediaUrl, apiKey, channelPreflight, scheduledTime = null }) {
   const channel = channelPreflight?.channelMap?.[platform] || {};
   const accountId = trim(channel.accountId) || await resolveAccountId(platform, apiKey);
   const target = buildTarget(platform, pack, channel);
@@ -936,6 +936,7 @@ async function publishAndWait({ platform, pack, mediaUrl, apiKey, channelPreflig
     text: buildPlatformText(platform, pack),
     mediaUrls: [mediaUrl],
     target,
+    ...(scheduledTime ? { scheduledTime } : {}),
   }, apiKey);
 
   const postSubmissionId = trim(post?.postSubmissionId || post?.id || post?.item?.postSubmissionId || post?.item?.id);
@@ -944,6 +945,19 @@ async function publishAndWait({ platform, pack, mediaUrl, apiKey, channelPreflig
     err.statusCode = 502;
     err.details = post;
     throw err;
+  }
+
+  // Render polling remains unchanged and completes before this point. For a
+  // scheduled social post, verify that Blotato accepted the submission once
+  // rather than blocking AIMS until the future publication time.
+  if (scheduledTime) {
+    let status = null;
+    try {
+      status = await getPostStatus(postSubmissionId, apiKey);
+    } catch (error) {
+      warn("blotato.schedule.status_check_failed", { platform, postSubmissionId, scheduledTime, error: error?.message || String(error) });
+    }
+    return { platform, accountId, target, postSubmissionId, post, status, scheduledTime };
   }
 
   const maxAttempts = positiveIntEnv("BLOTATO_POST_POLL_ATTEMPTS", 90, 720);
@@ -962,20 +976,20 @@ async function publishAndWait({ platform, pack, mediaUrl, apiKey, channelPreflig
 }
 
 
-async function publishPlatforms({ platforms = [], pack, mediaUrl, apiKey, channelPreflight }) {
+async function publishPlatforms({ platforms = [], pack, mediaUrl, apiKey, channelPreflight, scheduledTime = null }) {
   const settled = [];
   const staggerMs = Number(process.env.BLOTATO_PUBLISH_STAGGER_MS || 2500);
   const sequential = parseBoolean(process.env.BLOTATO_PUBLISH_SEQUENTIAL, true);
 
   if (!sequential) {
     return Promise.allSettled(
-      platforms.map((platform) => publishAndWait({ platform, pack, mediaUrl, apiKey, channelPreflight }))
+      platforms.map((platform) => publishAndWait({ platform, pack, mediaUrl, apiKey, channelPreflight, scheduledTime }))
     );
   }
 
   for (const platform of platforms) {
     try {
-      const value = await publishAndWait({ platform, pack, mediaUrl, apiKey, channelPreflight });
+      const value = await publishAndWait({ platform, pack, mediaUrl, apiKey, channelPreflight, scheduledTime });
       settled.push({ status: "fulfilled", value });
     } catch (reason) {
       settled.push({ status: "rejected", reason });
@@ -1021,7 +1035,38 @@ function buildRssSummary(articleSource = {}) {
   };
 }
 
-async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOTATO_SHORT_LANE, apiKey, editorialReservation = null, templateIdOverride = null, publishMode = "evening-lane", creativeStyle = "" }) {
+function londonDateParts(date = new Date()) {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/London", year: "numeric", month: "2-digit", day: "2-digit", weekday: "long",
+  }).formatToParts(date).filter((part) => part.type !== "literal").map((part) => [part.type, part.value]));
+  return { year: Number(parts.year), month: Number(parts.month), day: Number(parts.day), weekday: String(parts.weekday || "").toLowerCase() };
+}
+
+function londonLocalToUtcIso({ year, month, day, hour, minute }) {
+  const guess = new Date(Date.UTC(year, month - 1, day, hour, minute, 0));
+  const rendered = Object.fromEntries(new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/London", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+  }).formatToParts(guess).filter((part) => part.type !== "literal").map((part) => [part.type, part.value]));
+  const renderedUtc = Date.UTC(Number(rendered.year), Number(rendered.month) - 1, Number(rendered.day), Number(rendered.hour), Number(rendered.minute));
+  const offsetMs = renderedUtc - guess.getTime();
+  return new Date(Date.UTC(year, month - 1, day, hour, minute) - offsetMs).toISOString();
+}
+
+function resolveBlotatoScheduledTime(slot = "am", now = new Date()) {
+  const london = londonDateParts(now);
+  const envKey = `BLOTATO_SCHEDULE_${london.weekday.toUpperCase()}_${String(slot || "am").toUpperCase()}`;
+  const raw = trim(process.env[envKey]);
+  if (!/^\d{2}:\d{2}$/.test(raw)) throw new Error(`${envKey} must be configured as HH:mm`);
+  const [hour, minute] = raw.split(":").map(Number);
+  let scheduled = new Date(londonLocalToUtcIso({ ...london, hour, minute }));
+  if (scheduled.getTime() <= now.getTime() + 120_000) {
+    scheduled = new Date(now.getTime() + 10 * 60_000);
+    warn("blotato.schedule.slot_missed", { envKey, configuredTime: raw, fallbackScheduledTime: scheduled.toISOString() });
+  }
+  return scheduled.toISOString();
+}
+
+async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOTATO_SHORT_LANE, apiKey, editorialReservation = null, templateIdOverride = null, publishMode = "evening-lane", creativeStyle = "" , scheduleSlot = null }) {
   const lane = requireShortLaneConfig(laneSlug);
   const keepAliveLabel = `blotato:${lane.slug}:${sessionId}`;
   const keepAliveEnabled = parseBoolean(process.env.BLOTATO_KEEPALIVE_ENABLED, true);
@@ -1036,6 +1081,8 @@ async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOT
       defaults.templateAutoDiscovery = false;
     }
     defaults.publishMode = publishMode;
+    const scheduledTime = scheduleSlot ? resolveBlotatoScheduledTime(scheduleSlot) : null;
+    defaults.scheduledTime = scheduledTime;
     const platforms = defaults.channels;
 
     updateJob(lane.jobType, sessionId, { phase: "step-0-channel-preflight", defaults });
@@ -1250,6 +1297,7 @@ async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOT
       rejectedTemplateIds: video.rejectedTemplateIds,
       templateResolution,
       channelPreflight,
+      scheduledTime,
     });
 
     const settledPublishes = await publishPlatforms({
@@ -1258,6 +1306,7 @@ async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOT
       mediaUrl: video.mediaUrl,
       apiKey,
       channelPreflight,
+      scheduledTime,
     });
     const publishes = settledPublishes
       .filter((item) => item.status === "fulfilled")
@@ -1292,7 +1341,7 @@ async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOT
       title: articleSource.article?.title,
       link: articleSource.article?.link,
       pubDate: articleSource.article?.pubDate,
-      scheduledDateTime: new Date().toISOString(),
+      scheduledDateTime: scheduledTime || new Date().toISOString(),
     });
     if (editorialReservation) {
       completeEditorialReservation(editorialReservation, {
@@ -1301,7 +1350,7 @@ async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOT
         source: articleSource.article,
         audienceIntent: lane.theme,
         angle: pack.angle || pack.internalTitle,
-        scheduledDateTime: new Date().toISOString(),
+        scheduledDateTime: scheduledTime || new Date().toISOString(),
         text: pack.script,
         meta: { contentType: "blotato-short", platforms, channelPreflight },
       });
@@ -1310,7 +1359,7 @@ async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOT
     const result = {
       ok: true,
       service: "blotato",
-      lane: `${lane.slug}-publish-now`,
+      lane: `${lane.slug}-${scheduledTime ? "scheduled" : "publish-now"}`,
       sessionId,
       defaults: { ...defaults, resolvedTemplateId: video.templateId || templateId, requestedTemplateId: templateId, templateResolution },
       templateId: video.templateId || templateId,
@@ -1335,16 +1384,18 @@ async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOT
         platform: item.platform,
         accountId: item.accountId,
         postSubmissionId: item.postSubmissionId,
-        status: String(item.status?.status || item.status?.item?.status || item.post?.status || "published").trim().toLowerCase() || "published",
+        status: String(item.status?.status || item.status?.item?.status || item.post?.status || (scheduledTime ? "scheduled" : "published")).trim().toLowerCase() || (scheduledTime ? "scheduled" : "published"),
         target: item.target,
         post: item.post,
         rawStatus: item.status,
       })),
       publishes,
+      scheduledTime,
+      deliveryMode: scheduledTime ? "scheduled" : "immediate",
     };
 
     completeJob(lane.jobType, sessionId, { result });
-    info("blotato.publish_now.job.complete", { sessionId, lane: lane.slug, platforms });
+    info(scheduledTime ? "blotato.schedule.job.complete" : "blotato.publish_now.job.complete", { sessionId, lane: lane.slug, platforms, scheduledTime });
     return result;
   } catch (error) {
     if (editorialReservation) releaseEditorialReservation(editorialReservation);
@@ -1422,6 +1473,7 @@ export async function triggerPublishNowJob(req = {}, laneSlug = DEFAULT_BLOTATO_
     templateIdOverride: options.templateId || null,
     publishMode: options.publishMode || "evening-lane",
     creativeStyle: options.creativeStyle || "",
+    scheduleSlot: options.scheduleSlot || null,
   });
   if (parseBoolean(process.env.BLOTATO_INLINE_PUBLISH_JOBS, false)) {
     await run();
