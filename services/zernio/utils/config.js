@@ -210,6 +210,7 @@ export const PODCAST_PROMO_CONFIG = {
   label: "Turing's Torch Thursday Preview",
   publishTime: normaliseTime(process.env.ZERNIO_PODCAST_PROMO_TIME, "18:30"),
   feedUrl: trimString(process.env.ZERNIO_PODCAST_RSS_FEED_URL || process.env.PODCAST_RSS_FEED_URL, "https://podcast-rss-feeds.jonathan-harris.online/turing-torch.xml"),
+  spotifyUrl: trimString(process.env.ZERNIO_PODCAST_SPOTIFY_URL || process.env.PODCAST_SPOTIFY_URL, "https://open.spotify.com/show/4NluRPjuAIGK59vVf7GcoF"),
   fallbackImageUrl: trimString(process.env.ZERNIO_PODCAST_PROMO_IMAGE_URL, `${DAILY_IMAGE_BASE}/Podcast`),
   audienceIntent: "podcast-friday-preview",
   hashtags: ["#TuringsTorch", "#ArtificialIntelligence", "#AIPodcast"],

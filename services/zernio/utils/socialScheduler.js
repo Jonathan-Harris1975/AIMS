@@ -2004,11 +2004,11 @@ export async function buildAndSchedulePodcastThursdayPromo(options = {}) {
     temperature: 0.36,
   });
 
-  const destination = episode.link || feedUrl;
+  const destination = PODCAST_PROMO_CONFIG.spotifyUrl;
   const post = {
     title: generated.title,
     topic: generated.topic,
-    content: ensureHashtags(`${generated.content}\n\nFriday episode: ${destination}`, PODCAST_PROMO_CONFIG.hashtags, { maxTags: 3 }),
+    content: ensureHashtags(`${generated.content}\n\nListen on Spotify: ${destination}`, PODCAST_PROMO_CONFIG.hashtags, { maxTags: 3 }),
     imageUrl: options.imageUrl || "",
   };
 
@@ -2025,7 +2025,15 @@ export async function buildAndSchedulePodcastThursdayPromo(options = {}) {
       sessionId,
       lane: "podcast-thursday-promo",
       date: publishDate,
-      prompt: [generated.imagePrompt, `Episode title for context only, do not render text: ${episode.title}.`, "Turing's Torch: AI Weekly promotion artwork. No presenter or guest unless verified source imagery is supplied. No text, captions, logos or typography."].filter(Boolean).join("\n"),
+      prompt: [
+        generated.imagePrompt,
+        `Episode title for context only, never render it: ${episode.title}.`,
+        "Turing's Torch: AI Weekly promotion artwork. Create one premium editorial visual metaphor for the episode theme, not a magazine cover or title card.",
+        "Use a single strong focal object or environment, cinematic lighting, bold seasonal colour contrast and generous negative space.",
+        "No presenter, guest, humanoid robot, android, cyborg, human hands, fingers or close-up anatomy unless verified source imagery is supplied.",
+        "ABSOLUTELY NO visible words, letters, numbers, captions, logos, labels, signage, UI text, pseudo-text, typographic shapes or invented magazine mastheads anywhere in the image.",
+        "Avoid generic glowing brains, circuit-head silhouettes, floating networks, stock-office scenes and decorative AI wallpaper.",
+      ].filter(Boolean).join("\n"),
       fallbackUrl: episode.imageUrl || PODCAST_PROMO_CONFIG.fallbackImageUrl,
     });
     post.imageUrl = artwork.publicUrl || episode.imageUrl || PODCAST_PROMO_CONFIG.fallbackImageUrl;
