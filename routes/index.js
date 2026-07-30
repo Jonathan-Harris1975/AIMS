@@ -19,6 +19,7 @@ import auditsRoutes from "../audits/index.js";
 import rssLinksRoutes from "../services/rss-links/index.js";
 import opsRoutes from "../services/ops/index.js";
 import newsletterRoutes from "../services/newsletter/index.js";
+import commsHubRoutes from "../services/comms-hub/index.js";
 
 const router = express.Router();
 
@@ -43,6 +44,7 @@ export const routeRegistry = [
   { path: "/rss-links", name: "RSS Links (URL Shortener)", routes: rssLinksRoutes },
   { path: "/ops", name: "Operational Preflight", routes: opsRoutes },
   { path: "/newsletter", name: "Newsletter Engine (AI Edge)", routes: newsletterRoutes },
+  { path: "/comms-hub", name: "AIMS Comms Hub", routes: commsHubRoutes },
 ];
 
 try {
