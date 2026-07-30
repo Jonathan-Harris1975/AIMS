@@ -87,7 +87,12 @@ export async function composeIssueSections({ profile, lead, stories, sessionId, 
     },
   ];
 
-  const raw = await resilientRequest("newsletterCompose", { sessionId, messages, max_tokens: 3200 });
+  const raw = await resilientRequest("newsletterCompose", {
+    sessionId,
+    messages,
+    max_tokens: 3200,
+    response_format: { type: "json_object" },
+  });
   const parsed = parseJsonResponse(raw, "composeIssueSections");
   if (!parsed.ok) {
     warn("newsletter.compose.issue_parse_failed", { sessionId, error: parsed.error });
