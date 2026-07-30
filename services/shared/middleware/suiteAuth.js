@@ -107,6 +107,12 @@ export function isPublicBlotatoPublishPath(req) {
   return false;
 }
 
+export function isPublicCommsHubIntakePath(req) {
+  const method = String(req.method || "").toUpperCase();
+  const path = pathWithoutQuery(req).replace(/\/+$/, "").toLowerCase();
+  return method === "POST" && path === "/comms-hub/intake/jotform";
+}
+
 export function isCloudflarePurgePath(req) {
   const method = String(req.method || "").toUpperCase();
   if (method !== "POST") return false;
@@ -199,6 +205,11 @@ export function getBlotatoPublishAuthStrategy(req) {
 export function requireAimsBearerAuth(req, res, next) {
   if (String(req.method || "").toUpperCase() === "OPTIONS") return next();
   if (isPublicHealthRequest(req)) return next();
+
+  if (isPublicCommsHubIntakePath(req)) {
+    req.aimsAuth = { strategy: "jotform-api-reverification" };
+    return next();
+  }
 
   if (isBlotatoPublishTriggerPath(req)) {
     const strategy = getBlotatoPublishAuthStrategy(req);
