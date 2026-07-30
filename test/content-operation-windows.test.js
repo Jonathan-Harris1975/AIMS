@@ -10,8 +10,9 @@ test("every weekday AM runs Zernio blog RSS immediately after Blog Social build"
   for (const day of ["monday", "tuesday", "wednesday", "thursday", "friday"]) {
     const start = opsSource.indexOf(`"${day}-am": [`);
     assert.notEqual(start, -1, `${day}-am window missing`);
-    const nextWindow = opsSource.indexOf(`"${day === "friday" ? "monday-pm" : ({monday:"tuesday",tuesday:"wednesday",wednesday:"thursday",thursday:"friday"}[day])}-am": [`, start + 1);
-    const block = opsSource.slice(start, nextWindow > start ? nextWindow : opsSource.indexOf('"monday-pm": [', start));
+    const nextName = day === "friday" ? "friday-pm" : `${({monday:"tuesday",tuesday:"wednesday",wednesday:"thursday",thursday:"friday"}[day])}-am`;
+    const nextWindow = opsSource.indexOf(`"${nextName}": [`, start + 1);
+    const block = opsSource.slice(start, nextWindow);
     const build = block.indexOf('"/blog/social/daily/build"');
     const publish = block.indexOf('"/zernio/blog-rss/daily"');
     assert.ok(build >= 0, `${day}-am Blog Social build missing`);
@@ -23,9 +24,22 @@ test("weekly content services remain wired to their owning windows", () => {
   assert.match(opsSource, /"zernio-ebooks", "\/zernio\/ebooks\/weekly"/);
   assert.match(opsSource, /"zernio-quiz", "\/zernio\/quiz\/weekly"/);
   assert.match(opsSource, /"zernio-thursday", "\/zernio\/daily\/thursday"/);
-  assert.match(opsSource, /"podcast", "\/podcast\/run"/);
   assert.match(opsSource, /"zernio-saturday", "\/zernio\/daily\/saturday"/);
   assert.match(opsSource, /"zernio-sunday", "\/zernio\/daily\/sunday"/);
+  assert.match(opsSource, /"friday-pm": \[\["podcast", "\/podcast\/run", \{\}\]\]/);
+});
+
+test("weekday PM Blotato work is prepared in AM and Friday PM is podcast only", () => {
+  for (const path of [
+    "/blotato/shorts/news-insight/schedule",
+    "/blotato/shorts/model-verdict/schedule",
+    "/blotato/shorts/ai-at-work/schedule",
+    "/blotato/shorts/reality-check/schedule",
+    "/blotato/shorts/ai-playbook/schedule",
+  ]) assert.match(opsSource, new RegExp(path.replaceAll("/", "\\/")));
+  for (const day of ["monday", "tuesday", "wednesday", "thursday"]) {
+    assert.doesNotMatch(opsSource, new RegExp(`"${day}-pm"`));
+  }
 });
 
 test("ebook route validates the actual request body", () => {
