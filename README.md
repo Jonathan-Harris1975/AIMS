@@ -1,132 +1,80 @@
-# AIMS
+# AIMS Comms Hub
 
-AIMS is the production orchestration and content-operations service for Jonathan Harris's publishing ecosystem. It coordinates RSS ingestion, editorial generation, social publishing, blog production, podcast production, artwork, TTS, AI Edge newsletter delivery, audits, outreach and operational sequencing.
+Production Jotform intake service for Koyeb. It reuses the website's verified-submission normalisation approach and implements the first complete Comms Hub vertical slice without generated scaffolding or placeholder handlers.
 
-This README documents the live repository state only.
+## Implemented flow
 
-## Runtime
+1. `POST /v1/intake/jotform` accepts a Jotform webhook.
+2. The form and submission IDs are extracted from the webhook envelope.
+3. Only the three production forms are accepted.
+4. The submission is fetched from Jotform using `JOTFORM_API_KEY`; webhook field values are not trusted.
+5. A deterministic conversation ID, contact ID, message ID and event ID are created.
+6. Contact, conversation, first message and intake event are committed to D1 in one batch transaction.
+7. Duplicate webhook delivery is accepted without creating duplicate records.
+8. A redacted receipt is queued and uploaded to the `comms-hub` R2 bucket. The receipt contains no name, email address, phone number, answers or message body.
 
-- **Platform:** Node.js / Express
-- **Production entry point:** `scripts/bootstrap.js` via `npm start`
-- **HTTP server:** `server.js`
-- **Mounted route registry:** `routes/index.js`
-- **Default production timezone:** `Europe/London` where scheduling or date-sensitive content requires a timezone
-- **Primary AI gateway:** OpenRouter, with task-specific model configuration
-- **Primary object storage:** Cloudflare R2
-- **Authentication:** suite bearer authentication for the mounted service router
+## Production forms
 
-## Live service groups
+| Purpose | Jotform ID | Workflow |
+| --- | --- | --- |
+| Contact me | `260281179574362` | `contact_intake` |
+| Case study | `262063136008044` | `case_study_intake` |
+| Podcast enquiry | `262097861889073` | `podcast_enquiry_intake` |
 
-| Prefix | Service | Responsibility |
-|---|---|---|
-| `/rss` | RSS | Feed acquisition, filtering, rewrite, validation and feed publication |
-| `/script` | Podcast script | Episode research synthesis, script composition, editorial pass, transcript and metadata |
-| `/tts` | TTS | Speech generation, chunking, merge, edit and podcast audio mastering |
-| `/artwork` | Artwork | Blog, podcast and direct image generation |
-| `/podcast` | Podcast pipeline | End-to-end Turing's Torch production orchestration |
-| `/outreach` | Outreach | Prospect discovery, enrichment, validation, scoring and batch state |
-| `/blog` | Blog | Weekly article, daily blog-social content and blog RSS publication |
-| `/cloudflare` | Cloudflare | Cache purge and site-shell synchronisation |
-| `/zernio` | Zernio | Evergreen social, ebook, quiz, mini-series and podcast-promo scheduling |
-| `/blotato` | Blotato | Short-form video generation, rendering and platform publication |
-| `/audits` | Audits | Website, content, social, newsletter and monthly audit orchestration |
-| `/rss-links` | RSS links | R2-backed short-link creation and redirects |
-| `/ops` | Operations | Operational windows, preflight, warmup and excellence checks |
-| `/newsletter` | AI Edge | Newsletter generation, council QA, storage and Brevo delivery |
+## Koyeb environment
 
-## Operational sequencing
+Required:
 
-`services/ops/index.js` owns the weekday operation windows invoked by MAST. Tasks within a window execute sequentially with the configured delay and timeout controls.
+```text
+D1_UUID
+D1_API_KEY
+JOTFORM_API_KEY
+```
 
-### AM windows
+Optional:
 
-Monday includes RSS rewrite, outreach, blog social, weekly blog, AI Edge generate/send, Monday Zernio, weekly ebook, weekly quiz and Blotato AutoShorts.
+```text
+CLOUDFLARE_ACCOUNT_ID
+R2_BUCKET=comms-hub
+PORT=8000
+ARCHIVE_POLL_MS=60000
+```
 
-Tuesday through Friday include RSS rewrite, outreach, blog social, AI Edge generate/send, the matching Zernio daily lane and Blotato AutoShorts.
+`D1_API_KEY` must be a Cloudflare API token with D1 read/write and R2 object write access. When `CLOUDFLARE_ACCOUNT_ID` is omitted, the service discovers the account by locating `D1_UUID` among the token's accessible accounts.
 
-AI Edge operational execution is controlled by `AIMS_OPERATION_NEWSLETTER_ENABLED`.
+The one.com password secrets are deliberately not loaded by this intake process. They belong to the next email transport slice and should be mapped to valid environment names rather than exposed in source:
 
-### PM windows
+```text
+INFO_EMAIL_PASSWORD       <- Koyeb secret info-Jonathan-harris
+NEWSLETTER_EMAIL_PASSWORD <- Koyeb secret newsletter-Jonathan-harris
+ADMIN_EMAIL_PASSWORD      <- Koyeb secret admin-Jonathan-harris
+```
 
-- Monday: Blotato `news-insight`
-- Tuesday: Blotato `model-verdict`
-- Wednesday: Blotato `ai-at-work`
-- Thursday: Blotato `reality-check`
-- Friday: Blotato `ai-playbook`, podcast production, Saturday Zernio scheduling, Sunday Zernio scheduling
+## Koyeb deployment
 
-Friday therefore prepares the weekend Zernio content before weekend standby.
+Deploy the repository or this directory with the included Dockerfile. Configure:
 
-## Monthly audits
+```text
+Port: 8000
+Health check: /health
+Readiness check: /ready
+```
 
-The monthly audit routes are under `/audits/monthly`. They are Saturday-gated in Europe/London unless an explicit force override is supplied. AIMS owns audit sequencing and the RAMS handoff contract.
+Set each Jotform Webhooks integration URL to:
 
-The live top-level monthly endpoints are:
+```text
+https://<your-koyeb-service-host>/v1/intake/jotform
+```
 
-- `POST /audits/monthly/website`
-- `POST /audits/monthly/aims`
+Jotform's webhook timeout is 30 seconds. The request path performs only Jotform verification and one D1 batch. R2 upload runs from the durable retry queue after the webhook has been accepted.
 
-Audit work is separated from normal Monday-Friday operational windows.
+## R2 privacy boundary
 
-## Content governance
+The supplied `r2.dev` URL is public. Private correspondence is therefore stored only in D1. R2 receives a redacted integrity receipt with a SHA-256 hash of the canonical D1 payload. Do not place raw submissions, message bodies, email addresses or attachments under the public development URL.
 
-AIMS uses deterministic validators plus specialist AI review for public content. The shared content-quality layer enforces source integrity, British English, Jonathan Harris voice, anti-hype rules, structural quality and format-specific constraints. Specialist councils add channel-specific checks for social, shorts, blog, transcript and AI Edge output.
-
-The master content audit produces consolidated machine- and human-readable artefacts for RAMS and review workflows.
-
-## Models
-
-Task-specific model selection is configured through the production environment and service configuration rather than hard-coded into one universal model. High-reasoning editorial and council work, fast structured tasks, summaries and image generation can use separate model classes. OpenRouter fallbacks are controlled centrally.
-
-## Storage
-
-R2 bucket aliases are configured through `R2_BUCKET_*` and `R2_PUBLIC_BASE_URL_*` variables. The active system stores podcast audio, transcripts, blog output, blog images, RSS feeds, artwork, audit artefacts, metadata, intermediate audio and HIVE skill artefacts in dedicated buckets according to service responsibility.
-
-## HIVE skills
-
-AIMS reads its central HIVE skills manifest in read-only mode. The configured manifest path is `manifests/aims-skills-manifest.json`. HIVE supplies controlled capability/configuration context; AIMS owns runtime orchestration.
-
-## Authentication and external triggers
-
-The mounted service router applies `requireAimsBearerAuth`. Narrow service-specific secrets may also protect externally triggered publication or purge routes. Public exceptions are limited to routes intentionally designed for status or redirects.
-
-## Reliability
-
-- Internal operation tasks have bounded timeouts.
-- Service retries use bounded attempts and backoff.
-- Failed content QA blocks publication.
-- Async jobs expose status endpoints where long-running work requires polling.
-- Hookdeck dedupe is used on triggerable workflows that require duplicate protection.
-- Operational health/preflight endpoints expose readiness without returning secret values.
-
-## Development verification
+## Local verification
 
 ```bash
-npm ci
 npm test
-npm run build
-npm run check:startup
-npm run env:doctor
+npm run check
 ```
-
-Production install uses:
-
-```bash
-npm run deploy:install
-```
-
-## Repository documentation
-
-- `services/README.md` — live service catalogue
-- `audits/README.md` — audit system and RAMS handoff
-- `services/shared/README.md` — shared runtime components
-- `services/shared/utils/README.md` — shared utilities and contracts
-- Each service directory contains its own operational README.
-
-## Operational rules
-
-- Treat `config/production.defaults.env`, `env.template`, `config/thresholds.js` and the relevant service config module as the configuration sources of truth.
-- Secrets belong in the deployment secret store and must not be committed.
-- Production HTTP access is protected by the AIMS bearer-auth middleware unless a route explicitly implements a narrower public status/redirect contract.
-- Retries are for transient failures only; validation, policy and source-integrity failures fail closed.
-- Generated public content must pass its content-quality gates before publication or delivery.
-- Durable artefacts and job state use the configured R2/state utilities rather than process memory where a durable store is required.
