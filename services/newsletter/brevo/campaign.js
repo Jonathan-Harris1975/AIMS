@@ -32,11 +32,13 @@ export async function deliverNewsletterIssue({ profile, sessionId, buildResult }
 
   const { newsletter, storage } = buildResult;
 
-  const sender = await ensureSender({ name: profile.brevo.fromName, email: profile.brevo.fromEmail });
-  if (!sender.ok) {
+  let stage = "sender";
+  try {
+    const sender = await ensureSender({ name: profile.brevo.fromName, email: profile.brevo.fromEmail });
+    if (!sender.ok) {
     return { ok: false, status: "sender_error", error: sender.error };
   }
-  if (!sender.verified) {
+    if (!sender.verified) {
     warn("newsletter.brevo.send_blocked_unverified_sender", { sessionId, profileId: profile.id, senderId: sender.senderId });
     return {
       ok: false,
@@ -49,24 +51,31 @@ export async function deliverNewsletterIssue({ profile, sessionId, buildResult }
     };
   }
 
-  const list = await ensureList({ name: profile.brevo.listName, folderName: profile.brevo.folderName });
+  stage = "audience";
+  const list = await ensureList({ id: profile.brevo.listId, name: profile.brevo.listName, folderName: profile.brevo.folderName });
   if (!list.ok) {
     return { ok: false, status: "list_error", error: list.error };
   }
 
   // The public index.html uses the full website shell and is not email-safe.
-  // Brevo must receive the dedicated inline-CSS email.html artefact.
-  let contentField = storage?.emailUrl ? { htmlUrl: storage.emailUrl } : null;
-  if (!contentField) {
-    const html = await getObjectAsText(profile.storage.htmlBucketKey, `${storage?.prefix}/email.html`);
-    contentField = { htmlContent: html };
+  // Load the dedicated inline-CSS email.html artefact and send it to Brevo as
+  // htmlContent. This removes any dependency on Brevo being able to fetch an
+  // external R2/custom-domain URL during campaign creation.
+  stage = "content";
+  const html = await getObjectAsText(profile.storage.htmlBucketKey, `${storage?.prefix}/email.html`);
+  if (String(html || "").trim().length < 10) {
+    return { ok: false, status: "content_error", error: "Stored email.html is empty or too short for Brevo." };
   }
+  const contentField = { htmlContent: html };
 
+  stage = "campaign-create";
   const created = await createCampaign({
     name: `${profile.displayName} — ${new Date().toISOString().slice(0, 10)} — ${sessionId}`,
     subject: newsletter.subject,
     sender: { name: profile.brevo.fromName, email: profile.brevo.fromEmail },
     type: "classic",
+    previewText: newsletter.previewText,
+    replyTo: profile.brevo.replyTo || profile.brevo.fromEmail,
     ...contentField,
     recipients: { listIds: [list.listId] },
   });
@@ -78,6 +87,7 @@ export async function deliverNewsletterIssue({ profile, sessionId, buildResult }
   const campaignId = created.data?.id;
   info("newsletter.brevo.campaign_created", { sessionId, profileId: profile.id, campaignId, listId: list.listId });
 
+  stage = "campaign-send";
   const sent = await sendCampaignNow(campaignId);
   if (!sent.ok) {
     warn("newsletter.brevo.send_now_failed", { sessionId, campaignId, error: sent.error });
@@ -90,6 +100,10 @@ export async function deliverNewsletterIssue({ profile, sessionId, buildResult }
   info("newsletter.brevo.campaign_sent", { sessionId, profileId: profile.id, campaignId });
 
   return { ok: true, status: "sent", campaignId, listId: list.listId, sentAt };
+  } catch (err) {
+    warn("newsletter.brevo.delivery_exception", { sessionId, profileId: profile.id, stage, error: err?.message || String(err) });
+    return { ok: false, status: "delivery_exception", stage, error: err?.message || String(err) };
+  }
 }
 
 /**

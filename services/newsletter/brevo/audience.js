@@ -15,8 +15,8 @@ async function findFolderByName(name) {
   return { ok: true, folder: match || null };
 }
 
-async function findListByName(name) {
-  const result = await getLists({ limit: 50 });
+async function findListByName(name, folderId = null) {
+  const result = await getLists({ limit: 50, folderId });
   if (!result.ok) return { ok: false, error: result.error };
   const match = (result.data?.lists || []).find((l) => l.name === name);
   return { ok: true, list: match || null };
@@ -33,13 +33,15 @@ export async function ensureFolder(name) {
   return { ok: true, folderId: created.data?.id, created: true };
 }
 
-export async function ensureList({ name, folderName }) {
-  const found = await findListByName(name);
-  if (!found.ok) return found;
-  if (found.list) return { ok: true, listId: found.list.id, created: false };
+export async function ensureList({ id = null, name, folderName }) {
+  if (id) return { ok: true, listId: Number(id), created: false, source: "configured-id" };
 
   const folder = await ensureFolder(folderName);
   if (!folder.ok) return { ok: false, error: folder.error };
+
+  const found = await findListByName(name, folder.folderId);
+  if (!found.ok) return found;
+  if (found.list) return { ok: true, listId: found.list.id, created: false, folderId: folder.folderId };
 
   const created = await createList({ name, folderId: folder.folderId });
   if (!created.ok) return { ok: false, error: created.error };
