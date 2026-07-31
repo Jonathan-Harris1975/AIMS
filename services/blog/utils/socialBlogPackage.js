@@ -4,6 +4,7 @@ import { buildSocialBlogPersona } from "../../script/utils/toneSetter.js";
 import { getSeasonalPaletteDirection, STRICT_TEXT_FREE_RULE } from "../../artwork/utils/artworkPromptPolicy.js";
 import { britishEnglishPromptGuidance } from "../../content-quality/britishEnglish.js";
 import { jonathanVoicePrompt } from "../../content-quality/jonathanVoice.js";
+import { analyseTopicFidelity, selectSourcesByUrls, topicTokens } from "../../content-quality/topicFidelity.js";
 
 const CODE_FENCE_RE = /^```(?:json|html|markdown|md)?\s*|```$/gim;
 const TITLE_PREFIX_RE = /^(?:title|headline|summary|analysis|report|study|ai|openai|update|briefing|daily brief|social caption)\s*:\s*/i;
@@ -70,6 +71,26 @@ function dedupeStrings(values = []) {
   }
 
   return out;
+}
+
+function normaliseSourceUrls(values = [], sourceItems = []) {
+  const allowed = new Set((Array.isArray(sourceItems) ? sourceItems : [])
+    .map((item) => String(item?.link || item?.url || "").trim())
+    .filter(Boolean));
+  const out = [];
+  for (const raw of asArray(values)) {
+    const url = String(raw || "").trim();
+    if (!url || !allowed.has(url) || out.includes(url)) continue;
+    out.push(url);
+  }
+  return out.slice(0, 3);
+}
+
+function packageTopicText(pkg = {}) {
+  return [
+    pkg.title, pkg.summary, pkg.social_caption, pkg.hook, pkg.takeaway,
+    ...(Array.isArray(pkg.body_sections) ? pkg.body_sections.flatMap((section) => [section?.heading, ...(section?.paragraphs || [])]) : []),
+  ].filter(Boolean).join(" ");
 }
 
 function wordCount(value = "") {
@@ -370,6 +391,7 @@ export function buildFallbackSocialBlogPackage({ items = [], dateLabel } = {}) {
     hashtags: normaliseHashtags([], themes),
     image_prompt: `Create high-impact premium editorial tech artwork for a daily AI briefing. ${getSeasonalPaletteDirection(dateLabel)} Strong contrast, cinematic lighting, bold controlled colour, emotional storytelling, magazine-quality thumbnail composition and one clear focal subject tied to the post. ${STRICT_TEXT_FREE_RULE} No glowing brains, cartoon robots, stock office scenes or generic AI wallpaper.`,
     themes,
+    source_urls: lead.map((item) => String(item?.link || "").trim()).filter(Boolean).slice(0, 3),
     date_label: dateLabel,
     qa_mode: "fallback-package",
     qa_reason: "model-output-unavailable-or-repaired-to-fallback",
@@ -411,6 +433,10 @@ export function normaliseSocialBlogPackage(data = {}, context = {}) {
     hashtags: normaliseHashtags(data.hashtags, themes),
     image_prompt: imagePrompt,
     themes,
+    source_urls: normaliseSourceUrls(
+      data.source_urls || data.sourceUrls || (Object.keys(data || {}).length ? [] : fallback.source_urls),
+      context.items || [],
+    ),
   };
 }
 
@@ -440,10 +466,11 @@ export function toSocialBlogPackageContract(pkg = {}) {
     hashtags: hashtags.slice(0, 6),
     image_prompt: clean(pkg.image_prompt || pkg.imagePrompt || ""),
     themes,
+    source_urls: dedupeStrings(asArray(pkg.source_urls || pkg.sourceUrls)).slice(0, 3),
   };
 }
 
-export function validateSocialBlogPackageForBrand(pkg = {}) {
+export function validateSocialBlogPackageForBrand(pkg = {}, { sourceItems = [] } = {}) {
   const contract = toSocialBlogPackageContract(pkg);
   const defects = [];
   const titleWords = wordCount(contract.title);
@@ -487,10 +514,38 @@ export function validateSocialBlogPackageForBrand(pkg = {}) {
     defects.push("Image prompt is missing required social-blog style rules.");
   }
 
+  const selectedSources = selectSourcesByUrls(contract.source_urls, sourceItems);
+  if (sourceItems.length && selectedSources.length < 1) {
+    defects.push("source_urls must select 1 to 3 supplied source URLs.");
+  }
+  const packageText = packageTopicText(contract);
+  const topicFidelity = sourceItems.length && selectedSources.length
+    ? analyseTopicFidelity({
+        generated: packageText,
+        sources: selectedSources,
+        requiredTopic: [contract.title, ...(contract.themes || [])].join(" "),
+        minSourceHits: 3,
+        minTopicRatio: 0.34,
+        minScore: 62,
+      })
+    : { ok: !sourceItems.length, score: sourceItems.length ? 0 : 100, defects: [] };
+  defects.push(...topicFidelity.defects);
+
+  const generatedTokens = new Set(topicTokens(packageText));
+  for (const [index, source] of selectedSources.entries()) {
+    const sourceTokens = topicTokens([source?.title, source?.rewritten, source?.summary, source?.description].filter(Boolean).join(" "));
+    const represented = sourceTokens.filter((token) => generatedTokens.has(token));
+    if (sourceTokens.length >= 2 && represented.length < 1) {
+      defects.push(`Selected source ${index + 1} is not meaningfully represented in the generated package.`);
+    }
+  }
+
   return {
     ok: defects.length === 0,
     defects,
     contract,
+    selectedSources,
+    topicFidelity,
   };
 }
 
@@ -763,7 +818,7 @@ export function buildSocialPackagePrompt({ dateLabel, items = [] } = {}) {
     "Use the supplied rewritten RSS briefs as the only source material.",
     "",
     "Required JSON object with exactly these top-level keys:",
-    '{ "title": string, "summary": string, "social_caption": string, "hook": string, "body_sections": [{ "heading": string, "paragraphs": string[] }], "takeaway": string, "hashtags": string[], "image_prompt": string, "themes": string[] }',
+    '{ "title": string, "summary": string, "social_caption": string, "hook": string, "body_sections": [{ "heading": string, "paragraphs": string[] }], "takeaway": string, "hashtags": string[], "image_prompt": string, "themes": string[], "source_urls": string[] }',
     "",
     "Field rules:",
     "- title: 5 to 10 words, sentence case, human and specific.",
@@ -773,6 +828,8 @@ export function buildSocialPackagePrompt({ dateLabel, items = [] } = {}) {
     "- body_sections: 2 to 4 short sections, each with 1 to 2 tight paragraphs.",
     "- takeaway: one clear closing judgement.",
     "- hashtags: 3 to 6 relevant tags, no spam, no generic hashtag soup.",
+    "- source_urls: select 1 to 3 exact URLs from the supplied evidence that directly support the chosen angle. Do not cite every feed item.",
+    "- The title, summary, caption, sections and image prompt must all describe the same selected source angle. Do not merge unrelated stories into a generic AI roundup.",
     `- image_prompt: high-impact magazine-quality editorial style with cinematic lighting, emotional storytelling, bold controlled colour, strong contrast, modern YouTube-thumbnail focal hierarchy and a concrete visual angle tied to the post. ${getSeasonalPaletteDirection(dateLabel)} ${STRICT_TEXT_FREE_RULE} Avoid corporate stock-photo scenes, staged offices, generic data centres, floating dashboards, polygon networks, glowing brains, cartoon robots and generic AI wallpaper.`,
     "",
     "Source material:",
@@ -793,7 +850,8 @@ export function buildSocialBrandQaPrompt({ items = [], generatedJson = {} } = {}
     system: `${buildSocialBlogPersona()}\n\nAct as the brand QA gatekeeper for Jonathan Harris daily social-blog posts. Use evidence only. Do not rewrite unless needed to pass the gate.`,
     user: [
       "Review the generated daily social-blog JSON below.",
-      "Reject unsupported claims, invented facts, hype language, fake urgency, corporate sludge, generic AI filler, weak social_caption, weak image_prompt, or contract violations.",
+      "Reject unsupported claims, invented facts, hype language, fake urgency, corporate sludge, generic AI filler, weak social_caption, weak image_prompt, topical drift, invalid source_urls, or contract violations.",
+      "Confirm the generated package is specifically about its selected source_urls rather than merely sharing broad AI vocabulary.",
       "Return PASS or FAIL with a concise defect list and a corrected JSON object using exactly the required keys.",
       "",
       "Source material:",
