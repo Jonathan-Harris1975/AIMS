@@ -126,6 +126,8 @@ function publicJob(job) {
     id: job.id,
     window: job.window,
     status: job.status,
+    terminal: ["completed", "completed-with-failures", "failed"].includes(job.status),
+    updatedAt: job.updatedAt || job.startedAt,
     startedAt: job.startedAt,
     finishedAt: job.finishedAt || null,
     currentTask: job.currentTask || null,
@@ -270,18 +272,23 @@ router.get("/windows", (_req, res) => {
 
 async function executeOperationWindow(job, tasks, req) {
   job.status = "running";
+  job.updatedAt = new Date().toISOString();
   for (let index = 0; index < tasks.length; index += 1) {
     if (index > 0 && job.delayMs > 0) {
       job.currentTask = { name: "delay", before: tasks[index][0], delayMs: job.delayMs };
+      job.updatedAt = new Date().toISOString();
       await sleep(job.delayMs);
     }
     job.currentTask = { name: tasks[index][0], path: tasks[index][1], index: index + 1, total: tasks.length };
+    job.updatedAt = new Date().toISOString();
     const result = await runInternalTask(tasks[index], req);
     job.results.push(result);
+    job.updatedAt = new Date().toISOString();
     if (!result.ok) job.failures += 1;
   }
   job.currentTask = null;
   job.finishedAt = new Date().toISOString();
+  job.updatedAt = job.finishedAt;
   job.status = job.failures ? "completed-with-failures" : "completed";
 }
 
@@ -302,6 +309,7 @@ router.post("/run/:window", async (req, res, next) => {
       window: windowName,
       status: "accepted",
       startedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
       finishedAt: null,
       currentTask: null,
       delayMs: operationDelayMs(windowName),
@@ -313,6 +321,7 @@ router.post("/run/:window", async (req, res, next) => {
     void executeOperationWindow(job, tasks, req).catch((error) => {
       job.status = "failed";
       job.finishedAt = new Date().toISOString();
+      job.updatedAt = job.finishedAt;
       job.currentTask = null;
       job.failures += 1;
       job.results.push({ name: "operation-window", ok: false, error: error?.message || String(error) });
@@ -324,6 +333,7 @@ router.post("/run/:window", async (req, res, next) => {
       service: "ops",
       window: windowName,
       newsletterEnabled: operationNewsletterEnabled(),
+      statusUrl: `/ops/jobs/${encodeURIComponent(job.id)}`,
       job: publicJob(job),
     });
   } catch (error) { next(error); }
