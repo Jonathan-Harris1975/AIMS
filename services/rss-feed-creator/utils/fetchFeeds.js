@@ -127,11 +127,11 @@ function isWithinCutoff(pubDate) {
   try {
     const itemDate = new Date(pubDate);
     if (isNaN(itemDate.getTime())) return false;
-    
+
     const now = new Date();
     const cutoffMs = FEED_CUTOFF_HOURS * 60 * 60 * 1000;
     const ageMs = now - itemDate;
-    
+
     return ageMs <= cutoffMs && ageMs >= 0; // Also reject future dates
   } catch {
     return false;
@@ -170,10 +170,10 @@ async function fetchAndParseOne(url) {
 
     // Filter out entries missing both title and summary
     const cleaned = mapped.filter((i) => i.title || i.summary);
-    
+
     // Apply time window filter
     const withinCutoff = cleaned.filter((i) => isWithinCutoff(i.pubDate));
-    
+
     const filtered = withinCutoff.length;
     const discarded = cleaned.length - filtered;
 
