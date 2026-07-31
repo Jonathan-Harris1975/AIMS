@@ -4,6 +4,10 @@ AI Management Suite is a modular Node/Express application for Jonathan Harris’
 
 This README documents the repository as it exists in code. It separates **implemented**, **partially implemented**, and **present but not wired** areas so maintainers are not chasing phantom routes through the boiler-room fog. 🛠️
 
+## Release 2.9.2: governed morning and podcast operations
+
+This maintenance release verifies the complete weekday morning and Friday podcast hand-off between MAST and AIMS. Accepted Blotato and podcast jobs are polled to terminal state, synchronous body-level failures are honoured, partial platform delivery blocks standby, the Monday mini-series runs exactly once, Friday no longer duplicates the social-blog package, and podcast RSS/site publication failures keep the operation window failed rather than being mistaken for success.
+
 ## Release 2.9.0: content reliability and topicality
 
 This release closes the production failures observed on 31 July 2026 across the

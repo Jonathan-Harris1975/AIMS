@@ -1,6 +1,6 @@
 # AIMS security policy
 
-**Status:** Production-controlled  
+**Status:** Production-controlled
 **Last reviewed:** 21 June 2026
 
 AIMS is an authenticated background API. Store all API keys, provider tokens, webhook secrets and R2 credentials in Koyeb Secrets. Do not expose them through client-side JavaScript, logs, fixtures, reports or committed environment files.
