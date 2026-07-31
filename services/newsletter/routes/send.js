@@ -1,11 +1,12 @@
 // services/newsletter/routes/send.js
 import express from "express";
+import { warn } from "../../../logger.js";
 import { getObjectAsText, buildPublicUrl } from "../../shared/utils/r2-client.js";
 import { hookdeckDedupe } from "../../shared/utils/hookdeckDedupe.js";
 import { validateBody, newsletterSendBodySchema } from "../../shared/utils/requestSchemas.js";
 import { getNewsletterProfile } from "../config/profiles.js";
 import { buildIssueKeyPrefix, findLatestIssueSessionId } from "../engine/storage.js";
-import { deliverNewsletterIssue, getCampaignStatus } from "../brevo/campaign.js";
+import { deliverNewsletterIssue, getNewsletterDeliveryReadiness, getCampaignStatus } from "../brevo/campaign.js";
 
 const router = express.Router();
 const asyncRoute = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
@@ -73,11 +74,56 @@ router.post("/send", hookdeckDedupe("newsletter:send"), asyncRoute(async (req, r
 
   const result = await deliverNewsletterIssue({ profile, sessionId, buildResult });
   if (!result.ok) {
-    const status = result.status === "sender_pending_validation" ? 409 : 502;
+    const configurationStatuses = new Set([
+      "sender_pending_validation",
+      "audience_empty",
+      "audience_not_configured",
+      "content_error",
+    ]);
+    const status = configurationStatuses.has(result.status) ? 409 : 502;
+    warn("newsletter.send.blocked", {
+      profileId: profile.id,
+      sessionId,
+      stage: result.stage || null,
+      status: result.status || "unknown",
+      providerStatus: result.providerStatus || null,
+      providerCode: result.providerCode || null,
+      error: String(result.error || "newsletter delivery failed").slice(0, 700),
+    });
     return res.status(status).json(result);
   }
   return res.json(result);
 }));
+
+
+async function handleReadiness(profileId, res) {
+  const profile = getNewsletterProfile(profileId || "ai-edge");
+  const result = await getNewsletterDeliveryReadiness({ profile });
+  if (!result.ok) {
+    const configurationStatuses = new Set([
+      "audience_not_configured",
+      "audience_empty",
+      "sender_not_configured",
+      "sender_pending_validation",
+    ]);
+    return res.status(configurationStatuses.has(result.status) ? 409 : 502).json(result);
+  }
+  return res.status(result.ready ? 200 : 409).json(result);
+}
+
+// GET /newsletter/readiness/:profileId — side-effect-free Brevo delivery
+// preflight for operators and diagnostics. It never creates a sender/list.
+router.get("/readiness/:profileId?", asyncRoute(async (req, res) => (
+  handleReadiness(req.params.profileId || req.query.profileId, res)
+)));
+
+// POST /newsletter/readiness — scheduler-compatible, side-effect-free Brevo
+// preflight. AIMS operation windows use POST for every internal task, so this
+// companion route lets the scheduler prove sender/list readiness before it
+// attempts /newsletter/send.
+router.post("/readiness", asyncRoute(async (req, res) => (
+  handleReadiness(req.body?.profileId || req.query.profileId, res)
+)));
 
 // GET /newsletter/campaigns/:campaignId/status — poll Brevo for status/
 // performance of a real Brevo campaign.
