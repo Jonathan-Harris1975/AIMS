@@ -1,6 +1,6 @@
 # AIMS production readiness evidence report
 
-**Generated:** 21 June 2026  
+**Generated:** 21 June 2026
 **Status:** Repository-level production readiness passed. Live production certification still requires Koyeb deployment verification.
 
 ## Summary

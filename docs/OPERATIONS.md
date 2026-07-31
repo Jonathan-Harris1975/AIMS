@@ -1,6 +1,6 @@
 # AIMS production operations
 
-**Status:** Paid Koyeb production service  
+**Status:** Paid Koyeb production service
 **Last reviewed:** 21 June 2026
 
 AIMS runs as one non-root Koyeb Web Service with durable R2-backed state and fail-closed production settings. Use `/livez`, `/readyz`, `/ops/health`, `/ops/preflight`, `/ops/warmup` and `/ops/excellence` to distinguish process health, dependency readiness, warmup state and workflow/provider quality.

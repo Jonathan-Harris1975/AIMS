@@ -1,6 +1,6 @@
 # AIMS professional operations and alerting
 
-**Status:** Paid Koyeb production service  
+**Status:** Paid Koyeb production service
 **Last reviewed:** 21 June 2026
 
 AIMS records bounded professional-excellence telemetry in durable state. `GET /ops/excellence` exposes job success/failure counts, retry recoveries, repeated failure streaks and provider latency/failure aggregates without returning prompts, credentials, raw provider payloads or bearer tokens.
