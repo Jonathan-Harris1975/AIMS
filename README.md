@@ -4,6 +4,93 @@ AI Management Suite is a modular Node/Express application for Jonathan Harris’
 
 This README documents the repository as it exists in code. It separates **implemented**, **partially implemented**, and **present but not wired** areas so maintainers are not chasing phantom routes through the boiler-room fog. 🛠️
 
+## Release 2.9.0: content reliability and topicality
+
+This release closes the production failures observed on 31 July 2026 across the
+newsletter, Zernio, social-blog and Blotato pipelines. The central rule is now
+simple: a prompt, script or pre-render score is not proof that the published
+artefact is correct. Final copy, final source evidence and final pixels must all
+pass their own gates before an external side effect is allowed.
+
+### Newsletter
+
+- Generation and delivery are separate operations.
+- `POST /newsletter/readiness` and `GET /newsletter/readiness/:profileId?`
+  verify the configured Brevo sender and an existing populated audience list
+  without creating or sending anything.
+- The operational window runs `newsletter-generate`, then
+  `newsletter-readiness`, then `newsletter-send`. A failed readiness check
+  blocks delivery rather than producing an opaque downstream send failure.
+- Production list creation is disabled by default. Set
+  `NEWSLETTER_AI_EDGE_BREVO_LIST_ID` to the existing populated AI Edge list and
+  keep `NEWSLETTER_BREVO_ALLOW_LIST_CREATE=false`.
+- Newsletter artwork is inspected after generation. Travel/lifestyle drift,
+  pseudo-typography, logos, unrelated scenes and weak editorial relevance fail
+  before upload.
+
+### Zernio daily posts and weekly mini-series
+
+- Each daily lane has a deterministic topic contract. Saturday must contain a
+  genuine AI ethics/policy trade-off and a reasoned debate question; Friday
+  must describe a concrete operational lesson, consequence or recovery step.
+- A failed semantic gate triggers a materially new model repair using the
+  declared topic and supplied source evidence. Repeating the same unchanged
+  candidate five times is no longer accepted as a review loop.
+- RSS-backed daily posts retain only exact supplied source URLs and must remain
+  topically aligned with those sources.
+- Mini-series research may skip a weak week. Every planned and generated part
+  must cite approved evidence, match its own angle and remain distinct from the
+  other parts. The complete series is reviewed before any part is scheduled.
+- Social artwork is inspected after generation. Generated labels, pseudo-text,
+  infographic panels, decorative dashboards and unrelated generic AI imagery
+  are hard failures.
+
+### Daily social-blog posts
+
+- The structured package must select one to three exact URLs from the rewritten
+  RSS evidence supplied to the model.
+- The title, summary, body, caption and takeaway must represent the selected
+  sources rather than merely mentioning generic AI vocabulary.
+- Phase 4 and Phase 5 repairs rebuild the title, slug, HTML, manifest and image
+  prompt, regenerate artwork when the visual brief changes, and then rerun both
+  final gates. Repaired JSON can no longer be returned while stale pre-repair
+  HTML is published.
+- Empty model completions have a bounded per-provider retry budget and move to
+  the next configured provider promptly.
+
+### Blotato shorts
+
+- The finished duration contract is **35 to 55 seconds**, with a default target
+  of 45 seconds. Request validation, script calibration and final media checks
+  use the same range.
+- The finished MP4 is downloaded and checked with FFprobe before scheduling.
+- A contact sheet deliberately oversamples the first three seconds and is
+  reviewed multimodally for hook strength, source relevance, scene-to-script
+  alignment, visual progression, caption legibility and finished visual
+  quality.
+- Generic desk scenes, decorative AI metaphors, repeated near-identical scenes
+  and source-irrelevant visuals fail even when the pre-render script gate scored
+  highly.
+- Ambiguous “not complete” provider responses remain pending and are polled;
+  explicit insufficient-credit responses remain terminal.
+
+### Deployment gate
+
+Before enabling this release in production:
+
+```bash
+npm ci
+npm test
+npm run build
+npm run env:doctor:file -- env.template
+```
+
+Production also requires FFmpeg and FFprobe, a working image-capable QA route,
+the verified Brevo sender, the populated AI Edge list ID, and the existing
+Blotato/Zernio credentials. Keep publishing disabled if any readiness or final
+artefact gate fails. A technically successful generation is not permission to
+publish.
+
 ## Documentation index
 
 - [Audits](audits/README.md)
