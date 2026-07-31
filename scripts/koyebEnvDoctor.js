@@ -38,6 +38,8 @@ const NUMERIC_ENVS = new Set([
   "AI_EMPTY_COMPLETION_RETRIES_PER_PROVIDER",
   "ARTWORK_VISUAL_QA_THRESHOLD",
   "ARTWORK_VISUAL_QA_MAX_REGENERATIONS",
+  "PODCAST_TARGET_MINUTES",
+  "PODCAST_MAX_MINUTES",
   "BLOTATO_VIDEO_SCENE_COUNT",
   "BLOTATO_API_RETRY_ATTEMPTS",
   "BLOTATO_API_RETRY_MAX_MS",
@@ -83,6 +85,8 @@ const POSITIVE_INTEGER_ENVS = new Set([
   "AI_EMPTY_COMPLETION_RETRIES_PER_PROVIDER",
   "ARTWORK_VISUAL_QA_THRESHOLD",
   "ARTWORK_VISUAL_QA_MAX_REGENERATIONS",
+  "PODCAST_TARGET_MINUTES",
+  "PODCAST_MAX_MINUTES",
   "BLOTATO_VIDEO_SCENE_COUNT",
   "BLOTATO_API_RETRY_ATTEMPTS",
   "BLOTATO_API_RETRY_MAX_MS",
@@ -114,6 +118,7 @@ const BOOLEAN_ENVS = new Set([
   "BLOTATO_RENDERED_QA_REQUIRED",
   "ARTWORK_VISUAL_QA_ENABLED",
   "ARTWORK_VISUAL_QA_REQUIRED",
+  "ARTWORK_IMAGE_CONFIG_ENABLED",
   "NEWSLETTER_BREVO_ALLOW_LIST_CREATE",
   "BLOTATO_STEP0_PREFLIGHT_ENABLED",
   "BLOTATO_PREFLIGHT_REQUIRE_LISTED_ACCOUNTS",
@@ -278,6 +283,13 @@ function validateNumber({ key, value, line }, errors) {
 
   if (key === "BLOTATO_NEWS_DURATION_SECONDS" && (number < 35 || number > 55)) {
     errors.push({ line, key, message: `${key} must be between 35 and 55` });
+  }
+
+  if (key === "PODCAST_TARGET_MINUTES" && (number < 30 || number > 70)) {
+    return `${key} must be between 30 and 70`;
+  }
+  if (key === "PODCAST_MAX_MINUTES" && (number < 60 || number > 70)) {
+    return `${key} must be between 60 and 70`;
   }
 
   if (["BLOTATO_RENDERED_QA_THRESHOLD", "ARTWORK_VISUAL_QA_THRESHOLD"].includes(key) && (number < 1 || number > 100)) {
