@@ -320,16 +320,26 @@ These files exist but are not mounted by the active root route registry:
 
 | Name | Purpose | Used by | Required | Default/template | Notes |
 |---|---|---|---|---|---|
-| `COMMS_HUB_ENABLED` | Enables service runtime and readiness enforcement. | services/comms-hub, server.js | Required switch | `false` | Keep false until `npm run comms:migrate` succeeds. |
-| `D1_UUID` | Cloudflare D1 database UUID. | services/comms-hub/clients/d1Client.js | Required when enabled | `blank` | Koyeb secret-backed value. |
-| `D1_API_KEY` | Cloudflare API token with D1 read/write access. | services/comms-hub/clients/d1Client.js | Required when enabled | `blank` | Koyeb secret-backed value. |
-| `JOTFORM_API_KEY` | Re-fetches and verifies webhook submissions. | services/comms-hub/clients/jotformClient.js | Required when enabled | `blank` | Koyeb secret-backed value. |
-| `JOTFORM_API_BASE_URL` | Jotform API origin. | services/comms-hub/clients/jotformClient.js | Conditional | `https://api.jotform.com` | Override for the account’s Jotform region when required. |
+| `COMMS_HUB_ENABLED` | Enables service runtime and readiness enforcement. | services/comms-hub, server.js | Required switch | `false` | Keep false until both migrations succeed. |
+| `D1_UUID` | Cloudflare D1 database UUID and migration target. | Comms Hub migration and D1 client | Required when enabled | `blank` | Koyeb secret-backed administrative value. |
+| `D1_API_KEY` | Cloudflare token used by explicit migrations and Phase 1 REST fallback. | scripts/commsHubMigrate.js, D1 client | Required when enabled | `blank` | Runtime social queries use the Worker proxy instead. |
+| `COMMS_HUB_D1_PROXY_URL` | Bound-Worker runtime query endpoint. | Phase 2 D1 client | Required when either social family is enabled | `blank` | Use the exact `/query` URL. |
+| `COMMS_HUB_D1_PROXY_TOKEN` | Bearer secret shared with the D1 Worker. | Phase 2 D1 client and Worker | Required when either social family is enabled | `blank` | Independent of Cloudflare API tokens. |
+| `COMMS_HUB_PUBLIC_BASE_URL` | Public AIMS origin used to register Zernio webhooks. | socialService.js | Required when either social family is enabled | `blank` | No trailing slash required. |
+| `JOTFORM_API_KEY` | Re-fetches and verifies webhook submissions. | jotformClient.js | Required when enabled | `blank` | Koyeb secret-backed value. |
+| `ZERNIO_META_API_KEY` | Facebook/Instagram inbox credential. | zernioInboxClient.js | Required when Meta is enabled | `blank` | Never falls back to the Video or legacy key. |
+| `ZERNIO_VIDEO_API_KEY` | YouTube comment credential. | zernioInboxClient.js | Required when Video is enabled | `blank` | Never falls back to the Meta or legacy key. |
+| `ZERNIO_META_WEBHOOK_SECRET` | HMAC secret for the Meta webhook endpoint. | domain/zernioWebhook.js | Required when Meta is enabled | `blank` | Separate from the Meta API key. |
+| `ZERNIO_VIDEO_WEBHOOK_SECRET` | HMAC secret for the Video webhook endpoint. | domain/zernioWebhook.js | Required when Video is enabled | `blank` | Separate from the Video API key. |
+| `COMMS_HUB_ZERNIO_META_ENABLED` | Enables Facebook/Instagram ingestion, actions and polling. | Comms Hub runtime | Optional switch | `false` | Can be enabled independently. |
+| `COMMS_HUB_ZERNIO_VIDEO_ENABLED` | Enables YouTube comment ingestion, actions and polling. | Comms Hub runtime | Optional switch | `false` | Can be enabled independently. |
 | `R2_BUCKET_COMMS_HUB` | R2 bucket for redacted integrity receipts. | shared R2 client, archive worker | Required when enabled | `comms-hub` | Message content and attachments are not written to this public bucket. |
-| `R2_PUBLIC_BASE_URL_COMMS_HUB` | Public receipt URL base required by the shared R2 uploader. | shared R2 client | Required when enabled | supplied `r2.dev` URL | No trailing slash preferred. |
-| `COMMS_HUB_MAX_WEBHOOK_BYTES` | Service-specific webhook size cap. | domain/webhook.js, server.js | Optional | `1048576` | Enforced for parsed and streaming bodies. |
+| `R2_PUBLIC_BASE_URL_COMMS_HUB` | Public receipt URL base required by the shared R2 uploader. | shared R2 client | Required when enabled | supplied `r2.dev` URL | Redacted receipts only. |
+| `COMMS_HUB_MAX_WEBHOOK_BYTES` | Service-specific webhook size cap. | webhook domains, server.js | Optional | `1048576` | Enforced before JSON parsing on exact intake routes. |
+| `COMMS_HUB_ZERNIO_ACK_TIMEOUT_MS` | Maximum synchronous webhook acceptance budget. | socialService.js | Optional | `4000` | Hard-capped at 4500 ms so Zernio can retry rather than wait beyond its acknowledgement window. |
+| `COMMS_HUB_ZERNIO_POLL_ENABLED` | Enables leased fallback polling. | socialPollWorker.js | Optional | `true` | Poll jobs are isolated by credential family and platform. |
 | `COMMS_HUB_ARCHIVE_WORKER_ENABLED` | Enables the leased receipt worker. | runtime.js, archiveWorker.js | Optional | `true` | D1 remains the authoritative private store. |
-| `ONECOM_INFO_PASSWORD`, `ONECOM_NEWSLETTER_PASSWORD`, `ONECOM_ADMIN_PASSWORD` | Reserved env mappings for the later one.com email adapter. | Not loaded by the Jotform slice | Not yet required | `blank` | Map to the supplied Koyeb secrets only when the email adapter is implemented. |
+| `ONECOM_INFO_PASSWORD`, `ONECOM_NEWSLETTER_PASSWORD`, `ONECOM_ADMIN_PASSWORD` | Reserved env mappings for the later one.com email adapter. | Not loaded in Phase 2 | Not yet required | `blank` | Enable only when the email adapter is implemented. |
 
 ### Cloudflare purge
 

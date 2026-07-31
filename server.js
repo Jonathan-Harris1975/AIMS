@@ -216,19 +216,35 @@ const allowedOrigins = (process.env.CORS_ORIGINS || "")
   .map((value) => value.trim())
   .filter(Boolean);
 
-function isCommsHubJotformIntakeRequest(req) {
+function commsHubIntakePath(req) {
   const method = String(req?.method || "").toUpperCase();
+  if (method !== "POST") return "";
   const path = String(req?.originalUrl || req?.url || "")
     .split("?")[0]
     .replace(/\/+$/, "")
     .toLowerCase();
-  return method === "POST" && path === "/comms-hub/intake/jotform";
+  return [
+    "/comms-hub/intake/jotform",
+    "/comms-hub/intake/zernio/meta",
+    "/comms-hub/intake/zernio/video",
+  ].includes(path) ? path : "";
 }
 
 function recordCommsHubParsedBodyBytes(req, _res, buffer) {
-  if (isCommsHubJotformIntakeRequest(req)) {
-    req.aimsParsedBodyBytes = Buffer.isBuffer(buffer) ? buffer.length : 0;
+  const path = commsHubIntakePath(req);
+  if (!path) return;
+  const bytes = Buffer.isBuffer(buffer) ? buffer.length : 0;
+  const configured = Number(process.env.COMMS_HUB_MAX_WEBHOOK_BYTES || 1_048_576);
+  const maximum = Number.isInteger(configured) && configured > 0 ? configured : 1_048_576;
+  if (bytes > maximum) {
+    const error = new Error("Comms Hub webhook body exceeds the configured size limit.");
+    error.status = 413;
+    error.statusCode = 413;
+    error.type = "entity.too.large";
+    throw error;
   }
+  req.aimsParsedBodyBytes = bytes;
+  if (path.startsWith("/comms-hub/intake/zernio/")) req.aimsRawBody = Buffer.from(buffer);
 }
 
 app.use(
@@ -305,7 +321,7 @@ app.get("/health", (_req, res) =>
     ok: true,
     status: "ok",
     service: "AIMS",
-    version: process.env.APP_VERSION || "2.7.1",
+    version: process.env.APP_VERSION || "2.8.0",
     env: process.env.APP_ENV || process.env.NODE_ENV || "development",
     trustProxy,
     time: new Date().toISOString(),
@@ -323,7 +339,7 @@ app.get("/readyz", (_req, res) => {
   return res.status(report.ready && lifecycleState.state !== "maintenance" ? 200 : 503).json({
     ok: report.ready,
     service: "AIMS",
-    version: process.env.APP_VERSION || "2.7.1",
+    version: process.env.APP_VERSION || "2.8.0",
     ...report,
     lifecycle: lifecycleState,
     time: new Date().toISOString(),
