@@ -4,12 +4,12 @@ import { info } from "../../../logger.js";
 // 🔄 Duration Rotator (Auto-Normalizing per Episode)
 // ============================================================
 //
-// Ensures total runtime matches the auto-selected 30/45/60 minutes.
+// Ensures total runtime matches the auto-selected 30/45/50/60 minutes.
 // Balances section proportions and returns unified object.
 // ============================================================
 
 export function rotateDurations(durations = {}) {
-  const targetMins = durations.targetMins || 45;
+  const targetMins = durations.targetMins || 50;
   const targetSeconds = targetMins * 60;
 
   const intro = durations.introSeconds || 300;

@@ -429,18 +429,39 @@ function isOffBrandArtworkPrompt(text = "") {
   return ARTWORK_BANNED_TERMS.some((term) => lowered.includes(term));
 }
 
+function meaningfulArtworkTerms(value = "") {
+  const stop = new Set([
+    "about", "after", "again", "also", "been", "being", "between", "could", "from", "have", "into",
+    "more", "most", "other", "over", "that", "their", "there", "these", "they", "this", "through", "under",
+    "very", "what", "when", "where", "which", "while", "with", "would", "artificial", "intelligence", "weekly",
+    "podcast", "episode", "turing", "torch", "technology", "image", "artwork", "editorial",
+  ]);
+  return new Set(String(value || "").toLowerCase().match(/[a-z][a-z0-9-]{3,}/g)?.filter((word) => !stop.has(word)) || []);
+}
+
+function isArtworkPromptGrounded(candidate = "", source = "") {
+  const candidateTerms = meaningfulArtworkTerms(candidate);
+  const sourceTerms = meaningfulArtworkTerms(source);
+  if (!candidateTerms.size || !sourceTerms.size) return false;
+  let overlap = 0;
+  for (const term of candidateTerms) if (sourceTerms.has(term)) overlap += 1;
+  return overlap >= 2 || [...sourceTerms].some((term) => candidateTerms.has(term));
+}
+
 export function getArtworkPrompt(description, date) {
   const theme = sanitiseThemeText(description);
 
   return [
     "Premium editorial AI podcast cover art.",
-    "Mood: sharp, sceptical, cinematic, adult, intelligent, grounded.",
+    "Choose exactly one dominant story from the supplied episode themes and at most one secondary supporting element.",
+    "The dominant story must occupy roughly seventy per cent of the frame and be identifiable from a concrete person, object, workplace, consequence or decision named in the episode.",
+    "Mood: sharp, sceptical, cinematic, adult, intelligent and grounded.",
     getSeasonalPaletteDirection(date),
-    "Style: cinematic magazine-cover storytelling with one strong, recognisable focal subject drawn from the actual episode. Prefer concrete people, hands, semiconductor hardware, power infrastructure, security work, healthcare technology, scientific research, robotics, developer environments or other real-world subjects explicitly supported by the episode. The cover should make a listener curious about this week’s stories before they know the title. Do not default to abstract geometry, data motifs, generic AI infrastructure, symmetrical emblems, digital snowflakes, circuit mandalas, neural-network flowers, floating polygons or decorative technology patterns.",
+    "Use cinematic magazine-feature storytelling with a recognisable real-world focal scene. Prefer episode-supported semiconductor hardware, power infrastructure, security work, healthcare technology, scientific research, robotics, developer environments or another exact subject from the episode.",
+    "Decorative AI symbols, generic server rooms, glowing brains, symmetric emblems, circuit mandalas and unrelated futuristic motifs are not acceptable substitutes for the episode story.",
     STRICT_TEXT_FREE_RULE,
-    "Avoid: pastel fantasy, dreamy clouds, magical orb, cute or childlike sci-fi, cartoon softness.",
-    `Themes: ${theme || "AI systems, governance, power, risk, work, security."}`,
-  ].join(" ").slice(0, 1600);
+    `Episode themes and evidence: ${theme || "AI systems, governance, power, risk, work and security."}`,
+  ].join(" ").slice(0, 1800);
 }
 
 
@@ -604,10 +625,10 @@ export async function generateEpisodeMetaLLM(rawTranscript, sessionMeta = {}) {
     });
 
     const cleanedCandidate = String(candidatePrompt || "").replace(/\s+/g, " ").trim().slice(0, 500);
-    if (cleanedCandidate && !isOffBrandArtworkPrompt(cleanedCandidate)) {
+    if (cleanedCandidate && !isOffBrandArtworkPrompt(cleanedCandidate) && isArtworkPromptGrounded(cleanedCandidate, description)) {
       artworkPrompt = applyArtworkPromptPolicy(cleanedCandidate, { date: sessionId, mode: "podcast" });
     } else if (cleanedCandidate) {
-      warn("meta.artwork.offbrand", { sessionId, candidatePrompt: cleanedCandidate });
+      warn("meta.artwork.offbrand_or_ungrounded", { sessionId, candidatePrompt: cleanedCandidate });
     }
 
     await sessionCache.storeTempPart(sessionMeta, "artworkPrompt", artworkPrompt);

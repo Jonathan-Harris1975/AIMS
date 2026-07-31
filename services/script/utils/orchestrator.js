@@ -75,7 +75,8 @@ ${mainText}`,
     timeoutMs: Number(process.env.PODCAST_REPAIR_TIMEOUT_MS || 900000),
     reasoning: { effort: process.env.PODCAST_REPAIR_REASONING_EFFORT || "none", exclude: true },
   });
-  const repairedMain = String(raw || mainText).trim() || mainText;
+  const rawRepairedMain = String(raw || mainText).trim() || mainText;
+  const repairedMain = stripLeadingIntroEcho(rawRepairedMain, lockedIntro);
   // Never trust an LLM repair to preserve deterministic brand blocks. Reattach them here.
   return { text: [lockedIntro, repairedMain, lockedOutro].filter(Boolean).join("\n\n").trim() };
 }
@@ -118,32 +119,45 @@ function normalisedSpokenWords(text = "") {
   return String(text || "").toLowerCase().replace(/[’']/g, "").match(/[a-z0-9]+/g) || [];
 }
 
+function introParagraphSimilarity(paragraph = "", intro = "") {
+  const p = new Set(normalisedSpokenWords(paragraph).filter((word) => word.length > 3));
+  const i = new Set(normalisedSpokenWords(intro).filter((word) => word.length > 3));
+  if (!p.size || !i.size) return 0;
+  let overlap = 0;
+  for (const word of p) if (i.has(word)) overlap += 1;
+  return overlap / Math.min(p.size, i.size);
+}
+
+function looksLikeRepeatedIntro(paragraph = "", intro = "") {
+  const text = String(paragraph || "").trim();
+  if (!text) return false;
+  const normalised = text.toLowerCase().replace(/[’']/g, "'");
+  const brandedOpening = /\b(?:welcome(?: back)? to|this is|you're listening to|you are listening to)\s+(?:the\s+)?turing'?s torch\b|\bi'?m jonathan harris\b|\bjonathan harris here\b/i.test(normalised);
+  const similarity = introParagraphSimilarity(text, intro);
+  return brandedOpening || similarity >= 0.68 || (similarity >= 0.28 && /\b(?:welcome|episode|this week|today|host|listening)\b/i.test(normalised));
+}
+
 function stripLeadingIntroEcho(main = "", intro = "") {
   const body = String(main || "").trim();
   const introText = String(intro || "").trim();
   if (!body || !introText) return body;
 
-  const introWords = normalisedSpokenWords(introText);
-  const bodyWords = normalisedSpokenWords(body);
-  const probeLength = Math.min(60, introWords.length, bodyWords.length);
-  if (probeLength < 20) return body;
-
-  let matches = 0;
-  for (let i = 0; i < probeLength; i += 1) {
-    if (introWords[i] === bodyWords[i]) matches += 1;
+  // Remove an exact leading copy first, then inspect up to three leading
+  // paragraphs for paraphrased branded openings reintroduced by an editor.
+  let remaining = body;
+  if (remaining.toLowerCase().startsWith(introText.toLowerCase())) {
+    remaining = remaining.slice(introText.length).replace(/^[\s,;:.\-–—!?]+/, "").trim();
   }
-  if (matches / probeLength < 0.9) return body;
 
-  const tokenRe = /[A-Za-z0-9]+/g;
-  let match, count = 0, cut = 0;
-  while ((match = tokenRe.exec(body)) !== null && count < introWords.length) {
-    count += 1;
-    cut = tokenRe.lastIndex;
+  const paragraphs = remaining.split(/\n\s*\n+/).map((item) => item.trim()).filter(Boolean);
+  let removed = 0;
+  while (paragraphs.length && removed < 3 && looksLikeRepeatedIntro(paragraphs[0], introText)) {
+    paragraphs.shift();
+    removed += 1;
   }
-  const tail = body.slice(cut);
-  const boundary = tail.match(/^[\s,;:.\-–—!?]*(?:\n\s*)*/);
-  return body.slice(cut + (boundary?.[0]?.length || 0)).trim();
+  return paragraphs.join("\n\n").trim();
 }
+
 
 export async function orchestrateScript(input) {
   // Support both legacy string version and meta-object version
@@ -211,7 +225,11 @@ export async function orchestrateScript(input) {
       main
     );
 
-    const mainCandidate = (editorialMain && editorialMain.trim()) || main;
+    const rawMainCandidate = (editorialMain && editorialMain.trim()) || main;
+    const mainCandidate = stripLeadingIntroEcho(rawMainCandidate, intro);
+    if (mainCandidate !== rawMainCandidate) {
+      info("script.main.post_editorial_intro_echo_removed", { sessionId: sid });
+    }
     const editorialCandidate = [intro, mainCandidate, outro].filter(Boolean).join("\n\n");
     const editorialValidation = validateTranscriptStructure(editorialCandidate);
     const safeEditorialText = editorialValidation.ok ? editorialCandidate : initialFullText;

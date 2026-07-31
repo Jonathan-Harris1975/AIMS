@@ -197,7 +197,7 @@ export async function generateMainLongform(sessionMeta, articles, totalMainSecon
     sessionId: sessionMeta,
     section: "main-synthesis",
     messages: [{ role: "system", content: synthesisPrompt }],
-    // Long-form synthesis needs enough visible-output headroom for a 60-minute episode.
+    // Long-form synthesis needs enough visible-output headroom for the governed long-form episode profiles.
     max_tokens: Number(process.env.PODCAST_SYNTHESIS_MAX_TOKENS || 24000),
     timeoutMs: Number(process.env.PODCAST_SYNTHESIS_TIMEOUT_MS || 900000),
     reasoning: { effort: process.env.PODCAST_SYNTHESIS_REASONING_EFFORT || "low", exclude: true },
