@@ -126,14 +126,15 @@ function publicJob(job) {
     id: job.id,
     window: job.window,
     status: job.status,
-    terminal: ["completed", "completed-with-failures", "failed"].includes(job.status),
-    updatedAt: job.updatedAt || job.startedAt,
     startedAt: job.startedAt,
     finishedAt: job.finishedAt || null,
     currentTask: job.currentTask || null,
     delayMs: job.delayMs,
     results: job.results,
     failures: job.failures,
+    updatedAt: job.updatedAt || job.startedAt,
+    terminal: ["completed", "completed-with-failures", "failed"].includes(job.status),
+    statusUrl: `/ops/jobs/${encodeURIComponent(job.id)}`,
   };
 }
 
@@ -309,12 +310,12 @@ router.post("/run/:window", async (req, res, next) => {
       window: windowName,
       status: "accepted",
       startedAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
       finishedAt: null,
       currentTask: null,
       delayMs: operationDelayMs(windowName),
       results: [],
       failures: 0,
+      updatedAt: new Date().toISOString(),
     };
     operationJobs.set(id, job);
 
@@ -333,7 +334,6 @@ router.post("/run/:window", async (req, res, next) => {
       service: "ops",
       window: windowName,
       newsletterEnabled: operationNewsletterEnabled(),
-      statusUrl: `/ops/jobs/${encodeURIComponent(job.id)}`,
       job: publicJob(job),
     });
   } catch (error) { next(error); }
