@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { resolvePodcastDurationPolicy } from "../shared/utils/podcastDurationPolicy.js";
 
 function value(env, name) {
   const text = String(env?.[name] ?? "").trim();
@@ -85,12 +86,21 @@ export function getPodcastReadiness({ env = process.env, checkCommand = commandA
   requireUrl("podcast_transcript_public_url", ["R2_PUBLIC_BASE_URL_TRANSCRIPT_HTML", "R2_PUBLIC_BASE_URL_TRANSCRIPT"]);
 
   const durationSetting = oneOf(env, ["PODCAST_TARGET_MINUTES", "PODCAST_DURATION_MINUTES", "PODCAST_DURATION_MINS", "PODCAST_TARGET_MINS"]);
-  const targetMinutes = Number(durationSetting?.value || 60);
+  const durationPolicy = resolvePodcastDurationPolicy(env);
+  const targetMinutes = durationPolicy.targetMinutes;
+  const maxMinutes = durationPolicy.configuredMaxMinutes;
   checks.push({
     name: "podcast_target_minutes",
-    ok: Number.isFinite(targetMinutes) && targetMinutes >= 30 && targetMinutes <= 60,
+    ok: Number.isFinite(targetMinutes) && targetMinutes >= 30 && targetMinutes <= durationPolicy.maxMinutes,
     detail: Number.isFinite(targetMinutes)
       ? `${targetMinutes} minutes via ${durationSetting?.name || "default"}`
+      : "invalid number",
+  });
+  checks.push({
+    name: "podcast_max_minutes",
+    ok: Number.isFinite(maxMinutes) && maxMinutes >= 60 && maxMinutes <= durationPolicy.absoluteMaxMinutes,
+    detail: Number.isFinite(maxMinutes)
+      ? `${maxMinutes} minute hard ceiling (absolute maximum ${durationPolicy.absoluteMaxMinutes})`
       : "invalid number",
   });
 
@@ -106,6 +116,7 @@ export function getPodcastReadiness({ env = process.env, checkCommand = commandA
     service: "podcast",
     checks,
     targetMinutes,
+    maxMinutes: durationPolicy.maxMinutes,
     time: new Date().toISOString(),
   };
 }

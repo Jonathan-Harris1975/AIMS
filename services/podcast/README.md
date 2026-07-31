@@ -29,3 +29,7 @@ The service entry point, route modules and domain utilities are contained in thi
 - Durable artefacts and job state use the configured R2/state utilities rather than process memory where a durable store is required.
 
 The Friday operation window calls readiness first and blocks `/podcast/run` unless the required OpenRouter model, AWS Polly credentials, R2 storage lanes, intro/outro assets, target duration and FFmpeg/FFprobe are available. The operation then polls the podcast status route until the pipeline is terminal.
+
+## Duration policy
+
+The episode planner targets **50 minutes**. Finished audio may run beyond 60 minutes, but the absolute publication ceiling is **70 minutes**. If the mastered audio would exceed 70 minutes, AIMS automatically preserves the generated work and applies a calculated FFmpeg tempo fit before upload; no manual voice editing is required.
