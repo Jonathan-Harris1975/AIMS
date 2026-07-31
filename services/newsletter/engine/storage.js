@@ -18,9 +18,9 @@ export function buildIssueKeyPrefix(profile, { date = new Date(), sessionId } = 
 /**
  * Finds the sessionId to deliver when the caller doesn't already know it.
  *
- * MAST triggers /newsletter/generate and /newsletter/send as two separately
- * scheduled jobs (09:20 and 10:00) with no mechanism to pass generate's
- * timestamp-based sessionId into send's request body — so send must be able
+ * The AIMS morning window triggers generate, readiness and send sequentially,
+ * but deliberately does not pass a volatile in-memory sessionId between route
+ * calls. Send must therefore be able
  * to resolve "today's issue" on its own. Lists the day's key prefix, reads
  * each issue's metadata.json, and returns the sessionId of whichever has
  * the most recent generatedAt (normally there's exactly one per day; if
