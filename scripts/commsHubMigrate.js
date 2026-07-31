@@ -40,7 +40,16 @@ async function loadMigrations() {
 
 async function main() {
   const statusOnly = process.argv.includes("--status");
-  const config = loadCommsHubConfig({ ...process.env, COMMS_HUB_ENABLED: "true" }, { requireEnabled: true });
+  // Migrations are administrative operations and deliberately bypass the
+  // runtime Worker data plane, whose SQL allow-list excludes DDL.
+  const config = loadCommsHubConfig({
+    ...process.env,
+    COMMS_HUB_ENABLED: "true",
+    COMMS_HUB_D1_PROXY_URL: "",
+    COMMS_HUB_D1_PROXY_TOKEN: "",
+    COMMS_HUB_ZERNIO_META_ENABLED: "false",
+    COMMS_HUB_ZERNIO_VIDEO_ENABLED: "false",
+  }, { requireEnabled: true });
   const d1 = new D1Client(config);
   await d1.query(migrationTableSql);
   const appliedResult = await d1.query(
