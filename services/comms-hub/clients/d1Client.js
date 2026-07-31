@@ -91,17 +91,30 @@ export class D1Client {
 
   async execute(body, operation) {
     return withRetry(async () => {
-      const accountId = await this.resolveAccountId();
       let response;
       try {
-        response = await this.request(
-          `${this.config.cloudflareApiBaseUrl}/accounts/${accountId}/d1/database/${this.config.d1DatabaseId}/query`,
-          {
+        if (this.config.d1ProxyUrl) {
+          response = await this.fetchImpl(this.config.d1ProxyUrl, {
             method: "POST",
-            headers: { "content-type": "application/json" },
+            timeout: this.config.d1TimeoutMs,
+            headers: {
+              authorization: `Bearer ${this.config.d1ProxyToken}`,
+              accept: "application/json",
+              "content-type": "application/json",
+            },
             body: JSON.stringify(body),
-          }
-        );
+          });
+        } else {
+          const accountId = await this.resolveAccountId();
+          response = await this.request(
+            `${this.config.cloudflareApiBaseUrl}/accounts/${accountId}/d1/database/${this.config.d1DatabaseId}/query`,
+            {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify(body),
+            }
+          );
+        }
       } catch (cause) {
         throw new CommsHubError(502, "d1_unreachable", `${operation} could not reach D1.`, {
           cause,
