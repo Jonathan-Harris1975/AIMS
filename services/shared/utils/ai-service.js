@@ -23,6 +23,7 @@ const DEFAULT_TOP_P = Number(process.env.AI_TOP_P ?? aiConfig?.commonParams?.top
 // failover/failure, in line with the platform-wide 5-attempt floor.
 const MAX_RETRIES = Math.max(4, Number(process.env.AI_MAX_RETRIES ?? 4));
 const RETRY_BASE_MS = Number(process.env.AI_RETRY_BASE_MS ?? 750);
+const EMPTY_COMPLETION_RETRIES_PER_PROVIDER = Math.max(0, Number(process.env.AI_EMPTY_COMPLETION_RETRIES_PER_PROVIDER ?? 1));
 const __aiRouteCallsBySession = new Map();
 const __lastSuccessProvider = new Map();
 
@@ -371,18 +372,22 @@ export async function resilientRequest(routeName, {
         // fail over to the next configured provider instead of repeating the
         // same slow target for another full timeout cycle.
         const timedOut = err?.code === "OPENROUTER_TIMEOUT";
-        const retryable = !timedOut && !err?.nonRetryable && attempt < effectiveMaxRetries;
+        const emptyCompletion = err?.status === "empty_completion";
+        const emptyCompletionBudgetExhausted = emptyCompletion && attempt >= EMPTY_COMPLETION_RETRIES_PER_PROVIDER;
+        const retryable = !timedOut && !emptyCompletionBudgetExhausted && !err?.nonRetryable && attempt < effectiveMaxRetries;
         const exponentialWait = effectiveRetryBaseMs * Math.pow(2, attempt);
         const jitter = Math.floor(exponentialWait * (0.15 * Math.random()));
         const wait = exponentialWait + jitter;
-        logError(timedOut ? "ai.request.provider_failover" : "ai.request.retry", {
+        const failover = timedOut || emptyCompletionBudgetExhausted;
+        logError(failover ? "ai.request.provider_failover" : "ai.request.retry", {
           routeName,
           routeKey,
           provider: providerId,
           attempt: attempt + 1,
           wait: retryable ? wait : 0,
           retryable,
-          failover: timedOut,
+          failover,
+          failoverReason: timedOut ? "timeout" : emptyCompletionBudgetExhausted ? "empty_completion_budget_exhausted" : undefined,
           status: err?.status,
           message: safeSnippet(err?.message || String(err), 500),
         });
