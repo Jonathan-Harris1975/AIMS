@@ -28,6 +28,7 @@ const MAX_DURATION_SECONDS = 55;
 const DEFAULT_DURATION_SECONDS = 45;
 const LOW_COST_IMAGE_MODEL_LABEL = process.env.BLOTATO_LOW_COST_IMAGE_MODEL_LABEL || "flux schnell";
 const LOW_COST_VIDEO_MODEL_LABEL = process.env.BLOTATO_LOW_COST_VIDEO_MODEL_LABEL || "framepack";
+const BLOTATO_IMAGE_PROMPT_PROFILE = cleanPromptProfile(process.env.BLOTATO_IMAGE_PROMPT_PROFILE || "flux-schnell");
 
 // Gap 5: automated hook expert review. Set BLOTATO_HOOK_VARIANTS=2 to request an alternate
 // hook candidate and run an automated strength comparison. Zero manual interaction required.
@@ -39,20 +40,70 @@ const THUMBNAIL_TEXT_WORDS = Math.max(3, Math.min(6, Number(process.env.BLOTATO_
 
 const BLOTATO_HUMAN_VISUAL_RULE = [
   "HUMAN-CENTRED SOCIAL VISUALS.",
-  "Use believable adult human presence in the first scenes: expressive face, hands, body language, desk posture, presenter silhouette, analyst, creator, operator, customer or worker context.",
-  "Do not create a Jonathan Harris likeness, celebrity likeness, child, distorted face, uncanny hands or stock-photo grin.",
+  "Use believable adult human presence in the first scenes: expressive face, upper-body posture, presenter silhouette, analyst, creator, operator, customer or worker context.",
+  "Do not create a Jonathan Harris likeness, celebrity likeness, child, distorted face, visible hands or stock-photo grin.",
   "People should make the idea emotionally readable; the narration still carries the argument."
 ].join(" ");
 
 
 export const BLOTATO_STRICT_NO_TEXT_RULE = [
   "ABSOLUTE TEXT-FREE GENERATED VISUAL.",
-  "No readable text, pseudo-text, gibberish lettering, words, letters, numerals, punctuation, glyphs, captions, labels, interface copy, code, signage, logos, trademarks, watermarks, badges, seals or typography-shaped marks.",
-  "Do not visualise words from the hook, script, title, source article or thumbnail copy.",
-  "Use objects, environments, lighting, movement, geometry and texture only.",
+  "Do not render readable words, numbers, logos, watermarks or interface copy.",
+  "Do not visualise wording from the hook, script, article or thumbnail text.",
+  "Use blank unmarked screens, plain surfaces and clean environments instead of designed signage.",
 ].join(" ");
 
-function enforceTextFreeVisualPrompt(value = "", maxLength = 900) {
+const BLOTATO_TEXT_FREE_POSITIVE_DETAIL = "Blank unmarked screens, plain equipment surfaces, clean walls and uncluttered environments with no designed signage, logos or readable lettering.";
+const FLUX_SCHNELL_SCENE_STYLE = "Realistic editorial documentary image, vertical 9:16, cinematic cyan highlights, deep navy shadows, clear source context, one coherent action, premium but believable social-video visual.";
+
+function cleanPromptProfile(value = "") {
+  return String(value || "").trim().toLowerCase().replace(/[^a-z0-9-]+/g, "-") || "flux-schnell";
+}
+
+function usesFluxSchnellPromptProfile(profile = BLOTATO_IMAGE_PROMPT_PROFILE) {
+  return ["flux-schnell", "flux_schnell", "flux", "replicate/flux-schnell"].includes(cleanPromptProfile(profile));
+}
+
+function stripPromptBans(value = "") {
+  return cleanText(String(value || "")
+    .replace(/\b(?:no|never|avoid|without|do not)\b[^.]*\.?/gi, " ")
+    .replace(/\b(?:readable text|pseudo-text|gibberish lettering|typography|logos?|watermarks?|labels?|captions?|signage|dashboard(?:s)?|robot clich(?:e|és)|generic offices?)\b/gi, " ")
+    .replace(/\bScene\s*\d+(?:\s*of\s*\d+)?\s*:?[-]?/gi, " ")
+    .replace(/\s{2,}/g, " "), 620);
+}
+
+function fluxSceneShotDirection(index = 0) {
+  const directions = [
+    "medium close-up opening frame with the tension obvious at a glance",
+    "medium operational shot showing the process or workflow change",
+    "tight consequence shot showing the equipment, condition or impact",
+    "over-shoulder verification shot showing the human decision point",
+    "wider closing shot showing the outcome or unresolved risk",
+  ];
+  return directions[index % directions.length];
+}
+
+function buildFluxSchnellScenePrompt(value = "", index = 0, maxLength = 700) {
+  const base = stripPromptBans(removeHandVisualRequests(value));
+  const humanCue = humanVisualPromptSuffix(index)
+    .replace(/hands? and fingers? completely outside frame/gi, "arms outside frame")
+    .replace(/hands? and fingers? are not visible/gi, "arms outside frame")
+    .replace(/crop hands and fingers fully outside frame/gi, "shoulders-up framing")
+    .replace(/,?\s*not a stock-photo grin/gi, "")
+    .replace(/\s{2,}/g, " ");
+  return cleanText([
+    `Vertical 9:16 ${FLUX_SCHNELL_SCENE_STYLE}`,
+    `Use a ${fluxSceneShotDirection(index)}.`,
+    base,
+    humanCue,
+    BLOTATO_TEXT_FREE_POSITIVE_DETAIL,
+  ].filter(Boolean).join(" "), maxLength);
+}
+
+function enforceTextFreeVisualPrompt(value = "", maxLength = 900, index = 0) {
+  if (usesFluxSchnellPromptProfile()) {
+    return buildFluxSchnellScenePrompt(value, index, Math.min(maxLength, 720));
+  }
   const base = cleanText(value, Math.max(100, maxLength - BLOTATO_STRICT_NO_TEXT_RULE.length - 2));
   return cleanText(`${base}. ${BLOTATO_STRICT_NO_TEXT_RULE}`, maxLength);
 }
@@ -305,7 +356,7 @@ You create short-form video packs for Jonathan Harris, an AI author and podcast 
 ${jonathanVoicePrompt({ format: "short-form social video", includeArgumentArc: false })}
 
 # Role — Human-centred Shorts Creative Director
-You design the complete short as one continuous mini-story before writing individual scenes. You write narration-driven, voiceover-based AI short-form video scripts. Jonathan Harris is not on camera. Generated generic adults, faces and bodies are allowed when they make the idea more watchable, but visible hands and fingers are prohibited because the image generator does not render them reliably. Source relevance outranks decorative metaphor: show the actual industry, location, equipment, role and consequence described by the article. Frame people from shoulders-up, behind objects, or with hands fully outside the crop. The narration carries the story. Every scene must be visualisable without text overlays on generated imagery.
+You design the complete short as one continuous mini-story before writing individual scenes. You write narration-driven, voiceover-based AI short-form video scripts. Jonathan Harris is not on camera. Generated generic adults, faces and bodies are allowed when they make the idea more watchable, but visible hands and fingers are prohibited because the image generator does not render them reliably. When the preferred image model is Flux Schnell, write scene mediaSource prompts in positive visual language describing what should be visible, not long ban-lists of what should be excluded. Source relevance outranks decorative metaphor: show the actual industry, location, equipment, role and consequence described by the article. Frame people from shoulders-up, behind objects, or with hands fully outside the crop. The narration carries the story. Every scene must be visualisable without text overlays on generated imagery.
 
 # Social Video Laws
 1. The first frame must show a human-readable situation, tension or reaction, not decorative AI wallpaper.
@@ -411,6 +462,7 @@ Scene rules:
 - Scene 1 = hook/tension. Middle scenes = context, consequence and practical meaning. Final scene = takeaway/action.
 - Every mediaSource must inherit visualContinuity so the same visual world persists across the short. Deliberate scene changes must still preserve palette, lighting and camera grammar.
 - Each mediaSource must describe a specific physical scene, not a generic instruction.
+- If the image profile is Flux Schnell, build each mediaSource as a positive visual brief in this order: subject, action, real environment, composition, lighting, style.
 - At least three scenes must include concrete source-specific visual anchors from the supplied article. A person at a desk does not count.
 - Give every scene a different action, scale or consequence. Do not repeat the same portrait, seated person or desk composition.
 - Never use board games, playing cards, chess pieces, dominoes, miniature people/buildings, puzzles, toy models or abstract blocks as metaphors for the topic.
@@ -524,7 +576,7 @@ function addHumanVisualCue(value = "", index = 0) {
 
 function normaliseScene(scene = {}, fallbackScript = "", fallbackVisual = "", index = 0) {
   const rawVisual = addHumanVisualCue(scene.mediaSource || scene.visual || scene.imagePrompt || fallbackVisual, index);
-  const mediaSource = enforceTextFreeVisualPrompt(rawVisual, 900);
+  const mediaSource = enforceTextFreeVisualPrompt(rawVisual, 900, index);
   const script = cleanText(scene.script || scene.voiceover || fallbackScript, 700);
   if (!mediaSource || !script) return null;
   return { mediaSource, script };
@@ -556,7 +608,7 @@ function deriveScenesFromPack(pack = {}) {
         : `supporting point ${index + 1}`;
     const composition = phaseCompositions[index % phaseCompositions.length];
     return {
-      mediaSource: enforceTextFreeVisualPrompt(addHumanVisualCue(`${visualBase}. ${visualSignature} Scene ${index + 1} (${phase}): ${composition}.`, index), 900),
+      mediaSource: enforceTextFreeVisualPrompt(addHumanVisualCue(`${visualBase}. ${visualSignature} Scene ${index + 1} (${phase}): ${composition}.`, index), 900, index),
       script: chunk,
     };
   });
@@ -608,7 +660,8 @@ function deriveSourceGroundedScenes(pack = {}, article = {}) {
   return phases.map((phase, index) => ({
     mediaSource: enforceTextFreeVisualPrompt(
       `${continuity}. ${signature}. Scene ${index + 1} of ${MAX_SCENES}: ${phase}. Distinct from every other scene while preserving the same visual world.`,
-      900
+      900,
+      index
     ),
     script: scripts[index] || ensureSentence(pack.hook || pack.script),
   }));
@@ -735,6 +788,7 @@ export function buildBlotatoVisualPrompt(pack = {}) {
     `Visual continuity anchor: ${pack.visualContinuity || pack.visualDirection}`,
     `Visual direction: ${pack.visualDirection}`,
     `Cost guard: use the cheapest suitable generation settings available, preferably ${LOW_COST_IMAGE_MODEL_LABEL} for images and ${LOW_COST_VIDEO_MODEL_LABEL} for video. Do not use premium video models.`,
+    `Image prompt profile: ${BLOTATO_IMAGE_PROMPT_PROFILE}. If using Flux Schnell, keep every scene prompt concise, positive and visually concrete.`,
     `Style: premium documentary/editorial social video with cinematic lighting, bold controlled colour, high contrast and emotional storytelling. Keep it human-centred and visually immediate, but show the real source environment rather than a decorative metaphor. Avoid corporate stock staging, generic offices, data-centre glamour, floating dashboards, polygon networks and robot clichés. Never use board games, cards, chess pieces, miniatures, toy people, puzzles, abstract blocks or a wall calendar as a substitute for the article's actual people, place, equipment or consequence. Preserve the configured seasonal palette direction where supplied. British AI news commentary tone.`,
     `Finished-video target: five purposeful scenes inside the 35-55 second finished range, normally targeting 45 seconds, with visible progression from real-world tension to consequence, verification and outcome. Do not repeat the same person-at-a-desk composition.`,
     HUMAN_VISUALS_ENABLED ? BLOTATO_HUMAN_VISUAL_RULE : "Human subjects optional.",
@@ -1023,14 +1077,15 @@ export function repairShortPackForBlotatoGate(pack = {}, {
         mediaSource: enforceTextFreeVisualPrompt(addHumanVisualCue(
           `${continuity}. ${cleanText(scene.mediaSource || "", 700)}`,
           index
-        ), 900),
+        ), 900, index),
       }));
       output.scenes[0] = {
         ...output.scenes[0],
         script: ensureSentence(output.hook),
         mediaSource: enforceTextFreeVisualPrompt(
           `${continuity}. ${cleanText(output.scenes[0].mediaSource || "", 700)}. Opening frame must show the real source environment and practical tension immediately, not a generic reaction portrait.`,
-          900
+          900,
+          0
         ),
       };
     }
