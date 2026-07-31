@@ -26,7 +26,7 @@ function sendRouteError(req, res, err, fallbackMessage = "Internal error") {
 export async function generateArtwork(sessionId, prompt = "") {
   const resolvedPrompt = prompt && prompt.trim()
     ? prompt
-    : `Podcast cover art for ${sessionId} — abstract AI-themed design, high-contrast, bold typography`;
+    : `Podcast episode artwork for ${sessionId}: one concrete AI-news subject, cinematic technology editorial realism, high contrast, text-free.`;
 
   const imageData = await generatePodcastArtwork(resolvedPrompt, { sessionId });
   const buffer = Buffer.from(imageData, "base64");
@@ -53,7 +53,7 @@ router.post("/", hookdeckDedupe("artwork:generate"), async (req, res) => {
     }
 
     sessionId = sanitizeSessionId(parsed.data.sessionId || `art-${Date.now()}`, "art");
-    const prompt = parsed.data.prompt || "Podcast cover art: abstract AI design";
+    const prompt = parsed.data.prompt || "Podcast episode artwork: one concrete AI-news subject, cinematic editorial realism, text-free";
     const url = await generateArtwork(sessionId, prompt);
     res.json({ ok: true, sessionId, url });
   } catch (err) {
