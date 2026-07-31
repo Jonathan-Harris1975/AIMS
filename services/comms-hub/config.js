@@ -18,6 +18,21 @@ export const COMMS_HUB_FORM_ROUTES = Object.freeze({
   }),
 });
 
+export const ZERNIO_CHANNEL_FAMILIES = Object.freeze({
+  meta: Object.freeze({
+    platforms: Object.freeze(["facebook", "instagram"]),
+    apiKeyEnv: "ZERNIO_META_API_KEY",
+    webhookSecretEnv: "ZERNIO_META_WEBHOOK_SECRET",
+    enabledEnv: "COMMS_HUB_ZERNIO_META_ENABLED",
+  }),
+  video: Object.freeze({
+    platforms: Object.freeze(["youtube"]),
+    apiKeyEnv: "ZERNIO_VIDEO_API_KEY",
+    webhookSecretEnv: "ZERNIO_VIDEO_WEBHOOK_SECRET",
+    enabledEnv: "COMMS_HUB_ZERNIO_VIDEO_ENABLED",
+  }),
+});
+
 const REQUIRED_WHEN_ENABLED = Object.freeze([
   "D1_UUID",
   "D1_API_KEY",
@@ -60,8 +75,12 @@ function positiveInteger(value, fallback, name, { min = 1, max = Number.MAX_SAFE
   return parsed;
 }
 
-function normaliseBaseUrl(value, fallback) {
-  const text = normalise(value) || fallback;
+function normaliseBaseUrl(value, fallback, { required = false } = {}) {
+  const text = normalise(value) || fallback || "";
+  if (!text) {
+    if (required) throw new CommsHubError(503, "comms_hub_configuration_invalid", "A required URL is not configured.");
+    return "";
+  }
   let parsed;
   try {
     parsed = new URL(text);
@@ -86,20 +105,54 @@ export function extractAccountIdFromR2Endpoint(value) {
   }
 }
 
+export function getZernioFamilyReadiness(family, env = process.env) {
+  const definition = ZERNIO_CHANNEL_FAMILIES[family];
+  if (!definition) throw new TypeError(`Unsupported Zernio credential family: ${family}`);
+  const enabled = booleanValue(env[definition.enabledEnv], false);
+  const missing = [];
+  if (enabled) {
+    for (const name of [
+      definition.apiKeyEnv,
+      definition.webhookSecretEnv,
+      "COMMS_HUB_PUBLIC_BASE_URL",
+      "COMMS_HUB_D1_PROXY_URL",
+      "COMMS_HUB_D1_PROXY_TOKEN",
+    ]) {
+      if (!usableEnvValue(env[name])) missing.push(name);
+    }
+  }
+  return {
+    family,
+    enabled,
+    ready: !enabled || missing.length === 0,
+    status: !enabled ? "disabled" : missing.length ? "misconfigured" : "configured",
+    missing,
+    platforms: [...definition.platforms],
+  };
+}
+
 export function getCommsHubMissingEnv(env = process.env) {
   if (!booleanValue(env.COMMS_HUB_ENABLED, false)) return [];
-  return REQUIRED_WHEN_ENABLED.filter((name) => !usableEnvValue(env[name]));
+  const missing = REQUIRED_WHEN_ENABLED.filter((name) => !usableEnvValue(env[name]));
+  for (const family of Object.keys(ZERNIO_CHANNEL_FAMILIES)) {
+    missing.push(...getZernioFamilyReadiness(family, env).missing);
+  }
+  return [...new Set(missing)];
 }
 
 export function getCommsHubReadiness(env = process.env) {
   const enabled = booleanValue(env.COMMS_HUB_ENABLED, false);
   const missing = getCommsHubMissingEnv(env);
+  const zernio = Object.fromEntries(
+    Object.keys(ZERNIO_CHANNEL_FAMILIES).map((family) => [family, getZernioFamilyReadiness(family, env)])
+  );
   return {
     enabled,
     ready: !enabled || missing.length === 0,
     status: !enabled ? "disabled" : missing.length ? "misconfigured" : "configured",
     missing,
     forms: Object.keys(COMMS_HUB_FORM_ROUTES).length,
+    zernio,
   };
 }
 
@@ -123,18 +176,39 @@ export function loadCommsHubConfig(env = process.env, { requireEnabled = false }
     || usableEnvValue(env.CF_ACCOUNT_ID)
     || extractAccountIdFromR2Endpoint(env.R2_ENDPOINT);
 
+  const zernioFamilies = Object.fromEntries(
+    Object.entries(ZERNIO_CHANNEL_FAMILIES).map(([family, definition]) => {
+      const familyReadiness = readiness.zernio[family];
+      return [family, Object.freeze({
+        family,
+        enabled: familyReadiness.enabled,
+        apiKey: usableEnvValue(env[definition.apiKeyEnv]),
+        webhookSecret: usableEnvValue(env[definition.webhookSecretEnv]),
+        platforms: [...definition.platforms],
+        webhookName: family === "meta" ? "AIMS Comms Hub Meta" : "AIMS Comms Hub Video",
+      })];
+    })
+  );
+
   return Object.freeze({
     enabled: readiness.enabled,
     d1DatabaseId: usableEnvValue(env.D1_UUID),
     d1ApiToken: usableEnvValue(env.D1_API_KEY),
+    d1ProxyUrl: normaliseBaseUrl(env.COMMS_HUB_D1_PROXY_URL, ""),
+    d1ProxyToken: usableEnvValue(env.COMMS_HUB_D1_PROXY_TOKEN),
     cloudflareAccountId: accountId,
     cloudflareApiBaseUrl: normaliseBaseUrl(env.CLOUDFLARE_API_BASE_URL, "https://api.cloudflare.com/client/v4"),
     jotformApiKey: usableEnvValue(env.JOTFORM_API_KEY),
     jotformApiBaseUrl: normaliseBaseUrl(env.JOTFORM_API_BASE_URL, "https://api.jotform.com"),
+    zernioApiBaseUrl: normaliseBaseUrl(env.ZERNIO_API_BASE_URL, "https://zernio.com/api/v1"),
+    zernioFamilies: Object.freeze(zernioFamilies),
+    publicBaseUrl: normaliseBaseUrl(env.COMMS_HUB_PUBLIC_BASE_URL, ""),
     r2BucketAlias: "commsHub",
     r2BucketName: usableEnvValue(env.R2_BUCKET_COMMS_HUB) || "comms-hub",
     maxWebhookBytes: positiveInteger(env.COMMS_HUB_MAX_WEBHOOK_BYTES, 1_048_576, "COMMS_HUB_MAX_WEBHOOK_BYTES", { max: 10_485_760 }),
     jotformTimeoutMs: positiveInteger(env.COMMS_HUB_JOTFORM_TIMEOUT_MS, 10_000, "COMMS_HUB_JOTFORM_TIMEOUT_MS", { min: 1_000, max: 25_000 }),
+    zernioTimeoutMs: positiveInteger(env.COMMS_HUB_ZERNIO_TIMEOUT_MS, 15_000, "COMMS_HUB_ZERNIO_TIMEOUT_MS", { min: 1_000, max: 30_000 }),
+    zernioAckTimeoutMs: positiveInteger(env.COMMS_HUB_ZERNIO_ACK_TIMEOUT_MS, 4_000, "COMMS_HUB_ZERNIO_ACK_TIMEOUT_MS", { min: 500, max: 4_500 }),
     d1TimeoutMs: positiveInteger(env.COMMS_HUB_D1_TIMEOUT_MS, 15_000, "COMMS_HUB_D1_TIMEOUT_MS", { min: 1_000, max: 30_000 }),
     providerRetryAttempts: positiveInteger(env.COMMS_HUB_PROVIDER_RETRY_ATTEMPTS, 4, "COMMS_HUB_PROVIDER_RETRY_ATTEMPTS", { max: 8 }),
     providerRetryBaseMs: positiveInteger(env.COMMS_HUB_PROVIDER_RETRY_BASE_MS, 500, "COMMS_HUB_PROVIDER_RETRY_BASE_MS", { min: 100, max: 10_000 }),
@@ -144,6 +218,13 @@ export function loadCommsHubConfig(env = process.env, { requireEnabled = false }
     archiveBatchSize: positiveInteger(env.COMMS_HUB_ARCHIVE_BATCH_SIZE, 10, "COMMS_HUB_ARCHIVE_BATCH_SIZE", { max: 100 }),
     archiveLeaseMs: positiveInteger(env.COMMS_HUB_ARCHIVE_LEASE_MS, 120_000, "COMMS_HUB_ARCHIVE_LEASE_MS", { min: 30_000, max: 900_000 }),
     archiveMaxAttempts: positiveInteger(env.COMMS_HUB_ARCHIVE_MAX_ATTEMPTS, 10, "COMMS_HUB_ARCHIVE_MAX_ATTEMPTS", { max: 50 }),
+    socialPollWorkerEnabled: booleanValue(env.COMMS_HUB_ZERNIO_POLL_ENABLED, true),
+    socialPollMs: positiveInteger(env.COMMS_HUB_ZERNIO_POLL_MS, 120_000, "COMMS_HUB_ZERNIO_POLL_MS", { min: 30_000, max: 3_600_000 }),
+    socialPollLeaseMs: positiveInteger(env.COMMS_HUB_ZERNIO_POLL_LEASE_MS, 180_000, "COMMS_HUB_ZERNIO_POLL_LEASE_MS", { min: 30_000, max: 900_000 }),
+    socialPollBatchSize: positiveInteger(env.COMMS_HUB_ZERNIO_POLL_BATCH_SIZE, 25, "COMMS_HUB_ZERNIO_POLL_BATCH_SIZE", { min: 1, max: 100 }),
+    socialPollOverlapMs: positiveInteger(env.COMMS_HUB_ZERNIO_POLL_OVERLAP_MS, 7_200_000, "COMMS_HUB_ZERNIO_POLL_OVERLAP_MS", { min: 60_000, max: 86_400_000 }),
+    socialPollMaxMessagePages: positiveInteger(env.COMMS_HUB_ZERNIO_MAX_MESSAGE_PAGES, 5, "COMMS_HUB_ZERNIO_MAX_MESSAGE_PAGES", { min: 1, max: 5 }),
+    socialPollMaxCommentPages: positiveInteger(env.COMMS_HUB_ZERNIO_MAX_COMMENT_PAGES, 5, "COMMS_HUB_ZERNIO_MAX_COMMENT_PAGES", { min: 1, max: 10 }),
   });
 }
 

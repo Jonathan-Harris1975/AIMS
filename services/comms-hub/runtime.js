@@ -3,8 +3,10 @@ import { log } from "../../logger.js";
 import { loadCommsHubConfig, getCommsHubReadiness } from "./config.js";
 import { D1Client } from "./clients/d1Client.js";
 import { JotformClient } from "./clients/jotformClient.js";
+import { ZernioInboxClient } from "./clients/zernioInboxClient.js";
 import { CommsHubRepository } from "./repositories/commsRepository.js";
 import { CommsHubArchiveWorker } from "./workers/archiveWorker.js";
+import { CommsHubSocialPollWorker } from "./workers/socialPollWorker.js";
 import { safeErrorLog } from "./domain/redaction.js";
 
 let context = null;
@@ -14,9 +16,15 @@ export function createCommsHubContext({ env = process.env, fetchImpl, r2UploadTe
   const config = loadCommsHubConfig(env, { requireEnabled: true });
   const d1 = new D1Client(config, fetchImpl ? { fetchImpl } : undefined);
   const jotform = new JotformClient(config, fetchImpl ? { fetchImpl } : undefined);
+  const zernio = Object.fromEntries(
+    Object.entries(config.zernioFamilies)
+      .filter(([, family]) => family.enabled)
+      .map(([family]) => [family, new ZernioInboxClient(config, family, fetchImpl ? { fetchImpl } : undefined)])
+  );
   const repository = new CommsHubRepository(d1);
   const archiveWorker = new CommsHubArchiveWorker({ repository, uploadText: r2UploadText, config });
-  return Object.freeze({ config, d1, jotform, repository, archiveWorker });
+  const socialPollWorker = new CommsHubSocialPollWorker({ repository, zernio, config });
+  return Object.freeze({ config, d1, jotform, zernio: Object.freeze(zernio), repository, archiveWorker, socialPollWorker });
 }
 
 export function getCommsHubContext() {
@@ -53,10 +61,23 @@ export async function startCommsHubRuntime() {
       log.error("commsHub.runtime.schemaMissing", { action: "npm run comms:migrate", missing: schema.missing || [] });
       return { started: false, reason: "schema_missing" };
     }
-    const workerStarted = active.archiveWorker.start();
-    runtimeState = { status: "ready", ready: true, detail: workerStarted ? "worker_started" : "worker_disabled" };
-    log.info("commsHub.runtime.started", { workerStarted, forms: readiness.forms });
-    return { started: true, workerStarted };
+    const archiveWorkerStarted = active.archiveWorker.start();
+    const socialPollWorkerStarted = active.socialPollWorker.start();
+    runtimeState = {
+      status: "ready",
+      ready: true,
+      detail: socialPollWorkerStarted
+        ? "archive_and_social_workers_started"
+        : archiveWorkerStarted ? "archive_worker_started" : "workers_disabled",
+      workers: { archive: archiveWorkerStarted, socialPoll: socialPollWorkerStarted },
+    };
+    log.info("commsHub.runtime.started", {
+      archiveWorkerStarted,
+      socialPollWorkerStarted,
+      forms: readiness.forms,
+      zernio: Object.fromEntries(Object.entries(readiness.zernio).map(([family, state]) => [family, state.status])),
+    });
+    return { started: true, archiveWorkerStarted, socialPollWorkerStarted };
   } catch (error) {
     runtimeState = { status: "failed", ready: false, detail: error?.code || error?.name || "runtime_start_failed" };
     log.error("commsHub.runtime.startFailed", { error: safeErrorLog(error) });
@@ -65,7 +86,9 @@ export async function startCommsHubRuntime() {
 }
 
 export async function stopCommsHubRuntime() {
-  if (context) await context.archiveWorker.stop();
+  if (context) {
+    await Promise.all([context.archiveWorker.stop(), context.socialPollWorker.stop()]);
+  }
   context = null;
   runtimeState = { status: "stopped", ready: false, detail: "runtime_stopped" };
 }
@@ -75,6 +98,16 @@ export function kickCommsHubArchiveDrain() {
   queueMicrotask(() => {
     void context.archiveWorker.runOnce().catch((error) => {
       log.error("commsHub.archive.kickFailed", { error: safeErrorLog(error) });
+    });
+  });
+  return true;
+}
+
+export function kickCommsHubSocialPoll() {
+  if (!context || !context.config.socialPollWorkerEnabled || runtimeState.status !== "ready") return false;
+  queueMicrotask(() => {
+    void context.socialPollWorker.runOnce().catch((error) => {
+      log.error("commsHub.socialPoll.kickFailed", { error: safeErrorLog(error) });
     });
   });
   return true;
