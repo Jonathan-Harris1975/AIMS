@@ -27,3 +27,7 @@ The service entry point, route modules and domain utilities are contained in thi
 - Retries are for transient failures only; validation, policy and source-integrity failures fail closed.
 - Generated public content must pass its content-quality gates before publication or delivery.
 - Durable artefacts and job state use the configured R2/state utilities rather than process memory where a durable store is required.
+
+## OpenRouter image-generation contract
+
+All podcast, blog, newsletter, social-blog, Zernio social and quiz artwork uses the shared OpenRouter **Image API** transport. The primary production model is Seedream 4.5 with FLUX.2 Pro as backup. Prompts are reshaped per model family, aspect ratios are set per lane, and pixel-level QA is mandatory for every lane. A failed image may regenerate once with a materially different composition; off-topic but attractive artwork fails closed.
