@@ -69,13 +69,13 @@ async function handleMockRequest(req, res) {
       assert.ok(payload.messages.some((message) => String(message.content || "").includes("Create one short-form AI social video pack")));
       assert.ok(payload.messages.some((message) => String(message.content || "").includes("Spartan and informative")));
       assert.ok(payload.messages.some((message) => String(message.content || "").includes("Instagram must have no more than 5 hashtags")));
-      assert.ok(payload.messages.some((message) => String(message.content || "").includes("Target duration: 45 seconds minimum")));
+      assert.ok(payload.messages.some((message) => String(message.content || "").includes("Target duration: about 45 seconds")));
       assert.ok(payload.messages.some((message) => String(message.content || "").includes("HUMAN-CENTRED SOCIAL VISUALS")));
       assert.ok(payload.messages.some((message) => String(message.content || "").includes("First frame rule")));
       assert.ok(payload.messages.some((message) => String(message.content || "").includes("CTA: For straight-talking artificial intelligence analysis, keep Jonathan Harris on your radar.")));
       assert.ok(!payload.messages.some((message) => String(message.content || "").includes("CTA: Follow Jonathan Harris for more")));
       assert.equal(payload.response_format, undefined);
-      assert.ok(payload.messages.some((message) => String(message.content || "").includes("Provide exactly 7 scenes")));
+      assert.ok(payload.messages.some((message) => String(message.content || "").includes("Provide exactly 5 scenes")));
     }
     res.writeHead(200, { "content-type": "application/json" });
     res.end(JSON.stringify({
@@ -297,7 +297,7 @@ process.env.BLOTATO_TEMPLATE_VERIFY = "true";
 process.env.BLOTATO_TEMPLATE_AUTO_DISCOVERY = "true";
 process.env.BLOTATO_NEWS_TEMPLATE_SEARCH = "AI Video with AI Voice,AI Story Video,AI Voice,Story Video";
 process.env.BLOTATO_USE_MANUAL_TEMPLATE_INPUTS = "false";
-process.env.BLOTATO_VIDEO_SCENE_COUNT = "7";
+process.env.BLOTATO_VIDEO_SCENE_COUNT = "5";
 process.env.BLOTATO_MAX_EXPECTED_CREDITS = "70";
 process.env.BLOTATO_NEWS_JSON_RESPONSE_FORMAT = "false";
 process.env.BLOTATO_NEWS_RESPONSE_FORMAT_MODE = "json_object";
@@ -311,6 +311,7 @@ process.env.BLOTATO_PUBLISH_STAGGER_MS = "1";
 process.env.BLOTATO_API_RETRY_ATTEMPTS = "2";
 process.env.BLOTATO_API_RETRY_MAX_MS = "10";
 process.env.BLOTATO_SCRIPT_MODEL = "openai/test-model";
+process.env.BLOTATO_RENDERED_QA_ENABLED = "false";
 process.env.APP_TMP_DIR = `/tmp/aims-blotato-test-${Date.now()}`;
 
 const { app } = await import(`../server.js?blotato-suite=${Date.now()}`);
@@ -344,7 +345,7 @@ test.afterEach(() => {
   process.env.BLOTATO_TEMPLATE_AUTO_DISCOVERY = "true";
   process.env.BLOTATO_NEWS_TEMPLATE_SEARCH = "AI Video with AI Voice,AI Story Video,AI Voice,Story Video";
   process.env.BLOTATO_USE_MANUAL_TEMPLATE_INPUTS = "false";
-  process.env.BLOTATO_VIDEO_SCENE_COUNT = "7";
+  process.env.BLOTATO_VIDEO_SCENE_COUNT = "5";
   process.env.BLOTATO_MAX_EXPECTED_CREDITS = "70";
   process.env.BLOTATO_NEWS_JSON_RESPONSE_FORMAT = "false";
   process.env.BLOTATO_NEWS_RESPONSE_FORMAT_MODE = "json_object";
@@ -358,6 +359,7 @@ test.afterEach(() => {
   process.env.BLOTATO_API_RETRY_ATTEMPTS = "2";
   process.env.BLOTATO_API_RETRY_MAX_MS = "10";
   process.env.BLOTATO_SCRIPT_MODEL = "openai/test-model";
+  process.env.BLOTATO_RENDERED_QA_ENABLED = "false";
   process.env.OPENROUTER_API_BASE = mockBase;
   process.env.OPENROUTER_BASE_URL = mockBase;
 });
