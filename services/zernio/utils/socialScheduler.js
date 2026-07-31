@@ -19,6 +19,7 @@ import { buildIntentHash, completeEditorialReservation, hasRecentAudienceIntent,
 import { emitQaEvent } from "../../shared/utils/qaEvents.js";
 import { createSocialArtwork } from "../../artwork/createSocialArtwork.js";
 import { createQuizArtwork } from "../../artwork/createQuizArtwork.js";
+import { analyseTopicFidelity, jaccardTopicSimilarity, selectSourcesByUrls, topicTokens } from "../../content-quality/topicFidelity.js";
 
 
 const ZERNIO_DAILY_MAX_TOKENS = Math.max(1200, Number(process.env.ZERNIO_DAILY_MAX_TOKENS || 1400));
@@ -217,6 +218,19 @@ function addDailyLaneAlignmentChecks({ laneKey = "", post = {}, defects = [] } =
   const content = compactText(post.content || "");
   if (!content) return defects;
 
+  const declaredTopic = compactText([post.topic, post.title].filter(Boolean).join(" "));
+  if (topicTokens(declaredTopic).length >= 2) {
+    const alignment = analyseTopicFidelity({
+      generated: content,
+      sources: [{ title: declaredTopic }],
+      requiredTopic: declaredTopic,
+      minSourceHits: 1,
+      minTopicRatio: 0.25,
+      minScore: 42,
+    });
+    if (!alignment.ok) defects.push(`Post copy is not clearly aligned with its declared title/topic (${alignment.score}/100).`);
+  }
+
   if (laneKey === "tuesday" && !/\b(model|models|token|tokens|transformer|embedding|embeddings|inference|training|neural|algorithm|machine learning|context window|prompt|agent|agents|vector|retrieval|RAG|computer vision|classification|fine[- ]?tun|quantis|reasoning)\b/i.test(content)) {
     defects.push("Tuesday post drifted away from explaining a concrete AI, machine-learning, or computing concept.");
   }
@@ -229,6 +243,14 @@ function addDailyLaneAlignmentChecks({ laneKey = "", post = {}, defects = [] } =
     const hasSector = /\b(bank|banking|finance|financial|healthcare|hospital|clinical|retail|manufactur|factory|legal|law firm|insurance|logistics|supply chain|education|school|university|energy|utility|agriculture|media|telecom|public sector|government|cybersecurity|security operations)\b/i.test(content);
     const hasTask = /\b(triage|forecast|document|quality check|routing|fraud|admin|review|detect|classification|schedule|maintenance|inspection|claims|diagnos|inventory|support|monitor|analyse|analysis|search|summaris|extract)\b/i.test(content);
     if (!hasSector || !hasTask) defects.push("Thursday post must name a believable industry and one concrete task where AI helps.");
+  }
+
+  if (laneKey === "friday") {
+    const hasOperationalSubject = /\b(system|service|workflow|pipeline|routing|monitor|retry|failure|recovery|queue|storage|database|deployment|infrastructure|provider|integration|validation|quality gate|fallback|cost|latency|reliability|automation)\b/i.test(content);
+    const hasConsequenceOrAction = /\b(fail|break|drop|delay|recover|retry|route|store|verify|inspect|replace|block|quarantine|measure|reduce|prevent|improve|simplif|trade[- ]?off|because|therefore|means)\b/i.test(content);
+    if (!hasOperationalSubject || !hasConsequenceOrAction) {
+      defects.push("Friday post must explain one concrete AI system or operational lesson with a visible action, failure mode, consequence or recovery step.");
+    }
   }
 
   if (laneKey === "saturday") {
@@ -388,14 +410,104 @@ function runZernioSocialGate({ contentType = "zernio-social", laneKey = "", post
   };
 }
 
-async function reviewZernioGateOrThrow({ councilKey = "zernio-social-copy", gate, post, contentType, laneKey = "", featuredBook = null, verifiedQuote = null, label = "Zernio social gate", validate }) {
+function addExternalGateDefects(gate = {}, extraDefects = [], extraWarnings = []) {
+  const defects = [...new Set([...(gate.defects || []), ...extraDefects].filter(Boolean))];
+  const warnings = [...new Set([...(gate.warnings || []), ...extraWarnings].filter(Boolean))];
+  const score = scoreFromGate(defects, warnings);
+  return { ...gate, defects, warnings, score, ok: defects.length === 0 && score >= 86 };
+}
+
+export function buildZernioSemanticRepairPrompt({ laneKey = "", post = {}, gate = {}, attempt = 1, semanticContext = {} } = {}) {
+  const lane = LANE_CONFIG[laneKey] || { label: laneKey || "social post" };
+  const defects = Array.isArray(gate?.defects) ? gate.defects : [];
+  const saturdayRules = laneKey === "saturday"
+    ? [
+        "The repaired content must centre on one explicit AI ethics, governance, rights, privacy, safety, accountability, bias, consent or policy trade-off.",
+        "State the strongest credible case on both sides before Jonathan's measured view.",
+        "End with one direct open question asking where the reader would draw the line and why.",
+      ]
+    : [];
+  const sundayRules = laneKey === "sunday"
+    ? ["Preserve or supply a canonical human spotlightPerson and name their concrete contribution in the content."]
+    : [];
+
+  return {
+    system: [
+      "You are repairing one Zernio social post that failed a deterministic production gate.",
+      "Repair only the failed editorial components while preserving accurate facts, source meaning, British English and Jonathan Harris's direct, sceptical voice.",
+      "Return valid JSON only with exactly these string keys: title, topic, content, firstComment, spotlightPerson.",
+      "No markdown fences, notes, hashtags or extra keys.",
+      ...saturdayRules,
+      ...sundayRules,
+    ].join("\n"),
+    user: [
+      `Lane: ${lane.label} (${laneKey})`,
+      `Repair attempt: ${attempt}`,
+      `Failed checks: ${defects.join(" | ")}`,
+      semanticContext.requiredTopic ? `Required topic/angle: ${semanticContext.requiredTopic}` : "",
+      Array.isArray(semanticContext.sources) && semanticContext.sources.length
+        ? `Source evidence (use only this): ${JSON.stringify(semanticContext.sources.slice(0, 6).map((source) => ({ title: source.title || "", summary: source.summary || source.rewritten || "", link: source.link || "" })))}`
+        : "",
+      "Current post:",
+      JSON.stringify({
+        title: post.title || "",
+        topic: post.topic || "",
+        content: stripHashtags(post.content || ""),
+        firstComment: post.firstComment || "",
+        spotlightPerson: post.spotlightPerson || "",
+        sourceUrls: Array.isArray(post.sourceUrls) ? post.sourceUrls : [],
+      }),
+      `Keep content below ${ZERNIO_POST_MAX_CHARACTERS} characters.`,
+      "Return the complete repaired object now.",
+    ].filter(Boolean).join("\n"),
+  };
+}
+
+function gateNeedsSemanticRepair(gate = {}) {
+  return (gate.defects || []).some((defect) => /drifted|aligned|topical|fidelity|source-topic|tension|debate question|two-sided|contribution|person name|concrete|industry|task where AI helps|first-person|reader prompt/i.test(String(defect)));
+}
+
+async function repairZernioPostWithSemanticModel(candidate, { laneKey = "", gate = {}, attempt = 1, semanticContext = {} } = {}) {
+  if (!laneKey || !gateNeedsSemanticRepair(gate)) return candidate;
+  const prompt = buildZernioSemanticRepairPrompt({ laneKey, post: candidate, gate, attempt, semanticContext });
+  const raw = await resilientRequest("zernioDaily", {
+    sessionId: `ZERNIO-${laneKey.toUpperCase()}-GATE-REPAIR-${attempt}-${Date.now()}`,
+    messages: [
+      { role: "system", content: prompt.system },
+      { role: "user", content: prompt.user },
+    ],
+    max_tokens: 1300,
+    temperature: 0.2,
+    reasoning: { effort: "minimal" },
+  });
+  const parsed = parseJsonObject(raw, `${laneKey} semantic gate repair`);
+  return {
+    ...candidate,
+    title: compactText(parsed.title || candidate.title || "").slice(0, 80),
+    topic: compactText(parsed.topic || candidate.topic || "").slice(0, 120),
+    content: stripHashtags(parsed.content || candidate.content || ""),
+    firstComment: stripHashtags(parsed.firstComment || candidate.firstComment || ""),
+    spotlightPerson: compactText(parsed.spotlightPerson || candidate.spotlightPerson || ""),
+    sourceUrls: Array.isArray(parsed.sourceUrls)
+      ? parsed.sourceUrls.map((url) => String(url || "").trim()).filter(Boolean).slice(0, 4)
+      : (Array.isArray(candidate.sourceUrls) ? candidate.sourceUrls : []),
+  };
+}
+
+async function reviewZernioGateOrThrow({ councilKey = "zernio-social-copy", gate, post, contentType, laneKey = "", featuredBook = null, verifiedQuote = null, label = "Zernio social gate", validate, semanticContext = {} }) {
   const review = await runReviewCouncilGate({
     councilKey,
     gate,
     artifact: post,
     contentType,
-    repairArtifact: (candidate) => {
-      const repaired = repairZernioPostForReviewCouncil(candidate, { contentType, featuredBook });
+    repairArtifact: async (candidate, reviewContext = {}) => {
+      let repaired = repairZernioPostForReviewCouncil(candidate, { contentType, featuredBook });
+      repaired = await repairZernioPostWithSemanticModel(repaired, {
+        laneKey,
+        gate: reviewContext.gate || gate,
+        attempt: reviewContext.attempt || 1,
+        semanticContext,
+      });
       return laneKey === "monday" ? ensureMondayVerifiedQuote(repaired, verifiedQuote) : repaired;
     },
     validate: (candidate) => validate
@@ -889,6 +1001,9 @@ function normaliseDailyOutput(raw, lane) {
     topic: compactText(parsed.topic || lane.label).slice(0, 120),
     content: compactText(parsed.content || ""),
     firstComment: compactText(parsed.firstComment || ""),
+    sourceUrls: Array.isArray(parsed.sourceUrls)
+      ? parsed.sourceUrls.map((url) => String(url || "").trim()).filter(Boolean).slice(0, 4)
+      : [],
     spotlightPerson: compactText(parsed.spotlightPerson || "").slice(0, 80),
   };
 }
@@ -957,7 +1072,55 @@ function normaliseMiniSeriesPost(raw, postPlan) {
 
 function validMiniSeriesSourceUrls(urls = [], sourceItems = []) {
   const allowed = new Set(sourceItems.map((item) => String(item?.link || "").trim()).filter(Boolean));
-  return (Array.isArray(urls) ? urls : []).filter((url) => allowed.has(String(url || "").trim()));
+  return [...new Set((Array.isArray(urls) ? urls : []).map((url) => String(url || "").trim()).filter((url) => allowed.has(url)))];
+}
+
+function miniSeriesFidelity({ generated, sources, requiredTopic, minScore = 62 } = {}) {
+  return analyseTopicFidelity({
+    generated,
+    sources,
+    requiredTopic,
+    minSourceHits: 2,
+    minTopicRatio: 0.32,
+    minScore,
+  });
+}
+
+function miniSeriesThemeDefects(theme = {}, research = {}, researchSources = []) {
+  const defects = [];
+  const fidelity = miniSeriesFidelity({
+    generated: `${theme.seriesTitle || ""} ${theme.seriesSummary || ""}`,
+    sources: researchSources,
+    requiredTopic: research.topic || "",
+    minScore: 64,
+  });
+  defects.push(...fidelity.defects.map((defect) => `Series theme: ${defect}`));
+
+  for (const [index, post] of (theme.posts || []).entries()) {
+    if (!post.sourceUrls?.length) defects.push(`Mini-series part ${index + 1} has no approved source URL.`);
+    const relevant = selectSourcesByUrls(post.sourceUrls || [], researchSources);
+    if (relevant.length) {
+      const postFidelity = miniSeriesFidelity({
+        generated: `${post.title || ""} ${post.angle || ""} ${post.brief || ""}`,
+        sources: relevant,
+        requiredTopic: `${research.topic || ""} ${post.angle || ""}`,
+        minScore: 58,
+      });
+      defects.push(...postFidelity.defects.map((defect) => `Mini-series part ${index + 1}: ${defect}`));
+    }
+  }
+
+  for (let left = 0; left < (theme.posts || []).length; left += 1) {
+    for (let right = left + 1; right < (theme.posts || []).length; right += 1) {
+      const similarity = jaccardTopicSimilarity(
+        `${theme.posts[left]?.title || ""} ${theme.posts[left]?.angle || ""} ${theme.posts[left]?.brief || ""}`,
+        `${theme.posts[right]?.title || ""} ${theme.posts[right]?.angle || ""} ${theme.posts[right]?.brief || ""}`,
+      );
+      if (similarity > 0.68) defects.push(`Mini-series parts ${left + 1} and ${right + 1} are too similar (${Math.round(similarity * 100)}% topic overlap).`);
+    }
+  }
+
+  return { ok: defects.length === 0, defects, fidelity };
 }
 
 function miniSeriesPublishSlots(weekStartDate, count) {
@@ -1102,13 +1265,14 @@ function buildDailyLaneArtworkPrompt({ laneKey = "", post = {}, verifiedQuote = 
     "Create premium square social artwork with one immediately readable focal idea at phone-thumbnail size.",
     "Use the seasonal brand palette while keeping the scene natural, vivid and editorial.",
     "No visible words, labels, logos, interface copy, pseudo-text or watermarks.",
+    "Do not create title areas, callout boxes, annotation lines, legends, labels, cards, charts, dashboards or infographic layouts.",
   ];
 
   const directions = {
     tuesday: [
       "TUESDAY — CONCEPT EXPLAINER.",
-      "Choose the clearest visual treatment for the concept: either a clean editorial concept card made from purely visual objects and diagram-like relationships, or a concrete conceptual scene.",
-      "Show two to four distinct visual components, stages or contrasts when that genuinely clarifies the concept.",
+      "Choose one concrete conceptual scene or physical visual metaphor that makes the mechanism understandable without labels or diagrams.",
+      "Show two to four real objects, stages or contrasts only when their spatial relationship genuinely clarifies the concept.",
       "The image should make the underlying mechanism easier to grasp before the caption is read.",
       "Avoid generic robots, glowing brains and decorative circuitry.",
     ],
@@ -1128,10 +1292,11 @@ function buildDailyLaneArtworkPrompt({ laneKey = "", post = {}, verifiedQuote = 
     ],
     friday: [
       "FRIDAY — SYSTEMS / OPERATOR VISUAL.",
-      "Show the practical system lesson from the post: routing, monitoring, retries, evaluation, infrastructure, source integrity, cost control or failure recovery.",
-      "Use sophisticated technical visual storytelling such as hardware, operations consoles without legible text, connected components, physical infrastructure or a clean systems diagram made from visual shapes.",
-      "Prefer cause-and-effect and operational clarity over science-fiction aesthetics.",
-      "Avoid meaningless data webs and generic server-room glamour shots.",
+      "Show one concrete operational cause-and-effect moment from the post: an operator inspecting a failed route, a physical service hand-off, a visible recovery step, a simplified hardware path or another real action with consequences.",
+      "Use photographic or cinematic editorial storytelling, not an infographic, dashboard, diagram, UI mock-up, labelled architecture, callout panel or presentation slide.",
+      "If infrastructure appears, include a clear human decision or physical intervention so the image tells a story rather than glamourising a server room.",
+      "Every concept must be represented by real objects, position, light and action. Never ask the image model to label components.",
+      "Avoid generic racks of servers, floating dashboards, coloured annotation lines, blank text boxes, pseudo-interface elements and decorative network cables.",
     ],
     saturday: [
       "SATURDAY — EDITORIAL DEBATE.",
@@ -1221,23 +1386,6 @@ export async function buildAndScheduleDailyLane(laneKey, options = {}) {
     const audienceIntentWarning = hasRecentAudienceIntent(lane.audienceIntent, { excludePipeline: "zernio" })
       ? `Recent cross-pipeline post already used audience intent '${lane.audienceIntent}'. Review angle before publishing.`
       : null;
-    if (!dryRun && apiKey && Array.isArray(rssContext.items) && rssContext.items[0]) {
-      const reservation = await reserveEditorialSource({
-        pipeline: "zernio",
-        lane: laneKey,
-        source: rssContext.items[0],
-        audienceIntent: lane.audienceIntent,
-        angle: lane.label,
-        scheduledDateTime,
-      });
-      if (reservation.duplicatePrevented) {
-        const err = new Error(`Editorial source already reserved for another social pipeline: ${rssContext.items[0].title}`);
-        err.statusCode = 409;
-        throw err;
-      }
-      editorialReservation = reservation.reservation;
-    }
-
     const prompt = buildDailyPrompt({
       lane,
       publishDate,
@@ -1271,6 +1419,7 @@ export async function buildAndScheduleDailyLane(laneKey, options = {}) {
       imageUrl,
       content: ensureHashtags(generated.content, lane.hashtags),
       spotlightPerson: generated.spotlightPerson || "",
+      sourceUrls: Array.isArray(generated.sourceUrls) ? generated.sourceUrls : [],
       // Explicit duplicate-window override for intentional cross-posting.
       // `crosspost` remains supported for backwards compatibility.
       allowDuplicate: Boolean(options.allowDuplicate ?? options.crosspost ?? false),
@@ -1278,13 +1427,35 @@ export async function buildAndScheduleDailyLane(laneKey, options = {}) {
 
     if (laneKey === "monday") Object.assign(post, ensureMondayVerifiedQuote(post, verifiedQuote));
 
-    let zernioSocialGate = runZernioSocialGate({
+    const availableRssItems = Array.isArray(rssContext.items) ? rssContext.items : [];
+    let selectedRssSources = selectSourcesByUrls(post.sourceUrls, availableRssItems);
+    const validSourceUrls = selectedRssSources.map((source) => String(source.link || "").trim()).filter(Boolean);
+    const sourceDefects = [];
+    if (post.sourceUrls.length !== validSourceUrls.length) {
+      sourceDefects.push("Post sourceUrls contains a URL that was not supplied in the current RSS evidence.");
+    }
+    post.sourceUrls = validSourceUrls;
+
+    const dailySourceFidelity = (candidate) => selectedRssSources.length
+      ? analyseTopicFidelity({
+          generated: `${candidate.title || ""} ${candidate.topic || ""} ${candidate.content || ""}`,
+          sources: selectedRssSources,
+          requiredTopic: `${lane.label} ${candidate.topic || candidate.title || ""}`,
+          minSourceHits: 2,
+          minTopicRatio: 0.28,
+          minScore: 58,
+        })
+      : { ok: true, score: 100, defects: [] };
+    let sourceFidelity = dailySourceFidelity(post);
+    sourceDefects.push(...sourceFidelity.defects.map((defect) => `RSS source fidelity: ${defect}`));
+
+    let zernioSocialGate = addExternalGateDefects(runZernioSocialGate({
       contentType: `zernio-daily-${laneKey}`,
       laneKey,
       post,
       verifiedQuote,
       buildContext,
-    });
+    }), sourceDefects);
     if (!zernioSocialGate.ok) {
       const reviewed = await reviewZernioGateOrThrow({
         councilKey: "zernio-social-copy",
@@ -1294,16 +1465,63 @@ export async function buildAndScheduleDailyLane(laneKey, options = {}) {
         laneKey,
         verifiedQuote,
         label: `${lane.label} social gate`,
-        validate: (candidate) => runZernioSocialGate({
-          contentType: `zernio-daily-${laneKey}`,
-          laneKey,
-          post: candidate,
-          verifiedQuote,
-          buildContext,
-        }),
+        semanticContext: {
+          requiredTopic: `${lane.label} ${post.topic || post.title || ""}`,
+          sources: selectedRssSources.length
+            ? selectedRssSources
+            : (availableRssItems.length
+              ? availableRssItems
+              : (buildContext ? [{ title: `${lane.label} verified build context`, summary: buildContext }] : [])),
+        },
+        validate: (candidate) => {
+          const candidateProvidedUrls = Array.isArray(candidate.sourceUrls) ? candidate.sourceUrls : post.sourceUrls;
+          const candidateSources = selectSourcesByUrls(candidateProvidedUrls, availableRssItems);
+          selectedRssSources = candidateSources;
+          candidate.sourceUrls = candidateSources.map((source) => String(source.link || "").trim()).filter(Boolean);
+          const candidateSourceDefects = candidateProvidedUrls.length !== candidate.sourceUrls.length
+            ? ["Post sourceUrls contains a URL that was not supplied in the current RSS evidence."]
+            : [];
+          sourceFidelity = candidateSources.length
+            ? analyseTopicFidelity({
+                generated: `${candidate.title || ""} ${candidate.topic || ""} ${candidate.content || ""}`,
+                sources: candidateSources,
+                requiredTopic: `${lane.label} ${candidate.topic || candidate.title || ""}`,
+                minSourceHits: 2,
+                minTopicRatio: 0.28,
+                minScore: 58,
+              })
+            : { ok: true, score: 100, defects: [] };
+          return addExternalGateDefects(runZernioSocialGate({
+            contentType: `zernio-daily-${laneKey}`,
+            laneKey,
+            post: candidate,
+            verifiedQuote,
+            buildContext,
+          }), [
+            ...candidateSourceDefects,
+            ...sourceFidelity.defects.map((defect) => `RSS source fidelity: ${defect}`),
+          ]);
+        },
       });
       Object.assign(post, reviewed.post);
       zernioSocialGate = reviewed.gate;
+    }
+
+    if (!dryRun && apiKey && selectedRssSources[0]) {
+      const reservation = await reserveEditorialSource({
+        pipeline: "zernio",
+        lane: laneKey,
+        source: selectedRssSources[0],
+        audienceIntent: lane.audienceIntent,
+        angle: post.topic || lane.label,
+        scheduledDateTime,
+      });
+      if (reservation.duplicatePrevented) {
+        const err = new Error(`Editorial source already reserved for another social pipeline: ${selectedRssSources[0].title}`);
+        err.statusCode = 409;
+        throw err;
+      }
+      editorialReservation = reservation.reservation;
     }
 
     if (!options.imageUrl && !dryRun) {
@@ -1372,19 +1590,19 @@ export async function buildAndScheduleDailyLane(laneKey, options = {}) {
         imageUrl: post.imageUrl,
       });
       if (laneKey === "sunday") recordSpotlightPerson(detectSpotlightPerson(post), { scheduledDateTime, topic: post.topic, title: post.title });
-      for (const item of Array.isArray(rssContext.items) ? rssContext.items.slice(0, 1) : []) {
+      for (const item of selectedRssSources.slice(0, 3)) {
         recordUsedSocialSource({ lane: `zernio:${laneKey}`, title: item.title, link: item.link, pubDate: item.pubDate, scheduledDateTime });
       }
       if (editorialReservation) {
         completeEditorialReservation(editorialReservation, {
           pipeline: "zernio",
           lane: laneKey,
-          source: Array.isArray(rssContext.items) ? rssContext.items[0] : null,
+          source: selectedRssSources[0] || null,
           audienceIntent: lane.audienceIntent,
           angle: post.topic || post.title,
           scheduledDateTime,
           text: post.content,
-          meta: { contentType: "zernio-daily" },
+          meta: { contentType: "zernio-daily", sourceUrls: post.sourceUrls, topicFidelity: sourceFidelity },
         });
       } else {
         recordEditorialEvent({
@@ -1394,7 +1612,7 @@ export async function buildAndScheduleDailyLane(laneKey, options = {}) {
           angle: post.topic || post.title,
           scheduledDateTime,
           text: post.content,
-          meta: { contentType: "zernio-daily", dryRun: Boolean(scheduling.dryRun) },
+          meta: { contentType: "zernio-daily", dryRun: Boolean(scheduling.dryRun), sourceUrls: post.sourceUrls, topicFidelity: sourceFidelity },
         });
       }
     }
@@ -1418,6 +1636,8 @@ export async function buildAndScheduleDailyLane(laneKey, options = {}) {
       dryRun: scheduling.dryRun,
       scheduled: scheduling.scheduled,
       topic: post.topic,
+      sourceUrls: post.sourceUrls,
+      topicalScore: sourceFidelity.score,
       contentHash: contentHash(post.content),
     });
 
@@ -1709,12 +1929,21 @@ export async function buildAndScheduleWeeklyMiniSeries(options = {}) {
   });
 
   research.sourceUrls = validMiniSeriesSourceUrls(research.sourceUrls, sourceItems);
+  const researchSources = selectSourcesByUrls(research.sourceUrls, sourceItems);
+  const researchFidelity = miniSeriesFidelity({
+    generated: `${research.topic || ""} ${research.rationale || ""}`,
+    sources: researchSources,
+    requiredTopic: research.topic || "",
+    minScore: 64,
+  });
+  research.topicFidelity = researchFidelity;
   const researchApproved =
     research.decision === "create" &&
     research.suitabilityScore >= minimumScore &&
     research.authorityScore >= 70 &&
     research.audienceValueScore >= 70 &&
-    research.sourceUrls.length >= 2;
+    research.sourceUrls.length >= 2 &&
+    researchFidelity.ok;
 
   if (!researchApproved) {
     const reason = research.decision === "skip" ? "research-panel-skip" : "research-threshold-not-met";
@@ -1741,7 +1970,7 @@ export async function buildAndScheduleWeeklyMiniSeries(options = {}) {
   const theme = await requestStructuredZernioJson({
     routeName: "zernioMiniSeriesTheme",
     sessionId: `${sessionId}-THEME`,
-    prompt: buildMiniSeriesThemePrompt({ weekStartDate, research, sourceItems }),
+    prompt: buildMiniSeriesThemePrompt({ weekStartDate, research, sourceItems: researchSources }),
     label: "mini-series articles theme panel",
     normalise: (raw) => normaliseMiniSeriesTheme(raw, research),
     maxTokens: ZERNIO_MINI_SERIES_THEME_MAX_TOKENS,
@@ -1754,18 +1983,21 @@ export async function buildAndScheduleWeeklyMiniSeries(options = {}) {
   );
   theme.posts = theme.posts.slice(0, desiredCount).map((post) => ({
     ...post,
-    sourceUrls: validMiniSeriesSourceUrls(post.sourceUrls, sourceItems),
+    sourceUrls: validMiniSeriesSourceUrls(post.sourceUrls, researchSources),
   }));
 
   const broadTags = new Set(["#ai", "#artificialintelligence", "#technology", "#tech", "#innovation", "#future"]);
   const specificTags = theme.hashtags.filter((tag) => !broadTags.has(tag.toLowerCase()));
-  if (theme.posts.length < MINI_SERIES_CONFIG.minPosts || specificTags.length < 1) {
+  const themeGate = miniSeriesThemeDefects(theme, research, researchSources);
+  theme.topicFidelity = themeGate.fidelity;
+  if (theme.posts.length < MINI_SERIES_CONFIG.minPosts || specificTags.length < 1 || !themeGate.ok) {
     info("zernio.mini_series.skipped", {
       weekStartDate,
       reason: "theme-panel-insufficient-series",
       topic: research.topic,
       plannedPosts: theme.posts.length,
       hashtags: theme.hashtags,
+      defects: themeGate.defects,
     });
     return {
       ok: true,
@@ -1774,6 +2006,7 @@ export async function buildAndScheduleWeeklyMiniSeries(options = {}) {
       reason: "theme-panel-insufficient-series",
       research,
       theme,
+      defects: themeGate.defects,
       posts: [],
     };
   }
@@ -1794,7 +2027,7 @@ export async function buildAndScheduleWeeklyMiniSeries(options = {}) {
         postPlan,
         index,
         total: theme.posts.length,
-        sourceItems,
+        sourceItems: researchSources,
       }),
       label: `mini-series part ${index + 1}`,
       normalise: (raw) => normaliseMiniSeriesPost(raw, postPlan),
@@ -1813,11 +2046,20 @@ export async function buildAndScheduleWeeklyMiniSeries(options = {}) {
       imageUrl: "",
     };
 
-    let gate = runZernioSocialGate({
+    const postSources = selectSourcesByUrls(postPlan.sourceUrls || [], researchSources);
+    const requiredTopic = `${theme.seriesTitle || ""} ${postPlan.title || ""} ${postPlan.angle || ""} ${postPlan.brief || ""}`;
+    let postFidelity = miniSeriesFidelity({
+      generated: `${post.title || ""} ${post.topic || ""} ${post.content || ""}`,
+      sources: postSources,
+      requiredTopic,
+      minScore: 64,
+    });
+
+    let gate = addExternalGateDefects(runZernioSocialGate({
       contentType: "zernio-mini-series",
       laneKey: "weekly-mini-series",
       post,
-    });
+    }), postFidelity.defects);
 
     if (!gate.ok) {
       const reviewed = await reviewZernioGateOrThrow({
@@ -1827,31 +2069,102 @@ export async function buildAndScheduleWeeklyMiniSeries(options = {}) {
         contentType: "zernio-mini-series",
         laneKey: "weekly-mini-series",
         label: `Mini-series part ${index + 1} review`,
+        semanticContext: { requiredTopic, sources: postSources },
+        validate: (candidate) => {
+          postFidelity = miniSeriesFidelity({
+            generated: `${candidate.title || ""} ${candidate.topic || ""} ${candidate.content || ""}`,
+            sources: postSources,
+            requiredTopic,
+            minScore: 64,
+          });
+          return addExternalGateDefects(runZernioSocialGate({
+            contentType: "zernio-mini-series",
+            laneKey: "weekly-mini-series",
+            post: candidate,
+          }), postFidelity.defects);
+        },
       });
       post = reviewed.post;
       gate = reviewed.gate;
     }
 
+    post.imageUrl = options.imageUrl || "";
+    prepared.push({
+      index,
+      slot,
+      postPlan,
+      post,
+      gate,
+      topicFidelity: postFidelity,
+      generatedImagePrompt: generated.imagePrompt,
+      sources: postSources,
+    });
+  }
+
+  const generatedSeriesDefects = [];
+  for (let left = 0; left < prepared.length; left += 1) {
+    for (let right = left + 1; right < prepared.length; right += 1) {
+      const similarity = jaccardTopicSimilarity(
+        `${prepared[left].post.title || ""} ${prepared[left].post.topic || ""} ${stripHashtags(prepared[left].post.content || "")}`,
+        `${prepared[right].post.title || ""} ${prepared[right].post.topic || ""} ${stripHashtags(prepared[right].post.content || "")}`,
+      );
+      if (similarity > 0.62) {
+        generatedSeriesDefects.push(`Generated mini-series parts ${left + 1} and ${right + 1} are too similar (${Math.round(similarity * 100)}% topic overlap).`);
+      }
+    }
+  }
+
+  if (generatedSeriesDefects.length) {
+    warn("zernio.mini_series.generated_quality_failed", {
+      weekStartDate,
+      topic: research.topic,
+      seriesTitle: theme.seriesTitle,
+      defects: generatedSeriesDefects,
+    });
+    return {
+      ok: true,
+      lane: "weekly-mini-series",
+      skipped: true,
+      reason: "generated-series-quality-failed",
+      research,
+      theme,
+      defects: generatedSeriesDefects,
+      posts: prepared.map((item) => ({
+        index: item.index + 1,
+        post: item.post,
+        topicFidelity: item.topicFidelity,
+      })),
+      warnings: [loaded.warning].filter(Boolean),
+    };
+  }
+
+  for (const item of prepared) {
     if (!options.imageUrl && !dryRun) {
+      const sourceEvidence = (item.sources || []).slice(0, 3).map((source) => ({
+        title: source.title || "",
+        summary: source.summary || source.rewritten || "",
+        link: source.link || "",
+      }));
       const artwork = await createSocialArtwork({
-        sessionId: `${sessionId}-PART-${index + 1}`,
+        sessionId: `${sessionId}-PART-${item.index + 1}`,
         lane: "mini-series",
-        date: slot.publishDate,
+        date: item.slot.publishDate,
         prompt: [
-          generated.imagePrompt,
+          item.generatedImagePrompt,
           `Series theme for context only: ${theme.seriesTitle}.`,
-          `Part angle for context only: ${postPlan.angle}.`,
-          "Create a distinct image for this part while retaining a coherent editorial family across the series.",
+          `This part's final copy, for visual meaning only: ${stripHashtags(item.post.content || "").slice(0, 900)}`,
+          `Part angle for context only: ${item.postPlan.angle}.`,
+          `Exact source evidence: ${JSON.stringify(sourceEvidence)}`,
+          "Create a source-specific and visibly distinct image for this part while retaining a coherent editorial family across the series.",
+          "Do not recycle a generic person-at-a-laptop, glowing brain, abstract network, dashboard, labelled diagram or infographic composition.",
           "No visible text, labels, logos or typography.",
         ].join("\n"),
         fallbackUrl: MINI_SERIES_CONFIG.fallbackImageUrl,
       });
-      post.imageUrl = artwork.publicUrl || MINI_SERIES_CONFIG.fallbackImageUrl;
+      item.post.imageUrl = artwork.publicUrl || MINI_SERIES_CONFIG.fallbackImageUrl;
     } else {
-      post.imageUrl = options.imageUrl || MINI_SERIES_CONFIG.fallbackImageUrl;
+      item.post.imageUrl = options.imageUrl || MINI_SERIES_CONFIG.fallbackImageUrl;
     }
-
-    prepared.push({ index, slot, postPlan, post, gate });
   }
 
   if (!dryRun && apiKey) {
@@ -1919,6 +2232,7 @@ export async function buildAndScheduleWeeklyMiniSeries(options = {}) {
             part: item.index + 1,
             totalParts: prepared.length,
             sourceUrls: item.postPlan.sourceUrls,
+            topicFidelity: item.topicFidelity,
           },
         });
       }
@@ -1941,6 +2255,7 @@ export async function buildAndScheduleWeeklyMiniSeries(options = {}) {
         dryRun: scheduling.dryRun,
         duplicatePrevented: Boolean(scheduling.duplicatePrevented),
         post: item.post,
+        topicFidelity: item.topicFidelity,
         zernioResponse: scheduling.zernioResponse,
       });
     } catch (error) {

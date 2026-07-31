@@ -21,7 +21,7 @@ function renderRssBlock(rssItems = []) {
 
   return rssItems
     .slice(0, 8)
-    .map((item, index) => `${index + 1}. ${item.title} :: ${item.summary}`)
+    .map((item, index) => `${index + 1}. ${item.title} :: ${item.summary} :: URL ${item.link || ""}`)
     .join("\n");
 }
 
@@ -89,9 +89,10 @@ Content target: 100 to 160 words.`,
 
   return {
     system: `${BRAND_VOICE}
-Return valid JSON only with exactly these keys: title, topic, content, firstComment${lane.key === "sunday" ? ", spotlightPerson" : ""}.
+Return valid JSON only with exactly these keys: title, topic, content, firstComment, sourceUrls${lane.key === "sunday" ? ", spotlightPerson" : ""}.
 No extra keys.
-Every value must be a plain string.
+Every value must be a plain string except sourceUrls, which must be an array of exact URLs from the supplied RSS context.
+sourceUrls must be [] when the post is evergreen or does not rely on RSS evidence.
 firstComment should usually be an empty string unless a short, genuinely useful follow-up comment adds value.
 Do not put hashtags in any field.
 Do not wrap the JSON in markdown fences.
@@ -125,6 +126,8 @@ Output rules:
 - content: the actual post copy only
 - content must never exceed ${ZERNIO_POST_MAX_CHARACTERS} characters including spaces; use the extra room for substance, not padding
 - firstComment: usually empty
+- sourceUrls: exact RSS URLs used as factual evidence; [] when no RSS item is used
+- never mention a current event, organisation, product claim, person claim or statistic from RSS without listing its exact URL in sourceUrls
 - content must stand alone without hashtags
 - no markdown, no bullets, no labels, no quote marks around the full post
 - avoid textbook tone, Wikipedia tone, corporate tone, and motivational-poster tone
