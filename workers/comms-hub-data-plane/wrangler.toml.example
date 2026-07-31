@@ -1,0 +1,10 @@
+name = "aims-comms-hub-data-plane"
+main = "worker.js"
+compatibility_date = "2026-07-31"
+
+[[d1_databases]]
+binding = "COMMS_HUB_DB"
+database_name = "comms-hub"
+database_id = "REPLACE_WITH_D1_UUID"
+
+# Set with: wrangler secret put COMMS_HUB_D1_PROXY_TOKEN
