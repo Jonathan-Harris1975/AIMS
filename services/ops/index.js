@@ -126,15 +126,14 @@ function publicJob(job) {
     id: job.id,
     window: job.window,
     status: job.status,
+    terminal: ["completed", "completed-with-failures", "failed"].includes(job.status),
+    updatedAt: job.updatedAt || job.startedAt,
     startedAt: job.startedAt,
     finishedAt: job.finishedAt || null,
     currentTask: job.currentTask || null,
     delayMs: job.delayMs,
     results: job.results,
     failures: job.failures,
-    updatedAt: job.updatedAt || job.startedAt,
-    terminal: ["completed", "completed-with-failures", "failed"].includes(job.status),
-    statusUrl: `/ops/jobs/${encodeURIComponent(job.id)}`,
   };
 }
 
@@ -146,7 +145,8 @@ const OPERATION_WINDOWS = Object.freeze({
     ["zernio-blog-social", "/zernio/blog-rss/daily", {}],
     ["weekly-blog", "/blog/weekly/build", {}],
     ["newsletter-generate", "/newsletter/generate", { profileId: "ai-edge" }, "newsletter"],
-    ["newsletter-send", "/newsletter/send", { profileId: "ai-edge" }, "newsletter"],
+    ["newsletter-readiness", "/newsletter/readiness", { profileId: "ai-edge" }, "newsletter"],
+    ["newsletter-send", "/newsletter/send", { profileId: "ai-edge" }, "newsletter", false, "newsletter-readiness"],
     ["zernio-monday", "/zernio/daily/monday", {}],
     ["zernio-ebooks", "/zernio/ebooks/weekly", { dryRun: false, profileName: "Default", accountId: "ALL", usePodcastFeaturedBook: true }, null, true],
     ["zernio-quiz", "/zernio/quiz/weekly", {}],
@@ -157,7 +157,8 @@ const OPERATION_WINDOWS = Object.freeze({
     ["rss-rewrite", "/rss/rewrite", { batchSize: 5 }], ["outreach", "/outreach/batch/next", {}],
     ["blog-social", "/blog/social/daily/build", {}], ["zernio-blog-social", "/zernio/blog-rss/daily", {}],
     ["newsletter-generate", "/newsletter/generate", { profileId: "ai-edge" }, "newsletter"],
-    ["newsletter-send", "/newsletter/send", { profileId: "ai-edge" }, "newsletter"],
+    ["newsletter-readiness", "/newsletter/readiness", { profileId: "ai-edge" }, "newsletter"],
+    ["newsletter-send", "/newsletter/send", { profileId: "ai-edge" }, "newsletter", false, "newsletter-readiness"],
     ["zernio-tuesday", "/zernio/daily/tuesday", {}],
     ["blotato-am", "/blotato/autoshorts/schedule", {}],
     ["blotato-pm", "/blotato/shorts/model-verdict/schedule", {}],
@@ -166,7 +167,8 @@ const OPERATION_WINDOWS = Object.freeze({
     ["rss-rewrite", "/rss/rewrite", { batchSize: 5 }], ["outreach", "/outreach/batch/next", {}],
     ["blog-social", "/blog/social/daily/build", {}], ["zernio-blog-social", "/zernio/blog-rss/daily", {}],
     ["newsletter-generate", "/newsletter/generate", { profileId: "ai-edge" }, "newsletter"],
-    ["newsletter-send", "/newsletter/send", { profileId: "ai-edge" }, "newsletter"],
+    ["newsletter-readiness", "/newsletter/readiness", { profileId: "ai-edge" }, "newsletter"],
+    ["newsletter-send", "/newsletter/send", { profileId: "ai-edge" }, "newsletter", false, "newsletter-readiness"],
     ["zernio-wednesday", "/zernio/daily/wednesday", {}],
     ["blotato-am", "/blotato/autoshorts/schedule", {}],
     ["blotato-pm", "/blotato/shorts/ai-at-work/schedule", {}],
@@ -175,7 +177,8 @@ const OPERATION_WINDOWS = Object.freeze({
     ["rss-rewrite", "/rss/rewrite", { batchSize: 5 }], ["outreach", "/outreach/batch/next", {}],
     ["blog-social", "/blog/social/daily/build", {}], ["zernio-blog-social", "/zernio/blog-rss/daily", {}],
     ["newsletter-generate", "/newsletter/generate", { profileId: "ai-edge" }, "newsletter"],
-    ["newsletter-send", "/newsletter/send", { profileId: "ai-edge" }, "newsletter"],
+    ["newsletter-readiness", "/newsletter/readiness", { profileId: "ai-edge" }, "newsletter"],
+    ["newsletter-send", "/newsletter/send", { profileId: "ai-edge" }, "newsletter", false, "newsletter-readiness"],
     ["zernio-thursday", "/zernio/daily/thursday", {}],
     ["blotato-am", "/blotato/autoshorts/schedule", {}],
     ["blotato-pm", "/blotato/shorts/reality-check/schedule", {}],
@@ -184,7 +187,8 @@ const OPERATION_WINDOWS = Object.freeze({
     ["rss-rewrite", "/rss/rewrite", { batchSize: 5 }], ["outreach", "/outreach/batch/next", {}],
     ["blog-social", "/blog/social/daily/build", {}], ["zernio-blog-social", "/zernio/blog-rss/daily", {}],
     ["newsletter-generate", "/newsletter/generate", { profileId: "ai-edge" }, "newsletter"],
-    ["newsletter-send", "/newsletter/send", { profileId: "ai-edge" }, "newsletter"],
+    ["newsletter-readiness", "/newsletter/readiness", { profileId: "ai-edge" }, "newsletter"],
+    ["newsletter-send", "/newsletter/send", { profileId: "ai-edge" }, "newsletter", false, "newsletter-readiness"],
     ["zernio-friday", "/zernio/daily/friday", {}],
     ["zernio-saturday", "/zernio/daily/saturday", {}],
     ["zernio-sunday", "/zernio/daily/sunday", {}],
@@ -203,6 +207,16 @@ function assertContentOperationWindows() {
     const zernioBlogIndex = paths.indexOf("/zernio/blog-rss/daily");
     if (blogBuildIndex < 0 || zernioBlogIndex !== blogBuildIndex + 1) {
       throw new Error(`${windowName} must run /zernio/blog-rss/daily immediately after /blog/social/daily/build`);
+    }
+
+    const newsletterGenerateIndex = paths.indexOf("/newsletter/generate");
+    const newsletterReadinessIndex = paths.indexOf("/newsletter/readiness");
+    const newsletterSendIndex = paths.indexOf("/newsletter/send");
+    if (newsletterGenerateIndex < 0 || newsletterReadinessIndex !== newsletterGenerateIndex + 1 || newsletterSendIndex !== newsletterReadinessIndex + 1) {
+      throw new Error(`${windowName} must run newsletter generate -> readiness -> send in order`);
+    }
+    if (tasks[newsletterSendIndex]?.[5] !== "newsletter-readiness") {
+      throw new Error(`${windowName} newsletter send must depend on newsletter-readiness`);
     }
   }
 
@@ -268,7 +282,20 @@ async function runInternalTask([name, path, body = {}, feature = null, addWeekSt
 }
 
 router.get("/windows", (_req, res) => {
-  res.json({ ok: true, service: "ops", newsletterEnabled: operationNewsletterEnabled(), windows: Object.fromEntries(Object.entries(OPERATION_WINDOWS).map(([key, tasks]) => [key, { delayMs: operationDelayMs(key), tasks: tasks.map(([name, path, _body, feature]) => ({ name, path, enabled: feature !== "newsletter" || operationNewsletterEnabled() })) }])) });
+  res.json({
+    ok: true,
+    service: "ops",
+    newsletterEnabled: operationNewsletterEnabled(),
+    windows: Object.fromEntries(Object.entries(OPERATION_WINDOWS).map(([key, tasks]) => [key, {
+      delayMs: operationDelayMs(key),
+      tasks: tasks.map(([name, path, _body, feature, _addWeekStartDate, dependsOn]) => ({
+        name,
+        path,
+        dependsOn: dependsOn || null,
+        enabled: feature !== "newsletter" || operationNewsletterEnabled(),
+      })),
+    }])),
+  });
 });
 
 async function executeOperationWindow(job, tasks, req) {
@@ -280,9 +307,37 @@ async function executeOperationWindow(job, tasks, req) {
       job.updatedAt = new Date().toISOString();
       await sleep(job.delayMs);
     }
-    job.currentTask = { name: tasks[index][0], path: tasks[index][1], index: index + 1, total: tasks.length };
+    const task = tasks[index];
+    const [taskName, taskPath, _taskBody, _feature, _addWeekStartDate, dependsOn] = task;
+    job.currentTask = { name: taskName, path: taskPath, index: index + 1, total: tasks.length, dependsOn: dependsOn || null };
     job.updatedAt = new Date().toISOString();
-    const result = await runInternalTask(tasks[index], req);
+
+    if (dependsOn) {
+      const dependency = [...job.results].reverse().find((item) => item.name === dependsOn);
+      const dependencyReady = Boolean(
+        dependency?.ok
+        && dependency?.result?.ok !== false
+        && dependency?.result?.ready !== false
+      );
+      if (!dependencyReady) {
+        const result = {
+          name: taskName,
+          path: taskPath,
+          ok: false,
+          skipped: true,
+          status: 424,
+          reason: "operation-dependency-not-ready",
+          dependsOn,
+          dependency: dependency || null,
+        };
+        job.results.push(result);
+        job.failures += 1;
+        job.updatedAt = new Date().toISOString();
+        continue;
+      }
+    }
+
+    const result = await runInternalTask(task, req);
     job.results.push(result);
     job.updatedAt = new Date().toISOString();
     if (!result.ok) job.failures += 1;
@@ -310,12 +365,12 @@ router.post("/run/:window", async (req, res, next) => {
       window: windowName,
       status: "accepted",
       startedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
       finishedAt: null,
       currentTask: null,
       delayMs: operationDelayMs(windowName),
       results: [],
       failures: 0,
-      updatedAt: new Date().toISOString(),
     };
     operationJobs.set(id, job);
 
@@ -334,6 +389,7 @@ router.post("/run/:window", async (req, res, next) => {
       service: "ops",
       window: windowName,
       newsletterEnabled: operationNewsletterEnabled(),
+      statusUrl: `/ops/jobs/${encodeURIComponent(job.id)}`,
       job: publicJob(job),
     });
   } catch (error) { next(error); }
