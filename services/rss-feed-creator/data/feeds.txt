@@ -11,7 +11,6 @@ https://shaip.com/feed
 https://aiiottalk.com/feed
 https://oreilly.com/radar/topics/ai-ml/feed
 https://www.artificialintelligence-news.com/feed
-https://clarifai.com/blog/rss.xml
 https://unbabel.com/category/blog/feed
 https://blog.kore.ai/rss.xml
 https://bigdataanalyticsnews.com/category/artificial-intelligence/feed
@@ -24,7 +23,6 @@ https://blogs.rstudio.com/ai/index.xml
 https://nanonets.com/blog/rss
 https://insights.fusemachines.com/feed
 https://kavita-ganesan.com/feed
-https://aitimejournal.com/feed
 https://dlabs.ai/feed
 https://www.technologyreview.com/topic/artificial-intelligence/feed
 https://www.deepmind.com/blog/rss.xml
