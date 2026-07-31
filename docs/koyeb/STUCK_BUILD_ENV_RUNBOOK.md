@@ -1,5 +1,5 @@
-> **Document status:** Production reference  
-> **Last reviewed:** 16 June 2026  
+> **Document status:** Production reference
+> **Last reviewed:** 16 June 2026
 > **Operational authority:** Current repository README, SECURITY policy and operations guide.
 
 # Koyeb stuck in Building when env vars are added

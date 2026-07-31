@@ -1,5 +1,5 @@
-> **Document status:** Historical implementation record  
-> **Last reviewed:** 16 June 2026  
+> **Document status:** Historical implementation record
+> **Last reviewed:** 16 June 2026
 > **Operational authority:** Current repository README, SECURITY policy and operations guide.
 
 # Koyeb build-stage env isolation fix
