@@ -4,10 +4,18 @@ import { recordProviderOutcome } from "../../shared/utils/operationalExcellence.
 import { getCommsHubReadiness, loadCommsHubConfig } from "../config.js";
 import { newCorrelationId } from "../domain/ids.js";
 import { readJotformWebhookEnvelope } from "../domain/webhook.js";
+import { readZernioWebhookEnvelope } from "../domain/zernioWebhook.js";
 import { safeErrorLog } from "../domain/redaction.js";
 import { CommsHubError, toCommsHubError } from "../errors.js";
-import { getCommsHubContext, getCommsHubRuntimeReadiness, kickCommsHubArchiveDrain } from "../runtime.js";
+import {
+  getCommsHubContext,
+  getCommsHubRuntimeReadiness,
+  kickCommsHubArchiveDrain,
+  kickCommsHubSocialPoll,
+} from "../runtime.js";
 import { processJotformIntake } from "../intakeService.js";
+import { executeSocialAction } from "../socialActionsService.js";
+import { processZernioWebhook, reconcileZernioWebhook, withZernioAcceptanceDeadline } from "../socialService.js";
 
 function publicError(error) {
   const normalised = toCommsHubError(error, {
@@ -31,9 +39,22 @@ function validConversationId(value) {
   return /^cnv_[0-9a-hjkmnp-tv-z]{26}$/.test(candidate) ? candidate : "";
 }
 
+function requireReady(runtimeReadinessProvider) {
+  const runtime = runtimeReadinessProvider();
+  if (!runtime.ready) {
+    throw new CommsHubError(503, "comms_hub_not_ready", `Comms Hub runtime is not ready: ${runtime.status || "unknown"}.`, {
+      retryable: true,
+      failureClass: "temporary",
+      publicMessage: "Comms Hub is not ready.",
+    });
+  }
+  return runtime;
+}
+
 export function createCommsHubRouter({
   contextProvider = getCommsHubContext,
   kickArchive = kickCommsHubArchiveDrain,
+  kickSocialPoll = kickCommsHubSocialPoll,
   runtimeReadinessProvider = getCommsHubRuntimeReadiness,
 } = {}) {
   const router = express.Router();
@@ -49,15 +70,24 @@ export function createCommsHubRouter({
         enabled: configuration.enabled,
         status: configuration.status,
         forms: configuration.forms,
+        zernio: Object.fromEntries(Object.entries(configuration.zernio).map(([family, state]) => [family, {
+          enabled: state.enabled,
+          status: state.status,
+          platforms: state.platforms,
+        }])),
       },
       runtime: {
         status: runtime.status,
         ready: runtime.ready,
         detail: runtime.detail,
+        workers: runtime.workers || null,
       },
       channels: {
         jotform: ["contact", "case_study", "podcast_enquiry"],
-        socialConfigurationOwner: "zernio",
+        zernio: {
+          meta: ["facebook", "instagram"],
+          video: ["youtube"],
+        },
         emailHost: "one.com",
       },
     });
@@ -69,14 +99,7 @@ export function createCommsHubRouter({
     let identifiers = null;
     try {
       const config = loadCommsHubConfig(process.env, { requireEnabled: true });
-      const runtime = runtimeReadinessProvider();
-      if (!runtime.ready) {
-        throw new CommsHubError(503, "comms_hub_not_ready", `Comms Hub runtime is not ready: ${runtime.status || "unknown"}.`, {
-          retryable: true,
-          failureClass: "temporary",
-          publicMessage: "Comms Hub is not ready.",
-        });
-      }
+      requireReady(runtimeReadinessProvider);
       const envelope = await readJotformWebhookEnvelope(req, config.maxWebhookBytes);
       const active = contextProvider();
       const processed = await processJotformIntake({ envelope, correlationId, context: active });
@@ -124,22 +147,92 @@ export function createCommsHubRouter({
     }
   });
 
+  router.post("/intake/zernio/:family", async (req, res) => {
+    const startedAt = Date.now();
+    const family = String(req.params.family || "").trim().toLowerCase();
+    const correlationId = String(req.id || req.get?.("x-request-id") || newCorrelationId());
+    try {
+      const config = loadCommsHubConfig(process.env, { requireEnabled: true });
+      requireReady(runtimeReadinessProvider);
+      const familyConfig = config.zernioFamilies?.[family];
+      if (!familyConfig?.enabled) {
+        throw new CommsHubError(404, "zernio_family_disabled", "Zernio webhook family is not enabled.", {
+          publicMessage: "Webhook endpoint not found.",
+        });
+      }
+      const envelope = readZernioWebhookEnvelope(req, {
+        family,
+        secret: familyConfig.webhookSecret,
+        maxBytes: config.maxWebhookBytes,
+      });
+      const result = await withZernioAcceptanceDeadline(
+        processZernioWebhook({ envelope, correlationId, context: contextProvider() }),
+        config.zernioAckTimeoutMs
+      );
+      recordProviderOutcome({
+        routeKey: `comms-hub:zernio-${family}-intake`,
+        provider: `zernio-${family}`,
+        ok: true,
+        durationMs: Date.now() - startedAt,
+        status: result.test ? "test" : result.duplicate ? "duplicate" : "accepted",
+      });
+      log.info("commsHub.socialIntake.accepted", {
+        correlationId,
+        family,
+        platform: envelope.platform,
+        eventType: envelope.eventType,
+        duplicate: result.duplicate,
+        test: result.test,
+      });
+      return res.status(result.test || result.duplicate ? 200 : 202).json({
+        ok: true,
+        accepted: true,
+        duplicate: result.duplicate,
+        test: result.test,
+        correlationId,
+      });
+    } catch (error) {
+      const output = publicError(error);
+      recordProviderOutcome({
+        routeKey: `comms-hub:zernio-${family || "unknown"}-intake`,
+        provider: `zernio-${family || "unknown"}`,
+        ok: false,
+        durationMs: Date.now() - startedAt,
+        status: output.normalised.code,
+      });
+      log[output.statusCode >= 500 ? "error" : "warn"]("commsHub.socialIntake.rejected", {
+        correlationId,
+        family: family || null,
+        error: safeErrorLog(output.normalised),
+      });
+      return res.status(output.statusCode).json({ ...output.body, correlationId });
+    }
+  });
+
   router.get("/diagnostics", async (_req, res, next) => {
     try {
       const active = contextProvider();
-      const [schema, archive] = await Promise.all([
+      const [schema, archive, social] = await Promise.all([
         active.repository.schemaStatus(),
         active.repository.getArchiveCounts(),
+        active.repository.getSocialStatus(),
       ]);
       return res.status(schema.available ? 200 : 503).json({
         ok: schema.available,
         service: "comms-hub",
         schema,
         archive,
+        social,
         configuration: {
           forms: 3,
           r2Bucket: active.config.r2BucketName,
           archiveWorkerEnabled: active.config.archiveWorkerEnabled,
+          socialPollWorkerEnabled: active.config.socialPollWorkerEnabled,
+          d1Transport: active.config.d1ProxyUrl ? "worker-data-plane" : "cloudflare-rest",
+          zernio: Object.fromEntries(Object.entries(active.config.zernioFamilies).map(([family, value]) => [family, {
+            enabled: value.enabled,
+            platforms: value.platforms,
+          }])),
         },
       });
     } catch (error) {
@@ -156,13 +249,101 @@ export function createCommsHubRouter({
         });
       }
       const conversation = await contextProvider().repository.getConversation(conversationId);
-      if (!conversation) {
-        return res.status(404).json({ ok: false, error: "conversation_not_found" });
-      }
+      if (!conversation) return res.status(404).json({ ok: false, error: "conversation_not_found" });
       return res.status(200).json({ ok: true, service: "comms-hub", conversation });
     } catch (error) {
       next(error);
     }
+  });
+
+  router.get("/social/conversations", async (req, res, next) => {
+    try {
+      const platform = String(req.query.platform || "").trim().toLowerCase();
+      if (platform && !["facebook", "instagram", "youtube"].includes(platform)) {
+        throw new CommsHubError(400, "social_platform_invalid", "Social platform filter is invalid.");
+      }
+      const status = String(req.query.status || "").trim().toLowerCase();
+      if (status && !["open", "pending", "closed", "quarantined"].includes(status)) {
+        throw new CommsHubError(400, "social_status_invalid", "Conversation status filter is invalid.");
+      }
+      const conversations = await contextProvider().repository.listSocialConversations({
+        platform,
+        status,
+        before: String(req.query.before || "").trim(),
+        limit: Number(req.query.limit || 50),
+      });
+      return res.status(200).json({ ok: true, service: "comms-hub", conversations });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/social/conversations/:conversationId/actions/:action", async (req, res, next) => {
+    const startedAt = Date.now();
+    try {
+      const conversationId = validConversationId(req.params.conversationId);
+      if (!conversationId) throw new CommsHubError(400, "conversation_id_invalid", "Conversation ID is invalid.");
+      const result = await executeSocialAction({
+        conversationId,
+        action: req.params.action,
+        body: req.body || {},
+        idempotencyKey: req.get("idempotency-key"),
+        context: contextProvider(),
+      });
+      recordProviderOutcome({
+        routeKey: `comms-hub:social-action:${req.params.action}`,
+        provider: "zernio",
+        ok: true,
+        durationMs: Date.now() - startedAt,
+        status: result.duplicate ? "duplicate" : "complete",
+      });
+      return res.status(200).json({ ok: true, service: "comms-hub", duplicate: result.duplicate, result: result.response });
+    } catch (error) {
+      recordProviderOutcome({
+        routeKey: `comms-hub:social-action:${req.params.action || "unknown"}`,
+        provider: "zernio",
+        ok: false,
+        durationMs: Date.now() - startedAt,
+        status: error?.code || "failed",
+      });
+      next(error);
+    }
+  });
+
+  router.get("/social/status", async (_req, res, next) => {
+    try {
+      const social = await contextProvider().repository.getSocialStatus();
+      return res.status(200).json({ ok: true, service: "comms-hub", social });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/social/poll/drain", async (req, res, next) => {
+    try {
+      const requested = Number(req.body?.limit || 0);
+      const limit = Number.isInteger(requested) && requested > 0 ? Math.min(requested, 20) : 5;
+      const result = await contextProvider().socialPollWorker.runOnce({ limit });
+      return res.status(200).json({ ok: true, service: "comms-hub", ...result });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/social/webhooks/:family/reconcile", async (req, res, next) => {
+    try {
+      const family = String(req.params.family || "").trim().toLowerCase();
+      if (!["meta", "video"].includes(family)) throw new CommsHubError(404, "zernio_family_unknown", "Unknown Zernio family.");
+      const result = await reconcileZernioWebhook({ family, context: contextProvider() });
+      return res.status(200).json({ ok: true, service: "comms-hub", ...result });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/social/poll/kick", (_req, res) => {
+    const kicked = kickSocialPoll();
+    return res.status(kicked ? 202 : 409).json({ ok: kicked, service: "comms-hub", kicked });
   });
 
   router.get("/archive/status", async (_req, res, next) => {
