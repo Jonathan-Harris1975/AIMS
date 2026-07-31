@@ -194,7 +194,17 @@ for (const laneKey of Object.keys(LANE_CONFIG)) {
       }
     }
 
-    return { ...daily, extras };
+    const failedExtras = Object.entries(extras)
+      .filter(([, result]) => result?.ok === false || result?.failed === true || result?.partialFailure === true)
+      .map(([name, result]) => ({ name, error: result?.error || result?.reason || "weekly extra did not confirm success" }));
+
+    return {
+      ...daily,
+      ok: daily?.ok !== false && failedExtras.length === 0,
+      partialFailure: daily?.partialFailure === true || failedExtras.length > 0,
+      issues: [...(Array.isArray(daily?.issues) ? daily.issues : []), ...failedExtras],
+      extras,
+    };
   };
 
   router.post(
