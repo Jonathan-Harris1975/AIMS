@@ -39,10 +39,11 @@ async function loadStoredIssue(profile, sessionId, date) {
 // route creates the Brevo campaign and sends it immediately (sendNow) the
 // moment MAST calls it — there is no internal scheduledAt.
 //
-// sessionId is optional. MAST triggers /newsletter/generate and this route
-// as two independently scheduled jobs (09:20 and 10:00) with no mechanism to
-// pass generate's timestamp-based sessionId into send's static request body,
-// so when sessionId is omitted this resolves "today's most recently built
+// sessionId is optional. The AIMS morning operation runs generate, readiness
+// and send sequentially, but it deliberately does not couple routes through an
+// in-memory session value. When sessionId is omitted this resolves today's most
+// recently built issue for the profile from durable storage, so restarts do not
+// break the delivery hand-off. This resolves "today's most recently built
 // issue" for the profile itself (see engine/storage.js#findLatestIssueSessionId).
 router.post("/send", hookdeckDedupe("newsletter:send"), asyncRoute(async (req, res) => {
   const parsed = validateBody(newsletterSendBodySchema, req.body);
