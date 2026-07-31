@@ -1,5 +1,6 @@
 import express from "express";
 import { getOperationalExcellenceSnapshot } from "../shared/utils/operationalExcellence.js";
+import { extractAsyncStatusUrl, waitForAsyncOperation } from "./asyncOperation.js";
 
 const router = express.Router();
 
@@ -103,7 +104,11 @@ function sendStage(stage) {
 const operationJobs = new Map();
 
 function operationDelayMs(windowName) {
-  const isPm = String(windowName || "").endsWith("-pm");
+  const name = String(windowName || "").trim().toLowerCase();
+  if (name === "friday-pm") {
+    return Math.max(0, Number(process.env.AIMS_OPERATION_FRIDAY_PM_DELAY_MS || 0));
+  }
+  const isPm = name.endsWith("-pm");
   const envName = isPm ? "AIMS_OPERATION_PM_DELAY_MS" : "AIMS_OPERATION_AM_DELAY_MS";
   const fallback = isPm ? 600_000 : 300_000;
   return Math.max(0, Number(process.env[envName] || fallback));
@@ -141,64 +146,78 @@ const OPERATION_WINDOWS = Object.freeze({
   "monday-am": [
     ["rss-rewrite", "/rss/rewrite", { batchSize: 5 }],
     ["outreach", "/outreach/batch/next", {}],
-    ["blog-social", "/blog/social/daily/build", {}],
-    ["zernio-blog-social", "/zernio/blog-rss/daily", {}],
-    ["weekly-blog", "/blog/weekly/build", {}],
+    ["blog-social", "/blog/social/daily/build", {}, null, false, "rss-rewrite"],
+    ["zernio-blog-social", "/zernio/blog-rss/daily", {}, null, false, "blog-social"],
+    ["weekly-blog", "/blog/weekly/build", {}, null, false, "rss-rewrite"],
     ["newsletter-generate", "/newsletter/generate", { profileId: "ai-edge" }, "newsletter"],
-    ["newsletter-readiness", "/newsletter/readiness", { profileId: "ai-edge" }, "newsletter"],
+    ["newsletter-readiness", "/newsletter/readiness", { profileId: "ai-edge" }, "newsletter", false, "newsletter-generate"],
     ["newsletter-send", "/newsletter/send", { profileId: "ai-edge" }, "newsletter", false, "newsletter-readiness"],
     ["zernio-monday", "/zernio/daily/monday", {}],
     ["zernio-ebooks", "/zernio/ebooks/weekly", { dryRun: false, profileName: "Default", accountId: "ALL", usePodcastFeaturedBook: true }, null, true],
     ["zernio-quiz", "/zernio/quiz/weekly", {}],
-    ["blotato-am", "/blotato/autoshorts/schedule", {}],
-    ["blotato-pm", "/blotato/shorts/news-insight/schedule", {}],
+    ["blotato-am", "/blotato/autoshorts/schedule", {}, null, false, "rss-rewrite"],
+    ["blotato-pm", "/blotato/shorts/news-insight/schedule", {}, null, false, "rss-rewrite"],
   ],
   "tuesday-am": [
     ["rss-rewrite", "/rss/rewrite", { batchSize: 5 }], ["outreach", "/outreach/batch/next", {}],
-    ["blog-social", "/blog/social/daily/build", {}], ["zernio-blog-social", "/zernio/blog-rss/daily", {}],
+    ["blog-social", "/blog/social/daily/build", {}, null, false, "rss-rewrite"], ["zernio-blog-social", "/zernio/blog-rss/daily", {}, null, false, "blog-social"],
     ["newsletter-generate", "/newsletter/generate", { profileId: "ai-edge" }, "newsletter"],
-    ["newsletter-readiness", "/newsletter/readiness", { profileId: "ai-edge" }, "newsletter"],
+    ["newsletter-readiness", "/newsletter/readiness", { profileId: "ai-edge" }, "newsletter", false, "newsletter-generate"],
     ["newsletter-send", "/newsletter/send", { profileId: "ai-edge" }, "newsletter", false, "newsletter-readiness"],
     ["zernio-tuesday", "/zernio/daily/tuesday", {}],
-    ["blotato-am", "/blotato/autoshorts/schedule", {}],
-    ["blotato-pm", "/blotato/shorts/model-verdict/schedule", {}],
+    ["blotato-am", "/blotato/autoshorts/schedule", {}, null, false, "rss-rewrite"],
+    ["blotato-pm", "/blotato/shorts/model-verdict/schedule", {}, null, false, "rss-rewrite"],
   ],
   "wednesday-am": [
     ["rss-rewrite", "/rss/rewrite", { batchSize: 5 }], ["outreach", "/outreach/batch/next", {}],
-    ["blog-social", "/blog/social/daily/build", {}], ["zernio-blog-social", "/zernio/blog-rss/daily", {}],
+    ["blog-social", "/blog/social/daily/build", {}, null, false, "rss-rewrite"], ["zernio-blog-social", "/zernio/blog-rss/daily", {}, null, false, "blog-social"],
     ["newsletter-generate", "/newsletter/generate", { profileId: "ai-edge" }, "newsletter"],
-    ["newsletter-readiness", "/newsletter/readiness", { profileId: "ai-edge" }, "newsletter"],
+    ["newsletter-readiness", "/newsletter/readiness", { profileId: "ai-edge" }, "newsletter", false, "newsletter-generate"],
     ["newsletter-send", "/newsletter/send", { profileId: "ai-edge" }, "newsletter", false, "newsletter-readiness"],
     ["zernio-wednesday", "/zernio/daily/wednesday", {}],
-    ["blotato-am", "/blotato/autoshorts/schedule", {}],
-    ["blotato-pm", "/blotato/shorts/ai-at-work/schedule", {}],
+    ["blotato-am", "/blotato/autoshorts/schedule", {}, null, false, "rss-rewrite"],
+    ["blotato-pm", "/blotato/shorts/ai-at-work/schedule", {}, null, false, "rss-rewrite"],
   ],
   "thursday-am": [
     ["rss-rewrite", "/rss/rewrite", { batchSize: 5 }], ["outreach", "/outreach/batch/next", {}],
-    ["blog-social", "/blog/social/daily/build", {}], ["zernio-blog-social", "/zernio/blog-rss/daily", {}],
+    ["blog-social", "/blog/social/daily/build", {}, null, false, "rss-rewrite"], ["zernio-blog-social", "/zernio/blog-rss/daily", {}, null, false, "blog-social"],
     ["newsletter-generate", "/newsletter/generate", { profileId: "ai-edge" }, "newsletter"],
-    ["newsletter-readiness", "/newsletter/readiness", { profileId: "ai-edge" }, "newsletter"],
+    ["newsletter-readiness", "/newsletter/readiness", { profileId: "ai-edge" }, "newsletter", false, "newsletter-generate"],
     ["newsletter-send", "/newsletter/send", { profileId: "ai-edge" }, "newsletter", false, "newsletter-readiness"],
     ["zernio-thursday", "/zernio/daily/thursday", {}],
-    ["blotato-am", "/blotato/autoshorts/schedule", {}],
-    ["blotato-pm", "/blotato/shorts/reality-check/schedule", {}],
+    ["blotato-am", "/blotato/autoshorts/schedule", {}, null, false, "rss-rewrite"],
+    ["blotato-pm", "/blotato/shorts/reality-check/schedule", {}, null, false, "rss-rewrite"],
   ],
   "friday-am": [
     ["rss-rewrite", "/rss/rewrite", { batchSize: 5 }], ["outreach", "/outreach/batch/next", {}],
-    ["blog-social", "/blog/social/daily/build", {}], ["zernio-blog-social", "/zernio/blog-rss/daily", {}],
+    ["blog-social", "/blog/social/daily/build", {}, null, false, "rss-rewrite"], ["zernio-blog-social", "/zernio/blog-rss/daily", {}, null, false, "blog-social"],
     ["newsletter-generate", "/newsletter/generate", { profileId: "ai-edge" }, "newsletter"],
-    ["newsletter-readiness", "/newsletter/readiness", { profileId: "ai-edge" }, "newsletter"],
+    ["newsletter-readiness", "/newsletter/readiness", { profileId: "ai-edge" }, "newsletter", false, "newsletter-generate"],
     ["newsletter-send", "/newsletter/send", { profileId: "ai-edge" }, "newsletter", false, "newsletter-readiness"],
     ["zernio-friday", "/zernio/daily/friday", {}],
     ["zernio-saturday", "/zernio/daily/saturday", {}],
     ["zernio-sunday", "/zernio/daily/sunday", {}],
-    ["blotato-am", "/blotato/autoshorts/schedule", {}],
-    ["blotato-pm", "/blotato/shorts/ai-playbook/schedule", {}],
+    ["blotato-am", "/blotato/autoshorts/schedule", {}, null, false, "rss-rewrite"],
+    ["blotato-pm", "/blotato/shorts/ai-playbook/schedule", {}, null, false, "rss-rewrite"],
   ],
-  "friday-pm": [["podcast", "/podcast/run", {}]],
+  "friday-pm": [
+    ["podcast-readiness", "/podcast/readiness", {}],
+    ["podcast", "/podcast/run", {}, null, false, "podcast-readiness"],
+  ],
 });
 
 function assertContentOperationWindows() {
+  for (const [windowName, tasks] of Object.entries(OPERATION_WINDOWS)) {
+    const names = tasks.map((task) => task[0]);
+    const paths = tasks.map((task) => task[1]);
+    if (new Set(names).size !== names.length) {
+      throw new Error(`${windowName} contains duplicate task names`);
+    }
+    if (new Set(paths).size !== paths.length) {
+      throw new Error(`${windowName} contains duplicate task paths`);
+    }
+  }
+
   const weekdayWindows = ["monday-am", "tuesday-am", "wednesday-am", "thursday-am", "friday-am"];
   for (const windowName of weekdayWindows) {
     const tasks = OPERATION_WINDOWS[windowName] || [];
@@ -208,12 +227,27 @@ function assertContentOperationWindows() {
     if (blogBuildIndex < 0 || zernioBlogIndex !== blogBuildIndex + 1) {
       throw new Error(`${windowName} must run /zernio/blog-rss/daily immediately after /blog/social/daily/build`);
     }
+    if (tasks[blogBuildIndex]?.[5] !== "rss-rewrite") {
+      throw new Error(`${windowName} blog-social build must depend on rss-rewrite`);
+    }
+    if (tasks[zernioBlogIndex]?.[5] !== "blog-social") {
+      throw new Error(`${windowName} Zernio blog handoff must depend on blog-social`);
+    }
+
+    for (const [name, _path, _body, _feature, _weekStart, dependsOn] of tasks.filter((task) => task[0] === "blotato-am" || task[0] === "blotato-pm")) {
+      if (dependsOn !== "rss-rewrite") {
+        throw new Error(`${windowName} ${name} must depend on rss-rewrite`);
+      }
+    }
 
     const newsletterGenerateIndex = paths.indexOf("/newsletter/generate");
     const newsletterReadinessIndex = paths.indexOf("/newsletter/readiness");
     const newsletterSendIndex = paths.indexOf("/newsletter/send");
     if (newsletterGenerateIndex < 0 || newsletterReadinessIndex !== newsletterGenerateIndex + 1 || newsletterSendIndex !== newsletterReadinessIndex + 1) {
       throw new Error(`${windowName} must run newsletter generate -> readiness -> send in order`);
+    }
+    if (tasks[newsletterReadinessIndex]?.[5] !== "newsletter-generate") {
+      throw new Error(`${windowName} newsletter readiness must depend on newsletter-generate`);
     }
     if (tasks[newsletterSendIndex]?.[5] !== "newsletter-readiness") {
       throw new Error(`${windowName} newsletter send must depend on newsletter-readiness`);
@@ -224,6 +258,13 @@ function assertContentOperationWindows() {
   for (const required of ["/zernio/daily/monday", "/zernio/ebooks/weekly", "/zernio/quiz/weekly"]) {
     if (!mondayPaths.includes(required)) throw new Error(`monday-am missing required content task ${required}`);
   }
+  if (mondayPaths.includes("/zernio/mini-series/weekly")) {
+    throw new Error("monday-am must not duplicate the mini-series already owned by the Monday Zernio lane");
+  }
+  const mondayWeeklyBlog = OPERATION_WINDOWS["monday-am"].find((task) => task[0] === "weekly-blog");
+  if (mondayWeeklyBlog?.[5] !== "rss-rewrite") {
+    throw new Error("monday-am weekly blog must depend on rss-rewrite");
+  }
 
   const thursdayPaths = OPERATION_WINDOWS["thursday-am"].map((task) => task[1]);
   if (!thursdayPaths.includes("/zernio/daily/thursday")) throw new Error("thursday-am missing Zernio Thursday lane/podcast promo trigger");
@@ -233,9 +274,13 @@ function assertContentOperationWindows() {
     if (!fridayAmPaths.includes(required)) throw new Error(`friday-am missing required scheduled-content task ${required}`);
   }
 
-  const fridayPmPaths = OPERATION_WINDOWS["friday-pm"].map((task) => task[1]);
-  if (fridayPmPaths.length !== 1 || fridayPmPaths[0] !== "/podcast/run") {
-    throw new Error("friday-pm must contain only /podcast/run");
+  const fridayPmTasks = OPERATION_WINDOWS["friday-pm"];
+  const fridayPmPaths = fridayPmTasks.map((task) => task[1]);
+  if (fridayPmPaths.length !== 2 || fridayPmPaths[0] !== "/podcast/readiness" || fridayPmPaths[1] !== "/podcast/run") {
+    throw new Error("friday-pm must contain only podcast readiness followed by /podcast/run");
+  }
+  if (fridayPmTasks[1]?.[5] !== "podcast-readiness") {
+    throw new Error("friday-pm podcast run must depend on podcast-readiness");
   }
 }
 
@@ -263,6 +308,7 @@ async function runInternalTask([name, path, body = {}, feature = null, addWeekSt
   if (addWeekStartDate) payload.weekStartDate = localWeekStartDate();
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), Math.max(30_000, Number(process.env.AIMS_OPERATION_TASK_TIMEOUT_MS || 900_000)));
+  timeout.unref?.();
   try {
     const response = await fetch(`${base.replace(/\/+$/, "")}${path}`, {
       method: "POST",
@@ -271,11 +317,65 @@ async function runInternalTask([name, path, body = {}, feature = null, addWeekSt
       signal: controller.signal,
     });
     const text = await response.text();
+    clearTimeout(timeout);
     let result = null;
     try { result = text ? JSON.parse(text) : null; } catch { result = text.slice(0, 1000); }
-    return { name, path, ok: response.ok, status: response.status, result };
+
+    if (response.ok && response.status === 202) {
+      const statusUrl = extractAsyncStatusUrl(result);
+      if (!statusUrl) {
+        return {
+          name,
+          path,
+          ok: false,
+          status: 502,
+          acceptedStatus: response.status,
+          result,
+          error: "async-operation-status-url-missing",
+        };
+      }
+
+      const asyncJob = await waitForAsyncOperation({
+        baseUrl: base,
+        statusUrl,
+        token,
+        pollIntervalMs: Math.max(1_000, Number(process.env.AIMS_OPERATION_ASYNC_POLL_INTERVAL_MS || 15_000)),
+        timeoutMs: Math.max(60_000, Number(process.env.AIMS_OPERATION_ASYNC_JOB_TIMEOUT_MS || 21_600_000)),
+        requestTimeoutMs: Math.max(5_000, Number(process.env.AIMS_OPERATION_ASYNC_REQUEST_TIMEOUT_MS || 60_000)),
+      });
+
+      return {
+        name,
+        path,
+        ok: asyncJob.ok,
+        status: asyncJob.ok ? 200 : 500,
+        acceptedStatus: response.status,
+        result,
+        asyncStatus: asyncJob.status,
+        asyncPolls: asyncJob.polls,
+        asyncJob: asyncJob.payload,
+      };
+    }
+
+    const resultFailed = Boolean(
+      result
+      && typeof result === "object"
+      && (
+        result.ok === false
+        || result.failed === true
+        || result.partialFailure === true
+        || result.quarantined === true
+      )
+    );
+    return { name, path, ok: response.ok && !resultFailed, status: response.status, result };
   } catch (error) {
-    return { name, path, ok: false, error: error?.name === "AbortError" ? "operation-task-timeout" : (error?.message || String(error)) };
+    return {
+      name,
+      path,
+      ok: false,
+      error: error?.name === "AbortError" ? "operation-task-timeout" : (error?.message || String(error)),
+      errorCode: error?.code || null,
+    };
   } finally {
     clearTimeout(timeout);
   }

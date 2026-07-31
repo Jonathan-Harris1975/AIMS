@@ -16,7 +16,7 @@ Owns AIMS weekday morning task sequences, the Friday podcast window and operatio
 
 ## Behaviour
 
-Morning task spacing uses `AIMS_OPERATION_AM_DELAY_MS`; the Friday podcast window uses `AIMS_OPERATION_PM_DELAY_MS`. Task execution uses `AIMS_OPERATION_TASK_TIMEOUT_MS`. `AIMS_OPS_PREFLIGHT_STRICT` controls whether missing readiness inputs become hard failures. Friday AM prepares both Blotato schedule slots and Saturday/Sunday Zernio content. Friday PM runs only the podcast pipeline.
+Morning task spacing uses `AIMS_OPERATION_AM_DELAY_MS`. The Friday podcast readiness check flows immediately into the pipeline through `AIMS_OPERATION_FRIDAY_PM_DELAY_MS=0`; the legacy general PM delay remains available for any future multi-service PM window. Task execution uses `AIMS_OPERATION_TASK_TIMEOUT_MS`. `AIMS_OPS_PREFLIGHT_STRICT` controls whether missing readiness inputs become hard failures. Friday AM prepares both Blotato schedule slots and Saturday/Sunday Zernio content. Friday PM runs only the podcast pipeline.
 
 ## Implementation
 
@@ -30,3 +30,5 @@ The service entry point, route modules and domain utilities are contained in thi
 - Retries are for transient failures only; validation, policy and source-integrity failures fail closed.
 - Generated public content must pass its content-quality gates before publication or delivery.
 - Durable artefacts and job state use the configured R2/state utilities rather than process memory where a durable store is required.
+
+Accepted async jobs are not treated as finished. The operations service polls each returned `statusUrl` until the child job reaches a terminal state. This applies to the two daily Blotato renders and the Friday podcast pipeline, ensuring MAST pauses AIMS only after actual completion. The Monday Zernio daily lane owns the weekly mini-series exactly once; it is not duplicated as a separate operation task.
