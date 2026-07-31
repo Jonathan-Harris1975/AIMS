@@ -24,7 +24,7 @@ export default function chunkText(text, maxChars = Number(process.env.MAX_POLLY_
 
   const chunks = [];
   const getCharLength = (str) => str.length;
-  
+
   // Normalize text: standardize line breaks, remove excessive whitespace
   const normalized = text
     .replace(/\r\n/g, "\n")
@@ -33,7 +33,7 @@ export default function chunkText(text, maxChars = Number(process.env.MAX_POLLY_
 
   // Handle text smaller than max size
   if (getCharLength(normalized) <= maxChars) {
-    info("✓ Text fits in single chunk", { 
+    info("✓ Text fits in single chunk", {
       characters: getCharLength(normalized),
       limit: maxChars
     });
@@ -56,7 +56,7 @@ export default function chunkText(text, maxChars = Number(process.env.MAX_POLLY_
     if (!block) continue;
 
     const blockSize = getCharLength(block);
-    
+
     // Handle oversized blocks (longer than maxChars)
     if (blockSize > maxChars) {
       // Flush current chunk if exists
@@ -68,10 +68,10 @@ export default function chunkText(text, maxChars = Number(process.env.MAX_POLLY_
 
       // Subdivide oversized block by sentences
       const sentences = splitIntoSentences(block);
-      
+
       for (const sentence of sentences) {
         const sentenceSize = getCharLength(sentence);
-        
+
         // Emergency: if single sentence exceeds limit, split by words
         if (sentenceSize > maxChars) {
           debug(`⚠️  Found very long sentence (${sentenceSize} chars) - splitting by words`);
@@ -84,7 +84,7 @@ export default function chunkText(text, maxChars = Number(process.env.MAX_POLLY_
         }
 
         // Try to add sentence to current chunk
-        const testChunk = currentChunk 
+        const testChunk = currentChunk
           ? `${currentChunk} ${sentence}`
           : sentence;
 
@@ -103,10 +103,10 @@ export default function chunkText(text, maxChars = Number(process.env.MAX_POLLY_
 
     // Normal block processing
     const separator = hasParagraphs ? "\n\n" : " ";
-    const testChunk = currentChunk 
+    const testChunk = currentChunk
       ? `${currentChunk}${separator}${block}`
       : block;
-    
+
     const testSize = getCharLength(testChunk);
 
     if (testSize > maxChars) {
@@ -142,19 +142,19 @@ export default function chunkText(text, maxChars = Number(process.env.MAX_POLLY_
 
   // Enhanced human-friendly logging
   debug(`\n📊 Created ${validatedChunks.length} chunk${validatedChunks.length > 1 ? 's' : ''} for TTS processing:\n`);
-  
+
   validatedChunks.forEach((chunk, idx) => {
     const chars = getCharLength(chunk);
     const percentage = ((chars / maxChars) * 100).toFixed(0);
-    const preview = chunk.length > 50 
-      ? `${chunk.slice(0, 50)}...` 
+    const preview = chunk.length > 50
+      ? `${chunk.slice(0, 50)}...`
       : chunk;
-    
+
     // Visual bar representation
     const barLength = 20;
     const filledBars = Math.round((chars / maxChars) * barLength);
     const bar = '█'.repeat(filledBars) + '░'.repeat(barLength - filledBars);
-    
+
     debug(`  Chunk ${idx + 1}/${validatedChunks.length}: ${chars} chars [${bar}] ${percentage}% full`);
     debug(`    "${preview}"`);
   });
@@ -172,11 +172,11 @@ function splitIntoSentences(text) {
   // Enhanced regex: captures sentences ending with .!? followed by space or end
   // Handles common abbreviations (Mr., Dr., etc.)
   const sentences = [];
-  
+
   // Pattern: sentence-ending punctuation followed by whitespace or EOL
   // Negative lookbehind for common abbreviations
   const regex = /(?<!\b(?:Mr|Mrs|Ms|Dr|Prof|Sr|Jr|vs|etc|Inc|Ltd|Co|approx)\.)([.!?]+)(?=\s+[A-Z]|\s*$)/g;
-  
+
   let lastIndex = 0;
   let match;
 
@@ -206,7 +206,7 @@ function splitByWords(text, maxChars, getCharLength) {
 
   for (const word of words) {
     const test = current ? `${current} ${word}` : word;
-    
+
     if (getCharLength(test) > maxChars) {
       if (current) {
         chunks.push(current);
