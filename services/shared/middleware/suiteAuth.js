@@ -110,7 +110,11 @@ export function isPublicBlotatoPublishPath(req) {
 export function isPublicCommsHubIntakePath(req) {
   const method = String(req.method || "").toUpperCase();
   const path = pathWithoutQuery(req).replace(/\/+$/, "").toLowerCase();
-  return method === "POST" && path === "/comms-hub/intake/jotform";
+  return method === "POST" && [
+    "/comms-hub/intake/jotform",
+    "/comms-hub/intake/zernio/meta",
+    "/comms-hub/intake/zernio/video",
+  ].includes(path);
 }
 
 export function isCloudflarePurgePath(req) {
@@ -207,7 +211,12 @@ export function requireAimsBearerAuth(req, res, next) {
   if (isPublicHealthRequest(req)) return next();
 
   if (isPublicCommsHubIntakePath(req)) {
-    req.aimsAuth = { strategy: "jotform-api-reverification" };
+    const path = pathWithoutQuery(req).replace(/\/+$/, "").toLowerCase();
+    req.aimsAuth = {
+      strategy: path === "/comms-hub/intake/jotform"
+        ? "jotform-api-reverification"
+        : "zernio-hmac-sha256",
+    };
     return next();
   }
 
