@@ -5,8 +5,17 @@ import { hookdeckDedupe } from "../shared/utils/hookdeckDedupe.js";
 import { getPublicJob, beginJob, completeJob, failJob } from "../shared/utils/jobStore.js";
 import { validateBody, podcastRunBodySchema } from "../shared/utils/requestSchemas.js";
 import { info, error } from "../../logger.js";
+import { getPodcastReadiness } from "./readiness.js";
 
 const router = express.Router();
+
+function sendReadiness(_req, res) {
+  const report = getPodcastReadiness();
+  return res.status(report.ready ? 200 : 503).json({ ok: report.ready, ...report });
+}
+
+router.get("/readiness", sendReadiness);
+router.post("/readiness", sendReadiness);
 
 function sendRouteError(req, res, err, fallbackMessage = "Internal error") {
   const statusCode = Number(err?.statusCode) || 500;
@@ -21,6 +30,15 @@ router.post("/run", hookdeckDedupe("podcast:run"), async (req, res) => {
     const parsed = validateBody(podcastRunBodySchema, body);
     if (!parsed.ok) {
       return res.status(400).json({ ok: false, error: parsed.error });
+    }
+
+    const readiness = getPodcastReadiness();
+    if (!readiness.ready) {
+      return res.status(503).json({
+        ok: false,
+        error: "Podcast dependencies are not ready",
+        readiness,
+      });
     }
 
     const payload = parsed.data;

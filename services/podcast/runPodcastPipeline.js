@@ -7,6 +7,7 @@ import cleanupSession from "../shared/utils/cleanupSession.js";
 import finalCleanupSession from "../shared/utils/cleanupSessionFinal.js";
 import cleanupTempMemory from "../shared/utils/cleanupTempMemory.js";
 import { fetchWithTimeout } from "../shared/http-client.js";
+import { buildPodcastCompletionStatus } from "./completionStatus.js";
 
 const WEBHOOK_TIMEOUT_MS = Number(process.env.WEBHOOK_TIMEOUT_MS) || 15_000;
 
@@ -25,6 +26,8 @@ function normalisePipelineInput(input, maybeOptions = {}) {
     ...(maybeOptions || {}),
   };
 }
+
+
 
 async function triggerWebsiteRebuild(log, sessionId) {
   const primaryHook = String(process.env.WEBSITE_REBUILD_HOOK || "https://hooks.jonathan-harris.online/4q1mkzkfvb566f").trim();
@@ -127,22 +130,27 @@ export async function runPodcastPipeline(input = {}, maybeOptions = {}) {
     log.info("🗣️ TTS pipeline complete", { sessionId });
 
     log.info("📡 Updating RSS feed…");
+    let rss;
     try {
-      await runRssFeedCreator();
+      const result = await runRssFeedCreator();
+      rss = { ok: result?.ok !== false, result: result ?? null };
       log.info("📡 RSS feed updated successfully");
     } catch (rssErr) {
+      rss = { ok: false, error: rssErr?.message || String(rssErr) };
       log.error("❌ RSS feed update failed", {
         sessionId,
-        error: rssErr?.message,
+        error: rss.error,
       });
     }
 
+    const maintenanceWarnings = [];
     try {
       log.info("🧹 Cleaning R2 artefacts…");
       await cleanupSession(sessionId);
       await finalCleanupSession(sessionId);
       log.info("🧹 R2 cleanup complete");
     } catch (cleanupErr) {
+      maintenanceWarnings.push({ stage: "r2-cleanup", error: cleanupErr?.message || String(cleanupErr) });
       log.error("⚠️ R2 cleanup failed", {
         sessionId,
         error: cleanupErr?.message,
@@ -154,6 +162,7 @@ export async function runPodcastPipeline(input = {}, maybeOptions = {}) {
       await cleanupTempMemory(sessionId);
       log.info("🧽 Temporary memory cleared");
     } catch (memErr) {
+      maintenanceWarnings.push({ stage: "temporary-memory-cleanup", error: memErr?.message || String(memErr) });
       log.warn("⚠️ Memory cleanup failed", {
         sessionId,
         error: memErr?.message,
@@ -169,15 +178,23 @@ export async function runPodcastPipeline(input = {}, maybeOptions = {}) {
       });
     }
 
+    const completion = buildPodcastCompletionStatus({ rss, rebuild });
     const summary = {
+      ...completion,
       sessionId,
       script,
       artwork,
       tts,
+      rss,
       rebuild,
+      maintenanceWarnings,
     };
 
-    log.info("🏁 Podcast pipeline complete", { sessionId });
+    if (summary.partialFailure) {
+      log.error("Podcast production completed with publication failures", { sessionId, issues: summary.issues });
+    } else {
+      log.info("🏁 Podcast pipeline complete", { sessionId });
+    }
     return summary;
   } catch (err) {
     log.error("💥 Podcast pipeline failed", {

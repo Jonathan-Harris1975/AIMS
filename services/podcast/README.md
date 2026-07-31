@@ -6,13 +6,14 @@ Runs the end-to-end Turing's Torch: AI Weekly production workflow. It coordinate
 
 ## HTTP contract
 
+- `GET|POST /podcast/readiness` — verify the full Friday production contract without starting work.
 - `POST /podcast/run` — start a full episode pipeline.
 - `GET /podcast/status/:sessionId` — inspect pipeline state.
 - `GET /podcast/health` — readiness/health.
 
 ## Behaviour
 
-The pipeline is intentionally the longest weekly operation and runs in the Friday PM sequence after Blotato. Script and transcript content use the shared Jonathan Harris voice plus podcast-specific editorial/retention checks. TTS uses AWS Polly and FFmpeg processing. Output uses the configured podcast, transcript, metadata, artwork and RSS R2 buckets. Key controls include `PODCAST_*`, `POLLY_*`, `AWS_REGION`, FFmpeg timeout settings and OpenRouter editorial/repair/synthesis model settings.
+The pipeline is intentionally the longest weekly operation and runs in the dedicated Friday PM sequence after a side-effect-free readiness check. Blotato posts are prepared during the morning window, so the podcast window contains no unrelated service. Script and transcript content use the shared Jonathan Harris voice plus podcast-specific editorial/retention checks. TTS uses AWS Polly and FFmpeg processing. Output uses the configured podcast, transcript, metadata, artwork and RSS R2 buckets. Key controls include `PODCAST_*`, `POLLY_*`, `AWS_REGION`, FFmpeg timeout settings and OpenRouter editorial/repair/synthesis model settings.
 
 ## Implementation
 
@@ -26,3 +27,5 @@ The service entry point, route modules and domain utilities are contained in thi
 - Retries are for transient failures only; validation, policy and source-integrity failures fail closed.
 - Generated public content must pass its content-quality gates before publication or delivery.
 - Durable artefacts and job state use the configured R2/state utilities rather than process memory where a durable store is required.
+
+The Friday operation window calls readiness first and blocks `/podcast/run` unless the required OpenRouter model, AWS Polly credentials, R2 storage lanes, intro/outro assets, target duration and FFmpeg/FFprobe are available. The operation then polls the podcast status route until the pipeline is terminal.
