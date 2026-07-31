@@ -13,6 +13,7 @@ import { fetchWithTimeout } from "../../shared/http-client.js";
 import { getArtworkProviders } from "./openrouterProviders.js";
 import { applyArtworkPromptPolicy } from "./artworkPromptPolicy.js";
 import { THRESHOLDS } from "../../../config/thresholds.js";
+import { auditArtworkBase64 } from "./artworkVisualQa.js";
 import {
   artworkRetryDelayMs,
   buildArtworkChatPayload,
@@ -47,6 +48,26 @@ if (providers.length === 0) {
 
 export function buildInstruction(prompt, mode = "podcast", date) {
   const policyPrompt = applyArtworkPromptPolicy(prompt, { date, mode });
+
+  if (mode === "newsletter") {
+    return [
+      "Create a wide premium editorial news image for the AI Edge newsletter.",
+      "Composition: one concrete AI-news scene with a decisive focal subject and cinematic depth. This is an illustration, not a banner design or magazine-cover mock-up.",
+      "Style: intelligent, current, grounded, high-contrast editorial realism. No travel, landscape, lifestyle or inspirational-journey imagery.",
+      `Creative direction: ${policyPrompt}`,
+      "Final compliance check: remove all text, pseudo-text, title panels, buttons, interface labels, logos and watermarks before returning the image.",
+    ].join(" ");
+  }
+
+  if (mode === "social-blog") {
+    return [
+      "Create a premium wide editorial image for a social-distributed AI blog post.",
+      "Composition: one source-specific real-world consequence, decision or technical action with a strong phone-feed focal subject. It must visually match the selected source story, not generic AI news.",
+      "Style: cinematic editorial realism, high contrast, bold controlled colour and immediate visual tension. No infographic, dashboard, diagram, travel scene, generic office or decorative data-centre glamour.",
+      `Creative direction: ${policyPrompt}`,
+      "Final compliance check: no visible text, pseudo-text, callout boxes, labels, logos, interface chrome or watermarks.",
+    ].join(" ");
+  }
 
   if (mode === "blog") {
     return [
@@ -98,6 +119,14 @@ export function buildShortInstruction(prompt, mode = "podcast", date) {
   const policyPrompt = applyArtworkPromptPolicy(prompt, { date, mode });
   const trimmedDirection = String(policyPrompt || "").split(/\s+/).slice(0, 24).join(" ");
 
+  if (mode === "newsletter") {
+    return `AI-news editorial illustration, one concrete technical or human-scale focal scene, no banner layout, no travel or scenery. ${trimmedDirection} No text, pseudo-text, letters, numbers, logos, panels or watermarks.`;
+  }
+
+  if (mode === "social-blog") {
+    return `Source-specific AI social-blog editorial image, wide composition, one concrete consequence or technical action, cinematic and high contrast. ${trimmedDirection} No infographic, travel, generic office, text, pseudo-text, labels, logos or watermarks.`;
+  }
+
   if (mode === "blog") {
     return `Editorial blog hero image, cinematic landscape banner, premium and restrained. ${trimmedDirection} No text, letters, numbers, logos or watermarks.`;
   }
@@ -117,6 +146,32 @@ export function buildShortInstruction(prompt, mode = "podcast", date) {
 
 async function sleep(ms) {
   await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function parseBoolean(value, fallback = false) {
+  if (value === undefined || value === null || value === "") return fallback;
+  return ["1", "true", "yes", "on", "y"].includes(String(value).trim().toLowerCase());
+}
+
+function visualQaModes() {
+  return new Set(String(process.env.ARTWORK_VISUAL_QA_MODES || "newsletter,social,social-blog")
+    .split(",")
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean));
+}
+
+function shouldAuditArtwork(mode) {
+  return parseBoolean(process.env.ARTWORK_VISUAL_QA_ENABLED, true) && visualQaModes().has(String(mode || "").toLowerCase());
+}
+
+function buildQaRepairPrompt(prompt, qa = {}) {
+  const defects = [...(qa.hardDefects || []), ...(qa.defects || [])].filter(Boolean).slice(0, 8);
+  return [
+    prompt,
+    "REGENERATION REQUIRED AFTER PIXEL-LEVEL QA.",
+    `Previous defects: ${defects.join(" | ") || qa.summary || "image failed visual QA"}.`,
+    "Create a materially different composition that fixes every listed defect. Do not preserve the failed layout.",
+  ].join(" ");
 }
 
 async function requestArtworkFromProvider(provider, prompt, mode, date, { useShortInstruction = false } = {}) {
@@ -153,11 +208,72 @@ async function requestArtworkFromProvider(provider, prompt, mode, date, { useSho
       }
 
       const json = await res.json();
-      const image = extractBase64Image(json);
+      let image = extractBase64Image(json);
       if (!image) {
         const err = new Error(`No image data found in OpenRouter response from ${provider.modelEnv}.`);
         err.responseSnippet = safeSnippet(JSON.stringify(json || {}), 500);
         throw err;
+      }
+
+      if (shouldAuditArtwork(mode)) {
+        const qaRequired = parseBoolean(process.env.ARTWORK_VISUAL_QA_REQUIRED, true);
+        const maxRegenerations = Math.max(0, Math.min(2, Number(process.env.ARTWORK_VISUAL_QA_MAX_REGENERATIONS || 1)));
+        let qa;
+        let qaPrompt = prompt;
+        for (let qaAttempt = 0; qaAttempt <= maxRegenerations; qaAttempt += 1) {
+          try {
+            qa = await auditArtworkBase64({
+              base64: image,
+              mode,
+              creativePrompt: qaPrompt,
+              sessionId: `artwork-${mode}-${Date.now()}-${qaAttempt}`,
+            });
+          } catch (qaError) {
+            if (!qaRequired) {
+              warn("artwork.visual_qa.unavailable", { mode, provider: provider.id, error: qaError?.message || String(qaError) });
+              return image;
+            }
+            throw qaError;
+          }
+
+          info("artwork.visual_qa.result", {
+            mode,
+            provider: provider.id,
+            score: qa.score,
+            pass: qa.pass,
+            relevance: qa.relevance,
+            textSafety: qa.textSafety,
+            hardDefects: qa.hardDefects,
+          });
+          if (qa.pass) return image;
+          if (qaAttempt >= maxRegenerations) {
+            const err = new Error(`Generated ${mode} artwork failed visual QA (${qa.score}/${qa.threshold}): ${[...(qa.hardDefects || []), ...(qa.defects || [])].join(" | ") || qa.summary}`);
+            err.statusCode = 422;
+            err.artworkVisualQa = qa;
+            throw err;
+          }
+
+          qaPrompt = buildQaRepairPrompt(prompt, qa);
+          const retryPayload = buildArtworkChatPayload({
+            model: provider.model,
+            instruction: buildInstruction(qaPrompt, mode, date),
+            maxTokens: ARTWORK_MAX_TOKENS,
+            mode,
+          });
+          const retryResponse = await fetchWithTimeout(`${OPENROUTER_BASE_URL.replace(/\/+$/, "")}/chat/completions`, {
+            method: "POST",
+            headers,
+            body: JSON.stringify(retryPayload),
+            timeout: ARTWORK_REQUEST_TIMEOUT_MS,
+          });
+          if (!retryResponse.ok) {
+            const msg = await retryResponse.text().catch(() => "");
+            throw makeArtworkHttpError(retryResponse.status, msg, provider);
+          }
+          const retryJson = await retryResponse.json();
+          image = extractBase64Image(retryJson);
+          if (!image) throw new Error(`No image data found in QA regeneration response from ${provider.modelEnv}.`);
+        }
       }
 
       return image;
@@ -253,6 +369,14 @@ export async function generatePodcastArtwork(prompt, options = {}) {
 
 export async function generateBlogArtwork(prompt, options = {}) {
   return generateArtworkBase64(prompt, { ...options, mode: "blog" });
+}
+
+export async function generateNewsletterArtwork(prompt, options = {}) {
+  return generateArtworkBase64(prompt, { ...options, mode: "newsletter" });
+}
+
+export async function generateSocialBlogArtwork(prompt, options = {}) {
+  return generateArtworkBase64(prompt, { ...options, mode: "social-blog" });
 }
 
 export async function generateSocialArtwork(prompt, options = {}) {

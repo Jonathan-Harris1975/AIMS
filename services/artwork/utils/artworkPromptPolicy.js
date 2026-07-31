@@ -80,6 +80,16 @@ export function applyArtworkPromptPolicy(prompt = "", { date, mode = "editorial"
         "Abstract geometry may only be a minor supporting texture, never the main subject.",
       ].join(" ")
     : "";
+  const newsletterRule = mode === "newsletter"
+    ? [
+        "NEWSLETTER EDITORIAL REQUIREMENT: create a specific visual response to the lead AI story, not a generic masthead, banner, scenic backdrop or lifestyle photograph.",
+        "The subject must visibly belong to AI, software, robotics, security, governance, infrastructure or the lead story's real-world domain.",
+        "Prefer a concrete technical object, consequential workplace moment or human-scale news scene with clear editorial tension.",
+        "Never use beaches, oceans, coastlines, mountains, roads, paths, horizons, sunsets, tourism, resorts, anonymous lone travellers or inspirational journey imagery.",
+        "Never imitate a magazine cover or website template. Do not create empty title panels, hero-copy space, buttons, interface chrome or decorative layout boxes.",
+      ].join(" ")
+    : "";
+
   const socialRule = mode === "social"
     ? [
         "SOCIAL EDITORIAL REQUIREMENT: make the image immediately engaging and clearly related to the supplied post topic.",
@@ -107,6 +117,7 @@ export function applyArtworkPromptPolicy(prompt = "", { date, mode = "editorial"
     cleanPrompt,
     `Artwork mode: ${mode}.`,
     topicalPodcastRule,
+    newsletterRule,
     socialRule,
     quizRule,
     getSeasonalPaletteDirection(date),
