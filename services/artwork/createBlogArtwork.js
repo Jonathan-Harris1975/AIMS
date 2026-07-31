@@ -1,7 +1,7 @@
 // services/artwork/createBlogArtwork.js
 import { info, error, debug } from "../../logger.js";
 import { uploadBuffer } from "../shared/utils/r2-client.js";
-import { generateBlogArtwork } from "./utils/artwork.js";
+import { generateBlogArtwork, generateNewsletterArtwork, generateSocialBlogArtwork } from "./utils/artwork.js";
 
 const DEFAULT_BLOG_IMAGES_BUCKET_KEY = "blogImages";
 const BLOG_BUCKET_KEY = "blog";
@@ -63,6 +63,8 @@ export async function createBlogArtwork(input) {
   const prompt = typeof input === "object" ? input?.prompt : undefined;
   const artworkDate = typeof input === "object" ? (input?.date || input?.week) : undefined;
   const keyPrefix = typeof input === "object" ? normaliseKeyPrefix(input?.keyPrefix) : "";
+  const requestedMode = typeof input === "object" ? String(input?.mode || "blog") : "blog";
+  const artworkMode = ["newsletter", "social-blog"].includes(requestedMode) ? requestedMode : "blog";
   const { bucketKey, reason: bucketReason } = resolveBlogArtworkBucketKey();
 
   const log = (stage, meta) => info(`artwork.blog.${stage}`, {
@@ -74,12 +76,12 @@ export async function createBlogArtwork(input) {
   });
 
   try {
-    debug("artwork.blog.start", { sessionId, keyPrefix: keyPrefix || undefined, bucketKey, bucketReason });
+    debug("artwork.blog.start", { sessionId, keyPrefix: keyPrefix || undefined, bucketKey, bucketReason, artworkMode });
 
     const theme = prompt || `Blog header artwork for AI Weekly ${sessionId}`;
 
     const base64Data = await withTimeout(
-      generateBlogArtwork(theme, { date: artworkDate }),
+      (artworkMode === "newsletter" ? generateNewsletterArtwork : artworkMode === "social-blog" ? generateSocialBlogArtwork : generateBlogArtwork)(theme, { date: artworkDate }),
       ARTWORK_TIMEOUT_MS,
       "Blog artwork generation"
     );
