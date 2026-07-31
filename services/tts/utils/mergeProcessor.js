@@ -270,7 +270,7 @@ function scheduleCleanup(finalPath, sessionId, delayMs = 120000) {
       // Clean up any intermediate batch files
       const files = fs.readdirSync(TMP_DIR);
       const sessionFiles = files.filter(file => file.startsWith(sessionId));
-      
+
       sessionFiles.forEach(file => {
         const filePath = path.join(TMP_DIR, file);
         try {
@@ -281,14 +281,14 @@ function scheduleCleanup(finalPath, sessionId, delayMs = 120000) {
         }
       });
 
-      info("🧹 Memory cleanup completed", { 
-        sessionId, 
+      info("🧹 Memory cleanup completed", {
+        sessionId,
         filesRemoved: sessionFiles.length + (fs.existsSync(finalPath) ? 1 : 0)
       });
     } catch (err) {
-      error("Memory cleanup failed", { 
-        sessionId, 
-        error: err.message 
+      error("Memory cleanup failed", {
+        sessionId,
+        error: err.message
       });
     }
   }, delayMs);
@@ -337,15 +337,15 @@ export async function mergeProcessor(sessionId, chunkUrls = []) {
 
     // 🧹 SCHEDULE MEMORY CLEANUP WITH SILENT DELAY
     scheduleCleanup(finalPath, sid, CLEANUP_DELAY_MS);
-    info("🧹 Memory cleanup scheduled", { 
-      sessionId: sid, 
-      cleanupIn: `${Math.round(CLEANUP_DELAY_MS / 1000)} seconds` 
+    info("🧹 Memory cleanup scheduled", {
+      sessionId: sid,
+      cleanupIn: `${Math.round(CLEANUP_DELAY_MS / 1000)} seconds`
     });
 
     stopKeepAlive(label);
     return { key: mergedKey, localPath: finalPath };
   } catch (err) {
-    error("Merge process failed", { 
+    error("Merge process failed", {
       sessionId: sid,
       error: err.message,
       status: "failed"

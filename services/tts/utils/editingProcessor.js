@@ -126,12 +126,12 @@ function verifyFileReady(filePath, description) {
   if (!fs.existsSync(filePath)) {
     throw new Error(`${description}: File not found at ${filePath}`);
   }
-  
+
   const stats = fs.statSync(filePath);
   if (!stats.size) {
     throw new Error(`${description}: File is empty at ${filePath}`);
   }
-  
+
   return stats;
 }
 
@@ -143,7 +143,7 @@ function getAudioDuration(filePath) {
       '-of', 'default=noprint_wrappers=1:nokey=1',
       filePath
     ], { encoding: 'utf8', timeout: FFPROBE_TIMEOUT_MS });
-    
+
     if (probe.status === 0) {
       const duration = parseFloat(probe.stdout.trim());
       return isNaN(duration) ? null : duration;
@@ -338,15 +338,15 @@ export async function editingProcessor(sessionId, inputPathObj) {
     try {
       // Get audio duration to calculate proper fade out position
       const audioDuration = getAudioDuration(currentInput);
-      
+
       let fadeFilter;
       if (audioDuration && audioDuration > VOICE_FADE_SECONDS * 2) {
         // Calculate fade out start time (duration - fade length)
         const fadeOutStart = Math.max(0, audioDuration - VOICE_FADE_SECONDS);
-        
+
         // CORRECTED: Fade in at start, fade out at end
         fadeFilter = `afade=t=in:st=0:d=${VOICE_FADE_SECONDS},afade=t=out:st=${fadeOutStart}:d=${VOICE_FADE_SECONDS}`;
-        
+
         log.info("🎚️ Starting Stage 6 with duration-based fade in/out", {
           sessionId,
           fadeFilter,
@@ -357,7 +357,7 @@ export async function editingProcessor(sessionId, inputPathObj) {
       } else {
         // Fallback: Let FFmpeg automatically handle fade out at the end
         fadeFilter = `afade=t=in:d=${VOICE_FADE_SECONDS},afade=t=out:d=${VOICE_FADE_SECONDS}`;
-        
+
         log.info("🎚️ Starting Stage 6 with automatic fade in/out", {
           sessionId,
           fadeFilter,
@@ -373,13 +373,13 @@ export async function editingProcessor(sessionId, inputPathObj) {
         fadeFilter,
         "Stage 6: 🎚️ Corrected Fade In/Out (3s)"
       );
-      
+
       verifyFileReady(stage6Path, "Stage 6 output");
-      
+
       // Copy to final BEFORE cleaning up stage5
       fs.copyFileSync(stage6Path, finalPath);
       verifyFileReady(finalPath, "Final file after copy");
-      
+
       // Now clean up stage5 (previous stage)
       safeFileCleanup(sessionId, previousStagePath, "stage 5 after final copy");
       previousStagePath = stage6Path;
@@ -390,7 +390,7 @@ export async function editingProcessor(sessionId, inputPathObj) {
         error: stage6Err.message,
         previousStagePath
       });
-      
+
       // Skip the fade stage and use stage5 directly
       fs.copyFileSync(previousStagePath, finalPath);
       verifyFileReady(finalPath, "Final file after skipping fade");
@@ -458,7 +458,7 @@ export async function editingProcessor(sessionId, inputPathObj) {
     }
   } finally {
     // Final cleanup - remove all intermediate files except final
-    for (const stagePath of [stage1Path, stage2APath, stage2BPath, stage3Path, 
+    for (const stagePath of [stage1Path, stage2APath, stage2BPath, stage3Path,
                             stage4APath, stage4BPath, stage5Path, stage6Path]) {
       if (stagePath !== finalPath) {
         safeFileCleanup(sessionId, stagePath, "final cleanup");

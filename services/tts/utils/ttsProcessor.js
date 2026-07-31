@@ -71,7 +71,7 @@ async function synthesizeTextWithRetry(text, retries = 3) {
       return buffer;
     } catch (err) {
       const message = err?.message || err.toString();
-      const isRetryable = 
+      const isRetryable =
         message.includes("Throttling") ||
         message.includes("TooManyRequests") ||
         message.includes("slow down") ||
@@ -84,7 +84,7 @@ async function synthesizeTextWithRetry(text, retries = 3) {
 
       if (attempt === retries || !isRetryable) throw err;
 
-      await new Promise(resolve => 
+      await new Promise(resolve =>
         setTimeout(resolve, RETRY_DELAY_MS * attempt)
       );
     }
@@ -104,7 +104,7 @@ async function processChunkWithRetry(sessionId, chunk, chunkNumber, attempt = 1)
 
     const url = buildPublicUrl(CHUNKS_BUCKET_KEY, key);
 
-    const logMessage = attempt > 1 
+    const logMessage = attempt > 1
       ? `✅ Chunk ${chunkNumber} recovered (attempt ${attempt})`
       : `✅ Chunk ${chunkNumber} processed`;
 
@@ -136,7 +136,7 @@ async function processChunkWithRetry(sessionId, chunk, chunkNumber, attempt = 1)
 
     if (attempt < MAX_CHUNK_RETRIES && isRetryable) {
       const delay = RETRY_DELAY_MS * Math.pow(RETRY_BACKOFF_MULTIPLIER, attempt - 1);
-      
+
       debug(`Retrying chunk ${chunkNumber} in ${delay}ms`, {
         sessionId,
         nextAttempt: attempt + 1
@@ -166,7 +166,7 @@ async function processChunkWithRetry(sessionId, chunk, chunkNumber, attempt = 1)
 // ------------------------------------------------------------
 async function ttsProcessor(sessionId, chunkList = []) {
  info("🗣️ Starting TTS processing");
-  
+
   debug("🗣️ Starting TTS processing", {
     sessionId,
     totalChunks: chunkList.length,
@@ -178,7 +178,7 @@ async function ttsProcessor(sessionId, chunkList = []) {
   }
 
   const limit = pLimit(CONCURRENCY);
-  
+
   const tasks = chunkList.map((chunk, index) =>
     limit(() => processChunkWithRetry(sessionId, chunk, index + 1))
   );
