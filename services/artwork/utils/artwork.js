@@ -2,21 +2,21 @@
 // 🖼️ Artwork Generator (OpenRouter Image Model)
 // ============================================================
 //
-// Shared image transport for podcast covers and blog hero artwork.
-// Uses OpenRouter chat/completions image-output models. The request
-// must explicitly ask for image output with modalities, otherwise some
-// providers can close the response before returning usable image data.
+// Shared model-aware image transport for every AIMS artwork lane.
+// Uses OpenRouter's dedicated /images endpoint and applies provider-specific
+// prompt structure plus pixel-level relevance/quality gates.
 // ============================================================
 
 import { warn, error, info } from "../../../logger.js";
 import { fetchWithTimeout } from "../../shared/http-client.js";
 import { getArtworkProviders } from "./openrouterProviders.js";
 import { applyArtworkPromptPolicy } from "./artworkPromptPolicy.js";
+import { buildModelAwareArtworkPrompt } from "./artworkModelPrompt.js";
 import { THRESHOLDS } from "../../../config/thresholds.js";
 import { auditArtworkBase64 } from "./artworkVisualQa.js";
 import {
   artworkRetryDelayMs,
-  buildArtworkChatPayload,
+  buildArtworkImagePayload,
   extractBase64Image,
   getArtworkProviderAttempts,
   getArtworkRequestTimeoutMs,
@@ -30,7 +30,6 @@ const OPENROUTER_BASE_URL =
 
 const ARTWORK_TIMEOUT_MS = Number(process.env.ARTWORK_TIMEOUT_MS || process.env.AI_TIMEOUT) || 120_000;
 const ARTWORK_REQUEST_TIMEOUT_MS = getArtworkRequestTimeoutMs(ARTWORK_TIMEOUT_MS);
-const ARTWORK_MAX_TOKENS = Number(process.env.ARTWORK_MAX_TOKENS || 4096);
 
 const providers = getArtworkProviders();
 
@@ -101,12 +100,12 @@ export function buildInstruction(prompt, mode = "podcast", date) {
   }
 
   return [
-    "Create a 1400x1400 premium editorial podcast cover art image for an adult AI news show.",
-    "Mood: sharp, sceptical, intelligent, cinematic, grounded, modern and minimal.",
-    "Style: abstract technological realism, subtle data motifs, clean negative space and premium magazine illustration.",
+    "Create square premium editorial podcast episode artwork for an adult AI news show.",
+    "Composition: one dominant episode-specific real-world story occupying roughly seventy per cent of the frame, with at most one supporting element. The subject must be recognisable from the episode rather than a generic AI symbol.",
+    "Mood: sharp, sceptical, intelligent, cinematic, grounded and modern.",
+    "Style: premium magazine-feature realism with strong hierarchy, believable physical detail and clean negative space.",
     `Creative direction: ${policyPrompt}`,
-    "Avoid pastel fantasy, dreamy clouds, magical orb imagery, childlike sci-fi, cartoon softness, playful candy colours, whimsical storybook visuals, cute illustration or anything toy-like.",
-    "Final compliance check: inspect the whole composition and remove every accidental letter-like, number-like, logo-like or watermark-like mark before returning the image.",
+    "Final compliance check: remove all accidental text, pseudo-text, logos, UI, generic glowing brains, symmetric emblems and unrelated decorative technology motifs.",
   ].join(" ");
 }
 
@@ -141,7 +140,7 @@ export function buildShortInstruction(prompt, mode = "podcast", date) {
     return `Premium square editorial social image, one strong recognisable focal subject, cinematic, high contrast and engaging. ${trimmedDirection} No text, letters, numbers, logos or watermarks.`;
   }
 
-  return `Premium editorial podcast cover art, abstract technological realism, minimal. ${trimmedDirection} No text, letters, numbers, logos or watermarks.`;
+  return `Square premium podcast episode artwork, one dominant source-specific real-world subject, strong editorial hierarchy and cinematic realism. ${trimmedDirection} No text, generic AI emblems, unrelated technology decoration, logos or watermarks.`;
 }
 
 async function sleep(ms) {
@@ -154,7 +153,7 @@ function parseBoolean(value, fallback = false) {
 }
 
 function visualQaModes() {
-  return new Set(String(process.env.ARTWORK_VISUAL_QA_MODES || "newsletter,social,social-blog")
+  return new Set(String(process.env.ARTWORK_VISUAL_QA_MODES || "podcast,blog,newsletter,social,social-blog,quiz")
     .split(",")
     .map((item) => item.trim().toLowerCase())
     .filter(Boolean));
@@ -175,11 +174,15 @@ function buildQaRepairPrompt(prompt, qa = {}) {
 }
 
 async function requestArtworkFromProvider(provider, prompt, mode, date, { useShortInstruction = false } = {}) {
-  const instruction = useShortInstruction ? buildShortInstruction(prompt, mode, date) : buildInstruction(prompt, mode, date);
-  const payload = buildArtworkChatPayload({
+  const baseInstruction = useShortInstruction ? buildShortInstruction(prompt, mode, date) : buildInstruction(prompt, mode, date);
+  const instruction = buildModelAwareArtworkPrompt({
     model: provider.model,
-    instruction,
-    maxTokens: ARTWORK_MAX_TOKENS,
+    mode,
+    creativeDirection: baseInstruction,
+  });
+  const payload = buildArtworkImagePayload({
+    model: provider.model,
+    prompt: instruction,
     mode,
   });
 
@@ -187,7 +190,7 @@ async function requestArtworkFromProvider(provider, prompt, mode, date, { useSho
     Authorization: `Bearer ${provider.key}`,
     "Content-Type": "application/json",
     "HTTP-Referer": process.env.OPENROUTER_SITE_URL || process.env.APP_URL || "https://jonathan-harris.online",
-    "X-OpenRouter-Title": process.env.OPENROUTER_APP_NAME || process.env.APP_TITLE || "AI Management Suite",
+    "X-Title": process.env.OPENROUTER_APP_NAME || process.env.APP_TITLE || "AI Management Suite",
   };
 
   const attempts = getArtworkProviderAttempts();
@@ -195,7 +198,7 @@ async function requestArtworkFromProvider(provider, prompt, mode, date, { useSho
 
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     try {
-      const res = await fetchWithTimeout(`${OPENROUTER_BASE_URL.replace(/\/+$/, "")}/chat/completions`, {
+      const res = await fetchWithTimeout(`${OPENROUTER_BASE_URL.replace(/\/+$/, "")}/images`, {
         method: "POST",
         headers,
         body: JSON.stringify(payload),
@@ -254,13 +257,17 @@ async function requestArtworkFromProvider(provider, prompt, mode, date, { useSho
           }
 
           qaPrompt = buildQaRepairPrompt(prompt, qa);
-          const retryPayload = buildArtworkChatPayload({
+          const retryInstruction = buildModelAwareArtworkPrompt({
             model: provider.model,
-            instruction: buildInstruction(qaPrompt, mode, date),
-            maxTokens: ARTWORK_MAX_TOKENS,
+            mode,
+            creativeDirection: buildInstruction(qaPrompt, mode, date),
+          });
+          const retryPayload = buildArtworkImagePayload({
+            model: provider.model,
+            prompt: retryInstruction,
             mode,
           });
-          const retryResponse = await fetchWithTimeout(`${OPENROUTER_BASE_URL.replace(/\/+$/, "")}/chat/completions`, {
+          const retryResponse = await fetchWithTimeout(`${OPENROUTER_BASE_URL.replace(/\/+$/, "")}/images`, {
             method: "POST",
             headers,
             body: JSON.stringify(retryPayload),

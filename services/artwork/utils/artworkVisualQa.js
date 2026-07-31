@@ -56,27 +56,46 @@ export function normaliseArtworkVisualQa(raw, { threshold = DEFAULT_THRESHOLD } 
 }
 
 export function buildArtworkVisualQaPrompt({ mode = "editorial", creativePrompt = "" } = {}) {
-  const modeRules = mode === "newsletter"
-    ? [
-        "The image must look like serious AI/technology editorial journalism, not travel, tourism, lifestyle, a generic banner or scenic wallpaper.",
-        "Any readable or pseudo-readable typography is a hard failure.",
-      ]
-    : ["social", "social-blog"].includes(mode)
-      ? [
-          "The image must communicate the supplied post at phone-thumbnail size through one concrete visual idea.",
-          "Generated labels, callout boxes, dashboards, pseudo-text, infographic panels and decorative UI are hard failures unless visible text was explicitly required, which it was not here.",
-        ]
-      : ["Judge whether the image is specific to the supplied editorial brief rather than generic decoration."];
+  const rules = {
+    podcast: [
+      "The image must visibly communicate a concrete subject from the episode brief. A generic AI emblem, digital snowflake, circuit mandala, neural flower, floating polygon or decorative data network is a hard failure.",
+      "It must look like adult technology journalism rather than fantasy, lifestyle, generic sci-fi or a permanent show logo.",
+      "Any readable or pseudo-readable typography, logo or watermark is a hard failure.",
+    ],
+    blog: [
+      "The image must represent the article title, summary and dominant themes through one concrete editorial scene rather than generic AI decoration.",
+      "A stock office, decorative data centre, abstract network or unrelated technology scene is a hard failure when it does not express the article's actual angle.",
+      "Any readable or pseudo-readable typography, logo or watermark is a hard failure.",
+    ],
+    newsletter: [
+      "The image must look like serious AI/technology editorial journalism and visibly represent the lead story, not travel, tourism, lifestyle, a generic banner, magazine-cover mock-up or scenic wallpaper.",
+      "Any readable or pseudo-readable typography is a hard failure.",
+    ],
+    social: [
+      "The image must communicate the supplied post and lane at phone-thumbnail size through one concrete focal idea.",
+      "Generated labels, callout boxes, dashboards, pseudo-text, infographic panels and decorative UI are hard failures.",
+    ],
+    "social-blog": [
+      "The image must visibly match the selected source story and its stated consequence or decision, not merely the broad topic of AI.",
+      "Generated labels, callout boxes, dashboards, pseudo-text, infographic panels and decorative UI are hard failures.",
+    ],
+    quiz: [
+      "Visible text is required. Compare it against the supplied question/answer brief: missing, altered, repeated, invented or illegible wording is a hard failure.",
+      "A question card must show exactly four equally weighted options without revealing the answer. An answer card must retain all four options and highlight only the correct one.",
+      "Tiny text, weak contrast, clutter or a layout that is unreadable on a phone is a hard failure.",
+    ],
+  };
+  const modeRules = rules[mode] || ["Judge whether the image is specific to the supplied editorial brief rather than generic decoration."];
 
   return [
-    "Audit this generated editorial image. Judge the actual pixels, not the claimed prompt compliance.",
-    "Ignore ordinary photographic texture. Look carefully for readable text, pseudo-text, gibberish labels, logos, watermarks, travel scenery, unrelated subjects and broken anatomy.",
+    "Audit this generated image. Judge the actual pixels, not the claimed prompt compliance.",
+    "Check topical relevance, focal clarity, composition, brand fit, anatomy, object coherence and text behaviour.",
     ...modeRules,
     `Mode: ${mode}.`,
-    `Creative brief: ${compact(creativePrompt, 2600)}`,
+    `Creative brief: ${compact(creativePrompt, 3000)}`,
     "Return JSON only with exactly these keys:",
     '{"score":0,"relevance":0,"textSafety":0,"composition":0,"brandFit":0,"defects":[],"hardDefects":[],"summary":""}',
-    "Scores are 0-100. Put any text/pseudo-text, off-topic travel/lifestyle scene, unrelated infographic/UI, logo/watermark, severe anatomy defect or unusable composition in hardDefects.",
+    "Scores are 0-100. Put every publication-blocking defect in hardDefects. Be strict: attractive but off-topic artwork does not pass.",
   ].join("\n");
 }
 

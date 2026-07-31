@@ -1,20 +1,9 @@
-const DEFAULT_ARTWORK_MODALITIES = ["image", "text"];
-const ALLOWED_MODALITIES = new Set(["image", "text"]);
+import { getArtworkModelFamily, getDefaultArtworkAspectRatio } from "./artworkModelPrompt.js";
 
 function envFlagEnabled(name, defaultValue = true) {
   const raw = process.env[name];
   if (raw === undefined || raw === null || String(raw).trim() === "") return defaultValue;
   return !["0", "false", "no", "off"].includes(String(raw).trim().toLowerCase());
-}
-
-function parseModalities(raw) {
-  const values = String(raw || "")
-    .split(/[,+\s]+/)
-    .map((value) => value.trim().toLowerCase())
-    .filter(Boolean)
-    .filter((value, index, array) => ALLOWED_MODALITIES.has(value) && array.indexOf(value) === index);
-
-  return values.length ? values : [...DEFAULT_ARTWORK_MODALITIES];
 }
 
 function pickFirstEnv(...names) {
@@ -25,69 +14,61 @@ function pickFirstEnv(...names) {
   return undefined;
 }
 
-export function getArtworkModalities(model) {
-  const configured = process.env.OPENROUTER_ARTWORK_MODALITIES || process.env.ARTWORK_MODALITIES;
-  if (configured) return parseModalities(configured);
-
-  // Seedream 4.5 is image-output-only on OpenRouter. Asking it for text as
-  // an additional modality makes a healthy backup look broken. Keep the
-  // generic default for models that support mixed image/text output.
-  if (String(model || "").toLowerCase().startsWith("bytedance-seed/seedream-4.5")) {
-    return ["image"];
-  }
-
-  return [...DEFAULT_ARTWORK_MODALITIES];
+function modeEnvPrefix(mode = "podcast") {
+  return String(mode || "podcast").replace(/[^a-z0-9]+/gi, "_").toUpperCase();
 }
 
-export function getArtworkImageConfig(mode = "podcast") {
-  const configuredAspectRatio = mode === "blog"
-    ? pickFirstEnv("BLOG_ARTWORK_ASPECT_RATIO", "ARTWORK_IMAGE_ASPECT_RATIO")
-    : pickFirstEnv("PODCAST_ARTWORK_ASPECT_RATIO", "ARTWORK_IMAGE_ASPECT_RATIO");
-  const quality = pickFirstEnv("ARTWORK_IMAGE_QUALITY", "OPENROUTER_ARTWORK_QUALITY");
-  const explicitConfig = Boolean(configuredAspectRatio || quality);
+export function getArtworkImageConfig(model, mode = "podcast") {
+  const family = getArtworkModelFamily(model);
+  const prefix = modeEnvPrefix(mode);
+  const aspectRatio = pickFirstEnv(
+    `${prefix}_ARTWORK_ASPECT_RATIO`,
+    mode === "podcast" ? "PODCAST_ARTWORK_ASPECT_RATIO" : undefined,
+    mode === "blog" ? "BLOG_ARTWORK_ASPECT_RATIO" : undefined,
+    "ARTWORK_IMAGE_ASPECT_RATIO",
+  ) || getDefaultArtworkAspectRatio(mode);
+  const quality = pickFirstEnv(`${prefix}_ARTWORK_QUALITY`, "ARTWORK_IMAGE_QUALITY", "OPENROUTER_ARTWORK_QUALITY");
+  const outputFormat = pickFirstEnv("ARTWORK_OUTPUT_FORMAT") || "png";
+  const resolution = pickFirstEnv(`${prefix}_ARTWORK_RESOLUTION`, "ARTWORK_IMAGE_RESOLUTION") || "2K";
 
-  if (!explicitConfig && !envFlagEnabled("ARTWORK_IMAGE_CONFIG_ENABLED", false)) return undefined;
-  if (!envFlagEnabled("ARTWORK_IMAGE_CONFIG_ENABLED", true)) return undefined;
+  const config = { aspect_ratio: aspectRatio, output_format: outputFormat, n: 1 };
+  if (quality) config.quality = quality;
 
-  const aspectRatio = configuredAspectRatio || (mode === "blog" ? "16:9" : "1:1");
+  // Seedream explicitly supports 1K/2K/4K. Recraft and FLUX endpoints differ,
+  // so resolution is omitted for them rather than sending an unsupported knob.
+  if (family === "seedream") config.resolution = resolution;
 
-  const imageConfig = {};
-  if (aspectRatio) imageConfig.aspect_ratio = aspectRatio;
-  if (quality) imageConfig.quality = quality;
+  // FLUX.2 Pro currently exposes no aspect_ratio parameter in its endpoint
+  // capability record. Its required format is still stated in the prompt.
+  if (family === "flux") delete config.aspect_ratio;
 
-  return Object.keys(imageConfig).length ? imageConfig : undefined;
+  return config;
 }
 
-export function buildArtworkChatPayload({ model, instruction, maxTokens, mode = "podcast" } = {}) {
+export function buildArtworkImagePayload({ model, prompt, mode = "podcast" } = {}) {
   const payload = {
     model,
-    messages: [
-      {
-        role: "user",
-        content: [
-          {
-            type: "text",
-            text: instruction,
-          },
-        ],
-      },
-    ],
-    modalities: getArtworkModalities(model),
-    stream: false,
+    prompt,
+    ...getArtworkImageConfig(model, mode),
   };
 
-  const safeMaxTokens = Number(maxTokens);
-  if (Number.isFinite(safeMaxTokens) && safeMaxTokens > 0) {
-    payload.max_tokens = safeMaxTokens;
+  if (!envFlagEnabled("ARTWORK_IMAGE_CONFIG_ENABLED", true)) {
+    return { model, prompt, n: 1 };
   }
-
-  const imageConfig = getArtworkImageConfig(mode);
-  if (imageConfig) payload.image_config = imageConfig;
 
   return payload;
 }
 
+// Retained for source compatibility with older tests/imports. New production
+// traffic uses the dedicated OpenRouter /images endpoint.
+export function buildArtworkChatPayload({ model, instruction, mode = "podcast" } = {}) {
+  return buildArtworkImagePayload({ model, prompt: instruction, mode });
+}
+
 export function extractBase64Image(result) {
+  const dedicated = result?.data?.find?.((item) => typeof item?.b64_json === "string")?.b64_json;
+  if (dedicated) return dedicated;
+
   const images = result?.choices?.[0]?.message?.images;
   if (Array.isArray(images) && images[0]?.image_url?.url) {
     const url = images[0].image_url.url;
@@ -117,10 +98,7 @@ export function extractBase64Image(result) {
 }
 
 export function safeSnippet(value, maxLength = 500) {
-  return String(value || "")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, maxLength);
+  return String(value || "").replace(/\s+/g, " ").trim().slice(0, maxLength);
 }
 
 export function makeArtworkHttpError(status, body, provider) {
@@ -139,16 +117,8 @@ export function isTransientArtworkError(err) {
 
   const message = String(err?.message || err || "").toLowerCase();
   return [
-    "premature close",
-    "socket hang up",
-    "econnreset",
-    "etimedout",
-    "fetch failed",
-    "network",
-    "request timed out",
-    "request aborted",
-    "body timeout",
-    "terminated",
+    "premature close", "socket hang up", "econnreset", "etimedout", "fetch failed",
+    "network", "request timed out", "request aborted", "body timeout", "terminated",
   ].some((needle) => message.includes(needle));
 }
 
@@ -158,9 +128,9 @@ export function artworkRetryDelayMs(attempt) {
 }
 
 export function getArtworkProviderAttempts() {
-  const raw = Number(process.env.ARTWORK_PROVIDER_ATTEMPTS || process.env.ARTWORK_PROVIDER_RETRIES || 5);
-  if (!Number.isFinite(raw)) return 5;
-  return Math.min(Math.max(Math.floor(raw), 1), 8);
+  const raw = Number(process.env.ARTWORK_PROVIDER_ATTEMPTS || process.env.ARTWORK_PROVIDER_RETRIES || 3);
+  if (!Number.isFinite(raw)) return 3;
+  return Math.min(Math.max(Math.floor(raw), 1), 6);
 }
 
 export function getArtworkRequestTimeoutMs(fallbackTimeoutMs) {
