@@ -9,6 +9,7 @@ import { fetchWithTimeout } from "../../shared/http-client.js";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { buildAtempoFilter, calculateMainAudioFit, resolvePodcastDurationPolicy } from "../../shared/utils/podcastDurationPolicy.js";
 
 function slugify(value) {
   return String(value || "")
@@ -80,6 +81,27 @@ function runFFmpeg(args, timeoutMs = FFMPEG_TIMEOUT_MS) {
     p.on("close", (code) => {
       clearTimeout(timer);
       code === 0 ? resolve({ ok: true }) : reject(new Error(stderr));
+    });
+  });
+}
+
+function probeAudioDuration(filePath) {
+  return new Promise((resolve, reject) => {
+    const ff = spawn("ffprobe", [
+      "-v", "error",
+      "-show_entries", "format=duration",
+      "-of", "default=noprint_wrappers=1:nokey=1",
+      filePath,
+    ]);
+    let stdout = "";
+    let stderr = "";
+    ff.stdout.on("data", (data) => { stdout += data.toString(); });
+    ff.stderr.on("data", (data) => { stderr += data.toString(); });
+    ff.on("error", reject);
+    ff.on("close", (code) => {
+      const duration = Number.parseFloat(stdout.trim());
+      if (code === 0 && Number.isFinite(duration) && duration > 0) return resolve(duration);
+      reject(new Error(`ffprobe failed for ${filePath}: ${stderr || stdout || `exit ${code}`}`));
     });
   });
 }
@@ -156,23 +178,7 @@ async function updateMetaFile(sessionId, finalBuffer, finalPath, podcastUrl, art
 
   let duration = null;
   try {
-    const { stdout } = await new Promise((resolve) => {
-      const ff = spawn("ffprobe", [
-        "-v",
-        "error",
-        "-show_entries",
-        "format=duration",
-        "-of",
-        "default=noprint_wrappers=1:nokey=1",
-        finalPath,
-      ]);
-      let out = "";
-      ff.stdout.on("data", (d) => (out += d.toString()));
-      ff.on("close", () => resolve({ stdout: out }));
-    });
-
-    const d = parseFloat(stdout.trim());
-    if (!isNaN(d)) duration = d;
+    duration = await probeAudioDuration(finalPath);
   } catch {}
 
   const title = existing.title || "AI Hype Hits the Plumbing";
@@ -244,6 +250,10 @@ async function updateMetaFile(sessionId, finalBuffer, finalPath, podcastUrl, art
     podcastUrl,
     duration: durationSeconds,
     actualDurationSeconds: typeof duration === "number" ? duration : null,
+    maximumDurationMinutes: artworkMeta?.maximumDurationMinutes || existing.maximumDurationMinutes || null,
+    durationAutomaticallyAdjusted: Boolean(artworkMeta?.durationAutomaticallyAdjusted),
+    durationTempoFactor: artworkMeta?.durationTempoFactor || null,
+    durationBeforeAdjustmentSeconds: artworkMeta?.durationBeforeAdjustmentSeconds || null,
     fileSize: finalBuffer.length,
     pubDate: new Date(sessionDate).toUTCString(),
   };
@@ -298,9 +308,11 @@ export async function podcastProcessor(input, editedPathOrBuffer) {
   const intro = `${TMP_DIR}/${sessionId}_intro.mp3`;
   const main = `${TMP_DIR}/${sessionId}_main.mp3`;
   const outro = `${TMP_DIR}/${sessionId}_outro.mp3`;
+  const fittedMain = `${TMP_DIR}/${sessionId}_main_fitted.mp3`;
   const final = `${TMP_DIR}/${sessionId}_final.mp3`;
+  const emergencyFinal = `${TMP_DIR}/${sessionId}_final_fitted.mp3`;
   const list = `${TMP_DIR}/${sessionId}_list.txt`;
-  const tempFiles = [intro, main, outro, final, list];
+  const tempFiles = [intro, main, fittedMain, outro, final, emergencyFinal, list];
 
   try {
     fs.writeFileSync(main, editedBuffer);
@@ -314,14 +326,62 @@ export async function podcastProcessor(input, editedPathOrBuffer) {
     await dl(introUrl, intro);
     await dl(outroUrl, outro);
 
-    fs.writeFileSync(
-      list,
-      `file '${intro}'\nfile '${main}'\nfile '${outro}'\n`
-    );
+    const durationPolicy = resolvePodcastDurationPolicy();
+    const [introSeconds, mainSeconds, outroSeconds] = await Promise.all([
+      probeAudioDuration(intro),
+      probeAudioDuration(main),
+      probeAudioDuration(outro),
+    ]);
+    const fit = calculateMainAudioFit({
+      mainSeconds, introSeconds, outroSeconds, maxSeconds: durationPolicy.maxSeconds, safetySeconds: 1,
+    });
+    let mainForMix = main;
+    let durationAutomaticallyAdjusted = false;
+    let durationTempoFactor = null;
 
-    await runFFmpeg(["-y", "-f", "concat", "-safe", "0", "-i", list, "-c", "copy", final]);
+    if (fit.needsAdjustment) {
+      durationAutomaticallyAdjusted = true;
+      durationTempoFactor = fit.requiredTempo;
+      warn("podcast.duration.auto_fit.main", {
+        sessionId, targetMinutes: durationPolicy.targetMinutes, maxMinutes: durationPolicy.maxMinutes,
+        introSeconds, mainSeconds, outroSeconds, originalTotalSeconds: fit.originalTotalSeconds,
+        tempoFactor: fit.requiredTempo, projectedTotalSeconds: fit.projectedTotalSeconds,
+      });
+      await runFFmpeg([
+        "-y", "-i", main, "-filter:a", buildAtempoFilter(fit.requiredTempo),
+        "-ar", "44100", "-codec:a", "libmp3lame", "-b:a", "192k", fittedMain,
+      ]);
+      mainForMix = fittedMain;
+    }
 
-    const finalBuffer = fs.readFileSync(final);
+    fs.writeFileSync(list, `file '${intro}'\nfile '${mainForMix}'\nfile '${outro}'\n`);
+
+    await runFFmpeg(["-y", "-f", "concat", "-safe", "0", "-i", list, "-c:a", "libmp3lame", "-b:a", "192k", final]);
+
+    let finalPath = final;
+    let finalDurationSeconds = await probeAudioDuration(finalPath);
+    if (finalDurationSeconds > durationPolicy.maxSeconds + 0.25) {
+      const finalTempo = finalDurationSeconds / durationPolicy.maxSeconds;
+      durationAutomaticallyAdjusted = true;
+      durationTempoFactor = (durationTempoFactor || 1) * finalTempo;
+      warn("podcast.duration.auto_fit.final", { sessionId, finalDurationSeconds, maxSeconds: durationPolicy.maxSeconds, tempoFactor: finalTempo });
+      await runFFmpeg([
+        "-y", "-i", finalPath, "-filter:a", buildAtempoFilter(finalTempo),
+        "-ar", "44100", "-codec:a", "libmp3lame", "-b:a", "192k", emergencyFinal,
+      ]);
+      finalPath = emergencyFinal;
+      finalDurationSeconds = await probeAudioDuration(finalPath);
+    }
+    if (finalDurationSeconds > durationPolicy.maxSeconds + 0.25) {
+      throw new Error(`Automatic duration fitting failed: ${finalDurationSeconds.toFixed(2)}s exceeds ${durationPolicy.maxSeconds}s.`);
+    }
+
+    info("podcast.duration.final", {
+      sessionId, targetMinutes: durationPolicy.targetMinutes, maxMinutes: durationPolicy.maxMinutes,
+      finalDurationSeconds, adjusted: durationAutomaticallyAdjusted, tempoFactor: durationTempoFactor,
+    });
+
+    const finalBuffer = fs.readFileSync(finalPath);
 
     const podcastKey = `${sessionId}.mp3`;
     const podcastUrl = `${publicBasePodcast}/${podcastKey}`;
@@ -330,10 +390,14 @@ export async function podcastProcessor(input, editedPathOrBuffer) {
 
     info("📡 Uploaded final podcast", { sessionId, podcastKey });
 
-    await updateMetaFile(sessionId, finalBuffer, final, podcastUrl, {
+    await updateMetaFile(sessionId, finalBuffer, finalPath, podcastUrl, {
       artUrl,
       imageGenerationStatus,
       imageGenerationError,
+      maximumDurationMinutes: durationPolicy.maxMinutes,
+      durationAutomaticallyAdjusted,
+      durationTempoFactor,
+      durationBeforeAdjustmentSeconds: fit.originalTotalSeconds,
     });
 
     return {
@@ -343,6 +407,10 @@ export async function podcastProcessor(input, editedPathOrBuffer) {
       artUrl,
       imageGenerationStatus,
       imageGenerationError,
+      durationSeconds: finalDurationSeconds,
+      maximumDurationMinutes: durationPolicy.maxMinutes,
+      durationAutomaticallyAdjusted,
+      durationTempoFactor,
     };
   } finally {
     cleanup(tempFiles);
