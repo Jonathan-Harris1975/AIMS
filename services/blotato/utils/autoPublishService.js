@@ -31,6 +31,8 @@ import { buildBlotatoGateError, runBlotatoShortGate } from "./shortGate.js";
 import { runReviewCouncilGate, repairArtifactForReviewCouncil } from "../../content-quality/reviewCouncil.js";
 import { completeEditorialReservation, releaseEditorialReservation, reserveEditorialSource } from "../../social/editorialLedger.js";
 import { startKeepAlive, stopKeepAlive } from "../../shared/utils/keepalive.js";
+import { buildRenderedVideoQaError, reviewRenderedVideo } from "./renderedVideoQa.js";
+import { looksLikePendingVideoError } from "./renderStatus.js";
 
 export const BLOTATO_PUBLISH_JOB_TYPE = "blotato-news-insight-publish";
 export const DEFAULT_AI_STORY_TEMPLATE_PATH =
@@ -480,10 +482,31 @@ function findMediaUrl(value, depth = 0) {
   return "";
 }
 
-async function pollUntil({ label, run, isDone, isDonePayload, isFailed, extractStatus, maxAttempts, intervalMs, progressEvery = 30, finalGraceMs = 0 }) {
+
+async function pollUntil({ label, run, isDone, isDonePayload, isFailed, isPendingError, extractStatus, maxAttempts, intervalMs, progressEvery = 30, finalGraceMs = 0 }) {
   let latest = null;
+  let latestPendingError = null;
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    latest = await run();
+    try {
+      latest = await run();
+      latestPendingError = null;
+    } catch (error) {
+      if (!isPendingError?.(error)) throw error;
+      latestPendingError = error;
+      latest = error?.details || null;
+      if (progressEvery > 0 && attempt % progressEvery === 0) {
+        info("blotato.poll.provider_pending", {
+          label,
+          attempt,
+          maxAttempts,
+          statusCode: error?.statusCode || null,
+          message: trim(error?.message).slice(0, 500),
+        });
+      }
+      await sleep(intervalMs);
+      continue;
+    }
+
     const status = extractStatus(latest);
     if (isDone(status) || isDonePayload?.(latest, status)) return latest;
     if (isFailed(status)) {
@@ -500,8 +523,15 @@ async function pollUntil({ label, run, isDone, isDonePayload, isFailed, extractS
 
   if (finalGraceMs > 0) {
     await sleep(finalGraceMs);
-    latest = await run();
-    const status = extractStatus(latest);
+    try {
+      latest = await run();
+      latestPendingError = null;
+    } catch (error) {
+      if (!isPendingError?.(error)) throw error;
+      latestPendingError = error;
+      latest = error?.details || latest;
+    }
+    const status = extractStatus(latest || {});
     if (isDone(status) || isDonePayload?.(latest, status)) return latest;
     if (isFailed(status)) {
       const err = new Error(`${label} failed with status: ${status || "unknown"}`);
@@ -513,7 +543,8 @@ async function pollUntil({ label, run, isDone, isDonePayload, isFailed, extractS
 
   const err = new Error(`${label} did not complete before polling limit`);
   err.statusCode = 504;
-  err.details = latest;
+  err.details = latest || latestPendingError?.details || null;
+  if (latestPendingError) err.cause = latestPendingError;
   throw err;
 }
 
@@ -606,6 +637,7 @@ async function createAndWaitForVideo({ templateId, templateIdCandidates = [], pa
       isDone: (status) => VIDEO_DONE_STATUSES.has(status),
       isDonePayload: (payload) => Boolean(findMediaUrl(payload)),
       isFailed: (status) => VIDEO_FAILED_STATUSES.has(status),
+      isPendingError: looksLikePendingVideoError,
       maxAttempts,
       intervalMs,
       finalGraceMs,
@@ -1022,7 +1054,7 @@ function buildDefaults(laneSlug = DEFAULT_BLOTATO_SHORT_LANE) {
     templateSearch: trim(process.env.BLOTATO_NEWS_TEMPLATE_SEARCH || process.env.BLOTATO_TEMPLATE_SEARCH, DEFAULT_TEMPLATE_SEARCH),
     pickMode: trim(process.env.BLOTATO_RSS_PICK_MODE, "latest"),
     minDurationSeconds: 35,
-    maxDurationSeconds: 80,
+    maxDurationSeconds: 55,
   };
 }
 
@@ -1096,7 +1128,7 @@ async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOT
       article: articleSource.article,
       lane: lane.slug,
       theme: [trim(process.env.BLOTATO_NEWS_THEME, lane.theme), creativeStyle ? `AutoShort visual treatment: ${creativeStyle}. Keep the whole short visually coherent in this treatment.` : ""].filter(Boolean).join(" "),
-      durationSeconds: Math.min(80, Math.max(35, Number(process.env.BLOTATO_NEWS_DURATION_SECONDS || 55))),
+      durationSeconds: Math.min(55, Math.max(35, Number(process.env.BLOTATO_NEWS_DURATION_SECONDS || 45))),
       audience: trim(
         process.env.BLOTATO_NEWS_AUDIENCE,
         "curious readers, creators, authors, and small business owners"
@@ -1211,12 +1243,13 @@ async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOT
       });
 
       if (blotatoShortGate.ok) {
-        info("blotato.publish_now.quality_gate.passed", {
+        info("blotato.publish_now.pre_render_pack_gate.passed", {
           sessionId,
           lane: lane.slug,
           qualityAttempt,
           maxQualityAttempts,
-          score: blotatoShortGate.score,
+          preRenderPackScore: blotatoShortGate.score,
+          scoreMeaning: blotatoShortGate.scoreMeaning,
           performance: blotatoShortGate.performance,
         });
         break;
@@ -1227,12 +1260,12 @@ async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOT
       }
       priorGate = blotatoShortGate;
 
-      warn("blotato.publish_now.quality_retry", {
+      warn("blotato.publish_now.pre_render_pack_retry", {
         sessionId,
         lane: lane.slug,
         qualityAttempt,
         maxQualityAttempts,
-        score: blotatoShortGate.score,
+        preRenderPackScore: blotatoShortGate.score,
         defects: blotatoShortGate.defects?.slice?.(0, 8) || [],
         performance: blotatoShortGate.performance,
       });
@@ -1283,6 +1316,52 @@ async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOT
       },
     });
     updateJob(lane.jobType, sessionId, {
+      phase: "rendered-quality-review",
+      videoId: video.visualId,
+      videoDashboardUrl: video.dashboardUrl,
+      mediaUrl: video.mediaUrl,
+    });
+
+    const renderedVideoQa = await reviewRenderedVideo({
+      mediaUrl: video.mediaUrl,
+      pack,
+      article: articleSource.article,
+      sessionId: `${sessionId}-rendered-qa`,
+    });
+    if (!renderedVideoQa.pass) {
+      updateJob(lane.jobType, sessionId, {
+        phase: "rendered-quality-failed",
+        videoId: video.visualId,
+        videoDashboardUrl: video.dashboardUrl,
+        mediaUrl: video.mediaUrl,
+        renderedVideoQa,
+      });
+      warn("blotato.finished_video.qa_failed", {
+        sessionId,
+        lane: lane.slug,
+        visualId: video.visualId,
+        dashboardUrl: video.dashboardUrl,
+        finishedVisualScore: renderedVideoQa.score,
+        hookPerformance: renderedVideoQa.hookPerformance,
+        threshold: renderedVideoQa.threshold,
+        defects: renderedVideoQa.defects?.slice?.(0, 8) || [],
+        hardDefects: renderedVideoQa.hardDefects?.slice?.(0, 8) || [],
+        technical: renderedVideoQa.technical,
+      });
+      throw buildRenderedVideoQaError(renderedVideoQa);
+    }
+    info("blotato.finished_video.qa_passed", {
+      sessionId,
+      lane: lane.slug,
+      visualId: video.visualId,
+      finishedVisualScore: renderedVideoQa.score ?? null,
+      hookPerformance: renderedVideoQa.hookPerformance ?? null,
+      threshold: renderedVideoQa.threshold ?? null,
+      skipped: Boolean(renderedVideoQa.skipped),
+      technical: renderedVideoQa.technical || null,
+    });
+
+    updateJob(lane.jobType, sessionId, {
       phase: "publishing",
       videoId: video.visualId,
       videoDashboardUrl: video.dashboardUrl,
@@ -1298,6 +1377,7 @@ async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOT
       templateResolution,
       channelPreflight,
       scheduledTime,
+      renderedVideoQa,
     });
 
     const settledPublishes = await publishPlatforms({
@@ -1372,6 +1452,9 @@ async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOT
       source: articleSource,
       pack,
       blotatoShortGate,
+      preRenderPackScore: blotatoShortGate?.score ?? null,
+      renderedVideoQa,
+      finishedVisualScore: renderedVideoQa?.score ?? null,
       visualId: video.visualId,
       mediaUrl: video.mediaUrl,
       video,
