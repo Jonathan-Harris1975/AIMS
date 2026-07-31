@@ -8,6 +8,7 @@ import { createBlogArtwork } from "../../artwork/createBlogArtwork.js";
 import { publishSocialBlogRssFeed } from "./publishSocialBlogRssFeed.js";
 import { cleanSourceText, cleanSourceTitle } from "../utils/weeklyPackage.js";
 import { recordEditorialEvent } from "../../social/editorialLedger.js";
+import { selectSourcesByUrls } from "../../content-quality/topicFidelity.js";
 
 import {
   runPhase4AutonomousContentGate,
@@ -333,8 +334,21 @@ function getSocialFallbackImageUrl() {
   ).trim();
 }
 
+function groundSocialArtworkPrompt(basePrompt, sources = []) {
+  const evidence = (Array.isArray(sources) ? sources : []).slice(0, 3).map((source) => ({
+    title: cleanSourceTitle(source?.title || ""),
+    summary: cleanSourceText(source?.rewritten || source?.summary || source?.description || "").slice(0, 500),
+    url: String(source?.link || source?.url || "").trim(),
+  }));
+  return [
+    basePrompt,
+    evidence.length ? `Exact source evidence for visual grounding: ${JSON.stringify(evidence)}` : "",
+    "Depict one concrete person, place, object, technical action or consequence that is explicitly supported by the source evidence. Do not substitute generic AI symbolism.",
+  ].filter(Boolean).join(" ");
+}
+
 async function resolveSocialArtwork({ sessionId, imagePrompt, dateId, prefix }) {
-  const art = await createBlogArtwork({ sessionId, prompt: imagePrompt, keyPrefix: prefix, date: dateId });
+  const art = await createBlogArtwork({ sessionId, prompt: imagePrompt, keyPrefix: prefix, date: dateId, mode: "social-blog" });
 
   if (art?.ok && art.publicUrl) {
     return {
@@ -387,12 +401,13 @@ async function repairSocialPackageForCouncil({ sessionId, dateLabel, items, cand
   const evidence = (items || []).slice(0, 20).map((item, index) => ({
     index: index + 1,
     title: cleanSourceTitle(item?.title || ""),
-    summary: cleanSourceText(item?.summary || item?.description || item?.contentSnippet || "").slice(0, 800),
+    url: String(item?.link || "").trim(),
+    summary: cleanSourceText(item?.rewritten || item?.summary || item?.description || item?.contentSnippet || "").slice(0, 800),
   }));
   const raw = await resilientRequest("blogSocial", {
     sessionId,
     messages: [
-      { role: "system", content: "You are the repair editor for premium social content from a recognised British AI industry expert. Preserve strong copy. Fix only the listed QA defects. Never invent facts, numbers, dates, entities, quotations or statistics. Keep the voice direct, sceptical, commercially literate and Gen-X rather than corporate. Return valid JSON only using the same schema as the candidate." },
+      { role: "system", content: "You are the repair editor for premium social content from a recognised British AI industry expert. Preserve strong copy. Fix only the listed QA defects. Never invent facts, numbers, dates, entities, quotations or statistics. Keep the voice direct, sceptical, commercially literate and Gen-X rather than corporate. Keep source_urls limited to the supplied URLs and make every field specifically about those selected sources. Return valid JSON only using the same schema as the candidate." },
       { role: "user", content: `Repair attempt ${attempt || 1}.
 
 QA defects:
@@ -435,7 +450,7 @@ async function generateStructuredSocialPackage({ sessionId, dateLabel, items }) 
     : null;
 
   let brandCheck = socialPackage
-    ? validateSocialBlogPackageForBrand(socialPackage)
+    ? validateSocialBlogPackageForBrand(socialPackage, { sourceItems: items })
     : { ok: false, defects: [] };
 
   if (!parsed.ok || !brandCheck.ok) {
@@ -477,13 +492,21 @@ Repair instructions:
       : null;
 
     brandCheck = socialPackage
-      ? validateSocialBlogPackageForBrand(socialPackage)
+      ? validateSocialBlogPackageForBrand(socialPackage, { sourceItems: items })
       : { ok: false, defects: [] };
   }
 
   if (!parsed.ok) {
     warn("blog.social.daily.package.parseFallback", { dateLabel, error: parsed.error });
-    return normaliseSocialBlogPackage({}, { dateLabel, items });
+    const fallback = normaliseSocialBlogPackage({}, { dateLabel, items });
+    const fallbackCheck = validateSocialBlogPackageForBrand(fallback, { sourceItems: items });
+    if (!fallbackCheck.ok) {
+      const err = new Error(`Social blog fallback failed brand/topicality QA: ${fallbackCheck.defects.join(" | ")}`);
+      err.statusCode = 422;
+      err.socialBlogGate = fallbackCheck;
+      throw err;
+    }
+    return { ...fallback, topic_fidelity: fallbackCheck.topicFidelity };
   }
 
   if (blogSocialQaEnabled()) {
@@ -506,7 +529,7 @@ Repair instructions:
         debug("blog.social.daily.package.qaPass", { dateLabel });
       } else if (qa.ok && qa.data) {
         const corrected = normaliseSocialBlogPackage(qa.data, { dateLabel, items });
-        const correctedCheck = validateSocialBlogPackageForBrand(corrected);
+        const correctedCheck = validateSocialBlogPackageForBrand(corrected, { sourceItems: items });
 
         if (correctedCheck.defects.length <= brandCheck.defects.length) {
           socialPackage = corrected;
@@ -537,10 +560,15 @@ Repair instructions:
     warn("blog.social.daily.package.brandResidual", {
       dateLabel,
       defects: brandCheck.defects.slice(0, 10),
+      topicalScore: brandCheck.topicFidelity?.score ?? null,
     });
+    const err = new Error(`Social blog package failed brand/topicality QA: ${brandCheck.defects.join(" | ")}`);
+    err.statusCode = 422;
+    err.socialBlogGate = brandCheck;
+    throw err;
   }
 
-  return socialPackage;
+  return { ...socialPackage, topic_fidelity: brandCheck.topicFidelity };
 }
 
 export async function buildDailySocialBlogPost({
@@ -643,18 +671,28 @@ export async function buildDailySocialBlogPost({
       date: window.dateId,
     });
 
-    const cleanedSources = items.map((item) => ({
+    const selectedItems = selectSourcesByUrls(socialPackage.source_urls, items);
+    if (!selectedItems.length) {
+      const err = new Error("Social blog package did not select any valid source URLs.");
+      err.statusCode = 422;
+      throw err;
+    }
+
+    const cleanedSources = selectedItems.map((item) => ({
       title: item.title,
       link: item.link,
       pubDate: item.pubDateRaw,
     }));
 
-    const gateSources = items.map((item) => ({
+    const gateSources = selectedItems.map((item) => ({
       title: item.title,
       link: item.link,
       pubDate: item.pubDateRaw,
       rewritten: item.rewritten,
+      summary: item.rewritten,
     }));
+
+    imagePrompt = groundSocialArtworkPrompt(imagePrompt, gateSources);
 
     const dryRunArtwork = {
       imageUrl: getSocialFallbackImageUrl() || "",
@@ -664,7 +702,7 @@ export async function buildDailySocialBlogPost({
       imageBucketKey: null,
     };
 
-    const artwork = dryRun
+    let artwork = dryRun
       ? dryRunArtwork
       : await resolveSocialArtwork({
         sessionId,
@@ -673,7 +711,7 @@ export async function buildDailySocialBlogPost({
         prefix,
       });
 
-    const imageUrl = artwork.imageUrl;
+    let imageUrl = artwork.imageUrl;
 
     let postEntry = buildSocialPostManifestEntry({
       id: `daily-${window.dateId}`,
@@ -748,12 +786,16 @@ export async function buildDailySocialBlogPost({
         repairArtifact: (candidatePackage, { gate, attempt } = {}) => repairSocialPackageForCouncil({
           sessionId,
           dateLabel: window.dateLabel,
-          items: cleanedSources,
+          items: gateSources,
           candidate: candidatePackage,
           gate,
           attempt,
         }),
         validate: (candidatePackage) => {
+          const brandGate = validateSocialBlogPackageForBrand(candidatePackage, { sourceItems: gateSources });
+          if (!brandGate.ok) {
+            return { ok: false, score: brandGate.topicFidelity?.score || 0, defects: brandGate.defects, warnings: [], contentType: "social-content" };
+          }
           const candidateBodyHtml = renderSocialBodyHtml(candidatePackage, { escapeHtml });
           const candidateContentHtml = socialPostBody({
             title: candidatePackage.title,
@@ -802,13 +844,13 @@ export async function buildDailySocialBlogPost({
       dir = `${prefix}/posts/${slug}`;
       urls = buildSiteSocialUrls(slug);
       bodyHtml = renderSocialBodyHtml(socialPackage, { escapeHtml });
-      imagePrompt = buildSocialArtworkPrompt({
+      imagePrompt = groundSocialArtworkPrompt(buildSocialArtworkPrompt({
         title,
         summary: socialPackage.summary,
         themes: socialPackage.themes,
         generatedPrompt: socialPackage.image_prompt,
         date: window.dateId,
-      });
+      }), gateSources);
       postEntry = buildSocialPostManifestEntry({
         id: `daily-${window.dateId}`,
         slug,
@@ -884,17 +926,51 @@ export async function buildDailySocialBlogPost({
         repairArtifact: (candidate, { gate, attempt } = {}) => repairSocialPackageForCouncil({
           sessionId,
           dateLabel: window.dateLabel,
-          items: cleanedSources,
+          items: gateSources,
           candidate,
           gate,
           attempt,
         }),
-        validate: (candidate) => runPhase5OrganicGrowthGate({
-          contentType: "organic-visual-social",
-          generated: candidate,
-          sources: gateSources,
-          platforms: ["facebook", "instagram", "tiktok"],
-        }),
+        validate: (candidate) => {
+          const brandGate = validateSocialBlogPackageForBrand(candidate, { sourceItems: gateSources });
+          if (!brandGate.ok) return { ok: false, score: brandGate.topicFidelity?.score || 0, defects: brandGate.defects, warnings: [], contentType: "organic-visual-social" };
+
+          const candidateBodyHtml = renderSocialBodyHtml(candidate, { escapeHtml });
+          const candidateContentHtml = socialPostBody({
+            title: candidate.title,
+            summary: candidate.summary,
+            dateLabel: window.dateLabel,
+            imageUrl,
+            html: candidateBodyHtml,
+            sources: cleanedSources,
+            socialCaption: candidate.social_caption,
+            hashtags: candidate.hashtags,
+          });
+          const candidateFullHtml = renderPageWithSiteShell(siteShell, {
+            title: candidate.title,
+            description: candidate.summary,
+            canonicalUrl: urls.canonicalUrl,
+            imageUrl,
+            publishedAt: createdAt,
+            dateLabel: window.dateLabel,
+            contentHtml: candidateContentHtml,
+          });
+          const candidatePhase4 = runPhase4AutonomousContentGate({
+            contentType: "social-content",
+            generated: candidate,
+            html: candidateFullHtml,
+            sources: gateSources,
+            expectedSchemaTypes: ["BlogPosting"],
+          });
+          if (!candidatePhase4.ok) return candidatePhase4;
+
+          return runPhase5OrganicGrowthGate({
+            contentType: "organic-visual-social",
+            generated: candidate,
+            sources: gateSources,
+            platforms: ["facebook", "instagram", "tiktok"],
+          });
+        },
       });
 
       if (!reviewed.ok) {
@@ -909,8 +985,133 @@ export async function buildDailySocialBlogPost({
         });
       }
 
-      socialPackage = { ...socialPackage, ...reviewed.artifact };
-      phase5Gate = reviewed.gate;
+      const previousImagePrompt = imagePrompt;
+      socialPackage = normaliseSocialBlogPackage({ ...socialPackage, ...reviewed.artifact }, { dateLabel: window.dateLabel, items: gateSources });
+      const finalBrandGate = validateSocialBlogPackageForBrand(socialPackage, { sourceItems: gateSources });
+      if (!finalBrandGate.ok) {
+        return await quarantinePhase5SocialPost({
+          gate: { ok: false, score: finalBrandGate.topicFidelity?.score || 0, defects: finalBrandGate.defects, warnings: [], contentType: "organic-visual-social" },
+          dateId: window.dateId,
+          socialPackage,
+          cleanedSources: gateSources,
+          publishedObjects,
+          context: { dateLabel: window.dateLabel, prefix, slug, postUrl: urls.postUrl, reason: "post-review-brand-topic-regression" },
+          dryRun,
+        });
+      }
+      socialPackage.topic_fidelity = finalBrandGate.topicFidelity;
+
+      title = socialPackage.title;
+      slug = slugify(`${window.dateId}-${title}`);
+      dir = `${prefix}/posts/${slug}`;
+      urls = buildSiteSocialUrls(slug);
+      bodyHtml = renderSocialBodyHtml(socialPackage, { escapeHtml });
+      imagePrompt = groundSocialArtworkPrompt(buildSocialArtworkPrompt({
+        title,
+        summary: socialPackage.summary,
+        themes: socialPackage.themes,
+        generatedPrompt: socialPackage.image_prompt,
+        date: window.dateId,
+      }), gateSources);
+
+      if (!dryRun && imagePrompt !== previousImagePrompt) {
+        artwork = await resolveSocialArtwork({
+          sessionId: `${sessionId}-phase5-repair`,
+          imagePrompt,
+          dateId: window.dateId,
+          prefix,
+        });
+        imageUrl = artwork.imageUrl;
+      }
+
+      postEntry = buildSocialPostManifestEntry({
+        id: `daily-${window.dateId}`,
+        slug,
+        title,
+        summary: socialPackage.summary,
+        socialCaption: socialPackage.social_caption,
+        hook: socialPackage.hook,
+        bodyHtml,
+        takeaway: socialPackage.takeaway,
+        postUrl: urls.postUrl,
+        canonicalUrl: urls.canonicalUrl,
+        path: urls.postPath,
+        imageUrl,
+        imagePrompt,
+        imageStatus: artwork.imageStatus,
+        imageError: artwork.imageError,
+        imageBucketKey: artwork.imageBucketKey,
+        dateLabel: window.dateId,
+        themes: socialPackage.themes,
+        hashtags: socialPackage.hashtags,
+        sources: cleanedSources,
+        publishedAt: createdAt,
+      });
+      contentHtml = socialPostBody({
+        title,
+        summary: socialPackage.summary,
+        dateLabel: window.dateLabel,
+        imageUrl,
+        html: bodyHtml,
+        sources: cleanedSources,
+        socialCaption: socialPackage.social_caption,
+        hashtags: socialPackage.hashtags,
+      });
+      fullHtml = renderPageWithSiteShell(siteShell, {
+        title,
+        description: socialPackage.summary,
+        canonicalUrl: urls.canonicalUrl,
+        imageUrl,
+        publishedAt: createdAt,
+        dateLabel: window.dateLabel,
+        contentHtml,
+      });
+      mergedManifest = mergeSocialPostsManifest(existingManifest, postEntry);
+      publishedObjects = {
+        postHtmlKey: `${dir}/index.html`,
+        postMetaKey: `${dir}/post.json`,
+        manifestKey,
+        rssFeedKey: process.env.BLOG_SOCIAL_RSS_OBJECT_KEY || `${prefix}/feed.xml`,
+        imageKey: artwork.imageKey,
+        imageBucketKey: artwork.imageBucketKey,
+      };
+
+      phase4Gate = runPhase4AutonomousContentGate({
+        contentType: "social-content",
+        generated: socialPackage,
+        html: fullHtml,
+        sources: gateSources,
+        expectedSchemaTypes: ["BlogPosting"],
+      });
+      if (!phase4Gate.ok) {
+        return await quarantineSocialPost({
+          gate: phase4Gate,
+          dateId: window.dateId,
+          socialPackage,
+          cleanedSources: gateSources,
+          publishedObjects,
+          context: { dateLabel: window.dateLabel, prefix, slug, postUrl: urls.postUrl, reason: "phase5-repair-regressed-phase4" },
+          dryRun,
+        });
+      }
+
+      phase5Gate = runPhase5OrganicGrowthGate({
+        contentType: "organic-visual-social",
+        generated: { ...socialPackage, imagePrompt, imageUrl, caption: socialPackage.social_caption },
+        sources: gateSources,
+        platforms: ["facebook", "instagram", "tiktok"],
+      });
+      if (!phase5Gate.ok) {
+        return await quarantinePhase5SocialPost({
+          gate: phase5Gate,
+          dateId: window.dateId,
+          socialPackage,
+          cleanedSources: gateSources,
+          publishedObjects,
+          context: { dateLabel: window.dateLabel, prefix, slug, postUrl: urls.postUrl, reason: "phase5-repair-final-validation-failed" },
+          dryRun,
+        });
+      }
     }
 
     if (dryRun) {
@@ -944,6 +1145,7 @@ export async function buildDailySocialBlogPost({
         imageError: artwork.imageError,
         imageBucketKey: artwork.imageBucketKey,
         sourceCount: cleanedSources.length,
+        inputSourceCount: items.length,
         package: socialPackage,
         publishedObjects,
         phase4Gate,
@@ -997,6 +1199,7 @@ export async function buildDailySocialBlogPost({
       imageUrl,
       imageStatus: artwork.imageStatus,
       sourceCount: cleanedSources.length,
+      inputSourceCount: items.length,
       themeCount: socialPackage.themes.length,
     });
 
@@ -1024,6 +1227,7 @@ export async function buildDailySocialBlogPost({
       phase4Gate,
       phase5Gate,
       sourceCount: cleanedSources.length,
+      inputSourceCount: items.length,
       rebuild,
     };
   } catch (e) {
@@ -1034,7 +1238,9 @@ export async function buildDailySocialBlogPost({
 
     return {
       ok: false,
+      statusCode: Number(e?.statusCode || 500),
       error: e.message,
+      ...(e?.socialBlogGate ? { socialBlogGate: e.socialBlogGate } : {}),
     };
   }
 }
