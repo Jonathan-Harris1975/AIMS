@@ -3,6 +3,7 @@ import { constants } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { validateEnvFile } from "./koyebEnvDoctor.js";
+import { assertRelativeImportGraph } from "./utils/relativeImportGraph.js";
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const npmRegistry = "https://registry.npmjs.org/";
@@ -173,6 +174,8 @@ async function main() {
   await assertKoyebBuildCommandsAreRuntimeEnvIsolated();
   await assertKoyebEnvFilesArePasteSafe();
   await assertProductionDefaultsAreSafe();
+  const moduleGraph = await assertRelativeImportGraph(projectRoot);
+  console.log(`✅ Relative import graph passed (${moduleGraph.modulesChecked} modules)`);
   console.log("✅ Build check passed");
 }
 

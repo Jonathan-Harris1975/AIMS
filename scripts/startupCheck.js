@@ -1,28 +1,13 @@
 import "../config/loadEnv.js";
-import { access, readFile } from "node:fs/promises";
+import { access } from "node:fs/promises";
 import { constants } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { info, error, debug } from "../logger.js";
 import { durableStateEnvHint, hasDurableStateEnv } from "../services/shared/utils/durableStateEnv.js";
+import { assertRelativeImportGraph } from "./utils/relativeImportGraph.js";
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const requiredEntryModules = [
-  "server.js",
-  "routes/index.js",
-  "services/script/routes/index.js",
-  "services/tts/routes/tts.js",
-  "services/podcast/index.js",
-  "services/artwork/index.js",
-  "services/outreach/routes/index.js",
-  "services/blog/index.js",
-  "services/rss-feed-creator/index.js",
-  "services/blotato/index.js",
-  "services/comms-hub/index.js",
-];
-
-const importPattern = /(?:import\s+(?:[^'"()]+?\s+from\s+)?|export\s+[^'"()]+?\s+from\s+|import\()(["'])(\.{1,2}\/[^'"()]+)\1/g;
-
 function parseBoolean(value, fallback = false) {
   if (value === undefined || value === null || value === "") return fallback;
   if (typeof value === "boolean") return value;
@@ -43,53 +28,6 @@ async function assertBinaryExists(binaryName) {
   }
 
   throw new Error(`${binaryName} binary not found in standard runtime paths`);
-}
-
-function resolveImport(fromFile, specifier) {
-  const basePath = path.resolve(path.dirname(fromFile), specifier);
-  const candidates = [];
-
-  if (path.extname(basePath)) {
-    candidates.push(basePath);
-  } else {
-    candidates.push(`${basePath}.js`, `${basePath}.json`, path.join(basePath, "index.js"));
-  }
-
-  return candidates;
-}
-
-async function assertModuleGraph(entryRelativePath, visited = new Set()) {
-  const absolutePath = path.resolve(projectRoot, entryRelativePath);
-
-  if (visited.has(absolutePath)) return;
-  visited.add(absolutePath);
-
-  await access(absolutePath, constants.R_OK);
-  const source = await readFile(absolutePath, "utf8");
-
-  let match;
-  while ((match = importPattern.exec(source)) !== null) {
-    const specifier = match[2];
-    const candidates = resolveImport(absolutePath, specifier);
-    const resolved = [];
-
-    for (const candidate of candidates) {
-      try {
-        await access(candidate, constants.R_OK);
-        resolved.push(candidate);
-        break;
-      } catch {}
-    }
-
-    if (resolved.length === 0) {
-      throw new Error(`Missing relative import '${specifier}' referenced from ${path.relative(projectRoot, absolutePath)}`);
-    }
-
-    const target = resolved[0];
-    if (target.endsWith(".js")) {
-      await assertModuleGraph(path.relative(projectRoot, target), visited);
-    }
-  }
 }
 
 function assertProductionStateConfig() {
@@ -121,9 +59,7 @@ try {
   const ffmpegPath = await assertBinaryExists("ffmpeg");
   const ffprobePath = await assertBinaryExists("ffprobe");
 
-  for (const modulePath of requiredEntryModules) {
-    await assertModuleGraph(modulePath);
-  }
+  const moduleGraph = await assertRelativeImportGraph(projectRoot);
 
   assertProductionStateConfig();
 
@@ -139,7 +75,7 @@ try {
     info("startupCheck.warning", { warning });
   }
 
-  info("startupCheck.complete", { entryModulesChecked: requiredEntryModules.length });
+  info("startupCheck.complete", moduleGraph);
   process.exit(0);
 } catch (err) {
   error("startupCheck.fail", { error: err?.stack || err?.message || String(err) });
