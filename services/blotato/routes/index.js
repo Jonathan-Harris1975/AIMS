@@ -1,5 +1,5 @@
 import express from "express";
-import { hookdeckDedupe } from "../../shared/utils/hookdeckDedupe.js";
+import { requestDedupe } from "../../shared/utils/requestDedupe.js";
 import {
   createVisual,
   deleteVisual,
@@ -94,7 +94,7 @@ router.get(
 
 router.post(
   "/visuals",
-  hookdeckDedupe("blotato:create-visual"),
+  requestDedupe("blotato:create-visual"),
   asyncRoute(async (req, res) => {
     const parsed = validatePayload(createVisualBodySchema, req.body);
     if (!parsed.ok) return sendValidationError(res, parsed);
@@ -116,7 +116,7 @@ router.get(
 
 router.delete(
   "/visuals/:id",
-  hookdeckDedupe("blotato:delete-visual"),
+  requestDedupe("blotato:delete-visual"),
   asyncRoute(async (req, res) => {
     const apiKey = req.get("x-api-key") || req.get("authorization") || req.body?.apiKey;
     const result = await deleteVisual(req.params.id, apiKey);
@@ -126,7 +126,7 @@ router.delete(
 
 router.post(
   "/posts",
-  hookdeckDedupe("blotato:publish-post"),
+  requestDedupe("blotato:publish-post"),
   asyncRoute(async (req, res) => {
     const parsed = validatePayload(publishPostBodySchema, req.body);
     if (!parsed.ok) return sendValidationError(res, parsed);
@@ -250,7 +250,7 @@ router.get(
 
 router.post(
   "/shorts/news-insight",
-  hookdeckDedupe("blotato:news-insight-short"),
+  requestDedupe("blotato:news-insight-short"),
   asyncRoute(async (req, res) => {
     const parsed = validatePayload(newsInsightBodySchema, req.body);
     if (!parsed.ok) return sendValidationError(res, parsed);
@@ -262,7 +262,7 @@ router.post(
 
 router.post(
   "/shorts/:lane",
-  hookdeckDedupe("blotato:lane-short"),
+  requestDedupe("blotato:lane-short"),
   asyncRoute(async (req, res) => {
     const lane = requireShortLaneConfig(req.params.lane);
     const parsed = validatePayload(newsInsightBodySchema, { ...req.body, lane: lane.slug });
