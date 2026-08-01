@@ -10,7 +10,7 @@ test("unified website audit routes are mounted and MAST-facing run endpoint exis
   const digital = read("audits/routes/digitalGrowth.js");
   assert.match(index, /router\.use\("\/website", websiteRoutes\)/);
   assert.match(index, /router\.use\("\/digital-growth", digitalGrowthRoutes\)/);
-  assert.match(website, /router\.post\("\/run", hookdeckDedupe\("audits:website:run"\)/);
+  assert.match(website, /router\.post\("\/run", requestDedupe\("audits:website:run"\)/);
   assert.match(website, /retentionPolicy: "final-pdf-html-json-only"/);
   assert.match(digital, /WORKFLOW_ID = "digital-growth-audit\.yml"/);
 });
