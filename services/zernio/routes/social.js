@@ -1,6 +1,6 @@
 import express from "express";
 import { z } from "zod";
-import { hookdeckDedupe } from "../../shared/utils/hookdeckDedupe.js";
+import { requestDedupe } from "../../shared/utils/requestDedupe.js";
 import {
   validateBody,
   zernioDailyBodySchema,
@@ -77,7 +77,7 @@ router.get("/jobs/:lane/:sessionId", asyncRoute(async (req, res) => {
 
 router.post(
   "/setup/check",
-  hookdeckDedupe("zernio:setup:check"),
+  requestDedupe("zernio:setup:check"),
   asyncRoute(async (req, res) => {
     const parsed = validateBody(zernioSetupCheckBodySchema, req.body);
     if (!parsed.ok) {
@@ -129,7 +129,7 @@ router.post(
 
 router.post(
   "/posts/history",
-  hookdeckDedupe("zernio:posts:history"),
+  requestDedupe("zernio:posts:history"),
   asyncRoute(async (req, res) => {
     const parsed = validateBody(zernioPublishedHistoryBodySchema, req.body);
     if (!parsed.ok) {
@@ -209,7 +209,7 @@ for (const laneKey of Object.keys(LANE_CONFIG)) {
 
   router.post(
     `/daily/${laneKey}`,
-    hookdeckDedupe(`zernio:${laneKey}`),
+    requestDedupe(`zernio:${laneKey}`),
     asyncRoute(async (req, res) => {
       const parsed = validateBody(zernioDailyBodySchema, req.body);
       if (!parsed.ok) {
@@ -236,7 +236,7 @@ for (const laneKey of Object.keys(LANE_CONFIG)) {
 
 router.post(
   "/blog-rss/daily",
-  hookdeckDedupe("zernio:blog-rss:daily"),
+  requestDedupe("zernio:blog-rss:daily"),
   asyncRoute(async (req, res) => {
     const parsed = validateBody(zernioDailyBodySchema, req.body);
     if (!parsed.ok) {
@@ -264,7 +264,7 @@ router.post(
 
 router.post(
   "/mini-series/weekly",
-  hookdeckDedupe("zernio:mini-series:weekly"),
+  requestDedupe("zernio:mini-series:weekly"),
   asyncRoute(async (req, res) => {
     const parsed = validateBody(zernioMiniSeriesBodySchema, req.body);
     if (!parsed.ok) return res.status(400).json({ ok: false, error: parsed.error });
@@ -288,7 +288,7 @@ router.post(
 
 router.post(
   "/podcast/thursday-promo",
-  hookdeckDedupe("zernio:podcast:thursday-promo"),
+  requestDedupe("zernio:podcast:thursday-promo"),
   asyncRoute(async (req, res) => {
     const parsed = validateBody(zernioPodcastPromoBodySchema, req.body);
     if (!parsed.ok) return res.status(400).json({ ok: false, error: parsed.error });
@@ -311,7 +311,7 @@ router.post(
 
 router.post(
   "/ebooks/weekly",
-  hookdeckDedupe("zernio:ebooks:weekly"),
+  requestDedupe("zernio:ebooks:weekly"),
   asyncRoute(async (req, res) => {
     const parsed = validateBody(zernioEbookWeeklyBodySchema, req.body);
     if (!parsed.ok) {
@@ -337,7 +337,7 @@ router.post(
 
 router.post(
   "/quiz/weekly",
-  hookdeckDedupe("zernio:quiz:weekly"),
+  requestDedupe("zernio:quiz:weekly"),
   asyncRoute(async (req, res) => {
     const parsed = validateBody(zernioQuizBodySchema, req.body);
     if (!parsed.ok) {
