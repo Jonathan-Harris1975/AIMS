@@ -2,7 +2,7 @@ import express from "express";
 import { getObjectAsText } from "../services/shared/utils/r2-client.js";
 import { endToEndRewrite } from "../services/rss-feed-creator/rewrite-pipeline.js";
 import { error } from "../logger.js";
-import { hookdeckDedupe } from "../services/shared/utils/hookdeckDedupe.js";
+import { requestDedupe } from "../services/shared/utils/requestDedupe.js";
 import {
   getAsyncServiceRouteJobFresh,
   shouldRunAsyncServiceRoute,
@@ -21,7 +21,7 @@ function rssRewritePayload(req) {
   const body = req?.body && typeof req.body === "object" && !Array.isArray(req.body) ? req.body : {};
   return {
     ...body,
-    sessionId: body.sessionId || req?.hookdeckEventId || req?.headers?.["x-request-id"] || req?.id,
+    sessionId: body.sessionId || req?.idempotencyKey || req?.headers?.["x-request-id"] || req?.id,
   };
 }
 
@@ -73,7 +73,7 @@ router.get("/jobs/:lane/:sessionId", asyncRoute(async (req, res) => {
   return res.json(job);
 }));
 
-router.post("/", hookdeckDedupe("rss:rebuild"), asyncRoute(async (req, res) => {
+router.post("/", requestDedupe("rss:rebuild"), asyncRoute(async (req, res) => {
   if (shouldRunAsyncServiceRoute(req)) {
     const job = await startRssRewriteJob(req);
     return res.status(202).json({
