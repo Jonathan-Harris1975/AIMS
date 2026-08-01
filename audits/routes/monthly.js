@@ -27,7 +27,7 @@ router.post("/website", hookdeckDedupe("audits:monthly:website"), asyncRoute(asy
 
 router.post("/aims", hookdeckDedupe("audits:monthly:aims"), asyncRoute(async (req,res) => {
   if (!saturdayGuard(req,res)) return;
-  const job = await startAsyncAuditRouteJob({auditType:"content-master",payload:req.body||{},req,runner:runContentMasterAudit,metadata:{route:"audits.monthly.aims",requestedBy:"MAST monthly first-Saturday audit"}});
+  const job = await startAsyncAuditRouteJob({auditType:"content-master",payload:req.body||{},req,runner:runContentMasterAudit,metadata:{route:"audits.monthly.aims",requestedBy:"MAST monthly second-Saturday AIMS audit"}});
   res.status(202).json(job);
 }));
 
