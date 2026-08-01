@@ -1,7 +1,7 @@
 import express from "express";
 import { info, error } from "../../../logger.js";
 import { sanitizeSessionId } from "../../shared/utils/sessionId.js";
-import { hookdeckDedupe } from "../../shared/utils/hookdeckDedupe.js";
+import { requestDedupe } from "../../shared/utils/requestDedupe.js";
 import {
   generateIntro,
   generateMain,
@@ -56,7 +56,7 @@ router.get("/health", (_req, res) => {
   res.json({ ok: true, service: "script" });
 });
 
-router.post("/intro", hookdeckDedupe("script:intro"), async (req, res) => {
+router.post("/intro", requestDedupe("script:intro"), async (req, res) => {
   try {
     const payload = validateOrThrow(IntroSchema, req.body);
     info("script.intro.req", { date: payload.date, sessionId: payload.sessionId });
@@ -68,7 +68,7 @@ router.post("/intro", hookdeckDedupe("script:intro"), async (req, res) => {
   }
 });
 
-router.post("/main", hookdeckDedupe("script:main"), async (req, res) => {
+router.post("/main", requestDedupe("script:main"), async (req, res) => {
   try {
     const payload = validateOrThrow(MainSchema, req.body);
     info("script.main.req", { date: payload.date, sessionId: payload.sessionId });
@@ -80,7 +80,7 @@ router.post("/main", hookdeckDedupe("script:main"), async (req, res) => {
   }
 });
 
-router.post("/outro", hookdeckDedupe("script:outro"), async (req, res) => {
+router.post("/outro", requestDedupe("script:outro"), async (req, res) => {
   try {
     const payload = validateOrThrow(OutroSchema, req.body);
     info("script.outro.req", { date: payload.date, sessionId: payload.sessionId });
@@ -92,7 +92,7 @@ router.post("/outro", hookdeckDedupe("script:outro"), async (req, res) => {
   }
 });
 
-router.post("/compose", hookdeckDedupe("script:compose"), async (req, res) => {
+router.post("/compose", requestDedupe("script:compose"), async (req, res) => {
   try {
     const payload = validateOrThrow(ComposeSchema, req.body);
     info("script.compose.req", { date: payload.date, sessionId: payload.sessionId });
@@ -104,7 +104,7 @@ router.post("/compose", hookdeckDedupe("script:compose"), async (req, res) => {
   }
 });
 
-router.post("/orchestrate", hookdeckDedupe("script:orchestrate"), async (req, res) => {
+router.post("/orchestrate", requestDedupe("script:orchestrate"), async (req, res) => {
   try {
     const payload = validateOrThrow(OrchestrateSchema, req.body);
     info("script.orchestrate.req", { date: payload.date, sessionId: payload.sessionId });
