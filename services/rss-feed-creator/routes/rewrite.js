@@ -1,7 +1,7 @@
 import express from "express";
 import { endToEndRewrite } from "../rewrite-pipeline.js";
 import { info, error } from "../../../logger.js";
-import { hookdeckDedupe } from "../../shared/utils/hookdeckDedupe.js";
+import { requestDedupe } from "../../shared/utils/requestDedupe.js";
 import {
   getAsyncServiceRouteJobFresh,
   shouldRunAsyncServiceRoute,
@@ -21,7 +21,7 @@ function rssRewritePayload(req) {
   const body = req?.body && typeof req.body === "object" && !Array.isArray(req.body) ? req.body : {};
   return {
     ...body,
-    sessionId: body.sessionId || req?.hookdeckEventId || req?.headers?.["x-request-id"] || req?.id,
+    sessionId: body.sessionId || req?.idempotencyKey || req?.headers?.["x-request-id"] || req?.id,
   };
 }
 
@@ -51,7 +51,7 @@ router.get("/jobs/:lane/:sessionId", asyncRoute(async (req, res) => {
   return res.json(job);
 }));
 
-router.post("/rewrite", hookdeckDedupe("rss:rewrite"), asyncRoute(async (req, res) => {
+router.post("/rewrite", requestDedupe("rss:rewrite"), asyncRoute(async (req, res) => {
   try {
     info("rewrite.route.start");
 
