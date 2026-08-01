@@ -1,5 +1,5 @@
 import express from "express";
-import { hookdeckDedupe } from "../../services/shared/utils/hookdeckDedupe.js";
+import { requestDedupe } from "../../services/shared/utils/requestDedupe.js";
 import {
   getZernioConfigStatus,
   runZernioSocialPerformanceReport,
@@ -20,7 +20,7 @@ router.get("/health", (_req, res) => {
   });
 });
 
-router.post("/run", hookdeckDedupe("audits:social-performance:run"), asyncRoute(async (req, res) => {
+router.post("/run", requestDedupe("audits:social-performance:run"), asyncRoute(async (req, res) => {
   const job = await startAsyncAuditRouteJob({
     auditType: AUDIT_TYPE,
     payload: req.body || {},

@@ -1,5 +1,5 @@
 import express from "express";
-import { hookdeckDedupe } from "../../services/shared/utils/hookdeckDedupe.js";
+import { requestDedupe } from "../../services/shared/utils/requestDedupe.js";
 import { validateBody, onBrandAuditRunBodySchema } from "../../services/shared/utils/requestSchemas.js";
 import { runOnBrandAudit } from "../utils/onBrandAudit.js";
 import { getAsyncAuditRouteJobFresh, startAsyncAuditRouteJob } from "../utils/asyncAuditRouteJobs.js";
@@ -17,7 +17,7 @@ router.get("/health", (_req, res) => {
   });
 });
 
-router.post("/run", hookdeckDedupe("audits:on-brand:run"), asyncRoute(async (req, res) => {
+router.post("/run", requestDedupe("audits:on-brand:run"), asyncRoute(async (req, res) => {
   const parsed = validateBody(onBrandAuditRunBodySchema, req.body);
   if (!parsed.ok) {
     return res.status(400).json({ ok: false, auditType: AUDIT_TYPE, error: parsed.error });

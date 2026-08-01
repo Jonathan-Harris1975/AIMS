@@ -1,5 +1,5 @@
 import express from "express";
-import { hookdeckDedupe } from "../../services/shared/utils/hookdeckDedupe.js";
+import { requestDedupe } from "../../services/shared/utils/requestDedupe.js";
 import {
   validateBody,
   auditAnalysisBodySchema,
@@ -21,7 +21,7 @@ router.get("/health", (_req, res) => {
   res.json({ ok: true, auditType: AUDIT_TYPE, workflowId: WORKFLOW_ID, time: new Date().toISOString() });
 });
 
-router.post("/run", hookdeckDedupe("audits:seo-aeo-geo:run"), asyncRoute(async (req, res) => {
+router.post("/run", requestDedupe("audits:seo-aeo-geo:run"), asyncRoute(async (req, res) => {
   const parsed = validateBody(auditRunBodySchema, req.body);
   if (!parsed.ok) {
     return res.status(400).json({ ok: false, error: parsed.error });

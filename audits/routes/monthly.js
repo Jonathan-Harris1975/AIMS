@@ -1,5 +1,5 @@
 import express from "express";
-import { hookdeckDedupe } from "../../services/shared/utils/hookdeckDedupe.js";
+import { requestDedupe } from "../../services/shared/utils/requestDedupe.js";
 import { startWebsiteAuditPipeline } from "../utils/websiteAuditPipeline.js";
 import { startAsyncAuditRouteJob } from "../utils/asyncAuditRouteJobs.js";
 import { runContentMasterAudit } from "../utils/contentMasterPipeline.js";
@@ -19,13 +19,13 @@ function saturdayGuard(req, res) {
 
 router.get("/health", (_req,res) => res.json({ok:true,auditType:"monthly",orchestrator:"AIMS",endpoints:["POST /audits/monthly/website","POST /audits/monthly/aims"],policy:"Saturday maintenance lane; RAMS dispatch occurs only after each final audit report is complete."}));
 
-router.post("/website", hookdeckDedupe("audits:monthly:website"), asyncRoute(async (req,res) => {
+router.post("/website", requestDedupe("audits:monthly:website"), asyncRoute(async (req,res) => {
   if (!saturdayGuard(req,res)) return;
   const result = await startWebsiteAuditPipeline({...(req.body||{}), requestedBy:"MAST monthly first-Saturday audit"});
   res.status(202).json(result);
 }));
 
-router.post("/aims", hookdeckDedupe("audits:monthly:aims"), asyncRoute(async (req,res) => {
+router.post("/aims", requestDedupe("audits:monthly:aims"), asyncRoute(async (req,res) => {
   if (!saturdayGuard(req,res)) return;
   const job = await startAsyncAuditRouteJob({auditType:"content-master",payload:req.body||{},req,runner:runContentMasterAudit,metadata:{route:"audits.monthly.aims",requestedBy:"MAST monthly second-Saturday AIMS audit"}});
   res.status(202).json(job);

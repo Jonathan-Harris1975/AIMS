@@ -1,5 +1,5 @@
 import express from "express";
-import { hookdeckDedupe } from "../../services/shared/utils/hookdeckDedupe.js";
+import { requestDedupe } from "../../services/shared/utils/requestDedupe.js";
 import { runNewsletterAudit, getNewsletterAuditStatus } from "../utils/newsletterAudit.js";
 import { getAsyncAuditRouteJobFresh, startAsyncAuditRouteJob } from "../utils/asyncAuditRouteJobs.js";
 
@@ -15,7 +15,7 @@ router.get("/health", (_req, res) => {
   });
 });
 
-router.post("/run", hookdeckDedupe("audits:newsletter:run"), asyncRoute(async (req, res) => {
+router.post("/run", requestDedupe("audits:newsletter:run"), asyncRoute(async (req, res) => {
   const job = await startAsyncAuditRouteJob({
     auditType: AUDIT_TYPE,
     payload: req.body || {},
