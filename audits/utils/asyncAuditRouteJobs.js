@@ -88,7 +88,7 @@ export async function startAsyncAuditRouteJob({ auditType, payload = {}, runner,
     auditType,
     statusUrl,
     route: metadata.route || `${auditType}.run`,
-    eventId: req?.hookdeckEventId || null,
+    eventId: req?.idempotencyKey || null,
     ...metadata,
   });
 
