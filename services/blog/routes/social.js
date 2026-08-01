@@ -1,7 +1,7 @@
 import express from "express";
 import { buildDailySocialBlogPost } from "../social/buildDailySocialBlogPost.js";
 import { rebuildSocialBlogRssFeed } from "../social/publishSocialBlogRssFeed.js";
-import { hookdeckDedupe } from "../../shared/utils/hookdeckDedupe.js";
+import { requestDedupe } from "../../shared/utils/requestDedupe.js";
 import { validateBody, blogSocialDailyBuildBodySchema } from "../../shared/utils/requestSchemas.js";
 import { getAsyncServiceRouteJobFresh, shouldRunAsyncServiceRoute, startAsyncServiceRouteJob } from "../../shared/utils/asyncServiceRouteJobs.js";
 
@@ -15,7 +15,7 @@ router.get("/jobs/:lane/:sessionId", asyncRoute(async (req, res) => {
 }));
 
 // POST /blog/social/daily/build
-router.post("/daily/build", hookdeckDedupe("blog:socialDailyBuild"), asyncRoute(async (req, res) => {
+router.post("/daily/build", requestDedupe("blog:socialDailyBuild"), asyncRoute(async (req, res) => {
   const parsed = validateBody(blogSocialDailyBuildBodySchema, req.body);
   if (!parsed.ok) return res.status(400).json({ ok: false, error: parsed.error });
   if (shouldRunAsyncServiceRoute(req)) {

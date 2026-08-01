@@ -1,7 +1,7 @@
 // services/blog/routes/weekly.js
 import express from "express";
 import { buildWeeklyBlogPost } from "../weekly/buildWeeklyBlogPost.js";
-import { hookdeckDedupe } from "../../shared/utils/hookdeckDedupe.js";
+import { requestDedupe } from "../../shared/utils/requestDedupe.js";
 import { validateBody, blogWeeklyBuildBodySchema } from "../../shared/utils/requestSchemas.js";
 import { getAsyncServiceRouteJobFresh, shouldRunAsyncServiceRoute, startAsyncServiceRouteJob } from "../../shared/utils/asyncServiceRouteJobs.js";
 
@@ -16,7 +16,7 @@ router.get("/jobs/:lane/:sessionId", asyncRoute(async (req, res) => {
 }));
 
 // POST /blog/weekly/build
-router.post("/build", hookdeckDedupe("blog:weeklyBuild"), asyncRoute(async (req, res) => {
+router.post("/build", requestDedupe("blog:weeklyBuild"), asyncRoute(async (req, res) => {
   const parsed = validateBody(blogWeeklyBuildBodySchema, req.body);
   if (!parsed.ok) {
     return res.status(400).json({ ok: false, error: parsed.error });
