@@ -1,7 +1,7 @@
 import express from "express";
 import { runKeyword } from "../services/outreachService.js";
 import { runNextBatch, resetProgress } from "../services/batchService.js";
-import { hookdeckDedupe } from "../../shared/utils/hookdeckDedupe.js";
+import { requestDedupe } from "../../shared/utils/requestDedupe.js";
 import {
   validateBody,
   outreachKeywordBodySchema,
@@ -15,7 +15,7 @@ router.get("/health", (_req, res) => {
   res.json({ ok: true, service: "outreach" });
 });
 
-router.post("/keyword", hookdeckDedupe("outreach:keyword"), asyncRoute(async (req, res) => {
+router.post("/keyword", requestDedupe("outreach:keyword"), asyncRoute(async (req, res) => {
   const parsed = validateBody(outreachKeywordBodySchema, req.body);
   if (!parsed.ok) {
     return res.status(400).json({ ok: false, error: parsed.error });
@@ -25,12 +25,12 @@ router.post("/keyword", hookdeckDedupe("outreach:keyword"), asyncRoute(async (re
   res.json({ ok: true, ...result });
 }));
 
-router.post("/batch/next", hookdeckDedupe("outreach:batchNext"), asyncRoute(async (_req, res) => {
+router.post("/batch/next", requestDedupe("outreach:batchNext"), asyncRoute(async (_req, res) => {
   const result = await runNextBatch();
   res.json({ ok: true, ...result });
 }));
 
-router.post("/batch/reset", hookdeckDedupe("outreach:batchReset"), asyncRoute(async (req, res) => {
+router.post("/batch/reset", requestDedupe("outreach:batchReset"), asyncRoute(async (req, res) => {
   const parsed = validateBody(outreachResetBodySchema, req.body);
   if (!parsed.ok) {
     return res.status(400).json({ ok: false, error: parsed.error });
