@@ -1,7 +1,7 @@
 import express from "express";
 import { info, error } from "../../../logger.js";
 import { sanitizeSessionId } from "../../shared/utils/sessionId.js";
-import { hookdeckDedupe } from "../../shared/utils/hookdeckDedupe.js";
+import { requestDedupe } from "../../shared/utils/requestDedupe.js";
 import { getPublicJob, beginJob, completeJob, failJob } from "../../shared/utils/jobStore.js";
 import { validateBody, ttsOrchestrateBodySchema } from "../../shared/utils/requestSchemas.js";
 import { orchestrateTTS } from "../index.js";
@@ -21,14 +21,14 @@ router.get("/status/:sessionId", (req, res) => {
   return res.json({ ok: true, job });
 });
 
-router.post("/orchestrate", hookdeckDedupe("tts:orchestrate"), async (req, res) => {
+router.post("/orchestrate", requestDedupe("tts:orchestrate"), async (req, res) => {
   const parsed = validateBody(ttsOrchestrateBodySchema, req.body);
   if (!parsed.ok) {
     return res.status(400).json({ ok: false, error: parsed.error });
   }
 
   const sessionId = sanitizeSessionId(parsed.data.sessionId || `TT-${Date.now()}`, "TT");
-  const eventId = req.hookdeckEventId || null;
+  const eventId = req.idempotencyKey || null;
 
   if (typeof req.setTimeout === "function") {
     req.setTimeout(0);
