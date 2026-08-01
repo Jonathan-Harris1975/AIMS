@@ -1,6 +1,7 @@
 import express from "express";
 import { getOperationalExcellenceSnapshot } from "../shared/utils/operationalExcellence.js";
 import { extractAsyncStatusUrl, waitForAsyncOperation } from "./asyncOperation.js";
+import { getWebsiteAuditReadiness } from "../../audits/utils/websiteAuditReadiness.js";
 
 const router = express.Router();
 
@@ -63,13 +64,24 @@ function buildChecks(meta) {
     });
   }
 
+  if (meta.service === "audits" && meta.targetPath === "/audits/website/run") {
+    const readiness = getWebsiteAuditReadiness();
+    checks.push(...readiness.checks.map((item) => ({
+      name: `website-audit:${item.name}`,
+      ok: item.ok,
+      detail: item.ok ? "configured" : item.detail,
+    })));
+  }
+
   return checks;
 }
 
 function responseFor(req, stage) {
   const meta = requestMeta(req, stage);
   const checks = buildChecks(meta);
-  const strict = booleanEnv("AIMS_OPS_PREFLIGHT_STRICT", false);
+  const configuredStrict = booleanEnv("AIMS_OPS_PREFLIGHT_STRICT", false);
+  const websiteAuditStrict = meta.service === "audits" && meta.targetPath === "/audits/website/run";
+  const strict = configuredStrict || websiteAuditStrict;
   const requiredOk = checks.every((check) => check.ok);
 
   return {
@@ -77,6 +89,7 @@ function responseFor(req, stage) {
     body: {
       ok: strict ? requiredOk : true,
       strict,
+      strictReason: websiteAuditStrict ? "website-audit-contract" : (configuredStrict ? "environment" : "warning-only"),
       service: "ops",
       checkedService: meta.service,
       stage,
