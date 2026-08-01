@@ -16,7 +16,7 @@ Shared storage/state helpers centralise Cloudflare R2 clients, bucket alias reso
 ### Operational controls
 Shared utilities provide operational-excellence snapshots, alerts/failure tracking, async job handling, trigger metadata and internal-service request conventions.
 
-### Hookdeck dedupe
+### Request dedupe
 Dedupe utilities provide idempotency protection for triggerable workflows where repeated webhook/scheduler deliveries could otherwise duplicate work.
 
 ### Request contracts
@@ -39,7 +39,7 @@ The deployment environment provides:
 - AIMS auth/internal URL settings
 - OpenRouter model and retry settings
 - R2 endpoint, bucket and public-base settings
-- Hookdeck/dedupe settings
+- request-dedupe settings
 - operational timeout/state settings
 - HIVE skill manifest settings
 
