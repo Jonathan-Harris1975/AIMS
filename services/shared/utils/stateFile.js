@@ -14,7 +14,7 @@ const REMOTE_STATE_PREFIX = String(process.env.STATE_REMOTE_PREFIX || "state")
   .replace(/\/+$/, "");
 const KNOWN_REMOTE_FILES = new Set([
   "job-store.json",
-  "hookdeck-dedupe.json",
+  "request-dedupe.json",
   "social-editorial-ledger.json",
   "professional-excellence.json",
 ]);

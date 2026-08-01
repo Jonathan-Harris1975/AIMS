@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { beginJob, completeJob, failJob, flushJobStoreWrites, getPublicJobFresh } from "./jobStore.js";
 import { info, error as logError } from "../../../logger.js";
+import { getRequestIdempotencyKey } from "./requestDedupe.js";
 
 function trim(value) {
   return String(value || "").trim();
@@ -13,13 +14,8 @@ function slug(value) {
     .replace(/^-+|-+$/g, "") || "service";
 }
 
-function hookdeckEventId(req = {}) {
-  return req.hookdeckEventId
-    || req.get?.("x-hookdeck-eventid")
-    || req.get?.("x-hookdeck-event-id")
-    || req.headers?.["x-hookdeck-eventid"]
-    || req.headers?.["x-hookdeck-event-id"]
-    || null;
+function requestIdempotencyKey(req = {}) {
+  return getRequestIdempotencyKey(req);
 }
 
 function boolEnv(name, fallback = false, env = process.env) {
@@ -31,11 +27,11 @@ function boolEnv(name, fallback = false, env = process.env) {
 }
 
 export function shouldRunAsyncServiceRoute(req = {}, env = process.env) {
-  if (!boolEnv("HOOKDECK_ASYNC_SERVICE_ROUTES", true, env)) return false;
+  if (!boolEnv("ASYNC_SERVICE_ROUTES_ENABLED", true, env)) return false;
   if (boolEnv("ASYNC_SERVICE_ROUTES_ALWAYS", false, env)) return true;
   if (String(req.query?.async || "").toLowerCase() === "true") return true;
   if (req.body?.async === true || String(req.body?.async || "").toLowerCase() === "true") return true;
-  return Boolean(hookdeckEventId(req));
+  return Boolean(requestIdempotencyKey(req));
 }
 
 export function asyncServiceJobType(service, lane) {
@@ -114,9 +110,9 @@ export async function startAsyncServiceRouteJob({ service, lane, payload = {}, r
     service,
     lane,
     route: metadata.route || `${service}.${lane}`,
-    eventId: hookdeckEventId(req),
+    eventId: requestIdempotencyKey(req),
     statusUrl,
-    hookdeckAsync: true,
+    requestAsync: true,
     ...metadata,
   });
 

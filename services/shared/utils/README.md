@@ -20,7 +20,7 @@ Internal-service request helpers provide consistent AIMS-to-AIMS HTTP calls with
 Shared request schemas and content validators provide reusable fail-closed checks. Domain rules belong to the service that owns the content type.
 
 ### Dedupe/idempotency
-Hookdeck and schedule-claim helpers prevent duplicate execution/publication when triggers are retried.
+Request-dedupe and schedule-claim helpers prevent duplicate execution/publication when triggers are retried.
 
 ### Operational health
 Operational helpers expose readiness, excellence/failure snapshots and alert hooks without leaking secrets.
