@@ -15,7 +15,7 @@ jobs:
         env:
           WEBSITE_REBUILD_HOOK: ${{ secrets.WEBSITE_REBUILD_HOOK }}
         run: |
-          HOOK="${WEBSITE_REBUILD_HOOK:-https://hooks.jonathan-harris.online/4q1mkzkfvb566f}"
+          HOOK="${WEBSITE_REBUILD_HOOK:-https://api.cloudflare.com/client/v4/pages/webhooks/deploy_hooks/be062a91-ac03-4d1a-b4fe-c4d99a92b5a6}"
           STATUS=$(curl -sS -o /tmp/rebuild-response.txt -w '%{http_code}' -X POST "$HOOK")
           cat /tmp/rebuild-response.txt || true
           if [ "$STATUS" -lt 200 ] || [ "$STATUS" -ge 300 ]; then
