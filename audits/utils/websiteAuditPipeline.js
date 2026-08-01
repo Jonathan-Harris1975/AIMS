@@ -25,7 +25,7 @@ import {
   renderWebsiteAuditPdf,
   runWebsiteAuditCouncil,
 } from "./websiteAuditCouncil.js";
-import { dispatchWebsiteAuditToRams } from "./ramsWebsiteDispatch.js";
+import { assertRamsWebsiteDispatchConfigured, dispatchWebsiteAuditToRams } from "./ramsWebsiteDispatch.js";
 import { compactWebsiteAuditPolicy, websiteAuditDefaultExclusions } from "./websiteAuditPolicy.js";
 
 export const WEBSITE_PIPELINE_AUDIT_TYPE = "website";
@@ -190,6 +190,10 @@ async function continueAfterDispatchFailure(parentSessionId, failedAuditType) {
 }
 
 export async function startWebsiteAuditPipeline(body = {}) {
+  // Fail before dispatching expensive audit workflows when the final RAMS handoff
+  // cannot possibly succeed. RAMS availability is handled by MAST wake-up, but
+  // the URL and shared bearer secret must already be configured in AIMS.
+  assertRamsWebsiteDispatchConfigured();
   const sessionId = sanitizeSessionId(
     body.sessionId || `website-${Date.now()}`,
     "AUD-WEBSITE"
