@@ -212,7 +212,7 @@ function buildSiteSocialUrls(slug) {
 
 async function triggerWebsiteRebuild() {
   const hooks = [
-    String(process.env.WEBSITE_REBUILD_HOOK || "https://hooks.jonathan-harris.online/4q1mkzkfvb566f").trim(),
+    String(process.env.WEBSITE_REBUILD_HOOK || "https://api.cloudflare.com/client/v4/pages/webhooks/deploy_hooks/be062a91-ac03-4d1a-b4fe-c4d99a92b5a6").trim(),
     String(process.env.WEBSITE_REBUILD_HOOK_FALLBACK || "").trim(),
   ].filter(Boolean);
 
