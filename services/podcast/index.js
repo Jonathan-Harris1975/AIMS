@@ -1,7 +1,7 @@
 import express from "express";
 import { runPodcastPipeline } from "./runPodcastPipeline.js";
 import { sanitizeSessionId } from "../shared/utils/sessionId.js";
-import { hookdeckDedupe } from "../shared/utils/hookdeckDedupe.js";
+import { requestDedupe } from "../shared/utils/requestDedupe.js";
 import { getPublicJob, beginJob, completeJob, failJob } from "../shared/utils/jobStore.js";
 import { validateBody, podcastRunBodySchema } from "../shared/utils/requestSchemas.js";
 import { info, error } from "../../logger.js";
@@ -24,7 +24,7 @@ function sendRouteError(req, res, err, fallbackMessage = "Internal error") {
   return res.status(statusCode).json({ ok: false, error: publicMessage, requestId });
 }
 
-router.post("/run", hookdeckDedupe("podcast:run"), async (req, res) => {
+router.post("/run", requestDedupe("podcast:run"), async (req, res) => {
   try {
     const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
     const parsed = validateBody(podcastRunBodySchema, body);
@@ -46,7 +46,7 @@ router.post("/run", hookdeckDedupe("podcast:run"), async (req, res) => {
       payload.sessionId || payload.data?.sessionId || `TT-${new Date().toISOString().slice(0, 10)}`,
       "TT"
     );
-    const eventId = req.hookdeckEventId || null;
+    const eventId = req.idempotencyKey || null;
 
     info("api.podcast.start", { sessionId, eventId });
 
