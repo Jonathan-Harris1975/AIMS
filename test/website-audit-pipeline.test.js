@@ -26,6 +26,7 @@ test("AIMS owns the sequential website audit stages and the three-format final r
   assert.match(pipeline, /website-audit\.json/);
   assert.match(pipeline, /final-pdf-html-json-only/);
   assert.match(pipeline, /retainedArtefacts = \[pdf\.url, htmlReport\.url, jsonReport\.url\]/);
+  assert.match(pipeline, /assertRamsWebsiteDispatchConfigured/);
   assert.match(pipeline, /dispatchWebsiteAuditToRams/);
   assert.match(pipeline, /remediationContractVersion: "rams-website\/v1"/);
   assert.match(pipeline, /strictTemporaryCleanup/);
@@ -76,6 +77,9 @@ test("AIMS dispatches RAMS website remediation by exact final JSON key with retr
   assert.match(dispatch, /\/rebuild\/website\/run/);
   assert.match(dispatch, /audit_json_key: auditJsonKey/);
   assert.match(dispatch, /x-idempotency-key/);
+  assert.match(dispatch, /RAMS_WAIT_FOR_COMPLETION/);
+  assert.match(dispatch, /\/reports\/website\/\$\{encodeURIComponent\(runId\)\}/);
+  assert.match(dispatch, /audit\.website\.rams\.completed/);
   assert.match(routes, /\/jobs\/:sessionId\/rams\/retry/);
   assert.match(read("audits/utils/websiteAuditPipeline.js"), /Preserve the pipeline invariant on retries too/);
   assert.match(read("audits/utils/websiteAuditPipeline.js"), /cleanupRequired: false/);
