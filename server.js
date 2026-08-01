@@ -273,8 +273,8 @@ app.use(
     genReqId(req, res) {
       const inherited =
         req.headers["x-request-id"] ||
-        req.headers["x-hookdeck-eventid"] ||
-        req.headers["x-hookdeck-event-id"];
+        req.headers["x-trigger-run-key"] ||
+        req.headers["x-idempotency-key"];
 
       const requestId =
         typeof inherited === "string" && inherited.trim()
@@ -321,7 +321,7 @@ app.get("/health", (_req, res) =>
     ok: true,
     status: "ok",
     service: "AIMS",
-    version: process.env.APP_VERSION || "2.9.2",
+    version: process.env.APP_VERSION || "2.9.5",
     env: process.env.APP_ENV || process.env.NODE_ENV || "development",
     trustProxy,
     time: new Date().toISOString(),
@@ -339,7 +339,7 @@ app.get("/readyz", (_req, res) => {
   return res.status(report.ready && lifecycleState.state !== "maintenance" ? 200 : 503).json({
     ok: report.ready,
     service: "AIMS",
-    version: process.env.APP_VERSION || "2.9.2",
+    version: process.env.APP_VERSION || "2.9.5",
     ...report,
     lifecycle: lifecycleState,
     time: new Date().toISOString(),

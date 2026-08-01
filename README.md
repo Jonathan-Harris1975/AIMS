@@ -253,12 +253,12 @@ Expected high-level response:
 | Concern | Evidence | Behaviour |
 |---|---|---|
 | Logging | `logger.js`, `server.js` | Pino logger. Production logging is JSON when `NODE_ENV=production`; development uses `pino-pretty`. |
-| Request IDs | `server.js` | Uses `x-request-id`, Hookdeck event headers, or `crypto.randomUUID()`. Response header `x-request-id` is set. |
+| Request IDs | `server.js` | Uses `x-request-id`, Idempotency headers, or `crypto.randomUUID()`. Response header `x-request-id` is set. |
 | CORS | `server.js` | `CORS_ORIGINS` comma-separated allow-list. Without configured origins, non-production allows loopback origins. Server-to-server/no-origin requests are allowed. |
 | Body limits | `server.js` | `JSON_BODY_LIMIT` and `URLENCODED_BODY_LIMIT`, default `10mb`. |
 | Rate limiting | `services/shared/middleware/rateLimit.js` | Enabled by default in production, disabled by default outside production unless configured. Skips `/` and `/health`. Uses IP + method. |
 | Error handling | `server.js` | Invalid JSON `400`, body too large `413`, aborted requests `400`, CORS denied `403`, otherwise `500`, always JSON with request ID where available. |
-| Hookdeck dedupe | `services/shared/utils/hookdeckDedupe.js` | Routes with dedupe scopes return `202` on duplicate Hookdeck events. No Hookdeck header means the request runs normally. |
+| Request dedupe | `services/shared/utils/requestDedupe.js` | Routes with dedupe scopes return `202` on duplicate idempotent requests. No Idempotency header means the request runs normally. |
 | Job state | `services/shared/utils/jobStore.js`, `stateFile.js` | Async jobs are stored in shared state. Production requires durable R2 metasystem state unless explicitly allowing ephemeral state. |
 | Temporary files | `scripts/tempStorage.js`, TTS processors | Defaults to `/tmp/ai-management-suite`; audio processors use subdirectories beneath `APP_TMP_DIR` unless overridden. |
 
@@ -291,49 +291,49 @@ The table below is built from the active mounted routers in `routes/index.js` an
 | `GET` | `/` | core | Liveness smoke response. | None | None | Text `OK`. |
 | `GET` | `/health` | core | Runtime health response including trust-proxy value. | None | None | JSON `{ ok, status, trustProxy }`. |
 | `GET` | `/rss` | rss-feed-creator | Returns newsletter RSS XML from R2. | None | None | `application/rss+xml`; returns fallback empty feed if object is empty. |
-| `POST` | `/rss` | rss-feed-creator | Runs end-to-end RSS rewrite pipeline. | No fixed body. | Hookdeck header only affects dedupe on /rss/rewrite, not this route. | JSON with `ok`, `route`, `message`, `result`. |
-| `POST` | `/rss/rewrite` | rss-feed-creator | Runs end-to-end RSS rewrite pipeline via mounted rewrite router. | No required fields. | Hookdeck dedupe scope `rss:rewrite`. | JSON with `totalItems`, `rewrittenItems`, `message`. |
+| `POST` | `/rss` | rss-feed-creator | Runs end-to-end RSS rewrite pipeline. | No fixed body. | Idempotency header only affects dedupe on /rss/rewrite, not this route. | JSON with `ok`, `route`, `message`, `result`. |
+| `POST` | `/rss/rewrite` | rss-feed-creator | Runs end-to-end RSS rewrite pipeline via mounted rewrite router. | No required fields. | Request dedupe scope `rss:rewrite`. | JSON with `totalItems`, `rewrittenItems`, `message`. |
 | `GET` | `/script/health` | script | Script service health. | None | None | JSON `{ ok: true, service: "script" }`. |
-| `POST` | `/script/intro` | script | Generate intro text. | Optional `sessionId`, `date`, `prompt`. | Hookdeck dedupe `script:intro`. | JSON `{ ok, sessionId, text }`. |
-| `POST` | `/script/main` | script | Generate main segment text. | Optional `sessionId`, `rssUrl`, `maxItems`, `prompt`. | Hookdeck dedupe `script:main`. | JSON `{ ok, sessionId, text }`. |
-| `POST` | `/script/outro` | script | Generate outro text. | Optional `sessionId`, `prompt`. | Hookdeck dedupe `script:outro`. | JSON `{ ok, sessionId, text }`. |
-| `POST` | `/script/compose` | script | Compose intro/main/outro into a full episode package. | Optional `sessionId`, `intro`, `main[]`, `outro`, `editorPrompt`. | Hookdeck dedupe `script:compose`. | JSON `{ ok, sessionId, ...result }`. |
-| `POST` | `/script/orchestrate` | script | Generate full script, upload chunks, transcript and metadata. | Optional `sessionId`, `date`, `tone`, `location`. | Hookdeck dedupe `script:orchestrate`. | JSON includes `fullText`, `chunks`, `metadata` when successful. |
+| `POST` | `/script/intro` | script | Generate intro text. | Optional `sessionId`, `date`, `prompt`. | Request dedupe `script:intro`. | JSON `{ ok, sessionId, text }`. |
+| `POST` | `/script/main` | script | Generate main segment text. | Optional `sessionId`, `rssUrl`, `maxItems`, `prompt`. | Request dedupe `script:main`. | JSON `{ ok, sessionId, text }`. |
+| `POST` | `/script/outro` | script | Generate outro text. | Optional `sessionId`, `prompt`. | Request dedupe `script:outro`. | JSON `{ ok, sessionId, text }`. |
+| `POST` | `/script/compose` | script | Compose intro/main/outro into a full episode package. | Optional `sessionId`, `intro`, `main[]`, `outro`, `editorPrompt`. | Request dedupe `script:compose`. | JSON `{ ok, sessionId, ...result }`. |
+| `POST` | `/script/orchestrate` | script | Generate full script, upload chunks, transcript and metadata. | Optional `sessionId`, `date`, `tone`, `location`. | Request dedupe `script:orchestrate`. | JSON includes `fullText`, `chunks`, `metadata` when successful. |
 | `GET` | `/tts/health` | tts | TTS service health. | None | None | JSON `{ ok, service }`. |
 | `GET` | `/tts/status/:sessionId` | tts | Reads async TTS job status. | Path `sessionId`. | None | 200 with public job, 404 if not found. |
-| `POST` | `/tts/orchestrate` | tts | Starts asynchronous TTS job for an existing script session. | Optional `sessionId`; passthrough accepted. | Hookdeck dedupe `tts:orchestrate`. | 202 with `statusUrl`; duplicate active job also returns 202. |
-| `POST` | `/artwork/create` | artwork | Stores artwork request JSON for later handling. | Any JSON object. | Hookdeck dedupe `artwork:create`. | JSON with R2 bucket alias and key. |
-| `POST` | `/artwork/generate` | artwork | Generates PNG artwork and stores it in R2. | Optional `sessionId`, `prompt`. | Hookdeck dedupe `artwork:generate`. | JSON `{ ok, sessionId, url }`. |
+| `POST` | `/tts/orchestrate` | tts | Starts asynchronous TTS job for an existing script session. | Optional `sessionId`; passthrough accepted. | Request dedupe `tts:orchestrate`. | 202 with `statusUrl`; duplicate active job also returns 202. |
+| `POST` | `/artwork/create` | artwork | Stores artwork request JSON for later handling. | Any JSON object. | Request dedupe `artwork:create`. | JSON with R2 bucket alias and key. |
+| `POST` | `/artwork/generate` | artwork | Generates PNG artwork and stores it in R2. | Optional `sessionId`, `prompt`. | Request dedupe `artwork:generate`. | JSON `{ ok, sessionId, url }`. |
 | `GET` | `/podcast/health` | podcast | Podcast service health. | None | None | JSON `{ ok, service, time }`. |
-| `POST` | `/podcast/run` | podcast | Starts asynchronous full podcast pipeline. | Optional `sessionId` or `data.sessionId`; passthrough accepted. | Hookdeck dedupe `podcast:run`. | 202 with `statusUrl`; duplicate active job returns existing job. |
+| `POST` | `/podcast/run` | podcast | Starts asynchronous full podcast pipeline. | Optional `sessionId` or `data.sessionId`; passthrough accepted. | Request dedupe `podcast:run`. | 202 with `statusUrl`; duplicate active job returns existing job. |
 | `GET` | `/podcast/status/:sessionId` | podcast | Reads async podcast pipeline job status. | Path `sessionId`. | None | 200 with public job, 404 if not found. |
 | `GET` | `/outreach/health` | outreach | Outreach service health. | None | None | JSON `{ ok, service }`. |
-| `POST` | `/outreach/keyword` | outreach | Runs one outreach keyword scan and appends accepted leads. | Required `keyword` string. | Hookdeck dedupe `outreach:keyword`. | JSON with saved-lead and domain counts. |
-| `POST` | `/outreach/batch/next` | outreach | Runs the next configured keyword batch. | No required body. | Hookdeck dedupe `outreach:batchNext`. | JSON with `processed`, `done`, `lastProcessedIndex`. |
-| `POST` | `/outreach/batch/reset` | outreach | Resets batch cursor. | Optional `lastProcessedIndex` integer. | Hookdeck dedupe `outreach:batchReset`. | JSON with new cursor. |
-| `POST` | `/blog/weekly/build` | blog | Builds and publishes a weekly blog post. | Optional `days` 1-31 or `weekId` `YYYY-WNN`. | Hookdeck dedupe `blog:weeklyBuild`. | JSON build result including post, RSS and rebuild metadata. |
+| `POST` | `/outreach/keyword` | outreach | Runs one outreach keyword scan and appends accepted leads. | Required `keyword` string. | Request dedupe `outreach:keyword`. | JSON with saved-lead and domain counts. |
+| `POST` | `/outreach/batch/next` | outreach | Runs the next configured keyword batch. | No required body. | Request dedupe `outreach:batchNext`. | JSON with `processed`, `done`, `lastProcessedIndex`. |
+| `POST` | `/outreach/batch/reset` | outreach | Resets batch cursor. | Optional `lastProcessedIndex` integer. | Request dedupe `outreach:batchReset`. | JSON with new cursor. |
+| `POST` | `/blog/weekly/build` | blog | Builds and publishes a weekly blog post. | Optional `days` 1-31 or `weekId` `YYYY-WNN`. | Request dedupe `blog:weeklyBuild`. | JSON build result including post, RSS and rebuild metadata. |
 | `POST` | `/blog/rss/rebuild` | blog | Rebuilds weekly blog RSS from manifest. | No required body. | None | JSON RSS publishing result. |
-| `POST` | `/blog/social/daily/build` | blog | Builds daily/social blog post. | Optional `date`, `days` 1-7, `dryRun`, `force`. | Hookdeck dedupe `blog:socialDailyBuild`. | JSON build result or skip/dry-run result. |
+| `POST` | `/blog/social/daily/build` | blog | Builds daily/social blog post. | Optional `date`, `days` 1-7, `dryRun`, `force`. | Request dedupe `blog:socialDailyBuild`. | JSON build result or skip/dry-run result. |
 | `POST` | `/blog/social/rss/rebuild` | blog | Rebuilds daily/social blog RSS from manifest. | No required body. | None | JSON RSS publishing result. |
 | `GET` | `/cloudflare/health` | cloudflare-purge | Cloudflare purge service health/config check. | None | None | JSON with `configured` flag. |
 | `POST` | `/cloudflare/purge` | cloudflare-purge | Purges Cloudflare cache for one selected mode. | Exactly one of `purge_everything`, `files[]`, `tags[]`, `hosts[]`, `prefixes[]`. | Optional `x-cloudflare-purge-secret` required only when env secret is set. | JSON with Cloudflare purge result. |
 | `GET` | `/oneup/health` | oneup | OneUp service health and available lanes. | None | None | JSON with lane keys and route hints. |
-| `POST` | `/oneup/posts/history` | oneup | Fetches published post history from OneUp. | Optional `start`, `maxPages`, `lookbackDays`, `apiKey`. | Hookdeck dedupe `oneup:posts:history`. | JSON with OneUp rows and pagination metadata. |
-| `POST` | `/oneup/daily/:laneKey` | oneup | Builds and schedules a daily lane post. Lane keys: monday-sunday. | Optional `publishDate`, `scheduledDateTime`, `dryRun`, `categoryName`, `socialNetworkId`, `imageUrl`, `apiKey`. | Hookdeck dedupe `oneup:<laneKey>`. | JSON with generated post and scheduling status. |
-| `POST` | `/oneup/ebooks/weekly` | oneup | Builds/schedules Tuesday, Thursday and Saturday ebook posts. | Optional `weekStartDate`, `featuredBook`, `usePodcastFeaturedBook`, `publishTimes`, `scheduledDateTimes`, `dryRun`, category/network/image/api fields. | Hookdeck dedupe `oneup:ebooks:weekly`. | JSON with featured book, per-day posts, warnings. |
-| `POST` | `/oneup/quiz/weekly` | oneup | Builds/schedules weekly quiz question and answer posts. | Optional question/answer dates or scheduled datetimes, `dryRun`, category/network/image/api fields. | Hookdeck dedupe `oneup:quiz:weekly`. | JSON with question/answer scheduling results. |
+| `POST` | `/oneup/posts/history` | oneup | Fetches published post history from OneUp. | Optional `start`, `maxPages`, `lookbackDays`, `apiKey`. | Request dedupe `oneup:posts:history`. | JSON with OneUp rows and pagination metadata. |
+| `POST` | `/oneup/daily/:laneKey` | oneup | Builds and schedules a daily lane post. Lane keys: monday-sunday. | Optional `publishDate`, `scheduledDateTime`, `dryRun`, `categoryName`, `socialNetworkId`, `imageUrl`, `apiKey`. | Request dedupe `oneup:<laneKey>`. | JSON with generated post and scheduling status. |
+| `POST` | `/oneup/ebooks/weekly` | oneup | Builds/schedules Tuesday, Thursday and Saturday ebook posts. | Optional `weekStartDate`, `featuredBook`, `usePodcastFeaturedBook`, `publishTimes`, `scheduledDateTimes`, `dryRun`, category/network/image/api fields. | Request dedupe `oneup:ebooks:weekly`. | JSON with featured book, per-day posts, warnings. |
+| `POST` | `/oneup/quiz/weekly` | oneup | Builds/schedules weekly quiz question and answer posts. | Optional question/answer dates or scheduled datetimes, `dryRun`, category/network/image/api fields. | Request dedupe `oneup:quiz:weekly`. | JSON with question/answer scheduling results. |
 | `GET` | `/audits/mobile-ux/health` | audits | Mobile UX audit health. | None | None | JSON health. |
-| `POST` | `/audits/mobile-ux/run` | audits | Dispatches website Mobile UX audit workflow. | Optional `sessionId`, `websiteUrl`, `reportPrefix`, `workflowRef`, `requestedBy`, `notes`, `excludePatterns`. | Hookdeck dedupe; GitHub token required in env. | 202 with queued job and dispatch metadata. |
+| `POST` | `/audits/mobile-ux/run` | audits | Dispatches website Mobile UX audit workflow. | Optional `sessionId`, `websiteUrl`, `reportPrefix`, `workflowRef`, `requestedBy`, `notes`, `excludePatterns`. | Request dedupe; GitHub token required in env. | 202 with queued job and dispatch metadata. |
 | `POST` | `/audits/mobile-ux/callback` | audits | Receives Mobile UX audit workflow callback. | Audit callback schema: `auditType`, `sessionId`, `status`, `reportPrefix`, artefact URLs. | Bearer token or `x-audit-callback-token`. | JSON completion result. |
 | `GET` | `/audits/mobile-ux/jobs/:sessionId` | audits | Reads Mobile UX audit job state. | Path `sessionId`. | None | 200 public job or 404. |
 | `GET` | `/audits/seo-aeo-geo/health` | audits | SEO/AEO/GEO audit health. | None | None | JSON health. |
-| `POST` | `/audits/seo-aeo-geo/run` | audits | Dispatches website SEO/AEO/GEO forensic audit workflow. | Same audit-run schema as Mobile UX. | Hookdeck dedupe; GitHub token required in env. | 202 with queued job and dispatch metadata. |
+| `POST` | `/audits/seo-aeo-geo/run` | audits | Dispatches website SEO/AEO/GEO forensic audit workflow. | Same audit-run schema as Mobile UX. | Request dedupe; GitHub token required in env. | 202 with queued job and dispatch metadata. |
 | `POST` | `/audits/seo-aeo-geo/analysis` | audits | Starts AI analysis for audit payload submitted by workflow. | Requires `sessionId`, `baseUrl`, `inventory`, `priorityPages[]`, `allRoutes[]`, `repoSignals`. | Bearer token or `x-audit-callback-token`. | 200 if completed quickly, otherwise 202 with analysis status URL. |
 | `GET` | `/audits/seo-aeo-geo/analysis/:sessionId` | audits | Reads SEO/AEO/GEO AI analysis job. | Path `sessionId`. | Bearer token or `x-audit-callback-token`. | 202 running/queued, 200 completed, 409 failed/incomplete. |
 | `POST` | `/audits/seo-aeo-geo/callback` | audits | Receives SEO/AEO/GEO workflow callback. | Audit callback schema. | Bearer token or `x-audit-callback-token`. | JSON completion result. |
 | `GET` | `/audits/seo-aeo-geo/jobs/:sessionId` | audits | Reads SEO/AEO/GEO audit job state. | Path `sessionId`. | None | 200 public job or 404. |
 | `GET` | `/audits/on-brand/health` | audits | On-brand audit health. | None | None | JSON health. |
-| `POST` | `/audits/on-brand/run` | audits | Runs local on-brand audit over OneUp, podcast transcript and RSS evidence. | Optional `sessionId`, `lookbackDays`, `includeOneUp`, `includePodcastTranscripts`, `includeRss`, `dryRun`. | Hookdeck dedupe `audits:on-brand:run`. | JSON audit report result and published artefacts unless dry-run. |
+| `POST` | `/audits/on-brand/run` | audits | Runs local on-brand audit over OneUp, podcast transcript and RSS evidence. | Optional `sessionId`, `lookbackDays`, `includeOneUp`, `includePodcastTranscripts`, `includeRss`, `dryRun`. | Request dedupe `audits:on-brand:run`. | JSON audit report result and published artefacts unless dry-run. |
 | `POST` | `/rss-links/shorten` | rss-links | Creates or reuses an RSS short link. | Required `url` absolute http/https URL. | None | 201 if new, 200 if reused. |
 | `GET` | `/rss-links/:key` | rss-links | Redirects a short key to original URL. | Path `key` 4-32 alphanumeric. | None | 302 redirect; query string preserved. |
 | `GET` | `/rss-links/:key/index.html` | rss-links | Redirect page URL variant. | Path `key` 4-32 alphanumeric. | None | 302 redirect; query string preserved. |
@@ -392,7 +392,7 @@ These files exist but are not mounted by the active root route registry:
 | `APP_TMP_DIR` | Temporary working directory for FFmpeg/audio and bootstrap checks. | server.js, scripts/*, shared utilities | Optional/conditional | `/tmp/ai-management-suite` | Set only for services you run. |
 | `APP_STATE_DIR` | Durable/local state backend and paths. | server.js, scripts/*, shared utilities | Optional/conditional | `/tmp/ai-management-suite/state` | Set only for services you run. |
 | `JOB_STATUS_TTL_MS` | Timeout, delay or TTL control in milliseconds. | server.js, scripts/*, shared utilities | Optional/conditional | `86400000` | Set only for services you run. |
-| `HOOKDECK_DEDUPE_TTL_MS` | Timeout, delay or TTL control in milliseconds. | server.js, scripts/*, shared utilities | Optional/conditional | `21600000` | Set only for services you run. |
+| `REQUEST_DEDUPE_TTL_MS` | Timeout, delay or TTL control in milliseconds. | server.js, scripts/*, shared utilities | Optional/conditional | `21600000` | Set only for services you run. |
 | `RATE_LIMIT_ENABLED` | Global in-memory HTTP rate limiting control. | server.js, scripts/*, shared utilities | Optional/conditional | `true` | Set only for services you run. |
 | `RATE_LIMIT_WINDOW_MS` | Timeout, delay or TTL control in milliseconds. | server.js, scripts/*, shared utilities | Optional/conditional | `60000` | Set only for services you run. |
 | `RATE_LIMIT_MAX_REQUESTS` | Global in-memory HTTP rate limiting control. | server.js, scripts/*, shared utilities | Optional/conditional | `60` | Set only for services you run. |
@@ -781,7 +781,7 @@ These names were found in runtime code or deployment checks but are not present 
 | `rawtext` / `raw-text` | `R2_BUCKET_RAW_TEXT` | `R2_PUBLIC_BASE_URL_RAW_TEXT` | Script chunks and raw text assets. |
 | `chunks` | `R2_BUCKET_CHUNKS` or fallback `R2_BUCKET_RAW` | `R2_PUBLIC_BASE_URL_CHUNKS` | Raw MP3 chunks from Polly. |
 | `meta` | `R2_BUCKET_META` | `R2_PUBLIC_BASE_URL_META` | Episode metadata JSON. |
-| `metasystem` | `R2_BUCKET_META_SYSTEM` | `R2_PUBLIC_BASE_URL_META_SYSTEM` | Durable job state, Hookdeck dedupe, outreach progress and system files. |
+| `metasystem` | `R2_BUCKET_META_SYSTEM` | `R2_PUBLIC_BASE_URL_META_SYSTEM` | Durable job state, Request dedupe, outreach progress and system files. |
 | `merged` | `R2_BUCKET_MERGED` | `R2_PUBLIC_BASE_URL_MERGE` | Merged audio before editing. |
 | `edited` | `R2_BUCKET_EDITED_AUDIO` | `R2_PUBLIC_BASE_URL_EDITED_AUDIO` | Edited/mastered audio before final podcast mixdown. |
 | `art` | `R2_BUCKET_ART` | `R2_PUBLIC_BASE_URL_ART` | Podcast/direct artwork. |
@@ -811,10 +811,10 @@ These names were found in runtime code or deployment checks but are not present 
 - `services/shared/utils/podcastIndexClient.js` signs PodcastIndex hub notifications.
 - `services/rss-feed-podcast/index.js` calls `notifyHubByUrl` when `AUTO_CALL=yes` and PodcastIndex credentials are configured.
 
-### Hookdeck
+### Request deduplication
 
-- Hookdeck event headers are used for idempotency, not authentication.
-- Supported headers: `x-hookdeck-eventid` and `x-hookdeck-event-id`.
+- Idempotency headers are used for idempotency, not authentication.
+- Supported headers: `x-idempotency-key` and `x-trigger-run-key`.
 - Dedupe records are persisted via shared state when durable R2 state is enabled.
 
 ### OneUp
@@ -1235,7 +1235,7 @@ The repository uses Node’s built-in test runner through `node --test`. `supert
 
 - **Rate limiting**: In-memory per-process rate limiting. In multi-instance deployments, limits are per instance.
 - **Request IDs**: Every logged request gets a request ID from request headers or a UUID.
-- **Dedupe**: Hookdeck dedupe is idempotency only. It is not request authentication.
+- **Dedupe**: Request dedupe is idempotency only. It is not request authentication.
 - **Durable state**: Production state backend is `auto` by default. With R2 configured, job and dedupe state is stored in R2 metasystem. Without R2, production startup/checks reject local-only state unless explicitly allowed.
 - **Temporary directories**: Use `/tmp/ai-management-suite` by default, with service-specific subdirectories for merge/edit/mastering.
 - **Timeouts**: AI, feed fetch, artwork, Cloudflare purge, podcast fetch and FFmpeg timeouts are environment-driven.
@@ -1379,7 +1379,7 @@ Check:
 
 1. Keep the full path clear from the mount point plus local route path.
 2. Validate request bodies with Zod or an existing schema helper.
-3. Use `hookdeckDedupe(scope)` only for webhook-triggered idempotent routes.
+3. Use `requestDedupe(scope)` only for webhook-triggered idempotent routes.
 4. Return JSON consistently with `ok`, service-specific data and a useful error shape.
 5. Add route tests or at least schema tests.
 6. Update this README and the service README in the same pull request.
