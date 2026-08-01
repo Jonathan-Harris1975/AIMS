@@ -5,7 +5,7 @@
 import express from "express";
 import { putObject } from "../../shared/utils/r2-client.js";
 import { sanitizeSessionId } from "../../shared/utils/sessionId.js";
-import { hookdeckDedupe } from "../../shared/utils/hookdeckDedupe.js";
+import { requestDedupe } from "../../shared/utils/requestDedupe.js";
 import {
   validateBody,
   artworkGenerateBodySchema,
@@ -43,7 +43,7 @@ export async function generateArtwork(sessionId, prompt = "") {
 // ------------------------------------------------------------
 // Express Route Wrapper
 // ------------------------------------------------------------
-router.post("/", hookdeckDedupe("artwork:generate"), async (req, res) => {
+router.post("/", requestDedupe("artwork:generate"), async (req, res) => {
   let sessionId;
 
   try {

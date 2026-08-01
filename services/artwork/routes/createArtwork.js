@@ -1,7 +1,7 @@
 // services/artwork/routes/createArtwork.js
 import express from "express";
 import { putJson } from "../../shared/utils/r2-client.js";
-import { hookdeckDedupe } from "../../shared/utils/hookdeckDedupe.js";
+import { requestDedupe } from "../../shared/utils/requestDedupe.js";
 import {
   validateBody,
   artworkCreateBodySchema,
@@ -15,7 +15,7 @@ function sendRouteError(req, res, err, fallbackMessage = "Internal error") {
   return res.status(500).json({ ok: false, error: fallbackMessage, requestId });
 }
 
-router.post("/", hookdeckDedupe("artwork:create"), async (req, res) => {
+router.post("/", requestDedupe("artwork:create"), async (req, res) => {
   try {
     const parsed = validateBody(artworkCreateBodySchema, req.body);
     if (!parsed.ok) {
