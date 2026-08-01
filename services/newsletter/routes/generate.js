@@ -1,7 +1,7 @@
 // services/newsletter/routes/generate.js
 import express from "express";
 import { buildNewsletter } from "../engine/buildNewsletter.js";
-import { hookdeckDedupe } from "../../shared/utils/hookdeckDedupe.js";
+import { requestDedupe } from "../../shared/utils/requestDedupe.js";
 import { validateBody, newsletterGenerateBodySchema } from "../../shared/utils/requestSchemas.js";
 import {
   getAsyncServiceRouteJobFresh,
@@ -27,7 +27,7 @@ router.get("/jobs/:lane/:sessionId", asyncRoute(async (req, res) => {
 }));
 
 // POST /newsletter/generate — build one issue for a profile (default: ai-edge).
-router.post("/generate", hookdeckDedupe("newsletter:generate"), asyncRoute(async (req, res) => {
+router.post("/generate", requestDedupe("newsletter:generate"), asyncRoute(async (req, res) => {
   const parsed = validateBody(newsletterGenerateBodySchema, req.body);
   if (!parsed.ok) return res.status(400).json({ ok: false, error: parsed.error });
 

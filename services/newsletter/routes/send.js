@@ -2,7 +2,7 @@
 import express from "express";
 import { warn } from "../../../logger.js";
 import { getObjectAsText, buildPublicUrl } from "../../shared/utils/r2-client.js";
-import { hookdeckDedupe } from "../../shared/utils/hookdeckDedupe.js";
+import { requestDedupe } from "../../shared/utils/requestDedupe.js";
 import { validateBody, newsletterSendBodySchema } from "../../shared/utils/requestSchemas.js";
 import { getNewsletterProfile } from "../config/profiles.js";
 import { buildIssueKeyPrefix, findLatestIssueSessionId } from "../engine/storage.js";
@@ -45,7 +45,7 @@ async function loadStoredIssue(profile, sessionId, date) {
 // recently built issue for the profile from durable storage, so restarts do not
 // break the delivery hand-off. This resolves "today's most recently built
 // issue" for the profile itself (see engine/storage.js#findLatestIssueSessionId).
-router.post("/send", hookdeckDedupe("newsletter:send"), asyncRoute(async (req, res) => {
+router.post("/send", requestDedupe("newsletter:send"), asyncRoute(async (req, res) => {
   const parsed = validateBody(newsletterSendBodySchema, req.body);
   if (!parsed.ok) return res.status(400).json({ ok: false, error: parsed.error });
 
