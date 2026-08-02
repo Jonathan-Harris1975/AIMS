@@ -11,7 +11,7 @@ test("unified website audit routes are mounted and MAST-facing run endpoint exis
   assert.match(index, /router\.use\("\/website", websiteRoutes\)/);
   assert.match(index, /router\.use\("\/digital-growth", digitalGrowthRoutes\)/);
   assert.match(website, /router\.post\("\/run", requestDedupe\("audits:website:run"\)/);
-  assert.match(website, /retentionPolicy: "final-pdf-html-json-only"/);
+  assert.match(website, /retentionPolicy: "final-pdf-html-json-only-after-rams-acceptance; retain-source-evidence-on-failure"/);
   assert.match(digital, /WORKFLOW_ID = "digital-growth-audit\.yml"/);
 });
 
@@ -24,13 +24,17 @@ test("AIMS owns the sequential website audit stages and the three-format final r
   assert.match(pipeline, /website-audit\.pdf/);
   assert.match(pipeline, /website-audit\.html/);
   assert.match(pipeline, /website-audit\.json/);
-  assert.match(pipeline, /final-pdf-html-json-only/);
+  assert.match(pipeline, /final-pdf-html-json-only-after-rams-acceptance/);
+  assert.match(pipeline, /conditional-final-set-with-failure-evidence-retention/);
   assert.match(pipeline, /retainedArtefacts = \[pdf\.url, htmlReport\.url, jsonReport\.url\]/);
   assert.match(pipeline, /assertRamsWebsiteDispatchConfigured/);
   assert.match(pipeline, /dispatchWebsiteAuditToRams/);
   assert.match(pipeline, /remediationContractVersion: "rams-website\/v1"/);
   assert.match(pipeline, /strictTemporaryCleanup/);
   assert.match(pipeline, /cleanupAuditPrefix\(\{ reportPrefix: tempPrefix \}\)/);
+  assert.match(pipeline, /controlled-audit-failure/);
+  assert.match(pipeline, /evidenceRetentionRequired: true/);
+  assert.match(pipeline, /ramsDispatchPermitted: completeEvidenceContract/);
   assert.match(pipeline, /stale child callback/);
   assert.match(pipeline, /out-of-order child callback/);
 });
@@ -81,8 +85,9 @@ test("AIMS dispatches RAMS website remediation by exact final JSON key with retr
   assert.match(dispatch, /\/reports\/website\/\$\{encodeURIComponent\(runId\)\}/);
   assert.match(dispatch, /audit\.website\.rams\.completed/);
   assert.match(routes, /\/jobs\/:sessionId\/rams\/retry/);
-  assert.match(read("audits/utils/websiteAuditPipeline.js"), /Preserve the pipeline invariant on retries too/);
+  assert.match(read("audits/utils/websiteAuditPipeline.js"), /RAMS dispatch is prohibited because the website audit source evidence contract is incomplete/);
   assert.match(read("audits/utils/websiteAuditPipeline.js"), /cleanupRequired: false/);
+  assert.match(read("audits/utils/websiteAuditPipeline.js"), /parent\.ramsDispatch\?\.ok/);
   assert.doesNotMatch(index, /seo-aeo-geo-council|mobile-ux-council/);
 });
 

@@ -55,7 +55,7 @@ test("resilientRequest fails over immediately after a provider timeout", async (
 
   try {
     const { resilientRequest } = await import(`../services/shared/utils/ai-service.js?timeoutFailover=${Date.now()}`);
-    const result = await resilientRequest("scriptMain", {
+    const result = await resilientRequest("main", {
       sessionId: "timeout-failover-test",
       messages: [{ role: "user", content: "Test failover" }],
       timeoutMs: 20,
