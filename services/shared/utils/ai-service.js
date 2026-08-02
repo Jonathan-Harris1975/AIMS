@@ -144,7 +144,8 @@ function parseCsv(value) {
     .filter(Boolean);
 }
 
-function getOpenRouterProviderOptions({ response_format } = {}) {
+function getOpenRouterProviderOptions({ response_format, relaxedParameters = false } = {}) {
+  if (relaxedParameters) return undefined;
   const provider = {};
   const sortBy = String(process.env.OPENROUTER_SORT_BY || "").trim().toLowerCase();
   if (["price", "throughput", "latency"].includes(sortBy)) {
@@ -213,6 +214,22 @@ function makeOpenRouterError(status, body, providerId) {
   return err;
 }
 
+function isParameterCompatibilityError(err) {
+  const status = Number(err?.status);
+  const detail = `${err?.message || ""} ${err?.bodySnippet || ""}`.toLowerCase();
+  return [400, 404, 422].includes(status) && (
+    detail.includes("no endpoints found that can handle requested parameters") ||
+    detail.includes("unsupported parameter") ||
+    detail.includes("response_format") ||
+    detail.includes("reasoning") ||
+    detail.includes("require_parameters")
+  );
+}
+
+function modelSupportsReasoningOptions(model) {
+  return /(^|\/)(gpt-5(?:\.\d+)?|o1|o3|o4|deepseek-r1|qwen3)([-/:]|$)/i.test(String(model || ""));
+}
+
 function extractMessageContent(json) {
   const content = json?.choices?.[0]?.message?.content;
   if (typeof content === "string") return content;
@@ -229,18 +246,21 @@ function extractMessageContent(json) {
   return "";
 }
 
-async function callOpenRouter({ providerId, model, apiKey, messages, max_tokens, temperature, top_p, response_format, headers, timeoutMs, reasoning }) {
-  const payload = { model, messages, max_tokens, temperature, top_p };
-  if (response_format) payload.response_format = response_format;
+async function callOpenRouter({ providerId, model, apiKey, messages, max_tokens, temperature, top_p, response_format, headers, timeoutMs, reasoning, relaxedParameters = false }) {
+  const payload = { model, messages, max_tokens };
+  if (!relaxedParameters && Number.isFinite(Number(temperature))) payload.temperature = Number(temperature);
+  if (!relaxedParameters && Number.isFinite(Number(top_p))) payload.top_p = Number(top_p);
+  if (!relaxedParameters && response_format) payload.response_format = response_format;
 
-  const providerOptions = getOpenRouterProviderOptions({ response_format });
+  const providerOptions = getOpenRouterProviderOptions({ response_format, relaxedParameters });
   if (providerOptions) payload.provider = providerOptions;
 
-  const serviceTier = getServiceTier();
+  const serviceTier = relaxedParameters ? undefined : getServiceTier();
   if (serviceTier) payload.service_tier = serviceTier;
 
-  const effectiveReasoning = reasoning === undefined ? getReasoningOptions() : reasoning;
-  if (effectiveReasoning) payload.reasoning = effectiveReasoning;
+  const configuredReasoning = reasoning === undefined ? getReasoningOptions() : reasoning;
+  const effectiveReasoning = configuredReasoning && modelSupportsReasoningOptions(model) ? configuredReasoning : undefined;
+  if (!relaxedParameters && effectiveReasoning) payload.reasoning = effectiveReasoning;
 
   const reqHeaders = {
     "Content-Type": "application/json",
@@ -286,6 +306,7 @@ async function callOpenRouter({ providerId, model, apiKey, messages, max_tokens,
       model: json?.model || model,
       serviceTier: json?.service_tier || serviceTier,
       durationMs: Date.now() - startedAt,
+      parameterMode: relaxedParameters ? "relaxed" : "standard",
     };
   } catch (err) {
     if (err?.name === "AbortError") {
@@ -319,11 +340,35 @@ export async function resilientRequest(routeName, {
   const routeKey = resolveRouteKey(routeName);
   const chain = getProviderChainForRoute(routeKey);
   const requestedMaxRetries = Number.isFinite(Number(maxRetries)) ? Number(maxRetries) : MAX_RETRIES;
-  const effectiveMaxRetries = Math.max(4, requestedMaxRetries);
+  const effectiveMaxRetries = Math.max(0, requestedMaxRetries);
   const effectiveRetryBaseMs = Number.isFinite(Number(retryBaseMs)) ? Number(retryBaseMs) : RETRY_BASE_MS;
   let lastErr;
   const attempted = [];
   const attemptedProviderTargets = new Set();
+
+  const acceptSuccess = (providerId, provider, result) => {
+    if (shouldLogUsage()) {
+      info("ai.request.usage", {
+        routeName,
+        routeKey,
+        provider: providerId,
+        requestedModel: provider.name,
+        returnedModel: result.model,
+        durationMs: result.durationMs,
+        serviceTier: result.serviceTier,
+        parameterMode: result.parameterMode || "standard",
+        promptTokens: result.usage?.prompt_tokens,
+        completionTokens: result.usage?.completion_tokens,
+        totalTokens: result.usage?.total_tokens,
+        cost: result.usage?.cost,
+      });
+    }
+    recordProviderOutcome({ routeKey, provider: providerId, ok: true, durationMs: result.durationMs, status: "success" });
+    __record(sessionId, routeName, providerId, result.model || provider.name);
+    __lastSuccessProvider.set(routeKey, providerId);
+    __maybePrintSummary(sessionId, routeName);
+    return result.content;
+  };
 
   for (const providerId of chain) {
     const provider = getProviderConfig(providerId);
@@ -344,30 +389,46 @@ export async function resilientRequest(routeName, {
     for (let attempt = 0; attempt <= effectiveMaxRetries; attempt++) {
       try {
         const result = await callOpenRouter({ providerId, model: provider.name, apiKey: provider.apiKey, messages, max_tokens, temperature, top_p, response_format, headers, timeoutMs, reasoning });
-        if (shouldLogUsage()) {
-          info("ai.request.usage", {
+        return acceptSuccess(providerId, provider, result);
+      } catch (initialErr) {
+        let err = initialErr;
+        if (isParameterCompatibilityError(initialErr)) {
+          info("ai.request.parameter_relaxation", {
             routeName,
             routeKey,
             provider: providerId,
-            requestedModel: provider.name,
-            returnedModel: result.model,
-            durationMs: result.durationMs,
-            serviceTier: result.serviceTier,
-            promptTokens: result.usage?.prompt_tokens,
-            completionTokens: result.usage?.completion_tokens,
-            totalTokens: result.usage?.total_tokens,
-            cost: result.usage?.cost,
+            model: provider.name,
+            status: initialErr?.status,
+            message: safeSnippet(initialErr?.message || String(initialErr), 500),
           });
+          try {
+            const relaxedResult = await callOpenRouter({
+              providerId,
+              model: provider.name,
+              apiKey: provider.apiKey,
+              messages,
+              max_tokens,
+              headers,
+              timeoutMs,
+              reasoning: false,
+              relaxedParameters: true,
+            });
+            return acceptSuccess(providerId, provider, relaxedResult);
+          } catch (relaxedErr) {
+            err = relaxedErr;
+            attempted.push({
+              providerId,
+              model: provider.name,
+              attempt: attempt + 1,
+              parameterMode: "relaxed",
+              status: relaxedErr?.status || relaxedErr?.code || "failed",
+              message: safeSnippet(relaxedErr?.message || String(relaxedErr), 500),
+            });
+          }
         }
-        recordProviderOutcome({ routeKey, provider: providerId, ok: true, durationMs: result.durationMs, status: "success" });
-        __record(sessionId, routeName, providerId, result.model || provider.name);
-        __lastSuccessProvider.set(routeKey, providerId);
-        __maybePrintSummary(sessionId, routeName);
-        return result.content;
-      } catch (err) {
         lastErr = err;
         recordProviderOutcome({ routeKey, provider: providerId, ok: false, durationMs: 0, status: err?.status || err?.code || "failed" });
-        attempted.push({ providerId, model: provider.name, attempt: attempt + 1, status: err?.status || err?.code || "failed", message: safeSnippet(err?.message || String(err), 500) });
+        attempted.push({ providerId, model: provider.name, attempt: attempt + 1, parameterMode: "standard", status: err?.status || err?.code || "failed", message: safeSnippet(err?.message || String(err), 500) });
         // A request that has already consumed the full timeout window should
         // fail over to the next configured provider instead of repeating the
         // same slow target for another full timeout cycle.
@@ -383,6 +444,7 @@ export async function resilientRequest(routeName, {
           routeName,
           routeKey,
           provider: providerId,
+          model: provider.name,
           attempt: attempt + 1,
           wait: retryable ? wait : 0,
           retryable,
@@ -430,5 +492,11 @@ export function getProviderDiagnosticsForRoute(routeName) {
     }),
   };
 }
+
+export const __aiServiceTestHooks = {
+  getOpenRouterProviderOptions,
+  isParameterCompatibilityError,
+  modelSupportsReasoningOptions,
+};
 
 export default { resilientRequest, getProviderDiagnosticsForRoute };
