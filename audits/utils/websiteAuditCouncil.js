@@ -241,7 +241,7 @@ function compactSeo(report = {}) {
     workflowRunUrl: source.workflowRunUrl || null,
     reportJsonUrl: source.reportJsonUrl || null,
     callbackDiagnostics: source.callbackDiagnostics || null,
-    scores: analysis.scores || source.scores || {},
+    scores: analysis.scores || analysis.scoreTable || source.scores || source.scoreTable || {},
     executiveSummary: analysis.executiveSummary || source.summary || {},
     rankedIssueLedger: arr(analysis.rankedIssueLedger || analysis.issues || source.heuristicIssues).slice(0, 100),
     fullIssueRecords: arr(analysis.fullIssueRecords || analysis.issueRecords).slice(0, 100),
@@ -344,13 +344,48 @@ function stageCompletionState(stage) {
   return text(stage?.analysisCompletionState || stage?.auditCompletionState).toLowerCase();
 }
 
+function stageEvidenceContractErrors(definition, stage) {
+  const errors = [];
+  if (!text(stage.reportJsonUrl)) errors.push("report.json URL was not supplied");
+
+  if (definition.key === "digitalGrowth") {
+    const scoreRows = Object.keys(obj(stage.scorecard)).length;
+    const substantiveRows = arr(stage.findings).length + arr(stage.topActions).length + arr(stage.highValueOpportunities).length;
+    if (!scoreRows) errors.push("Digital Growth scorecard is empty");
+    if (!substantiveRows && !text(stage.overallVerdict)) errors.push("Digital Growth analysis contains no verdict, findings, opportunities or actions");
+  }
+
+  if (definition.key === "seoAeoGeo") {
+    const scoreRows = Object.keys(obj(stage.scores)).length;
+    const summaryRows = Object.keys(obj(stage.executiveSummary)).length;
+    const substantiveRows = arr(stage.rankedIssueLedger).length
+      + arr(stage.fullIssueRecords).length
+      + arr(stage.bestPracticeGapMatrix).length
+      + arr(stage.pageTypeFindings).length;
+    if (!arr(stage.coverageSummary).length) errors.push("SEO/AEO/GEO coverage ledger is empty");
+    if (!scoreRows && !summaryRows && !substantiveRows) errors.push("SEO/AEO/GEO machine-readable analysis is empty");
+  }
+
+  if (definition.key === "mobileUx") {
+    if (stage.coverageSummary?.complete !== true) errors.push("Mobile UX rendered coverage is not complete");
+    if (!Number.isFinite(Number(stage.mobileQualityScore))) errors.push("Mobile UX quality score is missing");
+    if (!Number.isFinite(Number(stage.screenshotCount)) || Number(stage.screenshotCount) <= 0) errors.push("Mobile UX screenshot evidence is missing");
+  }
+
+  return errors;
+}
+
 export function evaluateWebsiteAuditStageHealth(stageReports = {}) {
   const input = stageReports?.councilMembers ? stageReports : compactWebsiteAuditInputs(stageReports);
   const stages = STAGE_DEFINITIONS.map((definition) => {
     const stage = obj(input[definition.key]);
     const status = text(stage.status || "unknown").toLowerCase();
     const completionState = stageCompletionState(stage);
-    const completed = status === "completed" && (!completionState || completionState === "complete") && !(definition.key === "mobileUx" && stage.hardGateBlocked);
+    const evidenceContractErrors = stageEvidenceContractErrors(definition, stage);
+    const completed = status === "completed"
+      && completionState === "complete"
+      && !(definition.key === "mobileUx" && stage.hardGateBlocked)
+      && evidenceContractErrors.length === 0;
     const callback = obj(stage.callbackDiagnostics);
     const callbackDetail = [
       callback.error || callback.message,
@@ -364,7 +399,9 @@ export function evaluateWebsiteAuditStageHealth(stageReports = {}) {
         ? `Audit completion state was ${completionState}.`
         : definition.key === "mobileUx" && stage.hardGateBlocked
           ? "The rendered evidence hard-gate was blocked."
-          : `Child job status was ${status || "unknown"}.`);
+          : evidenceContractErrors.length
+            ? `Evidence contract failed: ${evidenceContractErrors.join("; ")}.`
+            : `Child job status was ${status || "unknown"}.`);
     return {
       ...definition,
       status: status || "unknown",
@@ -374,6 +411,7 @@ export function evaluateWebsiteAuditStageHealth(stageReports = {}) {
       workflowRunUrl: stage.workflowRunUrl || callback.workflowRunUrl || null,
       reportJsonUrl: stage.reportJsonUrl || null,
       callbackDiagnostics: callback,
+      evidenceContractErrors,
     };
   });
   return {
@@ -573,8 +611,8 @@ function normaliseCouncil(data, stageReports) {
   });
 
   const normalised = {
-    synthesisState: text(source.synthesisState) || "Complete",
-    executiveSummary: text(source.executiveSummary) || "The three audit stages were consolidated into one evidence-led implementation programme.",
+    synthesisState: text(source.synthesisState) || "Incomplete",
+    executiveSummary: text(source.executiveSummary) || "The council response was structurally incomplete and cannot be treated as a final synthesis.",
     scorecard,
     targetAssessment: buildTargetAssessment(scorecard),
     councilVerdict: obj(source.councilVerdict),
@@ -601,45 +639,147 @@ function normaliseCouncil(data, stageReports) {
   return enforceCouncilInvariants(normalised, stageReports);
 }
 
+function councilHasRequiredSubstance(councilValue) {
+  const council = obj(councilValue);
+  const verdict = obj(council.councilVerdict);
+  const scoredRows = Object.values(obj(council.scorecard)).filter((row) => Number.isFinite(Number(row?.score))).length;
+  const decisionRows = arr(council.topActions).length
+    + arr(council.unifiedFindings).length
+    + arr(council.masterIssueLedger).length
+    + arr(council.measurementPlan).length
+    + arr(council.definitionOfDone).length;
+  return text(council.executiveSummary).length >= 40
+    && Object.keys(verdict).length > 0
+    && scoredRows > 0
+    && decisionRows > 0;
+}
+
+function deterministicFinding(item, stageKey, index) {
+  const source = obj(item);
+  const affectedRaw = source.affected ?? source.affectedPagesTemplatesFilesOrRoutes ?? source.affectedPages ?? source.location ?? source.route ?? source.url ?? source.path ?? "";
+  const affected = Array.isArray(affectedRaw) ? affectedRaw : (text(affectedRaw) ? [text(affectedRaw)] : []);
+  const sourceId = text(source.findingId || source.issueId || source.groupId || source.id) || `${stageKey.toUpperCase()}-${String(index + 1).padStart(3, "0")}`;
+  return {
+    findingId: sourceId,
+    title: text(source.title || source.rootCause || source.issue || source.defectDescription || source.check || source.judgement) || `${stageKey} audit finding`,
+    rootCause: text(source.rootCause || source.title || source.issue || source.check) || `${stageKey} source finding`,
+    severity: text(source.severity || source.priority) || "Medium",
+    confidence: text(source.confidence || source.findingConfidence) || "Needs Verification",
+    affected,
+    evidence: arr(source.evidence || source.evidenceAnchors || source.observations).slice(0, 20),
+    exactRemediation: text(source.exactRemediation || source.exactChange || source.remediation || source.requiredOutcome || source.recommendedFix) || "Review the retained source-stage evidence and implement the smallest verified change.",
+    effort: text(source.effort || source.estimatedEffort) || "Needs estimation",
+    owner: text(source.owner || source.recommendedOwner || source.ownerClass) || "Website owner",
+    acceptanceCriterion: text(source.acceptanceCriterion) || "The source-stage verification passes after deployment.",
+    verificationMethod: text(source.verificationMethod) || "Rerun the affected source audit and compare the retained evidence.",
+    classification: text(source.classification) || "manual_review",
+    affectedPaths: arr(source.affectedPaths).slice(0, 20),
+    sourceFindingIds: uniqueByText([sourceId, ...arr(source.sourceFindingIds)]),
+  };
+}
+
 function deterministicFallback(stageReports, errorMessage) {
   const compact = compactWebsiteAuditInputs(stageReports);
+  const health = evaluateWebsiteAuditStageHealth(stageReports);
   const mobileScorable = compact.mobileUx.status === "completed" && !compact.mobileUx.hardGateBlocked && Number.isFinite(Number(compact.mobileUx.mobileQualityScore));
-  const digitalScore = (key) => {
-    const row = obj(compact.digitalGrowth.scorecard[key]);
-    return row.score !== null && row.score !== undefined && row.score !== "" && Number.isFinite(Number(row.score)) ? clamp(row.score, 1, 10, 1) : null;
+  const numericScore = (value) => {
+    if (value && typeof value === "object") value = value.score ?? value.value;
+    let score = Number(value);
+    if (!Number.isFinite(score)) return null;
+    // SEO/AEO/GEO source reports use a 0-100 scale; the unified council scorecard uses 1-10.
+    if (score > 10) score /= 10;
+    return Math.round(Math.max(1, Math.min(10, score)) * 10) / 10;
   };
+  const scoreRow = (value, basis) => {
+    const score = numericScore(value);
+    return { score, basis, status: score === null ? "Not Scored - Source Evidence Did Not Supply a Defensible Score" : "Scored from completed source-stage evidence" };
+  };
+  const digitalScore = (key) => obj(compact.digitalGrowth.scorecard)[key];
+  const seoScore = (key) => obj(compact.seoAeoGeo.scores)[key];
+
+  const sourceFindings = [
+    ...arr(compact.digitalGrowth.findings).map((item, index) => deterministicFinding(item, "digital-growth", index)),
+    ...arr(compact.seoAeoGeo.rankedIssueLedger).map((item, index) => deterministicFinding(item, "seo-aeo-geo", index)),
+    ...arr(compact.seoAeoGeo.fullIssueRecords).map((item, index) => deterministicFinding(item, "seo-aeo-geo-detail", index)),
+    ...arr(compact.mobileUx.rootCauseGroups).map((item, index) => deterministicFinding(item, "mobile-ux", index)),
+    ...arr(compact.mobileUx.findings).map((item, index) => deterministicFinding(item, "mobile-ux-detail", index)),
+  ];
+  const issueLedger = uniqueByText(sourceFindings).slice(0, 200);
+  const topActions = issueLedger.slice(0, 10).map((finding, index) => ({
+    rank: index + 1,
+    actionId: `A-${String(index + 1).padStart(2, "0")}`,
+    exactChange: finding.exactRemediation,
+    title: finding.title,
+    objectives: finding.affected,
+    impact: finding.severity,
+    effort: finding.effort,
+    confidence: finding.confidence,
+    owner: finding.owner,
+    acceptanceCriterion: finding.acceptanceCriterion,
+    verificationMethod: finding.verificationMethod,
+  }));
+  const completed = health.ok;
   const fallback = {
-    synthesisState: "Incomplete",
-    executiveSummary: "The audit stages completed or froze their available evidence, but the multidisciplinary AI council synthesis was unavailable. This fallback preserves evidence without inventing council conclusions.",
+    synthesisState: completed ? "Complete" : "Incomplete",
+    executiveSummary: completed
+      ? `All three source audits completed their evidence contracts. The AI council response was unavailable or structurally unusable, so AIMS produced this deterministic synthesis directly from the retained source ledgers without inventing evidence. ${text(errorMessage)}`.trim()
+      : `The source audit evidence contract is incomplete. AIMS produced a controlled deterministic failure synthesis and retained the forensic evidence. ${text(errorMessage)}`.trim(),
     scorecard: {
-      trafficGrowth: { score: digitalScore("trafficGrowth"), basis: "Stage 1 score where available.", status: digitalScore("trafficGrowth") ? "Stage 1 score only" : "Not Scored" },
-      newsletterSignUp: { score: digitalScore("newsletterSignUpRate"), basis: "Stage 1 score where available.", status: digitalScore("newsletterSignUpRate") ? "Stage 1 score only" : "Not Scored" },
-      podcastClickThrough: { score: digitalScore("podcastClickThroughs"), basis: "Stage 1 score where available.", status: digitalScore("podcastClickThroughs") ? "Stage 1 score only" : "Not Scored" },
-      llmDiscoverability: { score: digitalScore("llmDiscoverability"), basis: "Stage 1 score where available.", status: digitalScore("llmDiscoverability") ? "Stage 1 score only" : "Not Scored" },
-      ebookSalesPath: { score: digitalScore("ebookSalesMaximisation"), basis: "Stage 1 score where available.", status: digitalScore("ebookSalesMaximisation") ? "Stage 1 score only" : "Not Scored" },
-      technicalSeo: { score: null, basis: "Council synthesis unavailable; raw SEO evidence is retained below.", status: "Not Scored" },
-      aeo: { score: null, basis: "Council synthesis unavailable; raw SEO evidence is retained below.", status: "Not Scored" },
-      geo: { score: null, basis: "Council synthesis unavailable; raw SEO evidence is retained below.", status: "Not Scored" },
-      entityAuthority: { score: null, basis: "Council synthesis unavailable.", status: "Not Scored" },
-      internalLinkingIa: { score: null, basis: "Council synthesis unavailable.", status: "Not Scored" },
-      accessibility: { score: null, basis: "Council synthesis unavailable; use rendered accessibility evidence on rerun.", status: "Not Scored" },
-      visualDesignSystemConsistency: { score: null, basis: "Council synthesis unavailable; use rendered design-system evidence on rerun.", status: "Not Scored" },
-      coreWebVitalsPerformance: { score: null, basis: "No council synthesis/field performance judgement available.", status: "Not Scored - Evidence Not Supplied" },
-      structuredData: { score: null, basis: "Council synthesis unavailable.", status: "Not Scored" },
-      deploymentLiveParity: { score: null, basis: "Council synthesis unavailable; release-marker parity must be verified.", status: "Not Scored" },
-      linkConversionRouteIntegrity: { score: null, basis: "Council synthesis unavailable.", status: "Not Scored" },
-      securityPlatformHygiene: { score: null, basis: "No council synthesis/security-platform evidence available.", status: "Not Scored - Evidence Not Supplied" },
-      mobileUx: mobileScorable ? { score: clamp(compact.mobileUx.mobileQualityScore / 10, 1, 10, 1), basis: "Stage 3 rendered score only.", status: "Stage 3 score only" } : { score: null, basis: "Rendered Mobile UX evidence gate not met.", status: "Not Scored - Evidence Gate Not Met" },
-      councilConfidence: { score: 1, basis: `Council synthesis unavailable: ${text(errorMessage) || "unknown error"}`, status: "Incomplete" },
+      trafficGrowth: scoreRow(digitalScore("trafficGrowth"), "Digital Growth source-stage score where supplied."),
+      newsletterSignUp: scoreRow(digitalScore("newsletterSignUpRate") ?? digitalScore("newsletterSignUp"), "Digital Growth source-stage score where supplied."),
+      podcastClickThrough: scoreRow(digitalScore("podcastClickThroughs") ?? digitalScore("podcastClickThrough"), "Digital Growth source-stage score where supplied."),
+      llmDiscoverability: scoreRow(digitalScore("llmDiscoverability"), "Digital Growth source-stage score where supplied."),
+      ebookSalesPath: scoreRow(digitalScore("ebookSalesMaximisation") ?? digitalScore("ebookSalesPath"), "Digital Growth source-stage score where supplied."),
+      technicalSeo: scoreRow(seoScore("technicalSeo") ?? seoScore("seo"), "SEO/AEO/GEO source-stage score where supplied."),
+      aeo: scoreRow(seoScore("aeo"), "SEO/AEO/GEO source-stage score where supplied."),
+      geo: scoreRow(seoScore("geo"), "SEO/AEO/GEO source-stage score where supplied."),
+      entityAuthority: scoreRow(seoScore("entityAuthority") ?? seoScore("entity"), "SEO/AEO/GEO source-stage score where supplied."),
+      internalLinkingIa: scoreRow(seoScore("internalLinkingIa") ?? seoScore("internalLinking"), "SEO/AEO/GEO source-stage score where supplied."),
+      accessibility: scoreRow(null, "No cross-stage accessibility score is inferred without the required structured evidence."),
+      visualDesignSystemConsistency: scoreRow(null, "No cross-stage design-system score is inferred without the required structured evidence."),
+      coreWebVitalsPerformance: scoreRow(null, "No field Core Web Vitals evidence was supplied."),
+      structuredData: scoreRow(seoScore("structuredData"), "SEO/AEO/GEO source-stage score where supplied."),
+      deploymentLiveParity: scoreRow(null, "Live/source SHA parity requires an explicit verified marker."),
+      linkConversionRouteIntegrity: scoreRow(digitalScore("linkConversionRouteIntegrity"), "Digital Growth source-stage score where supplied."),
+      securityPlatformHygiene: scoreRow(null, "No complete security-header evidence block was supplied."),
+      mobileUx: mobileScorable
+        ? { score: clamp(compact.mobileUx.mobileQualityScore / 10, 1, 10, 1), basis: "Completed rendered Mobile UX quality score.", status: "Scored from completed rendered evidence" }
+        : { score: null, basis: "Rendered Mobile UX evidence gate was not met.", status: "Not Scored - Evidence Gate Not Met" },
+      councilConfidence: { score: completed ? 5 : 2, basis: `Deterministic synthesis used because the AI council response was unavailable or invalid: ${text(errorMessage) || "unknown error"}`, status: completed ? "Scored - Deterministic Fallback" : "Scored - Incomplete Evidence" },
     },
-    councilVerdict: { overallDiagnosis: "Council synthesis unavailable. Use source-stage evidence and rerun the council before treating cross-audit priorities as settled." },
-    topActions: [], quickWins: [], blockers: [], unifiedFindings: [], conflicts: [], funnelMap: [], keywordOpportunities: [],
-    implementationProgramme: {}, measurementPlan: [], gapMatrix: [], masterIssueLedger: [],
+    councilVerdict: {
+      overallDiagnosis: completed
+        ? "Source-stage evidence is complete; priorities below are mechanically consolidated from the retained issue ledgers and still require normal owner verification before implementation."
+        : "At least one source audit failed its evidence contract; this is a controlled failure report, not a website verdict.",
+      biggestStructuralWeakness: issueLedger[0]?.title || (completed ? "No dominant weakness was deterministically ranked." : "Incomplete source-stage evidence."),
+      greatestCrossObjectiveLever: topActions[0]?.exactChange || "Complete and verify every source-stage evidence contract.",
+    },
+    topActions,
+    quickWins: topActions.filter((row) => /quick|small|low/i.test(text(row.effort))).slice(0, 10),
+    blockers: [],
+    unifiedFindings: issueLedger.slice(0, 160),
+    conflicts: [],
+    funnelMap: [],
+    keywordOpportunities: arr(compact.digitalGrowth.dynamicKeywordStrategy).slice(0, 40),
+    implementationProgramme: {
+      days0to14: topActions.slice(0, 3),
+      days15to30: topActions.slice(3, 6),
+      days31to60: topActions.slice(6, 8),
+      days61to90: topActions.slice(8, 10),
+    },
+    measurementPlan: topActions.slice(0, 10).map((action) => ({ objective: action.title, metric: action.acceptanceCriterion, eventOrSource: action.verificationMethod, baseline: "Retained audit evidence", successCriterion: action.acceptanceCriterion })),
+    gapMatrix: arr(compact.seoAeoGeo.bestPracticeGapMatrix).slice(0, 60),
+    masterIssueLedger: issueLedger,
     councilRecord: {
-      seats: WEBSITE_AUDIT_COUNCIL_MEMBERS.map((member) => ({ ...member, reviewNote: "Council synthesis unavailable; no expert judgement invented." })),
-      majorVotes: [], dissent: [], rejectedAssumptions: [], unresolvedVerificationItems: [`Council synthesis failed: ${text(errorMessage) || "unknown error"}`],
+      seats: WEBSITE_AUDIT_COUNCIL_MEMBERS.map((member) => ({ ...member, reviewNote: "Seat represented by deterministic source-ledger synthesis; no individual AI judgement was invented." })),
+      majorVotes: [],
+      dissent: [],
+      rejectedAssumptions: ["A structurally valid JSON object is not automatically a substantive council synthesis."],
+      unresolvedVerificationItems: completed ? [`AI council synthesis fallback used: ${text(errorMessage) || "unknown error"}`] : health.failures.map((stage) => `${stage.label}: ${stage.reason}`),
     },
-    definitionOfDone: ["Rerun the council synthesis successfully before treating cross-audit priorities as final."],
+    definitionOfDone: completed
+      ? ["Each accepted remediation is implemented, deployed, and verified by its originating source audit.", "The next unified audit completes all source stages and either returns a substantive council synthesis or repeats this deterministic fallback without losing evidence."]
+      : health.failures.map((stage) => `${stage.label} completes with a valid report.json and its full machine-readable evidence contract.`),
   };
   fallback.targetAssessment = buildTargetAssessment(fallback.scorecard);
   return enforceCouncilInvariants(fallback, stageReports);
@@ -670,7 +810,11 @@ export async function runWebsiteAuditCouncil(stageReports) {
         { role: "user", content: `Consolidate this verified audit evidence bundle into the required council JSON.\n${JSON.stringify(payload)}` },
       ],
     });
-    return normaliseCouncil(parseJsonResponse(raw), stageReports);
+    const normalised = normaliseCouncil(parseJsonResponse(raw), stageReports);
+    if (!councilHasRequiredSubstance(normalised)) {
+      return deterministicFallback(stageReports, "The AI council returned structurally valid JSON without the required verdict, scored evidence and remediation substance.");
+    }
+    return normalised;
   } catch (err) {
     return deterministicFallback(stageReports, err?.message || String(err));
   }
@@ -826,6 +970,7 @@ export const __websiteAuditCouncilTestHooks = {
   evaluateWebsiteAuditStageHealth,
   enforceCouncilInvariants,
   deterministicFallback,
+  councilHasRequiredSubstance,
   compactDigital,
   compactSeo,
   compactMobile,

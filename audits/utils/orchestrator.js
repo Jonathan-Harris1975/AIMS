@@ -464,7 +464,46 @@ function callbackUrlForArtefact(payload = {}, directKey, artefactName) {
   return null;
 }
 
+const STAGE_REQUIRED_COMPLETION_URLS = Object.freeze({
+  "digital-growth": [
+    ["reportJsonUrl", "report.json"],
+    ["summaryUrl", "summary.json"],
+    ["evidenceUrl", "evidence.json"],
+    ["reportUrl", "report.html"],
+  ],
+  "seo-aeo-geo": [
+    ["reportJsonUrl", "report.json"],
+    ["summaryUrl", "summary.json"],
+    ["coverageUrl", "coverage.json"],
+    ["reportUrl", "report.html"],
+  ],
+});
+
+function assertCompletedSourceStagePayload(auditType, payload = {}) {
+  const required = STAGE_REQUIRED_COMPLETION_URLS[auditType] || [];
+  const missing = required
+    .filter(([directKey, artefactName]) => !callbackUrlForArtefact(payload, directKey, artefactName))
+    .map(([, artefactName]) => artefactName);
+  if (missing.length) {
+    throw new Error(`Completed ${auditType} callback is missing required artefact URL(s): ${missing.join(", ")}`);
+  }
+  const completionState = String(payload.auditCompletionState || payload.analysisCompletionState || "").trim().toLowerCase();
+  if (completionState !== "complete") {
+    throw new Error(`Completed ${auditType} callback must declare auditCompletionState=Complete`);
+  }
+  return true;
+}
+
 function assertCompletedMobileUxPayload(payload = {}) {
+  const completionState = String(payload.auditCompletionState || payload.analysisCompletionState || "").trim().toLowerCase();
+  if (completionState !== "complete") {
+    throw new Error("Completed Mobile UX callback must declare auditCompletionState=Complete");
+  }
+
+  if (payload.hardGateBlocked === true || payload.blocked === true) {
+    throw new Error("Completed Mobile UX callback cannot declare a blocked hard gate");
+  }
+
   const missing = MOBILE_UX_REQUIRED_COMPLETION_URLS
     .filter(([directKey, artefactName]) => !callbackUrlForArtefact(payload, directKey, artefactName))
     .map(([, artefactName]) => artefactName);
@@ -491,6 +530,8 @@ function optionalCompletionMetadata(payload = {}) {
     "error",
     "blocked",
     "hardGateBlocked",
+    "auditCompletionState",
+    "analysisCompletionState",
     "blockedTests",
     "stage3Blocks",
     "capabilities",
@@ -605,6 +646,7 @@ export async function completeAuditRun({ auditType, payload }) {
   } else {
     try {
       assertCompletedAuditArtifactUrls(payload);
+      assertCompletedSourceStagePayload(auditType, payload);
       if (auditType === "mobile-ux") {
         assertCompletedMobileUxPayload(payload);
       }

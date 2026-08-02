@@ -360,10 +360,15 @@ function deterministicAnalysisFallback(payload, reason) {
     findingId: item?.findingId || item?.issueId || item?.id || `DG-H-${String(index + 1).padStart(3, "0")}`,
     confidence: item?.confidence || "Needs Verification",
   }, index));
+  const hasDeterministicEvidence = findings.length > 0
+    && (arr(input.priorityPages).length > 0
+      || arr(input.coverage).length > 0
+      || Number(obj(input.inventory).repoRouteCount) > 0);
+
   if (!findings.length) {
     findings.push(normaliseFinding({
       findingId: "DG-EVIDENCE-001",
-      title: "Digital growth AI synthesis could not be completed",
+      title: "Digital growth synthesis could not be completed",
       objective: "Cross-objective",
       severity: "High",
       impact: "High",
@@ -371,7 +376,7 @@ function deterministicAnalysisFallback(payload, reason) {
       confidence: "Confirmed",
       location: input.baseUrl || "Digital growth audit pipeline",
       evidence: [reason],
-      exactChange: "Repair the AI synthesis route, rerun the digital growth stage, and retain this deterministic evidence record until a validated response is produced.",
+      exactChange: "Repair the synthesis route, rerun the digital growth stage, and retain this evidence record until a validated response is produced.",
       expectedImpact: "Restores a complete, evidence-led growth audit without discarding the deterministic crawl and repository evidence.",
       rationale: "A failed model response must not erase or falsely complete the source audit.",
       owner: "AIMS audit pipeline owner",
@@ -379,17 +384,24 @@ function deterministicAnalysisFallback(payload, reason) {
       verificationMethod: "Rerun the digital growth analysis and verify the stored response against the required schema.",
     }, 0));
   }
+
   return {
     auditType: "digital-growth",
-    auditCompletionState: "Incomplete",
-    overallVerdict: "Deterministic evidence was retained, but the AI synthesis was unavailable or structurally invalid. Findings below come only from supplied heuristic evidence.",
+    auditCompletionState: hasDeterministicEvidence ? "Complete" : "Incomplete",
+    overallVerdict: hasDeterministicEvidence
+      ? "The AI synthesis was unavailable or structurally invalid, so AIMS completed this stage deterministically from the retained crawl, route, repository and heuristic evidence. No unsupported scores were invented."
+      : "The supplied evidence did not contain enough deterministic findings to complete the Digital Growth stage.",
     scorecard: normaliseScorecard({}),
     executiveSummary: { top10Actions: findings.slice(0, 10).map((finding) => finding.exactChange) },
     findings,
     dynamicKeywordStrategy: [],
     highValueOpportunities: [],
-    limitations: [reason, "Scores remain unscored because the AI synthesis did not complete with a valid response."],
-    diagnostics: { fallbackUsed: true, reason },
+    limitations: [reason, "Objective scores remain unscored because the model synthesis did not complete with a valid response."],
+    diagnostics: {
+      fallbackUsed: true,
+      completionMode: hasDeterministicEvidence ? "deterministic-evidence" : "controlled-failure",
+      reason,
+    },
   };
 }
 
