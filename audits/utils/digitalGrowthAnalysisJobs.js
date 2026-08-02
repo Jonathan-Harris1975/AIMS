@@ -49,11 +49,21 @@ async function executeAnalysisJob(payload) {
       result: { analysis },
       routeCount: payload?.allRoutes?.length ?? 0,
       priorityPageCount: payload?.priorityPages?.length ?? 0,
+      auditCompletionState: analysis?.auditCompletionState || null,
+      fallbackUsed: Boolean(analysis?.diagnostics?.fallbackUsed),
+      repairUsed: Boolean(analysis?.diagnostics?.repairUsed),
+      inputCharacters: analysis?.diagnostics?.inputCharacters ?? null,
+      rawResponseCharacters: analysis?.diagnostics?.rawResponseCharacters ?? null,
     });
     await flushJobStoreWrites({ throwOnError: false });
     info("audit.digital-growth.analysis.completed", {
       sessionId,
+      auditCompletionState: analysis?.auditCompletionState || null,
       findingCount: Array.isArray(analysis?.findings) ? analysis.findings.length : 0,
+      fallbackUsed: Boolean(analysis?.diagnostics?.fallbackUsed),
+      repairUsed: Boolean(analysis?.diagnostics?.repairUsed),
+      inputCharacters: analysis?.diagnostics?.inputCharacters ?? null,
+      rawResponseCharacters: analysis?.diagnostics?.rawResponseCharacters ?? null,
     });
     return completed;
   } catch (err) {

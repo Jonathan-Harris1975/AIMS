@@ -22,6 +22,7 @@ import {
 import {
   buildWebsiteAuditHtml,
   compactWebsiteAuditInputs,
+  evaluateWebsiteAuditStageHealth,
   renderWebsiteAuditPdf,
   runWebsiteAuditCouncil,
 } from "./websiteAuditCouncil.js";
@@ -216,7 +217,7 @@ export async function startWebsiteAuditPipeline(body = {}) {
     tempPrefix,
     finalReportKey: finalReportKeys.pdf,
     finalReportKeys,
-    retentionPolicy: "final-pdf-html-json-only",
+    retentionPolicy: "conditional-final-set-with-failure-evidence-retention",
     websiteAuditPolicy: compactWebsiteAuditPolicy(),
     stages: {},
   });
@@ -230,7 +231,7 @@ export async function startWebsiteAuditPipeline(body = {}) {
     tempPrefix,
     finalReportKey: finalReportKeys.pdf,
     finalReportKeys,
-    retentionPolicy: "final-pdf-html-json-only",
+    retentionPolicy: "conditional-final-set-with-failure-evidence-retention",
     websiteAuditPolicy: compactWebsiteAuditPolicy(),
     stages: {},
   });
@@ -304,7 +305,8 @@ async function loadChildStage(parentSessionId, stage, parentJob) {
     performanceEvidence: childJob.performanceEvidence ?? report.performanceEvidence ?? evidence?.performanceEvidence ?? null,
     searchConsoleEvidence: childJob.searchConsoleEvidence ?? report.searchConsoleEvidence ?? evidence?.searchConsoleEvidence ?? null,
     securityEvidence: childJob.securityEvidence ?? report.securityEvidence ?? evidence?.securityEvidence ?? null,
-    jobError: childJob.error || null,
+    callbackDiagnostics: childJob.callbackDiagnostics || report.callbackDiagnostics || null,
+    jobError: childJob.error || report.error || null,
   };
 }
 
@@ -339,13 +341,20 @@ export async function finaliseWebsiteAuditPipeline(parentSessionId) {
   const finalReportKeys = parent.finalReportKeys || websitePipelineFinalKeys(parentSessionId, new Date(generatedAt));
   let publishedSet = null;
   let cleanupResult = null;
+  let sourceStageHealth = null;
+  let ramsDispatch = null;
   try {
     const current = await getPublicJobFresh(WEBSITE_PIPELINE_JOB_TYPE, parentSessionId);
     const [digitalGrowth, seoAeoGeo, mobileUx] = await Promise.all(
       WEBSITE_PIPELINE_STAGES.map((stage) => loadChildStage(parentSessionId, stage, current))
     );
     const stageReports = { digitalGrowth, seoAeoGeo, mobileUx };
+    sourceStageHealth = evaluateWebsiteAuditStageHealth(stageReports);
     const council = await runWebsiteAuditCouncil(stageReports);
+    const completeEvidenceContract = sourceStageHealth.ok && String(council.synthesisState || "").trim().toLowerCase() === "complete";
+    const reportType = completeEvidenceContract ? "unified-website-audit" : "controlled-website-audit-failure";
+    const retentionPolicy = completeEvidenceContract ? "final-pdf-html-json-only-after-rams-acceptance" : "final-report-set-plus-retained-source-evidence";
+
     const html = buildWebsiteAuditHtml({
       websiteUrl: current.websiteUrl || DEFAULT_WEBSITE_URL,
       sessionId: parentSessionId,
@@ -358,15 +367,17 @@ export async function finaliseWebsiteAuditPipeline(parentSessionId) {
     const pdf = await publishAuditBuffer({ key: finalReportKeys.pdf, body: pdfBuffer, contentType: "application/pdf" });
     const htmlReport = await publishAuditText({ key: finalReportKeys.html, text: html, contentType: "text/html; charset=utf-8" });
     const jsonPayload = {
-      schemaVersion: "website-audit-report/v1",
+      schemaVersion: "website-audit-report/v2",
       remediationContractVersion: "rams-website/v1",
       auditType: WEBSITE_PIPELINE_AUDIT_TYPE,
-      reportType: "unified-website-audit",
+      reportType,
+      reportStatus: completeEvidenceContract ? "complete" : "incomplete",
       sessionId: parentSessionId,
       websiteUrl: current.websiteUrl || DEFAULT_WEBSITE_URL,
       generatedAt,
-      retentionPolicy: "final-pdf-html-json-only",
+      retentionPolicy,
       websiteAuditPolicy: compactWebsiteAuditPolicy(),
+      sourceStageHealth,
       sourceStages: compactWebsiteAuditInputs(stageReports),
       council,
       reportSet: {
@@ -377,27 +388,66 @@ export async function finaliseWebsiteAuditPipeline(parentSessionId) {
       operational: {
         orchestrator: "AIMS",
         temporaryEvidencePrefix: current.tempPrefix || websitePipelineTempPrefix(parentSessionId),
-        temporaryEvidenceRetention: "deleted-after-complete-final-report-set-publication",
+        temporaryEvidenceRetention: completeEvidenceContract
+          ? "retained-until-rams-acceptance-then-deleted"
+          : "retained-for-diagnosis-and-rerun",
         ramsPipeline: "website",
+        ramsDispatchPermitted: completeEvidenceContract,
         delegatedAuditFamilies: compactWebsiteAuditPolicy().delegatedAuditFamilies,
       },
     };
     const jsonReport = await publishAuditJson({ key: finalReportKeys.json, payload: jsonPayload });
     publishedSet = { pdf, html: htmlReport, json: jsonReport };
+    const retainedArtefacts = [pdf.url, htmlReport.url, jsonReport.url];
 
-    // Only after all three final representations are safely in R2 do we remove
-    // the entire temporary evidence tree. The final report set contains no
-    // screenshots, stage artefacts, request manifests, or latest pointers.
-    cleanupResult = await strictTemporaryCleanup(current.tempPrefix || websitePipelineTempPrefix(parentSessionId));
+    if (!completeEvidenceContract) {
+      const failedLabels = sourceStageHealth.failures.map((stage) => `${stage.label} (${stage.status})`).join(", ");
+      const incompleteError = new Error(`Website audit evidence contract incomplete: ${failedLabels || "council synthesis was incomplete"}`);
+      const failed = failJob(WEBSITE_PIPELINE_JOB_TYPE, parentSessionId, incompleteError, {
+        auditType: WEBSITE_PIPELINE_AUDIT_TYPE,
+        phase: "controlled-audit-failure",
+        currentStage: null,
+        finalising: false,
+        finalReportKey: pdf.key,
+        finalReportKeys,
+        finalReportUrl: pdf.url,
+        finalReportPdfUrl: pdf.url,
+        finalReportHtmlUrl: htmlReport.url,
+        finalReportJsonUrl: jsonReport.url,
+        retainedArtefacts,
+        retentionPolicy,
+        temporaryCleanup: { ok: false, skipped: true, reason: "Source audit evidence is incomplete and must be retained for diagnosis." },
+        cleanupRequired: false,
+        evidenceRetentionRequired: true,
+        ramsDispatch: { ok: false, skipped: true, reason: "RAMS dispatch is prohibited until all required source audit stages complete." },
+        synthesisState: "Incomplete",
+        targetAssessment: council.targetAssessment || null,
+        sourceStageHealth,
+        stageStatuses: {
+          digitalGrowth: digitalGrowth.status,
+          seoAeoGeo: seoAeoGeo.status,
+          mobileUx: mobileUx.status,
+        },
+      });
+      await flushJobStoreWrites({ throwOnError: false });
+      logError("audit.website.pipeline.controlled_failure", {
+        pipelineSessionId: parentSessionId,
+        finalReportJsonUrl: jsonReport.url,
+        retainedTemporaryEvidencePrefix: current.tempPrefix || websitePipelineTempPrefix(parentSessionId),
+        failedStages: sourceStageHealth.failures.map((stage) => ({ key: stage.key, status: stage.status, reason: stage.reason, workflowRunUrl: stage.workflowRunUrl })),
+      });
+      return failed;
+    }
 
-    // AIMS owns the orchestration chain, so the completed machine-readable report
-    // is handed to RAMS once, by exact R2 key. RAMS never needs a latest.json pointer.
-    const ramsDispatch = await dispatchWebsiteAuditToRams({
+    // RAMS must accept the complete machine-readable report before temporary
+    // source evidence is removed. This preserves the forensic trail if the
+    // handoff fails and makes a retry safe.
+    ramsDispatch = await dispatchWebsiteAuditToRams({
       sessionId: parentSessionId,
       auditJsonKey: jsonReport.key,
     });
+    cleanupResult = await strictTemporaryCleanup(current.tempPrefix || websitePipelineTempPrefix(parentSessionId));
 
-    const retainedArtefacts = [pdf.url, htmlReport.url, jsonReport.url];
     const completed = completeJob(WEBSITE_PIPELINE_JOB_TYPE, parentSessionId, {
       auditType: WEBSITE_PIPELINE_AUDIT_TYPE,
       phase: "completed",
@@ -410,12 +460,14 @@ export async function finaliseWebsiteAuditPipeline(parentSessionId) {
       finalReportHtmlUrl: htmlReport.url,
       finalReportJsonUrl: jsonReport.url,
       retainedArtefacts,
-      retentionPolicy: "final-pdf-html-json-only",
+      retentionPolicy,
       temporaryCleanup: { ok: true, deletedCount: cleanupResult.deleted.length, attempts: cleanupResult.attempts, remainingCount: cleanupResult.remaining?.length || 0 },
       cleanupRequired: false,
+      evidenceRetentionRequired: false,
       ramsDispatch,
       synthesisState: council.synthesisState,
       targetAssessment: council.targetAssessment || null,
+      sourceStageHealth,
       stageStatuses: {
         digitalGrowth: digitalGrowth.status,
         seoAeoGeo: seoAeoGeo.status,
@@ -434,8 +486,8 @@ export async function finaliseWebsiteAuditPipeline(parentSessionId) {
     });
     return completed;
   } catch (err) {
-    // An incomplete final set is not a valid report. Remove partial final outputs
-    // while retaining temporary stage evidence for diagnosis/retry.
+    // Remove only an incomplete final report set. Temporary child evidence is
+    // never deleted on report, RAMS or cleanup failure.
     if (!publishedSet) {
       try { await cleanupAuditPrefix({ reportPrefix: finalReportKeys.prefix }); } catch {}
     }
@@ -444,7 +496,7 @@ export async function finaliseWebsiteAuditPipeline(parentSessionId) {
       : [];
     const failed = failJob(WEBSITE_PIPELINE_JOB_TYPE, parentSessionId, err, {
       auditType: WEBSITE_PIPELINE_AUDIT_TYPE,
-      phase: publishedSet ? "rams-dispatch-or-cleanup-failed" : "final-report-set-failed",
+      phase: publishedSet ? (ramsDispatch?.ok ? "temporary-cleanup-failed" : "rams-dispatch-failed") : "final-report-set-failed",
       currentStage: null,
       finalising: false,
       finalReportKey: publishedSet?.pdf?.key || finalReportKeys.pdf,
@@ -454,15 +506,19 @@ export async function finaliseWebsiteAuditPipeline(parentSessionId) {
       finalReportHtmlUrl: publishedSet?.html?.url || null,
       finalReportJsonUrl: publishedSet?.json?.url || null,
       retainedArtefacts,
-      cleanupRequired: Boolean(publishedSet) && !cleanupResult,
+      cleanupRequired: Boolean(ramsDispatch?.ok) && !cleanupResult,
+      evidenceRetentionRequired: true,
+      sourceStageHealth,
+      ramsDispatch: ramsDispatch || { ok: false, error: err?.message || String(err) },
       temporaryCleanup: cleanupResult
         ? { ok: true, deletedCount: cleanupResult.deleted.length, attempts: cleanupResult.attempts, remainingCount: cleanupResult.remaining?.length || 0 }
-        : { ok: false },
+        : { ok: false, skipped: true, reason: "Temporary evidence retained after pipeline failure." },
     });
     await flushJobStoreWrites({ throwOnError: false });
     logError("audit.website.pipeline.failed", {
       pipelineSessionId: parentSessionId,
       retainedArtefacts,
+      temporaryEvidenceRetained: true,
       message: err?.message || String(err),
     });
     return failed;
@@ -474,17 +530,21 @@ export async function retryWebsiteAuditRamsDispatch(parentSessionId) {
   if (!parent) throw new Error(`Website audit pipeline job not found: ${parentSessionId}`);
   const auditJsonKey = parent.finalReportKeys?.json || auditKeyFromPublicUrl(parent.finalReportJsonUrl);
   if (!auditJsonKey) throw new Error("Final website audit JSON is not available for RAMS dispatch");
+  if (!parent.sourceStageHealth?.ok || String(parent.synthesisState || "").toLowerCase() !== "complete") {
+    throw new Error("RAMS dispatch is prohibited because the website audit source evidence contract is incomplete");
+  }
 
-  // Preserve the pipeline invariant on retries too: RAMS is never handed the
-  // final report while temporary audit evidence is still present. Cleanup is
-  // idempotent, so rerunning it is both safe and a recovery path for a previous
-  // cleanup failure.
+  // A previous dispatch may already have succeeded while temporary cleanup failed.
+  // Reuse that accepted handoff rather than sending the same audit to RAMS again.
+  const ramsDispatch = parent.ramsDispatch?.ok
+    ? parent.ramsDispatch
+    : await dispatchWebsiteAuditToRams({ sessionId: parentSessionId, auditJsonKey });
   const cleanup = await strictTemporaryCleanup(parent.tempPrefix || websitePipelineTempPrefix(parentSessionId));
-  const ramsDispatch = await dispatchWebsiteAuditToRams({ sessionId: parentSessionId, auditJsonKey });
   const updated = updateJob(WEBSITE_PIPELINE_JOB_TYPE, parentSessionId, {
     ramsDispatch,
     temporaryCleanup: { ok: true, deletedCount: cleanup.deleted.length, attempts: cleanup.attempts, remainingCount: cleanup.remaining?.length || 0 },
     cleanupRequired: false,
+    evidenceRetentionRequired: false,
     status: parent.finalReportJsonUrl ? "completed" : parent.status,
     phase: parent.finalReportJsonUrl ? "completed" : parent.phase,
     updatedAt: new Date().toISOString(),
@@ -576,6 +636,7 @@ export const __websiteAuditPipelineTestHooks = {
   stageIndex,
   parentStageMetadata,
   strictTemporaryCleanup,
+  evaluateWebsiteAuditStageHealth,
 };
 
 export default {

@@ -195,7 +195,12 @@ function compactDigital(report = {}) {
     hasSampleSignal: row?.hasSampleSignal,
   }));
   return {
-    status: source.status || analysis.auditCompletionState || "unknown",
+    status: source.status || "unknown",
+    analysisCompletionState: analysis.auditCompletionState || source.auditCompletionState || null,
+    jobError: source.jobError || source.error || null,
+    workflowRunUrl: source.workflowRunUrl || null,
+    reportJsonUrl: source.reportJsonUrl || null,
+    callbackDiagnostics: source.callbackDiagnostics || null,
     scorecard: analysis.scorecard || source.scorecard || {},
     overallVerdict: analysis.overallVerdict || source.overallVerdict || "",
     findings: arr(analysis.findings || source.findings || source.heuristicIssues).slice(0, 80),
@@ -230,7 +235,12 @@ function compactSeo(report = {}) {
   const analysis = obj(source.analysis || source.claudeAnalysis || source.aiAnalysis);
   const coverage = obj(source.coverage);
   return {
-    status: source.status || coverage.auditCompletionState || analysis.auditCompletionState || "unknown",
+    status: source.status || "unknown",
+    auditCompletionState: coverage.auditCompletionState || analysis.auditCompletionState || source.auditCompletionState || null,
+    jobError: source.jobError || source.error || null,
+    workflowRunUrl: source.workflowRunUrl || null,
+    reportJsonUrl: source.reportJsonUrl || null,
+    callbackDiagnostics: source.callbackDiagnostics || null,
     scores: analysis.scores || source.scores || {},
     executiveSummary: analysis.executiveSummary || source.summary || {},
     rankedIssueLedger: arr(analysis.rankedIssueLedger || analysis.issues || source.heuristicIssues).slice(0, 100),
@@ -259,6 +269,11 @@ function compactMobile(report = {}) {
   const control = obj(source.reportControl || source.control || summary.reportControl);
   return {
     status: source.status || summary.status || "unknown",
+    auditCompletionState: coverage.auditCompletionState || summary.auditCompletionState || null,
+    jobError: source.jobError || source.error || null,
+    workflowRunUrl: source.workflowRunUrl || null,
+    reportJsonUrl: source.reportJsonUrl || null,
+    callbackDiagnostics: source.callbackDiagnostics || null,
     hardGateBlocked: Boolean(source.hardGateBlocked ?? summary.hardGateBlocked),
     mobileQualityScore: source.mobileQualityScore ?? summary.mobileQualityScore ?? null,
     releaseVerdict: source.releaseVerdict || summary.releaseVerdict || null,
@@ -298,6 +313,183 @@ export function compactWebsiteAuditInputs(stageReports = {}) {
     seoAeoGeo: compactSeo(stageReports.seoAeoGeo),
     mobileUx: compactMobile(stageReports.mobileUx),
   };
+}
+
+const STAGE_DEFINITIONS = Object.freeze([
+  {
+    key: "digitalGrowth",
+    label: "Digital Growth & Monetisation",
+    scoreKeys: ["trafficGrowth", "newsletterSignUp", "podcastClickThrough", "llmDiscoverability", "ebookSalesPath", "linkConversionRouteIntegrity"],
+  },
+  {
+    key: "seoAeoGeo",
+    label: "Website SEO / AEO / GEO",
+    scoreKeys: ["technicalSeo", "aeo", "geo", "entityAuthority", "internalLinkingIa", "structuredData"],
+  },
+  {
+    key: "mobileUx",
+    label: "Rendered Mobile UX Hard-Gate",
+    scoreKeys: ["mobileUx"],
+  },
+]);
+
+function serialiseJobError(value) {
+  if (!value) return "";
+  if (typeof value === "string") return text(value);
+  const source = obj(value);
+  return text(source.message || source.error || source.reason || JSON.stringify(source));
+}
+
+function stageCompletionState(stage) {
+  return text(stage?.analysisCompletionState || stage?.auditCompletionState).toLowerCase();
+}
+
+export function evaluateWebsiteAuditStageHealth(stageReports = {}) {
+  const input = stageReports?.councilMembers ? stageReports : compactWebsiteAuditInputs(stageReports);
+  const stages = STAGE_DEFINITIONS.map((definition) => {
+    const stage = obj(input[definition.key]);
+    const status = text(stage.status || "unknown").toLowerCase();
+    const completionState = stageCompletionState(stage);
+    const completed = status === "completed" && (!completionState || completionState === "complete") && !(definition.key === "mobileUx" && stage.hardGateBlocked);
+    const callback = obj(stage.callbackDiagnostics);
+    const callbackDetail = [
+      callback.error || callback.message,
+      callback.failedStep ? `Failed step: ${callback.failedStep}.` : "",
+      callback.exitCode !== null && callback.exitCode !== undefined ? `Exit code: ${callback.exitCode}.` : "",
+    ].map(text).filter(Boolean).join(" ");
+    const error = serialiseJobError(stage.jobError) || callbackDetail;
+    const reason = completed
+      ? ""
+      : error || (completionState && completionState !== "complete"
+        ? `Audit completion state was ${completionState}.`
+        : definition.key === "mobileUx" && stage.hardGateBlocked
+          ? "The rendered evidence hard-gate was blocked."
+          : `Child job status was ${status || "unknown"}.`);
+    return {
+      ...definition,
+      status: status || "unknown",
+      completionState: completionState || null,
+      completed,
+      reason,
+      workflowRunUrl: stage.workflowRunUrl || callback.workflowRunUrl || null,
+      reportJsonUrl: stage.reportJsonUrl || null,
+      callbackDiagnostics: callback,
+    };
+  });
+  return {
+    ok: stages.every((stage) => stage.completed),
+    stages,
+    failures: stages.filter((stage) => !stage.completed),
+  };
+}
+
+function uniqueByText(items) {
+  const seen = new Set();
+  return arr(items).filter((item) => {
+    const key = typeof item === "string" ? text(item) : text(item?.blocker || item?.title || item?.description || JSON.stringify(item));
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function stageFailureFinding(stage, index) {
+  const detail = stage.reason || `Child stage status was ${stage.status}.`;
+  const callback = obj(stage.callbackDiagnostics);
+  const forensicEvidence = [
+    detail,
+    callback.failedStep ? `Failed step: ${callback.failedStep}` : "",
+    callback.exitCode !== null && callback.exitCode !== undefined ? `Exit code: ${callback.exitCode}` : "",
+    callback.workflowLogTail ? `Workflow log tail: ${text(callback.workflowLogTail).slice(-4000)}` : "",
+    stage.workflowRunUrl,
+  ].filter(Boolean);
+  return {
+    findingId: `AUD-STAGE-${String(index + 1).padStart(3, "0")}`,
+    title: `${stage.label} did not complete`,
+    rootCause: `${stage.label} source stage failure`,
+    severity: "Critical",
+    confidence: "Confirmed",
+    affected: [stage.label],
+    evidence: forensicEvidence,
+    exactRemediation: "Inspect the retained child-stage callback, workflow run and artefacts; fix the exact failing command; then rerun the complete website audit pipeline.",
+    effort: "Strategic Investment",
+    owner: "Council Chair / Systems Integrator (Seat 1)",
+    acceptanceCriterion: `${stage.label} finishes with status completed and a complete evidence contract.`,
+    verificationMethod: "Rerun the child workflow and verify its complete callback and required artefacts before final synthesis.",
+    classification: "manual_review",
+    affectedPaths: [],
+    sourceFindingIds: [],
+  };
+}
+
+export function enforceCouncilInvariants(councilValue, stageReports = {}) {
+  const council = obj(councilValue);
+  const health = evaluateWebsiteAuditStageHealth(stageReports);
+  if (health.ok) return council;
+
+  const scorecard = { ...obj(council.scorecard) };
+  for (const stage of health.failures) {
+    for (const key of stage.scoreKeys) {
+      scorecard[key] = {
+        score: null,
+        status: "Not Scored - Source Audit Incomplete",
+        basis: `${stage.label} did not complete. ${stage.reason} Scoring from partial or failed evidence is prohibited.`,
+      };
+    }
+  }
+  const existingConfidence = Number(scorecard.councilConfidence?.score);
+  scorecard.councilConfidence = {
+    score: Number.isFinite(existingConfidence) ? Math.min(3, Math.max(1, Math.round(existingConfidence))) : 2,
+    status: "Scored - Incomplete Evidence",
+    basis: `${health.failures.length} of ${health.stages.length} required source audit stage(s) did not complete. The report is a controlled failure record, not a complete website assessment.`,
+  };
+
+  const blockers = health.failures.map((stage) => ({
+    blocker: `${stage.label} did not complete`,
+    description: stage.reason,
+    status: stage.status,
+    workflowRunUrl: stage.workflowRunUrl,
+    reportJsonUrl: stage.reportJsonUrl,
+  }));
+  const unresolved = health.failures.map((stage) => `${stage.label}: establish the exact failing command from the retained callback/workflow evidence and rerun to completion.`);
+  const failureFindings = health.failures.map(stageFailureFinding);
+
+  const normaliseWorkflowConfidence = (item) => {
+    const row = { ...obj(item) };
+    const title = text(row.title || row.rootCause || row.issue).toLowerCase();
+    if (title.includes("workflow") && title.includes("failure") && !arr(row.evidence).some((entry) => /traceback|exit code|failed command|exception/i.test(text(entry)))) {
+      row.confidence = "Needs Verification";
+      row.exactRemediation = text(row.exactRemediation || row.remediation) || "Inspect retained workflow diagnostics before defining a code change.";
+    }
+    return row;
+  };
+
+  const record = obj(council.councilRecord);
+  const result = {
+    ...council,
+    synthesisState: "Incomplete",
+    executiveSummary: `CONTROLLED AUDIT FAILURE: ${health.failures.length} required source stage(s) did not complete. No complete website verdict may be issued until those stages rerun successfully. ${text(council.executiveSummary)}`.trim(),
+    scorecard,
+    blockers: uniqueByText([...blockers, ...arr(council.blockers)]),
+    unifiedFindings: [...failureFindings, ...arr(council.unifiedFindings).map(normaliseWorkflowConfidence)].slice(0, 160),
+    masterIssueLedger: [...failureFindings, ...arr(council.masterIssueLedger).map(normaliseWorkflowConfidence)].slice(0, 200),
+    councilRecord: {
+      ...record,
+      unresolvedVerificationItems: uniqueByText([...unresolved, ...arr(record.unresolvedVerificationItems)]).slice(0, 80),
+      rejectedAssumptions: uniqueByText([
+        "A polished final report is not proof that its source audits completed.",
+        "A failed GitHub Actions job confirms the failure event, not its underlying code-level root cause.",
+        ...arr(record.rejectedAssumptions),
+      ]).slice(0, 50),
+    },
+    definitionOfDone: uniqueByText([
+      ...health.failures.map((stage) => `${stage.label} completes and publishes its full required evidence contract.`),
+      "The parent pipeline reaches completed only when every required source stage is complete, temporary evidence is retained until RAMS accepts the valid report, and all report formats agree on synthesis state.",
+      ...arr(council.definitionOfDone),
+    ]).slice(0, 80),
+  };
+  result.targetAssessment = buildTargetAssessment(scorecard);
+  return result;
 }
 
 function normaliseScoreRow(row, allowNull = true) {
@@ -380,7 +572,7 @@ function normaliseCouncil(data, stageReports) {
     return { seat: member.seat, role: member.role, reviewNote: text(found.reviewNote) || "Seat represented in the council synthesis; no separate note was returned." };
   });
 
-  return {
+  const normalised = {
     synthesisState: text(source.synthesisState) || "Complete",
     executiveSummary: text(source.executiveSummary) || "The three audit stages were consolidated into one evidence-led implementation programme.",
     scorecard,
@@ -406,6 +598,7 @@ function normaliseCouncil(data, stageReports) {
     },
     definitionOfDone: arr(source.definitionOfDone).slice(0, 80),
   };
+  return enforceCouncilInvariants(normalised, stageReports);
 }
 
 function deterministicFallback(stageReports, errorMessage) {
@@ -449,10 +642,14 @@ function deterministicFallback(stageReports, errorMessage) {
     definitionOfDone: ["Rerun the council synthesis successfully before treating cross-audit priorities as final."],
   };
   fallback.targetAssessment = buildTargetAssessment(fallback.scorecard);
-  return fallback;
+  return enforceCouncilInvariants(fallback, stageReports);
 }
 
 export async function runWebsiteAuditCouncil(stageReports) {
+  const health = evaluateWebsiteAuditStageHealth(stageReports);
+  if (health.failures.length === health.stages.length) {
+    return deterministicFallback(stageReports, "All required source audit stages were incomplete; AI council synthesis was skipped to avoid spending tokens on an evidence-empty report.");
+  }
   try {
     const { resilientRequest, getProviderDiagnosticsForRoute } = await import("../../services/shared/utils/ai-service.js");
     const diagnostics = getProviderDiagnosticsForRoute("auditForensic");
@@ -465,7 +662,8 @@ export async function runWebsiteAuditCouncil(stageReports) {
       temperature: Number(process.env.WEBSITE_AUDIT_COUNCIL_TEMPERATURE || 0.12),
       top_p: 0.95,
       timeoutMs: Number(process.env.WEBSITE_AUDIT_COUNCIL_TIMEOUT_MS || 300000),
-      maxRetries: Number(process.env.WEBSITE_AUDIT_COUNCIL_MAX_RETRIES || 1),
+      maxRetries: Number(process.env.WEBSITE_AUDIT_COUNCIL_MAX_RETRIES || 0),
+      reasoning: false,
       response_format: { type: "json_object" },
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
@@ -550,16 +748,19 @@ export function buildWebsiteAuditHtml({ websiteUrl, sessionId, generatedAt = new
   const measurement = arr(council.measurementPlan).map((item) => [esc(item.objective || ""), esc(item.metric || ""), esc(item.eventOrSource || ""), esc(item.baseline || ""), esc(item.successCriterion || "")]);
   const gaps = arr(council.gapMatrix).map((item) => [esc(item.area || ""), esc(item.currentState || ""), esc(item.targetState || ""), esc(item.priority || ""), esc(item.owner || "")]);
   const seats = arr(council.councilRecord?.seats).map((item) => [esc(item.seat || ""), esc(item.role || ""), esc(item.reviewNote || "")]);
+  const incomplete = text(council.synthesisState).toLowerCase() !== "complete";
+  const reportLabel = incomplete ? "Controlled Website Audit Failure" : "Unified Website Audit";
+  const reportTitle = incomplete ? "Incomplete Audit Evidence + Recovery Report" : "Digital Growth + Website SEO/AEO/GEO + Mobile UX";
   const sourceState = [
     ["Digital Growth", text(stageReports.digitalGrowth?.status || stageReports.digitalGrowth?.analysis?.auditCompletionState || "unknown")],
     ["SEO / AEO / GEO", text(stageReports.seoAeoGeo?.status || stageReports.seoAeoGeo?.coverage?.auditCompletionState || "unknown")],
     ["Mobile UX", text(stageReports.mobileUx?.status || stageReports.mobileUx?.summary?.status || "unknown")],
   ];
 
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Website Growth, Search & Mobile Audit</title><style>
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(reportLabel)}</title><style>
     @page{size:A4;margin:16mm 12mm 18mm}*{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;color:#172033;margin:0;font-size:9.5pt;line-height:1.45}h1{font-size:27pt;line-height:1.05;margin:0 0 8mm}h2{font-size:17pt;margin:9mm 0 4mm;border-bottom:2px solid #172033;padding-bottom:2mm}h3{font-size:12pt;margin:6mm 0 2mm}p{margin:0 0 3mm}.cover{min-height:245mm;display:flex;flex-direction:column;justify-content:center;page-break-after:always}.kicker{font-size:10pt;text-transform:uppercase;letter-spacing:.12em;font-weight:700}.subtitle{font-size:14pt;max-width:145mm}.meta{margin-top:14mm;padding:5mm;border:1px solid #cbd5e1;border-radius:3mm}.section{break-inside:auto}.pagebreak{page-break-before:always}.callout{padding:4mm 5mm;border-left:4px solid #172033;background:#f1f5f9;margin:4mm 0}.muted{color:#64748b}.chips span{display:inline-block;border:1px solid #cbd5e1;border-radius:99px;padding:1.2mm 2.5mm;margin:0 1mm 1mm 0;font-size:8pt}table{width:100%;border-collapse:collapse;margin:3mm 0 5mm;table-layout:fixed}th,td{border:1px solid #d8dee8;padding:2.2mm;vertical-align:top;word-break:break-word}th{background:#eef2f7;text-align:left;font-size:8.2pt}td{font-size:8pt}ul{margin:2mm 0 4mm 5mm;padding-left:4mm}li{margin:0 0 1.6mm}.small{font-size:8pt}.avoid{break-inside:avoid}.toc li{margin-bottom:1mm}.ledger td:nth-child(1){width:8%}.coverage{font-size:7pt}.coverage td,.coverage th{font-size:6.7pt;padding:1.3mm}.status{font-weight:700}.footer-note{margin-top:8mm;font-size:7.5pt;color:#64748b}
   </style></head><body>
-  <section class="cover"><div class="kicker">Unified Website Audit</div><h1>Digital Growth + Website SEO/AEO/GEO + Mobile UX</h1><p class="subtitle">One evidence-led council report for ${esc(websiteUrl)}. Three audit lenses, one implementation order, one retained report set in PDF, HTML and JSON.</p><div class="meta"><p><strong>Session:</strong> ${esc(sessionId)}</p><p><strong>Generated:</strong> ${esc(generatedAt)}</p><p><strong>Council:</strong> ${WEBSITE_AUDIT_COUNCIL_MEMBERS.length} specialist seats</p><p><strong>Synthesis state:</strong> ${esc(council.synthesisState)}</p>${sourceState.map(([name,status])=>`<p><strong>${esc(name)}:</strong> ${esc(status)}</p>`).join("")}</div></section>
+  <section class="cover"><div class="kicker">${esc(reportLabel)}</div><h1>${esc(reportTitle)}</h1><p class="subtitle">${incomplete ? "A controlled failure record for" : "One evidence-led council report for"} ${esc(websiteUrl)}. ${incomplete ? "Failed or incomplete source stages are preserved as blockers and may not be mistaken for a completed website assessment." : "Three audit lenses, one implementation order, one retained report set in PDF, HTML and JSON."}</p><div class="meta"><p><strong>Session:</strong> ${esc(sessionId)}</p><p><strong>Generated:</strong> ${esc(generatedAt)}</p><p><strong>Council:</strong> ${WEBSITE_AUDIT_COUNCIL_MEMBERS.length} specialist seats</p><p><strong>Synthesis state:</strong> ${esc(council.synthesisState)}</p>${sourceState.map(([name,status])=>`<p><strong>${esc(name)}:</strong> ${esc(status)}</p>`).join("")}</div></section>
 
   <section><h2>1. Executive Scorecard</h2>${scorecardHtml(council.scorecard)}<div class="callout"><strong>Target:</strong> ${esc(council.targetAssessment?.target ?? 8.5)}/10 minimum. <strong>Below target:</strong> ${esc((council.targetAssessment?.belowTarget || []).join(", ") || "None")} &nbsp; <strong>Unscored:</strong> ${esc((council.targetAssessment?.unscored || []).join(", ") || "None")}.</div><div class="callout"><strong>Executive synthesis.</strong> ${esc(council.executiveSummary)}</div></section>
   <section><h2>2. Council Verdict</h2><p><strong>Overall diagnosis:</strong> ${esc(verdict.overallDiagnosis || "")}</p><p><strong>Biggest structural weakness:</strong> ${esc(verdict.biggestStructuralWeakness || "")}</p><p><strong>Biggest commercial opportunity:</strong> ${esc(verdict.biggestCommercialOpportunity || "")}</p><p><strong>Biggest search opportunity:</strong> ${esc(verdict.biggestSearchOpportunity || "")}</p><p><strong>Biggest mobile risk:</strong> ${esc(verdict.biggestMobileRisk || "")}</p><p><strong>Greatest cross-objective lever:</strong> ${esc(verdict.greatestCrossObjectiveLever || "")}</p><h3>Strongest assets</h3>${listHtml(verdict.strongestAssets)}</section>
@@ -575,7 +776,7 @@ export function buildWebsiteAuditHtml({ websiteUrl, sessionId, generatedAt = new
   <section><h2>12. Master Issue Ledger</h2>${table(["ID","Severity","Confidence","Issue","Affected","Remediation","Effort","Owner"], findingRows(council.masterIssueLedger))}</section>
   <section class="pagebreak"><h2>13. Full URL Coverage Appendix</h2><p class="small">Deterministic URL coverage is taken directly from the SEO/AEO/GEO audit evidence rather than regenerated by the council.</p>${seoCoverage.length ? `<table class="coverage"><thead><tr><th>URL</th><th>Page type</th><th>Status</th><th>Canonical</th><th>Indexability</th><th>Coverage state</th><th>Verdict / score</th></tr></thead><tbody>${seoCoverage.map(row=>`<tr>${row.map(c=>`<td>${c}</td>`).join("")}</tr>`).join("")}</tbody></table>` : "<p class='muted'>Full URL ledger was not available from the SEO stage.</p>"}</section>
   <section class="pagebreak"><h2>14. Council Record</h2><p>The council uses independent specialist review, contradiction analysis, root-cause clustering, prioritisation and final deliberation. Notes below are decision summaries, not private reasoning.</p>${table(["Seat","Role","Review note"], seats)}<h3>Major decisions</h3>${listHtml(council.councilRecord?.majorVotes, (i)=>typeof i==="string"?i:`${i.decision || "Decision"}: ${i.outcome || ""}`)}<h3>Dissent</h3>${listHtml(council.councilRecord?.dissent, (i)=>typeof i==="string"?i:i.note||i.dissent||i.position)}<h3>Rejected assumptions</h3>${listHtml(council.councilRecord?.rejectedAssumptions)}<h3>Unresolved verification items</h3>${listHtml(council.councilRecord?.unresolvedVerificationItems)}</section>
-  <section><h2>15. Definition of Done</h2>${listHtml(council.definitionOfDone)}<p class="footer-note">Retention contract: only the final PDF, HTML and JSON representations are retained by the website audit pipeline. Stage artefacts are temporary working evidence and are deleted after successful final report-set publication.</p></section>
+  <section><h2>15. Definition of Done</h2>${listHtml(council.definitionOfDone)}<p class="footer-note">Retention contract: ${incomplete ? "source-stage evidence is retained for diagnosis and rerun; RAMS dispatch and temporary cleanup are prohibited until every required source stage completes." : "the final PDF, HTML and JSON representations are retained after successful RAMS handoff; temporary evidence may then be removed."}</p></section>
   </body></html>`;
 }
 
@@ -622,6 +823,8 @@ export const __websiteAuditCouncilTestHooks = {
   SYSTEM_PROMPT,
   parseJsonResponse,
   normaliseCouncil,
+  evaluateWebsiteAuditStageHealth,
+  enforceCouncilInvariants,
   deterministicFallback,
   compactDigital,
   compactSeo,

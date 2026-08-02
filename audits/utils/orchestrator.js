@@ -15,6 +15,7 @@ import {
 } from "./githubDispatch.js";
 import { buildAuditPrefix, makeAuditJobType } from "./auditPaths.js";
 import { websiteAuditDefaultExclusions } from "./websiteAuditPolicy.js";
+import { buildAuditCallbackDiagnostics } from "./auditCallbackDiagnostics.js";
 import {
   assertAuditR2Config,
   assertAuditArtifactUrls,
@@ -547,7 +548,7 @@ export async function completeAuditRun({ auditType, payload }) {
     repositoryIssueAppendixUrl: callbackUrlForArtefact(payload, "repositoryIssueAppendixUrl", "repository-issue-appendix.json") || null,
     mandatoryMobileScorecardUrl: callbackUrlForArtefact(payload, "mandatoryMobileScorecardUrl", "mandatory-mobile-scorecard.json") || null,
     responsiveFixAppendixUrl: callbackUrlForArtefact(payload, "responsiveFixAppendixUrl", "responsive-fix-appendix.json") || null,
-    workflowRunUrl: payload.workflowRunUrl || null,
+    workflowRunUrl: payload.workflowRunUrl || existingJob?.workflowRunUrl || null,
     screenshotCount: payload.screenshotCount ?? null,
     mobileFailureCount: payload.mobileFailureCount ?? null,
     issueCount: payload.issueCount ?? null,
@@ -558,6 +559,7 @@ export async function completeAuditRun({ auditType, payload }) {
     suppressLatest,
     temporaryArtifacts,
     updatedAt: payload.finishedAt || new Date().toISOString(),
+    callbackDiagnostics: buildAuditCallbackDiagnostics(payload, existingJob),
     ...optionalCompletionMetadata(payload),
   };
 
@@ -683,6 +685,21 @@ export async function completeAuditRun({ auditType, payload }) {
     }
   }
 
+  info("audit.workflow.callback.completed", {
+    auditType,
+    sessionId,
+    status,
+    pipelineSessionId,
+    workflowRunUrl: jobMetadata.workflowRunUrl,
+    message: payload.message || null,
+    error: payload.error || null,
+    storageUploadError: payload.storageUploadError || null,
+    artefactCount: jobMetadata.callbackDiagnostics?.artefactCount || 0,
+    blockedTestCount: jobMetadata.callbackDiagnostics?.blockedTestCount || 0,
+    stage3BlockCount: jobMetadata.callbackDiagnostics?.stage3BlockCount || 0,
+    controlledFailureArtefacts: status === "failed" && Object.keys(jobMetadata.artefacts || {}).length > 0,
+  });
+
   if (!suppressLatest) {
     await publishAuditLatest({
       auditType,
@@ -706,6 +723,11 @@ export async function completeAuditRun({ auditType, payload }) {
 export function getAuditJob(auditType, sessionId) {
   return getPublicJob(makeAuditJobType(auditType), sessionId);
 }
+
+export const __auditOrchestratorTestHooks = {
+  buildAuditCallbackDiagnostics,
+  assertCompletedMobileUxPayload,
+};
 
 export default {
   startAuditRun,
