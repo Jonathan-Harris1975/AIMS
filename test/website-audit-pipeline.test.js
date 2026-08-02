@@ -107,3 +107,15 @@ test("unified website audit carries delegated-scope policy, target assessment an
   assert.match(council, /Not Scored - Security Evidence Not Supplied/);
   assert.match(council, /Not Scored - Release SHA Not Verified/);
 });
+
+test("completed source callbacks require complete machine-readable artefact contracts", () => {
+  const orchestrator = read("audits/utils/orchestrator.js");
+  assert.match(orchestrator, /STAGE_REQUIRED_COMPLETION_URLS/);
+  assert.match(orchestrator, /"digital-growth"/);
+  assert.match(orchestrator, /"seo-aeo-geo"/);
+  assert.match(orchestrator, /reportJsonUrl/);
+  assert.match(orchestrator, /auditCompletionState=Complete/);
+  assert.match(orchestrator, /assertCompletedSourceStagePayload\(auditType, payload\)/);
+  assert.match(orchestrator, /Completed Mobile UX callback must declare auditCompletionState=Complete/);
+  assert.match(orchestrator, /Completed Mobile UX callback cannot declare a blocked hard gate/);
+});

@@ -11,9 +11,36 @@ import {
 import { buildAuditCallbackDiagnostics } from "../audits/utils/auditCallbackDiagnostics.js";
 
 const completedStages = {
-  digitalGrowth: { status: "completed", analysis: { auditCompletionState: "Complete" } },
-  seoAeoGeo: { status: "completed", coverage: { auditCompletionState: "Complete" } },
-  mobileUx: { status: "completed", hardGateBlocked: false, mobileQualityScore: 86, coverage: { auditCompletionState: "Complete" } },
+  digitalGrowth: {
+    status: "completed",
+    reportJsonUrl: "https://example.test/digital/report.json",
+    analysis: {
+      auditCompletionState: "Complete",
+      scorecard: { trafficGrowth: { score: 7 } },
+      overallVerdict: "The evidence-led Digital Growth audit completed.",
+      findings: [{ findingId: "DG-1", title: "Finding", exactRemediation: "Fix it" }],
+    },
+  },
+  seoAeoGeo: {
+    status: "completed",
+    reportJsonUrl: "https://example.test/seo/report.json",
+    auditCompletionState: "Complete",
+    analysis: {
+      auditCompletionState: "Complete",
+      scoreTable: { technicalSeo: 7 },
+      overallVerdict: "The evidence-led SEO audit completed.",
+      rankedIssueLedger: [{ issueId: "SEO-1", issue: "Finding", exactRemediation: "Fix it" }],
+    },
+    coverage: { auditCompletionState: "Complete", pageFamilyCoverage: [{ pageType: "homepage", coveragePercent: 100 }] },
+  },
+  mobileUx: {
+    status: "completed",
+    reportJsonUrl: "https://example.test/mobile/report.json",
+    hardGateBlocked: false,
+    mobileQualityScore: 86,
+    screenshotCount: 12,
+    coverage: { auditCompletionState: "Complete", complete: true },
+  },
 };
 
 test("three failed source stages can never produce a complete synthesis", () => {
@@ -57,6 +84,28 @@ test("all complete source stages satisfy the evidence contract", () => {
   assert.equal(health.failures.length, 0);
 });
 
+
+test("completed SEO status is rejected when report.json contains no machine-readable analysis", () => {
+  const health = evaluateWebsiteAuditStageHealth({
+    ...completedStages,
+    seoAeoGeo: {
+      status: "completed",
+      reportJsonUrl: "https://example.test/seo/report.json",
+      auditCompletionState: "Complete",
+      coverage: { auditCompletionState: "Complete", pageFamilyCoverage: [] },
+    },
+  });
+  assert.equal(health.ok, false);
+  assert.match(health.failures[0].reason, /coverage ledger is empty/i);
+  assert.match(health.failures[0].reason, /machine-readable analysis is empty/i);
+});
+
+test("empty council JSON is not substantive and cannot become a complete final report", () => {
+  const normalised = __websiteAuditCouncilTestHooks.normaliseCouncil({}, completedStages);
+  assert.equal(normalised.synthesisState, "Incomplete");
+  assert.equal(__websiteAuditCouncilTestHooks.councilHasRequiredSubstance(normalised), false);
+});
+
 test("digital growth normaliser accepts nested and aliased model output", () => {
   const result = __digitalGrowthAnalysisTestHooks.normaliseAnalysis({
     result: {
@@ -74,14 +123,31 @@ test("digital growth normaliser accepts nested and aliased model output", () => 
   assert.equal(result.scorecard.trafficGrowth.score, 7);
 });
 
-test("digital growth falls back deterministically when AI JSON has no usable ledger", () => {
+test("digital growth completes deterministically when AI JSON is unusable but retained crawl evidence is substantive", () => {
   const result = __digitalGrowthAnalysisTestHooks.normaliseAnalysis(
     { response: { prose: "No schema" } },
-    { fallbackEvidence: { baseUrl: "https://example.test", heuristicIssues: [{ id: "H-1", title: "CTA missing", remediation: "Add CTA" }] } }
+    {
+      fallbackEvidence: {
+        baseUrl: "https://example.test",
+        inventory: { repoRouteCount: 1 },
+        priorityPages: [{ route: "/" }],
+        heuristicIssues: [{ id: "H-1", title: "CTA missing", remediation: "Add CTA" }],
+      },
+    }
+  );
+  assert.equal(result.auditCompletionState, "Complete");
+  assert.equal(result.diagnostics.fallbackUsed, true);
+  assert.equal(result.diagnostics.completionMode, "deterministic-evidence");
+  assert.equal(result.findings[0].findingId, "H-1");
+});
+
+test("digital growth deterministic fallback remains incomplete when no site evidence exists", () => {
+  const result = __digitalGrowthAnalysisTestHooks.deterministicAnalysisFallback(
+    { baseUrl: "https://example.test", heuristicIssues: [] },
+    "model unavailable"
   );
   assert.equal(result.auditCompletionState, "Incomplete");
-  assert.equal(result.diagnostics.fallbackUsed, true);
-  assert.equal(result.findings[0].findingId, "H-1");
+  assert.equal(result.diagnostics.completionMode, "controlled-failure");
 });
 
 test("digital growth evidence bundle is bounded before model dispatch", () => {
@@ -116,6 +182,25 @@ test("fallback council itself is invariant-safe", () => {
   }, "council unavailable");
   assert.equal(result.synthesisState, "Incomplete");
   assert.equal(result.blockers.length, 3);
+});
+
+
+test("deterministic fallback converts SEO scores from 0-100 into the unified 1-10 scale", () => {
+  const result = __websiteAuditCouncilTestHooks.deterministicFallback({
+    digitalGrowth: completedStages.digitalGrowth,
+    seoAeoGeo: {
+      ...completedStages.seoAeoGeo,
+      analysis: {
+        ...completedStages.seoAeoGeo.analysis,
+        scoreTable: { technicalSeo: { score: 72 }, aeo: { score: 64 }, geo: { score: 81 } },
+      },
+    },
+    mobileUx: completedStages.mobileUx,
+  }, "council unavailable");
+  assert.equal(result.synthesisState, "Complete");
+  assert.equal(result.scorecard.technicalSeo.score, 7.2);
+  assert.equal(result.scorecard.aeo.score, 6.4);
+  assert.equal(result.scorecard.geo.score, 8.1);
 });
 
 
