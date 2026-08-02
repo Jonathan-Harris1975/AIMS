@@ -17,8 +17,8 @@ router.get("/health", (_req, res) => {
     ok: readiness.ready,
     auditType: "website",
     orchestration: "AIMS",
-    stages: ["digital-growth", "seo-aeo-geo", "mobile-ux", "expert-council", "final-report-set", "temporary-cleanup", "rams-website"],
-    retentionPolicy: "final-pdf-html-json-only",
+    stages: ["digital-growth", "seo-aeo-geo", "mobile-ux", "expert-council", "final-report-set", "rams-website", "temporary-cleanup"],
+    retentionPolicy: "final-pdf-html-json-only-after-rams-acceptance; retain-source-evidence-on-failure",
     readiness,
     time: new Date().toISOString(),
   });
