@@ -1,6 +1,6 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { rankAndSelectStories } from "../services/newsletter/engine/rank.js";
+import { assessNewsletterSourceQuality, rankAndSelectStories } from "../services/newsletter/engine/rank.js";
 
 function item(overrides = {}) {
   return {
@@ -55,4 +55,38 @@ describe("newsletter engine/rank.js", () => {
     assert.equal(1 + stories.length <= 11, true);
     assert.ok(lead);
   });
+  test("drops configured low-authority promotional sources before composition", () => {
+    const now = new Date("2026-08-03T09:00:00Z");
+    const items = [
+      item({
+        title: "Promotional model claim",
+        link: "https://robotwritersai.com/weekly-newsletter-template-speech-promotion-6",
+        sourceFeed: "https://robotwritersai.com/feed",
+        summary: "An unsupported model claim presented as a newsletter promotion.",
+        publishedAt: now.toISOString(),
+      }),
+      item({
+        title: "Anthropic publishes a complete safety study",
+        link: "https://anthropic.com/research/safety-study",
+        sourceFeed: "https://anthropic.com/feed",
+        summary: "Anthropic published a detailed safety study with its method, measured results, limitations and supporting evidence for independent review.",
+        publishedAt: now.toISOString(),
+      }),
+    ];
+    const result = rankAndSelectStories(items, { storyCount: 3, now });
+    assert.equal(result.lead.link, "https://anthropic.com/research/safety-study");
+    assert.equal(result.droppedForQuality.length, 1);
+    assert.equal(result.droppedForQuality[0].qualityReason, "blocked-domain");
+  });
+
+  test("marks truncated evidence as unsuitable for the Big Three", () => {
+    const quality = assessNewsletterSourceQuality(item({
+      summary: "Researchers began measuring agent behaviour, but the supplied feed entry is truncated…",
+      link: "https://example.com/research",
+    }));
+    assert.equal(quality.publishEligible, true);
+    assert.equal(quality.bigThreeEligible, false);
+    assert.equal(quality.truncated, true);
+  });
+
 });

@@ -72,3 +72,23 @@ test("partially published Blotato jobs fail the operation window", () => {
   assert.equal(assessment.terminal, true);
   assert.equal(assessment.ok, false);
 });
+
+test("operation polling survives a short-lived 404 before the durable child job appears", async () => {
+  let attempt = 0;
+  const result = await waitForAsyncOperation({
+    baseUrl: "http://127.0.0.1:8000",
+    statusUrl: "/zernio/jobs/daily-monday/ops-1",
+    pollIntervalMs: 1,
+    timeoutMs: 1_000,
+    notFoundGraceMs: 500,
+    maxConsecutiveErrors: 3,
+    fetchImpl: async () => {
+      attempt += 1;
+      if (attempt === 1) return response({ ok: false, error: "not found" }, 404);
+      return response({ ok: true, status: "completed", result: { ok: true } });
+    },
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.pollErrors, 1);
+  assert.equal(result.polls, 1);
+});

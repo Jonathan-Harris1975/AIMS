@@ -85,3 +85,12 @@ test("RSS-backed content never publishes from a failed morning rewrite", () => {
   assert.match(opsSource, /task\[0\] === "blotato-am" \|\| task\[0\] === "blotato-pm"/);
   assert.match(opsSource, /dependsOn !== "rss-rewrite"/);
 });
+
+
+test("long-running daily children are dispatched asynchronously with stable idempotency", () => {
+  assert.match(opsSource, /ASYNC_TASK_ROUTES/);
+  assert.match(opsSource, /async=true/);
+  assert.match(opsSource, /x-idempotency-key/);
+  assert.match(opsSource, /operation-dispatch-timeout/);
+  assert.match(opsSource, /asyncStatusUrlFor/);
+});
