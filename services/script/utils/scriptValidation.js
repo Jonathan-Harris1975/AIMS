@@ -204,6 +204,19 @@ export function enforceCanonicalOutro(text = "") {
   return `${base}\n\n${OUTRO_CLOSING_TAGLINE}`.trim();
 }
 
+export function enforceLockedOutro(text = "", lockedOutro = "") {
+  const trimmed = String(text || "").trim();
+  const locked = String(lockedOutro || "").trim();
+  if (!locked) return enforceCanonicalOutro(trimmed);
+
+  const existingOutro = extractOutro(trimmed);
+  const body = existingOutro && trimmed.endsWith(existingOutro)
+    ? trimmed.slice(0, -existingOutro.length).trim()
+    : textBeforeOutro(trimmed);
+
+  return [body, locked].filter(Boolean).join("\n\n").trim();
+}
+
 export function splitSpokenSentences(text = "") {
   const normalised = String(text || "").replace(/\s+/g, " ").trim();
   if (!normalised) return [];

@@ -457,8 +457,8 @@ export function getArtworkPrompt(description, date) {
     "The dominant story must occupy roughly seventy per cent of the frame and be identifiable from a concrete person, object, workplace, consequence or decision named in the episode.",
     "Mood: sharp, sceptical, cinematic, adult, intelligent and grounded.",
     getSeasonalPaletteDirection(date),
-    "Use cinematic magazine-feature storytelling with a recognisable real-world focal scene. Prefer episode-supported semiconductor hardware, power infrastructure, security work, healthcare technology, scientific research, robotics, developer environments or another exact subject from the episode.",
-    "Decorative AI symbols, generic server rooms, glowing brains, symmetric emblems, circuit mandalas and unrelated futuristic motifs are not acceptable substitutes for the episode story.",
+    "Use cinematic magazine-feature storytelling with a recognisable focal subject in a real-world scene. Prefer episode-supported semiconductor hardware, power infrastructure, security work, healthcare technology, scientific research, robotics, developer environments or another exact subject from the episode.",
+    "Decorative AI symbols, digital snowflakes, generic server rooms, glowing brains, symmetric emblems, circuit mandalas and unrelated futuristic motifs are not acceptable substitutes for the episode story.",
     STRICT_TEXT_FREE_RULE,
     `Episode themes and evidence: ${theme || "AI systems, governance, power, risk, work and security."}`,
   ].join(" ").slice(0, 1800);
