@@ -42,7 +42,11 @@ function hashtagFromCategory(value = "") {
     .split(/[^a-zA-Z0-9]+/)
     .filter(Boolean);
   if (!words.length) return "";
-  return `#${words.map((word) => word[0].toUpperCase() + word.slice(1).toLowerCase()).join("")}`;
+  return `#${words.map((word) => {
+    const upper = word.toUpperCase();
+    if (["AI", "API", "SEO", "AEO", "GEO", "LLM", "GPT", "UK", "EU"].includes(upper)) return upper;
+    return word[0].toUpperCase() + word.slice(1).toLowerCase();
+  }).join("")}`;
 }
 
 function pubDateMs(value) {
