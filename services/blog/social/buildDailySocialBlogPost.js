@@ -325,15 +325,6 @@ function blogSocialQaEnabled() {
   return String(process.env.BLOG_SOCIAL_QA_ENABLED || "true").trim().toLowerCase() !== "false";
 }
 
-function getSocialFallbackImageUrl() {
-  return String(
-    process.env.BLOG_SOCIAL_FALLBACK_IMAGE_URL ||
-    process.env.BLOG_FALLBACK_IMAGE_URL ||
-    process.env.BLOG_RSS_IMAGE_URL ||
-    "",
-  ).trim();
-}
-
 function groundSocialArtworkPrompt(basePrompt, sources = []) {
   const evidence = (Array.isArray(sources) ? sources : []).slice(0, 3).map((source) => ({
     title: cleanSourceTitle(source?.title || ""),
@@ -353,32 +344,14 @@ async function resolveSocialArtwork({ sessionId, imagePrompt, dateId, prefix }) 
   if (art?.ok && art.publicUrl) {
     return {
       imageUrl: art.publicUrl,
-      imageStatus: "generated",
-      imageError: null,
+      imageStatus: art.fallback ? "fallback" : "generated",
+      imageError: art.error || null,
       imageKey: art.key,
       imageBucketKey: art.bucketKey || null,
     };
   }
 
-  const fallbackImageUrl = getSocialFallbackImageUrl();
   const imageError = art?.error || "Unknown social blog artwork error";
-
-  if (fallbackImageUrl) {
-    warn("blog.social.daily.image.fallback", {
-      dateId,
-      sessionId,
-      imageUrl: fallbackImageUrl,
-      error: imageError,
-    });
-
-    return {
-      imageUrl: fallbackImageUrl,
-      imageStatus: "fallback",
-      imageError,
-      imageKey: null,
-      imageBucketKey: null,
-    };
-  }
 
   warn("blog.social.daily.image.unavailable", {
     dateId,
@@ -695,7 +668,7 @@ export async function buildDailySocialBlogPost({
     imagePrompt = groundSocialArtworkPrompt(imagePrompt, gateSources);
 
     const dryRunArtwork = {
-      imageUrl: getSocialFallbackImageUrl() || "",
+      imageUrl: "",
       imageStatus: "dry_run",
       imageError: null,
       imageKey: null,
@@ -711,6 +684,16 @@ export async function buildDailySocialBlogPost({
         prefix,
       });
 
+    if (!dryRun && !artwork.imageUrl) {
+      return {
+        ok: false,
+        quarantined: true,
+        reason: "artwork-unavailable",
+        dateId: window.dateId,
+        sessionId,
+        error: artwork.imageError || "Social blog did not produce a verified AI-relevant image.",
+      };
+    }
     let imageUrl = artwork.imageUrl;
 
     let postEntry = buildSocialPostManifestEntry({
