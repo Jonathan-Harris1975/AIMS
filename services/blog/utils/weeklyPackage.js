@@ -695,7 +695,7 @@ export function buildWeeklyPackagePrompt({ week, dateLabel, items = [] } = {}) {
     "Use the supplied rewritten RSS briefs as the only source material.",
     "",
     "Editorial mission:",
-    "- Produce one coherent weekly editorial argument, not a stitched digest.",
+    "- Produce one coherent weekly briefing, not a stitched digest.",
     "- Before drafting, silently write a one-sentence thesis answering: what does this week's evidence actually prove, expose, or change?",
     "- Every section must advance that thesis from a different evidence-backed angle. If a theme does not strengthen the argument, leave it out.",
     "- Find 3 to 5 dominant themes only after choosing the thesis; themes serve the argument, not the other way round.",

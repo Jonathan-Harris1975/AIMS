@@ -423,7 +423,7 @@ export function normaliseSocialBlogPackage(data = {}, context = {}) {
     fallback.image_prompt,
   );
 
-  return {
+  const normalised = {
     title: normaliseTitle(data.title || data.headline || fallback.title, fallback.title),
     summary,
     social_caption: clean(data.social_caption || data.socialCaption || data.description || fallback.social_caption),
@@ -433,11 +433,15 @@ export function normaliseSocialBlogPackage(data = {}, context = {}) {
     hashtags: normaliseHashtags(data.hashtags, themes),
     image_prompt: imagePrompt,
     themes,
-    source_urls: normaliseSourceUrls(
-      data.source_urls || data.sourceUrls || (Object.keys(data || {}).length ? [] : fallback.source_urls),
-      context.items || [],
-    ),
   };
+
+  const sourceUrls = normaliseSourceUrls(
+    data.source_urls || data.sourceUrls || (Object.keys(data || {}).length ? [] : fallback.source_urls),
+    context.items || [],
+  );
+  if (sourceUrls.length) normalised.source_urls = sourceUrls;
+
+  return normalised;
 }
 
 export function toSocialBlogPackageContract(pkg = {}) {
