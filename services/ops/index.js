@@ -399,7 +399,10 @@ async function runInternalTask([name, path, body = {}, feature = null, addWeekSt
       // If an idempotent acknowledgement was replayed by middleware, it may not
       // contain the original body. The canonical route and deterministic session
       // still let the orchestrator recover and poll the real child job.
-      const statusUrl = extractAsyncStatusUrl(result) || asyncStatusUrlFor(path, sessionId);
+      // The operation window owns the canonical route contract. Prefer its
+      // route map over a child-provided URL so a stale or malformed service
+      // acknowledgement cannot send polling to a non-existent endpoint.
+      const statusUrl = asyncStatusUrlFor(path, sessionId) || extractAsyncStatusUrl(result);
       if (!statusUrl) {
         return {
           name,
