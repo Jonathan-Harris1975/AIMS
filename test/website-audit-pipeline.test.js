@@ -37,6 +37,10 @@ test("AIMS owns the sequential website audit stages and the three-format final r
   assert.match(pipeline, /ramsDispatchPermitted: completeEvidenceContract/);
   assert.match(pipeline, /stale child callback/);
   assert.match(pipeline, /out-of-order child callback/);
+  assert.match(pipeline, /reusedActiveRun/);
+  assert.match(pipeline, /public-http/);
+  assert.match(pipeline, /expectedReportPrefix/);
+  assert.match(pipeline, /sourceArtifactDiagnostics/);
 });
 
 test("pipeline child audits suppress standalone latest pointers and legacy councils", () => {
