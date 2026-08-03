@@ -13,12 +13,13 @@ import {
   dispatchGithubWorkflow,
   verifyGithubWorkflowRun,
 } from "./githubDispatch.js";
-import { buildAuditPrefix, makeAuditJobType } from "./auditPaths.js";
+import { buildAuditPrefix, inferWebsitePipelineSessionIdFromPrefix, makeAuditJobType } from "./auditPaths.js";
 import { websiteAuditDefaultExclusions } from "./websiteAuditPolicy.js";
 import { buildAuditCallbackDiagnostics } from "./auditCallbackDiagnostics.js";
 import {
   assertAuditR2Config,
   assertAuditArtifactUrls,
+  auditKeyFromPublicUrl,
   assertCompletedAuditArtifactUrls,
   cleanupAuditPrefix,
   getAuditBucketName,
@@ -464,6 +465,38 @@ function callbackUrlForArtefact(payload = {}, directKey, artefactName) {
   return null;
 }
 
+function normaliseReportPrefix(value) {
+  return String(value || "").trim().replace(/^\/+/, "").replace(/\/+$/, "");
+}
+
+function assertCallbackMatchesAuditJob({ auditType, payload, existingJob }) {
+  const callbackPrefix = normaliseReportPrefix(payload.reportPrefix);
+  const expectedPrefix = normaliseReportPrefix(existingJob?.reportPrefix);
+
+  if (expectedPrefix && callbackPrefix !== expectedPrefix) {
+    throw new Error(
+      `Audit callback reportPrefix mismatch for ${auditType}: expected ${expectedPrefix}, received ${callbackPrefix || "<empty>"}`
+    );
+  }
+
+  const scopedPrefix = expectedPrefix || callbackPrefix;
+  if (!scopedPrefix) return true;
+
+  const { urls } = assertAuditArtifactUrls(payload, { requireAny: false });
+  const outsidePrefix = urls.filter((url) => {
+    const key = auditKeyFromPublicUrl(url);
+    return !key || !(key === scopedPrefix || key.startsWith(`${scopedPrefix}/`));
+  });
+
+  if (outsidePrefix.length) {
+    throw new Error(
+      `Audit callback artefact URL(s) are outside expected reportPrefix ${scopedPrefix}: ${outsidePrefix.join(", ")}`
+    );
+  }
+
+  return true;
+}
+
 const STAGE_REQUIRED_COMPLETION_URLS = Object.freeze({
   "digital-growth": [
     ["reportJsonUrl", "report.json"],
@@ -567,7 +600,14 @@ export async function completeAuditRun({ auditType, payload }) {
     `AUD-${auditType.toUpperCase()}`
   );
   const existingJob = await getPublicJobFresh(jobType, sessionId);
-  const pipelineSessionId = existingJob?.pipelineSessionId || null;
+  assertCallbackMatchesAuditJob({ auditType, payload, existingJob });
+  const inferredPipelineSessionId = inferWebsitePipelineSessionIdFromPrefix(payload.reportPrefix, auditType);
+  const pipelineSessionId = existingJob?.pipelineSessionId || inferredPipelineSessionId || null;
+  if (existingJob?.pipelineSessionId && inferredPipelineSessionId && existingJob.pipelineSessionId !== inferredPipelineSessionId) {
+    throw new Error(
+      `Audit callback pipeline session mismatch for ${auditType}: expected ${existingJob.pipelineSessionId}, received ${inferredPipelineSessionId}`
+    );
+  }
   const suppressLatest = existingJob?.suppressLatest === true || existingJob?.temporaryArtifacts === true || Boolean(pipelineSessionId);
   const temporaryArtifacts = existingJob?.temporaryArtifacts === true || Boolean(pipelineSessionId);
   const status = normaliseWorkflowStatus(payload.status);

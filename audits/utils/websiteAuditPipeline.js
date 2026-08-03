@@ -4,6 +4,7 @@ import {
   failJob,
   flushJobStoreWrites,
   getPublicJobFresh,
+  getMostRecentActiveJobFresh,
   queueJob,
   startJob,
   updateJob,
@@ -14,6 +15,7 @@ import { startAuditRun } from "./orchestrator.js";
 import {
   auditKeyFromPublicUrl,
   cleanupAuditPrefix,
+  getAuditPublicBaseUrl,
   publishAuditBuffer,
   publishAuditJson,
   publishAuditText,
@@ -32,6 +34,9 @@ import { compactWebsiteAuditPolicy, websiteAuditDefaultExclusions } from "./webs
 export const WEBSITE_PIPELINE_AUDIT_TYPE = "website";
 export const WEBSITE_PIPELINE_JOB_TYPE = makeAuditJobType(WEBSITE_PIPELINE_AUDIT_TYPE);
 const DEFAULT_WEBSITE_URL = "https://jonathan-harris.online";
+const WEBSITE_ACTIVE_RUN_REUSE_MS = Number(process.env.WEBSITE_AUDIT_RUN_REUSE_ACTIVE_MS || 6 * 60 * 60 * 1000);
+const AUDIT_ARTEFACT_READ_ATTEMPTS = Math.max(1, Number(process.env.AUDIT_ARTEFACT_READ_ATTEMPTS || 3));
+const AUDIT_ARTEFACT_READ_TIMEOUT_MS = Math.max(1000, Number(process.env.AUDIT_ARTEFACT_READ_TIMEOUT_MS || 15000));
 
 export const WEBSITE_PIPELINE_STAGES = Object.freeze([
   {
@@ -195,12 +200,35 @@ export async function startWebsiteAuditPipeline(body = {}) {
   // cannot possibly succeed. RAMS availability is handled by MAST wake-up, but
   // the URL and shared bearer secret must already be configured in AIMS.
   assertRamsWebsiteDispatchConfigured();
-  const sessionId = sanitizeSessionId(
-    body.sessionId || `website-${Date.now()}`,
-    "AUD-WEBSITE"
-  );
+  const forceNewRun = body.forceNewRun === true
+    || ["1", "true", "yes", "on"].includes(String(body.forceNewRun || body.force || "").trim().toLowerCase());
+  const explicitSessionId = body.sessionId
+    ? sanitizeSessionId(body.sessionId, "AUD-WEBSITE")
+    : null;
+
+  if (!explicitSessionId && !forceNewRun) {
+    const active = await getMostRecentActiveJobFresh(WEBSITE_PIPELINE_JOB_TYPE, {
+      maxAgeMs: WEBSITE_ACTIVE_RUN_REUSE_MS,
+    });
+    if (active) {
+      return {
+        ok: active.status !== "failed",
+        auditType: WEBSITE_PIPELINE_AUDIT_TYPE,
+        sessionId: active.sessionId,
+        status: active.status,
+        currentStage: active.currentStage || null,
+        reusedActiveRun: true,
+        message: "A website audit pipeline is already active; returning the existing canonical run.",
+        finalReportKey: active.finalReportKey || null,
+        finalReportKeys: active.finalReportKeys || null,
+        job: active,
+      };
+    }
+  }
+
+  const sessionId = explicitSessionId || sanitizeSessionId(`website-${Date.now()}`, "AUD-WEBSITE");
   const existing = await getPublicJobFresh(WEBSITE_PIPELINE_JOB_TYPE, sessionId);
-  if (existing && ["queued", "running", "completed"].includes(existing.status) && body.forceNewRun !== true) {
+  if (existing && ["queued", "running", "completed"].includes(existing.status) && !forceNewRun) {
     return { ok: existing.status !== "failed", auditType: WEBSITE_PIPELINE_AUDIT_TYPE, sessionId, status: existing.status, reused: true, job: existing };
   }
 
@@ -257,62 +285,226 @@ export async function startWebsiteAuditPipeline(body = {}) {
   };
 }
 
-async function safeReadJsonUrl(url) {
-  const key = auditKeyFromPublicUrl(url);
-  if (!key) return null;
-  try { return await readAuditJson({ key }); } catch { return null; }
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function normalisePrefix(value) {
+  return String(value || "").trim().replace(/^\/+/, "").replace(/\/+$/, "");
+}
+
+function publicAuditUrlForKey(key) {
+  const base = String(getAuditPublicBaseUrl() || "").trim().replace(/\/+$/, "");
+  const cleanKey = normalisePrefix(key);
+  return base && cleanKey ? `${base}/${cleanKey}` : "";
+}
+
+function uniqueLocations(values = []) {
+  const seen = new Set();
+  return values.map((value) => String(value || "").trim()).filter((value) => {
+    if (!value || seen.has(value)) return false;
+    seen.add(value);
+    return true;
+  });
+}
+
+async function fetchAuditJson(url) {
+  if (!url || typeof fetch !== "function") throw new Error("Public audit JSON fetch is unavailable");
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), AUDIT_ARTEFACT_READ_TIMEOUT_MS);
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      headers: { accept: "application/json" },
+      signal: controller.signal,
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status} ${response.statusText}`.trim());
+    return await response.json();
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function readAuditJsonLocation(location) {
+  const value = String(location || "").trim();
+  if (!value) throw new Error("Audit JSON location is empty");
+  const key = auditKeyFromPublicUrl(value);
+  const url = /^https?:\/\//i.test(value) ? value : publicAuditUrlForKey(key || value);
+  const errors = [];
+
+  for (let attempt = 1; attempt <= AUDIT_ARTEFACT_READ_ATTEMPTS; attempt += 1) {
+    if (key) {
+      try {
+        return { data: await readAuditJson({ key }), location: key, transport: "r2-sdk", attempt };
+      } catch (err) {
+        errors.push(`R2 attempt ${attempt}: ${err?.message || String(err)}`);
+      }
+    }
+
+    if (url) {
+      try {
+        return { data: await fetchAuditJson(url), location: url, transport: "public-http", attempt };
+      } catch (err) {
+        errors.push(`HTTP attempt ${attempt}: ${err?.message || String(err)}`);
+      }
+    }
+
+    if (attempt < AUDIT_ARTEFACT_READ_ATTEMPTS) await wait(attempt * 500);
+  }
+
+  throw new Error(errors.join(" | ") || `Unable to read audit JSON from ${value}`);
+}
+
+async function loadJsonArtefact(label, locations = []) {
+  const diagnostics = [];
+  for (const location of uniqueLocations(locations)) {
+    try {
+      const loaded = await readAuditJsonLocation(location);
+      return { value: loaded.data, loadedFrom: loaded.location, transport: loaded.transport, attempt: loaded.attempt, errors: diagnostics };
+    } catch (err) {
+      diagnostics.push(`${location}: ${err?.message || String(err)}`);
+    }
+  }
+  return { value: null, loadedFrom: null, transport: null, attempt: null, errors: diagnostics.length ? diagnostics : [`No ${label} location was available`] };
+}
+
+function stageArtefactLocations({ stageState, childJob, reportPrefix, directKey, artefactName }) {
+  return uniqueLocations([
+    childJob?.[directKey],
+    stageState?.[directKey],
+    childJob?.artefacts?.[artefactName],
+    stageState?.artefacts?.[artefactName],
+    `${reportPrefix}/${artefactName}`,
+  ]);
+}
+
+function compactArtefactLoadDiagnostic(load = {}) {
+  return {
+    loaded: Boolean(load.loadedFrom),
+    loadedFrom: load.loadedFrom || null,
+    transport: load.transport || null,
+    attempt: load.attempt || null,
+    errors: Array.isArray(load.errors) ? load.errors.slice(0, 12) : [],
+  };
 }
 
 async function loadChildStage(parentSessionId, stage, parentJob) {
-  const childId = parentJob?.stages?.[stage.key]?.sessionId || websitePipelineChildSessionId(parentSessionId, stage.auditType);
-  const childJob = await getPublicJobFresh(makeAuditJobType(stage.auditType), childId);
-  if (!childJob) {
-    return { auditType: stage.auditType, sessionId: childId, status: "not-found", limitation: "Child job state was not found." };
+  const stageState = parentJob?.stages?.[stage.key] || {};
+  const expectedChildId = stageState.sessionId || websitePipelineChildSessionId(parentSessionId, stage.auditType);
+  const expectedReportPrefix = normalisePrefix(
+    stageState.reportPrefix || `${websitePipelineTempPrefix(parentSessionId)}/${stage.prefixLeaf}`
+  );
+  const childJob = await getPublicJobFresh(makeAuditJobType(stage.auditType), expectedChildId);
+  const mismatches = [];
+
+  if (childJob?.pipelineSessionId && childJob.pipelineSessionId !== parentSessionId) {
+    mismatches.push(`Child job pipelineSessionId ${childJob.pipelineSessionId} does not match ${parentSessionId}`);
   }
-  const [reportJson, summary, coverage, evidence, execution, preflight] = await Promise.all([
-    safeReadJsonUrl(childJob.reportJsonUrl),
-    safeReadJsonUrl(childJob.summaryUrl),
-    safeReadJsonUrl(childJob.coverageUrl),
-    safeReadJsonUrl(childJob.evidenceUrl),
-    safeReadJsonUrl(childJob.executionUrl),
-    safeReadJsonUrl(childJob.preflightUrl),
+  if (childJob?.reportPrefix && normalisePrefix(childJob.reportPrefix) !== expectedReportPrefix) {
+    mismatches.push(`Child job reportPrefix ${childJob.reportPrefix} does not match ${expectedReportPrefix}`);
+  }
+
+  const trustedChildJob = mismatches.length ? null : childJob;
+  const [reportLoad, summaryLoad, coverageLoad, evidenceLoad, executionLoad, preflightLoad] = await Promise.all([
+    loadJsonArtefact("report.json", stageArtefactLocations({ stageState, childJob: trustedChildJob, reportPrefix: expectedReportPrefix, directKey: "reportJsonUrl", artefactName: "report.json" })),
+    loadJsonArtefact("summary.json", stageArtefactLocations({ stageState, childJob: trustedChildJob, reportPrefix: expectedReportPrefix, directKey: "summaryUrl", artefactName: "summary.json" })),
+    loadJsonArtefact("coverage.json", stageArtefactLocations({ stageState, childJob: trustedChildJob, reportPrefix: expectedReportPrefix, directKey: "coverageUrl", artefactName: "coverage.json" })),
+    loadJsonArtefact("evidence.json", stageArtefactLocations({ stageState, childJob: trustedChildJob, reportPrefix: expectedReportPrefix, directKey: "evidenceUrl", artefactName: "evidence.json" })),
+    loadJsonArtefact("execution.json", stageArtefactLocations({ stageState, childJob: trustedChildJob, reportPrefix: expectedReportPrefix, directKey: "executionUrl", artefactName: "execution.json" })),
+    loadJsonArtefact("preflight.json", uniqueLocations([
+      ...stageArtefactLocations({ stageState, childJob: trustedChildJob, reportPrefix: expectedReportPrefix, directKey: "preflightUrl", artefactName: "preflight.json" }),
+      trustedChildJob?.reconciliationUrl,
+      stageState?.reconciliationUrl,
+      `${expectedReportPrefix}/reconciliation.json`,
+    ])),
   ]);
-  const report = reportJson && typeof reportJson === "object" ? reportJson : {};
+
+  const report = reportLoad.value && typeof reportLoad.value === "object" ? reportLoad.value : {};
+  const summary = summaryLoad.value && typeof summaryLoad.value === "object" ? summaryLoad.value : {};
+  const coverage = coverageLoad.value && typeof coverageLoad.value === "object" ? coverageLoad.value : {};
+  const evidence = evidenceLoad.value && typeof evidenceLoad.value === "object" ? evidenceLoad.value : {};
+  const execution = executionLoad.value && typeof executionLoad.value === "object" ? executionLoad.value : {};
+  const preflight = preflightLoad.value && typeof preflightLoad.value === "object" ? preflightLoad.value : {};
+  const completionState = String(
+    report.auditCompletionState
+      || report.analysisCompletionState
+      || report.analysis?.auditCompletionState
+      || coverage.auditCompletionState
+      || summary.auditCompletionState
+      || ""
+  ).trim().toLowerCase();
+  const status = trustedChildJob?.status
+    || stageState.status
+    || (completionState === "complete" ? "completed" : "unknown");
+  const reportJsonUrl = trustedChildJob?.reportJsonUrl
+    || stageState.reportJsonUrl
+    || publicAuditUrlForKey(`${expectedReportPrefix}/report.json`)
+    || null;
+
+  const loadDiagnostics = {
+    expectedParentSessionId: parentSessionId,
+    expectedChildSessionId: expectedChildId,
+    expectedReportPrefix,
+    childJobFound: Boolean(childJob),
+    childJobTrusted: Boolean(trustedChildJob),
+    mismatches,
+    artefacts: {
+      reportJson: compactArtefactLoadDiagnostic(reportLoad),
+      summary: compactArtefactLoadDiagnostic(summaryLoad),
+      coverage: compactArtefactLoadDiagnostic(coverageLoad),
+      evidence: compactArtefactLoadDiagnostic(evidenceLoad),
+      execution: compactArtefactLoadDiagnostic(executionLoad),
+      preflight: compactArtefactLoadDiagnostic(preflightLoad),
+    },
+  };
+
   return {
     ...report,
     auditType: stage.auditType,
-    sessionId: childId,
-    status: childJob.status || report.status || "unknown",
-    summary: report.summary || summary || {},
-    coverage: report.coverage || coverage || {},
-    evidence: report.evidence || evidence || {},
-    execution: report.execution || execution || {},
-    preflight: report.preflight || preflight || {},
-    reportUrl: childJob.reportUrl || null,
-    reportJsonUrl: childJob.reportJsonUrl || null,
-    workflowRunUrl: childJob.workflowRunUrl || null,
+    sessionId: expectedChildId,
+    pipelineSessionId: parentSessionId,
+    reportPrefix: expectedReportPrefix,
+    status,
+    summary: report.summary || summary,
+    coverage: report.coverage || coverage,
+    evidence: report.evidence || evidence,
+    execution: report.execution || execution,
+    preflight: report.preflight || preflight,
+    reportUrl: trustedChildJob?.reportUrl || stageState.reportUrl || publicAuditUrlForKey(`${expectedReportPrefix}/report.html`) || null,
+    reportJsonUrl,
+    summaryUrl: trustedChildJob?.summaryUrl || stageState.summaryUrl || publicAuditUrlForKey(`${expectedReportPrefix}/summary.json`) || null,
+    coverageUrl: trustedChildJob?.coverageUrl || stageState.coverageUrl || publicAuditUrlForKey(`${expectedReportPrefix}/coverage.json`) || null,
+    evidenceUrl: trustedChildJob?.evidenceUrl || stageState.evidenceUrl || publicAuditUrlForKey(`${expectedReportPrefix}/evidence.json`) || null,
+    executionUrl: trustedChildJob?.executionUrl || stageState.executionUrl || publicAuditUrlForKey(`${expectedReportPrefix}/execution.json`) || null,
+    preflightUrl: trustedChildJob?.preflightUrl || stageState.preflightUrl || publicAuditUrlForKey(`${expectedReportPrefix}/preflight.json`) || null,
+    workflowRunUrl: trustedChildJob?.workflowRunUrl || stageState.workflowRunUrl || null,
     hardGateBlocked: Boolean(
-      childJob.hardGateBlocked === true
+      trustedChildJob?.hardGateBlocked === true
       || report.hardGateBlocked === true
-      || summary?.hardGateBlocked === true
-      || [childJob.releaseVerdict, report.releaseVerdict, summary?.releaseVerdict]
+      || summary.hardGateBlocked === true
+      || [trustedChildJob?.releaseVerdict, report.releaseVerdict, summary.releaseVerdict]
         .some((value) => String(value || "").trim().toUpperCase() === "BLOCKED")
     ),
-    mobileQualityScore: childJob.mobileQualityScore ?? report.mobileQualityScore ?? summary?.mobileQualityScore ?? null,
-    releaseVerdict: childJob.releaseVerdict ?? report.releaseVerdict ?? summary?.releaseVerdict ?? null,
-    screenshotCount: childJob.screenshotCount ?? report.screenshotCount ?? summary?.screenshotCount ?? null,
-    mobileFailureCount: childJob.mobileFailureCount ?? report.mobileFailureCount ?? summary?.mobileFailureCount ?? null,
-    sourceRevisionSha: childJob.sourceRevisionSha ?? report.sourceRevisionSha ?? execution?.sourceRevisionSha ?? null,
-    liveReleaseSha: childJob.liveReleaseSha ?? report.liveReleaseSha ?? execution?.liveReleaseSha ?? null,
-    liveReleaseMarkerUrl: childJob.liveReleaseMarkerUrl ?? report.liveReleaseMarkerUrl ?? execution?.liveReleaseMarkerUrl ?? null,
-    liveSourceParity: childJob.liveSourceParity ?? report.liveSourceParity ?? execution?.liveSourceParity ?? "unverified",
-    accessibilityEvidence: childJob.accessibilityEvidence ?? report.accessibilityEvidence ?? evidence?.accessibilityEvidence ?? null,
-    visualDesignEvidence: childJob.visualDesignEvidence ?? report.visualDesignEvidence ?? evidence?.visualDesignEvidence ?? null,
-    performanceEvidence: childJob.performanceEvidence ?? report.performanceEvidence ?? evidence?.performanceEvidence ?? null,
-    searchConsoleEvidence: childJob.searchConsoleEvidence ?? report.searchConsoleEvidence ?? evidence?.searchConsoleEvidence ?? null,
-    securityEvidence: childJob.securityEvidence ?? report.securityEvidence ?? evidence?.securityEvidence ?? null,
-    callbackDiagnostics: childJob.callbackDiagnostics || report.callbackDiagnostics || null,
-    jobError: childJob.error || report.error || null,
+    mobileQualityScore: trustedChildJob?.mobileQualityScore ?? report.mobileQualityScore ?? summary.mobileQualityScore ?? null,
+    releaseVerdict: trustedChildJob?.releaseVerdict ?? report.releaseVerdict ?? summary.releaseVerdict ?? null,
+    screenshotCount: trustedChildJob?.screenshotCount ?? report.screenshotCount ?? summary.screenshotCount ?? null,
+    mobileFailureCount: trustedChildJob?.mobileFailureCount ?? report.mobileFailureCount ?? summary.mobileFailureCount ?? null,
+    sourceRevisionSha: trustedChildJob?.sourceRevisionSha ?? report.sourceRevisionSha ?? execution.sourceRevisionSha ?? null,
+    liveReleaseSha: trustedChildJob?.liveReleaseSha ?? report.liveReleaseSha ?? execution.liveReleaseSha ?? null,
+    liveReleaseMarkerUrl: trustedChildJob?.liveReleaseMarkerUrl ?? report.liveReleaseMarkerUrl ?? execution.liveReleaseMarkerUrl ?? null,
+    liveSourceParity: trustedChildJob?.liveSourceParity ?? report.liveSourceParity ?? execution.liveSourceParity ?? "unverified",
+    accessibilityEvidence: trustedChildJob?.accessibilityEvidence ?? report.accessibilityEvidence ?? evidence.accessibilityEvidence ?? null,
+    visualDesignEvidence: trustedChildJob?.visualDesignEvidence ?? report.visualDesignEvidence ?? evidence.visualDesignEvidence ?? null,
+    performanceEvidence: trustedChildJob?.performanceEvidence ?? report.performanceEvidence ?? evidence.performanceEvidence ?? null,
+    searchConsoleEvidence: trustedChildJob?.searchConsoleEvidence ?? report.searchConsoleEvidence ?? evidence.searchConsoleEvidence ?? null,
+    securityEvidence: trustedChildJob?.securityEvidence ?? report.securityEvidence ?? evidence.securityEvidence ?? null,
+    callbackDiagnostics: trustedChildJob?.callbackDiagnostics || stageState.callbackDiagnostics || report.callbackDiagnostics || null,
+    artifactLoadDiagnostics: loadDiagnostics,
+    jobError: trustedChildJob?.error
+      || stageState.error
+      || report.error
+      || (mismatches.length ? { message: mismatches.join("; ") } : null)
+      || (!reportLoad.value ? { message: `Unable to load ${stage.auditType} report.json: ${reportLoad.errors.join(" | ")}` } : null),
   };
 }
 
@@ -385,6 +577,9 @@ export async function finaliseWebsiteAuditPipeline(parentSessionId) {
       websiteAuditPolicy: compactWebsiteAuditPolicy(),
       sourceStageHealth,
       sourceStages: compactWebsiteAuditInputs(stageReports),
+      sourceArtifactDiagnostics: Object.fromEntries(
+        Object.entries(stageReports).map(([key, value]) => [key, value.artifactLoadDiagnostics || null])
+      ),
       council,
       reportSet: {
         pdf: { key: pdf.key, url: pdf.url },
@@ -604,15 +799,47 @@ export async function resumeWebsiteAuditPipelineFromChild({ auditType, result })
     };
   }
 
+  const expectedStage = parent.stages?.[stage.key] || parentStageMetadata(pipelineSessionId, stage, parent.websiteUrl || DEFAULT_WEBSITE_URL);
+  const receivedSessionId = String(result?.sessionId || result?.job?.sessionId || "").trim();
+  const receivedReportPrefix = normalisePrefix(result?.job?.reportPrefix || "");
+  const expectedReportPrefix = normalisePrefix(expectedStage.reportPrefix);
+  if (expectedStage.sessionId && receivedSessionId !== expectedStage.sessionId) {
+    throw new Error(
+      `Website audit child session mismatch for ${auditType}: expected ${expectedStage.sessionId}, received ${receivedSessionId || "<empty>"}`
+    );
+  }
+  if (expectedReportPrefix && receivedReportPrefix && receivedReportPrefix !== expectedReportPrefix) {
+    throw new Error(
+      `Website audit child reportPrefix mismatch for ${auditType}: expected ${expectedReportPrefix}, received ${receivedReportPrefix}`
+    );
+  }
+  if (result?.job?.pipelineSessionId && result.job.pipelineSessionId !== pipelineSessionId) {
+    throw new Error(
+      `Website audit child pipelineSessionId mismatch for ${auditType}: expected ${pipelineSessionId}, received ${result.job.pipelineSessionId}`
+    );
+  }
+
   const childStage = {
-    ...(parent.stages?.[stage.key] || {}),
-    sessionId: result.sessionId,
+    ...expectedStage,
+    sessionId: receivedSessionId || expectedStage.sessionId,
     auditType,
     status: result.status || result.job?.status || "unknown",
-    reportUrl: result.job?.reportUrl || null,
-    reportJsonUrl: result.job?.reportJsonUrl || null,
-    summaryUrl: result.job?.summaryUrl || null,
-    coverageUrl: result.job?.coverageUrl || null,
+    reportPrefix: receivedReportPrefix || expectedReportPrefix,
+    reportUrl: result.job?.reportUrl || expectedStage.reportUrl || null,
+    reportJsonUrl: result.job?.reportJsonUrl || expectedStage.reportJsonUrl || null,
+    summaryUrl: result.job?.summaryUrl || expectedStage.summaryUrl || null,
+    coverageUrl: result.job?.coverageUrl || expectedStage.coverageUrl || null,
+    evidenceUrl: result.job?.evidenceUrl || expectedStage.evidenceUrl || null,
+    executionUrl: result.job?.executionUrl || expectedStage.executionUrl || null,
+    preflightUrl: result.job?.preflightUrl || expectedStage.preflightUrl || null,
+    reconciliationUrl: result.job?.reconciliationUrl || expectedStage.reconciliationUrl || null,
+    screenshotManifestUrl: result.job?.screenshotManifestUrl || expectedStage.screenshotManifestUrl || null,
+    focusedPageAppendixUrl: result.job?.focusedPageAppendixUrl || expectedStage.focusedPageAppendixUrl || null,
+    repositoryIssueAppendixUrl: result.job?.repositoryIssueAppendixUrl || expectedStage.repositoryIssueAppendixUrl || null,
+    mandatoryMobileScorecardUrl: result.job?.mandatoryMobileScorecardUrl || expectedStage.mandatoryMobileScorecardUrl || null,
+    responsiveFixAppendixUrl: result.job?.responsiveFixAppendixUrl || expectedStage.responsiveFixAppendixUrl || null,
+    artefacts: result.job?.artefacts || expectedStage.artefacts || {},
+    callbackDiagnostics: result.job?.callbackDiagnostics || expectedStage.callbackDiagnostics || null,
     finishedAt: result.job?.finishedAt || new Date().toISOString(),
     error: result.job?.error || result.error || null,
   };
