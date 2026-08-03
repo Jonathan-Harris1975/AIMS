@@ -31,10 +31,19 @@ function stringArray(value) {
   return Array.isArray(value) ? value.map((item) => compact(item, 320)).filter(Boolean).slice(0, 12) : [];
 }
 
+const SPECULATIVE_DEFECT_PATTERN = /\b(?:possible|possibly|appears? to|may be|might be|could be|cannot confirm|can\'t confirm|borderline|if confirmed|at any zoom|potential|seems? to|unclear whether)\b/i;
+
+function isSpeculativeDefect(value = "") {
+  return SPECULATIVE_DEFECT_PATTERN.test(String(value || ""));
+}
+
 export function normaliseArtworkVisualQa(raw, { threshold = DEFAULT_THRESHOLD } = {}) {
   const parsed = typeof raw === "string" ? extractJsonObject(raw) : raw;
-  const defects = stringArray(parsed?.defects);
-  const hardDefects = stringArray(parsed?.hardDefects);
+  const reportedDefects = stringArray(parsed?.defects);
+  const reportedHardDefects = stringArray(parsed?.hardDefects);
+  const speculativeHardDefects = reportedHardDefects.filter(isSpeculativeDefect);
+  const hardDefects = reportedHardDefects.filter((item) => !isSpeculativeDefect(item));
+  const defects = [...new Set([...reportedDefects, ...speculativeHardDefects])].slice(0, 12);
   const score = numberScore(parsed?.score);
   const relevance = numberScore(parsed?.relevance);
   const textSafety = numberScore(parsed?.textSafety);
@@ -65,20 +74,21 @@ export function buildArtworkVisualQaPrompt({ mode = "editorial", creativePrompt 
       "Any readable or pseudo-readable typography, logo or watermark is a hard failure.",
     ],
     blog: [
-      "The image must represent the article title, summary and dominant themes through one concrete editorial scene rather than generic AI decoration.",
+      "The image must visibly represent artificial intelligence or the article's AI-enabled consequence through one concrete editorial scene rather than generic decoration.",
       "A stock office, decorative data centre, abstract network or unrelated technology scene is a hard failure when it does not express the article's actual angle.",
       "Any readable or pseudo-readable typography, logo or watermark is a hard failure.",
     ],
     newsletter: [
-      "The image must look like serious AI/technology editorial journalism and visibly represent the lead story, not travel, tourism, lifestyle, a generic banner, magazine-cover mock-up or scenic wallpaper.",
+      "The image must look like serious photorealistic AI/technology editorial journalism and visibly represent the lead story, not anime, fantasy illustration, travel, tourism, lifestyle, a generic banner, magazine-cover mock-up or scenic wallpaper.",
       "Any readable or pseudo-readable typography is a hard failure.",
     ],
     social: [
-      "The image must communicate the supplied post and lane at phone-thumbnail size through one concrete focal idea.",
+      "The image must communicate the supplied post and lane at phone-thumbnail size through one concrete focal idea with a visible, source-supported artificial-intelligence connection.",
+      "Anime, fantasy illustration, unrelated hardware, generic lifestyle imagery or a scene with no visible AI/software/robotics/compute/research/security/governance context is a hard failure.",
       "Generated labels, callout boxes, dashboards, pseudo-text, infographic panels and decorative UI are hard failures.",
     ],
     "social-blog": [
-      "The image must visibly match the selected source story and its stated consequence or decision, not merely the broad topic of AI.",
+      "The image must visibly match the selected source story and its stated AI-enabled consequence or decision, not merely the broad topic of AI or an unrelated real-world scene.",
       "Generated labels, callout boxes, dashboards, pseudo-text, infographic panels and decorative UI are hard failures.",
     ],
     quiz: [
@@ -97,7 +107,7 @@ export function buildArtworkVisualQaPrompt({ mode = "editorial", creativePrompt 
     `Creative brief: ${compact(creativePrompt, 3000)}`,
     "Return JSON only with exactly these keys:",
     '{"score":0,"relevance":0,"textSafety":0,"composition":0,"brandFit":0,"defects":[],"hardDefects":[],"summary":""}',
-    "Scores are 0-100. Put every publication-blocking defect in hardDefects. Be strict: attractive but off-topic artwork does not pass.",
+    "Scores are 0-100. Put only directly observable publication-blocking defects in hardDefects. Speculation such as possible, borderline, cannot confirm or if visible at another zoom belongs in defects, not hardDefects. Be strict about actual readable text, anime/illustration drift and off-topic imagery: attractive but off-topic artwork does not pass.",
   ].join("\n");
 }
 

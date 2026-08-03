@@ -19,7 +19,6 @@ import {
   buildArtworkImagePayload,
   extractBase64Image,
   getArtworkProviderAttempts,
-  getArtworkRequestTimeoutMs,
   isTransientArtworkError,
   makeArtworkHttpError,
   safeSnippet,
@@ -28,8 +27,18 @@ import {
 const OPENROUTER_BASE_URL =
   process.env.OPENROUTER_BASE_URL || process.env.OPENROUTER_API_BASE || "https://openrouter.ai/api/v1";
 
-const ARTWORK_TIMEOUT_MS = Number(process.env.ARTWORK_TIMEOUT_MS || process.env.AI_TIMEOUT) || 120_000;
-const ARTWORK_REQUEST_TIMEOUT_MS = getArtworkRequestTimeoutMs(ARTWORK_TIMEOUT_MS);
+const DEFAULT_ARTWORK_REQUEST_TIMEOUT_MS = 120_000;
+
+function artworkRequestTimeoutMs(mode = "podcast") {
+  const prefix = String(mode || "podcast").replace(/[^a-z0-9]+/gi, "_").toUpperCase();
+  const configured = Number(
+    process.env[`${prefix}_ARTWORK_REQUEST_TIMEOUT_MS`]
+      || process.env.ARTWORK_REQUEST_TIMEOUT_MS
+      || process.env.ARTWORK_PROVIDER_TIMEOUT_MS
+      || DEFAULT_ARTWORK_REQUEST_TIMEOUT_MS
+  );
+  return Number.isFinite(configured) && configured > 0 ? configured : DEFAULT_ARTWORK_REQUEST_TIMEOUT_MS;
+}
 
 const providers = getArtworkProviders();
 
@@ -51,8 +60,8 @@ export function buildInstruction(prompt, mode = "podcast", date) {
   if (mode === "newsletter") {
     return [
       "Create a wide premium editorial news image for the AI Edge newsletter.",
-      "Composition: one concrete AI-news scene with a decisive focal subject and cinematic depth. This is an illustration, not a banner design or magazine-cover mock-up.",
-      "Style: intelligent, current, grounded, high-contrast editorial realism. No travel, landscape, lifestyle or inspirational-journey imagery.",
+      "Composition: one concrete artificial-intelligence news scene with a decisive focal subject and cinematic depth. This is a photorealistic editorial news image, not an illustration, anime frame, banner design or magazine-cover mock-up.",
+      "Style: intelligent, current, grounded, high-contrast technology-journalism realism. The image must visibly contain an AI, machine-learning, software, robotics, compute, security or governance anchor supported by the lead story. No travel, landscape, lifestyle or inspirational-journey imagery.",
       `Creative direction: ${policyPrompt}`,
       "Final compliance check: remove all text, pseudo-text, title panels, buttons, interface labels, logos and watermarks before returning the image.",
     ].join(" ");
@@ -70,9 +79,9 @@ export function buildInstruction(prompt, mode = "podcast", date) {
 
   if (mode === "blog") {
     return [
-      "Create a wide editorial blog hero image.",
-      "Composition: cinematic landscape banner, clearly usable as a website article header.",
-      "Style: premium, modern, restrained, atmospheric and editorial rather than promotional.",
+      "Create a wide photorealistic artificial-intelligence editorial blog hero image.",
+      "Composition: cinematic landscape banner with one article-specific technical or human consequence, clearly usable as a website article header.",
+      "Style: premium technology journalism, modern, restrained, atmospheric and editorial rather than promotional. Never use anime, fantasy illustration, generic travel, unrelated machinery or decorative technology wallpaper.",
       `Creative direction: ${policyPrompt}`,
       "Final compliance check: inspect the whole composition and remove every accidental letter-like, number-like, logo-like or watermark-like mark before returning the image.",
     ].join(" ");
@@ -91,9 +100,9 @@ export function buildInstruction(prompt, mode = "podcast", date) {
 
   if (mode === "social") {
     return [
-      "Create a premium square editorial social-media image.",
-      "Composition: strong single focal subject, instantly readable at thumbnail size, cinematic depth, high contrast, modern magazine-quality framing.",
-      "Style: intelligent, contemporary, human, engaging and editorial rather than corporate or stock-photo-like.",
+      "Create a premium square photorealistic artificial-intelligence editorial social-media image.",
+      "Composition: one post-specific AI-enabled action, consequence, person or technical object as the strong focal subject, instantly readable at thumbnail size, with cinematic depth and modern magazine-quality framing.",
+      "Style: intelligent, contemporary, human, engaging technology journalism rather than anime, fantasy, corporate stock photography or unrelated machinery. The AI connection must be visually legible through supported software, compute, robotics, research, security, governance or human-tool context.",
       `Creative direction: ${policyPrompt}`,
       "Final compliance check: inspect the whole composition and remove every accidental letter-like, number-like, logo-like or watermark-like mark before returning the image.",
     ].join(" ");
@@ -119,7 +128,7 @@ export function buildShortInstruction(prompt, mode = "podcast", date) {
   const trimmedDirection = String(policyPrompt || "").split(/\s+/).slice(0, 24).join(" ");
 
   if (mode === "newsletter") {
-    return `AI-news editorial illustration, one concrete technical or human-scale focal scene, no banner layout, no travel or scenery. ${trimmedDirection} No text, pseudo-text, letters, numbers, logos, panels or watermarks.`;
+    return `Photorealistic AI-news editorial image, one concrete artificial-intelligence technical or human-scale focal scene, no anime, illustration, banner layout, travel or scenery. ${trimmedDirection} No text, pseudo-text, letters, numbers, logos, panels or watermarks.`;
   }
 
   if (mode === "social-blog") {
@@ -127,7 +136,7 @@ export function buildShortInstruction(prompt, mode = "podcast", date) {
   }
 
   if (mode === "blog") {
-    return `Editorial blog hero image, cinematic landscape banner, premium and restrained. ${trimmedDirection} No text, letters, numbers, logos or watermarks.`;
+    return `Photorealistic artificial-intelligence editorial blog hero, cinematic landscape banner, one article-specific technical or human consequence, premium and restrained. ${trimmedDirection} No anime, unrelated scenery, text, letters, numbers, logos or watermarks.`;
   }
 
 
@@ -137,7 +146,7 @@ export function buildShortInstruction(prompt, mode = "podcast", date) {
 
 
   if (mode === "social") {
-    return `Premium square editorial social image, one strong recognisable focal subject, cinematic, high contrast and engaging. ${trimmedDirection} No text, letters, numbers, logos or watermarks.`;
+    return `Photorealistic square artificial-intelligence editorial social image, one post-specific AI-enabled action, consequence, person or technical object, cinematic and high contrast. ${trimmedDirection} No anime, unrelated imagery, text, letters, numbers, logos or watermarks.`;
   }
 
   return `Square premium podcast episode artwork, one dominant source-specific real-world subject, strong editorial hierarchy and cinematic realism. ${trimmedDirection} No text, generic AI emblems, unrelated technology decoration, logos or watermarks.`;
@@ -212,7 +221,7 @@ async function requestArtworkFromProvider(provider, prompt, mode, date, { useSho
         method: "POST",
         headers,
         body: JSON.stringify(payload),
-        timeout: ARTWORK_REQUEST_TIMEOUT_MS,
+        timeout: artworkRequestTimeoutMs(mode),
         signal,
       });
 
@@ -283,7 +292,7 @@ async function requestArtworkFromProvider(provider, prompt, mode, date, { useSho
             method: "POST",
             headers,
             body: JSON.stringify(retryPayload),
-            timeout: ARTWORK_REQUEST_TIMEOUT_MS,
+            timeout: artworkRequestTimeoutMs(mode),
             signal,
           });
           if (!retryResponse.ok) {
