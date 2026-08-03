@@ -634,5 +634,5 @@ test("Monday lane generates concept-led dynamic artwork without unsafe named-per
   assert.match(source, /The author name is attribution context only/);
   assert.match(source, /Do not attempt to depict, impersonate or approximate/);
   assert.match(source, /createSocialArtwork\(/);
-  assert.match(source, /fallbackUrl: lane\.imageUrl/);
+  assert.match(source, /zernio-daily-artwork-unavailable/);
 });

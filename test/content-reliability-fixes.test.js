@@ -5,10 +5,12 @@ import {
   buildArtworkVisualQaPrompt,
   normaliseArtworkVisualQa,
 } from "../services/artwork/utils/artworkVisualQa.js";
+import { zonedDateTimeString, zonedDateTimeToUtcDate } from "../services/zernio/utils/date.js";
+import { createDeterministicAiFallbackPng } from "../services/artwork/utils/deterministicAiFallback.js";
 
 test("newsletter artwork QA rejects travel drift and pseudo-text", () => {
   const prompt = buildArtworkVisualQaPrompt({ mode: "newsletter", creativePrompt: "AI security story" });
-  assert.match(prompt, /not travel, tourism, lifestyle/i);
+  assert.match(prompt, /not anime, fantasy illustration, travel, tourism, lifestyle/i);
   assert.match(prompt, /pseudo-readable typography is a hard failure/i);
 
   const result = normaliseArtworkVisualQa({
@@ -104,4 +106,223 @@ test("social-blog Phase 5 repairs rebuild and revalidate the published artefact"
   assert.match(source, /phase5-repair-final-validation-failed/);
   assert.match(source, /Social blog fallback failed brand\/topicality QA/);
   assert.match(source, /Exact source evidence for visual grounding/);
+});
+
+test("artwork QA downgrades speculative pixel concerns but blocks observed defects", () => {
+  const speculative = normaliseArtworkVisualQa({
+    score: 88,
+    relevance: 90,
+    textSafety: 94,
+    composition: 86,
+    brandFit: 87,
+    defects: [],
+    hardDefects: ["Possible tiny glyph on a device; cannot confirm at this zoom"],
+    summary: "Otherwise usable",
+  });
+  assert.equal(speculative.pass, true);
+  assert.equal(speculative.hardDefects.length, 0);
+  assert.equal(speculative.defects.length, 1);
+
+  const observed = normaliseArtworkVisualQa({
+    score: 90,
+    relevance: 92,
+    textSafety: 95,
+    composition: 90,
+    brandFit: 88,
+    defects: [],
+    hardDefects: ["Clearly readable alphanumeric label on the cable"],
+    summary: "Observed text",
+  });
+  assert.equal(observed.pass, false);
+  assert.equal(observed.hardDefects.length, 1);
+});
+
+test("artwork lanes have separate total budgets and AI-grounded photorealistic prompts", async () => {
+  const core = await readFile(new URL("../services/artwork/utils/artwork.js", import.meta.url), "utf8");
+  const blog = await readFile(new URL("../services/artwork/createBlogArtwork.js", import.meta.url), "utf8");
+  const social = await readFile(new URL("../services/artwork/createSocialArtwork.js", import.meta.url), "utf8");
+  const env = await readFile(new URL("../config/production.defaults.env", import.meta.url), "utf8");
+  assert.match(core, /photorealistic artificial-intelligence editorial blog hero/i);
+  assert.match(core, /Never use anime/i);
+  assert.match(blog, /NEWSLETTER_ARTWORK_TIMEOUT_MS/);
+  assert.match(blog, /SOCIAL_BLOG_ARTWORK_TIMEOUT_MS/);
+  assert.match(social, /ZERNIO_ARTWORK_TIMEOUT_MS/);
+  assert.match(env, /^ARTWORK_REQUEST_TIMEOUT_MS=120000$/m);
+  assert.match(env, /^NEWSLETTER_ARTWORK_TIMEOUT_MS=600000$/m);
+  assert.match(env, /^ZERNIO_ARTWORK_TIMEOUT_MS=600000$/m);
+});
+
+test("newsletter retains only the generated or deterministic AI fallback and fails closed otherwise", async () => {
+  const hero = await readFile(new URL("../services/newsletter/engine/heroImage.js", import.meta.url), "utf8");
+  const build = await readFile(new URL("../services/newsletter/engine/buildNewsletter.js", import.meta.url), "utf8");
+  assert.match(hero, /createBlogArtwork/);
+  assert.match(hero, /provider-and-deterministic-ai-fallback-failed/);
+  assert.match(hero, /imageStatus: result\.fallback \? "fallback" : "generated"/);
+  assert.doesNotMatch(hero, /NEWSLETTER_AI_EDGE_FALLBACK_IMAGE_URL/);
+  assert.match(build, /heroImageStatus/);
+  assert.match(build, /Newsletter editorial content passed but hero image generation failed/);
+});
+
+test("Zernio and Blotato scheduled publishing require provider confirmation", async () => {
+  const zernio = await readFile(new URL("../services/zernio/utils/socialScheduler.js", import.meta.url), "utf8");
+  const blotato = await readFile(new URL("../services/blotato/utils/autoPublishService.js", import.meta.url), "utf8");
+  const blotatoRoutes = await readFile(new URL("../services/blotato/routes/index.js", import.meta.url), "utf8");
+  const env = await readFile(new URL("../config/production.defaults.env", import.meta.url), "utf8");
+  assert.match(zernio, /verifyZernioScheduleResponse/);
+  assert.match(zernio, /ZERNIO_SCHEDULE_ACCEPTED_STATUSES = new Set\(\["scheduled"\]\)/);
+  assert.match(zernio, /Zernio did not confirm the scheduled post/);
+  assert.match(zernio, /remoteMs !== null && Math\.abs\(remoteMs - expectedMs\) <= toleranceMs/);
+  assert.match(zernio, /ZERNIO_REQUIRE_IMAGE/);
+  assert.match(zernio, /zernio-image-required/);
+  assert.match(zernio, /zernio\.mini_series\.part_schedule_failed/);
+  assert.match(zernio, /ZERNIO_MINI_SERIES_SCHEDULE_ATTEMPTS/);
+  assert.match(blotato, /POST_SCHEDULE_ACCEPTED_STATUSES = new Set\(\["scheduled"\]\)/);
+  assert.match(blotato, /scheduled submission/);
+  assert.match(blotato, /phase: "pre-publish"/);
+  assert.match(blotato, /blotato-scheduled-publishing-required/);
+  assert.match(blotatoRoutes, /requireScheduledBlotatoRoute/);
+  assert.match(blotatoRoutes, /\/autoshorts\/schedule/);
+  assert.match(blotatoRoutes, /\/shorts\/:lane\/schedule/);
+  assert.match(env, /^BLOTATO_REQUIRE_ALL_CHANNELS=true$/m);
+  assert.match(env, /^BLOTATO_ALLOW_IMMEDIATE_PUBLISH=false$/m);
+  assert.match(env, /^ZERNIO_REQUIRE_SCHEDULE_CONFIRMATION=true$/m);
+  assert.match(env, /^ZERNIO_REQUIRE_IMAGE=true$/m);
+});
+
+test("Zernio schedule recovery uses London time and a future blog-social slot", async () => {
+  const summer = zonedDateTimeToUtcDate("2026-08-03 12:00", "Europe/London");
+  const winter = zonedDateTimeToUtcDate("2026-01-15 12:00", "Europe/London");
+  assert.equal(summer.toISOString(), "2026-08-03T11:00:00.000Z");
+  assert.equal(winter.toISOString(), "2026-01-15T12:00:00.000Z");
+  assert.equal(zonedDateTimeString(summer, "Europe/London"), "2026-08-03 12:00");
+
+  const scheduler = await readFile(new URL("../services/zernio/utils/socialScheduler.js", import.meta.url), "utf8");
+  const config = await readFile(new URL("../services/zernio/utils/config.js", import.meta.url), "utf8");
+  const env = await readFile(new URL("../config/production.defaults.env", import.meta.url), "utf8");
+  assert.match(scheduler, /resolveZernioScheduledDateTime/);
+  assert.match(scheduler, /zernio\.schedule\.slot_recovered/);
+  assert.match(config, /ZERNIO_BLOG_RSS_TIME, "12:00"/);
+  assert.match(env, /^ZERNIO_SCHEDULE_RECOVERY_ENABLED=true$/m);
+  assert.match(env, /^ZERNIO_SCHEDULE_MIN_LEAD_MS=900000$/m);
+  assert.match(env, /^ZERNIO_BLOG_RSS_TIME=12:00$/m);
+});
+
+test("artwork provider failure produces an uploaded text-free AI fallback, not the generic logo tile", async () => {
+  const png = createDeterministicAiFallbackPng({ width: 640, height: 360, seed: "newsletter-ai-edge" });
+  assert.deepEqual([...png.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
+  assert.ok(png.length > 20_000);
+
+  const blogArtwork = await readFile(new URL("../services/artwork/createBlogArtwork.js", import.meta.url), "utf8");
+  const socialArtwork = await readFile(new URL("../services/artwork/createSocialArtwork.js", import.meta.url), "utf8");
+  const weeklyBlog = await readFile(new URL("../services/blog/weekly/buildWeeklyBlogPost.js", import.meta.url), "utf8");
+  const socialBlog = await readFile(new URL("../services/blog/social/buildDailySocialBlogPost.js", import.meta.url), "utf8");
+  const hero = await readFile(new URL("../services/newsletter/engine/heroImage.js", import.meta.url), "utf8");
+  const env = await readFile(new URL("../config/production.defaults.env", import.meta.url), "utf8");
+  assert.match(blogArtwork, /artwork\.blog\.deterministic_ai_fallback/);
+  assert.match(socialArtwork, /artwork\.social\.deterministic_ai_fallback/);
+  assert.match(weeklyBlog, /art\.fallback \? "fallback" : "generated"/);
+  assert.match(weeklyBlog, /reason: "artwork-unavailable"/);
+  assert.doesNotMatch(weeklyBlog, /BLOG_RSS_IMAGE_URL/);
+  assert.match(socialBlog, /art\.fallback \? "fallback" : "generated"/);
+  assert.match(socialBlog, /reason: "artwork-unavailable"/);
+  assert.doesNotMatch(socialBlog, /BLOG_SOCIAL_FALLBACK_IMAGE_URL/);
+  assert.doesNotMatch(hero, /blog-fallback-hero\.png/);
+  assert.match(env, /^BLOG_FALLBACK_IMAGE_URL=$/m);
+  assert.match(env, /^BLOG_SOCIAL_FALLBACK_IMAGE_URL=$/m);
+  assert.match(env, /^NEWSLETTER_AI_EDGE_FALLBACK_IMAGE_URL=$/m);
+});
+
+
+test("mini-series creation retries weak plans and duplicate parts, then fails closed before partial scheduling", async () => {
+  const scheduler = await readFile(new URL("../services/zernio/utils/socialScheduler.js", import.meta.url), "utf8");
+  const client = await readFile(new URL("../services/zernio/utils/zernioClient.js", import.meta.url), "utf8");
+  const env = await readFile(new URL("../config/production.defaults.env", import.meta.url), "utf8");
+  assert.match(scheduler, /ZERNIO_MINI_SERIES_THEME_ATTEMPTS/);
+  assert.match(scheduler, /zernio\.mini_series\.theme_retry/);
+  assert.match(scheduler, /ZERNIO_MINI_SERIES_DISTINCTNESS_ATTEMPTS/);
+  assert.match(scheduler, /zernio\.mini_series\.distinctness_retry/);
+  assert.match(scheduler, /reason: "generated-series-quality-failed"/);
+  assert.match(scheduler, /ok: false,\n\s+quarantined: true,\n\s+lane: "weekly-mini-series"/);
+  assert.match(scheduler, /fallbackUrl: ""/);
+  assert.match(scheduler, /reason: "mini-series-artwork-failed"/);
+  assert.match(scheduler, /await deletePost\(remoteId, apiKey\)/);
+  assert.match(scheduler, /mini-series-incomplete-rolled-back/);
+  assert.match(scheduler, /clearScheduleSlotClaim/);
+  assert.match(client, /export async function deletePost/);
+  assert.match(client, /"x-request-id": requestId/);
+  assert.match(scheduler, /zernio-daily-artwork-unavailable/);
+  assert.doesNotMatch(scheduler, /fallbackUrl: lane\.imageUrl/);
+  assert.match(env, /^ZERNIO_MINI_SERIES_THEME_ATTEMPTS=3$/m);
+  assert.match(env, /^ZERNIO_MINI_SERIES_DISTINCTNESS_ATTEMPTS=3$/m);
+});
+
+test("critical orchestration defaults stay aligned across deployment templates", async () => {
+  const files = await Promise.all([
+    readFile(new URL("../.env.example", import.meta.url), "utf8"),
+    readFile(new URL("../env.template", import.meta.url), "utf8"),
+    readFile(new URL("../config/production.defaults.env", import.meta.url), "utf8"),
+  ]);
+  const parse = (text) => Object.fromEntries(text.split(/\r?\n/)
+    .filter((line) => line.includes("=") && !line.trimStart().startsWith("#"))
+    .map((line) => {
+      const index = line.indexOf("=");
+      return [line.slice(0, index).trim(), line.slice(index + 1).trim()];
+    }));
+  const configs = files.map(parse);
+  const expected = {
+    ARTWORK_TASK_TIMEOUT_MS: "600000",
+    ARTWORK_REQUEST_TIMEOUT_MS: "120000",
+    BLOG_ARTWORK_TIMEOUT_MS: "600000",
+    NEWSLETTER_ARTWORK_TIMEOUT_MS: "600000",
+    SOCIAL_BLOG_ARTWORK_TIMEOUT_MS: "600000",
+    ZERNIO_ARTWORK_TIMEOUT_MS: "600000",
+    BLOG_FALLBACK_IMAGE_URL: "",
+    BLOG_SOCIAL_FALLBACK_IMAGE_URL: "",
+    NEWSLETTER_AI_EDGE_FALLBACK_IMAGE_URL: "",
+    ZERNIO_REQUIRE_SCHEDULE_CONFIRMATION: "true",
+    ZERNIO_REQUIRE_IMAGE: "true",
+    ZERNIO_REQUIRED_PLATFORMS: "facebook,instagram",
+    ZERNIO_MONDAY_TIME: "14:00",
+    ZERNIO_TUESDAY_TIME: "13:00",
+    ZERNIO_WEDNESDAY_TIME: "12:20",
+    ZERNIO_THURSDAY_TIME: "12:20",
+    ZERNIO_FRIDAY_TIME: "11:20",
+    ZERNIO_SATURDAY_TIME: "10:30",
+    ZERNIO_SUNDAY_TIME: "18:00",
+    ZERNIO_EBOOK_TUESDAY_TIME: "16:00",
+    ZERNIO_EBOOK_THURSDAY_TIME: "15:30",
+    ZERNIO_EBOOK_SATURDAY_TIME: "14:30",
+    ZERNIO_QUIZ_QUESTION_TIME: "12:00",
+    ZERNIO_QUIZ_ANSWER_TIME: "12:00",
+    ZERNIO_MINI_SERIES_TUESDAY_TIME: "19:30",
+    ZERNIO_MINI_SERIES_WEDNESDAY_TIME: "19:30",
+    ZERNIO_MINI_SERIES_THURSDAY_TIME: "20:00",
+    ZERNIO_MINI_SERIES_FRIDAY_TIME: "19:30",
+    ZERNIO_MINI_SERIES_SATURDAY_TIME: "19:30",
+    ZERNIO_MINI_SERIES_SUNDAY_TIME: "19:30",
+    ZERNIO_PODCAST_PROMO_TIME: "18:30",
+    ZERNIO_SCHEDULE_RECOVERY_ENABLED: "true",
+    ZERNIO_SCHEDULE_MIN_LEAD_MS: "900000",
+    ZERNIO_BLOG_RSS_TIME: "12:00",
+    BLOTATO_REQUIRE_ALL_CHANNELS: "true",
+    BLOTATO_ALLOW_IMMEDIATE_PUBLISH: "false",
+    BLOTATO_SCHEDULE_TIMEZONE: "Europe/London",
+    BLOTATO_SCHEDULE_MONDAY_AM: "10:30",
+    BLOTATO_SCHEDULE_MONDAY_PM: "18:30",
+    BLOTATO_SCHEDULE_TUESDAY_AM: "10:30",
+    BLOTATO_SCHEDULE_TUESDAY_PM: "18:30",
+    BLOTATO_SCHEDULE_WEDNESDAY_AM: "10:30",
+    BLOTATO_SCHEDULE_WEDNESDAY_PM: "19:00",
+    BLOTATO_SCHEDULE_THURSDAY_AM: "10:30",
+    BLOTATO_SCHEDULE_THURSDAY_PM: "19:00",
+    BLOTATO_SCHEDULE_FRIDAY_AM: "10:30",
+    BLOTATO_SCHEDULE_FRIDAY_PM: "16:30",
+    BLOTATO_SCHEDULE_MIN_LEAD_MS: "900000",
+    BLOTATO_SCHEDULE_VERIFY_ATTEMPTS: "12",
+    AIMS_OPERATION_NEWSLETTER_ENABLED: "true",
+    REVIEW_COUNCIL_STAGNATION_LIMIT: "2",
+  };
+  for (const [key, value] of Object.entries(expected)) {
+    for (const config of configs) assert.equal(config[key], value, `${key} must match every deployment template`);
+  }
 });

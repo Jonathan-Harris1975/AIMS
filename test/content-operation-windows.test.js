@@ -87,8 +87,8 @@ test("dependent publication steps cannot run after a failed build", () => {
 test("RSS-backed content never publishes from a failed morning rewrite", () => {
   assert.match(opsSource, /blog-social build must depend on rss-rewrite/);
   assert.match(opsSource, /weekly blog must depend on rss-rewrite/);
-  assert.match(opsSource, /task\[0\] === "blotato-am" \|\| task\[0\] === "blotato-pm"/);
-  assert.match(opsSource, /dependsOn !== "rss-rewrite"/);
+  assert.match(opsSource, /blotato-am must depend on rss-rewrite/);
+  assert.match(opsSource, /blotato-pm must wait for the AM Blotato render/);
 });
 
 
@@ -98,4 +98,41 @@ test("long-running daily children are dispatched asynchronously with stable idem
   assert.match(opsSource, /x-idempotency-key/);
   assert.match(opsSource, /operation-dispatch-timeout/);
   assert.match(opsSource, /asyncStatusUrlFor/);
+});
+
+test("weekday orchestration is deadline-first for scheduled publishing", () => {
+  for (const day of ["monday", "tuesday", "wednesday", "thursday", "friday"]) {
+    const start = opsSource.indexOf(`"${day}-am": [`);
+    const nextDay = { monday: "tuesday", tuesday: "wednesday", wednesday: "thursday", thursday: "friday" }[day];
+    const end = day === "friday" ? opsSource.indexOf('"friday-pm": [', start) : opsSource.indexOf(`"${nextDay}-am": [`, start);
+    const block = opsSource.slice(start, end);
+    const rss = block.indexOf('/rss/rewrite');
+    const blotatoAm = block.indexOf('/blotato/autoshorts/schedule');
+    const currentDayZernio = block.indexOf(`/zernio/daily/${day}`);
+    const blog = block.indexOf('/blog/social/daily/build');
+    const zernioBlog = block.indexOf('/zernio/blog-rss/daily');
+    const blotatoPm = block.indexOf('/blotato/shorts/');
+    const newsletter = block.indexOf('/newsletter/generate');
+    assert.ok(rss >= 0 && blotatoAm > rss && currentDayZernio > blotatoAm);
+    assert.ok(blog > currentDayZernio && zernioBlog > blog);
+    assert.ok(blotatoPm > zernioBlog && newsletter > blotatoPm);
+  }
+});
+
+
+test("Blotato renders are deferred, serialised and joined before the operation window completes", () => {
+  assert.match(opsSource, /DEFERRED_OPERATION_TASKS = new Set\(\["blotato-am", "blotato-pm"\]\)/);
+  assert.match(opsSource, /pendingTasks\.set\(taskName/);
+  assert.match(opsSource, /queuedBehind: dependsOn/);
+  assert.match(opsSource, /dependencyPromise\.then/);
+  assert.match(opsSource, /await settlePendingTask\(dependsOn\)/);
+  assert.match(opsSource, /for \(const taskName of \[\.\.\.pendingTasks\.keys\(\)\]\)/);
+  for (const day of ["monday", "tuesday", "wednesday", "thursday", "friday"]) {
+    const start = opsSource.indexOf(`"${day}-am": [`);
+    const nextDay = { monday: "tuesday", tuesday: "wednesday", wednesday: "thursday", thursday: "friday" }[day];
+    const end = day === "friday" ? opsSource.indexOf('"friday-pm": [', start) : opsSource.indexOf(`"${nextDay}-am": [`, start);
+    const block = opsSource.slice(start, end);
+    assert.match(block, /\["blotato-am"[^\n]+"rss-rewrite"\]/);
+    assert.match(block, /\["blotato-pm"[^\n]+"blotato-am"\]/);
+  }
 });
