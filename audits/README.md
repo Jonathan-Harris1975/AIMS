@@ -1,5 +1,5 @@
 > **Document status:** Production reference
-> **Last reviewed:** 28 July 2026
+> **Last reviewed:** 3 August 2026
 > **Operational authority:** Current repository README, SECURITY policy and operations guide.
 
 # Audits service
@@ -17,6 +17,7 @@ Owns the unified website audit pipeline (Digital Growth -> SEO/AEO/GEO -> render
 - `GET /audits/website/health`
 - `POST /audits/website/run`
 - `GET /audits/website/jobs/:sessionId`
+- `POST /audits/website/jobs/:sessionId/finalise/retry`
 - `POST /audits/website/jobs/:sessionId/rams/retry`
 - `GET /audits/mobile-ux/health`
 - `POST /audits/mobile-ux/run`
@@ -53,7 +54,7 @@ Owns the unified website audit pipeline (Digital Growth -> SEO/AEO/GEO -> render
 - SEO/AEO/GEO dispatches `seo-aeo-geo-forensic.yml`.
 - Callbacks and analysis URLs are built from `AUDIT_CALLBACK_BASE_URL` or `APP_URL`.
 - Callbacks require bearer token or `x-audit-callback-token`.
-- Completed audit artefact URLs are checked against `R2_PUBLIC_BASE_URL_AUDITS`.
+- Completed audit artefact URLs are checked against `R2_PUBLIC_BASE_URL_AUDITS`; source workflows verify that required JSON is publicly readable before callback, and final synthesis polls the same objects until the readiness deadline.
 - On-brand audits run inside this application and publish JSON/HTML outputs unless dry-run mode is used.
 - Social-performance reports are analysis-only. They do not post content and set `ramsPolicy.shouldTriggerRams=false` in report outputs.
 
@@ -78,6 +79,7 @@ Owns the unified website audit pipeline (Digital Growth -> SEO/AEO/GEO -> render
 - `GITHUB_TOKEN_WEBSITE_AUDITS`
 - `R2_BUCKET_AUDITS`, `R2_PUBLIC_BASE_URL_AUDITS`
 - `WEBSITE_AUDIT_RUN_REUSE_ACTIVE_MS`, `AUDIT_ARTEFACT_READ_ATTEMPTS`, `AUDIT_ARTEFACT_READ_TIMEOUT_MS`
+- `AUDIT_ARTEFACT_READY_TIMEOUT_MS`, `AUDIT_ARTEFACT_READY_POLL_MS`, `WEBSITE_AUDIT_FINALISATION_STALE_MS`
 - Shared R2 credentials and `R2_BUCKET_META_SYSTEM` for durable state
 - `AI_MODEL_AUDIT`, `AUDIT_AI_*`, `ON_BRAND_AUDIT_*`
 - `ZERNIO_META_API_KEY`, `ZERNIO_VIDEO_API_KEY`
@@ -118,6 +120,7 @@ Owns the unified website audit pipeline (Digital Growth -> SEO/AEO/GEO -> render
 - 401 on callback: token mismatch or missing token env.
 - Dispatch failure: check GitHub token, repo owner/name, workflow ID and ref.
 - Analysis not visible: check job status endpoint and R2 audit artefacts.
+- Final report stuck or produced before retained source JSON became readable: call `POST /audits/website/jobs/:sessionId/finalise/retry`. Stale in-progress finalisation is also re-queued when the job is read after `WEBSITE_AUDIT_FINALISATION_STALE_MS`.
 - Empty Zernio report: confirm both Zernio accounts are connected, API keys are set, and the report date range contains platform posts/analytics.
 - Artefact rejected: URL is outside `R2_PUBLIC_BASE_URL_AUDITS`.
 
@@ -139,7 +142,7 @@ Set `BRAND_SOCIAL_COUNCIL_RUN_AFTER_SOCIAL=true` to run it automatically after t
 
 The former standalone SEO/AEO/GEO and Mobile UX councils are retired. Their evidence now feeds the single 24-seat website council inside `websiteAuditCouncil.js`. The source audit callbacks only resume the AIMS parent pipeline; they do not launch separate councils.
 
-The retained website report set is exactly PDF, HTML and JSON. Once all three are published and the temporary evidence prefix is verified empty, AIMS dispatches RAMS pipeline `website` with the exact final JSON R2 key.
+The retained website report set is exactly PDF, HTML and JSON. AIMS dispatches RAMS pipeline `website` with the exact final JSON R2 key, waits for RAMS acceptance, and only then verifies and deletes the temporary evidence prefix.
 
 The final report also carries the compact website policy and a `targetAssessment` block so RAMS and humans can see which areas meet the 8.5 target, which are below target and which remain unscored because required evidence was not supplied.
 
