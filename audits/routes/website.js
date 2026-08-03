@@ -4,6 +4,7 @@ import { validateBody, auditRunBodySchema } from "../../services/shared/utils/re
 import { getWebsiteAuditReadiness } from "../utils/websiteAuditReadiness.js";
 import {
   getWebsiteAuditPipelineJobFresh,
+  retryWebsiteAuditFinalisation,
   retryWebsiteAuditRamsDispatch,
   startWebsiteAuditPipeline,
 } from "../utils/websiteAuditPipeline.js";
@@ -39,6 +40,11 @@ router.post("/run", requestDedupe("audits:website:run"), asyncRoute(async (req, 
 router.post("/jobs/:sessionId/rams/retry", requestDedupe("audits:website:rams:retry"), asyncRoute(async (req, res) => {
   const job = await retryWebsiteAuditRamsDispatch(req.params.sessionId);
   return res.status(202).json({ ok: true, auditType: "website", job });
+}));
+
+router.post("/jobs/:sessionId/finalise/retry", requestDedupe("audits:website:finalise:retry"), asyncRoute(async (req, res) => {
+  const result = await retryWebsiteAuditFinalisation(req.params.sessionId);
+  return res.status(202).json({ ok: true, auditType: "website", ...result });
 }));
 
 router.get("/jobs/:sessionId", asyncRoute(async (req, res) => {
