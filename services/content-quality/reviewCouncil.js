@@ -73,7 +73,7 @@ export const REVIEW_COUNCILS = Object.freeze({
   },
   "blotato-script-quality": {
     env: "REVIEW_COUNCIL_BLOTATO_SCRIPT_ENABLED",
-    defaultEnabled: true,
+    defaultEnabled: false,
     members: [
       { seat: 1, role: "Short-form Editorial Chair", remit: "Chair the meeting, reconcile story, visual, source and platform findings, and make the final render-ready or quarantine decision.", authority: "final-decision" },
       { seat: 2, role: "Source Fidelity Reviewer", remit: "Verify every factual claim, named entity and implication against the supplied source material before any creative optimisation is accepted.", authority: "hard-gate" },
@@ -149,8 +149,9 @@ export const REVIEW_COUNCILS = Object.freeze({
       { seat: 10, role: "Social Proof Integrity Reviewer", remit: "Block fabricated endorsements, popularity claims, rankings or social proof not present in the supplied evidence.", authority: "hard-gate" },
       { seat: 11, role: "Jonathan Harris Voice Editor", remit: "Keep the promotion in Jonathan's direct, useful, sceptical voice rather than conventional sales copy.", authority: "hard-gate" },
       { seat: 12, role: "British English Language Expert", remit: "Enforce polished British English throughout generated copy.", authority: "hard-gate" },
-      { seat: 13, role: "CTA and Link Integrity Reviewer", remit: "Confirm the exact book URL survives every repair and the CTA describes the real destination without misleading wording.", authority: "hard-gate" },
-      { seat: 14, role: "Independent Conversion Red-Team", remit: "Challenge empty persuasion, unsupported claims and any repair that improves sales tone by weakening credibility.", authority: "challenge" },
+      { seat: 13, role: "Grammar, Spelling and Punctuation Expert", remit: "Correct language mechanics, sentence construction and punctuation without flattening Jonathan's voice.", authority: "hard-gate" },
+      { seat: 14, role: "CTA and Link Integrity Reviewer", remit: "Confirm the exact book URL survives every repair and the CTA describes the real destination without misleading wording.", authority: "hard-gate" },
+      { seat: 15, role: "Independent Conversion Red-Team", remit: "Challenge empty persuasion, unsupported claims and any repair that improves sales tone by weakening credibility.", authority: "challenge" },
     ],
   },
   "quiz-logic": {
