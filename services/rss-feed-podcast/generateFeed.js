@@ -47,11 +47,16 @@ function isEpisodePublicationReady(meta = {}) {
   if (meta.episodePublicationReady === true || meta.productionComplete === true) return true;
 
   // Backwards compatibility for older, genuinely produced episodes that pre-date
-  // the explicit lifecycle marker. Planned metadata must not satisfy this gate.
+  // the explicit lifecycle marker. A public audio URL plus a positive file size
+  // proves an artefact exists; legacy records may carry only the planned duration.
   return (
     isAbsoluteHttpUrl(meta.podcastUrl) &&
     hasPositiveNumber(meta.fileSize) &&
-    (hasPositiveNumber(meta.actualDurationSeconds) || hasPositiveNumber(meta.duration))
+    (
+      hasPositiveNumber(meta.actualDurationSeconds) ||
+      hasPositiveNumber(meta.duration) ||
+      hasPositiveNumber(meta.plannedDurationSeconds)
+    )
   );
 }
 
@@ -264,7 +269,9 @@ function mapMetaToEpisode(meta, channelDiscovery = {}) {
     enclosureUrl: podcastUrl,
     enclosureLength: fileSize || 0,
     durationSeconds:
-      typeof duration === "number"
+      typeof meta.actualDurationSeconds === "number"
+        ? meta.actualDurationSeconds
+        : typeof duration === "number"
         ? duration
         : typeof plannedDurationSeconds === "number"
         ? plannedDurationSeconds
