@@ -61,8 +61,27 @@ export function buildArtworkImagePayload({ model, prompt, mode = "podcast" } = {
 
 // Retained for source compatibility with older tests/imports. New production
 // traffic uses the dedicated OpenRouter /images endpoint.
-export function buildArtworkChatPayload({ model, instruction, mode = "podcast" } = {}) {
-  return buildArtworkImagePayload({ model, prompt: instruction, mode });
+export function buildArtworkChatPayload({ model, instruction, mode = "podcast", maxTokens = 1024 } = {}) {
+  const configuredModalities = pickFirstEnv("ARTWORK_MODALITIES", "OPENROUTER_ARTWORK_MODALITIES");
+  const modalities = configuredModalities
+    ? configuredModalities.split(",").map((value) => value.trim()).filter(Boolean)
+    : mode === "podcast"
+      ? ["image"]
+      : ["image", "text"];
+
+  const payload = {
+    model,
+    messages: [{ role: "user", content: instruction }],
+    modalities,
+    stream: false,
+    max_tokens: Number(maxTokens) > 0 ? Number(maxTokens) : 1024,
+  };
+
+  if (envFlagEnabled("ARTWORK_IMAGE_CONFIG_ENABLED", false)) {
+    payload.image_config = getArtworkImageConfig(model, mode);
+  }
+
+  return payload;
 }
 
 export function extractBase64Image(result) {
