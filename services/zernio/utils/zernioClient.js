@@ -7,6 +7,8 @@
 // docs.zernio.com: profiles, accounts, posts, and analytics. It replaces the
 // former services/oneup/utils/oneupClient.js OneUp API wrapper.
 
+import crypto from "node:crypto";
+
 function trimString(value, fallback = "") {
   if (value === undefined || value === null) return fallback;
   const cleaned = String(value).trim();
@@ -173,7 +175,13 @@ async function zernioGet(endpoint, params = {}, apiKey) {
   });
 }
 
+function stableRequestId(endpoint, body = {}) {
+  const digest = crypto.createHash("sha256").update(`${endpoint}:${JSON.stringify(body || {})}`).digest("hex").slice(0, 32);
+  return `aims-${digest}`;
+}
+
 async function zernioPost(endpoint, body = {}, apiKey) {
+  const requestId = stableRequestId(endpoint, body);
   return withZernioRetry(`POST ${endpoint}`, async () => {
     const key = requireApiKey(apiKey);
 
@@ -182,6 +190,7 @@ async function zernioPost(endpoint, body = {}, apiKey) {
       headers: {
         Authorization: `Bearer ${key}`,
         "Content-Type": "application/json",
+        "x-request-id": requestId,
       },
       body: JSON.stringify(body || {}),
     });
@@ -195,6 +204,32 @@ async function zernioPost(endpoint, body = {}, apiKey) {
     }
 
     return parsed.json;
+  });
+}
+
+async function zernioDelete(endpoint, apiKey) {
+  return withZernioRetry(`DELETE ${endpoint}`, async () => {
+    const key = requireApiKey(apiKey);
+    const response = await fetch(`${getZernioApiBase()}/${endpoint}`, {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${key}`,
+        Accept: "application/json",
+      },
+    });
+    const parsed = await parseJsonSafe(response);
+    // DELETE is idempotent for our rollback use. A 404 after a lost success
+    // response still means the scheduled post is no longer present.
+    if (response.status === 404) {
+      return { ok: true, deleted: true, alreadyAbsent: true, message: parsed.json?.message || "Post already absent" };
+    }
+    if (!response.ok) {
+      const err = new Error(parsed.json?.error || parsed.json?.message || parsed.text || `Zernio DELETE ${endpoint} failed with ${response.status}`);
+      err.statusCode = response.status || 502;
+      err.details = parsed.json;
+      throw err;
+    }
+    return { ok: true, deleted: true, ...(parsed.json || {}) };
   });
 }
 
@@ -237,6 +272,16 @@ export async function listAccounts({ profileId } = {}, apiKey) {
 
 export async function createPost(body, apiKey) {
   return zernioPost("posts", body, apiKey);
+}
+
+export async function deletePost(postId, apiKey) {
+  const id = trimString(postId);
+  if (!id) {
+    const err = new Error("Zernio post ID is required for deletion");
+    err.statusCode = 400;
+    throw err;
+  }
+  return zernioDelete(`posts/${encodeURIComponent(id)}`, apiKey);
 }
 
 export async function listPostsWithAnalytics({ fromDate, toDate, page = 1, limit = 50, sortBy = "date" } = {}, apiKey) {

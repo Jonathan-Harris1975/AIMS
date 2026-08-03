@@ -4,12 +4,12 @@ import { resilientRequest } from "../../shared/utils/ai-service.js";
 import { info, warn } from "../../../logger.js";
 import { LANE_CONFIG, QUIZ_CONFIG, EBOOK_CONFIG, BLOG_RSS_CONFIG, PODCAST_PROMO_CONFIG, MINI_SERIES_CONFIG, ZERNIO_POST_MAX_CHARACTERS, ZERNIO_PROFILE_NAME_GENERAL, ZERNIO_PROFILE_NAME_EBOOKS, ZERNIO_DEFAULT_DRY_RUN, ZERNIO_CROSSPOST_DEDUPE_HOURS, DEFAULT_TIMEZONE, ZERNIO_QUEUE_GUARD_LOOKBACK_PAGES, getZernioRequiredPlatforms, getZernioAccountId, normaliseZernioAccountId, shouldValidateZernioTargetAccounts } from "./config.js";
 import { buildDailyPrompt, buildQuizPrompt, buildEbookPostPrompt, buildPodcastPromoPrompt, buildMiniSeriesResearchPrompt, buildMiniSeriesThemePrompt, buildMiniSeriesPostPrompt, buildAccountVariant } from "./prompts.js";
-import { addDays, nextWeekdayDateString, toScheduledDateTime, zonedDateString } from "./date.js";
+import { addDays, nextWeekdayDateString, toScheduledDateTime, zonedDateString, zonedDateTimeString, zonedDateTimeToUtcDate } from "./date.js";
 import { loadRecentRssContext } from "./feedContext.js";
 import { fetchBlogRssItems } from "./blogRssFeed.js";
 import { fetchPodcastPromoEpisode } from "./podcastRssFeed.js";
-import { getLaneHistory, getWeeklyTopicLedger, recordLaneSchedule, getQuizHistory, recordQuizSchedule, claimScheduleSlot, completeScheduleSlot, releaseScheduleSlot, isRecentSpotlightPerson, recordSpotlightPerson, hasRecentSocialSource, recordUsedSocialSource } from "./state.js";
-import { resolveProfile, inspectZernioTargeting, listPostsWithAnalytics, createPost } from "./zernioClient.js";
+import { getLaneHistory, getWeeklyTopicLedger, recordLaneSchedule, getQuizHistory, recordQuizSchedule, claimScheduleSlot, resetScheduleSlotClaim, completeScheduleSlot, releaseScheduleSlot, clearScheduleSlotClaim, isRecentSpotlightPerson, recordSpotlightPerson, hasRecentSocialSource, recordUsedSocialSource } from "./state.js";
+import { resolveProfile, inspectZernioTargeting, listPostsWithAnalytics, createPost, deletePost } from "./zernioClient.js";
 import getSponsor from "../../script/utils/getSponsor.js";
 import { resolveFeaturedEbook } from "./ebookCatalogue.js";
 import { runPhase5OrganicGrowthGate } from "../../content-quality/phase5OrganicGrowthGates.js";
@@ -787,11 +787,27 @@ function duplicateSlotWarning(reason) {
 }
 
 async function claimZernioSlot({ scope, scheduledDateTime, profileName, accountId, imageUrl, dryRun, apiKey, force, sourceIntentHash }) {
-  if (isEffectiveDryRun({ dryRun, apiKey }) || isTruthyOption(force)) {
-    return { claimed: false, skipped: true, duplicatePrevented: false, key: null };
+  if (isEffectiveDryRun({ dryRun, apiKey })) {
+    return {
+      claimed: false,
+      skipped: true,
+      duplicatePrevented: false,
+      key: null,
+      scheduledDateTime,
+      scheduleResolution: { scheduledDateTime, recovered: false, dryRun: true, laneKey: scope || null },
+    };
   }
 
-  return claimScheduleSlot({ scope, scheduledDateTime, profileName, accountId, imageUrl, sourceIntentHash });
+  const scheduleResolution = resolveZernioScheduledDateTime(scheduledDateTime, new Date(), { laneKey: scope });
+  const effectiveScheduledDateTime = scheduleResolution.scheduledDateTime;
+
+  if (isTruthyOption(force)) {
+    const claim = resetScheduleSlotClaim({ scope, scheduledDateTime: effectiveScheduledDateTime, profileName, accountId, imageUrl, sourceIntentHash });
+    return { ...claim, forced: true, scheduledDateTime: effectiveScheduledDateTime, scheduleResolution };
+  }
+
+  const claim = await claimScheduleSlot({ scope, scheduledDateTime: effectiveScheduledDateTime, profileName, accountId, imageUrl, sourceIntentHash });
+  return { ...claim, scheduledDateTime: effectiveScheduledDateTime, scheduleResolution };
 }
 
 
@@ -858,8 +874,116 @@ function slotDuplicatePostResult({ publishDate, scheduledDateTime, dryRun = fals
   };
 }
 
+const ZERNIO_SCHEDULE_ACCEPTED_STATUSES = new Set(["scheduled"]);
+const ZERNIO_SCHEDULE_FAILED_STATUSES = new Set(["failed", "error", "cancelled", "canceled", "rejected", "expired"]);
+
+function booleanValue(value, fallback = false) {
+  if (value === undefined || value === null || value === "") return fallback;
+  return ["1", "true", "yes", "on", "y"].includes(String(value).trim().toLowerCase());
+}
+
+function positiveInteger(name, fallback, max = 10) {
+  const parsed = Number(process.env[name]);
+  if (!Number.isFinite(parsed) || parsed < 1) return fallback;
+  return Math.min(Math.floor(parsed), max);
+}
+
+function delay(ms) {
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, Math.max(0, Number(ms || 0)));
+    timer.unref?.();
+  });
+}
+
+function normaliseScheduledTimestamp(value = "") {
+  const text = String(value || "").trim();
+  if (!text) return null;
+  try {
+    const hasExplicitOffset = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(text);
+    const date = hasExplicitOffset
+      ? new Date(text)
+      : zonedDateTimeToUtcDate(text, DEFAULT_TIMEZONE);
+    return Number.isFinite(date.getTime()) ? date.getTime() : null;
+  } catch {
+    return null;
+  }
+}
+
+export function resolveZernioScheduledDateTime(scheduledDateTime, now = new Date(), { laneKey = "" } = {}) {
+  const original = String(scheduledDateTime || "").trim();
+  const enabled = booleanValue(process.env.ZERNIO_SCHEDULE_RECOVERY_ENABLED, true);
+  const minimumLeadMs = Math.max(5 * 60_000, Number(process.env.ZERNIO_SCHEDULE_MIN_LEAD_MS || 15 * 60_000));
+  const scheduledLocalDate = original.slice(0, 10);
+  const currentLocalDate = zonedDateString(now, DEFAULT_TIMEZONE);
+  const originalMs = normaliseScheduledTimestamp(original);
+
+  if (!enabled || !original || originalMs === null || scheduledLocalDate !== currentLocalDate) {
+    return {
+      scheduledDateTime: original,
+      originalScheduledDateTime: original,
+      recovered: false,
+      minimumLeadMs,
+      laneKey: laneKey || null,
+    };
+  }
+
+  if (originalMs > now.getTime() + minimumLeadMs) {
+    return {
+      scheduledDateTime: original,
+      originalScheduledDateTime: original,
+      recovered: false,
+      minimumLeadMs,
+      laneKey: laneKey || null,
+    };
+  }
+
+  const recoveredDateTime = zonedDateTimeString(new Date(now.getTime() + minimumLeadMs), DEFAULT_TIMEZONE);
+  warn("zernio.schedule.slot_recovered", {
+    laneKey: laneKey || null,
+    originalScheduledDateTime: original,
+    recoveredScheduledDateTime: recoveredDateTime,
+    minimumLeadMs,
+  });
+  return {
+    scheduledDateTime: recoveredDateTime,
+    originalScheduledDateTime: original,
+    recovered: true,
+    minimumLeadMs,
+    laneKey: laneKey || null,
+  };
+}
+
+export function verifyZernioScheduleResponse(response = {}, expectedScheduledDateTime = "") {
+  const record = response?.post || response?.existingPost || response?.item || response?.data?.post || response?.data?.existingPost || response?.data || response || {};
+  const id = String(record?._id || record?.id || record?.postId || response?.postId || "").trim();
+  const status = String(record?.status || record?.state || record?.publishStatus || response?.status || "").trim().toLowerCase();
+  const remoteScheduledFor = String(record?.scheduledFor || record?.scheduledAt || response?.scheduledFor || "").trim();
+  const expectedMs = normaliseScheduledTimestamp(expectedScheduledDateTime);
+  const remoteMs = normaliseScheduledTimestamp(remoteScheduledFor);
+  const toleranceMs = Math.max(60_000, Number(process.env.ZERNIO_SCHEDULE_TIME_TOLERANCE_MS || 5 * 60_000));
+  const timeMatches = expectedMs === null
+    ? true
+    : remoteMs !== null && Math.abs(remoteMs - expectedMs) <= toleranceMs;
+  const failed = ZERNIO_SCHEDULE_FAILED_STATUSES.has(status);
+  const accepted = Boolean(id) && !failed && ZERNIO_SCHEDULE_ACCEPTED_STATUSES.has(status) && timeMatches;
+  return {
+    accepted,
+    id: id || null,
+    status: status || null,
+    expectedScheduledDateTime: expectedScheduledDateTime || null,
+    remoteScheduledFor: remoteScheduledFor || null,
+    timeMatches,
+    failed,
+  };
+}
+
 async function scheduleToZernio({ post, scheduledDateTime, profileName, accountId, dryRun, apiKey, preflightOnly = false, laneKey = "", dedupeWindowHours }) {
   const warnings = [];
+  const scheduleResolution = resolveZernioScheduledDateTime(scheduledDateTime, new Date(), { laneKey });
+  const effectiveScheduledDateTime = scheduleResolution.scheduledDateTime;
+  if (scheduleResolution.recovered) {
+    warnings.push(`The original Zernio slot was no longer safely in the future, so it was recovered to ${effectiveScheduledDateTime}.`);
+  }
   const normalisedAccountId = normaliseZernioAccountId(accountId, getZernioAccountId());
   const requiredPlatforms = getZernioRequiredPlatforms();
   const effectiveDryRun = Boolean(dryRun || ZERNIO_DEFAULT_DRY_RUN || !apiKey);
@@ -875,7 +999,29 @@ async function scheduleToZernio({ post, scheduledDateTime, profileName, accountI
       zernioResponse: null,
       profile: { id: null, name: profileName },
       targeting: { checked: false, accountId: normalisedAccountId },
+      scheduledDateTime: effectiveScheduledDateTime,
+      scheduleResolution,
     };
+  }
+
+  const requireImage = booleanValue(process.env.ZERNIO_REQUIRE_IMAGE, true);
+  const imageUrl = String(post?.imageUrl || "").trim();
+  if (requireImage && !imageUrl) {
+    const err = new Error(`Zernio live scheduling refused for lane '${laneKey || "unknown"}': no verified image URL was supplied.`);
+    err.statusCode = 422;
+    err.code = "zernio-image-required";
+    throw err;
+  }
+  if (imageUrl) {
+    try {
+      const parsedImageUrl = new URL(imageUrl);
+      if (!/^https?:$/.test(parsedImageUrl.protocol)) throw new Error("unsupported protocol");
+    } catch {
+      const err = new Error(`Zernio live scheduling refused for lane '${laneKey || "unknown"}': image URL is not a valid absolute HTTP(S) URL.`);
+      err.statusCode = 422;
+      err.code = "zernio-image-url-invalid";
+      throw err;
+    }
   }
 
   const targeting = shouldValidateZernioTargetAccounts() || requiredPlatforms.length
@@ -912,7 +1058,7 @@ async function scheduleToZernio({ post, scheduledDateTime, profileName, accountI
   // kept as a backwards-compatible alias for any existing callers.
   const allowDuplicateOverride = Boolean(post.allowDuplicate ?? post.crosspost ?? false);
   if (hasLikelyDuplicate(queuedPosts, {
-    scheduledDateTime,
+    scheduledDateTime: effectiveScheduledDateTime,
     targetAccountIds,
     imageUrl: post.imageUrl,
     content: post.content,
@@ -929,6 +1075,8 @@ async function scheduleToZernio({ post, scheduledDateTime, profileName, accountI
       profile,
       duplicatePrevented: true,
       targeting,
+      scheduledDateTime: effectiveScheduledDateTime,
+      scheduleResolution,
     };
   }
 
@@ -941,6 +1089,8 @@ async function scheduleToZernio({ post, scheduledDateTime, profileName, accountI
       zernioResponse: null,
       profile,
       targeting,
+      scheduledDateTime: effectiveScheduledDateTime,
+      scheduleResolution,
     };
   }
 
@@ -969,7 +1119,7 @@ async function scheduleToZernio({ post, scheduledDateTime, profileName, accountI
 
   const payload = {
     content,
-    scheduledFor: scheduledDateTime.replace(" ", "T"),
+    scheduledFor: effectiveScheduledDateTime.replace(" ", "T"),
     timezone: DEFAULT_TIMEZONE,
     platforms: targetedAccounts.map((account) => ({ platform: account.platform, accountId: account.accountId })),
     // Our lane images are served from clean, extensionless URLs (e.g.
@@ -983,12 +1133,26 @@ async function scheduleToZernio({ post, scheduledDateTime, profileName, accountI
   };
 
   const zernioResponse = await createPost(payload, apiKey);
+  const scheduleVerification = verifyZernioScheduleResponse(zernioResponse, effectiveScheduledDateTime);
+  const requireConfirmation = booleanValue(process.env.ZERNIO_REQUIRE_SCHEDULE_CONFIRMATION, true);
+  if (requireConfirmation && !scheduleVerification.accepted) {
+    const err = new Error(
+      `Zernio did not confirm the scheduled post${scheduleVerification.status ? ` (status: ${scheduleVerification.status})` : ""}${scheduleVerification.id ? "" : ": missing post id"}${scheduleVerification.timeMatches ? "" : ": scheduled time mismatch"}`
+    );
+    err.statusCode = scheduleVerification.failed ? 502 : 409;
+    err.zernioResponse = zernioResponse;
+    err.scheduleVerification = scheduleVerification;
+    throw err;
+  }
 
   return {
-    scheduled: true,
+    scheduled: scheduleVerification.accepted || !requireConfirmation,
     dryRun: false,
     warnings,
     zernioResponse,
+    scheduleVerification,
+    scheduleResolution,
+    scheduledDateTime: effectiveScheduledDateTime,
     profile,
     targeting,
   };
@@ -1241,15 +1405,17 @@ function buildMondayArtworkPrompt({ verifiedQuote, post } = {}) {
   const topic = compactText(post?.topic || post?.title || "artificial intelligence");
 
   return [
-    `Editorial portrait-led social artwork inspired by a verified quotation from ${author}.`,
-    `Primary subject: ${author}, depicted as the clear human focal point in a credible modern editorial portrait.`,
+    `Concept-led artificial-intelligence editorial artwork inspired by a verified quotation attributed to ${author}.`,
+    "The author name is attribution context only.",
+    "Do not attempt to depict, impersonate or approximate the quoted person.",
     `Theme: ${topic}.`,
     `Quotation context, for visual meaning only and never as visible text: ${quote}`,
-    "Show the person in an intelligent computing or AI context appropriate to the subject, with subtle programming, research or technical environment cues when relevant.",
-    "The person's presence must dominate the composition; technology is supporting context, not the subject.",
-    "Aim for the visual authority of a serious magazine profile or premium documentary thumbnail.",
-    "Avoid generic corporate portraits, anonymous business people, handshake imagery, glowing brains, abstract network art, circuit mandalas, digital snowflakes and decorative geometry.",
-    "No visible words, quotation marks, code, labels, logos or typography.",
+    "Translate the quotation into one concrete AI scene involving credible machine-learning, robotics, intelligent software, compute infrastructure, research or human oversight.",
+    "Make the AI mechanism and its real-world consequence immediately readable at phone-thumbnail size.",
+    "Use people only as anonymous operators, researchers or affected users when they clarify the decision or consequence.",
+    "Aim for the visual authority of serious technology journalism or a premium documentary thumbnail.",
+    "Avoid generic corporate portraits, handshake imagery, glowing brains, abstract network wallpaper, circuit mandalas, digital snowflakes and decorative geometry.",
+    "No visible words, quotation marks, code, labels, logos, screens with legible interfaces or typography.",
   ].join(" ");
 }
 
@@ -1264,6 +1430,8 @@ function buildDailyLaneArtworkPrompt({ laneKey = "", post = {}, verifiedQuote = 
     `Post context, for visual meaning only and never as visible text: ${content.slice(0, 700)}`,
     "Create premium square social artwork with one immediately readable focal idea at phone-thumbnail size.",
     "Use the seasonal brand palette while keeping the scene natural, vivid and editorial.",
+    "The scene must visibly and specifically connect to artificial intelligence through credible machine-learning, robotics, intelligent software, compute, research, security, governance or human-oversight cues supported by the post.",
+    "Reject travel scenery, lifestyle stock, unrelated machinery, generic offices and decorative technology that does not explain the AI subject.",
     "No visible words, labels, logos, interface copy, pseudo-text or watermarks.",
     "Do not create title areas, callout boxes, annotation lines, legends, labels, cards, charts, dashboards or infographic layouts.",
   ];
@@ -1328,12 +1496,12 @@ export async function buildAndScheduleDailyLane(laneKey, options = {}) {
   }
 
   const publishDate = options.publishDate || nextWeekdayDateString(laneKey, DEFAULT_TIMEZONE, new Date());
-  const scheduledDateTime = options.scheduledDateTime || toScheduledDateTime(publishDate, lane.publishTime);
+  let scheduledDateTime = options.scheduledDateTime || toScheduledDateTime(publishDate, lane.publishTime);
   const profileName = options.profileName || ZERNIO_PROFILE_NAME_GENERAL;
   const accountId = normaliseZernioAccountId(options.accountId || getZernioAccountId());
   const apiKey = options.apiKey || process.env.ZERNIO_META_API_KEY;
-  let imageUrl = options.imageUrl || lane.imageUrl;
   const dryRun = Boolean(options.dryRun);
+  let imageUrl = options.imageUrl || (dryRun ? lane.imageUrl : "");
 
   const slotClaim = await claimZernioSlot({
     scope: `daily:${laneKey}`,
@@ -1346,6 +1514,7 @@ export async function buildAndScheduleDailyLane(laneKey, options = {}) {
     force: options.force,
     sourceIntentHash: buildIntentHash({ audienceIntent: lane.audienceIntent, angle: laneKey }),
   });
+  scheduledDateTime = slotClaim.scheduledDateTime || scheduledDateTime;
 
   if (slotClaim.duplicatePrevented) {
     const warnings = [duplicateSlotWarning(slotClaim.reason)];
@@ -1530,22 +1699,16 @@ export async function buildAndScheduleDailyLane(laneKey, options = {}) {
         lane: laneKey,
         date: publishDate,
         prompt: buildDailyLaneArtworkPrompt({ laneKey, post, verifiedQuote }),
-        fallbackUrl: lane.imageUrl,
       });
 
-      if (artwork.publicUrl) {
-        imageUrl = artwork.publicUrl;
-        post.imageUrl = artwork.publicUrl;
+      if (!artwork?.ok || !artwork.publicUrl) {
+        const err = new Error(artwork?.error || `The ${lane.label} lane did not produce a verified AI-relevant image.`);
+        err.statusCode = 502;
+        err.code = "zernio-daily-artwork-unavailable";
+        throw err;
       }
-
-      if (!artwork.ok) {
-        warn("zernio.daily.artwork.fallback", {
-          lane: laneKey,
-          publishDate,
-          fallbackUrl: lane.imageUrl,
-          error: artwork.error,
-        });
-      }
+      imageUrl = artwork.publicUrl;
+      post.imageUrl = artwork.publicUrl;
     }
 
     if (laneKey === "sunday") {
@@ -1673,7 +1836,7 @@ export async function buildAndScheduleDailyLane(laneKey, options = {}) {
 // skips the AI content-generation and review-council gate steps.
 export async function buildAndScheduleBlogRssDaily(options = {}) {
   const publishDate = options.publishDate || zonedDateString(new Date(), DEFAULT_TIMEZONE);
-  const scheduledDateTime = options.scheduledDateTime || toScheduledDateTime(publishDate, BLOG_RSS_CONFIG.publishTime);
+  let scheduledDateTime = options.scheduledDateTime || toScheduledDateTime(publishDate, BLOG_RSS_CONFIG.publishTime);
   const profileName = options.profileName || ZERNIO_PROFILE_NAME_GENERAL;
   const accountId = normaliseZernioAccountId(options.accountId || getZernioAccountId());
   const apiKey = options.apiKey || process.env.ZERNIO_META_API_KEY;
@@ -1703,6 +1866,7 @@ export async function buildAndScheduleBlogRssDaily(options = {}) {
     force: options.force,
     sourceIntentHash: buildIntentHash({ audienceIntent: BLOG_RSS_CONFIG.audienceIntent, angle: article.link }),
   });
+  scheduledDateTime = slotClaim.scheduledDateTime || scheduledDateTime;
 
   if (slotClaim.duplicatePrevented) {
     const warnings = [duplicateSlotWarning(slotClaim.reason)];
@@ -1967,46 +2131,78 @@ export async function buildAndScheduleWeeklyMiniSeries(options = {}) {
     };
   }
 
-  const theme = await requestStructuredZernioJson({
-    routeName: "zernioMiniSeriesTheme",
-    sessionId: `${sessionId}-THEME`,
-    prompt: buildMiniSeriesThemePrompt({ weekStartDate, research, sourceItems: researchSources }),
-    label: "mini-series articles theme panel",
-    normalise: (raw) => normaliseMiniSeriesTheme(raw, research),
-    maxTokens: ZERNIO_MINI_SERIES_THEME_MAX_TOKENS,
-    temperature: 0.26,
-  });
-
-  const desiredCount = Math.max(
-    MINI_SERIES_CONFIG.minPosts,
-    Math.min(MINI_SERIES_CONFIG.maxPosts, research.suggestedPostCount, theme.posts.length)
-  );
-  theme.posts = theme.posts.slice(0, desiredCount).map((post) => ({
-    ...post,
-    sourceUrls: validMiniSeriesSourceUrls(post.sourceUrls, researchSources),
-  }));
-
+  let theme = null;
+  let themeGate = null;
+  let specificTags = [];
+  const maxThemeAttempts = positiveInteger("ZERNIO_MINI_SERIES_THEME_ATTEMPTS", 3, 5);
   const broadTags = new Set(["#ai", "#artificialintelligence", "#technology", "#tech", "#innovation", "#future"]);
-  const specificTags = theme.hashtags.filter((tag) => !broadTags.has(tag.toLowerCase()));
-  const themeGate = miniSeriesThemeDefects(theme, research, researchSources);
-  theme.topicFidelity = themeGate.fidelity;
-  if (theme.posts.length < MINI_SERIES_CONFIG.minPosts || specificTags.length < 1 || !themeGate.ok) {
-    info("zernio.mini_series.skipped", {
+
+  for (let themeAttempt = 1; themeAttempt <= maxThemeAttempts; themeAttempt += 1) {
+    const repairInstruction = themeAttempt > 1
+      ? [
+          `This is theme repair attempt ${themeAttempt}/${maxThemeAttempts}.`,
+          `The previous plan was rejected for: ${(themeGate?.defects || []).join(" | ") || "insufficient distinct posts or topic-specific hashtags"}.`,
+          `Return ${Math.max(MINI_SERIES_CONFIG.minPosts, research.suggestedPostCount || MINI_SERIES_CONFIG.minPosts)} genuinely distinct parts with exact approved source URLs and at least one topic-specific hashtag.`,
+        ].join(" ")
+      : "";
+    theme = await requestStructuredZernioJson({
+      routeName: "zernioMiniSeriesTheme",
+      sessionId: `${sessionId}-THEME-${themeAttempt}`,
+      prompt: [
+        buildMiniSeriesThemePrompt({ weekStartDate, research, sourceItems: researchSources }),
+        repairInstruction,
+      ].filter(Boolean).join("\n\n"),
+      label: `mini-series articles theme panel attempt ${themeAttempt}`,
+      normalise: (raw) => normaliseMiniSeriesTheme(raw, research),
+      maxTokens: ZERNIO_MINI_SERIES_THEME_MAX_TOKENS,
+      temperature: themeAttempt === 1 ? 0.26 : 0.34,
+    });
+
+    const desiredCount = Math.max(
+      MINI_SERIES_CONFIG.minPosts,
+      Math.min(MINI_SERIES_CONFIG.maxPosts, research.suggestedPostCount, theme.posts.length)
+    );
+    theme.posts = theme.posts.slice(0, desiredCount).map((post) => ({
+      ...post,
+      sourceUrls: validMiniSeriesSourceUrls(post.sourceUrls, researchSources),
+    }));
+
+    specificTags = theme.hashtags.filter((tag) => !broadTags.has(tag.toLowerCase()));
+    themeGate = miniSeriesThemeDefects(theme, research, researchSources);
+    theme.topicFidelity = themeGate.fidelity;
+    const themeReady = theme.posts.length >= MINI_SERIES_CONFIG.minPosts && specificTags.length >= 1 && themeGate.ok;
+    if (themeReady) break;
+
+    warn("zernio.mini_series.theme_retry", {
       weekStartDate,
-      reason: "theme-panel-insufficient-series",
       topic: research.topic,
+      attempt: themeAttempt,
+      maxAttempts: maxThemeAttempts,
       plannedPosts: theme.posts.length,
       hashtags: theme.hashtags,
       defects: themeGate.defects,
     });
+  }
+
+  if (!theme || theme.posts.length < MINI_SERIES_CONFIG.minPosts || specificTags.length < 1 || !themeGate?.ok) {
+    warn("zernio.mini_series.theme_failed", {
+      weekStartDate,
+      reason: "theme-panel-insufficient-series",
+      topic: research.topic,
+      plannedPosts: theme?.posts?.length || 0,
+      hashtags: theme?.hashtags || [],
+      defects: themeGate?.defects || [],
+      attempts: maxThemeAttempts,
+    });
     return {
-      ok: true,
+      ok: false,
+      quarantined: true,
       lane: "weekly-mini-series",
-      skipped: true,
+      skipped: false,
       reason: "theme-panel-insufficient-series",
       research,
       theme,
-      defects: themeGate.defects,
+      defects: themeGate?.defects || [],
       posts: [],
     };
   }
@@ -2014,25 +2210,30 @@ export async function buildAndScheduleWeeklyMiniSeries(options = {}) {
   const slots = miniSeriesPublishSlots(weekStartDate, theme.posts.length);
   const prepared = [];
 
-  // Build and review the whole series before scheduling any part. One weak
-  // post should not leave a half-built public series behind.
-  for (const [index, postPlan] of theme.posts.entries()) {
+  const buildPreparedMiniSeriesPart = async ({ index, postPlan, distinctnessAttempt = 0, contrastInstruction = "" }) => {
     const slot = slots[index];
     const generated = await requestStructuredZernioJson({
       routeName: "zernioMiniSeriesPost",
-      sessionId: `${sessionId}-PART-${index + 1}`,
-      prompt: buildMiniSeriesPostPrompt({
-        weekStartDate,
-        series: theme,
-        postPlan,
-        index,
-        total: theme.posts.length,
-        sourceItems: researchSources,
-      }),
-      label: `mini-series part ${index + 1}`,
+      sessionId: distinctnessAttempt > 0
+        ? `${sessionId}-PART-${index + 1}-DISTINCT-${distinctnessAttempt}`
+        : `${sessionId}-PART-${index + 1}`,
+      prompt: [
+        buildMiniSeriesPostPrompt({
+          weekStartDate,
+          series: theme,
+          postPlan,
+          index,
+          total: theme.posts.length,
+          sourceItems: researchSources,
+        }),
+        contrastInstruction,
+      ].filter(Boolean).join("\n\n"),
+      label: distinctnessAttempt > 0
+        ? `mini-series part ${index + 1} distinctness repair ${distinctnessAttempt}`
+        : `mini-series part ${index + 1}`,
       normalise: (raw) => normaliseMiniSeriesPost(raw, postPlan),
       maxTokens: ZERNIO_MINI_SERIES_POST_MAX_TOKENS,
-      temperature: 0.38,
+      temperature: distinctnessAttempt > 0 ? 0.48 : 0.38,
     });
 
     let post = {
@@ -2089,7 +2290,7 @@ export async function buildAndScheduleWeeklyMiniSeries(options = {}) {
     }
 
     post.imageUrl = options.imageUrl || "";
-    prepared.push({
+    return {
       index,
       slot,
       postPlan,
@@ -2098,33 +2299,88 @@ export async function buildAndScheduleWeeklyMiniSeries(options = {}) {
       topicFidelity: postFidelity,
       generatedImagePrompt: generated.imagePrompt,
       sources: postSources,
-    });
+      distinctnessAttempt,
+    };
+  };
+
+  // Build and review the whole series before scheduling any part. One weak
+  // post must not leave a half-built public series behind.
+  for (const [index, postPlan] of theme.posts.entries()) {
+    prepared.push(await buildPreparedMiniSeriesPart({ index, postPlan }));
   }
 
-  const generatedSeriesDefects = [];
-  for (let left = 0; left < prepared.length; left += 1) {
-    for (let right = left + 1; right < prepared.length; right += 1) {
-      const similarity = jaccardTopicSimilarity(
-        `${prepared[left].post.title || ""} ${prepared[left].post.topic || ""} ${stripHashtags(prepared[left].post.content || "")}`,
-        `${prepared[right].post.title || ""} ${prepared[right].post.topic || ""} ${stripHashtags(prepared[right].post.content || "")}`,
-      );
-      if (similarity > 0.62) {
-        generatedSeriesDefects.push(`Generated mini-series parts ${left + 1} and ${right + 1} are too similar (${Math.round(similarity * 100)}% topic overlap).`);
+  const findGeneratedSeriesIssues = () => {
+    const issues = [];
+    for (let left = 0; left < prepared.length; left += 1) {
+      for (let right = left + 1; right < prepared.length; right += 1) {
+        const similarity = jaccardTopicSimilarity(
+          `${prepared[left].post.title || ""} ${prepared[left].post.topic || ""} ${stripHashtags(prepared[left].post.content || "")}`,
+          `${prepared[right].post.title || ""} ${prepared[right].post.topic || ""} ${stripHashtags(prepared[right].post.content || "")}`,
+        );
+        if (similarity > 0.62) issues.push({ left, right, similarity });
       }
     }
+    return issues;
+  };
+
+  const maxDistinctnessAttempts = positiveInteger("ZERNIO_MINI_SERIES_DISTINCTNESS_ATTEMPTS", 3, 5);
+  let generatedSeriesIssues = findGeneratedSeriesIssues();
+
+  for (let distinctnessAttempt = 1; generatedSeriesIssues.length && distinctnessAttempt <= maxDistinctnessAttempts; distinctnessAttempt += 1) {
+    const repairIndices = [...new Set(generatedSeriesIssues.map((issue) => issue.right))];
+    warn("zernio.mini_series.distinctness_retry", {
+      weekStartDate,
+      topic: research.topic,
+      seriesTitle: theme.seriesTitle,
+      attempt: distinctnessAttempt,
+      maxAttempts: maxDistinctnessAttempts,
+      repairParts: repairIndices.map((index) => index + 1),
+      overlaps: generatedSeriesIssues.map((issue) => ({
+        leftPart: issue.left + 1,
+        rightPart: issue.right + 1,
+        similarity: Math.round(issue.similarity * 100),
+      })),
+    });
+
+    for (const index of repairIndices) {
+      const otherParts = prepared
+        .filter((item) => item.index !== index)
+        .map((item) => `Part ${item.index + 1}: ${item.post.title} — ${stripHashtags(item.post.content || "").slice(0, 420)}`)
+        .join("\n");
+      const contrastInstruction = [
+        `Distinctness repair attempt ${distinctnessAttempt}/${maxDistinctnessAttempts}.`,
+        `Rewrite only Part ${index + 1} so it takes a materially different argument, evidence path, consequence and opening from every other part.`,
+        `Keep the approved source URLs and the assigned part angle: ${prepared[index].postPlan.angle}.`,
+        "Do not paraphrase, summarise or recycle the other parts. Preserve British English and the series voice.",
+        `Other finished parts to contrast against:\n${otherParts}`,
+      ].join("\n");
+      prepared[index] = await buildPreparedMiniSeriesPart({
+        index,
+        postPlan: prepared[index].postPlan,
+        distinctnessAttempt,
+        contrastInstruction,
+      });
+    }
+
+    generatedSeriesIssues = findGeneratedSeriesIssues();
   }
 
-  if (generatedSeriesDefects.length) {
+  if (generatedSeriesIssues.length) {
+    const generatedSeriesDefects = generatedSeriesIssues.map((issue) =>
+      `Generated mini-series parts ${issue.left + 1} and ${issue.right + 1} remain too similar (${Math.round(issue.similarity * 100)}% topic overlap).`
+    );
     warn("zernio.mini_series.generated_quality_failed", {
       weekStartDate,
       topic: research.topic,
       seriesTitle: theme.seriesTitle,
       defects: generatedSeriesDefects,
+      attempts: maxDistinctnessAttempts,
     });
     return {
-      ok: true,
+      ok: false,
+      quarantined: true,
       lane: "weekly-mini-series",
-      skipped: true,
+      skipped: false,
       reason: "generated-series-quality-failed",
       research,
       theme,
@@ -2156,14 +2412,43 @@ export async function buildAndScheduleWeeklyMiniSeries(options = {}) {
           `Part angle for context only: ${item.postPlan.angle}.`,
           `Exact source evidence: ${JSON.stringify(sourceEvidence)}`,
           "Create a source-specific and visibly distinct image for this part while retaining a coherent editorial family across the series.",
+          "Make the relationship to artificial intelligence unmistakable through real AI compute, model evaluation, robotics, machine perception, AI safety or software-agent infrastructure grounded in this part's evidence.",
           "Do not recycle a generic person-at-a-laptop, glowing brain, abstract network, dashboard, labelled diagram or infographic composition.",
           "No visible text, labels, logos or typography.",
         ].join("\n"),
-        fallbackUrl: MINI_SERIES_CONFIG.fallbackImageUrl,
+        fallbackUrl: "",
       });
-      item.post.imageUrl = artwork.publicUrl || MINI_SERIES_CONFIG.fallbackImageUrl;
+      if (!artwork?.ok || !artwork.publicUrl) {
+        const errorMessage = artwork?.error || `Mini-series part ${item.index + 1} did not produce a verified AI-relevant image.`;
+        warn("zernio.mini_series.artwork_failed", {
+          weekStartDate,
+          seriesTitle: theme.seriesTitle,
+          part: item.index + 1,
+          error: errorMessage,
+        });
+        return {
+          ok: false,
+          quarantined: true,
+          lane: "weekly-mini-series",
+          skipped: false,
+          reason: "mini-series-artwork-failed",
+          research,
+          theme,
+          failedPart: item.index + 1,
+          error: errorMessage,
+          posts: prepared.map((preparedItem) => ({
+            index: preparedItem.index + 1,
+            post: preparedItem.post,
+            topicFidelity: preparedItem.topicFidelity,
+          })),
+          warnings: [loaded.warning].filter(Boolean),
+        };
+      }
+      item.post.imageUrl = artwork.publicUrl;
+      item.artworkStatus = artwork.imageStatus || (artwork.fallback ? "fallback" : "generated");
     } else {
-      item.post.imageUrl = options.imageUrl || MINI_SERIES_CONFIG.fallbackImageUrl;
+      item.post.imageUrl = options.imageUrl || "";
+      item.artworkStatus = options.imageUrl ? "provided" : "dry-run";
     }
   }
 
@@ -2182,117 +2467,265 @@ export async function buildAndScheduleWeeklyMiniSeries(options = {}) {
     }
   }
 
-  const results = [];
-  for (const item of prepared) {
-    const slotClaim = claimScheduleSlot({
-      scope: `mini-series:${item.index + 1}`,
-      scheduledDateTime: item.slot.scheduledDateTime,
-      profileName,
-      accountId,
-      force: options.force,
-      sourceIntentHash: buildIntentHash({
-        audienceIntent: MINI_SERIES_CONFIG.audienceIntent,
-        angle: `${research.topic}:${item.postPlan.angle}`,
-      }),
-    });
+  const resultByIndex = new Map();
+  const successfulSlotClaims = new Map();
+  let pending = [...prepared];
+  const maxScheduleRounds = positiveInteger("ZERNIO_MINI_SERIES_SCHEDULE_ATTEMPTS", 3, 5);
+  const retryBaseMs = Math.max(250, Number(process.env.ZERNIO_MINI_SERIES_RETRY_BASE_MS || 1_500));
 
-    if (slotClaim.duplicatePrevented) {
-      results.push({
-        ...item.slot,
-        scheduled: false,
-        duplicatePrevented: true,
-        post: item.post,
-        warning: duplicateSlotWarning(slotClaim.reason),
-      });
-      continue;
-    }
-
-    try {
-      const scheduling = await scheduleToZernio({
-        post: item.post,
-        scheduledDateTime: item.slot.scheduledDateTime,
+  for (let round = 1; round <= maxScheduleRounds && pending.length; round += 1) {
+    const nextPending = [];
+    for (const item of pending) {
+      let effectiveScheduledDateTime = item.slot.scheduledDateTime;
+      const slotClaim = await claimZernioSlot({
+        scope: `mini-series:${item.index + 1}`,
+        scheduledDateTime: effectiveScheduledDateTime,
         profileName,
         accountId,
+        imageUrl: item.post.imageUrl,
         dryRun,
         apiKey,
-        laneKey: "weekly-mini-series",
+        force: Boolean(options.force),
+        sourceIntentHash: buildIntentHash({
+          audienceIntent: MINI_SERIES_CONFIG.audienceIntent,
+          angle: `${research.topic}:${item.postPlan.angle}`,
+        }),
       });
+      effectiveScheduledDateTime = slotClaim.scheduledDateTime || effectiveScheduledDateTime;
 
-      if (scheduling.scheduled) {
+      if (slotClaim.duplicatePrevented) {
+        const recovered = slotClaim.reason === "same-slot-already-completed";
+        resultByIndex.set(item.index, {
+          ...item.slot,
+          index: item.index + 1,
+          scheduledDateTime: effectiveScheduledDateTime,
+          scheduled: recovered,
+          duplicatePrevented: true,
+          recoveredByDuplicate: recovered,
+          failed: !recovered && round >= maxScheduleRounds,
+          error: !recovered && round >= maxScheduleRounds
+            ? `Mini-series part ${item.index + 1} could not claim its scheduled slot after ${maxScheduleRounds} attempts.`
+            : null,
+          post: item.post,
+          topicFidelity: item.topicFidelity,
+          warning: duplicateSlotWarning(slotClaim.reason),
+          scheduleAttempt: round,
+        });
+        if (!recovered && round < maxScheduleRounds) nextPending.push(item);
+        continue;
+      }
+
+      try {
+        const scheduling = await scheduleToZernio({
+          post: item.post,
+          scheduledDateTime: effectiveScheduledDateTime,
+          profileName,
+          accountId,
+          dryRun,
+          apiKey,
+          laneKey: "weekly-mini-series",
+        });
+        effectiveScheduledDateTime = scheduling.scheduledDateTime || effectiveScheduledDateTime;
+
+        const complete = Boolean(scheduling.scheduled || scheduling.dryRun);
+        if (!complete) {
+          releaseScheduleSlot(slotClaim);
+          const failure = {
+            ...item.slot,
+            index: item.index + 1,
+            scheduledDateTime: effectiveScheduledDateTime,
+            scheduled: false,
+            failed: true,
+            duplicatePrevented: Boolean(scheduling.duplicatePrevented),
+            post: item.post,
+            topicFidelity: item.topicFidelity,
+            error: scheduling.duplicatePrevented
+              ? "Zernio reported an unverified duplicate instead of confirming this mini-series part."
+              : "Zernio did not confirm this mini-series part as scheduled.",
+            zernioResponse: scheduling.zernioResponse,
+            scheduleVerification: scheduling.scheduleVerification || null,
+            scheduleAttempt: round,
+          };
+          resultByIndex.set(item.index, failure);
+          if (round < maxScheduleRounds) nextPending.push(item);
+          continue;
+        }
+
+        if (slotClaim.claimed && scheduling.scheduled) successfulSlotClaims.set(item.index, slotClaim);
+        else releaseScheduleSlot(slotClaim);
+
+        resultByIndex.set(item.index, {
+          ...item.slot,
+          index: item.index + 1,
+          scheduledDateTime: effectiveScheduledDateTime,
+          scheduled: Boolean(scheduling.scheduled),
+          dryRun: Boolean(scheduling.dryRun),
+          duplicatePrevented: Boolean(scheduling.duplicatePrevented),
+          failed: false,
+          post: item.post,
+          topicFidelity: item.topicFidelity,
+          zernioResponse: scheduling.zernioResponse,
+          scheduleVerification: scheduling.scheduleVerification || null,
+          scheduleAttempt: round,
+        });
+      } catch (error) {
+        releaseScheduleSlot(slotClaim);
+        const failure = {
+          ...item.slot,
+          index: item.index + 1,
+          scheduledDateTime: effectiveScheduledDateTime,
+          scheduled: false,
+          failed: true,
+          post: item.post,
+          error: safeErrorMessage(error),
+          retry: retrySummaryFromError(error),
+          scheduleVerification: error?.scheduleVerification || null,
+          scheduleAttempt: round,
+        };
+        resultByIndex.set(item.index, failure);
+        warn("zernio.mini_series.part_schedule_failed", {
+          weekStartDate,
+          seriesTitle: theme.seriesTitle,
+          part: item.index + 1,
+          scheduledDateTime: effectiveScheduledDateTime,
+          attempt: round,
+          maxAttempts: maxScheduleRounds,
+          error: failure.error,
+          retry: failure.retry,
+          scheduleVerification: failure.scheduleVerification,
+        });
+        if (round < maxScheduleRounds) nextPending.push(item);
+      }
+    }
+
+    pending = nextPending;
+    if (pending.length && round < maxScheduleRounds) {
+      const waitMs = Math.min(retryBaseMs * (2 ** (round - 1)), 15_000);
+      warn("zernio.mini_series.schedule_retry", {
+        weekStartDate,
+        seriesTitle: theme.seriesTitle,
+        nextAttempt: round + 1,
+        remainingParts: pending.map((item) => item.index + 1),
+        waitMs,
+      });
+      await delay(waitMs);
+    }
+  }
+
+  const results = prepared.map((item) => resultByIndex.get(item.index) || {
+    ...item.slot,
+    index: item.index + 1,
+    scheduled: false,
+    failed: true,
+    post: item.post,
+    error: "Mini-series scheduling ended without a terminal result.",
+  });
+
+  const initiallyIncomplete = results.some((item) => item.failed || (!dryRun && !item.scheduled));
+  let rolledBackCount = 0;
+  let rollbackFailedCount = 0;
+
+  // Zernio exposes DELETE /v1/posts/{postId} for draft and scheduled posts.
+  // If any part remains incomplete after retries, remove every part created by
+  // this run so the public queue never contains a knowingly partial series.
+  if (!dryRun && initiallyIncomplete) {
+    for (const result of results) {
+      const index = Number(result.index || 0) - 1;
+      const slotClaim = successfulSlotClaims.get(index);
+      if (!result.scheduled || !slotClaim) continue;
+      const remoteId = result.scheduleVerification?.id || null;
+      try {
+        if (!remoteId) throw new Error("confirmed mini-series post did not expose a rollback post ID");
+        const rollback = await deletePost(remoteId, apiKey);
+        clearScheduleSlotClaim(slotClaim);
+        result.scheduled = false;
+        result.failed = true;
+        result.rolledBack = true;
+        result.rollback = { ok: true, postId: remoteId, response: rollback };
+        result.error = "Mini-series transaction rolled back because another part could not be scheduled.";
+        rolledBackCount += 1;
+      } catch (error) {
+        completeScheduleSlot(slotClaim, {
+          lane: "weekly-mini-series",
+          scheduledDateTime: result.scheduledDateTime,
+          topic: result.post?.topic,
+          title: result.post?.title,
+          rollbackFailed: true,
+          remoteId,
+        });
+        result.failed = true;
+        result.rollbackFailed = true;
+        result.rollback = { ok: false, postId: remoteId, error: safeErrorMessage(error) };
+        result.error = `Mini-series rollback failed: ${safeErrorMessage(error)}`;
+        rollbackFailedCount += 1;
+      }
+    }
+  } else if (!dryRun) {
+    for (const result of results) {
+      const index = Number(result.index || 0) - 1;
+      const slotClaim = successfulSlotClaims.get(index);
+      if (slotClaim) {
+        completeScheduleSlot(slotClaim, {
+          lane: "weekly-mini-series",
+          scheduledDateTime: result.scheduledDateTime,
+          topic: result.post?.topic,
+          title: result.post?.title,
+          duplicatePrevented: false,
+          remoteId: result.scheduleVerification?.id || null,
+        });
         recordEditorialEvent({
           pipeline: "zernio",
           lane: "weekly-mini-series",
           audienceIntent: MINI_SERIES_CONFIG.audienceIntent,
-          angle: item.postPlan.angle,
-          scheduledDateTime: item.slot.scheduledDateTime,
-          text: item.post.content,
+          angle: prepared[index]?.postPlan?.angle,
+          scheduledDateTime: result.scheduledDateTime,
+          text: result.post?.content,
           meta: {
             contentType: "zernio-weekly-mini-series",
             seriesTitle: theme.seriesTitle,
-            part: item.index + 1,
+            part: index + 1,
             totalParts: prepared.length,
-            sourceUrls: item.postPlan.sourceUrls,
-            topicFidelity: item.topicFidelity,
+            sourceUrls: prepared[index]?.postPlan?.sourceUrls || [],
+            topicFidelity: result.topicFidelity,
+            scheduleVerification: result.scheduleVerification || null,
           },
         });
       }
-
-      if (slotClaim.claimed && (scheduling.scheduled || scheduling.duplicatePrevented)) {
-        completeScheduleSlot(slotClaim, {
-          lane: "weekly-mini-series",
-          scheduledDateTime: item.slot.scheduledDateTime,
-          topic: item.post.topic,
-          title: item.post.title,
-          duplicatePrevented: Boolean(scheduling.duplicatePrevented),
-        });
-      } else {
-        releaseScheduleSlot(slotClaim);
-      }
-
-      results.push({
-        ...item.slot,
-        scheduled: scheduling.scheduled,
-        dryRun: scheduling.dryRun,
-        duplicatePrevented: Boolean(scheduling.duplicatePrevented),
-        post: item.post,
-        topicFidelity: item.topicFidelity,
-        zernioResponse: scheduling.zernioResponse,
-      });
-    } catch (error) {
-      releaseScheduleSlot(slotClaim);
-      results.push({
-        ...item.slot,
-        scheduled: false,
-        failed: true,
-        post: item.post,
-        error: safeErrorMessage(error),
-        retry: retrySummaryFromError(error),
-      });
     }
   }
 
-  const failedCount = results.filter((item) => item.failed).length;
+  const failedCount = results.filter((item) => item.failed || (!dryRun && !item.scheduled)).length;
   const scheduledCount = results.filter((item) => item.scheduled).length;
+  const previewCount = results.filter((item) => item.dryRun).length;
+  const ok = failedCount === 0 && (dryRun ? previewCount === results.length : scheduledCount === results.length);
   info("zernio.mini_series.complete", {
     weekStartDate,
     topic: research.topic,
     seriesTitle: theme.seriesTitle,
     postCount: results.length,
     scheduledCount,
+    previewCount,
     failedCount,
+    rolledBackCount,
+    rollbackFailedCount,
     skipped: false,
   });
 
   return {
-    ok: failedCount === 0,
-    partialFailure: failedCount > 0,
+    ok,
+    partialFailure: !ok,
+    quarantined: !ok,
+    reason: ok ? null : rollbackFailedCount ? "mini-series-rollback-failed" : "mini-series-incomplete-rolled-back",
     lane: "weekly-mini-series",
     skipped: false,
     weekStartDate,
     research,
     theme,
     scheduledCount,
+    previewCount,
     failedCount,
+    rolledBackCount,
+    rollbackFailedCount,
     posts: results,
     warnings: [loaded.warning].filter(Boolean),
   };
@@ -2320,7 +2753,7 @@ function buildPodcastPromoArtworkBrief({ episode = {}, generatedPrompt = "" } = 
 
 export async function buildAndSchedulePodcastThursdayPromo(options = {}) {
   const publishDate = options.publishDate || nextWeekdayDateString("thursday", DEFAULT_TIMEZONE, new Date());
-  const scheduledDateTime = options.scheduledDateTime || toScheduledDateTime(publishDate, PODCAST_PROMO_CONFIG.publishTime);
+  let scheduledDateTime = options.scheduledDateTime || toScheduledDateTime(publishDate, PODCAST_PROMO_CONFIG.publishTime);
   const profileName = options.profileName || ZERNIO_PROFILE_NAME_GENERAL;
   const accountId = normaliseZernioAccountId(options.accountId || getZernioAccountId());
   const dryRun = Boolean(options.dryRun);
@@ -2378,19 +2811,28 @@ export async function buildAndSchedulePodcastThursdayPromo(options = {}) {
         "ABSOLUTELY NO visible words, letters, numbers, captions, logos, labels, signage, UI text, pseudo-text, typographic shapes or invented magazine mastheads anywhere in the image.",
         "Avoid generic glowing brains, circuit-head silhouettes, floating decorative networks, stock-office scenes and decorative AI wallpaper.",
       ].filter(Boolean).join("\n"),
-      fallbackUrl: episode.imageUrl || PODCAST_PROMO_CONFIG.fallbackImageUrl,
     });
-    post.imageUrl = artwork.publicUrl || episode.imageUrl || PODCAST_PROMO_CONFIG.fallbackImageUrl;
+    if (!artwork.ok || !artwork.publicUrl) {
+      const err = new Error(`Thursday podcast promotion artwork unavailable: ${artwork.error || "no verified image URL returned"}`);
+      err.statusCode = 503;
+      err.code = "zernio-podcast-artwork-unavailable";
+      throw err;
+    }
+    post.imageUrl = artwork.publicUrl;
   }
 
-  const slotClaim = claimScheduleSlot({
+  const slotClaim = await claimZernioSlot({
     scope: "podcast:thursday-promo",
     scheduledDateTime,
     profileName,
     accountId,
+    imageUrl: post.imageUrl,
+    dryRun,
+    apiKey,
     force: options.force,
     sourceIntentHash: buildIntentHash({ audienceIntent: PODCAST_PROMO_CONFIG.audienceIntent, angle: episode.link || episode.title }),
   });
+  scheduledDateTime = slotClaim.scheduledDateTime || scheduledDateTime;
   if (slotClaim.duplicatePrevented) return slotDuplicatePostResult({ publishDate, scheduledDateTime, dryRun, profileName, reason: slotClaim.reason });
 
   try {
@@ -2465,7 +2907,7 @@ export async function buildAndScheduleEbookWeekly(options = {}) {
   for (const dayConfig of EBOOK_POST_DAYS) {
     const dayKey = dayConfig.key;
     const publishDate = addDays(weekStartDate, dayConfig.offset);
-    const scheduledDateTime = resolveEbookScheduledDateTime(options, dayKey, publishDate);
+    let scheduledDateTime = resolveEbookScheduledDateTime(options, dayKey, publishDate);
     const imageUrl = options.imageUrl || featuredBook.coverArtUrl || "";
     const slotClaim = await claimZernioSlot({
       scope: `ebooks:${dayKey}`,
@@ -2478,6 +2920,7 @@ export async function buildAndScheduleEbookWeekly(options = {}) {
       force: options.force,
       sourceIntentHash: buildIntentHash({ audienceIntent: EBOOK_CONFIG.audienceIntent, angle: `${featuredBook.title}:${dayKey}` }),
     });
+    scheduledDateTime = slotClaim.scheduledDateTime || scheduledDateTime;
 
     if (slotClaim.duplicatePrevented) {
       const duplicate = slotDuplicatePostResult({
@@ -2763,8 +3206,8 @@ function buildQuizAnswerArtworkPrompt({ title, question, options, correct } = {}
 export async function buildAndScheduleQuizSeries(options = {}) {
   const questionPublishDate = options.questionPublishDate || nextWeekdayDateString("wednesday", DEFAULT_TIMEZONE, new Date());
   const answerPublishDate = options.answerPublishDate || addDays(questionPublishDate, 1);
-  const questionDateTime = options.questionScheduledDateTime || toScheduledDateTime(questionPublishDate, QUIZ_CONFIG.questionPublishTime);
-  const answerDateTime = options.answerScheduledDateTime || toScheduledDateTime(answerPublishDate, QUIZ_CONFIG.answerPublishTime);
+  let questionDateTime = options.questionScheduledDateTime || toScheduledDateTime(questionPublishDate, QUIZ_CONFIG.questionPublishTime);
+  let answerDateTime = options.answerScheduledDateTime || toScheduledDateTime(answerPublishDate, QUIZ_CONFIG.answerPublishTime);
   const profileName = options.profileName || ZERNIO_PROFILE_NAME_GENERAL;
   const accountId = normaliseZernioAccountId(options.accountId || getZernioAccountId());
   const apiKey = options.apiKey || process.env.ZERNIO_META_API_KEY;
@@ -2794,6 +3237,8 @@ export async function buildAndScheduleQuizSeries(options = {}) {
     force: options.force,
     sourceIntentHash: buildIntentHash({ audienceIntent: QUIZ_CONFIG.audienceIntent, angle: answerPublishDate }),
   });
+  questionDateTime = questionSlotClaim.scheduledDateTime || questionDateTime;
+  answerDateTime = answerSlotClaim.scheduledDateTime || answerDateTime;
 
   if (questionSlotClaim.duplicatePrevented && answerSlotClaim.duplicatePrevented) {
     const question = slotDuplicatePostResult({

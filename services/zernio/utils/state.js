@@ -191,6 +191,14 @@ export function releaseScheduleSlot(slotClaim) {
   writeZernioState(state);
 }
 
+export function clearScheduleSlotClaim(slotClaim) {
+  if (!slotClaim?.key) return;
+  activeSlotClaims.delete(slotClaim.key);
+  const state = readZernioState();
+  state.slotClaims = cleanSlotClaims(state.slotClaims).filter((claim) => claim.key !== slotClaim.key);
+  writeZernioState(state);
+}
+
 export function resetScheduleSlotClaim(input = {}) {
   const key = buildScheduleSlotKey(input);
   const state = readZernioState();

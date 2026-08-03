@@ -77,3 +77,60 @@ export function toScheduledDateTime(dateString, timeString) {
   }
   return `${dateString} ${timeString}`;
 }
+
+export function zonedDateTimeString(date = new Date(), timeZone = "Europe/London") {
+  const parts = getFormatter(timeZone, {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  const map = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${map.year}-${map.month}-${map.day} ${map.hour}:${map.minute}`;
+}
+
+function zonedOffsetMs(date, timeZone) {
+  const parts = getFormatter(timeZone, {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  const map = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  const renderedAsUtc = Date.UTC(
+    Number(map.year),
+    Number(map.month) - 1,
+    Number(map.day),
+    Number(map.hour),
+    Number(map.minute),
+    Number(map.second),
+  );
+  return renderedAsUtc - date.getTime();
+}
+
+export function zonedDateTimeToUtcDate(value, timeZone = "Europe/London") {
+  const match = String(value || "").trim().match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?$/);
+  if (!match) throw new Error(`Invalid zoned date-time '${value}'. Expected YYYY-MM-DD HH:MM.`);
+
+  const localAsUtc = Date.UTC(
+    Number(match[1]),
+    Number(match[2]) - 1,
+    Number(match[3]),
+    Number(match[4]),
+    Number(match[5]),
+    Number(match[6] || 0),
+  );
+  let candidate = new Date(localAsUtc);
+
+  // Iterate because the timezone offset at the naive UTC guess can differ
+  // from the offset at the actual instant around daylight-saving changes.
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    candidate = new Date(localAsUtc - zonedOffsetMs(candidate, timeZone));
+  }
+  return candidate;
+}
