@@ -53,8 +53,8 @@ const google25FlashLite = provider(
 
 const gpt56Luna = provider(
   "gpt56Luna",
-  ["OPENROUTER_GPT_5_6_LUNA", "OPENROUTER_GPT56_LUNA"],
-  [...SHARED_OPENROUTER_KEY, "OPENROUTER_API_KEY_GPT_5_6_LUNA", "OPENROUTER_API_KEY_GPT56_LUNA"]
+  ["OPENROUTER_GPT_5_6_LUNA", "OPENROUTER_GPT56_LUNA", "OPENROUTER_CHATGPT"],
+  [...SHARED_OPENROUTER_KEY, "OPENROUTER_API_KEY_GPT_5_6_LUNA", "OPENROUTER_API_KEY_GPT56_LUNA", "OPENROUTER_API_KEY_CHATGPT"]
 );
 
 const claudeSonnet5 = provider(
@@ -165,7 +165,7 @@ export const aiConfig = {
     blogSocial: routeChain(["highQuality", "audit", "standard", "summary", "fallback"], ["claudeSonnet5", "anthropic46", "google25FlashLite"]),
     onBrandAudit: routeChain(["audit", "highQuality", "standard", "fallback"], ["anthropic46", "gpt56Sol", "google25FlashLite", "gpt56Luna", "meta"]),
     auditForensic: routeChain(["audit", "highQuality", "standard", "fallback"], ["anthropic46", "gpt56Sol", "google25FlashLite", "gpt56Luna", "meta"]),
-    zernioDaily: routeChain(["highQuality", "standard", "fast", "fallback"], ["claudeSonnet5", "anthropic46", "google25FlashLite"]),
+    zernioDaily: routeChain(["highQuality", "standard", "fast", "fallback"], ["claudeSonnet5", "anthropic46", "gpt56Luna", "google25FlashLite", "gpt56Sol"]),
     zernioMiniSeriesResearch: routeChain(["audit", "highQuality", "standard"], ["claudeSonnet5", "anthropic46"]),
     zernioMiniSeriesTheme: routeChain(["highQuality", "audit", "standard"], ["claudeSonnet5", "anthropic46"]),
     zernioMiniSeriesPost: routeChain(["highQuality", "standard", "audit"], ["claudeSonnet5", "anthropic46"]),

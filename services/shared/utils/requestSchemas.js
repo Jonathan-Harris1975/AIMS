@@ -457,7 +457,10 @@ export const auditCallbackBodySchema = z
     searchConsoleEvidence: z.record(z.string(), z.any()).optional(),
     securityEvidence: z.record(z.string(), z.any()).optional(),
     message: z.string().trim().min(1).max(4000).optional(),
-    error: z.string().trim().min(1).max(4000).optional(),
+    error: z
+      .union([z.string().trim().min(1).max(4000), z.null()])
+      .optional()
+      .transform((value) => value ?? undefined),
     failedStep: z.string().trim().min(1).max(500).optional(),
     exitCode: z.union([z.coerce.number().int(), z.string().trim().min(1).max(80)]).optional(),
     workflowLogTail: z.string().max(20000).optional(),
