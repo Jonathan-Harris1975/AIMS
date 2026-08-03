@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import express from "express";
 import { getOperationalExcellenceSnapshot } from "../shared/utils/operationalExcellence.js";
 import { extractAsyncStatusUrl, waitForAsyncOperation } from "./asyncOperation.js";
@@ -142,6 +143,7 @@ function publicJob(job) {
   if (!job) return null;
   return {
     id: job.id,
+    executionId: job.executionId || null,
     window: job.window,
     status: job.status,
     terminal: ["completed", "completed-with-failures", "failed"].includes(job.status),
@@ -310,32 +312,94 @@ function localWeekStartDate() {
   return `${map.year}-${map.month}-${map.day}`;
 }
 
-async function runInternalTask([name, path, body = {}, feature = null, addWeekStartDate = false], req) {
+const ASYNC_TASK_ROUTES = Object.freeze({
+  "/rss/rewrite": { statusBase: "/rss/jobs", lane: "rewrite" },
+  "/blog/social/daily/build": { statusBase: "/blog/social/jobs", lane: "daily-build" },
+  "/blog/weekly/build": { statusBase: "/blog/weekly/jobs", lane: "weekly-build" },
+  "/newsletter/generate": { statusBase: "/newsletter/jobs", lane: "generate" },
+  "/zernio/blog-rss/daily": { statusBase: "/zernio/jobs", lane: "blog-rss-daily" },
+  "/zernio/ebooks/weekly": { statusBase: "/zernio/jobs", lane: "ebooks-weekly" },
+  "/zernio/quiz/weekly": { statusBase: "/zernio/jobs", lane: "quiz-weekly" },
+  "/zernio/daily/monday": { statusBase: "/zernio/jobs", lane: "daily-monday" },
+  "/zernio/daily/tuesday": { statusBase: "/zernio/jobs", lane: "daily-tuesday" },
+  "/zernio/daily/wednesday": { statusBase: "/zernio/jobs", lane: "daily-wednesday" },
+  "/zernio/daily/thursday": { statusBase: "/zernio/jobs", lane: "daily-thursday" },
+  "/zernio/daily/friday": { statusBase: "/zernio/jobs", lane: "daily-friday" },
+  "/zernio/daily/saturday": { statusBase: "/zernio/jobs", lane: "daily-saturday" },
+  "/zernio/daily/sunday": { statusBase: "/zernio/jobs", lane: "daily-sunday" },
+});
+
+function operationToken(value = "") {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 70) || "task";
+}
+
+function taskSessionId(job, taskName) {
+  const group = String(taskName || "").startsWith("newsletter-") ? "newsletter" : taskName;
+  return `ops-${operationToken(job?.window)}-${operationToken(job?.executionId)}-${operationToken(group)}`.slice(0, 150);
+}
+
+function asyncStatusUrlFor(path, sessionId) {
+  const route = ASYNC_TASK_ROUTES[path];
+  if (!route) return null;
+  return `${route.statusBase}/${route.lane}/${encodeURIComponent(sessionId)}`;
+}
+
+function asyncDispatchPath(path) {
+  if (!ASYNC_TASK_ROUTES[path]) return path;
+  return `${path}${path.includes("?") ? "&" : "?"}async=true`;
+}
+
+async function runInternalTask([name, path, body = {}, feature = null, addWeekStartDate = false], req, job) {
   if (feature === "newsletter" && !operationNewsletterEnabled()) {
     return { name, path, ok: true, skipped: true, reason: "newsletter-disabled-until-brevo-ready" };
   }
 
   const base = normalise(process.env.AIMS_INTERNAL_BASE_URL) || `http://127.0.0.1:${process.env.PORT || 8000}`;
   const token = normalise(process.env.AIMS_API_KEY) || normalise(req.get?.("authorization")).replace(/^Bearer\s+/i, "");
-  const payload = { ...body };
+  const sessionId = taskSessionId(job, name);
+  const idempotencyKey = `ops:${job?.executionId || job?.id || "run"}:${name}`;
+  const payload = { ...body, sessionId };
+  // Delivery resolves the latest durable issue for the day. The generator
+  // sanitises its storage session ID, so forwarding the raw orchestration ID
+  // to readiness/send would point at a non-existent prefix.
+  if (["newsletter-readiness", "newsletter-send"].includes(name)) delete payload.sessionId;
+  if (ASYNC_TASK_ROUTES[path]) payload.async = true;
   if (addWeekStartDate) payload.weekStartDate = localWeekStartDate();
+
+  // Async-capable child routes must acknowledge quickly. Their actual work is
+  // tracked through the status endpoint, so the dispatch timeout is deliberately
+  // shorter than the child-job timeout and avoids Node's five-minute header limit.
+  const dispatchTimeoutMs = ASYNC_TASK_ROUTES[path]
+    ? Math.max(15_000, Number(process.env.AIMS_OPERATION_DISPATCH_TIMEOUT_MS || 120_000))
+    : Math.max(30_000, Number(process.env.AIMS_OPERATION_TASK_TIMEOUT_MS || 900_000));
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), Math.max(30_000, Number(process.env.AIMS_OPERATION_TASK_TIMEOUT_MS || 900_000)));
+  const timeout = setTimeout(() => controller.abort(new Error("operation-dispatch-timeout")), dispatchTimeoutMs);
   timeout.unref?.();
   try {
-    const response = await fetch(`${base.replace(/\/+$/, "")}${path}`, {
+    const response = await fetch(`${base.replace(/\/+$/, "")}${asyncDispatchPath(path)}`, {
       method: "POST",
-      headers: { "content-type": "application/json", ...(token ? { authorization: `Bearer ${token}` } : {}) },
+      headers: {
+        "content-type": "application/json",
+        "x-idempotency-key": idempotencyKey,
+        "x-operation-execution-id": job?.executionId || "",
+        ...(token ? { authorization: `Bearer ${token}` } : {}),
+      },
       body: JSON.stringify(payload),
       signal: controller.signal,
     });
     const text = await response.text();
-    clearTimeout(timeout);
     let result = null;
     try { result = text ? JSON.parse(text) : null; } catch { result = text.slice(0, 1000); }
 
     if (response.ok && response.status === 202) {
-      const statusUrl = extractAsyncStatusUrl(result);
+      // If an idempotent acknowledgement was replayed by middleware, it may not
+      // contain the original body. The canonical route and deterministic session
+      // still let the orchestrator recover and poll the real child job.
+      const statusUrl = extractAsyncStatusUrl(result) || asyncStatusUrlFor(path, sessionId);
       if (!statusUrl) {
         return {
           name,
@@ -344,6 +408,7 @@ async function runInternalTask([name, path, body = {}, feature = null, addWeekSt
           status: 502,
           acceptedStatus: response.status,
           result,
+          sessionId,
           error: "async-operation-status-url-missing",
         };
       }
@@ -355,6 +420,8 @@ async function runInternalTask([name, path, body = {}, feature = null, addWeekSt
         pollIntervalMs: Math.max(1_000, Number(process.env.AIMS_OPERATION_ASYNC_POLL_INTERVAL_MS || 15_000)),
         timeoutMs: Math.max(60_000, Number(process.env.AIMS_OPERATION_ASYNC_JOB_TIMEOUT_MS || 21_600_000)),
         requestTimeoutMs: Math.max(5_000, Number(process.env.AIMS_OPERATION_ASYNC_REQUEST_TIMEOUT_MS || 60_000)),
+        maxConsecutiveErrors: Math.max(1, Number(process.env.AIMS_OPERATION_ASYNC_MAX_POLL_ERRORS || 8)),
+        notFoundGraceMs: Math.max(0, Number(process.env.AIMS_OPERATION_ASYNC_NOT_FOUND_GRACE_MS || 120_000)),
       });
 
       return {
@@ -364,8 +431,11 @@ async function runInternalTask([name, path, body = {}, feature = null, addWeekSt
         status: asyncJob.ok ? 200 : 500,
         acceptedStatus: response.status,
         result,
+        sessionId,
+        statusUrl: asyncJob.statusUrl,
         asyncStatus: asyncJob.status,
         asyncPolls: asyncJob.polls,
+        asyncPollErrors: asyncJob.pollErrors,
         asyncJob: asyncJob.payload,
       };
     }
@@ -380,13 +450,16 @@ async function runInternalTask([name, path, body = {}, feature = null, addWeekSt
         || result.quarantined === true
       )
     );
-    return { name, path, ok: response.ok && !resultFailed, status: response.status, result };
+    return { name, path, ok: response.ok && !resultFailed, status: response.status, result, sessionId };
   } catch (error) {
     return {
       name,
       path,
       ok: false,
-      error: error?.name === "AbortError" ? "operation-task-timeout" : (error?.message || String(error)),
+      sessionId,
+      error: error?.name === "AbortError" || controller.signal.aborted
+        ? "operation-dispatch-timeout"
+        : (error?.message || String(error)),
       errorCode: error?.code || null,
     };
   } finally {
@@ -450,7 +523,7 @@ async function executeOperationWindow(job, tasks, req) {
       }
     }
 
-    const result = await runInternalTask(task, req);
+    const result = await runInternalTask(task, req, job);
     job.results.push(result);
     job.updatedAt = new Date().toISOString();
     if (!result.ok) job.failures += 1;
@@ -475,6 +548,7 @@ router.post("/run/:window", async (req, res, next) => {
 
     const job = {
       id,
+      executionId: crypto.randomUUID(),
       window: windowName,
       status: "accepted",
       startedAt: new Date().toISOString(),

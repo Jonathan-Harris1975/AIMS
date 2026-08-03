@@ -64,6 +64,13 @@ async function fetchStatus(url, { fetchImpl, headers, requestTimeoutMs }) {
   }
 }
 
+function retryablePollError(error, { elapsedMs = 0, notFoundGraceMs = 120_000 } = {}) {
+  const status = Number(error?.statusCode || error?.status || 0);
+  if (!status) return true;
+  if (status === 404) return elapsedMs <= notFoundGraceMs;
+  return [408, 409, 425, 429].includes(status) || status >= 500;
+}
+
 export async function waitForAsyncOperation({
   baseUrl,
   statusUrl,
@@ -72,23 +79,60 @@ export async function waitForAsyncOperation({
   pollIntervalMs = 15_000,
   timeoutMs = 6 * 60 * 60 * 1000,
   requestTimeoutMs = 60_000,
+  maxConsecutiveErrors = 8,
+  notFoundGraceMs = 120_000,
   onPoll = null,
 } = {}) {
   const resolvedStatusUrl = new URL(statusUrl, `${normalise(baseUrl).replace(/\/+$/, "")}/`).toString();
   const headers = token ? { authorization: `Bearer ${token}` } : {};
-  const deadline = Date.now() + Math.max(1_000, Number(timeoutMs || 0));
+  const startedAt = Date.now();
+  const deadline = startedAt + Math.max(1_000, Number(timeoutMs || 0));
+  const errorBudget = Math.max(1, Number(maxConsecutiveErrors || 1));
   let polls = 0;
+  let pollErrors = 0;
+  let consecutiveErrors = 0;
 
   while (Date.now() < deadline) {
-    const payload = await fetchStatus(resolvedStatusUrl, { fetchImpl, headers, requestTimeoutMs });
+    let payload;
+    try {
+      payload = await fetchStatus(resolvedStatusUrl, { fetchImpl, headers, requestTimeoutMs });
+      consecutiveErrors = 0;
+    } catch (error) {
+      pollErrors += 1;
+      consecutiveErrors += 1;
+      const elapsedMs = Date.now() - startedAt;
+      const retryable = retryablePollError(error, { elapsedMs, notFoundGraceMs });
+      onPoll?.({
+        polls,
+        pollErrors,
+        consecutiveErrors,
+        statusUrl: resolvedStatusUrl,
+        error,
+        retryable,
+      });
+      if (!retryable || consecutiveErrors > errorBudget) {
+        error.statusUrl = resolvedStatusUrl;
+        error.pollErrors = pollErrors;
+        error.consecutiveErrors = consecutiveErrors;
+        throw error;
+      }
+      const backoff = Math.min(
+        Math.max(500, Number(pollIntervalMs || 0)) * Math.max(1, consecutiveErrors),
+        60_000,
+      );
+      await sleep(backoff);
+      continue;
+    }
+
     polls += 1;
     const assessment = assessAsyncOperationPayload(payload);
-    onPoll?.({ polls, statusUrl: resolvedStatusUrl, payload, assessment });
+    onPoll?.({ polls, pollErrors, statusUrl: resolvedStatusUrl, payload, assessment });
 
     if (assessment.terminal) {
       return {
         ...assessment,
         polls,
+        pollErrors,
         statusUrl: resolvedStatusUrl,
         payload,
       };
@@ -97,6 +141,7 @@ export async function waitForAsyncOperation({
     if (assessment.unknown) {
       const error = new Error("Async operation status response omitted a recognised job status");
       error.payload = payload;
+      error.statusUrl = resolvedStatusUrl;
       throw error;
     }
 
@@ -106,6 +151,7 @@ export async function waitForAsyncOperation({
   const error = new Error(`Async operation exceeded ${timeoutMs}ms timeout`);
   error.code = "AIMS_OPERATION_ASYNC_TIMEOUT";
   error.statusUrl = resolvedStatusUrl;
+  error.pollErrors = pollErrors;
   throw error;
 }
 
