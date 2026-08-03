@@ -53,7 +53,7 @@ export const BLOTATO_STRICT_NO_TEXT_RULE = [
   "Use blank unmarked screens, plain surfaces and clean environments instead of designed signage.",
 ].join(" ");
 
-const BLOTATO_TEXT_FREE_POSITIVE_DETAIL = "Blank unmarked screens, plain equipment surfaces, clean walls and uncluttered environments with no designed signage, logos or readable lettering.";
+const BLOTATO_TEXT_FREE_POSITIVE_DETAIL = "ABSOLUTE TEXT-FREE GENERATED VISUAL. Blank unmarked screens and surfaces, free of pseudo-text, logos and watermarks.";
 const FLUX_SCHNELL_SCENE_STYLE = "Realistic editorial documentary image, vertical 9:16, cinematic cyan highlights, deep navy shadows, clear source context, one coherent action, premium but believable social-video visual.";
 
 function cleanPromptProfile(value = "") {
@@ -83,26 +83,41 @@ function fluxSceneShotDirection(index = 0) {
   return directions[index % directions.length];
 }
 
-function buildFluxSchnellScenePrompt(value = "", index = 0, maxLength = 700) {
-  const base = stripPromptBans(removeHandVisualRequests(value));
-  const humanCue = humanVisualPromptSuffix(index)
-    .replace(/hands? and fingers? completely outside frame/gi, "arms outside frame")
-    .replace(/hands? and fingers? are not visible/gi, "arms outside frame")
-    .replace(/crop hands and fingers fully outside frame/gi, "shoulders-up framing")
-    .replace(/,?\s*not a stock-photo grin/gi, "")
-    .replace(/\s{2,}/g, " ");
+function stripFluxPromptBoilerplate(value = "") {
+  return String(value || "")
+    .split(`Vertical 9:16 ${FLUX_SCHNELL_SCENE_STYLE}`).join(" ")
+    .split(FLUX_SCHNELL_SCENE_STYLE).join(" ")
+    .split(BLOTATO_TEXT_FREE_POSITIVE_DETAIL).join(" ")
+    .replace(/Use an? (?:medium close-up opening frame with the tension obvious at a glance|medium operational shot showing the process or workflow change|tight consequence shot showing the equipment, condition or impact|over-shoulder verification shot showing the human decision point|wider closing shot showing the outcome or unresolved risk)\.?/gi, " ")
+    .replace(/ABSOLUTE TEXT-FREE GENERATED VISUAL\.?/gi, " ")
+    .replace(/Believable adult face or upper body, natural expression, shoulders-up framing\.?/gi, " ")
+    .replace(/Professional adult shoulders-up beside the workflow, clear decision tension, arms outside frame\.?/gi, " ")
+    .replace(/Professional adult silhouette or over-shoulder view, visible work consequence, arms outside frame\.?/gi, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+function buildFluxSchnellScenePrompt(value = "", index = 0, maxLength = 900) {
+  const base = stripPromptBans(removeHandVisualRequests(stripFluxPromptBoilerplate(value)));
+  const humanCue = removeHandVisualRequests(humanVisualPromptSuffix(index));
   return cleanText([
     `Vertical 9:16 ${FLUX_SCHNELL_SCENE_STYLE}`,
-    `Use a ${fluxSceneShotDirection(index)}.`,
-    base,
-    humanCue,
     BLOTATO_TEXT_FREE_POSITIVE_DETAIL,
+    `Use a ${fluxSceneShotDirection(index)}.`,
+    humanCue,
+    base,
   ].filter(Boolean).join(" "), maxLength);
+}
+
+function isNormalisedFluxScenePrompt(value = "") {
+  const text = String(value || "").trim();
+  return /^Vertical 9:16 /i.test(text) && /ABSOLUTE TEXT-FREE GENERATED VISUAL/i.test(text);
 }
 
 function enforceTextFreeVisualPrompt(value = "", maxLength = 900, index = 0) {
   if (usesFluxSchnellPromptProfile()) {
-    return buildFluxSchnellScenePrompt(value, index, Math.min(maxLength, 720));
+    if (isNormalisedFluxScenePrompt(value)) return cleanText(removeHandVisualRequests(value), Math.min(maxLength, 900));
+    return buildFluxSchnellScenePrompt(value, index, Math.min(maxLength, 900));
   }
   const base = cleanText(value, Math.max(100, maxLength - BLOTATO_STRICT_NO_TEXT_RULE.length - 2));
   return cleanText(`${base}. ${BLOTATO_STRICT_NO_TEXT_RULE}`, maxLength);
@@ -554,17 +569,17 @@ function hasHumanVisualCue(value = "") {
 function humanVisualPromptSuffix(index = 0) {
   if (!HUMAN_VISUALS_ENABLED || index >= HUMAN_VISUAL_MIN_SCENES) return "";
   const cues = [
-    "Include a believable adult human face or upper body reacting to the situation, editorial lighting, natural expression, not a stock-photo grin; crop hands and fingers fully outside frame.",
-    "Include a professional adult shown shoulders-up beside the AI workflow, with hands and fingers completely outside frame and clear human decision tension.",
-    "Include a professional adult silhouette or over-shoulder view showing the work context and consequence, composed so hands and fingers are not visible.",
+    "Believable adult face or upper body, natural expression, shoulders-up framing.",
+    "Professional adult shoulders-up beside the workflow, clear decision tension, arms outside frame.",
+    "Professional adult silhouette or over-shoulder view, visible work consequence, arms outside frame.",
   ];
   return cues[index % cues.length];
 }
 
 function removeHandVisualRequests(value = "") {
   return cleanText(String(value || "")
-    .replace(/\b(adult\s+)?hands?\s+(using|holding|typing|on|with|beside|over)\b[^,.]*/gi, "upper-body composition with hands fully outside frame")
-    .replace(/\b(fingers?|fingertips?|palms?|thumbs?)\b/gi, "hands outside frame"), 820);
+    .replace(/\b(adult\s+)?hands?\s+(using|holding|typing|on|with|beside|over)\b[^,.]*/gi, "shoulders-up upper-body composition")
+    .replace(/\b(hands?|fingers?|fingertips?|palms?|thumbs?)\b/gi, "arms"), 820);
 }
 
 function addHumanVisualCue(value = "", index = 0) {
@@ -583,8 +598,7 @@ function normaliseScene(scene = {}, fallbackScript = "", fallbackVisual = "", in
 }
 
 function deriveScenesFromPack(pack = {}) {
-  const scriptSentences = splitSentences(pack.script);
-  const chunks = chunkSentences(scriptSentences, MAX_SCENES);
+  const chunks = balancedSceneScripts(pack.script || pack.hook || "", MAX_SCENES);
   const visualBase = cleanText(pack.visualDirection, 700);
   const laneSlug = pack.lane || DEFAULT_BLOTATO_SHORT_LANE;
   const laneConfig = getShortLaneConfig(laneSlug);
@@ -659,7 +673,7 @@ function deriveSourceGroundedScenes(pack = {}, article = {}) {
 
   return phases.map((phase, index) => ({
     mediaSource: enforceTextFreeVisualPrompt(
-      `${continuity}. ${signature}. Scene ${index + 1} of ${MAX_SCENES}: ${phase}. Distinct from every other scene while preserving the same visual world.`,
+      `Scene ${index + 1} of ${MAX_SCENES}: ${phase}. Distinct from every other scene while preserving the same visual world. ${continuity}. ${signature}.`,
       900,
       index
     ),
@@ -677,7 +691,12 @@ function normaliseScenes(scenes, pack = {}) {
   if (normalised.length === MAX_SCENES) return normalised;
 
   const derived = deriveScenesFromPack(pack);
-  return derived.length ? derived : normalised;
+  if (!normalised.length) return derived.slice(0, MAX_SCENES);
+
+  return [
+    ...normalised,
+    ...derived.slice(normalised.length),
+  ].slice(0, MAX_SCENES);
 }
 
 function normalisePack(pack = {}) {
@@ -778,7 +797,7 @@ function reinforceSourceGrounding(pack = {}, article = {}) {
 export function buildBlotatoVisualPrompt(pack = {}) {
   const laneConfig = requireShortLaneConfig(pack.lane || DEFAULT_BLOTATO_SHORT_LANE);
   return [
-    `Create a polished faceless vertical AI social video for Jonathan Harris.`,
+    `Create a polished faceless, human-centred social video for Jonathan Harris in vertical 9:16 format.`,
     `Lane: ${laneConfig.label}.`,
     `Use the supplied scenes as the source of truth.`,
     `Opening hook: ${pack.hook}`,
@@ -1071,22 +1090,17 @@ export function repairShortPackForBlotatoGate(pack = {}, {
   if (repairScenes || repairHook || repairNarrativeArc || repairVisualContinuity) {
     output.scenes = makeScenePackDurationSafe(output, article);
     if (Array.isArray(output.scenes) && output.scenes.length) {
-      const continuity = cleanText(output.visualContinuity || output.visualDirection || laneConfig.visualSignature, 700);
       output.scenes = output.scenes.map((scene, index) => ({
         ...scene,
-        mediaSource: enforceTextFreeVisualPrompt(addHumanVisualCue(
-          `${continuity}. ${cleanText(scene.mediaSource || "", 700)}`,
+        mediaSource: enforceTextFreeVisualPrompt(
+          addHumanVisualCue(cleanText(scene.mediaSource || "", 900), index),
+          900,
           index
-        ), 900, index),
+        ),
       }));
       output.scenes[0] = {
         ...output.scenes[0],
         script: ensureSentence(output.hook),
-        mediaSource: enforceTextFreeVisualPrompt(
-          `${continuity}. ${cleanText(output.scenes[0].mediaSource || "", 700)}. Opening frame must show the real source environment and practical tension immediately, not a generic reaction portrait.`,
-          900,
-          0
-        ),
       };
     }
   }
