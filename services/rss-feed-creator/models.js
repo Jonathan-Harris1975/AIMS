@@ -234,7 +234,7 @@ function buildValidationRepairMessages({
         "Validation defects to fix:",
         defectList,
         "",
-        `Length requirement: the repaired summary must be at least ${RSS_PROMPTS.MIN_SUMMARY_CHARS} characters and should normally be 70-90 words.`,
+        `Length requirement: the repaired summary must be at least ${RSS_PROMPTS.MIN_SUMMARY_CHARS} characters and should normally be 45-60 words.`,
         "Rewrite once. Do not output labels, notes or metadata.",
       ].join("\n"),
     },
