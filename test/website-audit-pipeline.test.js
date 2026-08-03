@@ -89,10 +89,25 @@ test("AIMS dispatches RAMS website remediation by exact final JSON key with retr
   assert.match(dispatch, /\/reports\/website\/\$\{encodeURIComponent\(runId\)\}/);
   assert.match(dispatch, /audit\.website\.rams\.completed/);
   assert.match(routes, /\/jobs\/:sessionId\/rams\/retry/);
+  assert.match(routes, /\/jobs\/:sessionId\/finalise\/retry/);
   assert.match(read("audits/utils/websiteAuditPipeline.js"), /RAMS dispatch is prohibited because the website audit source evidence contract is incomplete/);
   assert.match(read("audits/utils/websiteAuditPipeline.js"), /cleanupRequired: false/);
   assert.match(read("audits/utils/websiteAuditPipeline.js"), /parent\.ramsDispatch\?\.ok/);
   assert.doesNotMatch(index, /seo-aeo-geo-council|mobile-ux-council/);
+});
+
+test("website finalisation waits for readable source JSON and can recover stale or failed synthesis", () => {
+  const pipeline = read("audits/utils/websiteAuditPipeline.js");
+  const sharedBridge = read("services/shared/utils/websiteAuditPipeline.js");
+  assert.match(pipeline, /AUDIT_ARTEFACT_READY_TIMEOUT_MS/);
+  assert.match(pipeline, /withTimeout\([\s\S]{0,160}readAuditJson/);
+  assert.match(pipeline, /R2 audit JSON read/);
+  assert.match(pipeline, /audit\.website\.pipeline\.waiting_for_artefacts/);
+  assert.match(pipeline, /requiredArtifactSetReady/);
+  assert.match(pipeline, /finalisationPromises/);
+  assert.match(pipeline, /manual-finalisation-retry/);
+  assert.match(pipeline, /stale-finalisation-recovery/);
+  assert.match(sharedBridge, /export \* from "\.\.\/\.\.\/\.\.\/audits\/utils\/websiteAuditPipeline\.js"/);
 });
 
 test("unified website audit carries delegated-scope policy, target assessment and evidence-gated technical scores", () => {

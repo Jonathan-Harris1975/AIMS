@@ -131,6 +131,39 @@ test("completed SEO status is rejected when report.json contains no machine-read
   assert.match(health.failures[0].reason, /machine-readable analysis is empty/i);
 });
 
+test("a completed callback cannot pass synthesis when the advertised report JSON was not readable", () => {
+  const health = evaluateWebsiteAuditStageHealth({
+    ...completedStages,
+    digitalGrowth: {
+      ...completedStages.digitalGrowth,
+      artifactLoadDiagnostics: {
+        artefacts: { reportJson: { loaded: false } },
+        required: { ready: false },
+      },
+    },
+  });
+  assert.equal(health.ok, false);
+  assert.match(health.failures[0].reason, /report\.json was not readable/i);
+  assert.match(health.failures[0].reason, /artefact set was not fully readable/i);
+});
+
+test("Digital Growth summary metadata is retained for a precise controlled-failure report", () => {
+  const compact = __websiteAuditCouncilTestHooks.compactDigital({
+    status: "completed",
+    reportJsonUrl: "https://example.test/report.json",
+    summary: {
+      auditCompletionState: "Complete",
+      scorecard: { trafficGrowth: { score: 7 } },
+      overallVerdict: "Evidence was produced.",
+      topActions: ["Repair the hand-off."],
+    },
+  });
+  assert.equal(compact.analysisCompletionState, "Complete");
+  assert.equal(compact.scorecard.trafficGrowth.score, 7);
+  assert.equal(compact.overallVerdict, "Evidence was produced.");
+  assert.deepEqual(compact.topActions, ["Repair the hand-off."]);
+});
+
 test("empty council JSON is not substantive and cannot become a complete final report", () => {
   const normalised = __websiteAuditCouncilTestHooks.normaliseCouncil({}, completedStages);
   assert.equal(normalised.synthesisState, "Incomplete");
