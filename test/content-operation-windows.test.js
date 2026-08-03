@@ -50,6 +50,11 @@ test("operation windows poll accepted async children before completing", () => {
   assert.match(opsSource, /extractAsyncStatusUrl/);
   assert.match(opsSource, /waitForAsyncOperation/);
   assert.match(opsSource, /AIMS_OPERATION_ASYNC_JOB_TIMEOUT_MS/);
+  assert.match(
+    opsSource,
+    /asyncStatusUrlFor\(path, sessionId\) \|\| extractAsyncStatusUrl\(result\)/,
+    "canonical operation status routes must take precedence over child-provided URLs"
+  );
 });
 
 test("operation windows do not contain duplicate task names or paths", () => {
