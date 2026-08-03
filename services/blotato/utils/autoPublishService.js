@@ -41,7 +41,8 @@ export const DEFAULT_AI_STORY_TEMPLATE_PATH =
 const VIDEO_DONE_STATUSES = new Set(["done", "completed", "complete", "success", "ready", "finished", "rendered", "processed", "available"]);
 const VIDEO_FAILED_STATUSES = new Set(["creation-from-template-failed", "failed", "error", "cancelled", "canceled", "timed-out", "timeout", "insufficient-credits", "insufficient_credits", "no-credits", "payment-required", "payment_required", "billing-error"]);
 const POST_DONE_STATUSES = new Set(["published", "completed", "complete", "success"]);
-const POST_FAILED_STATUSES = new Set(["failed", "error", "insufficient-credits", "insufficient_credits", "payment-required", "payment_required"]);
+const POST_SCHEDULE_ACCEPTED_STATUSES = new Set(["scheduled"]);
+const POST_FAILED_STATUSES = new Set(["failed", "error", "cancelled", "canceled", "rejected", "insufficient-credits", "insufficient_credits", "payment-required", "payment_required"]);
 const DEFAULT_AI_STORY_TEMPLATE_UUID = "5903fe43-514d-40ee-a060-0d6628c5f8fd";
 const MODEL_CREDIT_HINTS = Object.freeze({
   image: {
@@ -979,17 +980,22 @@ async function publishAndWait({ platform, pack, mediaUrl, apiKey, channelPreflig
     throw err;
   }
 
-  // Render polling remains unchanged and completes before this point. For a
-  // scheduled social post, verify that Blotato accepted the submission once
-  // rather than blocking AIMS until the future publication time.
+  // Scheduled publishing is only complete when Blotato confirms that the
+  // submission is accepted into its queue. A transient status-read failure
+  // must not be converted into a false success.
   if (scheduledTime) {
-    let status = null;
-    try {
-      status = await getPostStatus(postSubmissionId, apiKey);
-    } catch (error) {
-      warn("blotato.schedule.status_check_failed", { platform, postSubmissionId, scheduledTime, error: error?.message || String(error) });
-    }
-    return { platform, accountId, target, postSubmissionId, post, status, scheduledTime };
+    const maxAttempts = positiveIntEnv("BLOTATO_SCHEDULE_VERIFY_ATTEMPTS", 12, 120);
+    const intervalMs = positiveIntEnv("BLOTATO_SCHEDULE_VERIFY_INTERVAL_MS", 3000, 60_000);
+    const status = await pollUntil({
+      label: `Blotato ${platform} scheduled submission`,
+      run: () => getPostStatus(postSubmissionId, apiKey),
+      extractStatus: (payload) => String(payload?.status || payload?.item?.status || payload?.post?.status || "").trim().toLowerCase(),
+      isDone: (value) => POST_SCHEDULE_ACCEPTED_STATUSES.has(value),
+      isFailed: (value) => POST_FAILED_STATUSES.has(value),
+      maxAttempts,
+      intervalMs,
+    });
+    return { platform, accountId, target, postSubmissionId, post, status, scheduledTime, scheduleVerified: true };
   }
 
   const maxAttempts = positiveIntEnv("BLOTATO_POST_POLL_ATTEMPTS", 90, 720);
@@ -1084,18 +1090,39 @@ function londonLocalToUtcIso({ year, month, day, hour, minute }) {
   return new Date(Date.UTC(year, month - 1, day, hour, minute) - offsetMs).toISOString();
 }
 
-function resolveBlotatoScheduledTime(slot = "am", now = new Date()) {
+export function resolveBlotatoScheduledTime(slot = "am", now = new Date(), { existingScheduledTime = null, phase = "initial" } = {}) {
   const london = londonDateParts(now);
   const envKey = `BLOTATO_SCHEDULE_${london.weekday.toUpperCase()}_${String(slot || "am").toUpperCase()}`;
   const raw = trim(process.env[envKey]);
   if (!/^\d{2}:\d{2}$/.test(raw)) throw new Error(`${envKey} must be configured as HH:mm`);
   const [hour, minute] = raw.split(":").map(Number);
-  let scheduled = new Date(londonLocalToUtcIso({ ...london, hour, minute }));
-  if (scheduled.getTime() <= now.getTime() + 120_000) {
-    scheduled = new Date(now.getTime() + 10 * 60_000);
-    warn("blotato.schedule.slot_missed", { envKey, configuredTime: raw, fallbackScheduledTime: scheduled.toISOString() });
+  const minimumLeadMs = Math.max(5 * 60_000, Number(process.env.BLOTATO_SCHEDULE_MIN_LEAD_MS || 15 * 60_000));
+  const configured = new Date(londonLocalToUtcIso({ ...london, hour, minute }));
+  const existing = existingScheduledTime ? new Date(existingScheduledTime) : null;
+  let scheduled = existing && Number.isFinite(existing.getTime()) ? existing : configured;
+  let recovered = false;
+
+  if (scheduled.getTime() <= now.getTime() + minimumLeadMs) {
+    scheduled = new Date(now.getTime() + minimumLeadMs);
+    recovered = true;
+    warn("blotato.schedule.slot_recovered", {
+      phase,
+      envKey,
+      configuredTime: raw,
+      previousScheduledTime: existingScheduledTime || configured.toISOString(),
+      recoveredScheduledTime: scheduled.toISOString(),
+      minimumLeadMs,
+    });
   }
-  return scheduled.toISOString();
+
+  return {
+    scheduledTime: scheduled.toISOString(),
+    configuredTime: configured.toISOString(),
+    recovered,
+    envKey,
+    minimumLeadMs,
+    phase,
+  };
 }
 
 async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOTATO_SHORT_LANE, apiKey, editorialReservation = null, templateIdOverride = null, publishMode = "evening-lane", creativeStyle = "" , scheduleSlot = null }) {
@@ -1113,8 +1140,10 @@ async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOT
       defaults.templateAutoDiscovery = false;
     }
     defaults.publishMode = publishMode;
-    const scheduledTime = scheduleSlot ? resolveBlotatoScheduledTime(scheduleSlot) : null;
+    let scheduleResolution = scheduleSlot ? resolveBlotatoScheduledTime(scheduleSlot, new Date(), { phase: "initial" }) : null;
+    let scheduledTime = scheduleResolution?.scheduledTime || null;
     defaults.scheduledTime = scheduledTime;
+    defaults.scheduleResolution = scheduleResolution;
     const platforms = defaults.channels;
 
     updateJob(lane.jobType, sessionId, { phase: "step-0-channel-preflight", defaults });
@@ -1361,6 +1390,16 @@ async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOT
       technical: renderedVideoQa.technical || null,
     });
 
+    if (scheduleSlot) {
+      scheduleResolution = resolveBlotatoScheduledTime(scheduleSlot, new Date(), {
+        existingScheduledTime: scheduledTime,
+        phase: "pre-publish",
+      });
+      scheduledTime = scheduleResolution.scheduledTime;
+      defaults.scheduledTime = scheduledTime;
+      defaults.scheduleResolution = scheduleResolution;
+    }
+
     updateJob(lane.jobType, sessionId, {
       phase: "publishing",
       videoId: video.visualId,
@@ -1377,6 +1416,7 @@ async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOT
       templateResolution,
       channelPreflight,
       scheduledTime,
+      scheduleResolution,
       renderedVideoQa,
     });
 
@@ -1404,7 +1444,7 @@ async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOT
       warn("blotato.publish_now.platform_failures", { sessionId, lane: lane.slug, failedPublishes });
     }
 
-    const requireAllChannels = parseBoolean(process.env.BLOTATO_REQUIRE_ALL_CHANNELS, false);
+    const requireAllChannels = parseBoolean(process.env.BLOTATO_REQUIRE_ALL_CHANNELS, true);
     if (!publishes.length || (requireAllChannels && failedPublishes.length)) {
       const err = new Error(
         !publishes.length
@@ -1448,6 +1488,8 @@ async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOT
       rejectedTemplateIds: video.rejectedTemplateIds,
       templateResolution,
       channelPreflight,
+      scheduledTime,
+      scheduleResolution,
       rss: buildRssSummary(articleSource),
       source: articleSource,
       pack,
@@ -1496,6 +1538,12 @@ async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOT
 }
 
 export async function triggerPublishNowJob(req = {}, laneSlug = DEFAULT_BLOTATO_SHORT_LANE, options = {}) {
+  if (!options.scheduleSlot && !parseBoolean(process.env.BLOTATO_ALLOW_IMMEDIATE_PUBLISH, false)) {
+    const err = new Error("Blotato immediate publishing is disabled; use a scheduled route with an AM or PM slot");
+    err.statusCode = 409;
+    err.code = "blotato-scheduled-publishing-required";
+    throw err;
+  }
   const lane = requireShortLaneConfig(laneSlug);
   const articleSource = await selectRssArticleForBlotato({ laneSlug: lane.slug });
   const reservationResult = await reserveEditorialSource({
