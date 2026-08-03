@@ -1,15 +1,24 @@
 // services/artwork/createBlogArtwork.js
-import { info, error, debug } from "../../logger.js";
+import { info, warn, error, debug } from "../../logger.js";
 import { uploadBuffer } from "../shared/utils/r2-client.js";
 import { generateBlogArtwork, generateNewsletterArtwork, generateSocialBlogArtwork } from "./utils/artwork.js";
 import { detectImageFormat } from "./utils/imageFormat.js";
 import { runArtworkTask } from "./utils/artworkTask.js";
+import { createDeterministicAiFallbackPng } from "./utils/deterministicAiFallback.js";
 
 const DEFAULT_BLOG_IMAGES_BUCKET_KEY = "blogImages";
 const BLOG_BUCKET_KEY = "blog";
-const ARTWORK_TIMEOUT_MS =
-  Number(process.env.BLOG_ARTWORK_TIMEOUT_MS || process.env.ARTWORK_TIMEOUT_MS || process.env.AI_TIMEOUT)
-  || 120_000;
+const DEFAULT_ARTWORK_TASK_TIMEOUT_MS = 8 * 60_000;
+
+function artworkTaskTimeoutMs(mode = "blog") {
+  const envName = mode === "newsletter"
+    ? "NEWSLETTER_ARTWORK_TIMEOUT_MS"
+    : mode === "social-blog"
+      ? "SOCIAL_BLOG_ARTWORK_TIMEOUT_MS"
+      : "BLOG_ARTWORK_TIMEOUT_MS";
+  const configured = Number(process.env[envName] || process.env.ARTWORK_TASK_TIMEOUT_MS || process.env.ARTWORK_TIMEOUT_MS);
+  return Number.isFinite(configured) && configured >= 60_000 ? configured : DEFAULT_ARTWORK_TASK_TIMEOUT_MS;
+}
 
 function normaliseKeyPrefix(value = "") {
   return String(value || "")
@@ -72,8 +81,8 @@ export async function createBlogArtwork(input) {
 
     const base64Data = await runArtworkTask(
       (signal) => (artworkMode === "newsletter" ? generateNewsletterArtwork : artworkMode === "social-blog" ? generateSocialBlogArtwork : generateBlogArtwork)(theme, { date: artworkDate, signal }),
-      ARTWORK_TIMEOUT_MS,
-      "Blog artwork generation",
+      artworkTaskTimeoutMs(artworkMode),
+      `${artworkMode} artwork generation`,
     );
     const image = detectImageFormat(base64Data);
 
@@ -89,6 +98,46 @@ export async function createBlogArtwork(input) {
     return { ok: true, key, publicUrl, bucketKey, bucketReason };
   } catch (err) {
     error("artwork.blog.fail", { sessionId, keyPrefix: keyPrefix || undefined, bucketKey, bucketReason, error: err.message });
-    return { ok: false, error: err.message, bucketKey, bucketReason };
+    try {
+      const fallbackBuffer = createDeterministicAiFallbackPng({
+        width: 1200,
+        height: 675,
+        seed: `${artworkMode}:${sessionId}:${prompt || ""}`,
+      });
+      const fallbackKey = keyPrefix
+        ? `${keyPrefix}/${sessionId}-ai-fallback.png`
+        : `${sessionId}-ai-fallback.png`;
+      const publicUrl = await uploadBuffer(bucketKey, fallbackKey, fallbackBuffer, "image/png");
+      warn("artwork.blog.deterministic_ai_fallback", {
+        sessionId,
+        artworkMode,
+        key: fallbackKey,
+        publicUrl,
+        originalError: err?.message || String(err),
+      });
+      return {
+        ok: true,
+        fallback: true,
+        imageStatus: "fallback",
+        error: err?.message || String(err),
+        key: fallbackKey,
+        publicUrl,
+        bucketKey,
+        bucketReason,
+      };
+    } catch (fallbackError) {
+      error("artwork.blog.deterministic_ai_fallback_failed", {
+        sessionId,
+        artworkMode,
+        originalError: err?.message || String(err),
+        fallbackError: fallbackError?.message || String(fallbackError),
+      });
+      return {
+        ok: false,
+        error: `${err?.message || String(err)}; deterministic AI fallback failed: ${fallbackError?.message || String(fallbackError)}`,
+        bucketKey,
+        bucketReason,
+      };
+    }
   }
 }

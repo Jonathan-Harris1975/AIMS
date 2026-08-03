@@ -1,14 +1,18 @@
 // services/artwork/createSocialArtwork.js
 
-import { info, error, debug } from "../../logger.js";
+import { info, warn, error, debug } from "../../logger.js";
 import { uploadBuffer } from "../shared/utils/r2-client.js";
 import { generateSocialArtwork } from "./utils/artwork.js";
 import { detectImageFormat } from "./utils/imageFormat.js";
 import { runArtworkTask } from "./utils/artworkTask.js";
+import { createDeterministicAiFallbackPng } from "./utils/deterministicAiFallback.js";
 
-const ARTWORK_TIMEOUT_MS =
-  Number(process.env.ZERNIO_ARTWORK_TIMEOUT_MS || process.env.ARTWORK_TIMEOUT_MS || process.env.AI_TIMEOUT)
-  || 120_000;
+const DEFAULT_ZERNIO_ARTWORK_TIMEOUT_MS = 8 * 60_000;
+
+function socialArtworkTimeoutMs() {
+  const configured = Number(process.env.ZERNIO_ARTWORK_TIMEOUT_MS || process.env.ARTWORK_TASK_TIMEOUT_MS || process.env.ARTWORK_TIMEOUT_MS);
+  return Number.isFinite(configured) && configured >= 60_000 ? configured : DEFAULT_ZERNIO_ARTWORK_TIMEOUT_MS;
+}
 
 function cleanPart(value = "") {
   return String(value || "")
@@ -32,8 +36,8 @@ export async function createSocialArtwork({
 
     const base64Data = await runArtworkTask(
       (signal) => generateSocialArtwork(prompt || `Editorial AI social artwork for ${safeLane}`, { date, signal }),
-      ARTWORK_TIMEOUT_MS,
-      "Social artwork generation",
+      socialArtworkTimeoutMs(),
+      "Zernio social artwork generation",
     );
 
     const image = detectImageFormat(base64Data);
@@ -50,11 +54,42 @@ export async function createSocialArtwork({
       fallbackUrl: fallbackUrl || undefined,
     });
 
-    return {
-      ok: false,
-      error: err?.message || String(err),
-      publicUrl: fallbackUrl || "",
-      fallback: Boolean(fallbackUrl),
-    };
+    try {
+      const fallbackBuffer = createDeterministicAiFallbackPng({
+        width: 1080,
+        height: 1080,
+        seed: `${safeLane}:${safeSession}:${prompt || ""}`,
+      });
+      const key = `zernio/${safeLane}/${safeSession}-ai-fallback.png`;
+      const publicUrl = await uploadBuffer("blogImages", key, fallbackBuffer, "image/png");
+      warn("artwork.social.deterministic_ai_fallback", {
+        sessionId: safeSession,
+        lane: safeLane,
+        key,
+        publicUrl,
+        originalError: err?.message || String(err),
+      });
+      return {
+        ok: true,
+        fallback: true,
+        imageStatus: "fallback",
+        error: err?.message || String(err),
+        key,
+        publicUrl,
+      };
+    } catch (fallbackError) {
+      error("artwork.social.deterministic_ai_fallback_failed", {
+        sessionId: safeSession,
+        lane: safeLane,
+        originalError: err?.message || String(err),
+        fallbackError: fallbackError?.message || String(fallbackError),
+      });
+      return {
+        ok: false,
+        error: `${err?.message || String(err)}; deterministic AI fallback failed: ${fallbackError?.message || String(fallbackError)}`,
+        publicUrl: "",
+        fallback: false,
+      };
+    }
   }
 }
