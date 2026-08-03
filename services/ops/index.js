@@ -160,60 +160,68 @@ function publicJob(job) {
 const OPERATION_WINDOWS = Object.freeze({
   "monday-am": [
     ["rss-rewrite", "/rss/rewrite", { batchSize: 5 }],
-    ["outreach", "/outreach/batch/next", {}],
+    ["blotato-am", "/blotato/autoshorts/schedule", {}, null, false, "rss-rewrite"],
+    ["zernio-monday", "/zernio/daily/monday", {}, null, false, "rss-rewrite"],
     ["blog-social", "/blog/social/daily/build", {}, null, false, "rss-rewrite"],
     ["zernio-blog-social", "/zernio/blog-rss/daily", {}, null, false, "blog-social"],
-    ["weekly-blog", "/blog/weekly/build", {}, null, false, "rss-rewrite"],
-    ["newsletter-generate", "/newsletter/generate", { profileId: "ai-edge" }, "newsletter"],
+    ["blotato-pm", "/blotato/shorts/news-insight/schedule", {}, null, false, "blotato-am"],
+    ["newsletter-generate", "/newsletter/generate", { profileId: "ai-edge" }, "newsletter", false, "rss-rewrite"],
     ["newsletter-readiness", "/newsletter/readiness", { profileId: "ai-edge" }, "newsletter", false, "newsletter-generate"],
     ["newsletter-send", "/newsletter/send", { profileId: "ai-edge" }, "newsletter", false, "newsletter-readiness"],
-    ["zernio-monday", "/zernio/daily/monday", {}],
-    ["zernio-ebooks", "/zernio/ebooks/weekly", { dryRun: false, profileName: "Default", accountId: "ALL", usePodcastFeaturedBook: true }, null, true],
-    ["zernio-quiz", "/zernio/quiz/weekly", {}],
-    ["blotato-am", "/blotato/autoshorts/schedule", {}, null, false, "rss-rewrite"],
-    ["blotato-pm", "/blotato/shorts/news-insight/schedule", {}, null, false, "rss-rewrite"],
+    ["weekly-blog", "/blog/weekly/build", {}, null, false, "rss-rewrite"],
+    ["outreach", "/outreach/batch/next", {}],
+    ["zernio-ebooks", "/zernio/ebooks/weekly", { dryRun: false, profileName: "Default", accountId: "ALL", usePodcastFeaturedBook: true }, null, true, "rss-rewrite"],
+    ["zernio-quiz", "/zernio/quiz/weekly", {}, null, false, "rss-rewrite"],
   ],
   "tuesday-am": [
-    ["rss-rewrite", "/rss/rewrite", { batchSize: 5 }], ["outreach", "/outreach/batch/next", {}],
-    ["blog-social", "/blog/social/daily/build", {}, null, false, "rss-rewrite"], ["zernio-blog-social", "/zernio/blog-rss/daily", {}, null, false, "blog-social"],
-    ["newsletter-generate", "/newsletter/generate", { profileId: "ai-edge" }, "newsletter"],
+    ["rss-rewrite", "/rss/rewrite", { batchSize: 5 }],
+    ["blotato-am", "/blotato/autoshorts/schedule", {}, null, false, "rss-rewrite"],
+    ["zernio-tuesday", "/zernio/daily/tuesday", {}, null, false, "rss-rewrite"],
+    ["blog-social", "/blog/social/daily/build", {}, null, false, "rss-rewrite"],
+    ["zernio-blog-social", "/zernio/blog-rss/daily", {}, null, false, "blog-social"],
+    ["blotato-pm", "/blotato/shorts/model-verdict/schedule", {}, null, false, "blotato-am"],
+    ["newsletter-generate", "/newsletter/generate", { profileId: "ai-edge" }, "newsletter", false, "rss-rewrite"],
     ["newsletter-readiness", "/newsletter/readiness", { profileId: "ai-edge" }, "newsletter", false, "newsletter-generate"],
     ["newsletter-send", "/newsletter/send", { profileId: "ai-edge" }, "newsletter", false, "newsletter-readiness"],
-    ["zernio-tuesday", "/zernio/daily/tuesday", {}],
-    ["blotato-am", "/blotato/autoshorts/schedule", {}, null, false, "rss-rewrite"],
-    ["blotato-pm", "/blotato/shorts/model-verdict/schedule", {}, null, false, "rss-rewrite"],
+    ["outreach", "/outreach/batch/next", {}],
   ],
   "wednesday-am": [
-    ["rss-rewrite", "/rss/rewrite", { batchSize: 5 }], ["outreach", "/outreach/batch/next", {}],
-    ["blog-social", "/blog/social/daily/build", {}, null, false, "rss-rewrite"], ["zernio-blog-social", "/zernio/blog-rss/daily", {}, null, false, "blog-social"],
-    ["newsletter-generate", "/newsletter/generate", { profileId: "ai-edge" }, "newsletter"],
+    ["rss-rewrite", "/rss/rewrite", { batchSize: 5 }],
+    ["blotato-am", "/blotato/autoshorts/schedule", {}, null, false, "rss-rewrite"],
+    ["zernio-wednesday", "/zernio/daily/wednesday", {}, null, false, "rss-rewrite"],
+    ["blog-social", "/blog/social/daily/build", {}, null, false, "rss-rewrite"],
+    ["zernio-blog-social", "/zernio/blog-rss/daily", {}, null, false, "blog-social"],
+    ["blotato-pm", "/blotato/shorts/ai-at-work/schedule", {}, null, false, "blotato-am"],
+    ["newsletter-generate", "/newsletter/generate", { profileId: "ai-edge" }, "newsletter", false, "rss-rewrite"],
     ["newsletter-readiness", "/newsletter/readiness", { profileId: "ai-edge" }, "newsletter", false, "newsletter-generate"],
     ["newsletter-send", "/newsletter/send", { profileId: "ai-edge" }, "newsletter", false, "newsletter-readiness"],
-    ["zernio-wednesday", "/zernio/daily/wednesday", {}],
-    ["blotato-am", "/blotato/autoshorts/schedule", {}, null, false, "rss-rewrite"],
-    ["blotato-pm", "/blotato/shorts/ai-at-work/schedule", {}, null, false, "rss-rewrite"],
+    ["outreach", "/outreach/batch/next", {}],
   ],
   "thursday-am": [
-    ["rss-rewrite", "/rss/rewrite", { batchSize: 5 }], ["outreach", "/outreach/batch/next", {}],
-    ["blog-social", "/blog/social/daily/build", {}, null, false, "rss-rewrite"], ["zernio-blog-social", "/zernio/blog-rss/daily", {}, null, false, "blog-social"],
-    ["newsletter-generate", "/newsletter/generate", { profileId: "ai-edge" }, "newsletter"],
+    ["rss-rewrite", "/rss/rewrite", { batchSize: 5 }],
+    ["blotato-am", "/blotato/autoshorts/schedule", {}, null, false, "rss-rewrite"],
+    ["zernio-thursday", "/zernio/daily/thursday", {}, null, false, "rss-rewrite"],
+    ["blog-social", "/blog/social/daily/build", {}, null, false, "rss-rewrite"],
+    ["zernio-blog-social", "/zernio/blog-rss/daily", {}, null, false, "blog-social"],
+    ["blotato-pm", "/blotato/shorts/reality-check/schedule", {}, null, false, "blotato-am"],
+    ["newsletter-generate", "/newsletter/generate", { profileId: "ai-edge" }, "newsletter", false, "rss-rewrite"],
     ["newsletter-readiness", "/newsletter/readiness", { profileId: "ai-edge" }, "newsletter", false, "newsletter-generate"],
     ["newsletter-send", "/newsletter/send", { profileId: "ai-edge" }, "newsletter", false, "newsletter-readiness"],
-    ["zernio-thursday", "/zernio/daily/thursday", {}],
-    ["blotato-am", "/blotato/autoshorts/schedule", {}, null, false, "rss-rewrite"],
-    ["blotato-pm", "/blotato/shorts/reality-check/schedule", {}, null, false, "rss-rewrite"],
+    ["outreach", "/outreach/batch/next", {}],
   ],
   "friday-am": [
-    ["rss-rewrite", "/rss/rewrite", { batchSize: 5 }], ["outreach", "/outreach/batch/next", {}],
-    ["blog-social", "/blog/social/daily/build", {}, null, false, "rss-rewrite"], ["zernio-blog-social", "/zernio/blog-rss/daily", {}, null, false, "blog-social"],
-    ["newsletter-generate", "/newsletter/generate", { profileId: "ai-edge" }, "newsletter"],
+    ["rss-rewrite", "/rss/rewrite", { batchSize: 5 }],
+    ["blotato-am", "/blotato/autoshorts/schedule", {}, null, false, "rss-rewrite"],
+    ["zernio-friday", "/zernio/daily/friday", {}, null, false, "rss-rewrite"],
+    ["zernio-saturday", "/zernio/daily/saturday", {}, null, false, "rss-rewrite"],
+    ["zernio-sunday", "/zernio/daily/sunday", {}, null, false, "rss-rewrite"],
+    ["blog-social", "/blog/social/daily/build", {}, null, false, "rss-rewrite"],
+    ["zernio-blog-social", "/zernio/blog-rss/daily", {}, null, false, "blog-social"],
+    ["blotato-pm", "/blotato/shorts/ai-playbook/schedule", {}, null, false, "blotato-am"],
+    ["newsletter-generate", "/newsletter/generate", { profileId: "ai-edge" }, "newsletter", false, "rss-rewrite"],
     ["newsletter-readiness", "/newsletter/readiness", { profileId: "ai-edge" }, "newsletter", false, "newsletter-generate"],
     ["newsletter-send", "/newsletter/send", { profileId: "ai-edge" }, "newsletter", false, "newsletter-readiness"],
-    ["zernio-friday", "/zernio/daily/friday", {}],
-    ["zernio-saturday", "/zernio/daily/saturday", {}],
-    ["zernio-sunday", "/zernio/daily/sunday", {}],
-    ["blotato-am", "/blotato/autoshorts/schedule", {}, null, false, "rss-rewrite"],
-    ["blotato-pm", "/blotato/shorts/ai-playbook/schedule", {}, null, false, "rss-rewrite"],
+    ["outreach", "/outreach/batch/next", {}],
   ],
   "friday-pm": [
     ["podcast-readiness", "/podcast/readiness", {}],
@@ -249,10 +257,29 @@ function assertContentOperationWindows() {
       throw new Error(`${windowName} Zernio blog handoff must depend on blog-social`);
     }
 
-    for (const [name, _path, _body, _feature, _weekStart, dependsOn] of tasks.filter((task) => task[0] === "blotato-am" || task[0] === "blotato-pm")) {
-      if (dependsOn !== "rss-rewrite") {
-        throw new Error(`${windowName} ${name} must depend on rss-rewrite`);
-      }
+    const blotatoAmTask = tasks.find((task) => task[0] === "blotato-am");
+    const blotatoPmTask = tasks.find((task) => task[0] === "blotato-pm");
+    if (blotatoAmTask?.[5] !== "rss-rewrite") {
+      throw new Error(`${windowName} blotato-am must depend on rss-rewrite`);
+    }
+    if (blotatoPmTask?.[5] !== "blotato-am") {
+      throw new Error(`${windowName} blotato-pm must wait for the AM Blotato render before starting another render`);
+    }
+
+    const rssIndex = paths.indexOf("/rss/rewrite");
+    const blotatoAmIndex = paths.indexOf("/blotato/autoshorts/schedule");
+    const blotatoPmIndex = tasks.findIndex((task) => task[0] === "blotato-pm");
+    const dailyZernioIndex = tasks.findIndex((task) => /^zernio-(?:monday|tuesday|wednesday|thursday|friday)$/.test(task[0]));
+    if (rssIndex !== 0 || blotatoAmIndex !== 1 || dailyZernioIndex !== 2) {
+      throw new Error(`${windowName} must prepare the AM Blotato slot and current-day Zernio slot immediately after rss-rewrite`);
+    }
+    if (blotatoPmIndex <= zernioBlogIndex) {
+      throw new Error(`${windowName} must finish current-day Zernio and blog-social scheduling before the later Blotato PM slot`);
+    }
+
+    const dailyZernio = tasks[dailyZernioIndex];
+    if (dailyZernio && dailyZernio[5] !== "rss-rewrite") {
+      throw new Error(`${windowName} ${dailyZernio[0]} must depend on rss-rewrite`);
     }
 
     const newsletterGenerateIndex = paths.indexOf("/newsletter/generate");
@@ -353,13 +380,13 @@ function asyncDispatchPath(path) {
   return `${path}${path.includes("?") ? "&" : "?"}async=true`;
 }
 
-async function runInternalTask([name, path, body = {}, feature = null, addWeekStartDate = false], req, job) {
+async function runInternalTask([name, path, body = {}, feature = null, addWeekStartDate = false], requestContext, job) {
   if (feature === "newsletter" && !operationNewsletterEnabled()) {
     return { name, path, ok: true, skipped: true, reason: "newsletter-disabled-until-brevo-ready" };
   }
 
   const base = normalise(process.env.AIMS_INTERNAL_BASE_URL) || `http://127.0.0.1:${process.env.PORT || 8000}`;
-  const token = normalise(process.env.AIMS_API_KEY) || normalise(req.get?.("authorization")).replace(/^Bearer\s+/i, "");
+  const token = normalise(process.env.AIMS_API_KEY) || normalise(requestContext?.authorization).replace(/^Bearer\s+/i, "");
   const sessionId = taskSessionId(job, name);
   const idempotencyKey = `ops:${job?.executionId || job?.id || "run"}:${name}`;
   const payload = { ...body, sessionId };
@@ -487,28 +514,102 @@ router.get("/windows", (_req, res) => {
   });
 });
 
+const DEFERRED_OPERATION_TASKS = new Set(["blotato-am", "blotato-pm"]);
+
 async function executeOperationWindow(job, tasks, req) {
   job.status = "running";
   job.updatedAt = new Date().toISOString();
+  const pendingTasks = new Map();
+  // Capture the only request value needed by delayed background work before
+  // the HTTP request lifecycle ends.
+  const requestContext = { authorization: normalise(req.get?.("authorization")) };
+
+  const operationDependencyReady = (dependency) => Boolean(
+    dependency?.ok
+    && dependency?.result?.ok !== false
+    && dependency?.result?.ready !== false
+  );
+
+  const settlePendingTask = async (taskName) => {
+    const pending = pendingTasks.get(taskName);
+    if (!pending) return [...job.results].reverse().find((item) => item.name === taskName) || null;
+
+    job.currentTask = {
+      name: `join:${taskName}`,
+      path: pending.path,
+      background: true,
+      pendingTasks: [...pendingTasks.keys()],
+    };
+    job.updatedAt = new Date().toISOString();
+    const result = await pending.promise;
+    pendingTasks.delete(taskName);
+    job.results[pending.resultIndex] = result;
+    if (!result.ok) job.failures += 1;
+    job.updatedAt = new Date().toISOString();
+    return result;
+  };
+
   for (let index = 0; index < tasks.length; index += 1) {
     if (index > 0 && job.delayMs > 0) {
-      job.currentTask = { name: "delay", before: tasks[index][0], delayMs: job.delayMs };
+      job.currentTask = { name: "delay", before: tasks[index][0], delayMs: job.delayMs, pendingTasks: [...pendingTasks.keys()] };
       job.updatedAt = new Date().toISOString();
       await sleep(job.delayMs);
     }
     const task = tasks[index];
     const [taskName, taskPath, _taskBody, _feature, _addWeekStartDate, dependsOn] = task;
-    job.currentTask = { name: taskName, path: taskPath, index: index + 1, total: tasks.length, dependsOn: dependsOn || null };
+    job.currentTask = {
+      name: taskName,
+      path: taskPath,
+      index: index + 1,
+      total: tasks.length,
+      dependsOn: dependsOn || null,
+      pendingTasks: [...pendingTasks.keys()],
+    };
     job.updatedAt = new Date().toISOString();
+
+    const deferredTask = DEFERRED_OPERATION_TASKS.has(taskName);
+    if (deferredTask && dependsOn && pendingTasks.has(dependsOn)) {
+      const dependencyPromise = pendingTasks.get(dependsOn).promise;
+      const placeholder = {
+        name: taskName,
+        path: taskPath,
+        ok: null,
+        pending: true,
+        background: true,
+        queuedBehind: dependsOn,
+        startedAt: new Date().toISOString(),
+      };
+      const resultIndex = job.results.push(placeholder) - 1;
+      pendingTasks.set(taskName, {
+        path: taskPath,
+        resultIndex,
+        promise: dependencyPromise.then((dependency) => {
+          if (!operationDependencyReady(dependency)) {
+            return {
+              name: taskName,
+              path: taskPath,
+              ok: false,
+              skipped: true,
+              status: 424,
+              reason: "operation-dependency-not-ready",
+              dependsOn,
+              dependency,
+            };
+          }
+          return runInternalTask(task, requestContext, job);
+        }),
+      });
+      job.updatedAt = new Date().toISOString();
+      continue;
+    }
+
+    if (dependsOn && pendingTasks.has(dependsOn)) {
+      await settlePendingTask(dependsOn);
+    }
 
     if (dependsOn) {
       const dependency = [...job.results].reverse().find((item) => item.name === dependsOn);
-      const dependencyReady = Boolean(
-        dependency?.ok
-        && dependency?.result?.ok !== false
-        && dependency?.result?.ready !== false
-      );
-      if (!dependencyReady) {
+      if (!operationDependencyReady(dependency)) {
         const result = {
           name: taskName,
           path: taskPath,
@@ -526,11 +627,38 @@ async function executeOperationWindow(job, tasks, req) {
       }
     }
 
-    const result = await runInternalTask(task, req, job);
+    if (deferredTask) {
+      const placeholder = {
+        name: taskName,
+        path: taskPath,
+        ok: null,
+        pending: true,
+        background: true,
+        startedAt: new Date().toISOString(),
+      };
+      const resultIndex = job.results.push(placeholder) - 1;
+      pendingTasks.set(taskName, {
+        path: taskPath,
+        resultIndex,
+        promise: runInternalTask(task, requestContext, job),
+      });
+      job.updatedAt = new Date().toISOString();
+      continue;
+    }
+
+    const result = await runInternalTask(task, requestContext, job);
     job.results.push(result);
     job.updatedAt = new Date().toISOString();
     if (!result.ok) job.failures += 1;
   }
+
+  // Deferred providers are still strict required stages. They run in the
+  // background to avoid blocking independent lanes, then the window joins and
+  // verifies every result before it can report completion.
+  for (const taskName of [...pendingTasks.keys()]) {
+    await settlePendingTask(taskName);
+  }
+
   job.currentTask = null;
   job.finishedAt = new Date().toISOString();
   job.updatedAt = job.finishedAt;
