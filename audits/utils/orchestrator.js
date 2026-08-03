@@ -500,10 +500,6 @@ function assertCompletedMobileUxPayload(payload = {}) {
     throw new Error("Completed Mobile UX callback must declare auditCompletionState=Complete");
   }
 
-  if (payload.hardGateBlocked === true || payload.blocked === true) {
-    throw new Error("Completed Mobile UX callback cannot declare a blocked hard gate");
-  }
-
   const missing = MOBILE_UX_REQUIRED_COMPLETION_URLS
     .filter(([directKey, artefactName]) => !callbackUrlForArtefact(payload, directKey, artefactName))
     .map(([, artefactName]) => artefactName);

@@ -291,7 +291,13 @@ async function loadChildStage(parentSessionId, stage, parentJob) {
     reportUrl: childJob.reportUrl || null,
     reportJsonUrl: childJob.reportJsonUrl || null,
     workflowRunUrl: childJob.workflowRunUrl || null,
-    hardGateBlocked: childJob.hardGateBlocked ?? report.hardGateBlocked ?? summary?.hardGateBlocked ?? false,
+    hardGateBlocked: Boolean(
+      childJob.hardGateBlocked === true
+      || report.hardGateBlocked === true
+      || summary?.hardGateBlocked === true
+      || [childJob.releaseVerdict, report.releaseVerdict, summary?.releaseVerdict]
+        .some((value) => String(value || "").trim().toUpperCase() === "BLOCKED")
+    ),
     mobileQualityScore: childJob.mobileQualityScore ?? report.mobileQualityScore ?? summary?.mobileQualityScore ?? null,
     releaseVerdict: childJob.releaseVerdict ?? report.releaseVerdict ?? summary?.releaseVerdict ?? null,
     screenshotCount: childJob.screenshotCount ?? report.screenshotCount ?? summary?.screenshotCount ?? null,

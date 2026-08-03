@@ -149,6 +149,12 @@ function clamp(value, min, max, fallback = null) {
   return Math.max(min, Math.min(max, Math.round(n)));
 }
 
+function mobileQualityScoreOutOfTen(value) {
+  const score = Number(value) / 10;
+  if (!Number.isFinite(score)) return null;
+  return Math.round(Math.max(1, Math.min(10, score)) * 10) / 10;
+}
+
 function firstCompleteJsonObject(value) {
   const source = String(value || "");
   for (let start = source.indexOf("{"); start >= 0; start = source.indexOf("{", start + 1)) {
@@ -267,6 +273,7 @@ function compactMobile(report = {}) {
   const summary = obj(source.summary);
   const coverage = obj(source.coverage);
   const control = obj(source.reportControl || source.control || summary.reportControl);
+  const releaseVerdict = source.releaseVerdict || summary.releaseVerdict || null;
   return {
     status: source.status || summary.status || "unknown",
     auditCompletionState: coverage.auditCompletionState || summary.auditCompletionState || null,
@@ -274,9 +281,13 @@ function compactMobile(report = {}) {
     workflowRunUrl: source.workflowRunUrl || null,
     reportJsonUrl: source.reportJsonUrl || null,
     callbackDiagnostics: source.callbackDiagnostics || null,
-    hardGateBlocked: Boolean(source.hardGateBlocked ?? summary.hardGateBlocked),
+    hardGateBlocked: Boolean(
+      source.hardGateBlocked === true
+      || summary.hardGateBlocked === true
+      || text(releaseVerdict).toUpperCase() === "BLOCKED"
+    ),
     mobileQualityScore: source.mobileQualityScore ?? summary.mobileQualityScore ?? null,
-    releaseVerdict: source.releaseVerdict || summary.releaseVerdict || null,
+    releaseVerdict,
     screenshotCount: source.screenshotCount ?? summary.screenshotCount ?? control.screenshotCount ?? null,
     mobileFailureCount: source.mobileFailureCount ?? summary.mobileFailureCount ?? control.mobileFailuresCount ?? null,
     capabilities: source.capabilities || summary.capabilities || {},
@@ -382,9 +393,11 @@ export function evaluateWebsiteAuditStageHealth(stageReports = {}) {
     const status = text(stage.status || "unknown").toLowerCase();
     const completionState = stageCompletionState(stage);
     const evidenceContractErrors = stageEvidenceContractErrors(definition, stage);
+    // A Mobile UX release gate can be BLOCKED while the audit itself has
+    // completed successfully and supplied its full rendered evidence.  That is
+    // a release finding, not a source-stage execution failure.
     const completed = status === "completed"
       && completionState === "complete"
-      && !(definition.key === "mobileUx" && stage.hardGateBlocked)
       && evidenceContractErrors.length === 0;
     const callback = obj(stage.callbackDiagnostics);
     const callbackDetail = [
@@ -397,9 +410,7 @@ export function evaluateWebsiteAuditStageHealth(stageReports = {}) {
       ? ""
       : error || (completionState && completionState !== "complete"
         ? `Audit completion state was ${completionState}.`
-        : definition.key === "mobileUx" && stage.hardGateBlocked
-          ? "The rendered evidence hard-gate was blocked."
-          : evidenceContractErrors.length
+        : evidenceContractErrors.length
             ? `Evidence contract failed: ${evidenceContractErrors.join("; ")}.`
             : `Child job status was ${status || "unknown"}.`);
     return {
@@ -564,12 +575,18 @@ function normaliseCouncil(data, stageReports) {
   const source = obj(data);
   const input = compactWebsiteAuditInputs(stageReports);
   const mobile = input.mobileUx;
-  const mobileScorable = mobile.status === "completed" && !mobile.hardGateBlocked && Number.isFinite(Number(mobile.mobileQualityScore));
+  const mobileScorable = mobile.status === "completed" && Number.isFinite(Number(mobile.mobileQualityScore));
   const score = obj(source.scorecard);
   const keys = ["trafficGrowth", "newsletterSignUp", "podcastClickThrough", "llmDiscoverability", "ebookSalesPath", "technicalSeo", "aeo", "geo", "entityAuthority", "internalLinkingIa", "accessibility", "visualDesignSystemConsistency", "coreWebVitalsPerformance", "structuredData", "deploymentLiveParity", "linkConversionRouteIntegrity", "securityPlatformHygiene", "councilConfidence"];
   const scorecard = Object.fromEntries(keys.map((key) => [key, normaliseScoreRow(score[key])]));
   scorecard.mobileUx = mobileScorable
-    ? { ...normaliseScoreRow(score.mobileUx), score: clamp(score.mobileUx?.score ?? mobile.mobileQualityScore / 10, 1, 10, 1) }
+    ? {
+        score: mobileQualityScoreOutOfTen(mobile.mobileQualityScore),
+        basis: mobile.hardGateBlocked
+          ? `Rendered Mobile UX audit completed with source score ${mobile.mobileQualityScore}/100 and release verdict ${mobile.releaseVerdict || "BLOCKED"}.`
+          : `Rendered Mobile UX audit completed with source score ${mobile.mobileQualityScore}/100.`,
+        status: mobile.hardGateBlocked ? "Scored - Release Hard Gate Blocked" : "Scored from completed rendered evidence",
+      }
     : { score: null, basis: "Rendered Mobile UX evidence gate did not complete with a score; council scoring is prohibited.", status: "Not Scored - Evidence Gate Not Met" };
 
   const hasAccessibilityEvidence = Boolean(input.mobileUx.accessibilityEvidence || input.digitalGrowth.accessibilityEvidence || input.seoAeoGeo.accessibilityEvidence);
@@ -618,7 +635,15 @@ function normaliseCouncil(data, stageReports) {
     councilVerdict: obj(source.councilVerdict),
     topActions: arr(source.topActions).slice(0, 20),
     quickWins: arr(source.quickWins).slice(0, 30),
-    blockers: arr(source.blockers).slice(0, 30),
+    blockers: uniqueByText([
+      ...(mobile.hardGateBlocked ? [{
+        blocker: "Mobile UX release hard gate blocked",
+        description: `Rendered evidence completed with release verdict ${mobile.releaseVerdict || "BLOCKED"} and source score ${mobile.mobileQualityScore ?? "not supplied"}/100.`,
+        status: "blocked",
+        reportJsonUrl: mobile.reportJsonUrl || null,
+      }] : []),
+      ...arr(source.blockers),
+    ]).slice(0, 30),
     unifiedFindings: arr(source.unifiedFindings).slice(0, 160),
     conflicts: arr(source.conflicts).slice(0, 60),
     funnelMap: arr(source.funnelMap).slice(0, 60),
@@ -681,7 +706,7 @@ function deterministicFinding(item, stageKey, index) {
 function deterministicFallback(stageReports, errorMessage) {
   const compact = compactWebsiteAuditInputs(stageReports);
   const health = evaluateWebsiteAuditStageHealth(stageReports);
-  const mobileScorable = compact.mobileUx.status === "completed" && !compact.mobileUx.hardGateBlocked && Number.isFinite(Number(compact.mobileUx.mobileQualityScore));
+  const mobileScorable = compact.mobileUx.status === "completed" && Number.isFinite(Number(compact.mobileUx.mobileQualityScore));
   const numericScore = (value) => {
     if (value && typeof value === "object") value = value.score ?? value.value;
     let score = Number(value);
@@ -743,7 +768,13 @@ function deterministicFallback(stageReports, errorMessage) {
       linkConversionRouteIntegrity: scoreRow(digitalScore("linkConversionRouteIntegrity"), "Digital Growth source-stage score where supplied."),
       securityPlatformHygiene: scoreRow(null, "No complete security-header evidence block was supplied."),
       mobileUx: mobileScorable
-        ? { score: clamp(compact.mobileUx.mobileQualityScore / 10, 1, 10, 1), basis: "Completed rendered Mobile UX quality score.", status: "Scored from completed rendered evidence" }
+        ? {
+            score: mobileQualityScoreOutOfTen(compact.mobileUx.mobileQualityScore),
+            basis: compact.mobileUx.hardGateBlocked
+              ? `Completed rendered Mobile UX quality score; release verdict ${compact.mobileUx.releaseVerdict || "BLOCKED"}.`
+              : "Completed rendered Mobile UX quality score.",
+            status: compact.mobileUx.hardGateBlocked ? "Scored - Release Hard Gate Blocked" : "Scored from completed rendered evidence",
+          }
         : { score: null, basis: "Rendered Mobile UX evidence gate was not met.", status: "Not Scored - Evidence Gate Not Met" },
       councilConfidence: { score: completed ? 5 : 2, basis: `Deterministic synthesis used because the AI council response was unavailable or invalid: ${text(errorMessage) || "unknown error"}`, status: completed ? "Scored - Deterministic Fallback" : "Scored - Incomplete Evidence" },
     },
