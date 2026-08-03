@@ -143,8 +143,17 @@ export function buildShortInstruction(prompt, mode = "podcast", date) {
   return `Square premium podcast episode artwork, one dominant source-specific real-world subject, strong editorial hierarchy and cinematic realism. ${trimmedDirection} No text, generic AI emblems, unrelated technology decoration, logos or watermarks.`;
 }
 
-async function sleep(ms) {
-  await new Promise((resolve) => setTimeout(resolve, ms));
+async function sleep(ms, signal) {
+  if (signal?.aborted) throw signal.reason instanceof Error ? signal.reason : new Error("Artwork generation aborted");
+  await new Promise((resolve, reject) => {
+    const timer = setTimeout(resolve, ms);
+    timer.unref?.();
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(signal.reason instanceof Error ? signal.reason : new Error("Artwork generation aborted"));
+    };
+    signal?.addEventListener?.("abort", onAbort, { once: true });
+  });
 }
 
 function parseBoolean(value, fallback = false) {
@@ -173,7 +182,7 @@ function buildQaRepairPrompt(prompt, qa = {}) {
   ].join(" ");
 }
 
-async function requestArtworkFromProvider(provider, prompt, mode, date, { useShortInstruction = false } = {}) {
+async function requestArtworkFromProvider(provider, prompt, mode, date, { useShortInstruction = false, signal } = {}) {
   const baseInstruction = useShortInstruction ? buildShortInstruction(prompt, mode, date) : buildInstruction(prompt, mode, date);
   const instruction = buildModelAwareArtworkPrompt({
     model: provider.model,
@@ -197,12 +206,14 @@ async function requestArtworkFromProvider(provider, prompt, mode, date, { useSho
   let lastError;
 
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    if (signal?.aborted) throw signal.reason instanceof Error ? signal.reason : new Error("Artwork generation aborted");
     try {
       const res = await fetchWithTimeout(`${OPENROUTER_BASE_URL.replace(/\/+$/, "")}/images`, {
         method: "POST",
         headers,
         body: JSON.stringify(payload),
         timeout: ARTWORK_REQUEST_TIMEOUT_MS,
+        signal,
       });
 
       if (!res.ok) {
@@ -230,6 +241,7 @@ async function requestArtworkFromProvider(provider, prompt, mode, date, { useSho
               mode,
               creativePrompt: qaPrompt,
               sessionId: `artwork-${mode}-${Date.now()}-${qaAttempt}`,
+              signal,
             });
           } catch (qaError) {
             if (!qaRequired) {
@@ -272,6 +284,7 @@ async function requestArtworkFromProvider(provider, prompt, mode, date, { useSho
             headers,
             body: JSON.stringify(retryPayload),
             timeout: ARTWORK_REQUEST_TIMEOUT_MS,
+            signal,
           });
           if (!retryResponse.ok) {
             const msg = await retryResponse.text().catch(() => "");
@@ -301,14 +314,14 @@ async function requestArtworkFromProvider(provider, prompt, mode, date, { useSho
         mode,
       });
 
-      await sleep(artworkRetryDelayMs(attempt));
+      await sleep(artworkRetryDelayMs(attempt), signal);
     }
   }
 
   throw lastError || new Error(`No image data returned from ${provider.modelEnv}.`);
 }
 
-async function generateArtworkBase64(prompt, { mode = "podcast", date } = {}) {
+async function generateArtworkBase64(prompt, { mode = "podcast", date, signal } = {}) {
   if (providers.length === 0) {
     throw new Error("Artwork generation disabled: missing OpenRouter artwork env vars.");
   }
@@ -316,8 +329,9 @@ async function generateArtworkBase64(prompt, { mode = "podcast", date } = {}) {
   let lastError;
 
   for (const provider of providers) {
+    if (signal?.aborted) throw signal.reason instanceof Error ? signal.reason : new Error("Artwork generation aborted");
     try {
-      const image = await requestArtworkFromProvider(provider, prompt, mode, date);
+      const image = await requestArtworkFromProvider(provider, prompt, mode, date, { signal });
       if (provider.id === "backup") {
         info("🎨 Artwork generated with backup OpenRouter image model", {
           modelEnv: provider.modelEnv,
@@ -345,8 +359,9 @@ async function generateArtworkBase64(prompt, { mode = "podcast", date } = {}) {
   if (THRESHOLDS.podcastArtwork.shortPromptRetryEnabled) {
     warn("🎨 All artwork providers failed with full prompt; retrying with shortened prompt", { mode });
     for (const provider of providers) {
+      if (signal?.aborted) throw signal.reason instanceof Error ? signal.reason : new Error("Artwork generation aborted");
       try {
-        const image = await requestArtworkFromProvider(provider, prompt, mode, date, { useShortInstruction: true });
+        const image = await requestArtworkFromProvider(provider, prompt, mode, date, { useShortInstruction: true, signal });
         info("🎨 Artwork generated with shortened prompt after full-prompt failures", {
           provider: provider.id,
           modelEnv: provider.modelEnv,

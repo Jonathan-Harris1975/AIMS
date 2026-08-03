@@ -5,6 +5,8 @@
 // drift into travel imagery or produce a decorative infographic unrelated to
 // the article. This audit inspects the pixels before upload/publication.
 
+import { detectImageFormat } from "./imageFormat.js";
+
 const DEFAULT_THRESHOLD = Math.max(1, Math.min(100, Number(process.env.ARTWORK_VISUAL_QA_THRESHOLD || 80)));
 
 function compact(value = "", max = 4000) {
@@ -99,28 +101,48 @@ export function buildArtworkVisualQaPrompt({ mode = "editorial", creativePrompt 
   ].join("\n");
 }
 
-export async function auditArtworkBase64({ base64, mode = "editorial", creativePrompt = "", sessionId = "artwork-qa" } = {}) {
+export async function auditArtworkBase64({ base64, mode = "editorial", creativePrompt = "", sessionId = "artwork-qa", signal } = {}) {
   const image = String(base64 || "").trim();
   if (!image) throw new Error("Artwork visual QA requires a base64 image.");
 
+  const { base64: cleanBase64, mimeType } = detectImageFormat(image);
   const { resilientRequest } = await import("../../shared/utils/ai-service.js");
-  const raw = await resilientRequest("artworkVisualQa", {
-    sessionId,
-    max_tokens: 700,
-    temperature: 0.1,
-    reasoning: { effort: "minimal" },
-    messages: [
-      {
-        role: "user",
-        content: [
-          { type: "text", text: buildArtworkVisualQaPrompt({ mode, creativePrompt }) },
-          { type: "image_url", image_url: { url: `data:image/png;base64,${image}` } },
-        ],
-      },
-    ],
-  });
+  const parseAttempts = Math.max(1, Math.min(3, Number(process.env.ARTWORK_VISUAL_QA_PARSE_ATTEMPTS || 2)));
+  let lastError;
 
-  return normaliseArtworkVisualQa(raw);
+  for (let attempt = 1; attempt <= parseAttempts; attempt += 1) {
+    if (signal?.aborted) throw signal.reason instanceof Error ? signal.reason : new Error("Artwork visual QA aborted");
+    const raw = await resilientRequest("artworkVisualQa", {
+      sessionId: `${sessionId}-${attempt}`,
+      max_tokens: 700,
+      temperature: 0.1,
+      reasoning: { effort: "minimal" },
+      response_format: { type: "json_object" },
+      maxRetries: 1,
+      signal,
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: `${buildArtworkVisualQaPrompt({ mode, creativePrompt })}${attempt > 1 ? "\nYour previous response was malformed. Return one complete valid JSON object only." : ""}`,
+            },
+            { type: "image_url", image_url: { url: `data:${mimeType};base64,${cleanBase64}` } },
+          ],
+        },
+      ],
+    });
+
+    try {
+      return normaliseArtworkVisualQa(raw);
+    } catch (error) {
+      lastError = error;
+      if (attempt >= parseAttempts) throw error;
+    }
+  }
+
+  throw lastError || new Error("Artwork visual QA returned no valid result");
 }
 
 export default { auditArtworkBase64, buildArtworkVisualQaPrompt, normaliseArtworkVisualQa };
