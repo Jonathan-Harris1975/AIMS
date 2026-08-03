@@ -246,7 +246,7 @@ function extractMessageContent(json) {
   return "";
 }
 
-async function callOpenRouter({ providerId, model, apiKey, messages, max_tokens, temperature, top_p, response_format, headers, timeoutMs, reasoning, relaxedParameters = false }) {
+async function callOpenRouter({ providerId, model, apiKey, messages, max_tokens, temperature, top_p, response_format, headers, timeoutMs, reasoning, signal: upstreamSignal, relaxedParameters = false }) {
   const payload = { model, messages, max_tokens };
   if (!relaxedParameters && Number.isFinite(Number(temperature))) payload.temperature = Number(temperature);
   if (!relaxedParameters && Number.isFinite(Number(top_p))) payload.top_p = Number(top_p);
@@ -270,7 +270,15 @@ async function callOpenRouter({ providerId, model, apiKey, messages, max_tokens,
   };
   const effectiveTimeoutMs = Number(timeoutMs || DEFAULT_TIMEOUT_MS);
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), effectiveTimeoutMs);
+  const abortFromUpstream = () => {
+    if (!controller.signal.aborted) controller.abort(upstreamSignal?.reason || new Error("OpenRouter request aborted"));
+  };
+  if (upstreamSignal?.aborted) abortFromUpstream();
+  else upstreamSignal?.addEventListener?.("abort", abortFromUpstream, { once: true });
+  const timeout = setTimeout(() => {
+    if (!controller.signal.aborted) controller.abort(new Error("OpenRouter request timed out"));
+  }, effectiveTimeoutMs);
+  timeout.unref?.();
   const startedAt = Date.now();
   try {
     const res = await fetch(getOpenRouterChatEndpoint(), { method: "POST", headers: reqHeaders, body: JSON.stringify(payload), signal: controller.signal });
@@ -309,7 +317,16 @@ async function callOpenRouter({ providerId, model, apiKey, messages, max_tokens,
       parameterMode: relaxedParameters ? "relaxed" : "standard",
     };
   } catch (err) {
-    if (err?.name === "AbortError") {
+    if (err?.name === "AbortError" || controller.signal.aborted) {
+      if (upstreamSignal?.aborted) {
+        const abortedErr = upstreamSignal.reason instanceof Error
+          ? upstreamSignal.reason
+          : new Error(`OpenRouter request aborted for provider ${providerId}`);
+        abortedErr.code ||= "OPENROUTER_ABORTED";
+        abortedErr.providerId = providerId;
+        abortedErr.nonRetryable = true;
+        throw abortedErr;
+      }
       const timeoutErr = new Error(`OpenRouter request timed out after ${effectiveTimeoutMs}ms for provider ${providerId}`);
       timeoutErr.code = "OPENROUTER_TIMEOUT";
       timeoutErr.providerId = providerId;
@@ -318,10 +335,20 @@ async function callOpenRouter({ providerId, model, apiKey, messages, max_tokens,
     throw err;
   } finally {
     clearTimeout(timeout);
+    upstreamSignal?.removeEventListener?.("abort", abortFromUpstream);
   }
 }
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const sleep = (ms, signal) => new Promise((resolve, reject) => {
+  if (signal?.aborted) return reject(signal.reason instanceof Error ? signal.reason : new Error("AI retry aborted"));
+  const timer = setTimeout(resolve, ms);
+  timer.unref?.();
+  const onAbort = () => {
+    clearTimeout(timer);
+    reject(signal.reason instanceof Error ? signal.reason : new Error("AI retry aborted"));
+  };
+  signal?.addEventListener?.("abort", onAbort, { once: true });
+});
 
 export async function resilientRequest(routeName, {
   sessionId,
@@ -336,6 +363,7 @@ export async function resilientRequest(routeName, {
   maxRetries,
   retryBaseMs,
   reasoning,
+  signal,
 } = {}) {
   const routeKey = resolveRouteKey(routeName);
   const chain = getProviderChainForRoute(routeKey);
@@ -371,6 +399,7 @@ export async function resilientRequest(routeName, {
   };
 
   for (const providerId of chain) {
+    if (signal?.aborted) throw signal.reason instanceof Error ? signal.reason : new Error("AI request aborted");
     const provider = getProviderConfig(providerId);
     if (!provider) {
       attempted.push({ providerId, status: "misconfigured" });
@@ -388,7 +417,7 @@ export async function resilientRequest(routeName, {
     try { safeRouteLog({ routeName, routeKey, provider: providerId, model: provider.name }); } catch {}
     for (let attempt = 0; attempt <= effectiveMaxRetries; attempt++) {
       try {
-        const result = await callOpenRouter({ providerId, model: provider.name, apiKey: provider.apiKey, messages, max_tokens, temperature, top_p, response_format, headers, timeoutMs, reasoning });
+        const result = await callOpenRouter({ providerId, model: provider.name, apiKey: provider.apiKey, messages, max_tokens, temperature, top_p, response_format, headers, timeoutMs, reasoning, signal });
         return acceptSuccess(providerId, provider, result);
       } catch (initialErr) {
         let err = initialErr;
@@ -411,6 +440,7 @@ export async function resilientRequest(routeName, {
               headers,
               timeoutMs,
               reasoning: false,
+              signal,
               relaxedParameters: true,
             });
             return acceptSuccess(providerId, provider, relaxedResult);
@@ -454,7 +484,7 @@ export async function resilientRequest(routeName, {
           message: safeSnippet(err?.message || String(err), 500),
         });
         if (!retryable) break;
-        await sleep(wait);
+        await sleep(wait, signal);
       }
     }
   }
