@@ -1,4 +1,5 @@
 import { info, warn } from "../../logger.js";
+import { isRetryableDispatchError } from "./ramsWebsiteDispatchRetry.js";
 
 const DEFAULT_RAMS_BASE_URL = "https://mod.jonathan-harris.online";
 
@@ -168,20 +169,23 @@ export async function dispatchWebsiteAuditToRams({ sessionId, auditJsonKey }) {
       return { ok: true, enabled: true, attempt, accepted: true, ...payload, completion, status: completion.status };
     } catch (err) {
       lastError = err;
+      const retryable = isRetryableDispatchError(err);
       warn("audit.website.rams.dispatch_retry", {
         sessionId,
         auditJsonKey: finalKey,
         attempt,
         maxAttempts: config.maxAttempts,
         status: err?.status || null,
+        retryable,
         message: err?.message || String(err),
       });
+      if (!retryable) break;
       if (attempt < config.maxAttempts) await sleep(500 * attempt);
     }
   }
   throw lastError || new Error("RAMS website rebuild dispatch failed");
 }
 
-export const __ramsWebsiteDispatchTestHooks = { validateAuditJsonKey, boolEnv, getRamsRunReport, waitForRamsRunCompletion };
+export const __ramsWebsiteDispatchTestHooks = { validateAuditJsonKey, boolEnv, getRamsRunReport, waitForRamsRunCompletion, isRetryableDispatchError };
 
 export default { assertRamsWebsiteDispatchConfigured, dispatchWebsiteAuditToRams, getRamsWebsiteDispatchConfig };
