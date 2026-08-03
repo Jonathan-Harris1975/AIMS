@@ -32,6 +32,26 @@ router.post("/run", requestDedupe("podcast:run"), async (req, res) => {
       return res.status(400).json({ ok: false, error: parsed.error });
     }
 
+    const payload = parsed.data;
+    const sessionId = sanitizeSessionId(
+      payload.sessionId || payload.data?.sessionId || `TT-${new Date().toISOString().slice(0, 10)}`,
+      "TT"
+    );
+    const eventId = req.idempotencyKey || null;
+    const existingJob = getPublicJob("podcast", sessionId);
+
+    if (existingJob && ["queued", "running"].includes(existingJob.status)) {
+      return res.status(202).json({
+        ok: true,
+        duplicateJob: true,
+        sessionId,
+        status: existingJob.status,
+        statusUrl: `/podcast/status/${encodeURIComponent(sessionId)}`,
+        message: "Podcast pipeline already running for this session.",
+        job: existingJob,
+      });
+    }
+
     const readiness = getPodcastReadiness();
     if (!readiness.ready) {
       return res.status(503).json({
@@ -40,13 +60,6 @@ router.post("/run", requestDedupe("podcast:run"), async (req, res) => {
         readiness,
       });
     }
-
-    const payload = parsed.data;
-    const sessionId = sanitizeSessionId(
-      payload.sessionId || payload.data?.sessionId || `TT-${new Date().toISOString().slice(0, 10)}`,
-      "TT"
-    );
-    const eventId = req.idempotencyKey || null;
 
     info("api.podcast.start", { sessionId, eventId });
 
