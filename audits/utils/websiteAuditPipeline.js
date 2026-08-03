@@ -37,6 +37,10 @@ const DEFAULT_WEBSITE_URL = "https://jonathan-harris.online";
 const WEBSITE_ACTIVE_RUN_REUSE_MS = Number(process.env.WEBSITE_AUDIT_RUN_REUSE_ACTIVE_MS || 6 * 60 * 60 * 1000);
 const AUDIT_ARTEFACT_READ_ATTEMPTS = Math.max(1, Number(process.env.AUDIT_ARTEFACT_READ_ATTEMPTS || 3));
 const AUDIT_ARTEFACT_READ_TIMEOUT_MS = Math.max(1000, Number(process.env.AUDIT_ARTEFACT_READ_TIMEOUT_MS || 15000));
+const AUDIT_ARTEFACT_READY_TIMEOUT_MS = Math.max(5000, Number(process.env.AUDIT_ARTEFACT_READY_TIMEOUT_MS || 120000));
+const AUDIT_ARTEFACT_READY_POLL_MS = Math.max(250, Number(process.env.AUDIT_ARTEFACT_READY_POLL_MS || 2000));
+const WEBSITE_AUDIT_FINALISATION_STALE_MS = Math.max(60000, Number(process.env.WEBSITE_AUDIT_FINALISATION_STALE_MS || 15 * 60 * 1000));
+const finalisationPromises = new Map();
 
 export const WEBSITE_PIPELINE_STAGES = Object.freeze([
   {
@@ -325,6 +329,20 @@ async function fetchAuditJson(url) {
   }
 }
 
+async function withTimeout(promise, timeoutMs, label) {
+  let timer;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function readAuditJsonLocation(location) {
   const value = String(location || "").trim();
   if (!value) throw new Error("Audit JSON location is empty");
@@ -335,7 +353,12 @@ async function readAuditJsonLocation(location) {
   for (let attempt = 1; attempt <= AUDIT_ARTEFACT_READ_ATTEMPTS; attempt += 1) {
     if (key) {
       try {
-        return { data: await readAuditJson({ key }), location: key, transport: "r2-sdk", attempt };
+        const data = await withTimeout(
+          readAuditJson({ key }),
+          AUDIT_ARTEFACT_READ_TIMEOUT_MS,
+          `R2 audit JSON read for ${key}`
+        );
+        return { data, location: key, transport: "r2-sdk", attempt };
       } catch (err) {
         errors.push(`R2 attempt ${attempt}: ${err?.message || String(err)}`);
       }
@@ -388,7 +411,19 @@ function compactArtefactLoadDiagnostic(load = {}) {
   };
 }
 
-async function loadChildStage(parentSessionId, stage, parentJob) {
+const STAGE_REQUIRED_ARTEFACT_DIAGNOSTIC_KEYS = Object.freeze({
+  "digital-growth": ["reportJson", "summary", "evidence"],
+  "seo-aeo-geo": ["reportJson", "summary", "coverage"],
+  "mobile-ux": ["reportJson", "summary", "coverage", "evidence", "execution", "preflight"],
+});
+
+function requiredArtefactReadiness(auditType, artefacts = {}) {
+  const required = STAGE_REQUIRED_ARTEFACT_DIAGNOSTIC_KEYS[auditType] || ["reportJson"];
+  const missing = required.filter((key) => artefacts?.[key]?.loaded !== true);
+  return { required, missing, ready: missing.length === 0 };
+}
+
+async function loadChildStageOnce(parentSessionId, stage, parentJob) {
   const stageState = parentJob?.stages?.[stage.key] || {};
   const expectedChildId = stageState.sessionId || websitePipelineChildSessionId(parentSessionId, stage.auditType);
   const expectedReportPrefix = normalisePrefix(
@@ -405,14 +440,21 @@ async function loadChildStage(parentSessionId, stage, parentJob) {
   }
 
   const trustedChildJob = mismatches.length ? null : childJob;
-  const [reportLoad, summaryLoad, coverageLoad, evidenceLoad, executionLoad, preflightLoad] = await Promise.all([
+  const [reportLoad, summaryLoad, coverageLoad, evidenceLoad, executionLoad, preflightLoad, reconciliationLoad] = await Promise.all([
     loadJsonArtefact("report.json", stageArtefactLocations({ stageState, childJob: trustedChildJob, reportPrefix: expectedReportPrefix, directKey: "reportJsonUrl", artefactName: "report.json" })),
     loadJsonArtefact("summary.json", stageArtefactLocations({ stageState, childJob: trustedChildJob, reportPrefix: expectedReportPrefix, directKey: "summaryUrl", artefactName: "summary.json" })),
     loadJsonArtefact("coverage.json", stageArtefactLocations({ stageState, childJob: trustedChildJob, reportPrefix: expectedReportPrefix, directKey: "coverageUrl", artefactName: "coverage.json" })),
     loadJsonArtefact("evidence.json", stageArtefactLocations({ stageState, childJob: trustedChildJob, reportPrefix: expectedReportPrefix, directKey: "evidenceUrl", artefactName: "evidence.json" })),
     loadJsonArtefact("execution.json", stageArtefactLocations({ stageState, childJob: trustedChildJob, reportPrefix: expectedReportPrefix, directKey: "executionUrl", artefactName: "execution.json" })),
-    loadJsonArtefact("preflight.json", uniqueLocations([
-      ...stageArtefactLocations({ stageState, childJob: trustedChildJob, reportPrefix: expectedReportPrefix, directKey: "preflightUrl", artefactName: "preflight.json" }),
+    loadJsonArtefact("preflight.json", stageArtefactLocations({
+      stageState,
+      childJob: trustedChildJob,
+      reportPrefix: expectedReportPrefix,
+      directKey: "preflightUrl",
+      artefactName: "preflight.json",
+    })),
+    loadJsonArtefact("reconciliation.json", uniqueLocations([
+      ...stageArtefactLocations({ stageState, childJob: trustedChildJob, reportPrefix: expectedReportPrefix, directKey: "reconciliationUrl", artefactName: "reconciliation.json" }),
       trustedChildJob?.reconciliationUrl,
       stageState?.reconciliationUrl,
       `${expectedReportPrefix}/reconciliation.json`,
@@ -425,6 +467,7 @@ async function loadChildStage(parentSessionId, stage, parentJob) {
   const evidence = evidenceLoad.value && typeof evidenceLoad.value === "object" ? evidenceLoad.value : {};
   const execution = executionLoad.value && typeof executionLoad.value === "object" ? executionLoad.value : {};
   const preflight = preflightLoad.value && typeof preflightLoad.value === "object" ? preflightLoad.value : {};
+  const reconciliation = reconciliationLoad.value && typeof reconciliationLoad.value === "object" ? reconciliationLoad.value : {};
   const completionState = String(
     report.auditCompletionState
       || report.analysisCompletionState
@@ -455,8 +498,10 @@ async function loadChildStage(parentSessionId, stage, parentJob) {
       evidence: compactArtefactLoadDiagnostic(evidenceLoad),
       execution: compactArtefactLoadDiagnostic(executionLoad),
       preflight: compactArtefactLoadDiagnostic(preflightLoad),
+      reconciliation: compactArtefactLoadDiagnostic(reconciliationLoad),
     },
   };
+  loadDiagnostics.required = requiredArtefactReadiness(stage.auditType, loadDiagnostics.artefacts);
 
   return {
     ...report,
@@ -465,11 +510,20 @@ async function loadChildStage(parentSessionId, stage, parentJob) {
     pipelineSessionId: parentSessionId,
     reportPrefix: expectedReportPrefix,
     status,
+    auditCompletionState: report.auditCompletionState
+      || report.analysisCompletionState
+      || report.analysis?.auditCompletionState
+      || coverage.auditCompletionState
+      || summary.auditCompletionState
+      || trustedChildJob?.auditCompletionState
+      || stageState.auditCompletionState
+      || null,
     summary: report.summary || summary,
     coverage: report.coverage || coverage,
     evidence: report.evidence || evidence,
     execution: report.execution || execution,
     preflight: report.preflight || preflight,
+    reconciliation: report.reconciliation || reconciliation,
     reportUrl: trustedChildJob?.reportUrl || stageState.reportUrl || publicAuditUrlForKey(`${expectedReportPrefix}/report.html`) || null,
     reportJsonUrl,
     summaryUrl: trustedChildJob?.summaryUrl || stageState.summaryUrl || publicAuditUrlForKey(`${expectedReportPrefix}/summary.json`) || null,
@@ -477,6 +531,7 @@ async function loadChildStage(parentSessionId, stage, parentJob) {
     evidenceUrl: trustedChildJob?.evidenceUrl || stageState.evidenceUrl || publicAuditUrlForKey(`${expectedReportPrefix}/evidence.json`) || null,
     executionUrl: trustedChildJob?.executionUrl || stageState.executionUrl || publicAuditUrlForKey(`${expectedReportPrefix}/execution.json`) || null,
     preflightUrl: trustedChildJob?.preflightUrl || stageState.preflightUrl || publicAuditUrlForKey(`${expectedReportPrefix}/preflight.json`) || null,
+    reconciliationUrl: trustedChildJob?.reconciliationUrl || stageState.reconciliationUrl || publicAuditUrlForKey(`${expectedReportPrefix}/reconciliation.json`) || null,
     workflowRunUrl: trustedChildJob?.workflowRunUrl || stageState.workflowRunUrl || null,
     hardGateBlocked: Boolean(
       trustedChildJob?.hardGateBlocked === true
@@ -489,10 +544,10 @@ async function loadChildStage(parentSessionId, stage, parentJob) {
     releaseVerdict: trustedChildJob?.releaseVerdict ?? report.releaseVerdict ?? summary.releaseVerdict ?? null,
     screenshotCount: trustedChildJob?.screenshotCount ?? report.screenshotCount ?? summary.screenshotCount ?? null,
     mobileFailureCount: trustedChildJob?.mobileFailureCount ?? report.mobileFailureCount ?? summary.mobileFailureCount ?? null,
-    sourceRevisionSha: trustedChildJob?.sourceRevisionSha ?? report.sourceRevisionSha ?? execution.sourceRevisionSha ?? null,
-    liveReleaseSha: trustedChildJob?.liveReleaseSha ?? report.liveReleaseSha ?? execution.liveReleaseSha ?? null,
-    liveReleaseMarkerUrl: trustedChildJob?.liveReleaseMarkerUrl ?? report.liveReleaseMarkerUrl ?? execution.liveReleaseMarkerUrl ?? null,
-    liveSourceParity: trustedChildJob?.liveSourceParity ?? report.liveSourceParity ?? execution.liveSourceParity ?? "unverified",
+    sourceRevisionSha: trustedChildJob?.sourceRevisionSha ?? report.sourceRevisionSha ?? execution.sourceRevisionSha ?? reconciliation.sourceRevisionSha ?? null,
+    liveReleaseSha: trustedChildJob?.liveReleaseSha ?? report.liveReleaseSha ?? execution.liveReleaseSha ?? reconciliation.liveReleaseSha ?? null,
+    liveReleaseMarkerUrl: trustedChildJob?.liveReleaseMarkerUrl ?? report.liveReleaseMarkerUrl ?? execution.liveReleaseMarkerUrl ?? reconciliation.liveReleaseMarkerUrl ?? null,
+    liveSourceParity: trustedChildJob?.liveSourceParity ?? report.liveSourceParity ?? execution.liveSourceParity ?? reconciliation.liveSourceParity ?? "unverified",
     accessibilityEvidence: trustedChildJob?.accessibilityEvidence ?? report.accessibilityEvidence ?? evidence.accessibilityEvidence ?? null,
     visualDesignEvidence: trustedChildJob?.visualDesignEvidence ?? report.visualDesignEvidence ?? evidence.visualDesignEvidence ?? null,
     performanceEvidence: trustedChildJob?.performanceEvidence ?? report.performanceEvidence ?? evidence.performanceEvidence ?? null,
@@ -500,11 +555,56 @@ async function loadChildStage(parentSessionId, stage, parentJob) {
     securityEvidence: trustedChildJob?.securityEvidence ?? report.securityEvidence ?? evidence.securityEvidence ?? null,
     callbackDiagnostics: trustedChildJob?.callbackDiagnostics || stageState.callbackDiagnostics || report.callbackDiagnostics || null,
     artifactLoadDiagnostics: loadDiagnostics,
+    reportJsonLoaded: loadDiagnostics.artefacts.reportJson.loaded,
+    requiredArtifactSetReady: loadDiagnostics.required.ready,
     jobError: trustedChildJob?.error
       || stageState.error
       || report.error
       || (mismatches.length ? { message: mismatches.join("; ") } : null)
       || (!reportLoad.value ? { message: `Unable to load ${stage.auditType} report.json: ${reportLoad.errors.join(" | ")}` } : null),
+  };
+}
+
+async function loadChildStage(parentSessionId, stage, parentJob) {
+  const startedAt = Date.now();
+  let polls = 0;
+  let currentParent = parentJob;
+  let latest = null;
+
+  while (true) {
+    polls += 1;
+    latest = await loadChildStageOnce(parentSessionId, stage, currentParent);
+    const status = String(latest.status || "unknown").trim().toLowerCase();
+    if (status !== "completed" || latest.requiredArtifactSetReady) break;
+    if (Date.now() - startedAt >= AUDIT_ARTEFACT_READY_TIMEOUT_MS) break;
+
+    info("audit.website.pipeline.waiting_for_artefacts", {
+      pipelineSessionId: parentSessionId,
+      auditType: stage.auditType,
+      poll: polls,
+      missing: latest.artifactLoadDiagnostics?.required?.missing || [],
+    });
+    await wait(AUDIT_ARTEFACT_READY_POLL_MS);
+    currentParent = await getPublicJobFresh(WEBSITE_PIPELINE_JOB_TYPE, parentSessionId) || currentParent;
+  }
+
+  const waitedMs = Date.now() - startedAt;
+  return {
+    ...latest,
+    artifactLoadDiagnostics: {
+      ...(latest?.artifactLoadDiagnostics || {}),
+      readinessWait: {
+        polls,
+        waitedMs,
+        timeoutMs: AUDIT_ARTEFACT_READY_TIMEOUT_MS,
+        pollMs: AUDIT_ARTEFACT_READY_POLL_MS,
+        timedOut: Boolean(
+          String(latest?.status || "").toLowerCase() === "completed"
+          && latest?.requiredArtifactSetReady !== true
+          && waitedMs >= AUDIT_ARTEFACT_READY_TIMEOUT_MS
+        ),
+      },
+    },
   };
 }
 
@@ -522,17 +622,20 @@ async function strictTemporaryCleanup(tempPrefix, attempts = 3) {
   throw lastError || new Error(`Temporary audit cleanup failed for ${tempPrefix}`);
 }
 
-export async function finaliseWebsiteAuditPipeline(parentSessionId) {
+async function runWebsiteAuditFinalisation(parentSessionId) {
   const parent = await getPublicJobFresh(WEBSITE_PIPELINE_JOB_TYPE, parentSessionId);
   if (!parent) throw new Error(`Website audit pipeline job not found: ${parentSessionId}`);
   if (parent.status === "completed" && parent.finalReportJsonUrl && parent.ramsDispatch?.ok) return parent;
 
+  const finalisationAttempt = Number(parent.finalisationAttempt || 0) + 1;
   await persistParent(parentSessionId, {
     status: "running",
     phase: "council-and-final-report",
     currentStage: "council-and-final-report",
     finalising: true,
-    finalisingAt: parent.finalisingAt || new Date().toISOString(),
+    finalisingAt: new Date().toISOString(),
+    finalisationAttempt,
+    finalisationLastError: null,
   });
 
   const generatedAt = new Date().toISOString();
@@ -624,6 +727,7 @@ export async function finaliseWebsiteAuditPipeline(parentSessionId) {
         synthesisState: "Incomplete",
         targetAssessment: council.targetAssessment || null,
         sourceStageHealth,
+        finalisationAttempt,
         stageStatuses: {
           digitalGrowth: digitalGrowth.status,
           seoAeoGeo: seoAeoGeo.status,
@@ -669,6 +773,7 @@ export async function finaliseWebsiteAuditPipeline(parentSessionId) {
       synthesisState: council.synthesisState,
       targetAssessment: council.targetAssessment || null,
       sourceStageHealth,
+      finalisationAttempt,
       stageStatuses: {
         digitalGrowth: digitalGrowth.status,
         seoAeoGeo: seoAeoGeo.status,
@@ -710,6 +815,8 @@ export async function finaliseWebsiteAuditPipeline(parentSessionId) {
       cleanupRequired: Boolean(ramsDispatch?.ok) && !cleanupResult,
       evidenceRetentionRequired: true,
       sourceStageHealth,
+      finalisationAttempt,
+      finalisationLastError: err?.message || String(err),
       ramsDispatch: ramsDispatch || { ok: false, error: err?.message || String(err) },
       temporaryCleanup: cleanupResult
         ? { ok: true, deletedCount: cleanupResult.deleted.length, attempts: cleanupResult.attempts, remainingCount: cleanupResult.remaining?.length || 0 }
@@ -724,6 +831,18 @@ export async function finaliseWebsiteAuditPipeline(parentSessionId) {
     });
     return failed;
   }
+}
+
+export function finaliseWebsiteAuditPipeline(parentSessionId) {
+  const key = String(parentSessionId || "").trim();
+  const active = finalisationPromises.get(key);
+  if (active) return active;
+
+  const finalisation = runWebsiteAuditFinalisation(key).finally(() => {
+    if (finalisationPromises.get(key) === finalisation) finalisationPromises.delete(key);
+  });
+  finalisationPromises.set(key, finalisation);
+  return finalisation;
 }
 
 export async function retryWebsiteAuditRamsDispatch(parentSessionId) {
@@ -754,13 +873,14 @@ export async function retryWebsiteAuditRamsDispatch(parentSessionId) {
   return updated;
 }
 
-function scheduleFinalisation(parentSessionId) {
+function scheduleFinalisation(parentSessionId, { reason = "source-stages-finished" } = {}) {
   return persistParent(parentSessionId, {
     status: "running",
     phase: "council-queued",
     currentStage: "council-queued",
     finalising: true,
     finalisingAt: new Date().toISOString(),
+    finalisationQueuedReason: reason,
   }).then((job) => {
     setImmediate(() => {
       finaliseWebsiteAuditPipeline(parentSessionId).catch((err) => {
@@ -769,6 +889,18 @@ function scheduleFinalisation(parentSessionId) {
     });
     return { ok: true, scheduled: true, job };
   });
+}
+
+export async function retryWebsiteAuditFinalisation(parentSessionId) {
+  const parent = await getPublicJobFresh(WEBSITE_PIPELINE_JOB_TYPE, parentSessionId);
+  if (!parent) throw new Error(`Website audit pipeline job not found: ${parentSessionId}`);
+  if (parent.status === "completed" && parent.finalReportJsonUrl && parent.ramsDispatch?.ok) {
+    return { ok: true, scheduled: false, alreadyCompleted: true, job: parent };
+  }
+  if (!parent.tempPrefix && !parent.stages) {
+    throw new Error("Website audit finalisation cannot be retried because source-stage metadata is unavailable");
+  }
+  return scheduleFinalisation(parentSessionId, { reason: "manual-finalisation-retry" });
 }
 
 export async function resumeWebsiteAuditPipelineFromChild({ auditType, result }) {
@@ -824,6 +956,7 @@ export async function resumeWebsiteAuditPipelineFromChild({ auditType, result })
     sessionId: receivedSessionId || expectedStage.sessionId,
     auditType,
     status: result.status || result.job?.status || "unknown",
+    auditCompletionState: result.job?.auditCompletionState || expectedStage.auditCompletionState || null,
     reportPrefix: receivedReportPrefix || expectedReportPrefix,
     reportUrl: result.job?.reportUrl || expectedStage.reportUrl || null,
     reportJsonUrl: result.job?.reportJsonUrl || expectedStage.reportJsonUrl || null,
@@ -840,6 +973,7 @@ export async function resumeWebsiteAuditPipelineFromChild({ auditType, result })
     responsiveFixAppendixUrl: result.job?.responsiveFixAppendixUrl || expectedStage.responsiveFixAppendixUrl || null,
     artefacts: result.job?.artefacts || expectedStage.artefacts || {},
     callbackDiagnostics: result.job?.callbackDiagnostics || expectedStage.callbackDiagnostics || null,
+    publicJsonValidation: result.job?.publicJsonValidation || expectedStage.publicJsonValidation || null,
     finishedAt: result.job?.finishedAt || new Date().toISOString(),
     error: result.job?.error || result.error || null,
   };
@@ -860,7 +994,21 @@ export async function resumeWebsiteAuditPipelineFromChild({ auditType, result })
 }
 
 export async function getWebsiteAuditPipelineJobFresh(sessionId) {
-  return getPublicJobFresh(WEBSITE_PIPELINE_JOB_TYPE, sessionId);
+  const job = await getPublicJobFresh(WEBSITE_PIPELINE_JOB_TYPE, sessionId);
+  if (!job || job.status === "completed" || job.status === "failed") return job;
+
+  const finalisingAt = Date.parse(job.finalisingAt || job.updatedAt || "");
+  const stale = Boolean(job.finalising)
+    && Number.isFinite(finalisingAt)
+    && Date.now() - finalisingAt >= WEBSITE_AUDIT_FINALISATION_STALE_MS;
+  const stageStatuses = WEBSITE_PIPELINE_STAGES.map((stage) => String(job.stages?.[stage.key]?.status || "").toLowerCase());
+  const stagesTerminal = stageStatuses.every((status) => ["completed", "failed"].includes(status));
+
+  if (stale && stagesTerminal) {
+    const recovered = await scheduleFinalisation(sessionId, { reason: "stale-finalisation-recovery" });
+    return recovered.job;
+  }
+  return job;
 }
 
 export const __websiteAuditPipelineTestHooks = {
@@ -868,6 +1016,9 @@ export const __websiteAuditPipelineTestHooks = {
   stageDefinition,
   stageIndex,
   parentStageMetadata,
+  requiredArtefactReadiness,
+  loadChildStageOnce,
+  loadChildStage,
   strictTemporaryCleanup,
   evaluateWebsiteAuditStageHealth,
 };
@@ -882,4 +1033,5 @@ export default {
   websitePipelineFinalKeys,
   websitePipelineChildSessionId,
   retryWebsiteAuditRamsDispatch,
+  retryWebsiteAuditFinalisation,
 };

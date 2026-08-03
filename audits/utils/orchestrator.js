@@ -4,6 +4,7 @@ import {
   queueJob,
   startJob,
   completeJob,
+  flushJobStoreWrites,
   getPublicJob,
   getPublicJobFresh,
   getMostRecentActiveJobFresh,
@@ -582,6 +583,7 @@ function optionalCompletionMetadata(payload = {}) {
     "securityEvidence",
     "rootCauseGroupCount",
     "storageUploadError",
+    "publicJsonValidation",
   ]) {
     if (payload[key] !== undefined) metadata[key] = payload[key];
   }
@@ -618,7 +620,8 @@ export async function completeAuditRun({ auditType, payload }) {
     summaryUrl: callbackUrlForArtefact(payload, "summaryUrl", "summary.json") || null,
     coverageUrl: callbackUrlForArtefact(payload, "coverageUrl", "coverage.json") || null,
     executionUrl: callbackUrlForArtefact(payload, "executionUrl", "execution.json") || null,
-    preflightUrl: callbackUrlForArtefact(payload, "preflightUrl", "preflight.json") || payload.reconciliationUrl || null,
+    preflightUrl: callbackUrlForArtefact(payload, "preflightUrl", "preflight.json") || null,
+    reconciliationUrl: callbackUrlForArtefact(payload, "reconciliationUrl", "reconciliation.json") || null,
     evidenceUrl: callbackUrlForArtefact(payload, "evidenceUrl", "evidence.json") || null,
     screenshotManifestUrl: callbackUrlForArtefact(payload, "screenshotManifestUrl", "screenshot-manifest.json") || null,
     focusedPageAppendixUrl: callbackUrlForArtefact(payload, "focusedPageAppendixUrl", "focused-page-appendix.json") || null,
@@ -752,6 +755,7 @@ export async function completeAuditRun({ auditType, payload }) {
           },
         });
       }
+      await flushJobStoreWrites({ throwOnError: false });
       return {
         ok: false,
         auditType,
@@ -762,6 +766,11 @@ export async function completeAuditRun({ auditType, payload }) {
       };
     }
   }
+
+  // The parent website pipeline resumes immediately after this function
+  // returns.  Persist the complete callback contract first so a cold start,
+  // another instance, or a retry cannot observe the older queued/running job.
+  await flushJobStoreWrites({ throwOnError: false });
 
   info("audit.workflow.callback.completed", {
     auditType,
