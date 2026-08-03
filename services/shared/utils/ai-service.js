@@ -4,6 +4,7 @@
 // ============================================================
 
 import aiConfig from "./ai-config.js";
+import { isParameterCompatibilityError } from "./openRouterErrorPolicy.js";
 import { safeRouteLog } from "../../../logger.js";
 import { info, error as logError } from "../../../logger.js";
 import { recordProviderOutcome } from "./operationalExcellence.js";
@@ -212,18 +213,6 @@ function makeOpenRouterError(status, body, providerId) {
   const transientHttp = [408, 409, 425, 429].includes(numericStatus) || numericStatus >= 500;
   err.nonRetryable = Number.isFinite(numericStatus) && !transientHttp;
   return err;
-}
-
-function isParameterCompatibilityError(err) {
-  const status = Number(err?.status);
-  const detail = `${err?.message || ""} ${err?.bodySnippet || ""}`.toLowerCase();
-  return [400, 404, 422].includes(status) && (
-    detail.includes("no endpoints found that can handle requested parameters") ||
-    detail.includes("unsupported parameter") ||
-    detail.includes("response_format") ||
-    detail.includes("reasoning") ||
-    detail.includes("require_parameters")
-  );
 }
 
 function modelSupportsReasoningOptions(model) {

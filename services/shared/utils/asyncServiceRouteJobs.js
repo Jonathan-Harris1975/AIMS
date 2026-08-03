@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { beginJob, completeJob, failJob, flushJobStoreWrites, getPublicJobFresh } from "./jobStore.js";
 import { info, error as logError } from "../../../logger.js";
 import { getRequestIdempotencyKey } from "./requestDedupe.js";
+import { statusUrlFor } from "./asyncServiceStatusUrl.js";
 
 function trim(value) {
   return String(value || "").trim();
@@ -42,13 +43,7 @@ export function asyncServiceSessionId(service, lane, payload = {}) {
   return trim(payload.sessionId) || `${slug(service)}-${slug(lane)}-${crypto.randomUUID()}`;
 }
 
-function statusUrlFor(req, service, lane, sessionId) {
-  const path = `/${slug(service)}/jobs/${slug(lane)}/${encodeURIComponent(sessionId)}`;
-  if (!req?.protocol || !req?.get) return path;
-  return `${req.protocol}://${req.get("host")}${path}`;
-}
-
-function publicShape(service, lane, job, req = null) {
+function publicShape(service, lane, job, req = null, statusBasePath = "") {
   if (!job) return null;
   return {
     ok: true,
@@ -62,7 +57,7 @@ function publicShape(service, lane, job, req = null) {
     startedAt: job.startedAt,
     finishedAt: job.finishedAt,
     attempt: job.attempt,
-    statusUrl: job.statusUrl || statusUrlFor(req, service, lane, job.sessionId),
+    statusUrl: job.statusUrl || statusUrlFor(req, service, lane, job.sessionId, statusBasePath),
     result: job.result,
     error: job.error,
   };
@@ -100,11 +95,11 @@ async function executeServiceJob({ service, lane, sessionId, payload, runner, me
   }
 }
 
-export async function startAsyncServiceRouteJob({ service, lane, payload = {}, runner, req = null, metadata = {} }) {
+export async function startAsyncServiceRouteJob({ service, lane, payload = {}, runner, req = null, statusBasePath = "", metadata = {} }) {
   if (typeof runner !== "function") throw new Error("Async service route runner must be a function");
   const sessionId = asyncServiceSessionId(service, lane, payload);
   const jobType = asyncServiceJobType(service, lane);
-  const statusUrl = statusUrlFor(req, service, lane, sessionId);
+  const statusUrl = statusUrlFor(req, service, lane, sessionId, statusBasePath);
   const payloadWithSession = { ...payload, sessionId };
   const { started, job } = beginJob(jobType, sessionId, {
     service,
@@ -125,7 +120,7 @@ export async function startAsyncServiceRouteJob({ service, lane, payload = {}, r
 
   await flushJobStoreWrites({ throwOnError: false });
   return {
-    ...publicShape(service, lane, job, req),
+    ...publicShape(service, lane, job, req, statusBasePath),
     started,
     duplicateJob: !started,
     accepted: true,

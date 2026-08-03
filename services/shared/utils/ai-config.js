@@ -164,7 +164,7 @@ export const aiConfig = {
     blogWeekly: routeChain(["standard", "summary", "fallback"], ["google25FlashLite", "gpt56Luna", "gpt56Sol"]),
     blogSocial: routeChain(["highQuality", "audit", "standard", "summary", "fallback"], ["claudeSonnet5", "anthropic46", "google25FlashLite"]),
     onBrandAudit: routeChain(["audit", "highQuality", "standard", "fallback"], ["anthropic46", "gpt56Sol", "google25FlashLite", "gpt56Luna", "meta"]),
-    auditForensic: routeChain(["audit", "highQuality", "standard", "fallback"], ["anthropic46", "gpt56Sol", "google25FlashLite", "gpt56Luna", "meta"]),
+    auditForensic: routeChain(["audit", "highQuality"], ["anthropic46", "google25FlashLite", "gpt56Sol", "gpt56Luna", "meta"]),
     zernioDaily: routeChain(["highQuality", "standard", "fast", "fallback"], ["claudeSonnet5", "anthropic46", "gpt56Luna", "google25FlashLite", "gpt56Sol"]),
     zernioMiniSeriesResearch: routeChain(["audit", "highQuality", "standard"], ["claudeSonnet5", "anthropic46"]),
     zernioMiniSeriesTheme: routeChain(["highQuality", "audit", "standard"], ["claudeSonnet5", "anthropic46"]),
