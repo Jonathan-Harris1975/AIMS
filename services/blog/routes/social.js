@@ -24,6 +24,7 @@ router.post("/daily/build", requestDedupe("blog:socialDailyBuild"), asyncRoute(a
       lane: "daily-build",
       payload: parsed.data,
       req,
+      statusBasePath: "/blog/social/jobs",
       runner: buildDailySocialBlogPost,
       metadata: { route: "/blog/social/daily/build" },
     });

@@ -31,6 +31,7 @@ router.post("/build", requestDedupe("blog:weeklyBuild"), asyncRoute(async (req, 
       lane: "weekly-build",
       payload: { days: requestedDays, weekId, ...parsed.data },
       req,
+      statusBasePath: "/blog/weekly/jobs",
       runner: (payload) => buildWeeklyBlogPost({ days: payload.days, weekId: payload.weekId }),
       metadata: { route: "/blog/weekly/build" },
     });
