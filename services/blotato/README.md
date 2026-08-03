@@ -13,16 +13,16 @@ Core endpoints:
 - `POST /blotato/visuals`, `GET/DELETE /blotato/visuals/:id`
 - `POST /blotato/posts`, `GET /blotato/posts/:postSubmissionId`
 - `GET /blotato/shorts/lanes`
-- `POST /blotato/autoshorts/publish-now`
-- `POST /blotato/shorts/news-insight/publish-now`
-- `POST /blotato/shorts/:lane/publish-now`
+- `POST /blotato/autoshorts/schedule`
+- `POST /blotato/shorts/:lane/schedule`
+- Legacy `publish-now` routes are disabled in production unless `BLOTATO_ALLOW_IMMEDIATE_PUBLISH=true` is deliberately set.
 - `POST /blotato/shorts/news-insight`
 - `POST /blotato/shorts/:lane`
 - `GET /blotato/jobs/:sessionId`
 
 ## Behaviour
 
-The quality layer checks hook strength, script length, narrative continuity, visual relevance, thumbnail text, source relationship and publish readiness. Rendering/publishing uses bounded polling and retry controls. Production publishing can be sequential and staggered across configured channel accounts. Friday PM uses the `ai-playbook` lane before the podcast pipeline. Configure through the `BLOTATO_*` family plus OpenRouter model variables.
+The quality layer checks hook strength, script length, narrative continuity, visual relevance, thumbnail text, source relationship and publish readiness. Rendering/publishing uses bounded polling and retry controls. Production publishing is scheduled-only, verifies the returned submission ID and queued `scheduled` state for every required channel, and serialises the two daily renders without blocking unrelated AIMS lanes. Friday PM uses the `ai-playbook` lane before the podcast pipeline. Configure through the `BLOTATO_*` family plus OpenRouter model variables.
 
 ## Implementation
 
