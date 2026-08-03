@@ -33,6 +33,21 @@ function sendValidationError(res, parsed) {
   return res.status(400).json({ ok: false, error: parsed.error });
 }
 
+function immediatePublishingEnabled() {
+  return ["1", "true", "yes", "on", "y"].includes(String(process.env.BLOTATO_ALLOW_IMMEDIATE_PUBLISH || "false").trim().toLowerCase());
+}
+
+function requireScheduledBlotatoRoute(res) {
+  if (immediatePublishingEnabled()) return false;
+  res.status(409).json({
+    ok: false,
+    service: "blotato",
+    code: "blotato-scheduled-publishing-required",
+    error: "Immediate Blotato publishing is disabled. Use /blotato/autoshorts/schedule or /blotato/shorts/:lane/schedule.",
+  });
+  return true;
+}
+
 router.get("/health", (_req, res) => {
   res.json({
     ok: true,
@@ -49,9 +64,9 @@ router.get("/health", (_req, res) => {
       lanes: "GET /blotato/shorts/lanes",
       newsInsightShort: "POST /blotato/shorts/news-insight",
       laneShort: "POST /blotato/shorts/:lane",
-      publishNow: "POST /blotato/shorts/news-insight/publish-now",
-      lanePublishNow: "POST /blotato/shorts/:lane/publish-now",
-      autoShortStylePublishNow: "POST /blotato/autoshorts/publish-now",
+      scheduleAm: "POST /blotato/autoshorts/schedule",
+      scheduleLane: "POST /blotato/shorts/:lane/schedule",
+      immediatePublishingEnabled: immediatePublishingEnabled(),
       jobStatus: "GET /blotato/jobs/:sessionId",
     },
     autoShortStyles: getAutoShortStyleConfigSummary(),
@@ -132,6 +147,7 @@ router.post(
     if (!parsed.ok) return sendValidationError(res, parsed);
 
     const { apiKey, ...payload } = parsed.data;
+    if (!payload.scheduledTime && requireScheduledBlotatoRoute(res)) return undefined;
     const result = await publishPost(payload, apiKey);
     return res.status(201).json({ ok: true, service: "blotato", ...result });
   })
@@ -182,6 +198,7 @@ router.post(
 router.post(
   "/autoshorts/publish-now",
   asyncRoute(async (req, res) => {
+    if (requireScheduledBlotatoRoute(res)) return undefined;
     const now = new Date();
     const weekday = new Intl.DateTimeFormat("en-GB", { weekday: "long", timeZone: "Europe/London" }).format(now).toLowerCase();
     const laneByWeekday = { monday: "news-insight", tuesday: "model-verdict", wednesday: "ai-at-work", thursday: "reality-check", friday: "ai-playbook" };
@@ -203,6 +220,7 @@ router.post(
 router.post(
   "/shorts/news-insight/publish-now",
   asyncRoute(async (req, res) => {
+    if (requireScheduledBlotatoRoute(res)) return undefined;
     const result = await triggerPublishNowJob(req, "news-insight");
     return res.status(result.statusCode || 202).json({
       ok: true,
@@ -218,6 +236,7 @@ router.post(
 router.post(
   "/shorts/:lane/publish-now",
   asyncRoute(async (req, res) => {
+    if (requireScheduledBlotatoRoute(res)) return undefined;
     const lane = requireShortLaneConfig(req.params.lane);
     const result = await triggerPublishNowJob(req, lane.slug);
     return res.status(result.statusCode || 202).json({
