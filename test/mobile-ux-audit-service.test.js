@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import { __auditOrchestratorTestHooks } from "../audits/utils/orchestrator.js";
 
 test("mobile UX audit route wiring declares the health, run, callback, and job-status surfaces", () => {
   const routeIndex = fs.readFileSync("audits/routes/index.js", "utf8");
@@ -112,6 +113,33 @@ test("completed mobile UX callbacks require the full production artefact set", (
   assert.match(orchestrator, /Completed Mobile UX callback is missing required artefact URL/);
   assert.match(orchestrator, /Completed Mobile UX callback must include screenshotCount greater than 0/);
   assert.match(orchestrator, /Completed Mobile UX callback must include mobileFailureCount/);
+});
+
+test("completed mobile UX evidence may report a blocked release hard gate", () => {
+  const artefactNames = [
+    "report.html",
+    "report.json",
+    "summary.json",
+    "coverage.json",
+    "execution.json",
+    "preflight.json",
+    "evidence.json",
+    "screenshot-manifest.json",
+    "focused-page-appendix.json",
+    "repository-issue-appendix.json",
+    "mandatory-mobile-scorecard.json",
+    "responsive-fix-appendix.json",
+  ];
+  const payload = {
+    auditCompletionState: "Complete",
+    hardGateBlocked: true,
+    releaseVerdict: "BLOCKED",
+    screenshotCount: 8,
+    mobileFailureCount: 3,
+    artefacts: Object.fromEntries(artefactNames.map((name) => [name, `https://example.test/${name}`])),
+  };
+
+  assert.equal(__auditOrchestratorTestHooks.assertCompletedMobileUxPayload(payload), true);
 });
 
 test("mobile UX job metadata preserves artefact URLs from nested artefact maps and split confidence", () => {

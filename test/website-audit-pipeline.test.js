@@ -117,5 +117,5 @@ test("completed source callbacks require complete machine-readable artefact cont
   assert.match(orchestrator, /auditCompletionState=Complete/);
   assert.match(orchestrator, /assertCompletedSourceStagePayload\(auditType, payload\)/);
   assert.match(orchestrator, /Completed Mobile UX callback must declare auditCompletionState=Complete/);
-  assert.match(orchestrator, /Completed Mobile UX callback cannot declare a blocked hard gate/);
+  assert.doesNotMatch(orchestrator, /Completed Mobile UX callback cannot declare a blocked hard gate/);
 });

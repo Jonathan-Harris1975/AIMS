@@ -84,6 +84,37 @@ test("all complete source stages satisfy the evidence contract", () => {
   assert.equal(health.failures.length, 0);
 });
 
+test("a completed mobile audit with a blocked release gate remains complete and uses its source score", () => {
+  const stageReports = {
+    ...completedStages,
+    mobileUx: {
+      ...completedStages.mobileUx,
+      hardGateBlocked: false,
+      releaseVerdict: "BLOCKED",
+      mobileQualityScore: 71.7,
+    },
+  };
+
+  const health = evaluateWebsiteAuditStageHealth(stageReports);
+  assert.equal(health.ok, true);
+
+  const council = __websiteAuditCouncilTestHooks.normaliseCouncil({
+    synthesisState: "Complete",
+    executiveSummary: "Complete evidence.",
+    scorecard: {
+      mobileUx: { score: 10, status: "Scored", basis: "model guess" },
+      councilConfidence: { score: 8, status: "Scored", basis: "complete" },
+    },
+    blockers: [],
+    councilRecord: {},
+  }, stageReports);
+
+  assert.equal(council.synthesisState, "Complete");
+  assert.equal(council.scorecard.mobileUx.score, 7.2);
+  assert.equal(council.scorecard.mobileUx.status, "Scored - Release Hard Gate Blocked");
+  assert.ok(council.blockers.some((item) => String(item.blocker || item).includes("Mobile UX release hard gate blocked")));
+});
+
 
 test("completed SEO status is rejected when report.json contains no machine-readable analysis", () => {
   const health = evaluateWebsiteAuditStageHealth({
