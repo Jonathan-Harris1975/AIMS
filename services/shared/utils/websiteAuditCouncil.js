@@ -187,11 +187,29 @@ function parseJsonResponse(raw) {
   return JSON.parse(candidate);
 }
 
+function sourceArtefactReadiness(source = {}) {
+  const diagnostics = obj(source.artifactLoadDiagnostics);
+  const hasDiagnostics = Object.keys(diagnostics).length > 0;
+  const reportJsonLoaded = typeof source.reportJsonLoaded === "boolean"
+    ? source.reportJsonLoaded
+    : hasDiagnostics
+      ? obj(diagnostics.artefacts).reportJson?.loaded === true
+      : Boolean(text(source.reportJsonUrl));
+  const requiredArtifactSetReady = typeof source.requiredArtifactSetReady === "boolean"
+    ? source.requiredArtifactSetReady
+    : hasDiagnostics
+      ? obj(diagnostics.required).ready === true
+      : reportJsonLoaded;
+  return { reportJsonLoaded, requiredArtifactSetReady, artifactLoadDiagnostics: diagnostics };
+}
+
 function compactDigital(report = {}) {
   const source = obj(report);
-  const analysis = obj(source.analysis || source.digitalGrowthAnalysis || source.result?.analysis);
+  const summary = obj(source.summary);
+  const analysis = obj(source.analysis || source.digitalGrowthAnalysis || source.result?.analysis || summary.analysis);
   const evidence = obj(source.evidenceSummary || source.evidence);
   const repo = obj(evidence.repoSignals);
+  const artefactReadiness = sourceArtefactReadiness(source);
   const ebookRows = arr(repo.ebookSalesPathEvidence).map((row) => ({
     route: row?.route,
     file: row?.file,
@@ -202,15 +220,21 @@ function compactDigital(report = {}) {
   }));
   return {
     status: source.status || "unknown",
-    analysisCompletionState: analysis.auditCompletionState || source.auditCompletionState || null,
+    analysisCompletionState: analysis.auditCompletionState || source.auditCompletionState || summary.auditCompletionState || null,
     jobError: source.jobError || source.error || null,
     workflowRunUrl: source.workflowRunUrl || null,
     reportJsonUrl: source.reportJsonUrl || null,
+    ...artefactReadiness,
     callbackDiagnostics: source.callbackDiagnostics || null,
-    scorecard: analysis.scorecard || source.scorecard || {},
-    overallVerdict: analysis.overallVerdict || source.overallVerdict || "",
+    scorecard: analysis.scorecard || source.scorecard || summary.scorecard || {},
+    overallVerdict: analysis.overallVerdict || source.overallVerdict || summary.overallVerdict || "",
     findings: arr(analysis.findings || source.findings || source.heuristicIssues).slice(0, 80),
-    topActions: arr(analysis.executiveSummary?.top10Actions || source.executiveSummary?.top10Actions).slice(0, 10),
+    topActions: arr(
+      analysis.executiveSummary?.top10Actions
+      || source.executiveSummary?.top10Actions
+      || summary.topActions
+      || summary.executiveSummary?.top10Actions
+    ).slice(0, 10),
     dynamicKeywordStrategy: arr(analysis.dynamicKeywordStrategy || source.dynamicKeywordStrategy).slice(0, 40),
     highValueOpportunities: arr(analysis.highValueOpportunities || source.highValueOpportunities).slice(0, 30),
     limitations: arr(analysis.limitations || source.limitations || evidence.limitations).slice(0, 30),
@@ -238,21 +262,24 @@ function compactDigital(report = {}) {
 
 function compactSeo(report = {}) {
   const source = obj(report);
-  const analysis = obj(source.analysis || source.claudeAnalysis || source.aiAnalysis);
+  const summary = obj(source.summary);
+  const analysis = obj(source.analysis || source.claudeAnalysis || source.aiAnalysis || summary.analysis);
   const coverage = obj(source.coverage);
+  const artefactReadiness = sourceArtefactReadiness(source);
   return {
     status: source.status || "unknown",
-    auditCompletionState: coverage.auditCompletionState || analysis.auditCompletionState || source.auditCompletionState || null,
+    auditCompletionState: source.auditCompletionState || coverage.auditCompletionState || analysis.auditCompletionState || summary.auditCompletionState || null,
     jobError: source.jobError || source.error || null,
     workflowRunUrl: source.workflowRunUrl || null,
     reportJsonUrl: source.reportJsonUrl || null,
+    ...artefactReadiness,
     callbackDiagnostics: source.callbackDiagnostics || null,
     scores: analysis.scores || analysis.scoreTable || source.scores || source.scoreTable || {},
-    executiveSummary: analysis.executiveSummary || source.summary || {},
-    rankedIssueLedger: arr(analysis.rankedIssueLedger || analysis.issues || source.heuristicIssues).slice(0, 100),
-    fullIssueRecords: arr(analysis.fullIssueRecords || analysis.issueRecords).slice(0, 100),
-    bestPracticeGapMatrix: arr(analysis.bestPracticeGapMatrix || analysis.gapMatrix).slice(0, 60),
-    pageTypeFindings: arr(analysis.pageTypeFindings).slice(0, 60),
+    executiveSummary: analysis.executiveSummary || source.executiveSummary || {},
+    rankedIssueLedger: arr(analysis.rankedIssueLedger || analysis.issues || source.rankedIssueLedger || source.heuristicIssues).slice(0, 100),
+    fullIssueRecords: arr(analysis.fullIssueRecords || analysis.issueRecords || source.fullIssueRecords).slice(0, 100),
+    bestPracticeGapMatrix: arr(analysis.bestPracticeGapMatrix || analysis.gapMatrix || source.bestPracticeGapMatrix).slice(0, 60),
+    pageTypeFindings: arr(analysis.pageTypeFindings || source.pageTypeFindings).slice(0, 60),
     sourceMismatches: arr(source.sourceMismatchesThatMatter || coverage.sourceMismatchesThatMatter).slice(0, 60),
     familyDiagnostics: arr(source.familyDiagnostics || coverage.familyDiagnostics).slice(0, 60),
     coverageSummary: arr(coverage.pageFamilyCoverage || source.pageFamilyCoverage).slice(0, 60),
@@ -274,12 +301,14 @@ function compactMobile(report = {}) {
   const coverage = obj(source.coverage);
   const control = obj(source.reportControl || source.control || summary.reportControl);
   const releaseVerdict = source.releaseVerdict || summary.releaseVerdict || null;
+  const artefactReadiness = sourceArtefactReadiness(source);
   return {
     status: source.status || summary.status || "unknown",
-    auditCompletionState: coverage.auditCompletionState || summary.auditCompletionState || null,
+    auditCompletionState: source.auditCompletionState || coverage.auditCompletionState || summary.auditCompletionState || null,
     jobError: source.jobError || source.error || null,
     workflowRunUrl: source.workflowRunUrl || null,
     reportJsonUrl: source.reportJsonUrl || null,
+    ...artefactReadiness,
     callbackDiagnostics: source.callbackDiagnostics || null,
     hardGateBlocked: Boolean(
       source.hardGateBlocked === true
@@ -358,6 +387,8 @@ function stageCompletionState(stage) {
 function stageEvidenceContractErrors(definition, stage) {
   const errors = [];
   if (!text(stage.reportJsonUrl)) errors.push("report.json URL was not supplied");
+  if (stage.reportJsonLoaded !== true) errors.push("report.json was not readable when final synthesis ran");
+  if (stage.requiredArtifactSetReady !== true) errors.push("required machine-readable artefact set was not fully readable");
 
   if (definition.key === "digitalGrowth") {
     const scoreRows = Object.keys(obj(stage.scorecard)).length;
