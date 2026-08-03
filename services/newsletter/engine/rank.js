@@ -13,6 +13,44 @@ const AI_SIGNAL_TERMS = [
   "copilot", "agent", "model release", "foundation model",
 ];
 
+function configuredBlockedDomains() {
+  return new Set(
+    String(process.env.NEWSLETTER_BLOCKED_SOURCE_DOMAINS || "robotwritersai.com")
+      .split(",")
+      .map((value) => value.trim().toLowerCase().replace(/^www\./, ""))
+      .filter(Boolean),
+  );
+}
+
+function sourceHostname(item = {}) {
+  for (const candidate of [item.link, item.sourceFeed]) {
+    try { return new URL(candidate).hostname.toLowerCase().replace(/^www\./, ""); } catch {}
+  }
+  return "";
+}
+
+export function assessNewsletterSourceQuality(item = {}) {
+  const hostname = sourceHostname(item);
+  const blockedDomains = configuredBlockedDomains();
+  const blockedDomain = [...blockedDomains].some((domain) => hostname === domain || hostname.endsWith(`.${domain}`));
+  const link = String(item.link || "").toLowerCase();
+  const promotionalPath = /newsletter-template|speech-promotion|sponsored-post|press-release/.test(link);
+  const summary = String(item.summary || "").trim();
+  const summaryWords = summary.split(/\s+/).filter(Boolean).length;
+  const truncated = /(?:\.\.\.|…|\[…?\]|\[truncated\])\s*$/i.test(summary) || /content truncated/i.test(summary);
+  const bigThreeEligible = !blockedDomain && !promotionalPath && !truncated && summaryWords >= 35;
+
+  return {
+    hostname,
+    blockedDomain,
+    promotionalPath,
+    truncated,
+    summaryWords,
+    bigThreeEligible,
+    publishEligible: !blockedDomain && !promotionalPath,
+  };
+}
+
 function scoreItem(item, { now = new Date() } = {}) {
   let score = 0;
 
@@ -29,8 +67,14 @@ function scoreItem(item, { now = new Date() } = {}) {
   const hits = AI_SIGNAL_TERMS.filter((term) => haystack.includes(term)).length;
   score += Math.min(hits, 5) * 4;
 
-  // Mild bonus for a non-trivial summary (more to work with editorially).
+  // Evidence quality is part of editorial relevance. Complete, attributable
+  // summaries are promoted into the Big Three; truncated or thin records remain
+  // available only for lower-risk slots rather than poisoning the repair loop.
+  const quality = assessNewsletterSourceQuality(item);
   if (item.summary && item.summary.length > 120) score += 3;
+  if (quality.bigThreeEligible) score += 40;
+  if (quality.truncated) score -= 35;
+  if (quality.summaryWords < 20) score -= 12;
 
   return score;
 }
@@ -43,11 +87,20 @@ function scoreItem(item, { now = new Date() } = {}) {
  */
 export function rankAndSelectStories(items, { storyCount, maxPerSourceFeed = 3, now = new Date() } = {}) {
   if (!Array.isArray(items) || items.length === 0) {
-    return { lead: null, stories: [], droppedForDiversity: [] };
+    return { lead: null, stories: [], droppedForDiversity: [], droppedForQuality: [] };
   }
 
+  const droppedForQuality = [];
   const scored = items
-    .map((item) => ({ item, score: scoreItem(item, { now }) }))
+    .map((item) => {
+      const sourceQuality = assessNewsletterSourceQuality(item);
+      return { item: { ...item, sourceQuality, bigThreeEligible: sourceQuality.bigThreeEligible }, sourceQuality, score: scoreItem(item, { now }) };
+    })
+    .filter((entry) => {
+      if (entry.sourceQuality.publishEligible) return true;
+      droppedForQuality.push({ ...entry.item, qualityReason: entry.sourceQuality.blockedDomain ? "blocked-domain" : "promotional-source" });
+      return false;
+    })
     .sort((a, b) => b.score - a.score);
 
   const perFeedCount = new Map();
@@ -71,6 +124,7 @@ export function rankAndSelectStories(items, { storyCount, maxPerSourceFeed = 3, 
     lead: lead || null,
     stories,
     droppedForDiversity,
+    droppedForQuality,
     totalCandidates: items.length,
   };
 }

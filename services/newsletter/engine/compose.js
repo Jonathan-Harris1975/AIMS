@@ -111,17 +111,20 @@ export async function composeIssueSections({ profile, lead, stories, sessionId, 
   const bigThree = [];
   for (const copy of bigCopy) {
     const resolved = resolveSource(copy?.sourceId);
-    if (!resolved || used.has(resolved.id)) continue;
+    if (!resolved || used.has(resolved.id) || resolved.source?.bigThreeEligible === false) continue;
     used.add(resolved.id);
     bigThree.push({ ...attachSource(copy, resolved.source), sourceId: resolved.id });
     if (bigThree.length === 3) break;
   }
   for (let index = 0; bigThree.length < 3 && index < allSources.length; index += 1) {
     const id = `S${index}`;
-    if (used.has(id)) continue;
+    if (used.has(id) || allSources[index]?.bigThreeEligible === false) continue;
     used.add(id);
     bigThree.push({ ...attachSource({}, allSources[index]), sourceId: id });
   }
+  // Fail closed later in validation if fewer than three evidence-grade sources
+  // exist. Do not quietly promote truncated or blocked-source material into the
+  // newsletter's most authoritative section.
 
   let worthUsing = null;
   const worthResolved = resolveSource(data.worthUsing?.sourceId);
@@ -131,7 +134,7 @@ export async function composeIssueSections({ profile, lead, stories, sessionId, 
       sourceId: worthResolved.id,
       title: worthResolved.source.title,
       link: worthResolved.source.link,
-      label: String(data.worthUsing?.label || "Worth Watching").trim(),
+      label: /^worth using$/i.test(String(data.worthUsing?.label || "")) ? "Worth Using" : "Worth Watching",
       summary: String(data.worthUsing?.summary || worthResolved.source.summary || "").trim(),
       whyUseful: String(data.worthUsing?.whyUseful || "").trim(),
     };
