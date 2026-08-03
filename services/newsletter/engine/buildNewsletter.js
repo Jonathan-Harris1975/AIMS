@@ -105,7 +105,12 @@ export async function buildNewsletter({ profileId = "ai-edge", sessionId: reques
     };
   }
 
-  const finalNewsletter = { ...qaResult.newsletter, heroImageUrl: heroImageResult.imageUrl };
+  const finalNewsletter = {
+    ...qaResult.newsletter,
+    heroImageUrl: heroImageResult.imageUrl,
+    heroImageStatus: heroImageResult.imageStatus || (heroImageResult.fallback ? "fallback" : "generated"),
+    heroImageError: heroImageResult.error || null,
+  };
   const finalValidation = runDeterministicValidators(finalNewsletter, {
     expectedStoryCount: Math.min(9, 1 + stories.length),
     requireHeroImage: true,
@@ -145,6 +150,7 @@ export async function buildNewsletter({ profileId = "ai-edge", sessionId: reques
     droppedForDiversity: droppedForDiversity.length,
     droppedForQuality: droppedForQuality.length,
     htmlUrl: stored.htmlUrl,
+    heroImageStatus: finalNewsletter.heroImageStatus,
   });
 
   return {
