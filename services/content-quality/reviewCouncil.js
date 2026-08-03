@@ -519,6 +519,9 @@ export async function runReviewCouncilGate({
   let currentGate = gate;
   let repairedArtifact = artifact;
   let repairedGate = gate;
+  let previousFingerprint = "";
+  let stagnantAttempts = 0;
+  const stagnationLimit = Math.max(1, Math.min(3, Number(process.env.REVIEW_COUNCIL_STAGNATION_LIMIT || 2)));
 
   for (let attempt = 1; attempt <= effectiveMaxAttempts; attempt += 1) {
     repairedArtifact = await repairArtifact(currentArtifact, { contentType, gate: currentGate, attempt });
@@ -541,6 +544,24 @@ export async function runReviewCouncilGate({
 
     if (repairedGate?.ok) break;
 
+    const fingerprint = JSON.stringify({
+      score: repairedGate?.score ?? null,
+      defects: [...(repairedGate?.defects || [])].map(String).sort(),
+    });
+    stagnantAttempts = fingerprint === previousFingerprint ? stagnantAttempts + 1 : 0;
+    previousFingerprint = fingerprint;
+    if (stagnantAttempts >= stagnationLimit) {
+      logger?.("review_council.stagnation_escalated", {
+        councilKey,
+        attempt,
+        maxAttempts: effectiveMaxAttempts,
+        score: repairedGate?.score ?? null,
+        defects: repairedGate?.defects?.slice?.(0, 8) || [],
+        stagnationLimit,
+      });
+      break;
+    }
+
     // Feed the (still-imperfect) repaired artefact back in as the input to
     // the next attempt so successive passes compound rather than repeat the
     // same fix against the untouched original.
@@ -554,7 +575,7 @@ export async function runReviewCouncilGate({
     originalGate: gate,
     repairedGate,
     attempts: [
-      `${attemptLog.length} of ${effectiveMaxAttempts} minimum repair-and-revalidate attempts used`,
+      `${attemptLog.length} of ${effectiveMaxAttempts} bounded repair-and-revalidate attempts used`,
       "deterministic text repair",
       "gate re-validation",
       "specialist-seat protocol and hard-gate arbitration",
@@ -564,13 +585,15 @@ export async function runReviewCouncilGate({
   });
   reviewCouncil.attemptLog = attemptLog;
   reviewCouncil.attemptsUsed = attemptLog.length;
-  reviewCouncil.minimumAttemptsRequired = effectiveMaxAttempts;
+  reviewCouncil.maximumAttemptsAllowed = effectiveMaxAttempts;
+  reviewCouncil.stagnationLimit = stagnationLimit;
 
   logger?.("review_council.gate_review", {
     councilKey,
     approved: reviewCouncil.approved,
     attemptsUsed: attemptLog.length,
-    minimumAttemptsRequired: effectiveMaxAttempts,
+    maximumAttemptsAllowed: effectiveMaxAttempts,
+    stagnationLimit,
     originalScore: reviewCouncil.originalScore,
     repairedScore: reviewCouncil.repairedScore,
     remainingDefects: reviewCouncil.defectsRemaining?.slice?.(0, 8) || [],
