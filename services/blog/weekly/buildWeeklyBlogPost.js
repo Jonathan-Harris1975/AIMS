@@ -261,44 +261,19 @@ function blogWeeklyQaEnabled() {
   return String(process.env.BLOG_WEEKLY_QA_ENABLED || "true").trim().toLowerCase() !== "false";
 }
 
-function getBlogFallbackImageUrl() {
-  return String(
-    process.env.BLOG_FALLBACK_IMAGE_URL
-      || process.env.BLOG_RSS_IMAGE_URL
-      || ""
-  ).trim();
-}
-
 async function resolveBlogArtwork({ sessionId, imagePrompt, week, dateLabel }) {
   const art = await createBlogArtwork({ sessionId, prompt: imagePrompt, week, date: dateLabel });
 
   if (art?.ok && art.publicUrl) {
     return {
       imageUrl: art.publicUrl,
-      imageStatus: "generated",
-      imageError: null,
+      imageStatus: art.fallback ? "fallback" : "generated",
+      imageError: art.error || null,
       imageBucketKey: art.bucketKey || null,
     };
   }
 
-  const fallbackImageUrl = getBlogFallbackImageUrl();
   const imageError = art?.error || "Unknown blog artwork error";
-
-  if (fallbackImageUrl) {
-    warn("blog.weekly.image.fallback", {
-      week,
-      sessionId,
-      imageUrl: fallbackImageUrl,
-      error: imageError,
-    });
-
-    return {
-      imageUrl: fallbackImageUrl,
-      imageStatus: "fallback",
-      imageError,
-      imageBucketKey: null,
-    };
-  }
 
   warn("blog.weekly.image.unavailable", {
     week,
@@ -551,6 +526,16 @@ export async function buildWeeklyBlogPost({ days, weekId } = {}) {
       week: window.week,
       dateLabel: window.dateLabel,
     });
+    if (!artwork.imageUrl) {
+      return {
+        ok: false,
+        quarantined: true,
+        reason: "artwork-unavailable",
+        week: window.week,
+        sessionId,
+        error: artwork.imageError || "Weekly blog did not produce a verified AI-relevant image.",
+      };
+    }
     const imageUrl = artwork.imageUrl;
 
     const { postPath, postUrl, postMetaUrl, postsManifestUrl, blogHubUrl, weeklyArchiveUrl } = buildSiteBlogUrls(slug, prefix);
