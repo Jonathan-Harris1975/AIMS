@@ -2,24 +2,14 @@
 import { info, error, debug } from "../../logger.js";
 import { uploadBuffer } from "../shared/utils/r2-client.js";
 import { generateBlogArtwork, generateNewsletterArtwork, generateSocialBlogArtwork } from "./utils/artwork.js";
+import { detectImageFormat } from "./utils/imageFormat.js";
+import { runArtworkTask } from "./utils/artworkTask.js";
 
 const DEFAULT_BLOG_IMAGES_BUCKET_KEY = "blogImages";
 const BLOG_BUCKET_KEY = "blog";
 const ARTWORK_TIMEOUT_MS =
   Number(process.env.BLOG_ARTWORK_TIMEOUT_MS || process.env.ARTWORK_TIMEOUT_MS || process.env.AI_TIMEOUT)
   || 120_000;
-
-function withTimeout(promise, timeoutMs, label) {
-  let timer;
-
-  return Promise.race([
-    promise,
-    new Promise((_, reject) => {
-      timer = setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs);
-      timer.unref?.();
-    }),
-  ]).finally(() => clearTimeout(timer));
-}
 
 function normaliseKeyPrefix(value = "") {
   return String(value || "")
@@ -80,19 +70,19 @@ export async function createBlogArtwork(input) {
 
     const theme = prompt || `Blog header artwork for AI Weekly ${sessionId}`;
 
-    const base64Data = await withTimeout(
-      (artworkMode === "newsletter" ? generateNewsletterArtwork : artworkMode === "social-blog" ? generateSocialBlogArtwork : generateBlogArtwork)(theme, { date: artworkDate }),
+    const base64Data = await runArtworkTask(
+      (signal) => (artworkMode === "newsletter" ? generateNewsletterArtwork : artworkMode === "social-blog" ? generateSocialBlogArtwork : generateBlogArtwork)(theme, { date: artworkDate, signal }),
       ARTWORK_TIMEOUT_MS,
-      "Blog artwork generation"
+      "Blog artwork generation",
     );
-    const buffer = Buffer.from(base64Data, "base64");
+    const image = detectImageFormat(base64Data);
 
-    const key = keyPrefix ? `${keyPrefix}/${sessionId}.png` : `${sessionId}.png`;
+    const key = keyPrefix ? `${keyPrefix}/${sessionId}.${image.extension}` : `${sessionId}.${image.extension}`;
     const publicUrl = await uploadBuffer(
       bucketKey,
       key,
-      buffer,
-      "image/png"
+      image.buffer,
+      image.mimeType,
     );
 
     log("done", { key, publicUrl });

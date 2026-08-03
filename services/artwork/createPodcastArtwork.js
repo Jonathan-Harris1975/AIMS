@@ -2,6 +2,8 @@
 import { info, warn, error, debug } from "../../logger.js";
 import { uploadBuffer } from "../shared/utils/r2-client.js";
 import { generatePodcastArtwork } from "./utils/artwork.js";
+import { detectImageFormat } from "./utils/imageFormat.js";
+import { runArtworkTask } from "./utils/artworkTask.js";
 import { emitQaEvent } from "../shared/utils/qaEvents.js";
 
 const R2_BUCKET_ART_KEY = "art";
@@ -43,21 +45,6 @@ function pickDeterministicFallbackUrl(sessionId) {
   return pool[stableIndex(sessionId, pool.length)];
 }
 
-function withTimeout(promise, timeoutMs, label) {
-  let timer;
-
-  return Promise.race([
-    promise,
-    new Promise((_, reject) => {
-      timer = setTimeout(
-        () => reject(new Error(`${label} timed out after ${timeoutMs}ms`)),
-        timeoutMs
-      );
-      timer.unref?.();
-    }),
-  ]).finally(() => clearTimeout(timer));
-}
-
 export async function createPodcastArtwork(input) {
   const sessionId = typeof input === "string" ? input : input?.sessionId;
   const prompt = typeof input === "object" ? input?.prompt : undefined;
@@ -67,19 +54,19 @@ export async function createPodcastArtwork(input) {
 
     const theme = prompt || `Podcast artwork for AI Weekly episode ${sessionId}`;
 
-    const base64Data = await withTimeout(
-      generatePodcastArtwork(theme),
+    const base64Data = await runArtworkTask(
+      (signal) => generatePodcastArtwork(theme, { signal }),
       PODCAST_ARTWORK_TIMEOUT_MS,
-      "Podcast artwork generation"
+      "Podcast artwork generation",
     );
-    const buffer = Buffer.from(base64Data, "base64");
+    const image = detectImageFormat(base64Data);
 
-    const key = `${sessionId}.png`;
+    const key = `${sessionId}.${image.extension}`;
     const publicUrl = await uploadBuffer(
       R2_BUCKET_ART_KEY,
       key,
-      buffer,
-      "image/png"
+      image.buffer,
+      image.mimeType,
     );
 
     info("artwork.podcast.generated", {
