@@ -23,15 +23,19 @@ const MAX_SUMMARY_CHARS =
     ? Number(process.env.MAX_SUMMARY_CHARS)
     : 1100;
 
-const PREFERRED_SUMMARY_WORDS =
+const PREFERRED_SUMMARY_WORDS = Math.min(
+  60,
   Number(process.env.RSS_PREFERRED_SUMMARY_WORDS) > 0
     ? Number(process.env.RSS_PREFERRED_SUMMARY_WORDS)
-    : 80;
+    : 60,
+);
 
-const ABSOLUTE_SUMMARY_WORDS =
+const ABSOLUTE_SUMMARY_WORDS = Math.min(
+  60,
   Number(process.env.RSS_ABSOLUTE_SUMMARY_WORDS) > 0
     ? Number(process.env.RSS_ABSOLUTE_SUMMARY_WORDS)
-    : 110;
+    : 60,
+);
 
 const TITLE_BRAND_PATTERNS = [
   { pattern: /^\s*title\s*:/i, message: 'Title uses banned prefix "Title:"' },
@@ -236,7 +240,7 @@ export function USER_ITEM({
     "Return only:",
     `1. headline (maximum ${maxTitleWords} words)`,
     "2. blank line",
-    `3. summary (${minChars}-${maxChars} characters, 70-90 words preferred, 110 words maximum for published RSS)`,
+    `3. summary (${minChars}-${maxChars} characters, 45-60 words preferred, 60 words maximum for published RSS)`,
   ]
     .filter(Boolean)
     .join("\n");
@@ -340,7 +344,7 @@ export function clampSummaryToWindow(
 
 export function clampSummaryToPreferredBrief(summary = "", maxWords = PREFERRED_SUMMARY_WORDS) {
   const normalized = normalizeSummaryText(summary);
-  const limit = Math.max(30, Number(maxWords) || PREFERRED_SUMMARY_WORDS);
+  const limit = Math.min(ABSOLUTE_SUMMARY_WORDS, Math.max(30, Number(maxWords) || PREFERRED_SUMMARY_WORDS));
   const words = normalized.split(/\s+/).filter(Boolean);
 
   if (!normalized || words.length <= limit) return normalized;
