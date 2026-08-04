@@ -256,6 +256,11 @@ test("Diagnostic redaction removes email, phone and long token values", () => {
   assert.doesNotMatch(output, /person@example\.com|7700 900123|abcdefghijklmnopqrstuvwxyz/);
 });
 
-test("Migration manifest requires both the Jotform and Zernio schemas", () => {
-  assert.deepEqual(COMMS_HUB_REQUIRED_MIGRATIONS, ["0001_comms_hub", "0002_zernio_social"]);
+test("Migration manifest requires all delivered Comms Hub phases", () => {
+  assert.deepEqual(COMMS_HUB_REQUIRED_MIGRATIONS, [
+    "0001_comms_hub",
+    "0002_zernio_social",
+    "0003_ai_workflows",
+    "0004_hardening",
+  ]);
 });
