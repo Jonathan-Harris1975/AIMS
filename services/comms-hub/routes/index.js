@@ -1,8 +1,10 @@
 import express from "express";
 import { log } from "../../../logger.js";
 import { recordProviderOutcome } from "../../shared/utils/operationalExcellence.js";
-import { getCommsHubReadiness, loadCommsHubConfig } from "../config.js";
-import { newCorrelationId } from "../domain/ids.js";
+import { getProviderDiagnosticsForRoute } from "../../shared/utils/ai-service.js";
+import { booleanValue, getCommsHubReadiness, loadCommsHubConfig } from "../config.js";
+import { newCorrelationId, stableId } from "../domain/ids.js";
+import { normalisePriorityOverride } from "../domain/ai.js";
 import { readJotformWebhookEnvelope } from "../domain/webhook.js";
 import { readZernioWebhookEnvelope } from "../domain/zernioWebhook.js";
 import { safeErrorLog } from "../domain/redaction.js";
@@ -14,7 +16,9 @@ import {
   kickCommsHubSocialPoll,
 } from "../runtime.js";
 import { processJotformIntake } from "../intakeService.js";
-import { executeSocialAction } from "../socialActionsService.js";
+import { executeSocialAction, requestSocialActionApproval } from "../socialActionsService.js";
+import { decideApproval } from "../approvalService.js";
+import { sendReplyDraft } from "../replyDraftService.js";
 import { processZernioWebhook, reconcileZernioWebhook, withZernioAcceptanceDeadline } from "../socialService.js";
 
 function publicError(error) {
@@ -37,6 +41,22 @@ function publicError(error) {
 function validConversationId(value) {
   const candidate = String(value || "").trim();
   return /^cnv_[0-9a-hjkmnp-tv-z]{26}$/.test(candidate) ? candidate : "";
+}
+
+function authenticatedActor(req) {
+  return String(
+    req?.user?.email
+      || req?.user?.id
+      || req?.aimsAuth?.subject
+      || req?.aimsAuth?.strategy
+      || "authenticated-aims-user"
+  ).trim().slice(0, 200);
+}
+
+function boundedId(value, prefix) {
+  const candidate = String(value || "").trim();
+  const pattern = new RegExp(`^${prefix}_[0-9a-hjkmnp-tv-z]{26}$`);
+  return pattern.test(candidate) ? candidate : "";
 }
 
 function requireReady(runtimeReadinessProvider) {
@@ -63,6 +83,7 @@ export function createCommsHubRouter({
     const configuration = getCommsHubReadiness();
     const runtime = runtimeReadinessProvider();
     const ready = configuration.ready && runtime.ready;
+    const aiEnabled = booleanValue(process.env.COMMS_HUB_AI_ENABLED, false);
     return res.status(ready ? 200 : 503).json({
       ok: ready,
       service: "comms-hub",
@@ -89,6 +110,11 @@ export function createCommsHubRouter({
           video: ["youtube"],
         },
         emailHost: "one.com",
+      },
+      capabilities: {
+        ai: configuration.enabled && aiEnabled,
+        approvals: aiEnabled ? true : booleanValue(process.env.COMMS_HUB_APPROVALS_ENFORCED, true),
+        backups: booleanValue(process.env.COMMS_HUB_BACKUP_ENABLED, false),
       },
     });
   });
@@ -366,6 +392,192 @@ export function createCommsHubRouter({
     } catch (error) {
       next(error);
     }
+  });
+
+
+  router.post("/conversations/:conversationId/ai/analyse", async (req, res, next) => {
+    const startedAt = Date.now();
+    try {
+      requireReady(runtimeReadinessProvider);
+      const conversationId = validConversationId(req.params.conversationId);
+      if (!conversationId) throw new CommsHubError(400, "conversation_id_invalid", "Conversation ID is invalid.");
+      const result = await contextProvider().aiWorkflowService.analyseConversation(conversationId, {
+        operation: String(req.body?.operation || "analyse").trim().slice(0, 100),
+        scheduleFollowUp: req.body?.scheduleFollowUp !== false,
+      });
+      recordProviderOutcome({ routeKey: "comms-hub:ai-analyse", provider: "aims-ai-router", ok: true, durationMs: Date.now() - startedAt, status: "complete" });
+      return res.status(201).json({ ok: true, service: "comms-hub", result });
+    } catch (error) {
+      recordProviderOutcome({ routeKey: "comms-hub:ai-analyse", provider: "aims-ai-router", ok: false, durationMs: Date.now() - startedAt, status: error?.code || "failed" });
+      next(error);
+    }
+  });
+
+  router.get("/conversations/:conversationId/ai", async (req, res, next) => {
+    try {
+      const conversationId = validConversationId(req.params.conversationId);
+      if (!conversationId) throw new CommsHubError(400, "conversation_id_invalid", "Conversation ID is invalid.");
+      const state = await contextProvider().aiRepository.getConversationAiState(conversationId);
+      return res.status(200).json({ ok: true, service: "comms-hub", conversationId, ...state });
+    } catch (error) { next(error); }
+  });
+
+  router.get("/ai/status", async (_req, res, next) => {
+    try {
+      const active = contextProvider();
+      return res.status(200).json({
+        ok: true,
+        service: "comms-hub",
+        enabled: active.config.aiEnabled,
+        approvalsEnforced: active.config.approvalsEnforced,
+        approvedKnowledgeInstances: active.config.aiSearchApprovedInstances,
+        routes: [
+          "commsHubTriage", "commsHubModeration", "commsHubSummary",
+          "commsHubDraftContact", "commsHubDraftContribute", "commsHubDraftPodcast", "commsHubDraftSocial",
+          "commsHubFollowUp",
+        ]
+          .map((route) => getProviderDiagnosticsForRoute(route)),
+      });
+    } catch (error) { next(error); }
+  });
+
+  router.post("/approvals/:approvalId/decision", async (req, res, next) => {
+    try {
+      const approvalId = boundedId(req.params.approvalId, "apr");
+      if (!approvalId) throw new CommsHubError(400, "approval_id_invalid", "Approval ID is invalid.");
+      const approval = await decideApproval({
+        repository: contextProvider().aiRepository,
+        approvalId,
+        decision: req.body?.decision,
+        decidedBy: authenticatedActor(req),
+        reason: req.body?.reason,
+      });
+      return res.status(200).json({ ok: true, service: "comms-hub", approval });
+    } catch (error) { next(error); }
+  });
+
+  router.get("/queue", async (req, res, next) => {
+    try {
+      const requested = Number(req.query?.limit || 0);
+      const limit = Number.isInteger(requested) && requested > 0 ? Math.min(requested, 200) : 50;
+      const conversations = await contextProvider().aiRepository.listPriorityQueue({ limit });
+      return res.status(200).json({ ok: true, service: "comms-hub", conversations });
+    } catch (error) { next(error); }
+  });
+
+  router.post("/conversations/:conversationId/priority", async (req, res, next) => {
+    try {
+      const conversationId = validConversationId(req.params.conversationId);
+      if (!conversationId) throw new CommsHubError(400, "conversation_id_invalid", "Conversation ID is invalid.");
+      const override = normalisePriorityOverride(req.body || {});
+      const createdAt = new Date().toISOString();
+      const result = await contextProvider().aiRepository.overridePriority({
+        id: stableId("pro", conversationId, override.score, override.reason, createdAt),
+        conversationId,
+        score: override.score,
+        label: override.label,
+        reason: override.reason,
+        actor: authenticatedActor(req),
+        createdAt,
+      });
+      return res.status(201).json({ ok: true, service: "comms-hub", ...result });
+    } catch (error) { next(error); }
+  });
+
+  router.post("/drafts/:draftId/send", async (req, res, next) => {
+    try {
+      const draftId = boundedId(req.params.draftId, "drf");
+      if (!draftId) throw new CommsHubError(400, "reply_draft_id_invalid", "Reply draft ID is invalid.");
+      const result = await sendReplyDraft({ draftId, context: contextProvider() });
+      return res.status(200).json({ ok: true, service: "comms-hub", ...result });
+    } catch (error) { next(error); }
+  });
+
+  router.post("/social/conversations/:conversationId/approvals/:action", async (req, res, next) => {
+    try {
+      const conversationId = validConversationId(req.params.conversationId);
+      if (!conversationId) throw new CommsHubError(400, "conversation_id_invalid", "Conversation ID is invalid.");
+      const approval = await requestSocialActionApproval({
+        conversationId,
+        action: req.params.action,
+        body: req.body || {},
+        idempotencyKey: req.get("idempotency-key"),
+        requestedBy: authenticatedActor(req),
+        context: contextProvider(),
+      });
+      return res.status(201).json({ ok: true, service: "comms-hub", approval });
+    } catch (error) { next(error); }
+  });
+
+  router.post("/workflows/podcast/:conversationId/start", async (req, res, next) => {
+    try {
+      const conversationId = validConversationId(req.params.conversationId);
+      if (!conversationId) throw new CommsHubError(400, "conversation_id_invalid", "Conversation ID is invalid.");
+      const workflow = await contextProvider().podcastWorkflowService.start(conversationId);
+      return res.status(201).json({ ok: true, service: "comms-hub", workflow });
+    } catch (error) { next(error); }
+  });
+
+  router.post("/workflows/podcast/:conversationId/advance", async (req, res, next) => {
+    try {
+      const conversationId = validConversationId(req.params.conversationId);
+      if (!conversationId) throw new CommsHubError(400, "conversation_id_invalid", "Conversation ID is invalid.");
+      const result = await contextProvider().podcastWorkflowService.advance({
+        conversationId,
+        action: req.body?.action,
+        idempotencyKey: req.get("idempotency-key"),
+        actor: authenticatedActor(req),
+        data: req.body?.data || {},
+      });
+      return res.status(200).json({ ok: true, service: "comms-hub", ...result });
+    } catch (error) { next(error); }
+  });
+
+  router.post("/follow-ups/drain", async (req, res, next) => {
+    try {
+      const requested = Number(req.body?.limit || 0);
+      const active = contextProvider();
+      const limit = Number.isInteger(requested) && requested > 0 ? Math.min(requested, active.config.followUpBatchSize) : active.config.followUpBatchSize;
+      const result = await active.followUpWorker.runOnce({ limit });
+      return res.status(200).json({ ok: true, service: "comms-hub", ...result });
+    } catch (error) { next(error); }
+  });
+
+  router.get("/providers/health", async (_req, res, next) => {
+    try {
+      const health = await contextProvider().providerHealthService.status();
+      return res.status(health.overall === "unavailable" ? 503 : 200).json({ ok: health.overall !== "unavailable", service: "comms-hub", health });
+    } catch (error) { next(error); }
+  });
+
+  router.post("/providers/health/snapshot", async (_req, res, next) => {
+    try {
+      const captured = await contextProvider().providerHealthService.capture();
+      return res.status(201).json({ ok: true, service: "comms-hub", captured: captured.length, providers: captured });
+    } catch (error) { next(error); }
+  });
+
+  router.post("/backups/run", async (req, res, next) => {
+    try {
+      const backup = await contextProvider().backupService.runBackup({ actor: authenticatedActor(req) });
+      return res.status(201).json({ ok: true, service: "comms-hub", backup });
+    } catch (error) { next(error); }
+  });
+
+  router.get("/backups/status", async (_req, res, next) => {
+    try {
+      const status = await contextProvider().aiRepository.getLatestBackupStatus();
+      return res.status(200).json({ ok: true, service: "comms-hub", ...status });
+    } catch (error) { next(error); }
+  });
+
+  router.post("/backups/:backupRunId/validate", async (req, res, next) => {
+    try {
+      const backupRunId = boundedId(req.params.backupRunId, "bkp");
+      if (!backupRunId) throw new CommsHubError(400, "backup_run_id_invalid", "Backup run ID is invalid.");
+      const validation = await contextProvider().backupService.validateRestore(backupRunId, { actor: authenticatedActor(req) });
+      return res.status(200).json({ ok: true, service: "comms-hub", validation });
+    } catch (error) { next(error); }
   });
 
   return router;
