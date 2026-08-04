@@ -4,6 +4,7 @@ import {
   GetObjectCommand,
   HeadObjectCommand,
   ListObjectsV2Command,
+  DeleteObjectCommand,
 } from "@aws-sdk/client-s3";
 import { CommsHubError } from "../errors.js";
 import { sha256Hex } from "../domain/ids.js";
@@ -34,7 +35,7 @@ export class PrivateR2Client {
     if (!this.bucket) {
       throw new CommsHubError(503, "private_r2_unconfigured", "R2_BUCKET_COMMS_HUB_PRIVATE is not configured.", {
         failureClass: "permanent",
-        publicMessage: "Private backup storage is not configured.",
+        publicMessage: "Private object storage is not configured.",
       });
     }
   }
@@ -72,6 +73,12 @@ export class PrivateR2Client {
       etag: String(response.ETag || "").replace(/^"|"$/g, ""),
       metadata: response.Metadata || {},
     };
+  }
+
+  async delete(key) {
+    this.assertConfigured();
+    await this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
+    return { bucket: this.bucket, key, deleted: true };
   }
 
   async list(prefix = "") {
