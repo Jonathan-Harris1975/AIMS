@@ -1,5 +1,6 @@
 import { CommsHubError } from "../errors.js";
 import { COMMS_HUB_REQUIRED_MIGRATIONS } from "../migrations/manifest.js";
+import { stableId } from "../domain/ids.js";
 
 function json(value) {
   return JSON.stringify(value);
@@ -86,7 +87,27 @@ export class CommsHubRepository {
           intake.processedAt,
           json({ questionId: attachment.questionId, label: attachment.label }),
         ],
-      })),
+      })),      {
+        sql: `INSERT OR REPLACE INTO comms_hub_search_documents
+          (id, object_type, object_id, conversation_id, contact_id, channel, searchable_text, metadata_json, updated_at)
+          VALUES (?, 'contact', ?, NULL, ?, 'form', ?, '{}', ?)`,
+        params: [stableId("srch", "contact", intake.contactId), intake.contactId, intake.contactId,
+          `${intake.contact.name} ${intake.contact.email} ${intake.contact.phone}`, intake.processedAt],
+      },
+      {
+        sql: `INSERT OR REPLACE INTO comms_hub_search_documents
+          (id, object_type, object_id, conversation_id, contact_id, channel, searchable_text, metadata_json, updated_at)
+          VALUES (?, 'conversation', ?, ?, ?, 'form', ?, '{}', ?)`,
+        params: [stableId("srch", "conversation", intake.conversationId), intake.conversationId,
+          intake.conversationId, intake.contactId, `${intake.message.subject} ${intake.message.bodyText}`, intake.processedAt],
+      },
+      {
+        sql: `INSERT OR REPLACE INTO comms_hub_search_documents
+          (id, object_type, object_id, conversation_id, contact_id, channel, searchable_text, metadata_json, updated_at)
+          VALUES (?, 'message', ?, ?, ?, 'form', ?, '{}', ?)`,
+        params: [stableId("srch", "message", intake.messageId), intake.messageId,
+          intake.conversationId, intake.contactId, `${intake.message.subject} ${intake.message.bodyText}`, intake.processedAt],
+      },
       {
         sql: `INSERT OR IGNORE INTO comms_hub_intake_events
           (event_id, conversation_id, provider, form_id, submission_id, correlation_id,
@@ -392,6 +413,33 @@ export class CommsHubRepository {
         params: [event.metadata?.deliveryStatus || event.eventType, event.processedAt, event.providerMessageId],
       });
     }
+
+    statements.push(
+      {
+        sql: `INSERT OR REPLACE INTO comms_hub_search_documents
+          (id, object_type, object_id, conversation_id, contact_id, channel, searchable_text, metadata_json, updated_at)
+         VALUES (?, 'contact', ?, NULL, ?, ?, ?, '{}', ?)`,
+        params: [stableId("srch", "contact", event.contactId), event.contactId, event.contactId,
+          event.threadType === "dm" ? "social_dm" : "social_comment",
+          `${event.identity?.displayName || ""} ${event.identity?.username || ""}`, event.processedAt],
+      },
+      {
+        sql: `INSERT OR REPLACE INTO comms_hub_search_documents
+          (id, object_type, object_id, conversation_id, contact_id, channel, searchable_text, metadata_json, updated_at)
+         VALUES (?, 'conversation', ?, ?, ?, ?, ?, '{}', ?)`,
+        params: [stableId("srch", "conversation", event.conversationId), event.conversationId,
+          event.conversationId, event.contactId, event.threadType === "dm" ? "social_dm" : "social_comment",
+          `${event.subject || ""} ${event.bodyText || ""}`, event.processedAt],
+      }
+    );
+    if (["message", "comment", "message_mutation"].includes(event.kind)) statements.push({
+      sql: `INSERT OR REPLACE INTO comms_hub_search_documents
+        (id, object_type, object_id, conversation_id, contact_id, channel, searchable_text, metadata_json, updated_at)
+       VALUES (?, 'message', ?, ?, ?, ?, ?, '{}', ?)`,
+      params: [stableId("srch", "message", event.messageId), event.messageId, event.conversationId,
+        event.contactId, event.threadType === "dm" ? "social_dm" : "social_comment",
+        `${event.subject || ""} ${event.bodyText || ""}`, event.processedAt],
+    });
 
     statements.push({
       sql: `INSERT OR IGNORE INTO comms_hub_social_events
