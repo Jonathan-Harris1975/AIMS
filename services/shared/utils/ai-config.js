@@ -53,8 +53,8 @@ const google25FlashLite = provider(
 
 const gpt56Luna = provider(
   "gpt56Luna",
-  ["OPENROUTER_GPT_5_6_LUNA", "OPENROUTER_GPT56_LUNA", "OPENROUTER_CHATGPT"],
-  [...SHARED_OPENROUTER_KEY, "OPENROUTER_API_KEY_GPT_5_6_LUNA", "OPENROUTER_API_KEY_GPT56_LUNA", "OPENROUTER_API_KEY_CHATGPT"]
+  ["OPENROUTER_GPT_5_6_LUNA", "OPENROUTER_GPT56_LUNA"],
+  [...SHARED_OPENROUTER_KEY, "OPENROUTER_API_KEY_GPT_5_6_LUNA", "OPENROUTER_API_KEY_GPT56_LUNA"]
 );
 
 const claudeSonnet5 = provider(
@@ -164,8 +164,8 @@ export const aiConfig = {
     blogWeekly: routeChain(["standard", "summary", "fallback"], ["google25FlashLite", "gpt56Luna", "gpt56Sol"]),
     blogSocial: routeChain(["highQuality", "audit", "standard", "summary", "fallback"], ["claudeSonnet5", "anthropic46", "google25FlashLite"]),
     onBrandAudit: routeChain(["audit", "highQuality", "standard", "fallback"], ["anthropic46", "gpt56Sol", "google25FlashLite", "gpt56Luna", "meta"]),
-    auditForensic: routeChain(["audit", "highQuality"], ["anthropic46", "google25FlashLite", "gpt56Sol", "gpt56Luna", "meta"]),
-    zernioDaily: routeChain(["highQuality", "standard", "fast", "fallback"], ["claudeSonnet5", "anthropic46", "gpt56Luna", "google25FlashLite", "gpt56Sol"]),
+    auditForensic: routeChain(["audit", "highQuality", "standard", "fallback"], ["anthropic46", "gpt56Sol", "google25FlashLite", "gpt56Luna", "meta"]),
+    zernioDaily: routeChain(["highQuality", "standard", "fast", "fallback"], ["claudeSonnet5", "anthropic46", "google25FlashLite"]),
     zernioMiniSeriesResearch: routeChain(["audit", "highQuality", "standard"], ["claudeSonnet5", "anthropic46"]),
     zernioMiniSeriesTheme: routeChain(["highQuality", "audit", "standard"], ["claudeSonnet5", "anthropic46"]),
     zernioMiniSeriesPost: routeChain(["highQuality", "standard", "audit"], ["claudeSonnet5", "anthropic46"]),
@@ -190,6 +190,18 @@ export const aiConfig = {
     newsletterAudienceReview: routeChain(["highQuality", "audit"], ["claudeSonnet5", "anthropic46"]),
     newsletterCouncilChair: routeChain(["audit", "highQuality"], ["claudeSonnet5", "anthropic46"]),
     newsletterHeroPrompt: routeChain(["summary", "fast", "fallback"], ["meta", "google25FlashLite"]),
+    // Comms Hub Phase 3. Triage and moderation favour structured JSON; drafting
+    // and summarisation use independent routes so a single model does not both
+    // propose and approve a high-risk response.
+    commsHubTriage: routeChain(["json", "audit", "standard"], ["gpt56Sol", "claudeSonnet5", "google25FlashLite"]),
+    commsHubModeration: routeChain(["audit", "json", "highQuality"], ["claudeSonnet5", "gpt56Sol", "anthropic46"]),
+    commsHubSummary: routeChain(["summary", "json", "fast"], ["gpt56Luna", "google25FlashLite", "gpt56Sol"]),
+    commsHubDraft: routeChain(["highQuality", "standard", "audit"], ["claudeSonnet5", "gpt56Sol", "anthropic46"]),
+    commsHubDraftContact: routeChain(["standard", "highQuality", "audit"], ["gpt56Sol", "claudeSonnet5", "anthropic46"]),
+    commsHubDraftContribute: routeChain(["highQuality", "standard", "audit"], ["claudeSonnet5", "gpt56Sol", "anthropic46"]),
+    commsHubDraftPodcast: routeChain(["highQuality", "audit", "standard"], ["claudeSonnet5", "anthropic46", "gpt56Sol"]),
+    commsHubDraftSocial: routeChain(["fast", "standard", "highQuality"], ["gpt56Luna", "gpt56Sol", "claudeSonnet5"]),
+    commsHubFollowUp: routeChain(["summary", "fast", "json"], ["gpt56Luna", "google25FlashLite", "gpt56Sol"]),
   },
 
   commonParams: { temperature: 0.65, top_p: 0.9, timeout: 90000 },
