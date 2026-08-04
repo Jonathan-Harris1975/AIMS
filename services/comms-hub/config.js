@@ -70,6 +70,17 @@ function csvValue(value) {
   return normalise(value).split(",").map((item) => item.trim()).filter(Boolean);
 }
 
+function jsonValue(value, fallback = {}) {
+  const text = normalise(value);
+  if (!text) return fallback;
+  try {
+    const parsed = JSON.parse(text);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : fallback;
+  } catch {
+    throw new CommsHubError(503, "comms_hub_configuration_invalid", "Configured JSON value is invalid.");
+  }
+}
+
 function decimalValue(value, fallback, name, { min = 0, max = 1 } = {}) {
   const text = normalise(value);
   if (!text) return fallback;
@@ -181,6 +192,23 @@ export function getCommsHubMissingEnv(env = process.env) {
     if (!restoreBucket || restoreBucket === primaryBucket || restoreBucket === privateBucket) missing.push("R2_BUCKET_COMMS_HUB_RESTORE");
     if (!restoreDatabase || restoreDatabase === sourceDatabase) missing.push("COMMS_HUB_RESTORE_DATABASE_ID");
   }
+  if (booleanValue(env.COMMS_HUB_EMAIL_ENABLED, false)) {
+    for (const name of ["COMMS_HUB_ONECOM_ACCOUNT_KEY", "COMMS_HUB_ONECOM_EMAIL_ADDRESS", "COMMS_HUB_ONECOM_USERNAME", "COMMS_HUB_ONECOM_PASSWORD", "COMMS_HUB_ONECOM_IMAP_HOST", "COMMS_HUB_ONECOM_SMTP_HOST", "R2_BUCKET_COMMS_HUB_PRIVATE", "COMMS_HUB_ATTACHMENT_SCANNER_URL", "COMMS_HUB_ATTACHMENT_SCANNER_TOKEN"]) {
+      if (!usableEnvValue(env[name])) missing.push(name);
+    }
+  }
+  if (booleanValue(env.COMMS_HUB_CHAT_ENABLED, false)) {
+    for (const name of ["COMMS_HUB_COGINPAL_API_BASE_URL", "COMMS_HUB_COGINPAL_API_KEY", "COMMS_HUB_COGINPAL_WEBHOOK_SECRET"]) {
+      if (!usableEnvValue(env[name])) missing.push(name);
+    }
+  }
+  if (booleanValue(env.COMMS_HUB_WAKE_ENABLED, false)) {
+    for (const name of ["COMMS_HUB_WAKE_REQUEST_URL", "COMMS_HUB_WAKE_REQUEST_SECRET"]) if (!usableEnvValue(env[name])) missing.push(name);
+  }
+  if (booleanValue(env.COMMS_HUB_RETENTION_WORKER_ENABLED, false) && !usableEnvValue(env.R2_BUCKET_COMMS_HUB_PRIVATE)) missing.push("R2_BUCKET_COMMS_HUB_PRIVATE");
+  if (booleanValue(env.COMMS_HUB_CREDENTIAL_VAULT_ENABLED, false) && !usableEnvValue(env.COMMS_HUB_CREDENTIAL_MASTER_KEY)) missing.push("COMMS_HUB_CREDENTIAL_MASTER_KEY");
+  if (booleanValue(env.COMMS_HUB_EMAIL_POLL_WORKER_ENABLED, false) && !booleanValue(env.COMMS_HUB_EMAIL_ENABLED, false)) missing.push("COMMS_HUB_EMAIL_ENABLED");
+  if (booleanValue(env.COMMS_HUB_AUTONOMOUS_REPLIES_ENABLED, false) && !aiEnabled) missing.push("COMMS_HUB_AI_ENABLED");
   return [...new Set(missing)];
 }
 
@@ -197,6 +225,10 @@ export function getCommsHubReadiness(env = process.env) {
     missing,
     forms: Object.keys(COMMS_HUB_FORM_ROUTES).length,
     zernio,
+    channels: {
+      email: booleanValue(env.COMMS_HUB_EMAIL_ENABLED, false),
+      chat: booleanValue(env.COMMS_HUB_CHAT_ENABLED, false),
+    },
   };
 }
 
@@ -302,6 +334,53 @@ export function loadCommsHubConfig(env = process.env, { requireEnabled = false }
     socialPollOverlapMs: positiveInteger(env.COMMS_HUB_ZERNIO_POLL_OVERLAP_MS, 7_200_000, "COMMS_HUB_ZERNIO_POLL_OVERLAP_MS", { min: 60_000, max: 86_400_000 }),
     socialPollMaxMessagePages: positiveInteger(env.COMMS_HUB_ZERNIO_MAX_MESSAGE_PAGES, 5, "COMMS_HUB_ZERNIO_MAX_MESSAGE_PAGES", { min: 1, max: 5 }),
     socialPollMaxCommentPages: positiveInteger(env.COMMS_HUB_ZERNIO_MAX_COMMENT_PAGES, 5, "COMMS_HUB_ZERNIO_MAX_COMMENT_PAGES", { min: 1, max: 10 }),
+    emailEnabled: booleanValue(env.COMMS_HUB_EMAIL_ENABLED, false),
+    oneComEmailAccountKey: usableEnvValue(env.COMMS_HUB_ONECOM_ACCOUNT_KEY),
+    oneComEmailAddress: usableEnvValue(env.COMMS_HUB_ONECOM_EMAIL_ADDRESS),
+    oneComEmailUsername: usableEnvValue(env.COMMS_HUB_ONECOM_USERNAME),
+    oneComEmailPassword: usableEnvValue(env.COMMS_HUB_ONECOM_PASSWORD),
+    oneComImapHost: usableEnvValue(env.COMMS_HUB_ONECOM_IMAP_HOST) || "imap.one.com",
+    oneComImapPort: positiveInteger(env.COMMS_HUB_ONECOM_IMAP_PORT, 993, "COMMS_HUB_ONECOM_IMAP_PORT", { min: 1, max: 65535 }),
+    oneComSmtpHost: usableEnvValue(env.COMMS_HUB_ONECOM_SMTP_HOST) || "send.one.com",
+    oneComSmtpPort: positiveInteger(env.COMMS_HUB_ONECOM_SMTP_PORT, 465, "COMMS_HUB_ONECOM_SMTP_PORT", { min: 1, max: 65535 }),
+    oneComSmtpEhloName: usableEnvValue(env.COMMS_HUB_ONECOM_SMTP_EHLO_NAME) || "aims.jonathan-harris.online",
+    oneComMailbox: usableEnvValue(env.COMMS_HUB_ONECOM_MAILBOX) || "INBOX",
+    oneComEmailTimeoutMs: positiveInteger(env.COMMS_HUB_ONECOM_TIMEOUT_MS, 20_000, "COMMS_HUB_ONECOM_TIMEOUT_MS", { min: 1_000, max: 60_000 }),
+    emailPollWorkerEnabled: booleanValue(env.COMMS_HUB_EMAIL_POLL_WORKER_ENABLED, false),
+    emailPollMs: positiveInteger(env.COMMS_HUB_EMAIL_POLL_MS, 60_000, "COMMS_HUB_EMAIL_POLL_MS", { min: 30_000, max: 3_600_000 }),
+    emailPollLeaseMs: positiveInteger(env.COMMS_HUB_EMAIL_POLL_LEASE_MS, 180_000, "COMMS_HUB_EMAIL_POLL_LEASE_MS", { min: 30_000, max: 900_000 }),
+    emailPollBatchSize: positiveInteger(env.COMMS_HUB_EMAIL_POLL_BATCH_SIZE, 25, "COMMS_HUB_EMAIL_POLL_BATCH_SIZE", { min: 1, max: 100 }),
+    chatEnabled: booleanValue(env.COMMS_HUB_CHAT_ENABLED, false),
+    coginPalApiBaseUrl: normaliseBaseUrl(env.COMMS_HUB_COGINPAL_API_BASE_URL, ""),
+    coginPalApiKey: usableEnvValue(env.COMMS_HUB_COGINPAL_API_KEY),
+    coginPalWebhookSecret: usableEnvValue(env.COMMS_HUB_COGINPAL_WEBHOOK_SECRET),
+    coginPalTimeoutMs: positiveInteger(env.COMMS_HUB_COGINPAL_TIMEOUT_MS, 15_000, "COMMS_HUB_COGINPAL_TIMEOUT_MS", { min: 1_000, max: 30_000 }),
+    webhookSignatureMaxAgeMs: positiveInteger(env.COMMS_HUB_WEBHOOK_SIGNATURE_MAX_AGE_MS, 300_000, "COMMS_HUB_WEBHOOK_SIGNATURE_MAX_AGE_MS", { min: 30_000, max: 3_600_000 }),
+    wakeEnabled: booleanValue(env.COMMS_HUB_WAKE_ENABLED, false),
+    wakeRequestUrl: normaliseBaseUrl(env.COMMS_HUB_WAKE_REQUEST_URL, ""),
+    wakeRequestSecret: usableEnvValue(env.COMMS_HUB_WAKE_REQUEST_SECRET),
+    wakeRequestTimeoutMs: positiveInteger(env.COMMS_HUB_WAKE_REQUEST_TIMEOUT_MS, 10_000, "COMMS_HUB_WAKE_REQUEST_TIMEOUT_MS", { min: 1_000, max: 30_000 }),
+    attachmentMaxBytes: positiveInteger(env.COMMS_HUB_ATTACHMENT_MAX_BYTES, 20_971_520, "COMMS_HUB_ATTACHMENT_MAX_BYTES", { min: 1_024, max: 104_857_600 }),
+    attachmentDownloadTimeoutMs: positiveInteger(env.COMMS_HUB_ATTACHMENT_DOWNLOAD_TIMEOUT_MS, 30_000, "COMMS_HUB_ATTACHMENT_DOWNLOAD_TIMEOUT_MS", { min: 1_000, max: 120_000 }),
+    attachmentScannerUrl: normaliseBaseUrl(env.COMMS_HUB_ATTACHMENT_SCANNER_URL, ""),
+    attachmentScannerToken: usableEnvValue(env.COMMS_HUB_ATTACHMENT_SCANNER_TOKEN),
+    attachmentScanTimeoutMs: positiveInteger(env.COMMS_HUB_ATTACHMENT_SCAN_TIMEOUT_MS, 30_000, "COMMS_HUB_ATTACHMENT_SCAN_TIMEOUT_MS", { min: 1_000, max: 120_000 }),
+    rbacDelegationSecret: usableEnvValue(env.COMMS_HUB_RBAC_DELEGATION_SECRET),
+    rbacSignatureMaxAgeMs: positiveInteger(env.COMMS_HUB_RBAC_SIGNATURE_MAX_AGE_MS, 300_000, "COMMS_HUB_RBAC_SIGNATURE_MAX_AGE_MS", { min: 30_000, max: 3_600_000 }),
+    suiteRole: usableEnvValue(env.COMMS_HUB_SUITE_ROLE) || "admin",
+    delayedActionWorkerEnabled: booleanValue(env.COMMS_HUB_DELAYED_ACTION_WORKER_ENABLED, false),
+    delayedActionPollMs: positiveInteger(env.COMMS_HUB_DELAYED_ACTION_POLL_MS, 60_000, "COMMS_HUB_DELAYED_ACTION_POLL_MS", { min: 30_000, max: 3_600_000 }),
+    delayedActionLeaseMs: positiveInteger(env.COMMS_HUB_DELAYED_ACTION_LEASE_MS, 180_000, "COMMS_HUB_DELAYED_ACTION_LEASE_MS", { min: 30_000, max: 900_000 }),
+    delayedActionBatchSize: positiveInteger(env.COMMS_HUB_DELAYED_ACTION_BATCH_SIZE, 20, "COMMS_HUB_DELAYED_ACTION_BATCH_SIZE", { min: 1, max: 100 }),
+    retentionWorkerEnabled: booleanValue(env.COMMS_HUB_RETENTION_WORKER_ENABLED, false),
+    retentionPollMs: positiveInteger(env.COMMS_HUB_RETENTION_POLL_MS, 86_400_000, "COMMS_HUB_RETENTION_POLL_MS", { min: 3_600_000, max: 604_800_000 }),
+    retentionBatchSize: positiveInteger(env.COMMS_HUB_RETENTION_BATCH_SIZE, 50, "COMMS_HUB_RETENTION_BATCH_SIZE", { min: 1, max: 500 }),
+    autonomousRepliesEnabled: booleanValue(env.COMMS_HUB_AUTONOMOUS_REPLIES_ENABLED, false),
+    credentialVaultEnabled: booleanValue(env.COMMS_HUB_CREDENTIAL_VAULT_ENABLED, false),
+    credentialMasterKey: usableEnvValue(env.COMMS_HUB_CREDENTIAL_MASTER_KEY),
+    oauthAllowedScopes: Object.freeze(csvValue(env.COMMS_HUB_OAUTH_ALLOWED_SCOPES)),
+    notificationEmailMap: Object.freeze(jsonValue(env.COMMS_HUB_NOTIFICATION_EMAIL_MAP, {})),
+    notificationDefaultEmail: usableEnvValue(env.COMMS_HUB_NOTIFICATION_DEFAULT_EMAIL),
   });
 }
 

@@ -41,7 +41,7 @@ Implemented capabilities:
 - a resumable podcast contribution workflow covering pre-check, assets, review, acceptance or rejection, episode-link delivery, backlink request and social offer;
 - an explicit prohibition on guest-booking paths.
 
-The one.com email transport is not implemented in this phase. Email/form drafts can be generated and approved, but sending through one.com remains blocked until its adapter exists.
+The one.com adapter now provides TLS IMAP polling, MIME parsing, threaded SMTP replies, attachment handling and idempotent outbound records. It remains disabled until its mailbox credentials and execution flags are deliberately configured.
 
 ### Phase 4: provider health, backup and restore validation
 
@@ -108,7 +108,7 @@ Phase 4:
 
 1. Deploy the existing Comms Hub data-plane Worker and keep all new Phase 3/4 flags false.
 2. Install the repository's locked production dependencies without changing `package-lock.json`.
-3. Run `npm run comms:migrate:status`, then `npm run comms:migrate` to apply migrations `0003_ai_workflows` and `0004_hardening` after the existing migrations.
+3. Run `npm run comms:migrate:status`, then `npm run comms:migrate` to apply migrations `0003_ai_workflows`, `0004_hardening` and `0005_operations_and_channels` after the existing migrations.
 4. Run the full test and build chain in the deployment environment.
 5. Deploy with `COMMS_HUB_AI_ENABLED=false`, follow-up disabled, provider-health disabled and backups disabled. Verify Phase 1/2 smoke paths first.
 6. Configure the approved AI Search instances and token. Enable AI with approvals enforced, then verify one low-risk draft, one high-risk approval and one unsupported moderation quarantine.
@@ -127,6 +127,7 @@ Public exact-path routes:
 - `POST /comms-hub/intake/jotform`
 - `POST /comms-hub/intake/zernio/meta`
 - `POST /comms-hub/intake/zernio/video`
+- `POST /comms-hub/intake/chat`
 
 All other Comms Hub routes require AIMS bearer authentication. Phase 3/4 additions are:
 
@@ -148,3 +149,22 @@ All other Comms Hub routes require AIMS bearer authentication. Phase 3/4 additio
 - `POST /comms-hub/backups/:backupRunId/validate`
 
 Outbound social actions and workflow transitions require an `Idempotency-Key` header where documented by the route. Completed identical actions return their stored result; uncertain actions are never resent automatically.
+
+## Unified operations and remaining backend capabilities
+
+Migration `0005_operations_and_channels` adds the backend contracts required before the website and HIVE user-interface pass:
+
+- a single filterable queue across forms, social, one.com email and CoginPal website chat;
+- chronological email/chat threads, reviewed cross-channel identity links, assignment, statuses, tags, private notes, mentions, saved replies and bulk triage;
+- private R2 attachment storage with mandatory malware scanning and checksum verification;
+- standards-based IMAP/SMTP email handling with Message-ID, In-Reply-To and References preservation;
+- signed CoginPal webhook intake, replay protection, idempotent replies and persistent human takeover state;
+- versioned declarative workflows with executable state transitions, routing rules, delayed actions, escalations and SLA timers;
+- explicit autonomous low-risk policies, disabled globally by default and still blocked for drafts requiring approval;
+- encrypted credentials, allow-listed OAuth scopes and refresh-token handling;
+- configurable export, anonymisation and logical deletion jobs with legal-hold tags, including private R2 object removal;
+- a unified quarantine catalogue with attempt history and safe replay handlers;
+- volume, response-time, resolution-time, automation, failure and channel metrics;
+- role-gated API contracts for the later responsive HIVE queue and conversation workspace.
+
+All email, chat, wake, delayed-action, retention, autonomous-reply and credential-vault execution flags default to `false`. Deploy migration `0005` before enabling any of them. The public chat webhook is `POST /comms-hub/intake/chat`; every operator endpoint remains bearer-authenticated and additionally applies Comms Hub role permissions. The Cloudflare wake relay lives in `workers/comms-hub-wake/` and always sends `runContentJobs: false`.

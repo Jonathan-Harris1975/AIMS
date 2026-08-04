@@ -1,0 +1,12 @@
+import { CommsHubError } from './errors.js';
+
+export class CommsHubReplyDeliveryService {
+  constructor({ context }) { this.context = context; }
+  async send({ conversation, draft, idempotencyKey }) {
+    const channel = conversation.channel;
+    if (channel === 'email') return this.context.emailService.send({ conversationId: conversation.id, bodyText: draft.body_text, bodyHtml: draft.body_html, subject: draft.subject || '', idempotencyKey });
+    if (channel === 'chat') return this.context.chatService.send({ conversationId: conversation.id, message: draft.body_text, idempotencyKey });
+    throw new CommsHubError(422, 'reply_channel_unsupported', `Reply delivery is not implemented for channel ${channel}.`);
+  }
+}
+export default CommsHubReplyDeliveryService;

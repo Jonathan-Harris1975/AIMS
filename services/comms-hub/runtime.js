@@ -7,17 +7,37 @@ import { ZernioInboxClient } from "./clients/zernioInboxClient.js";
 import { AiSearchClient } from "./clients/aiSearchClient.js";
 import { PrivateR2Client } from "./clients/privateR2Client.js";
 import { CloudflareBackupClient } from "./clients/cloudflareBackupClient.js";
+import { OneComMailClient } from "./clients/oneComMailClient.js";
+import { CoginPalClient } from "./clients/coginPalClient.js";
+import { MalwareScannerClient } from "./clients/malwareScannerClient.js";
+import { CommsHubWakeClient } from "./clients/wakeClient.js";
 import { CommsHubRepository } from "./repositories/commsRepository.js";
 import { CommsAiRepository } from "./repositories/commsAiRepository.js";
+import { CommsOperationsRepository } from "./repositories/commsOperationsRepository.js";
 import { CommsHubArchiveWorker } from "./workers/archiveWorker.js";
 import { CommsHubSocialPollWorker } from "./workers/socialPollWorker.js";
 import { CommsHubFollowUpWorker } from "./workers/followUpWorker.js";
 import { CommsHubProviderHealthWorker } from "./workers/providerHealthWorker.js";
 import { CommsHubBackupWorker } from "./workers/backupWorker.js";
+import { CommsHubEmailPollWorker } from "./workers/emailPollWorker.js";
+import { CommsHubDelayedActionWorker } from "./workers/delayedActionWorker.js";
+import { CommsHubRetentionWorker } from "./workers/retentionWorker.js";
 import { CommsHubAiWorkflowService } from "./aiWorkflowService.js";
 import { PodcastContributionWorkflowService } from "./podcastWorkflowService.js";
 import { CommsHubProviderHealthService } from "./providerHealthService.js";
 import { CommsHubBackupService } from "./backupService.js";
+import { CommsHubAuditService } from "./auditService.js";
+import { CommsHubNotificationService } from "./notificationService.js";
+import { CommsHubOperationsService } from "./operationsService.js";
+import { CommsHubWorkflowEngineService } from "./workflowEngineService.js";
+import { CommsHubAttachmentService } from "./attachmentService.js";
+import { CommsHubEmailService } from "./emailService.js";
+import { CommsHubChatService } from "./chatService.js";
+import { CommsHubReplyDeliveryService } from "./replyDeliveryService.js";
+import { CommsHubGovernanceService } from "./governanceService.js";
+import { CommsHubCredentialVaultService } from "./credentialVaultService.js";
+import { CommsHubQuarantineService } from "./quarantineService.js";
+import { CommsHubMetricsService } from "./metricsService.js";
 import { safeErrorLog } from "./domain/redaction.js";
 
 let context = null;
@@ -34,6 +54,8 @@ export function createCommsHubContext({ env = process.env, fetchImpl, r2UploadTe
   );
   const repository = new CommsHubRepository(d1);
   const aiRepository = new CommsAiRepository(d1);
+  const operationsRepository = new CommsOperationsRepository(d1);
+  const privateR2 = config.r2PrivateBucketName ? new PrivateR2Client(config) : null;
   const sourceR2 = config.backupEnabled
     ? new PrivateR2Client({ ...config, r2PrivateBucketName: config.r2BucketName })
     : null;
@@ -48,12 +70,30 @@ export function createCommsHubContext({ env = process.env, fetchImpl, r2UploadTe
     zernio: Object.freeze(zernio),
     repository,
     aiRepository,
+    operationsRepository,
     aiSearch: new AiSearchClient(config, fetchImpl ? { fetchImpl } : undefined),
+    privateR2,
     sourceR2,
     backupR2,
     restoreR2,
     backupClient: config.backupEnabled ? new CloudflareBackupClient(config, fetchImpl ? { fetchImpl } : undefined) : null,
+    oneComMail: new OneComMailClient(config),
+    coginPal: new CoginPalClient(config, fetchImpl ? { fetchImpl } : undefined),
+    malwareScanner: new MalwareScannerClient(config, fetchImpl ? { fetchImpl } : undefined),
+    wakeClient: new CommsHubWakeClient(config, fetchImpl ? { fetchImpl } : undefined),
   };
+  active.auditService = new CommsHubAuditService({ repository: operationsRepository });
+  active.notificationService = new CommsHubNotificationService({ context: active });
+  active.operationsService = new CommsHubOperationsService({ context: active });
+  active.workflowEngineService = new CommsHubWorkflowEngineService({ context: active });
+  active.attachmentService = new CommsHubAttachmentService({ context: active, ...(fetchImpl ? { fetchImpl } : {}) });
+  active.emailService = new CommsHubEmailService({ context: active });
+  active.chatService = new CommsHubChatService({ context: active });
+  active.replyDelivery = new CommsHubReplyDeliveryService({ context: active });
+  active.governanceService = new CommsHubGovernanceService({ context: active });
+  active.credentialVaultService = new CommsHubCredentialVaultService({ context: active });
+  active.quarantineService = new CommsHubQuarantineService({ context: active });
+  active.metricsService = new CommsHubMetricsService({ context: active });
   active.archiveWorker = new CommsHubArchiveWorker({ repository, uploadText: r2UploadText, config });
   active.socialPollWorker = new CommsHubSocialPollWorker({ repository, zernio, config });
   active.aiWorkflowService = new CommsHubAiWorkflowService({ context: active });
@@ -63,6 +103,12 @@ export function createCommsHubContext({ env = process.env, fetchImpl, r2UploadTe
   active.followUpWorker = new CommsHubFollowUpWorker({ context: active });
   active.providerHealthWorker = new CommsHubProviderHealthWorker({ context: active });
   active.backupWorker = new CommsHubBackupWorker({ context: active });
+  active.emailPollWorker = new CommsHubEmailPollWorker({ context: active });
+  active.delayedActionWorker = new CommsHubDelayedActionWorker({ context: active });
+  active.retentionWorker = new CommsHubRetentionWorker({ context: active });
+  active.quarantineService.register('email_poll', (item) => active.emailPollWorker.replay(item.source_id));
+  active.quarantineService.register('delayed_action', (item) => active.delayedActionWorker.replay(item.source_id));
+  active.quarantineService.register('retention_job', (item) => active.retentionWorker.replay(item.source_id));
   return Object.freeze(active);
 }
 
@@ -105,6 +151,9 @@ export async function startCommsHubRuntime() {
     const followUpWorkerStarted = active.followUpWorker.start();
     const providerHealthWorkerStarted = active.providerHealthWorker.start();
     const backupWorkerStarted = active.backupWorker.start();
+    const emailPollWorkerStarted = active.emailPollWorker.start();
+    const delayedActionWorkerStarted = active.delayedActionWorker.start();
+    const retentionWorkerStarted = active.retentionWorker.start();
     runtimeState = {
       status: "ready",
       ready: true,
@@ -115,6 +164,9 @@ export async function startCommsHubRuntime() {
         followUp: followUpWorkerStarted,
         providerHealth: providerHealthWorkerStarted,
         backup: backupWorkerStarted,
+        emailPoll: emailPollWorkerStarted,
+        delayedActions: delayedActionWorkerStarted,
+        retention: retentionWorkerStarted,
       },
     };
     log.info("commsHub.runtime.started", {
@@ -123,10 +175,13 @@ export async function startCommsHubRuntime() {
       followUpWorkerStarted,
       providerHealthWorkerStarted,
       backupWorkerStarted,
+      emailPollWorkerStarted,
+      delayedActionWorkerStarted,
+      retentionWorkerStarted,
       forms: readiness.forms,
       zernio: Object.fromEntries(Object.entries(readiness.zernio).map(([family, state]) => [family, state.status])),
     });
-    return { started: true, archiveWorkerStarted, socialPollWorkerStarted, followUpWorkerStarted, providerHealthWorkerStarted, backupWorkerStarted };
+    return { started: true, archiveWorkerStarted, socialPollWorkerStarted, followUpWorkerStarted, providerHealthWorkerStarted, backupWorkerStarted, emailPollWorkerStarted, delayedActionWorkerStarted, retentionWorkerStarted };
   } catch (error) {
     runtimeState = { status: "failed", ready: false, detail: error?.code || error?.name || "runtime_start_failed" };
     log.error("commsHub.runtime.startFailed", { error: safeErrorLog(error) });
@@ -142,6 +197,9 @@ export async function stopCommsHubRuntime() {
       context.followUpWorker.stop(),
       context.providerHealthWorker.stop(),
       context.backupWorker.stop(),
+      context.emailPollWorker.stop(),
+      context.delayedActionWorker.stop(),
+      context.retentionWorker.stop(),
     ]);
   }
   context = null;

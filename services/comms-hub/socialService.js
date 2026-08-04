@@ -52,10 +52,34 @@ export async function withZernioAcceptanceDeadline(operation, timeoutMs) {
   }
 }
 
+
+async function scheduleAttachmentIngestion(event, context) {
+  if (!context.workflowEngineService || !Array.isArray(event.attachments) || !event.attachments.length || !event.conversationId || !event.messageId) return;
+  const dueAt = new Date(Date.now() + 1_000).toISOString();
+  for (const attachment of event.attachments) {
+    if (!attachment?.url) continue;
+    const attachmentId = `${event.messageId}:${attachment.id}`;
+    await context.workflowEngineService.schedule({
+      conversationId: event.conversationId,
+      actionType: "attachment_ingest",
+      dueAt,
+      payload: {
+        attachmentId,
+        providerUrl: attachment.url,
+        filename: attachment.name || attachment.type || "attachment",
+        provider: "zernio",
+        metadata: { conversationId: event.conversationId, channel: event.threadType === "dm" ? "social_dm" : "social_comment" },
+      },
+      idempotencyKey: `attachment-ingest:${attachmentId}`,
+    }, { actor: "zernio-intake", role: "admin" });
+  }
+}
+
 export async function processZernioWebhook({ envelope, correlationId, context }) {
   const event = normaliseZernioEvent(envelope, { correlationId, source: "webhook" });
   if (event.kind === "test") return { test: true, duplicate: false, event };
   const persistence = await context.repository.persistZernioEvent(event);
+  if (!persistence.duplicate) await scheduleAttachmentIngestion(event, context);
   return { test: false, ...persistence, event };
 }
 
@@ -132,6 +156,7 @@ export async function persistPolledConversation({ family, platform, conversation
     });
     const event = normaliseZernioEvent(envelope, { correlationId: newCorrelationId(), source: "poll" });
     const result = await context.repository.persistZernioEvent(event);
+    if (!result.duplicate) await scheduleAttachmentIngestion(event, context);
     processed += result.duplicate ? 0 : 1;
     duplicates += result.duplicate ? 1 : 0;
   }
@@ -198,6 +223,7 @@ export async function persistPolledComments({ family, platform, post, comments, 
     });
     const event = normaliseZernioEvent(envelope, { correlationId: newCorrelationId(), source: "poll" });
     const result = await context.repository.persistZernioEvent(event);
+    if (!result.duplicate) await scheduleAttachmentIngestion(event, context);
     processed += result.duplicate ? 0 : 1;
     duplicates += result.duplicate ? 1 : 0;
   }
