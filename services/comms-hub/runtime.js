@@ -4,9 +4,20 @@ import { loadCommsHubConfig, getCommsHubReadiness } from "./config.js";
 import { D1Client } from "./clients/d1Client.js";
 import { JotformClient } from "./clients/jotformClient.js";
 import { ZernioInboxClient } from "./clients/zernioInboxClient.js";
+import { AiSearchClient } from "./clients/aiSearchClient.js";
+import { PrivateR2Client } from "./clients/privateR2Client.js";
+import { CloudflareBackupClient } from "./clients/cloudflareBackupClient.js";
 import { CommsHubRepository } from "./repositories/commsRepository.js";
+import { CommsAiRepository } from "./repositories/commsAiRepository.js";
 import { CommsHubArchiveWorker } from "./workers/archiveWorker.js";
 import { CommsHubSocialPollWorker } from "./workers/socialPollWorker.js";
+import { CommsHubFollowUpWorker } from "./workers/followUpWorker.js";
+import { CommsHubProviderHealthWorker } from "./workers/providerHealthWorker.js";
+import { CommsHubBackupWorker } from "./workers/backupWorker.js";
+import { CommsHubAiWorkflowService } from "./aiWorkflowService.js";
+import { PodcastContributionWorkflowService } from "./podcastWorkflowService.js";
+import { CommsHubProviderHealthService } from "./providerHealthService.js";
+import { CommsHubBackupService } from "./backupService.js";
 import { safeErrorLog } from "./domain/redaction.js";
 
 let context = null;
@@ -22,9 +33,37 @@ export function createCommsHubContext({ env = process.env, fetchImpl, r2UploadTe
       .map(([family]) => [family, new ZernioInboxClient(config, family, fetchImpl ? { fetchImpl } : undefined)])
   );
   const repository = new CommsHubRepository(d1);
-  const archiveWorker = new CommsHubArchiveWorker({ repository, uploadText: r2UploadText, config });
-  const socialPollWorker = new CommsHubSocialPollWorker({ repository, zernio, config });
-  return Object.freeze({ config, d1, jotform, zernio: Object.freeze(zernio), repository, archiveWorker, socialPollWorker });
+  const aiRepository = new CommsAiRepository(d1);
+  const sourceR2 = config.backupEnabled
+    ? new PrivateR2Client({ ...config, r2PrivateBucketName: config.r2BucketName })
+    : null;
+  const backupR2 = config.backupEnabled ? new PrivateR2Client(config) : null;
+  const restoreR2 = config.backupEnabled
+    ? new PrivateR2Client({ ...config, r2PrivateBucketName: config.r2RestoreBucketName })
+    : null;
+  const active = {
+    config,
+    d1,
+    jotform,
+    zernio: Object.freeze(zernio),
+    repository,
+    aiRepository,
+    aiSearch: new AiSearchClient(config, fetchImpl ? { fetchImpl } : undefined),
+    sourceR2,
+    backupR2,
+    restoreR2,
+    backupClient: config.backupEnabled ? new CloudflareBackupClient(config, fetchImpl ? { fetchImpl } : undefined) : null,
+  };
+  active.archiveWorker = new CommsHubArchiveWorker({ repository, uploadText: r2UploadText, config });
+  active.socialPollWorker = new CommsHubSocialPollWorker({ repository, zernio, config });
+  active.aiWorkflowService = new CommsHubAiWorkflowService({ context: active });
+  active.podcastWorkflowService = new PodcastContributionWorkflowService({ context: active });
+  active.providerHealthService = new CommsHubProviderHealthService({ context: active });
+  active.backupService = new CommsHubBackupService({ context: active });
+  active.followUpWorker = new CommsHubFollowUpWorker({ context: active });
+  active.providerHealthWorker = new CommsHubProviderHealthWorker({ context: active });
+  active.backupWorker = new CommsHubBackupWorker({ context: active });
+  return Object.freeze(active);
 }
 
 export function getCommsHubContext() {
@@ -63,21 +102,31 @@ export async function startCommsHubRuntime() {
     }
     const archiveWorkerStarted = active.archiveWorker.start();
     const socialPollWorkerStarted = active.socialPollWorker.start();
+    const followUpWorkerStarted = active.followUpWorker.start();
+    const providerHealthWorkerStarted = active.providerHealthWorker.start();
+    const backupWorkerStarted = active.backupWorker.start();
     runtimeState = {
       status: "ready",
       ready: true,
-      detail: socialPollWorkerStarted
-        ? "archive_and_social_workers_started"
-        : archiveWorkerStarted ? "archive_worker_started" : "workers_disabled",
-      workers: { archive: archiveWorkerStarted, socialPoll: socialPollWorkerStarted },
+      detail: "configured_workers_started",
+      workers: {
+        archive: archiveWorkerStarted,
+        socialPoll: socialPollWorkerStarted,
+        followUp: followUpWorkerStarted,
+        providerHealth: providerHealthWorkerStarted,
+        backup: backupWorkerStarted,
+      },
     };
     log.info("commsHub.runtime.started", {
       archiveWorkerStarted,
       socialPollWorkerStarted,
+      followUpWorkerStarted,
+      providerHealthWorkerStarted,
+      backupWorkerStarted,
       forms: readiness.forms,
       zernio: Object.fromEntries(Object.entries(readiness.zernio).map(([family, state]) => [family, state.status])),
     });
-    return { started: true, archiveWorkerStarted, socialPollWorkerStarted };
+    return { started: true, archiveWorkerStarted, socialPollWorkerStarted, followUpWorkerStarted, providerHealthWorkerStarted, backupWorkerStarted };
   } catch (error) {
     runtimeState = { status: "failed", ready: false, detail: error?.code || error?.name || "runtime_start_failed" };
     log.error("commsHub.runtime.startFailed", { error: safeErrorLog(error) });
@@ -87,7 +136,13 @@ export async function startCommsHubRuntime() {
 
 export async function stopCommsHubRuntime() {
   if (context) {
-    await Promise.all([context.archiveWorker.stop(), context.socialPollWorker.stop()]);
+    await Promise.all([
+      context.archiveWorker.stop(),
+      context.socialPollWorker.stop(),
+      context.followUpWorker.stop(),
+      context.providerHealthWorker.stop(),
+      context.backupWorker.stop(),
+    ]);
   }
   context = null;
   runtimeState = { status: "stopped", ready: false, detail: "runtime_stopped" };

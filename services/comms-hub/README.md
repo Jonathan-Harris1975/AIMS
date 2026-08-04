@@ -18,98 +18,106 @@ Every submission is re-fetched through the Jotform API. The returned form and su
 
 ### Phase 2: Zernio social inbox
 
-Zernio remains the connected-channel owner, while AIMS owns ingestion, persistence, actions, polling and operational state.
+Zernio remains the connected-channel owner, while AIMS owns ingestion, persistence, actions, polling and operational state. Meta and Video credentials are isolated; no legacy-key or cross-family fallback exists.
 
-The two Zernio API keys are deliberately isolated:
+Implemented capabilities include verified raw-body webhooks, deterministic deduplication, Facebook and Instagram DMs/comments, YouTube comments, cursor polling, message lifecycle events, provider/account/thread identities, persistent outbound idempotency and reconciliation-required handling for uncertain side effects.
 
-| Credential family | API key | Platforms used by Comms Hub | Webhook path |
-|---|---|---|---|
-| Meta | `ZERNIO_META_API_KEY` | Facebook and Instagram DMs/comments | `/comms-hub/intake/zernio/meta` |
-| Video | `ZERNIO_VIDEO_API_KEY` | YouTube comments | `/comms-hub/intake/zernio/video` |
+### Phase 3: AI decisions and podcast contribution workflow
 
-There is no legacy-key or cross-family fallback. Meta events signed with the Video secret, YouTube events sent to the Meta endpoint, and attempts to call a platform with the wrong API key are rejected.
+Phase 3 is opt-in through `COMMS_HUB_AI_ENABLED=false` and remains inert until explicitly enabled. When enabled, human approval enforcement is mandatory.
 
-Implemented Phase 2 capabilities:
+Implemented capabilities:
 
-- raw-body HMAC-SHA256 webhook verification;
-- stable event-ID deduplication for at-least-once delivery;
-- Facebook and Instagram DM ingestion and replies;
-- Facebook and Instagram comment ingestion, public replies, private replies, hide, unhide and delete actions;
-- YouTube comment ingestion, replies, deletion and moderation status actions;
-- message lifecycle handling for sent, edited, deleted, delivered and read events where the platform supplies them;
-- safe handling when lifecycle events arrive before the original message;
-- cursor-based polling fallback with independent Meta and Video leases;
-- provider/account/thread identities, outbound action idempotency and audit records in D1;
-- separate webhook registration and secret rotation for each credential family;
-- authenticated operational status, polling and action routes.
+- strict-JSON intent classification and reproducible priority scoring;
+- operator priority overrides with a persisted queue and audit trail;
+- dedicated model routes for triage, moderation, summaries, contact replies, case-study replies, podcast replies, social replies and follow-ups;
+- approved Cloudflare AI Search instance allow-listing and exact evidence-reference validation;
+- grounded draft generation with British English normalisation;
+- immutable, scope-hashed approval requests for risky replies and moderation actions;
+- sentiment, abuse and risk classification;
+- platform-specific moderation capability checks that quarantine unsupported actions before any provider call;
+- conversation summaries, unresolved actions and source-link retention;
+- at most one idempotent follow-up for an unresolved open conversation;
+- a resumable podcast contribution workflow covering pre-check, assets, review, acceptance or rejection, episode-link delivery, backlink request and social offer;
+- an explicit prohibition on guest-booking paths.
 
-## D1 data plane
+The one.com email transport is not implemented in this phase. Email/form drafts can be generated and approved, but sending through one.com remains blocked until its adapter exists.
 
-Phase 1 can use Cloudflare's authenticated D1 REST API for the three low-volume forms. Phase 2 social traffic is not considered ready until `COMMS_HUB_D1_PROXY_URL` and `COMMS_HUB_D1_PROXY_TOKEN` point to the supplied Cloudflare Worker in `workers/comms-hub-data-plane`.
+### Phase 4: provider health, backup and restore validation
 
-The Worker binds D1 directly and permits only authenticated parameterised runtime `SELECT`, `INSERT`, `UPDATE` and `DELETE` statements. It rejects DDL, SQL stacking, oversized bodies and excessive batch/parameter sizes. Migrations deliberately bypass the Worker and use the administrative Cloudflare D1 API.
+Phase 4 is also opt-in. Provider health snapshots classify configured, healthy, degraded, rate-limited and unavailable routes without treating configuration as proof of liveness.
 
-## R2 boundary
+Backup and recovery use three distinct storage boundaries:
 
-A distributed D1 lease queue writes only redacted integrity receipts to the public `comms-hub` R2 bucket. Names, email addresses, telephone numbers, form answers, social message bodies, file URLs and uploaded files are not written to the public `r2.dev` endpoint.
+1. the live Comms Hub R2 bucket;
+2. a private run-scoped backup bucket;
+3. a separate restore-validation bucket.
 
-A private bucket or controlled authenticated object service is required before private message archives or attachments are introduced.
+D1 backup exports are checksummed and catalogued with table record counts. Linked private R2 objects are copied into the backup run prefix rather than merely referenced. Restore validation requires a fresh empty D1 target, imports the SQL, verifies required tables and record counts, copies archived R2 objects into the restore bucket, then re-reads and checksums them. Production database and bucket targets are rejected.
+
+## Data and safety boundaries
+
+- Runtime D1 traffic uses the authenticated Worker data plane; migrations and D1 export/import use Cloudflare's administrative API.
+- The public `comms-hub` R2 endpoint stores redacted integrity receipts only.
+- Private message archives and linked objects belong in the private backup bucket, never the public `r2.dev` bucket.
+- AI Search requests are restricted to the configured instance allow-list.
+- AI output is treated as untrusted input and must pass schema, evidence, policy and approval checks.
+- AI analysis bounds long conversations to the newest 100 messages and 80,000 body characters before model routing.
+- Completed or quarantined moderation records cannot regress to an executable state.
+- Provider timeouts with uncertain side effects are not retried blindly.
+- Invalid flag combinations fail readiness: follow-ups require AI, and automatic backups require the backup service.
+- D1 export and import operations can block database access, so automatic backups remain disabled until a maintenance window has been approved.
 
 ## Environment contract
 
-Base service secrets and storage:
+Base service:
 
-- `D1_UUID`
-- `D1_API_KEY`
+- `COMMS_HUB_ENABLED`
+- `D1_UUID`, `D1_API_KEY`
 - `JOTFORM_API_KEY`
 - existing R2 endpoint/access secrets
-- `R2_BUCKET_COMMS_HUB=comms-hub`
-- `R2_PUBLIC_BASE_URL_COMMS_HUB`
+- `R2_BUCKET_COMMS_HUB`
 
-Phase 2 runtime data plane:
+Phase 2:
 
 - `COMMS_HUB_PUBLIC_BASE_URL`
-- `COMMS_HUB_D1_PROXY_URL`
-- `COMMS_HUB_D1_PROXY_TOKEN`
+- `COMMS_HUB_D1_PROXY_URL`, `COMMS_HUB_D1_PROXY_TOKEN`
+- `ZERNIO_META_API_KEY`, `ZERNIO_META_WEBHOOK_SECRET`
+- `ZERNIO_VIDEO_API_KEY`, `ZERNIO_VIDEO_WEBHOOK_SECRET`
+- independent `COMMS_HUB_ZERNIO_META_ENABLED` and `COMMS_HUB_ZERNIO_VIDEO_ENABLED` switches
 
-Meta family:
+Phase 3:
 
-- `ZERNIO_META_API_KEY`
-- `ZERNIO_META_WEBHOOK_SECRET`
-- `COMMS_HUB_ZERNIO_META_ENABLED=true`
+- `COMMS_HUB_AI_ENABLED=false`
+- `COMMS_HUB_APPROVALS_ENFORCED=true`
+- `CLOUDFLARE_AI_SEARCH_API_TOKEN`
+- `COMMS_HUB_AI_SEARCH_INSTANCES`, a comma-separated allow-list
+- optional AI limits and follow-up worker controls documented in `.env.example`
 
-Video family:
+Phase 4:
 
-- `ZERNIO_VIDEO_API_KEY`
-- `ZERNIO_VIDEO_WEBHOOK_SECRET`
-- `COMMS_HUB_ZERNIO_VIDEO_ENABLED=true`
-
-Each family can be enabled independently. Enabling one does not require or activate the other.
-
-Webhook acceptance budget:
-
-- `COMMS_HUB_ZERNIO_ACK_TIMEOUT_MS=4000`
-- Values above 4500 ms are rejected so AIMS answers within Zernio's five-second acknowledgement window. A timeout returns a retryable 503; deterministic event IDs make the later delivery safe.
+- `COMMS_HUB_PROVIDER_HEALTH_ENABLED=false`
+- `COMMS_HUB_BACKUP_ENABLED=false`
+- `COMMS_HUB_BACKUP_AUTOMATIC_ENABLED=false`
+- `R2_BUCKET_COMMS_HUB_PRIVATE`
+- `R2_BUCKET_COMMS_HUB_RESTORE`
+- `COMMS_HUB_RESTORE_DATABASE_ID`, which must not equal `D1_UUID` and must point to a fresh empty database for each validation
+- optional health, interval, poll and object-limit controls documented in `.env.example`
 
 ## Deployment order
 
-1. Deploy `workers/comms-hub-data-plane` with the production D1 binding and a strong Worker secret.
-2. Configure the AIMS/Koyeb secrets and keep `COMMS_HUB_ENABLED=false`.
-3. Keep both social family switches false during the first deployment.
-4. Run `npm ci`.
-5. Run `npm run comms:migrate:status`.
-6. Run `npm run comms:migrate` to apply `0001_comms_hub` and `0002_zernio_social` through the Cloudflare administrative API.
-7. Run `npm test` and `npm run build`.
-8. Set `COMMS_HUB_ENABLED=true` and deploy.
-9. Verify `/readyz`, `/comms-hub/health` and authenticated `/comms-hub/diagnostics`.
-10. Enable Meta, redeploy, then call `POST /comms-hub/social/webhooks/meta/reconcile`.
-11. Test one Facebook DM, one Instagram DM and one Meta comment action.
-12. Enable Video, redeploy, then call `POST /comms-hub/social/webhooks/video/reconcile`.
-13. Test one YouTube comment reply and one moderation action.
+1. Deploy the existing Comms Hub data-plane Worker and keep all new Phase 3/4 flags false.
+2. Install the repository's locked production dependencies without changing `package-lock.json`.
+3. Run `npm run comms:migrate:status`, then `npm run comms:migrate` to apply migrations `0003_ai_workflows` and `0004_hardening` after the existing migrations.
+4. Run the full test and build chain in the deployment environment.
+5. Deploy with `COMMS_HUB_AI_ENABLED=false`, follow-up disabled, provider-health disabled and backups disabled. Verify Phase 1/2 smoke paths first.
+6. Configure the approved AI Search instances and token. Enable AI with approvals enforced, then verify one low-risk draft, one high-risk approval and one unsupported moderation quarantine.
+7. Enable provider-health snapshots and verify persisted status for D1, Jotform, each enabled Zernio family, AI Search and AI providers.
+8. Create two private R2 buckets and a fresh disposable restore-only D1 database. Confirm all three buckets and both D1 IDs are distinct.
+9. Run one manual backup through `POST /comms-hub/backups/run`, then validate it through `POST /comms-hub/backups/:backupRunId/validate` during a maintenance window.
+10. Enable the follow-up worker only after its first due item has been inspected. Enable automatic backups only after the manual backup and isolated restore both succeed.
 
-Webhook reconciliation always reapplies the configured secret because the Zernio webhook listing does not expose its current secret.
-
-Outbound actions use persistent idempotency records. If a provider call times out or AIMS cannot prove whether the side effect completed, the action enters `reconciliation_required`; the same key is not resent automatically. Verify Zernio before issuing a deliberate new action.
+Rollback is feature-flag first: disable automatic backup, follow-up, provider health and AI, then redeploy. Migrations are additive; do not drop the new tables during an application rollback.
 
 ## Routes
 
@@ -120,24 +128,23 @@ Public exact-path routes:
 - `POST /comms-hub/intake/zernio/meta`
 - `POST /comms-hub/intake/zernio/video`
 
-AIMS bearer-authenticated routes:
+All other Comms Hub routes require AIMS bearer authentication. Phase 3/4 additions are:
 
-- `GET /comms-hub/diagnostics`
-- `GET /comms-hub/conversations/:conversationId`
-- `GET /comms-hub/social/conversations`
-- `POST /comms-hub/social/conversations/:conversationId/actions/:action`
-- `GET /comms-hub/social/status`
-- `POST /comms-hub/social/poll/drain`
-- `POST /comms-hub/social/poll/kick`
-- `POST /comms-hub/social/webhooks/:family/reconcile`
-- `GET /comms-hub/archive/status`
-- `POST /comms-hub/archive/drain`
+- `POST /comms-hub/conversations/:conversationId/ai/analyse`
+- `GET /comms-hub/conversations/:conversationId/ai`
+- `GET /comms-hub/ai/status`
+- `GET /comms-hub/queue`
+- `POST /comms-hub/conversations/:conversationId/priority`
+- `POST /comms-hub/approvals/:approvalId/decision`
+- `POST /comms-hub/drafts/:draftId/send`
+- `POST /comms-hub/social/conversations/:conversationId/approvals/:action`
+- `POST /comms-hub/workflows/podcast/:conversationId/start`
+- `POST /comms-hub/workflows/podcast/:conversationId/advance`
+- `POST /comms-hub/follow-ups/drain`
+- `GET /comms-hub/providers/health`
+- `POST /comms-hub/providers/health/snapshot`
+- `POST /comms-hub/backups/run`
+- `GET /comms-hub/backups/status`
+- `POST /comms-hub/backups/:backupRunId/validate`
 
-Outbound social actions require an `Idempotency-Key` header. A completed identical action returns its stored result. Processing or uncertain actions are never resent automatically; a failed request requires a new key after correction.
-
-## Deliberate boundaries
-
-- one.com remains the email host; IMAP/SMTP ingestion and sending are not part of Phase 2.
-- TikTok remains on the Video API key but is not a Comms Hub conversation channel because Zernio does not expose TikTok DMs/comments through this implemented slice.
-- AI classification, drafting, approval and autonomous reply policies are later phases.
-- HIVE operator screens are not included yet; current actions are API-first.
+Outbound social actions and workflow transitions require an `Idempotency-Key` header where documented by the route. Completed identical actions return their stored result; uncertain actions are never resent automatically.

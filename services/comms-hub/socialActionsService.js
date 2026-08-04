@@ -1,6 +1,8 @@
 import { CommsHubError, toCommsHubError } from "./errors.js";
 import { sha256Hex, stableId } from "./domain/ids.js";
 import { redactDiagnosticText } from "./domain/redaction.js";
+import { assertSupportedModerationAction } from "./domain/ai.js";
+import { requestApproval, requireApproval } from "./approvalService.js";
 
 function text(value) {
   return value === undefined || value === null ? "" : String(value).trim();
@@ -65,6 +67,63 @@ function validateButtons(value, max, label) {
   return value;
 }
 
+function actionBodyWithoutApproval(body = {}) {
+  const { approvalId: _approvalId, ...rest } = body && typeof body === "object" ? body : {};
+  return rest;
+}
+
+function isModerationAction(action) {
+  return ["hide", "unhide", "delete", "moderate", "block", "escalate"].includes(action);
+}
+
+export async function requestSocialActionApproval({ conversationId, action, body = {}, idempotencyKey, requestedBy, context }) {
+  const key = requireIdempotencyKey(idempotencyKey);
+  const thread = await context.repository.getSocialThreadByConversation(conversationId);
+  if (!thread) throw new CommsHubError(404, "social_thread_not_found", "Social thread was not found.");
+  const normalisedAction = text(action).toLowerCase();
+  if (!isModerationAction(normalisedAction)) {
+    throw new CommsHubError(422, "social_approval_not_required", "Only moderation actions use this approval route.");
+  }
+  const actionBody = actionBodyWithoutApproval(body);
+  const targetId = stableId("act", "zernio", key);
+  const payload = { conversationId, action: normalisedAction, body: actionBody };
+  const payloadSha256 = requestHash(payload);
+  const now = new Date().toISOString();
+  await context.aiRepository?.upsertModerationAction?.({
+    id: stableId("mod", "zernio", key), conversationId, platform: thread.platform,
+    actionType: normalisedAction, idempotencyKey: key, status: "requested", payloadSha256, now,
+  });
+  try {
+    assertSupportedModerationAction({ platform: thread.platform, action: normalisedAction, body: actionBody });
+    const approval = await requestApproval({
+      repository: context.aiRepository,
+      conversationId,
+      targetType: "moderation_action",
+      targetId,
+      actionType: normalisedAction,
+      payload,
+      riskLevel: ["delete", "moderate", "block"].includes(normalisedAction) ? "critical" : "high",
+      requestedBy,
+      metadata: { platform: thread.platform, credentialFamily: thread.credential_family, idempotencyKey: key },
+    });
+    await context.aiRepository?.upsertModerationAction?.({
+      id: stableId("mod", "zernio", key), conversationId, platform: thread.platform,
+      actionType: normalisedAction, idempotencyKey: key, status: "pending_approval",
+      approvalId: approval.id, payloadSha256, now: new Date().toISOString(),
+    });
+    return approval;
+  } catch (error) {
+    await context.aiRepository?.failModerationAction?.({
+      idempotencyKey: key,
+      status: error?.failureClass === "permanent" || error?.code === "moderation_capability_unsupported" ? "quarantined" : "failed",
+      failureClass: error?.failureClass || "permanent",
+      error: redactDiagnosticText(error?.message || error),
+      failedAt: new Date().toISOString(),
+    });
+    throw error;
+  }
+}
+
 export async function executeSocialAction({ conversationId, action, body = {}, idempotencyKey, context }) {
   const key = requireIdempotencyKey(idempotencyKey);
   const thread = await context.repository.getSocialThreadByConversation(conversationId);
@@ -73,14 +132,10 @@ export async function executeSocialAction({ conversationId, action, body = {}, i
       publicMessage: "Social conversation was not found.",
     });
   }
-  const client = context.zernio?.[thread.credential_family];
-  if (!client) {
-    throw new CommsHubError(503, "zernio_family_disabled", `Zernio ${thread.credential_family} client is unavailable.`, {
-      publicMessage: "Social channel is not enabled.",
-    });
-  }
-
   const normalisedAction = text(action).toLowerCase();
+  const actionBody = actionBodyWithoutApproval(body);
+  const targetId = stableId("act", "zernio", key);
+  const moderationPayload = { conversationId, action: normalisedAction, body: actionBody };
   const actionRequest = {
     action: normalisedAction,
     conversationId,
@@ -90,12 +145,12 @@ export async function executeSocialAction({ conversationId, action, body = {}, i
     providerThreadId: thread.provider_thread_id,
     providerPostId: thread.provider_post_id,
     rootCommentId: thread.root_comment_id,
-    body,
+    body: actionBody,
   };
   const hash = requestHash(actionRequest);
   const now = new Date().toISOString();
   const claimed = await context.repository.claimOutboundAction({
-    id: stableId("act", "zernio", key),
+    id: targetId,
     idempotencyKey: key,
     conversationId,
     family: thread.credential_family,
@@ -117,11 +172,43 @@ export async function executeSocialAction({ conversationId, action, body = {}, i
   let providerResponseReceived = false;
   try {
     let response;
+    if (isModerationAction(normalisedAction)) {
+      const moderationAudit = await context.aiRepository?.upsertModerationAction?.({
+        id: stableId("mod", "zernio", key), conversationId, platform: thread.platform,
+        actionType: normalisedAction, idempotencyKey: key, status: "processing",
+        approvalId: text(body.approvalId) || null, payloadSha256: requestHash(moderationPayload),
+        now: new Date().toISOString(),
+      });
+      if (moderationAudit?.status === "executed") {
+        throw new CommsHubError(409, "moderation_audit_conflict", "Moderation audit already records this action as executed.", {
+          failureClass: "permanent",
+          publicMessage: "Moderation action state is inconsistent and requires review.",
+        });
+      }
+      assertSupportedModerationAction({ platform: thread.platform, action: normalisedAction, body: actionBody });
+      if (context.config?.aiEnabled === true && context.config?.approvalsEnforced === true) {
+        await requireApproval({
+          repository: context.aiRepository,
+          approvalId: text(body.approvalId),
+          conversationId,
+          targetType: "moderation_action",
+          targetId,
+          actionType: normalisedAction,
+          payload: moderationPayload,
+        });
+      }
+    }
+    const client = context.zernio?.[thread.credential_family];
+    if (!client && normalisedAction !== "escalate") {
+      throw new CommsHubError(503, "zernio_family_disabled", `Zernio ${thread.credential_family} client is unavailable.`, {
+        publicMessage: "Social channel is not enabled.",
+      });
+    }
     if (normalisedAction === "reply") {
-      const message = requireMessage(body.message);
-      const attachmentUrl = optionalHttpsUrl(body.attachmentUrl, "attachmentUrl");
-      const quickReplies = validateButtons(body.quickReplies, 13, "quickReplies");
-      const buttons = validateButtons(body.buttons, 3, "buttons");
+      const message = requireMessage(actionBody.message);
+      const attachmentUrl = optionalHttpsUrl(actionBody.attachmentUrl, "attachmentUrl");
+      const quickReplies = validateButtons(actionBody.quickReplies, 13, "quickReplies");
+      const buttons = validateButtons(actionBody.buttons, 3, "buttons");
       if (quickReplies?.length && buttons?.length) {
         throw new CommsHubError(400, "social_interactions_conflict", "quickReplies and buttons are mutually exclusive.", {
           publicMessage: "Choose quickReplies or buttons, not both.",
@@ -134,13 +221,13 @@ export async function executeSocialAction({ conversationId, action, body = {}, i
           accountId: thread.account_id,
           message,
           attachmentUrl,
-          attachmentType: text(body.attachmentType) || undefined,
+          attachmentType: text(actionBody.attachmentType) || undefined,
           quickReplies,
           buttons,
-          messagingType: text(body.messagingType) || undefined,
-          messageTag: text(body.messageTag) || undefined,
+          messagingType: text(actionBody.messagingType) || undefined,
+          messageTag: text(actionBody.messageTag) || undefined,
         });
-      } else if (body.private === true) {
+      } else if (actionBody.private === true) {
         response = await client.privateReplyToComment({
           platform: thread.platform,
           postId: thread.provider_post_id,
@@ -179,7 +266,7 @@ export async function executeSocialAction({ conversationId, action, body = {}, i
       });
     } else if (normalisedAction === "status") {
       if (thread.thread_type !== "dm") throw new CommsHubError(400, "social_action_unsupported", "Status action requires a DM conversation.");
-      const status = text(body.status).toLowerCase();
+      const status = text(actionBody.status).toLowerCase();
       if (!["active", "archived"].includes(status)) {
         throw new CommsHubError(400, "social_status_invalid", "Status must be active or archived.", { publicMessage: "Status is invalid." });
       }
@@ -224,13 +311,13 @@ export async function executeSocialAction({ conversationId, action, body = {}, i
       if (thread.thread_type !== "comment" || thread.platform !== "youtube") {
         throw new CommsHubError(400, "social_action_unsupported", "Moderation status is available only for YouTube comments.");
       }
-      const moderationStatus = text(body.moderationStatus);
+      const moderationStatus = text(actionBody.moderationStatus);
       if (!["published", "rejected", "heldForReview"].includes(moderationStatus)) {
         throw new CommsHubError(400, "social_moderation_invalid", "YouTube moderationStatus is invalid.", {
           publicMessage: "Moderation status is invalid.",
         });
       }
-      if (body.banAuthor === true && moderationStatus !== "rejected") {
+      if (actionBody.banAuthor === true && moderationStatus !== "rejected") {
         throw new CommsHubError(400, "social_ban_author_invalid", "banAuthor is valid only with rejected moderation status.", {
           publicMessage: "banAuthor requires rejected moderation status.",
         });
@@ -241,7 +328,7 @@ export async function executeSocialAction({ conversationId, action, body = {}, i
         commentId: thread.root_comment_id,
         accountId: thread.account_id,
         moderationStatus,
-        banAuthor: body.banAuthor === true,
+        banAuthor: actionBody.banAuthor === true,
       });
       if (moderationStatus === "rejected") {
         await context.repository.setConversationStatus({
@@ -251,6 +338,14 @@ export async function executeSocialAction({ conversationId, action, body = {}, i
           updatedAt: new Date().toISOString(),
         });
       }
+    } else if (normalisedAction === "escalate") {
+      response = { success: true, internal: true, status: "escalated", reason: text(actionBody.reason).slice(0, 1000) || "moderation_review" };
+      await context.repository.setConversationStatus({
+        conversationId,
+        status: "pending",
+        providerStatus: "escalated",
+        updatedAt: new Date().toISOString(),
+      });
     } else {
       throw new CommsHubError(400, "social_action_unknown", `Unknown social action '${normalisedAction || "missing"}'.`, {
         publicMessage: "Social action is not supported.",
@@ -259,6 +354,9 @@ export async function executeSocialAction({ conversationId, action, body = {}, i
 
     providerResponseReceived = true;
     await context.repository.completeOutboundAction({ idempotencyKey: key, response, completedAt: new Date().toISOString() });
+    if (isModerationAction(normalisedAction)) {
+      await context.aiRepository?.completeModerationAction?.({ idempotencyKey: key, response, completedAt: new Date().toISOString() });
+    }
     return { duplicate: false, response };
   } catch (error) {
     const normalised = toCommsHubError(error, {
@@ -274,6 +372,15 @@ export async function executeSocialAction({ conversationId, action, body = {}, i
       failedAt: new Date().toISOString(),
       reconciliationRequired: providerResponseReceived || normalised.retryable || normalised.failureClass === "temporary",
     });
+    if (isModerationAction(normalisedAction)) {
+      await context.aiRepository?.failModerationAction?.({
+        idempotencyKey: key,
+        status: normalised.failureClass === "permanent" ? "quarantined" : "failed",
+        failureClass: normalised.failureClass || "recoverable",
+        error: redactDiagnosticText(normalised.message),
+        failedAt: new Date().toISOString(),
+      });
+    }
     throw normalised;
   }
 }
