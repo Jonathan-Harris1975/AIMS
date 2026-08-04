@@ -33,6 +33,7 @@ import { completeEditorialReservation, releaseEditorialReservation, reserveEdito
 import { startKeepAlive, stopKeepAlive } from "../../shared/utils/keepalive.js";
 import { buildRenderedVideoQaError, reviewRenderedVideo } from "./renderedVideoQa.js";
 import { looksLikePendingVideoError } from "./renderStatus.js";
+import { pollUntil } from "./pollUntil.js";
 
 export const BLOTATO_PUBLISH_JOB_TYPE = "blotato-news-insight-publish";
 export const DEFAULT_AI_STORY_TEMPLATE_PATH =
@@ -484,69 +485,30 @@ function findMediaUrl(value, depth = 0) {
 }
 
 
-async function pollUntil({ label, run, isDone, isDonePayload, isFailed, isPendingError, extractStatus, maxAttempts, intervalMs, progressEvery = 30, finalGraceMs = 0 }) {
-  let latest = null;
-  let latestPendingError = null;
-  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    try {
-      latest = await run();
-      latestPendingError = null;
-    } catch (error) {
-      if (!isPendingError?.(error)) throw error;
-      latestPendingError = error;
-      latest = error?.details || null;
-      if (progressEvery > 0 && attempt % progressEvery === 0) {
-        info("blotato.poll.provider_pending", {
-          label,
-          attempt,
-          maxAttempts,
-          statusCode: error?.statusCode || null,
-          message: trim(error?.message).slice(0, 500),
-        });
-      }
-      await sleep(intervalMs);
-      continue;
-    }
-
-    const status = extractStatus(latest);
-    if (isDone(status) || isDonePayload?.(latest, status)) return latest;
-    if (isFailed(status)) {
-      const err = new Error(`${label} failed with status: ${status || "unknown"}`);
-      err.statusCode = 502;
-      err.details = latest;
-      throw err;
-    }
-    if (progressEvery > 0 && attempt % progressEvery === 0) {
-      info("blotato.poll.still_waiting", { label, attempt, maxAttempts, status: status || "unknown" });
-    }
-    await sleep(intervalMs);
-  }
-
-  if (finalGraceMs > 0) {
-    await sleep(finalGraceMs);
-    try {
-      latest = await run();
-      latestPendingError = null;
-    } catch (error) {
-      if (!isPendingError?.(error)) throw error;
-      latestPendingError = error;
-      latest = error?.details || latest;
-    }
-    const status = extractStatus(latest || {});
-    if (isDone(status) || isDonePayload?.(latest, status)) return latest;
-    if (isFailed(status)) {
-      const err = new Error(`${label} failed with status: ${status || "unknown"}`);
-      err.statusCode = 502;
-      err.details = latest;
-      throw err;
-    }
-  }
-
-  const err = new Error(`${label} did not complete before polling limit`);
-  err.statusCode = 504;
-  err.details = latest || latestPendingError?.details || null;
-  if (latestPendingError) err.cause = latestPendingError;
-  throw err;
+function blotatoPollLoggers() {
+  return {
+    onPending: ({ label, attempt, maxAttempts, error, elapsedMs, maxDurationMs }) => {
+      info("blotato.poll.provider_pending", {
+        label,
+        attempt,
+        maxAttempts,
+        statusCode: error?.statusCode || null,
+        message: trim(error?.message).slice(0, 500),
+        elapsedMs,
+        maxDurationMs,
+      });
+    },
+    onWaiting: ({ label, attempt, maxAttempts, status, elapsedMs, maxDurationMs }) => {
+      info("blotato.poll.still_waiting", {
+        label,
+        attempt,
+        maxAttempts,
+        status,
+        elapsedMs,
+        maxDurationMs,
+      });
+    },
+  };
 }
 
 async function createAndWaitForVideo({ templateId, templateIdCandidates = [], pack, apiKey, onVisualCreated }) {
@@ -628,6 +590,7 @@ async function createAndWaitForVideo({ templateId, templateIdCandidates = [], pa
 
   const maxAttempts = positiveIntEnv("BLOTATO_VIDEO_POLL_ATTEMPTS", 720, 2880);
   const intervalMs = positiveIntEnv("BLOTATO_VIDEO_POLL_INTERVAL_MS", 5000, 60_000);
+  const maxDurationMs = positiveIntEnv("BLOTATO_VIDEO_POLL_MAX_DURATION_MS", 900_000, 3_600_000);
   const finalGraceMs = positiveIntEnv("BLOTATO_VIDEO_FINAL_GRACE_MS", 15_000, 180_000);
   let completed;
   try {
@@ -641,8 +604,10 @@ async function createAndWaitForVideo({ templateId, templateIdCandidates = [], pa
       isPendingError: looksLikePendingVideoError,
       maxAttempts,
       intervalMs,
+      maxDurationMs,
       finalGraceMs,
       progressEvery: positiveIntEnv("BLOTATO_VIDEO_POLL_PROGRESS_EVERY", 30, 240),
+      ...blotatoPollLoggers(),
     });
   } catch (error) {
     const safeDetails = sanitiseBlotatoFailure(error?.details || null);
@@ -994,6 +959,7 @@ async function publishAndWait({ platform, pack, mediaUrl, apiKey, channelPreflig
       isFailed: (value) => POST_FAILED_STATUSES.has(value),
       maxAttempts,
       intervalMs,
+      ...blotatoPollLoggers(),
     });
     return { platform, accountId, target, postSubmissionId, post, status, scheduledTime, scheduleVerified: true };
   }
@@ -1008,6 +974,7 @@ async function publishAndWait({ platform, pack, mediaUrl, apiKey, channelPreflig
     isFailed: (value) => POST_FAILED_STATUSES.has(value),
     maxAttempts,
     intervalMs,
+    ...blotatoPollLoggers(),
   });
 
   return { platform, accountId, target, postSubmissionId, post, status };
