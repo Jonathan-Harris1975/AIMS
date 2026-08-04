@@ -3,7 +3,10 @@ import { createHash, randomUUID } from "node:crypto";
 const BASE32_ALPHABET = "0123456789abcdefghjkmnpqrstvwxyz";
 
 export function sha256Hex(value) {
-  return createHash("sha256").update(String(value)).digest("hex");
+  const hash = createHash("sha256");
+  if (Buffer.isBuffer(value) || ArrayBuffer.isView(value)) hash.update(value);
+  else hash.update(String(value));
+  return hash.digest("hex");
 }
 
 function base32(buffer) {
