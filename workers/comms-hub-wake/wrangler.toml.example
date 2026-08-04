@@ -1,0 +1,13 @@
+name = "aims-comms-hub-wake"
+main = "worker.js"
+compatibility_date = "2026-08-01"
+
+[[kv_namespaces]]
+binding = "COMMS_HUB_WAKE_KV"
+id = "replace-with-kv-id"
+
+# Set as encrypted secrets:
+# COMMS_HUB_WAKE_REQUEST_SECRET
+# AIMS_WAKE_TOKEN
+[vars]
+AIMS_WAKE_URL = "https://your-aims-host.example.com/wake"
