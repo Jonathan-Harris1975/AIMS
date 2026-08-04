@@ -114,6 +114,7 @@ export function isPublicCommsHubIntakePath(req) {
     "/comms-hub/intake/jotform",
     "/comms-hub/intake/zernio/meta",
     "/comms-hub/intake/zernio/video",
+    "/comms-hub/intake/chat",
   ].includes(path);
 }
 
