@@ -166,8 +166,7 @@ const OPERATION_WINDOWS = Object.freeze({
     ["zernio-blog-social", "/zernio/blog-rss/daily", {}, null, false, "blog-social"],
     ["blotato-pm", "/blotato/shorts/news-insight/schedule", {}, null, false, "blotato-am"],
     ["newsletter-generate", "/newsletter/generate", { profileId: "ai-edge" }, "newsletter", false, "rss-rewrite"],
-    ["newsletter-readiness", "/newsletter/readiness", { profileId: "ai-edge" }, "newsletter", false, "newsletter-generate"],
-    ["newsletter-send", "/newsletter/send", { profileId: "ai-edge" }, "newsletter", false, "newsletter-readiness"],
+    ["newsletter-send", "/newsletter/send", { profileId: "ai-edge" }, "newsletter", false, "newsletter-generate"],
     ["weekly-blog", "/blog/weekly/build", {}, null, false, "rss-rewrite"],
     ["outreach", "/outreach/batch/next", {}],
     ["zernio-ebooks", "/zernio/ebooks/weekly", { dryRun: false, profileName: "Default", accountId: "ALL", usePodcastFeaturedBook: true }, null, true, "rss-rewrite"],
@@ -181,8 +180,7 @@ const OPERATION_WINDOWS = Object.freeze({
     ["zernio-blog-social", "/zernio/blog-rss/daily", {}, null, false, "blog-social"],
     ["blotato-pm", "/blotato/shorts/model-verdict/schedule", {}, null, false, "blotato-am"],
     ["newsletter-generate", "/newsletter/generate", { profileId: "ai-edge" }, "newsletter", false, "rss-rewrite"],
-    ["newsletter-readiness", "/newsletter/readiness", { profileId: "ai-edge" }, "newsletter", false, "newsletter-generate"],
-    ["newsletter-send", "/newsletter/send", { profileId: "ai-edge" }, "newsletter", false, "newsletter-readiness"],
+    ["newsletter-send", "/newsletter/send", { profileId: "ai-edge" }, "newsletter", false, "newsletter-generate"],
     ["outreach", "/outreach/batch/next", {}],
   ],
   "wednesday-am": [
@@ -193,8 +191,7 @@ const OPERATION_WINDOWS = Object.freeze({
     ["zernio-blog-social", "/zernio/blog-rss/daily", {}, null, false, "blog-social"],
     ["blotato-pm", "/blotato/shorts/ai-at-work/schedule", {}, null, false, "blotato-am"],
     ["newsletter-generate", "/newsletter/generate", { profileId: "ai-edge" }, "newsletter", false, "rss-rewrite"],
-    ["newsletter-readiness", "/newsletter/readiness", { profileId: "ai-edge" }, "newsletter", false, "newsletter-generate"],
-    ["newsletter-send", "/newsletter/send", { profileId: "ai-edge" }, "newsletter", false, "newsletter-readiness"],
+    ["newsletter-send", "/newsletter/send", { profileId: "ai-edge" }, "newsletter", false, "newsletter-generate"],
     ["outreach", "/outreach/batch/next", {}],
   ],
   "thursday-am": [
@@ -205,8 +202,7 @@ const OPERATION_WINDOWS = Object.freeze({
     ["zernio-blog-social", "/zernio/blog-rss/daily", {}, null, false, "blog-social"],
     ["blotato-pm", "/blotato/shorts/reality-check/schedule", {}, null, false, "blotato-am"],
     ["newsletter-generate", "/newsletter/generate", { profileId: "ai-edge" }, "newsletter", false, "rss-rewrite"],
-    ["newsletter-readiness", "/newsletter/readiness", { profileId: "ai-edge" }, "newsletter", false, "newsletter-generate"],
-    ["newsletter-send", "/newsletter/send", { profileId: "ai-edge" }, "newsletter", false, "newsletter-readiness"],
+    ["newsletter-send", "/newsletter/send", { profileId: "ai-edge" }, "newsletter", false, "newsletter-generate"],
     ["outreach", "/outreach/batch/next", {}],
   ],
   "friday-am": [
@@ -219,8 +215,7 @@ const OPERATION_WINDOWS = Object.freeze({
     ["zernio-blog-social", "/zernio/blog-rss/daily", {}, null, false, "blog-social"],
     ["blotato-pm", "/blotato/shorts/ai-playbook/schedule", {}, null, false, "blotato-am"],
     ["newsletter-generate", "/newsletter/generate", { profileId: "ai-edge" }, "newsletter", false, "rss-rewrite"],
-    ["newsletter-readiness", "/newsletter/readiness", { profileId: "ai-edge" }, "newsletter", false, "newsletter-generate"],
-    ["newsletter-send", "/newsletter/send", { profileId: "ai-edge" }, "newsletter", false, "newsletter-readiness"],
+    ["newsletter-send", "/newsletter/send", { profileId: "ai-edge" }, "newsletter", false, "newsletter-generate"],
     ["outreach", "/outreach/batch/next", {}],
   ],
   "friday-pm": [
@@ -283,16 +278,12 @@ function assertContentOperationWindows() {
     }
 
     const newsletterGenerateIndex = paths.indexOf("/newsletter/generate");
-    const newsletterReadinessIndex = paths.indexOf("/newsletter/readiness");
     const newsletterSendIndex = paths.indexOf("/newsletter/send");
-    if (newsletterGenerateIndex < 0 || newsletterReadinessIndex !== newsletterGenerateIndex + 1 || newsletterSendIndex !== newsletterReadinessIndex + 1) {
-      throw new Error(`${windowName} must run newsletter generate -> readiness -> send in order`);
+    if (newsletterGenerateIndex < 0 || newsletterSendIndex !== newsletterGenerateIndex + 1) {
+      throw new Error(`${windowName} must run newsletter generate -> send in order`);
     }
-    if (tasks[newsletterReadinessIndex]?.[5] !== "newsletter-generate") {
-      throw new Error(`${windowName} newsletter readiness must depend on newsletter-generate`);
-    }
-    if (tasks[newsletterSendIndex]?.[5] !== "newsletter-readiness") {
-      throw new Error(`${windowName} newsletter send must depend on newsletter-readiness`);
+    if (tasks[newsletterSendIndex]?.[5] !== "newsletter-generate") {
+      throw new Error(`${windowName} newsletter send must depend on newsletter-generate`);
     }
   }
 
@@ -393,7 +384,7 @@ async function runInternalTask([name, path, body = {}, feature = null, addWeekSt
   // Delivery resolves the latest durable issue for the day. The generator
   // sanitises its storage session ID, so forwarding the raw orchestration ID
   // to readiness/send would point at a non-existent prefix.
-  if (["newsletter-readiness", "newsletter-send"].includes(name)) delete payload.sessionId;
+  if (name === "newsletter-send") delete payload.sessionId;
   if (ASYNC_TASK_ROUTES[path]) payload.async = true;
   if (addWeekStartDate) payload.weekStartDate = localWeekStartDate();
 
