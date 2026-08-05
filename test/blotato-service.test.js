@@ -166,19 +166,11 @@ async function handleMockRequest(req, res) {
     assert.equal(body.textToImageModel, undefined);
     assert.equal(body.imageToVideoModel, undefined);
     assert.equal(body.useBrandKit, undefined);
-    if (body.templateId === AI_STORY_TEMPLATE_PATH) {
-      assert.ok(Array.isArray(body.inputs.scenes));
-      assert.ok(body.inputs.scenes.length >= 3);
-      assert.equal(body.inputs.aspectRatio, "9:16");
-      assert.equal(body.inputs.captionPosition, "bottom");
-      assert.equal(body.inputs.thumbnailText, "AI Gets Chores");
-      assert.match(body.inputs.visualStyle, /human-centred/);
-      assert.ok(body.inputs.scenes.filter((scene) => /adult|human|hands|face|silhouette|professional/i.test(scene.mediaSource)).length >= 3);
-    }
-    if (body.templateId === AI_STORY_TEMPLATE_UUID) {
-      assert.deepEqual(body.inputs, {});
-      assert.match(body.prompt, /Cost guard/i);
-    }
+    // Production defaults to Blotato's prompt-autofill contract for every
+    // template identifier, including the legacy full-path fallback. The path
+    // must never silently switch the request to hand-built scene inputs.
+    assert.deepEqual(body.inputs, {});
+    assert.ok(typeof body.prompt === "string" && body.prompt.trim().length > 0);
     res.writeHead(201, { "content-type": "application/json" });
     res.end(JSON.stringify({ item: { id: "visual-1", status: "queueing" } }));
     return;
@@ -362,6 +354,34 @@ test.afterEach(() => {
   process.env.BLOTATO_RENDERED_QA_ENABLED = "false";
   process.env.OPENROUTER_API_BASE = mockBase;
   process.env.OPENROUTER_BASE_URL = mockBase;
+});
+
+test("Blotato visual creation keeps prompt-autofill for UUID and path template IDs", async () => {
+  const { buildVisualCreationRequest } = await import("../services/blotato/utils/visualRequest.js");
+  const visualInputs = { scenes: [{ mediaSource: "human at a desk" }] };
+
+  for (const templateId of [AI_STORY_TEMPLATE_UUID, AI_STORY_TEMPLATE_PATH]) {
+    const requestBody = buildVisualCreationRequest({
+      candidateTemplateId: templateId,
+      visualInputs,
+      visualPrompt: "Create a five-scene AI news video",
+      manualInputsConfigured: false,
+    });
+    assert.equal(requestBody.templateId, templateId);
+    assert.deepEqual(requestBody.inputs, {});
+    assert.match(requestBody.prompt, /five-scene AI news video/);
+    assert.equal(requestBody.render, true);
+    assert.equal(requestBody.isDraft, false);
+  }
+
+  const manual = buildVisualCreationRequest({
+    candidateTemplateId: AI_STORY_TEMPLATE_PATH,
+    visualInputs,
+    visualPrompt: "Create a five-scene AI news video",
+    manualInputsConfigured: true,
+  });
+  assert.deepEqual(manual.inputs, visualInputs);
+  assert.match(manual.prompt, /five-scene AI news video/);
 });
 
 test("Blotato health endpoint is public and reports configured API key", async () => {

@@ -6,12 +6,15 @@ async function source(path) {
   return readFile(new URL(`../${path}`, import.meta.url), "utf8");
 }
 
-test("Blotato uses the account-listed template ID and explicit inputs for path templates", async () => {
+test("Blotato restores the proven prompt-autofill request for path and UUID templates", async () => {
   const text = await source("services/blotato/utils/autoPublishService.js");
+  const request = await source("services/blotato/utils/visualRequest.js");
   assert.match(text, /templateId:\s*rawId/);
   assert.match(text, /templateIdCandidates:\s*uniqueTemplateIds\(rawId, normalisedId, requested\)/);
-  assert.match(text, /const pathTemplate = \/\^\\\/\?base\\\/v2\\\//);
-  assert.match(text, /inputs:\s*useManualInputs \? visualInputs : \{\}/);
+  assert.match(text, /buildVisualCreationRequest/);
+  assert.match(request, /inputs:\s*manualInputsConfigured \? visualInputs : \{\}/);
+  assert.match(request, /prompt,/);
+  assert.doesNotMatch(text, /manualInputsConfigured \|\| pathTemplate/);
   assert.match(text, /BLOTATO_VIDEO_PENDING_ERROR_LIMIT", 120, 180/);
 });
 
@@ -28,14 +31,19 @@ test("OpenRouter retries parameter-incompatible structured requests with a porta
   assert.match(text, /ai\.request\.parameter_relaxation/);
 });
 
-test("Brevo delivery resolves populated lists, sends with sender ID and verifies dispatch", async () => {
+test("Brevo delivery resolves the populated list and persists an exactly-once campaign hand-off", async () => {
   const audience = await source("services/newsletter/brevo/audience.js");
   const campaign = await source("services/newsletter/brevo/campaign.js");
+  const ops = await source("services/ops/index.js");
   assert.match(audience, /chooseExistingList/);
+  assert.match(audience, /audienceNameAliases/);
   assert.match(audience, /totalSubscribers/);
-  assert.match(audience, /matched-name-global/);
   assert.match(campaign, /sender:\s*\{ id: senderId \}/);
-  assert.match(campaign, /sendCampaignNow\(campaignId\)/);
-  assert.match(campaign, /verifyCampaignDispatch\(campaignId\)/);
+  assert.match(campaign, /readCampaignDelivery/);
+  assert.match(campaign, /status:\s*"created"/);
+  assert.match(campaign, /sendCampaignNow/);
+  assert.match(campaign, /verifyCampaignDispatch/);
   assert.match(campaign, /DISPATCH_ACCEPTED_STATUSES = new Set\(\["queued", "scheduled", "sent"\]\)/);
+  assert.doesNotMatch(ops, /\["newsletter-readiness", "\/newsletter\/readiness"/);
+  assert.match(ops, /newsletter-send.*newsletter-generate/);
 });

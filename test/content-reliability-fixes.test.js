@@ -83,10 +83,10 @@ test("Blotato finished duration and visual QA are applied before publishing", as
 });
 
 
-test("operation windows prove newsletter readiness before send and skip blocked delivery", async () => {
+test("operation windows call newsletter send directly after a successful generation", async () => {
   const ops = await readFile(new URL("../services/ops/index.js", import.meta.url), "utf8");
-  assert.match(ops, /newsletter-readiness.*\/newsletter\/readiness/);
-  assert.match(ops, /newsletter-send.*newsletter-readiness/);
+  assert.doesNotMatch(ops, /newsletter-readiness.*\/newsletter\/readiness/);
+  assert.match(ops, /newsletter-send.*newsletter-generate/);
   assert.match(ops, /operation-dependency-not-ready/);
 });
 

@@ -80,8 +80,8 @@ test("synchronous tasks and Zernio weekly extras fail the operation window when 
 
 test("dependent publication steps cannot run after a failed build", () => {
   assert.match(opsSource, /Zernio blog handoff must depend on blog-social/);
-  assert.match(opsSource, /newsletter readiness must depend on newsletter-generate/);
-  assert.match(opsSource, /newsletter send must depend on newsletter-readiness/);
+  assert.match(opsSource, /newsletter send must depend on newsletter-generate/);
+  assert.doesNotMatch(opsSource, /newsletter send must depend on newsletter-readiness/);
 });
 
 test("RSS-backed content never publishes from a failed morning rewrite", () => {
