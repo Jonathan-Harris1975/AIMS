@@ -15,6 +15,47 @@ import { ensureList } from "./audience.js";
 import { ensureSender, inspectSender } from "./sender.js";
 import { createCampaign, sendCampaignNow, getCampaign } from "./client.js";
 
+const DISPATCH_ACCEPTED_STATUSES = new Set(["queued", "scheduled", "sent"]);
+const DISPATCH_FAILED_STATUSES = new Set(["suspended", "archive", "archived", "darchive", "cancel", "cancelled", "canceled"]);
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function verifyCampaignDispatch(campaignId) {
+  const attempts = Math.max(1, Math.min(20, Number(process.env.NEWSLETTER_BREVO_DISPATCH_VERIFY_ATTEMPTS || 10)));
+  const intervalMs = Math.max(250, Math.min(10_000, Number(process.env.NEWSLETTER_BREVO_DISPATCH_VERIFY_INTERVAL_MS || 2000)));
+  let lastStatus = "unknown";
+  let lastResult = null;
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    const result = await getCampaign(campaignId);
+    lastResult = result;
+    if (!result.ok) {
+      if (attempt < attempts) {
+        await sleep(intervalMs);
+        continue;
+      }
+      return { ok: false, status: "verification_failed", error: result.error, providerStatus: result.status, providerCode: result.code };
+    }
+
+    lastStatus = String(result.data?.status || "unknown").trim().toLowerCase();
+    if (DISPATCH_ACCEPTED_STATUSES.has(lastStatus)) {
+      return { ok: true, status: lastStatus, campaign: result.data };
+    }
+    if (DISPATCH_FAILED_STATUSES.has(lastStatus)) {
+      return { ok: false, status: lastStatus, error: `Brevo campaign entered terminal status '${lastStatus}' after sendNow.`, campaign: result.data };
+    }
+    if (attempt < attempts) await sleep(intervalMs);
+  }
+
+  return {
+    ok: false,
+    status: lastStatus,
+    error: `Brevo accepted sendNow but campaign ${campaignId} remained '${lastStatus}' after dispatch verification.`,
+    campaign: lastResult?.data || null,
+  };
+}
 
 export async function getNewsletterDeliveryReadiness({ profile }) {
   const sender = await inspectSender({ email: profile?.brevo?.fromEmail });
@@ -172,10 +213,17 @@ export async function deliverNewsletterIssue({ profile, sessionId, buildResult }
     const contentField = { htmlContent: html };
 
     stage = "campaign-create";
+    const senderId = Number(sender.senderId);
+    if (!Number.isFinite(senderId) || senderId <= 0) {
+      return { ok: false, status: "sender_error", stage, error: "Brevo returned no valid ID for the verified sender." };
+    }
     const created = await createCampaign({
       name: `${profile.displayName} — ${new Date().toISOString().slice(0, 10)} — ${sessionId}`,
       subject: newsletter.subject,
-      sender: { name: profile.brevo.fromName, email: profile.brevo.fromEmail },
+      // Use the verified Brevo sender ID. Passing email/name asks Brevo to
+      // resolve the identity again and can leave an otherwise valid campaign
+      // in draft when account sender aliases differ.
+      sender: { id: senderId },
       type: "classic",
       previewText: newsletter.previewText,
       replyTo: profile.brevo.replyTo || profile.brevo.fromEmail,
@@ -194,7 +242,16 @@ export async function deliverNewsletterIssue({ profile, sessionId, buildResult }
       };
     }
 
-    const campaignId = created.data?.id;
+    const campaignId = Number(created.data?.id);
+    if (!Number.isFinite(campaignId) || campaignId <= 0) {
+      return {
+        ok: false,
+        status: "campaign_create_failed",
+        stage,
+        error: "Brevo created no usable campaign ID.",
+        providerStatus: created.status || null,
+      };
+    }
     info("newsletter.brevo.campaign_created", { sessionId, profileId: profile.id, campaignId, listId: list.listId });
 
     stage = "campaign-send";
@@ -218,15 +275,42 @@ export async function deliverNewsletterIssue({ profile, sessionId, buildResult }
       };
     }
 
+    stage = "campaign-dispatch-verify";
+    const dispatched = await verifyCampaignDispatch(campaignId);
+    if (!dispatched.ok) {
+      warn("newsletter.brevo.dispatch_not_confirmed", {
+        sessionId,
+        campaignId,
+        campaignStatus: dispatched.status || null,
+        error: dispatched.error,
+      });
+      return {
+        ok: false,
+        status: "dispatch_not_confirmed",
+        stage,
+        campaignId,
+        campaignStatus: dispatched.status || null,
+        error: dispatched.error,
+        providerStatus: dispatched.providerStatus || null,
+        providerCode: dispatched.providerCode || null,
+      };
+    }
+
     const sentAt = new Date().toISOString();
     await recordCampaignDelivery({ profile, sessionId, campaignId, listId: list.listId, sentAt });
 
-    info("newsletter.brevo.campaign_sent", { sessionId, profileId: profile.id, campaignId });
+    info("newsletter.brevo.campaign_sent", {
+      sessionId,
+      profileId: profile.id,
+      campaignId,
+      campaignStatus: dispatched.status,
+    });
 
     return {
       ok: true,
-      status: "sent",
+      status: dispatched.status,
       campaignId,
+      campaignStatus: dispatched.status,
       listId: list.listId,
       audienceSubscribers: list.totalSubscribers,
       sentAt,

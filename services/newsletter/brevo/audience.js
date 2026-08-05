@@ -7,18 +7,50 @@
 import { info, warn } from "../../../logger.js";
 import { getFolders, createFolder, getLists, getList, createList, addContactsToList } from "./client.js";
 
+function normaliseName(value = "") {
+  return String(value || "").trim().toLocaleLowerCase("en-GB");
+}
+
+async function collectFolders() {
+  const folders = [];
+  for (let offset = 0; offset < 500; offset += 50) {
+    const result = await getFolders({ limit: 50, offset });
+    if (!result.ok) return { ok: false, error: result.error, providerStatus: result.status, providerCode: result.code };
+    const page = Array.isArray(result.data?.folders) ? result.data.folders : [];
+    folders.push(...page);
+    if (page.length < 50) break;
+  }
+  return { ok: true, folders };
+}
+
+async function collectLists(folderId = null) {
+  const lists = [];
+  for (let offset = 0; offset < 500; offset += 50) {
+    const result = await getLists({ limit: 50, offset, folderId });
+    if (!result.ok) return { ok: false, error: result.error, providerStatus: result.status, providerCode: result.code };
+    const page = Array.isArray(result.data?.lists) ? result.data.lists : [];
+    lists.push(...page);
+    if (page.length < 50) break;
+  }
+  return { ok: true, lists };
+}
+
 async function findFolderByName(name) {
-  const result = await getFolders({ limit: 50 });
-  if (!result.ok) return { ok: false, error: result.error, providerStatus: result.status, providerCode: result.code };
-  const match = (result.data?.folders || []).find((f) => f.name === name);
+  const result = await collectFolders();
+  if (!result.ok) return result;
+  const wanted = normaliseName(name);
+  const match = result.folders.find((folder) => normaliseName(folder.name) === wanted);
   return { ok: true, folder: match || null };
 }
 
-async function findListByName(name, folderId = null) {
-  const result = await getLists({ limit: 50, folderId });
-  if (!result.ok) return { ok: false, error: result.error, providerStatus: result.status, providerCode: result.code };
-  const match = (result.data?.lists || []).find((l) => l.name === name);
-  return { ok: true, list: match || null };
+async function findListsByName(name, folderId = null) {
+  const result = await collectLists(folderId);
+  if (!result.ok) return result;
+  const wanted = normaliseName(name);
+  return {
+    ok: true,
+    lists: result.lists.filter((list) => normaliseName(list.name) === wanted),
+  };
 }
 
 function subscriberCounts(data = {}) {
@@ -57,6 +89,23 @@ export async function inspectList(listId) {
   };
 }
 
+async function chooseExistingList(candidates = []) {
+  const inspected = [];
+  for (const candidate of candidates) {
+    const details = await inspectList(candidate?.id);
+    if (!details.ok) continue;
+    inspected.push(details);
+  }
+
+  if (!inspected.length) return null;
+  inspected.sort((left, right) => (
+    Number(right.totalSubscribers || 0) - Number(left.totalSubscribers || 0)
+    || Number(right.uniqueSubscribers || 0) - Number(left.uniqueSubscribers || 0)
+    || Number(left.listId || 0) - Number(right.listId || 0)
+  ));
+  return inspected[0];
+}
+
 export async function ensureFolder(name) {
   const found = await findFolderByName(name);
   if (!found.ok) return found;
@@ -69,71 +118,84 @@ export async function ensureFolder(name) {
 }
 
 export async function ensureList({ id = null, name, folderName, allowCreate = true }) {
-  let resolved;
-
   if (id) {
-    resolved = { ok: true, listId: Number(id), created: false, source: "configured-id" };
-  } else {
-    const foundFolder = await findFolderByName(folderName);
-    if (!foundFolder.ok) return { ...foundFolder, stage: "folder-lookup" };
-
-    let folderId = foundFolder.folder?.id || null;
-    if (!folderId && !allowCreate) {
-      return {
-        ok: false,
-        status: "audience_not_configured",
-        stage: "folder-lookup",
-        error: `Brevo folder '${folderName}' was not found. Configure NEWSLETTER_AI_EDGE_BREVO_LIST_ID to the existing populated list before production sending.`,
-      };
-    }
-    if (!folderId) {
-      const folder = await ensureFolder(folderName);
-      if (!folder.ok) return { ...folder, stage: "folder-create" };
-      folderId = folder.folderId;
-    }
-
-    const found = await findListByName(name, folderId);
-    if (!found.ok) return { ...found, stage: "list-lookup" };
-    if (found.list) {
-      resolved = {
-        ok: true,
-        listId: Number(found.list.id),
-        created: false,
-        folderId,
-        source: "matched-name",
-      };
-    } else if (!allowCreate) {
-      return {
-        ok: false,
-        status: "audience_not_configured",
-        stage: "list-lookup",
-        error: `Brevo list '${name}' was not found. Configure NEWSLETTER_AI_EDGE_BREVO_LIST_ID to the existing populated list before production sending.`,
-      };
-    } else {
-      const created = await createList({ name, folderId });
-      if (!created.ok) {
-        return {
-          ok: false,
-          error: created.error,
-          providerStatus: created.status,
-          providerCode: created.code,
-          stage: "list-create",
-        };
-      }
-      info("newsletter.brevo.list_created", { name, listId: created.data?.id, folderId });
-      resolved = {
-        ok: true,
-        listId: Number(created.data?.id),
-        created: true,
-        folderId,
-        source: "created",
-      };
-    }
+    const details = await inspectList(Number(id));
+    if (!details.ok) return { ...details, stage: "list-details", source: "configured-id" };
+    return { ...details, created: false, source: "configured-id" };
   }
 
-  const details = await inspectList(resolved.listId);
-  if (!details.ok) return { ...details, stage: "list-details", source: resolved.source };
-  return { ...resolved, ...details };
+  // Search every Brevo folder first. The production list may have been moved,
+  // renamed only by case, or duplicated during an earlier setup attempt. When
+  // duplicate names exist, choose the populated list rather than an empty one.
+  const globalMatches = await findListsByName(name);
+  if (!globalMatches.ok) return { ...globalMatches, stage: "global-list-lookup" };
+  const globalList = await chooseExistingList(globalMatches.lists);
+  if (globalList) {
+    return {
+      ...globalList,
+      created: false,
+      source: "matched-name-global",
+    };
+  }
+
+  const foundFolder = await findFolderByName(folderName);
+  if (!foundFolder.ok) return { ...foundFolder, stage: "folder-lookup" };
+
+  let folderId = foundFolder.folder?.id || null;
+  if (!folderId && !allowCreate) {
+    return {
+      ok: false,
+      status: "audience_not_configured",
+      stage: "folder-lookup",
+      error: `Brevo folder '${folderName}' was not found. Configure NEWSLETTER_AI_EDGE_BREVO_LIST_ID to the existing populated list before production sending.`,
+    };
+  }
+  if (!folderId) {
+    const folder = await ensureFolder(folderName);
+    if (!folder.ok) return { ...folder, stage: "folder-create" };
+    folderId = folder.folderId;
+  }
+
+  const folderMatches = await findListsByName(name, folderId);
+  if (!folderMatches.ok) return { ...folderMatches, stage: "list-lookup" };
+  const folderList = await chooseExistingList(folderMatches.lists);
+  if (folderList) {
+    return {
+      ...folderList,
+      created: false,
+      folderId,
+      source: "matched-name",
+    };
+  }
+
+  if (!allowCreate) {
+    return {
+      ok: false,
+      status: "audience_not_configured",
+      stage: "list-lookup",
+      error: `Brevo list '${name}' was not found. Configure NEWSLETTER_AI_EDGE_BREVO_LIST_ID to the existing populated list before production sending.`,
+    };
+  }
+
+  const created = await createList({ name, folderId });
+  if (!created.ok) {
+    return {
+      ok: false,
+      error: created.error,
+      providerStatus: created.status,
+      providerCode: created.code,
+      stage: "list-create",
+    };
+  }
+  info("newsletter.brevo.list_created", { name, listId: created.data?.id, folderId });
+  const details = await inspectList(Number(created.data?.id));
+  if (!details.ok) return { ...details, stage: "list-details", source: "created" };
+  return {
+    ...details,
+    created: true,
+    folderId,
+    source: "created",
+  };
 }
 
 /**
