@@ -152,11 +152,11 @@ test("artwork lanes have separate total budgets and AI-grounded photorealistic p
   assert.match(env, /^ZERNIO_ARTWORK_TIMEOUT_MS=600000$/m);
 });
 
-test("newsletter retains only the generated or deterministic AI fallback and fails closed otherwise", async () => {
+test("newsletter retains only generated provider artwork and fails closed otherwise", async () => {
   const hero = await readFile(new URL("../services/newsletter/engine/heroImage.js", import.meta.url), "utf8");
   const build = await readFile(new URL("../services/newsletter/engine/buildNewsletter.js", import.meta.url), "utf8");
   assert.match(hero, /createBlogArtwork/);
-  assert.match(hero, /provider-and-deterministic-ai-fallback-failed/);
+  assert.match(hero, /provider-artwork-failed/);
   assert.match(hero, /imageStatus: result\.fallback \? "fallback" : "generated"/);
   assert.doesNotMatch(hero, /NEWSLETTER_AI_EDGE_FALLBACK_IMAGE_URL/);
   assert.match(build, /heroImageStatus/);
@@ -207,7 +207,7 @@ test("Zernio schedule recovery uses London time and a future blog-social slot", 
   assert.match(env, /^ZERNIO_BLOG_RSS_TIME=12:00$/m);
 });
 
-test("artwork provider failure produces an uploaded text-free AI fallback, not the generic logo tile", async () => {
+test("artwork provider failure creates diagnostics but fails closed before publication", async () => {
   const png = createDeterministicAiFallbackPng({ width: 640, height: 360, seed: "newsletter-ai-edge" });
   assert.deepEqual([...png.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
   assert.ok(png.length > 20_000);
@@ -218,14 +218,12 @@ test("artwork provider failure produces an uploaded text-free AI fallback, not t
   const socialBlog = await readFile(new URL("../services/blog/social/buildDailySocialBlogPost.js", import.meta.url), "utf8");
   const hero = await readFile(new URL("../services/newsletter/engine/heroImage.js", import.meta.url), "utf8");
   const env = await readFile(new URL("../config/production.defaults.env", import.meta.url), "utf8");
-  assert.match(blogArtwork, /artwork\.blog\.deterministic_ai_fallback/);
-  assert.match(socialArtwork, /artwork\.social\.deterministic_ai_fallback/);
-  assert.match(weeklyBlog, /art\.fallback \? "fallback" : "generated"/);
+  assert.match(blogArtwork, /artwork\.blog\.deterministic_ai_diagnostic/);
+  assert.match(socialArtwork, /artwork\.social\.deterministic_ai_diagnostic/);
+  assert.match(blogArtwork, /ok: false,[\s\S]*diagnosticUrl: publicUrl,[\s\S]*publicUrl: ""/);
+  assert.match(socialArtwork, /ok: false,[\s\S]*diagnosticUrl: publicUrl,[\s\S]*publicUrl: ""/);
   assert.match(weeklyBlog, /reason: "artwork-unavailable"/);
-  assert.doesNotMatch(weeklyBlog, /BLOG_RSS_IMAGE_URL/);
-  assert.match(socialBlog, /art\.fallback \? "fallback" : "generated"/);
   assert.match(socialBlog, /reason: "artwork-unavailable"/);
-  assert.doesNotMatch(socialBlog, /BLOG_SOCIAL_FALLBACK_IMAGE_URL/);
   assert.doesNotMatch(hero, /blog-fallback-hero\.png/);
   assert.match(env, /^BLOG_FALLBACK_IMAGE_URL=$/m);
   assert.match(env, /^BLOG_SOCIAL_FALLBACK_IMAGE_URL=$/m);
