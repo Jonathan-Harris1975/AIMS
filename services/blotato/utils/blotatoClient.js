@@ -232,8 +232,9 @@ export async function createVisual({
     inputs,
     render,
     isDraft,
-    useBrandKit: Boolean(useBrandKit),
   };
+
+  if (useBrandKit === true) body.useBrandKit = true;
 
   if (prompt !== undefined && prompt !== null && String(prompt).trim()) {
     body.prompt = String(prompt).trim();

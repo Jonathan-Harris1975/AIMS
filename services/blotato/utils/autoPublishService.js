@@ -297,11 +297,15 @@ async function resolveVideoTemplateId({ requestedTemplateId, apiKey, autoDiscove
   const directMatch = idItems.find((item) => templateMatchesRequested(item, requested));
   if (directMatch) {
     const rawId = templateItemId(directMatch) || requested;
-    const id = normaliseTemplateIdForApi(rawId);
+    const normalisedId = normaliseTemplateIdForApi(rawId);
+    // A verified account template ID is the provider's source of truth. Some
+    // Blotato accounts currently list the AI Story template by its full path
+    // while rejecting the UUID documented for the public catalogue. Use the
+    // exact listed ID first, with the normalised UUID retained as fallback.
     return {
-      templateId: id,
+      templateId: rawId,
       rawTemplateId: rawId,
-      templateIdCandidates: uniqueTemplateIds(id, rawId, requested),
+      templateIdCandidates: uniqueTemplateIds(rawId, normalisedId, requested),
       verified: true,
       source: "configured-id",
       template: directMatch,
@@ -324,8 +328,9 @@ async function resolveVideoTemplateId({ requestedTemplateId, apiKey, autoDiscove
       searchItems.push(...items);
       const preferred = pickPreferredTemplate(items, { requested, searchTerms: [search] });
       const resolvedId = templateItemId(preferred);
-      const apiTemplateId = normaliseTemplateIdForApi(resolvedId);
-      if (apiTemplateId) {
+      const normalisedId = normaliseTemplateIdForApi(resolvedId);
+      if (resolvedId || normalisedId) {
+        const apiTemplateId = resolvedId || normalisedId;
         warn("blotato.template.auto_discovered", {
           requestedTemplateId: requested,
           resolvedTemplateId: apiTemplateId,
@@ -336,7 +341,7 @@ async function resolveVideoTemplateId({ requestedTemplateId, apiKey, autoDiscove
         return {
           templateId: apiTemplateId,
           rawTemplateId: resolvedId,
-          templateIdCandidates: uniqueTemplateIds(apiTemplateId, resolvedId, requested, DEFAULT_AI_STORY_TEMPLATE_PATH),
+          templateIdCandidates: uniqueTemplateIds(apiTemplateId, normalisedId, requested, DEFAULT_AI_STORY_TEMPLATE_PATH),
           verified: true,
           source: "auto-discovered",
           template: preferred,
@@ -355,8 +360,9 @@ async function resolveVideoTemplateId({ requestedTemplateId, apiKey, autoDiscove
     searchItems.push(...allItems);
     const preferred = pickPreferredTemplate(allItems, { requested, searchTerms });
     const resolvedId = templateItemId(preferred);
-    const apiTemplateId = normaliseTemplateIdForApi(resolvedId);
-    if (apiTemplateId) {
+    const normalisedId = normaliseTemplateIdForApi(resolvedId);
+    if (resolvedId || normalisedId) {
+      const apiTemplateId = resolvedId || normalisedId;
       warn("blotato.template.auto_discovered", {
         requestedTemplateId: requested,
         resolvedTemplateId: apiTemplateId,
@@ -367,7 +373,7 @@ async function resolveVideoTemplateId({ requestedTemplateId, apiKey, autoDiscove
       return {
         templateId: apiTemplateId,
         rawTemplateId: resolvedId,
-        templateIdCandidates: uniqueTemplateIds(apiTemplateId, resolvedId, requested, DEFAULT_AI_STORY_TEMPLATE_PATH),
+        templateIdCandidates: uniqueTemplateIds(apiTemplateId, normalisedId, requested, DEFAULT_AI_STORY_TEMPLATE_PATH),
         verified: true,
         source: "auto-discovered-all",
         template: preferred,
@@ -534,7 +540,7 @@ async function createAndWaitForVideo({ templateId, templateIdCandidates = [], pa
     videoModel: creditBudget.videoModel,
   });
 
-  const useManualInputs = parseBoolean(process.env.BLOTATO_USE_MANUAL_TEMPLATE_INPUTS, false);
+  const manualInputsConfigured = parseBoolean(process.env.BLOTATO_USE_MANUAL_TEMPLATE_INPUTS, false);
   const candidates = uniqueTemplateIds(templateId, templateIdCandidates);
   let visual;
   let usedTemplateId = templateId;
@@ -542,14 +548,31 @@ async function createAndWaitForVideo({ templateId, templateIdCandidates = [], pa
 
   for (const candidateTemplateId of candidates) {
     try {
-      visual = await createVisual({
+      // Blotato's current API recommends bare UUID + prompt + empty inputs.
+      // Some account-listed AI Story templates still expose their legacy full
+      // /base/v2/... path and reject the UUID. Those path templates require
+      // their explicit scene inputs; sending an empty inputs object creates a
+      // draft that never reaches a renderable state. Select the payload mode
+      // from the actual candidate accepted by the provider.
+      const pathTemplate = /^\/?base\/v2\//i.test(candidateTemplateId);
+      const useManualInputs = manualInputsConfigured || pathTemplate;
+      const request = {
         templateId: candidateTemplateId,
         inputs: useManualInputs ? visualInputs : {},
-        prompt: visualPrompt,
         render: true,
         isDraft: false,
-        useBrandKit: parseBoolean(process.env.BLOTATO_USE_BRAND_KIT, true),
-      }, apiKey);
+        useBrandKit: parseBoolean(process.env.BLOTATO_USE_BRAND_KIT, false),
+        ...(useManualInputs ? {} : { prompt: visualPrompt }),
+      };
+
+      info("blotato.video.create.request_mode", {
+        templateId: candidateTemplateId,
+        inputMode: useManualInputs ? "explicit-template-inputs" : "prompt-autofill",
+        sceneCount: useManualInputs ? visualInputs.scenes?.length || 0 : null,
+        useBrandKit: request.useBrandKit,
+      });
+
+      visual = await createVisual(request, apiKey);
       usedTemplateId = candidateTemplateId;
       if (candidateTemplateId !== templateId) {
         warn("blotato.video.create.template_fallback_used", {
@@ -607,7 +630,7 @@ async function createAndWaitForVideo({ templateId, templateIdCandidates = [], pa
       intervalMs,
       maxDurationMs,
       finalGraceMs,
-      maxConsecutivePendingErrors: positiveIntEnv("BLOTATO_VIDEO_PENDING_ERROR_LIMIT", 60, 120),
+      maxConsecutivePendingErrors: positiveIntEnv("BLOTATO_VIDEO_PENDING_ERROR_LIMIT", 120, 180),
       progressEvery: positiveIntEnv("BLOTATO_VIDEO_POLL_PROGRESS_EVERY", 30, 240),
       ...blotatoPollLoggers(),
     });
