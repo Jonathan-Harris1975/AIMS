@@ -34,6 +34,7 @@ import { startKeepAlive, stopKeepAlive } from "../../shared/utils/keepalive.js";
 import { buildRenderedVideoQaError, reviewRenderedVideo } from "./renderedVideoQa.js";
 import { looksLikePendingVideoError } from "./renderStatus.js";
 import { pollUntil } from "./pollUntil.js";
+import { buildVisualCreationRequest } from "./visualRequest.js";
 
 export const BLOTATO_PUBLISH_JOB_TYPE = "blotato-news-insight-publish";
 export const DEFAULT_AI_STORY_TEMPLATE_PATH =
@@ -548,28 +549,24 @@ async function createAndWaitForVideo({ templateId, templateIdCandidates = [], pa
 
   for (const candidateTemplateId of candidates) {
     try {
-      // Blotato's current API recommends bare UUID + prompt + empty inputs.
-      // Some account-listed AI Story templates still expose their legacy full
-      // /base/v2/... path and reject the UUID. Those path templates require
-      // their explicit scene inputs; sending an empty inputs object creates a
-      // draft that never reaches a renderable state. Select the payload mode
-      // from the actual candidate accepted by the provider.
-      const pathTemplate = /^\/?base\/v2\//i.test(candidateTemplateId);
-      const useManualInputs = manualInputsConfigured || pathTemplate;
-      const request = {
-        templateId: candidateTemplateId,
-        inputs: useManualInputs ? visualInputs : {},
-        render: true,
-        isDraft: false,
+      // Restore the last known working 31 July request contract. Blotato's
+      // documented template flow uses the prompt to populate template inputs;
+      // `inputs` remains an empty object unless manual input mode is explicitly
+      // enabled. A full account-listed template path is only an ID fallback and
+      // must not silently switch the request into a different input schema.
+      const request = buildVisualCreationRequest({
+        candidateTemplateId,
+        visualInputs,
+        visualPrompt,
+        manualInputsConfigured,
         useBrandKit: parseBoolean(process.env.BLOTATO_USE_BRAND_KIT, false),
-        ...(useManualInputs ? {} : { prompt: visualPrompt }),
-      };
+      });
 
       info("blotato.video.create.request_mode", {
         templateId: candidateTemplateId,
-        inputMode: useManualInputs ? "explicit-template-inputs" : "prompt-autofill",
-        sceneCount: useManualInputs ? visualInputs.scenes?.length || 0 : null,
-        useBrandKit: request.useBrandKit,
+        inputMode: manualInputsConfigured ? "explicit-template-inputs" : "prompt-autofill",
+        sceneCount: manualInputsConfigured ? visualInputs.scenes?.length || 0 : null,
+        useBrandKit: Boolean(request.useBrandKit),
       });
 
       visual = await createVisual(request, apiKey);
