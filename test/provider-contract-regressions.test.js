@@ -107,11 +107,11 @@ test("provider integrations follow current Blotato and OpenRouter contracts", as
     readFile(new URL("../config/production.defaults.env", import.meta.url), "utf8"),
   ]);
 
-  assert.match(blotatoClient, /useBrandKit: Boolean\(useBrandKit\)/);
+  assert.match(blotatoClient, /if \(useBrandKit === true\) body\.useBrandKit = true/);
   assert.match(blotatoClient, /`videos\/\$\{encodeURIComponent\(cleaned\)\}`/);
   assert.match(autoPublish, /BLOTATO_USE_BRAND_KIT/);
   assert.match(autoPublish, /id,title,name,description,inputs/);
-  assert.match(autoPublish, /BLOTATO_VIDEO_PENDING_ERROR_LIMIT", 60, 120/);
+  assert.match(autoPublish, /BLOTATO_VIDEO_PENDING_ERROR_LIMIT", 120, 180/);
   assert.match(capabilities, /images\/models\/\$\{encodeURIComponent\(author\)\}/);
   assert.match(capabilities, /filterImagePayloadByCapabilities/);
   assert.match(council, /strictJsonResponseFormat/);
@@ -120,12 +120,12 @@ test("provider integrations follow current Blotato and OpenRouter contracts", as
   assert.doesNotMatch(council, /type: "json_object"/);
   assert.doesNotMatch(compose, /type: "json_object"/);
   assert.doesNotMatch(visualQa, /type: "json_object"/);
-  assert.match(env, /^BLOTATO_NEWS_TEMPLATE_ID=5903fe43-514d-40ee-a060-0d6628c5f8fd$/m);
-  assert.match(env, /^BLOTATO_TEMPLATE_ID_MODE=uuid$/m);
+  assert.match(env, /^BLOTATO_NEWS_TEMPLATE_ID=\/base\/v2\/ai-story-video\/5903fe43-514d-40ee-a060-0d6628c5f8fd\/v1$/m);
+  assert.match(env, /^BLOTATO_TEMPLATE_ID_MODE=path$/m);
   assert.match(env, /^BLOTATO_VIDEO_POLL_ATTEMPTS=120$/m);
   assert.match(env, /^BLOTATO_VIDEO_POLL_MAX_DURATION_MS=600000$/m);
   assert.match(env, /^BLOTATO_STATUS_RETRY_ATTEMPTS=1$/m);
-  assert.match(env, /^BLOTATO_VIDEO_PENDING_ERROR_LIMIT=60$/m);
+  assert.match(env, /^BLOTATO_VIDEO_PENDING_ERROR_LIMIT=120$/m);
   assert.match(env, /^BLOTATO_PENDING_500_COMPAT=true$/m);
   assert.match(env, /^ARTWORK_TASK_TIMEOUT_MS=600000$/m);
   assert.match(env, /^BLOG_FALLBACK_IMAGE_URL=$/m);
