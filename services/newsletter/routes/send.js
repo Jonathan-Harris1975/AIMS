@@ -39,8 +39,8 @@ async function loadStoredIssue(profile, sessionId, date) {
 // route creates the Brevo campaign and sends it immediately (sendNow) the
 // moment MAST calls it — there is no internal scheduledAt.
 //
-// sessionId is optional. The AIMS morning operation runs generate, readiness
-// and send sequentially, but it deliberately does not couple routes through an
+// sessionId is optional. The AIMS morning operation runs generate and send
+// sequentially, but it deliberately does not couple routes through an
 // in-memory session value. When sessionId is omitted this resolves today's most
 // recently built issue for the profile from durable storage, so restarts do not
 // break the delivery hand-off. This resolves "today's most recently built
@@ -80,6 +80,8 @@ router.post("/send", requestDedupe("newsletter:send"), asyncRoute(async (req, re
       "audience_empty",
       "audience_not_configured",
       "content_error",
+      "existing_campaign_pending",
+      "existing_campaign_terminal",
     ]);
     const status = configurationStatuses.has(result.status) ? 409 : 502;
     warn("newsletter.send.blocked", {
@@ -118,10 +120,10 @@ router.get("/readiness/:profileId?", asyncRoute(async (req, res) => (
   handleReadiness(req.params.profileId || req.query.profileId, res)
 )));
 
-// POST /newsletter/readiness — scheduler-compatible, side-effect-free Brevo
-// preflight. AIMS operation windows use POST for every internal task, so this
-// companion route lets the scheduler prove sender/list readiness before it
-// attempts /newsletter/send.
+// POST /newsletter/readiness — operator-compatible, side-effect-free Brevo
+// preflight. It remains available for diagnostics but is deliberately not a
+// hard gate in the morning operation; /newsletter/send performs the same
+// checks and returns the precise provider failure without being skipped.
 router.post("/readiness", asyncRoute(async (req, res) => (
   handleReadiness(req.body?.profileId || req.query.profileId, res)
 )));
