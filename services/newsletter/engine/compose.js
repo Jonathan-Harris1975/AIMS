@@ -17,7 +17,10 @@ const ISSUE_SCHEMA = {
     openingNoteHtml: { type: "string", maxLength: 900 },
     bigThree: {
       type: "array",
-      minItems: 3,
+      // Anthropic's structured-output implementation currently accepts only
+      // minItems 0 or 1. Exact three-item enforcement remains deterministic
+      // below and in the newsletter validators.
+      minItems: 1,
       maxItems: 3,
       items: {
         type: "object",
