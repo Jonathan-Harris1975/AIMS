@@ -18,7 +18,7 @@ function modeEnvPrefix(mode = "podcast") {
   return String(mode || "podcast").replace(/[^a-z0-9]+/gi, "_").toUpperCase();
 }
 
-export function getArtworkImageConfig(model, mode = "podcast") {
+export function getArtworkImageConfig(model, mode = "podcast", { seed } = {}) {
   const family = getArtworkModelFamily(model);
   const prefix = modeEnvPrefix(mode);
   const aspectRatio = pickFirstEnv(
@@ -32,6 +32,7 @@ export function getArtworkImageConfig(model, mode = "podcast") {
   const resolution = pickFirstEnv(`${prefix}_ARTWORK_RESOLUTION`, "ARTWORK_IMAGE_RESOLUTION") || "2K";
 
   const config = { aspect_ratio: aspectRatio, output_format: outputFormat, n: 1 };
+  if (Number.isInteger(seed) && seed >= 0) config.seed = seed;
   if (quality) config.quality = quality;
 
   // Seedream explicitly supports 1K/2K/4K. Recraft and FLUX endpoints differ,
@@ -45,15 +46,15 @@ export function getArtworkImageConfig(model, mode = "podcast") {
   return config;
 }
 
-export function buildArtworkImagePayload({ model, prompt, mode = "podcast" } = {}) {
+export function buildArtworkImagePayload({ model, prompt, mode = "podcast", seed } = {}) {
   const payload = {
     model,
     prompt,
-    ...getArtworkImageConfig(model, mode),
+    ...getArtworkImageConfig(model, mode, { seed }),
   };
 
   if (!envFlagEnabled("ARTWORK_IMAGE_CONFIG_ENABLED", true)) {
-    return { model, prompt, n: 1 };
+    return { model, prompt, n: 1, ...(Number.isInteger(seed) && seed >= 0 ? { seed } : {}) };
   }
 
   return payload;

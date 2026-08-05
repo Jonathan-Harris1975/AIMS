@@ -6,8 +6,33 @@
 // the article. This audit inspects the pixels before upload/publication.
 
 import { detectImageFormat } from "./imageFormat.js";
+import { parseStructuredJson, strictJsonResponseFormat } from "../../shared/utils/structuredJson.js";
 
 const DEFAULT_THRESHOLD = Math.max(1, Math.min(100, Number(process.env.ARTWORK_VISUAL_QA_THRESHOLD || 80)));
+
+const ARTWORK_QA_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    score: { type: "number", minimum: 0, maximum: 100 },
+    relevance: { type: "number", minimum: 0, maximum: 100 },
+    textSafety: { type: "number", minimum: 0, maximum: 100 },
+    composition: { type: "number", minimum: 0, maximum: 100 },
+    brandFit: { type: "number", minimum: 0, maximum: 100 },
+    defects: {
+      type: "array",
+      maxItems: 8,
+      items: { type: "string", maxLength: 320 },
+    },
+    hardDefects: {
+      type: "array",
+      maxItems: 6,
+      items: { type: "string", maxLength: 320 },
+    },
+    summary: { type: "string", maxLength: 700 },
+  },
+  required: ["score", "relevance", "textSafety", "composition", "brandFit", "defects", "hardDefects", "summary"],
+};
 
 function compact(value = "", max = 4000) {
   const text = String(value || "").replace(/\s+/g, " ").trim();
@@ -15,11 +40,7 @@ function compact(value = "", max = 4000) {
 }
 
 function extractJsonObject(raw = "") {
-  const text = String(raw || "").trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "");
-  const first = text.indexOf("{");
-  const last = text.lastIndexOf("}");
-  const candidate = first >= 0 && last > first ? text.slice(first, last + 1) : text;
-  return JSON.parse(candidate);
+  return parseStructuredJson(raw, "artwork visual QA response");
 }
 
 function numberScore(value, fallback = 0) {
@@ -127,7 +148,7 @@ export async function auditArtworkBase64({ base64, mode = "editorial", creativeP
       max_tokens: 700,
       temperature: 0.1,
       reasoning: { effort: "minimal" },
-      response_format: { type: "json_object" },
+      response_format: strictJsonResponseFormat("artwork_visual_qa", ARTWORK_QA_SCHEMA),
       maxRetries: 1,
       signal,
       messages: [

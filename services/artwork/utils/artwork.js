@@ -7,6 +7,7 @@
 // prompt structure plus pixel-level relevance/quality gates.
 // ============================================================
 
+import { createHash } from "node:crypto";
 import { warn, error, info } from "../../../logger.js";
 import { fetchWithTimeout } from "../../shared/http-client.js";
 import { getArtworkProviders } from "./openrouterProviders.js";
@@ -14,6 +15,7 @@ import { applyArtworkPromptPolicy } from "./artworkPromptPolicy.js";
 import { buildModelAwareArtworkPrompt } from "./artworkModelPrompt.js";
 import { THRESHOLDS } from "../../../config/thresholds.js";
 import { auditArtworkBase64 } from "./artworkVisualQa.js";
+import { filterImagePayloadByCapabilities, getImageSupportedParameters } from "./openrouterImageCapabilities.js";
 import {
   artworkRetryDelayMs,
   buildArtworkImagePayload,
@@ -170,6 +172,13 @@ function parseBoolean(value, fallback = false) {
   return ["1", "true", "yes", "on", "y"].includes(String(value).trim().toLowerCase());
 }
 
+function createArtworkSeed(...parts) {
+  const digest = createHash("sha256")
+    .update(parts.map((part) => String(part ?? "")).join("|"))
+    .digest();
+  return digest.readUInt32BE(0) & 0x7fffffff;
+}
+
 function visualQaModes() {
   return new Set(String(process.env.ARTWORK_VISUAL_QA_MODES || "podcast,blog,newsletter,social,social-blog,quiz")
     .split(",")
@@ -191,17 +200,19 @@ function buildQaRepairPrompt(prompt, qa = {}) {
   ].join(" ");
 }
 
-async function requestArtworkFromProvider(provider, prompt, mode, date, { useShortInstruction = false, signal } = {}) {
+async function requestArtworkFromProvider(provider, prompt, mode, date, { useShortInstruction = false, signal, generationKey = "artwork", variation = "initial" } = {}) {
   const baseInstruction = useShortInstruction ? buildShortInstruction(prompt, mode, date) : buildInstruction(prompt, mode, date);
   const instruction = buildModelAwareArtworkPrompt({
     model: provider.model,
     mode,
     creativeDirection: baseInstruction,
   });
-  const payload = buildArtworkImagePayload({
+  const seed = createArtworkSeed(generationKey, date, mode, provider.model, variation, instruction);
+  const rawPayload = buildArtworkImagePayload({
     model: provider.model,
     prompt: instruction,
     mode,
+    seed,
   });
 
   const headers = {
@@ -210,6 +221,18 @@ async function requestArtworkFromProvider(provider, prompt, mode, date, { useSho
     "HTTP-Referer": process.env.OPENROUTER_SITE_URL || process.env.APP_URL || "https://jonathan-harris.online",
     "X-Title": process.env.OPENROUTER_APP_NAME || process.env.APP_TITLE || "AI Management Suite",
   };
+
+  const supportedParameters = await getImageSupportedParameters({
+    baseUrl: OPENROUTER_BASE_URL,
+    model: provider.model,
+    apiKey: provider.key,
+    headers: {
+      "HTTP-Referer": headers["HTTP-Referer"],
+      "X-Title": headers["X-Title"],
+    },
+    signal,
+  });
+  const payload = filterImagePayloadByCapabilities(rawPayload, supportedParameters);
 
   const attempts = getArtworkProviderAttempts();
   let lastError;
@@ -283,11 +306,13 @@ async function requestArtworkFromProvider(provider, prompt, mode, date, { useSho
             mode,
             creativeDirection: buildInstruction(qaPrompt, mode, date),
           });
-          const retryPayload = buildArtworkImagePayload({
+          const retryRawPayload = buildArtworkImagePayload({
             model: provider.model,
             prompt: retryInstruction,
             mode,
+            seed: createArtworkSeed(generationKey, date, mode, provider.model, `qa-${qaAttempt + 1}`, retryInstruction),
           });
+          const retryPayload = filterImagePayloadByCapabilities(retryRawPayload, supportedParameters);
           const retryResponse = await fetchWithTimeout(`${OPENROUTER_BASE_URL.replace(/\/+$/, "")}/images`, {
             method: "POST",
             headers,
@@ -330,7 +355,8 @@ async function requestArtworkFromProvider(provider, prompt, mode, date, { useSho
   throw lastError || new Error(`No image data returned from ${provider.modelEnv}.`);
 }
 
-async function generateArtworkBase64(prompt, { mode = "podcast", date, signal } = {}) {
+async function generateArtworkBase64(prompt, { mode = "podcast", date, signal, generationKey, sessionId } = {}) {
+  const stableGenerationKey = String(generationKey || sessionId || `${mode}:${date || "undated"}:${prompt || "artwork"}`);
   if (providers.length === 0) {
     throw new Error("Artwork generation disabled: missing OpenRouter artwork env vars.");
   }
@@ -340,7 +366,7 @@ async function generateArtworkBase64(prompt, { mode = "podcast", date, signal } 
   for (const provider of providers) {
     if (signal?.aborted) throw signal.reason instanceof Error ? signal.reason : new Error("Artwork generation aborted");
     try {
-      const image = await requestArtworkFromProvider(provider, prompt, mode, date, { signal });
+      const image = await requestArtworkFromProvider(provider, prompt, mode, date, { signal, generationKey: stableGenerationKey, variation: "full" });
       if (provider.id === "backup") {
         info("🎨 Artwork generated with backup OpenRouter image model", {
           modelEnv: provider.modelEnv,
@@ -370,7 +396,7 @@ async function generateArtworkBase64(prompt, { mode = "podcast", date, signal } 
     for (const provider of providers) {
       if (signal?.aborted) throw signal.reason instanceof Error ? signal.reason : new Error("Artwork generation aborted");
       try {
-        const image = await requestArtworkFromProvider(provider, prompt, mode, date, { useShortInstruction: true, signal });
+        const image = await requestArtworkFromProvider(provider, prompt, mode, date, { useShortInstruction: true, signal, generationKey: stableGenerationKey, variation: "short" });
         info("🎨 Artwork generated with shortened prompt after full-prompt failures", {
           provider: provider.id,
           modelEnv: provider.modelEnv,
