@@ -43,13 +43,25 @@ async function findFolderByName(name) {
   return { ok: true, folder: match || null };
 }
 
+function audienceNameAliases(name = "") {
+  const cleaned = String(name || "").trim();
+  if (!cleaned) return [];
+  const aliases = new Set([cleaned]);
+  if (/\s+subscribers$/i.test(cleaned)) {
+    aliases.add(cleaned.replace(/\s+subscribers$/i, "").trim());
+  } else {
+    aliases.add(`${cleaned} Subscribers`);
+  }
+  return [...aliases].map(normaliseName).filter(Boolean);
+}
+
 async function findListsByName(name, folderId = null) {
   const result = await collectLists(folderId);
   if (!result.ok) return result;
-  const wanted = normaliseName(name);
+  const wanted = new Set(audienceNameAliases(name));
   return {
     ok: true,
-    lists: result.lists.filter((list) => normaliseName(list.name) === wanted),
+    lists: result.lists.filter((list) => wanted.has(normaliseName(list.name))),
   };
 }
 
@@ -127,6 +139,8 @@ export async function ensureList({ id = null, name, folderName, allowCreate = tr
   // Search every Brevo folder first. The production list may have been moved,
   // renamed only by case, or duplicated during an earlier setup attempt. When
   // duplicate names exist, choose the populated list rather than an empty one.
+  // Accept both "AI Edge" and the 30/31 July legacy "AI Edge Subscribers"
+  // name so a deployment does not create or select the wrong audience.
   const globalMatches = await findListsByName(name);
   if (!globalMatches.ok) return { ...globalMatches, stage: "global-list-lookup" };
   const globalList = await chooseExistingList(globalMatches.lists);
