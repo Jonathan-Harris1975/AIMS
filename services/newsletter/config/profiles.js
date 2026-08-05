@@ -51,8 +51,8 @@ const aiEdge = Object.freeze({
   // so a successful build cannot silently send to a new empty audience.
   brevo: Object.freeze({
     listId: Number(env("NEWSLETTER_AI_EDGE_BREVO_LIST_ID", "")) || null,
-    listName: env("NEWSLETTER_AI_EDGE_BREVO_LIST_NAME", `${env("NEWSLETTER_AI_EDGE_NAME", "AI Edge")} Subscribers`),
-    folderName: env("NEWSLETTER_AI_EDGE_BREVO_FOLDER_NAME", "AIMS Newsletters"),
+    listName: env("NEWSLETTER_AI_EDGE_BREVO_LIST_NAME", env("NEWSLETTER_AI_EDGE_NAME", "AI Edge")),
+    folderName: env("NEWSLETTER_AI_EDGE_BREVO_FOLDER_NAME", env("NEWSLETTER_AI_EDGE_NAME", "AI Edge")),
     fromName: env("NEWSLETTER_AI_EDGE_FROM_NAME", "Jonathan Harris — AI Edge"),
     fromEmail: env("NEWSLETTER_AI_EDGE_FROM_EMAIL", env("BREVO_FROM_EMAIL")),
     replyTo: env("NEWSLETTER_AI_EDGE_REPLY_TO", env("NEWSLETTER_AI_EDGE_FROM_EMAIL", env("BREVO_FROM_EMAIL"))),
