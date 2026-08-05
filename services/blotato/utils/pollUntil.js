@@ -15,6 +15,7 @@ export async function pollUntil({
   progressEvery = 30,
   finalGraceMs = 0,
   maxDurationMs = Number.POSITIVE_INFINITY,
+  maxConsecutivePendingErrors = Number.POSITIVE_INFINITY,
   now = Date.now,
   wait = sleep,
   onPending,
@@ -22,6 +23,7 @@ export async function pollUntil({
 }) {
   let latest = null;
   let latestPendingError = null;
+  let consecutivePendingErrors = 0;
   const startedAt = now();
   const hasDurationLimit = Number.isFinite(maxDurationMs) && maxDurationMs > 0;
 
@@ -57,10 +59,21 @@ export async function pollUntil({
     try {
       latest = await run();
       latestPendingError = null;
+      consecutivePendingErrors = 0;
     } catch (error) {
       if (!isPendingError?.(error)) throw error;
       latestPendingError = error;
       latest = error?.details || null;
+      consecutivePendingErrors += 1;
+      if (Number.isFinite(maxConsecutivePendingErrors) && consecutivePendingErrors >= maxConsecutivePendingErrors) {
+        const err = new Error(`${label} exceeded ${maxConsecutivePendingErrors} consecutive provider polling errors`);
+        err.statusCode = 502;
+        err.code = "blotato-poll-provider-error-limit";
+        err.details = error?.details || null;
+        err.polling = { consecutivePendingErrors, maxConsecutivePendingErrors, elapsedMs: elapsedMs() };
+        err.cause = error;
+        throw err;
+      }
       if (progressEvery > 0 && attempt % progressEvery === 0) {
         onPending?.({
           label,
@@ -107,6 +120,15 @@ export async function pollUntil({
       if (!isPendingError?.(error)) throw error;
       latestPendingError = error;
       latest = error?.details || latest;
+      consecutivePendingErrors += 1;
+      if (Number.isFinite(maxConsecutivePendingErrors) && consecutivePendingErrors >= maxConsecutivePendingErrors) {
+        const err = new Error(`${label} exceeded ${maxConsecutivePendingErrors} consecutive provider polling errors`);
+        err.statusCode = 502;
+        err.code = "blotato-poll-provider-error-limit";
+        err.details = error?.details || null;
+        err.cause = error;
+        throw err;
+      }
     }
     const status = extractStatus(latest || {});
     if (isDone(status) || isDonePayload?.(latest, status)) return latest;

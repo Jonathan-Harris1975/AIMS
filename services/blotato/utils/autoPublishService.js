@@ -57,7 +57,7 @@ const MODEL_CREDIT_HINTS = Object.freeze({
   },
 });
 
-const TEMPLATE_LIST_FIELDS = "id,name,description,inputs";
+const TEMPLATE_LIST_FIELDS = "id,title,name,description,inputs";
 const DEFAULT_TEMPLATE_SEARCH = "AI Video with AI Voice";
 const FALLBACK_TEMPLATE_SEARCHES = Object.freeze([
   "AI Video with AI Voice",
@@ -548,6 +548,7 @@ async function createAndWaitForVideo({ templateId, templateIdCandidates = [], pa
         prompt: visualPrompt,
         render: true,
         isDraft: false,
+        useBrandKit: parseBoolean(process.env.BLOTATO_USE_BRAND_KIT, true),
       }, apiKey);
       usedTemplateId = candidateTemplateId;
       if (candidateTemplateId !== templateId) {
@@ -588,10 +589,10 @@ async function createAndWaitForVideo({ templateId, templateIdCandidates = [], pa
 
   onVisualCreated?.({ visualId, visual, visualInputs, visualPrompt, creditBudget, dashboardUrl: templateDashboardUrl(visualId), templateId: usedTemplateId, templateIdCandidates: candidates, rejectedTemplateIds });
 
-  const maxAttempts = positiveIntEnv("BLOTATO_VIDEO_POLL_ATTEMPTS", 720, 2880);
+  const maxAttempts = positiveIntEnv("BLOTATO_VIDEO_POLL_ATTEMPTS", 120, 720);
   const intervalMs = positiveIntEnv("BLOTATO_VIDEO_POLL_INTERVAL_MS", 5000, 60_000);
-  const maxDurationMs = positiveIntEnv("BLOTATO_VIDEO_POLL_MAX_DURATION_MS", 900_000, 3_600_000);
-  const finalGraceMs = positiveIntEnv("BLOTATO_VIDEO_FINAL_GRACE_MS", 15_000, 180_000);
+  const maxDurationMs = positiveIntEnv("BLOTATO_VIDEO_POLL_MAX_DURATION_MS", 600_000, 1_800_000);
+  const finalGraceMs = positiveIntEnv("BLOTATO_VIDEO_FINAL_GRACE_MS", 10_000, 60_000);
   let completed;
   try {
     completed = await pollUntil({
@@ -606,6 +607,7 @@ async function createAndWaitForVideo({ templateId, templateIdCandidates = [], pa
       intervalMs,
       maxDurationMs,
       finalGraceMs,
+      maxConsecutivePendingErrors: positiveIntEnv("BLOTATO_VIDEO_PENDING_ERROR_LIMIT", 60, 120),
       progressEvery: positiveIntEnv("BLOTATO_VIDEO_POLL_PROGRESS_EVERY", 30, 240),
       ...blotatoPollLoggers(),
     });
