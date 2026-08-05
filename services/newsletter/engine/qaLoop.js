@@ -11,8 +11,15 @@ import { runDeterministicValidators } from "./validators.js";
 import { composeIssueSections, composeSubjectAndPreview, composeFooter } from "./compose.js";
 import { runNewsletterEditorialCouncil } from "./editorialCouncil.js";
 
-async function regenerateContent({ profile, lead, stories, promotion, sessionId, repairContext = [] }) {
-  const issue = await composeIssueSections({ profile, lead, stories, sessionId, repairContext });
+async function regenerateContent({ profile, lead, stories, promotion, sessionId, repairContext = [], previousNewsletter = null }) {
+  const issue = await composeIssueSections({
+    profile,
+    lead,
+    stories,
+    sessionId,
+    repairContext,
+    previousDraft: previousNewsletter,
+  });
   if (!issue.ok) return issue;
 
   const subject = await composeSubjectAndPreview({
@@ -38,6 +45,9 @@ export async function runQaLoop({ profile, newsletter, lead, stories, promotion 
   const expectedStoryCount = Math.min(9, 1 + stories.length);
   let current = { ...newsletter };
   const history = [];
+  let previousFailureFingerprint = "";
+  let stagnantFailures = 0;
+  const stagnationLimit = Math.max(1, Math.min(3, Number(process.env.REVIEW_COUNCIL_STAGNATION_LIMIT || 2)));
 
   for (let iteration = 1; iteration <= maxIterations; iteration += 1) {
     const deterministic = runDeterministicValidators(current, { expectedStoryCount, requireHeroImage: false });
@@ -98,11 +108,31 @@ export async function runQaLoop({ profile, newsletter, lead, stories, promotion 
       };
     }
 
+    const failureFingerprint = JSON.stringify({
+      deterministic: deterministic.issues.map((issue) => issue.code || issue.message || String(issue)).sort(),
+      councilScore: council.score,
+      councilIssues: [...(council.issues || [])].map(String).sort(),
+    });
+    stagnantFailures = failureFingerprint === previousFailureFingerprint ? stagnantFailures + 1 : 0;
+    previousFailureFingerprint = failureFingerprint;
+
     const repairContext = [
+      ...(council.priorityFixes || []).map((fix) => `Chair priority: ${fix}`),
       ...deterministic.issues.map((issue) => issue.message || issue.code || String(issue)),
       ...(council.issues || []),
+      ...(stagnantFailures >= stagnationLimit
+        ? ["The previous repair did not improve the score or defects. Make a structural revision: change the failed story treatment, claims, hierarchy or voice rather than paraphrasing the same draft."]
+        : []),
     ];
-    const regenerated = await regenerateContent({ profile, lead, stories, promotion, sessionId, repairContext });
+    const regenerated = await regenerateContent({
+      profile,
+      lead,
+      stories,
+      promotion,
+      sessionId: `${sessionId}-repair-${iteration}`,
+      repairContext,
+      previousNewsletter: current,
+    });
     if (!regenerated.ok) {
       warn("newsletter.qa.regeneration_failed", { sessionId, iteration, error: regenerated.error });
       return {

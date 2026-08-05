@@ -75,7 +75,7 @@ export async function generateHeroImage({ profile, heroHeadline, leadStory = nul
       sessionId,
       profileId: profile.id,
       error: result.error,
-      reason: "provider-and-deterministic-ai-fallback-failed",
+      reason: "provider-artwork-failed",
     });
     return { ok: false, error: result.error, prompt };
   }
