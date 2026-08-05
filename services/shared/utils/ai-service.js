@@ -213,6 +213,13 @@ function makeOpenRouterError(status, body, providerId) {
   return err;
 }
 
+function isParameterCompatibilityError(error = {}) {
+  const status = Number(error?.status || 0);
+  if (![400, 404, 422].includes(status)) return false;
+  const text = [error?.message, error?.bodySnippet].filter(Boolean).join(" ").toLowerCase();
+  return /no endpoints found.*requested parameters|cannot handle.*parameters|unsupported parameter|response[_ ]format|structured output|output_config\.format\.schema|minitems|json schema/.test(text);
+}
+
 function extractMessageContent(json) {
   const content = json?.choices?.[0]?.message?.content;
   if (typeof content === "string") return content;
@@ -229,18 +236,24 @@ function extractMessageContent(json) {
   return "";
 }
 
-async function callOpenRouter({ providerId, model, apiKey, messages, max_tokens, temperature, top_p, response_format, headers, timeoutMs, reasoning }) {
-  const payload = { model, messages, max_tokens, temperature, top_p };
-  if (response_format) payload.response_format = response_format;
+async function callOpenRouter({ providerId, model, apiKey, messages, max_tokens, temperature, top_p, response_format, headers, timeoutMs, reasoning, relaxedParameters = false }) {
+  const payload = { model, messages, max_tokens };
+  if (!relaxedParameters) {
+    payload.temperature = temperature;
+    payload.top_p = top_p;
+    if (response_format) payload.response_format = response_format;
 
-  const providerOptions = getOpenRouterProviderOptions({ response_format });
-  if (providerOptions) payload.provider = providerOptions;
+    const providerOptions = getOpenRouterProviderOptions({ response_format });
+    if (providerOptions) payload.provider = providerOptions;
 
-  const serviceTier = getServiceTier();
-  if (serviceTier) payload.service_tier = serviceTier;
+    const serviceTier = getServiceTier();
+    if (serviceTier) payload.service_tier = serviceTier;
 
-  const effectiveReasoning = reasoning === undefined ? getReasoningOptions() : reasoning;
-  if (effectiveReasoning) payload.reasoning = effectiveReasoning;
+    const effectiveReasoning = reasoning === undefined ? getReasoningOptions() : reasoning;
+    if (effectiveReasoning) payload.reasoning = effectiveReasoning;
+  }
+
+  const serviceTier = relaxedParameters ? undefined : payload.service_tier;
 
   const reqHeaders = {
     "Content-Type": "application/json",
@@ -320,7 +333,7 @@ export async function resilientRequest(routeName, {
   const routeKey = resolveRouteKey(routeName);
   const chain = getProviderChainForRoute(routeKey);
   const requestedMaxRetries = Number.isFinite(Number(maxRetries)) ? Number(maxRetries) : MAX_RETRIES;
-  const effectiveMaxRetries = Math.max(4, requestedMaxRetries);
+  const effectiveMaxRetries = Math.max(0, requestedMaxRetries);
   const effectiveRetryBaseMs = Number.isFinite(Number(retryBaseMs)) ? Number(retryBaseMs) : RETRY_BASE_MS;
   let lastErr;
   const attempted = [];
@@ -342,6 +355,7 @@ export async function resilientRequest(routeName, {
     attemptedProviderTargets.add(targetKey);
 
     try { safeRouteLog({ routeName, routeKey, provider: providerId, model: provider.name }); } catch {}
+    let compatibilityRelaxationUsed = false;
     for (let attempt = 0; attempt <= effectiveMaxRetries; attempt++) {
       try {
         const result = await callOpenRouter({ providerId, model: provider.name, apiKey: provider.apiKey, messages, max_tokens, temperature, top_p, response_format, headers, timeoutMs, reasoning });
@@ -354,6 +368,7 @@ export async function resilientRequest(routeName, {
             returnedModel: result.model,
             durationMs: result.durationMs,
             serviceTier: result.serviceTier,
+            parameterMode: "standard",
             promptTokens: result.usage?.prompt_tokens,
             completionTokens: result.usage?.completion_tokens,
             totalTokens: result.usage?.total_tokens,
@@ -375,6 +390,68 @@ export async function resilientRequest(routeName, {
         } : result.content;
       } catch (err) {
         lastErr = err;
+
+        // Provider routing can select an endpoint that supports the model but
+        // not one of the optional request parameters. Retry the same model
+        // once with the portable core payload before abandoning it. The
+        // prompts still require JSON, and deterministic parsers/validators
+        // remain the final authority.
+        if (!compatibilityRelaxationUsed && isParameterCompatibilityError(err)) {
+          compatibilityRelaxationUsed = true;
+          info("ai.request.parameter_relaxation", {
+            routeName,
+            routeKey,
+            provider: providerId,
+            model: provider.name,
+            status: err?.status || null,
+          });
+          try {
+            const relaxed = await callOpenRouter({
+              providerId,
+              model: provider.name,
+              apiKey: provider.apiKey,
+              messages,
+              max_tokens,
+              headers,
+              timeoutMs,
+              relaxedParameters: true,
+            });
+            if (shouldLogUsage()) {
+              info("ai.request.usage", {
+                routeName,
+                routeKey,
+                provider: providerId,
+                requestedModel: provider.name,
+                returnedModel: relaxed.model,
+                durationMs: relaxed.durationMs,
+                serviceTier: relaxed.serviceTier,
+                parameterMode: "relaxed",
+                promptTokens: relaxed.usage?.prompt_tokens,
+                completionTokens: relaxed.usage?.completion_tokens,
+                totalTokens: relaxed.usage?.total_tokens,
+                cost: relaxed.usage?.cost,
+              });
+            }
+            recordProviderOutcome({ routeKey, provider: providerId, ok: true, durationMs: relaxed.durationMs, status: "success-relaxed" });
+            __record(sessionId, routeName, providerId, relaxed.model || provider.name);
+            __lastSuccessProvider.set(routeKey, providerId);
+            __maybePrintSummary(sessionId, routeName);
+            return returnMetadata ? {
+              content: relaxed.content,
+              providerId,
+              model: relaxed.model || provider.name,
+              durationMs: relaxed.durationMs,
+              usage: relaxed.usage || null,
+              serviceTier: relaxed.serviceTier || null,
+              routeKey,
+              parameterMode: "relaxed",
+            } : relaxed.content;
+          } catch (relaxedError) {
+            lastErr = relaxedError;
+            err = relaxedError;
+          }
+        }
+
         recordProviderOutcome({ routeKey, provider: providerId, ok: false, durationMs: 0, status: err?.status || err?.code || "failed" });
         attempted.push({ providerId, model: provider.name, attempt: attempt + 1, status: err?.status || err?.code || "failed", message: safeSnippet(err?.message || String(err), 500) });
         // A request that has already consumed the full timeout window should
