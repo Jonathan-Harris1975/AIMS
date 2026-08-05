@@ -35,7 +35,7 @@ export async function createSocialArtwork({
     debug("artwork.social.start", { sessionId: safeSession, lane: safeLane });
 
     const base64Data = await runArtworkTask(
-      (signal) => generateSocialArtwork(prompt || `Editorial AI social artwork for ${safeLane}`, { date, signal }),
+      (signal) => generateSocialArtwork(prompt || `Editorial AI social artwork for ${safeLane}`, { date, signal, generationKey: safeSession }),
       socialArtworkTimeoutMs(),
       "Zernio social artwork generation",
     );
@@ -62,7 +62,7 @@ export async function createSocialArtwork({
       });
       const key = `zernio/${safeLane}/${safeSession}-ai-fallback.png`;
       const publicUrl = await uploadBuffer("blogImages", key, fallbackBuffer, "image/png");
-      warn("artwork.social.deterministic_ai_fallback", {
+      warn("artwork.social.deterministic_ai_diagnostic", {
         sessionId: safeSession,
         lane: safeLane,
         key,
@@ -70,15 +70,16 @@ export async function createSocialArtwork({
         originalError: err?.message || String(err),
       });
       return {
-        ok: true,
+        ok: false,
         fallback: true,
-        imageStatus: "fallback",
+        imageStatus: "failed",
         error: err?.message || String(err),
-        key,
-        publicUrl,
+        diagnosticKey: key,
+        diagnosticUrl: publicUrl,
+        publicUrl: "",
       };
     } catch (fallbackError) {
-      error("artwork.social.deterministic_ai_fallback_failed", {
+      error("artwork.social.deterministic_ai_diagnostic_failed", {
         sessionId: safeSession,
         lane: safeLane,
         originalError: err?.message || String(err),
@@ -86,7 +87,7 @@ export async function createSocialArtwork({
       });
       return {
         ok: false,
-        error: `${err?.message || String(err)}; deterministic AI fallback failed: ${fallbackError?.message || String(fallbackError)}`,
+        error: `${err?.message || String(err)}; deterministic AI diagnostic failed: ${fallbackError?.message || String(fallbackError)}`,
         publicUrl: "",
         fallback: false,
       };

@@ -80,7 +80,7 @@ export async function createBlogArtwork(input) {
     const theme = prompt || `Blog header artwork for AI Weekly ${sessionId}`;
 
     const base64Data = await runArtworkTask(
-      (signal) => (artworkMode === "newsletter" ? generateNewsletterArtwork : artworkMode === "social-blog" ? generateSocialBlogArtwork : generateBlogArtwork)(theme, { date: artworkDate, signal }),
+      (signal) => (artworkMode === "newsletter" ? generateNewsletterArtwork : artworkMode === "social-blog" ? generateSocialBlogArtwork : generateBlogArtwork)(theme, { date: artworkDate, signal, generationKey: sessionId }),
       artworkTaskTimeoutMs(artworkMode),
       `${artworkMode} artwork generation`,
     );
@@ -108,7 +108,7 @@ export async function createBlogArtwork(input) {
         ? `${keyPrefix}/${sessionId}-ai-fallback.png`
         : `${sessionId}-ai-fallback.png`;
       const publicUrl = await uploadBuffer(bucketKey, fallbackKey, fallbackBuffer, "image/png");
-      warn("artwork.blog.deterministic_ai_fallback", {
+      warn("artwork.blog.deterministic_ai_diagnostic", {
         sessionId,
         artworkMode,
         key: fallbackKey,
@@ -116,17 +116,18 @@ export async function createBlogArtwork(input) {
         originalError: err?.message || String(err),
       });
       return {
-        ok: true,
+        ok: false,
         fallback: true,
-        imageStatus: "fallback",
+        imageStatus: "failed",
         error: err?.message || String(err),
-        key: fallbackKey,
-        publicUrl,
+        diagnosticKey: fallbackKey,
+        diagnosticUrl: publicUrl,
+        publicUrl: "",
         bucketKey,
         bucketReason,
       };
     } catch (fallbackError) {
-      error("artwork.blog.deterministic_ai_fallback_failed", {
+      error("artwork.blog.deterministic_ai_diagnostic_failed", {
         sessionId,
         artworkMode,
         originalError: err?.message || String(err),
@@ -134,7 +135,7 @@ export async function createBlogArtwork(input) {
       });
       return {
         ok: false,
-        error: `${err?.message || String(err)}; deterministic AI fallback failed: ${fallbackError?.message || String(fallbackError)}`,
+        error: `${err?.message || String(err)}; deterministic AI diagnostic failed: ${fallbackError?.message || String(fallbackError)}`,
         bucketKey,
         bucketReason,
       };
