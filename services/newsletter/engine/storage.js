@@ -71,17 +71,68 @@ export async function storeNewsletterIssue({ profile, sessionId, html, emailHtml
   return { prefix, htmlUrl, emailUrl, textUrl, metaUrl };
 }
 
-/**
- * Records that an issue was handed off to Brevo for delivery — written
- * alongside the issue's html/text/metadata so the monthly audit can later
- * pull real open/click/unsubscribe stats for that specific campaign (see
- * audits/utils/newsletterAudit.js).
- */
-export async function recordCampaignDelivery({ profile, sessionId, campaignId, listId, sentAt, date = new Date() }) {
-  const prefix = buildIssueKeyPrefix(profile, { date, sessionId });
-  const key = `${prefix}/campaign.json`;
-  const url = await putJson(profile.storage.htmlBucketKey, key, { campaignId, listId, sentAt, provider: "brevo" });
-  return { key, url };
+function campaignKey(profile, { sessionId, date = new Date(), prefix = null } = {}) {
+  const issuePrefix = prefix || buildIssueKeyPrefix(profile, { date, sessionId });
+  return `${issuePrefix}/campaign.json`;
 }
 
-export default { buildIssueKeyPrefix, storeNewsletterIssue, recordCampaignDelivery, findLatestIssueSessionId };
+/**
+ * Reads the durable exactly-once delivery record for an issue. Missing records
+ * are normal on a first attempt and return delivery:null.
+ */
+export async function readCampaignDelivery({ profile, sessionId, date = new Date(), prefix = null }) {
+  const key = campaignKey(profile, { sessionId, date, prefix });
+  try {
+    const delivery = JSON.parse(await getObjectAsText(profile.storage.htmlBucketKey, key));
+    return { key, delivery };
+  } catch (err) {
+    const message = String(err?.message || err || "");
+    const name = String(err?.name || err?.code || "");
+    const status = Number(err?.$metadata?.httpStatusCode || err?.statusCode || err?.status || 0);
+    if (status === 404 || /nosuchkey|notfound/i.test(name) || /not[ -]?found|no such key|404|does not exist/i.test(message)) {
+      return { key, delivery: null };
+    }
+    throw err;
+  }
+}
+
+/**
+ * Persists each campaign hand-off state alongside the rendered issue. The
+ * draft is recorded before sendNow, preventing retries from creating or
+ * dispatching a duplicate campaign after a restart.
+ */
+export async function recordCampaignDelivery({
+  profile,
+  sessionId,
+  campaignId,
+  listId,
+  status,
+  campaignStatus = null,
+  createdAt = null,
+  sentAt = null,
+  lastCheckedAt = null,
+  prefix = null,
+  date = new Date(),
+}) {
+  const key = campaignKey(profile, { sessionId, date, prefix });
+  const delivery = {
+    campaignId: Number(campaignId),
+    listId: Number(listId),
+    status,
+    campaignStatus,
+    createdAt,
+    sentAt,
+    lastCheckedAt,
+    provider: "brevo",
+  };
+  const url = await putJson(profile.storage.htmlBucketKey, key, delivery);
+  return { key, url, delivery };
+}
+
+export default {
+  buildIssueKeyPrefix,
+  storeNewsletterIssue,
+  findLatestIssueSessionId,
+  readCampaignDelivery,
+  recordCampaignDelivery,
+};
