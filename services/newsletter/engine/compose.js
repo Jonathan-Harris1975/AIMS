@@ -6,89 +6,26 @@
 // reattached deterministically after generation.
 
 import { resilientRequest } from "../../shared/utils/ai-service.js";
-import { parseStructuredJson, strictJsonResponseFormat } from "../../shared/utils/structuredJson.js";
 import { warn } from "../../../logger.js";
 
-const ISSUE_SCHEMA = {
-  type: "object",
-  additionalProperties: false,
-  properties: {
-    heroHeadline: { type: "string", maxLength: 180 },
-    openingNoteHtml: { type: "string", maxLength: 900 },
-    bigThree: {
-      type: "array",
-      // Anthropic's structured-output implementation currently accepts only
-      // minItems 0 or 1. Exact three-item enforcement remains deterministic
-      // below and in the newsletter validators.
-      minItems: 1,
-      maxItems: 3,
-      items: {
-        type: "object",
-        additionalProperties: false,
-        properties: {
-          sourceId: { type: "string" },
-          whatHappened: { type: "string", maxLength: 900 },
-          whyItMatters: { type: "string", maxLength: 800 },
-          jonathanTake: { type: "string", maxLength: 800 },
-        },
-        required: ["sourceId", "whatHappened", "whyItMatters", "jonathanTake"],
-      },
-    },
-    worthUsing: {
-      type: "object",
-      additionalProperties: false,
-      properties: {
-        sourceId: { type: "string" },
-        label: { type: "string", enum: ["Worth Using", "Worth Watching"] },
-        summary: { type: "string", maxLength: 700 },
-        whyUseful: { type: "string", maxLength: 600 },
-      },
-      required: ["sourceId", "label", "summary", "whyUseful"],
-    },
-    onRadar: {
-      type: "array",
-      maxItems: 5,
-      items: {
-        type: "object",
-        additionalProperties: false,
-        properties: {
-          sourceId: { type: "string" },
-          summary: { type: "string", maxLength: 420 },
-        },
-        required: ["sourceId", "summary"],
-      },
-    },
-    realityCheck: {
-      type: "object",
-      additionalProperties: false,
-      properties: {
-        sourceId: { type: "string" },
-        claim: { type: "string", maxLength: 420 },
-        assessment: { type: "string", maxLength: 800 },
-      },
-      required: ["sourceId", "claim", "assessment"],
-    },
-    yourTurn: { type: "string", maxLength: 300 },
-  },
-  required: ["heroHeadline", "openingNoteHtml", "bigThree", "worthUsing", "onRadar", "realityCheck", "yourTurn"],
-};
+function stripCodeFences(raw = "") {
+  return String(raw || "").replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
+}
 
-const SUBJECT_SCHEMA = {
-  type: "object",
-  additionalProperties: false,
-  properties: {
-    subject: { type: "string", maxLength: 78 },
-    previewText: { type: "string", maxLength: 120 },
-  },
-  required: ["subject", "previewText"],
-};
+function extractJsonCandidate(raw = "") {
+  const stripped = stripCodeFences(raw);
+  if (!stripped) return "";
+  try { JSON.parse(stripped); return stripped; } catch {}
+  const first = stripped.indexOf("{");
+  const last = stripped.lastIndexOf("}");
+  return first >= 0 && last > first ? stripped.slice(first, last + 1) : stripped;
+}
 
 function parseJsonResponse(raw, label) {
-  try {
-    return { ok: true, data: parseStructuredJson(raw, label) };
-  } catch (err) {
-    return { ok: false, error: err.message };
-  }
+  const candidate = extractJsonCandidate(raw);
+  if (!candidate) return { ok: false, error: `${label}: model returned an empty response` };
+  try { return { ok: true, data: JSON.parse(candidate) }; }
+  catch (err) { return { ok: false, error: `${label}: invalid JSON (${err.message})` }; }
 }
 
 function brandGuardrails(profile) {
@@ -120,7 +57,7 @@ function attachSource(copy = {}, source = {}) {
   };
 }
 
-export async function composeIssueSections({ profile, lead, stories, sessionId, repairContext = [], previousDraft = null }) {
+export async function composeIssueSections({ profile, lead, stories, sessionId, repairContext = [] }) {
   const allSources = [lead, ...stories].filter(Boolean);
 
   const messages = [
@@ -134,8 +71,7 @@ export async function composeIssueSections({ profile, lead, stories, sessionId, 
         "Each Big Three item MUST return the exact sourceId it uses. Choose one different source for Worth Using/Watching only when it offers genuine practical value; otherwise use Worth Watching. " +
         "Use no more than five additional unused sources for On the Radar. Every On the Radar item MUST carry the exact sourceId it summarises. Never attach a summary to a different source. " +
         "Reality Check may interrogate any supplied source, including a Big Three source, but MUST return that sourceId so its link can be attached deterministically. " +
-        "The opening note is 35-65 words and sounds like Jonathan, not a masthead. The reader question should invite a substantive response. " +
-        "When a prior draft and council defects are supplied, edit that draft deliberately: preserve sound material, replace the failed wording or source choice, address every prioritised defect, and never return a cosmetic near-copy.\n\n" +
+        "The opening note is 35-65 words and sounds like Jonathan, not a masthead. The reader question should invite a substantive response.\n\n" +
         "Respond with ONLY valid JSON using this shape: " +
         '{"heroHeadline":string,"openingNoteHtml":string,"bigThree":[{"sourceId":string,"whatHappened":string,"whyItMatters":string,"jonathanTake":string}],"worthUsing":{"sourceId":string,"label":string,"summary":string,"whyUseful":string},"onRadar":[{"sourceId":string,"summary":string}],"realityCheck":{"sourceId":string,"claim":string,"assessment":string},"yourTurn":string}. ' +
         "openingNoteHtml must be one <p> paragraph. No other field may contain HTML.",
@@ -144,11 +80,8 @@ export async function composeIssueSections({ profile, lead, stories, sessionId, 
       role: "user",
       content: [
         sourceBlock(lead, stories),
-        previousDraft
-          ? `\n\nPRIOR DRAFT TO REPAIR:\n${JSON.stringify(previousDraft)}`
-          : "",
         repairContext.length
-          ? `\n\nPRIORITISED COUNCIL DEFECTS TO FIX IN THIS REVISION:\n${repairContext.slice(0, 24).map((issue, index) => `${index + 1}. ${issue}`).join("\n")}`
+          ? `\n\nPRIOR COUNCIL DEFECTS TO FIX IN THIS REVISION:\n${repairContext.slice(0, 18).map((issue) => `- ${issue}`).join("\n")}`
           : "",
       ].filter(Boolean).join(""),
     },
@@ -158,9 +91,7 @@ export async function composeIssueSections({ profile, lead, stories, sessionId, 
     sessionId,
     messages,
     max_tokens: 3200,
-    temperature: 0.1,
-    reasoning: { effort: "minimal" },
-    response_format: strictJsonResponseFormat("newsletter_issue", ISSUE_SCHEMA),
+    response_format: { type: "json_object" },
   });
   const parsed = parseJsonResponse(raw, "composeIssueSections");
   if (!parsed.ok) {
@@ -180,20 +111,17 @@ export async function composeIssueSections({ profile, lead, stories, sessionId, 
   const bigThree = [];
   for (const copy of bigCopy) {
     const resolved = resolveSource(copy?.sourceId);
-    if (!resolved || used.has(resolved.id) || resolved.source?.bigThreeEligible === false) continue;
+    if (!resolved || used.has(resolved.id)) continue;
     used.add(resolved.id);
     bigThree.push({ ...attachSource(copy, resolved.source), sourceId: resolved.id });
     if (bigThree.length === 3) break;
   }
   for (let index = 0; bigThree.length < 3 && index < allSources.length; index += 1) {
     const id = `S${index}`;
-    if (used.has(id) || allSources[index]?.bigThreeEligible === false) continue;
+    if (used.has(id)) continue;
     used.add(id);
     bigThree.push({ ...attachSource({}, allSources[index]), sourceId: id });
   }
-  // Fail closed later in validation if fewer than three evidence-grade sources
-  // exist. Do not quietly promote truncated or blocked-source material into the
-  // newsletter's most authoritative section.
 
   let worthUsing = null;
   const worthResolved = resolveSource(data.worthUsing?.sourceId);
@@ -203,7 +131,7 @@ export async function composeIssueSections({ profile, lead, stories, sessionId, 
       sourceId: worthResolved.id,
       title: worthResolved.source.title,
       link: worthResolved.source.link,
-      label: /^worth using$/i.test(String(data.worthUsing?.label || "")) ? "Worth Using" : "Worth Watching",
+      label: String(data.worthUsing?.label || "Worth Watching").trim(),
       summary: String(data.worthUsing?.summary || worthResolved.source.summary || "").trim(),
       whyUseful: String(data.worthUsing?.whyUseful || "").trim(),
     };
@@ -292,14 +220,7 @@ export async function composeSubjectAndPreview({ profile, heroHeadline, bigThree
     },
   ];
 
-  const raw = await resilientRequest("newsletterSubject", {
-    sessionId,
-    messages,
-    max_tokens: 500,
-    temperature: 0,
-    reasoning: { effort: "minimal" },
-    response_format: strictJsonResponseFormat("newsletter_subject", SUBJECT_SCHEMA),
-  });
+  const raw = await resilientRequest("newsletterSubject", { sessionId, messages, max_tokens: 500 });
   const parsed = parseJsonResponse(raw, "composeSubjectAndPreview");
   if (!parsed.ok) return { ok: false, error: parsed.error };
   return {

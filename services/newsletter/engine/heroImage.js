@@ -19,12 +19,12 @@ export async function buildHeroImagePrompt({ profile, heroHeadline, leadStory = 
       role: "system",
       content:
         "You write a single concise image-generation prompt (1-2 sentences) for the hero " +
-        "photorealistic editorial news image for the AI Edge newsletter. Build one visually immediate artificial-intelligence scene from the actual lead news story, not merely the headline wording. " +
+        "illustration for the AI Edge newsletter. Build one visually immediate editorial scene from the actual lead news story, not merely the headline wording. " +
         "Use cinematic lighting, emotional resonance, bold controlled colour, high contrast and magazine-quality thumbnail composition. " +
         "Prefer a concrete human-scale scene, real-world object, consequence or workplace moment over generic abstract AI geometry. Use believable adult humans when a person helps tell the story. " +
         "Do not depict humanoid robots, cyborgs, androids, chrome people, synthetic heads or robot substitutes unless the lead story is specifically about physical robotics. " +
         "Avoid corporate stock-photo language, boardrooms, handshakes, staged office teams, generic data centres, floating dashboards, polygon networks and glowing AI orbs unless the headline genuinely requires them. " +
-        "The image must visibly belong to artificial intelligence, machine learning, software engineering, robotics, compute infrastructure, AI security, governance or the specific AI-enabled news domain described. Never request anime, graphic-novel, fantasy or cartoon styling. " +
+        "The image must visibly belong to technology, AI security, governance, software engineering or the specific news domain described. " +
         "Never use beaches, coastlines, oceans, resorts, tourism, travel, countryside, mountains, roads, paths, signposts, sunsets or lifestyle imagery unless the lead article itself is explicitly about that subject. " +
         "Never include typography, headlines, letters, numbers, logos, watermarks or pseudo-text inside the image. Seasonal colour direction is applied downstream, so do not fight it. No depictions of real named people. " +
         "Respond with ONLY the prompt text, nothing else.",
@@ -67,28 +67,14 @@ export async function generateHeroImage({ profile, heroHeadline, leadStory = nul
     sessionId,
     prompt,
     keyPrefix: profile.storage.keyPrefix,
-    mode: "newsletter",
   });
 
   if (!result.ok) {
-    warn("newsletter.hero.generation_failed", {
-      sessionId,
-      profileId: profile.id,
-      error: result.error,
-      reason: "provider-artwork-failed",
-    });
+    warn("newsletter.hero.generation_failed", { sessionId, profileId: profile.id, error: result.error });
     return { ok: false, error: result.error, prompt };
   }
 
-  return {
-    ok: true,
-    fallback: Boolean(result.fallback),
-    imageStatus: result.fallback ? "fallback" : "generated",
-    error: result.error || null,
-    prompt,
-    imageUrl: result.publicUrl,
-    key: result.key,
-  };
+  return { ok: true, prompt, imageUrl: result.publicUrl, key: result.key };
 }
 
 export default { buildHeroImagePrompt, generateHeroImage };

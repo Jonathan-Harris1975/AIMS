@@ -31,7 +31,7 @@ export async function buildNewsletter({ profileId = "ai-edge", sessionId: reques
   }
 
   const storyCount = profile.storyCount || THRESHOLDS.newsletter.storyCount;
-  const { lead, stories, droppedForDiversity, droppedForQuality = [] } = rankAndSelectStories(items, { storyCount, now });
+  const { lead, stories, droppedForDiversity } = rankAndSelectStories(items, { storyCount, now });
   if (!lead) return { ok: false, sessionId, profileId: profile.id, error: "Ranking produced no lead story." };
 
   const issue = await composeIssueSections({ profile, lead, stories, sessionId });
@@ -105,12 +105,7 @@ export async function buildNewsletter({ profileId = "ai-edge", sessionId: reques
     };
   }
 
-  const finalNewsletter = {
-    ...qaResult.newsletter,
-    heroImageUrl: heroImageResult.imageUrl,
-    heroImageStatus: heroImageResult.imageStatus || (heroImageResult.fallback ? "fallback" : "generated"),
-    heroImageError: heroImageResult.error || null,
-  };
+  const finalNewsletter = { ...qaResult.newsletter, heroImageUrl: heroImageResult.imageUrl };
   const finalValidation = runDeterministicValidators(finalNewsletter, {
     expectedStoryCount: Math.min(9, 1 + stories.length),
     requireHeroImage: true,
@@ -148,9 +143,7 @@ export async function buildNewsletter({ profileId = "ai-edge", sessionId: reques
     storyCount: metadata.storyCount,
     promotionType: promotion?.type || null,
     droppedForDiversity: droppedForDiversity.length,
-    droppedForQuality: droppedForQuality.length,
     htmlUrl: stored.htmlUrl,
-    heroImageStatus: finalNewsletter.heroImageStatus,
   });
 
   return {
@@ -162,11 +155,6 @@ export async function buildNewsletter({ profileId = "ai-edge", sessionId: reques
     newsletter: finalNewsletter,
     storage: stored,
     metadata,
-    sourceSelection: {
-      totalCandidates: items.length,
-      droppedForDiversity: droppedForDiversity.length,
-      droppedForQuality: droppedForQuality.map((item) => ({ title: item.title, link: item.link, reason: item.qualityReason })),
-    },
     generatedAt: now.toISOString(),
   };
 }

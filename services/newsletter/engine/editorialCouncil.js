@@ -2,54 +2,22 @@
 //
 // Dedicated multi-model editorial council for AI Edge. Reviewers have
 // deliberately different jobs and model routes; the chair sees their reports
-// and makes the final publish/revise decision. OpenRouter strict structured
-// outputs keep every council response machine-parseable and bounded.
+// and makes the final publish/revise decision. This avoids one model writing
+// and rubber-stamping its own work.
 
 import { resilientRequest } from "../../shared/utils/ai-service.js";
-import { parseStructuredJson, strictJsonResponseFormat } from "../../shared/utils/structuredJson.js";
 import { THRESHOLDS } from "../../../config/thresholds.js";
 import { getReviewCouncilMembers, isReviewCouncilEnabled } from "../../content-quality/reviewCouncil.js";
 import { warn } from "../../../logger.js";
 
-const REVIEW_SCHEMA = {
-  type: "object",
-  additionalProperties: false,
-  properties: {
-    score: { type: "number", minimum: 0, maximum: 100 },
-    verdict: { type: "string", enum: ["pass", "revise"] },
-    issues: {
-      type: "array",
-      maxItems: 5,
-      items: { type: "string", maxLength: 320 },
-    },
-    strengths: {
-      type: "array",
-      maxItems: 4,
-      items: { type: "string", maxLength: 240 },
-    },
-  },
-  required: ["score", "verdict", "issues", "strengths"],
-};
-
-const CHAIR_SCHEMA = {
-  type: "object",
-  additionalProperties: false,
-  properties: {
-    score: { type: "number", minimum: 0, maximum: 100 },
-    verdict: { type: "string", enum: ["pass", "revise"] },
-    issues: {
-      type: "array",
-      maxItems: 6,
-      items: { type: "string", maxLength: 320 },
-    },
-    priorityFixes: {
-      type: "array",
-      maxItems: 5,
-      items: { type: "string", maxLength: 320 },
-    },
-  },
-  required: ["score", "verdict", "issues", "priorityFixes"],
-};
+function parseJson(raw = "") {
+  const stripped = String(raw || "").replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
+  try { return JSON.parse(stripped); } catch {}
+  const first = stripped.indexOf("{");
+  const last = stripped.lastIndexOf("}");
+  if (first >= 0 && last > first) return JSON.parse(stripped.slice(first, last + 1));
+  throw new Error("Council response was not valid JSON.");
+}
 
 function boundedScore(value) {
   const score = Number(value);
@@ -72,70 +40,48 @@ function newsletterPayload(newsletter) {
 }
 
 function sourcePayload(lead, stories) {
-  return [lead, ...stories].filter(Boolean).map(({ title, summary, link, sourceFeed, publishedAt }, index) => ({
-    sourceId: `S${index}`,
-    title,
-    summary,
-    link,
-    sourceFeed,
-    publishedAt,
+  return [lead, ...stories].map(({ title, summary, link, sourceFeed, publishedAt }) => ({
+    title, summary, link, sourceFeed, publishedAt,
   }));
 }
 
-async function requestCouncilJson(route, {
-  sessionId,
-  messages,
-  schema,
-  schemaName,
-  maxTokens = 1100,
-} = {}) {
+async function requestCouncilJson(route, { sessionId, messages, maxTokens = 900 } = {}) {
   let lastError = null;
-
   for (let attempt = 1; attempt <= 2; attempt += 1) {
     const raw = await resilientRequest(route, {
-      sessionId: `${sessionId}-${route}-${attempt}`,
+      sessionId,
       max_tokens: maxTokens,
-      temperature: 0,
-      reasoning: { effort: "minimal" },
-      response_format: strictJsonResponseFormat(schemaName || route, schema),
+      temperature: attempt === 1 ? 0.15 : 0,
+      response_format: { type: "json_object" },
       messages: attempt === 1
         ? messages
         : [
             messages[0],
             {
               role: "user",
-              content: `${messages[1]?.content || ""}\n\nReturn a complete response matching the supplied JSON Schema. Keep every issue concise.`,
+              content: `${messages[1]?.content || ""}\n\nYour previous response was not parseable JSON. Return one valid JSON object only, with no code fence or commentary.`,
             },
           ],
     });
-
-    try {
-      return parseStructuredJson(raw, `${route} response`);
-    } catch (error) {
-      lastError = error;
-    }
+    try { return parseJson(raw); } catch (error) { lastError = error; }
   }
-
-  throw lastError || new Error(`${route} returned no valid structured response.`);
+  throw lastError || new Error("Council response was not valid JSON.");
 }
 
 async function runReviewer(route, role, instructions, payload, sessionId) {
   const data = await requestCouncilJson(route, {
     sessionId,
-    schema: REVIEW_SCHEMA,
-    schemaName: `${route}_review`,
     messages: [
       {
         role: "system",
         content:
           `You are the ${role} on the AI Edge editorial council. ${instructions} ` +
           `Score from 0-100. A publishable result must score at least ${THRESHOLDS.newsletter.qaPassThreshold}. ` +
-          "Return no more than five concise issues and four concise strengths. Use the exact sourceId values supplied when identifying source defects.",
+          'Respond ONLY as JSON: {"score":number,"verdict":"pass"|"revise","issues":[string],"strengths":[string]}.',
       },
-      { role: "user", content: JSON.stringify(payload) },
+      { role: "user", content: JSON.stringify(payload, null, 2) },
     ],
   });
-
   return {
     role,
     score: boundedScore(data.score),
@@ -190,9 +136,6 @@ export async function runNewsletterEditorialCouncil({ profile, newsletter, lead,
     const reports = [sourceReview, voiceReview, readerReview];
     const chair = await requestCouncilJson("newsletterCouncilChair", {
       sessionId,
-      schema: CHAIR_SCHEMA,
-      schemaName: "newsletter_council_chair",
-      maxTokens: 1200,
       messages: [
         {
           role: "system",
@@ -200,12 +143,11 @@ export async function runNewsletterEditorialCouncil({ profile, newsletter, lead,
             `You chair the AI Edge editorial council. Review the three specialist reports and make the final decision. ` +
             `Source integrity is a hard gate. The issue must also preserve Jonathan Harris's voice and provide genuine reader value. ` +
             `A pass requires every specialist score to be at least ${THRESHOLDS.newsletter.qaPassThreshold}. ` +
-            "Return no more than six concise issues and five prioritised fixes.",
+            'Respond ONLY as JSON: {"score":number,"verdict":"pass"|"revise","issues":[string],"priorityFixes":[string]}.',
         },
-        { role: "user", content: JSON.stringify({ reports, draft }) },
+        { role: "user", content: JSON.stringify({ reports, draft }, null, 2) },
       ],
     });
-
     const chairScore = boundedScore(chair.score);
     const specialistsPass = reports.every(
       (review) => review.verdict === "pass" && review.score >= THRESHOLDS.newsletter.qaPassThreshold
@@ -225,7 +167,6 @@ export async function runNewsletterEditorialCouncil({ profile, newsletter, lead,
         issues: Array.isArray(chair.issues) ? chair.issues : [],
         priorityFixes: Array.isArray(chair.priorityFixes) ? chair.priorityFixes : [],
       },
-      priorityFixes: Array.isArray(chair.priorityFixes) ? chair.priorityFixes : [],
       issues: [
         ...reports.flatMap((review) => review.issues.map((issue) => `${review.role}: ${issue}`)),
         ...(Array.isArray(chair.issues) ? chair.issues.map((issue) => `Chair: ${issue}`) : []),
@@ -239,7 +180,6 @@ export async function runNewsletterEditorialCouncil({ profile, newsletter, lead,
       verdict: "revise",
       members,
       reviews: [],
-      priorityFixes: ["Recover a complete machine-parseable council response before publication."],
       issues: [`Editorial council failed: ${err.message}`],
     };
   }
