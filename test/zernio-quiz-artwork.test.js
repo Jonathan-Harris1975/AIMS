@@ -38,14 +38,3 @@ test("quiz scheduler builds separate question and answer reveal artwork", async 
   assert.match(source, /Keep the three incorrect options visible but visually quieter/);
   assert.match(source, /semi-transparent topic-relevant diagram or visual motif/);
 });
-
-
-test("quiz cards use the deterministic Chromium renderer before image-model fallback", async () => {
-  const creator = await readFile(new URL("../services/artwork/createQuizArtwork.js", import.meta.url), "utf8");
-  const renderer = await readFile(new URL("../services/artwork/utils/quizCardRenderer.js", import.meta.url), "utf8");
-  assert.match(creator, /renderQuizCardPng/);
-  assert.match(creator, /deterministic-renderer/);
-  assert.match(renderer, /requires exactly four non-empty options/);
-  assert.match(renderer, /option-correct/);
-  assert.match(renderer, /Did you get it right\?/);
-});

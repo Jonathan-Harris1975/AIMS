@@ -124,7 +124,7 @@ test("Blotato visual prompts and scene inputs cannot request baked-in text", () 
   const scriptPrompt = buildNewsShortPrompt({
     article: { title: "AI update", summary: "A grounded source summary." },
     theme: "AI news",
-    durationSeconds: 40,
+    durationSeconds: 45,
     audience: "general AI readers",
     lane: "news-insight",
   });
@@ -136,7 +136,7 @@ test("Blotato visual prompts and scene inputs cannot request baked-in text", () 
   assert.match(visualPrompt, /ABSOLUTE TEXT-FREE GENERATED VISUAL/i);
 
   const inputs = buildBlotatoVideoInputs(pack);
-  assert.equal(inputs.scenes.length, 5);
+  assert.equal(inputs.scenes.length, 3);
   for (const scene of inputs.scenes) {
     assert.match(scene.mediaSource, /ABSOLUTE TEXT-FREE GENERATED VISUAL/i);
     assert.match(scene.mediaSource, /pseudo-text/i);

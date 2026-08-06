@@ -62,8 +62,8 @@ test("OpenRouter text routes used by blog, Zernio, RSS and audits resolve spread
       rssShortTitle: ["OPENROUTER_GPT_5_6_LUNA", "OPENROUTER_GOOGLE_2_5_flashlite"],
       auditForensic: [
         "OPENROUTER_ANTHROPIC_4_6",
-        "OPENROUTER_GOOGLE_2_5_flashlite",
         "OPENROUTER_GPT_5_6_SOL",
+        "OPENROUTER_GOOGLE_2_5_flashlite",
         "OPENROUTER_GPT_5_6_LUNA",
         "OPENROUTER_META",
       ],

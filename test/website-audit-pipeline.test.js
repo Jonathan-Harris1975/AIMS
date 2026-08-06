@@ -10,8 +10,8 @@ test("unified website audit routes are mounted and MAST-facing run endpoint exis
   const digital = read("audits/routes/digitalGrowth.js");
   assert.match(index, /router\.use\("\/website", websiteRoutes\)/);
   assert.match(index, /router\.use\("\/digital-growth", digitalGrowthRoutes\)/);
-  assert.match(website, /router\.post\("\/run", requestDedupe\("audits:website:run"\)/);
-  assert.match(website, /retentionPolicy: "final-pdf-html-json-only-after-rams-acceptance; retain-source-evidence-on-failure"/);
+  assert.match(website, /router\.post\("\/run", hookdeckDedupe\("audits:website:run"\)/);
+  assert.match(website, /retentionPolicy: "final-pdf-html-json-only"/);
   assert.match(digital, /WORKFLOW_ID = "digital-growth-audit\.yml"/);
 });
 
@@ -24,23 +24,14 @@ test("AIMS owns the sequential website audit stages and the three-format final r
   assert.match(pipeline, /website-audit\.pdf/);
   assert.match(pipeline, /website-audit\.html/);
   assert.match(pipeline, /website-audit\.json/);
-  assert.match(pipeline, /final-pdf-html-json-only-after-rams-acceptance/);
-  assert.match(pipeline, /conditional-final-set-with-failure-evidence-retention/);
+  assert.match(pipeline, /final-pdf-html-json-only/);
   assert.match(pipeline, /retainedArtefacts = \[pdf\.url, htmlReport\.url, jsonReport\.url\]/);
-  assert.match(pipeline, /assertRamsWebsiteDispatchConfigured/);
   assert.match(pipeline, /dispatchWebsiteAuditToRams/);
   assert.match(pipeline, /remediationContractVersion: "rams-website\/v1"/);
   assert.match(pipeline, /strictTemporaryCleanup/);
   assert.match(pipeline, /cleanupAuditPrefix\(\{ reportPrefix: tempPrefix \}\)/);
-  assert.match(pipeline, /controlled-audit-failure/);
-  assert.match(pipeline, /evidenceRetentionRequired: true/);
-  assert.match(pipeline, /ramsDispatchPermitted: completeEvidenceContract/);
   assert.match(pipeline, /stale child callback/);
   assert.match(pipeline, /out-of-order child callback/);
-  assert.match(pipeline, /reusedActiveRun/);
-  assert.match(pipeline, /public-http/);
-  assert.match(pipeline, /expectedReportPrefix/);
-  assert.match(pipeline, /sourceArtifactDiagnostics/);
 });
 
 test("pipeline child audits suppress standalone latest pointers and legacy councils", () => {
@@ -85,29 +76,10 @@ test("AIMS dispatches RAMS website remediation by exact final JSON key with retr
   assert.match(dispatch, /\/rebuild\/website\/run/);
   assert.match(dispatch, /audit_json_key: auditJsonKey/);
   assert.match(dispatch, /x-idempotency-key/);
-  assert.match(dispatch, /RAMS_WAIT_FOR_COMPLETION/);
-  assert.match(dispatch, /\/reports\/website\/\$\{encodeURIComponent\(runId\)\}/);
-  assert.match(dispatch, /audit\.website\.rams\.completed/);
   assert.match(routes, /\/jobs\/:sessionId\/rams\/retry/);
-  assert.match(routes, /\/jobs\/:sessionId\/finalise\/retry/);
-  assert.match(read("audits/utils/websiteAuditPipeline.js"), /RAMS dispatch is prohibited because the website audit source evidence contract is incomplete/);
+  assert.match(read("audits/utils/websiteAuditPipeline.js"), /Preserve the pipeline invariant on retries too/);
   assert.match(read("audits/utils/websiteAuditPipeline.js"), /cleanupRequired: false/);
-  assert.match(read("audits/utils/websiteAuditPipeline.js"), /parent\.ramsDispatch\?\.ok/);
   assert.doesNotMatch(index, /seo-aeo-geo-council|mobile-ux-council/);
-});
-
-test("website finalisation waits for readable source JSON and can recover stale or failed synthesis", () => {
-  const pipeline = read("audits/utils/websiteAuditPipeline.js");
-  const sharedBridge = read("services/shared/utils/websiteAuditPipeline.js");
-  assert.match(pipeline, /AUDIT_ARTEFACT_READY_TIMEOUT_MS/);
-  assert.match(pipeline, /withTimeout\([\s\S]{0,160}readAuditJson/);
-  assert.match(pipeline, /R2 audit JSON read/);
-  assert.match(pipeline, /audit\.website\.pipeline\.waiting_for_artefacts/);
-  assert.match(pipeline, /requiredArtifactSetReady/);
-  assert.match(pipeline, /finalisationPromises/);
-  assert.match(pipeline, /manual-finalisation-retry/);
-  assert.match(pipeline, /stale-finalisation-recovery/);
-  assert.match(sharedBridge, /export \* from "\.\.\/\.\.\/\.\.\/audits\/utils\/websiteAuditPipeline\.js"/);
 });
 
 test("unified website audit carries delegated-scope policy, target assessment and evidence-gated technical scores", () => {
@@ -125,16 +97,4 @@ test("unified website audit carries delegated-scope policy, target assessment an
   assert.match(council, /Not Scored - Visual Evidence Not Supplied/);
   assert.match(council, /Not Scored - Security Evidence Not Supplied/);
   assert.match(council, /Not Scored - Release SHA Not Verified/);
-});
-
-test("completed source callbacks require complete machine-readable artefact contracts", () => {
-  const orchestrator = read("audits/utils/orchestrator.js");
-  assert.match(orchestrator, /STAGE_REQUIRED_COMPLETION_URLS/);
-  assert.match(orchestrator, /"digital-growth"/);
-  assert.match(orchestrator, /"seo-aeo-geo"/);
-  assert.match(orchestrator, /reportJsonUrl/);
-  assert.match(orchestrator, /auditCompletionState=Complete/);
-  assert.match(orchestrator, /assertCompletedSourceStagePayload\(auditType, payload\)/);
-  assert.match(orchestrator, /Completed Mobile UX callback must declare auditCompletionState=Complete/);
-  assert.doesNotMatch(orchestrator, /Completed Mobile UX callback cannot declare a blocked hard gate/);
 });

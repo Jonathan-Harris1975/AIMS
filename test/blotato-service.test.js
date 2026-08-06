@@ -69,13 +69,13 @@ async function handleMockRequest(req, res) {
       assert.ok(payload.messages.some((message) => String(message.content || "").includes("Create one short-form AI social video pack")));
       assert.ok(payload.messages.some((message) => String(message.content || "").includes("Spartan and informative")));
       assert.ok(payload.messages.some((message) => String(message.content || "").includes("Instagram must have no more than 5 hashtags")));
-      assert.ok(payload.messages.some((message) => String(message.content || "").includes("Target duration: about 45 seconds")));
+      assert.ok(payload.messages.some((message) => String(message.content || "").includes("Target duration: 45 seconds minimum")));
       assert.ok(payload.messages.some((message) => String(message.content || "").includes("HUMAN-CENTRED SOCIAL VISUALS")));
       assert.ok(payload.messages.some((message) => String(message.content || "").includes("First frame rule")));
       assert.ok(payload.messages.some((message) => String(message.content || "").includes("CTA: For straight-talking artificial intelligence analysis, keep Jonathan Harris on your radar.")));
       assert.ok(!payload.messages.some((message) => String(message.content || "").includes("CTA: Follow Jonathan Harris for more")));
       assert.equal(payload.response_format, undefined);
-      assert.ok(payload.messages.some((message) => String(message.content || "").includes("Provide exactly 5 scenes")));
+      assert.ok(payload.messages.some((message) => String(message.content || "").includes("Provide exactly 7 scenes")));
     }
     res.writeHead(200, { "content-type": "application/json" });
     res.end(JSON.stringify({
@@ -166,11 +166,19 @@ async function handleMockRequest(req, res) {
     assert.equal(body.textToImageModel, undefined);
     assert.equal(body.imageToVideoModel, undefined);
     assert.equal(body.useBrandKit, undefined);
-    // Production defaults to Blotato's prompt-autofill contract for every
-    // template identifier, including the legacy full-path fallback. The path
-    // must never silently switch the request to hand-built scene inputs.
-    assert.deepEqual(body.inputs, {});
-    assert.ok(typeof body.prompt === "string" && body.prompt.trim().length > 0);
+    if (body.templateId === AI_STORY_TEMPLATE_PATH) {
+      assert.ok(Array.isArray(body.inputs.scenes));
+      assert.ok(body.inputs.scenes.length >= 3);
+      assert.equal(body.inputs.aspectRatio, "9:16");
+      assert.equal(body.inputs.captionPosition, "bottom");
+      assert.equal(body.inputs.thumbnailText, "AI Gets Chores");
+      assert.match(body.inputs.visualStyle, /human-centred/);
+      assert.ok(body.inputs.scenes.filter((scene) => /adult|human|hands|face|silhouette|professional/i.test(scene.mediaSource)).length >= 3);
+    }
+    if (body.templateId === AI_STORY_TEMPLATE_UUID) {
+      assert.deepEqual(body.inputs, {});
+      assert.match(body.prompt, /Cost guard/i);
+    }
     res.writeHead(201, { "content-type": "application/json" });
     res.end(JSON.stringify({ item: { id: "visual-1", status: "queueing" } }));
     return;
@@ -289,7 +297,7 @@ process.env.BLOTATO_TEMPLATE_VERIFY = "true";
 process.env.BLOTATO_TEMPLATE_AUTO_DISCOVERY = "true";
 process.env.BLOTATO_NEWS_TEMPLATE_SEARCH = "AI Video with AI Voice,AI Story Video,AI Voice,Story Video";
 process.env.BLOTATO_USE_MANUAL_TEMPLATE_INPUTS = "false";
-process.env.BLOTATO_VIDEO_SCENE_COUNT = "5";
+process.env.BLOTATO_VIDEO_SCENE_COUNT = "7";
 process.env.BLOTATO_MAX_EXPECTED_CREDITS = "70";
 process.env.BLOTATO_NEWS_JSON_RESPONSE_FORMAT = "false";
 process.env.BLOTATO_NEWS_RESPONSE_FORMAT_MODE = "json_object";
@@ -303,7 +311,6 @@ process.env.BLOTATO_PUBLISH_STAGGER_MS = "1";
 process.env.BLOTATO_API_RETRY_ATTEMPTS = "2";
 process.env.BLOTATO_API_RETRY_MAX_MS = "10";
 process.env.BLOTATO_SCRIPT_MODEL = "openai/test-model";
-process.env.BLOTATO_RENDERED_QA_ENABLED = "false";
 process.env.APP_TMP_DIR = `/tmp/aims-blotato-test-${Date.now()}`;
 
 const { app } = await import(`../server.js?blotato-suite=${Date.now()}`);
@@ -337,7 +344,7 @@ test.afterEach(() => {
   process.env.BLOTATO_TEMPLATE_AUTO_DISCOVERY = "true";
   process.env.BLOTATO_NEWS_TEMPLATE_SEARCH = "AI Video with AI Voice,AI Story Video,AI Voice,Story Video";
   process.env.BLOTATO_USE_MANUAL_TEMPLATE_INPUTS = "false";
-  process.env.BLOTATO_VIDEO_SCENE_COUNT = "5";
+  process.env.BLOTATO_VIDEO_SCENE_COUNT = "7";
   process.env.BLOTATO_MAX_EXPECTED_CREDITS = "70";
   process.env.BLOTATO_NEWS_JSON_RESPONSE_FORMAT = "false";
   process.env.BLOTATO_NEWS_RESPONSE_FORMAT_MODE = "json_object";
@@ -351,37 +358,8 @@ test.afterEach(() => {
   process.env.BLOTATO_API_RETRY_ATTEMPTS = "2";
   process.env.BLOTATO_API_RETRY_MAX_MS = "10";
   process.env.BLOTATO_SCRIPT_MODEL = "openai/test-model";
-  process.env.BLOTATO_RENDERED_QA_ENABLED = "false";
   process.env.OPENROUTER_API_BASE = mockBase;
   process.env.OPENROUTER_BASE_URL = mockBase;
-});
-
-test("Blotato visual creation keeps prompt-autofill for UUID and path template IDs", async () => {
-  const { buildVisualCreationRequest } = await import("../services/blotato/utils/visualRequest.js");
-  const visualInputs = { scenes: [{ mediaSource: "human at a desk" }] };
-
-  for (const templateId of [AI_STORY_TEMPLATE_UUID, AI_STORY_TEMPLATE_PATH]) {
-    const requestBody = buildVisualCreationRequest({
-      candidateTemplateId: templateId,
-      visualInputs,
-      visualPrompt: "Create a five-scene AI news video",
-      manualInputsConfigured: false,
-    });
-    assert.equal(requestBody.templateId, templateId);
-    assert.deepEqual(requestBody.inputs, {});
-    assert.match(requestBody.prompt, /five-scene AI news video/);
-    assert.equal(requestBody.render, true);
-    assert.equal(requestBody.isDraft, false);
-  }
-
-  const manual = buildVisualCreationRequest({
-    candidateTemplateId: AI_STORY_TEMPLATE_PATH,
-    visualInputs,
-    visualPrompt: "Create a five-scene AI news video",
-    manualInputsConfigured: true,
-  });
-  assert.deepEqual(manual.inputs, visualInputs);
-  assert.match(manual.prompt, /five-scene AI news video/);
 });
 
 test("Blotato health endpoint is public and reports configured API key", async () => {

@@ -629,10 +629,9 @@ test("Monday verified quote is kept once and localised duplicate is removed", as
   assert.match(source, /Monday commentary is too thin/);
 });
 
-test("Monday lane generates concept-led dynamic artwork without unsafe named-person imitation", async () => {
+test("Monday lane generates portrait-led dynamic artwork with static fallback", async () => {
   const source = await readFile(new URL("../services/zernio/utils/socialScheduler.js", import.meta.url), "utf8");
-  assert.match(source, /The author name is attribution context only/);
-  assert.match(source, /Do not attempt to depict, impersonate or approximate/);
+  assert.match(source, /Primary subject: \$\{author\}, depicted as the clear human focal point/);
   assert.match(source, /createSocialArtwork\(/);
-  assert.match(source, /zernio-daily-artwork-unavailable/);
+  assert.match(source, /fallbackUrl: lane\.imageUrl/);
 });
