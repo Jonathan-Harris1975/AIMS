@@ -139,12 +139,9 @@ async function blotatoRequest(endpoint, {
   body,
   apiKey,
   timeoutMs = Number(process.env.BLOTATO_TIMEOUT_MS || DEFAULT_TIMEOUT_MS),
-  retryAttempts,
 } = {}) {
   const key = getBlotatoApiKey(apiKey);
-  const attempts = Number.isFinite(Number(retryAttempts))
-    ? Math.min(Math.max(Math.floor(Number(retryAttempts)), 1), 8)
-    : positiveIntEnv("BLOTATO_API_RETRY_ATTEMPTS", 5, 8);
+  const attempts = positiveIntEnv("BLOTATO_API_RETRY_ATTEMPTS", 5, 8);
   const baseDelayMs = positiveIntEnv("BLOTATO_API_RETRY_BASE_MS", 1000, 30_000);
   const maxDelayMs = positiveIntEnv("BLOTATO_API_RETRY_MAX_MS", 12_000, 120_000);
   let lastError;
@@ -180,8 +177,7 @@ async function blotatoRequest(endpoint, {
       const retryable = Boolean(error?.retryable || isRetryableNetworkError(error));
       if (!retryable || attempt >= attempts) throw error;
 
-      const exponentialMs = baseDelayMs * Math.pow(2, attempt - 1);
-      const waitMs = Math.min(maxDelayMs, Math.max(exponentialMs, Number(error?.retryAfterMs || 0)));
+      const waitMs = Math.min(maxDelayMs, baseDelayMs * Math.pow(2, attempt - 1));
       await sleep(waitMs);
     }
   }
@@ -227,14 +223,13 @@ export async function createVisual({
   isDraft = false,
   useBrandKit = false,
 } = {}, apiKey) {
+  void useBrandKit;
   const body = {
     templateId,
     inputs,
     render,
     isDraft,
   };
-
-  if (useBrandKit === true) body.useBrandKit = true;
 
   if (prompt !== undefined && prompt !== null && String(prompt).trim()) {
     body.prompt = String(prompt).trim();
@@ -255,10 +250,7 @@ export async function getVisualStatus(id, apiKey) {
     throw err;
   }
 
-  return blotatoRequest(`videos/creations/${encodeURIComponent(cleaned)}`, {
-    apiKey,
-    retryAttempts: positiveIntEnv("BLOTATO_STATUS_RETRY_ATTEMPTS", 1, 3),
-  });
+  return blotatoRequest(`videos/creations/${encodeURIComponent(cleaned)}`, { apiKey });
 }
 
 export async function deleteVisual(id, apiKey) {
@@ -269,7 +261,7 @@ export async function deleteVisual(id, apiKey) {
     throw err;
   }
 
-  return blotatoRequest(`videos/${encodeURIComponent(cleaned)}`, {
+  return blotatoRequest(`videos/creations/${encodeURIComponent(cleaned)}`, {
     method: "DELETE",
     apiKey,
   });

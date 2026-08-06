@@ -7,10 +7,10 @@ import { buildBlotatoPersona } from "../../script/utils/toneSetter.js";
 import { jonathanVoicePrompt } from "../../content-quality/jonathanVoice.js";
 
 const NEWS_SHORT_MAX_TOKENS = Math.max(2600, Number(process.env.BLOTATO_NEWS_SHORT_MAX_TOKENS || 3600));
-const MIN_SCRIPT_WORDS = Math.max(80, Number(process.env.BLOTATO_NEWS_MIN_SCRIPT_WORDS || 90));
-const TARGET_SCRIPT_WORDS = Math.max(MIN_SCRIPT_WORDS, Number(process.env.BLOTATO_NEWS_TARGET_SCRIPT_WORDS || 115));
-const MAX_SCRIPT_WORDS = Math.max(TARGET_SCRIPT_WORDS, Number(process.env.BLOTATO_NEWS_MAX_SCRIPT_WORDS || 135));
-const MIN_SCENE_VOICEOVER_WORDS = Math.max(80, Number(process.env.BLOTATO_NEWS_MIN_SCENE_WORDS || 90));
+const MIN_SCRIPT_WORDS = Math.max(75, Number(process.env.BLOTATO_NEWS_MIN_SCRIPT_WORDS || 85));
+const TARGET_SCRIPT_WORDS = Math.max(MIN_SCRIPT_WORDS, Number(process.env.BLOTATO_NEWS_TARGET_SCRIPT_WORDS || 135));
+const MAX_SCRIPT_WORDS = Math.max(TARGET_SCRIPT_WORDS, Number(process.env.BLOTATO_NEWS_MAX_SCRIPT_WORDS || 190));
+const MIN_SCENE_VOICEOVER_WORDS = Math.max(75, Number(process.env.BLOTATO_NEWS_MIN_SCENE_WORDS || 110));
 
 // Brand kit — all visual and audio identity settings are env-configurable.
 const AI_STORY_VOICE = process.env.BLOTATO_BRAND_VOICE_NAME || "Daniel (British, authoritative)";
@@ -24,11 +24,10 @@ const AI_STORY_TRIM_TO_VOICEOVER = process.env.BLOTATO_BRAND_TRIM_TO_VOICEOVER !
 // Media generation cost preference labels. Current Blotato template requests are steered through prompt + template settings, not unsupported top-level model fields.
 const MAX_SCENES = Math.max(4, Math.min(9, Number(process.env.BLOTATO_VIDEO_SCENE_COUNT || 5)));
 const MIN_DURATION_SECONDS = 35;
-const MAX_DURATION_SECONDS = 55;
-const DEFAULT_DURATION_SECONDS = 45;
+const MAX_DURATION_SECONDS = 80;
+const DEFAULT_DURATION_SECONDS = 55;
 const LOW_COST_IMAGE_MODEL_LABEL = process.env.BLOTATO_LOW_COST_IMAGE_MODEL_LABEL || "flux schnell";
 const LOW_COST_VIDEO_MODEL_LABEL = process.env.BLOTATO_LOW_COST_VIDEO_MODEL_LABEL || "framepack";
-const BLOTATO_IMAGE_PROMPT_PROFILE = cleanPromptProfile(process.env.BLOTATO_IMAGE_PROMPT_PROFILE || "flux-schnell");
 
 // Gap 5: automated hook expert review. Set BLOTATO_HOOK_VARIANTS=2 to request an alternate
 // hook candidate and run an automated strength comparison. Zero manual interaction required.
@@ -40,85 +39,20 @@ const THUMBNAIL_TEXT_WORDS = Math.max(3, Math.min(6, Number(process.env.BLOTATO_
 
 const BLOTATO_HUMAN_VISUAL_RULE = [
   "HUMAN-CENTRED SOCIAL VISUALS.",
-  "Use believable adult human presence in the first scenes: expressive face, upper-body posture, presenter silhouette, analyst, creator, operator, customer or worker context.",
-  "Do not create a Jonathan Harris likeness, celebrity likeness, child, distorted face, visible hands or stock-photo grin.",
+  "Use believable adult human presence in the first scenes: expressive face, hands, body language, desk posture, presenter silhouette, analyst, creator, operator, customer or worker context.",
+  "Do not create a Jonathan Harris likeness, celebrity likeness, child, distorted face, uncanny hands or stock-photo grin.",
   "People should make the idea emotionally readable; the narration still carries the argument."
 ].join(" ");
 
 
 export const BLOTATO_STRICT_NO_TEXT_RULE = [
   "ABSOLUTE TEXT-FREE GENERATED VISUAL.",
-  "Do not render readable words, numbers, logos, watermarks or interface copy.",
-  "Do not visualise wording from the hook, script, article or thumbnail text.",
-  "Use blank unmarked screens, plain surfaces and clean environments instead of designed signage.",
+  "No readable text, pseudo-text, gibberish lettering, words, letters, numerals, punctuation, glyphs, captions, labels, interface copy, code, signage, logos, trademarks, watermarks, badges, seals or typography-shaped marks.",
+  "Do not visualise words from the hook, script, title, source article or thumbnail copy.",
+  "Use objects, environments, lighting, movement, geometry and texture only.",
 ].join(" ");
 
-const BLOTATO_TEXT_FREE_POSITIVE_DETAIL = "ABSOLUTE TEXT-FREE GENERATED VISUAL. Blank unmarked screens and surfaces, free of pseudo-text, logos and watermarks.";
-const FLUX_SCHNELL_SCENE_STYLE = "Realistic editorial documentary image, vertical 9:16, cinematic cyan highlights, deep navy shadows, clear source context, one coherent action, premium but believable social-video visual.";
-
-function cleanPromptProfile(value = "") {
-  return String(value || "").trim().toLowerCase().replace(/[^a-z0-9-]+/g, "-") || "flux-schnell";
-}
-
-function usesFluxSchnellPromptProfile(profile = BLOTATO_IMAGE_PROMPT_PROFILE) {
-  return ["flux-schnell", "flux_schnell", "flux", "replicate/flux-schnell"].includes(cleanPromptProfile(profile));
-}
-
-function stripPromptBans(value = "") {
-  return cleanText(String(value || "")
-    .replace(/\b(?:no|never|avoid|without|do not)\b[^.]*\.?/gi, " ")
-    .replace(/\b(?:readable text|pseudo-text|gibberish lettering|typography|logos?|watermarks?|labels?|captions?|signage|dashboard(?:s)?|robot clich(?:e|és)|generic offices?)\b/gi, " ")
-    .replace(/\bScene\s*\d+(?:\s*of\s*\d+)?\s*:?[-]?/gi, " ")
-    .replace(/\s{2,}/g, " "), 620);
-}
-
-function fluxSceneShotDirection(index = 0) {
-  const directions = [
-    "medium close-up opening frame with the tension obvious at a glance",
-    "medium operational shot showing the process or workflow change",
-    "tight consequence shot showing the equipment, condition or impact",
-    "over-shoulder verification shot showing the human decision point",
-    "wider closing shot showing the outcome or unresolved risk",
-  ];
-  return directions[index % directions.length];
-}
-
-function stripFluxPromptBoilerplate(value = "") {
-  return String(value || "")
-    .split(`Vertical 9:16 ${FLUX_SCHNELL_SCENE_STYLE}`).join(" ")
-    .split(FLUX_SCHNELL_SCENE_STYLE).join(" ")
-    .split(BLOTATO_TEXT_FREE_POSITIVE_DETAIL).join(" ")
-    .replace(/Use an? (?:medium close-up opening frame with the tension obvious at a glance|medium operational shot showing the process or workflow change|tight consequence shot showing the equipment, condition or impact|over-shoulder verification shot showing the human decision point|wider closing shot showing the outcome or unresolved risk)\.?/gi, " ")
-    .replace(/ABSOLUTE TEXT-FREE GENERATED VISUAL\.?/gi, " ")
-    .replace(/Believable adult face or upper body, natural expression, shoulders-up framing\.?/gi, " ")
-    .replace(/Professional adult shoulders-up beside the workflow, clear decision tension, arms outside frame\.?/gi, " ")
-    .replace(/Professional adult silhouette or over-shoulder view, visible work consequence, arms outside frame\.?/gi, " ")
-    .replace(/\s{2,}/g, " ")
-    .trim();
-}
-
-function buildFluxSchnellScenePrompt(value = "", index = 0, maxLength = 900) {
-  const base = stripPromptBans(removeHandVisualRequests(stripFluxPromptBoilerplate(value)));
-  const humanCue = removeHandVisualRequests(humanVisualPromptSuffix(index));
-  return cleanText([
-    `Vertical 9:16 ${FLUX_SCHNELL_SCENE_STYLE}`,
-    BLOTATO_TEXT_FREE_POSITIVE_DETAIL,
-    `Use a ${fluxSceneShotDirection(index)}.`,
-    humanCue,
-    base,
-  ].filter(Boolean).join(" "), maxLength);
-}
-
-function isNormalisedFluxScenePrompt(value = "") {
-  const text = String(value || "").trim();
-  return /^Vertical 9:16 /i.test(text) && /ABSOLUTE TEXT-FREE GENERATED VISUAL/i.test(text);
-}
-
-function enforceTextFreeVisualPrompt(value = "", maxLength = 900, index = 0) {
-  if (usesFluxSchnellPromptProfile()) {
-    if (isNormalisedFluxScenePrompt(value)) return cleanText(removeHandVisualRequests(value), Math.min(maxLength, 900));
-    return buildFluxSchnellScenePrompt(value, index, Math.min(maxLength, 900));
-  }
+function enforceTextFreeVisualPrompt(value = "", maxLength = 900) {
   const base = cleanText(value, Math.max(100, maxLength - BLOTATO_STRICT_NO_TEXT_RULE.length - 2));
   return cleanText(`${base}. ${BLOTATO_STRICT_NO_TEXT_RULE}`, maxLength);
 }
@@ -351,7 +285,7 @@ export function buildNewsShortPrompt({
   const articleBlock = renderArticles({ article, articles });
   const resolvedCta = ctaForLane(laneConfig.slug, cta);
   const targetDuration = Math.min(MAX_DURATION_SECONDS, Math.max(MIN_DURATION_SECONDS, Number(durationSeconds || DEFAULT_DURATION_SECONDS)));
-  const targetScriptWords = Math.min(MAX_SCRIPT_WORDS, Math.max(MIN_SCRIPT_WORDS, Math.round(targetDuration * 2.5)));
+  const targetScriptWords = Math.min(MAX_SCRIPT_WORDS, Math.max(MIN_SCRIPT_WORDS, Math.round(targetDuration * 2.35)));
   const structure = laneConfig.structure.map((item, index) => `${index + 1}. ${item}`).join("\n");
   const requestHookAlt = HOOK_VARIANTS >= 2;
   const previousDefects = [
@@ -371,7 +305,7 @@ You create short-form video packs for Jonathan Harris, an AI author and podcast 
 ${jonathanVoicePrompt({ format: "short-form social video", includeArgumentArc: false })}
 
 # Role — Human-centred Shorts Creative Director
-You design the complete short as one continuous mini-story before writing individual scenes. You write narration-driven, voiceover-based AI short-form video scripts. Jonathan Harris is not on camera. Generated generic adults, faces and bodies are allowed when they make the idea more watchable, but visible hands and fingers are prohibited because the image generator does not render them reliably. When the preferred image model is Flux Schnell, write scene mediaSource prompts in positive visual language describing what should be visible, not long ban-lists of what should be excluded. Source relevance outranks decorative metaphor: show the actual industry, location, equipment, role and consequence described by the article. Frame people from shoulders-up, behind objects, or with hands fully outside the crop. The narration carries the story. Every scene must be visualisable without text overlays on generated imagery.
+You design the complete short as one continuous mini-story before writing individual scenes. You write narration-driven, voiceover-based AI short-form video scripts. Jonathan Harris is not on camera. Generated generic adults, faces and bodies are allowed when they make the idea more watchable, but visible hands and fingers are prohibited because the image generator does not render them reliably. Frame people from shoulders-up, behind objects, or with hands fully outside the crop. The narration carries the story. Every scene must be visualisable without text overlays on generated imagery.
 
 # Social Video Laws
 1. The first frame must show a human-readable situation, tension or reaction, not decorative AI wallpaper.
@@ -382,10 +316,7 @@ You design the complete short as one continuous mini-story before writing indivi
 6. STORYBOARD FIRST. Decide the complete narrative arc and visual continuity before creating any scene. The scenes are chapters of one short, not independent illustrations of sentences.
 7. CONTINUITY. Reuse one coherent visual world: the same type of protagonist, setting, lighting language, palette and camera grammar unless the story itself requires a deliberate change. Do not randomly switch between unrelated people, abstract graphics, offices and devices.
 8. FLOW. Use this arc unless the lane demands a tighter variant: Hook → context/problem → consequence → practical meaning/action → takeaway. Each scene must hand the viewer naturally into the next.
-9. SOURCE-GROUNDED VISUALS. At least three of five scenes must visibly contain concrete source-specific anchors such as the named place, industry, equipment, job role, product or affected environment. A generic office person is not source grounding.
-10. VISUAL PROGRESSION. Each scene must show a different stage, action, scale or consequence. Do not repeat the same seated person, portrait or desk composition.
-11. NO GENERIC METAPHOR PROPS. Never substitute board games, playing cards, chess pieces, dominoes, toy people, miniature buildings, puzzles or abstract blocks for the real source context.
-12. HAND SAFETY. Never request visible hands, fingers, typing hands, pointing hands, phones held in hands, handshakes or close-up gestures. If a human is shown, crop below the shoulders or place hands completely outside frame.
+9. HAND SAFETY. Never request visible hands, fingers, typing hands, pointing hands, phones held in hands, handshakes or close-up gestures. If a human is shown, crop below the shoulders or place hands completely outside frame.
 
 # Writing style
 - British English.
@@ -455,7 +386,7 @@ Return exactly one JSON object with these keys:
   "visualContinuity": "one sentence defining the recurring protagonist type, setting, palette, lighting and camera language shared across scenes",
   "scenes": [
     {
-      "mediaSource": "AI image/video generation prompt for this scene. No text, labels, captions, or typography. Name the source-specific place, industry, equipment, role or consequence visible in the frame. Describe a distinct action and shot progression. Avoid generic offices, decorative metaphors and robot clichés.",
+      "mediaSource": "AI image/video generation prompt for this scene. Faceless. No text, labels, captions, or typography on the generated image. Describe subject, environment, movement, lighting temperature. Use the lane visual signature. Avoid generic robot clichés.",
       "script": "voiceover text for this scene — one or two short sentences"
     }
   ],
@@ -476,12 +407,7 @@ Scene rules:
 - Scene scripts must be complete spoken thoughts, normally 12-30 words each. Do not output caption-like fragments such as "and communication", "now baseline" or "candidates".
 - Scene 1 = hook/tension. Middle scenes = context, consequence and practical meaning. Final scene = takeaway/action.
 - Every mediaSource must inherit visualContinuity so the same visual world persists across the short. Deliberate scene changes must still preserve palette, lighting and camera grammar.
-- Each mediaSource must describe a specific physical scene, not a generic instruction.
-- If the image profile is Flux Schnell, build each mediaSource as a positive visual brief in this order: subject, action, real environment, composition, lighting, style.
-- At least three scenes must include concrete source-specific visual anchors from the supplied article. A person at a desk does not count.
-- Give every scene a different action, scale or consequence. Do not repeat the same portrait, seated person or desk composition.
-- Never use board games, playing cards, chess pieces, dominoes, miniature people/buildings, puzzles, toy models or abstract blocks as metaphors for the topic.
-- The first scene must immediately show the article's real-world tension, not a generic reaction portrait.
+- Each mediaSource must describe a specific visual, not a generic instruction.
 - CRITICAL: every mediaSource must obey this absolute rule: ${BLOTATO_STRICT_NO_TEXT_RULE}
 - Use the lane visual signature: ${laneConfig.visualSignature}
 - ${HUMAN_VISUALS_ENABLED ? `At least ${HUMAN_VISUAL_MIN_SCENES} scenes must include believable adult human presence through face, hands, body language, posture or a clearly human workplace/customer/creator moment. Do not use Jonathan Harris, celebrities or children.` : "Human subjects are optional for this run."}
@@ -494,7 +420,7 @@ Scene rules:
 - Avoid gimmicky robot clichés.
 - The first scene must support the hook.
 - The final scene must support the CTA or practical takeaway.
-- The combined scene scripts must contain enough spoken copy for a 35-55 second finished short, targeting about 45 seconds. Never return a thin or padded script.
+- The combined scene scripts must contain enough spoken copy for at least 35 seconds of voiceover. Never return a thin script.
 - The main script must be at least ${MIN_SCRIPT_WORDS} words and should land between ${MIN_SCRIPT_WORDS} and ${MAX_SCRIPT_WORDS} words.
 
 Output rules:
@@ -569,17 +495,17 @@ function hasHumanVisualCue(value = "") {
 function humanVisualPromptSuffix(index = 0) {
   if (!HUMAN_VISUALS_ENABLED || index >= HUMAN_VISUAL_MIN_SCENES) return "";
   const cues = [
-    "Believable adult face or upper body, natural expression, shoulders-up framing.",
-    "Professional adult shoulders-up beside the workflow, clear decision tension, arms outside frame.",
-    "Professional adult silhouette or over-shoulder view, visible work consequence, arms outside frame.",
+    "Include a believable adult human face or upper body reacting to the situation, editorial lighting, natural expression, not a stock-photo grin; crop hands and fingers fully outside frame.",
+    "Include a professional adult shown shoulders-up beside the AI workflow, with hands and fingers completely outside frame and clear human decision tension.",
+    "Include a professional adult silhouette or over-shoulder view showing the work context and consequence, composed so hands and fingers are not visible.",
   ];
   return cues[index % cues.length];
 }
 
 function removeHandVisualRequests(value = "") {
   return cleanText(String(value || "")
-    .replace(/\b(adult\s+)?hands?\s+(using|holding|typing|on|with|beside|over)\b[^,.]*/gi, "shoulders-up upper-body composition")
-    .replace(/\b(hands?|fingers?|fingertips?|palms?|thumbs?)\b/gi, "arms"), 820);
+    .replace(/\b(adult\s+)?hands?\s+(using|holding|typing|on|with|beside|over)\b[^,.]*/gi, "upper-body composition with hands fully outside frame")
+    .replace(/\b(fingers?|fingertips?|palms?|thumbs?)\b/gi, "hands outside frame"), 820);
 }
 
 function addHumanVisualCue(value = "", index = 0) {
@@ -591,14 +517,15 @@ function addHumanVisualCue(value = "", index = 0) {
 
 function normaliseScene(scene = {}, fallbackScript = "", fallbackVisual = "", index = 0) {
   const rawVisual = addHumanVisualCue(scene.mediaSource || scene.visual || scene.imagePrompt || fallbackVisual, index);
-  const mediaSource = enforceTextFreeVisualPrompt(rawVisual, 900, index);
+  const mediaSource = enforceTextFreeVisualPrompt(rawVisual, 900);
   const script = cleanText(scene.script || scene.voiceover || fallbackScript, 700);
   if (!mediaSource || !script) return null;
   return { mediaSource, script };
 }
 
 function deriveScenesFromPack(pack = {}) {
-  const chunks = balancedSceneScripts(pack.script || pack.hook || "", MAX_SCENES);
+  const scriptSentences = splitSentences(pack.script);
+  const chunks = chunkSentences(scriptSentences, scriptSentences.length >= 6 ? 5 : 4);
   const visualBase = cleanText(pack.visualDirection, 700);
   const laneSlug = pack.lane || DEFAULT_BLOTATO_SHORT_LANE;
   const laneConfig = getShortLaneConfig(laneSlug);
@@ -608,8 +535,8 @@ function deriveScenesFromPack(pack = {}) {
   // Gap 3 / Faceless skill: no text or labels on generated images.
   const phaseCompositions = [
     `Wide establishing shot with a believable adult human face or upper body as the emotional anchor, high contrast lighting, slow push-in`,
-    `Medium source-specific action shot with a believable adult professional shown shoulders-up and hands completely outside frame, visible workplace tension, ambient motion`,
-    `Close-up source-specific equipment or environment detail beside a human face or upper body, hands completely outside frame, dramatic directional light`,
+    `Medium shot with adult hands, laptop or phone interaction and visible workplace tension, ambient motion`,
+    `Close-up detail of human hands or face beside the AI workflow consequence, tight framing, dramatic directional light`,
     `Over-shoulder or isometric view mixing human posture with layered process complexity, data or network abstraction`,
     `Clean minimal frame with a professional adult silhouette and one key visual consequence, slight pull-back, calm resolution`,
   ];
@@ -622,63 +549,10 @@ function deriveScenesFromPack(pack = {}) {
         : `supporting point ${index + 1}`;
     const composition = phaseCompositions[index % phaseCompositions.length];
     return {
-      mediaSource: enforceTextFreeVisualPrompt(addHumanVisualCue(`${visualBase}. ${visualSignature} Scene ${index + 1} (${phase}): ${composition}.`, index), 900, index),
+      mediaSource: enforceTextFreeVisualPrompt(addHumanVisualCue(`${visualBase}. ${visualSignature} Scene ${index + 1} (${phase}): ${composition}.`, index), 900),
       script: chunk,
     };
   });
-}
-
-function balancedSceneScripts(script = "", count = MAX_SCENES) {
-  const sentences = splitSentences(script);
-  if (sentences.length >= count) {
-    const groups = Array.from({ length: count }, () => []);
-    sentences.forEach((sentence, index) => {
-      groups[Math.min(count - 1, Math.floor(index * count / sentences.length))].push(sentence);
-    });
-    return groups.map((group) => ensureSentence(group.join(" ")));
-  }
-
-  const words = cleanText(script, 4000).split(/\s+/).filter(Boolean);
-  const size = Math.max(1, Math.ceil(words.length / count));
-  return Array.from({ length: count }, (_, index) => {
-    const start = index * size;
-    const remainingScenes = count - index;
-    const remainingWords = words.length - start;
-    const take = index === count - 1 ? remainingWords : Math.max(1, Math.ceil(remainingWords / remainingScenes));
-    return ensureSentence(words.slice(start, start + take).join(" "));
-  });
-}
-
-function sourceVisualContext(article = {}, pack = {}) {
-  const title = cleanText(article.title || pack.internalTitle || pack.angle || "the selected AI story", 220);
-  const summary = cleanText(article.summary || article.description || pack.angle || "", 360);
-  const evidence = [title, firstSentence(summary)].filter(Boolean).join(". ");
-  return cleanText(evidence, 520);
-}
-
-function deriveSourceGroundedScenes(pack = {}, article = {}) {
-  const scripts = balancedSceneScripts(pack.script, MAX_SCENES);
-  const context = sourceVisualContext(article, pack);
-  const laneSlug = pack.lane || DEFAULT_BLOTATO_SHORT_LANE;
-  const laneConfig = getShortLaneConfig(laneSlug);
-  const signature = cleanText(laneConfig?.visualSignature || pack.visualDirection || "premium editorial documentary short", 300);
-  const continuity = cleanText(pack.visualContinuity || pack.visualDirection || signature, 360);
-  const phases = [
-    `Wide establishing shot in the real source environment described by: ${context}. Show the actual industry, location, equipment or affected people and the immediate tension; one adult upper body may anchor the frame, hands fully outside crop; slow push-in`,
-    `Medium operational action in the same source environment: ${context}. Show the real process, machinery, product or job role changing, not a symbolic prop; different camera angle and visible movement; hands fully outside crop`,
-    `Tight source-specific consequence shot from: ${context}. Focus on actual equipment, conditions or affected workflow with a human face or upper body for scale; no office substitute, no board games, cards, miniatures, puzzles or abstract blocks`,
-    `Over-shoulder verification or decision point inside the same real source context: ${context}. Show the responsible adult checking a concrete safety, quality, cost or approval consequence; hands and fingers outside frame; clear action rather than a static portrait`,
-    `Closing outcome shot in the same source environment: ${context}. Show the practical result or unresolved risk with a wider composition and calm pull-back; preserve the people, equipment and setting introduced earlier`,
-  ];
-
-  return phases.map((phase, index) => ({
-    mediaSource: enforceTextFreeVisualPrompt(
-      `Scene ${index + 1} of ${MAX_SCENES}: ${phase}. Distinct from every other scene while preserving the same visual world. ${continuity}. ${signature}.`,
-      900,
-      index
-    ),
-    script: scripts[index] || ensureSentence(pack.hook || pack.script),
-  }));
 }
 
 function normaliseScenes(scenes, pack = {}) {
@@ -688,15 +562,10 @@ function normaliseScenes(scenes, pack = {}) {
     .map((scene, index) => normaliseScene(scene, "", "", index))
     .filter(Boolean);
 
-  if (normalised.length === MAX_SCENES) return normalised;
+  if (normalised.length >= 3) return normalised;
 
   const derived = deriveScenesFromPack(pack);
-  if (!normalised.length) return derived.slice(0, MAX_SCENES);
-
-  return [
-    ...normalised,
-    ...derived.slice(normalised.length),
-  ].slice(0, MAX_SCENES);
+  return derived.length ? derived : normalised;
 }
 
 function normalisePack(pack = {}) {
@@ -788,16 +657,23 @@ function reinforceSourceGrounding(pack = {}, article = {}) {
     output.script = trimToWordCount(candidateScript, MAX_SCRIPT_WORDS);
   }
 
-  output.visualDirection = cleanText(`${output.visualDirection} Ground every scene in the real source environment: ${shortEvidence}`, 1400);
-  output.qualityNotes = cleanText(`Scene plan rebuilt from RSS source evidence: ${shortEvidence} ${output.qualityNotes || ""}`, 700);
-  output.scenes = deriveSourceGroundedScenes(output, article);
+  output.visualDirection = cleanText(`${output.visualDirection} Ground visuals in: ${shortEvidence}`, 1400);
+  output.qualityNotes = cleanText(`Grounded in RSS source: ${shortEvidence} ${output.qualityNotes || ""}`, 700);
+  output.scenes = Array.isArray(output.scenes) && output.scenes.length
+    ? output.scenes.map((scene, index) => index === 0
+        ? {
+            ...scene,
+            mediaSource: cleanText(`${scene.mediaSource} Source-grounding cue: ${shortEvidence}`, 900),
+          }
+        : scene)
+    : output.scenes;
   return output;
 }
 
 export function buildBlotatoVisualPrompt(pack = {}) {
   const laneConfig = requireShortLaneConfig(pack.lane || DEFAULT_BLOTATO_SHORT_LANE);
   return [
-    `Create a polished faceless, human-centred social video for Jonathan Harris in vertical 9:16 format.`,
+    `Create a polished faceless vertical AI social video for Jonathan Harris.`,
     `Lane: ${laneConfig.label}.`,
     `Use the supplied scenes as the source of truth.`,
     `Opening hook: ${pack.hook}`,
@@ -807,9 +683,7 @@ export function buildBlotatoVisualPrompt(pack = {}) {
     `Visual continuity anchor: ${pack.visualContinuity || pack.visualDirection}`,
     `Visual direction: ${pack.visualDirection}`,
     `Cost guard: use the cheapest suitable generation settings available, preferably ${LOW_COST_IMAGE_MODEL_LABEL} for images and ${LOW_COST_VIDEO_MODEL_LABEL} for video. Do not use premium video models.`,
-    `Image prompt profile: ${BLOTATO_IMAGE_PROMPT_PROFILE}. If using Flux Schnell, keep every scene prompt concise, positive and visually concrete.`,
-    `Style: premium documentary/editorial social video with cinematic lighting, bold controlled colour, high contrast and emotional storytelling. Keep it human-centred and visually immediate, but show the real source environment rather than a decorative metaphor. Avoid corporate stock staging, generic offices, data-centre glamour, floating dashboards, polygon networks and robot clichés. Never use board games, cards, chess pieces, miniatures, toy people, puzzles, abstract blocks or a wall calendar as a substitute for the article's actual people, place, equipment or consequence. Preserve the configured seasonal palette direction where supplied. British AI news commentary tone.`,
-    `Finished-video target: five purposeful scenes inside the 35-55 second finished range, normally targeting 45 seconds, with visible progression from real-world tension to consequence, verification and outcome. Do not repeat the same person-at-a-desk composition.`,
+    `Style: premium magazine/editorial social video with cinematic lighting, bold controlled colour, high contrast, emotional storytelling and a modern YouTube-thumbnail visual hierarchy. Keep it human-centred and visually immediate. Avoid corporate stock staging, generic data-centre glamour, floating dashboards, polygon networks and gimmicky robot clichés. Preserve the configured seasonal palette direction where supplied. British AI news commentary tone.`,
     HUMAN_VISUALS_ENABLED ? BLOTATO_HUMAN_VISUAL_RULE : "Human subjects optional.",
     BLOTATO_STRICT_NO_TEXT_RULE,
     `Thumbnail copy is supplied separately in the template inputs. Treat it as metadata only and never render that wording inside generated images.`,
@@ -926,9 +800,9 @@ function combinedSceneWordCount(scenes = []) {
   return (Array.isArray(scenes) ? scenes : []).reduce((total, scene) => total + wordCount(scene?.script || ""), 0);
 }
 
-function makeScenePackDurationSafe(pack = {}, article = {}) {
-  const derived = deriveSourceGroundedScenes(pack, article);
-  return derived.length === MAX_SCENES ? derived : normaliseScenes(pack.scenes, pack);
+function makeScenePackDurationSafe(pack = {}) {
+  const derived = deriveScenesFromPack(pack);
+  return derived.length >= 4 ? derived.slice(0, MAX_SCENES) : normaliseScenes(pack.scenes, pack);
 }
 
 function enhancePackForBlotatoDuration(pack = {}, options = {}, laneConfig = {}) {
@@ -939,12 +813,12 @@ function enhancePackForBlotatoDuration(pack = {}, options = {}, laneConfig = {})
   }
 
   output.scenes = normaliseScenes(output.scenes, output);
-  if (output.scenes.length !== MAX_SCENES || combinedSceneWordCount(output.scenes) < MIN_SCENE_VOICEOVER_WORDS) {
-    output.scenes = makeScenePackDurationSafe(output, options.article);
+  if (output.scenes.length < 4 || combinedSceneWordCount(output.scenes) < MIN_SCENE_VOICEOVER_WORDS) {
+    output.scenes = makeScenePackDurationSafe(output);
   }
 
   output.qualityNotes = cleanText(
-    output.qualityNotes || `Duration-safe ${laneConfig.label || "Blotato"} pack prepared for a coherent 35-55 second short targeting 45 seconds.`,
+    output.qualityNotes || `Duration-safe ${laneConfig.label || "Blotato"} pack prepared for a coherent 35-80 second short.`,
     500
   );
 
@@ -1050,7 +924,7 @@ export function repairShortPackForBlotatoGate(pack = {}, {
     || shouldRepairGateText(gate, /visual continuity anchor|visual continuity/i);
   const repairFlow = shouldRepairGateText(gate, /narrative\/visual flow score too low|flow score/i);
   const repairScenes = repairFlow
-    || shouldRepairGateText(gate, /human visual coverage|scene voiceover|exactly .* purposeful scenes|source-specific visual grounding|scene-to-script\/source alignment|visual progression|generic metaphor|near-duplicate|static portrait|thin/i);
+    || shouldRepairGateText(gate, /human visual coverage|scene voiceover|at least four usable scenes|thin/i);
   const repairScript = !output.script || shouldRepairGateText(gate, /script is too thin|scene voiceover is too thin|no script/i);
 
 
@@ -1088,19 +962,23 @@ export function repairShortPackForBlotatoGate(pack = {}, {
   }
 
   if (repairScenes || repairHook || repairNarrativeArc || repairVisualContinuity) {
-    output.scenes = makeScenePackDurationSafe(output, article);
+    output.scenes = makeScenePackDurationSafe(output);
     if (Array.isArray(output.scenes) && output.scenes.length) {
+      const continuity = cleanText(output.visualContinuity || output.visualDirection || laneConfig.visualSignature, 700);
       output.scenes = output.scenes.map((scene, index) => ({
         ...scene,
-        mediaSource: enforceTextFreeVisualPrompt(
-          addHumanVisualCue(cleanText(scene.mediaSource || "", 900), index),
-          900,
+        mediaSource: enforceTextFreeVisualPrompt(addHumanVisualCue(
+          `${continuity}. ${cleanText(scene.mediaSource || "", 700)}`,
           index
-        ),
+        ), 900),
       }));
       output.scenes[0] = {
         ...output.scenes[0],
         script: ensureSentence(output.hook),
+        mediaSource: enforceTextFreeVisualPrompt(addHumanVisualCue(
+          `${continuity}. Opening frame with a believable adult human face or upper body reacting to the practical risk in ${sourceAnchor(article, output)}. High contrast editorial lighting, phone-first composition, immediate human tension.`,
+          0
+        ), 900),
       };
     }
   }
@@ -1112,7 +990,6 @@ export function repairShortPackForBlotatoGate(pack = {}, {
     repairNarrativeArc ? "Narrative arc was restored from quality-gate feedback." : "",
     repairVisualContinuity ? "Visual continuity was restored and propagated across scenes." : "",
     repairFlow ? "Scene flow was rebuilt as one continuous hook-to-takeaway story." : "",
-    repairScenes ? "Scenes were rebuilt around concrete source evidence, distinct actions and visual progression; generic metaphor props were removed." : "",
   ].filter(Boolean).join(" "), 700);
 
   return enhancePackForBlotatoDuration(normalisePack(output), { article, cta }, laneConfig);
