@@ -67,6 +67,7 @@ export async function generateHeroImage({ profile, heroHeadline, leadStory = nul
     sessionId,
     prompt,
     keyPrefix: profile.storage.keyPrefix,
+    mode: "newsletter",
   });
 
   if (!result.ok) {
