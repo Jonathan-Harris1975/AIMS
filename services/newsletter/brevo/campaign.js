@@ -1,435 +1,248 @@
 // services/newsletter/brevo/campaign.js
 //
-// Exactly-once Brevo delivery for a QA-passed newsletter issue. MAST owns the
-// clock; this module owns the durable create -> record -> send -> verify handoff.
+// Turns a QA-passed, rendered newsletter issue into a Brevo send. Brevo's
+// v3 API supports full campaign creation and immediate sending, so delivery
+// is a straight create -> sendNow flow.
+//
+// Scheduling is owned entirely by MAST (a separate repository): this module
+// never sets Brevo's own `scheduledAt` — POST /newsletter/send is called
+// exactly when MAST wants the issue to go out, and sendNow fires immediately.
 
 import { info, warn } from "../../../logger.js";
 import { getObjectAsText } from "../../shared/utils/r2-client.js";
-import { readCampaignDelivery, recordCampaignDelivery } from "../engine/storage.js";
+import { recordCampaignDelivery } from "../engine/storage.js";
 import { ensureList } from "./audience.js";
 import { ensureSender, inspectSender } from "./sender.js";
-import {
-  createCampaign,
-  deleteCampaign,
-  sendCampaignNow,
-  getCampaign,
-} from "./client.js";
+import { createCampaign, sendCampaignNow, getCampaign } from "./client.js";
 
-const DISPATCH_ACCEPTED_STATUSES = new Set(["queued", "scheduled", "sent"]);
-const CAMPAIGN_TERMINAL_STATUSES = new Set(["suspended", "archive", "archived", "rejected"]);
 
-function positiveInteger(value, fallback) {
-  const parsed = Number.parseInt(String(value ?? ""), 10);
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
-}
-
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function subscriberCount(list = {}) {
-  for (const value of [list.activeSubscribers, list.uniqueSubscribers, list.totalSubscribers]) {
-    const parsed = Number(value);
-    if (Number.isFinite(parsed)) return Math.max(0, parsed);
-  }
-  return 0;
-}
-
-function errorResult(status, error, extra = {}) {
-  return { ok: false, status, error, ...extra };
-}
-
-function dependencies(overrides = {}) {
-  return {
-    getObjectAsText,
-    readCampaignDelivery,
-    recordCampaignDelivery,
-    ensureList,
-    ensureSender,
-    inspectSender,
-    createCampaign,
-    deleteCampaign,
-    sendCampaignNow,
-    getCampaign,
-    sleep,
-    ...overrides,
-  };
-}
-
-function normaliseCampaignStatus(value) {
-  return String(value || "").trim().toLowerCase();
-}
-
-/**
- * Polls Brevo until it confirms that sendNow has moved the campaign out of
- * draft. A 2xx response from sendNow alone is not treated as proof of dispatch.
- */
-export async function verifyCampaignDispatch(campaignId, deps = {}) {
-  const adapters = dependencies(deps);
-  const attempts = positiveInteger(process.env.NEWSLETTER_BREVO_DISPATCH_VERIFY_ATTEMPTS, 10);
-  const intervalMs = positiveInteger(process.env.NEWSLETTER_BREVO_DISPATCH_VERIFY_INTERVAL_MS, 2000);
-  let lastStatus = null;
-  let lastError = null;
-
-  for (let attempt = 1; attempt <= attempts; attempt += 1) {
-    const result = await adapters.getCampaign(campaignId);
-    if (result.ok) {
-      lastStatus = normaliseCampaignStatus(result.data?.status);
-      if (DISPATCH_ACCEPTED_STATUSES.has(lastStatus)) {
-        return { ok: true, campaignStatus: lastStatus, attempts: attempt, data: result.data };
-      }
-      if (CAMPAIGN_TERMINAL_STATUSES.has(lastStatus)) {
-        return {
-          ok: false,
-          status: "campaign_dispatch_terminal",
-          campaignStatus: lastStatus,
-          attempts: attempt,
-          error: `Brevo campaign ${campaignId} entered terminal status '${lastStatus}'.`,
-        };
-      }
-    } else {
-      lastError = result.error;
-    }
-
-    if (attempt < attempts) await adapters.sleep(intervalMs);
-  }
-
-  return {
-    ok: false,
-    status: "campaign_dispatch_unconfirmed",
-    campaignStatus: lastStatus,
-    attempts,
-    error: lastError || `Brevo did not confirm dispatch for campaign ${campaignId} after ${attempts} checks.`,
-  };
-}
-
-/**
- * Side-effect-free sender/list preflight used by operator diagnostics.
- */
-export async function getNewsletterDeliveryReadiness({ profile }, deps = {}) {
-  const adapters = dependencies(deps);
-
-  const sender = await adapters.inspectSender({ email: profile?.brevo?.fromEmail });
+export async function getNewsletterDeliveryReadiness({ profile }) {
+  const sender = await inspectSender({ email: profile?.brevo?.fromEmail });
   if (!sender.ok) {
-    return { ready: false, ...sender };
-  }
-  if (!sender.verified) {
-    return errorResult(
-      "sender_pending_validation",
-      `Sender ${sender.email} exists in Brevo but has not completed validation.`,
-      { ready: false, senderId: sender.senderId, email: sender.email },
-    );
-  }
-
-  const audience = await adapters.ensureList(
-    {
-      id: profile?.brevo?.listId,
-      name: profile?.brevo?.listName,
-      folderName: profile?.brevo?.folderName,
-    },
-    { allowCreate: false },
-  );
-  if (!audience.ok) return { ready: false, ...audience };
-
-  const subscribers = subscriberCount(audience);
-  if (subscribers < 1) {
-    return errorResult(
-      "audience_empty",
-      `Brevo list ${audience.listId} ('${audience.name || profile.brevo.listName}') has no active subscribers.`,
-      { ready: false, listId: audience.listId, subscribers },
-    );
+    return {
+      ok: false,
+      ready: false,
+      stage: "sender",
+      status: "sender_error",
+      error: sender.error,
+      providerStatus: sender.providerStatus || null,
+      providerCode: sender.providerCode || null,
+    };
   }
 
+  const list = await ensureList({
+    id: profile?.brevo?.listId,
+    name: profile?.brevo?.listName,
+    folderName: profile?.brevo?.folderName,
+    allowCreate: false,
+  });
+  if (!list.ok) {
+    return {
+      ok: false,
+      ready: false,
+      stage: "audience",
+      status: list.status || "list_error",
+      error: list.error,
+      providerStatus: list.providerStatus || null,
+      providerCode: list.providerCode || null,
+      sender,
+    };
+  }
+
+  const audienceReady = Number(list.totalSubscribers || 0) > 0;
+  const ready = Boolean(sender.exists && sender.verified && audienceReady);
   return {
     ok: true,
-    ready: true,
-    status: "ready",
+    ready,
     profileId: profile.id,
-    senderId: sender.senderId,
-    listId: audience.listId,
-    subscribers,
+    sender: {
+      email: sender.email,
+      exists: sender.exists,
+      verified: sender.verified,
+      senderId: sender.senderId,
+    },
+    audience: {
+      listId: list.listId,
+      listName: list.name || profile.brevo.listName,
+      source: list.source,
+      totalSubscribers: list.totalSubscribers,
+      uniqueSubscribers: list.uniqueSubscribers,
+      ready: audienceReady,
+    },
+    blockers: [
+      ...(!sender.exists ? ["sender_missing"] : []),
+      ...(sender.exists && !sender.verified ? ["sender_unverified"] : []),
+      ...(!audienceReady ? ["audience_empty"] : []),
+    ],
   };
 }
 
-async function loadEmailHtml(profile, buildResult, adapters) {
-  const embedded = String(buildResult?.emailHtml || "").trim();
-  if (embedded) return embedded;
-
-  const prefix = buildResult?.storage?.prefix;
-  if (!prefix) throw new Error("Newsletter build result has no storage prefix for email.html.");
-  return adapters.getObjectAsText(profile.storage.htmlBucketKey, `${prefix}/email.html`);
-}
-
-async function readExistingDelivery({ profile, sessionId, prefix }, adapters) {
-  const result = await adapters.readCampaignDelivery({ profile, sessionId, prefix });
-  return result?.delivery || null;
-}
-
-async function recordState(payload, adapters) {
-  return adapters.recordCampaignDelivery(payload);
-}
-
 /**
- * Delivers one rendered, QA-passed newsletter issue via Brevo. The optional
- * dependency argument exists for deterministic contract tests; production uses
- * the real adapters above.
+ * Delivers one rendered, QA-passed newsletter issue via Brevo.
+ *
+ * Preconditions checked, in order, before anything is sent:
+ *   1. The configured sender exists and has completed Brevo's OTP
+ *      verification (a manual, one-time step — see brevo/sender.js).
+ *   2. The configured target list already exists and contains at least one
+ *      active subscriber. Production sends never create a replacement list.
+ * If either isn't ready, this returns a clear, actionable status instead of
+ * attempting (and failing) a send.
  */
-export async function deliverNewsletterIssue({ profile, sessionId, buildResult }, deps = {}) {
+export async function deliverNewsletterIssue({ profile, sessionId, buildResult }) {
   if (!buildResult?.ok) {
-    return errorResult("build_failed", "Cannot deliver because the newsletter build did not succeed.");
+    return { ok: false, status: "build_failed", error: "Cannot deliver — the newsletter build did not succeed." };
   }
 
-  const adapters = dependencies(deps);
-  const prefix = buildResult?.storage?.prefix || null;
-  let stage = "campaign-state-read";
+  const { newsletter, storage } = buildResult;
 
+  let stage = "sender";
   try {
-    const existing = await readExistingDelivery({ profile, sessionId, prefix }, adapters);
-    if (existing?.status === "dispatched") {
+    const sender = await ensureSender({ name: profile.brevo.fromName, email: profile.brevo.fromEmail });
+    if (!sender.ok) {
       return {
-        ok: true,
-        status: "sent",
-        campaignId: Number(existing.campaignId),
-        listId: Number(existing.listId),
-        campaignStatus: existing.campaignStatus || "sent",
-        sentAt: existing.sentAt || null,
-        alreadyDispatched: true,
+        ok: false,
+        status: "sender_error",
+        stage,
+        error: sender.error,
+        providerStatus: sender.providerStatus || null,
+        providerCode: sender.providerCode || null,
+      };
+    }
+    if (!sender.verified) {
+      warn("newsletter.brevo.send_blocked_unverified_sender", { sessionId, profileId: profile.id, senderId: sender.senderId });
+      return {
+        ok: false,
+        status: "sender_pending_validation",
+        senderId: sender.senderId,
+        error:
+          `Sender ${sender.email} exists in Brevo but has not completed OTP verification yet. ` +
+          "Check the inbox for Brevo's verification email and confirm it (Brevo dashboard, or " +
+          "PUT /v3/senders/{id}/validate) before this profile can send.",
       };
     }
 
-    let campaignId = existing?.campaignId ? Number(existing.campaignId) : null;
-    let listId = existing?.listId ? Number(existing.listId) : null;
-    let createdAt = existing?.createdAt || null;
-    let resumed = false;
-
-    if (campaignId) {
-      stage = "existing-campaign-check";
-      const remote = await adapters.getCampaign(campaignId);
-      if (!remote.ok) {
-        return errorResult("existing_campaign_pending", remote.error, {
-          stage,
-          campaignId,
-          providerStatus: remote.status,
-          providerCode: remote.code,
-        });
-      }
-
-      const remoteStatus = normaliseCampaignStatus(remote.data?.status);
-      if (DISPATCH_ACCEPTED_STATUSES.has(remoteStatus)) {
-        const sentAt = existing?.sentAt || new Date().toISOString();
-        await recordState({
-          profile,
-          sessionId,
-          prefix,
-          campaignId,
-          listId,
-          status: "dispatched",
-          campaignStatus: remoteStatus,
-          createdAt,
-          sentAt,
-          lastCheckedAt: new Date().toISOString(),
-        }, adapters);
-        return {
-          ok: true,
-          status: "sent",
-          campaignId,
-          listId,
-          campaignStatus: remoteStatus,
-          sentAt,
-          alreadyDispatched: true,
-          recoveredFromProvider: true,
-        };
-      }
-      if (CAMPAIGN_TERMINAL_STATUSES.has(remoteStatus)) {
-        return errorResult(
-          "existing_campaign_terminal",
-          `Existing Brevo campaign ${campaignId} is '${remoteStatus}' and will not be sent automatically.`,
-          { stage, campaignId, campaignStatus: remoteStatus },
-        );
-      }
-      if (remoteStatus !== "draft") {
-        return errorResult(
-          "existing_campaign_pending",
-          `Existing Brevo campaign ${campaignId} is '${remoteStatus || "unknown"}'.`,
-          { stage, campaignId, campaignStatus: remoteStatus || null },
-        );
-      }
-      resumed = true;
-    }
-
-    stage = "sender";
-    const sender = await adapters.ensureSender({
-      name: profile.brevo.fromName,
-      email: profile.brevo.fromEmail,
-    });
-    if (!sender.ok) {
-      return errorResult(sender.status || "sender_error", sender.error, {
-        stage,
-        providerStatus: sender.providerStatus,
-        providerCode: sender.providerCode,
-      });
-    }
-    if (!sender.verified) {
-      return errorResult(
-        "sender_pending_validation",
-        `Sender ${sender.email} exists in Brevo but has not completed validation.`,
-        { stage, senderId: sender.senderId },
-      );
-    }
-    const senderId = Number(sender.senderId);
-    if (!senderId) return errorResult("sender_error", "Brevo returned no valid sender ID.", { stage });
-
     stage = "audience";
-    const audience = await adapters.ensureList({
+    const list = await ensureList({
       id: profile.brevo.listId,
       name: profile.brevo.listName,
       folderName: profile.brevo.folderName,
+      allowCreate: String(process.env.NEWSLETTER_BREVO_ALLOW_LIST_CREATE || "false").trim().toLowerCase() === "true",
     });
-    if (!audience.ok) {
-      return errorResult(audience.status || "list_error", audience.error, {
+    if (!list.ok) {
+      return {
+        ok: false,
+        status: list.status || "list_error",
         stage,
-        providerStatus: audience.providerStatus,
-        providerCode: audience.providerCode,
+        error: list.error,
+        providerStatus: list.providerStatus || null,
+        providerCode: list.providerCode || null,
+      };
+    }
+    if (Number(list.totalSubscribers || 0) < 1) {
+      warn("newsletter.brevo.send_blocked_empty_audience", {
+        sessionId,
+        profileId: profile.id,
+        listId: list.listId,
+        listName: list.name || profile.brevo.listName,
+        source: list.source,
       });
+      return {
+        ok: false,
+        status: "audience_empty",
+        stage,
+        listId: list.listId,
+        listName: list.name || profile.brevo.listName,
+        error: "The selected Brevo list has no active subscribers. Configure the existing subscriber list ID or populate the list before sending.",
+      };
     }
 
-    const subscribers = subscriberCount(audience);
-    if (subscribers < 1) {
-      return errorResult(
-        "audience_empty",
-        `Brevo list ${audience.listId} ('${audience.name || profile.brevo.listName}') has no active subscribers.`,
-        { stage, listId: audience.listId, subscribers },
-      );
-    }
-    listId = listId || Number(audience.listId);
-    if (!listId) return errorResult("audience_not_configured", "Brevo returned no valid list ID.", { stage });
-
+    // The public index.html uses the full website shell and is not email-safe.
+    // Load the dedicated inline-CSS email.html artefact and send it to Brevo as
+    // htmlContent. This removes any dependency on Brevo fetching an external
+    // R2/custom-domain URL during campaign creation.
     stage = "content";
-    const htmlContent = String(await loadEmailHtml(profile, buildResult, adapters)).trim();
-    if (htmlContent.length < 10) {
-      return errorResult("content_error", "Stored email.html is empty or too short for Brevo.", { stage });
+    const html = await getObjectAsText(profile.storage.htmlBucketKey, `${storage?.prefix}/email.html`);
+    const htmlBytes = Buffer.byteLength(String(html || ""), "utf8");
+    if (String(html || "").trim().length < 10) {
+      return { ok: false, status: "content_error", stage, error: "Stored email.html is empty or too short for Brevo." };
+    }
+    if (htmlBytes >= 1_000_000) {
+      return { ok: false, status: "content_error", stage, error: `Stored email.html is ${htmlBytes} bytes; Brevo campaign HTML must remain below 1 MB.` };
+    }
+    const contentField = { htmlContent: html };
+
+    stage = "campaign-create";
+    const created = await createCampaign({
+      name: `${profile.displayName} — ${new Date().toISOString().slice(0, 10)} — ${sessionId}`,
+      subject: newsletter.subject,
+      sender: { name: profile.brevo.fromName, email: profile.brevo.fromEmail },
+      type: "classic",
+      previewText: newsletter.previewText,
+      replyTo: profile.brevo.replyTo || profile.brevo.fromEmail,
+      ...contentField,
+      recipients: { listIds: [list.listId] },
+    });
+
+    if (!created.ok) {
+      return {
+        ok: false,
+        status: "campaign_create_failed",
+        stage,
+        error: created.error,
+        providerStatus: created.status || null,
+        providerCode: created.code || null,
+      };
     }
 
-    if (!campaignId) {
-      stage = "campaign-create";
-      const created = await adapters.createCampaign({
-        name: `${profile.displayName} — ${new Date().toISOString().slice(0, 10)} — ${sessionId}`,
-        subject: buildResult.newsletter.subject,
-        sender: { id: senderId },
-        type: "classic",
-        previewText: buildResult.newsletter.previewText,
-        replyTo: profile.brevo.replyTo || profile.brevo.fromEmail,
-        htmlContent,
-        recipients: { listIds: [listId] },
-      });
-      if (!created.ok) {
-        return errorResult("campaign_create_failed", created.error, {
-          stage,
-          providerStatus: created.status,
-          providerCode: created.code,
-        });
-      }
-
-      campaignId = Number(created.data?.id);
-      if (!campaignId) return errorResult("campaign_create_failed", "Brevo returned no campaign ID.", { stage });
-      createdAt = new Date().toISOString();
-      info("newsletter.brevo.campaign_created", { sessionId, profileId: profile.id, campaignId, listId });
-
-      stage = "campaign-state-write";
-      try {
-        await recordState({
-          profile,
-          sessionId,
-          prefix,
-          campaignId,
-          listId,
-          status: "created",
-          campaignStatus: "draft",
-          createdAt,
-          sentAt: null,
-          lastCheckedAt: createdAt,
-        }, adapters);
-      } catch (err) {
-        let campaignDeleted = false;
-        try {
-          const deleted = await adapters.deleteCampaign(campaignId);
-          campaignDeleted = Boolean(deleted?.ok);
-        } catch {
-          campaignDeleted = false;
-        }
-        return errorResult(
-          "campaign_state_write_failed",
-          `Created Brevo campaign ${campaignId}, but could not persist the idempotency record: ${err.message}`,
-          { stage, campaignId, campaignDeleted },
-        );
-      }
-    }
+    const campaignId = created.data?.id;
+    info("newsletter.brevo.campaign_created", { sessionId, profileId: profile.id, campaignId, listId: list.listId });
 
     stage = "campaign-send";
-    const sent = await adapters.sendCampaignNow(campaignId);
+    const sent = await sendCampaignNow(campaignId);
     if (!sent.ok) {
-      warn("newsletter.brevo.send_now_failed", { sessionId, campaignId, error: sent.error });
-      return errorResult("send_failed", sent.error, {
+      warn("newsletter.brevo.send_now_failed", {
+        sessionId,
+        campaignId,
+        providerStatus: sent.status || null,
+        providerCode: sent.code || null,
+        error: sent.error,
+      });
+      return {
+        ok: false,
+        status: "send_failed",
         stage,
         campaignId,
-        providerStatus: sent.status,
-        providerCode: sent.code,
-        resumed,
-      });
-    }
-
-    stage = "campaign-verify";
-    const verified = await verifyCampaignDispatch(campaignId, adapters);
-    if (!verified.ok) {
-      return { ...verified, stage, campaignId, listId, resumed };
+        error: sent.error,
+        providerStatus: sent.status || null,
+        providerCode: sent.code || null,
+      };
     }
 
     const sentAt = new Date().toISOString();
-    stage = "campaign-state-dispatched";
-    await recordState({
-      profile,
-      sessionId,
-      prefix,
-      campaignId,
-      listId,
-      status: "dispatched",
-      campaignStatus: verified.campaignStatus,
-      createdAt,
-      sentAt,
-      lastCheckedAt: sentAt,
-    }, adapters);
+    await recordCampaignDelivery({ profile, sessionId, campaignId, listId: list.listId, sentAt });
 
-    info("newsletter.brevo.campaign_sent", {
-      sessionId,
-      profileId: profile.id,
-      campaignId,
-      campaignStatus: verified.campaignStatus,
-    });
+    info("newsletter.brevo.campaign_sent", { sessionId, profileId: profile.id, campaignId });
 
     return {
       ok: true,
       status: "sent",
       campaignId,
-      listId,
-      campaignStatus: verified.campaignStatus,
+      listId: list.listId,
+      audienceSubscribers: list.totalSubscribers,
       sentAt,
-      resumed,
     };
   } catch (err) {
-    warn("newsletter.brevo.delivery_exception", {
-      sessionId,
-      profileId: profile?.id,
-      stage,
-      error: err?.message || String(err),
-    });
-    return errorResult("delivery_exception", err?.message || String(err), { stage });
+    warn("newsletter.brevo.delivery_exception", { sessionId, profileId: profile.id, stage, error: err?.message || String(err) });
+    return { ok: false, status: "delivery_exception", stage, error: err?.message || String(err) };
   }
 }
 
-/** Polls Brevo for a campaign's current status/performance. */
+/**
+ * Polls Brevo for a campaign's current status/performance.
+ */
 export async function getCampaignStatus(campaignId) {
   const result = await getCampaign(campaignId, { statistics: "globalStats" });
-  if (!result.ok) return { ok: false, error: result.error, providerStatus: result.status, providerCode: result.code };
+  if (!result.ok) return { ok: false, error: result.error };
 
   return {
     ok: true,
@@ -440,9 +253,4 @@ export async function getCampaignStatus(campaignId) {
   };
 }
 
-export default {
-  deliverNewsletterIssue,
-  getNewsletterDeliveryReadiness,
-  getCampaignStatus,
-  verifyCampaignDispatch,
-};
+export default { deliverNewsletterIssue, getNewsletterDeliveryReadiness, getCampaignStatus };
