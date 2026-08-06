@@ -46,13 +46,12 @@ const aiEdge = Object.freeze({
   ),
   feedUrls: envList("NEWSLETTER_AI_EDGE_FEED_URLS", []),
 
-  // Brevo delivery target. Production sending should use the exact existing,
-  // populated list ID. Automatic folder/list creation is disabled by default
-  // so a successful build cannot silently send to a new empty audience.
+  // Brevo delivery target. AIMS owns list/folder creation (no pre-existing
+  // list ID is assumed) — see services/newsletter/brevo/audience.js.
   brevo: Object.freeze({
     listId: Number(env("NEWSLETTER_AI_EDGE_BREVO_LIST_ID", "")) || null,
-    listName: env("NEWSLETTER_AI_EDGE_BREVO_LIST_NAME", env("NEWSLETTER_AI_EDGE_NAME", "AI Edge")),
-    folderName: env("NEWSLETTER_AI_EDGE_BREVO_FOLDER_NAME", env("NEWSLETTER_AI_EDGE_NAME", "AI Edge")),
+    listName: env("NEWSLETTER_AI_EDGE_BREVO_LIST_NAME", `${env("NEWSLETTER_AI_EDGE_NAME", "AI Edge")} Subscribers`),
+    folderName: env("NEWSLETTER_AI_EDGE_BREVO_FOLDER_NAME", "AIMS Newsletters"),
     fromName: env("NEWSLETTER_AI_EDGE_FROM_NAME", "Jonathan Harris — AI Edge"),
     fromEmail: env("NEWSLETTER_AI_EDGE_FROM_EMAIL", env("BREVO_FROM_EMAIL")),
     replyTo: env("NEWSLETTER_AI_EDGE_REPLY_TO", env("NEWSLETTER_AI_EDGE_FROM_EMAIL", env("BREVO_FROM_EMAIL"))),
