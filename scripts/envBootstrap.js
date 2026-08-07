@@ -66,7 +66,7 @@ export const ENV = {
   AUTO_CALL: opt("AUTO_CALL", "yes"),
 
   /* ---------------- AI runtime ---------------- */
-  AI_MAX_RETRIES: num("AI_MAX_RETRIES", 4),
+  AI_MAX_RETRIES: num("AI_MAX_RETRIES", 2),
   AI_MAX_TOKENS: num("AI_MAX_TOKENS", 4096),
   AI_RETRY_BASE_MS: num("AI_RETRY_BASE_MS", 750),
   AI_TEMPERATURE: num("AI_TEMPERATURE", 0.65),
@@ -153,6 +153,9 @@ export const ENV = {
   ARTWORK_VISUAL_QA_ENABLED: bool("ARTWORK_VISUAL_QA_ENABLED", true),
   ARTWORK_VISUAL_QA_REQUIRED: bool("ARTWORK_VISUAL_QA_REQUIRED", true),
   ARTWORK_VISUAL_QA_MODES: str("ARTWORK_VISUAL_QA_MODES", "podcast,blog,newsletter,social,social-blog,quiz"),
+  ARTWORK_PROVIDER_ATTEMPTS: num("ARTWORK_PROVIDER_ATTEMPTS", 1),
+  ARTWORK_VISUAL_QA_MAX_REGENERATIONS: num("ARTWORK_VISUAL_QA_MAX_REGENERATIONS", 0),
+  PODCAST_ARTWORK_SHORT_PROMPT_RETRY: bool("PODCAST_ARTWORK_SHORT_PROMPT_RETRY", false),
   OPENROUTER_CHATGPT: opt("OPENROUTER_CHATGPT"),
   OPENROUTER_GOOGLE: opt("OPENROUTER_GOOGLE"),
   OPENROUTER_META: opt("OPENROUTER_META"),
@@ -165,6 +168,8 @@ export const ENV = {
   API_SERP_KEY: opt("API_SERP_KEY"),
   API_OPENPAGERANK_KEY: opt("API_OPENPAGERANK_KEY"),
   API_URLSCAN_KEY: opt("API_URLSCAN_KEY"),
+  // Reserved: current Prospeo/Apollo search APIs no longer reveal email addresses.
+  // Production outreach does not invoke their paid enrichment endpoints implicitly.
   API_PROSPEO_KEY: opt("API_PROSPEO_KEY"),
   API_HUNTER_KEY: opt("API_HUNTER_KEY"),
   API_APOLLO_KEY: opt("API_APOLLO_KEY"),
@@ -182,7 +187,7 @@ export const ENV = {
   SERP_RESULT_LIMIT: num("SERP_RESULT_LIMIT", 30),
   OUTREACH_BATCH_SIZE: num("OUTREACH_BATCH_SIZE"),
   ZEROBOUNCE_BATCH_SIZE: num("ZEROBOUNCE_BATCH_SIZE", 25),
-  ZEROBOUNCE_TIMEOUT_MS: num("ZEROBOUNCE_TIMEOUT_MS", 30000),
+  ZEROBOUNCE_TIMEOUT_MS: num("ZEROBOUNCE_TIMEOUT_MS", 75000),
   ZEROBOUNCE_DELAY_MS: num("ZEROBOUNCE_DELAY_MS"),
 
   OUTREACH_MIN_LEAD_SCORE: num("OUTREACH_MIN_LEAD_SCORE"),
@@ -263,6 +268,11 @@ export const ENV = {
   BLOG_SOCIAL_RSS_DESCRIPTION: opt("BLOG_SOCIAL_RSS_DESCRIPTION"),
   BLOG_SOCIAL_FALLBACK_IMAGE_URL: opt("BLOG_SOCIAL_FALLBACK_IMAGE_URL"),
   BLOG_SOCIAL_QA_ENABLED: bool("BLOG_SOCIAL_QA_ENABLED", true),
+
+  /* ---------------- Website rebuild ---------------- */
+  // Deploy-hook URLs are credentials. Keep them in Koyeb/GitHub secrets only.
+  WEBSITE_REBUILD_HOOK: opt("WEBSITE_REBUILD_HOOK"),
+  WEBSITE_REBUILD_HOOK_FALLBACK: opt("WEBSITE_REBUILD_HOOK_FALLBACK"),
 
   /* ---------------- R2 ---------------- */
   R2_ENDPOINT: opt("R2_ENDPOINT"),

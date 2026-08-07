@@ -48,7 +48,6 @@ const NUMERIC_ENVS = new Set([
   "HEADROOM_TARGET_RATIO",
   "HEADROOM_PROTECT_RECENT",
   "ARTWORK_VISUAL_QA_THRESHOLD",
-  "ARTWORK_VISUAL_QA_MAX_REGENERATIONS",
   "PODCAST_TARGET_MINUTES",
   "PODCAST_MAX_MINUTES",
   "BLOTATO_VIDEO_SCENE_COUNT",
@@ -122,6 +121,7 @@ const POSITIVE_INTEGER_ENVS = new Set([
 
 const NON_NEGATIVE_INTEGER_ENVS = new Set([
   "AI_RETRY_BASE_MS",
+  "ARTWORK_VISUAL_QA_MAX_REGENERATIONS",
   "AI_EMPTY_COMPLETION_RETRIES_PER_PROVIDER",
   "HEADROOM_PROTECT_RECENT",
 ]);
@@ -304,10 +304,6 @@ function validateNumber({ key, value, line }, errors) {
 
   if (NON_NEGATIVE_INTEGER_ENVS.has(key) && (!Number.isInteger(number) || number < 0)) {
     errors.push({ line, key, message: `${key} must be a non-negative integer` });
-  }
-
-  if (key === "AI_MAX_RETRIES" && (!Number.isInteger(number) || number < 4)) {
-    errors.push({ line, key, message: `${key} must be an integer of at least 4` });
   }
 
   if (key === "AI_TEMPERATURE" && (number < 0 || number > 2)) {
