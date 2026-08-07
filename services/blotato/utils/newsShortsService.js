@@ -658,8 +658,11 @@ function deriveSourceGroundedScenes(pack = {}, article = {}) {
   ];
 
   return phases.map((phase, index) => ({
+    // Source evidence comes first deliberately. Flux Schnell prompt shaping is
+    // length-bounded, so putting continuity/style first can truncate the very
+    // article anchors the pre-render grounding gate is trying to preserve.
     mediaSource: enforceTextFreeVisualPrompt(
-      `${continuity}. ${signature}. Scene ${index + 1} of ${MAX_SCENES}: ${phase}. Distinct from every other scene while preserving the same visual world.`,
+      `${phase}. Scene ${index + 1} of ${MAX_SCENES}. ${continuity}. ${signature}. Distinct from every other scene while preserving the same visual world.`,
       900,
       index
     ),
@@ -1074,8 +1077,11 @@ export function repairShortPackForBlotatoGate(pack = {}, {
       const continuity = cleanText(output.visualContinuity || output.visualDirection || laneConfig.visualSignature, 700);
       output.scenes = output.scenes.map((scene, index) => ({
         ...scene,
+        // Keep the source-specific action at the front. Re-prepending a long
+        // continuity block caused Flux prompt compaction to erase source
+        // anchors and made deterministic repairs stagnate at the same score.
         mediaSource: enforceTextFreeVisualPrompt(addHumanVisualCue(
-          `${continuity}. ${cleanText(scene.mediaSource || "", 700)}`,
+          `${cleanText(scene.mediaSource || "", 700)}. Continuity: ${continuity}`,
           index
         ), 900, index),
       }));
@@ -1083,7 +1089,7 @@ export function repairShortPackForBlotatoGate(pack = {}, {
         ...output.scenes[0],
         script: ensureSentence(output.hook),
         mediaSource: enforceTextFreeVisualPrompt(
-          `${continuity}. ${cleanText(output.scenes[0].mediaSource || "", 700)}. Opening frame must show the real source environment and practical tension immediately, not a generic reaction portrait.`,
+          `${cleanText(output.scenes[0].mediaSource || "", 700)}. Opening frame must show the real source environment and practical tension immediately, not a generic reaction portrait. Continuity: ${continuity}`,
           900,
           0
         ),

@@ -26,6 +26,8 @@ export function looksLikePendingVideoError(error = {}) {
 
   if (statusCode === 402 || /insufficient[-_ ]credits|payment[-_ ]required|billing[-_ ]error|no[-_ ]credits/.test(status)) return false;
   if (/explicitly out of credits|credit balance is zero|insufficient credits|payment required/.test(text)) return false;
+  if (statusCode === 408 || statusCode === 425 || statusCode === 429) return true;
+  if (/fetch failed|socket (?:hang up|closed|terminated)|econnreset|etimedout|eai_again|network (?:error|failure|timeout|unreachable)/.test(text)) return true;
   return /video generation is not complete|render(?:ing)? is not complete|still (?:rendering|processing)|not ready|queued|in progress|processing|pending|try again|creation has not completed|most likely ran out of credits/.test(text);
 }
 
