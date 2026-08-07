@@ -427,9 +427,9 @@ export function normaliseSocialBlogPackage(data = {}, context = {}) {
     title: normaliseTitle(data.title || data.headline || fallback.title, fallback.title),
     summary,
     social_caption: clean(data.social_caption || data.socialCaption || data.description || fallback.social_caption),
-    hook: clean(data.hook || fallback.hook),
+    hook: firstSentence(data.hook || fallback.hook, 180),
     body_sections: sections.length ? sections : fallback.body_sections,
-    takeaway: clean(data.takeaway || data.closing || fallback.takeaway),
+    takeaway: firstSentence(data.takeaway || data.closing || fallback.takeaway, 220),
     hashtags: normaliseHashtags(data.hashtags, themes),
     image_prompt: imagePrompt,
     themes,
@@ -871,7 +871,9 @@ export function buildSocialBrandQaPrompt({ items = [], generatedJson = {} } = {}
 export function parseSocialBrandQaResponse(raw = "") {
   const cleaned = stripCodeFences(raw).trim();
 
-  if (/^PASS\b/i.test(cleaned)) {
+  const passText = cleaned.replace(/^\*{1,3}\s*/, "").replace(/\s*\*{1,3}(?=\s|$)/, "").trim();
+
+  if (/^PASS\b/i.test(passText)) {
     return {
       ok: true,
       pass: true,
