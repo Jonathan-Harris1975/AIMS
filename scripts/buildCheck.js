@@ -3,7 +3,11 @@ import { constants } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { validateEnvFile } from "./koyebEnvDoctor.js";
-import { assertRelativeImportGraph } from "./utils/relativeImportGraph.js";
+import {
+  assertAllSourceRelativeImports,
+  assertNoUnexpectedSourceControlCharacters,
+  assertRelativeImportGraph,
+} from "./utils/relativeImportGraph.js";
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const npmRegistry = "https://registry.npmjs.org/";
@@ -90,17 +94,25 @@ async function assertKoyebBuildCommandsAreRuntimeEnvIsolated() {
   const dockerfile = await readFile(path.join(projectRoot, "Dockerfile"), "utf8");
   const nixpacks = await readFile(path.join(projectRoot, "nixpacks.toml"), "utf8");
 
-  const dockerSanitisedBuildCommands = (dockerfile.match(/RUN env -i/g) || []).length;
-  if (dockerSanitisedBuildCommands < 2) {
-    throw new Error("Dockerfile build commands must run under env -i so runtime Koyeb env vars cannot poison image builds");
+  if (!dockerfile.includes("npm ci") || !dockerfile.includes("--ignore-scripts")) {
+    throw new Error("Dockerfile dependency installation must use npm ci with lifecycle scripts disabled");
   }
 
-  if (!dockerfile.includes("npm run build")) {
-    throw new Error("Dockerfile must run npm run build during image construction");
+  if (!dockerfile.includes("--kill-after=")) {
+    throw new Error("Dockerfile package/network timeouts must include a hard --kill-after deadline");
   }
 
-  if (!nixpacks.includes("env -i") || !nixpacks.includes("npm run build")) {
-    throw new Error("nixpacks.toml fallback build commands must isolate runtime env with env -i");
+  const dockerBuildValidationIsolated = /env -i[\s\S]{0,500}npm run build/.test(dockerfile);
+  if (!dockerBuildValidationIsolated) {
+    throw new Error("Dockerfile source validation must run under env -i so runtime Koyeb env vars cannot poison image builds");
+  }
+
+  if (!nixpacks.includes("npm ci --omit=dev --ignore-scripts")) {
+    throw new Error("nixpacks.toml dependency installation must disable lifecycle scripts");
+  }
+
+  if (!/env -i[^\n]*npm run build/.test(nixpacks)) {
+    throw new Error("nixpacks.toml source validation must isolate runtime env with env -i");
   }
 }
 
@@ -174,8 +186,12 @@ async function main() {
   await assertKoyebBuildCommandsAreRuntimeEnvIsolated();
   await assertKoyebEnvFilesArePasteSafe();
   await assertProductionDefaultsAreSafe();
+  const controlAudit = await assertNoUnexpectedSourceControlCharacters(projectRoot);
+  const sourceAudit = await assertAllSourceRelativeImports(projectRoot);
   const moduleGraph = await assertRelativeImportGraph(projectRoot);
-  console.log(`✅ Relative import graph passed (${moduleGraph.modulesChecked} modules)`);
+  console.log(`✅ Source control-character audit passed (${controlAudit.sourceModulesChecked} modules)`);
+  console.log(`✅ Full source relative-import audit passed (${sourceAudit.sourceModulesChecked} modules)`);
+  console.log(`✅ Production relative import graph passed (${moduleGraph.modulesChecked} modules)`);
   console.log("✅ Build check passed");
 }
 
