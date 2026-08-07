@@ -77,13 +77,21 @@ export class ZernioInboxClient {
   }
 
   async request(method, endpoint, { query, body } = {}) {
-    const operation = `Zernio ${this.family} ${method} ${endpoint}`;
+    const verb = String(method || "GET").toUpperCase();
+    const operation = `Zernio ${this.family} ${verb} ${endpoint}`;
+    // Zernio documents x-request-id idempotency for POST /v1/posts, but not
+    // for inbox messaging/comment action POSTs. Never replay an ambiguous
+    // inbox POST automatically: the first request may have succeeded even if
+    // its response was lost. Reconciliation/action-level retry can decide later.
+    const providerAttempts = ["GET", "HEAD", "OPTIONS", "PUT", "PATCH", "DELETE"].includes(verb)
+      ? this.config.providerRetryAttempts
+      : 1;
     return withRetry(async () => {
       const url = `${this.config.zernioApiBaseUrl}/${endpoint.replace(/^\/+/, "")}${queryString(query)}`;
       let response;
       try {
         response = await this.fetchImpl(url, {
-          method,
+          method: verb,
           timeout: this.config.zernioTimeoutMs,
           headers: {
             authorization: `Bearer ${this.familyConfig.apiKey}`,
@@ -102,7 +110,7 @@ export class ZernioInboxClient {
       }
       return parseJson(response, operation);
     }, {
-      attempts: this.config.providerRetryAttempts,
+      attempts: providerAttempts,
       baseMs: this.config.providerRetryBaseMs,
       maxMs: this.config.providerRetryMaxMs,
       onRetry: ({ attempt, maxAttempts, delayMs, error }) => logRetry("commsHub.zernio.retry", {
