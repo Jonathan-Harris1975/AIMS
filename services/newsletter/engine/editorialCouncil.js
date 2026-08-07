@@ -6,17 +6,37 @@
 // and rubber-stamping its own work.
 
 import { resilientRequest } from "../../shared/utils/ai-service.js";
+import { parseStructuredJson, strictJsonResponseFormat } from "../../shared/utils/structuredJson.js";
 import { THRESHOLDS } from "../../../config/thresholds.js";
 import { getReviewCouncilMembers, isReviewCouncilEnabled } from "../../content-quality/reviewCouncil.js";
 import { warn } from "../../../logger.js";
 
-function parseJson(raw = "") {
-  const stripped = String(raw || "").replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
-  try { return JSON.parse(stripped); } catch {}
-  const first = stripped.indexOf("{");
-  const last = stripped.lastIndexOf("}");
-  if (first >= 0 && last > first) return JSON.parse(stripped.slice(first, last + 1));
-  throw new Error("Council response was not valid JSON.");
+const REVIEW_SCHEMA = Object.freeze({
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    score: { type: "number" },
+    verdict: { type: "string", enum: ["pass", "revise"] },
+    issues: { type: "array", items: { type: "string" } },
+    strengths: { type: "array", items: { type: "string" } },
+  },
+  required: ["score", "verdict", "issues", "strengths"],
+});
+
+const CHAIR_SCHEMA = Object.freeze({
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    score: { type: "number" },
+    verdict: { type: "string", enum: ["pass", "revise"] },
+    issues: { type: "array", items: { type: "string" } },
+    priorityFixes: { type: "array", items: { type: "string" } },
+  },
+  required: ["score", "verdict", "issues", "priorityFixes"],
+});
+
+function parseJson(raw = "", label = "newsletter council response") {
+  return parseStructuredJson(raw, label);
 }
 
 function boundedScore(value) {
@@ -45,14 +65,14 @@ function sourcePayload(lead, stories) {
   }));
 }
 
-async function requestCouncilJson(route, { sessionId, messages, maxTokens = 900 } = {}) {
+async function requestCouncilJson(route, { sessionId, messages, maxTokens = 900, schema = REVIEW_SCHEMA } = {}) {
   let lastError = null;
   for (let attempt = 1; attempt <= 2; attempt += 1) {
     const raw = await resilientRequest(route, {
       sessionId,
       max_tokens: maxTokens,
       temperature: attempt === 1 ? 0.15 : 0,
-      response_format: { type: "json_object" },
+      response_format: strictJsonResponseFormat(`newsletter_${route}`, schema),
       messages: attempt === 1
         ? messages
         : [
@@ -136,6 +156,7 @@ export async function runNewsletterEditorialCouncil({ profile, newsletter, lead,
     const reports = [sourceReview, voiceReview, readerReview];
     const chair = await requestCouncilJson("newsletterCouncilChair", {
       sessionId,
+      schema: CHAIR_SCHEMA,
       messages: [
         {
           role: "system",

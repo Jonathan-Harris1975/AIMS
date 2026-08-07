@@ -6,26 +6,77 @@
 // reattached deterministically after generation.
 
 import { resilientRequest } from "../../shared/utils/ai-service.js";
+import { parseStructuredJson, strictJsonResponseFormat } from "../../shared/utils/structuredJson.js";
 import { warn } from "../../../logger.js";
 
-function stripCodeFences(raw = "") {
-  return String(raw || "").replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
-}
+const ISSUE_SECTIONS_SCHEMA = Object.freeze({
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    heroHeadline: { type: "string" },
+    openingNoteHtml: { type: "string" },
+    bigThree: {
+      type: "array",
+      minItems: 1,
+      maxItems: 3,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          sourceId: { type: "string" },
+          whatHappened: { type: "string" },
+          whyItMatters: { type: "string" },
+          jonathanTake: { type: "string" },
+        },
+        required: ["sourceId", "whatHappened", "whyItMatters", "jonathanTake"],
+      },
+    },
+    worthUsing: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        sourceId: { type: "string" },
+        label: { type: "string" },
+        summary: { type: "string" },
+        whyUseful: { type: "string" },
+      },
+      required: ["sourceId", "label", "summary", "whyUseful"],
+    },
+    onRadar: {
+      type: "array",
+      maxItems: 5,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: { sourceId: { type: "string" }, summary: { type: "string" } },
+        required: ["sourceId", "summary"],
+      },
+    },
+    realityCheck: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        sourceId: { type: "string" },
+        claim: { type: "string" },
+        assessment: { type: "string" },
+      },
+      required: ["sourceId", "claim", "assessment"],
+    },
+    yourTurn: { type: "string" },
+  },
+  required: ["heroHeadline", "openingNoteHtml", "bigThree", "worthUsing", "onRadar", "realityCheck", "yourTurn"],
+});
 
-function extractJsonCandidate(raw = "") {
-  const stripped = stripCodeFences(raw);
-  if (!stripped) return "";
-  try { JSON.parse(stripped); return stripped; } catch {}
-  const first = stripped.indexOf("{");
-  const last = stripped.lastIndexOf("}");
-  return first >= 0 && last > first ? stripped.slice(first, last + 1) : stripped;
-}
+const SUBJECT_PREVIEW_SCHEMA = Object.freeze({
+  type: "object",
+  additionalProperties: false,
+  properties: { subject: { type: "string" }, previewText: { type: "string" } },
+  required: ["subject", "previewText"],
+});
 
 function parseJsonResponse(raw, label) {
-  const candidate = extractJsonCandidate(raw);
-  if (!candidate) return { ok: false, error: `${label}: model returned an empty response` };
-  try { return { ok: true, data: JSON.parse(candidate) }; }
-  catch (err) { return { ok: false, error: `${label}: invalid JSON (${err.message})` }; }
+  try { return { ok: true, data: parseStructuredJson(raw, label) }; }
+  catch (err) { return { ok: false, error: `${label}: ${err.message}` }; }
 }
 
 function brandGuardrails(profile) {
@@ -91,7 +142,7 @@ export async function composeIssueSections({ profile, lead, stories, sessionId, 
     sessionId,
     messages,
     max_tokens: 3200,
-    response_format: { type: "json_object" },
+    response_format: strictJsonResponseFormat("newsletter_issue_sections", ISSUE_SECTIONS_SCHEMA),
   });
   const parsed = parseJsonResponse(raw, "composeIssueSections");
   if (!parsed.ok) {
@@ -220,7 +271,7 @@ export async function composeSubjectAndPreview({ profile, heroHeadline, bigThree
     },
   ];
 
-  const raw = await resilientRequest("newsletterSubject", { sessionId, messages, max_tokens: 500 });
+  const raw = await resilientRequest("newsletterSubject", { sessionId, messages, max_tokens: 500, response_format: strictJsonResponseFormat("newsletter_subject_preview", SUBJECT_PREVIEW_SCHEMA) });
   const parsed = parseJsonResponse(raw, "composeSubjectAndPreview");
   if (!parsed.ok) return { ok: false, error: parsed.error };
   return {
