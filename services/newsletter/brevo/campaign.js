@@ -7,13 +7,29 @@
 // Scheduling is owned entirely by MAST (a separate repository): this module
 // never sets Brevo's own `scheduledAt` — POST /newsletter/send is called
 // exactly when MAST wants the issue to go out, and sendNow fires immediately.
+//
+// Idempotency: MAST (or an operator) may call /newsletter/send more than
+// once for the same issue — a retried request after a timeout, a manual
+// re-trigger, etc. deliverNewsletterIssue therefore records its own delivery
+// state (see engine/storage.js) *before* calling Brevo's sendNow, and checks
+// that record on every call before creating anything new:
+//   - no record                -> create the campaign, then send it
+//   - record with status "created" (draft only, sendNow never confirmed)
+//                               -> reuse the existing campaignId, call
+//                                  sendNow again rather than create a
+//                                  second campaign
+//   - record with status "dispatched" -> already sent; return the stored
+//                                  result without calling Brevo again
+// If the durable record write itself fails right after creating the draft,
+// the newly created Brevo campaign is deleted rather than left as an
+// unrecorded draft Brevo could send with no idempotency guard watching it.
 
 import { info, warn } from "../../../logger.js";
 import { getObjectAsText } from "../../shared/utils/r2-client.js";
-import { recordCampaignDelivery } from "../engine/storage.js";
+import { readCampaignDelivery, recordCampaignDelivery } from "../engine/storage.js";
 import { ensureList } from "./audience.js";
 import { ensureSender, inspectSender } from "./sender.js";
-import { createCampaign, sendCampaignNow, getCampaign } from "./client.js";
+import { createCampaign, sendCampaignNow, getCampaign, deleteCampaign } from "./client.js";
 
 
 export async function getNewsletterDeliveryReadiness({ profile }) {
@@ -81,23 +97,56 @@ export async function getNewsletterDeliveryReadiness({ profile }) {
  * Delivers one rendered, QA-passed newsletter issue via Brevo.
  *
  * Preconditions checked, in order, before anything is sent:
- *   1. The configured sender exists and has completed Brevo's OTP
+ *   1. No earlier delivery attempt for this sessionId already dispatched
+ *      (or is sitting as an unsent draft) — see idempotency note above.
+ *   2. The configured sender exists and has completed Brevo's OTP
  *      verification (a manual, one-time step — see brevo/sender.js).
- *   2. The configured target list already exists and contains at least one
+ *   3. The configured target list already exists and contains at least one
  *      active subscriber. Production sends never create a replacement list.
- * If either isn't ready, this returns a clear, actionable status instead of
- * attempting (and failing) a send.
+ * If any of these isn't ready, this returns a clear, actionable status
+ * instead of attempting (and failing, or duplicating) a send.
+ *
+ * `deps` lets tests substitute every external adapter; production callers
+ * should omit it and get the real Brevo/R2 implementations.
  */
-export async function deliverNewsletterIssue({ profile, sessionId, buildResult }) {
+export async function deliverNewsletterIssue({ profile, sessionId, buildResult, date }, deps = {}) {
+  const {
+    getObjectAsText: readText = getObjectAsText,
+    readCampaignDelivery: readDelivery = readCampaignDelivery,
+    recordCampaignDelivery: recordDelivery = recordCampaignDelivery,
+    ensureList: doEnsureList = ensureList,
+    ensureSender: doEnsureSender = ensureSender,
+    createCampaign: doCreateCampaign = createCampaign,
+    sendCampaignNow: doSendCampaignNow = sendCampaignNow,
+    getCampaign: doGetCampaign = getCampaign,
+    deleteCampaign: doDeleteCampaign = deleteCampaign,
+  } = deps;
+
   if (!buildResult?.ok) {
     return { ok: false, status: "build_failed", error: "Cannot deliver — the newsletter build did not succeed." };
   }
 
   const { newsletter, storage } = buildResult;
 
-  let stage = "sender";
+  let stage = "delivery-record";
   try {
-    const sender = await ensureSender({ name: profile.brevo.fromName, email: profile.brevo.fromEmail });
+    const { delivery } = await readDelivery({ profile, sessionId, date });
+
+    if (delivery?.status === "dispatched") {
+      info("newsletter.brevo.send_skipped_already_dispatched", { sessionId, profileId: profile.id, campaignId: delivery.campaignId });
+      return {
+        ok: true,
+        status: "sent",
+        campaignId: delivery.campaignId,
+        listId: delivery.listId,
+        campaignStatus: delivery.campaignStatus,
+        sentAt: delivery.sentAt,
+        alreadyDispatched: true,
+      };
+    }
+
+    stage = "sender";
+    const sender = await doEnsureSender({ name: profile.brevo.fromName, email: profile.brevo.fromEmail });
     if (!sender.ok) {
       return {
         ok: false,
@@ -122,7 +171,7 @@ export async function deliverNewsletterIssue({ profile, sessionId, buildResult }
     }
 
     stage = "audience";
-    const list = await ensureList({
+    const list = await doEnsureList({
       id: profile.brevo.listId,
       name: profile.brevo.listName,
       folderName: profile.brevo.folderName,
@@ -156,49 +205,87 @@ export async function deliverNewsletterIssue({ profile, sessionId, buildResult }
       };
     }
 
-    // The public index.html uses the full website shell and is not email-safe.
-    // Load the dedicated inline-CSS email.html artefact and send it to Brevo as
-    // htmlContent. This removes any dependency on Brevo fetching an external
-    // R2/custom-domain URL during campaign creation.
-    stage = "content";
-    const html = await getObjectAsText(profile.storage.htmlBucketKey, `${storage?.prefix}/email.html`);
-    const htmlBytes = Buffer.byteLength(String(html || ""), "utf8");
-    if (String(html || "").trim().length < 10) {
-      return { ok: false, status: "content_error", stage, error: "Stored email.html is empty or too short for Brevo." };
-    }
-    if (htmlBytes >= 1_000_000) {
-      return { ok: false, status: "content_error", stage, error: `Stored email.html is ${htmlBytes} bytes; Brevo campaign HTML must remain below 1 MB.` };
-    }
-    const contentField = { htmlContent: html };
+    let campaignId = delivery?.campaignId || null;
 
-    stage = "campaign-create";
-    const created = await createCampaign({
-      name: `${profile.displayName} — ${new Date().toISOString().slice(0, 10)} — ${sessionId}`,
-      subject: newsletter.subject,
-      sender: { name: profile.brevo.fromName, email: profile.brevo.fromEmail },
-      type: "classic",
-      previewText: newsletter.previewText,
-      replyTo: profile.brevo.replyTo || profile.brevo.fromEmail,
-      ...contentField,
-      recipients: { listIds: [list.listId] },
-    });
+    if (!campaignId) {
+      // No prior attempt recorded for this sessionId — create a fresh
+      // campaign. The public index.html uses the full website shell and is
+      // not email-safe, so the caller is expected to have already loaded the
+      // dedicated inline-CSS email.html artefact into buildResult.emailHtml;
+      // this only falls back to fetching it directly when that's missing.
+      stage = "content";
+      const html = buildResult.emailHtml
+        ?? (storage?.prefix ? await readText(profile.storage.htmlBucketKey, `${storage.prefix}/email.html`) : null);
+      const htmlBytes = Buffer.byteLength(String(html || ""), "utf8");
+      if (String(html || "").trim().length < 10) {
+        return { ok: false, status: "content_error", stage, error: "Stored email.html is empty or too short for Brevo." };
+      }
+      if (htmlBytes >= 1_000_000) {
+        return { ok: false, status: "content_error", stage, error: `Stored email.html is ${htmlBytes} bytes; Brevo campaign HTML must remain below 1 MB.` };
+      }
 
-    if (!created.ok) {
-      return {
-        ok: false,
-        status: "campaign_create_failed",
-        stage,
-        error: created.error,
-        providerStatus: created.status || null,
-        providerCode: created.code || null,
-      };
+      stage = "campaign-create";
+      const created = await doCreateCampaign({
+        name: `${profile.displayName} — ${new Date().toISOString().slice(0, 10)} — ${sessionId}`,
+        subject: newsletter.subject,
+        sender: { id: sender.senderId },
+        type: "classic",
+        previewText: newsletter.previewText,
+        replyTo: profile.brevo.replyTo || profile.brevo.fromEmail,
+        htmlContent: html,
+        recipients: { listIds: [list.listId] },
+      });
+
+      if (!created.ok) {
+        return {
+          ok: false,
+          status: "campaign_create_failed",
+          stage,
+          error: created.error,
+          providerStatus: created.status || null,
+          providerCode: created.code || null,
+        };
+      }
+
+      campaignId = created.data?.id;
+      info("newsletter.brevo.campaign_created", { sessionId, profileId: profile.id, campaignId, listId: list.listId });
+
+      // Record the draft *before* sendNow. If this write fails we have no
+      // durable way to detect the campaign on a retry, so delete it from
+      // Brevo rather than leave an unrecorded draft that could later be
+      // sent (by AIMS retrying, or manually) with no idempotency guard.
+      stage = "delivery-record-create";
+      try {
+        await recordDelivery({
+          profile, sessionId, date,
+          campaignId, listId: list.listId,
+          status: "created", campaignStatus: "draft",
+          createdAt: new Date().toISOString(), sentAt: null,
+        });
+      } catch (writeErr) {
+        warn("newsletter.brevo.delivery_record_write_failed", { sessionId, profileId: profile.id, campaignId, error: writeErr?.message || String(writeErr) });
+        let campaignDeleted = false;
+        try {
+          const deleted = await doDeleteCampaign(campaignId);
+          campaignDeleted = Boolean(deleted?.ok);
+        } catch (deleteErr) {
+          warn("newsletter.brevo.orphaned_campaign_delete_failed", { sessionId, profileId: profile.id, campaignId, error: deleteErr?.message || String(deleteErr) });
+        }
+        return {
+          ok: false,
+          status: "campaign_state_write_failed",
+          stage,
+          campaignId,
+          campaignDeleted,
+          error: `Brevo campaign ${campaignId} was created but AIMS could not durably record it, so it was ${campaignDeleted ? "deleted" : "left in Brevo as an untracked draft — check the Brevo dashboard"}: ${writeErr?.message || String(writeErr)}`,
+        };
+      }
     }
 
-    const campaignId = created.data?.id;
-    info("newsletter.brevo.campaign_created", { sessionId, profileId: profile.id, campaignId, listId: list.listId });
+    const resumed = Boolean(delivery?.status === "created");
 
     stage = "campaign-send";
-    const sent = await sendCampaignNow(campaignId);
+    const sent = await doSendCampaignNow(campaignId);
     if (!sent.ok) {
       warn("newsletter.brevo.send_now_failed", {
         sessionId,
@@ -212,6 +299,7 @@ export async function deliverNewsletterIssue({ profile, sessionId, buildResult }
         status: "send_failed",
         stage,
         campaignId,
+        resumed,
         error: sent.error,
         providerStatus: sent.status || null,
         providerCode: sent.code || null,
@@ -219,17 +307,33 @@ export async function deliverNewsletterIssue({ profile, sessionId, buildResult }
     }
 
     const sentAt = new Date().toISOString();
-    await recordCampaignDelivery({ profile, sessionId, campaignId, listId: list.listId, sentAt });
+    let campaignStatus = "queued";
+    try {
+      const live = await doGetCampaign(campaignId);
+      if (live?.ok && live.data?.status) campaignStatus = live.data.status;
+    } catch (statusErr) {
+      warn("newsletter.brevo.post_send_status_check_failed", { sessionId, campaignId, error: statusErr?.message || String(statusErr) });
+    }
 
-    info("newsletter.brevo.campaign_sent", { sessionId, profileId: profile.id, campaignId });
+    stage = "delivery-record-dispatch";
+    await recordDelivery({
+      profile, sessionId, date,
+      campaignId, listId: list.listId,
+      status: "dispatched", campaignStatus,
+      createdAt: delivery?.createdAt || null, sentAt,
+    });
+
+    info("newsletter.brevo.campaign_sent", { sessionId, profileId: profile.id, campaignId, resumed });
 
     return {
       ok: true,
       status: "sent",
       campaignId,
+      campaignStatus,
       listId: list.listId,
       audienceSubscribers: list.totalSubscribers,
       sentAt,
+      ...(resumed ? { resumed: true } : {}),
     };
   } catch (err) {
     warn("newsletter.brevo.delivery_exception", { sessionId, profileId: profile.id, stage, error: err?.message || String(err) });
