@@ -29,9 +29,9 @@ const DEFAULT_MAX_TOKENS = finiteEnvNumber("AI_MAX_TOKENS", 4096, { min: 1, inte
 const DEFAULT_TEMPERATURE = finiteEnvNumber("AI_TEMPERATURE", aiConfig?.commonParams?.temperature ?? 0.7, { min: 0, max: 2 });
 const DEFAULT_TIMEOUT_MS = finiteEnvNumber("AI_TIMEOUT", aiConfig?.commonParams?.timeout ?? 90000, { min: 1, integer: true });
 const DEFAULT_TOP_P = finiteEnvNumber("AI_TOP_P", aiConfig?.commonParams?.top_p ?? 0.9, { min: 0, max: 1 });
-// 4 retries + the initial attempt = 5 total attempts per provider before
-// failover/failure, in line with the platform-wide 5-attempt floor.
-const MAX_RETRIES = Math.max(4, finiteEnvNumber("AI_MAX_RETRIES", 4, { min: 0, integer: true }));
+// Retries are deliberately configurable. Do not impose a hidden minimum: a
+// production operator must be able to cap paid retries when budget is tight.
+const MAX_RETRIES = finiteEnvNumber("AI_MAX_RETRIES", 2, { min: 0, integer: true });
 const RETRY_BASE_MS = finiteEnvNumber("AI_RETRY_BASE_MS", 750, { min: 0, integer: true });
 const EMPTY_COMPLETION_RETRIES_PER_PROVIDER = finiteEnvNumber("AI_EMPTY_COMPLETION_RETRIES_PER_PROVIDER", 1, { min: 0, integer: true });
 const __aiRouteCallsBySession = new Map();
@@ -211,12 +211,23 @@ function shouldLogUsage() {
   return parseBoolean(process.env.AI_USAGE_LOG_ENABLED, true) !== false;
 }
 
-function makeOpenRouterError(status, body, providerId) {
+function parseRetryAfterMs(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return 0;
+  const seconds = Number(raw);
+  if (Number.isFinite(seconds) && seconds >= 0) return Math.max(0, Math.ceil(seconds * 1000));
+  const dateMs = Date.parse(raw);
+  if (!Number.isFinite(dateMs)) return 0;
+  return Math.max(0, dateMs - Date.now());
+}
+
+function makeOpenRouterError(status, body, providerId, retryAfterHeader) {
   const err = new Error(`OpenRouter ${status} for provider ${providerId}: ${safeSnippet(body)}`);
   err.name = "AIProviderRequestError";
   err.status = status;
   err.providerId = providerId;
   err.bodySnippet = safeSnippet(body);
+  err.retryAfterMs = parseRetryAfterMs(retryAfterHeader);
   const numericStatus = Number(status);
   const transientHttp = [408, 409, 425, 429].includes(numericStatus) || numericStatus >= 500;
   err.nonRetryable = Number.isFinite(numericStatus) && !transientHttp;
@@ -251,7 +262,9 @@ async function callOpenRouter({ providerId, model, apiKey, messages, max_tokens,
     throw signal.reason instanceof Error ? signal.reason : Object.assign(new Error("OpenRouter request aborted"), { name: "AbortError", code: "AI_REQUEST_ABORTED" });
   }
 
-  const payload = { model, messages, max_tokens };
+  // OpenRouter still accepts max_tokens for compatibility, but the current
+  // Chat Completions contract deprecates it in favour of max_completion_tokens.
+  const payload = { model, messages, max_completion_tokens: max_tokens };
   if (!relaxedParameters) {
     payload.temperature = temperature;
     payload.top_p = top_p;
@@ -291,7 +304,7 @@ async function callOpenRouter({ providerId, model, apiKey, messages, max_tokens,
     const res = await fetch(getOpenRouterChatEndpoint(), { method: "POST", headers: reqHeaders, body: JSON.stringify(payload), signal: controller.signal });
     if (!res.ok) {
       const text = await res.text().catch(() => "");
-      throw makeOpenRouterError(res.status, text, providerId);
+      throw makeOpenRouterError(res.status, text, providerId, res.headers.get("retry-after"));
     }
     const json = await res.json();
     const content = extractMessageContent(json);
@@ -301,7 +314,7 @@ async function callOpenRouter({ providerId, model, apiKey, messages, max_tokens,
       const finishReason = json?.choices?.[0]?.finish_reason;
       const reasonNote =
         finishReason === "length"
-          ? "the model's reasoning consumed the entire max_tokens budget before producing visible output"
+          ? "the model's reasoning consumed the entire completion-token budget before producing visible output"
           : "the model returned no visible completion content";
       const emptyErr = new Error(
         `OpenRouter returned an empty completion for provider ${providerId} (model ${model}): ${reasonNote} ` +
@@ -538,7 +551,10 @@ export async function resilientRequest(routeName, {
         const retryable = !timedOut && !emptyCompletionBudgetExhausted && !err?.nonRetryable && attempt < effectiveMaxRetries;
         const exponentialWait = effectiveRetryBaseMs * Math.pow(2, attempt);
         const jitter = Math.floor(exponentialWait * (0.15 * Math.random()));
-        const wait = exponentialWait + jitter;
+        const localWait = exponentialWait + jitter;
+        // OpenRouter explicitly asks raw-fetch clients to honour Retry-After on
+        // 429/503. Cap the sleep so a malformed provider header cannot stall a job forever.
+        const wait = Math.min(120_000, Math.max(localWait, Number(err?.retryAfterMs || 0)));
         const failover = timedOut || emptyCompletionBudgetExhausted;
         logError(failover ? "ai.request.provider_failover" : "ai.request.retry", {
           routeName,

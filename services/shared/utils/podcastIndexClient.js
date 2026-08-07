@@ -1,6 +1,6 @@
 // services/shared/utils/podcastIndexClient.js
 // ============================================================
-// 🔗 Podcast Index API Client (HMAC-SHA1 auth)
+// 🔗 Podcast Index API Client (SHA-1 request auth)
 // ============================================================
 //
 // Env vars:
@@ -49,7 +49,7 @@ function ensureConfig() {
 }
 
 // ------------------------------------------------------------
-// 🧮 HMAC-style auth header builder
+// 🧮 Podcast Index SHA-1 auth header builder
 // ------------------------------------------------------------
 function buildAuthHeaders() {
   ensureConfig();
