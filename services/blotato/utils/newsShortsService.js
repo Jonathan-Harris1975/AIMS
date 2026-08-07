@@ -821,10 +821,17 @@ function reinforceSourceGrounding(pack = {}, article = {}) {
 
 export function buildBlotatoVisualPrompt(pack = {}) {
   const laneConfig = requireShortLaneConfig(pack.lane || DEFAULT_BLOTATO_SHORT_LANE);
+  const scenes = normaliseScenes(pack.scenes, pack);
+  const scenePlan = scenes.map((scene, index) => [
+    `SCENE ${index + 1} VISUAL: ${cleanText(scene?.mediaSource || "", 420)}`,
+    `SCENE ${index + 1} NARRATION: ${cleanText(scene?.script || "", 220)}`,
+  ].join("\n")).join("\n");
   return [
     `Create a polished faceless vertical AI social video for Jonathan Harris.`,
     `Lane: ${laneConfig.label}.`,
-    `Use the supplied scenes as the source of truth.`,
+    `Use the supplied scenes as the source of truth. The scene plan below is mandatory, not optional inspiration.`,
+    `Do not replace a source-specific scene with a generic office, warehouse, portrait, US map, abstract AI image or unrelated lifestyle footage.`,
+    `SCENE PLAN:\n${scenePlan}`,
     `Opening hook: ${pack.hook}`,
     `Editorial angle: ${pack.angle}`,
     `Narrative arc: ${pack.narrativeArc || "Hook to consequence to practical takeaway"}`,
