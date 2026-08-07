@@ -62,7 +62,9 @@ function getEligibleRoutes() {
 function getCompressEndpoint() {
   const base = String(process.env.HEADROOM_BASE_URL || "").trim().replace(/\/+$/, "");
   if (!base) return "";
-  return /\/v1$/i.test(base) ? `${base}/compress` : `${base}/v1/compress`;
+  if (/\/v1\/compress$/i.test(base)) return base;
+  if (/\/v1$/i.test(base)) return `${base}/compress`;
+  return `${base}/v1/compress`;
 }
 
 function getBearerToken() {
