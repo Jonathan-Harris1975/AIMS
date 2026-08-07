@@ -333,7 +333,17 @@ export function runBlotatoShortGate({ pack = {}, article = {}, lane = "" } = {})
     defects.push(`Too many static portrait/desk scenes (${visualPlan.staticPortraitScenes}); the short needs visible action and progression.`);
   }
 
-  const handVisualScenes = asArray(pack.scenes).filter((scene) => /\b(hands?|fingers?|fingertips?|palms?|thumbs?)\b/i.test(String(scene?.mediaSource || ""))).length;
+  const handVisualScenes = asArray(pack.scenes).filter((scene) => {
+    const media = String(scene?.mediaSource || "")
+      // Safe composition language should not be mistaken for a request to
+      // generate hands. Only residual hand terms after removing explicit
+      // crop/out-of-frame instructions count as a defect.
+      .replace(/\bhands?\s+and\s+(?:fingers?|fingertips?|palms?|thumbs?)\s+(?:are\s+)?(?:completely\s+|fully\s+)?(?:outside|out of)\s+(?:the\s+)?(?:frame|crop)\b/gi, " ")
+      .replace(/\b(?:hands?|fingers?|fingertips?|palms?|thumbs?)\s+(?:are\s+)?(?:completely\s+|fully\s+)?(?:outside|out of)\s+(?:the\s+)?(?:frame|crop)\b/gi, " ")
+      .replace(/\b(?:hands?|fingers?|fingertips?|palms?|thumbs?)\s+(?:are\s+)?not\s+visible\b/gi, " ")
+      .replace(/\b(?:crop|keep)\b[^,.;]{0,45}\b(?:hands?|fingers?|fingertips?|palms?|thumbs?)\b[^,.;]{0,45}\b(?:outside|out of)\s+(?:the\s+)?(?:frame|crop)\b/gi, " ");
+    return /\b(hands?|fingers?|fingertips?|palms?|thumbs?)\b/i.test(media);
+  }).length;
   if (handVisualScenes > 0) defects.push(`Generated scene prompts mention visible hands/fingers in ${handVisualScenes} scene(s); crop them out or use another composition.`);
   if (/\p{Extended_Pictographic}/u.test(text)) defects.push("Blotato pack contains emoji despite brand rules.");
   if (/```|^\s*[-*]\s+/m.test(text)) defects.push("Blotato pack contains markdown or bullet formatting.");

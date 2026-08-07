@@ -34,6 +34,7 @@ import { startKeepAlive, stopKeepAlive } from "../../shared/utils/keepalive.js";
 import { buildRenderedVideoQaError, reviewRenderedVideo } from "./renderedVideoQa.js";
 import { looksLikePendingVideoError } from "./renderStatus.js";
 import { pollUntil } from "./pollUntil.js";
+import { buildVisualCreationRequest } from "./visualRequest.js";
 
 export const BLOTATO_PUBLISH_JOB_TYPE = "blotato-news-insight-publish";
 export const DEFAULT_AI_STORY_TEMPLATE_PATH =
@@ -61,7 +62,7 @@ const MODEL_CREDIT_HINTS = Object.freeze({
   },
 });
 
-const TEMPLATE_LIST_FIELDS = "id,name,description,inputs";
+const TEMPLATE_LIST_FIELDS = "id,title,name,description,inputs";
 const DEFAULT_TEMPLATE_SEARCH = "AI Video with AI Voice";
 const FALLBACK_TEMPLATE_SEARCHES = Object.freeze([
   "AI Video with AI Voice",
@@ -514,6 +515,7 @@ async function createAndWaitForVideo({ templateId, templateIdCandidates = [], pa
   });
 
   const useManualInputs = parseBoolean(process.env.BLOTATO_USE_MANUAL_TEMPLATE_INPUTS, false);
+  const useBrandKit = parseBoolean(process.env.BLOTATO_USE_BRAND_KIT, false);
   const candidates = uniqueTemplateIds(templateId, templateIdCandidates);
   let visual;
   let usedTemplateId = templateId;
@@ -521,13 +523,13 @@ async function createAndWaitForVideo({ templateId, templateIdCandidates = [], pa
 
   for (const candidateTemplateId of candidates) {
     try {
-      visual = await createVisual({
-        templateId: candidateTemplateId,
-        inputs: useManualInputs ? visualInputs : {},
-        prompt: visualPrompt,
-        render: true,
-        isDraft: false,
-      }, apiKey);
+      visual = await createVisual(buildVisualCreationRequest({
+        candidateTemplateId,
+        visualInputs,
+        visualPrompt,
+        manualInputsConfigured: useManualInputs,
+        useBrandKit,
+      }), apiKey);
       usedTemplateId = candidateTemplateId;
       if (candidateTemplateId !== templateId) {
         warn("blotato.video.create.template_fallback_used", {

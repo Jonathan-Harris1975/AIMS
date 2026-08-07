@@ -223,13 +223,13 @@ export async function createVisual({
   isDraft = false,
   useBrandKit = false,
 } = {}, apiKey) {
-  void useBrandKit;
   const body = {
     templateId,
     inputs,
     render,
     isDraft,
   };
+  if (useBrandKit === true) body.useBrandKit = true;
 
   if (prompt !== undefined && prompt !== null && String(prompt).trim()) {
     body.prompt = String(prompt).trim();

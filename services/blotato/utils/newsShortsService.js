@@ -64,8 +64,37 @@ function usesFluxSchnellPromptProfile(profile = BLOTATO_IMAGE_PROMPT_PROFILE) {
   return ["flux-schnell", "flux_schnell", "flux", "replicate/flux-schnell"].includes(cleanPromptProfile(profile));
 }
 
+function escapeRegExp(value = "") {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function stripFluxPromptScaffolding(value = "") {
+  let output = String(value || "");
+  const scaffolds = [
+    `Vertical 9:16 ${FLUX_SCHNELL_SCENE_STYLE}`,
+    BLOTATO_TEXT_FREE_POSITIVE_DETAIL,
+    ...Array.from({ length: 5 }, (_, index) => `Use a ${fluxSceneShotDirection(index)}.`),
+  ];
+  for (const scaffold of scaffolds) {
+    output = output.replace(new RegExp(escapeRegExp(scaffold), "gi"), " ");
+  }
+  return output;
+}
+
+function stripTextBearingVisualRequests(value = "") {
+  return String(value || "")
+    // A positive Flux prompt must never retain an instruction to draw wording,
+    // even if a later suffix says the frame should be text-free. Remove the
+    // request itself rather than relying on contradictory negative prompting.
+    .replace(/\b(?:interface\s+)?panel\s+(?:showing|displaying|reading|with|containing)\s+(?:a\s+|an\s+|the\s+)?(?:headline|text|copy|words?|numbers?|labels?|logos?|caption|title|code)\b[^,.;]*/gi, "blank unmarked interface panel")
+    .replace(/\b(?:screen|display|monitor|whiteboard|chalkboard|notebook|paper|poster|sign)\s+(?:showing|displaying|reading|with|containing)\s+(?:a\s+|an\s+|the\s+)?(?:headline|text|copy|words?|numbers?|labels?|logos?|caption|title|code)\b[^,.;]*/gi, "blank unmarked surface")
+    .replace(/\bdashboard\s+(?:showing|displaying|with|containing)\s+[^,.;]*/gi, "blank unmarked workstation screen")
+    .replace(/\blogo\s+wall\b/gi, "plain unmarked wall")
+    .replace(/\b(?:headline|headlines|labelled diagram|labeled diagram|annotated diagram|annotated panel)\b/gi, "unmarked visual detail");
+}
+
 function stripPromptBans(value = "") {
-  return cleanText(String(value || "")
+  return cleanText(stripTextBearingVisualRequests(stripFluxPromptScaffolding(value))
     .replace(/\b(?:no|never|avoid|without|do not)\b[^.]*\.?/gi, " ")
     .replace(/\b(?:readable text|pseudo-text|gibberish lettering|typography|logos?|watermarks?|labels?|captions?|signage|dashboard(?:s)?|robot clich(?:e|és)|generic offices?)\b/gi, " ")
     .replace(/\bScene\s*\d+(?:\s*of\s*\d+)?\s*:?[-]?/gi, " ")
@@ -563,8 +592,12 @@ function humanVisualPromptSuffix(index = 0) {
 
 function removeHandVisualRequests(value = "") {
   return cleanText(String(value || "")
+    .replace(/\bhands?\s+and\s+(?:fingers?|fingertips?|palms?|thumbs?)\s+(?:are\s+)?(?:completely\s+|fully\s+)?(?:outside|out of)\s+(?:the\s+)?(?:frame|crop)\b/gi, "hands fully outside frame")
+    .replace(/\b(?:hands?|fingers?|fingertips?|palms?|thumbs?)\s+(?:are\s+)?(?:completely\s+|fully\s+)?(?:outside|out of)\s+(?:the\s+)?(?:frame|crop)\b/gi, "hands fully outside frame")
+    .replace(/\b(?:hands?|fingers?|fingertips?|palms?|thumbs?)\s+(?:are\s+)?not\s+visible\b/gi, "hands fully outside frame")
     .replace(/\b(adult\s+)?hands?\s+(using|holding|typing|on|with|beside|over)\b[^,.]*/gi, "upper-body composition with hands fully outside frame")
-    .replace(/\b(fingers?|fingertips?|palms?|thumbs?)\b/gi, "hands outside frame"), 820);
+    .replace(/\b(fingers?|fingertips?|palms?|thumbs?)\b/gi, "hands outside frame")
+    .replace(/\bhands?\s+and\s+hands?\s+outside\s+frame(?:\s+outside\s+frame)?/gi, "hands fully outside frame"), 820);
 }
 
 function addHumanVisualCue(value = "", index = 0) {
@@ -679,8 +712,16 @@ function normaliseScenes(scenes, pack = {}) {
 
   if (normalised.length === MAX_SCENES) return normalised;
 
+  // Preserve any source-specific scene briefs the model/provider already gave
+  // us, then fill only the missing slots. Replacing an incomplete scene set
+  // wholesale with generic derived scenes was erasing useful source anchors.
   const derived = deriveScenesFromPack(pack);
-  return derived.length ? derived : normalised;
+  if (!normalised.length) return derived;
+  const filled = [...normalised];
+  for (let index = normalised.length; index < MAX_SCENES && index < derived.length; index += 1) {
+    filled.push(derived[index]);
+  }
+  return filled.length ? filled : derived;
 }
 
 function normalisePack(pack = {}) {
@@ -1074,14 +1115,13 @@ export function repairShortPackForBlotatoGate(pack = {}, {
   if (repairScenes || repairHook || repairNarrativeArc || repairVisualContinuity) {
     output.scenes = makeScenePackDurationSafe(output, article);
     if (Array.isArray(output.scenes) && output.scenes.length) {
-      const continuity = cleanText(output.visualContinuity || output.visualDirection || laneConfig.visualSignature, 700);
       output.scenes = output.scenes.map((scene, index) => ({
         ...scene,
         // Keep the source-specific action at the front. Re-prepending a long
         // continuity block caused Flux prompt compaction to erase source
         // anchors and made deterministic repairs stagnate at the same score.
         mediaSource: enforceTextFreeVisualPrompt(addHumanVisualCue(
-          `${cleanText(scene.mediaSource || "", 700)}. Continuity: ${continuity}`,
+          cleanText(scene.mediaSource || "", 700),
           index
         ), 900, index),
       }));
@@ -1089,7 +1129,7 @@ export function repairShortPackForBlotatoGate(pack = {}, {
         ...output.scenes[0],
         script: ensureSentence(output.hook),
         mediaSource: enforceTextFreeVisualPrompt(
-          `${cleanText(output.scenes[0].mediaSource || "", 700)}. Opening frame must show the real source environment and practical tension immediately, not a generic reaction portrait. Continuity: ${continuity}`,
+          `${cleanText(output.scenes[0].mediaSource || "", 700)}. Opening frame must show the real source environment and practical tension immediately, not a generic reaction portrait.`,
           900,
           0
         ),
