@@ -1447,7 +1447,9 @@ function buildDailyLaneArtworkPrompt({ laneKey = "", post = {}, verifiedQuote = 
     "The scene must visibly and specifically connect to artificial intelligence through credible machine-learning, robotics, intelligent software, compute, research, security, governance or human-oversight cues supported by the post.",
     "Reject travel scenery, lifestyle stock, unrelated machinery, generic offices and decorative technology that does not explain the AI subject.",
     "No visible words, labels, logos, interface copy, pseudo-text or watermarks.",
-    "Do not create title areas, callout boxes, annotation lines, legends, labels, cards, charts, dashboards or infographic layouts.",
+    "Use text-resistant staging: prefer environments with no signs or printed material; keep screens dark, blank, turned away or naturally defocused; avoid papers, documents, whiteboards and presentation surfaces unless the lane specifically requires them.",
+    "Do not create title areas, callout boxes, annotation lines, legends, labels, cards, charts, dashboards, holographic panels, split screens, diptychs or infographic layouts.",
+    "Do not literalise abstract terms such as evaluation, monitoring, oversight, risk, workflow, comparison or autonomy as labelled charts, gauges, dashboards or UI. Translate them into one real physical action, decision or consequence.",
   ];
 
   const directions = {
@@ -1474,19 +1476,21 @@ function buildDailyLaneArtworkPrompt({ laneKey = "", post = {}, verifiedQuote = 
     ],
     friday: [
       "FRIDAY — SYSTEMS / OPERATOR VISUAL.",
-      "Show one concrete operational cause-and-effect moment from the post: an operator inspecting a failed route, a physical service hand-off, a visible recovery step, a simplified hardware path or another real action with consequences.",
+      "Show one concrete operational cause-and-effect moment from the post: an operator physically isolating, swapping, reconnecting, inspecting or recovering one AI-system component, sensor, edge device, accelerator or workstation path.",
+      "For software evaluation, monitoring, routing or reliability topics, use a real bench/workstation intervention with the display dark or turned away; show the consequence through hardware state, physical routing, posture and action rather than charts.",
       "Use photographic or cinematic editorial storytelling, not an infographic, dashboard, diagram, UI mock-up, labelled architecture, callout panel or presentation slide.",
-      "If infrastructure appears, include a clear human decision or physical intervention so the image tells a story rather than glamourising a server room.",
+      "If infrastructure appears, frame one specific human intervention and one specific device rather than a wall of server racks.",
       "Every concept must be represented by real objects, position, light and action. Never ask the image model to label components.",
       "Avoid generic racks of servers, floating dashboards, coloured annotation lines, blank text boxes, pseudo-interface elements and decorative network cables.",
     ],
     saturday: [
       "SATURDAY — EDITORIAL DEBATE.",
-      "Create a provocative but intelligent magazine-opinion image that makes the ethical or policy trade-off visually obvious.",
-      "Show two credible sides in tension through people, consequences, opposing environments, choices, boundaries or competing interests.",
-      "Human emotion, responsibility and real-world stakes should dominate over abstract technology.",
-      "The composition should make viewers pause and form an opinion before reading the caption.",
-      "Do not visually tell the viewer which side is correct. Avoid rage-bait, dystopian clichés and political campaign aesthetics.",
+      "Create one continuous magazine-opinion scene, never a split panel or before-and-after graphic.",
+      "Put two credible human perspectives in the same physical environment around one real AI-enabled decision or consequence: one person ready to allow the system to act and another visibly prepared to question, pause or intervene.",
+      "Keep screens out of frame or dark. Show the trade-off through body language, physical controls, distance, responsibility and the real-world stakes rather than labels, charts, warning icons or holograms.",
+      "Human emotion, responsibility and real-world stakes should dominate over abstract technology; avoid humanoid robots and cyborg imagery unless the post genuinely concerns embodied robotics.",
+      "The composition should make viewers pause and form an opinion before reading the caption without visually declaring either side correct.",
+      "Avoid rage-bait, dystopian clichés and political campaign aesthetics.",
     ],
     sunday: [
       "SUNDAY — PERSON SPOTLIGHT.",
