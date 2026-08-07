@@ -16,6 +16,10 @@ async function loadStoredIssue(profile, sessionId, date) {
   const bucketKey = profile.storage.htmlBucketKey;
   const metadataRaw = await getObjectAsText(bucketKey, `${prefix}/metadata.json`);
   const metadata = JSON.parse(metadataRaw);
+  // Load the dedicated inline-CSS email.html artefact here (once), so
+  // deliverNewsletterIssue doesn't need to re-fetch it from R2 — it's handed
+  // the content directly on buildResult.emailHtml.
+  const emailHtml = await getObjectAsText(bucketKey, `${prefix}/email.html`);
 
   return {
     ok: true,
@@ -24,6 +28,7 @@ async function loadStoredIssue(profile, sessionId, date) {
       previewText: metadata.previewText,
       heroHeadline: metadata.heroHeadline,
     },
+    emailHtml,
     storage: {
       prefix,
       htmlUrl: buildPublicUrl(bucketKey, `${prefix}/index.html`),
@@ -73,15 +78,13 @@ router.post("/send", requestDedupe("newsletter:send"), asyncRoute(async (req, re
     });
   }
 
-  const result = await deliverNewsletterIssue({ profile, sessionId, buildResult });
+  const result = await deliverNewsletterIssue({ profile, sessionId, buildResult, date: date ? new Date(date) : new Date() });
   if (!result.ok) {
     const configurationStatuses = new Set([
       "sender_pending_validation",
       "audience_empty",
       "audience_not_configured",
       "content_error",
-      "existing_campaign_pending",
-      "existing_campaign_terminal",
     ]);
     const status = configurationStatuses.has(result.status) ? 409 : 502;
     warn("newsletter.send.blocked", {
