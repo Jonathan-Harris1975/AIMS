@@ -161,8 +161,8 @@ export function artworkRetryDelayMs(attempt) {
 }
 
 export function getArtworkProviderAttempts() {
-  const raw = Number(process.env.ARTWORK_PROVIDER_ATTEMPTS || process.env.ARTWORK_PROVIDER_RETRIES || 3);
-  if (!Number.isFinite(raw)) return 3;
+  const raw = Number(process.env.ARTWORK_PROVIDER_ATTEMPTS || process.env.ARTWORK_PROVIDER_RETRIES || 1);
+  if (!Number.isFinite(raw)) return 1;
   return Math.min(Math.max(Math.floor(raw), 1), 6);
 }
 

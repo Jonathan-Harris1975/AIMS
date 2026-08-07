@@ -276,7 +276,7 @@ async function requestArtworkFromProvider(provider, prompt, mode, date, { useSho
 
       if (shouldAuditArtwork(mode)) {
         const qaRequired = parseBoolean(process.env.ARTWORK_VISUAL_QA_REQUIRED, true);
-        const maxRegenerations = Math.max(0, Math.min(2, Number(process.env.ARTWORK_VISUAL_QA_MAX_REGENERATIONS || 1)));
+        const maxRegenerations = Math.max(0, Math.min(2, Number(process.env.ARTWORK_VISUAL_QA_MAX_REGENERATIONS ?? 0)));
         let qa;
         let qaPrompt = prompt;
         for (let qaAttempt = 0; qaAttempt <= maxRegenerations; qaAttempt += 1) {
