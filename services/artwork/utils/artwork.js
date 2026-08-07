@@ -287,9 +287,12 @@ async function requestArtworkFromProvider(provider, prompt, mode, date, { useSho
             mode,
             provider: provider.id,
             score: qa.score,
+            threshold: qa.threshold,
             pass: qa.pass,
             relevance: qa.relevance,
             textSafety: qa.textSafety,
+            composition: qa.composition,
+            brandFit: qa.brandFit,
             hardDefects: qa.hardDefects,
           });
           if (qa.pass) return image;
