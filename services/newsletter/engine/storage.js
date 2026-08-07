@@ -72,16 +72,52 @@ export async function storeNewsletterIssue({ profile, sessionId, html, emailHtml
 }
 
 /**
- * Records that an issue was handed off to Brevo for delivery — written
- * alongside the issue's html/text/metadata so the monthly audit can later
- * pull real open/click/unsubscribe stats for that specific campaign (see
- * audits/utils/newsletterAudit.js).
+ * Records the current state of a Brevo campaign for one issue — written
+ * alongside the issue's html/text/metadata so (a) the monthly audit can
+ * later pull real open/click/unsubscribe stats for that specific campaign
+ * (see audits/utils/newsletterAudit.js), and (b) deliverNewsletterIssue can
+ * detect an in-flight or already-sent campaign on retry rather than create
+ * and send a second one.
+ *
+ * Called twice per successful send: once right after the Brevo campaign is
+ * created (status: "created", campaignStatus: "draft"), before sendNow is
+ * ever called, and again after sendNow succeeds (status: "dispatched").
+ * `status` here is AIMS's own idempotency state, distinct from Brevo's own
+ * `campaignStatus` string (draft/queued/sent/...).
  */
-export async function recordCampaignDelivery({ profile, sessionId, campaignId, listId, sentAt, date = new Date() }) {
+export async function recordCampaignDelivery({ profile, sessionId, campaignId, listId, status, campaignStatus, createdAt, sentAt, date = new Date() }) {
   const prefix = buildIssueKeyPrefix(profile, { date, sessionId });
   const key = `${prefix}/campaign.json`;
-  const url = await putJson(profile.storage.htmlBucketKey, key, { campaignId, listId, sentAt, provider: "brevo" });
-  return { key, url };
+  const payload = {
+    campaignId,
+    listId,
+    status,
+    campaignStatus: campaignStatus || null,
+    createdAt: createdAt || null,
+    sentAt: sentAt || null,
+    provider: "brevo",
+    updatedAt: new Date().toISOString(),
+  };
+  const url = await putJson(profile.storage.htmlBucketKey, key, payload);
+  return { key, url, delivery: payload };
 }
 
-export default { buildIssueKeyPrefix, storeNewsletterIssue, recordCampaignDelivery, findLatestIssueSessionId };
+/**
+ * Reads back the delivery record written by recordCampaignDelivery, if any.
+ * Returns { delivery: null } (never throws) when no record exists yet —
+ * callers use this to distinguish "never attempted", "campaign created but
+ * not yet sent" and "already dispatched" before deciding whether to call
+ * Brevo again.
+ */
+export async function readCampaignDelivery({ profile, sessionId, date = new Date() }) {
+  const prefix = buildIssueKeyPrefix(profile, { date, sessionId });
+  const key = `${prefix}/campaign.json`;
+  try {
+    const raw = await getObjectAsText(profile.storage.htmlBucketKey, key);
+    return { delivery: JSON.parse(raw) };
+  } catch {
+    return { delivery: null };
+  }
+}
+
+export default { buildIssueKeyPrefix, storeNewsletterIssue, recordCampaignDelivery, readCampaignDelivery, findLatestIssueSessionId };
