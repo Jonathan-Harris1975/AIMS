@@ -15,8 +15,11 @@ jobs:
         env:
           WEBSITE_REBUILD_HOOK: ${{ secrets.WEBSITE_REBUILD_HOOK }}
         run: |
-          HOOK="${WEBSITE_REBUILD_HOOK:-https://api.cloudflare.com/client/v4/pages/webhooks/deploy_hooks/be062a91-ac03-4d1a-b4fe-c4d99a92b5a6}"
-          STATUS=$(curl -sS -o /tmp/rebuild-response.txt -w '%{http_code}' -X POST "$HOOK")
+          if [ -z "${WEBSITE_REBUILD_HOOK:-}" ]; then
+            echo "WEBSITE_REBUILD_HOOK secret is not configured"
+            exit 1
+          fi
+          STATUS=$(curl -sS -o /tmp/rebuild-response.txt -w '%{http_code}' -X POST "$WEBSITE_REBUILD_HOOK")
           cat /tmp/rebuild-response.txt || true
           if [ "$STATUS" -lt 200 ] || [ "$STATUS" -ge 300 ]; then
             echo "Website rebuild hook failed with status $STATUS"
