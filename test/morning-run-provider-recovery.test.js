@@ -20,7 +20,9 @@ test("Blotato restores the proven prompt-autofill request for path and UUID temp
 
 test("newsletter structured output remains provider-compatible while exact story count stays deterministic", async () => {
   const text = await source("services/newsletter/engine/compose.js");
-  assert.match(text, /bigThree:[\s\S]*?minItems:\s*1[\s\S]*?maxItems:\s*3/);
+  assert.match(text, /bigThree:\s*\{[\s\S]*?type:\s*"array"[\s\S]*?items:\s*\{/);
+  assert.doesNotMatch(text, /\bminItems\s*:/);
+  assert.doesNotMatch(text, /\bmaxItems\s*:/);
   assert.match(text, /for \(let index = 0; bigThree\.length < 3/);
 });
 

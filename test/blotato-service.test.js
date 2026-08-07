@@ -484,7 +484,7 @@ test("Blotato news insight route builds a dry-run short pack", async () => {
   assert.ok(response.body.pack.scenes.length >= 3);
   assert.ok(Array.isArray(response.body.visualInputs.scenes));
   assert.equal(response.body.visualInputs.thumbnailText, "AI Gets Chores");
-  assert.match(response.body.visualPrompt, /human-centred social video/i);
+  assert.match(response.body.visualPrompt, /HUMAN-CENTRED SOCIAL VISUALS/i);
   assert.ok(response.body.visualInputs.scenes.filter((scene) => /adult|human|hands|face|silhouette|professional/i.test(scene.mediaSource)).length >= 3);
 });
 
@@ -510,7 +510,8 @@ test("Blotato generic weekly lane route builds a model-verdict dry-run pack", as
 });
 
 
-test("Blotato publish-now endpoint is public and runs the RSS-to-all configured social job", async () => {
+test("Blotato publish-now endpoint requires explicit opt-in and runs the RSS-to-all configured social job when enabled", async () => {
+  process.env.BLOTATO_ALLOW_IMMEDIATE_PUBLISH = "true";
   const response = await request(app).post("/blotato/shorts/news-insight/publish-now");
 
   assert.equal(response.status, 202);

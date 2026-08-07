@@ -177,7 +177,7 @@ const mockServer = http.createServer(async (req, res) => {
       topic: "Transformer basics",
       questionTitle: "Weekly AI Quiz",
       questionContent:
-        "Which architecture made modern large language models practical?\nA) Decision Tree\nB) Transformer\nC) K-Means\nD) Linear Regression\n\nComment your answer below.",
+        "AI quiz: Transformer basics. Which architecture made modern large language models practical?\nA) Decision Tree\nB) Transformer\nC) K-Means\nD) Linear Regression\n\nComment your answer below.",
       answerTitle: "Quiz Answer",
       answerContent:
         quizAnswerContentOverride ?? "Quiz Answer! The correct answer is B) Transformer. Transformers handle context far better than older sequence models, which is why they sit underneath most modern LLMs. Did you get it right?",
@@ -191,12 +191,20 @@ const mockServer = http.createServer(async (req, res) => {
       firstComment: "",
       spotlightPerson: "Fei-Fei Li",
     });
+  } else if (joined.includes("Lane: Tuesday Tech Talk")) {
+    content = JSON.stringify({
+      title: "Tuesday Tech Talk",
+      topic: "Transformer context windows",
+      content:
+        "Transformer context windows define how much input a language model can consider at once. A larger context window can help with long documents and multi-step work, but retrieval quality and prompt structure still matter. The practical lesson is to give the model the relevant evidence, not simply more tokens.",
+      firstComment: "",
+    });
   } else {
     content = JSON.stringify({
       title: "Monday Motivation",
-      topic: "Steady systems",
+      topic: "AI workflow discipline",
       content:
-        '"There is nothing so useless as doing efficiently that which should not be done at all." - Peter Drucker\n\nAI work gets better when you stop chasing theatre and keep shipping the useful bits.',
+        '"There is nothing so useless as doing efficiently that which should not be done at all." - Peter Drucker\n\nAI workflow discipline means deciding what deserves automation before optimising the machinery. Reliable workflows come from clear outcomes, useful checks, and the judgement to stop polishing work that should not exist.',
       firstComment: "",
     });
   }
