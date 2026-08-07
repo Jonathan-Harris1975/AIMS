@@ -45,14 +45,24 @@ function client() {
   });
 }
 
-function isRetryableStatus(status) {
-  return status === 429 || status >= 500;
+function isIdempotentMethod(method) {
+  return ["GET", "HEAD", "OPTIONS", "PUT", "DELETE"].includes(String(method || "GET").toUpperCase());
+}
+
+function isSafeBrevoRetry(method, status) {
+  const code = Number(status);
+  if (isIdempotentMethod(method)) return code === 408 || code === 425 || code === 429 || code >= 500;
+  // Brevo campaign/contact creation and sendNow are side-effecting POSTs.
+  // Only retry an explicit rejection where the provider has not accepted
+  // the operation. An ambiguous 5xx/network retry could duplicate a campaign,
+  // contact mutation, test send or live campaign send.
+  return code === 425 || code === 429;
 }
 
 /**
- * Issues one Brevo API request with retry/backoff. Brevo's rate-limit
- * response does not document a Retry-After header, so backoff is
- * exponential from retryBaseMs rather than header-driven.
+ * Issues one Brevo API request with bounded retry/backoff. Retry safety is
+ * method-aware because Brevo's campaign create/send endpoints do not expose
+ * an idempotency contract that would make ambiguous POST retries safe.
  */
 async function request(method, urlPath, { data, params, retries = THRESHOLDS.newsletter.brevoRetries, retryBaseMs = THRESHOLDS.newsletter.brevoRetryBaseMs } = {}) {
   const http = client();
@@ -66,7 +76,7 @@ async function request(method, urlPath, { data, params, retries = THRESHOLDS.new
         return { ok: true, status: response.status, data: response.data };
       }
 
-      if (isRetryableStatus(response.status) && attempt < retries) {
+      if (isSafeBrevoRetry(method, response.status) && attempt < retries) {
         const waitMs = retryBaseMs * 2 ** attempt;
         warn("newsletter.brevo.retry", { method, urlPath, status: response.status, attempt: attempt + 1, waitMs });
         await sleep(waitMs);
@@ -83,7 +93,7 @@ async function request(method, urlPath, { data, params, retries = THRESHOLDS.new
       };
     } catch (err) {
       lastError = err;
-      if (attempt < retries) {
+      if (isIdempotentMethod(method) && attempt < retries) {
         const waitMs = retryBaseMs * 2 ** attempt;
         warn("newsletter.brevo.network_retry", { method, urlPath, attempt: attempt + 1, waitMs, error: err.message });
         await sleep(waitMs);
