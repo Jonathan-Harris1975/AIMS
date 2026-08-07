@@ -11,10 +11,8 @@ const http = axios.create({
 const SERP_API_KEY = process.env.API_SERP_KEY;
 const OPENPAGERANK_KEY = process.env.API_OPENPAGERANK_KEY;
 
-const KEY_URLSCAN = process.env.API_URLSCAN_KEY;
-const KEY_PROSPEO = process.env.API_PROSPEO_KEY;
-const KEY_HUNTER = process.env.API_HUNTER_KEY;
-const KEY_APOLLO = process.env.API_APOLLO_KEY;
+const KEY_URLSCAN = process.env.API_URLSCAN_KEY || process.env.URLSCAN_API_KEY;
+const KEY_HUNTER = process.env.API_HUNTER_KEY || process.env.HUNTER_API_KEY;
 
 /* ============================================================
    ⏱️ RATE CONTROL
@@ -126,22 +124,55 @@ export async function serpLookup(keyword) {
 /* ============================================================
    📊 OPENPAGERANK (AUTHORITY SIGNAL)
 ============================================================ */
+function normaliseOpenPageRank(row) {
+  if (!row || typeof row !== "object") return null;
+  const score = row.open_page_rank ?? row.page_rank_decimal;
+  return {
+    ...row,
+    page_rank_decimal: Number.isFinite(Number(score)) ? Number(score) : null,
+    rank: row.rank ?? null,
+  };
+}
+
+async function getOpenPageRankCurrent(domain) {
+  const base = String(process.env.OPENPAGERANK_API_BASE || "https://openpagerank.keywordseverywhere.com").replace(/\/+$/, "");
+  const res = await http.post(
+    `${base}/v1/domains/bulk`,
+    { domains: [domain], include_history: false },
+    {
+      headers: { Authorization: `Bearer ${OPENPAGERANK_KEY}`, "Content-Type": "application/json" },
+      timeout: 15000,
+    }
+  );
+  return normaliseOpenPageRank(res.data?.results?.[0]);
+}
+
+async function getOpenPageRankLegacy(domain) {
+  const res = await http.get(
+    "https://openpagerank.com/api/v1.0/getPageRank",
+    {
+      params: { "domains[]": domain },
+      headers: { "API-OPR": OPENPAGERANK_KEY },
+      timeout: 15000,
+    }
+  );
+  return normaliseOpenPageRank(res.data?.response?.[0]);
+}
+
 async function getOpenPageRank(domain) {
   if (!OPENPAGERANK_KEY) return null;
 
-  try {
-    const res = await http.get(
-      "https://openpagerank.com/api/v1.0/getPageRank",
-      {
-        params: { "domains[]": domain },
-        headers: { "API-OPR": OPENPAGERANK_KEY },
-        timeout: 15000,
-      }
-    );
-    return res.data?.response?.[0] || null;
-  } catch {
-    return null;
+  // New OPR keys use the current bearer-token bulk API. Existing legacy keys
+  // remain usable during migration so outreach does not break on deployment.
+  const currentKey = /^opr_(?:live|test)_/i.test(OPENPAGERANK_KEY);
+  const attempts = currentKey ? [getOpenPageRankCurrent, getOpenPageRankLegacy] : [getOpenPageRankLegacy, getOpenPageRankCurrent];
+  for (const request of attempts) {
+    try {
+      const result = await request(domain);
+      if (result) return result;
+    } catch {}
   }
+  return null;
 }
 
 /* ============================================================
@@ -179,17 +210,11 @@ function detectEditorialHints(domainInfo) {
 
 /* ============================================================
    📧 EMAIL ENRICHMENT
+   Hunter Domain Search is the only automatic domain-wide email source here.
+   Apollo People Search and Prospeo Search Person no longer return email
+   addresses; revealing them now requires separate enrichment calls/credits.
+   AIMS deliberately does not trigger those paid enrichments implicitly.
 ============================================================ */
-async function getProspeo(domain) {
-  if (!KEY_PROSPEO) return null;
-  const res = await http.get("https://api.prospeo.io/api/email-finder", {
-    params: { domain },
-    headers: { "X-Api-Key": KEY_PROSPEO },
-    timeout: 15000,
-  });
-  return res.data;
-}
-
 async function getHunter(domain) {
   if (!KEY_HUNTER) return null;
   const res = await http.get("https://api.hunter.io/v2/domain-search", {
@@ -199,16 +224,6 @@ async function getHunter(domain) {
   return res.data;
 }
 
-async function getApollo(domain) {
-  if (!KEY_APOLLO) return null;
-  const res = await http.post("https://api.apollo.io/v1/mixed_people/search", {
-    api_key: KEY_APOLLO,
-    q_organization_domains: [domain],
-    page: 1,
-    per_page: 10,
-  }, { timeout: 15000 });
-  return res.data;
-}
 
 /* ============================================================
    🧠 ENRICH DOMAIN
@@ -223,13 +238,6 @@ export async function enrichDomain(domain, serpMeta = {}) {
 
   const emails = new Set();
 
-  if (KEY_PROSPEO) {
-    try {
-      const p = await getProspeo(d);
-      p?.emails?.forEach((e) => e?.email && emails.add(e.email.toLowerCase()));
-    } catch {}
-  }
-
   if (KEY_HUNTER) {
     try {
       const h = await getHunter(d);
@@ -237,12 +245,6 @@ export async function enrichDomain(domain, serpMeta = {}) {
     } catch {}
   }
 
-  if (emails.size < 2 && KEY_APOLLO) {
-    try {
-      const a = await getApollo(d);
-      a?.people?.forEach((p) => p?.email && emails.add(p.email.toLowerCase()));
-    } catch {}
-  }
 
   const domainInfo = await getUrlscan(d);
   const hasEditorial = detectEditorialHints(domainInfo);
@@ -271,4 +273,4 @@ export async function enrichDomain(domain, serpMeta = {}) {
     },
     blocked: false,
   };
-  }
+}
