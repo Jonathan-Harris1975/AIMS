@@ -71,6 +71,7 @@ async function requestCouncilJson(route, { sessionId, messages, maxTokens = 900,
     const raw = await resilientRequest(route, {
       sessionId,
       max_tokens: maxTokens,
+      reasoning: { effort: "none", exclude: true },
       temperature: attempt === 1 ? 0.15 : 0,
       response_format: strictJsonResponseFormat(`newsletter_${route}`, schema),
       messages: attempt === 1

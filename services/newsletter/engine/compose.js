@@ -17,8 +17,9 @@ const ISSUE_SECTIONS_SCHEMA = Object.freeze({
     openingNoteHtml: { type: "string" },
     bigThree: {
       type: "array",
-      minItems: 1,
-      maxItems: 3,
+      // Keep cardinality in deterministic post-parse validation. Some
+      // OpenRouter Anthropic/Azure structured-output endpoints reject
+      // minItems/maxItems even though the rest of this schema is supported.
       items: {
         type: "object",
         additionalProperties: false,
@@ -44,7 +45,7 @@ const ISSUE_SECTIONS_SCHEMA = Object.freeze({
     },
     onRadar: {
       type: "array",
-      maxItems: 5,
+      // Cardinality is enforced deterministically after parsing for provider portability.
       items: {
         type: "object",
         additionalProperties: false,
@@ -142,6 +143,7 @@ export async function composeIssueSections({ profile, lead, stories, sessionId, 
     sessionId,
     messages,
     max_tokens: 3200,
+    reasoning: { effort: "none", exclude: true },
     response_format: strictJsonResponseFormat("newsletter_issue_sections", ISSUE_SECTIONS_SCHEMA),
   });
   const parsed = parseJsonResponse(raw, "composeIssueSections");
@@ -271,7 +273,7 @@ export async function composeSubjectAndPreview({ profile, heroHeadline, bigThree
     },
   ];
 
-  const raw = await resilientRequest("newsletterSubject", { sessionId, messages, max_tokens: 500, response_format: strictJsonResponseFormat("newsletter_subject_preview", SUBJECT_PREVIEW_SCHEMA) });
+  const raw = await resilientRequest("newsletterSubject", { sessionId, messages, max_tokens: 500, reasoning: { effort: "none", exclude: true }, response_format: strictJsonResponseFormat("newsletter_subject_preview", SUBJECT_PREVIEW_SCHEMA) });
   const parsed = parseJsonResponse(raw, "composeSubjectAndPreview");
   if (!parsed.ok) return { ok: false, error: parsed.error };
   return {

@@ -10,7 +10,7 @@
 import Parser from "rss-parser";
 import fs from "fs";
 import path from "path";
-import { info, warn, error as logError } from "../../../logger.js";
+import { info, warn } from "../../../logger.js";
 import { THRESHOLDS } from "../../../config/thresholds.js";
 
 const parser = new Parser({
@@ -26,7 +26,7 @@ function isPermanentFeedError(err) {
   const statusMatch = message.match(/status code\s+(\d{3})/i);
   const status = statusMatch ? Number(statusMatch[1]) : null;
   if (status && status >= 400 && status < 500 && ![408, 409, 425, 429].includes(status)) return true;
-  return /attribute without value|invalid xml|unexpected close tag|non-whitespace before first tag|feed not recognized/i.test(message);
+  return /attribute without value|invalid character in entity name|invalid xml|unexpected close tag|non-whitespace before first tag|feed not recognized/i.test(message);
 }
 
 // ------------------------------------------------------------
@@ -96,7 +96,7 @@ export async function fetchFeedResilient(feedUrl, {
     }
   }
 
-  logError("newsletter.rss.fetch_failed", { feedUrl, error: lastError?.message });
+  warn("newsletter.rss.fetch_failed", { feedUrl, error: lastError?.message });
   return { ok: false, feedUrl, items: [], error: lastError?.message || "unknown error" };
 }
 
