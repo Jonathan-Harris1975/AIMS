@@ -14,6 +14,15 @@ function socialArtworkTimeoutMs() {
   return Number.isFinite(configured) && configured >= 60_000 ? configured : DEFAULT_ZERNIO_ARTWORK_TIMEOUT_MS;
 }
 
+function validFallbackUrl(value = "") {
+  try {
+    const url = new URL(String(value || "").trim());
+    return ["http:", "https:"].includes(url.protocol) ? url.toString() : "";
+  } catch {
+    return "";
+  }
+}
+
 function cleanPart(value = "") {
   return String(value || "")
     .trim()
@@ -47,11 +56,28 @@ export async function createSocialArtwork({
     info("artwork.social.done", { sessionId: safeSession, lane: safeLane, key, publicUrl });
     return { ok: true, key, publicUrl };
   } catch (err) {
+    const curatedFallback = validFallbackUrl(fallbackUrl);
+    if (curatedFallback) {
+      warn("artwork.social.curated_fallback", {
+        sessionId: safeSession,
+        lane: safeLane,
+        publicUrl: curatedFallback,
+        originalError: err?.message || String(err),
+      });
+      return {
+        ok: true,
+        fallback: true,
+        imageStatus: "curated-static-fallback",
+        warning: "Generated artwork unavailable; curated lane image used.",
+        originalError: err?.message || String(err),
+        publicUrl: curatedFallback,
+      };
+    }
+
     error("artwork.social.fail", {
       sessionId: safeSession,
       lane: safeLane,
       error: err?.message || String(err),
-      fallbackUrl: fallbackUrl || undefined,
     });
 
     try {
