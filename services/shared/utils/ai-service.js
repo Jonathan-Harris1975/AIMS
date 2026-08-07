@@ -304,7 +304,7 @@ async function callOpenRouter({ providerId, model, apiKey, messages, max_tokens,
     const res = await fetch(getOpenRouterChatEndpoint(), { method: "POST", headers: reqHeaders, body: JSON.stringify(payload), signal: controller.signal });
     if (!res.ok) {
       const text = await res.text().catch(() => "");
-      throw makeOpenRouterError(res.status, text, providerId, res.headers.get("retry-after"));
+      throw makeOpenRouterError(res.status, text, providerId, res.headers?.get?.("retry-after"));
     }
     const json = await res.json();
     const content = extractMessageContent(json);
