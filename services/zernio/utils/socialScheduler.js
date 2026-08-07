@@ -1476,10 +1476,10 @@ function buildDailyLaneArtworkPrompt({ laneKey = "", post = {}, verifiedQuote = 
     ],
     sunday: [
       "SUNDAY — PERSON SPOTLIGHT.",
-      `Primary subject: ${compactText(post?.spotlightPerson || topic)}, shown as the clear human focal point in an editorial portrait.`,
-      "Connect the portrait to the person's real contribution through subtle environmental or object-based context supported by the post.",
-      "Aim for the visual authority of a magazine profile rather than a corporate headshot.",
-      "Avoid anonymous substitutes, generic business portraits and decorative AI wallpaper.",
+      `Story subject: ${compactText(post?.spotlightPerson || topic)}. Do not fabricate or imitate the named person from text alone.`,
+      "Represent the person's real contribution through source-supported work, research objects, field context, equipment, environment or consequences described by the post.",
+      "If a human presence helps the composition and no verified reference image is supplied, keep that person anonymous and non-identifiable through rear-view, silhouette or cropped editorial framing.",
+      "Aim for the authority of a magazine profile story without inventing a recognisable likeness, corporate headshot or decorative AI wallpaper.",
     ],
   };
 
