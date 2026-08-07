@@ -141,6 +141,8 @@ function compactAccount(account) {
     accountId: accountId(account),
     accountUsername: account?.username || account?.displayName || account?.name || null,
     platform: account?.platform || null,
+    isActive: account?.isActive ?? null,
+    status: account?.status ?? null,
     isExpired: account?.isExpired ?? account?.tokenExpired ?? null,
     needsReconnect: account?.needsReconnect ?? account?.needReauth ?? null,
   };
@@ -360,7 +362,13 @@ export async function inspectZernioTargeting({
       globalAccounts = Array.isArray(globalResult?.accounts) ? globalResult.accounts : Array.isArray(globalResult?.data) ? globalResult.data : [];
       const staleRequired = globalAccounts
         .filter((account) => requiredTypes.some((required) => platformMatches(account?.platform, required)))
-        .filter((account) => account?.isExpired === true || account?.needsReconnect === true || account?.needReauth === true);
+        .filter((account) =>
+          account?.isActive === false ||
+          String(account?.status || "").toLowerCase() === "disconnected" ||
+          account?.isExpired === true ||
+          account?.needsReconnect === true ||
+          account?.needReauth === true
+        );
       if (staleRequired.length) {
         globalAccountWarnings.push(
           `${staleRequired.length} required Zernio social account(s) appear expired or need reconnecting.`
