@@ -1,0 +1,39 @@
+version: "3.9"
+
+services:
+  rms-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    image: repo-management-suite:latest
+    container_name: rms-api
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      # Port aligned with Dockerfile EXPOSE 3000 and server.js default.
+      # Override via PORT env var if you need a different host port.
+      - "3000:3000"
+    volumes:
+      # Mount local repo clones so the service can read/write them.
+      # Remove or comment these out if not running locally with cloned repos.
+      - type: bind
+        source: ${RMS_SEO_REPO_PATH}
+        target: /repos/seo
+        read_only: false
+      - type: bind
+        source: ${RMS_WEBSITE_REPO_PATH}
+        target: /repos/website
+        read_only: false
+    environment:
+      - RMS_SEO_REPO_PATH=/repos/seo
+      - RMS_WEBSITE_REPO_PATH=/repos/website
+    healthcheck:
+      # Uses curl (installed in the Dockerfile) instead of python/httpx
+      # which is not present in the node:22-bookworm-slim image.
+      test: ["CMD", "curl", "-f", "http://localhost:3000/livez"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
