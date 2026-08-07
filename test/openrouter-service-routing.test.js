@@ -169,6 +169,7 @@ test("OpenRouter artwork payload explicitly requests image output modalities", a
     assert.deepEqual(blogPayload.modalities, ["image", "text"]);
     assert.equal(blogPayload.stream, false);
     assert.equal(blogPayload.max_tokens, 512);
+    assert.equal(blogPayload.max_completion_tokens, undefined);
     assert.equal(blogPayload.image_config, undefined);
 
     process.env.ARTWORK_IMAGE_CONFIG_ENABLED = "true";

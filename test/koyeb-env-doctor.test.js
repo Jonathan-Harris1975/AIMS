@@ -131,12 +131,12 @@ test("koyeb env doctor rejects invalid core AI and Headroom numeric values", () 
   assert.ok(errors.some((error) => error.key === "HEADROOM_PROTECT_RECENT" && /non-negative integer/i.test(error.message)));
 });
 
-test("koyeb env doctor enforces the global retry floor and accepts zero where runtime supports it", () => {
-  const invalid = validateEnvObject({ AI_MAX_RETRIES: "0" });
-  assert.ok(invalid.some((error) => error.key === "AI_MAX_RETRIES" && /at least 4/i.test(error.message)));
+test("koyeb env doctor allows bounded core AI retry counts including zero where runtime supports it", () => {
+  const zeroRetries = validateEnvObject({ AI_MAX_RETRIES: "0" });
+  assert.equal(zeroRetries.some((error) => error.key === "AI_MAX_RETRIES"), false);
 
   const valid = validateEnvObject({
-    AI_MAX_RETRIES: "4",
+    AI_MAX_RETRIES: "2",
     AI_RETRY_BASE_MS: "0",
     AI_EMPTY_COMPLETION_RETRIES_PER_PROVIDER: "0",
     HEADROOM_PROTECT_RECENT: "0",
