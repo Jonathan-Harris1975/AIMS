@@ -84,7 +84,7 @@ export const THRESHOLDS = Object.freeze({
     retryCount: Math.max(1, num("PODCAST_ARTWORK_RETRY_COUNT", 5)),
     // Whether a shortened prompt retry pass should run after the normal
     // provider attempts are exhausted, before using branded fallback art.
-    shortPromptRetryEnabled: bool("PODCAST_ARTWORK_SHORT_PROMPT_RETRY", true),
+    shortPromptRetryEnabled: bool("PODCAST_ARTWORK_SHORT_PROMPT_RETRY", false),
   }),
   logging: Object.freeze({
     // Whether validators/scheduler emit structured QA optimisation events
