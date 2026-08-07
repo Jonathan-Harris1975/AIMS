@@ -495,6 +495,13 @@ These files exist but are not mounted by the active root route registry:
 | `OPENROUTER_ENABLE_FALLBACKS` | OpenRouter model, key or request-control configuration. | services/shared/utils/ai-config.js, ai-service.js | Conditional; required by AI generation routes | `true` | Set only for services you run. |
 | `OPENROUTER_REQUIRE_PARAMETERS_FOR_JSON` | OpenRouter model, key or request-control configuration. | services/shared/utils/ai-config.js, ai-service.js | Conditional; required by AI generation routes | `true` | Set only for services you run. |
 | `AI_USAGE_LOG_ENABLED` | OpenRouter model, key or request-control configuration. | services/shared/utils/ai-config.js, ai-service.js | Conditional; required by AI generation routes | `true` | Set only for services you run. |
+| `HEADROOM_ENABLED` | Enables pre-OpenRouter context compression for selected text routes. | services/shared/utils/headroom.js | No | `false` | Requires a reachable Headroom `/v1/compress` service before enabling. |
+| `HEADROOM_BASE_URL` | Base URL of the Headroom proxy/compression service. | services/shared/utils/headroom.js | Required when Headroom is enabled | `blank` | May end at the host root or `/v1`; artwork traffic does not use it. |
+| `HEADROOM_API_KEY` / `HEADROOM_PROXY_TOKEN` | Optional bearer authentication for the Headroom service. | services/shared/utils/headroom.js | Conditional | `blank` | Keep secret values in Koyeb/GitHub secret storage. |
+| `HEADROOM_TIMEOUT_MS` | Maximum wait for compression before AIMS fails open to the original messages. | services/shared/utils/headroom.js | No | `5000` | External caller aborts are propagated instead of failing open. |
+| `HEADROOM_MIN_INPUT_CHARS` | Minimum text payload size before compression is attempted. | services/shared/utils/headroom.js | No | `2000` | Avoids spending compression overhead on small prompts. |
+| `HEADROOM_TARGET_RATIO` | Requested compression ratio for eligible calls. | services/shared/utils/headroom.js | No | `0.7` | Compression is rejected if it does not actually save tokens. |
+| `HEADROOM_ROUTES` | Comma-separated allowlist of AIMS route keys eligible for compression. | services/shared/utils/headroom.js | No | curated batch routes | Multimodal visual-QA/image routes are hard-bypassed. |
 | `AI_MODEL_FAST` | OpenRouter model, key or request-control configuration. | services/shared/utils/ai-config.js, ai-service.js | Conditional; required by AI generation routes | `google/gemini-2.5-flash-lite` | Set only for services you run. |
 | `AI_MODEL_STANDARD` | OpenRouter model, key or request-control configuration. | services/shared/utils/ai-config.js, ai-service.js | Conditional; required by AI generation routes | `openai/gpt-5.6-luna` | Set only for services you run. |
 | `AI_MODEL_HIGH_QUALITY` | OpenRouter model, key or request-control configuration. | services/shared/utils/ai-config.js, ai-service.js | Conditional; required by AI generation routes | `anthropic/claude-sonnet-4.6` | Set only for services you run. |
@@ -502,12 +509,12 @@ These files exist but are not mounted by the active root route registry:
 | `AI_MODEL_JSON` | OpenRouter model, key or request-control configuration. | services/shared/utils/ai-config.js, ai-service.js | Conditional; required by AI generation routes | `openai/gpt-5.6-luna` | Set only for services you run. |
 | `AI_MODEL_SUMMARY` | OpenRouter model, key or request-control configuration. | services/shared/utils/ai-config.js, ai-service.js | Conditional; required by AI generation routes | `google/gemini-2.5-flash-lite` | Set only for services you run. |
 | `AI_MODEL_AUDIT` | OpenRouter model, key or request-control configuration. | services/shared/utils/ai-config.js, ai-service.js | Conditional; required by AI generation routes | `anthropic/claude-sonnet-4.6` | Set only for services you run. |
-| `AI_MODEL_IMAGE` | OpenRouter model, key or request-control configuration. | services/shared/utils/ai-config.js, ai-service.js | Conditional; required by AI generation routes | `recraft/recraft-v4.1` | Set only for services you run. |
-| `OPENROUTER_ART` | OpenRouter model, key or request-control configuration. | services/shared/utils/ai-config.js, ai-service.js | Conditional; required by AI generation routes | `recraft/recraft-v4.1` | Set only for services you run. |
-| `OPENROUTER_ART_BACKUP` | OpenRouter model, key or request-control configuration. | services/shared/utils/ai-config.js, ai-service.js | Conditional; required by AI generation routes | `bytedance-seed/seedream-4.5` | Set only for services you run. |
+| `AI_MODEL_IMAGE` | OpenRouter image-model configuration. | services/shared/utils/ai-config.js, artwork.js | Conditional; required by image generation routes | `bytedance-seed/seedream-4.5` | Image traffic remains direct to OpenRouter and is never routed through Headroom. |
+| `OPENROUTER_ART` | Primary OpenRouter artwork model. | services/artwork/utils/artwork.js | Conditional; required by artwork generation | `bytedance-seed/seedream-4.5` | Kept separate from Headroom chat compression. |
+| `OPENROUTER_ART_BACKUP` | Backup OpenRouter artwork model. | services/artwork/utils/artwork.js | Conditional; required by artwork failover | `black-forest-labs/flux.2-pro` | Kept separate from Headroom chat compression. |
 | `OPENROUTER_ANTHROPIC_4_6` | OpenRouter model, key or request-control configuration. | services/shared/utils/ai-config.js, ai-service.js | Conditional; required by AI generation routes | `anthropic/claude-sonnet-4.6` | Set only for services you run. |
 | `OPENROUTER_META` | OpenRouter model, key or request-control configuration. | services/shared/utils/ai-config.js, ai-service.js | Conditional; required by AI generation routes | `meta-llama/llama-4-scout` | Set only for services you run. |
-| `AI_MAX_RETRIES` | OpenRouter model, key or request-control configuration. | services/shared/utils/ai-config.js, ai-service.js | Conditional; required by AI generation routes | `1` | Set only for services you run. |
+| `AI_MAX_RETRIES` | Global retry budget per configured text provider. | services/shared/utils/ai-service.js | No | `4` | Enforced as a minimum of four retries; route-level overrides may intentionally use fewer. |
 | `AI_MAX_TOKENS` | OpenRouter model, key or request-control configuration. | services/shared/utils/ai-config.js, ai-service.js | Conditional; required by AI generation routes | `4096` | Secret value; keep in Koyeb/GitHub secret storage. |
 | `AI_RETRY_BASE_MS` | Timeout, delay or TTL control in milliseconds. | services/shared/utils/ai-config.js, ai-service.js | Conditional; required by AI generation routes | `750` | Set only for services you run. |
 | `AI_TEMPERATURE` | OpenRouter model, key or request-control configuration. | services/shared/utils/ai-config.js, ai-service.js | Conditional; required by AI generation routes | `0.65` | Set only for services you run. |
@@ -797,8 +804,8 @@ These names were found in runtime code or deployment checks but are not present 
 ### OpenRouter model routing
 
 - `services/shared/utils/ai-config.js` defines provider/model registry and route-specific model chains.
-- `services/shared/utils/ai-service.js` sends `/chat/completions` requests to OpenRouter, applies provider preferences, retries, fallbacks, usage logging and diagnostics.
-- Route keys include `intro`, `main`, `outro`, `compose`, `editorialPass`, `metadata`, `artworkImage`, `rssRewrite`, `blogWeekly`, `blogSocial`, `onBrandAudit`, `auditForensic`, `oneupDaily`, `oneupQuiz` and `oneupEbook`.
+- `services/shared/utils/ai-service.js` sends `/chat/completions` requests to OpenRouter, applies selective Headroom pre-compression, provider preferences, retries, fallbacks, caller cancellation, usage logging and diagnostics.
+- Route keys include `intro`, `main`, `outro`, `compose`, `scriptMain`, `scriptMainSynthesis`, `editorialPass`, `metadata`, `artworkImage`, `rssRewrite`, `blogWeekly`, `blogSocial`, `onBrandAudit`, `auditForensic`, `zernioDaily`, `zernioQuiz`, `zernioEbook`, newsletter routes, Blotato routes and Comms Hub routes.
 
 ### AWS Polly
 
