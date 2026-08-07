@@ -421,6 +421,7 @@ export async function resilientRequest(routeName, {
             cost: result.usage?.cost,
             headroomCompressed: headroom.compressed,
             headroomTokensSaved: headroom.tokensSaved || 0,
+            headroomReason: headroom.reason || null,
           });
         }
         recordProviderOutcome({ routeKey, provider: providerId, ok: true, durationMs: result.durationMs, status: "success" });
@@ -492,6 +493,7 @@ export async function resilientRequest(routeName, {
                 cost: relaxed.usage?.cost,
                 headroomCompressed: headroom.compressed,
                 headroomTokensSaved: headroom.tokensSaved || 0,
+                headroomReason: headroom.reason || null,
               });
             }
             recordProviderOutcome({ routeKey, provider: providerId, ok: true, durationMs: relaxed.durationMs, status: "success-relaxed" });
