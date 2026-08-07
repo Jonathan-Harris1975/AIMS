@@ -60,7 +60,7 @@ async function recoverThinSourceText(link = "", currentText = "") {
       const meta = [...html.matchAll(/<meta[^>]+(?:name|property)=["'](?:description|og:description|twitter:description)["'][^>]+content=["']([^"']+)["'][^>]*>/gi)]
         .map((m) => m[1])
         .join(" ");
-      const paragraphs = [...html.matchAll(/<p[^>]*>([\s\S]*?)<\/p>/gi)]
+      const paragraphs = [...html.matchAll(/<p\b[^>]*>([\s\S]*?)<\/p>/gi)]
         .slice(0, 8)
         .map((m) => stripHtml(m[1]))
         .join(" ");
@@ -90,8 +90,8 @@ async function recoverThinSourceText(link = "", currentText = "") {
 
 function stripHtml(input = "") {
   return String(input)
-    .replace(/<script[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script\b[^>]*>/gi, " ")
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style\b[^>]*>/gi, " ")
     .replace(/<[^>]*>/g, " ")
     .replace(/&nbsp;/gi, " ")
     .replace(/&amp;/gi, "&")
