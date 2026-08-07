@@ -38,6 +38,15 @@ test("newsletter delivery uses an existing populated Brevo list and exposes read
   assert.match(env, /^NEWSLETTER_BREVO_ALLOW_LIST_CREATE=false$/m);
 });
 
+test("newsletter structured output avoids provider-incompatible array cardinality and disables reasoning", async () => {
+  const compose = await readFile(new URL("../services/newsletter/engine/compose.js", import.meta.url), "utf8");
+  const council = await readFile(new URL("../services/newsletter/engine/editorialCouncil.js", import.meta.url), "utf8");
+  assert.doesNotMatch(compose, /maxItems:\s*[35]/);
+  assert.doesNotMatch(compose, /minItems:\s*1/);
+  assert.match(compose, /reasoning: \{ effort: "none", exclude: true \}/);
+  assert.match(council, /reasoning: \{ effort: "none", exclude: true \}/);
+});
+
 test("newsletter review routes avoid the logged unsupported GPT targets", async () => {
   const config = await readFile(new URL("../services/shared/utils/ai-config.js", import.meta.url), "utf8");
   assert.match(config, /newsletterFactCheck: routeChain\(\["audit", "highQuality"\]/);
@@ -249,7 +258,7 @@ test("mini-series creation retries weak plans and duplicate parts, then fails cl
   assert.match(client, /export async function deletePost/);
   assert.match(client, /"x-request-id": requestId/);
   assert.match(scheduler, /zernio-daily-artwork-unavailable/);
-  assert.doesNotMatch(scheduler, /fallbackUrl: lane\.imageUrl/);
+  assert.match(scheduler, /fallbackUrl: lane\.imageUrl/);
   assert.match(env, /^ZERNIO_MINI_SERIES_THEME_ATTEMPTS=3$/m);
   assert.match(env, /^ZERNIO_MINI_SERIES_DISTINCTNESS_ATTEMPTS=3$/m);
 });

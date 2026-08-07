@@ -134,6 +134,9 @@ test("Blotato visual prompts and scene inputs cannot request baked-in text", () 
   assert.doesNotMatch(visualPrompt, /Thumbnail text:/i);
   assert.doesNotMatch(visualPrompt, /DO NOT RENDER THIS/);
   assert.match(visualPrompt, /ABSOLUTE TEXT-FREE GENERATED VISUAL/i);
+  assert.match(visualPrompt, /SCENE PLAN:/i);
+  assert.match(visualPrompt, /SCENE 1 VISUAL:/i);
+  assert.match(visualPrompt, /mandatory, not optional inspiration/i);
 
   const inputs = buildBlotatoVideoInputs(pack);
   assert.ok(inputs.scenes.length >= 3);
