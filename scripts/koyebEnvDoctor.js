@@ -36,7 +36,17 @@ const NUMERIC_ENVS = new Set([
   "BLOTATO_RENDERED_MAX_SECONDS",
   "BLOTATO_RENDERED_QA_MAX_BYTES",
   "BLOTATO_RENDERED_QA_DOWNLOAD_TIMEOUT_MS",
+  "AI_MAX_RETRIES",
+  "AI_MAX_TOKENS",
+  "AI_RETRY_BASE_MS",
+  "AI_TEMPERATURE",
+  "AI_TIMEOUT",
+  "AI_TOP_P",
   "AI_EMPTY_COMPLETION_RETRIES_PER_PROVIDER",
+  "HEADROOM_TIMEOUT_MS",
+  "HEADROOM_MIN_INPUT_CHARS",
+  "HEADROOM_TARGET_RATIO",
+  "HEADROOM_PROTECT_RECENT",
   "ARTWORK_VISUAL_QA_THRESHOLD",
   "ARTWORK_VISUAL_QA_MAX_REGENERATIONS",
   "PODCAST_TARGET_MINUTES",
@@ -84,7 +94,10 @@ const POSITIVE_INTEGER_ENVS = new Set([
   "BLOTATO_RENDERED_MAX_SECONDS",
   "BLOTATO_RENDERED_QA_MAX_BYTES",
   "BLOTATO_RENDERED_QA_DOWNLOAD_TIMEOUT_MS",
-  "AI_EMPTY_COMPLETION_RETRIES_PER_PROVIDER",
+  "AI_MAX_TOKENS",
+  "AI_TIMEOUT",
+  "HEADROOM_TIMEOUT_MS",
+  "HEADROOM_MIN_INPUT_CHARS",
   "ARTWORK_VISUAL_QA_THRESHOLD",
   "ARTWORK_VISUAL_QA_MAX_REGENERATIONS",
   "PODCAST_TARGET_MINUTES",
@@ -107,6 +120,12 @@ const POSITIVE_INTEGER_ENVS = new Set([
   "COMMS_HUB_ARCHIVE_MAX_ATTEMPTS",
 ]);
 
+const NON_NEGATIVE_INTEGER_ENVS = new Set([
+  "AI_RETRY_BASE_MS",
+  "AI_EMPTY_COMPLETION_RETRIES_PER_PROVIDER",
+  "HEADROOM_PROTECT_RECENT",
+]);
+
 const BOOLEAN_ENVS = new Set([
   "ALLOW_EPHEMERAL_STATE",
   "BLOTATO_YOUTUBE_NOTIFY_SUBSCRIBERS",
@@ -121,6 +140,9 @@ const BOOLEAN_ENVS = new Set([
   "ARTWORK_VISUAL_QA_ENABLED",
   "ARTWORK_VISUAL_QA_REQUIRED",
   "ARTWORK_IMAGE_CONFIG_ENABLED",
+  "HEADROOM_ENABLED",
+  "HEADROOM_COMPRESS_USER_MESSAGES",
+  "HEADROOM_LOG_SAVINGS",
   "NEWSLETTER_BREVO_ALLOW_LIST_CREATE",
   "BLOTATO_STEP0_PREFLIGHT_ENABLED",
   "BLOTATO_PREFLIGHT_REQUIRE_LISTED_ACCOUNTS",
@@ -154,6 +176,7 @@ const URL_ENVS = new Set([
   "OPENROUTER_API_BASE",
   "OPENROUTER_BASE_URL",
   "OPENROUTER_SITE_URL",
+  "HEADROOM_BASE_URL",
   "PODCAST_EPISODE_BASE_URL",
   "PODCAST_FALLBACK_IMAGE_URL",
   "PODCAST_FUNDING_URL",
@@ -279,6 +302,30 @@ function validateNumber({ key, value, line }, errors) {
     errors.push({ line, key, message: `${key} must be a positive integer` });
   }
 
+  if (NON_NEGATIVE_INTEGER_ENVS.has(key) && (!Number.isInteger(number) || number < 0)) {
+    errors.push({ line, key, message: `${key} must be a non-negative integer` });
+  }
+
+  if (key === "AI_MAX_RETRIES" && (!Number.isInteger(number) || number < 4)) {
+    errors.push({ line, key, message: `${key} must be an integer of at least 4` });
+  }
+
+  if (key === "AI_TEMPERATURE" && (number < 0 || number > 2)) {
+    errors.push({ line, key, message: `${key} must be between 0 and 2` });
+  }
+
+  if (key === "AI_TOP_P" && (number < 0 || number > 1)) {
+    errors.push({ line, key, message: `${key} must be between 0 and 1` });
+  }
+
+  if (key === "HEADROOM_TIMEOUT_MS" && number < 100) {
+    errors.push({ line, key, message: `${key} must be at least 100` });
+  }
+
+  if (key === "HEADROOM_TARGET_RATIO" && (number < 0.05 || number > 1)) {
+    errors.push({ line, key, message: `${key} must be between 0.05 and 1` });
+  }
+
   if (key === "PHASE3_AUTOPUBLISH_MIN_SCORE" && (number < 0 || number > 100)) {
     errors.push({ line, key, message: `${key} must be between 0 and 100` });
   }
@@ -288,10 +335,10 @@ function validateNumber({ key, value, line }, errors) {
   }
 
   if (key === "PODCAST_TARGET_MINUTES" && (number < 30 || number > 70)) {
-    return `${key} must be between 30 and 70`;
+    errors.push({ line, key, message: `${key} must be between 30 and 70` });
   }
   if (key === "PODCAST_MAX_MINUTES" && (number < 60 || number > 70)) {
-    return `${key} must be between 60 and 70`;
+    errors.push({ line, key, message: `${key} must be between 60 and 70` });
   }
 
   if (["BLOTATO_RENDERED_QA_THRESHOLD", "ARTWORK_VISUAL_QA_THRESHOLD"].includes(key) && (number < 1 || number > 100)) {
