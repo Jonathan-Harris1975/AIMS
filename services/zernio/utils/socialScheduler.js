@@ -1424,10 +1424,24 @@ function buildDailyLaneArtworkPrompt({ laneKey = "", post = {}, verifiedQuote = 
 
   const topic = compactText(post?.topic || post?.title || "artificial intelligence");
   const content = compactText(post?.content || "").replace(/#[A-Za-z0-9_]+/g, "").trim();
+  const spotlightPerson = compactText(post?.spotlightPerson || "");
+  const sundayContributionContext = laneKey === "sunday"
+    ? compactText(`${post?.topic || ""} ${post?.title || ""}`)
+        .replace(spotlightPerson ? new RegExp(escapeRegExp(spotlightPerson), "gi") : /$^/, "")
+        .replace(/\b(?:18|19|20)\d{2}\b/g, "")
+        .replace(/[\"“”'‘’]+/g, " ")
+        .replace(/\b(?:phd|thesis|paper|book|publication|published)\b/gi, " ")
+        .replace(/\s+/g, " ")
+        .replace(/^[\s:;,.\-]+|[\s:;,.\-]+$/g, "")
+        .slice(0, 260)
+    : "";
+  const artworkTopic = laneKey === "sunday"
+    ? (sundayContributionContext || "machine-learning research contribution")
+    : topic;
 
   const common = [
-    `Topic: ${topic}.`,
-    `Post context, for visual meaning only and never as visible text: ${content.slice(0, 700)}`,
+    `Topic: ${artworkTopic}.`,
+    ...(laneKey === "sunday" ? [] : [`Post context, for visual meaning only and never as visible text: ${content.slice(0, 700)}`]),
     "Create premium square social artwork with one immediately readable focal idea at phone-thumbnail size.",
     "Use the seasonal brand palette while keeping the scene natural, vivid and editorial.",
     "The scene must visibly and specifically connect to artificial intelligence through credible machine-learning, robotics, intelligent software, compute, research, security, governance or human-oversight cues supported by the post.",
@@ -1476,10 +1490,12 @@ function buildDailyLaneArtworkPrompt({ laneKey = "", post = {}, verifiedQuote = 
     ],
     sunday: [
       "SUNDAY — PERSON SPOTLIGHT.",
-      `Story subject: ${compactText(post?.spotlightPerson || topic)}. Do not fabricate or imitate the named person from text alone.`,
-      "Represent the person's real contribution through source-supported work, research objects, field context, equipment, environment or consequences described by the post.",
-      "If a human presence helps the composition and no verified reference image is supplied, keep that person anonymous and non-identifiable through rear-view, silhouette or cropped editorial framing.",
-      "Aim for the authority of a magazine profile story without inventing a recognisable likeness, corporate headshot or decorative AI wallpaper.",
+      "The named person's identity is editorial context only. Never render, approximate or imply their face or recognisable likeness from text alone.",
+      "Translate the contribution into one concrete, source-supported research mechanism, object, experiment, machine-learning process or real-world consequence rather than depicting the person.",
+      "Prefer a human-free close-up of the relevant technical mechanism. If a person is essential, show only anonymous hands or a fully rear-facing figure with the face completely hidden.",
+      "For this lane avoid all text-bearing surfaces: no books, papers, notebooks, theses, whiteboards, chalkboards, posters, signs, monitors, terminal screens, interface panels or labelled diagrams.",
+      "Do not include dates, publication titles, thesis titles, names, equations, letters, numerals or pseudo-writing even when they appear in the post context.",
+      "Aim for the authority of a magazine profile story through the contribution itself, without a corporate headshot, fabricated portrait or decorative AI wallpaper.",
     ],
   };
 
@@ -1699,6 +1715,7 @@ export async function buildAndScheduleDailyLane(laneKey, options = {}) {
         lane: laneKey,
         date: publishDate,
         prompt: buildDailyLaneArtworkPrompt({ laneKey, post, verifiedQuote }),
+        fallbackUrl: lane.imageUrl,
       });
 
       if (!artwork?.ok || !artwork.publicUrl) {
