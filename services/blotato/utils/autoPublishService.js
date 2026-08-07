@@ -114,7 +114,9 @@ function normaliseTemplateId(value = DEFAULT_AI_STORY_TEMPLATE_PATH) {
 }
 
 function normaliseTemplateIdForApi(value = DEFAULT_AI_STORY_TEMPLATE_PATH) {
-  return normaliseTemplateId(value);
+  // Blotato's current /videos/from-templates contract requires the bare UUID,
+  // even when the catalogue/config stores the human-friendly /base/v2/... path.
+  return extractUuid(value) || extractUuid(normaliseTemplateId(value)) || DEFAULT_AI_STORY_TEMPLATE_UUID;
 }
 
 function uniqueTemplateIds(...groups) {

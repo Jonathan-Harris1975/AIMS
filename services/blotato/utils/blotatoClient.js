@@ -23,6 +23,16 @@ function isRetryableStatus(status) {
   return code === 408 || code === 425 || code === 429 || code >= 500;
 }
 
+function isSafeBlotatoRetry(method, status) {
+  const verb = String(method || "GET").toUpperCase();
+  if (["GET", "HEAD", "OPTIONS", "DELETE"].includes(verb)) return isRetryableStatus(status);
+  // Blotato does not document an idempotency key for video creation or post
+  // publishing. Only retry explicit rate-limit/too-early rejections; an
+  // ambiguous 5xx/network retry could create a duplicate paid video/post.
+  const code = Number(status);
+  return code === 425 || code === 429;
+}
+
 function isRetryableNetworkError(error) {
   const message = String(error?.message || error || "").toLowerCase();
   return /timeout|timed out|econnreset|etimedout|eai_again|socket hang up|network|fetch failed/.test(message);
@@ -167,17 +177,23 @@ async function blotatoRequest(endpoint, {
       const parsed = await parseResponseBody(response);
       if (!response.ok) {
         const err = makeBlotatoError({ response, parsed, endpoint });
-        err.retryable = isRetryableStatus(response.status);
+        err.retryable = isSafeBlotatoRetry(method, response.status);
         throw err;
       }
 
       return parsed.json ?? { raw: parsed.text };
     } catch (error) {
       lastError = error;
-      const retryable = Boolean(error?.retryable || isRetryableNetworkError(error));
+      const verb = String(method || "GET").toUpperCase();
+      const networkRetryable = ["GET", "HEAD", "OPTIONS", "DELETE"].includes(verb) && isRetryableNetworkError(error);
+      const retryable = Boolean(error?.retryable || networkRetryable);
       if (!retryable || attempt >= attempts) throw error;
 
-      const waitMs = Math.min(maxDelayMs, baseDelayMs * Math.pow(2, attempt - 1));
+      const exponentialWaitMs = Math.min(maxDelayMs, baseDelayMs * Math.pow(2, attempt - 1));
+      const providerRetryAfterMs = Number(error?.retryAfterMs || 0);
+      // Blotato returns Retry-After on rate limits. Respect the provider's
+      // window instead of hammering the same request with our shorter local backoff.
+      const waitMs = Math.min(MAX_SLEEP_MS, Math.max(exponentialWaitMs, providerRetryAfterMs));
       await sleep(waitMs);
     }
   }
@@ -261,7 +277,7 @@ export async function deleteVisual(id, apiKey) {
     throw err;
   }
 
-  return blotatoRequest(`videos/creations/${encodeURIComponent(cleaned)}`, {
+  return blotatoRequest(`videos/${encodeURIComponent(cleaned)}`, {
     method: "DELETE",
     apiKey,
   });
