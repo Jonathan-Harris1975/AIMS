@@ -7,6 +7,7 @@ import aiConfig from "./ai-config.js";
 import { safeRouteLog } from "../../../logger.js";
 import { info, error as logError } from "../../../logger.js";
 import { recordProviderOutcome } from "./operationalExcellence.js";
+import { compressForOpenRouter } from "./headroom.js";
 
 function getOpenRouterBaseUrl() {
   return process.env.OPENROUTER_BASE_URL || process.env.OPENROUTER_API_BASE || "https://openrouter.ai/api/v1";
@@ -15,15 +16,24 @@ function getOpenRouterBaseUrl() {
 function getOpenRouterChatEndpoint() {
   return `${getOpenRouterBaseUrl().replace(/\/+$/, "")}/chat/completions`;
 }
-const DEFAULT_MAX_TOKENS = Number(process.env.AI_MAX_TOKENS || 4096);
-const DEFAULT_TEMPERATURE = Number(process.env.AI_TEMPERATURE ?? aiConfig?.commonParams?.temperature ?? 0.7);
-const DEFAULT_TIMEOUT_MS = Number(process.env.AI_TIMEOUT ?? aiConfig?.commonParams?.timeout ?? 90000);
-const DEFAULT_TOP_P = Number(process.env.AI_TOP_P ?? aiConfig?.commonParams?.top_p ?? 0.9);
+function finiteEnvNumber(name, fallback, { min = -Infinity, max = Infinity, integer = false } = {}) {
+  const raw = process.env[name];
+  const value = raw === undefined || raw === null || raw === "" ? Number(fallback) : Number(raw);
+  if (!Number.isFinite(value) || value < min || value > max || (integer && !Number.isInteger(value))) {
+    return Number(fallback);
+  }
+  return value;
+}
+
+const DEFAULT_MAX_TOKENS = finiteEnvNumber("AI_MAX_TOKENS", 4096, { min: 1, integer: true });
+const DEFAULT_TEMPERATURE = finiteEnvNumber("AI_TEMPERATURE", aiConfig?.commonParams?.temperature ?? 0.7, { min: 0, max: 2 });
+const DEFAULT_TIMEOUT_MS = finiteEnvNumber("AI_TIMEOUT", aiConfig?.commonParams?.timeout ?? 90000, { min: 1, integer: true });
+const DEFAULT_TOP_P = finiteEnvNumber("AI_TOP_P", aiConfig?.commonParams?.top_p ?? 0.9, { min: 0, max: 1 });
 // 4 retries + the initial attempt = 5 total attempts per provider before
 // failover/failure, in line with the platform-wide 5-attempt floor.
-const MAX_RETRIES = Math.max(4, Number(process.env.AI_MAX_RETRIES ?? 4));
-const RETRY_BASE_MS = Number(process.env.AI_RETRY_BASE_MS ?? 750);
-const EMPTY_COMPLETION_RETRIES_PER_PROVIDER = Math.max(0, Number(process.env.AI_EMPTY_COMPLETION_RETRIES_PER_PROVIDER ?? 1));
+const MAX_RETRIES = Math.max(4, finiteEnvNumber("AI_MAX_RETRIES", 4, { min: 0, integer: true }));
+const RETRY_BASE_MS = finiteEnvNumber("AI_RETRY_BASE_MS", 750, { min: 0, integer: true });
+const EMPTY_COMPLETION_RETRIES_PER_PROVIDER = finiteEnvNumber("AI_EMPTY_COMPLETION_RETRIES_PER_PROVIDER", 1, { min: 0, integer: true });
 const __aiRouteCallsBySession = new Map();
 const __lastSuccessProvider = new Map();
 
@@ -236,7 +246,11 @@ function extractMessageContent(json) {
   return "";
 }
 
-async function callOpenRouter({ providerId, model, apiKey, messages, max_tokens, temperature, top_p, response_format, headers, timeoutMs, reasoning, relaxedParameters = false }) {
+async function callOpenRouter({ providerId, model, apiKey, messages, max_tokens, temperature, top_p, response_format, headers, timeoutMs, reasoning, signal, relaxedParameters = false }) {
+  if (signal?.aborted) {
+    throw signal.reason instanceof Error ? signal.reason : Object.assign(new Error("OpenRouter request aborted"), { name: "AbortError", code: "AI_REQUEST_ABORTED" });
+  }
+
   const payload = { model, messages, max_tokens };
   if (!relaxedParameters) {
     payload.temperature = temperature;
@@ -261,9 +275,17 @@ async function callOpenRouter({ providerId, model, apiKey, messages, max_tokens,
     ...(aiConfig?.headers || {}),
     ...(headers || {}),
   };
-  const effectiveTimeoutMs = Number(timeoutMs || DEFAULT_TIMEOUT_MS);
+  const effectiveTimeoutMs = Number.isFinite(Number(timeoutMs)) && Number(timeoutMs) > 0
+    ? Number(timeoutMs)
+    : DEFAULT_TIMEOUT_MS;
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), effectiveTimeoutMs);
+  let timedOut = false;
+  const onExternalAbort = () => controller.abort(signal?.reason);
+  signal?.addEventListener?.("abort", onExternalAbort, { once: true });
+  const timeout = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, effectiveTimeoutMs);
   const startedAt = Date.now();
   try {
     const res = await fetch(getOpenRouterChatEndpoint(), { method: "POST", headers: reqHeaders, body: JSON.stringify(payload), signal: controller.signal });
@@ -301,7 +323,10 @@ async function callOpenRouter({ providerId, model, apiKey, messages, max_tokens,
       durationMs: Date.now() - startedAt,
     };
   } catch (err) {
-    if (err?.name === "AbortError") {
+    if (signal?.aborted) {
+      throw signal.reason instanceof Error ? signal.reason : Object.assign(new Error("OpenRouter request aborted"), { name: "AbortError", code: "AI_REQUEST_ABORTED" });
+    }
+    if (timedOut || err?.name === "AbortError") {
       const timeoutErr = new Error(`OpenRouter request timed out after ${effectiveTimeoutMs}ms for provider ${providerId}`);
       timeoutErr.code = "OPENROUTER_TIMEOUT";
       timeoutErr.providerId = providerId;
@@ -310,10 +335,25 @@ async function callOpenRouter({ providerId, model, apiKey, messages, max_tokens,
     throw err;
   } finally {
     clearTimeout(timeout);
+    signal?.removeEventListener?.("abort", onExternalAbort);
   }
 }
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const sleep = (ms, signal) => new Promise((resolve, reject) => {
+  if (signal?.aborted) {
+    reject(signal.reason instanceof Error ? signal.reason : Object.assign(new Error("AI request aborted"), { name: "AbortError", code: "AI_REQUEST_ABORTED" }));
+    return;
+  }
+  const timer = setTimeout(() => {
+    signal?.removeEventListener?.("abort", onAbort);
+    resolve();
+  }, ms);
+  function onAbort() {
+    clearTimeout(timer);
+    reject(signal.reason instanceof Error ? signal.reason : Object.assign(new Error("AI request aborted"), { name: "AbortError", code: "AI_REQUEST_ABORTED" }));
+  }
+  signal?.addEventListener?.("abort", onAbort, { once: true });
+});
 
 export async function resilientRequest(routeName, {
   sessionId,
@@ -328,6 +368,7 @@ export async function resilientRequest(routeName, {
   maxRetries,
   retryBaseMs,
   reasoning,
+  signal,
   returnMetadata = false,
 } = {}) {
   const routeKey = resolveRouteKey(routeName);
@@ -355,10 +396,15 @@ export async function resilientRequest(routeName, {
     attemptedProviderTargets.add(targetKey);
 
     try { safeRouteLog({ routeName, routeKey, provider: providerId, model: provider.name }); } catch {}
+    if (signal?.aborted) {
+      throw signal.reason instanceof Error ? signal.reason : Object.assign(new Error("AI request aborted"), { name: "AbortError", code: "AI_REQUEST_ABORTED" });
+    }
+    const headroom = await compressForOpenRouter({ routeName, routeKey, model: provider.name, messages, signal });
+    const providerMessages = headroom.messages;
     let compatibilityRelaxationUsed = false;
     for (let attempt = 0; attempt <= effectiveMaxRetries; attempt++) {
       try {
-        const result = await callOpenRouter({ providerId, model: provider.name, apiKey: provider.apiKey, messages, max_tokens, temperature, top_p, response_format, headers, timeoutMs, reasoning });
+        const result = await callOpenRouter({ providerId, model: provider.name, apiKey: provider.apiKey, messages: providerMessages, max_tokens, temperature, top_p, response_format, headers, timeoutMs, reasoning, signal });
         if (shouldLogUsage()) {
           info("ai.request.usage", {
             routeName,
@@ -373,6 +419,8 @@ export async function resilientRequest(routeName, {
             completionTokens: result.usage?.completion_tokens,
             totalTokens: result.usage?.total_tokens,
             cost: result.usage?.cost,
+            headroomCompressed: headroom.compressed,
+            headroomTokensSaved: headroom.tokensSaved || 0,
           });
         }
         recordProviderOutcome({ routeKey, provider: providerId, ok: true, durationMs: result.durationMs, status: "success" });
@@ -387,9 +435,20 @@ export async function resilientRequest(routeName, {
           usage: result.usage || null,
           serviceTier: result.serviceTier || null,
           routeKey,
+          headroom: {
+            compressed: headroom.compressed,
+            tokensBefore: headroom.tokensBefore,
+            tokensAfter: headroom.tokensAfter,
+            tokensSaved: headroom.tokensSaved || 0,
+            compressionRatio: headroom.compressionRatio,
+            reason: headroom.reason,
+          },
         } : result.content;
       } catch (err) {
         lastErr = err;
+        if (signal?.aborted) {
+          throw signal.reason instanceof Error ? signal.reason : err;
+        }
 
         // Provider routing can select an endpoint that supports the model but
         // not one of the optional request parameters. Retry the same model
@@ -410,10 +469,11 @@ export async function resilientRequest(routeName, {
               providerId,
               model: provider.name,
               apiKey: provider.apiKey,
-              messages,
+              messages: providerMessages,
               max_tokens,
               headers,
               timeoutMs,
+              signal,
               relaxedParameters: true,
             });
             if (shouldLogUsage()) {
@@ -430,6 +490,8 @@ export async function resilientRequest(routeName, {
                 completionTokens: relaxed.usage?.completion_tokens,
                 totalTokens: relaxed.usage?.total_tokens,
                 cost: relaxed.usage?.cost,
+                headroomCompressed: headroom.compressed,
+                headroomTokensSaved: headroom.tokensSaved || 0,
               });
             }
             recordProviderOutcome({ routeKey, provider: providerId, ok: true, durationMs: relaxed.durationMs, status: "success-relaxed" });
@@ -445,9 +507,20 @@ export async function resilientRequest(routeName, {
               serviceTier: relaxed.serviceTier || null,
               routeKey,
               parameterMode: "relaxed",
+              headroom: {
+                compressed: headroom.compressed,
+                tokensBefore: headroom.tokensBefore,
+                tokensAfter: headroom.tokensAfter,
+                tokensSaved: headroom.tokensSaved || 0,
+                compressionRatio: headroom.compressionRatio,
+                reason: headroom.reason,
+              },
             } : relaxed.content;
           } catch (relaxedError) {
             lastErr = relaxedError;
+            if (signal?.aborted) {
+              throw signal.reason instanceof Error ? signal.reason : relaxedError;
+            }
             err = relaxedError;
           }
         }
@@ -478,7 +551,7 @@ export async function resilientRequest(routeName, {
           message: safeSnippet(err?.message || String(err), 500),
         });
         if (!retryable) break;
-        await sleep(wait);
+        await sleep(wait, signal);
       }
     }
   }
