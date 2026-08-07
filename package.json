@@ -34,7 +34,7 @@
     "express": "^4.19.2",
     "fast-xml-parser": "^5.2.5",
     "googleapis": "^173.0.0",
-    "nanoid": "^5.0.7",
+    "nanoid": "^5.1.16",
     "node-fetch": "^3.3.2",
     "openai": "^4.56.0",
     "p-limit": "^4.0.0",
