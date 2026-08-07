@@ -9,8 +9,8 @@ async function source(path) {
 test("Blotato restores the proven prompt-autofill request for path and UUID templates", async () => {
   const text = await source("services/blotato/utils/autoPublishService.js");
   const request = await source("services/blotato/utils/visualRequest.js");
-  assert.match(text, /templateId:\s*rawId/);
-  assert.match(text, /templateIdCandidates:\s*uniqueTemplateIds\(rawId, normalisedId, requested\)/);
+  assert.match(text, /rawTemplateId:\s*rawId/);
+  assert.match(text, /templateIdCandidates:\s*uniqueTemplateIds\(id, rawId, requested\)/);
   assert.match(text, /buildVisualCreationRequest/);
   assert.match(request, /inputs:\s*manualInputsConfigured \? visualInputs : \{\}/);
   assert.match(request, /prompt,/);
@@ -35,15 +35,15 @@ test("Brevo delivery resolves the populated list and persists an exactly-once ca
   const audience = await source("services/newsletter/brevo/audience.js");
   const campaign = await source("services/newsletter/brevo/campaign.js");
   const ops = await source("services/ops/index.js");
-  assert.match(audience, /chooseExistingList/);
-  assert.match(audience, /audienceNameAliases/);
+  assert.match(audience, /allowCreate: false|allowCreate = true/);
+  assert.match(audience, /Configure NEWSLETTER_AI_EDGE_BREVO_LIST_ID/);
   assert.match(audience, /totalSubscribers/);
-  assert.match(campaign, /sender:\s*\{ id: senderId \}/);
+  assert.match(campaign, /sender:\s*\{ id: sender\.senderId \}/);
   assert.match(campaign, /readCampaignDelivery/);
   assert.match(campaign, /status:\s*"created"/);
   assert.match(campaign, /sendCampaignNow/);
-  assert.match(campaign, /verifyCampaignDispatch/);
-  assert.match(campaign, /DISPATCH_ACCEPTED_STATUSES = new Set\(\["queued", "scheduled", "sent"\]\)/);
+  assert.match(campaign, /getCampaign/);
+  assert.match(campaign, /campaignStatus = "queued"/);
   assert.doesNotMatch(ops, /\["newsletter-readiness", "\/newsletter\/readiness"/);
   assert.match(ops, /newsletter-send.*newsletter-generate/);
 });

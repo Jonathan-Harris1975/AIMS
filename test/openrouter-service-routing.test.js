@@ -56,7 +56,7 @@ test("OpenRouter text routes used by blog, Zernio, RSS and audits resolve spread
     const { getProviderDiagnosticsForRoute } = await import(`../services/shared/utils/ai-service.js?openrouterRoutes=${Date.now()}`);
     const expectedRoutes = {
       blogWeekly: ["OPENROUTER_GOOGLE_2_5_flashlite", "OPENROUTER_GPT_5_6_LUNA", "OPENROUTER_GPT_5_6_SOL"],
-      zernioDaily: ["OPENROUTER_GPT_5_6_LUNA", "OPENROUTER_GOOGLE_2_5_flashlite", "OPENROUTER_GPT_5_6_SOL"],
+      zernioDaily: ["OPENROUTER_CLAUDE_SONNET_5", "OPENROUTER_ANTHROPIC_4_6", "OPENROUTER_GOOGLE_2_5_flashlite"],
       zernioQuiz: ["OPENROUTER_GPT_5_6_LUNA", "OPENROUTER_GOOGLE_2_5_flashlite", "OPENROUTER_GPT_5_6_SOL"],
       rssRewrite: ["OPENROUTER_GPT_5_6_LUNA", "OPENROUTER_GOOGLE_2_5_flashlite", "OPENROUTER_GPT_5_6_SOL"],
       rssShortTitle: ["OPENROUTER_GPT_5_6_LUNA", "OPENROUTER_GOOGLE_2_5_flashlite"],

@@ -47,8 +47,15 @@ function submission({ formId = "260281179574362", submissionId = "900001", email
 class SqliteD1 {
   constructor() {
     this.db = new DatabaseSync(":memory:");
-    this.db.exec(readFileSync(new URL("../services/comms-hub/migrations/0001_comms_hub.sql", import.meta.url), "utf8"));
-    this.db.exec(readFileSync(new URL("../services/comms-hub/migrations/0002_zernio_social.sql", import.meta.url), "utf8"));
+    for (const migration of [
+      "0001_comms_hub.sql",
+      "0002_zernio_social.sql",
+      "0003_ai_workflows.sql",
+      "0004_hardening.sql",
+      "0005_operations_and_channels.sql",
+    ]) {
+      this.db.exec(readFileSync(new URL(`../services/comms-hub/migrations/${migration}`, import.meta.url), "utf8"));
+    }
   }
 
   query(sql, params = []) {
@@ -262,5 +269,6 @@ test("Migration manifest requires all delivered Comms Hub phases", () => {
     "0002_zernio_social",
     "0003_ai_workflows",
     "0004_hardening",
+    "0005_operations_and_channels",
   ]);
 });

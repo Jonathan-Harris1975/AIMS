@@ -108,7 +108,7 @@ test("provider integrations follow current Blotato and OpenRouter contracts", as
   ]);
 
   assert.match(blotatoClient, /if \(useBrandKit === true\) body\.useBrandKit = true/);
-  assert.match(blotatoClient, /`videos\/\$\{encodeURIComponent\(cleaned\)\}`/);
+  assert.match(blotatoClient, /`videos\/creations\/\$\{encodeURIComponent\(cleaned\)\}`/);
   assert.match(autoPublish, /BLOTATO_USE_BRAND_KIT/);
   assert.match(autoPublish, /id,title,name,description,inputs/);
   assert.match(autoPublish, /BLOTATO_VIDEO_PENDING_ERROR_LIMIT", 120, 180/);

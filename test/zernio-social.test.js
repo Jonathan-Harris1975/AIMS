@@ -21,12 +21,12 @@ function applyBaseEnv() {
   process.env.LOG_LEVEL = "silent";
   process.env.ALLOW_EPHEMERAL_STATE = "true";
   process.env.APP_TMP_DIR = path.join(os.tmpdir(), `ai-mgmt-zernio-${Date.now()}-${Math.random().toString(16).slice(2)}`);
-  process.env.OPENROUTER_CHATGPT = "openai/test-model";
-  process.env.OPENROUTER_API_KEY_CHATGPT = "test-key";
-  delete process.env.OPENROUTER_GOOGLE;
-  delete process.env.OPENROUTER_API_KEY_GOOGLE;
-  delete process.env.OPENROUTER_DEEPSEEK;
-  delete process.env.OPENROUTER_API_KEY_DEEPSEEK;
+  process.env.OPENROUTER_API_KEY = "test-key";
+  process.env.OPENROUTER_GPT_5_6_LUNA = "openai/test-luna";
+  process.env.OPENROUTER_CLAUDE_SONNET_5 = "anthropic/test-sonnet";
+  process.env.OPENROUTER_ANTHROPIC_4_6 = "anthropic/test-46";
+  process.env.OPENROUTER_GOOGLE_2_5_flashlite = "google/test-flash-lite";
+  process.env.OPENROUTER_GPT_5_6_SOL = "openai/test-sol";
   delete process.env.ZERNIO_META_API_KEY;
   process.env.ZERNIO_DEFAULT_DRY_RUN = "false";
   process.env.ZERNIO_PROFILE_NAME_EBOOKS = "Ebooks";
@@ -141,7 +141,7 @@ const mockServer = http.createServer(async (req, res) => {
     const parsed = JSON.parse(body || "{}");
     scheduledRequests.push({ endpoint: url.pathname, body: parsed });
     res.writeHead(200, { "content-type": "application/json" });
-    res.end(JSON.stringify({ post: { _id: "post_abc123", status: "scheduled" } }));
+    res.end(JSON.stringify({ post: { _id: "post_abc123", status: "scheduled", scheduledFor: parsed.scheduledFor } }));
     return;
   }
 
@@ -629,9 +629,10 @@ test("Monday verified quote is kept once and localised duplicate is removed", as
   assert.match(source, /Monday commentary is too thin/);
 });
 
-test("Monday lane generates portrait-led dynamic artwork with static fallback", async () => {
+test("Sunday spotlight uses source-grounded dynamic artwork and fails closed without fabricated likeness", async () => {
   const source = await readFile(new URL("../services/zernio/utils/socialScheduler.js", import.meta.url), "utf8");
-  assert.match(source, /Primary subject: \$\{author\}, depicted as the clear human focal point/);
+  assert.match(source, /Do not fabricate or imitate the named person/i);
   assert.match(source, /createSocialArtwork\(/);
-  assert.match(source, /fallbackUrl: lane\.imageUrl/);
+  assert.match(source, /zernio-daily-artwork-unavailable/);
+  assert.doesNotMatch(source, /fallbackUrl: lane\.imageUrl/);
 });

@@ -156,10 +156,10 @@ test("newsletter retains only generated provider artwork and fails closed otherw
   const hero = await readFile(new URL("../services/newsletter/engine/heroImage.js", import.meta.url), "utf8");
   const build = await readFile(new URL("../services/newsletter/engine/buildNewsletter.js", import.meta.url), "utf8");
   assert.match(hero, /createBlogArtwork/);
-  assert.match(hero, /provider-artwork-failed/);
-  assert.match(hero, /imageStatus: result\.fallback \? "fallback" : "generated"/);
+  assert.match(hero, /if \(!result\.ok\)/);
+  assert.match(hero, /return \{ ok: false, error: result\.error, prompt \}/);
   assert.doesNotMatch(hero, /NEWSLETTER_AI_EDGE_FALLBACK_IMAGE_URL/);
-  assert.match(build, /heroImageStatus/);
+  assert.match(build, /if \(!heroImageResult\.ok\)/);
   assert.match(build, /Newsletter editorial content passed but hero image generation failed/);
 });
 

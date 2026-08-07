@@ -10,8 +10,8 @@ test("unified website audit routes are mounted and MAST-facing run endpoint exis
   const digital = read("audits/routes/digitalGrowth.js");
   assert.match(index, /router\.use\("\/website", websiteRoutes\)/);
   assert.match(index, /router\.use\("\/digital-growth", digitalGrowthRoutes\)/);
-  assert.match(website, /router\.post\("\/run", hookdeckDedupe\("audits:website:run"\)/);
-  assert.match(website, /retentionPolicy: "final-pdf-html-json-only"/);
+  assert.match(website, /router\.post\("\/run", requestDedupe\("audits:website:run"\)/);
+  assert.match(website, /retentionPolicy: "final-pdf-html-json-only-after-rams-acceptance; retain-source-evidence-on-failure"/);
   assert.match(digital, /WORKFLOW_ID = "digital-growth-audit\.yml"/);
 });
 
@@ -77,7 +77,7 @@ test("AIMS dispatches RAMS website remediation by exact final JSON key with retr
   assert.match(dispatch, /audit_json_key: auditJsonKey/);
   assert.match(dispatch, /x-idempotency-key/);
   assert.match(routes, /\/jobs\/:sessionId\/rams\/retry/);
-  assert.match(read("audits/utils/websiteAuditPipeline.js"), /Preserve the pipeline invariant on retries too/);
+  assert.match(read("audits/utils/websiteAuditPipeline.js"), /previous dispatch may already have succeeded while temporary cleanup failed/i);
   assert.match(read("audits/utils/websiteAuditPipeline.js"), /cleanupRequired: false/);
   assert.doesNotMatch(index, /seo-aeo-geo-council|mobile-ux-council/);
 });
