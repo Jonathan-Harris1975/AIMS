@@ -28,8 +28,9 @@ const MODE_SPECS = {
   },
   social: {
     format: "square 1:1 social-media editorial image",
-    composition: "one unmistakable focal idea, readable at thumbnail size, with clean depth and no infographic layout",
+    composition: "one uninterrupted photographic scene with one unmistakable focal idea, readable at thumbnail size, and no split-panel, poster, card or infographic layout",
     style: "intelligent modern editorial realism, cinematic lighting, bold controlled colour and natural human or physical context",
+    surfaceRule: "Use text-resistant staging: keep screens dark, blank, turned away or naturally defocused; avoid visible documents, signs, whiteboards, charts, dashboards, floating panels and labelled diagrams. Communicate the idea through physical action, objects, posture, environment and consequence.",
     textRule: "Render only the visual scene. Every surface is clean and unmarked; there is no typography, lettering, numbering, logo, interface copy or watermark.",
   },
   quiz: {
@@ -76,10 +77,11 @@ export function buildModelAwareArtworkPrompt({ model, mode = "podcast", creative
     return [
       `Subject: ${positiveDirection || "a concrete, source-specific artificial-intelligence editorial scene"}`,
       `Action: show the central real-world consequence or decision as a visible physical moment rather than decorative symbolism.`,
+      spec.surfaceRule ? `Scene discipline: ${spec.surfaceRule}` : "",
       `Style: ${spec.style}.`,
       `Context: ${spec.format}; ${spec.composition}.`,
       `Output discipline: ${spec.textRule}`,
-    ].join("\n");
+    ].filter(Boolean).join("\n");
   }
 
   if (family === "recraft") {
@@ -98,13 +100,14 @@ export function buildModelAwareArtworkPrompt({ model, mode = "podcast", creative
   if (family === "seedream") {
     return [
       `FORMAT: ${spec.format}.`,
+      spec.surfaceRule ? `SURFACE AND LAYOUT DISCIPLINE: ${spec.surfaceRule}` : "",
       `MAIN SUBJECT: ${direction || "a concrete, source-specific artificial-intelligence editorial scene"}`,
       `SPATIAL COMPOSITION: ${spec.composition}.`,
       `SUBJECT DETAIL: preserve realistic object identity, materials, proportions and physical relationships.`,
       `LIGHTING AND COLOUR: ${spec.style}; coherent light direction and controlled colour continuity across the whole frame.`,
       `STORY PRIORITY: communicate one clear editorial idea, not a collage of unrelated technology motifs.`,
       `OUTPUT CONSTRAINT: ${spec.textRule}`,
-    ].join("\n");
+    ].filter(Boolean).join("\n");
   }
 
   return [

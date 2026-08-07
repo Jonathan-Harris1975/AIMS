@@ -9,6 +9,24 @@ import { detectImageFormat } from "./imageFormat.js";
 import { parseStructuredJson, strictJsonResponseFormat } from "../../shared/utils/structuredJson.js";
 
 const DEFAULT_THRESHOLD = Math.max(1, Math.min(100, Number(process.env.ARTWORK_VISUAL_QA_THRESHOLD || 80)));
+const DEFAULT_MIN_RELEVANCE = Math.max(0, Math.min(100, Number(process.env.ARTWORK_VISUAL_QA_MIN_RELEVANCE || 70)));
+const DEFAULT_MIN_TEXT_SAFETY = Math.max(0, Math.min(100, Number(process.env.ARTWORK_VISUAL_QA_MIN_TEXT_SAFETY || 90)));
+
+function modeQaNumber(mode, suffix, fallback) {
+  const prefix = String(mode || "editorial").replace(/[^a-z0-9]+/gi, "_").toUpperCase();
+  const raw = process.env[`${prefix}_ARTWORK_VISUAL_QA_${suffix}`];
+  if (raw === undefined || raw === null || String(raw).trim() === "") return fallback;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? Math.max(0, Math.min(100, parsed)) : fallback;
+}
+
+export function artworkVisualQaThresholds(mode = "editorial") {
+  return {
+    threshold: modeQaNumber(mode, "THRESHOLD", DEFAULT_THRESHOLD),
+    minRelevance: modeQaNumber(mode, "MIN_RELEVANCE", DEFAULT_MIN_RELEVANCE),
+    minTextSafety: modeQaNumber(mode, "MIN_TEXT_SAFETY", DEFAULT_MIN_TEXT_SAFETY),
+  };
+}
 
 const ARTWORK_QA_SCHEMA = {
   type: "object",
@@ -64,7 +82,11 @@ function isSpeculativeDefect(value = "") {
   return SPECULATIVE_DEFECT_PATTERN.test(String(value || ""));
 }
 
-export function normaliseArtworkVisualQa(raw, { threshold = DEFAULT_THRESHOLD } = {}) {
+export function normaliseArtworkVisualQa(raw, {
+  threshold = DEFAULT_THRESHOLD,
+  minRelevance = DEFAULT_MIN_RELEVANCE,
+  minTextSafety = DEFAULT_MIN_TEXT_SAFETY,
+} = {}) {
   const parsed = typeof raw === "string" ? extractJsonObject(raw) : raw;
   const reportedDefects = stringArray(parsed?.defects);
   const reportedHardDefects = stringArray(parsed?.hardDefects);
@@ -77,12 +99,14 @@ export function normaliseArtworkVisualQa(raw, { threshold = DEFAULT_THRESHOLD } 
   const composition = numberScore(parsed?.composition);
   const brandFit = numberScore(parsed?.brandFit);
   const hardFailure = hardDefects.length > 0;
-  const pass = !hardFailure && score >= threshold && relevance >= 70 && textSafety >= 90;
+  const pass = !hardFailure && score >= threshold && relevance >= minRelevance && textSafety >= minTextSafety;
 
   return {
     pass,
     score,
     threshold,
+    minRelevance,
+    minTextSafety,
     relevance,
     textSafety,
     composition,
@@ -110,9 +134,10 @@ export function buildArtworkVisualQaPrompt({ mode = "editorial", creativePrompt 
       "Any readable or pseudo-readable typography is a hard failure.",
     ],
     social: [
-      "The image must communicate the supplied post and lane at phone-thumbnail size through one concrete focal idea with a visible, source-supported artificial-intelligence connection.",
-      "Anime, fantasy illustration, unrelated hardware, generic lifestyle imagery or a scene with no visible AI/software/robotics/compute/research/security/governance context is a hard failure.",
-      "Generated labels, callout boxes, dashboards, pseudo-text, infographic panels and decorative UI are hard failures.",
+      "The image must communicate the supplied post and lane at phone-thumbnail size through one concrete focal idea that is credibly compatible with the post's AI-enabled action, consequence or decision.",
+      "Do not require a literal AI symbol, neural-network diagram, dashboard or readable software interface to prove that the subject is AI. Credible compute, robotics, research, security, governance or human-tool context can carry the story without labels.",
+      "Treat unmistakably unrelated subject matter, anime/fantasy drift, a fabricated identifiable likeness of a named person, prominent readable text, or a dominant labelled dashboard/infographic layout as hard failures.",
+      "A broadly relevant workstation, compute or operational scene that lacks specificity is a relevance/composition defect, not a hard failure by itself. A small unreadable or naturally defocused screen graphic is also a soft defect unless it dominates the composition or contains readable text.",
       "Do not require or reward a fabricated likeness of a named person when the brief contains no verified reference image. A source-specific scene, rear-view human, silhouette or other deliberately non-identifiable treatment can satisfy a named-person story. Only flag identity as a hard defect when the pixels falsely present an identifiable person as the named individual or identity itself is an explicit verified-reference requirement.",
     ],
     "social-blog": [
@@ -179,7 +204,7 @@ export async function auditArtworkBase64({ base64, mode = "editorial", creativeP
     });
 
     try {
-      return normaliseArtworkVisualQa(raw);
+      return normaliseArtworkVisualQa(raw, artworkVisualQaThresholds(mode));
     } catch (error) {
       lastError = error;
       if (attempt >= parseAttempts) throw error;

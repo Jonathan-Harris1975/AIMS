@@ -190,6 +190,19 @@ function shouldAuditArtwork(mode) {
   return parseBoolean(process.env.ARTWORK_VISUAL_QA_ENABLED, true) && visualQaModes().has(String(mode || "").toLowerCase());
 }
 
+function shouldUseShortPromptRetry(mode = "podcast") {
+  const normalised = String(mode || "podcast").replace(/[^a-z0-9]+/gi, "_").toUpperCase();
+  const explicit = process.env[`${normalised}_ARTWORK_SHORT_PROMPT_RETRY`];
+  if (explicit !== undefined && explicit !== null && String(explicit).trim() !== "") {
+    return parseBoolean(explicit, false);
+  }
+  // The shortened retry was introduced for podcast artwork. For Zernio
+  // social images it strips the lane-specific grounding and repeatedly
+  // produces generic dashboards/server rooms, so social defaults to off.
+  if (String(mode || "").toLowerCase() === "social") return false;
+  return THRESHOLDS.podcastArtwork.shortPromptRetryEnabled;
+}
+
 function buildQaRepairPrompt(prompt, qa = {}) {
   const defects = [...(qa.hardDefects || []), ...(qa.defects || [])].filter(Boolean).slice(0, 8);
   return [
@@ -394,7 +407,7 @@ async function generateArtworkBase64(prompt, { mode = "podcast", date, signal, g
   // Every provider failed with the full-length prompt. As a last resort,
   // sweep the providers again with a much shorter prompt in case prompt
   // length/complexity contributed to the failures. OB-004 / BSC-OB-005.
-  if (THRESHOLDS.podcastArtwork.shortPromptRetryEnabled) {
+  if (shouldUseShortPromptRetry(mode)) {
     warn("🎨 All artwork providers failed with full prompt; retrying with shortened prompt", { mode });
     for (const provider of providers) {
       if (signal?.aborted) throw signal.reason instanceof Error ? signal.reason : new Error("Artwork generation aborted");
