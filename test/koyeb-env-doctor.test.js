@@ -104,3 +104,48 @@ test("koyeb env doctor validates the narrowed Blotato/state env set", () => {
 
   assert.deepEqual(errors, []);
 });
+
+test("koyeb env doctor rejects invalid core AI and Headroom numeric values", () => {
+  const errors = validateEnvObject({
+    AI_MAX_RETRIES: "banana",
+    AI_MAX_TOKENS: "0",
+    AI_RETRY_BASE_MS: "-1",
+    AI_TEMPERATURE: "3",
+    AI_TIMEOUT: "0",
+    AI_TOP_P: "1.5",
+    HEADROOM_TIMEOUT_MS: "0",
+    HEADROOM_MIN_INPUT_CHARS: "0",
+    HEADROOM_TARGET_RATIO: "1.5",
+    HEADROOM_PROTECT_RECENT: "-1",
+  });
+
+  assert.ok(errors.some((error) => error.key === "AI_MAX_RETRIES" && /numeric/i.test(error.message)));
+  assert.ok(errors.some((error) => error.key === "AI_MAX_TOKENS" && /positive integer/i.test(error.message)));
+  assert.ok(errors.some((error) => error.key === "AI_RETRY_BASE_MS" && /non-negative integer/i.test(error.message)));
+  assert.ok(errors.some((error) => error.key === "AI_TEMPERATURE" && /between 0 and 2/i.test(error.message)));
+  assert.ok(errors.some((error) => error.key === "AI_TIMEOUT" && /positive integer/i.test(error.message)));
+  assert.ok(errors.some((error) => error.key === "AI_TOP_P" && /between 0 and 1/i.test(error.message)));
+  assert.ok(errors.some((error) => error.key === "HEADROOM_TIMEOUT_MS" && /positive integer/i.test(error.message)));
+  assert.ok(errors.some((error) => error.key === "HEADROOM_MIN_INPUT_CHARS" && /positive integer/i.test(error.message)));
+  assert.ok(errors.some((error) => error.key === "HEADROOM_TARGET_RATIO" && /between 0.05 and 1/i.test(error.message)));
+  assert.ok(errors.some((error) => error.key === "HEADROOM_PROTECT_RECENT" && /non-negative integer/i.test(error.message)));
+});
+
+test("koyeb env doctor enforces the global retry floor and accepts zero where runtime supports it", () => {
+  const invalid = validateEnvObject({ AI_MAX_RETRIES: "0" });
+  assert.ok(invalid.some((error) => error.key === "AI_MAX_RETRIES" && /at least 4/i.test(error.message)));
+
+  const valid = validateEnvObject({
+    AI_MAX_RETRIES: "4",
+    AI_RETRY_BASE_MS: "0",
+    AI_EMPTY_COMPLETION_RETRIES_PER_PROVIDER: "0",
+    HEADROOM_PROTECT_RECENT: "0",
+  });
+  assert.deepEqual(valid, []);
+});
+
+test("koyeb env doctor reports out-of-range podcast duration settings", () => {
+  const errors = validateEnvObject({ PODCAST_TARGET_MINUTES: "10", PODCAST_MAX_MINUTES: "90" });
+  assert.ok(errors.some((error) => error.key === "PODCAST_TARGET_MINUTES" && /between 30 and 70/i.test(error.message)));
+  assert.ok(errors.some((error) => error.key === "PODCAST_MAX_MINUTES" && /between 60 and 70/i.test(error.message)));
+});

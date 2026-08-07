@@ -15,7 +15,7 @@ function restoreEnv(snapshot) {
 test("resilientRequest fails over immediately after a provider timeout", async () => {
   const names = [
     "AI_MODEL_STANDARD",
-    "AI_MODEL_FAST",
+    "OPENROUTER_GOOGLE_2_5_flashlite",
     "AI_MODEL_FALLBACK",
     "OPENROUTER_API_KEY",
     "OPENROUTER_API_BASE",
@@ -25,7 +25,7 @@ test("resilientRequest fails over immediately after a provider timeout", async (
   let callCount = 0;
 
   process.env.AI_MODEL_STANDARD = "openai/slow-test-model";
-  process.env.AI_MODEL_FAST = "google/fast-test-model";
+  process.env.OPENROUTER_GOOGLE_2_5_flashlite = "google/fast-test-model";
   delete process.env.AI_MODEL_FALLBACK;
   process.env.OPENROUTER_API_KEY = "sk-or-test-value";
   process.env.OPENROUTER_API_BASE = "https://openrouter.example/api/v1";
