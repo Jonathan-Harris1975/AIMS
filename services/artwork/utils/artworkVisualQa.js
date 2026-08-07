@@ -52,6 +52,12 @@ function stringArray(value) {
   return Array.isArray(value) ? value.map((item) => compact(item, 320)).filter(Boolean).slice(0, 12) : [];
 }
 
+function envFlag(name, fallback = false) {
+  const raw = process.env[name];
+  if (raw === undefined || raw === null || String(raw).trim() === "") return fallback;
+  return ["1", "true", "yes", "on", "y"].includes(String(raw).trim().toLowerCase());
+}
+
 const SPECULATIVE_DEFECT_PATTERN = /\b(?:possible|possibly|appears? to|may be|might be|could be|cannot confirm|can\'t confirm|borderline|if confirmed|at any zoom|potential|seems? to|unclear whether)\b/i;
 
 function isSpeculativeDefect(value = "") {
@@ -107,6 +113,7 @@ export function buildArtworkVisualQaPrompt({ mode = "editorial", creativePrompt 
       "The image must communicate the supplied post and lane at phone-thumbnail size through one concrete focal idea with a visible, source-supported artificial-intelligence connection.",
       "Anime, fantasy illustration, unrelated hardware, generic lifestyle imagery or a scene with no visible AI/software/robotics/compute/research/security/governance context is a hard failure.",
       "Generated labels, callout boxes, dashboards, pseudo-text, infographic panels and decorative UI are hard failures.",
+      "Do not require or reward a fabricated likeness of a named person when the brief contains no verified reference image. A source-specific scene, rear-view human, silhouette or other deliberately non-identifiable treatment can satisfy a named-person story. Only flag identity as a hard defect when the pixels falsely present an identifiable person as the named individual or identity itself is an explicit verified-reference requirement.",
     ],
     "social-blog": [
       "The image must visibly match the selected source story and its stated AI-enabled consequence or decision, not merely the broad topic of AI or an unrelated real-world scene.",
@@ -147,8 +154,14 @@ export async function auditArtworkBase64({ base64, mode = "editorial", creativeP
       sessionId: `${sessionId}-${attempt}`,
       max_tokens: 700,
       temperature: 0.1,
-      reasoning: { effort: "minimal" },
-      response_format: strictJsonResponseFormat("artwork_visual_qa", ARTWORK_QA_SCHEMA),
+      // Claude/OpenRouter vision routes have repeatedly rejected the stricter
+      // optional parameter bundle before succeeding with the portable payload.
+      // JSON is still enforced by the prompt plus deterministic parser; strict
+      // response_format remains opt-in for providers known to support it.
+      reasoning: null,
+      response_format: envFlag("ARTWORK_VISUAL_QA_STRICT_RESPONSE_FORMAT", false)
+        ? strictJsonResponseFormat("artwork_visual_qa", ARTWORK_QA_SCHEMA)
+        : undefined,
       maxRetries: 1,
       signal,
       messages: [

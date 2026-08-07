@@ -95,6 +95,7 @@ export function applyArtworkPromptPolicy(prompt = "", { date, mode = "editorial"
         "SOCIAL EDITORIAL REQUIREMENT: make the image immediately engaging, visibly connected to artificial intelligence, and clearly related to the supplied post topic.",
         "Prefer a concrete person using an AI tool, AI-relevant technical object, compute or robotics environment, research/security/governance consequence, or another source-supported AI-enabled moment over decorative abstract symbolism.",
         "Treat a quote-author name as attribution context only unless the supplied brief explicitly requests a person spotlight; never infer a portrait from attribution alone.",
+        "Do not fabricate the likeness of a named public figure from text alone. Unless verified reference imagery is supplied, represent a named-person story through their source-supported work, field, objects or environment; if a human is useful, keep them anonymous and non-identifiable through rear-view, silhouette or cropped editorial framing.",
         "Avoid anime, fantasy illustration, anonymous corporate people, handshake imagery, generic office teams, unrelated industrial hardware, glowing brains, floating polygons, circuit mandalas, digital snowflakes, abstract neural flowers and stock-photo staging.",
         "Use cinematic lighting, emotional presence, bold but controlled colour, high contrast and modern magazine or YouTube-thumbnail composition.",
       ].join(" ")

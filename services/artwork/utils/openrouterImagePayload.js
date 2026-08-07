@@ -133,13 +133,26 @@ export function makeArtworkHttpError(status, body, provider) {
 
 export function isTransientArtworkError(err) {
   if (err?.nonRetryable) return false;
-  if ([408, 409, 425, 429, 500, 502, 503, 504].includes(Number(err?.status))) return true;
+
+  const status = Number(err?.status ?? err?.statusCode ?? 0);
+  if ([408, 409, 425, 429, 500, 502, 503, 504].includes(status)) return true;
+  if (status >= 400 && status < 500) return false;
 
   const message = String(err?.message || err || "").toLowerCase();
-  return [
-    "premature close", "socket hang up", "econnreset", "etimedout", "fetch failed",
-    "network", "request timed out", "request aborted", "body timeout", "terminated",
-  ].some((needle) => message.includes(needle));
+  const transientSignatures = [
+    /premature close/,
+    /socket hang up/,
+    /\beconnreset\b/,
+    /\betimedout\b/,
+    /fetch failed/,
+    /network (?:error|failure|timeout|unreachable)/,
+    /request timed out/,
+    /request aborted/,
+    /body timeout/,
+    /connection (?:reset|closed|terminated|refused)/,
+    /socket (?:closed|terminated)/,
+  ];
+  return transientSignatures.some((pattern) => pattern.test(message));
 }
 
 export function artworkRetryDelayMs(attempt) {
