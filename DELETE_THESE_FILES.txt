@@ -1,4 +1,0 @@
-Remove these accidental duplicate files from the repo before deployment:
-services/artwork/artwork.js
-services/artwork/artworkPromptPolicy.js
-services/artwork/openrouterImagePayload.js
