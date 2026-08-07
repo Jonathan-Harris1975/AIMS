@@ -42,6 +42,11 @@ const VIDEO_DONE_STATUSES = new Set(["done", "completed", "complete", "success",
 const VIDEO_FAILED_STATUSES = new Set(["creation-from-template-failed", "failed", "error", "cancelled", "canceled", "timed-out", "timeout", "insufficient-credits", "insufficient_credits", "no-credits", "payment-required", "payment_required", "billing-error"]);
 const POST_DONE_STATUSES = new Set(["published", "completed", "complete", "success"]);
 const POST_FAILED_STATUSES = new Set(["failed", "error", "insufficient-credits", "insufficient_credits", "payment-required", "payment_required"]);
+// Mirrors ZERNIO_SCHEDULE_ACCEPTED_STATUSES in services/zernio/utils/socialScheduler.js:
+// a scheduled post is only confirmed once Blotato reports it queued as
+// "scheduled" — an unrecognised or still-pending status is not treated as
+// success.
+const POST_SCHEDULE_ACCEPTED_STATUSES = new Set(["scheduled"]);
 const DEFAULT_AI_STORY_TEMPLATE_UUID = "5903fe43-514d-40ee-a060-0d6628c5f8fd";
 const MODEL_CREDIT_HINTS = Object.freeze({
   image: {
@@ -980,16 +985,56 @@ async function publishAndWait({ platform, pack, mediaUrl, apiKey, channelPreflig
   }
 
   // Render polling remains unchanged and completes before this point. For a
-  // scheduled social post, verify that Blotato accepted the submission once
-  // rather than blocking AIMS until the future publication time.
+  // scheduled social post we don't block AIMS until the future publication
+  // time, but we do need to confirm Blotato actually queued the scheduled
+  // submission rather than trust the initial 201 response alone — a
+  // submission can be accepted and then rejected moments later (invalid
+  // account, insufficient credits, etc). Poll briefly using the configured
+  // verify window, mirroring verifyZernioScheduleResponse in
+  // services/zernio/utils/socialScheduler.js.
   if (scheduledTime) {
+    const verifyAttempts = positiveIntEnv("BLOTATO_SCHEDULE_VERIFY_ATTEMPTS", 12, 60);
+    const verifyIntervalMs = positiveIntEnv("BLOTATO_SCHEDULE_VERIFY_INTERVAL_MS", 3000, 60_000);
+    const requireConfirmation = parseBoolean(process.env.BLOTATO_REQUIRE_SCHEDULE_CONFIRMATION, true);
     let status = null;
-    try {
-      status = await getPostStatus(postSubmissionId, apiKey);
-    } catch (error) {
-      warn("blotato.schedule.status_check_failed", { platform, postSubmissionId, scheduledTime, error: error?.message || String(error) });
+    let value = "";
+    let confirmed = false;
+    let failed = false;
+    let lastError = null;
+
+    for (let attempt = 1; attempt <= verifyAttempts && !confirmed && !failed; attempt += 1) {
+      try {
+        status = await getPostStatus(postSubmissionId, apiKey);
+        lastError = null;
+      } catch (error) {
+        lastError = error;
+        status = null;
+        if (attempt < verifyAttempts) await sleep(verifyIntervalMs);
+        continue;
+      }
+
+      value = String(status?.status || status?.item?.status || "").trim().toLowerCase();
+      failed = POST_FAILED_STATUSES.has(value);
+      confirmed = !failed && POST_SCHEDULE_ACCEPTED_STATUSES.has(value);
+      if (!confirmed && !failed && attempt < verifyAttempts) await sleep(verifyIntervalMs);
     }
-    return { platform, accountId, target, postSubmissionId, post, status, scheduledTime };
+
+    if (requireConfirmation && !confirmed) {
+      warn("blotato.schedule.status_unconfirmed", {
+        platform, postSubmissionId, scheduledTime, verifyAttempts, verifyIntervalMs, failed,
+        lastStatus: value || null,
+        lastError: lastError?.message || null,
+      });
+      const err = new Error(
+        `Blotato did not confirm the scheduled submission for ${platform}${value ? ` (status: ${value})` : ""}${lastError ? `: ${lastError.message}` : ""}`
+      );
+      err.statusCode = failed ? 502 : 409;
+      err.code = "blotato-scheduled-publishing-required";
+      err.details = status;
+      throw err;
+    }
+
+    return { platform, accountId, target, postSubmissionId, post, status, scheduledTime, confirmed };
   }
 
   const maxAttempts = positiveIntEnv("BLOTATO_POST_POLL_ATTEMPTS", 90, 720);
@@ -1090,10 +1135,16 @@ function resolveBlotatoScheduledTime(slot = "am", now = new Date()) {
   const raw = trim(process.env[envKey]);
   if (!/^\d{2}:\d{2}$/.test(raw)) throw new Error(`${envKey} must be configured as HH:mm`);
   const [hour, minute] = raw.split(":").map(Number);
+  // BLOTATO_SCHEDULE_MIN_LEAD_MS is the configured floor on how close to "now"
+  // a scheduled time is allowed to be — Blotato (and the AM/PM operational
+  // windows that trigger this) need real lead time to render and queue the
+  // post, so a slot that has already passed (or is about to) falls back to
+  // "now plus the configured minimum lead", not a hardcoded 10 minutes.
+  const minLeadMs = positiveIntEnv("BLOTATO_SCHEDULE_MIN_LEAD_MS", 10 * 60_000, 6 * 60 * 60_000);
   let scheduled = new Date(londonLocalToUtcIso({ ...london, hour, minute }));
-  if (scheduled.getTime() <= now.getTime() + 120_000) {
-    scheduled = new Date(now.getTime() + 10 * 60_000);
-    warn("blotato.schedule.slot_missed", { envKey, configuredTime: raw, fallbackScheduledTime: scheduled.toISOString() });
+  if (scheduled.getTime() <= now.getTime() + minLeadMs) {
+    scheduled = new Date(now.getTime() + minLeadMs);
+    warn("blotato.schedule.slot_missed", { envKey, configuredTime: raw, minLeadMs, fallbackScheduledTime: scheduled.toISOString() });
   }
   return scheduled.toISOString();
 }
@@ -1361,8 +1412,13 @@ async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOT
       technical: renderedVideoQa.technical || null,
     });
 
+    // Scheduled runs enter a distinct "pre-publish" phase here: script/video
+    // generation is done, but the scheduled submission still needs Blotato's
+    // confirmation (see publishAndWait) before the job can be considered
+    // handed off.
+    const publishPhase = scheduledTime ? { phase: "pre-publish" } : { phase: "publishing" };
     updateJob(lane.jobType, sessionId, {
-      phase: "publishing",
+      ...publishPhase,
       videoId: video.visualId,
       videoDashboardUrl: video.dashboardUrl,
       creditBudget: video.creditBudget,
@@ -1402,6 +1458,18 @@ async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOT
 
     if (failedPublishes.length) {
       warn("blotato.publish_now.platform_failures", { sessionId, lane: lane.slug, failedPublishes });
+    }
+
+    // For scheduled posts, publishAndWait doesn't throw just because Blotato
+    // never confirmed the queued state within the verify window (a status
+    // rejection throws and lands in failedPublishes above; this is the
+    // "we genuinely don't know" case). Surface those separately rather than
+    // letting them disappear into an assumed "scheduled" status.
+    const unconfirmedPublishes = scheduledTime
+      ? publishes.filter((item) => item.confirmed === false).map((item) => ({ platform: item.platform, postSubmissionId: item.postSubmissionId }))
+      : [];
+    if (unconfirmedPublishes.length) {
+      warn("blotato.schedule.platform_unconfirmed", { sessionId, lane: lane.slug, unconfirmedPublishes });
     }
 
     const requireAllChannels = parseBoolean(process.env.BLOTATO_REQUIRE_ALL_CHANNELS, false);
@@ -1461,17 +1529,30 @@ async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOT
       creditEstimateOnly: true,
       actualCreditsUsed: "not_available_from_aims",
       creditSourceOfTruth: "Blotato dashboard",
-      partial: failedPublishes.length > 0,
+      partial: failedPublishes.length > 0 || unconfirmedPublishes.length > 0,
       failedPublishes,
-      posts: publishes.map((item) => ({
-        platform: item.platform,
-        accountId: item.accountId,
-        postSubmissionId: item.postSubmissionId,
-        status: String(item.status?.status || item.status?.item?.status || item.post?.status || (scheduledTime ? "scheduled" : "published")).trim().toLowerCase() || (scheduledTime ? "scheduled" : "published"),
-        target: item.target,
-        post: item.post,
-        rawStatus: item.status,
-      })),
+      unconfirmedPublishes,
+      posts: publishes.map((item) => {
+        // Only fall back to an assumed status when we have no signal at all
+        // (immediate-publish path, or a scheduled post Blotato didn't return
+        // a status object for). A scheduled post that finished verification
+        // unconfirmed must never be reported as "scheduled" — that's the
+        // exact silent-success gap this reporting previously had.
+        const reportedStatus = item.status?.status || item.status?.item?.status || item.post?.status || null;
+        const status = reportedStatus
+          ? String(reportedStatus).trim().toLowerCase()
+          : (scheduledTime ? (item.confirmed === false ? "unconfirmed" : "scheduled") : "published");
+        return {
+          platform: item.platform,
+          accountId: item.accountId,
+          postSubmissionId: item.postSubmissionId,
+          status,
+          confirmed: scheduledTime ? Boolean(item.confirmed) : true,
+          target: item.target,
+          post: item.post,
+          rawStatus: item.status,
+        };
+      }),
       publishes,
       scheduledTime,
       deliveryMode: scheduledTime ? "scheduled" : "immediate",
