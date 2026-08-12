@@ -831,9 +831,8 @@ These names were found in runtime code or deployment checks but are not present 
 
 ### Google APIs / Sheets
 
-- `services/outreach/services/sheetService.js` appends accepted outreach leads to the `Leads` tab.
-- Required variables: `GOOGLE_CLIENT_EMAIL`, `GOOGLE_PRIVATE_KEY`, `GOOGLE_SHEET_ID`.
-- `scripts/sheetService.js` also references the same Google Sheets variables.
+- Outreach accepted lead batches are stored in `R2_BUCKET_COMMS_HUB` under the `outreach/leads/` prefix.
+- Outreach no longer depends on Google Sheets for lead persistence.
 
 ### Outreach providers
 
