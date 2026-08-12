@@ -1,5 +1,0 @@
-Delete this obsolete outreach file after applying the update:
-services/outreach/services/sheetService.js
-
-Reason:
-Outreach no longer persists accepted leads to Google Sheets. Accepted lead batches now go to the Comms Hub R2 bucket via services/outreach/services/leadStore.js.
