@@ -1,6 +1,7 @@
 import { info } from "../../../logger.js";
 import { serpLookup, enrichDomain, shouldBlockDomain } from "./outreachCore.js";
 import { batchValidateEmails } from "./zeroBounceBatch.js";
+import { resolveOutreachThresholds } from "../config.js";
 
 /* ============================================================
    🧠 REPLY-RATE–AWARE SCORING
@@ -92,22 +93,14 @@ export async function serpOutreach(keyword) {
   });
 
   /* ------------------------------
-     🎯 ADAPTIVE ACCEPTANCE
+     🎯 POLICY-DRIVEN ACCEPTANCE
   ------------------------------ */
-  let accepted = enriched.filter(
+  const thresholds = resolveOutreachThresholds();
+  const accepted = enriched.filter(
     (e) =>
-      e.authority.tier !== "D" &&
+      e.authority.totalScore >= thresholds.minAuthorityScore &&
       e.emails.length > 0
   );
-
-  // Relax if yield is poor (never allow junk)
-  if (accepted.length < 3) {
-    accepted = enriched.filter(
-      (e) =>
-        e.authority.totalScore >= 10 &&
-        e.emails.length > 0
-    );
-  }
 
   /* ------------------------------
      📈 PRIORITISE FOR REPLIES
@@ -138,6 +131,8 @@ export async function serpOutreach(keyword) {
     keyword,
     acceptedDomains: accepted.length,
     emails: accepted.reduce((a, b) => a + b.emails.length, 0),
+    testMode: thresholds.testMode,
+    minAuthorityScore: thresholds.minAuthorityScore,
   });
 
   return {

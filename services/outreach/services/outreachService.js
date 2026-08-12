@@ -1,6 +1,7 @@
 import { serpOutreach } from "./serp-OutreachService.js";
 import { extractGoodLeads } from "../utils/filters.js";
-import { appendLeadRows } from "./sheetService.js";
+import { saveLeadBatch } from "./leadStore.js";
+import { resolveOutreachThresholds } from "../config.js";
 
 export async function runKeyword(keyword) {
   const result = await serpOutreach(keyword);
@@ -32,23 +33,16 @@ export async function runKeyword(keyword) {
 
   const good = extractGoodLeads(sourceRows, keyword);
 
-  if (good.length) {
-    const rows = good.map((r) => [
-      r.timestamp,
-      r.keyword,
-      r.domain,
-      r.da,
-      r.serpPosition ?? r.serpPos ?? null,
-      r.email,
-      r.emailScore,
-      r.leadScore,
-    ]);
-    await appendLeadRows(rows);
-  }
+  const thresholds = resolveOutreachThresholds();
+  const storage = good.length
+    ? await saveLeadBatch({ keyword, leads: good, thresholds })
+    : null;
 
   return {
     keyword,
     savedLeads: good.length,
     totalDomains: Array.isArray(result?.domains) ? result.domains.length : 0,
+    thresholds,
+    storage,
   };
 }
