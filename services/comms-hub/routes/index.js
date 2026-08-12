@@ -480,7 +480,7 @@ export function createCommsHubRouter({
         routes: [
           "commsHubTriage", "commsHubModeration", "commsHubSummary",
           "commsHubDraftContact", "commsHubDraftContribute", "commsHubDraftPodcast", "commsHubDraftSocial",
-          "commsHubFollowUp",
+          "commsHubFollowUp", "commsHubDraftComplex",
         ]
           .map((route) => getProviderDiagnosticsForRoute(route)),
       });
