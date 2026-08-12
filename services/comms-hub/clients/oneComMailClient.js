@@ -195,6 +195,18 @@ export class OneComMailClient {
     }
   }
 
+  async getMailboxCursor({ mailbox = "INBOX" } = {}) {
+    return this.withImapSession(async (session) => {
+      const selected = await session.command(`EXAMINE ${quoteImap(mailbox)}`);
+      const uidValidityLine = selected.lines.find((line) => /UIDVALIDITY/i.test(line)) || "";
+      const uidValidity = Number(uidValidityLine.match(/UIDVALIDITY\s+(\d+)/i)?.[1] || 0) || null;
+      const search = await session.command("UID SEARCH ALL");
+      const searchLine = search.lines.find((line) => /^\* SEARCH\b/i.test(line)) || "";
+      const uids = searchLine.replace(/^\* SEARCH\s*/i, "").split(/\s+/).map(Number).filter((value) => Number.isInteger(value) && value > 0);
+      return { mailbox, uidValidity, highestUid: uids.length ? Math.max(...uids) : 0 };
+    });
+  }
+
   async fetchMessages({ mailbox = "INBOX", afterUid = 0, limit = 25 } = {}) {
     const boundedLimit = Math.min(Math.max(Number(limit) || 25, 1), 100);
     return this.withImapSession(async (session) => {
