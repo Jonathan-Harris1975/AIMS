@@ -31,6 +31,8 @@ Implemented capabilities:
 - strict-JSON intent classification and reproducible priority scoring;
 - operator priority overrides with a persisted queue and audit trail;
 - dedicated model routes for triage, moderation, summaries, contact replies, case-study replies, podcast replies, social replies and follow-ups;
+- free-first OpenRouter routing for routine communications with an explicit primary plus two free failovers; all Comms Hub requests enforce Zero Data Retention and deny provider data collection;
+- deterministic complexity escalation: paid models are eligible only for complex conversations (high priority/risk, complex intent, workflow mismatch, or large/multi-action context);
 - approved Cloudflare AI Search instance allow-listing and exact evidence-reference validation;
 - grounded draft generation with British English normalisation;
 - immutable, scope-hashed approval requests for risky replies and moderation actions;
@@ -93,6 +95,8 @@ Phase 3:
 - `CLOUDFLARE_AI_SEARCH_API_TOKEN`
 - `COMMS_HUB_AI_SEARCH_INSTANCES`, a comma-separated allow-list
 - optional AI limits and follow-up worker controls documented in `.env.example`
+- routine model policy: `COMMS_HUB_MODEL_FREE_PRIMARY`, `COMMS_HUB_MODEL_FREE_BACKUP`, `COMMS_HUB_MODEL_FREE_FALLBACK`; complex-only paid policy: `COMMS_HUB_MODEL_PAID_PRIMARY`, `COMMS_HUB_MODEL_PAID_BACKUP`, `COMMS_HUB_MODEL_PAID_FALLBACK`
+- privacy controls: `COMMS_HUB_OPENROUTER_ZDR_ONLY=true` and `COMMS_HUB_OPENROUTER_DATA_COLLECTION=deny`
 
 Phase 4:
 
@@ -103,6 +107,12 @@ Phase 4:
 - `R2_BUCKET_COMMS_HUB_RESTORE`
 - `COMMS_HUB_RESTORE_DATABASE_ID`, which must not equal `D1_UUID` and must point to a fresh empty database for each validation
 - optional health, interval, poll and object-limit controls documented in `.env.example`
+
+### Email first-run safety
+
+`COMMS_HUB_EMAIL_HISTORICAL_BACKFILL_ENABLED=false` is the production-safe default. On the first enabled email poll, AIMS records the mailbox's current highest UID using metadata only and does not fetch or persist historical message bodies. Subsequent polls process only mail arriving after that watermark. Historical backfill must never be enabled during the phased Comms Hub rollout.
+
+Social polling, email polling, autonomous replies, follow-ups and web chat remain disabled until their corresponding test phase is explicitly opened.
 
 ## Deployment order
 

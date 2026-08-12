@@ -19,6 +19,33 @@ import { redactDiagnosticText } from "./domain/redaction.js";
 const MAX_TRANSCRIPT_MESSAGES = 100;
 const MAX_TRANSCRIPT_CHARACTERS = 80_000;
 
+export function classifyCommsComplexity({ intent, priority, moderation, routing, transcript, summary, config = {} }) {
+  const messageCount = Array.isArray(transcript) ? transcript.length : 0;
+  const characterCount = Array.isArray(transcript)
+    ? transcript.reduce((sum, message) => sum + String(message?.body || "").length, 0)
+    : 0;
+  const priorityThreshold = Number(config.aiComplexityPriorityScore ?? 70);
+  const messageThreshold = Number(config.aiComplexityMessageCount ?? 12);
+  const characterThreshold = Number(config.aiComplexityCharacterCount ?? 12_000);
+  const moderationThreshold = Number(config.aiComplexityModerationSeverity ?? 0.55);
+  const reasons = [];
+
+  if (Number(priority?.score || 0) >= priorityThreshold) reasons.push("high_priority");
+  if (Number(moderation?.severity || 0) >= moderationThreshold || ["high", "critical"].includes(String(moderation?.riskLevel || ""))) reasons.push("moderation_risk");
+  if (["complaint", "support_request", "commercial_enquiry"].includes(String(intent?.intent || ""))) reasons.push("complex_intent");
+  if (routing?.mismatch) reasons.push("workflow_mismatch");
+  if (messageCount >= messageThreshold) reasons.push("long_conversation");
+  if (characterCount >= characterThreshold) reasons.push("large_context");
+  if (Array.isArray(summary?.unresolvedActions) && summary.unresolvedActions.length >= 3) reasons.push("multiple_unresolved_actions");
+
+  return Object.freeze({
+    complex: reasons.length > 0,
+    reasons: Object.freeze(reasons),
+    messageCount,
+    characterCount,
+  });
+}
+
 function conversationTranscript(conversation) {
   const selected = [];
   let characters = 0;
@@ -158,7 +185,10 @@ export class CommsHubAiWorkflowService {
         id: stableId("evi", run.id, item.indexId, item.sourceReference, item.contentSha256),
       }));
 
-      const draftRoute = operation === "follow_up" ? "commsHubFollowUp" : policy.modelRoute;
+      const complexity = classifyCommsComplexity({ intent, priority, moderation, routing, transcript, summary, config: this.context.config });
+      const draftRoute = operation === "follow_up"
+        ? "commsHubFollowUp"
+        : complexity.complex ? "commsHubDraftComplex" : policy.modelRoute;
       const draftCall = await requestJson(aiRequest, draftRoute, [
         policy.purpose,
         operation === "follow_up" ? "This is a scheduled follow-up. Refer only to the unresolved dependency and do not repeat the full earlier reply." : "",
@@ -229,6 +259,7 @@ export class CommsHubAiWorkflowService {
         routing,
         priority,
         queue,
+        complexity,
         moderation,
         summary,
         evidence,
@@ -243,11 +274,11 @@ export class CommsHubAiWorkflowService {
           evidenceIds: usedEvidence.map((item) => item.id),
           provider: draftCall.result.providerId,
           model: draftCall.result.model,
-          metadata: { citedSourceReferences: citedReferences, approvalReasons: approvalPolicy.reasons },
+          metadata: { citedSourceReferences: citedReferences, approvalReasons: approvalPolicy.reasons, modelRoute: draftRoute, complexity },
         },
         approval,
         followUp,
-        model: { provider: draftCall.result.providerId, model: draftCall.result.model },
+        model: { provider: draftCall.result.providerId, model: draftCall.result.model, route: draftRoute, complexity },
         promptSha256: sha256Hex(JSON.stringify({ common, policy, evidence: evidencePrompt(evidence) })),
         responseSha256: sha256Hex(allResponses),
       });
@@ -259,6 +290,7 @@ export class CommsHubAiWorkflowService {
         routing,
         priority,
         queue,
+        complexity,
         moderation,
         summary,
         evidenceCount: evidence.length,
