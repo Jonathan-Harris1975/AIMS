@@ -60,6 +60,24 @@ export class CommsHubEmailPollWorker {
         leaseExpiresAt: new Date(now.getTime() + this.context.config.emailPollLeaseMs).toISOString(),
       });
       if (!state) return { skipped: true, reason: 'not_due' };
+
+      // First-run safety: never ingest historical mailbox content unless an
+      // operator has explicitly enabled historical backfill. Establish the
+      // current UID watermark using metadata only, then process only messages
+      // arriving after that baseline on subsequent polls.
+      if (Number(state.last_uid || 0) === 0 && !this.context.config.emailHistoricalBackfillEnabled) {
+        const cursor = await this.context.oneComMail.getMailboxCursor({ mailbox });
+        await this.context.operationsRepository.completeEmailPollState({
+          accountKey,
+          mailbox,
+          workerId: this.workerId,
+          lastUid: cursor.highestUid,
+          uidValidity: cursor.uidValidity,
+          nextAttemptAt: new Date(Date.now() + this.context.config.emailPollMs).toISOString(),
+        });
+        return { skipped: true, reason: 'historical_baseline_established', highestUid: cursor.highestUid };
+      }
+
       const fetched = await this.context.oneComMail.fetchMessages({
         mailbox,
         afterUid: Number(state.last_uid || 0),
