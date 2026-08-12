@@ -29,7 +29,7 @@ test("current external-provider contracts stay aligned", async () => {
     readFile(new URL("../services/shared/utils/podcastIndexClient.js", import.meta.url), "utf8"),
     readFile(new URL("../services/cloudflare-purge/utils/purgeCloudflareCache.js", import.meta.url), "utf8"),
     readFile(new URL("../services/script/utils/getWeatherSummary.js", import.meta.url), "utf8"),
-    readFile(new URL("../services/outreach/services/sheetService.js", import.meta.url), "utf8"),
+    readFile(new URL("../services/outreach/services/leadStore.js", import.meta.url), "utf8"),
     readFile(new URL("../.github/workflows/weekly-podcast-site-sync.yml", import.meta.url), "utf8"),
     readFile(new URL("../scripts/envBootstrap.js", import.meta.url), "utf8"),
     readFile(new URL("../services/tts/utils/ttsProcessor.js", import.meta.url), "utf8"),
@@ -75,7 +75,7 @@ test("current external-provider contracts stay aligned", async () => {
   assert.match(aiSearch, /max_num_results:/);
   assert.match(cloudflarePurge, /\/zones\/\$\{encodeURIComponent\(config\.zoneId\)\}\/purge_cache/);
 
-  // Jotform, Podcast Index, WeatherAPI/RapidAPI and Google Sheets.
+  // Jotform, Podcast Index, WeatherAPI/RapidAPI and outreach R2 storage.
   assert.match(jotform, /headers: \{ accept: "application\/json", APIKEY: this\.config\.jotformApiKey \}/);
   assert.match(jotform, /\/submission\/\$\{encodeURIComponent\(submissionId\)\}/);
   assert.match(podcastIndex, /https:\/\/api\.podcastindex\.org\/api\/1\.0/);
@@ -85,8 +85,8 @@ test("current external-provider contracts stay aligned", async () => {
   assert.match(weather, /weatherapi-com\.p\.rapidapi\.com/);
   assert.match(weather, /\/current\.json\?q=/);
   assert.match(weather, /"x-rapidapi-key": apiKey/);
-  assert.match(sheets, /https:\/\/www\.googleapis\.com\/auth\/spreadsheets/);
-  assert.match(sheets, /sheets\.spreadsheets\.values\.append/);
+  assert.match(sheets, /putJson\("commsHub"/);
+  assert.match(sheets, /outreachLeadPrefix/);
 
   // Amazon Polly and Cloudflare R2 S3-compatible API.
   assert.match(polly, /new SynthesizeSpeechCommand\(/);
