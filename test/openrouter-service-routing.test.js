@@ -18,6 +18,14 @@ const OPENROUTER_ENV_NAMES = [
   "OPENROUTER_API_KEY_ART",
   "OPENROUTER_API_KEY_ART_BACKUP",
   "BLOTATO_SCRIPT_MODEL",
+  "COMMS_HUB_MODEL_FREE_PRIMARY",
+  "COMMS_HUB_MODEL_FREE_BACKUP",
+  "COMMS_HUB_MODEL_FREE_FALLBACK",
+  "COMMS_HUB_MODEL_PAID_PRIMARY",
+  "COMMS_HUB_MODEL_PAID_BACKUP",
+  "COMMS_HUB_MODEL_PAID_FALLBACK",
+  "COMMS_HUB_OPENROUTER_ZDR_ONLY",
+  "COMMS_HUB_OPENROUTER_DATA_COLLECTION",
 ];
 
 function snapshotEnv(names) {
@@ -44,6 +52,14 @@ function applySpreadsheetOpenRouterEnv() {
   process.env.OPENROUTER_API_KEY = "sk-or-global-test-value";
   process.env.OPENROUTER_ART = "recraft/recraft-v4.1";
   process.env.BLOTATO_SCRIPT_MODEL = "anthropic/claude-sonnet-4-5";
+  process.env.COMMS_HUB_MODEL_FREE_PRIMARY = "openai/gpt-oss-120b:free";
+  process.env.COMMS_HUB_MODEL_FREE_BACKUP = "google/gemma-4-31b-it:free";
+  process.env.COMMS_HUB_MODEL_FREE_FALLBACK = "inclusionai/ling-3.0-flash:free";
+  process.env.COMMS_HUB_MODEL_PAID_PRIMARY = "anthropic/claude-sonnet-4.6";
+  process.env.COMMS_HUB_MODEL_PAID_BACKUP = "openai/gpt-5.6-sol";
+  process.env.COMMS_HUB_MODEL_PAID_FALLBACK = "anthropic/claude-opus-4.7";
+  process.env.COMMS_HUB_OPENROUTER_ZDR_ONLY = "true";
+  process.env.COMMS_HUB_OPENROUTER_DATA_COLLECTION = "deny";
   delete process.env.OPENROUTER_API_KEY_ART;
   delete process.env.OPENROUTER_API_KEY_ART_BACKUP;
 }
@@ -106,6 +122,67 @@ test("blotatoNewsShort route resolves with highQuality before standard in fallba
     assert.ok(hqIdx < stdIdx || stdIdx === -1, "highQuality must appear before standard in blotatoNewsShort chain");
   } finally {
     restoreEnv(oldEnv);
+  }
+});
+
+test("Comms Hub routes use three free models by default and paid models only on the complex route", async () => {
+  const oldEnv = snapshotEnv(OPENROUTER_ENV_NAMES);
+  applySpreadsheetOpenRouterEnv();
+
+  try {
+    const { getProviderDiagnosticsForRoute } = await import(`../services/shared/utils/ai-service.js?commsModelPolicy=${Date.now()}`);
+    const routine = getProviderDiagnosticsForRoute("commsHubDraftSocial").configuredProviders.filter((p) => p.configured);
+    assert.deepEqual(routine.map((p) => p.model), [
+      "openai/gpt-oss-120b:free",
+      "google/gemma-4-31b-it:free",
+      "inclusionai/ling-3.0-flash:free",
+    ]);
+    assert.ok(routine.every((p) => p.apiKeyEnv === "OPENROUTER_API_KEY"));
+
+    const complex = getProviderDiagnosticsForRoute("commsHubDraftComplex").configuredProviders.filter((p) => p.configured);
+    assert.deepEqual(complex.map((p) => p.model), [
+      "anthropic/claude-sonnet-4.6",
+      "openai/gpt-5.6-sol",
+      "anthropic/claude-opus-4.7",
+    ]);
+  } finally {
+    restoreEnv(oldEnv);
+  }
+});
+
+test("Comms Hub OpenRouter requests enforce ZDR and deny data collection", async () => {
+  const oldEnv = snapshotEnv(OPENROUTER_ENV_NAMES);
+  const oldFetch = globalThis.fetch;
+  applySpreadsheetOpenRouterEnv();
+  const payloads = [];
+
+  globalThis.fetch = async (_url, options = {}) => {
+    payloads.push(JSON.parse(options.body));
+    return {
+      ok: true,
+      json: async () => ({
+        model: "openai/gpt-oss-120b:free",
+        choices: [{ message: { content: JSON.stringify({ ok: true }) } }],
+        usage: {},
+      }),
+    };
+  };
+
+  try {
+    const { resilientRequest } = await import(`../services/shared/utils/ai-service.js?commsPrivacy=${Date.now()}`);
+    await resilientRequest("commsHubTriage", {
+      sessionId: "comms-privacy-test",
+      messages: [{ role: "user", content: "Return JSON" }],
+      response_format: { type: "json_object" },
+      maxRetries: 0,
+      timeoutMs: 1000,
+    });
+    assert.equal(payloads.length, 1);
+    assert.equal(payloads[0].provider?.zdr, true);
+    assert.equal(payloads[0].provider?.data_collection, "deny");
+  } finally {
+    restoreEnv(oldEnv);
+    globalThis.fetch = oldFetch;
   }
 });
 

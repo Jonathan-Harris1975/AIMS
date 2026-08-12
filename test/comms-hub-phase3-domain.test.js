@@ -277,6 +277,7 @@ test("AI analysis persists intent, priority, evidence, summary, draft, approval 
     commsHubModeration: { sentiment: "neutral", abuseLabel: "none", confidence: 0.99, severity: 0.1, rationale: "No abuse", recommendedAction: "reply" },
     commsHubSummary: { summary: "A podcast contribution includes a supporting URL.", unresolvedActions: ["Review the source"], sourceMessageIds: [messageId], nextAction: "Review evidence", followUpNeeded: true, followUpReason: "Review still pending", followUpHours: 72 },
     commsHubDraftPodcast: { bodyText: "Thank you for the contribution. We will review the supplied source through the automated podcast contribution process.", evidenceSourceReferences: ["https://docs.example.com/podcast-process"] },
+    commsHubDraftComplex: { bodyText: "Thank you for the contribution. We will review the supplied source through the automated podcast contribution process.", evidenceSourceReferences: ["https://docs.example.com/podcast-process"] },
   };
   const requestedRoutes = [];
   const aiRequest = async (routeName) => {
@@ -318,7 +319,9 @@ test("AI analysis persists intent, priority, evidence, summary, draft, approval 
   assert.equal(result.routing.selectedWorkflow, "podcast_enquiry_intake");
   assert.equal(result.routing.mismatch, false);
   assert.equal(result.queue.key, "priority_review");
-  assert.equal(requestedRoutes.at(-1), "commsHubDraftPodcast");
+  assert.equal(requestedRoutes.at(-1), "commsHubDraftComplex");
+  assert.equal(result.complexity.complex, true);
+  assert.ok(result.complexity.reasons.includes("high_priority"));
 
   const state = await aiRepository.getConversationAiState(conversationId);
   assert.equal(state.state.intent, "podcast_contribution");
