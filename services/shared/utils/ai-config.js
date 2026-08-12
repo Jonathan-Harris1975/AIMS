@@ -75,6 +75,43 @@ const gpt56Sol = provider(
   [...SHARED_OPENROUTER_KEY, "OPENROUTER_API_KEY_GPT_5_6_SOL", "OPENROUTER_API_KEY_GPT56_SOL"]
 );
 
+
+const commsFreePrimary = provider(
+  "commsFreePrimary",
+  ["COMMS_HUB_MODEL_FREE_PRIMARY"],
+  SHARED_OPENROUTER_KEY
+);
+
+const commsFreeBackup = provider(
+  "commsFreeBackup",
+  ["COMMS_HUB_MODEL_FREE_BACKUP"],
+  SHARED_OPENROUTER_KEY
+);
+
+const commsFreeFallback = provider(
+  "commsFreeFallback",
+  ["COMMS_HUB_MODEL_FREE_FALLBACK"],
+  SHARED_OPENROUTER_KEY
+);
+
+const commsPaidPrimary = provider(
+  "commsPaidPrimary",
+  ["COMMS_HUB_MODEL_PAID_PRIMARY"],
+  SHARED_OPENROUTER_KEY
+);
+
+const commsPaidBackup = provider(
+  "commsPaidBackup",
+  ["COMMS_HUB_MODEL_PAID_BACKUP"],
+  SHARED_OPENROUTER_KEY
+);
+
+const commsPaidFallback = provider(
+  "commsPaidFallback",
+  ["COMMS_HUB_MODEL_PAID_FALLBACK"],
+  SHARED_OPENROUTER_KEY
+);
+
 const newsletterEditorial = provider(
   "newsletterEditorial",
   ["NEWSLETTER_MODEL_EDITORIAL"],
@@ -121,6 +158,12 @@ const modelRegistry = {
   claudeSonnet5,
   claudeOpus47,
   gpt56Sol,
+  commsFreePrimary,
+  commsFreeBackup,
+  commsFreeFallback,
+  commsPaidPrimary,
+  commsPaidBackup,
+  commsPaidFallback,
   newsletterEditorial,
 };
 
@@ -190,18 +233,19 @@ export const aiConfig = {
     newsletterAudienceReview: routeChain(["highQuality", "audit"], ["claudeSonnet5", "anthropic46"]),
     newsletterCouncilChair: routeChain(["audit", "highQuality"], ["claudeSonnet5", "anthropic46"]),
     newsletterHeroPrompt: routeChain(["summary", "fast", "fallback"], ["meta", "google25FlashLite"]),
-    // Comms Hub Phase 3. Triage and moderation favour structured JSON; drafting
-    // and summarisation use independent routes so a single model does not both
-    // propose and approve a high-risk response.
-    commsHubTriage: routeChain(["json", "audit", "standard"], ["gpt56Sol", "claudeSonnet5", "google25FlashLite"]),
-    commsHubModeration: routeChain(["audit", "json", "highQuality"], ["claudeSonnet5", "gpt56Sol", "anthropic46"]),
-    commsHubSummary: routeChain(["summary", "json", "fast"], ["gpt56Luna", "google25FlashLite", "gpt56Sol"]),
-    commsHubDraft: routeChain(["highQuality", "standard", "audit"], ["claudeSonnet5", "gpt56Sol", "anthropic46"]),
-    commsHubDraftContact: routeChain(["standard", "highQuality", "audit"], ["gpt56Sol", "claudeSonnet5", "anthropic46"]),
-    commsHubDraftContribute: routeChain(["highQuality", "standard", "audit"], ["claudeSonnet5", "gpt56Sol", "anthropic46"]),
-    commsHubDraftPodcast: routeChain(["highQuality", "audit", "standard"], ["claudeSonnet5", "anthropic46", "gpt56Sol"]),
-    commsHubDraftSocial: routeChain(["fast", "standard", "highQuality"], ["gpt56Luna", "gpt56Sol", "claudeSonnet5"]),
-    commsHubFollowUp: routeChain(["summary", "fast", "json"], ["gpt56Luna", "google25FlashLite", "gpt56Sol"]),
+    // Comms Hub: routine communications are free-first and privacy-gated.
+    // Paid models are isolated to the deterministic complex-chat route only.
+    // The three free targets are explicit so failover remains predictable.
+    commsHubTriage: routeChain(["commsFreePrimary", "commsFreeBackup", "commsFreeFallback"], []),
+    commsHubModeration: routeChain(["commsFreePrimary", "commsFreeBackup", "commsFreeFallback"], []),
+    commsHubSummary: routeChain(["commsFreePrimary", "commsFreeBackup", "commsFreeFallback"], []),
+    commsHubDraft: routeChain(["commsFreePrimary", "commsFreeBackup", "commsFreeFallback"], []),
+    commsHubDraftContact: routeChain(["commsFreePrimary", "commsFreeBackup", "commsFreeFallback"], []),
+    commsHubDraftContribute: routeChain(["commsFreePrimary", "commsFreeBackup", "commsFreeFallback"], []),
+    commsHubDraftPodcast: routeChain(["commsFreePrimary", "commsFreeBackup", "commsFreeFallback"], []),
+    commsHubDraftSocial: routeChain(["commsFreePrimary", "commsFreeBackup", "commsFreeFallback"], []),
+    commsHubFollowUp: routeChain(["commsFreePrimary", "commsFreeBackup", "commsFreeFallback"], []),
+    commsHubDraftComplex: routeChain(["commsPaidPrimary", "commsPaidBackup", "commsPaidFallback"], []),
   },
 
   commonParams: { temperature: 0.65, top_p: 0.9, timeout: 90000 },

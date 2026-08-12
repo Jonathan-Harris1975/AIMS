@@ -154,7 +154,7 @@ function parseCsv(value) {
     .filter(Boolean);
 }
 
-function getOpenRouterProviderOptions({ response_format } = {}) {
+function getOpenRouterProviderOptions({ response_format, routeKey } = {}) {
   const provider = {};
   const sortBy = String(process.env.OPENROUTER_SORT_BY || "").trim().toLowerCase();
   if (["price", "throughput", "latency"].includes(sortBy)) {
@@ -180,8 +180,17 @@ function getOpenRouterProviderOptions({ response_format } = {}) {
     : Boolean(response_format && requireParametersForJson);
   if (requireParameters) provider.require_parameters = true;
 
-  const dataCollection = String(process.env.OPENROUTER_DATA_COLLECTION || "").trim().toLowerCase();
+  const isCommsHubRoute = String(routeKey || "").startsWith("commsHub");
+  const commsDataCollection = String(process.env.COMMS_HUB_OPENROUTER_DATA_COLLECTION || "deny").trim().toLowerCase();
+  const dataCollection = isCommsHubRoute
+    ? commsDataCollection
+    : String(process.env.OPENROUTER_DATA_COLLECTION || "").trim().toLowerCase();
   if (["allow", "deny"].includes(dataCollection)) provider.data_collection = dataCollection;
+
+  if (isCommsHubRoute) {
+    const zdrOnly = parseBoolean(process.env.COMMS_HUB_OPENROUTER_ZDR_ONLY, true) !== false;
+    if (zdrOnly) provider.zdr = true;
+  }
 
   return Object.keys(provider).length ? provider : undefined;
 }
@@ -257,7 +266,7 @@ function extractMessageContent(json) {
   return "";
 }
 
-async function callOpenRouter({ providerId, model, apiKey, messages, max_tokens, temperature, top_p, response_format, headers, timeoutMs, reasoning, signal, relaxedParameters = false }) {
+async function callOpenRouter({ routeKey, providerId, model, apiKey, messages, max_tokens, temperature, top_p, response_format, headers, timeoutMs, reasoning, signal, relaxedParameters = false }) {
   if (signal?.aborted) {
     throw signal.reason instanceof Error ? signal.reason : Object.assign(new Error("OpenRouter request aborted"), { name: "AbortError", code: "AI_REQUEST_ABORTED" });
   }
@@ -265,13 +274,16 @@ async function callOpenRouter({ providerId, model, apiKey, messages, max_tokens,
   // OpenRouter still accepts max_tokens for compatibility, but the current
   // Chat Completions contract deprecates it in favour of max_completion_tokens.
   const payload = { model, messages, max_completion_tokens: max_tokens };
+  // Provider privacy/routing controls are retained even during compatibility
+  // relaxation. Relaxing optional model parameters must never relax Comms Hub
+  // ZDR or data-collection policy.
+  const providerOptions = getOpenRouterProviderOptions({ response_format: relaxedParameters ? undefined : response_format, routeKey });
+  if (providerOptions) payload.provider = providerOptions;
+
   if (!relaxedParameters) {
     payload.temperature = temperature;
     payload.top_p = top_p;
     if (response_format) payload.response_format = response_format;
-
-    const providerOptions = getOpenRouterProviderOptions({ response_format });
-    if (providerOptions) payload.provider = providerOptions;
 
     const serviceTier = getServiceTier();
     if (serviceTier) payload.service_tier = serviceTier;
@@ -417,7 +429,7 @@ export async function resilientRequest(routeName, {
     let compatibilityRelaxationUsed = false;
     for (let attempt = 0; attempt <= effectiveMaxRetries; attempt++) {
       try {
-        const result = await callOpenRouter({ providerId, model: provider.name, apiKey: provider.apiKey, messages: providerMessages, max_tokens, temperature, top_p, response_format, headers, timeoutMs, reasoning, signal });
+        const result = await callOpenRouter({ routeKey, providerId, model: provider.name, apiKey: provider.apiKey, messages: providerMessages, max_tokens, temperature, top_p, response_format, headers, timeoutMs, reasoning, signal });
         if (shouldLogUsage()) {
           info("ai.request.usage", {
             routeName,
@@ -480,6 +492,7 @@ export async function resilientRequest(routeName, {
           });
           try {
             const relaxed = await callOpenRouter({
+              routeKey,
               providerId,
               model: provider.name,
               apiKey: provider.apiKey,
