@@ -1,33 +1,12 @@
 // services/outreach/utils/filters.js
 
-/**
- * Outreach scoring thresholds
- * These are policy-level controls and are env-driven.
- *
- * Keep validation lazy so the whole application can boot even when
- * outreach-specific configuration is absent.
- */
-function readNumericEnv(name) {
-  const raw = process.env[name];
-
-  if (raw === undefined || String(raw).trim() === "") {
-    throw new Error(`${name} is required for outreach lead filtering`);
-  }
-
-  const value = Number(raw);
-  if (Number.isNaN(value)) {
-    throw new Error(`${name} must be a number`);
-  }
-
-  return value;
-}
+import { resolveOutreachThresholds } from "../config.js";
 
 /**
- * Filters and scores outreach leads
+ * Filters and scores outreach leads using the active production/test policy.
  */
-export function extractGoodLeads(results = [], keyword) {
-  const MIN_LEAD_SCORE = readNumericEnv("OUTREACH_MIN_LEAD_SCORE");
-  const MIN_EMAIL_SCORE = readNumericEnv("OUTREACH_MIN_EMAIL_SCORE");
+export function extractGoodLeads(results = [], keyword, env = process.env) {
+  const thresholds = resolveOutreachThresholds(env);
   const now = new Date().toISOString();
 
   return results
@@ -49,7 +28,7 @@ export function extractGoodLeads(results = [], keyword) {
     })
     .filter(
       (r) =>
-        r.leadScore >= MIN_LEAD_SCORE &&
-        r.emailScore >= MIN_EMAIL_SCORE
+        r.leadScore >= thresholds.minLeadScore &&
+        r.emailScore >= thresholds.minEmailScore
     );
 }
