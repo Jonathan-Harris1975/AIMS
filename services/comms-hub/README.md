@@ -189,7 +189,8 @@ Jotform file-upload answers are persisted as attachment references with the form
 Required runtime settings for attachment ingestion:
 
 - `R2_BUCKET_COMMS_HUB_PRIVATE` — private R2 bucket used for attachment objects.
-- `COMMS_HUB_ATTACHMENT_SCANNER_URL`
-- `COMMS_HUB_ATTACHMENT_SCANNER_TOKEN`
+- `COMMS_HUB_ATTACHMENT_SCANNER_PROVIDER=cloudmersive`
+- `COMMS_HUB_ATTACHMENT_SCANNER_URL=https://api.cloudmersive.com/virus/scan/file`
+- `COMMS_HUB_ATTACHMENT_SCANNER_TOKEN` (Cloudmersive API key; secret)
 
 Stored objects are never exposed through a public R2 URL. Authenticated operators retrieve them through `GET /comms-hub/attachments/:attachmentId`, which re-validates the stored SHA-256 checksum before returning the file.
