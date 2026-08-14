@@ -175,18 +175,15 @@ export function buildJotformIntake({ formId, submissionId, route, submission, co
   };
   const payloadJson = JSON.stringify(payload);
   const payloadSha256 = sha256Hex(payloadJson);
-  const receipt = {
-    schemaVersion: 1,
-    eventId,
-    conversationId,
-    provider: "jotform",
-    sourceReferenceSha256: sha256Hex(sourceReference),
+  const storageSummary = Object.freeze({
+    formKey: route.key,
     workflow: route.workflow,
-    receivedAt,
-    processedAt,
-    payloadSha256,
+    answerCount: answers.length,
     attachmentCount: attachments.length,
-  };
+    hasEmail: Boolean(contact.email),
+    hasName: Boolean(contact.name),
+    acknowledgementProvider: "jotform",
+  });
 
   return Object.freeze({
     eventId,
@@ -197,7 +194,7 @@ export function buildJotformIntake({ formId, submissionId, route, submission, co
     archiveKey,
     payloadJson,
     payloadSha256,
-    receiptJson: JSON.stringify(receipt, null, 2),
+    storageSummary,
     processedAt,
     receivedAt,
     contact,
