@@ -191,6 +191,23 @@ export class CommsHubRepository {
     };
   }
 
+  async markAttachmentStatus(attachmentId, status, metadata = null) {
+    const safeStatus = String(status || "").trim().slice(0, 50);
+    if (!attachmentId || !safeStatus) return false;
+    if (metadata && Object.keys(metadata).length) {
+      await this.d1.query(
+        `UPDATE comms_hub_attachments
+            SET status = ?,
+                metadata_json = json_patch(COALESCE(metadata_json, '{}'), ?)
+          WHERE id = ?`,
+        [safeStatus, json(metadata), attachmentId]
+      );
+    } else {
+      await this.d1.query(`UPDATE comms_hub_attachments SET status = ? WHERE id = ?`, [safeStatus, attachmentId]);
+    }
+    return true;
+  }
+
   async getArchiveCounts() {
     const result = await this.d1.query(
       `SELECT archive_status AS status, COUNT(*) AS count
