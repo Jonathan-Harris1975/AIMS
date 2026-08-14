@@ -1,127 +1,206 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "service": "AIMS",
-  "principle": "private-by-default; public only when anonymous delivery is required",
+  "principle": "private-by-default; public only for anonymous published delivery",
+  "migrationMode": "compatibility-public-urls-remain-temporarily-enabled-until-dependent-repos-are-updated",
   "buckets": [
     {
       "bucket": "metasystem",
       "access": "private",
+      "aliases": [
+        "metasystem",
+        "metaSystem"
+      ],
       "publicBaseEnv": "R2_PUBLIC_BASE_URL_META_SYSTEM",
+      "compatibilityPublicUrl": true,
       "reason": "durable state, dedupe, progress and system files"
     },
     {
       "bucket": "comms-hub",
       "access": "private",
+      "aliases": [
+        "commsHub",
+        "commshub",
+        "comms-hub"
+      ],
       "publicBaseEnv": "R2_PUBLIC_BASE_URL_COMMS_HUB",
-      "reason": "redacted receipts and outreach operational objects"
+      "compatibilityPublicUrl": true,
+      "reason": "operational receipts and outreach lead objects"
     },
     {
       "bucket": "comms-hub-private",
       "access": "private",
+      "aliases": [],
       "publicBaseEnv": null,
+      "compatibilityPublicUrl": false,
       "reason": "attachments, quarantine and sensitive linked objects"
+    },
+    {
+      "bucket": "audits",
+      "access": "private",
+      "aliases": [
+        "audits",
+        "audit"
+      ],
+      "publicBaseEnv": "R2_PUBLIC_BASE_URL_AUDITS",
+      "compatibilityPublicUrl": true,
+      "reason": "audit artefacts are operational; RAMS migration must complete before public endpoint is disabled"
+    },
+    {
+      "bucket": "raw-text",
+      "access": "private",
+      "aliases": [
+        "rawtext",
+        "rawText",
+        "raw-text"
+      ],
+      "publicBaseEnv": "R2_PUBLIC_BASE_URL_RAW_TEXT",
+      "compatibilityPublicUrl": true,
+      "reason": "intermediate script/TTS chunks"
+    },
+    {
+      "bucket": "podcast-chunks",
+      "access": "private",
+      "aliases": [
+        "chunks",
+        "podcast-chunks",
+        "rawAudio",
+        "rawaudio",
+        "raw-audio"
+      ],
+      "publicBaseEnv": "R2_PUBLIC_BASE_URL_CHUNKS",
+      "compatibilityPublicUrl": true,
+      "reason": "intermediate TTS audio"
+    },
+    {
+      "bucket": "podcast-merged",
+      "access": "private",
+      "aliases": [
+        "merged"
+      ],
+      "publicBaseEnv": "R2_PUBLIC_BASE_URL_MERGE",
+      "compatibilityPublicUrl": true,
+      "reason": "intermediate merged podcast audio"
+    },
+    {
+      "bucket": "podcast-meta",
+      "access": "private",
+      "aliases": [
+        "meta"
+      ],
+      "publicBaseEnv": "R2_PUBLIC_BASE_URL_META",
+      "compatibilityPublicUrl": true,
+      "reason": "internal episode pipeline metadata"
+    },
+    {
+      "bucket": "edited",
+      "access": "private",
+      "aliases": [
+        "edited",
+        "editedAudio",
+        "edited-audio"
+      ],
+      "publicBaseEnv": "R2_PUBLIC_BASE_URL_EDITED_AUDIO",
+      "compatibilityPublicUrl": true,
+      "reason": "intermediate mastered audio before publication"
     },
     {
       "bucket": "hive-skills",
       "access": "public-temporary",
+      "aliases": [],
       "publicBaseEnv": "R2_PUBLIC_BASE_URL_HIVE_SKILLS",
-      "reason": "HIVE and RAMS currently consume governed descriptors over public URL; migrate later"
-    },
-    {
-      "bucket": "audits",
-      "access": "public-temporary",
-      "publicBaseEnv": "R2_PUBLIC_BASE_URL_AUDITS",
-      "reason": "AIMS/RAMS audit handoff currently validates publicly reachable artefact URLs; coordinate private migration with RAMS"
-    },
-    {
-      "bucket": "raw-text",
-      "access": "public-temporary",
-      "publicBaseEnv": "R2_PUBLIC_BASE_URL_RAW_TEXT",
-      "reason": "podcast/transcript code still uses URL fallbacks"
-    },
-    {
-      "bucket": "podcast-chunks",
-      "access": "public-temporary",
-      "publicBaseEnv": "R2_PUBLIC_BASE_URL_CHUNKS",
-      "reason": "existing podcast pipeline URL contract; migrate after authenticated-object refactor"
-    },
-    {
-      "bucket": "podcast-merged",
-      "access": "public-temporary",
-      "publicBaseEnv": "R2_PUBLIC_BASE_URL_MERGE",
-      "reason": "existing podcast pipeline URL contract"
-    },
-    {
-      "bucket": "podcast-meta",
-      "access": "public-temporary",
-      "publicBaseEnv": "R2_PUBLIC_BASE_URL_META",
-      "reason": "episode verification/website publication currently uses public metadata URL"
-    },
-    {
-      "bucket": "edited",
-      "access": "public-temporary",
-      "publicBaseEnv": "R2_PUBLIC_BASE_URL_EDITED_AUDIO",
-      "reason": "podcast processor can fetch edited audio by URL when local buffer is absent"
+      "compatibilityPublicUrl": true,
+      "reason": "explicitly retained until HIVE/RAMS authenticated migration"
     },
     {
       "bucket": "podcast",
       "access": "public",
+      "aliases": [
+        "podcast"
+      ],
       "publicBaseEnv": "R2_PUBLIC_BASE_URL_PODCAST",
-      "reason": "published podcast audio"
+      "reason": "published episode audio"
     },
     {
       "bucket": "podcastart",
       "access": "public",
+      "aliases": [
+        "art"
+      ],
       "publicBaseEnv": "R2_PUBLIC_BASE_URL_ART",
       "reason": "published artwork"
     },
     {
       "bucket": "podcast-rss-feeds",
       "access": "public",
+      "aliases": [
+        "podcastRss"
+      ],
       "publicBaseEnv": "R2_PUBLIC_BASE_URL_PODCAST_RSS",
       "reason": "podcast clients require anonymous retrieval"
     },
     {
       "bucket": "rss-feeds",
       "access": "public",
+      "aliases": [
+        "rss",
+        "rss-feeds",
+        "rssfeeds"
+      ],
       "publicBaseEnv": "R2_PUBLIC_BASE_URL_RSS",
       "reason": "public RSS delivery"
     },
     {
       "bucket": "blog",
       "access": "public",
+      "aliases": [
+        "blog"
+      ],
       "publicBaseEnv": "R2_PUBLIC_BASE_URL_BLOG",
       "reason": "published website content"
     },
     {
       "bucket": "blog-images",
       "access": "public",
+      "aliases": [
+        "blogImages",
+        "blogimages",
+        "blog-images"
+      ],
       "publicBaseEnv": "R2_PUBLIC_BASE_URL_BLOG_IMAGES",
-      "reason": "published web/social images"
+      "reason": "published web/social imagery"
     },
     {
       "bucket": "rss-feed-blog",
       "access": "public",
+      "aliases": [
+        "blogRss",
+        "blogrss",
+        "blog-rss"
+      ],
       "publicBaseEnv": "R2_PUBLIC_BASE_URL_BLOG_RSS",
       "reason": "public blog RSS"
     },
     {
       "bucket": "brand-assets",
       "access": "public",
+      "aliases": [
+        "brandAssets",
+        "brandassets",
+        "brand-assets"
+      ],
       "publicBaseEnv": "R2_PUBLIC_BASE_URL_BRAND_ASSETS",
       "reason": "public brand assets"
     },
     {
       "bucket": "transcripts",
       "access": "public",
+      "aliases": [
+        "transcript",
+        "transcripts"
+      ],
       "publicBaseEnv": "R2_PUBLIC_BASE_URL_TRANSCRIPT",
       "reason": "published transcript pages/assets"
-    },
-    {
-      "bucket": "comms-hub-restore",
-      "access": "not-created",
-      "publicBaseEnv": null,
-      "reason": "future backup/restore phase only"
     }
   ]
 }
