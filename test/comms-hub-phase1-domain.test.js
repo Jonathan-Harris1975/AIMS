@@ -6,6 +6,7 @@ import { DatabaseSync } from "node:sqlite";
 import { COMMS_HUB_FORM_ROUTES, getCommsHubReadiness, loadCommsHubConfig } from "../services/comms-hub/config.js";
 import { JotformClient } from "../services/comms-hub/clients/jotformClient.js";
 import { buildJotformIntake, extractJotformAttachments, extractJotformContact, normaliseJotformAnswers } from "../services/comms-hub/domain/submission.js";
+import { zonedDateTimeToUtcIso } from "../services/comms-hub/domain/time.js";
 import { redactDiagnosticText } from "../services/comms-hub/domain/redaction.js";
 import { parseMultipartFields, resolveJotformWebhook } from "../services/comms-hub/domain/webhook.js";
 import { processJotformIntake } from "../services/comms-hub/intakeService.js";
@@ -89,6 +90,14 @@ function buildIntake(options = {}) {
   });
 }
 
+
+
+test("Jotform zone-less timestamps are normalised using the configured source timezone across DST", () => {
+  assert.equal(zonedDateTimeToUtcIso("2026-07-31 00:00:00", "America/New_York"), "2026-07-31T04:00:00.000Z");
+  assert.equal(zonedDateTimeToUtcIso("2026-01-31 00:00:00", "America/New_York"), "2026-01-31T05:00:00.000Z");
+  assert.equal(zonedDateTimeToUtcIso("2026-07-31 00:00:00", "Europe/London"), "2026-07-30T23:00:00.000Z");
+  assert.equal(zonedDateTimeToUtcIso("2026-01-31 00:00:00", "Europe/London"), "2026-01-31T00:00:00.000Z");
+});
 test("Comms Hub remains deployment-safe when disabled", () => {
   const readiness = getCommsHubReadiness({ COMMS_HUB_ENABLED: "false" });
   assert.equal(readiness.ready, true);
