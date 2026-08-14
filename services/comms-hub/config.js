@@ -320,6 +320,7 @@ export function loadCommsHubConfig(env = process.env, { requireEnabled = false }
     backupMaxLinkedObjects: positiveInteger(env.COMMS_HUB_BACKUP_MAX_LINKED_OBJECTS, 1000, "COMMS_HUB_BACKUP_MAX_LINKED_OBJECTS", { min: 1, max: 10000 }),
     maxWebhookBytes: positiveInteger(env.COMMS_HUB_MAX_WEBHOOK_BYTES, 1_048_576, "COMMS_HUB_MAX_WEBHOOK_BYTES", { max: 10_485_760 }),
     jotformTimeoutMs: positiveInteger(env.COMMS_HUB_JOTFORM_TIMEOUT_MS, 10_000, "COMMS_HUB_JOTFORM_TIMEOUT_MS", { min: 1_000, max: 25_000 }),
+    jotformSourceTimeZone: usableEnvValue(env.COMMS_HUB_JOTFORM_SOURCE_TIMEZONE) || "UTC",
     zernioTimeoutMs: positiveInteger(env.COMMS_HUB_ZERNIO_TIMEOUT_MS, 15_000, "COMMS_HUB_ZERNIO_TIMEOUT_MS", { min: 1_000, max: 30_000 }),
     zernioAckTimeoutMs: positiveInteger(env.COMMS_HUB_ZERNIO_ACK_TIMEOUT_MS, 4_000, "COMMS_HUB_ZERNIO_ACK_TIMEOUT_MS", { min: 500, max: 4_500 }),
     d1TimeoutMs: positiveInteger(env.COMMS_HUB_D1_TIMEOUT_MS, 15_000, "COMMS_HUB_D1_TIMEOUT_MS", { min: 1_000, max: 30_000 }),
