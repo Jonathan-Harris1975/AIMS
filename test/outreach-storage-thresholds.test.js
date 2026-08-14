@@ -31,7 +31,7 @@ test("outreach test mode lowers thresholds without changing production defaults"
 
 test("outreach lead store targets the Comms Hub R2 bucket", async () => {
   const source = await readFile(new URL("../services/outreach/services/leadStore.js", import.meta.url), "utf8");
-  assert.match(source, /putJson\("commsHub", key, payload\)/);
+  assert.match(source, /putPrivateJson\("commsHub", key, payload\)/);
   assert.match(source, /outreachLeadPrefix/);
   assert.doesNotMatch(source, /googleapis|spreadsheets/i);
 });
