@@ -16,7 +16,7 @@ import {
   kickCommsHubArchiveDrain,
   kickCommsHubSocialPoll,
 } from "../runtime.js";
-import { processJotformIntake } from "../intakeService.js";
+import { ingestJotformAttachments, processJotformIntake } from "../intakeService.js";
 import { executeSocialAction, requestSocialActionApproval } from "../socialActionsService.js";
 import { decideApproval } from "../approvalService.js";
 import { sendReplyDraft } from "../replyDraftService.js";
@@ -117,6 +117,11 @@ export function createCommsHubRouter({
         ai: configuration.enabled && aiEnabled,
         approvals: aiEnabled && booleanValue(process.env.COMMS_HUB_APPROVALS_ENFORCED, true),
         backups: booleanValue(process.env.COMMS_HUB_BACKUP_ENABLED, false),
+        formAttachments: Boolean(
+          process.env.R2_BUCKET_COMMS_HUB_PRIVATE
+          && process.env.COMMS_HUB_ATTACHMENT_SCANNER_URL
+          && process.env.COMMS_HUB_ATTACHMENT_SCANNER_TOKEN
+        ),
         email: booleanValue(process.env.COMMS_HUB_EMAIL_ENABLED, false),
         chat: booleanValue(process.env.COMMS_HUB_CHAT_ENABLED, false),
         autonomousReplies: aiEnabled && booleanValue(process.env.COMMS_HUB_AUTONOMOUS_REPLIES_ENABLED, false),
@@ -141,6 +146,31 @@ export function createCommsHubRouter({
       const intake = processed.intake;
       const result = processed.persistence;
       kickArchive();
+
+      if (!result.duplicate && processed.intake.attachments.length) {
+        queueMicrotask(() => {
+          void ingestJotformAttachments({
+            intake: processed.intake,
+            context: active,
+            logger: log,
+          }).then((attachmentResult) => {
+            log.info("commsHub.formAttachments.complete", {
+              correlationId,
+              conversationId: processed.intake.conversationId,
+              requested: attachmentResult.requested,
+              stored: attachmentResult.stored,
+              failed: attachmentResult.failed,
+            });
+          }).catch((error) => {
+            log.error("commsHub.formAttachments.backgroundFailed", {
+              correlationId,
+              conversationId: processed.intake.conversationId,
+              error: safeErrorLog(error),
+            });
+          });
+        });
+      }
+
       recordProviderOutcome({
         routeKey: "comms-hub:jotform-intake",
         provider: "jotform",
