@@ -9,7 +9,7 @@ import { buildJotformIntake, extractJotformAttachments, extractJotformContact, n
 import { zonedDateTimeToUtcIso } from "../services/comms-hub/domain/time.js";
 import { redactDiagnosticText } from "../services/comms-hub/domain/redaction.js";
 import { parseMultipartFields, resolveJotformWebhook } from "../services/comms-hub/domain/webhook.js";
-import { processJotformIntake } from "../services/comms-hub/intakeService.js";
+import { ingestJotformAttachments, processJotformIntake } from "../services/comms-hub/intakeService.js";
 import { COMMS_HUB_REQUIRED_MIGRATIONS } from "../services/comms-hub/migrations/manifest.js";
 import { CommsHubRepository } from "../services/comms-hub/repositories/commsRepository.js";
 import { CommsHubArchiveWorker } from "../services/comms-hub/workers/archiveWorker.js";
@@ -280,4 +280,55 @@ test("Migration manifest requires all delivered Comms Hub phases", () => {
     "0004_hardening",
     "0005_operations_and_channels",
   ]);
+});
+
+
+test("Jotform attachment ingestion stores references independently of the generic delayed worker", async () => {
+  const intake = buildIntake();
+  const statuses = [];
+  const stored = [];
+  const result = await ingestJotformAttachments({
+    intake,
+    context: {
+      repository: {
+        async markAttachmentStatus(id, status) { statuses.push({ id, status }); return true; },
+      },
+      attachmentService: {
+        async ingestReference(input) {
+          stored.push(input);
+          return { object_key: `attachments/test/${input.attachmentId}/evidence.pdf` };
+        },
+      },
+    },
+    logger: { info() {}, error() {} },
+  });
+  assert.equal(result.requested, 1);
+  assert.equal(result.stored, 1);
+  assert.equal(result.failed, 0);
+  assert.equal(stored[0].provider, "jotform");
+  assert.equal(stored[0].metadata.conversationId, intake.conversationId);
+  assert.equal(statuses[0].status, "pending");
+});
+
+test("Jotform attachment ingestion records a failed status when secure storage is unavailable", async () => {
+  const intake = buildIntake();
+  const statuses = [];
+  const result = await ingestJotformAttachments({
+    intake,
+    context: {
+      repository: {
+        async markAttachmentStatus(id, status, metadata) { statuses.push({ id, status, metadata }); return true; },
+      },
+      attachmentService: {
+        async ingestReference() {
+          throw Object.assign(new Error("scanner missing"), { code: "attachment_scanner_unconfigured", failureClass: "permanent" });
+        },
+      },
+    },
+    logger: { info() {}, error() {} },
+  });
+  assert.equal(result.stored, 0);
+  assert.equal(result.failed, 1);
+  assert.equal(statuses.at(-1).status, "ingest_failed");
+  assert.equal(statuses.at(-1).metadata.code, "attachment_scanner_unconfigured");
 });
