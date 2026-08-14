@@ -25,8 +25,9 @@ export async function ingestJotformAttachments({ intake, context, logger = null 
           label: attachment.label,
         },
       });
-      results.push({ attachmentId: attachment.id, status: "stored", objectKey: stored?.object_key || stored?.objectKey || null });
-      logger?.info?.("commsHub.formAttachment.stored", {
+      const status = stored?.quarantined || stored?.scan_status === "pending" ? "quarantined" : "stored";
+      results.push({ attachmentId: attachment.id, status, objectKey: stored?.object_key || stored?.objectKey || null });
+      logger?.info?.(stored?.quarantined || stored?.scan_status === "pending" ? "commsHub.formAttachment.quarantined" : "commsHub.formAttachment.stored", {
         attachmentId: attachment.id,
         conversationId: intake.conversationId,
         filename: attachment.filename,
@@ -47,10 +48,12 @@ export async function ingestJotformAttachments({ intake, context, logger = null 
   }
 
   const stored = results.filter((item) => item.status === "stored").length;
+  const quarantined = results.filter((item) => item.status === "quarantined").length;
   return Object.freeze({
     requested: results.length,
     stored,
-    failed: results.length - stored,
+    quarantined,
+    failed: results.filter((item) => item.status === "failed").length,
     results: Object.freeze(results),
   });
 }
