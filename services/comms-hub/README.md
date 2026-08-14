@@ -80,7 +80,7 @@ Base service:
 - `D1_UUID`, `D1_API_KEY`
 - `JOTFORM_API_KEY`
 - existing R2 endpoint/access secrets
-- `R2_BUCKET_COMMS_HUB`
+- `R2_BUCKET_COMMS_HUB` — private operational receipts/outreach objects; no public `r2.dev` URL required.
 
 Phase 2:
 
@@ -194,3 +194,8 @@ Required runtime settings for attachment ingestion:
 - `COMMS_HUB_ATTACHMENT_SCANNER_TOKEN` (Cloudmersive API key; secret)
 
 Stored objects are never exposed through a public R2 URL. Authenticated operators retrieve them through `GET /comms-hub/attachments/:attachmentId`, which re-validates the stored SHA-256 checksum before returning the file.
+
+
+### Current backup/restore status
+
+Backup/restore is not provisioned yet. Keep `COMMS_HUB_BACKUP_ENABLED=false`, `COMMS_HUB_BACKUP_AUTOMATIC_ENABLED=false`, `R2_BUCKET_COMMS_HUB_RESTORE=` and `COMMS_HUB_RESTORE_DATABASE_ID=` until that phase is deliberately created and tested.

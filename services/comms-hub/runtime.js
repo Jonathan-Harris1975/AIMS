@@ -1,4 +1,3 @@
-import { uploadText } from "../shared/utils/r2-client.js";
 import { log } from "../../logger.js";
 import { loadCommsHubConfig, getCommsHubReadiness } from "./config.js";
 import { D1Client } from "./clients/d1Client.js";
@@ -43,7 +42,7 @@ import { safeErrorLog } from "./domain/redaction.js";
 let context = null;
 let runtimeState = { status: "idle", ready: false, detail: "not_started" };
 
-export function createCommsHubContext({ env = process.env, fetchImpl, r2UploadText = uploadText } = {}) {
+export function createCommsHubContext({ env = process.env, fetchImpl, r2ArchiveStore = null } = {}) {
   const config = loadCommsHubConfig(env, { requireEnabled: true });
   const d1 = new D1Client(config, fetchImpl ? { fetchImpl } : undefined);
   const jotform = new JotformClient(config, fetchImpl ? { fetchImpl } : undefined);
@@ -55,10 +54,9 @@ export function createCommsHubContext({ env = process.env, fetchImpl, r2UploadTe
   const repository = new CommsHubRepository(d1);
   const aiRepository = new CommsAiRepository(d1);
   const operationsRepository = new CommsOperationsRepository(d1);
+  const primaryR2 = r2ArchiveStore || new PrivateR2Client({ ...config, r2PrivateBucketName: config.r2BucketName });
   const privateR2 = config.r2PrivateBucketName ? new PrivateR2Client(config) : null;
-  const sourceR2 = config.backupEnabled
-    ? new PrivateR2Client({ ...config, r2PrivateBucketName: config.r2BucketName })
-    : null;
+  const sourceR2 = config.backupEnabled ? primaryR2 : null;
   const backupR2 = config.backupEnabled ? new PrivateR2Client(config) : null;
   const restoreR2 = config.backupEnabled
     ? new PrivateR2Client({ ...config, r2PrivateBucketName: config.r2RestoreBucketName })
@@ -72,6 +70,7 @@ export function createCommsHubContext({ env = process.env, fetchImpl, r2UploadTe
     aiRepository,
     operationsRepository,
     aiSearch: new AiSearchClient(config, fetchImpl ? { fetchImpl } : undefined),
+    primaryR2,
     privateR2,
     sourceR2,
     backupR2,
@@ -94,7 +93,7 @@ export function createCommsHubContext({ env = process.env, fetchImpl, r2UploadTe
   active.credentialVaultService = new CommsHubCredentialVaultService({ context: active });
   active.quarantineService = new CommsHubQuarantineService({ context: active });
   active.metricsService = new CommsHubMetricsService({ context: active });
-  active.archiveWorker = new CommsHubArchiveWorker({ repository, uploadText: r2UploadText, config });
+  active.archiveWorker = new CommsHubArchiveWorker({ repository, objectStore: primaryR2, config });
   active.socialPollWorker = new CommsHubSocialPollWorker({ repository, zernio, config });
   active.aiWorkflowService = new CommsHubAiWorkflowService({ context: active });
   active.podcastWorkflowService = new PodcastContributionWorkflowService({ context: active });

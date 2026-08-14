@@ -41,7 +41,6 @@ const REQUIRED_WHEN_ENABLED = Object.freeze([
   "R2_ACCESS_KEY_ID",
   "R2_SECRET_ACCESS_KEY",
   "R2_BUCKET_COMMS_HUB",
-  "R2_PUBLIC_BASE_URL_COMMS_HUB",
 ]);
 
 function normalise(value) {
