@@ -80,7 +80,7 @@ Base service:
 - `D1_UUID`, `D1_API_KEY`
 - `JOTFORM_API_KEY`
 - existing R2 endpoint/access secrets
-- `R2_BUCKET_COMMS_HUB` — private operational receipts/outreach objects; no public `r2.dev` URL required.
+- `R2_BUCKET_COMMS_HUB`
 
 Phase 2:
 
@@ -196,6 +196,6 @@ Required runtime settings for attachment ingestion:
 Stored objects are never exposed through a public R2 URL. Authenticated operators retrieve them through `GET /comms-hub/attachments/:attachmentId`, which re-validates the stored SHA-256 checksum before returning the file.
 
 
-### Current backup/restore status
+### R2 privacy transition
 
-Backup/restore is not provisioned yet. Keep `COMMS_HUB_BACKUP_ENABLED=false`, `COMMS_HUB_BACKUP_AUTOMATIC_ENABLED=false`, `R2_BUCKET_COMMS_HUB_RESTORE=` and `COMMS_HUB_RESTORE_DATABASE_ID=` until that phase is deliberately created and tested.
+Primary Comms Hub R2 access is authenticated. `comms-hub` and `comms-hub-private` are target-private buckets; any configured `R2_PUBLIC_BASE_URL_COMMS_HUB` is temporary compatibility only and is not required by Comms Hub readiness. The backup/restore bucket has not been created and must remain disabled until that phase is intentionally implemented.
