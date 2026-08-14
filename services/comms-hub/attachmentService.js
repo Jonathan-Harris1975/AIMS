@@ -12,8 +12,18 @@ export class CommsHubAttachmentService {
   }
 
   assertReady() {
-    if (!this.context.privateR2) throw new CommsHubError(503, 'attachment_storage_unconfigured', 'Private attachment storage is not configured.');
-    if (!this.context.malwareScanner) throw new CommsHubError(503, 'attachment_scanner_unconfigured', 'Attachment scanner is not configured.');
+    if (!this.context.privateR2 || !this.context.config?.r2PrivateBucketName) {
+      throw new CommsHubError(503, 'attachment_storage_unconfigured', 'R2_BUCKET_COMMS_HUB_PRIVATE is not configured.', {
+        failureClass: 'permanent',
+        publicMessage: 'Private attachment storage is not configured.',
+      });
+    }
+    if (!this.context.malwareScanner || !this.context.config?.attachmentScannerUrl || !this.context.config?.attachmentScannerToken) {
+      throw new CommsHubError(503, 'attachment_scanner_unconfigured', 'Attachment malware scanning is not configured.', {
+        failureClass: 'permanent',
+        publicMessage: 'Attachment scanning is not configured.',
+      });
+    }
   }
 
   async download(url) {

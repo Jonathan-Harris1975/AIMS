@@ -180,3 +180,16 @@ Migration `0005_operations_and_channels` adds the backend contracts required bef
 - role-gated API contracts for the later responsive HIVE queue and conversation workspace.
 
 All email, chat, wake, delayed-action, retention, autonomous-reply and credential-vault execution flags default to `false`. Deploy migration `0005` before enabling any of them. The public chat webhook is `POST /comms-hub/intake/chat`; every operator endpoint remains bearer-authenticated and additionally applies Comms Hub role permissions. The Cloudflare wake relay lives in `workers/comms-hub-wake/` and always sends `runContentJobs: false`.
+
+
+## Form attachment storage
+
+Jotform file-upload answers are persisted as attachment references with the form submission, then downloaded in the background, malware-scanned, and stored in the private Comms Hub R2 bucket. This path does **not** depend on `COMMS_HUB_DELAYED_ACTION_WORKER_ENABLED`; the delayed-action entry remains only as a recovery path.
+
+Required runtime settings for attachment ingestion:
+
+- `R2_BUCKET_COMMS_HUB_PRIVATE` — private R2 bucket used for attachment objects.
+- `COMMS_HUB_ATTACHMENT_SCANNER_URL`
+- `COMMS_HUB_ATTACHMENT_SCANNER_TOKEN`
+
+Stored objects are never exposed through a public R2 URL. Authenticated operators retrieve them through `GET /comms-hub/attachments/:attachmentId`, which re-validates the stored SHA-256 checksum before returning the file.
