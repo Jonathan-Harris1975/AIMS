@@ -81,7 +81,6 @@ export function getPodcastReadiness({ env = process.env, checkCommand = commandA
   requireUrl("podcast_outro_url", ["PODCAST_OUTRO_URL"]);
   requireUrl("podcast_public_url", ["R2_PUBLIC_BASE_URL_PODCAST"]);
   requireUrl("podcast_art_public_url", ["R2_PUBLIC_BASE_URL_ART"]);
-  requireUrl("podcast_meta_public_url", ["R2_PUBLIC_BASE_URL_META"]);
   requireUrl("podcast_rss_public_url", ["R2_PUBLIC_BASE_URL_PODCAST_RSS"]);
   requireUrl("podcast_transcript_public_url", ["R2_PUBLIC_BASE_URL_TRANSCRIPT_HTML", "R2_PUBLIC_BASE_URL_TRANSCRIPT"]);
 
