@@ -60,9 +60,9 @@ function receiptFor(job) {
 }
 
 export class CommsHubArchiveWorker {
-  constructor({ repository, uploadText, config, workerId = `aims-${randomUUID()}`, logger = null }) {
+  constructor({ repository, objectStore, config, workerId = `aims-${randomUUID()}`, logger = null }) {
     this.repository = repository;
-    this.uploadText = uploadText;
+    this.objectStore = objectStore;
     this.config = config;
     this.workerId = workerId;
     this.logger = logger;
@@ -86,12 +86,11 @@ export class CommsHubArchiveWorker {
 
   async processJob(job) {
     try {
-      await this.uploadText(
-        this.config.r2BucketAlias,
+      await this.objectStore.putText(
         job.archive_key,
         receiptFor(job),
         "application/json; charset=utf-8",
-        { cacheControl: "no-store, max-age=0" }
+        { purpose: "redacted-form-receipt" }
       );
       await this.repository.completeArchiveJob({
         eventId: job.event_id,
