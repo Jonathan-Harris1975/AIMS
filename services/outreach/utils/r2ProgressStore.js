@@ -1,6 +1,6 @@
 // services/outreach/utils/r2ProgressStore.js
 
-import { getObjectAsText, putJson } from "../../shared/utils/r2-client.js";
+import { getObjectAsText, putPrivateJson } from "../../shared/utils/r2-client.js";
 import { info } from "../../../logger.js";
 
 const DEFAULT_KEY = "outreach/progress.json";
@@ -49,7 +49,7 @@ export async function saveProgress(progress) {
     updatedAt: new Date().toISOString(),
   };
 
-  await putJson("metasystem", key, payload);
+  await putPrivateJson("metasystem", key, payload);
 
   info("outreach.batch.cursor", {
     nextStartIndex: payload.lastProcessedIndex,
