@@ -1,4 +1,5 @@
 import { stableId, sha256Hex } from "./ids.js";
+import { zonedDateTimeToUtcIso } from "./time.js";
 
 const IDENTITY_TYPES = new Set(["control_email", "control_phone", "control_fullname", "control_address"]);
 const FILE_TYPES = new Set(["control_fileupload"]);
@@ -134,17 +135,15 @@ export function extractJotformMessage(answers, route) {
   });
 }
 
-function submittedAt(submission, fallback) {
+function submittedAt(submission, fallback, sourceTimeZone = "UTC") {
   const raw = cleanText(submission?.created_at || submission?.createdAt, 100);
   if (!raw) return fallback;
-  const candidate = raw.includes("T") ? raw : `${raw.replace(" ", "T")}Z`;
-  const date = new Date(candidate);
-  return Number.isNaN(date.valueOf()) ? fallback : date.toISOString();
+  return zonedDateTimeToUtcIso(raw, sourceTimeZone) || fallback;
 }
 
-export function buildJotformIntake({ formId, submissionId, route, submission, correlationId, now = new Date() }) {
+export function buildJotformIntake({ formId, submissionId, route, submission, correlationId, now = new Date(), sourceTimeZone = "UTC" }) {
   const processedAt = now.toISOString();
-  const receivedAt = submittedAt(submission, processedAt);
+  const receivedAt = submittedAt(submission, processedAt, sourceTimeZone);
   const answers = normaliseJotformAnswers(submission);
   const contact = extractJotformContact(answers);
   const attachments = extractJotformAttachments(answers);
