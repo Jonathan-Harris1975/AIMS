@@ -5,7 +5,7 @@
 // ============================================================
 
 import { log } from "../../../logger.js";
-import { getObjectAsText, putJson } from "../../shared/utils/r2-client.js";
+import { getObjectAsText, putPrivateJson } from "../../shared/utils/r2-client.js";
 
 // Correct bucket alias for episode counter
 const EPISODE_COUNTER_BUCKET = "metasystem";
@@ -50,7 +50,7 @@ async function loadCounter() {
 
 // Save counter
 async function saveCounter(counter) {
-  await putJson(EPISODE_COUNTER_BUCKET, EPISODE_COUNTER_KEY, counter);
+  await putPrivateJson(EPISODE_COUNTER_BUCKET, EPISODE_COUNTER_KEY, counter);
 }
 
 // Issue next episode number
