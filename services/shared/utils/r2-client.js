@@ -244,7 +244,7 @@ export const R2_BUCKETS = {
   editedAudio:     R2_BUCKET_EDITED_AUDIO,
   "edited-audio":  R2_BUCKET_EDITED_AUDIO,
 
-  // Comms Hub integrity receipts (public bucket: never store message content or attachments)
+  // Comms Hub operational receipts (private-ready; never store message content or attachments)
   commsHub:        R2_BUCKET_COMMS_HUB,
   commshub:        R2_BUCKET_COMMS_HUB,
   "comms-hub":     R2_BUCKET_COMMS_HUB,
@@ -397,6 +397,28 @@ export const R2_PUBLIC_URLS = {
 };
 
 // ------------------------------------------------------------
+// 🔒 Private-ready aliases
+// ------------------------------------------------------------
+// These buckets contain internal/intermediate/operational data. AIMS must be
+// able to read/write them through authenticated R2 even while legacy public
+// URLs remain temporarily enabled for other repos during the coordinated
+// migration. Published delivery buckets are deliberately excluded.
+export const PRIVATE_READY_BUCKET_ALIASES = Object.freeze(new Set([
+  "rawtext", "rawText", "raw-text",
+  "meta",
+  "merged",
+  "chunks", "podcast-chunks", "rawAudio", "rawaudio", "raw-audio",
+  "edited", "editedAudio", "edited-audio",
+  "audits", "audit",
+  "commsHub", "commshub", "comms-hub",
+  "metasystem", "metaSystem",
+]));
+
+export function isPrivateReadyBucket(bucketKey) {
+  return PRIVATE_READY_BUCKET_ALIASES.has(String(bucketKey || ""));
+}
+
+// ------------------------------------------------------------
 // 🧩 Validation Helper
 // ------------------------------------------------------------
 export function ensureBucketKey(bucketKey) {
@@ -494,9 +516,9 @@ export async function uploadText(bucketKey, key, text, contentType = "text/plain
   return uploadBuffer(bucketKey, key, Buffer.from(text, "utf-8"), contentType, options);
 }
 
-// Private/internal R2 writes deliberately do not construct or require a public URL.
-// Return an opaque r2:// reference that can be logged or persisted without exposing
-// the object anonymously on the Internet.
+// Private/internal writes deliberately do not construct or require a public URL.
+// The returned r2:// reference is safe to persist/log and can be resolved by
+// authenticated AIMS code without anonymous HTTP access.
 export async function uploadPrivateBuffer(bucketKey, key, buffer, contentType = "application/octet-stream", options = {}) {
   const bucket = ensureBucketKey(bucketKey);
   const safeKey = normaliseR2ObjectKey(key);
@@ -519,13 +541,43 @@ export async function uploadPrivateText(bucketKey, key, text, contentType = "tex
   return uploadPrivateBuffer(bucketKey, key, Buffer.from(text, "utf-8"), contentType, options);
 }
 
-export async function getObjectAsText(bucketKey, key) {
+export async function getObjectAsBuffer(bucketKey, key) {
   const bucket = ensureBucketKey(bucketKey);
   const safeKey = normaliseR2ObjectKey(key);
   const response = await sendR2Command(new GetObjectCommand({ Bucket: bucket, Key: safeKey }));
   const chunks = [];
-  for await (const chunk of response.Body) chunks.push(chunk);
-  return Buffer.concat(chunks).toString("utf-8");
+  for await (const chunk of response.Body) chunks.push(Buffer.from(chunk));
+  return Buffer.concat(chunks);
+}
+
+export async function getObjectAsText(bucketKey, key) {
+  return (await getObjectAsBuffer(bucketKey, key)).toString("utf-8");
+}
+
+export function buildR2Reference(bucketKey, key) {
+  const bucket = ensureBucketKey(bucketKey);
+  const safeKey = normaliseR2ObjectKey(key);
+  return `r2://${bucket}/${safeKey}`;
+}
+
+export function parseR2Reference(reference) {
+  const raw = String(reference || "").trim();
+  if (!raw.startsWith("r2://")) return null;
+  const withoutScheme = raw.slice(5);
+  const slash = withoutScheme.indexOf("/");
+  if (slash <= 0) throw new Error("Invalid r2:// object reference");
+  const bucket = withoutScheme.slice(0, slash);
+  const key = normaliseR2ObjectKey(withoutScheme.slice(slash + 1));
+  return Object.freeze({ bucket, key });
+}
+
+export async function getR2ReferenceAsBuffer(reference) {
+  const parsed = parseR2Reference(reference);
+  if (!parsed) throw new Error("Expected an r2:// object reference");
+  const response = await sendR2Command(new GetObjectCommand({ Bucket: parsed.bucket, Key: parsed.key }));
+  const chunks = [];
+  for await (const chunk of response.Body) chunks.push(Buffer.from(chunk));
+  return Buffer.concat(chunks);
 }
 
 // ------------------------------------------------------------
@@ -617,6 +669,8 @@ export default {
   s3,
   R2_BUCKETS,
   R2_PUBLIC_URLS,
+  PRIVATE_READY_BUCKET_ALIASES,
+  isPrivateReadyBucket,
   R2_BUCKET_RAW_AUDIO,
   R2_BUCKET_RAW_TEXT_KEY,
   R2_BUCKET_PODCAST_KEY,
@@ -627,13 +681,17 @@ export default {
   uploadText,
   uploadPrivateBuffer,
   uploadPrivateText,
-  putPrivateJson,
   getObjectAsText,
+  getObjectAsBuffer,
+  buildR2Reference,
+  parseR2Reference,
+  getR2ReferenceAsBuffer,
   deleteObject,
   listObjects,
   listKeys,
   putObject,
   putJson,
+  putPrivateJson,
   putText,
   buildPublicUrl,
   normaliseR2ObjectKey,

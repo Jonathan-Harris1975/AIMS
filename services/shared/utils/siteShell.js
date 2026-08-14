@@ -94,8 +94,8 @@ function validateManifest(manifest, expectedReleaseSha = "") {
 
 async function persistLastKnownGood(shell) {
   try {
-    const { putJson } = await import("./r2-client.js");
-    await putJson("metasystem", LAST_KNOWN_GOOD_KEY, shell);
+    const { putPrivateJson } = await import("./r2-client.js");
+    await putPrivateJson("metasystem", LAST_KNOWN_GOOD_KEY, shell);
   } catch (error) {
     await logWarn("siteShell.cache.persistFailed", { error: error?.message || String(error) });
   }

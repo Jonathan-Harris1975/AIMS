@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { debug, warn } from "../../../logger.js";
-import { getObjectAsText, putJson } from "./r2-client.js";
+import { getObjectAsText, putPrivateJson } from "./r2-client.js";
 import { durableStateEnvHint, hasDurableStateEnv } from "./durableStateEnv.js";
 
 const BASE_STATE_DIR = path.resolve(
@@ -187,7 +187,7 @@ function queueRemoteWrite(filename, value) {
 
   remoteWriteQueue = remoteWriteQueue
     .then(async () => {
-      await putJson("metaSystem", key, snapshot);
+      await putPrivateJson("metaSystem", key, snapshot);
       lastRemoteWriteError = null;
       debug("state.remote.write.complete", { key });
     })

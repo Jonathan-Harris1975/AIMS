@@ -1,4 +1,4 @@
-import { getObjectAsText, listKeys, uploadText, putJson } from "./r2-client.js";
+import { getObjectAsText, listKeys, uploadText, putPrivateJson } from "./r2-client.js";
 import { loadSiteShell, applySiteShellToHtml } from "./siteShell.js";
 import { info, warn } from "../../../logger.js";
 
@@ -84,7 +84,7 @@ export async function syncPublishedSiteShell({ manifestUrl, releaseSha, dryRun =
 
   if (!dryRun) {
     try {
-      await putJson("metasystem", SYNC_STATE_KEY, result);
+      await putPrivateJson("metasystem", SYNC_STATE_KEY, result);
     } catch (error) {
       warn("siteShell.sync.statePersistFailed", { error: error?.message || String(error) });
     }
