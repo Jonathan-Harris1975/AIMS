@@ -155,6 +155,8 @@ export function createCommsHubRouter({
         workflow: intake.route.workflow,
         duplicate: result.duplicate,
         attachmentCount: intake.attachments.length,
+        acknowledgementProvider: processed.acknowledgement.provider,
+        aimsAutoresponse: processed.acknowledgement.sentByAims,
       });
       return res.status(result.duplicate ? 200 : 202).json({
         ok: true,
