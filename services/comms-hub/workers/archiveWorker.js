@@ -17,16 +17,45 @@ function nextAttemptAt(attempt, now = Date.now()) {
   return new Date(now + base + Math.floor(Math.random() * 5_000)).toISOString();
 }
 
+function safePayloadSummary(payloadJson) {
+  try {
+    const payload = JSON.parse(String(payloadJson || "{}"));
+    const answers = Array.isArray(payload?.answers) ? payload.answers : [];
+    const attachments = Array.isArray(payload?.attachments) ? payload.attachments : [];
+    return {
+      formKey: String(payload?.route?.key || "").slice(0, 100) || null,
+      workflow: String(payload?.route?.workflow || "").slice(0, 100) || null,
+      answerCount: answers.length,
+      attachmentCount: attachments.length,
+      acknowledgementProvider: "jotform",
+    };
+  } catch {
+    return {
+      formKey: null,
+      workflow: null,
+      answerCount: null,
+      attachmentCount: null,
+      acknowledgementProvider: "jotform",
+    };
+  }
+}
+
 function receiptFor(job) {
+  const summary = safePayloadSummary(job.payload_json);
   return JSON.stringify({
-    schemaVersion: 1,
+    schemaVersion: 2,
     eventId: job.event_id,
     conversationId: job.conversation_id,
     provider: job.provider,
     sourceReferenceSha256: sha256Hex(`jotform:${job.form_id}:${job.submission_id}`),
+    formKey: summary.formKey,
+    workflow: summary.workflow,
     receivedAt: job.received_at,
     processedAt: job.processed_at,
     payloadSha256: job.payload_sha256,
+    answerCount: summary.answerCount,
+    attachmentCount: summary.attachmentCount,
+    acknowledgementProvider: summary.acknowledgementProvider,
   }, null, 2);
 }
 
