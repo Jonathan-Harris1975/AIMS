@@ -18,7 +18,8 @@
     "blog:repair-links:check": "node scripts/backfill-blog-main-site-links.js",
     "blog:repair-links:apply": "node scripts/backfill-blog-main-site-links.js --apply",
     "comms:migrate": "node scripts/commsHubMigrate.js",
-    "comms:migrate:status": "node scripts/commsHubMigrate.js --status"
+    "comms:migrate:status": "node scripts/commsHubMigrate.js --status",
+    "r2:policy:check": "node scripts/r2AccessPolicyCheck.js"
   },
   "engines": {
     "node": "22.x",

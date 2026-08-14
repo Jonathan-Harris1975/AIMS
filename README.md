@@ -1441,3 +1441,10 @@ This documentation was prepared against the supplied repository structure and th
 - `env.template`
 
 Routes in this README are active only when they are mounted through `routes/index.js` or root `server.js`. Features marked present but not wired should not be treated as available HTTP endpoints until they are mounted and tested.
+
+
+## R2 private-readiness
+
+AIMS uses authenticated R2 access for internal/intermediate data. The target-private buckets are `metasystem`, `comms-hub`, `comms-hub-private`, `audits`, `raw-text`, `podcast-chunks`, `podcast-merged`, `podcast-meta`, and `edited`. Legacy public base URLs may remain configured temporarily while HIVE/RAMS/website consumers are migrated; they are compatibility endpoints, not AIMS' primary access path. `hive-skills` deliberately remains public during this transition. Published delivery buckets (podcast audio/artwork/RSS, website/blog assets, transcripts, brand assets) remain public.
+
+Run `npm run r2:policy:check` before deployment to detect access-policy drift. Comms Hub backup/restore storage is not created or enabled in this phase.
