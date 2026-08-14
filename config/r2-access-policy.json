@@ -1,0 +1,127 @@
+{
+  "schemaVersion": 1,
+  "service": "AIMS",
+  "principle": "private-by-default; public only when anonymous delivery is required",
+  "buckets": [
+    {
+      "bucket": "metasystem",
+      "access": "private",
+      "publicBaseEnv": "R2_PUBLIC_BASE_URL_META_SYSTEM",
+      "reason": "durable state, dedupe, progress and system files"
+    },
+    {
+      "bucket": "comms-hub",
+      "access": "private",
+      "publicBaseEnv": "R2_PUBLIC_BASE_URL_COMMS_HUB",
+      "reason": "redacted receipts and outreach operational objects"
+    },
+    {
+      "bucket": "comms-hub-private",
+      "access": "private",
+      "publicBaseEnv": null,
+      "reason": "attachments, quarantine and sensitive linked objects"
+    },
+    {
+      "bucket": "hive-skills",
+      "access": "public-temporary",
+      "publicBaseEnv": "R2_PUBLIC_BASE_URL_HIVE_SKILLS",
+      "reason": "HIVE and RAMS currently consume governed descriptors over public URL; migrate later"
+    },
+    {
+      "bucket": "audits",
+      "access": "public-temporary",
+      "publicBaseEnv": "R2_PUBLIC_BASE_URL_AUDITS",
+      "reason": "AIMS/RAMS audit handoff currently validates publicly reachable artefact URLs; coordinate private migration with RAMS"
+    },
+    {
+      "bucket": "raw-text",
+      "access": "public-temporary",
+      "publicBaseEnv": "R2_PUBLIC_BASE_URL_RAW_TEXT",
+      "reason": "podcast/transcript code still uses URL fallbacks"
+    },
+    {
+      "bucket": "podcast-chunks",
+      "access": "public-temporary",
+      "publicBaseEnv": "R2_PUBLIC_BASE_URL_CHUNKS",
+      "reason": "existing podcast pipeline URL contract; migrate after authenticated-object refactor"
+    },
+    {
+      "bucket": "podcast-merged",
+      "access": "public-temporary",
+      "publicBaseEnv": "R2_PUBLIC_BASE_URL_MERGE",
+      "reason": "existing podcast pipeline URL contract"
+    },
+    {
+      "bucket": "podcast-meta",
+      "access": "public-temporary",
+      "publicBaseEnv": "R2_PUBLIC_BASE_URL_META",
+      "reason": "episode verification/website publication currently uses public metadata URL"
+    },
+    {
+      "bucket": "edited",
+      "access": "public-temporary",
+      "publicBaseEnv": "R2_PUBLIC_BASE_URL_EDITED_AUDIO",
+      "reason": "podcast processor can fetch edited audio by URL when local buffer is absent"
+    },
+    {
+      "bucket": "podcast",
+      "access": "public",
+      "publicBaseEnv": "R2_PUBLIC_BASE_URL_PODCAST",
+      "reason": "published podcast audio"
+    },
+    {
+      "bucket": "podcastart",
+      "access": "public",
+      "publicBaseEnv": "R2_PUBLIC_BASE_URL_ART",
+      "reason": "published artwork"
+    },
+    {
+      "bucket": "podcast-rss-feeds",
+      "access": "public",
+      "publicBaseEnv": "R2_PUBLIC_BASE_URL_PODCAST_RSS",
+      "reason": "podcast clients require anonymous retrieval"
+    },
+    {
+      "bucket": "rss-feeds",
+      "access": "public",
+      "publicBaseEnv": "R2_PUBLIC_BASE_URL_RSS",
+      "reason": "public RSS delivery"
+    },
+    {
+      "bucket": "blog",
+      "access": "public",
+      "publicBaseEnv": "R2_PUBLIC_BASE_URL_BLOG",
+      "reason": "published website content"
+    },
+    {
+      "bucket": "blog-images",
+      "access": "public",
+      "publicBaseEnv": "R2_PUBLIC_BASE_URL_BLOG_IMAGES",
+      "reason": "published web/social images"
+    },
+    {
+      "bucket": "rss-feed-blog",
+      "access": "public",
+      "publicBaseEnv": "R2_PUBLIC_BASE_URL_BLOG_RSS",
+      "reason": "public blog RSS"
+    },
+    {
+      "bucket": "brand-assets",
+      "access": "public",
+      "publicBaseEnv": "R2_PUBLIC_BASE_URL_BRAND_ASSETS",
+      "reason": "public brand assets"
+    },
+    {
+      "bucket": "transcripts",
+      "access": "public",
+      "publicBaseEnv": "R2_PUBLIC_BASE_URL_TRANSCRIPT",
+      "reason": "published transcript pages/assets"
+    },
+    {
+      "bucket": "comms-hub-restore",
+      "access": "not-created",
+      "publicBaseEnv": null,
+      "reason": "future backup/restore phase only"
+    }
+  ]
+}
