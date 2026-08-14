@@ -21,6 +21,11 @@ export class CommsHubRepository {
       formId: intake.formId,
       submissionId: intake.submissionId,
       route: intake.route.key,
+      workflow: intake.route.workflow,
+      acknowledgementProvider: "jotform",
+      aimsAutoresponse: false,
+      answerCount: intake.storageSummary.answerCount,
+      attachmentCount: intake.storageSummary.attachmentCount,
     });
     const statements = [
       {
@@ -218,7 +223,7 @@ export class CommsHubRepository {
            LIMIT 1
         )
         RETURNING event_id, conversation_id, provider, form_id, submission_id, received_at, processed_at,
-                  payload_sha256, archive_key, archive_attempts`,
+                  payload_sha256, payload_json, archive_key, archive_attempts`,
       [workerId, leaseExpiresAt, maxAttempts, now, now]
     );
     return rows(result)[0] || null;
