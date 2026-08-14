@@ -494,6 +494,31 @@ export async function uploadText(bucketKey, key, text, contentType = "text/plain
   return uploadBuffer(bucketKey, key, Buffer.from(text, "utf-8"), contentType, options);
 }
 
+// Private/internal R2 writes deliberately do not construct or require a public URL.
+// Return an opaque r2:// reference that can be logged or persisted without exposing
+// the object anonymously on the Internet.
+export async function uploadPrivateBuffer(bucketKey, key, buffer, contentType = "application/octet-stream", options = {}) {
+  const bucket = ensureBucketKey(bucketKey);
+  const safeKey = normaliseR2ObjectKey(key);
+  const cacheControl = String(options?.cacheControl || "no-store, max-age=0").trim();
+
+  await sendR2Command(
+    new PutObjectCommand({
+      Bucket: bucket,
+      Key: safeKey,
+      Body: buffer,
+      ContentType: contentType,
+      ...(cacheControl ? { CacheControl: cacheControl } : {}),
+    })
+  );
+
+  return Object.freeze({ bucket, key: safeKey, uri: `r2://${bucket}/${safeKey}` });
+}
+
+export async function uploadPrivateText(bucketKey, key, text, contentType = "text/plain", options = {}) {
+  return uploadPrivateBuffer(bucketKey, key, Buffer.from(text, "utf-8"), contentType, options);
+}
+
 export async function getObjectAsText(bucketKey, key) {
   const bucket = ensureBucketKey(bucketKey);
   const safeKey = normaliseR2ObjectKey(key);
@@ -514,6 +539,9 @@ export const r2Get = getObjectAsText;
 
 export const putJson = async (bucketKey, key, obj) =>
   uploadText(bucketKey, key, JSON.stringify(obj, null, 2), "application/json");
+
+export const putPrivateJson = async (bucketKey, key, obj, options = {}) =>
+  uploadPrivateText(bucketKey, key, JSON.stringify(obj, null, 2), "application/json", options);
 
 export function buildPublicUrl(bucketKey, key) {
   const base = R2_PUBLIC_URLS[bucketKey];
@@ -597,6 +625,9 @@ export default {
   R2_PUBLIC_BASE_URL_RSS_RESOLVED,
   uploadBuffer,
   uploadText,
+  uploadPrivateBuffer,
+  uploadPrivateText,
+  putPrivateJson,
   getObjectAsText,
   deleteObject,
   listObjects,
