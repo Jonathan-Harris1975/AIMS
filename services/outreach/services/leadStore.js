@@ -1,4 +1,4 @@
-import { putJson } from "../../shared/utils/r2-client.js";
+import { putPrivateJson } from "../../shared/utils/r2-client.js";
 import { outreachLeadPrefix } from "../config.js";
 
 function safeSegment(value, fallback = "keyword") {
@@ -33,6 +33,6 @@ export async function saveLeadBatch({ keyword, leads = [], thresholds, generated
     leads,
   };
 
-  const url = await putJson("commsHub", key, payload);
+  const url = await putPrivateJson("commsHub", key, payload);
   return { bucketAlias: "commsHub", key, url, count: leads.length };
 }
