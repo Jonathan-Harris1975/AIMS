@@ -747,6 +747,14 @@ export function createCommsHubRouter({
     catch (error) { next(error); }
   });
 
+  router.post("/attachments/:attachmentId/scan", permit("manage_attachments"), async (req, res, next) => {
+    try {
+      const result = await contextProvider().attachmentService.scanQuarantined(req.params.attachmentId);
+      return res.json({ ok: true, result });
+    }
+    catch (error) { next(error); }
+  });
+
   router.post("/attachments/:attachmentId/ingest", permit("manage_attachments"), async (req, res, next) => {
     try {
       const buffer = Buffer.from(String(req.body?.base64 || ""), "base64");
