@@ -95,24 +95,25 @@ export async function orchestrateTTS(session) {
     const t1 = Date.now();
     const ttsResults = await ttsProcessor(sessionId, chunkList);
 
-    const successUrls = ttsResults
+    const successSources = ttsResults
       .filter((r) => r.success)
-      .map((r) => r.url);
+      .map((r) => r.r2Uri || r.url)
+      .filter(Boolean);
 
-    if (successUrls.length === 0) {
+    if (successSources.length === 0) {
       throw new Error("No TTS chunks were produced.");
     }
 
     info("🗣️ TTS saved to R2");
     debug("🗣️ TTS complete", {
       sessionId,
-      count: successUrls.length,
+      count: successSources.length,
       ms: Date.now() - t1,
     });
 
     // 3️⃣ Merge chunks
     const t2 = Date.now();
-    const merged = await mergeProcessor(sessionId, successUrls);
+    const merged = await mergeProcessor(sessionId, successSources);
 
     if (!merged?.key) {
       throw new Error("Merge step failed to produce output.");

@@ -4,7 +4,7 @@
 
 import { spawn } from "node:child_process";
 import { info, warn, error, debug } from "../../../logger.js";
-import { putObject } from "../../shared/utils/r2-client.js";
+import { putObject, putPrivateJson, getObjectAsText, getObjectAsBuffer } from "../../shared/utils/r2-client.js";
 import { fetchWithTimeout } from "../../shared/http-client.js";
 import fs from "node:fs";
 import path from "node:path";
@@ -163,13 +163,16 @@ async function updateMetaFile(sessionId, finalBuffer, finalPath, podcastUrl, art
 
   let existing = {};
   try {
-    if (metaUrl) {
-      const res = await fetchWithTimeout(metaUrl, { timeout: PODCAST_FETCH_TIMEOUT_MS });
-      if (res.ok && res.headers.get("content-type")?.includes("application/json")) {
-        existing = await res.json();
+    existing = JSON.parse(await getObjectAsText("meta", metaKey));
+  } catch {
+    // Compatibility fallback while the legacy public endpoint remains enabled.
+    try {
+      if (metaUrl) {
+        const res = await fetchWithTimeout(metaUrl, { timeout: PODCAST_FETCH_TIMEOUT_MS });
+        if (res.ok && res.headers.get("content-type")?.includes("application/json")) existing = await res.json();
       }
-    }
-  } catch {}
+    } catch {}
+  }
 
   const sessionDate =
     existing?.session?.date ||
@@ -258,12 +261,7 @@ async function updateMetaFile(sessionId, finalBuffer, finalPath, podcastUrl, art
     pubDate: new Date(sessionDate).toUTCString(),
   };
 
-  await safePutObject(
-    "meta",
-    metaKey,
-    Buffer.from(JSON.stringify(updated, null, 2)),
-    "application/json"
-  );
+  await putPrivateJson("meta", metaKey, updated);
 
   return { metaKey, metaUrl };
 }
@@ -292,15 +290,9 @@ export async function podcastProcessor(input, editedPathOrBuffer) {
     editedBuffer = editedPathOrBuffer;
     editedSource = "buffer";
   } else {
-    const publicBaseEdited = requireEnv("R2_PUBLIC_BASE_URL_EDITED_AUDIO");
-    const editedUrl = `${publicBaseEdited}/${sessionId}_edited.mp3`;
-
-    info("🎚 Fetching edited audio from R2", { sessionId, editedUrl, timeoutMs: PODCAST_FETCH_TIMEOUT_MS });
-
-    const res = await fetchWithTimeout(editedUrl, { timeout: PODCAST_FETCH_TIMEOUT_MS });
-    if (!res.ok) throw new Error("Failed to fetch edited audio from R2");
-
-    editedBuffer = Buffer.from(await res.arrayBuffer());
+    const editedKey = `${sessionId}_edited.mp3`;
+    info("🎚 Fetching edited audio from authenticated R2", { sessionId, editedKey });
+    editedBuffer = await getObjectAsBuffer("editedAudio", editedKey);
   }
 
   info("🎧 Retrieved edited audio", { sessionId, source: editedSource });

@@ -17,7 +17,7 @@ import path from "path";
 import { spawn, spawnSync } from "child_process";
 import { log } from "../../../logger.js";
 import { startKeepAlive, stopKeepAlive } from "../../shared/utils/keepalive.js";
-import { uploadBuffer } from "../../shared/utils/r2-client.js";
+import { uploadPrivateBuffer } from "../../shared/utils/r2-client.js";
 
 const TMP_DIR = path.resolve(process.env.PODCAST_EDIT_TMP_DIR || path.join(process.env.APP_TMP_DIR || "/tmp", "tts_editing"));
 const VOICE_FADE_SECONDS = 3.0; // 3-second fades
@@ -402,7 +402,7 @@ export async function editingProcessor(sessionId, inputPathObj) {
     const buffer = fs.readFileSync(finalPath);
     const key = `${sessionId}_edited.mp3`;
 
-    await uploadBuffer("editedAudio", key, buffer, "audio/mpeg");
+    await uploadPrivateBuffer("editedAudio", key, buffer, "audio/mpeg");
 
     log.info("💾 Uploaded edited MP3 to R2 (editedAudio)", {
       sessionId,
@@ -430,7 +430,7 @@ export async function editingProcessor(sessionId, inputPathObj) {
         const fallbackBuffer = fs.readFileSync(fallbackPath);
         const key = `${sessionId}_edited.mp3`;
 
-        await uploadBuffer("editedAudio", key, fallbackBuffer, "audio/mpeg");
+        await uploadPrivateBuffer("editedAudio", key, fallbackBuffer, "audio/mpeg");
 
         if (fallbackPath !== finalPath) {
           fs.copyFileSync(fallbackPath, finalPath);

@@ -9,7 +9,7 @@ import { spawn } from "child_process";
 import fetch from "node-fetch";
 import { info, error, warn, debug } from "../../../logger.js";
 import { startKeepAlive, stopKeepAlive } from "../../shared/utils/keepalive.js";
-import { uploadBuffer } from "../../shared/utils/r2-client.js";
+import { uploadPrivateBuffer, getR2ReferenceAsBuffer } from "../../shared/utils/r2-client.js";
 
 const TMP_DIR = path.resolve(process.env.PODCAST_MERGE_TMP_DIR || path.join(process.env.APP_TMP_DIR || "/tmp", "podcast_merge"));
 const MERGED_BUCKET = "merged";
@@ -47,6 +47,10 @@ function ensureTmpDir() {
 // ------------------------------------------------------------
 function isRemote(input) {
   return typeof input === "string" && /^https?:\/\//i.test(input);
+}
+
+function isR2Reference(input) {
+  return typeof input === "string" && input.startsWith("r2://");
 }
 
 // ------------------------------------------------------------
@@ -113,6 +117,7 @@ async function loadLocalToBuffer(localPath, attempt = 1) {
 // 🤝 Unified Buffer Loader (Remote or Local)
 // ------------------------------------------------------------
 async function loadChunk(input) {
+  if (isR2Reference(input)) return getR2ReferenceAsBuffer(input);
   if (isRemote(input)) return downloadRemoteToBuffer(input);
   return loadLocalToBuffer(input);
 }
@@ -131,7 +136,7 @@ export async function materializeSourceToLocal(sessionId, source, label = "singl
     throw new Error("Cannot materialize an empty source");
   }
 
-  if (!isRemote(source)) {
+  if (!isRemote(source) && !isR2Reference(source)) {
     return source;
   }
 
@@ -324,7 +329,7 @@ export async function mergeProcessor(sessionId, chunkUrls = []) {
     const mergedBuf = fs.readFileSync(finalPath);
     const mergedKey = `${sid}.mp3`;
 
-    await uploadBuffer(MERGED_BUCKET, mergedKey, mergedBuf, "audio/mpeg");
+    await uploadPrivateBuffer(MERGED_BUCKET, mergedKey, mergedBuf, "audio/mpeg");
 
     // ✅ CLEAN COMPLETION SUMMARY
     info("🟩 Merge process completed")

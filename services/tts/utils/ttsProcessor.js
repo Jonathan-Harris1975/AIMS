@@ -14,7 +14,7 @@ import {
   SynthesizeSpeechCommand,
 } from "@aws-sdk/client-polly";
 import { info, error, warn, debug } from "../../../logger.js";
-import { putObject, buildPublicUrl } from "../../shared/utils/r2-client.js";
+import { uploadPrivateBuffer, buildPublicUrl, buildR2Reference } from "../../shared/utils/r2-client.js";
 import pLimit from "p-limit";
 
 // ------------------------------------------------------------
@@ -100,9 +100,11 @@ async function processChunkWithRetry(sessionId, chunk, chunkNumber, attempt = 1)
     const audioBuffer = await synthesizeTextWithRetry(cleaned, 1);
 
     const key = `${sessionId}/chunk-${String(chunkNumber).padStart(3, "0")}.mp3`;
-    await putObject(CHUNKS_BUCKET_KEY, key, audioBuffer, "audio/mpeg");
+    await uploadPrivateBuffer(CHUNKS_BUCKET_KEY, key, audioBuffer, "audio/mpeg");
 
-    const url = buildPublicUrl(CHUNKS_BUCKET_KEY, key);
+    const r2Uri = buildR2Reference(CHUNKS_BUCKET_KEY, key);
+    let url = "";
+    try { url = buildPublicUrl(CHUNKS_BUCKET_KEY, key); } catch { url = ""; }
 
     const logMessage = attempt > 1
       ? `✅ Chunk ${chunkNumber} recovered (attempt ${attempt})`
@@ -118,6 +120,7 @@ async function processChunkWithRetry(sessionId, chunk, chunkNumber, attempt = 1)
       success: true,
       index: chunkNumber,
       url,
+      r2Uri,
       attempts: attempt,
     };
   } catch (err) {
