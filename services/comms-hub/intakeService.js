@@ -18,7 +18,12 @@ export async function processJotformIntake({ envelope, correlationId, context, n
       }, { actor: "jotform-intake", role: "admin" });
     }
   }
-  return { identifiers, intake, persistence };
+  return {
+    identifiers,
+    intake,
+    persistence,
+    acknowledgement: Object.freeze({ provider: "jotform", sentByAims: false }),
+  };
 }
 
 export default processJotformIntake;

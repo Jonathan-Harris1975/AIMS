@@ -16,6 +16,8 @@ Comms Hub is service 15 inside the existing AIMS process. It is mounted at `/com
 
 Every submission is re-fetched through the Jotform API. The returned form and submission identifiers must match before the contact, conversation, message, attachment references and intake event are persisted.
 
+Form acknowledgements/autoresponse emails remain owned by Jotform. AIMS does not send a second acknowledgement when a form is accepted. AIMS stores the verified submission in the Comms Hub data model, queues attachment ingestion when present, and writes only a redacted integrity receipt to the public Comms Hub R2 bucket. The receipt records the form route/workflow and non-sensitive counts, while the full normalised payload remains in D1.
+
 ### Phase 2: Zernio social inbox
 
 Zernio remains the connected-channel owner, while AIMS owns ingestion, persistence, actions, polling and operational state. Meta and Video credentials are isolated; no legacy-key or cross-family fallback exists.
