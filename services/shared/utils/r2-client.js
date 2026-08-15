@@ -380,14 +380,14 @@ export const R2_PUBLIC_URLS = {
   brandassets:     R2_PUBLIC_BASE_URL_BRAND_ASSETS,
   "brand-assets":  R2_PUBLIC_BASE_URL_BRAND_ASSETS,
 
-  // Comms Hub redacted integrity receipts
-  commsHub:        R2_PUBLIC_BASE_URL_COMMS_HUB,
-  commshub:        R2_PUBLIC_BASE_URL_COMMS_HUB,
-  "comms-hub":     R2_PUBLIC_BASE_URL_COMMS_HUB,
+  // Comms Hub operational receipts are private. Stale public env values are ignored.
+  commsHub:        null,
+  commshub:        null,
+  "comms-hub":     null,
 
-  // NEW — metasystem public URL
-  metasystem:      META_SYSTEM_PUBLIC_BASE_URL,
-  metaSystem:      META_SYSTEM_PUBLIC_BASE_URL,
+  // Durable system state is private. Stale public env values are ignored.
+  metasystem:      null,
+  metaSystem:      null,
 
   // Legacy/compat (read-only)
   R2_PUBLIC_BASE_URL_RSS_FEEDS,
