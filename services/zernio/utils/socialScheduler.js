@@ -123,7 +123,7 @@ function findPlainPhraseBreaches(text = "", phrases = []) {
 function imageUrlHostWarning(imageUrl = "") {
   const raw = String(imageUrl || "").trim();
   if (!raw) return [];
-  const allowedHosts = String(process.env.ZERNIO_CANONICAL_IMAGE_HOSTS || "images.jonathan-harris.online,pub-f6b6cfd7d07e46f695d08e4a8dc3bd6b.r2.dev")
+  const allowedHosts = String(process.env.ZERNIO_CANONICAL_IMAGE_HOSTS || "images.jonathan-harris.online")
     .split(",")
     .map((item) => item.trim().toLowerCase())
     .filter(Boolean);
