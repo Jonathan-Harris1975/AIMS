@@ -416,8 +416,22 @@ export function createCommsHubRouter({
 
   router.get("/social/status", permit("read_queue"), async (_req, res, next) => {
     try {
-      const social = await contextProvider().repository.getSocialStatus();
-      return res.status(200).json({ ok: true, service: "comms-hub", social });
+      const active = contextProvider();
+      const social = await active.repository.getSocialStatus();
+      const monitoring = {
+        monitorOnly: active.config.socialMonitorOnly,
+        pollWorkerEnabled: active.config.socialPollWorkerEnabled,
+        pollMs: active.config.socialPollMs,
+        batchSize: active.config.socialPollBatchSize,
+        enabledFamilies: active.socialPollWorker.enabledFamilies(),
+        families: Object.fromEntries(
+          Object.entries(active.config.zernioFamilies).map(([name, family]) => [name, {
+            enabled: family.enabled,
+            platforms: [...family.platforms],
+          }])
+        ),
+      };
+      return res.status(200).json({ ok: true, service: "comms-hub", monitoring, social });
     } catch (error) {
       next(error);
     }
