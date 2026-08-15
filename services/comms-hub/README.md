@@ -199,7 +199,7 @@ Stored objects are never exposed through a public R2 URL. Authenticated operator
 
 ### R2 privacy transition
 
-Primary Comms Hub R2 access is authenticated. `comms-hub` and `comms-hub-private` are target-private buckets; any configured `R2_PUBLIC_BASE_URL_COMMS_HUB` is temporary compatibility only and is not required by Comms Hub readiness. The backup/restore bucket has not been created and must remain disabled until that phase is intentionally implemented.
+Primary Comms Hub R2 access is authenticated. `comms-hub` and `comms-hub-private` are private buckets; `R2_PUBLIC_BASE_URL_COMMS_HUB` must remain blank and any bucket public development URL/custom public domain should be disabled in Cloudflare. The backup/restore bucket has not been created and must remain disabled until that phase is intentionally implemented.
 
 
 ## Live email rollout configuration
