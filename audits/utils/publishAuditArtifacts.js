@@ -8,23 +8,27 @@ import {
 
 const AUDIT_BUCKET_ALIAS = "audits";
 const AUDIT_BUCKET_ENV = "R2_BUCKET_AUDITS";
-const AUDIT_PUBLIC_BASE_ENV = "R2_PUBLIC_BASE_URL_AUDITS";
 
 function cleanEnv(name) {
   return String(process.env[name] || "").trim();
 }
 
-function trimTrailingSlash(value) {
-  return String(value || "").trim().replace(/\/+$/, "");
+function normaliseAuditKey(value) {
+  const key = String(value || "").trim().replace(/^\/+/, "");
+  if (!key || key.includes("..") || /[?#\x00-\x1f\x7f]/.test(key)) return "";
+  return key;
 }
 
 export function getAuditPublishConfig() {
+  const bucketName = getAuditBucketName();
   return {
     bucketAlias: AUDIT_BUCKET_ALIAS,
     bucketEnv: AUDIT_BUCKET_ENV,
-    publicBaseEnv: AUDIT_PUBLIC_BASE_ENV,
-    bucketName: getAuditBucketName(),
-    publicBaseUrl: getAuditPublicBaseUrl(),
+    publicBaseEnv: null,
+    bucketName,
+    publicBaseUrl: null,
+    accessMode: "private-r2",
+    storageUri: bucketName ? `r2://${bucketName}` : null,
   };
 }
 
@@ -33,19 +37,21 @@ export function getAuditBucketName() {
 }
 
 export function getAuditPublicBaseUrl() {
-  return trimTrailingSlash(cleanEnv(AUDIT_PUBLIC_BASE_ENV));
+  return "";
 }
 
 export function assertAuditR2Config() {
   const bucket = getAuditBucketName();
-  const publicBaseUrl = getAuditPublicBaseUrl();
-  const missing = [];
-  if (!bucket) missing.push(AUDIT_BUCKET_ENV);
-  if (!publicBaseUrl) missing.push(AUDIT_PUBLIC_BASE_ENV);
-  if (missing.length) {
-    throw new Error(`${missing.join(" and ")} must be configured for audit artefact storage`);
+  if (!bucket) {
+    throw new Error(`${AUDIT_BUCKET_ENV} must be configured for private audit artefact storage`);
   }
-  return { bucket, publicBaseUrl, bucketAlias: AUDIT_BUCKET_ALIAS };
+  return {
+    bucket,
+    publicBaseUrl: null,
+    bucketAlias: AUDIT_BUCKET_ALIAS,
+    accessMode: "private-r2",
+    storageUri: `r2://${bucket}`,
+  };
 }
 
 function getClient() {
@@ -59,13 +65,11 @@ function getClient() {
   });
 }
 
-function buildPublicUrl(key) {
-  const { publicBaseUrl } = assertAuditR2Config();
-  return `${publicBaseUrl}/${key}`;
-}
-
-function normalisePublicUrl(value) {
-  return String(value || "").trim().replace(/\/+$/, "");
+function buildPrivateReference(key) {
+  const { bucket } = assertAuditR2Config();
+  const cleanKey = normaliseAuditKey(key);
+  if (!cleanKey) throw new Error("Invalid audit artefact object key");
+  return `r2://${bucket}/${cleanKey}`;
 }
 
 function isUsableArtefactUrl(value) {
@@ -107,28 +111,59 @@ function artefactUrlsFromPayload(payload = {}) {
     .map((value) => String(value).trim());
 }
 
+// Legacy HTTP-shaped callback values are accepted only as object-key carriers.
+// AIMS never fetches them anonymously; it extracts the key and reads private R2.
+export function auditKeyFromPublicUrl(value) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  const { bucket } = assertAuditR2Config();
+
+  if (text.startsWith("r2://")) {
+    const prefix = `r2://${bucket}/`;
+    if (!text.startsWith(prefix)) return "";
+    return normaliseAuditKey(text.slice(prefix.length));
+  }
+
+  if (/^https?:\/\//i.test(text)) {
+    try {
+      const parsed = new URL(text);
+      const key = normaliseAuditKey(decodeURIComponent(parsed.pathname).replace(/^\/+/, ""));
+      return key.startsWith("audits/") ? key : "";
+    } catch {
+      return "";
+    }
+  }
+
+  return normaliseAuditKey(text);
+}
+
 export function assertAuditArtifactUrls(payload = {}, { requireAny = true } = {}) {
-  const { publicBaseUrl } = assertAuditR2Config();
-  const urls = artefactUrlsFromPayload(payload);
-  if (requireAny && !urls.length) {
-    throw new Error("Completed audit callback did not include any artefact URLs");
+  const { bucket } = assertAuditR2Config();
+  const locations = artefactUrlsFromPayload(payload);
+  if (requireAny && !locations.length) {
+    throw new Error("Completed audit callback did not include any artefact references");
   }
 
-  const normalisedBase = normalisePublicUrl(publicBaseUrl);
-  const outsideBase = urls.filter((url) => !normalisePublicUrl(url).startsWith(`${normalisedBase}/`));
-  if (outsideBase.length) {
-    throw new Error(
-      `Audit artefact URL(s) are outside ${AUDIT_PUBLIC_BASE_ENV}: ${outsideBase.join(", ")}`
-    );
+  const invalid = locations.filter((location) => {
+    const key = auditKeyFromPublicUrl(location);
+    return !key || !key.startsWith("audits/");
+  });
+  if (invalid.length) {
+    throw new Error(`Audit artefact reference(s) are outside private R2 bucket ${bucket}: ${invalid.join(", ")}`);
   }
 
-  return { ok: true, urls, publicBaseUrl: normalisedBase };
+  return {
+    ok: true,
+    urls: locations,
+    references: locations,
+    bucket,
+    accessMode: "private-r2",
+  };
 }
 
 export function assertCompletedAuditArtifactUrls(payload = {}) {
   return assertAuditArtifactUrls(payload, { requireAny: true });
 }
-
 
 async function bodyToString(body) {
   if (body === undefined || body === null) return "";
@@ -140,22 +175,12 @@ async function bodyToString(body) {
   return Buffer.concat(chunks).toString("utf8");
 }
 
-export function auditKeyFromPublicUrl(value) {
-  const text = String(value || "").trim();
-  if (!text) return "";
-  if (!/^https?:\/\//i.test(text)) return text.replace(/^\/+/, "");
-  const { publicBaseUrl } = assertAuditR2Config();
-  const base = normalisePublicUrl(publicBaseUrl);
-  const normalised = normalisePublicUrl(text);
-  if (!normalised.startsWith(`${base}/`)) return "";
-  return decodeURIComponent(normalised.slice(base.length + 1)).replace(/^\/+/, "");
-}
-
 export async function readAuditText({ key }) {
-  if (!key) throw new Error("readAuditText requires key");
+  const cleanKey = normaliseAuditKey(key);
+  if (!cleanKey) throw new Error("readAuditText requires a valid key");
   const { bucket } = assertAuditR2Config();
   const client = getClient();
-  const response = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+  const response = await client.send(new GetObjectCommand({ Bucket: bucket, Key: cleanKey }));
   return bodyToString(response.Body);
 }
 
@@ -165,15 +190,19 @@ export async function readAuditJson({ key }) {
 }
 
 async function putObject({ key, body, contentType }) {
+  const cleanKey = normaliseAuditKey(key);
+  if (!cleanKey) throw new Error("Audit publish requires a valid key");
   const { bucket } = assertAuditR2Config();
   const client = getClient();
   await client.send(new PutObjectCommand({
     Bucket: bucket,
-    Key: key,
+    Key: cleanKey,
     Body: body,
     ContentType: contentType,
+    CacheControl: "no-store, max-age=0",
   }));
-  return { key, url: buildPublicUrl(key), bucketAlias: AUDIT_BUCKET_ALIAS };
+  const uri = buildPrivateReference(cleanKey);
+  return { key: cleanKey, url: uri, uri, bucketAlias: AUDIT_BUCKET_ALIAS };
 }
 
 async function putJson(key, payload) {
@@ -211,7 +240,7 @@ export async function publishAuditRequest({ auditType, sessionId, payload, repor
     payload,
   };
   const published = await putJson(key, document);
-  return { key, url: published.url };
+  return { key, url: published.url, uri: published.uri };
 }
 
 export async function publishAuditLatest({ auditType, sessionId, payload }) {
@@ -223,7 +252,7 @@ export async function publishAuditLatest({ auditType, sessionId, payload }) {
     ...payload,
   };
   const published = await putJson(key, document);
-  return { key, url: published.url };
+  return { key, url: published.url, uri: published.uri };
 }
 
 function normaliseKeepPrefix(value) {

@@ -28,7 +28,6 @@ export function getWebsiteAuditReadiness(env = process.env) {
 
   const checks = [
     check("audit_r2_bucket", Boolean(clean(env.R2_BUCKET_AUDITS)), "R2_BUCKET_AUDITS"),
-    check("audit_r2_public_url", Boolean(clean(env.R2_PUBLIC_BASE_URL_AUDITS)), "R2_PUBLIC_BASE_URL_AUDITS"),
     check("r2_endpoint", any(env, ["R2_ENDPOINT", "R2_ENDPOINT_URL"]), "R2_ENDPOINT or R2_ENDPOINT_URL"),
     check("r2_access_key", Boolean(clean(env.R2_ACCESS_KEY_ID)), "R2_ACCESS_KEY_ID"),
     check("r2_secret_key", Boolean(clean(env.R2_SECRET_ACCESS_KEY)), "R2_SECRET_ACCESS_KEY"),

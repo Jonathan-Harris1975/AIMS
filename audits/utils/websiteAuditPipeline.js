@@ -15,7 +15,7 @@ import { startAuditRun } from "./orchestrator.js";
 import {
   auditKeyFromPublicUrl,
   cleanupAuditPrefix,
-  getAuditPublicBaseUrl,
+  getAuditBucketName,
   publishAuditBuffer,
   publishAuditJson,
   publishAuditText,
@@ -297,10 +297,10 @@ function normalisePrefix(value) {
   return String(value || "").trim().replace(/^\/+/, "").replace(/\/+$/, "");
 }
 
-function publicAuditUrlForKey(key) {
-  const base = String(getAuditPublicBaseUrl() || "").trim().replace(/\/+$/, "");
+function privateAuditReferenceForKey(key) {
+  const bucket = String(getAuditBucketName() || "").trim();
   const cleanKey = normalisePrefix(key);
-  return base && cleanKey ? `${base}/${cleanKey}` : "";
+  return bucket && cleanKey ? `r2://${bucket}/${cleanKey}` : "";
 }
 
 function uniqueLocations(values = []) {
@@ -310,23 +310,6 @@ function uniqueLocations(values = []) {
     seen.add(value);
     return true;
   });
-}
-
-async function fetchAuditJson(url) {
-  if (!url || typeof fetch !== "function") throw new Error("Public audit JSON fetch is unavailable");
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), AUDIT_ARTEFACT_READ_TIMEOUT_MS);
-  try {
-    const response = await fetch(url, {
-      method: "GET",
-      headers: { accept: "application/json" },
-      signal: controller.signal,
-    });
-    if (!response.ok) throw new Error(`HTTP ${response.status} ${response.statusText}`.trim());
-    return await response.json();
-  } finally {
-    clearTimeout(timeout);
-  }
 }
 
 async function withTimeout(promise, timeoutMs, label) {
@@ -347,35 +330,25 @@ async function readAuditJsonLocation(location) {
   const value = String(location || "").trim();
   if (!value) throw new Error("Audit JSON location is empty");
   const key = auditKeyFromPublicUrl(value);
-  const url = /^https?:\/\//i.test(value) ? value : publicAuditUrlForKey(key || value);
+  if (!key) throw new Error(`Audit JSON reference is outside the private audits bucket: ${value}`);
   const errors = [];
 
   for (let attempt = 1; attempt <= AUDIT_ARTEFACT_READ_ATTEMPTS; attempt += 1) {
-    if (key) {
-      try {
-        const data = await withTimeout(
-          readAuditJson({ key }),
-          AUDIT_ARTEFACT_READ_TIMEOUT_MS,
-          `R2 audit JSON read for ${key}`
-        );
-        return { data, location: key, transport: "r2-sdk", attempt };
-      } catch (err) {
-        errors.push(`R2 attempt ${attempt}: ${err?.message || String(err)}`);
-      }
-    }
-
-    if (url) {
-      try {
-        return { data: await fetchAuditJson(url), location: url, transport: "public-http", attempt };
-      } catch (err) {
-        errors.push(`HTTP attempt ${attempt}: ${err?.message || String(err)}`);
-      }
+    try {
+      const data = await withTimeout(
+        readAuditJson({ key }),
+        AUDIT_ARTEFACT_READ_TIMEOUT_MS,
+        `R2 audit JSON read for ${key}`
+      );
+      return { data, location: privateAuditReferenceForKey(key), transport: "r2-sdk", attempt };
+    } catch (err) {
+      errors.push(`R2 attempt ${attempt}: ${err?.message || String(err)}`);
     }
 
     if (attempt < AUDIT_ARTEFACT_READ_ATTEMPTS) await wait(attempt * 500);
   }
 
-  throw new Error(errors.join(" | ") || `Unable to read audit JSON from ${value}`);
+  throw new Error(errors.join(" | ") || `Unable to read private audit JSON from ${value}`);
 }
 
 async function loadJsonArtefact(label, locations = []) {
@@ -481,7 +454,7 @@ async function loadChildStageOnce(parentSessionId, stage, parentJob) {
     || (completionState === "complete" ? "completed" : "unknown");
   const reportJsonUrl = trustedChildJob?.reportJsonUrl
     || stageState.reportJsonUrl
-    || publicAuditUrlForKey(`${expectedReportPrefix}/report.json`)
+    || privateAuditReferenceForKey(`${expectedReportPrefix}/report.json`)
     || null;
 
   const loadDiagnostics = {
@@ -524,14 +497,14 @@ async function loadChildStageOnce(parentSessionId, stage, parentJob) {
     execution: report.execution || execution,
     preflight: report.preflight || preflight,
     reconciliation: report.reconciliation || reconciliation,
-    reportUrl: trustedChildJob?.reportUrl || stageState.reportUrl || publicAuditUrlForKey(`${expectedReportPrefix}/report.html`) || null,
+    reportUrl: trustedChildJob?.reportUrl || stageState.reportUrl || privateAuditReferenceForKey(`${expectedReportPrefix}/report.html`) || null,
     reportJsonUrl,
-    summaryUrl: trustedChildJob?.summaryUrl || stageState.summaryUrl || publicAuditUrlForKey(`${expectedReportPrefix}/summary.json`) || null,
-    coverageUrl: trustedChildJob?.coverageUrl || stageState.coverageUrl || publicAuditUrlForKey(`${expectedReportPrefix}/coverage.json`) || null,
-    evidenceUrl: trustedChildJob?.evidenceUrl || stageState.evidenceUrl || publicAuditUrlForKey(`${expectedReportPrefix}/evidence.json`) || null,
-    executionUrl: trustedChildJob?.executionUrl || stageState.executionUrl || publicAuditUrlForKey(`${expectedReportPrefix}/execution.json`) || null,
-    preflightUrl: trustedChildJob?.preflightUrl || stageState.preflightUrl || publicAuditUrlForKey(`${expectedReportPrefix}/preflight.json`) || null,
-    reconciliationUrl: trustedChildJob?.reconciliationUrl || stageState.reconciliationUrl || publicAuditUrlForKey(`${expectedReportPrefix}/reconciliation.json`) || null,
+    summaryUrl: trustedChildJob?.summaryUrl || stageState.summaryUrl || privateAuditReferenceForKey(`${expectedReportPrefix}/summary.json`) || null,
+    coverageUrl: trustedChildJob?.coverageUrl || stageState.coverageUrl || privateAuditReferenceForKey(`${expectedReportPrefix}/coverage.json`) || null,
+    evidenceUrl: trustedChildJob?.evidenceUrl || stageState.evidenceUrl || privateAuditReferenceForKey(`${expectedReportPrefix}/evidence.json`) || null,
+    executionUrl: trustedChildJob?.executionUrl || stageState.executionUrl || privateAuditReferenceForKey(`${expectedReportPrefix}/execution.json`) || null,
+    preflightUrl: trustedChildJob?.preflightUrl || stageState.preflightUrl || privateAuditReferenceForKey(`${expectedReportPrefix}/preflight.json`) || null,
+    reconciliationUrl: trustedChildJob?.reconciliationUrl || stageState.reconciliationUrl || privateAuditReferenceForKey(`${expectedReportPrefix}/reconciliation.json`) || null,
     workflowRunUrl: trustedChildJob?.workflowRunUrl || stageState.workflowRunUrl || null,
     hardGateBlocked: Boolean(
       trustedChildJob?.hardGateBlocked === true
