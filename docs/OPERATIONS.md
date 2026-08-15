@@ -47,9 +47,9 @@ AIMS runs as one non-root Koyeb Web Service with durable R2-backed state and fai
 ## Required non-secret production values
 
 - `R2_BUCKET_AUDITS=audits`
-- `R2_PUBLIC_BASE_URL_AUDITS=https://pub-f6b6cfd7d07e46f695d08e4a8dc3bd6b.r2.dev`
+- `R2_PUBLIC_BASE_URL_AUDITS=` (leave blank; `audits` is private and uses authenticated R2 access)
 - `R2_BUCKET_HIVE_SKILLS=hive-skills`
-- `R2_PUBLIC_BASE_URL_HIVE_SKILLS=https://pub-da50a6512f164566955a3076a1c795ef.r2.dev`
+- `R2_PUBLIC_BASE_URL_HIVE_SKILLS=` (leave blank; `hive-skills` is private and uses authenticated R2 access)
 - `BLOTATO_DEFAULT_CHANNELS=instagram,youtube,tiktok,facebook`
 - `BLOTATO_REQUIRE_ALL_CHANNELS=false` unless the release explicitly requires all platforms to publish successfully.
 - `CLOUDFLARE_PURGE_ALLOW_PUBLIC=false`

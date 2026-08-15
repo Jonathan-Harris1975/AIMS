@@ -9,12 +9,13 @@ AIMS now treats HIVE as the controller for shared skills. The repository should 
 ## Central R2 pool
 
 ```text
-R2_PUBLIC_BASE_URL_HIVE_SKILLS=https://pub-da50a6512f164566955a3076a1c795ef.r2.dev
+R2_PUBLIC_BASE_URL_HIVE_SKILLS=
 R2_BUCKET_HIVE_SKILLS=hive-skills
+# Objects are addressed internally as r2://hive-skills/<object-key> and read with authenticated R2 credentials.
 HIVE_SKILLS_AIMS_MANIFEST_PATH=manifests/aims-skills-manifest.json
 ```
 
-AIMS reads metadata from the AIMS manifest, skill descriptor URLs, and the Brand & Social council descriptor stored in the shared HIVE skill pool. The website audit now uses its built-in 24-seat council and no longer depends on the retired S203/S204 standalone council descriptors.
+AIMS reads metadata from the AIMS manifest, private R2 skill descriptor references, and the Brand & Social council descriptor stored in the shared HIVE skill pool. The website audit now uses its built-in 24-seat council and no longer depends on the retired S203/S204 standalone council descriptors.
 
 ## R2 council skill descriptor object key
 
