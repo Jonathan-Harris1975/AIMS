@@ -37,9 +37,14 @@ test("AIMS internal podcast path uses authenticated R2 for private intermediate 
   assert.match(editing, /uploadPrivateBuffer\("editedAudio"/);
 });
 
-test("compatibility public URLs are preserved during the cross-repo migration", async () => {
+test("target-private AIMS buckets no longer ship public base URLs", async () => {
   const env = await fs.readFile(new URL("../config/production.defaults.env", import.meta.url), "utf8");
+  for (const name of ["R2_PUBLIC_BASE_URL_META_SYSTEM", "R2_PUBLIC_BASE_URL_COMMS_HUB"]) {
+    assert.match(env, new RegExp(`^${name}=$`, "m"));
+  }
+
+  // Compatibility URLs remain only for buckets still marked temporary/public in the access matrix.
   for (const name of ["R2_PUBLIC_BASE_URL_AUDITS", "R2_PUBLIC_BASE_URL_RAW_TEXT", "R2_PUBLIC_BASE_URL_CHUNKS", "R2_PUBLIC_BASE_URL_MERGE", "R2_PUBLIC_BASE_URL_META", "R2_PUBLIC_BASE_URL_EDITED_AUDIO", "R2_PUBLIC_BASE_URL_HIVE_SKILLS"]) {
-    assert.match(env, new RegExp(`^${name}=`, "m"));
+    assert.match(env, new RegExp(`^${name}=.+$`, "m"));
   }
 });

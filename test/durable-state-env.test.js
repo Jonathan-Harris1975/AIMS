@@ -53,7 +53,7 @@ test("r2-client metasystem alias resolves legacy R2_META_BUCKET", async () => {
 
     assert.equal(mod.R2_BUCKETS.metasystem, "legacy-meta-bucket");
     assert.equal(mod.R2_BUCKETS.metaSystem, "legacy-meta-bucket");
-    assert.equal(mod.R2_PUBLIC_URLS.metasystem, "https://meta.example.invalid");
+    assert.equal(mod.R2_PUBLIC_URLS.metasystem, null);
     assert.equal(mod.BUCKET_ENV_BY_ALIAS.metasystem, "R2_META_BUCKET");
   } finally {
     for (const key of Object.keys(process.env)) {
