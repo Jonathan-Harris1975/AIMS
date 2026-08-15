@@ -767,7 +767,13 @@ export function createCommsHubRouter({
   });
 
   router.post("/email/poll/drain", permit("manage_workflows"), async (req, res, next) => {
-    try { return res.json({ ok: true, ...(await contextProvider().emailPollWorker.runOnce({ limit: Number(req.body?.limit || 0) || undefined })) }); }
+    try {
+      const result = await contextProvider().emailPollWorker.runOnce({
+        limit: Number(req.body?.limit || 0) || undefined,
+        force: req.body?.force === true,
+      });
+      return res.json({ ok: true, ...result });
+    }
     catch (error) { next(error); }
   });
 
