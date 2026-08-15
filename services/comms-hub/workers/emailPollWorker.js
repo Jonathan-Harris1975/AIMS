@@ -61,12 +61,16 @@ export class CommsHubEmailPollWorker {
       });
       if (!state) return { skipped: true, reason: 'not_due' };
 
-      // First-run safety: never ingest historical mailbox content unless an
-      // operator has explicitly enabled historical backfill. Establish the
-      // current UID watermark using metadata only, then process only messages
-      // arriving after that baseline on subsequent polls.
-      if (Number(state.last_uid || 0) === 0 && !this.context.config.emailHistoricalBackfillEnabled) {
-        const cursor = await this.context.oneComMail.getMailboxCursor({ mailbox });
+      // Safety boundary: inspect mailbox metadata before fetching any body.
+      // First run, UIDVALIDITY changes and mailbox resets establish a fresh
+      // watermark rather than risking historical message processing.
+      const cursor = await this.context.oneComMail.getMailboxCursor({ mailbox });
+      const lastUid = Number(state.last_uid || 0);
+      const previousUidValidity = Number(state.uid_validity || 0) || null;
+      const uidValidityChanged = Boolean(previousUidValidity && cursor.uidValidity && previousUidValidity !== cursor.uidValidity);
+      const mailboxReset = lastUid > Number(cursor.highestUid || 0);
+
+      if ((!lastUid && !this.context.config.emailHistoricalBackfillEnabled) || uidValidityChanged || mailboxReset) {
         await this.context.operationsRepository.completeEmailPollState({
           accountKey,
           mailbox,
@@ -75,7 +79,9 @@ export class CommsHubEmailPollWorker {
           uidValidity: cursor.uidValidity,
           nextAttemptAt: new Date(Date.now() + this.context.config.emailPollMs).toISOString(),
         });
-        return { skipped: true, reason: 'historical_baseline_established', highestUid: cursor.highestUid };
+        const reason = uidValidityChanged ? 'uidvalidity_rebaseline' : mailboxReset ? 'mailbox_reset_rebaseline' : 'historical_baseline_established';
+        log.info('commsHub.emailPoll.baseline', { accountKey, mailbox, reason, highestUid: cursor.highestUid, uidValidity: cursor.uidValidity });
+        return { skipped: true, reason, highestUid: cursor.highestUid };
       }
 
       const fetched = await this.context.oneComMail.fetchMessages({
@@ -95,6 +101,15 @@ export class CommsHubEmailPollWorker {
         uidValidity: fetched.uidValidity,
         nextAttemptAt: new Date(Date.now() + this.context.config.emailPollMs).toISOString(),
       });
+      if (results.length) {
+        log.info('commsHub.emailPoll.processed', {
+          accountKey,
+          mailbox,
+          managedAddress: this.context.config.oneComEmailAddress,
+          processed: results.length,
+          attachmentCount: results.reduce((total, item) => total + (item.attachments?.length || 0), 0),
+        });
+      }
       return { processed: results.length, highestUid: fetched.highestUid, results };
     } catch (error) {
       if (state) {
