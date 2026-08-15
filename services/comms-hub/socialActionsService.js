@@ -3,6 +3,7 @@ import { sha256Hex, stableId } from "./domain/ids.js";
 import { redactDiagnosticText } from "./domain/redaction.js";
 import { assertSupportedModerationAction } from "./domain/ai.js";
 import { requestApproval, requireApproval } from "./approvalService.js";
+import { SOCIAL_CHANNEL_CAPABILITIES } from "./config.js";
 
 function text(value) {
   return value === undefined || value === null ? "" : String(value).trim();
@@ -76,6 +77,19 @@ function isModerationAction(action) {
   return ["hide", "unhide", "delete", "moderate", "block", "escalate"].includes(action);
 }
 
+
+function capabilitiesForThread(thread) {
+  const platform = text(thread?.platform).toLowerCase();
+  const capabilities = SOCIAL_CHANNEL_CAPABILITIES[platform];
+  if (!capabilities || capabilities.family !== thread?.credential_family) {
+    throw new CommsHubError(409, "social_channel_contract_invalid", "Social thread platform/family capability contract is invalid.", {
+      failureClass: "permanent",
+      publicMessage: "Social channel configuration requires review.",
+    });
+  }
+  return capabilities;
+}
+
 function assertSocialWritesEnabled(context) {
   if (context?.config?.socialMonitorOnly === true) {
     throw new CommsHubError(403, "social_monitor_only", "Outbound social actions are disabled while Comms Hub social monitoring mode is active.", {
@@ -143,6 +157,7 @@ export async function executeSocialAction({ conversationId, action, body = {}, i
       publicMessage: "Social conversation was not found.",
     });
   }
+  const capabilities = capabilitiesForThread(thread);
   const normalisedAction = text(action).toLowerCase();
   const actionBody = actionBodyWithoutApproval(body);
   const targetId = stableId("act", "zernio", key);
@@ -226,6 +241,9 @@ export async function executeSocialAction({ conversationId, action, body = {}, i
         });
       }
       if (thread.thread_type === "dm") {
+        if (!capabilities.directMessages) {
+          throw new CommsHubError(400, "social_dm_unsupported", "Direct messages are not supported for this platform.", { publicMessage: "Direct messaging is not supported for this platform." });
+        }
         response = await client.sendMessage({
           platform: thread.platform,
           conversationId: thread.provider_thread_id,
@@ -239,6 +257,9 @@ export async function executeSocialAction({ conversationId, action, body = {}, i
           messageTag: text(actionBody.messageTag) || undefined,
         });
       } else if (actionBody.private === true) {
+        if (!capabilities.privateCommentReplies) {
+          throw new CommsHubError(400, "social_private_reply_unsupported", "Private comment replies are not supported for this platform.", { publicMessage: "Private reply is not supported for this platform." });
+        }
         response = await client.privateReplyToComment({
           platform: thread.platform,
           postId: thread.provider_post_id,
@@ -249,12 +270,15 @@ export async function executeSocialAction({ conversationId, action, body = {}, i
           buttons,
         });
       } else {
+        if (!capabilities.commentReplies) {
+          throw new CommsHubError(400, "social_comment_reply_unsupported", "Comment replies are not supported for this platform.", { publicMessage: "Comment reply is not supported for this platform." });
+        }
         if (quickReplies?.length || buttons?.length) {
           throw new CommsHubError(400, "social_interactions_unsupported", "Interactive elements are not valid on a public comment reply.", {
             publicMessage: "Interactive elements require a direct or private reply.",
           });
         }
-        if (attachmentUrl && thread.platform !== "facebook") {
+        if (attachmentUrl && !capabilities.commentAttachments) {
           throw new CommsHubError(400, "social_comment_attachment_unsupported", "Public comment attachments are available only on Facebook.", {
             publicMessage: "Attachments are not supported for this comment reply.",
           });
@@ -269,6 +293,7 @@ export async function executeSocialAction({ conversationId, action, body = {}, i
         });
       }
     } else if (normalisedAction === "read") {
+      if (!capabilities.markRead) throw new CommsHubError(400, "social_action_unsupported", "Read-state updates are not supported for this platform.");
       if (thread.thread_type !== "dm") throw new CommsHubError(400, "social_action_unsupported", "Read action requires a DM conversation.");
       response = await client.markConversationRead({
         platform: thread.platform,
@@ -276,6 +301,7 @@ export async function executeSocialAction({ conversationId, action, body = {}, i
         accountId: thread.account_id,
       });
     } else if (normalisedAction === "status") {
+      if (!capabilities.conversationStatus) throw new CommsHubError(400, "social_action_unsupported", "Conversation status updates are not supported for this platform.");
       if (thread.thread_type !== "dm") throw new CommsHubError(400, "social_action_unsupported", "Status action requires a DM conversation.");
       const status = text(actionBody.status).toLowerCase();
       if (!["active", "archived"].includes(status)) {
@@ -294,7 +320,7 @@ export async function executeSocialAction({ conversationId, action, body = {}, i
         updatedAt: new Date().toISOString(),
       });
     } else if (["hide", "unhide"].includes(normalisedAction)) {
-      if (thread.thread_type !== "comment" || !["facebook", "instagram"].includes(thread.platform)) {
+      if (thread.thread_type !== "comment" || !capabilities.hideComments) {
         throw new CommsHubError(400, "social_action_unsupported", "Hide and unhide are available only for Meta comments.");
       }
       response = await client.setCommentHidden({
@@ -305,6 +331,7 @@ export async function executeSocialAction({ conversationId, action, body = {}, i
         hidden: normalisedAction === "hide",
       });
     } else if (normalisedAction === "delete") {
+      if (!capabilities.deleteComments) throw new CommsHubError(400, "social_action_unsupported", "Comment deletion is not supported for this platform.");
       if (thread.thread_type !== "comment") throw new CommsHubError(400, "social_action_unsupported", "Delete action requires a comment conversation.");
       response = await client.deleteComment({
         platform: thread.platform,
@@ -319,7 +346,7 @@ export async function executeSocialAction({ conversationId, action, body = {}, i
         updatedAt: new Date().toISOString(),
       });
     } else if (normalisedAction === "moderate") {
-      if (thread.thread_type !== "comment" || thread.platform !== "youtube") {
+      if (thread.thread_type !== "comment" || !capabilities.moderation) {
         throw new CommsHubError(400, "social_action_unsupported", "Moderation status is available only for YouTube comments.");
       }
       const moderationStatus = text(actionBody.moderationStatus);

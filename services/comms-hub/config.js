@@ -33,6 +33,69 @@ export const ZERNIO_CHANNEL_FAMILIES = Object.freeze({
   }),
 });
 
+
+export const SOCIAL_CHANNEL_CAPABILITIES = Object.freeze({
+  facebook: Object.freeze({
+    family: "meta",
+    directMessages: true,
+    messageAttachments: true,
+    markRead: true,
+    conversationStatus: true,
+    comments: true,
+    commentReplies: true,
+    privateCommentReplies: true,
+    commentAttachments: true,
+    hideComments: true,
+    deleteComments: true,
+    moderation: false,
+    liveChat: false,
+    pollingResources: Object.freeze(["conversations", "comments"]),
+  }),
+  instagram: Object.freeze({
+    family: "meta",
+    directMessages: true,
+    messageAttachments: true,
+    markRead: true,
+    conversationStatus: true,
+    comments: true,
+    commentReplies: true,
+    privateCommentReplies: true,
+    commentAttachments: false,
+    hideComments: true,
+    deleteComments: true,
+    moderation: false,
+    liveChat: false,
+    pollingResources: Object.freeze(["conversations", "comments"]),
+  }),
+  youtube: Object.freeze({
+    family: "video",
+    directMessages: false,
+    messageAttachments: false,
+    markRead: false,
+    conversationStatus: false,
+    comments: true,
+    commentReplies: true,
+    privateCommentReplies: false,
+    commentAttachments: false,
+    hideComments: false,
+    deleteComments: true,
+    moderation: true,
+    liveChat: false,
+    pollingResources: Object.freeze(["comments"]),
+  }),
+});
+
+export function socialChannelCapabilities(platform) {
+  const key = normalise(platform).toLowerCase();
+  const capabilities = SOCIAL_CHANNEL_CAPABILITIES[key];
+  if (!capabilities) return null;
+  return {
+    platform: key,
+    ...capabilities,
+    pollingResources: [...capabilities.pollingResources],
+  };
+}
+
 const REQUIRED_WHEN_ENABLED = Object.freeze([
   "D1_UUID",
   "D1_API_KEY",

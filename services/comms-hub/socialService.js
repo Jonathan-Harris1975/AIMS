@@ -269,3 +269,20 @@ export async function reconcileZernioWebhook({ family, context }) {
   const updated = await client.updateWebhook({ _id: existing._id || existing.id, ...desired });
   return { family, operation: "updated", webhook: updated?.webhook || null, desired: { name: desired.name, url, events } };
 }
+
+
+export async function reconcileEnabledZernioWebhooks({ context }) {
+  const enabledFamilies = Object.entries(context?.config?.zernioFamilies || {})
+    .filter(([, family]) => family?.enabled)
+    .map(([family]) => family);
+  if (!enabledFamilies.length) {
+    throw new CommsHubError(503, "zernio_no_enabled_families", "No Zernio social channel families are enabled.", {
+      publicMessage: "No social channels are enabled.",
+    });
+  }
+  const families = {};
+  for (const family of enabledFamilies) {
+    families[family] = await reconcileZernioWebhook({ family, context });
+  }
+  return { enabledFamilies, families };
+}

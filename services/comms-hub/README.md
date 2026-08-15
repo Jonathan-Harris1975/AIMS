@@ -233,3 +233,18 @@ The customer inbox secret is `ONECOM_INFO_PASSWORD` (or the optional
 `emailPollWorkerStarted=true` and `email.passwordConfigured=true`.
 The first poll then logs `commsHub.emailPoll.baseline`. IMAP/auth/network
 failures log `commsHub.emailPoll.failed`.
+
+
+## Three-channel social monitoring profile
+
+The production Comms Hub social contract covers all supported interaction paths for the selected channels:
+
+| Channel | Inbound monitoring | Built outbound actions | First-rollout state |
+| --- | --- | --- | --- |
+| Facebook | DMs, message lifecycle events, comments | DM reply, public/private comment reply, mark-read/status, hide/unhide/delete | Monitor-only |
+| Instagram | DMs, message lifecycle events, comments | DM reply, public/private comment reply, mark-read/status, hide/unhide/delete | Monitor-only |
+| YouTube | Video comments | Public comment reply, delete, moderation | Monitor-only |
+
+YouTube private DMs and YouTube live chat are outside the current Zernio Comms Hub adapter. Do not expose those controls in the operator UI. The machine-readable capability matrix is exported as `SOCIAL_CHANNEL_CAPABILITIES` from `services/comms-hub/config.js` and is returned by `GET /comms-hub/social/status`.
+
+For a complete first canary, apply `config/comms-hub-social-monitoring.env.example`, reconcile both enabled webhook families through `POST /comms-hub/social/webhooks/reconcile-all`, and leave `COMMS_HUB_SOCIAL_MONITOR_ONLY=true` until Facebook DM/comment, Instagram DM/comment, and YouTube comment ingestion have each been proven live and deduplicated.

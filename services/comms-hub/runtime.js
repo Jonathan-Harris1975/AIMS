@@ -1,5 +1,5 @@
 import { log } from "../../logger.js";
-import { loadCommsHubConfig, getCommsHubReadiness } from "./config.js";
+import { loadCommsHubConfig, getCommsHubReadiness, SOCIAL_CHANNEL_CAPABILITIES } from "./config.js";
 import { D1Client } from "./clients/d1Client.js";
 import { JotformClient } from "./clients/jotformClient.js";
 import { ZernioInboxClient } from "./clients/zernioInboxClient.js";
@@ -201,6 +201,15 @@ export async function startCommsHubRuntime() {
           Object.entries(active.config.zernioFamilies)
             .filter(([, family]) => family.enabled)
             .map(([familyName, family]) => [familyName, [...family.platforms]])
+        ),
+        channels: Object.fromEntries(
+          Object.entries(SOCIAL_CHANNEL_CAPABILITIES).map(([platform, capabilities]) => [platform, {
+            family: capabilities.family,
+            enabled: active.config.zernioFamilies?.[capabilities.family]?.enabled === true,
+            directMessages: capabilities.directMessages,
+            comments: capabilities.comments,
+            pollingResources: [...capabilities.pollingResources],
+          }])
         ),
       },
     });
