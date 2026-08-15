@@ -19,16 +19,16 @@
 import { info, warn, error as logError } from "../../../logger.js";
 import { THRESHOLDS } from "../../../config/thresholds.js";
 
-let uploadTextRef = null;
-async function getUploadText() {
-  if (uploadTextRef) return uploadTextRef;
+let uploadPrivateTextRef = null;
+async function getUploadPrivateText() {
+  if (uploadPrivateTextRef) return uploadPrivateTextRef;
   try {
     const mod = await import("./r2-client.js");
-    uploadTextRef = mod.uploadText;
+    uploadPrivateTextRef = mod.uploadPrivateText;
   } catch {
-    uploadTextRef = null;
+    uploadPrivateTextRef = null;
   }
-  return uploadTextRef;
+  return uploadPrivateTextRef;
 }
 
 function severityLogger(severity) {
@@ -91,11 +91,11 @@ export function emitQaEvent({
 }
 
 async function persistQaEvent(event) {
-  const uploadText = await getUploadText();
-  if (!uploadText) return;
+  const uploadPrivateText = await getUploadPrivateText();
+  if (!uploadPrivateText) return;
   const day = event.ts.slice(0, 10);
   const key = `qa-events/${day}/${event.id}.json`;
-  await uploadText("audits", key, JSON.stringify(event, null, 2), "application/json");
+  await uploadPrivateText("audits", key, JSON.stringify(event, null, 2), "application/json");
 }
 
 async function sendQaAlert(event) {

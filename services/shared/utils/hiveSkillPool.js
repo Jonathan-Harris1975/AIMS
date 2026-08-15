@@ -9,7 +9,6 @@
 // Config precedence: explicit env argument -> process.env -> the defaults
 // published in config/hive-skills.json / docs/hive-shared-skills.md.
 
-const DEFAULT_PUBLIC_BASE_URL = "https://pub-da50a6512f164566955a3076a1c795ef.r2.dev";
 const DEFAULT_BUCKET = "hive-skills";
 const MANIFEST_PATH = "manifests/aims-skills-manifest.json";
 const SKILLS_INDEX_PATH = "index/skills-index.json";
@@ -42,27 +41,25 @@ function slugify(value) {
     .replace(/^-+|-+$/g, "");
 }
 
-function stripTrailingSlash(value) {
-  return String(value ?? "").replace(/\/+$/, "");
-}
-
 /**
  * Resolve the central HIVE/R2 skill-pool location.
  * @param {NodeJS.ProcessEnv} [env]
  */
 export function getHiveSkillPoolConfig(env = process.env) {
-  const publicBaseUrl = stripTrailingSlash(
-    env?.R2_PUBLIC_BASE_URL_HIVE_SKILLS || DEFAULT_PUBLIC_BASE_URL
-  );
-  const r2Bucket = env?.R2_BUCKET_HIVE_SKILLS || DEFAULT_BUCKET;
+  const r2Bucket = String(env?.R2_BUCKET_HIVE_SKILLS || DEFAULT_BUCKET).trim() || DEFAULT_BUCKET;
+  const r2BaseUri = `r2://${r2Bucket}`;
 
   return Object.freeze({
     r2Bucket,
-    publicBaseUrl,
+    accessMode: "private-r2-read-only",
+    publicBaseUrl: null,
+    r2BaseUri,
     manifestPath: MANIFEST_PATH,
     skillsIndexPath: SKILLS_INDEX_PATH,
-    manifestUrl: `${publicBaseUrl}/${MANIFEST_PATH}`,
-    skillsIndexUrl: `${publicBaseUrl}/${SKILLS_INDEX_PATH}`,
+    manifestUrl: `${r2BaseUri}/${MANIFEST_PATH}`,
+    manifestUri: `${r2BaseUri}/${MANIFEST_PATH}`,
+    skillsIndexUrl: `${r2BaseUri}/${SKILLS_INDEX_PATH}`,
+    skillsIndexUri: `${r2BaseUri}/${SKILLS_INDEX_PATH}`,
   });
 }
 
@@ -83,7 +80,8 @@ export function getCentralSkillReference(name, env = process.env) {
     slug,
     source: "central HIVE R2 shared skill pool",
     referencePrefix: slug ? `hive-skill://${slug}` : null,
-    descriptorUrl: slug ? `${pool.publicBaseUrl}/skills/${slug}.json` : null,
+    descriptorUrl: slug ? `${pool.r2BaseUri}/skills/${slug}.json` : null,
+    descriptorUri: slug ? `${pool.r2BaseUri}/skills/${slug}.json` : null,
   });
 }
 

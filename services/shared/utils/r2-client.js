@@ -338,11 +338,11 @@ export const PUBLIC_URL_ENV_BY_ALIAS = {
 
 export const R2_PUBLIC_URLS = {
   podcast:         R2_PUBLIC_BASE_URL_PODCAST,
-  rawtext:         R2_PUBLIC_BASE_URL_RAW_TEXT,
-  rawText:         R2_PUBLIC_BASE_URL_RAW_TEXT,
-  "raw-text":      R2_PUBLIC_BASE_URL_RAW_TEXT,
-  meta:            R2_PUBLIC_BASE_URL_META,
-  merged:          R2_PUBLIC_BASE_URL_MERGE,
+  rawtext:         null,
+  rawText:         null,
+  "raw-text":      null,
+  meta:            null,
+  merged:          null,
   art:             R2_PUBLIC_BASE_URL_ART,
   rss:             R2_PUBLIC_BASE_URL_RSS,
   "rss-feeds":     R2_PUBLIC_BASE_URL_RSS,
@@ -351,16 +351,16 @@ export const R2_PUBLIC_URLS = {
   transcript:      TRANSCRIPT_PUBLIC_BASE_URL,
   transcripts:     TRANSCRIPT_PUBLIC_BASE_URL,
 
-  chunks:          R2_PUBLIC_BASE_URL_CHUNKS,
-  "podcast-chunks":R2_PUBLIC_BASE_URL_CHUNKS,
+  chunks:          null,
+  "podcast-chunks":null,
 
   // Podcast RSS
   podcastRss:      R2_PUBLIC_BASE_URL_PODCAST_RSS,
 
   // Edited/mastered audio
-  edited:          R2_PUBLIC_BASE_URL_EDITED_AUDIO,
-  editedAudio:     R2_PUBLIC_BASE_URL_EDITED_AUDIO,
-  "edited-audio":  R2_PUBLIC_BASE_URL_EDITED_AUDIO,
+  edited:          null,
+  editedAudio:     null,
+  "edited-audio":  null,
 
   // Blog
   blog:            R2_PUBLIC_BASE_URL_BLOG,
@@ -372,8 +372,8 @@ export const R2_PUBLIC_URLS = {
   "blog-rss":      R2_PUBLIC_BASE_URL_BLOG_RSS,
 
   // Audit reports
-  audits:          R2_PUBLIC_BASE_URL_AUDITS,
-  audit:           R2_PUBLIC_BASE_URL_AUDITS,
+  audits:          null,
+  audit:           null,
 
   // Brand assets / legacy non-audit assets
   brandAssets:     R2_PUBLIC_BASE_URL_BRAND_ASSETS,
@@ -502,6 +502,10 @@ export async function uploadBuffer(bucketKey, key, buffer, contentType = "applic
       ...(cacheControl ? { CacheControl: cacheControl } : {}),
     })
   );
+
+  if (isPrivateReadyBucket(bucketKey)) {
+    return `r2://${bucket}/${safeKey}`;
+  }
 
   const base = R2_PUBLIC_URLS[bucketKey];
   if (!base) {
