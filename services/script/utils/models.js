@@ -10,7 +10,7 @@ import {
   getOutroPromptFull,
 } from "./promptTemplates.js";
 import fetchFeedArticles from "./fetchFeeds.js";
-import { putText, putJson, uploadPrivateText, putPrivateJson, buildPublicUrl } from "../../shared/utils/r2-client.js";
+import { putText, putJson, uploadPrivateText, putPrivateJson, buildR2Reference } from "../../shared/utils/r2-client.js";
 import { cleanTranscript } from "./textHelpers.js";
 import { calculateDuration } from "./durationCalculator.js";
 import { getWeatherSummary } from "./getWeatherSummary.js";
@@ -194,9 +194,8 @@ export async function generateComposedEpisode(sessionIdLike) {
     const name = `${id}/chunk-${String(i + 1).padStart(3, "0")}.txt`;
     const body = ttsChunks[i];
     await uploadPrivateText("rawtext", name, body);
-    let url = "";
-    try { url = buildPublicUrl("rawtext", name); } catch { url = ""; }
-    files.push({ index: i + 1, bytes: byteLen(body), key: name, r2Uri: `r2://${process.env.R2_BUCKET_RAW_TEXT}/${name}`, url });
+    const r2Uri = buildR2Reference("rawtext", name);
+    files.push({ index: i + 1, bytes: byteLen(body), key: name, r2Uri, url: null });
   }
 
   await putPrivateJson("meta", `${id}-tts.json`, { chunks: files, total: files.length });

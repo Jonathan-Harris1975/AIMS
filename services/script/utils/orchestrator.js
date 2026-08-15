@@ -5,7 +5,7 @@
 import { info, error, debug } from "../../../logger.js";
 import models from "./models.js";
 import { composeEpisode } from "../routes/composeScript.js";
-import { uploadText } from "../../shared/utils/r2-client.js"
+import { uploadText, uploadPrivateText } from "../../shared/utils/r2-client.js"
 import chunkText from "./chunkText.js";
 import { generateEpisodeMetaLLM } from "./podcastHelper.js";
 import * as sessionCache from "./sessionCache.js";
@@ -335,7 +335,7 @@ export async function orchestrateScript(input) {
 
     for (let i = 0; i < chunks.length; i++) {
       const key = `${sid}/chunk-${String(i + 1).padStart(3, "0")}.txt`;
-      await uploadText("rawtext", key, chunks[i], "text/plain");
+      await uploadPrivateText("rawtext", key, chunks[i], "text/plain");
       uploadedChunks.push(key);
     }
 
@@ -356,7 +356,7 @@ export async function orchestrateScript(input) {
     meta = await attachEpisodeNumberIfNeeded(meta);
 
     const metaKey = `${sid}.json`;
-    await uploadText(
+    await uploadPrivateText(
       "meta",
       metaKey,
       JSON.stringify(meta, null, 2),
