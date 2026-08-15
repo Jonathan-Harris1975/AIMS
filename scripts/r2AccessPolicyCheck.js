@@ -31,4 +31,4 @@ if (failures.length) {
   console.error("R2 access policy check failed:\n- " + failures.join("\n- "));
   process.exit(1);
 }
-console.log(`R2 access policy OK: ${policy.buckets.length} buckets classified; compatibility public URLs preserved intentionally.`);
+console.log(`R2 access policy OK: ${policy.buckets.length} buckets classified; target-private public URLs are blank/enforced.`);
