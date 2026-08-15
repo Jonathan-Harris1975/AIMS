@@ -20,6 +20,13 @@ function failureClass(error) {
   return "recoverable";
 }
 
+function pageState(pagination = {}) {
+  return {
+    hasMore: Boolean(pagination?.hasMore),
+    nextCursorPresent: Boolean(pagination?.nextCursor || pagination?.cursor),
+  };
+}
+
 export class CommsHubSocialPollWorker {
   constructor({ repository, zernio, config, writeLog = null }) {
     this.repository = repository;
@@ -40,6 +47,20 @@ export class CommsHubSocialPollWorker {
       .map(([name]) => name);
   }
 
+  monitoringSummary() {
+    const families = this.enabledFamilies();
+    return {
+      monitorOnly: this.config.socialMonitorOnly !== false,
+      workerId: this.workerId,
+      pollMs: this.config.socialPollMs,
+      batchSize: this.config.socialPollBatchSize,
+      families,
+      platforms: Object.fromEntries(
+        families.map((familyName) => [familyName, [...(this.config.zernioFamilies?.[familyName]?.platforms || [])]])
+      ),
+    };
+  }
+
   async pollConversationJob(job, client, cycleStartedAt) {
     const listing = await client.listConversations({
       platform: job.platform,
@@ -47,9 +68,23 @@ export class CommsHubSocialPollWorker {
       limit: this.config.socialPollBatchSize,
       status: "active",
     });
+    const conversations = Array.isArray(listing?.data) ? listing.data : [];
+    await this.writeLog("info", "commsHub.socialPoll.conversations.listed", {
+      workerId: this.workerId,
+      jobId: job.id,
+      family: job.credential_family,
+      platform: job.platform,
+      resource: job.resource,
+      cursorPresent: Boolean(job.cursor),
+      conversations: conversations.length,
+      ...pageState(listing?.pagination),
+    });
+
     let processed = 0;
     let duplicates = 0;
-    for (const conversation of Array.isArray(listing?.data) ? listing.data : []) {
+    let messagePages = 0;
+    let messagesSeen = 0;
+    for (const conversation of conversations) {
       let cursor = "";
       for (let page = 1; page <= this.config.socialPollMaxMessagePages; page += 1) {
         const response = await client.listMessages({
@@ -60,11 +95,23 @@ export class CommsHubSocialPollWorker {
           limit: 100,
           sortOrder: "desc",
         });
+        const messages = Array.isArray(response?.messages) ? response.messages : [];
+        messagePages += 1;
+        messagesSeen += messages.length;
+        await this.writeLog("info", "commsHub.socialPoll.messages.page", {
+          workerId: this.workerId,
+          jobId: job.id,
+          family: job.credential_family,
+          platform: job.platform,
+          page,
+          messages: messages.length,
+          ...pageState(response?.pagination),
+        });
         const result = await persistPolledConversation({
           family: job.credential_family,
           platform: job.platform,
           conversation,
-          messages: Array.isArray(response?.messages) ? response.messages : [],
+          messages,
           context: { repository: this.repository },
         });
         processed += result.processed;
@@ -76,6 +123,12 @@ export class CommsHubSocialPollWorker {
     return {
       processed,
       duplicates,
+      conversationsScanned: conversations.length,
+      messagePages,
+      messagesSeen,
+      postsScanned: 0,
+      commentPages: 0,
+      commentsSeen: 0,
       nextCursor: listing?.pagination?.hasMore ? listing?.pagination?.nextCursor || "" : "",
       cycleStartedAt,
       cycleComplete: !listing?.pagination?.hasMore,
@@ -90,9 +143,24 @@ export class CommsHubSocialPollWorker {
       limit: this.config.socialPollBatchSize,
       since,
     });
+    const posts = Array.isArray(listing?.data) ? listing.data : [];
+    await this.writeLog("info", "commsHub.socialPoll.commentPosts.listed", {
+      workerId: this.workerId,
+      jobId: job.id,
+      family: job.credential_family,
+      platform: job.platform,
+      resource: job.resource,
+      cursorPresent: Boolean(job.cursor),
+      sincePresent: Boolean(since),
+      posts: posts.length,
+      ...pageState(listing?.pagination),
+    });
+
     let processed = 0;
     let duplicates = 0;
-    for (const post of Array.isArray(listing?.data) ? listing.data : []) {
+    let commentPages = 0;
+    let commentsSeen = 0;
+    for (const post of posts) {
       let cursor = "";
       for (let page = 1; page <= this.config.socialPollMaxCommentPages; page += 1) {
         const response = await client.listPostComments({
@@ -102,11 +170,23 @@ export class CommsHubSocialPollWorker {
           cursor,
           limit: 100,
         });
+        const comments = Array.isArray(response?.comments) ? response.comments : [];
+        commentPages += 1;
+        commentsSeen += comments.length;
+        await this.writeLog("info", "commsHub.socialPoll.comments.page", {
+          workerId: this.workerId,
+          jobId: job.id,
+          family: job.credential_family,
+          platform: job.platform,
+          page,
+          comments: comments.length,
+          ...pageState(response?.pagination),
+        });
         const result = await persistPolledComments({
           family: job.credential_family,
           platform: job.platform,
           post,
-          comments: Array.isArray(response?.comments) ? response.comments : [],
+          comments,
           context: { repository: this.repository },
         });
         processed += result.processed;
@@ -119,6 +199,12 @@ export class CommsHubSocialPollWorker {
     return {
       processed,
       duplicates,
+      conversationsScanned: 0,
+      messagePages: 0,
+      messagesSeen: 0,
+      postsScanned: posts.length,
+      commentPages,
+      commentsSeen,
       nextCursor: listing?.pagination?.hasMore ? listing?.pagination?.nextCursor || "" : "",
       cycleStartedAt,
       cycleComplete: !listing?.pagination?.hasMore,
@@ -135,15 +221,28 @@ export class CommsHubSocialPollWorker {
   }
 
   async runOnce({ limit = 5 } = {}) {
-    if (this.running) return { skipped: true, reason: "already_running", processedJobs: 0 };
+    if (this.running) {
+      await this.writeLog("info", "commsHub.socialPoll.skipped", { workerId: this.workerId, reason: "already_running" });
+      return { skipped: true, reason: "already_running", processedJobs: 0 };
+    }
     const families = this.enabledFamilies();
-    if (!families.length) return { skipped: true, reason: "no_enabled_families", processedJobs: 0 };
+    if (!families.length) {
+      await this.writeLog("info", "commsHub.socialPoll.skipped", { workerId: this.workerId, reason: "no_enabled_families" });
+      return { skipped: true, reason: "no_enabled_families", processedJobs: 0 };
+    }
+
+    const maximum = Math.max(1, Math.min(20, Number(limit) || 5));
+    await this.writeLog("info", "commsHub.socialPoll.attempt", {
+      ...this.monitoringSummary(),
+      jobLimit: maximum,
+    });
+
     this.running = true;
     let processedJobs = 0;
     let ingested = 0;
     let duplicates = 0;
+    let noDueJobs = false;
     try {
-      const maximum = Math.max(1, Math.min(20, Number(limit) || 5));
       for (let index = 0; index < maximum; index += 1) {
         const now = new Date().toISOString();
         const job = await this.repository.claimSocialPollJob({
@@ -152,7 +251,28 @@ export class CommsHubSocialPollWorker {
           leaseExpiresAt: isoAfter(this.config.socialPollLeaseMs),
           families,
         });
-        if (!job) break;
+        if (!job) {
+          noDueJobs = true;
+          await this.writeLog("info", "commsHub.socialPoll.noDueJobs", {
+            workerId: this.workerId,
+            families,
+            processedJobs,
+          });
+          break;
+        }
+
+        await this.writeLog("info", "commsHub.socialPoll.claimed", {
+          workerId: this.workerId,
+          jobId: job.id,
+          family: job.credential_family,
+          platform: job.platform,
+          resource: job.resource,
+          cursorPresent: Boolean(job.cursor),
+          cycleStarted: Boolean(job.cycle_started_at),
+          lastSuccessAt: job.last_success_at || null,
+          attempts: Number(job.attempts || 0),
+        });
+
         try {
           const result = await this.processJob(job);
           const completedAt = new Date().toISOString();
@@ -177,7 +297,14 @@ export class CommsHubSocialPollWorker {
             resource: job.resource,
             ingested: result.processed,
             duplicates: result.duplicates,
+            conversationsScanned: result.conversationsScanned,
+            messagePages: result.messagePages,
+            messagesSeen: result.messagesSeen,
+            postsScanned: result.postsScanned,
+            commentPages: result.commentPages,
+            commentsSeen: result.commentsSeen,
             cycleComplete,
+            nextCursorPresent: !cycleComplete && Boolean(result.nextCursor),
           });
         } catch (error) {
           const classification = failureClass(error);
@@ -198,11 +325,22 @@ export class CommsHubSocialPollWorker {
             family: job.credential_family,
             platform: job.platform,
             resource: job.resource,
+            failureClass: classification,
+            retryAfterMs: delay,
             error: safeErrorLog(error),
           });
         }
       }
-      return { skipped: false, processedJobs, ingested, duplicates };
+      const result = { skipped: false, processedJobs, ingested, duplicates, noDueJobs };
+      await this.writeLog("info", "commsHub.socialPoll.runComplete", {
+        workerId: this.workerId,
+        families,
+        processedJobs,
+        ingested,
+        duplicates,
+        noDueJobs,
+      });
+      return result;
     } finally {
       this.running = false;
     }
@@ -215,7 +353,7 @@ export class CommsHubSocialPollWorker {
     }, this.config.socialPollMs);
     this.timer.unref?.();
     void this.runOnce().catch((error) => this.writeLog("error", "commsHub.socialPoll.initialRunFailed", { error: safeErrorLog(error) }));
-    void this.writeLog("info", "commsHub.socialPoll.started", { workerId: this.workerId, pollMs: this.config.socialPollMs });
+    void this.writeLog("info", "commsHub.socialPoll.started", this.monitoringSummary());
     return true;
   }
 
