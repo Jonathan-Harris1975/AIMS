@@ -27,18 +27,21 @@ test("mobile UX dispatch inputs match the website workflow compatibility contrac
     "audit_public_base_url",
     "audit_bucket_env",
     "audit_public_base_env",
+    "audit_storage_uri",
+    "audit_access_mode",
   ]) {
     assert.match(orchestrator, new RegExp(`${inputName}:`), `${inputName} missing from dispatch inputs`);
   }
 });
 
-test("audit artefact validation is wired to the dedicated audits bucket/public base only", () => {
+test("audit artefact validation is wired to authenticated private audits R2 only", () => {
   const publisher = fs.readFileSync("audits/utils/publishAuditArtifacts.js", "utf8");
   const orchestrator = fs.readFileSync("audits/utils/orchestrator.js", "utf8");
 
   assert.match(publisher, /R2_BUCKET_AUDITS/);
-  assert.match(publisher, /R2_PUBLIC_BASE_URL_AUDITS/);
-  assert.match(publisher, /outside \$\{AUDIT_PUBLIC_BASE_ENV\}/);
+  assert.match(publisher, /accessMode: "private-r2"/);
+  assert.match(publisher, /r2:\/\/\$\{bucket\}/);
+  assert.doesNotMatch(publisher, /const AUDIT_PUBLIC_BASE_ENV/);
   assert.match(orchestrator, /assertAuditArtifactUrls\(payload, \{ requireAny: false \}\)/);
   assert.match(orchestrator, /assertCompletedAuditArtifactUrls\(payload\)/);
   assert.match(orchestrator, /Audit callback type mismatch/);

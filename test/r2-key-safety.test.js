@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import "../config/loadEnv.js";
-import { normaliseR2ObjectKey, buildPublicUrl } from "../services/shared/utils/r2-client.js";
+import { normaliseR2ObjectKey, buildPublicUrl, buildR2Reference } from "../services/shared/utils/r2-client.js";
 
 test("R2 object keys reject traversal, absolute paths and URL fragments", () => {
   assert.equal(normaliseR2ObjectKey("audits/on-brand/latest.json"), "audits/on-brand/latest.json");
@@ -12,14 +12,19 @@ test("R2 object keys reject traversal, absolute paths and URL fragments", () => 
   }
 });
 
-test("R2 public URL builder uses the safe object key validator", () => {
+test("private R2 reference builder uses the safe object key validator", () => {
   assert.equal(
-    buildPublicUrl("audits", "audits/on-brand/latest.json"),
-    "https://pub-f6b6cfd7d07e46f695d08e4a8dc3bd6b.r2.dev/audits/on-brand/latest.json"
+    buildR2Reference("audits", "audits/on-brand/latest.json"),
+    "r2://audits/audits/on-brand/latest.json"
   );
 
   assert.throws(
-    () => buildPublicUrl("audits", "audits/on-brand/../../secret.json"),
+    () => buildR2Reference("audits", "audits/on-brand/../../secret.json"),
     /unsafe path traversal/i
+  );
+
+  assert.throws(
+    () => buildPublicUrl("audits", "audits/on-brand/latest.json"),
+    /public base URL is not configured/i
   );
 });

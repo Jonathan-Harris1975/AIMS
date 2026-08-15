@@ -16,23 +16,26 @@ function restoreEnv() {
 
 test.afterEach(() => restoreEnv());
 
-test("R2 shared client resolves the audits bucket alias and public URL", async () => {
+test("R2 shared client resolves audits as a private bucket alias", async () => {
   process.env.R2_BUCKET_AUDITS = "audits";
-  process.env.R2_PUBLIC_BASE_URL_AUDITS = "https://audits.example.test";
   process.env.R2_ACCESS_KEY_ID = "test";
   process.env.R2_SECRET_ACCESS_KEY = "test";
   process.env.R2_ENDPOINT = "https://r2.example.test";
 
   const mod = await import(`../services/shared/utils/r2-client.js?r2-audits=${Date.now()}`);
   assert.equal(mod.ensureBucketKey("audits"), "audits");
-  assert.equal(mod.buildPublicUrl("audits", "audits/on-brand/latest.json"), "https://audits.example.test/audits/on-brand/latest.json");
+  assert.equal(mod.buildR2Reference("audits", "audits/on-brand/latest.json"), "r2://audits/audits/on-brand/latest.json");
+  assert.throws(() => mod.buildPublicUrl("audits", "audits/on-brand/latest.json"), /public base URL is not configured/i);
 });
 
 test("audit publisher is configured for the audits bucket, not brand-assets", async () => {
   const mod = await import(`../audits/utils/publishAuditArtifacts.js?publish-config=${Date.now()}`);
   assert.equal(mod.getAuditPublishConfig().bucketAlias, "audits");
   assert.equal(mod.getAuditPublishConfig().bucketEnv, "R2_BUCKET_AUDITS");
-  assert.equal(mod.getAuditPublishConfig().publicBaseEnv, "R2_PUBLIC_BASE_URL_AUDITS");
+  assert.equal(mod.getAuditPublishConfig().publicBaseEnv, null);
+  assert.equal(mod.getAuditPublishConfig().publicBaseUrl, null);
+  assert.equal(mod.getAuditPublishConfig().accessMode, "private-r2");
+  assert.equal(mod.getAuditPublishConfig().storageUri, "r2://audits");
 });
 
 test("on-brand deterministic preflight catches key brand defects", async () => {

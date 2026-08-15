@@ -6,7 +6,6 @@ import { getWebsiteAuditReadiness } from "../audits/utils/websiteAuditReadiness.
 function readyEnv() {
   return {
     R2_BUCKET_AUDITS: "audits",
-    R2_PUBLIC_BASE_URL_AUDITS: "https://audits.example.test",
     R2_ENDPOINT: "https://account.r2.cloudflarestorage.com",
     R2_ACCESS_KEY_ID: "access",
     R2_SECRET_ACCESS_KEY: "secret",

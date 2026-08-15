@@ -12,10 +12,9 @@ const editingProcessorUrl = new URL("../services/tts/utils/editingProcessor.js",
 test("R2 policy classifies all AIMS internal/intermediate buckets as private", async () => {
   const policy = JSON.parse(await fs.readFile(policyUrl, "utf8"));
   const privateNames = new Set(policy.buckets.filter((entry) => entry.access === "private").map((entry) => entry.bucket));
-  for (const name of ["metasystem", "comms-hub", "comms-hub-private", "audits", "raw-text", "podcast-chunks", "podcast-merged", "podcast-meta", "edited"]) {
+  for (const name of ["metasystem", "comms-hub", "comms-hub-private", "audits", "raw-text", "podcast-chunks", "podcast-merged", "podcast-meta", "edited", "hive-skills"]) {
     assert.equal(privateNames.has(name), true, `${name} should be private`);
   }
-  assert.equal(policy.buckets.find((entry) => entry.bucket === "hive-skills")?.access, "public-temporary");
 });
 
 test("AIMS internal podcast path uses authenticated R2 for private intermediate artefacts", async () => {
@@ -43,8 +42,7 @@ test("target-private AIMS buckets no longer ship public base URLs", async () => 
     assert.match(env, new RegExp(`^${name}=$`, "m"));
   }
 
-  // Compatibility URLs remain only for buckets still marked temporary/public in the access matrix.
   for (const name of ["R2_PUBLIC_BASE_URL_AUDITS", "R2_PUBLIC_BASE_URL_RAW_TEXT", "R2_PUBLIC_BASE_URL_CHUNKS", "R2_PUBLIC_BASE_URL_MERGE", "R2_PUBLIC_BASE_URL_META", "R2_PUBLIC_BASE_URL_EDITED_AUDIO", "R2_PUBLIC_BASE_URL_HIVE_SKILLS"]) {
-    assert.match(env, new RegExp(`^${name}=.+$`, "m"));
+    assert.match(env, new RegExp(`^${name}=$`, "m"));
   }
 });

@@ -13,7 +13,7 @@ test("Lane 1 skills baseline exposes all autonomous skills and governance", () =
   assert.ok(baseline.skills.some((skill) => skill.slug === "seo-audit"));
   assert.ok(baseline.skills.some((skill) => skill.slug === "pdf"));
   assert.equal(baseline.r2Bucket, "hive-skills");
-  assert.match(baseline.manifestUrl, /manifests\/aims-skills-manifest\.json$/);
+  assert.match(baseline.manifestUrl, /^r2:\/\/hive-skills\/manifests\/aims-skills-manifest\.json$/);
   assert.ok(baseline.governance.blockedActions.includes("auto-deploy"));
   assert.equal(baseline.governance.skillSource, "central HIVE R2 shared skill pool");
 });
