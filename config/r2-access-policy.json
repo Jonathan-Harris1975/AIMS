@@ -43,8 +43,8 @@
         "audit"
       ],
       "publicBaseEnv": "R2_PUBLIC_BASE_URL_AUDITS",
-      "compatibilityPublicUrl": true,
-      "reason": "audit artefacts are operational; RAMS migration must complete before public endpoint is disabled"
+      "compatibilityPublicUrl": false,
+      "reason": "audit artefacts are operational and are read/written through authenticated R2"
     },
     {
       "bucket": "raw-text",
@@ -55,7 +55,7 @@
         "raw-text"
       ],
       "publicBaseEnv": "R2_PUBLIC_BASE_URL_RAW_TEXT",
-      "compatibilityPublicUrl": true,
+      "compatibilityPublicUrl": false,
       "reason": "intermediate script/TTS chunks"
     },
     {
@@ -69,7 +69,7 @@
         "raw-audio"
       ],
       "publicBaseEnv": "R2_PUBLIC_BASE_URL_CHUNKS",
-      "compatibilityPublicUrl": true,
+      "compatibilityPublicUrl": false,
       "reason": "intermediate TTS audio"
     },
     {
@@ -79,7 +79,7 @@
         "merged"
       ],
       "publicBaseEnv": "R2_PUBLIC_BASE_URL_MERGE",
-      "compatibilityPublicUrl": true,
+      "compatibilityPublicUrl": false,
       "reason": "intermediate merged podcast audio"
     },
     {
@@ -89,7 +89,7 @@
         "meta"
       ],
       "publicBaseEnv": "R2_PUBLIC_BASE_URL_META",
-      "compatibilityPublicUrl": true,
+      "compatibilityPublicUrl": false,
       "reason": "internal episode pipeline metadata"
     },
     {
@@ -101,16 +101,16 @@
         "edited-audio"
       ],
       "publicBaseEnv": "R2_PUBLIC_BASE_URL_EDITED_AUDIO",
-      "compatibilityPublicUrl": true,
+      "compatibilityPublicUrl": false,
       "reason": "intermediate mastered audio before publication"
     },
     {
       "bucket": "hive-skills",
-      "access": "public-temporary",
+      "access": "private",
       "aliases": [],
       "publicBaseEnv": "R2_PUBLIC_BASE_URL_HIVE_SKILLS",
-      "compatibilityPublicUrl": true,
-      "reason": "explicitly retained until HIVE/RAMS authenticated migration"
+      "compatibilityPublicUrl": false,
+      "reason": "shared skill descriptors and indexes are internal catalogue data read through authenticated R2"
     },
     {
       "bucket": "podcast",
