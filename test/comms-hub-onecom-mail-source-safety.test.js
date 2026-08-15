@@ -14,3 +14,16 @@ test("one.com polling drains UIDs oldest-first so a full batch cannot skip earli
   assert.match(source, /sort\(\(a, b\) => a - b\)\.slice\(0, boundedLimit\)/);
   assert.doesNotMatch(source, /slice\(-boundedLimit\)/);
 });
+
+test("one.com cursor uses UIDNEXT so expunged recent mail cannot move the watermark backwards", () => {
+  assert.match(source, /UIDNEXT/);
+  assert.match(source, /uidNext - 1/);
+  assert.match(source, /cursorSource: "uidnext"/);
+});
+
+test("one.com socket reader avoids repeated whole-buffer concatenation and raw message retention", () => {
+  assert.doesNotMatch(source, /Buffer\.concat\(\[this\.buffer/);
+  assert.match(source, /this\.chunks\.push\(value\)/);
+  assert.match(source, /return this\.consume\(length\)/);
+  assert.doesNotMatch(source, /messages\.push\(\{ uid, raw,/);
+});

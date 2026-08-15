@@ -30,3 +30,10 @@ test("email poll worker reports provider stage and D1 due-state diagnostics", ()
   assert.match(source, /nextAttemptAt/);
   assert.match(source, /leaseExpiresAt/);
 });
+
+test("email poll worker bounds message memory by fetching one message at a time", () => {
+  assert.match(source, /mode: 'bounded_one_message_at_a_time'/);
+  assert.match(source, /fetchMessages\(\{[\s\S]*?limit: 1/);
+  assert.match(source, /commsHub\.emailPoll\.messageFetched/);
+  assert.match(source, /commsHub\.emailPoll\.messagePersisted/);
+});
