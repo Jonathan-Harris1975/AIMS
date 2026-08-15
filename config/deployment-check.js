@@ -1,8 +1,8 @@
-import "./config/loadEnv.js";
+import "./loadEnv.js";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
-import { durableStateEnvHint, hasDurableStateEnv } from "./services/shared/utils/durableStateEnv.js";
-import { getCommsHubMissingEnv } from "./services/comms-hub/config.js";
+import { durableStateEnvHint, hasDurableStateEnv } from "../services/shared/utils/durableStateEnv.js";
+import { getCommsHubMissingEnv } from "../services/comms-hub/config.js";
 
 const REQUIRED_ENV_KEYS = [
   "NODE_ENV",

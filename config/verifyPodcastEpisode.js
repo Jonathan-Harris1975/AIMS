@@ -1,8 +1,8 @@
 // verifyPodcastEpisode.js
 // Usage: node verifyPodcastEpisode.js TT-2025-11-23
 
-import "./config/loadEnv.js";
-import { getObjectAsText, buildR2Reference } from "./services/shared/utils/r2-client.js";
+import "./loadEnv.js";
+import { getObjectAsText, buildR2Reference } from "../services/shared/utils/r2-client.js";
 
 const sessionId = process.argv[2];
 
