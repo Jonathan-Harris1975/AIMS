@@ -322,7 +322,7 @@ app.get("/health", (_req, res) =>
     ok: true,
     status: "ok",
     service: "AIMS",
-    version: process.env.APP_VERSION || "2.9.5",
+    version: process.env.APP_VERSION || "2.9.7",
     env: process.env.APP_ENV || process.env.NODE_ENV || "development",
     trustProxy,
     time: new Date().toISOString(),
@@ -340,7 +340,7 @@ app.get("/readyz", (_req, res) => {
   return res.status(report.ready && lifecycleState.state !== "maintenance" ? 200 : 503).json({
     ok: report.ready,
     service: "AIMS",
-    version: process.env.APP_VERSION || "2.9.5",
+    version: process.env.APP_VERSION || "2.9.7",
     ...report,
     lifecycle: lifecycleState,
     time: new Date().toISOString(),
