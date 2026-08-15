@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { safeErrorLog, redactDiagnosticText } from "../domain/redaction.js";
 import { persistPolledComments, persistPolledConversation } from "../socialService.js";
+import { SOCIAL_CHANNEL_CAPABILITIES } from "../config.js";
 
 function isoAfter(ms) {
   return new Date(Date.now() + Math.max(0, Number(ms) || 0)).toISOString();
@@ -57,6 +58,16 @@ export class CommsHubSocialPollWorker {
       families,
       platforms: Object.fromEntries(
         families.map((familyName) => [familyName, [...(this.config.zernioFamilies?.[familyName]?.platforms || [])]])
+      ),
+      channels: Object.fromEntries(
+        Object.entries(SOCIAL_CHANNEL_CAPABILITIES)
+          .filter(([, capabilities]) => families.includes(capabilities.family))
+          .map(([platform, capabilities]) => [platform, {
+            family: capabilities.family,
+            directMessages: capabilities.directMessages,
+            comments: capabilities.comments,
+            pollingResources: [...capabilities.pollingResources],
+          }])
       ),
     };
   }
