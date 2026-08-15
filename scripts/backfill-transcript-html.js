@@ -14,6 +14,7 @@ import {
   listKeys,
   getObjectAsText,
   uploadText,
+  uploadPrivateText,
 } from "../services/shared/utils/r2-client.js";
 import { generateTranscriptHtml } from "../services/script/utils/generateTranscriptHtml.js";
 import { runRssFeedCreator } from "../services/rss-feed-podcast/index.js";
@@ -74,10 +75,7 @@ function normalizeEpisodeNumber(value) {
 
 function buildRepairedMeta(sessionId, existing = {}) {
   const siteBaseUrl = String(process.env.SITE_BASE_URL || "https://jonathan-harris.online").replace(/\/$/, "");
-  const transcriptBase =
-    process.env.R2_PUBLIC_BASE_URL_TRANSCRIPT ||
-    process.env.R2_PUBLIC_BASE_URL_RAW_TEXT ||
-    "";
+  const transcriptBase = process.env.R2_PUBLIC_BASE_URL_TRANSCRIPT || "";
   const transcriptHtmlBase =
     process.env.PODCAST_TRANSCRIPT_HTML_BASE_URL ||
     process.env.R2_PUBLIC_BASE_URL_TRANSCRIPT_HTML ||
@@ -181,7 +179,7 @@ async function main() {
 
       if (!DRY_RUN) {
         await uploadText(TRANSCRIPT_BUCKET, `${sessionId}.html`, html, "text/html");
-        await uploadText(META_BUCKET, `${sessionId}.json`, JSON.stringify(repairedMeta, null, 2), "application/json");
+        await uploadPrivateText(META_BUCKET, `${sessionId}.json`, JSON.stringify(repairedMeta, null, 2), "application/json");
       }
 
       console.log(`✅  transcript + meta repaired${DRY_RUN ? " (dry run)" : ""}`);
