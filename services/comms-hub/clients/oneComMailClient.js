@@ -1,5 +1,4 @@
 import tls from "node:tls";
-import { once } from "node:events";
 import { CommsHubError } from "../errors.js";
 import { buildRawEmail, parseRawEmail } from "../domain/email.js";
 
@@ -15,43 +14,128 @@ class BufferedSocketReader {
   constructor(socket, timeoutMs) {
     this.socket = socket;
     this.timeoutMs = timeoutMs;
-    this.buffer = Buffer.alloc(0);
+    this.chunks = [];
+    this.length = 0;
     this.ended = false;
-    socket.on("data", (chunk) => { this.buffer = Buffer.concat([this.buffer, Buffer.from(chunk)]); });
-    socket.on("end", () => { this.ended = true; });
-    socket.on("close", () => { this.ended = true; });
+    this.error = null;
+    this.waiters = new Set();
+    socket.on("data", (chunk) => {
+      const value = Buffer.from(chunk);
+      if (!value.length) return;
+      this.chunks.push(value);
+      this.length += value.length;
+      this.wake();
+    });
+    socket.on("end", () => { this.ended = true; this.wake(); });
+    socket.on("close", () => { this.ended = true; this.wake(); });
+    socket.on("error", (error) => { this.error = error; this.wake(); });
   }
 
-  async waitForData() {
-    if (this.buffer.length || this.ended) return;
-    await Promise.race([
-      once(this.socket, "data"),
-      once(this.socket, "error").then(([error]) => { throw error; }),
-      new Promise((_, reject) => setTimeout(() => reject(new Error("Socket read timed out.")), this.timeoutMs)),
-    ]);
+  wake() {
+    for (const resolve of this.waiters) resolve();
+    this.waiters.clear();
+  }
+
+  async waitForData(previousLength = this.length) {
+    if (this.error) throw this.error;
+    if (this.length > previousLength || this.ended) return;
+    await new Promise((resolve, reject) => {
+      let timer;
+      const done = () => {
+        clearTimeout(timer);
+        this.waiters.delete(done);
+        resolve();
+      };
+      this.waiters.add(done);
+      timer = setTimeout(() => {
+        this.waiters.delete(done);
+        reject(new Error("Socket read timed out."));
+      }, this.timeoutMs);
+    });
+    if (this.error) throw this.error;
+  }
+
+  findCrlf() {
+    let offset = 0;
+    let previousWasCr = false;
+    for (const chunk of this.chunks) {
+      for (let index = 0; index < chunk.length; index += 1) {
+        const byte = chunk[index];
+        if (previousWasCr && byte === 10) return offset - 1;
+        previousWasCr = byte === 13;
+        offset += 1;
+      }
+    }
+    return -1;
+  }
+
+  consume(length) {
+    if (!Number.isSafeInteger(length) || length < 0 || length > this.length) {
+      throw new Error("Socket buffer consume length is invalid.");
+    }
+    if (length === 0) return Buffer.alloc(0);
+    const output = Buffer.allocUnsafe(length);
+    let written = 0;
+    while (written < length) {
+      const chunk = this.chunks[0];
+      const needed = length - written;
+      if (chunk.length <= needed) {
+        chunk.copy(output, written);
+        written += chunk.length;
+        this.chunks.shift();
+      } else {
+        chunk.copy(output, written, 0, needed);
+        this.chunks[0] = chunk.subarray(needed);
+        written += needed;
+      }
+    }
+    this.length -= length;
+    return output;
+  }
+
+  startsWith(bytes) {
+    const expected = Buffer.from(bytes);
+    if (this.length < expected.length) return false;
+    let matched = 0;
+    for (const chunk of this.chunks) {
+      const take = Math.min(chunk.length, expected.length - matched);
+      if (!chunk.subarray(0, take).equals(expected.subarray(matched, matched + take))) return false;
+      matched += take;
+      if (matched === expected.length) return true;
+    }
+    return false;
+  }
+
+  discardPrefix(bytes) {
+    const expected = Buffer.from(bytes);
+    if (!this.startsWith(expected)) return false;
+    this.consume(expected.length);
+    return true;
   }
 
   async readLine() {
     while (true) {
-      const index = this.buffer.indexOf("\r\n");
+      const index = this.findCrlf();
       if (index >= 0) {
-        const line = this.buffer.subarray(0, index).toString("utf8");
-        this.buffer = this.buffer.subarray(index + 2);
+        const line = this.consume(index).toString("utf8");
+        this.consume(2);
         return line;
       }
+      if (this.error) throw this.error;
       if (this.ended) throw new Error("Socket ended before a complete line was received.");
-      await this.waitForData();
+      const previousLength = this.length;
+      await this.waitForData(previousLength);
     }
   }
 
   async readBytes(length) {
-    while (this.buffer.length < length) {
+    while (this.length < length) {
+      if (this.error) throw this.error;
       if (this.ended) throw new Error("Socket ended before the declared literal was received.");
-      await this.waitForData();
+      const previousLength = this.length;
+      await this.waitForData(previousLength);
     }
-    const value = this.buffer.subarray(0, length);
-    this.buffer = this.buffer.subarray(length);
-    return value;
+    return this.consume(length);
   }
 }
 
@@ -117,9 +201,7 @@ class ImapSession {
         const length = Number(literalMatch[1]);
         if (!Number.isSafeInteger(length) || length < 0 || length > 50_000_000) throw new Error("Invalid IMAP literal length.");
         literals.push(await this.reader.readBytes(length));
-        if (this.reader.buffer.subarray(0, 2).toString("binary") === "\r\n") {
-          this.reader.buffer = this.reader.buffer.subarray(2);
-        }
+        this.reader.discardPrefix("\r\n");
       }
       if (line.startsWith(`${tag} `)) {
         if (!new RegExp(`^${tag} OK\\b`, "i").test(line)) {
@@ -218,10 +300,27 @@ export class OneComMailClient {
       const selected = await session.command(`EXAMINE ${quoteImap(mailbox)}`);
       const uidValidityLine = selected.lines.find((line) => /UIDVALIDITY/i.test(line)) || "";
       const uidValidity = Number(uidValidityLine.match(/UIDVALIDITY\s+(\d+)/i)?.[1] || 0) || null;
+
+      // UIDNEXT is monotonic for a mailbox generation. Unlike "highest UID
+      // currently returned by SEARCH", it does not move backwards when a mail
+      // client/rule moves or expunges recent messages. That makes UIDNEXT - 1
+      // the safe watermark for our no-historical-backfill boundary.
+      const uidNextLine = selected.lines.find((line) => /UIDNEXT/i.test(line)) || "";
+      const uidNext = Number(uidNextLine.match(/UIDNEXT\s+(\d+)/i)?.[1] || 0) || null;
+      if (uidNext) return { mailbox, uidValidity, highestUid: Math.max(uidNext - 1, 0), uidNext, cursorSource: "uidnext" };
+
+      // Standards-compliant servers normally advertise UIDNEXT. Keep a
+      // conservative SEARCH fallback for providers that omit it.
       const search = await session.command("UID SEARCH ALL");
       const searchLine = search.lines.find((line) => /^\* SEARCH\b/i.test(line)) || "";
       const uids = searchLine.replace(/^\* SEARCH\s*/i, "").split(/\s+/).map(Number).filter((value) => Number.isInteger(value) && value > 0);
-      return { mailbox, uidValidity, highestUid: uids.length ? Math.max(...uids) : 0 };
+      return {
+        mailbox,
+        uidValidity,
+        highestUid: uids.length ? Math.max(...uids) : 0,
+        uidNext: null,
+        cursorSource: "search_fallback",
+      };
     });
   }
 
@@ -240,7 +339,7 @@ export class OneComMailClient {
         const raw = fetched.literals[0];
         if (!raw) continue;
         session.stage = "message_parse";
-        messages.push({ uid, raw, parsed: parseRawEmail(raw) });
+        messages.push({ uid, parsed: parseRawEmail(raw) });
       }
       return { mailbox, uidValidity, messages, highestUid: uids.length ? Math.max(...uids) : Number(afterUid) || 0 };
     });
