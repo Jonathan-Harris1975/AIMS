@@ -85,9 +85,11 @@ class ImapSession {
     this.socket = socket;
     this.reader = new BufferedSocketReader(socket, timeoutMs);
     this.sequence = 0;
+    this.stage = "connected";
   }
 
   async greeting() {
+    this.stage = "greeting";
     const line = await this.reader.readLine();
     if (!/^\*\s+(OK|PREAUTH)\b/i.test(line)) throw new Error(`Unexpected IMAP greeting: ${line.slice(0, 200)}`);
     return line;
@@ -95,6 +97,14 @@ class ImapSession {
 
   async command(command) {
     this.sequence += 1;
+    const commandText = String(command || "").trim();
+    const upper = commandText.toUpperCase();
+    this.stage = upper.startsWith("UID SEARCH") ? "uid_search"
+      : upper.startsWith("UID FETCH") ? "uid_fetch"
+        : upper.startsWith("LOGIN") ? "login"
+          : upper.startsWith("EXAMINE") ? "examine"
+            : upper.startsWith("LOGOUT") ? "logout"
+              : upper.split(/\s+/)[0].toLowerCase() || "command";
     const tag = `A${String(this.sequence).padStart(4, "0")}`;
     this.socket.write(`${tag} ${command}\r\n`);
     const lines = [];
@@ -170,6 +180,8 @@ export class OneComMailClient {
   async withImapSession(callback) {
     this.assertConfigured();
     let socket;
+    let session;
+    let providerStage = "tls_connect";
     try {
       socket = await createTlsSocket({
         host: this.config.oneComImapHost,
@@ -177,21 +189,27 @@ export class OneComMailClient {
         servername: this.config.oneComImapHost,
         timeoutMs: this.config.oneComEmailTimeoutMs,
       });
-      const session = new ImapSession(socket, this.config.oneComEmailTimeoutMs);
+      session = new ImapSession(socket, this.config.oneComEmailTimeoutMs);
+      providerStage = "greeting";
       await session.greeting();
+      providerStage = "login";
       await session.command(`LOGIN ${quoteImap(this.config.oneComEmailUsername)} ${quoteImap(this.config.oneComEmailPassword)}`);
+      providerStage = "mailbox_operation";
       const result = await callback(session);
+      providerStage = "logout";
       await session.command("LOGOUT").catch(() => null);
       session.close();
       return result;
     } catch (cause) {
       socket?.destroy();
-      throw new CommsHubError(502, "onecom_imap_failed", "one.com IMAP operation failed.", {
+      const error = new CommsHubError(502, "onecom_imap_failed", "one.com IMAP operation failed.", {
         cause,
         retryable: true,
         failureClass: "temporary",
         publicMessage: "Email inbox is temporarily unavailable.",
       });
+      error.providerStage = session?.stage || providerStage;
+      throw error;
     }
   }
 
@@ -215,12 +233,13 @@ export class OneComMailClient {
       const uidValidity = Number(uidValidityLine.match(/UIDVALIDITY\s+(\d+)/i)?.[1] || 0) || null;
       const search = await session.command(`UID SEARCH UID ${Math.max(Number(afterUid) + 1, 1)}:*`);
       const searchLine = search.lines.find((line) => /^\* SEARCH\b/i.test(line)) || "";
-      const uids = searchLine.replace(/^\* SEARCH\s*/i, "").split(/\s+/).map(Number).filter((value) => Number.isInteger(value) && value > afterUid).slice(-boundedLimit);
+      const uids = searchLine.replace(/^\* SEARCH\s*/i, "").split(/\s+/).map(Number).filter((value) => Number.isInteger(value) && value > afterUid).sort((a, b) => a - b).slice(0, boundedLimit);
       const messages = [];
       for (const uid of uids) {
         const fetched = await session.command(`UID FETCH ${uid} (UID BODY.PEEK[])`);
         const raw = fetched.literals[0];
         if (!raw) continue;
+        session.stage = "message_parse";
         messages.push({ uid, raw, parsed: parseRawEmail(raw) });
       }
       return { mailbox, uidValidity, messages, highestUid: uids.length ? Math.max(...uids) : Number(afterUid) || 0 };
