@@ -1495,6 +1495,18 @@ export class CommsOperationsRepository {
     );
   }
 
+  async getEmailPollState({ accountKey, mailbox }) {
+    const result = await this.d1.query(
+      `SELECT account_key, mailbox, last_uid, uid_validity, last_success_at, next_attempt_at,
+              attempts, lease_owner, lease_expires_at, failure_class, created_at, updated_at
+         FROM comms_hub_email_poll_state
+        WHERE account_key = ? AND mailbox = ?
+        LIMIT 1`,
+      [accountKey, mailbox]
+    );
+    return rows(result)[0] || null;
+  }
+
   async claimEmailPollState({ accountKey, mailbox, workerId, now, leaseExpiresAt }) {
     await this.ensureEmailPollState({ accountKey, mailbox, at: now });
     const result = await this.d1.query(
