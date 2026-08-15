@@ -76,7 +76,17 @@ function isModerationAction(action) {
   return ["hide", "unhide", "delete", "moderate", "block", "escalate"].includes(action);
 }
 
+function assertSocialWritesEnabled(context) {
+  if (context?.config?.socialMonitorOnly === true) {
+    throw new CommsHubError(403, "social_monitor_only", "Outbound social actions are disabled while Comms Hub social monitoring mode is active.", {
+      failureClass: "permanent",
+      publicMessage: "Social channels are currently in monitoring-only mode.",
+    });
+  }
+}
+
 export async function requestSocialActionApproval({ conversationId, action, body = {}, idempotencyKey, requestedBy, context }) {
+  assertSocialWritesEnabled(context);
   const key = requireIdempotencyKey(idempotencyKey);
   const thread = await context.repository.getSocialThreadByConversation(conversationId);
   if (!thread) throw new CommsHubError(404, "social_thread_not_found", "Social thread was not found.");
@@ -125,6 +135,7 @@ export async function requestSocialActionApproval({ conversationId, action, body
 }
 
 export async function executeSocialAction({ conversationId, action, body = {}, idempotencyKey, context }) {
+  assertSocialWritesEnabled(context);
   const key = requireIdempotencyKey(idempotencyKey);
   const thread = await context.repository.getSocialThreadByConversation(conversationId);
   if (!thread) {

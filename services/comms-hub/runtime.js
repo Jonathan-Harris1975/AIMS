@@ -191,6 +191,18 @@ export async function startCommsHubRuntime() {
         passwordConfigured: Boolean(active.config.oneComEmailPassword),
       },
       zernio: Object.fromEntries(Object.entries(readiness.zernio).map(([family, state]) => [family, state.status])),
+      socialMonitoring: {
+        monitorOnly: active.config.socialMonitorOnly,
+        pollWorkerEnabled: active.config.socialPollWorkerEnabled,
+        pollMs: active.config.socialPollMs,
+        batchSize: active.config.socialPollBatchSize,
+        enabledFamilies: active.socialPollWorker.enabledFamilies(),
+        platforms: Object.fromEntries(
+          Object.entries(active.config.zernioFamilies)
+            .filter(([, family]) => family.enabled)
+            .map(([familyName, family]) => [familyName, [...family.platforms]])
+        ),
+      },
     });
     return { started: true, archiveWorkerStarted, socialPollWorkerStarted, followUpWorkerStarted, providerHealthWorkerStarted, backupWorkerStarted, emailPollWorkerStarted, delayedActionWorkerStarted, retentionWorkerStarted };
   } catch (error) {

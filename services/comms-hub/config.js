@@ -334,6 +334,7 @@ export function loadCommsHubConfig(env = process.env, { requireEnabled = false }
     archiveBatchSize: positiveInteger(env.COMMS_HUB_ARCHIVE_BATCH_SIZE, 10, "COMMS_HUB_ARCHIVE_BATCH_SIZE", { max: 100 }),
     archiveLeaseMs: positiveInteger(env.COMMS_HUB_ARCHIVE_LEASE_MS, 120_000, "COMMS_HUB_ARCHIVE_LEASE_MS", { min: 30_000, max: 900_000 }),
     archiveMaxAttempts: positiveInteger(env.COMMS_HUB_ARCHIVE_MAX_ATTEMPTS, 10, "COMMS_HUB_ARCHIVE_MAX_ATTEMPTS", { max: 50 }),
+    socialMonitorOnly: booleanValue(env.COMMS_HUB_SOCIAL_MONITOR_ONLY, true),
     socialPollWorkerEnabled: booleanValue(env.COMMS_HUB_ZERNIO_POLL_ENABLED, false),
     socialPollMs: positiveInteger(env.COMMS_HUB_ZERNIO_POLL_MS, 120_000, "COMMS_HUB_ZERNIO_POLL_MS", { min: 30_000, max: 3_600_000 }),
     socialPollLeaseMs: positiveInteger(env.COMMS_HUB_ZERNIO_POLL_LEASE_MS, 180_000, "COMMS_HUB_ZERNIO_POLL_LEASE_MS", { min: 30_000, max: 900_000 }),

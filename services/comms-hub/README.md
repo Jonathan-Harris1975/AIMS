@@ -89,6 +89,7 @@ Phase 2:
 - `ZERNIO_META_API_KEY`, `ZERNIO_META_WEBHOOK_SECRET`
 - `ZERNIO_VIDEO_API_KEY`, `ZERNIO_VIDEO_WEBHOOK_SECRET`
 - independent `COMMS_HUB_ZERNIO_META_ENABLED` and `COMMS_HUB_ZERNIO_VIDEO_ENABLED` switches
+- `COMMS_HUB_SOCIAL_MONITOR_ONLY=true` during channel canaries; polling/webhook ingestion stays live while all outbound social actions are rejected before any provider call
 
 Phase 3:
 
@@ -114,7 +115,7 @@ Phase 4:
 
 `COMMS_HUB_EMAIL_HISTORICAL_BACKFILL_ENABLED=false` is the production-safe default. On the first enabled email poll, AIMS records the mailbox's current highest UID using metadata only and does not fetch or persist historical message bodies. Subsequent polls process only mail arriving after that watermark. Historical backfill must never be enabled during the phased Comms Hub rollout.
 
-Social polling, email polling, autonomous replies, follow-ups and web chat remain disabled until their corresponding test phase is explicitly opened.
+Social polling, email polling, autonomous replies, follow-ups and web chat remain disabled until their corresponding test phase is explicitly opened. During the Meta canary, keep `COMMS_HUB_SOCIAL_MONITOR_ONLY=true` so Facebook/Instagram DMs and comments can be observed without any reply, read-state, status or moderation mutation reaching Zernio.
 
 ## Deployment order
 
