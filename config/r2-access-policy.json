@@ -2,7 +2,7 @@
   "schemaVersion": 2,
   "service": "AIMS",
   "principle": "private-by-default; public only for anonymous published delivery",
-  "migrationMode": "compatibility-public-urls-remain-temporarily-enabled-until-dependent-repos-are-updated",
+  "migrationMode": "private-targets-enforced; only explicitly temporary/public delivery buckets retain public URLs",
   "buckets": [
     {
       "bucket": "metasystem",
@@ -12,7 +12,7 @@
         "metaSystem"
       ],
       "publicBaseEnv": "R2_PUBLIC_BASE_URL_META_SYSTEM",
-      "compatibilityPublicUrl": true,
+      "compatibilityPublicUrl": false,
       "reason": "durable state, dedupe, progress and system files"
     },
     {
@@ -24,7 +24,7 @@
         "comms-hub"
       ],
       "publicBaseEnv": "R2_PUBLIC_BASE_URL_COMMS_HUB",
-      "compatibilityPublicUrl": true,
+      "compatibilityPublicUrl": false,
       "reason": "operational receipts and outreach lead objects"
     },
     {
