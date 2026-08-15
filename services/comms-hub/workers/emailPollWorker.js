@@ -112,6 +112,15 @@ export class CommsHubEmailPollWorker {
       }
       return { processed: results.length, highestUid: fetched.highestUid, results };
     } catch (error) {
+      log.error('commsHub.emailPoll.failed', {
+        accountKey,
+        mailbox,
+        attempts: Number(state?.attempts || 0),
+        code: error?.code || error?.name || 'email_poll_failed',
+        failureClass: error?.failureClass || 'temporary',
+        retryable: error?.retryable !== false,
+        message: error?.message || String(error),
+      });
       if (state) {
         await this.context.operationsRepository.failEmailPollState({
           accountKey,
