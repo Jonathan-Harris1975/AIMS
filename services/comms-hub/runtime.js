@@ -178,6 +178,18 @@ export async function startCommsHubRuntime() {
       delayedActionWorkerStarted,
       retentionWorkerStarted,
       forms: readiness.forms,
+      email: {
+        enabled: active.config.emailEnabled,
+        pollWorkerEnabled: active.config.emailPollWorkerEnabled,
+        address: active.config.oneComEmailAddress,
+        username: active.config.oneComEmailUsername,
+        imapHost: active.config.oneComImapHost,
+        imapPort: active.config.oneComImapPort,
+        mailbox: active.config.oneComMailbox,
+        historicalBackfillEnabled: active.config.emailHistoricalBackfillEnabled,
+        workflowEvaluationEnabled: active.config.emailWorkflowEvaluationEnabled,
+        passwordConfigured: Boolean(active.config.oneComEmailPassword),
+      },
       zernio: Object.fromEntries(Object.entries(readiness.zernio).map(([family, state]) => [family, state.status])),
     });
     return { started: true, archiveWorkerStarted, socialPollWorkerStarted, followUpWorkerStarted, providerHealthWorkerStarted, backupWorkerStarted, emailPollWorkerStarted, delayedActionWorkerStarted, retentionWorkerStarted };

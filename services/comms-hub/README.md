@@ -218,3 +218,17 @@ Email rollout safeguards:
 - an unsafe/unpromoted attachment does not discard its parent email.
 - the live info@ mailbox password is read from `COMMS_HUB_ONECOM_PASSWORD` when supplied, otherwise from the existing `ONECOM_INFO_PASSWORD` secret.
 - `ONECOM_ADMIN_PASSWORD` and `ONECOM_NEWSLETTER_PASSWORD` remain separate secrets for their own future/integration-specific use and are not used by the customer inbox worker.
+
+### Email deployment diagnostics
+
+Docker/Koyeb loads non-secret runtime defaults from `config/production.defaults.env`.
+For the email phase that file must contain `COMMS_HUB_EMAIL_ENABLED=true` and
+`COMMS_HUB_EMAIL_POLL_WORKER_ENABLED=true`; `.env.example` and `env.template`
+alone do not activate production email.
+
+The customer inbox secret is `ONECOM_INFO_PASSWORD` (or the optional
+`COMMS_HUB_ONECOM_PASSWORD` override). A healthy deployment logs
+`commsHub.runtime.started` with `email.enabled=true`,
+`emailPollWorkerStarted=true` and `email.passwordConfigured=true`.
+The first poll then logs `commsHub.emailPoll.baseline`. IMAP/auth/network
+failures log `commsHub.emailPoll.failed`.
