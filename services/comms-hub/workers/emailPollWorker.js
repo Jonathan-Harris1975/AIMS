@@ -156,6 +156,8 @@ export class CommsHubEmailPollWorker {
         accountKey,
         mailbox,
         highestUid: Number(cursor.highestUid || 0),
+        uidNext: Number(cursor.uidNext || 0) || null,
+        cursorSource: cursor.cursorSource || null,
         uidValidity: Number(cursor.uidValidity || 0) || null,
       });
 
@@ -187,43 +189,83 @@ export class CommsHubEmailPollWorker {
       }
 
       stage = 'fetch_messages';
-      const batchLimit = limit || this.context.config.emailPollBatchSize;
+      const batchLimit = Math.min(Math.max(Number(limit || this.context.config.emailPollBatchSize) || 1, 1), 100);
       log.info('commsHub.emailPoll.fetch.start', {
         workerId: this.workerId,
         accountKey,
         mailbox,
         afterUid: lastUid,
         limit: batchLimit,
+        mode: 'bounded_one_message_at_a_time',
       });
-      const fetched = await this.context.oneComMail.fetchMessages({
-        mailbox,
-        afterUid: lastUid,
-        limit: batchLimit,
-      });
+
+      // Keep IMAP/message memory bounded. A full RFC822 message can contain large
+      // base64 attachments; retaining 25 raw messages plus parsed buffers can
+      // exhaust a small Koyeb instance and starve the HTTP health endpoint.
+      // Fetch and persist exactly one message at a time, then release its raw
+      // buffer before moving to the next UID.
+      const results = [];
+      let workingUid = lastUid;
+      let observedUidValidity = cursor.uidValidity;
+      for (let index = 0; index < batchLimit; index += 1) {
+        stage = 'fetch_message';
+        const fetched = await this.context.oneComMail.fetchMessages({
+          mailbox,
+          afterUid: workingUid,
+          limit: 1,
+        });
+        observedUidValidity = fetched.uidValidity || observedUidValidity;
+        if (!fetched.messages.length) break;
+
+        const message = fetched.messages[0];
+        log.info('commsHub.emailPoll.messageFetched', {
+          workerId: this.workerId,
+          accountKey,
+          mailbox,
+          uid: message.uid,
+          index: index + 1,
+          limit: batchLimit,
+        });
+
+        stage = 'persist_message';
+        const persisted = await this.context.emailService.persistFetched({
+          uid: message.uid,
+          parsed: message.parsed,
+          mailbox,
+        });
+        results.push(persisted);
+        workingUid = Number(message.uid || fetched.highestUid || workingUid);
+
+        log.info('commsHub.emailPoll.messagePersisted', {
+          workerId: this.workerId,
+          accountKey,
+          mailbox,
+          uid: workingUid,
+          processed: results.length,
+          attachmentCount: persisted.attachments?.length || 0,
+        });
+      }
+
       log.info('commsHub.emailPoll.fetch.complete', {
         workerId: this.workerId,
         accountKey,
         mailbox,
         afterUid: lastUid,
-        fetched: fetched.messages.length,
-        highestUid: Number(fetched.highestUid || lastUid),
-        uidValidity: Number(fetched.uidValidity || 0) || null,
+        fetched: results.length,
+        highestUid: workingUid,
+        uidValidity: Number(observedUidValidity || 0) || null,
       });
-
-      const results = [];
-      for (const message of fetched.messages) {
-        stage = 'persist_message';
-        results.push(await this.context.emailService.persistFetched({ uid: message.uid, parsed: message.parsed, mailbox }));
-      }
 
       stage = 'complete_state';
       await this.context.operationsRepository.completeEmailPollState({
         accountKey,
         mailbox,
         workerId: this.workerId,
-        lastUid: fetched.highestUid,
-        uidValidity: fetched.uidValidity,
-        nextAttemptAt: new Date(Date.now() + this.context.config.emailPollMs).toISOString(),
+        lastUid: workingUid,
+        uidValidity: observedUidValidity,
+        // Drain another batch almost immediately when the configured batch was
+        // filled; otherwise return to the normal poll cadence.
+        nextAttemptAt: new Date(Date.now() + (results.length >= batchLimit ? 1_000 : this.context.config.emailPollMs)).toISOString(),
       });
 
       const attachmentCount = results.reduce((total, item) => total + (item.attachments?.length || 0), 0);
@@ -235,7 +277,7 @@ export class CommsHubEmailPollWorker {
         processed: results.length,
         attachmentCount,
         previousUid: lastUid,
-        highestUid: fetched.highestUid,
+        highestUid: workingUid,
       });
       if (results.length) {
         log.info('commsHub.emailPoll.processed', {
@@ -247,7 +289,7 @@ export class CommsHubEmailPollWorker {
           attachmentCount,
         });
       }
-      return { processed: results.length, highestUid: fetched.highestUid, results };
+      return { processed: results.length, highestUid: workingUid, results };
     } catch (error) {
       const failure = safeErrorLog(error);
       const failedStage = providerStage(error, stage);
