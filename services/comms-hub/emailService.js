@@ -18,24 +18,57 @@ export class CommsHubEmailService {
     const conversationId = existing?.conversation_id || stableId('cnv', 'email', this.context.config.oneComEmailAccountKey, threadKey);
     const messageId = stableId('msg', 'email', parsed.messageId);
     const now = new Date().toISOString();
+    const managedAddress = this.context.config.emailAddressRoles?.info?.address || this.context.config.oneComEmailAddress;
     const attachmentRows = parsed.attachments.map((item, index) => ({ id: stableId('att', messageId, index, item.filename, item.sha256), filename: item.filename, contentType: item.contentType, status: 'pending', metadata: { size: item.size } }));
     const persistence = await this.context.operationsRepository.persistChannelMessage({
       contact: { id: contactId, primaryEmail: sender, displayName: parsed.from?.name || sender, phone: '' },
-      conversation: { id: conversationId, channel: 'email', provider: 'one.com', workflow: 'email_inbox', status: 'open', contactId, subject: parsed.subject, sourceReference: parsed.messageId, metadata: { accountKey: this.context.config.oneComEmailAccountKey, mailbox, threadKey } },
-      message: { id: messageId, direction: 'inbound', sender, recipients: [...parsed.to, ...parsed.cc].map((item) => item.address), subject: parsed.subject, bodyText: parsed.text, bodyHtml: parsed.html, providerMessageId: parsed.messageId, receivedAt: parsed.receivedAt, metadata: { uid, rawSha256: parsed.rawSha256, inReplyTo: parsed.inReplyTo, references: parsed.references } },
+      conversation: { id: conversationId, channel: 'email', provider: 'one.com', workflow: 'email_inbox', status: 'open', contactId, subject: parsed.subject, sourceReference: parsed.messageId, metadata: { accountKey: this.context.config.oneComEmailAccountKey, mailbox, threadKey, managedAddress, mailboxRole: 'customer_facing' } },
+      message: { id: messageId, direction: 'inbound', sender, recipients: [...parsed.to, ...parsed.cc].map((item) => item.address), subject: parsed.subject, bodyText: parsed.text, bodyHtml: parsed.html, providerMessageId: parsed.messageId, receivedAt: parsed.receivedAt, metadata: { uid, rawSha256: parsed.rawSha256, inReplyTo: parsed.inReplyTo, references: parsed.references, managedAddress, mailboxRole: 'customer_facing' } },
       attachments: attachmentRows,
       at: now,
     });
     await this.context.operationsRepository.ensureConversationOperations(conversationId, 'email-adapter', now);
     await this.context.operationsRepository.upsertEmailThread({ id: stableId('eth', this.context.config.oneComEmailAccountKey, mailbox, threadKey), conversationId, accountKey: this.context.config.oneComEmailAccountKey, mailbox, providerThreadKey: threadKey, internetMessageId: parsed.messageId, references: [...parsed.references, parsed.messageId], lastUid: uid, createdAt: now, metadata: { subject: parsed.subject } });
     await this.context.operationsRepository.addContactAlias({ id: stableId('als', 'email', sender), contactId, type: 'email', value: sender, provider: 'one.com', confidence: 1, verified: true, createdAt: now, metadata: {} });
+    const attachmentResults = [];
     for (let index = 0; index < parsed.attachments.length; index += 1) {
       const source = parsed.attachments[index];
-      await this.context.attachmentService.ingest({ attachmentId: attachmentRows[index].id, filename: source.filename, contentType: source.contentType, buffer: source.buffer, provider: 'one.com', metadata: { messageId } });
+      const attachmentId = attachmentRows[index].id;
+      try {
+        const stored = await this.context.attachmentService.ingest({
+          attachmentId,
+          filename: source.filename,
+          contentType: source.contentType,
+          buffer: source.buffer,
+          provider: 'one.com',
+          metadata: { messageId, conversationId, contactId, channel: 'email', mailbox, managedAddress },
+        });
+        attachmentResults.push({ attachmentId, status: stored?.quarantined ? 'quarantined' : 'stored' });
+      } catch (error) {
+        // Preserve the parent email. The attachment service has already written
+        // the file to private quarantine before scanning/promotion.
+        attachmentResults.push({ attachmentId, status: 'quarantined', error: error?.code || 'attachment_ingest_failed' });
+        await this.context.repository.markAttachmentStatus?.(attachmentId, 'quarantined', {
+          code: error?.code || 'attachment_ingest_failed',
+          failureClass: error?.failureClass || null,
+        }).catch?.(() => {});
+      }
     }
-    await this.context.operationsRepository.indexSearchDocument({ id: stableId('srch', 'message', messageId), objectType: 'message', objectId: messageId, conversationId, contactId, channel: 'email', searchableText: `${parsed.subject}\n${parsed.text}\n${sender}`, metadata: {}, updatedAt: now });
-    await this.context.workflowEngineService.evaluate({ conversationId, event: { type: 'message_received', channel: 'email', sender, text: parsed.text, occurredAt: now } });
-    return { duplicate: persistence.duplicate, conversationId, messageId };
+    await this.context.operationsRepository.indexSearchDocument({
+      id: stableId('srch', 'message', messageId),
+      objectType: 'message',
+      objectId: messageId,
+      conversationId,
+      contactId,
+      channel: 'email',
+      searchableText: `${parsed.subject}\n${parsed.text}\n${sender}`,
+      metadata: { managedAddress, mailboxRole: 'customer_facing' },
+      updatedAt: now,
+    });
+    if (this.context.config.emailWorkflowEvaluationEnabled) {
+      await this.context.workflowEngineService.evaluate({ conversationId, event: { type: 'message_received', channel: 'email', sender, text: parsed.text, occurredAt: now } });
+    }
+    return { duplicate: persistence.duplicate, conversationId, messageId, workflow: 'email_inbox', managedAddress, attachments: attachmentResults };
   }
 
   async send({ conversationId, bodyText, bodyHtml = null, subject = '', recipients = [], cc = [], attachments = [], attachmentIds = [], idempotencyKey }) {

@@ -192,8 +192,11 @@ export function getCommsHubMissingEnv(env = process.env) {
     if (!restoreDatabase || restoreDatabase === sourceDatabase) missing.push("COMMS_HUB_RESTORE_DATABASE_ID");
   }
   if (booleanValue(env.COMMS_HUB_EMAIL_ENABLED, false)) {
-    for (const name of ["COMMS_HUB_ONECOM_ACCOUNT_KEY", "COMMS_HUB_ONECOM_EMAIL_ADDRESS", "COMMS_HUB_ONECOM_USERNAME", "COMMS_HUB_ONECOM_PASSWORD", "COMMS_HUB_ONECOM_IMAP_HOST", "COMMS_HUB_ONECOM_SMTP_HOST", "R2_BUCKET_COMMS_HUB_PRIVATE", "COMMS_HUB_ATTACHMENT_SCANNER_URL", "COMMS_HUB_ATTACHMENT_SCANNER_TOKEN"]) {
+    for (const name of ["COMMS_HUB_ONECOM_ACCOUNT_KEY", "COMMS_HUB_ONECOM_EMAIL_ADDRESS", "COMMS_HUB_ONECOM_USERNAME", "COMMS_HUB_ONECOM_IMAP_HOST", "COMMS_HUB_ONECOM_SMTP_HOST", "R2_BUCKET_COMMS_HUB_PRIVATE", "COMMS_HUB_ATTACHMENT_SCANNER_URL", "COMMS_HUB_ATTACHMENT_SCANNER_TOKEN"]) {
       if (!usableEnvValue(env[name])) missing.push(name);
+    }
+    if (!usableEnvValue(env.COMMS_HUB_ONECOM_PASSWORD) && !usableEnvValue(env.ONECOM_INFO_PASSWORD)) {
+      missing.push("ONECOM_INFO_PASSWORD");
     }
   }
   if (booleanValue(env.COMMS_HUB_CHAT_ENABLED, false)) {
@@ -342,7 +345,24 @@ export function loadCommsHubConfig(env = process.env, { requireEnabled = false }
     oneComEmailAccountKey: usableEnvValue(env.COMMS_HUB_ONECOM_ACCOUNT_KEY),
     oneComEmailAddress: usableEnvValue(env.COMMS_HUB_ONECOM_EMAIL_ADDRESS),
     oneComEmailUsername: usableEnvValue(env.COMMS_HUB_ONECOM_USERNAME),
-    oneComEmailPassword: usableEnvValue(env.COMMS_HUB_ONECOM_PASSWORD),
+    oneComEmailPassword: usableEnvValue(env.COMMS_HUB_ONECOM_PASSWORD) || usableEnvValue(env.ONECOM_INFO_PASSWORD),
+    emailAddressRoles: Object.freeze({
+      admin: Object.freeze({
+        address: usableEnvValue(env.COMMS_HUB_EMAIL_ADMIN_ADDRESS) || "admin@jonathan-harris.online",
+        purpose: "service_admin",
+        commsHubManaged: false,
+      }),
+      info: Object.freeze({
+        address: usableEnvValue(env.COMMS_HUB_EMAIL_PRIMARY_ADDRESS) || usableEnvValue(env.COMMS_HUB_ONECOM_EMAIL_ADDRESS) || "info@jonathan-harris.online",
+        purpose: "customer_facing",
+        commsHubManaged: true,
+      }),
+      newsletter: Object.freeze({
+        address: usableEnvValue(env.COMMS_HUB_EMAIL_NEWSLETTER_ADDRESS) || "newsletter@jonathan-harris.online",
+        purpose: "newsletter_brevo",
+        commsHubManaged: false,
+      }),
+    }),
     oneComImapHost: usableEnvValue(env.COMMS_HUB_ONECOM_IMAP_HOST) || "imap.one.com",
     oneComImapPort: positiveInteger(env.COMMS_HUB_ONECOM_IMAP_PORT, 993, "COMMS_HUB_ONECOM_IMAP_PORT", { min: 1, max: 65535 }),
     oneComSmtpHost: usableEnvValue(env.COMMS_HUB_ONECOM_SMTP_HOST) || "send.one.com",
@@ -355,6 +375,7 @@ export function loadCommsHubConfig(env = process.env, { requireEnabled = false }
     emailPollLeaseMs: positiveInteger(env.COMMS_HUB_EMAIL_POLL_LEASE_MS, 180_000, "COMMS_HUB_EMAIL_POLL_LEASE_MS", { min: 30_000, max: 900_000 }),
     emailPollBatchSize: positiveInteger(env.COMMS_HUB_EMAIL_POLL_BATCH_SIZE, 25, "COMMS_HUB_EMAIL_POLL_BATCH_SIZE", { min: 1, max: 100 }),
     emailHistoricalBackfillEnabled: booleanValue(env.COMMS_HUB_EMAIL_HISTORICAL_BACKFILL_ENABLED, false),
+    emailWorkflowEvaluationEnabled: booleanValue(env.COMMS_HUB_EMAIL_WORKFLOW_EVALUATION_ENABLED, false),
     chatEnabled: booleanValue(env.COMMS_HUB_CHAT_ENABLED, false),
     coginPalApiBaseUrl: normaliseBaseUrl(env.COMMS_HUB_COGINPAL_API_BASE_URL, ""),
     coginPalApiKey: usableEnvValue(env.COMMS_HUB_COGINPAL_API_KEY),

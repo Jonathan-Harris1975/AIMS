@@ -199,3 +199,22 @@ Stored objects are never exposed through a public R2 URL. Authenticated operator
 ### R2 privacy transition
 
 Primary Comms Hub R2 access is authenticated. `comms-hub` and `comms-hub-private` are target-private buckets; any configured `R2_PUBLIC_BASE_URL_COMMS_HUB` is temporary compatibility only and is not required by Comms Hub readiness. The backup/restore bucket has not been created and must remain disabled until that phase is intentionally implemented.
+
+
+## Live email rollout configuration
+
+The one.com email estate has three distinct addresses and roles:
+
+- `admin@jonathan-harris.online` — service registrations and infrastructure administration. It is **not** a Comms Hub customer inbox and is not polled by the Comms Hub email worker.
+- `info@jonathan-harris.online` — the primary customer-facing mailbox. This is the only mailbox enabled for live Comms Hub IMAP ingestion and SMTP replies in the current phased rollout.
+- `newsletter@jonathan-harris.online` — newsletter/Brevo identity. It remains outside the normal customer-conversation poller and is reserved for the newsletter/Brevo integration.
+
+Email rollout safeguards:
+
+- `COMMS_HUB_EMAIL_HISTORICAL_BACKFILL_ENABLED=false`: the first live poll records only the current UID watermark and does not fetch historical message bodies.
+- UIDVALIDITY changes and mailbox resets safely re-baseline before any new body fetch.
+- `COMMS_HUB_EMAIL_WORKFLOW_EVALUATION_ENABLED=false`: fresh email is stored, threaded and indexed, but the later unified prompt/conversation-intelligence layer remains off.
+- email attachments use the same `comms-hub-private` quarantine → malware scan → clean promotion → authenticated AIMS access path already proven by forms.
+- an unsafe/unpromoted attachment does not discard its parent email.
+- the live info@ mailbox password is read from `COMMS_HUB_ONECOM_PASSWORD` when supplied, otherwise from the existing `ONECOM_INFO_PASSWORD` secret.
+- `ONECOM_ADMIN_PASSWORD` and `ONECOM_NEWSLETTER_PASSWORD` remain separate secrets for their own future/integration-specific use and are not used by the customer inbox worker.
