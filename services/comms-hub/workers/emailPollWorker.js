@@ -7,6 +7,14 @@ function delay(attempt) {
   return Math.min(3_600_000, 30_000 * (2 ** Math.min(attempt, 7)));
 }
 
+function providerStage(error, fallback = null) {
+  return error?.providerStage || error?.cause?.providerStage || fallback;
+}
+
+function safeCause(error) {
+  return error?.cause ? safeErrorLog(error.cause) : null;
+}
+
 export class CommsHubEmailPollWorker {
   constructor({ context }) {
     this.context = context;
@@ -17,18 +25,45 @@ export class CommsHubEmailPollWorker {
 
   start() {
     if (!this.context.config.emailPollWorkerEnabled || this.timer) return false;
+
+    const reportUnhandledRunFailure = (event, error) => {
+      log.error(event, {
+        workerId: this.workerId,
+        accountKey: this.context.config.oneComEmailAccountKey,
+        mailbox: this.context.config.oneComMailbox,
+        providerStage: providerStage(error),
+        error: safeErrorLog(error),
+        cause: safeCause(error),
+      });
+    };
+
     this.timer = setInterval(
-      () => void this.runOnce().catch((error) => log.error('commsHub.emailPoll.failed', { error: safeErrorLog(error) })),
+      () => void this.runOnce().catch((error) => reportUnhandledRunFailure('commsHub.emailPoll.tickFailed', error)),
       this.context.config.emailPollMs
     );
     this.timer.unref?.();
-    void this.runOnce();
+
+    log.info('commsHub.emailPoll.started', {
+      workerId: this.workerId,
+      accountKey: this.context.config.oneComEmailAccountKey,
+      mailbox: this.context.config.oneComMailbox,
+      managedAddress: this.context.config.oneComEmailAddress,
+      pollMs: this.context.config.emailPollMs,
+      leaseMs: this.context.config.emailPollLeaseMs,
+      batchSize: this.context.config.emailPollBatchSize,
+      historicalBackfillEnabled: this.context.config.emailHistoricalBackfillEnabled,
+    });
+
+    // Never allow the boot-time IMAP attempt to become an unhandled rejection.
+    // runOnce() intentionally rethrows after recording/quarantining a failure.
+    void this.runOnce().catch((error) => reportUnhandledRunFailure('commsHub.emailPoll.initialRunFailed', error));
     return true;
   }
 
   async stop() {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
+    log.info('commsHub.emailPoll.stopped', { workerId: this.workerId });
   }
 
   async replay(sourceId) {
@@ -44,14 +79,33 @@ export class CommsHubEmailPollWorker {
   }
 
   async runOnce({ limit, force = false } = {}) {
-    if (this.running) return { skipped: true, reason: 'already_running' };
+    if (this.running) {
+      log.info('commsHub.emailPoll.skipped', { workerId: this.workerId, reason: 'already_running' });
+      return { skipped: true, reason: 'already_running' };
+    }
+
     this.running = true;
     const now = new Date();
     const mailbox = this.context.config.oneComMailbox;
     const accountKey = this.context.config.oneComEmailAccountKey;
     let state;
+    let stage = 'claim_state';
+
+    log.info('commsHub.emailPoll.attempt', {
+      workerId: this.workerId,
+      accountKey,
+      mailbox,
+      force,
+      requestedLimit: limit || null,
+    });
+
     try {
-      if (force) await this.context.operationsRepository.resetEmailPollStateForReplay({ accountKey, mailbox, at: now.toISOString() });
+      if (force) {
+        stage = 'reset_forced_poll';
+        await this.context.operationsRepository.resetEmailPollStateForReplay({ accountKey, mailbox, at: now.toISOString() });
+      }
+
+      stage = 'claim_state';
       state = await this.context.operationsRepository.claimEmailPollState({
         accountKey,
         mailbox,
@@ -59,18 +113,59 @@ export class CommsHubEmailPollWorker {
         now: now.toISOString(),
         leaseExpiresAt: new Date(now.getTime() + this.context.config.emailPollLeaseMs).toISOString(),
       });
-      if (!state) return { skipped: true, reason: 'not_due' };
+
+      if (!state) {
+        const current = typeof this.context.operationsRepository.getEmailPollState === 'function'
+          ? await this.context.operationsRepository.getEmailPollState({ accountKey, mailbox }).catch(() => null)
+          : null;
+        log.info('commsHub.emailPoll.skipped', {
+          workerId: this.workerId,
+          accountKey,
+          mailbox,
+          reason: 'not_due',
+          nextAttemptAt: current?.next_attempt_at || null,
+          leaseExpiresAt: current?.lease_expires_at || null,
+          leased: Boolean(current?.lease_owner),
+          attempts: Number(current?.attempts || 0),
+          lastUid: Number(current?.last_uid || 0),
+          uidValidity: Number(current?.uid_validity || 0) || null,
+          lastSuccessAt: current?.last_success_at || null,
+          failureClass: current?.failure_class || null,
+        });
+        return { skipped: true, reason: 'not_due' };
+      }
+
+      log.info('commsHub.emailPoll.claimed', {
+        workerId: this.workerId,
+        accountKey,
+        mailbox,
+        attempts: Number(state.attempts || 0),
+        lastUid: Number(state.last_uid || 0),
+        uidValidity: Number(state.uid_validity || 0) || null,
+        leaseExpiresAt: state.lease_expires_at || null,
+      });
 
       // Safety boundary: inspect mailbox metadata before fetching any body.
       // First run, UIDVALIDITY changes and mailbox resets establish a fresh
       // watermark rather than risking historical message processing.
+      stage = 'mailbox_cursor';
+      log.info('commsHub.emailPoll.imapCursor.start', { workerId: this.workerId, accountKey, mailbox });
       const cursor = await this.context.oneComMail.getMailboxCursor({ mailbox });
+      log.info('commsHub.emailPoll.imapCursor.complete', {
+        workerId: this.workerId,
+        accountKey,
+        mailbox,
+        highestUid: Number(cursor.highestUid || 0),
+        uidValidity: Number(cursor.uidValidity || 0) || null,
+      });
+
       const lastUid = Number(state.last_uid || 0);
       const previousUidValidity = Number(state.uid_validity || 0) || null;
       const uidValidityChanged = Boolean(previousUidValidity && cursor.uidValidity && previousUidValidity !== cursor.uidValidity);
       const mailboxReset = lastUid > Number(cursor.highestUid || 0);
 
       if ((!lastUid && !this.context.config.emailHistoricalBackfillEnabled) || uidValidityChanged || mailboxReset) {
+        stage = 'complete_baseline';
         await this.context.operationsRepository.completeEmailPollState({
           accountKey,
           mailbox,
@@ -80,19 +175,48 @@ export class CommsHubEmailPollWorker {
           nextAttemptAt: new Date(Date.now() + this.context.config.emailPollMs).toISOString(),
         });
         const reason = uidValidityChanged ? 'uidvalidity_rebaseline' : mailboxReset ? 'mailbox_reset_rebaseline' : 'historical_baseline_established';
-        log.info('commsHub.emailPoll.baseline', { accountKey, mailbox, reason, highestUid: cursor.highestUid, uidValidity: cursor.uidValidity });
+        log.info('commsHub.emailPoll.baseline', {
+          workerId: this.workerId,
+          accountKey,
+          mailbox,
+          reason,
+          highestUid: cursor.highestUid,
+          uidValidity: cursor.uidValidity,
+        });
         return { skipped: true, reason, highestUid: cursor.highestUid };
       }
 
+      stage = 'fetch_messages';
+      const batchLimit = limit || this.context.config.emailPollBatchSize;
+      log.info('commsHub.emailPoll.fetch.start', {
+        workerId: this.workerId,
+        accountKey,
+        mailbox,
+        afterUid: lastUid,
+        limit: batchLimit,
+      });
       const fetched = await this.context.oneComMail.fetchMessages({
         mailbox,
-        afterUid: Number(state.last_uid || 0),
-        limit: limit || this.context.config.emailPollBatchSize,
+        afterUid: lastUid,
+        limit: batchLimit,
       });
+      log.info('commsHub.emailPoll.fetch.complete', {
+        workerId: this.workerId,
+        accountKey,
+        mailbox,
+        afterUid: lastUid,
+        fetched: fetched.messages.length,
+        highestUid: Number(fetched.highestUid || lastUid),
+        uidValidity: Number(fetched.uidValidity || 0) || null,
+      });
+
       const results = [];
       for (const message of fetched.messages) {
+        stage = 'persist_message';
         results.push(await this.context.emailService.persistFetched({ uid: message.uid, parsed: message.parsed, mailbox }));
       }
+
+      stage = 'complete_state';
       await this.context.operationsRepository.completeEmailPollState({
         accountKey,
         mailbox,
@@ -101,25 +225,40 @@ export class CommsHubEmailPollWorker {
         uidValidity: fetched.uidValidity,
         nextAttemptAt: new Date(Date.now() + this.context.config.emailPollMs).toISOString(),
       });
+
+      const attachmentCount = results.reduce((total, item) => total + (item.attachments?.length || 0), 0);
+      log.info('commsHub.emailPoll.complete', {
+        workerId: this.workerId,
+        accountKey,
+        mailbox,
+        managedAddress: this.context.config.oneComEmailAddress,
+        processed: results.length,
+        attachmentCount,
+        previousUid: lastUid,
+        highestUid: fetched.highestUid,
+      });
       if (results.length) {
         log.info('commsHub.emailPoll.processed', {
+          workerId: this.workerId,
           accountKey,
           mailbox,
           managedAddress: this.context.config.oneComEmailAddress,
           processed: results.length,
-          attachmentCount: results.reduce((total, item) => total + (item.attachments?.length || 0), 0),
+          attachmentCount,
         });
       }
       return { processed: results.length, highestUid: fetched.highestUid, results };
     } catch (error) {
+      const failure = safeErrorLog(error);
+      const failedStage = providerStage(error, stage);
       log.error('commsHub.emailPoll.failed', {
+        workerId: this.workerId,
         accountKey,
         mailbox,
+        stage: failedStage,
         attempts: Number(state?.attempts || 0),
-        code: error?.code || error?.name || 'email_poll_failed',
-        failureClass: error?.failureClass || 'temporary',
-        retryable: error?.retryable !== false,
-        message: error?.message || String(error),
+        error: failure,
+        cause: safeCause(error),
       });
       if (state) {
         await this.context.operationsRepository.failEmailPollState({
@@ -127,7 +266,7 @@ export class CommsHubEmailPollWorker {
           mailbox,
           workerId: this.workerId,
           failureClass: error.failureClass || 'temporary',
-          error: error.message,
+          error: failure.message,
           nextAttemptAt: new Date(Date.now() + delay(Number(state.attempts || 1))).toISOString(),
         }).catch(() => null);
       }
@@ -136,9 +275,9 @@ export class CommsHubEmailPollWorker {
         sourceId: `${accountKey}:${mailbox}`,
         failureClass: error.failureClass || 'temporary',
         errorCode: error.code || 'email_poll_failed',
-        errorMessage: error.message,
+        errorMessage: failure.message,
         attempts: Number(state?.attempts || 1),
-        metadata: { accountKey, mailbox },
+        metadata: { accountKey, mailbox, stage: failedStage },
       }).catch(() => null);
       throw error;
     } finally {
