@@ -2,12 +2,12 @@ import express from "express";
 import { log } from "../../../logger.js";
 import { recordProviderOutcome } from "../../shared/utils/operationalExcellence.js";
 import { getProviderDiagnosticsForRoute } from "../../shared/utils/ai-service.js";
-import { booleanValue, getCommsHubReadiness, loadCommsHubConfig } from "../config.js";
+import { booleanValue, getCommsHubReadiness, loadCommsHubConfig, SOCIAL_CHANNEL_CAPABILITIES } from "../config.js";
 import { newCorrelationId, stableId } from "../domain/ids.js";
 import { normalisePriorityOverride } from "../domain/ai.js";
 import { attachCommsIdentity, requireCommsPermission } from "../domain/rbac.js";
 import { readJotformWebhookEnvelope } from "../domain/webhook.js";
-import { readZernioWebhookEnvelope } from "../domain/zernioWebhook.js";
+import { readZernioWebhookEnvelope, zernioWebhookEventsForFamily } from "../domain/zernioWebhook.js";
 import { safeErrorLog } from "../domain/redaction.js";
 import { CommsHubError, toCommsHubError } from "../errors.js";
 import {
@@ -20,7 +20,7 @@ import { ingestJotformAttachments, processJotformIntake } from "../intakeService
 import { executeSocialAction, requestSocialActionApproval } from "../socialActionsService.js";
 import { decideApproval } from "../approvalService.js";
 import { sendReplyDraft } from "../replyDraftService.js";
-import { processZernioWebhook, reconcileZernioWebhook, withZernioAcceptanceDeadline } from "../socialService.js";
+import { processZernioWebhook, reconcileEnabledZernioWebhooks, reconcileZernioWebhook, withZernioAcceptanceDeadline } from "../socialService.js";
 
 function publicError(error) {
   const normalised = toCommsHubError(error, {
@@ -428,6 +428,21 @@ export function createCommsHubRouter({
           Object.entries(active.config.zernioFamilies).map(([name, family]) => [name, {
             enabled: family.enabled,
             platforms: [...family.platforms],
+            webhookPath: `/comms-hub/intake/zernio/${name}`,
+            webhookEvents: zernioWebhookEventsForFamily(name).filter((event) => event !== "webhook.test"),
+          }])
+        ),
+        channels: Object.fromEntries(
+          Object.entries(SOCIAL_CHANNEL_CAPABILITIES).map(([platform, capabilities]) => [platform, {
+            family: capabilities.family,
+            enabled: active.config.zernioFamilies?.[capabilities.family]?.enabled === true,
+            directMessages: capabilities.directMessages,
+            comments: capabilities.comments,
+            commentReplies: capabilities.commentReplies,
+            privateCommentReplies: capabilities.privateCommentReplies,
+            moderation: capabilities.moderation,
+            liveChat: capabilities.liveChat,
+            pollingResources: [...capabilities.pollingResources],
           }])
         ),
       };
@@ -443,6 +458,16 @@ export function createCommsHubRouter({
       const limit = Number.isInteger(requested) && requested > 0 ? Math.min(requested, 20) : 5;
       const result = await contextProvider().socialPollWorker.runOnce({ limit });
       return res.status(200).json({ ok: true, service: "comms-hub", ...result });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/social/webhooks/reconcile-all", permit("manage_workflows"), async (_req, res, next) => {
+    try {
+      const result = await reconcileEnabledZernioWebhooks({ context: contextProvider() });
+      const kicked = kickSocialPoll();
+      return res.status(200).json({ ok: true, service: "comms-hub", kicked, ...result });
     } catch (error) {
       next(error);
     }
