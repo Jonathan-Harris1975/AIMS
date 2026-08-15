@@ -4,7 +4,7 @@
 
 import { spawn } from "node:child_process";
 import { info, warn, error, debug } from "../../../logger.js";
-import { putObject, putPrivateJson, getObjectAsText, getObjectAsBuffer } from "../../shared/utils/r2-client.js";
+import { putObject, putPrivateJson, getObjectAsText, getObjectAsBuffer, buildR2Reference } from "../../shared/utils/r2-client.js";
 import { fetchWithTimeout } from "../../shared/http-client.js";
 import fs from "node:fs";
 import path from "node:path";
@@ -145,12 +145,8 @@ function cleanup(files) {
 async function updateMetaFile(sessionId, finalBuffer, finalPath, podcastUrl, artworkMeta = {}) {
   const metaKey = `${sessionId}.json`;
 
-  const metaBase = process.env.R2_PUBLIC_BASE_URL_META || "";
   const artBase = process.env.R2_PUBLIC_BASE_URL_ART || "";
-  const transcriptBase =
-    process.env.R2_PUBLIC_BASE_URL_TRANSCRIPT ||
-    process.env.R2_PUBLIC_BASE_URL_RAW_TEXT ||
-    "";
+  const transcriptBase = process.env.R2_PUBLIC_BASE_URL_TRANSCRIPT || "";
   const siteBaseUrl = process.env.SITE_BASE_URL || "https://jonathan-harris.online";
   const transcriptHtmlBase =
     process.env.PODCAST_TRANSCRIPT_HTML_BASE_URL ||
@@ -159,19 +155,13 @@ async function updateMetaFile(sessionId, finalBuffer, finalPath, podcastUrl, art
     process.env.R2_PUBLIC_BASE_URL_TRANSCRIPT ||
     "";
 
-  const metaUrl = metaBase ? `${metaBase}/${metaKey}` : "";
+  const metaUri = buildR2Reference("meta", metaKey);
 
   let existing = {};
   try {
     existing = JSON.parse(await getObjectAsText("meta", metaKey));
   } catch {
-    // Compatibility fallback while the legacy public endpoint remains enabled.
-    try {
-      if (metaUrl) {
-        const res = await fetchWithTimeout(metaUrl, { timeout: PODCAST_FETCH_TIMEOUT_MS });
-        if (res.ok && res.headers.get("content-type")?.includes("application/json")) existing = await res.json();
-      }
-    } catch {}
+    existing = {};
   }
 
   const sessionDate =
@@ -263,7 +253,7 @@ async function updateMetaFile(sessionId, finalBuffer, finalPath, podcastUrl, art
 
   await putPrivateJson("meta", metaKey, updated);
 
-  return { metaKey, metaUrl };
+  return { metaKey, metaUri };
 }
 
 export async function podcastProcessor(input, editedPathOrBuffer) {
