@@ -216,6 +216,8 @@ export function requiresHumanApproval({
   workflowMismatch = false,
   intent = "unknown",
   securityRisk = false,
+  conductRisk = false,
+  contextEscalation = false,
 }) {
   const reasons = [];
   if (moderation.severity >= severityThreshold || ["high", "critical"].includes(moderation.riskLevel)) reasons.push("moderation_risk");
@@ -225,6 +227,8 @@ export function requiresHumanApproval({
   if (workflowMismatch) reasons.push("workflow_mismatch");
   if (intent === "spam") reasons.push("spam_intent");
   if (securityRisk) reasons.push("prompt_injection_or_poisoned_context");
+  if (conductRisk) reasons.push("abusive_or_hostile_conversation");
+  if (contextEscalation) reasons.push("smart_context_human_escalation");
   return Object.freeze({ required: reasons.length > 0, reasons: Object.freeze(reasons) });
 }
 
