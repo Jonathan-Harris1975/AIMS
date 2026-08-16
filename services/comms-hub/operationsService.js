@@ -1,4 +1,5 @@
 import { CommsHubError } from "./errors.js";
+import { channelFamily, isSocialChannel } from "./domain/channels.js";
 import { stableId } from "./domain/ids.js";
 
 function text(value, maximum = 10_000) {
@@ -226,16 +227,18 @@ export class CommsHubOperationsService {
     const replyKey = cleanTagKey(key || label);
     const template = text(bodyTemplate, 20_000);
     if (!template) throw new CommsHubError(400, "saved_reply_template_empty", "Saved reply template cannot be empty.");
-    if (!new Set(["any", "email", "social", "chat", "form"]).has(channel)) throw new CommsHubError(400, "saved_reply_channel_invalid", "Saved reply channel is invalid.");
+    const requestedChannel = String(channel || "any").toLowerCase();
+    if (!new Set(["any", "email", "social", "social_dm", "social_comment", "chat", "form"]).has(requestedChannel)) throw new CommsHubError(400, "saved_reply_channel_invalid", "Saved reply channel is invalid.");
+    const storedChannel = isSocialChannel(requestedChannel) ? "social" : requestedChannel;
     const variables = variablesFromTemplate(template);
     const reply = await this.context.operationsRepository.upsertSavedReply({
-      id: stableId("srp", replyKey), key: replyKey, label: text(label || key, 150), channel,
+      id: stableId("srp", replyKey), key: replyKey, label: text(label || key, 150), channel: storedChannel,
       bodyTemplate: template, variables, actor: actor.actor,
     });
     await this.context.auditService.record({
       actor: actor.actor, role: actor.role, action: "saved_reply_upserted", objectType: "saved_reply",
       objectId: reply.id, requestId: req.id || null, after: { ...reply, body_template: undefined },
-      details: { variables, channel },
+      details: { variables, channel: requestedChannel, storedChannel },
     });
     return { ...reply, variables };
   }
@@ -243,11 +246,13 @@ export class CommsHubOperationsService {
   async renderSavedReply({ key, channel, values = {} }, req) {
     const reply = await this.context.operationsRepository.getSavedReply(cleanTagKey(key));
     if (!reply) throw new CommsHubError(404, "saved_reply_not_found", "Saved reply was not found.");
-    if (reply.channel !== "any" && reply.channel !== channel) throw new CommsHubError(409, "saved_reply_channel_mismatch", "Saved reply is not valid for this channel.");
+    const requestedChannel = String(channel || "").toLowerCase();
+    const requestedFamily = channelFamily(requestedChannel);
+    if (reply.channel !== "any" && reply.channel !== requestedChannel && reply.channel !== requestedFamily) throw new CommsHubError(409, "saved_reply_channel_mismatch", "Saved reply is not valid for this channel.");
     const variables = JSON.parse(reply.variables_json || "[]");
     const bodyText = renderTemplate(reply.body_template, values, variables);
     const limits = { social: 2000, chat: 4000, email: 20_000, form: 20_000 };
-    if (bodyText.length > (limits[channel] || 20_000)) throw new CommsHubError(422, "saved_reply_render_too_long", "Rendered saved reply exceeds the channel limit.");
+    if (bodyText.length > (limits[requestedFamily] || 20_000)) throw new CommsHubError(422, "saved_reply_render_too_long", "Rendered saved reply exceeds the channel limit.");
     await this.context.auditService.record({
       actor: this.identity(req).actor, role: this.identity(req).role, action: "saved_reply_rendered",
       objectType: "saved_reply", objectId: reply.id, requestId: req.id || null,

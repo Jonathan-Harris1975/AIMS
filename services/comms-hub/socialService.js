@@ -75,11 +75,49 @@ async function scheduleAttachmentIngestion(event, context) {
   }
 }
 
+
+export async function ingestSocialAttachments(event, context) {
+  if (!context.attachmentService || !Array.isArray(event.attachments) || !event.attachments.length || !event.conversationId || !event.messageId) return;
+  for (const attachment of event.attachments) {
+    if (!attachment?.url) continue;
+    const attachmentId = `${event.messageId}:${attachment.id}`;
+    try {
+      const existing = await context.operationsRepository?.getAttachmentObject?.(attachmentId);
+      if (existing?.scan_status === "clean" && !existing?.deleted_at) continue;
+      await context.repository.markAttachmentStatus?.(attachmentId, "pending");
+      await context.attachmentService.ingestReference({
+        attachmentId,
+        providerUrl: attachment.url,
+        filename: attachment.name || attachment.type || "attachment",
+        provider: "zernio",
+        metadata: {
+          conversationId: event.conversationId,
+          contactId: event.contactId || null,
+          messageId: event.messageId,
+          channel: event.threadType === "dm" ? "social_dm" : "social_comment",
+          platform: event.platform,
+          credentialFamily: event.family,
+        },
+      });
+    } catch (error) {
+      await context.repository.markAttachmentStatus?.(attachmentId, "ingest_failed", {
+        code: error?.code || "attachment_ingest_failed",
+        failureClass: error?.failureClass || null,
+      }).catch?.(() => {});
+    }
+  }
+}
+
+function kickSocialAttachmentIngestion(event, context) {
+  if (!Array.isArray(event?.attachments) || !event.attachments.length) return;
+  queueMicrotask(() => { void ingestSocialAttachments(event, context); });
+}
+
 export async function processZernioWebhook({ envelope, correlationId, context }) {
   const event = normaliseZernioEvent(envelope, { correlationId, source: "webhook" });
   if (event.kind === "test") return { test: true, duplicate: false, event };
   const persistence = await context.repository.persistZernioEvent(event);
-  if (!persistence.duplicate) await scheduleAttachmentIngestion(event, context);
+  if (!persistence.duplicate) { await scheduleAttachmentIngestion(event, context); kickSocialAttachmentIngestion(event, context); }
   return { test: false, ...persistence, event };
 }
 
@@ -156,7 +194,7 @@ export async function persistPolledConversation({ family, platform, conversation
     });
     const event = normaliseZernioEvent(envelope, { correlationId: newCorrelationId(), source: "poll" });
     const result = await context.repository.persistZernioEvent(event);
-    if (!result.duplicate) await scheduleAttachmentIngestion(event, context);
+    if (!result.duplicate) { await scheduleAttachmentIngestion(event, context); kickSocialAttachmentIngestion(event, context); }
     processed += result.duplicate ? 0 : 1;
     duplicates += result.duplicate ? 1 : 0;
   }
@@ -226,7 +264,7 @@ export async function persistPolledComments({ family, platform, post, comments, 
     });
     const event = normaliseZernioEvent(envelope, { correlationId: newCorrelationId(), source: "poll" });
     const result = await context.repository.persistZernioEvent(event);
-    if (!result.duplicate) await scheduleAttachmentIngestion(event, context);
+    if (!result.duplicate) { await scheduleAttachmentIngestion(event, context); kickSocialAttachmentIngestion(event, context); }
     processed += result.duplicate ? 0 : 1;
     duplicates += result.duplicate ? 1 : 0;
   }

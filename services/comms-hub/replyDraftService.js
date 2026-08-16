@@ -2,6 +2,8 @@ import { CommsHubError } from "./errors.js";
 import { requireApproval } from "./approvalService.js";
 import { executeSocialAction } from "./socialActionsService.js";
 import { buildFormRequestRecord } from "./formOrchestrationService.js";
+import { isSocialChannel } from "./domain/channels.js";
+import { assertConversationReplyAllowed } from "./domain/replySafety.js";
 
 function parseArray(value) { try { const parsed = JSON.parse(value || "[]"); return Array.isArray(parsed) ? parsed : []; } catch { return []; } }
 function parseObject(value) { try { const parsed = JSON.parse(value || "{}"); return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {}; } catch { return {}; } }
@@ -35,9 +37,11 @@ export async function sendReplyDraft({ draftId, context }) {
   }
   const conversation = await context.repository.getConversation(draft.conversation_id);
   if (!conversation) throw new CommsHubError(404, "conversation_not_found", "Conversation was not found.");
+  const operations = await context.operationsRepository.getConversationOperations(conversation.id);
+  assertConversationReplyAllowed({ conversation, operations });
 
   let delivery;
-  if (conversation.channel === "social") {
+  if (isSocialChannel(conversation.channel)) {
     delivery = await executeSocialAction({
       conversationId: conversation.id,
       action: "reply",

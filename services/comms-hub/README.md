@@ -162,7 +162,7 @@ Social polling, email polling, autonomous replies and follow-ups remain gated by
 
 1. Deploy the existing Comms Hub data-plane Worker and keep all new Phase 3/4 flags false.
 2. Install the repository's locked production dependencies without changing `package-lock.json`.
-3. Run `npm run comms:migrate:status`, then `npm run comms:migrate` to apply migrations `0003_ai_workflows`, `0004_hardening` and `0005_operations_and_channels` after the existing migrations.
+3. Run `npm run comms:migrate:status`, then `npm run comms:migrate` to apply migrations `0003_ai_workflows`, `0004_hardening`, `0005_operations_and_channels` and `0006_smart_response_forms` after the existing migrations.
 4. Run the full test and build chain in the deployment environment.
 5. Deploy with `COMMS_HUB_AI_ENABLED=false`, follow-up disabled, provider-health disabled and backups disabled. Verify Phase 1/2 smoke paths first.
 6. Configure the approved AI Search instances and token. Enable AI with approvals enforced, then verify one low-risk draft, one high-risk approval and one unsupported moderation quarantine.
@@ -211,6 +211,8 @@ All other Comms Hub routes require AIMS bearer authentication. Phase 3/4 additio
 Outbound social actions and workflow transitions require an `Idempotency-Key` header where documented by the route. Completed identical actions return their stored result; uncertain actions are never resent automatically.
 
 ## Unified operations and remaining backend capabilities
+
+Migration `0006_smart_response_forms` adds durable Jotform request lifecycles and verified form-processing state used by Smart Response Intelligence.
 
 Migration `0005_operations_and_channels` adds the backend contracts required before the website and HIVE user-interface pass:
 
@@ -318,3 +320,7 @@ For a complete first canary, apply `config/comms-hub-social-monitoring.env.examp
 
 The unified queue now exposes `interaction_type` (`dm` or `comment`) plus social platform, family, account, provider thread/post/comment identifiers and provider status for every Zernio-backed conversation. This lets operator surfaces group private-message work separately from public comment work without guessing from subjects or message text.
 
+
+## Pre-Outreach conversation acceptance close-out (v2.13.1)
+
+Before Outreach setup, the Comms Hub conversation paths are sanity-checked as one system rather than independent adapters. The close-out covers CogniPal chat, one.com email, Facebook/Instagram DMs, Facebook/Instagram/YouTube comments, all three approved Jotforms, form processing/reply, attachments, handoff, reply-state safety, social channel-family policy matching and the Smart Layer security stack. See `docs/COMMS_HUB_PRE_OUTREACH_SANITY_V2.13.1.md` for the acceptance matrix and the remaining live-provider caveats.

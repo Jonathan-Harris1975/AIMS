@@ -3,6 +3,7 @@ import { sha256Hex, stableId } from './domain/ids.js';
 import { safeErrorLog } from './domain/redaction.js';
 import { scanPromptInjection } from './domain/promptSecurity.js';
 import { assessConversationConduct, scanOutboundLanguagePolicy } from './conversationConductService.js';
+import { assertConversationReplyAllowed } from './domain/replySafety.js';
 import { log } from '../../logger.js';
 
 function text(value, maximum = 4000) {
@@ -293,9 +294,15 @@ export class CommsHubChatService {
         publicMessage: 'That reply contains language blocked by the Communications Hub policy.',
       });
     }
-    const session = await this.context.operationsRepository.getChatSessionByConversation(conversationId);
+    const [session, conversation, operations] = await Promise.all([
+      this.context.operationsRepository.getChatSessionByConversation(conversationId),
+      this.context.repository.getConversation(conversationId),
+      this.context.operationsRepository.getConversationOperations(conversationId),
+    ]);
     if (!session) throw new CommsHubError(404, 'chat_session_not_found', 'Chat session was not found.');
+    if (!conversation || conversation.channel !== 'chat') throw new CommsHubError(404, 'chat_conversation_not_found', 'Website chat conversation was not found.');
     if (session.mode === 'closed') throw new CommsHubError(409, 'chat_session_closed', 'Chat session is closed.');
+    assertConversationReplyAllowed({ conversation, operations });
     const requestSha256 = sha256Hex(body);
     const claim = await this.context.operationsRepository.claimChannelOutboundAction({ id: stableId('coa', idempotencyKey), idempotencyKey, conversationId, channel: 'chat', actionType: 'reply', requestSha256 });
     if (!claim.acquired) {

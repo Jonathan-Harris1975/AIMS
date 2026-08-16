@@ -1,6 +1,7 @@
 import { loadEbookCatalogue } from "../zernio/utils/ebookCatalogue.js";
 import { sanitiseUntrustedText } from "./domain/promptSecurity.js";
 import { conversationInteractionSignals } from "./conversationConductService.js";
+import { isSocialChannel, isSocialCommentChannel } from "./domain/channels.js";
 
 const STOP_WORDS = new Set([
   "a","about","an","and","are","as","at","be","been","but","by","can","could","do","for","from","get","give","has","have","how","i","if","in","into","is","it","its","me","my","of","on","or","our","please","so","some","tell","that","the","their","them","there","they","this","to","us","want","what","when","where","which","who","why","with","would","you","your",
@@ -155,8 +156,8 @@ function engagementMode(conversation, text, quiz, bookRecommendationPreference =
   if (quiz.active) return "quiz_interaction";
   if (bookRecommendationPreference !== "opted_out" && /\b(book|ebook|read|reading|recommend|recommendation|learn more|beginner|advanced)\b/.test(value)) return "book_discovery";
   if (/\b(talk to jonathan|human|person|speak to|contact jonathan)\b/.test(value)) return "human_assistance";
-  if (conversation?.channel === "social" && conversation?.socialThread?.thread_type === "comment") return "public_content_discussion";
-  if (conversation?.channel === "social") return "social_conversation";
+  if ((isSocialCommentChannel(conversation?.channel) || conversation?.socialThread?.thread_type === "comment") && isSocialChannel(conversation?.channel)) return "public_content_discussion";
+  if (isSocialChannel(conversation?.channel)) return "social_conversation";
   if (conversation?.channel === "chat") return "website_conversation";
   return "general_conversation";
 }

@@ -446,6 +446,8 @@ export function loadCommsHubConfig(env = process.env, { requireEnabled = false }
     socialPollMaxMessagePages: positiveInteger(env.COMMS_HUB_ZERNIO_MAX_MESSAGE_PAGES, 5, "COMMS_HUB_ZERNIO_MAX_MESSAGE_PAGES", { min: 1, max: 5 }),
     socialPollMaxCommentPages: positiveInteger(env.COMMS_HUB_ZERNIO_MAX_COMMENT_PAGES, 5, "COMMS_HUB_ZERNIO_MAX_COMMENT_PAGES", { min: 1, max: 10 }),
     emailEnabled: booleanValue(env.COMMS_HUB_EMAIL_ENABLED, false),
+    emailExternalRecipientsEnabled: booleanValue(env.COMMS_HUB_EMAIL_EXTERNAL_RECIPIENTS_ENABLED, false),
+    emailMaxReplyChars: positiveInteger(env.COMMS_HUB_EMAIL_MAX_REPLY_CHARS, 20_000, "COMMS_HUB_EMAIL_MAX_REPLY_CHARS", { min: 1000, max: 100_000 }),
     oneComEmailAccountKey: usableEnvValue(env.COMMS_HUB_ONECOM_ACCOUNT_KEY),
     oneComEmailAddress: usableEnvValue(env.COMMS_HUB_ONECOM_EMAIL_ADDRESS),
     oneComEmailUsername: usableEnvValue(env.COMMS_HUB_ONECOM_USERNAME),

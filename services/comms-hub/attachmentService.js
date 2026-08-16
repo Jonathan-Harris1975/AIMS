@@ -1,14 +1,76 @@
 import { CommsHubError } from './errors.js';
+import { lookup as dnsLookup } from 'node:dns/promises';
+import { isIP } from 'node:net';
 import { sha256Hex, stableId } from './domain/ids.js';
 
 function safeFilename(value) {
   return String(value || 'attachment.bin').replace(/[^a-zA-Z0-9._-]+/g, '_').slice(0, 180) || 'attachment.bin';
 }
 
+function isPrivateOrSpecialIpv4(address) {
+  const parts = String(address || '').split('.').map(Number);
+  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) return true;
+  const [a, b] = parts;
+  return a === 0 || a === 10 || a === 127
+    || (a === 100 && b >= 64 && b <= 127)
+    || (a === 169 && b === 254)
+    || (a === 172 && b >= 16 && b <= 31)
+    || (a === 192 && b === 0)
+    || (a === 192 && b === 168)
+    || (a === 198 && (b === 18 || b === 19))
+    || (a === 198 && b === 51)
+    || (a === 203 && b === 0)
+    || a >= 224;
+}
+
+function isPrivateOrSpecialIp(address) {
+  const value = String(address || '').toLowerCase().replace(/^\[|\]$/g, '').split('%')[0];
+  const family = isIP(value);
+  if (family === 4) return isPrivateOrSpecialIpv4(value);
+  if (family !== 6) return false;
+  if (value === '::' || value === '::1') return true;
+  if (value.startsWith('fc') || value.startsWith('fd') || value.startsWith('fe8') || value.startsWith('fe9') || value.startsWith('fea') || value.startsWith('feb')) return true;
+  const mapped = value.match(/::ffff:(\d+\.\d+\.\d+\.\d+)$/);
+  return mapped ? isPrivateOrSpecialIpv4(mapped[1]) : false;
+}
+
+function assertAttachmentHostname(hostname) {
+  const host = String(hostname || '').toLowerCase().replace(/\.$/, '');
+  if (!host || host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local') || host.endsWith('.internal') || host.endsWith('.home.arpa')) {
+    throw new CommsHubError(400, 'attachment_url_private_target', 'Attachment URL may not target a local or private host.', { failureClass: 'permanent' });
+  }
+  if (isIP(host) && isPrivateOrSpecialIp(host)) {
+    throw new CommsHubError(400, 'attachment_url_private_target', 'Attachment URL may not target a private or special-use IP address.', { failureClass: 'permanent' });
+  }
+}
+
 export class CommsHubAttachmentService {
-  constructor({ context, fetchImpl = globalThis.fetch }) {
+  constructor({ context, fetchImpl = globalThis.fetch, lookupImpl = null }) {
     this.context = context;
     this.fetchImpl = fetchImpl;
+    // Production uses the Node resolver to prevent hostname-to-private-network attachment fetches.
+    // Tests/custom transports can inject a resolver explicitly without causing real DNS traffic.
+    this.lookupImpl = lookupImpl || (fetchImpl === globalThis.fetch ? dnsLookup : null);
+  }
+
+  async assertPublicAttachmentUrl(url) {
+    let parsed;
+    try { parsed = url instanceof URL ? url : new URL(url); } catch { throw new CommsHubError(400, 'attachment_url_invalid', 'Attachment URL is invalid.'); }
+    if (parsed.protocol !== 'https:') throw new CommsHubError(400, 'attachment_url_insecure', 'Attachment URL must use HTTPS.');
+    if (parsed.username || parsed.password) throw new CommsHubError(400, 'attachment_url_credentials_forbidden', 'Attachment URL may not contain embedded credentials.');
+    assertAttachmentHostname(parsed.hostname);
+    if (this.lookupImpl && !isIP(parsed.hostname)) {
+      let addresses;
+      try { addresses = await this.lookupImpl(parsed.hostname, { all: true, verbatim: true }); }
+      catch (cause) {
+        throw new CommsHubError(502, 'attachment_host_resolution_failed', 'Attachment host could not be resolved.', { cause, retryable: true, failureClass: 'temporary' });
+      }
+      const resolved = Array.isArray(addresses) ? addresses : [addresses];
+      if (!resolved.length || resolved.some((item) => isPrivateOrSpecialIp(item?.address))) {
+        throw new CommsHubError(400, 'attachment_url_private_target', 'Attachment URL resolves to a private or special-use network address.', { failureClass: 'permanent' });
+      }
+    }
+    return parsed;
   }
 
   assertReady() {
@@ -21,16 +83,28 @@ export class CommsHubAttachmentService {
   }
 
   async download(url) {
-    let parsed;
-    try { parsed = new URL(url); } catch { throw new CommsHubError(400, 'attachment_url_invalid', 'Attachment URL is invalid.'); }
-    if (parsed.protocol !== 'https:') throw new CommsHubError(400, 'attachment_url_insecure', 'Attachment URL must use HTTPS.');
-    const response = await this.fetchImpl(parsed, { signal: AbortSignal.timeout(this.context.config.attachmentDownloadTimeoutMs) });
-    if (!response.ok) throw new CommsHubError(502, 'attachment_download_failed', `Attachment download returned ${response.status}.`, { retryable: response.status >= 500, failureClass: response.status >= 500 ? 'temporary' : 'recoverable' });
-    const declared = Number(response.headers.get('content-length') || 0);
-    if (declared > this.context.config.attachmentMaxBytes) throw new CommsHubError(413, 'attachment_too_large', 'Attachment exceeds the configured size limit.');
-    const buffer = Buffer.from(await response.arrayBuffer());
-    if (buffer.length > this.context.config.attachmentMaxBytes) throw new CommsHubError(413, 'attachment_too_large', 'Attachment exceeds the configured size limit.');
-    return { buffer, contentType: response.headers.get('content-type')?.split(';')[0] || 'application/octet-stream' };
+    let current = await this.assertPublicAttachmentUrl(url);
+    const maximumRedirects = 3;
+    for (let redirectCount = 0; redirectCount <= maximumRedirects; redirectCount += 1) {
+      const response = await this.fetchImpl(current, {
+        signal: AbortSignal.timeout(this.context.config.attachmentDownloadTimeoutMs),
+        redirect: 'manual',
+      });
+      if ([301, 302, 303, 307, 308].includes(response.status)) {
+        if (redirectCount >= maximumRedirects) throw new CommsHubError(502, 'attachment_redirect_limit', 'Attachment download exceeded the redirect limit.', { failureClass: 'recoverable' });
+        const location = response.headers.get('location');
+        if (!location) throw new CommsHubError(502, 'attachment_redirect_invalid', 'Attachment download returned a redirect without a destination.', { failureClass: 'recoverable' });
+        current = await this.assertPublicAttachmentUrl(new URL(location, current));
+        continue;
+      }
+      if (!response.ok) throw new CommsHubError(502, 'attachment_download_failed', `Attachment download returned ${response.status}.`, { retryable: response.status >= 500, failureClass: response.status >= 500 ? 'temporary' : 'recoverable' });
+      const declared = Number(response.headers.get('content-length') || 0);
+      if (declared > this.context.config.attachmentMaxBytes) throw new CommsHubError(413, 'attachment_too_large', 'Attachment exceeds the configured size limit.');
+      const buffer = Buffer.from(await response.arrayBuffer());
+      if (buffer.length > this.context.config.attachmentMaxBytes) throw new CommsHubError(413, 'attachment_too_large', 'Attachment exceeds the configured size limit.');
+      return { buffer, contentType: response.headers.get('content-type')?.split(';')[0] || 'application/octet-stream' };
+    }
+    throw new CommsHubError(502, 'attachment_download_failed', 'Attachment download could not be completed.');
   }
 
   scannerReady() {

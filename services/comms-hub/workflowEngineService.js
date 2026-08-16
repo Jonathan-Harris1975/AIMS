@@ -1,4 +1,5 @@
 import { CommsHubError } from "./errors.js";
+import { channelFamily } from "./domain/channels.js";
 import { sha256Hex, stableId } from "./domain/ids.js";
 
 function text(value, maximum = 10_000) {
@@ -74,7 +75,10 @@ function includesInsensitive(value, expected) {
 
 function valueMatches(actual, expected) {
   if (Array.isArray(expected)) return expected.some((candidate) => valueMatches(actual, candidate));
-  return String(actual ?? "").toLowerCase() === String(expected ?? "").toLowerCase();
+  const actualValue = String(actual ?? "").toLowerCase();
+  const expectedValue = String(expected ?? "").toLowerCase();
+  if (actualValue === expectedValue) return true;
+  return channelFamily(actualValue) === "social" && channelFamily(expectedValue) === "social";
 }
 
 function inAllowedTime(condition, date = new Date()) {

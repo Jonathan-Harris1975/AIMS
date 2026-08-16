@@ -15,6 +15,7 @@ import {
 import { buildApprovalRequest } from "./approvalService.js";
 import { CommsHubError, toCommsHubError } from "./errors.js";
 import { redactDiagnosticText } from "./domain/redaction.js";
+import { isSocialChannel } from "./domain/channels.js";
 import { buildSmartConversationContext, smartPromptGuidance } from "./smartContextService.js";
 import { buildLiveContentContext, liveContentPromptGuidance } from "./liveContentAwarenessService.js";
 import { buildConversationStrategy, conversationStrategyPromptGuidance } from "./conversationStrategyService.js";
@@ -300,7 +301,7 @@ export class CommsHubAiWorkflowService {
         ? Object.freeze({ ...policy, requiresEvidence: false })
         : policy;
       const effectivePolicy = smartContext.memory?.responseLength === "brief"
-        ? Object.freeze({ ...channelPolicy, maximumCharacters: Math.min(channelPolicy.maximumCharacters, conversation.channel === "social" ? 500 : 700) })
+        ? Object.freeze({ ...channelPolicy, maximumCharacters: Math.min(channelPolicy.maximumCharacters, isSocialChannel(conversation.channel) ? 500 : 700) })
         : channelPolicy;
 
       const moderationCall = await requestJson(aiRequest, "commsHubModeration", [

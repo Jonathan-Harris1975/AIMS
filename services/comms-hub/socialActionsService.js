@@ -4,6 +4,8 @@ import { redactDiagnosticText } from "./domain/redaction.js";
 import { assertSupportedModerationAction } from "./domain/ai.js";
 import { requestApproval, requireApproval } from "./approvalService.js";
 import { SOCIAL_CHANNEL_CAPABILITIES } from "./config.js";
+import { scanOutboundLanguagePolicy } from "./conversationConductService.js";
+import { assertConversationReplyAllowed } from "./domain/replySafety.js";
 
 function text(value) {
   return value === undefined || value === null ? "" : String(value).trim();
@@ -159,6 +161,14 @@ export async function executeSocialAction({ conversationId, action, body = {}, i
   }
   const capabilities = capabilitiesForThread(thread);
   const normalisedAction = text(action).toLowerCase();
+  if (normalisedAction === "reply") {
+    const [conversation, operations] = await Promise.all([
+      context.repository.getConversation(conversationId),
+      context.operationsRepository.getConversationOperations(conversationId),
+    ]);
+    if (!conversation) throw new CommsHubError(404, "conversation_not_found", "Conversation was not found.");
+    assertConversationReplyAllowed({ conversation, operations });
+  }
   const actionBody = actionBodyWithoutApproval(body);
   const targetId = stableId("act", "zernio", key);
   const moderationPayload = { conversationId, action: normalisedAction, body: actionBody };
@@ -232,6 +242,13 @@ export async function executeSocialAction({ conversationId, action, body = {}, i
     }
     if (normalisedAction === "reply") {
       const message = requireMessage(actionBody.message);
+      if (context.config?.badLanguageBlockEnabled) {
+        const language = scanOutboundLanguagePolicy(message);
+        if (language.detected) throw new CommsHubError(422, "social_reply_language_policy_rejected", "Social reply contains blocked language.", {
+          failureClass: "permanent",
+          publicMessage: "That reply contains language blocked by the Communications Hub policy.",
+        });
+      }
       const attachmentUrl = optionalHttpsUrl(actionBody.attachmentUrl, "attachmentUrl");
       const quickReplies = validateButtons(actionBody.quickReplies, 13, "quickReplies");
       const buttons = validateButtons(actionBody.buttons, 3, "buttons");

@@ -1,8 +1,49 @@
 import { CommsHubError } from './errors.js';
 import { emailThreadKey } from './domain/email.js';
 import { sha256Hex, stableId } from './domain/ids.js';
+import { scanOutboundLanguagePolicy } from './conversationConductService.js';
+import { assertConversationReplyAllowed } from './domain/replySafety.js';
 
 function address(value) { return String(value || '').trim().toLowerCase(); }
+
+function validateReplyBody(context, bodyText, bodyHtml) {
+  const text = String(bodyText ?? '').trim();
+  const html = String(bodyHtml ?? '').trim();
+  if (!text && !html) throw new CommsHubError(422, 'email_reply_empty', 'Email reply cannot be empty.');
+  const maximum = Number(context?.config?.emailMaxReplyChars || 20_000);
+  if (text.length > maximum || html.length > maximum * 4) {
+    throw new CommsHubError(413, 'email_reply_too_long', 'Email reply exceeds the configured character limit.');
+  }
+  if (context?.config?.badLanguageBlockEnabled) {
+    const language = scanOutboundLanguagePolicy(`${text}\n${html}`);
+    if (language.detected) throw new CommsHubError(422, 'email_reply_language_policy_rejected', 'Email reply contains blocked language.', {
+      failureClass: 'permanent',
+      publicMessage: 'That reply contains language blocked by the Communications Hub policy.',
+    });
+  }
+}
+
+function assertConversationReplyRecipients(context, conversation, recipients = [], cc = []) {
+  const primary = address(conversation?.contact?.primary_email);
+  const requestedTo = [...new Set((recipients || []).map(address).filter(Boolean))];
+  const requestedCc = [...new Set((cc || []).map(address).filter(Boolean))];
+  if (context?.config?.emailExternalRecipientsEnabled === true) {
+    return { to: requestedTo.length ? requestedTo : [primary].filter(Boolean), cc: requestedCc };
+  }
+  if (requestedCc.length) {
+    throw new CommsHubError(403, 'email_external_recipient_blocked', 'Conversation replies cannot add CC recipients while external-recipient mode is disabled.', {
+      failureClass: 'permanent',
+      publicMessage: 'Additional recipients are disabled for conversation replies.',
+    });
+  }
+  if (requestedTo.some((item) => item !== primary)) {
+    throw new CommsHubError(403, 'email_external_recipient_blocked', 'Conversation replies may only be sent to the verified conversation email address.', {
+      failureClass: 'permanent',
+      publicMessage: 'This reply can only be sent to the conversation contact.',
+    });
+  }
+  return { to: [primary].filter(Boolean), cc: [] };
+}
 
 export class CommsHubEmailService {
   constructor({ context }) { this.context = context; }
@@ -76,9 +117,11 @@ export class CommsHubEmailService {
     if (!idempotencyKey) throw new CommsHubError(400, 'idempotency_key_required', 'Idempotency-Key is required.');
     const conversation = await this.context.repository.getConversation(conversationId);
     if (!conversation || conversation.channel !== 'email') throw new CommsHubError(404, 'email_conversation_not_found', 'Email conversation was not found.');
+    validateReplyBody(this.context, bodyText, bodyHtml);
     const workspace = await this.context.operationsRepository.getConversationWorkspace(conversationId);
+    assertConversationReplyAllowed({ conversation, operations: workspace.operations });
     const thread = workspace.emailThread;
-    const to = recipients.length ? recipients.map(address).filter(Boolean) : [address(conversation.contact?.primary_email)].filter(Boolean);
+    const { to, cc: safeCc } = assertConversationReplyRecipients(this.context, conversation, recipients, cc);
     if (!to.length) throw new CommsHubError(422, 'email_recipient_missing', 'Email recipient is missing.');
     const storedAttachments = [];
     for (const attachmentId of [...new Set((attachmentIds || []).map(String))].slice(0, 10)) {
@@ -86,7 +129,7 @@ export class CommsHubEmailService {
       storedAttachments.push({ filename: item.record.filename, contentType: item.record.content_type, buffer: item.buffer });
     }
     const allAttachments = [...attachments, ...storedAttachments];
-    const request = { conversationId, bodyText, bodyHtml, subject: subject || `Re: ${conversation.subject || ''}`, to, cc };
+    const request = { conversationId, bodyText, bodyHtml, subject: subject || `Re: ${conversation.subject || ''}`, to, cc: safeCc };
     const attachmentFingerprints = allAttachments.map((item) => ({ filename: item.filename, contentType: item.contentType, sha256: sha256Hex(item.buffer) }));
     const requestSha256 = sha256Hex(JSON.stringify({ ...request, attachments: attachmentFingerprints }));
     const claim = await this.context.operationsRepository.claimChannelOutboundAction({ id: stableId('coa', idempotencyKey), idempotencyKey, conversationId, channel: 'email', actionType: 'reply', requestSha256 });
@@ -96,9 +139,9 @@ export class CommsHubEmailService {
     }
     try {
       const references = JSON.parse(thread?.references_json || '[]');
-      const sent = await this.context.oneComMail.sendMessage({ to, cc, subject: request.subject, bodyText, bodyHtml, inReplyTo: thread?.internet_message_id || '', references, attachments: allAttachments });
+      const sent = await this.context.oneComMail.sendMessage({ to, cc: safeCc, subject: request.subject, bodyText, bodyHtml, inReplyTo: thread?.internet_message_id || '', references, attachments: allAttachments });
       const at = new Date().toISOString();
-      await this.context.operationsRepository.recordOutboundMessage({ id: stableId('msg', 'email-out', sent.messageId), conversationId, sender: this.context.config.oneComEmailAddress, recipients: [...to, ...cc], subject: request.subject, bodyText, bodyHtml, providerMessageId: sent.messageId, receivedAt: at, metadata: { inReplyTo: thread?.internet_message_id || null, references } });
+      await this.context.operationsRepository.recordOutboundMessage({ id: stableId('msg', 'email-out', sent.messageId), conversationId, sender: this.context.config.oneComEmailAddress, recipients: [...to, ...safeCc], subject: request.subject, bodyText, bodyHtml, providerMessageId: sent.messageId, receivedAt: at, metadata: { inReplyTo: thread?.internet_message_id || null, references } });
       await this.context.operationsRepository.upsertEmailThread({ id: thread?.id || stableId('eth', conversationId), conversationId, accountKey: this.context.config.oneComEmailAccountKey, mailbox: this.context.config.oneComMailbox, providerThreadKey: thread?.provider_thread_key || conversationId, internetMessageId: sent.messageId, references: [...references, sent.messageId], lastUid: thread?.last_uid || null, createdAt: thread?.created_at || at, metadata: {} });
       await this.context.operationsRepository.completeChannelOutboundAction({ idempotencyKey, providerMessageId: sent.messageId, response: sent, at });
       return { duplicate: false, providerMessageId: sent.messageId };
@@ -113,6 +156,9 @@ export class CommsHubEmailService {
     if (!idempotencyKey) throw new CommsHubError(400, 'idempotency_key_required', 'Idempotency-Key is required.');
     const conversation = await this.context.repository.getConversation(conversationId);
     if (!conversation || conversation.channel !== 'form') throw new CommsHubError(404, 'form_conversation_not_found', 'Form conversation was not found.');
+    validateReplyBody(this.context, bodyText, bodyHtml);
+    const operations = await this.context.operationsRepository.getConversationOperations(conversationId);
+    assertConversationReplyAllowed({ conversation, operations });
     const recipient = address(conversation.contact?.primary_email);
     if (!recipient) throw new CommsHubError(422, 'form_reply_recipient_missing', 'Verified form submission has no reply email address.');
     const request = { conversationId, bodyText, bodyHtml, subject: subject || `Re: ${conversation.subject || 'your submission'}`, to: [recipient] };
