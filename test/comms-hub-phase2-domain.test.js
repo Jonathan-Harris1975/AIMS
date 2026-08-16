@@ -47,6 +47,7 @@ class SqliteD1 {
       "0003_ai_workflows.sql",
       "0004_hardening.sql",
       "0005_operations_and_channels.sql",
+      "0006_smart_response_forms.sql",
     ]) {
       this.db.exec(readFileSync(new URL(`../services/comms-hub/migrations/${migration}`, import.meta.url), "utf8"));
     }

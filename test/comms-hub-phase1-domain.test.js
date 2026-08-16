@@ -54,6 +54,7 @@ class SqliteD1 {
       "0003_ai_workflows.sql",
       "0004_hardening.sql",
       "0005_operations_and_channels.sql",
+      "0006_smart_response_forms.sql",
     ]) {
       this.db.exec(readFileSync(new URL(`../services/comms-hub/migrations/${migration}`, import.meta.url), "utf8"));
     }
@@ -254,7 +255,7 @@ test("Archive worker stores a redacted integrity receipt and completes its lease
   };
   const worker = new CommsHubArchiveWorker({
     repository,
-    uploadText: async (...args) => uploaded.push(args),
+    objectStore: { async putText(...args) { uploaded.push(args); } },
     workerId: "worker-phase1",
     logger: { info() {}, warn() {}, error() {} },
     config: { archiveBatchSize: 10, archiveLeaseMs: 120000, archiveMaxAttempts: 10 },
@@ -262,7 +263,7 @@ test("Archive worker stores a redacted integrity receipt and completes its lease
   const result = await worker.runOnce();
   assert.deepEqual(result, { skipped: false, processed: 1, completed: 1, failed: 0 });
   assert.equal(completions.length, 1);
-  const receipt = uploaded[0][2];
+  const receipt = uploaded[0][1];
   assert.doesNotMatch(receipt, /person@example\.com|Jane Person|Please tell me more|7700 900123/);
   assert.match(receipt, new RegExp(intake.payloadSha256));
 });
@@ -279,6 +280,7 @@ test("Migration manifest requires all delivered Comms Hub phases", () => {
     "0003_ai_workflows",
     "0004_hardening",
     "0005_operations_and_channels",
+    "0006_smart_response_forms",
   ]);
 });
 
