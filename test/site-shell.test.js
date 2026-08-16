@@ -7,6 +7,7 @@ const shell = {
     releaseSha: "abc1234567",
     stylesheetUrl: "https://jonathan-harris.online/assets/css/site.css?v=abc1234567",
     siteUiScriptUrl: "https://jonathan-harris.online/assets/js/site-ui.min.js?v=abc1234567",
+    scriptGovernanceUrl: "https://jonathan-harris.online/assets/js/script-governance.min.js?v=abc1234567",
   },
   headerHtml: '<!-- JH_SITE_SHELL_HEADER_START release=abc1234567 -->\n<a class="skip-link" href="#main">Skip</a><header class="jh-header" id="site-primary-nav"><a href="https://jonathan-harris.online/">Jonathan Harris</a></header>\n<!-- JH_SITE_SHELL_HEADER_END -->',
   footerHtml: '<!-- JH_SITE_SHELL_FOOTER_START release=abc1234567 -->\n<footer class="site-footer"><a href="https://jonathan-harris.online/blog/">Read the blog</a></footer>\n<!-- JH_SITE_SHELL_FOOTER_END -->',
@@ -24,6 +25,7 @@ test("site shell replaces legacy hard-coded chrome and pins assets to the same r
   assert.match(result, /jh-site-shell-version" content="abc1234567/);
   assert.match(result, /site\.css\?v=abc1234567/);
   assert.match(result, /site-ui\.min\.js\?v=abc1234567/);
+  assert.match(result, /script-governance\.min\.js\?v=abc1234567/);
 });
 
 test("site shell can wrap legacy newsletter archive HTML that had no website chrome", () => {
