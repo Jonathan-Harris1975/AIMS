@@ -4,6 +4,7 @@ export const COMMS_HUB_REQUIRED_MIGRATIONS = Object.freeze([
   "0003_ai_workflows",
   "0004_hardening",
   "0005_operations_and_channels",
+  "0006_smart_response_forms",
 ]);
 
 export default COMMS_HUB_REQUIRED_MIGRATIONS;
