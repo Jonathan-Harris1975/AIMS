@@ -199,7 +199,11 @@ test("AI analysis bounds long conversation transcripts while preserving the newe
   const service = new CommsHubAiWorkflowService({
     context,
     aiRequest: async (routeName, options) => {
-      if (routeName === "commsHubTriage") capturedTranscript = JSON.parse(options.messages[1].content).transcript;
+      if (routeName === "commsHubTriage") {
+        const content = options.messages[1].content;
+        const match = content.match(/UNTRUSTED_DATA_JSON_START\n([\s\S]*?)\nUNTRUSTED_DATA_JSON_END/);
+        capturedTranscript = JSON.parse(match ? match[1] : content).transcript;
+      }
       return { content: JSON.stringify(responses[routeName]), providerId: "fake", model: "fake", routeKey: routeName };
     },
   });
@@ -372,7 +376,7 @@ test("Intent routing uses the selected workflow policy and escalates a workflow 
     commsHubTriage: { intent: "podcast_contribution", confidence: 0.98, urgency: 0.2, commercialValue: 0.2, reputationalRisk: 0.1, customerImpact: 0.2, rationale: "Podcast contribution" },
     commsHubModeration: { sentiment: "neutral", abuseLabel: "none", confidence: 0.99, severity: 0, rationale: "Safe", recommendedAction: "reply" },
     commsHubSummary: { summary: "A podcast contribution was submitted.", unresolvedActions: ["Review source"], sourceMessageIds: [messageId], nextAction: "Review source", followUpNeeded: false },
-    commsHubDraftPodcast: { bodyText: "Thank you. We will review the supplied source through the automated podcast contribution process.", evidenceSourceReferences: ["https://docs.example.com/podcast-process"] },
+    commsHubDraftComplex: { bodyText: "Thank you. We will review the supplied source through the automated podcast contribution process.", evidenceSourceReferences: ["https://docs.example.com/podcast-process"] },
   };
   const context = {
     config: { aiEnabled: true, approvalsEnforced: true, aiMaximumEvidence: 8, aiAutoApprovalRiskThreshold: 0.2, aiApprovalPriorityScore: 60 },
@@ -392,7 +396,8 @@ test("Intent routing uses the selected workflow policy and escalates a workflow 
   assert.equal(result.routing.mismatch, true);
   assert.equal(result.queue.escalationRequired, true);
   assert.equal(result.approval.status, "pending");
-  assert.equal(requestedRoutes.at(-1), "commsHubDraftPodcast");
+  assert.equal(requestedRoutes.at(-1), "commsHubDraftComplex");
+  assert.ok(result.complexity.reasons.includes("workflow_mismatch"));
   const state = await aiRepository.getConversationAiState(conversationId);
   assert.equal(state.state.selected_workflow, "podcast_enquiry_intake");
   assert.equal(state.state.workflow_mismatch, 1);
