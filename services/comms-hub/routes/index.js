@@ -577,6 +577,7 @@ export function createCommsHubRouter({
     try {
       const conversations = await contextProvider().operationsService.queue({
         status: String(req.query.status || ""), channel: String(req.query.channel || ""),
+        interactionType: String(req.query.interactionType || "").trim().toLowerCase(),
         ownerId: String(req.query.ownerId || ""), priority: String(req.query.priority || ""),
         tag: String(req.query.tag || ""), overdue: String(req.query.overdue || "") === "true",
         before: String(req.query.before || ""), limit: Number(req.query.limit || 50),
@@ -982,7 +983,7 @@ export function createCommsHubRouter({
   });
 
   router.get("/ui/bootstrap", permit("read_queue"), async (req, res, next) => {
-    try { const [queue, notifications] = await Promise.all([contextProvider().operationsService.queue({ limit: 50 }, req), contextProvider().notificationService.list({ actor: req.commsIdentity.actor, status: "unread", limit: 20 })]); return res.json({ ok: true, apiVersion: 1, responsiveContract: { minimumWidth: 320, pagination: "cursor", actions: ["assign", "status", "tag", "note", "reply", "takeover"] }, identity: req.commsIdentity, queue, notifications }); }
+    try { const [queue, notifications] = await Promise.all([contextProvider().operationsService.queue({ limit: 50 }, req), contextProvider().notificationService.list({ actor: req.commsIdentity.actor, status: "unread", limit: 20 })]); return res.json({ ok: true, apiVersion: 1, responsiveContract: { minimumWidth: 320, pagination: "cursor", actions: ["assign", "status", "tag", "note", "reply", "social-reply", "social-moderation", "takeover"] }, identity: req.commsIdentity, queue, notifications }); }
     catch (error) { next(error); }
   });
 
