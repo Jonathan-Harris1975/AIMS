@@ -365,7 +365,13 @@ function normaliseCommentEvent(envelope, correlationId, source) {
       canReply: comment.canReply !== false,
       canDelete: Boolean(comment.canDelete),
       canHide: Boolean(comment.canHide),
-      permalink: first(comment.url, post.permalink) || null,
+      permalink: first(comment.url, post.permalink, post.url) || null,
+      postContext: {
+        title: first(post.title, post.name) || null,
+        text: first(post.content, post.message, post.caption, post.description) || null,
+        permalink: first(post.permalink, post.url) || null,
+        createdTime: first(post.createdTime, post.createdAt) || null,
+      },
     },
   };
 }
