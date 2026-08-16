@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { log } from '../../../logger.js';
 import { safeErrorLog } from '../domain/redaction.js';
 import { CommsHubError } from '../errors.js';
+import { businessHoursPolicy, isWithinBusinessHours, nextBusinessOpening } from '../domain/businessHours.js';
+import { sendReplyDraft } from '../replyDraftService.js';
 
 function parse(value) {
   try { return JSON.parse(value || '{}'); } catch { return {}; }
@@ -69,7 +71,17 @@ export class CommsHubDelayedActionWorker {
         conversation: await this.context.repository.getConversation(item.conversation_id),
         draft: payload.draft,
         idempotencyKey: item.idempotency_key,
+        scheduledDelivery: true,
       });
+    }
+    if (item.action_type === 'reply_draft') {
+      return sendReplyDraft({ draftId: payload.draftId, context: this.context, scheduledDelivery: true });
+    }
+    if (item.action_type === 'email_reply') {
+      return this.context.emailService.send({ ...payload, scheduledDelivery: true });
+    }
+    if (item.action_type === 'form_reply') {
+      return this.context.emailService.sendFormResponse({ ...payload, scheduledDelivery: true });
     }
     if (item.action_type === 'retention') {
       return this.context.retentionWorker.runOnce({
@@ -87,6 +99,16 @@ export class CommsHubDelayedActionWorker {
 
   async process(item) {
     try {
+      const businessReplyTypes = new Set(['reply_draft', 'email_reply', 'form_reply']);
+      if (businessReplyTypes.has(item.action_type)) {
+        const policy = businessHoursPolicy(this.context.config);
+        const now = new Date();
+        if (!isWithinBusinessHours(now, policy)) {
+          const dueAt = nextBusinessOpening(now, policy).toISOString();
+          await this.context.operationsRepository.deferDelayedAction({ id: item.id, workerId: this.workerId, dueAt, at: now.toISOString() });
+          return { id: item.id, status: 'deferred_business_hours', dueAt };
+        }
+      }
       const result = await this.execute(item);
       await this.context.operationsRepository.completeDelayedAction({
         id: item.id,
