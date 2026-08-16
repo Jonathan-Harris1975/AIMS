@@ -25,6 +25,10 @@ export class CommsHubGovernanceService {
     if (!conversation || !draft || draft.conversation_id !== conversationId) throw new CommsHubError(404, 'autonomous_reply_target_missing', 'Conversation or reply draft was not found.');
     if (Number(draft.requires_approval) === 1) throw new CommsHubError(409, 'autonomous_reply_requires_approval', 'This draft requires human approval.');
     const state = ai?.state || ai || {};
+    const latestRunSecurity = ai?.runs?.[0]?.metadata?.security || {};
+    if (latestRunSecurity.promptInjectionDetected || latestRunSecurity.evidencePromptInjectionDetected) {
+      throw new CommsHubError(409, 'autonomous_reply_security_blocked', 'Autonomous replies are blocked for conversations with prompt-injection or poisoned-context indicators.');
+    }
     const intent = state.intent || 'unknown';
     const policy = await this.context.operationsRepository.findAutonomousPolicy({ channel: conversation.channel, intent });
     if (!policy) throw new CommsHubError(409, 'autonomous_policy_not_found', 'No active autonomous reply policy matches this conversation.');

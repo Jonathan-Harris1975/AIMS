@@ -3,6 +3,7 @@ import { requireApproval } from "./approvalService.js";
 import { executeSocialAction } from "./socialActionsService.js";
 
 function parseArray(value) { try { const parsed = JSON.parse(value || "[]"); return Array.isArray(parsed) ? parsed : []; } catch { return []; } }
+function parseObject(value) { try { const parsed = JSON.parse(value || "{}"); return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {}; } catch { return {}; } }
 
 export async function sendReplyDraft({ draftId, context }) {
   const draft = await context.aiRepository.getDraft(draftId);
@@ -14,6 +15,12 @@ export async function sendReplyDraft({ draftId, context }) {
     });
   }
   const evidenceIds = parseArray(draft.evidence_ids_json);
+  const draftMetadata = draft.metadata || parseObject(draft.metadata_json);
+  if (draftMetadata?.security?.promptInjectionDetected && Number(draft.requires_approval) !== 1) {
+    throw new CommsHubError(409, "reply_draft_security_approval_required", "A security-flagged AI draft cannot be sent without a scope-matched human approval.", {
+      publicMessage: "This reply requires security review before it can be sent.",
+    });
+  }
   if (Number(draft.requires_approval) === 1) {
     await requireApproval({
       repository: context.aiRepository,
@@ -38,7 +45,7 @@ export async function sendReplyDraft({ draftId, context }) {
       context,
     });
   } else if (context.replyDelivery?.send) {
-    delivery = await context.replyDelivery.send({ conversation, draft });
+    delivery = await context.replyDelivery.send({ conversation, draft, idempotencyKey: `ai-draft:${draft.id}` });
   } else {
     throw new CommsHubError(501, "reply_delivery_adapter_unavailable", "No delivery adapter is configured for this conversation channel.", {
       failureClass: "permanent",

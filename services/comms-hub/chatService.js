@@ -1,6 +1,7 @@
 import { CommsHubError } from './errors.js';
 import { sha256Hex, stableId } from './domain/ids.js';
 import { safeErrorLog } from './domain/redaction.js';
+import { scanPromptInjection } from './domain/promptSecurity.js';
 import { log } from '../../logger.js';
 
 function text(value, maximum = 4000) {
@@ -46,6 +47,14 @@ export class CommsHubChatService {
     }
 
     const messageText = rawMessage.slice(0, this.context.config.chatMaxMessageChars);
+    const promptSecurity = scanPromptInjection(messageText);
+    const promptSecurityMetadata = promptSecurity.detected ? {
+      detected: true,
+      riskLevel: promptSecurity.riskLevel,
+      score: promptSecurity.score,
+      reasons: promptSecurity.reasons,
+      fingerprint: promptSecurity.fingerprint,
+    } : { detected: false };
     const now = new Date().toISOString();
     const contactId = stableId('con', 'chat', websiteId, visitorId);
     const conversationId = stableId('cnv', 'chat', websiteId, sessionId);
@@ -91,7 +100,7 @@ export class CommsHubChatService {
         bodyHtml: null,
         providerMessageId,
         receivedAt: safeIso(payload.occurredAt) || now,
-        metadata: { payloadSha256: verified.payloadSha256, page, requestHuman },
+        metadata: { payloadSha256: verified.payloadSha256, page, requestHuman, promptSecurity: promptSecurityMetadata },
       },
       at: now,
     });
@@ -143,6 +152,22 @@ export class CommsHubChatService {
       metadata: { websiteId },
       updatedAt: now,
     });
+    if (promptSecurity.detected) {
+      await this.context.auditService?.record?.({
+        actor: 'system',
+        role: 'security',
+        action: 'chat_prompt_injection_detected',
+        objectType: 'message',
+        objectId: messageId,
+        conversationId,
+        details: {
+          riskLevel: promptSecurity.riskLevel,
+          score: promptSecurity.score,
+          reasons: promptSecurity.reasons,
+          fingerprint: promptSecurity.fingerprint,
+        },
+      }).catch(() => null);
+    }
     await this.context.workflowEngineService.evaluate({
       conversationId,
       event: { type: 'message_received', channel: 'chat', sender: visitorId, text: messageText, occurredAt: now },
@@ -156,6 +181,7 @@ export class CommsHubChatService {
       duplicate: persistence.duplicate,
       requestHuman,
       transport: this.context.config.coginPalApiBaseUrl ? 'provider_api' : 'aims_first_party',
+      promptSecurityRisk: promptSecurity.riskLevel,
     });
 
     if (!persistence.duplicate && !requestHuman && this.context.config.chatAiWorkflowEnabled && this.context.config.aiEnabled) {

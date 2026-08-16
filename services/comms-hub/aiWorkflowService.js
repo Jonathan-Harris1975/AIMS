@@ -15,6 +15,14 @@ import {
 import { buildApprovalRequest } from "./approvalService.js";
 import { CommsHubError, toCommsHubError } from "./errors.js";
 import { redactDiagnosticText } from "./domain/redaction.js";
+import {
+  promptSecuritySystemRules,
+  sanitiseUntrustedText,
+  scanConversationPromptInjection,
+  scanModelOutputSecurity,
+  scanPromptInjection,
+  validateOutboundUrls,
+} from "./domain/promptSecurity.js";
 
 const MAX_TRANSCRIPT_MESSAGES = 100;
 const MAX_TRANSCRIPT_CHARACTERS = 80_000;
@@ -58,10 +66,10 @@ function conversationTranscript(conversation) {
     selected.push({
       id: message.id,
       direction: message.direction,
-      sender: message.sender || "unknown",
+      sender: message.direction === "outbound" ? "Jonathan" : "external_contact",
       receivedAt: message.received_at,
-      subject: message.subject || "",
-      body: boundedBody,
+      subject: sanitiseUntrustedText(message.subject || "", 1000),
+      body: sanitiseUntrustedText(boundedBody, 12_000),
     });
     characters += boundedBody.length;
   }
@@ -70,8 +78,8 @@ function conversationTranscript(conversation) {
 
 function jsonMessages(system, payload) {
   return [
-    { role: "system", content: system },
-    { role: "user", content: JSON.stringify(payload) },
+    { role: "system", content: `${promptSecuritySystemRules()}\n\nTASK INSTRUCTIONS:\n${system}` },
+    { role: "user", content: `UNTRUSTED_DATA_JSON_START\n${JSON.stringify(payload)}\nUNTRUSTED_DATA_JSON_END` },
   ];
 }
 
@@ -90,9 +98,9 @@ async function requestJson(aiRequest, routeName, system, payload, options = {}) 
 function evidencePrompt(evidence) {
   return evidence.map((item) => ({
     evidenceId: item.id,
-    sourceReference: item.sourceReference,
-    title: item.title,
-    excerpt: item.excerpt,
+    sourceReference: sanitiseUntrustedText(item.sourceReference, 2000),
+    title: sanitiseUntrustedText(item.title, 500),
+    excerpt: sanitiseUntrustedText(item.excerpt, 12_000),
   }));
 }
 
@@ -118,6 +126,7 @@ export class CommsHubAiWorkflowService {
     if (!conversation) throw new CommsHubError(404, "conversation_not_found", "Conversation was not found.");
     if (!conversation.messages.length) throw new CommsHubError(422, "conversation_empty", "Conversation has no messages to analyse.");
 
+    const promptInjection = scanConversationPromptInjection(conversation.messages);
     const transcript = conversationTranscript(conversation);
     const transcriptTruncated = transcript.length < conversation.messages.length
       || conversation.messages.some((message) => String(message.body_text || "").length > 12_000);
@@ -133,12 +142,30 @@ export class CommsHubAiWorkflowService {
         messageCount: transcript.length,
         availableMessageCount: conversation.messages.length,
         transcriptTruncated,
+        security: {
+          promptInjectionDetected: promptInjection.detected,
+          promptInjectionRisk: promptInjection.riskLevel,
+          promptInjectionScore: promptInjection.score,
+          promptInjectionReasons: promptInjection.reasons,
+          flaggedMessageIds: promptInjection.flaggedMessageIds,
+        },
       },
     };
     await this.context.aiRepository.beginAiRun(run);
 
     try {
-      const common = { conversationId, workflow: conversation.workflow, channel: conversation.channel, transcript };
+      const common = {
+        conversationId,
+        workflow: conversation.workflow,
+        channel: conversation.channel,
+        security: {
+          externalContentIsUntrusted: true,
+          promptInjectionDetected: promptInjection.detected,
+          promptInjectionRisk: promptInjection.riskLevel,
+          promptInjectionReasons: promptInjection.reasons,
+        },
+        transcript,
+      };
       const aiRequest = this.requestAi.bind(this);
       const triage = await requestJson(aiRequest, "commsHubTriage", [
         "Classify the conversation using only the supplied messages.",
@@ -176,14 +203,33 @@ export class CommsHubAiWorkflowService {
         sourceLinks,
       });
 
-      const searchQuery = [conversation.subject, summary.summary, summary.nextAction].filter(Boolean).join("\n");
+      const searchSeed = promptInjection.detected
+        ? [conversation.subject, transcript.at(-1)?.body]
+        : [conversation.subject, summary.summary, summary.nextAction];
+      const searchQuery = sanitiseUntrustedText(searchSeed.filter(Boolean).join("\n"), 8000);
       const rawEvidence = await this.context.aiSearch.searchApproved(searchQuery, {
         maximumEvidence: this.context.config.aiMaximumEvidence,
       });
-      const evidence = rawEvidence.map((item) => ({
-        ...item,
-        id: stableId("evi", run.id, item.indexId, item.sourceReference, item.contentSha256),
-      }));
+      const rejectedEvidence = [];
+      const evidence = rawEvidence.flatMap((item) => {
+        const assessment = scanPromptInjection(`${item.title || ""}\n${item.excerpt || ""}`);
+        if (assessment.detected) {
+          rejectedEvidence.push({ sourceReference: item.sourceReference, riskLevel: assessment.riskLevel, reasons: assessment.reasons });
+          return [];
+        }
+        return [{
+          ...item,
+          excerpt: sanitiseUntrustedText(item.excerpt, 12_000),
+          id: stableId("evi", run.id, item.indexId, item.sourceReference, item.contentSha256),
+        }];
+      });
+      const evidenceInjectionDetected = rejectedEvidence.length > 0;
+      run.metadata.security = {
+        ...run.metadata.security,
+        evidencePromptInjectionDetected: evidenceInjectionDetected,
+        rejectedEvidenceCount: rejectedEvidence.length,
+        rejectedEvidenceReasons: [...new Set(rejectedEvidence.flatMap((item) => item.reasons || []))].slice(0, 20),
+      };
 
       const complexity = classifyCommsComplexity({ intent, priority, moderation, routing, transcript, summary, config: this.context.config });
       const draftRoute = operation === "follow_up"
@@ -212,6 +258,24 @@ export class CommsHubAiWorkflowService {
       }
       const usedEvidence = evidence.filter((item) => citedReferences.includes(item.sourceReference));
       const bodyText = applyBritishEnglishReplacements(validateDraft(draftCall.parsed, policy, usedEvidence.map((item) => item.id)));
+      const outputSecurity = scanModelOutputSecurity(bodyText);
+      if (outputSecurity.detected) {
+        throw new CommsHubError(422, "ai_output_security_rejected", "The AI draft failed security output validation.", {
+          failureClass: "recoverable",
+          publicMessage: "The reply draft was blocked by security validation.",
+        });
+      }
+      const allowedOutboundUrls = [
+        ...(summary.sourceLinks || []),
+        ...usedEvidence.map((item) => item.sourceReference).filter((value) => /^https:\/\//i.test(String(value || ""))),
+      ];
+      const outboundUrls = validateOutboundUrls(bodyText, { allowedUrls: allowedOutboundUrls });
+      if (!outboundUrls.valid) {
+        throw new CommsHubError(422, "ai_output_url_unapproved", "The AI draft contained an unapproved external URL.", {
+          failureClass: "recoverable",
+          publicMessage: "The reply draft contained a link that was not grounded in approved evidence.",
+        });
+      }
       const approvalPolicy = requiresHumanApproval({
         moderation,
         priority,
@@ -222,10 +286,12 @@ export class CommsHubAiWorkflowService {
         priorityScoreThreshold: this.context.config.aiApprovalPriorityScore,
         workflowMismatch: routing.mismatch,
         intent: intent.intent,
+        securityRisk: promptInjection.detected || evidenceInjectionDetected,
       });
+      const securityReviewRequired = promptInjection.detected || evidenceInjectionDetected;
       const queue = Object.freeze({
-        key: approvalPolicy.required || routing.mismatch ? "priority_review" : "standard",
-        escalationRequired: approvalPolicy.required || routing.mismatch,
+        key: securityReviewRequired ? "security_review" : approvalPolicy.required || routing.mismatch ? "priority_review" : "standard",
+        escalationRequired: securityReviewRequired || approvalPolicy.required || routing.mismatch,
       });
       const draftId = stableId("drf", run.id, sha256Hex(bodyText));
       const approval = this.context.config.approvalsEnforced && approvalPolicy.required
@@ -241,7 +307,7 @@ export class CommsHubAiWorkflowService {
         : null;
       const completedAt = new Date().toISOString();
       const conversationOpen = ["open", "pending"].includes(String(conversation.status || "").toLowerCase());
-      const followUp = scheduleFollowUp && conversationOpen && summary.followUpNeeded
+      const followUp = scheduleFollowUp && !securityReviewRequired && conversationOpen && summary.followUpNeeded
         ? {
             id: stableId("fol", conversationId, summary.followUpReason || summary.nextAction || "follow-up"),
             reason: summary.followUpReason || summary.nextAction || "Unresolved conversation action",
@@ -252,6 +318,13 @@ export class CommsHubAiWorkflowService {
         : null;
 
       const allResponses = [triage.result.content, moderationCall.result.content, summaryCall.result.content, draftCall.result.content].join("\n");
+      const responseSecurity = scanModelOutputSecurity(allResponses);
+      if (responseSecurity.detected) {
+        throw new CommsHubError(422, "ai_response_security_rejected", "The AI response bundle failed security validation.", {
+          failureClass: "recoverable",
+          publicMessage: "The AI response was blocked by security validation.",
+        });
+      }
       await this.context.aiRepository.persistAnalysisBundle({
         run,
         completedAt,
@@ -274,7 +347,19 @@ export class CommsHubAiWorkflowService {
           evidenceIds: usedEvidence.map((item) => item.id),
           provider: draftCall.result.providerId,
           model: draftCall.result.model,
-          metadata: { citedSourceReferences: citedReferences, approvalReasons: approvalPolicy.reasons, modelRoute: draftRoute, complexity },
+          metadata: {
+            citedSourceReferences: citedReferences,
+            approvalReasons: approvalPolicy.reasons,
+            modelRoute: draftRoute,
+            complexity,
+            security: {
+              promptInjectionDetected: securityReviewRequired,
+              transcriptPromptInjectionDetected: promptInjection.detected,
+              evidencePromptInjectionDetected: evidenceInjectionDetected,
+              rejectedEvidenceCount: rejectedEvidence.length,
+              reasons: [...new Set([...promptInjection.reasons, ...rejectedEvidence.flatMap((item) => item.reasons || [])])].slice(0, 20),
+            },
+          },
         },
         approval,
         followUp,

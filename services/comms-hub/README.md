@@ -101,6 +101,16 @@ Phase 3:
 - routine model policy: `COMMS_HUB_MODEL_FREE_PRIMARY`, `COMMS_HUB_MODEL_FREE_BACKUP`, `COMMS_HUB_MODEL_FREE_FALLBACK`; complex-only paid policy: `COMMS_HUB_MODEL_PAID_PRIMARY`, `COMMS_HUB_MODEL_PAID_BACKUP`, `COMMS_HUB_MODEL_PAID_FALLBACK`
 - privacy controls: `COMMS_HUB_OPENROUTER_ZDR_ONLY=true` and `COMMS_HUB_OPENROUTER_DATA_COLLECTION=deny`
 
+Mandatory AI security boundary (not feature-flagged):
+
+- all email, social, form, website-chat and retrieved AI Search content is treated as **untrusted data**, never as model instructions; system/task instructions are structurally separated from the untrusted JSON payload
+- transcript content is Unicode-normalised, common direct identifiers/credentials are redacted before inference, and detected prompt-control text is removed from the model-facing copy
+- deterministic prompt-injection screening covers direct override/jailbreak wording, role-label/template injection, reserved prompt-boundary tampering, typoglycaemic obfuscation, Base64-encoded instruction payloads and remote-image/markup exfiltration attempts
+- retrieved AI Search evidence is screened independently; poisoned evidence is excluded before drafting and the conversation is forced into `security_review`
+- model output is validated for prompt/credential leakage, remote exfiltration markup and ungrounded external URLs
+- any prompt-injection or poisoned-evidence signal forces human approval, blocks autonomous replies and suppresses automated follow-ups; high-risk provider/tool actions remain behind their existing scope-matched approval and idempotency controls
+- only security fingerprints/reason codes are written to security metadata/audit records; attacker prompt text is not copied into security logs
+
 Phase 4:
 
 - `COMMS_HUB_PROVIDER_HEALTH_ENABLED=false`
