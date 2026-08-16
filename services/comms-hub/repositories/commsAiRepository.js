@@ -168,7 +168,13 @@ export class CommsAiRepository {
       `SELECT * FROM comms_hub_priority_overrides WHERE conversation_id = ? ORDER BY created_at DESC LIMIT 20`,
       [conversationId]
     );
-    return { state: stateRow, runs: rows(runs), evidence: rows(evidence), drafts: rows(drafts), approvals: rows(approvals), followUps: rows(followUps), workflows: rows(workflows), priorityOverrides: rows(priorityOverrides) };
+    const runRows = rows(runs).map((row) => ({ ...row, metadata: parse(row.metadata_json, {}) }));
+    const draftRows = rows(drafts).map((row) => ({
+      ...row,
+      metadata: parse(row.metadata_json, {}),
+      evidence_ids: parse(row.evidence_ids_json, []),
+    }));
+    return { state: stateRow, runs: runRows, evidence: rows(evidence), drafts: draftRows, approvals: rows(approvals), followUps: rows(followUps), workflows: rows(workflows), priorityOverrides: rows(priorityOverrides) };
   }
 
   async overridePriority({ id, conversationId, score, label, reason, actor, createdAt }) {
