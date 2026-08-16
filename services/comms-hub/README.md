@@ -203,7 +203,7 @@ AIMS settings:
 
 `COMMS_HUB_COGINPAL_API_BASE_URL` and `COMMS_HUB_COGINPAL_API_KEY` are optional compatibility settings. When they are blank, operator replies use the first-party AIMS transport: AIMS records the outbound message in D1 and the website receives it on the next signed transcript sync. If either external-provider setting is supplied, both are required.
 
-The website Pages project needs `AIMS_COMMS_HUB_BASE_URL` plus the same `COMMS_HUB_COGINPAL_WEBHOOK_SECRET`. Keep the shared secret in Koyeb/Cloudflare secrets rather than in either repository. Visitor messages are length-limited and rate-limited server-side, transcript reads are visitor/session-bound, and requests with a mismatched visitor ID are rejected. Human handoff uses persistent `takeover_requested`, `human`, `automation` and `closed` session states.
+The website Pages project needs `AIMS_COMMS_HUB_BASE_URL` plus the same `COMMS_HUB_COGINPAL_WEBHOOK_SECRET`. When the shared CogniPal secret is present, first-party chat is treated as enabled even if an older rollout left `COMMS_HUB_CHAT_ENABLED=false`; use `COMMS_HUB_CHAT_FORCE_DISABLED=true` only as the explicit emergency kill switch. Leave `COMMS_HUB_COGINPAL_API_BASE_URL` and `COMMS_HUB_COGINPAL_API_KEY` blank for first-party website transport. Keep the shared secret in Koyeb/Cloudflare secrets rather than in either repository. Visitor messages are length-limited and rate-limited server-side, transcript reads are visitor/session-bound, and requests with a mismatched visitor ID are rejected. Human handoff uses persistent `takeover_requested`, `human`, `automation` and `closed` session states.
 
 ## Form attachment storage
 

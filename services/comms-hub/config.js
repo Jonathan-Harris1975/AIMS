@@ -127,6 +127,16 @@ export function booleanValue(value, fallback = false) {
   return fallback;
 }
 
+export function effectiveChatEnabled(env = process.env) {
+  // First-party CogniPal is considered enabled whenever its server-side HMAC
+  // secret is configured. This avoids a stale rollout flag silently turning the
+  // public route into a 404 after the website has already been deployed.
+  // COMMS_HUB_CHAT_FORCE_DISABLED remains the explicit emergency kill switch.
+  if (booleanValue(env.COMMS_HUB_CHAT_FORCE_DISABLED, false)) return false;
+  if (usableEnvValue(env.COMMS_HUB_COGINPAL_WEBHOOK_SECRET)) return true;
+  return booleanValue(env.COMMS_HUB_CHAT_ENABLED, false);
+}
+
 
 function csvValue(value) {
   return normalise(value).split(",").map((item) => item.trim()).filter(Boolean);
@@ -262,7 +272,7 @@ export function getCommsHubMissingEnv(env = process.env) {
       missing.push("ONECOM_INFO_PASSWORD");
     }
   }
-  if (booleanValue(env.COMMS_HUB_CHAT_ENABLED, false)) {
+  if (effectiveChatEnabled(env)) {
     if (!usableEnvValue(env.COMMS_HUB_COGINPAL_WEBHOOK_SECRET)) missing.push("COMMS_HUB_COGINPAL_WEBHOOK_SECRET");
     const coginPalApiBaseUrl = usableEnvValue(env.COMMS_HUB_COGINPAL_API_BASE_URL);
     const coginPalApiKey = usableEnvValue(env.COMMS_HUB_COGINPAL_API_KEY);
@@ -295,7 +305,7 @@ export function getCommsHubReadiness(env = process.env) {
     zernio,
     channels: {
       email: booleanValue(env.COMMS_HUB_EMAIL_ENABLED, false),
-      chat: booleanValue(env.COMMS_HUB_CHAT_ENABLED, false),
+      chat: effectiveChatEnabled(env),
     },
   };
 }
@@ -443,7 +453,7 @@ export function loadCommsHubConfig(env = process.env, { requireEnabled = false }
     emailPollBatchSize: positiveInteger(env.COMMS_HUB_EMAIL_POLL_BATCH_SIZE, 25, "COMMS_HUB_EMAIL_POLL_BATCH_SIZE", { min: 1, max: 100 }),
     emailHistoricalBackfillEnabled: booleanValue(env.COMMS_HUB_EMAIL_HISTORICAL_BACKFILL_ENABLED, false),
     emailWorkflowEvaluationEnabled: booleanValue(env.COMMS_HUB_EMAIL_WORKFLOW_EVALUATION_ENABLED, false),
-    chatEnabled: booleanValue(env.COMMS_HUB_CHAT_ENABLED, false),
+    chatEnabled: effectiveChatEnabled(env),
     coginPalApiBaseUrl: normaliseBaseUrl(env.COMMS_HUB_COGINPAL_API_BASE_URL, ""),
     coginPalApiKey: usableEnvValue(env.COMMS_HUB_COGINPAL_API_KEY),
     coginPalWebhookSecret: usableEnvValue(env.COMMS_HUB_COGINPAL_WEBHOOK_SECRET),
