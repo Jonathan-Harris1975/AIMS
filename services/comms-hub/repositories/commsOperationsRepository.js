@@ -1,5 +1,6 @@
 import { CommsHubError } from "../errors.js";
 import { sha256Hex, stableId } from "../domain/ids.js";
+import { channelFamily } from "../domain/channels.js";
 
 function rows(result) {
   return Array.isArray(result?.results) ? result.results : [];
@@ -350,11 +351,12 @@ export class CommsOperationsRepository {
   }
 
   async listSavedReplies({ channel = "" } = {}) {
+    const family = channelFamily(channel);
     const result = await this.d1.query(
       `SELECT * FROM comms_hub_saved_replies
-        WHERE active = 1 AND (? = '' OR channel IN ('any', ?))
+        WHERE active = 1 AND (? = '' OR channel IN ('any', ?, ?))
         ORDER BY label`,
-      [channel, channel]
+      [channel, channel, family]
     );
     return rows(result).map((row) => ({ ...row, variables: parseJson(row.variables_json, []) }));
   }
@@ -695,13 +697,14 @@ export class CommsOperationsRepository {
   }
 
   async findSlaPolicy({ channel, priorityLabel }) {
+    const family = channelFamily(channel);
     const result = await this.d1.query(
       `SELECT * FROM comms_hub_sla_policies
-        WHERE active = 1 AND channel IN (?, 'any') AND priority_label IN (?, 'any')
-        ORDER BY CASE WHEN channel = ? THEN 0 ELSE 1 END,
+        WHERE active = 1 AND channel IN (?, ?, 'any') AND priority_label IN (?, 'any')
+        ORDER BY CASE WHEN channel = ? THEN 0 WHEN channel = ? THEN 1 ELSE 2 END,
                  CASE WHEN priority_label = ? THEN 0 ELSE 1 END
         LIMIT 1`,
-      [channel, priorityLabel, channel, priorityLabel]
+      [channel, family, priorityLabel, channel, family, priorityLabel]
     );
     return rows(result)[0] || null;
   }
@@ -741,13 +744,14 @@ export class CommsOperationsRepository {
   }
 
   async findAutonomousPolicy({ channel, intent }) {
+    const family = channelFamily(channel);
     const result = await this.d1.query(
       `SELECT * FROM comms_hub_autonomous_reply_policies
-        WHERE status = 'active' AND channel IN (?, 'any') AND intent IN (?, 'any')
-        ORDER BY CASE WHEN channel = ? THEN 0 ELSE 1 END,
+        WHERE status = 'active' AND channel IN (?, ?, 'any') AND intent IN (?, 'any')
+        ORDER BY CASE WHEN channel = ? THEN 0 WHEN channel = ? THEN 1 ELSE 2 END,
                  CASE WHEN intent = ? THEN 0 ELSE 1 END
         LIMIT 1`,
-      [channel, intent, channel, intent]
+      [channel, family, intent, channel, family, intent]
     );
     return rows(result)[0] || null;
   }
@@ -786,7 +790,7 @@ export class CommsOperationsRepository {
       `SELECT c.id AS conversation_id, c.contact_id, c.channel, c.updated_at,
               p.id AS policy_id, p.policy_key, p.retain_days, p.action, p.legal_hold_tag
          FROM comms_hub_conversations c
-         JOIN comms_hub_retention_policies p ON p.active = 1 AND p.channel IN (c.channel, 'any')
+         JOIN comms_hub_retention_policies p ON p.active = 1 AND (p.channel IN (c.channel, 'any') OR (c.channel IN ('social_dm','social_comment') AND p.channel = 'social'))
         WHERE c.updated_at <= datetime(?, '-' || p.retain_days || ' days')
           AND NOT EXISTS (
             SELECT 1 FROM comms_hub_retention_jobs j
@@ -1702,9 +1706,15 @@ export class CommsOperationsRepository {
       `SELECT fr.*
          FROM comms_hub_form_requests fr
          JOIN comms_hub_conversations c ON c.id = fr.source_conversation_id
-         JOIN comms_hub_contacts ct ON ct.id = c.contact_id
         WHERE fr.form_id = ? AND fr.status = 'sent' AND fr.expires_at > ?
-          AND LOWER(COALESCE(ct.primary_email, '')) = ?
+          AND EXISTS (
+            SELECT 1 FROM comms_hub_contact_aliases ca
+             WHERE ca.contact_id = c.contact_id
+               AND ca.alias_type = 'email'
+               AND ca.verified = 1
+               AND ca.active = 1
+               AND LOWER(ca.alias_value) = ?
+          )
         ORDER BY fr.sent_at DESC
         LIMIT 2`,
       [formId, submittedAt, normalisedEmail]
