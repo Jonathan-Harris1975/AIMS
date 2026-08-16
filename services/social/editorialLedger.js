@@ -101,6 +101,7 @@ function normaliseEvent(input = {}) {
     platform: clean(input.platform || input.platforms || "") || null,
     scheduledDateTime: scheduledDateTime || null,
     textHash: text ? shortHash(text) : null,
+    contentExcerpt: text ? text.slice(0, 2200) : null,
     createdAt,
     meta: input.meta && typeof input.meta === "object" ? input.meta : {},
   };
