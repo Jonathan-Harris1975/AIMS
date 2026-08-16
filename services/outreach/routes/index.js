@@ -25,7 +25,10 @@ router.post("/keyword", requestDedupe("outreach:keyword"), asyncRoute(async (req
   res.json({ ok: true, ...result });
 }));
 
-router.post("/batch/next", requestDedupe("outreach:batchNext"), asyncRoute(async (_req, res) => {
+router.post("/batch/next", requestDedupe("outreach:batchNext"), asyncRoute(async (req, res) => {
+  if (req.aimsAuth?.strategy === "temporary-public-outreach-batch-next") {
+    res.set("X-AIMS-Temporary-Public-Route", "outreach-batch-next");
+  }
   const result = await runNextBatch();
   res.json({ ok: true, ...result });
 }));
