@@ -248,3 +248,8 @@ The production Comms Hub social contract covers all supported interaction paths 
 YouTube private DMs and YouTube live chat are outside the current Zernio Comms Hub adapter. Do not expose those controls in the operator UI. The machine-readable capability matrix is exported as `SOCIAL_CHANNEL_CAPABILITIES` from `services/comms-hub/config.js` and is returned by `GET /comms-hub/social/status`.
 
 For a complete first canary, apply `config/comms-hub-social-monitoring.env.example`, reconcile both enabled webhook families through `POST /comms-hub/social/webhooks/reconcile-all`, and leave `COMMS_HUB_SOCIAL_MONITOR_ONLY=true` until Facebook DM/comment, Instagram DM/comment, and YouTube comment ingestion have each been proven live and deduplicated.
+
+## Social queue contract
+
+The unified queue now exposes `interaction_type` (`dm` or `comment`) plus social platform, family, account, provider thread/post/comment identifiers and provider status for every Zernio-backed conversation. This lets operator surfaces group private-message work separately from public comment work without guessing from subjects or message text.
+

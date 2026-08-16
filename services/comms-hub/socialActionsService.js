@@ -128,7 +128,7 @@ export async function requestSocialActionApproval({ conversationId, action, body
       payload,
       riskLevel: ["delete", "moderate", "block"].includes(normalisedAction) ? "critical" : "high",
       requestedBy,
-      metadata: { platform: thread.platform, credentialFamily: thread.credential_family, idempotencyKey: key },
+      metadata: { platform: thread.platform, credentialFamily: thread.credential_family, idempotencyKey: key, actionBody },
     });
     await context.aiRepository?.upsertModerationAction?.({
       id: stableId("mod", "zernio", key), conversationId, platform: thread.platform,
