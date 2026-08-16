@@ -30,7 +30,7 @@ export const MODERATION_LABELS = Object.freeze([
 export const REPLY_POLICIES = Object.freeze({
   contact_intake: Object.freeze({
     key: "contact",
-    purpose: "Answer contact enquiries clearly and route unsupported requests for review.",
+    purpose: "Process contact enquiries substantively, answer what is supported, and route unsupported requests for review. For verified Jotform submissions, do not duplicate Jotform's immediate receipt acknowledgement.",
     maximumCharacters: 2200,
     requiresEvidence: true,
     defaultFollowUpHours: 48,
@@ -38,7 +38,7 @@ export const REPLY_POLICIES = Object.freeze({
   }),
   case_study_intake: Object.freeze({
     key: "contribute",
-    purpose: "Acknowledge a case-study contribution, identify missing evidence, and explain the next automated step.",
+    purpose: "Digest a verified case-study contribution, identify only genuinely missing evidence, and explain the next communication step without starting any content-production process or duplicating Jotform's receipt acknowledgement.",
     maximumCharacters: 2600,
     requiresEvidence: true,
     defaultFollowUpHours: 72,
@@ -46,7 +46,7 @@ export const REPLY_POLICIES = Object.freeze({
   }),
   podcast_enquiry_intake: Object.freeze({
     key: "podcast",
-    purpose: "Manage the automated podcast contribution journey without offering guest booking slots.",
+    purpose: "Digest a verified podcast enquiry/contribution and provide the appropriate next communication step without offering guest booking slots, starting episode/content production, or duplicating Jotform's receipt acknowledgement.",
     maximumCharacters: 2600,
     requiresEvidence: true,
     defaultFollowUpHours: 72,
