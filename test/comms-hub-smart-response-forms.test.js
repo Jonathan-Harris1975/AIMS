@@ -153,7 +153,7 @@ class SqliteD1 {
     this.db = new DatabaseSync(":memory:");
     for (const migration of [
       "0001_comms_hub.sql", "0002_zernio_social.sql", "0003_ai_workflows.sql",
-      "0004_hardening.sql", "0005_operations_and_channels.sql", "0006_smart_response_forms.sql",
+      "0004_hardening.sql", "0005_operations_and_channels.sql", "0006_smart_response_forms.sql", "0007_business_hours_and_handoff.sql",
     ]) this.db.exec(readFileSync(new URL(`../services/comms-hub/migrations/${migration}`, import.meta.url), "utf8"));
   }
   query(sql, params = []) { return { success: true, results: this.db.prepare(sql).all(...params) }; }

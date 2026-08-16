@@ -122,7 +122,7 @@ test('visitor human request moves chat into takeover_requested state', async () 
   const { context, state } = baseContext({ payload: {
     sessionId: 'session-2', visitorId: 'visitor-2', websiteId: 'jonathan-harris.online', requestHuman: true,
     message: { id: 'message-2', text: 'I would like a person' },
-  } });
+  }, context: { now: () => '2026-08-17T09:30:00.000Z' } });
   const service = new CommsHubChatService({ context });
   const accepted = await service.acceptWebhook({});
   assert.equal(accepted.takeoverRequested, true);

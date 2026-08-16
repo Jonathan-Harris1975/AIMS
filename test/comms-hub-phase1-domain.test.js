@@ -55,6 +55,7 @@ class SqliteD1 {
       "0004_hardening.sql",
       "0005_operations_and_channels.sql",
       "0006_smart_response_forms.sql",
+      "0007_business_hours_and_handoff.sql",
     ]) {
       this.db.exec(readFileSync(new URL(`../services/comms-hub/migrations/${migration}`, import.meta.url), "utf8"));
     }
@@ -104,6 +105,21 @@ test("Comms Hub remains deployment-safe when disabled", () => {
   assert.equal(readiness.ready, true);
   assert.equal(readiness.status, "disabled");
   assert.deepEqual(readiness.missing, []);
+});
+
+test("Business-hours contact defaults enforce weekday hand-off and 2-3 day first-response scheduling", () => {
+  const config = loadCommsHubConfig(baseEnv(), { requireEnabled: true });
+  assert.equal(config.businessTimeZone, "Europe/London");
+  assert.equal(config.businessStartHour, 9);
+  assert.equal(config.businessEndHour, 17);
+  assert.equal(config.replyDelayMinDays, 2);
+  assert.equal(config.replyDelayMaxDays, 3);
+  assert.equal(config.humanHandoffBusinessHoursOnly, true);
+  assert.equal(config.delayedActionWorkerEnabled, true);
+  assert.throws(
+    () => loadCommsHubConfig({ ...baseEnv(), COMMS_HUB_HUMAN_HANDOFF_BUSINESS_HOURS_ONLY: "false" }, { requireEnabled: true }),
+    (error) => error.code === "comms_hub_configuration_invalid"
+  );
 });
 
 test("Phase 1 readiness requires real storage and Jotform credentials", () => {
@@ -281,6 +297,7 @@ test("Migration manifest requires all delivered Comms Hub phases", () => {
     "0004_hardening",
     "0005_operations_and_channels",
     "0006_smart_response_forms",
+    "0007_business_hours_and_handoff",
   ]);
 });
 

@@ -27,6 +27,7 @@ class SqliteD1 {
       "0004_hardening.sql",
       "0005_operations_and_channels.sql",
       "0006_smart_response_forms.sql",
+      "0007_business_hours_and_handoff.sql",
     ]) this.db.exec(readFileSync(new URL(`../services/comms-hub/migrations/${name}`, import.meta.url), "utf8"));
   }
   async query(sql, params = []) { return { success: true, results: this.db.prepare(sql).all(...params) }; }
