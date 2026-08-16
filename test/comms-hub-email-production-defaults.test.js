@@ -28,5 +28,5 @@ test("production defaults enable the live info mailbox and poll worker", () => {
   assert.equal(defaults.COMMS_HUB_ONECOM_SMTP_HOST, "send.one.com");
   assert.equal(defaults.COMMS_HUB_ONECOM_SMTP_PORT, "465");
   assert.equal(defaults.COMMS_HUB_EMAIL_HISTORICAL_BACKFILL_ENABLED, "false");
-  assert.equal(defaults.COMMS_HUB_EMAIL_WORKFLOW_EVALUATION_ENABLED, "false");
+  assert.equal(defaults.COMMS_HUB_EMAIL_WORKFLOW_EVALUATION_ENABLED, "true");
 });

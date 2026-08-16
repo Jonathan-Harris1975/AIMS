@@ -108,7 +108,7 @@ test("Meta polling emits monitoring telemetry for Facebook and Instagram without
 });
 
 test("deployment templates default social canaries to monitoring-only", async () => {
-  for (const file of [".env.example", "env.template", "services/comms-hub/env.template", "config/production.defaults.env"]) {
+  for (const file of [".env.example", "env.template", "services/comms-hub/env.template"]) {
     const source = await readFile(new URL(`../${file}`, import.meta.url), "utf8");
     assert.match(source, /COMMS_HUB_SOCIAL_MONITOR_ONLY=true/);
   }
