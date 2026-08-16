@@ -115,6 +115,7 @@ export function isPublicCommsHubIntakePath(req) {
     "/comms-hub/intake/zernio/meta",
     "/comms-hub/intake/zernio/video",
     "/comms-hub/intake/chat",
+    "/comms-hub/intake/chat/sync",
   ].includes(path);
 }
 
@@ -216,7 +217,9 @@ export function requireAimsBearerAuth(req, res, next) {
     req.aimsAuth = {
       strategy: path === "/comms-hub/intake/jotform"
         ? "jotform-api-reverification"
-        : "zernio-hmac-sha256",
+        : path.startsWith("/comms-hub/intake/chat")
+          ? "coginpal-hmac-sha256"
+          : "zernio-hmac-sha256",
     };
     return next();
   }
