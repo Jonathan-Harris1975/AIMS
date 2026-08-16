@@ -108,6 +108,52 @@ export class CommsHubEmailService {
     }
   }
 
+  async sendFormResponse({ conversationId, bodyText, bodyHtml = null, subject = '', idempotencyKey }) {
+    if (!this.context.config.emailEnabled) throw new CommsHubError(409, 'email_channel_disabled', 'Email channel is disabled.');
+    if (!idempotencyKey) throw new CommsHubError(400, 'idempotency_key_required', 'Idempotency-Key is required.');
+    const conversation = await this.context.repository.getConversation(conversationId);
+    if (!conversation || conversation.channel !== 'form') throw new CommsHubError(404, 'form_conversation_not_found', 'Form conversation was not found.');
+    const recipient = address(conversation.contact?.primary_email);
+    if (!recipient) throw new CommsHubError(422, 'form_reply_recipient_missing', 'Verified form submission has no reply email address.');
+    const request = { conversationId, bodyText, bodyHtml, subject: subject || `Re: ${conversation.subject || 'your submission'}`, to: [recipient] };
+    const requestSha256 = sha256Hex(JSON.stringify(request));
+    const claim = await this.context.operationsRepository.claimChannelOutboundAction({
+      id: stableId('coa', idempotencyKey), idempotencyKey, conversationId, channel: 'form', actionType: 'processed_reply', requestSha256,
+    });
+    if (!claim.acquired) {
+      if (claim.duplicate) return { duplicate: true, providerMessageId: claim.existing.provider_message_id };
+      throw new CommsHubError(409, 'form_reply_in_progress', 'Processed form reply is already in progress.');
+    }
+    try {
+      const sent = await this.context.oneComMail.sendMessage({
+        to: [recipient],
+        subject: request.subject,
+        bodyText,
+        bodyHtml,
+      });
+      const at = new Date().toISOString();
+      await this.context.operationsRepository.recordOutboundMessage({
+        id: stableId('msg', 'form-email-out', sent.messageId),
+        conversationId,
+        sender: this.context.config.oneComEmailAddress,
+        recipients: [recipient],
+        subject: request.subject,
+        bodyText,
+        bodyHtml,
+        providerMessageId: sent.messageId,
+        receivedAt: at,
+        metadata: { deliveryChannel: 'email', sourceChannel: 'form', processedSubmissionReply: true },
+      });
+      await this.context.operationsRepository.completeChannelOutboundAction({ idempotencyKey, providerMessageId: sent.messageId, response: sent, at });
+      return { duplicate: false, providerMessageId: sent.messageId };
+    } catch (error) {
+      await this.context.operationsRepository.failChannelOutboundAction({
+        idempotencyKey, failureClass: error.failureClass || 'temporary', error: error.message, reconciliationRequired: Boolean(error.retryable),
+      });
+      throw error;
+    }
+  }
+
   async sendSystemNotification(notification) {
     const recipient = this.context.config.notificationEmailMap?.[notification.actor] || this.context.config.notificationDefaultEmail;
     if (!recipient) return { skipped: true };

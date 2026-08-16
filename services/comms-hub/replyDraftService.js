@@ -1,6 +1,7 @@
 import { CommsHubError } from "./errors.js";
 import { requireApproval } from "./approvalService.js";
 import { executeSocialAction } from "./socialActionsService.js";
+import { buildFormRequestRecord } from "./formOrchestrationService.js";
 
 function parseArray(value) { try { const parsed = JSON.parse(value || "[]"); return Array.isArray(parsed) ? parsed : []; } catch { return []; } }
 function parseObject(value) { try { const parsed = JSON.parse(value || "{}"); return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {}; } catch { return {}; } }
@@ -53,12 +54,28 @@ export async function sendReplyDraft({ draftId, context }) {
     });
   }
 
+  const sentAt = new Date().toISOString();
   const sent = await context.aiRepository.markDraftSent({
     id: draft.id,
-    sentAt: new Date().toISOString(),
-    metadata: { delivery: delivery?.response || delivery || {}, evidenceIds },
+    sentAt,
+    metadata: { ...draftMetadata, delivery: delivery?.response || delivery || {}, evidenceIds },
   });
-  return { duplicate: false, draft: sent, delivery: delivery?.response || delivery };
+  const formDecision = draftMetadata?.smartLayers?.formDecision || null;
+  let formRequest = null;
+  if (formDecision?.selected && !formDecision?.withholdUrl && conversation.channel !== "form" && context.operationsRepository?.upsertFormRequestSent) {
+    const request = buildFormRequestRecord({
+      conversation,
+      draftId: draft.id,
+      decision: formDecision,
+      sentAt,
+      expiryHours: context.config?.formRequestExpiryHours || 336,
+    });
+    if (request) formRequest = await context.operationsRepository.upsertFormRequestSent(request);
+  }
+  if (conversation.channel === "form" && context.operationsRepository?.updateFormProcessing) {
+    await context.operationsRepository.updateFormProcessing({ conversationId: conversation.id, status: "replied", replyDraftId: draft.id, replySentAt: sentAt }).catch(() => null);
+  }
+  return { duplicate: false, draft: sent, delivery: delivery?.response || delivery, formRequest };
 }
 
 export default sendReplyDraft;

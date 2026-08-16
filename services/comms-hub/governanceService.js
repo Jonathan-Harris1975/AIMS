@@ -26,8 +26,12 @@ export class CommsHubGovernanceService {
     if (Number(draft.requires_approval) === 1) throw new CommsHubError(409, 'autonomous_reply_requires_approval', 'This draft requires human approval.');
     const state = ai?.state || ai || {};
     const latestRunSecurity = ai?.runs?.[0]?.metadata?.security || {};
+    const latestResponseIntelligence = ai?.runs?.[0]?.metadata?.responseIntelligence || {};
     if (latestRunSecurity.promptInjectionDetected || latestRunSecurity.evidencePromptInjectionDetected) {
       throw new CommsHubError(409, 'autonomous_reply_security_blocked', 'Autonomous replies are blocked for conversations with prompt-injection or poisoned-context indicators.');
+    }
+    if (latestResponseIntelligence.version && latestResponseIntelligence.autonomousEligible !== true) {
+      throw new CommsHubError(409, 'autonomous_reply_response_intelligence_blocked', 'Smart Response Intelligence did not authorise autonomous delivery for this draft.');
     }
     const intent = state.intent || 'unknown';
     const policy = await this.context.operationsRepository.findAutonomousPolicy({ channel: conversation.channel, intent });

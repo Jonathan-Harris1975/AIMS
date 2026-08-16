@@ -119,6 +119,19 @@ Live Content Awareness + Conversation Strategy layer (dynamic, non-autonomous):
 - social comment polling preserves source-post title/content/permalink so public replies can respond to the actual post rather than guessing from the comment alone
 - see `docs/COMMS_HUB_LIVE_CONTENT_STRATEGY_V3.md` for the full policy
 
+Smart Response + Jotform Orchestration layer (dynamic, non-autonomous by default):
+
+- `COMMS_HUB_SMART_RESPONSE_ENABLED=true` derives answerability, deterministic confidence, clarification/human-review needs, low-risk autonomy eligibility and the next conversational move without granting send authority
+- `COMMS_HUB_FORM_ORCHESTRATION_ENABLED=true` selects only the three allow-listed Contact, Case Study and Podcast Enquiry Jotforms when structured intake is genuinely useful; ordinary questions remain conversational
+- the exact approved Jotform URL is injected dynamically, while an explicit `no_links` preference causes AIMS to ask permission before exposing it
+- active form requests are persisted through `sent → submitted → processed → replied` and the same active form is not repeatedly sent in one conversation
+- verified returned forms are digested after the existing Jotform verification/persistence path; direct contact identifiers are kept out of the model-facing digest and attachment contents are never invented
+- Jotform continues to own the immediate receipt acknowledgement; AIMS produces the later substantive processed response
+- processed form replies can be delivered through the existing one.com `info@jonathan-harris.online` transport with channel idempotency; `COMMS_HUB_FORM_AUTO_SEND_ENABLED=false` remains the safe default
+- a selected internal Jotform hand-off is grounded by AIMS' allow-listed form registry and does not depend on unrelated AI Search evidence, while output-security/link validation remains mandatory
+- podcast-segment, blog-article and newsletter-article creation from submitted information is explicitly out of scope and remains a separate downstream workflow
+- see `docs/COMMS_HUB_SMART_RESPONSE_FORMS_V4.md` for the full lifecycle and controls
+
 Mandatory AI security boundary (not feature-flagged):
 
 - all email, social, form, website-chat and retrieved AI Search content is treated as **untrusted data**, never as model instructions; system/task instructions are structurally separated from the untrusted JSON payload
@@ -180,6 +193,8 @@ All other Comms Hub routes require AIMS bearer authentication. Phase 3/4 additio
 - `POST /comms-hub/conversations/:conversationId/priority`
 - `POST /comms-hub/approvals/:approvalId/decision`
 - `POST /comms-hub/drafts/:draftId/send`
+- `GET /comms-hub/forms/:conversationId/status`
+- `POST /comms-hub/forms/:conversationId/process`
 - `POST /comms-hub/social/conversations/:conversationId/approvals/:action`
 - `POST /comms-hub/workflows/podcast/:conversationId/start`
 - `POST /comms-hub/workflows/podcast/:conversationId/advance`

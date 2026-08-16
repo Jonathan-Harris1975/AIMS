@@ -63,6 +63,9 @@ export async function processJotformIntake({ envelope, correlationId, context, n
   const submission = await context.jotform.verifySubmission(identifiers);
   const intake = buildJotformIntake({ ...identifiers, submission, correlationId, now, sourceTimeZone: context.config?.jotformSourceTimeZone || "UTC" });
   const persistence = await context.repository.persistJotformIntake(intake);
+  const formProcessing = context.formProcessingService?.registerVerifiedSubmission
+    ? await context.formProcessingService.registerVerifiedSubmission({ intake, duplicate: persistence.duplicate })
+    : null;
 
   // Keep the durable delayed-action record as a recovery path when that worker is enabled,
   // but form attachment ingestion no longer depends on the generic delayed worker being on.
@@ -83,6 +86,7 @@ export async function processJotformIntake({ envelope, correlationId, context, n
     identifiers,
     intake,
     persistence,
+    formProcessing,
     acknowledgement: Object.freeze({ provider: "jotform", sentByAims: false }),
   };
 }

@@ -3,18 +3,24 @@ import { CommsHubError } from "./errors.js";
 export const COMMS_HUB_FORM_ROUTES = Object.freeze({
   "260281179574362": Object.freeze({
     key: "contact",
+    label: "Contact form",
     workflow: "contact_intake",
     subject: "Contact form submission",
+    defaultUrl: "https://form.jotform.com/260281179574362",
   }),
   "262063136008044": Object.freeze({
     key: "case_study",
+    label: "Case study contribution form",
     workflow: "case_study_intake",
     subject: "Case study submission",
+    defaultUrl: "https://form.jotform.com/262063136008044",
   }),
   "262097861889073": Object.freeze({
     key: "podcast_enquiry",
+    label: "Podcast enquiry form",
     workflow: "podcast_enquiry_intake",
     subject: "Podcast enquiry",
+    defaultUrl: "https://form.jotform.com/262097861889073",
   }),
 });
 
@@ -330,6 +336,11 @@ export function loadCommsHubConfig(env = process.env, { requireEnabled = false }
     || usableEnvValue(env.CF_ACCOUNT_ID)
     || extractAccountIdFromR2Endpoint(env.R2_ENDPOINT);
   const aiEnabled = booleanValue(env.COMMS_HUB_AI_ENABLED, false);
+  const jotformForms = Object.freeze({
+    contact: Object.freeze({ ...COMMS_HUB_FORM_ROUTES["260281179574362"], formId: "260281179574362", url: normaliseBaseUrl(env.COMMS_HUB_JOTFORM_CONTACT_URL, COMMS_HUB_FORM_ROUTES["260281179574362"].defaultUrl) }),
+    case_study: Object.freeze({ ...COMMS_HUB_FORM_ROUTES["262063136008044"], formId: "262063136008044", url: normaliseBaseUrl(env.COMMS_HUB_JOTFORM_CASE_STUDY_URL, COMMS_HUB_FORM_ROUTES["262063136008044"].defaultUrl) }),
+    podcast_enquiry: Object.freeze({ ...COMMS_HUB_FORM_ROUTES["262097861889073"], formId: "262097861889073", url: normaliseBaseUrl(env.COMMS_HUB_JOTFORM_PODCAST_URL, COMMS_HUB_FORM_ROUTES["262097861889073"].defaultUrl) }),
+  });
 
   const zernioFamilies = Object.fromEntries(
     Object.entries(ZERNIO_CHANNEL_FAMILIES).map(([family, definition]) => {
@@ -355,6 +366,13 @@ export function loadCommsHubConfig(env = process.env, { requireEnabled = false }
     cloudflareApiBaseUrl: normaliseBaseUrl(env.CLOUDFLARE_API_BASE_URL, "https://api.cloudflare.com/client/v4"),
     jotformApiKey: usableEnvValue(env.JOTFORM_API_KEY),
     jotformApiBaseUrl: normaliseBaseUrl(env.JOTFORM_API_BASE_URL, "https://api.jotform.com"),
+    jotformForms,
+    smartResponseEnabled: booleanValue(env.COMMS_HUB_SMART_RESPONSE_ENABLED, true),
+    smartResponseMinimumConfidence: decimalValue(env.COMMS_HUB_SMART_RESPONSE_MIN_CONFIDENCE, 0.86, "COMMS_HUB_SMART_RESPONSE_MIN_CONFIDENCE"),
+    formOrchestrationEnabled: booleanValue(env.COMMS_HUB_FORM_ORCHESTRATION_ENABLED, true),
+    formSmartProcessingEnabled: booleanValue(env.COMMS_HUB_FORM_SMART_PROCESSING_ENABLED, true),
+    formAutoSendEnabled: booleanValue(env.COMMS_HUB_FORM_AUTO_SEND_ENABLED, false),
+    formRequestExpiryHours: positiveInteger(env.COMMS_HUB_FORM_REQUEST_EXPIRY_HOURS, 336, "COMMS_HUB_FORM_REQUEST_EXPIRY_HOURS", { min: 1, max: 2160 }),
     zernioApiBaseUrl: normaliseBaseUrl(env.ZERNIO_API_BASE_URL, "https://zernio.com/api/v1"),
     zernioFamilies: Object.freeze(zernioFamilies),
     publicBaseUrl: normaliseBaseUrl(env.COMMS_HUB_PUBLIC_BASE_URL, ""),
