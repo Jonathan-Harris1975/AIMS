@@ -86,6 +86,7 @@ function validateManifest(manifest, expectedReleaseSha = "") {
   for (const key of ["headerUrl", "footerUrl", "stylesheetUrl", "siteUiScriptUrl"]) {
     assertAllowedHttpsUrl(manifest[key], `site-shell ${key}`);
   }
+  if (manifest.scriptGovernanceUrl) assertAllowedHttpsUrl(manifest.scriptGovernanceUrl, "site-shell scriptGovernanceUrl");
   for (const key of ["headerSha256", "footerSha256"]) {
     if (!/^[a-f0-9]{64}$/i.test(String(manifest[key] || ""))) throw new Error(`Invalid ${key}`);
   }
@@ -171,6 +172,12 @@ function ensureSiteUiScript(html, url) {
   return cleaned.replace(/<\/body>/i, `<script defer src="${url}"></script>\n</body>`);
 }
 
+function ensureScriptGovernance(html, url) {
+  if (!url) return html;
+  const cleaned = html.replace(/\s*<script\b[^>]*src=["']https:\/\/jonathan-harris\.online\/assets\/js\/script-governance\.min\.js[^"']*["'][^>]*><\/script>\s*/ig, "\n");
+  return cleaned.replace(/<\/body>/i, `<script defer data-cookieyes="ignore" data-cookieconsent="ignore" src="${url}"></script>\n</body>`);
+}
+
 function replaceHeader(html, headerHtml) {
   const marker = /<!--\s*JH_SITE_SHELL_HEADER_START[\s\S]*?<!--\s*JH_SITE_SHELL_HEADER_END\s*-->/i;
   if (marker.test(html)) return html.replace(marker, headerHtml.trim());
@@ -203,6 +210,7 @@ export function applySiteShellToHtml(html, shell) {
   output = replaceFooter(output, shell.footerHtml);
   output = replaceOrInsertMeta(output, shell.manifest.releaseSha);
   output = ensureStylesheet(output, shell.manifest.stylesheetUrl);
+  output = ensureScriptGovernance(output, shell.manifest.scriptGovernanceUrl);
   output = ensureSiteUiScript(output, shell.manifest.siteUiScriptUrl);
   return output;
 }
