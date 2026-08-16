@@ -1,4 +1,4 @@
-# Comms Hub Smart Context v1
+# Comms Hub Smart Context v1 (superseded by Smart Context v2)
 
 ## Purpose
 
@@ -70,3 +70,8 @@ COMMS_HUB_SMART_MAX_BOOK_CANDIDATES=3
 ```
 
 The intended first rollout remains observe/classify/summarise/draft-only. Autonomous outbound actions stay disabled until separately approved.
+
+
+## Successor
+
+Smart Context v2 is implemented together with the conduct/memory layer documented in `COMMS_HUB_SMART_CONDUCT_MEMORY_V2.md`. It adds reversible explicit preferences, interaction-signal escalation and bad-language containment while preserving the same non-autonomous safety boundary.
