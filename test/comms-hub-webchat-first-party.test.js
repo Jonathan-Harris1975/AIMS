@@ -37,6 +37,7 @@ function baseContext(overrides = {}) {
       return state.messages.map((message) => ({ id: message.id, direction: message.direction, sender: message.sender, bodyText: message.bodyText, providerMessageId: message.providerMessageId, receivedAt: message.receivedAt }));
     },
     async getChatSessionByConversation(conversationId) { return state.session?.conversation_id === conversationId ? state.session : null; },
+    async getConversationOperations() { return { operational_status: "open" }; },
     async claimChannelOutboundAction({ idempotencyKey, conversationId, requestSha256 }) {
       const existing = state.outboundActions.get(idempotencyKey);
       if (existing) return { acquired: false, duplicate: true, existing };
@@ -84,6 +85,17 @@ function baseContext(overrides = {}) {
         async sendMessage() { throw new Error('external provider must not be called for first-party transport'); },
       },
       operationsRepository,
+      repository: {
+        async getConversation(id) {
+          return {
+            id, channel: "chat", status: "open",
+            messages: state.messages.map((message) => ({
+              id: message.id, direction: message.direction, body_text: message.bodyText,
+              received_at: message.receivedAt, metadata: message.metadata || {},
+            })),
+          };
+        },
+      },
       workflowEngineService: { async evaluate() {} },
       auditService: { async record() {} },
       wakeClient: { async requestWake() {} },

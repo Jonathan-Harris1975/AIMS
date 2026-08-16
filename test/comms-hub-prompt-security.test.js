@@ -144,7 +144,8 @@ test("security-flagged AI draft cannot bypass human approval and non-social deli
       },
       async markDraftSent({ id }) { return { id, status: "sent" }; },
     },
-    repository: { async getConversation() { return { id: "cnv_2", channel: "chat" }; } },
+    repository: { async getConversation() { return { id: "cnv_2", channel: "chat", status: "open" }; } },
+    operationsRepository: { async getConversationOperations() { return { operational_status: "open" }; } },
     replyDelivery: { async send({ idempotencyKey }) { deliveryKey = idempotencyKey; return { ok: true }; } },
   };
   const result = await sendReplyDraft({ draftId: "drf_safe", context: normalContext });
@@ -160,7 +161,7 @@ test("AI workflow contains injected chat content, rejects poisoned evidence and 
     id: "cnv_security_1",
     channel: "chat",
     provider: "cognipal",
-    workflow: "contact_intake",
+    workflow: "website_chat",
     status: "open",
     subject: "Website question",
     messages: [
@@ -189,6 +190,10 @@ test("AI workflow contains injected chat content, rejects poisoned evidence and 
       followUpNeeded: true, followUpReason: "Awaiting answer", followUpHours: 24,
     },
     commsHubDraftContact: {
+      bodyText: "Jonathan replies to website enquiries directly. Please use the contact details on the site if you need a timed response.",
+      evidenceSourceReferences: ["docs/contact-policy.md"],
+    },
+    commsHubDraftComplex: {
       bodyText: "Jonathan replies to website enquiries directly. Please use the contact details on the site if you need a timed response.",
       evidenceSourceReferences: ["docs/contact-policy.md"],
     },

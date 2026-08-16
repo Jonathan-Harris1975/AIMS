@@ -172,6 +172,7 @@ test("A sent form request is durably matched to a verified submission only by ex
   const decision = decideConversationJotform({ conversation: conversation("I want to guest on the podcast", { id: "cnv-1", contact_id: "contact-1" }), intent: { intent: "podcast_contribution", confidence: .95 }, summary: {}, config: config() });
   const request = buildFormRequestRecord({ conversation: { id: "cnv-1", contact_id: "contact-1", channel: "chat", workflow: "website_chat" }, draftId: "draft-1", decision, sentAt: "2026-08-16T16:05:00Z", expiryHours: 24 });
   await ops.upsertFormRequestSent(request);
+  await ops.addContactAlias({ id: "alias-email-1", contactId: "contact-1", type: "email", value: "reader@example.com", provider: "one.com", confidence: 1, verified: true, createdAt: "2026-08-16T16:05:00Z", metadata: {} });
   const wrong = await ops.matchPendingFormRequestForSubmission({ formId: decision.formId, email: "someoneelse@example.com", submissionConversationId: "form-cnv-wrong", submissionId: "sub-wrong", submittedAt: "2026-08-16T16:10:00Z" });
   assert.equal(wrong, null);
   const matched = await ops.matchPendingFormRequestForSubmission({ formId: decision.formId, email: "reader@example.com", submissionConversationId: "form-cnv-1", submissionId: "sub-1", submittedAt: "2026-08-16T16:10:00Z" });
@@ -187,7 +188,7 @@ test("AI workflow dynamically injects the exact approved Jotform URL and stores 
     commsHubTriage: { intent: "podcast_contribution", confidence: .96, urgency: .1, commercialValue: .2, reputationalRisk: .05, customerImpact: .1, rationale: "guest request" },
     commsHubModeration: { sentiment: "positive", abuseLabel: "none", confidence: .98, severity: 0, rationale: "safe", recommendedAction: "reply" },
     commsHubSummary: { summary: "Visitor wants to contribute to the podcast.", unresolvedActions: [], sourceMessageIds: [convo.messages[0].id], nextAction: "Collect structured podcast details", followUpNeeded: false, followUpReason: "", followUpHours: 0 },
-    commsHubDraftComplex: { bodyText: "The podcast enquiry form is the best next step: https://form.jotform.com/262097861889073", evidenceSourceReferences: [] },
+    commsHubDraftContact: { bodyText: "The podcast enquiry form is the best next step: https://form.jotform.com/262097861889073", evidenceSourceReferences: [] },
   };
   const service = new CommsHubAiWorkflowService({
     context: {
@@ -209,7 +210,7 @@ test("AI workflow dynamically injects the exact approved Jotform URL and stores 
     },
   });
   const result = await service.analyseConversation(convo.id, { scheduleFollowUp: false });
-  const draftCall = captured.find((item) => item.routeName === "commsHubDraftComplex");
+  const draftCall = captured.find((item) => item.routeName === "commsHubDraftContact");
   assert.ok(draftCall);
   assert.match(draftCall.options.messages[0].content, /JOTFORM ORCHESTRATION RULES:/);
   assert.match(draftCall.options.messages[0].content, /262097861889073/);
@@ -227,6 +228,7 @@ test("Smart form processing can carry a verified low-risk submission through ana
     config: { formSmartProcessingEnabled: true, formAutoSendEnabled: false, aiEnabled: true },
     operationsRepository: {
       async getFormProcessing() { return { conversation_id: "form-cnv", status: "digest_ready", digest: { attachmentReviewRequired: false } }; },
+      async getConversationOperations() { return { operational_status: "open" }; },
       async updateFormProcessing(input) { transitions.push(input.status); return { ...input, digest: { attachmentReviewRequired: false } }; },
     },
     aiWorkflowService: {
@@ -254,6 +256,7 @@ test("Processed Jotform replies are delivered by email from the form conversatio
     config: { emailEnabled: true, oneComEmailAddress: "info@jonathan-harris.online" },
     repository: { async getConversation() { return { id: "form-cnv", channel: "form", subject: "Podcast enquiry", contact: { primary_email: "guest@example.com" } }; } },
     operationsRepository: {
+      async getConversationOperations() { return { operational_status: "open" }; },
       async claimChannelOutboundAction(input) { calls.push(["claim", input]); return { acquired: true }; },
       async recordOutboundMessage(input) { calls.push(["record", input]); },
       async completeChannelOutboundAction(input) { calls.push(["complete", input]); },
@@ -280,7 +283,10 @@ test("sendReplyDraft records a Jotform request only after the channel reply succ
     },
     repository: { async getConversation() { return { id: "cnv-1", channel: "chat", workflow: "website_chat", contact_id: "contact-1", contact: { primary_email: "reader@example.com" } }; } },
     replyDelivery: { async send() { recorded.push(["delivery"]); return { response: { ok: true } }; } },
-    operationsRepository: { async upsertFormRequestSent(request) { recorded.push(["formRequest", request]); return request; } },
+    operationsRepository: {
+      async getConversationOperations() { return { operational_status: "open" }; },
+      async upsertFormRequestSent(request) { recorded.push(["formRequest", request]); return request; },
+    },
   };
   const result = await sendReplyDraft({ draftId: "draft-1", context });
   assert.equal(result.formRequest.formId, "262063136008044");

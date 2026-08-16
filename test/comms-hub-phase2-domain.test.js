@@ -445,8 +445,10 @@ test("DM reply uses the Meta client selected by the persisted thread family", as
     async completeOutboundAction(value) { calls.push({ complete: value }); },
     async failOutboundAction() {},
   };
+  repository.getConversation = async () => ({ id: "cnv_0123456789abcdefghjkmnpqrs", channel: "social_dm", status: "open" });
   const context = {
     repository,
+    operationsRepository: { async getConversationOperations() { return { operational_status: "open" }; } },
     zernio: {
       meta: { async sendMessage(value) { calls.push({ send: value }); return { success: true, messageId: "message-1" }; } },
       video: { async sendMessage() { throw new Error("video key must not be used"); } },

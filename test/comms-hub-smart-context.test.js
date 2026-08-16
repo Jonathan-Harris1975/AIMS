@@ -20,7 +20,7 @@ test("smart context derives per-session tone, interests, page context and verifi
   const conversation = {
     id: "cnv_smart_1",
     channel: "chat",
-    workflow: "contact_intake",
+    workflow: "website_chat",
     source_reference: "session-1",
     metadata_json: JSON.stringify({ page: { title: "AI in Logistics", url: "https://jonathan-harris.online/ai-logistics" } }),
     messages: [message("m1", "inbound", "My name is Alex. I'm in logistics and new to AI. Can you recommend a beginner book?")],
@@ -65,7 +65,7 @@ test("social comment context stays public, concise and does not pretend to know 
 test("AI workflow injects deterministic smart context into dynamic draft instructions and untrusted payload", async () => {
   const captured = [];
   const conversation = {
-    id: "cnv_dynamic_1", channel: "chat", provider: "coginpal", workflow: "contact_intake", status: "open",
+    id: "cnv_dynamic_1", channel: "chat", provider: "coginpal", workflow: "website_chat", status: "open",
     subject: "Website chat", metadata_json: JSON.stringify({ page: { title: "Logistics", url: "https://jonathan-harris.online/logistics" } }),
     messages: [message("m1", "inbound", "I'm new to AI in logistics. Which book should I read first?")],
   };

@@ -164,6 +164,7 @@ test("capability gate rejects a corrupt YouTube DM thread before any provider se
   const context = {
     config: { socialMonitorOnly: false, aiEnabled: false, approvalsEnforced: false },
     repository: {
+      async getConversation() { return { id: "cnv_01h00000000000000000000000", channel: "social_dm", status: "open" }; },
       async getSocialThreadByConversation() {
         return {
           credential_family: "video", platform: "youtube", thread_type: "dm",
@@ -174,6 +175,7 @@ test("capability gate rejects a corrupt YouTube DM thread before any provider se
       async completeOutboundAction() {},
       async failOutboundAction() {},
     },
+    operationsRepository: { async getConversationOperations() { return { operational_status: "open" }; } },
     zernio: { video: { async sendMessage() { providerCalled = true; return { success: true }; } } },
   };
   await assert.rejects(
