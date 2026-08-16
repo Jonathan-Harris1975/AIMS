@@ -101,6 +101,15 @@ Phase 3:
 - routine model policy: `COMMS_HUB_MODEL_FREE_PRIMARY`, `COMMS_HUB_MODEL_FREE_BACKUP`, `COMMS_HUB_MODEL_FREE_FALLBACK`; complex-only paid policy: `COMMS_HUB_MODEL_PAID_PRIMARY`, `COMMS_HUB_MODEL_PAID_BACKUP`, `COMMS_HUB_MODEL_PAID_FALLBACK`
 - privacy controls: `COMMS_HUB_OPENROUTER_ZDR_ONLY=true` and `COMMS_HUB_OPENROUTER_DATA_COLLECTION=deny`
 
+Smart Conduct + Memory layer (dynamic, non-autonomous):
+
+- `COMMS_HUB_SMART_CONTEXT_ENABLED=true` and `COMMS_HUB_SMART_CONDUCT_ENABLED=true` add deterministic conversation-scoped memory and conduct state without granting new model authority
+- explicit visitor preferences (brief/detailed, links, book recommendations, follow-up) are remembered within the conversation and the latest explicit preference wins
+- repeated confusion/complaint signals or an explicit human-contact request force priority review and suppress automated follow-up
+- `COMMS_HUB_BAD_LANGUAGE_BLOCK_ENABLED=true` masks profanity/slurs before inference, rejects bad language in AI drafts and first-party chat replies, and prevents repeated targeted abuse/threats from reaching autonomous reply logic
+- inbound abusive messages are retained for evidence; audit metadata stores only bounded conduct labels/reason codes rather than copied abusive text
+- see `docs/COMMS_HUB_SMART_CONDUCT_MEMORY_V2.md` for the full policy
+
 Mandatory AI security boundary (not feature-flagged):
 
 - all email, social, form, website-chat and retrieved AI Search content is treated as **untrusted data**, never as model instructions; system/task instructions are structurally separated from the untrusted JSON payload

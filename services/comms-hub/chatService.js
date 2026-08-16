@@ -2,6 +2,7 @@ import { CommsHubError } from './errors.js';
 import { sha256Hex, stableId } from './domain/ids.js';
 import { safeErrorLog } from './domain/redaction.js';
 import { scanPromptInjection } from './domain/promptSecurity.js';
+import { assessConversationConduct, scanOutboundLanguagePolicy } from './conversationConductService.js';
 import { log } from '../../logger.js';
 
 function text(value, maximum = 4000) {
@@ -48,6 +49,17 @@ export class CommsHubChatService {
 
     const messageText = rawMessage.slice(0, this.context.config.chatMaxMessageChars);
     const promptSecurity = scanPromptInjection(messageText);
+    const latestConduct = assessConversationConduct({ messages: [{ id: 'incoming', direction: 'inbound', body_text: messageText }] }, {
+      enabled: this.context.config.smartConductEnabled,
+      reviewStrikeThreshold: this.context.config.conductReviewStrikeThreshold,
+      automationBlockThreshold: this.context.config.conductAutomationBlockThreshold,
+    });
+    const conductMetadata = latestConduct.level !== 'none' ? {
+      level: latestConduct.level,
+      targeted: latestConduct.latestTargeted,
+      threat: latestConduct.threat,
+      reasons: latestConduct.reasons,
+    } : { level: 'none' };
     const promptSecurityMetadata = promptSecurity.detected ? {
       detected: true,
       riskLevel: promptSecurity.riskLevel,
@@ -100,7 +112,7 @@ export class CommsHubChatService {
         bodyHtml: null,
         providerMessageId,
         receivedAt: safeIso(payload.occurredAt) || now,
-        metadata: { payloadSha256: verified.payloadSha256, page, requestHuman, promptSecurity: promptSecurityMetadata },
+        metadata: { payloadSha256: verified.payloadSha256, page, requestHuman, promptSecurity: promptSecurityMetadata, conduct: conductMetadata },
       },
       at: now,
     });
@@ -152,6 +164,36 @@ export class CommsHubChatService {
       metadata: { websiteId },
       updatedAt: now,
     });
+    let conversationConduct = latestConduct;
+    if (this.context.config.smartConductEnabled && this.context.repository?.getConversation) {
+      try {
+        const persistedConversation = await this.context.repository.getConversation(conversationId);
+        if (persistedConversation) conversationConduct = assessConversationConduct(persistedConversation, {
+          enabled: true,
+          reviewStrikeThreshold: this.context.config.conductReviewStrikeThreshold,
+          automationBlockThreshold: this.context.config.conductAutomationBlockThreshold,
+        });
+      } catch {}
+    }
+    if (conversationConduct.level !== 'none') {
+      await this.context.auditService?.record?.({
+        actor: 'system',
+        role: 'security',
+        action: 'chat_conduct_flagged',
+        objectType: 'message',
+        objectId: messageId,
+        conversationId,
+        details: {
+          level: conversationConduct.level,
+          strikeCount: conversationConduct.strikeCount,
+          targetedCount: conversationConduct.targetedCount,
+          threat: conversationConduct.threat,
+          requiresHumanReview: conversationConduct.requiresHumanReview,
+          automationBlocked: conversationConduct.automationBlocked,
+          reasons: conversationConduct.reasons,
+        },
+      }).catch(() => null);
+    }
     if (promptSecurity.detected) {
       await this.context.auditService?.record?.({
         actor: 'system',
@@ -182,9 +224,11 @@ export class CommsHubChatService {
       requestHuman,
       transport: this.context.config.coginPalApiBaseUrl ? 'provider_api' : 'aims_first_party',
       promptSecurityRisk: promptSecurity.riskLevel,
+      conductLevel: conversationConduct.level,
+      conductAutomationBlocked: conversationConduct.automationBlocked,
     });
 
-    if (!persistence.duplicate && !requestHuman && this.context.config.chatAiWorkflowEnabled && this.context.config.aiEnabled) {
+    if (!persistence.duplicate && !requestHuman && !conversationConduct.automationBlocked && this.context.config.chatAiWorkflowEnabled && this.context.config.aiEnabled) {
       queueMicrotask(() => void this.runOptionalAutomation(conversationId));
     }
 
@@ -242,6 +286,13 @@ export class CommsHubChatService {
     const body = String(message ?? '').trim();
     if (!body) throw new CommsHubError(422, 'chat_message_empty', 'Chat reply cannot be empty.');
     if (body.length > this.context.config.chatMaxMessageChars) throw new CommsHubError(413, 'chat_message_too_long', 'Chat reply exceeds the configured character limit.');
+    if (this.context.config.badLanguageBlockEnabled) {
+      const language = scanOutboundLanguagePolicy(body);
+      if (language.detected) throw new CommsHubError(422, 'chat_reply_language_policy_rejected', 'Chat reply contains blocked language.', {
+        failureClass: 'permanent',
+        publicMessage: 'That reply contains language blocked by the Communications Hub policy.',
+      });
+    }
     const session = await this.context.operationsRepository.getChatSessionByConversation(conversationId);
     if (!session) throw new CommsHubError(404, 'chat_session_not_found', 'Chat session was not found.');
     if (session.mode === 'closed') throw new CommsHubError(409, 'chat_session_closed', 'Chat session is closed.');

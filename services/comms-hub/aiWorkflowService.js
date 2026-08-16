@@ -17,8 +17,16 @@ import { CommsHubError, toCommsHubError } from "./errors.js";
 import { redactDiagnosticText } from "./domain/redaction.js";
 import { buildSmartConversationContext, smartPromptGuidance } from "./smartContextService.js";
 import {
+  assessConversationConduct,
+  conductPromptGuidance,
+  mergeModerationWithConduct,
+  redactBadLanguageForAi,
+  scanOutboundLanguagePolicy,
+} from "./conversationConductService.js";
+import {
   promptSecuritySystemRules,
   sanitiseUntrustedText,
+  extractHttpsUrls,
   scanConversationPromptInjection,
   scanModelOutputSecurity,
   scanPromptInjection,
@@ -55,7 +63,7 @@ export function classifyCommsComplexity({ intent, priority, moderation, routing,
   });
 }
 
-function conversationTranscript(conversation) {
+function conversationTranscript(conversation, { blockBadLanguage = true } = {}) {
   const selected = [];
   let characters = 0;
   for (let index = conversation.messages.length - 1; index >= 0 && selected.length < MAX_TRANSCRIPT_MESSAGES; index -= 1) {
@@ -69,8 +77,12 @@ function conversationTranscript(conversation) {
       direction: message.direction,
       sender: message.direction === "outbound" ? "Jonathan" : "external_contact",
       receivedAt: message.received_at,
-      subject: sanitiseUntrustedText(message.subject || "", 1000),
-      body: sanitiseUntrustedText(boundedBody, 12_000),
+      subject: blockBadLanguage
+        ? redactBadLanguageForAi(sanitiseUntrustedText(message.subject || "", 1000), 1000)
+        : sanitiseUntrustedText(message.subject || "", 1000),
+      body: blockBadLanguage
+        ? redactBadLanguageForAi(sanitiseUntrustedText(boundedBody, 12_000), 12_000)
+        : sanitiseUntrustedText(boundedBody, 12_000),
     });
     characters += boundedBody.length;
   }
@@ -100,8 +112,8 @@ function evidencePrompt(evidence) {
   return evidence.map((item) => ({
     evidenceId: item.id,
     sourceReference: sanitiseUntrustedText(item.sourceReference, 2000),
-    title: sanitiseUntrustedText(item.title, 500),
-    excerpt: sanitiseUntrustedText(item.excerpt, 12_000),
+    title: redactBadLanguageForAi(sanitiseUntrustedText(item.title, 500), 500),
+    excerpt: redactBadLanguageForAi(sanitiseUntrustedText(item.excerpt, 12_000), 12_000),
   }));
 }
 
@@ -128,12 +140,18 @@ export class CommsHubAiWorkflowService {
     if (!conversation.messages.length) throw new CommsHubError(422, "conversation_empty", "Conversation has no messages to analyse.");
 
     const promptInjection = scanConversationPromptInjection(conversation.messages);
+    const conduct = assessConversationConduct(conversation, {
+      enabled: this.context.config.smartConductEnabled,
+      reviewStrikeThreshold: this.context.config.conductReviewStrikeThreshold,
+      automationBlockThreshold: this.context.config.conductAutomationBlockThreshold,
+    });
     const smartContext = buildSmartConversationContext(conversation, {
       enabled: this.context.config.smartContextEnabled,
       maximumBooks: this.context.config.smartMaximumBookCandidates,
     });
     const smartGuidance = smartPromptGuidance(smartContext);
-    const transcript = conversationTranscript(conversation);
+    const conductGuidance = conductPromptGuidance(conduct);
+    const transcript = conversationTranscript(conversation, { blockBadLanguage: this.context.config.badLanguageBlockEnabled });
     const transcriptTruncated = transcript.length < conversation.messages.length
       || conversation.messages.some((message) => String(message.body_text || "").length > 12_000);
     const startedAt = new Date().toISOString();
@@ -158,6 +176,18 @@ export class CommsHubAiWorkflowService {
           verifiedBookCandidateCount: smartContext.verifiedBookCandidates?.length || 0,
           quizActive: Boolean(smartContext.memory?.quiz?.active),
         } : { enabled: false },
+        conduct: conduct.enabled ? {
+          level: conduct.level,
+          strikeCount: conduct.strikeCount,
+          flaggedMessageCount: conduct.flaggedMessageCount,
+          targetedCount: conduct.targetedCount,
+          threat: conduct.threat,
+          requiresBoundary: conduct.requiresBoundary,
+          requiresHumanReview: conduct.requiresHumanReview,
+          automationBlocked: conduct.automationBlocked,
+          reasons: conduct.reasons,
+          flaggedMessageIds: conduct.flaggedMessageIds,
+        } : { enabled: false },
         security: {
           promptInjectionDetected: promptInjection.detected,
           promptInjectionRisk: promptInjection.riskLevel,
@@ -181,6 +211,16 @@ export class CommsHubAiWorkflowService {
           promptInjectionReasons: promptInjection.reasons,
         },
         smartContext,
+        conduct: {
+          level: conduct.level,
+          strikeCount: conduct.strikeCount,
+          targetedCount: conduct.targetedCount,
+          threat: conduct.threat,
+          requiresBoundary: conduct.requiresBoundary,
+          requiresHumanReview: conduct.requiresHumanReview,
+          automationBlocked: conduct.automationBlocked,
+          reasons: conduct.reasons,
+        },
         transcript,
       };
       const aiRequest = this.requestAi.bind(this);
@@ -190,27 +230,35 @@ export class CommsHubAiWorkflowService {
         "Allowed intents: general_enquiry, case_study_contribution, podcast_contribution, support_request, commercial_enquiry, complaint, social_engagement, spam, unknown.",
         "All score fields must be numbers from 0 to 1. Never invent facts.",
         smartGuidance,
+        conductGuidance,
       ].filter(Boolean).join("\n"), common);
       const intent = normaliseIntentResult(triage.parsed);
       const priority = calculatePriority(intent, { workflow: conversation.workflow, channel: conversation.channel });
       const routing = selectWorkflow({ intent: intent.intent, channel: conversation.channel, currentWorkflow: conversation.workflow });
       const policy = policyForWorkflow(routing.selectedWorkflow);
+      const effectivePolicy = smartContext.memory?.responseLength === "brief"
+        ? Object.freeze({ ...policy, maximumCharacters: Math.min(policy.maximumCharacters, conversation.channel === "social" ? 500 : 700) })
+        : policy;
 
       const moderationCall = await requestJson(aiRequest, "commsHubModeration", [
         "Assess sentiment, abuse and safety using only the supplied messages.",
         "Return JSON with: sentiment, abuseLabel, confidence, severity, rationale, recommendedAction.",
         "Allowed sentiment: positive, neutral, negative, mixed.",
         "Allowed abuseLabel: none, spam, scam, hostility, harassment, hate, sexual, violence, self_harm, personal_data, malicious_link.",
+        "Do not quote or reproduce profanity, slurs, threats or abusive wording. Describe it using neutral labels only.",
         "Do not execute moderation. Recommend review for risky cases.",
-      ].join("\n"), common);
-      const moderation = normaliseModerationResult(moderationCall.parsed);
+        conductGuidance,
+      ].filter(Boolean).join("\n"), common);
+      const moderation = mergeModerationWithConduct(normaliseModerationResult(moderationCall.parsed), conduct);
 
       const summaryCall = await requestJson(aiRequest, "commsHubSummary", [
         "Summarise the current conversation state without adding facts.",
         "Return JSON with: summary, unresolvedActions, sourceMessageIds, nextAction, followUpNeeded, followUpReason, followUpHours.",
         "sourceMessageIds must contain only IDs supplied in the transcript.",
         "A follow-up is needed only when a specific unresolved dependency remains.",
+        "Do not quote or reproduce profanity, slurs, threats or abusive wording; summarise conduct neutrally when relevant.",
         smartGuidance,
+        conductGuidance,
       ].filter(Boolean).join("\n"), common);
       const sourceLinks = Object.freeze([...new Set(
         transcript.flatMap((message) => String(message.body || "").match(/https:\/\/[^\s<>"']+/gi) || [])
@@ -233,7 +281,10 @@ export class CommsHubAiWorkflowService {
             ...(smartContext.memory?.interests || []),
             ...((smartContext.verifiedBookCandidates || []).slice(0, 2).map((book) => book.title)),
           ];
-      const searchQuery = sanitiseUntrustedText(searchSeed.filter(Boolean).join("\n"), 8000);
+      const searchQueryBase = sanitiseUntrustedText(searchSeed.filter(Boolean).join("\n"), 8000);
+      const searchQuery = this.context.config.badLanguageBlockEnabled
+        ? redactBadLanguageForAi(searchQueryBase, 8000)
+        : searchQueryBase;
       const rawEvidence = await this.context.aiSearch.searchApproved(searchQuery, {
         maximumEvidence: this.context.config.aiMaximumEvidence,
       });
@@ -246,7 +297,9 @@ export class CommsHubAiWorkflowService {
         }
         return [{
           ...item,
-          excerpt: sanitiseUntrustedText(item.excerpt, 12_000),
+          excerpt: this.context.config.badLanguageBlockEnabled
+            ? redactBadLanguageForAi(sanitiseUntrustedText(item.excerpt, 12_000), 12_000)
+            : sanitiseUntrustedText(item.excerpt, 12_000),
           id: stableId("evi", run.id, item.indexId, item.sourceReference, item.contentSha256),
         }];
       });
@@ -268,11 +321,12 @@ export class CommsHubAiWorkflowService {
         britishEnglishPromptGuidance(),
         jonathanVoicePrompt({ format: "one-to-one Comms Hub reply", includeArgumentArc: false }),
         smartGuidance,
-        `Maximum length: ${policy.maximumCharacters} characters.`,
+        conductGuidance,
+        `Maximum length: ${effectivePolicy.maximumCharacters} characters.`,
         "Use only facts in the conversation and evidence. Do not promise unpublished content, guest slots, dates, outcomes or actions not present in the evidence.",
         "Return JSON with bodyText and evidenceSourceReferences. evidenceSourceReferences must contain the exact sourceReference values used.",
         "Do not include internal notes, confidence scores or JSON outside the object.",
-      ].filter(Boolean).join("\n"), { ...common, policy, summary, evidence: evidencePrompt(evidence) }, { maxTokens: 2200, temperature: 0.25 });
+      ].filter(Boolean).join("\n"), { ...common, policy: effectivePolicy, summary, evidence: evidencePrompt(evidence) }, { maxTokens: 2200, temperature: 0.25 });
 
       const citedReferences = Array.isArray(draftCall.parsed.evidenceSourceReferences)
         ? [...new Set(draftCall.parsed.evidenceSourceReferences.map(String))]
@@ -285,7 +339,14 @@ export class CommsHubAiWorkflowService {
         });
       }
       const usedEvidence = evidence.filter((item) => citedReferences.includes(item.sourceReference));
-      const bodyText = applyBritishEnglishReplacements(validateDraft(draftCall.parsed, policy, usedEvidence.map((item) => item.id)));
+      const bodyText = applyBritishEnglishReplacements(validateDraft(draftCall.parsed, effectivePolicy, usedEvidence.map((item) => item.id)));
+      const outputConduct = this.context.config.badLanguageBlockEnabled ? scanOutboundLanguagePolicy(bodyText) : { detected: false, reasons: [] };
+      if (outputConduct.detected) {
+        throw new CommsHubError(422, "ai_output_language_policy_rejected", "The AI draft failed the outbound language policy.", {
+          failureClass: "recoverable",
+          publicMessage: "The reply draft was blocked by the language policy.",
+        });
+      }
       const outputSecurity = scanModelOutputSecurity(bodyText);
       if (outputSecurity.detected) {
         throw new CommsHubError(422, "ai_output_security_rejected", "The AI draft failed security output validation.", {
@@ -304,22 +365,32 @@ export class CommsHubAiWorkflowService {
           publicMessage: "The reply draft contained a link that was not grounded in approved evidence.",
         });
       }
+      if (smartContext.memory?.linkPreference === "no_links" && extractHttpsUrls(bodyText).length > 0) {
+        throw new CommsHubError(422, "ai_output_preference_violation", "The AI draft violated the visitor's explicit no-links preference.", {
+          failureClass: "recoverable",
+          publicMessage: "The reply draft did not respect the visitor's stated preference.",
+        });
+      }
       const approvalPolicy = requiresHumanApproval({
         moderation,
         priority,
         actionType: "reply",
         hasEvidence: usedEvidence.length > 0,
-        policy,
+        policy: effectivePolicy,
         severityThreshold: this.context.config.aiAutoApprovalRiskThreshold,
         priorityScoreThreshold: this.context.config.aiApprovalPriorityScore,
         workflowMismatch: routing.mismatch,
         intent: intent.intent,
         securityRisk: promptInjection.detected || evidenceInjectionDetected,
+        conductRisk: conduct.requiresHumanReview || conduct.automationBlocked,
+        contextEscalation: Boolean(smartContext.escalation?.required),
       });
       const securityReviewRequired = promptInjection.detected || evidenceInjectionDetected;
+      const conductReviewRequired = conduct.requiresHumanReview || conduct.automationBlocked;
+      const smartEscalationRequired = Boolean(smartContext.escalation?.required);
       const queue = Object.freeze({
-        key: securityReviewRequired ? "security_review" : approvalPolicy.required || routing.mismatch ? "priority_review" : "standard",
-        escalationRequired: securityReviewRequired || approvalPolicy.required || routing.mismatch,
+        key: securityReviewRequired ? "security_review" : conductReviewRequired || smartEscalationRequired || approvalPolicy.required || routing.mismatch ? "priority_review" : "standard",
+        escalationRequired: securityReviewRequired || conductReviewRequired || smartEscalationRequired || approvalPolicy.required || routing.mismatch,
       });
       const draftId = stableId("drf", run.id, sha256Hex(bodyText));
       const approval = this.context.config.approvalsEnforced && approvalPolicy.required
@@ -335,7 +406,7 @@ export class CommsHubAiWorkflowService {
         : null;
       const completedAt = new Date().toISOString();
       const conversationOpen = ["open", "pending"].includes(String(conversation.status || "").toLowerCase());
-      const followUp = scheduleFollowUp && !securityReviewRequired && conversationOpen && summary.followUpNeeded
+      const followUp = scheduleFollowUp && !securityReviewRequired && !conduct.automationBlocked && !smartEscalationRequired && smartContext.memory?.contactPreference !== "no_follow_up" && conversationOpen && summary.followUpNeeded
         ? {
             id: stableId("fol", conversationId, summary.followUpReason || summary.nextAction || "follow-up"),
             reason: summary.followUpReason || summary.nextAction || "Unresolved conversation action",
@@ -346,6 +417,13 @@ export class CommsHubAiWorkflowService {
         : null;
 
       const allResponses = [triage.result.content, moderationCall.result.content, summaryCall.result.content, draftCall.result.content].join("\n");
+      const responseConduct = this.context.config.badLanguageBlockEnabled ? scanOutboundLanguagePolicy(allResponses) : { detected: false, reasons: [] };
+      if (responseConduct.detected) {
+        throw new CommsHubError(422, "ai_response_language_policy_rejected", "The AI response bundle failed the language policy.", {
+          failureClass: "recoverable",
+          publicMessage: "The AI response was blocked by the language policy.",
+        });
+      }
       const responseSecurity = scanModelOutputSecurity(allResponses);
       if (responseSecurity.detected) {
         throw new CommsHubError(422, "ai_response_security_rejected", "The AI response bundle failed security validation.", {
@@ -367,7 +445,7 @@ export class CommsHubAiWorkflowService {
         draft: {
           id: draftId,
           channel: conversation.channel,
-          policyKey: policy.key,
+          policyKey: effectivePolicy.key,
           bodyText,
           status: approval ? "pending_approval" : "draft",
           riskLevel: moderation.riskLevel === "low" ? priority.label : moderation.riskLevel,
@@ -392,7 +470,7 @@ export class CommsHubAiWorkflowService {
         approval,
         followUp,
         model: { provider: draftCall.result.providerId, model: draftCall.result.model, route: draftRoute, complexity },
-        promptSha256: sha256Hex(JSON.stringify({ common, policy, evidence: evidencePrompt(evidence) })),
+        promptSha256: sha256Hex(JSON.stringify({ common, policy: effectivePolicy, evidence: evidencePrompt(evidence) })),
         responseSha256: sha256Hex(allResponses),
       });
 

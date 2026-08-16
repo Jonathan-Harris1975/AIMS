@@ -1,5 +1,6 @@
 import { loadEbookCatalogue } from "../zernio/utils/ebookCatalogue.js";
 import { sanitiseUntrustedText } from "./domain/promptSecurity.js";
+import { conversationInteractionSignals } from "./conversationConductService.js";
 
 const STOP_WORDS = new Set([
   "a","about","an","and","are","as","at","be","been","but","by","can","could","do","for","from","get","give","has","have","how","i","if","in","into","is","it","its","me","my","of","on","or","our","please","so","some","tell","that","the","their","them","there","they","this","to","us","want","what","when","where","which","who","why","with","would","you","your",
@@ -31,6 +32,15 @@ function safeJson(value) {
 
 function inboundMessages(conversation) {
   return (conversation?.messages || []).filter((message) => message?.direction !== "outbound");
+}
+
+function latestDetectedPreference(conversation, detector) {
+  let result = "unspecified";
+  for (const message of inboundMessages(conversation).slice(-20)) {
+    const value = detector(`${message?.subject || ""}\n${message?.body_text || message?.body || ""}`);
+    if (value !== "unspecified") result = value;
+  }
+  return result;
 }
 
 function transcriptText(conversation, maximum = 40_000) {
@@ -84,6 +94,35 @@ function detectTone(text) {
   return "conversational";
 }
 
+
+function detectResponseLengthPreference(text) {
+  const value = text.toLowerCase();
+  if (/\b(?:keep it short|keep (?:it|this) brief|brief answer|short answer|concise|just the answer|quick answer)\b/.test(value)) return "brief";
+  if (/\b(?:detailed|in detail|deep explanation|explain fully|comprehensive|walk me through|step by step)\b/.test(value)) return "detailed";
+  return "unspecified";
+}
+
+function detectLinkPreference(text) {
+  const value = text.toLowerCase();
+  if (/\b(?:no links|without links|do not send (?:me )?links|don't send (?:me )?links|dont send (?:me )?links)\b/.test(value)) return "no_links";
+  if (/\b(?:send (?:me )?the links?|include (?:the )?links?|links? (?:are|is) fine)\b/.test(value)) return "links_welcome";
+  return "unspecified";
+}
+
+function detectBookRecommendationPreference(text) {
+  const value = text.toLowerCase();
+  if (/\b(?:no book recommendations?|do not recommend (?:a )?books?|don't recommend (?:a )?books?|dont recommend (?:a )?books?|not interested in (?:the )?books?)\b/.test(value)) return "opted_out";
+  if (/\b(?:recommend(?: me)?[\s\S]{0,60}\bbooks?\b|book recommendations?|what should i read|something to read)\b/.test(value)) return "welcome";
+  return "unspecified";
+}
+
+function detectContactPreference(text) {
+  const value = text.toLowerCase();
+  if (/\b(?:do not contact me|don't contact me|dont contact me|no follow[- ]?up|do not follow up|don't follow up|dont follow up)\b/.test(value)) return "no_follow_up";
+  if (/\b(?:follow up|contact me|email me|get back to me)\b/.test(value)) return "follow_up_welcome";
+  return "unspecified";
+}
+
 function quizState(conversation) {
   const messages = conversation?.messages || [];
   const recent = messages.slice(-8);
@@ -111,10 +150,10 @@ function quizState(conversation) {
   });
 }
 
-function engagementMode(conversation, text, quiz) {
+function engagementMode(conversation, text, quiz, bookRecommendationPreference = "unspecified") {
   const value = text.toLowerCase();
   if (quiz.active) return "quiz_interaction";
-  if (/\b(book|ebook|read|reading|recommend|recommendation|learn more|beginner|advanced)\b/.test(value)) return "book_discovery";
+  if (bookRecommendationPreference !== "opted_out" && /\b(book|ebook|read|reading|recommend|recommendation|learn more|beginner|advanced)\b/.test(value)) return "book_discovery";
   if (/\b(talk to jonathan|human|person|speak to|contact jonathan)\b/.test(value)) return "human_assistance";
   if (conversation?.channel === "social" && conversation?.socialThread?.thread_type === "comment") return "public_content_discussion";
   if (conversation?.channel === "social") return "social_conversation";
@@ -209,17 +248,24 @@ export function buildSmartConversationContext(conversation, options = {}) {
   const allText = sanitiseUntrustedText(transcriptText(conversation), 40_000);
   const latestText = latestInboundText(conversation);
   const interests = detectInterests(allText);
-  const bookStyle = detectBookStyle(allText);
+  const bookStyle = latestDetectedPreference(conversation, detectBookStyle) !== "unspecified"
+    ? latestDetectedPreference(conversation, detectBookStyle)
+    : detectBookStyle(allText);
+  const responseLength = latestDetectedPreference(conversation, detectResponseLengthPreference);
+  const linkPreference = latestDetectedPreference(conversation, detectLinkPreference);
+  const bookRecommendationPreference = latestDetectedPreference(conversation, detectBookRecommendationPreference);
+  const contactPreference = latestDetectedPreference(conversation, detectContactPreference);
   const quiz = quizState(conversation);
-  const mode = engagementMode(conversation, latestText, quiz);
+  const mode = engagementMode(conversation, latestText, quiz, bookRecommendationPreference);
   const clock = londonClock(options.now || new Date());
   const socialThread = conversation?.socialThread || null;
-  const candidates = ["book_discovery", "website_conversation", "public_content_discussion", "social_conversation"].includes(mode)
+  const candidates = bookRecommendationPreference !== "opted_out" && ["book_discovery", "website_conversation", "public_content_discussion", "social_conversation"].includes(mode)
     ? verifiedBookCandidates(conversation, interests, bookStyle, options.maximumBooks || 3)
     : [];
+  const interactionSignals = conversationInteractionSignals(conversation);
   return Object.freeze({
     enabled: true,
-    version: "smart-context-v1",
+    version: "smart-context-v2",
     localDate: clock.date,
     localDay: clock.day,
     channel: String(conversation?.channel || "unknown"),
@@ -234,8 +280,21 @@ export function buildSmartConversationContext(conversation, options = {}) {
       explicitName: explicitName(allText),
       interests: Object.freeze(interests),
       bookStyle,
+      responseLength,
+      linkPreference,
+      bookRecommendationPreference,
+      contactPreference,
       priorBookRecommendations: Object.freeze(previousRecommendations(conversation)),
+      interactionSignals,
       quiz,
+    }),
+    escalation: Object.freeze({
+      required: interactionSignals.humanRequestCount > 0 || interactionSignals.confusionCount >= 3 || interactionSignals.complaintCount >= 3,
+      reasons: Object.freeze([
+        interactionSignals.humanRequestCount > 0 ? "human_requested" : "",
+        interactionSignals.confusionCount >= 3 ? "repeated_confusion" : "",
+        interactionSignals.complaintCount >= 3 ? "repeated_complaint" : "",
+      ].filter(Boolean)),
     }),
     verifiedBookCandidates: Object.freeze(candidates),
   });
@@ -269,6 +328,15 @@ export function smartPromptGuidance(context = {}) {
     guidance.push("- Respect requests to speak with Jonathan. Do not create friction by continuing to sell or interrogate the visitor.");
   }
   if (context.memory?.explicitName) guidance.push(`- The visitor explicitly provided the name '${context.memory.explicitName}'. Use it sparingly and naturally.`);
+  if (context.memory?.responseLength === "brief") guidance.push("- The visitor explicitly prefers brief answers. Keep the response tight unless detail is necessary for safety or accuracy.");
+  if (context.memory?.responseLength === "detailed") guidance.push("- The visitor explicitly prefers detailed explanations. Give useful depth without padding or repetition.");
+  if (context.memory?.linkPreference === "no_links") guidance.push("- The visitor has asked not to receive links. Do not include links unless they explicitly reverse that preference.");
+  if (context.memory?.bookRecommendationPreference === "opted_out") guidance.push("- The visitor has opted out of book recommendations. Do not promote or recommend a book unless they explicitly reverse that preference.");
+  if (context.memory?.contactPreference === "no_follow_up") guidance.push("- The visitor has asked for no follow-up. Do not suggest or schedule proactive follow-up unless they explicitly reverse that preference.");
+  if ((context.memory?.interactionSignals?.confusionCount || 0) >= 2) guidance.push("- The visitor has shown repeated confusion. Simplify the explanation and avoid introducing more concepts at once.");
+  if ((context.memory?.interactionSignals?.complaintCount || 0) >= 2) guidance.push("- This conversation contains repeated complaint/frustration signals. Acknowledge the substantive issue briefly and prioritise resolution over promotion.");
+  if ((context.memory?.interactionSignals?.humanRequestCount || 0) > 0) guidance.push("- A request for human contact has appeared in this conversation. Do not create unnecessary friction around handoff.");
+  if (context.escalation?.required) guidance.push(`- Human escalation is required by deterministic Smart Context (${(context.escalation.reasons || []).join(", ")}). Do not present automation as final authority.`);
   if (context.memory?.priorBookRecommendations?.length) guidance.push("- Avoid repeating an earlier book recommendation unless the new message clearly makes it relevant again.");
   return guidance.join("\n");
 }
