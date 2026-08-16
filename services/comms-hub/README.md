@@ -110,6 +110,15 @@ Smart Conduct + Memory layer (dynamic, non-autonomous):
 - inbound abusive messages are retained for evidence; audit metadata stores only bounded conduct labels/reason codes rather than copied abusive text
 - see `docs/COMMS_HUB_SMART_CONDUCT_MEMORY_V2.md` for the full policy
 
+Live Content Awareness + Conversation Strategy layer (dynamic, non-autonomous):
+
+- `COMMS_HUB_SMART_LIVE_CONTENT_ENABLED=true` dynamically supplies the exact social source-post context when available, recent Zernio/editorial topics and bounded public-content excerpts, plus the verified current/recent Zernio quiz state
+- `COMMS_HUB_SMART_LIVE_CONTENT_MAX_ITEMS=4` bounds the number of recent public-content items supplied to a model request
+- `COMMS_HUB_SMART_STRATEGY_ENABLED=true` derives a deterministic conversational objective/next-best move, response shape and promotion policy without granting provider/tool authority
+- Zernio quiz question/options/answer state is now durable across restarts through R2 state hydration
+- social comment polling preserves source-post title/content/permalink so public replies can respond to the actual post rather than guessing from the comment alone
+- see `docs/COMMS_HUB_LIVE_CONTENT_STRATEGY_V3.md` for the full policy
+
 Mandatory AI security boundary (not feature-flagged):
 
 - all email, social, form, website-chat and retrieved AI Search content is treated as **untrusted data**, never as model instructions; system/task instructions are structurally separated from the untrusted JSON payload

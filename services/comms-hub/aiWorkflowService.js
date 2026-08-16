@@ -16,6 +16,8 @@ import { buildApprovalRequest } from "./approvalService.js";
 import { CommsHubError, toCommsHubError } from "./errors.js";
 import { redactDiagnosticText } from "./domain/redaction.js";
 import { buildSmartConversationContext, smartPromptGuidance } from "./smartContextService.js";
+import { buildLiveContentContext, liveContentPromptGuidance } from "./liveContentAwarenessService.js";
+import { buildConversationStrategy, conversationStrategyPromptGuidance } from "./conversationStrategyService.js";
 import {
   assessConversationConduct,
   conductPromptGuidance,
@@ -149,7 +151,23 @@ export class CommsHubAiWorkflowService {
       enabled: this.context.config.smartContextEnabled,
       maximumBooks: this.context.config.smartMaximumBookCandidates,
     });
+    const liveContent = await buildLiveContentContext(conversation, {
+      enabled: this.context.config.smartLiveContentEnabled,
+      maximumItems: this.context.config.smartLiveContentMaxItems,
+      smartContext,
+    });
+    const strategy = this.context.config.smartStrategyEnabled === false
+      ? Object.freeze({ enabled: false })
+      : buildConversationStrategy({
+          conversation,
+          smartContext,
+          liveContent,
+          conduct,
+          security: { promptInjectionDetected: promptInjection.detected },
+        });
     const smartGuidance = smartPromptGuidance(smartContext);
+    const liveContentGuidance = liveContentPromptGuidance(liveContent);
+    const strategyGuidance = conversationStrategyPromptGuidance(strategy);
     const conductGuidance = conductPromptGuidance(conduct);
     const transcript = conversationTranscript(conversation, { blockBadLanguage: this.context.config.badLanguageBlockEnabled });
     const transcriptTruncated = transcript.length < conversation.messages.length
@@ -175,6 +193,21 @@ export class CommsHubAiWorkflowService {
           interestCount: smartContext.memory?.interests?.length || 0,
           verifiedBookCandidateCount: smartContext.verifiedBookCandidates?.length || 0,
           quizActive: Boolean(smartContext.memory?.quiz?.active),
+        } : { enabled: false },
+        liveContent: liveContent.enabled ? {
+          version: liveContent.version,
+          mode: liveContent.mode,
+          exactSocialPost: Boolean(liveContent.exactPost),
+          verifiedQuizAvailable: Boolean(liveContent.quiz?.available),
+          recentItemCount: liveContent.recentItems?.length || 0,
+        } : { enabled: false },
+        strategy: strategy.enabled ? {
+          version: strategy.version,
+          objective: strategy.objective,
+          nextBestMove: strategy.nextBestMove,
+          responseShape: strategy.responseShape,
+          promotionPolicy: strategy.promotionPolicy,
+          humanReviewRequired: strategy.humanReviewRequired,
         } : { enabled: false },
         conduct: conduct.enabled ? {
           level: conduct.level,
@@ -211,6 +244,8 @@ export class CommsHubAiWorkflowService {
           promptInjectionReasons: promptInjection.reasons,
         },
         smartContext,
+        liveContent,
+        strategy,
         conduct: {
           level: conduct.level,
           strikeCount: conduct.strikeCount,
@@ -230,6 +265,8 @@ export class CommsHubAiWorkflowService {
         "Allowed intents: general_enquiry, case_study_contribution, podcast_contribution, support_request, commercial_enquiry, complaint, social_engagement, spam, unknown.",
         "All score fields must be numbers from 0 to 1. Never invent facts.",
         smartGuidance,
+        liveContentGuidance,
+        strategyGuidance,
         conductGuidance,
       ].filter(Boolean).join("\n"), common);
       const intent = normaliseIntentResult(triage.parsed);
@@ -258,6 +295,8 @@ export class CommsHubAiWorkflowService {
         "A follow-up is needed only when a specific unresolved dependency remains.",
         "Do not quote or reproduce profanity, slurs, threats or abusive wording; summarise conduct neutrally when relevant.",
         smartGuidance,
+        liveContentGuidance,
+        strategyGuidance,
         conductGuidance,
       ].filter(Boolean).join("\n"), common);
       const sourceLinks = Object.freeze([...new Set(
@@ -280,6 +319,9 @@ export class CommsHubAiWorkflowService {
             smartContext.sourceReference,
             ...(smartContext.memory?.interests || []),
             ...((smartContext.verifiedBookCandidates || []).slice(0, 2).map((book) => book.title)),
+            liveContent.exactPost?.title,
+            liveContent.quiz?.topic,
+            ...((liveContent.recentItems || []).slice(0, 3).flatMap((item) => [item.title, item.topic])),
           ];
       const searchQueryBase = sanitiseUntrustedText(searchSeed.filter(Boolean).join("\n"), 8000);
       const searchQuery = this.context.config.badLanguageBlockEnabled
@@ -310,6 +352,29 @@ export class CommsHubAiWorkflowService {
         rejectedEvidenceCount: rejectedEvidence.length,
         rejectedEvidenceReasons: [...new Set(rejectedEvidence.flatMap((item) => item.reasons || []))].slice(0, 20),
       };
+      const finalStrategy = this.context.config.smartStrategyEnabled === false
+        ? strategy
+        : buildConversationStrategy({
+            conversation,
+            smartContext,
+            liveContent,
+            conduct,
+            security: {
+              promptInjectionDetected: promptInjection.detected,
+              evidencePromptInjectionDetected: evidenceInjectionDetected,
+            },
+          });
+      const finalStrategyGuidance = conversationStrategyPromptGuidance(finalStrategy);
+      if (run.metadata.strategy && finalStrategy.enabled) {
+        run.metadata.strategy = {
+          version: finalStrategy.version,
+          objective: finalStrategy.objective,
+          nextBestMove: finalStrategy.nextBestMove,
+          responseShape: finalStrategy.responseShape,
+          promotionPolicy: finalStrategy.promotionPolicy,
+          humanReviewRequired: finalStrategy.humanReviewRequired,
+        };
+      }
 
       const complexity = classifyCommsComplexity({ intent, priority, moderation, routing, transcript, summary, config: this.context.config });
       const draftRoute = operation === "follow_up"
@@ -321,12 +386,14 @@ export class CommsHubAiWorkflowService {
         britishEnglishPromptGuidance(),
         jonathanVoicePrompt({ format: "one-to-one Comms Hub reply", includeArgumentArc: false }),
         smartGuidance,
+        liveContentGuidance,
+        finalStrategyGuidance,
         conductGuidance,
         `Maximum length: ${effectivePolicy.maximumCharacters} characters.`,
         "Use only facts in the conversation and evidence. Do not promise unpublished content, guest slots, dates, outcomes or actions not present in the evidence.",
         "Return JSON with bodyText and evidenceSourceReferences. evidenceSourceReferences must contain the exact sourceReference values used.",
         "Do not include internal notes, confidence scores or JSON outside the object.",
-      ].filter(Boolean).join("\n"), { ...common, policy: effectivePolicy, summary, evidence: evidencePrompt(evidence) }, { maxTokens: 2200, temperature: 0.25 });
+      ].filter(Boolean).join("\n"), { ...common, strategy: finalStrategy, policy: effectivePolicy, summary, evidence: evidencePrompt(evidence) }, { maxTokens: 2200, temperature: 0.25 });
 
       const citedReferences = Array.isArray(draftCall.parsed.evidenceSourceReferences)
         ? [...new Set(draftCall.parsed.evidenceSourceReferences.map(String))]
@@ -357,6 +424,7 @@ export class CommsHubAiWorkflowService {
       const allowedOutboundUrls = [
         ...(summary.sourceLinks || []),
         ...usedEvidence.map((item) => item.sourceReference).filter((value) => /^https:\/\//i.test(String(value || ""))),
+        ...((liveContent.sourceReferences || []).filter((value) => /^https:\/\//i.test(String(value || "")))),
       ];
       const outboundUrls = validateOutboundUrls(bodyText, { allowedUrls: allowedOutboundUrls });
       if (!outboundUrls.valid) {
@@ -388,9 +456,10 @@ export class CommsHubAiWorkflowService {
       const securityReviewRequired = promptInjection.detected || evidenceInjectionDetected;
       const conductReviewRequired = conduct.requiresHumanReview || conduct.automationBlocked;
       const smartEscalationRequired = Boolean(smartContext.escalation?.required);
+      const strategyReviewRequired = Boolean(finalStrategy?.humanReviewRequired);
       const queue = Object.freeze({
-        key: securityReviewRequired ? "security_review" : conductReviewRequired || smartEscalationRequired || approvalPolicy.required || routing.mismatch ? "priority_review" : "standard",
-        escalationRequired: securityReviewRequired || conductReviewRequired || smartEscalationRequired || approvalPolicy.required || routing.mismatch,
+        key: securityReviewRequired ? "security_review" : conductReviewRequired || smartEscalationRequired || strategyReviewRequired || approvalPolicy.required || routing.mismatch ? "priority_review" : "standard",
+        escalationRequired: securityReviewRequired || conductReviewRequired || smartEscalationRequired || strategyReviewRequired || approvalPolicy.required || routing.mismatch,
       });
       const draftId = stableId("drf", run.id, sha256Hex(bodyText));
       const approval = this.context.config.approvalsEnforced && approvalPolicy.required
@@ -406,7 +475,7 @@ export class CommsHubAiWorkflowService {
         : null;
       const completedAt = new Date().toISOString();
       const conversationOpen = ["open", "pending"].includes(String(conversation.status || "").toLowerCase());
-      const followUp = scheduleFollowUp && !securityReviewRequired && !conduct.automationBlocked && !smartEscalationRequired && smartContext.memory?.contactPreference !== "no_follow_up" && conversationOpen && summary.followUpNeeded
+      const followUp = scheduleFollowUp && !securityReviewRequired && !conduct.automationBlocked && !smartEscalationRequired && !finalStrategy?.humanReviewRequired && smartContext.memory?.contactPreference !== "no_follow_up" && conversationOpen && summary.followUpNeeded
         ? {
             id: stableId("fol", conversationId, summary.followUpReason || summary.nextAction || "follow-up"),
             reason: summary.followUpReason || summary.nextAction || "Unresolved conversation action",
@@ -458,6 +527,14 @@ export class CommsHubAiWorkflowService {
             approvalReasons: approvalPolicy.reasons,
             modelRoute: draftRoute,
             complexity,
+            smartLayers: {
+              liveContentMode: liveContent.mode,
+              exactSourcePost: Boolean(liveContent.exactPost),
+              verifiedQuizAvailable: Boolean(liveContent.quiz?.available),
+              strategyObjective: finalStrategy?.objective || null,
+              nextBestMove: finalStrategy?.nextBestMove || null,
+              promotionPolicy: finalStrategy?.promotionPolicy || null,
+            },
             security: {
               promptInjectionDetected: securityReviewRequired,
               transcriptPromptInjectionDetected: promptInjection.detected,
