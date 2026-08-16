@@ -168,6 +168,7 @@ export class CommsHubAiWorkflowService {
           liveContent,
           conduct,
           security: { promptInjectionDetected: promptInjection.detected },
+          config: this.context.config,
         });
     const formProcessingState = conversation.channel === "form" && this.context.operationsRepository?.getFormProcessing
       ? await this.context.operationsRepository.getFormProcessing(conversationId)
@@ -390,6 +391,7 @@ export class CommsHubAiWorkflowService {
               promptInjectionDetected: promptInjection.detected,
               evidencePromptInjectionDetected: evidenceInjectionDetected,
             },
+            config: this.context.config,
           });
       const finalStrategyGuidance = conversationStrategyPromptGuidance(finalStrategy);
       if (run.metadata.strategy && finalStrategy.enabled) {

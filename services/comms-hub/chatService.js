@@ -5,6 +5,7 @@ import { scanPromptInjection } from './domain/promptSecurity.js';
 import { assessConversationConduct, scanOutboundLanguagePolicy } from './conversationConductService.js';
 import { assertConversationReplyAllowed } from './domain/replySafety.js';
 import { log } from '../../logger.js';
+import { humanContactOffer, humanHandoffStatus, recordCallbackEmail } from './humanContactService.js';
 
 function text(value, maximum = 4000) {
   return String(value ?? '').trim().slice(0, maximum);
@@ -27,6 +28,11 @@ function safePage(payload = {}) {
     title: text(page.title || payload.pageTitle, 300),
     referrer: text(page.referrer || payload.referrer, 1200),
   };
+}
+
+function object(value) {
+  if (value && typeof value === 'object' && !Array.isArray(value)) return value;
+  try { const parsed = JSON.parse(value || '{}'); return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}; } catch { return {}; }
 }
 
 export class CommsHubChatService {
@@ -68,12 +74,15 @@ export class CommsHubChatService {
       reasons: promptSecurity.reasons,
       fingerprint: promptSecurity.fingerprint,
     } : { detected: false };
-    const now = new Date().toISOString();
+    const nowDate = this.context.now ? new Date(this.context.now()) : new Date();
+    const now = nowDate.toISOString();
     const contactId = stableId('con', 'chat', websiteId, visitorId);
     const conversationId = stableId('cnv', 'chat', websiteId, sessionId);
     const providerMessageId = text(payload.message?.id || payload.messageId || payload.eventId || verified.nonce, 300);
     const messageId = stableId('msg', 'chat', providerMessageId);
     const page = safePage(payload);
+    const existingSession = await this.context.operationsRepository.getChatSession({ provider: 'coginpal', websiteId, providerSessionId: sessionId });
+    const existingSessionMetadata = object(existingSession?.metadata_json);
 
     const since = new Date(Date.now() - 60_000).toISOString();
     const recent = await this.context.operationsRepository.countRecentChatInbound({ conversationId, since });
@@ -129,9 +138,10 @@ export class CommsHubChatService {
       mode: 'automation',
       assignedActor: null,
       createdAt: now,
-      metadata: { page },
+      metadata: { page, callbackEmailOffered: Boolean(requestHuman || existingSessionMetadata.callbackEmailOffered) },
     });
-    if (requestHuman) {
+    const handoff = humanHandoffStatus(this.context.config, nowDate);
+    if (requestHuman && handoff.available) {
       await this.context.operationsRepository.updateChatTakeover({ conversationId, mode: 'takeover_requested', actor: null, at: now });
       await this.context.auditService?.record?.({
         actor: 'website-visitor',
@@ -140,7 +150,18 @@ export class CommsHubChatService {
         objectType: 'conversation',
         objectId: conversationId,
         conversationId,
-        details: { websiteId, sessionIdHash: sha256Hex(sessionId).slice(0, 16) },
+        details: { websiteId, sessionIdHash: sha256Hex(sessionId).slice(0, 16), businessHoursAvailable: handoff.available },
+      }).catch(() => null);
+      await this.context.notificationService?.create?.({
+        actor: 'admin', conversationId, type: 'human_handoff', title: 'Website visitor requested Jonathan',
+        bodyText: "A website visitor requested a live hand-off during Jonathan's published hand-off hours.",
+        severity: 'info', idempotencySeed: `chat-handoff:${messageId}`,
+      }).catch(() => null);
+    } else if (requestHuman) {
+      await this.context.auditService?.record?.({
+        actor: 'website-visitor', role: 'external', action: 'chat_handoff_deferred_outside_business_hours',
+        objectType: 'conversation', objectId: conversationId, conversationId,
+        details: { nextAvailableAt: handoff.nextAvailableAt, timeZone: handoff.timeZone },
       }).catch(() => null);
     }
     await this.context.operationsRepository.addContactAlias({
@@ -153,6 +174,10 @@ export class CommsHubChatService {
       verified: true,
       createdAt: now,
       metadata: { websiteId },
+    });
+    const callbackAlias = await recordCallbackEmail({
+      context: this.context, conversationId, contactId, channel: 'chat', provider: 'coginpal', bodyText: messageText,
+      allowBareEmail: Boolean(requestHuman || existingSession?.mode === 'takeover_requested' || existingSessionMetadata.callbackEmailOffered), at: now,
     });
     await this.context.operationsRepository.indexSearchDocument({
       id: stableId('srch', 'message', messageId),
@@ -216,13 +241,25 @@ export class CommsHubChatService {
       event: { type: 'message_received', channel: 'chat', sender: visitorId, text: messageText, occurredAt: now },
     });
     if (this.context.config.wakeEnabled) {
-      await this.context.wakeClient.requestWake({ eventId: providerMessageId, reason: 'website_chat', source: 'coginpal', receivedAt: now });
+      await this.context.wakeClient.requestWake({ eventId: providerMessageId, reason: 'website_chat', source: 'coginpal', receivedAt: now })
+        .catch((error) => log.warn('commsHub.chat.wakeSignalFailed', { conversationId, error: safeErrorLog(error) }));
+    }
+
+    if (!persistence.duplicate && (callbackAlias || (requestHuman && !existingSessionMetadata.callbackEmailOffered))) {
+      const message = callbackAlias
+        ? 'Thanks. I have attached that email address to this conversation so Jonathan can get back to you in due course.'
+        : humanContactOffer(handoff);
+      await this.send({ conversationId, message, idempotencyKey: `chat-human-contact:${messageId}` }).catch((error) => {
+        log.warn('commsHub.chat.humanContactOfferFailed', { conversationId, error: safeErrorLog(error) });
+      });
     }
 
     log.info('commsHub.chat.messageAccepted', {
       conversationId,
       duplicate: persistence.duplicate,
       requestHuman,
+      handoffAvailable: handoff.available,
+      callbackEmailCaptured: Boolean(callbackAlias),
       transport: this.context.config.coginPalApiBaseUrl ? 'provider_api' : 'aims_first_party',
       promptSecurityRisk: promptSecurity.riskLevel,
       conductLevel: conversationConduct.level,
@@ -233,7 +270,7 @@ export class CommsHubChatService {
       queueMicrotask(() => void this.runOptionalAutomation(conversationId));
     }
 
-    return { duplicate: persistence.duplicate, conversationId, messageId, takeoverRequested: requestHuman };
+    return { duplicate: persistence.duplicate, conversationId, messageId, takeoverRequested: Boolean(requestHuman && handoff.available), handoffAvailable: handoff.available, nextHandoffAt: handoff.nextAvailableAt, callbackEmailCaptured: Boolean(callbackAlias), emailCaptureOffered: Boolean(requestHuman && !callbackAlias) };
   }
 
   async syncWebhook(req) {
@@ -247,7 +284,7 @@ export class CommsHubChatService {
     if (!sessionId || !visitorId) throw new CommsHubError(422, 'chat_sync_payload_invalid', 'Chat sync payload is incomplete.');
 
     const session = await this.context.operationsRepository.getChatSession({ provider: 'coginpal', websiteId, providerSessionId: sessionId });
-    if (!session) return { exists: false, messages: [], mode: 'automation', takeoverRequested: false, humanConnected: false };
+    if (!session) { const handoff = humanHandoffStatus(this.context.config, this.context.now ? new Date(this.context.now()) : new Date()); return { exists: false, messages: [], mode: 'automation', takeoverRequested: false, humanConnected: false, handoffAvailable: handoff.available, nextHandoffAt: handoff.nextAvailableAt }; }
     if (String(session.visitor_id) !== visitorId) {
       throw new CommsHubError(403, 'chat_session_visitor_mismatch', 'Chat session does not belong to this visitor.', {
         publicMessage: 'This chat session could not be verified.',
@@ -258,6 +295,7 @@ export class CommsHubChatService {
       after,
       limit: this.context.config.chatHistoryLimit,
     });
+    const handoff = humanHandoffStatus(this.context.config, this.context.now ? new Date(this.context.now()) : new Date());
     return {
       exists: true,
       messages,
@@ -265,6 +303,8 @@ export class CommsHubChatService {
       takeoverRequested: session.mode === 'takeover_requested',
       humanConnected: session.mode === 'human',
       closed: session.mode === 'closed',
+      handoffAvailable: handoff.available,
+      nextHandoffAt: handoff.nextAvailableAt,
     };
   }
 
@@ -338,6 +378,13 @@ export class CommsHubChatService {
 
   async takeover({ conversationId, mode, actor }) {
     if (!['takeover_requested', 'human', 'automation', 'closed'].includes(mode)) throw new CommsHubError(400, 'chat_takeover_mode_invalid', 'Chat takeover mode is invalid.');
+    if (['takeover_requested', 'human'].includes(mode)) {
+      const handoff = humanHandoffStatus(this.context.config, this.context.now ? new Date(this.context.now()) : new Date());
+      if (!handoff.available) throw new CommsHubError(409, 'chat_handoff_outside_business_hours', 'Human hand-off is available only during configured business hours.', {
+        publicMessage: 'Jonathan is available for live hand-off Monday to Friday between 09:00 and 17:00 UK time. You can leave an email address for a later reply.',
+        details: { nextAvailableAt: handoff.nextAvailableAt, timeZone: handoff.timeZone },
+      });
+    }
     const session = await this.context.operationsRepository.updateChatTakeover({ conversationId, mode, actor });
     if (!session) throw new CommsHubError(404, 'chat_session_not_found', 'Chat session was not found.');
     await this.context.auditService?.record?.({ actor: actor || 'system', role: 'operator', action: 'chat_takeover_mode_changed', objectType: 'conversation', objectId: conversationId, conversationId, details: { mode } }).catch(() => null);

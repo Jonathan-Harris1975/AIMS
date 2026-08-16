@@ -4,11 +4,12 @@ import { executeSocialAction } from "./socialActionsService.js";
 import { buildFormRequestRecord } from "./formOrchestrationService.js";
 import { isSocialChannel } from "./domain/channels.js";
 import { assertConversationReplyAllowed } from "./domain/replySafety.js";
+import { businessHoursPolicy, conversationFirstInboundAt, delayedBusinessReplyAt, ensureFutureBusinessTime, hasOutboundMessages } from "./domain/businessHours.js";
 
 function parseArray(value) { try { const parsed = JSON.parse(value || "[]"); return Array.isArray(parsed) ? parsed : []; } catch { return []; } }
 function parseObject(value) { try { const parsed = JSON.parse(value || "{}"); return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {}; } catch { return {}; } }
 
-export async function sendReplyDraft({ draftId, context }) {
+export async function sendReplyDraft({ draftId, context, scheduledDelivery = false }) {
   const draft = await context.aiRepository.getDraft(draftId);
   if (!draft) throw new CommsHubError(404, "reply_draft_not_found", "Reply draft was not found.");
   if (draft.status === "sent") return { duplicate: true, draft };
@@ -40,6 +41,29 @@ export async function sendReplyDraft({ draftId, context }) {
   const operations = await context.operationsRepository.getConversationOperations(conversation.id);
   assertConversationReplyAllowed({ conversation, operations });
 
+  const shouldDelayInitialEmail = !scheduledDelivery && conversation.channel === 'email' && context.config?.emailInitialReplyDelayEnabled && !hasOutboundMessages(conversation);
+  const shouldDelayFormReply = !scheduledDelivery && conversation.channel === 'form' && context.config?.formReplyDelayEnabled && !hasOutboundMessages(conversation);
+  if (shouldDelayInitialEmail || shouldDelayFormReply) {
+    const policy = businessHoursPolicy(context.config);
+    const targetDueAt = delayedBusinessReplyAt({
+      receivedAt: conversationFirstInboundAt(conversation),
+      seed: `${conversation.id}:${conversation.channel === 'form' ? 'jotform-processed-reply' : 'initial-email-reply'}`,
+      ...policy,
+      minimumDays: context.config.replyDelayMinDays,
+      maximumDays: context.config.replyDelayMaxDays,
+    });
+    const dueAt = ensureFutureBusinessTime(targetDueAt, policy).toISOString();
+    const delayed = await context.workflowEngineService.schedule({
+      conversationId: conversation.id,
+      actionType: 'reply_draft',
+      dueAt,
+      payload: { draftId: draft.id },
+      idempotencyKey: `business-reply-draft:${draft.id}`,
+      maxAttempts: 8,
+    }, { actor: 'business-reply-scheduler', role: 'admin' });
+    return { duplicate: false, scheduled: true, dueAt: delayed?.due_at || dueAt, delayedActionId: delayed?.id || null, draft };
+  }
+
   let delivery;
   if (isSocialChannel(conversation.channel)) {
     delivery = await executeSocialAction({
@@ -50,7 +74,7 @@ export async function sendReplyDraft({ draftId, context }) {
       context,
     });
   } else if (context.replyDelivery?.send) {
-    delivery = await context.replyDelivery.send({ conversation, draft, idempotencyKey: `ai-draft:${draft.id}` });
+    delivery = await context.replyDelivery.send({ conversation, draft, idempotencyKey: `ai-draft:${draft.id}`, scheduledDelivery });
   } else {
     throw new CommsHubError(501, "reply_delivery_adapter_unavailable", "No delivery adapter is configured for this conversation channel.", {
       failureClass: "permanent",

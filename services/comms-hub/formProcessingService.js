@@ -153,6 +153,9 @@ export class CommsHubFormProcessingService {
         return { processed: true, sent: false, status, responseEligible, analysis };
       }
       const sent = await sendReplyDraft({ draftId: draft.id, context: this.context });
+      if (sent?.scheduled) {
+        return { processed: true, sent: false, scheduled: true, dueAt: sent.dueAt, status: "draft_ready", analysis, delivery: sent };
+      }
       return { processed: true, sent: true, status: "replied", analysis, delivery: sent };
     } catch (error) {
       await this.context.operationsRepository.updateFormProcessing?.({

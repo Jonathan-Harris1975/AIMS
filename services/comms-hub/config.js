@@ -246,6 +246,11 @@ export function getCommsHubMissingEnv(env = process.env) {
   if (booleanValue(env.COMMS_HUB_FOLLOW_UP_WORKER_ENABLED, false) && !aiEnabled) {
     missing.push("COMMS_HUB_AI_ENABLED");
   }
+  const delayedRepliesRequired = booleanValue(env.COMMS_HUB_EMAIL_INITIAL_REPLY_DELAY_ENABLED, true)
+    || booleanValue(env.COMMS_HUB_FORM_REPLY_DELAY_ENABLED, true);
+  if (delayedRepliesRequired && !booleanValue(env.COMMS_HUB_DELAYED_ACTION_WORKER_ENABLED, true)) {
+    missing.push("COMMS_HUB_DELAYED_ACTION_WORKER_ENABLED");
+  }
   if (booleanValue(env.COMMS_HUB_BACKUP_AUTOMATIC_ENABLED, false) && !backupEnabled) {
     missing.push("COMMS_HUB_BACKUP_ENABLED");
   }
@@ -356,6 +361,21 @@ export function loadCommsHubConfig(env = process.env, { requireEnabled = false }
     })
   );
 
+  const businessStartHour = positiveInteger(env.COMMS_HUB_BUSINESS_START_HOUR, 9, 'COMMS_HUB_BUSINESS_START_HOUR', { min: 0, max: 23 });
+  const businessEndHour = positiveInteger(env.COMMS_HUB_BUSINESS_END_HOUR, 17, 'COMMS_HUB_BUSINESS_END_HOUR', { min: 1, max: 24 });
+  if (businessStartHour >= businessEndHour) {
+    throw new CommsHubError(503, 'comms_hub_configuration_invalid', 'COMMS_HUB_BUSINESS_START_HOUR must be earlier than COMMS_HUB_BUSINESS_END_HOUR.');
+  }
+  const replyDelayMinDays = positiveInteger(env.COMMS_HUB_REPLY_DELAY_MIN_DAYS || env.COMMS_HUB_REPLY_DELAY_MIN_BUSINESS_DAYS, 2, 'COMMS_HUB_REPLY_DELAY_MIN_DAYS', { min: 1, max: 10 });
+  const replyDelayMaxDays = positiveInteger(env.COMMS_HUB_REPLY_DELAY_MAX_DAYS || env.COMMS_HUB_REPLY_DELAY_MAX_BUSINESS_DAYS, 3, 'COMMS_HUB_REPLY_DELAY_MAX_DAYS', { min: 1, max: 10 });
+  if (replyDelayMinDays > replyDelayMaxDays) {
+    throw new CommsHubError(503, 'comms_hub_configuration_invalid', 'COMMS_HUB_REPLY_DELAY_MIN_DAYS cannot exceed COMMS_HUB_REPLY_DELAY_MAX_DAYS.');
+  }
+  const humanHandoffBusinessHoursOnly = booleanValue(env.COMMS_HUB_HUMAN_HANDOFF_BUSINESS_HOURS_ONLY, true);
+  if (!humanHandoffBusinessHoursOnly) {
+    throw new CommsHubError(503, 'comms_hub_configuration_invalid', 'COMMS_HUB_HUMAN_HANDOFF_BUSINESS_HOURS_ONLY must remain true. Human hand-off is restricted to Monday-Friday 09:00-17:00 UK time.');
+  }
+
   return Object.freeze({
     enabled: readiness.enabled,
     d1DatabaseId: usableEnvValue(env.D1_UUID),
@@ -372,6 +392,15 @@ export function loadCommsHubConfig(env = process.env, { requireEnabled = false }
     formOrchestrationEnabled: booleanValue(env.COMMS_HUB_FORM_ORCHESTRATION_ENABLED, true),
     formSmartProcessingEnabled: booleanValue(env.COMMS_HUB_FORM_SMART_PROCESSING_ENABLED, true),
     formAutoSendEnabled: booleanValue(env.COMMS_HUB_FORM_AUTO_SEND_ENABLED, false),
+    businessTimeZone: usableEnvValue(env.COMMS_HUB_BUSINESS_TIMEZONE) || 'Europe/London',
+    businessStartHour,
+    businessEndHour,
+    emailInitialReplyDelayEnabled: booleanValue(env.COMMS_HUB_EMAIL_INITIAL_REPLY_DELAY_ENABLED, true),
+    formReplyDelayEnabled: booleanValue(env.COMMS_HUB_FORM_REPLY_DELAY_ENABLED, true),
+    replyDelayMinDays,
+    replyDelayMaxDays,
+    humanHandoffBusinessHoursOnly,
+    callbackEmailCaptureEnabled: booleanValue(env.COMMS_HUB_CALLBACK_EMAIL_CAPTURE_ENABLED, true),
     formRequestExpiryHours: positiveInteger(env.COMMS_HUB_FORM_REQUEST_EXPIRY_HOURS, 336, "COMMS_HUB_FORM_REQUEST_EXPIRY_HOURS", { min: 1, max: 2160 }),
     zernioApiBaseUrl: normaliseBaseUrl(env.ZERNIO_API_BASE_URL, "https://zernio.com/api/v1"),
     zernioFamilies: Object.freeze(zernioFamilies),
@@ -505,7 +534,7 @@ export function loadCommsHubConfig(env = process.env, { requireEnabled = false }
     rbacDelegationSecret: usableEnvValue(env.COMMS_HUB_RBAC_DELEGATION_SECRET),
     rbacSignatureMaxAgeMs: positiveInteger(env.COMMS_HUB_RBAC_SIGNATURE_MAX_AGE_MS, 300_000, "COMMS_HUB_RBAC_SIGNATURE_MAX_AGE_MS", { min: 30_000, max: 3_600_000 }),
     suiteRole: usableEnvValue(env.COMMS_HUB_SUITE_ROLE) || "admin",
-    delayedActionWorkerEnabled: booleanValue(env.COMMS_HUB_DELAYED_ACTION_WORKER_ENABLED, false),
+    delayedActionWorkerEnabled: booleanValue(env.COMMS_HUB_DELAYED_ACTION_WORKER_ENABLED, true),
     delayedActionPollMs: positiveInteger(env.COMMS_HUB_DELAYED_ACTION_POLL_MS, 60_000, "COMMS_HUB_DELAYED_ACTION_POLL_MS", { min: 30_000, max: 3_600_000 }),
     delayedActionLeaseMs: positiveInteger(env.COMMS_HUB_DELAYED_ACTION_LEASE_MS, 180_000, "COMMS_HUB_DELAYED_ACTION_LEASE_MS", { min: 30_000, max: 900_000 }),
     delayedActionBatchSize: positiveInteger(env.COMMS_HUB_DELAYED_ACTION_BATCH_SIZE, 20, "COMMS_HUB_DELAYED_ACTION_BATCH_SIZE", { min: 1, max: 100 }),

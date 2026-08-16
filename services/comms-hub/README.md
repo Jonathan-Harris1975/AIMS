@@ -162,7 +162,7 @@ Social polling, email polling, autonomous replies and follow-ups remain gated by
 
 1. Deploy the existing Comms Hub data-plane Worker and keep all new Phase 3/4 flags false.
 2. Install the repository's locked production dependencies without changing `package-lock.json`.
-3. Run `npm run comms:migrate:status`, then `npm run comms:migrate` to apply migrations `0003_ai_workflows`, `0004_hardening`, `0005_operations_and_channels` and `0006_smart_response_forms` after the existing migrations.
+3. Run `npm run comms:migrate:status`, then `npm run comms:migrate` to apply migrations `0003_ai_workflows`, `0004_hardening`, `0005_operations_and_channels` , `0006_smart_response_forms` and `0007_business_hours_and_handoff` after the existing migrations.
 4. Run the full test and build chain in the deployment environment.
 5. Deploy with `COMMS_HUB_AI_ENABLED=false`, follow-up disabled, provider-health disabled and backups disabled. Verify Phase 1/2 smoke paths first.
 6. Configure the approved AI Search instances and token. Enable AI with approvals enforced, then verify one low-risk draft, one high-risk approval and one unsupported moderation quarantine.
@@ -212,7 +212,7 @@ Outbound social actions and workflow transitions require an `Idempotency-Key` he
 
 ## Unified operations and remaining backend capabilities
 
-Migration `0006_smart_response_forms` adds durable Jotform request lifecycles and verified form-processing state used by Smart Response Intelligence.
+Migration `0006_smart_response_forms` adds durable Jotform request lifecycles and verified form-processing state used by Smart Response Intelligence. Migration `0007_business_hours_and_handoff` expands delayed-action types required for scheduled first email/Jotform replies.
 
 Migration `0005_operations_and_channels` adds the backend contracts required before the website and HIVE user-interface pass:
 
@@ -324,3 +324,25 @@ The unified queue now exposes `interaction_type` (`dm` or `comment`) plus social
 ## Pre-Outreach conversation acceptance close-out (v2.13.1)
 
 Before Outreach setup, the Comms Hub conversation paths are sanity-checked as one system rather than independent adapters. The close-out covers CogniPal chat, one.com email, Facebook/Instagram DMs, Facebook/Instagram/YouTube comments, all three approved Jotforms, form processing/reply, attachments, handoff, reply-state safety, social channel-family policy matching and the Smart Layer security stack. See `docs/COMMS_HUB_PRE_OUTREACH_SANITY_V2.13.1.md` for the acceptance matrix and the remaining live-provider caveats.
+
+
+## Business-hours replies and human contact (v2.13.2)
+
+AIMS applies a hard UK business-hours policy before Outreach is enabled. The first substantive AIMS email response and the later processed Jotform response are scheduled 2-3 calendar days after the first inbound message. If that target date is Saturday or Sunday it rolls forward to Monday. Delivery is allowed only Monday-Friday between 09:00 and 17:00 in `Europe/London`, with DST handled by the runtime timezone conversion. The delayed-action worker re-checks the window at execution time, so a late worker wake-up cannot send an overdue reply during the evening or weekend. Jotform's own immediate receipt acknowledgement remains Jotform-owned and is not delayed by AIMS.
+
+Human hand-off is also a hard Monday-Friday 09:00-17:00 UK-time boundary. CogniPal cannot enter `takeover_requested` or `human` outside that window, even through an authenticated operator takeover call. Outside the window it offers the visitor an optional callback-email path instead. Facebook and Instagram DM human-contact requests use the same availability calculation; when outbound social writes are enabled, the deterministic DM offers live hand-off only in-hours and otherwise offers the callback-email route. YouTube has no DM lane. Callback email capture is consent-based, conversation-scoped and stored as an unverified `callback_email` alias, so it does not silently merge identities or satisfy verified-email/Jotform linkage.
+
+The primary rollout controls are:
+
+- `COMMS_HUB_BUSINESS_TIMEZONE=Europe/London`
+- `COMMS_HUB_BUSINESS_START_HOUR=9`
+- `COMMS_HUB_BUSINESS_END_HOUR=17`
+- `COMMS_HUB_EMAIL_INITIAL_REPLY_DELAY_ENABLED=true`
+- `COMMS_HUB_FORM_REPLY_DELAY_ENABLED=true`
+- `COMMS_HUB_REPLY_DELAY_MIN_DAYS=2`
+- `COMMS_HUB_REPLY_DELAY_MAX_DAYS=3`
+- `COMMS_HUB_HUMAN_HANDOFF_BUSINESS_HOURS_ONLY=true` (fail-closed; `false` is rejected)
+- `COMMS_HUB_CALLBACK_EMAIL_CAPTURE_ENABLED=true`
+- `COMMS_HUB_DELAYED_ACTION_WORKER_ENABLED=true`
+
+Migration `0007_business_hours_and_handoff` expands the delayed-action schema for `reply_draft`, `email_reply` and `form_reply`; deploy/apply it before relying on scheduled business-hour responses. The direct website request to the first-party CogniPal intake is itself what wakes a sleeping Koyeb AIMS instance. The optional signed wake relay remains supplemental and its failure cannot invalidate a message that AIMS has already accepted. See `docs/COMMS_HUB_BUSINESS_HOURS_HANDOFF_V2.13.2.md`.

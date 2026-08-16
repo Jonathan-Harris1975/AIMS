@@ -3,6 +3,7 @@ import { emailThreadKey } from './domain/email.js';
 import { sha256Hex, stableId } from './domain/ids.js';
 import { scanOutboundLanguagePolicy } from './conversationConductService.js';
 import { assertConversationReplyAllowed } from './domain/replySafety.js';
+import { businessHoursPolicy, conversationFirstInboundAt, delayedBusinessReplyAt, ensureFutureBusinessTime, hasOutboundMessages } from './domain/businessHours.js';
 
 function address(value) { return String(value || '').trim().toLowerCase(); }
 
@@ -21,6 +22,32 @@ function validateReplyBody(context, bodyText, bodyHtml) {
       publicMessage: 'That reply contains language blocked by the Communications Hub policy.',
     });
   }
+}
+
+
+function businessReplyDueAt(context, conversation, seed) {
+  const policy = businessHoursPolicy(context.config);
+  const target = delayedBusinessReplyAt({
+    receivedAt: conversationFirstInboundAt(conversation),
+    seed,
+    ...policy,
+    minimumDays: context.config.replyDelayMinDays,
+    maximumDays: context.config.replyDelayMaxDays,
+  });
+  return ensureFutureBusinessTime(target, policy).toISOString();
+}
+
+async function scheduleBusinessReply(context, { conversation, actionType, payload, idempotencyKey, seed }) {
+  const dueAt = businessReplyDueAt(context, conversation, seed || idempotencyKey);
+  const action = await context.workflowEngineService.schedule({
+    conversationId: conversation.id,
+    actionType,
+    dueAt,
+    payload,
+    idempotencyKey: `business-reply:${idempotencyKey}`,
+    maxAttempts: 8,
+  }, { actor: 'business-reply-scheduler', role: 'admin' });
+  return { scheduled: true, dueAt: action?.due_at || dueAt, delayedActionId: action?.id || null };
 }
 
 function assertConversationReplyRecipients(context, conversation, recipients = [], cc = []) {
@@ -112,7 +139,7 @@ export class CommsHubEmailService {
     return { duplicate: persistence.duplicate, conversationId, messageId, workflow: 'email_inbox', managedAddress, attachments: attachmentResults };
   }
 
-  async send({ conversationId, bodyText, bodyHtml = null, subject = '', recipients = [], cc = [], attachments = [], attachmentIds = [], idempotencyKey }) {
+  async send({ conversationId, bodyText, bodyHtml = null, subject = '', recipients = [], cc = [], attachments = [], attachmentIds = [], idempotencyKey, scheduledDelivery = false }) {
     if (!this.context.config.emailEnabled) throw new CommsHubError(409, 'email_channel_disabled', 'Email channel is disabled.');
     if (!idempotencyKey) throw new CommsHubError(400, 'idempotency_key_required', 'Idempotency-Key is required.');
     const conversation = await this.context.repository.getConversation(conversationId);
@@ -123,6 +150,21 @@ export class CommsHubEmailService {
     const thread = workspace.emailThread;
     const { to, cc: safeCc } = assertConversationReplyRecipients(this.context, conversation, recipients, cc);
     if (!to.length) throw new CommsHubError(422, 'email_recipient_missing', 'Email recipient is missing.');
+    if (!scheduledDelivery && this.context.config.emailInitialReplyDelayEnabled && !hasOutboundMessages(conversation)) {
+      if ((attachments || []).length) {
+        throw new CommsHubError(422, 'email_initial_reply_inline_attachment_requires_storage', 'Delayed initial email replies require stored attachment IDs rather than inline attachment buffers.', {
+          failureClass: 'permanent',
+          publicMessage: 'Upload reply attachments to Comms Hub before scheduling the initial response.',
+        });
+      }
+      return scheduleBusinessReply(this.context, {
+        conversation,
+        actionType: 'email_reply',
+        idempotencyKey,
+        seed: `${conversation.id}:initial-email-reply`,
+        payload: { conversationId, bodyText, bodyHtml, subject, recipients: to, cc: safeCc, attachmentIds, idempotencyKey },
+      });
+    }
     const storedAttachments = [];
     for (const attachmentId of [...new Set((attachmentIds || []).map(String))].slice(0, 10)) {
       const item = await this.context.attachmentService.get(attachmentId);
@@ -151,7 +193,7 @@ export class CommsHubEmailService {
     }
   }
 
-  async sendFormResponse({ conversationId, bodyText, bodyHtml = null, subject = '', idempotencyKey }) {
+  async sendFormResponse({ conversationId, bodyText, bodyHtml = null, subject = '', idempotencyKey, scheduledDelivery = false }) {
     if (!this.context.config.emailEnabled) throw new CommsHubError(409, 'email_channel_disabled', 'Email channel is disabled.');
     if (!idempotencyKey) throw new CommsHubError(400, 'idempotency_key_required', 'Idempotency-Key is required.');
     const conversation = await this.context.repository.getConversation(conversationId);
@@ -161,6 +203,15 @@ export class CommsHubEmailService {
     assertConversationReplyAllowed({ conversation, operations });
     const recipient = address(conversation.contact?.primary_email);
     if (!recipient) throw new CommsHubError(422, 'form_reply_recipient_missing', 'Verified form submission has no reply email address.');
+    if (!scheduledDelivery && this.context.config.formReplyDelayEnabled && !hasOutboundMessages(conversation)) {
+      return scheduleBusinessReply(this.context, {
+        conversation,
+        actionType: 'form_reply',
+        idempotencyKey,
+        seed: `${conversation.id}:jotform-processed-reply`,
+        payload: { conversationId, bodyText, bodyHtml, subject, idempotencyKey },
+      });
+    }
     const request = { conversationId, bodyText, bodyHtml, subject: subject || `Re: ${conversation.subject || 'your submission'}`, to: [recipient] };
     const requestSha256 = sha256Hex(JSON.stringify(request));
     const claim = await this.context.operationsRepository.claimChannelOutboundAction({

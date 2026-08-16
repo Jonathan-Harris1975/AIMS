@@ -1,3 +1,4 @@
+import { humanHandoffStatus } from './humanContactService.js';
 function latestInboundText(conversation) {
   const message = (conversation?.messages || []).filter((item) => item?.direction !== "outbound").at(-1);
   return String(message?.body_text || message?.body || "").trim();
@@ -11,7 +12,7 @@ function looksLikeQuizAnswer(text) {
   return /^\s*(?:i\s+(?:think|guess|choose|pick)\s+)?(?:it'?s\s+)?[ABCD](?:\b|[).,:-])/i.test(text || "");
 }
 
-export function buildConversationStrategy({ conversation, smartContext = {}, liveContent = {}, conduct = {}, security = {} } = {}) {
+export function buildConversationStrategy({ conversation, smartContext = {}, liveContent = {}, conduct = {}, security = {}, config = {} } = {}) {
   const latest = latestInboundText(conversation);
   const complaints = Number(smartContext?.memory?.interactionSignals?.complaintCount || 0);
   const humanRequested = Number(smartContext?.memory?.interactionSignals?.humanRequestCount || 0) > 0;
@@ -49,6 +50,7 @@ export function buildConversationStrategy({ conversation, smartContext = {}, liv
   const publicComment = smartContext?.interactionType === "comment";
   const noPromotion = smartContext?.memory?.bookRecommendationPreference === "opted_out" || complaints >= 2 || needsHuman;
   const promotionPolicy = noPromotion ? "none" : smartContext?.engagementMode === "book_discovery" ? "requested" : "contextual_only";
+  const handoff = humanHandoffStatus(config);
   const responseShape = publicComment ? "brief_public_reply"
     : smartContext?.memory?.responseLength === "brief" ? "brief"
       : smartContext?.memory?.responseLength === "detailed" ? "detailed"
@@ -64,6 +66,7 @@ export function buildConversationStrategy({ conversation, smartContext = {}, liv
     maximumCallsToAction: promotionPolicy === "none" ? 0 : 1,
     askClarifyingQuestion: nextBestMove === "ask_one_clarifying_question",
     humanReviewRequired: needsHuman,
+    handoff: Object.freeze({ available: handoff.available, nextAvailableAt: handoff.nextAvailableAt, timeZone: handoff.timeZone, startHour: handoff.startHour, endHour: handoff.endHour, callbackEmailOption: true }),
     reasons: Object.freeze([
       securityRisk ? "security_risk" : "",
       conduct?.requiresHumanReview ? "conduct_review" : "",
@@ -86,6 +89,8 @@ export function conversationStrategyPromptGuidance(strategy = {}) {
     `- Promotion policy: ${strategy.promotionPolicy}; maximum calls to action: ${strategy.maximumCallsToAction}.`,
     "- 'Next best move' is a conversational recommendation only. It never grants permission to execute a provider action, send autonomously, mutate data or bypass approval/capability controls.",
     strategy.humanReviewRequired ? "- Human review is required. Do not keep pushing automation, sales or unnecessary questions." : "",
+    strategy.objective === 'human_handoff' && strategy.handoff?.available ? "- Live hand-off to Jonathan is available only now because it is within 09:00-17:00 Monday-Friday UK time. Offer the hand-off, and also offer the optional email callback route." : "",
+    strategy.objective === 'human_handoff' && !strategy.handoff?.available ? "- Live hand-off is currently unavailable. Do not imply Jonathan is online. Offer the user the option to leave an email address so Jonathan can get back to them in due course." : "",
     strategy.askClarifyingQuestion ? "- Ask one concise clarifying question instead of guessing." : "",
     strategy.promotionPolicy === "contextual_only" ? "- Mention a book, quiz, podcast or other Jonathan content only if it genuinely advances the user's current goal." : "",
     strategy.promotionPolicy === "none" ? "- Do not add promotional material or calls to action." : "",
