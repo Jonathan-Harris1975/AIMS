@@ -190,6 +190,16 @@ export async function startCommsHubRuntime() {
         workflowEvaluationEnabled: active.config.emailWorkflowEvaluationEnabled,
         passwordConfigured: Boolean(active.config.oneComEmailPassword),
       },
+      chat: {
+        enabled: active.config.chatEnabled,
+        provider: "coginpal",
+        transport: active.config.coginPalApiBaseUrl ? "provider_api" : "aims_first_party",
+        webhookSecretConfigured: Boolean(active.config.coginPalWebhookSecret),
+        aiWorkflowEnabled: active.config.chatAiWorkflowEnabled,
+        wakeEnabled: active.config.wakeEnabled,
+        maxMessageChars: active.config.chatMaxMessageChars,
+        maxMessagesPerMinute: active.config.chatMaxMessagesPerMinute,
+      },
       zernio: Object.fromEntries(Object.entries(readiness.zernio).map(([family, state]) => [family, state.status])),
       socialMonitoring: {
         monitorOnly: active.config.socialMonitorOnly,

@@ -263,8 +263,11 @@ export function getCommsHubMissingEnv(env = process.env) {
     }
   }
   if (booleanValue(env.COMMS_HUB_CHAT_ENABLED, false)) {
-    for (const name of ["COMMS_HUB_COGINPAL_API_BASE_URL", "COMMS_HUB_COGINPAL_API_KEY", "COMMS_HUB_COGINPAL_WEBHOOK_SECRET"]) {
-      if (!usableEnvValue(env[name])) missing.push(name);
+    if (!usableEnvValue(env.COMMS_HUB_COGINPAL_WEBHOOK_SECRET)) missing.push("COMMS_HUB_COGINPAL_WEBHOOK_SECRET");
+    const coginPalApiBaseUrl = usableEnvValue(env.COMMS_HUB_COGINPAL_API_BASE_URL);
+    const coginPalApiKey = usableEnvValue(env.COMMS_HUB_COGINPAL_API_KEY);
+    if ((coginPalApiBaseUrl && !coginPalApiKey) || (!coginPalApiBaseUrl && coginPalApiKey)) {
+      missing.push(coginPalApiBaseUrl ? "COMMS_HUB_COGINPAL_API_KEY" : "COMMS_HUB_COGINPAL_API_BASE_URL");
     }
   }
   if (booleanValue(env.COMMS_HUB_WAKE_ENABLED, false)) {
@@ -445,6 +448,10 @@ export function loadCommsHubConfig(env = process.env, { requireEnabled = false }
     coginPalApiKey: usableEnvValue(env.COMMS_HUB_COGINPAL_API_KEY),
     coginPalWebhookSecret: usableEnvValue(env.COMMS_HUB_COGINPAL_WEBHOOK_SECRET),
     coginPalTimeoutMs: positiveInteger(env.COMMS_HUB_COGINPAL_TIMEOUT_MS, 15_000, "COMMS_HUB_COGINPAL_TIMEOUT_MS", { min: 1_000, max: 30_000 }),
+    chatMaxMessageChars: positiveInteger(env.COMMS_HUB_CHAT_MAX_MESSAGE_CHARS, 4000, "COMMS_HUB_CHAT_MAX_MESSAGE_CHARS", { min: 200, max: 20_000 }),
+    chatMaxMessagesPerMinute: positiveInteger(env.COMMS_HUB_CHAT_MAX_MESSAGES_PER_MINUTE, 12, "COMMS_HUB_CHAT_MAX_MESSAGES_PER_MINUTE", { min: 1, max: 120 }),
+    chatHistoryLimit: positiveInteger(env.COMMS_HUB_CHAT_HISTORY_LIMIT, 100, "COMMS_HUB_CHAT_HISTORY_LIMIT", { min: 10, max: 250 }),
+    chatAiWorkflowEnabled: booleanValue(env.COMMS_HUB_CHAT_AI_WORKFLOW_ENABLED, false),
     webhookSignatureMaxAgeMs: positiveInteger(env.COMMS_HUB_WEBHOOK_SIGNATURE_MAX_AGE_MS, 300_000, "COMMS_HUB_WEBHOOK_SIGNATURE_MAX_AGE_MS", { min: 30_000, max: 3_600_000 }),
     wakeEnabled: booleanValue(env.COMMS_HUB_WAKE_ENABLED, false),
     wakeRequestUrl: normaliseBaseUrl(env.COMMS_HUB_WAKE_REQUEST_URL, ""),

@@ -115,7 +115,7 @@ Phase 4:
 
 `COMMS_HUB_EMAIL_HISTORICAL_BACKFILL_ENABLED=false` is the production-safe default. On the first enabled email poll, AIMS records the mailbox's current highest UID using metadata only and does not fetch or persist historical message bodies. Subsequent polls process only mail arriving after that watermark. Historical backfill must never be enabled during the phased Comms Hub rollout.
 
-Social polling, email polling, autonomous replies, follow-ups and web chat remain disabled until their corresponding test phase is explicitly opened. During the Meta canary, keep `COMMS_HUB_SOCIAL_MONITOR_ONLY=true` so Facebook/Instagram DMs and comments can be observed without any reply, read-state, status or moderation mutation reaching Zernio.
+Social polling, email polling, autonomous replies and follow-ups remain gated by their corresponding rollout phases. Website chat is now a first-party CogniPal transport: the public website calls same-origin Cloudflare Pages Functions, those Functions HMAC-sign requests into AIMS, and AIMS persists the transcript in Comms Hub D1. `COMMS_HUB_CHAT_AI_WORKFLOW_ENABLED=false` is the safe launch setting, so the chat accepts visitor messages and human handoff without autonomous model replies. During the Meta canary, keep `COMMS_HUB_SOCIAL_MONITOR_ONLY=true` so Facebook/Instagram DMs and comments can be observed without any reply, read-state, status or moderation mutation reaching Zernio.
 
 ## Deployment order
 
@@ -141,6 +141,7 @@ Public exact-path routes:
 - `POST /comms-hub/intake/zernio/meta`
 - `POST /comms-hub/intake/zernio/video`
 - `POST /comms-hub/intake/chat`
+- `POST /comms-hub/intake/chat/sync`
 
 All other Comms Hub routes require AIMS bearer authentication. Phase 3/4 additions are:
 
@@ -155,6 +156,9 @@ All other Comms Hub routes require AIMS bearer authentication. Phase 3/4 additio
 - `POST /comms-hub/workflows/podcast/:conversationId/start`
 - `POST /comms-hub/workflows/podcast/:conversationId/advance`
 - `POST /comms-hub/follow-ups/drain`
+- `GET /comms-hub/chat/status`
+- `POST /comms-hub/conversations/:conversationId/chat`
+- `POST /comms-hub/conversations/:conversationId/chat/takeover`
 - `GET /comms-hub/providers/health`
 - `POST /comms-hub/providers/health/snapshot`
 - `POST /comms-hub/backups/run`
@@ -180,8 +184,26 @@ Migration `0005_operations_and_channels` adds the backend contracts required bef
 - volume, response-time, resolution-time, automation, failure and channel metrics;
 - role-gated API contracts for the later responsive HIVE queue and conversation workspace.
 
-All email, chat, wake, delayed-action, retention, autonomous-reply and credential-vault execution flags default to `false`. Deploy migration `0005` before enabling any of them. The public chat webhook is `POST /comms-hub/intake/chat`; every operator endpoint remains bearer-authenticated and additionally applies Comms Hub role permissions. The Cloudflare wake relay lives in `workers/comms-hub-wake/` and always sends `runContentJobs: false`.
+Email, wake, delayed-action, retention, autonomous-reply and credential-vault execution remain independently gated. Website chat can be enabled once migration `0005` is present and `COMMS_HUB_COGINPAL_WEBHOOK_SECRET` is configured. Public website transport uses `POST /comms-hub/intake/chat` for visitor messages and `POST /comms-hub/intake/chat/sync` for signed transcript reads; operator send/takeover endpoints remain bearer-authenticated and apply Comms Hub role permissions. The sync endpoint verifies the HMAC and timestamp but deliberately does not persist a replay nonce because it is a read-only polling operation. The Cloudflare wake relay lives in `workers/comms-hub-wake/` and always sends `runContentJobs: false`.
 
+
+
+## First-party CogniPal website chat
+
+The production website chat no longer depends on BotSailor. The public browser loads `/assets/js/cognipal-webchat.min.js` through the governed site script and talks only to same-origin Pages Functions. Cloudflare Pages signs each server-to-server AIMS request with `COMMS_HUB_COGINPAL_WEBHOOK_SECRET`; the secret is never exposed to the browser.
+
+AIMS settings:
+
+- `COMMS_HUB_CHAT_ENABLED=true`
+- `COMMS_HUB_COGINPAL_WEBHOOK_SECRET=<shared secret>`
+- `COMMS_HUB_CHAT_AI_WORKFLOW_ENABLED=false` for the initial live phase
+- `COMMS_HUB_CHAT_MAX_MESSAGE_CHARS=4000`
+- `COMMS_HUB_CHAT_MAX_MESSAGES_PER_MINUTE=12`
+- `COMMS_HUB_CHAT_HISTORY_LIMIT=100`
+
+`COMMS_HUB_COGINPAL_API_BASE_URL` and `COMMS_HUB_COGINPAL_API_KEY` are optional compatibility settings. When they are blank, operator replies use the first-party AIMS transport: AIMS records the outbound message in D1 and the website receives it on the next signed transcript sync. If either external-provider setting is supplied, both are required.
+
+The website Pages project needs `AIMS_COMMS_HUB_BASE_URL` plus the same `COMMS_HUB_COGINPAL_WEBHOOK_SECRET`. Keep the shared secret in Koyeb/Cloudflare secrets rather than in either repository. Visitor messages are length-limited and rate-limited server-side, transcript reads are visitor/session-bound, and requests with a mismatched visitor ID are rejected. Human handoff uses persistent `takeover_requested`, `human`, `automation` and `closed` session states.
 
 ## Form attachment storage
 
