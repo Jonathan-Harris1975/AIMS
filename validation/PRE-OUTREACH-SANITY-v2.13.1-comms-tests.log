@@ -1,0 +1,970 @@
+TAP version 13
+# Subtest: CogniPal secret enables first-party chat even when a stale rollout flag says false
+ok 1 - CogniPal secret enables first-party chat even when a stale rollout flag says false
+  ---
+  duration_ms: 1.27481
+  type: 'test'
+  ...
+# Subtest: explicit force-disable remains the emergency kill switch
+ok 2 - explicit force-disable remains the emergency kill switch
+  ---
+  duration_ms: 0.206026
+  type: 'test'
+  ...
+# Subtest: first-party config does not require the legacy external CogniPal API
+ok 3 - first-party config does not require the legacy external CogniPal API
+  ---
+  duration_ms: 1.635395
+  type: 'test'
+  ...
+# Subtest: info@ is the managed customer-facing Comms Hub mailbox
+ok 4 - info@ is the managed customer-facing Comms Hub mailbox
+  ---
+  duration_ms: 2.523883
+  type: 'test'
+  ...
+# Subtest: quarantined attachment does not discard the parent info@ email
+ok 5 - quarantined attachment does not discard the parent info@ email
+  ---
+  duration_ms: 0.484669
+  type: 'test'
+  ...
+# Subtest: email role map keeps admin and newsletter outside the customer inbox worker
+ok 6 - email role map keeps admin and newsletter outside the customer inbox worker
+  ---
+  duration_ms: 1.376852
+  type: 'test'
+  ...
+# Subtest: email poll worker preserves first-run no-history boundary
+ok 7 - email poll worker preserves first-run no-history boundary
+  ---
+  duration_ms: 0.900075
+  type: 'test'
+  ...
+# Subtest: email poll worker re-baselines on UIDVALIDITY change or mailbox reset
+ok 8 - email poll worker re-baselines on UIDVALIDITY change or mailbox reset
+  ---
+  duration_ms: 0.150033
+  type: 'test'
+  ...
+# Subtest: email poll worker catches the boot-time run and exposes lifecycle telemetry
+ok 9 - email poll worker catches the boot-time run and exposes lifecycle telemetry
+  ---
+  duration_ms: 1.282201
+  type: 'test'
+  ...
+# Subtest: email poll worker reports provider stage and D1 due-state diagnostics
+ok 10 - email poll worker reports provider stage and D1 due-state diagnostics
+  ---
+  duration_ms: 0.1218
+  type: 'test'
+  ...
+# Subtest: email poll worker bounds message memory by fetching one message at a time
+ok 11 - email poll worker bounds message memory by fetching one message at a time
+  ---
+  duration_ms: 0.146508
+  type: 'test'
+  ...
+# Subtest: first email poll establishes a UID watermark without fetching historical message bodies
+ok 12 - first email poll establishes a UID watermark without fetching historical message bodies
+  ---
+  duration_ms: 1.436391
+  type: 'test'
+  ...
+# Subtest: email poll start catches a rejected boot-time run instead of leaking an unhandled rejection
+ok 13 - email poll start catches a rejected boot-time run instead of leaking an unhandled rejection
+  ---
+  duration_ms: 23.179118
+  type: 'test'
+  ...
+# Subtest: successful empty email poll advances state and reports zero processed
+ok 14 - successful empty email poll advances state and reports zero processed
+  ---
+  duration_ms: 0.51284
+  type: 'test'
+  ...
+# Subtest: production defaults enable the live info mailbox and poll worker
+ok 15 - production defaults enable the live info mailbox and poll worker
+  ---
+  duration_ms: 0.807177
+  type: 'test'
+  ...
+# Subtest: social monitoring-only mode blocks all outbound actions before provider or repository mutation
+ok 16 - social monitoring-only mode blocks all outbound actions before provider or repository mutation
+  ---
+  duration_ms: 1.334109
+  type: 'test'
+  ...
+# Subtest: Meta polling emits monitoring telemetry for Facebook and Instagram without outbound provider calls
+ok 17 - Meta polling emits monitoring telemetry for Facebook and Instagram without outbound provider calls
+  ---
+  duration_ms: 1.836073
+  type: 'test'
+  ...
+# Subtest: deployment templates default social canaries to monitoring-only
+ok 18 - deployment templates default social canaries to monitoring-only
+  ---
+  duration_ms: 4.143786
+  type: 'test'
+  ...
+# Subtest: one.com IMAP errors retain a safe provider stage without logging credentials
+ok 19 - one.com IMAP errors retain a safe provider stage without logging credentials
+  ---
+  duration_ms: 0.664335
+  type: 'test'
+  ...
+# Subtest: one.com polling drains UIDs oldest-first so a full batch cannot skip earlier mail
+ok 20 - one.com polling drains UIDs oldest-first so a full batch cannot skip earlier mail
+  ---
+  duration_ms: 0.117003
+  type: 'test'
+  ...
+# Subtest: one.com cursor uses UIDNEXT so expunged recent mail cannot move the watermark backwards
+ok 21 - one.com cursor uses UIDNEXT so expunged recent mail cannot move the watermark backwards
+  ---
+  duration_ms: 0.656424
+  type: 'test'
+  ...
+# Subtest: one.com socket reader avoids repeated whole-buffer concatenation and raw message retention
+ok 22 - one.com socket reader avoids repeated whole-buffer concatenation and raw message retention
+  ---
+  duration_ms: 0.18178
+  type: 'test'
+  ...
+# (node:10545) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: Jotform zone-less timestamps are normalised using the configured source timezone across DST
+ok 23 - Jotform zone-less timestamps are normalised using the configured source timezone across DST
+  ---
+  duration_ms: 16.340064
+  type: 'test'
+  ...
+# Subtest: Comms Hub remains deployment-safe when disabled
+ok 24 - Comms Hub remains deployment-safe when disabled
+  ---
+  duration_ms: 0.806326
+  type: 'test'
+  ...
+# Subtest: Phase 1 readiness requires real storage and Jotform credentials
+ok 25 - Phase 1 readiness requires real storage and Jotform credentials
+  ---
+  duration_ms: 0.344692
+  type: 'test'
+  ...
+# Subtest: Only the three supplied Jotforms are registered
+ok 26 - Only the three supplied Jotforms are registered
+  ---
+  duration_ms: 0.205425
+  type: 'test'
+  ...
+# Subtest: Jotform webhook resolution accepts canonical identifiers and rawRequest
+ok 27 - Jotform webhook resolution accepts canonical identifiers and rawRequest
+  ---
+  duration_ms: 0.354736
+  type: 'test'
+  ...
+# Subtest: Newsletter and unknown form IDs are rejected at the intake boundary
+ok 28 - Newsletter and unknown form IDs are rejected at the intake boundary
+  ---
+  duration_ms: 0.336059
+  type: 'test'
+  ...
+# Subtest: Multipart parsing extracts identifiers but ignores uploaded file bodies
+ok 29 - Multipart parsing extracts identifiers but ignores uploaded file bodies
+  ---
+  duration_ms: 0.510317
+  type: 'test'
+  ...
+# Subtest: Jotform identity extraction trusts field types rather than guessed labels
+ok 30 - Jotform identity extraction trusts field types rather than guessed labels
+  ---
+  duration_ms: 0.444779
+  type: 'test'
+  ...
+# Subtest: Jotform attachment extraction accepts HTTP(S) references only
+ok 31 - Jotform attachment extraction accepts HTTP(S) references only
+  ---
+  duration_ms: 0.894878
+  type: 'test'
+  ...
+# Subtest: Jotform intake identifiers are deterministic and scoped by form
+ok 32 - Jotform intake identifiers are deterministic and scoped by form
+  ---
+  duration_ms: 3.096954
+  type: 'test'
+  ...
+# Subtest: Jotform client uses the API key and verifies both provider identifiers
+ok 33 - Jotform client uses the API key and verifies both provider identifiers
+  ---
+  duration_ms: 14.210016
+  type: 'test'
+  ...
+# Subtest: Jotform provider mismatch is rejected before persistence
+ok 34 - Jotform provider mismatch is rejected before persistence
+  ---
+  duration_ms: 0.794738
+  type: 'test'
+  ...
+# Subtest: Jotform repository writes one conversation and deduplicates replayed delivery
+ok 35 - Jotform repository writes one conversation and deduplicates replayed delivery
+  ---
+  duration_ms: 7.226368
+  type: 'test'
+  ...
+# Subtest: Shared intake service verifies provider data before the D1 write
+ok 36 - Shared intake service verifies provider data before the D1 write
+  ---
+  duration_ms: 0.740849
+  type: 'test'
+  ...
+# Subtest: Archive worker stores a redacted integrity receipt and completes its lease
+ok 37 - Archive worker stores a redacted integrity receipt and completes its lease
+  ---
+  duration_ms: 1.088314
+  type: 'test'
+  ...
+# Subtest: Diagnostic redaction removes email, phone and long token values
+ok 38 - Diagnostic redaction removes email, phone and long token values
+  ---
+  duration_ms: 0.516066
+  type: 'test'
+  ...
+# Subtest: Migration manifest requires all delivered Comms Hub phases
+ok 39 - Migration manifest requires all delivered Comms Hub phases
+  ---
+  duration_ms: 0.092518
+  type: 'test'
+  ...
+# Subtest: Jotform attachment ingestion stores references independently of the generic delayed worker
+ok 40 - Jotform attachment ingestion stores references independently of the generic delayed worker
+  ---
+  duration_ms: 0.789752
+  type: 'test'
+  ...
+# Subtest: Jotform attachment ingestion records a failed status when secure storage is unavailable
+ok 41 - Jotform attachment ingestion records a failed status when secure storage is unavailable
+  ---
+  duration_ms: 1.667103
+  type: 'test'
+  ...
+# (node:10551) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: Zernio webhook acceptance has a hard deadline below the provider acknowledgement window
+ok 42 - Zernio webhook acceptance has a hard deadline below the provider acknowledgement window
+  ---
+  duration_ms: 6.855769
+  type: 'test'
+  ...
+# Subtest: Zernio Meta and Video readiness are independent and require separate secrets
+ok 43 - Zernio Meta and Video readiness are independent and require separate secrets
+  ---
+  duration_ms: 0.71449
+  type: 'test'
+  ...
+# Subtest: Zernio clients never fall back across the Meta and Video keys
+ok 44 - Zernio clients never fall back across the Meta and Video keys
+  ---
+  duration_ms: 15.744792
+  type: 'test'
+  ...
+# Subtest: Meta hide and unhide use Zernio's distinct HTTP contracts
+ok 45 - Meta hide and unhide use Zernio's distinct HTTP contracts
+  ---
+  duration_ms: 0.932784
+  type: 'test'
+  ...
+# Subtest: Only the exact Meta and Video POST endpoints bypass suite bearer auth
+ok 46 - Only the exact Meta and Video POST endpoints bypass suite bearer auth
+  ---
+  duration_ms: 0.343119
+  type: 'test'
+  ...
+# Subtest: Zernio webhook signatures use HMAC-SHA256 over the exact raw body
+ok 47 - Zernio webhook signatures use HMAC-SHA256 over the exact raw body
+  ---
+  duration_ms: 0.46513
+  type: 'test'
+  ...
+# Subtest: Meta webhook rejects a YouTube payload even when the signature is valid
+ok 48 - Meta webhook rejects a YouTube payload even when the signature is valid
+  ---
+  duration_ms: 0.503356
+  type: 'test'
+  ...
+# Subtest: Meta DM event normalises to deterministic Comms Hub identities
+ok 49 - Meta DM event normalises to deterministic Comms Hub identities
+  ---
+  duration_ms: 1.136616
+  type: 'test'
+  ...
+# Subtest: Video webhook accepts YouTube comments and creates a comment thread
+ok 50 - Video webhook accepts YouTube comments and creates a comment thread
+  ---
+  duration_ms: 0.938973
+  type: 'test'
+  ...
+# Subtest: Social repository persists and deduplicates a verified Meta message transactionally
+ok 51 - Social repository persists and deduplicates a verified Meta message transactionally
+  ---
+  duration_ms: 8.03762
+  type: 'test'
+  ...
+# Subtest: Out-of-order message lifecycle events are retained without violating message foreign keys
+ok 52 - Out-of-order message lifecycle events are retained without violating message foreign keys
+  ---
+  duration_ms: 6.000029
+  type: 'test'
+  ...
+# Subtest: Polling refreshes existing comment text and state instead of leaving stale records
+ok 53 - Polling refreshes existing comment text and state instead of leaving stale records
+  ---
+  duration_ms: 7.568365
+  type: 'test'
+  ...
+# Subtest: Polling can retain a deleted-message tombstone when the original webhook was missed
+ok 54 - Polling can retain a deleted-message tombstone when the original webhook was missed
+  ---
+  duration_ms: 6.541682
+  type: 'test'
+  ...
+# Subtest: Social migration prevents cross-family poll job collisions
+ok 55 - Social migration prevents cross-family poll job collisions
+  ---
+  duration_ms: 5.61689
+  type: 'test'
+  ...
+# Subtest: Uncertain outbound actions require reconciliation instead of blind retry
+ok 56 - Uncertain outbound actions require reconciliation instead of blind retry
+  ---
+  duration_ms: 7.179188
+  type: 'test'
+  ...
+# Subtest: DM reply uses the Meta client selected by the persisted thread family
+ok 57 - DM reply uses the Meta client selected by the persisted thread family
+  ---
+  duration_ms: 1.077548
+  type: 'test'
+  ...
+# Subtest: YouTube moderation uses the Video client and rejects banAuthor without rejection
+ok 58 - YouTube moderation uses the Video client and rejects banAuthor without rejection
+  ---
+  duration_ms: 0.737073
+  type: 'test'
+  ...
+# Subtest: Social polling worker claims only enabled credential families
+ok 59 - Social polling worker claims only enabled credential families
+  ---
+  duration_ms: 1.955861
+  type: 'test'
+  ...
+# Subtest: Video polling consumes Zernio data/comments response keys and persists an opaque cursor cycle
+ok 60 - Video polling consumes Zernio data/comments response keys and persists an opaque cursor cycle
+  ---
+  duration_ms: 6.40553
+  type: 'test'
+  ...
+# Subtest: Webhook reconciliation always reapplies the family secret for safe rotation
+ok 61 - Webhook reconciliation always reapplies the family secret for safe rotation
+  ---
+  duration_ms: 0.299504
+  type: 'test'
+  ...
+# Subtest: D1 data-plane statement validation rejects DDL and SQL stacking
+ok 62 - D1 data-plane statement validation rejects DDL and SQL stacking
+  ---
+  duration_ms: 0.376138
+  type: 'test'
+  ...
+# Subtest: D1 data-plane requires the exact proxy token and returns Cloudflare-compatible results
+ok 63 - D1 data-plane requires the exact proxy token and returns Cloudflare-compatible results
+  ---
+  duration_ms: 2.287993
+  type: 'test'
+  ...
+# (node:10562) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: Phase 3 AI readiness is opt-in and requires approved AI Search configuration
+ok 64 - Phase 3 AI readiness is opt-in and requires approved AI Search configuration
+  ---
+  duration_ms: 2.688888
+  type: 'test'
+  ...
+# Subtest: Follow-up worker configuration fails closed unless Phase 3 AI is enabled
+ok 65 - Follow-up worker configuration fails closed unless Phase 3 AI is enabled
+  ---
+  duration_ms: 0.13452
+  type: 'test'
+  ...
+# Subtest: AI Search client accepts the current Cloudflare chunks and item metadata response shape
+ok 66 - AI Search client accepts the current Cloudflare chunks and item metadata response shape
+  ---
+  duration_ms: 0.880967
+  type: 'test'
+  ...
+# Subtest: Intent scoring is deterministic and strict JSON rejects prose wrappers
+ok 67 - Intent scoring is deterministic and strict JSON rejects prose wrappers
+  ---
+  duration_ms: 0.720158
+  type: 'test'
+  ...
+# Subtest: Each intake workflow selects its dedicated drafting route
+ok 68 - Each intake workflow selects its dedicated drafting route
+  ---
+  duration_ms: 0.125045
+  type: 'test'
+  ...
+# Subtest: AI analysis bounds long conversation transcripts while preserving the newest messages
+ok 69 - AI analysis bounds long conversation transcripts while preserving the newest messages
+  ---
+  duration_ms: 156.668422
+  type: 'test'
+  ...
+# Subtest: Spam intent always requires human approval even when other risk signals are low
+ok 70 - Spam intent always requires human approval even when other risk signals are low
+  ---
+  duration_ms: 0.256751
+  type: 'test'
+  ...
+# Subtest: Approval middleware fails closed until a matching authorised decision exists
+ok 71 - Approval middleware fails closed until a matching authorised decision exists
+  ---
+  duration_ms: 3.93042
+  type: 'test'
+  ...
+# Subtest: AI analysis persists intent, priority, evidence, summary, draft, approval and one follow-up
+ok 72 - AI analysis persists intent, priority, evidence, summary, draft, approval and one follow-up
+  ---
+  duration_ms: 9.314294
+  type: 'test'
+  ...
+# Subtest: Intent routing uses the selected workflow policy and escalates a workflow mismatch
+ok 73 - Intent routing uses the selected workflow policy and escalates a workflow mismatch
+  ---
+  duration_ms: 6.96477
+  type: 'test'
+  ...
+# Subtest: AI drafting rejects evidence references that were not returned by approved indexes
+ok 74 - AI drafting rejects evidence references that were not returned by approved indexes
+  ---
+  duration_ms: 5.732052
+  type: 'test'
+  ...
+# Subtest: High-risk social moderation requires a scope-matched approval before provider execution
+ok 75 - High-risk social moderation requires a scope-matched approval before provider execution
+  ---
+  duration_ms: 6.713927
+  type: 'test'
+  ...
+# Subtest: Unsupported moderation actions are quarantined and never reach the provider
+ok 76 - Unsupported moderation actions are quarantined and never reach the provider
+  ---
+  duration_ms: 3.411139
+  type: 'test'
+  ...
+# Subtest: Podcast contribution workflow is resumable and never offers a guest booking path
+ok 77 - Podcast contribution workflow is resumable and never offers a guest booking path
+  ---
+  duration_ms: 4.4839
+  type: 'test'
+  ...
+# (node:10578) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: Phase 4 backup readiness is opt-in and requires private R2 storage
+ok 78 - Phase 4 backup readiness is opt-in and requires private R2 storage
+  ---
+  duration_ms: 2.052935
+  type: 'test'
+  ...
+# Subtest: Automatic backups and Cloudflare account routing fail closed when their prerequisites are missing
+ok 79 - Automatic backups and Cloudflare account routing fail closed when their prerequisites are missing
+  ---
+  duration_ms: 0.184524
+  type: 'test'
+  ...
+# Subtest: Provider health records rate limiting, outages and unknown configuration without inventing liveness
+ok 80 - Provider health records rate limiting, outages and unknown configuration without inventing liveness
+  ---
+  duration_ms: 4.164086
+  type: 'test'
+  ...
+# Subtest: Provider health prefers real observations over readiness placeholders for the same provider route
+ok 81 - Provider health prefers real observations over readiness placeholders for the same provider route
+  ---
+  duration_ms: 2.461761
+  type: 'test'
+  ...
+# Subtest: D1 and private R2 backup archives independent copies with checksums and validates from the archive
+ok 82 - D1 and private R2 backup archives independent copies with checksums and validates from the archive
+  ---
+  duration_ms: 5.716087
+  type: 'test'
+  ...
+# Subtest: Restore validation refuses a non-empty target before importing any data
+ok 83 - Restore validation refuses a non-empty target before importing any data
+  ---
+  duration_ms: 4.165398
+  type: 'test'
+  ...
+# Subtest: Restore validation fails closed when the archived manifest is altered
+ok 84 - Restore validation fails closed when the archived manifest is altered
+  ---
+  duration_ms: 3.439001
+  type: 'test'
+  ...
+# Subtest: Restore validation fails closed when restored record counts differ
+ok 85 - Restore validation fails closed when restored record counts differ
+  ---
+  duration_ms: 3.20259
+  type: 'test'
+  ...
+# Subtest: Backup refuses to silently truncate linked R2 objects
+ok 86 - Backup refuses to silently truncate linked R2 objects
+  ---
+  duration_ms: 2.621869
+  type: 'test'
+  ...
+# Subtest: Cloudflare D1 import uses init, checksum upload and ingest, and refuses the production target
+ok 87 - Cloudflare D1 import uses init, checksum upload and ingest, and refuses the production target
+  ---
+  duration_ms: 14.449831
+  type: 'test'
+  ...
+# (node:10589) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: runtime channel taxonomy covers persisted social DM/comment values
+ok 88 - runtime channel taxonomy covers persisted social DM/comment values
+  ---
+  duration_ms: 1.932487
+  type: 'test'
+  ...
+# Subtest: chat and email preserve their operational workflows and have reply policies
+ok 89 - chat and email preserve their operational workflows and have reply policies
+  ---
+  duration_ms: 0.205284
+  type: 'test'
+  ...
+# Subtest: smart context recognises persisted social comment and DM channels
+ok 90 - smart context recognises persisted social comment and DM channels
+  ---
+  duration_ms: 34.650392
+  type: 'test'
+  ...
+# Subtest: AI draft delivery sends persisted social_dm via social action adapter
+ok 91 - AI draft delivery sends persisted social_dm via social action adapter
+  ---
+  duration_ms: 3.638977
+  type: 'test'
+  ...
+# Subtest: manual email replies block bad language and arbitrary recipients by default
+ok 92 - manual email replies block bad language and arbitrary recipients by default
+  ---
+  duration_ms: 1.959396
+  type: 'test'
+  ...
+# Subtest: manual social replies block bad language before provider send
+ok 93 - manual social replies block bad language before provider send
+  ---
+  duration_ms: 0.955637
+  type: 'test'
+  ...
+# Subtest: form request cycles are idempotent per draft but allow a later genuine cycle
+ok 94 - form request cycles are idempotent per draft but allow a later genuine cycle
+  ---
+  duration_ms: 0.369798
+  type: 'test'
+  ...
+# Subtest: old completed form intent does not resurrect unless the latest conversation asks again
+ok 95 - old completed form intent does not resurrect unless the latest conversation asks again
+  ---
+  duration_ms: 2.760354
+  type: 'test'
+  ...
+# Subtest: returned Jotform matches only a source contact with a verified email alias
+ok 96 - returned Jotform matches only a source contact with a verified email alias
+  ---
+  duration_ms: 11.599784
+  type: 'test'
+  ...
+# Subtest: attachment downloader rejects local/private targets and validates redirects
+ok 97 - attachment downloader rejects local/private targets and validates redirects
+  ---
+  duration_ms: 19.877271
+  type: 'test'
+  ...
+# Subtest: generic reply delivery supports persisted social channels for delayed/replay paths
+ok 98 - generic reply delivery supports persisted social channels for delayed/replay paths
+  ---
+  duration_ms: 0.54676
+  type: 'test'
+  ...
+# Subtest: reply state blocks resolved, snoozed, archived, blocked and quarantined conversations
+ok 99 - reply state blocks resolved, snoozed, archived, blocked and quarantined conversations
+  ---
+  duration_ms: 0.184804
+  type: 'test'
+  ...
+# Subtest: manual email reply refuses a resolved conversation before SMTP
+ok 100 - manual email reply refuses a resolved conversation before SMTP
+  ---
+  duration_ms: 0.272214
+  type: 'test'
+  ...
+# Subtest: manual social reply refuses an archived conversation before provider claim
+ok 101 - manual social reply refuses an archived conversation before provider claim
+  ---
+  duration_ms: 0.206587
+  type: 'test'
+  ...
+# Subtest: social attachments ingest in background path without requiring the delayed-action worker
+ok 102 - social attachments ingest in background path without requiring the delayed-action worker
+  ---
+  duration_ms: 0.259705
+  type: 'test'
+  ...
+# Subtest: delayed attachment recovery skips an attachment already promoted clean
+ok 103 - delayed attachment recovery skips an attachment already promoted clean
+  ---
+  duration_ms: 0.512009
+  type: 'test'
+  ...
+# Subtest: generic social saved replies and policies cover persisted DM/comment channels
+ok 104 - generic social saved replies and policies cover persisted DM/comment channels
+  ---
+  duration_ms: 5.998406
+  type: 'test'
+  ...
+# Subtest: prompt-injection scanner catches direct, typoglycemia, encoded and exfiltration patterns
+ok 105 - prompt-injection scanner catches direct, typoglycemia, encoded and exfiltration patterns
+  ---
+  duration_ms: 4.192247
+  type: 'test'
+  ...
+# Subtest: prompt-injection scanner preserves ordinary customer text and sanitises instruction-control payloads
+ok 106 - prompt-injection scanner preserves ordinary customer text and sanitises instruction-control payloads
+  ---
+  duration_ms: 1.184177
+  type: 'test'
+  ...
+# Subtest: conversation prompt-injection assessment records only message IDs and reasons, not attacker text
+ok 107 - conversation prompt-injection assessment records only message IDs and reasons, not attacker text
+  ---
+  duration_ms: 0.656884
+  type: 'test'
+  ...
+# Subtest: security risk always forces human approval regardless of otherwise low model risk
+ok 108 - security risk always forces human approval regardless of otherwise low model risk
+  ---
+  duration_ms: 0.191704
+  type: 'test'
+  ...
+# Subtest: AI output security rejects prompt leakage, credentials and remote exfiltration markup
+ok 109 - AI output security rejects prompt leakage, credentials and remote exfiltration markup
+  ---
+  duration_ms: 0.520031
+  type: 'test'
+  ...
+# Subtest: outbound URL validator permits owned or grounded links and blocks novel external links
+ok 110 - outbound URL validator permits owned or grounded links and blocks novel external links
+  ---
+  duration_ms: 0.364151
+  type: 'test'
+  ...
+# Subtest: autonomous reply is fail-closed for a prompt-injection flagged AI run
+ok 111 - autonomous reply is fail-closed for a prompt-injection flagged AI run
+  ---
+  duration_ms: 0.649343
+  type: 'test'
+  ...
+# Subtest: security-flagged AI draft cannot bypass human approval and non-social delivery gets an idempotency key
+ok 112 - security-flagged AI draft cannot bypass human approval and non-social delivery gets an idempotency key
+  ---
+  duration_ms: 0.659909
+  type: 'test'
+  ...
+# Subtest: AI workflow contains injected chat content, rejects poisoned evidence and forces security review without follow-up
+ok 113 - AI workflow contains injected chat content, rejects poisoned evidence and forces security review without follow-up
+  ---
+  duration_ms: 49.573345
+  type: 'test'
+  ...
+# Subtest: conduct layer distinguishes isolated frustration from repeated targeted abuse
+ok 114 - conduct layer distinguishes isolated frustration from repeated targeted abuse
+  ---
+  duration_ms: 3.440984
+  type: 'test'
+  ...
+# Subtest: reported bad language is contained without treating a quoted report like direct abuse
+ok 115 - reported bad language is contained without treating a quoted report like direct abuse
+  ---
+  duration_ms: 0.252154
+  type: 'test'
+  ...
+# Subtest: threatening language always blocks automation and requires human review
+ok 116 - threatening language always blocks automation and requires human review
+  ---
+  duration_ms: 0.245815
+  type: 'test'
+  ...
+# Subtest: bad language is masked before inference and rejected in outbound copy
+ok 117 - bad language is masked before inference and rejected in outbound copy
+  ---
+  duration_ms: 1.516429
+  type: 'test'
+  ...
+# Subtest: smart memory remembers explicit conversational preferences without inventing profile data
+ok 118 - smart memory remembers explicit conversational preferences without inventing profile data
+  ---
+  duration_ms: 22.353152
+  type: 'test'
+  ...
+# Subtest: AI workflow masks inbound profanity and forces approval after repeated targeted abuse
+ok 119 - AI workflow masks inbound profanity and forces approval after repeated targeted abuse
+  ---
+  duration_ms: 30.675216
+  type: 'test'
+  ...
+# Subtest: AI workflow rejects a generated draft containing blocked language
+ok 120 - AI workflow rejects a generated draft containing blocked language
+  ---
+  duration_ms: 6.085495
+  type: 'test'
+  ...
+# Subtest: latest explicit preference wins so a visitor can reverse an earlier opt-out
+ok 121 - latest explicit preference wins so a visitor can reverse an earlier opt-out
+  ---
+  duration_ms: 2.705522
+  type: 'test'
+  ...
+# Subtest: AI workflow fails closed when a generated reply violates an explicit no-links preference
+ok 122 - AI workflow fails closed when a generated reply violates an explicit no-links preference
+  ---
+  duration_ms: 3.207147
+  type: 'test'
+  ...
+# Subtest: smart context derives per-session tone, interests, page context and verified book candidates
+ok 123 - smart context derives per-session tone, interests, page context and verified book candidates
+  ---
+  duration_ms: 24.228194
+  type: 'test'
+  ...
+# Subtest: smart quiz context recognises A/B/C/D answers but never invents correctness
+ok 124 - smart quiz context recognises A/B/C/D answers but never invents correctness
+  ---
+  duration_ms: 2.772883
+  type: 'test'
+  ...
+# Subtest: social comment context stays public, concise and does not pretend to know unseen source-post text
+ok 125 - social comment context stays public, concise and does not pretend to know unseen source-post text
+  ---
+  duration_ms: 1.592742
+  type: 'test'
+  ...
+# Subtest: AI workflow injects deterministic smart context into dynamic draft instructions and untrusted payload
+ok 126 - AI workflow injects deterministic smart context into dynamic draft instructions and untrusted payload
+  ---
+  duration_ms: 26.299696
+  type: 'test'
+  ...
+# Subtest: live content awareness uses exact social source-post context rather than guessing
+ok 127 - live content awareness uses exact social source-post context rather than guessing
+  ---
+  duration_ms: 15.652015
+  type: 'test'
+  ...
+# Subtest: live content awareness exposes the verified current quiz from Zernio runtime state
+ok 128 - live content awareness exposes the verified current quiz from Zernio runtime state
+  ---
+  duration_ms: 0.738105
+  type: 'test'
+  ...
+# Subtest: recent public content is selected dynamically from the editorial ledger
+ok 129 - recent public content is selected dynamically from the editorial ledger
+  ---
+  duration_ms: 0.713508
+  type: 'test'
+  ...
+# Subtest: conversation strategy chooses context-aware moves without granting tool authority
+ok 130 - conversation strategy chooses context-aware moves without granting tool authority
+  ---
+  duration_ms: 0.36416
+  type: 'test'
+  ...
+# Subtest: Zernio comment normalisation preserves source-post context for smart replies
+ok 131 - Zernio comment normalisation preserves source-post context for smart replies
+  ---
+  duration_ms: 1.059061
+  type: 'test'
+  ...
+# Subtest: AI workflow supplies live content and deterministic strategy to dynamic prompts
+ok 132 - AI workflow supplies live content and deterministic strategy to dynamic prompts
+  ---
+  duration_ms: 31.907674
+  type: 'test'
+  ...
+# (node:10644) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: Smart Response sends the podcast form only for participation intent, not ordinary podcast questions
+ok 133 - Smart Response sends the podcast form only for participation intent, not ordinary podcast questions
+  ---
+  duration_ms: 2.759432
+  type: 'test'
+  ...
+# Subtest: An already-active form request is not sent repeatedly in the same conversation
+ok 134 - An already-active form request is not sent repeatedly in the same conversation
+  ---
+  duration_ms: 0.201559
+  type: 'test'
+  ...
+# Subtest: Case-study contribution gets the case-study form while simple enquiries remain conversational
+ok 135 - Case-study contribution gets the case-study form while simple enquiries remain conversational
+  ---
+  duration_ms: 0.210462
+  type: 'test'
+  ...
+# Subtest: An explicit no-links preference makes Smart Response ask permission before exposing a required form link
+ok 136 - An explicit no-links preference makes Smart Response ask permission before exposing a required form link
+  ---
+  duration_ms: 0.845484
+  type: 'test'
+  ...
+# Subtest: Jotform digest excludes identity/upload fields from substantive facts and keeps creative reuse out of scope
+ok 137 - Jotform digest excludes identity/upload fields from substantive facts and keeps creative reuse out of scope
+  ---
+  duration_ms: 17.492815
+  type: 'test'
+  ...
+# Subtest: A sent form request is durably matched to a verified submission only by exact form plus verified email
+ok 138 - A sent form request is durably matched to a verified submission only by exact form plus verified email
+  ---
+  duration_ms: 8.39439
+  type: 'test'
+  ...
+# Subtest: AI workflow dynamically injects the exact approved Jotform URL and stores the form decision
+ok 139 - AI workflow dynamically injects the exact approved Jotform URL and stores the form decision
+  ---
+  duration_ms: 18.090581
+  type: 'test'
+  ...
+# Subtest: Smart form processing can carry a verified low-risk submission through analysis to an explicit reply send
+ok 140 - Smart form processing can carry a verified low-risk submission through analysis to an explicit reply send
+  ---
+  duration_ms: 1.117187
+  type: 'test'
+  ...
+# Subtest: Processed Jotform replies are delivered by email from the form conversation with channel idempotency
+ok 141 - Processed Jotform replies are delivered by email from the form conversation with channel idempotency
+  ---
+  duration_ms: 0.825675
+  type: 'test'
+  ...
+# Subtest: sendReplyDraft records a Jotform request only after the channel reply succeeds
+ok 142 - sendReplyDraft records a Jotform request only after the channel reply succeeds
+  ---
+  duration_ms: 0.543747
+  type: 'test'
+  ...
+# Subtest: autonomous replies are blocked when Smart Response Intelligence says the draft is not eligible
+ok 143 - autonomous replies are blocked when Smart Response Intelligence says the draft is not eligible
+  ---
+  duration_ms: 0.614281
+  type: 'test'
+  ...
+# Subtest: config exposes the three exact smart-form URLs and keeps automatic form replies off by default
+ok 144 - config exposes the three exact smart-form URLs and keeps automatic form replies off by default
+  ---
+  duration_ms: 1.209354
+  type: 'test'
+  ...
+# Subtest: three-channel capability matrix reflects the implemented Facebook, Instagram and YouTube contracts
+ok 145 - three-channel capability matrix reflects the implemented Facebook, Instagram and YouTube contracts
+  ---
+  duration_ms: 0.976258
+  type: 'test'
+  ...
+# Subtest: full social monitoring environment makes both credential families ready while writes remain blocked
+ok 146 - full social monitoring environment makes both credential families ready while writes remain blocked
+  ---
+  duration_ms: 1.709655
+  type: 'test'
+  ...
+# Subtest: webhook family contracts include Meta DMs/comments and YouTube comments without inventing YouTube DMs
+ok 147 - webhook family contracts include Meta DMs/comments and YouTube comments without inventing YouTube DMs
+  ---
+  duration_ms: 0.129012
+  type: 'test'
+  ...
+# Subtest: poll worker can drain all five seeded monitoring resources across the three channels
+ok 148 - poll worker can drain all five seeded monitoring resources across the three channels
+  ---
+  duration_ms: 1.907819
+  type: 'test'
+  ...
+# Subtest: reconcile-all configures both enabled Zernio webhook families
+ok 149 - reconcile-all configures both enabled Zernio webhook families
+  ---
+  duration_ms: 0.422556
+  type: 'test'
+  ...
+# Subtest: capability gate rejects a corrupt YouTube DM thread before any provider send
+ok 150 - capability gate rejects a corrupt YouTube DM thread before any provider send
+  ---
+  duration_ms: 2.535811
+  type: 'test'
+  ...
+# Subtest: full social monitoring deployment profile enables both families and leaves secrets blank
+ok 151 - full social monitoring deployment profile enables both families and leaves secrets blank
+  ---
+  duration_ms: 4.108754
+  type: 'test'
+  ...
+# Subtest: chat intake persists a first-party website message and sync returns it
+ok 152 - chat intake persists a first-party website message and sync returns it
+  ---
+  duration_ms: 6.138054
+  type: 'test'
+  ...
+# Subtest: visitor human request moves chat into takeover_requested state
+ok 153 - visitor human request moves chat into takeover_requested state
+  ---
+  duration_ms: 1.580394
+  type: 'test'
+  ...
+# Subtest: first-party chat replies are recorded in D1 without an external CoginPal API
+ok 154 - first-party chat replies are recorded in D1 without an external CoginPal API
+  ---
+  duration_ms: 1.454507
+  type: 'test'
+  ...
+# Subtest: chat sync rejects a visitor mismatch
+ok 155 - chat sync rejects a visitor mismatch
+  ---
+  duration_ms: 0.730554
+  type: 'test'
+  ...
+# Subtest: chat intake and sync remain public HMAC intake paths
+ok 156 - chat intake and sync remain public HMAC intake paths
+  ---
+  duration_ms: 0.19494
+  type: 'test'
+  ...
+# Subtest: chat intake records prompt-injection security metadata without logging attacker text
+ok 157 - chat intake records prompt-injection security metadata without logging attacker text
+  ---
+  duration_ms: 0.718585
+  type: 'test'
+  ...
+# Subtest: first-party chat contains inbound bad language and blocks profane outbound replies
+ok 158 - first-party chat contains inbound bad language and blocks profane outbound replies
+  ---
+  duration_ms: 1.103857
+  type: 'test'
+  ...
+1..158
+# tests 158
+# suites 0
+# pass 158
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 659.250358

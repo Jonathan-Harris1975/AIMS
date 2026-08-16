@@ -1,0 +1,8 @@
+
+> AI-management-suite@2.13.1 build
+> node scripts/buildCheck.js
+
+✅ Source control-character audit passed (392 modules)
+✅ Full source relative-import audit passed (392 modules)
+✅ Production relative import graph passed (319 modules)
+✅ Build check passed
