@@ -26,7 +26,7 @@ Implemented capabilities include verified raw-body webhooks, deterministic dedup
 
 ### Phase 3: AI decisions and podcast contribution workflow
 
-Phase 3 is opt-in through `COMMS_HUB_AI_ENABLED=false` and remains inert until explicitly enabled. When enabled, human approval enforcement is mandatory.
+In the v2.13.3 full-channel production profile, Phase 3 AI is active through `COMMS_HUB_AI_ENABLED=true`. Human approval enforcement remains mandatory and security/Smart Response gates can still block any autonomous delivery.
 
 Implemented capabilities:
 
@@ -89,11 +89,11 @@ Phase 2:
 - `ZERNIO_META_API_KEY`, `ZERNIO_META_WEBHOOK_SECRET`
 - `ZERNIO_VIDEO_API_KEY`, `ZERNIO_VIDEO_WEBHOOK_SECRET`
 - independent `COMMS_HUB_ZERNIO_META_ENABLED` and `COMMS_HUB_ZERNIO_VIDEO_ENABLED` switches
-- `COMMS_HUB_SOCIAL_MONITOR_ONLY=true` during channel canaries; polling/webhook ingestion stays live while all outbound social actions are rejected before any provider call
+- production v2.13.3 uses `COMMS_HUB_SOCIAL_MONITOR_ONLY=false`; `config/comms-hub-social-monitoring.env.example` remains available only for an explicit read-only canary/rollback window
 
 Phase 3:
 
-- `COMMS_HUB_AI_ENABLED=false`
+- `COMMS_HUB_AI_ENABLED=true` in the v2.13.3 full-channel production profile
 - `COMMS_HUB_APPROVALS_ENFORCED=true`
 - `CLOUDFLARE_AI_SEARCH_API_TOKEN`
 - `COMMS_HUB_AI_SEARCH_INSTANCES`, a comma-separated allow-list
@@ -127,7 +127,7 @@ Smart Response + Jotform Orchestration layer (dynamic, non-autonomous by default
 - active form requests are persisted through `sent → submitted → processed → replied` and the same active form is not repeatedly sent in one conversation
 - verified returned forms are digested after the existing Jotform verification/persistence path; direct contact identifiers are kept out of the model-facing digest and attachment contents are never invented
 - Jotform continues to own the immediate receipt acknowledgement; AIMS produces the later substantive processed response
-- processed form replies can be delivered through the existing one.com `info@jonathan-harris.online` transport with channel idempotency; `COMMS_HUB_FORM_AUTO_SEND_ENABLED=false` remains the safe default
+- processed form replies can be delivered through the existing one.com `info@jonathan-harris.online` transport with channel idempotency; v2.13.3 uses `COMMS_HUB_FORM_AUTO_SEND_ENABLED=true`, while attachments, security/conduct risk, low confidence or approval requirements still block automatic delivery
 - a selected internal Jotform hand-off is grounded by AIMS' allow-listed form registry and does not depend on unrelated AI Search evidence, while output-security/link validation remains mandatory
 - podcast-segment, blog-article and newsletter-article creation from submitted information is explicitly out of scope and remains a separate downstream workflow
 - see `docs/COMMS_HUB_SMART_RESPONSE_FORMS_V4.md` for the full lifecycle and controls
@@ -144,7 +144,7 @@ Mandatory AI security boundary (not feature-flagged):
 
 Phase 4:
 
-- `COMMS_HUB_PROVIDER_HEALTH_ENABLED=false`
+- `COMMS_HUB_PROVIDER_HEALTH_ENABLED=true` in the v2.13.3 full-channel production profile
 - `COMMS_HUB_BACKUP_ENABLED=false`
 - `COMMS_HUB_BACKUP_AUTOMATIC_ENABLED=false`
 - `R2_BUCKET_COMMS_HUB_PRIVATE`
@@ -156,20 +156,16 @@ Phase 4:
 
 `COMMS_HUB_EMAIL_HISTORICAL_BACKFILL_ENABLED=false` is the production-safe default. On the first enabled email poll, AIMS records the mailbox's current highest UID using metadata only and does not fetch or persist historical message bodies. Subsequent polls process only mail arriving after that watermark. Historical backfill must never be enabled during the phased Comms Hub rollout.
 
-Social polling, email polling, autonomous replies and follow-ups remain gated by their corresponding rollout phases. Website chat is now a first-party CogniPal transport: the public website calls same-origin Cloudflare Pages Functions, those Functions HMAC-sign requests into AIMS, and AIMS persists the transcript in Comms Hub D1. `COMMS_HUB_CHAT_AI_WORKFLOW_ENABLED=false` is the safe launch setting, so the chat accepts visitor messages and human handoff without autonomous model replies. During the Meta canary, keep `COMMS_HUB_SOCIAL_MONITOR_ONLY=true` so Facebook/Instagram DMs and comments can be observed without any reply, read-state, status or moderation mutation reaching Zernio.
+In v2.13.3 all completed conversation channels are active: social polling, email polling, first-party CogniPal AI workflow evaluation, follow-ups and policy-gated autonomous replies. Website chat remains a first-party CogniPal transport: the public website calls same-origin Cloudflare Pages Functions, those Functions HMAC-sign requests into AIMS, and AIMS persists the transcript in Comms Hub D1. `COMMS_HUB_CHAT_AI_WORKFLOW_ENABLED=true` and `COMMS_HUB_SOCIAL_MONITOR_ONLY=false` are the production activation settings. Security, conduct, Smart Response, approvals, capability checks, idempotency and business-hour/delay rules remain fail-closed. Outreach alone remains disabled via `AIMS_OPERATION_OUTREACH_ENABLED=false`.
 
 ## Deployment order
 
-1. Deploy the existing Comms Hub data-plane Worker and keep all new Phase 3/4 flags false.
-2. Install the repository's locked production dependencies without changing `package-lock.json`.
-3. Run `npm run comms:migrate:status`, then `npm run comms:migrate` to apply migrations `0003_ai_workflows`, `0004_hardening`, `0005_operations_and_channels` , `0006_smart_response_forms` and `0007_business_hours_and_handoff` after the existing migrations.
-4. Run the full test and build chain in the deployment environment.
-5. Deploy with `COMMS_HUB_AI_ENABLED=false`, follow-up disabled, provider-health disabled and backups disabled. Verify Phase 1/2 smoke paths first.
-6. Configure the approved AI Search instances and token. Enable AI with approvals enforced, then verify one low-risk draft, one high-risk approval and one unsupported moderation quarantine.
-7. Enable provider-health snapshots and verify persisted status for D1, Jotform, each enabled Zernio family, AI Search and AI providers.
-8. Create two private R2 buckets and a fresh disposable restore-only D1 database. Confirm all three buckets and both D1 IDs are distinct.
-9. Run one manual backup through `POST /comms-hub/backups/run`, then validate it through `POST /comms-hub/backups/:backupRunId/validate` during a maintenance window.
-10. Enable the follow-up worker only after its first due item has been inspected. Enable automatic backups only after the manual backup and isolated restore both succeed.
+1. Apply all Comms Hub migrations through `0008_full_channel_activation` with `npm run comms:migrate`.
+2. Deploy AIMS v2.13.3 with the live non-secret activation profile from `config/production.defaults.env` / `config/comms-hub-all-channels.env.example` and the required production secrets supplied by the deployment environment.
+3. Confirm readiness for D1, Jotform, one.com email, CogniPal HMAC, both enabled Zernio families and the approved AI Search instances. Missing required live configuration must fail readiness rather than silently disabling a channel.
+4. Confirm `AIMS_OPERATION_OUTREACH_ENABLED=false`. The weekday operations scheduler must report/skip Outreach until its dedicated setup is complete.
+5. Run the Comms Hub regression/build gates, then capture remaining live social-provider and delayed-response timing evidence without weakening security, approval, idempotency or business-hours controls.
+6. Keep automatic backups disabled until the separate backup/restore maintenance-window validation is deliberately completed.
 
 Rollback is feature-flag first: disable automatic backup, follow-up, provider health and AI, then redeploy. Migrations are additive; do not drop the new tables during an application rollback.
 
@@ -241,7 +237,7 @@ AIMS settings:
 
 - `COMMS_HUB_CHAT_ENABLED=true`
 - `COMMS_HUB_COGINPAL_WEBHOOK_SECRET=<shared secret>`
-- `COMMS_HUB_CHAT_AI_WORKFLOW_ENABLED=false` for the initial live phase
+- `COMMS_HUB_CHAT_AI_WORKFLOW_ENABLED=true` in the v2.13.3 full-channel production profile
 - `COMMS_HUB_CHAT_MAX_MESSAGE_CHARS=4000`
 - `COMMS_HUB_CHAT_MAX_MESSAGES_PER_MINUTE=12`
 - `COMMS_HUB_CHAT_HISTORY_LIMIT=100`
@@ -281,7 +277,7 @@ Email rollout safeguards:
 
 - `COMMS_HUB_EMAIL_HISTORICAL_BACKFILL_ENABLED=false`: the first live poll records only the current UID watermark and does not fetch historical message bodies.
 - UIDVALIDITY changes and mailbox resets safely re-baseline before any new body fetch.
-- `COMMS_HUB_EMAIL_WORKFLOW_EVALUATION_ENABLED=false`: fresh email is stored, threaded and indexed, but the later unified prompt/conversation-intelligence layer remains off.
+- `COMMS_HUB_EMAIL_WORKFLOW_EVALUATION_ENABLED=true`: fresh email is stored, threaded, indexed and evaluated by the Smart Layers; attachment-bearing or unsafe/ambiguous messages remain review-gated.
 - email attachments use the same `comms-hub-private` quarantine → malware scan → clean promotion → authenticated AIMS access path already proven by forms.
 - an unsafe/unpromoted attachment does not discard its parent email.
 - the live info@ mailbox password is read from `COMMS_HUB_ONECOM_PASSWORD` when supplied, otherwise from the existing `ONECOM_INFO_PASSWORD` secret.
@@ -306,15 +302,15 @@ failures log `commsHub.emailPoll.failed`.
 
 The production Comms Hub social contract covers all supported interaction paths for the selected channels:
 
-| Channel | Inbound monitoring | Built outbound actions | First-rollout state |
+| Channel | Inbound monitoring | Built outbound actions | Production state |
 | --- | --- | --- | --- |
-| Facebook | DMs, message lifecycle events, comments | DM reply, public/private comment reply, mark-read/status, hide/unhide/delete | Monitor-only |
-| Instagram | DMs, message lifecycle events, comments | DM reply, public/private comment reply, mark-read/status, hide/unhide/delete | Monitor-only |
-| YouTube | Video comments | Public comment reply, delete, moderation | Monitor-only |
+| Facebook | DMs, message lifecycle events, comments | DM reply, public/private comment reply, mark-read/status, hide/unhide/delete | Active; writes policy-gated |
+| Instagram | DMs, message lifecycle events, comments | DM reply, public/private comment reply, mark-read/status, hide/unhide/delete | Active; writes policy-gated |
+| YouTube | Video comments | Public comment reply, delete, moderation | Active; writes policy-gated |
 
 YouTube private DMs and YouTube live chat are outside the current Zernio Comms Hub adapter. Do not expose those controls in the operator UI. The machine-readable capability matrix is exported as `SOCIAL_CHANNEL_CAPABILITIES` from `services/comms-hub/config.js` and is returned by `GET /comms-hub/social/status`.
 
-For a complete first canary, apply `config/comms-hub-social-monitoring.env.example`, reconcile both enabled webhook families through `POST /comms-hub/social/webhooks/reconcile-all`, and leave `COMMS_HUB_SOCIAL_MONITOR_ONLY=true` until Facebook DM/comment, Instagram DM/comment, and YouTube comment ingestion have each been proven live and deduplicated.
+Production v2.13.3 runs with `COMMS_HUB_SOCIAL_MONITOR_ONLY=false`. `config/comms-hub-social-monitoring.env.example` is retained as an explicit read-only canary/rollback profile. Live Facebook/Instagram/YouTube canaries should still be captured as evidence and rollback confidence checks; they are no longer the configuration unlock for the channel.
 
 ## Social queue contract
 
@@ -346,3 +342,14 @@ The primary rollout controls are:
 - `COMMS_HUB_DELAYED_ACTION_WORKER_ENABLED=true`
 
 Migration `0007_business_hours_and_handoff` expands the delayed-action schema for `reply_draft`, `email_reply` and `form_reply`; deploy/apply it before relying on scheduled business-hour responses. The direct website request to the first-party CogniPal intake is itself what wakes a sleeping Koyeb AIMS instance. The optional signed wake relay remains supplemental and its failure cannot invalidate a message that AIMS has already accepted. See `docs/COMMS_HUB_BUSINESS_HOURS_HANDOFF_V2.13.2.md`.
+
+
+## Full-channel production activation (v2.13.3)
+
+The production defaults now activate all completed conversation channels: Jotform/forms, the live `info@` mailbox, CogniPal website chat, Facebook/Instagram DMs and Facebook/Instagram/YouTube comments. Meta/Video polling, Smart Layers, AI workflow evaluation, low-risk form auto-send, provider health and the autonomous reply engine are enabled. `COMMS_HUB_SOCIAL_MONITOR_ONLY=false` permits provider delivery, but replies remain fail-closed behind Smart Response eligibility, prompt/conduct security, approval requirements, active autonomous policies, idempotency and channel-specific delivery rules.
+
+Migration `0008_full_channel_activation` creates conservative active policies for low-risk/high-confidence chat, email and social replies. Fresh attachment-free email and inbound social messages now kick the Smart Layer analysis path automatically; attachment-bearing messages stay review-gated instead of being blindly auto-answered. Email and processed Jotform substantive replies continue to schedule 2-3 calendar days after receipt, weekdays only between 09:00-17:00 Europe/London. Human hand-off remains restricted to that same weekday business window. Historical email backfill and arbitrary external email recipients remain disabled.
+
+Outreach is deliberately excluded. `AIMS_OPERATION_OUTREACH_ENABLED=false` causes the existing weekday operations windows to skip `/outreach/batch/next` until the dedicated Outreach setup is completed.
+
+Apply `npm run comms:migrate` before deploying v2.13.3 so migration `0008_full_channel_activation` is present. `config/comms-hub-all-channels.env.example` documents the non-secret activation profile.

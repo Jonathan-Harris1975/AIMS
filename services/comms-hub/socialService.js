@@ -4,6 +4,7 @@ import { normaliseZernioEvent, zernioWebhookEventsForFamily } from "./domain/zer
 import { executeSocialAction } from './socialActionsService.js';
 import { humanContactOffer, humanContactRequested, humanHandoffStatus, recordCallbackEmail } from './humanContactService.js';
 import { safeErrorLog } from './domain/redaction.js';
+import { kickInboundConversationAutomation } from './inboundAutomationService.js';
 import { log } from '../../logger.js';
 
 function text(value) {
@@ -173,11 +174,24 @@ function kickSocialDmHumanContact(event, context) {
   queueMicrotask(() => { void handleSocialDmHumanContact(event, context).catch((error) => log.warn('commsHub.social.humanContactHandlingFailed', { conversationId: event.conversationId, error: safeErrorLog(error) })); });
 }
 
+
+function kickSocialConversationAutomation(event, context) {
+  if (!event || event.direction !== 'inbound' || !event.bodyText || !event.conversationId) return false;
+  if (event.threadType === 'dm' && humanContactRequested(event.bodyText)) return false;
+  return kickInboundConversationAutomation({
+    context,
+    conversationId: event.conversationId,
+    actor: `social-${event.platform || 'unknown'}-automation`,
+    scheduleFollowUp: true,
+    blockedReason: Array.isArray(event.attachments) && event.attachments.length ? 'attachment_review_required' : '',
+  });
+}
+
 export async function processZernioWebhook({ envelope, correlationId, context }) {
   const event = normaliseZernioEvent(envelope, { correlationId, source: "webhook" });
   if (event.kind === "test") return { test: true, duplicate: false, event };
   const persistence = await context.repository.persistZernioEvent(event);
-  if (!persistence.duplicate) { await scheduleAttachmentIngestion(event, context); kickSocialAttachmentIngestion(event, context); kickSocialDmHumanContact(event, context); }
+  if (!persistence.duplicate) { await scheduleAttachmentIngestion(event, context); kickSocialAttachmentIngestion(event, context); kickSocialDmHumanContact(event, context); kickSocialConversationAutomation(event, context); }
   return { test: false, ...persistence, event };
 }
 
@@ -254,7 +268,7 @@ export async function persistPolledConversation({ family, platform, conversation
     });
     const event = normaliseZernioEvent(envelope, { correlationId: newCorrelationId(), source: "poll" });
     const result = await context.repository.persistZernioEvent(event);
-    if (!result.duplicate) { await scheduleAttachmentIngestion(event, context); kickSocialAttachmentIngestion(event, context); kickSocialDmHumanContact(event, context); }
+    if (!result.duplicate) { await scheduleAttachmentIngestion(event, context); kickSocialAttachmentIngestion(event, context); kickSocialDmHumanContact(event, context); kickSocialConversationAutomation(event, context); }
     processed += result.duplicate ? 0 : 1;
     duplicates += result.duplicate ? 1 : 0;
   }
@@ -324,7 +338,7 @@ export async function persistPolledComments({ family, platform, post, comments, 
     });
     const event = normaliseZernioEvent(envelope, { correlationId: newCorrelationId(), source: "poll" });
     const result = await context.repository.persistZernioEvent(event);
-    if (!result.duplicate) { await scheduleAttachmentIngestion(event, context); kickSocialAttachmentIngestion(event, context); kickSocialDmHumanContact(event, context); }
+    if (!result.duplicate) { await scheduleAttachmentIngestion(event, context); kickSocialAttachmentIngestion(event, context); kickSocialDmHumanContact(event, context); kickSocialConversationAutomation(event, context); }
     processed += result.duplicate ? 0 : 1;
     duplicates += result.duplicate ? 1 : 0;
   }

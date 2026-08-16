@@ -4,6 +4,7 @@ import { sha256Hex, stableId } from './domain/ids.js';
 import { scanOutboundLanguagePolicy } from './conversationConductService.js';
 import { assertConversationReplyAllowed } from './domain/replySafety.js';
 import { businessHoursPolicy, conversationFirstInboundAt, delayedBusinessReplyAt, ensureFutureBusinessTime, hasOutboundMessages } from './domain/businessHours.js';
+import { kickInboundConversationAutomation } from "./inboundAutomationService.js";
 
 function address(value) { return String(value || '').trim().toLowerCase(); }
 
@@ -135,6 +136,15 @@ export class CommsHubEmailService {
     });
     if (this.context.config.emailWorkflowEvaluationEnabled) {
       await this.context.workflowEngineService.evaluate({ conversationId, event: { type: 'message_received', channel: 'email', sender, text: parsed.text, occurredAt: now } });
+    }
+    if (!persistence.duplicate && this.context.config.emailWorkflowEvaluationEnabled) {
+      kickInboundConversationAutomation({
+        context: this.context,
+        conversationId,
+        actor: 'email-inbound-automation',
+        scheduleFollowUp: true,
+        blockedReason: parsed.attachments.length ? 'attachment_review_required' : '',
+      });
     }
     return { duplicate: persistence.duplicate, conversationId, messageId, workflow: 'email_inbox', managedAddress, attachments: attachmentResults };
   }
