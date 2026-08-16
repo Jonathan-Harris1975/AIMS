@@ -124,6 +124,10 @@ export function createCommsHubRouter({
         ),
         email: booleanValue(process.env.COMMS_HUB_EMAIL_ENABLED, false),
         chat: effectiveChatEnabled(process.env),
+        smartResponse: aiEnabled && booleanValue(process.env.COMMS_HUB_SMART_RESPONSE_ENABLED, true),
+        formOrchestration: booleanValue(process.env.COMMS_HUB_FORM_ORCHESTRATION_ENABLED, true),
+        formSmartProcessing: aiEnabled && booleanValue(process.env.COMMS_HUB_FORM_SMART_PROCESSING_ENABLED, true),
+        formAutoSend: aiEnabled && booleanValue(process.env.COMMS_HUB_FORM_AUTO_SEND_ENABLED, false),
         autonomousReplies: aiEnabled && booleanValue(process.env.COMMS_HUB_AUTONOMOUS_REPLIES_ENABLED, false),
         delayedActions: booleanValue(process.env.COMMS_HUB_DELAYED_ACTION_WORKER_ENABLED, false),
         retention: booleanValue(process.env.COMMS_HUB_RETENTION_WORKER_ENABLED, false),
@@ -147,22 +151,35 @@ export function createCommsHubRouter({
       const result = processed.persistence;
       kickArchive();
 
-      if (!result.duplicate && processed.intake.attachments.length) {
+      if (!result.duplicate) {
         queueMicrotask(() => {
-          void ingestJotformAttachments({
-            intake: processed.intake,
-            context: active,
-            logger: log,
-          }).then((attachmentResult) => {
-            log.info("commsHub.formAttachments.complete", {
-              correlationId,
-              conversationId: processed.intake.conversationId,
-              requested: attachmentResult.requested,
-              stored: attachmentResult.stored,
-              failed: attachmentResult.failed,
-            });
-          }).catch((error) => {
-            log.error("commsHub.formAttachments.backgroundFailed", {
+          void (async () => {
+            if (processed.intake.attachments.length) {
+              const attachmentResult = await ingestJotformAttachments({
+                intake: processed.intake,
+                context: active,
+                logger: log,
+              });
+              log.info("commsHub.formAttachments.complete", {
+                correlationId,
+                conversationId: processed.intake.conversationId,
+                requested: attachmentResult.requested,
+                stored: attachmentResult.stored,
+                failed: attachmentResult.failed,
+              });
+            }
+            if (active.config.formSmartProcessingEnabled && active.formProcessingService) {
+              const formResult = await active.formProcessingService.processConversation(processed.intake.conversationId);
+              log.info("commsHub.formProcessing.complete", {
+                correlationId,
+                conversationId: processed.intake.conversationId,
+                processed: Boolean(formResult?.processed),
+                sent: Boolean(formResult?.sent),
+                status: formResult?.status || null,
+              });
+            }
+          })().catch((error) => {
+            log.error("commsHub.formProcessing.backgroundFailed", {
               correlationId,
               conversationId: processed.intake.conversationId,
               error: safeErrorLog(error),
@@ -526,6 +543,26 @@ export function createCommsHubRouter({
     }
   });
 
+
+  router.get("/forms/:conversationId/status", permit("read_conversation"), async (req, res, next) => {
+    try {
+      const conversationId = validConversationId(req.params.conversationId);
+      if (!conversationId) throw new CommsHubError(400, "conversation_id_invalid", "Conversation ID is invalid.");
+      const active = contextProvider();
+      const processing = await active.operationsRepository.getFormProcessing(conversationId);
+      if (!processing) return res.status(404).json({ ok: false, error: "form_processing_not_found" });
+      return res.status(200).json({ ok: true, service: "comms-hub", processing });
+    } catch (error) { next(error); }
+  });
+
+  router.post("/forms/:conversationId/process", permit("manage_workflows"), async (req, res, next) => {
+    try {
+      const conversationId = validConversationId(req.params.conversationId);
+      if (!conversationId) throw new CommsHubError(400, "conversation_id_invalid", "Conversation ID is invalid.");
+      const result = await contextProvider().formProcessingService.processConversation(conversationId, { autoSend: req.body?.autoSend === true });
+      return res.status(200).json({ ok: true, service: "comms-hub", result });
+    } catch (error) { next(error); }
+  });
 
   router.post("/conversations/:conversationId/ai/analyse", permit("manage_workflows"), async (req, res, next) => {
     const startedAt = Date.now();
