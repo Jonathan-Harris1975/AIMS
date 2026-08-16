@@ -77,7 +77,11 @@ export class CommsHubDelayedActionWorker {
         action: payload.action || 'anonymise',
       });
     }
-    if (item.action_type === 'attachment_ingest') return this.context.attachmentService.ingestReference(payload);
+    if (item.action_type === 'attachment_ingest') {
+      const existing = await this.context.operationsRepository.getAttachmentObject?.(payload.attachmentId);
+      if (existing?.scan_status === 'clean' && !existing?.deleted_at) return { duplicate: true, attachmentId: payload.attachmentId, status: 'clean' };
+      return this.context.attachmentService.ingestReference(payload);
+    }
     throw new CommsHubError(400, 'delayed_action_type_unsupported', `Unsupported delayed action ${item.action_type}.`);
   }
 
