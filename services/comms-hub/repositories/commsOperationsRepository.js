@@ -1246,6 +1246,47 @@ export class CommsOperationsRepository {
     return rows(result)[0] || null;
   }
 
+  async getChatSession({ provider = "coginpal", websiteId, providerSessionId }) {
+    const result = await this.d1.query(
+      `SELECT * FROM comms_hub_chat_sessions
+        WHERE provider = ? AND website_id = ? AND provider_session_id = ?
+        LIMIT 1`,
+      [provider, websiteId, providerSessionId]
+    );
+    return rows(result)[0] || null;
+  }
+
+  async countRecentChatInbound({ conversationId, since }) {
+    const result = await this.d1.query(
+      `SELECT COUNT(*) AS count FROM comms_hub_messages
+        WHERE conversation_id = ? AND direction = 'inbound' AND received_at >= ?`,
+      [conversationId, since]
+    );
+    return Number(rows(result)[0]?.count || 0);
+  }
+
+  async listChatMessages({ conversationId, after = "", limit = 100 }) {
+    const safeLimit = Math.min(Math.max(Number(limit) || 100, 1), 250);
+    const result = await this.d1.query(
+      `SELECT id, direction, sender, body_text, provider_message_id, received_at, created_at, metadata_json
+         FROM comms_hub_messages
+        WHERE conversation_id = ? AND (? = '' OR received_at > ?)
+        ORDER BY received_at ASC
+        LIMIT ?`,
+      [conversationId, after, after, safeLimit]
+    );
+    return rows(result).map((row) => ({
+      id: row.id,
+      direction: row.direction,
+      sender: row.sender || null,
+      bodyText: row.body_text || "",
+      providerMessageId: row.provider_message_id || null,
+      receivedAt: row.received_at,
+      createdAt: row.created_at,
+      metadata: parseJson(row.metadata_json, {}),
+    }));
+  }
+
   async updateChatTakeover({ conversationId, mode, actor = null, at = nowIso() }) {
     const result = await this.d1.query(
       `UPDATE comms_hub_chat_sessions
