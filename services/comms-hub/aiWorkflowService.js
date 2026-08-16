@@ -15,6 +15,7 @@ import {
 import { buildApprovalRequest } from "./approvalService.js";
 import { CommsHubError, toCommsHubError } from "./errors.js";
 import { redactDiagnosticText } from "./domain/redaction.js";
+import { buildSmartConversationContext, smartPromptGuidance } from "./smartContextService.js";
 import {
   promptSecuritySystemRules,
   sanitiseUntrustedText,
@@ -127,6 +128,11 @@ export class CommsHubAiWorkflowService {
     if (!conversation.messages.length) throw new CommsHubError(422, "conversation_empty", "Conversation has no messages to analyse.");
 
     const promptInjection = scanConversationPromptInjection(conversation.messages);
+    const smartContext = buildSmartConversationContext(conversation, {
+      enabled: this.context.config.smartContextEnabled,
+      maximumBooks: this.context.config.smartMaximumBookCandidates,
+    });
+    const smartGuidance = smartPromptGuidance(smartContext);
     const transcript = conversationTranscript(conversation);
     const transcriptTruncated = transcript.length < conversation.messages.length
       || conversation.messages.some((message) => String(message.body_text || "").length > 12_000);
@@ -142,6 +148,16 @@ export class CommsHubAiWorkflowService {
         messageCount: transcript.length,
         availableMessageCount: conversation.messages.length,
         transcriptTruncated,
+        smartContext: smartContext.enabled ? {
+          version: smartContext.version,
+          engagementMode: smartContext.engagementMode,
+          tone: smartContext.tone,
+          platform: smartContext.platform,
+          interactionType: smartContext.interactionType,
+          interestCount: smartContext.memory?.interests?.length || 0,
+          verifiedBookCandidateCount: smartContext.verifiedBookCandidates?.length || 0,
+          quizActive: Boolean(smartContext.memory?.quiz?.active),
+        } : { enabled: false },
         security: {
           promptInjectionDetected: promptInjection.detected,
           promptInjectionRisk: promptInjection.riskLevel,
@@ -164,6 +180,7 @@ export class CommsHubAiWorkflowService {
           promptInjectionRisk: promptInjection.riskLevel,
           promptInjectionReasons: promptInjection.reasons,
         },
+        smartContext,
         transcript,
       };
       const aiRequest = this.requestAi.bind(this);
@@ -172,7 +189,8 @@ export class CommsHubAiWorkflowService {
         "Return JSON with: intent, confidence, urgency, commercialValue, reputationalRisk, customerImpact, rationale.",
         "Allowed intents: general_enquiry, case_study_contribution, podcast_contribution, support_request, commercial_enquiry, complaint, social_engagement, spam, unknown.",
         "All score fields must be numbers from 0 to 1. Never invent facts.",
-      ].join("\n"), common);
+        smartGuidance,
+      ].filter(Boolean).join("\n"), common);
       const intent = normaliseIntentResult(triage.parsed);
       const priority = calculatePriority(intent, { workflow: conversation.workflow, channel: conversation.channel });
       const routing = selectWorkflow({ intent: intent.intent, channel: conversation.channel, currentWorkflow: conversation.workflow });
@@ -192,7 +210,8 @@ export class CommsHubAiWorkflowService {
         "Return JSON with: summary, unresolvedActions, sourceMessageIds, nextAction, followUpNeeded, followUpReason, followUpHours.",
         "sourceMessageIds must contain only IDs supplied in the transcript.",
         "A follow-up is needed only when a specific unresolved dependency remains.",
-      ].join("\n"), common);
+        smartGuidance,
+      ].filter(Boolean).join("\n"), common);
       const sourceLinks = Object.freeze([...new Set(
         transcript.flatMap((message) => String(message.body || "").match(/https:\/\/[^\s<>"']+/gi) || [])
           .map((value) => value.replace(/[),.;!?]+$/g, ""))
@@ -205,7 +224,15 @@ export class CommsHubAiWorkflowService {
 
       const searchSeed = promptInjection.detected
         ? [conversation.subject, transcript.at(-1)?.body]
-        : [conversation.subject, summary.summary, summary.nextAction];
+        : [
+            conversation.subject,
+            summary.summary,
+            summary.nextAction,
+            smartContext.page?.title,
+            smartContext.sourceReference,
+            ...(smartContext.memory?.interests || []),
+            ...((smartContext.verifiedBookCandidates || []).slice(0, 2).map((book) => book.title)),
+          ];
       const searchQuery = sanitiseUntrustedText(searchSeed.filter(Boolean).join("\n"), 8000);
       const rawEvidence = await this.context.aiSearch.searchApproved(searchQuery, {
         maximumEvidence: this.context.config.aiMaximumEvidence,
@@ -240,11 +267,12 @@ export class CommsHubAiWorkflowService {
         operation === "follow_up" ? "This is a scheduled follow-up. Refer only to the unresolved dependency and do not repeat the full earlier reply." : "",
         britishEnglishPromptGuidance(),
         jonathanVoicePrompt({ format: "one-to-one Comms Hub reply", includeArgumentArc: false }),
+        smartGuidance,
         `Maximum length: ${policy.maximumCharacters} characters.`,
         "Use only facts in the conversation and evidence. Do not promise unpublished content, guest slots, dates, outcomes or actions not present in the evidence.",
         "Return JSON with bodyText and evidenceSourceReferences. evidenceSourceReferences must contain the exact sourceReference values used.",
         "Do not include internal notes, confidence scores or JSON outside the object.",
-      ].join("\n"), { ...common, policy, summary, evidence: evidencePrompt(evidence) }, { maxTokens: 2200, temperature: 0.25 });
+      ].filter(Boolean).join("\n"), { ...common, policy, summary, evidence: evidencePrompt(evidence) }, { maxTokens: 2200, temperature: 0.25 });
 
       const citedReferences = Array.isArray(draftCall.parsed.evidenceSourceReferences)
         ? [...new Set(draftCall.parsed.evidenceSourceReferences.map(String))]

@@ -372,6 +372,8 @@ export function loadCommsHubConfig(env = process.env, { requireEnabled = false }
     aiSearchApprovedInstances: Object.freeze([...new Set(csvValue(env.COMMS_HUB_AI_SEARCH_INSTANCES))]),
     aiSearchTimeoutMs: positiveInteger(env.COMMS_HUB_AI_SEARCH_TIMEOUT_MS, 20_000, "COMMS_HUB_AI_SEARCH_TIMEOUT_MS", { min: 1_000, max: 60_000 }),
     aiMaximumEvidence: positiveInteger(env.COMMS_HUB_AI_MAX_EVIDENCE, 8, "COMMS_HUB_AI_MAX_EVIDENCE", { min: 1, max: 30 }),
+    smartContextEnabled: booleanValue(env.COMMS_HUB_SMART_CONTEXT_ENABLED, true),
+    smartMaximumBookCandidates: positiveInteger(env.COMMS_HUB_SMART_MAX_BOOK_CANDIDATES, 3, "COMMS_HUB_SMART_MAX_BOOK_CANDIDATES", { min: 1, max: 6 }),
     aiAutoApprovalRiskThreshold: decimalValue(env.COMMS_HUB_AI_AUTO_APPROVAL_RISK_THRESHOLD, 0.2, "COMMS_HUB_AI_AUTO_APPROVAL_RISK_THRESHOLD"),
     aiApprovalPriorityScore: positiveInteger(env.COMMS_HUB_AI_APPROVAL_PRIORITY_SCORE, 60, "COMMS_HUB_AI_APPROVAL_PRIORITY_SCORE", { min: 1, max: 100 }),
     aiComplexityPriorityScore: positiveInteger(env.COMMS_HUB_COMPLEXITY_PRIORITY_SCORE, 70, "COMMS_HUB_COMPLEXITY_PRIORITY_SCORE", { min: 1, max: 100 }),
