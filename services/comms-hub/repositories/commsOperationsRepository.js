@@ -626,6 +626,20 @@ export class CommsOperationsRepository {
     return rows(result)[0] || null;
   }
 
+  async deferDelayedAction({ id, workerId, dueAt, at = nowIso() }) {
+    const result = await this.d1.query(
+      `UPDATE comms_hub_delayed_actions
+          SET status = 'scheduled', due_at = ?, next_attempt_at = ?,
+              attempts = CASE WHEN attempts > 0 THEN attempts - 1 ELSE 0 END,
+              lease_owner = NULL, lease_expires_at = NULL, updated_at = ?,
+              failure_class = NULL, error = NULL
+        WHERE id = ? AND status = 'leased' AND lease_owner = ? RETURNING *`,
+      [dueAt, dueAt, at, id, workerId]
+    );
+    if (!rows(result).length) throw new CommsHubError(409, 'delayed_action_lease_lost', 'Delayed action lease was lost.');
+    return rows(result)[0];
+  }
+
   async completeDelayedAction({ id, workerId, completedAt }) {
     const result = await this.d1.query(
       `UPDATE comms_hub_delayed_actions
