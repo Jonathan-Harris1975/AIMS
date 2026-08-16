@@ -3494,12 +3494,17 @@ export async function buildAndScheduleQuizSeries(options = {}) {
           });
 
     if (questionScheduling.scheduled || answerScheduling.scheduled) {
+      const runtimeQuiz = parseQuizQuestionCard(questionPost.content);
+      const runtimeCorrect = parseQuizCorrectAnswer(answerPost.content, runtimeQuiz.options);
       recordQuizSchedule({
         topic: generated.topic,
         questionDateTime,
         answerDateTime,
         questionTitle: questionPost.title,
         answerTitle: answerPost.title,
+        question: runtimeQuiz.question,
+        options: runtimeQuiz.options,
+        correctAnswer: runtimeCorrect,
       });
       recordEditorialEvent({
         pipeline: "zernio",
