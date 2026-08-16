@@ -8,7 +8,7 @@ Discovers and qualifies backlink/outreach prospects using search and enrichment 
 
 - `GET /outreach/health`
 - `POST /outreach/keyword` — run discovery for a supplied keyword/topic.
-- `POST /outreach/batch/next` — advance the configured batch workflow.
+- `POST /outreach/batch/next` — advance the configured batch workflow. For the temporary Make.com test window only, this exact POST route may bypass suite bearer auth when `OUTREACH_BATCH_NEXT_ALLOW_PUBLIC=true`.
 - `POST /outreach/batch/reset` — reset durable batch progress.
 
 ## Behaviour
@@ -38,6 +38,8 @@ The outreach discovery/qualification path does not call an LLM. It is determinis
 
 - Treat `config/production.defaults.env`, `env.template`, and the outreach config module as configuration sources of truth.
 - Secrets belong in the deployment secret store and must not be committed.
-- Production HTTP access is protected by the AIMS bearer-auth middleware unless a route explicitly implements a narrower public status contract.
+- Production HTTP access is protected by the AIMS bearer-auth middleware unless a route explicitly implements a narrower public contract. During the temporary Outreach test window, only `POST /outreach/batch/next` is exempt when `OUTREACH_BATCH_NEXT_ALLOW_PUBLIC=true`; `GET` on that path, `/outreach/keyword`, `/outreach/batch/reset`, and every other protected AIMS route still require bearer auth.
+- `AIMS_OPERATION_OUTREACH_ENABLED=false` remains unchanged, so AIMS' own weekday operations scheduler does not also trigger Outreach while Make.com is providing the twice-daily test cadence.
+- Set `OUTREACH_BATCH_NEXT_ALLOW_PUBLIC=false` as soon as the Make.com test window ends.
 - Retries are for transient failures only; validation, policy and source-integrity failures fail closed.
 - Durable artefacts and job state use configured R2/state utilities rather than process memory where durable storage is required.
