@@ -282,7 +282,22 @@ export function createCommsHubRouter({
       const active = contextProvider();
       if (!active.config.chatEnabled) throw new CommsHubError(404, "chat_channel_disabled", "Website chat channel is disabled.");
       const result = await active.chatService.acceptWebhook(req);
-      return res.status(result.duplicate ? 200 : 202).json({ ok: true, accepted: true, duplicate: result.duplicate, correlationId });
+      return res.status(result.duplicate ? 200 : 202).json({ ok: true, accepted: true, duplicate: result.duplicate, messageId: result.messageId, takeoverRequested: result.takeoverRequested, correlationId });
+    } catch (error) {
+      const output = publicError(error);
+      return res.status(output.statusCode).json({ ...output.body, correlationId });
+    }
+  });
+
+  router.post("/intake/chat/sync", async (req, res) => {
+    const correlationId = String(req.id || req.get?.("x-request-id") || newCorrelationId());
+    try {
+      requireReady(runtimeReadinessProvider);
+      const active = contextProvider();
+      if (!active.config.chatEnabled) throw new CommsHubError(404, "chat_channel_disabled", "Website chat channel is disabled.");
+      const result = await active.chatService.syncWebhook(req);
+      res.set("cache-control", "no-store");
+      return res.json({ ok: true, ...result, correlationId });
     } catch (error) {
       const output = publicError(error);
       return res.status(output.statusCode).json({ ...output.body, correlationId });
@@ -820,6 +835,23 @@ export function createCommsHubRouter({
   router.post("/conversations/:conversationId/email", permit("send_reply"), async (req, res, next) => {
     try { const result = await contextProvider().emailService.send({ conversationId: req.params.conversationId, bodyText: req.body?.bodyText, bodyHtml: req.body?.bodyHtml, subject: req.body?.subject, recipients: req.body?.recipients || [], cc: req.body?.cc || [], attachments: [], attachmentIds: req.body?.attachmentIds || [], idempotencyKey: req.get("idempotency-key") }); return res.json({ ok: true, ...result }); }
     catch (error) { next(error); }
+  });
+
+  router.get("/chat/status", permit("read_queue"), async (_req, res, next) => {
+    try {
+      const active = contextProvider();
+      return res.json({
+        ok: true,
+        enabled: active.config.chatEnabled,
+        provider: "coginpal",
+        transport: active.config.coginPalApiBaseUrl ? "provider_api" : "aims_first_party",
+        aiWorkflowEnabled: active.config.chatAiWorkflowEnabled,
+        wakeEnabled: active.config.wakeEnabled,
+        maximumMessageCharacters: active.config.chatMaxMessageChars,
+        maximumMessagesPerMinute: active.config.chatMaxMessagesPerMinute,
+        historyLimit: active.config.chatHistoryLimit,
+      });
+    } catch (error) { next(error); }
   });
 
   router.post("/conversations/:conversationId/chat", permit("send_reply"), async (req, res, next) => {
