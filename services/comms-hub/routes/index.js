@@ -2,7 +2,7 @@ import express from "express";
 import { log } from "../../../logger.js";
 import { recordProviderOutcome } from "../../shared/utils/operationalExcellence.js";
 import { getProviderDiagnosticsForRoute } from "../../shared/utils/ai-service.js";
-import { booleanValue, getCommsHubReadiness, loadCommsHubConfig, SOCIAL_CHANNEL_CAPABILITIES } from "../config.js";
+import { booleanValue, effectiveChatEnabled, getCommsHubReadiness, loadCommsHubConfig, SOCIAL_CHANNEL_CAPABILITIES } from "../config.js";
 import { newCorrelationId, stableId } from "../domain/ids.js";
 import { normalisePriorityOverride } from "../domain/ai.js";
 import { attachCommsIdentity, requireCommsPermission } from "../domain/rbac.js";
@@ -123,7 +123,7 @@ export function createCommsHubRouter({
           && process.env.COMMS_HUB_ATTACHMENT_SCANNER_TOKEN
         ),
         email: booleanValue(process.env.COMMS_HUB_EMAIL_ENABLED, false),
-        chat: booleanValue(process.env.COMMS_HUB_CHAT_ENABLED, false),
+        chat: effectiveChatEnabled(process.env),
         autonomousReplies: aiEnabled && booleanValue(process.env.COMMS_HUB_AUTONOMOUS_REPLIES_ENABLED, false),
         delayedActions: booleanValue(process.env.COMMS_HUB_DELAYED_ACTION_WORKER_ENABLED, false),
         retention: booleanValue(process.env.COMMS_HUB_RETENTION_WORKER_ENABLED, false),
@@ -280,7 +280,7 @@ export function createCommsHubRouter({
     try {
       requireReady(runtimeReadinessProvider);
       const active = contextProvider();
-      if (!active.config.chatEnabled) throw new CommsHubError(404, "chat_channel_disabled", "Website chat channel is disabled.");
+      if (!active.config.chatEnabled) throw new CommsHubError(503, "chat_channel_disabled", "Website chat channel is disabled.", { retryable: true, failureClass: "temporary", publicMessage: "Website chat is temporarily unavailable." });
       const result = await active.chatService.acceptWebhook(req);
       return res.status(result.duplicate ? 200 : 202).json({ ok: true, accepted: true, duplicate: result.duplicate, messageId: result.messageId, takeoverRequested: result.takeoverRequested, correlationId });
     } catch (error) {
@@ -294,7 +294,7 @@ export function createCommsHubRouter({
     try {
       requireReady(runtimeReadinessProvider);
       const active = contextProvider();
-      if (!active.config.chatEnabled) throw new CommsHubError(404, "chat_channel_disabled", "Website chat channel is disabled.");
+      if (!active.config.chatEnabled) throw new CommsHubError(503, "chat_channel_disabled", "Website chat channel is disabled.", { retryable: true, failureClass: "temporary", publicMessage: "Website chat is temporarily unavailable." });
       const result = await active.chatService.syncWebhook(req);
       res.set("cache-control", "no-store");
       return res.json({ ok: true, ...result, correlationId });
