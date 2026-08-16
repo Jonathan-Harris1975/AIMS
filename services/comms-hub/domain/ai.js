@@ -1,5 +1,6 @@
 import { CommsHubError } from "../errors.js";
 import { sha256Hex } from "./ids.js";
+import { isChatChannel, isEmailChannel, isFormChannel, isSocialChannel, isSocialCommentChannel } from "./channels.js";
 
 export const COMMS_HUB_INTENTS = Object.freeze([
   "general_enquiry",
@@ -67,6 +68,22 @@ export const REPLY_POLICIES = Object.freeze({
     requiresEvidence: false,
     defaultFollowUpHours: 24,
     modelRoute: "commsHubDraftSocial",
+  }),
+  website_chat: Object.freeze({
+    key: "website_chat",
+    purpose: "Answer website chat enquiries conversationally, ask one focused clarification when needed, and route structured intake through the approved Jotform orchestration layer rather than inventing a separate workflow.",
+    maximumCharacters: 1800,
+    requiresEvidence: false,
+    defaultFollowUpHours: 48,
+    modelRoute: "commsHubDraftContact",
+  }),
+  email_inbox: Object.freeze({
+    key: "email_inbox",
+    purpose: "Draft a substantive reply to a customer email while preserving the existing email thread, using approved evidence where needed and routing structured intake through the approved Jotform orchestration layer.",
+    maximumCharacters: 2600,
+    requiresEvidence: false,
+    defaultFollowUpHours: 48,
+    modelRoute: "commsHubDraftContact",
   }),
 });
 
@@ -137,7 +154,7 @@ export function calculatePriority(result, { workflow = "", channel = "" } = {}) 
   if (result.intent === "complaint") { override += 15; reasons.push("complaint"); }
   if (result.intent === "support_request" && result.urgency >= 0.75) { override += 10; reasons.push("urgent_support"); }
   if (workflow === "podcast_enquiry_intake" && result.intent === "podcast_contribution") { override += 5; reasons.push("podcast_workflow"); }
-  if (channel === "social" && result.reputationalRisk >= 0.7) { override += 10; reasons.push("public_reputation"); }
+  if ((isSocialCommentChannel(channel) || workflow === "social_comment_moderation") && result.reputationalRisk >= 0.7) { override += 10; reasons.push("public_reputation"); }
   const score = Math.round(clampNumber(base + override, 0, 100, 0));
   const label = priorityLabelForScore(score);
   return Object.freeze({ score, label, baseScore: Math.round(base), factors, overrideReasons: Object.freeze(reasons) });
@@ -158,10 +175,18 @@ export function normalisePriorityOverride(value = {}) {
 
 export function selectWorkflow({ intent, channel, currentWorkflow }) {
   let selectedWorkflow;
-  if (channel === "social") {
-    selectedWorkflow = currentWorkflow === "social_comment_moderation" ? "social_comment_moderation" : "social_inbox";
-  } else {
+  if (isSocialChannel(channel)) {
+    selectedWorkflow = isSocialCommentChannel(channel) || currentWorkflow === "social_comment_moderation"
+      ? "social_comment_moderation"
+      : "social_inbox";
+  } else if (isChatChannel(channel)) {
+    selectedWorkflow = "website_chat";
+  } else if (isEmailChannel(channel)) {
+    selectedWorkflow = "email_inbox";
+  } else if (isFormChannel(channel)) {
     selectedWorkflow = INTENT_WORKFLOW_MAP[intent] || currentWorkflow || "contact_intake";
+  } else {
+    selectedWorkflow = currentWorkflow || INTENT_WORKFLOW_MAP[intent] || "contact_intake";
   }
   const mismatch = Boolean(currentWorkflow && selectedWorkflow !== currentWorkflow);
   return Object.freeze({

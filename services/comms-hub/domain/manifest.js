@@ -1,8 +1,12 @@
+// Legacy import path retained for compatibility. Keep this list in lockstep with
+// services/comms-hub/migrations/manifest.js so readiness checks cannot drift.
 export const COMMS_HUB_REQUIRED_MIGRATIONS = Object.freeze([
   "0001_comms_hub",
   "0002_zernio_social",
   "0003_ai_workflows",
   "0004_hardening",
+  "0005_operations_and_channels",
+  "0006_smart_response_forms",
 ]);
 
 export default COMMS_HUB_REQUIRED_MIGRATIONS;
