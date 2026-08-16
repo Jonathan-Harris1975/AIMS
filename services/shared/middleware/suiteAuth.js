@@ -119,6 +119,14 @@ export function isPublicCommsHubIntakePath(req) {
   ].includes(path);
 }
 
+export function isTemporaryPublicOutreachBatchNextPath(req) {
+  if (!truthy(process.env.OUTREACH_BATCH_NEXT_ALLOW_PUBLIC)) return false;
+
+  const method = String(req.method || "").toUpperCase();
+  const path = pathWithoutQuery(req).replace(/\/+$/, "").toLowerCase();
+  return method === "POST" && path === "/outreach/batch/next";
+}
+
 export function isCloudflarePurgePath(req) {
   const method = String(req.method || "").toUpperCase();
   if (method !== "POST") return false;
@@ -221,6 +229,11 @@ export function requireAimsBearerAuth(req, res, next) {
           ? "coginpal-hmac-sha256"
           : "zernio-hmac-sha256",
     };
+    return next();
+  }
+
+  if (isTemporaryPublicOutreachBatchNextPath(req)) {
+    req.aimsAuth = { strategy: "temporary-public-outreach-batch-next" };
     return next();
   }
 
