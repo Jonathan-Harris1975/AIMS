@@ -61,6 +61,10 @@ function baseContext(overrides = {}) {
         chatHistoryLimit: 100,
         chatAiWorkflowEnabled: false,
         aiEnabled: false,
+        smartConductEnabled: true,
+        badLanguageBlockEnabled: true,
+        conductReviewStrikeThreshold: 2,
+        conductAutomationBlockThreshold: 2,
         autonomousRepliesEnabled: false,
         wakeEnabled: false,
         coginPalApiBaseUrl: '',
@@ -156,4 +160,24 @@ test('chat intake records prompt-injection security metadata without logging att
   assert.ok(state.messages[0].metadata.promptSecurity.reasons.includes('instruction_override'));
   assert.equal(audits.some((entry) => entry.action === 'chat_prompt_injection_detected'), true);
   assert.doesNotMatch(JSON.stringify(audits), /reveal the developer prompt/i);
+});
+
+
+test('first-party chat contains inbound bad language and blocks profane outbound replies', async () => {
+  const audits = [];
+  const { context, state } = baseContext({
+    payload: {
+      sessionId: 'session-conduct', visitorId: 'visitor-conduct', websiteId: 'jonathan-harris.online',
+      message: { id: 'message-conduct', text: 'This is damn frustrating.' },
+    },
+    context: { auditService: { async record(entry) { audits.push(entry); } } },
+  });
+  const service = new CommsHubChatService({ context });
+  const accepted = await service.acceptWebhook({});
+  assert.equal(state.messages[0].metadata.conduct.level, 'mild');
+  assert.equal(audits.some((entry) => entry.action === 'chat_conduct_flagged'), true);
+  await assert.rejects(
+    () => service.send({ conversationId: accepted.conversationId, message: 'That is fucking ridiculous.', idempotencyKey: 'webchat:conduct:1' }),
+    (error) => error?.code === 'chat_reply_language_policy_rejected',
+  );
 });
