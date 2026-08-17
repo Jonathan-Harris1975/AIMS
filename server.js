@@ -2,6 +2,7 @@ import "./config/loadEnv.js";
 import express from "express";
 import cors from "cors";
 import crypto from "node:crypto";
+import { createRequire } from "node:module";
 import pinoHttp from "pino-http";
 import { info, debug, error, log } from "./logger.js";
 import routes from "./routes/index.js";
@@ -12,6 +13,9 @@ import * as lifecycle from "./services/shared/utils/lifecycle.js";
 import { requireAimsBearerAuth } from "./services/shared/middleware/suiteAuth.js";
 import { getCommsHubReadiness } from "./services/comms-hub/config.js";
 import { getCommsHubRuntimeReadiness, startCommsHubRuntime, stopCommsHubRuntime } from "./services/comms-hub/runtime.js";
+
+const require = createRequire(import.meta.url);
+const PACKAGE_VERSION = require("./package.json")?.version || "unknown";
 
 export const app = express();
 
@@ -323,7 +327,7 @@ app.get("/health", (_req, res) =>
     ok: true,
     status: "ok",
     service: "AIMS",
-    version: process.env.APP_VERSION || "2.9.7",
+    version: process.env.APP_VERSION || PACKAGE_VERSION,
     env: process.env.APP_ENV || process.env.NODE_ENV || "development",
     trustProxy,
     time: new Date().toISOString(),
@@ -341,7 +345,7 @@ app.get("/readyz", (_req, res) => {
   return res.status(report.ready && lifecycleState.state !== "maintenance" ? 200 : 503).json({
     ok: report.ready,
     service: "AIMS",
-    version: process.env.APP_VERSION || "2.9.7",
+    version: process.env.APP_VERSION || PACKAGE_VERSION,
     ...report,
     lifecycle: lifecycleState,
     time: new Date().toISOString(),

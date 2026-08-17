@@ -1,6 +1,6 @@
 {
   "name": "AI-management-suite",
-  "version": "2.13.7",
+  "version": "2.14.1",
   "type": "module",
   "main": "server.js",
   "scripts": {
