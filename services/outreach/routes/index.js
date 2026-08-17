@@ -15,6 +15,12 @@ router.get("/health", (_req, res) => {
   res.json({ ok: true, service: "outreach" });
 });
 
+router.get("/automation/status", asyncRoute(async (_req, res) => {
+  const { getCommsHubContext } = await import("../../comms-hub/runtime.js");
+  const status = await getCommsHubContext().outreachAutomationService.status();
+  res.json({ ok: true, service: "outreach", automation: status });
+}));
+
 router.post("/keyword", requestDedupe("outreach:keyword"), asyncRoute(async (req, res) => {
   const parsed = validateBody(outreachKeywordBodySchema, req.body);
   if (!parsed.ok) {
