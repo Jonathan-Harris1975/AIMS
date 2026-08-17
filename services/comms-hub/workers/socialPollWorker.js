@@ -29,10 +29,11 @@ function pageState(pagination = {}) {
 }
 
 export class CommsHubSocialPollWorker {
-  constructor({ repository, zernio, config, writeLog = null }) {
-    this.repository = repository;
-    this.zernio = zernio;
-    this.config = config;
+  constructor({ context = null, repository = null, zernio = null, config = null, writeLog = null }) {
+    this.context = context || { repository, zernio, config };
+    this.repository = repository || context?.repository;
+    this.zernio = zernio || context?.zernio;
+    this.config = config || context?.config;
     this.workerId = `comms-social-${randomUUID()}`;
     this.timer = null;
     this.running = false;
@@ -123,7 +124,7 @@ export class CommsHubSocialPollWorker {
           platform: job.platform,
           conversation,
           messages,
-          context: { repository: this.repository },
+          context: this.context,
         });
         processed += result.processed;
         duplicates += result.duplicates;
@@ -198,7 +199,7 @@ export class CommsHubSocialPollWorker {
           platform: job.platform,
           post,
           comments,
-          context: { repository: this.repository },
+          context: this.context,
         });
         processed += result.processed;
         duplicates += result.duplicates;

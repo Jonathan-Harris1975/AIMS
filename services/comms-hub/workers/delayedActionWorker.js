@@ -83,6 +83,12 @@ export class CommsHubDelayedActionWorker {
     if (item.action_type === 'form_reply') {
       return this.context.emailService.sendFormResponse({ ...payload, scheduledDelivery: true });
     }
+    if (item.action_type === 'outreach_follow_up') {
+      return this.context.outreachAutomationService.processFollowUp(payload);
+    }
+    if (item.action_type === 'outreach_reply_process') {
+      return this.context.outreachAutomationService.processReply(payload);
+    }
     if (item.action_type === 'retention') {
       return this.context.retentionWorker.runOnce({
         conversationId: item.conversation_id,
@@ -99,7 +105,7 @@ export class CommsHubDelayedActionWorker {
 
   async process(item) {
     try {
-      const businessReplyTypes = new Set(['reply_draft', 'email_reply', 'form_reply']);
+      const businessReplyTypes = new Set(['reply_draft', 'email_reply', 'form_reply', 'outreach_follow_up', 'outreach_reply_process']);
       if (businessReplyTypes.has(item.action_type)) {
         const policy = businessHoursPolicy(this.context.config);
         const now = new Date();
