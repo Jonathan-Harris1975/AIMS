@@ -112,6 +112,24 @@ const commsPaidFallback = provider(
   SHARED_OPENROUTER_KEY
 );
 
+const outreachWriter = provider(
+  "outreachWriter",
+  ["OUTREACH_ARTICLE_MODEL", "OUTREACH_PITCH_MODEL", "OUTREACH_REPLY_MODEL"],
+  SHARED_OPENROUTER_KEY
+);
+
+const outreachReviewer = provider(
+  "outreachReviewer",
+  ["OUTREACH_ARTICLE_REVIEW_MODEL"],
+  SHARED_OPENROUTER_KEY
+);
+
+const outreachFallback = provider(
+  "outreachFallback",
+  ["OUTREACH_ARTICLE_FALLBACK_MODEL"],
+  SHARED_OPENROUTER_KEY
+);
+
 const newsletterEditorial = provider(
   "newsletterEditorial",
   ["NEWSLETTER_MODEL_EDITORIAL"],
@@ -164,6 +182,9 @@ const modelRegistry = {
   commsPaidPrimary,
   commsPaidBackup,
   commsPaidFallback,
+  outreachWriter,
+  outreachReviewer,
+  outreachFallback,
   newsletterEditorial,
 };
 
@@ -246,6 +267,13 @@ export const aiConfig = {
     commsHubDraftSocial: routeChain(["commsFreePrimary", "commsFreeBackup", "commsFreeFallback"], []),
     commsHubFollowUp: routeChain(["commsFreePrimary", "commsFreeBackup", "commsFreeFallback"], []),
     commsHubDraftComplex: routeChain(["commsPaidPrimary", "commsPaidBackup", "commsPaidFallback"], []),
+    // Outreach guest-article acquisition is deliberately premium. Discovery stays deterministic;
+    // only pitch/reply/article writing uses these paid quality routes. Names retain the commsHub
+    // prefix so OpenRouter ZDR/data_collection=deny policy remains mandatory.
+    commsHubOutreachPitch: routeChain(["outreachWriter"], ["outreachFallback"]),
+    commsHubOutreachReply: routeChain(["outreachWriter"], ["outreachFallback"]),
+    commsHubOutreachArticle: routeChain(["outreachWriter"], ["outreachFallback"]),
+    commsHubOutreachArticleReview: routeChain(["outreachReviewer"], ["outreachFallback"]),
   },
 
   commonParams: { temperature: 0.65, top_p: 0.9, timeout: 90000 },
