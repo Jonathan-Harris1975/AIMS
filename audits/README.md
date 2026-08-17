@@ -54,7 +54,7 @@ Owns the unified website audit pipeline (Digital Growth -> SEO/AEO/GEO -> render
 - SEO/AEO/GEO dispatches `seo-aeo-geo-forensic.yml`.
 - Callbacks and analysis URLs are built from `AUDIT_CALLBACK_BASE_URL` or `APP_URL`.
 - Callbacks require bearer token or `x-audit-callback-token`.
-- Completed audit artefact URLs are checked against `R2_PUBLIC_BASE_URL_AUDITS`; source workflows verify that required JSON is publicly readable before callback, and final synthesis polls the same objects until the readiness deadline.
+- Completed audit artefacts remain private in the `audits` R2 bucket and are referenced as `r2://audits/...`; AIMS reads them with authenticated R2 access.
 - On-brand audits run inside this application and publish JSON/HTML outputs unless dry-run mode is used.
 - Social-performance reports are analysis-only. They do not post content and set `ramsPolicy.shouldTriggerRams=false` in report outputs.
 
@@ -77,7 +77,7 @@ Owns the unified website audit pipeline (Digital Growth -> SEO/AEO/GEO -> render
 - `AUDIT_CALLBACK_BASE_URL` or `APP_URL`
 - `AUDIT_WEBSITE_REPO_OWNER`, `AUDIT_WEBSITE_REPO_NAME`, `AUDIT_WEBSITE_REPO_REF`
 - `GITHUB_TOKEN_WEBSITE_AUDITS`
-- `R2_BUCKET_AUDITS`, `R2_PUBLIC_BASE_URL_AUDITS`
+- `R2_BUCKET_AUDITS` (private; `R2_PUBLIC_BASE_URL_AUDITS` stays blank)
 - `WEBSITE_AUDIT_RUN_REUSE_ACTIVE_MS`, `AUDIT_ARTEFACT_READ_ATTEMPTS`, `AUDIT_ARTEFACT_READ_TIMEOUT_MS`
 - `AUDIT_ARTEFACT_READY_TIMEOUT_MS`, `AUDIT_ARTEFACT_READY_POLL_MS`, `WEBSITE_AUDIT_FINALISATION_STALE_MS`
 - Shared R2 credentials and `R2_BUCKET_META_SYSTEM` for durable state
@@ -122,7 +122,7 @@ Owns the unified website audit pipeline (Digital Growth -> SEO/AEO/GEO -> render
 - Analysis not visible: check job status endpoint and R2 audit artefacts.
 - Final report stuck or produced before retained source JSON became readable: call `POST /audits/website/jobs/:sessionId/finalise/retry`. Stale in-progress finalisation is also re-queued when the job is read after `WEBSITE_AUDIT_FINALISATION_STALE_MS`.
 - Empty Zernio report: confirm both Zernio accounts are connected, API keys are set, and the report date range contains platform posts/analytics.
-- Artefact rejected: URL is outside `R2_PUBLIC_BASE_URL_AUDITS`.
+- Artefact rejected: reference is outside the private `audits` R2 bucket.
 
 ## Connections to other services
 
