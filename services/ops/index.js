@@ -168,7 +168,7 @@ const OPERATION_WINDOWS = Object.freeze({
     ["newsletter-generate", "/newsletter/generate", { profileId: "ai-edge" }, "newsletter", false, "rss-rewrite"],
     ["newsletter-send", "/newsletter/send", { profileId: "ai-edge" }, "newsletter", false, "newsletter-generate"],
     ["weekly-blog", "/blog/weekly/build", {}, null, false, "rss-rewrite"],
-    ["outreach", "/outreach/batch/next", {}],
+    ["outreach", "/outreach/batch/next", {}, "outreach"],
     ["zernio-ebooks", "/zernio/ebooks/weekly", { dryRun: false, profileName: "Default", accountId: "ALL", usePodcastFeaturedBook: true }, null, true, "rss-rewrite"],
     ["zernio-quiz", "/zernio/quiz/weekly", {}, null, false, "rss-rewrite"],
   ],
@@ -181,7 +181,7 @@ const OPERATION_WINDOWS = Object.freeze({
     ["blotato-pm", "/blotato/shorts/model-verdict/schedule", {}, null, false, "blotato-am"],
     ["newsletter-generate", "/newsletter/generate", { profileId: "ai-edge" }, "newsletter", false, "rss-rewrite"],
     ["newsletter-send", "/newsletter/send", { profileId: "ai-edge" }, "newsletter", false, "newsletter-generate"],
-    ["outreach", "/outreach/batch/next", {}],
+    ["outreach", "/outreach/batch/next", {}, "outreach"],
   ],
   "wednesday-am": [
     ["rss-rewrite", "/rss/rewrite", { batchSize: 5 }],
@@ -192,7 +192,7 @@ const OPERATION_WINDOWS = Object.freeze({
     ["blotato-pm", "/blotato/shorts/ai-at-work/schedule", {}, null, false, "blotato-am"],
     ["newsletter-generate", "/newsletter/generate", { profileId: "ai-edge" }, "newsletter", false, "rss-rewrite"],
     ["newsletter-send", "/newsletter/send", { profileId: "ai-edge" }, "newsletter", false, "newsletter-generate"],
-    ["outreach", "/outreach/batch/next", {}],
+    ["outreach", "/outreach/batch/next", {}, "outreach"],
   ],
   "thursday-am": [
     ["rss-rewrite", "/rss/rewrite", { batchSize: 5 }],
@@ -203,7 +203,7 @@ const OPERATION_WINDOWS = Object.freeze({
     ["blotato-pm", "/blotato/shorts/reality-check/schedule", {}, null, false, "blotato-am"],
     ["newsletter-generate", "/newsletter/generate", { profileId: "ai-edge" }, "newsletter", false, "rss-rewrite"],
     ["newsletter-send", "/newsletter/send", { profileId: "ai-edge" }, "newsletter", false, "newsletter-generate"],
-    ["outreach", "/outreach/batch/next", {}],
+    ["outreach", "/outreach/batch/next", {}, "outreach"],
   ],
   "friday-am": [
     ["rss-rewrite", "/rss/rewrite", { batchSize: 5 }],
@@ -216,7 +216,7 @@ const OPERATION_WINDOWS = Object.freeze({
     ["blotato-pm", "/blotato/shorts/ai-playbook/schedule", {}, null, false, "blotato-am"],
     ["newsletter-generate", "/newsletter/generate", { profileId: "ai-edge" }, "newsletter", false, "rss-rewrite"],
     ["newsletter-send", "/newsletter/send", { profileId: "ai-edge" }, "newsletter", false, "newsletter-generate"],
-    ["outreach", "/outreach/batch/next", {}],
+    ["outreach", "/outreach/batch/next", {}, "outreach"],
   ],
   "friday-pm": [
     ["podcast-readiness", "/podcast/readiness", {}],
@@ -323,6 +323,10 @@ function operationNewsletterEnabled() {
   return booleanEnv("AIMS_OPERATION_NEWSLETTER_ENABLED", false);
 }
 
+function operationOutreachEnabled() {
+  return booleanEnv("AIMS_OPERATION_OUTREACH_ENABLED", false);
+}
+
 function localWeekStartDate() {
   const now = new Date();
   const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(now);
@@ -374,6 +378,9 @@ function asyncDispatchPath(path) {
 async function runInternalTask([name, path, body = {}, feature = null, addWeekStartDate = false], requestContext, job) {
   if (feature === "newsletter" && !operationNewsletterEnabled()) {
     return { name, path, ok: true, skipped: true, reason: "newsletter-disabled-until-brevo-ready" };
+  }
+  if (feature === "outreach" && !operationOutreachEnabled()) {
+    return { name, path, ok: true, skipped: true, reason: "outreach-disabled-until-dedicated-setup" };
   }
 
   const base = normalise(process.env.AIMS_INTERNAL_BASE_URL) || `http://127.0.0.1:${process.env.PORT || 8000}`;
@@ -493,13 +500,14 @@ router.get("/windows", (_req, res) => {
     ok: true,
     service: "ops",
     newsletterEnabled: operationNewsletterEnabled(),
+    outreachEnabled: operationOutreachEnabled(),
     windows: Object.fromEntries(Object.entries(OPERATION_WINDOWS).map(([key, tasks]) => [key, {
       delayMs: operationDelayMs(key),
       tasks: tasks.map(([name, path, _body, feature, _addWeekStartDate, dependsOn]) => ({
         name,
         path,
         dependsOn: dependsOn || null,
-        enabled: feature !== "newsletter" || operationNewsletterEnabled(),
+        enabled: feature === "newsletter" ? operationNewsletterEnabled() : feature === "outreach" ? operationOutreachEnabled() : true,
       })),
     }])),
   });
@@ -698,6 +706,7 @@ router.post("/run/:window", async (req, res, next) => {
       service: "ops",
       window: windowName,
       newsletterEnabled: operationNewsletterEnabled(),
+      outreachEnabled: operationOutreachEnabled(),
       statusUrl: `/ops/jobs/${encodeURIComponent(job.id)}`,
       job: publicJob(job),
     });
