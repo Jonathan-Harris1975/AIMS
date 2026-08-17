@@ -16,21 +16,30 @@ function safeCause(error) {
 }
 
 export class CommsHubEmailPollWorker {
-  constructor({ context }) {
+  constructor({ context, accountKey = 'info' }) {
     this.context = context;
+    this.account = context.config.emailAccounts?.[accountKey] || {
+      key: context.config.oneComEmailAccountKey,
+      address: context.config.oneComEmailAddress,
+      mailbox: context.config.oneComMailbox,
+      enabled: context.config.emailEnabled !== false,
+      mailboxRole: 'customer_facing',
+      workflowEvaluationEnabled: context.config.emailWorkflowEvaluationEnabled,
+    };
+    this.mailClient = context.oneComMailAccounts?.[this.account.key] || context.oneComMail;
     this.timer = null;
     this.running = false;
-    this.workerId = `email-${randomUUID()}`;
+    this.workerId = `email-${this.account.key}-${randomUUID()}`;
   }
 
   start() {
-    if (!this.context.config.emailPollWorkerEnabled || this.timer) return false;
+    if (!this.context.config.emailPollWorkerEnabled || !this.account.enabled || this.timer) return false;
 
     const reportUnhandledRunFailure = (event, error) => {
       log.error(event, {
         workerId: this.workerId,
-        accountKey: this.context.config.oneComEmailAccountKey,
-        mailbox: this.context.config.oneComMailbox,
+        accountKey: this.account.key,
+        mailbox: this.account.mailbox,
         providerStage: providerStage(error),
         error: safeErrorLog(error),
         cause: safeCause(error),
@@ -45,9 +54,9 @@ export class CommsHubEmailPollWorker {
 
     log.info('commsHub.emailPoll.started', {
       workerId: this.workerId,
-      accountKey: this.context.config.oneComEmailAccountKey,
-      mailbox: this.context.config.oneComMailbox,
-      managedAddress: this.context.config.oneComEmailAddress,
+      accountKey: this.account.key,
+      mailbox: this.account.mailbox,
+      managedAddress: this.account.address,
       pollMs: this.context.config.emailPollMs,
       leaseMs: this.context.config.emailPollLeaseMs,
       batchSize: this.context.config.emailPollBatchSize,
@@ -67,8 +76,8 @@ export class CommsHubEmailPollWorker {
   }
 
   async replay(sourceId) {
-    const accountKey = this.context.config.oneComEmailAccountKey;
-    const mailbox = this.context.config.oneComMailbox;
+    const accountKey = this.account.key;
+    const mailbox = this.account.mailbox;
     if (sourceId !== `${accountKey}:${mailbox}`) {
       throw new CommsHubError(409, 'email_poll_replay_target_invalid', 'Email poll replay target does not match the configured mailbox.');
     }
@@ -86,8 +95,8 @@ export class CommsHubEmailPollWorker {
 
     this.running = true;
     const now = new Date();
-    const mailbox = this.context.config.oneComMailbox;
-    const accountKey = this.context.config.oneComEmailAccountKey;
+    const mailbox = this.account.mailbox;
+    const accountKey = this.account.key;
     let state;
     let stage = 'claim_state';
 
@@ -150,7 +159,7 @@ export class CommsHubEmailPollWorker {
       // watermark rather than risking historical message processing.
       stage = 'mailbox_cursor';
       log.info('commsHub.emailPoll.imapCursor.start', { workerId: this.workerId, accountKey, mailbox });
-      const cursor = await this.context.oneComMail.getMailboxCursor({ mailbox });
+      const cursor = await this.mailClient.getMailboxCursor({ mailbox });
       log.info('commsHub.emailPoll.imapCursor.complete', {
         workerId: this.workerId,
         accountKey,
@@ -209,7 +218,7 @@ export class CommsHubEmailPollWorker {
       let observedUidValidity = cursor.uidValidity;
       for (let index = 0; index < batchLimit; index += 1) {
         stage = 'fetch_message';
-        const fetched = await this.context.oneComMail.fetchMessages({
+        const fetched = await this.mailClient.fetchMessages({
           mailbox,
           afterUid: workingUid,
           limit: 1,
@@ -232,6 +241,10 @@ export class CommsHubEmailPollWorker {
           uid: message.uid,
           parsed: message.parsed,
           mailbox,
+          accountKey,
+          managedAddress: this.account.address,
+          mailboxRole: this.account.mailboxRole,
+          automationEnabled: this.account.workflowEvaluationEnabled === true,
         });
         results.push(persisted);
         workingUid = Number(message.uid || fetched.highestUid || workingUid);
@@ -273,7 +286,7 @@ export class CommsHubEmailPollWorker {
         workerId: this.workerId,
         accountKey,
         mailbox,
-        managedAddress: this.context.config.oneComEmailAddress,
+        managedAddress: this.account.address,
         processed: results.length,
         attachmentCount,
         previousUid: lastUid,
@@ -284,7 +297,7 @@ export class CommsHubEmailPollWorker {
           workerId: this.workerId,
           accountKey,
           mailbox,
-          managedAddress: this.context.config.oneComEmailAddress,
+          managedAddress: this.account.address,
           processed: results.length,
           attachmentCount,
         });
