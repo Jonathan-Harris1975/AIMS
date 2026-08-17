@@ -1002,7 +1002,7 @@ Evidence: `audits/routes/mobileUx.js`, `audits/utils/orchestrator.js`.
 1. `POST /audits/mobile-ux/run` dispatches `mobile-ux-hard-gate.yml` by default.
 2. Default exclude patterns for this audit are `/podcast` and `/blog`, unless request body provides `excludePatterns`.
 3. Callback is protected by the audit callback token.
-4. Completed artefact URLs must be inside `R2_PUBLIC_BASE_URL_AUDITS`.
+4. Completed artefact references must resolve inside the private `audits` R2 bucket (`r2://audits/...`).
 5. Completion cleans the audit prefix and keeps selected report artefacts.
 
 ### On-brand audit workflow
@@ -1338,7 +1338,7 @@ Check:
 - `AUDIT_CALLBACK_BASE_URL` or `APP_URL` resolves publicly.
 - `AUDIT_CALLBACK_TOKEN` or `AI_SUITE_AUDIT_CALLBACK_TOKEN` matches the token sent by the workflow.
 - `GITHUB_TOKEN_WEBSITE_AUDITS`, `AUDIT_WEBSITE_REPO_OWNER`, `AUDIT_WEBSITE_REPO_NAME`, and optional `AUDIT_WEBSITE_REPO_REF`.
-- Audit artefact URLs are under `R2_PUBLIC_BASE_URL_AUDITS`.
+- Audit artefact references resolve inside the private `audits` R2 bucket; `R2_PUBLIC_BASE_URL_AUDITS` remains blank.
 
 ### OneUp scheduling failure
 
