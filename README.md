@@ -430,7 +430,7 @@ These files exist but are not mounted by the active root route registry:
 | `COMMS_HUB_ZERNIO_ACK_TIMEOUT_MS` | Maximum synchronous webhook acceptance budget. | socialService.js | Optional | `4000` | Hard-capped at 4500 ms so Zernio can retry rather than wait beyond its acknowledgement window. |
 | `COMMS_HUB_ZERNIO_POLL_ENABLED` | Enables leased fallback polling. | socialPollWorker.js | Optional | `true` | Poll jobs are isolated by credential family and platform. |
 | `COMMS_HUB_ARCHIVE_WORKER_ENABLED` | Enables the leased receipt worker. | runtime.js, archiveWorker.js | Optional | `true` | D1 remains the authoritative private store. |
-| `ONECOM_INFO_PASSWORD`, `ONECOM_NEWSLETTER_PASSWORD`, `ONECOM_ADMIN_PASSWORD` | one.com mailbox secrets. `ONECOM_INFO_PASSWORD` is used by the live Comms Hub customer inbox; admin/newsletter remain isolated for service administration and Brevo/newsletter use. | Comms Hub email + future newsletter/admin integrations | Conditional | `blank` | Keep all passwords in Koyeb secrets; only info@ is polled by Comms Hub. |
+| `ONECOM_INFO_PASSWORD`, `ONECOM_NEWSLETTER_PASSWORD`, `ONECOM_ADMIN_PASSWORD` | one.com mailbox secrets. All three mailboxes are polled by Comms Hub when enabled. `admin@` and `newsletter@` are manual-reply-only operator inboxes; `info@` retains the Smart/automated workflow. | Comms Hub email | Conditional | `blank` | Keep all passwords in Koyeb secrets. |
 
 ### Cloudflare purge
 
@@ -479,7 +479,7 @@ These files exist but are not mounted by the active root route registry:
 | `R2_PUBLIC_BASE_URL_BLOG` | Public base URL used to build externally reachable object URLs. | services/shared/utils/r2-client.js and storage-backed services | Conditional; required by storage-backed services | `blank` | No trailing slash preferred. |
 | `R2_PUBLIC_BASE_URL_BLOG_IMAGES` | Public base URL used to build externally reachable object URLs. | services/shared/utils/r2-client.js and storage-backed services | Conditional; required by storage-backed services | `blank` | No trailing slash preferred. |
 | `R2_PUBLIC_BASE_URL_BLOG_RSS` | Public base URL used to build externally reachable object URLs. | services/shared/utils/r2-client.js and storage-backed services | Conditional; required by storage-backed services | `blank` | No trailing slash preferred. |
-| `R2_PUBLIC_BASE_URL_AUDITS` | Public base URL used to build externally reachable object URLs. | services/shared/utils/r2-client.js and storage-backed services | Conditional; required by storage-backed services | `https://pub-f6b6cfd7d07e46f695d08e4a8dc3bd6b.r2.dev` | No trailing slash preferred. |
+| `R2_PUBLIC_BASE_URL_AUDITS` | Legacy public-base variable for the private audits bucket. | services/shared/utils/r2-client.js and audit services | Leave blank | `` | Audit artefacts use authenticated R2 access and `r2://audits/...` references. |
 
 ### OpenRouter / AI routing
 
@@ -1001,7 +1001,7 @@ Evidence: `audits/routes/mobileUx.js`, `audits/utils/orchestrator.js`.
 1. `POST /audits/mobile-ux/run` dispatches `mobile-ux-hard-gate.yml` by default.
 2. Default exclude patterns for this audit are `/podcast` and `/blog`, unless request body provides `excludePatterns`.
 3. Callback is protected by the audit callback token.
-4. Completed artefact URLs must be inside `R2_PUBLIC_BASE_URL_AUDITS`.
+4. Completed artefact references must resolve inside the private `audits` R2 bucket (`r2://audits/...`).
 5. Completion cleans the audit prefix and keeps selected report artefacts.
 
 ### On-brand audit workflow
@@ -1337,7 +1337,7 @@ Check:
 - `AUDIT_CALLBACK_BASE_URL` or `APP_URL` resolves publicly.
 - `AUDIT_CALLBACK_TOKEN` or `AI_SUITE_AUDIT_CALLBACK_TOKEN` matches the token sent by the workflow.
 - `GITHUB_TOKEN_WEBSITE_AUDITS`, `AUDIT_WEBSITE_REPO_OWNER`, `AUDIT_WEBSITE_REPO_NAME`, and optional `AUDIT_WEBSITE_REPO_REF`.
-- Audit artefact URLs are under `R2_PUBLIC_BASE_URL_AUDITS`.
+- Audit artefact references resolve inside the private `audits` R2 bucket; `R2_PUBLIC_BASE_URL_AUDITS` remains blank.
 
 ### OneUp scheduling failure
 

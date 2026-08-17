@@ -1,0 +1,16 @@
+MODIFIED	.env.example
+MODIFIED	README.md
+MODIFIED	audits/README.md
+MODIFIED	config/README.md
+MODIFIED	config/deployment-check.js
+ADDED	config/koyeb.production.env.example
+MODIFIED	config/production.defaults.env
+MODIFIED	deployment-check.js
+ADDED	docs/koyeb/ENV_SANITY_AUDIT_2026-08-17.md
+ADDED	docs/koyeb/RUNTIME_ENV_DEFAULT_ONLY_2026-08-17.txt
+MODIFIED	env.template
+MODIFIED	package-lock.json
+MODIFIED	package.json
+MODIFIED	scripts/koyebEnvDoctor.js
+MODIFIED	services/comms-hub/env.template
+MODIFIED	test/koyeb-env-doctor.test.js

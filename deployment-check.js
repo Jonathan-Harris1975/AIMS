@@ -15,10 +15,8 @@ const REQUIRED_ENV_KEYS = [
   "AUDIT_WEBSITE_REPO_NAME",
   "GITHUB_TOKEN_WEBSITE_AUDITS",
   // Required for all three audit pipelines (SEO/AEO/GEO, Mobile UX, On-Brand).
-  // publishAuditArtifacts.js throws at runtime if absent; catching it here gives
-  // a clear startup failure instead of a cryptic R2 error during the first audit run.
+  // Audit artefacts are private R2 objects, so only the bucket is required here.
   "R2_BUCKET_AUDITS",
-  "R2_PUBLIC_BASE_URL_AUDITS",
   "RAPIDAPI_HOST",
   "RAPIDAPI_KEY",
   "FEED_URL",
