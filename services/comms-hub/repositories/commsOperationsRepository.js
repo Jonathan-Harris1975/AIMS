@@ -63,7 +63,7 @@ export class CommsOperationsRepository {
   }
 
   async listUnifiedQueue({
-    status = "", channel = "", interactionType = "", owner = "", priority = "", aiStatus = "",
+    status = "", channel = "", interactionType = "", emailAccountKey = "", owner = "", priority = "", aiStatus = "",
     tag = "", overdue = false, before = "", limit = 50,
   } = {}) {
     const boundedLimit = Number.isInteger(Number(limit)) ? Math.min(Math.max(Number(limit), 1), 200) : 50;
@@ -83,6 +83,13 @@ export class CommsOperationsRepository {
       }
       clauses.push("st.thread_type = ?");
       params.push(interactionType);
+    }
+    if (emailAccountKey) {
+      if (!["info", "admin", "newsletter"].includes(emailAccountKey)) {
+        throw new CommsHubError(400, "email_account_key_invalid", "Email account must be info, admin or newsletter.");
+      }
+      clauses.push("et.account_key = ?");
+      params.push(emailAccountKey);
     }
     if (owner) {
       clauses.push("o.owner_id = ?");
@@ -129,6 +136,7 @@ export class CommsOperationsRepository {
               st.credential_family AS social_family, st.account_id AS social_account_id,
               st.provider_thread_id AS social_provider_thread_id, st.provider_post_id AS social_provider_post_id,
               st.root_comment_id AS social_root_comment_id, st.provider_status AS social_provider_status,
+              et.account_key AS email_account_key, et.mailbox AS email_mailbox,
               CAST((julianday('now') - julianday(c.last_message_at)) * 86400 AS INTEGER) AS age_seconds,
               CASE WHEN o.response_due_at IS NOT NULL AND o.response_due_at <= ? THEN 1 ELSE 0 END AS response_overdue
          FROM comms_hub_conversations c
@@ -136,6 +144,7 @@ export class CommsOperationsRepository {
          LEFT JOIN comms_hub_conversation_operations o ON o.conversation_id = c.id
          LEFT JOIN comms_hub_conversation_state s ON s.conversation_id = c.id
          LEFT JOIN comms_hub_social_threads st ON st.conversation_id = c.id
+         LEFT JOIN comms_hub_email_threads et ON et.conversation_id = c.id
          ${where}
         ORDER BY response_overdue DESC,
                  COALESCE(s.priority_score, 0) DESC,
