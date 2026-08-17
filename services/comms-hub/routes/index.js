@@ -630,6 +630,7 @@ export function createCommsHubRouter({
       const conversations = await contextProvider().operationsService.queue({
         status: String(req.query.status || ""), channel: String(req.query.channel || ""),
         interactionType: String(req.query.interactionType || "").trim().toLowerCase(),
+        emailAccountKey: String(req.query.emailAccountKey || "").trim().toLowerCase(),
         ownerId: String(req.query.ownerId || ""), priority: String(req.query.priority || ""),
         tag: String(req.query.tag || ""), overdue: String(req.query.overdue || "") === "true",
         before: String(req.query.before || ""), limit: Number(req.query.limit || 50),
@@ -860,7 +861,11 @@ export function createCommsHubRouter({
 
   router.post("/email/poll/drain", permit("manage_workflows"), async (req, res, next) => {
     try {
-      const result = await contextProvider().emailPollWorker.runOnce({
+      const active = contextProvider();
+      const accountKey = String(req.body?.accountKey || "info").trim().toLowerCase();
+      const worker = active.emailPollWorkers?.[accountKey];
+      if (!worker) throw new CommsHubError(404, "email_account_not_found", "Requested email account is not configured.");
+      const result = await worker.runOnce({
         limit: Number(req.body?.limit || 0) || undefined,
         force: req.body?.force === true,
       });
@@ -870,7 +875,7 @@ export function createCommsHubRouter({
   });
 
   router.post("/conversations/:conversationId/email", permit("send_reply"), async (req, res, next) => {
-    try { const result = await contextProvider().emailService.send({ conversationId: req.params.conversationId, bodyText: req.body?.bodyText, bodyHtml: req.body?.bodyHtml, subject: req.body?.subject, recipients: req.body?.recipients || [], cc: req.body?.cc || [], attachments: [], attachmentIds: req.body?.attachmentIds || [], idempotencyKey: req.get("idempotency-key") }); return res.json({ ok: true, ...result }); }
+    try { const result = await contextProvider().emailService.send({ conversationId: req.params.conversationId, bodyText: req.body?.bodyText, bodyHtml: req.body?.bodyHtml, subject: req.body?.subject, recipients: req.body?.recipients || [], cc: req.body?.cc || [], attachments: [], attachmentIds: req.body?.attachmentIds || [], idempotencyKey: req.get("idempotency-key"), manualReply: true }); return res.json({ ok: true, ...result }); }
     catch (error) { next(error); }
   });
 
