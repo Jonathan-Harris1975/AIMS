@@ -112,89 +112,71 @@ async function saveProgress(progress) {
    Batch runner
 ============================================================ */
 
+let batchRunning = false;
+
+function positiveInt(name, fallback, min = 1, max = 1440) {
+  const value = Number(process.env[name]);
+  if (!Number.isFinite(value)) return fallback;
+  return Math.max(min, Math.min(max, Math.floor(value)));
+}
+
 export async function runNextBatch() {
-  const keywordConfig = loadOutreachKeywords();
-  const { keywords } = keywordConfig;
-
-  if (!keywords.length) {
-    info("outreach.batch.keywords.none", {
-      source: keywordConfig.source,
-      filePath: keywordConfig.filePath,
-      fileFound: keywordConfig.found,
-    });
-
-    return {
-      processed: 0,
-      done: true,
-      skipped: true,
-      reason: "NO_OUTREACH_KEYWORDS",
-      keywordSource: keywordConfig.source,
-      keywordFilePath: keywordConfig.filePath,
-      keywordFileFound: keywordConfig.found,
-      keywordCount: 0,
-    };
-  }
-
-  info("outreach.batch.keywords.loaded", {
-    source: keywordConfig.source,
-    keywordCount: keywords.length,
-    filePath: keywordConfig.filePath,
-  });
-
-  const progress = await loadProgress();
-  let index = Number(progress.lastProcessedIndex) || 0;
-
-  const batchSize = Number(process.env.OUTREACH_BATCH_SIZE) || 0;
-  const delayMs = Number(process.env.SERP_RATE_DELAY_MS) || 0;
-
-  if (batchSize <= 0) {
-    info("outreach.batch.size.none", {
-      keywordSource: keywordConfig.source,
-      keywordCount: keywords.length,
-    });
-
-    return {
-      processed: 0,
-      done: true,
-      skipped: true,
-      reason: "OUTREACH_BATCH_SIZE_NOT_CONFIGURED",
-      keywordSource: keywordConfig.source,
-      keywordCount: keywords.length,
-      lastProcessedIndex: index,
-    };
-  }
-
-  let processed = 0;
-
-  while (index < keywords.length && processed < batchSize) {
-    const keyword = keywords[index];
-
-    info(`🔎 Outreach batch keyword [${index}]: ${keyword}`);
-    await runKeyword(keyword);
-
-    index++;
-    processed++;
-
-    await saveProgress({ lastProcessedIndex: index, batchSize });
-
-    if (delayMs > 0) {
-      await wait(delayMs);
+  if (batchRunning) return { processed: 0, skipped: true, reason: "OUTREACH_BATCH_ALREADY_RUNNING" };
+  batchRunning = true;
+  try {
+    const keywordConfig = loadOutreachKeywords();
+    const { keywords } = keywordConfig;
+    if (!keywords.length) {
+      info("outreach.batch.keywords.none", { source: keywordConfig.source, filePath: keywordConfig.filePath, fileFound: keywordConfig.found });
+      return { processed: 0, done: true, skipped: true, reason: "NO_OUTREACH_KEYWORDS", keywordSource: keywordConfig.source, keywordFilePath: keywordConfig.filePath, keywordFileFound: keywordConfig.found, keywordCount: 0 };
     }
+
+    const progress = await loadProgress();
+    const now = Date.now();
+    const minIntervalMs = positiveInt("OUTREACH_TRIGGER_MIN_INTERVAL_MINUTES", 300, 1, 1440) * 60_000;
+    const lastTriggeredAt = Date.parse(progress.lastTriggeredAt || "");
+    if (Number.isFinite(lastTriggeredAt) && now - lastTriggeredAt < minIntervalMs) {
+      return {
+        processed: 0, skipped: true, reason: "OUTREACH_TRIGGER_COOLDOWN",
+        nextAllowedAt: new Date(lastTriggeredAt + minIntervalMs).toISOString(),
+        lastProcessedIndex: Number(progress.lastProcessedIndex) || 0,
+      };
+    }
+
+    const batchSize = Number(process.env.OUTREACH_BATCH_SIZE) || 0;
+    const delayMs = Number(process.env.SERP_RATE_DELAY_MS) || 0;
+    if (batchSize <= 0) return { processed: 0, done: true, skipped: true, reason: "OUTREACH_BATCH_SIZE_NOT_CONFIGURED", keywordSource: keywordConfig.source, keywordCount: keywords.length };
+
+    const cycle = parseBoolean(process.env.OUTREACH_BATCH_CYCLE, true);
+    let index = Number(progress.lastProcessedIndex) || 0;
+    if (index >= keywords.length && cycle) index = 0;
+    if (index >= keywords.length) return { processed: 0, done: true, skipped: true, reason: "OUTREACH_KEYWORDS_COMPLETE", lastProcessedIndex: index, keywordCount: keywords.length };
+
+    await saveProgress({ ...progress, lastProcessedIndex: index, batchSize, lastTriggeredAt: new Date(now).toISOString() });
+    let processed = 0;
+    const automation = { sent: 0, queued: 0, skipped: 0, failed: 0 };
+    const results = [];
+    while (processed < batchSize && keywords.length) {
+      if (index >= keywords.length) {
+        if (!cycle) break;
+        index = 0;
+      }
+      const keyword = keywords[index];
+      info("outreach.batch.keyword", { index, keyword });
+      const result = await runKeyword(keyword);
+      results.push({ keyword, savedLeads: result.savedLeads, automation: result.automation || null });
+      for (const key of Object.keys(automation)) automation[key] += Number(result?.automation?.[key] || 0);
+      index += 1;
+      processed += 1;
+      await saveProgress({ lastProcessedIndex: index, batchSize, lastTriggeredAt: new Date(now).toISOString() });
+      if (delayMs > 0 && processed < batchSize) await wait(delayMs);
+      if (!cycle && index >= keywords.length) break;
+    }
+    const done = !cycle && index >= keywords.length;
+    return { processed, done, cycle, lastProcessedIndex: index, keywordSource: keywordConfig.source, keywordCount: keywords.length, automation, results };
+  } finally {
+    batchRunning = false;
   }
-
-  const done = index >= keywords.length;
-
-  if (done) {
-    info("🏁 Outreach batch completed");
-  }
-
-  return {
-    processed,
-    done,
-    lastProcessedIndex: index,
-    keywordSource: keywordConfig.source,
-    keywordCount: keywords.length,
-  };
 }
 
 /* ============================================================
@@ -202,14 +184,8 @@ export async function runNextBatch() {
 ============================================================ */
 
 export async function resetProgress(lastProcessedIndex = 0) {
-  const index =
-    Number.isFinite(lastProcessedIndex) && lastProcessedIndex >= 0
-      ? lastProcessedIndex
-      : 0;
-
-  const progress = await saveProgress({ lastProcessedIndex: index });
-
+  const index = Number.isFinite(lastProcessedIndex) && lastProcessedIndex >= 0 ? lastProcessedIndex : 0;
+  const progress = await saveProgress({ lastProcessedIndex: index, lastTriggeredAt: null });
   info(`🔄 Outreach progress reset to index ${index}`);
-
   return { lastProcessedIndex: Number(progress.lastProcessedIndex) || 0 };
 }

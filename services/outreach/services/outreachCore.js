@@ -237,11 +237,26 @@ export async function enrichDomain(domain, serpMeta = {}) {
   }
 
   const emails = new Set();
+  const emailCandidates = [];
 
   if (KEY_HUNTER) {
     try {
       const h = await getHunter(d);
-      h?.data?.emails?.forEach((e) => e?.email && emails.add(e.email.toLowerCase()));
+      h?.data?.emails?.forEach((e) => {
+        if (!e?.email) return;
+        const email = String(e.email).toLowerCase();
+        emails.add(email);
+        emailCandidates.push({
+          email,
+          firstName: e.first_name || null,
+          lastName: e.last_name || null,
+          position: e.position || null,
+          department: e.department || null,
+          type: e.type || null,
+          confidence: Number(e.confidence || 0) || null,
+          sources: Array.isArray(e.sources) ? e.sources.slice(0, 8) : [],
+        });
+      });
     } catch {}
   }
 
@@ -263,6 +278,10 @@ export async function enrichDomain(domain, serpMeta = {}) {
   return {
     domain: d,
     emails: [...emails],
+    emailCandidates,
+    sourceUrl: serpMeta.sourceUrl || null,
+    sourceTitle: serpMeta.sourceTitle || null,
+    sourceSnippet: serpMeta.sourceSnippet || null,
     authority: {
       serpPosition,
       serpScore,

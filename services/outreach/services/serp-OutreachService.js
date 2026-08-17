@@ -38,7 +38,7 @@ export async function serpOutreach(keyword) {
       const u = new URL(r.link);
       const d = normaliseHost(u.hostname);
       if (!domainMap.has(d)) {
-        domainMap.set(d, { domain: d, position: r.position || null });
+        domainMap.set(d, { domain: d, position: r.position || null, sourceUrl: r.link || null, sourceTitle: r.title || null, sourceSnippet: r.snippet || null });
       }
     } catch {}
   });
@@ -81,7 +81,8 @@ export async function serpOutreach(keyword) {
   enriched.forEach((e) => {
     e.emails = e.emails.map((email) => {
       const v = validationMap.get(email) || { status: "unknown" };
-      return { email, validation: v };
+      const hunter = Array.isArray(e.emailCandidates) ? e.emailCandidates.find((item) => item.email === email) : null;
+      return { email, validation: v, hunter };
     });
   });
 
