@@ -888,7 +888,6 @@ export function createCommsHubRouter({
         provider: "coginpal",
         transport: active.config.coginPalApiBaseUrl ? "provider_api" : "aims_first_party",
         aiWorkflowEnabled: active.config.chatAiWorkflowEnabled,
-        wakeEnabled: active.config.wakeEnabled,
         maximumMessageCharacters: active.config.chatMaxMessageChars,
         maximumMessagesPerMinute: active.config.chatMaxMessagesPerMinute,
         historyLimit: active.config.chatHistoryLimit,
