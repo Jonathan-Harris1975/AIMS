@@ -160,7 +160,7 @@ In v2.13.3 all completed conversation channels are active: social polling, email
 
 ## Deployment order
 
-1. Apply all Comms Hub migrations through `0008_full_channel_activation` with `npm run comms:migrate`.
+1. Keep `COMMS_HUB_AUTO_MIGRATE_ON_START=true` so AIMS checks and applies any pending immutable Comms Hub migrations before starting Comms Hub workers. `npm run comms:migrate` remains available for explicit maintenance.
 2. Deploy AIMS v2.13.3 with the live non-secret activation profile from `config/production.defaults.env` / `config/comms-hub-all-channels.env.example` and the required production secrets supplied by the deployment environment.
 3. Confirm readiness for D1, Jotform, one.com email, CogniPal HMAC, both enabled Zernio families and the approved AI Search instances. Missing required live configuration must fail readiness rather than silently disabling a channel.
 4. Confirm `AIMS_OPERATION_OUTREACH_ENABLED=false`. The weekday operations scheduler must report/skip Outreach until its dedicated setup is complete.
@@ -354,4 +354,4 @@ Migration `0008_full_channel_activation` creates conservative active policies fo
 
 Outreach is deliberately excluded. `AIMS_OPERATION_OUTREACH_ENABLED=false` causes the existing weekday operations windows to skip `/outreach/batch/next` until the dedicated Outreach setup is completed.
 
-Apply `npm run comms:migrate` before deploying v2.13.3 so migration `0008_full_channel_activation` is present. `config/comms-hub-all-channels.env.example` documents the non-secret activation profile.
+AIMS now self-heals pending Comms Hub schema migrations at runtime startup when `COMMS_HUB_AUTO_MIGRATE_ON_START=true`. `npm run comms:migrate` remains available as an explicit maintenance command. `config/comms-hub-all-channels.env.example` documents the non-secret activation profile.

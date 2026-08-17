@@ -39,6 +39,7 @@ import { CommsHubCredentialVaultService } from "./credentialVaultService.js";
 import { CommsHubQuarantineService } from "./quarantineService.js";
 import { CommsHubMetricsService } from "./metricsService.js";
 import { safeErrorLog } from "./domain/redaction.js";
+import { recoverCommsHubSchema } from "./migrations/schemaRecovery.js";
 
 let context = null;
 let runtimeState = { status: "idle", ready: false, detail: "not_started" };
@@ -162,11 +163,34 @@ export async function startCommsHubRuntime() {
   runtimeState = { status: "starting", ready: false, detail: "checking_schema" };
   try {
     const active = getCommsHubContext();
-    const schema = await active.repository.schemaStatus();
+    const recovery = await recoverCommsHubSchema({
+      repository: active.repository,
+      autoMigrateOnStart: active.config.autoMigrateOnStart,
+      env: process.env,
+      onMigrationStart: async (schema) => {
+        runtimeState = { status: "migrating", ready: false, detail: "auto_migrating_schema", missing: schema.missing || [] };
+        log.warn("commsHub.runtime.autoMigration.start", { missing: schema.missing || [] });
+      },
+    });
+    const schema = recovery.schema;
+    if (recovery.migration && schema.available) {
+      log.info("commsHub.runtime.autoMigration.complete", {
+        applied: recovery.migration.applied || 0,
+        appliedVersions: recovery.migration.appliedVersions || [],
+      });
+    }
     if (!schema.available) {
-      runtimeState = { status: "schema_missing", ready: false, detail: "run_npm_comms_migrate" };
-      log.error("commsHub.runtime.schemaMissing", { action: "npm run comms:migrate", missing: schema.missing || [] });
-      return { started: false, reason: "schema_missing" };
+      runtimeState = {
+        status: "schema_missing",
+        ready: false,
+        detail: active.config.autoMigrateOnStart ? "auto_migration_incomplete" : "auto_migration_disabled",
+        missing: schema.missing || [],
+      };
+      log.error("commsHub.runtime.schemaMissing", {
+        autoMigrateOnStart: active.config.autoMigrateOnStart,
+        missing: schema.missing || [],
+      });
+      return { started: false, reason: "schema_missing", missing: schema.missing || [] };
     }
     const archiveWorkerStarted = active.archiveWorker.start();
     const socialPollWorkerStarted = active.socialPollWorker.start();
