@@ -138,7 +138,7 @@ test('website hand-off outside hours stays automated and offers callback email i
       chatEnabled: true, chatMaxMessageChars: 4000, chatMaxMessagesPerMinute: 12, chatHistoryLimit: 100,
       chatAiWorkflowEnabled: false, aiEnabled: false, smartConductEnabled: true, badLanguageBlockEnabled: true,
       conductReviewStrikeThreshold: 2, conductAutomationBlockThreshold: 2, autonomousRepliesEnabled: false,
-      wakeEnabled: false, coginPalApiBaseUrl: '', humanHandoffBusinessHoursOnly: true,
+      coginPalApiBaseUrl: '', humanHandoffBusinessHoursOnly: true,
       businessTimeZone: 'Europe/London', businessStartHour: 9, businessEndHour: 17, callbackEmailCaptureEnabled: true,
     },
     coginPal: { async readWebhook() { return { nonce: 'n1', payloadSha256: 'sha', payload: { sessionId: 's1', visitorId: 'v1', websiteId: 'jonathan-harris.online', requestHuman: true, message: { id: 'm1', text: 'Can I speak to Jonathan?' } } }; } },
@@ -155,7 +155,7 @@ test('website hand-off outside hours stays automated and offers callback email i
     },
     repository: { async getConversation(id) { return { id, channel: 'chat', status: 'open', messages: state.messages.map((m) => ({ direction: m.direction, body_text: m.bodyText, received_at: m.receivedAt })) }; } },
     workflowEngineService: { async evaluate() {} }, auditService: { async record() {} }, notificationService: { async create() {} },
-    wakeClient: { async requestWake() {} }, aiWorkflowService: { async analyseConversation() {} }, governanceService: { async attemptAutonomousReply() {} },
+    aiWorkflowService: { async analyseConversation() {} }, governanceService: { async attemptAutonomousReply() {} },
   };
   const service = new CommsHubChatService({ context });
   const result = await service.acceptWebhook({});
