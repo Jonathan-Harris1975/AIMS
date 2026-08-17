@@ -7,6 +7,8 @@ export const COMMS_HUB_REQUIRED_MIGRATIONS = Object.freeze([
   "0006_smart_response_forms",
   "0007_business_hours_and_handoff",
   "0008_full_channel_activation",
+  "0009_outreach_automation",
+  "0010_runtime_reliability",
 ]);
 
 export default COMMS_HUB_REQUIRED_MIGRATIONS;
