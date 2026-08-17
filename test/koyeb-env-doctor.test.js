@@ -14,8 +14,14 @@ test("koyeb env doctor accepts compact CLI secret references", () => {
   assert.deepEqual(validateEnvEntries(entries), []);
 });
 
+test("koyeb env doctor accepts hyphenated Koyeb secret names", () => {
+  const { entries } = parseEnvLines("D1_API_KEY={{ secret.CF-database-hive-API }}\n");
+
+  assert.deepEqual(validateEnvEntries(entries), []);
+});
+
 test("koyeb env doctor rejects invalid secret names", () => {
-  const { entries } = parseEnvLines("BLOTATO_API_KEY={{ secret.BLOTATO-API-KEY }}\n");
+  const { entries } = parseEnvLines("BLOTATO_API_KEY={{ secret.BLOTATO/API/KEY }}\n");
   const errors = validateEnvEntries(entries);
 
   assert.equal(errors.length, 1);
