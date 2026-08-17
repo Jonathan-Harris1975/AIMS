@@ -35,7 +35,7 @@
 
 ### Wake behaviour
 
-The public website's signed request to the first-party CogniPal AIMS endpoint is itself the cold-start/wake request for Koyeb. The optional `COMMS_HUB_WAKE_*` relay is supplemental signalling after intake. It is best-effort and cannot turn an already accepted visitor message into a failure.
+The public website's signed request to the first-party CogniPal AIMS endpoint is itself sufficient to wake a scale-to-zero HTTP service. The separate Comms Hub wake relay was retired in v2.14.1. Continuous background polling still requires AIMS to remain running, so production should keep at least one AIMS instance active.
 
 ## Persistence / migration
 

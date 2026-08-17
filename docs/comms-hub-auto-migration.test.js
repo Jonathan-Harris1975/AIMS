@@ -122,9 +122,9 @@ test("migration runner can apply the full required manifest through a serialised
   };
   const result = await runCommsHubMigrations({ env: baseEnv(), d1: fakeD1 });
   assert.equal(result.ok, true);
-  assert.equal(result.applied, 8);
-  assert.equal(result.total, 8);
-  assert.equal(migrationBatches, 8);
+  assert.equal(result.applied, 10);
+  assert.equal(result.total, 10);
+  assert.equal(migrationBatches, 10);
   assert.deepEqual(result.appliedVersions, [
     "0001_comms_hub",
     "0002_zernio_social",
@@ -134,6 +134,8 @@ test("migration runner can apply the full required manifest through a serialised
     "0006_smart_response_forms",
     "0007_business_hours_and_handoff",
     "0008_full_channel_activation",
+    "0009_outreach_automation",
+    "0010_runtime_reliability",
   ]);
 });
 
