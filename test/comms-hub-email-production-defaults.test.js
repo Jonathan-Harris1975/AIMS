@@ -22,7 +22,13 @@ test("production defaults enable the live info mailbox and poll worker", () => {
   assert.equal(defaults.COMMS_HUB_ONECOM_EMAIL_ADDRESS, "info@jonathan-harris.online");
   assert.equal(defaults.COMMS_HUB_ONECOM_USERNAME, "info@jonathan-harris.online");
   assert.equal(defaults.COMMS_HUB_EMAIL_ADMIN_ADDRESS, "admin@jonathan-harris.online");
+  assert.equal(defaults.COMMS_HUB_EMAIL_ADMIN_ENABLED, "true");
+  assert.equal(defaults.COMMS_HUB_EMAIL_ADMIN_USERNAME, "admin@jonathan-harris.online");
+  assert.equal(defaults.COMMS_HUB_EMAIL_ADMIN_MAILBOX, "INBOX");
   assert.equal(defaults.COMMS_HUB_EMAIL_NEWSLETTER_ADDRESS, "newsletter@jonathan-harris.online");
+  assert.equal(defaults.COMMS_HUB_EMAIL_NEWSLETTER_ENABLED, "true");
+  assert.equal(defaults.COMMS_HUB_EMAIL_NEWSLETTER_USERNAME, "newsletter@jonathan-harris.online");
+  assert.equal(defaults.COMMS_HUB_EMAIL_NEWSLETTER_MAILBOX, "INBOX");
   assert.equal(defaults.COMMS_HUB_ONECOM_IMAP_HOST, "imap.one.com");
   assert.equal(defaults.COMMS_HUB_ONECOM_IMAP_PORT, "993");
   assert.equal(defaults.COMMS_HUB_ONECOM_SMTP_HOST, "send.one.com");

@@ -46,6 +46,8 @@ test("full production profile is readiness-complete when deployment secrets are 
     JOTFORM_API_KEY: "jotform-token",
     COMMS_HUB_ATTACHMENT_SCANNER_TOKEN: "scanner-token",
     COMMS_HUB_ONECOM_PASSWORD: "mail-password",
+    ONECOM_ADMIN_PASSWORD: "admin-mail-password",
+    ONECOM_NEWSLETTER_PASSWORD: "newsletter-mail-password",
     COMMS_HUB_COGINPAL_WEBHOOK_SECRET: "chat-secret",
     COMMS_HUB_AI_SEARCH_INSTANCES: "search-prod",
     CLOUDFLARE_AI_SEARCH_API_TOKEN: "search-token",

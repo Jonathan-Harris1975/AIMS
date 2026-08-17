@@ -83,7 +83,7 @@ test("quarantined attachment does not discard the parent info@ email", async () 
   assert.equal(result.attachments[0].error, "attachment_infected");
 });
 
-test("email role map keeps admin and newsletter outside the customer inbox worker", () => {
+test("email role map exposes info, admin and newsletter as managed Comms Hub mailboxes", () => {
   const env = {
     COMMS_HUB_ENABLED: "false",
     COMMS_HUB_EMAIL_PRIMARY_ADDRESS: "info@jonathan-harris.online",
@@ -92,7 +92,7 @@ test("email role map keeps admin and newsletter outside the customer inbox worke
   };
   const cfg = loadCommsHubConfig(env);
   assert.equal(cfg.emailAddressRoles.info.commsHubManaged, true);
-  assert.equal(cfg.emailAddressRoles.admin.commsHubManaged, false);
-  assert.equal(cfg.emailAddressRoles.newsletter.commsHubManaged, false);
+  assert.equal(cfg.emailAddressRoles.admin.commsHubManaged, true);
+  assert.equal(cfg.emailAddressRoles.newsletter.commsHubManaged, true);
   assert.equal(cfg.emailAddressRoles.newsletter.purpose, "newsletter_brevo");
 });
