@@ -9,7 +9,6 @@ import { CloudflareBackupClient } from "./clients/cloudflareBackupClient.js";
 import { OneComMailClient } from "./clients/oneComMailClient.js";
 import { CoginPalClient } from "./clients/coginPalClient.js";
 import { MalwareScannerClient } from "./clients/malwareScannerClient.js";
-import { CommsHubWakeClient } from "./clients/wakeClient.js";
 import { CommsHubRepository } from "./repositories/commsRepository.js";
 import { CommsAiRepository } from "./repositories/commsAiRepository.js";
 import { CommsOperationsRepository } from "./repositories/commsOperationsRepository.js";
@@ -21,6 +20,7 @@ import { CommsHubBackupWorker } from "./workers/backupWorker.js";
 import { CommsHubEmailPollWorker } from "./workers/emailPollWorker.js";
 import { CommsHubDelayedActionWorker } from "./workers/delayedActionWorker.js";
 import { CommsHubRetentionWorker } from "./workers/retentionWorker.js";
+import { CommsHubWebhookReconcileWorker } from "./workers/webhookReconcileWorker.js";
 import { CommsHubAiWorkflowService } from "./aiWorkflowService.js";
 import { PodcastContributionWorkflowService } from "./podcastWorkflowService.js";
 import { CommsHubProviderHealthService } from "./providerHealthService.js";
@@ -38,11 +38,38 @@ import { CommsHubGovernanceService } from "./governanceService.js";
 import { CommsHubCredentialVaultService } from "./credentialVaultService.js";
 import { CommsHubQuarantineService } from "./quarantineService.js";
 import { CommsHubMetricsService } from "./metricsService.js";
+import { OutreachAutomationService } from "../outreach/services/automationService.js";
 import { safeErrorLog } from "./domain/redaction.js";
 import { recoverCommsHubSchema } from "./migrations/schemaRecovery.js";
 
 let context = null;
 let runtimeState = { status: "idle", ready: false, detail: "not_started" };
+let runtimeStartPromise = null;
+let runtimeSupervisorTimer = null;
+let runtimeFailureCount = 0;
+
+function clearRuntimeSupervisorTimer() {
+  if (runtimeSupervisorTimer) clearTimeout(runtimeSupervisorTimer);
+  runtimeSupervisorTimer = null;
+}
+
+function scheduleRuntimeSupervisorRetry(active, reason) {
+  if (!active?.config?.runtimeSupervisorEnabled || runtimeSupervisorTimer) return false;
+  runtimeFailureCount += 1;
+  const base = active.config.runtimeSupervisorRetryMs;
+  const maximum = active.config.runtimeSupervisorMaxRetryMs;
+  const delayMs = Math.min(maximum, base * (2 ** Math.min(runtimeFailureCount - 1, 5)));
+  runtimeState = { ...runtimeState, retryScheduled: true, retryInMs: delayMs, failureCount: runtimeFailureCount };
+  runtimeSupervisorTimer = setTimeout(() => {
+    runtimeSupervisorTimer = null;
+    void startCommsHubRuntime().catch((error) => {
+      log.error("commsHub.runtime.supervisorUnhandled", { error: safeErrorLog(error) });
+    });
+  }, delayMs);
+  runtimeSupervisorTimer.unref?.();
+  log.warn("commsHub.runtime.retryScheduled", { reason, delayMs, failureCount: runtimeFailureCount });
+  return true;
+}
 
 export function createCommsHubContext({ env = process.env, fetchImpl, r2ArchiveStore = null } = {}) {
   const config = loadCommsHubConfig(env, { requireEnabled: true });
@@ -94,7 +121,6 @@ export function createCommsHubContext({ env = process.env, fetchImpl, r2ArchiveS
     oneComMail: oneComMailAccounts.info || new OneComMailClient(config),
     coginPal: new CoginPalClient(config, fetchImpl ? { fetchImpl } : undefined),
     malwareScanner: new MalwareScannerClient(config, fetchImpl ? { fetchImpl } : undefined),
-    wakeClient: new CommsHubWakeClient(config, fetchImpl ? { fetchImpl } : undefined),
   };
   active.auditService = new CommsHubAuditService({ repository: operationsRepository });
   active.notificationService = new CommsHubNotificationService({ context: active });
@@ -109,8 +135,9 @@ export function createCommsHubContext({ env = process.env, fetchImpl, r2ArchiveS
   active.credentialVaultService = new CommsHubCredentialVaultService({ context: active });
   active.quarantineService = new CommsHubQuarantineService({ context: active });
   active.metricsService = new CommsHubMetricsService({ context: active });
+  active.outreachAutomationService = new OutreachAutomationService({ context: active });
   active.archiveWorker = new CommsHubArchiveWorker({ repository, objectStore: primaryR2, config });
-  active.socialPollWorker = new CommsHubSocialPollWorker({ repository, zernio, config });
+  active.socialPollWorker = new CommsHubSocialPollWorker({ context: active });
   active.aiWorkflowService = new CommsHubAiWorkflowService({ context: active });
   active.podcastWorkflowService = new PodcastContributionWorkflowService({ context: active });
   active.providerHealthService = new CommsHubProviderHealthService({ context: active });
@@ -124,6 +151,7 @@ export function createCommsHubContext({ env = process.env, fetchImpl, r2ArchiveS
   active.emailPollWorker = active.emailPollWorkers.info || Object.values(active.emailPollWorkers)[0] || null;
   active.delayedActionWorker = new CommsHubDelayedActionWorker({ context: active });
   active.retentionWorker = new CommsHubRetentionWorker({ context: active });
+  active.webhookReconcileWorker = new CommsHubWebhookReconcileWorker({ context: active });
   active.quarantineService.register('email_poll', (item) => {
     const accountKey = String(item.source_id || '').split(':')[0];
     const worker = active.emailPollWorkers[accountKey];
@@ -148,145 +176,171 @@ export function getCommsHubRuntimeReadiness() {
 }
 
 export async function startCommsHubRuntime() {
-  const readiness = getCommsHubReadiness();
-  if (!readiness.enabled) {
-    runtimeState = { status: "disabled", ready: true, detail: "service_disabled" };
-    log.info("commsHub.runtime.disabled");
-    return { started: false, reason: "disabled" };
-  }
-  if (!readiness.ready) {
-    runtimeState = { status: "misconfigured", ready: false, detail: "missing_environment", missing: readiness.missing };
-    log.error("commsHub.runtime.misconfigured", { missing: readiness.missing });
-    return { started: false, reason: "misconfigured", missing: readiness.missing };
-  }
+  if (runtimeState.ready) return { started: true, alreadyStarted: true, runtime: { ...runtimeState } };
+  if (runtimeStartPromise) return runtimeStartPromise;
 
-  runtimeState = { status: "starting", ready: false, detail: "checking_schema" };
-  try {
-    const active = getCommsHubContext();
-    const recovery = await recoverCommsHubSchema({
-      repository: active.repository,
-      autoMigrateOnStart: active.config.autoMigrateOnStart,
-      env: process.env,
-      onMigrationStart: async (schema) => {
-        runtimeState = { status: "migrating", ready: false, detail: "auto_migrating_schema", missing: schema.missing || [] };
-        log.warn("commsHub.runtime.autoMigration.start", { missing: schema.missing || [] });
-      },
-    });
-    const schema = recovery.schema;
-    if (recovery.migration && schema.available) {
-      log.info("commsHub.runtime.autoMigration.complete", {
-        applied: recovery.migration.applied || 0,
-        appliedVersions: recovery.migration.appliedVersions || [],
-      });
+  runtimeStartPromise = (async () => {
+    const readiness = getCommsHubReadiness();
+    if (!readiness.enabled) {
+      clearRuntimeSupervisorTimer();
+      runtimeState = { status: "disabled", ready: true, detail: "service_disabled" };
+      log.info("commsHub.runtime.disabled");
+      return { started: false, reason: "disabled" };
     }
-    if (!schema.available) {
-      runtimeState = {
-        status: "schema_missing",
-        ready: false,
-        detail: active.config.autoMigrateOnStart ? "auto_migration_incomplete" : "auto_migration_disabled",
-        missing: schema.missing || [],
-      };
-      log.error("commsHub.runtime.schemaMissing", {
+    if (!readiness.ready) {
+      clearRuntimeSupervisorTimer();
+      runtimeState = { status: "misconfigured", ready: false, detail: "missing_environment", missing: readiness.missing };
+      log.error("commsHub.runtime.misconfigured", { missing: readiness.missing });
+      return { started: false, reason: "misconfigured", missing: readiness.missing };
+    }
+
+    runtimeState = { status: "starting", ready: false, detail: "checking_schema" };
+    let active;
+    try {
+      active = getCommsHubContext();
+      const recovery = await recoverCommsHubSchema({
+        repository: active.repository,
         autoMigrateOnStart: active.config.autoMigrateOnStart,
-        missing: schema.missing || [],
+        env: process.env,
+        onMigrationStart: async (schema) => {
+          runtimeState = { status: "migrating", ready: false, detail: "auto_migrating_schema", missing: schema.missing || [] };
+          log.warn("commsHub.runtime.autoMigration.start", { missing: schema.missing || [] });
+        },
       });
-      return { started: false, reason: "schema_missing", missing: schema.missing || [] };
+      const schema = recovery.schema;
+      if (recovery.migration && schema.available) {
+        log.info("commsHub.runtime.autoMigration.complete", {
+          applied: recovery.migration.applied || 0,
+          appliedVersions: recovery.migration.appliedVersions || [],
+        });
+      }
+      if (!schema.available) {
+        runtimeState = {
+          status: "schema_missing",
+          ready: false,
+          detail: active.config.autoMigrateOnStart ? "auto_migration_incomplete" : "auto_migration_disabled",
+          missing: schema.missing || [],
+        };
+        log.error("commsHub.runtime.schemaMissing", {
+          autoMigrateOnStart: active.config.autoMigrateOnStart,
+          missing: schema.missing || [],
+        });
+        if (active.config.autoMigrateOnStart) scheduleRuntimeSupervisorRetry(active, "schema_missing");
+        return { started: false, reason: "schema_missing", missing: schema.missing || [] };
+      }
+
+      const archiveWorkerStarted = active.archiveWorker.start();
+      const socialPollWorkerStarted = active.socialPollWorker.start();
+      const webhookReconcileWorkerStarted = active.webhookReconcileWorker.start();
+      const followUpWorkerStarted = active.followUpWorker.start();
+      const providerHealthWorkerStarted = active.providerHealthWorker.start();
+      const backupWorkerStarted = active.backupWorker.start();
+      const emailPollWorkerStarted = Object.fromEntries(Object.entries(active.emailPollWorkers).map(([key, worker]) => [key, worker.start()]));
+      const delayedActionWorkerStarted = active.delayedActionWorker.start();
+      const retentionWorkerStarted = active.retentionWorker.start();
+      clearRuntimeSupervisorTimer();
+      runtimeFailureCount = 0;
+      runtimeState = {
+        status: "ready",
+        ready: true,
+        detail: "configured_workers_started",
+        workers: {
+          archive: archiveWorkerStarted,
+          socialPoll: socialPollWorkerStarted,
+          webhookReconcile: webhookReconcileWorkerStarted,
+          followUp: followUpWorkerStarted,
+          providerHealth: providerHealthWorkerStarted,
+          backup: backupWorkerStarted,
+          emailPoll: emailPollWorkerStarted,
+          delayedActions: delayedActionWorkerStarted,
+          retention: retentionWorkerStarted,
+        },
+      };
+      log.info("commsHub.runtime.started", {
+        archiveWorkerStarted,
+        socialPollWorkerStarted,
+        webhookReconcileWorkerStarted,
+        followUpWorkerStarted,
+        providerHealthWorkerStarted,
+        backupWorkerStarted,
+        emailPollWorkerStarted,
+        delayedActionWorkerStarted,
+        retentionWorkerStarted,
+        forms: readiness.forms,
+        email: {
+          enabled: active.config.emailEnabled,
+          pollWorkerEnabled: active.config.emailPollWorkerEnabled,
+          imapHost: active.config.oneComImapHost,
+          imapPort: active.config.oneComImapPort,
+          historicalBackfillEnabled: active.config.emailHistoricalBackfillEnabled,
+          accounts: Object.fromEntries(Object.entries(active.config.emailAccounts || {}).map(([key, account]) => [key, {
+            enabled: account.enabled,
+            address: account.address,
+            mailbox: account.mailbox,
+            manualOnly: account.manualOnly,
+            workflowEvaluationEnabled: account.workflowEvaluationEnabled,
+            passwordConfigured: Boolean(account.password),
+            workerStarted: emailPollWorkerStarted[key] === true,
+          }])),
+        },
+        chat: {
+          enabled: active.config.chatEnabled,
+          provider: "coginpal",
+          transport: active.config.coginPalApiBaseUrl ? "provider_api" : "aims_first_party",
+          webhookSecretConfigured: Boolean(active.config.coginPalWebhookSecret),
+          aiWorkflowEnabled: active.config.chatAiWorkflowEnabled,
+          maxMessageChars: active.config.chatMaxMessageChars,
+          maxMessagesPerMinute: active.config.chatMaxMessagesPerMinute,
+        },
+        zernio: Object.fromEntries(Object.entries(readiness.zernio).map(([family, state]) => [family, state.status])),
+        socialMonitoring: {
+          monitorOnly: active.config.socialMonitorOnly,
+          pollWorkerEnabled: active.config.socialPollWorkerEnabled,
+          pollMs: active.config.socialPollMs,
+          batchSize: active.config.socialPollBatchSize,
+          webhookReconcileEnabled: active.config.zernioWebhookReconcileEnabled,
+          webhookReconcileIntervalMs: active.config.zernioWebhookReconcileIntervalMs,
+          enabledFamilies: active.socialPollWorker.enabledFamilies(),
+          platforms: Object.fromEntries(
+            Object.entries(active.config.zernioFamilies)
+              .filter(([, family]) => family.enabled)
+              .map(([familyName, family]) => [familyName, [...family.platforms]])
+          ),
+          channels: Object.fromEntries(
+            Object.entries(SOCIAL_CHANNEL_CAPABILITIES).map(([platform, capabilities]) => [platform, {
+              family: capabilities.family,
+              enabled: active.config.zernioFamilies?.[capabilities.family]?.enabled === true,
+              directMessages: capabilities.directMessages,
+              comments: capabilities.comments,
+              pollingResources: [...capabilities.pollingResources],
+            }])
+          ),
+        },
+      });
+      return { started: true, archiveWorkerStarted, socialPollWorkerStarted, webhookReconcileWorkerStarted, followUpWorkerStarted, providerHealthWorkerStarted, backupWorkerStarted, emailPollWorkerStarted, delayedActionWorkerStarted, retentionWorkerStarted };
+    } catch (error) {
+      runtimeState = { status: "failed", ready: false, detail: error?.code || error?.name || "runtime_start_failed" };
+      log.error("commsHub.runtime.startFailed", { error: safeErrorLog(error) });
+      if (active) scheduleRuntimeSupervisorRetry(active, error?.code || error?.name || "runtime_start_failed");
+      return { started: false, reason: "failed" };
     }
-    const archiveWorkerStarted = active.archiveWorker.start();
-    const socialPollWorkerStarted = active.socialPollWorker.start();
-    const followUpWorkerStarted = active.followUpWorker.start();
-    const providerHealthWorkerStarted = active.providerHealthWorker.start();
-    const backupWorkerStarted = active.backupWorker.start();
-    const emailPollWorkerStarted = Object.fromEntries(Object.entries(active.emailPollWorkers).map(([key, worker]) => [key, worker.start()]));
-    const delayedActionWorkerStarted = active.delayedActionWorker.start();
-    const retentionWorkerStarted = active.retentionWorker.start();
-    runtimeState = {
-      status: "ready",
-      ready: true,
-      detail: "configured_workers_started",
-      workers: {
-        archive: archiveWorkerStarted,
-        socialPoll: socialPollWorkerStarted,
-        followUp: followUpWorkerStarted,
-        providerHealth: providerHealthWorkerStarted,
-        backup: backupWorkerStarted,
-        emailPoll: emailPollWorkerStarted,
-        delayedActions: delayedActionWorkerStarted,
-        retention: retentionWorkerStarted,
-      },
-    };
-    log.info("commsHub.runtime.started", {
-      archiveWorkerStarted,
-      socialPollWorkerStarted,
-      followUpWorkerStarted,
-      providerHealthWorkerStarted,
-      backupWorkerStarted,
-      emailPollWorkerStarted,
-      delayedActionWorkerStarted,
-      retentionWorkerStarted,
-      forms: readiness.forms,
-      email: {
-        enabled: active.config.emailEnabled,
-        pollWorkerEnabled: active.config.emailPollWorkerEnabled,
-        imapHost: active.config.oneComImapHost,
-        imapPort: active.config.oneComImapPort,
-        historicalBackfillEnabled: active.config.emailHistoricalBackfillEnabled,
-        accounts: Object.fromEntries(Object.entries(active.config.emailAccounts || {}).map(([key, account]) => [key, {
-          enabled: account.enabled,
-          address: account.address,
-          mailbox: account.mailbox,
-          manualOnly: account.manualOnly,
-          workflowEvaluationEnabled: account.workflowEvaluationEnabled,
-          passwordConfigured: Boolean(account.password),
-          workerStarted: emailPollWorkerStarted[key] === true,
-        }])),
-      },
-      chat: {
-        enabled: active.config.chatEnabled,
-        provider: "coginpal",
-        transport: active.config.coginPalApiBaseUrl ? "provider_api" : "aims_first_party",
-        webhookSecretConfigured: Boolean(active.config.coginPalWebhookSecret),
-        aiWorkflowEnabled: active.config.chatAiWorkflowEnabled,
-        wakeEnabled: active.config.wakeEnabled,
-        maxMessageChars: active.config.chatMaxMessageChars,
-        maxMessagesPerMinute: active.config.chatMaxMessagesPerMinute,
-      },
-      zernio: Object.fromEntries(Object.entries(readiness.zernio).map(([family, state]) => [family, state.status])),
-      socialMonitoring: {
-        monitorOnly: active.config.socialMonitorOnly,
-        pollWorkerEnabled: active.config.socialPollWorkerEnabled,
-        pollMs: active.config.socialPollMs,
-        batchSize: active.config.socialPollBatchSize,
-        enabledFamilies: active.socialPollWorker.enabledFamilies(),
-        platforms: Object.fromEntries(
-          Object.entries(active.config.zernioFamilies)
-            .filter(([, family]) => family.enabled)
-            .map(([familyName, family]) => [familyName, [...family.platforms]])
-        ),
-        channels: Object.fromEntries(
-          Object.entries(SOCIAL_CHANNEL_CAPABILITIES).map(([platform, capabilities]) => [platform, {
-            family: capabilities.family,
-            enabled: active.config.zernioFamilies?.[capabilities.family]?.enabled === true,
-            directMessages: capabilities.directMessages,
-            comments: capabilities.comments,
-            pollingResources: [...capabilities.pollingResources],
-          }])
-        ),
-      },
-    });
-    return { started: true, archiveWorkerStarted, socialPollWorkerStarted, followUpWorkerStarted, providerHealthWorkerStarted, backupWorkerStarted, emailPollWorkerStarted, delayedActionWorkerStarted, retentionWorkerStarted };
-  } catch (error) {
-    runtimeState = { status: "failed", ready: false, detail: error?.code || error?.name || "runtime_start_failed" };
-    log.error("commsHub.runtime.startFailed", { error: safeErrorLog(error) });
-    return { started: false, reason: "failed" };
+  })();
+
+  try {
+    return await runtimeStartPromise;
+  } finally {
+    runtimeStartPromise = null;
   }
 }
 
 export async function stopCommsHubRuntime() {
+  clearRuntimeSupervisorTimer();
+  runtimeFailureCount = 0;
   if (context) {
     await Promise.all([
       context.archiveWorker.stop(),
       context.socialPollWorker.stop(),
+      context.webhookReconcileWorker.stop(),
       context.followUpWorker.stop(),
       context.providerHealthWorker.stop(),
       context.backupWorker.stop(),
@@ -320,6 +374,9 @@ export function kickCommsHubSocialPoll() {
 }
 
 export function resetCommsHubRuntimeForTests() {
+  clearRuntimeSupervisorTimer();
+  runtimeStartPromise = null;
+  runtimeFailureCount = 0;
   context = null;
   runtimeState = { status: "idle", ready: false, detail: "not_started" };
 }

@@ -161,9 +161,9 @@ In v2.13.3 all completed conversation channels are active: social polling, email
 ## Deployment order
 
 1. Keep `COMMS_HUB_AUTO_MIGRATE_ON_START=true` so AIMS checks and applies any pending immutable Comms Hub migrations before starting Comms Hub workers. `npm run comms:migrate` remains available for explicit maintenance.
-2. Deploy AIMS v2.13.3 with the live non-secret activation profile from `config/production.defaults.env` / `config/comms-hub-all-channels.env.example` and the required production secrets supplied by the deployment environment.
+2. Deploy AIMS v2.14.1 with the live non-secret activation profile from `config/production.defaults.env` / `config/comms-hub-all-channels.env.example` and the required production secrets supplied by the deployment environment.
 3. Confirm readiness for D1, Jotform, one.com email, CogniPal HMAC, both enabled Zernio families and the approved AI Search instances. Missing required live configuration must fail readiness rather than silently disabling a channel.
-4. Confirm `AIMS_OPERATION_OUTREACH_ENABLED=false`. The weekday operations scheduler must report/skip Outreach until its dedicated setup is complete.
+4. Confirm `AIMS_OPERATION_OUTREACH_ENABLED=false`. Make.com owns the temporary twice-daily Outreach trigger, so the internal AIMS operations scheduler must continue to skip Outreach.
 5. Run the Comms Hub regression/build gates, then capture remaining live social-provider and delayed-response timing evidence without weakening security, approval, idempotency or business-hours controls.
 6. Keep automatic backups disabled until the separate backup/restore maintenance-window validation is deliberately completed.
 
@@ -343,7 +343,7 @@ The primary rollout controls are:
 - `COMMS_HUB_CALLBACK_EMAIL_CAPTURE_ENABLED=true`
 - `COMMS_HUB_DELAYED_ACTION_WORKER_ENABLED=true`
 
-Migration `0007_business_hours_and_handoff` expands the delayed-action schema for `reply_draft`, `email_reply` and `form_reply`; deploy/apply it before relying on scheduled business-hour responses. The direct website request to the first-party CogniPal intake is itself what wakes a sleeping Koyeb AIMS instance. The optional signed wake relay remains supplemental and its failure cannot invalidate a message that AIMS has already accepted. See `docs/COMMS_HUB_BUSINESS_HOURS_HANDOFF_V2.13.2.md`.
+Migration `0007_business_hours_and_handoff` expands the delayed-action schema for `reply_draft`, `email_reply` and `form_reply`; deploy/apply it before relying on scheduled business-hour responses. The direct website request to the first-party CogniPal intake is itself what wakes a sleeping Koyeb AIMS instance. The old signed wake relay is retired. Continuous IMAP, social-poll, delayed-action and follow-up automation therefore requires the AIMS Koyeb service to keep at least one instance running. See `docs/COMMS_HUB_BUSINESS_HOURS_HANDOFF_V2.13.2.md` and `docs/COMMS_HUB_RUNTIME_RELIABILITY_V2.14.1.md`.
 
 
 ## Full-channel production activation (v2.13.3)
@@ -352,6 +352,15 @@ The production defaults now activate all completed conversation channels: Jotfor
 
 Migration `0008_full_channel_activation` creates conservative active policies for low-risk/high-confidence chat, email and social replies. Fresh attachment-free email and inbound social messages now kick the Smart Layer analysis path automatically; attachment-bearing messages stay review-gated instead of being blindly auto-answered. Email and processed Jotform substantive replies continue to schedule 2-3 calendar days after receipt, weekdays only between 09:00-17:00 Europe/London. Human hand-off remains restricted to that same weekday business window. Historical email backfill and arbitrary external email recipients remain disabled.
 
-Outreach is deliberately excluded. `AIMS_OPERATION_OUTREACH_ENABLED=false` causes the existing weekday operations windows to skip `/outreach/batch/next` until the dedicated Outreach setup is completed.
+Outreach automation is implemented, but the internal AIMS operations scheduler remains deliberately excluded. `AIMS_OPERATION_OUTREACH_ENABLED=false` prevents duplicate Outreach runs while Make.com owns the temporary twice-daily `/outreach/batch/next` trigger.
 
 AIMS now self-heals pending Comms Hub schema migrations at runtime startup when `COMMS_HUB_AUTO_MIGRATE_ON_START=true`. `npm run comms:migrate` remains available as an explicit maintenance command. `config/comms-hub-all-channels.env.example` documents the non-secret activation profile.
+
+
+## Runtime reliability and restored Outreach lineage (v2.14.1)
+
+AIMS v2.14.1 consolidates the full v2.14.0 guest-article Outreach automation with the later Admin/Newsletter multi-mailbox work, automatic D1 schema recovery and environment-sanity changes. Migration `0009_outreach_automation` is restored and `0010_runtime_reliability` adds a narrow low-risk `social_engagement` autonomous policy while retaining the evidence-required general social policy.
+
+The social polling worker now passes the complete runtime context into polled-event persistence, so polling has the same attachment, human-contact and AI/governance automation capabilities as webhook intake. Enabled Zernio webhooks are reconciled at startup and periodically, and a bounded runtime supervisor retries recoverable Comms Hub startup/schema failures. HIVE should use AIMS `/readyz` for operational monitoring rather than a service-specific liveness endpoint.
+
+The obsolete wake relay has been removed. Keep at least one AIMS Koyeb instance running for continuous background polling and delayed-action workers. Full operational notes are in `docs/COMMS_HUB_RUNTIME_RELIABILITY_V2.14.1.md`.

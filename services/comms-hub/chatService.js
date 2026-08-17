@@ -240,11 +240,6 @@ export class CommsHubChatService {
       conversationId,
       event: { type: 'message_received', channel: 'chat', sender: visitorId, text: messageText, occurredAt: now },
     });
-    if (this.context.config.wakeEnabled) {
-      await this.context.wakeClient.requestWake({ eventId: providerMessageId, reason: 'website_chat', source: 'coginpal', receivedAt: now })
-        .catch((error) => log.warn('commsHub.chat.wakeSignalFailed', { conversationId, error: safeErrorLog(error) }));
-    }
-
     if (!persistence.duplicate && (callbackAlias || (requestHuman && !existingSessionMetadata.callbackEmailOffered))) {
       const message = callbackAlias
         ? 'Thanks. I have attached that email address to this conversation so Jonathan can get back to you in due course.'

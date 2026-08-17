@@ -114,10 +114,11 @@ export class CommsHubEmailService {
     const conversationId = existing?.conversation_id || stableId('cnv', 'email', account.key, threadKey);
     const messageId = stableId('msg', 'email', parsed.messageId);
     const now = new Date().toISOString();
-        const attachmentRows = parsed.attachments.map((item, index) => ({ id: stableId('att', messageId, index, item.filename, item.sha256), filename: item.filename, contentType: item.contentType, status: 'pending', metadata: { size: item.size } }));
+    const outreachReply = existingConversation?.workflow === 'outreach_guest_article';
+    const attachmentRows = parsed.attachments.map((item, index) => ({ id: stableId('att', messageId, index, item.filename, item.sha256), filename: item.filename, contentType: item.contentType, status: 'pending', metadata: { size: item.size } }));
     const persistence = await this.context.operationsRepository.persistChannelMessage({
       contact: { id: contactId, primaryEmail: sender, displayName: parsed.from?.name || sender, phone: '' },
-      conversation: { id: conversationId, channel: 'email', provider: 'one.com', workflow: 'email_inbox', status: 'open', contactId, subject: parsed.subject, sourceReference: parsed.messageId, metadata: { accountKey: account.key, mailbox, threadKey, managedAddress: effectiveManagedAddress, mailboxRole: effectiveMailboxRole, manualOnly: account.manualOnly === true } },
+      conversation: { id: conversationId, channel: 'email', provider: 'one.com', workflow: outreachReply ? 'outreach_guest_article' : 'email_inbox', status: 'open', contactId, subject: parsed.subject, sourceReference: parsed.messageId, metadata: outreachReply ? { ...(existingConversation?.metadata || {}), accountKey: account.key, mailbox, threadKey, managedAddress: effectiveManagedAddress, mailboxRole: effectiveMailboxRole, manualOnly: account.manualOnly === true, outreachReply: true } : { accountKey: account.key, mailbox, threadKey, managedAddress: effectiveManagedAddress, mailboxRole: effectiveMailboxRole, manualOnly: account.manualOnly === true } },
       message: { id: messageId, direction: 'inbound', sender, recipients: [...parsed.to, ...parsed.cc].map((item) => item.address), subject: parsed.subject, bodyText: parsed.text, bodyHtml: parsed.html, providerMessageId: parsed.messageId, receivedAt: parsed.receivedAt, metadata: { uid, rawSha256: parsed.rawSha256, inReplyTo: parsed.inReplyTo, references: parsed.references, managedAddress: effectiveManagedAddress, mailboxRole: effectiveMailboxRole, manualOnly: account.manualOnly === true } },
       attachments: attachmentRows,
       at: now,
@@ -160,19 +161,23 @@ export class CommsHubEmailService {
       metadata: { managedAddress: effectiveManagedAddress, mailboxRole: effectiveMailboxRole, accountKey: account.key },
       updatedAt: now,
     });
-    if (evaluateWorkflow) {
-      await this.context.workflowEngineService.evaluate({ conversationId, event: { type: 'message_received', channel: 'email', sender, text: parsed.text, occurredAt: now } });
+    if (outreachReply && !persistence.duplicate) {
+      await this.context.outreachAutomationService?.scheduleReplyProcessing(conversationId, messageId);
+    } else {
+      if (evaluateWorkflow) {
+        await this.context.workflowEngineService.evaluate({ conversationId, event: { type: 'message_received', channel: 'email', sender, text: parsed.text, occurredAt: now } });
+      }
+      if (!persistence.duplicate && evaluateWorkflow) {
+        kickInboundConversationAutomation({
+          context: this.context,
+          conversationId,
+          actor: 'email-inbound-automation',
+          scheduleFollowUp: true,
+          blockedReason: parsed.attachments.length ? 'attachment_review_required' : '',
+        });
+      }
     }
-    if (!persistence.duplicate && evaluateWorkflow) {
-      kickInboundConversationAutomation({
-        context: this.context,
-        conversationId,
-        actor: 'email-inbound-automation',
-        scheduleFollowUp: true,
-        blockedReason: parsed.attachments.length ? 'attachment_review_required' : '',
-      });
-    }
-    return { duplicate: persistence.duplicate, conversationId, messageId, workflow: 'email_inbox', accountKey: account.key, managedAddress: effectiveManagedAddress, mailboxRole: effectiveMailboxRole, manualOnly: account.manualOnly === true, attachments: attachmentResults };
+    return { duplicate: persistence.duplicate, conversationId, messageId, workflow: outreachReply ? 'outreach_guest_article' : 'email_inbox', accountKey: account.key, managedAddress: effectiveManagedAddress, mailboxRole: effectiveMailboxRole, manualOnly: account.manualOnly === true, attachments: attachmentResults };
   }
 
   async send({ conversationId, bodyText, bodyHtml = null, subject = '', recipients = [], cc = [], attachments = [], attachmentIds = [], idempotencyKey, scheduledDelivery = false, manualReply = false }) {

@@ -297,9 +297,6 @@ export function getCommsHubMissingEnv(env = process.env) {
       missing.push(coginPalApiBaseUrl ? "COMMS_HUB_COGINPAL_API_KEY" : "COMMS_HUB_COGINPAL_API_BASE_URL");
     }
   }
-  if (booleanValue(env.COMMS_HUB_WAKE_ENABLED, false)) {
-    for (const name of ["COMMS_HUB_WAKE_REQUEST_URL", "COMMS_HUB_WAKE_REQUEST_SECRET"]) if (!usableEnvValue(env[name])) missing.push(name);
-  }
   if (booleanValue(env.COMMS_HUB_RETENTION_WORKER_ENABLED, false) && !usableEnvValue(env.R2_BUCKET_COMMS_HUB_PRIVATE)) missing.push("R2_BUCKET_COMMS_HUB_PRIVATE");
   if (booleanValue(env.COMMS_HUB_CREDENTIAL_VAULT_ENABLED, false) && !usableEnvValue(env.COMMS_HUB_CREDENTIAL_MASTER_KEY)) missing.push("COMMS_HUB_CREDENTIAL_MASTER_KEY");
   if (booleanValue(env.COMMS_HUB_EMAIL_POLL_WORKER_ENABLED, false) && !booleanValue(env.COMMS_HUB_EMAIL_ENABLED, false)) missing.push("COMMS_HUB_EMAIL_ENABLED");
@@ -504,6 +501,9 @@ export function loadCommsHubConfig(env = process.env, { requireEnabled = false }
     zernioAckTimeoutMs: positiveInteger(env.COMMS_HUB_ZERNIO_ACK_TIMEOUT_MS, 4_000, "COMMS_HUB_ZERNIO_ACK_TIMEOUT_MS", { min: 500, max: 4_500 }),
     d1TimeoutMs: positiveInteger(env.COMMS_HUB_D1_TIMEOUT_MS, 15_000, "COMMS_HUB_D1_TIMEOUT_MS", { min: 1_000, max: 30_000 }),
     autoMigrateOnStart: booleanValue(env.COMMS_HUB_AUTO_MIGRATE_ON_START, true),
+    runtimeSupervisorEnabled: booleanValue(env.COMMS_HUB_RUNTIME_SUPERVISOR_ENABLED, true),
+    runtimeSupervisorRetryMs: positiveInteger(env.COMMS_HUB_RUNTIME_SUPERVISOR_RETRY_MS, 30_000, "COMMS_HUB_RUNTIME_SUPERVISOR_RETRY_MS", { min: 5_000, max: 300_000 }),
+    runtimeSupervisorMaxRetryMs: positiveInteger(env.COMMS_HUB_RUNTIME_SUPERVISOR_MAX_RETRY_MS, 300_000, "COMMS_HUB_RUNTIME_SUPERVISOR_MAX_RETRY_MS", { min: 30_000, max: 3_600_000 }),
     providerRetryAttempts: positiveInteger(env.COMMS_HUB_PROVIDER_RETRY_ATTEMPTS, 4, "COMMS_HUB_PROVIDER_RETRY_ATTEMPTS", { max: 8 }),
     providerRetryBaseMs: positiveInteger(env.COMMS_HUB_PROVIDER_RETRY_BASE_MS, 500, "COMMS_HUB_PROVIDER_RETRY_BASE_MS", { min: 100, max: 10_000 }),
     providerRetryMaxMs: positiveInteger(env.COMMS_HUB_PROVIDER_RETRY_MAX_MS, 8_000, "COMMS_HUB_PROVIDER_RETRY_MAX_MS", { min: 500, max: 30_000 }),
@@ -520,6 +520,8 @@ export function loadCommsHubConfig(env = process.env, { requireEnabled = false }
     socialPollOverlapMs: positiveInteger(env.COMMS_HUB_ZERNIO_POLL_OVERLAP_MS, 7_200_000, "COMMS_HUB_ZERNIO_POLL_OVERLAP_MS", { min: 60_000, max: 86_400_000 }),
     socialPollMaxMessagePages: positiveInteger(env.COMMS_HUB_ZERNIO_MAX_MESSAGE_PAGES, 5, "COMMS_HUB_ZERNIO_MAX_MESSAGE_PAGES", { min: 1, max: 5 }),
     socialPollMaxCommentPages: positiveInteger(env.COMMS_HUB_ZERNIO_MAX_COMMENT_PAGES, 5, "COMMS_HUB_ZERNIO_MAX_COMMENT_PAGES", { min: 1, max: 10 }),
+    zernioWebhookReconcileEnabled: booleanValue(env.COMMS_HUB_ZERNIO_WEBHOOK_RECONCILE_ENABLED, true),
+    zernioWebhookReconcileIntervalMs: positiveInteger(env.COMMS_HUB_ZERNIO_WEBHOOK_RECONCILE_INTERVAL_MS, 900_000, "COMMS_HUB_ZERNIO_WEBHOOK_RECONCILE_INTERVAL_MS", { min: 60_000, max: 86_400_000 }),
     emailEnabled: booleanValue(env.COMMS_HUB_EMAIL_ENABLED, false),
     emailExternalRecipientsEnabled: booleanValue(env.COMMS_HUB_EMAIL_EXTERNAL_RECIPIENTS_ENABLED, false),
     emailMaxReplyChars: positiveInteger(env.COMMS_HUB_EMAIL_MAX_REPLY_CHARS, 20_000, "COMMS_HUB_EMAIL_MAX_REPLY_CHARS", { min: 1000, max: 100_000 }),
@@ -568,10 +570,6 @@ export function loadCommsHubConfig(env = process.env, { requireEnabled = false }
     chatHistoryLimit: positiveInteger(env.COMMS_HUB_CHAT_HISTORY_LIMIT, 100, "COMMS_HUB_CHAT_HISTORY_LIMIT", { min: 10, max: 250 }),
     chatAiWorkflowEnabled: booleanValue(env.COMMS_HUB_CHAT_AI_WORKFLOW_ENABLED, false),
     webhookSignatureMaxAgeMs: positiveInteger(env.COMMS_HUB_WEBHOOK_SIGNATURE_MAX_AGE_MS, 300_000, "COMMS_HUB_WEBHOOK_SIGNATURE_MAX_AGE_MS", { min: 30_000, max: 3_600_000 }),
-    wakeEnabled: booleanValue(env.COMMS_HUB_WAKE_ENABLED, false),
-    wakeRequestUrl: normaliseBaseUrl(env.COMMS_HUB_WAKE_REQUEST_URL, ""),
-    wakeRequestSecret: usableEnvValue(env.COMMS_HUB_WAKE_REQUEST_SECRET),
-    wakeRequestTimeoutMs: positiveInteger(env.COMMS_HUB_WAKE_REQUEST_TIMEOUT_MS, 10_000, "COMMS_HUB_WAKE_REQUEST_TIMEOUT_MS", { min: 1_000, max: 30_000 }),
     attachmentMaxBytes: positiveInteger(env.COMMS_HUB_ATTACHMENT_MAX_BYTES, 20_971_520, "COMMS_HUB_ATTACHMENT_MAX_BYTES", { min: 1_024, max: 104_857_600 }),
     attachmentDownloadTimeoutMs: positiveInteger(env.COMMS_HUB_ATTACHMENT_DOWNLOAD_TIMEOUT_MS, 30_000, "COMMS_HUB_ATTACHMENT_DOWNLOAD_TIMEOUT_MS", { min: 1_000, max: 120_000 }),
     attachmentScannerProvider: (usableEnvValue(env.COMMS_HUB_ATTACHMENT_SCANNER_PROVIDER) || "cloudmersive").toLowerCase(),
