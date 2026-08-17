@@ -430,7 +430,7 @@ These files exist but are not mounted by the active root route registry:
 | `COMMS_HUB_ZERNIO_ACK_TIMEOUT_MS` | Maximum synchronous webhook acceptance budget. | socialService.js | Optional | `4000` | Hard-capped at 4500 ms so Zernio can retry rather than wait beyond its acknowledgement window. |
 | `COMMS_HUB_ZERNIO_POLL_ENABLED` | Enables leased fallback polling. | socialPollWorker.js | Optional | `true` | Poll jobs are isolated by credential family and platform. |
 | `COMMS_HUB_ARCHIVE_WORKER_ENABLED` | Enables the leased receipt worker. | runtime.js, archiveWorker.js | Optional | `true` | D1 remains the authoritative private store. |
-| `ONECOM_INFO_PASSWORD`, `ONECOM_NEWSLETTER_PASSWORD`, `ONECOM_ADMIN_PASSWORD` | one.com mailbox secrets. `ONECOM_INFO_PASSWORD` is used by the live Comms Hub customer inbox; admin/newsletter remain isolated for service administration and Brevo/newsletter use. | Comms Hub email + future newsletter/admin integrations | Conditional | `blank` | Keep all passwords in Koyeb secrets; only info@ is polled by Comms Hub. |
+| `ONECOM_INFO_PASSWORD`, `ONECOM_NEWSLETTER_PASSWORD`, `ONECOM_ADMIN_PASSWORD` | one.com mailbox secrets. All three mailboxes are polled by Comms Hub when enabled. `admin@` and `newsletter@` are manual-reply-only operator inboxes; `info@` retains the Smart/automated workflow. | Comms Hub email | Conditional | `blank` | Keep all passwords in Koyeb secrets. |
 
 ### Cloudflare purge
 
