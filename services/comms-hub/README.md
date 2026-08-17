@@ -267,11 +267,11 @@ Primary Comms Hub R2 access is authenticated. `comms-hub` and `comms-hub-private
 
 ## Live email rollout configuration
 
-The one.com email estate has three distinct addresses and roles:
+The one.com email estate has three distinct Comms Hub mailbox services:
 
-- `admin@jonathan-harris.online` — service registrations and infrastructure administration. It is **not** a Comms Hub customer inbox and is not polled by the Comms Hub email worker.
-- `info@jonathan-harris.online` — the primary customer-facing mailbox. This is the only mailbox enabled for live Comms Hub IMAP ingestion and SMTP replies in the current phased rollout.
-- `newsletter@jonathan-harris.online` — newsletter/Brevo identity. It remains outside the normal customer-conversation poller and is reserved for the newsletter/Brevo integration.
+- `info@jonathan-harris.online` — the primary customer-facing Smart/automated mailbox.
+- `admin@jonathan-harris.online` — an independently polled operator mailbox surfaced under Unified Inbox → Admin email. It is manual-reply-only.
+- `newsletter@jonathan-harris.online` — an independently polled operator mailbox surfaced under Unified Inbox → Newsletter email. It is manual-reply-only and remains distinct from the newsletter content-generation service.
 
 Email rollout safeguards:
 
@@ -281,7 +281,7 @@ Email rollout safeguards:
 - email attachments use the same `comms-hub-private` quarantine → malware scan → clean promotion → authenticated AIMS access path already proven by forms.
 - an unsafe/unpromoted attachment does not discard its parent email.
 - the live info@ mailbox password is read from `COMMS_HUB_ONECOM_PASSWORD` when supplied, otherwise from the existing `ONECOM_INFO_PASSWORD` secret.
-- `ONECOM_ADMIN_PASSWORD` and `ONECOM_NEWSLETTER_PASSWORD` remain separate secrets for their own future/integration-specific use and are not used by the customer inbox worker.
+- `ONECOM_ADMIN_PASSWORD` and `ONECOM_NEWSLETTER_PASSWORD` are separate one.com mailbox secrets. When the corresponding mailbox flags are enabled, Comms Hub polls `admin@jonathan-harris.online` and `newsletter@jonathan-harris.online` independently. Those two inboxes are manual-reply-only: inbound messages are stored/indexed normally but do not trigger the email Smart/automation workflow.
 
 ### Email deployment diagnostics
 
@@ -291,11 +291,13 @@ For the email phase that file must contain `COMMS_HUB_EMAIL_ENABLED=true` and
 alone do not activate production email.
 
 The customer inbox secret is `ONECOM_INFO_PASSWORD` (or the optional
-`COMMS_HUB_ONECOM_PASSWORD` override). A healthy deployment logs
-`commsHub.runtime.started` with `email.enabled=true`,
-`emailPollWorkerStarted=true` and `email.passwordConfigured=true`.
-The first poll then logs `commsHub.emailPoll.baseline`. IMAP/auth/network
-failures log `commsHub.emailPoll.failed`.
+`COMMS_HUB_ONECOM_PASSWORD` override). Admin and Newsletter use
+`ONECOM_ADMIN_PASSWORD` and `ONECOM_NEWSLETTER_PASSWORD`. A healthy deployment logs
+`commsHub.runtime.started` with `email.enabled=true` and an `email.accounts` map for
+`info`, `admin` and `newsletter`, including each account's `workerStarted`,
+`manualOnly` and `passwordConfigured` state. `emailPollWorkerStarted` is likewise a
+per-account map. Each mailbox establishes its own `commsHub.emailPoll.baseline`;
+IMAP/auth/network failures log `commsHub.emailPoll.failed` with the account key.
 
 
 ## Three-channel social monitoring profile

@@ -8,6 +8,28 @@ import { kickInboundConversationAutomation } from "./inboundAutomationService.js
 
 function address(value) { return String(value || '').trim().toLowerCase(); }
 
+
+function resolveEmailAccount(context, accountKey = 'info') {
+  const key = String(accountKey || 'info').trim().toLowerCase();
+  const account = context?.config?.emailAccounts?.[key];
+  if (account) return account;
+  return {
+    key: context.config.oneComEmailAccountKey || 'info',
+    enabled: context.config.emailEnabled,
+    address: context.config.oneComEmailAddress,
+    username: context.config.oneComEmailUsername,
+    password: context.config.oneComEmailPassword,
+    mailbox: context.config.oneComMailbox,
+    mailboxRole: 'customer_facing',
+    manualOnly: false,
+    workflowEvaluationEnabled: context.config.emailWorkflowEvaluationEnabled,
+  };
+}
+
+function emailClientFor(context, account) {
+  return context.oneComMailAccounts?.[account.key] || context.oneComMail;
+}
+
 function validateReplyBody(context, bodyText, bodyHtml) {
   const text = String(bodyText ?? '').trim();
   const html = String(bodyHtml ?? '').trim();
@@ -76,28 +98,32 @@ function assertConversationReplyRecipients(context, conversation, recipients = [
 export class CommsHubEmailService {
   constructor({ context }) { this.context = context; }
 
-  async persistFetched({ uid, parsed, mailbox = 'INBOX' }) {
+  async persistFetched({ uid, parsed, mailbox = 'INBOX', accountKey = 'info', managedAddress = '', mailboxRole = '', automationEnabled = null }) {
     if (!this.context.config.emailEnabled) throw new CommsHubError(409, 'email_channel_disabled', 'Email channel is disabled.');
     const sender = address(parsed.from?.address);
     if (!sender) throw new CommsHubError(422, 'email_sender_missing', 'Inbound email has no valid sender.');
+    const account = resolveEmailAccount(this.context, accountKey);
+    if (!account.enabled) throw new CommsHubError(409, 'email_mailbox_disabled', `Email mailbox ${account.key} is disabled.`);
+    const effectiveManagedAddress = address(managedAddress) || account.address;
+    const effectiveMailboxRole = String(mailboxRole || account.mailboxRole || 'customer_facing');
+    const evaluateWorkflow = automationEnabled === null ? account.workflowEvaluationEnabled === true : automationEnabled === true;
     const threadKey = emailThreadKey(parsed);
-    const existing = await this.context.operationsRepository.findEmailThread({ accountKey: this.context.config.oneComEmailAccountKey, mailbox, providerThreadKey: threadKey, internetMessageId: parsed.inReplyTo || parsed.messageId });
+    const existing = await this.context.operationsRepository.findEmailThread({ accountKey: account.key, mailbox, providerThreadKey: threadKey, internetMessageId: parsed.inReplyTo || parsed.messageId });
     const existingConversation = existing?.conversation_id ? await this.context.repository.getConversation(existing.conversation_id) : null;
     const contactId = existingConversation?.contact_id || stableId('con', 'email', sender);
-    const conversationId = existing?.conversation_id || stableId('cnv', 'email', this.context.config.oneComEmailAccountKey, threadKey);
+    const conversationId = existing?.conversation_id || stableId('cnv', 'email', account.key, threadKey);
     const messageId = stableId('msg', 'email', parsed.messageId);
     const now = new Date().toISOString();
-    const managedAddress = this.context.config.emailAddressRoles?.info?.address || this.context.config.oneComEmailAddress;
-    const attachmentRows = parsed.attachments.map((item, index) => ({ id: stableId('att', messageId, index, item.filename, item.sha256), filename: item.filename, contentType: item.contentType, status: 'pending', metadata: { size: item.size } }));
+        const attachmentRows = parsed.attachments.map((item, index) => ({ id: stableId('att', messageId, index, item.filename, item.sha256), filename: item.filename, contentType: item.contentType, status: 'pending', metadata: { size: item.size } }));
     const persistence = await this.context.operationsRepository.persistChannelMessage({
       contact: { id: contactId, primaryEmail: sender, displayName: parsed.from?.name || sender, phone: '' },
-      conversation: { id: conversationId, channel: 'email', provider: 'one.com', workflow: 'email_inbox', status: 'open', contactId, subject: parsed.subject, sourceReference: parsed.messageId, metadata: { accountKey: this.context.config.oneComEmailAccountKey, mailbox, threadKey, managedAddress, mailboxRole: 'customer_facing' } },
-      message: { id: messageId, direction: 'inbound', sender, recipients: [...parsed.to, ...parsed.cc].map((item) => item.address), subject: parsed.subject, bodyText: parsed.text, bodyHtml: parsed.html, providerMessageId: parsed.messageId, receivedAt: parsed.receivedAt, metadata: { uid, rawSha256: parsed.rawSha256, inReplyTo: parsed.inReplyTo, references: parsed.references, managedAddress, mailboxRole: 'customer_facing' } },
+      conversation: { id: conversationId, channel: 'email', provider: 'one.com', workflow: 'email_inbox', status: 'open', contactId, subject: parsed.subject, sourceReference: parsed.messageId, metadata: { accountKey: account.key, mailbox, threadKey, managedAddress: effectiveManagedAddress, mailboxRole: effectiveMailboxRole, manualOnly: account.manualOnly === true } },
+      message: { id: messageId, direction: 'inbound', sender, recipients: [...parsed.to, ...parsed.cc].map((item) => item.address), subject: parsed.subject, bodyText: parsed.text, bodyHtml: parsed.html, providerMessageId: parsed.messageId, receivedAt: parsed.receivedAt, metadata: { uid, rawSha256: parsed.rawSha256, inReplyTo: parsed.inReplyTo, references: parsed.references, managedAddress: effectiveManagedAddress, mailboxRole: effectiveMailboxRole, manualOnly: account.manualOnly === true } },
       attachments: attachmentRows,
       at: now,
     });
     await this.context.operationsRepository.ensureConversationOperations(conversationId, 'email-adapter', now);
-    await this.context.operationsRepository.upsertEmailThread({ id: stableId('eth', this.context.config.oneComEmailAccountKey, mailbox, threadKey), conversationId, accountKey: this.context.config.oneComEmailAccountKey, mailbox, providerThreadKey: threadKey, internetMessageId: parsed.messageId, references: [...parsed.references, parsed.messageId], lastUid: uid, createdAt: now, metadata: { subject: parsed.subject } });
+    await this.context.operationsRepository.upsertEmailThread({ id: stableId('eth', account.key, mailbox, threadKey), conversationId, accountKey: account.key, mailbox, providerThreadKey: threadKey, internetMessageId: parsed.messageId, references: [...parsed.references, parsed.messageId], lastUid: uid, createdAt: now, metadata: { subject: parsed.subject } });
     await this.context.operationsRepository.addContactAlias({ id: stableId('als', 'email', sender), contactId, type: 'email', value: sender, provider: 'one.com', confidence: 1, verified: true, createdAt: now, metadata: {} });
     const attachmentResults = [];
     for (let index = 0; index < parsed.attachments.length; index += 1) {
@@ -110,7 +136,7 @@ export class CommsHubEmailService {
           contentType: source.contentType,
           buffer: source.buffer,
           provider: 'one.com',
-          metadata: { messageId, conversationId, contactId, channel: 'email', mailbox, managedAddress },
+          metadata: { messageId, conversationId, contactId, channel: 'email', mailbox, managedAddress: effectiveManagedAddress, accountKey: account.key, mailboxRole: effectiveMailboxRole },
         });
         attachmentResults.push({ attachmentId, status: stored?.quarantined ? 'quarantined' : 'stored' });
       } catch (error) {
@@ -131,13 +157,13 @@ export class CommsHubEmailService {
       contactId,
       channel: 'email',
       searchableText: `${parsed.subject}\n${parsed.text}\n${sender}`,
-      metadata: { managedAddress, mailboxRole: 'customer_facing' },
+      metadata: { managedAddress: effectiveManagedAddress, mailboxRole: effectiveMailboxRole, accountKey: account.key },
       updatedAt: now,
     });
-    if (this.context.config.emailWorkflowEvaluationEnabled) {
+    if (evaluateWorkflow) {
       await this.context.workflowEngineService.evaluate({ conversationId, event: { type: 'message_received', channel: 'email', sender, text: parsed.text, occurredAt: now } });
     }
-    if (!persistence.duplicate && this.context.config.emailWorkflowEvaluationEnabled) {
+    if (!persistence.duplicate && evaluateWorkflow) {
       kickInboundConversationAutomation({
         context: this.context,
         conversationId,
@@ -146,10 +172,10 @@ export class CommsHubEmailService {
         blockedReason: parsed.attachments.length ? 'attachment_review_required' : '',
       });
     }
-    return { duplicate: persistence.duplicate, conversationId, messageId, workflow: 'email_inbox', managedAddress, attachments: attachmentResults };
+    return { duplicate: persistence.duplicate, conversationId, messageId, workflow: 'email_inbox', accountKey: account.key, managedAddress: effectiveManagedAddress, mailboxRole: effectiveMailboxRole, manualOnly: account.manualOnly === true, attachments: attachmentResults };
   }
 
-  async send({ conversationId, bodyText, bodyHtml = null, subject = '', recipients = [], cc = [], attachments = [], attachmentIds = [], idempotencyKey, scheduledDelivery = false }) {
+  async send({ conversationId, bodyText, bodyHtml = null, subject = '', recipients = [], cc = [], attachments = [], attachmentIds = [], idempotencyKey, scheduledDelivery = false, manualReply = false }) {
     if (!this.context.config.emailEnabled) throw new CommsHubError(409, 'email_channel_disabled', 'Email channel is disabled.');
     if (!idempotencyKey) throw new CommsHubError(400, 'idempotency_key_required', 'Idempotency-Key is required.');
     const conversation = await this.context.repository.getConversation(conversationId);
@@ -158,6 +184,15 @@ export class CommsHubEmailService {
     const workspace = await this.context.operationsRepository.getConversationWorkspace(conversationId);
     assertConversationReplyAllowed({ conversation, operations: workspace.operations });
     const thread = workspace.emailThread;
+    const account = resolveEmailAccount(this.context, thread?.account_key || 'info');
+    if (!account.enabled) throw new CommsHubError(409, 'email_mailbox_disabled', `Email mailbox ${account.key} is disabled.`);
+    if (account.manualOnly && manualReply !== true) {
+      throw new CommsHubError(409, 'email_mailbox_manual_only', `${account.address} is a manual-reply-only inbox.`, {
+        failureClass: 'permanent',
+        publicMessage: 'This inbox only allows an operator to send replies manually.',
+      });
+    }
+    const mailClient = emailClientFor(this.context, account);
     const { to, cc: safeCc } = assertConversationReplyRecipients(this.context, conversation, recipients, cc);
     if (!to.length) throw new CommsHubError(422, 'email_recipient_missing', 'Email recipient is missing.');
     if (!scheduledDelivery && this.context.config.emailInitialReplyDelayEnabled && !hasOutboundMessages(conversation)) {
@@ -172,7 +207,7 @@ export class CommsHubEmailService {
         actionType: 'email_reply',
         idempotencyKey,
         seed: `${conversation.id}:initial-email-reply`,
-        payload: { conversationId, bodyText, bodyHtml, subject, recipients: to, cc: safeCc, attachmentIds, idempotencyKey },
+        payload: { conversationId, bodyText, bodyHtml, subject, recipients: to, cc: safeCc, attachmentIds, idempotencyKey, manualReply },
       });
     }
     const storedAttachments = [];
@@ -191,10 +226,10 @@ export class CommsHubEmailService {
     }
     try {
       const references = JSON.parse(thread?.references_json || '[]');
-      const sent = await this.context.oneComMail.sendMessage({ to, cc: safeCc, subject: request.subject, bodyText, bodyHtml, inReplyTo: thread?.internet_message_id || '', references, attachments: allAttachments });
+      const sent = await mailClient.sendMessage({ to, cc: safeCc, subject: request.subject, bodyText, bodyHtml, inReplyTo: thread?.internet_message_id || '', references, attachments: allAttachments });
       const at = new Date().toISOString();
-      await this.context.operationsRepository.recordOutboundMessage({ id: stableId('msg', 'email-out', sent.messageId), conversationId, sender: this.context.config.oneComEmailAddress, recipients: [...to, ...safeCc], subject: request.subject, bodyText, bodyHtml, providerMessageId: sent.messageId, receivedAt: at, metadata: { inReplyTo: thread?.internet_message_id || null, references } });
-      await this.context.operationsRepository.upsertEmailThread({ id: thread?.id || stableId('eth', conversationId), conversationId, accountKey: this.context.config.oneComEmailAccountKey, mailbox: this.context.config.oneComMailbox, providerThreadKey: thread?.provider_thread_key || conversationId, internetMessageId: sent.messageId, references: [...references, sent.messageId], lastUid: thread?.last_uid || null, createdAt: thread?.created_at || at, metadata: {} });
+      await this.context.operationsRepository.recordOutboundMessage({ id: stableId('msg', 'email-out', sent.messageId), conversationId, sender: account.address, recipients: [...to, ...safeCc], subject: request.subject, bodyText, bodyHtml, providerMessageId: sent.messageId, receivedAt: at, metadata: { inReplyTo: thread?.internet_message_id || null, references } });
+      await this.context.operationsRepository.upsertEmailThread({ id: thread?.id || stableId('eth', conversationId), conversationId, accountKey: account.key, mailbox: account.mailbox, providerThreadKey: thread?.provider_thread_key || conversationId, internetMessageId: sent.messageId, references: [...references, sent.messageId], lastUid: thread?.last_uid || null, createdAt: thread?.created_at || at, metadata: {} });
       await this.context.operationsRepository.completeChannelOutboundAction({ idempotencyKey, providerMessageId: sent.messageId, response: sent, at });
       return { duplicate: false, providerMessageId: sent.messageId };
     } catch (error) {

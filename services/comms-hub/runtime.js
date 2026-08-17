@@ -62,6 +62,18 @@ export function createCommsHubContext({ env = process.env, fetchImpl, r2ArchiveS
   const restoreR2 = config.backupEnabled
     ? new PrivateR2Client({ ...config, r2PrivateBucketName: config.r2RestoreBucketName })
     : null;
+  const oneComMailAccounts = Object.freeze(Object.fromEntries(
+    Object.entries(config.emailAccounts || {})
+      .filter(([, account]) => account.enabled)
+      .map(([key, account]) => [key, new OneComMailClient({
+        ...config,
+        oneComEmailAccountKey: account.key,
+        oneComEmailAddress: account.address,
+        oneComEmailUsername: account.username,
+        oneComEmailPassword: account.password,
+        oneComMailbox: account.mailbox,
+      })])
+  ));
   const active = {
     config,
     d1,
@@ -77,7 +89,8 @@ export function createCommsHubContext({ env = process.env, fetchImpl, r2ArchiveS
     backupR2,
     restoreR2,
     backupClient: config.backupEnabled ? new CloudflareBackupClient(config, fetchImpl ? { fetchImpl } : undefined) : null,
-    oneComMail: new OneComMailClient(config),
+    oneComMailAccounts,
+    oneComMail: oneComMailAccounts.info || new OneComMailClient(config),
     coginPal: new CoginPalClient(config, fetchImpl ? { fetchImpl } : undefined),
     malwareScanner: new MalwareScannerClient(config, fetchImpl ? { fetchImpl } : undefined),
     wakeClient: new CommsHubWakeClient(config, fetchImpl ? { fetchImpl } : undefined),
@@ -104,10 +117,18 @@ export function createCommsHubContext({ env = process.env, fetchImpl, r2ArchiveS
   active.followUpWorker = new CommsHubFollowUpWorker({ context: active });
   active.providerHealthWorker = new CommsHubProviderHealthWorker({ context: active });
   active.backupWorker = new CommsHubBackupWorker({ context: active });
-  active.emailPollWorker = new CommsHubEmailPollWorker({ context: active });
+  active.emailPollWorkers = Object.freeze(Object.fromEntries(
+    Object.keys(oneComMailAccounts).map((accountKey) => [accountKey, new CommsHubEmailPollWorker({ context: active, accountKey })])
+  ));
+  active.emailPollWorker = active.emailPollWorkers.info || Object.values(active.emailPollWorkers)[0] || null;
   active.delayedActionWorker = new CommsHubDelayedActionWorker({ context: active });
   active.retentionWorker = new CommsHubRetentionWorker({ context: active });
-  active.quarantineService.register('email_poll', (item) => active.emailPollWorker.replay(item.source_id));
+  active.quarantineService.register('email_poll', (item) => {
+    const accountKey = String(item.source_id || '').split(':')[0];
+    const worker = active.emailPollWorkers[accountKey];
+    if (!worker) throw new Error(`No email poll worker is configured for ${accountKey || 'unknown'}.`);
+    return worker.replay(item.source_id);
+  });
   active.quarantineService.register('delayed_action', (item) => active.delayedActionWorker.replay(item.source_id));
   active.quarantineService.register('retention_job', (item) => active.retentionWorker.replay(item.source_id));
   return Object.freeze(active);
@@ -152,7 +173,7 @@ export async function startCommsHubRuntime() {
     const followUpWorkerStarted = active.followUpWorker.start();
     const providerHealthWorkerStarted = active.providerHealthWorker.start();
     const backupWorkerStarted = active.backupWorker.start();
-    const emailPollWorkerStarted = active.emailPollWorker.start();
+    const emailPollWorkerStarted = Object.fromEntries(Object.entries(active.emailPollWorkers).map(([key, worker]) => [key, worker.start()]));
     const delayedActionWorkerStarted = active.delayedActionWorker.start();
     const retentionWorkerStarted = active.retentionWorker.start();
     runtimeState = {
@@ -183,14 +204,18 @@ export async function startCommsHubRuntime() {
       email: {
         enabled: active.config.emailEnabled,
         pollWorkerEnabled: active.config.emailPollWorkerEnabled,
-        address: active.config.oneComEmailAddress,
-        username: active.config.oneComEmailUsername,
         imapHost: active.config.oneComImapHost,
         imapPort: active.config.oneComImapPort,
-        mailbox: active.config.oneComMailbox,
         historicalBackfillEnabled: active.config.emailHistoricalBackfillEnabled,
-        workflowEvaluationEnabled: active.config.emailWorkflowEvaluationEnabled,
-        passwordConfigured: Boolean(active.config.oneComEmailPassword),
+        accounts: Object.fromEntries(Object.entries(active.config.emailAccounts || {}).map(([key, account]) => [key, {
+          enabled: account.enabled,
+          address: account.address,
+          mailbox: account.mailbox,
+          manualOnly: account.manualOnly,
+          workflowEvaluationEnabled: account.workflowEvaluationEnabled,
+          passwordConfigured: Boolean(account.password),
+          workerStarted: emailPollWorkerStarted[key] === true,
+        }])),
       },
       chat: {
         enabled: active.config.chatEnabled,
@@ -241,7 +266,7 @@ export async function stopCommsHubRuntime() {
       context.followUpWorker.stop(),
       context.providerHealthWorker.stop(),
       context.backupWorker.stop(),
-      context.emailPollWorker.stop(),
+      ...Object.values(context.emailPollWorkers || {}).map((worker) => worker.stop()),
       context.delayedActionWorker.stop(),
       context.retentionWorker.stop(),
     ]);

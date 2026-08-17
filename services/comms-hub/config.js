@@ -282,6 +282,12 @@ export function getCommsHubMissingEnv(env = process.env) {
     if (!usableEnvValue(env.COMMS_HUB_ONECOM_PASSWORD) && !usableEnvValue(env.ONECOM_INFO_PASSWORD)) {
       missing.push("ONECOM_INFO_PASSWORD");
     }
+    if (booleanValue(env.COMMS_HUB_EMAIL_ADMIN_ENABLED, true) && !usableEnvValue(env.ONECOM_ADMIN_PASSWORD)) {
+      missing.push("ONECOM_ADMIN_PASSWORD");
+    }
+    if (booleanValue(env.COMMS_HUB_EMAIL_NEWSLETTER_ENABLED, true) && !usableEnvValue(env.ONECOM_NEWSLETTER_PASSWORD)) {
+      missing.push("ONECOM_NEWSLETTER_PASSWORD");
+    }
   }
   if (effectiveChatEnabled(env)) {
     if (!usableEnvValue(env.COMMS_HUB_COGINPAL_WEBHOOK_SECRET)) missing.push("COMMS_HUB_COGINPAL_WEBHOOK_SECRET");
@@ -375,6 +381,45 @@ export function loadCommsHubConfig(env = process.env, { requireEnabled = false }
   if (!humanHandoffBusinessHoursOnly) {
     throw new CommsHubError(503, 'comms_hub_configuration_invalid', 'COMMS_HUB_HUMAN_HANDOFF_BUSINESS_HOURS_ONLY must remain true. Human hand-off is restricted to Monday-Friday 09:00-17:00 UK time.');
   }
+
+  const primaryEmailAddress = usableEnvValue(env.COMMS_HUB_EMAIL_PRIMARY_ADDRESS) || usableEnvValue(env.COMMS_HUB_ONECOM_EMAIL_ADDRESS) || "info@jonathan-harris.online";
+  const primaryEmailUsername = usableEnvValue(env.COMMS_HUB_ONECOM_USERNAME) || primaryEmailAddress;
+  const oneComMailbox = usableEnvValue(env.COMMS_HUB_ONECOM_MAILBOX) || "INBOX";
+  const emailAccounts = Object.freeze({
+    info: Object.freeze({
+      key: "info",
+      enabled: booleanValue(env.COMMS_HUB_EMAIL_ENABLED, false),
+      address: primaryEmailAddress,
+      username: primaryEmailUsername,
+      password: usableEnvValue(env.COMMS_HUB_ONECOM_PASSWORD) || usableEnvValue(env.ONECOM_INFO_PASSWORD),
+      mailbox: oneComMailbox,
+      mailboxRole: "customer_facing",
+      manualOnly: false,
+      workflowEvaluationEnabled: booleanValue(env.COMMS_HUB_EMAIL_WORKFLOW_EVALUATION_ENABLED, false),
+    }),
+    admin: Object.freeze({
+      key: "admin",
+      enabled: booleanValue(env.COMMS_HUB_EMAIL_ENABLED, false) && booleanValue(env.COMMS_HUB_EMAIL_ADMIN_ENABLED, true),
+      address: usableEnvValue(env.COMMS_HUB_EMAIL_ADMIN_ADDRESS) || "admin@jonathan-harris.online",
+      username: usableEnvValue(env.COMMS_HUB_EMAIL_ADMIN_USERNAME) || usableEnvValue(env.COMMS_HUB_EMAIL_ADMIN_ADDRESS) || "admin@jonathan-harris.online",
+      password: usableEnvValue(env.ONECOM_ADMIN_PASSWORD),
+      mailbox: usableEnvValue(env.COMMS_HUB_EMAIL_ADMIN_MAILBOX) || oneComMailbox,
+      mailboxRole: "service_admin",
+      manualOnly: true,
+      workflowEvaluationEnabled: false,
+    }),
+    newsletter: Object.freeze({
+      key: "newsletter",
+      enabled: booleanValue(env.COMMS_HUB_EMAIL_ENABLED, false) && booleanValue(env.COMMS_HUB_EMAIL_NEWSLETTER_ENABLED, true),
+      address: usableEnvValue(env.COMMS_HUB_EMAIL_NEWSLETTER_ADDRESS) || "newsletter@jonathan-harris.online",
+      username: usableEnvValue(env.COMMS_HUB_EMAIL_NEWSLETTER_USERNAME) || usableEnvValue(env.COMMS_HUB_EMAIL_NEWSLETTER_ADDRESS) || "newsletter@jonathan-harris.online",
+      password: usableEnvValue(env.ONECOM_NEWSLETTER_PASSWORD),
+      mailbox: usableEnvValue(env.COMMS_HUB_EMAIL_NEWSLETTER_MAILBOX) || oneComMailbox,
+      mailboxRole: "newsletter",
+      manualOnly: true,
+      workflowEvaluationEnabled: false,
+    }),
+  });
 
   return Object.freeze({
     enabled: readiness.enabled,
@@ -477,25 +522,26 @@ export function loadCommsHubConfig(env = process.env, { requireEnabled = false }
     emailEnabled: booleanValue(env.COMMS_HUB_EMAIL_ENABLED, false),
     emailExternalRecipientsEnabled: booleanValue(env.COMMS_HUB_EMAIL_EXTERNAL_RECIPIENTS_ENABLED, false),
     emailMaxReplyChars: positiveInteger(env.COMMS_HUB_EMAIL_MAX_REPLY_CHARS, 20_000, "COMMS_HUB_EMAIL_MAX_REPLY_CHARS", { min: 1000, max: 100_000 }),
-    oneComEmailAccountKey: usableEnvValue(env.COMMS_HUB_ONECOM_ACCOUNT_KEY),
-    oneComEmailAddress: usableEnvValue(env.COMMS_HUB_ONECOM_EMAIL_ADDRESS),
-    oneComEmailUsername: usableEnvValue(env.COMMS_HUB_ONECOM_USERNAME),
-    oneComEmailPassword: usableEnvValue(env.COMMS_HUB_ONECOM_PASSWORD) || usableEnvValue(env.ONECOM_INFO_PASSWORD),
+    emailAccounts,
+    oneComEmailAccountKey: emailAccounts.info.key,
+    oneComEmailAddress: emailAccounts.info.address,
+    oneComEmailUsername: emailAccounts.info.username,
+    oneComEmailPassword: emailAccounts.info.password,
     emailAddressRoles: Object.freeze({
       admin: Object.freeze({
-        address: usableEnvValue(env.COMMS_HUB_EMAIL_ADMIN_ADDRESS) || "admin@jonathan-harris.online",
+        address: emailAccounts.admin.address,
         purpose: "service_admin",
-        commsHubManaged: false,
+        commsHubManaged: true,
       }),
       info: Object.freeze({
-        address: usableEnvValue(env.COMMS_HUB_EMAIL_PRIMARY_ADDRESS) || usableEnvValue(env.COMMS_HUB_ONECOM_EMAIL_ADDRESS) || "info@jonathan-harris.online",
+        address: emailAccounts.info.address,
         purpose: "customer_facing",
         commsHubManaged: true,
       }),
       newsletter: Object.freeze({
-        address: usableEnvValue(env.COMMS_HUB_EMAIL_NEWSLETTER_ADDRESS) || "newsletter@jonathan-harris.online",
+        address: emailAccounts.newsletter.address,
         purpose: "newsletter_brevo",
-        commsHubManaged: false,
+        commsHubManaged: true,
       }),
     }),
     oneComImapHost: usableEnvValue(env.COMMS_HUB_ONECOM_IMAP_HOST) || "imap.one.com",
@@ -503,7 +549,7 @@ export function loadCommsHubConfig(env = process.env, { requireEnabled = false }
     oneComSmtpHost: usableEnvValue(env.COMMS_HUB_ONECOM_SMTP_HOST) || "send.one.com",
     oneComSmtpPort: positiveInteger(env.COMMS_HUB_ONECOM_SMTP_PORT, 465, "COMMS_HUB_ONECOM_SMTP_PORT", { min: 1, max: 65535 }),
     oneComSmtpEhloName: usableEnvValue(env.COMMS_HUB_ONECOM_SMTP_EHLO_NAME) || "aims.jonathan-harris.online",
-    oneComMailbox: usableEnvValue(env.COMMS_HUB_ONECOM_MAILBOX) || "INBOX",
+    oneComMailbox,
     oneComEmailTimeoutMs: positiveInteger(env.COMMS_HUB_ONECOM_TIMEOUT_MS, 20_000, "COMMS_HUB_ONECOM_TIMEOUT_MS", { min: 1_000, max: 60_000 }),
     emailPollWorkerEnabled: booleanValue(env.COMMS_HUB_EMAIL_POLL_WORKER_ENABLED, false),
     emailPollMs: positiveInteger(env.COMMS_HUB_EMAIL_POLL_MS, 60_000, "COMMS_HUB_EMAIL_POLL_MS", { min: 30_000, max: 3_600_000 }),
