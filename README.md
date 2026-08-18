@@ -411,7 +411,8 @@ These files exist but are not mounted by the active root route registry:
 
 | Name | Purpose | Used by | Required | Default/template | Notes |
 |---|---|---|---|---|---|
-| `COMMS_HUB_ENABLED` | Enables service runtime and readiness enforcement. | services/comms-hub, server.js | Required switch | `false` | Keep false until both migrations succeed. |
+| `COMMS_HUB_ENABLED` | Enables service runtime and readiness enforcement. | services/comms-hub, server.js | Required switch | `false` | When enabled, startup verifies the schema before workers start. |
+| `COMMS_HUB_AUTO_MIGRATE_ON_START` | Automatically applies pending immutable Comms Hub migrations when runtime detects schema drift. | Comms Hub runtime and migration runner | Optional | `true` | Uses administrative D1 credentials, bypasses the runtime Worker data plane, and fails closed on checksum/schema errors. |
 | `D1_UUID` | Cloudflare D1 database UUID and migration target. | Comms Hub migration and D1 client | Required when enabled | `blank` | Koyeb secret-backed administrative value. |
 | `D1_API_KEY` | Cloudflare token used by explicit migrations and Phase 1 REST fallback. | scripts/commsHubMigrate.js, D1 client | Required when enabled | `blank` | Runtime social queries use the Worker proxy instead. |
 | `COMMS_HUB_D1_PROXY_URL` | Bound-Worker runtime query endpoint. | Phase 2 D1 client | Required when either social family is enabled | `blank` | Use the exact `/query` URL. |

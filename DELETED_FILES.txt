@@ -1,0 +1,10 @@
+Files removed by the production remediation pass.
+Delete these paths from the repository when applying this update ZIP.
+
+AIMS-main/MANIFEST.json
+AIMS-main/UPDATED_FILES_MANIFEST.txt
+AIMS-main/config/README.md
+AIMS-main/episode-counter.json
+AIMS-main/services/comms-hub/domain/0002_zernio_social.sql
+AIMS-main/test/outreach-temporary-public-trigger.test.js
+AIMS-main/utils/temp.js
