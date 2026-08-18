@@ -494,9 +494,10 @@ export class CommsHubRepository {
 
   async listSocialConversations({ platform = "", status = "", limit = 50, before = "" } = {}) {
     const clauses = ["c.provider = 'zernio'"];
+    if (!status) clauses.push("COALESCE(o.operational_status, c.status) <> 'archived'");
     const params = [];
     if (platform) { clauses.push("t.platform = ?"); params.push(platform); }
-    if (status) { clauses.push("c.status = ?"); params.push(status); }
+    if (status) { clauses.push("COALESCE(o.operational_status, c.status) = ?"); params.push(status); }
     if (before) { clauses.push("c.updated_at < ?"); params.push(before); }
     params.push(Math.max(1, Math.min(100, Number(limit) || 50)));
     const result = await this.d1.query(
@@ -505,6 +506,7 @@ export class CommsHubRepository {
               t.provider_status, i.username, i.display_name, i.avatar_url
          FROM comms_hub_conversations c
          JOIN comms_hub_social_threads t ON t.conversation_id = c.id
+         LEFT JOIN comms_hub_conversation_operations o ON o.conversation_id = c.id
          LEFT JOIN comms_hub_channel_identities i
            ON i.contact_id = c.contact_id AND i.account_id = t.account_id AND i.platform = t.platform
         WHERE ${clauses.join(" AND ")}

@@ -69,6 +69,7 @@ export class CommsOperationsRepository {
     const boundedLimit = Number.isInteger(Number(limit)) ? Math.min(Math.max(Number(limit), 1), 200) : 50;
     const clauses = [];
     const params = [];
+    if (!status) clauses.push("COALESCE(o.operational_status, c.status) <> 'archived'");
     if (status) {
       clauses.push("COALESCE(o.operational_status, c.status) = ?");
       params.push(status);
@@ -790,19 +791,28 @@ export class CommsOperationsRepository {
     return Number(rows(result)[0]?.count || 0);
   }
 
-  async listResolvedBeforeArchiveCutoff(cutoffIso, limit = 100) {
+  async listClosedBeforeArchiveCutoff(cutoffIso, limit = 100) {
     const result = await this.d1.query(
-      `SELECT o.conversation_id, o.resolved_at, o.version, c.channel, c.contact_id
-         FROM comms_hub_conversation_operations o
-         JOIN comms_hub_conversations c ON c.id = o.conversation_id
-        WHERE o.operational_status = 'resolved'
-          AND o.resolved_at IS NOT NULL
-          AND o.resolved_at < ?
-        ORDER BY o.resolved_at ASC
+      `SELECT c.id AS conversation_id,
+              COALESCE(o.resolved_at, c.updated_at) AS closed_at,
+              o.version,
+              c.channel,
+              c.contact_id
+         FROM comms_hub_conversations c
+         LEFT JOIN comms_hub_conversation_operations o ON o.conversation_id = c.id
+        WHERE (
+              (o.operational_status = 'resolved' AND o.resolved_at IS NOT NULL AND o.resolved_at < ?)
+           OR (c.status = 'closed' AND c.updated_at < ? AND COALESCE(o.operational_status, '') <> 'archived')
+        )
+        ORDER BY COALESCE(o.resolved_at, c.updated_at) ASC
         LIMIT ?`,
-      [cutoffIso, Math.min(Math.max(Number(limit) || 100, 1), 500)]
+      [cutoffIso, cutoffIso, Math.min(Math.max(Number(limit) || 100, 1), 500)]
     );
     return rows(result);
+  }
+
+  async listResolvedBeforeArchiveCutoff(cutoffIso, limit = 100) {
+    return this.listClosedBeforeArchiveCutoff(cutoffIso, limit);
   }
 
   async upsertRetentionPolicy(policy) {
@@ -1663,6 +1673,98 @@ export class CommsOperationsRepository {
     return { contact, aliases: rows(aliasesResult), channelIdentities: rows(identitiesResult), conversations: rows(conversationsResult), identityLinks: rows(linksResult) };
   }
 
+  async updateContact({ contactId, changes, at = nowIso() }) {
+    const currentResult = await this.d1.query(`SELECT * FROM comms_hub_contacts WHERE id = ?`, [contactId]);
+    const current = rows(currentResult)[0] || null;
+    if (!current) return null;
+
+    const sets = [];
+    const params = [];
+    for (const [column, key] of [["display_name", "displayName"], ["primary_email", "primaryEmail"], ["phone", "phone"]]) {
+      if (!Object.prototype.hasOwnProperty.call(changes, key)) continue;
+      sets.push(`${column} = ?`);
+      params.push(changes[key]);
+    }
+    if (!sets.length) return current;
+    sets.push("updated_at = ?");
+    params.push(at, contactId);
+    const result = await this.d1.query(
+      `UPDATE comms_hub_contacts SET ${sets.join(", ")} WHERE id = ? RETURNING *`,
+      params
+    );
+    return rows(result)[0] || null;
+  }
+
+  async findContactByEmail(primaryEmail, excludeContactId = "") {
+    if (!primaryEmail) return null;
+    const result = await this.d1.query(
+      `SELECT id, primary_email, display_name, phone, created_at, updated_at
+         FROM comms_hub_contacts
+        WHERE LOWER(primary_email) = ? AND (? = '' OR id <> ?)
+        LIMIT 1`,
+      [primaryEmail, excludeContactId, excludeContactId]
+    );
+    return rows(result)[0] || null;
+  }
+
+  async deleteContactPreservingConversations({ contactId, replacementContactId, at = nowIso() }) {
+    const replacementName = "Deleted contact";
+    const [archiveResult, conversationCountResult] = await Promise.all([
+      this.d1.query(
+        `SELECT conversation_id, snapshot_json
+           FROM comms_hub_conversation_archives
+          WHERE contact_id = ?`,
+        [contactId]
+      ),
+      this.d1.query(`SELECT COUNT(*) AS count FROM comms_hub_conversations WHERE contact_id = ?`, [contactId]),
+    ]);
+    const archiveUpdates = rows(archiveResult).map((archive) => {
+      const snapshot = parseJson(archive.snapshot_json, {});
+      if (snapshot?.conversation) {
+        snapshot.conversation.contact_id = replacementContactId;
+        snapshot.conversation.contact = {
+          id: replacementContactId,
+          primary_email: null,
+          display_name: replacementName,
+          phone: null,
+          deleted: true,
+        };
+      }
+      return {
+        sql: `UPDATE comms_hub_conversation_archives SET contact_id = ?, snapshot_json = ? WHERE conversation_id = ?`,
+        params: [replacementContactId, json(snapshot), archive.conversation_id],
+      };
+    });
+
+    await this.d1.batch([
+      {
+        sql: `INSERT OR IGNORE INTO comms_hub_contacts
+          (id, primary_email, display_name, phone, created_at, updated_at)
+          VALUES (?, NULL, ?, NULL, ?, ?)`,
+        params: [replacementContactId, replacementName, at, at],
+      },
+      { sql: `DELETE FROM comms_hub_contact_aliases WHERE contact_id = ?`, params: [contactId] },
+      { sql: `DELETE FROM comms_hub_channel_identities WHERE contact_id = ?`, params: [contactId] },
+      { sql: `DELETE FROM comms_hub_identity_links WHERE source_contact_id = ? OR target_contact_id = ?`, params: [contactId, contactId] },
+      { sql: `UPDATE comms_hub_conversations SET contact_id = ?, updated_at = ? WHERE contact_id = ?`, params: [replacementContactId, at, contactId] },
+      { sql: `UPDATE comms_hub_form_requests SET source_contact_id = ? WHERE source_contact_id = ?`, params: [replacementContactId, contactId] },
+      { sql: `UPDATE comms_hub_retention_jobs SET contact_id = ? WHERE contact_id = ?`, params: [replacementContactId, contactId] },
+      { sql: `UPDATE comms_hub_search_documents SET contact_id = ? WHERE contact_id = ? AND object_type <> 'contact'`, params: [replacementContactId, contactId] },
+      { sql: `DELETE FROM comms_hub_search_documents WHERE object_type = 'contact' AND object_id = ?`, params: [contactId] },
+    ]);
+    for (let index = 0; index < archiveUpdates.length; index += 80) {
+      await this.d1.batch(archiveUpdates.slice(index, index + 80));
+    }
+    await this.d1.query(`DELETE FROM comms_hub_contacts WHERE id = ?`, [contactId]);
+    return {
+      contactId,
+      replacementContactId,
+      linkedConversationCount: Number(rows(conversationCountResult)[0]?.count || 0),
+      archivedConversationCount: archiveUpdates.length,
+      deletedAt: at,
+    };
+  }
+
   async addContactAlias(alias) {
     const result = await this.d1.query(
       `INSERT INTO comms_hub_contact_aliases
@@ -1810,6 +1912,101 @@ export class CommsOperationsRepository {
       await this.d1.query(`UPDATE comms_hub_form_requests SET status = 'replied', processed_at = COALESCE(processed_at, ?), replied_at = ?, updated_at = ? WHERE id = ?`, [at, replySentAt || at, at, row.matched_form_request_id]);
     }
     return row;
+  }
+
+  async storeConversationArchive({ conversation, snapshot, closedAt, archivedAt = nowIso() }) {
+    const result = await this.d1.query(
+      `INSERT INTO comms_hub_conversation_archives
+        (conversation_id, contact_id, channel, provider, workflow, subject, closed_at, archived_at, snapshot_json)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(conversation_id) DO UPDATE SET
+         contact_id = excluded.contact_id,
+         channel = excluded.channel,
+         provider = excluded.provider,
+         workflow = excluded.workflow,
+         subject = excluded.subject,
+         closed_at = excluded.closed_at,
+         archived_at = excluded.archived_at,
+         snapshot_json = excluded.snapshot_json
+       RETURNING conversation_id, contact_id, channel, provider, workflow, subject, closed_at, archived_at`,
+      [conversation.id, conversation.contact_id, conversation.channel, conversation.provider, conversation.workflow,
+        conversation.subject, closedAt, archivedAt, json(snapshot)]
+    );
+    return rows(result)[0] || null;
+  }
+
+  async getConversationArchive(conversationId) {
+    const result = await this.d1.query(
+      `SELECT conversation_id, contact_id, channel, provider, workflow, subject, closed_at, archived_at, snapshot_json
+         FROM comms_hub_conversation_archives
+        WHERE conversation_id = ?`,
+      [conversationId]
+    );
+    const archive = rows(result)[0] || null;
+    if (!archive) return null;
+    return { ...archive, snapshot: parseJson(archive.snapshot_json, {}) };
+  }
+
+  async listConversationArchives({ contactId = "", channel = "", before = "", limit = 50 } = {}) {
+    const clauses = [];
+    const params = [];
+    if (contactId) { clauses.push("contact_id = ?"); params.push(contactId); }
+    if (channel) { clauses.push("channel = ?"); params.push(channel); }
+    if (before) { clauses.push("archived_at < ?"); params.push(before); }
+    const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
+    const result = await this.d1.query(
+      `SELECT conversation_id, contact_id, channel, provider, workflow, subject, closed_at, archived_at
+         FROM comms_hub_conversation_archives
+         ${where}
+        ORDER BY archived_at DESC
+        LIMIT ?`,
+      [...params, Math.min(Math.max(Number(limit) || 50, 1), 200)]
+    );
+    return rows(result);
+  }
+
+  async hardDeleteConversation({ conversationId }) {
+    const statements = [
+      { sql: `DELETE FROM comms_hub_attachment_objects WHERE attachment_id IN (SELECT a.id FROM comms_hub_attachments a JOIN comms_hub_messages m ON m.id = a.message_id WHERE m.conversation_id = ?)`, params: [conversationId] },
+      { sql: `DELETE FROM comms_hub_social_events WHERE conversation_id = ? OR message_id IN (SELECT id FROM comms_hub_messages WHERE conversation_id = ?)`, params: [conversationId, conversationId] },
+      { sql: `DELETE FROM comms_hub_attachments WHERE message_id IN (SELECT id FROM comms_hub_messages WHERE conversation_id = ?)`, params: [conversationId] },
+      { sql: `DELETE FROM comms_hub_mentions WHERE conversation_id = ?`, params: [conversationId] },
+      { sql: `DELETE FROM comms_hub_workflow_events WHERE workflow_run_id IN (SELECT id FROM comms_hub_workflow_runs WHERE conversation_id = ?)`, params: [conversationId] },
+      { sql: `DELETE FROM comms_hub_moderation_actions WHERE conversation_id = ?`, params: [conversationId] },
+      { sql: `DELETE FROM comms_hub_reply_drafts WHERE conversation_id = ?`, params: [conversationId] },
+      { sql: `DELETE FROM comms_hub_ai_evidence WHERE conversation_id = ?`, params: [conversationId] },
+      { sql: `DELETE FROM comms_hub_follow_ups WHERE conversation_id = ?`, params: [conversationId] },
+      { sql: `DELETE FROM comms_hub_conversation_state WHERE conversation_id = ?`, params: [conversationId] },
+      { sql: `DELETE FROM comms_hub_ai_runs WHERE conversation_id = ?`, params: [conversationId] },
+      { sql: `DELETE FROM comms_hub_form_processing WHERE conversation_id = ?`, params: [conversationId] },
+      { sql: `DELETE FROM comms_hub_form_requests WHERE source_conversation_id = ? OR submission_conversation_id = ?`, params: [conversationId, conversationId] },
+      { sql: `DELETE FROM comms_hub_outreach_articles WHERE conversation_id = ? OR target_id IN (SELECT id FROM comms_hub_outreach_targets WHERE conversation_id = ?)`, params: [conversationId, conversationId] },
+      { sql: `DELETE FROM comms_hub_outreach_targets WHERE conversation_id = ?`, params: [conversationId] },
+      { sql: `DELETE FROM comms_hub_approvals WHERE conversation_id = ?`, params: [conversationId] },
+      { sql: `DELETE FROM comms_hub_channel_outbound_actions WHERE conversation_id = ?`, params: [conversationId] },
+      { sql: `DELETE FROM comms_hub_social_outbound_actions WHERE conversation_id = ?`, params: [conversationId] },
+      { sql: `DELETE FROM comms_hub_social_threads WHERE conversation_id = ?`, params: [conversationId] },
+      { sql: `DELETE FROM comms_hub_email_threads WHERE conversation_id = ?`, params: [conversationId] },
+      { sql: `DELETE FROM comms_hub_chat_sessions WHERE conversation_id = ?`, params: [conversationId] },
+      { sql: `DELETE FROM comms_hub_delayed_actions WHERE conversation_id = ?`, params: [conversationId] },
+      { sql: `DELETE FROM comms_hub_escalations WHERE conversation_id = ?`, params: [conversationId] },
+      { sql: `DELETE FROM comms_hub_priority_overrides WHERE conversation_id = ?`, params: [conversationId] },
+      { sql: `DELETE FROM comms_hub_intake_events WHERE conversation_id = ?`, params: [conversationId] },
+      { sql: `DELETE FROM comms_hub_conversation_tags WHERE conversation_id = ?`, params: [conversationId] },
+      { sql: `DELETE FROM comms_hub_internal_notes WHERE conversation_id = ?`, params: [conversationId] },
+      { sql: `DELETE FROM comms_hub_notifications WHERE conversation_id = ?`, params: [conversationId] },
+      { sql: `UPDATE comms_hub_quarantine_items SET conversation_id = NULL WHERE conversation_id = ?`, params: [conversationId] },
+      { sql: `UPDATE comms_hub_retention_jobs SET conversation_id = NULL WHERE conversation_id = ?`, params: [conversationId] },
+      { sql: `DELETE FROM comms_hub_search_documents WHERE conversation_id = ? OR (object_type = 'conversation' AND object_id = ?)`, params: [conversationId, conversationId] },
+      { sql: `DELETE FROM comms_hub_conversation_operations WHERE conversation_id = ?`, params: [conversationId] },
+      { sql: `DELETE FROM comms_hub_messages WHERE conversation_id = ?`, params: [conversationId] },
+      { sql: `DELETE FROM comms_hub_workflow_runs WHERE conversation_id = ?`, params: [conversationId] },
+      { sql: `DELETE FROM comms_hub_conversation_archives WHERE conversation_id = ?`, params: [conversationId] },
+      { sql: `DELETE FROM comms_hub_conversations WHERE id = ? RETURNING id`, params: [conversationId] },
+    ];
+    const results = await this.d1.batch(statements);
+    const deleted = rows(results.at(-1))[0]?.id || null;
+    return { conversationId, deleted: Boolean(deleted) };
   }
 
   async getConversationWorkspace(conversationId) {
