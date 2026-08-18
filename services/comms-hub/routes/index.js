@@ -641,6 +641,27 @@ export function createCommsHubRouter({
     } catch (error) { next(error); }
   });
 
+  router.get("/archives/conversations", permit("read_queue"), async (req, res, next) => {
+    try {
+      const archives = await contextProvider().operationsService.listConversationArchives({
+        contactId: String(req.query.contactId || "").trim(),
+        channel: String(req.query.channel || "").trim().toLowerCase(),
+        before: String(req.query.before || "").trim(),
+        limit: Number(req.query.limit || 50),
+      }, req);
+      return res.status(200).json({ ok: true, service: "comms-hub", archives });
+    } catch (error) { next(error); }
+  });
+
+  router.get("/archives/conversations/:conversationId", permit("read_conversation"), async (req, res, next) => {
+    try {
+      const conversationId = validConversationId(req.params.conversationId);
+      if (!conversationId) throw new CommsHubError(400, "conversation_id_invalid", "Conversation ID is invalid.");
+      const archive = await contextProvider().operationsService.archivedConversation(conversationId, req);
+      return res.status(200).json({ ok: true, service: "comms-hub", archive });
+    } catch (error) { next(error); }
+  });
+
   router.post("/conversations/:conversationId/priority", permit("update_status"), async (req, res, next) => {
     try {
       const conversationId = validConversationId(req.params.conversationId);
@@ -822,6 +843,22 @@ export function createCommsHubRouter({
     catch (error) { next(error); }
   });
 
+  router.patch("/contacts/:contactId", permit("manage_identity"), async (req, res, next) => {
+    try {
+      const contactId = boundedId(req.params.contactId, "ctc");
+      if (!contactId) throw new CommsHubError(400, "contact_id_invalid", "Contact ID is invalid.");
+      return res.json({ ok: true, profile: await contextProvider().operationsService.updateContact({ contactId, ...(req.body || {}) }, req) });
+    } catch (error) { next(error); }
+  });
+
+  router.delete("/contacts/:contactId", permit("manage_retention"), async (req, res, next) => {
+    try {
+      const contactId = boundedId(req.params.contactId, "ctc");
+      if (!contactId) throw new CommsHubError(400, "contact_id_invalid", "Contact ID is invalid.");
+      return res.json({ ok: true, result: await contextProvider().operationsService.deleteContact(contactId, req) });
+    } catch (error) { next(error); }
+  });
+
   router.post("/identity-links", permit("manage_identity"), async (req, res, next) => {
     try { return res.status(201).json({ ok: true, link: await contextProvider().operationsService.proposeIdentityLink(req.body || {}, req) }); }
     catch (error) { next(error); }
@@ -1000,6 +1037,14 @@ export function createCommsHubRouter({
   router.post("/conversations/:conversationId/anonymise", permit("manage_retention"), async (req, res, next) => {
     try { return res.json({ ok: true, result: await contextProvider().governanceService.anonymise({ conversationId: req.params.conversationId, actor: req.commsIdentity.actor }) }); }
     catch (error) { next(error); }
+  });
+
+  router.delete("/conversations/:conversationId", permit("manage_retention"), async (req, res, next) => {
+    try {
+      const conversationId = validConversationId(req.params.conversationId);
+      if (!conversationId) throw new CommsHubError(400, "conversation_id_invalid", "Conversation ID is invalid.");
+      return res.json({ ok: true, result: await contextProvider().governanceService.deleteConversation({ conversationId, actor: req.commsIdentity.actor }) });
+    } catch (error) { next(error); }
   });
 
   router.post("/conversations/:conversationId/delete", permit("manage_retention"), async (req, res, next) => {
