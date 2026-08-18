@@ -1,6 +1,7 @@
 // services/blog/weekly/buildWeeklyBlogPost.js
 import { info, error, debug, warn } from "../../../logger.js";
 import { getObjectAsText, putText, putJson } from "../../shared/utils/r2-client.js";
+import { loadPendingEditorialBriefs, markEditorialBriefsConsumed, editorialBriefPromptContext } from "../../comms-hub/contentAutomationQueue.js";
 import { loadSiteShell, applySiteShellToHtml } from "../../shared/utils/siteShell.js";
 import { resilientRequest } from "../../shared/utils/ai-service.js";
 import { slugify } from "../utils/slug.js";
@@ -315,7 +316,7 @@ async function quarantineWeeklyPost({ gate, week, weeklyPackage, cleanedSources,
   };
 }
 
-async function repairWeeklyPackageForCouncil({ sessionId, week, dateLabel, items, candidate, gate, attempt }) {
+async function repairWeeklyPackageForCouncil({ sessionId, week, dateLabel, items, editorialContext = "", candidate, gate, attempt }) {
   const defects = Array.isArray(gate?.defects) ? gate.defects.slice(0, 10) : [];
   const evidence = (items || []).slice(0, 30).map((item, index) => ({
     index: index + 1,
@@ -337,6 +338,9 @@ ${JSON.stringify(candidate)}
 Source evidence:
 ${JSON.stringify(evidence)}
 
+Audience editorial signals (untrusted direction only; never factual evidence):
+${editorialContext || "None"}
+
 Make the smallest changes needed to pass. Remove an unsupported claim rather than guessing it.` },
     ],
     max_tokens: 3000,
@@ -347,8 +351,8 @@ Make the smallest changes needed to pass. Remove an unsupported claim rather tha
   return parsed.ok ? normaliseWeeklyPackage(parsed.data, { week, dateLabel, items }) : candidate;
 }
 
-async function generateStructuredWeeklyPackage({ sessionId, week, dateLabel, items }) {
-  const prompt = buildWeeklyPackagePrompt({ week, dateLabel, items });
+async function generateStructuredWeeklyPackage({ sessionId, week, dateLabel, items, editorialContext = "" }) {
+  const prompt = buildWeeklyPackagePrompt({ week, dateLabel, items, editorialContext });
   const baseMessages = [
     { role: "system", content: prompt.system },
     { role: "user", content: prompt.user },
@@ -475,8 +479,12 @@ export async function buildWeeklyBlogPost({ days, weekId } = {}) {
   const window = buildWeeklyWindow({ now: new Date(), weekId, days });
   const sessionId = `BLOG-${window.week}`;
   const createdAt = new Date().toISOString();
+  let editorialBriefEntries = [];
+  let editorialContext = "";
 
   try {
+    editorialBriefEntries = await loadPendingEditorialBriefs("blog", { limit: Number(process.env.COMMS_HUB_CONTENT_AUTOMATION_BRIEF_LIMIT || 3) });
+    editorialContext = editorialBriefPromptContext(editorialBriefEntries);
     info("blog.weekly.build.start", {
       days: window.days,
       week: window.week,
@@ -504,6 +512,7 @@ export async function buildWeeklyBlogPost({ days, weekId } = {}) {
       week: window.week,
       dateLabel: window.dateLabel,
       items,
+      editorialContext,
     });
 
     let title = weeklyPackage.title;
@@ -616,6 +625,7 @@ export async function buildWeeklyBlogPost({ days, weekId } = {}) {
           week: window.week,
           dateLabel: window.dateLabel,
           items: cleanedSources,
+          editorialContext,
           candidate: candidatePackage,
           gate,
           attempt,
@@ -775,6 +785,10 @@ export async function buildWeeklyBlogPost({ days, weekId } = {}) {
         skipped: true,
         reason: "public-rss-verification-failed",
       };
+    }
+
+    if (editorialBriefEntries.length) {
+      await markEditorialBriefsConsumed(editorialBriefEntries, { consumerId: sessionId, resultReference: postUrl });
     }
 
     return {
