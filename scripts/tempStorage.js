@@ -11,8 +11,6 @@ const TEMP_DIR = path.resolve(process.env.APP_TMP_DIR || path.join(os.tmpdir(), 
 
 if (!fs.existsSync(TEMP_DIR)) {
   fs.mkdirSync(TEMP_DIR, { recursive: true });
-  log.debug("temp.dir.created", { TEMP_DIR });
 }
 
-log.info("💽 temp.dir.verified");
-log.debug("temp.dir.verified", { TEMP_DIR });
+log.info("temp.dir.verified");
