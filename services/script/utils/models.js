@@ -55,7 +55,12 @@ function normalizeSessionMeta(sessionIdLike) {
     return { sessionId: sessionIdLike, date: m ? m[0] : undefined };
   }
   if (typeof sessionIdLike === "object" && sessionIdLike) {
-    const meta = { sessionId: sessionIdLike.sessionId || "", date: sessionIdLike.date };
+    const meta = {
+      sessionId: sessionIdLike.sessionId || "",
+      date: sessionIdLike.date,
+      editorialContext: String(sessionIdLike.editorialContext || "").slice(0, 18000),
+      editorialBriefs: Array.isArray(sessionIdLike.editorialBriefs) ? sessionIdLike.editorialBriefs.slice(0, 10) : [],
+    };
     // Carry through any explicit duration override so calculateDuration()
     // can honour it instead of always falling back to hash-based rotation.
     for (const key of DURATION_OVERRIDE_KEYS) {
@@ -99,6 +104,11 @@ export async function generateMain(sessionIdLike) {
       link: it?.link || it?.url || "",
     }))
     .filter((a) => a.title || a.summary);
+
+  sessionMeta.sourceItems = articles;
+  if (sessionIdLike && typeof sessionIdLike === "object") {
+    sessionIdLike.sourceItems = articles;
+  }
 
   const { mainSeconds, targetMins } = calculateDuration(
     "main",
