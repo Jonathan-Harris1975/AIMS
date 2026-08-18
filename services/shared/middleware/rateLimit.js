@@ -1,4 +1,5 @@
 import { warn } from "../../../logger.js";
+import { getRateLimitClientId } from "../http/clientIdentity.js";
 
 const DEFAULT_WINDOW_MS = 60_000;
 const DEFAULT_MAX_REQUESTS = 60;
@@ -40,14 +41,6 @@ function scheduleCleanup(windowMs) {
   cleanupState.timer.unref?.();
 }
 
-function getClientId(req) {
-  const forwarded = req.headers["x-forwarded-for"];
-  if (typeof forwarded === "string" && forwarded.trim()) {
-    return forwarded.split(",")[0].trim();
-  }
-  return req.ip || req.socket?.remoteAddress || "unknown";
-}
-
 function shouldSkip(req) {
   const path = String(req.path || req.originalUrl || req.url || "/").split("?")[0].replace(/\/+$/, "") || "/";
   if (["/", "/health", "/livez", "/readyz"].includes(path)) return true;
@@ -71,7 +64,7 @@ export function createRateLimitMiddleware(options = {}) {
   return (req, res, next) => {
     if (shouldSkip(req)) return next();
 
-    const key = `${getClientId(req)}:${req.method}`;
+    const key = `${getRateLimitClientId(req)}:${req.method}`;
     const now = Date.now();
     const current = buckets.get(key);
 
@@ -91,7 +84,7 @@ export function createRateLimitMiddleware(options = {}) {
     warn("rate.limit.exceeded", {
       method: req.method,
       path: req.originalUrl || req.url,
-      ip: getClientId(req),
+      ip: getRateLimitClientId(req),
       retryAfterSeconds,
       requestId: req.id || req.headers["x-request-id"] || null,
     });
