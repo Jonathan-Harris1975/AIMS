@@ -62,19 +62,51 @@ export class CommsHubMonthEndConversationArchiveWorker {
     this.running = true;
     try {
       const at = now ? new Date(now) : (this.context.now ? new Date(this.context.now()) : new Date());
+      const archivedAt = at.toISOString();
       const cutoff = currentMonthArchiveCutoff(at, this.context.config.businessTimeZone || 'Europe/London');
       const batchSize = Math.min(Math.max(Number(limit) || this.context.config.monthEndArchiveBatchSize, 1), 500);
-      const candidates = await this.context.operationsRepository.listResolvedBeforeArchiveCutoff(cutoff, batchSize);
+      const candidates = await this.context.operationsRepository.listClosedBeforeArchiveCutoff(cutoff, batchSize);
       let archived = 0;
       const failed = [];
       for (const candidate of candidates) {
         try {
-          await this.context.operationsService.updateStatus({
+          const [conversation, workspace] = await Promise.all([
+            this.context.repository.getConversation(candidate.conversation_id),
+            this.context.operationsRepository.getConversationWorkspace(candidate.conversation_id),
+          ]);
+          if (!conversation) continue;
+          await this.context.operationsRepository.storeConversationArchive({
+            conversation,
+            snapshot: { conversation, ...workspace },
+            closedAt: candidate.closed_at || conversation.updated_at,
+            archivedAt,
+          });
+          const currentOperations = candidate.version == null
+            ? await this.context.operationsRepository.ensureConversationOperations(candidate.conversation_id, 'month-end-archive', archivedAt)
+            : null;
+          const updated = await this.context.operationsRepository.updateConversationStatus({
             conversationId: candidate.conversation_id,
             status: 'archived',
-            expectedVersion: candidate.version ?? null,
+            actor: 'month-end-archive',
+            expectedVersion: candidate.version ?? currentOperations?.version ?? null,
             reason: 'automatic_month_end_archive',
-          }, { id: null, commsIdentity: { actor: 'month-end-archive', role: 'admin' } });
+            at: archivedAt,
+          });
+          await this.context.aiRepository?.cancelFollowUpsForConversation?.({
+            conversationId: candidate.conversation_id,
+            cancelledAt: archivedAt,
+            reason: 'conversation_archived',
+          }).catch(() => null);
+          await this.context.auditService?.record?.({
+            actor: 'month-end-archive',
+            role: 'admin',
+            action: 'conversation_archived_monthly',
+            objectType: 'conversation',
+            objectId: candidate.conversation_id,
+            conversationId: candidate.conversation_id,
+            after: updated,
+            details: { cutoff, archivedAt, archiveStore: 'comms_hub_conversation_archives' },
+          }).catch(() => null);
           archived += 1;
         } catch (error) {
           failed.push({ conversationId: candidate.conversation_id, code: error?.code || 'archive_failed' });
