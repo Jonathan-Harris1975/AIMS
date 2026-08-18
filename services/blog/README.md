@@ -8,7 +8,7 @@ Builds the weekly long-form article, daily social posts that drive traffic to bl
 
 - `POST /blog/weekly/build` — generate and publish the weekly article.
 - `GET /blog/weekly/jobs/:lane/:sessionId` — inspect weekly job state.
-- `POST /blog/social/daily/build` — build daily blog-social content.
+- `POST /blog/social/daily/build` — generate daily blog-social content.
 - `GET /blog/social/jobs/:lane/:sessionId` — inspect social job state.
 - `POST /blog/social/rss/rebuild` — rebuild blog-social RSS.
 - `POST /blog/rss/rebuild` — rebuild the main blog RSS.
