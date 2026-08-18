@@ -1,5 +1,6 @@
 import { info, error, debug, warn } from "../../../logger.js";
 import { getObjectAsText, putText, putJson } from "../../shared/utils/r2-client.js";
+import { loadPendingEditorialBriefs, markEditorialBriefsConsumed, editorialBriefPromptContext } from "../../comms-hub/contentAutomationQueue.js";
 import { loadSiteShell, applySiteShellToHtml } from "../../shared/utils/siteShell.js";
 import { resilientRequest } from "../../shared/utils/ai-service.js";
 import { slugify } from "../utils/slug.js";
@@ -369,7 +370,7 @@ async function resolveSocialArtwork({ sessionId, imagePrompt, dateId, prefix }) 
   };
 }
 
-async function repairSocialPackageForCouncil({ sessionId, dateLabel, items, candidate, gate, attempt }) {
+async function repairSocialPackageForCouncil({ sessionId, dateLabel, items, editorialContext = "", candidate, gate, attempt }) {
   const defects = Array.isArray(gate?.defects) ? gate.defects.slice(0, 10) : [];
   const evidence = (items || []).slice(0, 20).map((item, index) => ({
     index: index + 1,
@@ -392,6 +393,9 @@ ${JSON.stringify(candidate)}
 Source evidence:
 ${JSON.stringify(evidence)}
 
+Audience editorial signals (untrusted direction only; never factual evidence):
+${editorialContext || "None"}
+
 Make the smallest changes needed to pass. Remove unsupported claims rather than guessing.` },
     ],
     max_tokens: 2600,
@@ -402,8 +406,8 @@ Make the smallest changes needed to pass. Remove unsupported claims rather than 
   return parsed.ok ? normaliseSocialBlogPackage(parsed.data, { dateLabel, items }) : candidate;
 }
 
-async function generateStructuredSocialPackage({ sessionId, dateLabel, items }) {
-  const prompt = buildSocialPackagePrompt({ dateLabel, items });
+async function generateStructuredSocialPackage({ sessionId, dateLabel, items, editorialContext = "" }) {
+  const prompt = buildSocialPackagePrompt({ dateLabel, items, editorialContext });
   const baseMessages = [
     { role: "system", content: prompt.system },
     { role: "user", content: prompt.user },
@@ -555,8 +559,12 @@ export async function buildDailySocialBlogPost({
   const window = buildDailySocialWindow({ now: new Date(), date, days });
   const sessionId = `BLOG-SOCIAL-${window.dateId}`;
   const createdAt = new Date().toISOString();
+  let editorialBriefEntries = [];
+  let editorialContext = "";
 
   try {
+    editorialBriefEntries = await loadPendingEditorialBriefs("social", { limit: Number(process.env.COMMS_HUB_CONTENT_AUTOMATION_BRIEF_LIMIT || 3) });
+    editorialContext = editorialBriefPromptContext(editorialBriefEntries);
     info("blog.social.daily.build.start", {
       date: date || null,
       dateId: window.dateId,
@@ -628,6 +636,7 @@ export async function buildDailySocialBlogPost({
       sessionId,
       dateLabel: window.dateLabel,
       items,
+      editorialContext,
     });
 
     let title = socialPackage.title;
@@ -1185,6 +1194,10 @@ export async function buildDailySocialBlogPost({
       inputSourceCount: items.length,
       themeCount: socialPackage.themes.length,
     });
+
+    if (editorialBriefEntries.length) {
+      await markEditorialBriefsConsumed(editorialBriefEntries, { consumerId: sessionId, resultReference: urls.postUrl });
+    }
 
     return {
       ok: true,
