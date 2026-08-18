@@ -83,7 +83,7 @@ test("quarantined attachment does not discard the parent info@ email", async () 
   assert.equal(result.attachments[0].error, "attachment_infected");
 });
 
-test("email role map exposes info, admin and newsletter as managed Comms Hub mailboxes", () => {
+test("email role map manages only info and marks admin/newsletter outside automation", () => {
   const env = {
     COMMS_HUB_ENABLED: "false",
     COMMS_HUB_EMAIL_PRIMARY_ADDRESS: "info@jonathan-harris.online",
@@ -92,7 +92,9 @@ test("email role map exposes info, admin and newsletter as managed Comms Hub mai
   };
   const cfg = loadCommsHubConfig(env);
   assert.equal(cfg.emailAddressRoles.info.commsHubManaged, true);
-  assert.equal(cfg.emailAddressRoles.admin.commsHubManaged, true);
-  assert.equal(cfg.emailAddressRoles.newsletter.commsHubManaged, true);
+  assert.equal(cfg.emailAddressRoles.admin.commsHubManaged, false);
+  assert.equal(cfg.emailAddressRoles.admin.automationExcluded, true);
+  assert.equal(cfg.emailAddressRoles.newsletter.commsHubManaged, false);
+  assert.equal(cfg.emailAddressRoles.newsletter.automationExcluded, true);
   assert.equal(cfg.emailAddressRoles.newsletter.purpose, "newsletter_brevo");
 });

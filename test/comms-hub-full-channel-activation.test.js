@@ -31,6 +31,8 @@ test("production defaults activate every Comms Hub conversation channel while Ou
   assert.equal(defaults.COMMS_HUB_SOCIAL_MONITOR_ONLY, "false");
   assert.equal(defaults.COMMS_HUB_EMAIL_HISTORICAL_BACKFILL_ENABLED, "false");
   assert.equal(defaults.COMMS_HUB_EMAIL_EXTERNAL_RECIPIENTS_ENABLED, "false");
+  assert.equal(defaults.COMMS_HUB_EMAIL_ADMIN_ENABLED, "false");
+  assert.equal(defaults.COMMS_HUB_EMAIL_NEWSLETTER_ENABLED, "false");
   assert.equal(defaults.COMMS_HUB_APPROVALS_ENFORCED, "true");
   assert.equal(defaults.COMMS_HUB_HUMAN_HANDOFF_BUSINESS_HOURS_ONLY, "true");
   assert.equal(defaults.AIMS_OPERATION_OUTREACH_ENABLED, "false");
@@ -46,8 +48,6 @@ test("full production profile is readiness-complete when deployment secrets are 
     JOTFORM_API_KEY: "jotform-token",
     COMMS_HUB_ATTACHMENT_SCANNER_TOKEN: "scanner-token",
     COMMS_HUB_ONECOM_PASSWORD: "mail-password",
-    ONECOM_ADMIN_PASSWORD: "admin-mail-password",
-    ONECOM_NEWSLETTER_PASSWORD: "newsletter-mail-password",
     COMMS_HUB_COGINPAL_WEBHOOK_SECRET: "chat-secret",
     COMMS_HUB_AI_SEARCH_INSTANCES: "search-prod",
     CLOUDFLARE_AI_SEARCH_API_TOKEN: "search-token",

@@ -37,3 +37,27 @@ test("inbound automation stops before send when the draft requires approval", as
   assert.equal(result.reason, "approval_required");
   assert.equal(sent, false);
 });
+
+
+test("inbound automation skips legacy Admin/Newsletter email conversations before AI or governance", async () => {
+  for (const accountKey of ["admin", "newsletter"]) {
+    let analysed = false;
+    let sent = false;
+    const context = {
+      config: { aiEnabled: true, autonomousRepliesEnabled: true },
+      repository: {
+        async getConversation() {
+          return { id: `cnv-${accountKey}`, channel: "email", metadata: { accountKey } };
+        },
+      },
+      aiWorkflowService: { async analyseConversation() { analysed = true; } },
+      governanceService: { async attemptAutonomousReply() { sent = true; } },
+    };
+    const result = await runInboundConversationAutomation({ context, conversationId: `cnv-${accountKey}` });
+    assert.equal(result.skipped, true);
+    assert.equal(result.reason, "email_account_outside_comms_hub_automation");
+    assert.equal(result.accountKey, accountKey);
+    assert.equal(analysed, false);
+    assert.equal(sent, false);
+  }
+});
