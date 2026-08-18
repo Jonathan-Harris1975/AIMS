@@ -1,5 +1,5 @@
 > **Document status:** Production reference
-> **Last reviewed:** 3 August 2026
+> **Last reviewed:** 18 August 2026
 > **Operational authority:** Current repository README, SECURITY policy and operations guide.
 
 # Audits service
