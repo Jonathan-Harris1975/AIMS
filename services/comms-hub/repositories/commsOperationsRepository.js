@@ -67,7 +67,7 @@ export class CommsOperationsRepository {
     tag = "", overdue = false, before = "", limit = 50,
   } = {}) {
     const boundedLimit = Number.isInteger(Number(limit)) ? Math.min(Math.max(Number(limit), 1), 200) : 50;
-    const clauses = [];
+    const clauses = ["(c.channel <> 'email' OR COALESCE(et.account_key, '') NOT IN ('admin', 'newsletter'))"];
     const params = [];
     if (!status) clauses.push("COALESCE(o.operational_status, c.status) <> 'archived'");
     if (status) {
@@ -86,8 +86,8 @@ export class CommsOperationsRepository {
       params.push(interactionType);
     }
     if (emailAccountKey) {
-      if (!["info", "admin", "newsletter"].includes(emailAccountKey)) {
-        throw new CommsHubError(400, "email_account_key_invalid", "Email account must be info, admin or newsletter.");
+      if (emailAccountKey !== "info") {
+        throw new CommsHubError(400, "email_account_key_invalid", "Only the info mailbox is managed by Comms Hub.");
       }
       clauses.push("et.account_key = ?");
       params.push(emailAccountKey);
@@ -600,11 +600,14 @@ export class CommsOperationsRepository {
           SET status = 'leased', lease_owner = ?, lease_expires_at = ?,
               attempts = attempts + 1, updated_at = ?
         WHERE id = (
-          SELECT id FROM comms_hub_delayed_actions
-           WHERE attempts < max_attempts AND due_at <= ? AND next_attempt_at <= ?
-             AND (status IN ('scheduled','failed') OR
-                  (status = 'leased' AND (lease_expires_at IS NULL OR lease_expires_at <= ?)))
-           ORDER BY due_at ASC LIMIT 1
+          SELECT da.id FROM comms_hub_delayed_actions da
+          JOIN comms_hub_conversations c ON c.id = da.conversation_id
+          LEFT JOIN comms_hub_email_threads et ON et.conversation_id = c.id
+           WHERE da.attempts < da.max_attempts AND da.due_at <= ? AND da.next_attempt_at <= ?
+             AND (c.channel <> 'email' OR COALESCE(et.account_key, '') NOT IN ('admin', 'newsletter'))
+             AND (da.status IN ('scheduled','failed') OR
+                  (da.status = 'leased' AND (da.lease_expires_at IS NULL OR da.lease_expires_at <= ?)))
+           ORDER BY da.due_at ASC LIMIT 1
         ) RETURNING *`,
       [workerId, leaseExpiresAt, now, now, now, now]
     );
@@ -618,6 +621,12 @@ export class CommsOperationsRepository {
               attempts = attempts + 1, updated_at = ?
         WHERE id = ? AND attempts < max_attempts AND due_at <= ? AND next_attempt_at <= ?
           AND status IN ('scheduled','failed')
+          AND NOT EXISTS (
+            SELECT 1 FROM comms_hub_conversations c
+            LEFT JOIN comms_hub_email_threads et ON et.conversation_id = c.id
+            WHERE c.id = comms_hub_delayed_actions.conversation_id
+              AND c.channel = 'email' AND COALESCE(et.account_key, '') IN ('admin', 'newsletter')
+          )
         RETURNING *`,
       [workerId, leaseExpiresAt, now, id, now, now]
     );
@@ -630,7 +639,14 @@ export class CommsOperationsRepository {
           SET status = 'scheduled', attempts = 0, next_attempt_at = ?, due_at = ?,
               lease_owner = NULL, lease_expires_at = NULL,
               failure_class = NULL, error = NULL, updated_at = ?
-        WHERE id = ? AND status IN ('failed','quarantined') RETURNING *`,
+        WHERE id = ? AND status IN ('failed','quarantined')
+          AND NOT EXISTS (
+            SELECT 1 FROM comms_hub_conversations c
+            LEFT JOIN comms_hub_email_threads et ON et.conversation_id = c.id
+            WHERE c.id = comms_hub_delayed_actions.conversation_id
+              AND c.channel = 'email' AND COALESCE(et.account_key, '') IN ('admin', 'newsletter')
+          )
+        RETURNING *`,
       [at, at, at, id]
     );
     return rows(result)[0] || null;
@@ -800,7 +816,9 @@ export class CommsOperationsRepository {
               c.contact_id
          FROM comms_hub_conversations c
          LEFT JOIN comms_hub_conversation_operations o ON o.conversation_id = c.id
-        WHERE (
+         LEFT JOIN comms_hub_email_threads et ON et.conversation_id = c.id
+        WHERE (c.channel <> 'email' OR COALESCE(et.account_key, '') NOT IN ('admin', 'newsletter'))
+          AND (
               (o.operational_status = 'resolved' AND o.resolved_at IS NOT NULL AND o.resolved_at < ?)
            OR (c.status = 'closed' AND c.updated_at < ? AND COALESCE(o.operational_status, '') <> 'archived')
         )
@@ -839,7 +857,9 @@ export class CommsOperationsRepository {
               p.id AS policy_id, p.policy_key, p.retain_days, p.action, p.legal_hold_tag
          FROM comms_hub_conversations c
          JOIN comms_hub_retention_policies p ON p.active = 1 AND (p.channel IN (c.channel, 'any') OR (c.channel IN ('social_dm','social_comment') AND p.channel = 'social'))
-        WHERE c.updated_at <= datetime(?, '-' || p.retain_days || ' days')
+         LEFT JOIN comms_hub_email_threads et ON et.conversation_id = c.id
+        WHERE (c.channel <> 'email' OR COALESCE(et.account_key, '') NOT IN ('admin', 'newsletter'))
+          AND c.updated_at <= datetime(?, '-' || p.retain_days || ' days')
           AND NOT EXISTS (
             SELECT 1 FROM comms_hub_retention_jobs j
              WHERE j.conversation_id = c.id AND j.status IN ('pending','processing','complete')

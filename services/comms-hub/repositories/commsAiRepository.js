@@ -375,8 +375,10 @@ export class CommsAiRepository {
         WHERE id = (
           SELECT f.id FROM comms_hub_follow_ups f
           JOIN comms_hub_conversations c ON c.id = f.conversation_id
+          LEFT JOIN comms_hub_email_threads et ON et.conversation_id = c.id
           WHERE f.attempts < ? AND f.next_attempt_at <= ? AND f.due_at <= ?
             AND c.status IN ('open', 'pending')
+            AND (c.channel <> 'email' OR COALESCE(et.account_key, '') NOT IN ('admin', 'newsletter'))
             AND (f.status IN ('scheduled', 'failed') OR (f.status = 'leased' AND (f.lease_expires_at IS NULL OR f.lease_expires_at <= ?)))
           ORDER BY f.due_at ASC LIMIT 1
         ) RETURNING *`,
