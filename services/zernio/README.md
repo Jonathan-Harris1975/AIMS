@@ -1,42 +1,46 @@
-# AIMS services
+# Zernio social service
 
-This directory contains the production service modules mounted by `routes/index.js` plus internal support modules used by those services.
+**Live route prefix:** `/zernio`
 
-## Mounted services
+Zernio owns AIMS static/social scheduling: seven daily editorial lanes, blog-RSS social posts, the weekly mini-series, Thursday Turing's Torch promotion, eBook promotion and the weekly quiz pair.
 
-| Directory | Route prefix | Live responsibility |
-|---|---|---|
-| `artwork` | `/artwork` | Generate artwork for podcast, blog and direct requests |
-| `blog` | `/blog` | Weekly blog, blog social and blog RSS |
-| `blotato` | `/blotato` | Short-form video generation and publishing |
-| `cloudflare-purge` | `/cloudflare` | Cache purge and site-shell sync |
-| `newsletter` | `/newsletter` | AI Edge generation and Brevo delivery |
-| `ops` | `/ops` | Weekday operation windows and readiness checks |
-| `outreach` | `/outreach` | Discovery, enrichment, validation and lead batching |
-| `podcast` | `/podcast` | End-to-end podcast pipeline |
-| `rss-feed-creator` | `/rss` | RSS rewrite and publication pipeline |
-| `rss-links` | `/rss-links` | Short links and redirects |
-| `script` | `/script` | Podcast script and transcript generation |
-| `tts` | `/tts` | Speech and final audio processing |
-| `zernio` | `/zernio` | Social scheduling and promotional lanes |
+## HTTP contract
 
-## Internal support modules
+- `GET /zernio/health`
+- `GET /zernio/jobs/:lane/:sessionId`
+- `POST /zernio/setup/check`
+- `POST /zernio/posts/history`
+- `POST /zernio/daily/monday`
+- `POST /zernio/daily/tuesday`
+- `POST /zernio/daily/wednesday`
+- `POST /zernio/daily/thursday`
+- `POST /zernio/daily/friday`
+- `POST /zernio/daily/saturday`
+- `POST /zernio/daily/sunday`
+- `POST /zernio/blog-rss/daily`
+- `POST /zernio/mini-series/weekly`
+- `POST /zernio/podcast/thursday-promo`
+- `POST /zernio/ebooks/weekly`
+- `POST /zernio/quiz/weekly`
 
-- `content-quality` — shared validators and editorial quality gates.
-- `shared` — authentication, state, R2, AI, dedupe, operational and request utilities.
-- `social` — shared social helpers used by publishing services.
-- `rss-feed-podcast` — podcast RSS generation support used by the podcast workflow.
-- `api` — internal router composition module; the production route registry mounts the service routers directly.
+## Publishing rules
 
-## Service design contract
+- Daily lanes use deterministic day-specific intent and topic contracts.
+- RSS-backed posts preserve supplied source URLs and must remain topically aligned with their evidence.
+- British English, Jonathan Harris voice, semantic gates and review councils run before scheduling.
+- Artwork is checked for relevance and visual defects before the external side effect.
+- Schedule-slot claims and provider-history checks prevent accidental duplicates.
+- Required platforms default to Facebook and Instagram and can be changed through `ZERNIO_REQUIRED_PLATFORMS`.
+- Provider requests use bounded retry/backoff settings from the `ZERNIO_API_RETRY_*` variables.
 
-Each live service is responsible for its own request validation, domain logic, external provider calls and lane-specific QA. Shared concerns such as auth, storage, model access, retries, content governance and durable state should use `services/shared` rather than duplicate implementations.
+## Special lanes
 
-## Operational rules
+- **Mini-series:** planned weekly research can skip a weak week; each part must remain evidence-backed and distinct.
+- **Thursday podcast promotion:** image/static social promotion for Turing's Torch. Audio promotion remains owned by the podcast lane.
+- **eBooks:** scheduled Tuesday, Thursday and Saturday; the main post requires a valid HTTPS book URL and passes eBook conversion/content gates.
+- **Quiz:** schedules separate question and answer posts with distinct artwork.
+- **Blog RSS:** publishes the daily blog-social package after the blog service has produced it.
 
-- Treat `config/production.defaults.env`, `env.template`, `config/thresholds.js` and the relevant service config module as the configuration sources of truth.
-- Secrets belong in the deployment secret store and must not be committed.
-- Production HTTP access is protected by the AIMS bearer-auth middleware unless a route explicitly implements a narrower public status/redirect contract.
-- Retries are for transient failures only; validation, policy and source-integrity failures fail closed.
-- Generated public content must pass its content-quality gates before publication or delivery.
-- Durable artefacts and job state use the configured R2/state utilities rather than process memory where a durable store is required.
+## Configuration
+
+Use `config/production.defaults.env`, `env.template` and `services/zernio/utils/config.js` as the source of truth. Keep provider credentials in the deployment secret store.
