@@ -16,6 +16,7 @@ import { buildApprovalRequest } from "./approvalService.js";
 import { CommsHubError, toCommsHubError } from "./errors.js";
 import { redactDiagnosticText } from "./domain/redaction.js";
 import { isSocialChannel } from "./domain/channels.js";
+import { resolveConversationAutomationExclusion } from "./domain/automationScope.js";
 import { buildSmartConversationContext, smartPromptGuidance } from "./smartContextService.js";
 import { buildLiveContentContext, liveContentPromptGuidance } from "./liveContentAwarenessService.js";
 import { buildConversationStrategy, conversationStrategyPromptGuidance } from "./conversationStrategyService.js";
@@ -143,6 +144,13 @@ export class CommsHubAiWorkflowService {
     }
     const conversation = await this.context.repository.getConversation(conversationId);
     if (!conversation) throw new CommsHubError(404, "conversation_not_found", "Conversation was not found.");
+    const automationExclusion = await resolveConversationAutomationExclusion(this.context, conversation);
+    if (automationExclusion) {
+      throw new CommsHubError(409, "conversation_automation_excluded", `Email account ${automationExclusion.accountKey} is outside Comms Hub automation.`, {
+        failureClass: "permanent",
+        publicMessage: "This conversation belongs to a mailbox that is intentionally outside AIMS automation.",
+      });
+    }
     if (!conversation.messages.length) throw new CommsHubError(422, "conversation_empty", "Conversation has no messages to analyse.");
 
     const promptInjection = scanConversationPromptInjection(conversation.messages);

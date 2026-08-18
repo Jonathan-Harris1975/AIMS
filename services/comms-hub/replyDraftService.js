@@ -5,6 +5,7 @@ import { buildFormRequestRecord } from "./formOrchestrationService.js";
 import { isSocialChannel } from "./domain/channels.js";
 import { assertConversationReplyAllowed } from "./domain/replySafety.js";
 import { businessHoursPolicy, conversationFirstInboundAt, delayedBusinessReplyAt, ensureFutureBusinessTime, hasOutboundMessages } from "./domain/businessHours.js";
+import { resolveConversationAutomationExclusion } from "./domain/automationScope.js";
 
 function parseArray(value) { try { const parsed = JSON.parse(value || "[]"); return Array.isArray(parsed) ? parsed : []; } catch { return []; } }
 function parseObject(value) { try { const parsed = JSON.parse(value || "{}"); return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {}; } catch { return {}; } }
@@ -38,6 +39,13 @@ export async function sendReplyDraft({ draftId, context, scheduledDelivery = fal
   }
   const conversation = await context.repository.getConversation(draft.conversation_id);
   if (!conversation) throw new CommsHubError(404, "conversation_not_found", "Conversation was not found.");
+  const automationExclusion = await resolveConversationAutomationExclusion(context, conversation);
+  if (automationExclusion) {
+    throw new CommsHubError(409, "conversation_automation_excluded", `Email account ${automationExclusion.accountKey} is outside Comms Hub automation.`, {
+      failureClass: "permanent",
+      publicMessage: "This conversation belongs to a mailbox that is intentionally outside AIMS automation.",
+    });
+  }
   const operations = await context.operationsRepository.getConversationOperations(conversation.id);
   assertConversationReplyAllowed({ conversation, operations });
 

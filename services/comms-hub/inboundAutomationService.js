@@ -1,5 +1,6 @@
 import { safeErrorLog } from "./domain/redaction.js";
 import { log } from "../../logger.js";
+import { resolveConversationAutomationExclusion } from "./domain/automationScope.js";
 
 const pending = new Set();
 
@@ -14,6 +15,11 @@ function enabled(context) {
 
 export async function runInboundConversationAutomation({ context, conversationId, actor = "inbound-automation", scheduleFollowUp = true } = {}) {
   if (!conversationId || !enabled(context)) return { skipped: true, reason: "automation_disabled" };
+  const conversation = context.repository?.getConversation
+    ? await context.repository.getConversation(conversationId).catch(() => null)
+    : null;
+  const automationExclusion = conversation ? await resolveConversationAutomationExclusion(context, conversation) : null;
+  if (automationExclusion) return { skipped: true, reason: automationExclusion.reason, accountKey: automationExclusion.accountKey };
   const operations = context.operationsRepository?.getConversationOperations
     ? await context.operationsRepository.getConversationOperations(conversationId).catch(() => null)
     : null;

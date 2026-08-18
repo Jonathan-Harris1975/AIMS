@@ -282,12 +282,6 @@ export function getCommsHubMissingEnv(env = process.env) {
     if (!usableEnvValue(env.COMMS_HUB_ONECOM_PASSWORD) && !usableEnvValue(env.ONECOM_INFO_PASSWORD)) {
       missing.push("ONECOM_INFO_PASSWORD");
     }
-    if (booleanValue(env.COMMS_HUB_EMAIL_ADMIN_ENABLED, true) && !usableEnvValue(env.ONECOM_ADMIN_PASSWORD)) {
-      missing.push("ONECOM_ADMIN_PASSWORD");
-    }
-    if (booleanValue(env.COMMS_HUB_EMAIL_NEWSLETTER_ENABLED, true) && !usableEnvValue(env.ONECOM_NEWSLETTER_PASSWORD)) {
-      missing.push("ONECOM_NEWSLETTER_PASSWORD");
-    }
   }
   if (effectiveChatEnabled(env)) {
     if (!usableEnvValue(env.COMMS_HUB_COGINPAL_WEBHOOK_SECRET)) missing.push("COMMS_HUB_COGINPAL_WEBHOOK_SECRET");
@@ -382,6 +376,9 @@ export function loadCommsHubConfig(env = process.env, { requireEnabled = false }
   const primaryEmailAddress = usableEnvValue(env.COMMS_HUB_EMAIL_PRIMARY_ADDRESS) || usableEnvValue(env.COMMS_HUB_ONECOM_EMAIL_ADDRESS) || "info@jonathan-harris.online";
   const primaryEmailUsername = usableEnvValue(env.COMMS_HUB_ONECOM_USERNAME) || primaryEmailAddress;
   const oneComMailbox = usableEnvValue(env.COMMS_HUB_ONECOM_MAILBOX) || "INBOX";
+  // Only info@ is a Comms Hub-managed mailbox. Admin and newsletter are hard
+  // exclusions: stale deployment flags or credentials must never create pollers,
+  // workflow evaluation, AI classification or outbound delivery for those inboxes.
   const emailAccounts = Object.freeze({
     info: Object.freeze({
       key: "info",
@@ -394,27 +391,19 @@ export function loadCommsHubConfig(env = process.env, { requireEnabled = false }
       manualOnly: false,
       workflowEvaluationEnabled: booleanValue(env.COMMS_HUB_EMAIL_WORKFLOW_EVALUATION_ENABLED, false),
     }),
+  });
+  const excludedEmailAccounts = Object.freeze({
     admin: Object.freeze({
       key: "admin",
-      enabled: booleanValue(env.COMMS_HUB_EMAIL_ENABLED, false) && booleanValue(env.COMMS_HUB_EMAIL_ADMIN_ENABLED, true),
       address: usableEnvValue(env.COMMS_HUB_EMAIL_ADMIN_ADDRESS) || "admin@jonathan-harris.online",
-      username: usableEnvValue(env.COMMS_HUB_EMAIL_ADMIN_USERNAME) || usableEnvValue(env.COMMS_HUB_EMAIL_ADMIN_ADDRESS) || "admin@jonathan-harris.online",
-      password: usableEnvValue(env.ONECOM_ADMIN_PASSWORD),
-      mailbox: usableEnvValue(env.COMMS_HUB_EMAIL_ADMIN_MAILBOX) || oneComMailbox,
-      mailboxRole: "service_admin",
-      manualOnly: true,
-      workflowEvaluationEnabled: false,
+      purpose: "service_admin",
+      automationExcluded: true,
     }),
     newsletter: Object.freeze({
       key: "newsletter",
-      enabled: booleanValue(env.COMMS_HUB_EMAIL_ENABLED, false) && booleanValue(env.COMMS_HUB_EMAIL_NEWSLETTER_ENABLED, true),
       address: usableEnvValue(env.COMMS_HUB_EMAIL_NEWSLETTER_ADDRESS) || "newsletter@jonathan-harris.online",
-      username: usableEnvValue(env.COMMS_HUB_EMAIL_NEWSLETTER_USERNAME) || usableEnvValue(env.COMMS_HUB_EMAIL_NEWSLETTER_ADDRESS) || "newsletter@jonathan-harris.online",
-      password: usableEnvValue(env.ONECOM_NEWSLETTER_PASSWORD),
-      mailbox: usableEnvValue(env.COMMS_HUB_EMAIL_NEWSLETTER_MAILBOX) || oneComMailbox,
-      mailboxRole: "newsletter",
-      manualOnly: true,
-      workflowEvaluationEnabled: false,
+      purpose: "newsletter_brevo",
+      automationExcluded: true,
     }),
   });
 
@@ -526,25 +515,29 @@ export function loadCommsHubConfig(env = process.env, { requireEnabled = false }
     emailExternalRecipientsEnabled: booleanValue(env.COMMS_HUB_EMAIL_EXTERNAL_RECIPIENTS_ENABLED, false),
     emailMaxReplyChars: positiveInteger(env.COMMS_HUB_EMAIL_MAX_REPLY_CHARS, 20_000, "COMMS_HUB_EMAIL_MAX_REPLY_CHARS", { min: 1000, max: 100_000 }),
     emailAccounts,
+    excludedEmailAccounts,
     oneComEmailAccountKey: emailAccounts.info.key,
     oneComEmailAddress: emailAccounts.info.address,
     oneComEmailUsername: emailAccounts.info.username,
     oneComEmailPassword: emailAccounts.info.password,
     emailAddressRoles: Object.freeze({
       admin: Object.freeze({
-        address: emailAccounts.admin.address,
+        address: excludedEmailAccounts.admin.address,
         purpose: "service_admin",
-        commsHubManaged: true,
+        commsHubManaged: false,
+        automationExcluded: true,
       }),
       info: Object.freeze({
         address: emailAccounts.info.address,
         purpose: "customer_facing",
         commsHubManaged: true,
+        automationExcluded: false,
       }),
       newsletter: Object.freeze({
-        address: emailAccounts.newsletter.address,
+        address: excludedEmailAccounts.newsletter.address,
         purpose: "newsletter_brevo",
-        commsHubManaged: true,
+        commsHubManaged: false,
+        automationExcluded: true,
       }),
     }),
     oneComImapHost: usableEnvValue(env.COMMS_HUB_ONECOM_IMAP_HOST) || "imap.one.com",

@@ -5,14 +5,28 @@ import { scanOutboundLanguagePolicy } from './conversationConductService.js';
 import { assertConversationReplyAllowed } from './domain/replySafety.js';
 import { businessHoursPolicy, conversationFirstInboundAt, delayedBusinessReplyAt, ensureFutureBusinessTime, hasOutboundMessages } from './domain/businessHours.js';
 import { kickInboundConversationAutomation } from "./inboundAutomationService.js";
+import { isAutomationExcludedEmailAccountKey } from './domain/automationScope.js';
 
 function address(value) { return String(value || '').trim().toLowerCase(); }
 
 
 function resolveEmailAccount(context, accountKey = 'info') {
   const key = String(accountKey || 'info').trim().toLowerCase();
-  const account = context?.config?.emailAccounts?.[key];
-  if (account) return account;
+  if (isAutomationExcludedEmailAccountKey(key)) {
+    throw new CommsHubError(409, 'email_mailbox_automation_excluded', `${key} is outside Comms Hub automation.`, {
+      failureClass: 'permanent',
+      publicMessage: 'This mailbox is intentionally outside AIMS Communications Hub automation.',
+    });
+  }
+  const accounts = context?.config?.emailAccounts || null;
+  if (accounts && Object.keys(accounts).length) {
+    const account = accounts[key];
+    if (account) return account;
+    throw new CommsHubError(404, 'email_account_not_configured', `Email account ${key || 'unknown'} is not configured for Comms Hub.`);
+  }
+  if (key !== String(context.config.oneComEmailAccountKey || 'info').trim().toLowerCase()) {
+    throw new CommsHubError(404, 'email_account_not_configured', `Email account ${key || 'unknown'} is not configured for Comms Hub.`);
+  }
   return {
     key: context.config.oneComEmailAccountKey || 'info',
     enabled: context.config.emailEnabled,

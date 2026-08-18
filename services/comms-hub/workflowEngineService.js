@@ -1,6 +1,7 @@
 import { CommsHubError } from "./errors.js";
 import { channelFamily } from "./domain/channels.js";
 import { sha256Hex, stableId } from "./domain/ids.js";
+import { resolveConversationAutomationExclusion } from "./domain/automationScope.js";
 
 function text(value, maximum = 10_000) {
   return String(value ?? "").trim().slice(0, maximum);
@@ -271,13 +272,20 @@ export class CommsHubWorkflowEngineService {
   }
 
   async evaluate({ conversationId, trigger = "manual", date = new Date() }, identity = { actor: "workflow-engine", role: "admin" }) {
-    const [conversation, ai, operations, tags] = await Promise.all([
-      this.context.repository.getConversation(conversationId),
+    const conversation = await this.context.repository.getConversation(conversationId);
+    if (!conversation) throw new CommsHubError(404, "conversation_not_found", "Conversation was not found.");
+    const automationExclusion = await resolveConversationAutomationExclusion(this.context, conversation);
+    if (automationExclusion) {
+      throw new CommsHubError(409, "conversation_automation_excluded", `Email account ${automationExclusion.accountKey} is outside Comms Hub automation.`, {
+        failureClass: "permanent",
+        publicMessage: "This conversation belongs to a mailbox that is intentionally outside AIMS automation.",
+      });
+    }
+    const [ai, operations, tags] = await Promise.all([
       this.context.aiRepository.getConversationAiState(conversationId).catch(() => null),
       this.context.operationsRepository.ensureConversationOperations(conversationId, identity.actor),
       this.context.operationsRepository.listConversationTags(conversationId),
     ]);
-    if (!conversation) throw new CommsHubError(404, "conversation_not_found", "Conversation was not found.");
     const context = {
       channel: conversation.channel,
       intent: ai?.state?.intent || ai?.intent || "unknown",

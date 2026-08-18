@@ -1,6 +1,7 @@
 import { CommsHubError } from './errors.js';
 import { stableId } from './domain/ids.js';
 import { sendReplyDraft } from './replyDraftService.js';
+import { resolveConversationAutomationExclusion } from './domain/automationScope.js';
 
 function cleanKey(value) { return String(value || '').trim().toLowerCase().replace(/[^a-z0-9._-]+/g, '_').slice(0, 80); }
 
@@ -26,6 +27,13 @@ export class CommsHubGovernanceService {
       : Promise.resolve(null);
     const [conversation, ai, draft, operations] = await Promise.all([this.context.repository.getConversation(conversationId), this.context.aiRepository.getConversationAiState(conversationId), this.context.aiRepository.getDraft(draftId), operationsPromise]);
     if (!conversation || !draft || draft.conversation_id !== conversationId) throw new CommsHubError(404, 'autonomous_reply_target_missing', 'Conversation or reply draft was not found.');
+    const automationExclusion = await resolveConversationAutomationExclusion(this.context, conversation);
+    if (automationExclusion) {
+      throw new CommsHubError(409, 'conversation_automation_excluded', `Email account ${automationExclusion.accountKey} is outside Comms Hub automation.`, {
+        failureClass: 'permanent',
+        publicMessage: 'This conversation belongs to a mailbox that is intentionally outside AIMS automation.',
+      });
+    }
     if (operations?.owner_type === 'person') throw new CommsHubError(409, 'autonomous_reply_human_assigned', 'Autonomous replies are disabled while this conversation is assigned to Jonathan.');
     if (Number(draft.requires_approval) === 1) throw new CommsHubError(409, 'autonomous_reply_requires_approval', 'This draft requires human approval.');
     const state = ai?.state || ai || {};
