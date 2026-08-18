@@ -8,6 +8,7 @@ import finalCleanupSession from "../shared/utils/cleanupSessionFinal.js";
 import cleanupTempMemory from "../shared/utils/cleanupTempMemory.js";
 import { fetchWithTimeout } from "../shared/http-client.js";
 import { buildPodcastCompletionStatus } from "./completionStatus.js";
+import { loadPendingEditorialBriefs, markEditorialBriefsConsumed, editorialBriefPromptContext } from "../comms-hub/contentAutomationQueue.js";
 
 const WEBHOOK_TIMEOUT_MS = Number(process.env.WEBHOOK_TIMEOUT_MS) || 15_000;
 
@@ -93,8 +94,16 @@ export async function runPodcastPipeline(input = {}, maybeOptions = {}) {
   try {
     log.info("🚀 Podcast pipeline starting", { sessionId, force });
 
+    const editorialBriefEntries = await loadPendingEditorialBriefs("podcast", { limit: Number(process.env.COMMS_HUB_CONTENT_AUTOMATION_BRIEF_LIMIT || 3) });
+    const editorialContext = editorialBriefPromptContext(editorialBriefEntries);
+
     log.info("📝 Generating podcast script…");
-    const script = await getScriptForPodcast({ sessionId, force });
+    const script = await getScriptForPodcast({
+      sessionId,
+      force,
+      editorialContext,
+      editorialBriefs: editorialBriefEntries.map((entry) => entry.brief),
+    });
     if (!script?.ok) {
       throw new Error(script?.error || "Podcast script generation failed");
     }
@@ -128,6 +137,10 @@ export async function runPodcastPipeline(input = {}, maybeOptions = {}) {
       throw new Error(tts?.error || "TTS pipeline failed");
     }
     log.info("🗣️ TTS pipeline complete", { sessionId });
+
+    if (editorialBriefEntries.length) {
+      await markEditorialBriefsConsumed(editorialBriefEntries, { consumerId: sessionId, resultReference: sessionId });
+    }
 
     log.info("📡 Updating RSS feed…");
     let rss;
