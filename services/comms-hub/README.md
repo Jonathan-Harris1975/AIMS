@@ -163,7 +163,7 @@ In v2.13.3 all completed conversation channels are active: social polling, email
 1. Keep `COMMS_HUB_AUTO_MIGRATE_ON_START=true` so AIMS checks and applies any pending immutable Comms Hub migrations before starting Comms Hub workers. `npm run comms:migrate` remains available for explicit maintenance.
 2. Deploy AIMS v2.14.1 with the live non-secret activation profile from `config/production.defaults.env` / `config/comms-hub-all-channels.env.example` and the required production secrets supplied by the deployment environment.
 3. Confirm readiness for D1, Jotform, one.com email, CogniPal HMAC, both enabled Zernio families and the approved AI Search instances. Missing required live configuration must fail readiness rather than silently disabling a channel.
-4. Confirm `AIMS_OPERATION_OUTREACH_ENABLED=false`. Make.com owns the temporary twice-daily Outreach trigger, so the internal AIMS operations scheduler must continue to skip Outreach.
+4. Confirm `AIMS_OPERATION_OUTREACH_ENABLED=false`. Make.com owns the authenticated twice-daily Outreach trigger, so the internal AIMS operations scheduler must continue to skip Outreach.
 5. Run the Comms Hub regression/build gates, then capture remaining live social-provider and delayed-response timing evidence without weakening security, approval, idempotency or business-hours controls.
 6. Keep automatic backups disabled until the separate backup/restore maintenance-window validation is deliberately completed.
 
@@ -352,7 +352,7 @@ The production defaults now activate all completed conversation channels: Jotfor
 
 Migration `0008_full_channel_activation` creates conservative active policies for low-risk/high-confidence chat, email and social replies. Fresh attachment-free email and inbound social messages now kick the Smart Layer analysis path automatically; attachment-bearing messages stay review-gated instead of being blindly auto-answered. Email and processed Jotform substantive replies continue to schedule 2-3 calendar days after receipt, weekdays only between 09:00-17:00 Europe/London. Human hand-off remains restricted to that same weekday business window. Historical email backfill and arbitrary external email recipients remain disabled.
 
-Outreach automation is implemented, but the internal AIMS operations scheduler remains deliberately excluded. `AIMS_OPERATION_OUTREACH_ENABLED=false` prevents duplicate Outreach runs while Make.com owns the temporary twice-daily `/outreach/batch/next` trigger.
+Outreach automation is implemented, but the internal AIMS operations scheduler remains deliberately excluded. `AIMS_OPERATION_OUTREACH_ENABLED=false` prevents duplicate Outreach runs while Make.com owns the authenticated twice-daily `/outreach/batch/next` trigger.
 
 AIMS now self-heals pending Comms Hub schema migrations at runtime startup when `COMMS_HUB_AUTO_MIGRATE_ON_START=true`. `npm run comms:migrate` remains available as an explicit maintenance command. `config/comms-hub-all-channels.env.example` documents the non-secret activation profile.
 
