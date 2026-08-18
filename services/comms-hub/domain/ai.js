@@ -39,7 +39,7 @@ export const REPLY_POLICIES = Object.freeze({
   }),
   case_study_intake: Object.freeze({
     key: "contribute",
-    purpose: "Digest a verified case-study contribution, identify only genuinely missing evidence, and explain the next communication step without starting any content-production process or duplicating Jotform's receipt acknowledgement.",
+    purpose: "Digest a verified case-study contribution, identify only genuinely missing evidence, and explain the next communication step. Downstream content automation is separate from this reply workflow and must not be represented as guaranteed publication.",
     maximumCharacters: 2600,
     requiresEvidence: true,
     defaultFollowUpHours: 72,
@@ -47,7 +47,7 @@ export const REPLY_POLICIES = Object.freeze({
   }),
   podcast_enquiry_intake: Object.freeze({
     key: "podcast",
-    purpose: "Digest a verified podcast enquiry/contribution and provide the appropriate next communication step without offering guest booking slots, starting episode/content production, or duplicating Jotform's receipt acknowledgement.",
+    purpose: "Digest a verified podcast enquiry/contribution and provide the appropriate next communication step without offering guest booking slots or promising participation. Downstream editorial automation is separate from this reply workflow.",
     maximumCharacters: 2600,
     requiresEvidence: true,
     defaultFollowUpHours: 72,
