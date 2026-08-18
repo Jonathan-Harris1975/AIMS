@@ -119,7 +119,7 @@ test("An explicit no-links preference makes Smart Response ask permission before
   assert.equal(intelligence.autonomousEligible, false);
 });
 
-test("Jotform digest excludes identity/upload fields from substantive facts and keeps creative reuse out of scope", () => {
+test("Jotform digest excludes identity/upload fields while allowing controlled downstream editorial reuse", () => {
   const submission = {
     id: "sub-1",
     form_id: "262063136008044",
@@ -140,7 +140,7 @@ test("Jotform digest excludes identity/upload fields from substantive facts and 
   assert.equal(digest.facts[0].label, "What happened?");
   assert.equal(digest.attachmentCount, 1);
   assert.equal(digest.attachmentReviewRequired, true);
-  assert.equal(digest.creativeReuseInScope, false);
+  assert.equal(digest.creativeReuseInScope, true);
 
   const safe = formProcessingForAi({ status: "digest_ready", digest });
   assert.equal(safe.digest.contact.emailSupplied, true);

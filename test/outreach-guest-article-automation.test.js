@@ -46,7 +46,7 @@ test('outreach premium model routes exist and remain under commsHub privacy rout
 
 test('migration manifest includes outreach automation', () => {
   assert.ok(COMMS_HUB_REQUIRED_MIGRATIONS.includes('0009_outreach_automation'));
-  assert.equal(COMMS_HUB_REQUIRED_MIGRATIONS.at(-1), '0012_excluded_email_automation_scope');
+  assert.equal(COMMS_HUB_REQUIRED_MIGRATIONS.at(-1), '0013_content_automation_queue');
 });
 
 test('outreach migration extends delayed actions without dropping earlier action types', async (t) => {
