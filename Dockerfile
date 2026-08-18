@@ -1,7 +1,7 @@
 # ============================================================
 # AI Management Suite — Koyeb production image
 # ============================================================
-FROM node:22-bookworm-slim AS runtime
+FROM node:22-alpine3.23 AS runtime
 
 ENV NODE_ENV=production \
     TZ=UTC \
@@ -12,29 +12,31 @@ ENV NODE_ENV=production \
     NPM_CONFIG_FETCH_RETRY_MINTIMEOUT=10000 \
     NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT=30000 \
     NPM_CONFIG_FETCH_TIMEOUT=60000 \
-    RSS_INIT_ON_BOOT=false
+    RSS_INIT_ON_BOOT=false \
+    CHROMIUM_PATH=/usr/bin/chromium \
+    PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium
 
 WORKDIR /app
 
-# Runtime essentials. Every network/package step has both a soft TERM timeout and
-# a hard KILL deadline. GNU timeout without --kill-after can otherwise leave a
-# wedged child process alive indefinitely, which presents in Koyeb as a Deployment
-# stuck in Provisioning.
-RUN echo "[build] apt index" \
- && timeout --signal=TERM --kill-after=20s 300s apt-get \
-    -o Acquire::Retries=3 \
-    -o Acquire::http::Timeout=30 \
-    -o Acquire::https::Timeout=30 update \
- && echo "[build] apt runtime packages" \
- && DEBIAN_FRONTEND=noninteractive timeout --signal=TERM --kill-after=20s 600s apt-get \
-    -o Dpkg::Use-Pty=0 \
-    install -y --no-install-recommends \
+# Koyeb's overlay-backed builder can reject dpkg's package replacement links with
+# EXDEV ("Invalid cross-device link"). Use Alpine's apk runtime instead of Debian
+# apt/dpkg so Chromium/FFmpeg installation does not exercise that failure path.
+# Install GNU timeout first; the larger runtime package step and all later network
+# steps retain both a soft TERM timeout and a hard KILL deadline.
+RUN echo "[build] timeout utility" \
+ && apk add --no-cache coreutils
+
+RUN echo "[build] runtime packages" \
+ && timeout --signal=TERM --kill-after=20s 600s apk add --no-cache \
     ca-certificates \
     curl \
     dumb-init \
     ffmpeg \
     chromium \
- && rm -rf /var/lib/apt/lists/*
+ && command -v chromium >/dev/null \
+ && command -v ffmpeg >/dev/null \
+ && command -v ffprobe >/dev/null \
+ && command -v dumb-init >/dev/null
 
 # Install production dependencies before copying the app for better build caching.
 # Do not wipe the builder environment for this network step: hosted builders may

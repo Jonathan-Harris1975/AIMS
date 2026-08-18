@@ -1210,7 +1210,7 @@ The repository uses Node’s built-in test runner through `node --test`. `supert
 
 ### Dockerfile behaviour
 
-`Dockerfile` uses `node:20-bookworm-slim`, installs `ffmpeg`, `ca-certificates`, `curl` and `dumb-init`, runs `npm ci --omit=dev`, exposes port `3000`, and starts the app with `npm start`.
+`Dockerfile` uses the official `node:22-alpine3.23` image, installs `chromium`, `ffmpeg`, `ca-certificates`, `curl`, `dumb-init` and GNU `coreutils`, runs `npm ci --omit=dev`, exposes port `3000`, and starts the app with `npm start`. Alpine avoids the Debian `dpkg` package-replacement path that can fail with `Invalid cross-device link` on overlay-backed hosted builders.
 
 ### npm scripts
 
