@@ -301,6 +301,7 @@ test("Migration manifest requires all delivered Comms Hub phases", () => {
     "0008_full_channel_activation",
     "0009_outreach_automation",
     "0010_runtime_reliability",
+    "0011_contact_deletion_and_conversation_archives",
   ]);
 });
 

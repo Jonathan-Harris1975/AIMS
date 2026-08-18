@@ -23,7 +23,7 @@ test('manual archive is allowed only after a conversation is resolved', async ()
   assert.equal(updateCalled, false);
 });
 
-test('month-end archive selects only resolved conversations before the current local month', async () => {
+test('month-end archive copies closed conversations into the archive store before hiding them from the active queue', async () => {
   const calls = [];
   const context = {
     config: {
@@ -32,23 +32,42 @@ test('month-end archive selects only resolved conversations before the current l
       monthEndArchiveBatchSize: 100,
       businessTimeZone: 'Europe/London',
     },
-    operationsRepository: {
-      async listResolvedBeforeArchiveCutoff(cutoff, limit) {
-        calls.push(['list', cutoff, limit]);
-        return [{ conversation_id: 'cnv_old', version: 4 }];
+    repository: {
+      async getConversation(conversationId) {
+        return {
+          id: conversationId,
+          contact_id: 'ctc_test',
+          channel: 'email',
+          provider: 'gmail',
+          workflow: 'inbox',
+          subject: 'Closed conversation',
+          updated_at: '2026-07-20T10:00:00.000Z',
+        };
       },
     },
-    operationsService: {
-      async updateStatus(input) { calls.push(['archive', input]); return { operational_status: 'archived' }; },
+    operationsRepository: {
+      async listClosedBeforeArchiveCutoff(cutoff, limit) {
+        calls.push(['list', cutoff, limit]);
+        return [{ conversation_id: 'cnv_old', version: 4, closed_at: '2026-07-20T10:00:00.000Z' }];
+      },
+      async getConversationWorkspace(conversationId) {
+        return { operations: { conversation_id: conversationId, operational_status: 'resolved', version: 4 }, messages: [] };
+      },
+      async storeConversationArchive(input) { calls.push(['store', input]); return input; },
+      async updateConversationStatus(input) { calls.push(['archive', input]); return { operational_status: 'archived' }; },
     },
+    aiRepository: { async cancelFollowUpsForConversation() {} },
+    auditService: { async record() {} },
   };
   const worker = new CommsHubMonthEndConversationArchiveWorker({ context });
   const result = await worker.runOnce({ now: '2026-08-17T12:00:00.000Z' });
 
   assert.equal(result.archived, 1);
   assert.equal(calls[0][1], '2026-07-31T23:00:00.000Z');
-  assert.equal(calls[1][1].status, 'archived');
-  assert.equal(calls[1][1].reason, 'automatic_month_end_archive');
+  assert.equal(calls[1][0], 'store');
+  assert.equal(calls[1][1].conversation.id, 'cnv_old');
+  assert.equal(calls[2][1].status, 'archived');
+  assert.equal(calls[2][1].reason, 'automatic_month_end_archive');
 });
 
 test('UK month cutoff handles winter GMT as well as summer BST', () => {
