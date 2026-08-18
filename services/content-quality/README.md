@@ -1,29 +1,28 @@
-# AI Edge newsletter service
+# Content quality service
 
-**Live route prefix:** `/newsletter`
+Shared production quality gates for AIMS-generated public content.
 
-Generates, reviews, stores and sends AI Edge through Brevo. The editorial format prioritises a small number of important stories, Jonathan Harris analysis, useful tools/workflows, radar items, a reality-check section and cross-channel promotion.
+## Purpose
 
-## HTTP contract
+This module centralises the language, brand, factual-integrity and presentation checks reused by blog, podcast, RSS, newsletter, Zernio and Blotato pipelines. It does not expose an HTTP route of its own. Callers import the validators and review councils directly from this directory.
 
-- `POST /newsletter/generate` — build and QA an issue.
-- `GET /newsletter/jobs/:lane/:sessionId` — inspect generation job state.
-- `POST /newsletter/send` — deliver a previously generated QA-passed issue through Brevo.
-- `GET /newsletter/campaigns/:campaignId/status` — query Brevo campaign state.
+## Core controls
 
-## Behaviour
+- `britishEnglish.js` is the canonical British-English lexicon and spelling check.
+- `brandLexicon.js` contains anti-hype, engagement-bait and channel-specific wording rules.
+- `jonathanVoice.js` and `topicFidelity.js` enforce voice and source-topic fidelity.
+- `reviewCouncil.js` runs the shared editorial review council contract.
+- `phase3Gates.js`, `phase4AutonomousGates.js` and `phase5OrganicGrowthGates.js` provide progressively stricter release gates.
+- `validators/` contains focused anti-hype, brand, entity-preservation, metadata and spoken-cadence validators plus the composite `runValidators()` entry point.
 
-Generation uses a specialist council covering source/fact integrity, Jonathan voice, newsletter/audience performance and a final chair. The service enforces a minimum QA pass count and bounded correction attempts. Tuesday issues can promote the featured ebook; Thursday issues can promote Turing's Torch. Delivery finds or creates the configured Brevo list/folder and requires a valid sender. Operational execution is controlled by `AIMS_OPERATION_NEWSLETTER_ENABLED`. Key variables: `BREVO_*`, `NEWSLETTER_*`, sender/list/profile settings and OpenRouter council/editorial model settings.
+## Production rules
 
-## Implementation
+- Public-facing prose must pass the relevant British-English and brand checks before publication or delivery.
+- Validators return structured defects and warnings; callers decide whether the lane should retry, repair, quarantine or fail closed.
+- QA event emission uses the shared AIMS QA event utility rather than ad-hoc console output.
+- Exact quotations, product names, URLs, code and API fields are preserved where language normalisation would corrupt source material.
+- Thresholds come from `config/thresholds.js`; do not duplicate numeric limits in individual pipelines.
 
-The service entry point, route modules and domain utilities are contained in this directory. Calls from AIMS operational windows use the same authenticated HTTP contract as external suite triggers, which keeps job logging, validation and failure handling consistent.
+## Extending the service
 
-## Operational rules
-
-- Treat `config/production.defaults.env`, `env.template`, `config/thresholds.js` and the relevant service config module as the configuration sources of truth.
-- Secrets belong in the deployment secret store and must not be committed.
-- Production HTTP access is protected by the AIMS bearer-auth middleware unless a route explicitly implements a narrower public status/redirect contract.
-- Retries are for transient failures only; validation, policy and source-integrity failures fail closed.
-- Generated public content must pass its content-quality gates before publication or delivery.
-- Durable artefacts and job state use the configured R2/state utilities rather than process memory where a durable store is required.
+Add narrowly scoped validators under `validators/`, export them from `validators/index.js`, and compose them through existing pipeline gates. Avoid creating lane-specific copies of shared language or brand rules.
