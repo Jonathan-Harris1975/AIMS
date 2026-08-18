@@ -790,6 +790,21 @@ export class CommsOperationsRepository {
     return Number(rows(result)[0]?.count || 0);
   }
 
+  async listResolvedBeforeArchiveCutoff(cutoffIso, limit = 100) {
+    const result = await this.d1.query(
+      `SELECT o.conversation_id, o.resolved_at, o.version, c.channel, c.contact_id
+         FROM comms_hub_conversation_operations o
+         JOIN comms_hub_conversations c ON c.id = o.conversation_id
+        WHERE o.operational_status = 'resolved'
+          AND o.resolved_at IS NOT NULL
+          AND o.resolved_at < ?
+        ORDER BY o.resolved_at ASC
+        LIMIT ?`,
+      [cutoffIso, Math.min(Math.max(Number(limit) || 100, 1), 500)]
+    );
+    return rows(result);
+  }
+
   async upsertRetentionPolicy(policy) {
     const result = await this.d1.query(
       `INSERT INTO comms_hub_retention_policies
