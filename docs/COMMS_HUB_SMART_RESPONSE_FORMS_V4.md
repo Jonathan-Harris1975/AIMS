@@ -93,7 +93,7 @@ The model is explicitly told:
 - identify only genuinely missing information;
 - never invent the content of an attachment;
 - do not promise acceptance/publication/booking;
-- do not start podcast-segment, blog-article or newsletter-article creation.
+- do not start content generation from the reply model itself; eligible Case Study/Podcast submissions are handed to the separate controlled downstream content queue.
 
 Processed form replies use the existing one.com `info@jonathan-harris.online` mail transport and persistent channel idempotency. They are recorded as outbound messages on the form conversation.
 
@@ -124,18 +124,26 @@ Even when auto-send is explicitly enabled, AIMS requires all of the following:
 - `COMMS_HUB_SMART_RESPONSE_MIN_CONFIDENCE=0.86`
 - `COMMS_HUB_FORM_ORCHESTRATION_ENABLED=true`
 - `COMMS_HUB_FORM_SMART_PROCESSING_ENABLED=true`
+- `COMMS_HUB_CONTENT_AUTOMATION_ENABLED=true`
+- `COMMS_HUB_CONTENT_AUTOMATION_BLOG_ENABLED=true`
+- `COMMS_HUB_CONTENT_AUTOMATION_SOCIAL_ENABLED=true`
+- `COMMS_HUB_CONTENT_AUTOMATION_PODCAST_ENABLED=true`
 - `COMMS_HUB_FORM_AUTO_SEND_ENABLED=false`
 - `COMMS_HUB_FORM_REQUEST_EXPIRY_HOURS=336`
 - `COMMS_HUB_JOTFORM_CONTACT_URL=https://form.jotform.com/260281179574362`
 - `COMMS_HUB_JOTFORM_CASE_STUDY_URL=https://form.jotform.com/262063136008044`
 - `COMMS_HUB_JOTFORM_PODCAST_URL=https://form.jotform.com/262097861889073`
 
-## Deliberately out of scope
+## Downstream content automation boundary
 
-Turning a user's submitted information into any of the following is a separate downstream process and must not be started by this layer:
+The form-processing/reply layer still finishes at structured intake, digest, assessment/draft and the appropriate reply to the user. It does **not** directly generate or publish public content.
 
-- podcast segment or episode content;
-- blog article;
-- newsletter article.
+After a verified submission is persisted, a separate durable `content_automation` action may enqueue sanitised editorial direction into the existing production lanes:
 
-The form-processing layer finishes at structured intake, digest, assessment/draft and the appropriate reply to the user.
+- **Case Study** → weekly blog + social-blog editorial queues;
+- **Podcast Enquiry** → podcast + social-blog editorial queues;
+- **Contact** → no public-content queue.
+
+Queued form material is untrusted editorial direction only. Direct identifiers are excluded, prompt-injection attempts are blocked, and factual claims must still be supported by each pipeline's established source-grounding and QA/review controls. A submission never guarantees publication, podcast participation or a particular editorial outcome.
+
+Newsletter creation is not part of this form-driven content automation. The admin and newsletter email inboxes remain outside Comms Hub automation.
