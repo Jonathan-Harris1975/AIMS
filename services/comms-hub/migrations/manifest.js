@@ -10,6 +10,7 @@ export const COMMS_HUB_REQUIRED_MIGRATIONS = Object.freeze([
   "0009_outreach_automation",
   "0010_runtime_reliability",
   "0011_contact_deletion_and_conversation_archives",
+  "0012_excluded_email_automation_scope",
 ]);
 
 export default COMMS_HUB_REQUIRED_MIGRATIONS;
