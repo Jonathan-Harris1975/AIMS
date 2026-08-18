@@ -4,6 +4,7 @@ import { recordProviderOutcome } from "../../shared/utils/operationalExcellence.
 import { getProviderDiagnosticsForRoute } from "../../shared/utils/ai-service.js";
 import { booleanValue, effectiveChatEnabled, getCommsHubReadiness, loadCommsHubConfig, SOCIAL_CHANNEL_CAPABILITIES } from "../config.js";
 import { newCorrelationId, stableId } from "../domain/ids.js";
+import { isAutomationExcludedEmailAccountKey } from "../domain/automationScope.js";
 import { normalisePriorityOverride } from "../domain/ai.js";
 import { attachCommsIdentity, requireCommsPermission } from "../domain/rbac.js";
 import { readJotformWebhookEnvelope } from "../domain/webhook.js";
@@ -902,6 +903,12 @@ export function createCommsHubRouter({
     try {
       const active = contextProvider();
       const accountKey = String(req.body?.accountKey || "info").trim().toLowerCase();
+      if (isAutomationExcludedEmailAccountKey(accountKey)) {
+        throw new CommsHubError(409, "email_mailbox_automation_excluded", `${accountKey} is outside Comms Hub automation.`, {
+          failureClass: "permanent",
+          publicMessage: "This mailbox is intentionally outside AIMS Communications Hub automation.",
+        });
+      }
       const worker = active.emailPollWorkers?.[accountKey];
       if (!worker) throw new CommsHubError(404, "email_account_not_found", "Requested email account is not configured.");
       const result = await worker.runOnce({
