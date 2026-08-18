@@ -9,12 +9,12 @@ AIMS Outreach is a guest-article acquisition pipeline. Discovery and qualificati
 - `GET /outreach/health`
 - `GET /outreach/automation/status` — authenticated automation/model/safety status.
 - `POST /outreach/keyword` — discovery for one supplied topic.
-- `POST /outreach/batch/next` — advance the keyword batch. During the temporary Make.com test window only, this exact POST route may bypass suite bearer auth when `OUTREACH_BATCH_NEXT_ALLOW_PUBLIC=true`.
+- `POST /outreach/batch/next` — advance the keyword batch. This mutation is always protected by suite bearer authentication.
 - `POST /outreach/batch/reset` — reset durable keyword progress.
 
-## Trigger ownership during the Make.com test window
+## External scheduler ownership
 
-`AIMS_OPERATION_OUTREACH_ENABLED=false` deliberately keeps the built-in weekday AIMS operations scheduler from running Outreach. Make.com can trigger `POST /outreach/batch/next` twice daily. A durable trigger cooldown, in-process overlap guard, per-batch send cap and per-day send cap reduce duplicate/abuse risk while that route is temporarily public. Set `OUTREACH_BATCH_NEXT_ALLOW_PUBLIC=false` after testing, then decide whether Make.com or AIMS owns the permanent schedule; never leave both active.
+`AIMS_OPERATION_OUTREACH_ENABLED=false` deliberately keeps the built-in weekday AIMS operations scheduler from running Outreach. An external scheduler such as Make.com may trigger `POST /outreach/batch/next` twice daily using the AIMS bearer token. A durable trigger cooldown, in-process overlap guard, per-batch send cap and per-day send cap reduce duplicate execution risk. Keep one permanent schedule owner; never leave both Make.com and AIMS scheduling the same batch.
 
 ## Discovery and contact eligibility
 
