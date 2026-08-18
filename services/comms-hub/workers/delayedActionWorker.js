@@ -89,6 +89,9 @@ export class CommsHubDelayedActionWorker {
     if (item.action_type === 'outreach_reply_process') {
       return this.context.outreachAutomationService.processReply(payload);
     }
+    if (item.action_type === 'content_automation') {
+      return this.context.contentAutomationService.process({ conversationId: item.conversation_id, payload });
+    }
     if (item.action_type === 'retention') {
       return this.context.retentionWorker.runOnce({
         conversationId: item.conversation_id,
