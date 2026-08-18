@@ -131,6 +131,7 @@ export function createCommsHubRouter({
         autonomousReplies: aiEnabled && booleanValue(process.env.COMMS_HUB_AUTONOMOUS_REPLIES_ENABLED, false),
         delayedActions: booleanValue(process.env.COMMS_HUB_DELAYED_ACTION_WORKER_ENABLED, false),
         retention: booleanValue(process.env.COMMS_HUB_RETENTION_WORKER_ENABLED, false),
+        monthEndArchive: booleanValue(process.env.COMMS_HUB_MONTH_END_ARCHIVE_ENABLED, true),
         credentialVault: booleanValue(process.env.COMMS_HUB_CREDENTIAL_VAULT_ENABLED, false),
       },
     });
@@ -363,6 +364,7 @@ export function createCommsHubRouter({
           forms: 3,
           r2Bucket: active.config.r2BucketName,
           archiveWorkerEnabled: active.config.archiveWorkerEnabled,
+          monthEndArchiveEnabled: active.config.monthEndArchiveEnabled,
           socialPollWorkerEnabled: active.config.socialPollWorkerEnabled,
           d1Transport: active.config.d1ProxyUrl ? "worker-data-plane" : "cloudflare-rest",
           zernio: Object.fromEntries(Object.entries(active.config.zernioFamilies).map(([family, value]) => [family, {
