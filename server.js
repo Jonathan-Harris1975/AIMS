@@ -8,6 +8,7 @@ import { info, debug, error, log } from "./logger.js";
 import routes from "./routes/index.js";
 import { fileURLToPath } from "node:url";
 import { createRateLimitMiddleware } from "./services/shared/middleware/rateLimit.js";
+import { parseTrustProxy } from "./services/shared/http/trustProxy.js";
 import { hasDurableStateEnv, durableStateEnvHint } from "./services/shared/utils/durableStateEnv.js";
 import * as lifecycle from "./services/shared/utils/lifecycle.js";
 import { requireAimsBearerAuth } from "./services/shared/middleware/suiteAuth.js";
@@ -18,31 +19,6 @@ const require = createRequire(import.meta.url);
 const PACKAGE_VERSION = require("./package.json")?.version || "unknown";
 
 export const app = express();
-
-function normaliseEnvString(value) {
-  if (value === undefined || value === null) return "";
-  return String(value).trim();
-}
-
-function isProductionEnv(value = process.env.NODE_ENV) {
-  return normaliseEnvString(value).toLowerCase() === "production";
-}
-
-function parseTrustProxy(value) {
-  if (value === undefined || value === null || value === "") {
-    return isProductionEnv() ? 1 : false;
-  }
-
-  if (value === true || value === false) {
-    return value;
-  }
-
-  const normalized = String(value).trim().toLowerCase();
-  if (["1", "true", "yes", "on"].includes(normalized)) return true;
-  if (["0", "false", "no", "off"].includes(normalized)) return false;
-  if (/^\d+$/.test(normalized)) return Number(normalized);
-  return value;
-}
 
 function isLoopbackOrigin(origin) {
   try {

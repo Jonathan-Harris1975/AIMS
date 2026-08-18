@@ -38,3 +38,5 @@ Production secrets belong in Koyeb Secrets. Use placeholder names in docs only, 
 ## Vulnerability reporting
 
 Report vulnerabilities privately to the repository owner with endpoint, impact, reproducible evidence and whether the issue can trigger publishing, destructive cache purges, audit dispatches, email/outreach side effects or state corruption.
+
+- Rate limiting keys are derived from Express `req.ip` after the configured `TRUST_PROXY` policy; raw client-supplied forwarding headers are never trusted directly. The in-process limiter assumes one AIMS application instance, so horizontal scaling requires a shared edge or distributed rate limiter before additional instances are enabled.
