@@ -54,6 +54,7 @@ const {
   R2_BUCKET_BRAND_ASSETS,
   R2_BUCKET_AUDITS,
   R2_BUCKET_COMMS_HUB,
+  R2_BUCKET_COMMS_HUB_PRIVATE,
 
   // Legacy/compat (read-only)
   R2_BUCKET_PODCAST_OUTPUT,
@@ -248,6 +249,9 @@ export const R2_BUCKETS = {
   commsHub:        R2_BUCKET_COMMS_HUB,
   commshub:        R2_BUCKET_COMMS_HUB,
   "comms-hub":     R2_BUCKET_COMMS_HUB,
+  commsHubPrivate:  R2_BUCKET_COMMS_HUB_PRIVATE,
+  commshubprivate:  R2_BUCKET_COMMS_HUB_PRIVATE,
+  "comms-hub-private": R2_BUCKET_COMMS_HUB_PRIVATE,
 
   // NEW — metasystem bucket (episode-counter + system files)
   metasystem:      META_SYSTEM_BUCKET_NAME,
@@ -295,6 +299,9 @@ export const BUCKET_ENV_BY_ALIAS = {
   commsHub: "R2_BUCKET_COMMS_HUB",
   commshub: "R2_BUCKET_COMMS_HUB",
   "comms-hub": "R2_BUCKET_COMMS_HUB",
+  commsHubPrivate: "R2_BUCKET_COMMS_HUB_PRIVATE",
+  commshubprivate: "R2_BUCKET_COMMS_HUB_PRIVATE",
+  "comms-hub-private": "R2_BUCKET_COMMS_HUB_PRIVATE",
   metasystem: META_SYSTEM_BUCKET_ENV_NAME,
   metaSystem: META_SYSTEM_BUCKET_ENV_NAME,
 };
