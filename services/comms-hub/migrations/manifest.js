@@ -9,6 +9,7 @@ export const COMMS_HUB_REQUIRED_MIGRATIONS = Object.freeze([
   "0008_full_channel_activation",
   "0009_outreach_automation",
   "0010_runtime_reliability",
+  "0011_contact_deletion_and_conversation_archives",
 ]);
 
 export default COMMS_HUB_REQUIRED_MIGRATIONS;
