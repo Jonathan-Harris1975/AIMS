@@ -12,7 +12,7 @@ Terminal or guarded branches include `decline`, `opt_out`, `paid_placement_decli
 
 ## Trigger model
 
-During the temporary test phase, Make.com owns the twice-daily `POST /outreach/batch/next` trigger. `AIMS_OPERATION_OUTREACH_ENABLED=false` prevents duplicate scheduling from the AIMS weekday operations window. The public test route is protected operationally by idempotency, an overlap guard and a configurable minimum trigger interval; bearer authentication should be restored after the Make test window.
+Make.com currently owns the twice-daily `POST /outreach/batch/next` trigger. `AIMS_OPERATION_OUTREACH_ENABLED=false` prevents duplicate scheduling from the AIMS weekday operations window. The route always requires the AIMS suite bearer token and retains idempotency, an overlap guard and a configurable minimum trigger interval.
 
 ## Recipient policy
 
@@ -45,5 +45,5 @@ The article cannot auto-send unless:
 1. Run `npm run comms:migrate` so `0009_outreach_automation` is present.
 2. Provide the existing SERP/Hunter/ZeroBounce/OpenPageRank, one.com, D1, R2 and OpenRouter secrets.
 3. Keep `AIMS_OPERATION_OUTREACH_ENABLED=false` while Make.com owns the schedule.
-4. Keep `OUTREACH_BATCH_NEXT_ALLOW_PUBLIC=true` only for the temporary Make.com test window.
-5. After live canaries, restore bearer authentication and choose one permanent scheduler owner.
+4. Authenticate every `POST /outreach/batch/next` trigger with the AIMS suite bearer token.
+5. Keep exactly one scheduler owner for Outreach; if scheduling moves back into AIMS, disable the Make.com schedule before enabling `AIMS_OPERATION_OUTREACH_ENABLED`.
