@@ -1,47 +1,36 @@
-# Comms Hub multi-mailbox email services — AIMS v2.13.5
+# Comms Hub email automation scope
 
-## Scope
+## Current boundary
 
-AIMS now treats `info@jonathan-harris.online`, `admin@jonathan-harris.online`, and `newsletter@jonathan-harris.online` as independent one.com mailboxes inside Comms Hub.
+AIMS Communications Hub manages only `info@jonathan-harris.online`.
 
-- `info` remains the customer-facing Smart/automated email lane.
-- `admin` is a separately polled operator mailbox and is manual-reply-only.
-- `newsletter` is a separately polled operator mailbox and is manual-reply-only.
+`admin@jonathan-harris.online` and `newsletter@jonathan-harris.online` are intentionally outside the automation boundary. AIMS must not poll, classify, draft, reply, follow up, retain, month-end archive, or surface those inboxes in the Unified Inbox.
 
-Each mailbox has its own IMAP cursor, thread identity, managed address, mailbox metadata, SMTP sender identity, and attachment path. Historical backfill remains disabled.
+## Enforcement
 
-## Manual-only enforcement
+The boundary is enforced in several layers rather than relying on deployment flags alone:
 
-Admin and Newsletter are protected at the backend, not only in the UI. An automated/AI send attempt against either mailbox is rejected with `email_mailbox_manual_only`. The authenticated operator email route supplies the explicit manual-reply flag.
+- `config.emailAccounts` contains only `info`; Admin and Newsletter are listed as explicit exclusions.
+- Email intake and send operations reject the excluded account keys with `email_mailbox_automation_excluded`.
+- AI analysis and workflow evaluation reject legacy excluded-mailbox conversations.
+- Automatic follow-up, delayed-action, retention and month-end archive selection skip excluded mailbox conversations.
+- Unified Inbox queries hide legacy Admin/Newsletter conversations and the AIMS-UI specialist queues for those inboxes have been removed.
+- Production and example configuration pin the old Admin/Newsletter enable switches to `false`; the runtime code does not honour a stale `true` value.
 
-The existing first-response timing policy is preserved. A first operator reply is scheduled through the existing business-hours delayed-action path when the timing rule applies.
-
-## Configuration
-
-Production defaults enable both additional mailboxes:
-
-```env
-COMMS_HUB_EMAIL_ADMIN_ENABLED=true
-COMMS_HUB_EMAIL_ADMIN_USERNAME=admin@jonathan-harris.online
-COMMS_HUB_EMAIL_ADMIN_MAILBOX=INBOX
-COMMS_HUB_EMAIL_NEWSLETTER_ENABLED=true
-COMMS_HUB_EMAIL_NEWSLETTER_USERNAME=newsletter@jonathan-harris.online
-COMMS_HUB_EMAIL_NEWSLETTER_MAILBOX=INBOX
-```
-
-Required existing one.com secrets:
+## Managed email configuration
 
 ```env
-ONECOM_ADMIN_PASSWORD=...
-ONECOM_NEWSLETTER_PASSWORD=...
+COMMS_HUB_EMAIL_ENABLED=true
+COMMS_HUB_EMAIL_ADMIN_ENABLED=false
+COMMS_HUB_EMAIL_NEWSLETTER_ENABLED=false
+COMMS_HUB_ONECOM_ACCOUNT_KEY=info
+COMMS_HUB_ONECOM_EMAIL_ADDRESS=info@jonathan-harris.online
+COMMS_HUB_ONECOM_USERNAME=info@jonathan-harris.online
+ONECOM_INFO_PASSWORD=...
 ```
 
-`info` retains the existing `ONECOM_INFO_PASSWORD`/Comms Hub password compatibility path.
+Admin and Newsletter mailbox passwords are not required by Comms Hub. Their independent operational ownership should remain outside this service.
 
-## Unified queue contract
+## Legacy-data handling
 
-The unified queue now exposes `email_account_key` and `email_mailbox`, and accepts `emailAccountKey=info|admin|newsletter` as a filter. Email thread IDs include the account key to prevent cross-mailbox collisions.
-
-## Validation
-
-Release validation covers independent intake, no-history baselining, manual-only enforcement, correct sender identity, queue filtering, existing Comms Hub security/business-hours behaviour, and the full Comms Hub regression suite.
+Migration `0012_excluded_email_automation_scope` cancels queued delayed actions and follow-ups for Admin/Newsletter conversations left by earlier versions. Existing conversation data is preserved; it is simply kept outside active AIMS automation.
