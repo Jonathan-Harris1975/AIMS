@@ -66,6 +66,9 @@ export async function processJotformIntake({ envelope, correlationId, context, n
   const formProcessing = context.formProcessingService?.registerVerifiedSubmission
     ? await context.formProcessingService.registerVerifiedSubmission({ intake, duplicate: persistence.duplicate })
     : null;
+  const contentAutomation = context.contentAutomationService?.scheduleVerifiedSubmission
+    ? await context.contentAutomationService.scheduleVerifiedSubmission({ intake, duplicate: persistence.duplicate })
+    : null;
 
   // Keep the durable delayed-action record as a recovery path when that worker is enabled,
   // but form attachment ingestion no longer depends on the generic delayed worker being on.
@@ -87,6 +90,7 @@ export async function processJotformIntake({ envelope, correlationId, context, n
     intake,
     persistence,
     formProcessing,
+    contentAutomation,
     acknowledgement: Object.freeze({ provider: "jotform", sentByAims: false }),
   };
 }

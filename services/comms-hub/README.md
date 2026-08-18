@@ -129,7 +129,10 @@ Smart Response + Jotform Orchestration layer (dynamic, non-autonomous by default
 - Jotform continues to own the immediate receipt acknowledgement; AIMS produces the later substantive processed response
 - processed form replies can be delivered through the existing one.com `info@jonathan-harris.online` transport with channel idempotency; v2.13.3 uses `COMMS_HUB_FORM_AUTO_SEND_ENABLED=true`, while attachments, security/conduct risk, low confidence or approval requirements still block automatic delivery
 - a selected internal Jotform hand-off is grounded by AIMS' allow-listed form registry and does not depend on unrelated AI Search evidence, while output-security/link validation remains mandatory
-- podcast-segment, blog-article and newsletter-article creation from submitted information is explicitly out of scope and remains a separate downstream workflow
+- verified **Case Study** forms can enqueue sanitised editorial direction for the existing weekly blog and social-blog lanes; verified **Podcast Enquiry** forms can enqueue sanitised editorial direction for the existing podcast and social-blog lanes
+- form submissions never become factual evidence by themselves: direct identifiers are excluded, prompt-injection attempts are blocked, and each content pipeline must still ground factual claims in its normal approved sources and pass its normal QA/review gates
+- the form reply layer does not publish content directly; it schedules a durable `content_automation` action, which writes pending editorial briefs to the private Comms Hub R2 queue for consumption by the existing scheduled content pipelines
+- Contact forms remain correspondence-only; newsletter content automation remains outside this flow, and the admin/newsletter email inboxes remain outside Comms Hub automation entirely
 - see `docs/COMMS_HUB_SMART_RESPONSE_FORMS_V4.md` for the full lifecycle and controls
 
 Mandatory AI security boundary (not feature-flagged):

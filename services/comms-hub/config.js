@@ -248,8 +248,12 @@ export function getCommsHubMissingEnv(env = process.env) {
   }
   const delayedRepliesRequired = booleanValue(env.COMMS_HUB_EMAIL_INITIAL_REPLY_DELAY_ENABLED, true)
     || booleanValue(env.COMMS_HUB_FORM_REPLY_DELAY_ENABLED, true);
-  if (delayedRepliesRequired && !booleanValue(env.COMMS_HUB_DELAYED_ACTION_WORKER_ENABLED, true)) {
+  const contentAutomationRequired = booleanValue(env.COMMS_HUB_CONTENT_AUTOMATION_ENABLED, false);
+  if ((delayedRepliesRequired || contentAutomationRequired) && !booleanValue(env.COMMS_HUB_DELAYED_ACTION_WORKER_ENABLED, true)) {
     missing.push("COMMS_HUB_DELAYED_ACTION_WORKER_ENABLED");
+  }
+  if (contentAutomationRequired && !usableEnvValue(env.R2_BUCKET_COMMS_HUB_PRIVATE)) {
+    missing.push("R2_BUCKET_COMMS_HUB_PRIVATE");
   }
   if (booleanValue(env.COMMS_HUB_BACKUP_AUTOMATIC_ENABLED, false) && !backupEnabled) {
     missing.push("COMMS_HUB_BACKUP_ENABLED");
@@ -423,6 +427,13 @@ export function loadCommsHubConfig(env = process.env, { requireEnabled = false }
     formOrchestrationEnabled: booleanValue(env.COMMS_HUB_FORM_ORCHESTRATION_ENABLED, true),
     formSmartProcessingEnabled: booleanValue(env.COMMS_HUB_FORM_SMART_PROCESSING_ENABLED, true),
     formAutoSendEnabled: booleanValue(env.COMMS_HUB_FORM_AUTO_SEND_ENABLED, false),
+    contentAutomationEnabled: booleanValue(env.COMMS_HUB_CONTENT_AUTOMATION_ENABLED, false),
+    contentAutomationBlogEnabled: booleanValue(env.COMMS_HUB_CONTENT_AUTOMATION_BLOG_ENABLED, true),
+    contentAutomationSocialEnabled: booleanValue(env.COMMS_HUB_CONTENT_AUTOMATION_SOCIAL_ENABLED, true),
+    contentAutomationPodcastEnabled: booleanValue(env.COMMS_HUB_CONTENT_AUTOMATION_PODCAST_ENABLED, true),
+    contentAutomationMaxFacts: positiveInteger(env.COMMS_HUB_CONTENT_AUTOMATION_MAX_FACTS, 12, "COMMS_HUB_CONTENT_AUTOMATION_MAX_FACTS", { min: 1, max: 30 }),
+    contentAutomationMaxAttempts: positiveInteger(env.COMMS_HUB_CONTENT_AUTOMATION_MAX_ATTEMPTS, 8, "COMMS_HUB_CONTENT_AUTOMATION_MAX_ATTEMPTS", { min: 1, max: 20 }),
+    contentAutomationBriefLimit: positiveInteger(env.COMMS_HUB_CONTENT_AUTOMATION_BRIEF_LIMIT, 3, "COMMS_HUB_CONTENT_AUTOMATION_BRIEF_LIMIT", { min: 1, max: 10 }),
     businessTimeZone: usableEnvValue(env.COMMS_HUB_BUSINESS_TIMEZONE) || 'Europe/London',
     businessStartHour,
     businessEndHour,

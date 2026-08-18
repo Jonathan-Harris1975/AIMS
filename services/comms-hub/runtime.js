@@ -35,6 +35,7 @@ import { CommsHubEmailService } from "./emailService.js";
 import { CommsHubChatService } from "./chatService.js";
 import { CommsHubReplyDeliveryService } from "./replyDeliveryService.js";
 import { CommsHubFormProcessingService } from "./formProcessingService.js";
+import { CommsHubContentAutomationService } from "./contentAutomationService.js";
 import { CommsHubGovernanceService } from "./governanceService.js";
 import { CommsHubCredentialVaultService } from "./credentialVaultService.js";
 import { CommsHubQuarantineService } from "./quarantineService.js";
@@ -132,6 +133,7 @@ export function createCommsHubContext({ env = process.env, fetchImpl, r2ArchiveS
   active.chatService = new CommsHubChatService({ context: active });
   active.replyDelivery = new CommsHubReplyDeliveryService({ context: active });
   active.formProcessingService = new CommsHubFormProcessingService({ context: active });
+  active.contentAutomationService = new CommsHubContentAutomationService({ context: active });
   active.governanceService = new CommsHubGovernanceService({ context: active });
   active.credentialVaultService = new CommsHubCredentialVaultService({ context: active });
   active.quarantineService = new CommsHubQuarantineService({ context: active });

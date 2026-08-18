@@ -47,7 +47,7 @@ export function buildJotformInformationDigest(intake) {
     attachmentReviewRequired: (intake.attachments?.length || 0) > 0,
     missing: Object.freeze(missing),
     canReplyByEmail: Boolean(intake.contact?.email),
-    creativeReuseInScope: false,
+    creativeReuseInScope: ["case_study", "podcast_enquiry"].includes(intake.route.key),
   });
 }
 
@@ -78,7 +78,7 @@ export function formProcessingForAi(formProcessing) {
       attachmentReviewRequired: Boolean(digest.attachmentReviewRequired),
       missing: Object.freeze([...(digest.missing || [])].slice(0, 20)),
       canReplyByEmail: Boolean(digest.canReplyByEmail),
-      creativeReuseInScope: false,
+      creativeReuseInScope: Boolean(digest.creativeReuseInScope),
     }),
   });
 }
@@ -94,7 +94,7 @@ export function formProcessingPromptGuidance(formProcessing) {
     "- Jotform already owns the immediate receipt acknowledgement. Do not send a duplicate 'we received your form' acknowledgement.",
     "- Produce a substantive processed response: answer what can be answered, identify only genuinely missing information, and state the next communication step without promising acceptance/publication/booking.",
     "- Treat uploaded attachments as unavailable for substantive inference until the secure attachment pipeline has completed; never invent their contents.",
-    "- Creating podcast segments, blog articles or newsletter articles from this submission is OUT OF SCOPE for this workflow and must not be started here.",
+    "- Downstream blog/social/podcast editorial automation is handled by a separate controlled queue. Do not start it from the reply model, claim that publication is guaranteed, or expose internal automation details.",
   ].join("\n");
 }
 
