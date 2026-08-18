@@ -301,6 +301,102 @@ export class CommsHubOperationsService {
     return profile;
   }
 
+  async updateContact({ contactId, ...input }, req) {
+    const actor = this.identity(req);
+    const before = await this.context.operationsRepository.getContactProfile(contactId);
+    if (!before) throw new CommsHubError(404, "contact_not_found", "Contact was not found.");
+
+    const changes = {};
+    if (Object.prototype.hasOwnProperty.call(input, "displayName")) changes.displayName = text(input.displayName, 300) || null;
+    if (Object.prototype.hasOwnProperty.call(input, "phone")) changes.phone = text(input.phone, 100) || null;
+    if (Object.prototype.hasOwnProperty.call(input, "primaryEmail")) {
+      const email = text(input.primaryEmail, 320).toLowerCase();
+      if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        throw new CommsHubError(400, "contact_email_invalid", "Contact email address is invalid.");
+      }
+      if (email) {
+        const conflict = await this.context.operationsRepository.findContactByEmail(email, contactId);
+        if (conflict) throw new CommsHubError(409, "contact_email_conflict", "Another contact already uses this email address.");
+      }
+      changes.primaryEmail = email || null;
+    }
+    if (!Object.keys(changes).length) throw new CommsHubError(400, "contact_update_empty", "At least one contact field must be supplied.");
+
+    const updated = await this.context.operationsRepository.updateContact({ contactId, changes });
+    if (!updated) throw new CommsHubError(404, "contact_not_found", "Contact was not found.");
+    await this.context.operationsRepository.indexSearchDocument({
+      id: stableId("srch", "contact", contactId),
+      objectType: "contact",
+      objectId: contactId,
+      contactId,
+      channel: before.conversations?.[0]?.channel || null,
+      searchableText: [updated.display_name, updated.primary_email, updated.phone].filter(Boolean).join(" "),
+      metadata: {},
+      updatedAt: updated.updated_at,
+    });
+    const profile = await this.context.operationsRepository.getContactProfile(contactId);
+    await this.context.auditService.record({
+      actor: actor.actor,
+      role: actor.role,
+      action: "contact_updated",
+      objectType: "contact",
+      objectId: contactId,
+      requestId: req.id || null,
+      before: before.contact,
+      after: profile?.contact || updated,
+    });
+    return profile;
+  }
+
+  async deleteContact(contactId, req) {
+    const actor = this.identity(req);
+    const replacementContactId = stableId("ctc", "deleted-contact", contactId);
+    const profile = await this.context.operationsRepository.getContactProfile(contactId);
+    if (!profile) throw new CommsHubError(404, "contact_not_found", "Contact was not found.");
+    const result = await this.context.operationsRepository.deleteContactPreservingConversations({ contactId, replacementContactId });
+    await this.context.auditService.record({
+      actor: actor.actor,
+      role: actor.role,
+      action: "contact_deleted",
+      objectType: "contact",
+      objectId: contactId,
+      requestId: req.id || null,
+      details: {
+        linkedConversationCount: result.linkedConversationCount,
+        archivedConversationCount: result.archivedConversationCount,
+        replacementContactId,
+      },
+    });
+    return result;
+  }
+
+  async listConversationArchives(filters, req) {
+    const archives = await this.context.operationsRepository.listConversationArchives(filters);
+    await this.context.auditService.record({
+      actor: this.identity(req).actor,
+      role: this.identity(req).role,
+      action: "conversation_archives_read",
+      objectType: "conversation_archive",
+      requestId: req.id || null,
+      details: { resultCount: archives.length },
+    });
+    return archives;
+  }
+
+  async archivedConversation(conversationId, req) {
+    const archive = await this.context.operationsRepository.getConversationArchive(conversationId);
+    if (!archive) throw new CommsHubError(404, "conversation_archive_not_found", "Archived conversation was not found.");
+    await this.context.auditService.record({
+      actor: this.identity(req).actor,
+      role: this.identity(req).role,
+      action: "conversation_archive_read",
+      objectType: "conversation_archive",
+      objectId: conversationId,
+      requestId: req.id || null,
+    });
+    return archive;
+  }
+
   async proposeIdentityLink({ sourceContactId, targetContactId, confidence, reason, metadata = {} }, req) {
     const actor = this.identity(req);
     if (sourceContactId === targetContactId) throw new CommsHubError(400, "identity_link_self", "A contact cannot be linked to itself.");

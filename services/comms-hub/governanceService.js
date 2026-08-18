@@ -88,17 +88,17 @@ export class CommsHubGovernanceService {
     const objects = await this.context.operationsRepository.listAttachmentObjectsForConversation(conversationId);
     if (objects.length && !this.context.privateR2) throw new CommsHubError(503, 'retention_storage_unconfigured', 'Private object storage is required to delete attachment content safely.');
     for (const object of objects) await this.context.privateR2.delete(object.object_key);
-    const result = await this.context.operationsRepository.deleteConversationContent({ conversationId, contactId: conversation.contact_id });
+    const result = await this.context.operationsRepository.hardDeleteConversation({ conversationId });
+    if (!result.deleted) throw new CommsHubError(404, 'conversation_not_found', 'Conversation was not found.');
     await this.context.auditService.record({
       actor,
       role: 'admin',
       action: 'conversation_deleted',
       objectType: 'conversation',
       objectId: conversationId,
-      conversationId,
-      details: { contactId: conversation.contact_id, deletedAttachmentObjects: objects.length, logicalDeletion: true },
+      details: { contactId: conversation.contact_id, deletedAttachmentObjects: objects.length, hardDeletion: true },
     });
-    return { ...result, deletedAttachmentObjects: objects.length, logicalDeletion: true };
+    return { ...result, deletedAttachmentObjects: objects.length, hardDeletion: true };
   }
 }
 export default CommsHubGovernanceService;
