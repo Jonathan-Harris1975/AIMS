@@ -14,6 +14,10 @@ function enabled(context) {
 
 export async function runInboundConversationAutomation({ context, conversationId, actor = "inbound-automation", scheduleFollowUp = true } = {}) {
   if (!conversationId || !enabled(context)) return { skipped: true, reason: "automation_disabled" };
+  const operations = context.operationsRepository?.getConversationOperations
+    ? await context.operationsRepository.getConversationOperations(conversationId).catch(() => null)
+    : null;
+  if (operations?.owner_type === "person") return { skipped: true, reason: "human_assigned" };
   const analysis = await context.aiWorkflowService.analyseConversation(conversationId, { operation: "analyse", scheduleFollowUp });
   if (!analysis?.draft?.id) return { skipped: true, reason: "no_draft", analysis };
   if (analysis.draft.requiresApproval) return { skipped: true, reason: "approval_required", analysis };
@@ -32,6 +36,7 @@ export async function runInboundConversationAutomation({ context, conversationId
       "autonomous_reply_requires_approval",
       "autonomous_reply_rate_limited",
       "autonomous_replies_disabled",
+      "autonomous_reply_human_assigned",
     ]);
     if (!expected.has(error?.code)) throw error;
     return { skipped: true, reason: error.code, analysis };

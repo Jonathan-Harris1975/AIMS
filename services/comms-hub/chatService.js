@@ -305,12 +305,17 @@ export class CommsHubChatService {
 
   async runOptionalAutomation(conversationId) {
     try {
+      const operations = await this.context.operationsRepository.getConversationOperations(conversationId);
+      if (operations?.owner_type === 'person') {
+        log.info('commsHub.chat.automationSkipped', { conversationId, reason: 'human_assigned' });
+        return;
+      }
       const analysis = await this.context.aiWorkflowService.analyseConversation(conversationId, { operation: 'analyse', scheduleFollowUp: false });
       if (!this.context.config.autonomousRepliesEnabled || !analysis?.draft?.id || analysis.draft.requiresApproval) return;
       await this.context.governanceService.attemptAutonomousReply({ conversationId, draftId: analysis.draft.id }, { actor: 'coginpal-automation', role: 'admin' });
       log.info('commsHub.chat.automationSent', { conversationId, draftId: analysis.draft.id });
     } catch (error) {
-      const expected = new Set(['autonomous_policy_not_found', 'autonomous_reply_policy_rejected', 'autonomous_replies_disabled']);
+      const expected = new Set(['autonomous_policy_not_found', 'autonomous_reply_policy_rejected', 'autonomous_replies_disabled', 'autonomous_reply_human_assigned']);
       const level = expected.has(error?.code) ? 'info' : 'warn';
       log[level]('commsHub.chat.automationSkipped', { conversationId, error: safeErrorLog(error) });
     }

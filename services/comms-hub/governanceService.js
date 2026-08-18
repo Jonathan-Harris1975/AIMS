@@ -21,8 +21,12 @@ export class CommsHubGovernanceService {
 
   async attemptAutonomousReply({ conversationId, draftId }, identity = { actor: 'autonomous-worker', role: 'admin' }) {
     if (!this.context.config.autonomousRepliesEnabled) throw new CommsHubError(409, 'autonomous_replies_disabled', 'Autonomous replies are disabled.');
-    const [conversation, ai, draft] = await Promise.all([this.context.repository.getConversation(conversationId), this.context.aiRepository.getConversationAiState(conversationId), this.context.aiRepository.getDraft(draftId)]);
+    const operationsPromise = this.context.operationsRepository?.getConversationOperations
+      ? this.context.operationsRepository.getConversationOperations(conversationId)
+      : Promise.resolve(null);
+    const [conversation, ai, draft, operations] = await Promise.all([this.context.repository.getConversation(conversationId), this.context.aiRepository.getConversationAiState(conversationId), this.context.aiRepository.getDraft(draftId), operationsPromise]);
     if (!conversation || !draft || draft.conversation_id !== conversationId) throw new CommsHubError(404, 'autonomous_reply_target_missing', 'Conversation or reply draft was not found.');
+    if (operations?.owner_type === 'person') throw new CommsHubError(409, 'autonomous_reply_human_assigned', 'Autonomous replies are disabled while this conversation is assigned to Jonathan.');
     if (Number(draft.requires_approval) === 1) throw new CommsHubError(409, 'autonomous_reply_requires_approval', 'This draft requires human approval.');
     const state = ai?.state || ai || {};
     const latestRunSecurity = ai?.runs?.[0]?.metadata?.security || {};

@@ -20,6 +20,7 @@ import { CommsHubBackupWorker } from "./workers/backupWorker.js";
 import { CommsHubEmailPollWorker } from "./workers/emailPollWorker.js";
 import { CommsHubDelayedActionWorker } from "./workers/delayedActionWorker.js";
 import { CommsHubRetentionWorker } from "./workers/retentionWorker.js";
+import { CommsHubMonthEndConversationArchiveWorker } from "./workers/monthEndConversationArchiveWorker.js";
 import { CommsHubWebhookReconcileWorker } from "./workers/webhookReconcileWorker.js";
 import { CommsHubAiWorkflowService } from "./aiWorkflowService.js";
 import { PodcastContributionWorkflowService } from "./podcastWorkflowService.js";
@@ -151,6 +152,7 @@ export function createCommsHubContext({ env = process.env, fetchImpl, r2ArchiveS
   active.emailPollWorker = active.emailPollWorkers.info || Object.values(active.emailPollWorkers)[0] || null;
   active.delayedActionWorker = new CommsHubDelayedActionWorker({ context: active });
   active.retentionWorker = new CommsHubRetentionWorker({ context: active });
+  active.monthEndConversationArchiveWorker = new CommsHubMonthEndConversationArchiveWorker({ context: active });
   active.webhookReconcileWorker = new CommsHubWebhookReconcileWorker({ context: active });
   active.quarantineService.register('email_poll', (item) => {
     const accountKey = String(item.source_id || '').split(':')[0];
@@ -238,6 +240,7 @@ export async function startCommsHubRuntime() {
       const emailPollWorkerStarted = Object.fromEntries(Object.entries(active.emailPollWorkers).map(([key, worker]) => [key, worker.start()]));
       const delayedActionWorkerStarted = active.delayedActionWorker.start();
       const retentionWorkerStarted = active.retentionWorker.start();
+      const monthEndConversationArchiveWorkerStarted = active.monthEndConversationArchiveWorker.start();
       clearRuntimeSupervisorTimer();
       runtimeFailureCount = 0;
       runtimeState = {
@@ -254,6 +257,7 @@ export async function startCommsHubRuntime() {
           emailPoll: emailPollWorkerStarted,
           delayedActions: delayedActionWorkerStarted,
           retention: retentionWorkerStarted,
+          monthEndConversationArchive: monthEndConversationArchiveWorkerStarted,
         },
       };
       log.info("commsHub.runtime.started", {
@@ -266,6 +270,7 @@ export async function startCommsHubRuntime() {
         emailPollWorkerStarted,
         delayedActionWorkerStarted,
         retentionWorkerStarted,
+        monthEndConversationArchiveWorkerStarted,
         forms: readiness.forms,
         email: {
           enabled: active.config.emailEnabled,
@@ -317,7 +322,7 @@ export async function startCommsHubRuntime() {
           ),
         },
       });
-      return { started: true, archiveWorkerStarted, socialPollWorkerStarted, webhookReconcileWorkerStarted, followUpWorkerStarted, providerHealthWorkerStarted, backupWorkerStarted, emailPollWorkerStarted, delayedActionWorkerStarted, retentionWorkerStarted };
+      return { started: true, archiveWorkerStarted, socialPollWorkerStarted, webhookReconcileWorkerStarted, followUpWorkerStarted, providerHealthWorkerStarted, backupWorkerStarted, emailPollWorkerStarted, delayedActionWorkerStarted, retentionWorkerStarted, monthEndConversationArchiveWorkerStarted };
     } catch (error) {
       runtimeState = { status: "failed", ready: false, detail: error?.code || error?.name || "runtime_start_failed" };
       log.error("commsHub.runtime.startFailed", { error: safeErrorLog(error) });
@@ -347,6 +352,7 @@ export async function stopCommsHubRuntime() {
       ...Object.values(context.emailPollWorkers || {}).map((worker) => worker.stop()),
       context.delayedActionWorker.stop(),
       context.retentionWorker.stop(),
+      context.monthEndConversationArchiveWorker.stop(),
     ]);
   }
   context = null;

@@ -93,9 +93,15 @@ export class CommsHubOperationsService {
       snoozedUntil = new Date(timestamp).toISOString();
     }
     const before = await this.context.operationsRepository.getConversationOperations(conversationId);
+    const normalisedStatus = text(status, 50).toLowerCase();
+    if (normalisedStatus === "archived" && !["resolved", "archived"].includes(before?.operational_status)) {
+      throw new CommsHubError(409, "conversation_archive_requires_resolution", "Only completed conversations can be archived.", {
+        publicMessage: "Mark the conversation as resolved before archiving it.",
+      });
+    }
     const updated = await this.context.operationsRepository.updateConversationStatus({
       conversationId,
-      status: text(status, 50).toLowerCase(),
+      status: normalisedStatus,
       actor: actor.actor,
       expectedVersion,
       snoozedUntil,
