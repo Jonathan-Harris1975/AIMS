@@ -55,7 +55,7 @@ Form orchestration can route podcast and case-study submissions into content-aut
 
 The contribution state machine covers pre-check, asset requests/review, acceptance/rejection, episode-link recording, backlink request, optional social offer and completion. Routes exist to start and advance the workflow.
 
-The current repository does **not** automatically advance that state machine from the successful podcast publication event. Post-publication follow-up therefore still requires workflow advancement by an operator/integration. That is the remaining end-to-end automation gap in this lane.
+The Friday podcast pipeline now automatically advances accepted `podcast_contribution` workflows only after RSS publication and the website rebuild have both confirmed success. The episode URL, backlink-request state, social-post offer state and terminal completion are recorded idempotently against the publication session; failures surface back through the podcast operation so MAST can alert rather than silently losing the hand-off.
 
 ## Website chat
 

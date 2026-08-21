@@ -91,6 +91,36 @@ export class PodcastContributionWorkflowService {
       now,
     });
   }
+
+  async advancePublishedContribution({ conversationId, episodeUrl, publicationId }) {
+    const current = await this.start(conversationId);
+    if (!["accepted", "episode_link_sent", "backlink_requested", "social_offer_sent", "complete"].includes(current.state)) {
+      return { skipped: true, reason: "workflow_not_accepted", state: current.state };
+    }
+    const actions = [
+      ["publish_episode", { episodeUrl }],
+      ["request_backlink", { backlinkRequestedAt: new Date().toISOString() }],
+      ["offer_social_post", { socialPostOfferedAt: new Date().toISOString() }],
+      ["complete", { publicationId, completedAutomatically: true }],
+    ];
+    let state = current.state;
+    const results = [];
+    for (const [action, data] of actions) {
+      const valid = TRANSITIONS[state]?.[action];
+      if (!valid) continue;
+      const result = await this.advance({
+        conversationId,
+        action,
+        idempotencyKey: `podcast-publication:${publicationId}:${action}`,
+        actor: "aims:podcast-pipeline",
+        data,
+      });
+      state = result.run?.state || valid;
+      results.push({ action, state, duplicate: Boolean(result.duplicate) });
+    }
+    return { skipped: false, state, results };
+  }
+
 }
 
 export default PodcastContributionWorkflowService;
