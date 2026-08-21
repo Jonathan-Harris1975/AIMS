@@ -27,17 +27,18 @@ export class CloudflareBackupClient {
     return `${this.config.cloudflareApiBaseUrl}/accounts/${this.config.cloudflareAccountId}/d1/database/${databaseId}/${operation}`;
   }
 
-  async requestJson(url, body) {
-    const response = await this.fetchImpl(url, {
-      method: "POST",
+  async requestApi(method, url, body = undefined) {
+    const options = {
+      method,
       timeout: this.config.backupRequestTimeoutMs,
       headers: {
         authorization: `Bearer ${this.config.d1ApiToken}`,
         accept: "application/json",
         "content-type": "application/json",
       },
-      body: JSON.stringify(body),
-    });
+    };
+    if (body !== undefined) options.body = JSON.stringify(body);
+    const response = await this.fetchImpl(url, options);
     const payload = await response.json().catch(() => null);
     if (!response.ok || !payload || payload.success === false) {
       throw new CommsHubError(response.status === 429 ? 429 : 502, "cloudflare_backup_api_failed", `Cloudflare backup API failed${messages(payload) ? `: ${messages(payload)}` : ` with HTTP ${response.status}`}.`, {
@@ -46,7 +47,79 @@ export class CloudflareBackupClient {
         publicMessage: "Cloudflare backup operation failed.",
       });
     }
-    return payload.result || {};
+    return payload.result ?? {};
+  }
+
+  async requestJson(url, body) {
+    return this.requestApi("POST", url, body);
+  }
+
+  databaseCollectionEndpoint() {
+    return `${this.config.cloudflareApiBaseUrl}/accounts/${this.config.cloudflareAccountId}/d1/database`;
+  }
+
+  async ensureRestoreDatabase() {
+    const cachedId = String(this.configuredRestoreDatabaseId || "").trim();
+    if (cachedId) {
+      return { id: cachedId, name: this.config.restoreDatabaseName || "COMMS_HUB_RESTORE_DATABASE", created: false, source: "runtime_cache" };
+    }
+    const configuredId = String(this.config.restoreDatabaseId || "").trim();
+    if (configuredId) {
+      if (configuredId === this.config.d1DatabaseId) {
+        throw new CommsHubError(400, "restore_target_unsafe", "Restore validation requires a separate non-production D1 database.", {
+          failureClass: "permanent",
+          publicMessage: "Restore target must be an isolated database.",
+        });
+      }
+      this.configuredRestoreDatabaseId = configuredId;
+      return { id: configuredId, name: this.config.restoreDatabaseName || "COMMS_HUB_RESTORE_DATABASE", created: false, source: "configured_id" };
+    }
+
+    const name = String(this.config.restoreDatabaseName || "COMMS_HUB_RESTORE_DATABASE").trim();
+    if (!name) {
+      throw new CommsHubError(503, "restore_database_name_unconfigured", "COMMS_HUB_RESTORE_DATABASE must contain the isolated restore database name.", {
+        failureClass: "permanent",
+        publicMessage: "The restore database name is not configured.",
+      });
+    }
+    const collection = this.databaseCollectionEndpoint();
+    const listUrl = `${collection}?name=${encodeURIComponent(name)}&page=1&per_page=100`;
+    const listed = await this.requestApi("GET", listUrl);
+    const exact = (Array.isArray(listed) ? listed : []).filter((item) => String(item?.name || "") === name && String(item?.uuid || "").trim());
+    if (exact.length > 1) {
+      throw new CommsHubError(409, "restore_database_name_ambiguous", `More than one D1 database matched the restore name '${name}'.`, {
+        failureClass: "permanent",
+        publicMessage: "The restore database name is ambiguous.",
+      });
+    }
+    if (exact.length === 1) {
+      const id = String(exact[0].uuid).trim();
+      if (id === this.config.d1DatabaseId) {
+        throw new CommsHubError(409, "restore_target_unsafe", "The restore database name resolves to the production D1 database.", {
+          failureClass: "permanent",
+          publicMessage: "Restore target must be an isolated database.",
+        });
+      }
+      this.configuredRestoreDatabaseId = id;
+      return { id, name, created: false, source: "discovered_by_name" };
+    }
+
+    const created = await this.requestApi("POST", collection, { name });
+    const id = String(created?.uuid || "").trim();
+    if (!id) {
+      throw new CommsHubError(502, "restore_database_create_invalid", "Cloudflare created the restore database without returning a UUID.", {
+        failureClass: "recoverable",
+        publicMessage: "Restore database creation returned an invalid response.",
+      });
+    }
+    if (id === this.config.d1DatabaseId) {
+      throw new CommsHubError(409, "restore_target_unsafe", "Cloudflare returned the production D1 UUID for the restore database.", {
+        failureClass: "permanent",
+        publicMessage: "Restore target must be an isolated database.",
+      });
+    }
+    this.configuredRestoreDatabaseId = id;
+    return { id, name: String(created?.name || name), created: true, source: "created" };
   }
 
   async exportDatabase(databaseId = this.config.d1DatabaseId) {

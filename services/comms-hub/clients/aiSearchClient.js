@@ -66,6 +66,7 @@ export class AiSearchClient {
   constructor(config, { fetchImpl = sharedFetch } = {}) {
     this.config = config;
     this.fetchImpl = fetchImpl;
+    this.lastSearchDiagnostics = Object.freeze({ ok: true, degraded: false, successfulInstances: 0, failedInstances: [] });
   }
 
   async searchInstance(instanceId, query, { maxResults = 6 } = {}) {
@@ -124,9 +125,22 @@ export class AiSearchClient {
       this.config.aiSearchApprovedInstances.map((instanceId) => this.searchInstance(instanceId, query, { maxResults: maxResultsPerInstance }))
     );
     const evidence = settled.flatMap((result) => result.status === "fulfilled" ? result.value : []);
-    if (!evidence.length && settled.every((result) => result.status === "rejected")) {
-      throw settled.find((result) => result.status === "rejected")?.reason;
-    }
+    const failures = settled.flatMap((result, index) => result.status === "rejected" ? [{
+      instanceId: this.config.aiSearchApprovedInstances[index],
+      code: result.reason?.code || result.reason?.name || "ai_search_failed",
+      statusCode: result.reason?.statusCode || null,
+    }] : []);
+    const successfulInstances = settled.length - failures.length;
+    this.lastSearchDiagnostics = Object.freeze({
+      ok: successfulInstances > 0,
+      degraded: failures.length > 0,
+      successfulInstances,
+      failedInstances: Object.freeze(failures.map((item) => Object.freeze(item))),
+      evidenceCount: evidence.length,
+    });
+    // Runtime indexing/search failures are deliberately non-blocking. AIMS can
+    // still draft from the conversation, while evidence-required workflows are
+    // forced to human review when no approved evidence is available.
     return evidence
       .sort((left, right) => Number(right.score ?? -1) - Number(left.score ?? -1))
       .slice(0, Math.max(1, Math.min(30, Number(maximumEvidence) || 8)));
