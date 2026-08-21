@@ -12,7 +12,7 @@ Terminal or guarded branches include `decline`, `opt_out`, `paid_placement_decli
 
 ## Trigger model
 
-Make.com currently owns the twice-daily `POST /outreach/batch/next` trigger. `AIMS_OPERATION_OUTREACH_ENABLED=false` prevents duplicate scheduling from the AIMS weekday operations window. The route always requires the AIMS suite bearer token and retains idempotency, an overlap guard and a configurable minimum trigger interval.
+MAST owns the twice-daily weekday `POST /outreach/batch/next` triggers at 09:00 and 16:00 Europe/London. `AIMS_OPERATION_OUTREACH_ENABLED=true` keeps the automation lane available while MAST remains the single clock. The route always requires the AIMS suite bearer token and retains idempotency, an overlap guard and a configurable minimum trigger interval.
 
 ## Recipient policy
 
@@ -44,6 +44,6 @@ The article cannot auto-send unless:
 
 1. Run `npm run comms:migrate` so `0009_outreach_automation` is present.
 2. Provide the existing SERP/Hunter/ZeroBounce/OpenPageRank, one.com, D1, R2 and OpenRouter secrets.
-3. Keep `AIMS_OPERATION_OUTREACH_ENABLED=false` while Make.com owns the schedule.
+3. Keep `AIMS_OPERATION_OUTREACH_ENABLED=true` and MAST as the single schedule owner.
 4. Authenticate every `POST /outreach/batch/next` trigger with the AIMS suite bearer token.
-5. Keep exactly one scheduler owner for Outreach; if scheduling moves back into AIMS, disable the Make.com schedule before enabling `AIMS_OPERATION_OUTREACH_ENABLED`.
+5. Keep exactly one scheduler owner for Outreach: MAST. The AIMS route is an execution endpoint and manual recovery control, not a second clock.

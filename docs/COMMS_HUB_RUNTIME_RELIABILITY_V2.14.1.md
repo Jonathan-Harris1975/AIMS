@@ -11,7 +11,7 @@ This release consolidates the complete v2.14.0 Outreach automation branch with t
 - A narrow `social_engagement` autonomous policy allows low-risk social acknowledgements to proceed without an AI Search evidence hit. The existing general social policy remains evidence-required and higher confidence.
 - The obsolete Comms Hub wake relay and `COMMS_HUB_WAKE_*` configuration have been removed. Incoming HTTP requests already wake the AIMS service. Continuous IMAP/social/delayed-action polling requires the AIMS Koyeb service to keep at least one instance running.
 - AIMS health/readiness responses now use the package version instead of the old `2.9.7` fallback.
-- The full v2.14.0 guest-article Outreach implementation and migration `0009_outreach_automation` are restored. The internal AIMS Outreach scheduler remains disabled while the authenticated Make.com trigger owns the schedule, preventing duplicate Outreach runs.
+- The full v2.14.0 guest-article Outreach implementation and migration `0009_outreach_automation` are restored. MAST now owns the authenticated 09:00/16:00 weekday Outreach cadence while the AIMS route remains the idempotent execution endpoint, preventing duplicate schedule ownership.
 
 ## Required deployment setting
 
