@@ -65,7 +65,7 @@ function buildChecks(meta) {
     });
   }
 
-  if (meta.service === "audits" && meta.targetPath === "/audits/website/run") {
+  if (meta.service === "audits" && ["/audits/website/run", "/audits/monthly/website"].includes(meta.targetPath)) {
     const readiness = getWebsiteAuditReadiness();
     checks.push(...readiness.checks.map((item) => ({
       name: `website-audit:${item.name}`,
@@ -81,7 +81,7 @@ function responseFor(req, stage) {
   const meta = requestMeta(req, stage);
   const checks = buildChecks(meta);
   const configuredStrict = booleanEnv("AIMS_OPS_PREFLIGHT_STRICT", false);
-  const websiteAuditStrict = meta.service === "audits" && meta.targetPath === "/audits/website/run";
+  const websiteAuditStrict = meta.service === "audits" && ["/audits/website/run", "/audits/monthly/website"].includes(meta.targetPath);
   const strict = configuredStrict || websiteAuditStrict;
   const requiredOk = checks.every((check) => check.ok);
 
@@ -168,7 +168,6 @@ const OPERATION_WINDOWS = Object.freeze({
     ["newsletter-generate", "/newsletter/generate", { profileId: "ai-edge" }, "newsletter", false, "rss-rewrite"],
     ["newsletter-send", "/newsletter/send", { profileId: "ai-edge" }, "newsletter", false, "newsletter-generate"],
     ["weekly-blog", "/blog/weekly/build", {}, null, false, "rss-rewrite"],
-    ["outreach", "/outreach/batch/next", {}, "outreach"],
     ["zernio-ebooks", "/zernio/ebooks/weekly", { dryRun: false, profileName: "Default", accountId: "ALL", usePodcastFeaturedBook: true }, null, true, "rss-rewrite"],
     ["zernio-quiz", "/zernio/quiz/weekly", {}, null, false, "rss-rewrite"],
   ],
@@ -181,7 +180,6 @@ const OPERATION_WINDOWS = Object.freeze({
     ["blotato-pm", "/blotato/shorts/model-verdict/schedule", {}, null, false, "blotato-am"],
     ["newsletter-generate", "/newsletter/generate", { profileId: "ai-edge" }, "newsletter", false, "rss-rewrite"],
     ["newsletter-send", "/newsletter/send", { profileId: "ai-edge" }, "newsletter", false, "newsletter-generate"],
-    ["outreach", "/outreach/batch/next", {}, "outreach"],
   ],
   "wednesday-am": [
     ["rss-rewrite", "/rss/rewrite", { batchSize: 5 }],
@@ -192,7 +190,6 @@ const OPERATION_WINDOWS = Object.freeze({
     ["blotato-pm", "/blotato/shorts/ai-at-work/schedule", {}, null, false, "blotato-am"],
     ["newsletter-generate", "/newsletter/generate", { profileId: "ai-edge" }, "newsletter", false, "rss-rewrite"],
     ["newsletter-send", "/newsletter/send", { profileId: "ai-edge" }, "newsletter", false, "newsletter-generate"],
-    ["outreach", "/outreach/batch/next", {}, "outreach"],
   ],
   "thursday-am": [
     ["rss-rewrite", "/rss/rewrite", { batchSize: 5 }],
@@ -203,7 +200,6 @@ const OPERATION_WINDOWS = Object.freeze({
     ["blotato-pm", "/blotato/shorts/reality-check/schedule", {}, null, false, "blotato-am"],
     ["newsletter-generate", "/newsletter/generate", { profileId: "ai-edge" }, "newsletter", false, "rss-rewrite"],
     ["newsletter-send", "/newsletter/send", { profileId: "ai-edge" }, "newsletter", false, "newsletter-generate"],
-    ["outreach", "/outreach/batch/next", {}, "outreach"],
   ],
   "friday-am": [
     ["rss-rewrite", "/rss/rewrite", { batchSize: 5 }],
@@ -216,7 +212,6 @@ const OPERATION_WINDOWS = Object.freeze({
     ["blotato-pm", "/blotato/shorts/ai-playbook/schedule", {}, null, false, "blotato-am"],
     ["newsletter-generate", "/newsletter/generate", { profileId: "ai-edge" }, "newsletter", false, "rss-rewrite"],
     ["newsletter-send", "/newsletter/send", { profileId: "ai-edge" }, "newsletter", false, "newsletter-generate"],
-    ["outreach", "/outreach/batch/next", {}, "outreach"],
   ],
   "friday-pm": [
     ["podcast-readiness", "/podcast/readiness", {}],
@@ -324,6 +319,7 @@ function operationNewsletterEnabled() {
 }
 
 function operationOutreachEnabled() {
+  // Compatibility/status flag only. Outreach execution is clocked exclusively by MAST at 09:00 and 16:00 weekdays.
   return booleanEnv("AIMS_OPERATION_OUTREACH_ENABLED", false);
 }
 
@@ -379,10 +375,6 @@ async function runInternalTask([name, path, body = {}, feature = null, addWeekSt
   if (feature === "newsletter" && !operationNewsletterEnabled()) {
     return { name, path, ok: true, skipped: true, reason: "newsletter-disabled-until-brevo-ready" };
   }
-  if (feature === "outreach" && !operationOutreachEnabled()) {
-    return { name, path, ok: true, skipped: true, reason: "outreach-disabled-until-dedicated-setup" };
-  }
-
   const base = normalise(process.env.AIMS_INTERNAL_BASE_URL) || `http://127.0.0.1:${process.env.PORT || 8000}`;
   const token = normalise(process.env.AIMS_API_KEY) || normalise(requestContext?.authorization).replace(/^Bearer\s+/i, "");
   const sessionId = taskSessionId(job, name);
