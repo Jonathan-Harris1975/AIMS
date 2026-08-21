@@ -1,8 +1,9 @@
-name: Weekly podcast site sync
+name: Podcast site sync recovery
 
+# Normal production ownership lives in the Friday AIMS podcast pipeline, which
+# triggers WEBSITE_REBUILD_HOOK only after RSS publication has completed. Keep
+# this workflow as an operator recovery control; do not create a second clock.
 on:
-  schedule:
-    - cron: '0 8 * * 1'
   workflow_dispatch:
 
 permissions: {}
