@@ -40,7 +40,8 @@ test("website audit readiness rejects secret placeholders and missing completion
 test("website audit operational pretriggers are fail-closed even when global strict mode is disabled", () => {
   const source = readFileSync(new URL("../services/ops/index.js", import.meta.url), "utf8");
   assert.match(source, /websiteAuditStrict\s*=\s*meta\.service\s*===\s*["']audits["']/);
-  assert.match(source, /meta\.targetPath\s*===\s*["']\/audits\/website\/run["']/);
+  assert.match(source, /["']\/audits\/website\/run["']/);
+  assert.match(source, /["']\/audits\/monthly\/website["']/);
   assert.match(source, /configuredStrict\s*\|\|\s*websiteAuditStrict/);
   assert.match(source, /strictReason:\s*websiteAuditStrict\s*\?/);
 });
