@@ -14,6 +14,7 @@ import * as lifecycle from "./services/shared/utils/lifecycle.js";
 import { requireAimsBearerAuth } from "./services/shared/middleware/suiteAuth.js";
 import { getCommsHubReadiness } from "./services/comms-hub/config.js";
 import { getCommsHubRuntimeReadiness, startCommsHubRuntime, stopCommsHubRuntime } from "./services/comms-hub/runtime.js";
+import { restoreAimsModelGovernance } from "./services/shared/utils/modelGovernance.js";
 
 const require = createRequire(import.meta.url);
 const PACKAGE_VERSION = require("./package.json")?.version || "unknown";
@@ -417,6 +418,8 @@ export function startServer(port = PORT, host = "0.0.0.0") {
     debug("server.trustProxy", { trustProxy });
   });
 
+  void restoreAimsModelGovernance()
+    .catch((err) => error("model-governance.aims.startup-restore", { error: err?.message || String(err) }));
   void startCommsHubRuntime();
 
   if (!processHandlersBound) {
