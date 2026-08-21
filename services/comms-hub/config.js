@@ -277,7 +277,9 @@ export function getCommsHubMissingEnv(env = process.env) {
     const restoreDatabase = usableEnvValue(env.COMMS_HUB_RESTORE_DATABASE_ID);
     if (!privateBucket || privateBucket === primaryBucket) missing.push("R2_BUCKET_COMMS_HUB_PRIVATE");
     if (!restoreBucket || restoreBucket === primaryBucket || restoreBucket === privateBucket) missing.push("R2_BUCKET_COMMS_HUB_RESTORE");
-    if (!restoreDatabase || restoreDatabase === sourceDatabase) missing.push("COMMS_HUB_RESTORE_DATABASE_ID");
+    // COMMS_HUB_RESTORE_DATABASE_ID is an optional override. When absent, AIMS
+    // discovers or creates the isolated restore database by name at runtime.
+    if (restoreDatabase && restoreDatabase === sourceDatabase) missing.push("COMMS_HUB_RESTORE_DATABASE_ID");
   }
   if (booleanValue(env.COMMS_HUB_EMAIL_ENABLED, false)) {
     for (const name of ["COMMS_HUB_ONECOM_ACCOUNT_KEY", "COMMS_HUB_ONECOM_EMAIL_ADDRESS", "COMMS_HUB_ONECOM_USERNAME", "COMMS_HUB_ONECOM_IMAP_HOST", "COMMS_HUB_ONECOM_SMTP_HOST", "R2_BUCKET_COMMS_HUB_PRIVATE", "COMMS_HUB_ATTACHMENT_SCANNER_URL", "COMMS_HUB_ATTACHMENT_SCANNER_TOKEN"]) {
@@ -491,6 +493,7 @@ export function loadCommsHubConfig(env = process.env, { requireEnabled = false }
     backupPollMs: positiveInteger(env.COMMS_HUB_BACKUP_POLL_MS, 1_000, "COMMS_HUB_BACKUP_POLL_MS", { min: 250, max: 30_000 }),
     backupPollAttempts: positiveInteger(env.COMMS_HUB_BACKUP_POLL_ATTEMPTS, 300, "COMMS_HUB_BACKUP_POLL_ATTEMPTS", { min: 1, max: 3600 }),
     backupRequestTimeoutMs: positiveInteger(env.COMMS_HUB_BACKUP_REQUEST_TIMEOUT_MS, 60_000, "COMMS_HUB_BACKUP_REQUEST_TIMEOUT_MS", { min: 5_000, max: 300_000 }),
+    restoreDatabaseName: usableEnvValue(env.COMMS_HUB_RESTORE_DATABASE) || "COMMS_HUB_RESTORE_DATABASE",
     restoreDatabaseId: usableEnvValue(env.COMMS_HUB_RESTORE_DATABASE_ID),
     backupObjectPrefixes: Object.freeze(csvValue(env.COMMS_HUB_BACKUP_OBJECT_PREFIXES || "attachments/,conversation-assets/")),
     backupMaxLinkedObjects: positiveInteger(env.COMMS_HUB_BACKUP_MAX_LINKED_OBJECTS, 1000, "COMMS_HUB_BACKUP_MAX_LINKED_OBJECTS", { min: 1, max: 10000 }),

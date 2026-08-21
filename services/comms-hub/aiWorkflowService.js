@@ -366,6 +366,10 @@ export class CommsHubAiWorkflowService {
       const rawEvidence = await this.context.aiSearch.searchApproved(searchQuery, {
         maximumEvidence: this.context.config.aiMaximumEvidence,
       });
+      run.metadata.knowledgeSearch = {
+        ...(this.context.aiSearch.lastSearchDiagnostics || {}),
+        evidenceAvailable: rawEvidence.length > 0,
+      };
       const rejectedEvidence = [];
       const evidence = rawEvidence.flatMap((item) => {
         const assessment = scanPromptInjection(`${item.title || ""}\n${item.excerpt || ""}`);
@@ -424,7 +428,7 @@ export class CommsHubAiWorkflowService {
       // A selected Jotform route is grounded by AIMS' own allow-listed form registry rather than
       // external AI Search evidence. Keep all other output/security checks in force, but do not
       // make a procedural form hand-off depend on an unrelated evidence result.
-      const draftValidationPolicy = responseIntelligence.formDecision?.selected
+      const draftValidationPolicy = responseIntelligence.formDecision?.selected || evidence.length === 0
         ? Object.freeze({ ...effectivePolicy, requiresEvidence: false })
         : effectivePolicy;
       run.metadata.responseIntelligence = {

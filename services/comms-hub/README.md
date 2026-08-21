@@ -95,3 +95,10 @@ Comms Hub migrations are additive and are applied/checkable through the existing
 Use `config/production.defaults.env`, `config/comms-hub-all-channels.env.example`, `.env.example` and `services/comms-hub/config.js` as the configuration source of truth. Keep secrets in Koyeb/Cloudflare secret stores. Outreach remains separately controlled by `AIMS_OPERATION_OUTREACH_ENABLED` and is not part of Comms Hub channel activation.
 
 Before enabling a channel, verify D1, provider credentials, webhook signatures, required account/family IDs, provider health and the relevant worker flags. Missing required live configuration should fail readiness rather than silently pretending the channel is active.
+
+
+### Restore database bootstrap
+
+When governed backups are enabled, AIMS resolves `COMMS_HUB_RESTORE_DATABASE` (default: `COMMS_HUB_RESTORE_DATABASE`) against Cloudflare D1 and creates it when absent. `COMMS_HUB_RESTORE_DATABASE_ID` is retained only as an optional explicit UUID override. The production `D1_UUID` is never accepted as a restore target.
+
+AI Search retrieval is fail-soft at runtime: missing/unindexed search evidence does not take the AI workflow offline. Evidence-required replies without retrieved evidence remain human-review-only.

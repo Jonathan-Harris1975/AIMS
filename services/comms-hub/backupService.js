@@ -77,11 +77,12 @@ export class CommsHubBackupService {
 
   async runBackup({ actor = "aims:comms-hub" } = {}) {
     this.assertEnabled();
+    const restoreDatabase = await this.context.backupClient.ensureRestoreDatabase();
     const started = new Date();
     const run = {
       id: stableId("bkp", this.context.config.d1DatabaseId, started.toISOString()),
       sourceDatabaseId: this.context.config.d1DatabaseId,
-      restoreDatabaseId: this.context.config.restoreDatabaseId || null,
+      restoreDatabaseId: restoreDatabase.id,
       startedAt: started.toISOString(),
       metadata: { actor: String(actor || "aims:comms-hub").slice(0, 200) },
     };
@@ -160,13 +161,8 @@ export class CommsHubBackupService {
     if (!run.r2_export_key || !run.export_sha256 || !run.r2_manifest_key || !run.manifest_sha256) {
       throw new CommsHubError(409, "backup_not_complete", "Backup has no completed export and manifest to validate.");
     }
-    const target = this.context.config.restoreDatabaseId;
-    if (!target || target === this.context.config.d1DatabaseId) {
-      throw new CommsHubError(503, "restore_database_unconfigured", "COMMS_HUB_RESTORE_DATABASE_ID must identify a separate isolated D1 database.", {
-        failureClass: "permanent",
-        publicMessage: "An isolated restore database is not configured.",
-      });
-    }
+    const restoreDatabase = await this.context.backupClient.ensureRestoreDatabase();
+    const target = restoreDatabase.id;
     await this.context.aiRepository.updateBackupRun(run.id, { status: "validating", validationStatus: "running" });
     try {
       const sql = await this.context.backupR2.getBuffer(run.r2_export_key);

@@ -233,6 +233,16 @@ export async function startCommsHubRuntime() {
         return { started: false, reason: "schema_missing", missing: schema.missing || [] };
       }
 
+      if (active.config.backupEnabled) {
+        runtimeState = { status: "starting", ready: false, detail: "ensuring_restore_database" };
+        const restoreDatabase = await active.backupClient.ensureRestoreDatabase();
+        log.info("commsHub.runtime.restoreDatabaseReady", {
+          name: restoreDatabase.name,
+          created: restoreDatabase.created,
+          source: restoreDatabase.source,
+        });
+      }
+
       const archiveWorkerStarted = active.archiveWorker.start();
       const socialPollWorkerStarted = active.socialPollWorker.start();
       const webhookReconcileWorkerStarted = active.webhookReconcileWorker.start();
