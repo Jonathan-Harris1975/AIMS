@@ -101,6 +101,29 @@ test("Phase 3 AI readiness is opt-in and requires approved AI Search configurati
   assert.equal(config.followUpWorkerEnabled, false);
 });
 
+test("AI Search runtime failures degrade evidence retrieval without taking AIMS AI offline", async () => {
+  const client = new AiSearchClient({
+    aiSearchApprovedInstances: ["hive", "site"],
+    cloudflareApiBaseUrl: "https://api.cloudflare.com/client/v4",
+    cloudflareAccountId: "account-1",
+    aiSearchApiToken: "token-1",
+    aiSearchTimeoutMs: 20_000,
+  }, {
+    fetchImpl: async () => ({
+      ok: false,
+      status: 502,
+      json: async () => ({ success: false, errors: [{ message: "indexing incomplete" }] }),
+    }),
+  });
+
+  const evidence = await client.searchApproved("test query");
+  assert.deepEqual(evidence, []);
+  assert.equal(client.lastSearchDiagnostics.ok, false);
+  assert.equal(client.lastSearchDiagnostics.degraded, true);
+  assert.equal(client.lastSearchDiagnostics.successfulInstances, 0);
+  assert.equal(client.lastSearchDiagnostics.failedInstances.length, 2);
+});
+
 test("Follow-up worker configuration fails closed unless Phase 3 AI is enabled", () => {
   const readiness = getCommsHubReadiness({
     ...baseEnv(),

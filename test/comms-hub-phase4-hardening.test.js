@@ -102,6 +102,9 @@ function backupContext({ restoredCountDelta = 0, sourceObjects, restoreExistingT
     backupR2,
     restoreR2,
     backupClient: {
+      async ensureRestoreDatabase() {
+        return { id: restoreDatabaseId, name: "COMMS_HUB_RESTORE_DATABASE", created: false, source: "test" };
+      },
       async exportDatabase() {
         return { sql: Buffer.from("CREATE TABLE restored_marker(id TEXT);"), bookmark: "bookmark-1", filename: "comms-hub.sql" };
       },
@@ -130,7 +133,6 @@ test("Phase 4 backup readiness is opt-in and requires private R2 storage", () =>
   assert.deepEqual(missing.missing, [
     "R2_BUCKET_COMMS_HUB_PRIVATE",
     "R2_BUCKET_COMMS_HUB_RESTORE",
-    "COMMS_HUB_RESTORE_DATABASE_ID",
   ]);
   const enabled = getCommsHubReadiness({
     ...baseEnv(),
@@ -300,6 +302,56 @@ test("Backup refuses to silently truncate linked R2 objects", async () => {
   await assert.rejects(() => service.runBackup(), (error) => error?.code === "backup_object_limit_exceeded");
   const latest = await context.aiRepository.getLatestBackupStatus();
   assert.equal(latest.runs[0].status, "quarantined");
+});
+
+test("AIMS discovers or creates COMMS_HUB_RESTORE_DATABASE without requiring a pre-provisioned UUID", async () => {
+  const calls = [];
+  const config = {
+    cloudflareApiBaseUrl: "https://api.cloudflare.com/client/v4",
+    cloudflareAccountId: "account-1",
+    d1DatabaseId: "production-db",
+    d1ApiToken: "token",
+    restoreDatabaseName: "COMMS_HUB_RESTORE_DATABASE",
+    restoreDatabaseId: "",
+    backupRequestTimeoutMs: 10_000,
+  };
+  const fetchImpl = async (url, options) => {
+    calls.push({ url, method: options.method, body: options.body });
+    if (options.method === "GET") {
+      return { ok: true, status: 200, json: async () => ({ success: true, result: [] }) };
+    }
+    if (options.method === "POST" && url.endsWith("/d1/database")) {
+      assert.deepEqual(JSON.parse(options.body), { name: "COMMS_HUB_RESTORE_DATABASE" });
+      return { ok: true, status: 200, json: async () => ({ success: true, result: { uuid: "restore-db", name: "COMMS_HUB_RESTORE_DATABASE" } }) };
+    }
+    throw new Error(`Unexpected request: ${options.method} ${url}`);
+  };
+  const client = new CloudflareBackupClient(config, { fetchImpl });
+  const created = await client.ensureRestoreDatabase();
+  assert.deepEqual(created, { id: "restore-db", name: "COMMS_HUB_RESTORE_DATABASE", created: true, source: "created" });
+  const cached = await client.ensureRestoreDatabase();
+  assert.equal(cached.id, "restore-db");
+  assert.equal(cached.source, "runtime_cache");
+  assert.equal(calls.length, 2);
+  assert.match(calls[0].url, /\?name=COMMS_HUB_RESTORE_DATABASE&page=1&per_page=100$/);
+});
+
+test("AIMS reuses an existing COMMS_HUB_RESTORE_DATABASE by exact name", async () => {
+  const config = {
+    cloudflareApiBaseUrl: "https://api.cloudflare.com/client/v4",
+    cloudflareAccountId: "account-1",
+    d1DatabaseId: "production-db",
+    d1ApiToken: "token",
+    restoreDatabaseName: "COMMS_HUB_RESTORE_DATABASE",
+    restoreDatabaseId: "",
+    backupRequestTimeoutMs: 10_000,
+  };
+  const fetchImpl = async (_url, options) => {
+    assert.equal(options.method, "GET");
+    return { ok: true, status: 200, json: async () => ({ success: true, result: [{ uuid: "existing-restore-db", name: "COMMS_HUB_RESTORE_DATABASE" }] }) };
+  };
+  const result = await new CloudflareBackupClient(config, { fetchImpl }).ensureRestoreDatabase();
+  assert.deepEqual(result, { id: "existing-restore-db", name: "COMMS_HUB_RESTORE_DATABASE", created: false, source: "discovered_by_name" });
 });
 
 test("Cloudflare D1 import uses init, checksum upload and ingest, and refuses the production target", async () => {
