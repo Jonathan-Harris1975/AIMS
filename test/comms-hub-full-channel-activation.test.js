@@ -17,7 +17,7 @@ function parseEnv(text) {
 
 const defaults = parseEnv(fs.readFileSync(new URL("../config/production.defaults.env", import.meta.url), "utf8"));
 
-test("production defaults activate every Comms Hub conversation channel while Outreach stays disabled", () => {
+test("production defaults activate every Comms Hub conversation channel plus autonomous maintenance", () => {
   for (const key of [
     "COMMS_HUB_ENABLED", "COMMS_HUB_AI_ENABLED", "COMMS_HUB_ZERNIO_META_ENABLED",
     "COMMS_HUB_ZERNIO_VIDEO_ENABLED", "COMMS_HUB_ZERNIO_POLL_ENABLED",
@@ -35,7 +35,10 @@ test("production defaults activate every Comms Hub conversation channel while Ou
   assert.equal(defaults.COMMS_HUB_EMAIL_NEWSLETTER_ENABLED, "false");
   assert.equal(defaults.COMMS_HUB_APPROVALS_ENFORCED, "true");
   assert.equal(defaults.COMMS_HUB_HUMAN_HANDOFF_BUSINESS_HOURS_ONLY, "true");
-  assert.equal(defaults.AIMS_OPERATION_OUTREACH_ENABLED, "false");
+  assert.equal(defaults.AIMS_OPERATION_OUTREACH_ENABLED, "true");
+  assert.equal(defaults.COMMS_HUB_BACKUP_ENABLED, "true");
+  assert.equal(defaults.COMMS_HUB_BACKUP_AUTOMATIC_ENABLED, "true");
+  assert.equal(defaults.COMMS_HUB_RETENTION_WORKER_ENABLED, "true");
 });
 
 test("full production profile is readiness-complete when deployment secrets are supplied", () => {
@@ -54,6 +57,7 @@ test("full production profile is readiness-complete when deployment secrets are 
     COMMS_HUB_PUBLIC_BASE_URL: "https://app.jonathan-harris.online",
     COMMS_HUB_D1_PROXY_URL: "https://d1-proxy.example.test",
     COMMS_HUB_D1_PROXY_TOKEN: "d1-proxy-token",
+    COMMS_HUB_RESTORE_DATABASE_ID: "restore-db-id",
     ZERNIO_META_API_KEY: "meta-key", ZERNIO_META_WEBHOOK_SECRET: "meta-secret",
     ZERNIO_VIDEO_API_KEY: "video-key", ZERNIO_VIDEO_WEBHOOK_SECRET: "video-secret",
   };
@@ -78,9 +82,9 @@ test("full-channel migration executes and activates conservative policy-gated re
   ]);
 });
 
-test("scheduled content orchestration keeps Outreach disabled until its dedicated setup", () => {
+test("Outreach is enabled in AIMS and owned by the external MAST clock, not duplicated inside content windows", () => {
   const source = fs.readFileSync(new URL("../services/ops/index.js", import.meta.url), "utf8");
   assert.match(source, /AIMS_OPERATION_OUTREACH_ENABLED/);
-  assert.match(source, /outreach-disabled-until-dedicated-setup/);
-  assert.match(source, /\["outreach", "\/outreach\/batch\/next", \{\}, "outreach"\]/);
+  assert.doesNotMatch(source, /outreach-disabled-until-dedicated-setup/);
+  assert.doesNotMatch(source, /\["outreach", "\/outreach\/batch\/next"/);
 });
