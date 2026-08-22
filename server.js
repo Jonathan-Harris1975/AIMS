@@ -15,6 +15,7 @@ import { requireAimsBearerAuth } from "./services/shared/middleware/suiteAuth.js
 import { getCommsHubReadiness } from "./services/comms-hub/config.js";
 import { getCommsHubRuntimeReadiness, startCommsHubRuntime, stopCommsHubRuntime } from "./services/comms-hub/runtime.js";
 import { restoreAimsModelGovernance } from "./services/shared/utils/modelGovernance.js";
+import { probeCriticalDependencies } from "./services/shared/readiness/dependencyProbes.js";
 
 const require = createRequire(import.meta.url);
 const PACKAGE_VERSION = require("./package.json")?.version || "unknown";
@@ -162,22 +163,32 @@ function usableSecret(value) {
   return Boolean(text && !/^\{\{\s*secret\.[^}]+\}\}$/i.test(text));
 }
 
-function productionReadiness() {
+async function productionReadiness() {
   const production = isProductionEnv();
+  const ephemeralAllowed = process.env.ALLOW_EPHEMERAL_STATE === "true";
+  const durableConfigured = hasDurableStateEnv(process.env);
+  const openrouterConfigured = usableSecret(process.env.OPENROUTER_API_KEY);
+  const probes = production
+    ? await probeCriticalDependencies()
+    : {
+        durableState: { ok: durableConfigured, configured: durableConfigured, detail: durableConfigured ? "configured" : "missing" },
+        openrouter: { ok: openrouterConfigured, configured: openrouterConfigured, detail: openrouterConfigured ? "configured" : "missing" },
+      };
   const checks = [
     { name: "process", ok: true, detail: "AIMS process is responding." },
     { name: "suite_auth", ok: !production || usableSecret(process.env.AIMS_API_KEY || process.env.AI_SUITE_API_KEY), detail: usableSecret(process.env.AIMS_API_KEY || process.env.AI_SUITE_API_KEY) ? "configured" : "missing" },
     {
       name: "durable_state",
-      ok:
-        !production ||
-        process.env.ALLOW_EPHEMERAL_STATE === "true" ||
-        hasDurableStateEnv(process.env),
-      detail: hasDurableStateEnv(process.env)
-        ? "R2 durable state configured"
+      ok: !production || ephemeralAllowed || (durableConfigured && probes.durableState.ok),
+      detail: durableConfigured
+        ? `R2 durable state ${probes.durableState.detail}`
         : `ephemeral or incomplete durable state configuration. ${durableStateEnvHint()}`,
     },
-    { name: "openrouter", ok: !production || usableSecret(process.env.OPENROUTER_API_KEY), detail: usableSecret(process.env.OPENROUTER_API_KEY) ? "configured" : "missing" },
+    {
+      name: "openrouter",
+      ok: !production || (openrouterConfigured && probes.openrouter.ok),
+      detail: openrouterConfigured ? probes.openrouter.detail : "missing",
+    },
     (() => {
       const configuration = getCommsHubReadiness();
       const runtime = getCommsHubRuntimeReadiness();
@@ -316,17 +327,21 @@ app.get("/livez", (_req, res) =>
   res.status(200).json({ ok: true, status: "alive", service: "AIMS", lifecycle: lifecycle.snapshot() })
 );
 
-app.get("/readyz", (_req, res) => {
-  const report = productionReadiness();
-  const lifecycleState = lifecycle.computeState({ dependenciesReady: report.ready });
-  return res.status(report.ready && lifecycleState.state !== "maintenance" ? 200 : 503).json({
-    ok: report.ready,
-    service: "AIMS",
-    version: process.env.APP_VERSION || PACKAGE_VERSION,
-    ...report,
-    lifecycle: lifecycleState,
-    time: new Date().toISOString(),
-  });
+app.get("/readyz", async (_req, res, next) => {
+  try {
+    const report = await productionReadiness();
+    const lifecycleState = lifecycle.computeState({ dependenciesReady: report.ready });
+    return res.status(report.ready && lifecycleState.state !== "maintenance" ? 200 : 503).json({
+      ok: report.ready,
+      service: "AIMS",
+      version: process.env.APP_VERSION || PACKAGE_VERSION,
+      ...report,
+      lifecycle: lifecycleState,
+      time: new Date().toISOString(),
+    });
+  } catch (readinessError) {
+    return next(readinessError);
+  }
 });
 
 app.get("/admin/lifecycle", requireAimsBearerAuth, (_req, res) => res.status(200).json(lifecycle.snapshot()));
