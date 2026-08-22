@@ -117,11 +117,15 @@ async function handleReadiness(profileId, res) {
   return res.status(result.ready ? 200 : 409).json(result);
 }
 
-// GET /newsletter/readiness/:profileId — side-effect-free Brevo delivery
-// preflight for operators and diagnostics. It never creates a sender/list.
-router.get("/readiness/:profileId?", asyncRoute(async (req, res) => (
+// GET /newsletter/readiness and /newsletter/readiness/:profileId —
+// side-effect-free Brevo delivery preflight for operators and diagnostics.
+// Express 5 / path-to-regexp no longer accepts the legacy `:param?` syntax,
+// so register the optional-profile variants explicitly.
+const readinessHandler = asyncRoute(async (req, res) => (
   handleReadiness(req.params.profileId || req.query.profileId, res)
-)));
+));
+router.get("/readiness", readinessHandler);
+router.get("/readiness/:profileId", readinessHandler);
 
 // POST /newsletter/readiness — operator-compatible, side-effect-free Brevo
 // preflight. It remains available for diagnostics but is deliberately not a
