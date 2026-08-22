@@ -8,6 +8,7 @@ import { slugify } from "../utils/slug.js";
 import { pageTemplate, weeklyPostBody } from "../utils/templates.js";
 import { createBlogArtwork } from "../../artwork/createBlogArtwork.js";
 import { publishBlogRssFeed, verifyPublicBlogRssFeed } from "../rss/publishBlogRssFeed.js";
+import { fetchWithTimeout } from "../../shared/http-client.js";
 
 import {
   runPhase4AutonomousContentGate,
@@ -221,7 +222,7 @@ async function triggerWebsiteRebuild() {
     for (let attempt = 1; attempt <= 3; attempt += 1) {
       try {
         info("blog.weekly.rebuild.start", { hookUrl, attempt });
-        const response = await fetch(hookUrl, { method: "POST" });
+        const response = await fetchWithTimeout(hookUrl, { method: "POST" });
         const body = await response.text().catch(() => "");
         const result = { ok: response.ok, status: response.status, hookUrl, attempt, body };
 
