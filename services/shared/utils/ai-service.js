@@ -31,7 +31,7 @@ const DEFAULT_TIMEOUT_MS = finiteEnvNumber("AI_TIMEOUT", aiConfig?.commonParams?
 const DEFAULT_TOP_P = finiteEnvNumber("AI_TOP_P", aiConfig?.commonParams?.top_p ?? 0.9, { min: 0, max: 1 });
 // Retries are deliberately configurable. Do not impose a hidden minimum: a
 // production operator must be able to cap paid retries when budget is tight.
-const MAX_RETRIES = finiteEnvNumber("AI_MAX_RETRIES", 2, { min: 0, integer: true });
+const MAX_RETRIES = finiteEnvNumber("AI_MAX_RETRIES", 4, { min: 0, integer: true });
 const RETRY_BASE_MS = finiteEnvNumber("AI_RETRY_BASE_MS", 750, { min: 0, integer: true });
 const EMPTY_COMPLETION_RETRIES_PER_PROVIDER = finiteEnvNumber("AI_EMPTY_COMPLETION_RETRIES_PER_PROVIDER", 1, { min: 0, integer: true });
 const __aiRouteCallsBySession = new Map();
@@ -77,7 +77,8 @@ function getProviderChainForRoute(routeKey) {
 }
 
 function isRetiredModel(value) {
-  return /^deepseek\//i.test(String(value || "").trim());
+  const model = String(value || "").trim();
+  return /^deepseek\//i.test(model) || /^openai\/gpt-5\.6-luna$/i.test(model);
 }
 
 function looksLikeTemplatePlaceholder(value) {
@@ -109,8 +110,8 @@ function getProviderConfig(providerId) {
   const model = resolvedModel.value || conf.name;
   const apiKey = resolvedKey.value || conf.apiKey;
 
-  // DeepSeek has been retired from AIMS production routing. This hard guard
-  // also neutralises stale Koyeb/process env values left behind from older deployments.
+  // Retired model families are blocked even if stale Koyeb/process env values survive an older deployment.
+  // This keeps the canonical model policy authoritative at runtime, not just in templates.
   if (isRetiredModel(model)) return null;
   if (!model || !apiKey) return null;
   if (looksLikeTemplatePlaceholder(model) || looksLikeTemplatePlaceholder(apiKey)) return null;
@@ -201,7 +202,7 @@ function getServiceTier() {
   return undefined;
 }
 
-// Reasoning-capable models (for example openai/gpt-5.6-luna) spend part of max_tokens on
+// Reasoning-capable models can spend part of max_tokens on
 // internal "reasoning" tokens before writing any visible content. If
 // max_tokens is tight, the reasoning step can consume the entire budget and
 // the API returns HTTP 200 with a *successful* response whose message.content

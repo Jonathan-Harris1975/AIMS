@@ -51,12 +51,6 @@ const google25FlashLite = provider(
   [...SHARED_OPENROUTER_KEY, "OPENROUTER_API_KEY_GOOGLE_2_5_flashlite", "OPENROUTER_API_KEY_GOOGLE_2-5_flashlite", "OPENROUTER_API_KEY_GOOGLE_2.5_flashlite", "OPENROUTER_API_KEY_GOOGLE_25_FLASHLITE", "OPENROUTER_API_KEY_GOOGLE"]
 );
 
-const gpt56Luna = provider(
-  "gpt56Luna",
-  ["OPENROUTER_GPT_5_6_LUNA", "OPENROUTER_GPT56_LUNA"],
-  [...SHARED_OPENROUTER_KEY, "OPENROUTER_API_KEY_GPT_5_6_LUNA", "OPENROUTER_API_KEY_GPT56_LUNA"]
-);
-
 const claudeSonnet5 = provider(
   "claudeSonnet5",
   ["OPENROUTER_CLAUDE_SONNET_5", "OPENROUTER_ANTHROPIC_SONNET_5", "AI_MODEL_HIGH_QUALITY"],
@@ -163,7 +157,7 @@ const modelRegistry = {
   audit,
   image,
   google: google25FlashLite,
-  chatgpt: gpt56Luna,
+  chatgpt: gpt56Sol,
   blotatoScript,
   anthropic: anthropic46,
   meta,
@@ -172,7 +166,6 @@ const modelRegistry = {
   artworkBackup,
   anthropic46,
   google25FlashLite,
-  gpt56Luna,
   claudeSonnet5,
   claudeOpus47,
   gpt56Sol,
@@ -206,49 +199,49 @@ export const aiConfig = {
   models: modelRegistry,
 
   routeModels: {
-    intro: routeChain(["fast", "standard", "fallback"], ["gpt56Luna", "google25FlashLite", "meta"]),
-    main: routeChain(["standard", "fast", "fallback"], ["google25FlashLite", "gpt56Luna", "gpt56Sol"]),
-    outro: routeChain(["fast", "standard", "fallback"], ["google25FlashLite", "gpt56Luna", "meta"]),
-    scriptIntro: routeChain(["gpt56Luna", "standard", "fallback"], ["google25FlashLite", "meta"]),
-    scriptMain: routeChain(["gpt56Luna", "standard", "fallback"], ["google25FlashLite", "gpt56Sol"]),
+    intro: routeChain(["fast", "standard", "fallback"], ["google25FlashLite", "gpt56Sol", "meta"]),
+    main: routeChain(["standard", "fast", "fallback"], ["google25FlashLite", "gpt56Sol"]),
+    outro: routeChain(["fast", "standard", "fallback"], ["google25FlashLite", "gpt56Sol", "meta"]),
+    scriptIntro: routeChain(["highQuality", "standard", "fallback"], ["gpt56Sol", "google25FlashLite", "meta"]),
+    scriptMain: routeChain(["highQuality", "standard", "fallback"], ["gpt56Sol", "google25FlashLite"]),
     scriptMainSynthesis: routeChain(["claudeSonnet5", "gpt56Sol"], ["claudeOpus47"]),
-    scriptOutro: routeChain(["gpt56Luna", "standard", "fallback"], ["google25FlashLite", "meta"]),
+    scriptOutro: routeChain(["highQuality", "standard", "fallback"], ["gpt56Sol", "google25FlashLite", "meta"]),
     compose: routeChain(["highQuality", "standard", "fallback"], ["anthropic46", "gpt56Sol", "google25FlashLite"]),
     editorialPass: routeChain(["claudeOpus47", "gpt56Sol"], ["claudeSonnet5"]),
-    editAndFormat: routeChain(["standard", "fast", "fallback"], ["gpt56Luna", "google25FlashLite", "gpt56Sol"]),
-    metadata: routeChain(["summary", "json", "fast", "fallback"], ["google25FlashLite", "gpt56Luna", "gpt56Sol"]),
-    podcastHelper: routeChain(["summary", "fast", "fallback"], ["gpt56Luna", "google25FlashLite", "meta"]),
-    seoKeywords: routeChain(["summary", "fast", "fallback"], ["gpt56Luna", "google25FlashLite"]),
+    editAndFormat: routeChain(["standard", "fast", "fallback"], ["gpt56Sol", "google25FlashLite"]),
+    metadata: routeChain(["summary", "json", "fast", "fallback"], ["google25FlashLite", "gpt56Sol"]),
+    podcastHelper: routeChain(["summary", "fast", "fallback"], ["google25FlashLite", "gpt56Sol", "meta"]),
+    seoKeywords: routeChain(["summary", "fast", "fallback"], ["google25FlashLite", "gpt56Sol"]),
     artworkPrompt: routeChain(["summary", "fast", "fallback"], ["meta", "google25FlashLite"]),
     artworkImage: routeChain(["image"], ["artworkPrimary", "artworkBackup"]),
     artworkVisualQa: routeChain(["audit", "highQuality"], ["claudeSonnet5", "anthropic46", "gpt56Sol"]),
     blotatoVisualQa: routeChain(["audit", "highQuality"], ["claudeSonnet5", "anthropic46", "gpt56Sol"]),
-    rssRewrite: routeChain(["standard", "fast", "fallback"], ["gpt56Luna", "google25FlashLite", "gpt56Sol"]),
-    rssShortTitle: routeChain(["fast", "summary", "fallback"], ["gpt56Luna", "google25FlashLite"]),
-    blogWeekly: routeChain(["standard", "summary", "fallback"], ["google25FlashLite", "gpt56Luna", "gpt56Sol"]),
+    rssRewrite: routeChain(["standard", "fast", "fallback"], ["gpt56Sol", "google25FlashLite"]),
+    rssShortTitle: routeChain(["fast", "summary", "fallback"], ["google25FlashLite", "gpt56Sol"]),
+    blogWeekly: routeChain(["standard", "summary", "fallback"], ["google25FlashLite", "gpt56Sol"]),
     blogSocial: routeChain(["highQuality", "audit", "standard", "summary", "fallback"], ["claudeSonnet5", "anthropic46", "google25FlashLite"]),
-    onBrandAudit: routeChain(["audit", "highQuality", "standard", "fallback"], ["anthropic46", "gpt56Sol", "google25FlashLite", "gpt56Luna", "meta"]),
-    auditForensic: routeChain(["audit", "highQuality", "standard", "fallback"], ["anthropic46", "gpt56Sol", "google25FlashLite", "gpt56Luna", "meta"]),
+    onBrandAudit: routeChain(["audit", "highQuality", "standard", "fallback"], ["anthropic46", "gpt56Sol", "google25FlashLite", "meta"]),
+    auditForensic: routeChain(["audit", "highQuality", "standard", "fallback"], ["anthropic46", "gpt56Sol", "google25FlashLite", "meta"]),
     zernioDaily: routeChain(["highQuality", "standard", "fast", "fallback"], ["claudeSonnet5", "anthropic46", "google25FlashLite"]),
     zernioMiniSeriesResearch: routeChain(["audit", "highQuality", "standard"], ["claudeSonnet5", "anthropic46"]),
     zernioMiniSeriesTheme: routeChain(["highQuality", "audit", "standard"], ["claudeSonnet5", "anthropic46"]),
     zernioMiniSeriesPost: routeChain(["highQuality", "standard", "audit"], ["claudeSonnet5", "anthropic46"]),
-    zernioQuiz: routeChain(["fast", "standard", "fallback"], ["gpt56Luna", "google25FlashLite", "gpt56Sol"]),
-    zernioEbook: routeChain(["fast", "standard", "fallback"], ["gpt56Luna", "google25FlashLite", "gpt56Sol"]),
+    zernioQuiz: routeChain(["highQuality", "standard", "fast", "fallback"], ["gpt56Sol", "google25FlashLite"]),
+    zernioEbook: routeChain(["highQuality", "standard", "fast", "fallback"], ["gpt56Sol", "google25FlashLite"]),
     zernioPodcastPromo: routeChain(["highQuality", "standard", "fallback"], ["gpt56Sol", "google25FlashLite"]),
     // Blotato script quality is production-critical. highQuality sits above standard so Claude 4.6
-    // is the first fallback after the dedicated blotatoScript provider, ahead of the general Luna lane.
-    blotatoNewsShort: routeChain(["blotatoScript", "highQuality", "standard", "fallback"], ["anthropic46", "gpt56Sol", "gpt56Luna"]),
+    // is the first fallback after the dedicated blotatoScript provider, ahead of the lower-cost fallback lane.
+    blotatoNewsShort: routeChain(["blotatoScript", "highQuality", "standard", "fallback"], ["anthropic46", "gpt56Sol", "google25FlashLite"]),
     // Newsletter engine (services/newsletter). Composition needs the same
     // editorial quality bar as the blog; QA review is intentionally routed
     // through a different provider than composition so the reviewer isn't
     // just re-approving its own output.
-    // AI Edge uses task-specific routes. Sonnet 5 handles editorial writing/voice,
-    // GPT-5.6 Sol handles source-integrity and final arbitration, while Luna
-    // handles low-latency subject/audience work. Each route retains provider
+    // AI Edge uses task-specific routes. Sonnet handles editorial writing/voice,
+    // GPT-5.6 Sol provides an independent premium fallback, while Gemini handles
+    // low-latency subject work. Each route retains provider
     // failover through the shared resilient requester.
-    newsletterCompose: routeChain(["newsletterEditorial", "highQuality"], ["gpt56Sol", "gpt56Luna"]),
-    newsletterSubject: routeChain(["gpt56Luna", "fast", "summary"], ["google25FlashLite", "gpt56Sol"]),
+    newsletterCompose: routeChain(["newsletterEditorial", "highQuality"], ["gpt56Sol", "claudeOpus47"]),
+    newsletterSubject: routeChain(["fast", "summary", "highQuality"], ["google25FlashLite", "gpt56Sol"]),
     newsletterFactCheck: routeChain(["audit", "highQuality"], ["claudeSonnet5", "anthropic46"]),
     newsletterVoiceReview: routeChain(["newsletterEditorial", "highQuality"], ["gpt56Sol", "anthropic46"]),
     newsletterAudienceReview: routeChain(["highQuality", "audit"], ["claudeSonnet5", "anthropic46"]),
