@@ -23,6 +23,8 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - name: Reject committed literal secrets
+        run: python3 scripts/secret_scan.py
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Reject legacy envBootstrap imports
         run: |
@@ -33,6 +35,8 @@ jobs:
         run: find . -name '*.js' -not -path './node_modules/*' -print0 | xargs -0 -n1 node --check
       - run: npm run verify
       - run: npm run deploy:smoke
+      - name: Enforce health endpoint performance SLO
+        run: npm run perf:gate
       - run: npm audit --omit=dev --audit-level=high
 
   docker:
