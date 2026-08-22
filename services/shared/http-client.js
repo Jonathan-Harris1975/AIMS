@@ -1,4 +1,4 @@
-import fetch from "node-fetch";
+import nodeFetch from "node-fetch";
 
 const DEFAULT_HEADERS = {
   accept: "*/*",
@@ -34,7 +34,11 @@ export async function fetchWithTimeout(url, options = {}) {
   }
 
   try {
-    const response = await fetch(url, {
+    // Resolve fetch at call time so tests and callers can inject a standards-
+    // compatible implementation through globalThis.fetch. Node 22 provides a
+    // native implementation; node-fetch remains a compatibility fallback.
+    const fetchImpl = typeof globalThis.fetch === "function" ? globalThis.fetch : nodeFetch;
+    const response = await fetchImpl(url, {
       ...rest,
       headers: {
         ...DEFAULT_HEADERS,
