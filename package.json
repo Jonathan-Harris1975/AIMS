@@ -19,7 +19,9 @@
     "blog:repair-links:apply": "node scripts/backfill-blog-main-site-links.js --apply",
     "comms:migrate": "node scripts/commsHubMigrate.js",
     "comms:migrate:status": "node scripts/commsHubMigrate.js --status",
-    "r2:policy:check": "node scripts/r2AccessPolicyCheck.js"
+    "r2:policy:check": "node scripts/r2AccessPolicyCheck.js",
+    "secret:scan": "python3 scripts/secret_scan.py",
+    "perf:gate": "node scripts/performanceGate.js"
   },
   "engines": {
     "node": "22.x",
