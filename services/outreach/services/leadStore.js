@@ -33,6 +33,12 @@ export async function saveLeadBatch({ keyword, leads = [], thresholds, generated
     leads,
   };
 
-  const url = await putPrivateJson("commsHub", key, payload);
-  return { bucketAlias: "commsHub", key, url, count: leads.length };
+  const stored = await putPrivateJson("commsHub", key, payload);
+  return {
+    bucketAlias: "commsHub",
+    bucket: stored.bucket,
+    key: stored.key,
+    uri: stored.uri,
+    count: leads.length,
+  };
 }
