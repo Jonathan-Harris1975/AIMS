@@ -107,7 +107,7 @@ test("current external-provider contracts stay aligned", async () => {
   assert.match(siteSyncWorkflow, /secrets\.WEBSITE_REBUILD_HOOK/);
   assert.doesNotMatch(siteSyncWorkflow, /pages\/webhooks\/deploy_hooks\/[0-9a-f-]{20,}/i);
   assert.match(envBootstrap, /WEBSITE_REBUILD_HOOK: opt\("WEBSITE_REBUILD_HOOK"\)/);
-  assert.match(envBootstrap, /AI_MAX_RETRIES: num\("AI_MAX_RETRIES", 2\)/);
+  assert.match(envBootstrap, /AI_MAX_RETRIES: num\("AI_MAX_RETRIES", 4\)/);
   assert.match(envBootstrap, /ARTWORK_PROVIDER_ATTEMPTS: num\("ARTWORK_PROVIDER_ATTEMPTS", 1\)/);
   assert.match(envBootstrap, /ARTWORK_VISUAL_QA_MAX_REGENERATIONS: num\("ARTWORK_VISUAL_QA_MAX_REGENERATIONS", 0\)/);
 });

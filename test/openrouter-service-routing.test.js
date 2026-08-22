@@ -5,7 +5,6 @@ const OPENROUTER_ENV_NAMES = [
   "OPENROUTER_ART_BACKUP",
   "OPENROUTER_META",
   "OPENROUTER_ANTHROPIC_4_6",
-  "OPENROUTER_GPT_5_6_LUNA",
   "OPENROUTER_CLAUDE_SONNET_5",
   "OPENROUTER_CLAUDE_OPUS_4_7",
   "OPENROUTER_GPT_5_6_SOL",
@@ -43,7 +42,6 @@ function applySpreadsheetOpenRouterEnv() {
   process.env.OPENROUTER_ART_BACKUP = "bytedance-seed/seedream-4.5";
   process.env.OPENROUTER_META = "meta-llama/llama-4-scout";
   process.env.OPENROUTER_ANTHROPIC_4_6 = "anthropic/claude-sonnet-4.6";
-  process.env.OPENROUTER_GPT_5_6_LUNA = "openai/gpt-5.6-luna";
   process.env.OPENROUTER_CLAUDE_SONNET_5 = "anthropic/claude-sonnet-4.6";
   process.env.OPENROUTER_CLAUDE_OPUS_4_7 = "anthropic/claude-opus-4.7";
   process.env.OPENROUTER_GPT_5_6_SOL = "openai/gpt-5.6-sol";
@@ -71,17 +69,16 @@ test("OpenRouter text routes used by blog, Zernio, RSS and audits resolve spread
   try {
     const { getProviderDiagnosticsForRoute } = await import(`../services/shared/utils/ai-service.js?openrouterRoutes=${Date.now()}`);
     const expectedRoutes = {
-      blogWeekly: ["OPENROUTER_GOOGLE_2_5_flashlite", "OPENROUTER_GPT_5_6_LUNA", "OPENROUTER_GPT_5_6_SOL"],
+      blogWeekly: ["OPENROUTER_GOOGLE_2_5_flashlite", "OPENROUTER_GPT_5_6_SOL"],
       zernioDaily: ["OPENROUTER_CLAUDE_SONNET_5", "OPENROUTER_ANTHROPIC_4_6", "OPENROUTER_GOOGLE_2_5_flashlite"],
-      zernioQuiz: ["OPENROUTER_GPT_5_6_LUNA", "OPENROUTER_GOOGLE_2_5_flashlite", "OPENROUTER_GPT_5_6_SOL"],
-      rssRewrite: ["OPENROUTER_GPT_5_6_LUNA", "OPENROUTER_GOOGLE_2_5_flashlite", "OPENROUTER_GPT_5_6_SOL"],
-      rssShortTitle: ["OPENROUTER_GPT_5_6_LUNA", "OPENROUTER_GOOGLE_2_5_flashlite"],
+      zernioQuiz: ["OPENROUTER_GPT_5_6_SOL", "OPENROUTER_GOOGLE_2_5_flashlite"],
+      rssRewrite: ["OPENROUTER_GPT_5_6_SOL", "OPENROUTER_GOOGLE_2_5_flashlite"],
+      rssShortTitle: ["OPENROUTER_GOOGLE_2_5_flashlite", "OPENROUTER_GPT_5_6_SOL"],
       auditForensic: [
         "OPENROUTER_ANTHROPIC_4_6",
         "OPENROUTER_GPT_5_6_SOL",
         "OPENROUTER_GOOGLE_2_5_flashlite",
-        "OPENROUTER_GPT_5_6_LUNA",
-        "OPENROUTER_META",
+              "OPENROUTER_META",
       ],
     };
 
@@ -115,9 +112,9 @@ test("blotatoNewsShort route resolves with highQuality before standard in fallba
     assert.equal(configured[0]?.providerId, "blotatoScript", "blotatoScript should be first in chain");
     assert.equal(configured[0]?.model, "anthropic/claude-sonnet-4-5");
 
-    // highQuality (anthropic46) must appear before the general Luna/standard lane
+    // highQuality (anthropic46) must appear before the general standard lane
     const hqIdx = configured.findIndex((p) => p.providerId === "anthropic46" || p.providerId === "highQuality");
-    const stdIdx = configured.findIndex((p) => p.providerId === "gpt56Luna" || p.providerId === "standard");
+    const stdIdx = configured.findIndex((p) => p.providerId === "standard");
     assert.ok(hqIdx !== -1, "highQuality/anthropic46 should be present in blotatoNewsShort chain");
     assert.ok(hqIdx < stdIdx || stdIdx === -1, "highQuality must appear before standard in blotatoNewsShort chain");
   } finally {
@@ -277,17 +274,17 @@ test("OpenRouter artwork payload explicitly requests image output modalities", a
 });
 
 
-test("podcast script routes use Luna for drafting and Claude for synthesis/editorial", async () => {
+test("podcast script routes use Claude for drafting and premium independent synthesis/editorial fallbacks", async () => {
   const oldEnv = snapshotEnv(OPENROUTER_ENV_NAMES);
   applySpreadsheetOpenRouterEnv();
-  process.env.AI_MODEL_STANDARD = "openai/gpt-5.6-luna";
+  process.env.AI_MODEL_STANDARD = "anthropic/claude-sonnet-4.6";
   process.env.AI_MODEL_HIGH_QUALITY = "anthropic/claude-sonnet-4.6";
 
   try {
     const { getProviderDiagnosticsForRoute } = await import(`../services/shared/utils/ai-service.js?podcastQuality=${Date.now()}`);
     for (const routeName of ["scriptIntro", "scriptMain", "scriptOutro"]) {
       const configured = getProviderDiagnosticsForRoute(routeName).configuredProviders.filter((p) => p.configured);
-      assert.equal(configured[0]?.model, "openai/gpt-5.6-luna", `${routeName} should draft with GPT-5.6 Luna`);
+      assert.equal(configured[0]?.model, "anthropic/claude-sonnet-4.6", `${routeName} should draft with Claude Sonnet 4.6`);
     }
 
     const synthesis = getProviderDiagnosticsForRoute("scriptMainSynthesis").configuredProviders.filter((p) => p.configured);
@@ -297,6 +294,22 @@ test("podcast script routes use Luna for drafting and Claude for synthesis/edito
     const editorial = getProviderDiagnosticsForRoute("editorialPass").configuredProviders.filter((p) => p.configured);
     assert.equal(editorial[0]?.model, "anthropic/claude-opus-4.7", "editorial/repair should lead with Claude Opus 4.7");
     assert.equal(editorial[1]?.model, "openai/gpt-5.6-sol", "editorial/repair should use GPT-5.6 Sol as the independent premium backup");
+  } finally {
+    restoreEnv(oldEnv);
+  }
+});
+
+
+test("retired GPT-5.6 Luna model cannot be selected through stale generic model env", async () => {
+  const oldEnv = snapshotEnv([...OPENROUTER_ENV_NAMES, "AI_MODEL_STANDARD"]);
+  applySpreadsheetOpenRouterEnv();
+  process.env.AI_MODEL_STANDARD = "openai/gpt-5.6-luna";
+
+  try {
+    const { getProviderDiagnosticsForRoute } = await import(`../services/shared/utils/ai-service.js?retiredLuna=${Date.now()}`);
+    const diagnostics = getProviderDiagnosticsForRoute("blogWeekly");
+    const configured = diagnostics.configuredProviders.filter((p) => p.configured);
+    assert.equal(configured.some((p) => p.model === "openai/gpt-5.6-luna"), false);
   } finally {
     restoreEnv(oldEnv);
   }
