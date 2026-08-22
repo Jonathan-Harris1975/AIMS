@@ -33,6 +33,7 @@ function buildBaseEnv(overrides = {}) {
     R2_BUCKET_BRAND_ASSETS: "brand-assets",
     R2_PUBLIC_BASE_URL_BRAND_ASSETS: "https://assets.example.invalid",
     R2_BUCKET_AUDITS: "audits",
+    COMMS_HUB_ENABLED: "false",
     ...overrides,
   };
 }

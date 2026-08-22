@@ -85,7 +85,7 @@ test("current external-provider contracts stay aligned", async () => {
   assert.match(weather, /weatherapi-com\.p\.rapidapi\.com/);
   assert.match(weather, /\/current\.json\?q=/);
   assert.match(weather, /"x-rapidapi-key": apiKey/);
-  assert.match(sheets, /putJson\("commsHub"/);
+  assert.match(sheets, /putPrivateJson\("commsHub"/);
   assert.match(sheets, /outreachLeadPrefix/);
 
   // Amazon Polly and Cloudflare R2 S3-compatible API.

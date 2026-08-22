@@ -25,6 +25,6 @@ test("private R2 reference builder uses the safe object key validator", () => {
 
   assert.throws(
     () => buildPublicUrl("audits", "audits/on-brand/latest.json"),
-    /public base URL is not configured/i
+    /no public URL configured/i
   );
 });

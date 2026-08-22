@@ -309,7 +309,7 @@ test("buildAndScheduleDailyLane returns a dry-run Monday preview with hashtags",
   assert.equal(result.scheduled, false);
   assert.equal(result.publishDate, "2026-04-13");
   assert.match(result.post.content, /#ArtificialIntelligence/);
-  assert.match(result.post.content, /shipping the useful bits/i);
+  assert.match(result.post.content, /deciding what deserves automation/i);
 });
 
 test("buildAndScheduleQuizSeries returns dry-run question and answer posts", async () => {

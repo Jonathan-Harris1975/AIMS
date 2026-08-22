@@ -25,10 +25,11 @@ test("R2 shared client resolves audits as a private bucket alias", async () => {
   const mod = await import(`../services/shared/utils/r2-client.js?r2-audits=${Date.now()}`);
   assert.equal(mod.ensureBucketKey("audits"), "audits");
   assert.equal(mod.buildR2Reference("audits", "audits/on-brand/latest.json"), "r2://audits/audits/on-brand/latest.json");
-  assert.throws(() => mod.buildPublicUrl("audits", "audits/on-brand/latest.json"), /public base URL is not configured/i);
+  assert.throws(() => mod.buildPublicUrl("audits", "audits/on-brand/latest.json"), /no public URL configured/i);
 });
 
 test("audit publisher is configured for the audits bucket, not brand-assets", async () => {
+  process.env.R2_BUCKET_AUDITS = "audits";
   const mod = await import(`../audits/utils/publishAuditArtifacts.js?publish-config=${Date.now()}`);
   assert.equal(mod.getAuditPublishConfig().bucketAlias, "audits");
   assert.equal(mod.getAuditPublishConfig().bucketEnv, "R2_BUCKET_AUDITS");
