@@ -1,4 +1,4 @@
-import fetch from "node-fetch";
+import { fetchWithTimeout } from "../../services/shared/http-client.js";
 
 function requiredEnv(name) {
   const value = String(process.env[name] || "").trim();
@@ -71,7 +71,7 @@ function stripInputs(inputs = {}, names = []) {
 }
 
 async function postWorkflowDispatch({ apiBase, workflowId, token, ref, inputs }) {
-  return fetch(
+  return fetchWithTimeout(
     `${apiBase}/actions/workflows/${encodeURIComponent(workflowId)}/dispatches`,
     {
       method: "POST",
@@ -153,7 +153,7 @@ export async function verifyGithubWorkflowRun({
   let lastRunSummary = [];
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    const response = await fetch(
+    const response = await fetchWithTimeout(
       `${apiBase}/actions/workflows/${encodeURIComponent(workflowId)}/runs?event=workflow_dispatch&branch=${encodeURIComponent(effectiveRef)}&per_page=20`,
       {
         method: "GET",

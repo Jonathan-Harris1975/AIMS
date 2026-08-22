@@ -11,6 +11,7 @@ import {
 } from "./seoGeoSkillLenses.js";
 import * as r2Client from "../../services/shared/utils/r2-client.js";
 import { info } from "../../logger.js";
+import { fetchWithTimeout } from "../../services/shared/http-client.js";
 
 const EPISODE_AUDIT_TYPE = "podcast-episode";
 const TRANSCRIPT_AUDIT_TYPE = "podcast-transcript";
@@ -202,7 +203,7 @@ async function readPodcastRssXml() {
   const configured = envUrl("PODCAST_RSS_FEED_URL", "R2_PUBLIC_BASE_URL_PODCAST_RSS");
   const feedUrl = configured && /\.xml($|[?#])/i.test(configured) ? configured : configured ? joinUrl(configured, "feed.xml") : "";
   if (!feedUrl) throw new Error(`No podcast RSS feed URL configured. ${attempts.join(" | ")}`);
-  const response = await fetch(feedUrl);
+  const response = await fetchWithTimeout(feedUrl);
   if (!response.ok) throw new Error(`Podcast RSS public fetch failed with ${response.status}. ${attempts.join(" | ")}`);
   return { xml: await response.text(), method: "public podcast RSS fetch", feedUrl, attempts };
 }

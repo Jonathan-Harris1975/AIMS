@@ -3,6 +3,7 @@ import { fetchPublishedPostsHistory } from "../../services/zernio/utils/zernioCl
 import * as r2Client from "../../services/shared/utils/r2-client.js";
 import { RSS_PROMPTS } from "../../services/rss-feed-creator/utils/rss-prompts.js";
 import { buildOnBrandSkillPreflightFindings } from "./seoGeoSkillLenses.js";
+import { fetchWithTimeout } from "../../services/shared/http-client.js";
 
 const REPO_FILES_INSPECTED = [
   "services/zernio/utils/zernioClient.js",
@@ -453,7 +454,7 @@ async function loadRssFromPublicXml() {
   const base = String(process.env.R2_PUBLIC_BASE_URL_RSS || process.env.R2_PUBLIC_BASE_URL_RSS_FEEDS || "").replace(/\/+$/, "");
   if (!base) throw new Error("No R2_PUBLIC_BASE_URL_RSS or R2_PUBLIC_BASE_URL_RSS_FEEDS configured for RSS fallback.");
   const feedUrl = `${base}/feed.xml`;
-  const response = await fetch(feedUrl);
+  const response = await fetchWithTimeout(feedUrl);
   if (!response.ok) throw new Error(`RSS public XML fetch failed with ${response.status}`);
   const xml = await response.text();
   const parsed = new XMLParser({ ignoreAttributes: false }).parse(xml);
