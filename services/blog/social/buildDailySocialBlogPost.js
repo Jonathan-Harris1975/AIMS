@@ -10,6 +10,7 @@ import { publishSocialBlogRssFeed } from "./publishSocialBlogRssFeed.js";
 import { cleanSourceText, cleanSourceTitle } from "../utils/weeklyPackage.js";
 import { recordEditorialEvent } from "../../social/editorialLedger.js";
 import { selectSourcesByUrls } from "../../content-quality/topicFidelity.js";
+import { fetchWithTimeout } from "../../shared/http-client.js";
 
 import {
   runPhase4AutonomousContentGate,
@@ -228,7 +229,7 @@ async function triggerWebsiteRebuild() {
       try {
         info("blog.social.rebuild.start", { hookUrl, attempt });
 
-        const response = await fetch(hookUrl, { method: "POST" });
+        const response = await fetchWithTimeout(hookUrl, { method: "POST" });
         const body = await response.text().catch(() => "");
 
         if (response.ok) {
