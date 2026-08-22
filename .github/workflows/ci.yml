@@ -41,7 +41,14 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: docker build -t aims:ci .
-      - run: docker run --rm aims:ci node --version
+      - name: Verify Node runtime and smoke AIMS inside production image
+        run: |
+          docker run --rm aims:ci node -e "const major=Number(process.versions.node.split('.')[0]); if (major !== 22) process.exit(1);"
+          docker run --rm \
+            -e NODE_ENV=production \
+            -e ALLOW_EPHEMERAL_STATE=true \
+            -e STATE_BACKEND=local \
+            aims:ci npm run deploy:smoke
 
   notify_failure:
     name: Notify central operations on CI failure
