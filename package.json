@@ -35,7 +35,7 @@
     "fast-xml-parser": "^5.2.5",
     "googleapis": "^173.0.0",
     "node-fetch": "^3.3.2",
-    "p-limit": "^4.0.0",
+    "p-limit": "^7.3.1",
     "pino": "^9.2.0",
     "pino-http": "^9.0.0",
     "pino-pretty": "^11.2.2",
