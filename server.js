@@ -254,9 +254,6 @@ app.use(
   })
 );
 
-app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || "10mb", verify: recordCommsHubParsedBodyBytes }));
-app.use(express.urlencoded({ extended: true, limit: process.env.URLENCODED_BODY_LIMIT || "10mb", verify: recordCommsHubParsedBodyBytes }));
-
 app.use(
   pinoHttp({
     logger: log,
@@ -306,7 +303,55 @@ app.use((req, res, next) => {
   next();
 });
 
+/*
+ * Reject abusive and unauthorised traffic before consuming request bodies.
+ * Public Comms Hub intake routes are still authenticated by their route-level
+ * webhook signatures after the bounded parser has preserved the raw body.
+ */
 app.use(createRateLimitMiddleware());
+app.use(requireAimsBearerAuth);
+
+const commsHubMaxWebhookBytes = (() => {
+  const configured = Number(process.env.COMMS_HUB_MAX_WEBHOOK_BYTES || 1_048_576);
+  return Number.isInteger(configured) && configured > 0 ? configured : 1_048_576;
+})();
+
+function isJsonRequest(req) {
+  return Boolean(req.is?.(["application/json", "application/*+json"]));
+}
+
+function isUrlEncodedRequest(req) {
+  return Boolean(req.is?.("application/x-www-form-urlencoded"));
+}
+
+/*
+ * Comms Hub public intake uses its own strict parser ceiling. This makes the
+ * one-megabyte webhook contract effective while the stream is being read,
+ * including when Content-Length is absent. Multipart Jotform bodies bypass
+ * these parsers and are bounded by readJotformWebhookEnvelope's stream reader.
+ */
+app.use(express.json({
+  limit: commsHubMaxWebhookBytes,
+  type: (req) => Boolean(commsHubIntakePath(req)) && isJsonRequest(req),
+  verify: recordCommsHubParsedBodyBytes,
+}));
+app.use(express.urlencoded({
+  extended: true,
+  limit: commsHubMaxWebhookBytes,
+  type: (req) => Boolean(commsHubIntakePath(req)) && isUrlEncodedRequest(req),
+  verify: recordCommsHubParsedBodyBytes,
+}));
+
+/* General authenticated API bodies retain the existing configurable ceiling. */
+app.use(express.json({
+  limit: process.env.JSON_BODY_LIMIT || "10mb",
+  type: (req) => !commsHubIntakePath(req) && isJsonRequest(req),
+}));
+app.use(express.urlencoded({
+  extended: true,
+  limit: process.env.URLENCODED_BODY_LIMIT || "10mb",
+  type: (req) => !commsHubIntakePath(req) && isUrlEncodedRequest(req),
+}));
 
 app.get("/", (_req, res) => res.status(200).send("OK"));
 
