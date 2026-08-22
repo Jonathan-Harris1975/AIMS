@@ -8,6 +8,7 @@
 // former services/oneup/utils/oneupClient.js OneUp API wrapper.
 
 import crypto from "node:crypto";
+import { fetchWithTimeout } from "../../shared/http-client.js";
 
 function trimString(value, fallback = "") {
   if (value === undefined || value === null) return fallback;
@@ -157,7 +158,7 @@ async function zernioGet(endpoint, params = {}, apiKey) {
       url.searchParams.set(param, String(value));
     });
 
-    const response = await fetch(url, {
+    const response = await fetchWithTimeout(url, {
       method: "GET",
       headers: {
         Authorization: `Bearer ${key}`,
@@ -187,7 +188,7 @@ async function zernioPost(endpoint, body = {}, apiKey) {
   return withZernioRetry(`POST ${endpoint}`, async () => {
     const key = requireApiKey(apiKey);
 
-    const response = await fetch(`${getZernioApiBase()}/${endpoint}`, {
+    const response = await fetchWithTimeout(`${getZernioApiBase()}/${endpoint}`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${key}`,
@@ -212,7 +213,7 @@ async function zernioPost(endpoint, body = {}, apiKey) {
 async function zernioDelete(endpoint, apiKey) {
   return withZernioRetry(`DELETE ${endpoint}`, async () => {
     const key = requireApiKey(apiKey);
-    const response = await fetch(`${getZernioApiBase()}/${endpoint}`, {
+    const response = await fetchWithTimeout(`${getZernioApiBase()}/${endpoint}`, {
       method: "DELETE",
       headers: {
         Authorization: `Bearer ${key}`,
