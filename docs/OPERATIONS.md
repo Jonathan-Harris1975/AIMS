@@ -1,7 +1,7 @@
 # AIMS production operations
 
 **Status:** Paid Koyeb production service
-**Last reviewed:** 21 June 2026
+**Last reviewed:** 23 August 2026
 
 AIMS runs as one non-root Koyeb Web Service with durable R2-backed state and fail-closed production settings. Use `/livez`, `/readyz`, `/ops/health`, `/ops/preflight`, `/ops/warmup` and `/ops/excellence` to distinguish process health, dependency readiness, warmup state and workflow/provider quality.
 
@@ -12,7 +12,7 @@ AIMS runs as one non-root Koyeb Web Service with durable R2-backed state and fai
 | `GET /health` | Public | Basic service health and build flags. |
 | `GET /livez` | Public | Process liveness only. |
 | `GET /readyz` | Public | Production readiness checks for suite auth, durable state, R2 and core config. |
-| `GET /ops/health` | AIMS bearer | Deeper operational health. |
+| `GET /ops/health` | Public | Bounded pre-trigger operational health; intentionally exposes no prompts, credentials or privileged actions. |
 | `POST /ops/preflight` | AIMS bearer | Governed preflight checks before MAST/HIVE-triggered work. |
 | `POST /ops/warmup` | AIMS bearer | Warmup infrastructure for downstream workflows. |
 | `GET /ops/excellence` | AIMS bearer | Bounded production telemetry without prompts or secrets. |
@@ -75,7 +75,7 @@ Run these after Koyeb deploys:
 curl -fsS https://<aims-service>/health
 curl -fsS https://<aims-service>/livez
 curl -fsS https://<aims-service>/readyz
-curl -fsS -H "Authorization: Bearer $AIMS_API_KEY" https://<aims-service>/ops/health
+curl -fsS https://<aims-service>/ops/health
 curl -fsS -H "Authorization: Bearer $AIMS_API_KEY" https://<aims-service>/ops/excellence
 ```
 

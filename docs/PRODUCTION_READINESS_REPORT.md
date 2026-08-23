@@ -1,6 +1,7 @@
 # AIMS production readiness evidence report
 
-**Generated:** 21 June 2026
+**Generated:** 21 June 2026  
+**Health-contract clarification:** 23 August 2026
 **Status:** Repository-level production readiness passed. Live production certification still requires Koyeb deployment verification.
 
 ## Summary
@@ -42,7 +43,7 @@ This pass hardened AIMS around the areas most likely to be challenged by senior 
 ## Live verification still required
 
 - Koyeb deployment health for `/health`, `/livez` and `/readyz`.
-- Authenticated `/ops/health` and `/ops/excellence` against the live service.
+- Public bounded `/ops/health` and authenticated `/ops/excellence` against the live service.
 - Live R2 read/write/list/delete against production buckets.
 - Live OpenRouter provider routing and fallback with production API key.
 - Live Blotato, Zernio, Cloudflare purge, GitHub audit dispatch and podcast/TTS credentials where those lanes are enabled.
