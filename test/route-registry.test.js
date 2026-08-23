@@ -21,8 +21,9 @@ test("runtime version fallback matches package version and container probes live
   const serverSource = await readFile(new URL("../server.js", import.meta.url), "utf8");
   const dockerSource = await readFile(new URL("../Dockerfile", import.meta.url), "utf8");
   const composeSource = await readFile(new URL("../docker-compose.yml", import.meta.url), "utf8");
-
-  assert.match(serverSource, new RegExp(`process\\.env\\.APP_VERSION \\|\\| \\"${packageJson.version.replaceAll(".", "\\.")}\\"`));
+  assert.equal(typeof packageJson.version, "string");
+  assert.match(serverSource, /const PACKAGE_VERSION = require\("\.\/package\.json"\)\?\.version \|\| "unknown";/);
+  assert.match(serverSource, /process\.env\.APP_VERSION \|\| PACKAGE_VERSION/);
   assert.match(dockerSource, /\/livez/);
   assert.match(composeSource, /\/livez/);
 });
