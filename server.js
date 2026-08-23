@@ -22,6 +22,14 @@ const PACKAGE_VERSION = require("./package.json")?.version || "unknown";
 
 export const app = express();
 
+function normaliseEnvString(value) {
+  return value === undefined || value === null ? "" : String(value).trim();
+}
+
+function isProductionEnv() {
+  return normaliseEnvString(process.env.NODE_ENV).toLowerCase() === "production";
+}
+
 function isLoopbackOrigin(origin) {
   try {
     const url = new URL(origin);
