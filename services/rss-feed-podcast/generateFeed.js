@@ -184,7 +184,7 @@ export function generateFeedXML(episodesMeta) {
   return buildRssXml(channel, items);
 }
 
-function mapMetaToEpisode(meta, channelDiscovery = {}) {
+export function mapMetaToEpisode(meta, channelDiscovery = {}) {
   const sessionId = meta.sessionId || meta.session?.sessionId || null;
   const {
     title,

@@ -11,7 +11,7 @@
 
 import { listKeys, getObjectAsText, putObject, R2_PUBLIC_URLS } from "../shared/utils/r2-client.js";
 import { info, warn, error } from "../../logger.js";
-import { generateFeedXML } from "./generateFeed.js";
+import { generateFeedXML, mapMetaToEpisode } from "./generateFeed.js";
 import { hasPodcastIndexCredentials, notifyHubByUrl } from "../shared/utils/podcastIndexClient.js";
 
 function envString(...keys) {
@@ -37,7 +37,11 @@ const FEED_URL =
   envString("PODCAST_RSS_FEED_URL") ||
   `${R2_PUBLIC_URLS.podcastRss || ""}/${RSS_KEY}`;
 
-export async function runRssFeedCreator() {
+function sessionIdFor(meta = {}) {
+  return String(meta.sessionId || meta.session?.sessionId || "").trim();
+}
+
+export async function runRssFeedCreator({ requiredSessionId = null } = {}) {
   info("🚀 Starting RSS feed generation");
 
   // ------------------------------------------------------------
@@ -53,7 +57,7 @@ export async function runRssFeedCreator() {
 
   if (!Array.isArray(keys) || keys.length === 0) {
     warn("No metadata files found in meta bucket");
-    return;
+    return { ok: false, reason: "no_metadata_files" };
   }
 
   const metaKeys = keys.filter((key) => {
@@ -65,7 +69,7 @@ export async function runRssFeedCreator() {
 
   if (metaKeys.length === 0) {
     warn("No .json metadata files found in meta bucket root");
-    return;
+    return { ok: false, reason: "no_episode_metadata_files" };
   }
 
   info("Found metadata files", { count: metaKeys.length });
@@ -84,7 +88,23 @@ export async function runRssFeedCreator() {
 
   if (episodes.length === 0) {
     warn("No valid episode metadata parsed – RSS not generated");
-    return;
+    return { ok: false, reason: "no_valid_episode_metadata" };
+  }
+
+  let requiredEpisode = null;
+  const required = String(requiredSessionId || "").trim();
+  if (required) {
+    const requiredMeta = episodes.find((episode) => sessionIdFor(episode) === required);
+    if (!requiredMeta) {
+      throw new Error(`Current podcast session ${required} is missing from episode metadata; refusing to report RSS publication success.`);
+    }
+    requiredEpisode = mapMetaToEpisode(requiredMeta);
+    if (!requiredEpisode) {
+      throw new Error(`Current podcast session ${required} is not publication-ready; refusing to report RSS publication success.`);
+    }
+    if (!/^https:\/\//i.test(String(requiredEpisode.link || ""))) {
+      throw new Error(`Current podcast session ${required} has no canonical HTTPS episode page URL.`);
+    }
   }
 
   // ------------------------------------------------------------
@@ -124,9 +144,26 @@ export async function runRssFeedCreator() {
   const shouldAutoCall =
     String(process.env.AUTO_CALL || "").toLowerCase() === "yes";
 
+  const result = {
+    ok: true,
+    feedUrl: FEED_URL,
+    bucketAlias: RSS_BUCKET_ALIAS,
+    key: RSS_KEY,
+    episodeCount: episodes.length,
+    episode: requiredEpisode
+      ? {
+          sessionId: required,
+          guid: requiredEpisode.guid,
+          title: requiredEpisode.title,
+          url: requiredEpisode.link,
+        }
+      : null,
+    podcastIndex: { attempted: false, notified: false },
+  };
+
   if (!shouldAutoCall) {
     info("AUTO_CALL disabled — PodcastIndex Hub NOT notified.");
-    return;
+    return result;
   }
 
   if (!hasPodcastIndexCredentials()) {
@@ -134,7 +171,7 @@ export async function runRssFeedCreator() {
       feedUrl: FEED_URL,
       autoCall: true,
     });
-    return;
+    return { ...result, podcastIndex: { attempted: false, notified: false, reason: "credentials_not_configured" } };
   }
 
   info("📡 AUTO_CALL=yes — notifying PodcastIndex Hub…", {
@@ -147,11 +184,13 @@ export async function runRssFeedCreator() {
       result: res?.status,
       feedUrl: FEED_URL,
     });
+    return { ...result, podcastIndex: { attempted: true, notified: true, status: res?.status || null } };
   } catch (err) {
     warn("⚠️ PodcastIndex Hub notify failed", {
       feedUrl: FEED_URL,
       error: String(err),
     });
+    return { ...result, podcastIndex: { attempted: true, notified: false, error: err?.message || String(err) } };
   }
 }
 
