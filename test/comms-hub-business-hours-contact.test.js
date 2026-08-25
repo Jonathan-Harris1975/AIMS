@@ -88,6 +88,7 @@ function emailContext(channel = 'email') {
   return {
     scheduled,
     context: {
+      now: () => '2026-08-14T10:00:00.000Z',
       config: {
         emailEnabled: true, emailInitialReplyDelayEnabled: true, formReplyDelayEnabled: true,
         replyDelayMinDays: 2, replyDelayMaxDays: 3,
