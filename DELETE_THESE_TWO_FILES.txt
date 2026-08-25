@@ -1,8 +1,0 @@
-Delete these two accidental root-level service files from the repository:
-
-services/emailService.js
-services/replyDraftService.js
-
-Do NOT delete:
-services/comms-hub/emailService.js
-services/comms-hub/replyDraftService.js
