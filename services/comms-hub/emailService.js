@@ -71,7 +71,8 @@ function businessReplyDueAt(context, conversation, seed) {
     minimumDays: context.config.replyDelayMinDays,
     maximumDays: context.config.replyDelayMaxDays,
   });
-  return ensureFutureBusinessTime(target, policy).toISOString();
+  const now = typeof context.now === 'function' ? context.now() : new Date();
+  return ensureFutureBusinessTime(target, policy, now).toISOString();
 }
 
 async function scheduleBusinessReply(context, { conversation, actionType, payload, idempotencyKey, seed }) {

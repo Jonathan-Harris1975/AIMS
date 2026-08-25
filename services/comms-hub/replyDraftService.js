@@ -60,7 +60,8 @@ export async function sendReplyDraft({ draftId, context, scheduledDelivery = fal
       minimumDays: context.config.replyDelayMinDays,
       maximumDays: context.config.replyDelayMaxDays,
     });
-    const dueAt = ensureFutureBusinessTime(targetDueAt, policy).toISOString();
+    const now = typeof context.now === 'function' ? context.now() : new Date();
+    const dueAt = ensureFutureBusinessTime(targetDueAt, policy, now).toISOString();
     const delayed = await context.workflowEngineService.schedule({
       conversationId: conversation.id,
       actionType: 'reply_draft',
