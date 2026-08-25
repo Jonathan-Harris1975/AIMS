@@ -282,7 +282,7 @@ export function getCommsHubMissingEnv(env = process.env) {
     if (restoreDatabase && restoreDatabase === sourceDatabase) missing.push("COMMS_HUB_RESTORE_DATABASE_ID");
   }
   if (booleanValue(env.COMMS_HUB_EMAIL_ENABLED, false)) {
-    for (const name of ["COMMS_HUB_ONECOM_ACCOUNT_KEY", "COMMS_HUB_ONECOM_EMAIL_ADDRESS", "COMMS_HUB_ONECOM_USERNAME", "COMMS_HUB_ONECOM_IMAP_HOST", "COMMS_HUB_ONECOM_SMTP_HOST", "R2_BUCKET_COMMS_HUB_PRIVATE", "COMMS_HUB_ATTACHMENT_SCANNER_URL", "COMMS_HUB_ATTACHMENT_SCANNER_TOKEN"]) {
+    for (const name of ["COMMS_HUB_ONECOM_EMAIL_ADDRESS", "COMMS_HUB_ONECOM_USERNAME", "COMMS_HUB_ONECOM_IMAP_HOST", "COMMS_HUB_ONECOM_SMTP_HOST", "R2_BUCKET_COMMS_HUB_PRIVATE", "COMMS_HUB_ATTACHMENT_SCANNER_URL", "COMMS_HUB_ATTACHMENT_SCANNER_TOKEN"]) {
       if (!usableEnvValue(env[name])) missing.push(name);
     }
     if (!usableEnvValue(env.COMMS_HUB_ONECOM_PASSWORD) && !usableEnvValue(env.ONECOM_INFO_PASSWORD)) {
