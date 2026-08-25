@@ -25,13 +25,13 @@ Use `GET /livez` only for process liveness. Use `GET /readyz` for AIMS operation
 
 Jotform submissions still require the three production Jotform forms to be configured to deliver their webhook to:
 
-`https://app.jonathan-harris.online/comms-hub/intake/jotform`
+`https://zeroth-kara-jonathanharris-3296ed37.koyeb.app/comms-hub/intake/jotform`
 
 The current Jotform client validates and processes submissions after delivery. This release does not invent or assume an unverified Jotform webhook-management API contract.
 
 ## Zernio endpoints
 
-- Meta: `https://app.jonathan-harris.online/comms-hub/intake/zernio/meta`
-- Video: `https://app.jonathan-harris.online/comms-hub/intake/zernio/video`
+- Meta: `https://zeroth-kara-jonathanharris-3296ed37.koyeb.app/comms-hub/intake/zernio/meta`
+- Video: `https://zeroth-kara-jonathanharris-3296ed37.koyeb.app/comms-hub/intake/zernio/video`
 
 When the respective family is enabled and correctly credentialled, AIMS now reconciles these webhooks automatically.
