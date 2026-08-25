@@ -17,10 +17,11 @@ const REVIEW_SCHEMA = Object.freeze({
   properties: {
     score: { type: "number" },
     verdict: { type: "string", enum: ["pass", "revise"] },
+    blocking: { type: "boolean" },
     issues: { type: "array", items: { type: "string" } },
     strengths: { type: "array", items: { type: "string" } },
   },
-  required: ["score", "verdict", "issues", "strengths"],
+  required: ["score", "verdict", "blocking", "issues", "strengths"],
 });
 
 const CHAIR_SCHEMA = Object.freeze({
@@ -29,10 +30,11 @@ const CHAIR_SCHEMA = Object.freeze({
   properties: {
     score: { type: "number" },
     verdict: { type: "string", enum: ["pass", "revise"] },
+    blocking: { type: "boolean" },
     issues: { type: "array", items: { type: "string" } },
     priorityFixes: { type: "array", items: { type: "string" } },
   },
-  required: ["score", "verdict", "issues", "priorityFixes"],
+  required: ["score", "verdict", "blocking", "issues", "priorityFixes"],
 });
 
 function parseJson(raw = "", label = "newsletter council response") {
@@ -98,15 +100,20 @@ async function runReviewer(route, role, instructions, payload, sessionId) {
         content:
           `You are the ${role} on the AI Edge editorial council. ${instructions} ` +
           `Score from 0-100. A publishable result must score at least ${THRESHOLDS.newsletter.qaPassThreshold}. ` +
-          'Respond ONLY as JSON: {"score":number,"verdict":"pass"|"revise","issues":[string],"strengths":[string]}.',
+          'Set blocking=true only for an unresolved defect that makes the newsletter unfit to publish. A score at or above the threshold with only polish suggestions must pass. ' +
+          'Respond ONLY as JSON: {"score":number,"verdict":"pass"|"revise","blocking":boolean,"issues":[string],"strengths":[string]}.',
       },
       { role: "user", content: JSON.stringify(payload, null, 2) },
     ],
   });
+  const reviewerScore = boundedScore(data.score);
+  const blocking = data.blocking === true || reviewerScore < THRESHOLDS.newsletter.qaPassThreshold;
+  const passed = reviewerScore >= THRESHOLDS.newsletter.qaPassThreshold && !blocking;
   return {
     role,
-    score: boundedScore(data.score),
-    verdict: data.verdict === "pass" ? "pass" : "revise",
+    score: reviewerScore,
+    verdict: passed ? "pass" : "revise",
+    blocking,
     issues: Array.isArray(data.issues) ? data.issues : [],
     strengths: Array.isArray(data.strengths) ? data.strengths : [],
   };
@@ -165,16 +172,18 @@ export async function runNewsletterEditorialCouncil({ profile, newsletter, lead,
             `You chair the AI Edge editorial council. Review the three specialist reports and make the final decision. ` +
             `Source integrity is a hard gate. The issue must also preserve Jonathan Harris's voice and provide genuine reader value. ` +
             `A pass requires every specialist score to be at least ${THRESHOLDS.newsletter.qaPassThreshold}. ` +
-            'Respond ONLY as JSON: {"score":number,"verdict":"pass"|"revise","issues":[string],"priorityFixes":[string]}.',
+            'Set blocking=true only when an unresolved hard-gate defect remains. A score at or above the threshold with non-blocking polish suggestions must pass. ' +
+            'Respond ONLY as JSON: {"score":number,"verdict":"pass"|"revise","blocking":boolean,"issues":[string],"priorityFixes":[string]}.',
         },
         { role: "user", content: JSON.stringify({ reports, draft }, null, 2) },
       ],
     });
     const chairScore = boundedScore(chair.score);
+    const chairBlocking = chair.blocking === true || chairScore < THRESHOLDS.newsletter.qaPassThreshold;
     const specialistsPass = reports.every(
-      (review) => review.verdict === "pass" && review.score >= THRESHOLDS.newsletter.qaPassThreshold
+      (review) => !review.blocking && review.score >= THRESHOLDS.newsletter.qaPassThreshold
     );
-    const passed = specialistsPass && chair.verdict === "pass" && chairScore >= THRESHOLDS.newsletter.qaPassThreshold;
+    const passed = specialistsPass && !chairBlocking && chairScore >= THRESHOLDS.newsletter.qaPassThreshold;
 
     return {
       ok: passed,
@@ -185,7 +194,8 @@ export async function runNewsletterEditorialCouncil({ profile, newsletter, lead,
       chair: {
         role: "Publishing Readiness Chair",
         score: chairScore,
-        verdict: chair.verdict === "pass" ? "pass" : "revise",
+        verdict: passed ? "pass" : "revise",
+        blocking: chairBlocking,
         issues: Array.isArray(chair.issues) ? chair.issues : [],
         priorityFixes: Array.isArray(chair.priorityFixes) ? chair.priorityFixes : [],
       },
