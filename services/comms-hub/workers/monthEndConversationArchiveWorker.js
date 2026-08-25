@@ -38,10 +38,11 @@ export class CommsHubMonthEndConversationArchiveWorker {
     this.context = context;
     this.timer = null;
     this.running = false;
+    this.stopping = false;
   }
 
   start() {
-    if (!this.context.config.monthEndArchiveEnabled || this.timer) return false;
+    if (!this.context.config.monthEndArchiveEnabled || this.timer || this.stopping) return false;
     this.timer = setInterval(
       () => void this.runOnce().catch((error) => log.error('commsHub.monthEndArchive.failed', { error: safeErrorLog(error) })),
       this.context.config.monthEndArchivePollMs,
@@ -52,13 +53,15 @@ export class CommsHubMonthEndConversationArchiveWorker {
   }
 
   async stop() {
+    this.stopping = true;
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
+    while (this.running) await new Promise((resolve) => setTimeout(resolve, 25));
   }
 
   async runOnce({ limit = null, now = null } = {}) {
     if (!this.context.config.monthEndArchiveEnabled) return { skipped: true, reason: 'disabled', archived: 0 };
-    if (this.running) return { skipped: true, reason: 'already_running', archived: 0 };
+    if (this.running || this.stopping) return { skipped: true, reason: this.stopping ? 'stopping' : 'already_running', archived: 0 };
     this.running = true;
     try {
       const at = now ? new Date(now) : (this.context.now ? new Date(this.context.now()) : new Date());

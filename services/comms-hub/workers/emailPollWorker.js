@@ -29,11 +29,12 @@ export class CommsHubEmailPollWorker {
     this.mailClient = context.oneComMailAccounts?.[this.account.key] || context.oneComMail;
     this.timer = null;
     this.running = false;
+    this.stopping = false;
     this.workerId = `email-${this.account.key}-${randomUUID()}`;
   }
 
   start() {
-    if (!this.context.config.emailPollWorkerEnabled || !this.account.enabled || this.timer) return false;
+    if (!this.context.config.emailPollWorkerEnabled || !this.account.enabled || this.timer || this.stopping) return false;
 
     const reportUnhandledRunFailure = (event, error) => {
       log.error(event, {
@@ -70,8 +71,10 @@ export class CommsHubEmailPollWorker {
   }
 
   async stop() {
+    this.stopping = true;
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
+    while (this.running) await new Promise((resolve) => setTimeout(resolve, 25));
     log.info('commsHub.emailPoll.stopped', { workerId: this.workerId });
   }
 
@@ -88,9 +91,10 @@ export class CommsHubEmailPollWorker {
   }
 
   async runOnce({ limit, force = false } = {}) {
-    if (this.running) {
-      log.info('commsHub.emailPoll.skipped', { workerId: this.workerId, reason: 'already_running' });
-      return { skipped: true, reason: 'already_running' };
+    if (this.running || this.stopping) {
+      const reason = this.stopping ? 'stopping' : 'already_running';
+      log.info('commsHub.emailPoll.skipped', { workerId: this.workerId, reason });
+      return { skipped: true, reason };
     }
 
     this.running = true;

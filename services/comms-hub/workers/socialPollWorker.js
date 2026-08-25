@@ -37,6 +37,7 @@ export class CommsHubSocialPollWorker {
     this.workerId = `comms-social-${randomUUID()}`;
     this.timer = null;
     this.running = false;
+    this.stopping = false;
     this.writeLog = writeLog || (async (level, event, data) => {
       const { log } = await import("../../../logger.js");
       log[level](event, data);
@@ -233,9 +234,10 @@ export class CommsHubSocialPollWorker {
   }
 
   async runOnce({ limit = 5 } = {}) {
-    if (this.running) {
-      await this.writeLog("info", "commsHub.socialPoll.skipped", { workerId: this.workerId, reason: "already_running" });
-      return { skipped: true, reason: "already_running", processedJobs: 0 };
+    if (this.running || this.stopping) {
+      const reason = this.stopping ? "stopping" : "already_running";
+      await this.writeLog("info", "commsHub.socialPoll.skipped", { workerId: this.workerId, reason });
+      return { skipped: true, reason, processedJobs: 0 };
     }
     const families = this.enabledFamilies();
     if (!families.length) {
@@ -359,7 +361,7 @@ export class CommsHubSocialPollWorker {
   }
 
   start() {
-    if (!this.config.socialPollWorkerEnabled || !this.enabledFamilies().length || this.timer) return false;
+    if (!this.config.socialPollWorkerEnabled || !this.enabledFamilies().length || this.timer || this.stopping) return false;
     this.timer = setInterval(() => {
       void this.runOnce().catch((error) => this.writeLog("error", "commsHub.socialPoll.tickFailed", { error: safeErrorLog(error) }));
     }, this.config.socialPollMs);
@@ -370,6 +372,7 @@ export class CommsHubSocialPollWorker {
   }
 
   async stop() {
+    this.stopping = true;
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
     while (this.running) await new Promise((resolve) => setTimeout(resolve, 25));

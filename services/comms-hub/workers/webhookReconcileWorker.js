@@ -8,6 +8,7 @@ export class CommsHubWebhookReconcileWorker {
     this.workerId = `comms-webhooks-${randomUUID()}`;
     this.timer = null;
     this.running = false;
+    this.stopping = false;
     this.writeLog = writeLog || (async (level, event, data) => {
       const { log } = await import("../../../logger.js");
       log[level](event, data);
@@ -21,7 +22,7 @@ export class CommsHubWebhookReconcileWorker {
   }
 
   async runOnce() {
-    if (this.running) return { skipped: true, reason: "already_running" };
+    if (this.running || this.stopping) return { skipped: true, reason: this.stopping ? "stopping" : "already_running" };
     if (!this.context?.config?.zernioWebhookReconcileEnabled) return { skipped: true, reason: "disabled" };
     const families = this.enabledFamilies();
     if (!families.length) return { skipped: true, reason: "no_enabled_families" };
@@ -62,13 +63,13 @@ export class CommsHubWebhookReconcileWorker {
   }
 
   start() {
-    if (!this.context?.config?.zernioWebhookReconcileEnabled || this.timer || !this.enabledFamilies().length) return false;
+    if (!this.context?.config?.zernioWebhookReconcileEnabled || this.timer || this.stopping || !this.enabledFamilies().length) return false;
     const intervalMs = this.context.config.zernioWebhookReconcileIntervalMs;
     this.timer = setInterval(() => {
-      void this.runOnce().catch(() => {});
+      void this.runOnce().catch((error) => this.writeLog("error", "commsHub.webhooks.tickFailed", { workerId: this.workerId, error: safeErrorLog(error) }));
     }, intervalMs);
     this.timer.unref?.();
-    void this.runOnce().catch(() => {});
+    void this.runOnce().catch((error) => this.writeLog("error", "commsHub.webhooks.initialRunFailed", { workerId: this.workerId, error: safeErrorLog(error) }));
     void this.writeLog("info", "commsHub.webhooks.workerStarted", {
       workerId: this.workerId,
       intervalMs,
@@ -78,6 +79,7 @@ export class CommsHubWebhookReconcileWorker {
   }
 
   async stop() {
+    this.stopping = true;
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
     while (this.running) await new Promise((resolve) => setTimeout(resolve, 25));

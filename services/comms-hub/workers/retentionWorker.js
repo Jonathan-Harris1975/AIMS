@@ -8,22 +8,25 @@ export class CommsHubRetentionWorker {
     this.context = context;
     this.timer = null;
     this.running = false;
+    this.stopping = false;
   }
 
   start() {
-    if (!this.context.config.retentionWorkerEnabled || this.timer) return false;
+    if (!this.context.config.retentionWorkerEnabled || this.timer || this.stopping) return false;
     this.timer = setInterval(
       () => void this.runOnce().catch((error) => log.error('commsHub.retention.failed', { error: safeErrorLog(error) })),
       this.context.config.retentionPollMs
     );
     this.timer.unref?.();
-    void this.runOnce();
+    void this.runOnce().catch((error) => log.error('commsHub.retention.initialFailed', { error: safeErrorLog(error) }));
     return true;
   }
 
   async stop() {
+    this.stopping = true;
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
+    while (this.running) await new Promise((resolve) => setTimeout(resolve, 25));
   }
 
   async executeCandidate(candidate, actor = 'retention-worker') {
@@ -94,7 +97,7 @@ export class CommsHubRetentionWorker {
   }
 
   async runOnce({ limit, conversationId, action = 'anonymise' } = {}) {
-    if (this.running) return { skipped: true };
+    if (this.running || this.stopping) return { skipped: true };
     this.running = true;
     try {
       let candidates;

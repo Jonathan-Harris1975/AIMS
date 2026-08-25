@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { safeErrorLog, redactDiagnosticText } from "../domain/redaction.js";
+import { log } from "../../../logger.js";
 
 function failureClass(error) {
   if (error?.failureClass) return error.failureClass;
@@ -57,7 +58,6 @@ export class CommsHubFollowUpWorker {
             failedAt: new Date().toISOString(),
           });
           failed += 1;
-          const { log } = await import("../../../logger.js");
           log.warn("commsHub.followUp.failed", { followUpId: job.id, conversationId: job.conversation_id, error: safeErrorLog(error) });
         }
       }
@@ -67,9 +67,12 @@ export class CommsHubFollowUpWorker {
 
   start() {
     if (!this.context.config.followUpWorkerEnabled || this.timer || this.stopping) return false;
-    this.timer = setInterval(() => void this.runOnce().catch(() => {}), this.context.config.followUpPollMs);
+    this.timer = setInterval(
+      () => void this.runOnce().catch((error) => log.error("commsHub.followUp.tickFailed", { workerId: this.workerId, error: safeErrorLog(error) })),
+      this.context.config.followUpPollMs
+    );
     this.timer.unref?.();
-    void this.runOnce().catch(() => {});
+    void this.runOnce().catch((error) => log.error("commsHub.followUp.initialRunFailed", { workerId: this.workerId, error: safeErrorLog(error) }));
     return true;
   }
 

@@ -15,22 +15,25 @@ export class CommsHubDelayedActionWorker {
     this.workerId = `delay-${randomUUID()}`;
     this.timer = null;
     this.running = false;
+    this.stopping = false;
   }
 
   start() {
-    if (!this.context.config.delayedActionWorkerEnabled || this.timer) return false;
+    if (!this.context.config.delayedActionWorkerEnabled || this.timer || this.stopping) return false;
     this.timer = setInterval(
       () => void this.runOnce().catch((error) => log.error('commsHub.delayed.failed', { error: safeErrorLog(error) })),
       this.context.config.delayedActionPollMs
     );
     this.timer.unref?.();
-    void this.runOnce();
+    void this.runOnce().catch((error) => log.error('commsHub.delayed.initialFailed', { error: safeErrorLog(error) }));
     return true;
   }
 
   async stop() {
+    this.stopping = true;
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
+    while (this.running) await new Promise((resolve) => setTimeout(resolve, 25));
   }
 
   async execute(item) {
@@ -170,7 +173,7 @@ export class CommsHubDelayedActionWorker {
   }
 
   async runOnce({ limit } = {}) {
-    if (this.running) return { skipped: true };
+    if (this.running || this.stopping) return { skipped: true };
     this.running = true;
     const output = [];
     try {

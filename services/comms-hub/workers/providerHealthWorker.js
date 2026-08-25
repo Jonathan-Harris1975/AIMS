@@ -1,3 +1,6 @@
+import { log } from "../../../logger.js";
+import { safeErrorLog } from "../domain/redaction.js";
+
 export class CommsHubProviderHealthWorker {
   constructor({ context }) { this.context = context; this.timer = null; this.running = false; this.stopping = false; }
   async runOnce() {
@@ -8,8 +11,13 @@ export class CommsHubProviderHealthWorker {
   }
   start() {
     if (!this.context.config.providerHealthWorkerEnabled || this.timer || this.stopping) return false;
-    this.timer = setInterval(() => void this.runOnce().catch(() => {}), this.context.config.providerHealthPollMs);
-    this.timer.unref?.(); void this.runOnce().catch(() => {}); return true;
+    this.timer = setInterval(
+      () => void this.runOnce().catch((error) => log.error("commsHub.providerHealth.tickFailed", { error: safeErrorLog(error) })),
+      this.context.config.providerHealthPollMs
+    );
+    this.timer.unref?.();
+    void this.runOnce().catch((error) => log.error("commsHub.providerHealth.initialRunFailed", { error: safeErrorLog(error) }));
+    return true;
   }
   async stop() { this.stopping = true; if (this.timer) clearInterval(this.timer); this.timer = null; while (this.running) await new Promise((resolve) => setTimeout(resolve, 25)); }
 }
