@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 import { loadCommsHubConfig } from "../services/comms-hub/config.js";
+import { COMMS_HUB_REQUIRED_MIGRATIONS } from "../services/comms-hub/migrations/manifest.js";
 import { recoverCommsHubSchema } from "../services/comms-hub/migrations/schemaRecovery.js";
 import { runCommsHubMigrations } from "../services/comms-hub/migrations/runner.js";
 
@@ -122,22 +123,10 @@ test("migration runner can apply the full required manifest through a serialised
   };
   const result = await runCommsHubMigrations({ env: baseEnv(), d1: fakeD1 });
   assert.equal(result.ok, true);
-  assert.equal(result.applied, 11);
-  assert.equal(result.total, 11);
-  assert.equal(migrationBatches, 11);
-  assert.deepEqual(result.appliedVersions, [
-    "0001_comms_hub",
-    "0002_zernio_social",
-    "0003_ai_workflows",
-    "0004_hardening",
-    "0005_operations_and_channels",
-    "0006_smart_response_forms",
-    "0007_business_hours_and_handoff",
-    "0008_full_channel_activation",
-    "0009_outreach_automation",
-    "0010_runtime_reliability",
-    "0011_contact_deletion_and_conversation_archives",
-  ]);
+  assert.equal(result.applied, COMMS_HUB_REQUIRED_MIGRATIONS.length);
+  assert.equal(result.total, COMMS_HUB_REQUIRED_MIGRATIONS.length);
+  assert.equal(migrationBatches, COMMS_HUB_REQUIRED_MIGRATIONS.length);
+  assert.deepEqual(result.appliedVersions, [...COMMS_HUB_REQUIRED_MIGRATIONS]);
 });
 
 test("migration runner bypasses runtime proxy, serialises writers and preserves checksum immutability", () => {
