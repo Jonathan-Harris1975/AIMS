@@ -306,8 +306,14 @@ app.use(
 
 app.use((req, res, next) => {
   lifecycle.requestStarted();
-  res.on("finish", () => lifecycle.requestFinished());
-  res.on("close", () => lifecycle.requestFinished());
+  let requestSettled = false;
+  const finishRequest = () => {
+    if (requestSettled) return;
+    requestSettled = true;
+    lifecycle.requestFinished();
+  };
+  res.once("finish", finishRequest);
+  res.once("close", finishRequest);
   next();
 });
 
@@ -556,7 +562,7 @@ function shutdown(signal) {
   setTimeout(() => {
     error("server.shutdown.force", { signal });
     process.exit(1);
-  }, Number(process.env.SHUTDOWN_TIMEOUT_MS) || 10000).unref();
+  }, Number(process.env.SHUTDOWN_TIMEOUT_MS) || 25000).unref();
 }
 
 const isEntrypoint = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];

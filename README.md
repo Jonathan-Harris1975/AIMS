@@ -89,7 +89,7 @@ Comms Hub is part of the AIMS process and is mounted at `/comms-hub`. The curren
 - podcast/case-study contribution state and editorial-brief queues;
 - provider health, follow-up and backup/restore support.
 
-The podcast contribution state machine exists, but post-publication follow-up is still advanced through workflow actions rather than being automatically coupled to a successful podcast publication event. See `services/comms-hub/README.md`.
+Accepted podcast contributions are advanced automatically only after RSS publication and the website rebuild both confirm success. The hand-off is idempotent, records the canonical episode URL, and leaves the contribution queued for retry if publication or Comms Hub advancement fails. See `services/comms-hub/README.md`.
 
 ## Audits and RAMS hand-off
 
