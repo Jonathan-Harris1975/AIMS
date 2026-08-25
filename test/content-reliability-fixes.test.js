@@ -161,7 +161,7 @@ test("artwork lanes have separate total budgets and AI-grounded photorealistic p
   assert.match(env, /^ZERNIO_ARTWORK_TIMEOUT_MS=600000$/m);
 });
 
-test("newsletter retains only generated provider artwork and fails closed otherwise", async () => {
+test("newsletter proceeds only when artwork service returns a usable generated or deterministic image", async () => {
   const hero = await readFile(new URL("../services/newsletter/engine/heroImage.js", import.meta.url), "utf8");
   const build = await readFile(new URL("../services/newsletter/engine/buildNewsletter.js", import.meta.url), "utf8");
   assert.match(hero, /createBlogArtwork/);
@@ -170,6 +170,31 @@ test("newsletter retains only generated provider artwork and fails closed otherw
   assert.doesNotMatch(hero, /NEWSLETTER_AI_EDGE_FALLBACK_IMAGE_URL/);
   assert.match(build, /if \(!heroImageResult\.ok\)/);
   assert.match(build, /Newsletter editorial content passed but hero image generation failed/);
+});
+
+test("paid Blotato renders survive QA plumbing failures and rendered QA uses structured output", async () => {
+  const publish = await readFile(new URL("../services/blotato/utils/autoPublishService.js", import.meta.url), "utf8");
+  const qa = await readFile(new URL("../services/blotato/utils/renderedVideoQa.js", import.meta.url), "utf8");
+  const env = await readFile(new URL("../config/production.defaults.env", import.meta.url), "utf8");
+  assert.match(publish, /getJobsByType/);
+  assert.match(publish, /reusableRenderedVideo/);
+  assert.match(publish, /phase === "rendered-quality-review"/);
+  assert.match(publish, /blotato\.render_reuse\.hit/);
+  assert.match(qa, /strictJsonResponseFormat\("blotato_rendered_video_qa"/);
+  assert.match(qa, /max_tokens: 1400/);
+  assert.match(qa, /BLOTATO_RENDERED_QA_JSON_ATTEMPTS/);
+  assert.match(qa, /qa_infrastructure_fallback/);
+  assert.match(env, /^BLOTATO_RENDERED_QA_JSON_ATTEMPTS=2$/m);
+  assert.match(env, /^BLOTATO_RENDERED_QA_INFRASTRUCTURE_FALLBACK=true$/m);
+  assert.match(env, /^BLOTATO_RENDER_REUSE_MAX_AGE_MS=21600000$/m);
+});
+
+test("newsletter council cannot burn a rewrite merely because verdict text contradicts a passing score", async () => {
+  const council = await readFile(new URL("../services/newsletter/engine/editorialCouncil.js", import.meta.url), "utf8");
+  assert.match(council, /blocking: \{ type: "boolean" \}/);
+  assert.match(council, /reviewerScore >= THRESHOLDS\.newsletter\.qaPassThreshold && !blocking/);
+  assert.match(council, /!review\.blocking && review\.score >= THRESHOLDS\.newsletter\.qaPassThreshold/);
+  assert.match(council, /!chairBlocking && chairScore >= THRESHOLDS\.newsletter\.qaPassThreshold/);
 });
 
 test("Zernio and Blotato scheduled publishing require provider confirmation", async () => {
@@ -214,9 +239,10 @@ test("Zernio schedule recovery uses London time and a future blog-social slot", 
   assert.match(env, /^ZERNIO_SCHEDULE_RECOVERY_ENABLED=true$/m);
   assert.match(env, /^ZERNIO_SCHEDULE_MIN_LEAD_MS=900000$/m);
   assert.match(env, /^ZERNIO_BLOG_RSS_TIME=12:00$/m);
+  assert.match(env, /^ZERNIO_API_RETRY_ATTEMPTS=5$/m);
 });
 
-test("artwork provider failure creates diagnostics but fails closed before publication", async () => {
+test("artwork provider failure degrades to publishable deterministic fallbacks for daily lanes", async () => {
   const png = createDeterministicAiFallbackPng({ width: 640, height: 360, seed: "newsletter-ai-edge" });
   assert.deepEqual([...png.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
   assert.ok(png.length > 20_000);
@@ -229,14 +255,20 @@ test("artwork provider failure creates diagnostics but fails closed before publi
   const env = await readFile(new URL("../config/production.defaults.env", import.meta.url), "utf8");
   assert.match(blogArtwork, /artwork\.blog\.deterministic_ai_diagnostic/);
   assert.match(socialArtwork, /artwork\.social\.deterministic_ai_diagnostic/);
-  assert.match(blogArtwork, /ok: false,[\s\S]*diagnosticUrl: publicUrl,[\s\S]*publicUrl: ""/);
-  assert.match(socialArtwork, /ok: false,[\s\S]*diagnosticUrl: publicUrl,[\s\S]*publicUrl: ""/);
+  assert.match(blogArtwork, /SOCIAL_BLOG_ALLOW_DETERMINISTIC_FALLBACK/);
+  assert.match(blogArtwork, /NEWSLETTER_ALLOW_DETERMINISTIC_FALLBACK/);
+  assert.match(blogArtwork, /ok: publishableFallback,[\s\S]*diagnosticUrl: publicUrl,[\s\S]*publicUrl: publishableFallback \? publicUrl : ""/);
+  assert.match(socialArtwork, /ZERNIO_ALLOW_DETERMINISTIC_FALLBACK/);
+  assert.match(socialArtwork, /ok: publishableFallback,[\s\S]*diagnosticUrl: publicUrl,[\s\S]*publicUrl: publishableFallback \? publicUrl : ""/);
   assert.match(weeklyBlog, /reason: "artwork-unavailable"/);
   assert.match(socialBlog, /reason: "artwork-unavailable"/);
   assert.doesNotMatch(hero, /blog-fallback-hero\.png/);
   assert.match(env, /^BLOG_FALLBACK_IMAGE_URL=$/m);
   assert.match(env, /^BLOG_SOCIAL_FALLBACK_IMAGE_URL=$/m);
   assert.match(env, /^NEWSLETTER_AI_EDGE_FALLBACK_IMAGE_URL=$/m);
+  assert.match(env, /^SOCIAL_BLOG_ALLOW_DETERMINISTIC_FALLBACK=true$/m);
+  assert.match(env, /^NEWSLETTER_ALLOW_DETERMINISTIC_FALLBACK=true$/m);
+  assert.match(env, /^ZERNIO_ALLOW_DETERMINISTIC_FALLBACK=true$/m);
 });
 
 
