@@ -14,6 +14,14 @@ function socialArtworkTimeoutMs() {
   return Number.isFinite(configured) && configured >= 60_000 ? configured : DEFAULT_ZERNIO_ARTWORK_TIMEOUT_MS;
 }
 
+function boolEnv(name, fallback = false) {
+  const value = String(process.env[name] ?? "").trim().toLowerCase();
+  if (!value) return fallback;
+  if (["1", "true", "yes", "on", "y"].includes(value)) return true;
+  if (["0", "false", "no", "off", "n"].includes(value)) return false;
+  return fallback;
+}
+
 function validFallbackUrl(value = "") {
   try {
     const url = new URL(String(value || "").trim());
@@ -95,14 +103,18 @@ export async function createSocialArtwork({
         publicUrl,
         originalError: err?.message || String(err),
       });
+      const publishableFallback = boolEnv("ZERNIO_ALLOW_DETERMINISTIC_FALLBACK", true);
       return {
-        ok: false,
+        ok: publishableFallback,
         fallback: true,
-        imageStatus: "failed",
-        error: err?.message || String(err),
+        imageStatus: publishableFallback ? "deterministic-fallback" : "failed",
+        warning: publishableFallback ? "Generated artwork unavailable; deterministic editorial fallback used." : undefined,
+        error: publishableFallback ? undefined : (err?.message || String(err)),
+        originalError: err?.message || String(err),
+        key: publishableFallback ? key : undefined,
         diagnosticKey: key,
         diagnosticUrl: publicUrl,
-        publicUrl: "",
+        publicUrl: publishableFallback ? publicUrl : "",
       };
     } catch (fallbackError) {
       error("artwork.social.deterministic_ai_diagnostic_failed", {

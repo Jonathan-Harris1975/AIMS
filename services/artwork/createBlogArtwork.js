@@ -34,6 +34,20 @@ function hasEnv(name) {
   return Boolean(String(process.env[name] || "").trim());
 }
 
+function boolEnv(name, fallback = false) {
+  const value = String(process.env[name] ?? "").trim().toLowerCase();
+  if (!value) return fallback;
+  if (["1", "true", "yes", "on", "y"].includes(value)) return true;
+  if (["0", "false", "no", "off", "n"].includes(value)) return false;
+  return fallback;
+}
+
+function allowDeterministicFallback(mode) {
+  if (mode === "social-blog") return boolEnv("SOCIAL_BLOG_ALLOW_DETERMINISTIC_FALLBACK", true);
+  if (mode === "newsletter") return boolEnv("NEWSLETTER_ALLOW_DETERMINISTIC_FALLBACK", true);
+  return boolEnv("BLOG_ALLOW_DETERMINISTIC_FALLBACK", false);
+}
+
 function resolveBlogArtworkBucketKey() {
   const configured = normaliseAlias(process.env.BLOG_ARTWORK_BUCKET_ALIAS);
 
@@ -115,14 +129,18 @@ export async function createBlogArtwork(input) {
         publicUrl,
         originalError: err?.message || String(err),
       });
+      const publishableFallback = allowDeterministicFallback(artworkMode);
       return {
-        ok: false,
+        ok: publishableFallback,
         fallback: true,
-        imageStatus: "failed",
-        error: err?.message || String(err),
+        imageStatus: publishableFallback ? "deterministic-fallback" : "failed",
+        warning: publishableFallback ? "Generated artwork unavailable; deterministic editorial fallback used." : undefined,
+        error: publishableFallback ? undefined : (err?.message || String(err)),
+        originalError: err?.message || String(err),
+        key: publishableFallback ? fallbackKey : undefined,
         diagnosticKey: fallbackKey,
         diagnosticUrl: publicUrl,
-        publicUrl: "",
+        publicUrl: publishableFallback ? publicUrl : "",
         bucketKey,
         bucketReason,
       };
