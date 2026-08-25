@@ -3,7 +3,9 @@ import {
   beginJob,
   completeJob,
   failJob,
+  getJobsByType,
   getPublicJobFresh,
+  refreshJobStoreFromState,
   toPublicJob,
   updateJob,
 } from "../../shared/utils/jobStore.js";
@@ -1056,6 +1058,39 @@ function buildRssSummary(articleSource = {}) {
   };
 }
 
+function normaliseArticleIdentity(article = {}) {
+  return trim(article.link || article.url || article.guid || article.title).toLowerCase();
+}
+
+async function reusableRenderedVideo(jobType, article = {}, currentSessionId = "") {
+  await refreshJobStoreFromState();
+  const identity = normaliseArticleIdentity(article);
+  if (!identity) return null;
+  const maxAgeMs = positiveIntEnv("BLOTATO_RENDER_REUSE_MAX_AGE_MS", 6 * 60 * 60_000, 24 * 60 * 60_000);
+  const now = Date.now();
+  const candidate = getJobsByType(jobType)
+    .filter((job) => job.sessionId !== currentSessionId)
+    .filter((job) => job.status === "failed" && job.phase === "rendered-quality-review")
+    .filter((job) => normaliseArticleIdentity(job.source?.article || job.rss?.article || {}) === identity)
+    .filter((job) => job.mediaUrl && job.videoId)
+    .filter((job) => {
+      const updated = Date.parse(job.updatedAt || job.startedAt || "");
+      return Number.isFinite(updated) && now - updated <= maxAgeMs;
+    })
+    .sort((a, b) => Date.parse(b.updatedAt || 0) - Date.parse(a.updatedAt || 0))[0];
+  if (!candidate) return null;
+  return {
+    visualId: candidate.videoId,
+    dashboardUrl: candidate.videoDashboardUrl || null,
+    mediaUrl: candidate.mediaUrl,
+    creditBudget: candidate.creditBudget || null,
+    templateId: candidate.templateId || null,
+    templateIdCandidates: candidate.templateIdCandidates || [],
+    rejectedTemplateIds: candidate.rejectedTemplateIds || [],
+    reusedFromSessionId: candidate.sessionId,
+  };
+}
+
 function londonDateParts(date = new Date()) {
   const parts = Object.fromEntries(new Intl.DateTimeFormat("en-GB", {
     timeZone: "Europe/London", year: "numeric", month: "2-digit", day: "2-digit", weekday: "long",
@@ -1281,7 +1316,8 @@ async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOT
       throw buildBlotatoGateError(errorGate);
     }
 
-    const video = await createAndWaitForVideo({
+    const reusedVideo = await reusableRenderedVideo(lane.jobType, articleSource.article, sessionId);
+    const video = reusedVideo || await createAndWaitForVideo({
       templateId,
       templateIdCandidates: templateResolution.templateIdCandidates || [
         templateResolution.rawTemplateId,
@@ -1315,7 +1351,18 @@ async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOT
       videoId: video.visualId,
       videoDashboardUrl: video.dashboardUrl,
       mediaUrl: video.mediaUrl,
+      reusedRender: Boolean(reusedVideo),
+      reusedFromSessionId: reusedVideo?.reusedFromSessionId || null,
     });
+    if (reusedVideo) {
+      info("blotato.render_reuse.hit", {
+        sessionId,
+        lane: lane.slug,
+        reusedFromSessionId: reusedVideo.reusedFromSessionId,
+        visualId: reusedVideo.visualId,
+        mediaUrl: reusedVideo.mediaUrl,
+      });
+    }
 
     const renderedVideoQa = await reviewRenderedVideo({
       mediaUrl: video.mediaUrl,

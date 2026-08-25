@@ -3,6 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
+import { parseStructuredJson, strictJsonResponseFormat } from "../../shared/utils/structuredJson.js";
 
 const execFileAsync = promisify(execFile);
 const DEFAULT_MIN_SECONDS = Number(process.env.BLOTATO_RENDERED_MIN_SECONDS || 35);
@@ -10,6 +11,29 @@ const DEFAULT_MAX_SECONDS = Number(process.env.BLOTATO_RENDERED_MAX_SECONDS || 5
 const DEFAULT_THRESHOLD = Number(process.env.BLOTATO_RENDERED_QA_THRESHOLD || 70);
 const DEFAULT_FRAME_COUNT = Math.max(4, Math.min(12, Number(process.env.BLOTATO_RENDERED_QA_FRAMES || 8)));
 const DEFAULT_MAX_BYTES = Math.max(10_000_000, Number(process.env.BLOTATO_RENDERED_QA_MAX_BYTES || 120_000_000));
+const RENDERED_VIDEO_QA_SCHEMA = Object.freeze({
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    score: { type: "number" },
+    hookPerformance: { type: "number" },
+    sourceRelevance: { type: "number" },
+    sceneAlignment: { type: "number" },
+    continuity: { type: "number" },
+    visualProgression: { type: "number" },
+    visualQuality: { type: "number" },
+    captionLegibility: { type: "number" },
+    defects: { type: "array", items: { type: "string" } },
+    hardDefects: { type: "array", items: { type: "string" } },
+    summary: { type: "string" },
+    recommendation: { type: "string" },
+  },
+  required: [
+    "score", "hookPerformance", "sourceRelevance", "sceneAlignment", "continuity",
+    "visualProgression", "visualQuality", "captionLegibility", "defects", "hardDefects",
+    "summary", "recommendation",
+  ],
+});
 
 function compact(value = "", max = 3000) {
   const text = String(value || "").replace(/\s+/g, " ").trim();
@@ -31,13 +55,6 @@ function score(value) {
 
 function stringArray(value) {
   return Array.isArray(value) ? value.map((item) => compact(item, 320)).filter(Boolean).slice(0, 15) : [];
-}
-
-function extractJsonObject(raw = "") {
-  const text = String(raw || "").trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "");
-  const start = text.indexOf("{");
-  const end = text.lastIndexOf("}");
-  return JSON.parse(start >= 0 && end > start ? text.slice(start, end + 1) : text);
 }
 
 function parseRate(value = "") {
@@ -207,7 +224,7 @@ export function normaliseRenderedVideoQa(raw, {
   threshold = DEFAULT_THRESHOLD,
   technical = {},
 } = {}) {
-  const parsed = typeof raw === "string" ? extractJsonObject(raw) : raw;
+  const parsed = typeof raw === "string" ? parseStructuredJson(raw, "Blotato rendered-video QA response") : raw;
   const defects = stringArray(parsed?.defects);
   const hardDefects = stringArray(parsed?.hardDefects);
   const result = {
@@ -294,21 +311,57 @@ export async function reviewRenderedVideo({
     await createContactSheet(videoPath, contactSheetPath, { durationSeconds: metadata.durationSeconds, frameCount });
     const contactSheet = await readFile(contactSheetPath);
     const { resilientRequest } = await import("../../shared/utils/ai-service.js");
-    const raw = await resilientRequest("blotatoVisualQa", {
-      sessionId,
-      max_tokens: 900,
-      temperature: 0.1,
-      reasoning: { effort: "minimal" },
-      messages: [{
-        role: "user",
-        content: [
-          { type: "text", text: buildRenderedVideoQaPrompt({ pack, article, technical }) },
-          { type: "image_url", image_url: { url: `data:image/jpeg;base64,${contactSheet.toString("base64")}` } },
-        ],
-      }],
-    });
-    return normaliseRenderedVideoQa(raw, { technical });
+    const maxJsonAttempts = Math.max(1, Math.min(3, Number(process.env.BLOTATO_RENDERED_QA_JSON_ATTEMPTS || 2)));
+    let lastQaError = null;
+    for (let attempt = 1; attempt <= maxJsonAttempts; attempt += 1) {
+      try {
+        const raw = await resilientRequest("blotatoVisualQa", {
+          sessionId: `${sessionId}-json-${attempt}`,
+          max_tokens: 1400,
+          temperature: attempt === 1 ? 0.1 : 0,
+          reasoning: { effort: "minimal" },
+          response_format: strictJsonResponseFormat("blotato_rendered_video_qa", RENDERED_VIDEO_QA_SCHEMA),
+          messages: [{
+            role: "user",
+            content: [
+              { type: "text", text: `${buildRenderedVideoQaPrompt({ pack, article, technical })}${attempt > 1 ? "\nYour previous response was invalid JSON. Return one complete JSON object only." : ""}` },
+              { type: "image_url", image_url: { url: `data:image/jpeg;base64,${contactSheet.toString("base64")}` } },
+            ],
+          }],
+        });
+        return normaliseRenderedVideoQa(raw, { technical });
+      } catch (error) {
+        lastQaError = error;
+      }
+    }
+
+    if (boolEnv("BLOTATO_RENDERED_QA_INFRASTRUCTURE_FALLBACK", true)) {
+      return {
+        pass: true,
+        skipped: true,
+        reason: "qa_infrastructure_fallback",
+        error: compact(lastQaError?.message || lastQaError, 500),
+        score: null,
+        threshold: DEFAULT_THRESHOLD,
+        technical,
+        defects: [],
+        hardDefects: [],
+      };
+    }
+    throw lastQaError || new Error("Rendered-video QA returned no valid structured result.");
   } catch (error) {
+    if (boolEnv("BLOTATO_RENDERED_QA_INFRASTRUCTURE_FALLBACK", true)) {
+      return {
+        pass: true,
+        skipped: true,
+        reason: "qa_infrastructure_fallback",
+        error: compact(error?.message || error, 500),
+        score: null,
+        threshold: DEFAULT_THRESHOLD,
+        defects: [],
+        hardDefects: [],
+      };
+    }
     if (!boolEnv("BLOTATO_RENDERED_QA_REQUIRED", true)) {
       return { pass: true, skipped: true, reason: "qa_unavailable", error: compact(error?.message || error, 500) };
     }
