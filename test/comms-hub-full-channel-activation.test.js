@@ -54,7 +54,7 @@ test("full production profile is readiness-complete when deployment secrets are 
     COMMS_HUB_COGINPAL_WEBHOOK_SECRET: "chat-secret",
     COMMS_HUB_AI_SEARCH_INSTANCES: "search-prod",
     CLOUDFLARE_AI_SEARCH_API_TOKEN: "search-token",
-    COMMS_HUB_PUBLIC_BASE_URL: "https://app.jonathan-harris.online",
+    COMMS_HUB_PUBLIC_BASE_URL: "https://zeroth-kara-jonathanharris-3296ed37.koyeb.app",
     COMMS_HUB_D1_PROXY_URL: "https://d1-proxy.example.test",
     COMMS_HUB_D1_PROXY_TOKEN: "d1-proxy-token",
     COMMS_HUB_RESTORE_DATABASE_ID: "restore-db-id",

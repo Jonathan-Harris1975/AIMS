@@ -77,7 +77,7 @@ test("webhook reconcile worker creates a missing enabled Zernio webhook", async 
   const created = [];
   const context = {
     config: {
-      publicBaseUrl: "https://app.jonathan-harris.online",
+      publicBaseUrl: "https://zeroth-kara-jonathanharris-3296ed37.koyeb.app",
       zernioWebhookReconcileEnabled: true,
       zernioWebhookReconcileIntervalMs: 900_000,
       zernioFamilies: {
@@ -105,7 +105,7 @@ test("webhook reconcile worker creates a missing enabled Zernio webhook", async 
   assert.equal(result.skipped, false);
   assert.equal(result.families.meta.operation, "created");
   assert.equal(created.length, 1);
-  assert.equal(created[0].url, "https://app.jonathan-harris.online/comms-hub/intake/zernio/meta");
+  assert.equal(created[0].url, "https://zeroth-kara-jonathanharris-3296ed37.koyeb.app/comms-hub/intake/zernio/meta");
   assert.equal(created[0].secret, "test-secret");
   assert.equal(created[0].isActive, true);
 });
@@ -115,7 +115,7 @@ test("webhook reconciliation isolates one Zernio family failure from the other f
   const created = [];
   const context = {
     config: {
-      publicBaseUrl: "https://app.jonathan-harris.online",
+      publicBaseUrl: "https://zeroth-kara-jonathanharris-3296ed37.koyeb.app",
       zernioWebhookReconcileEnabled: true,
       zernioWebhookReconcileIntervalMs: 900_000,
       zernioFamilies: {
@@ -137,7 +137,7 @@ test("webhook reconciliation isolates one Zernio family failure from the other f
   assert.deepEqual(result.succeeded, ["video"]);
   assert.equal(result.failures.meta.code, "meta_outage");
   assert.equal(result.families.video.operation, "created");
-  assert.equal(created[0].url, "https://app.jonathan-harris.online/comms-hub/intake/zernio/video");
+  assert.equal(created[0].url, "https://zeroth-kara-jonathanharris-3296ed37.koyeb.app/comms-hub/intake/zernio/video");
 });
 
 test("runtime reliability migration preserves strict default social policy and adds a narrow engagement policy", () => {
