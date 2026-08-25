@@ -28,6 +28,37 @@ function normalisePipelineInput(input, maybeOptions = {}) {
   };
 }
 
+async function advancePublishedCommsContributions(entries, { episodeUrl, publicationId } = {}) {
+  const conversationIds = [...new Set(
+    (entries || [])
+      .map((entry) => String(entry?.brief?.source?.conversationId || "").trim())
+      .filter(Boolean)
+  )];
+  if (!conversationIds.length) return { skipped: true, reason: "no_comms_contributions", results: [] };
+  if (!/^https:\/\//i.test(String(episodeUrl || ""))) {
+    throw new Error("Published podcast contribution hand-off requires a canonical HTTPS episode URL.");
+  }
+
+  const { getCommsHubContext, getCommsHubRuntimeReadiness } = await import("../comms-hub/runtime.js");
+  const readiness = getCommsHubRuntimeReadiness();
+  if (!readiness.ready || readiness.status === "disabled") {
+    throw new Error(`Comms Hub is not ready for podcast publication hand-off (${readiness.status || "unknown"}:${readiness.detail || "unknown"}).`);
+  }
+  const context = getCommsHubContext();
+  const results = [];
+  for (const conversationId of conversationIds) {
+    results.push({
+      conversationId,
+      result: await context.podcastWorkflowService.advancePublishedContribution({
+        conversationId,
+        episodeUrl,
+        publicationId,
+      }),
+    });
+  }
+  return { skipped: false, results };
+}
+
 
 
 async function triggerWebsiteRebuild(log, sessionId) {
@@ -138,15 +169,12 @@ export async function runPodcastPipeline(input = {}, maybeOptions = {}) {
     }
     log.info("🗣️ TTS pipeline complete", { sessionId });
 
-    if (editorialBriefEntries.length) {
-      await markEditorialBriefsConsumed(editorialBriefEntries, { consumerId: sessionId, resultReference: sessionId });
-    }
-
     log.info("📡 Updating RSS feed…");
     let rss;
     try {
-      const result = await runRssFeedCreator();
-      rss = { ok: result?.ok !== false, result: result ?? null };
+      const result = await runRssFeedCreator({ requiredSessionId: sessionId });
+      if (!result?.ok) throw new Error(result?.reason || "RSS feed generation did not confirm success");
+      rss = { ok: true, result };
       log.info("📡 RSS feed updated successfully");
     } catch (rssErr) {
       rss = { ok: false, error: rssErr?.message || String(rssErr) };
@@ -192,6 +220,30 @@ export async function runPodcastPipeline(input = {}, maybeOptions = {}) {
     }
 
     const completion = buildPodcastCompletionStatus({ rss, rebuild });
+    let publicationHandoff = { skipped: true, reason: "publication_not_confirmed", results: [] };
+    if (completion.ok) {
+      try {
+        const episodeUrl = rss.result?.episode?.url;
+        publicationHandoff = await advancePublishedCommsContributions(editorialBriefEntries, {
+          episodeUrl,
+          publicationId: sessionId,
+        });
+        if (editorialBriefEntries.length) {
+          const consumption = await markEditorialBriefsConsumed(editorialBriefEntries, {
+            consumerId: sessionId,
+            resultReference: episodeUrl || sessionId,
+          });
+          const failures = consumption.filter((item) => item.ok !== true);
+          if (failures.length) throw new Error(`${failures.length} editorial brief(s) could not be marked consumed after publication.`);
+        }
+      } catch (handoffError) {
+        publicationHandoff = { ok: false, error: handoffError?.message || String(handoffError), results: [] };
+        completion.ok = false;
+        completion.partialFailure = true;
+        completion.issues.push({ stage: "comms-publication-handoff", error: publicationHandoff.error });
+        log.error("Podcast publication hand-off failed", { sessionId, error: publicationHandoff.error });
+      }
+    }
     const summary = {
       ...completion,
       sessionId,
@@ -200,6 +252,7 @@ export async function runPodcastPipeline(input = {}, maybeOptions = {}) {
       tts,
       rss,
       rebuild,
+      publicationHandoff,
       maintenanceWarnings,
     };
 
