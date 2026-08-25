@@ -32,7 +32,8 @@ jobs:
             echo "configured=true" >> "$GITHUB_OUTPUT"
           else
             echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::AIMS deployment watcher is not configured; deployment attestation and downstream smoke dispatch are skipped."
+            echo "::error::AIMS production deployment watcher requires KOYEB_TOKEN and KOYEB_SERVICE."
+            exit 1
           fi
       - name: Install verified Koyeb CLI
         if: steps.deployment_config.outputs.configured == 'true'
