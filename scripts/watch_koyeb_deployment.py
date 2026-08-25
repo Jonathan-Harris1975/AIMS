@@ -13,8 +13,8 @@ from typing import Any, Iterable
 
 from ops_notify import send_event
 
-SUCCESS = {"healthy", "sleeping"}
-FAILURE = {"error", "failed", "unhealthy", "cancelled", "canceled"}
+SUCCESS = {"healthy"}
+FAILURE = {"error", "failed", "unhealthy", "cancelled", "canceled", "sleeping"}
 PENDING = {"pending", "provisioning", "scheduled", "allocating", "starting", "stopping", "building", "deploying", "degraded"}
 
 
@@ -87,8 +87,13 @@ def _deployment_sha(item: dict[str, Any]) -> str:
 
 def _matches_expected_deployment(item: dict[str, Any], expected_sha: str, expected_after: datetime | None) -> bool:
     candidate_sha = _deployment_sha(item)
-    if expected_sha and candidate_sha and not candidate_sha.lower().startswith(expected_sha.lower()):
-        return False
+    if expected_sha:
+        if not candidate_sha:
+            return False
+        expected = expected_sha.lower()
+        candidate = candidate_sha.lower()
+        if not (candidate.startswith(expected) or expected.startswith(candidate)):
+            return False
     if expected_after is not None:
         created = _parse_timestamp(_created(item))
         if created is not None and created < expected_after - timedelta(minutes=5):
@@ -101,8 +106,8 @@ def main() -> int:
     token = os.getenv("KOYEB_TOKEN", "").strip()
     display_name = os.getenv("SERVICE_DISPLAY_NAME", service or "Koyeb service").strip()
     if not service or not token:
-        print("Koyeb deployment watcher is not configured; skipping.")
-        return 0
+        print("Koyeb deployment watcher requires KOYEB_SERVICE and KOYEB_TOKEN.", file=sys.stderr)
+        return 2
     attempts = max(1, int(os.getenv("KOYEB_DEPLOYMENT_MAX_ATTEMPTS", "40")))
     poll_seconds = max(5, int(os.getenv("KOYEB_DEPLOYMENT_POLL_SECONDS", "15")))
     expected_sha = os.getenv("EXPECTED_DEPLOYMENT_SHA", os.getenv("GITHUB_SHA", "")).strip()
