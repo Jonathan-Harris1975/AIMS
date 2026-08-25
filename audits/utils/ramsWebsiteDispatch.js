@@ -1,7 +1,7 @@
 import { info, warn } from "../../logger.js";
 import { isRetryableDispatchError } from "./ramsWebsiteDispatchRetry.js";
 
-const DEFAULT_RAMS_BASE_URL = "https://mod.jonathan-harris.online";
+const DEFAULT_RAMS_BASE_URL = "https://static-helaina-jonathanharris-6df5d241.koyeb.app";
 
 function clean(value) {
   return String(value || "").trim();
