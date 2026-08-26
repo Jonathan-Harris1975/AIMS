@@ -175,6 +175,7 @@ router.get("/shorts/lanes", (_req, res) => {
 
 router.post(
   "/autoshorts/schedule",
+  requestDedupe("blotato:autoshorts:schedule"),
   asyncRoute(async (req, res) => {
     const now = new Date();
     const weekday = new Intl.DateTimeFormat("en-GB", { weekday: "long", timeZone: "Europe/London" }).format(now).toLowerCase();
@@ -188,6 +189,7 @@ router.post(
 
 router.post(
   "/shorts/:lane/schedule",
+  requestDedupe("blotato:lane:schedule"),
   asyncRoute(async (req, res) => {
     const lane = requireShortLaneConfig(req.params.lane);
     const result = await triggerPublishNowJob(req, lane.slug, { publishMode: "evening-scheduled", scheduleSlot: "pm" });
