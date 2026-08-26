@@ -1564,15 +1564,16 @@ export async function buildAndScheduleDailyLane(laneKey, options = {}) {
     }
 
     if (!options.imageUrl && !dryRun) {
+      const imagePrompt = buildDailyLaneArtworkPrompt({ laneKey, post, verifiedQuote });
       const artwork = await createSocialArtwork({
         sessionId: `ZERNIO-${laneKey.toUpperCase()}-${publishDate}`,
         lane: laneKey,
         date: publishDate,
-        prompt: buildDailyLaneArtworkPrompt({ laneKey, post, verifiedQuote }),
-        fallbackUrl: lane.imageUrl,
+        prompt: imagePrompt,
+        allowFallback: false,
       });
 
-      if (!artwork?.ok || !artwork.publicUrl) {
+      if (!artwork?.ok || !artwork.publicUrl || artwork.fallback) {
         const err = new Error(artwork?.error || `The ${lane.label} lane did not produce a verified AI-relevant image.`);
         err.statusCode = 502;
         err.code = "zernio-daily-artwork-unavailable";
@@ -1580,6 +1581,7 @@ export async function buildAndScheduleDailyLane(laneKey, options = {}) {
       }
       imageUrl = artwork.publicUrl;
       post.imageUrl = artwork.publicUrl;
+      post.imagePrompt = imagePrompt;
     }
 
     if (laneKey === "sunday") {

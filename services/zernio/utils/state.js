@@ -66,15 +66,20 @@ function normaliseSlotPart(value) {
     .replace(/\s+/g, " ");
 }
 
-export function buildScheduleSlotKey({ scope, scheduledDateTime, profileName, accountId, imageUrl, sourceIntentHash }) {
+export function buildScheduleSlotKey({ scope, scheduledDateTime, profileName, accountId }) {
   return [
     normaliseSlotPart(scope || "zernio"),
     normaliseSlotPart(scheduledDateTime),
     normaliseSlotPart(profileName),
     normaliseSlotPart(accountId),
-    normaliseSlotPart(imageUrl),
-    normaliseSlotPart(sourceIntentHash),
   ].join("|");
+}
+
+function sameScheduleSlot(claim = {}, input = {}) {
+  return normaliseSlotPart(claim.scope || "zernio") === normaliseSlotPart(input.scope || "zernio")
+    && normaliseSlotPart(claim.scheduledDateTime) === normaliseSlotPart(input.scheduledDateTime)
+    && normaliseSlotPart(claim.profileName) === normaliseSlotPart(input.profileName)
+    && normaliseSlotPart(claim.accountId) === normaliseSlotPart(input.accountId);
 }
 
 function cleanSlotClaims(claims, now = Date.now()) {
@@ -123,8 +128,15 @@ export async function claimScheduleSlot(input = {}) {
 
   const state = await readZernioStateFresh();
   const slotClaims = cleanSlotClaims(state.slotClaims);
-  const existing = slotClaims.find((claim) => claim.key === key);
+  const existingIndex = slotClaims.findIndex((claim) => claim.key === key || sameScheduleSlot(claim, input));
+  const existing = existingIndex >= 0 ? slotClaims[existingIndex] : null;
   if (existing) {
+    // Migrate pre-fix claims whose key also contained image/source hashes to
+    // the canonical slot identity. Content can change on a rerun; the posting
+    // slot itself must remain unique.
+    if (existing.key !== key) {
+      slotClaims[existingIndex] = { ...existing, key };
+    }
     state.slotClaims = slotClaims;
     writeZernioState(state);
     return {
@@ -202,7 +214,7 @@ export function clearScheduleSlotClaim(slotClaim) {
 export function resetScheduleSlotClaim(input = {}) {
   const key = buildScheduleSlotKey(input);
   const state = readZernioState();
-  const slotClaims = cleanSlotClaims(state.slotClaims).filter((claim) => claim.key !== key);
+  const slotClaims = cleanSlotClaims(state.slotClaims).filter((claim) => claim.key !== key && !sameScheduleSlot(claim, input));
   const claim = makeSlotClaim(input, "pending");
 
   activeSlotClaims.add(key);
