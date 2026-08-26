@@ -279,7 +279,7 @@ export function runBlotatoShortGate({ pack = {}, article = {}, lane = "" } = {})
   const sceneVoiceWords = sceneVoiceoverWordCount(pack.scenes);
   const minScriptWords = positiveIntEnv("BLOTATO_NEWS_MIN_SCRIPT_WORDS", 80, 140);
   const maxScriptWords = positiveIntEnv("BLOTATO_NEWS_MAX_SCRIPT_WORDS", 102, 180);
-  const minSceneWords = positiveIntEnv("BLOTATO_NEWS_MIN_SCENE_WORDS", 90, 140);
+  const minSceneWords = positiveIntEnv("BLOTATO_NEWS_MIN_SCENE_WORDS", 80, 140);
   const targetSceneCount = positiveIntEnv("BLOTATO_VIDEO_SCENE_COUNT", 5, 7);
   const humanVisualsEnabled = boolEnv("BLOTATO_HUMAN_VISUALS_ENABLED", true);
   const minHumanScenes = positiveIntEnv("BLOTATO_HUMAN_VISUAL_MIN_SCENES", 3, 5);
