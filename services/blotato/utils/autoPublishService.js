@@ -116,8 +116,9 @@ function normaliseTemplateId(value = DEFAULT_AI_STORY_TEMPLATE_PATH) {
 }
 
 function normaliseTemplateIdForApi(value = DEFAULT_AI_STORY_TEMPLATE_PATH) {
-  // Blotato's current /videos/from-templates contract requires the bare UUID,
-  // even when the catalogue/config stores the human-friendly /base/v2/... path.
+  // Keep the UUID as a compatibility fallback. The template catalogue can
+  // return a versioned /base/v2/... path, and that exact catalogue value is
+  // preferred by resolveVideoTemplateId before this fallback is attempted.
   return extractUuid(value) || extractUuid(normaliseTemplateId(value)) || DEFAULT_AI_STORY_TEMPLATE_UUID;
 }
 
@@ -306,11 +307,12 @@ async function resolveVideoTemplateId({ requestedTemplateId, apiKey, autoDiscove
   const directMatch = idItems.find((item) => templateMatchesRequested(item, requested));
   if (directMatch) {
     const rawId = templateItemId(directMatch) || requested;
-    const id = normaliseTemplateIdForApi(rawId);
+    const id = rawId;
+    const uuidFallback = normaliseTemplateIdForApi(rawId);
     return {
       templateId: id,
       rawTemplateId: rawId,
-      templateIdCandidates: uniqueTemplateIds(id, rawId, requested),
+      templateIdCandidates: uniqueTemplateIds(rawId, uuidFallback, requested),
       verified: true,
       source: "configured-id",
       template: directMatch,
@@ -333,8 +335,9 @@ async function resolveVideoTemplateId({ requestedTemplateId, apiKey, autoDiscove
       searchItems.push(...items);
       const preferred = pickPreferredTemplate(items, { requested, searchTerms: [search] });
       const resolvedId = templateItemId(preferred);
-      const apiTemplateId = normaliseTemplateIdForApi(resolvedId);
+      const apiTemplateId = resolvedId;
       if (apiTemplateId) {
+        const uuidFallback = normaliseTemplateIdForApi(resolvedId);
         warn("blotato.template.auto_discovered", {
           requestedTemplateId: requested,
           resolvedTemplateId: apiTemplateId,
@@ -345,7 +348,7 @@ async function resolveVideoTemplateId({ requestedTemplateId, apiKey, autoDiscove
         return {
           templateId: apiTemplateId,
           rawTemplateId: resolvedId,
-          templateIdCandidates: uniqueTemplateIds(apiTemplateId, resolvedId, requested, DEFAULT_AI_STORY_TEMPLATE_PATH),
+          templateIdCandidates: uniqueTemplateIds(resolvedId, uuidFallback, requested, DEFAULT_AI_STORY_TEMPLATE_PATH),
           verified: true,
           source: "auto-discovered",
           template: preferred,
@@ -364,8 +367,9 @@ async function resolveVideoTemplateId({ requestedTemplateId, apiKey, autoDiscove
     searchItems.push(...allItems);
     const preferred = pickPreferredTemplate(allItems, { requested, searchTerms });
     const resolvedId = templateItemId(preferred);
-    const apiTemplateId = normaliseTemplateIdForApi(resolvedId);
+    const apiTemplateId = resolvedId;
     if (apiTemplateId) {
+      const uuidFallback = normaliseTemplateIdForApi(resolvedId);
       warn("blotato.template.auto_discovered", {
         requestedTemplateId: requested,
         resolvedTemplateId: apiTemplateId,
@@ -376,7 +380,7 @@ async function resolveVideoTemplateId({ requestedTemplateId, apiKey, autoDiscove
       return {
         templateId: apiTemplateId,
         rawTemplateId: resolvedId,
-        templateIdCandidates: uniqueTemplateIds(apiTemplateId, resolvedId, requested, DEFAULT_AI_STORY_TEMPLATE_PATH),
+        templateIdCandidates: uniqueTemplateIds(resolvedId, uuidFallback, requested, DEFAULT_AI_STORY_TEMPLATE_PATH),
         verified: true,
         source: "auto-discovered-all",
         template: preferred,
@@ -1070,7 +1074,7 @@ async function reusableRenderedVideo(jobType, article = {}, currentSessionId = "
   const now = Date.now();
   const candidate = getJobsByType(jobType)
     .filter((job) => job.sessionId !== currentSessionId)
-    .filter((job) => job.status === "failed" && job.phase === "rendered-quality-review")
+    .filter((job) => job.status === "failed" && job.renderedVideoQa?.pass === true)
     .filter((job) => normaliseArticleIdentity(job.source?.article || job.rss?.article || {}) === identity)
     .filter((job) => job.mediaUrl && job.videoId)
     .filter((job) => {
@@ -1096,6 +1100,47 @@ function londonDateParts(date = new Date()) {
     timeZone: "Europe/London", year: "numeric", month: "2-digit", day: "2-digit", weekday: "long",
   }).formatToParts(date).filter((part) => part.type !== "literal").map((part) => [part.type, part.value]));
   return { year: Number(parts.year), month: Number(parts.month), day: Number(parts.day), weekday: String(parts.weekday || "").toLowerCase() };
+}
+
+function londonDateString(date = new Date()) {
+  const { year, month, day } = londonDateParts(date);
+  return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+function inferScheduleSlotFromJob(job = {}) {
+  const explicit = trim(job.scheduleSlot).toLowerCase();
+  if (["am", "pm"].includes(explicit)) return explicit;
+  const publishMode = trim(job.defaults?.publishMode || job.publishMode).toLowerCase();
+  if (publishMode === "autoshorts-scheduled") return "am";
+  if (publishMode === "evening-scheduled") return "pm";
+  return "";
+}
+
+function scheduleDateFromJob(job = {}) {
+  const explicit = trim(job.scheduleDate);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(explicit)) return explicit;
+  const timestamp = job.defaults?.scheduledTime || job.scheduledTime || job.startedAt || job.createdAt;
+  const parsed = timestamp ? new Date(timestamp) : null;
+  return parsed && Number.isFinite(parsed.getTime()) ? londonDateString(parsed) : "";
+}
+
+function jobOwnsScheduledSlot(job = {}) {
+  if (["queued", "running", "completed"].includes(job.status)) return true;
+  if (job.status !== "failed") return false;
+  // Once Blotato has created a visual, a blind rerun can create another paid
+  // render. Keep the slot claimed for the day and surface the failed job
+  // instead. Failures before visual creation remain safely retryable.
+  return Boolean(job.videoId || job.mediaUrl || job.result?.visualId || job.result?.mediaUrl);
+}
+
+async function findExistingScheduledSlotJob(jobType, scheduleSlot, scheduleDate) {
+  if (!scheduleSlot || !scheduleDate) return null;
+  await refreshJobStoreFromState();
+  return getJobsByType(jobType)
+    .filter((job) => inferScheduleSlotFromJob(job) === scheduleSlot)
+    .filter((job) => scheduleDateFromJob(job) === scheduleDate)
+    .filter(jobOwnsScheduledSlot)
+    .sort((a, b) => Date.parse(b.updatedAt || b.createdAt || 0) - Date.parse(a.updatedAt || a.createdAt || 0))[0] || null;
 }
 
 function londonLocalToUtcIso({ year, month, day, hour, minute }) {
@@ -1145,9 +1190,10 @@ async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOT
     defaults.publishMode = publishMode;
     const scheduledTime = scheduleSlot ? resolveBlotatoScheduledTime(scheduleSlot) : null;
     defaults.scheduledTime = scheduledTime;
+    const scheduleDate = scheduleSlot ? londonDateString(new Date()) : null;
     const platforms = defaults.channels;
 
-    updateJob(lane.jobType, sessionId, { phase: "step-0-channel-preflight", defaults });
+    updateJob(lane.jobType, sessionId, { phase: "step-0-channel-preflight", defaults, scheduleSlot, scheduleDate });
     const channelPreflight = await runBlotatoStep0Preflight({ platforms, apiKey });
 
     updateJob(lane.jobType, sessionId, { phase: "template-resolution", channelPreflight });
@@ -1569,6 +1615,37 @@ async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOT
 
 export async function triggerPublishNowJob(req = {}, laneSlug = DEFAULT_BLOTATO_SHORT_LANE, options = {}) {
   const lane = requireShortLaneConfig(laneSlug);
+  const scheduleSlot = trim(options.scheduleSlot).toLowerCase();
+  const scheduleDate = scheduleSlot ? londonDateString(new Date()) : null;
+  if (scheduleSlot) {
+    const existing = await findExistingScheduledSlotJob(lane.jobType, scheduleSlot, scheduleDate);
+    if (existing) {
+      const publicJob = toPublicJob(existing);
+      const statusUrl = publicJobUrl(req, existing.sessionId);
+      info("blotato.schedule.duplicate_prevented", {
+        lane: lane.slug,
+        scheduleSlot,
+        scheduleDate,
+        existingSessionId: existing.sessionId,
+        existingStatus: existing.status,
+        existingPhase: existing.phase || null,
+        paidRenderPresent: Boolean(existing.videoId || existing.mediaUrl || existing.result?.visualId || existing.result?.mediaUrl),
+      });
+      return {
+        statusCode: 202,
+        started: false,
+        duplicatePrevented: true,
+        reason: existing.status === "completed" ? "same-daily-slot-already-completed" : "same-daily-slot-already-owned",
+        sessionId: existing.sessionId,
+        status: publicJob?.status || existing.status,
+        statusUrl,
+        defaults: existing.defaults || buildDefaults(lane.slug),
+        rss: existing.rss || null,
+        job: publicJob,
+      };
+    }
+  }
+
   const articleSource = await selectRssArticleForBlotato({ laneSlug: lane.slug });
   const reservationResult = await reserveEditorialSource({
     pipeline: "blotato",
@@ -1598,6 +1675,8 @@ export async function triggerPublishNowJob(req = {}, laneSlug = DEFAULT_BLOTATO_
     source: articleSource,
     defaults,
     lane: lane.slug,
+    scheduleSlot: scheduleSlot || null,
+    scheduleDate,
     statusUrl,
     editorialReservation,
   });
@@ -1628,7 +1707,7 @@ export async function triggerPublishNowJob(req = {}, laneSlug = DEFAULT_BLOTATO_
     templateIdOverride: options.templateId || null,
     publishMode: options.publishMode || "evening-lane",
     creativeStyle: options.creativeStyle || "",
-    scheduleSlot: options.scheduleSlot || null,
+    scheduleSlot: scheduleSlot || null,
   });
   if (parseBoolean(process.env.BLOTATO_INLINE_PUBLISH_JOBS, false)) {
     await run();

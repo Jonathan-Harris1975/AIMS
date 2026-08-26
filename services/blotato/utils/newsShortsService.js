@@ -7,10 +7,10 @@ import { buildBlotatoPersona } from "../../script/utils/toneSetter.js";
 import { jonathanVoicePrompt } from "../../content-quality/jonathanVoice.js";
 
 const NEWS_SHORT_MAX_TOKENS = Math.max(2600, Number(process.env.BLOTATO_NEWS_SHORT_MAX_TOKENS || 3600));
-const MIN_SCRIPT_WORDS = Math.max(80, Number(process.env.BLOTATO_NEWS_MIN_SCRIPT_WORDS || 90));
-const TARGET_SCRIPT_WORDS = Math.max(MIN_SCRIPT_WORDS, Number(process.env.BLOTATO_NEWS_TARGET_SCRIPT_WORDS || 115));
-const MAX_SCRIPT_WORDS = Math.max(TARGET_SCRIPT_WORDS, Number(process.env.BLOTATO_NEWS_MAX_SCRIPT_WORDS || 135));
-const MIN_SCENE_VOICEOVER_WORDS = Math.max(80, Number(process.env.BLOTATO_NEWS_MIN_SCENE_WORDS || 90));
+const MIN_SCRIPT_WORDS = Math.max(75, Number(process.env.BLOTATO_NEWS_MIN_SCRIPT_WORDS || 80));
+const TARGET_SCRIPT_WORDS = Math.max(MIN_SCRIPT_WORDS, Number(process.env.BLOTATO_NEWS_TARGET_SCRIPT_WORDS || 92));
+const MAX_SCRIPT_WORDS = Math.max(TARGET_SCRIPT_WORDS, Number(process.env.BLOTATO_NEWS_MAX_SCRIPT_WORDS || 102));
+const MIN_SCENE_VOICEOVER_WORDS = Math.max(75, Number(process.env.BLOTATO_NEWS_MIN_SCENE_WORDS || 80));
 
 // Brand kit — all visual and audio identity settings are env-configurable.
 const AI_STORY_VOICE = process.env.BLOTATO_BRAND_VOICE_NAME || "Daniel (British, authoritative)";
@@ -365,7 +365,10 @@ export function buildNewsShortPrompt({
   const articleBlock = renderArticles({ article, articles });
   const resolvedCta = ctaForLane(laneConfig.slug, cta);
   const targetDuration = Math.min(MAX_DURATION_SECONDS, Math.max(MIN_DURATION_SECONDS, Number(durationSeconds || DEFAULT_DURATION_SECONDS)));
-  const targetScriptWords = Math.min(MAX_SCRIPT_WORDS, Math.max(MIN_SCRIPT_WORDS, Math.round(targetDuration * 2.5)));
+  // Use the explicit production word target rather than assuming a fixed
+  // 150-wpm voice. Finished-video QA is authoritative on duration, so the
+  // script needs enough headroom for the selected TTS voice and transitions.
+  const targetScriptWords = Math.min(MAX_SCRIPT_WORDS, Math.max(MIN_SCRIPT_WORDS, TARGET_SCRIPT_WORDS));
   const structure = laneConfig.structure.map((item, index) => `${index + 1}. ${item}`).join("\n");
   const requestHookAlt = HOOK_VARIANTS >= 2;
   const previousDefects = [
