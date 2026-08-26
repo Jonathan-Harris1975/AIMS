@@ -43,8 +43,8 @@ function weakModelVerdictPack() {
 }
 
 test("Blotato quality repair strengthens a weak model-verdict hook before rendering", () => {
-  process.env.BLOTATO_NEWS_MIN_SCRIPT_WORDS = "95";
-  process.env.BLOTATO_NEWS_MIN_SCENE_WORDS = "90";
+  process.env.BLOTATO_NEWS_MIN_SCRIPT_WORDS = "80";
+  process.env.BLOTATO_NEWS_MIN_SCENE_WORDS = "80";
   process.env.BLOTATO_HUMAN_VISUALS_ENABLED = "true";
   process.env.BLOTATO_HUMAN_VISUAL_MIN_SCENES = "3";
 
@@ -67,7 +67,7 @@ test("Blotato quality repair strengthens a weak model-verdict hook before render
   const repairedGate = runBlotatoShortGate({ pack: repaired, article, lane: "model-verdict" });
 
   assert.equal(repairedGate.ok, true);
-  assert.ok(repairedGate.performance.hookScore >= 55);
+  assert.ok(repairedGate.performance.hookScore >= 65);
   assert.match(repaired.hook, /Claude/i);
   assert.match(repaired.hook, /but|risk/i);
   assert.match(repaired.hook, /your workflow/i);

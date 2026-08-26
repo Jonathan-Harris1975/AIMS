@@ -443,6 +443,7 @@ test("buildAndScheduleDailyLane validates Facebook targeting before live schedul
     publishDate: "2026-04-13",
     profileName: "General",
     accountId: "fb-page-1",
+    imageUrl: "https://images.jonathan-harris.online/generated/monday-ci",
     force: true,
   });
 
@@ -451,14 +452,14 @@ test("buildAndScheduleDailyLane validates Facebook targeting before live schedul
   assert.equal(result.targeting.ok, true);
   assert.equal(result.targeting.targetedAccounts[0].platform, "facebook");
   assert.deepEqual(scheduledRequests.at(-1).body.platforms, [{ platform: "facebook", accountId: "fb-page-1" }]);
-  // Regression test: lane images are served from extensionless URLs
-  // (e.g. https://images.jonathan-harris.online/Monday). Zernio's
-  // `mediaUrls` shorthand infers media type from the URL and silently
-  // drops images with no file extension, so the request must use
-  // `mediaItems` with an explicit `type` instead.
+  // Regression test: generated/hosted images may use extensionless URLs.
+  // Zernio's `mediaUrls` shorthand infers media type from the URL and can
+  // silently drop images with no file extension, so the request must use
+  // `mediaItems` with an explicit `type` instead. The injected image fixture
+  // keeps this targeting test independent from live artwork credentials.
   assert.equal(scheduledRequests.at(-1).body.mediaUrls, undefined);
   assert.deepEqual(scheduledRequests.at(-1).body.mediaItems, [
-    { type: "image", url: "https://images.jonathan-harris.online/Monday" },
+    { type: "image", url: "https://images.jonathan-harris.online/generated/monday-ci" },
   ]);
 });
 
@@ -480,6 +481,7 @@ test("buildAndScheduleDailyLane retries a transient Zernio scheduling failure", 
     publishDate: "2026-04-13",
     profileName: "General",
     accountId: "fb-page-1",
+    imageUrl: "https://images.jonathan-harris.online/generated/monday-ci-retry",
     force: true,
   });
 
@@ -507,6 +509,7 @@ test("buildAndScheduleDailyLane fails loudly when required Facebook targeting is
       publishDate: "2026-04-13",
       profileName: "Ebooks",
       accountId: "ALL",
+      imageUrl: "https://images.jonathan-harris.online/generated/monday-ci-targeting",
       force: true,
     }),
     /Zernio target setup failed.*facebook/
