@@ -84,25 +84,31 @@ async function handleMockRequest(req, res) {
           content: JSON.stringify({
             internalTitle: "Agents move into admin",
             angle: "The useful story is workflow delegation, not another shiny demo.",
-            hook: "AI agents are moving from chat to chores.",
+            hook: "AI agents are moving into office workflows, but your team still owns the handoff.",
             script: "AI agents are moving from chat to chores. The important part is not the demo theatre. It is that teams are starting to hand over repeatable admin, research, drafting, routing and checking tasks. That does not remove judgement. It moves judgement to the design of the workflow. The useful move is boring on purpose: choose one repeatable task, set clear checks, review the result, then widen the workflow only when it behaves. The winners will not be people who ask better one-off questions. They will be the ones who build better systems around the tools.",
-            visualDirection: "Human-centred dark editorial AI newsroom, adult analyst reaction, task cards moving through a clean workflow, visual emphasis on chores, workflow and judgement.",
+            narrativeArc: "Open with the office workflow shift, show delegated tasks, explain the human approval point, then finish on practical system design.",
+            visualContinuity: "Keep the same adult operations team and dark editorial office environment while the workflow progresses from chat to delegated tasks and human approval.",
+            visualDirection: "Human-centred dark editorial office environment showing AI agents moving routine admin work through a practical workflow.",
             scenes: [
               {
-                mediaSource: "Human-centred dark editorial newsroom visual with an adult analyst face reacting as task cards move from chat bubbles into workflow columns.",
-                script: "AI agents are moving from chat to chores."
+                mediaSource: "Adult operations lead walking through an office where AI agent workflow tasks move from a chat station into a practical admin queue, documentary wide shot.",
+                script: "AI agents are moving from chat to chores. The important part is not the demo theatre."
               },
               {
-                mediaSource: "Adult hands using a laptop beside a minimal dashboard showing admin, research, drafting, routing and checking tasks flowing through a clean system.",
+                mediaSource: "Two adult office colleagues reviewing routine admin, research and drafting tasks moving through an AI agent workflow, medium operational shot.",
                 script: "Teams are starting to hand over repeatable admin, research, drafting, routing and checking tasks."
               },
               {
-                mediaSource: "Over-shoulder view of a professional adult checking an abstract workflow builder with human approval checkpoints and no readable text.",
+                mediaSource: "Adult workflow operator beside an office approval station while an AI agent routes completed tasks for review, tight documentary consequence shot.",
                 script: "That does not remove judgement. It moves judgement to the design of the workflow."
               },
               {
-                mediaSource: "Professional adult silhouette in premium dark technology scene showing connected systems around practical AI tools, no robot imagery.",
-                script: "The winners will be the ones who build better systems around the tools."
+                mediaSource: "Adult team lead verifying a repeatable office task at a human approval checkpoint before the AI agent workflow continues, over-shoulder verification view.",
+                script: "Choose one repeatable task, set clear checks, review the result, then widen the workflow only when it behaves."
+              },
+              {
+                mediaSource: "Adult office team moving through a completed AI agent workflow with admin tasks cleared and a visible human decision point, wider closing outcome shot.",
+                script: "The winners will not be people who ask better one-off questions. They will build better systems around the tools."
               }
             ],
             thumbnailText: "AI Gets Chores",
