@@ -97,7 +97,14 @@ function isQuietAccessLogRequest(req) {
     .split("?")[0]
     .replace(/\/+$/, "") || "/";
 
-  return path === "/" || path === "/health" || path.toLowerCase().endsWith("/health");
+  const normalisedPath = path.toLowerCase();
+  return (
+    normalisedPath === "/" ||
+    normalisedPath === "/health" ||
+    normalisedPath === "/livez" ||
+    normalisedPath === "/readyz" ||
+    normalisedPath.endsWith("/health")
+  );
 }
 
 const trustProxy = parseTrustProxy(process.env.TRUST_PROXY);
