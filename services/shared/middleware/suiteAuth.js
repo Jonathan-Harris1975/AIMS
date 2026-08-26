@@ -41,7 +41,14 @@ function pathWithoutQuery(req) {
 export function isPublicHealthRequest(req) {
   if (!["GET", "HEAD"].includes(String(req.method || "").toUpperCase())) return false;
   const path = pathWithoutQuery(req).replace(/\/+$/, "") || "/";
-  return path === "/" || path === "/health" || path.toLowerCase().endsWith("/health");
+  const normalisedPath = path.toLowerCase();
+  return (
+    normalisedPath === "/" ||
+    normalisedPath === "/health" ||
+    normalisedPath === "/livez" ||
+    normalisedPath === "/readyz" ||
+    normalisedPath.endsWith("/health")
+  );
 }
 
 function expectedSuiteKey() {
