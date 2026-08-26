@@ -44,6 +44,7 @@ export async function createSocialArtwork({
   date,
   lane = "social",
   fallbackUrl = "",
+  allowFallback = true,
 } = {}) {
   const safeSession = cleanPart(sessionId || `${lane}-${Date.now()}`);
   const safeLane = cleanPart(lane || "social").toLowerCase();
@@ -64,6 +65,21 @@ export async function createSocialArtwork({
     info("artwork.social.done", { sessionId: safeSession, lane: safeLane, key, publicUrl });
     return { ok: true, key, publicUrl };
   } catch (err) {
+    if (!allowFallback) {
+      error("artwork.social.required_generation_failed", {
+        sessionId: safeSession,
+        lane: safeLane,
+        error: err?.message || String(err),
+      });
+      return {
+        ok: false,
+        error: err?.message || String(err),
+        publicUrl: "",
+        fallback: false,
+        imageStatus: "generation-failed",
+      };
+    }
+
     const curatedFallback = validFallbackUrl(fallbackUrl);
     if (curatedFallback) {
       warn("artwork.social.curated_fallback", {
