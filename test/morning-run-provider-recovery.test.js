@@ -10,12 +10,24 @@ test("Blotato restores the proven prompt-autofill request for path and UUID temp
   const text = await source("services/blotato/utils/autoPublishService.js");
   const request = await source("services/blotato/utils/visualRequest.js");
   assert.match(text, /rawTemplateId:\s*rawId/);
-  assert.match(text, /templateIdCandidates:\s*uniqueTemplateIds\(id, rawId, requested\)/);
+  assert.match(text, /templateIdCandidates:\s*uniqueTemplateIds\(rawId, uuidFallback, requested\)/);
+  assert.match(text, /templateIdCandidates:\s*uniqueTemplateIds\(resolvedId, uuidFallback, requested, DEFAULT_AI_STORY_TEMPLATE_PATH\)/);
   assert.match(text, /buildVisualCreationRequest/);
   assert.match(request, /inputs:\s*manualInputsConfigured \? visualInputs : \{\}/);
   assert.match(request, /prompt,/);
   assert.doesNotMatch(text, /manualInputsConfigured \|\| pathTemplate/);
   assert.match(text, /BLOTATO_VIDEO_PENDING_ERROR_LIMIT", 120, 180/);
+});
+
+test("Blotato scheduled slots are idempotent after a paid visual has been created", async () => {
+  const text = await source("services/blotato/utils/autoPublishService.js");
+  const routes = await source("services/blotato/routes/index.js");
+  assert.match(text, /findExistingScheduledSlotJob/);
+  assert.match(text, /jobOwnsScheduledSlot/);
+  assert.match(text, /job\.videoId \|\| job\.mediaUrl \|\| job\.result\?\.visualId \|\| job\.result\?\.mediaUrl/);
+  assert.match(text, /blotato\.schedule\.duplicate_prevented/);
+  assert.match(routes, /requestDedupe\("blotato:autoshorts:schedule"\)/);
+  assert.match(routes, /requestDedupe\("blotato:lane:schedule"\)/);
 });
 
 test("newsletter structured output remains provider-compatible while exact story count stays deterministic", async () => {

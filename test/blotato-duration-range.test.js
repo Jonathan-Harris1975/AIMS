@@ -13,8 +13,12 @@ test("Blotato shorts use the production 35-55 second range", async () => {
 
 test("production word-count range supports coherent 35-55 second shorts", async () => {
   const env = await readFile(new URL("../config/production.defaults.env", import.meta.url), "utf8");
+  const news = await readFile(new URL("../services/blotato/utils/newsShortsService.js", import.meta.url), "utf8");
   assert.match(env, /^BLOTATO_NEWS_DURATION_SECONDS=45$/m);
-  assert.match(env, /^BLOTATO_NEWS_MIN_SCRIPT_WORDS=90$/m);
-  assert.match(env, /^BLOTATO_NEWS_TARGET_SCRIPT_WORDS=115$/m);
-  assert.match(env, /^BLOTATO_NEWS_MAX_SCRIPT_WORDS=135$/m);
+  assert.match(env, /^BLOTATO_NEWS_MIN_SCRIPT_WORDS=80$/m);
+  assert.match(env, /^BLOTATO_NEWS_TARGET_SCRIPT_WORDS=92$/m);
+  assert.match(env, /^BLOTATO_NEWS_MAX_SCRIPT_WORDS=102$/m);
+  assert.match(env, /^BLOTATO_NEWS_MIN_SCENE_WORDS=80$/m);
+  assert.match(news, /targetScriptWords = Math\.min\(MAX_SCRIPT_WORDS, Math\.max\(MIN_SCRIPT_WORDS, TARGET_SCRIPT_WORDS\)\)/);
+  assert.doesNotMatch(news, /targetDuration \* 2\.5/);
 });

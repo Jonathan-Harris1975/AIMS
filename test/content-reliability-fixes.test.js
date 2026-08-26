@@ -178,7 +178,7 @@ test("paid Blotato renders survive QA plumbing failures and rendered QA uses str
   const env = await readFile(new URL("../config/production.defaults.env", import.meta.url), "utf8");
   assert.match(publish, /getJobsByType/);
   assert.match(publish, /reusableRenderedVideo/);
-  assert.match(publish, /phase === "rendered-quality-review"/);
+  assert.match(publish, /job\.renderedVideoQa\?\.pass === true/);
   assert.match(publish, /blotato\.render_reuse\.hit/);
   assert.match(qa, /strictJsonResponseFormat\("blotato_rendered_video_qa"/);
   assert.match(qa, /max_tokens: 1400/);
@@ -242,13 +242,14 @@ test("Zernio schedule recovery uses London time and a future blog-social slot", 
   assert.match(env, /^ZERNIO_API_RETRY_ATTEMPTS=5$/m);
 });
 
-test("artwork provider failure degrades to publishable deterministic fallbacks for daily lanes", async () => {
+test("artwork provider fallback remains available generically while Zernio daily evergreen opts out", async () => {
   const png = createDeterministicAiFallbackPng({ width: 640, height: 360, seed: "newsletter-ai-edge" });
   assert.deepEqual([...png.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
   assert.ok(png.length > 20_000);
 
   const blogArtwork = await readFile(new URL("../services/artwork/createBlogArtwork.js", import.meta.url), "utf8");
   const socialArtwork = await readFile(new URL("../services/artwork/createSocialArtwork.js", import.meta.url), "utf8");
+  const zernioScheduler = await readFile(new URL("../services/zernio/utils/socialScheduler.js", import.meta.url), "utf8");
   const weeklyBlog = await readFile(new URL("../services/blog/weekly/buildWeeklyBlogPost.js", import.meta.url), "utf8");
   const socialBlog = await readFile(new URL("../services/blog/social/buildDailySocialBlogPost.js", import.meta.url), "utf8");
   const hero = await readFile(new URL("../services/newsletter/engine/heroImage.js", import.meta.url), "utf8");
@@ -259,7 +260,11 @@ test("artwork provider failure degrades to publishable deterministic fallbacks f
   assert.match(blogArtwork, /NEWSLETTER_ALLOW_DETERMINISTIC_FALLBACK/);
   assert.match(blogArtwork, /ok: publishableFallback,[\s\S]*diagnosticUrl: publicUrl,[\s\S]*publicUrl: publishableFallback \? publicUrl : ""/);
   assert.match(socialArtwork, /ZERNIO_ALLOW_DETERMINISTIC_FALLBACK/);
+  assert.match(socialArtwork, /allowFallback = true/);
+  assert.match(socialArtwork, /if \(!allowFallback\)/);
   assert.match(socialArtwork, /ok: publishableFallback,[\s\S]*diagnosticUrl: publicUrl,[\s\S]*publicUrl: publishableFallback \? publicUrl : ""/);
+  assert.match(zernioScheduler, /allowFallback: false/);
+  assert.match(zernioScheduler, /artwork\.fallback/);
   assert.match(weeklyBlog, /reason: "artwork-unavailable"/);
   assert.match(socialBlog, /reason: "artwork-unavailable"/);
   assert.doesNotMatch(hero, /blog-fallback-hero\.png/);
@@ -290,7 +295,8 @@ test("mini-series creation retries weak plans and duplicate parts, then fails cl
   assert.match(client, /export async function deletePost/);
   assert.match(client, /"x-request-id": requestId/);
   assert.match(scheduler, /zernio-daily-artwork-unavailable/);
-  assert.match(scheduler, /fallbackUrl: lane\.imageUrl/);
+  assert.match(scheduler, /allowFallback: false/);
+  assert.match(scheduler, /!artwork\?\.ok \|\| !artwork\.publicUrl \|\| artwork\.fallback/);
   assert.match(env, /^ZERNIO_MINI_SERIES_THEME_ATTEMPTS=3$/m);
   assert.match(env, /^ZERNIO_MINI_SERIES_DISTINCTNESS_ATTEMPTS=3$/m);
 });

@@ -637,11 +637,13 @@ test("Monday verified quote is kept once and localised duplicate is removed", as
   assert.match(source, /Monday commentary is too thin/);
 });
 
-test("Sunday spotlight avoids fabricated likenesses and retains curated artwork fallback", async () => {
+test("Sunday spotlight avoids fabricated likenesses and daily evergreen artwork fails closed", async () => {
   const source = await readFile(new URL("../services/zernio/utils/socialScheduler.js", import.meta.url), "utf8");
   assert.match(source, /Never render, approximate or imply their face or recognisable likeness/i);
   assert.match(source, /no books, papers, notebooks, theses, whiteboards, chalkboards/i);
   assert.match(source, /createSocialArtwork\(/);
-  assert.match(source, /fallbackUrl: lane\.imageUrl/);
+  assert.match(source, /allowFallback: false/);
+  assert.match(source, /!artwork\?\.ok \|\| !artwork\.publicUrl \|\| artwork\.fallback/);
+  assert.match(source, /post\.imagePrompt = imagePrompt/);
   assert.match(source, /zernio-daily-artwork-unavailable/);
 });

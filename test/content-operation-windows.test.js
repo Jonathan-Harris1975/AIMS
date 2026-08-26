@@ -4,6 +4,10 @@ import fs from "node:fs";
 
 const opsSource = fs.readFileSync(new URL("../services/ops/index.js", import.meta.url), "utf8");
 
+function occurrences(text, needle) {
+  return text.split(needle).length - 1;
+}
+
 test("weekday AM windows contain blog-social handoff and both Blotato schedule slots", () => {
   const eveningPaths = {
     monday: "/blotato/shorts/news-insight/schedule",
@@ -16,10 +20,11 @@ test("weekday AM windows contain blog-social handoff and both Blotato schedule s
     const start = opsSource.indexOf(`"${day}-am": [`);
     const next = day === "friday" ? opsSource.indexOf('"friday-pm": [', start) : opsSource.indexOf(`"${({monday:"tuesday",tuesday:"wednesday",wednesday:"thursday",thursday:"friday"})[day]}-am": [`, start);
     const block = opsSource.slice(start, next);
-    assert.ok(block.includes('/blog/social/daily/build'));
-    assert.ok(block.includes('/zernio/blog-rss/daily'));
-    assert.ok(block.includes('/blotato/autoshorts/schedule'));
-    assert.ok(block.includes(eveningPaths[day]));
+    assert.equal(occurrences(block, '/blog/social/daily/build'), 1, `${day} must build one social-blog item`);
+    assert.equal(occurrences(block, '/zernio/blog-rss/daily'), 1, `${day} must schedule one social-blog item`);
+    assert.equal(occurrences(block, `/zernio/daily/${day}`), 1, `${day} must schedule one daily evergreen item`);
+    assert.equal(occurrences(block, '/blotato/autoshorts/schedule'), 1, `${day} must have one Blotato AM slot`);
+    assert.equal(occurrences(block, eveningPaths[day]), 1, `${day} must have one Blotato PM slot`);
   }
 });
 
