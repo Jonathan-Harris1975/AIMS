@@ -209,8 +209,8 @@ async function productionReadiness() {
       const runtime = getCommsHubRuntimeReadiness();
       return {
         name: "comms_hub",
-        ok: configuration.ready && runtime.ready,
-        detail: runtime.status,
+        ok: configuration.enabled && configuration.ready && runtime.ready,
+        detail: configuration.enabled ? runtime.status : "disabled",
       };
     })(),
   ];
