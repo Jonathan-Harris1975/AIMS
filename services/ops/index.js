@@ -664,8 +664,22 @@ router.post("/run/:window", async (req, res, next) => {
 
     const id = operationJobId(windowName);
     const existing = operationJobs.get(id);
-    if (existing && ["accepted", "running"].includes(existing.status)) {
-      return res.status(202).json({ ok: true, service: "ops", duplicatePrevented: true, job: publicJob(existing) });
+    const forceRerun = [req.query?.force, req.body?.force, req.get?.("x-operation-force")]
+      .some((value) => ["1", "true", "yes", "on"].includes(String(value ?? "").trim().toLowerCase()));
+    // A content window owns one London-calendar-day execution. Replaying a
+    // completed or partially failed window used to rerun every provider stage,
+    // including paid Blotato renders and Zernio artwork. Default to one-shot;
+    // a human can still deliberately override it with force=true.
+    if (existing && !forceRerun) {
+      return res.status(202).json({
+        ok: true,
+        service: "ops",
+        duplicatePrevented: true,
+        reason: ["accepted", "running"].includes(existing.status)
+          ? "same-day-window-already-running"
+          : "same-day-window-already-executed",
+        job: publicJob(existing),
+      });
     }
 
     const job = {
