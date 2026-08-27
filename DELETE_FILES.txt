@@ -1,2 +1,0 @@
-Remove this accidental duplicate file from the repository:
-services/comms-hub/clients/index.js
