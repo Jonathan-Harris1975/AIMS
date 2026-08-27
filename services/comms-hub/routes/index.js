@@ -85,7 +85,7 @@ export function createCommsHubRouter({
   router.get("/health", (_req, res) => {
     const configuration = getCommsHubReadiness();
     const runtime = runtimeReadinessProvider();
-    const ready = configuration.ready && runtime.ready;
+    const ready = configuration.enabled && configuration.ready && runtime.ready;
     const aiEnabled = booleanValue(process.env.COMMS_HUB_AI_ENABLED, false);
     return res.status(ready ? 200 : 503).json({
       ok: ready,
