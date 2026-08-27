@@ -9,6 +9,15 @@ function parse(value) {
   try { return JSON.parse(value || '{}'); } catch { return {}; }
 }
 
+const CHAT_AI_RETRY_DELAYS_MS = Object.freeze([15_000, 45_000, 120_000, 300_000]);
+
+function retryDelayMs(item, attempts) {
+  if (item.action_type === 'chat_ai_retry') {
+    return CHAT_AI_RETRY_DELAYS_MS[Math.min(Math.max(0, attempts - 1), CHAT_AI_RETRY_DELAYS_MS.length - 1)];
+  }
+  return Math.min(3_600_000, 30_000 * 2 ** attempts);
+}
+
 export class CommsHubDelayedActionWorker {
   constructor({ context }) {
     this.context = context;
@@ -95,6 +104,13 @@ export class CommsHubDelayedActionWorker {
     if (item.action_type === 'content_automation') {
       return this.context.contentAutomationService.process({ conversationId: item.conversation_id, payload });
     }
+    if (item.action_type === 'chat_ai_retry') {
+      return this.context.chatService.runOptionalAutomation(item.conversation_id, {
+        triggerMessageId: payload.triggerMessageId || '',
+        scheduleRetry: false,
+        rethrowRecoverable: true,
+      });
+    }
     if (item.action_type === 'retention') {
       return this.context.retentionWorker.runOnce({
         conversationId: item.conversation_id,
@@ -137,7 +153,7 @@ export class CommsHubDelayedActionWorker {
         status: final ? 'quarantined' : 'scheduled',
         failureClass: error.failureClass || (final ? 'recoverable' : 'temporary'),
         error: error.message,
-        nextAttemptAt: new Date(Date.now() + Math.min(3_600_000, 30_000 * 2 ** attempts)).toISOString(),
+        nextAttemptAt: new Date(Date.now() + retryDelayMs(item, attempts)).toISOString(),
         failedAt: new Date().toISOString(),
       });
       if (final) {
@@ -151,6 +167,20 @@ export class CommsHubDelayedActionWorker {
           attempts,
           metadata: { actionType: item.action_type },
         });
+        if (item.action_type === 'chat_ai_retry') {
+          await this.context.notificationService.create({
+            actor: 'admin',
+            conversationId: item.conversation_id,
+            type: 'system',
+            title: 'CogniPal automation needs attention',
+            bodyText: 'Automatic web-chat reply generation exhausted its retry budget. The visitor message is preserved for manual follow-up.',
+            severity: 'warning',
+            emailRequested: false,
+            idempotencySeed: `chat-ai-retry-exhausted:${item.id}`,
+          }).catch((notificationError) => {
+            log.error('commsHub.chat.automationRetryNotificationFailed', { itemId: item.id, error: safeErrorLog(notificationError) });
+          });
+        }
       }
       return { id: item.id, status: final ? 'quarantined' : 'retry', error: error.message };
     }
