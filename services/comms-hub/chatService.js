@@ -35,6 +35,23 @@ function object(value) {
   try { const parsed = JSON.parse(value || '{}'); return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}; } catch { return {}; }
 }
 
+const CHAT_AI_RETRY_INITIAL_DELAY_MS = 5_000;
+const CHAT_AI_RETRY_MAX_ATTEMPTS = 4;
+const EXPECTED_AUTOMATION_SKIP_CODES = new Set([
+  'autonomous_policy_not_found',
+  'autonomous_reply_policy_rejected',
+  'autonomous_replies_disabled',
+  'autonomous_reply_human_assigned',
+]);
+
+function recoverableAutomationError(error) {
+  if (EXPECTED_AUTOMATION_SKIP_CODES.has(error?.code)) return false;
+  return error?.retryable === true
+    || error?.code === 'comms_hub_ai_failed'
+    || error?.failureClass === 'temporary'
+    || error?.failureClass === 'recoverable';
+}
+
 export class CommsHubChatService {
   constructor({ context }) { this.context = context; }
 
@@ -262,7 +279,7 @@ export class CommsHubChatService {
     });
 
     if (!persistence.duplicate && !requestHuman && !conversationConduct.automationBlocked && this.context.config.chatAiWorkflowEnabled && this.context.config.aiEnabled) {
-      queueMicrotask(() => void this.runOptionalAutomation(conversationId));
+      queueMicrotask(() => void this.runOptionalAutomation(conversationId, { triggerMessageId: messageId }));
     }
 
     return { duplicate: persistence.duplicate, conversationId, messageId, takeoverRequested: Boolean(requestHuman && handoff.available), handoffAvailable: handoff.available, nextHandoffAt: handoff.nextAvailableAt, callbackEmailCaptured: Boolean(callbackAlias), emailCaptureOffered: Boolean(requestHuman && !callbackAlias) };
@@ -303,21 +320,63 @@ export class CommsHubChatService {
     };
   }
 
-  async runOptionalAutomation(conversationId) {
+  async scheduleAutomationRetry(conversationId, triggerMessageId, error) {
+    const now = this.context.now ? new Date(this.context.now()) : new Date();
+    const dueAt = new Date(now.getTime() + CHAT_AI_RETRY_INITIAL_DELAY_MS).toISOString();
+    const retryKey = `chat-ai-retry:${conversationId}:${text(triggerMessageId, 200) || 'latest'}`;
+    const action = await this.context.operationsRepository.scheduleDelayedAction({
+      id: stableId('dla', retryKey),
+      conversationId,
+      actionType: 'chat_ai_retry',
+      payload: { triggerMessageId: text(triggerMessageId, 200) || null },
+      dueAt,
+      maxAttempts: CHAT_AI_RETRY_MAX_ATTEMPTS,
+      idempotencyKey: retryKey,
+      actor: 'coginpal-automation',
+      createdAt: now.toISOString(),
+    });
+    log.warn('commsHub.chat.automationRetryScheduled', {
+      conversationId,
+      delayedActionId: action?.id || null,
+      dueAt,
+      error: safeErrorLog(error),
+    });
+    return action;
+  }
+
+  async runOptionalAutomation(conversationId, { triggerMessageId = '', scheduleRetry = true, rethrowRecoverable = false } = {}) {
     try {
       const operations = await this.context.operationsRepository.getConversationOperations(conversationId);
       if (operations?.owner_type === 'person') {
         log.info('commsHub.chat.automationSkipped', { conversationId, reason: 'human_assigned' });
-        return;
+        return { skipped: true, reason: 'human_assigned' };
       }
       const analysis = await this.context.aiWorkflowService.analyseConversation(conversationId, { operation: 'analyse', scheduleFollowUp: false });
-      if (!this.context.config.autonomousRepliesEnabled || !analysis?.draft?.id || analysis.draft.requiresApproval) return;
+      if (!this.context.config.autonomousRepliesEnabled || !analysis?.draft?.id || analysis.draft.requiresApproval) {
+        return { skipped: true, reason: analysis?.draft?.requiresApproval ? 'approval_required' : 'autonomous_reply_unavailable' };
+      }
       await this.context.governanceService.attemptAutonomousReply({ conversationId, draftId: analysis.draft.id }, { actor: 'coginpal-automation', role: 'admin' });
       log.info('commsHub.chat.automationSent', { conversationId, draftId: analysis.draft.id });
+      return { sent: true, draftId: analysis.draft.id };
     } catch (error) {
-      const expected = new Set(['autonomous_policy_not_found', 'autonomous_reply_policy_rejected', 'autonomous_replies_disabled', 'autonomous_reply_human_assigned']);
-      const level = expected.has(error?.code) ? 'info' : 'warn';
-      log[level]('commsHub.chat.automationSkipped', { conversationId, error: safeErrorLog(error) });
+      const expected = EXPECTED_AUTOMATION_SKIP_CODES.has(error?.code);
+      let retryScheduled = false;
+      if (!expected && scheduleRetry && recoverableAutomationError(error)) {
+        try {
+          await this.scheduleAutomationRetry(conversationId, triggerMessageId, error);
+          retryScheduled = true;
+        } catch (retryError) {
+          log.error('commsHub.chat.automationRetryScheduleFailed', {
+            conversationId,
+            error: safeErrorLog(retryError),
+            originalError: safeErrorLog(error),
+          });
+        }
+      }
+      const level = expected ? 'info' : 'warn';
+      log[level]('commsHub.chat.automationSkipped', { conversationId, retryScheduled, error: safeErrorLog(error) });
+      if (rethrowRecoverable && !expected && recoverableAutomationError(error)) throw error;
+      return { skipped: true, retryScheduled, reason: error?.code || 'automation_failed' };
     }
   }
 
