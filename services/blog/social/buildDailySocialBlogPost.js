@@ -343,17 +343,17 @@ function groundSocialArtworkPrompt(basePrompt, sources = []) {
 async function resolveSocialArtwork({ sessionId, imagePrompt, dateId, prefix }) {
   const art = await createBlogArtwork({ sessionId, prompt: imagePrompt, keyPrefix: prefix, date: dateId, mode: "social-blog" });
 
-  if (art?.ok && art.publicUrl) {
+  if (art?.ok && art.publicUrl && !art.fallback) {
     return {
       imageUrl: art.publicUrl,
-      imageStatus: art.fallback ? "fallback" : "generated",
+      imageStatus: "generated",
       imageError: art.error || null,
       imageKey: art.key,
       imageBucketKey: art.bucketKey || null,
     };
   }
 
-  const imageError = art?.error || "Unknown social blog artwork error";
+  const imageError = art?.error || art?.warning || "Unknown social blog artwork error";
 
   warn("blog.social.daily.image.unavailable", {
     dateId,
