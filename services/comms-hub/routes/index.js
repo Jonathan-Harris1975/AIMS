@@ -21,6 +21,7 @@ import { ingestJotformAttachments, processJotformIntake } from "../intakeService
 import { executeSocialAction, requestSocialActionApproval } from "../socialActionsService.js";
 import { decideApproval } from "../approvalService.js";
 import { sendReplyDraft } from "../replyDraftService.js";
+import { getFirstPartyBookCatalogueStatus } from "../smartContextService.js";
 import { processZernioWebhook, reconcileEnabledZernioWebhooks, reconcileZernioWebhook, withZernioAcceptanceDeadline } from "../socialService.js";
 
 function publicError(error) {
@@ -609,6 +610,13 @@ export function createCommsHubRouter({
         enabled: active.config.aiEnabled,
         approvalsEnforced: active.config.approvalsEnforced,
         approvedKnowledgeInstances: active.config.aiSearchApprovedInstances,
+        firstPartyBookCatalogue: getFirstPartyBookCatalogueStatus(),
+        knowledgeGrounding: {
+          provider: "cloudflare-ai-search",
+          approvedInstances: active.config.aiSearchApprovedInstances,
+          lastSearchDiagnostics: active.aiSearch.lastSearchDiagnostics || null,
+          firstPartyCatalogueAuthoritativeForBooks: true,
+        },
         routes: [
           "commsHubTriage", "commsHubModeration", "commsHubSummary",
           "commsHubDraftContact", "commsHubDraftContribute", "commsHubDraftPodcast", "commsHubDraftSocial",
