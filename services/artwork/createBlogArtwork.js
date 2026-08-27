@@ -43,7 +43,7 @@ function boolEnv(name, fallback = false) {
 }
 
 function allowDeterministicFallback(mode) {
-  if (mode === "social-blog") return boolEnv("SOCIAL_BLOG_ALLOW_DETERMINISTIC_FALLBACK", true);
+  if (mode === "social-blog") return boolEnv("SOCIAL_BLOG_ALLOW_DETERMINISTIC_FALLBACK", false);
   if (mode === "newsletter") return boolEnv("NEWSLETTER_ALLOW_DETERMINISTIC_FALLBACK", true);
   return boolEnv("BLOG_ALLOW_DETERMINISTIC_FALLBACK", false);
 }
