@@ -267,11 +267,12 @@ test("artwork provider fallback remains available generically while Zernio daily
   assert.match(zernioScheduler, /artwork\.fallback/);
   assert.match(weeklyBlog, /reason: "artwork-unavailable"/);
   assert.match(socialBlog, /reason: "artwork-unavailable"/);
+  assert.match(socialBlog, /!art\.fallback/);
   assert.doesNotMatch(hero, /blog-fallback-hero\.png/);
   assert.match(env, /^BLOG_FALLBACK_IMAGE_URL=$/m);
   assert.match(env, /^BLOG_SOCIAL_FALLBACK_IMAGE_URL=$/m);
   assert.match(env, /^NEWSLETTER_AI_EDGE_FALLBACK_IMAGE_URL=$/m);
-  assert.match(env, /^SOCIAL_BLOG_ALLOW_DETERMINISTIC_FALLBACK=true$/m);
+  assert.match(env, /^SOCIAL_BLOG_ALLOW_DETERMINISTIC_FALLBACK=false$/m);
   assert.match(env, /^NEWSLETTER_ALLOW_DETERMINISTIC_FALLBACK=true$/m);
   assert.match(env, /^ZERNIO_ALLOW_DETERMINISTIC_FALLBACK=true$/m);
 });
