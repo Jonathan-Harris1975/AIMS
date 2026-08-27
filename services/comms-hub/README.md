@@ -21,6 +21,16 @@ Comms Hub persists channel messages and metadata in D1, exposes a filterable ope
 
 The AI layer supports analysis, priority, response proposals, approvals, channel capability checks, idempotency, conduct/profanity controls and policy-gated autonomous responses. Unsafe, ambiguous, attachment-bearing or approval-required cases stay review-gated.
 
+## Knowledge grounding and book discovery
+
+Comms Hub uses two complementary knowledge sources. Cloudflare AI Search (`COMMS_HUB_AI_SEARCH_INSTANCES`) grounds general website/content answers from approved indexed material. The bundled Jonathan Harris ebook catalogue is a separate first-party authoritative source for book availability and book recommendations.
+
+Book discovery is deterministic at the final drafting step when verified catalogue candidates exist. AIMS selects from the local catalogue, records those books as first-party evidence, uses the exact canonical `jonathan-harris.online/ebooks/` URLs and does not substitute third-party titles from model memory. Broad requests such as “what books are available on artificial intelligence?” return a curated general-AI starting set; specific industry requests use scored catalogue matching. If a specific request has no verified match, the model is instructed to ask a short clarifying question rather than invent a title.
+
+`GET /comms-hub/ai/status` exposes the approved AI Search instances, the latest AI Search diagnostics and first-party catalogue integrity/counts. AI Search provider outcomes are also recorded into the operational provider-health telemetry. This makes an indexing/token/provider problem visible instead of silently presenting a configured-but-unverified knowledge layer.
+
+Routine Comms Hub model routing is free-first but availability-first: production defaults use Dots3-Note as the common free primary and then the paid economy safety net. Optional free backup/fallback models can still be configured explicitly, but are not enabled by default because shared free pools can be rate-limited or incompatible with the mandatory ZDR/data-collection policy.
+
 ## Business-hours policy
 
 The first substantive AIMS email response and the processed Jotform reply are scheduled **2-3 calendar days after the first inbound message**. A target falling on Saturday or Sunday rolls forward to Monday. Delivery is restricted to **Monday-Friday, 09:00-17:00 Europe/London**, and the delayed-action worker re-checks that window at execution time.
@@ -101,4 +111,4 @@ Before enabling a channel, verify D1, provider credentials, webhook signatures, 
 
 When governed backups are enabled, AIMS resolves `COMMS_HUB_RESTORE_DATABASE` (default: `COMMS_HUB_RESTORE_DATABASE`) against Cloudflare D1 and creates it when absent. `COMMS_HUB_RESTORE_DATABASE_ID` is retained only as an optional explicit UUID override. The production `D1_UUID` is never accepted as a restore target.
 
-AI Search retrieval is fail-soft at runtime: missing/unindexed search evidence does not take the AI workflow offline. Evidence-required replies without retrieved evidence remain human-review-only.
+AI Search retrieval is fail-soft at runtime: missing/unindexed search evidence does not take the AI workflow offline. Evidence-required replies without retrieved evidence remain human-review-only. Book discovery does not depend on AI Search retrieval because verified catalogue records are injected as first-party evidence.

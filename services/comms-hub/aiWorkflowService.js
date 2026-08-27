@@ -135,6 +135,65 @@ function evidencePrompt(evidence) {
   }));
 }
 
+function firstPartyBookEvidence(smartContext = {}) {
+  return (smartContext.verifiedBookCandidates || []).flatMap((book) => {
+    const sourceReference = String(book?.bookUrl || "").trim();
+    const title = String(book?.title || "").trim();
+    if (!title || !/^https:\/\/jonathan-harris\.online\/ebooks\//i.test(sourceReference)) return [];
+    const excerpt = [book.summary, book.audience].filter(Boolean).join("\n").trim().slice(0, 12_000);
+    return [{
+      indexId: "first-party-book-catalogue",
+      sourceReference,
+      title,
+      excerpt,
+      score: Number(book.score || 1),
+      contentSha256: sha256Hex(`${title}\n${sourceReference}\n${excerpt}`),
+      metadata: { sourceType: "first_party_catalogue", authoritative: true },
+    }];
+  });
+}
+
+function conciseBookSummary(value, maximum = 260) {
+  const text = String(value || "").replace(/\s+/g, " ").trim();
+  if (text.length <= maximum) return text;
+  const clipped = text.slice(0, maximum - 1).replace(/\s+\S*$/, "").trim();
+  return `${clipped}.`;
+}
+
+function verifiedBookDiscoveryDraft(smartContext = {}, policy = {}) {
+  if (smartContext.engagementMode !== "book_discovery") return null;
+  const candidates = (smartContext.verifiedBookCandidates || []).slice(0, 2);
+  if (!candidates.length) return null;
+  const includeLinks = smartContext.memory?.linkPreference !== "no_links";
+  const interests = smartContext.memory?.interests || [];
+  const broad = Boolean(smartContext.bookCatalogue?.broadDiscovery);
+  const intro = broad
+    ? "For a solid grounding in AI, these are the strongest starting points from Jonathan Harris's verified catalogue:"
+    : interests.length
+      ? `For ${interests.slice(0, 2).join(" and ")}, these are the strongest matches from Jonathan Harris's verified catalogue:`
+      : "These are the strongest matches from Jonathan Harris's verified catalogue:";
+  const items = candidates.map((book, index) => {
+    const summary = conciseBookSummary(book.summary || book.audience, 260);
+    const link = includeLinks ? `\n${book.bookUrl}` : "";
+    return `${index + 1}. ${book.title}${summary ? ` — ${summary}` : ""}${link}`;
+  });
+  const suffix = candidates.length > 1
+    ? "\n\nIf you tell me whether you want a general introduction or a particular industry, I can narrow that to the best single choice."
+    : "";
+  let bodyText = `${intro}\n\n${items.join("\n\n")}${suffix}`.trim();
+  const maximumCharacters = Math.max(300, Number(policy.maximumCharacters || 4000));
+  if (bodyText.length > maximumCharacters) {
+    // Preserve exact first-party title/URL rather than chopping a verified link in half.
+    const first = candidates[0];
+    const link = includeLinks ? `\n${first.bookUrl}` : "";
+    bodyText = `${intro}\n\n${first.title}${link}`.slice(0, maximumCharacters).trim();
+  }
+  return Object.freeze({
+    bodyText,
+    evidenceSourceReferences: Object.freeze(candidates.map((book) => book.bookUrl)),
+  });
+}
+
 export class CommsHubAiWorkflowService {
   constructor({ context, aiRequest = null }) {
     this.context = context;
@@ -374,12 +433,22 @@ export class CommsHubAiWorkflowService {
       const searchQuery = this.context.config.badLanguageBlockEnabled
         ? redactBadLanguageForAi(searchQueryBase, 8000)
         : searchQueryBase;
-      const rawEvidence = await this.context.aiSearch.searchApproved(searchQuery, {
+      const firstPartyEvidence = firstPartyBookEvidence(smartContext);
+      const aiSearchEvidence = await this.context.aiSearch.searchApproved(searchQuery, {
         maximumEvidence: this.context.config.aiMaximumEvidence,
       });
+      const seenEvidenceSources = new Set();
+      const rawEvidence = [...firstPartyEvidence, ...aiSearchEvidence].filter((item) => {
+        const key = String(item?.sourceReference || "").trim();
+        if (!key || seenEvidenceSources.has(key)) return false;
+        seenEvidenceSources.add(key);
+        return true;
+      }).slice(0, Math.max(this.context.config.aiMaximumEvidence || 8, firstPartyEvidence.length));
       run.metadata.knowledgeSearch = {
         ...(this.context.aiSearch.lastSearchDiagnostics || {}),
         evidenceAvailable: rawEvidence.length > 0,
+        firstPartyCatalogueEvidenceCount: firstPartyEvidence.length,
+        aiSearchEvidenceCount: aiSearchEvidence.length,
       };
       const rejectedEvidence = [];
       const evidence = rawEvidence.flatMap((item) => {
@@ -459,23 +528,34 @@ export class CommsHubAiWorkflowService {
       const draftRoute = operation === "follow_up"
         ? "commsHubFollowUp"
         : complexity.complex ? "commsHubDraftComplex" : policy.modelRoute;
-      const draftCall = await requestJson(aiRequest, draftRoute, [
-        policy.purpose,
-        operation === "follow_up" ? "This is a scheduled follow-up. Refer only to the unresolved dependency and do not repeat the full earlier reply." : "",
-        britishEnglishPromptGuidance(),
-        jonathanVoicePrompt({ format: "one-to-one Comms Hub reply", includeArgumentArc: false }),
-        smartGuidance,
-        liveContentGuidance,
-        finalStrategyGuidance,
-        responseGuidance,
-        jotformGuidance,
-        verifiedFormGuidance,
-        conductGuidance,
-        `Maximum length: ${effectivePolicy.maximumCharacters} characters.`,
-        "Use only facts in the conversation and evidence. Do not promise unpublished content, guest slots, dates, outcomes or actions not present in the evidence.",
-        "Return JSON with bodyText and evidenceSourceReferences. evidenceSourceReferences must contain the exact sourceReference values used.",
-        "Do not include internal notes, confidence scores or JSON outside the object.",
-      ].filter(Boolean).join("\n"), { ...common, strategy: finalStrategy, responseIntelligence, policy: effectivePolicy, summary, evidence: evidencePrompt(evidence) }, { maxTokens: 2200, temperature: 0.25 });
+      const catalogueDraft = verifiedBookDiscoveryDraft(smartContext, effectivePolicy);
+      const draftCall = catalogueDraft
+        ? {
+            parsed: catalogueDraft,
+            result: {
+              content: JSON.stringify(catalogueDraft),
+              providerId: "aims-first-party-catalogue",
+              model: "verified-book-catalogue-v1",
+              routeKey: draftRoute,
+            },
+          }
+        : await requestJson(aiRequest, draftRoute, [
+            policy.purpose,
+            operation === "follow_up" ? "This is a scheduled follow-up. Refer only to the unresolved dependency and do not repeat the full earlier reply." : "",
+            britishEnglishPromptGuidance(),
+            jonathanVoicePrompt({ format: "one-to-one Comms Hub reply", includeArgumentArc: false }),
+            smartGuidance,
+            liveContentGuidance,
+            finalStrategyGuidance,
+            responseGuidance,
+            jotformGuidance,
+            verifiedFormGuidance,
+            conductGuidance,
+            `Maximum length: ${effectivePolicy.maximumCharacters} characters.`,
+            "Use only facts in the conversation and evidence. Do not promise unpublished content, guest slots, dates, outcomes or actions not present in the evidence.",
+            "Return JSON with bodyText and evidenceSourceReferences. evidenceSourceReferences must contain the exact sourceReference values used.",
+            "Do not include internal notes, confidence scores or JSON outside the object.",
+          ].filter(Boolean).join("\n"), { ...common, strategy: finalStrategy, responseIntelligence, policy: effectivePolicy, summary, evidence: evidencePrompt(evidence) }, { maxTokens: 2200, temperature: 0.25 });
 
       const citedReferences = Array.isArray(draftCall.parsed.evidenceSourceReferences)
         ? [...new Set(draftCall.parsed.evidenceSourceReferences.map(String))]
@@ -506,6 +586,7 @@ export class CommsHubAiWorkflowService {
       const allowedOutboundUrls = [
         ...(summary.sourceLinks || []),
         ...usedEvidence.map((item) => item.sourceReference).filter((value) => /^https:\/\//i.test(String(value || ""))),
+        ...((smartContext.verifiedBookCandidates || []).map((book) => book.bookUrl).filter((value) => /^https:\/\/jonathan-harris\.online\/ebooks\//i.test(String(value || "")))),
         ...((liveContent.sourceReferences || []).filter((value) => /^https:\/\//i.test(String(value || "")))),
         ...(responseIntelligence.formDecision?.selected ? [responseIntelligence.formDecision.formUrl] : []),
       ];
