@@ -1,6 +1,16 @@
 import { CommsHubError } from "../errors.js";
 import { sha256Hex } from "../domain/ids.js";
 
+
+async function recordKnowledgeOutcome(outcome) {
+  try {
+    const { recordProviderOutcome } = await import("../../shared/utils/operationalExcellence.js");
+    recordProviderOutcome(outcome);
+  } catch {
+    // Provider telemetry must never make knowledge retrieval unavailable.
+  }
+}
+
 async function sharedFetch(url, options) {
   const { fetchWithTimeout } = await import("../../shared/http-client.js");
   return fetchWithTimeout(url, options);
@@ -70,6 +80,8 @@ export class AiSearchClient {
   }
 
   async searchInstance(instanceId, query, { maxResults = 6 } = {}) {
+    const startedAt = Date.now();
+    const routeKey = `comms-hub:knowledge:${instanceId}`;
     if (!this.config.aiSearchApprovedInstances.includes(instanceId)) {
       throw new CommsHubError(403, "ai_search_instance_unapproved", `AI Search instance '${instanceId}' is not approved for Comms Hub grounding.`, {
         failureClass: "permanent",
@@ -93,6 +105,7 @@ export class AiSearchClient {
         }),
       });
     } catch (cause) {
+      await recordKnowledgeOutcome({ routeKey, provider: "cloudflare-ai-search", ok: false, durationMs: Date.now() - startedAt, status: "unreachable" });
       throw new CommsHubError(502, "ai_search_unreachable", "Cloudflare AI Search could not be reached.", {
         cause,
         retryable: true,
@@ -102,16 +115,19 @@ export class AiSearchClient {
     }
     const payload = await response.json().catch(() => null);
     if (!response.ok || payload?.success === false || !payload) {
+      await recordKnowledgeOutcome({ routeKey, provider: "cloudflare-ai-search", ok: false, durationMs: Date.now() - startedAt, status: String(response.status || "failed") });
       throw new CommsHubError(response.status === 429 ? 429 : 502, "ai_search_failed", `AI Search failed with HTTP ${response.status}.`, {
         retryable: response.status === 429 || response.status >= 500,
         failureClass: response.status === 429 || response.status >= 500 ? "temporary" : "permanent",
         publicMessage: "Knowledge search failed.",
       });
     }
-    return candidateChunks(payload)
+    const results = candidateChunks(payload)
       .map((chunk, index) => normaliseChunk(chunk, instanceId, index))
       .filter(Boolean)
       .slice(0, Math.max(1, Math.min(20, Number(maxResults) || 6)));
+    await recordKnowledgeOutcome({ routeKey, provider: "cloudflare-ai-search", ok: true, durationMs: Date.now() - startedAt, status: results.length ? "success" : "empty" });
+    return results;
   }
 
   async searchApproved(query, { maxResultsPerInstance = 4, maximumEvidence = 8 } = {}) {
