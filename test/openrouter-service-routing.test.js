@@ -8,6 +8,10 @@ const OPENROUTER_ENV_NAMES = [
   "OPENROUTER_CLAUDE_SONNET_5",
   "OPENROUTER_CLAUDE_OPUS_4_7",
   "OPENROUTER_GPT_5_6_SOL",
+  "OPENROUTER_FREE_PRIMARY_MODEL",
+  "AI_MODEL_FAST",
+  "AI_MODEL_JSON",
+  "AI_MODEL_SUMMARY",
   "AI_MODEL_STANDARD",
   "AI_MODEL_HIGH_QUALITY",
   "OPENROUTER_GOOGLE_2_5_flashlite",
@@ -46,6 +50,10 @@ function applySpreadsheetOpenRouterEnv() {
   process.env.OPENROUTER_CLAUDE_SONNET_5 = "anthropic/claude-sonnet-4.6";
   process.env.OPENROUTER_CLAUDE_OPUS_4_7 = "anthropic/claude-opus-4.7";
   process.env.OPENROUTER_GPT_5_6_SOL = "openai/gpt-5.6-sol";
+  process.env.OPENROUTER_FREE_PRIMARY_MODEL = "dots-studio/dots-3-note-preview:free";
+  process.env.AI_MODEL_FAST = process.env.OPENROUTER_FREE_PRIMARY_MODEL;
+  process.env.AI_MODEL_JSON = process.env.OPENROUTER_FREE_PRIMARY_MODEL;
+  process.env.AI_MODEL_SUMMARY = process.env.OPENROUTER_FREE_PRIMARY_MODEL;
   process.env.OPENROUTER_GOOGLE_2_5_flashlite = "google/gemini-2.5-flash-lite";
   process.env.OPENROUTER_API_BASE = "https://openrouter.ai/api/v1";
   process.env.OPENROUTER_API_KEY = "sk-or-global-test-value";
@@ -80,7 +88,7 @@ test("OpenRouter text routes used by blog, Zernio, RSS and audits resolve spread
         "OPENROUTER_ANTHROPIC_4_6",
         "OPENROUTER_GPT_5_6_SOL",
         "OPENROUTER_GOOGLE_2_5_flashlite",
-              "OPENROUTER_META",
+        "OPENROUTER_META",
       ],
     };
 
@@ -161,7 +169,7 @@ test("Comms Hub OpenRouter requests enforce ZDR and deny data collection", async
     return {
       ok: true,
       json: async () => ({
-        model: "openai/gpt-oss-20b:free",
+        model: "dots-studio/dots-3-note-preview:free",
         choices: [{ message: { content: JSON.stringify({ ok: true }) } }],
         usage: {},
       }),
@@ -183,6 +191,24 @@ test("Comms Hub OpenRouter requests enforce ZDR and deny data collection", async
   } finally {
     restoreEnv(oldEnv);
     globalThis.fetch = oldFetch;
+  }
+});
+
+test("Dots3-Note is the common free model for fast, JSON and summary service lanes", async () => {
+  const oldEnv = snapshotEnv(OPENROUTER_ENV_NAMES);
+  applySpreadsheetOpenRouterEnv();
+
+  try {
+    const { getProviderDiagnosticsForRoute } = await import(`../services/shared/utils/ai-service.js?commonFreeModel=${Date.now()}`);
+    for (const routeName of ["metadata", "podcastHelper", "seoKeywords", "rssShortTitle", "newsletterSubject"]) {
+      const configured = getProviderDiagnosticsForRoute(routeName).configuredProviders.filter((p) => p.configured);
+      assert.ok(
+        configured.some((p) => p.model === "dots-studio/dots-3-note-preview:free"),
+        `${routeName} should include the common Dots3-Note free model`
+      );
+    }
+  } finally {
+    restoreEnv(oldEnv);
   }
 });
 
