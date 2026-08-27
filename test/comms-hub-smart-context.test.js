@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { buildSmartConversationContext, smartPromptGuidance } from "../services/comms-hub/smartContextService.js";
+import { buildSmartConversationContext, getFirstPartyBookCatalogueStatus, smartPromptGuidance } from "../services/comms-hub/smartContextService.js";
 import { CommsHubAiWorkflowService } from "../services/comms-hub/aiWorkflowService.js";
 
 function message(id, direction, body, metadata = {}) {
@@ -62,7 +62,7 @@ test("social comment context stays public, concise and does not pretend to know 
   assert.match(smartPromptGuidance(context), /Do not pretend to know the source post text/i);
 });
 
-test("AI workflow injects deterministic smart context into dynamic draft instructions and untrusted payload", async () => {
+test("AI workflow treats the first-party book catalogue as authoritative evidence and drafts deterministically", async () => {
   const captured = [];
   const conversation = {
     id: "cnv_dynamic_1", channel: "chat", provider: "coginpal", workflow: "website_chat", status: "open",
@@ -73,7 +73,6 @@ test("AI workflow injects deterministic smart context into dynamic draft instruc
     commsHubTriage: { intent: "general_enquiry", confidence: .9, urgency: .1, commercialValue: .1, reputationalRisk: .1, customerImpact: .1, rationale: "book enquiry" },
     commsHubModeration: { sentiment: "neutral", abuseLabel: "none", confidence: .9, severity: 0, rationale: "safe", recommendedAction: "reply" },
     commsHubSummary: { summary: "Visitor wants a beginner logistics AI book.", unresolvedActions: [], sourceMessageIds: ["m1"], nextAction: "Recommend a grounded book", followUpNeeded: false, followUpReason: "", followUpHours: 0 },
-    commsHubDraftContact: { bodyText: "A strong starting point is Artificial Intelligence in Logistics: Optimizing Efficiency and Sustainability: https://jonathan-harris.online/ebooks/artificial-intelligence-in-logistics-optimizing-efficiency-and-sustainability/", evidenceSourceReferences: ["https://jonathan-harris.online/ebooks/artificial-intelligence-in-logistics-optimizing-efficiency-and-sustainability/"] },
   };
   let persisted = null;
   const service = new CommsHubAiWorkflowService({
@@ -81,7 +80,7 @@ test("AI workflow injects deterministic smart context into dynamic draft instruc
       config: { aiEnabled: true, approvalsEnforced: true, aiMaximumEvidence: 8, aiAutoApprovalRiskThreshold: .2, aiApprovalPriorityScore: 60, smartContextEnabled: true, smartMaximumBookCandidates: 3 },
       repository: { async getConversation() { return conversation; } },
       aiRepository: { async beginAiRun() {}, async persistAnalysisBundle(bundle) { persisted = bundle; }, async failAiRun() {} },
-      aiSearch: { async searchApproved() { return [{ indexId: "site", sourceReference: "https://jonathan-harris.online/ebooks/artificial-intelligence-in-logistics-optimizing-efficiency-and-sustainability/", title: "AI in Logistics", excerpt: "A beginner-friendly practical guide to AI in logistics.", score: .99, contentSha256: "abc", metadata: {} }]; } },
+      aiSearch: { lastSearchDiagnostics: { ok: true }, async searchApproved() { return []; } },
     },
     aiRequest: async (routeName, options) => {
       captured.push({ routeName, options });
@@ -89,11 +88,79 @@ test("AI workflow injects deterministic smart context into dynamic draft instruc
     },
   });
   await service.analyseConversation(conversation.id, { scheduleFollowUp: false });
-  const draftRequest = captured.find((entry) => entry.routeName === "commsHubDraftContact");
-  assert.ok(draftRequest);
-  assert.match(draftRequest.options.messages[0].content, /SMART CONTEXT RULES:/);
-  assert.match(draftRequest.options.messages[0].content, /book discovery/i);
-  assert.match(draftRequest.options.messages[1].content, /verifiedBookCandidates/);
-  assert.match(draftRequest.options.messages[1].content, /Artificial Intelligence in Logistics/i);
+  assert.equal(captured.some((entry) => entry.routeName.startsWith("commsHubDraft")), false);
   assert.equal(persisted.run.metadata.smartContext.engagementMode, "book_discovery");
+  assert.ok(persisted.run.metadata.knowledgeSearch.firstPartyCatalogueEvidenceCount >= 1);
+  assert.equal(persisted.draft.provider, "aims-first-party-catalogue");
+  assert.equal(persisted.draft.model, "verified-book-catalogue-v1");
+  assert.match(persisted.draft.bodyText, /Artificial Intelligence in Logistics/i);
+  assert.match(persisted.draft.bodyText, /https:\/\/jonathan-harris\.online\/ebooks\//i);
+  assert.equal(persisted.evidence.some((item) => item.metadata?.sourceType === "first_party_catalogue"), true);
+});
+
+test("broad AI book enquiries return verified Jonathan Harris catalogue candidates instead of third-party books", () => {
+  const context = buildSmartConversationContext({
+    id: "cnv_books_broad",
+    channel: "chat",
+    workflow: "website_chat",
+    messages: [message("m1", "inbound", "What books are available on artificial intelligence?")],
+  });
+  assert.equal(context.engagementMode, "book_discovery");
+  assert.equal(context.bookCatalogue.authoritative, true);
+  assert.equal(context.bookCatalogue.broadDiscovery, true);
+  assert.ok(context.verifiedBookCandidates.length >= 2);
+  assert.equal(context.verifiedBookCandidates[0].title, "The Artificial Intelligence Revolution: From Algorithms to Consciousness");
+  assert.ok(context.verifiedBookCandidates.every((book) => book.sourceType === "first_party_catalogue"));
+  assert.ok(context.verifiedBookCandidates.every((book) => /^https:\/\/jonathan-harris\.online\/ebooks\//i.test(book.bookUrl)));
+  assert.match(smartPromptGuidance(context), /Do not recommend third-party books/i);
+});
+
+test("generic recommendation wording does not incorrectly force book discovery", () => {
+  const context = buildSmartConversationContext({
+    id: "cnv_podcast_recommendation",
+    channel: "chat",
+    workflow: "website_chat",
+    messages: [message("m1", "inbound", "Can you recommend a podcast episode about AI agents?")],
+  });
+  assert.equal(context.engagementMode, "website_conversation");
+  assert.equal(context.verifiedBookCandidates.length, 0);
+});
+
+
+test("first-party book catalogue readiness reports every bundled book as a valid canonical website record", () => {
+  const status = getFirstPartyBookCatalogueStatus();
+  assert.equal(status.ready, true);
+  assert.equal(status.authoritative, true);
+  assert.equal(status.bookCount, 40);
+  assert.equal(status.validBookCount, 40);
+  assert.equal(status.invalidBookCount, 0);
+});
+
+test("exact broad AI book question produces only verified first-party catalogue recommendations", async () => {
+  const conversation = {
+    id: "cnv_books_exact", channel: "chat", provider: "coginpal", workflow: "website_chat", status: "open",
+    subject: "Website chat", messages: [message("m1", "inbound", "What books are available on artificial intelligence?")],
+  };
+  const responses = {
+    commsHubTriage: { intent: "general_enquiry", confidence: .95, urgency: .05, commercialValue: .1, reputationalRisk: .01, customerImpact: .1, rationale: "book enquiry" },
+    commsHubModeration: { sentiment: "neutral", abuseLabel: "none", confidence: .99, severity: 0, rationale: "safe", recommendedAction: "reply" },
+    commsHubSummary: { summary: "Visitor asks which AI books are available.", unresolvedActions: [], sourceMessageIds: ["m1"], nextAction: "Recommend verified catalogue books", followUpNeeded: false, followUpReason: "", followUpHours: 0 },
+  };
+  let persisted = null;
+  const service = new CommsHubAiWorkflowService({
+    context: {
+      config: { aiEnabled: true, approvalsEnforced: true, aiMaximumEvidence: 8, aiAutoApprovalRiskThreshold: .2, aiApprovalPriorityScore: 60, smartContextEnabled: true, smartMaximumBookCandidates: 3 },
+      repository: { async getConversation() { return conversation; } },
+      aiRepository: { async beginAiRun() {}, async persistAnalysisBundle(bundle) { persisted = bundle; }, async failAiRun() {} },
+      aiSearch: { lastSearchDiagnostics: { ok: true, evidenceCount: 0 }, async searchApproved() { return []; } },
+    },
+    aiRequest: async (routeName) => ({ content: JSON.stringify(responses[routeName]), providerId: "test", model: "test", routeKey: routeName }),
+  });
+
+  await service.analyseConversation(conversation.id, { scheduleFollowUp: false });
+  assert.match(persisted.draft.bodyText, /The Artificial Intelligence Revolution: From Algorithms to Consciousness/);
+  assert.match(persisted.draft.bodyText, /AI Literacy for the Modern Workplace/);
+  assert.match(persisted.draft.bodyText, /https:\/\/jonathan-harris\.online\/ebooks\//i);
+  assert.doesNotMatch(persisted.draft.bodyText, /Russell|Norvig|Goodfellow|Bengio|Bostrom|Sutton|Barto/i);
+  assert.equal(persisted.draft.provider, "aims-first-party-catalogue");
 });
