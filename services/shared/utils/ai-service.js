@@ -396,6 +396,7 @@ export async function resilientRequest(routeName, {
   reasoning,
   signal,
   returnMetadata = false,
+  validateContent,
 } = {}) {
   const routeKey = resolveRouteKey(routeName);
   const chain = getProviderChainForRoute(routeKey);
@@ -431,6 +432,7 @@ export async function resilientRequest(routeName, {
     for (let attempt = 0; attempt <= effectiveMaxRetries; attempt++) {
       try {
         const result = await callOpenRouter({ routeKey, providerId, model: provider.name, apiKey: provider.apiKey, messages: providerMessages, max_tokens, temperature, top_p, response_format, headers, timeoutMs, reasoning, signal });
+        if (typeof validateContent === "function") await validateContent(result.content, { routeName, routeKey, providerId, model: result.model || provider.name });
         if (shouldLogUsage()) {
           info("ai.request.usage", {
             routeName,
@@ -504,6 +506,7 @@ export async function resilientRequest(routeName, {
               signal,
               relaxedParameters: true,
             });
+            if (typeof validateContent === "function") await validateContent(relaxed.content, { routeName, routeKey, providerId, model: relaxed.model || provider.name });
             if (shouldLogUsage()) {
               info("ai.request.usage", {
                 routeName,
@@ -561,15 +564,16 @@ export async function resilientRequest(routeName, {
         // same slow target for another full timeout cycle.
         const timedOut = err?.code === "OPENROUTER_TIMEOUT";
         const emptyCompletion = err?.status === "empty_completion";
+        const invalidCompletion = err?.status === "invalid_completion" || err?.code === "AI_INVALID_STRUCTURED_OUTPUT";
         const emptyCompletionBudgetExhausted = emptyCompletion && attempt >= EMPTY_COMPLETION_RETRIES_PER_PROVIDER;
-        const retryable = !timedOut && !emptyCompletionBudgetExhausted && !err?.nonRetryable && attempt < effectiveMaxRetries;
+        const retryable = !timedOut && !invalidCompletion && !emptyCompletionBudgetExhausted && !err?.nonRetryable && attempt < effectiveMaxRetries;
         const exponentialWait = effectiveRetryBaseMs * Math.pow(2, attempt);
         const jitter = Math.floor(exponentialWait * (0.15 * Math.random()));
         const localWait = exponentialWait + jitter;
         // OpenRouter explicitly asks raw-fetch clients to honour Retry-After on
         // 429/503. Cap the sleep so a malformed provider header cannot stall a job forever.
         const wait = Math.min(120_000, Math.max(localWait, Number(err?.retryAfterMs || 0)));
-        const failover = timedOut || emptyCompletionBudgetExhausted;
+        const failover = timedOut || invalidCompletion || emptyCompletionBudgetExhausted;
         logError(failover ? "ai.request.provider_failover" : "ai.request.retry", {
           routeName,
           routeKey,
@@ -578,7 +582,7 @@ export async function resilientRequest(routeName, {
           wait: retryable ? wait : 0,
           retryable,
           failover,
-          failoverReason: timedOut ? "timeout" : emptyCompletionBudgetExhausted ? "empty_completion_budget_exhausted" : undefined,
+          failoverReason: timedOut ? "timeout" : invalidCompletion ? "invalid_completion" : emptyCompletionBudgetExhausted ? "empty_completion_budget_exhausted" : undefined,
           status: err?.status,
           message: safeSnippet(err?.message || String(err), 500),
         });
