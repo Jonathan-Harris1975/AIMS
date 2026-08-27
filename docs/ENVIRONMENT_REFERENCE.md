@@ -113,14 +113,14 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `BLOTATO_HUMAN_VISUAL_MIN_SCENES` | Yes | services/blotato/utils/newsShortsService.js:38 |
 | `BLOTATO_IMAGE_PROMPT_PROFILE` | No | services/blotato/utils/newsShortsService.js:31 |
 | `BLOTATO_IMAGE_TO_VIDEO_MODEL` | Yes | services/blotato/utils/autoPublishService.js:418 |
-| `BLOTATO_INLINE_PUBLISH_JOBS` | No | services/blotato/utils/autoPublishService.js:1712 |
+| `BLOTATO_INLINE_PUBLISH_JOBS` | No | services/blotato/utils/autoPublishService.js:1745 |
 | `BLOTATO_INSTAGRAM_SHARE_TO_FEED` | Yes | services/blotato/utils/autoPublishService.js:838 |
-| `BLOTATO_KEEPALIVE_ENABLED` | Yes | services/blotato/utils/autoPublishService.js:1179 |
+| `BLOTATO_KEEPALIVE_ENABLED` | Yes | services/blotato/utils/autoPublishService.js:1200 |
 | `BLOTATO_LOW_COST_IMAGE_MODEL_LABEL` | Yes | services/blotato/utils/autoPublishService.js:417<br>services/blotato/utils/newsShortsService.js:29 |
 | `BLOTATO_LOW_COST_VIDEO_MODEL_LABEL` | Yes | services/blotato/utils/autoPublishService.js:418<br>services/blotato/utils/newsShortsService.js:30 |
-| `BLOTATO_NEWS_AUDIENCE` | No | services/blotato/utils/autoPublishService.js:1209 |
-| `BLOTATO_NEWS_CTA` | Yes | services/blotato/utils/autoPublishService.js:1214 |
-| `BLOTATO_NEWS_DURATION_SECONDS` | Yes | services/blotato/utils/autoPublishService.js:1207 |
+| `BLOTATO_NEWS_AUDIENCE` | No | services/blotato/utils/autoPublishService.js:1230 |
+| `BLOTATO_NEWS_CTA` | Yes | services/blotato/utils/autoPublishService.js:1235 |
+| `BLOTATO_NEWS_DURATION_SECONDS` | Yes | services/blotato/utils/autoPublishService.js:1228 |
 | `BLOTATO_NEWS_JSON_RESPONSE_FORMAT` | Yes | services/blotato/utils/newsShortsService.js:1219 |
 | `BLOTATO_NEWS_MAX_SCRIPT_WORDS` | Yes | services/blotato/utils/newsShortsService.js:12 |
 | `BLOTATO_NEWS_MIN_SCENE_WORDS` | Yes | services/blotato/utils/newsShortsService.js:13 |
@@ -131,7 +131,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `BLOTATO_NEWS_TARGET_SCRIPT_WORDS` | Yes | services/blotato/utils/newsShortsService.js:11 |
 | `BLOTATO_NEWS_TEMPLATE_ID` | Yes | services/blotato/utils/autoPublishService.js:1044<br>services/blotato/utils/autoPublishService.js:1045 |
 | `BLOTATO_NEWS_TEMPLATE_SEARCH` | Yes | services/blotato/utils/autoPublishService.js:294<br>services/blotato/utils/autoPublishService.js:1049 |
-| `BLOTATO_NEWS_THEME` | No | services/blotato/utils/autoPublishService.js:1206 |
+| `BLOTATO_NEWS_THEME` | No | services/blotato/utils/autoPublishService.js:1227 |
 | `BLOTATO_PREFLIGHT_REQUIRE_LISTED_ACCOUNTS` | Yes | services/blotato/utils/autoPublishService.js:686 |
 | `BLOTATO_PREFLIGHT_REQUIRE_LISTED_SUBACCOUNTS` | Yes | services/blotato/utils/autoPublishService.js:734<br>services/blotato/utils/autoPublishService.js:762 |
 | `BLOTATO_PUBLISH_SEQUENTIAL` | Yes | services/blotato/utils/autoPublishService.js:1009 |
@@ -144,7 +144,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `BLOTATO_RENDERED_QA_JSON_ATTEMPTS` | Yes | services/blotato/utils/renderedVideoQa.js:314 |
 | `BLOTATO_RENDERED_QA_MAX_BYTES` | Yes | services/blotato/utils/renderedVideoQa.js:13 |
 | `BLOTATO_RENDERED_QA_THRESHOLD` | Yes | services/blotato/utils/renderedVideoQa.js:11 |
-| `BLOTATO_REQUIRE_ALL_CHANNELS` | Yes | services/blotato/utils/autoPublishService.js:1512 |
+| `BLOTATO_REQUIRE_ALL_CHANNELS` | Yes | services/blotato/utils/autoPublishService.js:1544 |
 | `BLOTATO_REQUIRE_SCHEDULE_CONFIRMATION` | Yes | services/blotato/utils/autoPublishService.js:948 |
 | `BLOTATO_RSS_BUCKET_ALIAS` | Yes | services/blotato/utils/rssArticlePicker.js:94<br>services/blotato/utils/rssArticleSource.js:146 |
 | `BLOTATO_RSS_FEED_URL` | No | services/blotato/utils/rssArticlePicker.js:78<br>services/blotato/utils/rssArticleSource.js:133 |
@@ -437,7 +437,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `ZERNIO_FRIDAY_BUILD_CONTEXT_TTL_DAYS` | No | services/zernio/utils/socialScheduler.js:87 |
 | `ZERNIO_FRIDAY_IMAGE_URL` | No | services/zernio/utils/config.js:154 |
 | `ZERNIO_FRIDAY_TIME` | Yes | services/zernio/utils/config.js:153 |
-| `ZERNIO_META_API_KEY` | Yes | audits/utils/onBrandEvidence.js:223<br>services/zernio/utils/socialScheduler.js:1372<br>services/zernio/utils/socialScheduler.js:1715<br>services/zernio/utils/socialScheduler.js:1896<br>services/zernio/utils/socialScheduler.js:1927<br>services/zernio/utils/socialScheduler.js:2633<br>+3 more |
+| `ZERNIO_META_API_KEY` | Yes | audits/utils/onBrandEvidence.js:223<br>services/zernio/utils/socialScheduler.js:1379<br>services/zernio/utils/socialScheduler.js:1724<br>services/zernio/utils/socialScheduler.js:1907<br>services/zernio/utils/socialScheduler.js:1938<br>services/zernio/utils/socialScheduler.js:2644<br>+3 more |
 | `ZERNIO_MINI_SERIES_FRIDAY_TIME` | Yes | services/zernio/utils/config.js:205 |
 | `ZERNIO_MINI_SERIES_IMAGE_URL` | No | services/zernio/utils/config.js:200 |
 | `ZERNIO_MINI_SERIES_LOOKBACK_DAYS` | No | services/zernio/utils/config.js:198 |
@@ -447,7 +447,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `ZERNIO_MINI_SERIES_MIN_SCORE` | No | services/zernio/utils/config.js:197 |
 | `ZERNIO_MINI_SERIES_POST_MAX_TOKENS` | No | services/zernio/utils/socialScheduler.js:30 |
 | `ZERNIO_MINI_SERIES_RESEARCH_MAX_TOKENS` | No | services/zernio/utils/socialScheduler.js:28 |
-| `ZERNIO_MINI_SERIES_RETRY_BASE_MS` | Yes | services/zernio/utils/socialScheduler.js:2347 |
+| `ZERNIO_MINI_SERIES_RETRY_BASE_MS` | Yes | services/zernio/utils/socialScheduler.js:2358 |
 | `ZERNIO_MINI_SERIES_SATURDAY_TIME` | Yes | services/zernio/utils/config.js:206 |
 | `ZERNIO_MINI_SERIES_SUNDAY_TIME` | Yes | services/zernio/utils/config.js:207 |
 | `ZERNIO_MINI_SERIES_THEME_MAX_TOKENS` | No | services/zernio/utils/socialScheduler.js:29 |
@@ -474,14 +474,14 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `ZERNIO_REPORT_FROM_DATE` | No | audits/utils/zernioSocialPerformance.js:61 |
 | `ZERNIO_REPORT_TO_DATE` | No | audits/utils/zernioSocialPerformance.js:62 |
 | `ZERNIO_REQUIRED_PLATFORMS` | Yes | services/zernio/utils/config.js:69 |
-| `ZERNIO_REQUIRE_IMAGE` | Yes | services/zernio/utils/socialScheduler.js:857 |
-| `ZERNIO_REQUIRE_SCHEDULE_CONFIRMATION` | Yes | services/zernio/utils/socialScheduler.js:987 |
+| `ZERNIO_REQUIRE_IMAGE` | Yes | services/zernio/utils/socialScheduler.js:864 |
+| `ZERNIO_REQUIRE_SCHEDULE_CONFIRMATION` | Yes | services/zernio/utils/socialScheduler.js:994 |
 | `ZERNIO_RSS_LOOKBACK_DAYS` | Yes | services/zernio/utils/config.js:80 |
 | `ZERNIO_SATURDAY_IMAGE_URL` | No | services/zernio/utils/config.js:163 |
 | `ZERNIO_SATURDAY_TIME` | Yes | services/zernio/utils/config.js:162 |
-| `ZERNIO_SCHEDULE_MIN_LEAD_MS` | Yes | services/zernio/utils/socialScheduler.js:765 |
-| `ZERNIO_SCHEDULE_RECOVERY_ENABLED` | Yes | services/zernio/utils/socialScheduler.js:764 |
-| `ZERNIO_SCHEDULE_TIME_TOLERANCE_MS` | Yes | services/zernio/utils/socialScheduler.js:813 |
+| `ZERNIO_SCHEDULE_MIN_LEAD_MS` | Yes | services/zernio/utils/socialScheduler.js:772 |
+| `ZERNIO_SCHEDULE_RECOVERY_ENABLED` | Yes | services/zernio/utils/socialScheduler.js:771 |
+| `ZERNIO_SCHEDULE_TIME_TOLERANCE_MS` | Yes | services/zernio/utils/socialScheduler.js:820 |
 | `ZERNIO_SLOT_COMPLETED_TTL_MS` | No | services/zernio/utils/state.js:10 |
 | `ZERNIO_SLOT_PENDING_TTL_MS` | No | services/zernio/utils/state.js:9 |
 | `ZERNIO_SUNDAY_IMAGE_URL` | No | services/zernio/utils/config.js:172 |
