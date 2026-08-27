@@ -2301,8 +2301,9 @@ export async function buildAndScheduleWeeklyMiniSeries(options = {}) {
           "No visible text, labels, logos or typography.",
         ].join("\n"),
         fallbackUrl: "",
+        allowFallback: false,
       });
-      if (!artwork?.ok || !artwork.publicUrl) {
+      if (!artwork?.ok || !artwork.publicUrl || artwork.fallback) {
         const errorMessage = artwork?.error || `Mini-series part ${item.index + 1} did not produce a verified AI-relevant image.`;
         warn("zernio.mini_series.artwork_failed", {
           weekStartDate,
@@ -2695,8 +2696,9 @@ export async function buildAndSchedulePodcastThursdayPromo(options = {}) {
         "ABSOLUTELY NO visible words, letters, numbers, captions, logos, labels, signage, UI text, pseudo-text, typographic shapes or invented magazine mastheads anywhere in the image.",
         "Avoid generic glowing brains, circuit-head silhouettes, floating decorative networks, stock-office scenes and decorative AI wallpaper.",
       ].filter(Boolean).join("\n"),
+      allowFallback: false,
     });
-    if (!artwork.ok || !artwork.publicUrl) {
+    if (!artwork.ok || !artwork.publicUrl || artwork.fallback) {
       const err = new Error(`Thursday podcast promotion artwork unavailable: ${artwork.error || "no verified image URL returned"}`);
       err.statusCode = 503;
       err.code = "zernio-podcast-artwork-unavailable";
