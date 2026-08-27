@@ -437,7 +437,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `ZERNIO_FRIDAY_BUILD_CONTEXT_TTL_DAYS` | No | services/zernio/utils/socialScheduler.js:87 |
 | `ZERNIO_FRIDAY_IMAGE_URL` | No | services/zernio/utils/config.js:154 |
 | `ZERNIO_FRIDAY_TIME` | Yes | services/zernio/utils/config.js:153 |
-| `ZERNIO_META_API_KEY` | Yes | audits/utils/onBrandEvidence.js:223<br>services/zernio/utils/socialScheduler.js:1379<br>services/zernio/utils/socialScheduler.js:1724<br>services/zernio/utils/socialScheduler.js:1907<br>services/zernio/utils/socialScheduler.js:1938<br>services/zernio/utils/socialScheduler.js:2644<br>+3 more |
+| `ZERNIO_META_API_KEY` | Yes | audits/utils/onBrandEvidence.js:223<br>services/zernio/utils/socialScheduler.js:1379<br>services/zernio/utils/socialScheduler.js:1724<br>services/zernio/utils/socialScheduler.js:1907<br>services/zernio/utils/socialScheduler.js:1938<br>services/zernio/utils/socialScheduler.js:2645<br>+3 more |
 | `ZERNIO_MINI_SERIES_FRIDAY_TIME` | Yes | services/zernio/utils/config.js:205 |
 | `ZERNIO_MINI_SERIES_IMAGE_URL` | No | services/zernio/utils/config.js:200 |
 | `ZERNIO_MINI_SERIES_LOOKBACK_DAYS` | No | services/zernio/utils/config.js:198 |
@@ -447,7 +447,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `ZERNIO_MINI_SERIES_MIN_SCORE` | No | services/zernio/utils/config.js:197 |
 | `ZERNIO_MINI_SERIES_POST_MAX_TOKENS` | No | services/zernio/utils/socialScheduler.js:30 |
 | `ZERNIO_MINI_SERIES_RESEARCH_MAX_TOKENS` | No | services/zernio/utils/socialScheduler.js:28 |
-| `ZERNIO_MINI_SERIES_RETRY_BASE_MS` | Yes | services/zernio/utils/socialScheduler.js:2358 |
+| `ZERNIO_MINI_SERIES_RETRY_BASE_MS` | Yes | services/zernio/utils/socialScheduler.js:2359 |
 | `ZERNIO_MINI_SERIES_SATURDAY_TIME` | Yes | services/zernio/utils/config.js:206 |
 | `ZERNIO_MINI_SERIES_SUNDAY_TIME` | Yes | services/zernio/utils/config.js:207 |
 | `ZERNIO_MINI_SERIES_THEME_MAX_TOKENS` | No | services/zernio/utils/socialScheduler.js:29 |
