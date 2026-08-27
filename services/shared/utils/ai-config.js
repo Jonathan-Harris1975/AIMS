@@ -88,6 +88,12 @@ const commsFreeFallback = provider(
   SHARED_OPENROUTER_KEY
 );
 
+const commsPaidEconomy = provider(
+  "commsPaidEconomy",
+  ["COMMS_HUB_MODEL_PAID_ECONOMY"],
+  SHARED_OPENROUTER_KEY
+);
+
 const commsPaidPrimary = provider(
   "commsPaidPrimary",
   ["COMMS_HUB_MODEL_PAID_PRIMARY"],
@@ -172,6 +178,7 @@ const modelRegistry = {
   commsFreePrimary,
   commsFreeBackup,
   commsFreeFallback,
+  commsPaidEconomy,
   commsPaidPrimary,
   commsPaidBackup,
   commsPaidFallback,
@@ -201,6 +208,13 @@ function fixedRouteChain(providerIds) {
   // ai-service resolves/skips unavailable providers at request time.
   return providerIds.filter((id, index) => providerIds.indexOf(id) === index);
 }
+
+const commsRoutineProviderIds = [
+  "commsFreePrimary",
+  "commsFreeBackup",
+  "commsFreeFallback",
+  "commsPaidEconomy",
+];
 
 export const aiConfig = {
   models: modelRegistry,
@@ -255,17 +269,18 @@ export const aiConfig = {
     newsletterCouncilChair: routeChain(["audit", "highQuality"], ["claudeSonnet5", "anthropic46"]),
     newsletterHeroPrompt: routeChain(["summary", "fast", "fallback"], ["meta", "google25FlashLite"]),
     // Comms Hub: routine communications are free-first and privacy-gated.
-    // Paid models are isolated to the deterministic complex-chat route only.
-    // The three free targets are explicit so failover remains predictable.
-    commsHubTriage: routeChain(["commsFreePrimary", "commsFreeBackup", "commsFreeFallback"], []),
-    commsHubModeration: routeChain(["commsFreePrimary", "commsFreeBackup", "commsFreeFallback"], []),
-    commsHubSummary: routeChain(["commsFreePrimary", "commsFreeBackup", "commsFreeFallback"], []),
-    commsHubDraft: routeChain(["commsFreePrimary", "commsFreeBackup", "commsFreeFallback"], []),
-    commsHubDraftContact: routeChain(["commsFreePrimary", "commsFreeBackup", "commsFreeFallback"], []),
-    commsHubDraftContribute: routeChain(["commsFreePrimary", "commsFreeBackup", "commsFreeFallback"], []),
-    commsHubDraftPodcast: routeChain(["commsFreePrimary", "commsFreeBackup", "commsFreeFallback"], []),
-    commsHubDraftSocial: routeChain(["commsFreePrimary", "commsFreeBackup", "commsFreeFallback"], []),
-    commsHubFollowUp: routeChain(["commsFreePrimary", "commsFreeBackup", "commsFreeFallback"], []),
+    // Two pinned free models are followed by OpenRouter's dynamic free router.
+    // A low-cost paid economy target is the final routine safety net so a stale
+    // or temporarily incompatible free pool cannot silently disable web chat.
+    commsHubTriage: routeChain(commsRoutineProviderIds, []),
+    commsHubModeration: routeChain(commsRoutineProviderIds, []),
+    commsHubSummary: routeChain(commsRoutineProviderIds, []),
+    commsHubDraft: routeChain(commsRoutineProviderIds, []),
+    commsHubDraftContact: routeChain(commsRoutineProviderIds, []),
+    commsHubDraftContribute: routeChain(commsRoutineProviderIds, []),
+    commsHubDraftPodcast: routeChain(commsRoutineProviderIds, []),
+    commsHubDraftSocial: routeChain(commsRoutineProviderIds, []),
+    commsHubFollowUp: routeChain(commsRoutineProviderIds, []),
     commsHubDraftComplex: routeChain(["commsPaidPrimary", "commsPaidBackup", "commsPaidFallback"], []),
     // Outreach guest-article acquisition is deliberately premium. Discovery stays deterministic;
     // only pitch/reply/article writing uses these paid quality routes. Names retain the commsHub
