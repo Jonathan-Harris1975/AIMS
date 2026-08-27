@@ -270,9 +270,10 @@ export const aiConfig = {
     newsletterCouncilChair: routeChain(["audit", "highQuality"], ["claudeSonnet5", "anthropic46"]),
     newsletterHeroPrompt: routeChain(["summary", "fast", "fallback"], ["meta", "google25FlashLite"]),
     // Comms Hub: routine communications are free-first and privacy-gated.
-    // Two pinned free models are followed by OpenRouter's dynamic free router.
-    // A low-cost paid economy target is the final routine safety net so a stale
-    // or temporarily incompatible free pool cannot silently disable web chat.
+    // Optional free backup/fallback providers are included only when explicitly
+    // configured. Production defaults deliberately go straight from the verified
+    // common free primary to the low-cost paid economy safety net, avoiding known
+    // upstream free-pool rate limits and ZDR-incompatible dynamic endpoints.
     commsHubTriage: routeChain(commsRoutineProviderIds, []),
     commsHubModeration: routeChain(commsRoutineProviderIds, []),
     commsHubSummary: routeChain(commsRoutineProviderIds, []),
