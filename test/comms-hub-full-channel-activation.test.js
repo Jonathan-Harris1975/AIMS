@@ -88,3 +88,22 @@ test("Outreach is enabled in AIMS and owned by the external MAST clock, not dupl
   assert.doesNotMatch(source, /outreach-disabled-until-dedicated-setup/);
   assert.doesNotMatch(source, /\["outreach", "\/outreach\/batch\/next"/);
 });
+
+test("autonomous governance reads persisted Comms Hub confidence and risk fields", async () => {
+  const { resolveAutonomousAssessment } = await import("../services/comms-hub/governanceService.js");
+  assert.deepEqual(
+    resolveAutonomousAssessment({
+      state: { intent_confidence: 0.96, risk_level: "low" },
+      runs: [{ reputational_risk: 0.03 }],
+    }),
+    { risk: 0.03, confidence: 0.96 },
+  );
+
+  assert.deepEqual(
+    resolveAutonomousAssessment({
+      state: { intent_confidence: 0.97, risk_level: "high" },
+      runs: [{ reputational_risk: 0.02 }],
+    }),
+    { risk: 0.65, confidence: 0.97 },
+  );
+});

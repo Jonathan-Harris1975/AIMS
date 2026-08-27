@@ -51,7 +51,7 @@ function applySpreadsheetOpenRouterEnv() {
   process.env.OPENROUTER_API_KEY = "sk-or-global-test-value";
   process.env.OPENROUTER_ART = "recraft/recraft-v4.1";
   process.env.BLOTATO_SCRIPT_MODEL = "anthropic/claude-sonnet-4-5";
-  process.env.COMMS_HUB_MODEL_FREE_PRIMARY = "openai/gpt-oss-20b:free";
+  process.env.COMMS_HUB_MODEL_FREE_PRIMARY = "dots-studio/dots-3-note-preview:free";
   process.env.COMMS_HUB_MODEL_FREE_BACKUP = "z-ai/glm-5.2:free";
   process.env.COMMS_HUB_MODEL_FREE_FALLBACK = "openrouter/free";
   process.env.COMMS_HUB_MODEL_PAID_ECONOMY = "openai/gpt-oss-20b";
@@ -132,7 +132,7 @@ test("Comms Hub routes use free-first routing with an economy paid safety net an
     const { getProviderDiagnosticsForRoute } = await import(`../services/shared/utils/ai-service.js?commsModelPolicy=${Date.now()}`);
     const routine = getProviderDiagnosticsForRoute("commsHubDraftSocial").configuredProviders.filter((p) => p.configured);
     assert.deepEqual(routine.map((p) => p.model), [
-      "openai/gpt-oss-20b:free",
+      "dots-studio/dots-3-note-preview:free",
       "z-ai/glm-5.2:free",
       "openrouter/free",
       "openai/gpt-oss-20b",
@@ -331,5 +331,57 @@ test("retired DeepSeek model cannot be selected through stale generic fallback e
     assert.equal(configured.some((p) => String(p.model || "").startsWith("deepseek/")), false);
   } finally {
     restoreEnv(oldEnv);
+  }
+});
+
+test("Comms Hub structured-output validation fails over before accepting invalid JSON", async () => {
+  const oldEnv = snapshotEnv(OPENROUTER_ENV_NAMES);
+  const oldFetch = globalThis.fetch;
+  applySpreadsheetOpenRouterEnv();
+  process.env.COMMS_HUB_MODEL_FREE_PRIMARY = "dots-studio/dots-3-note-preview:free";
+  const requestedModels = [];
+
+  globalThis.fetch = async (_url, options = {}) => {
+    const payload = JSON.parse(options.body);
+    requestedModels.push(payload.model);
+    const invalid = payload.model === "dots-studio/dots-3-note-preview:free";
+    return {
+      ok: true,
+      json: async () => ({
+        model: payload.model,
+        choices: [{ message: { content: invalid ? "not-json" : JSON.stringify({ ok: true }) } }],
+        usage: {},
+      }),
+    };
+  };
+
+  try {
+    const { resilientRequest } = await import(`../services/shared/utils/ai-service.js?commsStructuredFailover=${Date.now()}`);
+    const result = await resilientRequest("commsHubSummary", {
+      sessionId: "comms-structured-failover",
+      messages: [{ role: "user", content: "Return JSON" }],
+      response_format: { type: "json_object" },
+      maxRetries: 0,
+      timeoutMs: 1000,
+      returnMetadata: true,
+      validateContent(content) {
+        try { JSON.parse(content); }
+        catch {
+          const error = new Error("invalid structured output");
+          error.code = "AI_INVALID_STRUCTURED_OUTPUT";
+          error.status = "invalid_completion";
+          error.nonRetryable = true;
+          throw error;
+        }
+      },
+    });
+    assert.equal(result.model, "z-ai/glm-5.2:free");
+    assert.deepEqual(requestedModels.slice(0, 2), [
+      "dots-studio/dots-3-note-preview:free",
+      "z-ai/glm-5.2:free",
+    ]);
+  } finally {
+    restoreEnv(oldEnv);
+    globalThis.fetch = oldFetch;
   }
 });
