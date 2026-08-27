@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { CommsHubChatService } from '../services/comms-hub/chatService.js';
+import { CommsHubError } from '../services/comms-hub/errors.js';
 import { isPublicCommsHubIntakePath } from '../services/shared/middleware/suiteAuth.js';
 
 function baseContext(overrides = {}) {
@@ -9,6 +10,7 @@ function baseContext(overrides = {}) {
     messages: [],
     session: null,
     outboundActions: new Map(),
+    delayedActions: [],
   };
   const operationsRepository = {
     async countRecentChatInbound() { return 0; },
@@ -51,6 +53,11 @@ function baseContext(overrides = {}) {
     },
     async completeChannelOutboundAction({ idempotencyKey, providerMessageId }) { state.outboundActions.get(idempotencyKey).provider_message_id = providerMessageId; },
     async failChannelOutboundAction() {},
+    async scheduleDelayedAction(input) {
+      const action = { id: input.id, ...input };
+      state.delayedActions.push(action);
+      return action;
+    },
   };
   return {
     state,
@@ -190,4 +197,46 @@ test('first-party chat contains inbound bad language and blocks profane outbound
     () => service.send({ conversationId: accepted.conversationId, message: 'That is fucking ridiculous.', idempotencyKey: 'webchat:conduct:1' }),
     (error) => error?.code === 'chat_reply_language_policy_rejected',
   );
+});
+
+
+test('recoverable chat AI failure schedules a durable retry instead of silently abandoning the message', async () => {
+  const aiFailure = new CommsHubError(502, 'comms_hub_ai_failed', 'OpenRouter providers unavailable.', {
+    failureClass: 'recoverable',
+  });
+  const { context, state } = baseContext({
+    config: { chatAiWorkflowEnabled: true, aiEnabled: true, autonomousRepliesEnabled: true },
+    context: {
+      aiWorkflowService: { async analyseConversation() { throw aiFailure; } },
+    },
+  });
+  const service = new CommsHubChatService({ context });
+  const result = await service.runOptionalAutomation('conversation-retry', { triggerMessageId: 'message-retry-1' });
+  assert.equal(result.retryScheduled, true);
+  assert.equal(state.delayedActions.length, 1);
+  assert.equal(state.delayedActions[0].actionType, 'chat_ai_retry');
+  assert.equal(state.delayedActions[0].maxAttempts, 4);
+  assert.match(state.delayedActions[0].idempotencyKey, /conversation-retry:message-retry-1/);
+});
+
+test('durable chat AI retry rethrows recoverable failures for the delayed-action worker', async () => {
+  const aiFailure = new CommsHubError(502, 'comms_hub_ai_failed', 'OpenRouter providers unavailable.', {
+    failureClass: 'recoverable',
+  });
+  const { context, state } = baseContext({
+    config: { chatAiWorkflowEnabled: true, aiEnabled: true, autonomousRepliesEnabled: true },
+    context: {
+      aiWorkflowService: { async analyseConversation() { throw aiFailure; } },
+    },
+  });
+  const service = new CommsHubChatService({ context });
+  await assert.rejects(
+    () => service.runOptionalAutomation('conversation-retry', {
+      triggerMessageId: 'message-retry-2',
+      scheduleRetry: false,
+      rethrowRecoverable: true,
+    }),
+    (error) => error?.code === 'comms_hub_ai_failed',
+  );
+  assert.equal(state.delayedActions.length, 0, 'worker-owned retries must not create duplicate delayed actions');
 });
