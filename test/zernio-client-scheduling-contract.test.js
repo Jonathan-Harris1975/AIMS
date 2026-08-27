@@ -87,3 +87,37 @@ test("Zernio rollback treats an already-absent scheduled post as success", async
   assert.equal(deleted.deleted, true);
   assert.equal(deleted.alreadyAbsent, true);
 });
+
+test("Zernio slot seed keeps the provider request id stable when recovered schedule/body changes", async (t) => {
+  const requestIds = [];
+  const bodies = [];
+  const server = http.createServer(async (req, res) => {
+    if (req.method !== "POST" || req.url !== "/posts") {
+      res.writeHead(404, { "content-type": "application/json" });
+      res.end(JSON.stringify({ error: "Not found" }));
+      return;
+    }
+    let raw = "";
+    for await (const chunk of req) raw += chunk;
+    const body = JSON.parse(raw || "{}");
+    requestIds.push(String(req.headers["x-request-id"] || ""));
+    bodies.push(body);
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({ post: { _id: `post_${requestIds.length}`, status: "scheduled", scheduledFor: body.scheduledFor } }));
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+
+  const address = server.address();
+  process.env.ZERNIO_API_BASE_URL = `http://127.0.0.1:${address.port}`;
+  process.env.ZERNIO_API_RETRY_ATTEMPTS = "1";
+  const { createPost } = await import(`../services/zernio/utils/zernioClient.js?slot-seed=${Date.now()}`);
+  const seed = "daily:thursday|2026-08-27 12:20|default|all";
+
+  await createPost({ content: "first", scheduledFor: "2026-08-27T12:35", timezone: "Europe/London", platforms: [{ platform: "facebook", accountId: "fb-1" }] }, "test-key", { idempotencySeed: seed });
+  await createPost({ content: "second", scheduledFor: "2026-08-27T12:52", timezone: "Europe/London", platforms: [{ platform: "facebook", accountId: "fb-1" }] }, "test-key", { idempotencySeed: seed });
+
+  assert.equal(requestIds.length, 2);
+  assert.equal(requestIds[0], requestIds[1]);
+  assert.notEqual(bodies[0].scheduledFor, bodies[1].scheduledFor);
+});

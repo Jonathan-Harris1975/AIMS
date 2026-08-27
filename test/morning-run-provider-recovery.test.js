@@ -61,3 +61,17 @@ test("Brevo delivery resolves the populated list and persists an exactly-once ca
   assert.doesNotMatch(ops, /\["newsletter-readiness", "\/newsletter\/readiness"/);
   assert.match(ops, /newsletter-send.*newsletter-generate/);
 });
+
+test("Blotato scheduled runs use deterministic slot sessions and a hard two-render daily fuse", async () => {
+  const text = await source("services/blotato/utils/autoPublishService.js");
+  const defaults = await source("config/production.defaults.env");
+  assert.match(text, /createScheduledSessionId/);
+  assert.match(text, /`BLT-\$\{lane\}-\$\{scheduleDate\}-\$\{slot\}`/);
+  assert.match(text, /BLOTATO_DAILY_PAID_RENDER_CAP", 2, 10/);
+  assert.match(text, /blotato-daily-paid-render-cap/);
+  assert.match(text, /paidVisualIdsForDate\(scheduleDate\)/);
+  assert.match(text, /inferScheduleSlotFromJob\(job\) === scheduleSlot/);
+  assert.match(text, /scheduleDateFromJob\(job\) === scheduleDate/);
+  assert.match(text, /reusableRenderedVideo\(lane\.jobType, articleSource\.article, sessionId, \{ scheduleSlot, scheduleDate \}\)/);
+  assert.match(defaults, /^BLOTATO_DAILY_PAID_RENDER_CAP=2$/m);
+});

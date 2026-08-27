@@ -17,3 +17,15 @@ test("Zernio slot identity is independent of content and image payloads", async 
   assert.match(source, /sameScheduleSlot\(claim, input\)/);
   assert.match(source, /claim\.key === key \|\| sameScheduleSlot\(claim, input\)/);
 });
+
+test("Zernio recovered times keep the original canonical slot and provider idempotency seed", async () => {
+  const scheduler = await readFile(new URL("../services/zernio/utils/socialScheduler.js", import.meta.url), "utf8");
+  const client = await readFile(new URL("../services/zernio/utils/zernioClient.js", import.meta.url), "utf8");
+
+  assert.match(scheduler, /canonicalScheduledDateTime = scheduleResolution\.originalScheduledDateTime \|\| originalScheduledDateTime/);
+  assert.match(scheduler, /claimInput = \{ scope, scheduledDateTime: canonicalScheduledDateTime/);
+  assert.match(scheduler, /claimScheduleSlot\(claimInput\)/);
+  assert.match(scheduler, /idempotencySeed: slotClaim\.key \|\| ""/);
+  assert.match(scheduler, /createPost\(payload, apiKey, \{ idempotencySeed \}\)/);
+  assert.match(client, /material = seed \? `\$\{endpoint\}:slot:\$\{seed\}`/);
+});
