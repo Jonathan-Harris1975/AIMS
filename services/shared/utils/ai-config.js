@@ -28,6 +28,7 @@ function provider(providerId, modelEnvNames, keyEnvNames) {
 }
 
 const SHARED_OPENROUTER_KEY = ["OPENROUTER_API_KEY"];
+const COMMON_FREE_MODEL_ENVS = ["OPENROUTER_FREE_PRIMARY_MODEL"];
 const ART_OPENROUTER_KEY_FALLBACKS = ["OPENROUTER_API_KEY_ART_BACKUP", "OPENROUTER_API_KEY_ART"];
 
 const fast = provider("fast", ["AI_MODEL_FAST"], SHARED_OPENROUTER_KEY);
@@ -72,7 +73,7 @@ const gpt56Sol = provider(
 
 const commsFreePrimary = provider(
   "commsFreePrimary",
-  ["COMMS_HUB_MODEL_FREE_PRIMARY"],
+  ["COMMS_HUB_MODEL_FREE_PRIMARY", ...COMMON_FREE_MODEL_ENVS],
   SHARED_OPENROUTER_KEY
 );
 
