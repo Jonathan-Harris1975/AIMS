@@ -178,13 +178,15 @@ async function zernioGet(endpoint, params = {}, apiKey) {
   });
 }
 
-function stableRequestId(endpoint, body = {}) {
-  const digest = crypto.createHash("sha256").update(`${endpoint}:${JSON.stringify(body || {})}`).digest("hex").slice(0, 32);
+function stableRequestId(endpoint, body = {}, idempotencySeed = "") {
+  const seed = trimString(idempotencySeed);
+  const material = seed ? `${endpoint}:slot:${seed}` : `${endpoint}:${JSON.stringify(body || {})}`;
+  const digest = crypto.createHash("sha256").update(material).digest("hex").slice(0, 32);
   return `aims-${digest}`;
 }
 
-async function zernioPost(endpoint, body = {}, apiKey) {
-  const requestId = stableRequestId(endpoint, body);
+async function zernioPost(endpoint, body = {}, apiKey, { idempotencySeed = "" } = {}) {
+  const requestId = stableRequestId(endpoint, body, idempotencySeed);
   return withZernioRetry(`POST ${endpoint}`, async () => {
     const key = requireApiKey(apiKey);
 
@@ -273,8 +275,8 @@ export async function listAccounts({ profileId } = {}, apiKey) {
 // list of posts with their status and analytics, which this client uses in
 // place of OneUp's getscheduledposts/getpublishedposts endpoints.
 
-export async function createPost(body, apiKey) {
-  return zernioPost("posts", body, apiKey);
+export async function createPost(body, apiKey, options = {}) {
+  return zernioPost("posts", body, apiKey, options);
 }
 
 export async function deletePost(postId, apiKey) {

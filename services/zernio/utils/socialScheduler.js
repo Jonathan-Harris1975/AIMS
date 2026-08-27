@@ -674,27 +674,34 @@ function duplicateSlotWarning(reason) {
 }
 
 async function claimZernioSlot({ scope, scheduledDateTime, profileName, accountId, imageUrl, dryRun, apiKey, force, sourceIntentHash }) {
+  const originalScheduledDateTime = String(scheduledDateTime || "").trim();
   if (isEffectiveDryRun({ dryRun, apiKey })) {
     return {
       claimed: false,
       skipped: true,
       duplicatePrevented: false,
       key: null,
-      scheduledDateTime,
-      scheduleResolution: { scheduledDateTime, recovered: false, dryRun: true, laneKey: scope || null },
+      scheduledDateTime: originalScheduledDateTime,
+      canonicalScheduledDateTime: originalScheduledDateTime,
+      scheduleResolution: { scheduledDateTime: originalScheduledDateTime, originalScheduledDateTime, recovered: false, dryRun: true, laneKey: scope || null },
     };
   }
 
-  const scheduleResolution = resolveZernioScheduledDateTime(scheduledDateTime, new Date(), { laneKey: scope });
+  const scheduleResolution = resolveZernioScheduledDateTime(originalScheduledDateTime, new Date(), { laneKey: scope });
   const effectiveScheduledDateTime = scheduleResolution.scheduledDateTime;
+  // Slot ownership must use the configured/canonical slot, not the recovered
+  // "now + lead" time. Otherwise every late rerun produces a new timestamp
+  // and can create another paid/generated post for the same intended slot.
+  const canonicalScheduledDateTime = scheduleResolution.originalScheduledDateTime || originalScheduledDateTime;
+  const claimInput = { scope, scheduledDateTime: canonicalScheduledDateTime, profileName, accountId, imageUrl, sourceIntentHash };
 
   if (isTruthyOption(force)) {
-    const claim = resetScheduleSlotClaim({ scope, scheduledDateTime: effectiveScheduledDateTime, profileName, accountId, imageUrl, sourceIntentHash });
-    return { ...claim, forced: true, scheduledDateTime: effectiveScheduledDateTime, scheduleResolution };
+    const claim = resetScheduleSlotClaim(claimInput);
+    return { ...claim, forced: true, scheduledDateTime: effectiveScheduledDateTime, canonicalScheduledDateTime, scheduleResolution };
   }
 
-  const claim = await claimScheduleSlot({ scope, scheduledDateTime: effectiveScheduledDateTime, profileName, accountId, imageUrl, sourceIntentHash });
-  return { ...claim, scheduledDateTime: effectiveScheduledDateTime, scheduleResolution };
+  const claim = await claimScheduleSlot(claimInput);
+  return { ...claim, scheduledDateTime: effectiveScheduledDateTime, canonicalScheduledDateTime, scheduleResolution };
 }
 
 
@@ -827,7 +834,7 @@ export function verifyZernioScheduleResponse(response = {}, expectedScheduledDat
   };
 }
 
-async function scheduleToZernio({ post, scheduledDateTime, profileName, accountId, dryRun, apiKey, preflightOnly = false, laneKey = "", dedupeWindowHours }) {
+async function scheduleToZernio({ post, scheduledDateTime, profileName, accountId, dryRun, apiKey, preflightOnly = false, laneKey = "", dedupeWindowHours, idempotencySeed = "" }) {
   const warnings = [];
   const scheduleResolution = resolveZernioScheduledDateTime(scheduledDateTime, new Date(), { laneKey });
   const effectiveScheduledDateTime = scheduleResolution.scheduledDateTime;
@@ -982,7 +989,7 @@ async function scheduleToZernio({ post, scheduledDateTime, profileName, accountI
     ...(post.imageUrl ? { mediaItems: [{ type: "image", url: post.imageUrl }] } : {}),
   };
 
-  const zernioResponse = await createPost(payload, apiKey);
+  const zernioResponse = await createPost(payload, apiKey, { idempotencySeed });
   const scheduleVerification = verifyZernioScheduleResponse(zernioResponse, effectiveScheduledDateTime);
   const requireConfirmation = booleanValue(process.env.ZERNIO_REQUIRE_SCHEDULE_CONFIRMATION, true);
   if (requireConfirmation && !scheduleVerification.accepted) {
@@ -1609,7 +1616,9 @@ export async function buildAndScheduleDailyLane(laneKey, options = {}) {
       apiKey,
       laneKey,
       dedupeWindowHours: options.dedupeWindowHours,
+      idempotencySeed: slotClaim.key || "",
     });
+    scheduledDateTime = scheduling.scheduledDateTime || scheduledDateTime;
 
     const warnings = [
       ...(rssContext.warning ? [rssContext.warning] : []),
@@ -1791,7 +1800,9 @@ export async function buildAndScheduleBlogRssDaily(options = {}) {
       apiKey,
       laneKey: "blog-rss",
       dedupeWindowHours: options.dedupeWindowHours,
+      idempotencySeed: slotClaim.key || "",
     });
+    scheduledDateTime = scheduling.scheduledDateTime || scheduledDateTime;
 
     const warnings = [...(scheduling.warnings || [])];
 
