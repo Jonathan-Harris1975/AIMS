@@ -5,6 +5,38 @@ import { resolveConversationAutomationExclusion } from './domain/automationScope
 
 function cleanKey(value) { return String(value || '').trim().toLowerCase().replace(/[^a-z0-9._-]+/g, '_').slice(0, 80); }
 
+function finiteNumber(value) {
+  if (value === undefined || value === null || String(value).trim() === '') return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function riskLevelFloor(value) {
+  switch (String(value || '').trim().toLowerCase()) {
+    case 'low': return 0;
+    case 'medium': return 0.25;
+    case 'high': return 0.65;
+    case 'critical': return 1;
+    default: return null;
+  }
+}
+
+export function resolveAutonomousAssessment(ai = {}) {
+  const state = ai?.state || ai || {};
+  const latestRun = Array.isArray(ai?.runs) ? ai.runs[0] || {} : {};
+  const confidence = finiteNumber(state.intent_confidence)
+    ?? finiteNumber(latestRun.intent_confidence)
+    ?? finiteNumber(state.confidence)
+    ?? 0;
+  const riskCandidates = [
+    finiteNumber(state.risk_score),
+    finiteNumber(latestRun.reputational_risk),
+    riskLevelFloor(state.risk_level || latestRun.risk_level),
+  ].filter((value) => value !== null);
+  const risk = riskCandidates.length ? Math.max(...riskCandidates) : 1;
+  return { risk, confidence };
+}
+
 export class CommsHubGovernanceService {
   constructor({ context }) { this.context = context; }
 
@@ -48,8 +80,7 @@ export class CommsHubGovernanceService {
     const intent = state.intent || 'unknown';
     const policy = await this.context.operationsRepository.findAutonomousPolicy({ channel: conversation.channel, intent });
     if (!policy) throw new CommsHubError(409, 'autonomous_policy_not_found', 'No active autonomous reply policy matches this conversation.');
-    const risk = Number(state.risk_score ?? 1);
-    const confidence = Number(state.confidence ?? 0);
+    const { risk, confidence } = resolveAutonomousAssessment(ai);
     const evidenceCount = Array.isArray(ai?.evidence) ? ai.evidence.length : Number(state.evidence_count || 0);
     if (risk > Number(policy.maximum_risk) || confidence < Number(policy.minimum_confidence) || (Number(policy.require_evidence) === 1 && evidenceCount < 1)) throw new CommsHubError(409, 'autonomous_reply_policy_rejected', 'Draft does not meet the active autonomous reply policy.');
     const sentSince = await this.context.operationsRepository.countAutonomousSendsSince(policy.policy_key, new Date(Date.now() - 3_600_000).toISOString());

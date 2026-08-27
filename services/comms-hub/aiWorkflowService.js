@@ -111,6 +111,17 @@ async function requestJson(aiRequest, routeName, system, payload, options = {}) 
     temperature: options.temperature ?? 0.15,
     max_tokens: options.maxTokens ?? 1800,
     returnMetadata: true,
+    validateContent(content) {
+      try {
+        parseStrictJson(content, `${routeName} response`);
+      } catch (cause) {
+        const error = new Error(`${routeName} provider returned invalid structured output`, { cause });
+        error.code = "AI_INVALID_STRUCTURED_OUTPUT";
+        error.status = "invalid_completion";
+        error.nonRetryable = true;
+        throw error;
+      }
+    },
   });
   return { parsed: parseStrictJson(result.content, `${routeName} response`), result };
 }
