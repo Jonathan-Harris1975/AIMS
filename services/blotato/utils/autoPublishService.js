@@ -1066,7 +1066,7 @@ function normaliseArticleIdentity(article = {}) {
   return trim(article.link || article.url || article.guid || article.title).toLowerCase();
 }
 
-async function reusableRenderedVideo(jobType, article = {}, currentSessionId = "") {
+async function reusableRenderedVideo(jobType, article = {}, currentSessionId = "", { scheduleSlot = "", scheduleDate = "" } = {}) {
   await refreshJobStoreFromState();
   const identity = normaliseArticleIdentity(article);
   if (!identity) return null;
@@ -1076,6 +1076,8 @@ async function reusableRenderedVideo(jobType, article = {}, currentSessionId = "
     .filter((job) => job.sessionId !== currentSessionId)
     .filter((job) => job.status === "failed" && job.renderedVideoQa?.pass === true)
     .filter((job) => normaliseArticleIdentity(job.source?.article || job.rss?.article || {}) === identity)
+    .filter((job) => !scheduleSlot || inferScheduleSlotFromJob(job) === scheduleSlot)
+    .filter((job) => !scheduleDate || scheduleDateFromJob(job) === scheduleDate)
     .filter((job) => job.mediaUrl && job.videoId)
     .filter((job) => {
       const updated = Date.parse(job.updatedAt || job.startedAt || "");
@@ -1105,6 +1107,25 @@ function londonDateParts(date = new Date()) {
 function londonDateString(date = new Date()) {
   const { year, month, day } = londonDateParts(date);
   return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+function createScheduledSessionId(laneSlug, scheduleSlot, scheduleDate) {
+  const lane = trim(laneSlug).toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "") || "short";
+  const slot = trim(scheduleSlot).toLowerCase().replace(/[^a-z0-9-]+/g, "-") || "slot";
+  return `BLT-${lane}-${scheduleDate}-${slot}`.slice(0, 150);
+}
+
+async function paidVisualIdsForDate(scheduleDate) {
+  await refreshJobStoreFromState();
+  const ids = new Set();
+  for (const type of getShortLaneJobTypes()) {
+    for (const job of getJobsByType(type)) {
+      if (scheduleDateFromJob(job) !== scheduleDate) continue;
+      const visualId = trim(job.videoId || job.result?.visualId);
+      if (visualId) ids.add(visualId);
+    }
+  }
+  return ids;
 }
 
 function inferScheduleSlotFromJob(job = {}) {
@@ -1173,7 +1194,7 @@ function resolveBlotatoScheduledTime(slot = "am", now = new Date()) {
   return scheduled.toISOString();
 }
 
-async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOTATO_SHORT_LANE, apiKey, editorialReservation = null, templateIdOverride = null, publishMode = "evening-lane", creativeStyle = "" , scheduleSlot = null }) {
+async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOTATO_SHORT_LANE, apiKey, editorialReservation = null, templateIdOverride = null, publishMode = "evening-lane", creativeStyle = "", scheduleSlot = null, scheduleDate = null }) {
   const lane = requireShortLaneConfig(laneSlug);
   const keepAliveLabel = `blotato:${lane.slug}:${sessionId}`;
   const keepAliveEnabled = parseBoolean(process.env.BLOTATO_KEEPALIVE_ENABLED, true);
@@ -1362,7 +1383,18 @@ async function runPublishJob({ sessionId, articleSource, laneSlug = DEFAULT_BLOT
       throw buildBlotatoGateError(errorGate);
     }
 
-    const reusedVideo = await reusableRenderedVideo(lane.jobType, articleSource.article, sessionId);
+    const reusedVideo = await reusableRenderedVideo(lane.jobType, articleSource.article, sessionId, { scheduleSlot, scheduleDate });
+    if (!reusedVideo && scheduleSlot && scheduleDate) {
+      const paidRenderCap = positiveIntEnv("BLOTATO_DAILY_PAID_RENDER_CAP", 2, 10);
+      const paidVisualIds = await paidVisualIdsForDate(scheduleDate);
+      if (paidVisualIds.size >= paidRenderCap) {
+        const err = new Error(`Blotato daily paid-render cap reached (${paidVisualIds.size}/${paidRenderCap}) for ${scheduleDate}. No additional video was created.`);
+        err.statusCode = 409;
+        err.code = "blotato-daily-paid-render-cap";
+        err.paidVisualIds = [...paidVisualIds];
+        throw err;
+      }
+    }
     const video = reusedVideo || await createAndWaitForVideo({
       templateId,
       templateIdCandidates: templateResolution.templateIdCandidates || [
@@ -1661,7 +1693,7 @@ export async function triggerPublishNowJob(req = {}, laneSlug = DEFAULT_BLOTATO_
     throw err;
   }
   const editorialReservation = reservationResult.reservation || null;
-  const sessionId = createSessionId(articleSource.article, lane.slug);
+  const sessionId = scheduleSlot ? createScheduledSessionId(lane.slug, scheduleSlot, scheduleDate) : createSessionId(articleSource.article, lane.slug);
   const defaults = buildDefaults(lane.slug);
   if (options.templateId) {
     defaults.templateId = normaliseTemplateId(options.templateId);
@@ -1708,6 +1740,7 @@ export async function triggerPublishNowJob(req = {}, laneSlug = DEFAULT_BLOTATO_
     publishMode: options.publishMode || "evening-lane",
     creativeStyle: options.creativeStyle || "",
     scheduleSlot: scheduleSlot || null,
+    scheduleDate,
   });
   if (parseBoolean(process.env.BLOTATO_INLINE_PUBLISH_JOBS, false)) {
     await run();
