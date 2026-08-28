@@ -55,7 +55,7 @@ export async function createPodcastArtwork(input) {
     const theme = prompt || `Podcast artwork for AI Weekly episode ${sessionId}`;
 
     const base64Data = await runArtworkTask(
-      (signal) => generatePodcastArtwork(theme, { signal }),
+      (signal) => generatePodcastArtwork(theme, { signal, sessionId }),
       PODCAST_ARTWORK_TIMEOUT_MS,
       "Podcast artwork generation",
     );
