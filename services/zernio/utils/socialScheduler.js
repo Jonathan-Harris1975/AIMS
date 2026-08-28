@@ -774,7 +774,7 @@ export function resolveZernioScheduledDateTime(scheduledDateTime, now = new Date
   const currentLocalDate = zonedDateString(now, DEFAULT_TIMEZONE);
   const originalMs = normaliseScheduledTimestamp(original);
 
-  if (!enabled || !original || originalMs === null || scheduledLocalDate !== currentLocalDate) {
+  if (!original || originalMs === null || scheduledLocalDate !== currentLocalDate) {
     return {
       scheduledDateTime: original,
       originalScheduledDateTime: original,
@@ -792,6 +792,15 @@ export function resolveZernioScheduledDateTime(scheduledDateTime, now = new Date
       minimumLeadMs,
       laneKey: laneKey || null,
     };
+  }
+
+  if (!enabled) {
+    const err = new Error(`Zernio scheduled slot '${original}' for ${laneKey || "social"} was missed. Exact scheduled posting is required, so no replacement time was created.`);
+    err.statusCode = 409;
+    err.code = "zernio-schedule-slot-missed";
+    err.scheduledDateTime = original;
+    err.minimumLeadMs = minimumLeadMs;
+    throw err;
   }
 
   const recoveredDateTime = zonedDateTimeString(new Date(now.getTime() + minimumLeadMs), DEFAULT_TIMEZONE);
@@ -1299,8 +1308,10 @@ function buildDailyLaneArtworkPrompt({ laneKey = "", post = {}, verifiedQuote = 
   const common = [
     `Topic: ${artworkTopic}.`,
     ...(laneKey === "sunday" ? [] : [`Post context, for visual meaning only and never as visible text: ${content.slice(0, 700)}`]),
-    "Create premium square social artwork with one immediately readable focal idea at phone-thumbnail size.",
+    "Create premium square personal-brand editorial artwork with one immediately readable focal idea at phone-thumbnail size.",
+    "The visual identity is an independent professional AI author/host publication: intelligent, human, editorial and creator-led, never a corporate campaign, consultancy deck, SaaS advert or enterprise stock image.",
     "Use the seasonal brand palette while keeping the scene natural, vivid and editorial.",
+    "Avoid boardrooms, handshakes, suited teams, posed office groups, glossy device mock-ups, generic corporate gradients, presentation-deck compositions and anonymous enterprise stock photography.",
     "The scene must visibly and specifically connect to artificial intelligence through credible machine-learning, robotics, intelligent software, compute, research, security, governance or human-oversight cues supported by the post.",
     "Reject travel scenery, lifestyle stock, unrelated machinery, generic offices and decorative technology that does not explain the AI subject.",
     "No visible words, labels, logos, interface copy, pseudo-text or watermarks.",
@@ -1939,6 +1950,48 @@ export async function buildAndScheduleWeeklyMiniSeries(options = {}) {
   const minimumScore = Number(options.minimumSuitabilityScore ?? MINI_SERIES_CONFIG.minimumSuitabilityScore);
   const sessionId = `ZERNIO-MINI-SERIES-${weekStartDate}`;
 
+  let seriesClaim = null;
+  if (!dryRun && apiKey) {
+    const claimInput = {
+      scope: "mini-series:weekly",
+      scheduledDateTime: weekStartDate,
+      profileName,
+      accountId,
+      sourceIntentHash: buildIntentHash({ audienceIntent: MINI_SERIES_CONFIG.audienceIntent, angle: weekStartDate }),
+    };
+    seriesClaim = isTruthyOption(options.force)
+      ? resetScheduleSlotClaim(claimInput)
+      : await claimScheduleSlot(claimInput);
+    if (seriesClaim.duplicatePrevented) {
+      info("zernio.mini_series.duplicate_prevented", { weekStartDate, slotKey: seriesClaim.key, reason: seriesClaim.reason });
+      return {
+        ok: true,
+        lane: "weekly-mini-series",
+        skipped: true,
+        duplicatePrevented: true,
+        reason: seriesClaim.reason,
+        weekStartDate,
+        posts: [],
+        warnings: [duplicateSlotWarning(seriesClaim.reason)],
+      };
+    }
+  }
+
+  const finishMiniSeries = (result) => {
+    if (seriesClaim?.claimed) {
+      completeScheduleSlot(seriesClaim, {
+        lane: "weekly-mini-series",
+        weekStartDate,
+        ok: result?.ok !== false,
+        skipped: Boolean(result?.skipped),
+        reason: result?.reason || null,
+        scheduledCount: Number(result?.scheduledCount || 0),
+      });
+    }
+    return result;
+  };
+
+  try {
   const loaded = Array.isArray(options.sourceItems) && options.sourceItems.length
     ? { ok: true, items: options.sourceItems, warning: null }
     : await loadRecentRssContext({
@@ -1955,7 +2008,7 @@ export async function buildAndScheduleWeeklyMiniSeries(options = {}) {
 
   if (sourceItems.length < 2) {
     info("zernio.mini_series.skipped", { weekStartDate, reason: "insufficient-source-evidence", sourceCount: sourceItems.length });
-    return {
+    return finishMiniSeries({
       ok: true,
       lane: "weekly-mini-series",
       skipped: true,
@@ -1963,7 +2016,7 @@ export async function buildAndScheduleWeeklyMiniSeries(options = {}) {
       sourceCount: sourceItems.length,
       warnings: [loaded.warning].filter(Boolean),
       posts: [],
-    };
+    });
   }
 
   const research = await requestStructuredZernioJson({
@@ -2004,7 +2057,7 @@ export async function buildAndScheduleWeeklyMiniSeries(options = {}) {
       audienceValueScore: research.audienceValueScore,
       sourceCount: research.sourceUrls.length,
     });
-    return {
+    return finishMiniSeries({
       ok: true,
       lane: "weekly-mini-series",
       skipped: true,
@@ -2012,7 +2065,7 @@ export async function buildAndScheduleWeeklyMiniSeries(options = {}) {
       research,
       posts: [],
       warnings: [loaded.warning].filter(Boolean),
-    };
+    });
   }
 
   let theme = null;
@@ -2078,7 +2131,7 @@ export async function buildAndScheduleWeeklyMiniSeries(options = {}) {
       defects: themeGate?.defects || [],
       attempts: maxThemeAttempts,
     });
-    return {
+    return finishMiniSeries({
       ok: false,
       quarantined: true,
       lane: "weekly-mini-series",
@@ -2088,7 +2141,7 @@ export async function buildAndScheduleWeeklyMiniSeries(options = {}) {
       theme,
       defects: themeGate?.defects || [],
       posts: [],
-    };
+    });
   }
 
   const slots = miniSeriesPublishSlots(weekStartDate, theme.posts.length);
@@ -2260,7 +2313,7 @@ export async function buildAndScheduleWeeklyMiniSeries(options = {}) {
       defects: generatedSeriesDefects,
       attempts: maxDistinctnessAttempts,
     });
-    return {
+    return finishMiniSeries({
       ok: false,
       quarantined: true,
       lane: "weekly-mini-series",
@@ -2275,7 +2328,7 @@ export async function buildAndScheduleWeeklyMiniSeries(options = {}) {
         topicFidelity: item.topicFidelity,
       })),
       warnings: [loaded.warning].filter(Boolean),
-    };
+    });
   }
 
   for (const item of prepared) {
@@ -2311,7 +2364,7 @@ export async function buildAndScheduleWeeklyMiniSeries(options = {}) {
           part: item.index + 1,
           error: errorMessage,
         });
-        return {
+        return finishMiniSeries({
           ok: false,
           quarantined: true,
           lane: "weekly-mini-series",
@@ -2327,7 +2380,7 @@ export async function buildAndScheduleWeeklyMiniSeries(options = {}) {
             topicFidelity: preparedItem.topicFidelity,
           })),
           warnings: [loaded.warning].filter(Boolean),
-        };
+        });
       }
       item.post.imageUrl = artwork.publicUrl;
       item.artworkStatus = artwork.imageStatus || (artwork.fallback ? "fallback" : "generated");
@@ -2409,6 +2462,7 @@ export async function buildAndScheduleWeeklyMiniSeries(options = {}) {
           dryRun,
           apiKey,
           laneKey: "weekly-mini-series",
+          idempotencySeed: slotClaim.key || "",
         });
         effectiveScheduledDateTime = scheduling.scheduledDateTime || effectiveScheduledDateTime;
 
@@ -2596,7 +2650,7 @@ export async function buildAndScheduleWeeklyMiniSeries(options = {}) {
     skipped: false,
   });
 
-  return {
+  return finishMiniSeries({
     ok,
     partialFailure: !ok,
     quarantined: !ok,
@@ -2613,7 +2667,11 @@ export async function buildAndScheduleWeeklyMiniSeries(options = {}) {
     rollbackFailedCount,
     posts: results,
     warnings: [loaded.warning].filter(Boolean),
-  };
+  });
+  } catch (error) {
+    if (seriesClaim?.claimed) releaseScheduleSlot(seriesClaim);
+    throw error;
+  }
 }
 
 
@@ -2645,6 +2703,21 @@ export async function buildAndSchedulePodcastThursdayPromo(options = {}) {
   const apiKey = options.apiKey || process.env.ZERNIO_META_API_KEY;
   const feedUrl = options.feedUrl || PODCAST_PROMO_CONFIG.feedUrl;
   const sessionId = `ZERNIO-PODCAST-PROMO-${publishDate}`;
+  const slotClaim = await claimZernioSlot({
+    scope: "podcast:thursday-promo",
+    scheduledDateTime,
+    profileName,
+    accountId,
+    imageUrl: options.imageUrl || "",
+    dryRun,
+    apiKey,
+    force: options.force,
+    sourceIntentHash: buildIntentHash({ audienceIntent: PODCAST_PROMO_CONFIG.audienceIntent, angle: publishDate }),
+  });
+  scheduledDateTime = slotClaim.scheduledDateTime || scheduledDateTime;
+  if (slotClaim.duplicatePrevented) return slotDuplicatePostResult({ publishDate, scheduledDateTime, dryRun, profileName, reason: slotClaim.reason });
+
+  try {
   const episode = await fetchPodcastPromoEpisode({ feedUrl });
 
   const generated = await requestStructuredZernioJson({
@@ -2707,22 +2780,7 @@ export async function buildAndSchedulePodcastThursdayPromo(options = {}) {
     post.imageUrl = artwork.publicUrl;
   }
 
-  const slotClaim = await claimZernioSlot({
-    scope: "podcast:thursday-promo",
-    scheduledDateTime,
-    profileName,
-    accountId,
-    imageUrl: post.imageUrl,
-    dryRun,
-    apiKey,
-    force: options.force,
-    sourceIntentHash: buildIntentHash({ audienceIntent: PODCAST_PROMO_CONFIG.audienceIntent, angle: episode.link || episode.title }),
-  });
-  scheduledDateTime = slotClaim.scheduledDateTime || scheduledDateTime;
-  if (slotClaim.duplicatePrevented) return slotDuplicatePostResult({ publishDate, scheduledDateTime, dryRun, profileName, reason: slotClaim.reason });
-
-  try {
-    const scheduling = await scheduleToZernio({ post, scheduledDateTime, profileName, accountId, dryRun, apiKey, laneKey: "podcast-thursday-promo" });
+    const scheduling = await scheduleToZernio({ post, scheduledDateTime, profileName, accountId, dryRun, apiKey, laneKey: "podcast-thursday-promo", idempotencySeed: slotClaim.key || "" });
     if (scheduling.scheduled) {
       recordEditorialEvent({
         pipeline: "zernio",
