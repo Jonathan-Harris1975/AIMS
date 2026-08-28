@@ -115,7 +115,8 @@ async function triggerWebsiteRebuild(log, sessionId) {
 }
 
 export async function runPodcastPipeline(input = {}, maybeOptions = {}) {
-  const { sessionId, force } = normalisePipelineInput(input, maybeOptions);
+  const pipelineInput = normalisePipelineInput(input, maybeOptions);
+  const { sessionId, force } = pipelineInput;
   const log = { info, warn, error };
 
   if (!sessionId) {
@@ -130,6 +131,7 @@ export async function runPodcastPipeline(input = {}, maybeOptions = {}) {
 
     log.info("📝 Generating podcast script…");
     const script = await getScriptForPodcast({
+      ...pipelineInput,
       sessionId,
       force,
       editorialContext,
@@ -147,7 +149,7 @@ export async function runPodcastPipeline(input = {}, maybeOptions = {}) {
       force,
       prompt: artworkPrompt || undefined,
     });
-    if (!artwork?.ok || !artwork?.publicUrl) {
+    if (!artwork?.ok || !artwork?.publicUrl || artwork?.source !== "generated" || !artwork?.key) {
       throw new Error(artwork?.error || "Artwork generation failed");
     }
     log.info("🎨 Artwork generation complete", {

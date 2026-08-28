@@ -80,7 +80,11 @@ router.post("/run", requestDedupe("podcast:run"), async (req, res) => {
       });
     }
 
-    void runPodcastPipeline(sessionId)
+    void runPodcastPipeline({
+      ...payload,
+      sessionId,
+      targetMinutes: payload.targetMinutes || 60,
+    })
       .then((result) => {
         completeJob("podcast", sessionId, { eventId, result });
         info("api.podcast.complete", { sessionId, eventId });
