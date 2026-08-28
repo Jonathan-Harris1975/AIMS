@@ -206,14 +206,21 @@ export async function persistPolledConversation({ family, platform, conversation
     const providerMessageId = text(message?.id);
     if (!providerMessageId) continue;
     const direction = text(message?.direction).toLowerCase();
+    const messageText = text(message?.message);
+    const messageAttachments = Array.isArray(message?.attachments) ? message.attachments : [];
     const eventType = message?.isDeleted
       ? "message.deleted"
       : message?.isEdited
         ? "message.edited"
         : ["outgoing", "outbound", "sent"].includes(direction) ? "message.sent" : "message.received";
+    // Zernio can return historical/system inbox records that have an ID and
+    // lifecycle metadata but no user-visible text or attachment. They are not
+    // actionable messages and must not abort the entire Facebook/Instagram
+    // polling job.
+    if (!message?.isDeleted && !message?.isEdited && !messageText && messageAttachments.length === 0) continue;
     const fingerprint = stablePayloadHash({
-      message: message?.message || "",
-      attachments: message?.attachments || [],
+      message: messageText,
+      attachments: messageAttachments,
       isEdited: Boolean(message?.isEdited),
       isDeleted: Boolean(message?.isDeleted),
       deliveryStatus: message?.deliveryStatus || null,
@@ -242,14 +249,14 @@ export async function persistPolledConversation({ family, platform, conversation
         conversationId,
         accountId,
         platform,
-        text: message?.message || "",
+        text: messageText,
         direction,
         sender: {
           id: message?.senderId || conversation?.participantId || null,
           name: message?.senderName || conversation?.participantName || null,
           isOwner: ["outgoing", "outbound", "sent"].includes(direction),
         },
-        attachments: message?.attachments || [],
+        attachments: messageAttachments,
         createdAt: message?.createdAt || message?.sentAt || null,
         deliveryStatus: message?.deliveryStatus || null,
         metadata: {

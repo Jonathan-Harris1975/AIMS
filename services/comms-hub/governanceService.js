@@ -82,7 +82,16 @@ export class CommsHubGovernanceService {
     if (!policy) throw new CommsHubError(409, 'autonomous_policy_not_found', 'No active autonomous reply policy matches this conversation.');
     const { risk, confidence } = resolveAutonomousAssessment(ai);
     const evidenceCount = Array.isArray(ai?.evidence) ? ai.evidence.length : Number(state.evidence_count || 0);
-    if (risk > Number(policy.maximum_risk) || confidence < Number(policy.minimum_confidence) || (Number(policy.require_evidence) === 1 && evidenceCount < 1)) throw new CommsHubError(409, 'autonomous_reply_policy_rejected', 'Draft does not meet the active autonomous reply policy.');
+    const maximumRisk = Number(policy.maximum_risk);
+    const minimumConfidence = Number(policy.minimum_confidence);
+    const evidenceRequired = Number(policy.require_evidence) === 1;
+    if (risk > maximumRisk || confidence < minimumConfidence || (evidenceRequired && evidenceCount < 1)) {
+      throw new CommsHubError(
+        409,
+        'autonomous_reply_policy_rejected',
+        `Draft does not meet autonomous policy ${policy.policy_key}: risk=${risk.toFixed(3)}/${maximumRisk.toFixed(3)}, confidence=${confidence.toFixed(3)}/${minimumConfidence.toFixed(3)}, evidence=${evidenceCount}${evidenceRequired ? ' required' : ' optional'}.`,
+      );
+    }
     const sentSince = await this.context.operationsRepository.countAutonomousSendsSince(policy.policy_key, new Date(Date.now() - 3_600_000).toISOString());
     if (sentSince >= Number(policy.maximum_per_hour)) throw new CommsHubError(429, 'autonomous_reply_rate_limited', 'Autonomous reply hourly limit has been reached.');
     const result = await sendReplyDraft({ draftId, context: this.context });
