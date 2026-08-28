@@ -73,7 +73,7 @@ CogniPal is first-party. The website calls same-origin Pages Functions, which si
 
 ## Social monitoring and actions
 
-Facebook/Instagram DMs are supported; Facebook/Instagram/YouTube comments are supported. Provider writes remain behind policy, approval, channel capability and idempotency controls. The machine-readable capability matrix is exported from `services/comms-hub/config.js` and surfaced through the social status routes.
+Facebook/Instagram DMs are supported; Facebook/Instagram/YouTube comments are supported. Social polling is forward-only: the first poll establishes a freshness watermark without importing provider history, and later polls may overlap only as far back as that watermark. Per-message and per-comment timestamps are checked again before persistence, so older DMs/comments returned by a provider page are discarded. This applies to Facebook and Instagram DMs/comments and YouTube comments. Provider writes remain behind policy, approval, channel capability and idempotency controls. The machine-readable capability matrix is exported from `services/comms-hub/config.js` and surfaced through the social status routes.
 
 ## Main route groups
 

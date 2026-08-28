@@ -20,6 +20,38 @@ function stablePayloadHash(payload) {
   return sha256Hex(JSON.stringify(payload));
 }
 
+function normalisedTimestamp(value) {
+  const candidate = text(value);
+  if (!candidate) return "";
+  const parsed = new Date(candidate);
+  return Number.isFinite(parsed.getTime()) ? parsed.toISOString() : "";
+}
+
+function firstTimestamp(...values) {
+  for (const value of values) {
+    const candidate = normalisedTimestamp(value);
+    if (candidate) return candidate;
+  }
+  return "";
+}
+
+function isFreshAtOrAfter(timestamp, cutoff) {
+  const floor = normalisedTimestamp(cutoff);
+  if (!floor) return true;
+  const occurredAt = normalisedTimestamp(timestamp);
+  return Boolean(occurredAt) && occurredAt >= floor;
+}
+
+function polledMessageActivityAt(message) {
+  if (message?.isDeleted) return firstTimestamp(message?.deletedAt, message?.createdAt, message?.sentAt, message?.timestamp);
+  if (message?.isEdited) return firstTimestamp(message?.editedAt, message?.createdAt, message?.sentAt, message?.timestamp);
+  return firstTimestamp(message?.createdAt, message?.sentAt, message?.timestamp);
+}
+
+function polledCommentActivityAt(comment) {
+  return firstTimestamp(comment?.createdTime, comment?.createdAt, comment?.timestamp);
+}
+
 function syntheticEnvelope({ family, platform, eventType, eventId, timestamp, payload }) {
   const rawBody = Buffer.from(JSON.stringify(payload));
   return Object.freeze({
@@ -195,7 +227,7 @@ export async function processZernioWebhook({ envelope, correlationId, context })
   return { test: false, ...persistence, event };
 }
 
-export async function persistPolledConversation({ family, platform, conversation, messages, context }) {
+export async function persistPolledConversation({ family, platform, conversation, messages, context, freshSince = "" }) {
   const accountId = text(conversation?.accountId);
   const conversationId = text(conversation?.id);
   if (!accountId || !conversationId) return { processed: 0, duplicates: 0 };
@@ -205,6 +237,8 @@ export async function persistPolledConversation({ family, platform, conversation
   for (const message of messages || []) {
     const providerMessageId = text(message?.id);
     if (!providerMessageId) continue;
+    const activityAt = polledMessageActivityAt(message);
+    if (!isFreshAtOrAfter(activityAt, freshSince)) continue;
     const direction = text(message?.direction).toLowerCase();
     const messageText = text(message?.message);
     const messageAttachments = Array.isArray(message?.attachments) ? message.attachments : [];
@@ -231,7 +265,7 @@ export async function persistPolledConversation({ family, platform, conversation
     const payload = {
       id: `poll:${family}:${platform}:message:${accountId}:${providerMessageId}:${fingerprint}`,
       event: eventType,
-      timestamp: message?.createdAt || message?.sentAt || conversation?.updatedTime || new Date().toISOString(),
+      timestamp: activityAt || conversation?.updatedTime || conversation?.updatedAt || new Date().toISOString(),
       account: { accountId, platform, username: conversation?.accountUsername || null },
       conversation: {
         id: conversationId,
@@ -257,7 +291,7 @@ export async function persistPolledConversation({ family, platform, conversation
           isOwner: ["outgoing", "outbound", "sent"].includes(direction),
         },
         attachments: messageAttachments,
-        createdAt: message?.createdAt || message?.sentAt || null,
+        createdAt: activityAt || null,
         deliveryStatus: message?.deliveryStatus || null,
         metadata: {
           storyReply: Boolean(message?.storyReply),
@@ -293,7 +327,7 @@ function flattenComments(comments) {
   return output;
 }
 
-export async function persistPolledComments({ family, platform, post, comments, context }) {
+export async function persistPolledComments({ family, platform, post, comments, context, freshSince = "" }) {
   const accountId = text(post?.accountId);
   const postId = text(post?.id);
   if (!accountId || !postId) return { processed: 0, duplicates: 0 };
@@ -303,6 +337,8 @@ export async function persistPolledComments({ family, platform, post, comments, 
   for (const comment of flattenComments(comments)) {
     const commentId = text(comment?.id);
     if (!commentId) continue;
+    const activityAt = polledCommentActivityAt(comment);
+    if (!isFreshAtOrAfter(activityAt, freshSince)) continue;
     const fingerprint = stablePayloadHash({
       message: comment?.message || "",
       from: comment?.from || {},
@@ -310,7 +346,7 @@ export async function persistPolledComments({ family, platform, post, comments, 
       isHidden: Boolean(comment?.isHidden),
       likeCount: Number(comment?.likeCount || 0),
     }).slice(0, 16);
-    const timestamp = comment?.createdTime || post?.createdTime || new Date().toISOString();
+    const timestamp = activityAt || post?.createdTime || post?.createdAt || new Date().toISOString();
     const payload = {
       id: `poll:${family}:${platform}:comment:${accountId}:${postId}:${commentId}:${fingerprint}`,
       event: "comment.received",
