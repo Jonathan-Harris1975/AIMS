@@ -412,3 +412,57 @@ test("Comms Hub structured-output validation fails over before accepting invalid
     globalThis.fetch = oldFetch;
   }
 });
+
+test("Comms Hub immediately fails over a rate-limited free provider instead of sleeping and retrying it", async () => {
+  const oldEnv = snapshotEnv(OPENROUTER_ENV_NAMES);
+  const oldFetch = globalThis.fetch;
+  applySpreadsheetOpenRouterEnv();
+  const requestedModels = [];
+
+  globalThis.fetch = async (_url, options = {}) => {
+    const payload = JSON.parse(options.body);
+    requestedModels.push(payload.model);
+    if (payload.model === "z-ai/glm-5.2:free") {
+      return {
+        ok: false,
+        status: 429,
+        headers: { get: () => "60" },
+        json: async () => ({ error: { message: "temporarily rate-limited upstream", code: 429 } }),
+        text: async () => JSON.stringify({ error: { message: "temporarily rate-limited upstream", code: 429 } }),
+      };
+    }
+    return {
+      ok: true,
+      status: 200,
+      headers: { get: () => null },
+      json: async () => ({
+        model: payload.model,
+        choices: [{ message: { content: JSON.stringify({ ok: true }) } }],
+        usage: {},
+      }),
+    };
+  };
+
+  try {
+    const { resilientRequest } = await import(`../services/shared/utils/ai-service.js?comms429Failover=${Date.now()}`);
+    const result = await resilientRequest("commsHubTriage", {
+      sessionId: "comms-429-failover",
+      messages: [{ role: "user", content: "Return JSON" }],
+      response_format: { type: "json_object" },
+      maxRetries: 2,
+      retryBaseMs: 5000,
+      timeoutMs: 1000,
+      returnMetadata: true,
+      validateContent(content) { JSON.parse(content); },
+    });
+    assert.equal(result.model, "dots-studio/dots-3-note-preview:free");
+    assert.deepEqual(requestedModels.slice(0, 2), [
+      "z-ai/glm-5.2:free",
+      "dots-studio/dots-3-note-preview:free",
+    ]);
+    assert.equal(requestedModels.filter((model) => model === "z-ai/glm-5.2:free").length, 1);
+  } finally {
+    restoreEnv(oldEnv);
+    globalThis.fetch = oldFetch;
+  }
+});

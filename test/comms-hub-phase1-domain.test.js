@@ -305,6 +305,7 @@ test("Migration manifest requires all delivered Comms Hub phases", () => {
     "0012_excluded_email_automation_scope",
     "0013_content_automation_queue",
     "0014_chat_ai_retry",
+    "0015_chat_delivery_reliability",
   ]);
 });
 

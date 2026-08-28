@@ -111,3 +111,11 @@ test("autonomous governance reads persisted Comms Hub confidence and risk fields
     { risk: 0.65, confidence: 0.97 },
   );
 });
+
+test("latest chat delivery migration aligns autonomous policy with Smart Response confidence", async () => {
+  const { readFileSync } = await import("node:fs");
+  const sql = readFileSync(new URL("../services/comms-hub/migrations/0015_chat_delivery_reliability.sql", import.meta.url), "utf8");
+  assert.match(sql, /full-chat-low-risk/);
+  assert.match(sql, /'chat', 'any', 0\.20, 0\.86, 0/);
+  assert.match(sql, /status='active'/);
+});

@@ -382,6 +382,38 @@ test("Polling can retain a deleted-message tombstone when the original webhook w
 });
 
 
+test("Polling ignores Zernio historical records with no visible message content", async () => {
+  const d1 = new SqliteD1();
+  const repository = new CommsHubRepository(d1);
+  const result = await persistPolledConversation({
+    family: "meta",
+    platform: "facebook",
+    conversation: {
+      id: "thread-empty-record",
+      accountId: "page-empty-record",
+      participantId: "person-empty-record",
+      participantName: "Historical sender",
+      status: "active",
+    },
+    messages: [{
+      id: "message-empty-record",
+      conversationId: "thread-empty-record",
+      accountId: "page-empty-record",
+      platform: "facebook",
+      direction: "incoming",
+      message: "",
+      attachments: [],
+      deliveryStatus: null,
+      createdAt: "2026-07-31T00:10:00.000Z",
+    }],
+    context: { repository },
+  });
+  assert.deepEqual(result, { processed: 0, duplicates: 0 });
+  assert.equal(d1.query("SELECT COUNT(*) AS count FROM comms_hub_messages").results[0].count, 0);
+  assert.equal(d1.query("SELECT COUNT(*) AS count FROM comms_hub_social_events").results[0].count, 0);
+});
+
+
 test("Social migration prevents cross-family poll job collisions", () => {
   const d1 = new SqliteD1();
   const rows = d1.query("SELECT credential_family, platform, resource FROM comms_hub_social_poll_jobs ORDER BY id").results;
