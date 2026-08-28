@@ -303,8 +303,8 @@ test("AI analysis persists intent, priority, evidence, summary, draft, approval 
     commsHubTriage: { intent: "podcast_contribution", confidence: 0.96, urgency: 0.8, commercialValue: 0.5, reputationalRisk: 0.7, customerImpact: 0.8, rationale: "Time-sensitive contribution" },
     commsHubModeration: { sentiment: "neutral", abuseLabel: "none", confidence: 0.99, severity: 0.1, rationale: "No abuse", recommendedAction: "reply" },
     commsHubSummary: { summary: "A podcast contribution includes a supporting URL.", unresolvedActions: ["Review the source"], sourceMessageIds: [messageId], nextAction: "Review evidence", followUpNeeded: true, followUpReason: "Review still pending", followUpHours: 72 },
-    commsHubDraftPodcast: { bodyText: "Thank you for the contribution. We will review the supplied source through the automated podcast contribution process.", evidenceSourceReferences: ["https://docs.example.com/podcast-process"] },
-    commsHubDraftComplex: { bodyText: "Thank you for the contribution. We will review the supplied source through the automated podcast contribution process.", evidenceSourceReferences: ["https://docs.example.com/podcast-process"] },
+    commsHubDraftPodcast: { bodyText: "Thank you for the contribution. We will review the supplied source through the automated podcast contribution process.", evidenceSourceReferences: ["https://jonathan-harris.online/podcast"] },
+    commsHubDraftComplex: { bodyText: "Thank you for the contribution. We will review the supplied source through the automated podcast contribution process.", evidenceSourceReferences: ["https://jonathan-harris.online/podcast"] },
   };
   const requestedRoutes = [];
   const aiRequest = async (routeName) => {
@@ -326,7 +326,7 @@ test("AI analysis persists intent, priority, evidence, summary, draft, approval 
       async searchApproved() {
         return [{
           indexId: "hive",
-          sourceReference: "https://docs.example.com/podcast-process",
+          sourceReference: "https://jonathan-harris.online/podcast",
           title: "Podcast contribution process",
           excerpt: "Contributions are reviewed automatically before publication.",
           score: 0.94,
@@ -399,13 +399,13 @@ test("Intent routing uses the selected workflow policy and escalates a workflow 
     commsHubTriage: { intent: "podcast_contribution", confidence: 0.98, urgency: 0.2, commercialValue: 0.2, reputationalRisk: 0.1, customerImpact: 0.2, rationale: "Podcast contribution" },
     commsHubModeration: { sentiment: "neutral", abuseLabel: "none", confidence: 0.99, severity: 0, rationale: "Safe", recommendedAction: "reply" },
     commsHubSummary: { summary: "A podcast contribution was submitted.", unresolvedActions: ["Review source"], sourceMessageIds: [messageId], nextAction: "Review source", followUpNeeded: false },
-    commsHubDraftComplex: { bodyText: "Thank you. We will review the supplied source through the automated podcast contribution process.", evidenceSourceReferences: ["https://docs.example.com/podcast-process"] },
+    commsHubDraftComplex: { bodyText: "Thank you. We will review the supplied source through the automated podcast contribution process.", evidenceSourceReferences: ["https://jonathan-harris.online/podcast"] },
   };
   const context = {
     config: { aiEnabled: true, approvalsEnforced: true, aiMaximumEvidence: 8, aiAutoApprovalRiskThreshold: 0.2, aiApprovalPriorityScore: 60 },
     repository: { async getConversation() { return rowConversation(d1, conversationId, { workflow: "contact_intake" }); } },
     aiRepository,
-    aiSearch: { async searchApproved() { return [{ indexId: "hive", sourceReference: "https://docs.example.com/podcast-process", excerpt: "Automated review only.", title: "Podcast process", score: 1, contentSha256: "ok", metadata: {} }]; } },
+    aiSearch: { async searchApproved() { return [{ indexId: "hive", sourceReference: "https://jonathan-harris.online/podcast", excerpt: "Automated review only.", title: "Podcast process", score: 1, contentSha256: "ok", metadata: {} }]; } },
   };
   const service = new CommsHubAiWorkflowService({
     context,
@@ -440,7 +440,7 @@ test("AI drafting rejects evidence references that were not returned by approved
     config: { aiEnabled: true, approvalsEnforced: true, aiMaximumEvidence: 8, aiAutoApprovalRiskThreshold: 0.2, aiApprovalPriorityScore: 60 },
     repository: { async getConversation() { return rowConversation(d1, conversationId); } },
     aiRepository,
-    aiSearch: { async searchApproved() { return [{ indexId: "hive", sourceReference: "https://approved.example.com", excerpt: "Approved", title: "Approved", score: 1, contentSha256: "ok", metadata: {} }]; } },
+    aiSearch: { async searchApproved() { return [{ indexId: "hive", sourceReference: "https://jonathan-harris.online/podcast", excerpt: "Approved", title: "Approved", score: 1, contentSha256: "ok", metadata: {} }]; } },
   };
   const service = new CommsHubAiWorkflowService({
     context,

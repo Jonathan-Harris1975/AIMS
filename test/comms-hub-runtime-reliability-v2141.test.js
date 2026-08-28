@@ -140,18 +140,23 @@ test("webhook reconciliation isolates one Zernio family failure from the other f
   assert.equal(created[0].url, "https://zeroth-kara-jonathanharris-3296ed37.koyeb.app/comms-hub/intake/zernio/video");
 });
 
-test("runtime reliability migration preserves strict default social policy and adds a narrow engagement policy", () => {
+test("social delivery keeps the narrow engagement policy and activates the guarded general social policy", () => {
   const db = new DatabaseSync(":memory:");
   for (const name of COMMS_HUB_REQUIRED_MIGRATIONS) {
     db.exec(fs.readFileSync(new URL(`../services/comms-hub/migrations/${name}.sql`, import.meta.url), "utf8"));
   }
-  const general = db.prepare("SELECT policy_key, require_evidence, minimum_confidence FROM comms_hub_autonomous_reply_policies WHERE policy_key='full-social-low-risk'").get();
-  const engagement = db.prepare("SELECT policy_key, intent, require_evidence, minimum_confidence, status FROM comms_hub_autonomous_reply_policies WHERE policy_key='social-engagement-safe'").get();
+  const general = db.prepare("SELECT policy_key, intent, maximum_risk, require_evidence, minimum_confidence, status FROM comms_hub_autonomous_reply_policies WHERE policy_key='full-social-low-risk'").get();
+  const engagement = db.prepare("SELECT policy_key, intent, maximum_risk, require_evidence, minimum_confidence, status FROM comms_hub_autonomous_reply_policies WHERE policy_key='social-engagement-safe'").get();
 
-  assert.equal(general.require_evidence, 1);
-  assert.equal(Number(general.minimum_confidence), 0.94);
+  assert.equal(general.policy_key, "full-social-low-risk");
+  assert.equal(general.intent, "any");
+  assert.equal(Number(general.maximum_risk), 0.15);
+  assert.equal(general.require_evidence, 0);
+  assert.equal(Number(general.minimum_confidence), 0.88);
+  assert.equal(general.status, "active");
   assert.equal(engagement.policy_key, "social-engagement-safe");
   assert.equal(engagement.intent, "social_engagement");
+  assert.equal(Number(engagement.maximum_risk), 0.05);
   assert.equal(engagement.require_evidence, 0);
   assert.equal(Number(engagement.minimum_confidence), 0.9);
   assert.equal(engagement.status, "active");

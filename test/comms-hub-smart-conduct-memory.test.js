@@ -83,7 +83,7 @@ test("smart memory remembers explicit conversational preferences without inventi
     ],
   };
   const context = buildSmartConversationContext(conversation);
-  assert.equal(context.version, "smart-context-v2");
+  assert.equal(context.version, "smart-context-v3");
   assert.equal(context.memory.explicitName, "Sam");
   assert.equal(context.memory.responseLength, "brief");
   assert.equal(context.memory.linkPreference, "no_links");
@@ -224,7 +224,7 @@ test("AI workflow fails closed when a generated reply violates an explicit no-li
     commsHubTriage: { intent: "social_engagement", confidence: .9, urgency: .1, commercialValue: .1, reputationalRisk: .1, customerImpact: .1, rationale: "general social question" },
     commsHubModeration: { sentiment: "neutral", abuseLabel: "none", confidence: .9, severity: 0, rationale: "safe", recommendedAction: "reply" },
     commsHubSummary: { summary: "Visitor asks what Jonathan offers and does not want links.", unresolvedActions: [], sourceMessageIds: ["m1"], nextAction: "Answer briefly", followUpNeeded: false, followUpReason: "", followUpHours: 0 },
-    commsHubDraftSocial: { bodyText: "Jonathan writes and speaks about practical AI. https://jonathan-harris.online", evidenceSourceReferences: [] },
+    commsHubDraftSocial: { bodyText: "Jonathan writes and speaks about practical AI. https://jonathan-harris.online", evidenceSourceReferences: ["https://jonathan-harris.online"] },
   };
   const service = new CommsHubAiWorkflowService({
     context: {
@@ -235,7 +235,7 @@ test("AI workflow fails closed when a generated reply violates an explicit no-li
       },
       repository: { async getConversation() { return conversation; } },
       aiRepository: { async beginAiRun() {}, async persistAnalysisBundle() {}, async failAiRun() {} },
-      aiSearch: { async searchApproved() { return []; } },
+      aiSearch: { async searchApproved() { return [{ indexId: "site", sourceReference: "https://jonathan-harris.online", title: "Jonathan Harris", excerpt: "Verified information about Jonathan Harris and his work.", score: .99, contentSha256: "official-home", metadata: { approved: true } }]; } },
     },
     aiRequest: async (routeName) => ({ content: JSON.stringify(responses[routeName]), providerId: "test", model: "test", routeKey: routeName }),
   });

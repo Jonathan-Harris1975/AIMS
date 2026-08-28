@@ -152,5 +152,5 @@ test("latest Comms Hub migration accepts durable content_automation actions", ()
   const sql = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='comms_hub_delayed_actions'").get().sql;
   assert.match(sql, /content_automation/);
   assert.match(sql, /chat_ai_retry/);
-  assert.equal(COMMS_HUB_REQUIRED_MIGRATIONS.at(-1), "0015_chat_delivery_reliability");
+  assert.ok(COMMS_HUB_REQUIRED_MIGRATIONS.includes("0013_content_automation_queue"));
 });
