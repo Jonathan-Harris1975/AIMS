@@ -270,10 +270,8 @@ export const aiConfig = {
     newsletterCouncilChair: routeChain(["audit", "highQuality"], ["claudeSonnet5", "anthropic46"]),
     newsletterHeroPrompt: routeChain(["summary", "fast", "fallback"], ["meta", "google25FlashLite"]),
     // Comms Hub: routine communications are free-first and privacy-gated.
-    // Optional free backup/fallback providers are included only when explicitly
-    // configured. Production defaults deliberately go straight from the verified
-    // common free primary to the low-cost paid economy safety net, avoiding known
-    // upstream free-pool rate limits and ZDR-incompatible dynamic endpoints.
+    // Production order is GLM 5.2 Free -> Dots3-Note Free -> paid economy safety net.
+    // An optional third free fallback is included only when explicitly configured.
     commsHubTriage: routeChain(commsRoutineProviderIds, []),
     commsHubModeration: routeChain(commsRoutineProviderIds, []),
     commsHubSummary: routeChain(commsRoutineProviderIds, []),
