@@ -13,6 +13,63 @@ function isoBefore(value, ms) {
   return new Date(date.getTime() - Math.max(0, Number(ms) || 0)).toISOString();
 }
 
+function validIso(value) {
+  if (value === undefined || value === null || String(value).trim() === "") return "";
+  const date = new Date(value);
+  return Number.isFinite(date.getTime()) ? date.toISOString() : "";
+}
+
+function laterIso(left, right) {
+  const a = validIso(left);
+  const b = validIso(right);
+  if (!a) return b;
+  if (!b) return a;
+  return a >= b ? a : b;
+}
+
+function freshSinceForJob(job, cycleStartedAt, overlapMs) {
+  if (!job?.last_success_at) return validIso(job?.fresh_since_at) || validIso(cycleStartedAt);
+  return laterIso(isoBefore(job.last_success_at, overlapMs), job?.fresh_since_at);
+}
+
+function itemActivityAt(item) {
+  for (const value of [
+    item?.updatedTime, item?.updatedAt, item?.lastMessageAt, item?.lastMessageTime,
+    item?.latestMessageAt, item?.createdTime, item?.createdAt, item?.sentAt, item?.timestamp,
+  ]) {
+    const candidate = validIso(value);
+    if (candidate) return candidate;
+  }
+  return "";
+}
+
+function messageActivityAt(message) {
+  const values = message?.isDeleted
+    ? [message?.deletedAt, message?.createdAt, message?.sentAt, message?.timestamp]
+    : message?.isEdited
+      ? [message?.editedAt, message?.createdAt, message?.sentAt, message?.timestamp]
+      : [message?.createdAt, message?.sentAt, message?.timestamp];
+  for (const value of values) {
+    const candidate = validIso(value);
+    if (candidate) return candidate;
+  }
+  return "";
+}
+
+function isOlderThan(timestamp, cutoff) {
+  const value = validIso(timestamp);
+  const floor = validIso(cutoff);
+  return Boolean(value && floor && value < floor);
+}
+
+function emptyPollResult(cycleStartedAt, { baseline = false } = {}) {
+  return {
+    processed: 0, duplicates: 0, conversationsScanned: 0, messagePages: 0, messagesSeen: 0,
+    postsScanned: 0, commentPages: 0, commentsSeen: 0, nextCursor: "", cycleStartedAt,
+    cycleComplete: true, baseline,
+  };
+}
+
 function failureClass(error) {
   if (error?.failureClass) return error.failureClass;
   if (error?.retryable) return "temporary";
@@ -75,6 +132,7 @@ export class CommsHubSocialPollWorker {
   }
 
   async pollConversationJob(job, client, cycleStartedAt) {
+    const freshSince = freshSinceForJob(job, cycleStartedAt, this.config.socialPollOverlapMs);
     const listing = await client.listConversations({
       platform: job.platform,
       cursor: job.cursor || "",
@@ -97,7 +155,13 @@ export class CommsHubSocialPollWorker {
     let duplicates = 0;
     let messagePages = 0;
     let messagesSeen = 0;
+    let staleBoundaryReached = false;
     for (const conversation of conversations) {
+      const conversationActivityAt = itemActivityAt(conversation);
+      if (isOlderThan(conversationActivityAt, freshSince)) {
+        staleBoundaryReached = true;
+        continue;
+      }
       let cursor = "";
       for (let page = 1; page <= this.config.socialPollMaxMessagePages; page += 1) {
         const response = await client.listMessages({
@@ -126,10 +190,12 @@ export class CommsHubSocialPollWorker {
           conversation,
           messages,
           context: this.context,
+          freshSince,
         });
         processed += result.processed;
         duplicates += result.duplicates;
-        if (!response?.pagination?.hasMore || !response?.pagination?.nextCursor) break;
+        const containsOlderKnownMessage = messages.some((message) => isOlderThan(messageActivityAt(message), freshSince));
+        if (containsOlderKnownMessage || !response?.pagination?.hasMore || !response?.pagination?.nextCursor) break;
         cursor = response.pagination.nextCursor;
       }
     }
@@ -142,14 +208,14 @@ export class CommsHubSocialPollWorker {
       postsScanned: 0,
       commentPages: 0,
       commentsSeen: 0,
-      nextCursor: listing?.pagination?.hasMore ? listing?.pagination?.nextCursor || "" : "",
+      nextCursor: listing?.pagination?.hasMore && !staleBoundaryReached ? listing?.pagination?.nextCursor || "" : "",
       cycleStartedAt,
-      cycleComplete: !listing?.pagination?.hasMore,
+      cycleComplete: staleBoundaryReached || !listing?.pagination?.hasMore,
     };
   }
 
   async pollCommentJob(job, client, cycleStartedAt) {
-    const since = isoBefore(job.last_success_at, this.config.socialPollOverlapMs);
+    const since = freshSinceForJob(job, cycleStartedAt, this.config.socialPollOverlapMs);
     const listing = await client.listCommentedPosts({
       platform: job.platform,
       cursor: job.cursor || "",
@@ -201,6 +267,7 @@ export class CommsHubSocialPollWorker {
           post,
           comments,
           context: this.context,
+          freshSince: since,
         });
         processed += result.processed;
         duplicates += result.duplicates;
@@ -228,6 +295,17 @@ export class CommsHubSocialPollWorker {
     const client = this.zernio?.[job.credential_family];
     if (!client) throw new Error(`Zernio ${job.credential_family} client is unavailable.`);
     const cycleStartedAt = job.cycle_started_at || new Date().toISOString();
+    if (!job.last_success_at) {
+      await this.writeLog("info", "commsHub.socialPoll.baselined", {
+        workerId: this.workerId,
+        jobId: job.id,
+        family: job.credential_family,
+        platform: job.platform,
+        resource: job.resource,
+        freshSinceAt: cycleStartedAt,
+      });
+      return emptyPollResult(cycleStartedAt, { baseline: true });
+    }
     if (job.resource === "conversations") return this.pollConversationJob(job, client, cycleStartedAt);
     if (job.resource === "comments") return this.pollCommentJob(job, client, cycleStartedAt);
     throw new Error(`Unsupported social polling resource: ${job.resource}`);
@@ -297,6 +375,7 @@ export class CommsHubSocialPollWorker {
             cursor: cycleComplete ? null : result.nextCursor,
             cycleStartedAt: cycleComplete ? null : result.cycleStartedAt,
             lastSuccessAt: cycleComplete ? completedAt : null,
+            freshSinceAt: result.baseline ? result.cycleStartedAt : null,
             nextAttemptAt: cycleComplete ? isoAfter(this.config.socialPollMs) : isoAfter(1_000),
             completedAt,
           });
