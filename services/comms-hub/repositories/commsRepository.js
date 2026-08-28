@@ -477,7 +477,17 @@ export class CommsHubRepository {
     });
 
     const results = await this.d1.batch(statements);
-    return { duplicate: !rows(results.at(-1)).length };
+    const duplicate = !rows(results.at(-1)).length;
+    if (!duplicate && event.direction === "inbound" && event.conversationId) {
+      await this.d1.query(
+        `UPDATE comms_hub_conversation_operations
+            SET operational_status = 'open', snoozed_until = NULL, resolved_at = NULL,
+                updated_by = 'social-inbound', updated_at = ?, version = version + 1
+          WHERE conversation_id = ? AND operational_status = 'archived'`,
+        [event.processedAt, event.conversationId]
+      );
+    }
+    return { duplicate };
   }
 
   async getSocialThreadByConversation(conversationId) {
@@ -610,21 +620,23 @@ export class CommsHubRepository {
            LIMIT 1
         )
         RETURNING id, credential_family, platform, resource, cursor, cycle_started_at,
-                  last_success_at, attempts`,
+                  fresh_since_at, last_success_at, attempts`,
       [workerId, leaseExpiresAt, now, ...families, now, now]
     );
     return rows(result)[0] || null;
   }
 
-  async completeSocialPollJob({ id, workerId, cursor, cycleStartedAt, lastSuccessAt, nextAttemptAt, completedAt }) {
+  async completeSocialPollJob({ id, workerId, cursor, cycleStartedAt, freshSinceAt = null, lastSuccessAt, nextAttemptAt, completedAt }) {
     const result = await this.d1.query(
       `UPDATE comms_hub_social_poll_jobs
-          SET cursor = ?, cycle_started_at = ?, last_success_at = COALESCE(?, last_success_at),
+          SET cursor = ?, cycle_started_at = ?,
+              fresh_since_at = COALESCE(fresh_since_at, ?),
+              last_success_at = COALESCE(?, last_success_at),
               next_attempt_at = ?, lease_owner = NULL, lease_expires_at = NULL,
               attempts = 0, failure_class = NULL, error = NULL, updated_at = ?
         WHERE id = ? AND lease_owner = ?
         RETURNING id`,
-      [cursor || null, cycleStartedAt || null, lastSuccessAt || null, nextAttemptAt, completedAt, id, workerId]
+      [cursor || null, cycleStartedAt || null, freshSinceAt || null, lastSuccessAt || null, nextAttemptAt, completedAt, id, workerId]
     );
     if (!rows(result).length) throw new CommsHubError(409, "social_poll_lease_lost", "Social polling lease was lost.");
   }
@@ -648,7 +660,7 @@ export class CommsHubRepository {
                        FROM comms_hub_social_events
                       GROUP BY credential_family, platform, event_type
                       ORDER BY credential_family, platform, event_type`),
-      this.d1.query(`SELECT id, credential_family, platform, resource, cursor, last_success_at,
+      this.d1.query(`SELECT id, credential_family, platform, resource, cursor, fresh_since_at, last_success_at,
                             next_attempt_at, attempts, lease_owner, lease_expires_at,
                             failure_class, error, updated_at
                        FROM comms_hub_social_poll_jobs
