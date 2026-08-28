@@ -162,12 +162,21 @@ function quizState(conversation) {
   });
 }
 
+function bookDiscoveryRequested(text, bookRecommendationPreference = "unspecified") {
+  if (bookRecommendationPreference === "opted_out") return false;
+  if (bookRecommendationPreference === "welcome") return true;
+  const value = String(text || "").toLowerCase().replace(/\s+/g, " ").trim();
+  if (/^(?:books?|ebooks?|e-books?)[?.!]*$/.test(value)) return true;
+  return /\b(?:recommend(?: me)?|suggest(?: me)?|looking for|find me|what should i read|something to read)\b[\s\S]{0,80}\b(?:books?|e-?books?|reading)\b/.test(value)
+    || /\b(?:which|what|any)\s+(?:ai\s+)?(?:books?|e-?books?)\b/.test(value)
+    || /\b(?:do you have|have you got|is there|are there)\b[\s\S]{0,80}\b(?:books?|e-?books?)\b/.test(value)
+    || /\b(?:books?|e-?books?)\s+(?:on|about|for|covering)\s+\S+/.test(value);
+}
+
 function engagementMode(conversation, text, quiz, bookRecommendationPreference = "unspecified") {
   const value = text.toLowerCase();
   if (quiz.active) return "quiz_interaction";
-  const explicitBookIntent = bookRecommendationPreference === "welcome"
-    || /\b(?:books?|e-?books?|reading|what should i read|something to read)\b/.test(value);
-  if (bookRecommendationPreference !== "opted_out" && explicitBookIntent) return "book_discovery";
+  if (bookDiscoveryRequested(value, bookRecommendationPreference)) return "book_discovery";
   if (/\b(talk to jonathan|human|person|speak to|contact jonathan)\b/.test(value)) return "human_assistance";
   if ((isSocialCommentChannel(conversation?.channel) || conversation?.socialThread?.thread_type === "comment") && isSocialChannel(conversation?.channel)) return "public_content_discussion";
   if (isSocialChannel(conversation?.channel)) return "social_conversation";
@@ -327,7 +336,7 @@ export function buildSmartConversationContext(conversation, options = {}) {
   const interactionSignals = conversationInteractionSignals(conversation);
   return Object.freeze({
     enabled: true,
-    version: "smart-context-v2",
+    version: "smart-context-v3",
     localDate: clock.date,
     localDay: clock.day,
     channel: String(conversation?.channel || "unknown"),

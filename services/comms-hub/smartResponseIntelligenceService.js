@@ -20,6 +20,7 @@ export function buildSmartResponseIntelligence({
   evidence = [],
   smartContext = {},
   strategy = {},
+  conversationalIntelligence = {},
   conduct = {},
   security = {},
   policy = {},
@@ -35,7 +36,13 @@ export function buildSmartResponseIntelligence({
   const hasEvidence = Array.isArray(evidence) && evidence.length > 0;
   const unresolvedCount = Array.isArray(summary?.unresolvedActions) ? summary.unresolvedActions.length : 0;
   const ambiguousIntent = clamp(intent?.confidence) < 0.58 || ["unknown"].includes(String(intent?.intent || ""));
-  const clarificationRequired = !humanReview && (linkPreferenceBlocksForm || (!formDecision.selected && (ambiguousIntent || unresolvedCount >= 3)));
+  const deterministicClarification = Boolean(conversationalIntelligence?.clarificationRequired);
+  const deterministicResponse = ["assistant_identity", "assistant_capabilities"].includes(String(conversationalIntelligence?.deterministicResponseKind || ""));
+  const strategyClarification = Boolean(strategy?.askClarifyingQuestion);
+  // Clarification is driven by deterministic conversation/strategy state rather than
+  // model confidence alone. A low triage confidence score must not make a clear
+  // visitor question disappear into an unsent clarification loop.
+  const clarificationRequired = !humanReview && (deterministicClarification || strategyClarification || linkPreferenceBlocksForm);
 
   let score = clamp(intent?.confidence, 0.5);
   if (evidenceRequired && !hasEvidence) score -= 0.18;
@@ -64,6 +71,14 @@ export function buildSmartResponseIntelligence({
         ? "ask_one_clarifying_question"
         : "answer_directly";
 
+  const safeClarificationEligible = clarificationRequired
+    && !humanReview
+    && !securityBlocked
+    && Number(moderation?.severity || 0) < 0.2;
+  const safeDeterministicResponseEligible = deterministicResponse
+    && !humanReview
+    && !securityBlocked
+    && Number(moderation?.severity || 0) < 0.2;
   const autonomousEligible = !humanReview
     && !clarificationRequired
     && clamp(intent?.confidence) >= Number(config.smartResponseMinimumConfidence ?? 0.86)
@@ -72,13 +87,15 @@ export function buildSmartResponseIntelligence({
 
   return Object.freeze({
     enabled: config.smartResponseEnabled !== false,
-    version: "smart-response/v1",
+    version: "smart-response/v2",
     confidence: Number(score.toFixed(3)),
     confidenceBand: level(score),
     answerability,
     clarificationRequired,
     humanReviewRequired: humanReview,
     autonomousEligible,
+    safeClarificationEligible,
+    safeDeterministicResponseEligible,
     nextBestMove,
     formDecision,
     reasons: Object.freeze([
@@ -86,6 +103,10 @@ export function buildSmartResponseIntelligence({
       ...(conduct.requiresHumanReview || conduct.automationBlocked ? ["conduct_risk"] : []),
       ...(strategy.humanReviewRequired ? ["strategy_review"] : []),
       ...(smartContext.escalation?.required ? ["context_escalation"] : []),
+      ...(deterministicClarification ? [`conversation_ambiguous:${conversationalIntelligence?.ambiguityKind || "unknown"}`] : []),
+      ...(strategyClarification && !deterministicClarification ? ["strategy_clarification"] : []),
+      ...(safeClarificationEligible ? ["safe_deterministic_clarification"] : []),
+      ...(safeDeterministicResponseEligible ? [`safe_deterministic_response:${conversationalIntelligence?.deterministicResponseKind}`] : []),
       ...(ambiguousIntent ? ["intent_ambiguous"] : []),
       ...(evidenceRequired && !hasEvidence ? ["evidence_missing"] : []),
       ...(formDecision.selected ? [`form:${formDecision.formKey}`] : []),

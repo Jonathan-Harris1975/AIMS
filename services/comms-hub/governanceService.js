@@ -74,7 +74,10 @@ export class CommsHubGovernanceService {
     if (latestRunSecurity.promptInjectionDetected || latestRunSecurity.evidencePromptInjectionDetected) {
       throw new CommsHubError(409, 'autonomous_reply_security_blocked', 'Autonomous replies are blocked for conversations with prompt-injection or poisoned-context indicators.');
     }
-    if (latestResponseIntelligence.version && latestResponseIntelligence.autonomousEligible !== true) {
+    const safeClarification = latestResponseIntelligence.safeClarificationEligible === true;
+    const safeDeterministicResponse = latestResponseIntelligence.safeDeterministicResponseEligible === true;
+    const safeDeterministicDelivery = safeClarification || safeDeterministicResponse;
+    if (latestResponseIntelligence.version && latestResponseIntelligence.autonomousEligible !== true && !safeDeterministicDelivery) {
       throw new CommsHubError(409, 'autonomous_reply_response_intelligence_blocked', 'Smart Response Intelligence did not authorise autonomous delivery for this draft.');
     }
     const intent = state.intent || 'unknown';
@@ -85,17 +88,17 @@ export class CommsHubGovernanceService {
     const maximumRisk = Number(policy.maximum_risk);
     const minimumConfidence = Number(policy.minimum_confidence);
     const evidenceRequired = Number(policy.require_evidence) === 1;
-    if (risk > maximumRisk || confidence < minimumConfidence || (evidenceRequired && evidenceCount < 1)) {
+    if (risk > maximumRisk || (!safeDeterministicDelivery && confidence < minimumConfidence) || (!safeDeterministicDelivery && evidenceRequired && evidenceCount < 1)) {
       throw new CommsHubError(
         409,
         'autonomous_reply_policy_rejected',
-        `Draft does not meet autonomous policy ${policy.policy_key}: risk=${risk.toFixed(3)}/${maximumRisk.toFixed(3)}, confidence=${confidence.toFixed(3)}/${minimumConfidence.toFixed(3)}, evidence=${evidenceCount}${evidenceRequired ? ' required' : ' optional'}.`,
+        `Draft does not meet autonomous policy ${policy.policy_key}: risk=${risk.toFixed(3)}/${maximumRisk.toFixed(3)}, confidence=${confidence.toFixed(3)}/${minimumConfidence.toFixed(3)}, evidence=${evidenceCount}${evidenceRequired ? ' required' : ' optional'}, safeDeterministicDelivery=${safeDeterministicDelivery}.`,
       );
     }
     const sentSince = await this.context.operationsRepository.countAutonomousSendsSince(policy.policy_key, new Date(Date.now() - 3_600_000).toISOString());
     if (sentSince >= Number(policy.maximum_per_hour)) throw new CommsHubError(429, 'autonomous_reply_rate_limited', 'Autonomous reply hourly limit has been reached.');
     const result = await sendReplyDraft({ draftId, context: this.context });
-    await this.context.auditService.record({ actor: identity.actor, role: identity.role, action: 'autonomous_reply_sent', objectType: 'reply_draft', objectId: draftId, conversationId, details: { policyKey: policy.policy_key, risk, confidence, evidenceCount, automated: true } });
+    await this.context.auditService.record({ actor: identity.actor, role: identity.role, action: 'autonomous_reply_sent', objectType: 'reply_draft', objectId: draftId, conversationId, details: { policyKey: policy.policy_key, risk, confidence, evidenceCount, safeClarification, safeDeterministicResponse, automated: true } });
     return { policy: policy.policy_key, ...result };
   }
 

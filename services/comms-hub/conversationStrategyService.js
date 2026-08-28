@@ -12,7 +12,7 @@ function looksLikeQuizAnswer(text) {
   return /^\s*(?:i\s+(?:think|guess|choose|pick)\s+)?(?:it'?s\s+)?[ABCD](?:\b|[).,:-])/i.test(text || "");
 }
 
-export function buildConversationStrategy({ conversation, smartContext = {}, liveContent = {}, conduct = {}, security = {}, config = {} } = {}) {
+export function buildConversationStrategy({ conversation, smartContext = {}, liveContent = {}, brandGrounding = {}, conversationalIntelligence = {}, conduct = {}, security = {}, config = {} } = {}) {
   const latest = latestInboundText(conversation);
   const complaints = Number(smartContext?.memory?.interactionSignals?.complaintCount || 0);
   const humanRequested = Number(smartContext?.memory?.interactionSignals?.humanRequestCount || 0) > 0;
@@ -30,12 +30,18 @@ export function buildConversationStrategy({ conversation, smartContext = {}, liv
   } else if (complaints >= 2 || conduct?.requiresBoundary) {
     objective = "resolve_concern";
     nextBestMove = "address_the_issue_before_any_promotion";
+  } else if (conversationalIntelligence?.clarificationRequired) {
+    objective = "clarify_intent";
+    nextBestMove = "ask_one_clarifying_question";
   } else if (liveContent?.quiz?.available && (looksLikeQuizAnswer(latest) || smartContext?.engagementMode === "quiz_interaction")) {
     objective = "quiz_engagement";
     nextBestMove = "continue_verified_quiz_context";
   } else if (liveContent?.exactPost || smartContext?.engagementMode === "public_content_discussion") {
     objective = "discuss_source_content";
     nextBestMove = "respond_to_the_specific_public_post_or_comment";
+  } else if (brandGrounding?.required) {
+    objective = "grounded_brand_answer";
+    nextBestMove = "answer_from_official_website_only";
   } else if (smartContext?.engagementMode === "book_discovery") {
     objective = "resource_match";
     nextBestMove = smartContext?.verifiedBookCandidates?.length ? "recommend_best_verified_match" : "ask_one_clarifying_question";
@@ -58,13 +64,14 @@ export function buildConversationStrategy({ conversation, smartContext = {}, liv
 
   return Object.freeze({
     enabled: true,
-    version: "conversation-strategy-v1",
+    version: "conversation-strategy-v2",
     objective,
     nextBestMove,
     responseShape,
     promotionPolicy,
     maximumCallsToAction: promotionPolicy === "none" ? 0 : 1,
     askClarifyingQuestion: nextBestMove === "ask_one_clarifying_question",
+    clarificationQuestion: conversationalIntelligence?.clarificationQuestion || "",
     humanReviewRequired: needsHuman,
     handoff: Object.freeze({ available: handoff.available, nextAvailableAt: handoff.nextAvailableAt, timeZone: handoff.timeZone, startHour: handoff.startHour, endHour: handoff.endHour, callbackEmailOption: true }),
     reasons: Object.freeze([
@@ -75,6 +82,8 @@ export function buildConversationStrategy({ conversation, smartContext = {}, liv
       humanRequested ? "human_requested" : "",
       liveContent?.exactPost ? "exact_source_post" : "",
       liveContent?.quiz?.available ? "verified_quiz_available" : "",
+      conversationalIntelligence?.clarificationRequired ? `clarification:${conversationalIntelligence.ambiguityKind || "ambiguous"}` : "",
+      brandGrounding?.required ? "official_website_grounding_required" : "",
     ].filter(Boolean)),
   });
 }
@@ -91,7 +100,8 @@ export function conversationStrategyPromptGuidance(strategy = {}) {
     strategy.humanReviewRequired ? "- Human review is required. Do not keep pushing automation, sales or unnecessary questions." : "",
     strategy.objective === 'human_handoff' && strategy.handoff?.available ? "- Live hand-off to Jonathan is available only now because it is within 09:00-17:00 Monday-Friday UK time. Offer the hand-off, and also offer the optional email callback route." : "",
     strategy.objective === 'human_handoff' && !strategy.handoff?.available ? "- Live hand-off is currently unavailable. Do not imply Jonathan is online. Offer the user the option to leave an email address so Jonathan can get back to them in due course." : "",
-    strategy.askClarifyingQuestion ? "- Ask one concise clarifying question instead of guessing." : "",
+    strategy.askClarifyingQuestion ? `- Ask exactly one concise clarifying question instead of guessing.${strategy.clarificationQuestion ? ` Use: ${strategy.clarificationQuestion}` : ""}` : "",
+    strategy.objective === "grounded_brand_answer" ? "- Answer factual questions about Jonathan only from verified official-website evidence. If it is not verified there, say so rather than inferring." : "",
     strategy.promotionPolicy === "contextual_only" ? "- Mention a book, quiz, podcast or other Jonathan content only if it genuinely advances the user's current goal." : "",
     strategy.promotionPolicy === "none" ? "- Do not add promotional material or calls to action." : "",
   ].filter(Boolean).join("\n");
