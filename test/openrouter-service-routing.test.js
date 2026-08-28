@@ -59,9 +59,9 @@ function applySpreadsheetOpenRouterEnv() {
   process.env.OPENROUTER_API_KEY = "sk-or-global-test-value";
   process.env.OPENROUTER_ART = "recraft/recraft-v4.1";
   process.env.BLOTATO_SCRIPT_MODEL = "anthropic/claude-sonnet-4-5";
-  process.env.COMMS_HUB_MODEL_FREE_PRIMARY = "dots-studio/dots-3-note-preview:free";
-  process.env.COMMS_HUB_MODEL_FREE_BACKUP = "z-ai/glm-5.2:free";
-  process.env.COMMS_HUB_MODEL_FREE_FALLBACK = "openrouter/free";
+  process.env.COMMS_HUB_MODEL_FREE_PRIMARY = "z-ai/glm-5.2:free";
+  process.env.COMMS_HUB_MODEL_FREE_BACKUP = "dots-studio/dots-3-note-preview:free";
+  delete process.env.COMMS_HUB_MODEL_FREE_FALLBACK;
   process.env.COMMS_HUB_MODEL_PAID_ECONOMY = "openai/gpt-oss-20b";
   process.env.COMMS_HUB_MODEL_PAID_PRIMARY = "anthropic/claude-sonnet-4.6";
   process.env.COMMS_HUB_MODEL_PAID_BACKUP = "openai/gpt-5.6-sol";
@@ -140,9 +140,8 @@ test("Comms Hub routes use free-first routing with an economy paid safety net an
     const { getProviderDiagnosticsForRoute } = await import(`../services/shared/utils/ai-service.js?commsModelPolicy=${Date.now()}`);
     const routine = getProviderDiagnosticsForRoute("commsHubDraftSocial").configuredProviders.filter((p) => p.configured);
     assert.deepEqual(routine.map((p) => p.model), [
-      "dots-studio/dots-3-note-preview:free",
       "z-ai/glm-5.2:free",
-      "openrouter/free",
+      "dots-studio/dots-3-note-preview:free",
       "openai/gpt-oss-20b",
     ]);
     assert.ok(routine.every((p) => p.apiKeyEnv === "OPENROUTER_API_KEY"));
@@ -364,13 +363,15 @@ test("Comms Hub structured-output validation fails over before accepting invalid
   const oldEnv = snapshotEnv(OPENROUTER_ENV_NAMES);
   const oldFetch = globalThis.fetch;
   applySpreadsheetOpenRouterEnv();
-  process.env.COMMS_HUB_MODEL_FREE_PRIMARY = "dots-studio/dots-3-note-preview:free";
+  process.env.COMMS_HUB_MODEL_FREE_PRIMARY = "z-ai/glm-5.2:free";
+  process.env.COMMS_HUB_MODEL_FREE_BACKUP = "dots-studio/dots-3-note-preview:free";
+  delete process.env.COMMS_HUB_MODEL_FREE_FALLBACK;
   const requestedModels = [];
 
   globalThis.fetch = async (_url, options = {}) => {
     const payload = JSON.parse(options.body);
     requestedModels.push(payload.model);
-    const invalid = payload.model === "dots-studio/dots-3-note-preview:free";
+    const invalid = payload.model === "z-ai/glm-5.2:free";
     return {
       ok: true,
       json: async () => ({
@@ -401,10 +402,10 @@ test("Comms Hub structured-output validation fails over before accepting invalid
         }
       },
     });
-    assert.equal(result.model, "z-ai/glm-5.2:free");
+    assert.equal(result.model, "dots-studio/dots-3-note-preview:free");
     assert.deepEqual(requestedModels.slice(0, 2), [
-      "dots-studio/dots-3-note-preview:free",
       "z-ai/glm-5.2:free",
+      "dots-studio/dots-3-note-preview:free",
     ]);
   } finally {
     restoreEnv(oldEnv);

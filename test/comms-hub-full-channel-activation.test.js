@@ -39,8 +39,8 @@ test("production defaults activate every Comms Hub conversation channel plus aut
   assert.equal(defaults.COMMS_HUB_BACKUP_ENABLED, "true");
   assert.equal(defaults.COMMS_HUB_BACKUP_AUTOMATIC_ENABLED, "true");
   assert.equal(defaults.COMMS_HUB_RETENTION_WORKER_ENABLED, "true");
-  assert.equal(defaults.COMMS_HUB_MODEL_FREE_PRIMARY, "dots-studio/dots-3-note-preview:free");
-  assert.equal(defaults.COMMS_HUB_MODEL_FREE_BACKUP, "");
+  assert.equal(defaults.COMMS_HUB_MODEL_FREE_PRIMARY, "z-ai/glm-5.2:free");
+  assert.equal(defaults.COMMS_HUB_MODEL_FREE_BACKUP, "dots-studio/dots-3-note-preview:free");
   assert.equal(defaults.COMMS_HUB_MODEL_FREE_FALLBACK, "");
   assert.equal(defaults.COMMS_HUB_MODEL_PAID_ECONOMY, "openai/gpt-oss-20b");
 });
