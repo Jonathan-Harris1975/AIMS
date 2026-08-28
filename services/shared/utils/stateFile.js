@@ -18,6 +18,7 @@ const KNOWN_REMOTE_FILES = new Set([
   "social-editorial-ledger.json",
   "zernio-social-state.json",
   "professional-excellence.json",
+  "operation-window-state.json",
 ]);
 const remoteStateCache = new Map();
 
