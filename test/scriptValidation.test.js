@@ -88,6 +88,12 @@ test("script validation rejects a dangling fragment immediately before the outro
   );
 });
 
+test("script validation rejects an intro-and-outro stub for a 60-minute episode", () => {
+  const validation = validateTranscriptStructure(transcript, { targetMinutes: 60 });
+  assert.equal(validation.ok, false);
+  assert.ok(validation.reasons.some((reason) => /too short for 60-minute plan/i.test(reason)));
+});
+
 test("script validation does not mistake a.m. or p.m. for broken lowercase punctuation joins", () => {
   const joins = findBrokenPunctuationJoins("The service runs from 9 a.m. to 5 p.m. on weekdays.");
   assert.deepEqual(joins, []);
