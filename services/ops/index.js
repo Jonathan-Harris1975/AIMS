@@ -357,6 +357,12 @@ function operationToken(value = "") {
 }
 
 function taskSessionId(job, taskName) {
+  if (String(taskName || "").trim().toLowerCase() === "podcast") {
+    const londonDate = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Europe/London", year: "numeric", month: "2-digit", day: "2-digit",
+    }).format(new Date());
+    return `TT-${londonDate}`;
+  }
   const group = String(taskName || "").startsWith("newsletter-") ? "newsletter" : taskName;
   return `ops-${operationToken(job?.window)}-${operationToken(job?.executionId)}-${operationToken(group)}`.slice(0, 150);
 }
@@ -381,6 +387,10 @@ async function runInternalTask([name, path, body = {}, feature = null, addWeekSt
   const sessionId = taskSessionId(job, name);
   const idempotencyKey = `ops:${job?.executionId || job?.id || "run"}:${name}`;
   const payload = { ...body, sessionId };
+  if (name === "podcast") {
+    payload.targetMinutes = 60;
+    payload.date = sessionId.replace(/^TT-/, "");
+  }
   // Delivery resolves the latest durable issue for the day. The generator
   // sanitises its storage session ID, so forwarding the raw orchestration ID
   // to readiness/send would point at a non-existent prefix.
