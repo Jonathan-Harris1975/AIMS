@@ -566,14 +566,21 @@ export async function resilientRequest(routeName, {
         const emptyCompletion = err?.status === "empty_completion";
         const invalidCompletion = err?.status === "invalid_completion" || err?.code === "AI_INVALID_STRUCTURED_OUTPUT";
         const emptyCompletionBudgetExhausted = emptyCompletion && attempt >= EMPTY_COMPLETION_RETRIES_PER_PROVIDER;
-        const retryable = !timedOut && !invalidCompletion && !emptyCompletionBudgetExhausted && !err?.nonRetryable && attempt < effectiveMaxRetries;
+        // Comms Hub's free providers are opportunistic capacity. A shared-pool
+        // rate limit or an endpoint/data-policy mismatch should immediately
+        // advance to the next configured model rather than making a website
+        // visitor wait through retries that cannot improve this request.
+        const commsFreeUnavailable = String(routeKey || "").startsWith("commsHub")
+          && String(providerId || "").startsWith("commsFree")
+          && [404, 429].includes(Number(err?.status));
+        const retryable = !timedOut && !invalidCompletion && !emptyCompletionBudgetExhausted && !commsFreeUnavailable && !err?.nonRetryable && attempt < effectiveMaxRetries;
         const exponentialWait = effectiveRetryBaseMs * Math.pow(2, attempt);
         const jitter = Math.floor(exponentialWait * (0.15 * Math.random()));
         const localWait = exponentialWait + jitter;
         // OpenRouter explicitly asks raw-fetch clients to honour Retry-After on
         // 429/503. Cap the sleep so a malformed provider header cannot stall a job forever.
         const wait = Math.min(120_000, Math.max(localWait, Number(err?.retryAfterMs || 0)));
-        const failover = timedOut || invalidCompletion || emptyCompletionBudgetExhausted;
+        const failover = timedOut || invalidCompletion || emptyCompletionBudgetExhausted || commsFreeUnavailable;
         logError(failover ? "ai.request.provider_failover" : "ai.request.retry", {
           routeName,
           routeKey,
@@ -582,7 +589,15 @@ export async function resilientRequest(routeName, {
           wait: retryable ? wait : 0,
           retryable,
           failover,
-          failoverReason: timedOut ? "timeout" : invalidCompletion ? "invalid_completion" : emptyCompletionBudgetExhausted ? "empty_completion_budget_exhausted" : undefined,
+          failoverReason: timedOut
+            ? "timeout"
+            : invalidCompletion
+              ? "invalid_completion"
+              : emptyCompletionBudgetExhausted
+                ? "empty_completion_budget_exhausted"
+                : commsFreeUnavailable
+                  ? "free_provider_unavailable"
+                  : undefined,
           status: err?.status,
           message: safeSnippet(err?.message || String(err), 500),
         });
