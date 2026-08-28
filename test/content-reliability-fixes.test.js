@@ -223,7 +223,7 @@ test("Zernio and Blotato scheduled publishing require provider confirmation", as
   assert.match(env, /^ZERNIO_REQUIRE_IMAGE=true$/m);
 });
 
-test("Zernio schedule recovery uses London time and a future blog-social slot", async () => {
+test("Zernio exact schedules use London time and fail closed instead of silently moving a missed slot", async () => {
   const summer = zonedDateTimeToUtcDate("2026-08-03 12:00", "Europe/London");
   const winter = zonedDateTimeToUtcDate("2026-01-15 12:00", "Europe/London");
   assert.equal(summer.toISOString(), "2026-08-03T11:00:00.000Z");
@@ -235,8 +235,9 @@ test("Zernio schedule recovery uses London time and a future blog-social slot", 
   const env = await readFile(new URL("../config/production.defaults.env", import.meta.url), "utf8");
   assert.match(scheduler, /resolveZernioScheduledDateTime/);
   assert.match(scheduler, /zernio\.schedule\.slot_recovered/);
+  assert.match(scheduler, /zernio-schedule-slot-missed/);
   assert.match(config, /ZERNIO_BLOG_RSS_TIME, "12:00"/);
-  assert.match(env, /^ZERNIO_SCHEDULE_RECOVERY_ENABLED=true$/m);
+  assert.match(env, /^ZERNIO_SCHEDULE_RECOVERY_ENABLED=false$/m);
   assert.match(env, /^ZERNIO_SCHEDULE_MIN_LEAD_MS=900000$/m);
   assert.match(env, /^ZERNIO_BLOG_RSS_TIME=12:00$/m);
   assert.match(env, /^ZERNIO_API_RETRY_ATTEMPTS=5$/m);
@@ -286,6 +287,9 @@ test("mini-series creation retries weak plans and duplicate parts, then fails cl
   assert.match(scheduler, /zernio\.mini_series\.theme_retry/);
   assert.match(scheduler, /ZERNIO_MINI_SERIES_DISTINCTNESS_ATTEMPTS/);
   assert.match(scheduler, /zernio\.mini_series\.distinctness_retry/);
+  assert.match(scheduler, /scope: "mini-series:weekly"/);
+  assert.match(scheduler, /zernio\.mini_series\.duplicate_prevented/);
+  assert.match(scheduler, /idempotencySeed: slotClaim\.key \|\| ""/);
   assert.match(scheduler, /reason: "generated-series-quality-failed"/);
   assert.match(scheduler, /ok: false,\n\s+quarantined: true,\n\s+lane: "weekly-mini-series"/);
   assert.match(scheduler, /fallbackUrl: ""/);
@@ -347,7 +351,7 @@ test("critical orchestration defaults stay aligned across deployment templates",
     ZERNIO_MINI_SERIES_SATURDAY_TIME: "19:30",
     ZERNIO_MINI_SERIES_SUNDAY_TIME: "19:30",
     ZERNIO_PODCAST_PROMO_TIME: "18:30",
-    ZERNIO_SCHEDULE_RECOVERY_ENABLED: "true",
+    ZERNIO_SCHEDULE_RECOVERY_ENABLED: "false",
     ZERNIO_SCHEDULE_MIN_LEAD_MS: "900000",
     ZERNIO_BLOG_RSS_TIME: "12:00",
     BLOTATO_REQUIRE_ALL_CHANNELS: "true",
@@ -364,6 +368,7 @@ test("critical orchestration defaults stay aligned across deployment templates",
     BLOTATO_SCHEDULE_FRIDAY_AM: "10:30",
     BLOTATO_SCHEDULE_FRIDAY_PM: "16:30",
     BLOTATO_SCHEDULE_MIN_LEAD_MS: "900000",
+    BLOTATO_SCHEDULE_RECOVERY_ENABLED: "false",
     BLOTATO_SCHEDULE_VERIFY_ATTEMPTS: "12",
     AIMS_OPERATION_NEWSLETTER_ENABLED: "true",
     REVIEW_COUNCIL_STAGNATION_LIMIT: "2",
