@@ -3,6 +3,7 @@ import express from "express";
 import { getOperationalExcellenceSnapshot } from "../shared/utils/operationalExcellence.js";
 import { extractAsyncStatusUrl, waitForAsyncOperation } from "./asyncOperation.js";
 import { getWebsiteAuditReadiness } from "../../audits/utils/websiteAuditReadiness.js";
+import { claimOperationWindow, getOperationWindowReceipt, persistOperationWindow } from "./operationWindowState.js";
 
 const router = express.Router();
 
@@ -510,6 +511,7 @@ const DEFERRED_OPERATION_TASKS = new Set(["blotato-am", "blotato-pm"]);
 async function executeOperationWindow(job, tasks, req) {
   job.status = "running";
   job.updatedAt = new Date().toISOString();
+  await persistOperationWindow(job);
   const pendingTasks = new Map();
   // Capture the only request value needed by delayed background work before
   // the HTTP request lifecycle ends.
@@ -654,6 +656,7 @@ async function executeOperationWindow(job, tasks, req) {
   job.finishedAt = new Date().toISOString();
   job.updatedAt = job.finishedAt;
   job.status = job.failures ? "completed-with-failures" : "completed";
+  await persistOperationWindow(job);
 }
 
 router.post("/run/:window", async (req, res, next) => {
@@ -666,10 +669,9 @@ router.post("/run/:window", async (req, res, next) => {
     const existing = operationJobs.get(id);
     const forceRerun = [req.query?.force, req.body?.force, req.get?.("x-operation-force")]
       .some((value) => ["1", "true", "yes", "on"].includes(String(value ?? "").trim().toLowerCase()));
-    // A content window owns one London-calendar-day execution. Replaying a
-    // completed or partially failed window used to rerun every provider stage,
-    // including paid Blotato renders and Zernio artwork. Default to one-shot;
-    // a human can still deliberately override it with force=true.
+    // A content window owns one London-calendar-day execution. The local map
+    // is only a fast path; durable state below is the authority across restarts,
+    // rolling deployments and multiple Koyeb instances.
     if (existing && !forceRerun) {
       return res.status(202).json({
         ok: true,
@@ -682,9 +684,22 @@ router.post("/run/:window", async (req, res, next) => {
       });
     }
 
+    const executionId = crypto.randomUUID();
+    const durableClaim = await claimOperationWindow({ id, window: windowName, executionId, force: forceRerun });
+    if (!durableClaim.claimed) {
+      if (durableClaim.receipt) operationJobs.set(id, durableClaim.receipt);
+      return res.status(202).json({
+        ok: true,
+        service: "ops",
+        duplicatePrevented: true,
+        reason: durableClaim.reason,
+        job: durableClaim.receipt || null,
+      });
+    }
+
     const job = {
       id,
-      executionId: crypto.randomUUID(),
+      executionId,
       window: windowName,
       status: "accepted",
       startedAt: new Date().toISOString(),
@@ -704,6 +719,7 @@ router.post("/run/:window", async (req, res, next) => {
       job.currentTask = null;
       job.failures += 1;
       job.results.push({ name: "operation-window", ok: false, error: error?.message || String(error) });
+      void persistOperationWindow(job).catch(() => {});
     });
 
     return res.status(202).json({
@@ -719,10 +735,17 @@ router.post("/run/:window", async (req, res, next) => {
   } catch (error) { next(error); }
 });
 
-router.get("/jobs/:id", (req, res) => {
-  const job = operationJobs.get(normalise(req.params.id));
-  if (!job) return res.status(404).json({ ok: false, error: "operation-job-not-found" });
-  return res.json({ ok: true, service: "ops", job: publicJob(job) });
+router.get("/jobs/:id", async (req, res, next) => {
+  try {
+    const id = normalise(req.params.id);
+    const localJob = operationJobs.get(id);
+    if (localJob) return res.json({ ok: true, service: "ops", job: publicJob(localJob) });
+
+    const durableJob = await getOperationWindowReceipt(id);
+    if (!durableJob) return res.status(404).json({ ok: false, error: "operation-job-not-found" });
+    operationJobs.set(id, durableJob);
+    return res.json({ ok: true, service: "ops", job: durableJob });
+  } catch (error) { next(error); }
 });
 
 router.get("/health", sendStage("health"));
