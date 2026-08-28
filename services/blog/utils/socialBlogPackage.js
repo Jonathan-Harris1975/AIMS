@@ -836,7 +836,7 @@ export function buildSocialPackagePrompt({ dateLabel, items = [], editorialConte
     "- hashtags: 3 to 6 relevant tags, no spam, no generic hashtag soup.",
     "- source_urls: select 1 to 3 exact URLs from the supplied evidence that directly support the chosen angle. Do not cite every feed item.",
     "- The title, summary, caption, sections and image prompt must all describe the same selected source angle. Do not merge unrelated stories into a generic AI roundup.",
-    `- image_prompt: high-impact magazine-quality editorial style with cinematic lighting, emotional storytelling, bold controlled colour, strong contrast, modern YouTube-thumbnail focal hierarchy and a concrete visual angle tied to the post. ${getSeasonalPaletteDirection(dateLabel)} ${STRICT_TEXT_FREE_RULE} Avoid corporate stock-photo scenes, staged offices, generic data centres, floating dashboards, polygon networks, glowing brains, cartoon robots and generic AI wallpaper.`,
+    `- image_prompt: premium independent personal-brand editorial photography/art direction for Jonathan Harris, with cinematic lighting, human judgement, bold controlled colour, strong contrast, mobile-first focal hierarchy and one concrete visual angle tied to the post. It must feel like an intelligent creator-led technology publication, never an enterprise campaign, consultancy deck, SaaS advert or corporate brand asset. ${getSeasonalPaletteDirection(dateLabel)} ${STRICT_TEXT_FREE_RULE} Avoid boardrooms, handshakes, suited teams, staged offices, glossy device mock-ups, generic data centres, floating dashboards, gradient corporate backgrounds, polygon networks, glowing brains, cartoon robots and generic AI wallpaper.`,
     "",
     "Source material:",
     sourceDigest,
