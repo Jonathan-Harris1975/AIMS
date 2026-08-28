@@ -1188,6 +1188,16 @@ function resolveBlotatoScheduledTime(slot = "am", now = new Date()) {
   const minLeadMs = positiveIntEnv("BLOTATO_SCHEDULE_MIN_LEAD_MS", 10 * 60_000, 6 * 60 * 60_000);
   let scheduled = new Date(londonLocalToUtcIso({ ...london, hour, minute }));
   if (scheduled.getTime() <= now.getTime() + minLeadMs) {
+    const recoveryEnabled = parseBoolean(process.env.BLOTATO_SCHEDULE_RECOVERY_ENABLED, false);
+    if (!recoveryEnabled) {
+      const err = new Error(`Blotato scheduled slot ${envKey}=${raw} was missed. Exact scheduled posting is required, so no paid render was started.`);
+      err.statusCode = 409;
+      err.code = "blotato-schedule-slot-missed";
+      err.envKey = envKey;
+      err.configuredTime = raw;
+      err.minLeadMs = minLeadMs;
+      throw err;
+    }
     scheduled = new Date(now.getTime() + minLeadMs);
     warn("blotato.schedule.slot_missed", { envKey, configuredTime: raw, minLeadMs, fallbackScheduledTime: scheduled.toISOString() });
   }
@@ -1676,6 +1686,10 @@ export async function triggerPublishNowJob(req = {}, laneSlug = DEFAULT_BLOTATO_
         job: publicJob,
       };
     }
+    // Validate the exact provider slot before selecting/reserving content or
+    // invoking any AI. A late replay must cost zero and must not invent a new
+    // publish time.
+    resolveBlotatoScheduledTime(scheduleSlot);
   }
 
   const articleSource = await selectRssArticleForBlotato({ laneSlug: lane.slug });
