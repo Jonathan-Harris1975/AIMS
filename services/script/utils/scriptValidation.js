@@ -8,6 +8,7 @@ import { OUTRO_CLOSING_TAGLINE } from "./promptTemplates.js";
 
 const MIN_TRANSCRIPT_LENGTH = 500;
 const MIN_OUTRO_LENGTH = 120;
+const MIN_SPOKEN_WORDS_PER_MINUTE = 105;
 
 const LOWERCASE_PUNCTUATION_ABBREVIATIONS = new Set([
   "approx",
@@ -248,12 +249,21 @@ export function validateSpokenCopy(text = "", { maxSentenceWords = 25 } = {}) {
   };
 }
 
-export function validateTranscriptStructure(text = "") {
+export function validateTranscriptStructure(text = "", { targetMinutes } = {}) {
   const trimmed = String(text || "").trim();
   const reasons = [];
 
   if (trimmed.length < MIN_TRANSCRIPT_LENGTH) {
     reasons.push(`transcript too short (${trimmed.length} chars)`);
+  }
+
+  const plannedMinutes = Number(targetMinutes);
+  if (Number.isFinite(plannedMinutes) && plannedMinutes > 0) {
+    const actualWords = words(trimmed).length;
+    const minimumWords = Math.floor(plannedMinutes * MIN_SPOKEN_WORDS_PER_MINUTE);
+    if (actualWords < minimumWords) {
+      reasons.push(`transcript too short for ${plannedMinutes}-minute plan (${actualWords} words; minimum ${minimumWords})`);
+    }
   }
 
   if (!hasRequiredOutro(trimmed)) {

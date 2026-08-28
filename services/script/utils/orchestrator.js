@@ -16,9 +16,14 @@ import { findLongSpokenSentences, validateTranscriptSourceIntegrity, validateTra
 import { validateSpokenCadence } from "../../content-quality/validators/spokenCadenceValidator.js";
 import { runReviewCouncilGate } from "../../content-quality/reviewCouncil.js";
 import { resilientRequest } from "../../shared/utils/ai-service.js";
+import { resolveTargetMins } from "./durationCalculator.js";
+
+function transcriptValidationOptions(sessionMeta = {}) {
+  return { targetMinutes: resolveTargetMins(sessionMeta) };
+}
 
 function evaluatePodcastTranscriptGate(text = "", sessionMeta = {}) {
-  const structure = validateTranscriptStructure(text);
+  const structure = validateTranscriptStructure(text, transcriptValidationOptions(sessionMeta));
   const sourceIntegrity = validateTranscriptSourceIntegrity(text, sessionMeta);
   const structureReasons = structure.ok ? [] : (structure.reasons || []);
   const cadenceOnly = structureReasons.length > 0 && structureReasons.every((reason) => /sentence\(s\) exceed/i.test(String(reason || "")));
@@ -202,7 +207,7 @@ export async function orchestrateScript(input) {
     const initialFullText =
       composed?.fullText ?? [intro, main, outro].join("\n\n");
 
-    const initialValidation = validateTranscriptStructure(initialFullText);
+    const initialValidation = validateTranscriptStructure(initialFullText, transcriptValidationOptions(sessionMeta));
     if (!initialValidation.ok) {
       const repairableSpokenLength = hasOnlyRepairableSpokenLengthDefects(initialValidation);
       const logPayload = {
@@ -231,7 +236,7 @@ export async function orchestrateScript(input) {
       info("script.main.post_editorial_intro_echo_removed", { sessionId: sid });
     }
     const editorialCandidate = [intro, mainCandidate, outro].filter(Boolean).join("\n\n");
-    const editorialValidation = validateTranscriptStructure(editorialCandidate);
+    const editorialValidation = validateTranscriptStructure(editorialCandidate, transcriptValidationOptions(sessionMeta));
     const safeEditorialText = editorialValidation.ok ? editorialCandidate : initialFullText;
 
     if (!editorialValidation.ok) {
@@ -281,7 +286,7 @@ export async function orchestrateScript(input) {
       });
     }
 
-    const finalValidation = validateTranscriptStructure(finalCandidate);
+    const finalValidation = validateTranscriptStructure(finalCandidate, transcriptValidationOptions(sessionMeta));
     if (!finalValidation.ok) {
       const repairableSpokenLength = hasOnlyRepairableSpokenLengthDefects(finalValidation);
       const hardLongSentences = repairableSpokenLength ? getHardLongSentenceDefects(finalCandidate) : [];
