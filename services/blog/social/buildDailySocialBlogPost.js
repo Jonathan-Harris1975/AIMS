@@ -120,7 +120,10 @@ export function buildDailySocialWindow({ now = new Date(), date, days = 1 } = {}
 
   const end = new Date(now);
   const start = new Date(end.getTime() - safeDays * MS_PER_DAY);
-  const dateId = formatIsoDate(new Date(end.getTime() - MS_PER_DAY));
+  // The source evidence is the trailing N-hour window, but the published
+  // package belongs to the day it is actually created. Using yesterday's date
+  // here made a live Tuesday build appear to be Monday's daily post.
+  const dateId = formatIsoDate(end);
 
   return {
     start,
