@@ -82,7 +82,9 @@ test("poll worker can drain all five seeded monitoring resources across the thre
     ["poll_video_youtube_comments", "video", "youtube", "comments"],
   ].map(([id, credential_family, platform, resource]) => ({
     id, credential_family, platform, resource,
-    cursor: null, cycle_started_at: null, last_success_at: null, attempts: 1,
+    cursor: null, cycle_started_at: null,
+    last_success_at: new Date(Date.now() - 60_000).toISOString(),
+    fresh_since_at: new Date(Date.now() - 60_000).toISOString(), attempts: 1,
   }));
   const calls = [];
   const completed = [];

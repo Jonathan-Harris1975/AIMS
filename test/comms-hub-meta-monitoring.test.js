@@ -39,7 +39,8 @@ test("Meta polling emits monitoring telemetry for Facebook and Instagram without
       resource: "conversations",
       cursor: null,
       cycle_started_at: null,
-      last_success_at: null,
+      last_success_at: new Date(Date.now() - 60_000).toISOString(),
+      fresh_since_at: new Date(Date.now() - 60_000).toISOString(),
       attempts: 1,
     },
     {
@@ -49,7 +50,8 @@ test("Meta polling emits monitoring telemetry for Facebook and Instagram without
       resource: "comments",
       cursor: null,
       cycle_started_at: null,
-      last_success_at: null,
+      last_success_at: new Date(Date.now() - 60_000).toISOString(),
+      fresh_since_at: new Date(Date.now() - 60_000).toISOString(),
       attempts: 1,
     },
   ];
