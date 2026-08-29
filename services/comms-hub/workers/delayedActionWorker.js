@@ -4,6 +4,7 @@ import { safeErrorLog } from '../domain/redaction.js';
 import { CommsHubError } from '../errors.js';
 import { businessHoursPolicy, isWithinBusinessHours, nextBusinessOpening } from '../domain/businessHours.js';
 import { sendReplyDraft } from '../replyDraftService.js';
+import { runInboundConversationAutomation } from '../inboundAutomationService.js';
 
 function parse(value) {
   try { return JSON.parse(value || '{}'); } catch { return {}; }
@@ -110,6 +111,19 @@ export class CommsHubDelayedActionWorker {
         scheduleRetry: false,
         rethrowRecoverable: true,
       });
+    }
+    if (item.action_type === 'social_context_retry') {
+      const result = await runInboundConversationAutomation({
+        context: this.context,
+        conversationId: item.conversation_id,
+        actor: 'social-context-retry',
+        scheduleFollowUp: true,
+        scheduleContextRetry: false,
+      });
+      if (result?.reason === 'social_post_context_unavailable') {
+        throw new CommsHubError(503, 'social_post_context_unavailable', 'Social source-post context is still unavailable.', { failureClass: 'temporary' });
+      }
+      return result;
     }
     if (item.action_type === 'retention') {
       return this.context.retentionWorker.runOnce({
