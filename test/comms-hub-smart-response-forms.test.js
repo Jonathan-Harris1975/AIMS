@@ -211,9 +211,11 @@ test("AI workflow dynamically injects the exact approved Jotform URL and stores 
   });
   const result = await service.analyseConversation(convo.id, { scheduleFollowUp: false });
   const draftCall = captured.find((item) => item.routeName === "commsHubDraftContact");
-  assert.ok(draftCall);
-  assert.match(draftCall.options.messages[0].content, /JOTFORM ORCHESTRATION RULES:/);
-  assert.match(draftCall.options.messages[0].content, /262097861889073/);
+  assert.equal(draftCall, undefined, "approved form handoffs should not require a model draft call");
+  assert.equal(persisted.draft.provider, "aims-form-orchestration");
+  assert.equal(persisted.draft.model, "deterministic-approved-jotform-v1");
+  assert.match(persisted.draft.bodyText, /podcast enquiry form/i);
+  assert.match(persisted.draft.bodyText, /https:\/\/form\.jotform\.com\/262097861889073/);
   assert.equal(result.responseIntelligence.formDecision.formKey, "podcast_enquiry");
   assert.equal(persisted.draft.metadata.smartLayers.formDecision.formKey, "podcast_enquiry");
 });
