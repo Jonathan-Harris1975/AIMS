@@ -192,6 +192,23 @@ function normaliseIdentity(candidate, fallback = {}) {
   };
 }
 
+function normalisePostContext(...values) {
+  const candidates = values.map(object);
+  const source = candidates.find((entry) => first(
+    entry.id, entry.platformPostId, entry.postId, entry.title, entry.name, entry.headline,
+    entry.content, entry.message, entry.caption, entry.description, entry.text, entry.permalink, entry.url, entry.link
+  ));
+  if (!source) return null;
+  const context = {
+    postId: first(source.id, source.platformPostId, source.postId, source.providerPostId) || null,
+    title: first(source.title, source.name, source.headline) || null,
+    text: first(source.content, source.message, source.caption, source.description, source.text) || null,
+    permalink: first(source.permalink, source.url, source.link) || null,
+    createdTime: first(source.createdTime, source.createdAt, source.publishedAt, source.timestamp) || null,
+  };
+  return Object.values(context).some(Boolean) ? context : null;
+}
+
 function normaliseAttachments(values) {
   return array(values).map((item, index) => {
     const entry = object(item);
@@ -230,6 +247,20 @@ function normaliseMessageEvent(envelope, correlationId, source) {
   const attachments = normaliseAttachments(message.attachments);
   const statusOnly = ["message.delivered", "message.read", "message.failed"].includes(eventType);
   const mutation = ["message.edited", "message.deleted"].includes(eventType);
+  const postContext = normalisePostContext(
+    message.metadata?.postContext,
+    message.metadata?.sourcePost,
+    message.metadata?.post,
+    message.metadata?.story,
+    message.postContext,
+    message.sourcePost,
+    message.post,
+    message.story,
+    conversation.postContext,
+    conversation.sourcePost,
+    conversation.post,
+    payload.post
+  );
 
   if (!accountId || !providerThreadId || !providerMessageId) {
     throw new CommsHubError(422, "zernio_message_identity_incomplete", "Zernio message event is missing account, conversation or message identity.", {
@@ -287,6 +318,7 @@ function normaliseMessageEvent(envelope, correlationId, source) {
       deleted: eventType === "message.deleted",
       storyReply: Boolean(message.metadata?.storyReply),
       storyMention: Boolean(message.metadata?.isStoryMention),
+      ...(postContext ? { postContext } : {}),
     },
   };
 }
@@ -366,11 +398,12 @@ function normaliseCommentEvent(envelope, correlationId, source) {
       canDelete: Boolean(comment.canDelete),
       canHide: Boolean(comment.canHide),
       permalink: first(comment.url, post.permalink, post.url) || null,
-      postContext: {
-        title: first(post.title, post.name) || null,
-        text: first(post.content, post.message, post.caption, post.description) || null,
-        permalink: first(post.permalink, post.url) || null,
-        createdTime: first(post.createdTime, post.createdAt) || null,
+      postContext: normalisePostContext(post) || {
+        postId: providerPostId,
+        title: null,
+        text: null,
+        permalink: first(comment.url) || null,
+        createdTime: null,
       },
     },
   };
