@@ -1,8 +1,30 @@
 import { safeErrorLog } from "./domain/redaction.js";
 import { log } from "../../logger.js";
 import { resolveConversationAutomationExclusion } from "./domain/automationScope.js";
+import { stableId } from "./domain/ids.js";
+import { ensureSocialPostContext } from "./socialPostContextService.js";
 
 const pending = new Set();
+
+async function scheduleSocialContextRetry(context, conversation, actor) {
+  if (!context?.operationsRepository?.scheduleDelayedAction || !conversation?.id) return null;
+  const latestInbound = (conversation.messages || []).filter((message) => message?.direction !== "outbound").at(-1);
+  const messageId = String(latestInbound?.id || conversation.socialThread?.provider_post_id || "latest").slice(0, 200);
+  const retryKey = `social-context-retry:${conversation.id}:${messageId}`;
+  const now = context.now ? new Date(context.now()) : new Date();
+  const dueAt = new Date(now.getTime() + 30_000).toISOString();
+  return context.operationsRepository.scheduleDelayedAction({
+    id: stableId("dla", retryKey),
+    conversationId: conversation.id,
+    actionType: "social_context_retry",
+    payload: { triggerMessageId: messageId },
+    dueAt,
+    maxAttempts: 8,
+    idempotencyKey: retryKey,
+    actor: actor || "social-context-automation",
+    createdAt: now.toISOString(),
+  });
+}
 
 function enabled(context) {
   return Boolean(
@@ -13,13 +35,20 @@ function enabled(context) {
   );
 }
 
-export async function runInboundConversationAutomation({ context, conversationId, actor = "inbound-automation", scheduleFollowUp = true } = {}) {
+export async function runInboundConversationAutomation({ context, conversationId, actor = "inbound-automation", scheduleFollowUp = true, scheduleContextRetry = true } = {}) {
   if (!conversationId || !enabled(context)) return { skipped: true, reason: "automation_disabled" };
   const conversation = context.repository?.getConversation
     ? await context.repository.getConversation(conversationId).catch(() => null)
     : null;
   const automationExclusion = conversation ? await resolveConversationAutomationExclusion(context, conversation) : null;
   if (automationExclusion) return { skipped: true, reason: automationExclusion.reason, accountKey: automationExclusion.accountKey };
+  if (conversation?.provider === "zernio" && conversation?.socialThread) {
+    const sourceContext = await ensureSocialPostContext({ context, conversation });
+    if (sourceContext.required && !sourceContext.available) {
+      const retry = scheduleContextRetry ? await scheduleSocialContextRetry(context, conversation, actor).catch(() => null) : null;
+      return { skipped: true, reason: "social_post_context_unavailable", sourceContext, retryScheduled: Boolean(retry), retry };
+    }
+  }
   const operations = context.operationsRepository?.getConversationOperations
     ? await context.operationsRepository.getConversationOperations(conversationId).catch(() => null)
     : null;

@@ -296,6 +296,10 @@ export async function persistPolledConversation({ family, platform, conversation
         metadata: {
           storyReply: Boolean(message?.storyReply),
           isStoryMention: Boolean(message?.isStoryMention),
+          ...(message?.postContext ? { postContext: message.postContext } : {}),
+          ...(message?.sourcePost ? { sourcePost: message.sourcePost } : {}),
+          ...(message?.post ? { post: message.post } : {}),
+          ...(message?.story ? { story: message.story } : {}),
         },
       },
     };

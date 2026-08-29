@@ -75,7 +75,7 @@ export function decideConversationJotform({ conversation, intent, summary, smart
 
   const podcastPattern = /\b(podcast|turing'?s torch)\b[\s\S]{0,140}\b(guest|appear|apply|contribut|interview|join|take part|be on)\b|\b(guest|appear|apply|contribut|interview|join|take part|be on)\b[\s\S]{0,140}\b(podcast|turing'?s torch)\b/i;
   const caseStudyPattern = /\b(case study|success story|share (?:my|our) experience|contribute (?:a )?(?:case|story)|project results?|implementation story)\b/i;
-  const contactPattern = /\b(proposal|media enquiry|speaking enquiry|consulting brief|partnership proposal|collaboration proposal|attach(?:ment)?|send (?:a )?brief|detailed requirements)\b/i;
+  const contactPattern = /\b(proposal|media enquiry|press enquiry|speaking enquiry|consulting brief|partnership proposal|collaboration proposal|podcast sponsorship|podcast advertising|sponsor(?:ing|ship)? (?:the )?podcast|advertis(?:e|ing) (?:on|with) (?:the )?podcast|website enquiry|website issue|website problem|site issue|site problem|technical issue (?:on|with) (?:the )?(?:website|site)|attach(?:ment)?|send (?:a )?brief|detailed requirements)\b/i;
 
   const latestPodcastParticipation = podcastPattern.test(latestBody);
   const latestCaseStudy = caseStudyPattern.test(latestBody);

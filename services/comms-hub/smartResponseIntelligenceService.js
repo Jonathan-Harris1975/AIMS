@@ -79,15 +79,20 @@ export function buildSmartResponseIntelligence({
     && !humanReview
     && !securityBlocked
     && Number(moderation?.severity || 0) < 0.2;
+  const safeFormDeliveryEligible = Boolean(formDecision.selected)
+    && !formDecision.withholdUrl
+    && !humanReview
+    && !securityBlocked
+    && Number(moderation?.severity || 0) < 0.2;
   const autonomousEligible = !humanReview
     && !clarificationRequired
-    && clamp(intent?.confidence) >= Number(config.smartResponseMinimumConfidence ?? 0.86)
-    && (!evidenceRequired || hasEvidence || formDecision.selected)
+    && (safeFormDeliveryEligible || clamp(intent?.confidence) >= Number(config.smartResponseMinimumConfidence ?? 0.86))
+    && (!evidenceRequired || hasEvidence || safeFormDeliveryEligible)
     && Number(moderation?.severity || 0) < 0.2;
 
   return Object.freeze({
     enabled: config.smartResponseEnabled !== false,
-    version: "smart-response/v2",
+    version: "smart-response/v3",
     confidence: Number(score.toFixed(3)),
     confidenceBand: level(score),
     answerability,
@@ -96,6 +101,7 @@ export function buildSmartResponseIntelligence({
     autonomousEligible,
     safeClarificationEligible,
     safeDeterministicResponseEligible,
+    safeFormDeliveryEligible,
     nextBestMove,
     formDecision,
     reasons: Object.freeze([
@@ -107,7 +113,8 @@ export function buildSmartResponseIntelligence({
       ...(strategyClarification && !deterministicClarification ? ["strategy_clarification"] : []),
       ...(safeClarificationEligible ? ["safe_deterministic_clarification"] : []),
       ...(safeDeterministicResponseEligible ? [`safe_deterministic_response:${conversationalIntelligence?.deterministicResponseKind}`] : []),
-      ...(ambiguousIntent ? ["intent_ambiguous"] : []),
+      ...(safeFormDeliveryEligible ? [`safe_form_delivery:${formDecision.formKey}`] : []),
+      ...(ambiguousIntent && !safeFormDeliveryEligible ? ["intent_ambiguous"] : []),
       ...(evidenceRequired && !hasEvidence ? ["evidence_missing"] : []),
       ...(formDecision.selected ? [`form:${formDecision.formKey}`] : []),
     ]),

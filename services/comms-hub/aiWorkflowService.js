@@ -162,6 +162,23 @@ function conciseBookSummary(value, maximum = 260) {
   return `${clipped}.`;
 }
 
+export function deterministicFormHandoffDraft(decision) {
+  if (!decision?.selected || decision.withholdUrl || !/^https:\/\/form\.jotform\.com\/\d+$/i.test(String(decision.formUrl || ""))) return null;
+  const introductions = {
+    podcast_enquiry: "For a podcast guest or contribution enquiry, the podcast enquiry form is the right structured route.",
+    case_study: "For a case study contribution, the case study contribution form is the right structured route.",
+    contact: "For this enquiry, the contact form is the right structured route.",
+  };
+  const introduction = introductions[decision.formKey] || "The approved form is the right structured route for this enquiry.";
+  const explanation = decision.required
+    ? "It collects the details needed to assess the enquiry without asking you to post structured information into the conversation."
+    : "It collects the details needed to respond properly without asking you to post structured information into the conversation.";
+  return Object.freeze({
+    bodyText: `${introduction} ${explanation}\n\n${decision.formUrl}`,
+    evidenceSourceReferences: Object.freeze([]),
+  });
+}
+
 function verifiedBookDiscoveryDraft(smartContext = {}, policy = {}) {
   if (smartContext.engagementMode !== "book_discovery") return null;
   const candidates = (smartContext.verifiedBookCandidates || []).slice(0, 2);
@@ -561,6 +578,7 @@ export class CommsHubAiWorkflowService {
         autonomousEligible: responseIntelligence.autonomousEligible,
         safeClarificationEligible: responseIntelligence.safeClarificationEligible,
         safeDeterministicResponseEligible: responseIntelligence.safeDeterministicResponseEligible,
+        safeFormDeliveryEligible: responseIntelligence.safeFormDeliveryEligible,
         nextBestMove: responseIntelligence.nextBestMove,
         formKey: responseIntelligence.formDecision?.selected ? responseIntelligence.formDecision.formKey : null,
         reasons: responseIntelligence.reasons,
@@ -571,8 +589,9 @@ export class CommsHubAiWorkflowService {
         ? "commsHubFollowUp"
         : complexity.complex ? "commsHubDraftComplex" : policy.modelRoute;
       const conversationalDraft = deterministicConversationalDraft(conversationalIntelligence, { channel: conversation.channel });
-      const catalogueDraft = conversationalDraft ? null : verifiedBookDiscoveryDraft(smartContext, effectivePolicy);
-      const brandFallbackDraft = brandGrounding.required && draftEvidence.length === 0 && !conversationalDraft && !catalogueDraft
+      const formHandoffDraft = conversationalDraft ? null : deterministicFormHandoffDraft(responseIntelligence.formDecision);
+      const catalogueDraft = conversationalDraft || formHandoffDraft ? null : verifiedBookDiscoveryDraft(smartContext, effectivePolicy);
+      const brandFallbackDraft = brandGrounding.required && draftEvidence.length === 0 && !conversationalDraft && !formHandoffDraft && !catalogueDraft
         ? { bodyText: unverifiedBrandFallback({ channel: conversation.channel }), evidenceSourceReferences: [] }
         : null;
       const draftCall = conversationalDraft
@@ -585,6 +604,16 @@ export class CommsHubAiWorkflowService {
               routeKey: draftRoute,
             },
           }
+        : formHandoffDraft
+          ? {
+              parsed: formHandoffDraft,
+              result: {
+                content: JSON.stringify(formHandoffDraft),
+                providerId: "aims-form-orchestration",
+                model: "deterministic-approved-jotform-v1",
+                routeKey: draftRoute,
+              },
+            }
         : catalogueDraft
         ? {
             parsed: catalogueDraft,
@@ -780,6 +809,7 @@ export class CommsHubAiWorkflowService {
                 autonomousEligible: responseIntelligence.autonomousEligible,
                 safeClarificationEligible: responseIntelligence.safeClarificationEligible,
                 safeDeterministicResponseEligible: responseIntelligence.safeDeterministicResponseEligible,
+                safeFormDeliveryEligible: responseIntelligence.safeFormDeliveryEligible,
                 nextBestMove: responseIntelligence.nextBestMove,
               },
               formDecision: responseIntelligence.formDecision,

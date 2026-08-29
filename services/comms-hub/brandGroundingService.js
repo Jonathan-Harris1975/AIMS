@@ -2,6 +2,10 @@ import { sanitiseUntrustedText } from "./domain/promptSecurity.js";
 import { isSocialChannel, isSocialCommentChannel } from "./domain/channels.js";
 
 const OFFICIAL_HOSTS = new Set(["jonathan-harris.online", "www.jonathan-harris.online"]);
+const FIRST_PARTY_FAMILIES = new Set([
+  "books", "podcast_media", "services", "speaking", "projects_work", "background",
+  "contact_collaboration", "availability", "pricing", "social", "newsletter", "content", "website",
+]);
 
 function latestInbound(conversation) {
   return (conversation?.messages || []).filter((message) => message?.direction !== "outbound").at(-1) || null;
@@ -26,9 +30,12 @@ export function classifyBrandGrounding(conversation, { conversationalIntelligenc
     /\b(?:jonathan(?: harris)?|you|your|yours)\b/.test(value)
     && /\b(?:do|does|did|are|is|have|has|host|run|offer|provide|publish|write|wrote|work|worked|speak|spoken|podcast|newsletter|book|books|ebook|ebooks|service|services|consult|consulting|website|social|linkedin|youtube|instagram|facebook|career|background|experience|qualification|award|client|company|business|project|projects|available|where|when|who|what)\b/.test(value)
   ) || /\b(?:who is jonathan harris|what does jonathan harris do|tell me about jonathan harris)\b/.test(value);
-  const personalBrandQuestion = !sourcePostDiscussion && (intelligenceAvailable
+  const emailFirstPartyQuestion = conversation?.channel === "email"
+    && FIRST_PARTY_FAMILIES.has(String(conversationalIntelligence?.family || ""));
+  const officialDomainMentioned = /\b(?:www\.)?jonathan-harris\.online\b/i.test(value);
+  const personalBrandQuestion = !sourcePostDiscussion && (emailFirstPartyQuestion || officialDomainMentioned || (intelligenceAvailable
     ? Boolean(conversationalIntelligence?.personalBrandLikely)
-    : legacyPersonalBrandQuestion);
+    : legacyPersonalBrandQuestion));
 
   return Object.freeze({
     required: personalBrandQuestion,

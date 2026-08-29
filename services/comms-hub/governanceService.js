@@ -76,7 +76,8 @@ export class CommsHubGovernanceService {
     }
     const safeClarification = latestResponseIntelligence.safeClarificationEligible === true;
     const safeDeterministicResponse = latestResponseIntelligence.safeDeterministicResponseEligible === true;
-    const safeDeterministicDelivery = safeClarification || safeDeterministicResponse;
+    const safeFormDelivery = latestResponseIntelligence.safeFormDeliveryEligible === true;
+    const safeDeterministicDelivery = safeClarification || safeDeterministicResponse || safeFormDelivery;
     if (latestResponseIntelligence.version && latestResponseIntelligence.autonomousEligible !== true && !safeDeterministicDelivery) {
       throw new CommsHubError(409, 'autonomous_reply_response_intelligence_blocked', 'Smart Response Intelligence did not authorise autonomous delivery for this draft.');
     }
@@ -98,7 +99,7 @@ export class CommsHubGovernanceService {
     const sentSince = await this.context.operationsRepository.countAutonomousSendsSince(policy.policy_key, new Date(Date.now() - 3_600_000).toISOString());
     if (sentSince >= Number(policy.maximum_per_hour)) throw new CommsHubError(429, 'autonomous_reply_rate_limited', 'Autonomous reply hourly limit has been reached.');
     const result = await sendReplyDraft({ draftId, context: this.context });
-    await this.context.auditService.record({ actor: identity.actor, role: identity.role, action: 'autonomous_reply_sent', objectType: 'reply_draft', objectId: draftId, conversationId, details: { policyKey: policy.policy_key, risk, confidence, evidenceCount, safeClarification, safeDeterministicResponse, automated: true } });
+    await this.context.auditService.record({ actor: identity.actor, role: identity.role, action: 'autonomous_reply_sent', objectType: 'reply_draft', objectId: draftId, conversationId, details: { policyKey: policy.policy_key, risk, confidence, evidenceCount, safeClarification, safeDeterministicResponse, safeFormDelivery, automated: true } });
     return { policy: policy.policy_key, ...result };
   }
 
