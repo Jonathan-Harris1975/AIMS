@@ -109,9 +109,15 @@ test("Meta polling emits monitoring telemetry for Facebook and Instagram without
   assert.equal(logs.some((entry) => entry.event === "commsHub.socialPoll.runComplete" && entry.data.processedJobs === 2), true);
 });
 
-test("deployment templates default social canaries to monitoring-only", async () => {
+test("deployment templates default social automation to outbound-enabled mode", async () => {
   for (const file of [".env.example", "env.template", "services/comms-hub/env.template"]) {
     const source = await readFile(new URL(`../${file}`, import.meta.url), "utf8");
-    assert.match(source, /COMMS_HUB_SOCIAL_MONITOR_ONLY=true/);
+    assert.match(source, /COMMS_HUB_SOCIAL_MONITOR_ONLY=false/);
   }
+
+  const monitoringProfile = await readFile(
+    new URL("../config/comms-hub-social-monitoring.env.example", import.meta.url),
+    "utf8"
+  );
+  assert.match(monitoringProfile, /COMMS_HUB_SOCIAL_MONITOR_ONLY=true/);
 });
