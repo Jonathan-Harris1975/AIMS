@@ -191,6 +191,32 @@ export class CommsHubRepository {
     };
   }
 
+  async mergeSocialPostContext({ conversationId, postContext, updatedAt = new Date().toISOString() } = {}) {
+    if (!conversationId || !postContext || typeof postContext !== "object") return false;
+    const patch = json({ postContext });
+    await this.d1.batch([
+      {
+        sql: `UPDATE comms_hub_social_threads
+                SET metadata_json = json_patch(COALESCE(metadata_json, '{}'), ?),
+                    updated_at = ?
+              WHERE conversation_id = ?`,
+        params: [patch, updatedAt, conversationId],
+      },
+      {
+        sql: `UPDATE comms_hub_messages
+                SET metadata_json = json_patch(COALESCE(metadata_json, '{}'), ?)
+              WHERE id = (
+                SELECT id FROM comms_hub_messages
+                 WHERE conversation_id = ? AND direction = 'inbound'
+                 ORDER BY received_at DESC, created_at DESC
+                 LIMIT 1
+              )`,
+        params: [patch, conversationId],
+      },
+    ]);
+    return true;
+  }
+
   async markAttachmentStatus(attachmentId, status, metadata = null) {
     const safeStatus = String(status || "").trim().slice(0, 50);
     if (!attachmentId || !safeStatus) return false;
