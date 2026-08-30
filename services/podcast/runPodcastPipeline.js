@@ -8,7 +8,15 @@ import finalCleanupSession from "../shared/utils/cleanupSessionFinal.js";
 import cleanupTempMemory from "../shared/utils/cleanupTempMemory.js";
 import { fetchWithTimeout } from "../shared/http-client.js";
 import { buildPodcastCompletionStatus } from "./completionStatus.js";
-import { loadPendingEditorialBriefs, markEditorialBriefsConsumed, editorialBriefPromptContext } from "../comms-hub/contentAutomationQueue.js";
+import {
+  claimPendingEditorialBriefs,
+  editorialBriefFingerprint,
+  editorialBriefIds,
+  editorialBriefPromptContext,
+  finaliseEditorialBriefsAfterPublication,
+  markEditorialBriefsReconciliationRequired,
+  releaseEditorialBriefClaims,
+} from "../comms-hub/contentAutomationQueue.js";
 
 const WEBHOOK_TIMEOUT_MS = Number(process.env.WEBHOOK_TIMEOUT_MS) || 15_000;
 
@@ -118,6 +126,8 @@ export async function runPodcastPipeline(input = {}, maybeOptions = {}) {
   const pipelineInput = normalisePipelineInput(input, maybeOptions);
   const { sessionId, force } = pipelineInput;
   const log = { info, warn, error };
+  let editorialBriefEntries = [];
+  let editorialBriefFinalised = false;
 
   if (!sessionId) {
     throw new Error("Missing required sessionId");
@@ -126,8 +136,12 @@ export async function runPodcastPipeline(input = {}, maybeOptions = {}) {
   try {
     log.info("🚀 Podcast pipeline starting", { sessionId, force });
 
-    const editorialBriefEntries = await loadPendingEditorialBriefs("podcast", { limit: Number(process.env.COMMS_HUB_CONTENT_AUTOMATION_BRIEF_LIMIT || 3) });
+    editorialBriefEntries = await claimPendingEditorialBriefs("podcast", {
+      limit: Number(process.env.COMMS_HUB_CONTENT_AUTOMATION_BRIEF_LIMIT || 3),
+      consumerId: sessionId,
+    });
     const editorialContext = editorialBriefPromptContext(editorialBriefEntries);
+    const editorialFingerprint = editorialBriefFingerprint(editorialBriefEntries);
 
     log.info("📝 Generating podcast script…");
     const script = await getScriptForPodcast({
@@ -136,6 +150,8 @@ export async function runPodcastPipeline(input = {}, maybeOptions = {}) {
       force,
       editorialContext,
       editorialBriefs: editorialBriefEntries.map((entry) => entry.brief),
+      editorialBriefIds: editorialBriefIds(editorialBriefEntries),
+      editorialBriefFingerprint: editorialFingerprint,
     });
     if (!script?.ok) {
       throw new Error(script?.error || "Podcast script generation failed");
@@ -223,28 +239,68 @@ export async function runPodcastPipeline(input = {}, maybeOptions = {}) {
 
     const completion = buildPodcastCompletionStatus({ rss, rebuild });
     let publicationHandoff = { skipped: true, reason: "publication_not_confirmed", results: [] };
+    let briefHandoff = { ok: true, skipped: true, reason: "no_editorial_briefs" };
+    const episodeUrl = rss?.result?.episode?.url || null;
     if (completion.ok) {
       try {
-        const episodeUrl = rss.result?.episode?.url;
         publicationHandoff = await advancePublishedCommsContributions(editorialBriefEntries, {
           episodeUrl,
           publicationId: sessionId,
         });
         if (editorialBriefEntries.length) {
-          const consumption = await markEditorialBriefsConsumed(editorialBriefEntries, {
+          editorialBriefFinalised = true;
+          briefHandoff = await finaliseEditorialBriefsAfterPublication(editorialBriefEntries, {
             consumerId: sessionId,
-            resultReference: episodeUrl || sessionId,
+            resultReference: {
+              sessionId,
+              episodeUrl: episodeUrl || null,
+              rssPublished: true,
+              websiteRebuildConfirmed: true,
+            },
+            reconciliationReason: "podcast_published_but_brief_archive_failed",
           });
-          const failures = consumption.filter((item) => item.ok !== true);
-          if (failures.length) throw new Error(`${failures.length} editorial brief(s) could not be marked consumed after publication.`);
+          if (!briefHandoff.ok) {
+            completion.ok = false;
+            completion.partialFailure = true;
+            completion.issues.push({ stage: "editorial-brief-handoff", error: briefHandoff.status || "brief hand-off requires reconciliation" });
+          }
         }
       } catch (handoffError) {
         publicationHandoff = { ok: false, error: handoffError?.message || String(handoffError), results: [] };
+        if (editorialBriefEntries.length) {
+          editorialBriefFinalised = true;
+          const reconciliation = await markEditorialBriefsReconciliationRequired(editorialBriefEntries, {
+            consumerId: sessionId,
+            resultReference: { sessionId, episodeUrl, rssPublished: true, websiteRebuildConfirmed: true },
+            reason: "podcast_published_but_contribution_handoff_failed",
+          });
+          briefHandoff = {
+            ok: false,
+            skipped: false,
+            status: reconciliation.every((item) => item.ok === true) ? "reconciliation_required" : "reconciliation_failed",
+            reconciliationRequired: true,
+            reconciliation,
+          };
+        }
         completion.ok = false;
         completion.partialFailure = true;
         completion.issues.push({ stage: "comms-publication-handoff", error: publicationHandoff.error });
         log.error("Podcast publication hand-off failed", { sessionId, error: publicationHandoff.error });
       }
+    } else if (rss?.ok && editorialBriefEntries.length) {
+      editorialBriefFinalised = true;
+      const reconciliation = await markEditorialBriefsReconciliationRequired(editorialBriefEntries, {
+        consumerId: sessionId,
+        resultReference: { sessionId, episodeUrl, rssPublished: true, websiteRebuildConfirmed: false },
+        reason: "podcast_rss_published_but_website_rebuild_not_confirmed",
+      });
+      briefHandoff = {
+        ok: false,
+        skipped: false,
+        status: reconciliation.every((item) => item.ok === true) ? "reconciliation_required" : "reconciliation_failed",
+        reconciliationRequired: true,
+        reconciliation,
+      };
     }
     const summary = {
       ...completion,
@@ -255,6 +311,9 @@ export async function runPodcastPipeline(input = {}, maybeOptions = {}) {
       rss,
       rebuild,
       publicationHandoff,
+      briefHandoff,
+      editorialBriefIds: editorialBriefIds(editorialBriefEntries),
+      editorialBriefFingerprint: editorialBriefFingerprint(editorialBriefEntries),
       maintenanceWarnings,
     };
 
@@ -271,6 +330,15 @@ export async function runPodcastPipeline(input = {}, maybeOptions = {}) {
       stack: err?.stack,
     });
     throw err;
+  } finally {
+    if (editorialBriefEntries.length && !editorialBriefFinalised) {
+      await releaseEditorialBriefClaims(editorialBriefEntries, {
+        consumerId: sessionId,
+        reason: "podcast_failed_before_confirmed_rss_publication",
+      }).catch((releaseError) => {
+        log.error("Podcast editorial brief claim release failed", { sessionId, error: releaseError?.message || String(releaseError) });
+      });
+    }
   }
 }
 
