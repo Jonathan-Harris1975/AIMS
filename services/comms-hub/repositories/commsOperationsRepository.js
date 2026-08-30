@@ -112,6 +112,7 @@ export class CommsOperationsRepository extends CommsIdentityArchiveRepository {
               st.provider_thread_id AS social_provider_thread_id, st.provider_post_id AS social_provider_post_id,
               st.root_comment_id AS social_root_comment_id, st.provider_status AS social_provider_status,
               et.account_key AS email_account_key, et.mailbox AS email_mailbox,
+              (SELECT MAX(ae.occurred_at) FROM comms_hub_audit_events ae WHERE ae.conversation_id = c.id AND ae.action = 'autonomous_reply_sent') AS last_auto_sent_at,
               CAST((julianday('now') - julianday(c.last_message_at)) * 86400 AS INTEGER) AS age_seconds,
               CASE WHEN o.response_due_at IS NOT NULL AND o.response_due_at <= ? THEN 1 ELSE 0 END AS response_overdue
          FROM comms_hub_conversations c
