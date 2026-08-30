@@ -60,6 +60,10 @@ function normalizeSessionMeta(sessionIdLike) {
       date: sessionIdLike.date,
       editorialContext: String(sessionIdLike.editorialContext || "").slice(0, 18000),
       editorialBriefs: Array.isArray(sessionIdLike.editorialBriefs) ? sessionIdLike.editorialBriefs.slice(0, 10) : [],
+      editorialBriefIds: Array.isArray(sessionIdLike.editorialBriefIds)
+        ? sessionIdLike.editorialBriefIds.map((value) => String(value || "").trim()).filter(Boolean).slice(0, 10)
+        : [],
+      editorialBriefFingerprint: String(sessionIdLike.editorialBriefFingerprint || "").trim().slice(0, 64),
     };
     // Carry through any explicit duration override so calculateDuration()
     // can honour it instead of always falling back to hash-based rotation.
