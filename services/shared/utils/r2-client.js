@@ -499,6 +499,8 @@ export async function uploadBuffer(bucketKey, key, buffer, contentType = "applic
   const bucket = ensureBucketKey(bucketKey);
   const safeKey = normaliseR2ObjectKey(key);
   const cacheControl = String(options?.cacheControl || "").trim();
+  const ifMatch = String(options?.ifMatch || "").trim();
+  const ifNoneMatch = String(options?.ifNoneMatch || "").trim();
 
   await sendR2Command(
     new PutObjectCommand({
@@ -507,6 +509,8 @@ export async function uploadBuffer(bucketKey, key, buffer, contentType = "applic
       Body: buffer,
       ContentType: contentType,
       ...(cacheControl ? { CacheControl: cacheControl } : {}),
+      ...(ifMatch ? { IfMatch: ifMatch } : {}),
+      ...(ifNoneMatch ? { IfNoneMatch: ifNoneMatch } : {}),
     })
   );
 
@@ -534,6 +538,8 @@ export async function uploadPrivateBuffer(bucketKey, key, buffer, contentType = 
   const bucket = ensureBucketKey(bucketKey);
   const safeKey = normaliseR2ObjectKey(key);
   const cacheControl = String(options?.cacheControl || "no-store, max-age=0").trim();
+  const ifMatch = String(options?.ifMatch || "").trim();
+  const ifNoneMatch = String(options?.ifNoneMatch || "").trim();
 
   await sendR2Command(
     new PutObjectCommand({
@@ -542,6 +548,8 @@ export async function uploadPrivateBuffer(bucketKey, key, buffer, contentType = 
       Body: buffer,
       ContentType: contentType,
       ...(cacheControl ? { CacheControl: cacheControl } : {}),
+      ...(ifMatch ? { IfMatch: ifMatch } : {}),
+      ...(ifNoneMatch ? { IfNoneMatch: ifNoneMatch } : {}),
     })
   );
 
@@ -552,17 +560,31 @@ export async function uploadPrivateText(bucketKey, key, text, contentType = "tex
   return uploadPrivateBuffer(bucketKey, key, Buffer.from(text, "utf-8"), contentType, options);
 }
 
-export async function getObjectAsBuffer(bucketKey, key) {
+export async function getObjectAsBufferWithMetadata(bucketKey, key) {
   const bucket = ensureBucketKey(bucketKey);
   const safeKey = normaliseR2ObjectKey(key);
   const response = await sendR2Command(new GetObjectCommand({ Bucket: bucket, Key: safeKey }));
   const chunks = [];
   for await (const chunk of response.Body) chunks.push(Buffer.from(chunk));
-  return Buffer.concat(chunks);
+  return {
+    buffer: Buffer.concat(chunks),
+    eTag: response.ETag || null,
+    contentType: response.ContentType || null,
+    lastModified: response.LastModified instanceof Date ? response.LastModified.toISOString() : response.LastModified || null,
+  };
+}
+
+export async function getObjectAsBuffer(bucketKey, key) {
+  return (await getObjectAsBufferWithMetadata(bucketKey, key)).buffer;
 }
 
 export async function getObjectAsText(bucketKey, key) {
   return (await getObjectAsBuffer(bucketKey, key)).toString("utf-8");
+}
+
+export async function getObjectAsTextWithMetadata(bucketKey, key) {
+  const result = await getObjectAsBufferWithMetadata(bucketKey, key);
+  return { ...result, text: result.buffer.toString("utf-8") };
 }
 
 export function buildR2Reference(bucketKey, key) {
@@ -693,7 +715,9 @@ export default {
   uploadPrivateBuffer,
   uploadPrivateText,
   getObjectAsText,
+  getObjectAsTextWithMetadata,
   getObjectAsBuffer,
+  getObjectAsBufferWithMetadata,
   buildR2Reference,
   parseR2Reference,
   getR2ReferenceAsBuffer,
