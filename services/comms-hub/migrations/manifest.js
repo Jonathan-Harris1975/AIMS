@@ -18,6 +18,7 @@ export const COMMS_HUB_REQUIRED_MIGRATIONS = Object.freeze([
   "0017_social_fresh_activity_only",
   "0018_default_channel_automation",
   "0019_social_context_retry",
+  "0020_professional_autonomous_comms",
 ]);
 
 export default COMMS_HUB_REQUIRED_MIGRATIONS;
