@@ -19,6 +19,16 @@ import { emitQaEvent } from "../../shared/utils/qaEvents.js";
 import { createSocialArtwork } from "../../artwork/createSocialArtwork.js";
 import { createQuizArtwork } from "../../artwork/createQuizArtwork.js";
 import { analyseTopicFidelity, jaccardTopicSimilarity, selectSourcesByUrls, topicTokens } from "../../content-quality/topicFidelity.js";
+import {
+  claimPendingEditorialBriefs,
+  editorialBriefFingerprint,
+  editorialBriefIds,
+  editorialBriefPromptContext,
+  editorialBriefTopicSeed,
+  finaliseEditorialBriefsAfterPublication,
+  markEditorialBriefsReconciliationRequired,
+  releaseEditorialBriefClaims,
+} from "../../comms-hub/contentAutomationQueue.js";
 
 import { booleanValue, compactText, contentHash, delay, ensureHashtags, ensureQuizAnswerMarker, escapeRegExp, extractHashtags, extractJsonCandidate, findPlainPhraseBreaches, isTruthyOption, isWithinDuplicateWindow, normaliseSimple, parseJsonObject, parseScheduleTime, positiveInteger, queuedItemAccountIds, retrySummaryFromError, retryWarningFromError, safeErrorMessage, safeModelPreview, statusCodeFromError, wordCount } from "./socialSchedulerPrimitives.js";
 
@@ -1116,12 +1126,12 @@ function miniSeriesFidelity({ generated, sources, requiredTopic, minScore = 62 }
   });
 }
 
-function miniSeriesThemeDefects(theme = {}, research = {}, researchSources = []) {
+function miniSeriesThemeDefects(theme = {}, research = {}, researchSources = [], requiredTopic = "") {
   const defects = [];
   const fidelity = miniSeriesFidelity({
     generated: `${theme.seriesTitle || ""} ${theme.seriesSummary || ""}`,
     sources: researchSources,
-    requiredTopic: research.topic || "",
+    requiredTopic: requiredTopic || research.topic || "",
     minScore: 64,
   });
   defects.push(...fidelity.defects.map((defect) => `Series theme: ${defect}`));
@@ -1133,7 +1143,7 @@ function miniSeriesThemeDefects(theme = {}, research = {}, researchSources = [])
       const postFidelity = miniSeriesFidelity({
         generated: `${post.title || ""} ${post.angle || ""} ${post.brief || ""}`,
         sources: relevant,
-        requiredTopic: `${research.topic || ""} ${post.angle || ""}`,
+        requiredTopic: `${requiredTopic || research.topic || ""} ${post.angle || ""}`,
         minScore: 58,
       });
       defects.push(...postFidelity.defects.map((defect) => `Mini-series part ${index + 1}: ${defect}`));
@@ -1949,6 +1959,12 @@ export async function buildAndScheduleWeeklyMiniSeries(options = {}) {
   const apiKey = options.apiKey || process.env.ZERNIO_META_API_KEY;
   const minimumScore = Number(options.minimumSuitabilityScore ?? MINI_SERIES_CONFIG.minimumSuitabilityScore);
   const sessionId = `ZERNIO-MINI-SERIES-${weekStartDate}`;
+  let editorialBriefEntries = [];
+  let editorialContext = "";
+  let effectiveTopicSeed = String(options.topicSeed || "").trim();
+  let topicRequired = false;
+  let briefDispositionAttempted = false;
+  let externalMiniSeriesPublications = [];
 
   let seriesClaim = null;
   if (!dryRun && apiKey) {
@@ -1977,7 +1993,7 @@ export async function buildAndScheduleWeeklyMiniSeries(options = {}) {
     }
   }
 
-  const finishMiniSeries = (result) => {
+  const finishMiniSeries = async (result) => {
     if (seriesClaim?.claimed) {
       completeScheduleSlot(seriesClaim, {
         lane: "weekly-mini-series",
@@ -1988,10 +2004,74 @@ export async function buildAndScheduleWeeklyMiniSeries(options = {}) {
         scheduledCount: Number(result?.scheduledCount || 0),
       });
     }
-    return result;
+
+    let briefHandoff = { ok: true, skipped: true, reason: "no_editorial_briefs" };
+    if (editorialBriefEntries.length && !briefDispositionAttempted) {
+      briefDispositionAttempted = true;
+      const resultReference = {
+        service: "zernio",
+        lane: "weekly-mini-series",
+        sessionId,
+        weekStartDate,
+        seriesTitle: result?.theme?.seriesTitle || null,
+        topic: result?.research?.topic || effectiveTopicSeed || null,
+        publications: externalMiniSeriesPublications,
+      };
+      const expectedParts = Array.isArray(result?.posts) ? result.posts.length : 0;
+      const fullyPublished = result?.ok === true && !dryRun && expectedParts > 0 && externalMiniSeriesPublications.length === expectedParts;
+
+      if (fullyPublished) {
+        briefHandoff = await finaliseEditorialBriefsAfterPublication(editorialBriefEntries, {
+          consumerId: sessionId,
+          resultReference,
+        });
+      } else if (externalMiniSeriesPublications.length) {
+        const reconciliation = await markEditorialBriefsReconciliationRequired(editorialBriefEntries, {
+          consumerId: sessionId,
+          resultReference,
+          reason: "zernio_mini_series_partial_publication_or_rollback_failure",
+        });
+        briefHandoff = {
+          ok: reconciliation.every((item) => item.ok === true),
+          status: "reconciliation_required",
+          reconciliationRequired: true,
+          reconciliation,
+        };
+      } else {
+        const released = await releaseEditorialBriefClaims(editorialBriefEntries, {
+          consumerId: sessionId,
+          reason: dryRun
+            ? "zernio_mini_series_dry_run"
+            : "zernio_mini_series_ended_without_publication",
+        });
+        briefHandoff = {
+          ok: released.every((item) => item.ok === true),
+          status: "released",
+          released,
+        };
+      }
+    }
+
+    return {
+      ...result,
+      partialFailure: Boolean(result?.partialFailure || briefHandoff?.reconciliationRequired),
+      editorialBriefIds: editorialBriefIds(editorialBriefEntries),
+      editorialBriefFingerprint: editorialBriefFingerprint(editorialBriefEntries),
+      briefHandoff,
+    };
   };
 
   try {
+  const configuredBriefLimit = Number(process.env.COMMS_HUB_CONTENT_AUTOMATION_ZERNIO_MINI_SERIES_BRIEF_LIMIT || 1);
+  editorialBriefEntries = await claimPendingEditorialBriefs("zernio_mini_series", {
+    limit: Math.min(1, Math.max(1, Number.isFinite(configuredBriefLimit) ? Math.floor(configuredBriefLimit) : 1)),
+    consumerId: sessionId,
+  });
+  topicRequired = editorialBriefEntries.length > 0;
+  editorialContext = editorialBriefPromptContext(editorialBriefEntries);
+  effectiveTopicSeed = topicRequired
+    ? editorialBriefTopicSeed(editorialBriefEntries)
+    : effectiveTopicSeed;
   const loaded = Array.isArray(options.sourceItems) && options.sourceItems.length
     ? { ok: true, items: options.sourceItems, warning: null }
     : await loadRecentRssContext({
@@ -2022,7 +2102,13 @@ export async function buildAndScheduleWeeklyMiniSeries(options = {}) {
   const research = await requestStructuredZernioJson({
     routeName: "zernioMiniSeriesResearch",
     sessionId: `${sessionId}-RESEARCH`,
-    prompt: buildMiniSeriesResearchPrompt({ weekStartDate, sourceItems, topicSeed: options.topicSeed || "" }),
+    prompt: buildMiniSeriesResearchPrompt({
+      weekStartDate,
+      sourceItems,
+      topicSeed: effectiveTopicSeed,
+      topicRequired,
+      editorialContext,
+    }),
     label: "mini-series research panel",
     normalise: normaliseMiniSeriesResearch,
     maxTokens: ZERNIO_MINI_SERIES_RESEARCH_MAX_TOKENS,
@@ -2034,17 +2120,27 @@ export async function buildAndScheduleWeeklyMiniSeries(options = {}) {
   const researchFidelity = miniSeriesFidelity({
     generated: `${research.topic || ""} ${research.rationale || ""}`,
     sources: researchSources,
-    requiredTopic: research.topic || "",
+    requiredTopic: effectiveTopicSeed || research.topic || "",
     minScore: 64,
   });
+  const requestedTopicSourceFidelity = topicRequired
+    ? miniSeriesFidelity({
+        generated: researchSources.map((source) => `${source.title || ""} ${source.summary || ""}`).join(" "),
+        sources: researchSources,
+        requiredTopic: effectiveTopicSeed,
+        minScore: 58,
+      })
+    : null;
   research.topicFidelity = researchFidelity;
+  research.requestedTopicSourceFidelity = requestedTopicSourceFidelity;
   const researchApproved =
     research.decision === "create" &&
     research.suitabilityScore >= minimumScore &&
     research.authorityScore >= 70 &&
     research.audienceValueScore >= 70 &&
     research.sourceUrls.length >= 2 &&
-    researchFidelity.ok;
+    researchFidelity.ok &&
+    (!requestedTopicSourceFidelity || requestedTopicSourceFidelity.ok);
 
   if (!researchApproved) {
     const reason = research.decision === "skip" ? "research-panel-skip" : "research-threshold-not-met";
@@ -2086,7 +2182,13 @@ export async function buildAndScheduleWeeklyMiniSeries(options = {}) {
       routeName: "zernioMiniSeriesTheme",
       sessionId: `${sessionId}-THEME-${themeAttempt}`,
       prompt: [
-        buildMiniSeriesThemePrompt({ weekStartDate, research, sourceItems: researchSources }),
+        buildMiniSeriesThemePrompt({
+          weekStartDate,
+          research,
+          sourceItems: researchSources,
+          requiredTopic: effectiveTopicSeed,
+          editorialContext,
+        }),
         repairInstruction,
       ].filter(Boolean).join("\n\n"),
       label: `mini-series articles theme panel attempt ${themeAttempt}`,
@@ -2105,7 +2207,7 @@ export async function buildAndScheduleWeeklyMiniSeries(options = {}) {
     }));
 
     specificTags = theme.hashtags.filter((tag) => !broadTags.has(tag.toLowerCase()));
-    themeGate = miniSeriesThemeDefects(theme, research, researchSources);
+    themeGate = miniSeriesThemeDefects(theme, research, researchSources, effectiveTopicSeed);
     theme.topicFidelity = themeGate.fidelity;
     const themeReady = theme.posts.length >= MINI_SERIES_CONFIG.minPosts && specificTags.length >= 1 && themeGate.ok;
     if (themeReady) break;
@@ -2162,6 +2264,7 @@ export async function buildAndScheduleWeeklyMiniSeries(options = {}) {
           index,
           total: theme.posts.length,
           sourceItems: researchSources,
+          requiredTopic: effectiveTopicSeed,
         }),
         contrastInstruction,
       ].filter(Boolean).join("\n\n"),
@@ -2185,7 +2288,7 @@ export async function buildAndScheduleWeeklyMiniSeries(options = {}) {
     };
 
     const postSources = selectSourcesByUrls(postPlan.sourceUrls || [], researchSources);
-    const requiredTopic = `${theme.seriesTitle || ""} ${postPlan.title || ""} ${postPlan.angle || ""} ${postPlan.brief || ""}`;
+    const requiredTopic = `${effectiveTopicSeed || ""} ${theme.seriesTitle || ""} ${postPlan.title || ""} ${postPlan.angle || ""} ${postPlan.brief || ""}`;
     let postFidelity = miniSeriesFidelity({
       generated: `${post.title || ""} ${post.topic || ""} ${post.content || ""}`,
       sources: postSources,
@@ -2493,6 +2596,15 @@ export async function buildAndScheduleWeeklyMiniSeries(options = {}) {
         if (slotClaim.claimed && scheduling.scheduled) successfulSlotClaims.set(item.index, slotClaim);
         else releaseScheduleSlot(slotClaim);
 
+        if (scheduling.scheduled && !scheduling.duplicatePrevented) {
+          externalMiniSeriesPublications.push({
+            index: item.index + 1,
+            scheduledDateTime: effectiveScheduledDateTime,
+            postId: scheduling.scheduleVerification?.id || null,
+            status: scheduling.scheduleVerification?.status || "scheduled",
+          });
+        }
+
         resultByIndex.set(item.index, {
           ...item.slot,
           index: item.index + 1,
@@ -2582,6 +2694,9 @@ export async function buildAndScheduleWeeklyMiniSeries(options = {}) {
         result.rolledBack = true;
         result.rollback = { ok: true, postId: remoteId, response: rollback };
         result.error = "Mini-series transaction rolled back because another part could not be scheduled.";
+        externalMiniSeriesPublications = externalMiniSeriesPublications.filter((publication) =>
+          publication.index !== result.index && (!remoteId || publication.postId !== remoteId)
+        );
         rolledBackCount += 1;
       } catch (error) {
         completeScheduleSlot(slotClaim, {
@@ -2670,6 +2785,28 @@ export async function buildAndScheduleWeeklyMiniSeries(options = {}) {
   });
   } catch (error) {
     if (seriesClaim?.claimed) releaseScheduleSlot(seriesClaim);
+    if (editorialBriefEntries.length && !briefDispositionAttempted) {
+      briefDispositionAttempted = true;
+      if (externalMiniSeriesPublications.length) {
+        await markEditorialBriefsReconciliationRequired(editorialBriefEntries, {
+          consumerId: sessionId,
+          resultReference: {
+            service: "zernio",
+            lane: "weekly-mini-series",
+            sessionId,
+            weekStartDate,
+            publications: externalMiniSeriesPublications,
+            error: safeErrorMessage(error),
+          },
+          reason: "zernio_mini_series_failed_after_publication",
+        });
+      } else {
+        await releaseEditorialBriefClaims(editorialBriefEntries, {
+          consumerId: sessionId,
+          reason: "zernio_mini_series_failed_before_publication",
+        });
+      }
+    }
     throw error;
   }
 }
