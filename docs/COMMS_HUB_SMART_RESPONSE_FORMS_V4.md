@@ -128,6 +128,13 @@ Even when auto-send is explicitly enabled, AIMS requires all of the following:
 - `COMMS_HUB_CONTENT_AUTOMATION_BLOG_ENABLED=true`
 - `COMMS_HUB_CONTENT_AUTOMATION_SOCIAL_ENABLED=true`
 - `COMMS_HUB_CONTENT_AUTOMATION_PODCAST_ENABLED=true`
+- `COMMS_HUB_CONTENT_AUTOMATION_BLOTATO_VIDEO_ENABLED=true`
+- `COMMS_HUB_CONTENT_AUTOMATION_ZERNIO_MINI_SERIES_ENABLED=true`
+- `COMMS_HUB_CONTENT_AUTOMATION_BRIEF_LIMIT=3`
+- `COMMS_HUB_CONTENT_AUTOMATION_BLOTATO_VIDEO_BRIEF_LIMIT=1`
+- `COMMS_HUB_CONTENT_AUTOMATION_ZERNIO_MINI_SERIES_BRIEF_LIMIT=1`
+- `COMMS_HUB_CONTENT_AUTOMATION_BRIEF_LEASE_MS=43200000`
+- `COMMS_HUB_CONTENT_AUTOMATION_BRIEF_MAX_AGE_HOURS=336`
 - `COMMS_HUB_FORM_AUTO_SEND_ENABLED=false`
 - `COMMS_HUB_FORM_REQUEST_EXPIRY_HOURS=336`
 - `COMMS_HUB_JOTFORM_CONTACT_URL=https://form.jotform.com/260281179574362`
@@ -138,11 +145,13 @@ Even when auto-send is explicitly enabled, AIMS requires all of the following:
 
 The form-processing/reply layer still finishes at structured intake, digest, assessment/draft and the appropriate reply to the user. It does **not** directly generate or publish public content.
 
-After a verified submission is persisted, a separate durable `content_automation` action may enqueue sanitised editorial direction into the existing production lanes:
+After a verified submission is persisted, a separate durable `content_automation` action assesses the enabled candidate lanes and enqueues sanitised editorial direction into exactly one best-fit production lane:
 
-- **Case Study** → weekly blog + social-blog editorial queues;
-- **Podcast Enquiry** → podcast + social-blog editorial queues;
+- **Case Study candidates** → weekly blog, social blog, Blotato video or Zernio mini-series;
+- **Podcast Enquiry candidates** → podcast ingestion, weekly blog, social blog, Blotato video or Zernio mini-series;
 - **Contact** → no public-content queue.
+
+All five lanes have consumers. Their queue lifecycle is `pending → claimed → consumed`; claims are released if a run stops before publication. A brief becomes `consumed` only after the complete lane-specific hand-off is confirmed. If any public or scheduled output exists but the remaining hand-off fails, the brief moves to `reconciliation_required` so the next run cannot silently duplicate it. Expired pending briefs are archived, and a queue outage fails closed.
 
 Queued form material is untrusted editorial direction only. Direct identifiers are excluded, prompt-injection attempts are blocked, and factual claims must still be supported by each pipeline's established source-grounding and QA/review controls. A submission never guarantees publication, podcast participation or a particular editorial outcome.
 
