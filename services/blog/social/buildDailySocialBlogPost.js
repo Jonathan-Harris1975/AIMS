@@ -1,6 +1,14 @@
 import { info, error, debug, warn } from "../../../logger.js";
 import { getObjectAsText, putText, putJson } from "../../shared/utils/r2-client.js";
-import { loadPendingEditorialBriefs, markEditorialBriefsConsumed, editorialBriefPromptContext } from "../../comms-hub/contentAutomationQueue.js";
+import {
+  claimPendingEditorialBriefs,
+  editorialBriefFingerprint,
+  editorialBriefIds,
+  editorialBriefPromptContext,
+  finaliseEditorialBriefsAfterPublication,
+  markEditorialBriefsReconciliationRequired,
+  releaseEditorialBriefClaims,
+} from "../../comms-hub/contentAutomationQueue.js";
 import { loadSiteShell, applySiteShellToHtml } from "../../shared/utils/siteShell.js";
 import { resilientRequest } from "../../shared/utils/ai-service.js";
 import { slugify } from "../utils/slug.js";
@@ -565,9 +573,14 @@ export async function buildDailySocialBlogPost({
   const createdAt = new Date().toISOString();
   let editorialBriefEntries = [];
   let editorialContext = "";
+  let editorialBriefFinalised = false;
+  let irreversiblePublicationReference = null;
 
   try {
-    editorialBriefEntries = await loadPendingEditorialBriefs("social", { limit: Number(process.env.COMMS_HUB_CONTENT_AUTOMATION_BRIEF_LIMIT || 3) });
+    editorialBriefEntries = await claimPendingEditorialBriefs("social", {
+      limit: Number(process.env.COMMS_HUB_CONTENT_AUTOMATION_BRIEF_LIMIT || 3),
+      consumerId: sessionId,
+    });
     editorialContext = editorialBriefPromptContext(editorialBriefEntries);
     info("blog.social.daily.build.start", {
       date: date || null,
@@ -1122,6 +1135,15 @@ export async function buildDailySocialBlogPost({
         meta: { contentType: "daily-social-blog", dryRun: true, qaMode: socialPackage.qa_mode || "model-package" },
       });
 
+      const released = await releaseEditorialBriefClaims(editorialBriefEntries, {
+        consumerId: sessionId,
+        reason: "social_blog_dry_run",
+      });
+      editorialBriefFinalised = true;
+      const briefHandoff = editorialBriefEntries.length
+        ? { ok: released.every((item) => item.ok === true), status: "released", reason: "dry_run", released }
+        : { ok: true, skipped: true, reason: "no_editorial_briefs" };
+
       return {
         ok: true,
         dryRun: true,
@@ -1146,9 +1168,18 @@ export async function buildDailySocialBlogPost({
         publishedObjects,
         phase4Gate,
         phase5Gate,
+        briefHandoff,
+        editorialBriefIds: editorialBriefIds(editorialBriefEntries),
+        editorialBriefFingerprint: editorialBriefFingerprint(editorialBriefEntries),
       };
     }
 
+    irreversiblePublicationReference = {
+      sessionId,
+      postUrl: urls.postUrl,
+      canonicalUrl: urls.canonicalUrl,
+      postHtmlKey: `${dir}/index.html`,
+    };
     await putText(OUT_BLOG_BUCKET_KEY, `${dir}/index.html`, fullHtml, "text/html; charset=utf-8");
 
     await putJson(OUT_BLOG_BUCKET_KEY, `${dir}/post.json`, {
@@ -1199,12 +1230,25 @@ export async function buildDailySocialBlogPost({
       themeCount: socialPackage.themes.length,
     });
 
+    let briefHandoff = { ok: true, skipped: true, reason: "no_editorial_briefs" };
     if (editorialBriefEntries.length) {
-      await markEditorialBriefsConsumed(editorialBriefEntries, { consumerId: sessionId, resultReference: urls.postUrl });
+      editorialBriefFinalised = true;
+      briefHandoff = await finaliseEditorialBriefsAfterPublication(editorialBriefEntries, {
+        consumerId: sessionId,
+        resultReference: {
+          sessionId,
+          postUrl: urls.postUrl,
+          rssFeedUrl: rss.feedUrl,
+          briefIds: editorialBriefIds(editorialBriefEntries),
+          briefFingerprint: editorialBriefFingerprint(editorialBriefEntries),
+        },
+        reconciliationReason: "social_blog_published_but_brief_archive_failed",
+      });
     }
 
     return {
       ok: true,
+      partialFailure: briefHandoff.ok === false || briefHandoff.reconciliationRequired === true,
       dateId: window.dateId,
       days: window.days,
       title,
@@ -1229,6 +1273,9 @@ export async function buildDailySocialBlogPost({
       sourceCount: cleanedSources.length,
       inputSourceCount: items.length,
       rebuild,
+      briefHandoff,
+      editorialBriefIds: editorialBriefIds(editorialBriefEntries),
+      editorialBriefFingerprint: editorialBriefFingerprint(editorialBriefEntries),
     };
   } catch (e) {
     error("blog.social.daily.build.fail", {
@@ -1236,11 +1283,41 @@ export async function buildDailySocialBlogPost({
       stack: e.stack,
     });
 
+    let briefHandoff = null;
+    if (editorialBriefEntries.length && !editorialBriefFinalised && irreversiblePublicationReference) {
+      editorialBriefFinalised = true;
+      const reconciliation = await markEditorialBriefsReconciliationRequired(editorialBriefEntries, {
+        consumerId: sessionId,
+        resultReference: {
+          ...irreversiblePublicationReference,
+          error: e?.message || String(e),
+        },
+        reason: "social_blog_failed_after_publication_started",
+      });
+      briefHandoff = {
+        ok: reconciliation.every((item) => item.ok === true),
+        status: "reconciliation_required",
+        reconciliationRequired: true,
+        reconciliation,
+      };
+    }
+
     return {
       ok: false,
+      partialFailure: Boolean(briefHandoff),
       statusCode: Number(e?.statusCode || 500),
       error: e.message,
+      ...(briefHandoff ? { briefHandoff } : {}),
       ...(e?.socialBlogGate ? { socialBlogGate: e.socialBlogGate } : {}),
     };
+  } finally {
+    if (editorialBriefEntries.length && !editorialBriefFinalised) {
+      await releaseEditorialBriefClaims(editorialBriefEntries, {
+        consumerId: sessionId,
+        reason: "social_blog_failed_before_confirmed_publication",
+      }).catch((releaseError) => {
+        error("blog.social.daily.brief_release_fail", { error: releaseError?.message || String(releaseError) });
+      });
+    }
   }
 }
