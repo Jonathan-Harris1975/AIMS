@@ -31,10 +31,47 @@ export function humanHandoffStatus(config = {}, at = new Date()) {
   });
 }
 
-export function humanContactOffer({ available }) {
-  return available
-    ? 'Jonathan is available for hand-off now. I can flag this conversation for him. If you would rather he gets back to you later, you can leave an email address here.'
-    : "Jonathan isn't available for live hand-off right now. If you'd like him to get back to you in due course, you can leave an email address here and I'll attach it to this conversation.";
+export function humanContactOffer({ available, contactUrl = "" }) {
+  if (available) return "Jonathan is available for a live hand-off now. I’ll flag this conversation for him.";
+  const url = String(contactUrl || "").trim();
+  return url
+    ? `Jonathan isn’t available for a live hand-off right now. The best structured route is the Contact Me form: ${url}`
+    : "Jonathan isn’t available for a live hand-off right now. Please use the Contact Me form on jonathan-harris.online so the enquiry reaches the right place.";
+}
+
+export function proactiveHumanHandoffDecision({ handoff = {}, responseIntelligence = {}, strategy = {}, interactionSignals = {}, explicitRequest = false, conduct = {} } = {}) {
+  const dissatisfaction = Number(interactionSignals.complaintCount || 0) > 0 || Number(interactionSignals.confusionCount || 0) >= 2;
+  const lowAnswerability = responseIntelligence.answerability === "human_review" || responseIntelligence.humanReviewRequired === true;
+  const strategyReview = strategy.humanReviewRequired === true;
+  const conductReview = conduct.requiresHumanReview === true || conduct.automationBlocked === true;
+  const needed = Boolean(explicitRequest || dissatisfaction || lowAnswerability || strategyReview || conductReview);
+  const reason = explicitRequest ? "explicit_human_request"
+    : conductReview ? "conduct_or_safety_review"
+      : strategyReview ? "strategy_human_review"
+        : lowAnswerability ? "low_answerability"
+          : dissatisfaction ? "visitor_dissatisfaction_or_repeated_confusion"
+            : "automation_can_continue";
+  return Object.freeze({
+    needed,
+    reason,
+    available: Boolean(handoff.available),
+    requestLiveHandoff: needed && Boolean(handoff.available),
+    offerContactForm: needed && !handoff.available && !conductReview,
+  });
+}
+
+export async function notifyHumanHandoff({ context, conversationId, reason = "human_review", idempotencySeed = "" } = {}) {
+  return context.notificationService?.create?.({
+    actor: "admin",
+    conversationId,
+    type: "human_handoff_requested",
+    title: "CogniPal conversation needs Jonathan",
+    bodyText: `CogniPal routed this conversation to Jonathan. Reason: ${String(reason || "human review").replace(/_/g, " ")}.`,
+    severity: "critical",
+    emailRequested: true,
+    idempotencySeed: idempotencySeed || `human-handoff:${conversationId}:${reason}`,
+    metadata: { reason },
+  });
 }
 
 export async function recordCallbackEmail({ context, conversationId, contactId, channel, provider, bodyText, allowBareEmail = false, at = new Date().toISOString() }) {

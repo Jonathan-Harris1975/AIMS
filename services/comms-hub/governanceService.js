@@ -99,7 +99,7 @@ export class CommsHubGovernanceService {
     const sentSince = await this.context.operationsRepository.countAutonomousSendsSince(policy.policy_key, new Date(Date.now() - 3_600_000).toISOString());
     if (sentSince >= Number(policy.maximum_per_hour)) throw new CommsHubError(429, 'autonomous_reply_rate_limited', 'Autonomous reply hourly limit has been reached.');
     const result = await sendReplyDraft({ draftId, context: this.context });
-    await this.context.auditService.record({ actor: identity.actor, role: identity.role, action: 'autonomous_reply_sent', objectType: 'reply_draft', objectId: draftId, conversationId, details: { policyKey: policy.policy_key, risk, confidence, evidenceCount, safeClarification, safeDeterministicResponse, safeFormDelivery, automated: true } });
+    await this.context.auditService.record({ actor: identity.actor, role: identity.role, action: 'autonomous_reply_sent', objectType: 'reply_draft', objectId: draftId, conversationId, details: { policyKey: policy.policy_key, channel: conversation.channel, risk, confidence, evidenceCount, responseReasons: latestResponseIntelligence.reasons || [], answerability: latestResponseIntelligence.answerability || null, model: ai?.runs?.[0]?.model || ai?.runs?.[0]?.model_name || null, safeClarification, safeDeterministicResponse, safeFormDelivery, automated: true } });
     return { policy: policy.policy_key, ...result };
   }
 

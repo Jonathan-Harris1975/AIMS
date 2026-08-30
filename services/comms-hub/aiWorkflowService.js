@@ -225,6 +225,36 @@ export class CommsHubAiWorkflowService {
     return resilientRequest(routeName, options);
   }
 
+  async assessContentSubmission({ conversationId, formKey, editorialSignals = [], allowedLanes = [] } = {}) {
+    if (!this.context.config.aiEnabled) throw new CommsHubError(503, "comms_hub_ai_disabled", "Comms Hub AI is disabled.");
+    const lanes = [...new Set((allowedLanes || []).map((lane) => String(lane || "").trim()).filter(Boolean))];
+    if (!lanes.length) throw new CommsHubError(422, "content_automation_lane_missing", "No content automation lane is available for assessment.");
+    const call = await requestJson(this.requestAi.bind(this), "commsHubSummary", [
+      "Assess a verified Jotform submission for Jonathan Harris's personal-brand content pipeline.",
+      "Return JSON only with: coherence (0..1), narrativeStrength (0..1), brandFit (0..1), factualRisk (0..1), selectedLane, rationale.",
+      `selectedLane must be exactly one of: ${lanes.join(", ")}.`,
+      "Use only the supplied editorial signals. Do not invent facts. Strong long-form narrative favours podcast; practical/how-to depth favours blog; punchy visual or quote-led material favours blotato_video; a serialisable topic with multiple distinct angles favours zernio_mini_series; concise general audience insight favours social.",
+      "factualRisk measures unsupported, contradictory, promotional or suspicious claims; higher is worse.",
+    ].join("\n"), {
+      conversationId: conversationId || `content-${formKey || "submission"}`,
+      formKey: String(formKey || ""),
+      allowedLanes: lanes,
+      editorialSignals: (editorialSignals || []).slice(0, 20),
+    }, { maxTokens: 900, temperature: 0.1 });
+    const value = call.parsed || {};
+    const clamp = (input, fallback = 0) => { const n = Number(input); return Number.isFinite(n) ? Math.max(0, Math.min(1, n)) : fallback; };
+    const selectedLane = lanes.includes(String(value.selectedLane || "")) ? String(value.selectedLane) : lanes[0];
+    return Object.freeze({
+      coherence: clamp(value.coherence, 0.5),
+      narrativeStrength: clamp(value.narrativeStrength, 0.5),
+      brandFit: clamp(value.brandFit, 0.5),
+      factualRisk: clamp(value.factualRisk, 0.5),
+      selectedLane,
+      rationale: sanitiseUntrustedText(value.rationale || "", 1200),
+      model: call.result?.model || null,
+    });
+  }
+
   async analyseConversation(conversationId, { operation = "analyse", scheduleFollowUp = true } = {}) {
     if (!this.context.config.aiEnabled) {
       throw new CommsHubError(503, "comms_hub_ai_disabled", "Comms Hub AI is disabled.", {
@@ -576,6 +606,8 @@ export class CommsHubAiWorkflowService {
         clarificationRequired: responseIntelligence.clarificationRequired,
         humanReviewRequired: responseIntelligence.humanReviewRequired,
         autonomousEligible: responseIntelligence.autonomousEligible,
+        channelAutoSendEnabled: responseIntelligence.channelAutoSendEnabled,
+        businessRisk: responseIntelligence.businessRisk,
         safeClarificationEligible: responseIntelligence.safeClarificationEligible,
         safeDeterministicResponseEligible: responseIntelligence.safeDeterministicResponseEligible,
         safeFormDeliveryEligible: responseIntelligence.safeFormDeliveryEligible,

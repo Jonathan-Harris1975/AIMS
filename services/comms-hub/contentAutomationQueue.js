@@ -3,7 +3,7 @@ import { log } from "../../logger.js";
 
 const BUCKET = "commsHubPrivate";
 const ROOT = "content-automation";
-const ALLOWED_LANES = new Set(["blog", "social", "podcast"]);
+const ALLOWED_LANES = new Set(["blog", "social", "podcast", "blotato_video", "zernio_mini_series"]);
 
 function laneName(value) {
   const lane = String(value || "").trim().toLowerCase();
@@ -22,7 +22,7 @@ function envEnabled(name, fallback = true) {
 
 function laneEnabled(lane) {
   if (!envEnabled("COMMS_HUB_CONTENT_AUTOMATION_ENABLED", false)) return false;
-  const key = { blog: "BLOG", social: "SOCIAL", podcast: "PODCAST" }[laneName(lane)];
+  const key = { blog: "BLOG", social: "SOCIAL", podcast: "PODCAST", blotato_video: "BLOTATO_VIDEO", zernio_mini_series: "ZERNIO_MINI_SERIES" }[laneName(lane)];
   return envEnabled(`COMMS_HUB_CONTENT_AUTOMATION_${key}_ENABLED`, true);
 }
 

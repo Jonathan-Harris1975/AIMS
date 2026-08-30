@@ -2,10 +2,10 @@ import { CommsHubError } from './errors.js';
 import { sha256Hex, stableId } from './domain/ids.js';
 import { safeErrorLog } from './domain/redaction.js';
 import { scanPromptInjection } from './domain/promptSecurity.js';
-import { assessConversationConduct, scanOutboundLanguagePolicy } from './conversationConductService.js';
+import { assessConversationConduct, conversationInteractionSignals, scanOutboundLanguagePolicy } from './conversationConductService.js';
 import { assertConversationReplyAllowed } from './domain/replySafety.js';
 import { log } from '../../logger.js';
-import { humanContactOffer, humanHandoffStatus, recordCallbackEmail } from './humanContactService.js';
+import { humanContactOffer, humanHandoffStatus, notifyHumanHandoff, proactiveHumanHandoffDecision } from './humanContactService.js';
 
 function text(value, maximum = 4000) {
   return String(value ?? '').trim().slice(0, maximum);
@@ -170,9 +170,9 @@ export class CommsHubChatService {
         details: { websiteId, sessionIdHash: sha256Hex(sessionId).slice(0, 16), businessHoursAvailable: handoff.available },
       }).catch(() => null);
       await this.context.notificationService?.create?.({
-        actor: 'admin', conversationId, type: 'human_handoff', title: 'Website visitor requested Jonathan',
+        actor: 'admin', conversationId, type: 'human_handoff_requested', title: 'Website visitor requested Jonathan',
         bodyText: "A website visitor requested a live hand-off during Jonathan's published hand-off hours.",
-        severity: 'info', idempotencySeed: `chat-handoff:${messageId}`,
+        severity: 'critical', emailRequested: true, idempotencySeed: `chat-handoff:${messageId}`,
       }).catch(() => null);
     } else if (requestHuman) {
       await this.context.auditService?.record?.({
@@ -192,10 +192,7 @@ export class CommsHubChatService {
       createdAt: now,
       metadata: { websiteId },
     });
-    const callbackAlias = await recordCallbackEmail({
-      context: this.context, conversationId, contactId, channel: 'chat', provider: 'coginpal', bodyText: messageText,
-      allowBareEmail: Boolean(requestHuman || existingSession?.mode === 'takeover_requested' || existingSessionMetadata.callbackEmailOffered), at: now,
-    });
+    const callbackAlias = null;
     await this.context.operationsRepository.indexSearchDocument({
       id: stableId('srch', 'message', messageId),
       objectType: 'message',
@@ -257,10 +254,8 @@ export class CommsHubChatService {
       conversationId,
       event: { type: 'message_received', channel: 'chat', sender: visitorId, text: messageText, occurredAt: now },
     });
-    if (!persistence.duplicate && (callbackAlias || (requestHuman && !existingSessionMetadata.callbackEmailOffered))) {
-      const message = callbackAlias
-        ? 'Thanks. I have attached that email address to this conversation so Jonathan can get back to you in due course.'
-        : humanContactOffer(handoff);
+    if (!persistence.duplicate && requestHuman) {
+      const message = humanContactOffer({ handoff, available: handoff.available, contactUrl: this.context.config.jotformForms?.contact?.url || '' });
       await this.send({ conversationId, message, idempotencyKey: `chat-human-contact:${messageId}` }).catch((error) => {
         log.warn('commsHub.chat.humanContactOfferFailed', { conversationId, error: safeErrorLog(error) });
       });
@@ -271,7 +266,7 @@ export class CommsHubChatService {
       duplicate: persistence.duplicate,
       requestHuman,
       handoffAvailable: handoff.available,
-      callbackEmailCaptured: Boolean(callbackAlias),
+      callbackEmailCaptured: false,
       transport: this.context.config.coginPalApiBaseUrl ? 'provider_api' : 'aims_first_party',
       promptSecurityRisk: promptSecurity.riskLevel,
       conductLevel: conversationConduct.level,
@@ -282,7 +277,7 @@ export class CommsHubChatService {
       queueMicrotask(() => void this.runOptionalAutomation(conversationId, { triggerMessageId: messageId }));
     }
 
-    return { duplicate: persistence.duplicate, conversationId, messageId, takeoverRequested: Boolean(requestHuman && handoff.available), handoffAvailable: handoff.available, nextHandoffAt: handoff.nextAvailableAt, callbackEmailCaptured: Boolean(callbackAlias), emailCaptureOffered: Boolean(requestHuman && !callbackAlias) };
+    return { duplicate: persistence.duplicate, conversationId, messageId, takeoverRequested: Boolean(requestHuman && handoff.available), handoffAvailable: handoff.available, nextHandoffAt: handoff.nextAvailableAt, callbackEmailCaptured: false, emailCaptureOffered: false, contactFormUrl: requestHuman && !handoff.available ? (this.context.config.jotformForms?.contact?.url || null) : null };
   }
 
   async syncWebhook(req) {
@@ -344,6 +339,41 @@ export class CommsHubChatService {
     return action;
   }
 
+  async applyProactiveHumanRouting(conversationId, analysis, { triggerMessageId = '' } = {}) {
+    const conversation = await this.context.repository.getConversation(conversationId);
+    if (!conversation) return { routed: false };
+    const handoff = humanHandoffStatus(this.context.config, this.context.now ? new Date(this.context.now()) : new Date());
+    const conduct = assessConversationConduct(conversation, {
+      enabled: this.context.config.smartConductEnabled,
+      reviewStrikeThreshold: this.context.config.conductReviewStrikeThreshold,
+      automationBlockThreshold: this.context.config.conductAutomationBlockThreshold,
+    });
+    const interactionSignals = conversationInteractionSignals(conversation);
+    const decision = proactiveHumanHandoffDecision({
+      handoff,
+      responseIntelligence: analysis?.responseIntelligence || {},
+      strategy: analysis?.strategy || {},
+      interactionSignals,
+      explicitRequest: interactionSignals.humanRequestCount > 0,
+      conduct,
+    });
+    if (!decision.needed) return { routed: false, decision };
+    if (decision.requestLiveHandoff) {
+      await this.context.operationsRepository.updateChatTakeover({ conversationId, mode: 'takeover_requested', actor: null, at: new Date().toISOString() });
+      await notifyHumanHandoff({ context: this.context, conversationId, reason: decision.reason, idempotencySeed: `proactive-handoff:${conversationId}:${triggerMessageId || 'latest'}` }).catch(() => null);
+      await this.context.auditService?.record?.({ actor: 'coginpal-automation', role: 'operator', action: 'chat_proactive_handoff_requested', objectType: 'conversation', objectId: conversationId, conversationId, details: { reason: decision.reason } }).catch(() => null);
+      return { routed: true, mode: 'takeover_requested', decision };
+    }
+    if (decision.offerContactForm) {
+      const contactUrl = this.context.config.jotformForms?.contact?.url || '';
+      const message = humanContactOffer({ available: false, contactUrl });
+      await this.send({ conversationId, message, idempotencyKey: `chat-proactive-contact:${triggerMessageId || conversationId}` });
+      await this.context.auditService?.record?.({ actor: 'coginpal-automation', role: 'operator', action: 'chat_out_of_hours_contact_form_offered', objectType: 'conversation', objectId: conversationId, conversationId, details: { reason: decision.reason, contactUrlConfigured: Boolean(contactUrl) } }).catch(() => null);
+      return { routed: true, mode: 'contact_form', decision };
+    }
+    return { routed: true, mode: 'review_only', decision };
+  }
+
   async runOptionalAutomation(conversationId, { triggerMessageId = '', scheduleRetry = true, rethrowRecoverable = false } = {}) {
     try {
       const operations = await this.context.operationsRepository.getConversationOperations(conversationId);
@@ -352,6 +382,8 @@ export class CommsHubChatService {
         return { skipped: true, reason: 'human_assigned' };
       }
       const analysis = await this.context.aiWorkflowService.analyseConversation(conversationId, { operation: 'analyse', scheduleFollowUp: false });
+      const humanRouting = await this.applyProactiveHumanRouting(conversationId, analysis, { triggerMessageId });
+      if (humanRouting.routed) return { skipped: true, reason: `human_routing:${humanRouting.mode}`, humanRouting, analysis };
       if (!this.context.config.autonomousRepliesEnabled || !analysis?.draft?.id || analysis.draft.requiresApproval) {
         return { skipped: true, reason: analysis?.draft?.requiresApproval ? 'approval_required' : 'autonomous_reply_unavailable' };
       }
@@ -440,7 +472,7 @@ export class CommsHubChatService {
     if (['takeover_requested', 'human'].includes(mode)) {
       const handoff = humanHandoffStatus(this.context.config, this.context.now ? new Date(this.context.now()) : new Date());
       if (!handoff.available) throw new CommsHubError(409, 'chat_handoff_outside_business_hours', 'Human hand-off is available only during configured business hours.', {
-        publicMessage: 'Jonathan is available for live hand-off Monday to Friday between 09:00 and 17:00 UK time. You can leave an email address for a later reply.',
+        publicMessage: `Jonathan is available for live hand-off Monday to Friday between 09:00 and 17:00 UK time. Outside those hours, please use the Contact Me form: ${this.context.config.jotformForms?.contact?.url || 'https://jonathan-harris.online/'}`,
         details: { nextAvailableAt: handoff.nextAvailableAt, timeZone: handoff.timeZone },
       });
     }

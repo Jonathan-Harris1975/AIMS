@@ -2,7 +2,7 @@ import { CommsHubError } from "./errors.js";
 import { newCorrelationId, sha256Hex } from "./domain/ids.js";
 import { normaliseZernioEvent, zernioWebhookEventsForFamily } from "./domain/zernioWebhook.js";
 import { executeSocialAction } from './socialActionsService.js';
-import { humanContactOffer, humanContactRequested, humanHandoffStatus, recordCallbackEmail } from './humanContactService.js';
+import { humanContactOffer, humanContactRequested, humanHandoffStatus, notifyHumanHandoff } from './humanContactService.js';
 import { safeErrorLog } from './domain/redaction.js';
 import { kickInboundConversationAutomation } from './inboundAutomationService.js';
 import { log } from '../../logger.js';
@@ -157,37 +157,17 @@ export async function handleSocialDmHumanContact(event, context) {
     ? await context.repository.getConversation(event.conversationId).catch(() => null)
     : null;
   const priorMessages = (conversation?.messages || []).slice(0, -1);
-  const priorHumanRequest = priorMessages.some((message) => message?.direction !== 'outbound' && humanContactRequested(message?.body_text || ''));
-  const priorOffer = priorMessages.some((message) => message?.direction === 'outbound' && /leave an email address|available for hand-off/i.test(String(message?.body_text || '')));
+  const priorOffer = priorMessages.some((message) => message?.direction === 'outbound' && /contact me form|available for (?:a )?(?:live )?hand-off/i.test(String(message?.body_text || '')));
   const requested = humanContactRequested(event.bodyText);
-  const callbackAlias = await recordCallbackEmail({
-    context,
-    conversationId: event.conversationId,
-    contactId: event.contactId,
-    channel: 'social_dm',
-    provider: `zernio:${event.platform}`,
-    bodyText: event.bodyText,
-    allowBareEmail: requested || priorHumanRequest,
-    at: event.processedAt || new Date().toISOString(),
-  });
-  if (!requested && !callbackAlias) return;
+  if (!requested) return;
 
   const handoff = humanHandoffStatus(context.config, context.now ? new Date(context.now()) : new Date());
-  if (requested) {
-    await context.notificationService?.create?.({
-      actor: 'admin', conversationId: event.conversationId, type: 'human_handoff', title: `${event.platform} DM requested Jonathan`,
-      bodyText: handoff.available
-        ? 'A social DM requested Jonathan during the live hand-off window.'
-        : 'A social DM requested Jonathan outside the live hand-off window. The user should be offered the callback-email option.',
-      severity: 'info', idempotencySeed: `social-handoff:${event.messageId}`,
-      metadata: { platform: event.platform, handoffAvailable: handoff.available, nextHandoffAt: handoff.nextAvailableAt },
-    }).catch(() => null);
+  if (handoff.available) {
+    await notifyHumanHandoff({ context, conversationId: event.conversationId, reason: 'explicit_social_dm_human_request', idempotencySeed: `social-handoff:${event.messageId}` }).catch(() => null);
   }
 
-  if (context.config.socialMonitorOnly === true || (requested && priorOffer && !callbackAlias)) return;
-  const message = callbackAlias
-    ? 'Thanks. I have attached that email address to this conversation so Jonathan can get back to you in due course.'
-    : humanContactOffer(handoff);
+  if (context.config.socialMonitorOnly === true || priorOffer) return;
+  const message = humanContactOffer({ available: handoff.available, contactUrl: context.config.jotformForms?.contact?.url || '' });
   try {
     await executeSocialAction({
       conversationId: event.conversationId,

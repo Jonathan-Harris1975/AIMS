@@ -8,7 +8,7 @@ Comms Hub is the unified communications service inside AIMS. It is mounted at `/
 |---|---|---|
 | one.com `info@` email | IMAP polling and threading | governed SMTP replies |
 | Jotform | verified webhook intake, fields and attachments | processed-form replies and workflow actions |
-| CogniPal website chat | signed first-party intake/sync | AI replies, human takeover and callback-email capture |
+| CogniPal website chat | signed first-party intake/sync | grounded AI replies and proactive hours-aware human takeover |
 | Facebook | DMs and comments | DM/comment replies and supported moderation actions |
 | Instagram | DMs and comments | DM/comment replies and supported moderation actions |
 | YouTube | comments | comment replies and supported moderation actions |
@@ -19,7 +19,7 @@ YouTube private DMs and live chat are outside the current adapter contract.
 
 Comms Hub persists channel messages and metadata in D1, exposes a filterable operator queue and keeps social `dm` and `comment` thread types explicit. AIMS-UI uses those fields to keep private messages and public comments in separate work queues.
 
-The AI layer supports analysis, priority, response proposals, approvals, channel capability checks, idempotency, conduct/profanity controls and policy-gated autonomous responses. Unsafe, ambiguous, attachment-bearing or approval-required cases stay review-gated.
+The AI layer supports analysis, priority, response proposals, channel capability checks, idempotency, conduct/profanity controls and policy-gated autonomous responses. Safe answerable replies auto-send on enabled channels; security, legal/privacy/money risk, repeated conduct, attachment and explicit human-review cases remain fail-closed.
 
 ## Knowledge grounding and book discovery
 
@@ -35,7 +35,7 @@ Routine Comms Hub model routing is free-first but availability-first: production
 
 The first substantive AIMS email response and the processed Jotform reply are scheduled **2-3 calendar days after the first inbound message**. A target falling on Saturday or Sunday rolls forward to Monday. Delivery is restricted to **Monday-Friday, 09:00-17:00 Europe/London**, and the delayed-action worker re-checks that window at execution time.
 
-Human takeover uses the same weekday 09:00-17:00 window. Outside the window CogniPal and supported DM flows can offer optional callback-email capture instead of claiming a live hand-off is available.
+Human takeover uses the same weekday 09:00-17:00 window. Inside the window CogniPal can proactively request a live hand-off when confidence, dissatisfaction or safety logic requires Jonathan. Outside the window CogniPal and supported DM flows direct the visitor to the verified Contact Me Jotform; conversational callback-email capture is disabled by default.
 
 Primary controls include:
 
@@ -47,7 +47,12 @@ Primary controls include:
 - `COMMS_HUB_REPLY_DELAY_MIN_DAYS=2`
 - `COMMS_HUB_REPLY_DELAY_MAX_DAYS=3`
 - `COMMS_HUB_HUMAN_HANDOFF_BUSINESS_HOURS_ONLY=true`
-- `COMMS_HUB_CALLBACK_EMAIL_CAPTURE_ENABLED=true`
+- `COMMS_HUB_CALLBACK_EMAIL_CAPTURE_ENABLED=false`
+- `COMMS_HUB_AUTO_SEND_ENABLED=true`
+- `COMMS_HUB_AUTO_SEND_CHAT_ENABLED=true`
+- `COMMS_HUB_AUTO_SEND_EMAIL_ENABLED=true`
+- `COMMS_HUB_AUTO_SEND_SOCIAL_ENABLED=true`
+- `COMMS_HUB_AUTO_SEND_FORM_ENABLED=true`
 
 ## Email safety
 
@@ -59,7 +64,7 @@ Email attachments use the same private quarantine, malware scan and clean-promot
 
 Jotform intake is verified before persistence. Attachment URLs are validated, downloaded to private R2 quarantine, scanned, integrity-checked and promoted only when clean. Public exposure is not the storage contract.
 
-Form orchestration can route podcast and case-study submissions into content-automation editorial queues. Weekly blog, daily social-blog and podcast generation can consume those briefs.
+Form orchestration quality-gates verified podcast and case-study submissions before editorial reuse. Completeness is scored deterministically; coherence, narrative strength, brand fit, factual risk and best-fit lane are assessed through validated structured AI output. Only one best-fit lane is selected. Below-threshold submissions are held for review; passing submissions can route to blog, social, podcast, Blotato-video or Zernio-mini-series editorial queues according to enabled lanes.
 
 ## Podcast contribution workflow
 

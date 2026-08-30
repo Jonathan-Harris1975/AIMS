@@ -18,6 +18,11 @@ const COMPLAINT_RE = /\b(?:complaint|not happy|unhappy|frustrat(?:ed|ing)|annoy(
 const CONFUSION_RE = /\b(?:i (?:do not|don't|dont) understand|confus(?:ed|ing)|what do you mean|that makes no sense|can you explain|i(?:'m| am) lost)\b/i;
 const HUMAN_RE = /\b(?:talk|speak|chat)\s+(?:to|with)\s+(?:jonathan|a human|a person)|\bhuman\s+(?:please|help|support)\b/i;
 
+const MONEY_REFUND_RE = /\b(?:refund|chargeback|charged|payment dispute|billing dispute|money back|reimburse|compensation|invoice dispute|unauthorised charge|unauthorized charge)\b/i;
+const LEGAL_RE = /\b(?:solicitor|lawyer|legal action|lawsuit|sue|litigation|court|breach of contract|liability|cease and desist|formal notice|legal claim)\b/i;
+const PRIVACY_RIGHTS_RE = /\b(?:subject access request|data subject request|right to erasure|right to be forgotten|delete my data|gdpr request|data protection complaint|privacy complaint)\b/i;
+const COMMERCIAL_COMMITMENT_RE = /\b(?:guarantee|guaranteed outcome|binding commitment|contract price|final quote|authorise payment|authorize payment|agree to pay|settlement offer)\b/i;
+
 function unique(values) {
   return [...new Set(values.filter(Boolean))];
 }
@@ -179,6 +184,22 @@ export function conductPromptGuidance(conduct = {}) {
   if (conduct.requiresHumanReview) guidance.push("- This conversation requires human review. Do not imply that an automated reply has final authority or promise enforcement action.");
   if (conduct.threat) guidance.push("- Threatening language was detected. Keep the reply minimal and non-confrontational; do not continue ordinary promotional or sales dialogue.");
   return guidance.join("\n");
+}
+
+
+export function assessConversationBusinessRisk(conversation) {
+  const recent = inboundMessages(conversation).slice(-20).map((message) => canonicalConductText(rawMessageText(message), 5000));
+  const combined = recent.join("\n");
+  const categories = [];
+  if (MONEY_REFUND_RE.test(combined)) categories.push("money_or_refund");
+  if (LEGAL_RE.test(combined)) categories.push("legal_or_contractual");
+  if (PRIVACY_RIGHTS_RE.test(combined)) categories.push("privacy_or_data_rights");
+  if (COMMERCIAL_COMMITMENT_RE.test(combined)) categories.push("commercial_commitment");
+  return Object.freeze({
+    detected: categories.length > 0,
+    requiresHumanReview: categories.length > 0,
+    categories: Object.freeze(categories),
+  });
 }
 
 export function conversationInteractionSignals(conversation) {

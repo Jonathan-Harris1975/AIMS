@@ -1,9 +1,20 @@
 import { decideConversationJotform } from "./formOrchestrationService.js";
+import { assessConversationBusinessRisk } from "./conversationConductService.js";
 
 function clamp(value, fallback = 0) {
   const number = Number(value);
   if (!Number.isFinite(number)) return fallback;
   return Math.max(0, Math.min(1, number));
+}
+
+function autoSendEnabledForChannel(config = {}, channel = "") {
+  if (config.autoSendEnabled === false) return false;
+  const selected = String(channel || "").toLowerCase();
+  if (selected === "chat") return config.autoSendChatEnabled !== false;
+  if (selected === "email") return config.autoSendEmailEnabled !== false;
+  if (selected === "form") return config.autoSendFormEnabled !== false;
+  if (["facebook", "instagram", "youtube", "linkedin", "tiktok", "x", "threads"].includes(selected)) return config.autoSendSocialEnabled !== false;
+  return true;
 }
 
 function level(score) {
@@ -31,7 +42,9 @@ export function buildSmartResponseIntelligence({
   const linkPreferenceBlocksForm = Boolean(rawFormDecision.selected && smartContext?.memory?.linkPreference === "no_links");
   const formDecision = linkPreferenceBlocksForm ? Object.freeze({ ...rawFormDecision, withholdUrl: true }) : rawFormDecision;
   const securityBlocked = Boolean(security.promptInjectionDetected || security.evidencePromptInjectionDetected);
-  const humanReview = Boolean(securityBlocked || conduct.requiresHumanReview || conduct.automationBlocked || strategy.humanReviewRequired || smartContext.escalation?.required);
+  const businessRisk = assessConversationBusinessRisk(conversation);
+  const channelAutoSendEnabled = autoSendEnabledForChannel(config, conversation?.channel);
+  const humanReview = Boolean(securityBlocked || businessRisk.requiresHumanReview || conduct.requiresHumanReview || conduct.automationBlocked || strategy.humanReviewRequired || smartContext.escalation?.required);
   const evidenceRequired = Boolean(policy.requiresEvidence);
   const hasEvidence = Array.isArray(evidence) && evidence.length > 0;
   const unresolvedCount = Array.isArray(summary?.unresolvedActions) ? summary.unresolvedActions.length : 0;
@@ -84,7 +97,8 @@ export function buildSmartResponseIntelligence({
     && !humanReview
     && !securityBlocked
     && Number(moderation?.severity || 0) < 0.2;
-  const autonomousEligible = !humanReview
+  const autonomousEligible = channelAutoSendEnabled
+    && !humanReview
     && !clarificationRequired
     && (safeFormDeliveryEligible || clamp(intent?.confidence) >= Number(config.smartResponseMinimumConfidence ?? 0.86))
     && (!evidenceRequired || hasEvidence || safeFormDeliveryEligible)
@@ -99,6 +113,8 @@ export function buildSmartResponseIntelligence({
     clarificationRequired,
     humanReviewRequired: humanReview,
     autonomousEligible,
+    channelAutoSendEnabled,
+    businessRisk,
     safeClarificationEligible,
     safeDeterministicResponseEligible,
     safeFormDeliveryEligible,
@@ -106,6 +122,8 @@ export function buildSmartResponseIntelligence({
     formDecision,
     reasons: Object.freeze([
       ...(securityBlocked ? ["security_risk"] : []),
+      ...(businessRisk.detected ? businessRisk.categories.map((category) => `business_risk:${category}`) : []),
+      ...(!channelAutoSendEnabled ? ["channel_auto_send_disabled"] : []),
       ...(conduct.requiresHumanReview || conduct.automationBlocked ? ["conduct_risk"] : []),
       ...(strategy.humanReviewRequired ? ["strategy_review"] : []),
       ...(smartContext.escalation?.required ? ["context_escalation"] : []),
