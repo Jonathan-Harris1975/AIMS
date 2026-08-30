@@ -1,7 +1,15 @@
 // services/blog/weekly/buildWeeklyBlogPost.js
 import { info, error, debug, warn } from "../../../logger.js";
 import { getObjectAsText, putText, putJson } from "../../shared/utils/r2-client.js";
-import { loadPendingEditorialBriefs, markEditorialBriefsConsumed, editorialBriefPromptContext } from "../../comms-hub/contentAutomationQueue.js";
+import {
+  claimPendingEditorialBriefs,
+  editorialBriefFingerprint,
+  editorialBriefIds,
+  editorialBriefPromptContext,
+  finaliseEditorialBriefsAfterPublication,
+  markEditorialBriefsReconciliationRequired,
+  releaseEditorialBriefClaims,
+} from "../../comms-hub/contentAutomationQueue.js";
 import { loadSiteShell, applySiteShellToHtml } from "../../shared/utils/siteShell.js";
 import { resilientRequest } from "../../shared/utils/ai-service.js";
 import { slugify } from "../utils/slug.js";
@@ -482,9 +490,14 @@ export async function buildWeeklyBlogPost({ days, weekId } = {}) {
   const createdAt = new Date().toISOString();
   let editorialBriefEntries = [];
   let editorialContext = "";
+  let editorialBriefFinalised = false;
+  let irreversiblePublicationReference = null;
 
   try {
-    editorialBriefEntries = await loadPendingEditorialBriefs("blog", { limit: Number(process.env.COMMS_HUB_CONTENT_AUTOMATION_BRIEF_LIMIT || 3) });
+    editorialBriefEntries = await claimPendingEditorialBriefs("blog", {
+      limit: Number(process.env.COMMS_HUB_CONTENT_AUTOMATION_BRIEF_LIMIT || 3),
+      consumerId: sessionId,
+    });
     editorialContext = editorialBriefPromptContext(editorialBriefEntries);
     info("blog.weekly.build.start", {
       days: window.days,
@@ -729,6 +742,11 @@ export async function buildWeeklyBlogPost({ days, weekId } = {}) {
     const existingManifest = await loadExistingPostsManifest(outBucketKey, `${prefix}/posts.json`);
     const mergedManifest = mergePostsManifest(existingManifest, postEntry);
 
+    irreversiblePublicationReference = {
+      sessionId,
+      postUrl,
+      postHtmlKey: `${dir}/index.html`,
+    };
     await putText(outBucketKey, `${dir}/index.html`, fullHtml, "text/html; charset=utf-8");
     await putJson(outBucketKey, `${dir}/post.json`, {
       schema_version: 1,
@@ -788,12 +806,42 @@ export async function buildWeeklyBlogPost({ days, weekId } = {}) {
       };
     }
 
+    let briefHandoff = { ok: true, skipped: true, reason: "no_editorial_briefs" };
     if (editorialBriefEntries.length) {
-      await markEditorialBriefsConsumed(editorialBriefEntries, { consumerId: sessionId, resultReference: postUrl });
+      editorialBriefFinalised = true;
+      const resultReference = {
+        sessionId,
+        postUrl,
+        rssFeedUrl: rss.feedUrl,
+        websiteRebuildConfirmed: rebuild.ok === true,
+        publicFeedVerified: feedVerification.ok === true,
+        briefIds: editorialBriefIds(editorialBriefEntries),
+        briefFingerprint: editorialBriefFingerprint(editorialBriefEntries),
+      };
+      if (feedVerification.ok && rebuild.ok) {
+        briefHandoff = await finaliseEditorialBriefsAfterPublication(editorialBriefEntries, {
+          consumerId: sessionId,
+          resultReference,
+          reconciliationReason: "weekly_blog_published_but_brief_archive_failed",
+        });
+      } else {
+        const reconciliation = await markEditorialBriefsReconciliationRequired(editorialBriefEntries, {
+          consumerId: sessionId,
+          resultReference,
+          reason: "weekly_blog_published_but_distribution_not_confirmed",
+        });
+        briefHandoff = {
+          ok: reconciliation.every((item) => item.ok === true),
+          status: "reconciliation_required",
+          reconciliationRequired: true,
+          reconciliation,
+        };
+      }
     }
 
     return {
       ok: true,
+      partialFailure: briefHandoff.ok === false || briefHandoff.reconciliationRequired === true,
       week: window.week,
       days: window.days,
       title,
@@ -818,9 +866,39 @@ export async function buildWeeklyBlogPost({ days, weekId } = {}) {
         rssFeedKey: rss.objectKey,
       },
       rebuild,
+      briefHandoff,
+      editorialBriefIds: editorialBriefIds(editorialBriefEntries),
+      editorialBriefFingerprint: editorialBriefFingerprint(editorialBriefEntries),
     };
   } catch (e) {
     error("blog.weekly.build.fail", { error: e.message, stack: e.stack });
-    return { ok: false, error: e.message };
+    let briefHandoff = null;
+    if (editorialBriefEntries.length && !editorialBriefFinalised && irreversiblePublicationReference) {
+      editorialBriefFinalised = true;
+      const reconciliation = await markEditorialBriefsReconciliationRequired(editorialBriefEntries, {
+        consumerId: sessionId,
+        resultReference: {
+          ...irreversiblePublicationReference,
+          error: e?.message || String(e),
+        },
+        reason: "weekly_blog_failed_after_publication_started",
+      });
+      briefHandoff = {
+        ok: reconciliation.every((item) => item.ok === true),
+        status: "reconciliation_required",
+        reconciliationRequired: true,
+        reconciliation,
+      };
+    }
+    return { ok: false, partialFailure: Boolean(briefHandoff), error: e.message, ...(briefHandoff ? { briefHandoff } : {}) };
+  } finally {
+    if (editorialBriefEntries.length && !editorialBriefFinalised) {
+      await releaseEditorialBriefClaims(editorialBriefEntries, {
+        consumerId: sessionId,
+        reason: "weekly_blog_failed_before_confirmed_publication",
+      }).catch((releaseError) => {
+        error("blog.weekly.brief_release_fail", { error: releaseError?.message || String(releaseError) });
+      });
+    }
   }
 }
