@@ -5,6 +5,7 @@ import {
   findPatternBreaches,
   cleanLexiconText,
 } from "../../content-quality/brandLexicon.js";
+import { analyseTopicFidelity } from "../../content-quality/topicFidelity.js";
 
 function asArray(value) {
   return Array.isArray(value) ? value : [];
@@ -270,7 +271,7 @@ function scoreFrom(defects = [], warnings = []) {
   return Math.max(0, 100 - defects.length * 16 - warnings.length * 4);
 }
 
-export function runBlotatoShortGate({ pack = {}, article = {}, lane = "" } = {}) {
+export function runBlotatoShortGate({ pack = {}, article = {}, lane = "", requiredTopic = "" } = {}) {
   const defects = [];
   const warnings = [];
   const text = cleanLexiconText(textFromPack(pack));
@@ -289,6 +290,29 @@ export function runBlotatoShortGate({ pack = {}, article = {}, lane = "" } = {})
   const fragmentScenes = sceneFragmentCount(pack.scenes);
   const flowScore = sceneFlowScore(pack);
   const visualPlan = analyseBlotatoVisualPlan({ scenes: pack.scenes, article });
+  const topicFidelity = analyseTopicFidelity({
+    generated: text,
+    sources: [article],
+    requiredTopic,
+    minSourceHits: 2,
+    minTopicRatio: 0.28,
+    minScore: requiredTopic ? 62 : 55,
+  });
+  const sourceTopicFidelity = requiredTopic
+    ? analyseTopicFidelity({
+        generated: [article.title, article.summary, article.description].filter(Boolean).join(" "),
+        sources: [article],
+        requiredTopic,
+        minSourceHits: 1,
+        minTopicRatio: 0.2,
+        minScore: 58,
+      })
+    : null;
+
+  defects.push(...topicFidelity.defects.map((defect) => `Editorial topic: ${defect}`));
+  if (sourceTopicFidelity) {
+    defects.push(...sourceTopicFidelity.defects.map((defect) => `Editorial topic is not supported by the selected RSS evidence: ${defect}`));
+  }
 
   if (!pack.script) defects.push("Blotato pack has no script.");
   if (!pack.hook) defects.push("Blotato pack has no hook.");
@@ -381,6 +405,8 @@ export function runBlotatoShortGate({ pack = {}, article = {}, lane = "" } = {})
       genericMetaphorScenes: visualPlan.genericMetaphorScenes,
       nearDuplicatePairs: visualPlan.nearDuplicatePairs,
       staticPortraitScenes: visualPlan.staticPortraitScenes,
+      topicFidelity,
+      sourceTopicFidelity,
     },
     checkedAt: new Date().toISOString(),
   };

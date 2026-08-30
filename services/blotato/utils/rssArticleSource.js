@@ -4,6 +4,7 @@ import { getObjectAsText } from "../../shared/utils/r2-client.js";
 import { debug, warn } from "../../../logger.js";
 import { hasRecentSocialSource } from "../../zernio/utils/state.js";
 import { hasRecentEditorialSource, hasBeenUsedCrossLaneToday } from "../../social/editorialLedger.js";
+import { topicTokens } from "../../content-quality/topicFidelity.js";
 import { getLaneRssEnvKey } from "../utils/shortLanes.js";
 
 const parser = new Parser();
@@ -184,7 +185,14 @@ function getLoaders(laneSlug = "") {
   return preferR2 ? [...r2Loaders, ...httpLoaders] : [...httpLoaders, ...r2Loaders];
 }
 
-function pickItem(items = []) {
+function editorialTopicScore(item = {}, topicSeed = "") {
+  const required = topicTokens(topicSeed);
+  if (!required.length) return 0;
+  const available = new Set(topicTokens([item.title, item.summary, item.source].filter(Boolean).join(" ")));
+  return required.filter((token) => available.has(token)).length / Math.min(required.length, 8);
+}
+
+function pickItem(items = [], { topicSeed = "" } = {}) {
   const usable = items
     .filter((item) => item.title && (item.summary || item.link))
     .map((item) => ({ ...item }))
@@ -201,15 +209,27 @@ function pickItem(items = []) {
       !hasBeenUsedCrossLaneToday(item)
   );
   const candidates = unused.length ? unused : usable;
+  const ranked = topicTokens(topicSeed).length
+    ? candidates
+        .map((item) => ({ item, editorialTopicScore: editorialTopicScore(item, topicSeed) }))
+        .sort((left, right) =>
+          right.editorialTopicScore - left.editorialTopicScore ||
+          (right.item._pubDateMs || 0) - (left.item._pubDateMs || 0)
+        )
+    : candidates.map((item) => ({ item, editorialTopicScore: 0 }));
   const mode = trim(process.env.BLOTATO_RSS_PICK_MODE, "latest").toLowerCase();
   if (mode === "random") {
-    return candidates[Math.floor(Math.random() * candidates.length)];
+    const bestScore = ranked[0]?.editorialTopicScore || 0;
+    const pool = bestScore > 0
+      ? ranked.filter((candidate) => candidate.editorialTopicScore === bestScore)
+      : ranked;
+    return pool[Math.floor(Math.random() * pool.length)]?.item || null;
   }
 
-  return candidates[0];
+  return ranked[0]?.item || null;
 }
 
-export async function selectRssArticleForBlotato({ laneSlug = "" } = {}) {
+export async function selectRssArticleForBlotato({ laneSlug = "", topicSeed = "" } = {}) {
   const loaders = getLoaders(laneSlug);
   let lastError = null;
 
@@ -217,7 +237,7 @@ export async function selectRssArticleForBlotato({ laneSlug = "" } = {}) {
     try {
       debug("blotato.rss.load.start", { source: loader.label, lane: laneSlug || "default" });
       const items = await loader.run();
-      const article = pickItem(items);
+      const article = pickItem(items, { topicSeed });
       if (article) {
         delete article._pubDateMs;
         debug("blotato.rss.load.complete", { source: loader.label, lane: laneSlug || "default", title: article.title });
