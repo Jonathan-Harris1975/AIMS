@@ -64,13 +64,15 @@ Email attachments use the same private quarantine, malware scan and clean-promot
 
 Jotform intake is verified before persistence. Attachment URLs are validated, downloaded to private R2 quarantine, scanned, integrity-checked and promoted only when clean. Public exposure is not the storage contract.
 
-Form orchestration quality-gates verified podcast and case-study submissions before editorial reuse. Completeness is scored deterministically; coherence, narrative strength, brand fit, factual risk and best-fit lane are assessed through validated structured AI output. Only one best-fit lane is selected. Below-threshold submissions are held for review; passing submissions can route to blog, social, podcast, Blotato-video or Zernio-mini-series editorial queues according to enabled lanes.
+Form orchestration quality-gates verified podcast and case-study submissions before editorial reuse. Completeness is scored deterministically; coherence, narrative strength, brand fit, factual risk and best-fit lane are assessed through validated structured AI output. Only one best-fit lane is selected. Below-threshold submissions are held for review; passing submissions can route to blog, social, podcast ingestion, Blotato video or the Zernio mini-series according to enabled lanes.
+
+All five queues have production consumers. Each consumer atomically claims a brief before generation, treats its contents as untrusted editorial direction rather than factual evidence, and releases the claim when a run fails before publication. A brief moves to `consumed` only after that lane's full publication hand-off is confirmed. Irreversible partial publications move to `reconciliation_required`, stale pending briefs expire after the configured age limit, and queue-storage errors fail closed rather than silently falling back to self-directed output. Blotato and Zernio claim one brief per short or series; the long-form blog, social-blog and podcast lanes use the general brief limit.
 
 ## Podcast contribution workflow
 
 The contribution state machine covers pre-check, asset requests/review, acceptance/rejection, episode-link recording, backlink request, optional social offer and completion. Routes exist to start and advance the workflow.
 
-The Friday podcast pipeline now automatically advances accepted `podcast_contribution` workflows only after RSS publication and the website rebuild have both confirmed success. The episode URL, backlink-request state, social-post offer state and terminal completion are recorded idempotently against the publication session; failures surface back through the podcast operation so MAST can alert rather than silently losing the hand-off.
+The Friday podcast ingestion pipeline claims its editorial brief before script generation and carries the brief IDs and fingerprint through the podcast session metadata. It automatically advances accepted `podcast_contribution` workflows only after RSS publication and the website rebuild have both confirmed success. The episode URL, backlink-request state, social-post offer state and terminal completion are recorded idempotently against the publication session. If RSS is already live but the rebuild or contribution hand-off fails, the brief is held for reconciliation rather than retried as a second episode.
 
 ## Website chat
 
