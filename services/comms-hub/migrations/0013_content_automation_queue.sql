@@ -1,6 +1,6 @@
 -- Comms Hub downstream content automation.
 -- Adds a durable delayed-action type used to turn verified, sanitised Jotform
--- editorial signals into the existing blog, social and podcast production lanes.
+-- editorial signals into the five blog, social, podcast, Blotato-video and Zernio-series lanes.
 -- Admin/newsletter mailbox exclusions remain enforced by the existing scope guards.
 
 CREATE TABLE comms_hub_delayed_actions_v4 (
