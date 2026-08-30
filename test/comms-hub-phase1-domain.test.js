@@ -310,6 +310,7 @@ test("Migration manifest requires all delivered Comms Hub phases", () => {
     "0017_social_fresh_activity_only",
     "0018_default_channel_automation",
     "0019_social_context_retry",
+    "0020_professional_autonomous_comms",
   ]);
 });
 

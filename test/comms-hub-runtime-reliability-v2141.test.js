@@ -141,7 +141,7 @@ test("webhook reconciliation isolates one Zernio family failure from the other f
   assert.equal(created[0].url, "https://zeroth-kara-jonathanharris-3296ed37.koyeb.app/comms-hub/intake/zernio/video");
 });
 
-test("social delivery keeps the narrow engagement policy and activates the guarded general social policy", () => {
+test("social delivery keeps the narrow engagement policy and applies the professional confidence floor to general social replies", () => {
   const db = new DatabaseSync(":memory:");
   for (const name of COMMS_HUB_REQUIRED_MIGRATIONS) {
     db.exec(fs.readFileSync(new URL(`../services/comms-hub/migrations/${name}.sql`, import.meta.url), "utf8"));
@@ -153,7 +153,7 @@ test("social delivery keeps the narrow engagement policy and activates the guard
   assert.equal(general.intent, "any");
   assert.equal(Number(general.maximum_risk), 0.15);
   assert.equal(general.require_evidence, 0);
-  assert.equal(Number(general.minimum_confidence), 0.88);
+  assert.equal(Number(general.minimum_confidence), 0.86);
   assert.equal(general.status, "active");
   assert.equal(engagement.policy_key, "social-engagement-safe");
   assert.equal(engagement.intent, "social_engagement");

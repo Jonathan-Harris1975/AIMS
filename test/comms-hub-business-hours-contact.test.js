@@ -131,7 +131,8 @@ test('processed Jotform response uses the same delayed weekday business-hours ru
   assert.ok(Number(parts.hour) >= 9 && Number(parts.hour) < 17);
 });
 
-test('website hand-off outside hours stays automated and offers callback email instead', async () => {
+test('website hand-off outside hours stays automated and offers the Contact Me form instead', async () => {
+  const contactFormUrl = 'https://form.jotform.com/260281179574362';
   const state = { session: null, messages: [], actions: new Map(), aliases: [] };
   const context = {
     now: () => '2026-08-16T18:00:00.000Z', // Sunday
@@ -140,7 +141,8 @@ test('website hand-off outside hours stays automated and offers callback email i
       chatAiWorkflowEnabled: false, aiEnabled: false, smartConductEnabled: true, badLanguageBlockEnabled: true,
       conductReviewStrikeThreshold: 2, conductAutomationBlockThreshold: 2, autonomousRepliesEnabled: false,
       coginPalApiBaseUrl: '', humanHandoffBusinessHoursOnly: true,
-      businessTimeZone: 'Europe/London', businessStartHour: 9, businessEndHour: 17, callbackEmailCaptureEnabled: true,
+      businessTimeZone: 'Europe/London', businessStartHour: 9, businessEndHour: 17, callbackEmailCaptureEnabled: false,
+      jotformForms: { contact: { url: contactFormUrl } },
     },
     coginPal: { async readWebhook() { return { nonce: 'n1', payloadSha256: 'sha', payload: { sessionId: 's1', visitorId: 'v1', websiteId: 'jonathan-harris.online', requestHuman: true, message: { id: 'm1', text: 'Can I speak to Jonathan?' } } }; } },
     operationsRepository: {
@@ -162,9 +164,12 @@ test('website hand-off outside hours stays automated and offers callback email i
   const result = await service.acceptWebhook({});
   assert.equal(result.takeoverRequested, false);
   assert.equal(result.handoffAvailable, false);
-  assert.equal(result.emailCaptureOffered, true);
+  assert.equal(result.emailCaptureOffered, false);
+  assert.equal(result.contactFormUrl, contactFormUrl);
   assert.equal(state.session.mode, 'automation');
-  assert.match(state.messages.at(-1).bodyText, /leave an email address/i);
+  assert.match(state.messages.at(-1).bodyText, /Contact Me form/i);
+  assert.match(state.messages.at(-1).bodyText, new RegExp(contactFormUrl.replaceAll('.', '\\.')));
+  assert.doesNotMatch(state.messages.at(-1).bodyText, /leave an email address/i);
   await assert.rejects(
     () => service.takeover({ conversationId: result.conversationId, mode: 'human', actor: 'jonathan' }),
     (error) => error.code === 'chat_handoff_outside_business_hours'
@@ -191,7 +196,8 @@ test('business-hours migration expands delayed-action schema for email, form and
 });
 
 
-test('social DM human request outside hours offers callback email without implying live availability', async () => {
+test('social DM human request outside hours offers the Contact Me form without implying live availability', async () => {
+  const contactFormUrl = 'https://form.jotform.com/260281179574362';
   const sent = [];
   const notifications = [];
   const event = {
@@ -207,7 +213,8 @@ test('social DM human request outside hours offers callback email without implyi
     config: {
       socialMonitorOnly: false, badLanguageBlockEnabled: true,
       businessTimeZone: 'Europe/London', businessStartHour: 9, businessEndHour: 17,
-      callbackEmailCaptureEnabled: true,
+      callbackEmailCaptureEnabled: false,
+      jotformForms: { contact: { url: contactFormUrl } },
     },
     repository: {
       async getConversation() { return conversation; },
@@ -224,9 +231,10 @@ test('social DM human request outside hours offers callback email without implyi
     zernio: { meta: { async sendMessage(input) { sent.push(input); return { id: 'provider-reply-1' }; } } },
   };
   await handleSocialDmHumanContact(event, context);
-  assert.equal(notifications.length, 1);
-  assert.equal(notifications[0].metadata.handoffAvailable, false);
+  assert.equal(notifications.length, 0);
   assert.equal(sent.length, 1);
-  assert.match(sent[0].message, /leave an email address/i);
+  assert.match(sent[0].message, /Contact Me form/i);
+  assert.match(sent[0].message, new RegExp(contactFormUrl.replaceAll('.', '\\.')));
+  assert.doesNotMatch(sent[0].message, /leave an email address/i);
   assert.doesNotMatch(sent[0].message, /available for hand-off now/i);
 });
