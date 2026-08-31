@@ -261,7 +261,7 @@ test("artwork provider fallback remains available generically while Zernio daily
   assert.match(blogArtwork, /NEWSLETTER_ALLOW_DETERMINISTIC_FALLBACK/);
   assert.match(blogArtwork, /ok: publishableFallback,[\s\S]*diagnosticUrl: publicUrl,[\s\S]*publicUrl: publishableFallback \? publicUrl : ""/);
   assert.match(socialArtwork, /ZERNIO_ALLOW_DETERMINISTIC_FALLBACK/);
-  assert.match(socialArtwork, /allowFallback = true/);
+  assert.match(socialArtwork, /allowFallback = false/);
   assert.match(socialArtwork, /if \(!allowFallback\)/);
   assert.match(socialArtwork, /ok: publishableFallback,[\s\S]*diagnosticUrl: publicUrl,[\s\S]*publicUrl: publishableFallback \? publicUrl : ""/);
   assert.match(zernioScheduler, /allowFallback: false/);
@@ -275,9 +275,27 @@ test("artwork provider fallback remains available generically while Zernio daily
   assert.match(env, /^NEWSLETTER_AI_EDGE_FALLBACK_IMAGE_URL=$/m);
   assert.match(env, /^SOCIAL_BLOG_ALLOW_DETERMINISTIC_FALLBACK=false$/m);
   assert.match(env, /^NEWSLETTER_ALLOW_DETERMINISTIC_FALLBACK=true$/m);
-  assert.match(env, /^ZERNIO_ALLOW_DETERMINISTIC_FALLBACK=true$/m);
+  assert.match(env, /^ZERNIO_ALLOW_DETERMINISTIC_FALLBACK=false$/m);
 });
 
+
+test("social providers are production schedule-only and the weekday window owns the complete social chain", async () => {
+  const blotatoRoutes = await readFile(new URL("../services/blotato/routes/index.js", import.meta.url), "utf8");
+  const ops = await readFile(new URL("../services/ops/index.js", import.meta.url), "utf8");
+  const env = await readFile(new URL("../config/production.defaults.env", import.meta.url), "utf8");
+
+  assert.match(blotatoRoutes, /return configured && !production;/);
+  assert.match(env, /^BLOTATO_ALLOW_IMMEDIATE_PUBLISH=false$/m);
+  assert.match(env, /^BLOTATO_SCHEDULE_RECOVERY_ENABLED=false$/m);
+  for (const contract of [
+    '["blotato-am", "/blotato/autoshorts/schedule"',
+    '["zernio-monday", "/zernio/daily/monday"',
+    '["blog-social", "/blog/social/daily/build"',
+    '["zernio-blog-social", "/zernio/blog-rss/daily"',
+    '["blotato-pm", "/blotato/shorts/news-insight/schedule"',
+  ]) assert.ok(ops.includes(contract), `missing social operation task: ${contract}`);
+  assert.ok(ops.includes('const DEFERRED_OPERATION_TASKS = new Set();'));
+});
 
 test("mini-series creation retries weak plans and duplicate parts, then fails closed before partial scheduling", async () => {
   const scheduler = await readFile(new URL("../services/zernio/utils/socialScheduler.js", import.meta.url), "utf8");
