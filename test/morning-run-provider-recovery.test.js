@@ -72,6 +72,9 @@ test("Blotato scheduled runs use deterministic slot sessions and a hard two-rend
   assert.match(text, /paidVisualIdsForDate\(scheduleDate\)/);
   assert.match(text, /inferScheduleSlotFromJob\(job\) === scheduleSlot/);
   assert.match(text, /scheduleDateFromJob\(job\) === scheduleDate/);
-  assert.match(text, /reusableRenderedVideo\(lane\.jobType, articleSource\.article, sessionId, \{ scheduleSlot, scheduleDate \}\)/);
+  assert.match(
+    text,
+    /reusableRenderedVideo\(lane\.jobType, articleSource\.article, sessionId, \{\s*scheduleSlot,\s*scheduleDate: activeScheduleDate,\s*briefFingerprint,\s*\}\)/
+  );
   assert.match(defaults, /^BLOTATO_DAILY_PAID_RENDER_CAP=2$/m);
 });

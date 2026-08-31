@@ -314,6 +314,9 @@ process.env.BLOTATO_PUBLISH_STAGGER_MS = "1";
 process.env.BLOTATO_API_RETRY_ATTEMPTS = "2";
 process.env.BLOTATO_API_RETRY_MAX_MS = "10";
 process.env.BLOTATO_SCRIPT_MODEL = "openai/test-model";
+// This suite verifies Blotato's standalone provider lifecycle. Editorial queue
+// failure handling has dedicated tests and requires a separate R2 fixture.
+process.env.COMMS_HUB_CONTENT_AUTOMATION_BLOTATO_VIDEO_ENABLED = "false";
 process.env.APP_TMP_DIR = `/tmp/aims-blotato-test-${Date.now()}`;
 
 const { app } = await import(`../server.js?blotato-suite=${Date.now()}`);
@@ -362,6 +365,7 @@ test.afterEach(() => {
   process.env.BLOTATO_API_RETRY_ATTEMPTS = "2";
   process.env.BLOTATO_API_RETRY_MAX_MS = "10";
   process.env.BLOTATO_SCRIPT_MODEL = "openai/test-model";
+  process.env.COMMS_HUB_CONTENT_AUTOMATION_BLOTATO_VIDEO_ENABLED = "false";
   process.env.OPENROUTER_API_BASE = mockBase;
   process.env.OPENROUTER_BASE_URL = mockBase;
 });
