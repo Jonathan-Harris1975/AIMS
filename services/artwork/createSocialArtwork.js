@@ -44,7 +44,7 @@ export async function createSocialArtwork({
   date,
   lane = "social",
   fallbackUrl = "",
-  allowFallback = true,
+  allowFallback = false,
 } = {}) {
   const safeSession = cleanPart(sessionId || `${lane}-${Date.now()}`);
   const safeLane = cleanPart(lane || "social").toLowerCase();
@@ -119,7 +119,7 @@ export async function createSocialArtwork({
         publicUrl,
         originalError: err?.message || String(err),
       });
-      const publishableFallback = boolEnv("ZERNIO_ALLOW_DETERMINISTIC_FALLBACK", true);
+      const publishableFallback = boolEnv("ZERNIO_ALLOW_DETERMINISTIC_FALLBACK", false);
       return {
         ok: publishableFallback,
         fallback: true,
