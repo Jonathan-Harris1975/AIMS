@@ -73,7 +73,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `AWS_REGION` | Yes | services/tts/utils/ttsProcessor.js:23 |
 | `BACKFILL_TRANSCRIPT_HTML` | No | scripts/bootstrap.js:156 |
 | `BACKFILL_TRANSCRIPT_HTML_TIMEOUT_MS` | No | scripts/bootstrap.js:161 |
-| `BLOG_ARTWORK_BUCKET_ALIAS` | Yes | services/artwork/createBlogArtwork.js:52 |
+| `BLOG_ARTWORK_BUCKET_ALIAS` | Yes | services/artwork/createBlogArtwork.js:56 |
 | `BLOG_PREFIX` | Yes | services/blog/routes/rss.js:9<br>services/blog/weekly/buildWeeklyBlogPost.js:484 |
 | `BLOG_RSS_DESCRIPTION` | No | services/blog/rss/publishBlogRssFeed.js:147 |
 | `BLOG_RSS_FEED_URL` | No | services/blog/rss/publishBlogRssFeed.js:132 |
@@ -92,7 +92,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `BLOG_SOCIAL_RSS_TITLE` | Yes | services/blog/social/publishSocialBlogRssFeed.js:357 |
 | `BLOG_WEEKLY_JSON_RESPONSE_FORMAT` | No | services/blog/weekly/buildWeeklyBlogPost.js:357<br>services/blog/weekly/buildWeeklyBlogPost.js:375<br>services/blog/weekly/buildWeeklyBlogPost.js:415 |
 | `BLOG_WEEKLY_QA_ENABLED` | No | services/blog/weekly/buildWeeklyBlogPost.js:271 |
-| `BLOTATO_ALLOW_IMMEDIATE_PUBLISH` | Yes | services/blotato/routes/index.js:37 |
+| `BLOTATO_ALLOW_IMMEDIATE_PUBLISH` | Yes | services/blotato/routes/index.js:41 |
 | `BLOTATO_ALLOW_PUBLIC_PUBLISH_HOOKS` | Yes | services/shared/middleware/suiteAuth.js:81 |
 | `BLOTATO_API_BASE` | Yes | services/blotato/utils/blotatoClient.js:61 |
 | `BLOTATO_AUTOSHORT_ROTATION_DAYS` | No | services/blotato/utils/autoShortStyles.js:1 |
@@ -264,7 +264,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `MAX_URL_FEEDS_PER_RUN` | Yes | services/rss-feed-creator/utils/feedRotationManager.js:20<br>services/rss-feed-creator/utils/fetchFeeds.js:29 |
 | `MIN_SUMMARY_CHARS` | Yes | services/rss-feed-creator/utils/rss-prompts.js:17<br>services/rss-feed-creator/utils/rss-prompts.js:18 |
 | `NEWSLETTER_BREVO_ALLOW_LIST_CREATE` | Yes | services/newsletter/brevo/campaign.js:178 |
-| `NODE_ENV` | Yes | logger.js:8<br>scripts/deploySmoke.js:4<br>scripts/performanceGate.js:5<br>scripts/startupCheck.js:34<br>server.js:30<br>server.js:385<br>+12 more |
+| `NODE_ENV` | Yes | logger.js:8<br>scripts/deploySmoke.js:4<br>scripts/performanceGate.js:5<br>scripts/startupCheck.js:34<br>server.js:30<br>server.js:385<br>+13 more |
 | `ONEUP_EBOOK_CATALOGUE_PATH` | No | services/zernio/utils/ebookCatalogue.js:42 |
 | `ON_BRAND_AUDIT_MAX_TOKENS` | No | audits/utils/onBrandAudit.js:13 |
 | `ON_BRAND_AUDIT_TEMPERATURE` | No | audits/utils/onBrandAudit.js:14 |
