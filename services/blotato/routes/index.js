@@ -34,7 +34,13 @@ function sendValidationError(res, parsed) {
 }
 
 function immediatePublishingEnabled() {
-  return ["1", "true", "yes", "on", "y"].includes(String(process.env.BLOTATO_ALLOW_IMMEDIATE_PUBLISH || "false").trim().toLowerCase());
+  // Production social publishing is schedule-only. Keeping the legacy flag
+  // here used to allow an old MAST trigger to bypass the scheduler and create
+  // instant posts, even though the scheduled routes were correctly configured.
+  // Development/test can still opt in explicitly.
+  const configured = ["1", "true", "yes", "on", "y"].includes(String(process.env.BLOTATO_ALLOW_IMMEDIATE_PUBLISH || "false").trim().toLowerCase());
+  const production = String(process.env.NODE_ENV || "").trim().toLowerCase() === "production";
+  return configured && !production;
 }
 
 function requireScheduledBlotatoRoute(res) {
