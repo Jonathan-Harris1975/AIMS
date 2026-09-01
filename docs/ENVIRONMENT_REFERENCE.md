@@ -5,8 +5,8 @@
 This inventory makes the runtime configuration contract auditable without duplicating secret values. `.env.example` and `env.template` remain the curated operator templates; this file records every production `process.env` dependency and its source locations.
 
 - Runtime variables referenced in production code: **492**
-- Present in curated templates: **355**
-- Not present in curated templates: **137**
+- Present in curated templates: **378**
+- Not present in curated templates: **114**
 
 | Variable | Curated template | Production references |
 | --- | --- | --- |
@@ -14,7 +14,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `AIMS_API_KEY` | Yes | server.js:194<br>services/ops/index.js:386<br>services/shared/middleware/suiteAuth.js:55 |
 | `AIMS_BUSY_CONCURRENCY_THRESHOLD` | No | services/shared/utils/lifecycle.js:15 |
 | `AIMS_FAILURE_ALERT_THRESHOLD` | Yes | services/shared/utils/operationalExcellence.js:5 |
-| `AIMS_INTERNAL_BASE_URL` | No | services/ops/index.js:385 |
+| `AIMS_INTERNAL_BASE_URL` | Yes | services/ops/index.js:385 |
 | `AIMS_OPERATION_ASYNC_JOB_TIMEOUT_MS` | Yes | services/ops/index.js:452 |
 | `AIMS_OPERATION_ASYNC_MAX_POLL_ERRORS` | No | services/ops/index.js:454 |
 | `AIMS_OPERATION_ASYNC_NOT_FOUND_GRACE_MS` | No | services/ops/index.js:455 |
@@ -22,7 +22,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `AIMS_OPERATION_ASYNC_REQUEST_TIMEOUT_MS` | Yes | services/ops/index.js:453 |
 | `AIMS_OPERATION_DISPATCH_TIMEOUT_MS` | No | services/ops/index.js:405 |
 | `AIMS_OPERATION_FRIDAY_PM_DELAY_MS` | Yes | services/ops/index.js:124 |
-| `AIMS_OPERATION_TASK_TIMEOUT_MS` | No | services/ops/index.js:406 |
+| `AIMS_OPERATION_TASK_TIMEOUT_MS` | Yes | services/ops/index.js:406 |
 | `AIMS_STARTUP_GRACE_MS` | No | services/shared/utils/lifecycle.js:14 |
 | `AI_RETRY_BASE_MS` | Yes | audits/utils/seoAeoGeoAnalysis.js:1884 |
 | `AI_SUITE_API_KEY` | Yes | server.js:194<br>services/shared/middleware/suiteAuth.js:55 |
@@ -71,7 +71,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `AUDIT_WEBSITE_REPO_REF` | Yes | audits/utils/githubDispatch.js:35 |
 | `AUTO_CALL` | Yes | services/rss-feed-podcast/index.js:145 |
 | `AWS_REGION` | Yes | services/tts/utils/ttsProcessor.js:23 |
-| `BACKFILL_TRANSCRIPT_HTML` | No | scripts/bootstrap.js:156 |
+| `BACKFILL_TRANSCRIPT_HTML` | Yes | scripts/bootstrap.js:156 |
 | `BACKFILL_TRANSCRIPT_HTML_TIMEOUT_MS` | No | scripts/bootstrap.js:161 |
 | `BLOG_ARTWORK_BUCKET_ALIAS` | Yes | services/artwork/createBlogArtwork.js:56 |
 | `BLOG_PREFIX` | Yes | services/blog/routes/rss.js:9<br>services/blog/weekly/buildWeeklyBlogPost.js:484 |
@@ -95,7 +95,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `BLOTATO_ALLOW_IMMEDIATE_PUBLISH` | Yes | services/blotato/routes/index.js:41 |
 | `BLOTATO_ALLOW_PUBLIC_PUBLISH_HOOKS` | Yes | services/shared/middleware/suiteAuth.js:81 |
 | `BLOTATO_API_BASE` | Yes | services/blotato/utils/blotatoClient.js:61 |
-| `BLOTATO_AUTOSHORT_ROTATION_DAYS` | No | services/blotato/utils/autoShortStyles.js:1 |
+| `BLOTATO_AUTOSHORT_ROTATION_DAYS` | Yes | services/blotato/utils/autoShortStyles.js:1 |
 | `BLOTATO_BRAND_ANIMATE_IMAGES` | Yes | services/blotato/utils/newsShortsService.js:21 |
 | `BLOTATO_BRAND_ASPECT_RATIO` | Yes | services/blotato/utils/newsShortsService.js:20 |
 | `BLOTATO_BRAND_CAPTION_POSITION` | Yes | services/blotato/utils/newsShortsService.js:18 |
@@ -111,7 +111,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `BLOTATO_HOOK_VARIANTS` | Yes | services/blotato/utils/newsShortsService.js:35 |
 | `BLOTATO_HUMAN_VISUALS_ENABLED` | Yes | services/blotato/utils/newsShortsService.js:37 |
 | `BLOTATO_HUMAN_VISUAL_MIN_SCENES` | Yes | services/blotato/utils/newsShortsService.js:38 |
-| `BLOTATO_IMAGE_PROMPT_PROFILE` | No | services/blotato/utils/newsShortsService.js:31 |
+| `BLOTATO_IMAGE_PROMPT_PROFILE` | Yes | services/blotato/utils/newsShortsService.js:31 |
 | `BLOTATO_IMAGE_TO_VIDEO_MODEL` | Yes | services/blotato/utils/autoPublishService.js:428 |
 | `BLOTATO_INLINE_PUBLISH_JOBS` | No | services/blotato/utils/autoPublishService.js:1959 |
 | `BLOTATO_INSTAGRAM_SHARE_TO_FEED` | Yes | services/blotato/utils/autoPublishService.js:848 |
@@ -177,7 +177,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `BLOTATO_YOUTUBE_NOTIFY_SUBSCRIBERS` | Yes | services/blotato/utils/autoPublishService.js:858 |
 | `BLOTATO_YOUTUBE_PRIVACY_STATUS` | Yes | services/blotato/utils/autoPublishService.js:857 |
 | `BOOTSTRAP_STEP_TIMEOUT_MS` | Yes | scripts/bootstrap.js:5 |
-| `BRAND_SOCIAL_COUNCIL_RUN_AFTER_SOCIAL` | No | audits/utils/zernioSocialPerformance.js:699 |
+| `BRAND_SOCIAL_COUNCIL_RUN_AFTER_SOCIAL` | Yes | audits/utils/zernioSocialPerformance.js:699 |
 | `BREVO_API_BASE_URL` | Yes | services/newsletter/brevo/client.js:23 |
 | `BREVO_API_KEY` | Yes | services/newsletter/brevo/client.js:30 |
 | `CHROME_BIN` | No | audits/utils/socialThumbnailAudit.js:133 |
@@ -210,14 +210,14 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `COMMS_HUB_FORM_SMART_PROCESSING_ENABLED` | Yes | services/comms-hub/routes/index.js:131 |
 | `COMMS_HUB_MAX_WEBHOOK_BYTES` | Yes | server.js:246<br>server.js:336 |
 | `COMMS_HUB_MONTH_END_ARCHIVE_ENABLED` | Yes | services/comms-hub/routes/index.js:142 |
-| `COMMS_HUB_OPENROUTER_DATA_COLLECTION` | No | services/shared/utils/ai-service.js:185 |
-| `COMMS_HUB_OPENROUTER_ZDR_ONLY` | No | services/shared/utils/ai-service.js:192 |
+| `COMMS_HUB_OPENROUTER_DATA_COLLECTION` | Yes | services/shared/utils/ai-service.js:185 |
+| `COMMS_HUB_OPENROUTER_ZDR_ONLY` | Yes | services/shared/utils/ai-service.js:192 |
 | `COMMS_HUB_RETENTION_WORKER_ENABLED` | Yes | services/comms-hub/routes/index.js:141 |
 | `COMMS_HUB_SMART_RESPONSE_ENABLED` | Yes | services/comms-hub/routes/index.js:129 |
-| `CONTENT_MASTER_COUNCIL_MAX_RETRIES` | No | audits/utils/contentMasterCouncil.js:110 |
-| `CONTENT_MASTER_COUNCIL_MAX_TOKENS` | No | audits/utils/contentMasterCouncil.js:110 |
-| `CONTENT_MASTER_COUNCIL_TEMPERATURE` | No | audits/utils/contentMasterCouncil.js:110 |
-| `CONTENT_MASTER_COUNCIL_TIMEOUT_MS` | No | audits/utils/contentMasterCouncil.js:110 |
+| `CONTENT_MASTER_COUNCIL_MAX_RETRIES` | Yes | audits/utils/contentMasterCouncil.js:110 |
+| `CONTENT_MASTER_COUNCIL_MAX_TOKENS` | Yes | audits/utils/contentMasterCouncil.js:110 |
+| `CONTENT_MASTER_COUNCIL_TEMPERATURE` | Yes | audits/utils/contentMasterCouncil.js:110 |
+| `CONTENT_MASTER_COUNCIL_TIMEOUT_MS` | Yes | audits/utils/contentMasterCouncil.js:110 |
 | `CORS_ORIGINS` | Yes | server.js:221 |
 | `DEBUG_ROUTES` | Yes | logger.js:114 |
 | `DIGITAL_GROWTH_AI_MAX_INPUT_CHARS` | Yes | audits/utils/digitalGrowthAnalysis.js:325 |
@@ -306,7 +306,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `PHASE3_SOURCE_OVERLAP_MIN` | No | services/content-quality/phase3Gates.js:368 |
 | `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` | Yes | audits/utils/contentMasterCouncil.js:116<br>audits/utils/websiteAuditCouncil.js:992<br>services/artwork/utils/quizCardRenderer.js:21 |
 | `PODCASTINDEX_USER_AGENT` | Yes | services/shared/utils/podcastIndexClient.js:34 |
-| `PODCAST_ARTWORK_TIMEOUT_MS` | No | services/artwork/createPodcastArtwork.js:12 |
+| `PODCAST_ARTWORK_TIMEOUT_MS` | Yes | services/artwork/createPodcastArtwork.js:12 |
 | `PODCAST_DURATION_MINS` | No | services/script/utils/durationCalculator.js:79 |
 | `PODCAST_DURATION_MINUTES` | No | services/script/utils/durationCalculator.js:80 |
 | `PODCAST_EDITORIAL_MAX_TOKENS` | Yes | services/script/utils/editorialPass.js:85 |
@@ -332,9 +332,9 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `PODCAST_SYNTHESIS_TIMEOUT_MS` | Yes | services/script/utils/mainChunker.js:205 |
 | `PODCAST_TARGET_MINS` | No | services/script/utils/durationCalculator.js:77 |
 | `PODCAST_TARGET_MINUTES` | Yes | services/script/utils/durationCalculator.js:78 |
-| `PODCAST_TRANSCRIPT_HARD_MAX_SENTENCE_WORDS` | No | services/script/utils/orchestrator.js:96 |
-| `PODCAST_TRANSCRIPT_HTML_BASE_URL` | No | scripts/backfill-transcript-html.js:80<br>scripts/backfill-transcript-html.js:131<br>services/script/utils/orchestrator.js:380<br>services/tts/utils/podcastProcessor.js:152 |
-| `PODCAST_TRANSCRIPT_MAX_SENTENCE_WORDS` | No | services/script/utils/editAndFormat.js:184<br>services/script/utils/orchestrator.js:95<br>services/script/utils/orchestrator.js:297<br>services/script/utils/scriptValidation.js:293 |
+| `PODCAST_TRANSCRIPT_HARD_MAX_SENTENCE_WORDS` | Yes | services/script/utils/orchestrator.js:96 |
+| `PODCAST_TRANSCRIPT_HTML_BASE_URL` | Yes | scripts/backfill-transcript-html.js:80<br>scripts/backfill-transcript-html.js:131<br>services/script/utils/orchestrator.js:380<br>services/tts/utils/podcastProcessor.js:152 |
+| `PODCAST_TRANSCRIPT_MAX_SENTENCE_WORDS` | Yes | services/script/utils/editAndFormat.js:184<br>services/script/utils/orchestrator.js:95<br>services/script/utils/orchestrator.js:297<br>services/script/utils/scriptValidation.js:293 |
 | `PODCAST_TRANSCRIPT_MIN_SOURCE_TERMS` | No | services/script/utils/scriptValidation.js:390 |
 | `POLLY_VOICE_ID` | Yes | services/tts/utils/ttsProcessor.js:24 |
 | `PORT` | Yes | routes/podcast-pipeline.js:14<br>scripts/deploySmoke.js:3<br>scripts/startupCheck.js:67<br>server.js:473<br>services/ops/index.js:385 |
@@ -401,8 +401,8 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `SERVER_LISTEN_TIMEOUT_MS` | No | scripts/bootstrap.js:6 |
 | `SHUTDOWN_TIMEOUT_MS` | Yes | server.js:572 |
 | `SITE_BASE_URL` | Yes | scripts/backfill-blog-main-site-links.js:63<br>scripts/backfill-transcript-html.js:77<br>scripts/backfill-transcript-html.js:133<br>services/blog/rss/publishBlogRssFeed.js:10<br>services/blog/utils/mainSiteLinks.js:20<br>services/blog/utils/mainSiteLinks.js:24<br>+5 more |
-| `SITE_SHELL_ALLOWED_HOSTS` | No | services/shared/utils/siteShell.js:30 |
-| `SITE_SHELL_MANIFEST_URL` | No | services/shared/utils/siteShell.js:120 |
+| `SITE_SHELL_ALLOWED_HOSTS` | Yes | services/shared/utils/siteShell.js:30 |
+| `SITE_SHELL_MANIFEST_URL` | Yes | services/shared/utils/siteShell.js:120 |
 | `SITE_SHELL_SYNC_SHARED_SECRET` | Yes | services/shared/middleware/suiteAuth.js:67 |
 | `SOCIAL_LEDGER_INTENT_LOOKBACK_DAYS` | No | services/social/editorialLedger.js:8 |
 | `SOCIAL_LEDGER_RESERVATION_TTL_HOURS` | No | services/social/editorialLedger.js:7 |
@@ -432,7 +432,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `ZERNIO_BLOG_RSS_HASHTAG_LIMIT` | No | services/zernio/utils/config.js:108 |
 | `ZERNIO_BLOG_RSS_IMAGE_URL` | No | services/zernio/utils/config.js:107 |
 | `ZERNIO_BLOG_RSS_TIME` | Yes | services/zernio/utils/config.js:103 |
-| `ZERNIO_CANONICAL_IMAGE_HOSTS` | No | services/zernio/utils/socialScheduler.js:120 |
+| `ZERNIO_CANONICAL_IMAGE_HOSTS` | Yes | services/zernio/utils/socialScheduler.js:120 |
 | `ZERNIO_DAILY_MAX_TOKENS` | No | services/zernio/utils/socialScheduler.js:36 |
 | `ZERNIO_DEFAULT_DRY_RUN` | Yes | services/zernio/utils/config.js:79 |
 | `ZERNIO_EBOOK_MAX_TOKENS` | No | services/zernio/utils/socialScheduler.js:42 |
@@ -463,11 +463,11 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `ZERNIO_MONDAY_IMAGE_URL` | No | services/zernio/utils/config.js:118 |
 | `ZERNIO_MONDAY_TIME` | Yes | services/zernio/utils/config.js:117 |
 | `ZERNIO_PODCAST_PROMO_IMAGE_URL` | No | services/zernio/utils/config.js:217 |
-| `ZERNIO_PODCAST_PROMO_MAX_TOKENS` | No | services/zernio/utils/socialScheduler.js:41 |
+| `ZERNIO_PODCAST_PROMO_MAX_TOKENS` | Yes | services/zernio/utils/socialScheduler.js:41 |
 | `ZERNIO_PODCAST_PROMO_TIME` | Yes | services/zernio/utils/config.js:214 |
-| `ZERNIO_PODCAST_RSS_FEED_URL` | No | services/zernio/utils/config.js:215<br>services/zernio/utils/podcastRssFeed.js:56 |
-| `ZERNIO_PODCAST_SPOTIFY_URL` | No | services/zernio/utils/config.js:216 |
-| `ZERNIO_POST_MAX_CHARACTERS` | No | services/zernio/utils/config.js:84 |
+| `ZERNIO_PODCAST_RSS_FEED_URL` | Yes | services/zernio/utils/config.js:215<br>services/zernio/utils/podcastRssFeed.js:56 |
+| `ZERNIO_PODCAST_SPOTIFY_URL` | Yes | services/zernio/utils/config.js:216 |
+| `ZERNIO_POST_MAX_CHARACTERS` | Yes | services/zernio/utils/config.js:84 |
 | `ZERNIO_PROFILE_NAME_EBOOKS` | Yes | services/zernio/utils/config.js:60 |
 | `ZERNIO_PROFILE_NAME_GENERAL` | Yes | services/zernio/utils/config.js:59 |
 | `ZERNIO_QUIZ_ANSWER_IMAGE_URL` | No | services/zernio/utils/config.js:183 |
