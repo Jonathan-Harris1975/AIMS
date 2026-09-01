@@ -382,7 +382,7 @@ async function runInternalTask([name, path, body = {}, feature = null, addWeekSt
   if (feature === "newsletter" && !operationNewsletterEnabled()) {
     return { name, path, ok: true, skipped: true, reason: "newsletter-disabled-until-brevo-ready" };
   }
-  const base = normalise(process.env.AIMS_INTERNAL_BASE_URL) || `http://127.0.0.1:${process.env.PORT || 8000}`;
+  const base = normalise(process.env.AIMS_INTERNAL_BASE_URL) || `http://127.0.0.1:${process.env.PORT || 3000}`;
   const token = normalise(process.env.AIMS_API_KEY) || normalise(requestContext?.authorization).replace(/^Bearer\s+/i, "");
   const sessionId = taskSessionId(job, name);
   const idempotencyKey = `ops:${job?.executionId || job?.id || "run"}:${name}`;
