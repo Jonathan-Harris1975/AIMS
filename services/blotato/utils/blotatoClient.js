@@ -4,7 +4,7 @@ const DEFAULT_BLOTATO_API_BASE = "https://backend.blotato.com/v2";
 const DEFAULT_TIMEOUT_MS = 30_000;
 const MAX_SLEEP_MS = 120_000;
 
-const BLOTATO_KEY_ENV_NAMES = ["Blotato_API_key", "BLOTATO_API_KEY"];
+const BLOTATO_KEY_ENV_NAMES = ["BLOTATO_API_KEY", "Blotato_API_key"];
 
 function positiveIntEnv(name, fallback, max = Number.POSITIVE_INFINITY) {
   const parsed = Number(process.env[name]);
@@ -72,7 +72,7 @@ export function getBlotatoApiKey(apiKey) {
   const resolved = firstUsableEnv(BLOTATO_KEY_ENV_NAMES);
   if (resolved.value) return resolved.value;
 
-  const err = new Error("Missing Blotato_API_key");
+  const err = new Error("Missing BLOTATO_API_KEY");
   err.statusCode = 400;
   err.envNames = BLOTATO_KEY_ENV_NAMES;
   throw err;
