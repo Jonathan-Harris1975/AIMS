@@ -201,7 +201,10 @@ test("Zernio and Blotato scheduled publishing require provider confirmation", as
   const zernio = await readFile(new URL("../services/zernio/utils/socialScheduler.js", import.meta.url), "utf8");
   const blotato = await readFile(new URL("../services/blotato/utils/autoPublishService.js", import.meta.url), "utf8");
   const blotatoRoutes = await readFile(new URL("../services/blotato/routes/index.js", import.meta.url), "utf8");
+  const blotatoClient = await readFile(new URL("../services/blotato/utils/blotatoClient.js", import.meta.url), "utf8");
+  const zernioClient = await readFile(new URL("../services/zernio/utils/zernioClient.js", import.meta.url), "utf8");
   const env = await readFile(new URL("../config/production.defaults.env", import.meta.url), "utf8");
+  const envExample = await readFile(new URL("../.env.example", import.meta.url), "utf8");
   assert.match(zernio, /verifyZernioScheduleResponse/);
   assert.match(zernio, /ZERNIO_SCHEDULE_ACCEPTED_STATUSES = new Set\(\["scheduled"\]\)/);
   assert.match(zernio, /Zernio did not confirm the scheduled post/);
@@ -221,6 +224,10 @@ test("Zernio and Blotato scheduled publishing require provider confirmation", as
   assert.match(env, /^BLOTATO_ALLOW_IMMEDIATE_PUBLISH=false$/m);
   assert.match(env, /^ZERNIO_REQUIRE_SCHEDULE_CONFIRMATION=true$/m);
   assert.match(env, /^ZERNIO_REQUIRE_IMAGE=true$/m);
+  assert.match(blotatoClient, /BLOTATO_KEY_ENV_NAMES = \["BLOTATO_API_KEY", "Blotato_API_key"\]/);
+  assert.match(zernioClient, /export async function listAccountsHealth/);
+  assert.match(zernioClient, /canPost === false/);
+  assert.match(envExample, /^ZERNIO_DEFAULT_DRY_RUN=false$/m);
 });
 
 test("Zernio exact schedules use London time and fail closed instead of silently moving a missed slot", async () => {
