@@ -11,11 +11,13 @@ Comms Hub migrations do not use this endpoint. `npm run comms:migrate` deliberat
 
 ## Deployment
 
-1. Copy `wrangler.toml.example` to `wrangler.toml`.
-2. Set the exact production D1 database ID.
-3. Create a long random secret with `wrangler secret put COMMS_HUB_D1_PROXY_TOKEN`.
-4. Deploy the Worker.
-5. Set Koyeb `COMMS_HUB_D1_PROXY_URL=https://<worker-host>/query`.
-6. Set Koyeb `COMMS_HUB_D1_PROXY_TOKEN` to the same secret.
+1. Use the checked-in `wrangler.toml`; it is the canonical production Worker configuration. Do not create or commit a second `wrangler.toml` from a template.
+2. Verify the production D1 database ID in `wrangler.toml` before deployment.
+3. Pin Wrangler to `4.127.1` for local and CI deployments.
+4. Create a long random secret with `npx --yes wrangler@4.127.1 secret put COMMS_HUB_D1_PROXY_TOKEN`.
+5. Deploy with `npx --yes wrangler@4.127.1 deploy`.
+6. Verify `GET /health` returns `{"ok":true,"service":"comms-hub-data-plane"}`.
+7. Set Koyeb `COMMS_HUB_D1_PROXY_URL=https://<worker-host>/query`.
+8. Set Koyeb `COMMS_HUB_D1_PROXY_TOKEN` to the same secret.
 
 Social channel families are deliberately not ready without this Worker. Jotform-only Phase 1 can continue to use Cloudflare's REST API when both social family switches are false.
