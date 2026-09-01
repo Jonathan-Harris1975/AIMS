@@ -269,6 +269,14 @@ export async function listAccounts({ profileId } = {}, apiKey) {
   return zernioGet("accounts", profileId ? { profileId } : {}, apiKey);
 }
 
+// Zernio introduced an explicit posting-capability check in August 2026.
+// An account can exist and be connected while still being disabled for posting
+// (for example an ads-only connection). Preflight this before creating a post
+// so AIMS fails before the external side effect with a useful diagnosis.
+export async function listAccountsHealth({ profileId, platform } = {}, apiKey) {
+  return zernioGet("accounts/health", { profileId, platform }, apiKey);
+}
+
 // --- Posts -------------------------------------------------------------
 // POST /v1/posts creates (and optionally schedules/publishes) a post.
 // GET /v1/analytics with a date range and no postId returns a paginated
@@ -342,6 +350,17 @@ export async function inspectZernioTargeting({
   const profileId = trimString(profile?._id || profile?.id);
   const accountResult = await listAccounts({ profileId }, apiKey);
   const profileAccounts = Array.isArray(accountResult?.accounts) ? accountResult.accounts : Array.isArray(accountResult?.data) ? accountResult.data : [];
+  let healthAccounts = [];
+  const healthWarnings = [];
+  try {
+    const healthResult = await listAccountsHealth({ profileId }, apiKey);
+    healthAccounts = Array.isArray(healthResult?.accounts) ? healthResult.accounts : Array.isArray(healthResult?.data) ? healthResult.data : [];
+  } catch (error) {
+    // Health is a diagnostic/preflight enhancement. If the endpoint itself is
+    // unavailable, retain the existing account validation rather than making a
+    // provider capability endpoint a hard dependency for every publish.
+    healthWarnings.push(`Could not fetch Zernio account health: ${error.message}`);
+  }
   const target = parseAccountTarget(targetAccountId);
   const targetIds = new Set(target.ids.map((id) => String(id)));
   const targetedAccounts = target.mode === "all"
@@ -356,6 +375,10 @@ export async function inspectZernioTargeting({
   const missingRequiredPlatforms = requiredTypes.filter(
     (required) => !targetedAccounts.some((account) => platformMatches(account?.platform, required))
   );
+  const healthById = new Map(healthAccounts.map((account) => [accountId(account), account]));
+  const nonPostableTargetAccounts = targetedAccounts
+    .map((account) => ({ account, health: healthById.get(accountId(account)) }))
+    .filter(({ health }) => health && health.canPost === false);
 
   let globalAccounts = [];
   let globalAccountWarnings = [];
@@ -393,9 +416,15 @@ export async function inspectZernioTargeting({
     warnings.push(`Zernio profile '${profileName}' is not targeting required platform(s): ${missingRequiredPlatforms.join(", ")}`);
   }
   warnings.push(...globalAccountWarnings);
+  warnings.push(...healthWarnings);
+  if (nonPostableTargetAccounts.length) {
+    warnings.push(
+      `Zernio target account(s) are connected but disabled for posting: ${nonPostableTargetAccounts.map(({ account }) => accountId(account)).join(", ")}`
+    );
+  }
 
   return {
-    ok: missingTargetIds.length === 0 && missingRequiredPlatforms.length === 0 && profileAccounts.length > 0,
+    ok: missingTargetIds.length === 0 && missingRequiredPlatforms.length === 0 && profileAccounts.length > 0 && nonPostableTargetAccounts.length === 0,
     profile,
     accountId: targetAccountId,
     targetMode: target.mode,
@@ -404,6 +433,20 @@ export async function inspectZernioTargeting({
     targetedAccountCount: targetedAccounts.length,
     profileAccounts: profileAccounts.map(compactAccount),
     targetedAccounts: targetedAccounts.map(compactAccount),
+    healthAccounts: healthAccounts.map((account) => ({
+      accountId: accountId(account),
+      platform: account?.platform || null,
+      status: account?.status || null,
+      canPost: account?.canPost ?? null,
+      needsReconnect: account?.needsReconnect ?? null,
+      issues: Array.isArray(account?.issues) ? account.issues : [],
+    })),
+    nonPostableTargetAccounts: nonPostableTargetAccounts.map(({ account, health }) => ({
+      accountId: accountId(account),
+      platform: account?.platform || null,
+      status: health?.status || null,
+      issues: Array.isArray(health?.issues) ? health.issues : [],
+    })),
     missingTargetIds,
     missingRequiredPlatforms,
     globalAccountCount: globalAccounts.length,
