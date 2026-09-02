@@ -21,7 +21,9 @@ Immediate-publish compatibility routes remain disabled in production unless `BLO
 
 The five weekday short lanes are `news-insight`, `model-verdict`, `ai-at-work`, `reality-check` and `ai-playbook`. AutoShorts rotates through 48 visual/story styles. Finished duration is 35-55 seconds with a 45-second default target.
 
-The service checks hook strength, narrative continuity, source relevance, scene progression, human presence, caption legibility and finished media quality. The final MP4 is inspected before scheduling. Provider submission state is polled rather than assuming acceptance means publication.
+The service checks hook strength, narrative continuity, source relevance, scene progression, human presence, caption legibility and finished media quality. It makes bounded repairs before rendering. If those repairs are exhausted, performance heuristics become advisory, while source integrity, brand safety and structural defects still block publication. The final MP4 is inspected before scheduling; technical defects always block, while a soft performance score is advisory by default and can be made strict with `BLOTATO_RENDERED_QA_BLOCK_SOFT_FAILURES=true`.
+
+Provider submission state is polled rather than assuming acceptance means publication. `BLOTATO_SCHEDULE_RECOVERY_ENABLED=true` safely moves a missed same-day slot forward while retaining the deterministic slot claim.
 
 Production defaults require every configured channel and scheduling confirmation: `BLOTATO_REQUIRE_ALL_CHANNELS=true` and `BLOTATO_REQUIRE_SCHEDULE_CONFIRMATION=true`. The two daily renders are serialised so one render does not collide with another.
 
