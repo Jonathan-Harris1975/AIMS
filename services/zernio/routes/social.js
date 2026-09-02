@@ -11,7 +11,7 @@ import {
 } from "../../shared/utils/requestSchemas.js";
 import { buildAndScheduleDailyLane, buildAndScheduleDailyLaneAccountVariants, buildAndScheduleQuizSeries, buildAndScheduleEbookWeekly, buildAndScheduleBlogRssDaily, buildAndSchedulePodcastThursdayPromo, buildAndScheduleWeeklyMiniSeries } from "../utils/socialScheduler.js";
 import { getAsyncServiceRouteJobFresh, shouldRunAsyncServiceRoute, startAsyncServiceRouteJob } from "../../shared/utils/asyncServiceRouteJobs.js";
-import { fetchPublishedPostsHistory, inspectZernioTargeting } from "../utils/zernioClient.js";
+import { fetchPublishedPostsHistory, getZernioConfigSummary, inspectZernioTargeting } from "../utils/zernioClient.js";
 import { LANE_CONFIG, ZERNIO_PROFILE_NAME_GENERAL, ZERNIO_PROFILE_NAME_EBOOKS, getZernioRequiredPlatforms, getZernioAccountId, normaliseZernioAccountId, parsePlatforms } from "../utils/config.js";
 
 const router = express.Router();
@@ -57,6 +57,7 @@ router.get("/health", (_req, res) => {
   res.json({
     ok: true,
     service: "zernio",
+    ...getZernioConfigSummary(),
     lanes: Object.keys(LANE_CONFIG),
     quizRoute: "/zernio/quiz/weekly",
     ebookWeeklyRoute: "/zernio/ebooks/weekly",
