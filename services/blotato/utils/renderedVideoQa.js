@@ -256,6 +256,17 @@ export function normaliseRenderedVideoQa(raw, {
   return result;
 }
 
+export function assessRenderedVideoQaPublication(result = {}, { blockSoftFailures = false } = {}) {
+  const hardFailure = result?.technical?.pass === false
+    || stringArray(result?.hardDefects).length > 0;
+  const softFailure = result?.pass === false && !hardFailure;
+  return {
+    block: result?.pass === false && (hardFailure || Boolean(blockSoftFailures)),
+    hardFailure,
+    softFailure,
+  };
+}
+
 export function buildRenderedVideoQaError(result = {}) {
   const reasons = [
     ...(result.technical?.defects || []),
@@ -372,6 +383,7 @@ export async function reviewRenderedVideo({
 }
 
 export default {
+  assessRenderedVideoQaPublication,
   buildRenderedVideoQaError,
   buildRenderedVideoQaPrompt,
   evaluateRenderedVideoTechnical,

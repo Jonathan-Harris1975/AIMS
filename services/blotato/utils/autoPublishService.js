@@ -29,11 +29,11 @@ import { DEFAULT_BLOTATO_SHORT_LANE, getShortLaneJobTypes, requireShortLaneConfi
 import { selectRssArticleForBlotato } from "./rssArticleSource.js";
 import { info, warn } from "../../../logger.js";
 import { recordUsedSocialSource } from "../../zernio/utils/state.js";
-import { buildBlotatoGateError, runBlotatoShortGate } from "./shortGate.js";
+import { assessBlotatoQualityRetry, buildBlotatoGateError, runBlotatoShortGate } from "./shortGate.js";
 import { runReviewCouncilGate, repairArtifactForReviewCouncil } from "../../content-quality/reviewCouncil.js";
 import { completeEditorialReservation, releaseEditorialReservation, reserveEditorialSource } from "../../social/editorialLedger.js";
 import { startKeepAlive, stopKeepAlive } from "../../shared/utils/keepalive.js";
-import { buildRenderedVideoQaError, reviewRenderedVideo } from "./renderedVideoQa.js";
+import { assessRenderedVideoQaPublication, buildRenderedVideoQaError, reviewRenderedVideo } from "./renderedVideoQa.js";
 import { looksLikePendingVideoError } from "./renderStatus.js";
 import { pollUntil } from "./pollUntil.js";
 import { buildVisualCreationRequest } from "./visualRequest.js";
@@ -1213,7 +1213,7 @@ function resolveBlotatoScheduledTime(slot = "am", now = new Date()) {
   const minLeadMs = positiveIntEnv("BLOTATO_SCHEDULE_MIN_LEAD_MS", 10 * 60_000, 6 * 60 * 60_000);
   let scheduled = new Date(londonLocalToUtcIso({ ...london, hour, minute }));
   if (scheduled.getTime() <= now.getTime() + minLeadMs) {
-    const recoveryEnabled = parseBoolean(process.env.BLOTATO_SCHEDULE_RECOVERY_ENABLED, false);
+    const recoveryEnabled = parseBoolean(process.env.BLOTATO_SCHEDULE_RECOVERY_ENABLED, true);
     if (!recoveryEnabled) {
       const err = new Error(`Blotato scheduled slot ${envKey}=${raw} was missed. Exact scheduled posting is required, so no paid render was started.`);
       err.statusCode = 409;
@@ -1432,19 +1432,46 @@ async function runPublishJob({
       });
     }
 
+    let qualityRecovery = null;
+    if (!blotatoShortGate?.ok) {
+      const errorGate = bestRejected?.gate || blotatoShortGate;
+      const assessment = assessBlotatoQualityRetry(errorGate);
+      if (assessment.publishable) {
+        pack = bestRejected?.pack || pack;
+        qualityRecovery = {
+          acceptedAfterRetries: true,
+          advisoryDefects: assessment.advisoryDefects,
+          blockingDefects: [],
+        };
+        blotatoShortGate = {
+          ...errorGate,
+          qualityAttempts,
+          ...qualityRecovery,
+        };
+        warn("blotato.publish_now.pre_render_pack.accepted_after_retries", {
+          sessionId,
+          lane: lane.slug,
+          score: errorGate.score,
+          advisoryDefects: assessment.advisoryDefects.slice(0, 8),
+        });
+      }
+    }
+
     updateJob(lane.jobType, sessionId, {
-      phase: blotatoShortGate?.ok ? "script-approved" : "script-quality-failed",
+      phase: blotatoShortGate?.ok || qualityRecovery?.acceptedAfterRetries
+        ? "script-approved"
+        : "script-quality-failed",
       channelPreflight,
       templateId,
       templateResolution,
       qualityAttempts,
       finalGate: blotatoShortGate,
+      qualityRecovery,
     });
 
-    if (!blotatoShortGate?.ok) {
+    if (!blotatoShortGate?.ok && !qualityRecovery?.acceptedAfterRetries) {
       const errorGate = bestRejected?.gate || blotatoShortGate;
-      errorGate.qualityAttempts = qualityAttempts;
-      throw buildBlotatoGateError(errorGate);
+      throw buildBlotatoGateError({ ...errorGate, qualityAttempts });
     }
 
     const reusedVideo = await reusableRenderedVideo(lane.jobType, articleSource.article, sessionId, {
@@ -1517,12 +1544,22 @@ async function runPublishJob({
       sessionId: `${sessionId}-rendered-qa`,
     });
     if (!renderedVideoQa.pass) {
+      const blockSoftQaFailures = parseBoolean(process.env.BLOTATO_RENDERED_QA_BLOCK_SOFT_FAILURES, false);
+      const qaPublication = assessRenderedVideoQaPublication(renderedVideoQa, {
+        blockSoftFailures: blockSoftQaFailures,
+      });
+      const hardQaFailure = qaPublication.hardFailure;
       updateJob(lane.jobType, sessionId, {
-        phase: "rendered-quality-failed",
+        phase: hardQaFailure || blockSoftQaFailures
+          ? "rendered-quality-failed"
+          : "rendered-quality-advisory",
         videoId: video.visualId,
         videoDashboardUrl: video.dashboardUrl,
         mediaUrl: video.mediaUrl,
-        renderedVideoQa,
+        renderedVideoQa: {
+          ...renderedVideoQa,
+          acceptedAfterSoftFailure: !hardQaFailure && !blockSoftQaFailures,
+        },
       });
       warn("blotato.finished_video.qa_failed", {
         sessionId,
@@ -1535,10 +1572,22 @@ async function runPublishJob({
         defects: renderedVideoQa.defects?.slice?.(0, 8) || [],
         hardDefects: renderedVideoQa.hardDefects?.slice?.(0, 8) || [],
         technical: renderedVideoQa.technical,
+        hardQaFailure,
+        blockSoftQaFailures,
       });
-      throw buildRenderedVideoQaError(renderedVideoQa);
+      if (qaPublication.block) {
+        throw buildRenderedVideoQaError(renderedVideoQa);
+      }
+      renderedVideoQa.acceptedAfterSoftFailure = true;
+      warn("blotato.finished_video.qa_soft_failure_accepted", {
+        sessionId,
+        lane: lane.slug,
+        visualId: video.visualId,
+        score: renderedVideoQa.score,
+        threshold: renderedVideoQa.threshold,
+      });
     }
-    info("blotato.finished_video.qa_passed", {
+    info(renderedVideoQa.pass ? "blotato.finished_video.qa_passed" : "blotato.finished_video.qa_accepted", {
       sessionId,
       lane: lane.slug,
       visualId: video.visualId,

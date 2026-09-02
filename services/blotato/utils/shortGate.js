@@ -412,6 +412,35 @@ export function runBlotatoShortGate({ pack = {}, article = {}, lane = "", requir
   };
 }
 
+const RETRY_EXHAUSTED_ADVISORY_DEFECTS = [
+  /^Hook performance score too low/i,
+  /^Thumbnail performance score too low/i,
+  /^Narrative\/visual flow score too low/i,
+  /^Human visual coverage too low/i,
+  /^Source-specific visual grounding is too weak/i,
+  /^Scene-to-script\/source alignment score too low/i,
+  /^Visual progression score too low/i,
+  /^Generic metaphor props detected/i,
+  /^Near-duplicate visual plans detected/i,
+  /^Too many static portrait\/desk scenes/i,
+];
+
+// Performance heuristics are useful repair signals, but after every model and
+// deterministic repair attempt they must not become a total publishing outage.
+// Structural, source-fidelity and brand defects remain hard blockers.
+export function assessBlotatoQualityRetry(gate = {}) {
+  const defects = Array.isArray(gate?.defects) ? gate.defects.map(String) : [];
+  const advisoryDefects = defects.filter((defect) =>
+    RETRY_EXHAUSTED_ADVISORY_DEFECTS.some((pattern) => pattern.test(defect))
+  );
+  const blockingDefects = defects.filter((defect) => !advisoryDefects.includes(defect));
+  return {
+    publishable: blockingDefects.length === 0,
+    advisoryDefects,
+    blockingDefects,
+  };
+}
+
 export function buildBlotatoGateError(gate) {
   const err = new Error(`Blotato pre-render pack gate failed (${gate.score}/88): ${gate.defects.join(" | ")}`);
   err.statusCode = 422;
