@@ -30,8 +30,10 @@ Zernio owns AIMS static/social scheduling: seven daily editorial lanes, blog-RSS
 - British English, Jonathan Harris voice, semantic gates and review councils run before scheduling.
 - Artwork is checked for relevance and visual defects before the external side effect.
 - Schedule-slot claims and provider-history checks prevent accidental duplicates.
+- Duplicate checks use `GET /v1/posts`; publishing does not depend on analytics permissions.
 - Required platforms default to Facebook and Instagram and can be changed through `ZERNIO_REQUIRED_PLATFORMS`.
 - Provider requests use bounded retry/backoff settings from the `ZERNIO_API_RETRY_*` variables.
+- Post creation sends a deterministic RFC 4122 UUID in `x-request-id`, allowing safe retries without violating Zernio's header contract.
 
 ## Special lanes
 
@@ -43,4 +45,4 @@ Zernio owns AIMS static/social scheduling: seven daily editorial lanes, blog-RSS
 
 ## Configuration
 
-Use `config/production.defaults.env`, `env.template` and `services/zernio/utils/config.js` as the source of truth. Keep provider credentials in the deployment secret store.
+Use `config/production.defaults.env`, `env.template` and `services/zernio/utils/config.js` as the source of truth. The scheduler accepts the AIMS-scoped `ZERNIO_META_API_KEY` or Zernio's canonical `ZERNIO_API_KEY`; an explicit request key takes precedence. Placeholder secret references are treated as unconfigured, and a live run without a usable key fails rather than returning a misleading dry-run success. Keep provider credentials in the deployment secret store.
