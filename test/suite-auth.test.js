@@ -188,6 +188,36 @@ test("ops pretrigger health is public but preflight and warmup require suite aut
   });
 });
 
+test("strict posting preflight accepts the credential aliases used by both clients", async () => {
+  await withEnv({
+    NODE_ENV: "production",
+    AIMS_API_KEY: "test-aims-key",
+    AIMS_OPS_PREFLIGHT_STRICT: "true",
+    BLOTATO_API_KEY: undefined,
+    Blotato_API_key: "legacy-blotato-key",
+    ZERNIO_META_API_KEY: undefined,
+    ZERNIO_API_KEY: "canonical-zernio-key",
+  }, async () => {
+    const cases = [
+      { service: "blotato", targetPath: "/blotato/autoshorts/schedule", detail: "configured:Blotato_API_key" },
+      { service: "zernio", targetPath: "/zernio/daily/monday", detail: "configured:ZERNIO_API_KEY" },
+    ];
+
+    for (const item of cases) {
+      const response = await request(app)
+        .get(`/ops/preflight?service=${item.service}&targetPath=${encodeURIComponent(item.targetPath)}`)
+        .set("Authorization", "Bearer test-aims-key");
+
+      assert.equal(response.status, 200, item.service);
+      assert.equal(response.body.ok, true, item.service);
+      assert.equal(response.body.readiness, "ready", item.service);
+      const credentialCheck = response.body.checks.find((check) => check.name.startsWith("env:"));
+      assert.equal(credentialCheck.ok, true, item.service);
+      assert.equal(credentialCheck.detail, item.detail, item.service);
+    }
+  });
+});
+
 
 test("scanner probe paths are dropped before suite auth", async () => {
   await withEnv({ NODE_ENV: "production", AIMS_API_KEY: "test-aims-key" }, async () => {

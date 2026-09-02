@@ -36,6 +36,7 @@ const AI_STORY_TEMPLATE_UUID = "5903fe43-514d-40ee-a060-0d6628c5f8fd";
 const capturedChatRequests = [];
 const capturedVisualRequests = [];
 const capturedPostRequests = [];
+const scheduledPostIds = new Set();
 
 function countHashtags(value = "") {
   return (String(value || "").match(/(^|\s)#[\p{L}\p{N}_]+/gu) || []).length;
@@ -44,15 +45,16 @@ function countHashtags(value = "") {
 async function handleMockRequest(req, res) {
   const url = new URL(req.url, "http://127.0.0.1");
 
-  if (req.method === "GET" && url.pathname === "/feed.xml") {
+  if (req.method === "GET" && ["/feed.xml", "/feed-scheduled.xml"].includes(url.pathname)) {
+    const scheduledFixture = url.pathname === "/feed-scheduled.xml";
     res.writeHead(200, { "content-type": "application/rss+xml" });
     res.end(`<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0">
   <channel>
     <title>Jonathan Harris AI News</title>
     <item>
-      <title>AI agents move from chat to office tasks</title>
-      <link>https://example.com/agents-office-tasks</link>
+      <title>${scheduledFixture ? "AI agents move into scheduled office workflows" : "AI agents move from chat to office tasks"}</title>
+      <link>https://example.com/${scheduledFixture ? "agents-scheduled-office-workflows" : "agents-office-tasks"}</link>
       <description>A new wave of agent tools is aimed at routine admin and workflow tasks.</description>
       <pubDate>${new Date().toUTCString()}</pubDate>
     </item>
@@ -227,6 +229,7 @@ async function handleMockRequest(req, res) {
     }
 
     const id = body.post.content.platform === "tiktok" ? "post-1" : `post-${body.post.content.platform}`;
+    if (body.scheduledTime) scheduledPostIds.add(id);
     res.writeHead(201, { "content-type": "application/json" });
     res.end(JSON.stringify({ postSubmissionId: id }));
     return;
@@ -235,7 +238,11 @@ async function handleMockRequest(req, res) {
   if (req.method === "GET" && url.pathname.startsWith("/v2/posts/post-")) {
     const id = url.pathname.split("/").pop();
     res.writeHead(200, { "content-type": "application/json" });
-    res.end(JSON.stringify({ postSubmissionId: id, status: "published", publicUrl: `https://example.com/p/${id}` }));
+    res.end(JSON.stringify({
+      postSubmissionId: id,
+      status: scheduledPostIds.has(id) ? "scheduled" : "published",
+      publicUrl: scheduledPostIds.has(id) ? undefined : `https://example.com/p/${id}`,
+    }));
     return;
   }
 
@@ -329,6 +336,10 @@ test.after(async () => {
 });
 
 test.afterEach(() => {
+  capturedChatRequests.length = 0;
+  capturedVisualRequests.length = 0;
+  capturedPostRequests.length = 0;
+  scheduledPostIds.clear();
   process.env.Blotato_API_key = "test-blotato-key";
   process.env.BLOTATO_API_BASE = `${mockBase}/v2`;
   process.env.BLOTATO_NEWS_RSS_URL = `${mockBase}/feed.xml`;
@@ -438,7 +449,7 @@ test("Blotato visual and post lifecycle routes call the API", async () => {
     .set(auth);
 
   assert.equal(postStatus.status, 200);
-  assert.equal(postStatus.body.status, "published");
+  assert.equal(postStatus.body.status, "scheduled");
 });
 
 test("Blotato publish schema rejects target/platform mismatch", async () => {
@@ -565,4 +576,31 @@ test("Blotato publish-now endpoint requires explicit opt-in and runs the RSS-to-
     jobStatus.body.job.result.channelPreflight.platforms.map((item) => item.platform),
     ["instagram", "youtube", "tiktok", "facebook"]
   );
+});
+
+test("Blotato scheduled lane reaches the provider and confirms every queued post", async () => {
+  const weekday = new Intl.DateTimeFormat("en-GB", { weekday: "long", timeZone: "Europe/London" }).format(new Date()).toUpperCase();
+  process.env[`BLOTATO_SCHEDULE_${weekday}_PM`] = "00:00";
+  process.env.BLOTATO_SCHEDULE_RECOVERY_ENABLED = "true";
+  process.env.BLOTATO_SCHEDULE_MIN_LEAD_MS = "60000";
+  process.env.BLOTATO_SCHEDULE_VERIFY_ATTEMPTS = "2";
+  process.env.BLOTATO_SCHEDULE_VERIFY_INTERVAL_MS = "1";
+  process.env.BLOTATO_NEWS_RSS_URL = `${mockBase}/feed-scheduled.xml`;
+
+  const response = await request(app)
+    .post("/blotato/shorts/news-insight/schedule")
+    .set(auth)
+    .send({});
+
+  assert.equal(response.status, 202);
+  assert.equal(response.body.started, true);
+
+  const jobStatus = await request(app).get(`/blotato/jobs/${response.body.sessionId}`);
+  assert.equal(jobStatus.status, 200);
+  assert.equal(jobStatus.body.job.status, "completed");
+  assert.equal(jobStatus.body.job.result.deliveryMode, "scheduled");
+  assert.equal(jobStatus.body.job.result.posts.length, 4);
+  assert.ok(jobStatus.body.job.result.posts.every((post) => post.status === "scheduled" && post.confirmed === true));
+  assert.equal(capturedPostRequests.length, 4);
+  assert.ok(capturedPostRequests.every((payload) => Boolean(payload.scheduledTime)));
 });

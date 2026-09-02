@@ -28,6 +28,7 @@ function applyBaseEnv() {
   process.env.OPENROUTER_GOOGLE_2_5_flashlite = "google/test-flash-lite";
   process.env.OPENROUTER_GPT_5_6_SOL = "openai/test-sol";
   delete process.env.ZERNIO_META_API_KEY;
+  delete process.env.ZERNIO_API_KEY;
   process.env.ZERNIO_DEFAULT_DRY_RUN = "false";
   process.env.ZERNIO_PROFILE_NAME_EBOOKS = "Ebooks";
   process.env.ZERNIO_TUESDAY_TIME = "13:00";
@@ -36,8 +37,10 @@ function applyBaseEnv() {
 }
 
 const scheduledRequests = [];
+const listedPostRequests = [];
 let zernioScheduleFailuresRemaining = 0;
 let zernioScheduleAttempts = 0;
+let analyticsRequests = 0;
 let quizAnswerContentOverride = null;
 let mockBlogRssItems = null;
 
@@ -89,7 +92,7 @@ function mockBlogRssXml() {
 }
 
 // Mock server shaped after the documented Zernio REST API
-// (https://docs.zernio.com/): GET /profiles, GET /accounts, GET /analytics,
+// (https://docs.zernio.com/): GET /profiles, GET /accounts, GET /posts,
 // POST /posts. This replaces the OneUp-shaped mock server this test used
 // before the migration (listcategory, listcategoryaccount, getscheduledposts,
 // scheduletextpost/scheduleimagepost).
@@ -123,6 +126,17 @@ const mockServer = http.createServer(async (req, res) => {
   }
 
   if (req.method === "GET" && url.pathname === "/analytics") {
+    analyticsRequests += 1;
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({ posts: [] }));
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/posts") {
+    listedPostRequests.push({
+      authorization: req.headers.authorization,
+      query: Object.fromEntries(url.searchParams.entries()),
+    });
     res.writeHead(200, { "content-type": "application/json" });
     res.end(JSON.stringify({ posts: [] }));
     return;
@@ -132,6 +146,12 @@ const mockServer = http.createServer(async (req, res) => {
     zernioScheduleAttempts += 1;
     let body = "";
     for await (const chunk of req) body += chunk;
+    const requestId = String(req.headers["x-request-id"] || "");
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(requestId)) {
+      res.writeHead(400, { "content-type": "application/json" });
+      res.end(JSON.stringify({ error: "x-request-id must be a UUID" }));
+      return;
+    }
     if (zernioScheduleFailuresRemaining > 0) {
       zernioScheduleFailuresRemaining -= 1;
       res.writeHead(503, { "content-type": "application/json" });
@@ -139,7 +159,7 @@ const mockServer = http.createServer(async (req, res) => {
       return;
     }
     const parsed = JSON.parse(body || "{}");
-    scheduledRequests.push({ endpoint: url.pathname, body: parsed });
+    scheduledRequests.push({ endpoint: url.pathname, body: parsed, authorization: req.headers.authorization, requestId });
     res.writeHead(200, { "content-type": "application/json" });
     res.end(JSON.stringify({ post: { _id: "post_abc123", status: "scheduled", scheduledFor: parsed.scheduledFor } }));
     return;
@@ -233,8 +253,10 @@ test.after(async () => {
 
 test.afterEach(() => {
   scheduledRequests.length = 0;
+  listedPostRequests.length = 0;
   zernioScheduleFailuresRemaining = 0;
   zernioScheduleAttempts = 0;
+  analyticsRequests = 0;
   quizAnswerContentOverride = null;
   mockBlogRssItems = null;
   restoreEnv();
@@ -429,6 +451,18 @@ test("Zernio account IDs are normalised for API scheduling", async () => {
   assert.equal(mod.normaliseZernioAccountId('["fb-page-1","ig-account-1"]'), '["fb-page-1","ig-account-1"]');
 });
 
+test("Zernio duplicate checks read account IDs from the posts response shape", async () => {
+  const { queuedItemAccountIds } = await import(`../services/zernio/utils/socialSchedulerPrimitives.js?zernio-post-accounts=${Date.now()}`);
+  const ids = queuedItemAccountIds({
+    platforms: [
+      { platform: "facebook", accountId: { _id: "fb-page-1" } },
+      { platform: "instagram", accountId: "ig-account-1" },
+    ],
+  });
+
+  assert.deepEqual([...ids], ["fb-page-1", "ig-account-1"]);
+});
+
 test("buildAndScheduleDailyLane validates Facebook targeting before live scheduling", async () => {
   restoreEnv();
   applyBaseEnv();
@@ -461,6 +495,59 @@ test("buildAndScheduleDailyLane validates Facebook targeting before live schedul
   assert.deepEqual(scheduledRequests.at(-1).body.mediaItems, [
     { type: "image", url: "https://images.jonathan-harris.online/generated/monday-ci" },
   ]);
+});
+
+test("Zernio posts successfully with the canonical ZERNIO_API_KEY and no analytics permission", async () => {
+  restoreEnv();
+  applyBaseEnv();
+  process.env.OPENROUTER_API_BASE = mockBase;
+  process.env.ZERNIO_API_BASE_URL = mockBase;
+  process.env.ZERNIO_API_KEY = "canonical-zernio-key";
+  process.env.ZERNIO_REQUIRED_PLATFORMS = "facebook";
+  process.env.ZERNIO_VALIDATE_TARGET_ACCOUNTS = "true";
+
+  const mod = await import(`../services/zernio/utils/socialScheduler.js?zernio-canonical-key=${Date.now()}`);
+  const result = await mod.buildAndScheduleDailyLane("monday", {
+    publishDate: "2026-04-13",
+    profileName: "General",
+    accountId: "fb-page-1",
+    imageUrl: "https://images.jonathan-harris.online/generated/monday-canonical-key",
+    force: true,
+  });
+
+  assert.equal(result.scheduled, true);
+  assert.equal(scheduledRequests.length, 1);
+  assert.equal(scheduledRequests[0].authorization, "Bearer canonical-zernio-key");
+  assert.match(scheduledRequests[0].requestId, /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+  assert.equal(scheduledRequests[0].body.title, "Monday Motivation");
+  assert.doesNotMatch(scheduledRequests[0].body.content, /^Monday Motivation/);
+  assert.equal(listedPostRequests.length, 1);
+  assert.equal(listedPostRequests[0].authorization, "Bearer canonical-zernio-key");
+  assert.ok(listedPostRequests[0].query.dateFrom);
+  assert.ok(listedPostRequests[0].query.dateTo);
+  assert.equal(analyticsRequests, 0);
+});
+
+test("Zernio live scheduling fails closed when neither supported API key is configured", async () => {
+  restoreEnv();
+  applyBaseEnv();
+  process.env.OPENROUTER_API_BASE = mockBase;
+  process.env.ZERNIO_API_BASE_URL = mockBase;
+
+  const mod = await import(`../services/zernio/utils/socialScheduler.js?zernio-missing-key=${Date.now()}`);
+
+  await assert.rejects(
+    () => mod.buildAndScheduleDailyLane("monday", {
+      publishDate: "2026-04-13",
+      profileName: "General",
+      accountId: "fb-page-1",
+      imageUrl: "https://images.jonathan-harris.online/generated/monday-missing-key",
+      force: true,
+    }),
+    /Missing Zernio API key \(ZERNIO_META_API_KEY or ZERNIO_API_KEY\)/
+  );
+
+  assert.equal(scheduledRequests.length, 0);
 });
 
 test("buildAndScheduleDailyLane retries a transient Zernio scheduling failure", async () => {

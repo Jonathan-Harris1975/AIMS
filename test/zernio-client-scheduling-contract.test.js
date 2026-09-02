@@ -61,7 +61,7 @@ test("Zernio create retries reuse one idempotency key and scheduled posts can be
   assert.equal(created.post.status, "scheduled");
   assert.equal(postAttempts, 2);
   assert.equal(requestIds.length, 2);
-  assert.ok(requestIds[0].startsWith("aims-"));
+  assert.match(requestIds[0], /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
   assert.equal(requestIds[0], requestIds[1]);
   assert.deepEqual(created._zernioRetry, { attempts: 2, recovered: true, operation: "POST posts" });
 
