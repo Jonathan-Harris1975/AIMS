@@ -1,7 +1,7 @@
 # AIMS production operations
 
 **Status:** Paid Koyeb production service
-**Last reviewed:** 23 August 2026
+**Last reviewed:** 2 September 2026
 
 AIMS runs as one non-root Koyeb Web Service with durable R2-backed state and fail-closed production settings. Use `/livez`, `/readyz`, `/ops/health`, `/ops/preflight`, `/ops/warmup` and `/ops/excellence` to distinguish process health, dependency readiness, warmup state and workflow/provider quality.
 
@@ -83,9 +83,10 @@ curl -fsS -H "Authorization: Bearer $AIMS_API_KEY" https://<aims-service>/ops/ex
 
 1. Inspect durable job state, quarantine state and `/ops/excellence`.
 2. Identify the last completed step and its idempotency key.
-3. Do not replay publishing, email, purge, GitHub dispatch or bulk outreach until downstream state is checked.
-4. Resume through the governed route using the same job identifier where supported.
-5. Retain state objects, provider IDs, R2 artefact URLs and logs with the release evidence.
+3. Failed, `completed-with-failures` and stale interrupted operation-window receipts retry automatically after `AIMS_OPERATION_RECOVERY_COOLDOWN_MS`, up to `AIMS_OPERATION_MAX_ATTEMPTS`. Successful task results are carried forward, so recovery runs only failed, skipped or unfinished tasks. Actively heartbeating and successful receipts remain protected.
+4. Do not replay publishing, email, purge, GitHub dispatch or bulk outreach until downstream state is checked. Blotato slot claims and Zernio request IDs/provider history prevent duplicates during an authorised recovery.
+5. Resume through the governed route using the same job identifier where supported. Use `?force=true` only after inspecting an incorrectly successful receipt.
+6. Retain state objects, provider IDs, R2 artefact URLs and logs with the release evidence.
 
 ## Rollback
 
