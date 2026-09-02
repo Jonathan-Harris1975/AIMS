@@ -42,12 +42,12 @@ function booleanEnvFromValue(value, fallback = false) {
 }
 
 const SERVICE_ENV_HINTS = {
-  zernio: ["ZERNIO_META_API_KEY"],
-  blotato: ["BLOTATO_API_KEY"],
-  audits: ["R2_BUCKET_AUDITS"],
-  podcast: ["R2_BUCKET_PODCAST"],
-  rss: ["R2_BUCKET_RAW_TEXT"],
-  blog: ["R2_BUCKET_BLOG"],
+  zernio: [["ZERNIO_META_API_KEY", "ZERNIO_API_KEY"]],
+  blotato: [["BLOTATO_API_KEY", "Blotato_API_key"]],
+  audits: [["R2_BUCKET_AUDITS"]],
+  podcast: [["R2_BUCKET_PODCAST"]],
+  rss: [["R2_BUCKET_RAW_TEXT"]],
+  blog: [["R2_BUCKET_BLOG"]],
   outreach: [],
 };
 
@@ -58,11 +58,12 @@ function buildChecks(meta) {
     { name: "targetPath", ok: Boolean(meta.targetPath), detail: meta.targetPath || "No target path supplied by scheduler." },
   ];
 
-  for (const name of envNames) {
+  for (const names of envNames) {
+    const configuredName = names.find((name) => envPresent(name));
     checks.push({
-      name: `env:${name}`,
-      ok: envPresent(name),
-      detail: envPresent(name) ? "configured" : "missing-or-placeholder",
+      name: `env:${names.join("|")}`,
+      ok: Boolean(configuredName),
+      detail: configuredName ? `configured:${configuredName}` : "missing-or-placeholder",
     });
   }
 
