@@ -3,7 +3,14 @@ import express from "express";
 import { getOperationalExcellenceSnapshot } from "../shared/utils/operationalExcellence.js";
 import { extractAsyncStatusUrl, waitForAsyncOperation } from "./asyncOperation.js";
 import { getWebsiteAuditReadiness } from "../../audits/utils/websiteAuditReadiness.js";
-import { claimOperationWindow, getOperationWindowReceipt, persistOperationWindow } from "./operationWindowState.js";
+import {
+  claimOperationWindow,
+  getOperationWindowReceipt,
+  operationTaskSucceeded,
+  operationWindowNeedsRecovery,
+  persistOperationWindow,
+} from "./operationWindowState.js";
+import { info, warn } from "../../logger.js";
 
 const router = express.Router();
 
@@ -15,6 +22,12 @@ function booleanEnv(name, fallback = false) {
   const raw = process.env[name];
   if (raw === undefined || raw === null || raw === "") return fallback;
   return ["1", "true", "yes", "y", "on"].includes(String(raw).trim().toLowerCase());
+}
+
+function integerEnv(name, fallback, { min = 0, max = Number.MAX_SAFE_INTEGER } = {}) {
+  const parsed = Number(process.env[name]);
+  const value = Number.isFinite(parsed) ? Math.trunc(parsed) : fallback;
+  return Math.max(min, Math.min(max, value));
 }
 
 function envPresent(name) {
@@ -148,6 +161,9 @@ function publicJob(job) {
     executionId: job.executionId || null,
     window: job.window,
     status: job.status,
+    attempt: Math.max(1, Number(job.attempt || 1)),
+    recovery: Boolean(job.recovery),
+    recoveredFromExecutionId: job.recoveredFromExecutionId || null,
     terminal: ["completed", "completed-with-failures", "failed"].includes(job.status),
     updatedAt: job.updatedAt || job.startedAt,
     startedAt: job.startedAt,
@@ -162,56 +178,56 @@ function publicJob(job) {
 const OPERATION_WINDOWS = Object.freeze({
   "monday-am": [
     ["rss-rewrite", "/rss/rewrite", { batchSize: 5 }],
-    ["blotato-am", "/blotato/autoshorts/schedule", {}, null, false, "rss-rewrite"],
-    ["zernio-monday", "/zernio/daily/monday", {}, null, false, "rss-rewrite"],
+    ["blotato-am", "/blotato/autoshorts/schedule", {}],
+    ["zernio-monday", "/zernio/daily/monday", {}],
     ["blog-social", "/blog/social/daily/build", {}, null, false, "rss-rewrite"],
     ["zernio-blog-social", "/zernio/blog-rss/daily", {}, null, false, "blog-social"],
-    ["blotato-pm", "/blotato/shorts/news-insight/schedule", {}, null, false, "blotato-am"],
+    ["blotato-pm", "/blotato/shorts/news-insight/schedule", {}],
     ["newsletter-generate", "/newsletter/generate", { profileId: "ai-edge" }, "newsletter", false, "rss-rewrite"],
     ["newsletter-send", "/newsletter/send", { profileId: "ai-edge" }, "newsletter", false, "newsletter-generate"],
     ["weekly-blog", "/blog/weekly/build", {}, null, false, "rss-rewrite"],
-    ["zernio-ebooks", "/zernio/ebooks/weekly", { dryRun: false, profileName: "Default", accountId: "ALL", usePodcastFeaturedBook: true }, null, true, "rss-rewrite"],
-    ["zernio-quiz", "/zernio/quiz/weekly", {}, null, false, "rss-rewrite"],
+    ["zernio-ebooks", "/zernio/ebooks/weekly", { dryRun: false, profileName: "Default", accountId: "ALL", usePodcastFeaturedBook: true }, null, true],
+    ["zernio-quiz", "/zernio/quiz/weekly", {}],
   ],
   "tuesday-am": [
     ["rss-rewrite", "/rss/rewrite", { batchSize: 5 }],
-    ["blotato-am", "/blotato/autoshorts/schedule", {}, null, false, "rss-rewrite"],
-    ["zernio-tuesday", "/zernio/daily/tuesday", {}, null, false, "rss-rewrite"],
+    ["blotato-am", "/blotato/autoshorts/schedule", {}],
+    ["zernio-tuesday", "/zernio/daily/tuesday", {}],
     ["blog-social", "/blog/social/daily/build", {}, null, false, "rss-rewrite"],
     ["zernio-blog-social", "/zernio/blog-rss/daily", {}, null, false, "blog-social"],
-    ["blotato-pm", "/blotato/shorts/model-verdict/schedule", {}, null, false, "blotato-am"],
+    ["blotato-pm", "/blotato/shorts/model-verdict/schedule", {}],
     ["newsletter-generate", "/newsletter/generate", { profileId: "ai-edge" }, "newsletter", false, "rss-rewrite"],
     ["newsletter-send", "/newsletter/send", { profileId: "ai-edge" }, "newsletter", false, "newsletter-generate"],
   ],
   "wednesday-am": [
     ["rss-rewrite", "/rss/rewrite", { batchSize: 5 }],
-    ["blotato-am", "/blotato/autoshorts/schedule", {}, null, false, "rss-rewrite"],
-    ["zernio-wednesday", "/zernio/daily/wednesday", {}, null, false, "rss-rewrite"],
+    ["blotato-am", "/blotato/autoshorts/schedule", {}],
+    ["zernio-wednesday", "/zernio/daily/wednesday", {}],
     ["blog-social", "/blog/social/daily/build", {}, null, false, "rss-rewrite"],
     ["zernio-blog-social", "/zernio/blog-rss/daily", {}, null, false, "blog-social"],
-    ["blotato-pm", "/blotato/shorts/ai-at-work/schedule", {}, null, false, "blotato-am"],
+    ["blotato-pm", "/blotato/shorts/ai-at-work/schedule", {}],
     ["newsletter-generate", "/newsletter/generate", { profileId: "ai-edge" }, "newsletter", false, "rss-rewrite"],
     ["newsletter-send", "/newsletter/send", { profileId: "ai-edge" }, "newsletter", false, "newsletter-generate"],
   ],
   "thursday-am": [
     ["rss-rewrite", "/rss/rewrite", { batchSize: 5 }],
-    ["blotato-am", "/blotato/autoshorts/schedule", {}, null, false, "rss-rewrite"],
-    ["zernio-thursday", "/zernio/daily/thursday", {}, null, false, "rss-rewrite"],
+    ["blotato-am", "/blotato/autoshorts/schedule", {}],
+    ["zernio-thursday", "/zernio/daily/thursday", {}],
     ["blog-social", "/blog/social/daily/build", {}, null, false, "rss-rewrite"],
     ["zernio-blog-social", "/zernio/blog-rss/daily", {}, null, false, "blog-social"],
-    ["blotato-pm", "/blotato/shorts/reality-check/schedule", {}, null, false, "blotato-am"],
+    ["blotato-pm", "/blotato/shorts/reality-check/schedule", {}],
     ["newsletter-generate", "/newsletter/generate", { profileId: "ai-edge" }, "newsletter", false, "rss-rewrite"],
     ["newsletter-send", "/newsletter/send", { profileId: "ai-edge" }, "newsletter", false, "newsletter-generate"],
   ],
   "friday-am": [
     ["rss-rewrite", "/rss/rewrite", { batchSize: 5 }],
-    ["blotato-am", "/blotato/autoshorts/schedule", {}, null, false, "rss-rewrite"],
-    ["zernio-friday", "/zernio/daily/friday", {}, null, false, "rss-rewrite"],
-    ["zernio-saturday", "/zernio/daily/saturday", {}, null, false, "rss-rewrite"],
-    ["zernio-sunday", "/zernio/daily/sunday", {}, null, false, "rss-rewrite"],
+    ["blotato-am", "/blotato/autoshorts/schedule", {}],
+    ["zernio-friday", "/zernio/daily/friday", {}],
+    ["zernio-saturday", "/zernio/daily/saturday", {}],
+    ["zernio-sunday", "/zernio/daily/sunday", {}],
     ["blog-social", "/blog/social/daily/build", {}, null, false, "rss-rewrite"],
     ["zernio-blog-social", "/zernio/blog-rss/daily", {}, null, false, "blog-social"],
-    ["blotato-pm", "/blotato/shorts/ai-playbook/schedule", {}, null, false, "blotato-am"],
+    ["blotato-pm", "/blotato/shorts/ai-playbook/schedule", {}],
     ["newsletter-generate", "/newsletter/generate", { profileId: "ai-edge" }, "newsletter", false, "rss-rewrite"],
     ["newsletter-send", "/newsletter/send", { profileId: "ai-edge" }, "newsletter", false, "newsletter-generate"],
   ],
@@ -251,11 +267,8 @@ function assertContentOperationWindows() {
 
     const blotatoAmTask = tasks.find((task) => task[0] === "blotato-am");
     const blotatoPmTask = tasks.find((task) => task[0] === "blotato-pm");
-    if (blotatoAmTask?.[5] !== "rss-rewrite") {
-      throw new Error(`${windowName} blotato-am must depend on rss-rewrite`);
-    }
-    if (blotatoPmTask?.[5] !== "blotato-am") {
-      throw new Error(`${windowName} blotato-pm must wait for the AM Blotato render before starting another render`);
+    if (blotatoAmTask?.[5] || blotatoPmTask?.[5]) {
+      throw new Error(`${windowName} Blotato slots must not be suppressed by another content lane`);
     }
 
     const rssIndex = paths.indexOf("/rss/rewrite");
@@ -270,8 +283,8 @@ function assertContentOperationWindows() {
     }
 
     const dailyZernio = tasks[dailyZernioIndex];
-    if (dailyZernio && dailyZernio[5] !== "rss-rewrite") {
-      throw new Error(`${windowName} ${dailyZernio[0]} must depend on rss-rewrite`);
+    if (dailyZernio?.[5]) {
+      throw new Error(`${windowName} ${dailyZernio[0]} must not be suppressed by another content lane`);
     }
 
     const newsletterGenerateIndex = paths.indexOf("/newsletter/generate");
@@ -408,6 +421,22 @@ async function runInternalTask([name, path, body = {}, feature = null, addWeekSt
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(new Error("operation-dispatch-timeout")), dispatchTimeoutMs);
   timeout.unref?.();
+  const heartbeatIntervalMs = integerEnv("AIMS_OPERATION_HEARTBEAT_MS", 60_000, { min: 15_000, max: 10 * 60_000 });
+  let lastHeartbeatMs = Date.now();
+  const heartbeat = () => {
+    const now = Date.now();
+    if (now - lastHeartbeatMs < heartbeatIntervalMs) return;
+    lastHeartbeatMs = now;
+    job.updatedAt = new Date(now).toISOString();
+    void persistOperationWindow(job).catch((heartbeatError) => {
+      warn("ops.window.heartbeat_failed", {
+        jobId: job.id,
+        executionId: job.executionId,
+        task: name,
+        error: heartbeatError?.message || String(heartbeatError),
+      });
+    });
+  };
   try {
     const response = await fetch(`${base.replace(/\/+$/, "")}${asyncDispatchPath(path)}`, {
       method: "POST",
@@ -454,6 +483,7 @@ async function runInternalTask([name, path, body = {}, feature = null, addWeekSt
         requestTimeoutMs: Math.max(5_000, Number(process.env.AIMS_OPERATION_ASYNC_REQUEST_TIMEOUT_MS || 60_000)),
         maxConsecutiveErrors: Math.max(1, Number(process.env.AIMS_OPERATION_ASYNC_MAX_POLL_ERRORS || 8)),
         notFoundGraceMs: Math.max(0, Number(process.env.AIMS_OPERATION_ASYNC_NOT_FOUND_GRACE_MS || 120_000)),
+        onPoll: heartbeat,
       });
 
       return {
@@ -528,6 +558,12 @@ async function executeOperationWindow(job, tasks, req) {
   job.updatedAt = new Date().toISOString();
   await persistOperationWindow(job);
   const pendingTasks = new Map();
+  const resumeResults = new Map(
+    (Array.isArray(job.resumeResults) ? job.resumeResults : [])
+      .filter(operationTaskSucceeded)
+      .map((result) => [result.name, result])
+  );
+  let executedTaskCount = 0;
   // Capture the only request value needed by delayed background work before
   // the HTTP request lifecycle ends.
   const requestContext = { authorization: normalise(req.get?.("authorization")) };
@@ -554,17 +590,32 @@ async function executeOperationWindow(job, tasks, req) {
     job.results[pending.resultIndex] = result;
     if (!result.ok) job.failures += 1;
     job.updatedAt = new Date().toISOString();
+    await persistOperationWindow(job);
     return result;
   };
 
   for (let index = 0; index < tasks.length; index += 1) {
-    if (index > 0 && job.delayMs > 0) {
-      job.currentTask = { name: "delay", before: tasks[index][0], delayMs: job.delayMs, pendingTasks: [...pendingTasks.keys()] };
-      job.updatedAt = new Date().toISOString();
-      await sleep(job.delayMs);
-    }
     const task = tasks[index];
     const [taskName, taskPath, _taskBody, _feature, _addWeekStartDate, dependsOn] = task;
+    const resumedResult = resumeResults.get(taskName);
+    if (resumedResult) {
+      job.results.push({
+        ...resumedResult,
+        resumed: true,
+        recoveredFromExecutionId: job.recoveredFromExecutionId || null,
+      });
+      job.updatedAt = new Date().toISOString();
+      await persistOperationWindow(job);
+      continue;
+    }
+
+    if (executedTaskCount > 0 && job.delayMs > 0) {
+      job.currentTask = { name: "delay", before: tasks[index][0], delayMs: job.delayMs, pendingTasks: [...pendingTasks.keys()] };
+      job.updatedAt = new Date().toISOString();
+      await persistOperationWindow(job);
+      await sleep(job.delayMs);
+    }
+    executedTaskCount += 1;
     job.currentTask = {
       name: taskName,
       path: taskPath,
@@ -574,6 +625,7 @@ async function executeOperationWindow(job, tasks, req) {
       pendingTasks: [...pendingTasks.keys()],
     };
     job.updatedAt = new Date().toISOString();
+    await persistOperationWindow(job);
 
     const deferredTask = DEFERRED_OPERATION_TASKS.has(taskName);
     if (deferredTask && dependsOn && pendingTasks.has(dependsOn)) {
@@ -608,6 +660,7 @@ async function executeOperationWindow(job, tasks, req) {
         }),
       });
       job.updatedAt = new Date().toISOString();
+      await persistOperationWindow(job);
       continue;
     }
 
@@ -631,6 +684,7 @@ async function executeOperationWindow(job, tasks, req) {
         job.results.push(result);
         job.failures += 1;
         job.updatedAt = new Date().toISOString();
+        await persistOperationWindow(job);
         continue;
       }
     }
@@ -651,6 +705,7 @@ async function executeOperationWindow(job, tasks, req) {
         promise: runInternalTask(task, requestContext, job),
       });
       job.updatedAt = new Date().toISOString();
+      await persistOperationWindow(job);
       continue;
     }
 
@@ -658,6 +713,7 @@ async function executeOperationWindow(job, tasks, req) {
     job.results.push(result);
     job.updatedAt = new Date().toISOString();
     if (!result.ok) job.failures += 1;
+    await persistOperationWindow(job);
   }
 
   // Deferred providers are still strict required stages. They run in the
@@ -672,6 +728,15 @@ async function executeOperationWindow(job, tasks, req) {
   job.updatedAt = job.finishedAt;
   job.status = job.failures ? "completed-with-failures" : "completed";
   await persistOperationWindow(job);
+  info("ops.window.complete", {
+    jobId: job.id,
+    executionId: job.executionId,
+    window: job.window,
+    attempt: job.attempt,
+    status: job.status,
+    failures: job.failures,
+    failedTasks: job.results.filter((item) => item?.ok === false).map((item) => item.name),
+  });
 }
 
 router.post("/run/:window", async (req, res, next) => {
@@ -684,10 +749,17 @@ router.post("/run/:window", async (req, res, next) => {
     const existing = operationJobs.get(id);
     const forceRerun = [req.query?.force, req.body?.force, req.get?.("x-operation-force")]
       .some((value) => ["1", "true", "yes", "on"].includes(String(value ?? "").trim().toLowerCase()));
+    const allowRecovery = booleanEnv("AIMS_OPERATION_AUTO_RECOVERY_ENABLED", true);
+    const maxAttempts = integerEnv("AIMS_OPERATION_MAX_ATTEMPTS", 3, { min: 1, max: 10 });
+    const recoveryCooldownMs = integerEnv("AIMS_OPERATION_RECOVERY_COOLDOWN_MS", 60_000, { max: 24 * 60 * 60_000 });
+    const staleAfterMs = integerEnv("AIMS_OPERATION_STALE_AFTER_MS", 30 * 60_000, { min: 5 * 60_000, max: 24 * 60 * 60_000 });
     // A content window owns one London-calendar-day execution. The local map
     // is only a fast path; durable state below is the authority across restarts,
     // rolling deployments and multiple Koyeb instances.
-    if (existing && !forceRerun) {
+    if (existing && !forceRerun && (
+      !allowRecovery
+      || !operationWindowNeedsRecovery(existing, { staleAfterMs })
+    )) {
       return res.status(202).json({
         ok: true,
         service: "ops",
@@ -700,14 +772,32 @@ router.post("/run/:window", async (req, res, next) => {
     }
 
     const executionId = crypto.randomUUID();
-    const durableClaim = await claimOperationWindow({ id, window: windowName, executionId, force: forceRerun });
+    const durableClaim = await claimOperationWindow({
+      id,
+      window: windowName,
+      executionId,
+      force: forceRerun,
+      allowRecovery,
+      maxAttempts,
+      recoveryCooldownMs,
+      staleAfterMs,
+    });
     if (!durableClaim.claimed) {
       if (durableClaim.receipt) operationJobs.set(id, durableClaim.receipt);
+      info("ops.window.duplicate_prevented", {
+        jobId: id,
+        window: windowName,
+        reason: durableClaim.reason,
+        retryAt: durableClaim.retryAt || null,
+        status: durableClaim.receipt?.status || null,
+        attempt: durableClaim.receipt?.attempt || null,
+      });
       return res.status(202).json({
         ok: true,
         service: "ops",
         duplicatePrevented: true,
         reason: durableClaim.reason,
+        retryAt: durableClaim.retryAt || null,
         job: durableClaim.receipt || null,
       });
     }
@@ -715,6 +805,9 @@ router.post("/run/:window", async (req, res, next) => {
     const job = {
       id,
       executionId,
+      attempt: durableClaim.receipt?.attempt || 1,
+      recovery: Boolean(durableClaim.receipt?.recovery),
+      recoveredFromExecutionId: durableClaim.receipt?.recoveredFromExecutionId || null,
       window: windowName,
       status: "accepted",
       startedAt: new Date().toISOString(),
@@ -723,9 +816,17 @@ router.post("/run/:window", async (req, res, next) => {
       currentTask: null,
       delayMs: operationDelayMs(windowName),
       results: [],
+      resumeResults: durableClaim.receipt?.resumeResults || [],
       failures: 0,
     };
     operationJobs.set(id, job);
+    info("ops.window.accepted", {
+      jobId: id,
+      executionId,
+      window: windowName,
+      attempt: job.attempt,
+      recovery: job.recovery,
+    });
 
     void executeOperationWindow(job, tasks, req).catch((error) => {
       job.status = "failed";
@@ -734,6 +835,13 @@ router.post("/run/:window", async (req, res, next) => {
       job.currentTask = null;
       job.failures += 1;
       job.results.push({ name: "operation-window", ok: false, error: error?.message || String(error) });
+      warn("ops.window.failed", {
+        jobId: job.id,
+        executionId: job.executionId,
+        window: job.window,
+        attempt: job.attempt,
+        error: error?.message || String(error),
+      });
       void persistOperationWindow(job).catch(() => {});
     });
 

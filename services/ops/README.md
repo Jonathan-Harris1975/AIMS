@@ -18,6 +18,8 @@ Owns AIMS weekday morning task sequences, the Friday podcast window and operatio
 
 Morning task spacing uses `AIMS_OPERATION_AM_DELAY_MS`. The Friday podcast readiness check flows immediately into the pipeline through `AIMS_OPERATION_FRIDAY_PM_DELAY_MS=0`; the legacy general PM delay remains available for any future multi-service PM window. Task execution uses `AIMS_OPERATION_TASK_TIMEOUT_MS`. `AIMS_OPS_PREFLIGHT_STRICT` controls whether missing readiness inputs become hard failures. Friday AM prepares both Blotato schedule slots and Saturday/Sunday Zernio content. Friday PM runs only the podcast pipeline.
 
+Blotato and the daily Zernio lane run independently of the RSS rewrite task. Tasks remain sequential to control load, but a content failure in one lane no longer suppresses either social provider before its API call.
+
 ## Implementation
 
 The service entry point, route modules and domain utilities are contained in this directory. Calls from AIMS operational windows use the same authenticated HTTP contract as external suite triggers, which keeps job logging, validation and failure handling consistent.
@@ -32,3 +34,5 @@ The service entry point, route modules and domain utilities are contained in thi
 - Durable artefacts and job state use the configured R2/state utilities rather than process memory where a durable store is required.
 
 Accepted async jobs are not treated as finished. The operations service polls each returned `statusUrl` until the child job reaches a terminal state. This applies to the two daily Blotato renders and the Friday podcast pipeline, ensuring MAST pauses AIMS only after actual completion. The Monday Zernio daily lane owns the weekly mini-series exactly once; it is not duplicated as a separate operation task.
+
+Successful and actively heartbeating operation windows remain one-shot for the London calendar day. Failed, `completed-with-failures` and stale interrupted receipts are automatically recoverable after a bounded cooldown. Recovery carries forward successful task results and runs only failed, skipped or unfinished tasks. Configure this with `AIMS_OPERATION_AUTO_RECOVERY_ENABLED`, `AIMS_OPERATION_MAX_ATTEMPTS`, `AIMS_OPERATION_RECOVERY_COOLDOWN_MS`, `AIMS_OPERATION_STALE_AFTER_MS` and `AIMS_OPERATION_HEARTBEAT_MS`. Provider-level slot claims and request IDs remain the final duplicate guard.
