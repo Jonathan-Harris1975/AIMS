@@ -1430,6 +1430,7 @@ export async function buildAndScheduleDailyLane(laneKey, options = {}) {
   }
 
   let editorialReservation = null;
+  let artworkWarning = "";
 
   try {
     const laneHistory = getLaneHistory(laneKey);
@@ -1583,16 +1584,20 @@ export async function buildAndScheduleDailyLane(laneKey, options = {}) {
 
     if (!options.imageUrl && !dryRun) {
       const imagePrompt = buildDailyLaneArtworkPrompt({ laneKey, post, verifiedQuote });
-      const artwork = await createSocialArtwork({
+      const artworkFactory = process.env.NODE_ENV === "test" && typeof options.artworkFactory === "function"
+        ? options.artworkFactory
+        : createSocialArtwork;
+      const artwork = await artworkFactory({
         sessionId: `ZERNIO-${laneKey.toUpperCase()}-${publishDate}`,
         lane: laneKey,
         date: publishDate,
         prompt: imagePrompt,
-        allowFallback: false,
+        fallbackUrl: lane.imageUrl,
+        allowFallback: true,
       });
 
-      if (!artwork?.ok || !artwork.publicUrl || artwork.fallback) {
-        const err = new Error(artwork?.error || `The ${lane.label} lane did not produce a verified AI-relevant image.`);
+      if (!artwork?.ok || !artwork.publicUrl) {
+        const err = new Error(artwork?.error || `The ${lane.label} lane did not produce a usable image.`);
         err.statusCode = 502;
         err.code = "zernio-daily-artwork-unavailable";
         throw err;
@@ -1600,6 +1605,10 @@ export async function buildAndScheduleDailyLane(laneKey, options = {}) {
       imageUrl = artwork.publicUrl;
       post.imageUrl = artwork.publicUrl;
       post.imagePrompt = imagePrompt;
+      post.imageStatus = artwork.imageStatus || (artwork.fallback ? "fallback" : "generated");
+      if (artwork.fallback) {
+        artworkWarning = artwork.warning || `Generated ${lane.label} artwork was unavailable; the curated lane image was used.`;
+      }
     }
 
     if (laneKey === "sunday") {
@@ -1635,6 +1644,7 @@ export async function buildAndScheduleDailyLane(laneKey, options = {}) {
       ...(rssContext.warning ? [rssContext.warning] : []),
       ...(buildContextResolved.warnings || []),
       ...(audienceIntentWarning ? [audienceIntentWarning] : []),
+      ...(artworkWarning ? [artworkWarning] : []),
       ...(scheduling.warnings || []),
     ];
 
@@ -2446,11 +2456,11 @@ export async function buildAndScheduleWeeklyMiniSeries(options = {}) {
           "Do not recycle a generic person-at-a-laptop, glowing brain, abstract network, dashboard, labelled diagram or infographic composition.",
           "No visible text, labels, logos or typography.",
         ].join("\n"),
-        fallbackUrl: "",
-        allowFallback: false,
+        fallbackUrl: MINI_SERIES_CONFIG.fallbackImageUrl,
+        allowFallback: true,
       });
-      if (!artwork?.ok || !artwork.publicUrl || artwork.fallback) {
-        const errorMessage = artwork?.error || `Mini-series part ${item.index + 1} did not produce a verified AI-relevant image.`;
+      if (!artwork?.ok || !artwork.publicUrl) {
+        const errorMessage = artwork?.error || `Mini-series part ${item.index + 1} did not produce a usable image.`;
         warn("zernio.mini_series.artwork_failed", {
           weekStartDate,
           seriesTitle: theme.seriesTitle,
@@ -2477,6 +2487,9 @@ export async function buildAndScheduleWeeklyMiniSeries(options = {}) {
       }
       item.post.imageUrl = artwork.publicUrl;
       item.artworkStatus = artwork.imageStatus || (artwork.fallback ? "fallback" : "generated");
+      item.artworkWarning = artwork.fallback
+        ? (artwork.warning || `Generated artwork for mini-series part ${item.index + 1} was unavailable; a safe fallback image was used.`)
+        : "";
     } else {
       item.post.imageUrl = options.imageUrl || "";
       item.artworkStatus = options.imageUrl ? "provided" : "dry-run";
@@ -2605,6 +2618,8 @@ export async function buildAndScheduleWeeklyMiniSeries(options = {}) {
           failed: false,
           post: item.post,
           topicFidelity: item.topicFidelity,
+          artworkStatus: item.artworkStatus,
+          artworkWarning: item.artworkWarning || null,
           zernioResponse: scheduling.zernioResponse,
           scheduleVerification: scheduling.scheduleVerification || null,
           scheduleAttempt: round,
@@ -2771,7 +2786,7 @@ export async function buildAndScheduleWeeklyMiniSeries(options = {}) {
     rolledBackCount,
     rollbackFailedCount,
     posts: results,
-    warnings: [loaded.warning].filter(Boolean),
+    warnings: [loaded.warning, ...prepared.map((item) => item.artworkWarning)].filter(Boolean),
   });
   } catch (error) {
     if (seriesClaim?.claimed) releaseScheduleSlot(seriesClaim);
@@ -2864,6 +2879,7 @@ export async function buildAndSchedulePodcastThursdayPromo(options = {}) {
     content: ensureHashtags(`${generated.content}\n\nListen on Spotify: ${destination}`, PODCAST_PROMO_CONFIG.hashtags, { maxTags: 3 }),
     imageUrl: options.imageUrl || "",
   };
+  let podcastArtworkWarning = "";
 
   const gate = runZernioSocialGate({ contentType: "zernio-podcast-promo", laneKey: "podcast-thursday-promo", post });
   if (gate.defects?.length) {
@@ -2896,15 +2912,20 @@ export async function buildAndSchedulePodcastThursdayPromo(options = {}) {
         "ABSOLUTELY NO visible words, letters, numbers, captions, logos, labels, signage, UI text, pseudo-text, typographic shapes or invented magazine mastheads anywhere in the image.",
         "Avoid generic glowing brains, circuit-head silhouettes, floating decorative networks, stock-office scenes and decorative AI wallpaper.",
       ].filter(Boolean).join("\n"),
-      allowFallback: false,
+      fallbackUrl: PODCAST_PROMO_CONFIG.fallbackImageUrl,
+      allowFallback: true,
     });
-    if (!artwork.ok || !artwork.publicUrl || artwork.fallback) {
-      const err = new Error(`Thursday podcast promotion artwork unavailable: ${artwork.error || "no verified image URL returned"}`);
+    if (!artwork.ok || !artwork.publicUrl) {
+      const err = new Error(`Thursday podcast promotion artwork unavailable: ${artwork.error || "no usable image URL returned"}`);
       err.statusCode = 503;
       err.code = "zernio-podcast-artwork-unavailable";
       throw err;
     }
     post.imageUrl = artwork.publicUrl;
+    post.imageStatus = artwork.imageStatus || (artwork.fallback ? "fallback" : "generated");
+    if (artwork.fallback) {
+      podcastArtworkWarning = artwork.warning || "Generated podcast artwork was unavailable; the curated podcast image was used.";
+    }
   }
 
     const scheduling = await scheduleToZernio({ post, scheduledDateTime, profileName, accountId, dryRun, apiKey, laneKey: "podcast-thursday-promo", idempotencySeed: slotClaim.key || "" });
@@ -2930,7 +2951,7 @@ export async function buildAndSchedulePodcastThursdayPromo(options = {}) {
       duplicatePrevented: Boolean(scheduling.duplicatePrevented), post, episode,
       audioGenerated: false,
       audioPolicy: "All Turing's Torch audio remains in the podcast production pipeline.",
-      warnings: scheduling.warnings || [], zernioResponse: scheduling.zernioResponse, targeting: scheduling.targeting || null,
+      warnings: [podcastArtworkWarning, ...(scheduling.warnings || [])].filter(Boolean), zernioResponse: scheduling.zernioResponse, targeting: scheduling.targeting || null,
     };
   } catch (error) {
     releaseScheduleSlot(slotClaim);
