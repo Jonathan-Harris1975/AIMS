@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { runBlotatoShortGate } from "../services/blotato/utils/shortGate.js";
+import { assessBlotatoQualityRetry, runBlotatoShortGate } from "../services/blotato/utils/shortGate.js";
 import { repairShortPackForBlotatoGate } from "../services/blotato/utils/newsShortsService.js";
 
 function longScript() {
@@ -75,4 +75,24 @@ test("Blotato quality repair strengthens a weak model-verdict hook before render
   assert.ok(String(repaired.visualContinuity || "").split(/\s+/).filter(Boolean).length >= 8);
   assert.ok(repaired.scenes.every((scene) => /navy|charcoal|cinematic|professional|continuity/i.test(scene.mediaSource)));
   assert.ok(repaired.scenes.filter((scene) => /adult|human|hands|face|shoulder|professional/i.test(scene.mediaSource)).length >= 3);
+});
+
+test("exhausted performance heuristics become advisory without bypassing source or brand defects", () => {
+  const advisory = assessBlotatoQualityRetry({
+    defects: [
+      "Hook performance score too low (58/100; target >=65).",
+      "Visual progression score too low (61/100); scenes are too repetitive or static.",
+    ],
+  });
+  assert.equal(advisory.publishable, true);
+  assert.equal(advisory.blockingDefects.length, 0);
+
+  const unsafe = assessBlotatoQualityRetry({
+    defects: [
+      "Hook performance score too low (58/100; target >=65).",
+      "Blotato pack does not share enough topic evidence with the selected RSS source.",
+    ],
+  });
+  assert.equal(unsafe.publishable, false);
+  assert.deepEqual(unsafe.blockingDefects, ["Blotato pack does not share enough topic evidence with the selected RSS source."]);
 });

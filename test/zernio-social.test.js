@@ -497,6 +497,44 @@ test("buildAndScheduleDailyLane validates Facebook targeting before live schedul
   ]);
 });
 
+test("Zernio reaches the provider with curated fallback artwork when generation is unavailable", async () => {
+  restoreEnv();
+  applyBaseEnv();
+  process.env.OPENROUTER_API_BASE = mockBase;
+  process.env.ZERNIO_API_BASE_URL = mockBase;
+  process.env.ZERNIO_API_KEY = "zernio-fallback-key";
+  process.env.ZERNIO_REQUIRED_PLATFORMS = "facebook";
+  process.env.ZERNIO_VALIDATE_TARGET_ACCOUNTS = "true";
+  const artworkCalls = [];
+
+  const mod = await import(`../services/zernio/utils/socialScheduler.js?zernio-artwork-fallback=${Date.now()}`);
+  const result = await mod.buildAndScheduleDailyLane("monday", {
+    publishDate: "2026-04-13",
+    profileName: "General",
+    accountId: "fb-page-1",
+    force: true,
+    artworkFactory: async (input) => {
+      artworkCalls.push(input);
+      return {
+        ok: true,
+        fallback: true,
+        imageStatus: "curated-static-fallback",
+        warning: "Generated artwork unavailable; curated lane image used.",
+        publicUrl: "https://images.jonathan-harris.online/Monday",
+      };
+    },
+  });
+
+  assert.equal(result.scheduled, true);
+  assert.equal(artworkCalls.length, 1);
+  assert.equal(artworkCalls[0].allowFallback, true);
+  assert.equal(artworkCalls[0].fallbackUrl, "https://images.jonathan-harris.online/Monday");
+  assert.match(result.warnings.join("\n"), /curated lane image used/i);
+  assert.deepEqual(scheduledRequests.at(-1).body.mediaItems, [
+    { type: "image", url: "https://images.jonathan-harris.online/Monday" },
+  ]);
+});
+
 test("Zernio posts successfully with the canonical ZERNIO_API_KEY and no analytics permission", async () => {
   restoreEnv();
   applyBaseEnv();
@@ -727,13 +765,15 @@ test("Monday verified quote is kept once and localised duplicate is removed", as
   assert.match(source, /Monday commentary is too thin/);
 });
 
-test("Sunday spotlight avoids fabricated likenesses and daily evergreen artwork fails closed", async () => {
+test("Sunday spotlight avoids fabricated likenesses and daily evergreen artwork degrades safely", async () => {
   const source = await readFile(new URL("../services/zernio/utils/socialScheduler.js", import.meta.url), "utf8");
   assert.match(source, /Never render, approximate or imply their face or recognisable likeness/i);
   assert.match(source, /no books, papers, notebooks, theses, whiteboards, chalkboards/i);
   assert.match(source, /createSocialArtwork\(/);
-  assert.match(source, /allowFallback: false/);
-  assert.match(source, /!artwork\?\.ok \|\| !artwork\.publicUrl \|\| artwork\.fallback/);
+  assert.match(source, /fallbackUrl: lane\.imageUrl/);
+  assert.match(source, /allowFallback: true/);
+  assert.match(source, /!artwork\?\.ok \|\| !artwork\.publicUrl/);
+  assert.doesNotMatch(source, /!artwork\?\.ok \|\| !artwork\.publicUrl \|\| artwork\.fallback/);
   assert.match(source, /post\.imagePrompt = imagePrompt/);
   assert.match(source, /zernio-daily-artwork-unavailable/);
 });

@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import test from "node:test";
 
-process.env.APP_TMP_DIR = `/tmp/aims-excellence-${process.pid}`;
+process.env.APP_TMP_DIR = `/tmp/aims-excellence-${process.pid}-${randomUUID()}`;
 process.env.ALLOW_EPHEMERAL_STATE = "true";
 process.env.STATE_BACKEND = "local";
 

@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  assessRenderedVideoQaPublication,
   buildRenderedVideoQaPrompt,
   evaluateRenderedVideoTechnical,
   normaliseRenderedVideoQa,
@@ -36,6 +37,36 @@ test("finished-video visual QA fails an off-topic 36 score", () => {
   assert.equal(result.pass, false);
   assert.equal(result.score, 36);
   assert.equal(result.hookPerformance, 7);
+  assert.deepEqual(assessRenderedVideoQaPublication(result), {
+    block: true,
+    hardFailure: true,
+    softFailure: false,
+  });
+});
+
+test("finished-video performance scores are advisory unless strict mode is enabled", () => {
+  const result = normaliseRenderedVideoQa({
+    score: 68,
+    hookPerformance: 62,
+    sourceRelevance: 78,
+    sceneAlignment: 72,
+    continuity: 76,
+    visualProgression: 66,
+    visualQuality: 74,
+    captionLegibility: 82,
+    defects: ["Opening movement could be stronger"],
+    hardDefects: [],
+    summary: "Relevant and usable, but not a top performance score",
+    recommendation: "Strengthen the next opening",
+  }, { technical: { pass: true } });
+
+  assert.equal(result.pass, false);
+  assert.deepEqual(assessRenderedVideoQaPublication(result), {
+    block: false,
+    hardFailure: false,
+    softFailure: true,
+  });
+  assert.equal(assessRenderedVideoQaPublication(result, { blockSoftFailures: true }).block, true);
 });
 
 test("rendered-video prompt explicitly penalises generic metaphor props", () => {

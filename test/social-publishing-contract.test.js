@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-test("social publishing contract is current-day, personal-brand and exact-time", async () => {
+test("social publishing contract is current-day, personal-brand and recovers missed slots", async () => {
   const socialBlog = await readFile(new URL("../services/blog/social/buildDailySocialBlogPost.js", import.meta.url), "utf8");
   const socialPackage = await readFile(new URL("../services/blog/utils/socialBlogPackage.js", import.meta.url), "utf8");
   const zernio = await readFile(new URL("../services/zernio/utils/socialScheduler.js", import.meta.url), "utf8");
@@ -17,6 +17,6 @@ test("social publishing contract is current-day, personal-brand and exact-time",
   assert.match(zernio, /zernio-schedule-slot-missed/);
   assert.match(blotato, /blotato-schedule-slot-missed/);
   assert.match(blotato, /No paid render was started|no paid render was started/i);
-  assert.match(env, /^ZERNIO_SCHEDULE_RECOVERY_ENABLED=false$/m);
-  assert.match(env, /^BLOTATO_SCHEDULE_RECOVERY_ENABLED=false$/m);
+  assert.match(env, /^ZERNIO_SCHEDULE_RECOVERY_ENABLED=true$/m);
+  assert.match(env, /^BLOTATO_SCHEDULE_RECOVERY_ENABLED=true$/m);
 });

@@ -180,12 +180,15 @@ test("paid Blotato renders survive QA plumbing failures and rendered QA uses str
   assert.match(publish, /reusableRenderedVideo/);
   assert.match(publish, /job\.renderedVideoQa\?\.pass === true/);
   assert.match(publish, /blotato\.render_reuse\.hit/);
+  assert.match(publish, /BLOTATO_RENDERED_QA_BLOCK_SOFT_FAILURES/);
+  assert.match(publish, /blotato\.finished_video\.qa_soft_failure_accepted/);
   assert.match(qa, /strictJsonResponseFormat\("blotato_rendered_video_qa"/);
   assert.match(qa, /max_tokens: 1400/);
   assert.match(qa, /BLOTATO_RENDERED_QA_JSON_ATTEMPTS/);
   assert.match(qa, /qa_infrastructure_fallback/);
   assert.match(env, /^BLOTATO_RENDERED_QA_JSON_ATTEMPTS=2$/m);
   assert.match(env, /^BLOTATO_RENDERED_QA_INFRASTRUCTURE_FALLBACK=true$/m);
+  assert.match(env, /^BLOTATO_RENDERED_QA_BLOCK_SOFT_FAILURES=false$/m);
   assert.match(env, /^BLOTATO_RENDER_REUSE_MAX_AGE_MS=21600000$/m);
 });
 
@@ -230,7 +233,7 @@ test("Zernio and Blotato scheduled publishing require provider confirmation", as
   assert.match(envExample, /^ZERNIO_DEFAULT_DRY_RUN=false$/m);
 });
 
-test("Zernio exact schedules use London time and fail closed instead of silently moving a missed slot", async () => {
+test("Zernio exact schedules use London time and recover missed slots with a safe lead", async () => {
   const summer = zonedDateTimeToUtcDate("2026-08-03 12:00", "Europe/London");
   const winter = zonedDateTimeToUtcDate("2026-01-15 12:00", "Europe/London");
   assert.equal(summer.toISOString(), "2026-08-03T11:00:00.000Z");
@@ -244,13 +247,13 @@ test("Zernio exact schedules use London time and fail closed instead of silently
   assert.match(scheduler, /zernio\.schedule\.slot_recovered/);
   assert.match(scheduler, /zernio-schedule-slot-missed/);
   assert.match(config, /ZERNIO_BLOG_RSS_TIME, "12:00"/);
-  assert.match(env, /^ZERNIO_SCHEDULE_RECOVERY_ENABLED=false$/m);
+  assert.match(env, /^ZERNIO_SCHEDULE_RECOVERY_ENABLED=true$/m);
   assert.match(env, /^ZERNIO_SCHEDULE_MIN_LEAD_MS=900000$/m);
   assert.match(env, /^ZERNIO_BLOG_RSS_TIME=12:00$/m);
   assert.match(env, /^ZERNIO_API_RETRY_ATTEMPTS=5$/m);
 });
 
-test("artwork provider fallback remains available generically while Zernio daily evergreen opts out", async () => {
+test("artwork provider fallback keeps Zernio posting when generated artwork is unavailable", async () => {
   const png = createDeterministicAiFallbackPng({ width: 640, height: 360, seed: "newsletter-ai-edge" });
   assert.deepEqual([...png.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
   assert.ok(png.length > 20_000);
@@ -271,7 +274,8 @@ test("artwork provider fallback remains available generically while Zernio daily
   assert.match(socialArtwork, /allowFallback = false/);
   assert.match(socialArtwork, /if \(!allowFallback\)/);
   assert.match(socialArtwork, /ok: publishableFallback,[\s\S]*diagnosticUrl: publicUrl,[\s\S]*publicUrl: publishableFallback \? publicUrl : ""/);
-  assert.match(zernioScheduler, /allowFallback: false/);
+  assert.match(zernioScheduler, /fallbackUrl: lane\.imageUrl/);
+  assert.match(zernioScheduler, /allowFallback: true/);
   assert.match(zernioScheduler, /artwork\.fallback/);
   assert.match(weeklyBlog, /reason: "artwork-unavailable"/);
   assert.match(socialBlog, /reason: "artwork-unavailable"/);
@@ -282,7 +286,7 @@ test("artwork provider fallback remains available generically while Zernio daily
   assert.match(env, /^NEWSLETTER_AI_EDGE_FALLBACK_IMAGE_URL=$/m);
   assert.match(env, /^SOCIAL_BLOG_ALLOW_DETERMINISTIC_FALLBACK=false$/m);
   assert.match(env, /^NEWSLETTER_ALLOW_DETERMINISTIC_FALLBACK=true$/m);
-  assert.match(env, /^ZERNIO_ALLOW_DETERMINISTIC_FALLBACK=false$/m);
+  assert.match(env, /^ZERNIO_ALLOW_DETERMINISTIC_FALLBACK=true$/m);
 });
 
 
@@ -293,7 +297,8 @@ test("social providers are production schedule-only and the weekday window owns 
 
   assert.match(blotatoRoutes, /return configured && !production;/);
   assert.match(env, /^BLOTATO_ALLOW_IMMEDIATE_PUBLISH=false$/m);
-  assert.match(env, /^BLOTATO_SCHEDULE_RECOVERY_ENABLED=false$/m);
+  assert.match(env, /^BLOTATO_SCHEDULE_RECOVERY_ENABLED=true$/m);
+  assert.match(env, /^AIMS_OPERATION_AUTO_RECOVERY_ENABLED=true$/m);
   for (const contract of [
     '["blotato-am", "/blotato/autoshorts/schedule"',
     '["zernio-monday", "/zernio/daily/monday"',
@@ -317,7 +322,7 @@ test("mini-series creation retries weak plans and duplicate parts, then fails cl
   assert.match(scheduler, /idempotencySeed: slotClaim\.key \|\| ""/);
   assert.match(scheduler, /reason: "generated-series-quality-failed"/);
   assert.match(scheduler, /ok: false,\n\s+quarantined: true,\n\s+lane: "weekly-mini-series"/);
-  assert.match(scheduler, /fallbackUrl: ""/);
+  assert.match(scheduler, /fallbackUrl: MINI_SERIES_CONFIG\.fallbackImageUrl/);
   assert.match(scheduler, /reason: "mini-series-artwork-failed"/);
   assert.match(scheduler, /await deletePost\(remoteId, apiKey\)/);
   assert.match(scheduler, /mini-series-incomplete-rolled-back/);
@@ -325,8 +330,8 @@ test("mini-series creation retries weak plans and duplicate parts, then fails cl
   assert.match(client, /export async function deletePost/);
   assert.match(client, /"x-request-id": requestId/);
   assert.match(scheduler, /zernio-daily-artwork-unavailable/);
-  assert.match(scheduler, /allowFallback: false/);
-  assert.match(scheduler, /!artwork\?\.ok \|\| !artwork\.publicUrl \|\| artwork\.fallback/);
+  assert.match(scheduler, /allowFallback: true/);
+  assert.doesNotMatch(scheduler, /!artwork\?\.ok \|\| !artwork\.publicUrl \|\| artwork\.fallback/);
   assert.match(env, /^ZERNIO_MINI_SERIES_THEME_ATTEMPTS=3$/m);
   assert.match(env, /^ZERNIO_MINI_SERIES_DISTINCTNESS_ATTEMPTS=3$/m);
 });
@@ -376,7 +381,8 @@ test("critical orchestration defaults stay aligned across deployment templates",
     ZERNIO_MINI_SERIES_SATURDAY_TIME: "19:30",
     ZERNIO_MINI_SERIES_SUNDAY_TIME: "19:30",
     ZERNIO_PODCAST_PROMO_TIME: "18:30",
-    ZERNIO_SCHEDULE_RECOVERY_ENABLED: "false",
+    ZERNIO_ALLOW_DETERMINISTIC_FALLBACK: "true",
+    ZERNIO_SCHEDULE_RECOVERY_ENABLED: "true",
     ZERNIO_SCHEDULE_MIN_LEAD_MS: "900000",
     ZERNIO_BLOG_RSS_TIME: "12:00",
     BLOTATO_REQUIRE_ALL_CHANNELS: "true",
@@ -393,9 +399,13 @@ test("critical orchestration defaults stay aligned across deployment templates",
     BLOTATO_SCHEDULE_FRIDAY_AM: "10:30",
     BLOTATO_SCHEDULE_FRIDAY_PM: "16:30",
     BLOTATO_SCHEDULE_MIN_LEAD_MS: "900000",
-    BLOTATO_SCHEDULE_RECOVERY_ENABLED: "false",
+    BLOTATO_SCHEDULE_RECOVERY_ENABLED: "true",
+    BLOTATO_RENDERED_QA_BLOCK_SOFT_FAILURES: "false",
     BLOTATO_SCHEDULE_VERIFY_ATTEMPTS: "12",
     AIMS_OPERATION_NEWSLETTER_ENABLED: "true",
+    AIMS_OPERATION_AUTO_RECOVERY_ENABLED: "true",
+    AIMS_OPERATION_MAX_ATTEMPTS: "3",
+    AIMS_OPERATION_RECOVERY_COOLDOWN_MS: "60000",
     REVIEW_COUNCIL_STAGNATION_LIMIT: "2",
   };
   for (const [key, value] of Object.entries(expected)) {

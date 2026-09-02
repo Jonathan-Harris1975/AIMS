@@ -25,6 +25,12 @@ test("weekday AM windows contain blog-social handoff and both Blotato schedule s
     assert.equal(occurrences(block, `/zernio/daily/${day}`), 1, `${day} must schedule one daily evergreen item`);
     assert.equal(occurrences(block, '/blotato/autoshorts/schedule'), 1, `${day} must have one Blotato AM slot`);
     assert.equal(occurrences(block, eveningPaths[day]), 1, `${day} must have one Blotato PM slot`);
+    const socialLines = block.split(/\r?\n/).filter((line) => /\["(?:blotato-(?:am|pm)|zernio-(?:monday|tuesday|wednesday|thursday|friday))"/.test(line));
+    assert.ok(socialLines.length >= 3, `${day} must expose the independent provider tasks`);
+    for (const line of socialLines) {
+      assert.equal(line.includes('"rss-rewrite"'), false, `${day} provider task must not depend on RSS rewrite`);
+      assert.equal(line.includes('"blotato-am"],'), false, `${day} PM provider task must not depend on AM success`);
+    }
   }
 });
 
