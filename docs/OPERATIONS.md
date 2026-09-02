@@ -37,8 +37,8 @@ AIMS runs as one non-root Koyeb Web Service with durable R2-backed state and fai
 | Audit callback | `AUDIT_CALLBACK_TOKEN` |
 | GitHub audit dispatch | `GITHUB_TOKEN_WEBSITE_AUDITS` |
 | Cloudflare purge | `CF_zone`/`CLOUDFLARE_ZONE_ID`, `CF_purge`/`CLOUDFLARE_PURGE_API_TOKEN`, optionally `CLOUDFLARE_PURGE_SHARED_SECRET` for webhook callers |
-| Blotato | `Blotato_API_key`, optionally `BLOTATO_PUBLISH_WEBHOOK_SECRET` for scheduler hooks |
-| Zernio | `ZERNIO_META_API_KEY` |
+| Blotato | `BLOTATO_API_KEY` (legacy `Blotato_API_key` is accepted), optionally `BLOTATO_PUBLISH_WEBHOOK_SECRET` for scheduler hooks |
+| Zernio publishing | `ZERNIO_META_API_KEY` or canonical `ZERNIO_API_KEY` |
 | Zernio | `ZERNIO_API_KEY_META`, `ZERNIO_API_KEY_VIDEO` where monthly reports are enabled |
 | Podcast/TTS | AWS/Polly credentials and podcast-index credentials where those lanes are enabled |
 | Outreach | Apollo, Hunter, SERP, URLScan and ZeroBounce keys where outreach is enabled |
