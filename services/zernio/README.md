@@ -28,8 +28,9 @@ Zernio owns AIMS static/social scheduling: seven daily editorial lanes, blog-RSS
 - Daily lanes use deterministic day-specific intent and topic contracts.
 - RSS-backed posts preserve supplied source URLs and must remain topically aligned with their evidence.
 - British English, Jonathan Harris voice, semantic gates and review councils run before scheduling.
-- Artwork is checked for relevance and visual defects before the external side effect.
+- Artwork is checked for relevance and visual defects before the external side effect. If generation is unavailable, daily, mini-series and podcast lanes use their curated public fallback rather than suppressing the provider call.
 - Schedule-slot claims and provider-history checks prevent accidental duplicates.
+- `ZERNIO_SCHEDULE_RECOVERY_ENABLED=true` safely moves missed same-day slots forward; `ZERNIO_ALLOW_DETERMINISTIC_FALLBACK=true` keeps a final brand-safe image path available.
 - Duplicate checks use `GET /v1/posts`; publishing does not depend on analytics permissions.
 - Required platforms default to Facebook and Instagram and can be changed through `ZERNIO_REQUIRED_PLATFORMS`.
 - Provider requests use bounded retry/backoff settings from the `ZERNIO_API_RETRY_*` variables.
