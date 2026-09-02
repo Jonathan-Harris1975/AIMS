@@ -3,6 +3,11 @@ export function retryableStatus(status) {
 }
 
 export function retryableError(error) {
+  // Provider clients make a more informed retry decision than a translated
+  // HTTP status can. Honour that explicit decision before applying generic
+  // status/message heuristics (for example, a permanent D1 quota error may be
+  // exposed to callers as a 502/503 but must not be replayed).
+  if (typeof error?.retryable === "boolean") return error.retryable;
   const status = Number(error?.statusCode || error?.status || 0);
   if (retryableStatus(status)) return true;
   const haystack = `${error?.name || ""} ${error?.code || ""} ${error?.message || error || ""}`.toLowerCase();
