@@ -119,7 +119,7 @@ export async function createSocialArtwork({
         publicUrl,
         originalError: err?.message || String(err),
       });
-      const publishableFallback = boolEnv("ZERNIO_ALLOW_DETERMINISTIC_FALLBACK", false);
+      const publishableFallback = boolEnv("ZERNIO_ALLOW_DETERMINISTIC_FALLBACK", true);
       return {
         ok: publishableFallback,
         fallback: true,
