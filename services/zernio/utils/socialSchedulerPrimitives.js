@@ -119,8 +119,17 @@ export function isWithinDuplicateWindow(first = "", second = "", hours = 48) {
 }
 
 export function queuedItemAccountIds(item) {
-  const rows = Array.isArray(item?.platformAnalytics) ? item.platformAnalytics : [];
-  return new Set(rows.map((row) => String(row?.accountId || "")).filter(Boolean));
+  const rows = [
+    ...(Array.isArray(item?.platformAnalytics) ? item.platformAnalytics : []),
+    ...(Array.isArray(item?.platforms) ? item.platforms : []),
+  ];
+  return new Set(rows.map((row) => {
+    const account = row?.accountId;
+    if (account && typeof account === "object") {
+      return String(account._id || account.id || account.accountId || "");
+    }
+    return String(account || "");
+  }).filter(Boolean));
 }
 
 export function isTruthyOption(value) {
@@ -173,4 +182,3 @@ export function delay(ms) {
     timer.unref?.();
   });
 }
-

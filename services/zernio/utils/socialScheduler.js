@@ -8,7 +8,7 @@ import { loadRecentRssContext } from "./feedContext.js";
 import { fetchBlogRssItems } from "./blogRssFeed.js";
 import { fetchPodcastPromoEpisode } from "./podcastRssFeed.js";
 import { getLaneHistory, getWeeklyTopicLedger, recordLaneSchedule, getQuizHistory, recordQuizSchedule, claimScheduleSlot, resetScheduleSlotClaim, completeScheduleSlot, releaseScheduleSlot, clearScheduleSlotClaim, isRecentSpotlightPerson, recordSpotlightPerson, hasRecentSocialSource, recordUsedSocialSource } from "./state.js";
-import { resolveProfile, inspectZernioTargeting, listPostsWithAnalytics, createPost, deletePost } from "./zernioClient.js";
+import { resolveProfile, inspectZernioTargeting, listPosts, createPost, deletePost, getZernioApiKey } from "./zernioClient.js";
 import getSponsor from "../../script/utils/getSponsor.js";
 import { resolveFeaturedEbook } from "./ebookCatalogue.js";
 import { runPhase5OrganicGrowthGate } from "../../content-quality/phase5OrganicGrowthGates.js";
@@ -609,16 +609,10 @@ async function requestStructuredZernioJson({ routeName, sessionId, prompt, label
 
 
 
-// LIMITATION (see migration notes): OneUp's getscheduledposts endpoint
-// returned a per-post category_name, which let this guard match on
-// "same OneUp category" directly. Zernio's documented GET /v1/analytics
-// listing (the closest equivalent to "list my posts") does not expose a
-// profile/category name per post — only accountId/platform under
-// platformAnalytics[]. The safest available alternative is to match on
-// accountId + content hash + time window instead of profile name. The
-// state.js slot-claim ledger (checked before this remote guard ever runs)
-// remains the primary, always-available duplicate guard for same-run and
-// cross-run scheduling, since it never depends on the Zernio API.
+// Zernio's publishing API exposes scheduled and published posts at GET
+// /v1/posts. Keep this guard on that resource rather than /v1/analytics so a
+// publishing-only API key is sufficient to create a post. The state.js
+// slot-claim ledger remains the primary same-run and cross-run guard.
 async function getQueuedPosts(apiKey) {
   const output = [];
   const now = new Date();
@@ -627,8 +621,8 @@ async function getQueuedPosts(apiKey) {
   const isoDate = (date) => date.toISOString().slice(0, 10);
 
   for (let page = 1; page <= ZERNIO_QUEUE_GUARD_LOOKBACK_PAGES; page += 1) {
-    const result = await listPostsWithAnalytics(
-      { fromDate: isoDate(windowStart), toDate: isoDate(windowEnd), page, limit: 50 },
+    const result = await listPosts(
+      { dateFrom: isoDate(windowStart), dateTo: isoDate(windowEnd), page, limit: 50 },
       apiKey
     );
     const rows = Array.isArray(result?.posts) ? result.posts : Array.isArray(result?.data) ? result.data : [];
@@ -675,8 +669,14 @@ function hasLikelyDuplicate(queuedPosts, { scheduledDateTime, targetAccountIds =
 }
 
 
-function isEffectiveDryRun({ dryRun, apiKey }) {
-  return Boolean(dryRun || ZERNIO_DEFAULT_DRY_RUN || !apiKey);
+function isEffectiveDryRun({ dryRun }) {
+  return Boolean(dryRun || ZERNIO_DEFAULT_DRY_RUN);
+}
+
+function resolveSchedulerApiKey(options = {}) {
+  return getZernioApiKey(options.apiKey, {
+    required: !isEffectiveDryRun({ dryRun: options.dryRun }),
+  });
 }
 
 function duplicateSlotWarning(reason) {
@@ -862,10 +862,8 @@ async function scheduleToZernio({ post, scheduledDateTime, profileName, accountI
   }
   const normalisedAccountId = normaliseZernioAccountId(accountId, getZernioAccountId());
   const requiredPlatforms = getZernioRequiredPlatforms();
-  const effectiveDryRun = Boolean(dryRun || ZERNIO_DEFAULT_DRY_RUN || !apiKey);
-  if (!apiKey) {
-    warnings.push("ZERNIO_META_API_KEY is missing, so this run was returned as a dry run preview.");
-  }
+  const effectiveDryRun = isEffectiveDryRun({ dryRun });
+  apiKey = getZernioApiKey(apiKey, { required: !effectiveDryRun });
 
   if (effectiveDryRun) {
     return {
@@ -976,25 +974,17 @@ async function scheduleToZernio({ post, scheduledDateTime, profileName, accountI
     throw err;
   }
 
-  // LIMITATION (see migration notes): OneUp's scheduletextpost/
-  // scheduleimagepost accepted a separate `title` field and a `first_comment`
-  // field. Zernio's documented POST /v1/posts schema (content, platforms[],
-  // scheduledFor, timezone, mediaItems, publishNow) has no documented title
-  // field, and no confirmed first-comment field, even though Zernio's
-  // marketing pages mention first-comment automation as a feature. Rather
-  // than fabricate an undocumented field name, the title is folded into the
-  // post content and the first comment is dropped with a warning.
-  if (post.title) {
-    warnings.push("Zernio's documented Posts API has no separate title field; the title was folded into the post content.");
-  }
+  // Zernio now documents a root-level `title` field for reference/display.
+  // Its Posts API still has no confirmed first-comment field, so the ebook
+  // URL remains in the main post content and first-comment metadata is not
+  // sent under a fabricated provider field.
   if (post.firstComment) {
     warnings.push("Zernio's documented Posts API does not confirm a first-comment field; the first comment was not sent. Ebook URLs are therefore carried in the main post content.");
   }
 
-  const content = [post.title, post.content].filter(Boolean).join("\n\n") || post.content;
-
   const payload = {
-    content,
+    ...(post.title ? { title: post.title } : {}),
+    content: post.content,
     scheduledFor: effectiveScheduledDateTime.replace(" ", "T"),
     timezone: DEFAULT_TIMEZONE,
     platforms: targetedAccounts.map((account) => ({ platform: account.platform, accountId: account.accountId })),
@@ -1397,7 +1387,7 @@ export async function buildAndScheduleDailyLane(laneKey, options = {}) {
   let scheduledDateTime = options.scheduledDateTime || toScheduledDateTime(publishDate, lane.publishTime);
   const profileName = options.profileName || ZERNIO_PROFILE_NAME_GENERAL;
   const accountId = normaliseZernioAccountId(options.accountId || getZernioAccountId());
-  const apiKey = options.apiKey || process.env.ZERNIO_META_API_KEY;
+  const apiKey = resolveSchedulerApiKey(options);
   const dryRun = Boolean(options.dryRun);
   let imageUrl = options.imageUrl || (dryRun ? lane.imageUrl : "");
 
@@ -1742,7 +1732,7 @@ export async function buildAndScheduleBlogRssDaily(options = {}) {
   let scheduledDateTime = options.scheduledDateTime || toScheduledDateTime(publishDate, BLOG_RSS_CONFIG.publishTime);
   const profileName = options.profileName || ZERNIO_PROFILE_NAME_GENERAL;
   const accountId = normaliseZernioAccountId(options.accountId || getZernioAccountId());
-  const apiKey = options.apiKey || process.env.ZERNIO_META_API_KEY;
+  const apiKey = resolveSchedulerApiKey(options);
   const dryRun = Boolean(options.dryRun);
 
   const { url: feedUrl, items } = await fetchBlogRssItems({});
@@ -1925,7 +1915,7 @@ export async function buildAndScheduleDailyLaneAccountVariants(laneKey, options 
       profileName,
       accountId: normaliseZernioAccountId(options.accountId || getZernioAccountId()),
       dryRun: Boolean(options.dryRun),
-      apiKey: options.apiKey || process.env.ZERNIO_META_API_KEY,
+      apiKey: resolveSchedulerApiKey(options),
       laneKey,
       dedupeWindowHours: options.dedupeWindowHours,
     });
@@ -1956,7 +1946,7 @@ export async function buildAndScheduleWeeklyMiniSeries(options = {}) {
   const profileName = options.profileName || ZERNIO_PROFILE_NAME_GENERAL;
   const accountId = normaliseZernioAccountId(options.accountId || getZernioAccountId());
   const dryRun = Boolean(options.dryRun);
-  const apiKey = options.apiKey || process.env.ZERNIO_META_API_KEY;
+  const apiKey = resolveSchedulerApiKey(options);
   const minimumScore = Number(options.minimumSuitabilityScore ?? MINI_SERIES_CONFIG.minimumSuitabilityScore);
   const sessionId = `ZERNIO-MINI-SERIES-${weekStartDate}`;
   let editorialBriefEntries = [];
@@ -2837,7 +2827,7 @@ export async function buildAndSchedulePodcastThursdayPromo(options = {}) {
   const profileName = options.profileName || ZERNIO_PROFILE_NAME_GENERAL;
   const accountId = normaliseZernioAccountId(options.accountId || getZernioAccountId());
   const dryRun = Boolean(options.dryRun);
-  const apiKey = options.apiKey || process.env.ZERNIO_META_API_KEY;
+  const apiKey = resolveSchedulerApiKey(options);
   const feedUrl = options.feedUrl || PODCAST_PROMO_CONFIG.feedUrl;
   const sessionId = `ZERNIO-PODCAST-PROMO-${publishDate}`;
   const slotClaim = await claimZernioSlot({
@@ -2981,7 +2971,7 @@ export async function buildAndScheduleEbookWeekly(options = {}) {
     warnings.push("Featured ebook has no manuscriptUrl in the local catalogue.");
   }
 
-  const apiKey = options.apiKey || process.env.ZERNIO_META_API_KEY;
+  const apiKey = resolveSchedulerApiKey(options);
   const dryRun = Boolean(options.dryRun);
   const posts = {};
 
@@ -3291,7 +3281,7 @@ export async function buildAndScheduleQuizSeries(options = {}) {
   let answerDateTime = options.answerScheduledDateTime || toScheduledDateTime(answerPublishDate, QUIZ_CONFIG.answerPublishTime);
   const profileName = options.profileName || ZERNIO_PROFILE_NAME_GENERAL;
   const accountId = normaliseZernioAccountId(options.accountId || getZernioAccountId());
-  const apiKey = options.apiKey || process.env.ZERNIO_META_API_KEY;
+  const apiKey = resolveSchedulerApiKey(options);
   const dryRun = Boolean(options.dryRun);
   let questionImageUrl = options.questionImageUrl || QUIZ_CONFIG.questionImageUrl;
   let answerImageUrl = options.answerImageUrl || QUIZ_CONFIG.answerImageUrl;

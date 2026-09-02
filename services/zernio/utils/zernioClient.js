@@ -1,7 +1,7 @@
 // Zernio REST API client (https://docs.zernio.com/).
 //
 // Base URL: https://zernio.com/api/v1
-// Auth: Authorization: Bearer <ZERNIO_META_API_KEY>
+// Auth: Authorization: Bearer <ZERNIO_API_KEY>
 //
 // This client only implements endpoints that are documented at
 // docs.zernio.com: profiles, accounts, posts, and analytics. It replaces the
@@ -10,27 +10,62 @@
 import crypto from "node:crypto";
 import { fetchWithTimeout } from "../../shared/http-client.js";
 
+export const ZERNIO_KEY_ENV_NAMES = Object.freeze(["ZERNIO_META_API_KEY", "ZERNIO_API_KEY"]);
+const ZERNIO_REQUEST_ID_NAMESPACE = Buffer.from("6ba7b8109dad11d180b400c04fd430c8", "hex");
+
 function trimString(value, fallback = "") {
   if (value === undefined || value === null) return fallback;
   const cleaned = String(value).trim();
   return cleaned || fallback;
 }
 
+function looksLikeTemplatePlaceholder(value) {
+  return /^\s*\{\{\s*secret\.[^}]+\}\}\s*$/i.test(String(value || ""));
+}
+
+function firstUsableEnv(names = []) {
+  for (const name of names) {
+    const value = trimString(process.env[name]);
+    if (!value || looksLikeTemplatePlaceholder(value)) continue;
+    return { name, value };
+  }
+  return { name: undefined, value: undefined };
+}
+
 function getZernioApiBase() {
   return trimString(process.env.ZERNIO_API_BASE_URL, "https://zernio.com/api/v1").replace(/\/+$/, "");
 }
 
+export function getZernioApiKey(apiKey, { required = true } = {}) {
+  const supplied = trimString(apiKey);
+  if (supplied && !looksLikeTemplatePlaceholder(supplied)) return supplied;
+
+  // AIMS deployments can use the service-scoped Meta key, while
+  // ZERNIO_API_KEY remains the canonical Zernio credential name.
+  const resolved = firstUsableEnv(ZERNIO_KEY_ENV_NAMES);
+  if (resolved.value) return resolved.value;
+  if (!required) return undefined;
+
+  const err = new Error(`Missing Zernio API key (${ZERNIO_KEY_ENV_NAMES.join(" or ")})`);
+  err.statusCode = 400;
+  err.envNames = ZERNIO_KEY_ENV_NAMES;
+  throw err;
+}
+
+export function hasZernioApiKey() {
+  return Boolean(firstUsableEnv(ZERNIO_KEY_ENV_NAMES).value);
+}
+
+export function getZernioConfigSummary() {
+  return {
+    apiBase: getZernioApiBase(),
+    apiKeyConfigured: hasZernioApiKey(),
+    apiKeyEnvNames: ZERNIO_KEY_ENV_NAMES,
+  };
+}
+
 function requireApiKey(apiKey) {
-  // ZERNIO_META_API_KEY is the single supported credential env var for this
-  // service (see migration notes). ZERNIO_API_KEY is accepted as a fallback
-  // since it is the name used by Zernio's own SDKs/CLI.
-  const key = trimString(apiKey || process.env.ZERNIO_META_API_KEY || process.env.ZERNIO_API_KEY);
-  if (!key) {
-    const err = new Error("Missing ZERNIO_META_API_KEY");
-    err.statusCode = 400;
-    throw err;
-  }
-  return key;
+  return getZernioApiKey(apiKey);
 }
 
 function retryNumber(name, fallback, { min = 0, max = 10 } = {}) {
@@ -181,8 +216,18 @@ async function zernioGet(endpoint, params = {}, apiKey) {
 function stableRequestId(endpoint, body = {}, idempotencySeed = "") {
   const seed = trimString(idempotencySeed);
   const material = seed ? `${endpoint}:slot:${seed}` : `${endpoint}:${JSON.stringify(body || {})}`;
-  const digest = crypto.createHash("sha256").update(material).digest("hex").slice(0, 32);
-  return `aims-${digest}`;
+  const digest = crypto
+    .createHash("sha1")
+    .update(ZERNIO_REQUEST_ID_NAMESPACE)
+    .update(material)
+    .digest()
+    .subarray(0, 16);
+  // Zernio validates x-request-id as a UUID. A deterministic UUIDv5 keeps
+  // retries for one logical post idempotent while satisfying that contract.
+  digest[6] = (digest[6] & 0x0f) | 0x50;
+  digest[8] = (digest[8] & 0x3f) | 0x80;
+  const value = digest.toString("hex");
+  return `${value.slice(0, 8)}-${value.slice(8, 12)}-${value.slice(12, 16)}-${value.slice(16, 20)}-${value.slice(20)}`;
 }
 
 async function zernioPost(endpoint, body = {}, apiKey, { idempotencySeed = "" } = {}) {
@@ -279,9 +324,8 @@ export async function listAccountsHealth({ profileId, platform } = {}, apiKey) {
 
 // --- Posts -------------------------------------------------------------
 // POST /v1/posts creates (and optionally schedules/publishes) a post.
-// GET /v1/analytics with a date range and no postId returns a paginated
-// list of posts with their status and analytics, which this client uses in
-// place of OneUp's getscheduledposts/getpublishedposts endpoints.
+// GET /v1/posts is the publishing API's paginated post listing. Analytics is
+// kept separate because a publishing-only key need not have analytics access.
 
 export async function createPost(body, apiKey, options = {}) {
   return zernioPost("posts", body, apiKey, options);
@@ -295,6 +339,30 @@ export async function deletePost(postId, apiKey) {
     throw err;
   }
   return zernioDelete(`posts/${encodeURIComponent(id)}`, apiKey);
+}
+
+export async function listPosts({
+  page = 1,
+  limit = 50,
+  source,
+  status,
+  platform,
+  profileId,
+  createdBy,
+  dateFrom,
+  dateTo,
+} = {}, apiKey) {
+  return zernioGet("posts", {
+    page,
+    limit,
+    source,
+    status,
+    platform,
+    profileId,
+    createdBy,
+    dateFrom,
+    dateTo,
+  }, apiKey);
 }
 
 export async function listPostsWithAnalytics({ fromDate, toDate, page = 1, limit = 50, sortBy = "date" } = {}, apiKey) {
