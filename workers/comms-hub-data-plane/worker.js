@@ -18,6 +18,12 @@ function text(value) {
   return value === undefined || value === null ? "" : String(value).trim();
 }
 
+function isDailyRowReadLimit(value) {
+  const message = text(value?.message || value).toLowerCase();
+  return message.includes("exceeded d1's free tier daily row read limit")
+    || /d1[^.]{0,80}daily[^.]{0,80}row read limit/.test(message);
+}
+
 function bearer(request) {
   const match = text(request.headers.get("authorization")).match(/^Bearer\s+(.+)$/i);
   return match ? match[1].trim() : "";
@@ -116,12 +122,18 @@ export default {
       const result = await executePayload(env.COMMS_HUB_DB, payload);
       return json({ success: true, result });
     } catch (error) {
+      const message = text(error?.message || error).slice(0, 500) || "D1 operation failed";
+      const dailyRowReadLimit = isDailyRowReadLimit(message);
       return json({
         success: false,
-        errors: [{ message: text(error?.message || error).slice(0, 500) || "D1 operation failed" }],
-      }, 400);
+        retryable: false,
+        errors: [{
+          code: dailyRowReadLimit ? "d1_daily_row_read_limit" : "d1_operation_failed",
+          message,
+        }],
+      }, dailyRowReadLimit ? 429 : 400);
     }
   },
 };
 
-export { constantTimeEqual, executePayload, validateStatement };
+export { constantTimeEqual, executePayload, isDailyRowReadLimit, validateStatement };
