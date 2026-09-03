@@ -505,6 +505,7 @@ test("Zernio reaches the provider with curated fallback artwork when generation 
   process.env.ZERNIO_API_KEY = "zernio-fallback-key";
   process.env.ZERNIO_REQUIRED_PLATFORMS = "facebook";
   process.env.ZERNIO_VALIDATE_TARGET_ACCOUNTS = "true";
+  process.env.ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK = "true";
   const artworkCalls = [];
 
   const mod = await import(`../services/zernio/utils/socialScheduler.js?zernio-artwork-fallback=${Date.now()}`);
@@ -533,6 +534,43 @@ test("Zernio reaches the provider with curated fallback artwork when generation 
   assert.deepEqual(scheduledRequests.at(-1).body.mediaItems, [
     { type: "image", url: "https://images.jonathan-harris.online/Monday" },
   ]);
+});
+
+test("Zernio schedules generated artwork and keeps static fallback disabled by default", async () => {
+  restoreEnv();
+  applyBaseEnv();
+  process.env.OPENROUTER_API_BASE = mockBase;
+  process.env.ZERNIO_API_BASE_URL = mockBase;
+  process.env.ZERNIO_API_KEY = "zernio-generated-art-key";
+  process.env.ZERNIO_REQUIRED_PLATFORMS = "facebook";
+  process.env.ZERNIO_VALIDATE_TARGET_ACCOUNTS = "true";
+  delete process.env.ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK;
+  const artworkCalls = [];
+
+  const mod = await import(`../services/zernio/utils/socialScheduler.js?zernio-generated-art=${Date.now()}`);
+  const result = await mod.buildAndScheduleDailyLane("monday", {
+    publishDate: "2026-04-20",
+    profileName: "General",
+    accountId: "fb-page-1",
+    force: true,
+    artworkFactory: async (input) => {
+      artworkCalls.push(input);
+      return {
+        ok: true,
+        fallback: false,
+        imageStatus: "generated",
+        publicUrl: "https://images.jonathan-harris.online/zernio/monday/generated-qa-safe.png",
+      };
+    },
+  });
+
+  assert.equal(result.scheduled, true);
+  assert.equal(result.post.imageStatus, "generated");
+  assert.equal(artworkCalls[0].allowFallback, false);
+  assert.deepEqual(scheduledRequests.at(-1).body.mediaItems, [{
+    type: "image",
+    url: "https://images.jonathan-harris.online/zernio/monday/generated-qa-safe.png",
+  }]);
 });
 
 test("Zernio posts successfully with the canonical ZERNIO_API_KEY and no analytics permission", async () => {
@@ -771,7 +809,7 @@ test("Sunday spotlight avoids fabricated likenesses and daily evergreen artwork 
   assert.match(source, /no books, papers, notebooks, theses, whiteboards, chalkboards/i);
   assert.match(source, /createSocialArtwork\(/);
   assert.match(source, /fallbackUrl: lane\.imageUrl/);
-  assert.match(source, /allowFallback: true/);
+  assert.match(source, /allowFallback: booleanValue\(process\.env\.ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK, false\)/);
   assert.match(source, /!artwork\?\.ok \|\| !artwork\.publicUrl/);
   assert.doesNotMatch(source, /!artwork\?\.ok \|\| !artwork\.publicUrl \|\| artwork\.fallback/);
   assert.match(source, /post\.imagePrompt = imagePrompt/);

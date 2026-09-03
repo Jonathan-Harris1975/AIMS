@@ -174,8 +174,15 @@ async function handleMockRequest(req, res) {
     assert.equal(body.textToImageModel, undefined);
     assert.equal(body.imageToVideoModel, undefined);
     assert.equal(body.useBrandKit, undefined);
-    if ([AI_STORY_TEMPLATE_PATH, AI_STORY_TEMPLATE_UUID].includes(body.templateId)) {
-      assert.deepEqual(body.inputs, {});
+    if (/Cost guard/i.test(body.prompt || "")) {
+      assert.equal(body.inputs.scenes.length, 5);
+      assert.ok(body.inputs.scenes.every((scene) => scene.mediaSource && scene.script));
+      assert.equal(body.inputs.aiImageModel, "replicate/black-forest-labs/flux-schnell");
+      assert.equal(body.inputs.animateAiImages, true);
+      assert.deepEqual(Object.keys(body.inputs).sort(), [
+        "aiImageModel", "animateAiImages", "aspectRatio", "captionPosition", "highlightColor",
+        "scenes", "transition", "trimToVoiceover", "voiceName",
+      ].sort());
       assert.match(body.prompt, /Cost guard/i);
     }
     res.writeHead(201, { "content-type": "application/json" });
@@ -305,7 +312,7 @@ process.env.BLOTATO_TEMPLATE_ID_MODE = "uuid";
 process.env.BLOTATO_TEMPLATE_VERIFY = "true";
 process.env.BLOTATO_TEMPLATE_AUTO_DISCOVERY = "true";
 process.env.BLOTATO_NEWS_TEMPLATE_SEARCH = "AI Video with AI Voice,AI Story Video,AI Voice,Story Video";
-process.env.BLOTATO_USE_MANUAL_TEMPLATE_INPUTS = "false";
+process.env.BLOTATO_USE_MANUAL_TEMPLATE_INPUTS = "true";
 process.env.BLOTATO_VIDEO_SCENE_COUNT = "5";
 process.env.BLOTATO_MAX_EXPECTED_CREDITS = "70";
 process.env.BLOTATO_NEWS_JSON_RESPONSE_FORMAT = "false";
@@ -360,7 +367,7 @@ test.afterEach(() => {
   process.env.BLOTATO_TEMPLATE_VERIFY = "true";
   process.env.BLOTATO_TEMPLATE_AUTO_DISCOVERY = "true";
   process.env.BLOTATO_NEWS_TEMPLATE_SEARCH = "AI Video with AI Voice,AI Story Video,AI Voice,Story Video";
-  process.env.BLOTATO_USE_MANUAL_TEMPLATE_INPUTS = "false";
+  process.env.BLOTATO_USE_MANUAL_TEMPLATE_INPUTS = "true";
   process.env.BLOTATO_VIDEO_SCENE_COUNT = "5";
   process.env.BLOTATO_MAX_EXPECTED_CREDITS = "70";
   process.env.BLOTATO_NEWS_JSON_RESPONSE_FORMAT = "false";
@@ -507,6 +514,10 @@ test("Blotato news insight route builds a dry-run short pack", async () => {
   assert.ok(response.body.pack.scenes.length >= 3);
   assert.ok(Array.isArray(response.body.visualInputs.scenes));
   assert.equal(response.body.visualInputs.thumbnailText, "AI Gets Chores");
+  assert.equal(response.body.visualRequest.inputs.scenes.length, 5);
+  assert.equal(response.body.visualRequest.inputs.aiImageModel, "replicate/black-forest-labs/flux-schnell");
+  assert.equal(response.body.visualRequest.inputs.animateAiImages, true);
+  assert.equal(response.body.visualRequest.inputs.thumbnailText, undefined);
   assert.match(response.body.visualPrompt, /HUMAN-CENTRED SOCIAL VISUALS/i);
   assert.ok(response.body.visualInputs.scenes.filter((scene) => /adult|human|hands|face|silhouette|professional/i.test(scene.mediaSource)).length >= 3);
 });
@@ -572,6 +583,11 @@ test("Blotato publish-now endpoint requires explicit opt-in and runs the RSS-to-
   assert.equal(facebookPost.post.target.pageId, "562160556971997");
   assert.equal(facebookPost.post.target.mediaType, "reel");
   assert.equal(jobStatus.body.job.result.channelPreflight.ready, true);
+  const visualRequest = capturedVisualRequests.find((item) => /Cost guard/i.test(item.prompt || ""));
+  assert.ok(visualRequest, "the paid render request should be captured");
+  assert.equal(visualRequest.inputs.scenes.length, 5);
+  assert.equal(visualRequest.inputs.aiImageModel, "replicate/black-forest-labs/flux-schnell");
+  assert.equal(visualRequest.inputs.animateAiImages, true);
   assert.deepEqual(
     jobStatus.body.job.result.channelPreflight.platforms.map((item) => item.platform),
     ["instagram", "youtube", "tiktok", "facebook"]
@@ -603,4 +619,5 @@ test("Blotato scheduled lane reaches the provider and confirms every queued post
   assert.ok(jobStatus.body.job.result.posts.every((post) => post.status === "scheduled" && post.confirmed === true));
   assert.equal(capturedPostRequests.length, 4);
   assert.ok(capturedPostRequests.every((payload) => Boolean(payload.scheduledTime)));
+  assert.equal(capturedVisualRequests.at(-1).inputs.scenes.length, 5);
 });

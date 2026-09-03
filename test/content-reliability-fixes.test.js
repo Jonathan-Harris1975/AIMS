@@ -253,7 +253,7 @@ test("Zernio exact schedules use London time and recover missed slots with a saf
   assert.match(env, /^ZERNIO_API_RETRY_ATTEMPTS=5$/m);
 });
 
-test("artwork provider fallback keeps Zernio posting when generated artwork is unavailable", async () => {
+test("Zernio retains diagnostic artwork support but does not publish a static fallback by default", async () => {
   const png = createDeterministicAiFallbackPng({ width: 640, height: 360, seed: "newsletter-ai-edge" });
   assert.deepEqual([...png.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
   assert.ok(png.length > 20_000);
@@ -275,7 +275,7 @@ test("artwork provider fallback keeps Zernio posting when generated artwork is u
   assert.match(socialArtwork, /if \(!allowFallback\)/);
   assert.match(socialArtwork, /ok: publishableFallback,[\s\S]*diagnosticUrl: publicUrl,[\s\S]*publicUrl: publishableFallback \? publicUrl : ""/);
   assert.match(zernioScheduler, /fallbackUrl: lane\.imageUrl/);
-  assert.match(zernioScheduler, /allowFallback: true/);
+  assert.match(zernioScheduler, /allowFallback: booleanValue\(process\.env\.ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK, false\)/);
   assert.match(zernioScheduler, /artwork\.fallback/);
   assert.match(weeklyBlog, /reason: "artwork-unavailable"/);
   assert.match(socialBlog, /reason: "artwork-unavailable"/);
@@ -286,7 +286,8 @@ test("artwork provider fallback keeps Zernio posting when generated artwork is u
   assert.match(env, /^NEWSLETTER_AI_EDGE_FALLBACK_IMAGE_URL=$/m);
   assert.match(env, /^SOCIAL_BLOG_ALLOW_DETERMINISTIC_FALLBACK=false$/m);
   assert.match(env, /^NEWSLETTER_ALLOW_DETERMINISTIC_FALLBACK=true$/m);
-  assert.match(env, /^ZERNIO_ALLOW_DETERMINISTIC_FALLBACK=true$/m);
+  assert.match(env, /^ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK=false$/m);
+  assert.match(env, /^ZERNIO_ALLOW_DETERMINISTIC_FALLBACK=false$/m);
 });
 
 
@@ -330,7 +331,7 @@ test("mini-series creation retries weak plans and duplicate parts, then fails cl
   assert.match(client, /export async function deletePost/);
   assert.match(client, /"x-request-id": requestId/);
   assert.match(scheduler, /zernio-daily-artwork-unavailable/);
-  assert.match(scheduler, /allowFallback: true/);
+  assert.match(scheduler, /allowFallback: booleanValue\(process\.env\.ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK, false\)/);
   assert.doesNotMatch(scheduler, /!artwork\?\.ok \|\| !artwork\.publicUrl \|\| artwork\.fallback/);
   assert.match(env, /^ZERNIO_MINI_SERIES_THEME_ATTEMPTS=3$/m);
   assert.match(env, /^ZERNIO_MINI_SERIES_DISTINCTNESS_ATTEMPTS=3$/m);
@@ -381,7 +382,8 @@ test("critical orchestration defaults stay aligned across deployment templates",
     ZERNIO_MINI_SERIES_SATURDAY_TIME: "19:30",
     ZERNIO_MINI_SERIES_SUNDAY_TIME: "19:30",
     ZERNIO_PODCAST_PROMO_TIME: "18:30",
-    ZERNIO_ALLOW_DETERMINISTIC_FALLBACK: "true",
+    ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK: "false",
+    ZERNIO_ALLOW_DETERMINISTIC_FALLBACK: "false",
     ZERNIO_SCHEDULE_RECOVERY_ENABLED: "true",
     ZERNIO_SCHEDULE_MIN_LEAD_MS: "900000",
     ZERNIO_BLOG_RSS_TIME: "12:00",

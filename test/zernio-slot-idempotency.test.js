@@ -29,3 +29,30 @@ test("Zernio recovered times keep the original canonical slot and provider idemp
   assert.match(scheduler, /createPost\(payload, apiKey, \{ idempotencySeed \}\)/);
   assert.match(client, /material = seed \? `\$\{endpoint\}:slot:\$\{seed\}`/);
 });
+
+test("Zernio accepts its documented existingPost response when a recovered retry moved the local time", async () => {
+  const { verifyZernioScheduleResponse } = await import(`../services/zernio/utils/socialScheduler.js?idempotent-replay=${Date.now()}`);
+
+  const replay = verifyZernioScheduleResponse({
+    existingPost: {
+      _id: "post_already_scheduled",
+      status: "scheduled",
+      scheduledFor: "2026-09-03T12:35:00+01:00",
+    },
+  }, "2026-09-03 12:52");
+
+  assert.equal(replay.accepted, true);
+  assert.equal(replay.idempotentReplay, true);
+  assert.equal(replay.timeMatches, false);
+  assert.equal(replay.replayTimeDifferenceAccepted, true);
+
+  const unrelated = verifyZernioScheduleResponse({
+    post: {
+      _id: "post_unrelated",
+      status: "scheduled",
+      scheduledFor: "2026-09-03T12:35:00+01:00",
+    },
+  }, "2026-09-03 12:52");
+  assert.equal(unrelated.accepted, false);
+  assert.equal(unrelated.idempotentReplay, false);
+});
