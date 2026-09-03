@@ -63,7 +63,7 @@ export async function createSocialArtwork({
     const publicUrl = await uploadBuffer("blogImages", key, image.buffer, image.mimeType);
 
     info("artwork.social.done", { sessionId: safeSession, lane: safeLane, key, publicUrl });
-    return { ok: true, key, publicUrl };
+    return { ok: true, key, publicUrl, fallback: false, imageStatus: "generated" };
   } catch (err) {
     if (!allowFallback) {
       error("artwork.social.required_generation_failed", {
@@ -119,7 +119,7 @@ export async function createSocialArtwork({
         publicUrl,
         originalError: err?.message || String(err),
       });
-      const publishableFallback = boolEnv("ZERNIO_ALLOW_DETERMINISTIC_FALLBACK", true);
+      const publishableFallback = boolEnv("ZERNIO_ALLOW_DETERMINISTIC_FALLBACK", false);
       return {
         ok: publishableFallback,
         fallback: true,
