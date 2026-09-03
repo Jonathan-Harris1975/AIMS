@@ -23,9 +23,11 @@ The five weekday short lanes are `news-insight`, `model-verdict`, `ai-at-work`, 
 
 The service checks hook strength, narrative continuity, source relevance, scene progression, human presence, caption legibility and finished media quality. It makes bounded repairs before rendering. If those repairs are exhausted, performance heuristics become advisory, while source integrity, brand safety and structural defects still block publication. The final MP4 is inspected before scheduling; technical defects always block, while a soft performance score is advisory by default and can be made strict with `BLOTATO_RENDERED_QA_BLOCK_SOFT_FAILURES=true`.
 
+The AI Voice template receives the approved `scenes[].mediaSource` and `scenes[].script` storyboard as explicit manual inputs, plus only the template's documented voice, image-model, animation, caption, transition and aspect-ratio fields. Prompt autofill remains supplemental and cannot replace the source-grounded scenes.
+
 Provider submission state is polled rather than assuming acceptance means publication. `BLOTATO_SCHEDULE_RECOVERY_ENABLED=true` safely moves a missed same-day slot forward while retaining the deterministic slot claim.
 
-Production defaults require every configured channel and scheduling confirmation: `BLOTATO_REQUIRE_ALL_CHANNELS=true` and `BLOTATO_REQUIRE_SCHEDULE_CONFIRMATION=true`. The two daily renders are serialised so one render does not collide with another.
+Production defaults require every configured channel and scheduling confirmation: `BLOTATO_REQUIRE_ALL_CHANNELS=true` and `BLOTATO_REQUIRE_SCHEDULE_CONFIRMATION=true`. The two daily renders are serialised so one render does not collide with another. A hard-QA render rejected before any social submission may be replaced once; completed or provider-submitted slots remain duplicate-protected.
 
 The `ai-playbook` lane is prepared in the **Friday AM** operation. Friday PM is podcast-only.
 
