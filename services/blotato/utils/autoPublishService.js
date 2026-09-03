@@ -67,6 +67,7 @@ const MODEL_CREDIT_HINTS = Object.freeze({
     "flux schnell": 1,
     "flux-schnell": 1,
     "replicate/flux-schnell": 1,
+    "replicate/black-forest-labs/flux-schnell": 1,
   },
   video: {
     framepack: 55,
@@ -110,6 +111,12 @@ function sleep(ms) {
 function positiveIntEnv(name, fallback, max = Number.POSITIVE_INFINITY) {
   const parsed = Number(process.env[name]);
   if (!Number.isFinite(parsed) || parsed < 1) return fallback;
+  return Math.min(Math.floor(parsed), max);
+}
+
+function nonNegativeIntEnv(name, fallback, max = Number.POSITIVE_INFINITY) {
+  const parsed = Number(process.env[name]);
+  if (!Number.isFinite(parsed) || parsed < 0) return fallback;
   return Math.min(Math.floor(parsed), max);
 }
 
@@ -532,7 +539,13 @@ async function createAndWaitForVideo({ templateId, templateIdCandidates = [], pa
     videoModel: creditBudget.videoModel,
   });
 
-  const useManualInputs = parseBoolean(process.env.BLOTATO_USE_MANUAL_TEMPLATE_INPUTS, false);
+  const configuredManualInputs = parseBoolean(process.env.BLOTATO_USE_MANUAL_TEMPLATE_INPUTS, true);
+  if (!configuredManualInputs) {
+    warn("blotato.video.create.legacy_prompt_only_setting_ignored", {
+      setting: "BLOTATO_USE_MANUAL_TEMPLATE_INPUTS",
+      reason: "The AI Voice template requires source-grounded manual scenes for production publishing",
+    });
+  }
   const useBrandKit = parseBoolean(process.env.BLOTATO_USE_BRAND_KIT, false);
   const candidates = uniqueTemplateIds(templateId, templateIdCandidates);
   let visual;
@@ -545,7 +558,7 @@ async function createAndWaitForVideo({ templateId, templateIdCandidates = [], pa
         candidateTemplateId,
         visualInputs,
         visualPrompt,
-        manualInputsConfigured: useManualInputs,
+        manualInputsConfigured: true,
         useBrandKit,
       }), apiKey);
       usedTemplateId = candidateTemplateId;
@@ -1170,12 +1183,41 @@ function scheduleDateFromJob(job = {}) {
   return parsed && Number.isFinite(parsed.getTime()) ? londonDateString(parsed) : "";
 }
 
+function jobHasPublicationEvidence(job = {}) {
+  return Boolean(
+    job.postSubmissionId
+      || job.result?.postSubmissionId
+      || job.posts?.length
+      || job.publishes?.length
+      || job.result?.posts?.length
+      || job.result?.publishes?.length
+  );
+}
+
+/**
+ * A rendered video rejected before POST /v2/posts is safe to replace once.
+ * The old implementation treated any paid visual as permanent slot ownership,
+ * which made automated recovery impossible even though no social submission
+ * had occurred. Bound the replacement count so a persistent provider-quality
+ * problem cannot create an unlimited credit loop.
+ */
+export function isReplaceableRenderedQualityFailure(job = {}) {
+  if (job.status !== "failed" || job.phase !== "rendered-quality-failed") return false;
+  if (!job.videoId && !job.mediaUrl && !job.result?.visualId && !job.result?.mediaUrl) return false;
+  if (jobHasPublicationEvidence(job)) return false;
+  const allowedReplacements = nonNegativeIntEnv("BLOTATO_FAILED_RENDER_REPLACEMENTS", 1, 2);
+  const completedAttempts = Math.max(1, Number(job.attempt || 1));
+  return completedAttempts - 1 < allowedReplacements;
+}
+
 function jobOwnsScheduledSlot(job = {}) {
   if (["queued", "running", "completed"].includes(job.status)) return true;
   if (job.status !== "failed") return false;
+  if (isReplaceableRenderedQualityFailure(job)) return false;
   // Once Blotato has created a visual, a blind rerun can create another paid
-  // render. Keep the slot claimed for the day and surface the failed job
-  // instead. Failures before visual creation remain safely retryable.
+  // render. Keep the slot claimed unless this is the one bounded, pre-publish
+  // quality replacement handled above. Failures before visual creation remain
+  // safely retryable.
   return Boolean(job.videoId || job.mediaUrl || job.result?.visualId || job.result?.mediaUrl);
 }
 
@@ -1186,6 +1228,16 @@ async function findExistingScheduledSlotJob(jobType, scheduleSlot, scheduleDate)
     .filter((job) => inferScheduleSlotFromJob(job) === scheduleSlot)
     .filter((job) => scheduleDateFromJob(job) === scheduleDate)
     .filter(jobOwnsScheduledSlot)
+    .sort((a, b) => Date.parse(b.updatedAt || b.createdAt || 0) - Date.parse(a.updatedAt || a.createdAt || 0))[0] || null;
+}
+
+async function findReplaceableScheduledRender(jobType, scheduleSlot, scheduleDate) {
+  if (!scheduleSlot || !scheduleDate) return null;
+  await refreshJobStoreFromState();
+  return getJobsByType(jobType)
+    .filter((job) => inferScheduleSlotFromJob(job) === scheduleSlot)
+    .filter((job) => scheduleDateFromJob(job) === scheduleDate)
+    .filter(isReplaceableRenderedQualityFailure)
     .sort((a, b) => Date.parse(b.updatedAt || b.createdAt || 0) - Date.parse(a.updatedAt || a.createdAt || 0))[0] || null;
 }
 
@@ -1244,6 +1296,7 @@ async function runPublishJob({
   creativeStyle = "",
   scheduleSlot = null,
   scheduleDate = null,
+  failedRenderReplacement = null,
 }) {
   const lane = requireShortLaneConfig(laneSlug);
   const keepAliveLabel = `blotato:${lane.slug}:${sessionId}`;
@@ -1273,6 +1326,7 @@ async function runPublishJob({
       scheduleDate: activeScheduleDate,
       editorialBriefIds: editorialBriefIds(editorialBriefEntries),
       editorialBriefFingerprint: briefFingerprint,
+      failedRenderReplacement,
     });
     const channelPreflight = await runBlotatoStep0Preflight({ platforms, apiKey });
 
@@ -1793,6 +1847,7 @@ async function runPublishJob({
       editorialBriefIds: editorialBriefIds(editorialBriefEntries),
       editorialBriefFingerprint: briefFingerprint,
       briefHandoff,
+      failedRenderReplacement,
     };
 
     completeJob(lane.jobType, sessionId, { result });
@@ -1869,6 +1924,7 @@ export async function triggerPublishNowJob(req = {}, laneSlug = DEFAULT_BLOTATO_
   const lane = requireShortLaneConfig(laneSlug);
   const scheduleSlot = trim(options.scheduleSlot).toLowerCase();
   const scheduleDate = scheduleSlot ? londonDateString(new Date()) : null;
+  let failedRenderReplacement = null;
   if (scheduleSlot) {
     const existing = await findExistingScheduledSlotJob(lane.jobType, scheduleSlot, scheduleDate);
     if (existing) {
@@ -1895,6 +1951,22 @@ export async function triggerPublishNowJob(req = {}, laneSlug = DEFAULT_BLOTATO_
         rss: existing.rss || null,
         job: publicJob,
       };
+    }
+    const replaceable = await findReplaceableScheduledRender(lane.jobType, scheduleSlot, scheduleDate);
+    if (replaceable) {
+      failedRenderReplacement = {
+        sessionId: replaceable.sessionId,
+        visualId: trim(replaceable.videoId || replaceable.result?.visualId) || null,
+        mediaUrl: trim(replaceable.mediaUrl || replaceable.result?.mediaUrl) || null,
+        attempt: Number(replaceable.attempt || 1),
+        reason: "rendered-quality-failed-before-publication",
+      };
+      warn("blotato.schedule.failed_render_replacement", {
+        lane: lane.slug,
+        scheduleSlot,
+        scheduleDate,
+        ...failedRenderReplacement,
+      });
     }
     // Validate the exact provider slot before selecting/reserving content or
     // invoking any AI. A late replay must cost zero and must not invent a new
@@ -1953,6 +2025,16 @@ export async function triggerPublishNowJob(req = {}, laneSlug = DEFAULT_BLOTATO_
       editorialReservation,
       editorialBriefIds: editorialBriefIds(editorialBriefEntries),
       editorialBriefFingerprint: editorialBriefFingerprint(editorialBriefEntries),
+      failedRenderReplacement,
+      // Remove the rejected render from the active job before the daily cap is
+      // evaluated. Its identity remains in failedRenderReplacement for audit.
+      ...(failedRenderReplacement ? {
+        videoId: undefined,
+        videoDashboardUrl: undefined,
+        mediaUrl: undefined,
+        renderedVideoQa: undefined,
+        result: undefined,
+      } : {}),
     }));
   } catch (error) {
     if (editorialReservation) releaseEditorialReservation(editorialReservation);
@@ -1976,6 +2058,7 @@ export async function triggerPublishNowJob(req = {}, laneSlug = DEFAULT_BLOTATO_
     editorialBriefIds: editorialBriefIds(editorialBriefEntries),
     editorialBriefFingerprint: editorialBriefFingerprint(editorialBriefEntries),
     job: publicJob,
+    failedRenderReplacement,
   };
 
   if (!started) {
@@ -2004,6 +2087,7 @@ export async function triggerPublishNowJob(req = {}, laneSlug = DEFAULT_BLOTATO_
     creativeStyle: options.creativeStyle || "",
     scheduleSlot: scheduleSlot || null,
     scheduleDate,
+    failedRenderReplacement,
   });
   if (parseBoolean(process.env.BLOTATO_INLINE_PUBLISH_JOBS, false)) {
     await run();

@@ -2,6 +2,7 @@ import { warn } from "../../../logger.js";
 import { AMERICAN_TO_BRITISH } from "../../content-quality/brandLexicon.js";
 import { resilientRequest } from "../../shared/utils/ai-service.js";
 import { createVisual } from "./blotatoClient.js";
+import { buildVisualCreationRequest } from "./visualRequest.js";
 import { DEFAULT_BLOTATO_SHORT_LANE, requireShortLaneConfig, getShortLaneConfig } from "./shortLanes.js";
 import { buildBlotatoPersona } from "../../script/utils/toneSetter.js";
 import { jonathanVoicePrompt } from "../../content-quality/jonathanVoice.js";
@@ -29,6 +30,22 @@ const DEFAULT_DURATION_SECONDS = 45;
 const LOW_COST_IMAGE_MODEL_LABEL = process.env.BLOTATO_LOW_COST_IMAGE_MODEL_LABEL || "flux schnell";
 const LOW_COST_VIDEO_MODEL_LABEL = process.env.BLOTATO_LOW_COST_VIDEO_MODEL_LABEL || "framepack";
 const BLOTATO_IMAGE_PROMPT_PROFILE = cleanPromptProfile(process.env.BLOTATO_IMAGE_PROMPT_PROFILE || "flux-schnell");
+const DEFAULT_AI_STORY_IMAGE_MODEL = "replicate/black-forest-labs/flux-schnell";
+
+function normaliseAiStoryImageModel(value = "") {
+  const raw = String(value || "").trim();
+  const key = raw.toLowerCase().replace(/[_\s]+/g, "-");
+  if (["flux-schnell", "replicate/flux-schnell", "replicate/black-forest-labs/flux-schnell"].includes(key)) {
+    return DEFAULT_AI_STORY_IMAGE_MODEL;
+  }
+  return raw || DEFAULT_AI_STORY_IMAGE_MODEL;
+}
+
+const AI_STORY_IMAGE_MODEL = normaliseAiStoryImageModel(
+  process.env.BLOTATO_AI_IMAGE_MODEL
+    || process.env.BLOTATO_TEXT_TO_IMAGE_MODEL
+    || LOW_COST_IMAGE_MODEL_LABEL
+);
 
 // Gap 5: automated hook expert review. Set BLOTATO_HOOK_VARIANTS=2 to request an alternate
 // hook candidate and run an automated strength comparison. Zero manual interaction required.
@@ -869,6 +886,7 @@ export function buildBlotatoVideoInputs(pack = {}) {
   return {
     scenes,
     voiceName: AI_STORY_VOICE,
+    aiImageModel: AI_STORY_IMAGE_MODEL,
     captionPosition: AI_STORY_CAPTION_POSITION,
     highlightColor: AI_STORY_HIGHLIGHT,
     transition: AI_STORY_TRANSITION,
@@ -1391,21 +1409,28 @@ export async function buildOrCreateShortLane(options = {}) {
   const pack = await buildShortLanePack({ ...options, lane: laneConfig.slug });
   const visualPrompt = buildBlotatoVisualPrompt(pack);
   const visualInputs = buildBlotatoVideoInputs(pack);
-  // Always build visualInputs from the pack. Keep model choice out of the inputs
-  // object unless Blotato exposes it in the template schema; unsupported fields
-  // are easy for the API to ignore, which creates silent credit burn.
+  // Always build source-grounded manual inputs from the pack. Route this
+  // lower-level create endpoint through the same documented template contract
+  // as the scheduled publisher so neither path can silently fall back to
+  // prompt-autofill or send AIMS-only editorial metadata to Blotato.
   const callerInputs = options.inputs && Object.keys(options.inputs).length > 0 ? options.inputs : {};
   const mergedInputs = {
     ...visualInputs,
     ...callerInputs,
   };
-  const visualRequest = {
-    templateId: options.templateId,
-    inputs: mergedInputs,
-    prompt: visualPrompt,
-    render: options.render ?? true,
-    isDraft: options.isDraft ?? false,
-  };
+  const visualRequest = options.templateId
+    ? {
+        ...buildVisualCreationRequest({
+          candidateTemplateId: options.templateId,
+          visualInputs: mergedInputs,
+          visualPrompt,
+          manualInputsConfigured: true,
+          useBrandKit: options.useBrandKit === true,
+        }),
+        render: options.render ?? true,
+        isDraft: options.isDraft ?? false,
+      }
+    : null;
 
   if (!options.createVisual || options.dryRun) {
     return {
@@ -1417,8 +1442,14 @@ export async function buildOrCreateShortLane(options = {}) {
       pack,
       visualPrompt,
       visualInputs,
-      visualRequest: options.templateId ? visualRequest : null,
+      visualRequest,
     };
+  }
+
+  if (!visualRequest) {
+    const error = new Error("Blotato template ID is required when createVisual is enabled");
+    error.statusCode = 400;
+    throw error;
   }
 
   const visual = await createVisual(visualRequest, options.apiKey);

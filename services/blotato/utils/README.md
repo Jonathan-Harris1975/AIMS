@@ -21,9 +21,9 @@ Immediate-publish compatibility routes remain disabled in production unless `BLO
 
 The five weekday short lanes are `news-insight`, `model-verdict`, `ai-at-work`, `reality-check` and `ai-playbook`. AutoShorts rotates through 48 visual/story styles. Finished duration is 35-55 seconds with a 45-second default target.
 
-The service checks hook strength, narrative continuity, source relevance, scene progression, human presence, caption legibility and finished media quality. The final MP4 is inspected before scheduling. Provider submission state is polled rather than assuming acceptance means publication.
+The service checks hook strength, narrative continuity, source relevance, scene progression, human presence, caption legibility and finished media quality. The final MP4 is inspected before scheduling. The approved five-scene storyboard is sent through the AI Voice template's documented manual scene inputs, so prompt autofill cannot replace it with generic visuals. Provider submission state is polled rather than assuming acceptance means publication.
 
-Production defaults require every configured channel and scheduling confirmation: `BLOTATO_REQUIRE_ALL_CHANNELS=true` and `BLOTATO_REQUIRE_SCHEDULE_CONFIRMATION=true`. The two daily renders are serialised so one render does not collide with another.
+Production defaults require every configured channel and scheduling confirmation: `BLOTATO_REQUIRE_ALL_CHANNELS=true` and `BLOTATO_REQUIRE_SCHEDULE_CONFIRMATION=true`. The two daily renders are serialised so one render does not collide with another. One hard-QA failure before provider submission may replace its rejected render; submitted and completed slots remain duplicate-protected.
 
 The `ai-playbook` lane is prepared in the **Friday AM** operation. Friday PM is podcast-only.
 
