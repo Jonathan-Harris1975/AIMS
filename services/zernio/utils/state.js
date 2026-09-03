@@ -137,15 +137,43 @@ export async function claimScheduleSlot(input = {}) {
     if (existing.key !== key) {
       slotClaims[existingIndex] = { ...existing, key };
     }
+    if (existing.state === "completed") {
+      state.slotClaims = slotClaims;
+      writeZernioState(state);
+      return {
+        claimed: false,
+        duplicatePrevented: true,
+        key,
+        state: "completed",
+        reason: "same-slot-already-completed",
+        existing,
+      };
+    }
+
+    // An in-process owner is caught by activeSlotClaims above. A persisted
+    // pending claim with no active owner is therefore an orphan left by a
+    // restart/timeout. Reclaim it and reuse the same canonical slot key; the
+    // key also seeds Zernio's stable x-request-id, so an uncertain provider
+    // hand-off remains idempotent instead of being abandoned for two hours.
+    const reclaimed = {
+      ...makeSlotClaim(input, "pending"),
+      key,
+      reclaimedFrom: {
+        createdAt: existing.createdAt || null,
+        updatedAt: existing.updatedAt || null,
+      },
+    };
+    activeSlotClaims.add(key);
+    slotClaims[existingIndex] = reclaimed;
     state.slotClaims = slotClaims;
     writeZernioState(state);
     return {
-      claimed: false,
-      duplicatePrevented: true,
+      claimed: true,
+      duplicatePrevented: false,
       key,
-      state: existing.state || "pending",
-      reason: existing.state === "completed" ? "same-slot-already-completed" : "same-slot-already-claimed",
-      existing,
+      state: "pending",
+      claim: reclaimed,
+      recoveredOrphanedClaim: true,
     };
   }
 

@@ -8,7 +8,7 @@ import { loadRecentRssContext } from "./feedContext.js";
 import { fetchBlogRssItems } from "./blogRssFeed.js";
 import { fetchPodcastPromoEpisode } from "./podcastRssFeed.js";
 import { getLaneHistory, getWeeklyTopicLedger, recordLaneSchedule, getQuizHistory, recordQuizSchedule, claimScheduleSlot, resetScheduleSlotClaim, completeScheduleSlot, releaseScheduleSlot, clearScheduleSlotClaim, isRecentSpotlightPerson, recordSpotlightPerson, hasRecentSocialSource, recordUsedSocialSource } from "./state.js";
-import { resolveProfile, inspectZernioTargeting, listPosts, createPost, deletePost, getZernioApiKey } from "./zernioClient.js";
+import { resolveProfile, inspectZernioTargeting, listPosts, getPost, createPost, deletePost, getZernioApiKey } from "./zernioClient.js";
 import getSponsor from "../../script/utils/getSponsor.js";
 import { resolveFeaturedEbook } from "./ebookCatalogue.js";
 import { runPhase5OrganicGrowthGate } from "../../content-quality/phase5OrganicGrowthGates.js";
@@ -830,6 +830,13 @@ export function resolveZernioScheduledDateTime(scheduledDateTime, now = new Date
 }
 
 export function verifyZernioScheduleResponse(response = {}, expectedScheduledDateTime = "") {
+  // Zernio returns `existingPost` when a retry reuses the same x-request-id.
+  // A late recovery recalculates its safe future time, so that original post
+  // can legitimately retain an earlier scheduledFor value. The provider has
+  // already identified it as the same logical request; rejecting it solely on
+  // that time difference turns a successful idempotent hand-off into a failed
+  // lane and leaves the local slot pending.
+  const idempotentReplay = Boolean(response?.existingPost || response?.data?.existingPost);
   const record = response?.post || response?.existingPost || response?.item || response?.data?.post || response?.data?.existingPost || response?.data || response || {};
   const id = String(record?._id || record?.id || record?.postId || response?.postId || "").trim();
   const status = String(record?.status || record?.state || record?.publishStatus || response?.status || "").trim().toLowerCase();
@@ -841,7 +848,10 @@ export function verifyZernioScheduleResponse(response = {}, expectedScheduledDat
     ? true
     : remoteMs !== null && Math.abs(remoteMs - expectedMs) <= toleranceMs;
   const failed = ZERNIO_SCHEDULE_FAILED_STATUSES.has(status);
-  const accepted = Boolean(id) && !failed && ZERNIO_SCHEDULE_ACCEPTED_STATUSES.has(status) && timeMatches;
+  const accepted = Boolean(id)
+    && !failed
+    && ZERNIO_SCHEDULE_ACCEPTED_STATUSES.has(status)
+    && (timeMatches || idempotentReplay);
   return {
     accepted,
     id: id || null,
@@ -849,11 +859,104 @@ export function verifyZernioScheduleResponse(response = {}, expectedScheduledDat
     expectedScheduledDateTime: expectedScheduledDateTime || null,
     remoteScheduledFor: remoteScheduledFor || null,
     timeMatches,
+    idempotentReplay,
+    replayTimeDifferenceAccepted: Boolean(idempotentReplay && !timeMatches && accepted),
     failed,
   };
 }
 
-async function scheduleToZernio({ post, scheduledDateTime, profileName, accountId, dryRun, apiKey, preflightOnly = false, laneKey = "", dedupeWindowHours, idempotencySeed = "" }) {
+function zernioPostRecord(response = {}) {
+  return response?.post
+    || response?.existingPost
+    || response?.item
+    || response?.data?.post
+    || response?.data?.existingPost
+    || response?.data
+    || response
+    || {};
+}
+
+function duplicateConflictPostId(error = {}) {
+  if (Number(error?.statusCode || error?.status) !== 409) return "";
+  const payload = error?.details && typeof error.details === "object" ? error.details : {};
+  return String(
+    payload?.details?.existingPostId
+      || payload?.existingPostId
+      || error?.existingPostId
+      || ""
+  ).trim();
+}
+
+function postMediaUrls(record = {}) {
+  return [
+    ...(Array.isArray(record?.mediaItems) ? record.mediaItems.map((item) => item?.url || item?.mediaUrl) : []),
+    ...(Array.isArray(record?.mediaUrls) ? record.mediaUrls : []),
+    ...(Array.isArray(record?.media) ? record.media.map((item) => item?.url || item?.mediaUrl) : []),
+  ].map((value) => String(value || "").trim()).filter(Boolean);
+}
+
+async function reconcileZernioDuplicateConflict({ error, post, scheduledDateTime, targetAccountIds, apiKey }) {
+  const existingPostId = duplicateConflictPostId(error);
+  if (!existingPostId) return null;
+
+  const existingResponse = await getPost(existingPostId, apiKey);
+  const record = zernioPostRecord(existingResponse);
+  const verification = verifyZernioScheduleResponse(existingResponse, scheduledDateTime);
+  const status = String(record?.status || record?.state || "").trim().toLowerCase();
+  const lifecycleAccepted = ["scheduled", "publishing", "published"].includes(status);
+  const requestedAccountIds = [...new Set((targetAccountIds || []).map((id) => String(id || "").trim()).filter(Boolean))];
+  const existingAccountIds = queuedItemAccountIds(record);
+  const accountCoverage = requestedAccountIds.every((id) => existingAccountIds.has(id));
+  const contentMatches = Boolean(post?.content)
+    && Boolean(record?.content)
+    && contentHash(record.content) === contentHash(post.content);
+  const existingMediaUrls = postMediaUrls(record);
+  // Some Zernio response projections omit media. When media is present it
+  // must match; when omitted, the provider's content+media conflict remains
+  // the authoritative equality signal.
+  const mediaMatches = !post?.imageUrl
+    || existingMediaUrls.length === 0
+    || existingMediaUrls.includes(String(post.imageUrl).trim());
+  const expectedMs = normaliseScheduledTimestamp(scheduledDateTime);
+  const remoteMs = normaliseScheduledTimestamp(record?.scheduledFor || record?.scheduledAt || "");
+  const toleranceMs = Math.max(
+    5 * 60_000,
+    Number(process.env.ZERNIO_DUPLICATE_RECONCILIATION_TOLERANCE_MS || 60 * 60_000)
+  );
+  const scheduleClose = expectedMs !== null
+    && remoteMs !== null
+    && Math.abs(remoteMs - expectedMs) <= toleranceMs;
+
+  if (!lifecycleAccepted || !accountCoverage || !contentMatches || !mediaMatches || !scheduleClose) {
+    error.zernioDuplicateReconciliation = {
+      existingPostId,
+      status: status || null,
+      lifecycleAccepted,
+      accountCoverage,
+      missingAccountIds: requestedAccountIds.filter((id) => !existingAccountIds.has(id)),
+      contentMatches,
+      mediaMatches,
+      scheduleClose,
+      remoteScheduledFor: record?.scheduledFor || record?.scheduledAt || null,
+      expectedScheduledDateTime: scheduledDateTime,
+      toleranceMs,
+    };
+    return null;
+  }
+
+  return {
+    existingPostId,
+    existingResponse,
+    verification: {
+      ...verification,
+      accepted: true,
+      duplicateConflictReconciled: true,
+      reconciliationTimeMatches: scheduleClose,
+    },
+  };
+}
+
+export async function scheduleToZernio({ post, scheduledDateTime, profileName, accountId, dryRun, apiKey, preflightOnly = false, laneKey = "", dedupeWindowHours, idempotencySeed = "" }) {
   const warnings = [];
   const scheduleResolution = resolveZernioScheduledDateTime(scheduledDateTime, new Date(), { laneKey });
   const effectiveScheduledDateTime = scheduleResolution.scheduledDateTime;
@@ -998,8 +1101,46 @@ async function scheduleToZernio({ post, scheduledDateTime, profileName, accountI
     ...(post.imageUrl ? { mediaItems: [{ type: "image", url: post.imageUrl }] } : {}),
   };
 
-  const zernioResponse = await createPost(payload, apiKey, { idempotencySeed });
+  let zernioResponse;
+  try {
+    zernioResponse = await createPost(payload, apiKey, { idempotencySeed });
+  } catch (error) {
+    const reconciled = await reconcileZernioDuplicateConflict({
+      error,
+      post,
+      scheduledDateTime: effectiveScheduledDateTime,
+      targetAccountIds,
+      apiKey,
+    });
+    if (!reconciled) throw error;
+
+    warnings.push(`Zernio confirmed that the same post is already present as ${reconciled.existingPostId}; no duplicate was created.`);
+    info("zernio.schedule.duplicate_reconciled", {
+      laneKey: laneKey || null,
+      existingPostId: reconciled.existingPostId,
+      scheduledDateTime: effectiveScheduledDateTime,
+      targetedAccountCount: targetAccountIds.length,
+    });
+    return {
+      scheduled: false,
+      dryRun: false,
+      duplicatePrevented: true,
+      providerAcceptedExisting: true,
+      warnings,
+      zernioResponse: reconciled.existingResponse,
+      scheduleVerification: reconciled.verification,
+      scheduleResolution,
+      scheduledDateTime: effectiveScheduledDateTime,
+      profile,
+      targeting,
+    };
+  }
   const scheduleVerification = verifyZernioScheduleResponse(zernioResponse, effectiveScheduledDateTime);
+  if (scheduleVerification.replayTimeDifferenceAccepted) {
+    warnings.push(
+      `Zernio returned the original scheduled post for this idempotent retry (${scheduleVerification.remoteScheduledFor}); no duplicate was created.`
+    );
+  }
   const requireConfirmation = booleanValue(process.env.ZERNIO_REQUIRE_SCHEDULE_CONFIRMATION, true);
   if (requireConfirmation && !scheduleVerification.accepted) {
     const err = new Error(
@@ -1593,7 +1734,7 @@ export async function buildAndScheduleDailyLane(laneKey, options = {}) {
         date: publishDate,
         prompt: imagePrompt,
         fallbackUrl: lane.imageUrl,
-        allowFallback: true,
+        allowFallback: booleanValue(process.env.ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK, false),
       });
 
       if (!artwork?.ok || !artwork.publicUrl) {
@@ -2457,7 +2598,7 @@ export async function buildAndScheduleWeeklyMiniSeries(options = {}) {
           "No visible text, labels, logos or typography.",
         ].join("\n"),
         fallbackUrl: MINI_SERIES_CONFIG.fallbackImageUrl,
-        allowFallback: true,
+        allowFallback: booleanValue(process.env.ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK, false),
       });
       if (!artwork?.ok || !artwork.publicUrl) {
         const errorMessage = artwork?.error || `Mini-series part ${item.index + 1} did not produce a usable image.`;
@@ -2913,7 +3054,7 @@ export async function buildAndSchedulePodcastThursdayPromo(options = {}) {
         "Avoid generic glowing brains, circuit-head silhouettes, floating decorative networks, stock-office scenes and decorative AI wallpaper.",
       ].filter(Boolean).join("\n"),
       fallbackUrl: PODCAST_PROMO_CONFIG.fallbackImageUrl,
-      allowFallback: true,
+      allowFallback: booleanValue(process.env.ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK, false),
     });
     if (!artwork.ok || !artwork.publicUrl) {
       const err = new Error(`Thursday podcast promotion artwork unavailable: ${artwork.error || "no usable image URL returned"}`);

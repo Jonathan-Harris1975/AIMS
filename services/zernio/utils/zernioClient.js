@@ -331,6 +331,16 @@ export async function createPost(body, apiKey, options = {}) {
   return zernioPost("posts", body, apiKey, options);
 }
 
+export async function getPost(postId, apiKey) {
+  const id = trimString(postId);
+  if (!id) {
+    const err = new Error("Zernio post ID is required");
+    err.statusCode = 400;
+    throw err;
+  }
+  return zernioGet(`posts/${encodeURIComponent(id)}`, {}, apiKey);
+}
+
 export async function deletePost(postId, apiKey) {
   const id = trimString(postId);
   if (!id) {
