@@ -213,6 +213,49 @@ function buildQaRepairPrompt(prompt, qa = {}) {
   ].join(" ");
 }
 
+function boundedQaFloor(value, fallback) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? Math.max(0, Math.min(100, parsed)) : fallback;
+}
+
+function socialAdvisoryFloors() {
+  return {
+    minScore: boundedQaFloor(process.env.SOCIAL_ARTWORK_VISUAL_QA_ADVISORY_MIN_SCORE, 55),
+    minRelevance: boundedQaFloor(process.env.SOCIAL_ARTWORK_VISUAL_QA_ADVISORY_MIN_RELEVANCE, 60),
+    minTextSafety: boundedQaFloor(process.env.SOCIAL_ARTWORK_VISUAL_QA_ADVISORY_MIN_TEXT_SAFETY, 60),
+  };
+}
+
+function candidateRank(candidate = {}) {
+  const qa = candidate.qa || {};
+  // Overall score and relevance dominate. Composition breaks the observed
+  // same-score ties before speculative text-safety deductions do.
+  return (Number(qa.score || 0) * 1_000_000)
+    + (Number(qa.relevance || 0) * 10_000)
+    + (Number(qa.composition || 0) * 100)
+    + (Number(qa.brandFit || 0) * 10)
+    + Number(qa.textSafety || 0);
+}
+
+/**
+ * Both configured image providers may return a good, relevant social image
+ * that misses only subjective composition/brand scoring. Keep hard pixel
+ * defects blocking, but after all providers have been tried prefer the best
+ * hard-defect-free generated candidate over a static lane fallback.
+ */
+export function selectPublishableSocialArtworkCandidate(candidates = [], options = {}) {
+  const enabled = options.enabled ?? parseBoolean(process.env.SOCIAL_ARTWORK_VISUAL_QA_ALLOW_SOFT_FAILURES, true);
+  if (!enabled) return null;
+  const floors = { ...socialAdvisoryFloors(), ...(options.floors || {}) };
+  return (Array.isArray(candidates) ? candidates : [])
+    .filter((candidate) => candidate?.base64 && candidate?.qa)
+    .filter((candidate) => (candidate.qa.hardDefects || []).length === 0)
+    .filter((candidate) => Number(candidate.qa.score || 0) >= floors.minScore)
+    .filter((candidate) => Number(candidate.qa.relevance || 0) >= floors.minRelevance)
+    .filter((candidate) => Number(candidate.qa.textSafety || 0) >= floors.minTextSafety)
+    .sort((left, right) => candidateRank(right) - candidateRank(left))[0] || null;
+}
+
 async function requestArtworkFromProvider(provider, prompt, mode, date, { useShortInstruction = false, signal, generationKey = "artwork", variation = "initial" } = {}) {
   const baseInstruction = useShortInstruction ? buildShortInstruction(prompt, mode, date) : buildInstruction(prompt, mode, date);
   const instruction = buildModelAwareArtworkPrompt({
@@ -313,6 +356,15 @@ async function requestArtworkFromProvider(provider, prompt, mode, date, { useSho
             const err = new Error(`Generated ${mode} artwork failed visual QA (${qa.score}/${qa.threshold}): ${[...(qa.hardDefects || []), ...(qa.defects || [])].join(" | ") || qa.summary}`);
             err.statusCode = 422;
             err.artworkVisualQa = qa;
+            err.artworkCandidate = {
+              base64: image,
+              qa,
+              provider: {
+                id: provider.id,
+                model: provider.model,
+                modelEnv: provider.modelEnv,
+              },
+            };
             throw err;
           }
 
@@ -378,6 +430,7 @@ async function generateArtworkBase64(prompt, { mode = "podcast", date, signal, g
   }
 
   let lastError;
+  const qaCandidates = [];
 
   for (const provider of providers) {
     if (signal?.aborted) throw signal.reason instanceof Error ? signal.reason : new Error("Artwork generation aborted");
@@ -393,6 +446,7 @@ async function generateArtworkBase64(prompt, { mode = "podcast", date, signal, g
       return image;
     } catch (e) {
       lastError = e;
+      if (e?.artworkCandidate) qaCandidates.push(e.artworkCandidate);
       error("Artwork provider failed", {
         provider: provider.id,
         modelEnv: provider.modelEnv,
@@ -421,6 +475,7 @@ async function generateArtworkBase64(prompt, { mode = "podcast", date, signal, g
         return image;
       } catch (e) {
         lastError = e;
+        if (e?.artworkCandidate) qaCandidates.push(e.artworkCandidate);
         error("Artwork provider failed on shortened-prompt retry", {
           provider: provider.id,
           modelEnv: provider.modelEnv,
@@ -430,6 +485,25 @@ async function generateArtworkBase64(prompt, { mode = "podcast", date, signal, g
           mode,
         });
       }
+    }
+  }
+
+  if (String(mode || "").toLowerCase() === "social") {
+    const selected = selectPublishableSocialArtworkCandidate(qaCandidates);
+    if (selected) {
+      info("artwork.visual_qa.soft_candidate_accepted", {
+        mode,
+        provider: selected.provider?.id || null,
+        model: selected.provider?.model || null,
+        score: selected.qa.score,
+        threshold: selected.qa.threshold,
+        relevance: selected.qa.relevance,
+        textSafety: selected.qa.textSafety,
+        composition: selected.qa.composition,
+        brandFit: selected.qa.brandFit,
+        hardDefects: selected.qa.hardDefects || [],
+      });
+      return selected.base64;
     }
   }
 
