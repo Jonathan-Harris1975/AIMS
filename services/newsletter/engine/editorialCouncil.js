@@ -140,7 +140,8 @@ export async function runNewsletterEditorialCouncil({ profile, newsletter, lead,
     const sourceReview = await runReviewer(
       "newsletterFactCheck",
       "Source Integrity and Fact-Checking Reviewer",
-      "Check every factual assertion against the supplied source summaries. Flag invented detail, unsupported certainty, source/title mismatch, and opinion presented as fact. Treat source fidelity as a hard gate.",
+      "Check every factual assertion against the supplied source summaries. Flag invented detail, unsupported certainty, source/title mismatch, and opinion presented as fact. \
+Treat source fidelity as a hard gate.",
       { draft, sources },
       sessionId
     );
@@ -148,7 +149,8 @@ export async function runNewsletterEditorialCouncil({ profile, newsletter, lead,
     const voiceReview = await runReviewer(
       "newsletterVoiceReview",
       "Jonathan Harris Voice and Editorial Reviewer",
-      "Judge British English, sceptical Gen-X judgement, clarity, authority, restraint, natural first-person commentary and absence of generic AI copy. Jonathan's take should add judgement rather than repeat the summary.",
+      "Judge British English, sceptical Gen-X judgement, clarity, authority, restraint, natural first-person commentary and absence of generic AI copy. Jonathan's take should \
+add judgement rather than repeat the summary.",
       { profile: { displayName: profile.displayName, brandVoice: profile.brandVoice }, draft },
       sessionId
     );
@@ -156,7 +158,8 @@ export async function runNewsletterEditorialCouncil({ profile, newsletter, lead,
     const readerReview = await runReviewer(
       "newsletterAudienceReview",
       "Audience Value and Newsletter Performance Reviewer",
-      "Judge five-minute scanability, hierarchy, usefulness, subject/preview strength, Big Three selection, Worth Using value, On the Radar compression, Reality Check distinctiveness, reader question quality and whether any promotion overwhelms editorial content.",
+      "Judge five-minute scanability, hierarchy, usefulness, subject/preview strength, Big Three selection, Worth Using value, On the Radar compression, Reality Check \
+distinctiveness, reader question quality and whether any promotion overwhelms editorial content.",
       { draft },
       sessionId
     );

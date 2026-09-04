@@ -119,13 +119,16 @@ export async function composeIssueSections({ profile, lead, stories, sessionId, 
         `You are the senior editor writing "${profile.displayName}". The reader promise is: ` +
         "we filtered the noise and kept only what deserves attention. Build a compact five-minute issue.\n\n" +
         brandGuardrails(profile) +
-        "\n\nChoose exactly three Big Three stories from the supplied sources. They should form the strongest coherent editorial theme available rather than simply taking the first three ranked items. " +
+        "\n\nChoose exactly three Big Three stories from the supplied sources. They should form the strongest coherent editorial theme available rather than simply taking the \
+first three ranked items. " +
         "Each Big Three item MUST return the exact sourceId it uses. Choose one different source for Worth Using/Watching only when it offers genuine practical value; otherwise use Worth Watching. " +
         "Use no more than five additional unused sources for On the Radar. Every On the Radar item MUST carry the exact sourceId it summarises. Never attach a summary to a different source. " +
         "Reality Check may interrogate any supplied source, including a Big Three source, but MUST return that sourceId so its link can be attached deterministically. " +
         "The opening note is 35-65 words and sounds like Jonathan, not a masthead. The reader question should invite a substantive response.\n\n" +
         "Respond with ONLY valid JSON using this shape: " +
-        '{"heroHeadline":string,"openingNoteHtml":string,"bigThree":[{"sourceId":string,"whatHappened":string,"whyItMatters":string,"jonathanTake":string}],"worthUsing":{"sourceId":string,"label":string,"summary":string,"whyUseful":string},"onRadar":[{"sourceId":string,"summary":string}],"realityCheck":{"sourceId":string,"claim":string,"assessment":string},"yourTurn":string}. ' +
+        '{"heroHeadline":string,"openingNoteHtml":string,"bigThree":[{"sourceId":string,"whatHappened":string,"whyItMatters":string,"jonathanTake":string}],"worthUsing":\
+{"sourceId":string,"label":string,"summary":string,"whyUseful":string},"onRadar":[{"sourceId":string,"summary":string}],"realityCheck":{"sourceId":string,"claim":string,\
+"assessment":string},"yourTurn":string}. ' +
         "openingNoteHtml must be one <p> paragraph. No other field may contain HTML.",
     },
     {
@@ -273,7 +276,8 @@ export async function composeSubjectAndPreview({ profile, heroHeadline, bigThree
     },
   ];
 
-  const raw = await resilientRequest("newsletterSubject", { sessionId, messages, max_tokens: 500, reasoning: { effort: "none", exclude: true }, response_format: strictJsonResponseFormat("newsletter_subject_preview", SUBJECT_PREVIEW_SCHEMA) });
+  const raw = await resilientRequest("newsletterSubject", { sessionId, messages, max_tokens: 500, reasoning: { effort: "none", exclude: true }, response_format:
+     strictJsonResponseFormat("newsletter_subject_preview", SUBJECT_PREVIEW_SCHEMA) });
   const parsed = parseJsonResponse(raw, "composeSubjectAndPreview");
   if (!parsed.ok) return { ok: false, error: parsed.error };
   return {

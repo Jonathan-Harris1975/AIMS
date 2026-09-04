@@ -68,7 +68,8 @@ export function validateStructuralCompleteness(newsletter, { expectedStoryCount,
   if (!newsletter.realityCheck?.assessment) issues.push({ code: "missing_reality_check", message: "Reality Check is missing." });
   if (!newsletter.yourTurn) issues.push({ code: "missing_reader_question", message: "Your Turn reader question is missing." });
   const uniqueLinks = new Set(sourceLinks(newsletter));
-  if (expectedStoryCount && uniqueLinks.size < expectedStoryCount) issues.push({ code: "story_count_short", message: `Only ${uniqueLinks.size} of ${expectedStoryCount} expected source stories are represented.` });
+  if (expectedStoryCount && uniqueLinks.size < expectedStoryCount) issues.push({ code: "story_count_short", message:
+     `Only ${uniqueLinks.size} of ${expectedStoryCount} expected source stories are represented.` });
   return { pass: issues.length === 0, issues };
 }
 
@@ -117,4 +118,5 @@ export function runDeterministicValidators(newsletter, { expectedStoryCount, req
   return { pass: issues.length === 0, issues };
 }
 
-export default { validateBannedPhrases, validateBritishSpelling, validateSubjectLength, validateStructuralCompleteness, validateNoDuplicateStories, validateLinks, validatePromotion, runDeterministicValidators };
+export default { validateBannedPhrases, validateBritishSpelling, validateSubjectLength, validateStructuralCompleteness, validateNoDuplicateStories, validateLinks,
+   validatePromotion, runDeterministicValidators };
