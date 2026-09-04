@@ -35,10 +35,14 @@ function intake(formKey = "case_study") {
 }
 
 const substantiveFacts = [
-  { label: "What changed?", value: "We introduced a staged AI triage workflow across a six-week pilot, measured the baseline first, then compared handling time, error rates and operator interventions every week. The strongest improvement came from keeping human review on ambiguous cases rather than trying to automate every decision." },
-  { label: "What should readers learn?", value: "The practical lesson is to begin with a narrow workflow, define measurable success criteria, retain a clear human escalation path and review the evidence before expanding automation. That makes the story useful beyond a single organisation and avoids presenting a pilot result as a universal claim." },
-  { label: "What was difficult?", value: "The main difficulty was inconsistent source data. We had to standardise intake fields and create an exception queue before the automation became dependable enough for day-to-day use." },
-  { label: "What would you do differently?", value: "I would spend more time on the baseline and exception taxonomy before choosing the model, because those decisions had more impact on operational quality than model selection alone." },
+  { label: "What changed?", value: "We introduced a staged AI triage workflow across a six-week pilot, measured the baseline first, then compared handling time, error rates \
+and operator interventions every week. The strongest improvement came from keeping human review on ambiguous cases rather than trying to automate every decision." },
+  { label: "What should readers learn?", value: "The practical lesson is to begin with a narrow workflow, define measurable success criteria, retain a clear human escalation \
+path and review the evidence before expanding automation. That makes the story useful beyond a single organisation and avoids presenting a pilot result as a universal claim." },
+  { label: "What was difficult?", value: "The main difficulty was inconsistent source data. We had to standardise intake fields and create an exception queue before the \
+automation became dependable enough for day-to-day use." },
+  { label: "What would you do differently?", value: "I would spend more time on the baseline and exception taxonomy before choosing the model, because those decisions had more \
+impact on operational quality than model selection alone." },
   { label: "Evidence", value: "The submission describes measured internal pilot observations and does not ask Jonathan to present unsupported numbers or guaranteed outcomes." },
   { label: "Audience", value: "Operations leaders evaluating practical AI adoption who need a grounded example of where automation helped, where it did not, and how human oversight was retained." },
 ];
@@ -75,8 +79,10 @@ test("quality gate selects exactly one best-fit lane and persists an auditable s
   const service = new CommsHubContentAutomationService({
     context: {
       config: contentConfig(),
-      operationsRepository: { async getFormProcessing() { return { form_key: "case_study", form_id: "262063136008044", submission_id: "sub-content-1", digest: { formKey: "case_study", facts: substantiveFacts } }; } },
-      aiWorkflowService: { async assessContentSubmission() { return { coherence: .94, narrativeStrength: .86, brandFit: .96, factualRisk: .04, selectedLane: "blog", rationale: "Practical, substantial how-to case study." }; } },
+      operationsRepository: { async getFormProcessing() { return { form_key: "case_study", form_id: "262063136008044", submission_id: "sub-content-1", digest: { formKey:
+         "case_study", facts: substantiveFacts } }; } },
+      aiWorkflowService: { async assessContentSubmission() { return { coherence: .94, narrativeStrength: .86, brandFit: .96, factualRisk: .04, selectedLane: "blog", rationale:
+         "Practical, substantial how-to case study." }; } },
       auditService: { async record(entry) { audits.push(entry); } },
       notificationService: { async create() {} },
     },
@@ -146,7 +152,8 @@ test("latest Comms Hub migration keeps autonomous policies active at the shared 
   const db = new DatabaseSync(":memory:");
   for (const name of COMMS_HUB_REQUIRED_MIGRATIONS) db.exec(readFileSync(new URL(`../services/comms-hub/migrations/${name}.sql`, import.meta.url), "utf8"));
   assert.ok(COMMS_HUB_REQUIRED_MIGRATIONS.includes("0020_professional_autonomous_comms"));
-  const rows = db.prepare("SELECT policy_key, minimum_confidence, status FROM comms_hub_autonomous_reply_policies WHERE policy_key IN ('full-chat-low-risk','full-email-low-risk','full-social-low-risk') ORDER BY policy_key").all();
+  const rows = db.prepare("SELECT policy_key, minimum_confidence, status FROM comms_hub_autonomous_reply_policies WHERE policy_key IN ('full-chat-low-risk','full-email-low-\
+risk','full-social-low-risk') ORDER BY policy_key").all();
   assert.equal(rows.length, 3);
   assert.ok(rows.every((row) => row.minimum_confidence === .86 && row.status === "active"));
 });

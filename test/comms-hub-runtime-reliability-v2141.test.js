@@ -63,7 +63,8 @@ test("social polling passes the full runtime context into inbound automation", a
 
   const worker = new CommsHubSocialPollWorker({ context, writeLog: async () => {} });
   const freshSince = new Date(Date.now() - 60_000).toISOString();
-  const result = await worker.pollConversationJob({ credential_family: "meta", platform: "facebook", last_success_at: freshSince, fresh_since_at: freshSince }, context.zernio.meta, new Date().toISOString());
+  const result = await worker.pollConversationJob({ credential_family: "meta", platform: "facebook", last_success_at: freshSince, fresh_since_at: freshSince },
+     context.zernio.meta, new Date().toISOString());
   await flush();
   await flush();
 
@@ -146,8 +147,10 @@ test("social delivery keeps the narrow engagement policy and applies the profess
   for (const name of COMMS_HUB_REQUIRED_MIGRATIONS) {
     db.exec(fs.readFileSync(new URL(`../services/comms-hub/migrations/${name}.sql`, import.meta.url), "utf8"));
   }
-  const general = db.prepare("SELECT policy_key, intent, maximum_risk, require_evidence, minimum_confidence, status FROM comms_hub_autonomous_reply_policies WHERE policy_key='full-social-low-risk'").get();
-  const engagement = db.prepare("SELECT policy_key, intent, maximum_risk, require_evidence, minimum_confidence, status FROM comms_hub_autonomous_reply_policies WHERE policy_key='social-engagement-safe'").get();
+  const general = db.prepare("SELECT policy_key, intent, maximum_risk, require_evidence, minimum_confidence, status FROM comms_hub_autonomous_reply_policies WHERE policy_\
+key='full-social-low-risk'").get();
+  const engagement = db.prepare("SELECT policy_key, intent, maximum_risk, require_evidence, minimum_confidence, status FROM comms_hub_autonomous_reply_policies WHERE policy_\
+key='social-engagement-safe'").get();
 
   assert.equal(general.policy_key, "full-social-low-risk");
   assert.equal(general.intent, "any");

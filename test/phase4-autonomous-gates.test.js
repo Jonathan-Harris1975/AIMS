@@ -20,12 +20,15 @@ const sources = [
 const generated = {
   title: "Production costs made the demo glow look expensive",
   summary: "Model costs rose 25% as deployment work moved from demo theatre to actual support. The useful signal is operational control, not launch confetti.",
-  social_caption: "Model costs rose 25% as teams moved from demos to production support. That is the useful signal here: artificial intelligence still needs operational control, boring governance and cost discipline before the boardroom victory lap starts.",
+  social_caption: "Model costs rose 25% as teams moved from demos to production support. That is the useful signal here: artificial intelligence still needs operational \
+control, boring governance and cost discipline before the boardroom victory lap starts.",
   hashtags: ["#AIReality", "#AIBusiness", "#AIGovernance"],
   themes: ["Costs", "Governance", "Deployment"],
 };
 
-const html = `<!doctype html><html><head><script type="application/ld+json">{"@context":"https://schema.org","@type":"BlogPosting","headline":"Production costs made the demo glow look expensive","description":"Model costs rose 25% as deployment work moved from demo theatre to actual support.","datePublished":"2026-05-17T08:00:00Z","author":{"@type":"Person","name":"Jonathan Harris"},"mainEntityOfPage":{"@type":"WebPage","@id":"https://example.com/post"}}</script></head><body>OK</body></html>`;
+const html = `<!doctype html><html><head><script type="application/ld+json">{"@context":"https://schema.org","@type":"BlogPosting","headline":"Production costs made the demo \
+glow look expensive","description":"Model costs rose 25% as deployment work moved from demo theatre to actual support.","datePublished":"2026-05-17T08:00:00Z","author":\
+{"@type":"Person","name":"Jonathan Harris"},"mainEntityOfPage":{"@type":"WebPage","@id":"https://example.com/post"}}</script></head><body>OK</body></html>`;
 
 test("Phase 4 gate allows source-backed social content with valid schema", () => {
   const gate = runPhase4AutonomousContentGate({
@@ -79,17 +82,21 @@ test("Phase 4 quarantine records are deterministic enough for R2 storage", () =>
 
 
 test("Phase 4 weekly blog gate does not quarantine apostrophes, quoted labels or long-form editorial rhythm", () => {
-  const weeklyHtml = `<!doctype html><html><head><script type="application/ld+json">{"@context":"https://schema.org","@type":"BlogPosting","headline":"Plumbing, promises and trust","description":"The useful signal is operational control.","datePublished":"2026-05-17T08:00:00Z","author":{"@type":"Person","name":"Jonathan Harris"},"mainEntityOfPage":{"@type":"WebPage","@id":"https://example.com/blog"}}</script></head><body><nav>Podcast</nav><main>Weekly blog</main></body></html>`;
+  const weeklyHtml = `<!doctype html><html><head><script type="application/ld+json">{"@context":"https://schema.org","@type":"BlogPosting","headline":"Plumbing, promises and \
+trust","description":"The useful signal is operational control.","datePublished":"2026-05-17T08:00:00Z","author":{"@type":"Person","name":"Jonathan Harris"},"mainEntityOfPage":\
+{"@type":"WebPage","@id":"https://example.com/blog"}}</script></head><body><nav>Podcast</nav><main>Weekly blog</main></body></html>`;
   const gate = runPhase4AutonomousContentGate({
     contentType: "weekly-blog",
     generated: {
       title: "Plumbing, promises and trust",
-      summary: "Hermes's self-hosted runtime and the DataRobot 'no-slides' Build Club both point to the same boring truth: artificial intelligence projects live or die by provenance, integration and governance rather than demo glitter.",
+      summary: "Hermes's self-hosted runtime and the DataRobot 'no-slides' Build Club both point to the same boring truth: artificial intelligence projects live or die by \
+provenance, integration and governance rather than demo glitter.",
       sections: [
         {
           heading: "Plumbing beats headline models",
           paragraphs: [
-            "The recurring point is mundane and uncomfortable: models amplify whatever the inputs contain, so provenance, versioning, coherent state and the little rules about what context to keep are the levers that determine whether a system is useful or hallucinatory."
+            "The recurring point is mundane and uncomfortable: models amplify whatever the inputs contain, so provenance, versioning, coherent state and the little rules about \
+what context to keep are the levers that determine whether a system is useful or hallucinatory."
           ],
         },
       ],

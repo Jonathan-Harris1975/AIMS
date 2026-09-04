@@ -147,7 +147,8 @@ test("podcast discovery metadata keeps keywords useful but not stuffed", async (
   assert.doesNotMatch(discovery.legacy.itunesKeywordsCsv, /aartificial/i);
 
   const legacy = buildLegacyItunesKeywordsCsv(
-    "aartificial intelligence, tech news, machine learning, AI podcast, Gen X, AI roundup, chatbot advancements, ai jobs impact, open ai news, ai bias, autonomous systems, llm updates, ai policy, gpt news, ai safety",
+    "aartificial intelligence, tech news, machine learning, AI podcast, Gen X, AI roundup, chatbot advancements, ai jobs impact, open ai news, ai bias, autonomous systems, llm \
+updates, ai policy, gpt news, ai safety",
     { context: sampleMain }
   );
   assert.ok(legacy.length <= 255);

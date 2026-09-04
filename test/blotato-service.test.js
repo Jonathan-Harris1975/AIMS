@@ -88,7 +88,10 @@ async function handleMockRequest(req, res) {
             internalTitle: "Agents move into admin",
             angle: "The useful story is workflow delegation, not another shiny demo.",
             hook: "AI agents are moving into office workflows, but your team still owns the handoff.",
-            script: "AI agents are moving from chat to chores. The important part is not the demo theatre. It is that teams are starting to hand over repeatable admin, research, drafting, routing and checking tasks. That does not remove judgement. It moves judgement to the design of the workflow. The useful move is boring on purpose: choose one repeatable task, set clear checks, review the result, then widen the workflow only when it behaves. The winners will not be people who ask better one-off questions. They will be the ones who build better systems around the tools.",
+            script: "AI agents are moving from chat to chores. The important part is not the demo theatre. It is that teams are starting to hand over repeatable admin, \
+research, drafting, routing and checking tasks. That does not remove judgement. It moves judgement to the design of the workflow. The useful move is boring on purpose: choose \
+one repeatable task, set clear checks, review the result, then widen the workflow only when it behaves. The winners will not be people who ask better one-off questions. They \
+will be the ones who build better systems around the tools.",
             narrativeArc: "Open with the office workflow shift, show delegated tasks, explain the human approval point, then finish on practical system design.",
             visualContinuity: "Keep the same adult operations team and dark editorial office environment while the workflow progresses from chat to delegated tasks and human approval.",
             visualDirection: "Human-centred dark editorial office environment showing AI agents moving routine admin work through a practical workflow.",

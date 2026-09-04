@@ -431,7 +431,8 @@ test("Uncertain outbound actions require reconciliation instead of blind retry",
     timestamp: now,
     account: { accountId: "meta-account", platform: "facebook" },
     conversation: { id: "fb-thread-outbound", platform: "facebook", accountId: "meta-account", participantId: "person-outbound" },
-    message: { id: "fb-message-outbound", conversationId: "fb-thread-outbound", platform: "facebook", accountId: "meta-account", text: "Hello", direction: "incoming", sender: { id: "person-outbound", name: "Person" } },
+    message: { id: "fb-message-outbound", conversationId: "fb-thread-outbound", platform: "facebook", accountId: "meta-account", text: "Hello", direction: "incoming", sender: {
+       id: "person-outbound", name: "Person" } },
   }, "meta-hook"), { family: "meta", secret: "meta-hook", maxBytes: 100_000 });
   const event = normaliseZernioEvent(envelope, { correlationId: "corr-outbound", source: "webhook" });
   await repository.persistZernioEvent(event);

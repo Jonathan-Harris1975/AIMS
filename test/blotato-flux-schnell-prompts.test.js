@@ -24,7 +24,8 @@ test("Flux Schnell profile rewrites scene prompts as positive visual briefs", as
   const inputs = buildBlotatoVideoInputs({
     lane: "news-insight",
     hook: "The warehouse workflow is changing.",
-    script: "A warehouse team is moving from manual picking to AI-assisted routing. The shift looks efficient. The real question is whether the workflow still leaves room for human checks. That is where the operational risk sits. You need the speed and the oversight.",
+    script: "A warehouse team is moving from manual picking to AI-assisted routing. The shift looks efficient. The real question is whether the workflow still leaves room for \
+human checks. That is where the operational risk sits. You need the speed and the oversight.",
     visualDirection: "Warehouse fulfilment centre, autonomous picking robots, conveyor lanes, supervisor oversight, cyan and deep navy editorial lighting.",
     visualContinuity: "One warehouse supervisor, the same fulfilment centre, cyan and deep navy editorial lighting, realistic documentary camera language.",
     scenes: [

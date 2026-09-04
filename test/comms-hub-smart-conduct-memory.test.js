@@ -118,9 +118,12 @@ test("AI workflow masks inbound profanity and forces approval after repeated tar
   const responses = {
     commsHubTriage: { intent: "general_enquiry", confidence: .9, urgency: .1, commercialValue: .1, reputationalRisk: .2, customerImpact: .1, rationale: "pricing question with hostility" },
     commsHubModeration: { sentiment: "negative", abuseLabel: "none", confidence: .9, severity: .1, rationale: "hostile tone", recommendedAction: "reply" },
-    commsHubSummary: { summary: "Visitor asks for pricing information and has used repeated targeted abusive language.", unresolvedActions: [], sourceMessageIds: ["m1", "m2"], nextAction: "Explain pricing calmly", followUpNeeded: true, followUpReason: "pricing", followUpHours: 24 },
-    commsHubDraftContact: { bodyText: "I can help with the pricing question, but I won't engage with personal abuse. What pricing information do you need?", evidenceSourceReferences: ["https://jonathan-harris.online/pricing"] },
-    commsHubDraftComplex: { bodyText: "I can help with the pricing question, but I won't engage with personal abuse. What pricing information do you need?", evidenceSourceReferences: ["https://jonathan-harris.online/pricing"] },
+    commsHubSummary: { summary: "Visitor asks for pricing information and has used repeated targeted abusive language.", unresolvedActions: [], sourceMessageIds: ["m1", "m2"],
+       nextAction: "Explain pricing calmly", followUpNeeded: true, followUpReason: "pricing", followUpHours: 24 },
+    commsHubDraftContact: { bodyText: "I can help with the pricing question, but I won't engage with personal abuse. What pricing information do you need?",
+       evidenceSourceReferences: ["https://jonathan-harris.online/pricing"] },
+    commsHubDraftComplex: { bodyText: "I can help with the pricing question, but I won't engage with personal abuse. What pricing information do you need?",
+       evidenceSourceReferences: ["https://jonathan-harris.online/pricing"] },
   };
   let persisted = null;
   const service = new CommsHubAiWorkflowService({
@@ -141,7 +144,8 @@ test("AI workflow masks inbound profanity and forces approval after repeated tar
       },
       repository: { async getConversation() { return conversation; } },
       aiRepository: { async beginAiRun() {}, async persistAnalysisBundle(bundle) { persisted = bundle; }, async failAiRun() {} },
-      aiSearch: { async searchApproved() { return [{ indexId: "site", sourceReference: "https://jonathan-harris.online/pricing", title: "Pricing", excerpt: "Pricing information is available on Jonathan's website.", score: .9, contentSha256: "pricing", metadata: {} }]; } },
+      aiSearch: { async searchApproved() { return [{ indexId: "site", sourceReference: "https://jonathan-harris.online/pricing", title: "Pricing", excerpt:
+         "Pricing information is available on Jonathan's website.", score: .9, contentSha256: "pricing", metadata: {} }]; } },
     },
     aiRequest: async (routeName, options) => {
       captured.push({ routeName, options });
@@ -189,7 +193,8 @@ test("AI workflow rejects a generated draft containing blocked language", async 
       },
       repository: { async getConversation() { return conversation; } },
       aiRepository: { async beginAiRun() {}, async persistAnalysisBundle() {}, async failAiRun() {} },
-      aiSearch: { async searchApproved() { return [{ indexId: "site", sourceReference: "https://jonathan-harris.online/about", title: "About", excerpt: "General information about Jonathan's work.", score: .9, contentSha256: "about", metadata: {} }]; } },
+      aiSearch: { async searchApproved() { return [{ indexId: "site", sourceReference: "https://jonathan-harris.online/about", title: "About", excerpt:
+         "General information about Jonathan's work.", score: .9, contentSha256: "about", metadata: {} }]; } },
     },
     aiRequest: async (routeName) => {
       const value = normal[routeName] || { bodyText: "This is fucking simple.", evidenceSourceReferences: ["https://jonathan-harris.online/about"] };
@@ -223,7 +228,8 @@ test("AI workflow fails closed when a generated reply violates an explicit no-li
   const responses = {
     commsHubTriage: { intent: "social_engagement", confidence: .9, urgency: .1, commercialValue: .1, reputationalRisk: .1, customerImpact: .1, rationale: "general social question" },
     commsHubModeration: { sentiment: "neutral", abuseLabel: "none", confidence: .9, severity: 0, rationale: "safe", recommendedAction: "reply" },
-    commsHubSummary: { summary: "Visitor asks what Jonathan offers and does not want links.", unresolvedActions: [], sourceMessageIds: ["m1"], nextAction: "Answer briefly", followUpNeeded: false, followUpReason: "", followUpHours: 0 },
+    commsHubSummary: { summary: "Visitor asks what Jonathan offers and does not want links.", unresolvedActions: [], sourceMessageIds: ["m1"], nextAction: "Answer briefly",
+       followUpNeeded: false, followUpReason: "", followUpHours: 0 },
     commsHubDraftSocial: { bodyText: "Jonathan writes and speaks about practical AI. https://jonathan-harris.online", evidenceSourceReferences: ["https://jonathan-harris.online"] },
   };
   const service = new CommsHubAiWorkflowService({
@@ -235,7 +241,8 @@ test("AI workflow fails closed when a generated reply violates an explicit no-li
       },
       repository: { async getConversation() { return conversation; } },
       aiRepository: { async beginAiRun() {}, async persistAnalysisBundle() {}, async failAiRun() {} },
-      aiSearch: { async searchApproved() { return [{ indexId: "site", sourceReference: "https://jonathan-harris.online", title: "Jonathan Harris", excerpt: "Verified information about Jonathan Harris and his work.", score: .99, contentSha256: "official-home", metadata: { approved: true } }]; } },
+      aiSearch: { async searchApproved() { return [{ indexId: "site", sourceReference: "https://jonathan-harris.online", title: "Jonathan Harris", excerpt:
+         "Verified information about Jonathan Harris and his work.", score: .99, contentSha256: "official-home", metadata: { approved: true } }]; } },
     },
     aiRequest: async (routeName) => ({ content: JSON.stringify(responses[routeName]), providerId: "test", model: "test", routeKey: routeName }),
   });

@@ -41,9 +41,13 @@ function validForensicJson() {
       },
     ],
     pageTypeFindings: [{ pageType: "podcast episode", count: 1, coverageState: "Fully analysed", score: 63, grade: "D", judgement: "Thin but crawlable.", keyNote: "Needs richer answer blocks." }],
-    priorityPageAnnex: [{ url: "https://jonathan-harris.online/podcast/episodes/example/", pageType: "podcast episode", templateSource: "podcast generator", titleStatus: "Healthy", metaStatus: "Healthy", canonicalStatus: "Healthy", schemaStatus: "Mixed", aeoStatus: "Weak", geoStatus: "Weak", score: 63, grade: "D", confirmedIssueIds: ["JH-SEO-001"], keyNote: "Thin episode page." }],
-    templateComponentGeneratorAnnex: [{ sourceFile: "scripts/generate_podcast_episodes.py", area: "Podcast generation", observedLogic: "Generates episode routes", repeatedEffect: "Dynamic route drift risk", fixPriority: "High" }],
-    codeMarkupContentRemediationAppendix: [{ target: "scripts/generate_podcast_episodes.py", issueId: "JH-SEO-001", currentPattern: "Generated URLs are not asserted in coverage.", correctedPattern: "Persist and validate a generated URL inventory.", rationale: "Prevents drift." }],
+    priorityPageAnnex: [{ url: "https://jonathan-harris.online/podcast/episodes/example/", pageType: "podcast episode", templateSource: "podcast generator", titleStatus:
+       "Healthy", metaStatus: "Healthy", canonicalStatus: "Healthy", schemaStatus: "Mixed", aeoStatus: "Weak", geoStatus: "Weak", score: 63, grade: "D", confirmedIssueIds: [
+         "JH-SEO-001"], keyNote: "Thin episode page." }],
+    templateComponentGeneratorAnnex: [{ sourceFile: "scripts/generate_podcast_episodes.py", area: "Podcast generation", observedLogic: "Generates episode routes",
+       repeatedEffect: "Dynamic route drift risk", fixPriority: "High" }],
+    codeMarkupContentRemediationAppendix: [{ target: "scripts/generate_podcast_episodes.py", issueId: "JH-SEO-001", currentPattern:
+       "Generated URLs are not asserted in coverage.", correctedPattern: "Persist and validate a generated URL inventory.", rationale: "Prevents drift." }],
     bestPracticeGapMatrix: [{ pageType: "podcast episode", seo: "Partial", aeo: "Weak", geo: "Weak", confidence: "Confirmed", topMissingElement: "Deterministic inventory", businessImpact: "High" }],
     finalVerdictAndImplementationOrder: { narrative: "Fix dynamic governance first.", steps: ["Add deterministic podcast inventory validation."], expectedGains: ["Reduced route drift."] },
     fullUrlCoverageAppendix: [{ url: "https://jonathan-harris.online/podcast/episodes/example/", pageType: "podcast episode", coverageState: "Fully analysed", status: 200, risk: "Medium" }],
@@ -60,7 +64,8 @@ function validAnalysisPayload() {
     generatedAt: "2026-05-03T00:00:00Z",
     inventory: { discoveredRouteCount: 1 },
     priorityPages: [{ url: "https://jonathan-harris.online/podcast/episodes/example/", pageType: "podcast episode", total: 63 }],
-    allRoutes: [{ url: "https://jonathan-harris.online/podcast/episodes/example/", pageType: "podcast episode", coverageState: "Fully analysed", statusCode: 200, total: 63, scores: { technicalSeo: 16, onPageIntent: 10, aeo: 8, geo: 7, entity: 7, internalLinking: 6, conversion: 0 } }],
+    allRoutes: [{ url: "https://jonathan-harris.online/podcast/episodes/example/", pageType: "podcast episode", coverageState: "Fully analysed", statusCode: 200, total: 63,
+       scores: { technicalSeo: 16, onPageIntent: 10, aeo: 8, geo: 7, entity: 7, internalLinking: 6, conversion: 0 } }],
     heuristicIssues: [],
     repoSignals: {},
     liveDynamicUrls: [],

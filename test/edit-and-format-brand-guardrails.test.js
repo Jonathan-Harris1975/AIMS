@@ -20,7 +20,8 @@ test('final script pass applies British spelling and anti-hype replacements', ()
 });
 
 test('final script pass splits long spoken sentences below the podcast QA threshold', () => {
-  const input = 'This sentence keeps going because the original report flagged overlong podcast delivery, and it needs a cleaner spoken rhythm for Brian, while still preserving the basic meaning for listeners.';
+  const input = 'This sentence keeps going because the original report flagged overlong podcast delivery, and it needs a cleaner spoken rhythm for Brian, while still \
+preserving the basic meaning for listeners.';
   const output = editAndFormat(input);
   const longest = output
     .split(/[.!?]+/)

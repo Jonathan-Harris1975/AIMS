@@ -76,7 +76,8 @@ test("recent public content is selected dynamically from the editorial ledger", 
   }, {
     editorialLedger: { events: [
       { id: "old", pipeline: "zernio", lane: "monday", angle: "AI in education", contentExcerpt: "AI and schools", scheduledDateTime: "2026-08-15 09:00:00", createdAt: "2026-08-15T08:00:00Z" },
-      { id: "new", pipeline: "zernio", lane: "sunday", angle: "AI in logistics", contentExcerpt: "A practical look at AI in freight and supply chains.", scheduledDateTime: "2026-08-16 09:00:00", createdAt: "2026-08-16T08:00:00Z" },
+      { id: "new", pipeline: "zernio", lane: "sunday", angle: "AI in logistics", contentExcerpt: "A practical look at AI in freight and supply chains.", scheduledDateTime:
+         "2026-08-16 09:00:00", createdAt: "2026-08-16T08:00:00Z" },
     ] },
     zernioState: { quiz: { scheduled: [] } },
     smartContext: { memory: { interests: ["logistics"] }, page: {} },
@@ -131,12 +132,14 @@ test("AI workflow supplies live content and deterministic strategy to dynamic pr
   const conversation = {
     id: "cnv-live-ai", channel: "social", provider: "zernio", workflow: "social_comment_moderation", status: "open", subject: "Instagram comment", metadata_json: "{}",
     socialThread: { platform: "instagram", thread_type: "comment", provider_post_id: "post-9", metadata_json: "{}" },
-    messages: [message("m1", "inbound", "What practical step should a small business take first?", { postContext: { title: "Practical AI adoption", text: "The post says start with one measurable workflow before buying a pile of AI tools.", permalink: "https://instagram.com/p/9" } })],
+    messages: [message("m1", "inbound", "What practical step should a small business take first?", { postContext: { title: "Practical AI adoption", text:
+       "The post says start with one measurable workflow before buying a pile of AI tools.", permalink: "https://instagram.com/p/9" } })],
   };
   const responses = {
     commsHubTriage: { intent: "social_engagement", confidence: .9, urgency: .1, commercialValue: .1, reputationalRisk: .1, customerImpact: .1, rationale: "public question" },
     commsHubModeration: { sentiment: "neutral", abuseLabel: "none", confidence: .9, severity: 0, rationale: "safe", recommendedAction: "reply" },
-    commsHubSummary: { summary: "Reader asks for the first practical step.", unresolvedActions: [], sourceMessageIds: ["m1"], nextAction: "Answer from the source post", followUpNeeded: false, followUpReason: "", followUpHours: 0 },
+    commsHubSummary: { summary: "Reader asks for the first practical step.", unresolvedActions: [], sourceMessageIds: ["m1"], nextAction: "Answer from the source post",
+       followUpNeeded: false, followUpReason: "", followUpHours: 0 },
     commsHubDraftSocial: { bodyText: "Start with one workflow where success is measurable, then prove value before adding more tools.", evidenceSourceReferences: [] },
   };
   const service = new CommsHubAiWorkflowService({

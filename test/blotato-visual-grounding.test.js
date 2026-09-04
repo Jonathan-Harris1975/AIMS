@@ -25,8 +25,10 @@ test("generic metaphor scenes are rejected as poor source grounding", () => {
 
 test("source-specific construction scenes score strongly", () => {
   const scenes = [
-    ["Wide Hong Kong construction site with tower cranes, scaffolding and helmeted workers entering a marked safety zone, supervisor shoulders-up in foreground", "Hong Kong construction sites are testing AI safety cameras."],
-    ["Medium shot of site cameras monitoring workers near concrete formwork and moving machinery, supervisor upper body at edge of frame", "The cameras detect missing helmets and dangerous zone crossings."],
+    ["Wide Hong Kong construction site with tower cranes, scaffolding and helmeted workers entering a marked safety zone, supervisor shoulders-up in foreground",
+       "Hong Kong construction sites are testing AI safety cameras."],
+    ["Medium shot of site cameras monitoring workers near concrete formwork and moving machinery, supervisor upper body at edge of frame",
+       "The cameras detect missing helmets and dangerous zone crossings."],
     ["Tight shot of a helmeted worker beside a real site camera and excavator boundary as an alert light changes, no screen text", "That matters where one missed warning can become an injury."],
     ["Over-shoulder site safety officer verifying the physical work area and camera placement, hands outside crop", "But the system still needs a human to check context and false alerts."],
     ["Wide closing view of the same Hong Kong site with separated pedestrian route, cranes and supervised crew working safely", "Use AI to spot risk, then keep people responsible for the decision."],

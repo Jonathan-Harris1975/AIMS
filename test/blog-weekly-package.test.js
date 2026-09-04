@@ -189,7 +189,8 @@ test("brand QA prompt and parser support PASS and corrected JSON", () => {
   assert.match(qaPrompt.user, /summary duplication in the first paragraph/);
   assert.deepEqual(parseWeeklyBrandQaResponse("PASS"), { ok: true, pass: true, feedback: "PASS" });
 
-  const failed = parseWeeklyBrandQaResponse('FAIL - title issue\n{"title":"Where AI speed went missing","summary":"First sentence. Second sentence.","dominant_themes":["Latency"],"image_prompt":"Dark image.","sections":[]}');
+  const failed = parseWeeklyBrandQaResponse('FAIL - title issue\n{"title":"Where AI speed went missing","summary":"First sentence. Second sentence.","dominant_themes":\
+["Latency"],"image_prompt":"Dark image.","sections":[]}');
   assert.equal(failed.ok, true);
   assert.equal(failed.pass, false);
   assert.equal(failed.data.title, "Where AI speed went missing");

@@ -65,7 +65,8 @@ test("fresh social comments enrich missing source-post text before automation", 
   const result = await ensureSocialPostContext({
     conversation,
     context: {
-      zernio: { meta: { async listCommentedPosts() { return { data: [{ id: "post-9", accountId: "acct-1", title: "Practical AI", content: "Start with one measurable workflow.", permalink: "https://instagram.com/p/9" }], pagination: { hasMore: false } }; } } },
+      zernio: { meta: { async listCommentedPosts() { return { data: [{ id: "post-9", accountId: "acct-1", title: "Practical AI", content: "Start with one measurable workflow.",
+         permalink: "https://instagram.com/p/9" }], pagination: { hasMore: false } }; } } },
       repository: { async mergeSocialPostContext(input) { persisted = input; } },
     },
   });
@@ -176,7 +177,8 @@ test("customer-facing email grounds website and podcast topics in the official s
 test("email/chat form routing distinguishes podcast participation from sponsorship and website support", () => {
   const config = formsConfig();
   const base = (body) => ({ id: "c1", channel: "email", messages: [message(body)] });
-  const guest = decideConversationJotform({ conversation: base("I would like to appear as a guest on the podcast."), intent: { intent: "podcast_contribution", confidence: .96 }, summary: {}, config });
+  const guest = decideConversationJotform({ conversation: base("I would like to appear as a guest on the podcast."), intent: { intent: "podcast_contribution", confidence:
+     .96 }, summary: {}, config });
   const sponsor = decideConversationJotform({ conversation: base("We would like to discuss podcast sponsorship."), intent: { intent: "commercial_enquiry", confidence: .92 }, summary: {}, config });
   const website = decideConversationJotform({ conversation: base("I need to report a website issue."), intent: { intent: "support_request", confidence: .91 }, summary: {}, config });
   assert.equal(guest.formKey, "podcast_enquiry");
@@ -219,7 +221,8 @@ test("migration 0020 is delivered and keeps all three customer-facing autonomous
   assert.equal(COMMS_HUB_REQUIRED_MIGRATIONS.at(-1), "0020_professional_autonomous_comms");
   const db = new DatabaseSync(":memory:");
   for (const key of COMMS_HUB_REQUIRED_MIGRATIONS) db.exec(readFileSync(new URL(`../services/comms-hub/migrations/${key}.sql`, import.meta.url), "utf8"));
-  const rows = db.prepare("SELECT policy_key, status FROM comms_hub_autonomous_reply_policies WHERE policy_key IN ('full-chat-low-risk','full-email-low-risk','full-social-low-risk') ORDER BY policy_key").all();
+  const rows = db.prepare("SELECT policy_key, status FROM comms_hub_autonomous_reply_policies WHERE policy_key IN ('full-chat-low-risk','full-email-low-risk','full-social-low-\
+risk') ORDER BY policy_key").all();
   assert.equal(rows.length, 3);
   assert.ok(rows.every((row) => row.status === "active"));
   const delayedTableSql = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='comms_hub_delayed_actions'").get()?.sql || "";

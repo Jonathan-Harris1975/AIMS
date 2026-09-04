@@ -36,7 +36,8 @@ function baseContext(overrides = {}) {
       return state.session;
     },
     async listChatMessages() {
-      return state.messages.map((message) => ({ id: message.id, direction: message.direction, sender: message.sender, bodyText: message.bodyText, providerMessageId: message.providerMessageId, receivedAt: message.receivedAt }));
+      return state.messages.map((message) => ({ id: message.id, direction: message.direction, sender: message.sender, bodyText: message.bodyText, providerMessageId:
+         message.providerMessageId, receivedAt: message.receivedAt }));
     },
     async getChatSessionByConversation(conversationId) { return state.session?.conversation_id === conversationId ? state.session : null; },
     async getConversationOperations() { return { operational_status: "open" }; },
@@ -151,7 +152,8 @@ test('chat sync rejects a visitor mismatch', async () => {
   const setup = baseContext();
   const service = new CommsHubChatService({ context: setup.context });
   await service.acceptWebhook({});
-  setup.context.coginPal.readWebhook = async () => ({ nonce: 'nonce-87654321', payloadSha256: 'def456', payload: { sessionId: 'session-1', visitorId: 'visitor-other', websiteId: 'jonathan-harris.online' } });
+  setup.context.coginPal.readWebhook = async () => ({ nonce: 'nonce-87654321', payloadSha256: 'def456', payload: { sessionId: 'session-1', visitorId: 'visitor-other',
+     websiteId: 'jonathan-harris.online' } });
   await assert.rejects(() => service.syncWebhook({}), (error) => error?.code === 'chat_session_visitor_mismatch');
 });
 

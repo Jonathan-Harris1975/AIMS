@@ -12,7 +12,8 @@ test("Phase 3 RSS rewrite gate does not treat contractions and possessives as un
 
   const summary = [
     "DataRobot and Dell have laid out the blunt problem: plenty of organisations can build models and run pilots, but few can actually run agentic AI at enterprise scale.",
-    "The finish line keeps moving because the obstacle isn't clever models; it's the messy business of infrastructure, security, governance and everyday operations that sit behind any production deployment.",
+    "The finish line keeps moving because the obstacle isn't clever models; it's the messy business of infrastructure, security, governance and everyday operations that sit \
+behind any production deployment.",
     "That's the point of their framing: reliable runtimes, identity controls, auditability and access controls matter more than demo glow.",
   ].join(" ");
 
@@ -33,7 +34,8 @@ test("Phase 3 RSS rewrite gate does not treat contractions and possessives as un
 
 test("Phase 3 RSS rewrite gate still blocks unsupported substantial direct quotations", () => {
   const sourceText = "Amazon discussed Alexa for Shopping, Rufus, product discovery, opt-out controls and purchase confirmations.";
-  const summary = "Amazon folded shopping assistance into Alexa. The company said \"this tool guarantees the cheapest purchase every time without any advertising influence\", which would be a strong claim if true.";
+  const summary = "Amazon folded shopping assistance into Alexa. The company said \"this tool guarantees the cheapest purchase every time without any advertising influence\", \
+which would be a strong claim if true.";
 
   const gate = runPhase3AutopublishGate({
     contentType: "rss-rewrite",

@@ -8,7 +8,8 @@ function runLoader(env) {
     [
       "--input-type=module",
       "-e",
-      "import './config/loadEnv.js'; console.log(JSON.stringify({ apiBase: process.env.BLOTATO_API_BASE, apiKey: process.env.BLOTATO_API_KEY || null, state: process.env.STATE_BACKEND, port: process.env.PORT }));",
+      "import './config/loadEnv.js'; console.log(JSON.stringify({ apiBase: process.env.BLOTATO_API_BASE, apiKey: process.env.BLOTATO_API_KEY || null, state: process.env.STATE_\
+BACKEND, port: process.env.PORT }));",
     ],
     { cwd: process.cwd(), env, encoding: "utf8" }
   );

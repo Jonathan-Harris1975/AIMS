@@ -11,7 +11,8 @@ const manifest = {
     slug: "2026-05-06-ai-meets-the-plumbing",
     title: "AI meets the awkward plumbing",
     summary: "First sentence. Second sentence.",
-    social_caption: "A practical daily AI briefing for social channels, written with enough energy to travel but enough scepticism to stay useful. It keeps the focus on what the source material supports, not launch theatre or invented sparkle.",
+    social_caption: "A practical daily AI briefing for social channels, written with enough energy to travel but enough scepticism to stay useful. It keeps the focus on what \
+the source material supports, not launch theatre or invented sparkle.",
     hook: "The useful bit sat under the demo.",
     body_html: "<section><h2>The pressure point</h2><p>Delivery mattered more than gloss.</p></section>",
     takeaway: "Judge the story by delivery, cost and control.",
@@ -42,13 +43,16 @@ test("social RSS items expose image enclosure and media tags when imageUrl exist
 });
 
 test("normaliseSocialBlogManifestItems filters weekly posts out of social manifests", () => {
-  const items = normaliseSocialBlogManifestItems({ items: [...manifest.items, { title: "Weekly post", url: "https://jonathan-harris.online/blog/posts/2026-w18-weekly-post/", path: "/blog/posts/2026-w18-weekly-post/", summary: "Weekly summary.", published_at: "2026-05-05T08:00:00.000Z" }] });
+  const items = normaliseSocialBlogManifestItems({ items: [...manifest.items, { title: "Weekly post", url: "https://jonathan-harris.online/blog/posts/2026-w18-weekly-post/",
+     path: "/blog/posts/2026-w18-weekly-post/", summary: "Weekly summary.", published_at: "2026-05-05T08:00:00.000Z" }] });
   assert.equal(items.length, 1);
   assert.equal(items[0].title, "AI meets the awkward plumbing");
 });
 
 test("existing weekly RSS builder still emits the weekly feed without media namespace", () => {
-  const xml = buildBlogRssXml({ manifest: { updated_at: "2026-05-06T08:00:00.000Z", items: [{ title: "Weekly AI briefing keeps working", url: "https://jonathan-harris.online/blog/posts/2026-w18-weekly-ai-briefing/", summary: "Weekly summary.", published_at: "2026-05-06T08:00:00.000Z", themes: ["Models"] }] }, feedUrl: "https://blog-rss.jonathan-harris.online/feed.xml", channelLink: "https://jonathan-harris.online/blog/" });
+  const xml = buildBlogRssXml({ manifest: { updated_at: "2026-05-06T08:00:00.000Z", items: [{ title: "Weekly AI briefing keeps working", url:
+     "https://jonathan-harris.online/blog/posts/2026-w18-weekly-ai-briefing/", summary: "Weekly summary.", published_at: "2026-05-06T08:00:00.000Z", themes: ["Models"] }] },
+        feedUrl: "https://blog-rss.jonathan-harris.online/feed.xml", channelLink: "https://jonathan-harris.online/blog/" });
   assert.match(xml, /xmlns:content="http:\/\/purl\.org\/rss\/1\.0\/modules\/content\/"/);
   assert.doesNotMatch(xml, /xmlns:media=/);
   assert.match(xml, /<link>https:\/\/jonathan-harris\.online\/blog\/posts\/2026-w18-weekly-ai-briefing\/<\/link>/);

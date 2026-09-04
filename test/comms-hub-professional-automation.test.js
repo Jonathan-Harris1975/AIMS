@@ -17,7 +17,8 @@ function baseInput(body = "Can you explain your AI work?", channel = "chat") {
     summary: { unresolvedActions: [] },
     evidence: [{}],
     policy: { requiresEvidence: false },
-    config: { smartResponseEnabled: true, smartResponseMinimumConfidence: .86, autoSendEnabled: true, autoSendChatEnabled: true, autoSendEmailEnabled: true, autoSendSocialEnabled: true, autoSendFormEnabled: true },
+    config: { smartResponseEnabled: true, smartResponseMinimumConfidence: .86, autoSendEnabled: true, autoSendChatEnabled: true, autoSendEmailEnabled: true,
+       autoSendSocialEnabled: true, autoSendFormEnabled: true },
   };
 }
 

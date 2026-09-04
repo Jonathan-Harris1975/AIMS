@@ -17,11 +17,14 @@ const canonicalWithStraightQuotes = OUTRO_CLOSING_TAGLINE
   .replace(/[’]/g, "'")
   .replace(/[—]/g, "-");
 
-const transcript = `Intro section that is comfortably long enough to get us over the minimum validation length without any drama whatsoever. It keeps going because machines are needy and validators are worse.
+const transcript = `Intro section that is comfortably long enough to get us over the minimum validation length without any drama whatsoever. It keeps going because machines \
+are needy and validators are worse.
 
-Main section that is also long enough to look like a real transcript. It explains what happened, why it matters, and avoids collapsing into marketing paste. There is enough content here to make the parser stop sulking.
+Main section that is also long enough to look like a real transcript. It explains what happened, why it matters, and avoids collapsing into marketing paste. There is enough \
+content here to make the parser stop sulking.
 
-The week was noisy, the claims were louder, and the useful part was buried under the usual varnish. For the daily brief, head to jonathan-harris dot online. If you want the longer version, take a look at the related book as well.
+The week was noisy, the claims were louder, and the useful part was buried under the usual varnish. For the daily brief, head to jonathan-harris dot online. If you want the \
+longer version, take a look at the related book as well.
 
 ${canonicalWithStraightQuotes}`;
 
@@ -40,7 +43,8 @@ test("script validation accepts the required outro when quotes and dashes are no
 
 
 test("enforceCanonicalOutro appends the canonical branded closing line when the model omits it", () => {
-  const draftOutro = `The week was loud and the sensible part took a bit of digging. For the daily brief, head to jonathan-harris dot online. If you want the deeper version, this week's book will sort that out.`;
+  const draftOutro = `The week was loud and the sensible part took a bit of digging. For the daily brief, head to jonathan-harris dot online. If you want the deeper version, \
+this week's book will sort that out.`;
 
   const repaired = enforceCanonicalOutro(draftOutro);
 
@@ -65,11 +69,14 @@ test("enforceLockedOutro restores the exact generated outro after an altered out
 import editAndFormat from "../services/script/utils/editAndFormat.js";
 
 function makeTranscript(mainText) {
-  const intro = `This intro is long enough to look like a real opening. It sets up a noisy week in artificial intelligence without pretending every vendor announcement is a thunderbolt from Mount Procurement. It gives the listener enough context to settle in and understand the stakes.`;
+  const intro = `This intro is long enough to look like a real opening. It sets up a noisy week in artificial intelligence without pretending every vendor announcement is a \
+thunderbolt from Mount Procurement. It gives the listener enough context to settle in and understand the stakes.`;
 
-  const main = `The rest of the analysis keeps the episode comfortably above the validation floor. It talks about power, money, control, risk, regulation, incentives, infrastructure, and why ordinary listeners should care when polished demos become procurement decisions. ${mainText}`;
+  const main = `The rest of the analysis keeps the episode comfortably above the validation floor. It talks about power, money, control, risk, regulation, incentives, \
+infrastructure, and why ordinary listeners should care when polished demos become procurement decisions. ${mainText}`;
 
-  const outroBody = `The week was noisy, the claims were louder, and the useful part was buried under the usual varnish. For the daily brief, head to jonathan-harris dot online. If you want the longer version, take a look at the related book as well.`;
+  const outroBody = `The week was noisy, the claims were louder, and the useful part was buried under the usual varnish. For the daily brief, head to jonathan-harris dot \
+online. If you want the longer version, take a look at the related book as well.`;
 
   return `${intro}\n\n${main}\n\n${outroBody}\n\n${OUTRO_CLOSING_TAGLINE}`;
 }
@@ -130,7 +137,8 @@ test("editAndFormat normalises high-confidence British spelling", () => {
 
 test("editAndFormat splits a clearly overlong spoken sentence without tiny fragments", () => {
   const formatted = editAndFormat(
-    "This sentence keeps adding clauses because the source copy was bloated, and it keeps stacking detail after detail until the spoken rhythm collapses under the weight of its own procurement-friendly fog, while another needless clause keeps marching forward with a clipboard."
+    "This sentence keeps adding clauses because the source copy was bloated, and it keeps stacking detail after detail until the spoken rhythm collapses under the weight of \
+its own procurement-friendly fog, while another needless clause keeps marching forward with a clipboard."
   );
 
   const sentences = formatted.match(/[^.!?]+[.!?]+/g) || [];
@@ -143,7 +151,8 @@ test("editAndFormat splits a clearly overlong spoken sentence without tiny fragm
 });
 
 test("spoken sentence parsing respects punctuation followed by closing quotes", () => {
-  const quoted = `It's enough to make one recall Alan Turing himself, who once observed, and I'm paraphrasing slightly for clarity, that "The original question, 'Can machines think?' I believe to be too meaningless to deserve discussion." It's a sentiment that seems particularly pertinent when sifting through the sheer volume of what's being presented to us each week.`;
+  const quoted = `It's enough to make one recall Alan Turing himself, who once observed, and I'm paraphrasing slightly for clarity, that "The original question, 'Can machines \
+think?' I believe to be too meaningless to deserve discussion." It's a sentiment that seems particularly pertinent when sifting through the sheer volume of what's being presented to us each week.`;
 
   const sentences = splitSpokenSentences(quoted);
   assert.equal(sentences.length, 3, sentences.join(" | "));
@@ -151,7 +160,8 @@ test("spoken sentence parsing respects punctuation followed by closing quotes", 
 });
 
 test("spoken sentence validation still catches a genuinely overlong sentence", () => {
-  const genuinelyLong = "This deliberately long sentence keeps adding one clause after another while avoiding all useful punctuation so the validator can prove that genuine spoken-word bloat still triggers the hard quality control instead of slipping through unnoticed during production.";
+  const genuinelyLong = "This deliberately long sentence keeps adding one clause after another while avoiding all useful punctuation so the validator can prove that genuine \
+spoken-word bloat still triggers the hard quality control instead of slipping through unnoticed during production.";
 
   const defects = findLongSpokenSentences(genuinelyLong, { maxWords: 25 });
   assert.equal(defects.length, 1);

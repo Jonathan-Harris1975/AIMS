@@ -190,7 +190,8 @@ const mockServer = http.createServer(async (req, res) => {
     content = JSON.stringify({
       title: `${day} Ebook Angle`,
       topic: `${day} book angle`,
-      content: `${day} post copy for readers who want to understand artificial intelligence without swallowing the hype. The book helps them spot weak claims, ask better questions, and use tools carefully in ordinary work. It is practical, grounded, and useful even before anyone clicks through. #ModelNoise`,
+      content: `${day} post copy for readers who want to understand artificial intelligence without swallowing the hype. The book helps them spot weak claims, ask better \
+questions, and use tools carefully in ordinary work. It is practical, grounded, and useful even before anyone clicks through. #ModelNoise`,
       firstComment: "Featured book: Practical AI Thinking\nRead more: https://example.com/practical-ai-thinking",
     });
   } else if (joined.includes("paired weekly AI quiz")) {
@@ -198,17 +199,20 @@ const mockServer = http.createServer(async (req, res) => {
       topic: "Transformer basics",
       questionTitle: "Weekly AI Quiz",
       questionContent:
-        "AI quiz: Transformer basics. Which architecture made modern large language models practical?\nA) Decision Tree\nB) Transformer\nC) K-Means\nD) Linear Regression\n\nComment your answer below.",
+        "AI quiz: Transformer basics. Which architecture made modern large language models practical?\nA) Decision Tree\nB) Transformer\nC) K-Means\nD) Linear \
+Regression\n\nComment your answer below.",
       answerTitle: "Quiz Answer",
       answerContent:
-        quizAnswerContentOverride ?? "Quiz Answer! The correct answer is B) Transformer. Transformers handle context far better than older sequence models, which is why they sit underneath most modern LLMs. Did you get it right?",
+        quizAnswerContentOverride ?? "Quiz Answer! The correct answer is B) Transformer. Transformers handle context far better than older sequence models, which is why they \
+sit underneath most modern LLMs. Did you get it right?",
     });
   } else if (joined.includes("Lane: Sunday AI Spotlight")) {
     content = JSON.stringify({
       title: "Sunday AI Spotlight",
       topic: "Fei-Fei Li and ImageNet",
       content:
-        "Fei-Fei Li helped create ImageNet, the large labelled image dataset that accelerated progress in computer vision. Her research helped make image recognition benchmarks practical at scale, while her later work has kept human-centred AI firmly in the conversation. The useful legacy is not a slogan: better data changed what machines could learn to see.",
+        "Fei-Fei Li helped create ImageNet, the large labelled image dataset that accelerated progress in computer vision. Her research helped make image recognition \
+benchmarks practical at scale, while her later work has kept human-centred AI firmly in the conversation. The useful legacy is not a slogan: better data changed what machines could learn to see.",
       firstComment: "",
       spotlightPerson: "Fei-Fei Li",
     });
@@ -217,7 +221,8 @@ const mockServer = http.createServer(async (req, res) => {
       title: "Tuesday Tech Talk",
       topic: "Transformer context windows",
       content:
-        "Transformer context windows define how much input a language model can consider at once. A larger context window can help with long documents and multi-step work, but retrieval quality and prompt structure still matter. The practical lesson is to give the model the relevant evidence, not simply more tokens.",
+        "Transformer context windows define how much input a language model can consider at once. A larger context window can help with long documents and multi-step work, but \
+retrieval quality and prompt structure still matter. The practical lesson is to give the model the relevant evidence, not simply more tokens.",
       firstComment: "",
     });
   } else {
@@ -225,7 +230,8 @@ const mockServer = http.createServer(async (req, res) => {
       title: "Monday Motivation",
       topic: "AI workflow discipline",
       content:
-        '"There is nothing so useless as doing efficiently that which should not be done at all." - Peter Drucker\n\nAI workflow discipline means deciding what deserves automation before optimising the machinery. Reliable workflows come from clear outcomes, useful checks, and the judgement to stop polishing work that should not exist.',
+        '"There is nothing so useless as doing efficiently that which should not be done at all." - Peter Drucker\n\nAI workflow discipline means deciding what deserves \
+automation before optimising the machinery. Reliable workflows come from clear outcomes, useful checks, and the judgement to stop polishing work that should not exist.',
       firstComment: "",
     });
   }

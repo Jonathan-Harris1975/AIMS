@@ -42,7 +42,8 @@ test("target-private AIMS buckets no longer ship public base URLs", async () => 
     assert.match(env, new RegExp(`^${name}=$`, "m"));
   }
 
-  for (const name of ["R2_PUBLIC_BASE_URL_AUDITS", "R2_PUBLIC_BASE_URL_RAW_TEXT", "R2_PUBLIC_BASE_URL_CHUNKS", "R2_PUBLIC_BASE_URL_MERGE", "R2_PUBLIC_BASE_URL_META", "R2_PUBLIC_BASE_URL_EDITED_AUDIO", "R2_PUBLIC_BASE_URL_HIVE_SKILLS"]) {
+  for (const name of ["R2_PUBLIC_BASE_URL_AUDITS", "R2_PUBLIC_BASE_URL_RAW_TEXT", "R2_PUBLIC_BASE_URL_CHUNKS", "R2_PUBLIC_BASE_URL_MERGE", "R2_PUBLIC_BASE_URL_META",
+     "R2_PUBLIC_BASE_URL_EDITED_AUDIO", "R2_PUBLIC_BASE_URL_HIVE_SKILLS"]) {
     assert.match(env, new RegExp(`^${name}=$`, "m"));
   }
 });

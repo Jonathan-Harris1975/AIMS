@@ -8,8 +8,10 @@ const siteShell = {
     stylesheetUrl: "https://jonathan-harris.online/assets/css/site.css?v=abc1234567",
     siteUiScriptUrl: "https://jonathan-harris.online/assets/js/site-ui.min.js?v=abc1234567",
   },
-  headerHtml: '<!-- JH_SITE_SHELL_HEADER_START release=abc1234567 --><a class="skip-link" href="#main">Skip</a><header class="jh-header" id="site-primary-nav"><span class="jh-logo-wrap"><img class="jh-header__logo" alt=""/></span><a href="https://jonathan-harris.online/ebooks/">Browse Books</a></header><!-- JH_SITE_SHELL_HEADER_END -->',
-  footerHtml: '<!-- JH_SITE_SHELL_FOOTER_START release=abc1234567 --><footer class="site-footer"><a href="https://jonathan-harris.online/blog/">Read the blog</a></footer><!-- JH_SITE_SHELL_FOOTER_END -->',
+  headerHtml: '<!-- JH_SITE_SHELL_HEADER_START release=abc1234567 --><a class="skip-link" href="#main">Skip</a><header class="jh-header" id="site-primary-nav"><span class="jh-\
+logo-wrap"><img class="jh-header__logo" alt=""/></span><a href="https://jonathan-harris.online/ebooks/">Browse Books</a></header><!-- JH_SITE_SHELL_HEADER_END -->',
+  footerHtml: '<!-- JH_SITE_SHELL_FOOTER_START release=abc1234567 --><footer class="site-footer"><a href="https://jonathan-harris.online/blog/">Read the blog</a></footer><!-- \
+JH_SITE_SHELL_FOOTER_END -->',
 };
 
 test('generateTranscriptHtml uses on-brand header, governed scripts, and square logo shell', () => {

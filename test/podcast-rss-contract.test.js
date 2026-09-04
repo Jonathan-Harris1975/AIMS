@@ -35,7 +35,9 @@ test("generateFeedXML keeps episode page, audio enclosure, and transcript URLs d
 
 test("generateFeedXML emits concise legacy iTunes keywords instead of stuffed keyword dumps", () => {
   const original = process.env.PODCAST_ITUNES_KEYWORDS;
-  process.env.PODCAST_ITUNES_KEYWORDS = "aartificial intelligence, tech news, machine learning, AI podcast, Gen X, AI roundup, chatgpt, chatbot advancements, ai jobs impact, open ai news, ai bias, autonomous systems, llm updates, ai policy, gpt news, ai safety, tech culture, neural networks explained, ai companies, deepfake detection, ai weekly, ai news, ai breakthroughs";
+  process.env.PODCAST_ITUNES_KEYWORDS = "aartificial intelligence, tech news, machine learning, AI podcast, Gen X, AI roundup, chatgpt, chatbot advancements, ai jobs impact, \
+open ai news, ai bias, autonomous systems, llm updates, ai policy, gpt news, ai safety, tech culture, neural networks explained, ai companies, deepfake detection, ai weekly, \
+ai news, ai breakthroughs";
 
   try {
     const xml = generateFeedXML([

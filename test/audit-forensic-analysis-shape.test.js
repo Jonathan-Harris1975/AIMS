@@ -74,11 +74,17 @@ function validAnalysis(overrides = {}) {
         verificationMethod: "Rerun the audit and confirm /blog/ remains Fully analysed in coverage.json with a generated feed inventory entry.",
       },
     ],
-    pageTypeFindings: [{ pageType: "blog archive", count: 1, coverageState: "Fully analysed", score: 69, grade: "D", judgement: "Needs governance hardening.", keyNote: "Dynamic output is the risk." }],
-    priorityPageAnnex: [{ url: "https://jonathan-harris.online/blog/", pageType: "blog archive", templateSource: "blog/index.html", titleStatus: "Healthy", metaStatus: "Healthy", canonicalStatus: "Healthy", schemaStatus: "Healthy", aeoStatus: "Mixed", geoStatus: "Weak", score: 69, grade: "D", confirmedIssueIds: ["JH-SEO-001"], keyNote: "Governance issue." }],
-    templateComponentGeneratorAnnex: [{ sourceFile: "scripts/generate-blog-from-rss.mjs", area: "Blog generation", observedLogic: "Feed-derived archive output", repeatedEffect: "Potential repo-live drift", fixPriority: "High" }],
-    codeMarkupContentRemediationAppendix: [{ target: "scripts/generate-blog-from-rss.mjs", issueId: "JH-SEO-001", currentPattern: "Feed output is not treated as a release inventory.", correctedPattern: "Write deterministic blog inventory JSON and compare it to coverage.json during CI.", rationale: "Prevents hidden dynamic drift." }],
-    bestPracticeGapMatrix: [{ pageType: "blog archive", seo: "Partial", aeo: "Partial", geo: "Weak", confidence: "Confirmed", topMissingElement: "Deterministic dynamic inventory", businessImpact: "High" }],
+    pageTypeFindings: [{ pageType: "blog archive", count: 1, coverageState: "Fully analysed", score: 69, grade: "D", judgement: "Needs governance hardening.", keyNote:
+       "Dynamic output is the risk." }],
+    priorityPageAnnex: [{ url: "https://jonathan-harris.online/blog/", pageType: "blog archive", templateSource: "blog/index.html", titleStatus: "Healthy", metaStatus:
+       "Healthy", canonicalStatus: "Healthy", schemaStatus: "Healthy", aeoStatus: "Mixed", geoStatus: "Weak", score: 69, grade: "D", confirmedIssueIds: ["JH-SEO-001"], keyNote: "Governance issue." }],
+    templateComponentGeneratorAnnex: [{ sourceFile: "scripts/generate-blog-from-rss.mjs", area: "Blog generation", observedLogic: "Feed-derived archive output", repeatedEffect:
+       "Potential repo-live drift", fixPriority: "High" }],
+    codeMarkupContentRemediationAppendix: [{ target: "scripts/generate-blog-from-rss.mjs", issueId: "JH-SEO-001", currentPattern:
+       "Feed output is not treated as a release inventory.", correctedPattern: "Write deterministic blog inventory JSON and compare it to coverage.json during CI.", rationale:
+          "Prevents hidden dynamic drift." }],
+    bestPracticeGapMatrix: [{ pageType: "blog archive", seo: "Partial", aeo: "Partial", geo: "Weak", confidence: "Confirmed", topMissingElement:
+       "Deterministic dynamic inventory", businessImpact: "High" }],
     finalVerdictAndImplementationOrder: { narrative: "Fix dynamic governance before polishing copy.", steps: ["Add deterministic blog inventory validation."], expectedGains: ["Reduced drift."] },
     fullUrlCoverageAppendix: [{ url: "https://jonathan-harris.online/blog/", pageType: "blog archive", coverageState: "Fully analysed", status: 200, risk: "Medium" }],
     limitations: ["No Search Console export was supplied."],
@@ -176,7 +182,8 @@ test("deterministic forensic fallback treats transcript pages as delegated R2 au
     ...payload,
     allRoutes: [
       ...payload.allRoutes,
-      { url: "https://jonathan-harris.online/transcripts/TT-2026-05-01.html", pageType: "podcast transcript", coverageState: "Excluded - delegated R2 audit", statusCode: 200, total: 68, scores: { technicalSeo: 16, onPageIntent: 10, aeo: 5, geo: 16, entity: 7, internalLinking: 6, conversion: 0 } },
+      { url: "https://jonathan-harris.online/transcripts/TT-2026-05-01.html", pageType: "podcast transcript", coverageState: "Excluded - delegated R2 audit", statusCode: 200,
+         total: 68, scores: { technicalSeo: 16, onPageIntent: 10, aeo: 5, geo: 16, entity: 7, internalLinking: 6, conversion: 0 } },
     ],
     coverageFamilies: [
       ...payload.coverageFamilies,

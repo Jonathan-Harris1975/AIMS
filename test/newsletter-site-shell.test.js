@@ -14,11 +14,13 @@ const newsletter = {
   onRadar: [{ title: "Radar", link: "https://example.com/radar", summary: "Summary" }],
   realityCheck: { claim: "Claim", assessment: "Assessment", link: "https://example.com/1" },
   yourTurn: "What do you think?",
-  promotion: { type: "podcast", eyebrow: "Thursday podcast preview", title: "Turing's Torch: AI Weekly", url: "https://jonathan-harris.online/podcast/", blurb: "New episode Friday.", ctaLabel: "Follow Turing's Torch" },
+  promotion: { type: "podcast", eyebrow: "Thursday podcast preview", title: "Turing's Torch: AI Weekly", url: "https://jonathan-harris.online/podcast/", blurb:
+     "New episode Friday.", ctaLabel: "Follow Turing's Torch" },
   footer: { text: "Jonathan Harris" },
 };
 const shell = {
-  manifest: { releaseSha: "abc1234567", stylesheetUrl: "https://jonathan-harris.online/assets/css/site.css?v=abc1234567", siteUiScriptUrl: "https://jonathan-harris.online/assets/js/site-ui.min.js?v=abc1234567", scriptGovernanceUrl: "https://jonathan-harris.online/assets/js/script-governance.min.js?v=abc1234567" },
+  manifest: { releaseSha: "abc1234567", stylesheetUrl: "https://jonathan-harris.online/assets/css/site.css?v=abc1234567", siteUiScriptUrl:
+     "https://jonathan-harris.online/assets/js/site-ui.min.js?v=abc1234567", scriptGovernanceUrl: "https://jonathan-harris.online/assets/js/script-governance.min.js?v=abc1234567" },
   headerHtml: '<!-- JH_SITE_SHELL_HEADER_START release=abc1234567 --><header class="jh-header" id="site-primary-nav">Header</header><!-- JH_SITE_SHELL_HEADER_END -->',
   footerHtml: '<!-- JH_SITE_SHELL_FOOTER_START release=abc1234567 --><footer class="site-footer">Footer</footer><!-- JH_SITE_SHELL_FOOTER_END -->',
 };

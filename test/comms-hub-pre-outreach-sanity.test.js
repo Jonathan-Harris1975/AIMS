@@ -58,7 +58,8 @@ test("runtime channel taxonomy covers persisted social DM/comment values", () =>
   assert.deepEqual({ selected: dm.selectedWorkflow, mismatch: dm.mismatch }, { selected: "social_inbox", mismatch: false });
   assert.deepEqual({ selected: comment.selectedWorkflow, mismatch: comment.mismatch }, { selected: "social_comment_moderation", mismatch: false });
 
-  const publicPriority = calculatePriority({ intent: "complaint", urgency: 0, customerImpact: 0, reputationalRisk: 0.8, commercialValue: 0 }, { workflow: "social_comment_moderation", channel: "social_comment" });
+  const publicPriority = calculatePriority({ intent: "complaint", urgency: 0, customerImpact: 0, reputationalRisk: 0.8, commercialValue: 0 }, { workflow:
+     "social_comment_moderation", channel: "social_comment" });
   assert.ok(publicPriority.overrideReasons.includes("public_reputation"));
 });
 
@@ -92,12 +93,14 @@ test("AI draft delivery sends persisted social_dm via social action adapter", as
   const context = {
     config: { socialMonitorOnly: false, badLanguageBlockEnabled: true, aiEnabled: false, approvalsEnforced: true },
     aiRepository: {
-      async getDraft() { return { id: "draft-1", conversation_id: "cnv-1", status: "ready", body_text: "Thanks for getting in touch.", body_html: null, subject: "", evidence_ids_json: "[]", metadata_json: "{}", requires_approval: 0 }; },
+      async getDraft() { return { id: "draft-1", conversation_id: "cnv-1", status: "ready", body_text: "Thanks for getting in touch.", body_html: null, subject: "",
+         evidence_ids_json: "[]", metadata_json: "{}", requires_approval: 0 }; },
       async markDraftSent({ id }) { markedSent = id === "draft-1"; return { id, status: "sent" }; },
     },
     repository: {
       async getConversation() { return { id: "cnv-1", channel: "social_dm", workflow: "social_inbox" }; },
-      async getSocialThreadByConversation() { return { conversation_id: "cnv-1", credential_family: "meta", platform: "facebook", thread_type: "dm", account_id: "acct", provider_thread_id: "thread-1", provider_post_id: null, root_comment_id: null }; },
+      async getSocialThreadByConversation() { return { conversation_id: "cnv-1", credential_family: "meta", platform: "facebook", thread_type: "dm", account_id: "acct",
+         provider_thread_id: "thread-1", provider_post_id: null, root_comment_id: null }; },
       async claimOutboundAction() { return { acquired: true, duplicate: false }; },
       async completeOutboundAction() {},
       async failOutboundAction() {},
@@ -120,8 +123,10 @@ test("manual email replies block bad language and arbitrary recipients by defaul
     oneComMail: { async sendMessage() { sendCalled = true; return { messageId: "x" }; } },
   };
   const service = new CommsHubEmailService({ context });
-  await assert.rejects(() => service.send({ conversationId: "email-1", bodyText: "You are a fucking idiot", idempotencyKey: "email-test-1" }), (error) => error?.code === "email_reply_language_policy_rejected");
-  await assert.rejects(() => service.send({ conversationId: "email-1", bodyText: "Normal reply", recipients: ["other@example.com"], idempotencyKey: "email-test-2" }), (error) => error?.code === "email_external_recipient_blocked");
+  await assert.rejects(() => service.send({ conversationId: "email-1", bodyText: "You are a fucking idiot", idempotencyKey: "email-test-1" }), (
+    error) => error?.code === "email_reply_language_policy_rejected");
+  await assert.rejects(() => service.send({ conversationId: "email-1", bodyText: "Normal reply", recipients: ["other@example.com"], idempotencyKey: "email-test-2" }), (
+    error) => error?.code === "email_external_recipient_blocked");
   assert.equal(sendCalled, false);
 });
 
@@ -131,14 +136,16 @@ test("manual social replies block bad language before provider send", async () =
     config: { socialMonitorOnly: false, badLanguageBlockEnabled: true, aiEnabled: false, approvalsEnforced: true },
     repository: {
       async getConversation() { return { id: "cnv-1", channel: "social_dm", status: "open" }; },
-      async getSocialThreadByConversation() { return { conversation_id: "cnv-1", credential_family: "meta", platform: "facebook", thread_type: "dm", account_id: "acct", provider_thread_id: "thread-1", provider_post_id: null, root_comment_id: null }; },
+      async getSocialThreadByConversation() { return { conversation_id: "cnv-1", credential_family: "meta", platform: "facebook", thread_type: "dm", account_id: "acct",
+         provider_thread_id: "thread-1", provider_post_id: null, root_comment_id: null }; },
       async claimOutboundAction() { return { acquired: true, duplicate: false }; },
       async failOutboundAction() {},
     },
     operationsRepository: { async getConversationOperations() { return { operational_status: "open" }; } },
     zernio: { meta: { async sendMessage() { sendCalled = true; return { id: "provider-1" }; } } },
   };
-  await assert.rejects(() => executeSocialAction({ conversationId: "cnv-1", action: "reply", body: { message: "fuck off" }, idempotencyKey: "social-test-1", context }), (error) => error?.code === "social_reply_language_policy_rejected");
+  await assert.rejects(() => executeSocialAction({ conversationId: "cnv-1", action: "reply", body: { message: "fuck off" }, idempotencyKey: "social-test-1", context }), (
+    error) => error?.code === "social_reply_language_policy_rejected");
   assert.equal(sendCalled, false);
 });
 
@@ -161,7 +168,8 @@ test("old completed form intent does not resurrect unless the latest conversatio
   const stale = decideConversationJotform({ conversation: base, intent: { intent: "podcast_contribution" }, summary: {}, formRequests, config: formConfig });
   assert.equal(stale.selected, false);
 
-  const again = decideConversationJotform({ conversation: { ...base, messages: [...base.messages, message("m3", "I'd like to apply to be on the podcast again.")] }, intent: { intent: "podcast_contribution" }, summary: {}, formRequests, config: formConfig });
+  const again = decideConversationJotform({ conversation: { ...base, messages: [...base.messages, message("m3", "I'd like to apply to be on the podcast again.")] }, intent: {
+     intent: "podcast_contribution" }, summary: {}, formRequests, config: formConfig });
   assert.equal(again.selected, true);
   assert.equal(again.formKey, "podcast_enquiry");
 });
@@ -171,14 +179,18 @@ test("returned Jotform matches only a source contact with a verified email alias
   const repo = new CommsOperationsRepository(d1);
   const now = "2026-08-16T16:00:00.000Z";
   d1.db.prepare(`INSERT INTO comms_hub_contacts (id, primary_email, display_name, phone, created_at, updated_at) VALUES ('contact-1','person@example.com','Person','',?,?)`).run(now, now);
-  d1.db.prepare(`INSERT INTO comms_hub_conversations (id, channel, provider, workflow, status, contact_id, subject, source_reference, created_at, updated_at, last_message_at, metadata_json) VALUES ('source-1','chat','coginpal','website_chat','open','contact-1','Chat','s1',?,?,?,'{}')`).run(now, now, now);
-  await repo.upsertFormRequestSent({ id: "fr-1", sourceConversationId: "source-1", sourceContactId: "contact-1", formKey: "contact", formId: "form-1", formUrl: "https://form.jotform.com/form-1", reason: "test", sentViaChannel: "chat", sentDraftId: "draft-1", sentAt: now, expiresAt: "2026-08-20T16:00:00.000Z", metadata: {} });
+  d1.db.prepare(`INSERT INTO comms_hub_conversations (id, channel, provider, workflow, status, contact_id, subject, source_reference, created_at, updated_at, last_message_at, \
+metadata_json) VALUES ('source-1','chat','coginpal','website_chat','open','contact-1','Chat','s1',?,?,?,'{}')`).run(now, now, now);
+  await repo.upsertFormRequestSent({ id: "fr-1", sourceConversationId: "source-1", sourceContactId: "contact-1", formKey: "contact", formId: "form-1", formUrl:
+     "https://form.jotform.com/form-1", reason: "test", sentViaChannel: "chat", sentDraftId: "draft-1", sentAt: now, expiresAt: "2026-08-20T16:00:00.000Z", metadata: {} });
 
-  const noAlias = await repo.matchPendingFormRequestForSubmission({ formId: "form-1", email: "person@example.com", submissionConversationId: "submission-1", submissionId: "sub-1", submittedAt: "2026-08-16T17:00:00.000Z" });
+  const noAlias = await repo.matchPendingFormRequestForSubmission({ formId: "form-1", email: "person@example.com", submissionConversationId: "submission-1", submissionId:
+     "sub-1", submittedAt: "2026-08-16T17:00:00.000Z" });
   assert.equal(noAlias, null);
 
   await repo.addContactAlias({ id: "alias-1", contactId: "contact-1", type: "email", value: "person@example.com", provider: "one.com", confidence: 1, verified: true, createdAt: now, metadata: {} });
-  const matched = await repo.matchPendingFormRequestForSubmission({ formId: "form-1", email: "person@example.com", submissionConversationId: "submission-1", submissionId: "sub-1", submittedAt: "2026-08-16T17:00:00.000Z" });
+  const matched = await repo.matchPendingFormRequestForSubmission({ formId: "form-1", email: "person@example.com", submissionConversationId: "submission-1", submissionId:
+     "sub-1", submittedAt: "2026-08-16T17:00:00.000Z" });
   assert.equal(matched?.id, "fr-1");
   assert.equal(matched?.match_method, "verified_email_and_form");
 });
@@ -209,7 +221,8 @@ test("generic reply delivery supports persisted social channels for delayed/repl
     config: { socialMonitorOnly: false, badLanguageBlockEnabled: true, aiEnabled: false, approvalsEnforced: true },
     repository: {
       async getConversation() { return { id: "cnv-2", channel: "social_dm", status: "open" }; },
-      async getSocialThreadByConversation() { return { conversation_id: "cnv-2", credential_family: "meta", platform: "instagram", thread_type: "dm", account_id: "acct", provider_thread_id: "thread-2", provider_post_id: null, root_comment_id: null }; },
+      async getSocialThreadByConversation() { return { conversation_id: "cnv-2", credential_family: "meta", platform: "instagram", thread_type: "dm", account_id: "acct",
+         provider_thread_id: "thread-2", provider_post_id: null, root_comment_id: null }; },
       async claimOutboundAction() { return { acquired: true, duplicate: false }; },
       async completeOutboundAction() {},
       async failOutboundAction() {},
@@ -241,7 +254,8 @@ test("manual email reply refuses a resolved conversation before SMTP", async () 
     oneComMail: { async sendMessage() { sent = true; return { messageId: "never" }; } },
   };
   const service = new CommsHubEmailService({ context });
-  await assert.rejects(() => service.send({ conversationId: "email-resolved", bodyText: "A normal reply", idempotencyKey: "email-resolved-1" }), (error) => error?.code === "conversation_reply_blocked");
+  await assert.rejects(() => service.send({ conversationId: "email-resolved", bodyText: "A normal reply", idempotencyKey: "email-resolved-1" }), (
+    error) => error?.code === "conversation_reply_blocked");
   assert.equal(sent, false);
 });
 
@@ -252,13 +266,15 @@ test("manual social reply refuses an archived conversation before provider claim
     config: { socialMonitorOnly: false, badLanguageBlockEnabled: true },
     repository: {
       async getConversation() { return { id: "social-archived", channel: "social_dm", status: "open" }; },
-      async getSocialThreadByConversation() { return { conversation_id: "social-archived", credential_family: "meta", platform: "facebook", thread_type: "dm", account_id: "acct", provider_thread_id: "thread", provider_post_id: null, root_comment_id: null }; },
+      async getSocialThreadByConversation() { return { conversation_id: "social-archived", credential_family: "meta", platform: "facebook", thread_type: "dm", account_id:
+         "acct", provider_thread_id: "thread", provider_post_id: null, root_comment_id: null }; },
       async claimOutboundAction() { claimed = true; return { acquired: true, duplicate: false }; },
     },
     operationsRepository: { async getConversationOperations() { return { operational_status: "archived" }; } },
     zernio: { meta: { async sendMessage() { providerCalled = true; return { id: "never" }; } } },
   };
-  await assert.rejects(() => executeSocialAction({ conversationId: "social-archived", action: "reply", body: { message: "Hello" }, idempotencyKey: "social-archived-1", context }), (error) => error?.code === "conversation_reply_blocked");
+  await assert.rejects(() => executeSocialAction({ conversationId: "social-archived", action: "reply", body: { message: "Hello" }, idempotencyKey: "social-archived-1",
+     context }), (error) => error?.code === "conversation_reply_blocked");
   assert.equal(claimed, false);
   assert.equal(providerCalled, false);
 });
@@ -301,10 +317,12 @@ test("generic social saved replies and policies cover persisted DM/comment chann
   assert.equal((await repo.listSavedReplies({ channel: "social_dm" })).length, 1);
   assert.equal((await repo.listSavedReplies({ channel: "social_comment" })).length, 1);
 
-  await repo.upsertAutonomousPolicy({ id: "arp-1", key: "social-safe", channel: "social", intent: "general_enquiry", maximumRisk: 0.1, minimumConfidence: 0.99, requireEvidence: true, allowedHours: {}, maximumPerHour: 1, status: "active", actor: "admin", approvedBy: "admin", createdAt: now });
+  await repo.upsertAutonomousPolicy({ id: "arp-1", key: "social-safe", channel: "social", intent: "general_enquiry", maximumRisk: 0.1, minimumConfidence: 0.99, requireEvidence:
+     true, allowedHours: {}, maximumPerHour: 1, status: "active", actor: "admin", approvedBy: "admin", createdAt: now });
   assert.equal((await repo.findAutonomousPolicy({ channel: "social_dm", intent: "general_enquiry" }))?.policy_key, "social-safe");
 
-  const sla = await d1.query(`INSERT INTO comms_hub_sla_policies (id,policy_key,channel,priority_label,first_response_minutes,resolution_minutes,business_hours_json,active,created_by,created_at,updated_at) VALUES ('sla-1','social-standard','social','normal',60,1440,'{}',1,'admin',?,?) RETURNING *`, [now, now]);
+  const sla = await d1.query(`INSERT INTO comms_hub_sla_policies (id,policy_key,channel,priority_label,first_response_minutes,resolution_minutes,business_hours_json,active,\
+created_by,created_at,updated_at) VALUES ('sla-1','social-standard','social','normal',60,1440,'{}',1,'admin',?,?) RETURNING *`, [now, now]);
   assert.equal(sla.results.length, 1);
   assert.equal((await repo.findSlaPolicy({ channel: "social_comment", priorityLabel: "normal" }))?.policy_key, "social-standard");
 });

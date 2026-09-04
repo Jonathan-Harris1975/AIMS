@@ -72,12 +72,14 @@ test("AI workflow treats the first-party book catalogue as authoritative evidenc
   const responses = {
     commsHubTriage: { intent: "general_enquiry", confidence: .9, urgency: .1, commercialValue: .1, reputationalRisk: .1, customerImpact: .1, rationale: "book enquiry" },
     commsHubModeration: { sentiment: "neutral", abuseLabel: "none", confidence: .9, severity: 0, rationale: "safe", recommendedAction: "reply" },
-    commsHubSummary: { summary: "Visitor wants a beginner logistics AI book.", unresolvedActions: [], sourceMessageIds: ["m1"], nextAction: "Recommend a grounded book", followUpNeeded: false, followUpReason: "", followUpHours: 0 },
+    commsHubSummary: { summary: "Visitor wants a beginner logistics AI book.", unresolvedActions: [], sourceMessageIds: ["m1"], nextAction: "Recommend a grounded book",
+       followUpNeeded: false, followUpReason: "", followUpHours: 0 },
   };
   let persisted = null;
   const service = new CommsHubAiWorkflowService({
     context: {
-      config: { aiEnabled: true, approvalsEnforced: true, aiMaximumEvidence: 8, aiAutoApprovalRiskThreshold: .2, aiApprovalPriorityScore: 60, smartContextEnabled: true, smartMaximumBookCandidates: 3 },
+      config: { aiEnabled: true, approvalsEnforced: true, aiMaximumEvidence: 8, aiAutoApprovalRiskThreshold: .2, aiApprovalPriorityScore: 60, smartContextEnabled: true,
+         smartMaximumBookCandidates: 3 },
       repository: { async getConversation() { return conversation; } },
       aiRepository: { async beginAiRun() {}, async persistAnalysisBundle(bundle) { persisted = bundle; }, async failAiRun() {} },
       aiSearch: { lastSearchDiagnostics: { ok: true }, async searchApproved() { return []; } },
@@ -144,12 +146,14 @@ test("exact broad AI book question produces only verified first-party catalogue 
   const responses = {
     commsHubTriage: { intent: "general_enquiry", confidence: .95, urgency: .05, commercialValue: .1, reputationalRisk: .01, customerImpact: .1, rationale: "book enquiry" },
     commsHubModeration: { sentiment: "neutral", abuseLabel: "none", confidence: .99, severity: 0, rationale: "safe", recommendedAction: "reply" },
-    commsHubSummary: { summary: "Visitor asks which AI books are available.", unresolvedActions: [], sourceMessageIds: ["m1"], nextAction: "Recommend verified catalogue books", followUpNeeded: false, followUpReason: "", followUpHours: 0 },
+    commsHubSummary: { summary: "Visitor asks which AI books are available.", unresolvedActions: [], sourceMessageIds: ["m1"], nextAction: "Recommend verified catalogue books",
+       followUpNeeded: false, followUpReason: "", followUpHours: 0 },
   };
   let persisted = null;
   const service = new CommsHubAiWorkflowService({
     context: {
-      config: { aiEnabled: true, approvalsEnforced: true, aiMaximumEvidence: 8, aiAutoApprovalRiskThreshold: .2, aiApprovalPriorityScore: 60, smartContextEnabled: true, smartMaximumBookCandidates: 3 },
+      config: { aiEnabled: true, approvalsEnforced: true, aiMaximumEvidence: 8, aiAutoApprovalRiskThreshold: .2, aiApprovalPriorityScore: 60, smartContextEnabled: true,
+         smartMaximumBookCandidates: 3 },
       repository: { async getConversation() { return conversation; } },
       aiRepository: { async beginAiRun() {}, async persistAnalysisBundle(bundle) { persisted = bundle; }, async failAiRun() {} },
       aiSearch: { lastSearchDiagnostics: { ok: true, evidenceCount: 0 }, async searchApproved() { return []; } },

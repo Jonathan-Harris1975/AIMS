@@ -25,8 +25,10 @@ function seedEmailConversation(d1, accountKey, idSuffix, status = "open") {
   const contactId = `ctc_${idSuffix}`;
   const conversationId = `cnv_${idSuffix}`;
   d1.query(`INSERT INTO comms_hub_contacts (id, primary_email, display_name, phone, created_at, updated_at) VALUES (?, ?, ?, NULL, ?, ?)`, [contactId, `${idSuffix}@example.com`, idSuffix, at, at]);
-  d1.query(`INSERT INTO comms_hub_conversations (id, channel, provider, workflow, status, contact_id, subject, source_reference, created_at, updated_at, last_message_at, metadata_json) VALUES (?, 'email', 'one.com', 'email_inbox', ?, ?, ?, ?, ?, ?, ?, ?)`, [conversationId, status, contactId, idSuffix, `source-${idSuffix}`, at, at, at, JSON.stringify({ accountKey })]);
-  d1.query(`INSERT INTO comms_hub_email_threads (id, conversation_id, account_key, mailbox, provider_thread_key, internet_message_id, references_json, last_uid, created_at, updated_at, metadata_json) VALUES (?, ?, ?, 'INBOX', ?, ?, '[]', 1, ?, ?, '{}')`, [`eth_${idSuffix}`, conversationId, accountKey, `thread-${idSuffix}`, `<${idSuffix}@example.com>`, at, at]);
+  d1.query(`INSERT INTO comms_hub_conversations (id, channel, provider, workflow, status, contact_id, subject, source_reference, created_at, updated_at, last_message_at, \
+metadata_json) VALUES (?, 'email', 'one.com', 'email_inbox', ?, ?, ?, ?, ?, ?, ?, ?)`, [conversationId, status, contactId, idSuffix, `source-${idSuffix}`, at, at, at, JSON.stringify({ accountKey })]);
+  d1.query(`INSERT INTO comms_hub_email_threads (id, conversation_id, account_key, mailbox, provider_thread_key, internet_message_id, references_json, last_uid, created_at, \
+updated_at, metadata_json) VALUES (?, ?, ?, 'INBOX', ?, ?, '[]', 1, ?, ?, '{}')`, [`eth_${idSuffix}`, conversationId, accountKey, `thread-${idSuffix}`, `<${idSuffix}@example.com>`, at, at]);
   return { contactId, conversationId };
 }
 
@@ -47,10 +49,13 @@ test("Unified Inbox, delayed actions and follow-ups exclude legacy Admin/Newslet
   const now = "2026-08-18T09:00:00.000Z";
 
   for (const [id, conversationId] of [["da-admin", admin.conversationId], ["da-newsletter", newsletter.conversationId], ["da-info", info.conversationId]]) {
-    d1.query(`INSERT INTO comms_hub_delayed_actions (id, conversation_id, action_type, payload_json, due_at, status, attempts, max_attempts, idempotency_key, next_attempt_at, created_by, created_at, updated_at) VALUES (?, ?, 'notification', '{}', ?, 'scheduled', 0, 8, ?, ?, 'test', ?, ?)`, [id, conversationId, now, `idem-${id}`, now, now, now]);
+    d1.query(`INSERT INTO comms_hub_delayed_actions (id, conversation_id, action_type, payload_json, due_at, status, attempts, max_attempts, idempotency_key, next_attempt_at, \
+created_by, created_at, updated_at) VALUES (?, ?, 'notification', '{}', ?, 'scheduled', 0, 8, ?, ?, 'test', ?, ?)`, [id, conversationId, now, `idem-${id}`, now, now, now]);
   }
   for (const [id, conversationId] of [["fu-admin", admin.conversationId], ["fu-newsletter", newsletter.conversationId], ["fu-info", info.conversationId]]) {
-    d1.query(`INSERT INTO comms_hub_follow_ups (id, conversation_id, ai_run_id, reason, due_at, status, attempts, lease_owner, lease_expires_at, next_attempt_at, completed_at, cancelled_at, failure_class, error, idempotency_key, metadata_json, created_at, updated_at) VALUES (?, ?, NULL, 'test', ?, 'scheduled', 0, NULL, NULL, ?, NULL, NULL, NULL, NULL, ?, '{}', ?, ?)`, [id, conversationId, now, now, `idem-${id}`, now, now]);
+    d1.query(`INSERT INTO comms_hub_follow_ups (id, conversation_id, ai_run_id, reason, due_at, status, attempts, lease_owner, lease_expires_at, next_attempt_at, completed_at, \
+cancelled_at, failure_class, error, idempotency_key, metadata_json, created_at, updated_at) VALUES (?, ?, NULL, 'test', ?, 'scheduled', 0, NULL, NULL, ?, NULL, NULL, NULL, \
+NULL, ?, '{}', ?, ?)`, [id, conversationId, now, now, `idem-${id}`, now, now]);
   }
 
   const queue = await operations.listUnifiedQueue({ limit: 20 });
@@ -76,8 +81,11 @@ test("scope migration cancels queued automation from an older multi-mailbox depl
   const d1 = new SqliteD1({ includeScopeMigration: false });
   const admin = seedEmailConversation(d1, "admin", "legacy-admin");
   const now = "2026-08-18T09:00:00.000Z";
-  d1.query(`INSERT INTO comms_hub_delayed_actions (id, conversation_id, action_type, payload_json, due_at, status, attempts, max_attempts, idempotency_key, next_attempt_at, created_by, created_at, updated_at) VALUES ('da-legacy', ?, 'notification', '{}', ?, 'scheduled', 0, 8, 'idem-da-legacy', ?, 'test', ?, ?)`, [admin.conversationId, now, now, now, now]);
-  d1.query(`INSERT INTO comms_hub_follow_ups (id, conversation_id, ai_run_id, reason, due_at, status, attempts, lease_owner, lease_expires_at, next_attempt_at, completed_at, cancelled_at, failure_class, error, idempotency_key, metadata_json, created_at, updated_at) VALUES ('fu-legacy', ?, NULL, 'test', ?, 'scheduled', 0, NULL, NULL, ?, NULL, NULL, NULL, NULL, 'idem-fu-legacy', '{}', ?, ?)`, [admin.conversationId, now, now, now, now]);
+  d1.query(`INSERT INTO comms_hub_delayed_actions (id, conversation_id, action_type, payload_json, due_at, status, attempts, max_attempts, idempotency_key, next_attempt_at, \
+created_by, created_at, updated_at) VALUES ('da-legacy', ?, 'notification', '{}', ?, 'scheduled', 0, 8, 'idem-da-legacy', ?, 'test', ?, ?)`, [admin.conversationId, now, now, now, now]);
+  d1.query(`INSERT INTO comms_hub_follow_ups (id, conversation_id, ai_run_id, reason, due_at, status, attempts, lease_owner, lease_expires_at, next_attempt_at, completed_at, \
+cancelled_at, failure_class, error, idempotency_key, metadata_json, created_at, updated_at) VALUES ('fu-legacy', ?, NULL, 'test', ?, 'scheduled', 0, NULL, NULL, ?, NULL, NULL, \
+NULL, NULL, 'idem-fu-legacy', '{}', ?, ?)`, [admin.conversationId, now, now, now, now]);
 
   d1.db.exec(readFileSync(new URL("../services/comms-hub/migrations/0012_excluded_email_automation_scope.sql", import.meta.url), "utf8"));
 

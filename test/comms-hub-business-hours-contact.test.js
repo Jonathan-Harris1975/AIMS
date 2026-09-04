@@ -144,19 +144,23 @@ test('website hand-off outside hours stays automated and offers the Contact Me f
       businessTimeZone: 'Europe/London', businessStartHour: 9, businessEndHour: 17, callbackEmailCaptureEnabled: false,
       jotformForms: { contact: { url: contactFormUrl } },
     },
-    coginPal: { async readWebhook() { return { nonce: 'n1', payloadSha256: 'sha', payload: { sessionId: 's1', visitorId: 'v1', websiteId: 'jonathan-harris.online', requestHuman: true, message: { id: 'm1', text: 'Can I speak to Jonathan?' } } }; } },
+    coginPal: { async readWebhook() { return { nonce: 'n1', payloadSha256: 'sha', payload: { sessionId: 's1', visitorId: 'v1', websiteId: 'jonathan-harris.online',
+       requestHuman: true, message: { id: 'm1', text: 'Can I speak to Jonathan?' } } }; } },
     operationsRepository: {
       async getChatSession() { return state.session; }, async countRecentChatInbound() { return 0; },
       async persistChannelMessage(input) { state.messages.push(input.message); return { duplicate: false }; }, async ensureConversationOperations() {},
-      async upsertChatSession(input) { state.session = { conversation_id: input.conversationId, provider_session_id: input.providerSessionId, website_id: input.websiteId, visitor_id: input.visitorId, mode: 'automation', metadata_json: JSON.stringify(input.metadata || {}) }; return state.session; },
+      async upsertChatSession(input) { state.session = { conversation_id: input.conversationId, provider_session_id: input.providerSessionId, website_id: input.websiteId,
+         visitor_id: input.visitorId, mode: 'automation', metadata_json: JSON.stringify(input.metadata || {}) }; return state.session; },
       async updateChatTakeover({ mode }) { state.session.mode = mode; return state.session; },
       async addContactAlias(alias) { state.aliases.push(alias); return alias; }, async indexSearchDocument() {},
       async getChatSessionByConversation() { return state.session; }, async getConversationOperations() { return { operational_status: 'open' }; },
-      async claimChannelOutboundAction({ idempotencyKey }) { if (state.actions.has(idempotencyKey)) return { acquired: false, duplicate: true, existing: state.actions.get(idempotencyKey) }; const row = { provider_message_id: null }; state.actions.set(idempotencyKey, row); return { acquired: true, duplicate: false, action: row }; },
+      async claimChannelOutboundAction({ idempotencyKey }) { if (state.actions.has(idempotencyKey)) return { acquired: false, duplicate: true, existing: state.actions.get(
+        idempotencyKey) }; const row = { provider_message_id: null }; state.actions.set(idempotencyKey, row); return { acquired: true, duplicate: false, action: row }; },
       async recordOutboundMessage(input) { state.messages.push({ direction: 'outbound', bodyText: input.bodyText, providerMessageId: input.providerMessageId }); },
       async completeChannelOutboundAction({ idempotencyKey, providerMessageId }) { state.actions.get(idempotencyKey).provider_message_id = providerMessageId; }, async failChannelOutboundAction() {},
     },
-    repository: { async getConversation(id) { return { id, channel: 'chat', status: 'open', messages: state.messages.map((m) => ({ direction: m.direction, body_text: m.bodyText, received_at: m.receivedAt })) }; } },
+    repository: { async getConversation(id) { return { id, channel: 'chat', status: 'open', messages: state.messages.map((m) => ({ direction: m.direction, body_text:
+       m.bodyText, received_at: m.receivedAt })) }; } },
     workflowEngineService: { async evaluate() {} }, auditService: { async record() {} }, notificationService: { async create() {} },
     aiWorkflowService: { async analyseConversation() {} }, governanceService: { async attemptAutonomousReply() {} },
   };
@@ -187,10 +191,12 @@ test('business-hours migration expands delayed-action schema for email, form and
   const now = '2026-08-17T08:00:00.000Z';
   db.prepare(`INSERT INTO comms_hub_contacts (id, primary_email, display_name, phone, created_at, updated_at) VALUES (?,?,?,?,?,?)`)
     .run('con-delay', 'person@example.com', 'Person', '', now, now);
-  db.prepare(`INSERT INTO comms_hub_conversations (id, channel, provider, workflow, status, contact_id, subject, source_reference, created_at, updated_at, last_message_at, metadata_json) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
+  db.prepare(`INSERT INTO comms_hub_conversations (id, channel, provider, workflow, status, contact_id, subject, source_reference, created_at, updated_at, last_message_at, \
+metadata_json) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
     .run('cnv-delay', 'email', 'one.com', 'email_inbox', 'open', 'con-delay', 'Hello', 'source', now, now, now, '{}');
   for (const actionType of ['reply_draft', 'email_reply', 'form_reply']) {
-    assert.doesNotThrow(() => db.prepare(`INSERT INTO comms_hub_delayed_actions (id, conversation_id, action_type, payload_json, due_at, status, attempts, max_attempts, idempotency_key, next_attempt_at, created_by, created_at, updated_at) VALUES (?,?,?,?,?,'scheduled',0,8,?,?,?, ?, ?)`)
+    assert.doesNotThrow(() => db.prepare(`INSERT INTO comms_hub_delayed_actions (id, conversation_id, action_type, payload_json, due_at, status, attempts, max_attempts, \
+idempotency_key, next_attempt_at, created_by, created_at, updated_at) VALUES (?,?,?,?,?,'scheduled',0,8,?,?,?, ?, ?)`)
       .run(`delay-${actionType}`, 'cnv-delay', actionType, '{}', now, `key-${actionType}`, now, 'test', now, now));
   }
 });

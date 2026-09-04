@@ -167,15 +167,22 @@ class SqliteD1 {
 test("A sent form request is durably matched to a verified submission only by exact form plus verified email", async () => {
   const d1 = new SqliteD1();
   const ops = new CommsOperationsRepository(d1);
-  d1.query(`INSERT INTO comms_hub_contacts (id, primary_email, display_name, phone, created_at, updated_at) VALUES ('contact-1','reader@example.com','Reader','',?,?)`, ["2026-08-16T16:00:00Z", "2026-08-16T16:00:00Z"]);
-  d1.query(`INSERT INTO comms_hub_conversations (id, channel, provider, workflow, status, contact_id, subject, source_reference, created_at, updated_at, last_message_at, metadata_json) VALUES ('cnv-1','chat','coginpal','website_chat','open','contact-1','Chat','session-1',?,?,?, '{}')`, ["2026-08-16T16:00:00Z", "2026-08-16T16:00:00Z", "2026-08-16T16:00:00Z"]);
-  const decision = decideConversationJotform({ conversation: conversation("I want to guest on the podcast", { id: "cnv-1", contact_id: "contact-1" }), intent: { intent: "podcast_contribution", confidence: .95 }, summary: {}, config: config() });
-  const request = buildFormRequestRecord({ conversation: { id: "cnv-1", contact_id: "contact-1", channel: "chat", workflow: "website_chat" }, draftId: "draft-1", decision, sentAt: "2026-08-16T16:05:00Z", expiryHours: 24 });
+  d1.query(`INSERT INTO comms_hub_contacts (id, primary_email, display_name, phone, created_at, updated_at) VALUES ('contact-1','reader@example.com','Reader','',?,?)`, [
+    "2026-08-16T16:00:00Z", "2026-08-16T16:00:00Z"]);
+  d1.query(`INSERT INTO comms_hub_conversations (id, channel, provider, workflow, status, contact_id, subject, source_reference, created_at, updated_at, last_message_at, \
+metadata_json) VALUES ('cnv-1','chat','coginpal','website_chat','open','contact-1','Chat','session-1',?,?,?, '{}')`, ["2026-08-16T16:00:00Z", "2026-08-16T16:00:00Z", "2026-08-16T16:00:00Z"]);
+  const decision = decideConversationJotform({ conversation: conversation("I want to guest on the podcast", { id: "cnv-1", contact_id: "contact-1" }), intent: { intent:
+     "podcast_contribution", confidence: .95 }, summary: {}, config: config() });
+  const request = buildFormRequestRecord({ conversation: { id: "cnv-1", contact_id: "contact-1", channel: "chat", workflow: "website_chat" }, draftId: "draft-1", decision,
+     sentAt: "2026-08-16T16:05:00Z", expiryHours: 24 });
   await ops.upsertFormRequestSent(request);
-  await ops.addContactAlias({ id: "alias-email-1", contactId: "contact-1", type: "email", value: "reader@example.com", provider: "one.com", confidence: 1, verified: true, createdAt: "2026-08-16T16:05:00Z", metadata: {} });
-  const wrong = await ops.matchPendingFormRequestForSubmission({ formId: decision.formId, email: "someoneelse@example.com", submissionConversationId: "form-cnv-wrong", submissionId: "sub-wrong", submittedAt: "2026-08-16T16:10:00Z" });
+  await ops.addContactAlias({ id: "alias-email-1", contactId: "contact-1", type: "email", value: "reader@example.com", provider: "one.com", confidence: 1, verified: true,
+     createdAt: "2026-08-16T16:05:00Z", metadata: {} });
+  const wrong = await ops.matchPendingFormRequestForSubmission({ formId: decision.formId, email: "someoneelse@example.com", submissionConversationId: "form-cnv-wrong",
+     submissionId: "sub-wrong", submittedAt: "2026-08-16T16:10:00Z" });
   assert.equal(wrong, null);
-  const matched = await ops.matchPendingFormRequestForSubmission({ formId: decision.formId, email: "reader@example.com", submissionConversationId: "form-cnv-1", submissionId: "sub-1", submittedAt: "2026-08-16T16:10:00Z" });
+  const matched = await ops.matchPendingFormRequestForSubmission({ formId: decision.formId, email: "reader@example.com", submissionConversationId: "form-cnv-1", submissionId:
+     "sub-1", submittedAt: "2026-08-16T16:10:00Z" });
   assert.equal(matched.status, "submitted");
   assert.equal(matched.match_method, "verified_email_and_form");
 });
@@ -187,7 +194,8 @@ test("AI workflow dynamically injects the exact approved Jotform URL and stores 
   const responses = {
     commsHubTriage: { intent: "podcast_contribution", confidence: .96, urgency: .1, commercialValue: .2, reputationalRisk: .05, customerImpact: .1, rationale: "guest request" },
     commsHubModeration: { sentiment: "positive", abuseLabel: "none", confidence: .98, severity: 0, rationale: "safe", recommendedAction: "reply" },
-    commsHubSummary: { summary: "Visitor wants to contribute to the podcast.", unresolvedActions: [], sourceMessageIds: [convo.messages[0].id], nextAction: "Collect structured podcast details", followUpNeeded: false, followUpReason: "", followUpHours: 0 },
+    commsHubSummary: { summary: "Visitor wants to contribute to the podcast.", unresolvedActions: [], sourceMessageIds: [convo.messages[0].id], nextAction:
+       "Collect structured podcast details", followUpNeeded: false, followUpReason: "", followUpHours: 0 },
     commsHubDraftContact: { bodyText: "The podcast enquiry form is the best next step: https://form.jotform.com/262097861889073", evidenceSourceReferences: [] },
   };
   const service = new CommsHubAiWorkflowService({
@@ -275,8 +283,10 @@ test("Processed Jotform replies are delivered by email from the form conversatio
 
 test("sendReplyDraft records a Jotform request only after the channel reply succeeds", async () => {
   const recorded = [];
-  const decision = { selected: true, formKey: "case_study", formId: "262063136008044", formUrl: "https://form.jotform.com/262063136008044", label: "Case study contribution form", workflow: "case_study_intake", reason: "case_study_contribution_requires_structured_intake", required: true };
-  const draft = { id: "draft-1", conversation_id: "cnv-1", status: "draft", body_text: `Please use ${decision.formUrl}`, evidence_ids_json: "[]", requires_approval: 0, metadata: { smartLayers: { formDecision: decision } } };
+  const decision = { selected: true, formKey: "case_study", formId: "262063136008044", formUrl: "https://form.jotform.com/262063136008044", label:
+     "Case study contribution form", workflow: "case_study_intake", reason: "case_study_contribution_requires_structured_intake", required: true };
+  const draft = { id: "draft-1", conversation_id: "cnv-1", status: "draft", body_text: `Please use ${decision.formUrl}`, evidence_ids_json: "[]", requires_approval: 0,
+     metadata: { smartLayers: { formDecision: decision } } };
   const context = {
     config: { formRequestExpiryHours: 336 },
     aiRepository: {
@@ -300,7 +310,8 @@ test("autonomous replies are blocked when Smart Response Intelligence says the d
     config: { autonomousRepliesEnabled: true },
     repository: { async getConversation() { return { id: "cnv-1", channel: "chat" }; } },
     aiRepository: {
-      async getConversationAiState() { return { state: { intent: "general_enquiry", risk_score: 0, confidence: 1 }, runs: [{ metadata: { security: {}, responseIntelligence: { version: "smart-response/v1", autonomousEligible: false } } }], evidence: [{}] }; },
+      async getConversationAiState() { return { state: { intent: "general_enquiry", risk_score: 0, confidence: 1 }, runs: [{ metadata: { security: {}, responseIntelligence: {
+         version: "smart-response/v1", autonomousEligible: false } } }], evidence: [{}] }; },
       async getDraft() { return { id: "d1", conversation_id: "cnv-1", requires_approval: 0 }; },
     },
   };

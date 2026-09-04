@@ -18,7 +18,8 @@ test("weekday AM windows contain blog-social handoff and both Blotato schedule s
   };
   for (const day of Object.keys(eveningPaths)) {
     const start = opsSource.indexOf(`"${day}-am": [`);
-    const next = day === "friday" ? opsSource.indexOf('"friday-pm": [', start) : opsSource.indexOf(`"${({monday:"tuesday",tuesday:"wednesday",wednesday:"thursday",thursday:"friday"})[day]}-am": [`, start);
+    const next = day === "friday" ? opsSource.indexOf('"friday-pm": [', start) : opsSource.indexOf(`"${({monday:"tuesday",tuesday:"wednesday",wednesday:"thursday",thursday:
+      "friday"})[day]}-am": [`, start);
     const block = opsSource.slice(start, next);
     assert.equal(occurrences(block, '/blog/social/daily/build'), 1, `${day} must build one social-blog item`);
     assert.equal(occurrences(block, '/zernio/blog-rss/daily'), 1, `${day} must schedule one social-blog item`);
