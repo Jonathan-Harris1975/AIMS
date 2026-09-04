@@ -18,7 +18,8 @@ export const QUIZ_TEXT_RULE = [
 export const STRICT_TEXT_FREE_RULE = [
   "ABSOLUTE TEXT-FREE OUTPUT.",
   "No text. No letters. No numbers. No logos. No watermarks.",
-  "Do not include text of any kind. Do not render readable text, pseudo-text, gibberish text, letters, words, numerals, punctuation, glyphs, captions, headlines, labels, code, interface copy, signage, logos, trademarks, watermarks, badges, seals or typography-shaped marks anywhere in the image.",
+  "Do not include text of any kind. Do not render readable text, pseudo-text, gibberish text, letters, words, numerals, punctuation, glyphs, captions, headlines, labels, code, \
+interface copy, signage, logos, trademarks, watermarks, badges, seals or typography-shaped marks anywhere in the image.",
   "Do not turn the supplied title, theme, quotation, script or metadata into visible writing.",
   "Represent every concept through composition, objects, light, texture, geometry and atmosphere only.",
   "If any earlier instruction implies visible wording, ignore that part and keep the image completely text-free.",
@@ -74,9 +75,11 @@ export function applyArtworkPromptPolicy(prompt = "", { date, mode = "editorial"
   const topicalPodcastRule = mode === "podcast"
     ? [
         "TOPICAL EDITORIAL REQUIREMENT: the image must visibly communicate one or two concrete subjects from this specific episode, not merely the idea of AI.",
-        "Choose recognisable real-world visual storytelling such as semiconductor hardware, data-centre power infrastructure, security work, healthcare technology, scientific research, robotics, developers or other episode-specific objects and environments when supported by the prompt.",
+        "Choose recognisable real-world visual storytelling such as semiconductor hardware, data-centre power infrastructure, security work, healthcare technology, scientific \
+research, robotics, developers or other episode-specific objects and environments when supported by the prompt.",
         "Create a strong magazine-cover focal scene with depth, tension and human or physical context where appropriate.",
-        "Do not default to a symmetrical abstract emblem, digital snowflake, neural-network flower, generic circuit mandala, floating polygon, glowing brain, anonymous data web or decorative geometry.",
+        "Do not default to a symmetrical abstract emblem, digital snowflake, neural-network flower, generic circuit mandala, floating polygon, glowing brain, anonymous data \
+web or decorative geometry.",
         "Abstract geometry may only be a minor supporting texture, never the main subject.",
       ].join(" ")
     : "";
@@ -85,7 +88,8 @@ export function applyArtworkPromptPolicy(prompt = "", { date, mode = "editorial"
         "SOCIAL EDITORIAL REQUIREMENT: make the image immediately engaging and clearly related to the supplied post topic.",
         "Prefer a concrete person, object, workplace, real-world environment or physical consequence over decorative abstract AI symbolism.",
         "For a named public figure or quote-author brief, make that person the clear editorial focal subject and use only subtle topic-relevant visual context around them.",
-        "Avoid anonymous corporate people, handshake imagery, generic office teams, glowing brains, floating polygons, circuit mandalas, digital snowflakes, abstract neural flowers and stock-photo staging.",
+        "Avoid anonymous corporate people, handshake imagery, generic office teams, glowing brains, floating polygons, circuit mandalas, digital snowflakes, abstract neural \
+flowers and stock-photo staging.",
         "Use cinematic lighting, emotional presence, bold but controlled colour, high contrast and modern magazine or YouTube-thumbnail composition.",
       ].join(" ")
     : "";
