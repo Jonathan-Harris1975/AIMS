@@ -111,7 +111,8 @@ export const newsInsightBodySchema = z
     articles: z.array(articleSchema).max(8).optional(),
     lane: shortLaneSchema.optional(),
     theme: z
-      .enum(["ai-news-bite", "what-it-means", "workflow-tip", "podcast-angle", "reality-check", "ebook-insight", "tool-or-model-verdict", "ai-at-work", "risk-and-reality-check", "practical-ai-playbook", "what-happened-and-why-it-matters"])
+      .enum(["ai-news-bite", "what-it-means", "workflow-tip", "podcast-angle", "reality-check", "ebook-insight", "tool-or-model-verdict", "ai-at-work",
+         "risk-and-reality-check", "practical-ai-playbook", "what-happened-and-why-it-matters"])
       .optional(),
     durationSeconds: z.coerce.number().int().min(35).max(55).optional().default(45),
     cta: z.string().trim().max(500).optional(),

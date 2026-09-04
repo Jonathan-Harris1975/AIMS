@@ -58,7 +58,8 @@ const VISUAL_STYLE_STOP_WORDS = new Set([
   "foreground", "directional", "restrained", "motion", "text", "letters", "logo", "watermark", "caption",
 ]);
 
-const GENERIC_METAPHOR_PATTERN = /\b(board\s*game|playing\s*cards?|card\s*deck|chess(?:board|pieces?)?|domino(?:es)?|miniatures?|figurines?|toy\s+(?:people|workers|buildings?|models?)|puzzle\s*pieces?|abstract\s+(?:blocks?|tokens?|shapes?)|generic\s+desk\s+props?|model\s+village)\b/i;
+const GENERIC_METAPHOR_PATTERN = new RegExp("\\b(board\\s*game|playing\\s*cards?|card\\s*deck|chess(?:board|pieces?)?|domino(?:es)?|miniatures?|figurines?|toy\\s+(?:people|\
+workers|buildings?|models?)|puzzle\\s*pieces?|abstract\\s+(?:blocks?|tokens?|shapes?)|generic\\s+desk\\s+props?|model\\s+village)\\b", "i");
 const STATIC_PORTRAIT_PATTERN = /\b(sitting|seated|standing)\s+(?:alone\s+)?(?:at|beside|behind)\s+(?:a\s+)?(?:desk|table)|\bportrait\b|\blooking\s+at\s+(?:camera|screen)\b/i;
 
 function meaningfulTokens(value = "", { removeSource = new Set() } = {}) {
@@ -200,7 +201,8 @@ function boolEnv(name, fallback = false) {
 function humanVisualSceneCount(scenes = []) {
   return asArray(scenes).reduce((total, scene) => {
     const media = String(scene?.mediaSource || "");
-    return /\b(person|people|human|adult|face|faces|body|bodies|worker|workers|creator|creators|author|founder|editor|staff|professional|operator|analyst|reader|customer|client|silhouette|portrait|shoulder|desk posture|expression|gesture|commuter|team|teams)\b/i.test(media) ? total + 1 : total;
+    return new RegExp("\\b(person|people|human|adult|face|faces|body|bodies|worker|workers|creator|creators|author|founder|editor|staff|professional|operator|analyst|reader|\
+customer|client|silhouette|portrait|shoulder|desk posture|expression|gesture|commuter|team|teams)\\b", "i").test(media) ? total + 1 : total;
   }, 0);
 }
 

@@ -53,7 +53,8 @@ export const DEFAULT_AI_STORY_TEMPLATE_PATH =
   "/base/v2/ai-story-video/5903fe43-514d-40ee-a060-0d6628c5f8fd/v1";
 
 const VIDEO_DONE_STATUSES = new Set(["done", "completed", "complete", "success", "ready", "finished", "rendered", "processed", "available"]);
-const VIDEO_FAILED_STATUSES = new Set(["creation-from-template-failed", "failed", "error", "cancelled", "canceled", "timed-out", "timeout", "insufficient-credits", "insufficient_credits", "no-credits", "payment-required", "payment_required", "billing-error"]);
+const VIDEO_FAILED_STATUSES = new Set(["creation-from-template-failed", "failed", "error", "cancelled", "canceled", "timed-out", "timeout", "insufficient-credits",
+   "insufficient_credits", "no-credits", "payment-required", "payment_required", "billing-error"]);
 const POST_DONE_STATUSES = new Set(["published", "completed", "complete", "success"]);
 const POST_FAILED_STATUSES = new Set(["failed", "error", "insufficient-credits", "insufficient_credits", "payment-required", "payment_required"]);
 // Mirrors ZERNIO_SCHEDULE_ACCEPTED_STATUSES in services/zernio/utils/socialScheduler.js:
@@ -581,7 +582,8 @@ async function createAndWaitForVideo({ templateId, templateIdCandidates = [], pa
       });
       if (nextTemplateId) continue;
 
-      const err = new Error(`Blotato rejected every resolved template ID. Tried: ${rejectedTemplateIds.join(", ")}. Use /blotato/templates?search=${encodeURIComponent(DEFAULT_TEMPLATE_SEARCH)} and set BLOTATO_NEWS_TEMPLATE_ID to the ID value returned by Blotato for this account.`);
+      const err = new Error(`Blotato rejected every resolved template ID. Tried: ${rejectedTemplateIds.join(", ")}. Use /blotato/templates?search=${encodeURIComponent(
+        DEFAULT_TEMPLATE_SEARCH)} and set BLOTATO_NEWS_TEMPLATE_ID to the ID value returned by Blotato for this account.`);
       err.statusCode = error?.statusCode || 422;
       err.cause = error;
       err.details = error?.details || null;
@@ -598,7 +600,8 @@ async function createAndWaitForVideo({ templateId, templateIdCandidates = [], pa
     throw err;
   }
 
-  onVisualCreated?.({ visualId, visual, visualInputs, visualPrompt, creditBudget, dashboardUrl: templateDashboardUrl(visualId), templateId: usedTemplateId, templateIdCandidates: candidates, rejectedTemplateIds });
+  onVisualCreated?.({ visualId, visual, visualInputs, visualPrompt, creditBudget, dashboardUrl: templateDashboardUrl(visualId), templateId: usedTemplateId,
+     templateIdCandidates: candidates, rejectedTemplateIds });
 
   const maxAttempts = positiveIntEnv("BLOTATO_VIDEO_POLL_ATTEMPTS", 720, 2880);
   const intervalMs = positiveIntEnv("BLOTATO_VIDEO_POLL_INTERVAL_MS", 5000, 60_000);
@@ -654,7 +657,8 @@ async function createAndWaitForVideo({ templateId, templateIdCandidates = [], pa
     throw err;
   }
 
-  return { visualId, visual, completed, mediaUrl, visualPrompt, visualInputs, creditBudget, dashboardUrl: templateDashboardUrl(visualId), templateId: usedTemplateId, templateIdCandidates: candidates, rejectedTemplateIds };
+  return { visualId, visual, completed, mediaUrl, visualPrompt, visualInputs, creditBudget, dashboardUrl: templateDashboardUrl(visualId), templateId: usedTemplateId,
+     templateIdCandidates: candidates, rejectedTemplateIds };
 }
 
 
@@ -1337,7 +1341,8 @@ async function runPublishJob({
     const scriptOptions = {
       article: articleSource.article,
       lane: lane.slug,
-      theme: [trim(process.env.BLOTATO_NEWS_THEME, lane.theme), creativeStyle ? `AutoShort visual treatment: ${creativeStyle}. Keep the whole short visually coherent in this treatment.` : ""].filter(Boolean).join(" "),
+      theme: [trim(process.env.BLOTATO_NEWS_THEME, lane.theme), creativeStyle ?
+         `AutoShort visual treatment: ${creativeStyle}. Keep the whole short visually coherent in this treatment.` : ""].filter(Boolean).join(" "),
       durationSeconds: Math.min(55, Math.max(35, Number(process.env.BLOTATO_NEWS_DURATION_SECONDS || 45))),
       audience: trim(
         process.env.BLOTATO_NEWS_AUDIENCE,

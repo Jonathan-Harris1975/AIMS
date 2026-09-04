@@ -203,10 +203,13 @@ export function buildRenderedVideoQaPrompt({ pack = {}, article = {}, technical 
   return [
     "Audit the finished vertical social video represented by this chronological contact sheet.",
     "This is post-render quality control. Judge the actual frames, not the script plan or prompt compliance.",
-    "The video must finish within 35-55 seconds and normally targets roughly 45 seconds. Ordinary subtitle captions are expected; do not fail legitimate readable captions. Do fail gibberish, cropped/unreadable captions, accidental logos or image-generated pseudo-text.",
-    "The first three cells are deliberately sampled from the opening three seconds. Give the hook/scroll-stopper at least 40% of the overall judgement: movement, specificity, visual tension, immediate source relevance and whether it stops a rapid scroll.",
+    "The video must finish within 35-55 seconds and normally targets roughly 45 seconds. Ordinary subtitle captions are expected; do not fail legitimate readable captions. Do \
+fail gibberish, cropped/unreadable captions, accidental logos or image-generated pseudo-text.",
+    "The first three cells are deliberately sampled from the opening three seconds. Give the hook/scroll-stopper at least 40% of the overall judgement: movement, specificity, \
+visual tension, immediate source relevance and whether it stops a rapid scroll.",
     "Give special weight to source relevance, scene-to-narration fit, visual progression and whether the sequence tells one coherent story.",
-    "Penalise repeated static portraits, repeated desk scenes, arbitrary cards/board games/miniatures/toys/puzzles, generic AI imagery, irrelevant lifestyle imagery, weak change between scenes and visuals that could illustrate any article.",
+    "Penalise repeated static portraits, repeated desk scenes, arbitrary cards/board games/miniatures/toys/puzzles, generic AI imagery, irrelevant lifestyle imagery, weak \
+change between scenes and visuals that could illustrate any article.",
     "A technically polished but off-topic video must score poorly. A static generic opening must cap the total score below 60 even if later frames improve.",
     `Source title: ${compact(article.title, 300)}`,
     `Source summary: ${compact(article.summary || article.description, 1000)}`,
@@ -215,8 +218,10 @@ export function buildRenderedVideoQaPrompt({ pack = {}, article = {}, technical 
     `Technical metadata: ${JSON.stringify(technical)}`,
     `Scene plan:\n${scenes}`,
     "Return JSON only with exactly these keys:",
-    '{"score":0,"hookPerformance":0,"sourceRelevance":0,"sceneAlignment":0,"continuity":0,"visualProgression":0,"visualQuality":0,"captionLegibility":0,"defects":[],"hardDefects":[],"summary":"","recommendation":""}',
-    "Scores are 0-100. Hard defects include seriously off-topic visuals, repeated generic metaphor props, broken/unreadable captions, severe generated anatomy, logos/watermarks, or a sequence that does not match the source story.",
+    '{"score":0,"hookPerformance":0,"sourceRelevance":0,"sceneAlignment":0,"continuity":0,"visualProgression":0,"visualQuality":0,"captionLegibility":0,"defects":[],\
+"hardDefects":[],"summary":"","recommendation":""}',
+    "Scores are 0-100. Hard defects include seriously off-topic visuals, repeated generic metaphor props, broken/unreadable captions, severe generated anatomy, logos/\
+watermarks, or a sequence that does not match the source story.",
   ].join("\n");
 }
 
@@ -335,7 +340,8 @@ export async function reviewRenderedVideo({
           messages: [{
             role: "user",
             content: [
-              { type: "text", text: `${buildRenderedVideoQaPrompt({ pack, article, technical })}${attempt > 1 ? "\nYour previous response was invalid JSON. Return one complete JSON object only." : ""}` },
+              { type: "text", text: `${buildRenderedVideoQaPrompt({ pack, article, technical })}${attempt > 1 ?
+                 "\nYour previous response was invalid JSON. Return one complete JSON object only." : ""}` },
               { type: "image_url", image_url: { url: `data:image/jpeg;base64,${contactSheet.toString("base64")}` } },
             ],
           }],
