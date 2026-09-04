@@ -2,6 +2,7 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { javascriptLineLengthFailures } from "./lintRules.js";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const skipDirectories = new Set([
@@ -96,6 +97,10 @@ async function main() {
           failures.push(`${rel}:${index + 1}: trailing whitespace`);
         }
       }
+    }
+
+    if (javascriptExtensions.has(extension)) {
+      failures.push(...javascriptLineLengthFailures(source, rel));
     }
 
     if (extension === ".json") {
