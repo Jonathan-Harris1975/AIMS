@@ -66,7 +66,10 @@ async function repairPodcastTranscriptForCouncil(candidate = {}, { gate, attempt
       role: "user",
       content: `You are the final review editor for Turing's Torch, hosted by a recognised British AI industry expert.
 
-Repair only the listed defects in the MAIN BODY below. The intro and branded outro are locked by code and will be reattached after your repair, so DO NOT create an intro or outro. Preserve all supported facts, the existing argument, approximate length and dry Gen-X voice. Use British English. Do not add facts, numbers, quotations, names or claims that are not already in the text. If a claim is flagged as unsupported, remove or soften it rather than guessing. Keep the result natural for spoken delivery. Return the repaired MAIN BODY only as plain transcript text.
+Repair only the listed defects in the MAIN BODY below. The intro and branded outro are locked by code and will be reattached after your repair, so DO NOT create an intro or \
+outro. Preserve all supported facts, the existing argument, approximate length and dry Gen-X voice. Use British English. Do not add facts, numbers, quotations, names or claims \
+that are not already in the text. If a claim is flagged as unsupported, remove or soften it rather than guessing. Keep the result natural for spoken delivery. Return the \
+repaired MAIN BODY only as plain transcript text.
 
 Repair attempt: ${attempt || 1}
 Defects:
@@ -137,7 +140,8 @@ function looksLikeRepeatedIntro(paragraph = "", intro = "") {
   const text = String(paragraph || "").trim();
   if (!text) return false;
   const normalised = text.toLowerCase().replace(/[’']/g, "'");
-  const brandedOpening = /\b(?:welcome(?: back)? to|this is|you're listening to|you are listening to)\s+(?:the\s+)?turing'?s torch\b|\bi'?m jonathan harris\b|\bjonathan harris here\b/i.test(normalised);
+  const brandedOpening = new RegExp("\\b(?:welcome(?: back)? to|this is|you're listening to|you are listening to)\\s+(?:the\\s+)?turing'?s torch\\b|\\bi'?m jonathan harris\\b|\
+\\bjonathan harris here\\b", "i").test(normalised);
   const similarity = introParagraphSimilarity(text, intro);
   return brandedOpening || similarity >= 0.68 || (similarity >= 0.28 && /\b(?:welcome|episode|this week|today|host|listening)\b/i.test(normalised));
 }

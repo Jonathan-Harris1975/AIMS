@@ -188,7 +188,8 @@ function buildFallbackDescription(mainOnly = "", durationPlan = {}) {
     : "the week’s loudest artificial intelligence claims";
 
   const paragraphs = [
-    `${HOST_NAME} cuts through ${topicLine} in this ${targetMins}-minute ${PODCAST_TITLE} briefing. What matters is simple: what is useful, what is undercooked, and who carries the risk once the demo glow wears off.`,
+    `${HOST_NAME} cuts through ${topicLine} in this ${targetMins}-minute ${PODCAST_TITLE} briefing. What matters is simple: what is useful, what is undercooked, and who \
+carries the risk once the demo glow wears off.`,
     "Expect plain-English context on power, money, data, labour and control, with the usual vendor fireworks left outside where they belong.",
   ];
 
@@ -457,8 +458,10 @@ export function getArtworkPrompt(description, date) {
     "The dominant story must occupy roughly seventy per cent of the frame and be identifiable from a concrete person, object, workplace, consequence or decision named in the episode.",
     "Mood: sharp, sceptical, cinematic, adult, intelligent and grounded.",
     getSeasonalPaletteDirection(date),
-    "Use cinematic magazine-feature storytelling with a recognisable focal subject in a real-world scene. Prefer episode-supported semiconductor hardware, power infrastructure, security work, healthcare technology, scientific research, robotics, developer environments or another exact subject from the episode.",
-    "Decorative AI symbols, digital snowflakes, generic server rooms, glowing brains, symmetric emblems, circuit mandalas and unrelated futuristic motifs are not acceptable substitutes for the episode story.",
+    "Use cinematic magazine-feature storytelling with a recognisable focal subject in a real-world scene. Prefer episode-supported semiconductor hardware, power infrastructure,\
+ security work, healthcare technology, scientific research, robotics, developer environments or another exact subject from the episode.",
+    "Decorative AI symbols, digital snowflakes, generic server rooms, glowing brains, symmetric emblems, circuit mandalas and unrelated futuristic motifs are not acceptable \
+substitutes for the episode story.",
     STRICT_TEXT_FREE_RULE,
     `Episode themes and evidence: ${theme || "AI systems, governance, power, risk, work and security."}`,
   ].join(" ").slice(0, 1800);
@@ -496,7 +499,8 @@ function deriveEpisodeTakeaways({ description = "", mainOnly = "", topics = [] }
 }
 
 function deriveEpisodeEntities({ keywords = [], topics = [], mainOnly = "" } = {}) {
-  const candidateEntities = (mainOnly.match(/\b(?:OpenAI|Anthropic|Google|Microsoft|NVIDIA|Meta|Apple|Amazon|Gemini|Claude|GPT|LLM|AI governance|agentic AI|robotics|finance AI|healthcare AI)\b/gi) || [])
+  const candidateEntities = (mainOnly.match(new RegExp("\\b(?:OpenAI|Anthropic|Google|Microsoft|NVIDIA|Meta|Apple|Amazon|Gemini|Claude|GPT|LLM|AI governance|agentic AI|\
+robotics|finance AI|healthcare AI)\\b", "gi")) || [])
     .map((item) => item.replace(/\s+/g, " ").trim());
   return uniqueKeywordList([
     "Jonathan Harris",
