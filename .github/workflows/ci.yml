@@ -25,14 +25,14 @@ jobs:
           cache: npm
       - name: Reject committed literal secrets
         run: python3 scripts/secret_scan.py
+      - name: Reject unapproved repository duplication and hygiene regressions
+        run: python3 scripts/check_repository_hygiene.py
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Reject legacy envBootstrap imports
         run: |
           if grep -RInE 'scripts/envBootstrap\.js|import[[:space:]]+[^;]*\bENV\b[^;]*from' deployment-check.js scripts services routes server.js --exclude='envBootstrap.js' --exclude='*.md'; then
             exit 1
           fi
-      - name: Syntax check
-        run: find . -name '*.js' -not -path './node_modules/*' -print0 | xargs -0 -n1 node --check
       - run: npm run verify
       - run: npm run deploy:smoke
       - name: Enforce health endpoint performance SLO
