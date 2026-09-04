@@ -277,7 +277,8 @@ export async function deliverNewsletterIssue({ profile, sessionId, buildResult, 
           stage,
           campaignId,
           campaignDeleted,
-          error: `Brevo campaign ${campaignId} was created but AIMS could not durably record it, so it was ${campaignDeleted ? "deleted" : "left in Brevo as an untracked draft — check the Brevo dashboard"}: ${writeErr?.message || String(writeErr)}`,
+          error: `Brevo campaign ${campaignId} was created but AIMS could not durably record it, so it was ${campaignDeleted ? "deleted" :
+             "left in Brevo as an untracked draft — check the Brevo dashboard"}: ${writeErr?.message || String(writeErr)}`,
         };
       }
     }
