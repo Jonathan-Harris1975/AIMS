@@ -2,7 +2,7 @@ import express from "express";
 import { runPodcastPipeline } from "./runPodcastPipeline.js";
 import { sanitizeSessionId } from "../shared/utils/sessionId.js";
 import { requestDedupe } from "../shared/utils/requestDedupe.js";
-import { getPublicJob, beginJob, completeJob, failJob } from "../shared/utils/jobStore.js";
+import { getPublicJobFresh, beginJob, completeJob, failJob } from "../shared/utils/jobStore.js";
 import { validateBody, podcastRunBodySchema } from "../shared/utils/requestSchemas.js";
 import { info, error } from "../../logger.js";
 import { getPodcastReadiness } from "./readiness.js";
@@ -38,7 +38,7 @@ router.post("/run", requestDedupe("podcast:run"), async (req, res) => {
       "TT"
     );
     const eventId = req.idempotencyKey || null;
-    const existingJob = getPublicJob("podcast", sessionId);
+    const existingJob = await getPublicJobFresh("podcast", sessionId);
 
     if (existingJob && ["queued", "running"].includes(existingJob.status)) {
       return res.status(202).json({
@@ -110,15 +110,25 @@ router.post("/run", requestDedupe("podcast:run"), async (req, res) => {
   }
 });
 
-router.get("/status/:sessionId", (req, res) => {
+router.get("/status/:sessionId", async (req, res) => {
   const sessionId = sanitizeSessionId(req.params.sessionId, "TT");
-  const job = getPublicJob("podcast", sessionId);
 
-  if (!job) {
-    return res.status(404).json({ ok: false, error: "No podcast job found", sessionId });
+  try {
+    const job = await getPublicJobFresh("podcast", sessionId);
+
+    if (!job) {
+      return res.status(404).json({ ok: false, error: "No podcast job found", sessionId });
+    }
+
+    return res.json({ ok: true, job });
+  } catch (err) {
+    error("api.podcast.status.fail", {
+      sessionId,
+      requestId: req?.id || req?.headers?.["x-request-id"] || null,
+      error: err?.stack || err?.message || String(err),
+    });
+    return sendRouteError(req, res, err, "Podcast job status request failed");
   }
-
-  return res.json({ ok: true, job });
 });
 
 router.get("/health", (_req, res) =>

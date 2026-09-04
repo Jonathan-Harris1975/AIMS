@@ -28,7 +28,7 @@ The service entry point, route modules and domain utilities are contained in thi
 - Generated public content must pass its content-quality gates before publication or delivery.
 - Durable artefacts and job state use the configured R2/state utilities rather than process memory where a durable store is required.
 
-The Friday operation window calls readiness first and blocks `/podcast/run` unless the required OpenRouter model, AWS Polly credentials, R2 storage lanes, intro/outro assets, target duration and FFmpeg/FFprobe are available. The operation then polls the podcast status route until the pipeline is terminal.
+The Friday operation window calls readiness first and blocks `/podcast/run` unless the required OpenRouter model, AWS Polly credentials, R2 storage lanes, intro/outro assets, target duration and FFmpeg/FFprobe are available. The operation then polls the podcast status route until the pipeline is terminal. Podcast run de-duplication and status reads use fresh durable job state so polling remains correct across restarts and multi-instance deployments.
 
 ## Duration policy
 
