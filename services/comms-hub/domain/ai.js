@@ -31,7 +31,8 @@ export const MODERATION_LABELS = Object.freeze([
 export const REPLY_POLICIES = Object.freeze({
   contact_intake: Object.freeze({
     key: "contact",
-    purpose: "Process contact enquiries substantively, answer what is supported, and route unsupported requests for review. For verified Jotform submissions, do not duplicate Jotform's immediate receipt acknowledgement.",
+    purpose: "Process contact enquiries substantively, answer what is supported, and route unsupported requests for review. For verified Jotform submissions, do not duplicate \
+Jotform's immediate receipt acknowledgement.",
     maximumCharacters: 2200,
     requiresEvidence: true,
     defaultFollowUpHours: 48,
@@ -39,7 +40,8 @@ export const REPLY_POLICIES = Object.freeze({
   }),
   case_study_intake: Object.freeze({
     key: "contribute",
-    purpose: "Digest a verified case-study contribution, identify only genuinely missing evidence, and explain the next communication step. Downstream content automation is separate from this reply workflow and must not be represented as guaranteed publication.",
+    purpose: "Digest a verified case-study contribution, identify only genuinely missing evidence, and explain the next communication step. Downstream content automation is \
+separate from this reply workflow and must not be represented as guaranteed publication.",
     maximumCharacters: 2600,
     requiresEvidence: true,
     defaultFollowUpHours: 72,
@@ -47,7 +49,8 @@ export const REPLY_POLICIES = Object.freeze({
   }),
   podcast_enquiry_intake: Object.freeze({
     key: "podcast",
-    purpose: "Digest a verified podcast enquiry/contribution and provide the appropriate next communication step without offering guest booking slots or promising participation. Downstream editorial automation is separate from this reply workflow.",
+    purpose: "Digest a verified podcast enquiry/contribution and provide the appropriate next communication step without offering guest booking slots or promising \
+participation. Downstream editorial automation is separate from this reply workflow.",
     maximumCharacters: 2600,
     requiresEvidence: true,
     defaultFollowUpHours: 72,
@@ -71,7 +74,8 @@ export const REPLY_POLICIES = Object.freeze({
   }),
   website_chat: Object.freeze({
     key: "website_chat",
-    purpose: "Answer website chat enquiries conversationally, ask one focused clarification when needed, and route structured intake through the approved Jotform orchestration layer rather than inventing a separate workflow.",
+    purpose: "Answer website chat enquiries conversationally, ask one focused clarification when needed, and route structured intake through the approved Jotform orchestration \
+layer rather than inventing a separate workflow.",
     maximumCharacters: 1800,
     requiresEvidence: false,
     defaultFollowUpHours: 48,
@@ -79,7 +83,8 @@ export const REPLY_POLICIES = Object.freeze({
   }),
   email_inbox: Object.freeze({
     key: "email_inbox",
-    purpose: "Draft a substantive reply to a customer email while preserving the existing email thread, using approved evidence where needed and routing structured intake through the approved Jotform orchestration layer.",
+    purpose: "Draft a substantive reply to a customer email while preserving the existing email thread, using approved evidence where needed and routing structured intake \
+through the approved Jotform orchestration layer.",
     maximumCharacters: 2600,
     requiresEvidence: false,
     defaultFollowUpHours: 48,

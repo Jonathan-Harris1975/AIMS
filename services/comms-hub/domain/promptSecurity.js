@@ -14,8 +14,10 @@ const AI_PRIVATE_KEY_RE = /-----BEGIN(?: RSA| EC| OPENSSH)? PRIVATE KEY-----[\s\
 const DIRECT_PATTERNS = Object.freeze([
   { key: "instruction_override", weight: 5, regex: /\b(?:ignore|disregard|forget|override|bypass)\b[\s\S]{0,80}\b(?:previous|prior|system|developer|safety|instructions?|rules?|policy|policies)\b/i },
   { key: "role_escalation", weight: 4, regex: /\b(?:you\s+are\s+now|act\s+as|switch\s+to|enter)\b[\s\S]{0,80}\b(?:developer|admin|root|system|unrestricted|jailbreak|dan)\b/i },
-  { key: "system_prompt_extraction", weight: 5, regex: /\b(?:reveal|repeat|print|show|dump|expose|return)\b[\s\S]{0,80}\b(?:system|developer|hidden|internal)\b[\s\S]{0,40}\b(?:prompt|instructions?|message|policy|configuration)\b/i },
-  { key: "secret_extraction", weight: 5, regex: /\b(?:reveal|print|show|dump|expose|send|return|extract|exfiltrate)\b[\s\S]{0,80}\b(?:api[_ -]?key|password|secret|bearer\s+token|credential|private\s+key|access\s+token)\b/i },
+  { key: "system_prompt_extraction", weight: 5, regex: new RegExp("\\b(?:reveal|repeat|print|show|dump|expose|return)\\b[\\s\\S]{0,80}\\b(?:system|developer|hidden|internal)\
+\\b[\\s\\S]{0,40}\\b(?:prompt|instructions?|message|policy|configuration)\\b", "i") },
+  { key: "secret_extraction", weight: 5, regex: new RegExp("\\b(?:reveal|print|show|dump|expose|send|return|extract|exfiltrate)\\b[\\s\\S]{0,80}\\b(?:api[_ -]?key|password|\
+secret|bearer\\s+token|credential|private\\s+key|access\\s+token)\\b", "i") },
   { key: "tool_manipulation", weight: 4, regex: /\b(?:call|invoke|run|execute|use)\b[\s\S]{0,60}\b(?:tool|function|shell|command|terminal|plugin|api)\b/i },
   { key: "policy_bypass", weight: 4, regex: /\b(?:disable|remove|skip|circumvent|bypass)\b[\s\S]{0,60}\b(?:approval|guardrail|filter|moderation|security|safety|validation)\b/i },
   { key: "prompt_boundary_tampering", weight: 5, regex: /(?:UNTRUSTED_DATA_JSON_(?:START|END)|TASK INSTRUCTIONS|SECURITY RULES|<\|(?:im_start|system|developer|assistant)\|>|\[INST\])/i },
