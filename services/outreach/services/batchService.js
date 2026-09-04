@@ -128,7 +128,8 @@ export async function runNextBatch() {
     const { keywords } = keywordConfig;
     if (!keywords.length) {
       info("outreach.batch.keywords.none", { source: keywordConfig.source, filePath: keywordConfig.filePath, fileFound: keywordConfig.found });
-      return { processed: 0, done: true, skipped: true, reason: "NO_OUTREACH_KEYWORDS", keywordSource: keywordConfig.source, keywordFilePath: keywordConfig.filePath, keywordFileFound: keywordConfig.found, keywordCount: 0 };
+      return { processed: 0, done: true, skipped: true, reason: "NO_OUTREACH_KEYWORDS", keywordSource: keywordConfig.source, keywordFilePath: keywordConfig.filePath,
+         keywordFileFound: keywordConfig.found, keywordCount: 0 };
     }
 
     const progress = await loadProgress();
