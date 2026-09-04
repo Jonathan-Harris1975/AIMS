@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { testCredential } from "./helpers/testCredentials.js";
 
 function saveEnv(names) {
   return Object.fromEntries(names.map((name) => [name, process.env[name]]));
@@ -29,7 +30,7 @@ test("resilientRequest honours audit maxRetries=0 and masks provider error body"
   let callCount = 0;
 
   process.env.OPENROUTER_ANTHROPIC = "anthropic/test-model";
-  process.env.OPENROUTER_API_KEY_ANTHROPIC = "sk-or-secret-value";
+  process.env.OPENROUTER_API_KEY_ANTHROPIC = testCredential("openrouter-anthropic");
   delete process.env.OPENROUTER_GOOGLE;
   delete process.env.OPENROUTER_API_KEY_GOOGLE;
   delete process.env.OPENROUTER_CHATGPT;

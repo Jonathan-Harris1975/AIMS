@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
+import { testCredential } from "./helpers/testCredentials.js";
 
 const ORIGINAL_ENV = { ...process.env };
 
@@ -502,7 +503,7 @@ test("Zernio reaches the provider with curated fallback artwork when generation 
   applyBaseEnv();
   process.env.OPENROUTER_API_BASE = mockBase;
   process.env.ZERNIO_API_BASE_URL = mockBase;
-  process.env.ZERNIO_API_KEY = "zernio-fallback-key";
+  process.env.ZERNIO_API_KEY = testCredential("zernio-fallback");
   process.env.ZERNIO_REQUIRED_PLATFORMS = "facebook";
   process.env.ZERNIO_VALIDATE_TARGET_ACCOUNTS = "true";
   process.env.ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK = "true";
@@ -541,7 +542,7 @@ test("Zernio schedules generated artwork and keeps static fallback disabled by d
   applyBaseEnv();
   process.env.OPENROUTER_API_BASE = mockBase;
   process.env.ZERNIO_API_BASE_URL = mockBase;
-  process.env.ZERNIO_API_KEY = "zernio-generated-art-key";
+  process.env.ZERNIO_API_KEY = testCredential("zernio-generated-art");
   process.env.ZERNIO_REQUIRED_PLATFORMS = "facebook";
   process.env.ZERNIO_VALIDATE_TARGET_ACCOUNTS = "true";
   delete process.env.ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK;
@@ -578,7 +579,7 @@ test("Zernio posts successfully with the canonical ZERNIO_API_KEY and no analyti
   applyBaseEnv();
   process.env.OPENROUTER_API_BASE = mockBase;
   process.env.ZERNIO_API_BASE_URL = mockBase;
-  process.env.ZERNIO_API_KEY = "canonical-zernio-key";
+  process.env.ZERNIO_API_KEY = testCredential("zernio-canonical");
   process.env.ZERNIO_REQUIRED_PLATFORMS = "facebook";
   process.env.ZERNIO_VALIDATE_TARGET_ACCOUNTS = "true";
 

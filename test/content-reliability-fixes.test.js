@@ -48,7 +48,7 @@ test("newsletter structured output avoids provider-incompatible array cardinalit
 });
 
 test("newsletter review routes avoid the logged unsupported GPT targets", async () => {
-  const config = await readFile(new URL("../services/shared/utils/ai-config.js", import.meta.url), "utf8");
+  const config = await readFile(new URL("../ai-config.js", import.meta.url), "utf8");
   assert.match(config, /newsletterFactCheck: routeChain\(\["audit", "highQuality"\]/);
   assert.match(config, /newsletterAudienceReview: routeChain\(\["highQuality", "audit"\]/);
   assert.match(config, /newsletterCouncilChair: routeChain\(\["audit", "highQuality"\]/);
@@ -73,7 +73,7 @@ test("empty OpenRouter completions fail over after a bounded provider budget", a
 test("social blog and mini-series have source-specific topicality gates", async () => {
   const socialPackage = await readFile(new URL("../services/blog/utils/socialBlogPackage.js", import.meta.url), "utf8");
   const scheduler = await readFile(new URL("../services/zernio/utils/socialScheduler.js", import.meta.url), "utf8");
-  const aiConfig = await readFile(new URL("../services/shared/utils/ai-config.js", import.meta.url), "utf8");
+  const aiConfig = await readFile(new URL("../ai-config.js", import.meta.url), "utf8");
   assert.match(socialPackage, /source_urls/);
   assert.match(socialPackage, /analyseTopicFidelity/);
   assert.match(scheduler, /miniSeriesThemeDefects/);

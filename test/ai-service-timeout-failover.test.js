@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { testCredential } from "./helpers/testCredentials.js";
 
 function saveEnv(names) {
   return Object.fromEntries(names.map((name) => [name, process.env[name]]));
@@ -27,7 +28,7 @@ test("resilientRequest fails over immediately after a provider timeout", async (
   process.env.AI_MODEL_STANDARD = "openai/slow-test-model";
   process.env.OPENROUTER_GOOGLE_2_5_flashlite = "google/fast-test-model";
   delete process.env.AI_MODEL_FALLBACK;
-  process.env.OPENROUTER_API_KEY = "sk-or-test-value";
+  process.env.OPENROUTER_API_KEY = testCredential("openrouter");
   process.env.OPENROUTER_API_BASE = "https://openrouter.example/api/v1";
 
   globalThis.fetch = async (_url, options = {}) => {

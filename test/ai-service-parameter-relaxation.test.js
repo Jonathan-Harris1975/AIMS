@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { testCredential } from "./helpers/testCredentials.js";
 
 function saveEnv(names) {
   return Object.fromEntries(names.map((name) => [name, process.env[name]]));
@@ -30,7 +31,7 @@ test("resilientRequest retries the same model once with relaxed parameters after
   process.env.AI_MODEL_STANDARD = "openai/gpt-5.6-test";
   delete process.env.AI_MODEL_FAST;
   delete process.env.AI_MODEL_FALLBACK;
-  process.env.OPENROUTER_API_KEY = "sk-or-test-value";
+  process.env.OPENROUTER_API_KEY = testCredential("openrouter");
   process.env.OPENROUTER_API_BASE = "https://openrouter.example/api/v1";
   process.env.OPENROUTER_REQUIRE_PARAMETERS_FOR_JSON = "true";
   process.env.OPENROUTER_REASONING_EFFORT = "low";

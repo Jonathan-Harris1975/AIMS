@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import request from "supertest";
+import { testCredential } from "./helpers/testCredentials.js";
 
 const ORIGINAL_ENV = { ...process.env };
 
@@ -281,11 +282,11 @@ const mockBase = `http://127.0.0.1:${mockAddress.port}`;
 process.env.NODE_ENV = "test";
 process.env.LOG_LEVEL = "silent";
 process.env.AIMS_API_KEY = "suite-key";
-process.env.Blotato_API_key = "test-blotato-key";
+process.env.Blotato_API_key = testCredential("blotato");
 process.env.BLOTATO_API_BASE = `${mockBase}/v2`;
 process.env.OPENROUTER_API_BASE = mockBase;
 process.env.OPENROUTER_BASE_URL = mockBase;
-process.env.OPENROUTER_API_KEY = "test-openrouter-key";
+process.env.OPENROUTER_API_KEY = testCredential("openrouter");
 process.env.AI_MODEL_STANDARD = "openai/test-model";
 process.env.OPENROUTER_GPT_5_6_LUNA = "openai/test-model";
 process.env.OPENROUTER_CLAUDE_SONNET_5 = "openai/test-model";
@@ -347,7 +348,7 @@ test.afterEach(() => {
   capturedVisualRequests.length = 0;
   capturedPostRequests.length = 0;
   scheduledPostIds.clear();
-  process.env.Blotato_API_key = "test-blotato-key";
+  process.env.Blotato_API_key = testCredential("blotato");
   process.env.BLOTATO_API_BASE = `${mockBase}/v2`;
   process.env.BLOTATO_NEWS_RSS_URL = `${mockBase}/feed.xml`;
   process.env.BLOTATO_RSS_PREFER_R2 = "false";

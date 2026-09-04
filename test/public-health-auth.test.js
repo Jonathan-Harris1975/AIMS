@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { testCredential } from "./helpers/testCredentials.js";
 
 import { isPublicHealthRequest, requireAimsBearerAuth } from "../services/shared/middleware/suiteAuth.js";
 
@@ -30,7 +31,7 @@ test("liveness and readiness probes remain public in production", () => {
   const previousSuiteKey = process.env.AI_SUITE_API_KEY;
 
   process.env.NODE_ENV = "production";
-  process.env.AIMS_API_KEY = "test-production-suite-key";
+  process.env.AIMS_API_KEY = testCredential("aims-production");
   delete process.env.AI_SUITE_API_KEY;
 
   try {
@@ -60,7 +61,7 @@ test("non-health endpoints remain protected in production", () => {
   const previousSuiteKey = process.env.AI_SUITE_API_KEY;
 
   process.env.NODE_ENV = "production";
-  process.env.AIMS_API_KEY = "test-production-suite-key";
+  process.env.AIMS_API_KEY = testCredential("aims-production");
   delete process.env.AI_SUITE_API_KEY;
 
   try {

@@ -12,6 +12,6 @@ test("production artwork defaults use Seedream 4.5 with FLUX.2 Pro fallback", as
 });
 
 test("artwork image route retains explicit primary then backup providers", async () => {
-  const source = await readFile(new URL("../services/shared/utils/ai-config.js", import.meta.url), "utf8");
+  const source = await readFile(new URL("../ai-config.js", import.meta.url), "utf8");
   assert.match(source, /artworkImage:\s*routeChain\(\["image"\],\s*\["artworkPrimary",\s*"artworkBackup"\]\)/);
 });

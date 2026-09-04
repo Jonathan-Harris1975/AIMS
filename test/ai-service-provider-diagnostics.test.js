@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { testCredential } from "./helpers/testCredentials.js";
 
 function snapshotEnv(names) {
   return Object.fromEntries(names.map((name) => [name, process.env[name]]));
@@ -48,7 +49,7 @@ test("auditForensic route supports current Koyeb spreadsheet model vars with one
   const snapshot = snapshotEnv(OPENROUTER_ENV_NAMES);
   clearOpenRouterEnv();
 
-  process.env.OPENROUTER_API_KEY = "sk-or-test-shared";
+  process.env.OPENROUTER_API_KEY = testCredential("openrouter-shared");
   process.env.OPENROUTER_ANTHROPIC_4_6 = "anthropic/claude-sonnet-4.6";
   process.env.OPENROUTER_GOOGLE_2_5_flashlite = "google/gemini-2.5-flash-lite";
   process.env.OPENROUTER_GPT_5_6_SOL = "openai/gpt-5.6-sol";
@@ -109,7 +110,7 @@ test("auditForensic route supports provider-specific key aliases alongside Sol",
 test("auditForensic route does not expose retired DeepSeek providers", async () => {
   const snapshot = snapshotEnv(OPENROUTER_ENV_NAMES);
   clearOpenRouterEnv();
-  process.env.OPENROUTER_API_KEY = "sk-or-test-shared";
+  process.env.OPENROUTER_API_KEY = testCredential("openrouter-shared");
   process.env.OPENROUTER_GPT_5_6_SOL = "openai/gpt-5.6-sol";
 
   try {
@@ -127,7 +128,7 @@ test("auditForensic route skips unresolved model-specific placeholders and uses 
 
   process.env.OPENROUTER_ANTHROPIC = "anthropic/claude-4.5-sonnet";
   process.env["OPENROUTER_API_KEY_ANTHROPIC_4-6"] = "{{ secret.OPENROUTER_API_KEY_ANTHROPIC_4-6 }}";
-  process.env.OPENROUTER_API_KEY = "sk-or-real-shared";
+  process.env.OPENROUTER_API_KEY = testCredential("openrouter-shared-real");
 
   try {
     const { getProviderDiagnosticsForRoute } = await import(`../services/shared/utils/ai-service.js?diag=${Date.now()}-skip-placeholder`);

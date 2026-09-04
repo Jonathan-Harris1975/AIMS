@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { testCredential } from "./helpers/testCredentials.js";
 
 const OPENROUTER_ENV_NAMES = [
   "OPENROUTER_ART_BACKUP",
@@ -56,7 +57,7 @@ function applySpreadsheetOpenRouterEnv() {
   process.env.AI_MODEL_SUMMARY = process.env.OPENROUTER_FREE_PRIMARY_MODEL;
   process.env.OPENROUTER_GOOGLE_2_5_flashlite = "google/gemini-2.5-flash-lite";
   process.env.OPENROUTER_API_BASE = "https://openrouter.ai/api/v1";
-  process.env.OPENROUTER_API_KEY = "sk-or-global-test-value";
+  process.env.OPENROUTER_API_KEY = testCredential("openrouter-global");
   process.env.OPENROUTER_ART = "recraft/recraft-v4.1";
   process.env.BLOTATO_SCRIPT_MODEL = "anthropic/claude-sonnet-4-5";
   process.env.COMMS_HUB_MODEL_FREE_PRIMARY = "z-ai/glm-5.2:free";
