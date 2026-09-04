@@ -128,6 +128,8 @@ export function evaluateOperationWindowClaim(existing, {
   };
 }
 
+export { classifyOperationDuplicate } from "./operationDuplicate.js";
+
 export async function getOperationWindowReceipt(id) {
   const state = cleanState(await readJsonStateFresh(STATE_FILE, { receipts: [] }));
   return publicReceipt(state.receipts.find((item) => item.id === normalise(id)) || null);

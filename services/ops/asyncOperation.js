@@ -2,6 +2,12 @@ function normalise(value) {
   return value === undefined || value === null ? "" : String(value).trim();
 }
 
+const PODCAST_POST_PUBLICATION_ISSUES = new Set([
+  "website-rebuild",
+  "editorial-brief-handoff",
+  "comms-publication-handoff",
+]);
+
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, Math.max(0, Number(ms || 0))));
 }
@@ -36,6 +42,43 @@ export function assessAsyncOperationPayload(payload) {
   }
 
   return { terminal: false, ok: null, status, result, unknown: true };
+}
+
+export function assessAsyncTaskOutcome(path, asyncJob = {}) {
+  if (asyncJob?.ok === true) {
+    return { ok: true, warning: false, nonRetryablePartialPublication: false };
+  }
+
+  if (normalise(path) !== "/podcast/run" || normalise(asyncJob?.status).toLowerCase() !== "completed") {
+    return { ok: false, warning: false, nonRetryablePartialPublication: false };
+  }
+
+  const result = asyncJob?.result;
+  const issues = Array.isArray(result?.issues) ? result.issues : [];
+  const episodeUrl = normalise(result?.rss?.result?.episode?.url);
+  const rssPublished = Boolean(
+    result?.rss?.ok === true
+    && result?.rss?.result?.ok !== false
+    && /^https:\/\//i.test(episodeUrl)
+  );
+  const postPublicationOnly = issues.length > 0 && issues.every((issue) =>
+    PODCAST_POST_PUBLICATION_ISSUES.has(normalise(issue?.stage).toLowerCase())
+  );
+
+  if (rssPublished && result?.partialFailure === true && postPublicationOnly) {
+    return {
+      // Once the RSS item is live the publication is irreversible. Re-running
+      // the full Friday pipeline is the wrong recovery action for a failed site
+      // rebuild or Comms Hub hand-off; those are reconciled separately.
+      ok: true,
+      warning: true,
+      nonRetryablePartialPublication: true,
+      episodeUrl,
+      issues,
+    };
+  }
+
+  return { ok: false, warning: false, nonRetryablePartialPublication: false };
 }
 
 async function fetchStatus(url, { fetchImpl, headers, requestTimeoutMs }) {
@@ -158,5 +201,6 @@ export async function waitForAsyncOperation({
 export default {
   extractAsyncStatusUrl,
   assessAsyncOperationPayload,
+  assessAsyncTaskOutcome,
   waitForAsyncOperation,
 };

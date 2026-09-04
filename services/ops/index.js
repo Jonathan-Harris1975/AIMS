@@ -1,9 +1,10 @@
 import crypto from "node:crypto";
 import express from "express";
 import { getOperationalExcellenceSnapshot } from "../shared/utils/operationalExcellence.js";
-import { extractAsyncStatusUrl, waitForAsyncOperation } from "./asyncOperation.js";
+import { assessAsyncTaskOutcome, extractAsyncStatusUrl, waitForAsyncOperation } from "./asyncOperation.js";
 import { getWebsiteAuditReadiness } from "../../audits/utils/websiteAuditReadiness.js";
 import {
+  classifyOperationDuplicate,
   claimOperationWindow,
   getOperationWindowReceipt,
   operationTaskSucceeded,
@@ -486,11 +487,13 @@ async function runInternalTask([name, path, body = {}, feature = null, addWeekSt
         onPoll: heartbeat,
       });
 
+      const taskOutcome = assessAsyncTaskOutcome(path, asyncJob);
+
       return {
         name,
         path,
-        ok: asyncJob.ok,
-        status: asyncJob.ok ? 200 : 500,
+        ok: taskOutcome.ok,
+        status: taskOutcome.ok ? 200 : 500,
         acceptedStatus: response.status,
         result,
         sessionId,
@@ -499,6 +502,9 @@ async function runInternalTask([name, path, body = {}, feature = null, addWeekSt
         asyncPolls: asyncJob.polls,
         asyncPollErrors: asyncJob.pollErrors,
         asyncJob: asyncJob.payload,
+        warning: taskOutcome.warning || undefined,
+        nonRetryablePartialPublication: taskOutcome.nonRetryablePartialPublication || undefined,
+        publicationIssues: taskOutcome.issues || undefined,
       };
     }
 
@@ -760,13 +766,17 @@ router.post("/run/:window", async (req, res, next) => {
       !allowRecovery
       || !operationWindowNeedsRecovery(existing, { staleAfterMs })
     )) {
-      return res.status(202).json({
-        ok: true,
+      const reason = ["accepted", "running"].includes(existing.status)
+        ? "same-day-window-already-running"
+        : "same-day-window-already-executed";
+      const duplicate = classifyOperationDuplicate(reason, existing);
+      return res.status(duplicate.httpStatus).json({
+        ok: duplicate.ok,
         service: "ops",
         duplicatePrevented: true,
-        reason: ["accepted", "running"].includes(existing.status)
-          ? "same-day-window-already-running"
-          : "same-day-window-already-executed",
+        reason,
+        terminal: duplicate.terminal,
+        retryable: duplicate.retryable,
         job: publicJob(existing),
       });
     }
@@ -784,6 +794,7 @@ router.post("/run/:window", async (req, res, next) => {
     });
     if (!durableClaim.claimed) {
       if (durableClaim.receipt) operationJobs.set(id, durableClaim.receipt);
+      const duplicate = classifyOperationDuplicate(durableClaim.reason, durableClaim.receipt);
       info("ops.window.duplicate_prevented", {
         jobId: id,
         window: windowName,
@@ -791,13 +802,25 @@ router.post("/run/:window", async (req, res, next) => {
         retryAt: durableClaim.retryAt || null,
         status: durableClaim.receipt?.status || null,
         attempt: durableClaim.receipt?.attempt || null,
+        terminal: duplicate.terminal,
+        retryable: duplicate.retryable,
+        failedTasks: (durableClaim.receipt?.results || [])
+          .filter((item) => item?.ok === false)
+          .map((item) => ({
+            name: item?.name || null,
+            status: item?.status || null,
+            reason: item?.reason || null,
+            error: item?.error || null,
+          })),
       });
-      return res.status(202).json({
-        ok: true,
+      return res.status(duplicate.httpStatus).json({
+        ok: duplicate.ok,
         service: "ops",
         duplicatePrevented: true,
         reason: durableClaim.reason,
         retryAt: durableClaim.retryAt || null,
+        terminal: duplicate.terminal,
+        retryable: duplicate.retryable,
         job: durableClaim.receipt || null,
       });
     }
@@ -861,13 +884,18 @@ router.post("/run/:window", async (req, res, next) => {
 router.get("/jobs/:id", async (req, res, next) => {
   try {
     const id = normalise(req.params.id);
+    // The durable receipt is authoritative across Koyeb instances. Reading it
+    // first prevents an instance-local terminal/stale cache entry from hiding a
+    // newer recovery attempt from an external scheduler poll.
+    const durableJob = await getOperationWindowReceipt(id);
+    if (durableJob) {
+      operationJobs.set(id, durableJob);
+      return res.json({ ok: true, service: "ops", job: durableJob });
+    }
+
     const localJob = operationJobs.get(id);
     if (localJob) return res.json({ ok: true, service: "ops", job: publicJob(localJob) });
-
-    const durableJob = await getOperationWindowReceipt(id);
-    if (!durableJob) return res.status(404).json({ ok: false, error: "operation-job-not-found" });
-    operationJobs.set(id, durableJob);
-    return res.json({ ok: true, service: "ops", job: durableJob });
+    return res.status(404).json({ ok: false, error: "operation-job-not-found" });
   } catch (error) { next(error); }
 });
 
