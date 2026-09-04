@@ -189,7 +189,8 @@ router.post(
     const laneSlug = laneByWeekday[weekday] || "news-insight";
     const style = getAutoShortStyleRotation(now);
     const result = await triggerPublishNowJob(req, laneSlug, { creativeStyle: style.creativeStyle, publishMode: "autoshorts-scheduled", scheduleSlot: "am" });
-    return res.status(result.statusCode || 202).json({ ok: true, service: "blotato", lane: "autoshorts-scheduled", style, sourceLane: laneSlug, message: "Blotato AM scheduled-post job accepted.", ...result });
+    return res.status(result.statusCode || 202).json({ ok: true, service: "blotato", lane: "autoshorts-scheduled", style, sourceLane: laneSlug, message:
+       "Blotato AM scheduled-post job accepted.", ...result });
   })
 );
 
