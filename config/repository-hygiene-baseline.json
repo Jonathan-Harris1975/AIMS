@@ -1,0 +1,424 @@
+{
+  "version": 1,
+  "python_line_fingerprints": [
+    {
+      "path": "scripts/audits/check_crawlers.py",
+      "sha256": "67877e7361078295a9fe4f23f3793174948eed39a545da119b705b9bb8212816",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "scripts/audits/ebook_pipeline.py",
+      "sha256": "199be44f7db0ec6a946c27b5d2e33a53e48b26b4e199b79bfe4d5b00dd8868f6",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "scripts/audits/ebook_pipeline.py",
+      "sha256": "071f747c21407331a2ce22a9b1febbbaff5ad6ffd2f9e8b2e999505704d2335f",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "scripts/audits/ebook_pipeline.py",
+      "sha256": "7f8da96e1778f80a59aa6fc70230c97eb65eb7a55adab9af575fdb30682fdeb4",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "scripts/audits/ebook_pipeline.py",
+      "sha256": "749524cb90a3f7547bb0c82d0f373061b62a5bcd0d52899ba90fdfb38119afc7",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "scripts/audits/ebook_pipeline.py",
+      "sha256": "450465baf1d6dd37fda80d7f19bca345257299087b8d528a85e0d8ef66abdaea",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "scripts/audits/ebook_pipeline.py",
+      "sha256": "5516bdac2066a36e02b9a148933aae6c4af5943b6fcda29904cc48745badbc8b",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "scripts/audits/ebook_pipeline.py",
+      "sha256": "5bd317fcc614cf53491a7e5d16f6a571fa78aed1592d8228a264dba3ba7072c4",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "scripts/audits/ebook_pipeline.py",
+      "sha256": "0137a303c698791ad3286b4e1a988b10ea13d6a99165e5cd58a37ab4a7c71d26",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "scripts/audits/ebook_pipeline.py",
+      "sha256": "f176f8c9b912067c9a9d8d79c757569d09af54637d43a5abd8d85e913705916d",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "scripts/audits/ebook_pipeline.py",
+      "sha256": "10ba7899873f9b4f595298b6eb1c9721afdd1029bb814a813cf789338e99ea30",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "scripts/audits/ebook_pipeline.py",
+      "sha256": "cd9b9f100f7d2764ded2340dfd89f953609c55f7bf03bc8446209cdc4fb9578e",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "scripts/audits/ebook_pipeline.py",
+      "sha256": "99090a901d8b29c5c3e620854a7278e563d8d012e66afa81b9d2ccdb18bb680a",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "scripts/audits/ebook_pipeline.py",
+      "sha256": "e404d01c25ac02d65d3c9f4b6dde0c63c61cb871d44f08a4906693dcad068ee4",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "scripts/audits/ebook_pipeline.py",
+      "sha256": "9c413d71bbc2187645c5c32f085fc1925d7982c94e3baf353af71acd89e46d85",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "scripts/audits/ebook_pipeline.py",
+      "sha256": "5d003f099e59de5a2b2e22aa3ced164545c0e3fac7f1efa8d989f9437fc1e4af",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "scripts/audits/ebook_pipeline.py",
+      "sha256": "bba760cab04541bbd96a0edd2bc60568000de03f75473124d3e3714cfd3f3e5b",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "scripts/audits/ebook_pipeline.py",
+      "sha256": "9356631e0191b26fa121e416c5a9d1c725d888b9b9cc416535bb1ce970ef46d2",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "scripts/audits/ebook_pipeline.py",
+      "sha256": "f7c34a98333006546a43917bce7e15c0fd2159fa67ca1602e28dbbd79679cf2b",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "scripts/audits/ebook_pipeline.py",
+      "sha256": "85d088fc522c7de7777b2db8138484711478c8331ce594d61baeeb8211c9f676",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "scripts/audits/ebook_pipeline.py",
+      "sha256": "19861b70b37eed7a6467bd9143881d83b13f6284236280d546e7b170a7ed9b04",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "scripts/audits/ebook_pipeline.py",
+      "sha256": "226a9c3c59434b720fc18ef92542ffcbfca5fafbdc8e911264f398fcb4614aee",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "scripts/audits/ebook_pipeline.py",
+      "sha256": "f4d4a717e8bf643b8490907b1c3a83ccc93287de61dba3c98b2a66c154724fcc",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "scripts/audits/ebook_pipeline.py",
+      "sha256": "b4957a6a2552aa8150af18680641c60410335c8c3188eb7faaf1c1fd0cad4d05",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "scripts/audits/inject_partials.py",
+      "sha256": "3c3b0b964797f6f69adafcb6b749868edacaea2f9f5a4c19ef50847b2525da54",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "scripts/maintenance/ebook_pipeline.py",
+      "sha256": "76e0b8392ebbd5d162ec1276f3325734a5b70facfb40762ca8b154840a20ad6a",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "scripts/maintenance/ebook_pipeline.py",
+      "sha256": "f529140e473bb92a2b7dea5fb4f2d076a6bec56784c96ae5b7f69ec7e2cf0878",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "scripts/maintenance/ebook_pipeline.py",
+      "sha256": "318dee1af2fdb93c8277813977f51affe32651105f236c83083a363d89557fc9",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "scripts/maintenance/ebook_pipeline.py",
+      "sha256": "26f16e309e5e966b56318f91a648cb1bec064c3f484888cad7384b5ca5cea74d",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "scripts/maintenance/ebook_pipeline.py",
+      "sha256": "6583e69f0e6521748f97f55633d04129ea47bcb279bae27157f55c0bcf020524",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "scripts/maintenance/ebook_pipeline.py",
+      "sha256": "0254f3341cedb0daf3e45ddbae24266444b949fe2a35f6236a2af7e368b210f4",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "scripts/maintenance/ebook_pipeline.py",
+      "sha256": "7caaf07be1e87605ca81899a639153e3c335e875bcfcac123c7ae174be04ef17",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "scripts/maintenance/ebook_pipeline.py",
+      "sha256": "14b84c79e09c0e4c9d213efdb297a357bf1ce17422e8ac4e17267c61a36ca517",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "scripts/maintenance/ebook_pipeline.py",
+      "sha256": "f6d170762aa16cbd21a5b3f21b19b811c3a9cbb1a520626bf67e1d30607a845c",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "scripts/maintenance/ebook_pipeline.py",
+      "sha256": "6a90807cd59ce268857722c3323ed3b0c8433ea3fe1bd91327ea086a3696bd3b",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "scripts/maintenance/ebook_pipeline.py",
+      "sha256": "a921b29182c91f4028db615ee8175e23fc554b0b4837c023e7752be90199cf8f",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "scripts/maintenance/ebook_pipeline.py",
+      "sha256": "ed5c7efe5475e10722608320e481ec9a7490fab99c8d96f79e7c06f08bbeb057",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "scripts/maintenance/ebook_pipeline.py",
+      "sha256": "3888255dc872c6a7e7af4408380cbb396536879a44e13b071221e6db4a2b9e67",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "scripts/maintenance/ebook_pipeline.py",
+      "sha256": "eb9208fc42a11a5418ea8d8d01159f368335909aff24555773602b06bb6208af",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "scripts/maintenance/ebook_pipeline.py",
+      "sha256": "2fc0664b9fed121966394747b722c4e57a6d8898687de7f16faf3be8d957dd46",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "scripts/maintenance/ebook_pipeline.py",
+      "sha256": "eb20d99c00708b550d9a2766e12a5b899929c338a785583d87a16d989cbc57f5",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "scripts/maintenance/ebook_pipeline.py",
+      "sha256": "3816666cda031a362f392f2958871a71d266a044e207b1b48646e542b2b6d037",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "scripts/maintenance/ebook_pipeline.py",
+      "sha256": "fdcb921036a7488e1dc236288cd4c7112fe55fad27ac58bf07e66a1cdb7047fe",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "scripts/maintenance/ebook_pipeline.py",
+      "sha256": "e5cc2983f10ce3e86f015e4dc89cab0b793e48e2f7c4c2e0e280c62b6316289e",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "scripts/maintenance/ebook_pipeline.py",
+      "sha256": "14bb79562c51907f87886d7868541ff5ae5d284d661f10d44575f7a3402e8aa4",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "scripts/maintenance/ebook_pipeline.py",
+      "sha256": "3254041810ab6e0b234a59d408213c379a5a76d20254f0cf5718c06f73a8ee63",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "scripts/maintenance/ebook_pipeline.py",
+      "sha256": "a7cbf41f1712e9be1e6a01aa66460012a501a9d8330ac3f730ee7737bcbbc7e9",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "scripts/maintenance/ebook_pipeline.py",
+      "sha256": "b673aafa2853f7f49dcf68df5a40dc188a7f23ada8d92549c769a040687d13b2",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "seo_aeo_geo_forensic.py",
+      "sha256": "daf67239bc5eda28334b6272678c64c4d7506322d7208bbc881d505e7e05ffe0",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "seo_aeo_geo_forensic.py",
+      "sha256": "0df127ccc0ea624947a7a5a2ba0f6fd04f323400448f27f949ba53a4759a8863",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "seo_aeo_geo_forensic.py",
+      "sha256": "ebc03ff6596dd5ac52c7ba63c6b68de98b46a4af6f7e25217e92cdd932bc0fba",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "seo_aeo_geo_forensic.py",
+      "sha256": "e5325004ae528e0e1898aa66c37d9de238d4a502034cbf98f8cfa9190bdf45fe",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "seo_aeo_geo_forensic.py",
+      "sha256": "fec128597cb84275d9485d5c212bc7d1f855a320549a640616b255db00232581",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "seo_aeo_geo_forensic.py",
+      "sha256": "5425d28d109d65aed580f4c0b784c6cd878a9d4dd962b8d91f6d620a2c2f043e",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "seo_aeo_geo_forensic.py",
+      "sha256": "0cfcde8e67e8b1ecb70a60bd169b25ce5e023a4d28db1e6eba42d633a5084edb",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "seo_aeo_geo_forensic.py",
+      "sha256": "9707479a687d5a707629381274c83fc1c0064ce4a3e2a15b660bd01f4953ab21",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "seo_aeo_geo_forensic.py",
+      "sha256": "ccc13769c9d67dade3a5f58c36252b5dd6777ccddb65fd9d064a006456a68a31",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "seo_aeo_geo_forensic.py",
+      "sha256": "7e77eb984c92cedced831ff36a7f9ef8680806991c75dfa0d463e576f7baf2ef",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "seo_aeo_geo_forensic.py",
+      "sha256": "a4392bf89dfdf392d869563307173296d22da1142306025905e3f671cd871b82",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "seo_aeo_geo_forensic.py",
+      "sha256": "5a8040ecfc5f3e99f5a45c4241dae472fd4f7973b6b8dd24e10de1c3f7427d96",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "seo_aeo_geo_forensic.py",
+      "sha256": "cac0bb709b08454fc3bd232184cb955e9a29c2e66f44230ad3b61c36e6ce2de6",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "seo_aeo_geo_forensic.py",
+      "sha256": "a5af7ab281e0098aeed8ded94e4730b54d88c7d03a29526c024d53c1668e92a1",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "seo_aeo_geo_forensic.py",
+      "sha256": "e48385511948f3f0223988fe0d577ced18585b0336b6cf3bc43c8d19cfcee47d",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "seo_aeo_geo_forensic.py",
+      "sha256": "35d1be8665166ce9605bc0f45c28285b8422a2154791e388280384ade54c12be",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "seo_aeo_geo_forensic.py",
+      "sha256": "d6d76f568a9757a856d069737040e557ed29834217c1b43397aea6836caf4bb2",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "seo_aeo_geo_forensic.py",
+      "sha256": "6efc9fc4cf6ca47f9841f4340afd66a156364358dfc23f6f18ed3c6b012f80a6",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "seo_aeo_geo_forensic.py",
+      "sha256": "8f727812d78acfea0f18d64de638d06f9c62e13a7e3781ac9584255926e7bdc7",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "seo_aeo_geo_forensic.py",
+      "sha256": "cbcabf936a4416bb77819f4db2f58b290faf8f3e6ad18c88652cf37ae9a1426d",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "seo_aeo_geo_forensic.py",
+      "sha256": "0f6934f701f2da2927f18581f8e0f471371fc65e45aef1f152f7527145069b05",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "seo_aeo_geo_forensic.py",
+      "sha256": "ec8d981aa67c605cc6e84d8c084ccea2286b232c411a35fdb0f8d0b2aa5bdb08",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "seo_aeo_geo_forensic.py",
+      "sha256": "7384a295f40c8016f6952951a677829d299ec18a1cfc189fd9fb8c44113176c7",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "seo_aeo_geo_forensic.py",
+      "sha256": "71a4b73036fa27efd77608505c5837d0c3c637d60ab2619c820616881b203c81",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "seo_aeo_geo_forensic.py",
+      "sha256": "f5577a1b4916192dcc4f36cb0174cc8d4c668f8741b5de8c949244a8d53d4dc0",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "seo_aeo_geo_forensic.py",
+      "sha256": "82a927559156256ee6dd8c3045cf4d0b9fd92096023ea6afccb1fe2b90b0a212",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "seo_aeo_geo_forensic.py",
+      "sha256": "24157e13751d232bbb7ca378a9023c5afdae3b3a50e1b951b99ec4a6c788da07",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "seo_aeo_geo_forensic.py",
+      "sha256": "eb63bffa211d2a349fcf8d3431892b57c36d95ca689bc44ec2d02e14e61906b9",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "seo_aeo_geo_forensic.py",
+      "sha256": "c9bb2c13a3ab3fed783d03d84c3a79725389440ca8ef5b0c24d55d73eba9e8b2",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "seo_aeo_geo_forensic.py",
+      "sha256": "9ed3ad23b005a82cba881433db933d483537075dcfc21e44459d629c5d87acad",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    },
+    {
+      "path": "seo_aeo_geo_forensic.py",
+      "sha256": "6495892f09925b1c4353ad95bf4679a57938041582e41a96dd992ca82266bf3a",
+      "reason": "Pre-existing overlong Python line captured when the repository hygiene gate was introduced."
+    }
+  ],
+  "duplicate_groups": [
+    {
+      "paths": [
+        "_redirects",
+        "_redirects.txt"
+      ],
+      "reason": "_redirects.txt is the governed exact mirror of Cloudflare Pages _redirects."
+    },
+    {
+      "paths": [
+        "robot.txt",
+        "robots.txt"
+      ],
+      "reason": "Legacy /robot.txt compatibility is intentionally published alongside canonical /robots.txt."
+    },
+    {
+      "paths": [
+        "scripts/audits/Sitemap.xml",
+        "scripts/audits/site-map.xml",
+        "scripts/audits/sitemap (1).xml"
+      ],
+      "reason": "Audit fixtures intentionally preserve legacy sitemap aliases with identical payloads."
+    }
+  ]
+}
