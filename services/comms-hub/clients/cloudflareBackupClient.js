@@ -41,7 +41,8 @@ export class CloudflareBackupClient {
     const response = await this.fetchImpl(url, options);
     const payload = await response.json().catch(() => null);
     if (!response.ok || !payload || payload.success === false) {
-      throw new CommsHubError(response.status === 429 ? 429 : 502, "cloudflare_backup_api_failed", `Cloudflare backup API failed${messages(payload) ? `: ${messages(payload)}` : ` with HTTP ${response.status}`}.`, {
+      throw new CommsHubError(response.status === 429 ? 429 : 502, "cloudflare_backup_api_failed", `Cloudflare backup API failed${messages(payload) ? `: ${messages(payload)}` :
+         ` with HTTP ${response.status}`}.`, {
         retryable: response.status === 429 || response.status >= 500,
         failureClass: response.status === 429 || response.status >= 500 ? "temporary" : "permanent",
         publicMessage: "Cloudflare backup operation failed.",
