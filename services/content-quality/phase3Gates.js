@@ -267,7 +267,8 @@ function unsupportedNumericClaims(generated = [], sourceText = "") {
 
 function keywordOverlap(sourceText = "", outputText = "") {
   const stop = new Set([
-    "about", "after", "again", "also", "because", "before", "being", "between", "could", "from", "have", "into", "more", "most", "much", "news", "over", "same", "some", "that", "their", "there", "these", "this", "those", "through", "what", "when", "where", "which", "while", "with", "would", "your",
+    "about", "after", "again", "also", "because", "before", "being", "between", "could", "from", "have", "into", "more", "most", "much", "news", "over", "same", "some", "that",
+       "their", "there", "these", "this", "those", "through", "what", "when", "where", "which", "while", "with", "would", "your",
   ]);
   const words = (text) => normaliseContentText(text)
     .toLowerCase()

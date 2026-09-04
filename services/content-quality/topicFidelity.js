@@ -1,6 +1,11 @@
 const STOP_WORDS = new Set([
-  "about","above","after","again","against","also","among","and","any","are","around","because","been","before","being","below","between","both","but","can","could","did","does","doing","down","during","each","for","from","further","had","has","have","having","here","how","into","its","itself","just","more","most","not","now","off","once","only","other","our","out","over","same","should","some","such","than","that","the","their","them","then","there","these","they","this","those","through","too","under","until","very","was","were","what","when","where","which","while","who","why","will","with","would","you","your",
-  "artificial","intelligence","news","report","reports","reported","says","said","latest","update","updates","story","stories","article","articles","analysis","brief","briefing","today","week","weekly","daily","new","using","used","use","help","helps","make","makes","made","system","systems","technology","technologies","tech","digital","data","model","models","ai",
+  "about","above","after","again","against","also","among","and","any","are","around","because","been","before","being","below","between","both","but","can","could","did",
+    "does","doing","down","during","each","for","from","further","had","has","have","having","here","how","into","its","itself","just","more","most","not","now","off","once",
+      "only","other","our","out","over","same","should","some","such","than","that","the","their","them","then","there","these","they","this","those","through","too","under",
+        "until","very","was","were","what","when","where","which","while","who","why","will","with","would","you","your",
+  "artificial","intelligence","news","report","reports","reported","says","said","latest","update","updates","story","stories","article","articles","analysis","brief",
+    "briefing","today","week","weekly","daily","new","using","used","use","help","helps","make","makes","made","system","systems","technology","technologies","tech","digital",
+      "data","model","models","ai",
 ]);
 
 function compact(value = "") {

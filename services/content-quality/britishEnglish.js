@@ -78,6 +78,7 @@ export function applyBritishEnglishReplacements(text = "") {
 export function britishEnglishPromptGuidance() {
   return [
     ...BRITISH_ENGLISH_CONTEXT_GUIDANCE,
-    "Preferred forms include analyse, behaviour, colour, centre, organisation, organise, optimise, prioritise, personalise, recognise, realise, summarise, authorise, visualise, standardise, artefact, catalogue, modelling, travelling, labelled, cancelled, defence, grey and sceptical.",
+    "Preferred forms include analyse, behaviour, colour, centre, organisation, organise, optimise, prioritise, personalise, recognise, realise, summarise, authorise, visualise,\
+ standardise, artefact, catalogue, modelling, travelling, labelled, cancelled, defence, grey and sceptical.",
   ].join(" ");
 }
