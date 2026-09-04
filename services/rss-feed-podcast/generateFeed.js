@@ -134,7 +134,8 @@ export function generateFeedXML(episodesMeta) {
   const channelTitle = envString("PODCAST_TITLE") || "Turing’s Torch: Artificial Intelligence Weekly";
   const channelDescription =
     envString("PODCAST_DESCRIPTION") ||
-    "Hosted by Jonathan Harris, Turing's Torch AI Weekly cuts through artificial intelligence news, AI governance, automation and model hype with sceptical, plain-English analysis for people who would rather not swallow the vendor confetti.";
+    "Hosted by Jonathan Harris, Turing's Torch AI Weekly cuts through artificial intelligence news, AI governance, automation and model hype with sceptical, plain-English \
+analysis for people who would rather not swallow the vendor confetti.";
   const channelCategories = [envString("PODCAST_CATEGORY_1"), envString("PODCAST_CATEGORY_2")].filter(Boolean);
   const channelDiscovery = buildPodcastDiscoveryMetadata({
     title: channelTitle,
