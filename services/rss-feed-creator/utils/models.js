@@ -650,7 +650,8 @@ export async function rewriteArticle(item = {}) {
       });
 
       if (!reviewed.ok) {
-        const councilErr = new Error(`Phase 3 repair still failed after RSS review council (${reviewed.gate.score}/${reviewed.gate.threshold}): ${reviewed.gate.defects.join(" | ")}; original failure: ${err.message}`);
+        const councilErr = new Error(`Phase 3 repair still failed after RSS review council (${reviewed.gate.score}/${reviewed.gate.threshold}): ${reviewed.gate.defects.join(
+          " | ")}; original failure: ${err.message}`);
         councilErr.name = "Phase3AutopublishGateError";
         councilErr.statusCode = 422;
         councilErr.phase3Report = reviewed.gate;
