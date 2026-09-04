@@ -1,19 +1,24 @@
 import { readFileSync } from "node:fs";
 import { resilientRequest } from "../../shared/utils/ai-service.js";
 import { info, warn } from "../../../logger.js";
-import { LANE_CONFIG, QUIZ_CONFIG, EBOOK_CONFIG, BLOG_RSS_CONFIG, PODCAST_PROMO_CONFIG, MINI_SERIES_CONFIG, ZERNIO_POST_MAX_CHARACTERS, ZERNIO_PROFILE_NAME_GENERAL, ZERNIO_PROFILE_NAME_EBOOKS, ZERNIO_DEFAULT_DRY_RUN, ZERNIO_CROSSPOST_DEDUPE_HOURS, DEFAULT_TIMEZONE, ZERNIO_QUEUE_GUARD_LOOKBACK_PAGES, getZernioRequiredPlatforms, getZernioAccountId, normaliseZernioAccountId, shouldValidateZernioTargetAccounts } from "./config.js";
-import { buildDailyPrompt, buildQuizPrompt, buildEbookPostPrompt, buildPodcastPromoPrompt, buildMiniSeriesResearchPrompt, buildMiniSeriesThemePrompt, buildMiniSeriesPostPrompt, buildAccountVariant } from "./prompts.js";
+import { LANE_CONFIG, QUIZ_CONFIG, EBOOK_CONFIG, BLOG_RSS_CONFIG, PODCAST_PROMO_CONFIG, MINI_SERIES_CONFIG, ZERNIO_POST_MAX_CHARACTERS, ZERNIO_PROFILE_NAME_GENERAL,
+   ZERNIO_PROFILE_NAME_EBOOKS, ZERNIO_DEFAULT_DRY_RUN, ZERNIO_CROSSPOST_DEDUPE_HOURS, DEFAULT_TIMEZONE, ZERNIO_QUEUE_GUARD_LOOKBACK_PAGES, getZernioRequiredPlatforms,
+      getZernioAccountId, normaliseZernioAccountId, shouldValidateZernioTargetAccounts } from "./config.js";
+import { buildDailyPrompt, buildQuizPrompt, buildEbookPostPrompt, buildPodcastPromoPrompt, buildMiniSeriesResearchPrompt, buildMiniSeriesThemePrompt, buildMiniSeriesPostPrompt,
+   buildAccountVariant } from "./prompts.js";
 import { addDays, nextWeekdayDateString, toScheduledDateTime, zonedDateString, zonedDateTimeString, zonedDateTimeToUtcDate } from "./date.js";
 import { loadRecentRssContext } from "./feedContext.js";
 import { fetchBlogRssItems } from "./blogRssFeed.js";
 import { fetchPodcastPromoEpisode } from "./podcastRssFeed.js";
-import { getLaneHistory, getWeeklyTopicLedger, recordLaneSchedule, getQuizHistory, recordQuizSchedule, claimScheduleSlot, resetScheduleSlotClaim, completeScheduleSlot, releaseScheduleSlot, clearScheduleSlotClaim, isRecentSpotlightPerson, recordSpotlightPerson, hasRecentSocialSource, recordUsedSocialSource } from "./state.js";
+import { getLaneHistory, getWeeklyTopicLedger, recordLaneSchedule, getQuizHistory, recordQuizSchedule, claimScheduleSlot, resetScheduleSlotClaim, completeScheduleSlot,
+   releaseScheduleSlot, clearScheduleSlotClaim, isRecentSpotlightPerson, recordSpotlightPerson, hasRecentSocialSource, recordUsedSocialSource } from "./state.js";
 import { resolveProfile, inspectZernioTargeting, listPosts, getPost, createPost, deletePost, getZernioApiKey } from "./zernioClient.js";
 import getSponsor from "../../script/utils/getSponsor.js";
 import { resolveFeaturedEbook } from "./ebookCatalogue.js";
 import { runPhase5OrganicGrowthGate } from "../../content-quality/phase5OrganicGrowthGates.js";
 import { repairZernioPostForReviewCouncil, runReviewCouncilGate } from "../../content-quality/reviewCouncil.js";
-import { ANTI_HYPE_HEDGING_PHRASES, BANNED_PROMO_PATTERNS, ENGAGEMENT_BAIT_PATTERNS, GENERIC_HASHTAGS, INFLATED_EBOOK_CLAIM_PATTERNS, MOTIVATIONAL_HASHTAGS, MOTIVATIONAL_TONE_PATTERNS, findAmericanSpellings, findGenericAbstractionBreaches, findPatternBreaches } from "../../content-quality/brandLexicon.js";
+import { ANTI_HYPE_HEDGING_PHRASES, BANNED_PROMO_PATTERNS, ENGAGEMENT_BAIT_PATTERNS, GENERIC_HASHTAGS, INFLATED_EBOOK_CLAIM_PATTERNS, MOTIVATIONAL_HASHTAGS,
+   MOTIVATIONAL_TONE_PATTERNS, findAmericanSpellings, findGenericAbstractionBreaches, findPatternBreaches } from "../../content-quality/brandLexicon.js";
 import { buildIntentHash, completeEditorialReservation, hasRecentAudienceIntent, recordEditorialEvent, releaseEditorialReservation, reserveEditorialSource } from "../../social/editorialLedger.js";
 import { emitQaEvent } from "../../shared/utils/qaEvents.js";
 import { createSocialArtwork } from "../../artwork/createSocialArtwork.js";
@@ -30,7 +35,9 @@ import {
   releaseEditorialBriefClaims,
 } from "../../comms-hub/contentAutomationQueue.js";
 
-import { booleanValue, compactText, contentHash, delay, ensureHashtags, ensureQuizAnswerMarker, escapeRegExp, extractHashtags, extractJsonCandidate, findPlainPhraseBreaches, isTruthyOption, isWithinDuplicateWindow, normaliseSimple, parseJsonObject, parseScheduleTime, positiveInteger, queuedItemAccountIds, retrySummaryFromError, retryWarningFromError, safeErrorMessage, safeModelPreview, statusCodeFromError, wordCount } from "./socialSchedulerPrimitives.js";
+import { booleanValue, compactText, contentHash, delay, ensureHashtags, ensureQuizAnswerMarker, escapeRegExp, extractHashtags, extractJsonCandidate, findPlainPhraseBreaches,
+   isTruthyOption, isWithinDuplicateWindow, normaliseSimple, parseJsonObject, parseScheduleTime, positiveInteger, queuedItemAccountIds, retrySummaryFromError,
+      retryWarningFromError, safeErrorMessage, safeModelPreview, statusCodeFromError, wordCount } from "./socialSchedulerPrimitives.js";
 
 
 const ZERNIO_DAILY_MAX_TOKENS = Math.max(1200, Number(process.env.ZERNIO_DAILY_MAX_TOKENS || 1400));
@@ -204,7 +211,8 @@ function looksLikePersonName(value = "") {
   if (!text || text.length > 80) return false;
   const words = text.split(/\s+/).filter(Boolean);
   if (words.length < 2 || words.length > 5) return false;
-  if (/\b(ai|artificial|intelligence|identity|lifecycle|management|system|systems|model|models|network|networks|learning|ethics|policy|governance|technology|tech|future|history)\b/i.test(text)) return false;
+  if (new RegExp("\\b(ai|artificial|intelligence|identity|lifecycle|management|system|systems|model|models|network|networks|learning|ethics|policy|governance|technology|tech|\
+future|history)\\b", "i").test(text)) return false;
   return words.every((word) => /^[A-Z][A-Za-z'’.-]*$/.test(word));
 }
 
@@ -225,7 +233,8 @@ function addDailyLaneAlignmentChecks({ laneKey = "", post = {}, defects = [] } =
     if (!alignment.ok) defects.push(`Post copy is not clearly aligned with its declared title/topic (${alignment.score}/100).`);
   }
 
-  if (laneKey === "tuesday" && !/\b(model|models|token|tokens|transformer|embedding|embeddings|inference|training|neural|algorithm|machine learning|context window|prompt|agent|agents|vector|retrieval|RAG|computer vision|classification|fine[- ]?tun|quantis|reasoning)\b/i.test(content)) {
+  if (laneKey === "tuesday" && !new RegExp("\\b(model|models|token|tokens|transformer|embedding|embeddings|inference|training|neural|algorithm|machine learning|context window|\
+prompt|agent|agents|vector|retrieval|RAG|computer vision|classification|fine[- ]?tun|quantis|reasoning)\\b", "i").test(content)) {
     defects.push("Tuesday post drifted away from explaining a concrete AI, machine-learning, or computing concept.");
   }
 
@@ -234,14 +243,18 @@ function addDailyLaneAlignmentChecks({ laneKey = "", post = {}, defects = [] } =
   }
 
   if (laneKey === "thursday") {
-    const hasSector = /\b(bank|banking|finance|financial|healthcare|hospital|clinical|retail|manufactur|factory|legal|law firm|insurance|logistics|supply chain|education|school|university|energy|utility|agriculture|media|telecom|public sector|government|cybersecurity|security operations)\b/i.test(content);
-    const hasTask = /\b(triage|forecast|document|quality check|routing|fraud|admin|review|detect|classification|schedule|maintenance|inspection|claims|diagnos|inventory|support|monitor|analyse|analysis|search|summaris|extract)\b/i.test(content);
+    const hasSector = new RegExp("\\b(bank|banking|finance|financial|healthcare|hospital|clinical|retail|manufactur|factory|legal|law firm|insurance|logistics|supply chain|\
+education|school|university|energy|utility|agriculture|media|telecom|public sector|government|cybersecurity|security operations)\\b", "i").test(content);
+    const hasTask = new RegExp("\\b(triage|forecast|document|quality check|routing|fraud|admin|review|detect|classification|schedule|maintenance|inspection|claims|diagnos|\
+inventory|support|monitor|analyse|analysis|search|summaris|extract)\\b", "i").test(content);
     if (!hasSector || !hasTask) defects.push("Thursday post must name a believable industry and one concrete task where AI helps.");
   }
 
   if (laneKey === "friday") {
-    const hasOperationalSubject = /\b(system|service|workflow|pipeline|routing|monitor|retry|failure|recovery|queue|storage|database|deployment|infrastructure|provider|integration|validation|quality gate|fallback|cost|latency|reliability|automation)\b/i.test(content);
-    const hasConsequenceOrAction = /\b(fail|break|drop|delay|recover|retry|route|store|verify|inspect|replace|block|quarantine|measure|reduce|prevent|improve|simplif|trade[- ]?off|because|therefore|means)\b/i.test(content);
+    const hasOperationalSubject = new RegExp("\\b(system|service|workflow|pipeline|routing|monitor|retry|failure|recovery|queue|storage|database|deployment|infrastructure|\
+provider|integration|validation|quality gate|fallback|cost|latency|reliability|automation)\\b", "i").test(content);
+    const hasConsequenceOrAction = new RegExp("\\b(fail|break|drop|delay|recover|retry|route|store|verify|inspect|replace|block|quarantine|measure|reduce|prevent|improve|\
+simplif|trade[- ]?off|because|therefore|means)\\b", "i").test(content);
     if (!hasOperationalSubject || !hasConsequenceOrAction) {
       defects.push("Friday post must explain one concrete AI system or operational lesson with a visible action, failure mode, consequence or recovery step.");
     }
@@ -440,7 +453,8 @@ export function buildZernioSemanticRepairPrompt({ laneKey = "", post = {}, gate 
       `Failed checks: ${defects.join(" | ")}`,
       semanticContext.requiredTopic ? `Required topic/angle: ${semanticContext.requiredTopic}` : "",
       Array.isArray(semanticContext.sources) && semanticContext.sources.length
-        ? `Source evidence (use only this): ${JSON.stringify(semanticContext.sources.slice(0, 6).map((source) => ({ title: source.title || "", summary: source.summary || source.rewritten || "", link: source.link || "" })))}`
+        ? `Source evidence (use only this): ${JSON.stringify(semanticContext.sources.slice(0, 6).map((source) => ({ title: source.title || "", summary: source.summary ||
+           source.rewritten || "", link: source.link || "" })))}`
         : "",
       "Current post:",
       JSON.stringify({
@@ -458,7 +472,8 @@ export function buildZernioSemanticRepairPrompt({ laneKey = "", post = {}, gate 
 }
 
 function gateNeedsSemanticRepair(gate = {}) {
-  return (gate.defects || []).some((defect) => /drifted|aligned|topical|fidelity|source-topic|tension|debate question|two-sided|contribution|person name|concrete|industry|task where AI helps|first-person|reader prompt/i.test(String(defect)));
+  return (gate.defects || []).some((defect) => new RegExp("drifted|aligned|topical|fidelity|source-topic|tension|debate question|two-sided|contribution|person name|concrete|\
+industry|task where AI helps|first-person|reader prompt", "i").test(String(defect)));
 }
 
 async function repairZernioPostWithSemanticModel(candidate, { laneKey = "", gate = {}, attempt = 1, semanticContext = {} } = {}) {
@@ -488,7 +503,8 @@ async function repairZernioPostWithSemanticModel(candidate, { laneKey = "", gate
   };
 }
 
-async function reviewZernioGateOrThrow({ councilKey = "zernio-social-copy", gate, post, contentType, laneKey = "", featuredBook = null, verifiedQuote = null, label = "Zernio social gate", validate, semanticContext = {} }) {
+async function reviewZernioGateOrThrow({ councilKey = "zernio-social-copy", gate, post, contentType, laneKey = "", featuredBook = null, verifiedQuote = null, label =
+   "Zernio social gate", validate, semanticContext = {} }) {
   const review = await runReviewCouncilGate({
     councilKey,
     gate,
@@ -1144,7 +1160,8 @@ export async function scheduleToZernio({ post, scheduledDateTime, profileName, a
   const requireConfirmation = booleanValue(process.env.ZERNIO_REQUIRE_SCHEDULE_CONFIRMATION, true);
   if (requireConfirmation && !scheduleVerification.accepted) {
     const err = new Error(
-      `Zernio did not confirm the scheduled post${scheduleVerification.status ? ` (status: ${scheduleVerification.status})` : ""}${scheduleVerification.id ? "" : ": missing post id"}${scheduleVerification.timeMatches ? "" : ": scheduled time mismatch"}`
+      `Zernio did not confirm the scheduled post${scheduleVerification.status ? ` (status: ${scheduleVerification.status})` : ""}${scheduleVerification.id ? "" :
+         ": missing post id"}${scheduleVerification.timeMatches ? "" : ": scheduled time mismatch"}`
     );
     err.statusCode = scheduleVerification.failed ? 502 : 409;
     err.zernioResponse = zernioResponse;
@@ -1450,15 +1467,19 @@ function buildDailyLaneArtworkPrompt({ laneKey = "", post = {}, verifiedQuote = 
     `Topic: ${artworkTopic}.`,
     ...(laneKey === "sunday" ? [] : [`Post context, for visual meaning only and never as visible text: ${content.slice(0, 700)}`]),
     "Create premium square personal-brand editorial artwork with one immediately readable focal idea at phone-thumbnail size.",
-    "The visual identity is an independent professional AI author/host publication: intelligent, human, editorial and creator-led, never a corporate campaign, consultancy deck, SaaS advert or enterprise stock image.",
+    "The visual identity is an independent professional AI author/host publication: intelligent, human, editorial and creator-led, never a corporate campaign, consultancy deck,\
+ SaaS advert or enterprise stock image.",
     "Use the seasonal brand palette while keeping the scene natural, vivid and editorial.",
     "Avoid boardrooms, handshakes, suited teams, posed office groups, glossy device mock-ups, generic corporate gradients, presentation-deck compositions and anonymous enterprise stock photography.",
-    "The scene must visibly and specifically connect to artificial intelligence through credible machine-learning, robotics, intelligent software, compute, research, security, governance or human-oversight cues supported by the post.",
+    "The scene must visibly and specifically connect to artificial intelligence through credible machine-learning, robotics, intelligent software, compute, research, security, \
+governance or human-oversight cues supported by the post.",
     "Reject travel scenery, lifestyle stock, unrelated machinery, generic offices and decorative technology that does not explain the AI subject.",
     "No visible words, labels, logos, interface copy, pseudo-text or watermarks.",
-    "Use text-resistant staging: prefer environments with no signs or printed material; keep screens dark, blank, turned away or naturally defocused; avoid papers, documents, whiteboards and presentation surfaces unless the lane specifically requires them.",
+    "Use text-resistant staging: prefer environments with no signs or printed material; keep screens dark, blank, turned away or naturally defocused; avoid papers, documents, \
+whiteboards and presentation surfaces unless the lane specifically requires them.",
     "Do not create title areas, callout boxes, annotation lines, legends, labels, cards, charts, dashboards, holographic panels, split screens, diptychs or infographic layouts.",
-    "Do not literalise abstract terms such as evaluation, monitoring, oversight, risk, workflow, comparison or autonomy as labelled charts, gauges, dashboards or UI. Translate them into one real physical action, decision or consequence.",
+    "Do not literalise abstract terms such as evaluation, monitoring, oversight, risk, workflow, comparison or autonomy as labelled charts, gauges, dashboards or UI. Translate \
+them into one real physical action, decision or consequence.",
   ];
 
   const directions = {
@@ -1485,8 +1506,10 @@ function buildDailyLaneArtworkPrompt({ laneKey = "", post = {}, verifiedQuote = 
     ],
     friday: [
       "FRIDAY — SYSTEMS / OPERATOR VISUAL.",
-      "Show one concrete operational cause-and-effect moment from the post: an operator physically isolating, swapping, reconnecting, inspecting or recovering one AI-system component, sensor, edge device, accelerator or workstation path.",
-      "For software evaluation, monitoring, routing or reliability topics, use a real bench/workstation intervention with the display dark or turned away; show the consequence through hardware state, physical routing, posture and action rather than charts.",
+      "Show one concrete operational cause-and-effect moment from the post: an operator physically isolating, swapping, reconnecting, inspecting or recovering one AI-system \
+component, sensor, edge device, accelerator or workstation path.",
+      "For software evaluation, monitoring, routing or reliability topics, use a real bench/workstation intervention with the display dark or turned away; show the consequence \
+through hardware state, physical routing, posture and action rather than charts.",
       "Use photographic or cinematic editorial storytelling, not an infographic, dashboard, diagram, UI mock-up, labelled architecture, callout panel or presentation slide.",
       "If infrastructure appears, frame one specific human intervention and one specific device rather than a wall of server racks.",
       "Every concept must be represented by real objects, position, light and action. Never ask the image model to label components.",
@@ -1495,8 +1518,10 @@ function buildDailyLaneArtworkPrompt({ laneKey = "", post = {}, verifiedQuote = 
     saturday: [
       "SATURDAY — EDITORIAL DEBATE.",
       "Create one continuous magazine-opinion scene, never a split panel or before-and-after graphic.",
-      "Put two credible human perspectives in the same physical environment around one real AI-enabled decision or consequence: one person ready to allow the system to act and another visibly prepared to question, pause or intervene.",
-      "Keep screens out of frame or dark. Show the trade-off through body language, physical controls, distance, responsibility and the real-world stakes rather than labels, charts, warning icons or holograms.",
+      "Put two credible human perspectives in the same physical environment around one real AI-enabled decision or consequence: one person ready to allow the system to act and \
+another visibly prepared to question, pause or intervene.",
+      "Keep screens out of frame or dark. Show the trade-off through body language, physical controls, distance, responsibility and the real-world stakes rather than labels, \
+charts, warning icons or holograms.",
       "Human emotion, responsibility and real-world stakes should dominate over abstract technology; avoid humanoid robots and cyborg imagery unless the post genuinely concerns embodied robotics.",
       "The composition should make viewers pause and form an opinion before reading the caption without visually declaring either side correct.",
       "Avoid rage-bait, dystopian clichés and political campaign aesthetics.",
@@ -1506,7 +1531,8 @@ function buildDailyLaneArtworkPrompt({ laneKey = "", post = {}, verifiedQuote = 
       "The named person's identity is editorial context only. Never render, approximate or imply their face or recognisable likeness from text alone.",
       "Translate the contribution into one concrete, source-supported research mechanism, object, experiment, machine-learning process or real-world consequence rather than depicting the person.",
       "Prefer a human-free close-up of the relevant technical mechanism. If a person is essential, show only anonymous hands or a fully rear-facing figure with the face completely hidden.",
-      "For this lane avoid all text-bearing surfaces: no books, papers, notebooks, theses, whiteboards, chalkboards, posters, signs, monitors, terminal screens, interface panels or labelled diagrams.",
+      "For this lane avoid all text-bearing surfaces: no books, papers, notebooks, theses, whiteboards, chalkboards, posters, signs, monitors, terminal screens, interface \
+panels or labelled diagrams.",
       "Do not include dates, publication titles, thesis titles, names, equations, letters, numerals or pseudo-writing even when they appear in the post context.",
       "Aim for the authority of a magazine profile story through the contribution itself, without a corporate headshot, fabricated portrait or decorative AI wallpaper.",
     ],
@@ -2316,7 +2342,8 @@ export async function buildAndScheduleWeeklyMiniSeries(options = {}) {
       ? [
           `This is theme repair attempt ${themeAttempt}/${maxThemeAttempts}.`,
           `The previous plan was rejected for: ${(themeGate?.defects || []).join(" | ") || "insufficient distinct posts or topic-specific hashtags"}.`,
-          `Return ${Math.max(MINI_SERIES_CONFIG.minPosts, research.suggestedPostCount || MINI_SERIES_CONFIG.minPosts)} genuinely distinct parts with exact approved source URLs and at least one topic-specific hashtag.`,
+          `Return ${Math.max(MINI_SERIES_CONFIG.minPosts, research.suggestedPostCount ||
+             MINI_SERIES_CONFIG.minPosts)} genuinely distinct parts with exact approved source URLs and at least one topic-specific hashtag.`,
         ].join(" ")
       : "";
     theme = await requestStructuredZernioJson({
@@ -2593,7 +2620,8 @@ export async function buildAndScheduleWeeklyMiniSeries(options = {}) {
           `Part angle for context only: ${item.postPlan.angle}.`,
           `Exact source evidence: ${JSON.stringify(sourceEvidence)}`,
           "Create a source-specific and visibly distinct image for this part while retaining a coherent editorial family across the series.",
-          "Make the relationship to artificial intelligence unmistakable through real AI compute, model evaluation, robotics, machine perception, AI safety or software-agent infrastructure grounded in this part's evidence.",
+          "Make the relationship to artificial intelligence unmistakable through real AI compute, model evaluation, robotics, machine perception, AI safety or software-agent \
+infrastructure grounded in this part's evidence.",
           "Do not recycle a generic person-at-a-laptop, glowing brain, abstract network, dashboard, labelled diagram or infographic composition.",
           "No visible text, labels, logos or typography.",
         ].join("\n"),
@@ -2958,7 +2986,8 @@ export async function buildAndScheduleWeeklyMiniSeries(options = {}) {
 }
 
 
-const PODCAST_PROMO_RURAL_VISUAL_PATTERN = /\b(?:countryside|rural|moorland|field|forest|mountain|beach|road|path|crossroads?|signpost|direction sign|wooden sign|trail|fork in (?:the )?road|doorway|open door)\b/i;
+const PODCAST_PROMO_RURAL_VISUAL_PATTERN = new RegExp("\\b(?:countryside|rural|moorland|field|forest|mountain|beach|road|path|crossroads?|signpost|direction sign|wooden sign|\
+trail|fork in (?:the )?road|doorway|open door)\\b", "i");
 
 function buildPodcastPromoArtworkBrief({ episode = {}, generatedPrompt = "" } = {}) {
   const candidate = compactText(generatedPrompt || "");
@@ -2967,7 +2996,8 @@ function buildPodcastPromoArtworkBrief({ episode = {}, generatedPrompt = "" } = 
   const technicalFallback = [
     "Create premium editorial technology artwork for Turing's Torch: AI Weekly.",
     `Episode context: ${episodeContext || "practical artificial-intelligence infrastructure, governance and deployment"}.`,
-    "Build one cinematic, unmistakably technical scene using concrete AI compute infrastructure: dark data-centre racks, accelerator hardware, network security equipment, model-evaluation instrumentation, developer tooling or another subject directly supported by the episode context.",
+    "Build one cinematic, unmistakably technical scene using concrete AI compute infrastructure: dark data-centre racks, accelerator hardware, network security equipment, \
+model-evaluation instrumentation, developer tooling or another subject directly supported by the episode context.",
     "Show tension through lighting, scale, physical systems and operational consequences, not through symbolic travel or lifestyle imagery.",
   ].join(" ");
 
@@ -3026,7 +3056,8 @@ export async function buildAndSchedulePodcastThursdayPromo(options = {}) {
   if (gate.defects?.length) {
     const err = new Error(`Thursday podcast promotion failed brand gate: ${gate.defects.join(" | ")}`);
     err.statusCode = 422;
-    emitQaEvent({ source: "scheduler.gate.podcast-thursday-promo", type: "podcast_promo_brand_gate_failed", severity: "high", message: err.message, detail: { publishDate, episodeTitle: episode.title } });
+    emitQaEvent({ source: "scheduler.gate.podcast-thursday-promo", type: "podcast_promo_brand_gate_failed", severity: "high", message: err.message, detail: { publishDate,
+       episodeTitle: episode.title } });
     throw err;
   }
 
