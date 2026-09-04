@@ -52,7 +52,8 @@ router.post("/aims", requestDedupe("audits:monthly:aims"), asyncRoute(async (req
     error: "aims-monthly-audit-is-second-saturday-only",
     hint: "MAST should call this endpoint on the second Saturday of the month.",
   })) return;
-  const job = await startAsyncAuditRouteJob({auditType:"content-master",payload:req.body||{},req,runner:runContentMasterAudit,metadata:{route:"audits.monthly.aims",requestedBy:"MAST monthly second-Saturday AIMS audit"}});
+  const job = await startAsyncAuditRouteJob({auditType:"content-master",payload:req.body||{},req,runner:runContentMasterAudit,metadata:{route:"audits.monthly.aims",requestedBy:
+    "MAST monthly second-Saturday AIMS audit"}});
   res.status(202).json(job);
 }));
 
