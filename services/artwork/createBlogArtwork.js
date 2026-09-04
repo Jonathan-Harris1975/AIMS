@@ -98,7 +98,8 @@ export async function createBlogArtwork(input) {
     const theme = prompt || `Blog header artwork for AI Weekly ${sessionId}`;
 
     const base64Data = await runArtworkTask(
-      (signal) => (artworkMode === "newsletter" ? generateNewsletterArtwork : artworkMode === "social-blog" ? generateSocialBlogArtwork : generateBlogArtwork)(theme, { date: artworkDate, signal, generationKey: sessionId }),
+      (signal) => (artworkMode === "newsletter" ? generateNewsletterArtwork : artworkMode === "social-blog" ? generateSocialBlogArtwork : generateBlogArtwork)(theme, { date:
+         artworkDate, signal, generationKey: sessionId }),
       artworkTaskTimeoutMs(artworkMode),
       `${artworkMode} artwork generation`,
     );
