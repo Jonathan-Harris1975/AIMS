@@ -5,6 +5,8 @@
   "main": "server.js",
   "scripts": {
     "build": "node scripts/buildCheck.js",
+    "lint": "node scripts/lintCheck.js",
+    "repo:hygiene": "python3 scripts/check_repository_hygiene.py",
     "start": "node scripts/bootstrap.js",
     "start:server": "node server.js",
     "check:startup": "node scripts/startupCheck.js",
@@ -14,7 +16,7 @@
     "deploy:smoke": "node scripts/deploySmoke.js",
     "env:doctor": "node scripts/koyebEnvDoctor.js",
     "env:doctor:file": "node scripts/koyebEnvDoctor.js",
-    "verify": "npm test && npm run build && npm run env:reference:check",
+    "verify": "npm run lint && npm run repo:hygiene && npm test && npm run build && npm run env:reference:check",
     "env:reference:check": "node scripts/envReference.js --check",
     "env:reference:write": "node scripts/envReference.js --write",
     "blog:repair-links:check": "node scripts/backfill-blog-main-site-links.js",
