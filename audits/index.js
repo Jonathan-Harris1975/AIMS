@@ -1,7 +1,5 @@
-import express from "express";
 import routes from "./routes/index.js";
+import { mountServiceRoutes } from "../services/shared/utils/serviceRouter.js";
 
-const router = express.Router();
-router.use("/", routes);
-
-export default router;
+export const auditRouter = mountServiceRoutes(routes);
+export default auditRouter;
