@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   assessAsyncOperationPayload,
+  assessAsyncTaskOutcome,
   extractAsyncStatusUrl,
   waitForAsyncOperation,
 } from "../services/ops/asyncOperation.js";
@@ -91,4 +92,52 @@ test("operation polling survives a short-lived 404 before the durable child job 
   assert.equal(result.ok, true);
   assert.equal(result.pollErrors, 1);
   assert.equal(result.polls, 1);
+});
+
+
+test("published podcast episodes do not rerun for post-publication reconciliation failures", () => {
+  const outcome = assessAsyncTaskOutcome("/podcast/run", {
+    status: "completed",
+    ok: false,
+    result: {
+      partialFailure: true,
+      rss: {
+        ok: true,
+        result: { ok: true, episode: { url: "https://example.test/podcast/episode-1.mp3" } },
+      },
+      issues: [{ stage: "website-rebuild", error: "hook unavailable" }],
+    },
+  });
+
+  assert.equal(outcome.ok, true);
+  assert.equal(outcome.warning, true);
+  assert.equal(outcome.nonRetryablePartialPublication, true);
+  assert.equal(outcome.episodeUrl, "https://example.test/podcast/episode-1.mp3");
+});
+
+test("podcast RSS or pre-publication failures still fail the operation window", () => {
+  const rssFailure = assessAsyncTaskOutcome("/podcast/run", {
+    status: "completed",
+    ok: false,
+    result: {
+      partialFailure: true,
+      rss: { ok: false, result: { ok: false } },
+      issues: [{ stage: "rss", error: "publish failed" }],
+    },
+  });
+  assert.equal(rssFailure.ok, false);
+
+  const prePublicationFailure = assessAsyncTaskOutcome("/podcast/run", {
+    status: "completed",
+    ok: false,
+    result: {
+      partialFailure: true,
+      rss: {
+        ok: true,
+        result: { ok: true, episode: { url: "https://example.test/podcast/episode-1.mp3" } },
+      },
+      issues: [{ stage: "artwork", error: "render failed" }],
+    },
+  });
+  assert.equal(prePublicationFailure.ok, false);
 });

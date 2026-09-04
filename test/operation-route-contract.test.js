@@ -48,6 +48,8 @@ test("Friday podcast and operation status endpoints exist", () => {
   assert.match(podcast, /router\.post\("\/readiness"/);
   assert.match(podcast, /router\.post\("\/run"/);
   assert.match(podcast, /router\.get\("\/status\/:sessionId"/);
+  assert.match(podcast, /getPublicJobFresh/);
   assert.match(ops, /router\.post\("\/run\/:window"/);
   assert.match(ops, /router\.get\("\/jobs\/:id"/);
+  assert.match(ops, /classifyOperationDuplicate/);
 });
