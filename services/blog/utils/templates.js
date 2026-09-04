@@ -54,7 +54,10 @@ ${blogCriticalCss()}
 <meta content="${safeDesc}" name="twitter:description"/>
 <meta content="${safeImage}" name="twitter:image"/>
 <link href="${safeCanonical}" rel="canonical"/>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"BlogPosting","headline":${jsonString(title || "Blog")},"description":${jsonString(description || "")},"image":${jsonString(imageUrl || "https://images.jonathan-harris.online/site-logo")},"datePublished":${jsonString(publishedAt || "")},"dateModified":${jsonString(publishedAt || "")},"author":{"@type":"Person","@id":"https://jonathan-harris.online/#person","name":"Jonathan Harris"},"publisher":{"@type":"Person","@id":"https://jonathan-harris.online/#person","name":"Jonathan Harris"},"mainEntityOfPage":{"@type":"WebPage","@id":${jsonString(canonicalUrl || "")}}}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"BlogPosting","headline":${jsonString(title || "Blog")},"description":${jsonString(description ||
+   "")},"image":${jsonString(imageUrl || "https://images.jonathan-harris.online/site-logo")},"datePublished":${jsonString(publishedAt || "")},"dateModified":${jsonString(
+     publishedAt || "")},"author":{"@type":"Person","@id":"https://jonathan-harris.online/#person","name":"Jonathan Harris"},"publisher":{"@type":"Person","@id":"https://\
+jonathan-harris.online/#person","name":"Jonathan Harris"},"mainEntityOfPage":{"@type":"WebPage","@id":${jsonString(canonicalUrl || "")}}}</script>
 </head>
 <body class="page-blog page-blog-post">
 <header class="hero hero--has-fixed-nav" role="region">
