@@ -44,7 +44,8 @@ export function buildSmartResponseIntelligence({
   const securityBlocked = Boolean(security.promptInjectionDetected || security.evidencePromptInjectionDetected);
   const businessRisk = assessConversationBusinessRisk(conversation);
   const channelAutoSendEnabled = autoSendEnabledForChannel(config, conversation?.channel);
-  const humanReview = Boolean(securityBlocked || businessRisk.requiresHumanReview || conduct.requiresHumanReview || conduct.automationBlocked || strategy.humanReviewRequired || smartContext.escalation?.required);
+  const humanReview = Boolean(securityBlocked || businessRisk.requiresHumanReview || conduct.requiresHumanReview || conduct.automationBlocked || strategy.humanReviewRequired ||
+     smartContext.escalation?.required);
   const evidenceRequired = Boolean(policy.requiresEvidence);
   const hasEvidence = Array.isArray(evidence) && evidence.length > 0;
   const unresolvedCount = Array.isArray(summary?.unresolvedActions) ? summary.unresolvedActions.length : 0;

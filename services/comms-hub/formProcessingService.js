@@ -92,9 +92,11 @@ export function formProcessingPromptGuidance(formProcessing) {
     `- Substantive field count: ${formProcessing.digest.facts.length}.`,
     `- Attachment count: ${formProcessing.digest.attachmentCount}.`,
     "- Jotform already owns the immediate receipt acknowledgement. Do not send a duplicate 'we received your form' acknowledgement.",
-    "- Produce a substantive processed response: answer what can be answered, identify only genuinely missing information, and state the next communication step without promising acceptance/publication/booking.",
+    "- Produce a substantive processed response: answer what can be answered, identify only genuinely missing information, and state the next communication step without \
+promising acceptance/publication/booking.",
     "- Treat uploaded attachments as unavailable for substantive inference until the secure attachment pipeline has completed; never invent their contents.",
-    "- Downstream blog/social/podcast editorial automation is handled by a separate controlled queue. Do not start it from the reply model, claim that publication is guaranteed, or expose internal automation details.",
+    "- Downstream blog/social/podcast editorial automation is handled by a separate controlled queue. Do not start it from the reply model, claim that publication is \
+guaranteed, or expose internal automation details.",
   ].join("\n");
 }
 

@@ -28,7 +28,9 @@ export function classifyBrandGrounding(conversation, { conversationalIntelligenc
   const intelligenceAvailable = conversationalIntelligence?.enabled === true;
   const legacyPersonalBrandQuestion = Boolean(
     /\b(?:jonathan(?: harris)?|you|your|yours)\b/.test(value)
-    && /\b(?:do|does|did|are|is|have|has|host|run|offer|provide|publish|write|wrote|work|worked|speak|spoken|podcast|newsletter|book|books|ebook|ebooks|service|services|consult|consulting|website|social|linkedin|youtube|instagram|facebook|career|background|experience|qualification|award|client|company|business|project|projects|available|where|when|who|what)\b/.test(value)
+    && new RegExp("\\b(?:do|does|did|are|is|have|has|host|run|offer|provide|publish|write|wrote|work|worked|speak|spoken|podcast|newsletter|book|books|ebook|ebooks|service|\
+services|consult|consulting|website|social|linkedin|youtube|instagram|facebook|career|background|experience|qualification|award|client|company|business|project|projects|\
+available|where|when|who|what)\\b", "").test(value)
   ) || /\b(?:who is jonathan harris|what does jonathan harris do|tell me about jonathan harris)\b/.test(value);
   const emailFirstPartyQuestion = conversation?.channel === "email"
     && FIRST_PARTY_FAMILIES.has(String(conversationalIntelligence?.family || ""));
@@ -60,8 +62,10 @@ export function brandGroundingPromptGuidance(grounding = {}, evidence = []) {
   const official = officialWebsiteEvidence(evidence);
   return [
     "PERSONAL-BRAND SOURCE-OF-TRUTH RULES:",
-    "- Jonathan Harris's official website is the primary source of truth for factual claims about Jonathan, his work, books, podcast, services, projects, experience, availability and public activities.",
-    "- For those facts, use only supplied evidence whose sourceReference is on https://jonathan-harris.online/. Do not fill gaps from model memory, assumptions, common patterns or third-party knowledge.",
+    "- Jonathan Harris's official website is the primary source of truth for factual claims about Jonathan, his work, books, podcast, services, projects, experience, \
+availability and public activities.",
+    "- For those facts, use only supplied evidence whose sourceReference is on https://jonathan-harris.online/. Do not fill gaps from model memory, assumptions, common \
+patterns or third-party knowledge.",
     "- Never invent a title, role, service, platform, URL, schedule, biography detail, credential, client, project, product or media property.",
     official.length
       ? "- Official website evidence is available. Answer only what that evidence supports and cite only the exact supplied sourceReference values used."
@@ -90,7 +94,8 @@ export function normaliseCogniPalBrandIdentity(value, grounding = {}) {
     [/\bI\s+launched\b/gi, "Jonathan launched"],
     [/\bI\s+have\s+(?=(?:a|an|the|written|published|worked|spoken|created|founded|launched)\b)/gi, "Jonathan has "],
     [/\bI\s+am\s+(?=(?:available|an?\s+(?:author|speaker|consultant|advisor|adviser)|the\s+(?:author|host|founder))\b)/gi, "Jonathan is "],
-    [/\bmy\s+(?=(?:book|books|podcast|podcasts|service|services|website|site|career|background|experience|project|projects|client|clients|newsletter|social|linkedin|instagram|facebook|youtube)\b)/gi, "Jonathan's "],
+    [new RegExp("\\bmy\\s+(?=(?:book|books|podcast|podcasts|service|services|website|site|career|background|experience|project|projects|client|clients|newsletter|social|\
+linkedin|instagram|facebook|youtube)\\b)", "gi"), "Jonathan's "],
     [/\bour\s+(?=(?:book|books|podcast|podcasts|service|services|website|site|newsletter)\b)/gi, "Jonathan's "],
   ];
   for (const [pattern, replacement] of replacements) text = text.replace(pattern, replacement);

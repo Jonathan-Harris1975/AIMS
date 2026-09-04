@@ -45,9 +45,13 @@ export class CommsHubGovernanceService {
     if (!key) throw new CommsHubError(400, 'autonomous_policy_key_invalid', 'Autonomous policy key is required.');
     const status = String(input.status || 'draft').toLowerCase();
     if (!['draft', 'active', 'disabled'].includes(status)) throw new CommsHubError(400, 'autonomous_policy_status_invalid', 'Autonomous policy status is invalid.');
-    if (status === 'active' && identity.role !== 'admin' && identity.role !== 'reviewer') throw new CommsHubError(403, 'autonomous_policy_approval_denied', 'Only a reviewer or administrator may activate autonomous replies.');
+    if (status === 'active' && identity.role !== 'admin' && identity.role !== 'reviewer') throw new CommsHubError(403, 'autonomous_policy_approval_denied',
+       'Only a reviewer or administrator may activate autonomous replies.');
     const createdAt = new Date().toISOString();
-    const policy = await this.context.operationsRepository.upsertAutonomousPolicy({ id: stableId('arp', key), key, channel: String(input.channel || 'any'), intent: String(input.intent || 'any'), maximumRisk: Number(input.maximumRisk ?? 0.15), minimumConfidence: Number(input.minimumConfidence ?? 0.9), requireEvidence: input.requireEvidence !== false, allowedHours: input.allowedHours || {}, maximumPerHour: Math.min(Math.max(Number(input.maximumPerHour) || 1, 1), 50), status, actor: identity.actor, approvedBy: status === 'active' ? identity.actor : null, createdAt });
+    const policy = await this.context.operationsRepository.upsertAutonomousPolicy({ id: stableId('arp', key), key, channel: String(input.channel || 'any'), intent: String(
+      input.intent || 'any'), maximumRisk: Number(input.maximumRisk ?? 0.15), minimumConfidence: Number(input.minimumConfidence ?? 0.9), requireEvidence:
+         input.requireEvidence !== false, allowedHours: input.allowedHours || {}, maximumPerHour: Math.min(Math.max(Number(input.maximumPerHour) || 1, 1), 50), status, actor:
+            identity.actor, approvedBy: status === 'active' ? identity.actor : null, createdAt });
     await this.context.auditService.record({ actor: identity.actor, role: identity.role, action: 'autonomous_policy_upserted', objectType: 'autonomous_policy', objectId: policy.id, after: policy });
     return policy;
   }
@@ -57,7 +61,8 @@ export class CommsHubGovernanceService {
     const operationsPromise = this.context.operationsRepository?.getConversationOperations
       ? this.context.operationsRepository.getConversationOperations(conversationId)
       : Promise.resolve(null);
-    const [conversation, ai, draft, operations] = await Promise.all([this.context.repository.getConversation(conversationId), this.context.aiRepository.getConversationAiState(conversationId), this.context.aiRepository.getDraft(draftId), operationsPromise]);
+    const [conversation, ai, draft, operations] = await Promise.all([this.context.repository.getConversation(conversationId), this.context.aiRepository.getConversationAiState(
+      conversationId), this.context.aiRepository.getDraft(draftId), operationsPromise]);
     if (!conversation || !draft || draft.conversation_id !== conversationId) throw new CommsHubError(404, 'autonomous_reply_target_missing', 'Conversation or reply draft was not found.');
     const automationExclusion = await resolveConversationAutomationExclusion(this.context, conversation);
     if (automationExclusion) {
@@ -93,13 +98,17 @@ export class CommsHubGovernanceService {
       throw new CommsHubError(
         409,
         'autonomous_reply_policy_rejected',
-        `Draft does not meet autonomous policy ${policy.policy_key}: risk=${risk.toFixed(3)}/${maximumRisk.toFixed(3)}, confidence=${confidence.toFixed(3)}/${minimumConfidence.toFixed(3)}, evidence=${evidenceCount}${evidenceRequired ? ' required' : ' optional'}, safeDeterministicDelivery=${safeDeterministicDelivery}.`,
+        `Draft does not meet autonomous policy ${policy.policy_key}: risk=${risk.toFixed(3)}/${maximumRisk.toFixed(3)}, confidence=${confidence.toFixed(
+          3)}/${minimumConfidence.toFixed(3)}, evidence=${evidenceCount}${evidenceRequired ? ' required' : ' optional'}, safeDeterministicDelivery=${safeDeterministicDelivery}.`,
       );
     }
     const sentSince = await this.context.operationsRepository.countAutonomousSendsSince(policy.policy_key, new Date(Date.now() - 3_600_000).toISOString());
     if (sentSince >= Number(policy.maximum_per_hour)) throw new CommsHubError(429, 'autonomous_reply_rate_limited', 'Autonomous reply hourly limit has been reached.');
     const result = await sendReplyDraft({ draftId, context: this.context });
-    await this.context.auditService.record({ actor: identity.actor, role: identity.role, action: 'autonomous_reply_sent', objectType: 'reply_draft', objectId: draftId, conversationId, details: { policyKey: policy.policy_key, channel: conversation.channel, risk, confidence, evidenceCount, responseReasons: latestResponseIntelligence.reasons || [], answerability: latestResponseIntelligence.answerability || null, model: ai?.runs?.[0]?.model || ai?.runs?.[0]?.model_name || null, safeClarification, safeDeterministicResponse, safeFormDelivery, automated: true } });
+    await this.context.auditService.record({ actor: identity.actor, role: identity.role, action: 'autonomous_reply_sent', objectType: 'reply_draft', objectId: draftId,
+       conversationId, details: { policyKey: policy.policy_key, channel: conversation.channel, risk, confidence, evidenceCount, responseReasons:
+          latestResponseIntelligence.reasons || [], answerability: latestResponseIntelligence.answerability || null, model: ai?.runs?.[0]?.model || ai?.runs?.[0]?.model_name ||
+             null, safeClarification, safeDeterministicResponse, safeFormDelivery, automated: true } });
     return { policy: policy.policy_key, ...result };
   }
 
@@ -110,7 +119,8 @@ export class CommsHubGovernanceService {
     const action = String(input.action || 'archive');
     if (!['archive', 'anonymise', 'delete'].includes(action)) throw new CommsHubError(400, 'retention_action_invalid', 'Retention action is invalid.');
     const createdAt = new Date().toISOString();
-    const policy = await this.context.operationsRepository.upsertRetentionPolicy({ id: stableId('ret', key), key, channel: String(input.channel || 'any'), retainDays, action, legalHoldTag: input.legalHoldTag || null, active: input.active !== false, actor: identity.actor, createdAt });
+    const policy = await this.context.operationsRepository.upsertRetentionPolicy({ id: stableId('ret', key), key, channel: String(input.channel || 'any'), retainDays, action,
+       legalHoldTag: input.legalHoldTag || null, active: input.active !== false, actor: identity.actor, createdAt });
     await this.context.auditService.record({ actor: identity.actor, role: identity.role, action: 'retention_policy_upserted', objectType: 'retention_policy', objectId: policy.id, after: policy });
     return policy;
   }
@@ -120,9 +130,11 @@ export class CommsHubGovernanceService {
     const createdAt = new Date().toISOString();
     const key = `exports/${createdAt.slice(0, 10)}/${conversationId}-${createdAt.replace(/[:.]/g, '-')}.json`;
     const stored = await this.context.privateR2.putText(key, JSON.stringify(data, null, 2), 'application/json', { conversation_id: conversationId, export_type: 'subject_access' });
-    const job = await this.context.operationsRepository.createRetentionJob({ id: stableId('rtj', 'export', conversationId, createdAt), conversationId, contactId: data.conversation.contact_id, action: 'export', actor, requestedAt: createdAt, metadata: { sha256: stored.sha256 } });
+    const job = await this.context.operationsRepository.createRetentionJob({ id: stableId('rtj', 'export', conversationId, createdAt), conversationId, contactId:
+       data.conversation.contact_id, action: 'export', actor, requestedAt: createdAt, metadata: { sha256: stored.sha256 } });
     await this.context.operationsRepository.updateRetentionJob({ id: job.id, status: 'complete', exportObjectKey: key, completedAt: createdAt });
-    await this.context.auditService.record({ actor, role: 'admin', action: 'conversation_exported', objectType: 'conversation', objectId: conversationId, conversationId, details: { objectKey: key, sha256: stored.sha256 } });
+    await this.context.auditService.record({ actor, role: 'admin', action: 'conversation_exported', objectType: 'conversation', objectId: conversationId, conversationId,
+       details: { objectKey: key, sha256: stored.sha256 } });
     return { jobId: job.id, objectKey: key, sha256: stored.sha256 };
   }
 
@@ -130,7 +142,8 @@ export class CommsHubGovernanceService {
     const conversation = await this.context.repository.getConversation(conversationId);
     if (!conversation) throw new CommsHubError(404, 'conversation_not_found', 'Conversation was not found.');
     const result = await this.context.operationsRepository.anonymiseConversation({ conversationId, contactId: conversation.contact_id });
-    await this.context.auditService.record({ actor, role: 'admin', action: 'conversation_anonymised', objectType: 'conversation', objectId: conversationId, conversationId, details: { contactId: conversation.contact_id } });
+    await this.context.auditService.record({ actor, role: 'admin', action: 'conversation_anonymised', objectType: 'conversation', objectId: conversationId, conversationId,
+       details: { contactId: conversation.contact_id } });
     return result;
   }
 

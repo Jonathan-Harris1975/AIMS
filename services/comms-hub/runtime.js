@@ -334,7 +334,8 @@ export async function startCommsHubRuntime() {
           ),
         },
       });
-      return { started: true, archiveWorkerStarted, socialPollWorkerStarted, webhookReconcileWorkerStarted, followUpWorkerStarted, providerHealthWorkerStarted, backupWorkerStarted, emailPollWorkerStarted, delayedActionWorkerStarted, retentionWorkerStarted, monthEndConversationArchiveWorkerStarted };
+      return { started: true, archiveWorkerStarted, socialPollWorkerStarted, webhookReconcileWorkerStarted, followUpWorkerStarted, providerHealthWorkerStarted,
+         backupWorkerStarted, emailPollWorkerStarted, delayedActionWorkerStarted, retentionWorkerStarted, monthEndConversationArchiveWorkerStarted };
     } catch (error) {
       runtimeState = { status: "failed", ready: false, detail: error?.code || error?.name || "runtime_start_failed" };
       log.error("commsHub.runtime.startFailed", { error: safeErrorLog(error) });

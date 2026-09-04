@@ -79,7 +79,8 @@ export async function processJotformIntake({ envelope, correlationId, context, n
         conversationId: intake.conversationId,
         actionType: "attachment_ingest",
         dueAt,
-        payload: { attachmentId: attachment.id, providerUrl: attachment.providerUrl, filename: attachment.filename, provider: "jotform", metadata: { conversationId: intake.conversationId, contactId: intake.contactId, messageId: intake.messageId, channel: "form", formId: intake.formId, submissionId: intake.submissionId } },
+        payload: { attachmentId: attachment.id, providerUrl: attachment.providerUrl, filename: attachment.filename, provider: "jotform", metadata: { conversationId:
+           intake.conversationId, contactId: intake.contactId, messageId: intake.messageId, channel: "form", formId: intake.formId, submissionId: intake.submissionId } },
         idempotencyKey: `attachment-ingest:${attachment.id}`,
       }, { actor: "jotform-intake", role: "admin" });
     }

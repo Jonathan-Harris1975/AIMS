@@ -4,7 +4,8 @@ import { conversationInteractionSignals } from "./conversationConductService.js"
 import { isSocialChannel, isSocialCommentChannel } from "./domain/channels.js";
 
 const STOP_WORDS = new Set([
-  "a","about","an","and","are","as","at","be","been","but","by","can","could","do","for","from","get","give","has","have","how","i","if","in","into","is","it","its","me","my","of","on","or","our","please","so","some","tell","that","the","their","them","there","they","this","to","us","want","what","when","where","which","who","why","with","would","you","your",
+  "a","about","an","and","are","as","at","be","been","but","by","can","could","do","for","from","get","give","has","have","how","i","if","in","into","is","it","its","me","my",
+    "of","on","or","our","please","so","some","tell","that","the","their","them","there","they","this","to","us","want","what","when","where","which","who","why","with","would","you","your",
   "ai","artificial","intelligence",
 ]);
 
@@ -149,7 +150,8 @@ function quizState(conversation) {
     }
   }
   const latest = inboundMessages(conversation).at(-1);
-  const answerMatch = String(latest?.body_text || latest?.body || "").trim().match(/^(?:i(?:'ll| will)?\s+(?:go|choose)\s+with\s+|i\s+think\s+(?:it(?:'s| is)\s+)?|answer\s*[:=-]?\s*)?([ABCD])(?:\b|[\).])/i);
+  const answerMatch = String(latest?.body_text || latest?.body || "").trim().match(
+    /^(?:i(?:'ll| will)?\s+(?:go|choose)\s+with\s+|i\s+think\s+(?:it(?:'s| is)\s+)?|answer\s*[:=-]?\s*)?([ABCD])(?:\b|[\).])/i);
   const latestText = latestInboundText(conversation, 2000).toLowerCase();
   const quizRequested = /\b(quiz|question|test me|challenge)\b/.test(latestText);
   return Object.freeze({
@@ -392,12 +394,16 @@ export function smartPromptGuidance(context = {}) {
   }
   if (context.engagementMode === "book_discovery") {
     guidance.push("- FIRST-PARTY BOOK POLICY: VERIFIED_BOOK_CANDIDATES are the authoritative Jonathan Harris catalogue for this reply.");
-    guidance.push("- Recommend only VERIFIED_BOOK_CANDIDATES. Use their exact titles and exact bookUrl values. Do not recommend third-party books, invent titles, substitute Amazon links or rely on general model knowledge for book availability.");
-    guidance.push("- Recommend at most two books. Prefer the candidate that matches the stated industry, experience level and desired reading style. If there are no verified candidates, ask one short clarifying question instead of naming any book.");
+    guidance.push("- Recommend only VERIFIED_BOOK_CANDIDATES. Use their exact titles and exact bookUrl values. Do not recommend third-party books, invent titles, substitute \
+Amazon links or rely on general model knowledge for book availability.");
+    guidance.push("- Recommend at most two books. Prefer the candidate that matches the stated industry, experience level and desired reading style. If there are no verified \
+candidates, ask one short clarifying question instead of naming any book.");
   }
   if (context.engagementMode === "quiz_interaction") {
-    guidance.push("- Treat A/B/C/D replies as quiz answers when the session context indicates a quiz. Do not claim an answer is correct unless the correct answer is grounded in approved evidence or supplied quiz context.");
-    guidance.push("- If the user asks for a quiz but no verified quiz is available, offer a short topic-based question only when the task explicitly allows creating one; otherwise ask what topic they want.");
+    guidance.push("- Treat A/B/C/D replies as quiz answers when the session context indicates a quiz. Do not claim an answer is correct unless the correct answer is grounded \
+in approved evidence or supplied quiz context.");
+    guidance.push("- If the user asks for a quiz but no verified quiz is available, offer a short topic-based question only when the task explicitly allows creating one; \
+otherwise ask what topic they want.");
   }
   if (context.engagementMode === "public_content_discussion") {
     guidance.push("- This is a public comment context. Be concise, useful and non-salesy. Do not pretend to know the source post text unless it is present in the supplied evidence/context.");
@@ -409,12 +415,18 @@ export function smartPromptGuidance(context = {}) {
   if (context.memory?.responseLength === "brief") guidance.push("- The visitor explicitly prefers brief answers. Keep the response tight unless detail is necessary for safety or accuracy.");
   if (context.memory?.responseLength === "detailed") guidance.push("- The visitor explicitly prefers detailed explanations. Give useful depth without padding or repetition.");
   if (context.memory?.linkPreference === "no_links") guidance.push("- The visitor has asked not to receive links. Do not include links unless they explicitly reverse that preference.");
-  if (context.memory?.bookRecommendationPreference === "opted_out") guidance.push("- The visitor has opted out of book recommendations. Do not promote or recommend a book unless they explicitly reverse that preference.");
-  if (context.memory?.contactPreference === "no_follow_up") guidance.push("- The visitor has asked for no follow-up. Do not suggest or schedule proactive follow-up unless they explicitly reverse that preference.");
-  if ((context.memory?.interactionSignals?.confusionCount || 0) >= 2) guidance.push("- The visitor has shown repeated confusion. Simplify the explanation and avoid introducing more concepts at once.");
-  if ((context.memory?.interactionSignals?.complaintCount || 0) >= 2) guidance.push("- This conversation contains repeated complaint/frustration signals. Acknowledge the substantive issue briefly and prioritise resolution over promotion.");
-  if ((context.memory?.interactionSignals?.humanRequestCount || 0) > 0) guidance.push("- A request for human contact has appeared in this conversation. Do not create unnecessary friction around handoff.");
-  if (context.escalation?.required) guidance.push(`- Human escalation is required by deterministic Smart Context (${(context.escalation.reasons || []).join(", ")}). Do not present automation as final authority.`);
+  if (context.memory?.bookRecommendationPreference === "opted_out") guidance.push(
+    "- The visitor has opted out of book recommendations. Do not promote or recommend a book unless they explicitly reverse that preference.");
+  if (context.memory?.contactPreference === "no_follow_up") guidance.push(
+    "- The visitor has asked for no follow-up. Do not suggest or schedule proactive follow-up unless they explicitly reverse that preference.");
+  if ((context.memory?.interactionSignals?.confusionCount || 0) >= 2) guidance.push(
+    "- The visitor has shown repeated confusion. Simplify the explanation and avoid introducing more concepts at once.");
+  if ((context.memory?.interactionSignals?.complaintCount || 0) >= 2) guidance.push(
+    "- This conversation contains repeated complaint/frustration signals. Acknowledge the substantive issue briefly and prioritise resolution over promotion.");
+  if ((context.memory?.interactionSignals?.humanRequestCount || 0) > 0) guidance.push(
+    "- A request for human contact has appeared in this conversation. Do not create unnecessary friction around handoff.");
+  if (context.escalation?.required) guidance.push(`- Human escalation is required by deterministic Smart Context (${(context.escalation.reasons || []).join(
+    ", ")}). Do not present automation as final authority.`);
   if (context.memory?.priorBookRecommendations?.length) guidance.push("- Avoid repeating an earlier book recommendation unless the new message clearly makes it relevant again.");
   return guidance.join("\n");
 }

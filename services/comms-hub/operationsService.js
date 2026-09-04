@@ -234,7 +234,8 @@ export class CommsHubOperationsService {
     const template = text(bodyTemplate, 20_000);
     if (!template) throw new CommsHubError(400, "saved_reply_template_empty", "Saved reply template cannot be empty.");
     const requestedChannel = String(channel || "any").toLowerCase();
-    if (!new Set(["any", "email", "social", "social_dm", "social_comment", "chat", "form"]).has(requestedChannel)) throw new CommsHubError(400, "saved_reply_channel_invalid", "Saved reply channel is invalid.");
+    if (!new Set(["any", "email", "social", "social_dm", "social_comment", "chat", "form"]).has(requestedChannel)) throw new CommsHubError(400, "saved_reply_channel_invalid",
+       "Saved reply channel is invalid.");
     const storedChannel = isSocialChannel(requestedChannel) ? "social" : requestedChannel;
     const variables = variablesFromTemplate(template);
     const reply = await this.context.operationsRepository.upsertSavedReply({
@@ -254,7 +255,8 @@ export class CommsHubOperationsService {
     if (!reply) throw new CommsHubError(404, "saved_reply_not_found", "Saved reply was not found.");
     const requestedChannel = String(channel || "").toLowerCase();
     const requestedFamily = channelFamily(requestedChannel);
-    if (reply.channel !== "any" && reply.channel !== requestedChannel && reply.channel !== requestedFamily) throw new CommsHubError(409, "saved_reply_channel_mismatch", "Saved reply is not valid for this channel.");
+    if (reply.channel !== "any" && reply.channel !== requestedChannel && reply.channel !== requestedFamily) throw new CommsHubError(409, "saved_reply_channel_mismatch",
+       "Saved reply is not valid for this channel.");
     const variables = JSON.parse(reply.variables_json || "[]");
     const bodyText = renderTemplate(reply.body_template, values, variables);
     const limits = { social: 2000, chat: 4000, email: 20_000, form: 20_000 };

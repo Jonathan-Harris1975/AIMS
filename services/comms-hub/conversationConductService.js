@@ -1,7 +1,8 @@
 import { normaliseUntrustedText } from "./domain/promptSecurity.js";
 
 const PROFANITY_PATTERNS = Object.freeze([
-  { key: "strong_profanity", severity: 2, regex: /\b(?:f+(?:u+)?c+k+(?:ing|ed|er|ers|off)?|m+o+t+h+e+r+f+(?:u+)?c+k+e+r+s?|c+u+n+t+s?|a+s+s+h+o+l+e+s?|a+r+s+e+h+o+l+e+s?|d+i+c+k+h+e+a+d+s?|w+a+n+k+e+r+s?)\b/i },
+  { key: "strong_profanity", severity: 2, regex: new RegExp("\\b(?:f+(?:u+)?c+k+(?:ing|ed|er|ers|off)?|m+o+t+h+e+r+f+(?:u+)?c+k+e+r+s?|c+u+n+t+s?|a+s+s+h+o+l+e+s?|\
+a+r+s+e+h+o+l+e+s?|d+i+c+k+h+e+a+d+s?|w+a+n+k+e+r+s?)\\b", "i") },
   { key: "profanity", severity: 1, regex: /\b(?:s+h+(?:i+)?t+(?:ty|ting|ted)?|b+a+s+t+a+r+d+s?|b+o+l+l+o+c+k+s?|p+i+s+s+(?:ed|ing)?|c+r+a+p+|d+a+m+n+(?:ed)?|b+l+o+o+d+y+)\b/i },
   { key: "hate_slur", severity: 4, regex: /\b(?:n+i+g+g+(?:e+r|a)s?|f+a+g+g+o+t+s?|k+i+k+e+s?)\b/i },
 ]);
@@ -12,7 +13,8 @@ const OBFUSCATED_LANGUAGE_PATTERNS = Object.freeze([
 ]);
 
 const TARGET_MARKER_RE = /\b(?:you|your|you're|youre|jonathan|cognipal|bot|assistant)\b/i;
-const THREAT_RE = /\b(?:i(?:'ll| will| am going to|m going to)?\s+(?:kill|hurt|attack|find|dox|destroy)\s+(?:you|jonathan)|(?:kill|hurt|attack|dox)\s+(?:you|jonathan)|i know where you live|watch your back)\b/i;
+const THREAT_RE = new RegExp("\\b(?:i(?:'ll| will| am going to|m going to)?\\s+(?:kill|hurt|attack|find|dox|destroy)\\s+(?:you|jonathan)|(?:kill|hurt|attack|dox)\\s+(?:you|\
+jonathan)|i know where you live|watch your back)\\b", "i");
 const REPORTING_CONTEXT_RE = /\b(?:said|wrote|posted|called me|called you|quote|quoting|reported|someone told me)\b/i;
 const COMPLAINT_RE = /\b(?:complaint|not happy|unhappy|frustrat(?:ed|ing)|annoy(?:ed|ing)|disappoint(?:ed|ing)|terrible service|poor service|this is ridiculous|fed up)\b/i;
 const CONFUSION_RE = /\b(?:i (?:do not|don't|dont) understand|confus(?:ed|ing)|what do you mean|that makes no sense|can you explain|i(?:'m| am) lost)\b/i;

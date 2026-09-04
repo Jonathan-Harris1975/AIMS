@@ -123,24 +123,33 @@ export class CommsHubEmailService {
     const effectiveMailboxRole = String(mailboxRole || account.mailboxRole || 'customer_facing');
     const evaluateWorkflow = automationEnabled === null ? account.workflowEvaluationEnabled === true : automationEnabled === true;
     const threadKey = emailThreadKey(parsed);
-    const existing = await this.context.operationsRepository.findEmailThread({ accountKey: account.key, mailbox, providerThreadKey: threadKey, internetMessageId: parsed.inReplyTo || parsed.messageId });
+    const existing = await this.context.operationsRepository.findEmailThread({ accountKey: account.key, mailbox, providerThreadKey: threadKey, internetMessageId:
+       parsed.inReplyTo || parsed.messageId });
     const existingConversation = existing?.conversation_id ? await this.context.repository.getConversation(existing.conversation_id) : null;
     const contactId = existingConversation?.contact_id || stableId('con', 'email', sender);
     const conversationId = existing?.conversation_id || stableId('cnv', 'email', account.key, threadKey);
     const messageId = stableId('msg', 'email', parsed.messageId);
     const now = new Date().toISOString();
     const outreachReply = existingConversation?.workflow === 'outreach_guest_article';
-    const attachmentRows = parsed.attachments.map((item, index) => ({ id: stableId('att', messageId, index, item.filename, item.sha256), filename: item.filename, contentType: item.contentType, status: 'pending', metadata: { size: item.size } }));
+    const attachmentRows = parsed.attachments.map((item, index) => ({ id: stableId('att', messageId, index, item.filename, item.sha256), filename: item.filename, contentType:
+       item.contentType, status: 'pending', metadata: { size: item.size } }));
     const persistence = await this.context.operationsRepository.persistChannelMessage({
       contact: { id: contactId, primaryEmail: sender, displayName: parsed.from?.name || sender, phone: '' },
-      conversation: { id: conversationId, channel: 'email', provider: 'one.com', workflow: outreachReply ? 'outreach_guest_article' : 'email_inbox', status: 'open', contactId, subject: parsed.subject, sourceReference: parsed.messageId, metadata: outreachReply ? { ...(existingConversation?.metadata || {}), accountKey: account.key, mailbox, threadKey, managedAddress: effectiveManagedAddress, mailboxRole: effectiveMailboxRole, manualOnly: account.manualOnly === true, outreachReply: true } : { accountKey: account.key, mailbox, threadKey, managedAddress: effectiveManagedAddress, mailboxRole: effectiveMailboxRole, manualOnly: account.manualOnly === true } },
-      message: { id: messageId, direction: 'inbound', sender, recipients: [...parsed.to, ...parsed.cc].map((item) => item.address), subject: parsed.subject, bodyText: parsed.text, bodyHtml: parsed.html, providerMessageId: parsed.messageId, receivedAt: parsed.receivedAt, metadata: { uid, rawSha256: parsed.rawSha256, inReplyTo: parsed.inReplyTo, references: parsed.references, managedAddress: effectiveManagedAddress, mailboxRole: effectiveMailboxRole, manualOnly: account.manualOnly === true } },
+      conversation: { id: conversationId, channel: 'email', provider: 'one.com', workflow: outreachReply ? 'outreach_guest_article' : 'email_inbox', status: 'open', contactId,
+         subject: parsed.subject, sourceReference: parsed.messageId, metadata: outreachReply ? { ...(existingConversation?.metadata || {}), accountKey: account.key, mailbox,
+            threadKey, managedAddress: effectiveManagedAddress, mailboxRole: effectiveMailboxRole, manualOnly: account.manualOnly === true, outreachReply: true } : {
+               accountKey: account.key, mailbox, threadKey, managedAddress: effectiveManagedAddress, mailboxRole: effectiveMailboxRole, manualOnly: account.manualOnly === true } },
+      message: { id: messageId, direction: 'inbound', sender, recipients: [...parsed.to, ...parsed.cc].map((item) => item.address), subject: parsed.subject, bodyText:
+         parsed.text, bodyHtml: parsed.html, providerMessageId: parsed.messageId, receivedAt: parsed.receivedAt, metadata: { uid, rawSha256: parsed.rawSha256, inReplyTo:
+            parsed.inReplyTo, references: parsed.references, managedAddress: effectiveManagedAddress, mailboxRole: effectiveMailboxRole, manualOnly: account.manualOnly === true } },
       attachments: attachmentRows,
       at: now,
     });
     await this.context.operationsRepository.ensureConversationOperations(conversationId, 'email-adapter', now);
-    await this.context.operationsRepository.upsertEmailThread({ id: stableId('eth', account.key, mailbox, threadKey), conversationId, accountKey: account.key, mailbox, providerThreadKey: threadKey, internetMessageId: parsed.messageId, references: [...parsed.references, parsed.messageId], lastUid: uid, createdAt: now, metadata: { subject: parsed.subject } });
-    await this.context.operationsRepository.addContactAlias({ id: stableId('als', 'email', sender), contactId, type: 'email', value: sender, provider: 'one.com', confidence: 1, verified: true, createdAt: now, metadata: {} });
+    await this.context.operationsRepository.upsertEmailThread({ id: stableId('eth', account.key, mailbox, threadKey), conversationId, accountKey: account.key, mailbox,
+       providerThreadKey: threadKey, internetMessageId: parsed.messageId, references: [...parsed.references, parsed.messageId], lastUid: uid, createdAt: now, metadata: { subject: parsed.subject } });
+    await this.context.operationsRepository.addContactAlias({ id: stableId('als', 'email', sender), contactId, type: 'email', value: sender, provider: 'one.com', confidence: 1,
+       verified: true, createdAt: now, metadata: {} });
     const attachmentResults = [];
     for (let index = 0; index < parsed.attachments.length; index += 1) {
       const source = parsed.attachments[index];
@@ -192,10 +201,12 @@ export class CommsHubEmailService {
         });
       }
     }
-    return { duplicate: persistence.duplicate, conversationId, messageId, workflow: outreachReply ? 'outreach_guest_article' : 'email_inbox', accountKey: account.key, managedAddress: effectiveManagedAddress, mailboxRole: effectiveMailboxRole, manualOnly: account.manualOnly === true, attachments: attachmentResults };
+    return { duplicate: persistence.duplicate, conversationId, messageId, workflow: outreachReply ? 'outreach_guest_article' : 'email_inbox', accountKey: account.key,
+       managedAddress: effectiveManagedAddress, mailboxRole: effectiveMailboxRole, manualOnly: account.manualOnly === true, attachments: attachmentResults };
   }
 
-  async send({ conversationId, bodyText, bodyHtml = null, subject = '', recipients = [], cc = [], attachments = [], attachmentIds = [], idempotencyKey, scheduledDelivery = false, manualReply = false }) {
+  async send({ conversationId, bodyText, bodyHtml = null, subject = '', recipients = [], cc = [], attachments = [], attachmentIds = [], idempotencyKey, scheduledDelivery =
+     false, manualReply = false }) {
     if (!this.context.config.emailEnabled) throw new CommsHubError(409, 'email_channel_disabled', 'Email channel is disabled.');
     if (!idempotencyKey) throw new CommsHubError(400, 'idempotency_key_required', 'Idempotency-Key is required.');
     const conversation = await this.context.repository.getConversation(conversationId);
@@ -239,21 +250,27 @@ export class CommsHubEmailService {
     const request = { conversationId, bodyText, bodyHtml, subject: subject || `Re: ${conversation.subject || ''}`, to, cc: safeCc };
     const attachmentFingerprints = allAttachments.map((item) => ({ filename: item.filename, contentType: item.contentType, sha256: sha256Hex(item.buffer) }));
     const requestSha256 = sha256Hex(JSON.stringify({ ...request, attachments: attachmentFingerprints }));
-    const claim = await this.context.operationsRepository.claimChannelOutboundAction({ id: stableId('coa', idempotencyKey), idempotencyKey, conversationId, channel: 'email', actionType: 'reply', requestSha256 });
+    const claim = await this.context.operationsRepository.claimChannelOutboundAction({ id: stableId('coa', idempotencyKey), idempotencyKey, conversationId, channel: 'email',
+       actionType: 'reply', requestSha256 });
     if (!claim.acquired) {
       if (claim.duplicate) return { duplicate: true, providerMessageId: claim.existing.provider_message_id };
       throw new CommsHubError(409, 'email_send_in_progress', 'Email send is already in progress.');
     }
     try {
       const references = JSON.parse(thread?.references_json || '[]');
-      const sent = await mailClient.sendMessage({ to, cc: safeCc, subject: request.subject, bodyText, bodyHtml, inReplyTo: thread?.internet_message_id || '', references, attachments: allAttachments });
+      const sent = await mailClient.sendMessage({ to, cc: safeCc, subject: request.subject, bodyText, bodyHtml, inReplyTo: thread?.internet_message_id || '', references,
+         attachments: allAttachments });
       const at = new Date().toISOString();
-      await this.context.operationsRepository.recordOutboundMessage({ id: stableId('msg', 'email-out', sent.messageId), conversationId, sender: account.address, recipients: [...to, ...safeCc], subject: request.subject, bodyText, bodyHtml, providerMessageId: sent.messageId, receivedAt: at, metadata: { inReplyTo: thread?.internet_message_id || null, references } });
-      await this.context.operationsRepository.upsertEmailThread({ id: thread?.id || stableId('eth', conversationId), conversationId, accountKey: account.key, mailbox: account.mailbox, providerThreadKey: thread?.provider_thread_key || conversationId, internetMessageId: sent.messageId, references: [...references, sent.messageId], lastUid: thread?.last_uid || null, createdAt: thread?.created_at || at, metadata: {} });
+      await this.context.operationsRepository.recordOutboundMessage({ id: stableId('msg', 'email-out', sent.messageId), conversationId, sender: account.address, recipients: [
+        ...to, ...safeCc], subject: request.subject, bodyText, bodyHtml, providerMessageId: sent.messageId, receivedAt: at, metadata: { inReplyTo: thread?.internet_message_id || null, references } });
+      await this.context.operationsRepository.upsertEmailThread({ id: thread?.id || stableId('eth', conversationId), conversationId, accountKey: account.key, mailbox:
+         account.mailbox, providerThreadKey: thread?.provider_thread_key || conversationId, internetMessageId: sent.messageId, references: [...references, sent.messageId],
+            lastUid: thread?.last_uid || null, createdAt: thread?.created_at || at, metadata: {} });
       await this.context.operationsRepository.completeChannelOutboundAction({ idempotencyKey, providerMessageId: sent.messageId, response: sent, at });
       return { duplicate: false, providerMessageId: sent.messageId };
     } catch (error) {
-      await this.context.operationsRepository.failChannelOutboundAction({ idempotencyKey, failureClass: error.failureClass || 'temporary', error: error.message, reconciliationRequired: Boolean(error.retryable) });
+      await this.context.operationsRepository.failChannelOutboundAction({ idempotencyKey, failureClass: error.failureClass || 'temporary', error: error.message,
+         reconciliationRequired: Boolean(error.retryable) });
       throw error;
     }
   }

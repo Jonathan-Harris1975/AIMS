@@ -147,14 +147,16 @@ export class CommsHubContentAutomationService {
     }
 
     const signals = buildEditorialSignals(state.digest, this.context.config.contentAutomationMaxFacts);
-    if (!signals.length) return this.holdForReview({ conversationId, formKey, quality: { score: 0 }, threshold: this.context.config.contentAutomationQualityMinimumScore, reason: "no_substantive_editorial_signals" });
+    if (!signals.length) return this.holdForReview({ conversationId, formKey, quality: { score: 0 }, threshold: this.context.config.contentAutomationQualityMinimumScore,
+       reason: "no_substantive_editorial_signals" });
 
     const completeness = deterministicContentCompleteness(signals);
     let aiQuality;
     try {
       aiQuality = await this.context.aiWorkflowService.assessContentSubmission({ conversationId, formKey, editorialSignals: signals, allowedLanes: candidates });
     } catch (error) {
-      return this.holdForReview({ conversationId, formKey, quality: { score: completeness.score, completeness, aiAssessmentUnavailable: true }, threshold: this.context.config.contentAutomationQualityMinimumScore, reason: error?.code || "quality_assessment_failed" });
+      return this.holdForReview({ conversationId, formKey, quality: { score: completeness.score, completeness, aiAssessmentUnavailable: true }, threshold:
+         this.context.config.contentAutomationQualityMinimumScore, reason: error?.code || "quality_assessment_failed" });
     }
     const score = combineContentQuality({ completeness, ai: aiQuality });
     const threshold = Number(this.context.config.contentAutomationQualityMinimumScore ?? 0.78);

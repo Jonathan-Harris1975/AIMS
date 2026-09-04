@@ -233,7 +233,8 @@ export class CommsHubAiWorkflowService {
       "Assess a verified Jotform submission for Jonathan Harris's personal-brand content pipeline.",
       "Return JSON only with: coherence (0..1), narrativeStrength (0..1), brandFit (0..1), factualRisk (0..1), selectedLane, rationale.",
       `selectedLane must be exactly one of: ${lanes.join(", ")}.`,
-      "Use only the supplied editorial signals. Do not invent facts. Strong long-form narrative favours podcast; practical/how-to depth favours blog; punchy visual or quote-led material favours blotato_video; a serialisable topic with multiple distinct angles favours zernio_mini_series; concise general audience insight favours social.",
+      "Use only the supplied editorial signals. Do not invent facts. Strong long-form narrative favours podcast; practical/how-to depth favours blog; punchy visual or quote-\
+led material favours blotato_video; a serialisable topic with multiple distinct angles favours zernio_mini_series; concise general audience insight favours social.",
       "factualRisk measures unsupported, contradictory, promotional or suspicious claims; higher is worse.",
     ].join("\n"), {
       conversationId: conversationId || `content-${formKey || "submission"}`,
@@ -681,7 +682,8 @@ export class CommsHubAiWorkflowService {
             "Use only facts in the conversation and evidence. Do not promise unpublished content, guest slots, dates, outcomes or actions not present in the evidence.",
             "Return JSON with bodyText and evidenceSourceReferences. evidenceSourceReferences must contain the exact sourceReference values used.",
             "Do not include internal notes, confidence scores or JSON outside the object.",
-          ].filter(Boolean).join("\n"), { ...common, strategy: finalStrategy, responseIntelligence, policy: effectivePolicy, summary, evidence: evidencePrompt(draftEvidence) }, { maxTokens: 2200, temperature: 0.25 });
+          ].filter(Boolean).join("\n"), { ...common, strategy: finalStrategy, responseIntelligence, policy: effectivePolicy, summary, evidence: evidencePrompt(draftEvidence) },
+             { maxTokens: 2200, temperature: 0.25 });
 
       const citedReferences = Array.isArray(resolvedDraftCall.parsed.evidenceSourceReferences)
         ? [...new Set(resolvedDraftCall.parsed.evidenceSourceReferences.map(String))]
@@ -749,7 +751,8 @@ export class CommsHubAiWorkflowService {
       const smartEscalationRequired = Boolean(smartContext.escalation?.required);
       const strategyReviewRequired = Boolean(finalStrategy?.humanReviewRequired);
       const queue = Object.freeze({
-        key: securityReviewRequired ? "security_review" : conductReviewRequired || smartEscalationRequired || strategyReviewRequired || approvalPolicy.required || routing.mismatch ? "priority_review" : "standard",
+        key: securityReviewRequired ? "security_review" : conductReviewRequired || smartEscalationRequired || strategyReviewRequired || approvalPolicy.required ||
+           routing.mismatch ? "priority_review" : "standard",
         escalationRequired: securityReviewRequired || conductReviewRequired || smartEscalationRequired || strategyReviewRequired || approvalPolicy.required || routing.mismatch,
       });
       const draftId = stableId("drf", run.id, sha256Hex(bodyText));
@@ -766,7 +769,9 @@ export class CommsHubAiWorkflowService {
         : null;
       const completedAt = new Date().toISOString();
       const conversationOpen = ["open", "pending"].includes(String(conversation.status || "").toLowerCase());
-      const followUp = scheduleFollowUp && !securityReviewRequired && !conduct.automationBlocked && !smartEscalationRequired && !finalStrategy?.humanReviewRequired && !responseIntelligence.humanReviewRequired && !responseIntelligence.clarificationRequired && smartContext.memory?.contactPreference !== "no_follow_up" && conversationOpen && summary.followUpNeeded
+      const followUp = scheduleFollowUp && !securityReviewRequired && !conduct.automationBlocked && !smartEscalationRequired && !finalStrategy?.humanReviewRequired &&
+         !responseIntelligence.humanReviewRequired && !responseIntelligence.clarificationRequired && smartContext.memory?.contactPreference !== "no_follow_up" &&
+            conversationOpen && summary.followUpNeeded
         ? {
             id: stableId("fol", conversationId, summary.followUpReason || summary.nextAction || "follow-up"),
             reason: summary.followUpReason || summary.nextAction || "Unresolved conversation action",

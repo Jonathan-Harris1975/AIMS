@@ -73,7 +73,8 @@ export function buildConversationStrategy({ conversation, smartContext = {}, liv
     askClarifyingQuestion: nextBestMove === "ask_one_clarifying_question",
     clarificationQuestion: conversationalIntelligence?.clarificationQuestion || "",
     humanReviewRequired: needsHuman,
-    handoff: Object.freeze({ available: handoff.available, nextAvailableAt: handoff.nextAvailableAt, timeZone: handoff.timeZone, startHour: handoff.startHour, endHour: handoff.endHour, callbackEmailOption: true }),
+    handoff: Object.freeze({ available: handoff.available, nextAvailableAt: handoff.nextAvailableAt, timeZone: handoff.timeZone, startHour: handoff.startHour, endHour:
+       handoff.endHour, callbackEmailOption: true }),
     reasons: Object.freeze([
       securityRisk ? "security_risk" : "",
       conduct?.requiresHumanReview ? "conduct_review" : "",
@@ -98,10 +99,13 @@ export function conversationStrategyPromptGuidance(strategy = {}) {
     `- Promotion policy: ${strategy.promotionPolicy}; maximum calls to action: ${strategy.maximumCallsToAction}.`,
     "- 'Next best move' is a conversational recommendation only. It never grants permission to execute a provider action, send autonomously, mutate data or bypass approval/capability controls.",
     strategy.humanReviewRequired ? "- Human review is required. Do not keep pushing automation, sales or unnecessary questions." : "",
-    strategy.objective === 'human_handoff' && strategy.handoff?.available ? "- Live hand-off to Jonathan is available only now because it is within 09:00-17:00 Monday-Friday UK time. Offer the hand-off, and also offer the optional email callback route." : "",
-    strategy.objective === 'human_handoff' && !strategy.handoff?.available ? "- Live hand-off is currently unavailable. Do not imply Jonathan is online. Offer the user the option to leave an email address so Jonathan can get back to them in due course." : "",
+    strategy.objective === 'human_handoff' && strategy.handoff?.available ?
+       "- Live hand-off to Jonathan is available only now because it is within 09:00-17:00 Monday-Friday UK time. Offer the hand-off, and also offer the optional email callback route." : "",
+    strategy.objective === 'human_handoff' && !strategy.handoff?.available ?
+       "- Live hand-off is currently unavailable. Do not imply Jonathan is online. Offer the user the option to leave an email address so Jonathan can get back to them in due course." : "",
     strategy.askClarifyingQuestion ? `- Ask exactly one concise clarifying question instead of guessing.${strategy.clarificationQuestion ? ` Use: ${strategy.clarificationQuestion}` : ""}` : "",
-    strategy.objective === "grounded_brand_answer" ? "- Answer factual questions about Jonathan only from verified official-website evidence. If it is not verified there, say so rather than inferring." : "",
+    strategy.objective === "grounded_brand_answer" ? "- Answer factual questions about Jonathan only from verified official-website evidence. If it is not verified there, say \
+so rather than inferring." : "",
     strategy.promotionPolicy === "contextual_only" ? "- Mention a book, quiz, podcast or other Jonathan content only if it genuinely advances the user's current goal." : "",
     strategy.promotionPolicy === "none" ? "- Do not add promotional material or calls to action." : "",
   ].filter(Boolean).join("\n");

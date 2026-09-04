@@ -282,7 +282,8 @@ export function getCommsHubMissingEnv(env = process.env) {
     if (restoreDatabase && restoreDatabase === sourceDatabase) missing.push("COMMS_HUB_RESTORE_DATABASE_ID");
   }
   if (booleanValue(env.COMMS_HUB_EMAIL_ENABLED, false)) {
-    for (const name of ["COMMS_HUB_ONECOM_EMAIL_ADDRESS", "COMMS_HUB_ONECOM_USERNAME", "COMMS_HUB_ONECOM_IMAP_HOST", "COMMS_HUB_ONECOM_SMTP_HOST", "R2_BUCKET_COMMS_HUB_PRIVATE", "COMMS_HUB_ATTACHMENT_SCANNER_URL", "COMMS_HUB_ATTACHMENT_SCANNER_TOKEN"]) {
+    for (const name of ["COMMS_HUB_ONECOM_EMAIL_ADDRESS", "COMMS_HUB_ONECOM_USERNAME", "COMMS_HUB_ONECOM_IMAP_HOST", "COMMS_HUB_ONECOM_SMTP_HOST",
+       "R2_BUCKET_COMMS_HUB_PRIVATE", "COMMS_HUB_ATTACHMENT_SCANNER_URL", "COMMS_HUB_ATTACHMENT_SCANNER_TOKEN"]) {
       if (!usableEnvValue(env[name])) missing.push(name);
     }
     if (!usableEnvValue(env.COMMS_HUB_ONECOM_PASSWORD) && !usableEnvValue(env.ONECOM_INFO_PASSWORD)) {
@@ -345,9 +346,12 @@ export function loadCommsHubConfig(env = process.env, { requireEnabled = false }
     || extractAccountIdFromR2Endpoint(env.R2_ENDPOINT);
   const aiEnabled = booleanValue(env.COMMS_HUB_AI_ENABLED, false);
   const jotformForms = Object.freeze({
-    contact: Object.freeze({ ...COMMS_HUB_FORM_ROUTES["260281179574362"], formId: "260281179574362", url: normaliseBaseUrl(env.COMMS_HUB_JOTFORM_CONTACT_URL, COMMS_HUB_FORM_ROUTES["260281179574362"].defaultUrl) }),
-    case_study: Object.freeze({ ...COMMS_HUB_FORM_ROUTES["262063136008044"], formId: "262063136008044", url: normaliseBaseUrl(env.COMMS_HUB_JOTFORM_CASE_STUDY_URL, COMMS_HUB_FORM_ROUTES["262063136008044"].defaultUrl) }),
-    podcast_enquiry: Object.freeze({ ...COMMS_HUB_FORM_ROUTES["262097861889073"], formId: "262097861889073", url: normaliseBaseUrl(env.COMMS_HUB_JOTFORM_PODCAST_URL, COMMS_HUB_FORM_ROUTES["262097861889073"].defaultUrl) }),
+    contact: Object.freeze({ ...COMMS_HUB_FORM_ROUTES["260281179574362"], formId: "260281179574362", url: normaliseBaseUrl(env.COMMS_HUB_JOTFORM_CONTACT_URL,
+       COMMS_HUB_FORM_ROUTES["260281179574362"].defaultUrl) }),
+    case_study: Object.freeze({ ...COMMS_HUB_FORM_ROUTES["262063136008044"], formId: "262063136008044", url: normaliseBaseUrl(env.COMMS_HUB_JOTFORM_CASE_STUDY_URL,
+       COMMS_HUB_FORM_ROUTES["262063136008044"].defaultUrl) }),
+    podcast_enquiry: Object.freeze({ ...COMMS_HUB_FORM_ROUTES["262097861889073"], formId: "262097861889073", url: normaliseBaseUrl(env.COMMS_HUB_JOTFORM_PODCAST_URL,
+       COMMS_HUB_FORM_ROUTES["262097861889073"].defaultUrl) }),
   });
 
   const zernioFamilies = Object.fromEntries(

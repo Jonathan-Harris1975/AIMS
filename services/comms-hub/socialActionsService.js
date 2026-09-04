@@ -275,7 +275,8 @@ export async function executeSocialAction({ conversationId, action, body = {}, i
         });
       } else if (actionBody.private === true) {
         if (!capabilities.privateCommentReplies) {
-          throw new CommsHubError(400, "social_private_reply_unsupported", "Private comment replies are not supported for this platform.", { publicMessage: "Private reply is not supported for this platform." });
+          throw new CommsHubError(400, "social_private_reply_unsupported", "Private comment replies are not supported for this platform.", { publicMessage:
+             "Private reply is not supported for this platform." });
         }
         response = await client.privateReplyToComment({
           platform: thread.platform,
@@ -288,7 +289,8 @@ export async function executeSocialAction({ conversationId, action, body = {}, i
         });
       } else {
         if (!capabilities.commentReplies) {
-          throw new CommsHubError(400, "social_comment_reply_unsupported", "Comment replies are not supported for this platform.", { publicMessage: "Comment reply is not supported for this platform." });
+          throw new CommsHubError(400, "social_comment_reply_unsupported", "Comment replies are not supported for this platform.", { publicMessage:
+             "Comment reply is not supported for this platform." });
         }
         if (quickReplies?.length || buttons?.length) {
           throw new CommsHubError(400, "social_interactions_unsupported", "Interactive elements are not valid on a public comment reply.", {

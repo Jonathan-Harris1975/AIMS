@@ -277,7 +277,9 @@ export class CommsHubChatService {
       queueMicrotask(() => void this.runOptionalAutomation(conversationId, { triggerMessageId: messageId }));
     }
 
-    return { duplicate: persistence.duplicate, conversationId, messageId, takeoverRequested: Boolean(requestHuman && handoff.available), handoffAvailable: handoff.available, nextHandoffAt: handoff.nextAvailableAt, callbackEmailCaptured: false, emailCaptureOffered: false, contactFormUrl: requestHuman && !handoff.available ? (this.context.config.jotformForms?.contact?.url || null) : null };
+    return { duplicate: persistence.duplicate, conversationId, messageId, takeoverRequested: Boolean(requestHuman && handoff.available), handoffAvailable: handoff.available,
+       nextHandoffAt: handoff.nextAvailableAt, callbackEmailCaptured: false, emailCaptureOffered: false, contactFormUrl: requestHuman && !handoff.available ? (
+         this.context.config.jotformForms?.contact?.url || null) : null };
   }
 
   async syncWebhook(req) {
@@ -291,7 +293,8 @@ export class CommsHubChatService {
     if (!sessionId || !visitorId) throw new CommsHubError(422, 'chat_sync_payload_invalid', 'Chat sync payload is incomplete.');
 
     const session = await this.context.operationsRepository.getChatSession({ provider: 'coginpal', websiteId, providerSessionId: sessionId });
-    if (!session) { const handoff = humanHandoffStatus(this.context.config, this.context.now ? new Date(this.context.now()) : new Date()); return { exists: false, messages: [], mode: 'automation', takeoverRequested: false, humanConnected: false, handoffAvailable: handoff.available, nextHandoffAt: handoff.nextAvailableAt }; }
+    if (!session) { const handoff = humanHandoffStatus(this.context.config, this.context.now ? new Date(this.context.now()) : new Date()); return { exists: false, messages: [],
+       mode: 'automation', takeoverRequested: false, humanConnected: false, handoffAvailable: handoff.available, nextHandoffAt: handoff.nextAvailableAt }; }
     if (String(session.visitor_id) !== visitorId) {
       throw new CommsHubError(403, 'chat_session_visitor_mismatch', 'Chat session does not belong to this visitor.', {
         publicMessage: 'This chat session could not be verified.',
@@ -360,15 +363,18 @@ export class CommsHubChatService {
     if (!decision.needed) return { routed: false, decision };
     if (decision.requestLiveHandoff) {
       await this.context.operationsRepository.updateChatTakeover({ conversationId, mode: 'takeover_requested', actor: null, at: new Date().toISOString() });
-      await notifyHumanHandoff({ context: this.context, conversationId, reason: decision.reason, idempotencySeed: `proactive-handoff:${conversationId}:${triggerMessageId || 'latest'}` }).catch(() => null);
-      await this.context.auditService?.record?.({ actor: 'coginpal-automation', role: 'operator', action: 'chat_proactive_handoff_requested', objectType: 'conversation', objectId: conversationId, conversationId, details: { reason: decision.reason } }).catch(() => null);
+      await notifyHumanHandoff({ context: this.context, conversationId, reason: decision.reason, idempotencySeed: `proactive-handoff:${conversationId}:${triggerMessageId ||
+         'latest'}` }).catch(() => null);
+      await this.context.auditService?.record?.({ actor: 'coginpal-automation', role: 'operator', action: 'chat_proactive_handoff_requested', objectType: 'conversation',
+         objectId: conversationId, conversationId, details: { reason: decision.reason } }).catch(() => null);
       return { routed: true, mode: 'takeover_requested', decision };
     }
     if (decision.offerContactForm) {
       const contactUrl = this.context.config.jotformForms?.contact?.url || '';
       const message = humanContactOffer({ available: false, contactUrl });
       await this.send({ conversationId, message, idempotencyKey: `chat-proactive-contact:${triggerMessageId || conversationId}` });
-      await this.context.auditService?.record?.({ actor: 'coginpal-automation', role: 'operator', action: 'chat_out_of_hours_contact_form_offered', objectType: 'conversation', objectId: conversationId, conversationId, details: { reason: decision.reason, contactUrlConfigured: Boolean(contactUrl) } }).catch(() => null);
+      await this.context.auditService?.record?.({ actor: 'coginpal-automation', role: 'operator', action: 'chat_out_of_hours_contact_form_offered', objectType: 'conversation',
+         objectId: conversationId, conversationId, details: { reason: decision.reason, contactUrlConfigured: Boolean(contactUrl) } }).catch(() => null);
       return { routed: true, mode: 'contact_form', decision };
     }
     return { routed: true, mode: 'review_only', decision };
@@ -435,7 +441,8 @@ export class CommsHubChatService {
     if (session.mode === 'closed') throw new CommsHubError(409, 'chat_session_closed', 'Chat session is closed.');
     assertConversationReplyAllowed({ conversation, operations });
     const requestSha256 = sha256Hex(body);
-    const claim = await this.context.operationsRepository.claimChannelOutboundAction({ id: stableId('coa', idempotencyKey), idempotencyKey, conversationId, channel: 'chat', actionType: 'reply', requestSha256 });
+    const claim = await this.context.operationsRepository.claimChannelOutboundAction({ id: stableId('coa', idempotencyKey), idempotencyKey, conversationId, channel: 'chat',
+       actionType: 'reply', requestSha256 });
     if (!claim.acquired) {
       if (claim.duplicate) return { duplicate: true, providerMessageId: claim.existing.provider_message_id };
       throw new CommsHubError(409, 'chat_send_in_progress', 'Chat send is already in progress.');
@@ -462,7 +469,8 @@ export class CommsHubChatService {
       log.info('commsHub.chat.replyRecorded', { conversationId, providerMessageId, transport: localTransport ? 'aims_first_party' : 'provider_api' });
       return { duplicate: false, providerMessageId, transport: localTransport ? 'aims_first_party' : 'provider_api' };
     } catch (error) {
-      await this.context.operationsRepository.failChannelOutboundAction({ idempotencyKey, failureClass: error.failureClass || 'temporary', error: error.message, reconciliationRequired: Boolean(error.retryable) });
+      await this.context.operationsRepository.failChannelOutboundAction({ idempotencyKey, failureClass: error.failureClass || 'temporary', error: error.message,
+         reconciliationRequired: Boolean(error.retryable) });
       throw error;
     }
   }
@@ -472,13 +480,15 @@ export class CommsHubChatService {
     if (['takeover_requested', 'human'].includes(mode)) {
       const handoff = humanHandoffStatus(this.context.config, this.context.now ? new Date(this.context.now()) : new Date());
       if (!handoff.available) throw new CommsHubError(409, 'chat_handoff_outside_business_hours', 'Human hand-off is available only during configured business hours.', {
-        publicMessage: `Jonathan is available for live hand-off Monday to Friday between 09:00 and 17:00 UK time. Outside those hours, please use the Contact Me form: ${this.context.config.jotformForms?.contact?.url || 'https://jonathan-harris.online/'}`,
+        publicMessage: `Jonathan is available for live hand-off Monday to Friday between 09:00 and 17:00 UK time. Outside those hours, please use the Contact Me form:\
+ ${this.context.config.jotformForms?.contact?.url || 'https://jonathan-harris.online/'}`,
         details: { nextAvailableAt: handoff.nextAvailableAt, timeZone: handoff.timeZone },
       });
     }
     const session = await this.context.operationsRepository.updateChatTakeover({ conversationId, mode, actor });
     if (!session) throw new CommsHubError(404, 'chat_session_not_found', 'Chat session was not found.');
-    await this.context.auditService?.record?.({ actor: actor || 'system', role: 'operator', action: 'chat_takeover_mode_changed', objectType: 'conversation', objectId: conversationId, conversationId, details: { mode } }).catch(() => null);
+    await this.context.auditService?.record?.({ actor: actor || 'system', role: 'operator', action: 'chat_takeover_mode_changed', objectType: 'conversation', objectId:
+       conversationId, conversationId, details: { mode } }).catch(() => null);
     return session;
   }
 }

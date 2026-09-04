@@ -12,12 +12,14 @@ const CHOICE_ONLY = /^(?:which one|which|what one|the first one|the second one|t
 const PRICE_ONLY = /^(?:how much|price|cost|what does it cost|what's the price|what is the price)[?.!\s]*$/i;
 const AVAILABILITY_ONLY = /^(?:is it available|are they available|available|when is it available|where can i get it)[?.!\s]*$/i;
 const UNRESOLVED_REFERENCE = /\b(?:that|this|it|them|those|these|the one|the other one|another one)\b/i;
-const EXPLICIT_REFERENCE_ANCHOR = /\b(?:book|ebook|service|podcast|project|course|workshop|article|post|comment|video|newsletter|event|talk|keynote|consulting|consultancy|website|page|link|form|topic|question|answer|option|model|tool|technology|artificial intelligence|machine learning|ai)\b/i;
+const EXPLICIT_REFERENCE_ANCHOR = new RegExp("\\b(?:book|ebook|service|podcast|project|course|workshop|article|post|comment|video|newsletter|event|talk|keynote|consulting|\
+consultancy|website|page|link|form|topic|question|answer|option|model|tool|technology|artificial intelligence|machine learning|ai)\\b", "i");
 
 const BRAND_FAMILIES = Object.freeze([
   ["books", /\b(?:book|books|ebook|ebooks|read|reading|publication|publications|author|written|wrote)\b/i],
   ["podcast_media", /\b(?:podcast|podcasts|interview|interviews|media|press|radio|television|tv|youtube|spotify|apple podcasts?|video|videos)\b/i],
-  ["services", /\b(?:service|services|consult|consulting|consultancy|advisory|advice|workshop|workshops|training|train|course|courses|sector|sectors|industry|industries|specialise|specialises|specialism|specialisms|expertise|professional services?)\b/i],
+  ["services", new RegExp("\\b(?:service|services|consult|consulting|consultancy|advisory|advice|workshop|workshops|training|train|course|courses|sector|sectors|industry|\
+industries|specialise|specialises|specialism|specialisms|expertise|professional services?)\\b", "i")],
   ["speaking", /\b(?:speak|speaking|speaker|keynote|keynotes|conference|event|events|talk|talks|presentation|presentations)\b/i],
   ["projects_work", /\b(?:project|projects|work|worked|client|clients|case study|case studies|portfolio|programme|programmes)\b/i],
   ["background", /\b(?:about|background|bio|biography|career|experience|qualification|qualifications|credential|credentials|award|awards|who is jonathan|what does jonathan)\b/i],
@@ -65,7 +67,8 @@ function resolvedWithPrior(prior, latest) {
 
 function detectBrandFamily(text) {
   const value = String(text || "");
-  if (/\b(?:who are you|are you jonathan|is this jonathan|am i speaking (?:to|with) jonathan|are you (?:a )?(?:bot|ai|assistant)|what is cognipal|who is cognipal)\b/i.test(value)) return "assistant_identity";
+  if (new RegExp("\\b(?:who are you|are you jonathan|is this jonathan|am i speaking (?:to|with) jonathan|are you (?:a )?(?:bot|ai|assistant)|what is cognipal|who is cognipal)\
+\\b", "i").test(value)) return "assistant_identity";
   if (/\b(?:what can you do|what can cognipal do|how can you help(?: me)?|what do you help with|what can i ask you)\b/i.test(value)) return "assistant_capabilities";
   const matches = BRAND_FAMILIES.filter(([, pattern]) => pattern.test(value)).map(([name]) => name);
   if (matches.includes("pricing") && matches.includes("services")) return "services";
@@ -77,10 +80,12 @@ function likelyPersonalBrand(text, family) {
   if (["assistant_identity", "assistant_capabilities"].includes(family)) return false;
   if (/\bjonathan(?: harris)?\b/i.test(value)) return true;
 
-  const brandFamily = ["books", "podcast_media", "services", "speaking", "projects_work", "background", "contact_collaboration", "availability", "pricing", "social", "newsletter", "content", "website"].includes(family);
+  const brandFamily = ["books", "podcast_media", "services", "speaking", "projects_work", "background", "contact_collaboration", "availability", "pricing", "social",
+     "newsletter", "content", "website"].includes(family);
   if (brandFamily && !/^\s*(?:what is|what are|define|explain)\b/i.test(value)) return true;
 
-  if (/\b(?:your|yours)\s+(?:background|career|experience|work|project|projects|book|books|podcast|newsletter|service|services|sectors?|industr(?:y|ies)|specialisms?|expertise|blog|articles?|content|website|site|linkedin|instagram|facebook|youtube|views?|opinion|approach|availability|fees?|rates?|clients?)\b/i.test(value)) return true;
+  if (new RegExp("\\b(?:your|yours)\\s+(?:background|career|experience|work|project|projects|book|books|podcast|newsletter|service|services|sectors?|industr(?:y|ies)|\
+specialisms?|expertise|blog|articles?|content|website|site|linkedin|instagram|facebook|youtube|views?|opinion|approach|availability|fees?|rates?|clients?)\\b", "i").test(value)) return true;
   if (/\b(?:do|did|have|has|are|were|will)\s+you\b/i.test(value)) return true;
   if (/\bwhat\s+do\s+you\s+(?:do|offer|provide|write|publish|cover|specialise in|specialize in|think|believe)\b/i.test(value)) return true;
   if (/\bwhere\s+(?:do|can)\s+(?:i|we)\s+(?:find|follow|contact|book|hire)\s+you\b/i.test(value)) return true;
@@ -93,7 +98,8 @@ function likelyPersonalBrand(text, family) {
 
 function containsSpecificObject(text) {
   const words = String(text || "").toLowerCase().match(/[a-z0-9][a-z0-9'-]*/g) || [];
-  const noise = new Set(["can","could","would","you","please","help","me","with","this","that","it","the","a","an","my","your","about","more","tell","what","how","why","when","where","which","who","do","does","is","are","i"]);
+  const noise = new Set(["can","could","would","you","please","help","me","with","this","that","it","the","a","an","my","your","about","more","tell","what","how","why","when",
+    "where","which","who","do","does","is","are","i"]);
   return words.some((word) => word.length >= 3 && !noise.has(word));
 }
 
@@ -249,11 +255,13 @@ export function conversationalIntelligencePromptGuidance(intelligence = {}) {
     `- Current topic family: ${intelligence.family}.`,
     `- Personal-brand question likely: ${intelligence.personalBrandLikely ? "yes" : "no"}.`,
     `- Ambiguity detected: ${intelligence.clarificationRequired ? "yes" : "no"}.`,
-    intelligence.contextResolved ? "- A short or referential message was resolved using the existing conversation/source-post context. Continue that topic naturally without asking the user to repeat it." : "",
+    intelligence.contextResolved ? "- A short or referential message was resolved using the existing conversation/source-post context. Continue that topic naturally without \
+asking the user to repeat it." : "",
     intelligence.clarificationRequired ? `- Do not guess the missing meaning. Ask exactly this one clarification question: ${intelligence.clarificationQuestion}` : "",
     "- Resolve pronouns and follow-up phrases from the supplied conversation history when the referent is clear. Do not invent a referent when it is not clear.",
     "- Answer the user's actual question first. Do not force a promotion, book, form, hand-off or call to action into an unrelated conversation.",
-    "- In public comments, keep the reply proportionate and public-safe: do not expose private conversation details, contact data or internal handling. In DMs/webchat, be concise but allow enough detail to be genuinely useful.",
+    "- In public comments, keep the reply proportionate and public-safe: do not expose private conversation details, contact data or internal handling. In DMs/webchat, be \
+concise but allow enough detail to be genuinely useful.",
     "- Maintain continuity across turns: do not reintroduce yourself, repeat established facts or ask again for information already supplied in the conversation.",
   ].filter(Boolean).join("\n");
 }
@@ -273,7 +281,8 @@ export function deterministicConversationalDraft(intelligence = {}, { channel = 
     return Object.freeze({
       bodyText: isSocialCommentChannel(channel)
         ? "I’m CogniPal, Jonathan Harris’s AI assistant — not Jonathan himself."
-        : "I’m CogniPal, Jonathan Harris’s AI assistant — not Jonathan himself. I use verified information from his website and the conversation context, and I won’t invent details that aren’t supported.",
+        : "I’m CogniPal, Jonathan Harris’s AI assistant — not Jonathan himself. I use verified information from his website and the conversation context, and I won’t invent \
+details that aren’t supported.",
       evidenceSourceReferences: [],
     });
   }
@@ -281,7 +290,8 @@ export function deterministicConversationalDraft(intelligence = {}, { channel = 
     return Object.freeze({
       bodyText: isSocialCommentChannel(channel)
         ? "I can help with questions about Jonathan’s published work or this post, using verified information."
-        : "I can help with questions about Jonathan’s work, books and public content using his website as the main source of truth, continue the conversation in context, and route a request to Jonathan when appropriate.",
+        : "I can help with questions about Jonathan’s work, books and public content using his website as the main source of truth, continue the conversation in context, and \
+route a request to Jonathan when appropriate.",
       evidenceSourceReferences: [],
     });
   }

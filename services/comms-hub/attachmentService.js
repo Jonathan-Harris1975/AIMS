@@ -97,7 +97,8 @@ export class CommsHubAttachmentService {
         current = await this.assertPublicAttachmentUrl(new URL(location, current));
         continue;
       }
-      if (!response.ok) throw new CommsHubError(502, 'attachment_download_failed', `Attachment download returned ${response.status}.`, { retryable: response.status >= 500, failureClass: response.status >= 500 ? 'temporary' : 'recoverable' });
+      if (!response.ok) throw new CommsHubError(502, 'attachment_download_failed', `Attachment download returned ${response.status}.`, { retryable: response.status >= 500,
+         failureClass: response.status >= 500 ? 'temporary' : 'recoverable' });
       const declared = Number(response.headers.get('content-length') || 0);
       if (declared > this.context.config.attachmentMaxBytes) throw new CommsHubError(413, 'attachment_too_large', 'Attachment exceeds the configured size limit.');
       const buffer = Buffer.from(await response.arrayBuffer());
@@ -115,7 +116,9 @@ export class CommsHubAttachmentService {
     const scannedAt = new Date().toISOString();
     const scan = await this.context.malwareScanner.scan({ buffer: body, filename, contentType });
     if (!scan.clean) {
-      await this.context.operationsRepository.recordAttachmentObject({ id: stableId('aob', attachmentId), attachmentId, bucketName: this.context.config.r2PrivateBucketName, objectKey: quarantineKey, sha256, sizeBytes: body.length, contentType, scanStatus: 'infected', scanProvider: scan.provider, scanReference: scan.reference, scannedAt, storedAt: scannedAt, metadata: { ...metadata, quarantine: true, findings: scan.findings } });
+      await this.context.operationsRepository.recordAttachmentObject({ id: stableId('aob', attachmentId), attachmentId, bucketName: this.context.config.r2PrivateBucketName,
+         objectKey: quarantineKey, sha256, sizeBytes: body.length, contentType, scanStatus: 'infected', scanProvider: scan.provider, scanReference: scan.reference, scannedAt,
+            storedAt: scannedAt, metadata: { ...metadata, quarantine: true, findings: scan.findings } });
       await this.context.d1.query(`UPDATE comms_hub_attachments SET status = 'quarantined' WHERE id = ?`, [attachmentId]);
       throw new CommsHubError(422, 'attachment_infected', 'Attachment failed malware scanning.', { failureClass: 'permanent' });
     }
@@ -123,9 +126,13 @@ export class CommsHubAttachmentService {
     const cleanKey = `attachments/${scannedAt.slice(0, 10)}/${attachmentId}/${sha256.slice(0, 16)}-${filename}`;
     const stored = await this.context.privateR2.putBuffer(cleanKey, body, contentType, { sha256, attachment_id: attachmentId, scan_status: 'clean' });
     if (quarantineKey !== cleanKey) await this.context.privateR2.delete(quarantineKey).catch(() => {});
-    const record = await this.context.operationsRepository.recordAttachmentObject({ id: stableId('aob', attachmentId), attachmentId, bucketName: stored.bucket, objectKey: stored.key, sha256, sizeBytes: stored.size, contentType, scanStatus: 'clean', scanProvider: scan.provider, scanReference: scan.reference, scannedAt, storedAt: scannedAt, metadata: { ...metadata, quarantine: false } });
+    const record = await this.context.operationsRepository.recordAttachmentObject({ id: stableId('aob', attachmentId), attachmentId, bucketName: stored.bucket, objectKey:
+       stored.key, sha256, sizeBytes: stored.size, contentType, scanStatus: 'clean', scanProvider: scan.provider, scanReference: scan.reference, scannedAt, storedAt: scannedAt,
+          metadata: { ...metadata, quarantine: false } });
     await this.context.d1.query(`UPDATE comms_hub_attachments SET status = 'stored' WHERE id = ?`, [attachmentId]);
-    await this.context.operationsRepository.indexSearchDocument({ id: stableId('srch', 'attachment', attachmentId), objectType: 'attachment', objectId: attachmentId, conversationId: metadata.conversationId || null, contactId: metadata.contactId || null, channel: metadata.channel || null, searchableText: `${filename} ${contentType} ${provider}`, metadata: { sha256, sizeBytes: body.length }, updatedAt: scannedAt });
+    await this.context.operationsRepository.indexSearchDocument({ id: stableId('srch', 'attachment', attachmentId), objectType: 'attachment', objectId: attachmentId,
+       conversationId: metadata.conversationId || null, contactId: metadata.contactId || null, channel: metadata.channel || null, searchableText:
+          `${filename} ${contentType} ${provider}`, metadata: { sha256, sizeBytes: body.length }, updatedAt: scannedAt });
     return record;
   }
 
@@ -142,7 +149,9 @@ export class CommsHubAttachmentService {
     // Always land untrusted uploads in the private quarantine prefix first. They are not
     // retrievable through get() until a scanner marks them clean and promotion succeeds.
     const quarantined = await this.context.privateR2.putBuffer(quarantineKey, body, contentType, { sha256, attachment_id: attachmentId, scan_status: 'pending' });
-    await this.context.operationsRepository.recordAttachmentObject({ id: stableId('aob', attachmentId), attachmentId, bucketName: quarantined.bucket, objectKey: quarantined.key, sha256, sizeBytes: quarantined.size, contentType, scanStatus: 'pending', scanProvider: null, scanReference: null, scannedAt: null, storedAt, metadata: { ...metadata, quarantine: true } });
+    await this.context.operationsRepository.recordAttachmentObject({ id: stableId('aob', attachmentId), attachmentId, bucketName: quarantined.bucket, objectKey:
+       quarantined.key, sha256, sizeBytes: quarantined.size, contentType, scanStatus: 'pending', scanProvider: null, scanReference: null, scannedAt: null, storedAt, metadata: {
+          ...metadata, quarantine: true } });
     await this.context.d1.query(`UPDATE comms_hub_attachments SET status = 'quarantined' WHERE id = ?`, [attachmentId]);
 
     if (!this.scannerReady()) return { ...quarantined, object_key: quarantined.key, scan_status: 'pending', quarantined: true };
@@ -157,7 +166,8 @@ export class CommsHubAttachmentService {
     if (record.scan_status === 'clean') return record;
     const body = await this.context.privateR2.getBuffer(record.object_key);
     if (sha256Hex(body) !== record.sha256) throw new CommsHubError(409, 'attachment_checksum_mismatch', 'Attachment integrity validation failed.');
-    return this.promoteQuarantined({ attachmentId, filename: safeFilename(record.filename), contentType: record.content_type || 'application/octet-stream', body, sha256: record.sha256, quarantineKey: record.object_key, provider: record.provider || 'remote', metadata: {} });
+    return this.promoteQuarantined({ attachmentId, filename: safeFilename(record.filename), contentType: record.content_type || 'application/octet-stream', body, sha256:
+       record.sha256, quarantineKey: record.object_key, provider: record.provider || 'remote', metadata: {} });
   }
 
   async ingestReference({ attachmentId, providerUrl, filename, contentType = 'application/octet-stream', provider = 'remote', metadata = {} }) {

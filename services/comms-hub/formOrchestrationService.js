@@ -73,9 +73,12 @@ export function decideConversationJotform({ conversation, intent, summary, smart
   const explicitNewCycle = /\b(?:another|new|again|resubmit|re-submit|submit again|apply again|updated form|update my (?:form|application)|fill (?:it|the form) in again)\b/i.test(latestBody);
   const explicitlyWantsForm = /\b(form|application|apply|submit|questionnaire|send (?:you )?my details|where do i send|how do i contribute)\b/i.test(latestBody);
 
-  const podcastPattern = /\b(podcast|turing'?s torch)\b[\s\S]{0,140}\b(guest|appear|apply|contribut|interview|join|take part|be on)\b|\b(guest|appear|apply|contribut|interview|join|take part|be on)\b[\s\S]{0,140}\b(podcast|turing'?s torch)\b/i;
+  const podcastPattern = new RegExp("\\b(podcast|turing'?s torch)\\b[\\s\\S]{0,140}\\b(guest|appear|apply|contribut|interview|join|take part|be on)\\b|\\b(guest|appear|apply|\
+contribut|interview|join|take part|be on)\\b[\\s\\S]{0,140}\\b(podcast|turing'?s torch)\\b", "i");
   const caseStudyPattern = /\b(case study|success story|share (?:my|our) experience|contribute (?:a )?(?:case|story)|project results?|implementation story)\b/i;
-  const contactPattern = /\b(proposal|media enquiry|press enquiry|speaking enquiry|consulting brief|partnership proposal|collaboration proposal|podcast sponsorship|podcast advertising|sponsor(?:ing|ship)? (?:the )?podcast|advertis(?:e|ing) (?:on|with) (?:the )?podcast|website enquiry|website issue|website problem|site issue|site problem|technical issue (?:on|with) (?:the )?(?:website|site)|attach(?:ment)?|send (?:a )?brief|detailed requirements)\b/i;
+  const contactPattern = new RegExp("\\b(proposal|media enquiry|press enquiry|speaking enquiry|consulting brief|partnership proposal|collaboration proposal|podcast sponsorship|\
+podcast advertising|sponsor(?:ing|ship)? (?:the )?podcast|advertis(?:e|ing) (?:on|with) (?:the )?podcast|website enquiry|website issue|website problem|site issue|site problem|\
+technical issue (?:on|with) (?:the )?(?:website|site)|attach(?:ment)?|send (?:a )?brief|detailed requirements)\\b", "i");
 
   const latestPodcastParticipation = podcastPattern.test(latestBody);
   const latestCaseStudy = caseStudyPattern.test(latestBody);
@@ -89,7 +92,8 @@ export function decideConversationJotform({ conversation, intent, summary, smart
 
   if (wantsPodcastParticipation) {
     if (alreadyActive("podcast_enquiry")) return Object.freeze({ selected: false, reason: "form_already_active", formKey: "podcast_enquiry", activeRequest: true });
-    if (completed("podcast_enquiry") && !latestPodcastParticipation && !explicitNewCycle) return Object.freeze({ selected: false, reason: "form_previously_completed_no_new_request", formKey: "podcast_enquiry" });
+    if (completed("podcast_enquiry") && !latestPodcastParticipation && !explicitNewCycle) return Object.freeze({ selected: false, reason:
+       "form_previously_completed_no_new_request", formKey: "podcast_enquiry" });
     return formDecision("podcast_enquiry", {
       reason: "podcast_participation_requires_structured_intake",
       required: true,
@@ -109,7 +113,8 @@ export function decideConversationJotform({ conversation, intent, summary, smart
   }
   if (structuredContactNeeded || (explicitlyWantsForm && ["commercial_enquiry", "support_request", "general_enquiry"].includes(intentName))) {
     if (alreadyActive("contact")) return Object.freeze({ selected: false, reason: "form_already_active", formKey: "contact", activeRequest: true });
-    if (completed("contact") && !latestStructuredContact && !explicitlyWantsForm && !explicitNewCycle) return Object.freeze({ selected: false, reason: "form_previously_completed_no_new_request", formKey: "contact" });
+    if (completed("contact") && !latestStructuredContact && !explicitlyWantsForm && !explicitNewCycle) return Object.freeze({ selected: false, reason:
+       "form_previously_completed_no_new_request", formKey: "contact" });
     return formDecision("contact", {
       reason: structuredContactNeeded ? "structured_contact_details_helpful" : "visitor_explicitly_requested_form",
       required: false,
