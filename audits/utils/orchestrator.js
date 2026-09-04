@@ -331,14 +331,16 @@ function auditFailureReportHtml({ auditType, sessionId, message, payload }) {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${title}</title>
-  <style>body{font-family:Arial,sans-serif;max-width:980px;margin:40px auto;padding:0 20px;line-height:1.55;color:#111827}code,pre{background:#f3f4f6;border-radius:8px;padding:2px 6px}pre{padding:16px;overflow:auto}.badge{display:inline-block;background:#fee2e2;color:#991b1b;border-radius:999px;padding:6px 12px;font-weight:700}</style>
+  <style>body{font-family:Arial,sans-serif;max-width:980px;margin:40px auto;padding:0 20px;line-height:1.55;color:#111827}code,pre{background:#f3f4f6;border-radius:8px;padding:\
+2px 6px}pre{padding:16px;overflow:auto}.badge{display:inline-block;background:#fee2e2;color:#991b1b;border-radius:999px;padding:6px 12px;font-weight:700}</style>
 </head>
 <body>
   <h1>${title}</h1>
   <p><span class="badge">FAILED</span></p>
   <p><strong>Session:</strong> <code>${sessionId}</code></p>
   <p>${message}</p>
-  <p>This controlled failure report was written by the AI Management Suite because the external website workflow did not provide a complete published artefact set. It is a controlled failure record, not a successful scored audit report.</p>
+  <p>This controlled failure report was written by the AI Management Suite because the external website workflow did not provide a complete published artefact set. It is a \
+controlled failure record, not a successful scored audit report.</p>
   <h2>Callback payload</h2>
   <pre>${safeJsonForHtml(payload)}</pre>
 </body>

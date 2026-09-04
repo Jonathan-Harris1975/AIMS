@@ -196,7 +196,8 @@ function groupPhraseGuardrailDefects(defects = []) {
       whyItIsOffBrand: `Historic evidence contains ${phrases.length || issues.length} AI/newsroom filler pattern(s). Treat this as calibration for future output, not a retroactive copy-edit ticket.`,
       violatedRule: "No hype, no corporate wallpaper, no generic AI summary tone.",
       rootCauseLevel: "validator",
-      exactRemediation: `For ${futureVerb(first.sourceType)}, add or tighten a grouped anti-hype guardrail covering ${phraseList}; require the generator to replace those patterns with concrete facts, risks, or consequences.`,
+      exactRemediation: `For ${futureVerb(first.sourceType)}, add or tighten a grouped anti-hype guardrail covering ${phraseList}; require the generator to replace those \
+patterns with concrete facts, risks, or consequences.`,
       improvedExample: "",
       verificationMethod: `Generate fresh ${futureVerb(first.sourceType)} and rerun the audit; the grouped anti-hype pattern should not recur.`,
     };
@@ -487,10 +488,14 @@ export function normaliseOnBrandReport(report, evidence, { rawModelError } = {})
       defects: arr(reportObj.podcastTranscriptFindings?.defects).length ? normaliseExistingDefects(reportObj.podcastTranscriptFindings.defects) : podcastDefaults.defects,
     },
     patternLevelDiagnosis: {
-      repeatedTitleProblems: arr(reportObj.patternLevelDiagnosis?.repeatedTitleProblems).length ? arr(reportObj.patternLevelDiagnosis.repeatedTitleProblems).map(String) : derivedPatterns.repeatedTitleProblems,
-      repeatedToneProblems: arr(reportObj.patternLevelDiagnosis?.repeatedToneProblems).length ? arr(reportObj.patternLevelDiagnosis.repeatedToneProblems).map(String) : derivedPatterns.repeatedToneProblems,
-      repeatedSpokenProblems: arr(reportObj.patternLevelDiagnosis?.repeatedSpokenProblems).length ? arr(reportObj.patternLevelDiagnosis.repeatedSpokenProblems).map(String) : derivedPatterns.repeatedSpokenProblems,
-      crossChannelBrandDrift: arr(reportObj.patternLevelDiagnosis?.crossChannelBrandDrift).length ? arr(reportObj.patternLevelDiagnosis.crossChannelBrandDrift).map(String) : derivedPatterns.crossChannelBrandDrift,
+      repeatedTitleProblems: arr(reportObj.patternLevelDiagnosis?.repeatedTitleProblems).length ? arr(reportObj.patternLevelDiagnosis.repeatedTitleProblems).map(String) :
+         derivedPatterns.repeatedTitleProblems,
+      repeatedToneProblems: arr(reportObj.patternLevelDiagnosis?.repeatedToneProblems).length ? arr(reportObj.patternLevelDiagnosis.repeatedToneProblems).map(String) :
+         derivedPatterns.repeatedToneProblems,
+      repeatedSpokenProblems: arr(reportObj.patternLevelDiagnosis?.repeatedSpokenProblems).length ? arr(reportObj.patternLevelDiagnosis.repeatedSpokenProblems).map(String) :
+         derivedPatterns.repeatedSpokenProblems,
+      crossChannelBrandDrift: arr(reportObj.patternLevelDiagnosis?.crossChannelBrandDrift).length ? arr(reportObj.patternLevelDiagnosis.crossChannelBrandDrift).map(String) :
+         derivedPatterns.crossChannelBrandDrift,
     },
     promptLevelDiagnosis: normaliseObjectArray(reportObj.promptLevelDiagnosis, ["affectedArea", "diagnosis", "evidence", "recommendedPromptChange"], { futureFrame: true }),
     pipelineLevelDiagnosis: (() => {
@@ -505,7 +510,8 @@ export function normaliseOnBrandReport(report, evidence, { rawModelError } = {})
       affectedFilesOrServices: arr(row?.affectedFilesOrServices).map(String),
       whyThisComesFirst: futureFrameText(cleanString(row?.whyThisComesFirst, "It addresses future-output evidence rather than speculative rewrite work.")),
       implementationNotes: futureFrameText(cleanString(row?.implementationNotes, "Use the future QA finding as a future-output guardrail.")),
-      verificationMethod: futureVerification(futureFrameText(cleanString(row?.verificationMethod, "Generate fresh output and rerun the on-brand audit.")), cleanString(row?.affectedSource, defects[index]?.sourceType || "pipeline")),
+      verificationMethod: futureVerification(futureFrameText(cleanString(row?.verificationMethod, "Generate fresh output and rerun the on-brand audit.")), cleanString(
+        row?.affectedSource, defects[index]?.sourceType || "pipeline")),
     })) : derivedPlan,
     doNotChange: normaliseObjectArray(reportObj.doNotChange, ["area", "reason", "evidence"]),
     limitations: Array.from(new Set(limitations.filter(Boolean))),

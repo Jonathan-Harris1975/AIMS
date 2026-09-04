@@ -47,22 +47,39 @@ Non-negotiable rules:
 - Prioritise confirmed blockers, then high-impact Quick Wins, then medium lifts, then strategic investments.
 - Recommendations must be executable by a small team and include exact change, owner, acceptance criterion and verification method.
 - The masterIssueLedger is the machine-readable remediation contract consumed by RAMS. Build it deliberately rather than copying prose rows.
-- Mark a masterIssueLedger row classification="code_fix" ONLY when ALL of these are true: confidence is exactly Confirmed; the source audits explicitly name one or more exact repository-relative files; affectedPaths contains only those verbatim observed file paths; sourceFindingIds is non-empty; exactRemediation is deterministic; and fixClass is one of the allowed website fix classes in the required JSON shape.
-- Never infer a repository file from a URL, route, selector, template family or likely implementation. Never invent affectedPaths. When the source evidence names only a URL/route, use classification="manual_review" and leave affectedPaths empty.
-- Use classification="future_guidance" for editorial, strategic or content recommendations that are not a deterministic repository patch. Use classification="manual_review" for anything else that lacks the full code_fix evidence contract.
-- R2/AIMS-owned generated podcast or transcript content must not be presented as a static website repository code_fix unless the source evidence explicitly identifies a governed website source file that actually controls the defect.
-- The supplied websiteAuditPolicy is binding governance. /blog and /transcripts are deliberately delegated to their dedicated R2 audit pipelines. Their absence from this website audit is NOT a coverage defect and must not reduce website-audit scores. /podcast remains in scope and must be audited as a website route.
-- Treat the policy minimumTargetScore (8.5/10) as an acceptance target, never as a score floor. Never inflate a score to meet the target. Explicitly identify any scored area below target or any required area that is unscored because evidence is missing.
-- Require live/source deployment parity evidence before merging live-production observations with repository-readiness observations. If /release.json or equivalent SHA parity is missing or mismatched, separate the two states and mark live parity as unverified or below target rather than blending evidence.
-- Accessibility assessment must distinguish WCAG 2.2 AA minimum target size (24 CSS px subject to its exceptions) from the preferred 44 CSS px usability target. Require evidence for text contrast, UI component contrast, keyboard use, visible focus, Focus Not Obscured (Minimum), 200% zoom/reflow and text-spacing resilience before claiming strong accessibility.
-- Visual/design-system assessment must explicitly cover card/page surface separation, text and button contrast, consistent component radii, template-family spacing/padding, branded hero/header presence, floating-menu lifecycle, third-party embed clipping and typography-system consistency. Do not recommend centre-aligning long-form body text; centralise the typography system, not every paragraph.
-- Do not award strong accessibility or visual/design-system scores without structured rendered evidence. If those evidence blocks are missing, leave the corresponding score unscored rather than extrapolating from source HTML.
-- Core Web Vitals must prefer field evidence. Good thresholds are LCP <= 2500 ms, INP <= 200 ms and CLS <= 0.1 at the 75th percentile. Lighthouse/lab evidence is diagnostic and must not be presented as field proof.
-- For Google AI search features, do not treat llms.txt or special AI markup as ranking requirements. Standard crawl/index eligibility, useful textual content, internal linking and visible-content/structured-data alignment remain primary. llms.txt may be scored only as optional supporting infrastructure. Check OAI-SearchBot crawlability when evidence is supplied.
+- Mark a masterIssueLedger row classification="code_fix" ONLY when ALL of these are true: confidence is exactly Confirmed; the source audits explicitly name one or more exact \
+repository-relative files; affectedPaths contains only those verbatim observed file paths; sourceFindingIds is non-empty; exactRemediation is deterministic; and fixClass is \
+one of the allowed website fix classes in the required JSON shape.
+- Never infer a repository file from a URL, route, selector, template family or likely implementation. Never invent affectedPaths. When the source evidence names only a URL/\
+route, use classification="manual_review" and leave affectedPaths empty.
+- Use classification="future_guidance" for editorial, strategic or content recommendations that are not a deterministic repository patch. Use classification="manual_review" \
+for anything else that lacks the full code_fix evidence contract.
+- R2/AIMS-owned generated podcast or transcript content must not be presented as a static website repository code_fix unless the source evidence explicitly identifies a \
+governed website source file that actually controls the defect.
+- The supplied websiteAuditPolicy is binding governance. /blog and /transcripts are deliberately delegated to their dedicated R2 audit pipelines. Their absence from this \
+website audit is NOT a coverage defect and must not reduce website-audit scores. /podcast remains in scope and must be audited as a website route.
+- Treat the policy minimumTargetScore (8.5/10) as an acceptance target, never as a score floor. Never inflate a score to meet the target. Explicitly identify any scored area \
+below target or any required area that is unscored because evidence is missing.
+- Require live/source deployment parity evidence before merging live-production observations with repository-readiness observations. If /release.json or equivalent SHA parity \
+is missing or mismatched, separate the two states and mark live parity as unverified or below target rather than blending evidence.
+- Accessibility assessment must distinguish WCAG 2.2 AA minimum target size (24 CSS px subject to its exceptions) from the preferred 44 CSS px usability target. Require \
+evidence for text contrast, UI component contrast, keyboard use, visible focus, Focus Not Obscured (Minimum), 200% zoom/reflow and text-spacing resilience before claiming strong accessibility.
+- Visual/design-system assessment must explicitly cover card/page surface separation, text and button contrast, consistent component radii, template-family spacing/padding, \
+branded hero/header presence, floating-menu lifecycle, third-party embed clipping and typography-system consistency. Do not recommend centre-aligning long-form body text; \
+centralise the typography system, not every paragraph.
+- Do not award strong accessibility or visual/design-system scores without structured rendered evidence. If those evidence blocks are missing, leave the corresponding score \
+unscored rather than extrapolating from source HTML.
+- Core Web Vitals must prefer field evidence. Good thresholds are LCP <= 2500 ms, INP <= 200 ms and CLS <= 0.1 at the 75th percentile. Lighthouse/lab evidence is diagnostic \
+and must not be presented as field proof.
+- For Google AI search features, do not treat llms.txt or special AI markup as ranking requirements. Standard crawl/index eligibility, useful textual content, internal linking \
+and visible-content/structured-data alignment remain primary. llms.txt may be scored only as optional supporting infrastructure. Check OAI-SearchBot crawlability when evidence is supplied.
 - Recommend FAQPage schema only when a real visible FAQ/Q&A block exists and the schema matches it. Do not add FAQ schema merely to improve AEO.
 - Where Search Console evidence is supplied, use query/page performance and the Generative AI performance report when available. Its absence is a measurement limitation, not an audit failure.
-- Validate the governed Jotform and Elfsight contracts from websiteAuditPolicy when rendered evidence is available, including iframe visibility/height, fallback-link hierarchy and exactly-one loader/widget rules.
-- Security/platform hygiene must use supplied evidence rather than assumption. Check HTTPS, mixed content, Content-Security-Policy, Strict-Transport-Security, Referrer-Policy, Permissions-Policy, third-party script inventory, iframe permissions and form/privacy surfaces. If this evidence is absent, keep the security/platform score unscored rather than inferring safety from a successful page load.
+- Validate the governed Jotform and Elfsight contracts from websiteAuditPolicy when rendered evidence is available, including iframe visibility/height, fallback-link hierarchy \
+and exactly-one loader/widget rules.
+- Security/platform hygiene must use supplied evidence rather than assumption. Check HTTPS, mixed content, Content-Security-Policy, Strict-Transport-Security, Referrer-Policy, \
+Permissions-Policy, third-party script inventory, iframe permissions and form/privacy surfaces. If this evidence is absent, keep the security/platform score unscored rather \
+than inferring safety from a successful page load.
 - Do not repeat the three reports. Synthesize them.
 - Use British English and direct language.
 - Return JSON only. No markdown fences. No private chain-of-thought.
@@ -99,11 +116,16 @@ Required JSON shape:
     "mobileUx":{"score":null,"basis":"...","status":"Not Scored - Evidence Gate Not Met"},
     "councilConfidence":{"score":1,"basis":"...","status":"Scored"}
   },
-  "councilVerdict":{"overallDiagnosis":"...","strongestAssets":["..."],"biggestStructuralWeakness":"...","biggestCommercialOpportunity":"...","biggestSearchOpportunity":"...","biggestMobileRisk":"...","greatestCrossObjectiveLever":"..."},
-  "topActions":[{"rank":1,"actionId":"A-01","exactChange":"...","objectives":["..."],"affected":["..."],"impact":"Very High|High|Medium|Low","effort":"Quick Win|Medium Lift|Strategic Investment","confidence":"Confirmed|Probable|Needs Verification","dependency":"...","owner":"...","acceptanceCriterion":"...","verificationMethod":"...","priorityScore":100,"dissentNote":"","sourceFindingIds":["..."]}],
+  "councilVerdict":{"overallDiagnosis":"...","strongestAssets":["..."],"biggestStructuralWeakness":"...","biggestCommercialOpportunity":"...","biggestSearchOpportunity":"...",\
+"biggestMobileRisk":"...","greatestCrossObjectiveLever":"..."},
+  "topActions":[{"rank":1,"actionId":"A-01","exactChange":"...","objectives":["..."],"affected":["..."],"impact":"Very High|High|Medium|Low","effort":"Quick Win|Medium Lift|\
+Strategic Investment","confidence":"Confirmed|Probable|Needs Verification","dependency":"...","owner":"...","acceptanceCriterion":"...","verificationMethod":"...",\
+"priorityScore":100,"dissentNote":"","sourceFindingIds":["..."]}],
   "quickWins":[],
   "blockers":[],
-  "unifiedFindings":[{"findingId":"U-001","title":"...","rootCause":"...","severity":"Critical|High|Medium|Low","confidence":"Confirmed|Probable|Needs Verification","affected":["..."],"evidence":["..."],"objectives":["..."],"exactRemediation":"...","expectedGain":"...","effort":"Quick Win|Medium Lift|Strategic Investment","owner":"...","acceptanceCriterion":"...","verificationMethod":"...","sourceFindingIds":["..."]}],
+  "unifiedFindings":[{"findingId":"U-001","title":"...","rootCause":"...","severity":"Critical|High|Medium|Low","confidence":"Confirmed|Probable|Needs Verification","affected":\
+["..."],"evidence":["..."],"objectives":["..."],"exactRemediation":"...","expectedGain":"...","effort":"Quick Win|Medium Lift|Strategic Investment","owner":"...",\
+"acceptanceCriterion":"...","verificationMethod":"...","sourceFindingIds":["..."]}],
   "conflicts":[{"topic":"...","positions":["..."],"resolution":"...","confidence":"..."}],
   "funnelMap":[{"journey":"...","currentFriction":"...","exactChange":"...","measurement":"..."}],
   "keywordOpportunities":[{"topic":"...","intent":"...","targetPageOrGap":"...","action":"...","confidence":"..."}],
@@ -117,7 +139,8 @@ Required JSON shape:
     "severity":"Critical|High|Medium|Low",
     "confidence":"Confirmed|Probable|Needs Verification",
     "classification":"code_fix|manual_review|future_guidance",
-    "fixClass":"html_fix|css_fix|meta_fix|schema_fix|structured_data_fix|canonical_fix|redirect_fix|crawler_fix|sitemap_fix|robots_fix|llms_fix|accessibility_fix|template_fix|partial_fix|internal_link_fix|viewport_fix|",
+    "fixClass":"html_fix|css_fix|meta_fix|schema_fix|structured_data_fix|canonical_fix|redirect_fix|crawler_fix|sitemap_fix|robots_fix|llms_fix|accessibility_fix|template_fix|\
+partial_fix|internal_link_fix|viewport_fix|",
     "affected":["URL, route, template or human-readable scope"],
     "affectedPaths":["exact/repo-relative/file.ext"],
     "evidence":["specific observed evidence"],
@@ -548,7 +571,8 @@ export function enforceCouncilInvariants(councilValue, stageReports = {}) {
   const result = {
     ...council,
     synthesisState: "Incomplete",
-    executiveSummary: `CONTROLLED AUDIT FAILURE: ${health.failures.length} required source stage(s) did not complete. No complete website verdict may be issued until those stages rerun successfully. ${text(council.executiveSummary)}`.trim(),
+    executiveSummary: `CONTROLLED AUDIT FAILURE: ${health.failures.length} required source stage(s) did not complete. No complete website verdict may be issued until those \
+stages rerun successfully. ${text(council.executiveSummary)}`.trim(),
     scorecard,
     blockers: uniqueByText([...blockers, ...arr(council.blockers)]),
     unifiedFindings: [...failureFindings, ...arr(council.unifiedFindings).map(normaliseWorkflowConfidence)].slice(0, 160),
@@ -564,7 +588,8 @@ export function enforceCouncilInvariants(councilValue, stageReports = {}) {
     },
     definitionOfDone: uniqueByText([
       ...health.failures.map((stage) => `${stage.label} completes and publishes its full required evidence contract.`),
-      "The parent pipeline reaches completed only when every required source stage is complete, temporary evidence is retained until RAMS accepts the valid report, and all report formats agree on synthesis state.",
+      "The parent pipeline reaches completed only when every required source stage is complete, temporary evidence is retained until RAMS accepts the valid report, and all \
+report formats agree on synthesis state.",
       ...arr(council.definitionOfDone),
     ]).slice(0, 80),
   };
@@ -608,7 +633,9 @@ function normaliseCouncil(data, stageReports) {
   const mobile = input.mobileUx;
   const mobileScorable = mobile.status === "completed" && Number.isFinite(Number(mobile.mobileQualityScore));
   const score = obj(source.scorecard);
-  const keys = ["trafficGrowth", "newsletterSignUp", "podcastClickThrough", "llmDiscoverability", "ebookSalesPath", "technicalSeo", "aeo", "geo", "entityAuthority", "internalLinkingIa", "accessibility", "visualDesignSystemConsistency", "coreWebVitalsPerformance", "structuredData", "deploymentLiveParity", "linkConversionRouteIntegrity", "securityPlatformHygiene", "councilConfidence"];
+  const keys = ["trafficGrowth", "newsletterSignUp", "podcastClickThrough", "llmDiscoverability", "ebookSalesPath", "technicalSeo", "aeo", "geo", "entityAuthority",
+     "internalLinkingIa", "accessibility", "visualDesignSystemConsistency", "coreWebVitalsPerformance", "structuredData", "deploymentLiveParity",
+        "linkConversionRouteIntegrity", "securityPlatformHygiene", "councilConfidence"];
   const scorecard = Object.fromEntries(keys.map((key) => [key, normaliseScoreRow(score[key])]));
   scorecard.mobileUx = mobileScorable
     ? {
@@ -622,33 +649,39 @@ function normaliseCouncil(data, stageReports) {
 
   const hasAccessibilityEvidence = Boolean(input.mobileUx.accessibilityEvidence || input.digitalGrowth.accessibilityEvidence || input.seoAeoGeo.accessibilityEvidence);
   if (!hasAccessibilityEvidence) {
-    scorecard.accessibility = { score: null, basis: "No structured WCAG 2.2 rendered accessibility evidence was supplied. Accessibility must not be inferred from markup or a successful mobile render alone.", status: "Not Scored - Accessibility Evidence Not Supplied" };
+    scorecard.accessibility = { score: null, basis: "No structured WCAG 2.2 rendered accessibility evidence was supplied. Accessibility must not be inferred from markup or a \
+successful mobile render alone.", status: "Not Scored - Accessibility Evidence Not Supplied" };
   }
 
   const hasVisualDesignEvidence = Boolean(input.mobileUx.visualDesignEvidence || input.digitalGrowth.visualDesignEvidence || input.seoAeoGeo.visualDesignEvidence);
   if (!hasVisualDesignEvidence) {
-    scorecard.visualDesignSystemConsistency = { score: null, basis: "No structured rendered design-system evidence was supplied for surfaces, contrast, spacing, radii, hero/header state, floating-menu lifecycle or embedded content.", status: "Not Scored - Visual Evidence Not Supplied" };
+    scorecard.visualDesignSystemConsistency = { score: null, basis: "No structured rendered design-system evidence was supplied for surfaces, contrast, spacing, radii, hero/\
+header state, floating-menu lifecycle or embedded content.", status: "Not Scored - Visual Evidence Not Supplied" };
   }
 
   const parityStates = [input.digitalGrowth.liveSourceParity, input.seoAeoGeo.liveSourceParity, input.mobileUx.liveSourceParity]
     .map((value) => text(value).toLowerCase())
     .filter((value) => ["matched", "mismatched"].includes(value));
   if (parityStates.includes("mismatched")) {
-    scorecard.deploymentLiveParity = { score: 1, basis: "At least one source audit reports a live /release.json SHA that does not match the audited source revision. Live and repository findings must remain separate.", status: "Scored - Mismatched" };
+    scorecard.deploymentLiveParity = { score: 1, basis: "At least one source audit reports a live /release.json SHA that does not match the audited source revision. Live and \
+repository findings must remain separate.", status: "Scored - Mismatched" };
   } else if (parityStates.length && parityStates.every((value) => value === "matched")) {
     scorecard.deploymentLiveParity = { score: 10, basis: "Available source audits confirm the live release marker matches the audited source revision.", status: "Scored - Matched" };
   } else {
-    scorecard.deploymentLiveParity = { score: null, basis: "Release-marker SHA parity was not verified in the supplied audit evidence; live and repository observations must not be blended.", status: "Not Scored - Release SHA Not Verified" };
+    scorecard.deploymentLiveParity = { score: null, basis: "Release-marker SHA parity was not verified in the supplied audit evidence; live and repository observations must \
+not be blended.", status: "Not Scored - Release SHA Not Verified" };
   }
 
   const hasPerformanceEvidence = Boolean(input.mobileUx.performanceEvidence || input.digitalGrowth.performanceEvidence || input.seoAeoGeo.performanceEvidence);
   if (!hasPerformanceEvidence) {
-    scorecard.coreWebVitalsPerformance = { score: null, basis: "No field Core Web Vitals evidence was supplied. Lighthouse/lab diagnostics alone are not field proof.", status: "Not Scored - Field Evidence Not Supplied" };
+    scorecard.coreWebVitalsPerformance = { score: null, basis: "No field Core Web Vitals evidence was supplied. Lighthouse/lab diagnostics alone are not field proof.", status:
+       "Not Scored - Field Evidence Not Supplied" };
   }
 
   const hasSecurityEvidence = Boolean(input.mobileUx.securityEvidence || input.digitalGrowth.securityEvidence || input.seoAeoGeo.securityEvidence);
   if (!hasSecurityEvidence) {
-    scorecard.securityPlatformHygiene = { score: null, basis: "No security/platform header and mixed-content evidence was supplied. A successful page load is not proof of a sound security-header posture.", status: "Not Scored - Security Evidence Not Supplied" };
+    scorecard.securityPlatformHygiene = { score: null, basis: "No security/platform header and mixed-content evidence was supplied. A successful page load is not proof of a \
+sound security-header posture.", status: "Not Scored - Security Evidence Not Supplied" };
   }
 
   const record = obj(source.councilRecord);
@@ -723,7 +756,8 @@ function deterministicFinding(item, stageKey, index) {
     confidence: text(source.confidence || source.findingConfidence) || "Needs Verification",
     affected,
     evidence: arr(source.evidence || source.evidenceAnchors || source.observations).slice(0, 20),
-    exactRemediation: text(source.exactRemediation || source.exactChange || source.remediation || source.requiredOutcome || source.recommendedFix) || "Review the retained source-stage evidence and implement the smallest verified change.",
+    exactRemediation: text(source.exactRemediation || source.exactChange || source.remediation || source.requiredOutcome || source.recommendedFix) ||
+       "Review the retained source-stage evidence and implement the smallest verified change.",
     effort: text(source.effort || source.estimatedEffort) || "Needs estimation",
     owner: text(source.owner || source.recommendedOwner || source.ownerClass) || "Website owner",
     acceptanceCriterion: text(source.acceptanceCriterion) || "The source-stage verification passes after deployment.",
@@ -778,7 +812,8 @@ function deterministicFallback(stageReports, errorMessage) {
   const fallback = {
     synthesisState: completed ? "Complete" : "Incomplete",
     executiveSummary: completed
-      ? `All three source audits completed their evidence contracts. The AI council response was unavailable or structurally unusable, so AIMS produced this deterministic synthesis directly from the retained source ledgers without inventing evidence. ${text(errorMessage)}`.trim()
+      ? `All three source audits completed their evidence contracts. The AI council response was unavailable or structurally unusable, so AIMS produced this deterministic \
+synthesis directly from the retained source ledgers without inventing evidence. ${text(errorMessage)}`.trim()
       : `The source audit evidence contract is incomplete. AIMS produced a controlled deterministic failure synthesis and retained the forensic evidence. ${text(errorMessage)}`.trim(),
     scorecard: {
       trafficGrowth: scoreRow(digitalScore("trafficGrowth"), "Digital Growth source-stage score where supplied."),
@@ -807,7 +842,8 @@ function deterministicFallback(stageReports, errorMessage) {
             status: compact.mobileUx.hardGateBlocked ? "Scored - Release Hard Gate Blocked" : "Scored from completed rendered evidence",
           }
         : { score: null, basis: "Rendered Mobile UX evidence gate was not met.", status: "Not Scored - Evidence Gate Not Met" },
-      councilConfidence: { score: completed ? 5 : 2, basis: `Deterministic synthesis used because the AI council response was unavailable or invalid: ${text(errorMessage) || "unknown error"}`, status: completed ? "Scored - Deterministic Fallback" : "Scored - Incomplete Evidence" },
+      councilConfidence: { score: completed ? 5 : 2, basis: `Deterministic synthesis used because the AI council response was unavailable or invalid: ${text(errorMessage) ||
+         "unknown error"}`, status: completed ? "Scored - Deterministic Fallback" : "Scored - Incomplete Evidence" },
     },
     councilVerdict: {
       overallDiagnosis: completed
@@ -829,7 +865,8 @@ function deterministicFallback(stageReports, errorMessage) {
       days31to60: topActions.slice(6, 8),
       days61to90: topActions.slice(8, 10),
     },
-    measurementPlan: topActions.slice(0, 10).map((action) => ({ objective: action.title, metric: action.acceptanceCriterion, eventOrSource: action.verificationMethod, baseline: "Retained audit evidence", successCriterion: action.acceptanceCriterion })),
+    measurementPlan: topActions.slice(0, 10).map((action) => ({ objective: action.title, metric: action.acceptanceCriterion, eventOrSource: action.verificationMethod, baseline:
+       "Retained audit evidence", successCriterion: action.acceptanceCriterion })),
     gapMatrix: arr(compact.seoAeoGeo.bestPracticeGapMatrix).slice(0, 60),
     masterIssueLedger: issueLedger,
     councilRecord: {
@@ -840,7 +877,8 @@ function deterministicFallback(stageReports, errorMessage) {
       unresolvedVerificationItems: completed ? [`AI council synthesis fallback used: ${text(errorMessage) || "unknown error"}`] : health.failures.map((stage) => `${stage.label}: ${stage.reason}`),
     },
     definitionOfDone: completed
-      ? ["Each accepted remediation is implemented, deployed, and verified by its originating source audit.", "The next unified audit completes all source stages and either returns a substantive council synthesis or repeats this deterministic fallback without losing evidence."]
+      ? ["Each accepted remediation is implemented, deployed, and verified by its originating source audit.",
+         "The next unified audit completes all source stages and either returns a substantive council synthesis or repeats this deterministic fallback without losing evidence."]
       : health.failures.map((stage) => `${stage.label} completes with a valid report.json and its full machine-readable evidence contract.`),
   };
   fallback.targetAssessment = buildTargetAssessment(fallback.scorecard);
@@ -889,7 +927,8 @@ function listHtml(items, formatter = (item) => text(item)) {
 
 function table(headers, rows) {
   if (!rows.length) return "<p class='muted'>No records.</p>";
-  return `<table><thead><tr>${headers.map((h) => `<th>${esc(h)}</th>`).join("")}</tr></thead><tbody>${rows.map((row) => `<tr>${row.map((cell) => `<td>${cell}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
+  return `<table><thead><tr>${headers.map((h) => `<th>${esc(h)}</th>`).join("")}</tr></thead><tbody>${rows.map((row) => `<tr>${row.map((cell) => `<td>${cell}</td>`).join(
+    "")}</tr>`).join("")}</tbody></table>`;
 }
 
 function scorecardHtml(scorecard = {}) {
@@ -926,9 +965,11 @@ function findingRows(findings = []) {
     const affected = Array.isArray(affectedRaw) ? affectedRaw.join(", ") : text(affectedRaw);
     const title = finding.title || finding.rootCause || finding.issue || finding.defectDescription || finding.check || finding.judgement || "";
     return [
-      `<strong>${esc(finding.findingId || finding.issueId || finding.groupId || `U-${index + 1}`)}</strong>`, esc(finding.severity || finding.priority || ""), esc(finding.confidence || finding.findingConfidence || ""),
+      `<strong>${esc(finding.findingId || finding.issueId || finding.groupId || `U-${index + 1}`)}</strong>`, esc(finding.severity || finding.priority || ""), esc(
+        finding.confidence || finding.findingConfidence || ""),
       esc(title), esc(affected),
-      esc(finding.exactRemediation || finding.exactChange || finding.remediation || finding.requiredOutcome || finding.recommendedFix || ""), esc(finding.effort || finding.estimatedEffort || ""), esc(finding.owner || finding.recommendedOwner || finding.ownerClass || ""),
+      esc(finding.exactRemediation || finding.exactChange || finding.remediation || finding.requiredOutcome || finding.recommendedFix || ""), esc(finding.effort ||
+         finding.estimatedEffort || ""), esc(finding.owner || finding.recommendedOwner || finding.ownerClass || ""),
     ];
   });
 }
@@ -939,7 +980,8 @@ function seoCoverageRows(stageReports = {}) {
   const urls = arr(coverage.urls || seo.urls);
   return urls.map((item) => {
     const row = obj(item);
-    return [esc(row.url || row.liveUrl || row.route || ""), esc(row.pageType || ""), esc(row.statusCode ?? row.status ?? ""), esc(row.canonical || row.canonicalTarget || ""), esc(row.indexability || row.indexabilityStatus || ""), esc(row.coverageState || row.state || ""), esc(row.score ?? row.condensedVerdict ?? row.verdict ?? "")];
+    return [esc(row.url || row.liveUrl || row.route || ""), esc(row.pageType || ""), esc(row.statusCode ?? row.status ?? ""), esc(row.canonical || row.canonicalTarget || ""),
+       esc(row.indexability || row.indexabilityStatus || ""), esc(row.coverageState || row.state || ""), esc(row.score ?? row.condensedVerdict ?? row.verdict ?? "")];
   });
 }
 
@@ -950,8 +992,10 @@ export function buildWebsiteAuditHtml({ websiteUrl, sessionId, generatedAt = new
   const seoCoverage = seoCoverageRows(stageReports);
   const conflicts = arr(council.conflicts).map((item) => [esc(item.topic || ""), esc(arr(item.positions).join(" | ")), esc(item.resolution || ""), esc(item.confidence || "")]);
   const funnel = arr(council.funnelMap).map((item) => [esc(item.journey || ""), esc(item.currentFriction || ""), esc(item.exactChange || ""), esc(item.measurement || "")]);
-  const keywords = arr(council.keywordOpportunities).map((item) => [esc(item.topic || ""), esc(item.intent || ""), esc(item.targetPageOrGap || ""), esc(item.action || ""), esc(item.confidence || "")]);
-  const measurement = arr(council.measurementPlan).map((item) => [esc(item.objective || ""), esc(item.metric || ""), esc(item.eventOrSource || ""), esc(item.baseline || ""), esc(item.successCriterion || "")]);
+  const keywords = arr(council.keywordOpportunities).map((item) => [esc(item.topic || ""), esc(item.intent || ""), esc(item.targetPageOrGap || ""), esc(item.action || ""), esc(
+    item.confidence || "")]);
+  const measurement = arr(council.measurementPlan).map((item) => [esc(item.objective || ""), esc(item.metric || ""), esc(item.eventOrSource || ""), esc(item.baseline || ""),
+     esc(item.successCriterion || "")]);
   const gaps = arr(council.gapMatrix).map((item) => [esc(item.area || ""), esc(item.currentState || ""), esc(item.targetState || ""), esc(item.priority || ""), esc(item.owner || "")]);
   const seats = arr(council.councilRecord?.seats).map((item) => [esc(item.seat || ""), esc(item.role || ""), esc(item.reviewNote || "")]);
   const incomplete = text(council.synthesisState).toLowerCase() !== "complete";
@@ -964,25 +1008,70 @@ export function buildWebsiteAuditHtml({ websiteUrl, sessionId, generatedAt = new
   ];
 
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(reportLabel)}</title><style>
-    @page{size:A4;margin:16mm 12mm 18mm}*{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;color:#172033;margin:0;font-size:9.5pt;line-height:1.45}h1{font-size:27pt;line-height:1.05;margin:0 0 8mm}h2{font-size:17pt;margin:9mm 0 4mm;border-bottom:2px solid #172033;padding-bottom:2mm}h3{font-size:12pt;margin:6mm 0 2mm}p{margin:0 0 3mm}.cover{min-height:245mm;display:flex;flex-direction:column;justify-content:center;page-break-after:always}.kicker{font-size:10pt;text-transform:uppercase;letter-spacing:.12em;font-weight:700}.subtitle{font-size:14pt;max-width:145mm}.meta{margin-top:14mm;padding:5mm;border:1px solid #cbd5e1;border-radius:3mm}.section{break-inside:auto}.pagebreak{page-break-before:always}.callout{padding:4mm 5mm;border-left:4px solid #172033;background:#f1f5f9;margin:4mm 0}.muted{color:#64748b}.chips span{display:inline-block;border:1px solid #cbd5e1;border-radius:99px;padding:1.2mm 2.5mm;margin:0 1mm 1mm 0;font-size:8pt}table{width:100%;border-collapse:collapse;margin:3mm 0 5mm;table-layout:fixed}th,td{border:1px solid #d8dee8;padding:2.2mm;vertical-align:top;word-break:break-word}th{background:#eef2f7;text-align:left;font-size:8.2pt}td{font-size:8pt}ul{margin:2mm 0 4mm 5mm;padding-left:4mm}li{margin:0 0 1.6mm}.small{font-size:8pt}.avoid{break-inside:avoid}.toc li{margin-bottom:1mm}.ledger td:nth-child(1){width:8%}.coverage{font-size:7pt}.coverage td,.coverage th{font-size:6.7pt;padding:1.3mm}.status{font-weight:700}.footer-note{margin-top:8mm;font-size:7.5pt;color:#64748b}
+    @page{size:A4;margin:16mm 12mm 18mm}*{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;color:#172033;margin:0;font-size:9.5pt;line-height:1.45}h1{font-\
+size:27pt;line-height:1.05;margin:0 0 8mm}h2{font-size:17pt;margin:9mm 0 4mm;border-bottom:2px solid #172033;padding-bottom:2mm}h3{font-size:12pt;margin:6mm 0 2mm}p{margin:0 0 \
+3mm}.cover{min-height:245mm;display:flex;flex-direction:column;justify-content:center;page-break-after:always}.kicker{font-size:10pt;text-transform:uppercase;letter-spacing:.\
+12em;font-weight:700}.subtitle{font-size:14pt;max-width:145mm}.meta{margin-top:14mm;padding:5mm;border:1px solid #cbd5e1;border-radius:3mm}.section{break-inside:auto}.\
+pagebreak{page-break-before:always}.callout{padding:4mm 5mm;border-left:4px solid #172033;background:#f1f5f9;margin:4mm 0}.muted{color:#64748b}.chips span{display:inline-block;\
+border:1px solid #cbd5e1;border-radius:99px;padding:1.2mm 2.5mm;margin:0 1mm 1mm 0;font-size:8pt}table{width:100%;border-collapse:collapse;margin:3mm 0 5mm;table-layout:fixed}\
+th,td{border:1px solid #d8dee8;padding:2.2mm;vertical-align:top;word-break:break-word}th{background:#eef2f7;text-align:left;font-size:8.2pt}td{font-size:8pt}ul{margin:2mm 0 \
+4mm 5mm;padding-left:4mm}li{margin:0 0 1.6mm}.small{font-size:8pt}.avoid{break-inside:avoid}.toc li{margin-bottom:1mm}.ledger td:nth-child(1){width:8%}.coverage{font-size:7pt}.\
+coverage td,.coverage th{font-size:6.7pt;padding:1.3mm}.status{font-weight:700}.footer-note{margin-top:8mm;font-size:7.5pt;color:#64748b}
   </style></head><body>
-  <section class="cover"><div class="kicker">${esc(reportLabel)}</div><h1>${esc(reportTitle)}</h1><p class="subtitle">${incomplete ? "A controlled failure record for" : "One evidence-led council report for"} ${esc(websiteUrl)}. ${incomplete ? "Failed or incomplete source stages are preserved as blockers and may not be mistaken for a completed website assessment." : "Three audit lenses, one implementation order, one retained report set in PDF, HTML and JSON."}</p><div class="meta"><p><strong>Session:</strong> ${esc(sessionId)}</p><p><strong>Generated:</strong> ${esc(generatedAt)}</p><p><strong>Council:</strong> ${WEBSITE_AUDIT_COUNCIL_MEMBERS.length} specialist seats</p><p><strong>Synthesis state:</strong> ${esc(council.synthesisState)}</p>${sourceState.map(([name,status])=>`<p><strong>${esc(name)}:</strong> ${esc(status)}</p>`).join("")}</div></section>
+  <section class="cover"><div class="kicker">${esc(reportLabel)}</div><h1>${esc(reportTitle)}</h1><p class="subtitle">${incomplete ? "A controlled failure record for" :
+     "One evidence-led council report for"} ${esc(websiteUrl)}. ${incomplete ?
+        "Failed or incomplete source stages are preserved as blockers and may not be mistaken for a completed website assessment." :
+           "Three audit lenses, one implementation order, one retained report set in PDF, HTML and JSON."}</p><div class="meta"><p><strong>Session:</strong> ${esc(
+             sessionId)}</p><p><strong>Generated:</strong> ${esc(generatedAt)}</p><p><strong>Council:</strong> ${WEBSITE_AUDIT_COUNCIL_MEMBERS.length} specialist seats</p><p>\
+<strong>Synthesis state:</strong> ${esc(council.synthesisState)}</p>${sourceState.map(([name,status])=>`<p><strong>${esc(name)}:</strong> ${esc(status)}</p>`).join("")}</div></section>
 
-  <section><h2>1. Executive Scorecard</h2>${scorecardHtml(council.scorecard)}<div class="callout"><strong>Target:</strong> ${esc(council.targetAssessment?.target ?? 8.5)}/10 minimum. <strong>Below target:</strong> ${esc((council.targetAssessment?.belowTarget || []).join(", ") || "None")} &nbsp; <strong>Unscored:</strong> ${esc((council.targetAssessment?.unscored || []).join(", ") || "None")}.</div><div class="callout"><strong>Executive synthesis.</strong> ${esc(council.executiveSummary)}</div></section>
-  <section><h2>2. Council Verdict</h2><p><strong>Overall diagnosis:</strong> ${esc(verdict.overallDiagnosis || "")}</p><p><strong>Biggest structural weakness:</strong> ${esc(verdict.biggestStructuralWeakness || "")}</p><p><strong>Biggest commercial opportunity:</strong> ${esc(verdict.biggestCommercialOpportunity || "")}</p><p><strong>Biggest search opportunity:</strong> ${esc(verdict.biggestSearchOpportunity || "")}</p><p><strong>Biggest mobile risk:</strong> ${esc(verdict.biggestMobileRisk || "")}</p><p><strong>Greatest cross-objective lever:</strong> ${esc(verdict.greatestCrossObjectiveLever || "")}</p><h3>Strongest assets</h3>${listHtml(verdict.strongestAssets)}</section>
-  <section><h2>3. Top Priorities</h2>${table(["Rank","ID","Exact change","Objectives","Impact","Effort","Confidence","Owner","Acceptance criterion","Verification"], actionRows(council.topActions))}<h3>Quick Wins</h3>${listHtml(council.quickWins, (item)=>typeof item === "string" ? item : item.exactChange || item.action || item.title)}<h3>Release / Evidence Blockers</h3>${listHtml(council.blockers, (item)=>typeof item === "string" ? item : item.title || item.blocker || item.description)}</section>
-  <section class="pagebreak"><h2>4. Source Audit Evidence Summary</h2><h3>Digital Growth & Monetisation</h3><p><strong>Status:</strong> ${esc(sourceEvidence.digitalGrowth.status)}</p><p>${esc(sourceEvidence.digitalGrowth.overallVerdict || "")}</p>${table(["ID","Severity","Confidence","Finding","Location","Exact change","Effort","Owner"], findingRows(sourceEvidence.digitalGrowth.findings.slice(0,30)))}<h3>Website SEO / AEO / GEO</h3><p><strong>Status:</strong> ${esc(sourceEvidence.seoAeoGeo.status)}</p>${table(["ID","Severity","Confidence","Finding","Affected","Exact remediation","Effort","Owner"], findingRows(sourceEvidence.seoAeoGeo.rankedIssueLedger.slice(0,40)))}<h3>Rendered Mobile UX Hard-Gate</h3><p><strong>Status:</strong> ${esc(sourceEvidence.mobileUx.status)} &nbsp; <strong>Release verdict:</strong> ${esc(sourceEvidence.mobileUx.releaseVerdict || "Not available")} &nbsp; <strong>Mobile score:</strong> ${sourceEvidence.mobileUx.mobileQualityScore == null ? "Not scored" : esc(sourceEvidence.mobileUx.mobileQualityScore)}</p>${sourceEvidence.mobileUx.hardGateBlocked ? "<div class='callout'><strong>Mobile evidence gate blocked.</strong> No council Mobile UX score may be fabricated.</div>" : ""}${table(["ID","Severity","Confidence","Finding","Affected","Exact remediation","Effort","Owner"], findingRows([...sourceEvidence.mobileUx.rootCauseGroups, ...sourceEvidence.mobileUx.findings].slice(0,40)))}</section>
-  <section class="pagebreak"><h2>5. Unified Root-Cause Findings</h2><table class="ledger"><thead><tr><th>ID</th><th>Severity</th><th>Confidence</th><th>Root cause</th><th>Affected</th><th>Exact remediation</th><th>Effort</th><th>Owner</th></tr></thead><tbody>${findingRows(council.unifiedFindings).map(row=>`<tr>${row.map(c=>`<td>${c}</td>`).join("")}</tr>`).join("")}</tbody></table></section>
+  <section><h2>1. Executive Scorecard</h2>${scorecardHtml(council.scorecard)}<div class="callout"><strong>Target:</strong> ${esc(council.targetAssessment?.target ??
+     8.5)}/10 minimum. <strong>Below target:</strong> ${esc((council.targetAssessment?.belowTarget || []).join(", ") || "None")} &nbsp; <strong>Unscored:</strong> ${esc((
+       council.targetAssessment?.unscored || []).join(", ") || "None")}.</div><div class="callout"><strong>Executive synthesis.</strong> ${esc(council.executiveSummary)}</div></section>
+  <section><h2>2. Council Verdict</h2><p><strong>Overall diagnosis:</strong> ${esc(verdict.overallDiagnosis || "")}</p><p><strong>Biggest structural weakness:</strong> ${esc(
+    verdict.biggestStructuralWeakness || "")}</p><p><strong>Biggest commercial opportunity:</strong> ${esc(verdict.biggestCommercialOpportunity ||
+       "")}</p><p><strong>Biggest search opportunity:</strong> ${esc(verdict.biggestSearchOpportunity || "")}</p><p><strong>Biggest mobile risk:</strong> ${esc(
+         verdict.biggestMobileRisk || "")}</p><p><strong>Greatest cross-objective lever:</strong> ${esc(verdict.greatestCrossObjectiveLever ||
+            "")}</p><h3>Strongest assets</h3>${listHtml(verdict.strongestAssets)}</section>
+  <section><h2>3. Top Priorities</h2>${table(["Rank","ID","Exact change","Objectives","Impact","Effort","Confidence","Owner","Acceptance criterion","Verification"], actionRows(
+    council.topActions))}<h3>Quick Wins</h3>${listHtml(council.quickWins, (item)=>typeof item === "string" ? item : item.exactChange || item.action ||
+       item.title)}<h3>Release / Evidence Blockers</h3>${listHtml(council.blockers, (item)=>typeof item === "string" ? item : item.title || item.blocker || item.description)}</section>
+  <section class="pagebreak"><h2>4. Source Audit Evidence Summary</h2><h3>Digital Growth & Monetisation</h3><p><strong>Status:</strong> ${esc(
+    sourceEvidence.digitalGrowth.status)}</p><p>${esc(sourceEvidence.digitalGrowth.overallVerdict || "")}</p>${table(["ID","Severity","Confidence","Finding","Location",
+      "Exact change","Effort","Owner"], findingRows(sourceEvidence.digitalGrowth.findings.slice(0,30)))}<h3>Website SEO / AEO / GEO</h3><p><strong>Status:</strong> ${esc(
+        sourceEvidence.seoAeoGeo.status)}</p>${table(["ID","Severity","Confidence","Finding","Affected","Exact remediation","Effort","Owner"], findingRows(
+          sourceEvidence.seoAeoGeo.rankedIssueLedger.slice(0,40)))}<h3>Rendered Mobile UX Hard-Gate</h3><p><strong>Status:</strong> ${esc(
+            sourceEvidence.mobileUx.status)} &nbsp; <strong>Release verdict:</strong> ${esc(sourceEvidence.mobileUx.releaseVerdict ||
+               "Not available")} &nbsp; <strong>Mobile score:</strong> ${sourceEvidence.mobileUx.mobileQualityScore == null ? "Not scored" : esc(
+                 sourceEvidence.mobileUx.mobileQualityScore)}</p>${sourceEvidence.mobileUx.hardGateBlocked ?
+                    "<div class='callout'><strong>Mobile evidence gate blocked.</strong> No council Mobile UX score may be fabricated.</div>" : ""}${table(["ID","Severity",
+                      "Confidence","Finding","Affected","Exact remediation","Effort","Owner"], findingRows([...sourceEvidence.mobileUx.rootCauseGroups,
+                         ...sourceEvidence.mobileUx.findings].slice(0,40)))}</section>
+  <section class="pagebreak"><h2>5. Unified Root-Cause Findings</h2><table class="ledger"><thead><tr><th>ID</th><th>Severity</th><th>Confidence</th><th>Root cause</th><th>\
+Affected</th><th>Exact remediation</th><th>Effort</th><th>Owner</th></tr></thead><tbody>${findingRows(council.unifiedFindings).map(row=>`<tr>${row.map(c=>`<td>${c}</td>`).join(
+  "")}</tr>`).join("")}</tbody></table></section>
   <section><h2>6. Cross-Audit Conflict Register</h2>${table(["Topic","Positions","Resolution","Confidence"], conflicts)}</section>
   <section><h2>7. Funnel & Monetisation Map</h2>${table(["Journey","Current friction","Exact change","Measurement"], funnel)}</section>
   <section><h2>8. Keyword & Content Opportunity Map</h2>${table(["Topic","Intent","Target page / gap","Action","Confidence"], keywords)}</section>
-  <section><h2>9. 30 / 60 / 90-Day Implementation Programme</h2><h3>Days 0-14</h3>${listHtml(programme.days0to14, (i)=>typeof i==="string"?i:i.action||i.exactChange||i.title)}<h3>Days 15-30</h3>${listHtml(programme.days15to30, (i)=>typeof i==="string"?i:i.action||i.exactChange||i.title)}<h3>Days 31-60</h3>${listHtml(programme.days31to60, (i)=>typeof i==="string"?i:i.action||i.exactChange||i.title)}<h3>Days 61-90</h3>${listHtml(programme.days61to90, (i)=>typeof i==="string"?i:i.action||i.exactChange||i.title)}</section>
+  <section><h2>9. 30 / 60 / 90-Day Implementation Programme</h2><h3>Days 0-14</h3>${listHtml(programme.days0to14, (i)=>typeof i==="string"?i:i.action||i.exactChange||
+    i.title)}<h3>Days 15-30</h3>${listHtml(programme.days15to30, (i)=>typeof i==="string"?i:i.action||i.exactChange||i.title)}<h3>Days 31-60</h3>${listHtml(
+      programme.days31to60, (i)=>typeof i==="string"?i:i.action||i.exactChange||i.title)}<h3>Days 61-90</h3>${listHtml(programme.days61to90, (i)=>typeof i==="string"?i:
+        i.action||i.exactChange||i.title)}</section>
   <section><h2>10. KPI & Verification Plan</h2>${table(["Objective","Metric","Event / source","Baseline","Success criterion"], measurement)}</section>
   <section><h2>11. Best-Practice Gap Matrix</h2>${table(["Area","Current state","Target state","Priority","Owner"], gaps)}</section>
   <section><h2>12. Master Issue Ledger</h2>${table(["ID","Severity","Confidence","Issue","Affected","Remediation","Effort","Owner"], findingRows(council.masterIssueLedger))}</section>
-  <section class="pagebreak"><h2>13. Full URL Coverage Appendix</h2><p class="small">Deterministic URL coverage is taken directly from the SEO/AEO/GEO audit evidence rather than regenerated by the council.</p>${seoCoverage.length ? `<table class="coverage"><thead><tr><th>URL</th><th>Page type</th><th>Status</th><th>Canonical</th><th>Indexability</th><th>Coverage state</th><th>Verdict / score</th></tr></thead><tbody>${seoCoverage.map(row=>`<tr>${row.map(c=>`<td>${c}</td>`).join("")}</tr>`).join("")}</tbody></table>` : "<p class='muted'>Full URL ledger was not available from the SEO stage.</p>"}</section>
-  <section class="pagebreak"><h2>14. Council Record</h2><p>The council uses independent specialist review, contradiction analysis, root-cause clustering, prioritisation and final deliberation. Notes below are decision summaries, not private reasoning.</p>${table(["Seat","Role","Review note"], seats)}<h3>Major decisions</h3>${listHtml(council.councilRecord?.majorVotes, (i)=>typeof i==="string"?i:`${i.decision || "Decision"}: ${i.outcome || ""}`)}<h3>Dissent</h3>${listHtml(council.councilRecord?.dissent, (i)=>typeof i==="string"?i:i.note||i.dissent||i.position)}<h3>Rejected assumptions</h3>${listHtml(council.councilRecord?.rejectedAssumptions)}<h3>Unresolved verification items</h3>${listHtml(council.councilRecord?.unresolvedVerificationItems)}</section>
-  <section><h2>15. Definition of Done</h2>${listHtml(council.definitionOfDone)}<p class="footer-note">Retention contract: ${incomplete ? "source-stage evidence is retained for diagnosis and rerun; RAMS dispatch and temporary cleanup are prohibited until every required source stage completes." : "the final PDF, HTML and JSON representations are retained after successful RAMS handoff; temporary evidence may then be removed."}</p></section>
+  <section class="pagebreak"><h2>13. Full URL Coverage Appendix</h2><p class="small">Deterministic URL coverage is taken directly from the SEO/AEO/GEO audit evidence rather \
+than regenerated by the council.</p>${seoCoverage.length ? `<table class="coverage"><thead><tr><th>URL</th><th>Page type</th><th>Status</th><th>Canonical</th><th>Indexability</\
+th><th>Coverage state</th><th>Verdict / score</th></tr></thead><tbody>${seoCoverage.map(row=>`<tr>${row.map(c=>`<td>${c}</td>`).join("")}</tr>`).join("")}</tbody></table>` :
+   "<p class='muted'>Full URL ledger was not available from the SEO stage.</p>"}</section>
+  <section class="pagebreak"><h2>14. Council Record</h2><p>The council uses independent specialist review, contradiction analysis, root-cause clustering, prioritisation and \
+final deliberation. Notes below are decision summaries, not private reasoning.</p>${table(["Seat","Role","Review note"], seats)}<h3>Major decisions</h3>${listHtml(
+  council.councilRecord?.majorVotes, (i)=>typeof i==="string"?i:`${i.decision || "Decision"}: ${i.outcome || ""}`)}<h3>Dissent</h3>${listHtml(council.councilRecord?.dissent, (
+    i)=>typeof i==="string"?i:i.note||i.dissent||i.position)}<h3>Rejected assumptions</h3>${listHtml(
+      council.councilRecord?.rejectedAssumptions)}<h3>Unresolved verification items</h3>${listHtml(council.councilRecord?.unresolvedVerificationItems)}</section>
+  <section><h2>15. Definition of Done</h2>${listHtml(council.definitionOfDone)}<p class="footer-note">Retention contract: ${incomplete ?
+     "source-stage evidence is retained for diagnosis and rerun; RAMS dispatch and temporary cleanup are prohibited until every required source stage completes." :
+        "the final PDF, HTML and JSON representations are retained after successful RAMS handoff; temporary evidence may then be removed."}</p></section>
   </body></html>`;
 }
 
@@ -1017,7 +1106,8 @@ export async function renderWebsiteAuditPdf(html) {
       printBackground: true,
       displayHeaderFooter: true,
       headerTemplate: "<div></div>",
-      footerTemplate: '<div style="font-size:7px;width:100%;text-align:center;color:#64748b"><span>Jonathan Harris Website Audit</span> · <span class="pageNumber"></span>/<span class="totalPages"></span></div>',
+      footerTemplate: '<div style="font-size:7px;width:100%;text-align:center;color:#64748b"><span>Jonathan Harris Website Audit</span> · <span class="pageNumber"></span>/\
+<span class="totalPages"></span></div>',
       margin: { top: "16mm", right: "12mm", bottom: "18mm", left: "12mm" },
     });
   } finally {

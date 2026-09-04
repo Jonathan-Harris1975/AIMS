@@ -31,9 +31,11 @@ Rules:
 - Prioritise verified blockers, then high-impact Quick Wins.
 - Scores are 1-10 and must have a one-line evidence rationale.
 - The websiteAuditPolicy target of 8.5/10 is an acceptance target, not a score floor. Never inflate a score to meet it.
-- /blog and /transcripts are intentionally excluded from this website audit because their R2 content is audited by dedicated pipelines. Do not penalise this audit for their absence. /podcast remains in scope.
+- /blog and /transcripts are intentionally excluded from this website audit because their R2 content is audited by dedicated pipelines. Do not penalise this audit for their \
+absence. /podcast remains in scope.
 - Respect the governed newsletter, Contribute, podcast, accessibility, visual-design, deployment-parity and link-integrity contracts in websiteAuditPolicy whenever matching evidence is supplied.
-- Do not treat llms.txt or special AI markup as a Google AI-search requirement. Treat llms.txt as optional supporting infrastructure and prioritise crawl/index eligibility, textual usefulness, internal linking, entity clarity, and structured-data/visible-content alignment.
+- Do not treat llms.txt or special AI markup as a Google AI-search requirement. Treat llms.txt as optional supporting infrastructure and prioritise crawl/index eligibility, \
+textual usefulness, internal linking, entity clarity, and structured-data/visible-content alignment.
 - Do not claim checkout, analytics or revenue performance unless it was supplied.
 - If evidence is missing, say what is unverified and define the measurement/event needed.
 - Return JSON only. Do not return markdown fences, the prompt, private reasoning or chain-of-thought.
@@ -76,7 +78,8 @@ Required JSON shape:
 const REPAIR_SYSTEM_PROMPT = `You repair a Digital Growth audit response into the exact JSON contract requested by the original audit.
 Use only facts already present in the supplied response. Do not add recommendations, scores, evidence or claims that are not there.
 Return JSON only. The result must contain auditCompletionState, scorecard, executiveSummary.top10Actions, findings, dynamicKeywordStrategy, highValueOpportunities and limitations.
-A finding must use the Digital Growth fields findingId, title, objective, severity, impact, effort, confidence, location, evidence, exactChange, expectedImpact, rationale, owner, acceptanceCriterion, verificationMethod and crossObjectiveMultiplier.`;
+A finding must use the Digital Growth fields findingId, title, objective, severity, impact, effort, confidence, location, evidence, exactChange, expectedImpact, rationale, \
+owner, acceptanceCriterion, verificationMethod and crossObjectiveMultiplier.`;
 
 function trim(value) {
   return String(value ?? "").trim();
@@ -182,7 +185,8 @@ function normaliseScorecard(value) {
     scorecard[key] = {
       label,
       score: hasScore ? clamp(row.score, 1, 10, 1) : null,
-      rationale: trim(row.rationale || row.basis || row.reason) || (hasScore ? "Evidence rationale was not supplied by the analysis." : "The analysis did not return a defensible score for this objective."),
+      rationale: trim(row.rationale || row.basis || row.reason) || (hasScore ? "Evidence rationale was not supplied by the analysis." :
+         "The analysis did not return a defensible score for this objective."),
     };
   }
   return scorecard;
@@ -258,7 +262,8 @@ function normaliseAnalysis(data, { fallbackEvidence } = {}) {
   return {
     auditType: "digital-growth",
     auditCompletionState: trim(source.auditCompletionState || source.completionState) || "Complete",
-    overallVerdict: trim(source.overallVerdict || source.executiveSummary?.overallVerdict || source.summary) || "Digital growth evidence was analysed; see the ranked findings for implementation priorities.",
+    overallVerdict: trim(source.overallVerdict || source.executiveSummary?.overallVerdict || source.summary) ||
+       "Digital growth evidence was analysed; see the ranked findings for implementation priorities.",
     scorecard,
     executiveSummary: { top10Actions: top10.length ? top10 : findings.slice(0, 10).map((finding) => finding.exactChange) },
     findings,
@@ -389,7 +394,8 @@ function deterministicAnalysisFallback(payload, reason) {
     auditType: "digital-growth",
     auditCompletionState: hasDeterministicEvidence ? "Complete" : "Incomplete",
     overallVerdict: hasDeterministicEvidence
-      ? "The AI synthesis was unavailable or structurally invalid, so AIMS completed this stage deterministically from the retained crawl, route, repository and heuristic evidence. No unsupported scores were invented."
+      ? "The AI synthesis was unavailable or structurally invalid, so AIMS completed this stage deterministically from the retained crawl, route, repository and heuristic \
+evidence. No unsupported scores were invented."
       : "The supplied evidence did not contain enough deterministic findings to complete the Digital Growth stage.",
     scorecard: normaliseScorecard({}),
     executiveSummary: { top10Actions: findings.slice(0, 10).map((finding) => finding.exactChange) },

@@ -70,7 +70,8 @@ const REPORT_STRUCTURE = [
 
 const SYSTEM_PROMPT = `You are a senior forensic SEO + AEO + GEO audit engineer operating under the Full-Estate Forensic SEO + AEO + GEO Audit System, version v2026.04-FULL-COVERAGE.
 
-You will receive a structured evidence payload collected from repository routes, workbook data, sitemap snapshots, feed manifests, live route checks, URL coverage ledgers, page-family reconciliation, and heuristic baseline checks for the jonathan-harris.online estate.
+You will receive a structured evidence payload collected from repository routes, workbook data, sitemap snapshots, feed manifests, live route checks, URL coverage ledgers, \
+page-family reconciliation, and heuristic baseline checks for the jonathan-harris.online estate.
 
 Your task is to return one strict forensic JSON object, not a written report, not markdown, and not a generic SEO audit. The HTML/PDF report builder will render your JSON.
 
@@ -78,7 +79,8 @@ NON-NEGOTIABLE OPERATING RULES:
 1. Use supplied evidence only. Do not invent URLs, file paths, metrics, scores, crawl results, schemas, selectors, or live behaviour.
 2. No boilerplate, no filler, no vague "improve metadata" style advice.
 3. Every significant issue must name the exact URL, file path, route family, template, generator, canonical target, schema type, selector, or content block supported by the evidence payload.
-4. Podcast, archive, utility, and programmatic website families are mandatory when present in the payload. /blog and /transcripts are deliberately delegated to dedicated R2 audit pipelines under websiteAuditPolicy; do not treat their exclusion from this website audit as missing coverage.
+4. Podcast, archive, utility, and programmatic website families are mandatory when present in the payload. /blog and /transcripts are deliberately delegated to dedicated R2 \
+audit pipelines under websiteAuditPolicy; do not treat their exclusion from this website audit as missing coverage.
 5. If coverage is partial, failed, or not available, state the limitation explicitly and include it in limitations and fullUrlCoverageAppendix.
 6. If repo, workbook, sitemap, feed, and live evidence disagree, state the conflict and mark confidence as Confirmed, Probable, or Needs verification.
 7. Treat broken URLs, redirects, and failed fetches as audit findings. Do not call the audit incomplete merely because the estate has broken routes.
@@ -88,24 +90,37 @@ NON-NEGOTIABLE OPERATING RULES:
 11. Reject duplicated generic ledgers. Aggregate repeated template-level defects intelligently while preserving URL-level evidence in appendices.
 12. The final JSON must support this report structure: ${REPORT_STRUCTURE.join("; ")}.
 13. Return one JSON object only. No code fences. No commentary.
-14. Keep the response compact: rankedIssueLedger <= 8 aggregated issues, pageTypeFindings <= 16 rows, priorityPageAnnex <= 12 rows, templateComponentGeneratorAnnex <= 12 rows, codeMarkupContentRemediationAppendix <= 12 rows, bestPracticeGapMatrix <= 16 rows.
-15. Do not echo the complete URL ledger. Set fullUrlCoverageAppendix to [] unless a row adds unique judgement beyond the supplied allRoutes evidence; the local report builder will derive the full URL appendix deterministically.
+14. Keep the response compact: rankedIssueLedger <= 8 aggregated issues, pageTypeFindings <= 16 rows, priorityPageAnnex <= 12 rows, templateComponentGeneratorAnnex <= 12 rows, \
+codeMarkupContentRemediationAppendix <= 12 rows, bestPracticeGapMatrix <= 16 rows.
+15. Do not echo the complete URL ledger. Set fullUrlCoverageAppendix to [] unless a row adds unique judgement beyond the supplied allRoutes evidence; the local report builder \
+will derive the full URL appendix deterministically.
 16. Keep narrative strings under 90 words. Prefer exact files, routes, selectors, and affected families over long prose.
 17. Do not repeat weak template advice across families. If several pages share the same shallow AEO/GEO symptom, turn it into one root-cause issue naming the exact template or generator.
-18. Never use generic remediations such as "Add answer-first summaries, extractable subheadings, and direct response blocks". Replace them with page-family-specific fixes that name the observed current pattern and the exact missing blocks, schema types, link targets, files, or generator logic.
-19. When evidence is present, prioritise system defects before copy polish: unintended route-governance exclusions, sitemap/workbook/repo/feed mismatches, duplicate canonicals or slugs, live/source deployment drift, crawl/index barriers, and broken internal/conversion routes. Treat llms.txt / llm-index as optional supporting discovery infrastructure, not a Google AI-search requirement.
-20. Podcast episode findings must distinguish title/date/summary/audio/transcript-link wrappers from retrieval-ready episode pages. Transcript findings must distinguish raw transcript walls from chunked, summary-led transcript pages.
+18. Never use generic remediations such as "Add answer-first summaries, extractable subheadings, and direct response blocks". Replace them with page-family-specific fixes that \
+name the observed current pattern and the exact missing blocks, schema types, link targets, files, or generator logic.
+19. When evidence is present, prioritise system defects before copy polish: unintended route-governance exclusions, sitemap/workbook/repo/feed mismatches, duplicate canonicals \
+or slugs, live/source deployment drift, crawl/index barriers, and broken internal/conversion routes. Treat llms.txt / llm-index as optional supporting discovery infrastructure,\
+ not a Google AI-search requirement.
+20. Podcast episode findings must distinguish title/date/summary/audio/transcript-link wrappers from retrieval-ready episode pages. Transcript findings must distinguish raw \
+transcript walls from chunked, summary-led transcript pages.
 21. Treat source ledger and source mismatch rows as evidence, not decoration. Each mismatch must carry id, severity, sources, evidence, impact, and fix fields where the payload supports them.
 22. Provide both a compact rankedIssueLedger and fullIssueRecords. The ranked ledger is for prioritisation; fullIssueRecords must preserve the full issue format in readable flowing fields.
 23. The codeMarkupContentRemediationAppendix must provide implementation-grade patterns, exact source targets, and verification steps for every Critical or High issue.
-24. Never use fallback phrases such as "Implementation order derived from the ranked issue ledger" as an executive summary or verdict. The executive summary must state the strongest estate area, weakest estate area, main root cause, and implementation theme.
-25. Transcript evidence must be numerically coherent. Do not write "0 transcript pages behave..." as evidence for a High issue; say exactly how many transcript pages lack summary-led, sectioned, entity-rich, above-the-fold transcript structure.
-26. The bestPracticeGapMatrix must use page-family-specific gaps. Do not repeat "Answer-first evidence blocks" across unrelated families when podcast, transcript, blog, book, archive, author, comparison, site-page, or lead-generation evidence supports a more exact missing element.
+24. Never use fallback phrases such as "Implementation order derived from the ranked issue ledger" as an executive summary or verdict. The executive summary must state the \
+strongest estate area, weakest estate area, main root cause, and implementation theme.
+25. Transcript evidence must be numerically coherent. Do not write "0 transcript pages behave..." as evidence for a High issue; say exactly how many transcript pages lack \
+summary-led, sectioned, entity-rich, above-the-fold transcript structure.
+26. The bestPracticeGapMatrix must use page-family-specific gaps. Do not repeat "Answer-first evidence blocks" across unrelated families when podcast, transcript, blog, book, \
+archive, author, comparison, site-page, or lead-generation evidence supports a more exact missing element.
 27. Do not rank /podcast/TT-YYYY-MM-DD compatibility redirect wrappers as priority content pages. Put those in redirect/compatibility evidence only.
-28. Intentionally delegated R2 families (/blog and /transcripts), redirects, or canonical-only route families must be marked N/A/delegated, not F, in page-type findings and gap matrices. Podcast routes are not delegated and remain in scope.
+28. Intentionally delegated R2 families (/blog and /transcripts), redirects, or canonical-only route families must be marked N/A/delegated, not F, in page-type findings and \
+gap matrices. Podcast routes are not delegated and remain in scope.
 29. FAQPage schema may be recommended only where a real visible FAQ/Q&A block exists and matching schema would describe that visible content. Never add FAQ schema purely for AEO.
-30. Google AI features require no special AI markup or AI-specific machine-readable file. Standard crawl/index eligibility, useful textual content, internal linking and structured-data/visible-content alignment remain primary. Check OAI-SearchBot crawlability when supplied evidence supports it.
-31. Return deterministicRemediationLedger as { "findings": [] }. Only use classification "code_fix" when affectedPaths are exact repo-owned files, evidence is deterministic, requiredOutcome is exact, and allowedFixClass is one of meta_fix, schema_fix, sitemap_fix, internal_link_fix, robots_fix, canonical_fix. Aggregate scores, page-family trends, and R2-hosted podcast/episodes pages must remain classification "manual_review".
+30. Google AI features require no special AI markup or AI-specific machine-readable file. Standard crawl/index eligibility, useful textual content, internal linking and \
+structured-data/visible-content alignment remain primary. Check OAI-SearchBot crawlability when supplied evidence supports it.
+31. Return deterministicRemediationLedger as { "findings": [] }. Only use classification "code_fix" when affectedPaths are exact repo-owned files, evidence is deterministic, \
+requiredOutcome is exact, and allowedFixClass is one of meta_fix, schema_fix, sitemap_fix, internal_link_fix, robots_fix, canonical_fix. Aggregate scores, page-family trends, \
+and R2-hosted podcast/episodes pages must remain classification "manual_review".
 
 MANDATORY TOP-LEVEL JSON KEYS:
 ${REQUIRED_TOP_LEVEL_KEYS.join(", ")}
@@ -183,7 +198,8 @@ function buildUserPrompt(payload) {
     "",
     "Use the evidence payload only. Do not invent evidence. If the payload is thin for a family, record that limitation.",
     "The allRoutes and coverage arrays are the URL ledger for this run unless a payload field explicitly says otherwise.",
-    "The skillsBaseline block is governance and evidence-readiness metadata only; do not treat installed skills as proof that a crawl, screenshot or monitoring run succeeded unless matching artefacts are present.",
+    "The skillsBaseline block is governance and evidence-readiness metadata only; do not treat installed skills as proof that a crawl, screenshot or monitoring run succeeded \
+unless matching artefacts are present.",
     "Return one compact JSON object only, following the mandatory contract.",
     "Do not echo the complete route ledger; use [] for fullUrlCoverageAppendix unless a row adds unique judgement beyond allRoutes.",
     "",
@@ -433,9 +449,12 @@ function baselineIssueFromCoverage(row, index) {
     auditLens: lens,
     rootCauseLevel: failed > 0 ? "route" : "template",
     affectedPagesTemplatesFilesOrRoutes: `${pageType} via ${sourceFile}`,
-    evidenceObserved: failed > 0 ? `${failed} ${pageType} URL(s) failed or remained incomplete in the supplied coverage family.` : `${pageType} average score is ${Number.isFinite(averageScore) ? averageScore : 0}; answer-first and generative retrieval patterns need template-level reinforcement.`,
-    whyItMatters: failed > 0 ? "Incomplete or failed routes prevent a release-ready full-estate audit verdict." : "Thin answer-first structure reduces answer-engine extraction and generative-search citation quality.",
-    exactRemediation: failed > 0 ? `Resolve the failed ${pageType} route(s), then rerun the audit until the ${pageType} coverage row reports 0 failed URLs.` : `Update ${sourceFile} for ${pageType} pages with a direct-answer summary, question-led H2, extractable bullet list, and clear Jonathan Harris entity context.`,
+    evidenceObserved: failed > 0 ? `${failed} ${pageType} URL(s) failed or remained incomplete in the supplied coverage family.` :
+       `${pageType} average score is ${Number.isFinite(averageScore) ? averageScore : 0}; answer-first and generative retrieval patterns need template-level reinforcement.`,
+    whyItMatters: failed > 0 ? "Incomplete or failed routes prevent a release-ready full-estate audit verdict." :
+       "Thin answer-first structure reduces answer-engine extraction and generative-search citation quality.",
+    exactRemediation: failed > 0 ? `Resolve the failed ${pageType} route(s), then rerun the audit until the ${pageType} coverage row reports 0 failed URLs.` :
+       `Update ${sourceFile} for ${pageType} pages with a direct-answer summary, question-led H2, extractable bullet list, and clear Jonathan Harris entity context.`,
     expectedGain: failed > 0 ? "Full coverage can be established without failed-gate route evidence." : "Improved AEO/GEO scores and stronger machine-readable page-family summaries.",
     estimatedEffort: failed > 0 ? "Medium" : "Low",
     recommendedOwner: failed > 0 ? "Engineering" : "Content",
@@ -544,10 +563,12 @@ function transcriptDiagnosticEvidence(payload, transcript) {
   const sample = listSample(transcript?.sampleWeakUrls || transcript?.sampleUrls, "url", 3);
 
   if (/^0\s+transcript pages behave/i.test(direct) || /0\s+transcript pages.*without enough/i.test(direct)) {
-    return `${weak || "Analysed"}/${total || weak || "analysed"} transcript page(s) lack verified above-the-fold summary, key-takeaway, topic-index, timestamp/section-anchor, or entity-index evidence before the transcript body${sample ? `; sample: ${sample}` : ""}.`;
+    return `${weak || "Analysed"}/${total || weak || "analysed"} transcript page(s) lack verified above-the-fold summary, key-takeaway, topic-index, timestamp/section-anchor, \
+or entity-index evidence before the transcript body${sample ? `; sample: ${sample}` : ""}.`;
   }
   if (direct) return direct;
-  return `${total || "Analysed"} transcript route(s) require transcript-specific checks for summary-led structure, entity index, anchors, related links, and Transcript/PodcastEpisode schema alignment${sample ? `; sample: ${sample}` : ""}.`;
+  return `${total || "Analysed"} transcript route(s) require transcript-specific checks for summary-led structure, entity index, anchors, related links, and Transcript/\
+PodcastEpisode schema alignment${sample ? `; sample: ${sample}` : ""}.`;
 }
 
 function dynamicInternalLinkEvidence(payload) {
@@ -562,7 +583,8 @@ function dynamicInternalLinkEvidence(payload) {
   if (!weak.length) return { confirmed: false, evidence: "" };
   return {
     confirmed: true,
-    evidence: weak.map((family) => `${family.pageType || family.family}: ${Number(family.topicOrBookLinkCount || 0)}/${Number(family.analysedUrls || family.totalUrls || 0)} analysed pages link into topic/book/glossary assets`).join("; "),
+    evidence: weak.map((family) => `${family.pageType || family.family}: ${Number(family.topicOrBookLinkCount || 0)}/${Number(family.analysedUrls || family.totalUrls ||
+       0)} analysed pages link into topic/book/glossary assets`).join("; "),
   };
 }
 
@@ -645,7 +667,9 @@ function deriveNarrative(payload, issues) {
   const weakestParts = [];
   if (podcastScore) weakestParts.push(`podcast episodes at ${podcastScore}`);
   const critical = asArray(issues).filter((issue) => issue.severity === "Critical").map((issue) => issue.issueId).join(" and ");
-  return `The governed website estate is strongest in ${strongest}${weakestParts.length ? `, while ${weakestParts.join(" and ")} need the most attention` : ""}. Blog and transcript content are intentionally delegated to dedicated R2 audit pipelines and are not website-audit coverage gaps. The main website risk is source-of-truth drift across repo, workbook, sitemap, feed and live podcast routes${critical ? `, led by ${critical}` : ""}. Fix governance and canonical integrity before polishing page copy.`;
+  return `The governed website estate is strongest in ${strongest}${weakestParts.length ? `, while ${weakestParts.join(" and ")} need the most attention` :
+     ""}. Blog and transcript content are intentionally delegated to dedicated R2 audit pipelines and are not website-audit coverage gaps. The main website risk is source-of-\
+truth drift across repo, workbook, sitemap, feed and live podcast routes${critical ? `, led by ${critical}` : ""}. Fix governance and canonical integrity before polishing page copy.`;
 }
 
 function isPodcastCompatibilityRoute(value) {
@@ -757,7 +781,9 @@ function signalIssuesFromPayload(payload) {
       affectedPagesTemplatesFilesOrRoutes: "scripts/check_ungoverned_routes.py; podcast/episodes/; workbook Pages sheet",
       evidenceObserved: `EXCLUDED_ROUTE_PREFIXES contains ${governanceExcludes.join(", ")}.`,
       whyItMatters: "Podcast routes are part of the website audit and can otherwise exist live without repo, workbook, sitemap, feed, and coverage parity.",
-      exactRemediation: "Remove unintended podcast/episodes/ exclusions from the website release gate. Govern podcast leaves through a deterministic route manifest compared against workbook Pages, sitemap.xml, podcast feed, and coverage.json; keep only intentional compatibility redirects exempted. Leave /blog and /transcripts delegated to their dedicated R2 audit pipelines.",
+      exactRemediation: "Remove unintended podcast/episodes/ exclusions from the website release gate. Govern podcast leaves through a deterministic route manifest compared \
+against workbook Pages, sitemap.xml, podcast feed, and coverage.json; keep only intentional compatibility redirects exempted. Leave /blog and /transcripts delegated to their \
+dedicated R2 audit pipelines.",
       expectedGain: "Stops silent podcast route drift while preserving the deliberate R2 audit split for blog and transcripts.",
       estimatedEffort: "Medium",
       recommendedOwner: "Engineering / SEO",
@@ -776,7 +802,9 @@ function signalIssuesFromPayload(payload) {
       affectedPagesTemplatesFilesOrRoutes: "data/podcast-episodes.json; scripts/generate_podcast_episodes.py; sitemap.xml; podcast episode canonicals",
       evidenceObserved: duplicatePodcastEvidence(duplicatePodcastUrls),
       whyItMatters: "Multiple episodes collapsing into one canonical URL destroys episode identity and makes sitemap coverage misleading.",
-      exactRemediation: "Make podcast slugs unique inside scripts/generate_podcast_episodes.py by appending session_id or ISO date whenever a title slug repeats or equals the generic artificial-intelligence-weekly slug. Regenerate data/podcast-episodes.json, episode pages, sitemap entries, workbook/dynamic inventory, and only then add intentional 301 redirects from any shared legacy URL.",
+      exactRemediation: "Make podcast slugs unique inside scripts/generate_podcast_episodes.py by appending session_id or ISO date whenever a title slug repeats or equals the \
+generic artificial-intelligence-weekly slug. Regenerate data/podcast-episodes.json, episode pages, sitemap entries, workbook/dynamic inventory, and only then add intentional \
+301 redirects from any shared legacy URL.",
       expectedGain: "Restores one episode per URL, one canonical per episode, and clean podcast topical authority.",
       estimatedEffort: "Medium",
       recommendedOwner: "Engineering",
@@ -798,11 +826,13 @@ function signalIssuesFromPayload(payload) {
       affectedPagesTemplatesFilesOrRoutes: "data/podcast-episodes.json; sitemap.xml; workbook Pages; live podcast routes",
       evidenceObserved: freshness.evidence,
       whyItMatters: "The live estate can move ahead of the governed repo snapshot, making release gates, sitemap checks, workbook parity, and audit coverage stale before the next deployment.",
-      exactRemediation: "Keep the podcast website route ledger, episode metadata, sitemap entries and workbook/dynamic inventory synchronised before deployment. Transcript-route governance remains with the dedicated R2 transcript audit pipeline.",
+      exactRemediation: "Keep the podcast website route ledger, episode metadata, sitemap entries and workbook/dynamic inventory synchronised before deployment. Transcript-\
+route governance remains with the dedicated R2 transcript audit pipeline.",
       expectedGain: "Keeps the podcast website surface discoverable and auditable without duplicating the transcript audit pipeline.",
       estimatedEffort: "Medium",
       recommendedOwner: "Engineering / Editorial Ops",
-      verificationMethod: "Rerun the audit after the podcast build and confirm the latest live podcast/transcript date matches data/podcast-episodes.json, sitemap.xml, workbook/dynamic inventory, and coverage.json.",
+      verificationMethod: "Rerun the audit after the podcast build and confirm the latest live podcast/transcript date matches data/podcast-episodes.json, sitemap.xml, \
+workbook/dynamic inventory, and coverage.json.",
     }));
   }
 
@@ -813,13 +843,16 @@ function signalIssuesFromPayload(payload) {
       auditLens: "GEO / Optional Discovery Support",
       rootCauseLevel: "llms discovery asset",
       affectedPagesTemplatesFilesOrRoutes: "llms.txt; llm-index.json",
-      evidenceObserved: "repoSignals.llmsScope is ebook-only. llms.txt/llm-index coverage is narrower than the website estate, but these files are optional supporting infrastructure rather than a Google AI-search requirement.",
+      evidenceObserved: "repoSignals.llmsScope is ebook-only. llms.txt/llm-index coverage is narrower than the website estate, but these files are optional supporting \
+infrastructure rather than a Google AI-search requirement.",
       whyItMatters: "Broader optional discovery files may help some retrieval systems, but crawl/index eligibility, useful content, internal links and entity clarity are higher-priority controls.",
-      exactRemediation: "Only after core crawl/index and content controls are healthy, optionally expand llms.txt/llm-index.json to the governed website families. Do not duplicate the separately audited /blog or /transcripts R2 inventories in this website audit unless the architecture explicitly requires it.",
+      exactRemediation: "Only after core crawl/index and content controls are healthy, optionally expand llms.txt/llm-index.json to the governed website families. Do not \
+duplicate the separately audited /blog or /transcripts R2 inventories in this website audit unless the architecture explicitly requires it.",
       expectedGain: "Improves optional machine-oriented discovery without overstating its ranking value.",
       estimatedEffort: "Low / Medium",
       recommendedOwner: "GEO / Engineering",
-      verificationMethod: "Fetch llms.txt and llm-index.json; if the optional files are intentionally expanded, confirm the governed website families are present without duplicating delegated R2 blog/transcript inventories.",
+      verificationMethod: "Fetch llms.txt and llm-index.json; if the optional files are intentionally expanded, confirm the governed website families are present without \
+duplicating delegated R2 blog/transcript inventories.",
     }));
   }
 
@@ -835,9 +868,11 @@ function signalIssuesFromPayload(payload) {
         auditLens: "Technical / Crawl / Coverage",
         rootCauseLevel: "route / source-owner mapping",
         affectedPagesTemplatesFilesOrRoutes: "R2 podcast episode routes; podcast RSS feed; legacy /podcast/TT-* compatibility URLs; workbook Pages source",
-        evidenceObserved: `${failed} podcast episode URL(s) failed or were not mapped to the current R2 podcast source. Episode page quality was not scored because no episode page was successfully analysed.`,
+        evidenceObserved: `${failed} podcast episode URL(s) failed or were not mapped to the current R2 podcast source. Episode page quality was not scored because no episode \
+page was successfully analysed.`,
         whyItMatters: "Failed or mis-owned podcast URLs prevent full-estate verification and create crawl reliability risk.",
-        exactRemediation: "Map current podcast episode URLs through the AIMS/R2 podcast source, redirect or retire legacy /podcast/TT-* URLs, and remove stale workbook rows unless they remain intentionally public.",
+        exactRemediation: "Map current podcast episode URLs through the AIMS/R2 podcast source, redirect or retire legacy /podcast/TT-* URLs, and remove stale workbook rows \
+unless they remain intentionally public.",
         expectedGain: "Restores honest podcast coverage without asking the website repo to patch R2-owned pages.",
         estimatedEffort: "Medium",
         recommendedOwner: "AIMS / SEO / Redirect governance",
@@ -850,13 +885,16 @@ function signalIssuesFromPayload(payload) {
         auditLens: "AEO / Content / Podcast",
         rootCauseLevel: "AIMS/R2 template / content",
         affectedPagesTemplatesFilesOrRoutes: podcastEpisode.sourceFile || "services/rss-feed-podcast/generateFeed.js; services/tts/utils/podcastProcessor.js; R2 podcast episode pages",
-        evidenceObserved: evidenceText(podcastEpisode.observedTemplateEvidence) || `Podcast episode family average score is ${podcastEpisode.averageScore || "below target"}; sample URLs: ${listSample(podcastEpisode.sampleUrls, "url", 3)}.`,
+        evidenceObserved: evidenceText(podcastEpisode.observedTemplateEvidence) || `Podcast episode family average score is ${podcastEpisode.averageScore ||
+           "below target"}; sample URLs: ${listSample(podcastEpisode.sampleUrls, "url", 3)}.`,
         whyItMatters: "Episode pages that are mainly audio wrappers cannot win answer surfaces or generative citations for the topics discussed in the show.",
-        exactRemediation: "Update the governed podcast episode template so every episode renders an answer-first summary, 3-5 key takeaways, discussed entities/topics, transcript preview anchors, related topic guides/books, PodcastEpisode JSON-LD, and a canonical transcript link. Add FAQPage JSON-LD only when a real visible FAQ/Q&A block exists.",
+        exactRemediation: "Update the governed podcast episode template so every episode renders an answer-first summary, 3-5 key takeaways, discussed entities/topics, \
+transcript preview anchors, related topic guides/books, PodcastEpisode JSON-LD, and a canonical transcript link. Add FAQPage JSON-LD only when a real visible FAQ/Q&A block exists.",
         expectedGain: "Turns each episode from a thin doorway into a retrieval-ready landing page.",
         estimatedEffort: "Medium",
         recommendedOwner: "Content / AIMS Engineering",
-        verificationMethod: "Rerun the audit and confirm podcast episode priority pages show takeaways, topic/book links, PodcastEpisode schema, transcript linkage and improved AEO/GEO evidence; FAQ schema must match a visible FAQ when present.",
+        verificationMethod: "Rerun the audit and confirm podcast episode priority pages show takeaways, topic/book links, PodcastEpisode schema, transcript linkage and \
+improved AEO/GEO evidence; FAQ schema must match a visible FAQ when present.",
       }));
     }
   }
@@ -894,11 +932,13 @@ function signalIssuesFromPayload(payload) {
       affectedPagesTemplatesFilesOrRoutes: "podcast episode pages; topic guides; ebook detail pages; glossary routes",
       evidenceObserved: internalLinking.evidence,
       whyItMatters: "The site has useful topical assets, but podcast pages are not consistently feeding topic, book, glossary, and episode clusters.",
-      exactRemediation: "Generate contextual related links from podcast topics: two topic guides, two relevant ebooks, three glossary terms, prior/next episode, and a relevant newsletter or evidence route where available.",
+      exactRemediation: "Generate contextual related links from podcast topics: two topic guides, two relevant ebooks, three glossary terms, prior/next episode, and a relevant \
+newsletter or evidence route where available.",
       expectedGain: "Improves crawl paths, topical graph strength, entity relationships, and post-listening conversion journeys.",
       estimatedEffort: "Medium",
       recommendedOwner: "Editorial / Engineering",
-      verificationMethod: "Rerun the website audit and confirm podcast diagnostics show topic/book/glossary link coverage with crawlable anchors. Blog/transcript link graphs remain verified by their dedicated R2 audit pipelines.",
+      verificationMethod: "Rerun the website audit and confirm podcast diagnostics show topic/book/glossary link coverage with crawlable anchors. Blog/transcript link graphs \
+remain verified by their dedicated R2 audit pipelines.",
     }));
   }
 
@@ -1081,7 +1121,8 @@ function normalisePageTypeFindings(data, payload) {
         coverageState,
         score,
         grade: excludedOrRedirect ? "N/A" : expectedGrade(score),
-        judgement: excludedOrRedirect ? "Intentional redirect/canonical path, tracked for governance but not scored as content." : text(row.judgement || row.verdict, "Judgement derived from supplied AI analysis and coverage ledger."),
+        judgement: excludedOrRedirect ? "Intentional redirect/canonical path, tracked for governance but not scored as content." : text(row.judgement || row.verdict,
+           "Judgement derived from supplied AI analysis and coverage ledger."),
         keyNote: excludedOrRedirect ? "Redirect/non-page route, score not applicable." : text(row.keyNote || row.keyFinding, "See coverage ledger for URL-level evidence."),
       };
     });
@@ -1098,8 +1139,10 @@ function normalisePageTypeFindings(data, payload) {
       coverageState,
       score,
       grade: excludedOrRedirect ? "N/A" : expectedGrade(score),
-      judgement: excludedOrRedirect ? "Intentional redirect/canonical path, tracked for governance but not scored as content." : Number(row.failed || 0) > 0 ? "Coverage defects remain in this family." : "Family inventoried with explicit URL-level coverage states.",
-      keyNote: excludedOrRedirect ? `Excluded ${Number(row.excluded || 0)} redirect/non-page URL(s); content score not applicable.` : `Analysed ${Number(row.analysed || 0)}, excluded ${Number(row.excluded || 0)}, failed ${Number(row.failed || 0)}.`,
+      judgement: excludedOrRedirect ? "Intentional redirect/canonical path, tracked for governance but not scored as content." : Number(row.failed || 0) > 0 ?
+         "Coverage defects remain in this family." : "Family inventoried with explicit URL-level coverage states.",
+      keyNote: excludedOrRedirect ? `Excluded ${Number(row.excluded || 0)} redirect/non-page URL(s); content score not applicable.` : `Analysed ${Number(row.analysed ||
+         0)}, excluded ${Number(row.excluded || 0)}, failed ${Number(row.failed || 0)}.`,
     };
   });
 }
@@ -1166,7 +1209,8 @@ function normaliseTemplateAnnex(data, payload) {
       sourceFile: text(row.sourceFile || row.target || row.area, "Unknown source file"),
       area: text(row.area || row.pageFamily, "Route family"),
       observedLogic: text(sanitiseTemplateEvidence(row.area || row.pageFamily, row.observedLogic || row.metadataLogic || row.schemaLogic), "Observed from supplied route/template evidence."),
-      repeatedEffect: text(sanitiseTemplateEvidence(row.area || row.pageFamily, row.repeatedEffect || row.repeatedDefects || row.generativeSearchGaps), "Repeated family effect recorded in coverage ledger."),
+      repeatedEffect: text(sanitiseTemplateEvidence(row.area || row.pageFamily, row.repeatedEffect || row.repeatedDefects || row.generativeSearchGaps),
+         "Repeated family effect recorded in coverage ledger."),
       fixPriority: text(row.fixPriority, "Medium"),
       pagesAffected: asArray(row.pagesAffected).map(String),
       sampleCorrectedBlock: text(row.sampleCorrectedBlock, "Not supplied by AI forensic analysis"),
@@ -1197,7 +1241,8 @@ function normaliseGapMatrix(data, payload) {
         aeo: delegated || excludedOrRedirect ? "N/A" : text(row.aeo || row.aeoCompliance, "Not verified"),
         geo: delegated || excludedOrRedirect ? "N/A" : text(row.geo || row.geoCompliance, "Not verified"),
         confidence: text(row.confidence, "Needs verification"),
-        topMissingElement: delegated ? pageTypeSpecificGap(pageType) : excludedOrRedirect ? "Intentional redirect/canonical route, verify target and exclusion evidence" : pageTypeSpecificGap(pageType, text(row.topMissingElement || row.topMissing, "See issue ledger")),
+        topMissingElement: delegated ? pageTypeSpecificGap(pageType) : excludedOrRedirect ? "Intentional redirect/canonical route, verify target and exclusion evidence" :
+           pageTypeSpecificGap(pageType, text(row.topMissingElement || row.topMissing, "See issue ledger")),
         businessImpact: text(row.businessImpact, "Medium"),
       };
     });
@@ -1213,7 +1258,8 @@ function normaliseGapMatrix(data, payload) {
       aeo: delegated || excludedOrRedirect ? "N/A" : Number(row.averageScore || 0) >= 80 ? "Partial" : "Weak",
       geo: delegated || excludedOrRedirect ? "N/A" : Number(row.averageScore || 0) >= 80 ? "Partial" : "Weak",
       confidence: "Confirmed",
-      topMissingElement: delegated ? pageTypeSpecificGap(pageType) : excludedOrRedirect ? "Intentional redirect/canonical route, verify target and exclusion evidence" : Number(row.failed || 0) > 0 ? "Fetch or redirect reliability" : pageTypeSpecificGap(pageType, "Answer-first evidence blocks"),
+      topMissingElement: delegated ? pageTypeSpecificGap(pageType) : excludedOrRedirect ? "Intentional redirect/canonical route, verify target and exclusion evidence" : Number(
+        row.failed || 0) > 0 ? "Fetch or redirect reliability" : pageTypeSpecificGap(pageType, "Answer-first evidence blocks"),
       businessImpact: /book|podcast|transcript|blog|lead|conversion/i.test(String(pageType || "")) ? "High" : "Medium",
     };
   });
@@ -1696,10 +1742,12 @@ function buildNormalisedPayload(data, payload) {
     quickWins: asArray(data?.quickWins || executiveSummary.quickWins).map(String).filter(Boolean).slice(0, 6),
     majorRisks: asArray(data?.majorRisks || executiveSummary.majorRisks).map(String).filter(Boolean).slice(0, 8),
     estateLabels: asArray(data?.estateLabels || executiveSummary.estateLabels).map(String).filter(Boolean).slice(0, 10),
-    scopeInputsMethod: isPlainObject(data?.scopeInputsMethod) ? data.scopeInputsMethod : { method: text(data?.scopeInputsMethod, "Evidence-led repo, workbook, sitemap, feed, route, and coverage reconciliation.") },
+    scopeInputsMethod: isPlainObject(data?.scopeInputsMethod) ? data.scopeInputsMethod : { method: text(data?.scopeInputsMethod,
+       "Evidence-led repo, workbook, sitemap, feed, route, and coverage reconciliation.") },
     sourceLedger,
     sourceMismatchesThatMatter: sourceMismatches,
-    inventoryReconciliationSummary: isPlainObject(data?.inventoryReconciliationSummary) ? data.inventoryReconciliationSummary : { summary: text(data?.inventoryReconciliationSummary, "Inventory reconciliation derived from supplied route and coverage ledgers.") },
+    inventoryReconciliationSummary: isPlainObject(data?.inventoryReconciliationSummary) ? data.inventoryReconciliationSummary : { summary: text(
+      data?.inventoryReconciliationSummary, "Inventory reconciliation derived from supplied route and coverage ledgers.") },
     findingsByAuditLens: normaliseFindings(data?.findingsByAuditLens || data?.findingsByLens),
     rankedIssueLedger: issues,
     fullIssueRecords: buildFullIssueRecords(issues),

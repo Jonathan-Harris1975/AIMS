@@ -472,10 +472,17 @@ function repositoryIssueAppendix({ auditType, sessionId, generatedAt, findings, 
 
 function renderReportHtml({ title, report }) {
   const findings = arr(report.findings);
-  const lensRows = arr(report.appliedSkillLenses).map((lens) => `<tr><td>${escapeHtml(lens.name)}</td><td>${escapeHtml(lens.adoption)}</td><td>${escapeHtml(lens.mode)}</td><td>${escapeHtml(arr(lens.checks).join("; "))}</td></tr>`).join("\n");
-  const skillLensHtml = `<section><h2>Applied SEO/GEO skill lenses</h2><p>These are deterministic AIMS adaptations of the attached skills repo. They enrich the report without enabling blind static-site patching.</p><table><thead><tr><th>Skill</th><th>Adoption</th><th>Mode</th><th>Checks used</th></tr></thead><tbody>${lensRows}</tbody></table><h3>Measured signals</h3><pre>${escapeHtml(JSON.stringify(report.skillLensSummary?.measuredSignals || {}, null, 2))}</pre></section>`;
+  const lensRows = arr(report.appliedSkillLenses).map((lens) => `<tr><td>${escapeHtml(lens.name)}</td><td>${escapeHtml(lens.adoption)}</td><td>${escapeHtml(
+    lens.mode)}</td><td>${escapeHtml(arr(lens.checks).join("; "))}</td></tr>`).join("\n");
+  const skillLensHtml = `<section><h2>Applied SEO/GEO skill lenses</h2><p>These are deterministic AIMS adaptations of the attached skills repo. They enrich the report without \
+enabling blind static-site patching.</p><table><thead><tr><th>Skill</th><th>Adoption</th><th>Mode</th><th>Checks used</th></tr></thead><tbody>${lensRows}</tbody></table><h3>\
+Measured signals</h3><pre>${escapeHtml(JSON.stringify(report.skillLensSummary?.measuredSignals || {}, null, 2))}</pre></section>`;
   const findingHtml = findings.length
-    ? findings.map((finding) => `<article class="finding"><h3>${escapeHtml(finding.issueId)} · ${escapeHtml(finding.title)}</h3><p><span class="pill ${finding.severity === "critical" || finding.severity === "high" ? "bad" : finding.severity === "medium" ? "warn" : "ok"}">${escapeHtml(finding.severity)}</span> <span class="pill">${escapeHtml(finding.sourceOwner)}</span> <span class="pill">${escapeHtml(finding.classification)}</span></p><p><strong>Evidence:</strong> ${escapeHtml(arr(finding.evidence).join(" | "))}</p><p><strong>Outcome:</strong> ${escapeHtml(finding.requiredOutcome)}</p><p><strong>Verification:</strong> ${escapeHtml(finding.verificationMethod)}</p></article>`).join("\n")
+    ? findings.map((finding) => `<article class="finding"><h3>${escapeHtml(finding.issueId)} · ${escapeHtml(
+      finding.title)}</h3><p><span class="pill ${finding.severity === "critical" || finding.severity === "high" ? "bad" : finding.severity === "medium" ? "warn" :
+         "ok"}">${escapeHtml(finding.severity)}</span> <span class="pill">${escapeHtml(finding.sourceOwner)}</span> <span class="pill">${escapeHtml(
+           finding.classification)}</span></p><p><strong>Evidence:</strong> ${escapeHtml(arr(finding.evidence).join(" | "))}</p><p><strong>Outcome:</strong> ${escapeHtml(
+             finding.requiredOutcome)}</p><p><strong>Verification:</strong> ${escapeHtml(finding.verificationMethod)}</p></article>`).join("\n")
     : "<p>No material findings were generated.</p>";
   return `<!doctype html>
 <html lang="en-GB">
@@ -483,13 +490,23 @@ function renderReportHtml({ title, report }) {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${escapeHtml(title)}</title>
-<style>body{font-family:Arial,Helvetica,sans-serif;margin:0;background:#f4f7fb;color:#111827;line-height:1.55}header{background:#0d1420;color:#fff;padding:30px 24px}main{max-width:1180px;margin:0 auto;padding:32px 20px 64px}section,.finding{background:#fff;border:1px solid #e5e7eb;border-radius:18px;padding:22px;margin:18px 0;box-shadow:0 12px 30px rgba(13,20,32,.06)}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px}.kpi{background:#0d1420;color:#fff;border-radius:16px;padding:16px}.kpi strong{font-size:24px;display:block}.pill{display:inline-block;border-radius:999px;padding:5px 10px;background:#eef2ff;color:#4338ca;font-weight:700;font-size:12px;margin:0 4px 4px 0}.ok{background:#dcfce7;color:#166534}.warn{background:#fef3c7;color:#92400e}.bad{background:#fee2e2;color:#991b1b}table{width:100%;border-collapse:collapse;font-size:13px}th,td{border-bottom:1px solid #e5e7eb;padding:9px 7px;text-align:left;vertical-align:top}th{background:#f8fafc}pre{white-space:pre-wrap;word-break:break-word;background:#f3f4f6;border-radius:12px;padding:14px;font-size:12px}@media print{section,.finding{break-inside:avoid;page-break-inside:avoid}}</style>
+<style>body{font-family:Arial,Helvetica,sans-serif;margin:0;background:#f4f7fb;color:#111827;line-height:1.55}header{background:#0d1420;color:#fff;padding:30px 24px}main{max-\
+width:1180px;margin:0 auto;padding:32px 20px 64px}section,.finding{background:#fff;border:1px solid #e5e7eb;border-radius:18px;padding:22px;margin:18px 0;box-shadow:0 12px \
+30px rgba(13,20,32,.06)}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px}.kpi{background:#0d1420;color:#fff;border-radius:16px;padding:16px}\
+.kpi strong{font-size:24px;display:block}.pill{display:inline-block;border-radius:999px;padding:5px 10px;background:#eef2ff;color:#4338ca;font-weight:700;font-size:12px;margin:\
+0 4px 4px 0}.ok{background:#dcfce7;color:#166534}.warn{background:#fef3c7;color:#92400e}.bad{background:#fee2e2;color:#991b1b}table{width:100%;border-collapse:collapse;font-\
+size:13px}th,td{border-bottom:1px solid #e5e7eb;padding:9px 7px;text-align:left;vertical-align:top}th{background:#f8fafc}pre{white-space:pre-wrap;word-break:break-word;\
+background:#f3f4f6;border-radius:12px;padding:14px;font-size:12px}@media print{section,.finding{break-inside:avoid;page-break-inside:avoid}}</style>
 </head>
 <body>
 <header><h1>${escapeHtml(title)}</h1><p>Generated ${escapeHtml(report.generatedAt)} · ${escapeHtml(report.executiveVerdict.status)}</p></header>
 <main>
-<section><h2>Executive verdict</h2><p>${escapeHtml(report.executiveVerdict.summary)}</p><p><span class="pill ok">AIMS/R2-owned</span><span class="pill">RAMS-readable</span><span class="pill warn">no direct static website patching</span></p></section>
-<section><h2>Score snapshot</h2><div class="grid"><div class="kpi"><span>Score</span><strong>${escapeHtml(report.score)}</strong></div><div class="kpi"><span>Items inspected</span><strong>${escapeHtml(report.sourceCoverage.itemsInspected)}</strong></div><div class="kpi"><span>Findings</span><strong>${escapeHtml(findings.length)}</strong></div><div class="kpi"><span>Status</span><strong>${escapeHtml(report.sourceCoverage.status)}</strong></div></div></section>
+<section><h2>Executive verdict</h2><p>${escapeHtml(report.executiveVerdict.summary)}</p><p><span class="pill ok">AIMS/R2-owned</span><span class="pill">RAMS-readable</span>\
+<span class="pill warn">no direct static website patching</span></p></section>
+<section><h2>Score snapshot</h2><div class="grid"><div class="kpi"><span>Score</span><strong>${escapeHtml(
+  report.score)}</strong></div><div class="kpi"><span>Items inspected</span><strong>${escapeHtml(
+    report.sourceCoverage.itemsInspected)}</strong></div><div class="kpi"><span>Findings</span><strong>${escapeHtml(
+      findings.length)}</strong></div><div class="kpi"><span>Status</span><strong>${escapeHtml(report.sourceCoverage.status)}</strong></div></div></section>
 ${skillLensHtml}
 <section><h2>RAMS-readable findings</h2>${findingHtml}</section>
 <section><h2>Source coverage</h2><pre>${escapeHtml(JSON.stringify(report.sourceCoverage, null, 2))}</pre></section>

@@ -94,7 +94,8 @@ function ramsPolicy() {
     shouldTriggerRams: false,
     codePatchAllowed: false,
     defaultClassification: "future_guidance",
-    reason: "This council report is a master decision layer for RAMS planning. It is not allowed to request code patches unless a later finding includes exact repo-owned files and deterministic acceptance criteria.",
+    reason: "This council report is a master decision layer for RAMS planning. It is not allowed to request code patches unless a later finding includes exact repo-owned files \
+and deterministic acceptance criteria.",
   };
 }
 
@@ -301,7 +302,8 @@ function buildSocialFindings(report, findings) {
       sourceOwner: "zernio_analysis",
       automationReadiness: "analysis_hygiene",
       evidence: [`postsAnalysed: ${totalPosts}`, `unclassifiedPosts: ${unclassifiedPosts}`, `unclassifiedShare: ${percentage((unclassifiedPosts / totalPosts) * 100)}`],
-      requiredOutcome: "Add durable content-lane/source-pipeline markers in AIMS scheduling logs and/or generated captions so future Zernio reports can separate Zernio, Blotato, quiz, ebook and manual posts cleanly.",
+      requiredOutcome: "Add durable content-lane/source-pipeline markers in AIMS scheduling logs and/or generated captions so future Zernio reports can separate Zernio, \
+Blotato, quiz, ebook and manual posts cleanly.",
       verificationMethod: "Rerun the social-performance report and confirm unclassified posts fall below 25% of the monthly total.",
     }));
   }
@@ -323,7 +325,8 @@ function buildSocialFindings(report, findings) {
           `bestPlatform: ${best.key} (${percentage(best.metrics?.engagementRateAvg)})`,
           `weakestPlatform: ${weakest.key} (${percentage(weakest.metrics?.engagementRateAvg)})`,
         ],
-        requiredOutcome: `Use ${best.key} as the reference for hook and CTA testing, then compare ${weakest.key} format, first line, caption length and visual packaging before the next monthly report.`,
+        requiredOutcome: `Use ${best.key} as the reference for hook and CTA testing, then compare ${weakest.key} format, first line, caption length and visual packaging before \
+the next monthly report.`,
         verificationMethod: "Rerun Zernio and the council report after one month of platform-specific hook/packaging tests.",
       }));
     }
@@ -365,7 +368,8 @@ function socialRecommendationOutcome(rec = {}, priority = "") {
   const title = firstText(rec.title).toLowerCase();
   const detail = firstText(rec.detail, "Use this recommendation to tune future post generation and scheduling.");
   if (priority === "platform_tuning" || title.includes("youtube") || title.includes("creative packaging")) {
-    return "Run a one-month platform packaging test: compare opening line, caption length, title/thumbnail promise and first-frame clarity against the strongest platform pattern. Do not change automation weights until the next report confirms the signal.";
+    return "Run a one-month platform packaging test: compare opening line, caption length, title/thumbnail promise and first-frame clarity against the strongest platform \
+pattern. Do not change automation weights until the next report confirms the signal.";
   }
   if (priority === "content_lane_weighting" || title.includes("ebook")) {
     return "Give the detected winning lane a small extra test allocation next month, then confirm whether the improvement holds with meaningful reach/views before adjusting long-term scheduling.";
@@ -390,7 +394,8 @@ function buildThumbnailFindings(report, findings) {
       sourceOwner: "blotato_video_pipeline",
       automationReadiness: "thumbnail_evidence_gap",
       evidence: [thumbnailAudit.reason || "Thumbnail evidence collection disabled or unavailable."],
-      requiredOutcome: "Enable thumbnail auditing for a bounded sample of Facebook, Instagram, YouTube and TikTok shorts when Playwright or metadata fetch is stable, so packaging recommendations are based on visual evidence rather than captions alone.",
+      requiredOutcome: "Enable thumbnail auditing for a bounded sample of Facebook, Instagram, YouTube and TikTok shorts when Playwright or metadata fetch is stable, so \
+packaging recommendations are based on visual evidence rather than captions alone.",
       verificationMethod: "Run the social-performance report with thumbnail auditing enabled and confirm thumbnail-audit.json is published.",
     }));
     return;
@@ -546,7 +551,10 @@ function severityBadge(severity) {
 
 function renderFindings(findings = []) {
   if (!findings.length) return "<p>No material council findings were generated.</p>";
-  return findings.map((finding) => `<article class="finding"><h3>${escapeHtml(finding.issueId)} · ${escapeHtml(finding.title)}</h3><p>${severityBadge(finding.severity)} <span class="pill">${escapeHtml(finding.councilMember)}</span> <span class="pill">${escapeHtml(finding.sourceOwner)}</span> <span class="pill">${escapeHtml(finding.classification)}</span></p><p><strong>Evidence:</strong> ${escapeHtml(arr(finding.evidence).join(" | "))}</p><p><strong>Outcome:</strong> ${escapeHtml(finding.requiredOutcome)}</p><p><strong>Verification:</strong> ${escapeHtml(finding.verificationMethod)}</p></article>`).join("\n");
+  return findings.map((finding) => `<article class="finding"><h3>${escapeHtml(finding.issueId)} · ${escapeHtml(finding.title)}</h3><p>${severityBadge(
+    finding.severity)} <span class="pill">${escapeHtml(finding.councilMember)}</span> <span class="pill">${escapeHtml(
+      finding.sourceOwner)}</span> <span class="pill">${escapeHtml(finding.classification)}</span></p><p><strong>Evidence:</strong> ${escapeHtml(arr(finding.evidence).join(
+        " | "))}</p><p><strong>Outcome:</strong> ${escapeHtml(finding.requiredOutcome)}</p><p><strong>Verification:</strong> ${escapeHtml(finding.verificationMethod)}</p></article>`).join("\n");
 }
 
 export function renderBrandSocialCouncilHtml(report) {
@@ -558,15 +566,28 @@ export function renderBrandSocialCouncilHtml(report) {
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Brand & Social Media Performance Council</title>
 <style>
-body{font-family:Arial,Helvetica,sans-serif;margin:0;background:#f4f7fb;color:#111827;line-height:1.55}header{background:#0d1420;color:#fff;padding:30px 24px}main{max-width:1180px;margin:0 auto;padding:32px 20px 64px}section,.finding{background:#fff;border:1px solid #e5e7eb;border-radius:18px;padding:22px;margin:18px 0;box-shadow:0 12px 30px rgba(13,20,32,.06)}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px}.kpi{background:#0d1420;color:#fff;border-radius:16px;padding:16px}.kpi strong{font-size:24px;display:block}.pill{display:inline-block;border-radius:999px;padding:5px 10px;background:#eef2ff;color:#4338ca;font-weight:700;font-size:12px;margin:0 4px 4px 0}.ok{background:#dcfce7;color:#166534}.warn{background:#fef3c7;color:#92400e}.bad{background:#fee2e2;color:#991b1b}table{width:100%;border-collapse:collapse;font-size:13px}th,td{border-bottom:1px solid #e5e7eb;padding:9px 7px;text-align:left;vertical-align:top}th{background:#f8fafc}@media print{section,.finding{break-inside:avoid;page-break-inside:avoid}}
+body{font-family:Arial,Helvetica,sans-serif;margin:0;background:#f4f7fb;color:#111827;line-height:1.55}header{background:#0d1420;color:#fff;padding:30px 24px}main{max-width:\
+1180px;margin:0 auto;padding:32px 20px 64px}section,.finding{background:#fff;border:1px solid #e5e7eb;border-radius:18px;padding:22px;margin:18px 0;box-shadow:0 12px 30px \
+rgba(13,20,32,.06)}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px}.kpi{background:#0d1420;color:#fff;border-radius:16px;padding:16px}.kpi \
+strong{font-size:24px;display:block}.pill{display:inline-block;border-radius:999px;padding:5px 10px;background:#eef2ff;color:#4338ca;font-weight:700;font-size:12px;margin:0 \
+4px 4px 0}.ok{background:#dcfce7;color:#166534}.warn{background:#fef3c7;color:#92400e}.bad{background:#fee2e2;color:#991b1b}table{width:100%;border-collapse:collapse;font-size:\
+13px}th,td{border-bottom:1px solid #e5e7eb;padding:9px 7px;text-align:left;vertical-align:top}th{background:#f8fafc}@media print{section,.finding{break-inside:avoid;page-break-inside:avoid}}
 </style>
 </head>
 <body>
 <header><h1>Brand & Social Media Performance Council</h1><p>Generated ${escapeHtml(report.generatedAt)} · ${escapeHtml(report.executiveVerdict.status)}</p></header>
 <main>
-<section><h2>Executive verdict</h2><p>${escapeHtml(report.executiveVerdict.summary)}</p><p><span class="pill ok">R2 audits bucket</span><span class="pill">RAMS-readable</span><span class="pill warn">no direct code patching</span></p></section>
-<section><h2>Score snapshot</h2><div class="grid"><div class="kpi"><span>Brand fit</span><strong>${formatNumber(scores.brandFit)}</strong></div><div class="kpi"><span>Social posts</span><strong>${formatNumber(scores.socialPosts)}</strong></div><div class="kpi"><span>Views</span><strong>${formatNumber(scores.socialViews)}</strong></div><div class="kpi"><span>Clicks</span><strong>${formatNumber(scores.socialClicks)}</strong></div><div class="kpi"><span>Avg engagement</span><strong>${percentage(scores.socialEngagementRateAvg)}</strong></div><div class="kpi"><span>Podcast episodes</span><strong>${formatNumber(scores.podcastEpisodeScore)}</strong></div><div class="kpi"><span>Transcripts</span><strong>${formatNumber(scores.podcastTranscriptScore)}</strong></div></div></section>
-<section><h2>Council members</h2><table><thead><tr><th>Role</th><th>Remit</th></tr></thead><tbody>${report.councilMembers.map((member) => `<tr><td>${escapeHtml(member.role)}</td><td>${escapeHtml(member.remit)}</td></tr>`).join("\n")}</tbody></table></section>
+<section><h2>Executive verdict</h2><p>${escapeHtml(report.executiveVerdict.summary)}</p><p><span class="pill ok">R2 audits bucket</span><span class="pill">RAMS-readable</span>\
+<span class="pill warn">no direct code patching</span></p></section>
+<section><h2>Score snapshot</h2><div class="grid"><div class="kpi"><span>Brand fit</span><strong>${formatNumber(
+  scores.brandFit)}</strong></div><div class="kpi"><span>Social posts</span><strong>${formatNumber(
+    scores.socialPosts)}</strong></div><div class="kpi"><span>Views</span><strong>${formatNumber(
+      scores.socialViews)}</strong></div><div class="kpi"><span>Clicks</span><strong>${formatNumber(
+        scores.socialClicks)}</strong></div><div class="kpi"><span>Avg engagement</span><strong>${percentage(
+          scores.socialEngagementRateAvg)}</strong></div><div class="kpi"><span>Podcast episodes</span><strong>${formatNumber(
+            scores.podcastEpisodeScore)}</strong></div><div class="kpi"><span>Transcripts</span><strong>${formatNumber(scores.podcastTranscriptScore)}</strong></div></div></section>
+<section><h2>Council members</h2><table><thead><tr><th>Role</th><th>Remit</th></tr></thead><tbody>${report.councilMembers.map((member) => `<tr><td>${escapeHtml(
+  member.role)}</td><td>${escapeHtml(member.remit)}</td></tr>`).join("\n")}</tbody></table></section>
 <section><h2>RAMS policy</h2><p>${escapeHtml(report.ramsPolicy.reason)}</p></section>
 <section><h2>RAMS-readable findings</h2>${renderFindings(report.findings)}</section>
 <section><h2>Source coverage</h2><pre>${escapeHtml(JSON.stringify(report.coverage, null, 2))}</pre></section>

@@ -221,7 +221,8 @@ export async function collectZernioEvidence({ include, windowStart, windowEnd, l
     return { sourceType: "zernio_blog_social", status: "blocked", items: [], evidenceMethod: "disabled by request", limitations: ["includeZernio was false."] };
   }
   if (!process.env.ZERNIO_META_API_KEY) {
-    return { sourceType: "zernio_blog_social", status: "blocked", items: [], evidenceMethod: "Zernio API not called", limitations: ["ZERNIO_META_API_KEY is not configured, so Zernio evidence could not be retrieved."] };
+    return { sourceType: "zernio_blog_social", status: "blocked", items: [], evidenceMethod: "Zernio API not called", limitations: [
+      "ZERNIO_META_API_KEY is not configured, so Zernio evidence could not be retrieved."] };
   }
 
   try {
@@ -596,7 +597,8 @@ function checkText(findings, { text, sourceType, itemTitleOrId, field = "copy" }
       whyItIsOffBrand: `The ${field} contains generic AI/newsroom phrasing that should be treated as calibration evidence for future output, not as a retroactive rewrite ticket.`,
       violatedRule: "No hype, no corporate wallpaper, no generic AI summary tone.",
       rootCauseLevel: "validator",
-      exactRemediation: `For future ${field}, add or tighten an anti-hype guardrail covering ${phraseList}; require the generator to replace those patterns with the concrete fact, risk, or consequence being described.`,
+      exactRemediation: `For future ${field}, add or tighten an anti-hype guardrail covering ${phraseList}; require the generator to replace those patterns with the concrete \
+fact, risk, or consequence being described.`,
       verificationMethod: `Generate fresh ${field} and rerun the audit; the next outputs should not repeat the grouped anti-hype phrase pattern.`,
     });
   }

@@ -145,7 +145,8 @@ async function dispatchStage(parentSessionId, stage, parentJob) {
         websiteUrl,
         reportPrefix: child.reportPrefix,
         requestedBy: "AIMS website audit pipeline",
-        notes: `Temporary child stage of website audit pipeline ${parentSessionId}. AIMS owns sequencing and final retention. Blog and transcript routes are delegated to their dedicated R2 audit pipelines; podcast routes remain in scope.`,
+        notes: `Temporary child stage of website audit pipeline ${parentSessionId}. AIMS owns sequencing and final retention. Blog and transcript routes are delegated to their \
+dedicated R2 audit pipelines; podcast routes remain in scope.`,
         excludePatterns: websiteAuditDefaultExclusions(stage.auditType),
         pipelineSessionId: parentSessionId,
         temporaryArtifacts: true,
@@ -418,7 +419,8 @@ async function loadChildStageOnce(parentSessionId, stage, parentJob) {
     loadJsonArtefact("summary.json", stageArtefactLocations({ stageState, childJob: trustedChildJob, reportPrefix: expectedReportPrefix, directKey: "summaryUrl", artefactName: "summary.json" })),
     loadJsonArtefact("coverage.json", stageArtefactLocations({ stageState, childJob: trustedChildJob, reportPrefix: expectedReportPrefix, directKey: "coverageUrl", artefactName: "coverage.json" })),
     loadJsonArtefact("evidence.json", stageArtefactLocations({ stageState, childJob: trustedChildJob, reportPrefix: expectedReportPrefix, directKey: "evidenceUrl", artefactName: "evidence.json" })),
-    loadJsonArtefact("execution.json", stageArtefactLocations({ stageState, childJob: trustedChildJob, reportPrefix: expectedReportPrefix, directKey: "executionUrl", artefactName: "execution.json" })),
+    loadJsonArtefact("execution.json", stageArtefactLocations({ stageState, childJob: trustedChildJob, reportPrefix: expectedReportPrefix, directKey: "executionUrl",
+       artefactName: "execution.json" })),
     loadJsonArtefact("preflight.json", stageArtefactLocations({
       stageState,
       childJob: trustedChildJob,

@@ -127,7 +127,8 @@ function hasQuestionPattern(text = "") {
 
 function hasAnswerFriendlyCue(text = "") {
   const cleaned = cleanText(text);
-  return hasQuestionPattern(cleaned) || /\b(short answer|what matters|why it matters|the practical issue|the catch|the risk|what changed|who carries the risk|useful signal|under the launch deck|what to watch)\b/i.test(cleaned);
+  return hasQuestionPattern(cleaned) || new RegExp("\\b(short answer|what matters|why it matters|the practical issue|the catch|the risk|what changed|who carries the risk|\
+useful signal|under the launch deck|what to watch)\\b", "i").test(cleaned);
 }
 
 function namedEntityCount(text = "") {
@@ -313,7 +314,8 @@ export function buildEpisodeSkillLensFindings(evidence = {}, makeFinding) {
         severity: "low",
         itemTitleOrId: label,
         evidence: [`skill: content-refresher`, `ageDays: ${itemAge}`],
-        requiredOutcome: "For older evergreen episode entries, review whether the summary, transcript link and related-topic path still reflect the current content model; do not rewrite historic audio/transcripts automatically.",
+        requiredOutcome: "For older evergreen episode entries, review whether the summary, transcript link and related-topic path still reflect the current content model; do \
+not rewrite historic audio/transcripts automatically.",
         verificationMethod: "Rerun the report after the next monthly QA cycle and confirm old items are either intentionally archived or still have current metadata paths.",
       });
     }
@@ -423,7 +425,8 @@ export function buildTranscriptSkillLensFindings(evidence = {}, makeFinding) {
         severity: "low",
         itemTitleOrId: label,
         evidence: [`skill: internal-linking-optimizer`, "relatedBookOrTopicLink: not detected"],
-        requiredOutcome: "For future transcript HTML, add conservative related topic/book links where the episode genuinely supports them; keep this recommendation-only until generator evidence is stable.",
+        requiredOutcome: "For future transcript HTML, add conservative related topic/book links where the episode genuinely supports them; keep this recommendation-only until \
+generator evidence is stable.",
         verificationMethod: "Generate fresh transcript HTML and confirm relevant internal paths appear without unrelated ebook stuffing.",
       });
     }

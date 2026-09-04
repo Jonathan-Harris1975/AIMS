@@ -25,7 +25,8 @@ export const searchVisibilityBaseline = Object.freeze({
       source: aiSeo.source,
       sourceUrl: aiSeo.descriptorUrl,
       installCommand: null,
-      purpose: "AEO/GEO/LLMO baseline for extractable answers, entity clarity, crawl/index eligibility, AI citation readiness, visible-content/schema alignment, OAI-SearchBot accessibility, and optional llms.txt support.",
+      purpose: "AEO/GEO/LLMO baseline for extractable answers, entity clarity, crawl/index eligibility, AI citation readiness, visible-content/schema alignment, OAI-SearchBot \
+accessibility, and optional llms.txt support.",
     }),
   ]),
   guardrails: Object.freeze([
