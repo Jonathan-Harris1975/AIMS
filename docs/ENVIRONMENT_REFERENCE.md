@@ -11,18 +11,18 @@ This inventory makes the runtime configuration contract auditable without duplic
 | Variable | Curated template | Production references |
 | --- | --- | --- |
 | `AIMS_ALLOW_UNAUTHENTICATED_DEV` | Yes | services/shared/middleware/suiteAuth.js:86 |
-| `AIMS_API_KEY` | Yes | server.js:194<br>services/ops/index.js:400<br>services/shared/middleware/suiteAuth.js:55 |
+| `AIMS_API_KEY` | Yes | server.js:194<br>services/ops/index.js:401<br>services/shared/middleware/suiteAuth.js:55 |
 | `AIMS_BUSY_CONCURRENCY_THRESHOLD` | No | services/shared/utils/lifecycle.js:15 |
 | `AIMS_FAILURE_ALERT_THRESHOLD` | Yes | services/shared/utils/operationalExcellence.js:5 |
-| `AIMS_INTERNAL_BASE_URL` | Yes | services/ops/index.js:399 |
-| `AIMS_OPERATION_ASYNC_JOB_TIMEOUT_MS` | Yes | services/ops/index.js:482 |
-| `AIMS_OPERATION_ASYNC_MAX_POLL_ERRORS` | No | services/ops/index.js:484 |
-| `AIMS_OPERATION_ASYNC_NOT_FOUND_GRACE_MS` | No | services/ops/index.js:485 |
-| `AIMS_OPERATION_ASYNC_POLL_INTERVAL_MS` | Yes | services/ops/index.js:481 |
-| `AIMS_OPERATION_ASYNC_REQUEST_TIMEOUT_MS` | Yes | services/ops/index.js:483 |
-| `AIMS_OPERATION_DISPATCH_TIMEOUT_MS` | No | services/ops/index.js:419 |
-| `AIMS_OPERATION_FRIDAY_PM_DELAY_MS` | Yes | services/ops/index.js:138 |
-| `AIMS_OPERATION_TASK_TIMEOUT_MS` | Yes | services/ops/index.js:420 |
+| `AIMS_INTERNAL_BASE_URL` | Yes | services/ops/index.js:400 |
+| `AIMS_OPERATION_ASYNC_JOB_TIMEOUT_MS` | Yes | services/ops/index.js:483 |
+| `AIMS_OPERATION_ASYNC_MAX_POLL_ERRORS` | No | services/ops/index.js:485 |
+| `AIMS_OPERATION_ASYNC_NOT_FOUND_GRACE_MS` | No | services/ops/index.js:486 |
+| `AIMS_OPERATION_ASYNC_POLL_INTERVAL_MS` | Yes | services/ops/index.js:482 |
+| `AIMS_OPERATION_ASYNC_REQUEST_TIMEOUT_MS` | Yes | services/ops/index.js:484 |
+| `AIMS_OPERATION_DISPATCH_TIMEOUT_MS` | No | services/ops/index.js:420 |
+| `AIMS_OPERATION_FRIDAY_PM_DELAY_MS` | Yes | services/ops/index.js:139 |
+| `AIMS_OPERATION_TASK_TIMEOUT_MS` | Yes | services/ops/index.js:421 |
 | `AIMS_STARTUP_GRACE_MS` | No | services/shared/utils/lifecycle.js:14 |
 | `AI_RETRY_BASE_MS` | Yes | audits/utils/seoAeoGeoAnalysis.js:1884 |
 | `AI_SUITE_API_KEY` | Yes | server.js:194<br>services/shared/middleware/suiteAuth.js:55 |
@@ -39,9 +39,9 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `API_ZERO_KEY` | Yes | services/outreach/services/zeroBounceBatch.js:21 |
 | `APP_ENV` | No | scripts/performanceGate.js:6<br>server.js:385 |
 | `APP_STATE_DIR` | Yes | services/shared/utils/stateFile.js:9 |
-| `APP_TITLE` | Yes | ai-config.js:298<br>services/artwork/utils/artwork.js:278<br>services/shared/utils/ai-config.js:298 |
+| `APP_TITLE` | Yes | ai-config.js:298<br>services/artwork/utils/artwork.js:278 |
 | `APP_TMP_DIR` | Yes | scripts/tempStorage.js:10<br>services/blotato/utils/renderedVideoQa.js:293<br>services/shared/utils/stateFile.js:10<br>services/tts/utils/editingProcessor.js:22<br>services/tts/utils/mergeProcessor.js:14<br>services/tts/utils/podcastProcessor.js:56 |
-| `APP_URL` | Yes | ai-config.js:297<br>audits/utils/orchestrator.js:139<br>services/artwork/utils/artwork.js:277<br>services/rss-feed-creator/utils/feedGenerator.js:32<br>services/shared/utils/ai-config.js:297 |
+| `APP_URL` | Yes | ai-config.js:297<br>audits/utils/orchestrator.js:139<br>services/artwork/utils/artwork.js:277<br>services/rss-feed-creator/utils/feedGenerator.js:32 |
 | `APP_VERSION` | No | server.js:384<br>server.js:403<br>services/shared/utils/operationalExcellence.js:106<br>services/shared/utils/operationalExcellence.js:147 |
 | `ARTWORK_CAPABILITY_CACHE_MS` | No | services/artwork/utils/openrouterImageCapabilities.js:21 |
 | `ARTWORK_CAPABILITY_DISCOVERY_ENABLED` | No | services/artwork/utils/openrouterImageCapabilities.js:55 |
@@ -274,7 +274,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `OPENPAGERANK_API_BASE` | No | services/outreach/services/outreachCore.js:138 |
 | `OPENROUTER_API_BASE` | Yes | services/artwork/utils/artwork.js:30<br>services/shared/utils/ai-service.js:13 |
 | `OPENROUTER_API_KEY` | Yes | server.js:185 |
-| `OPENROUTER_APP_NAME` | Yes | ai-config.js:298<br>services/artwork/utils/artwork.js:278<br>services/shared/utils/ai-config.js:298 |
+| `OPENROUTER_APP_NAME` | Yes | ai-config.js:298<br>services/artwork/utils/artwork.js:278 |
 | `OPENROUTER_BASE_URL` | Yes | services/artwork/utils/artwork.js:30<br>services/shared/utils/ai-service.js:13 |
 | `OPENROUTER_DATA_COLLECTION` | No | services/shared/utils/ai-service.js:188 |
 | `OPENROUTER_ENABLE_FALLBACKS` | Yes | services/shared/utils/ai-service.js:174 |
@@ -285,7 +285,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `OPENROUTER_REQUIRE_PARAMETERS` | No | services/shared/utils/ai-service.js:177 |
 | `OPENROUTER_REQUIRE_PARAMETERS_FOR_JSON` | Yes | services/shared/utils/ai-service.js:178 |
 | `OPENROUTER_SERVICE_TIER` | Yes | services/shared/utils/ai-service.js:200 |
-| `OPENROUTER_SITE_URL` | Yes | ai-config.js:297<br>services/artwork/utils/artwork.js:277<br>services/shared/utils/ai-config.js:297 |
+| `OPENROUTER_SITE_URL` | Yes | ai-config.js:297<br>services/artwork/utils/artwork.js:277 |
 | `OPENROUTER_SORT_BY` | Yes | services/shared/utils/ai-service.js:160 |
 | `OPS_ALERT_TIMEOUT_MS` | Yes | services/shared/utils/operationalExcellence.js:6 |
 | `OUTREACH_AUTOMATION_ENABLED` | Yes | services/outreach/services/outreachService.js:32 |
@@ -339,7 +339,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `PODCAST_TRANSCRIPT_MAX_SENTENCE_WORDS` | Yes | services/script/utils/editAndFormat.js:184<br>services/script/utils/orchestrator.js:95<br>services/script/utils/orchestrator.js:297<br>services/script/utils/scriptValidation.js:293 |
 | `PODCAST_TRANSCRIPT_MIN_SOURCE_TERMS` | No | services/script/utils/scriptValidation.js:390 |
 | `POLLY_VOICE_ID` | Yes | services/tts/utils/ttsProcessor.js:24 |
-| `PORT` | Yes | routes/podcast-pipeline.js:14<br>scripts/deploySmoke.js:3<br>scripts/startupCheck.js:67<br>server.js:473<br>services/ops/index.js:399 |
+| `PORT` | Yes | routes/podcast-pipeline.js:14<br>scripts/deploySmoke.js:3<br>scripts/startupCheck.js:67<br>server.js:473<br>services/ops/index.js:400 |
 | `QA_ALERT_WEBHOOK_URL` | Yes | config/thresholds.js:96 |
 | `R2_ACCESS_KEY_ID` | Yes | audits/utils/publishAuditArtifacts.js:62<br>scripts/startupCheck.js:69 |
 | `R2_BUCKET_ART` | Yes | services/artwork/utils/io.js:15 |
