@@ -335,7 +335,8 @@ async function repairWeeklyPackageForCouncil({ sessionId, week, dateLabel, items
   const raw = await resilientRequest("blogWeekly", {
     sessionId,
     messages: [
-      { role: "system", content: "You are the repair editor for a premium British AI industry blog. Preserve strong copy. Fix only the listed QA defects. Never invent facts, numbers, dates, entities or quotations. Keep a confident, sceptical, commercially literate Gen-X voice. Return valid JSON only using the same schema as the candidate." },
+      { role: "system", content: "You are the repair editor for a premium British AI industry blog. Preserve strong copy. Fix only the listed QA defects. Never invent facts, \
+numbers, dates, entities or quotations. Keep a confident, sceptical, commercially literate Gen-X voice. Return valid JSON only using the same schema as the candidate." },
       { role: "user", content: `Repair attempt ${attempt || 1}.
 
 QA defects:
