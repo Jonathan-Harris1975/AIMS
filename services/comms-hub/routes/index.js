@@ -306,9 +306,11 @@ export function createCommsHubRouter({
     try {
       requireReady(runtimeReadinessProvider);
       const active = contextProvider();
-      if (!active.config.chatEnabled) throw new CommsHubError(503, "chat_channel_disabled", "Website chat channel is disabled.", { retryable: true, failureClass: "temporary", publicMessage: "Website chat is temporarily unavailable." });
+      if (!active.config.chatEnabled) throw new CommsHubError(503, "chat_channel_disabled", "Website chat channel is disabled.", { retryable: true, failureClass: "temporary",
+         publicMessage: "Website chat is temporarily unavailable." });
       const result = await active.chatService.acceptWebhook(req);
-      return res.status(result.duplicate ? 200 : 202).json({ ok: true, accepted: true, duplicate: result.duplicate, messageId: result.messageId, takeoverRequested: result.takeoverRequested, correlationId });
+      return res.status(result.duplicate ? 200 : 202).json({ ok: true, accepted: true, duplicate: result.duplicate, messageId: result.messageId, takeoverRequested:
+         result.takeoverRequested, correlationId });
     } catch (error) {
       const output = publicError(error);
       return res.status(output.statusCode).json({ ...output.body, correlationId });
@@ -320,7 +322,8 @@ export function createCommsHubRouter({
     try {
       requireReady(runtimeReadinessProvider);
       const active = contextProvider();
-      if (!active.config.chatEnabled) throw new CommsHubError(503, "chat_channel_disabled", "Website chat channel is disabled.", { retryable: true, failureClass: "temporary", publicMessage: "Website chat is temporarily unavailable." });
+      if (!active.config.chatEnabled) throw new CommsHubError(503, "chat_channel_disabled", "Website chat channel is disabled.", { retryable: true, failureClass: "temporary",
+         publicMessage: "Website chat is temporarily unavailable." });
       const result = await active.chatService.syncWebhook(req);
       res.set("cache-control", "no-store");
       return res.json({ ok: true, ...result, correlationId });
@@ -819,12 +822,14 @@ export function createCommsHubRouter({
   });
 
   router.post("/conversations/:conversationId/notes", permit("note"), async (req, res, next) => {
-    try { return res.status(201).json({ ok: true, note: await contextProvider().operationsService.addNote({ conversationId: req.params.conversationId, bodyText: req.body?.bodyText, mentions: req.body?.mentions }, req) }); }
+    try { return res.status(201).json({ ok: true, note: await contextProvider().operationsService.addNote({ conversationId: req.params.conversationId, bodyText:
+       req.body?.bodyText, mentions: req.body?.mentions }, req) }); }
     catch (error) { next(error); }
   });
 
   router.get("/mentions", permit("read_notifications"), async (req, res, next) => {
-    try { return res.json({ ok: true, mentions: await contextProvider().operationsRepository.listMentions({ actor: req.commsIdentity.actor, status: String(req.query.status || "unread"), limit: Number(req.query.limit || 100) }) }); }
+    try { return res.json({ ok: true, mentions: await contextProvider().operationsRepository.listMentions({ actor: req.commsIdentity.actor, status: String(req.query.status ||
+       "unread"), limit: Number(req.query.limit || 100) }) }); }
     catch (error) { next(error); }
   });
 
@@ -885,12 +890,15 @@ export function createCommsHubRouter({
   });
 
   router.get("/search", permit("read_conversation"), async (req, res, next) => {
-    try { const results = await contextProvider().operationsService.search({ query: req.query.q, objectType: req.query.objectType, channel: req.query.channel, contactId: req.query.contactId, conversationId: req.query.conversationId, limit: Number(req.query.limit || 50) }, req); return res.json({ ok: true, results }); }
+    try { const results = await contextProvider().operationsService.search({ query: req.query.q, objectType: req.query.objectType, channel: req.query.channel, contactId:
+       req.query.contactId, conversationId: req.query.conversationId, limit: Number(req.query.limit || 50) }, req); return res.json({ ok: true, results }); }
     catch (error) { next(error); }
   });
 
   router.get("/attachments/:attachmentId", permit("read_conversation"), async (req, res, next) => {
-    try { const { record, buffer } = await contextProvider().attachmentService.get(req.params.attachmentId); res.setHeader("content-type", record.content_type); res.setHeader("content-length", String(buffer.length)); res.setHeader("cache-control", "private, no-store"); res.setHeader("content-disposition", `attachment; filename="${String(record.object_key).split('/').at(-1).replace(/[\r\n"]/g, '_')}"`); return res.send(buffer); }
+    try { const { record, buffer } = await contextProvider().attachmentService.get(req.params.attachmentId); res.setHeader("content-type", record.content_type); res.setHeader(
+      "content-length", String(buffer.length)); res.setHeader("cache-control", "private, no-store"); res.setHeader("content-disposition", `attachment; filename="${String(
+        record.object_key).split('/').at(-1).replace(/[\r\n"]/g, '_')}"`); return res.send(buffer); }
     catch (error) { next(error); }
   });
 
@@ -906,8 +914,10 @@ export function createCommsHubRouter({
     try {
       const buffer = Buffer.from(String(req.body?.base64 || ""), "base64");
       const active = contextProvider();
-      if (req.body?.messageId) await active.operationsRepository.ensureAttachmentReference({ id: req.params.attachmentId, messageId: req.body.messageId, provider: req.body?.provider || "api", filename: req.body?.filename, status: "pending", metadata: req.body?.metadata || {} });
-      const result = await active.attachmentService.ingest({ attachmentId: req.params.attachmentId, filename: req.body?.filename, contentType: req.body?.contentType || "application/octet-stream", buffer, provider: req.body?.provider || "api", metadata: req.body?.metadata || {} });
+      if (req.body?.messageId) await active.operationsRepository.ensureAttachmentReference({ id: req.params.attachmentId, messageId: req.body.messageId, provider:
+         req.body?.provider || "api", filename: req.body?.filename, status: "pending", metadata: req.body?.metadata || {} });
+      const result = await active.attachmentService.ingest({ attachmentId: req.params.attachmentId, filename: req.body?.filename, contentType: req.body?.contentType ||
+         "application/octet-stream", buffer, provider: req.body?.provider || "api", metadata: req.body?.metadata || {} });
       return res.status(201).json({ ok: true, result });
     }
     catch (error) { next(error); }
@@ -935,7 +945,9 @@ export function createCommsHubRouter({
   });
 
   router.post("/conversations/:conversationId/email", permit("send_reply"), async (req, res, next) => {
-    try { const result = await contextProvider().emailService.send({ conversationId: req.params.conversationId, bodyText: req.body?.bodyText, bodyHtml: req.body?.bodyHtml, subject: req.body?.subject, recipients: req.body?.recipients || [], cc: req.body?.cc || [], attachments: [], attachmentIds: req.body?.attachmentIds || [], idempotencyKey: req.get("idempotency-key"), manualReply: true }); return res.json({ ok: true, ...result }); }
+    try { const result = await contextProvider().emailService.send({ conversationId: req.params.conversationId, bodyText: req.body?.bodyText, bodyHtml: req.body?.bodyHtml,
+       subject: req.body?.subject, recipients: req.body?.recipients || [], cc: req.body?.cc || [], attachments: [], attachmentIds: req.body?.attachmentIds || [],
+          idempotencyKey: req.get("idempotency-key"), manualReply: true }); return res.json({ ok: true, ...result }); }
     catch (error) { next(error); }
   });
 
@@ -956,7 +968,8 @@ export function createCommsHubRouter({
   });
 
   router.post("/conversations/:conversationId/chat", permit("send_reply"), async (req, res, next) => {
-    try { const result = await contextProvider().chatService.send({ conversationId: req.params.conversationId, message: req.body?.message, idempotencyKey: req.get("idempotency-key") }); return res.json({ ok: true, ...result }); }
+    try { const result = await contextProvider().chatService.send({ conversationId: req.params.conversationId, message: req.body?.message, idempotencyKey: req.get(
+      "idempotency-key") }); return res.json({ ok: true, ...result }); }
     catch (error) { next(error); }
   });
 
@@ -976,22 +989,26 @@ export function createCommsHubRouter({
   });
 
   router.get("/workflow-definitions", permit("read_conversation"), async (req, res, next) => {
-    try { return res.json({ ok: true, definitions: await contextProvider().operationsRepository.listWorkflowDefinitions({ key: String(req.query.key || ""), status: String(req.query.status || "") }) }); }
+    try { return res.json({ ok: true, definitions: await contextProvider().operationsRepository.listWorkflowDefinitions({ key: String(req.query.key || ""), status: String(
+      req.query.status || "") }) }); }
     catch (error) { next(error); }
   });
 
   router.post("/conversations/:conversationId/workflows/:key/start", permit("manage_workflows"), async (req, res, next) => {
-    try { return res.status(201).json({ ok: true, run: await contextProvider().workflowEngineService.startDefinition({ conversationId: req.params.conversationId, key: req.params.key, data: req.body?.data || {}, idempotencyKey: req.get("idempotency-key") || "" }, req.commsIdentity) }); }
+    try { return res.status(201).json({ ok: true, run: await contextProvider().workflowEngineService.startDefinition({ conversationId: req.params.conversationId, key:
+       req.params.key, data: req.body?.data || {}, idempotencyKey: req.get("idempotency-key") || "" }, req.commsIdentity) }); }
     catch (error) { next(error); }
   });
 
   router.get("/workflow-runs/:runId", permit("read_conversation"), async (req, res, next) => {
-    try { const run = await contextProvider().aiRepository.getWorkflowRun(req.params.runId); if (!run) throw new CommsHubError(404, "workflow_run_not_found", "Workflow run was not found."); return res.json({ ok: true, run: { ...run, data: JSON.parse(run.data_json || "{}") } }); }
+    try { const run = await contextProvider().aiRepository.getWorkflowRun(req.params.runId); if (!run) throw new CommsHubError(404, "workflow_run_not_found",
+       "Workflow run was not found."); return res.json({ ok: true, run: { ...run, data: JSON.parse(run.data_json || "{}") } }); }
     catch (error) { next(error); }
   });
 
   router.post("/workflow-runs/:runId/transition", permit("manage_workflows"), async (req, res, next) => {
-    try { return res.json({ ok: true, result: await contextProvider().workflowEngineService.transitionDefinition({ runId: req.params.runId, action: req.body?.action, data: req.body?.data || {}, details: req.body?.details || {}, idempotencyKey: req.get("idempotency-key") || "" }, req.commsIdentity) }); }
+    try { return res.json({ ok: true, result: await contextProvider().workflowEngineService.transitionDefinition({ runId: req.params.runId, action: req.body?.action, data:
+       req.body?.data || {}, details: req.body?.details || {}, idempotencyKey: req.get("idempotency-key") || "" }, req.commsIdentity) }); }
     catch (error) { next(error); }
   });
 
@@ -1001,7 +1018,8 @@ export function createCommsHubRouter({
   });
 
   router.post("/conversations/:conversationId/rules/evaluate", permit("manage_rules"), async (req, res, next) => {
-    try { return res.json({ ok: true, result: await contextProvider().workflowEngineService.evaluate({ conversationId: req.params.conversationId, trigger: req.body?.trigger || "manual" }, req.commsIdentity) }); }
+    try { return res.json({ ok: true, result: await contextProvider().workflowEngineService.evaluate({ conversationId: req.params.conversationId, trigger: req.body?.trigger ||
+       "manual" }, req.commsIdentity) }); }
     catch (error) { next(error); }
   });
 
@@ -1016,12 +1034,14 @@ export function createCommsHubRouter({
   });
 
   router.post("/conversations/:conversationId/escalations", permit("manage_escalations"), async (req, res, next) => {
-    try { return res.status(201).json({ ok: true, escalation: await contextProvider().workflowEngineService.escalate({ conversationId: req.params.conversationId, ...req.body }, req.commsIdentity) }); }
+    try { return res.status(201).json({ ok: true, escalation: await contextProvider().workflowEngineService.escalate({ conversationId: req.params.conversationId, ...req.body },
+       req.commsIdentity) }); }
     catch (error) { next(error); }
   });
 
   router.get("/escalations", permit("read_queue"), async (req, res, next) => {
-    try { return res.json({ ok: true, escalations: await contextProvider().operationsRepository.listEscalations({ status: String(req.query.status || "open"), severity: String(req.query.severity || ""), limit: Number(req.query.limit || 100) }) }); }
+    try { return res.json({ ok: true, escalations: await contextProvider().operationsRepository.listEscalations({ status: String(req.query.status || "open"), severity: String(
+      req.query.severity || ""), limit: Number(req.query.limit || 100) }) }); }
     catch (error) { next(error); }
   });
 
@@ -1041,7 +1061,8 @@ export function createCommsHubRouter({
   });
 
   router.post("/conversations/:conversationId/autonomous-reply", permit("manage_autonomy"), async (req, res, next) => {
-    try { return res.json({ ok: true, result: await contextProvider().governanceService.attemptAutonomousReply({ conversationId: req.params.conversationId, draftId: req.body?.draftId }, req.commsIdentity) }); }
+    try { return res.json({ ok: true, result: await contextProvider().governanceService.attemptAutonomousReply({ conversationId: req.params.conversationId, draftId:
+       req.body?.draftId }, req.commsIdentity) }); }
     catch (error) { next(error); }
   });
 
@@ -1051,7 +1072,8 @@ export function createCommsHubRouter({
   });
 
   router.post("/conversations/:conversationId/export", permit("manage_retention"), async (req, res, next) => {
-    try { return res.status(201).json({ ok: true, export: await contextProvider().governanceService.exportConversation({ conversationId: req.params.conversationId, actor: req.commsIdentity.actor }) }); }
+    try { return res.status(201).json({ ok: true, export: await contextProvider().governanceService.exportConversation({ conversationId: req.params.conversationId, actor:
+       req.commsIdentity.actor }) }); }
     catch (error) { next(error); }
   });
 
@@ -1079,7 +1101,8 @@ export function createCommsHubRouter({
   });
 
   router.get("/quarantine", permit("read_queue"), async (req, res, next) => {
-    try { return res.json({ ok: true, items: await contextProvider().quarantineService.list({ status: String(req.query.status || "quarantined"), failureClass: String(req.query.failureClass || ""), limit: Number(req.query.limit || 100) }) }); }
+    try { return res.json({ ok: true, items: await contextProvider().quarantineService.list({ status: String(req.query.status || "quarantined"), failureClass: String(
+      req.query.failureClass || ""), limit: Number(req.query.limit || 100) }) }); }
     catch (error) { next(error); }
   });
 
@@ -1089,12 +1112,14 @@ export function createCommsHubRouter({
   });
 
   router.get("/metrics", permit("read_metrics"), async (req, res, next) => {
-    try { const to = req.query.to || new Date().toISOString(); const from = req.query.from || new Date(Date.parse(to) - 30 * 86400000).toISOString(); return res.json({ ok: true, metrics: await contextProvider().metricsService.get({ from, to }) }); }
+    try { const to = req.query.to || new Date().toISOString(); const from = req.query.from || new Date(Date.parse(to) - 30 * 86400000).toISOString(); return res.json({ ok:
+       true, metrics: await contextProvider().metricsService.get({ from, to }) }); }
     catch (error) { next(error); }
   });
 
   router.get("/notifications", permit("read_notifications"), async (req, res, next) => {
-    try { return res.json({ ok: true, notifications: await contextProvider().notificationService.list({ actor: req.commsIdentity.actor, status: String(req.query.status || "unread"), limit: Number(req.query.limit || 100) }) }); }
+    try { return res.json({ ok: true, notifications: await contextProvider().notificationService.list({ actor: req.commsIdentity.actor, status: String(req.query.status ||
+       "unread"), limit: Number(req.query.limit || 100) }) }); }
     catch (error) { next(error); }
   });
 
@@ -1114,7 +1139,8 @@ export function createCommsHubRouter({
   });
 
   router.post("/credentials/:key/oauth/refresh", permit("manage_credentials"), async (req, res, next) => {
-    try { const token = await contextProvider().credentialVaultService.getOAuthAccessToken(req.params.key, { forceRefresh: true }, req.commsIdentity); return res.json({ ok: true, token: { tokenType: token.tokenType, scopes: token.scopes, expiresAt: token.expiresAt } }); }
+    try { const token = await contextProvider().credentialVaultService.getOAuthAccessToken(req.params.key, { forceRefresh: true }, req.commsIdentity); return res.json({ ok:
+       true, token: { tokenType: token.tokenType, scopes: token.scopes, expiresAt: token.expiresAt } }); }
     catch (error) { next(error); }
   });
 
@@ -1124,7 +1150,9 @@ export function createCommsHubRouter({
   });
 
   router.get("/ui/bootstrap", permit("read_queue"), async (req, res, next) => {
-    try { const [queue, notifications] = await Promise.all([contextProvider().operationsService.queue({ limit: 50 }, req), contextProvider().notificationService.list({ actor: req.commsIdentity.actor, status: "unread", limit: 20 })]); return res.json({ ok: true, apiVersion: 1, responsiveContract: { minimumWidth: 320, pagination: "cursor", actions: ["assign", "status", "tag", "note", "reply", "social-reply", "social-moderation", "takeover"] }, identity: req.commsIdentity, queue, notifications }); }
+    try { const [queue, notifications] = await Promise.all([contextProvider().operationsService.queue({ limit: 50 }, req), contextProvider().notificationService.list({ actor:
+       req.commsIdentity.actor, status: "unread", limit: 20 })]); return res.json({ ok: true, apiVersion: 1, responsiveContract: { minimumWidth: 320, pagination: "cursor",
+          actions: ["assign", "status", "tag", "note", "reply", "social-reply", "social-moderation", "takeover"] }, identity: req.commsIdentity, queue, notifications }); }
     catch (error) { next(error); }
   });
 
