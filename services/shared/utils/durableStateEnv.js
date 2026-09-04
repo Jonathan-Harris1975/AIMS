@@ -62,7 +62,8 @@ export function hasDurableStateEnv(env = process.env) {
 }
 
 export function durableStateEnvHint() {
-  return `Configure R2 credentials plus ${DURABLE_STATE_BUCKET_ENV_CANDIDATES.join(" or ")} with STATE_BACKEND=auto or r2, or set ALLOW_EPHEMERAL_STATE=true only if you intentionally accept state loss across container restarts.`;
+  return `Configure R2 credentials plus ${DURABLE_STATE_BUCKET_ENV_CANDIDATES.join(
+    " or ")} with STATE_BACKEND=auto or r2, or set ALLOW_EPHEMERAL_STATE=true only if you intentionally accept state loss across container restarts.`;
 }
 
 export function durableStateBucketEnvCandidates() {

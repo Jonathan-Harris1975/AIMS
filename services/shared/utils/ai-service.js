@@ -411,7 +411,8 @@ export async function resilientRequest(routeName, {
     const provider = getProviderConfig(providerId);
     if (!provider) {
       attempted.push({ providerId, status: "misconfigured" });
-      logError("ai.provider.misconfigured", { routeName, routeKey, providerId, modelEnvNames: aiConfig?.models?.[providerId]?.modelEnvNames, keyEnvNames: aiConfig?.models?.[providerId]?.keyEnvNames });
+      logError("ai.provider.misconfigured", { routeName, routeKey, providerId, modelEnvNames: aiConfig?.models?.[providerId]?.modelEnvNames, keyEnvNames: aiConfig?.models?.[
+        providerId]?.keyEnvNames });
       continue;
     }
 
@@ -431,7 +432,8 @@ export async function resilientRequest(routeName, {
     let compatibilityRelaxationUsed = false;
     for (let attempt = 0; attempt <= effectiveMaxRetries; attempt++) {
       try {
-        const result = await callOpenRouter({ routeKey, providerId, model: provider.name, apiKey: provider.apiKey, messages: providerMessages, max_tokens, temperature, top_p, response_format, headers, timeoutMs, reasoning, signal });
+        const result = await callOpenRouter({ routeKey, providerId, model: provider.name, apiKey: provider.apiKey, messages: providerMessages, max_tokens, temperature, top_p,
+           response_format, headers, timeoutMs, reasoning, signal });
         if (typeof validateContent === "function") await validateContent(result.content, { routeName, routeKey, providerId, model: result.model || provider.name });
         if (shouldLogUsage()) {
           info("ai.request.usage", {
