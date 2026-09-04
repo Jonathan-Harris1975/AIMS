@@ -393,7 +393,9 @@ async function repairSocialPackageForCouncil({ sessionId, dateLabel, items, edit
   const raw = await resilientRequest("blogSocial", {
     sessionId,
     messages: [
-      { role: "system", content: "You are the repair editor for premium social content from a recognised British AI industry expert. Preserve strong copy. Fix only the listed QA defects. Never invent facts, numbers, dates, entities, quotations or statistics. Keep the voice direct, sceptical, commercially literate and Gen-X rather than corporate. Keep source_urls limited to the supplied URLs and make every field specifically about those selected sources. Return valid JSON only using the same schema as the candidate." },
+      { role: "system", content: "You are the repair editor for premium social content from a recognised British AI industry expert. Preserve strong copy. Fix only the listed \
+QA defects. Never invent facts, numbers, dates, entities, quotations or statistics. Keep the voice direct, sceptical, commercially literate and Gen-X rather than corporate. \
+Keep source_urls limited to the supplied URLs and make every field specifically about those selected sources. Return valid JSON only using the same schema as the candidate." },
       { role: "user", content: `Repair attempt ${attempt || 1}.
 
 QA defects:
@@ -842,7 +844,8 @@ export async function buildDailySocialBlogPost({
           socialPackage: reviewed.artifact,
           cleanedSources: gateSources,
           publishedObjects,
-          context: { dateLabel: window.dateLabel, prefix, slug, postUrl: urls.postUrl, housekeeping: buildHousekeepingPlan({ lane: "daily-social-blog", artefacts: Object.values(publishedObjects).filter(Boolean) }) },
+          context: { dateLabel: window.dateLabel, prefix, slug, postUrl: urls.postUrl, housekeeping: buildHousekeepingPlan({ lane: "daily-social-blog", artefacts:
+             Object.values(publishedObjects).filter(Boolean) }) },
           dryRun,
         });
       }
@@ -989,7 +992,8 @@ export async function buildDailySocialBlogPost({
           socialPackage: reviewed.artifact,
           cleanedSources: gateSources,
           publishedObjects,
-          context: { dateLabel: window.dateLabel, prefix, slug, postUrl: urls.postUrl, housekeeping: buildHousekeepingPlan({ lane: "daily-social-blog-phase5", artefacts: Object.values(publishedObjects).filter(Boolean) }) },
+          context: { dateLabel: window.dateLabel, prefix, slug, postUrl: urls.postUrl, housekeeping: buildHousekeepingPlan({ lane: "daily-social-blog-phase5", artefacts:
+             Object.values(publishedObjects).filter(Boolean) }) },
           dryRun,
         });
       }
