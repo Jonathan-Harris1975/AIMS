@@ -29,6 +29,9 @@ SENSITIVE_KEY = re.compile(
     re.IGNORECASE,
 )
 ENV_ASSIGNMENT = re.compile(r"^\s*(?:export\s+)?([A-Z][A-Z0-9_]*)\s*=\s*(.*?)\s*$")
+JS_ENV_LITERAL_ASSIGNMENT = re.compile(
+    r"process\.env(?:\.([A-Za-z_][A-Za-z0-9_]*)|\[\"([^\"]+)\"\]|\['([^']+)'\])\s*=\s*([\"'])(.*?)\4"
+)
 PRIVATE_KEY = re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----")
 KNOWN_TOKEN_PATTERNS = [
     ("OpenAI/OpenRouter-style API key", re.compile(r"\bsk-(?:or-)?[A-Za-z0-9_-]{20,}\b")),
@@ -112,6 +115,18 @@ def scan_file(path: Path, root: Path) -> list[str]:
             for label, pattern in KNOWN_TOKEN_PATTERNS:
                 if pattern.search(line):
                     findings.append(f"{rel}:{line_no}: {label}")
+
+        if path.suffix.lower() in {".js", ".mjs", ".cjs", ".ts", ".tsx"}:
+            for assignment in JS_ENV_LITERAL_ASSIGNMENT.finditer(line):
+                dot_key, double_key, single_key, _quote, raw_value = assignment.groups()
+                key = dot_key or double_key or single_key or ""
+                if not SENSITIVE_KEY.search(key):
+                    continue
+                value = strip_inline_comment(raw_value)
+                if is_safe_literal(value):
+                    continue
+                if len(value) >= 16:
+                    findings.append(f"{rel}:{line_no}: literal value assigned to {key}")
 
         env_like = (".env" in path.name.lower() or path.suffix.lower() in {".txt", ".md", ".yml", ".yaml", ".toml", ".ini", ".cfg", ".conf"})
         if not env_like:
