@@ -191,7 +191,8 @@ async function productionReadiness() {
       };
   const checks = [
     { name: "process", ok: true, detail: "AIMS process is responding." },
-    { name: "suite_auth", ok: !production || usableSecret(process.env.AIMS_API_KEY || process.env.AI_SUITE_API_KEY), detail: usableSecret(process.env.AIMS_API_KEY || process.env.AI_SUITE_API_KEY) ? "configured" : "missing" },
+    { name: "suite_auth", ok: !production || usableSecret(process.env.AIMS_API_KEY || process.env.AI_SUITE_API_KEY), detail: usableSecret(process.env.AIMS_API_KEY ||
+       process.env.AI_SUITE_API_KEY) ? "configured" : "missing" },
     {
       name: "durable_state",
       ok: !production || ephemeralAllowed || (durableConfigured && probes.durableState.ok),
