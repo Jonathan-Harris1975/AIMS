@@ -30,7 +30,8 @@ const MODE_SPECS = {
     format: "square 1:1 social-media editorial image",
     composition: "one uninterrupted photographic scene with one unmistakable focal idea, readable at thumbnail size, and no split-panel, poster, card or infographic layout",
     style: "intelligent modern editorial realism, cinematic lighting, bold controlled colour and natural human or physical context",
-    surfaceRule: "Use text-resistant staging: keep screens dark, blank, turned away or naturally defocused; avoid visible documents, signs, whiteboards, charts, dashboards, floating panels and labelled diagrams. Communicate the idea through physical action, objects, posture, environment and consequence.",
+    surfaceRule: "Use text-resistant staging: keep screens dark, blank, turned away or naturally defocused; avoid visible documents, signs, whiteboards, charts, dashboards, \
+floating panels and labelled diagrams. Communicate the idea through physical action, objects, posture, environment and consequence.",
     textRule: "Render only the visual scene. Every surface is clean and unmarked; there is no typography, lettering, numbering, logo, interface copy or watermark.",
   },
   quiz: {

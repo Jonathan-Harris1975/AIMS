@@ -76,7 +76,8 @@ function envFlag(name, fallback = false) {
   return ["1", "true", "yes", "on", "y"].includes(String(raw).trim().toLowerCase());
 }
 
-const SPECULATIVE_DEFECT_PATTERN = /\b(?:possible|possibly|appears? to|may be|might be|could be|cannot confirm|can\'t confirm|borderline|if confirmed|at any zoom|potential|seems? to|unclear whether)\b/i;
+const SPECULATIVE_DEFECT_PATTERN = new RegExp("\\b(?:possible|possibly|appears? to|may be|might be|could be|cannot confirm|can\\'t confirm|borderline|if confirmed|at any zoom|\
+potential|seems? to|unclear whether)\\b", "i");
 
 function isSpeculativeDefect(value = "") {
   return SPECULATIVE_DEFECT_PATTERN.test(String(value || ""));
@@ -120,7 +121,8 @@ export function normaliseArtworkVisualQa(raw, {
 export function buildArtworkVisualQaPrompt({ mode = "editorial", creativePrompt = "" } = {}) {
   const rules = {
     podcast: [
-      "The image must visibly communicate a concrete subject from the episode brief. A generic AI emblem, digital snowflake, circuit mandala, neural flower, floating polygon or decorative data network is a hard failure.",
+      "The image must visibly communicate a concrete subject from the episode brief. A generic AI emblem, digital snowflake, circuit mandala, neural flower, floating polygon \
+or decorative data network is a hard failure.",
       "It must look like adult technology journalism rather than fantasy, lifestyle, generic sci-fi or a permanent show logo.",
       "Any readable or pseudo-readable typography, logo or watermark is a hard failure.",
     ],
@@ -130,15 +132,22 @@ export function buildArtworkVisualQaPrompt({ mode = "editorial", creativePrompt 
       "Any readable or pseudo-readable typography, logo or watermark is a hard failure.",
     ],
     newsletter: [
-      "The image must look like serious photorealistic AI/technology editorial journalism and visibly represent the lead story, not anime, fantasy illustration, travel, tourism, lifestyle, a generic banner, magazine-cover mock-up or scenic wallpaper.",
+      "The image must look like serious photorealistic AI/technology editorial journalism and visibly represent the lead story, not anime, fantasy illustration, travel, \
+tourism, lifestyle, a generic banner, magazine-cover mock-up or scenic wallpaper.",
       "Any readable or pseudo-readable typography is a hard failure.",
     ],
     social: [
-      "The image must communicate the supplied post and lane at phone-thumbnail size through one concrete focal idea that is credibly compatible with the post's AI-enabled action, consequence or decision.",
-      "Do not require a literal AI symbol, neural-network diagram, dashboard or readable software interface to prove that the subject is AI. Credible compute, robotics, research, security, governance or human-tool context can carry the story without labels.",
-      "Treat unmistakably unrelated subject matter, anime/fantasy drift, a fabricated identifiable likeness of a named person, prominent readable text, or a dominant labelled dashboard/infographic layout as hard failures.",
-      "A broadly relevant workstation, compute or operational scene that lacks specificity is a relevance/composition defect, not a hard failure by itself. A small unreadable or naturally defocused screen graphic is also a soft defect unless it dominates the composition or contains readable text.",
-      "Do not require or reward a fabricated likeness of a named person when the brief contains no verified reference image. A source-specific scene, rear-view human, silhouette or other deliberately non-identifiable treatment can satisfy a named-person story. Only flag identity as a hard defect when the pixels falsely present an identifiable person as the named individual or identity itself is an explicit verified-reference requirement.",
+      "The image must communicate the supplied post and lane at phone-thumbnail size through one concrete focal idea that is credibly compatible with the post's AI-enabled \
+action, consequence or decision.",
+      "Do not require a literal AI symbol, neural-network diagram, dashboard or readable software interface to prove that the subject is AI. Credible compute, robotics, \
+research, security, governance or human-tool context can carry the story without labels.",
+      "Treat unmistakably unrelated subject matter, anime/fantasy drift, a fabricated identifiable likeness of a named person, prominent readable text, or a dominant labelled \
+dashboard/infographic layout as hard failures.",
+      "A broadly relevant workstation, compute or operational scene that lacks specificity is a relevance/composition defect, not a hard failure by itself. A small unreadable \
+or naturally defocused screen graphic is also a soft defect unless it dominates the composition or contains readable text.",
+      "Do not require or reward a fabricated likeness of a named person when the brief contains no verified reference image. A source-specific scene, rear-view human, \
+silhouette or other deliberately non-identifiable treatment can satisfy a named-person story. Only flag identity as a hard defect when the pixels falsely present an \
+identifiable person as the named individual or identity itself is an explicit verified-reference requirement.",
     ],
     "social-blog": [
       "The image must visibly match the selected source story and its stated AI-enabled consequence or decision, not merely the broad topic of AI or an unrelated real-world scene.",
@@ -160,7 +169,8 @@ export function buildArtworkVisualQaPrompt({ mode = "editorial", creativePrompt 
     `Creative brief: ${compact(creativePrompt, 3000)}`,
     "Return JSON only with exactly these keys:",
     '{"score":0,"relevance":0,"textSafety":0,"composition":0,"brandFit":0,"defects":[],"hardDefects":[],"summary":""}',
-    "Scores are 0-100. Put only directly observable publication-blocking defects in hardDefects. Speculation such as possible, borderline, cannot confirm or if visible at another zoom belongs in defects, not hardDefects. Be strict about actual readable text, anime/illustration drift and off-topic imagery: attractive but off-topic artwork does not pass.",
+    "Scores are 0-100. Put only directly observable publication-blocking defects in hardDefects. Speculation such as possible, borderline, cannot confirm or if visible at \
+another zoom belongs in defects, not hardDefects. Be strict about actual readable text, anime/illustration drift and off-topic imagery: attractive but off-topic artwork does not pass.",
   ].join("\n");
 }
 

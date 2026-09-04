@@ -62,8 +62,10 @@ export function buildInstruction(prompt, mode = "podcast", date) {
   if (mode === "newsletter") {
     return [
       "Create a wide premium editorial news image for the AI Edge newsletter.",
-      "Composition: one concrete artificial-intelligence news scene with a decisive focal subject and cinematic depth. This is a photorealistic editorial news image, not an illustration, anime frame, banner design or magazine-cover mock-up.",
-      "Style: intelligent, current, grounded, high-contrast technology-journalism realism. The image must visibly contain an AI, machine-learning, software, robotics, compute, security or governance anchor supported by the lead story. No travel, landscape, lifestyle or inspirational-journey imagery.",
+      "Composition: one concrete artificial-intelligence news scene with a decisive focal subject and cinematic depth. This is a photorealistic editorial news image, not an \
+illustration, anime frame, banner design or magazine-cover mock-up.",
+      "Style: intelligent, current, grounded, high-contrast technology-journalism realism. The image must visibly contain an AI, machine-learning, software, robotics, compute, \
+security or governance anchor supported by the lead story. No travel, landscape, lifestyle or inspirational-journey imagery.",
       `Creative direction: ${policyPrompt}`,
       "Final compliance check: remove all text, pseudo-text, title panels, buttons, interface labels, logos and watermarks before returning the image.",
     ].join(" ");
@@ -72,8 +74,10 @@ export function buildInstruction(prompt, mode = "podcast", date) {
   if (mode === "social-blog") {
     return [
       "Create a premium wide editorial image for a social-distributed AI blog post.",
-      "Composition: one source-specific real-world consequence, decision or technical action with a strong phone-feed focal subject. It must visually match the selected source story, not generic AI news.",
-      "Style: cinematic editorial realism, high contrast, bold controlled colour and immediate visual tension. No infographic, dashboard, diagram, travel scene, generic office or decorative data-centre glamour.",
+      "Composition: one source-specific real-world consequence, decision or technical action with a strong phone-feed focal subject. It must visually match the selected source \
+story, not generic AI news.",
+      "Style: cinematic editorial realism, high contrast, bold controlled colour and immediate visual tension. No infographic, dashboard, diagram, travel scene, generic office \
+or decorative data-centre glamour.",
       `Creative direction: ${policyPrompt}`,
       "Final compliance check: no visible text, pseudo-text, callout boxes, labels, logos, interface chrome or watermarks.",
     ].join(" ");
@@ -83,7 +87,8 @@ export function buildInstruction(prompt, mode = "podcast", date) {
     return [
       "Create a wide photorealistic artificial-intelligence editorial blog hero image.",
       "Composition: cinematic landscape banner with one article-specific technical or human consequence, clearly usable as a website article header.",
-      "Style: premium technology journalism, modern, restrained, atmospheric and editorial rather than promotional. Never use anime, fantasy illustration, generic travel, unrelated machinery or decorative technology wallpaper.",
+      "Style: premium technology journalism, modern, restrained, atmospheric and editorial rather than promotional. Never use anime, fantasy illustration, generic travel, \
+unrelated machinery or decorative technology wallpaper.",
       `Creative direction: ${policyPrompt}`,
       "Final compliance check: inspect the whole composition and remove every accidental letter-like, number-like, logo-like or watermark-like mark before returning the image.",
     ].join(" ");
@@ -103,8 +108,10 @@ export function buildInstruction(prompt, mode = "podcast", date) {
   if (mode === "social") {
     return [
       "Create a premium square photorealistic artificial-intelligence editorial social-media image.",
-      "Composition: one post-specific AI-enabled action, consequence, person or technical object as the strong focal subject, instantly readable at thumbnail size, with cinematic depth and modern magazine-quality framing.",
-      "Style: intelligent, contemporary, human, engaging technology journalism rather than anime, fantasy, corporate stock photography or unrelated machinery. The AI connection must be visually legible through supported software, compute, robotics, research, security, governance or human-tool context.",
+      "Composition: one post-specific AI-enabled action, consequence, person or technical object as the strong focal subject, instantly readable at thumbnail size, with \
+cinematic depth and modern magazine-quality framing.",
+      "Style: intelligent, contemporary, human, engaging technology journalism rather than anime, fantasy, corporate stock photography or unrelated machinery. The AI \
+connection must be visually legible through supported software, compute, robotics, research, security, governance or human-tool context.",
       `Creative direction: ${policyPrompt}`,
       "Final compliance check: inspect the whole composition and remove every accidental letter-like, number-like, logo-like or watermark-like mark before returning the image.",
     ].join(" ");
@@ -112,7 +119,8 @@ export function buildInstruction(prompt, mode = "podcast", date) {
 
   return [
     "Create square premium editorial podcast episode artwork for an adult AI news show.",
-    "Composition: one dominant episode-specific real-world story occupying roughly seventy per cent of the frame, with at most one supporting element. The subject must be recognisable from the episode rather than a generic AI symbol.",
+    "Composition: one dominant episode-specific real-world story occupying roughly seventy per cent of the frame, with at most one supporting element. The subject must be \
+recognisable from the episode rather than a generic AI symbol.",
     "Mood: sharp, sceptical, intelligent, cinematic, grounded and modern.",
     "Style: premium magazine-feature realism with strong hierarchy, believable physical detail and clean negative space.",
     `Creative direction: ${policyPrompt}`,
@@ -130,28 +138,34 @@ export function buildShortInstruction(prompt, mode = "podcast", date) {
   const trimmedDirection = String(policyPrompt || "").split(/\s+/).slice(0, 24).join(" ");
 
   if (mode === "newsletter") {
-    return `Photorealistic AI-news editorial image, one concrete artificial-intelligence technical or human-scale focal scene, no anime, illustration, banner layout, travel or scenery. ${trimmedDirection} No text, pseudo-text, letters, numbers, logos, panels or watermarks.`;
+    return `Photorealistic AI-news editorial image, one concrete artificial-intelligence technical or human-scale focal scene, no anime, illustration, banner layout, travel or \
+scenery. ${trimmedDirection} No text, pseudo-text, letters, numbers, logos, panels or watermarks.`;
   }
 
   if (mode === "social-blog") {
-    return `Source-specific AI social-blog editorial image, wide composition, one concrete consequence or technical action, cinematic and high contrast. ${trimmedDirection} No infographic, travel, generic office, text, pseudo-text, labels, logos or watermarks.`;
+    return `Source-specific AI social-blog editorial image, wide composition, one concrete consequence or technical action, cinematic and high contrast. ${trimmedDirection} No \
+infographic, travel, generic office, text, pseudo-text, labels, logos or watermarks.`;
   }
 
   if (mode === "blog") {
-    return `Photorealistic artificial-intelligence editorial blog hero, cinematic landscape banner, one article-specific technical or human consequence, premium and restrained. ${trimmedDirection} No anime, unrelated scenery, text, letters, numbers, logos or watermarks.`;
+    return `Photorealistic artificial-intelligence editorial blog hero, cinematic landscape banner, one article-specific technical or human consequence, premium and restrained.\
+ ${trimmedDirection} No anime, unrelated scenery, text, letters, numbers, logos or watermarks.`;
   }
 
 
   if (mode === "quiz") {
-    return `Square social AI quiz card. Keep every supplied answer label and visible phrase exact. Large readable typography, four clear answer panels, high contrast, polished editorial design. ${trimmedDirection}`;
+    return `Square social AI quiz card. Keep every supplied answer label and visible phrase exact. Large readable typography, four clear answer panels, high contrast, polished \
+editorial design. ${trimmedDirection}`;
   }
 
 
   if (mode === "social") {
-    return `Photorealistic square artificial-intelligence editorial social image, one post-specific AI-enabled action, consequence, person or technical object, cinematic and high contrast. ${trimmedDirection} No anime, unrelated imagery, text, letters, numbers, logos or watermarks.`;
+    return `Photorealistic square artificial-intelligence editorial social image, one post-specific AI-enabled action, consequence, person or technical object, cinematic and \
+high contrast. ${trimmedDirection} No anime, unrelated imagery, text, letters, numbers, logos or watermarks.`;
   }
 
-  return `Square premium podcast episode artwork, one dominant source-specific real-world subject, strong editorial hierarchy and cinematic realism. ${trimmedDirection} No text, generic AI emblems, unrelated technology decoration, logos or watermarks.`;
+  return `Square premium podcast episode artwork, one dominant source-specific real-world subject, strong editorial hierarchy and cinematic realism. ${trimmedDirection} No \
+text, generic AI emblems, unrelated technology decoration, logos or watermarks.`;
 }
 
 async function sleep(ms, signal) {
