@@ -174,7 +174,8 @@ export class CommsAiRepository {
       metadata: parse(row.metadata_json, {}),
       evidence_ids: parse(row.evidence_ids_json, []),
     }));
-    return { state: stateRow, runs: runRows, evidence: rows(evidence), drafts: draftRows, approvals: rows(approvals), followUps: rows(followUps), workflows: rows(workflows), priorityOverrides: rows(priorityOverrides) };
+    return { state: stateRow, runs: runRows, evidence: rows(evidence), drafts: draftRows, approvals: rows(approvals), followUps: rows(followUps), workflows: rows(workflows),
+       priorityOverrides: rows(priorityOverrides) };
   }
 
   async overridePriority({ id, conversationId, score, label, reason, actor, createdAt }) {

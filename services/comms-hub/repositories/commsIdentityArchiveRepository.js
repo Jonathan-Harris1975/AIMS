@@ -251,10 +251,12 @@ export class CommsIdentityArchiveRepository {
     const row = rows(result)[0] || null;
     if (row) row.digest = parseJson(row.digest_json, {});
     if (row?.matched_form_request_id && ['draft_ready','pending_approval','review_required'].includes(status)) {
-      await this.d1.query(`UPDATE comms_hub_form_requests SET status = 'processed', processed_at = COALESCE(processed_at, ?), updated_at = ? WHERE id = ? AND status = 'submitted'`, [at, at, row.matched_form_request_id]);
+      await this.d1.query(`UPDATE comms_hub_form_requests SET status = 'processed', processed_at = COALESCE(processed_at, ?), updated_at = ? WHERE id = ? AND status = \
+'submitted'`, [at, at, row.matched_form_request_id]);
     }
     if (row?.matched_form_request_id && status === 'replied') {
-      await this.d1.query(`UPDATE comms_hub_form_requests SET status = 'replied', processed_at = COALESCE(processed_at, ?), replied_at = ?, updated_at = ? WHERE id = ?`, [at, replySentAt || at, at, row.matched_form_request_id]);
+      await this.d1.query(`UPDATE comms_hub_form_requests SET status = 'replied', processed_at = COALESCE(processed_at, ?), replied_at = ?, updated_at = ? WHERE id = ?`, [at,
+         replySentAt || at, at, row.matched_form_request_id]);
     }
     return row;
   }
@@ -312,7 +314,8 @@ export class CommsIdentityArchiveRepository {
 
   async hardDeleteConversation({ conversationId }) {
     const statements = [
-      { sql: `DELETE FROM comms_hub_attachment_objects WHERE attachment_id IN (SELECT a.id FROM comms_hub_attachments a JOIN comms_hub_messages m ON m.id = a.message_id WHERE m.conversation_id = ?)`, params: [conversationId] },
+      { sql: `DELETE FROM comms_hub_attachment_objects WHERE attachment_id IN (SELECT a.id FROM comms_hub_attachments a JOIN comms_hub_messages m ON m.id = a.message_id WHERE \
+m.conversation_id = ?)`, params: [conversationId] },
       { sql: `DELETE FROM comms_hub_social_events WHERE conversation_id = ? OR message_id IN (SELECT id FROM comms_hub_messages WHERE conversation_id = ?)`, params: [conversationId, conversationId] },
       { sql: `DELETE FROM comms_hub_attachments WHERE message_id IN (SELECT id FROM comms_hub_messages WHERE conversation_id = ?)`, params: [conversationId] },
       { sql: `DELETE FROM comms_hub_mentions WHERE conversation_id = ?`, params: [conversationId] },
@@ -325,7 +328,8 @@ export class CommsIdentityArchiveRepository {
       { sql: `DELETE FROM comms_hub_ai_runs WHERE conversation_id = ?`, params: [conversationId] },
       { sql: `DELETE FROM comms_hub_form_processing WHERE conversation_id = ?`, params: [conversationId] },
       { sql: `DELETE FROM comms_hub_form_requests WHERE source_conversation_id = ? OR submission_conversation_id = ?`, params: [conversationId, conversationId] },
-      { sql: `DELETE FROM comms_hub_outreach_articles WHERE conversation_id = ? OR target_id IN (SELECT id FROM comms_hub_outreach_targets WHERE conversation_id = ?)`, params: [conversationId, conversationId] },
+      { sql: `DELETE FROM comms_hub_outreach_articles WHERE conversation_id = ? OR target_id IN (SELECT id FROM comms_hub_outreach_targets WHERE conversation_id = ?)`, params:
+         [conversationId, conversationId] },
       { sql: `DELETE FROM comms_hub_outreach_targets WHERE conversation_id = ?`, params: [conversationId] },
       { sql: `DELETE FROM comms_hub_approvals WHERE conversation_id = ?`, params: [conversationId] },
       { sql: `DELETE FROM comms_hub_channel_outbound_actions WHERE conversation_id = ?`, params: [conversationId] },
