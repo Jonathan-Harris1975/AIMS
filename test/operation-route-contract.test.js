@@ -53,3 +53,10 @@ test("Friday podcast and operation status endpoints exist", () => {
   assert.match(ops, /router\.get\("\/jobs\/:id"/);
   assert.match(ops, /classifyOperationDuplicate/);
 });
+
+test("HIVE AI Council model-governance apply endpoint is mounted in ops", () => {
+  assert.match(ops, /applyAimsModelGovernance/);
+  assert.match(ops, /router\.post\("\/model-governance\/apply"/);
+  assert.match(ops, /sourceRunId is required/);
+  assert.match(ops, /registry must be an object keyed by HIVE model category/);
+});
