@@ -98,3 +98,17 @@ test("unified website audit carries delegated-scope policy, target assessment an
   assert.match(council, /Not Scored - Security Evidence Not Supplied/);
   assert.match(council, /Not Scored - Release SHA Not Verified/);
 });
+
+test("website audit dispatch uses private R2 references and child-run reconciliation prevents callback limbo", () => {
+  const orchestrator = read("audits/utils/orchestrator.js");
+  const pipeline = read("audits/utils/websiteAuditPipeline.js");
+  const github = read("audits/utils/githubDispatch.js");
+
+  assert.match(orchestrator, /audit_public_base_url: auditR2\.storageUri \|\| `r2:\/\/\$\{auditR2\.bucket\}`/);
+  assert.match(orchestrator, /audit_public_base_env: "R2_PUBLIC_BASE_URL_AUDITS"/);
+  assert.match(pipeline, /WEBSITE_AUDIT_CHILD_RECONCILE_AFTER_MS/);
+  assert.match(pipeline, /reconcileCurrentChildStage/);
+  assert.match(pipeline, /GitHub audit workflow reached terminal conclusion/);
+  assert.match(pipeline, /non-terminal child callback/);
+  assert.match(github, /export async function getGithubWorkflowRun/);
+});
