@@ -4,29 +4,29 @@
 
 This inventory makes the runtime configuration contract auditable without duplicating secret values. `.env.example` and `env.template` remain the curated operator templates; this file records every production `process.env` dependency and its source locations.
 
-- Runtime variables referenced in production code: **499**
+- Runtime variables referenced in production code: **501**
 - Present in curated templates: **385**
-- Not present in curated templates: **114**
+- Not present in curated templates: **116**
 
 | Variable | Curated template | Production references |
 | --- | --- | --- |
 | `AIMS_ALLOW_UNAUTHENTICATED_DEV` | Yes | services/shared/middleware/suiteAuth.js:86 |
-| `AIMS_API_KEY` | Yes | server.js:194<br>services/ops/index.js:401<br>services/shared/middleware/suiteAuth.js:55 |
+| `AIMS_API_KEY` | Yes | server.js:194<br>services/ops/index.js:402<br>services/shared/middleware/suiteAuth.js:55 |
 | `AIMS_BUSY_CONCURRENCY_THRESHOLD` | No | services/shared/utils/lifecycle.js:15 |
 | `AIMS_FAILURE_ALERT_THRESHOLD` | Yes | services/shared/utils/operationalExcellence.js:5 |
-| `AIMS_INTERNAL_BASE_URL` | Yes | services/ops/index.js:400 |
-| `AIMS_OPERATION_ASYNC_JOB_TIMEOUT_MS` | Yes | services/ops/index.js:483 |
-| `AIMS_OPERATION_ASYNC_MAX_POLL_ERRORS` | No | services/ops/index.js:485 |
-| `AIMS_OPERATION_ASYNC_NOT_FOUND_GRACE_MS` | No | services/ops/index.js:486 |
-| `AIMS_OPERATION_ASYNC_POLL_INTERVAL_MS` | Yes | services/ops/index.js:482 |
-| `AIMS_OPERATION_ASYNC_REQUEST_TIMEOUT_MS` | Yes | services/ops/index.js:484 |
-| `AIMS_OPERATION_DISPATCH_TIMEOUT_MS` | No | services/ops/index.js:420 |
-| `AIMS_OPERATION_FRIDAY_PM_DELAY_MS` | Yes | services/ops/index.js:139 |
-| `AIMS_OPERATION_TASK_TIMEOUT_MS` | Yes | services/ops/index.js:421 |
+| `AIMS_INTERNAL_BASE_URL` | Yes | services/ops/index.js:401 |
+| `AIMS_OPERATION_ASYNC_JOB_TIMEOUT_MS` | Yes | services/ops/index.js:484 |
+| `AIMS_OPERATION_ASYNC_MAX_POLL_ERRORS` | No | services/ops/index.js:486 |
+| `AIMS_OPERATION_ASYNC_NOT_FOUND_GRACE_MS` | No | services/ops/index.js:487 |
+| `AIMS_OPERATION_ASYNC_POLL_INTERVAL_MS` | Yes | services/ops/index.js:483 |
+| `AIMS_OPERATION_ASYNC_REQUEST_TIMEOUT_MS` | Yes | services/ops/index.js:485 |
+| `AIMS_OPERATION_DISPATCH_TIMEOUT_MS` | No | services/ops/index.js:421 |
+| `AIMS_OPERATION_FRIDAY_PM_DELAY_MS` | Yes | services/ops/index.js:140 |
+| `AIMS_OPERATION_TASK_TIMEOUT_MS` | Yes | services/ops/index.js:422 |
 | `AIMS_STARTUP_GRACE_MS` | No | services/shared/utils/lifecycle.js:14 |
 | `AI_RETRY_BASE_MS` | Yes | audits/utils/seoAeoGeoAnalysis.js:1932 |
 | `AI_SUITE_API_KEY` | Yes | server.js:194<br>server.js:195<br>services/shared/middleware/suiteAuth.js:55 |
-| `AI_SUITE_AUDIT_CALLBACK_TOKEN` | Yes | audits/utils/callbackAuth.js:9<br>audits/utils/orchestrator.js:143<br>services/shared/middleware/suiteAuth.js:59 |
+| `AI_SUITE_AUDIT_CALLBACK_TOKEN` | Yes | audits/utils/callbackAuth.js:9<br>audits/utils/orchestrator.js:147<br>services/shared/middleware/suiteAuth.js:59 |
 | `AI_TIMEOUT` | Yes | services/artwork/createPodcastArtwork.js:14<br>services/artwork/createQuizArtwork.js:11<br>services/blotato/utils/newsShortsService.js:1313<br>services/script/utils/getSponsor.js:38<br>services/tts/utils/mergeProcessor.js:26 |
 | `AI_USAGE_LOG_ENABLED` | Yes | services/shared/utils/ai-service.js:221 |
 | `ALLOW_EPHEMERAL_STATE` | Yes | scripts/performanceGate.js:10<br>scripts/startupCheck.js:35<br>server.js:183<br>services/outreach/services/batchService.js:45<br>services/shared/utils/stateFile.js:74 |
@@ -41,7 +41,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `APP_STATE_DIR` | Yes | services/shared/utils/stateFile.js:9 |
 | `APP_TITLE` | Yes | ai-config.js:300<br>services/artwork/utils/artwork.js:292 |
 | `APP_TMP_DIR` | Yes | scripts/tempStorage.js:10<br>services/blotato/utils/renderedVideoQa.js:298<br>services/shared/utils/stateFile.js:10<br>services/tts/utils/editingProcessor.js:22<br>services/tts/utils/mergeProcessor.js:14<br>services/tts/utils/podcastProcessor.js:56 |
-| `APP_URL` | Yes | ai-config.js:299<br>audits/utils/orchestrator.js:139<br>services/artwork/utils/artwork.js:291<br>services/rss-feed-creator/utils/feedGenerator.js:32 |
+| `APP_URL` | Yes | ai-config.js:299<br>audits/utils/orchestrator.js:143<br>services/artwork/utils/artwork.js:291<br>services/rss-feed-creator/utils/feedGenerator.js:32 |
 | `APP_VERSION` | No | server.js:385<br>server.js:404<br>services/shared/utils/operationalExcellence.js:106<br>services/shared/utils/operationalExcellence.js:147 |
 | `ARTWORK_CAPABILITY_CACHE_MS` | No | services/artwork/utils/openrouterImageCapabilities.js:21 |
 | `ARTWORK_CAPABILITY_DISCOVERY_ENABLED` | No | services/artwork/utils/openrouterImageCapabilities.js:55 |
@@ -61,12 +61,12 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `ARTWORK_VISUAL_QA_PARSE_ATTEMPTS` | No | services/artwork/utils/artworkVisualQa.js:183 |
 | `ARTWORK_VISUAL_QA_REQUIRED` | Yes | services/artwork/utils/artwork.js:335 |
 | `ARTWORK_VISUAL_QA_THRESHOLD` | Yes | services/artwork/utils/artworkVisualQa.js:11 |
-| `AUDIT_ARTEFACT_READY_POLL_MS` | Yes | audits/utils/websiteAuditPipeline.js:41 |
-| `AUDIT_ARTEFACT_READY_TIMEOUT_MS` | Yes | audits/utils/websiteAuditPipeline.js:40 |
-| `AUDIT_ARTEFACT_READ_ATTEMPTS` | Yes | audits/utils/websiteAuditPipeline.js:38 |
-| `AUDIT_ARTEFACT_READ_TIMEOUT_MS` | Yes | audits/utils/websiteAuditPipeline.js:39 |
-| `AUDIT_CALLBACK_BASE_URL` | Yes | audits/utils/orchestrator.js:139 |
-| `AUDIT_CALLBACK_TOKEN` | Yes | audits/utils/callbackAuth.js:9<br>audits/utils/orchestrator.js:143<br>services/shared/middleware/suiteAuth.js:59 |
+| `AUDIT_ARTEFACT_READY_POLL_MS` | Yes | audits/utils/websiteAuditPipeline.js:42 |
+| `AUDIT_ARTEFACT_READY_TIMEOUT_MS` | Yes | audits/utils/websiteAuditPipeline.js:41 |
+| `AUDIT_ARTEFACT_READ_ATTEMPTS` | Yes | audits/utils/websiteAuditPipeline.js:39 |
+| `AUDIT_ARTEFACT_READ_TIMEOUT_MS` | Yes | audits/utils/websiteAuditPipeline.js:40 |
+| `AUDIT_CALLBACK_BASE_URL` | Yes | audits/utils/orchestrator.js:143 |
+| `AUDIT_CALLBACK_TOKEN` | Yes | audits/utils/callbackAuth.js:9<br>audits/utils/orchestrator.js:147<br>services/shared/middleware/suiteAuth.js:59 |
 | `AUDIT_RUN_REUSE_ACTIVE_MS` | No | audits/utils/orchestrator.js:34 |
 | `AUDIT_WEBSITE_REPO_REF` | Yes | audits/utils/githubDispatch.js:35 |
 | `AUTO_CALL` | Yes | services/rss-feed-podcast/index.js:145 |
@@ -339,7 +339,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `PODCAST_TRANSCRIPT_MAX_SENTENCE_WORDS` | Yes | services/script/utils/editAndFormat.js:184<br>services/script/utils/orchestrator.js:98<br>services/script/utils/orchestrator.js:301<br>services/script/utils/scriptValidation.js:293 |
 | `PODCAST_TRANSCRIPT_MIN_SOURCE_TERMS` | No | services/script/utils/scriptValidation.js:390 |
 | `POLLY_VOICE_ID` | Yes | services/tts/utils/ttsProcessor.js:24 |
-| `PORT` | Yes | routes/podcast-pipeline.js:14<br>scripts/deploySmoke.js:3<br>scripts/startupCheck.js:67<br>server.js:474<br>services/ops/index.js:400 |
+| `PORT` | Yes | routes/podcast-pipeline.js:14<br>scripts/deploySmoke.js:3<br>scripts/startupCheck.js:67<br>server.js:474<br>services/ops/index.js:401 |
 | `QA_ALERT_WEBHOOK_URL` | Yes | config/thresholds.js:96 |
 | `R2_ACCESS_KEY_ID` | Yes | audits/utils/publishAuditArtifacts.js:62<br>scripts/startupCheck.js:69 |
 | `R2_BUCKET_ART` | Yes | services/artwork/utils/io.js:15 |
@@ -420,12 +420,14 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `URLENCODED_BODY_LIMIT` | Yes | server.js:374 |
 | `URLSCAN_API_KEY` | Yes | services/outreach/services/outreachCore.js:14 |
 | `WEBHOOK_TIMEOUT_MS` | Yes | services/podcast/runPodcastPipeline.js:21 |
+| `WEBSITE_AUDIT_CHILD_RECONCILE_AFTER_MS` | No | audits/utils/websiteAuditPipeline.js:44 |
+| `WEBSITE_AUDIT_CHILD_RECONCILE_INTERVAL_MS` | No | audits/utils/websiteAuditPipeline.js:45 |
 | `WEBSITE_AUDIT_COUNCIL_MAX_RETRIES` | Yes | audits/utils/websiteAuditCouncil.js:905 |
 | `WEBSITE_AUDIT_COUNCIL_MAX_TOKENS` | Yes | audits/utils/websiteAuditCouncil.js:901 |
 | `WEBSITE_AUDIT_COUNCIL_TEMPERATURE` | No | audits/utils/websiteAuditCouncil.js:902 |
 | `WEBSITE_AUDIT_COUNCIL_TIMEOUT_MS` | Yes | audits/utils/websiteAuditCouncil.js:904 |
-| `WEBSITE_AUDIT_FINALISATION_STALE_MS` | Yes | audits/utils/websiteAuditPipeline.js:42 |
-| `WEBSITE_AUDIT_RUN_REUSE_ACTIVE_MS` | Yes | audits/utils/websiteAuditPipeline.js:37 |
+| `WEBSITE_AUDIT_FINALISATION_STALE_MS` | Yes | audits/utils/websiteAuditPipeline.js:43 |
+| `WEBSITE_AUDIT_RUN_REUSE_ACTIVE_MS` | Yes | audits/utils/websiteAuditPipeline.js:38 |
 | `WEBSITE_REBUILD_HOOK` | Yes | scripts/backfill-blog-main-site-links.js:20<br>services/blog/social/buildDailySocialBlogPost.js:228<br>services/blog/weekly/buildWeeklyBlogPost.js:219<br>services/podcast/runPodcastPipeline.js:73 |
 | `WEBSITE_REBUILD_HOOK_FALLBACK` | Yes | scripts/backfill-blog-main-site-links.js:21<br>services/blog/social/buildDailySocialBlogPost.js:229<br>services/blog/weekly/buildWeeklyBlogPost.js:220<br>services/podcast/runPodcastPipeline.js:74 |
 | `X` | No | config/thresholds.js:6<br>config/thresholds.js:16 |
