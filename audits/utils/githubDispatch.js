@@ -133,6 +133,36 @@ export async function dispatchGithubWorkflow({ workflowId, inputs, ref }) {
   };
 }
 
+export async function getGithubWorkflowRun({ runId }) {
+  const token = requiredEnv("GITHUB_TOKEN_WEBSITE_AUDITS");
+  const owner = requiredEnv("AUDIT_WEBSITE_REPO_OWNER");
+  const repo = requiredEnv("AUDIT_WEBSITE_REPO_NAME");
+  const cleanRunId = String(runId || "").trim();
+  if (!/^\d+$/.test(cleanRunId)) {
+    throw new Error(`Invalid GitHub workflow run id: ${runId || "<empty>"}`);
+  }
+  const apiBase = buildRepoApiBase(owner, repo);
+  const response = await fetchWithTimeout(
+    `${apiBase}/actions/runs/${encodeURIComponent(cleanRunId)}`,
+    { method: "GET", headers: githubApiHeaders(token) }
+  );
+  if (!response.ok) {
+    const text = await readTextSafe(response);
+    throw new Error(`GitHub workflow run lookup failed (${response.status}): ${text}`);
+  }
+  const run = await response.json().catch(() => ({}));
+  return {
+    ok: true,
+    runId: run.id || Number(cleanRunId),
+    workflowRunUrl: run.html_url || null,
+    status: run.status || null,
+    conclusion: run.conclusion || null,
+    createdAt: run.created_at || null,
+    updatedAt: run.updated_at || null,
+    displayTitle: run.display_title || run.name || null,
+  };
+}
+
 export async function verifyGithubWorkflowRun({
   workflowId,
   ref,

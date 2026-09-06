@@ -60,9 +60,13 @@ function buildWorkflowInputs({ sessionId, reportPrefix, websiteUrl, excludePatte
     analysis_url: analysisUrl,
     callback_token: callbackToken,
     audit_bucket: auditR2.bucket,
-    audit_public_base_url: "",
+    // The website audit runners historically named this a "public" base URL,
+    // but AIMS intentionally keeps the dedicated audits bucket private.  Pass
+    // the canonical r2:// bucket URI so runners can publish opaque private-R2
+    // references without requiring an HTTP-public bucket.
+    audit_public_base_url: auditR2.storageUri || `r2://${auditR2.bucket}`,
     audit_bucket_env: "R2_BUCKET_AUDITS",
-    audit_public_base_env: "",
+    audit_public_base_env: "R2_PUBLIC_BASE_URL_AUDITS",
     audit_storage_uri: auditR2.storageUri,
     audit_access_mode: "private-r2",
   };

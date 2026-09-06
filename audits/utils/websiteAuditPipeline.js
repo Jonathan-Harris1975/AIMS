@@ -12,6 +12,7 @@ import {
 import { sanitizeSessionId } from "../../services/shared/utils/sessionId.js";
 import { makeAuditJobType } from "./auditPaths.js";
 import { startAuditRun } from "./orchestrator.js";
+import { getGithubWorkflowRun } from "./githubDispatch.js";
 import {
   auditKeyFromPublicUrl,
   cleanupAuditPrefix,
@@ -40,6 +41,8 @@ const AUDIT_ARTEFACT_READ_TIMEOUT_MS = Math.max(1000, Number(process.env.AUDIT_A
 const AUDIT_ARTEFACT_READY_TIMEOUT_MS = Math.max(5000, Number(process.env.AUDIT_ARTEFACT_READY_TIMEOUT_MS || 120000));
 const AUDIT_ARTEFACT_READY_POLL_MS = Math.max(250, Number(process.env.AUDIT_ARTEFACT_READY_POLL_MS || 2000));
 const WEBSITE_AUDIT_FINALISATION_STALE_MS = Math.max(60000, Number(process.env.WEBSITE_AUDIT_FINALISATION_STALE_MS || 15 * 60 * 1000));
+const WEBSITE_AUDIT_CHILD_RECONCILE_AFTER_MS = Math.max(30000, Number(process.env.WEBSITE_AUDIT_CHILD_RECONCILE_AFTER_MS || 90 * 1000));
+const WEBSITE_AUDIT_CHILD_RECONCILE_INTERVAL_MS = Math.max(30000, Number(process.env.WEBSITE_AUDIT_CHILD_RECONCILE_INTERVAL_MS || 60 * 1000));
 const finalisationPromises = new Map();
 
 export const WEBSITE_PIPELINE_STAGES = Object.freeze([
@@ -65,6 +68,120 @@ export const WEBSITE_PIPELINE_STAGES = Object.freeze([
     prefixLeaf: "mobile-ux",
   },
 ]);
+
+function workflowRunIdFromUrl(value) {
+  const match = String(value || "").match(/\/actions\/runs\/(\d+)(?:[/?#]|$)/);
+  return match ? match[1] : null;
+}
+
+function isGithubRunTerminal(run) {
+  return String(run?.status || "").toLowerCase() === "completed";
+}
+
+async function reconcileCurrentChildStage(parent) {
+  const stage = stageDefinition(parent?.currentStage);
+  if (!stage) return parent;
+  const stageState = parent?.stages?.[stage.key];
+  if (!stageState || ["completed", "failed"].includes(String(stageState.status || "").toLowerCase())) return parent;
+
+  const runId = String(stageState.workflowRunId || workflowRunIdFromUrl(stageState.workflowRunUrl) || "").trim();
+  if (!runId) return parent;
+
+  const startedAt = Date.parse(stageState.dispatchedAt || stageState.startedAt || parent.updatedAt || "");
+  if (!Number.isFinite(startedAt) || Date.now() - startedAt < WEBSITE_AUDIT_CHILD_RECONCILE_AFTER_MS) return parent;
+
+  const lastCheckAt = Date.parse(stageState.lastWorkflowReconcileAt || "");
+  if (Number.isFinite(lastCheckAt) && Date.now() - lastCheckAt < WEBSITE_AUDIT_CHILD_RECONCILE_INTERVAL_MS) return parent;
+
+  let run;
+  try {
+    run = await getGithubWorkflowRun({ runId });
+  } catch (err) {
+    logError("audit.website.pipeline.child_reconcile_lookup_failed", {
+      pipelineSessionId: parent.sessionId,
+      auditType: stage.auditType,
+      runId,
+      message: err?.message || String(err),
+    });
+    await persistParent(parent.sessionId, {
+      stages: {
+        ...(parent.stages || {}),
+        [stage.key]: {
+          ...stageState,
+          lastWorkflowReconcileAt: new Date().toISOString(),
+          workflowReconcileError: err?.message || String(err),
+        },
+      },
+    });
+    return parent;
+  }
+
+  const checkedAt = new Date().toISOString();
+  if (!isGithubRunTerminal(run)) {
+    return persistParent(parent.sessionId, {
+      stages: {
+        ...(parent.stages || {}),
+        [stage.key]: {
+          ...stageState,
+          workflowRunId: String(run.runId || runId),
+          workflowRunUrl: run.workflowRunUrl || stageState.workflowRunUrl || null,
+          githubRunStatus: run.status || null,
+          githubRunConclusion: run.conclusion || null,
+          lastWorkflowReconcileAt: checkedAt,
+        },
+      },
+    });
+  }
+
+  const conclusion = String(run.conclusion || "unknown").toLowerCase();
+  const error = conclusion === "success"
+    ? "GitHub audit workflow completed successfully but AIMS did not receive the required terminal child callback; treating the stage as failed closed to prevent a permanently running monthly audit."
+    : `GitHub audit workflow reached terminal conclusion '${conclusion}' without a terminal child callback.`;
+
+  info("audit.website.pipeline.child_reconciled_terminal_run", {
+    pipelineSessionId: parent.sessionId,
+    auditType: stage.auditType,
+    runId,
+    conclusion,
+  });
+
+  failJob(makeAuditJobType(stage.auditType), stageState.sessionId, new Error(error), {
+    pipelineSessionId: parent.sessionId,
+    reportPrefix: stageState.reportPrefix,
+    workflowRunUrl: run.workflowRunUrl || stageState.workflowRunUrl || null,
+    workflowRunId: String(run.runId || runId),
+    githubRunStatus: run.status || null,
+    githubRunConclusion: conclusion,
+    reconciledFromGithub: true,
+  });
+  await flushJobStoreWrites({ throwOnError: false });
+
+  await resumeWebsiteAuditPipelineFromChild({
+    auditType: stage.auditType,
+    result: {
+      sessionId: stageState.sessionId,
+      status: "failed",
+      error,
+      job: {
+        ...stageState,
+        sessionId: stageState.sessionId,
+        pipelineSessionId: parent.sessionId,
+        auditType: stage.auditType,
+        status: "failed",
+        reportPrefix: stageState.reportPrefix,
+        workflowRunUrl: run.workflowRunUrl || stageState.workflowRunUrl || null,
+        workflowRunId: String(run.runId || runId),
+        githubRunStatus: run.status || null,
+        githubRunConclusion: conclusion,
+        lastWorkflowReconcileAt: checkedAt,
+        finishedAt: run.updatedAt || checkedAt,
+        error,
+      },
+    },
+  });
+
+  return getPublicJobFresh(WEBSITE_PIPELINE_JOB_TYPE, parent.sessionId);
+}
 
 function safeSegment(value) {
   return String(value || "")
@@ -163,6 +280,8 @@ dedicated R2 audit pipelines; podcast routes remain in scope.`,
           ...child,
           status: result.status || "queued",
           workflowRunUrl: result.workflowRunUrl || result.dispatch?.workflowRunUrl || null,
+          workflowRunId: result.workflowRunId || result.dispatch?.workflowRunId || null,
+          dispatchedAt: result.dispatch?.dispatchedAt || new Date().toISOString(),
           callbackUrl: result.callbackUrl || null,
         },
       },
@@ -954,6 +1073,18 @@ export async function resumeWebsiteAuditPipelineFromChild({ auditType, result })
   };
   await persistParent(pipelineSessionId, { stages: { ...(parent.stages || {}), [stage.key]: childStage } });
 
+  const childStatus = String(childStage.status || "").toLowerCase();
+  if (!["completed", "failed"].includes(childStatus)) {
+    return {
+      ok: true,
+      ignored: true,
+      reason: "non-terminal child callback",
+      pipelineSessionId,
+      receivedStage: auditType,
+      childStatus,
+    };
+  }
+
   const index = stageIndex(auditType);
   const next = WEBSITE_PIPELINE_STAGES[index + 1];
   if (next) {
@@ -969,8 +1100,13 @@ export async function resumeWebsiteAuditPipelineFromChild({ auditType, result })
 }
 
 export async function getWebsiteAuditPipelineJobFresh(sessionId) {
-  const job = await getPublicJobFresh(WEBSITE_PIPELINE_JOB_TYPE, sessionId);
+  let job = await getPublicJobFresh(WEBSITE_PIPELINE_JOB_TYPE, sessionId);
   if (!job || job.status === "completed" || job.status === "failed") return job;
+
+  if (!job.finalising && stageDefinition(job.currentStage)) {
+    job = await reconcileCurrentChildStage(job);
+    if (!job || job.status === "completed" || job.status === "failed") return job;
+  }
 
   const finalisingAt = Date.parse(job.finalisingAt || job.updatedAt || "");
   const stale = Boolean(job.finalising)
@@ -990,6 +1126,7 @@ export const __websiteAuditPipelineTestHooks = {
   safeSegment,
   stageDefinition,
   stageIndex,
+  workflowRunIdFromUrl,
   parentStageMetadata,
   requiredArtefactReadiness,
   loadChildStageOnce,
