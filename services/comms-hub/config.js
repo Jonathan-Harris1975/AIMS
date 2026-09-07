@@ -574,7 +574,7 @@ export function loadCommsHubConfig(env = process.env, { requireEnabled = false }
     oneComMailbox,
     oneComEmailTimeoutMs: positiveInteger(env.COMMS_HUB_ONECOM_TIMEOUT_MS, 20_000, "COMMS_HUB_ONECOM_TIMEOUT_MS", { min: 1_000, max: 60_000 }),
     emailPollWorkerEnabled: booleanValue(env.COMMS_HUB_EMAIL_POLL_WORKER_ENABLED, booleanValue(env.COMMS_HUB_EMAIL_ENABLED, false)),
-    emailPollMs: positiveInteger(env.COMMS_HUB_EMAIL_POLL_MS, 300_000, "COMMS_HUB_EMAIL_POLL_MS", { min: 30_000, max: 3_600_000 }),
+    emailPollMs: positiveInteger(env.COMMS_HUB_EMAIL_POLL_MS, 1_800_000, "COMMS_HUB_EMAIL_POLL_MS", { min: 30_000, max: 3_600_000 }),
     emailPollLeaseMs: positiveInteger(env.COMMS_HUB_EMAIL_POLL_LEASE_MS, 180_000, "COMMS_HUB_EMAIL_POLL_LEASE_MS", { min: 30_000, max: 900_000 }),
     emailPollBatchSize: positiveInteger(env.COMMS_HUB_EMAIL_POLL_BATCH_SIZE, 25, "COMMS_HUB_EMAIL_POLL_BATCH_SIZE", { min: 1, max: 100 }),
     emailHistoricalBackfillEnabled: booleanValue(env.COMMS_HUB_EMAIL_HISTORICAL_BACKFILL_ENABLED, false),
