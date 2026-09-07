@@ -604,7 +604,7 @@ async function createAndWaitForVideo({ templateId, templateIdCandidates = [], pa
      templateIdCandidates: candidates, rejectedTemplateIds });
 
   const maxAttempts = positiveIntEnv("BLOTATO_VIDEO_POLL_ATTEMPTS", 720, 2880);
-  const intervalMs = positiveIntEnv("BLOTATO_VIDEO_POLL_INTERVAL_MS", 5000, 60_000);
+  const intervalMs = positiveIntEnv("BLOTATO_VIDEO_POLL_INTERVAL_MS", 3000, 60_000);
   const finalGraceMs = positiveIntEnv("BLOTATO_VIDEO_FINAL_GRACE_MS", 15_000, 180_000);
   let completed;
   try {

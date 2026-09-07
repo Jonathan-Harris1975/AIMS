@@ -2,6 +2,28 @@ function clean(value = "") {
   return String(value ?? "").trim();
 }
 
+const DEFAULT_AI_STORY_VOICE = "Daniel (British, authoritative)";
+const GEORGE_AI_STORY_VOICE = "George (British, warm)";
+const DANIEL_VOICE_ID = "elevenlabs/eleven_multilingual_v2/cjVigY5qzO86Huf0OWal";
+const GEORGE_VOICE_ID = "elevenlabs/eleven_multilingual_v2/cgSgspJ2msm6clMCkdW9";
+
+/**
+ * The AI Video with AI Voice template accepts its friendly `voiceName` enum,
+ * while Blotato's generic voice catalogue also publishes provider voice IDs.
+ * Normalise those IDs and the invalid legacy George label into supported
+ * template values before a paid render is created.
+ */
+export function normaliseBlotatoVoiceName(value = "") {
+  const raw = clean(value);
+  const key = raw.toLowerCase().replace(/\s+/g, " ");
+  if (!raw) return DEFAULT_AI_STORY_VOICE;
+  if (key === "george (british, authoritative)" || key === DANIEL_VOICE_ID.toLowerCase()) {
+    return DEFAULT_AI_STORY_VOICE;
+  }
+  if (key === GEORGE_VOICE_ID.toLowerCase()) return GEORGE_AI_STORY_VOICE;
+  return raw;
+}
+
 const AI_STORY_INPUT_KEYS = Object.freeze([
   "voiceName",
   "aiImageModel",
@@ -85,4 +107,4 @@ export function buildVisualCreationRequest({
   };
 }
 
-export default { buildVisualCreationRequest };
+export default { buildVisualCreationRequest, normaliseBlotatoVoiceName };

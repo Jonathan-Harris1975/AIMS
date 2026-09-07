@@ -2,7 +2,7 @@ import { warn } from "../../../logger.js";
 import { AMERICAN_TO_BRITISH } from "../../content-quality/brandLexicon.js";
 import { resilientRequest } from "../../shared/utils/ai-service.js";
 import { createVisual } from "./blotatoClient.js";
-import { buildVisualCreationRequest } from "./visualRequest.js";
+import { buildVisualCreationRequest, normaliseBlotatoVoiceName } from "./visualRequest.js";
 import { DEFAULT_BLOTATO_SHORT_LANE, requireShortLaneConfig, getShortLaneConfig } from "./shortLanes.js";
 import { buildBlotatoPersona } from "../../script/utils/toneSetter.js";
 import { jonathanVoicePrompt } from "../../content-quality/jonathanVoice.js";
@@ -14,7 +14,7 @@ const MAX_SCRIPT_WORDS = Math.max(TARGET_SCRIPT_WORDS, Number(process.env.BLOTAT
 const MIN_SCENE_VOICEOVER_WORDS = Math.max(75, Number(process.env.BLOTATO_NEWS_MIN_SCENE_WORDS || 80));
 
 // Brand kit — all visual and audio identity settings are env-configurable.
-const AI_STORY_VOICE = process.env.BLOTATO_BRAND_VOICE_NAME || "Daniel (British, authoritative)";
+const AI_STORY_VOICE = normaliseBlotatoVoiceName(process.env.BLOTATO_BRAND_VOICE_NAME);
 const AI_STORY_HIGHLIGHT = process.env.BLOTATO_BRAND_HIGHLIGHT_COLOR || "#00E5FF";
 const AI_STORY_CAPTION_POSITION = process.env.BLOTATO_BRAND_CAPTION_POSITION || "bottom";
 const AI_STORY_TRANSITION = process.env.BLOTATO_BRAND_TRANSITION || "fade";

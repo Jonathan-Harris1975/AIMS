@@ -27,6 +27,11 @@ export function looksLikePendingVideoError(error = {}) {
   if (statusCode === 402 || /insufficient[-_ ]credits|payment[-_ ]required|billing[-_ ]error|no[-_ ]credits/.test(status)) return false;
   if (/explicitly out of credits|credit balance is zero|insufficient credits|payment required/.test(text)) return false;
   if (statusCode === 408 || statusCode === 425 || statusCode === 429) return true;
+  // Status polling is a safe GET. Blotato's render workflow is deliberately
+  // asynchronous, so a transient provider 5xx while a render is waking or
+  // progressing must stay inside the bounded polling loop rather than aborting
+  // a visual that may still complete. 4xx identity/billing failures remain hard.
+  if (statusCode >= 500 && statusCode <= 599) return true;
   if (/fetch failed|socket (?:hang up|closed|terminated)|econnreset|etimedout|eai_again|network (?:error|failure|timeout|unreachable)/.test(text)) return true;
   return new RegExp("video generation is not complete|render(?:ing)? is not complete|still (?:rendering|processing)|not ready|queued|in progress|processing|pending|try again|\
 creation has not completed|most likely ran out of credits", "").test(text);
