@@ -36,5 +36,10 @@ test("quiz scheduler builds separate question and answer reveal artwork", async 
   assert.match(source, /cardType: "question"/);
   assert.match(source, /cardType: "answer"/);
   assert.match(source, /Keep the three incorrect options visible but visually quieter/);
-  assert.match(source, /semi-transparent topic-relevant diagram or visual motif/);
+  assert.match(source, /Quiz topic:/);
+  assert.match(source, /specific, recognisable real-world scene, mechanism, device, workflow or consequence/);
+  assert.match(source, /Do not use generic AI wallpaper/);
+  assert.match(source, /zernio-quiz-question-artwork-unavailable/);
+  assert.match(source, /zernio-quiz-answer-artwork-unavailable/);
+  assert.match(source, /refusing to schedule the static default image/);
 });

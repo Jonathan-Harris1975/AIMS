@@ -44,7 +44,7 @@ test("artwork payload supports explicit deterministic seeds and model-specific s
   assert.equal("resolution" in flux, false);
 });
 
-test("Blotato accepts only the observed not-complete 500 as bounded pending", () => {
+test("Blotato keeps transient status-poll 5xx responses inside bounded polling", () => {
   assert.equal(looksLikePendingVideoError({
     statusCode: 500,
     message: "Video generation is not complete. You most likely ran out of credits.",
@@ -52,7 +52,7 @@ test("Blotato accepts only the observed not-complete 500 as bounded pending", ()
   assert.equal(looksLikePendingVideoError({
     statusCode: 500,
     message: "Internal server error",
-  }), false);
+  }), true);
   assert.equal(looksLikePendingVideoError({
     statusCode: 402,
     message: "Payment required: insufficient credits",
@@ -69,6 +69,20 @@ test("Blotato accepts only the observed not-complete 500 as bounded pending", ()
     statusCode: 404,
     message: "Creation not found",
   }), false);
+});
+
+test("Blotato normalises the invalid legacy British voice selection to a current template voice", async () => {
+  const { normaliseBlotatoVoiceName } = await import(`../services/blotato/utils/visualRequest.js?voice-contract=${Date.now()}`);
+
+  assert.equal(normaliseBlotatoVoiceName("George (British, authoritative)"), "Daniel (British, authoritative)");
+  assert.equal(
+    normaliseBlotatoVoiceName("elevenlabs/eleven_multilingual_v2/cjVigY5qzO86Huf0OWal"),
+    "Daniel (British, authoritative)",
+  );
+  assert.equal(
+    normaliseBlotatoVoiceName("elevenlabs/eleven_multilingual_v2/cgSgspJ2msm6clMCkdW9"),
+    "George (British, warm)",
+  );
 });
 
 test("pollUntil fails after a bounded run of provider pending errors", async () => {
@@ -124,10 +138,12 @@ test("provider integrations follow current Blotato and OpenRouter contracts", as
   assert.match(env, /^BLOTATO_NEWS_TEMPLATE_ID=\/base\/v2\/ai-story-video\/5903fe43-514d-40ee-a060-0d6628c5f8fd\/v1$/m);
   assert.match(env, /^BLOTATO_TEMPLATE_ID_MODE=uuid$/m);
   assert.match(env, /^BLOTATO_VIDEO_POLL_ATTEMPTS=120$/m);
+  assert.match(env, /^BLOTATO_VIDEO_POLL_INTERVAL_MS=3000$/m);
   assert.match(env, /^BLOTATO_VIDEO_POLL_MAX_DURATION_MS=600000$/m);
   assert.match(env, /^BLOTATO_STATUS_RETRY_ATTEMPTS=1$/m);
   assert.match(env, /^BLOTATO_VIDEO_PENDING_ERROR_LIMIT=120$/m);
   assert.match(env, /^BLOTATO_PENDING_500_COMPAT=true$/m);
+  assert.match(env, /^BLOTATO_BRAND_VOICE_NAME=Daniel \(British, authoritative\)$/m);
   assert.match(env, /^ARTWORK_TASK_TIMEOUT_MS=600000$/m);
   assert.match(env, /^BLOG_FALLBACK_IMAGE_URL=$/m);
   assert.match(env, /^BLOG_SOCIAL_FALLBACK_IMAGE_URL=$/m);

@@ -30,6 +30,14 @@ test("Zernio recovered times keep the original canonical slot and provider idemp
   assert.match(client, /material = seed \? `\$\{endpoint\}:slot:\$\{seed\}`/);
 });
 
+test("weekly ebook and quiz provider handoffs reuse their durable schedule-slot idempotency keys", async () => {
+  const scheduler = await readFile(new URL("../services/zernio/utils/socialScheduler.js", import.meta.url), "utf8");
+
+  assert.match(scheduler, /laneKey: `ebook-\$\{dayKey\}`,[\s\S]*?idempotencySeed: slotClaim\.key \|\| ""/);
+  assert.match(scheduler, /laneKey: "quiz-answer",[\s\S]*?idempotencySeed: answerSlotClaim\.key \|\| ""/);
+  assert.match(scheduler, /laneKey: "quiz-question",[\s\S]*?idempotencySeed: questionSlotClaim\.key \|\| ""/);
+});
+
 test("Zernio accepts its documented existingPost response when a recovered retry moved the local time", async () => {
   const { verifyZernioScheduleResponse } = await import(`../services/zernio/utils/socialScheduler.js?idempotent-replay=${Date.now()}`);
 
