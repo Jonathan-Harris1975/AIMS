@@ -3287,6 +3287,8 @@ export async function buildAndScheduleEbookWeekly(options = {}) {
         accountId,
         dryRun,
         apiKey,
+        laneKey: `ebook-${dayKey}`,
+        idempotencySeed: slotClaim.key || "",
       });
 
       posts[dayKey] = {
@@ -3431,28 +3433,34 @@ function parseQuizCorrectAnswer(answerContent = "", options = []) {
   };
 }
 
-function buildQuizQuestionArtworkPrompt({ title, question, options } = {}) {
+function buildQuizQuestionArtworkPrompt({ title, topic, question, options } = {}) {
   const optionBlock = options.map(({ letter, text }) => `${letter}) ${text}`).join("\n");
+  const quizTopic = compactText(topic || question || "artificial intelligence");
 
   return [
     "QUESTION CARD.",
+    `Quiz topic: ${quizTopic}`,
     `Header text: ${compactText(title || "AI Quiz")}`,
     `Question text: ${compactText(question)}`,
     "Render these four answer choices exactly, each in its own large horizontal panel:",
     optionBlock,
     "Do not highlight, tick, colour-code, enlarge or otherwise reveal which answer is correct.",
     "Give every option equal visual weight.",
-    "Use a small simple diagram or icon beside each option where it improves recognition.",
+    "The background or side illustration must depict one specific, recognisable real-world scene, mechanism, device, workflow or consequence from this exact quiz topic.",
+    "Do not use generic AI wallpaper, glowing brains, random circuit patterns, decorative robots or unrelated technology imagery.",
+    "Use a small topic-relevant diagram or icon beside each option where it improves recognition.",
     'Footer text: "Comment your answer below."',
     "Keep the design highly readable on a phone and visually energetic enough to encourage comments.",
   ].join("\n");
 }
 
-function buildQuizAnswerArtworkPrompt({ title, question, options, correct } = {}) {
+function buildQuizAnswerArtworkPrompt({ title, topic, question, options, correct } = {}) {
   const optionBlock = options.map(({ letter, text }) => `${letter}) ${text}`).join("\n");
+  const quizTopic = compactText(topic || question || "artificial intelligence");
 
   return [
     "ANSWER REVEAL CARD.",
+    `Quiz topic: ${quizTopic}`,
     `Small header text: ${compactText(title || "AI Quiz Answer")}`,
     `Question context: ${compactText(question)}`,
     "Keep all four original options visible:",
@@ -3461,7 +3469,9 @@ function buildQuizAnswerArtworkPrompt({ title, question, options, correct } = {}
     `Short explanation: ${compactText(correct.explanation).slice(0, 260)}`,
     `Strongly highlight only ${correct.letter}) ${correct.text} with a clear correct-answer treatment.`,
     "Keep the three incorrect options visible but visually quieter.",
-    "Place one subtle semi-transparent topic-relevant diagram or visual motif behind the explanation area, with enough contrast that all text remains easy to read.",
+    "Place one specific, recognisable real-world scene, mechanism, device, workflow or consequence from this exact quiz topic behind or beside the explanation area.",
+    "Do not use generic AI wallpaper, glowing brains, random circuit patterns, decorative robots or unrelated technology imagery.",
+    "Keep the topical visual subtle enough that all text remains easy to read.",
     "Do not add extra slogans, invented facts, fake labels or unrelated words.",
     'Footer text: "Did you get it right?"',
   ].join("\n");
@@ -3611,12 +3621,15 @@ export async function buildAndScheduleQuizSeries(options = {}) {
       const correct = parseQuizCorrectAnswer(answerPost.content, parsedQuiz.options);
 
       if (parsedQuiz.options.length !== 4 || !correct.letter || !correct.text) {
-        warn("zernio.quiz.artwork.static_fallback", {
+        warn("zernio.quiz.artwork.structure_invalid", {
           questionPublishDate,
-          reason: "quiz-structure-not-safe-for-image-generation",
           parsedOptionCount: parsedQuiz.options.length,
           correctLetter: correct.letter || null,
         });
+        const err = new Error("Quiz structure was not safe for themed artwork generation; refusing to schedule the static default image.");
+        err.statusCode = 422;
+        err.code = "zernio-quiz-artwork-structure-invalid";
+        throw err;
       } else {
         if (!options.questionImageUrl) {
           const questionArtwork = await createQuizArtwork({
@@ -3625,16 +3638,21 @@ export async function buildAndScheduleQuizSeries(options = {}) {
             date: questionPublishDate,
             prompt: buildQuizQuestionArtworkPrompt({
               title: questionPost.title,
+              topic: generated.topic,
               question: parsedQuiz.question,
               options: parsedQuiz.options,
             }),
             fallbackUrl: QUIZ_CONFIG.questionImageUrl,
           });
 
-          if (questionArtwork.publicUrl) {
-            questionImageUrl = questionArtwork.publicUrl;
-            questionPost.imageUrl = questionArtwork.publicUrl;
+          if (!questionArtwork?.ok || !questionArtwork.publicUrl || questionArtwork.fallback) {
+            const err = new Error(questionArtwork?.error || "Quiz question themed artwork generation failed; refusing to schedule the static default image.");
+            err.statusCode = 502;
+            err.code = "zernio-quiz-question-artwork-unavailable";
+            throw err;
           }
+          questionImageUrl = questionArtwork.publicUrl;
+          questionPost.imageUrl = questionArtwork.publicUrl;
         }
 
         if (!options.answerImageUrl) {
@@ -3644,6 +3662,7 @@ export async function buildAndScheduleQuizSeries(options = {}) {
             date: answerPublishDate,
             prompt: buildQuizAnswerArtworkPrompt({
               title: answerPost.title,
+              topic: generated.topic,
               question: parsedQuiz.question,
               options: parsedQuiz.options,
               correct,
@@ -3651,10 +3670,14 @@ export async function buildAndScheduleQuizSeries(options = {}) {
             fallbackUrl: QUIZ_CONFIG.answerImageUrl,
           });
 
-          if (answerArtwork.publicUrl) {
-            answerImageUrl = answerArtwork.publicUrl;
-            answerPost.imageUrl = answerArtwork.publicUrl;
+          if (!answerArtwork?.ok || !answerArtwork.publicUrl || answerArtwork.fallback) {
+            const err = new Error(answerArtwork?.error || "Quiz answer themed artwork generation failed; refusing to schedule the static default image.");
+            err.statusCode = 502;
+            err.code = "zernio-quiz-answer-artwork-unavailable";
+            throw err;
           }
+          answerImageUrl = answerArtwork.publicUrl;
+          answerPost.imageUrl = answerArtwork.publicUrl;
         }
       }
     }
@@ -3681,6 +3704,8 @@ export async function buildAndScheduleQuizSeries(options = {}) {
             accountId,
             dryRun,
             apiKey,
+            laneKey: "quiz-answer",
+            idempotencySeed: answerSlotClaim.key || "",
           });
     } catch (error) {
       answerScheduling = {
@@ -3734,6 +3759,8 @@ export async function buildAndScheduleQuizSeries(options = {}) {
             accountId,
             dryRun,
             apiKey,
+            laneKey: "quiz-question",
+            idempotencySeed: questionSlotClaim.key || "",
           });
 
     if (questionScheduling.scheduled || answerScheduling.scheduled) {
