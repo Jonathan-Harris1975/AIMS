@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { safeErrorLog } from '../domain/redaction.js';
 import { log } from '../../../logger.js';
 import { CommsHubError } from '../errors.js';
+import { businessHoursPolicy, isWithinBusinessHours, nextBusinessOpening } from '../domain/businessHours.js';
 
 function delay(attempt) {
   return Math.min(3_600_000, 30_000 * (2 ** Math.min(attempt, 7)));
@@ -47,8 +48,12 @@ export class CommsHubEmailPollWorker {
       });
     };
 
+    const businessPolicy = businessHoursPolicy(this.context.config);
     this.timer = setInterval(
-      () => void this.runOnce().catch((error) => reportUnhandledRunFailure('commsHub.emailPoll.tickFailed', error)),
+      () => {
+        if (!isWithinBusinessHours(new Date(), businessPolicy)) return;
+        void this.runOnce().catch((error) => reportUnhandledRunFailure('commsHub.emailPoll.tickFailed', error));
+      },
       this.context.config.emailPollMs
     );
     this.timer.unref?.();
@@ -90,17 +95,34 @@ export class CommsHubEmailPollWorker {
     return result;
   }
 
-  async runOnce({ limit, force = false } = {}) {
+  async runOnce({ limit, force = false, now: nowValue = new Date() } = {}) {
     if (this.running || this.stopping) {
       const reason = this.stopping ? 'stopping' : 'already_running';
       log.info('commsHub.emailPoll.skipped', { workerId: this.workerId, reason });
       return { skipped: true, reason };
     }
 
-    this.running = true;
-    const now = new Date();
+    const now = nowValue instanceof Date ? nowValue : new Date(nowValue);
     const mailbox = this.account.mailbox;
     const accountKey = this.account.key;
+    const policy = businessHoursPolicy(this.context.config);
+
+    if (!force && !isWithinBusinessHours(now, policy)) {
+      const nextAttemptAt = nextBusinessOpening(now, policy).toISOString();
+      log.info('commsHub.emailPoll.skipped', {
+        workerId: this.workerId,
+        accountKey,
+        mailbox,
+        reason: 'outside_business_hours',
+        nextAttemptAt,
+        businessTimeZone: policy.timeZone,
+        businessStartHour: policy.startHour,
+        businessEndHour: policy.endHour,
+      });
+      return { skipped: true, reason: 'outside_business_hours', nextAttemptAt };
+    }
+
+    this.running = true;
     let state;
     let stage = 'claim_state';
 
@@ -187,7 +209,7 @@ export class CommsHubEmailPollWorker {
           workerId: this.workerId,
           lastUid: cursor.highestUid,
           uidValidity: cursor.uidValidity,
-          nextAttemptAt: new Date(Date.now() + this.context.config.emailPollMs).toISOString(),
+          nextAttemptAt: new Date(now.getTime() + this.context.config.emailPollMs).toISOString(),
         });
         const reason = uidValidityChanged ? 'uidvalidity_rebaseline' : mailboxReset ? 'mailbox_reset_rebaseline' : 'historical_baseline_established';
         log.info('commsHub.emailPoll.baseline', {
@@ -282,7 +304,7 @@ export class CommsHubEmailPollWorker {
         uidValidity: observedUidValidity,
         // Drain another batch almost immediately when the configured batch was
         // filled; otherwise return to the normal poll cadence.
-        nextAttemptAt: new Date(Date.now() + (results.length >= batchLimit ? 1_000 : this.context.config.emailPollMs)).toISOString(),
+        nextAttemptAt: new Date(now.getTime() + (results.length >= batchLimit ? 1_000 : this.context.config.emailPollMs)).toISOString(),
       });
 
       const attachmentCount = results.reduce((total, item) => total + (item.attachments?.length || 0), 0);
@@ -326,7 +348,7 @@ export class CommsHubEmailPollWorker {
           workerId: this.workerId,
           failureClass: error.failureClass || 'temporary',
           error: failure.message,
-          nextAttemptAt: new Date(Date.now() + delay(Number(state.attempts || 1))).toISOString(),
+          nextAttemptAt: new Date(now.getTime() + delay(Number(state.attempts || 1))).toISOString(),
         }).catch(() => null);
       }
       await this.context.quarantineService.quarantine({
