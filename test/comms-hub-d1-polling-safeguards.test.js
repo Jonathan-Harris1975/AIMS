@@ -112,7 +112,7 @@ test("production polling defaults use webhook-first reconciliation intervals", (
     "COMMS_HUB_ZERNIO_POLL_MS=3600000",
     "COMMS_HUB_FOLLOW_UP_POLL_MS=900000",
     "COMMS_HUB_PROVIDER_HEALTH_POLL_MS=900000",
-    "COMMS_HUB_EMAIL_POLL_MS=300000",
+    "COMMS_HUB_EMAIL_POLL_MS=1800000",
     "COMMS_HUB_DELAYED_ACTION_POLL_MS=300000",
   ]) assert.match(source, new RegExp(`^${expected}$`, "m"));
 });

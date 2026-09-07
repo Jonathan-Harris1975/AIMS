@@ -28,7 +28,7 @@ test("first email poll establishes a UID watermark without fetching historical m
   };
 
   const worker = new CommsHubEmailPollWorker({ context });
-  const result = await worker.runOnce();
+  const result = await worker.runOnce({ now: new Date("2026-09-07T10:00:00.000Z") });
   assert.equal(result.skipped, true);
   assert.equal(result.reason, "historical_baseline_established");
   assert.equal(result.highestUid, 4321);
@@ -86,9 +86,79 @@ test("successful empty email poll advances state and reports zero processed", as
   };
 
   const worker = new CommsHubEmailPollWorker({ context });
-  const result = await worker.runOnce();
+  const result = await worker.runOnce({ now: new Date("2026-09-07T10:00:00.000Z") });
   assert.equal(result.processed, 0);
   assert.equal(result.highestUid, 4321);
   assert.equal(calls.complete.length, 1);
   assert.equal(calls.complete[0].lastUid, 4321);
 });
+
+test("automatic email polling stops at the configured business-hours boundary before touching D1 or IMAP", async () => {
+  const calls = { claim: 0, cursor: 0, fetch: 0 };
+  const context = {
+    config: {
+      emailPollWorkerEnabled: true,
+      emailPollMs: 60_000,
+      emailPollLeaseMs: 180_000,
+      emailPollBatchSize: 25,
+      emailHistoricalBackfillEnabled: false,
+      oneComEmailAccountKey: "info",
+      oneComEmailAddress: "info@jonathan-harris.online",
+      oneComMailbox: "INBOX",
+      businessTimeZone: "Europe/London",
+      businessStartHour: 9,
+      businessEndHour: 17,
+    },
+    operationsRepository: {
+      async claimEmailPollState() { calls.claim += 1; throw new Error("must not claim outside business hours"); },
+    },
+    oneComMail: {
+      async getMailboxCursor() { calls.cursor += 1; throw new Error("must not connect to IMAP outside business hours"); },
+      async fetchMessages() { calls.fetch += 1; throw new Error("must not fetch outside business hours"); },
+    },
+  };
+
+  const worker = new CommsHubEmailPollWorker({ context });
+  const result = await worker.runOnce({ now: new Date("2026-09-06T20:00:00.000Z") });
+  assert.equal(result.skipped, true);
+  assert.equal(result.reason, "outside_business_hours");
+  assert.equal(result.nextAttemptAt, "2026-09-07T08:00:00.000Z");
+  assert.deepEqual(calls, { claim: 0, cursor: 0, fetch: 0 });
+});
+
+test("forced email replay can still be run deliberately outside business hours", async () => {
+  const calls = { reset: 0, claim: 0, cursor: 0 };
+  const context = {
+    config: {
+      emailPollWorkerEnabled: true,
+      emailPollMs: 60_000,
+      emailPollLeaseMs: 180_000,
+      emailPollBatchSize: 25,
+      emailHistoricalBackfillEnabled: false,
+      oneComEmailAccountKey: "info",
+      oneComEmailAddress: "info@jonathan-harris.online",
+      oneComMailbox: "INBOX",
+      businessTimeZone: "Europe/London",
+      businessStartHour: 9,
+      businessEndHour: 17,
+    },
+    operationsRepository: {
+      async resetEmailPollStateForReplay() { calls.reset += 1; },
+      async claimEmailPollState() { calls.claim += 1; return { last_uid: 5, uid_validity: 77, attempts: 1 }; },
+      async completeEmailPollState(value) { return value; },
+      async failEmailPollState() { throw new Error("must not fail"); },
+    },
+    oneComMail: {
+      async getMailboxCursor() { calls.cursor += 1; return { mailbox: "INBOX", uidValidity: 77, highestUid: 5 }; },
+      async fetchMessages() { return { mailbox: "INBOX", uidValidity: 77, highestUid: 5, messages: [] }; },
+    },
+    emailService: { async persistFetched() { throw new Error("nothing should be persisted"); } },
+    quarantineService: { async quarantine() {} },
+  };
+
+  const worker = new CommsHubEmailPollWorker({ context });
+  const result = await worker.runOnce({ force: true, now: new Date("2026-09-06T20:00:00.000Z") });
+  assert.equal(result.processed, 0);
+  assert.deepEqual(calls, { reset: 1, claim: 1, cursor: 1 });
+});
+

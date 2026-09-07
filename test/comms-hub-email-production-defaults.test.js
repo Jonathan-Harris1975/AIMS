@@ -19,6 +19,7 @@ const defaults = parseEnv(fs.readFileSync(new URL("../config/production.defaults
 test("production defaults enable the live info mailbox and poll worker", () => {
   assert.equal(defaults.COMMS_HUB_EMAIL_ENABLED, "true");
   assert.equal(defaults.COMMS_HUB_EMAIL_POLL_WORKER_ENABLED, "true");
+  assert.equal(defaults.COMMS_HUB_EMAIL_POLL_MS, "1800000");
   assert.equal(defaults.COMMS_HUB_ONECOM_EMAIL_ADDRESS, "info@jonathan-harris.online");
   assert.equal(defaults.COMMS_HUB_ONECOM_USERNAME, "info@jonathan-harris.online");
   assert.equal(defaults.COMMS_HUB_EMAIL_ADMIN_ADDRESS, "admin@jonathan-harris.online");
