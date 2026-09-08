@@ -634,21 +634,21 @@ test("Blotato scheduled lane reaches the provider and confirms every queued post
 
 test("Blotato accepts a provider-acknowledged in-progress scheduled submission", async () => {
   const weekday = new Intl.DateTimeFormat("en-GB", { weekday: "long", timeZone: "Europe/London" }).format(new Date()).toUpperCase();
-  // Use the opposite daily slot from the preceding scheduled-lane test. The
-  // production duplicate guard intentionally retains completed slot ownership
-  // for the day, so reusing PM here makes this test exercise dedupe instead of
-  // the provider's documented in-progress acknowledgement path.
-  process.env[`BLOTATO_SCHEDULE_${weekday}_AM`] = "00:00";
+  // Use a different scheduled lane from the preceding news-insight test.
+  // /shorts/:lane/schedule always owns the PM slot by contract, so changing the
+  // AM environment variable does not alter the slot and would still exercise
+  // production dedupe instead of the provider acknowledgement path.
+  process.env[`BLOTATO_SCHEDULE_${weekday}_PM`] = "00:00";
   process.env.BLOTATO_SCHEDULE_RECOVERY_ENABLED = "true";
   process.env.BLOTATO_SCHEDULE_MIN_LEAD_MS = "60000";
   process.env.BLOTATO_SCHEDULE_VERIFY_ATTEMPTS = "2";
   process.env.BLOTATO_SCHEDULE_VERIFY_INTERVAL_MS = "1";
-  process.env.BLOTATO_NEWS_RSS_URL = `${mockBase}/feed-scheduled.xml`;
+  process.env.BLOTATO_NEWS_RSS_URL = `${mockBase}/feed.xml`;
   scheduledPostStatusMode = "in-progress";
 
   try {
     const response = await request(app)
-      .post("/blotato/shorts/news-insight/schedule")
+      .post("/blotato/shorts/ai-at-work/schedule")
       .set(auth)
       .send({});
 
