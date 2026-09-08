@@ -634,7 +634,11 @@ test("Blotato scheduled lane reaches the provider and confirms every queued post
 
 test("Blotato accepts a provider-acknowledged in-progress scheduled submission", async () => {
   const weekday = new Intl.DateTimeFormat("en-GB", { weekday: "long", timeZone: "Europe/London" }).format(new Date()).toUpperCase();
-  process.env[`BLOTATO_SCHEDULE_${weekday}_PM`] = "00:00";
+  // Use the opposite daily slot from the preceding scheduled-lane test. The
+  // production duplicate guard intentionally retains completed slot ownership
+  // for the day, so reusing PM here makes this test exercise dedupe instead of
+  // the provider's documented in-progress acknowledgement path.
+  process.env[`BLOTATO_SCHEDULE_${weekday}_AM`] = "00:00";
   process.env.BLOTATO_SCHEDULE_RECOVERY_ENABLED = "true";
   process.env.BLOTATO_SCHEDULE_MIN_LEAD_MS = "60000";
   process.env.BLOTATO_SCHEDULE_VERIFY_ATTEMPTS = "2";
