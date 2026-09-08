@@ -543,7 +543,7 @@ test("Zernio reaches the provider with curated fallback artwork when generation 
   ]);
 });
 
-test("Zernio schedules generated artwork and keeps static fallback disabled by default", async () => {
+test("Zernio schedules fresh generated artwork before the enabled stored-image fallback", async () => {
   restoreEnv();
   applyBaseEnv();
   process.env.OPENROUTER_API_BASE = mockBase;
@@ -573,7 +573,7 @@ test("Zernio schedules generated artwork and keeps static fallback disabled by d
 
   assert.equal(result.scheduled, true);
   assert.equal(result.post.imageStatus, "generated");
-  assert.equal(artworkCalls[0].allowFallback, false);
+  assert.equal(artworkCalls[0].allowFallback, true);
   assert.deepEqual(scheduledRequests.at(-1).body.mediaItems, [{
     type: "image",
     url: "https://images.jonathan-harris.online/zernio/monday/generated-qa-safe.png",
@@ -816,7 +816,7 @@ test("Sunday spotlight avoids fabricated likenesses and daily evergreen artwork 
   assert.match(source, /no books, papers, notebooks, theses, whiteboards, chalkboards/i);
   assert.match(source, /createSocialArtwork\(/);
   assert.match(source, /fallbackUrl: lane\.imageUrl/);
-  assert.match(source, /allowFallback: booleanValue\(process\.env\.ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK, false\)/);
+  assert.match(source, /allowFallback: booleanValue\(process\.env\.ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK, true\)/);
   assert.match(source, /!artwork\?\.ok \|\| !artwork\.publicUrl/);
   assert.doesNotMatch(source, /!artwork\?\.ok \|\| !artwork\.publicUrl \|\| artwork\.fallback/);
   assert.match(source, /post\.imagePrompt = imagePrompt/);

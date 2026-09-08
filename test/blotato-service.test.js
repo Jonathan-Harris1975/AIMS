@@ -37,7 +37,8 @@ const AI_STORY_TEMPLATE_UUID = "5903fe43-514d-40ee-a060-0d6628c5f8fd";
 const capturedChatRequests = [];
 const capturedVisualRequests = [];
 const capturedPostRequests = [];
-const scheduledPostIds = new Set();
+const scheduledPostTimes = new Map();
+let scheduledPostStatusMode = "scheduled";
 
 function countHashtags(value = "") {
   return (String(value || "").match(/(^|\s)#[\p{L}\p{N}_]+/gu) || []).length;
@@ -240,7 +241,7 @@ will be the ones who build better systems around the tools.",
     }
 
     const id = body.post.content.platform === "tiktok" ? "post-1" : `post-${body.post.content.platform}`;
-    if (body.scheduledTime) scheduledPostIds.add(id);
+    if (body.scheduledTime) scheduledPostTimes.set(id, body.scheduledTime);
     res.writeHead(201, { "content-type": "application/json" });
     res.end(JSON.stringify({ postSubmissionId: id }));
     return;
@@ -249,10 +250,13 @@ will be the ones who build better systems around the tools.",
   if (req.method === "GET" && url.pathname.startsWith("/v2/posts/post-")) {
     const id = url.pathname.split("/").pop();
     res.writeHead(200, { "content-type": "application/json" });
+    const scheduledTime = scheduledPostTimes.get(id);
+    const transitional = scheduledTime && scheduledPostStatusMode === "in-progress";
     res.end(JSON.stringify({
       postSubmissionId: id,
-      status: scheduledPostIds.has(id) ? "scheduled" : "published",
-      publicUrl: scheduledPostIds.has(id) ? undefined : `https://example.com/p/${id}`,
+      status: scheduledTime ? (transitional ? "in-progress" : "scheduled") : "published",
+      scheduledTime: scheduledTime || undefined,
+      publicUrl: scheduledTime ? undefined : `https://example.com/p/${id}`,
     }));
     return;
   }
@@ -350,10 +354,11 @@ test.afterEach(() => {
   capturedChatRequests.length = 0;
   capturedVisualRequests.length = 0;
   capturedPostRequests.length = 0;
-  scheduledPostIds.clear();
+  scheduledPostTimes.clear();
   process.env.Blotato_API_key = testCredential("blotato");
   process.env.BLOTATO_API_BASE = `${mockBase}/v2`;
   process.env.BLOTATO_NEWS_RSS_URL = `${mockBase}/feed.xml`;
+  scheduledPostStatusMode = "scheduled";
   process.env.BLOTATO_RSS_PREFER_R2 = "false";
   process.env.BLOTATO_INLINE_PUBLISH_JOBS = "true";
   process.env.BLOTATO_VIDEO_POLL_ATTEMPTS = "2";
@@ -624,4 +629,36 @@ test("Blotato scheduled lane reaches the provider and confirms every queued post
   assert.equal(capturedPostRequests.length, 4);
   assert.ok(capturedPostRequests.every((payload) => Boolean(payload.scheduledTime)));
   assert.equal(capturedVisualRequests.at(-1).inputs.scenes.length, 5);
+});
+
+
+test("Blotato accepts a provider-acknowledged in-progress scheduled submission", async () => {
+  const weekday = new Intl.DateTimeFormat("en-GB", { weekday: "long", timeZone: "Europe/London" }).format(new Date()).toUpperCase();
+  process.env[`BLOTATO_SCHEDULE_${weekday}_PM`] = "00:00";
+  process.env.BLOTATO_SCHEDULE_RECOVERY_ENABLED = "true";
+  process.env.BLOTATO_SCHEDULE_MIN_LEAD_MS = "60000";
+  process.env.BLOTATO_SCHEDULE_VERIFY_ATTEMPTS = "2";
+  process.env.BLOTATO_SCHEDULE_VERIFY_INTERVAL_MS = "1";
+  process.env.BLOTATO_NEWS_RSS_URL = `${mockBase}/feed-scheduled.xml`;
+  scheduledPostStatusMode = "in-progress";
+
+  try {
+    const response = await request(app)
+      .post("/blotato/shorts/news-insight/schedule")
+      .set(auth)
+      .send({});
+
+    assert.equal(response.status, 202);
+    assert.equal(response.body.started, true);
+
+    const jobStatus = await request(app).get(`/blotato/jobs/${response.body.sessionId}`);
+    assert.equal(jobStatus.status, 200);
+    assert.equal(jobStatus.body.job.status, "completed");
+    assert.equal(jobStatus.body.job.result.deliveryMode, "scheduled");
+    assert.equal(jobStatus.body.job.result.posts.length, 4);
+    assert.ok(jobStatus.body.job.result.posts.every((post) => post.status === "in-progress" && post.confirmed === true));
+    assert.ok(capturedPostRequests.every((payload) => Date.parse(payload.scheduledTime) > Date.now()));
+  } finally {
+    scheduledPostStatusMode = "scheduled";
+  }
 });

@@ -76,11 +76,11 @@ test("Blotato normalises the invalid legacy British voice selection to a current
 
   assert.equal(normaliseBlotatoVoiceName("George (British, authoritative)"), "Daniel (British, authoritative)");
   assert.equal(
-    normaliseBlotatoVoiceName("elevenlabs/eleven_multilingual_v2/cjVigY5qzO86Huf0OWal"),
+    normaliseBlotatoVoiceName("elevenlabs/eleven_multilingual_v2/onwK4e9ZLuTAKqWW03F9"),
     "Daniel (British, authoritative)",
   );
   assert.equal(
-    normaliseBlotatoVoiceName("elevenlabs/eleven_multilingual_v2/cgSgspJ2msm6clMCkdW9"),
+    normaliseBlotatoVoiceName("elevenlabs/eleven_multilingual_v2/JBFqnCBsd6RMkjVDRZzb"),
     "George (British, warm)",
   );
 });
@@ -127,6 +127,9 @@ test("provider integrations follow current Blotato and OpenRouter contracts", as
   assert.match(autoPublish, /BLOTATO_USE_BRAND_KIT/);
   assert.match(autoPublish, /id,title,name,description,inputs/);
   assert.match(autoPublish, /BLOTATO_VIDEO_PENDING_ERROR_LIMIT", 120, 180/);
+  assert.match(autoPublish, /blotato\.schedule\.rebased_after_render/);
+  assert.match(autoPublish, /value !== "in-progress"/);
+  assert.match(autoPublish, /scheduledTimesMatch\(providerTime, requestedScheduledTime\)/);
   assert.match(capabilities, /images\/models\/\$\{encodeURIComponent\(author\)\}/);
   assert.match(capabilities, /filterImagePayloadByCapabilities/);
   assert.match(council, /strictJsonResponseFormat/);
