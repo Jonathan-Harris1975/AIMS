@@ -57,10 +57,10 @@ const VIDEO_FAILED_STATUSES = new Set(["creation-from-template-failed", "failed"
    "insufficient_credits", "no-credits", "payment-required", "payment_required", "billing-error"]);
 const POST_DONE_STATUSES = new Set(["published", "completed", "complete", "success"]);
 const POST_FAILED_STATUSES = new Set(["failed", "error", "insufficient-credits", "insufficient_credits", "payment-required", "payment_required"]);
-// Mirrors ZERNIO_SCHEDULE_ACCEPTED_STATUSES in services/zernio/utils/socialScheduler.js:
-// a scheduled post is only confirmed once Blotato reports it queued as
-// "scheduled" — an unrecognised or still-pending status is not treated as
-// success.
+// Blotato documents `scheduled` as the terminal queued state, while a newly
+// submitted scheduled post may remain `in-progress` for a short period. We only
+// accept that transitional state when the provider also echoes the exact future
+// `scheduledTime` requested by AIMS.
 const POST_SCHEDULE_ACCEPTED_STATUSES = new Set(["scheduled"]);
 const DEFAULT_AI_STORY_TEMPLATE_UUID = "5903fe43-514d-40ee-a060-0d6628c5f8fd";
 const MODEL_CREDIT_HINTS = Object.freeze({
@@ -107,6 +107,39 @@ function parseBoolean(value, fallback = false) {
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function parsedDateMs(value = "") {
+  const ms = Date.parse(String(value || "").trim());
+  return Number.isFinite(ms) ? ms : null;
+}
+
+function scheduledTimesMatch(left = "", right = "", toleranceMs = 1000) {
+  const leftMs = parsedDateMs(left);
+  const rightMs = parsedDateMs(right);
+  if (leftMs === null || rightMs === null) return false;
+  return Math.abs(leftMs - rightMs) <= toleranceMs;
+}
+
+function providerScheduledTime(payload = {}) {
+  return trim(payload?.scheduledTime || payload?.item?.scheduledTime || "");
+}
+
+function scheduledSubmissionConfirmed({ statusValue = "", statusPayload = {}, requestedScheduledTime = "", now = new Date() } = {}) {
+  const value = trim(statusValue).toLowerCase();
+  if (POST_FAILED_STATUSES.has(value)) return false;
+  if (POST_DONE_STATUSES.has(value)) return true;
+
+  const providerTime = providerScheduledTime(statusPayload);
+  if (POST_SCHEDULE_ACCEPTED_STATUSES.has(value)) {
+    return !providerTime || scheduledTimesMatch(providerTime, requestedScheduledTime);
+  }
+  if (value !== "in-progress") return false;
+
+  const providerMs = parsedDateMs(providerTime);
+  return providerMs !== null
+    && providerMs > now.getTime()
+    && scheduledTimesMatch(providerTime, requestedScheduledTime);
 }
 
 function positiveIntEnv(name, fallback, max = Number.POSITIVE_INFINITY) {
@@ -994,7 +1027,12 @@ async function publishAndWait({ platform, pack, mediaUrl, apiKey, channelPreflig
 
       value = String(status?.status || status?.item?.status || "").trim().toLowerCase();
       failed = POST_FAILED_STATUSES.has(value);
-      confirmed = !failed && POST_SCHEDULE_ACCEPTED_STATUSES.has(value);
+      confirmed = !failed && scheduledSubmissionConfirmed({
+        statusValue: value,
+        statusPayload: status,
+        requestedScheduledTime: scheduledTime,
+        now: new Date(),
+      });
       if (!confirmed && !failed && attempt < verifyAttempts) await sleep(verifyIntervalMs);
     }
 
@@ -1002,6 +1040,7 @@ async function publishAndWait({ platform, pack, mediaUrl, apiKey, channelPreflig
       warn("blotato.schedule.status_unconfirmed", {
         platform, postSubmissionId, scheduledTime, verifyAttempts, verifyIntervalMs, failed,
         lastStatus: value || null,
+        providerScheduledTime: providerScheduledTime(status) || providerScheduledTime(post) || null,
         lastError: lastError?.message || null,
       });
       const err = new Error(
@@ -1255,8 +1294,20 @@ function londonLocalToUtcIso({ year, month, day, hour, minute }) {
   return new Date(Date.UTC(year, month - 1, day, hour, minute) - offsetMs).toISOString();
 }
 
-function resolveBlotatoScheduledTime(slot = "am", now = new Date()) {
-  const london = londonDateParts(now);
+function resolveBlotatoScheduledTime(slot = "am", now = new Date(), scheduleDate = "") {
+  const currentLondon = londonDateParts(now);
+  const dateMatch = String(scheduleDate || "").trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const london = dateMatch
+    ? {
+        ...currentLondon,
+        year: Number(dateMatch[1]),
+        month: Number(dateMatch[2]),
+        day: Number(dateMatch[3]),
+        weekday: new Intl.DateTimeFormat("en-GB", { weekday: "long", timeZone: "Europe/London" })
+          .format(new Date(`${dateMatch[1]}-${dateMatch[2]}-${dateMatch[3]}T12:00:00Z`))
+          .toLowerCase(),
+      }
+    : currentLondon;
   const envKey = `BLOTATO_SCHEDULE_${london.weekday.toUpperCase()}_${String(slot || "am").toUpperCase()}`;
   const raw = trim(process.env[envKey]);
   if (!/^\d{2}:\d{2}$/.test(raw)) throw new Error(`${envKey} must be configured as HH:mm`);
@@ -1318,9 +1369,9 @@ async function runPublishJob({
       defaults.templateAutoDiscovery = false;
     }
     defaults.publishMode = publishMode;
-    const scheduledTime = scheduleSlot ? resolveBlotatoScheduledTime(scheduleSlot) : null;
-    defaults.scheduledTime = scheduledTime;
     const activeScheduleDate = scheduleSlot ? (scheduleDate || londonDateString(new Date())) : null;
+    let scheduledTime = scheduleSlot ? resolveBlotatoScheduledTime(scheduleSlot, new Date(), activeScheduleDate) : null;
+    defaults.scheduledTime = scheduledTime;
     const platforms = defaults.channels;
 
     updateJob(lane.jobType, sessionId, {
@@ -1657,6 +1708,26 @@ async function runPublishJob({
       technical: renderedVideoQa.technical || null,
     });
 
+    // Rendering and finished-video QA can consume enough time for a recovered
+    // slot to become stale. Recalculate the schedule immediately before the
+    // provider POST so Blotato always receives a genuinely future timestamp.
+    // A still-future configured AM/PM slot remains unchanged; only a missed or
+    // too-close slot is moved forward by BLOTATO_SCHEDULE_MIN_LEAD_MS.
+    if (scheduleSlot) {
+      const previousScheduledTime = scheduledTime;
+      scheduledTime = resolveBlotatoScheduledTime(scheduleSlot, new Date(), activeScheduleDate);
+      defaults.scheduledTime = scheduledTime;
+      if (previousScheduledTime && !scheduledTimesMatch(previousScheduledTime, scheduledTime)) {
+        warn("blotato.schedule.rebased_after_render", {
+          sessionId,
+          lane: lane.slug,
+          scheduleSlot,
+          previousScheduledTime,
+          scheduledTime,
+        });
+      }
+    }
+
     // Scheduled runs enter a distinct "pre-publish" phase here: script/video
     // generation is done, but the scheduled submission still needs Blotato's
     // confirmation (see publishAndWait) before the job can be considered
@@ -1976,7 +2047,7 @@ export async function triggerPublishNowJob(req = {}, laneSlug = DEFAULT_BLOTATO_
     // Validate the exact provider slot before selecting/reserving content or
     // invoking any AI. A late replay must cost zero and must not invent a new
     // publish time.
-    resolveBlotatoScheduledTime(scheduleSlot);
+    resolveBlotatoScheduledTime(scheduleSlot, new Date(), scheduleDate);
   }
 
   const sessionId = scheduleSlot

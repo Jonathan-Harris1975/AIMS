@@ -4,8 +4,8 @@ function clean(value = "") {
 
 const DEFAULT_AI_STORY_VOICE = "Daniel (British, authoritative)";
 const GEORGE_AI_STORY_VOICE = "George (British, warm)";
-const DANIEL_VOICE_ID = "elevenlabs/eleven_multilingual_v2/cjVigY5qzO86Huf0OWal";
-const GEORGE_VOICE_ID = "elevenlabs/eleven_multilingual_v2/cgSgspJ2msm6clMCkdW9";
+const DANIEL_VOICE_ID = "elevenlabs/eleven_multilingual_v2/onwK4e9ZLuTAKqWW03F9";
+const GEORGE_VOICE_ID = "elevenlabs/eleven_multilingual_v2/JBFqnCBsd6RMkjVDRZzb";
 
 /**
  * The AI Video with AI Voice template accepts its friendly `voiceName` enum,
