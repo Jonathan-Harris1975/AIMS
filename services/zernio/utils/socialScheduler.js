@@ -1760,7 +1760,7 @@ export async function buildAndScheduleDailyLane(laneKey, options = {}) {
         date: publishDate,
         prompt: imagePrompt,
         fallbackUrl: lane.imageUrl,
-        allowFallback: booleanValue(process.env.ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK, false),
+        allowFallback: booleanValue(process.env.ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK, true),
       });
 
       if (!artwork?.ok || !artwork.publicUrl) {
