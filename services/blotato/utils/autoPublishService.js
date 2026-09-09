@@ -14,6 +14,7 @@ import {
   getUser,
   getVisualStatus,
   listAccounts,
+  listSchedules,
   listSubaccounts,
   listTemplates,
   publishPost,
@@ -57,10 +58,9 @@ const VIDEO_FAILED_STATUSES = new Set(["creation-from-template-failed", "failed"
    "insufficient_credits", "no-credits", "payment-required", "payment_required", "billing-error"]);
 const POST_DONE_STATUSES = new Set(["published", "completed", "complete", "success"]);
 const POST_FAILED_STATUSES = new Set(["failed", "error", "insufficient-credits", "insufficient_credits", "payment-required", "payment_required"]);
-// Blotato documents `scheduled` as the terminal queued state, while a newly
-// submitted scheduled post may remain `in-progress` for a short period. We only
-// accept that transitional state when the provider also echoes the exact future
-// `scheduledTime` requested by AIMS.
+// Blotato documents `scheduled` as the terminal queued state. `in-progress` is
+// deliberately time-free and must not be treated as a failed schedule; the
+// matching time is acknowledged by POST /posts or the /schedules collection.
 const POST_SCHEDULE_ACCEPTED_STATUSES = new Set(["scheduled"]);
 const DEFAULT_AI_STORY_TEMPLATE_UUID = "5903fe43-514d-40ee-a060-0d6628c5f8fd";
 const MODEL_CREDIT_HINTS = Object.freeze({
@@ -125,6 +125,14 @@ function providerScheduledTime(payload = {}) {
   return trim(payload?.scheduledTime || payload?.item?.scheduledTime || "");
 }
 
+function scheduledTimeAcknowledged(payload = {}, requestedScheduledTime = "", now = new Date()) {
+  const providerTime = providerScheduledTime(payload);
+  const providerMs = parsedDateMs(providerTime);
+  return providerMs !== null
+    && providerMs > now.getTime()
+    && scheduledTimesMatch(providerTime, requestedScheduledTime);
+}
+
 function scheduledSubmissionConfirmed({ statusValue = "", statusPayload = {}, requestedScheduledTime = "", now = new Date() } = {}) {
   const value = trim(statusValue).toLowerCase();
   if (POST_FAILED_STATUSES.has(value)) return false;
@@ -132,14 +140,9 @@ function scheduledSubmissionConfirmed({ statusValue = "", statusPayload = {}, re
 
   const providerTime = providerScheduledTime(statusPayload);
   if (POST_SCHEDULE_ACCEPTED_STATUSES.has(value)) {
-    return !providerTime || scheduledTimesMatch(providerTime, requestedScheduledTime);
+    return scheduledTimeAcknowledged(statusPayload, requestedScheduledTime, now);
   }
-  if (value !== "in-progress") return false;
-
-  const providerMs = parsedDateMs(providerTime);
-  return providerMs !== null
-    && providerMs > now.getTime()
-    && scheduledTimesMatch(providerTime, requestedScheduledTime);
+  return false;
 }
 
 function positiveIntEnv(name, fallback, max = Number.POSITIVE_INFINITY) {
@@ -703,6 +706,95 @@ function listItems(payload = {}) {
   return [];
 }
 
+function scheduleDraft(item = {}) {
+  return item?.draft || item?.post || item?.item?.draft || {};
+}
+
+function scheduleAccountId(item = {}) {
+  const draft = scheduleDraft(item);
+  return trim(item?.account?.id || draft?.accountId || item?.accountId);
+}
+
+function schedulePlatform(item = {}) {
+  const draft = scheduleDraft(item);
+  return trim(draft?.content?.platform || draft?.target?.targetType || item?.platform).toLowerCase();
+}
+
+function scheduleMediaUrls(item = {}) {
+  const mediaUrls = scheduleDraft(item)?.content?.mediaUrls;
+  return Array.isArray(mediaUrls) ? mediaUrls.map((value) => trim(value)).filter(Boolean) : [];
+}
+
+function matchingScheduleItem(item = {}, {
+  accountId = "",
+  platform = "",
+  mediaUrl = "",
+  scheduledTime = "",
+} = {}) {
+  const remoteTime = trim(item?.scheduledAt || item?.scheduledTime || item?.item?.scheduledAt);
+  return scheduledTimesMatch(remoteTime, scheduledTime)
+    && scheduleAccountId(item) === trim(accountId)
+    && schedulePlatform(item) === trim(platform).toLowerCase()
+    && scheduleMediaUrls(item).includes(trim(mediaUrl));
+}
+
+async function findMatchingScheduledPost({
+  accountId,
+  platform,
+  mediaUrl,
+  scheduledTime,
+  apiKey,
+} = {}) {
+  const maxPages = positiveIntEnv("BLOTATO_SCHEDULE_VERIFY_PAGES", 3, 10);
+  let cursor;
+
+  for (let page = 1; page <= maxPages; page += 1) {
+    const response = await listSchedules({ limit: 50, cursor }, apiKey);
+    const match = listItems(response).find((item) => matchingScheduleItem(item, {
+      accountId,
+      platform,
+      mediaUrl,
+      scheduledTime,
+    }));
+    if (match) return match;
+
+    const nextCursor = trim(response?.cursor || response?.nextCursor);
+    if (!nextCursor || nextCursor === cursor) break;
+    cursor = nextCursor;
+  }
+
+  return null;
+}
+
+function scheduleConfirmationResult({
+  platform,
+  accountId,
+  target,
+  scheduledTime,
+  schedule,
+  post = null,
+  status = null,
+  postSubmissionId = null,
+  confirmationSource = "schedules-list",
+} = {}) {
+  return {
+    platform,
+    accountId,
+    target,
+    postSubmissionId,
+    scheduleId: trim(schedule?.id || schedule?.scheduleId) || null,
+    post,
+    status: status || {
+      status: "scheduled",
+      scheduledTime: trim(schedule?.scheduledAt || schedule?.scheduledTime || scheduledTime),
+    },
+    scheduledTime,
+    confirmed: true,
+    confirmationSource,
+    recoveredExistingSchedule: confirmationSource === "pre-publish-schedules-list",
+  };
+}
+
 function platformAccountEnvName(platform = "") {
   return `BLOTATO_${String(platform || "").toUpperCase()}_ACCOUNT_ID`;
 }
@@ -973,26 +1065,140 @@ function buildPlatformText(platform, pack) {
   return pack.facebookCaption || pack.tiktokCaption || pack.script;
 }
 
-async function publishAndWait({ platform, pack, mediaUrl, apiKey, channelPreflight, scheduledTime = null }) {
+async function publishAndWait({
+  platform,
+  pack,
+  mediaUrl,
+  apiKey,
+  channelPreflight,
+  scheduledTime = null,
+  scheduleRecoveryMode = false,
+  recoveryScheduledTime = null,
+}) {
   const channel = channelPreflight?.channelMap?.[platform] || {};
   const accountId = trim(channel.accountId) || await resolveAccountId(platform, apiKey);
   const target = buildTarget(platform, pack, channel);
-  const post = await publishPost({
-    accountId,
-    platform,
-    text: buildPlatformText(platform, pack),
-    mediaUrls: [mediaUrl],
-    target,
-    ...(scheduledTime ? { scheduledTime } : {}),
-  }, apiKey);
+
+  if (scheduledTime && scheduleRecoveryMode) {
+    try {
+      const candidateTimes = [...new Set([recoveryScheduledTime, scheduledTime].map((value) => trim(value)).filter(Boolean))];
+      let existing = null;
+      let matchedScheduledTime = scheduledTime;
+      for (const candidateTime of candidateTimes) {
+        existing = await findMatchingScheduledPost({
+          accountId,
+          platform,
+          mediaUrl,
+          scheduledTime: candidateTime,
+          apiKey,
+        });
+        if (existing) {
+          matchedScheduledTime = candidateTime;
+          break;
+        }
+      }
+      if (existing) {
+        info("blotato.schedule.existing_reconciled", {
+          platform,
+          accountId,
+          scheduledTime: matchedScheduledTime,
+          scheduleId: trim(existing?.id || existing?.scheduleId) || null,
+        });
+        return scheduleConfirmationResult({
+          platform,
+          accountId,
+          target,
+          scheduledTime: matchedScheduledTime,
+          schedule: existing,
+          confirmationSource: "pre-publish-schedules-list",
+        });
+      }
+    } catch (error) {
+      const reconciliationError = new Error(
+        `Blotato could not reconcile the existing ${platform} schedule before retrying: ${error?.message || String(error)}`
+      );
+      reconciliationError.statusCode = error?.statusCode || 503;
+      reconciliationError.code = "blotato-schedule-reconciliation-unavailable";
+      reconciliationError.platform = platform;
+      reconciliationError.publicationAttempted = false;
+      reconciliationError.submissionOutcome = "reconciliation-unavailable";
+      throw reconciliationError;
+    }
+  }
+
+  let post;
+  try {
+    post = await publishPost({
+      accountId,
+      platform,
+      text: buildPlatformText(platform, pack),
+      mediaUrls: [mediaUrl],
+      target,
+      ...(scheduledTime ? { scheduledTime } : {}),
+    }, apiKey);
+  } catch (error) {
+    const publishError = error instanceof Error ? error : new Error(String(error));
+    const statusCode = Number(publishError?.statusCode || publishError?.status || 0);
+    publishError.platform = platform;
+    publishError.publicationAttempted = true;
+    publishError.submissionOutcome = !statusCode || statusCode === 408 || statusCode === 425 || statusCode === 429 || statusCode >= 500
+      ? "ambiguous"
+      : "rejected";
+
+    if (scheduledTime) {
+      try {
+        const recovered = await findMatchingScheduledPost({ accountId, platform, mediaUrl, scheduledTime, apiKey });
+        if (recovered) {
+          warn("blotato.schedule.publish_error_reconciled", {
+            platform,
+            accountId,
+            scheduledTime,
+            scheduleId: trim(recovered?.id || recovered?.scheduleId) || null,
+            originalError: publishError.message,
+          });
+          return scheduleConfirmationResult({
+            platform,
+            accountId,
+            target,
+            scheduledTime,
+            schedule: recovered,
+            confirmationSource: "post-error-schedules-list",
+          });
+        }
+      } catch (reconciliationError) {
+        publishError.reconciliationError = reconciliationError?.message || String(reconciliationError);
+      }
+    }
+    throw publishError;
+  }
 
   const postSubmissionId = trim(post?.postSubmissionId || post?.id || post?.item?.postSubmissionId || post?.item?.id);
   if (!postSubmissionId) {
+    if (scheduledTime) {
+      try {
+        const recovered = await findMatchingScheduledPost({ accountId, platform, mediaUrl, scheduledTime, apiKey });
+        if (recovered) {
+          return scheduleConfirmationResult({
+            platform,
+            accountId,
+            target,
+            scheduledTime,
+            schedule: recovered,
+            post,
+            confirmationSource: "post-response-schedules-list",
+          });
+        }
+      } catch {
+        // Preserve the successful but malformed provider response below. It is
+        // ambiguous and therefore must never be blindly retried.
+      }
+    }
     const err = new Error(`Blotato ${platform} post response did not include postSubmissionId`);
     err.statusCode = 502;
     err.details = post;
     err.platform = platform;
     err.publicationAttempted = true;
+    err.submissionOutcome = "ambiguous";
     throw err;
   }
 
@@ -1010,11 +1216,13 @@ async function publishAndWait({ platform, pack, mediaUrl, apiKey, channelPreflig
     const requireConfirmation = parseBoolean(process.env.BLOTATO_REQUIRE_SCHEDULE_CONFIRMATION, true);
     let status = null;
     let value = "";
-    let confirmed = false;
+    let confirmed = scheduledTimeAcknowledged(post, scheduledTime, new Date());
+    let confirmationSource = confirmed ? "create-response" : null;
+    let schedule = null;
     let failed = false;
     let lastError = null;
 
-    for (let attempt = 1; attempt <= verifyAttempts && !confirmed && !failed; attempt += 1) {
+    for (let attempt = 1; attempt <= verifyAttempts && !failed; attempt += 1) {
       try {
         status = await getPostStatus(postSubmissionId, apiKey);
         lastError = null;
@@ -1027,13 +1235,54 @@ async function publishAndWait({ platform, pack, mediaUrl, apiKey, channelPreflig
 
       value = String(status?.status || status?.item?.status || "").trim().toLowerCase();
       failed = POST_FAILED_STATUSES.has(value);
-      confirmed = !failed && scheduledSubmissionConfirmed({
+      if (failed) {
+        confirmed = false;
+        confirmationSource = null;
+        break;
+      }
+
+      const statusConfirmed = scheduledSubmissionConfirmed({
         statusValue: value,
         statusPayload: status,
         requestedScheduledTime: scheduledTime,
         now: new Date(),
       });
-      if (!confirmed && !failed && attempt < verifyAttempts) await sleep(verifyIntervalMs);
+      if (statusConfirmed) {
+        confirmed = true;
+        confirmationSource = value === "scheduled" ? "post-status" : "published-status";
+        break;
+      }
+
+      if (value === "scheduled" && !providerScheduledTime(status) && confirmed) {
+        confirmationSource = "create-response+scheduled-status";
+        break;
+      }
+
+      // A scheduled response with a different time contradicts the create
+      // acknowledgement and must be reconciled rather than reported as valid.
+      if (value === "scheduled" && providerScheduledTime(status)) {
+        confirmed = false;
+        confirmationSource = null;
+        break;
+      }
+
+      // The documented in-progress response contains only the status. A
+      // matching scheduledTime in the create response is already an explicit
+      // provider acknowledgement, so one successful status check is enough.
+      if (value === "in-progress" && confirmed) break;
+      if (attempt < verifyAttempts) await sleep(verifyIntervalMs);
+    }
+
+    if (!failed && (!confirmed || value === "in-progress")) {
+      try {
+        schedule = await findMatchingScheduledPost({ accountId, platform, mediaUrl, scheduledTime, apiKey });
+        if (schedule) {
+          confirmed = true;
+          confirmationSource = "schedules-list";
+        }
+      } catch (error) {
+        lastError = lastError || error;
+      }
     }
 
     if (requireConfirmation && !confirmed) {
@@ -1052,10 +1301,22 @@ async function publishAndWait({ platform, pack, mediaUrl, apiKey, channelPreflig
       err.platform = platform;
       err.postSubmissionId = postSubmissionId;
       err.publicationAttempted = true;
+      err.submissionOutcome = failed ? "provider-failed" : "ambiguous";
       throw err;
     }
 
-    return { platform, accountId, target, postSubmissionId, post, status, scheduledTime, confirmed };
+    return {
+      platform,
+      accountId,
+      target,
+      postSubmissionId,
+      scheduleId: trim(schedule?.id || schedule?.scheduleId) || null,
+      post,
+      status,
+      scheduledTime,
+      confirmed,
+      confirmationSource,
+    };
   }
 
   const maxAttempts = positiveIntEnv("BLOTATO_POST_POLL_ATTEMPTS", 90, 720);
@@ -1076,6 +1337,7 @@ async function publishAndWait({ platform, pack, mediaUrl, apiKey, channelPreflig
     publishError.platform = platform;
     publishError.postSubmissionId = postSubmissionId;
     publishError.publicationAttempted = true;
+    publishError.submissionOutcome = "ambiguous";
     throw publishError;
   }
 
@@ -1083,20 +1345,47 @@ async function publishAndWait({ platform, pack, mediaUrl, apiKey, channelPreflig
 }
 
 
-async function publishPlatforms({ platforms = [], pack, mediaUrl, apiKey, channelPreflight, scheduledTime = null }) {
+async function publishPlatforms({
+  platforms = [],
+  pack,
+  mediaUrl,
+  apiKey,
+  channelPreflight,
+  scheduledTime = null,
+  scheduleRecoveryMode = false,
+  recoveryScheduledTime = null,
+}) {
   const settled = [];
   const staggerMs = Number(process.env.BLOTATO_PUBLISH_STAGGER_MS || 2500);
   const sequential = parseBoolean(process.env.BLOTATO_PUBLISH_SEQUENTIAL, true);
 
   if (!sequential) {
     return Promise.allSettled(
-      platforms.map((platform) => publishAndWait({ platform, pack, mediaUrl, apiKey, channelPreflight, scheduledTime }))
+      platforms.map((platform) => publishAndWait({
+        platform,
+        pack,
+        mediaUrl,
+        apiKey,
+        channelPreflight,
+        scheduledTime,
+        scheduleRecoveryMode,
+        recoveryScheduledTime,
+      }))
     );
   }
 
   for (const platform of platforms) {
     try {
-      const value = await publishAndWait({ platform, pack, mediaUrl, apiKey, channelPreflight, scheduledTime });
+      const value = await publishAndWait({
+        platform,
+        pack,
+        mediaUrl,
+        apiKey,
+        channelPreflight,
+        scheduledTime,
+        scheduleRecoveryMode,
+        recoveryScheduledTime,
+      });
       settled.push({ status: "fulfilled", value });
     } catch (reason) {
       settled.push({ status: "rejected", reason });
@@ -1227,6 +1516,10 @@ function scheduleDateFromJob(job = {}) {
 }
 
 function jobHasPublicationEvidence(job = {}) {
+  const references = [
+    ...(Array.isArray(job.publicationReferences) ? job.publicationReferences : []),
+    ...(Array.isArray(job.result?.publicationReferences) ? job.result.publicationReferences : []),
+  ];
   return Boolean(
     job.postSubmissionId
       || job.result?.postSubmissionId
@@ -1234,6 +1527,7 @@ function jobHasPublicationEvidence(job = {}) {
       || job.publishes?.length
       || job.result?.posts?.length
       || job.result?.publishes?.length
+      || references.some((item) => item?.postSubmissionId || item?.scheduleId || item?.submissionOutcome === "ambiguous")
   );
 }
 
@@ -1253,10 +1547,34 @@ export function isReplaceableRenderedQualityFailure(job = {}) {
   return completedAttempts - 1 < allowedReplacements;
 }
 
+/**
+ * Reuse a paid, QA-approved video when the provider rejected scheduling before
+ * creating a submission. The retry rechecks /schedules for every platform
+ * before POST /posts, so a response that was accepted but lost locally cannot
+ * create a duplicate.
+ */
+export function isRetryableRenderedPublishFailure(job = {}) {
+  if (job.status !== "failed") return false;
+  if (!["pre-publish", "publishing", "publish-failed"].includes(trim(job.phase).toLowerCase())) return false;
+  if (!job.videoId && !job.mediaUrl && !job.result?.visualId && !job.result?.mediaUrl) return false;
+  const qa = job.renderedVideoQa || job.result?.renderedVideoQa || {};
+  if (!(qa.pass === true || qa.skipped === true || qa.acceptedAfterSoftFailure === true)) return false;
+
+  const references = Array.isArray(job.publicationReferences) ? job.publicationReferences : [];
+  if (references.some((item) => item?.submissionOutcome === "ambiguous")) return false;
+  const failures = Array.isArray(job.failedPublishes) ? job.failedPublishes : [];
+  if (failures.some((item) => item?.submissionOutcome === "ambiguous")) return false;
+  if (failures.length && failures.some((item) => !["rejected", "reconciliation-unavailable"].includes(item?.submissionOutcome))) return false;
+
+  const maxAttempts = positiveIntEnv("BLOTATO_POST_SUBMISSION_RETRY_ATTEMPTS", 3, 5);
+  return Math.max(1, Number(job.attempt || 1)) < maxAttempts;
+}
+
 function jobOwnsScheduledSlot(job = {}) {
   if (["queued", "running", "completed"].includes(job.status)) return true;
   if (job.status !== "failed") return false;
   if (isReplaceableRenderedQualityFailure(job)) return false;
+  if (isRetryableRenderedPublishFailure(job)) return false;
   // Once Blotato has created a visual, a blind rerun can create another paid
   // render. Keep the slot claimed unless this is the one bounded, pre-publish
   // quality replacement handled above. Failures before visual creation remain
@@ -1281,6 +1599,16 @@ async function findReplaceableScheduledRender(jobType, scheduleSlot, scheduleDat
     .filter((job) => inferScheduleSlotFromJob(job) === scheduleSlot)
     .filter((job) => scheduleDateFromJob(job) === scheduleDate)
     .filter(isReplaceableRenderedQualityFailure)
+    .sort((a, b) => Date.parse(b.updatedAt || b.createdAt || 0) - Date.parse(a.updatedAt || a.createdAt || 0))[0] || null;
+}
+
+async function findRetryableScheduledPublish(jobType, scheduleSlot, scheduleDate) {
+  if (!scheduleSlot || !scheduleDate) return null;
+  await refreshJobStoreFromState();
+  return getJobsByType(jobType)
+    .filter((job) => inferScheduleSlotFromJob(job) === scheduleSlot)
+    .filter((job) => scheduleDateFromJob(job) === scheduleDate)
+    .filter(isRetryableRenderedPublishFailure)
     .sort((a, b) => Date.parse(b.updatedAt || b.createdAt || 0) - Date.parse(a.updatedAt || a.createdAt || 0))[0] || null;
 }
 
@@ -1352,11 +1680,14 @@ async function runPublishJob({
   scheduleSlot = null,
   scheduleDate = null,
   failedRenderReplacement = null,
+  failedPublishRecovery = null,
 }) {
   const lane = requireShortLaneConfig(laneSlug);
   const keepAliveLabel = `blotato:${lane.slug}:${sessionId}`;
   const keepAliveEnabled = parseBoolean(process.env.BLOTATO_KEEPALIVE_ENABLED, true);
   let publicationReferences = [];
+  let failedPublishes = [];
+  let scheduledTime = null;
   let briefDispositionAttempted = false;
   if (keepAliveEnabled) startKeepAlive(keepAliveLabel, positiveIntEnv("BLOTATO_KEEPALIVE_INTERVAL_MS", 20_000, 120_000));
 
@@ -1370,7 +1701,7 @@ async function runPublishJob({
     }
     defaults.publishMode = publishMode;
     const activeScheduleDate = scheduleSlot ? (scheduleDate || londonDateString(new Date())) : null;
-    let scheduledTime = scheduleSlot ? resolveBlotatoScheduledTime(scheduleSlot, new Date(), activeScheduleDate) : null;
+    scheduledTime = scheduleSlot ? resolveBlotatoScheduledTime(scheduleSlot, new Date(), activeScheduleDate) : null;
     defaults.scheduledTime = scheduledTime;
     const platforms = defaults.channels;
 
@@ -1382,6 +1713,7 @@ async function runPublishJob({
       editorialBriefIds: editorialBriefIds(editorialBriefEntries),
       editorialBriefFingerprint: briefFingerprint,
       failedRenderReplacement,
+      failedPublishRecovery,
     });
     const channelPreflight = await runBlotatoStep0Preflight({ platforms, apiKey });
 
@@ -1409,10 +1741,31 @@ async function runPublishJob({
     const qualityAttempts = [];
     let priorGate = null;
     let bestRejected = null;
-    let pack = null;
-    let blotatoShortGate = null;
+    let pack = failedPublishRecovery?.pack ? normalisePackForPublish(failedPublishRecovery.pack) : null;
+    let blotatoShortGate = pack ? runBlotatoShortGate({
+      pack,
+      article: articleSource.article,
+      lane: lane.slug,
+      requiredTopic,
+    }) : null;
 
-    for (let qualityAttempt = 1; qualityAttempt <= maxQualityAttempts; qualityAttempt += 1) {
+    if (blotatoShortGate?.ok) {
+      qualityAttempts.push({
+        attempt: "recovered",
+        ok: true,
+        score: blotatoShortGate.score ?? null,
+        defects: blotatoShortGate.defects?.slice?.(0, 8) || [],
+        warnings: blotatoShortGate.warnings?.slice?.(0, 8) || [],
+        performance: blotatoShortGate.performance || null,
+      });
+      info("blotato.schedule.failed_publish_pack_reused", {
+        sessionId,
+        lane: lane.slug,
+        score: blotatoShortGate.score ?? null,
+      });
+    }
+
+    for (let qualityAttempt = 1; !blotatoShortGate?.ok && qualityAttempt <= maxQualityAttempts; qualityAttempt += 1) {
       updateJob(lane.jobType, sessionId, {
         phase: "script-generation",
         channelPreflight,
@@ -1577,6 +1930,7 @@ async function runPublishJob({
       qualityAttempts,
       finalGate: blotatoShortGate,
       qualityRecovery,
+      pack,
     });
 
     if (!blotatoShortGate?.ok && !qualityRecovery?.acceptedAfterRetries) {
@@ -1584,11 +1938,23 @@ async function runPublishJob({
       throw buildBlotatoGateError({ ...errorGate, qualityAttempts });
     }
 
-    const reusedVideo = await reusableRenderedVideo(lane.jobType, articleSource.article, sessionId, {
-      scheduleSlot,
-      scheduleDate: activeScheduleDate,
-      briefFingerprint,
-    });
+    const recoveredPublishVideo = failedPublishRecovery?.visualId && failedPublishRecovery?.mediaUrl
+      ? {
+          visualId: failedPublishRecovery.visualId,
+          dashboardUrl: failedPublishRecovery.dashboardUrl || null,
+          mediaUrl: failedPublishRecovery.mediaUrl,
+          creditBudget: failedPublishRecovery.creditBudget || null,
+          templateId: failedPublishRecovery.templateId || templateId,
+          templateIdCandidates: failedPublishRecovery.templateIdCandidates || [],
+          rejectedTemplateIds: failedPublishRecovery.rejectedTemplateIds || [],
+          reusedFromSessionId: failedPublishRecovery.sessionId,
+        }
+      : null;
+    const reusedVideo = recoveredPublishVideo || await reusableRenderedVideo(lane.jobType, articleSource.article, sessionId, {
+        scheduleSlot,
+        scheduleDate: activeScheduleDate,
+        briefFingerprint,
+      });
     if (!reusedVideo && scheduleSlot && activeScheduleDate) {
       const paidRenderCap = positiveIntEnv("BLOTATO_DAILY_PAID_RENDER_CAP", 2, 10);
       const paidVisualIds = await paidVisualIdsForDate(activeScheduleDate);
@@ -1638,7 +2004,7 @@ async function runPublishJob({
       reusedFromSessionId: reusedVideo?.reusedFromSessionId || null,
     });
     if (reusedVideo) {
-      info("blotato.render_reuse.hit", {
+      info(recoveredPublishVideo ? "blotato.schedule.failed_publish_video_reused" : "blotato.render_reuse.hit", {
         sessionId,
         lane: lane.slug,
         reusedFromSessionId: reusedVideo.reusedFromSessionId,
@@ -1647,12 +2013,14 @@ async function runPublishJob({
       });
     }
 
-    const renderedVideoQa = await reviewRenderedVideo({
-      mediaUrl: video.mediaUrl,
-      pack,
-      article: articleSource.article,
-      sessionId: `${sessionId}-rendered-qa`,
-    });
+    const renderedVideoQa = recoveredPublishVideo && failedPublishRecovery?.renderedVideoQa
+      ? { ...failedPublishRecovery.renderedVideoQa, reusedForScheduleRetry: true }
+      : await reviewRenderedVideo({
+          mediaUrl: video.mediaUrl,
+          pack,
+          article: articleSource.article,
+          sessionId: `${sessionId}-rendered-qa`,
+        });
     if (!renderedVideoQa.pass) {
       const blockSoftQaFailures = parseBoolean(process.env.BLOTATO_RENDERED_QA_BLOCK_SOFT_FAILURES, false);
       const qaPublication = assessRenderedVideoQaPublication(renderedVideoQa, {
@@ -1759,6 +2127,8 @@ async function runPublishJob({
       apiKey,
       channelPreflight,
       scheduledTime,
+      scheduleRecoveryMode: Boolean(failedPublishRecovery),
+      recoveryScheduledTime: failedPublishRecovery?.scheduledTime || null,
     });
     const publishes = settledPublishes
       .filter((item) => item.status === "fulfilled")
@@ -1766,9 +2136,11 @@ async function runPublishJob({
     publicationReferences = publishes.map((item) => ({
       platform: item.platform,
       postSubmissionId: item.postSubmissionId || null,
+      scheduleId: item.scheduleId || null,
       confirmed: scheduledTime ? Boolean(item.confirmed) : true,
+      confirmationSource: item.confirmationSource || null,
     }));
-    const failedPublishes = settledPublishes
+    failedPublishes = settledPublishes
       .map((item, index) => ({ platform: platforms[index], result: item }))
       .filter((item) => item.result.status === "rejected")
       .map((item) => ({
@@ -1777,25 +2149,33 @@ async function runPublishJob({
         statusCode: item.result.reason?.statusCode || item.result.reason?.status || null,
         postSubmissionId: item.result.reason?.postSubmissionId || null,
         publicationAttempted: item.result.reason?.publicationAttempted === true,
+        submissionOutcome: item.result.reason?.submissionOutcome || null,
+        reconciliationError: item.result.reason?.reconciliationError || null,
       }));
     publicationReferences.push(...failedPublishes
-      .filter((item) => item.publicationAttempted)
+      .filter((item) => item.postSubmissionId || item.scheduleId || item.submissionOutcome === "ambiguous")
       .map((item) => ({
         platform: item.platform,
         postSubmissionId: item.postSubmissionId,
+        scheduleId: item.scheduleId || null,
         confirmed: false,
         failed: true,
+        submissionOutcome: item.submissionOutcome,
       })));
+
+    updateJob(lane.jobType, sessionId, {
+      phase: failedPublishes.length ? "publish-partial" : "publish-confirmed",
+      scheduledTime,
+      publicationReferences,
+      failedPublishes,
+    });
 
     if (failedPublishes.length) {
       warn("blotato.publish_now.platform_failures", { sessionId, lane: lane.slug, failedPublishes });
     }
 
-    // For scheduled posts, publishAndWait doesn't throw just because Blotato
-    // never confirmed the queued state within the verify window (a status
-    // rejection throws and lands in failedPublishes above; this is the
-    // "we genuinely don't know" case). Surface those separately rather than
-    // letting them disappear into an assumed "scheduled" status.
+    // Confirmation can be optional outside production. Keep any such
+    // unconfirmed hand-offs visible instead of reporting an assumed schedule.
     const unconfirmedPublishes = scheduledTime
       ? publishes.filter((item) => item.confirmed === false).map((item) => ({ platform: item.platform, postSubmissionId: item.postSubmissionId }))
       : [];
@@ -1807,7 +2187,9 @@ async function runPublishJob({
     if (!publishes.length || (requireAllChannels && failedPublishes.length)) {
       const err = new Error(
         !publishes.length
-          ? "Blotato media rendered but no platform reached a confirmed published status after retries and polling"
+          ? scheduledTime
+            ? "Blotato media rendered but no platform reached a confirmed scheduled state after retries and reconciliation"
+            : "Blotato media rendered but no platform reached a confirmed published status after retries and polling"
           : `Blotato publishing failed on required channels after retries: ${failedPublishes.map((item) => item.platform).join(", ")}`
       );
       err.statusCode = 502;
@@ -1848,8 +2230,11 @@ async function runPublishJob({
         platform: item.platform,
         accountId: item.accountId,
         postSubmissionId: item.postSubmissionId,
+        scheduleId: item.scheduleId || null,
         status,
         confirmed: scheduledTime ? Boolean(item.confirmed) : true,
+        confirmationSource: item.confirmationSource || null,
+        recoveredExistingSchedule: Boolean(item.recoveredExistingSchedule),
         target: item.target,
         post: item.post,
         rawStatus: item.status,
@@ -1865,6 +2250,7 @@ async function runPublishJob({
       mediaUrl: video.mediaUrl,
       posts: posts.map(({ platform, postSubmissionId, status, confirmed }) => ({ platform, postSubmissionId, status, confirmed })),
       failedPublishes,
+      publicationReferences,
     };
     let briefHandoff;
     if (partialPublication && editorialBriefEntries.length) {
@@ -1915,6 +2301,7 @@ async function runPublishJob({
       creditSourceOfTruth: "Blotato dashboard",
       partial: partialPublication || briefHandoff?.reconciliationRequired === true,
       failedPublishes,
+      publicationReferences,
       unconfirmedPublishes,
       posts,
       publishes,
@@ -1924,6 +2311,7 @@ async function runPublishJob({
       editorialBriefFingerprint: briefFingerprint,
       briefHandoff,
       failedRenderReplacement,
+      failedPublishRecovery,
     };
 
     completeJob(lane.jobType, sessionId, { result });
@@ -1983,7 +2371,13 @@ async function runPublishJob({
         });
       }
     }
-    failJob(lane.jobType, sessionId, error);
+    failJob(lane.jobType, sessionId, error, {
+      ...(failedPublishes.length ? { phase: "publish-failed" } : {}),
+      scheduledTime,
+      publicationReferences,
+      failedPublishes,
+      failedPublishRecovery,
+    });
     warn("blotato.publish_now.job.fail", {
       sessionId,
       error: error?.message || String(error),
@@ -2001,6 +2395,7 @@ export async function triggerPublishNowJob(req = {}, laneSlug = DEFAULT_BLOTATO_
   const scheduleSlot = trim(options.scheduleSlot).toLowerCase();
   const scheduleDate = scheduleSlot ? londonDateString(new Date()) : null;
   let failedRenderReplacement = null;
+  let failedPublishRecovery = null;
   if (scheduleSlot) {
     const existing = await findExistingScheduledSlotJob(lane.jobType, scheduleSlot, scheduleDate);
     if (existing) {
@@ -2028,7 +2423,38 @@ export async function triggerPublishNowJob(req = {}, laneSlug = DEFAULT_BLOTATO_
         job: publicJob,
       };
     }
-    const replaceable = await findReplaceableScheduledRender(lane.jobType, scheduleSlot, scheduleDate);
+    const retryablePublish = await findRetryableScheduledPublish(lane.jobType, scheduleSlot, scheduleDate);
+    if (retryablePublish) {
+      failedPublishRecovery = {
+        sessionId: retryablePublish.sessionId,
+        visualId: trim(retryablePublish.videoId || retryablePublish.result?.visualId) || null,
+        dashboardUrl: trim(retryablePublish.videoDashboardUrl || retryablePublish.result?.video?.dashboardUrl) || null,
+        mediaUrl: trim(retryablePublish.mediaUrl || retryablePublish.result?.mediaUrl) || null,
+        scheduledTime: trim(retryablePublish.scheduledTime || retryablePublish.defaults?.scheduledTime) || null,
+        attempt: Number(retryablePublish.attempt || 1),
+        source: retryablePublish.source || null,
+        rss: retryablePublish.rss || null,
+        pack: retryablePublish.pack || null,
+        creditBudget: retryablePublish.creditBudget || null,
+        templateId: retryablePublish.templateId || null,
+        templateIdCandidates: retryablePublish.templateIdCandidates || [],
+        rejectedTemplateIds: retryablePublish.rejectedTemplateIds || [],
+        renderedVideoQa: retryablePublish.renderedVideoQa || retryablePublish.result?.renderedVideoQa || null,
+        reason: "rendered-video-ready-for-schedule-retry",
+      };
+      warn("blotato.schedule.failed_publish_recovery", {
+        lane: lane.slug,
+        scheduleSlot,
+        scheduleDate,
+        sessionId: failedPublishRecovery.sessionId,
+        visualId: failedPublishRecovery.visualId,
+        scheduledTime: failedPublishRecovery.scheduledTime,
+        attempt: failedPublishRecovery.attempt,
+      });
+    }
+    const replaceable = failedPublishRecovery
+      ? null
+      : await findReplaceableScheduledRender(lane.jobType, scheduleSlot, scheduleDate);
     if (replaceable) {
       failedRenderReplacement = {
         sessionId: replaceable.sessionId,
@@ -2062,27 +2488,31 @@ export async function triggerPublishNowJob(req = {}, laneSlug = DEFAULT_BLOTATO_
   let job;
 
   try {
-    const configuredBriefLimit = Number(process.env.COMMS_HUB_CONTENT_AUTOMATION_BLOTATO_VIDEO_BRIEF_LIMIT || 1);
-    editorialBriefEntries = await claimPendingEditorialBriefs("blotato_video", {
-      limit: Math.min(1, Math.max(1, Number.isFinite(configuredBriefLimit) ? Math.floor(configuredBriefLimit) : 1)),
-      consumerId: sessionId,
-    });
-    const requiredTopic = editorialBriefTopicSeed(editorialBriefEntries);
-    articleSource = await selectRssArticleForBlotato({ laneSlug: lane.slug, topicSeed: requiredTopic });
-    const reservationResult = await reserveEditorialSource({
-      pipeline: "blotato",
-      lane: lane.slug,
-      source: articleSource.article,
-      audienceIntent: lane.theme,
-      angle: lane.label,
-      scheduledDateTime: new Date().toISOString(),
-    });
-    if (reservationResult.duplicatePrevented) {
-      const err = new Error(`Selected RSS article is already reserved for another social pipeline: ${articleSource.article?.title || "untitled"}`);
-      err.statusCode = 409;
-      throw err;
+    if (failedPublishRecovery?.source?.article) {
+      articleSource = failedPublishRecovery.source;
+    } else {
+      const configuredBriefLimit = Number(process.env.COMMS_HUB_CONTENT_AUTOMATION_BLOTATO_VIDEO_BRIEF_LIMIT || 1);
+      editorialBriefEntries = await claimPendingEditorialBriefs("blotato_video", {
+        limit: Math.min(1, Math.max(1, Number.isFinite(configuredBriefLimit) ? Math.floor(configuredBriefLimit) : 1)),
+        consumerId: sessionId,
+      });
+      const requiredTopic = editorialBriefTopicSeed(editorialBriefEntries);
+      articleSource = await selectRssArticleForBlotato({ laneSlug: lane.slug, topicSeed: requiredTopic });
+      const reservationResult = await reserveEditorialSource({
+        pipeline: "blotato",
+        lane: lane.slug,
+        source: articleSource.article,
+        audienceIntent: lane.theme,
+        angle: lane.label,
+        scheduledDateTime: new Date().toISOString(),
+      });
+      if (reservationResult.duplicatePrevented) {
+        const err = new Error(`Selected RSS article is already reserved for another social pipeline: ${articleSource.article?.title || "untitled"}`);
+        err.statusCode = 409;
+        throw err;
+      }
+      editorialReservation = reservationResult.reservation || null;
     }
-    editorialReservation = reservationResult.reservation || null;
     defaults = buildDefaults(lane.slug);
     if (options.templateId) {
       defaults.templateId = normaliseTemplateId(options.templateId);
@@ -2102,6 +2532,9 @@ export async function triggerPublishNowJob(req = {}, laneSlug = DEFAULT_BLOTATO_
       editorialBriefIds: editorialBriefIds(editorialBriefEntries),
       editorialBriefFingerprint: editorialBriefFingerprint(editorialBriefEntries),
       failedRenderReplacement,
+      failedPublishRecovery,
+      publicationReferences: [],
+      failedPublishes: [],
       // Remove the rejected render from the active job before the daily cap is
       // evaluated. Its identity remains in failedRenderReplacement for audit.
       ...(failedRenderReplacement ? {
@@ -2135,6 +2568,7 @@ export async function triggerPublishNowJob(req = {}, laneSlug = DEFAULT_BLOTATO_
     editorialBriefFingerprint: editorialBriefFingerprint(editorialBriefEntries),
     job: publicJob,
     failedRenderReplacement,
+    failedPublishRecovery,
   };
 
   if (!started) {
@@ -2164,6 +2598,7 @@ export async function triggerPublishNowJob(req = {}, laneSlug = DEFAULT_BLOTATO_
     scheduleSlot: scheduleSlot || null,
     scheduleDate,
     failedRenderReplacement,
+    failedPublishRecovery,
   });
   if (parseBoolean(process.env.BLOTATO_INLINE_PUBLISH_JOBS, false)) {
     await run();

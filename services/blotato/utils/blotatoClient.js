@@ -334,3 +334,11 @@ export async function getPostStatus(postSubmissionId, apiKey) {
 
   return blotatoRequest(`posts/${encodeURIComponent(cleaned)}`, { apiKey });
 }
+
+export async function listSchedules({ limit = 50, cursor } = {}, apiKey) {
+  const safeLimit = Math.min(50, Math.max(1, Number(limit) || 50));
+  return blotatoRequest("schedules", {
+    params: { limit: safeLimit, cursor },
+    apiKey,
+  });
+}
