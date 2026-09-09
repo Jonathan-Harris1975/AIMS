@@ -23,6 +23,15 @@ function deterministicQuizArtworkEnabled() {
   return !["0", "false", "no", "off"].includes(raw);
 }
 
+function validFallbackUrl(value = "") {
+  try {
+    const url = new URL(String(value || "").trim());
+    return ["http:", "https:"].includes(url.protocol) ? url.toString() : "";
+  } catch {
+    return "";
+  }
+}
+
 export async function createQuizArtwork({
   sessionId,
   prompt,
@@ -30,6 +39,7 @@ export async function createQuizArtwork({
   cardType = "question",
   card = null,
   fallbackUrl = "",
+  allowFallback = false,
 } = {}) {
   const safeSession = cleanPart(sessionId || `quiz-${Date.now()}`);
   const safeType = cleanPart(cardType || "question").toLowerCase();
@@ -89,19 +99,39 @@ export async function createQuizArtwork({
 
     return { ok: true, key, publicUrl, source };
   } catch (err) {
+    const curatedFallback = allowFallback ? validFallbackUrl(fallbackUrl) : "";
     error("artwork.quiz.fail", {
       sessionId: safeSession,
       cardType: safeType,
       bucketAlias: "blogImages",
       error: err?.message || String(err),
-      fallbackUrl: fallbackUrl || undefined,
+      fallbackUrl: curatedFallback || undefined,
     });
+
+    if (curatedFallback) {
+      warn("artwork.quiz.curated_fallback", {
+        sessionId: safeSession,
+        cardType: safeType,
+        fallbackUrl: curatedFallback,
+        originalError: err?.message || String(err),
+      });
+      return {
+        ok: true,
+        error: undefined,
+        originalError: err?.message || String(err),
+        warning: `Fresh quiz ${safeType} artwork was unavailable; the stored ${safeType} image was used.`,
+        publicUrl: curatedFallback,
+        fallback: true,
+        imageStatus: "curated-static-fallback",
+      };
+    }
 
     return {
       ok: false,
       error: err?.message || String(err),
-      publicUrl: fallbackUrl || "",
-      fallback: Boolean(fallbackUrl),
+      publicUrl: "",
+      fallback: false,
+      imageStatus: "generation-failed",
     };
   }
 }
