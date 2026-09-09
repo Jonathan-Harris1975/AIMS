@@ -2626,7 +2626,7 @@ infrastructure grounded in this part's evidence.",
           "No visible text, labels, logos or typography.",
         ].join("\n"),
         fallbackUrl: MINI_SERIES_CONFIG.fallbackImageUrl,
-        allowFallback: booleanValue(process.env.ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK, false),
+        allowFallback: booleanValue(process.env.ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK, true),
       });
       if (!artwork?.ok || !artwork.publicUrl) {
         const errorMessage = artwork?.error || `Mini-series part ${item.index + 1} did not produce a usable image.`;
@@ -3085,7 +3085,7 @@ export async function buildAndSchedulePodcastThursdayPromo(options = {}) {
         "Avoid generic glowing brains, circuit-head silhouettes, floating decorative networks, stock-office scenes and decorative AI wallpaper.",
       ].filter(Boolean).join("\n"),
       fallbackUrl: PODCAST_PROMO_CONFIG.fallbackImageUrl,
-      allowFallback: booleanValue(process.env.ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK, false),
+      allowFallback: booleanValue(process.env.ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK, true),
     });
     if (!artwork.ok || !artwork.publicUrl) {
       const err = new Error(`Thursday podcast promotion artwork unavailable: ${artwork.error || "no usable image URL returned"}`);
@@ -3488,6 +3488,8 @@ export async function buildAndScheduleQuizSeries(options = {}) {
   const dryRun = Boolean(options.dryRun);
   let questionImageUrl = options.questionImageUrl || QUIZ_CONFIG.questionImageUrl;
   let answerImageUrl = options.answerImageUrl || QUIZ_CONFIG.answerImageUrl;
+  const allowCuratedArtworkFallback = booleanValue(process.env.ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK, true);
+  const artworkWarnings = [];
 
   const questionSlotClaim = await claimZernioSlot({
     scope: "quiz:question",
@@ -3626,10 +3628,15 @@ export async function buildAndScheduleQuizSeries(options = {}) {
           parsedOptionCount: parsedQuiz.options.length,
           correctLetter: correct.letter || null,
         });
-        const err = new Error("Quiz structure was not safe for themed artwork generation; refusing to schedule the static default image.");
-        err.statusCode = 422;
-        err.code = "zernio-quiz-artwork-structure-invalid";
-        throw err;
+        if (!allowCuratedArtworkFallback || !questionImageUrl || !answerImageUrl) {
+          const err = new Error("Quiz structure was not safe for themed artwork generation and no stored fallback image was available.");
+          err.statusCode = 422;
+          err.code = "zernio-quiz-artwork-structure-invalid";
+          throw err;
+        }
+        questionPost.imageStatus = "curated-static-fallback";
+        answerPost.imageStatus = "curated-static-fallback";
+        artworkWarnings.push("Fresh quiz artwork could not be built safely from the generated structure; the stored question and answer images were used.");
       } else {
         if (!options.questionImageUrl) {
           const questionArtwork = await createQuizArtwork({
@@ -3643,16 +3650,19 @@ export async function buildAndScheduleQuizSeries(options = {}) {
               options: parsedQuiz.options,
             }),
             fallbackUrl: QUIZ_CONFIG.questionImageUrl,
+            allowFallback: allowCuratedArtworkFallback,
           });
 
-          if (!questionArtwork?.ok || !questionArtwork.publicUrl || questionArtwork.fallback) {
-            const err = new Error(questionArtwork?.error || "Quiz question themed artwork generation failed; refusing to schedule the static default image.");
+          if (!questionArtwork?.ok || !questionArtwork.publicUrl) {
+            const err = new Error(questionArtwork?.error || "Quiz question themed artwork generation failed and no stored fallback image was available.");
             err.statusCode = 502;
             err.code = "zernio-quiz-question-artwork-unavailable";
             throw err;
           }
           questionImageUrl = questionArtwork.publicUrl;
           questionPost.imageUrl = questionArtwork.publicUrl;
+          questionPost.imageStatus = questionArtwork.imageStatus || (questionArtwork.fallback ? "curated-static-fallback" : "generated");
+          if (questionArtwork.fallback && questionArtwork.warning) artworkWarnings.push(questionArtwork.warning);
         }
 
         if (!options.answerImageUrl) {
@@ -3668,16 +3678,19 @@ export async function buildAndScheduleQuizSeries(options = {}) {
               correct,
             }),
             fallbackUrl: QUIZ_CONFIG.answerImageUrl,
+            allowFallback: allowCuratedArtworkFallback,
           });
 
-          if (!answerArtwork?.ok || !answerArtwork.publicUrl || answerArtwork.fallback) {
-            const err = new Error(answerArtwork?.error || "Quiz answer themed artwork generation failed; refusing to schedule the static default image.");
+          if (!answerArtwork?.ok || !answerArtwork.publicUrl) {
+            const err = new Error(answerArtwork?.error || "Quiz answer themed artwork generation failed and no stored fallback image was available.");
             err.statusCode = 502;
             err.code = "zernio-quiz-answer-artwork-unavailable";
             throw err;
           }
           answerImageUrl = answerArtwork.publicUrl;
           answerPost.imageUrl = answerArtwork.publicUrl;
+          answerPost.imageStatus = answerArtwork.imageStatus || (answerArtwork.fallback ? "curated-static-fallback" : "generated");
+          if (answerArtwork.fallback && answerArtwork.warning) artworkWarnings.push(answerArtwork.warning);
         }
       }
     }
@@ -3830,7 +3843,7 @@ ${answerPost.content}`,
       lane: "quiz",
       topic: generated.topic,
       dryRun: questionScheduling.dryRun || answerScheduling.dryRun,
-      warnings: [...new Set([...(questionScheduling.warnings || []), ...(answerScheduling.warnings || [])].filter(Boolean))],
+      warnings: [...new Set([...artworkWarnings, ...(questionScheduling.warnings || []), ...(answerScheduling.warnings || [])].filter(Boolean))],
       question: {
         publishDate: questionPublishDate,
         scheduledDateTime: questionDateTime,

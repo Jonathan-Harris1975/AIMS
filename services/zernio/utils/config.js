@@ -1,6 +1,7 @@
 import { THRESHOLDS } from "../../../config/thresholds.js";
 
 const DAILY_IMAGE_BASE = "https://images.jonathan-harris.online";
+const DEFAULT_STORED_IMAGE_URL = `${DAILY_IMAGE_BASE}/site-logo`;
 
 function trimString(value, fallback = "") {
   if (value === undefined || value === null) return fallback;
@@ -101,10 +102,9 @@ export const BLOG_RSS_CONFIG = {
   key: "blog-rss",
   label: "Blog Daily Briefing Repost",
   publishTime: normaliseTime(process.env.ZERNIO_BLOG_RSS_TIME, "12:00"),
-  // Live scheduling is fail-closed when the feed item has no verified image.
-  // A generic static tile would hide an upstream content failure and can be
-  // unrelated to the actual AI story, so there is deliberately no default.
-  fallbackImageUrl: trimString(process.env.ZERNIO_BLOG_RSS_IMAGE_URL, ""),
+  // The daily social-blog builder supplies fresh topic artwork. This stored
+  // brand asset is used only when that upstream generation cannot complete.
+  fallbackImageUrl: trimString(process.env.ZERNIO_BLOG_RSS_IMAGE_URL, DEFAULT_STORED_IMAGE_URL),
   hashtagLimit: Math.max(0, Number(process.env.ZERNIO_BLOG_RSS_HASHTAG_LIMIT || 3)),
   audienceIntent: "blog-daily-briefing-repost",
 };
@@ -197,7 +197,7 @@ export const MINI_SERIES_CONFIG = {
   minimumSuitabilityScore: Math.max(0, Math.min(100, Number(process.env.ZERNIO_MINI_SERIES_MIN_SCORE || 78))),
   researchLookbackDays: Math.max(2, Number(process.env.ZERNIO_MINI_SERIES_LOOKBACK_DAYS || 7)),
   researchMaxItems: Math.max(4, Number(process.env.ZERNIO_MINI_SERIES_MAX_SOURCE_ITEMS || 12)),
-  fallbackImageUrl: trimString(process.env.ZERNIO_MINI_SERIES_IMAGE_URL, ""),
+  fallbackImageUrl: trimString(process.env.ZERNIO_MINI_SERIES_IMAGE_URL, DEFAULT_STORED_IMAGE_URL),
   publishTimes: {
     tuesday: normaliseTime(process.env.ZERNIO_MINI_SERIES_TUESDAY_TIME, "19:30"),
     wednesday: normaliseTime(process.env.ZERNIO_MINI_SERIES_WEDNESDAY_TIME, "19:30"),
