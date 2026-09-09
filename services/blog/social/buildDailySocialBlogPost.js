@@ -50,6 +50,7 @@ const SOURCE_RSS_BUCKET_KEY = "rss";
 const SOURCE_RSS_FEED_KEY = "feed.json";
 const OUT_BLOG_BUCKET_KEY = "blog";
 const MS_PER_DAY = 86_400_000;
+const DEFAULT_SOCIAL_FALLBACK_IMAGE_URL = "https://images.jonathan-harris.online/site-logo";
 
 function normalisePrefix(value = DEFAULT_SOCIAL_PREFIX) {
   return String(value || DEFAULT_SOCIAL_PREFIX).trim().replace(/^\/+|\/+$/g, "") || DEFAULT_SOCIAL_PREFIX;
@@ -338,6 +339,18 @@ function blogSocialQaEnabled() {
   return String(process.env.BLOG_SOCIAL_QA_ENABLED || "true").trim().toLowerCase() !== "false";
 }
 
+function configuredSocialFallbackImageUrl() {
+  const candidate = String(
+    process.env.BLOG_SOCIAL_FALLBACK_IMAGE_URL || DEFAULT_SOCIAL_FALLBACK_IMAGE_URL
+  ).trim();
+  try {
+    const parsed = new URL(candidate);
+    return ["http:", "https:"].includes(parsed.protocol) ? parsed.toString() : "";
+  } catch {
+    return "";
+  }
+}
+
 function groundSocialArtworkPrompt(basePrompt, sources = []) {
   const evidence = (Array.isArray(sources) ? sources : []).slice(0, 3).map((source) => ({
     title: cleanSourceTitle(source?.title || ""),
@@ -365,6 +378,25 @@ async function resolveSocialArtwork({ sessionId, imagePrompt, dateId, prefix }) 
   }
 
   const imageError = art?.error || art?.warning || "Unknown social blog artwork error";
+  const fallbackImageUrl = configuredSocialFallbackImageUrl();
+
+  if (fallbackImageUrl) {
+    warn("blog.social.daily.image.curated_fallback", {
+      dateId,
+      sessionId,
+      error: imageError,
+      fallbackImageUrl,
+      reason: "fresh-artwork-unavailable",
+    });
+
+    return {
+      imageUrl: fallbackImageUrl,
+      imageStatus: "curated-static-fallback",
+      imageError,
+      imageKey: null,
+      imageBucketKey: null,
+    };
+  }
 
   warn("blog.social.daily.image.unavailable", {
     dateId,
