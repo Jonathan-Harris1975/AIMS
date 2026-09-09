@@ -1,7 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { isReplaceableRenderedQualityFailure } from "../services/blotato/utils/autoPublishService.js";
+import {
+  isReplaceableRenderedQualityFailure,
+  isRetryableRenderedPublishFailure,
+} from "../services/blotato/utils/autoPublishService.js";
 
 async function source(path) {
   return readFile(new URL(`../${path}`, import.meta.url), "utf8");
@@ -32,8 +35,36 @@ test("Blotato scheduled slots are idempotent after a paid visual has been create
   assert.match(text, /isReplaceableRenderedQualityFailure/);
   assert.match(text, /BLOTATO_FAILED_RENDER_REPLACEMENTS/);
   assert.match(text, /blotato\.schedule\.failed_render_replacement/);
+  assert.match(text, /findRetryableScheduledPublish/);
+  assert.match(text, /blotato\.schedule\.failed_publish_recovery/);
+  assert.match(text, /blotato\.schedule\.existing_reconciled/);
   assert.match(routes, /requestDedupe\("blotato:autoshorts:schedule"\)/);
   assert.match(routes, /requestDedupe\("blotato:lane:schedule"\)/);
+});
+
+test("Blotato reuses a QA-approved video after a definitive schedule rejection but blocks ambiguous retries", () => {
+  const previous = process.env.BLOTATO_POST_SUBMISSION_RETRY_ATTEMPTS;
+  process.env.BLOTATO_POST_SUBMISSION_RETRY_ATTEMPTS = "3";
+  try {
+    const failedPublish = {
+      status: "failed",
+      phase: "publish-failed",
+      attempt: 1,
+      videoId: "visual-ready",
+      mediaUrl: "https://example.com/ready.mp4",
+      renderedVideoQa: { pass: true },
+      failedPublishes: [{ platform: "instagram", submissionOutcome: "rejected" }],
+    };
+    assert.equal(isRetryableRenderedPublishFailure(failedPublish), true);
+    assert.equal(isRetryableRenderedPublishFailure({ ...failedPublish, attempt: 3 }), false);
+    assert.equal(isRetryableRenderedPublishFailure({
+      ...failedPublish,
+      publicationReferences: [{ platform: "instagram", submissionOutcome: "ambiguous" }],
+    }), false);
+  } finally {
+    if (previous === undefined) delete process.env.BLOTATO_POST_SUBMISSION_RETRY_ATTEMPTS;
+    else process.env.BLOTATO_POST_SUBMISSION_RETRY_ATTEMPTS = previous;
+  }
 });
 
 test("Blotato permits one pre-publication quality replacement but never duplicates a submitted post", () => {
@@ -99,6 +130,7 @@ test("Blotato scheduled runs use deterministic slots, a daily cap, and bounded r
   assert.match(text, /BLOTATO_DAILY_PAID_RENDER_CAP", 2, 10/);
   assert.match(text, /blotato-daily-paid-render-cap/);
   assert.match(text, /BLOTATO_FAILED_RENDER_REPLACEMENTS/);
+  assert.match(text, /BLOTATO_POST_SUBMISSION_RETRY_ATTEMPTS/);
   assert.match(text, /paidVisualIdsForDate\(scheduleDate\)/);
   assert.match(text, /inferScheduleSlotFromJob\(job\) === scheduleSlot/);
   assert.match(text, /scheduleDateFromJob\(job\) === scheduleDate/);

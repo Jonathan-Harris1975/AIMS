@@ -243,7 +243,7 @@ will be the ones who build better systems around the tools.",
     const id = body.post.content.platform === "tiktok" ? "post-1" : `post-${body.post.content.platform}`;
     if (body.scheduledTime) scheduledPostTimes.set(id, body.scheduledTime);
     res.writeHead(201, { "content-type": "application/json" });
-    res.end(JSON.stringify({ postSubmissionId: id }));
+    res.end(JSON.stringify({ postSubmissionId: id, scheduledTime: body.scheduledTime || undefined }));
     return;
   }
 
@@ -255,9 +255,27 @@ will be the ones who build better systems around the tools.",
     res.end(JSON.stringify({
       postSubmissionId: id,
       status: scheduledTime ? (transitional ? "in-progress" : "scheduled") : "published",
-      scheduledTime: scheduledTime || undefined,
+      scheduledTime: scheduledTime && !transitional ? scheduledTime : undefined,
       publicUrl: scheduledTime ? undefined : `https://example.com/p/${id}`,
     }));
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/v2/schedules") {
+    const items = capturedPostRequests
+      .filter((payload) => payload.scheduledTime)
+      .map((payload) => {
+        const platform = payload.post.content.platform;
+        const id = platform === "tiktok" ? "post-1" : `post-${platform}`;
+        return {
+          id: `schedule-${id}`,
+          scheduledAt: payload.scheduledTime,
+          account: { id: payload.post.accountId },
+          draft: payload.post,
+        };
+      });
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({ items, count: String(items.length) }));
     return;
   }
 
@@ -661,6 +679,7 @@ test("Blotato accepts a provider-acknowledged in-progress scheduled submission",
     assert.equal(jobStatus.body.job.result.deliveryMode, "scheduled");
     assert.equal(jobStatus.body.job.result.posts.length, 4);
     assert.ok(jobStatus.body.job.result.posts.every((post) => post.status === "in-progress" && post.confirmed === true));
+    assert.ok(jobStatus.body.job.result.posts.every((post) => post.confirmationSource === "schedules-list"));
     assert.ok(capturedPostRequests.every((payload) => Date.parse(payload.scheduledTime) > Date.now()));
   } finally {
     scheduledPostStatusMode = "scheduled";

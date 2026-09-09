@@ -128,8 +128,10 @@ test("provider integrations follow current Blotato and OpenRouter contracts", as
   assert.match(autoPublish, /id,title,name,description,inputs/);
   assert.match(autoPublish, /BLOTATO_VIDEO_PENDING_ERROR_LIMIT", 120, 180/);
   assert.match(autoPublish, /blotato\.schedule\.rebased_after_render/);
-  assert.match(autoPublish, /value !== "in-progress"/);
+  assert.match(autoPublish, /scheduledTimeAcknowledged/);
   assert.match(autoPublish, /scheduledTimesMatch\(providerTime, requestedScheduledTime\)/);
+  assert.match(autoPublish, /findMatchingScheduledPost/);
+  assert.match(blotatoClient, /blotatoRequest\("schedules"/);
   assert.match(capabilities, /images\/models\/\$\{encodeURIComponent\(author\)\}/);
   assert.match(capabilities, /filterImagePayloadByCapabilities/);
   assert.match(council, /strictJsonResponseFormat/);
@@ -149,5 +151,5 @@ test("provider integrations follow current Blotato and OpenRouter contracts", as
   assert.match(env, /^BLOTATO_BRAND_VOICE_NAME=Daniel \(British, authoritative\)$/m);
   assert.match(env, /^ARTWORK_TASK_TIMEOUT_MS=600000$/m);
   assert.match(env, /^BLOG_FALLBACK_IMAGE_URL=$/m);
-  assert.match(env, /^BLOG_SOCIAL_FALLBACK_IMAGE_URL=$/m);
+  assert.match(env, /^BLOG_SOCIAL_FALLBACK_IMAGE_URL=https:\/\/images\.jonathan-harris\.online\/site-logo$/m);
 });

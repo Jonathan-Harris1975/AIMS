@@ -220,6 +220,8 @@ test("Zernio and Blotato scheduled publishing require provider confirmation", as
   assert.match(blotato, /scheduled submission/);
   assert.match(blotato, /phase: "pre-publish"/);
   assert.match(blotato, /blotato-scheduled-publishing-required/);
+  assert.match(blotato, /findMatchingScheduledPost/);
+  assert.match(blotatoClient, /export async function listSchedules/);
   assert.match(blotatoRoutes, /requireScheduledBlotatoRoute/);
   assert.match(blotatoRoutes, /\/autoshorts\/schedule/);
   assert.match(blotatoRoutes, /\/shorts\/:lane\/schedule/);
@@ -261,6 +263,7 @@ test("Zernio keeps fresh generated artwork primary and permits the curated store
   const blogArtwork = await readFile(new URL("../services/artwork/createBlogArtwork.js", import.meta.url), "utf8");
   const socialArtwork = await readFile(new URL("../services/artwork/createSocialArtwork.js", import.meta.url), "utf8");
   const zernioScheduler = await readFile(new URL("../services/zernio/utils/socialScheduler.js", import.meta.url), "utf8");
+  const zernioConfig = await readFile(new URL("../services/zernio/utils/config.js", import.meta.url), "utf8");
   const weeklyBlog = await readFile(new URL("../services/blog/weekly/buildWeeklyBlogPost.js", import.meta.url), "utf8");
   const socialBlog = await readFile(new URL("../services/blog/social/buildDailySocialBlogPost.js", import.meta.url), "utf8");
   const hero = await readFile(new URL("../services/newsletter/engine/heroImage.js", import.meta.url), "utf8");
@@ -278,11 +281,15 @@ test("Zernio keeps fresh generated artwork primary and permits the curated store
   assert.match(zernioScheduler, /allowFallback: booleanValue\(process\.env\.ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK, true\)/);
   assert.match(zernioScheduler, /artwork\.fallback/);
   assert.match(weeklyBlog, /reason: "artwork-unavailable"/);
-  assert.match(socialBlog, /reason: "artwork-unavailable"/);
+  assert.match(socialBlog, /DEFAULT_SOCIAL_FALLBACK_IMAGE_URL/);
+  assert.match(socialBlog, /imageStatus: "curated-static-fallback"/);
+  assert.match(socialBlog, /reason: "fresh-artwork-unavailable"/);
   assert.match(socialBlog, /!art\.fallback/);
+  assert.match(zernioConfig, /ZERNIO_BLOG_RSS_IMAGE_URL, DEFAULT_STORED_IMAGE_URL/);
+  assert.match(zernioConfig, /ZERNIO_MINI_SERIES_IMAGE_URL, DEFAULT_STORED_IMAGE_URL/);
   assert.doesNotMatch(hero, /blog-fallback-hero\.png/);
   assert.match(env, /^BLOG_FALLBACK_IMAGE_URL=$/m);
-  assert.match(env, /^BLOG_SOCIAL_FALLBACK_IMAGE_URL=$/m);
+  assert.match(env, /^BLOG_SOCIAL_FALLBACK_IMAGE_URL=https:\/\/images\.jonathan-harris\.online\/site-logo$/m);
   assert.match(env, /^NEWSLETTER_AI_EDGE_FALLBACK_IMAGE_URL=$/m);
   assert.match(env, /^SOCIAL_BLOG_ALLOW_DETERMINISTIC_FALLBACK=false$/m);
   assert.match(env, /^NEWSLETTER_ALLOW_DETERMINISTIC_FALLBACK=true$/m);
@@ -358,7 +365,7 @@ test("critical orchestration defaults stay aligned across deployment templates",
     SOCIAL_BLOG_ARTWORK_TIMEOUT_MS: "600000",
     ZERNIO_ARTWORK_TIMEOUT_MS: "600000",
     BLOG_FALLBACK_IMAGE_URL: "",
-    BLOG_SOCIAL_FALLBACK_IMAGE_URL: "",
+    BLOG_SOCIAL_FALLBACK_IMAGE_URL: "https://images.jonathan-harris.online/site-logo",
     NEWSLETTER_AI_EDGE_FALLBACK_IMAGE_URL: "",
     ZERNIO_REQUIRE_SCHEDULE_CONFIRMATION: "true",
     ZERNIO_REQUIRE_IMAGE: "true",
@@ -375,18 +382,23 @@ test("critical orchestration defaults stay aligned across deployment templates",
     ZERNIO_EBOOK_SATURDAY_TIME: "14:30",
     ZERNIO_QUIZ_QUESTION_TIME: "12:00",
     ZERNIO_QUIZ_ANSWER_TIME: "12:00",
+    ZERNIO_QUIZ_IMAGE_URL: "https://images.jonathan-harris.online/Quiz",
+    ZERNIO_QUIZ_ANSWER_IMAGE_URL: "https://images.jonathan-harris.online/Answer",
     ZERNIO_MINI_SERIES_TUESDAY_TIME: "19:30",
     ZERNIO_MINI_SERIES_WEDNESDAY_TIME: "19:30",
     ZERNIO_MINI_SERIES_THURSDAY_TIME: "20:00",
     ZERNIO_MINI_SERIES_FRIDAY_TIME: "19:30",
     ZERNIO_MINI_SERIES_SATURDAY_TIME: "19:30",
     ZERNIO_MINI_SERIES_SUNDAY_TIME: "19:30",
+    ZERNIO_MINI_SERIES_IMAGE_URL: "https://images.jonathan-harris.online/site-logo",
     ZERNIO_PODCAST_PROMO_TIME: "18:30",
+    ZERNIO_PODCAST_PROMO_IMAGE_URL: "https://images.jonathan-harris.online/Podcast",
     ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK: "true",
     ZERNIO_ALLOW_DETERMINISTIC_FALLBACK: "false",
     ZERNIO_SCHEDULE_RECOVERY_ENABLED: "true",
     ZERNIO_SCHEDULE_MIN_LEAD_MS: "900000",
     ZERNIO_BLOG_RSS_TIME: "12:00",
+    ZERNIO_BLOG_RSS_IMAGE_URL: "https://images.jonathan-harris.online/site-logo",
     BLOTATO_REQUIRE_ALL_CHANNELS: "true",
     BLOTATO_ALLOW_IMMEDIATE_PUBLISH: "false",
     BLOTATO_SCHEDULE_TIMEZONE: "Europe/London",
@@ -404,6 +416,8 @@ test("critical orchestration defaults stay aligned across deployment templates",
     BLOTATO_SCHEDULE_RECOVERY_ENABLED: "true",
     BLOTATO_RENDERED_QA_BLOCK_SOFT_FAILURES: "false",
     BLOTATO_SCHEDULE_VERIFY_ATTEMPTS: "12",
+    BLOTATO_SCHEDULE_VERIFY_PAGES: "3",
+    BLOTATO_POST_SUBMISSION_RETRY_ATTEMPTS: "3",
     AIMS_OPERATION_NEWSLETTER_ENABLED: "true",
     AIMS_OPERATION_AUTO_RECOVERY_ENABLED: "true",
     AIMS_OPERATION_MAX_ATTEMPTS: "3",

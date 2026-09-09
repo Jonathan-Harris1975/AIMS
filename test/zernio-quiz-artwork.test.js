@@ -41,5 +41,7 @@ test("quiz scheduler builds separate question and answer reveal artwork", async 
   assert.match(source, /Do not use generic AI wallpaper/);
   assert.match(source, /zernio-quiz-question-artwork-unavailable/);
   assert.match(source, /zernio-quiz-answer-artwork-unavailable/);
-  assert.match(source, /refusing to schedule the static default image/);
+  assert.match(source, /allowFallback: allowCuratedArtworkFallback/);
+  assert.match(source, /curated-static-fallback/);
+  assert.match(source, /stored question and answer images were used/);
 });
