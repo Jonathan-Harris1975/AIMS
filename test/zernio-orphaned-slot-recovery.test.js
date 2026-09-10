@@ -4,7 +4,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-test("Zernio reclaims an orphaned pending slot and keeps completed slots duplicate-safe", async () => {
+test("Zernio never steals a live pending slot and only reclaims it after expiry", async () => {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "aims-zernio-orphaned-slot-"));
   const previous = {
     NODE_ENV: process.env.NODE_ENV,
@@ -43,13 +43,33 @@ test("Zernio reclaims an orphaned pending slot and keeps completed slots duplica
       }],
     });
 
+    const liveDuplicate = await state.claimScheduleSlot(input);
+    assert.equal(liveDuplicate.claimed, false);
+    assert.equal(liveDuplicate.duplicatePrevented, true);
+    assert.equal(liveDuplicate.reason, "same-slot-already-running");
+
+    state.writeZernioState({
+      lanes: {},
+      quiz: { topics: [], scheduled: [] },
+      weeklyLedger: [],
+      spotlightPeople: [],
+      usedSocialSources: [],
+      slotClaims: [{
+        ...input,
+        key,
+        state: "pending",
+        createdAt: "2026-09-03T08:00:00.000Z",
+        updatedAt: "2026-09-03T08:00:00.000Z",
+        expiresAt: Date.now() - 1,
+      }],
+    });
+
     const reclaimed = await state.claimScheduleSlot(input);
     assert.equal(reclaimed.claimed, true);
     assert.equal(reclaimed.duplicatePrevented, false);
-    assert.equal(reclaimed.recoveredOrphanedClaim, true);
     assert.equal(reclaimed.key, key);
 
-    state.completeScheduleSlot(reclaimed, { postId: "zernio-post-1" });
+    await state.completeScheduleSlot(reclaimed, { postId: "zernio-post-1" });
     const completedDuplicate = await state.claimScheduleSlot(input);
     assert.equal(completedDuplicate.claimed, false);
     assert.equal(completedDuplicate.duplicatePrevented, true);

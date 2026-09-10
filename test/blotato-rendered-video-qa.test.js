@@ -19,7 +19,7 @@ test("the observed 40.87 second vertical render passes technical duration QA", (
   assert.equal(result.aspectRatio, 0.5625);
 });
 
-test("finished-video visual QA fails an off-topic 36 score", () => {
+test("finished-video visual QA is advisory by default and can be explicitly enforced", () => {
   const result = normaliseRenderedVideoQa({
     score: 36,
     hookPerformance: 7,
@@ -38,10 +38,11 @@ test("finished-video visual QA fails an off-topic 36 score", () => {
   assert.equal(result.score, 36);
   assert.equal(result.hookPerformance, 7);
   assert.deepEqual(assessRenderedVideoQaPublication(result), {
-    block: true,
+    block: false,
     hardFailure: true,
     softFailure: false,
   });
+  assert.equal(assessRenderedVideoQaPublication(result, { blockHardFailures: true }).block, true);
 });
 
 test("finished-video performance scores are advisory unless strict mode is enabled", () => {

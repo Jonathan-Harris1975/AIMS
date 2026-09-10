@@ -42,7 +42,7 @@ test("Blotato scheduled slots are idempotent after a paid visual has been create
   assert.match(routes, /requestDedupe\("blotato:lane:schedule"\)/);
 });
 
-test("Blotato reuses a QA-approved video after a definitive schedule rejection but blocks ambiguous retries", () => {
+test("Blotato reuses rendered videos for provider handoff but blocks ambiguous retries", () => {
   const previous = process.env.BLOTATO_POST_SUBMISSION_RETRY_ATTEMPTS;
   process.env.BLOTATO_POST_SUBMISSION_RETRY_ATTEMPTS = "3";
   try {
@@ -56,6 +56,16 @@ test("Blotato reuses a QA-approved video after a definitive schedule rejection b
       failedPublishes: [{ platform: "instagram", submissionOutcome: "rejected" }],
     };
     assert.equal(isRetryableRenderedPublishFailure(failedPublish), true);
+    assert.equal(isRetryableRenderedPublishFailure({
+      ...failedPublish,
+      phase: "rendered-quality-failed",
+      renderedVideoQa: {
+        pass: false,
+        hardDefects: ["Model-labelled visual defect"],
+        technical: { pass: true },
+      },
+      failedPublishes: [],
+    }), true);
     assert.equal(isRetryableRenderedPublishFailure({ ...failedPublish, attempt: 3 }), false);
     assert.equal(isRetryableRenderedPublishFailure({
       ...failedPublish,
