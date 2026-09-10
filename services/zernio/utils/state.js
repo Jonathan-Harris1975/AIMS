@@ -1,4 +1,5 @@
-import { readJsonState, readJsonStateFresh, writeJsonState } from "../../shared/utils/stateFile.js";
+import { readJsonState, readJsonStateFresh, writeJsonState, flushStateWrites } from "../../shared/utils/stateFile.js";
+import { claimDurableLease, completeDurableLease, releaseDurableLease } from "../../shared/utils/durableLease.js";
 
 const STATE_FILE = "zernio-social-state.json";
 const MAX_HISTORY = 12;
@@ -140,6 +141,7 @@ export async function claimScheduleSlot(input = {}) {
     if (existing.state === "completed") {
       state.slotClaims = slotClaims;
       writeZernioState(state);
+      await flushStateWrites({ throwOnError: process.env.NODE_ENV === "production" });
       return {
         claimed: false,
         duplicatePrevented: true,
@@ -150,30 +152,43 @@ export async function claimScheduleSlot(input = {}) {
       };
     }
 
-    // An in-process owner is caught by activeSlotClaims above. A persisted
-    // pending claim with no active owner is therefore an orphan left by a
-    // restart/timeout. Reclaim it and reuse the same canonical slot key; the
-    // key also seeds Zernio's stable x-request-id, so an uncertain provider
-    // hand-off remains idempotent instead of being abandoned for two hours.
-    const reclaimed = {
-      ...makeSlotClaim(input, "pending"),
-      key,
-      reclaimedFrom: {
-        createdAt: existing.createdAt || null,
-        updatedAt: existing.updatedAt || null,
-      },
-    };
-    activeSlotClaims.add(key);
-    slotClaims[existingIndex] = reclaimed;
+    // A pending claim can belong to another live Koyeb instance. Absence from
+    // this process's in-memory set does not make it orphaned. The expiry is the
+    // only safe automatic recovery boundary.
     state.slotClaims = slotClaims;
     writeZernioState(state);
+    await flushStateWrites({ throwOnError: process.env.NODE_ENV === "production" });
     return {
-      claimed: true,
-      duplicatePrevented: false,
+      claimed: false,
+      duplicatePrevented: true,
       key,
       state: "pending",
-      claim: reclaimed,
-      recoveredOrphanedClaim: true,
+      reason: "same-slot-already-running",
+      existing,
+    };
+  }
+
+  const durable = await claimDurableLease({
+    namespace: "zernio-schedule",
+    key,
+    pendingTtlMs: PENDING_SLOT_TTL_MS,
+    completedTtlMs: COMPLETED_SLOT_TTL_MS,
+    metadata: {
+      scope: input.scope || "zernio",
+      scheduledDateTime: input.scheduledDateTime || null,
+      profileName: input.profileName || null,
+      accountId: input.accountId || null,
+    },
+  });
+  if (!durable.claimed) {
+    return {
+      claimed: false,
+      duplicatePrevented: true,
+      key,
+      state: durable.state || "pending",
+      reason: durable.state === "completed" ? "same-slot-already-completed" : "same-slot-already-running",
+      existing: durable.existing || null,
+      durableLease: null,
     };
   }
 
@@ -181,6 +196,13 @@ export async function claimScheduleSlot(input = {}) {
   activeSlotClaims.add(key);
   state.slotClaims = [...slotClaims, claim].slice(-MAX_SLOT_CLAIMS);
   writeZernioState(state);
+  try {
+    await flushStateWrites({ throwOnError: process.env.NODE_ENV === "production" });
+  } catch (error) {
+    activeSlotClaims.delete(key);
+    await releaseDurableLease(durable.lease, { reason: "zernio-state-write-failed" });
+    throw error;
+  }
 
   return {
     claimed: true,
@@ -188,13 +210,17 @@ export async function claimScheduleSlot(input = {}) {
     key,
     state: "pending",
     claim,
+    durableLease: durable.lease,
   };
 }
 
-export function completeScheduleSlot(slotClaim, result = {}) {
+export async function completeScheduleSlot(slotClaim, result = {}) {
   if (!slotClaim?.key) return;
+  if (slotClaim.durableLease) {
+    await completeDurableLease(slotClaim.durableLease, result);
+  }
   const now = Date.now();
-  const state = readZernioState();
+  const state = await readZernioStateFresh();
   const slotClaims = cleanSlotClaims(state.slotClaims, now);
   const index = slotClaims.findIndex((claim) => claim.key === slotClaim.key);
   const existing = index >= 0 ? slotClaims[index] : { key: slotClaim.key };
@@ -216,38 +242,83 @@ export function completeScheduleSlot(slotClaim, result = {}) {
   activeSlotClaims.delete(slotClaim.key);
   state.slotClaims = slotClaims.slice(-MAX_SLOT_CLAIMS);
   writeZernioState(state);
+  await flushStateWrites({ throwOnError: process.env.NODE_ENV === "production" });
 }
 
-export function releaseScheduleSlot(slotClaim) {
+export async function releaseScheduleSlot(slotClaim) {
   if (!slotClaim?.key) return;
+  if (slotClaim.durableLease) {
+    await releaseDurableLease(slotClaim.durableLease, { reason: "zernio-schedule-not-confirmed" });
+  }
   activeSlotClaims.delete(slotClaim.key);
 
-  const state = readZernioState();
+  const state = await readZernioStateFresh();
   const slotClaims = cleanSlotClaims(state.slotClaims).filter((claim) => {
     if (claim.key !== slotClaim.key) return true;
     return claim.state === "completed";
   });
   state.slotClaims = slotClaims;
   writeZernioState(state);
+  await flushStateWrites({ throwOnError: process.env.NODE_ENV === "production" });
 }
 
-export function clearScheduleSlotClaim(slotClaim) {
+export async function clearScheduleSlotClaim(slotClaim) {
   if (!slotClaim?.key) return;
+  if (slotClaim.durableLease) {
+    await releaseDurableLease(slotClaim.durableLease, { reason: "zernio-schedule-claim-cleared" });
+  }
   activeSlotClaims.delete(slotClaim.key);
-  const state = readZernioState();
+  const state = await readZernioStateFresh();
   state.slotClaims = cleanSlotClaims(state.slotClaims).filter((claim) => claim.key !== slotClaim.key);
   writeZernioState(state);
+  await flushStateWrites({ throwOnError: process.env.NODE_ENV === "production" });
 }
 
-export function resetScheduleSlotClaim(input = {}) {
+export async function resetScheduleSlotClaim(input = {}) {
   const key = buildScheduleSlotKey(input);
-  const state = readZernioState();
+  const state = await readZernioStateFresh();
   const slotClaims = cleanSlotClaims(state.slotClaims).filter((claim) => claim.key !== key && !sameScheduleSlot(claim, input));
+  const existing = cleanSlotClaims(state.slotClaims).find((claim) => claim.key === key || sameScheduleSlot(claim, input));
+  if (existing?.state === "pending") {
+    return {
+      claimed: false,
+      duplicatePrevented: true,
+      key,
+      state: "pending",
+      reason: "same-slot-already-running",
+      existing,
+    };
+  }
+
+  const durable = await claimDurableLease({
+    namespace: "zernio-schedule",
+    key,
+    pendingTtlMs: PENDING_SLOT_TTL_MS,
+    completedTtlMs: COMPLETED_SLOT_TTL_MS,
+    force: true,
+    metadata: {
+      scope: input.scope || "zernio",
+      scheduledDateTime: input.scheduledDateTime || null,
+      profileName: input.profileName || null,
+      accountId: input.accountId || null,
+    },
+  });
+  if (!durable.claimed) {
+    return {
+      claimed: false,
+      duplicatePrevented: true,
+      key,
+      state: durable.state || "pending",
+      reason: durable.state === "completed" ? "same-slot-already-completed" : "same-slot-already-running",
+      existing: durable.existing || null,
+    };
+  }
   const claim = makeSlotClaim(input, "pending");
 
   activeSlotClaims.add(key);
   state.slotClaims = [...slotClaims, claim].slice(-MAX_SLOT_CLAIMS);
   writeZernioState(state);
+  await flushStateWrites({ throwOnError: process.env.NODE_ENV === "production" });
 
   return {
     claimed: true,
@@ -255,18 +326,23 @@ export function resetScheduleSlotClaim(input = {}) {
     key,
     state: "pending",
     claim,
+    durableLease: durable.lease,
     repairedStaleCompletedSlot: true,
   };
 }
 
-export function forgetScheduleSlot(slotClaimOrKey) {
+export async function forgetScheduleSlot(slotClaimOrKey) {
   const key = typeof slotClaimOrKey === "string" ? slotClaimOrKey : slotClaimOrKey?.key;
   if (!key) return false;
 
+  if (typeof slotClaimOrKey === "object" && slotClaimOrKey?.durableLease) {
+    await releaseDurableLease(slotClaimOrKey.durableLease, { reason: "zernio-schedule-forgotten" });
+  }
   activeSlotClaims.delete(key);
-  const state = readZernioState();
+  const state = await readZernioStateFresh();
   state.slotClaims = cleanSlotClaims(state.slotClaims).filter((claim) => claim.key !== key);
   writeZernioState(state);
+  await flushStateWrites({ throwOnError: process.env.NODE_ENV === "production" });
   return true;
 }
 

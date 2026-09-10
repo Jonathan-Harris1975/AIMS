@@ -722,7 +722,7 @@ async function claimZernioSlot({ scope, scheduledDateTime, profileName, accountI
   const claimInput = { scope, scheduledDateTime: canonicalScheduledDateTime, profileName, accountId, imageUrl, sourceIntentHash };
 
   if (isTruthyOption(force)) {
-    const claim = resetScheduleSlotClaim(claimInput);
+    const claim = await resetScheduleSlotClaim(claimInput);
     return { ...claim, forced: true, scheduledDateTime: effectiveScheduledDateTime, canonicalScheduledDateTime, scheduleResolution };
   }
 
@@ -1851,7 +1851,7 @@ export async function buildAndScheduleDailyLane(laneKey, options = {}) {
     }
 
     if (slotClaim.claimed && (scheduling.scheduled || scheduling.duplicatePrevented)) {
-      completeScheduleSlot(slotClaim, {
+      await completeScheduleSlot(slotClaim, {
         lane: laneKey,
         scheduledDateTime,
         topic: post.topic,
@@ -1859,7 +1859,7 @@ export async function buildAndScheduleDailyLane(laneKey, options = {}) {
         duplicatePrevented: Boolean(scheduling.duplicatePrevented),
       });
     } else {
-      releaseScheduleSlot(slotClaim);
+      await releaseScheduleSlot(slotClaim);
     }
 
     info("zernio.daily.complete", {
@@ -1890,7 +1890,7 @@ export async function buildAndScheduleDailyLane(laneKey, options = {}) {
       zernioSocialGate,
     };
   } catch (error) {
-    releaseScheduleSlot(slotClaim);
+    await releaseScheduleSlot(slotClaim);
     if (editorialReservation) releaseEditorialReservation(editorialReservation);
     throw error;
   }
@@ -2008,7 +2008,7 @@ export async function buildAndScheduleBlogRssDaily(options = {}) {
     }
 
     if (slotClaim.claimed && (scheduling.scheduled || scheduling.duplicatePrevented)) {
-      completeScheduleSlot(slotClaim, {
+      await completeScheduleSlot(slotClaim, {
         lane: "blog-rss",
         scheduledDateTime,
         topic: article.title,
@@ -2016,7 +2016,7 @@ export async function buildAndScheduleBlogRssDaily(options = {}) {
         duplicatePrevented: Boolean(scheduling.duplicatePrevented),
       });
     } else {
-      releaseScheduleSlot(slotClaim);
+      await releaseScheduleSlot(slotClaim);
     }
 
     info("zernio.blogRss.complete", {
@@ -2046,7 +2046,7 @@ export async function buildAndScheduleBlogRssDaily(options = {}) {
       targeting: scheduling.targeting || null,
     };
   } catch (error) {
-    releaseScheduleSlot(slotClaim);
+    await releaseScheduleSlot(slotClaim);
     throw error;
   }
 }
@@ -2143,7 +2143,7 @@ export async function buildAndScheduleWeeklyMiniSeries(options = {}) {
       sourceIntentHash: buildIntentHash({ audienceIntent: MINI_SERIES_CONFIG.audienceIntent, angle: weekStartDate }),
     };
     seriesClaim = isTruthyOption(options.force)
-      ? resetScheduleSlotClaim(claimInput)
+      ? await resetScheduleSlotClaim(claimInput)
       : await claimScheduleSlot(claimInput);
     if (seriesClaim.duplicatePrevented) {
       info("zernio.mini_series.duplicate_prevented", { weekStartDate, slotKey: seriesClaim.key, reason: seriesClaim.reason });
@@ -2162,7 +2162,7 @@ export async function buildAndScheduleWeeklyMiniSeries(options = {}) {
 
   const finishMiniSeries = async (result) => {
     if (seriesClaim?.claimed) {
-      completeScheduleSlot(seriesClaim, {
+      await completeScheduleSlot(seriesClaim, {
         lane: "weekly-mini-series",
         weekStartDate,
         ok: result?.ok !== false,
@@ -2743,7 +2743,7 @@ infrastructure grounded in this part's evidence.",
 
         const complete = Boolean(scheduling.scheduled || scheduling.dryRun);
         if (!complete) {
-          releaseScheduleSlot(slotClaim);
+          await releaseScheduleSlot(slotClaim);
           const failure = {
             ...item.slot,
             index: item.index + 1,
@@ -2766,7 +2766,7 @@ infrastructure grounded in this part's evidence.",
         }
 
         if (slotClaim.claimed && scheduling.scheduled) successfulSlotClaims.set(item.index, slotClaim);
-        else releaseScheduleSlot(slotClaim);
+        else await releaseScheduleSlot(slotClaim);
 
         if (scheduling.scheduled && !scheduling.duplicatePrevented) {
           externalMiniSeriesPublications.push({
@@ -2794,7 +2794,7 @@ infrastructure grounded in this part's evidence.",
           scheduleAttempt: round,
         });
       } catch (error) {
-        releaseScheduleSlot(slotClaim);
+        await releaseScheduleSlot(slotClaim);
         const failure = {
           ...item.slot,
           index: item.index + 1,
@@ -2862,7 +2862,7 @@ infrastructure grounded in this part's evidence.",
       try {
         if (!remoteId) throw new Error("confirmed mini-series post did not expose a rollback post ID");
         const rollback = await deletePost(remoteId, apiKey);
-        clearScheduleSlotClaim(slotClaim);
+        await clearScheduleSlotClaim(slotClaim);
         result.scheduled = false;
         result.failed = true;
         result.rolledBack = true;
@@ -2873,7 +2873,7 @@ infrastructure grounded in this part's evidence.",
         );
         rolledBackCount += 1;
       } catch (error) {
-        completeScheduleSlot(slotClaim, {
+        await completeScheduleSlot(slotClaim, {
           lane: "weekly-mini-series",
           scheduledDateTime: result.scheduledDateTime,
           topic: result.post?.topic,
@@ -2893,7 +2893,7 @@ infrastructure grounded in this part's evidence.",
       const index = Number(result.index || 0) - 1;
       const slotClaim = successfulSlotClaims.get(index);
       if (slotClaim) {
-        completeScheduleSlot(slotClaim, {
+        await completeScheduleSlot(slotClaim, {
           lane: "weekly-mini-series",
           scheduledDateTime: result.scheduledDateTime,
           topic: result.post?.topic,
@@ -2958,7 +2958,7 @@ infrastructure grounded in this part's evidence.",
     warnings: [loaded.warning, ...prepared.map((item) => item.artworkWarning)].filter(Boolean),
   });
   } catch (error) {
-    if (seriesClaim?.claimed) releaseScheduleSlot(seriesClaim);
+    if (seriesClaim?.claimed) await releaseScheduleSlot(seriesClaim);
     if (editorialBriefEntries.length && !briefDispositionAttempted) {
       briefDispositionAttempted = true;
       if (externalMiniSeriesPublications.length) {
@@ -3113,9 +3113,15 @@ export async function buildAndSchedulePodcastThursdayPromo(options = {}) {
       });
     }
     if (slotClaim.claimed && (scheduling.scheduled || scheduling.duplicatePrevented)) {
-      completeScheduleSlot(slotClaim, { lane: "podcast-thursday-promo", scheduledDateTime, topic: episode.title, title: generated.title, duplicatePrevented: Boolean(scheduling.duplicatePrevented) });
+      await completeScheduleSlot(slotClaim, {
+        lane: "podcast-thursday-promo",
+        scheduledDateTime,
+        topic: episode.title,
+        title: generated.title,
+        duplicatePrevented: Boolean(scheduling.duplicatePrevented),
+      });
     } else {
-      releaseScheduleSlot(slotClaim);
+      await releaseScheduleSlot(slotClaim);
     }
     return {
       ok: true, lane: "podcast-thursday-promo", publishDate, scheduledDateTime,
@@ -3126,7 +3132,7 @@ export async function buildAndSchedulePodcastThursdayPromo(options = {}) {
       warnings: [podcastArtworkWarning, ...(scheduling.warnings || [])].filter(Boolean), zernioResponse: scheduling.zernioResponse, targeting: scheduling.targeting || null,
     };
   } catch (error) {
-    releaseScheduleSlot(slotClaim);
+    await releaseScheduleSlot(slotClaim);
     throw error;
   }
 }
@@ -3316,7 +3322,7 @@ export async function buildAndScheduleEbookWeekly(options = {}) {
       }
 
       if (slotClaim.claimed && (scheduling.scheduled || scheduling.duplicatePrevented)) {
-        completeScheduleSlot(slotClaim, {
+        await completeScheduleSlot(slotClaim, {
           lane: "ebooks-weekly",
           day: dayKey,
           scheduledDateTime,
@@ -3326,12 +3332,12 @@ export async function buildAndScheduleEbookWeekly(options = {}) {
           duplicatePrevented: Boolean(scheduling.duplicatePrevented),
         });
       } else {
-        releaseScheduleSlot(slotClaim);
+        await releaseScheduleSlot(slotClaim);
       }
 
       warnings.push(...(scheduling.warnings || []));
     } catch (error) {
-      releaseScheduleSlot(slotClaim);
+      await releaseScheduleSlot(slotClaim);
       const failedPost = failedEbookPostResult({
         dayKey,
         publishDate,
@@ -3803,7 +3809,7 @@ ${answerPost.content}`,
     }
 
     if (questionSlotClaim.claimed && (questionScheduling.scheduled || questionScheduling.duplicatePrevented)) {
-      completeScheduleSlot(questionSlotClaim, {
+      await completeScheduleSlot(questionSlotClaim, {
         lane: "quiz",
         part: "question",
         scheduledDateTime: questionDateTime,
@@ -3812,11 +3818,11 @@ ${answerPost.content}`,
         duplicatePrevented: Boolean(questionScheduling.duplicatePrevented),
       });
     } else {
-      releaseScheduleSlot(questionSlotClaim);
+      await releaseScheduleSlot(questionSlotClaim);
     }
 
     if (answerSlotClaim.claimed && (answerScheduling.scheduled || answerScheduling.duplicatePrevented)) {
-      completeScheduleSlot(answerSlotClaim, {
+      await completeScheduleSlot(answerSlotClaim, {
         lane: "quiz",
         part: "answer",
         scheduledDateTime: answerDateTime,
@@ -3825,7 +3831,7 @@ ${answerPost.content}`,
         duplicatePrevented: Boolean(answerScheduling.duplicatePrevented),
       });
     } else {
-      releaseScheduleSlot(answerSlotClaim);
+      await releaseScheduleSlot(answerSlotClaim);
     }
 
     info("zernio.quiz.complete", {
@@ -3872,8 +3878,8 @@ ${answerPost.content}`,
       },
     };
   } catch (error) {
-    releaseScheduleSlot(questionSlotClaim);
-    releaseScheduleSlot(answerSlotClaim);
+    await releaseScheduleSlot(questionSlotClaim);
+    await releaseScheduleSlot(answerSlotClaim);
     throw error;
   }
 }
