@@ -6,12 +6,22 @@
 import { info, warn } from "../../../logger.js";
 
 const DEFAULT_ROUTES = Object.freeze([
-  "compose",
+  "intro",
+  "main",
+  "outro",
+  "scriptIntro",
   "scriptMain",
   "scriptMainSynthesis",
+  "scriptOutro",
+  "compose",
   "editorialPass",
   "editAndFormat",
+  "metadata",
+  "podcastHelper",
+  "seoKeywords",
+  "artworkPrompt",
   "rssRewrite",
+  "rssShortTitle",
   "blogWeekly",
   "blogSocial",
   "onBrandAudit",
@@ -20,17 +30,39 @@ const DEFAULT_ROUTES = Object.freeze([
   "zernioMiniSeriesResearch",
   "zernioMiniSeriesTheme",
   "zernioMiniSeriesPost",
+  "zernioQuiz",
   "zernioEbook",
+  "zernioPodcastPromo",
   "blotatoNewsShort",
   "newsletterCompose",
+  "newsletterSubject",
   "newsletterFactCheck",
   "newsletterVoiceReview",
   "newsletterAudienceReview",
   "newsletterCouncilChair",
+  "newsletterHeroPrompt",
+  "commsHubTriage",
+  "commsHubModeration",
+  "commsHubSummary",
+  "commsHubDraft",
+  "commsHubDraftContact",
+  "commsHubDraftContribute",
+  "commsHubDraftPodcast",
+  "commsHubDraftSocial",
+  "commsHubFollowUp",
+  "commsHubDraftComplex",
+  "commsHubOutreachPitch",
+  "commsHubOutreachReply",
+  "commsHubOutreachArticle",
+  "commsHubOutreachArticleReview",
 ]);
 
 const HARD_BYPASS_ROUTES = new Set(["artworkVisualQa", "blotatoVisualQa", "artworkImage"]);
+const FAILURE_THRESHOLD = 3;
+const CIRCUIT_OPEN_MS = 30_000;
 let warnedMissingBaseUrl = false;
+let consecutiveFailures = 0;
+let circuitOpenUntil = 0;
 
 function parseBoolean(value, fallback = false) {
   if (value === undefined || value === null || value === "") return fallback;
@@ -67,8 +99,13 @@ function getCompressEndpoint() {
   return `${base}/v1/compress`;
 }
 
+function cleanSecret(value) {
+  const text = String(value || "").trim();
+  return /^\{\{\s*secret\.[^}]+\}\}$/i.test(text) ? "" : text;
+}
+
 function getBearerToken() {
-  return String(process.env.HEADROOM_API_KEY || process.env.HEADROOM_PROXY_TOKEN || "").trim();
+  return cleanSecret(process.env.HEADROOM_API_KEY) || cleanSecret(process.env.HEADROOM_PROXY_TOKEN);
 }
 
 function textCharacterCount(messages = []) {
@@ -140,6 +177,7 @@ async function fetchWithTimeout(url, options, { timeoutMs, signal } = {}) {
     timedOut = true;
     controller.abort();
   }, timeoutMs);
+  timer.unref?.();
 
   try {
     return await fetch(url, { ...options, signal: controller.signal });
@@ -171,6 +209,29 @@ function skip(reason, messages, extra = {}) {
   };
 }
 
+function circuitIsOpen() {
+  return circuitOpenUntil > Date.now();
+}
+
+function recordSuccess() {
+  consecutiveFailures = 0;
+  circuitOpenUntil = 0;
+}
+
+function recordFailure() {
+  consecutiveFailures += 1;
+  if (consecutiveFailures >= FAILURE_THRESHOLD) {
+    circuitOpenUntil = Date.now() + CIRCUIT_OPEN_MS;
+    consecutiveFailures = 0;
+  }
+}
+
+function resetCircuit() {
+  consecutiveFailures = 0;
+  circuitOpenUntil = 0;
+  warnedMissingBaseUrl = false;
+}
+
 export async function compressForOpenRouter({ routeName, routeKey, model, messages, signal } = {}) {
   const original = Array.isArray(messages) ? messages : [];
   if (!parseBoolean(process.env.HEADROOM_ENABLED, false)) return skip("disabled", original);
@@ -186,9 +247,10 @@ export async function compressForOpenRouter({ routeName, routeKey, model, messag
   }
   if (!isTextOnly(original)) return skip("non-text-or-multimodal", original);
 
-  const minChars = Math.floor(finiteNumber(process.env.HEADROOM_MIN_INPUT_CHARS, 2000, { min: 1 }));
+  const minChars = Math.floor(finiteNumber(process.env.HEADROOM_MIN_INPUT_CHARS, 1000, { min: 1 }));
   const inputChars = textCharacterCount(original);
   if (inputChars < minChars) return skip("below-minimum-input", original, { inputChars });
+  if (circuitIsOpen()) return skip("circuit-open", original, { inputChars });
 
   const endpoint = getCompressEndpoint();
   if (!endpoint) {
@@ -200,11 +262,14 @@ export async function compressForOpenRouter({ routeName, routeKey, model, messag
   }
 
   const timeoutMs = Math.floor(finiteNumber(process.env.HEADROOM_TIMEOUT_MS, 5000, { min: 100 }));
-  const targetRatio = finiteNumber(process.env.HEADROOM_TARGET_RATIO, 0.7, { min: 0.05, max: 1 });
+  const targetRatio = finiteNumber(process.env.HEADROOM_TARGET_RATIO, 0.30, { min: 0.05, max: 1 });
   const protectRecent = Math.floor(finiteNumber(process.env.HEADROOM_PROTECT_RECENT, 0, { min: 0 }));
   const token = getBearerToken();
   const headers = { "Content-Type": "application/json" };
-  if (token) headers.Authorization = `Bearer ${token}`;
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+    headers["X-Headroom-Proxy-Token"] = token;
+  }
 
   const body = {
     messages: original,
@@ -213,6 +278,7 @@ export async function compressForOpenRouter({ routeName, routeKey, model, messag
       compress_user_messages: parseBoolean(process.env.HEADROOM_COMPRESS_USER_MESSAGES, true),
       target_ratio: targetRatio,
       protect_recent: protectRecent,
+      protect_analysis_context: true,
     },
   };
 
@@ -227,6 +293,7 @@ export async function compressForOpenRouter({ routeName, routeKey, model, messag
     );
 
     if (!response.ok) {
+      recordFailure();
       const text = await response.text().catch(() => "");
       warn("ai.headroom.fail_open", {
         routeName,
@@ -240,6 +307,7 @@ export async function compressForOpenRouter({ routeName, routeKey, model, messag
 
     const result = await response.json();
     if (result?.compression_skipped) {
+      recordSuccess();
       return skip(result?.skip_reason || "headroom-skipped", original, {
         inputChars,
         durationMs: Date.now() - startedAt,
@@ -253,15 +321,18 @@ export async function compressForOpenRouter({ routeName, routeKey, model, messag
     const compressionRatio = Number(result?.compression_ratio);
 
     if (!shapePreserved(original, candidate)) {
+      recordFailure();
       warn("ai.headroom.rejected", { routeName, routeKey: effectiveRoute, model, reason: "message-shape-or-system-changed" });
       return skip("unsafe-message-change", original, { inputChars, durationMs: Date.now() - startedAt });
     }
 
     if (!Number.isFinite(tokensBefore) || !Number.isFinite(tokensAfter) || !Number.isFinite(tokensSaved)) {
+      recordFailure();
       warn("ai.headroom.rejected", { routeName, routeKey: effectiveRoute, model, reason: "missing-token-metrics" });
       return skip("missing-token-metrics", original, { inputChars, durationMs: Date.now() - startedAt });
     }
 
+    recordSuccess();
     if (tokensSaved <= 0 || tokensAfter >= tokensBefore) {
       return skip("no-token-saving", original, {
         inputChars,
@@ -303,6 +374,7 @@ export async function compressForOpenRouter({ routeName, routeKey, model, messag
     return outcome;
   } catch (error) {
     if (signal?.aborted) throw makeExternalAbortError(signal);
+    recordFailure();
     warn("ai.headroom.fail_open", {
       routeName,
       routeKey: effectiveRoute,
@@ -324,6 +396,7 @@ export const __headroomTestHooks = {
   isTextOnly,
   shapePreserved,
   textCharacterCount,
+  resetCircuit,
 };
 
 export default { compressForOpenRouter };
