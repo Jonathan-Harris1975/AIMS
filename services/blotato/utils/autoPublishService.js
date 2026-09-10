@@ -1548,17 +1548,21 @@ export function isReplaceableRenderedQualityFailure(job = {}) {
 }
 
 /**
- * Reuse a paid, QA-approved video when the provider rejected scheduling before
- * creating a submission. The retry rechecks /schedules for every platform
- * before POST /posts, so a response that was accepted but lost locally cannot
- * create a duplicate.
+ * Reuse a paid video when scheduling has not been confirmed. This includes
+ * videos stopped by the former fail-closed rendered-QA behaviour: QA is now an
+ * audit by default, so those existing renders must be handed to POST /v2/posts
+ * rather than charging for a replacement. The retry rechecks /schedules before
+ * each POST, so a response accepted but lost locally cannot create a duplicate.
  */
 export function isRetryableRenderedPublishFailure(job = {}) {
   if (job.status !== "failed") return false;
-  if (!["pre-publish", "publishing", "publish-failed"].includes(trim(job.phase).toLowerCase())) return false;
+  const phase = trim(job.phase).toLowerCase();
+  if (!["rendered-quality-failed", "pre-publish", "publishing", "publish-failed"].includes(phase)) return false;
   if (!job.videoId && !job.mediaUrl && !job.result?.visualId && !job.result?.mediaUrl) return false;
   const qa = job.renderedVideoQa || job.result?.renderedVideoQa || {};
-  if (!(qa.pass === true || qa.skipped === true || qa.acceptedAfterSoftFailure === true)) return false;
+  if (phase !== "rendered-quality-failed"
+    && !(qa.pass === true || qa.skipped === true || qa.acceptedAfterSoftFailure === true || qa.acceptedForScheduling === true)) return false;
+  if (phase === "rendered-quality-failed" && jobHasPublicationEvidence(job)) return false;
 
   const references = Array.isArray(job.publicationReferences) ? job.publicationReferences : [];
   if (references.some((item) => item?.submissionOutcome === "ambiguous")) return false;
@@ -2023,12 +2027,14 @@ async function runPublishJob({
         });
     if (!renderedVideoQa.pass) {
       const blockSoftQaFailures = parseBoolean(process.env.BLOTATO_RENDERED_QA_BLOCK_SOFT_FAILURES, false);
+      const blockHardQaFailures = parseBoolean(process.env.BLOTATO_RENDERED_QA_BLOCK_HARD_FAILURES, false);
       const qaPublication = assessRenderedVideoQaPublication(renderedVideoQa, {
         blockSoftFailures: blockSoftQaFailures,
+        blockHardFailures: blockHardQaFailures,
       });
       const hardQaFailure = qaPublication.hardFailure;
       updateJob(lane.jobType, sessionId, {
-        phase: hardQaFailure || blockSoftQaFailures
+        phase: qaPublication.block
           ? "rendered-quality-failed"
           : "rendered-quality-advisory",
         videoId: video.visualId,
@@ -2036,7 +2042,8 @@ async function runPublishJob({
         mediaUrl: video.mediaUrl,
         renderedVideoQa: {
           ...renderedVideoQa,
-          acceptedAfterSoftFailure: !hardQaFailure && !blockSoftQaFailures,
+          acceptedAfterSoftFailure: qaPublication.softFailure && !qaPublication.block,
+          acceptedForScheduling: !qaPublication.block,
         },
       });
       warn("blotato.finished_video.qa_failed", {
@@ -2052,12 +2059,16 @@ async function runPublishJob({
         technical: renderedVideoQa.technical,
         hardQaFailure,
         blockSoftQaFailures,
+        blockHardQaFailures,
       });
       if (qaPublication.block) {
         throw buildRenderedVideoQaError(renderedVideoQa);
       }
-      renderedVideoQa.acceptedAfterSoftFailure = true;
-      warn("blotato.finished_video.qa_soft_failure_accepted", {
+      renderedVideoQa.acceptedAfterSoftFailure = qaPublication.softFailure;
+      renderedVideoQa.acceptedForScheduling = true;
+      warn(hardQaFailure
+        ? "blotato.finished_video.qa_hard_failure_advisory"
+        : "blotato.finished_video.qa_soft_failure_accepted", {
         sessionId,
         lane: lane.slug,
         visualId: video.visualId,

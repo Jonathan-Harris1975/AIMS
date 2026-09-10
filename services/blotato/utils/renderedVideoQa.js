@@ -261,12 +261,19 @@ export function normaliseRenderedVideoQa(raw, {
   return result;
 }
 
-export function assessRenderedVideoQaPublication(result = {}, { blockSoftFailures = false } = {}) {
+export function assessRenderedVideoQaPublication(result = {}, {
+  blockSoftFailures = false,
+  blockHardFailures = false,
+} = {}) {
   const hardFailure = result?.technical?.pass === false
     || stringArray(result?.hardDefects).length > 0;
   const softFailure = result?.pass === false && !hardFailure;
   return {
-    block: result?.pass === false && (hardFailure || Boolean(blockSoftFailures)),
+    // Rendered QA is an audit by default. It must not silently consume a paid
+    // render and stop before POST /v2/posts. Deployments that deliberately want
+    // fail-closed behaviour can opt in; strict soft-failure blocking also
+    // blocks hard failures as the stronger enforcement mode.
+    block: result?.pass === false && (Boolean(blockSoftFailures) || (hardFailure && Boolean(blockHardFailures))),
     hardFailure,
     softFailure,
   };
