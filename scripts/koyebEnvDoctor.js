@@ -47,6 +47,7 @@ const NUMERIC_ENVS = new Set([
   "HEADROOM_MIN_INPUT_CHARS",
   "HEADROOM_TARGET_RATIO",
   "HEADROOM_PROTECT_RECENT",
+  "HEADROOM_MIN_TOKENS",
   "ARTWORK_VISUAL_QA_THRESHOLD",
   "PODCAST_TARGET_MINUTES",
   "PODCAST_MAX_MINUTES",
@@ -102,6 +103,7 @@ const POSITIVE_INTEGER_ENVS = new Set([
   "AI_TIMEOUT",
   "HEADROOM_TIMEOUT_MS",
   "HEADROOM_MIN_INPUT_CHARS",
+  "HEADROOM_MIN_TOKENS",
   "ARTWORK_VISUAL_QA_THRESHOLD",
   "ARTWORK_VISUAL_QA_MAX_REGENERATIONS",
   "PODCAST_TARGET_MINUTES",
@@ -153,8 +155,12 @@ const BOOLEAN_ENVS = new Set([
   "ARTWORK_VISUAL_QA_REQUIRED",
   "ARTWORK_IMAGE_CONFIG_ENABLED",
   "HEADROOM_ENABLED",
+  "HEADROOM_COMPRESS_ALLOW_REMOTE",
   "HEADROOM_COMPRESS_USER_MESSAGES",
+  "HEADROOM_COMPRESS_SYSTEM_MESSAGES",
   "HEADROOM_LOG_SAVINGS",
+  "HEADROOM_STATELESS",
+  "HEADROOM_TELEMETRY",
   "NEWSLETTER_BREVO_ALLOW_LIST_CREATE",
   "BLOTATO_STEP0_PREFLIGHT_ENABLED",
   "BLOTATO_PREFLIGHT_REQUIRE_LISTED_ACCOUNTS",
@@ -229,6 +235,9 @@ const VALID_STATE_BACKENDS = new Set(["auto", "r2", "local", "file", "filesystem
 const VALID_CHANNELS = new Set(["instagram", "youtube", "tiktok", "facebook", "linkedin", "threads", "twitter"]);
 const VALID_YOUTUBE_PRIVACY = new Set(["public", "private", "unlisted"]);
 const VALID_RSS_PICK_MODES = new Set(["latest", "random"]);
+const VALID_HEADROOM_MODES = new Set(["cache", "token"]);
+const VALID_HEADROOM_SAVINGS_PROFILES = new Set(["coding", "balanced", "agent-90", "general"]);
+const VALID_HEADROOM_KOMPRESS_BACKENDS = new Set(["auto", "onnx", "onnx_cpu", "onnx_coreml", "pytorch", "pytorch_mps", "cpu", "coreml", "mps", "torch", "torch_mps"]);
 
 function clean(value) {
   return String(value ?? "").trim();
@@ -430,6 +439,18 @@ function validateEnum({ key, value, line }, errors) {
     errors.push({ line, key, message: `${key} must be one of: ${[...VALID_RSS_PICK_MODES].join(", ")}` });
   }
 
+  if (key === "HEADROOM_MODE" && !VALID_HEADROOM_MODES.has(raw)) {
+    errors.push({ line, key, message: `${key} must be one of: ${[...VALID_HEADROOM_MODES].join(", ")}` });
+  }
+
+  if (key === "HEADROOM_SAVINGS_PROFILE" && !VALID_HEADROOM_SAVINGS_PROFILES.has(raw)) {
+    errors.push({ line, key, message: `${key} must be one of: ${[...VALID_HEADROOM_SAVINGS_PROFILES].join(", ")}` });
+  }
+
+  if (key === "HEADROOM_KOMPRESS_BACKEND" && !VALID_HEADROOM_KOMPRESS_BACKENDS.has(raw)) {
+    errors.push({ line, key, message: `${key} is not a supported Headroom Kompress backend` });
+  }
+
   if (key === "BLOTATO_DEFAULT_CHANNELS") {
     const channels = raw.split(",").map((item) => item.trim()).filter(Boolean);
     if (!channels.length) {
@@ -459,6 +480,27 @@ export function validateEnvEntries(entries) {
     validateUrl(entry, errors);
     validateTemplate(entry, errors);
     validateEnum(entry, errors);
+  }
+
+  const byKey = new Map(entries.map((entry) => [entry.key, entry]));
+  const headroomEnabled = ["1", "true", "yes", "on"].includes(clean(byKey.get("HEADROOM_ENABLED")?.value).toLowerCase());
+  if (headroomEnabled) {
+    const enabledEntry = byKey.get("HEADROOM_ENABLED");
+    const baseUrl = clean(byKey.get("HEADROOM_BASE_URL")?.value);
+    const proxyToken = clean(byKey.get("HEADROOM_API_KEY")?.value) || clean(byKey.get("HEADROOM_PROXY_TOKEN")?.value);
+    if (!baseUrl) {
+      errors.push({ line: enabledEntry?.line ?? null, key: "HEADROOM_BASE_URL", message: "HEADROOM_BASE_URL is required when HEADROOM_ENABLED=true" });
+    } else {
+      try {
+        const host = new URL(baseUrl).hostname.toLowerCase();
+        const loopback = host === "localhost" || host === "127.0.0.1" || host === "::1";
+        if (!loopback && !proxyToken) {
+          errors.push({ line: enabledEntry?.line ?? null, key: "HEADROOM_PROXY_TOKEN", message: "HEADROOM_PROXY_TOKEN (or HEADROOM_API_KEY) is required for a non-loopback Headroom service" });
+        }
+      } catch {
+        // validateUrl reports malformed HEADROOM_BASE_URL values.
+      }
+    }
   }
 
   return errors;
