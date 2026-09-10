@@ -19,6 +19,7 @@ import { cleanSourceText, cleanSourceTitle } from "../utils/weeklyPackage.js";
 import { recordEditorialEvent } from "../../social/editorialLedger.js";
 import { selectSourcesByUrls } from "../../content-quality/topicFidelity.js";
 import { fetchWithTimeout } from "../../shared/http-client.js";
+import { claimDurableLease, completeDurableLease, releaseDurableLease } from "../../shared/utils/durableLease.js";
 
 import {
   runPhase4AutonomousContentGate,
@@ -51,9 +52,15 @@ const SOURCE_RSS_FEED_KEY = "feed.json";
 const OUT_BLOG_BUCKET_KEY = "blog";
 const MS_PER_DAY = 86_400_000;
 const DEFAULT_SOCIAL_FALLBACK_IMAGE_URL = "https://images.jonathan-harris.online/site-logo";
+const DAILY_BUILD_PENDING_TTL_MS = Number(process.env.BLOG_SOCIAL_BUILD_PENDING_TTL_MS || 2 * 60 * 60 * 1000);
+const DAILY_BUILD_COMPLETED_TTL_MS = Number(process.env.BLOG_SOCIAL_BUILD_COMPLETED_TTL_MS || 90 * 24 * 60 * 60 * 1000);
 
 function normalisePrefix(value = DEFAULT_SOCIAL_PREFIX) {
   return String(value || DEFAULT_SOCIAL_PREFIX).trim().replace(/^\/+|\/+$/g, "") || DEFAULT_SOCIAL_PREFIX;
+}
+
+function dailySocialSlug(dateId) {
+  return slugify(`${dateId}-daily-ai-briefing`);
 }
 
 function parsePubDate(value) {
@@ -609,6 +616,8 @@ export async function buildDailySocialBlogPost({
   let editorialContext = "";
   let editorialBriefFinalised = false;
   let irreversiblePublicationReference = null;
+  let publicationLease = null;
+  let publicationLeaseFinalised = false;
 
   try {
     editorialBriefEntries = await claimPendingEditorialBriefs("social", {
@@ -652,6 +661,34 @@ export async function buildDailySocialBlogPost({
       };
     }
 
+    if (!dryRun) {
+      const leaseResult = await claimDurableLease({
+        namespace: "blog-social-daily",
+        key: window.dateId,
+        pendingTtlMs: DAILY_BUILD_PENDING_TTL_MS,
+        completedTtlMs: DAILY_BUILD_COMPLETED_TTL_MS,
+        force: Boolean(force),
+        metadata: { dateId: window.dateId, manifestKey, prefix },
+      });
+      if (!leaseResult.claimed) {
+        info("blog.social.daily.build.duplicate_prevented", {
+          dateId: window.dateId,
+          state: leaseResult.state,
+          reason: leaseResult.reason,
+          leaseObjectKey: leaseResult.objectKey,
+        });
+        return {
+          ok: true,
+          skipped: true,
+          duplicatePrevented: true,
+          reason: `Daily social blog build for ${window.dateId} is already owned or completed.`,
+          dateId: window.dateId,
+          manifestKey,
+        };
+      }
+      publicationLease = leaseResult.lease;
+    }
+
     const rawFeed = await getObjectAsText(SOURCE_RSS_BUCKET_KEY, SOURCE_RSS_FEED_KEY);
     const items = normaliseFeedItems(JSON.parse(rawFeed), window);
 
@@ -691,7 +728,7 @@ export async function buildDailySocialBlogPost({
     });
 
     let title = socialPackage.title;
-    let slug = slugify(`${window.dateId}-${title}`);
+    let slug = dailySocialSlug(window.dateId);
     let dir = `${prefix}/posts/${slug}`;
     let urls = buildSiteSocialUrls(slug);
     let bodyHtml = renderSocialBodyHtml(socialPackage, { escapeHtml });
@@ -884,7 +921,7 @@ export async function buildDailySocialBlogPost({
 
       socialPackage = reviewed.artifact;
       title = socialPackage.title;
-      slug = slugify(`${window.dateId}-${title}`);
+      slug = dailySocialSlug(window.dateId);
       dir = `${prefix}/posts/${slug}`;
       urls = buildSiteSocialUrls(slug);
       bodyHtml = renderSocialBodyHtml(socialPackage, { escapeHtml });
@@ -1047,7 +1084,7 @@ export async function buildDailySocialBlogPost({
       socialPackage.topic_fidelity = finalBrandGate.topicFidelity;
 
       title = socialPackage.title;
-      slug = slugify(`${window.dateId}-${title}`);
+      slug = dailySocialSlug(window.dateId);
       dir = `${prefix}/posts/${slug}`;
       urls = buildSiteSocialUrls(slug);
       bodyHtml = renderSocialBodyHtml(socialPackage, { escapeHtml });
@@ -1060,13 +1097,23 @@ export async function buildDailySocialBlogPost({
       }), gateSources);
 
       if (!dryRun && imagePrompt !== previousImagePrompt) {
-        artwork = await resolveSocialArtwork({
+        const replacementArtwork = await resolveSocialArtwork({
           sessionId: `${sessionId}-phase5-repair`,
           imagePrompt,
           dateId: window.dateId,
           prefix,
         });
-        imageUrl = artwork.imageUrl;
+        if (replacementArtwork.imageStatus === "generated" || artwork.imageStatus !== "generated") {
+          artwork = replacementArtwork;
+          imageUrl = artwork.imageUrl;
+        } else {
+          warn("blog.social.daily.image.kept_existing_generated", {
+            dateId: window.dateId,
+            sessionId,
+            rejectedReplacementStatus: replacementArtwork.imageStatus,
+            rejectedReplacementError: replacementArtwork.imageError,
+          });
+        }
       }
 
       postEntry = buildSocialPostManifestEntry({
@@ -1210,6 +1257,31 @@ export async function buildDailySocialBlogPost({
       };
     }
 
+    // Re-read immediately before the first public write. This catches a build
+    // started by an older deployment or another trigger before the durable
+    // lease existed, and prevents its later fallback-art copy winning the race.
+    const latestManifest = await loadExistingPostsManifest(OUT_BLOG_BUCKET_KEY, manifestKey);
+    const existingAtCommit = findExistingSocialPostForDate(latestManifest, window.dateId);
+    if (existingAtCommit && !force) {
+      if (publicationLease) {
+        await completeDurableLease(publicationLease, {
+          reason: "existing-post-observed-before-commit",
+          existingId: existingAtCommit.id,
+          existingUrl: existingAtCommit.url || null,
+        });
+        publicationLeaseFinalised = true;
+      }
+      return {
+        ok: true,
+        skipped: true,
+        duplicatePrevented: true,
+        reason: `Daily social blog post already exists for ${window.dateId}.`,
+        existing: existingAtCommit,
+        manifestKey,
+      };
+    }
+    mergedManifest = mergeSocialPostsManifest(latestManifest, postEntry);
+
     irreversiblePublicationReference = {
       sessionId,
       postUrl: urls.postUrl,
@@ -1236,6 +1308,17 @@ export async function buildDailySocialBlogPost({
     });
 
     await putJson(OUT_BLOG_BUCKET_KEY, manifestKey, mergedManifest);
+
+    if (publicationLease) {
+      await completeDurableLease(publicationLease, {
+        dateId: window.dateId,
+        postUrl: urls.postUrl,
+        canonicalUrl: urls.canonicalUrl,
+        manifestKey,
+        imageStatus: artwork.imageStatus,
+      });
+      publicationLeaseFinalised = true;
+    }
 
     const publishedManifest = await loadExistingPostsManifest(OUT_BLOG_BUCKET_KEY, manifestKey);
     const rss = await publishSocialBlogRssFeed({ manifest: publishedManifest, prefix });
@@ -1347,6 +1430,15 @@ export async function buildDailySocialBlogPost({
       ...(e?.socialBlogGate ? { socialBlogGate: e.socialBlogGate } : {}),
     };
   } finally {
+    if (publicationLease && !publicationLeaseFinalised) {
+      await releaseDurableLease(publicationLease, {
+        reason: irreversiblePublicationReference
+          ? "daily-blog-build-failed-before-manifest-commit"
+          : "daily-blog-build-ended-before-publication",
+      }).catch((leaseError) => {
+        error("blog.social.daily.lease_release_fail", { error: leaseError?.message || String(leaseError) });
+      });
+    }
     if (editorialBriefEntries.length && !editorialBriefFinalised) {
       await releaseEditorialBriefClaims(editorialBriefEntries, {
         consumerId: sessionId,
