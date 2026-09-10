@@ -59,6 +59,47 @@ export async function probeOpenRouter({ env = process.env, fetchImpl = globalThi
   });
 }
 
+export async function probeHeadroom({ env = process.env, fetchImpl = globalThis.fetch, force = false } = {}) {
+  const enabled = ["1", "true", "yes", "on", "y"].includes(clean(env.HEADROOM_ENABLED).toLowerCase());
+  if (!enabled) return { ok: true, configured: false, detail: "disabled" };
+
+  const configuredBase = clean(env.HEADROOM_BASE_URL);
+  if (!configuredBase) return { ok: false, configured: false, detail: "missing" };
+
+  const timeoutMs = positiveMs(env.READINESS_PROBE_TIMEOUT_MS, 3_000);
+  const ttlMs = positiveMs(env.READINESS_PROBE_CACHE_MS, 30_000);
+  const root = configuredBase
+    .replace(/\/+$/, "")
+    .replace(/\/v1\/compress$/i, "")
+    .replace(/\/v1$/i, "");
+  const token = clean(env.HEADROOM_API_KEY) || clean(env.HEADROOM_PROXY_TOKEN);
+
+  return withCache(`headroom:${root}`, ttlMs, force, async () => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    timer.unref?.();
+    const headers = { accept: "application/json" };
+    if (token) {
+      headers.authorization = `Bearer ${token}`;
+      headers["x-headroom-proxy-token"] = token;
+    }
+    try {
+      const response = await fetchImpl(`${root}/readyz`, {
+        method: "GET",
+        headers,
+        signal: controller.signal,
+      });
+      return response.ok
+        ? { ok: true, configured: true, detail: "reachable" }
+        : { ok: false, configured: true, detail: `http_${response.status}` };
+    } catch (error) {
+      return { ok: false, configured: true, detail: errorName(error) };
+    } finally {
+      clearTimeout(timer);
+    }
+  });
+}
+
 export async function probeDurableState({ env = process.env, clientFactory = null, force = false } = {}) {
   const endpoint = clean(env.R2_ENDPOINT || env.R2_ENDPOINT_URL);
   const accessKeyId = clean(env.R2_ACCESS_KEY_ID);
@@ -95,11 +136,12 @@ export async function probeDurableState({ env = process.env, clientFactory = nul
 }
 
 export async function probeCriticalDependencies(options = {}) {
-  const [durableState, openrouter] = await Promise.all([
+  const [durableState, openrouter, headroom] = await Promise.all([
     probeDurableState(options),
     probeOpenRouter(options),
+    probeHeadroom(options),
   ]);
-  return { durableState, openrouter };
+  return { durableState, openrouter, headroom };
 }
 
 export function clearDependencyProbeCache() {
