@@ -155,3 +155,23 @@ test("koyeb env doctor reports out-of-range podcast duration settings", () => {
   assert.ok(errors.some((error) => error.key === "PODCAST_TARGET_MINUTES" && /between 30 and 70/i.test(error.message)));
   assert.ok(errors.some((error) => error.key === "PODCAST_MAX_MINUTES" && /between 60 and 70/i.test(error.message)));
 });
+
+
+test("koyeb env doctor requires a reachable Headroom configuration when enabled", () => {
+  const missingBase = validateEnvObject({ HEADROOM_ENABLED: "true" });
+  assert.ok(missingBase.some((error) => error.key === "HEADROOM_BASE_URL"));
+
+  const missingToken = validateEnvObject({
+    HEADROOM_ENABLED: "true",
+    HEADROOM_BASE_URL: "http://headroom:8787",
+  });
+  assert.ok(missingToken.some((error) => error.key === "HEADROOM_PROXY_TOKEN"));
+
+  const configured = validateEnvObject({
+    HEADROOM_ENABLED: "true",
+    HEADROOM_BASE_URL: "http://headroom:8787",
+    HEADROOM_PROXY_TOKEN: "{{ secret.HEADROOM_PROXY_TOKEN }}",
+    HEADROOM_TARGET_RATIO: "0.30",
+  });
+  assert.deepEqual(configured, []);
+});

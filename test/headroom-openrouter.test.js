@@ -33,6 +33,7 @@ test("Headroom compresses eligible text-only messages and preserves system messa
   process.env.HEADROOM_BASE_URL = "http://headroom.test:8787";
   process.env.HEADROOM_MIN_INPUT_CHARS = "1";
   process.env.HEADROOM_ROUTES = "scriptMain";
+  process.env.HEADROOM_PROXY_TOKEN = "headroom-test-token";
   process.env.HEADROOM_LOG_SAVINGS = "false";
 
   const original = [
@@ -67,6 +68,10 @@ test("Headroom compresses eligible text-only messages and preserves system messa
     assert.equal(request.url, "http://headroom.test:8787/v1/compress");
     assert.equal(request.body.model, "openai/gpt-5.6-luna");
     assert.equal(request.body.config.compress_user_messages, true);
+    assert.equal(request.body.config.target_ratio, 0.3);
+    assert.equal(request.body.config.protect_analysis_context, true);
+    assert.equal(request.options.headers.Authorization, "Bearer headroom-test-token");
+    assert.equal(request.options.headers["X-Headroom-Proxy-Token"], "headroom-test-token");
     assert.deepEqual(result.messages[0], original[0]);
     assert.equal(result.messages[1].content, "Compressed source material.");
     assert.equal(result.compressed, true);
@@ -196,6 +201,45 @@ test("shared OpenRouter service forwards Headroom-compressed messages", async ()
     assert.match(seen[0].url, /headroom\.test/);
     assert.match(seen[1].url, /openrouter\.test/);
     assert.equal(seen[1].body.messages[0].content, "compressed payload");
+  } finally {
+    restoreEnv(snapshot);
+    globalThis.fetch = oldFetch;
+  }
+});
+
+
+test("Headroom default route coverage includes every text-only AIMS LLM workflow", async () => {
+  const { __headroomTestHooks } = await import(`../services/shared/utils/headroom.js?routes=${Date.now()}`);
+  const { default: aiConfig } = await import(`../ai-config.js?headroomRoutes=${Date.now()}`);
+  const expected = Object.keys(aiConfig.routeModels)
+    .filter((route) => !__headroomTestHooks.HARD_BYPASS_ROUTES.has(route))
+    .sort();
+  assert.deepEqual([...__headroomTestHooks.DEFAULT_ROUTES].sort(), expected);
+});
+
+test("Headroom opens a short fail-open circuit after repeated proxy failures", async () => {
+  const snapshot = snapshotEnv(HEADROOM_ENV);
+  const oldFetch = globalThis.fetch;
+  process.env.HEADROOM_ENABLED = "true";
+  process.env.HEADROOM_BASE_URL = "http://headroom.test:8787";
+  process.env.HEADROOM_MIN_INPUT_CHARS = "1";
+  process.env.HEADROOM_ROUTES = "main";
+  process.env.HEADROOM_LOG_SAVINGS = "false";
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls += 1;
+    return { ok: false, status: 503, text: async () => "unavailable" };
+  };
+
+  try {
+    const { compressForOpenRouter, __headroomTestHooks } = await import(`../services/shared/utils/headroom.js?circuit=${Date.now()}`);
+    __headroomTestHooks.resetCircuit();
+    const request = { routeName: "main", routeKey: "main", model: "test/model", messages: [{ role: "user", content: "long payload" }] };
+    assert.equal((await compressForOpenRouter(request)).reason, "http-error");
+    assert.equal((await compressForOpenRouter(request)).reason, "http-error");
+    assert.equal((await compressForOpenRouter(request)).reason, "http-error");
+    assert.equal((await compressForOpenRouter(request)).reason, "circuit-open");
+    assert.equal(calls, 3);
   } finally {
     restoreEnv(snapshot);
     globalThis.fetch = oldFetch;
