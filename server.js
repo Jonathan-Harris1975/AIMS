@@ -183,11 +183,13 @@ async function productionReadiness() {
   const ephemeralAllowed = process.env.ALLOW_EPHEMERAL_STATE === "true";
   const durableConfigured = hasDurableStateEnv(process.env);
   const openrouterConfigured = usableSecret(process.env.OPENROUTER_API_KEY);
+  const headroomEnabled = ["1", "true", "yes", "on", "y"].includes(normaliseEnvString(process.env.HEADROOM_ENABLED).toLowerCase());
   const probes = production
     ? await probeCriticalDependencies()
     : {
         durableState: { ok: durableConfigured, configured: durableConfigured, detail: durableConfigured ? "configured" : "missing" },
         openrouter: { ok: openrouterConfigured, configured: openrouterConfigured, detail: openrouterConfigured ? "configured" : "missing" },
+        headroom: { ok: true, configured: headroomEnabled, detail: headroomEnabled ? "configured" : "disabled" },
       };
   const checks = [
     { name: "process", ok: true, detail: "AIMS process is responding." },
@@ -204,6 +206,11 @@ async function productionReadiness() {
       name: "openrouter",
       ok: !production || (openrouterConfigured && probes.openrouter.ok),
       detail: openrouterConfigured ? probes.openrouter.detail : "missing",
+    },
+    {
+      name: "headroom",
+      ok: !production || !headroomEnabled || probes.headroom.ok,
+      detail: headroomEnabled ? probes.headroom.detail : "disabled",
     },
     (() => {
       const configuration = getCommsHubReadiness();
