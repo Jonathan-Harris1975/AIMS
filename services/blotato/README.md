@@ -21,7 +21,7 @@ Immediate-publish compatibility routes remain disabled in production unless `BLO
 
 The five weekday short lanes are `news-insight`, `model-verdict`, `ai-at-work`, `reality-check` and `ai-playbook`. AutoShorts rotates through 48 visual/story styles. Finished duration is 35-55 seconds with a 45-second default target.
 
-The service checks hook strength, narrative continuity, source relevance, scene progression, human presence, caption legibility and finished media quality. It makes bounded repairs before rendering. If those repairs are exhausted, performance heuristics become advisory, while source integrity, brand safety and structural defects still block publication. The final MP4 is inspected before scheduling; technical defects always block, while a soft performance score is advisory by default and can be made strict with `BLOTATO_RENDERED_QA_BLOCK_SOFT_FAILURES=true`.
+The service checks hook strength, narrative continuity, source relevance, scene progression, human presence, caption legibility and finished media quality. It makes bounded repairs before rendering. Rendered-video QA is recorded as an advisory audit by default so a completed paid render still reaches Blotato's scheduling endpoint. Set `BLOTATO_RENDERED_QA_BLOCK_HARD_FAILURES=true` to block model-labelled or technical hard defects, or `BLOTATO_RENDERED_QA_BLOCK_SOFT_FAILURES=true` for strict enforcement of every rendered-QA failure.
 
 The AI Voice template receives the approved `scenes[].mediaSource` and `scenes[].script` storyboard as explicit manual inputs, plus only the template's documented voice, image-model, animation, caption, transition and aspect-ratio fields. Prompt autofill remains supplemental and cannot replace the source-grounded scenes.
 
