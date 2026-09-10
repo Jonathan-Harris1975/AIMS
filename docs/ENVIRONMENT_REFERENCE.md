@@ -4,9 +4,9 @@
 
 This inventory makes the runtime configuration contract auditable without duplicating secret values. `.env.example` and `env.template` remain the curated operator templates; this file records every production `process.env` dependency and its source locations.
 
-- Runtime variables referenced in production code: **502**
-- Present in curated templates: **391**
-- Not present in curated templates: **111**
+- Runtime variables referenced in production code: **505**
+- Present in curated templates: **392**
+- Not present in curated templates: **113**
 
 | Variable | Curated template | Production references |
 | --- | --- | --- |
@@ -40,7 +40,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `APP_ENV` | No | scripts/performanceGate.js:6<br>server.js:386 |
 | `APP_STATE_DIR` | Yes | services/shared/utils/stateFile.js:9 |
 | `APP_TITLE` | Yes | ai-config.js:300<br>services/artwork/utils/artwork.js:292 |
-| `APP_TMP_DIR` | Yes | scripts/tempStorage.js:10<br>services/blotato/utils/renderedVideoQa.js:298<br>services/shared/utils/stateFile.js:10<br>services/tts/utils/editingProcessor.js:22<br>services/tts/utils/mergeProcessor.js:14<br>services/tts/utils/podcastProcessor.js:56 |
+| `APP_TMP_DIR` | Yes | scripts/tempStorage.js:10<br>services/blotato/utils/renderedVideoQa.js:305<br>services/shared/utils/stateFile.js:10<br>services/tts/utils/editingProcessor.js:22<br>services/tts/utils/mergeProcessor.js:14<br>services/tts/utils/podcastProcessor.js:56 |
 | `APP_URL` | Yes | ai-config.js:299<br>audits/utils/orchestrator.js:143<br>services/artwork/utils/artwork.js:291<br>services/rss-feed-creator/utils/feedGenerator.js:32 |
 | `APP_VERSION` | No | server.js:385<br>server.js:404<br>services/shared/utils/operationalExcellence.js:106<br>services/shared/utils/operationalExcellence.js:147 |
 | `ARTWORK_CAPABILITY_CACHE_MS` | No | services/artwork/utils/openrouterImageCapabilities.js:21 |
@@ -83,13 +83,15 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `BLOG_RSS_PUBLIC_VERIFY_BASE_MS` | Yes | services/blog/rss/publishBlogRssFeed.js:51 |
 | `BLOG_RSS_PUBLIC_VERIFY_TIMEOUT_MS` | Yes | services/blog/rss/publishBlogRssFeed.js:52 |
 | `BLOG_RSS_TITLE` | No | services/blog/rss/publishBlogRssFeed.js:146 |
-| `BLOG_SOCIAL_FALLBACK_IMAGE_URL` | Yes | services/blog/social/buildDailySocialBlogPost.js:344 |
-| `BLOG_SOCIAL_PREFIX` | Yes | services/blog/routes/social.js:41<br>services/blog/social/buildDailySocialBlogPost.js:603<br>services/blog/social/publishSocialBlogRssFeed.js:69 |
-| `BLOG_SOCIAL_PUBLIC_BASE_URL` | Yes | services/blog/social/buildDailySocialBlogPost.js:202<br>services/blog/social/publishSocialBlogRssFeed.js:74 |
-| `BLOG_SOCIAL_PUBLIC_POSTS_BASE_URL` | Yes | services/blog/social/buildDailySocialBlogPost.js:206<br>services/blog/social/publishSocialBlogRssFeed.js:83 |
-| `BLOG_SOCIAL_QA_ENABLED` | Yes | services/blog/social/buildDailySocialBlogPost.js:339 |
+| `BLOG_SOCIAL_BUILD_COMPLETED_TTL_MS` | No | services/blog/social/buildDailySocialBlogPost.js:56 |
+| `BLOG_SOCIAL_BUILD_PENDING_TTL_MS` | No | services/blog/social/buildDailySocialBlogPost.js:55 |
+| `BLOG_SOCIAL_FALLBACK_IMAGE_URL` | Yes | services/blog/social/buildDailySocialBlogPost.js:351 |
+| `BLOG_SOCIAL_PREFIX` | Yes | services/blog/routes/social.js:41<br>services/blog/social/buildDailySocialBlogPost.js:610<br>services/blog/social/publishSocialBlogRssFeed.js:69 |
+| `BLOG_SOCIAL_PUBLIC_BASE_URL` | Yes | services/blog/social/buildDailySocialBlogPost.js:209<br>services/blog/social/publishSocialBlogRssFeed.js:74 |
+| `BLOG_SOCIAL_PUBLIC_POSTS_BASE_URL` | Yes | services/blog/social/buildDailySocialBlogPost.js:213<br>services/blog/social/publishSocialBlogRssFeed.js:83 |
+| `BLOG_SOCIAL_QA_ENABLED` | Yes | services/blog/social/buildDailySocialBlogPost.js:346 |
 | `BLOG_SOCIAL_RSS_DESCRIPTION` | Yes | services/blog/social/publishSocialBlogRssFeed.js:358 |
-| `BLOG_SOCIAL_RSS_OBJECT_KEY` | Yes | services/blog/social/buildDailySocialBlogPost.js:810<br>services/blog/social/buildDailySocialBlogPost.js:945<br>services/blog/social/buildDailySocialBlogPost.js:1119<br>services/blog/social/publishSocialBlogRssFeed.js:91 |
+| `BLOG_SOCIAL_RSS_OBJECT_KEY` | Yes | services/blog/social/buildDailySocialBlogPost.js:847<br>services/blog/social/buildDailySocialBlogPost.js:982<br>services/blog/social/buildDailySocialBlogPost.js:1166<br>services/blog/social/publishSocialBlogRssFeed.js:91 |
 | `BLOG_SOCIAL_RSS_TITLE` | Yes | services/blog/social/publishSocialBlogRssFeed.js:357 |
 | `BLOG_WEEKLY_JSON_RESPONSE_FORMAT` | No | services/blog/weekly/buildWeeklyBlogPost.js:358<br>services/blog/weekly/buildWeeklyBlogPost.js:376<br>services/blog/weekly/buildWeeklyBlogPost.js:416 |
 | `BLOG_WEEKLY_QA_ENABLED` | No | services/blog/weekly/buildWeeklyBlogPost.js:271 |
@@ -115,14 +117,14 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `BLOTATO_HUMAN_VISUAL_MIN_SCENES` | Yes | services/blotato/utils/newsShortsService.js:55 |
 | `BLOTATO_IMAGE_PROMPT_PROFILE` | Yes | services/blotato/utils/newsShortsService.js:32 |
 | `BLOTATO_IMAGE_TO_VIDEO_MODEL` | Yes | services/blotato/utils/autoPublishService.js:472 |
-| `BLOTATO_INLINE_PUBLISH_JOBS` | No | services/blotato/utils/autoPublishService.js:2603 |
+| `BLOTATO_INLINE_PUBLISH_JOBS` | No | services/blotato/utils/autoPublishService.js:2614 |
 | `BLOTATO_INSTAGRAM_SHARE_TO_FEED` | Yes | services/blotato/utils/autoPublishService.js:990 |
-| `BLOTATO_KEEPALIVE_ENABLED` | Yes | services/blotato/utils/autoPublishService.js:1687 |
+| `BLOTATO_KEEPALIVE_ENABLED` | Yes | services/blotato/utils/autoPublishService.js:1691 |
 | `BLOTATO_LOW_COST_IMAGE_MODEL_LABEL` | Yes | services/blotato/utils/autoPublishService.js:471<br>services/blotato/utils/newsShortsService.js:30 |
 | `BLOTATO_LOW_COST_VIDEO_MODEL_LABEL` | Yes | services/blotato/utils/autoPublishService.js:472<br>services/blotato/utils/newsShortsService.js:31 |
-| `BLOTATO_NEWS_AUDIENCE` | No | services/blotato/utils/autoPublishService.js:1731 |
-| `BLOTATO_NEWS_CTA` | Yes | services/blotato/utils/autoPublishService.js:1736 |
-| `BLOTATO_NEWS_DURATION_SECONDS` | Yes | services/blotato/utils/autoPublishService.js:1729 |
+| `BLOTATO_NEWS_AUDIENCE` | No | services/blotato/utils/autoPublishService.js:1735 |
+| `BLOTATO_NEWS_CTA` | Yes | services/blotato/utils/autoPublishService.js:1740 |
+| `BLOTATO_NEWS_DURATION_SECONDS` | Yes | services/blotato/utils/autoPublishService.js:1733 |
 | `BLOTATO_NEWS_JSON_RESPONSE_FORMAT` | Yes | services/blotato/utils/newsShortsService.js:1288 |
 | `BLOTATO_NEWS_MAX_SCRIPT_WORDS` | Yes | services/blotato/utils/newsShortsService.js:13 |
 | `BLOTATO_NEWS_MIN_SCENE_WORDS` | Yes | services/blotato/utils/newsShortsService.js:14 |
@@ -133,7 +135,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `BLOTATO_NEWS_TARGET_SCRIPT_WORDS` | Yes | services/blotato/utils/newsShortsService.js:12 |
 | `BLOTATO_NEWS_TEMPLATE_ID` | Yes | services/blotato/utils/autoPublishService.js:1413<br>services/blotato/utils/autoPublishService.js:1414 |
 | `BLOTATO_NEWS_TEMPLATE_SEARCH` | Yes | services/blotato/utils/autoPublishService.js:348<br>services/blotato/utils/autoPublishService.js:1418 |
-| `BLOTATO_NEWS_THEME` | No | services/blotato/utils/autoPublishService.js:1727 |
+| `BLOTATO_NEWS_THEME` | No | services/blotato/utils/autoPublishService.js:1731 |
 | `BLOTATO_PREFLIGHT_REQUIRE_LISTED_ACCOUNTS` | Yes | services/blotato/utils/autoPublishService.js:838 |
 | `BLOTATO_PREFLIGHT_REQUIRE_LISTED_SUBACCOUNTS` | Yes | services/blotato/utils/autoPublishService.js:886<br>services/blotato/utils/autoPublishService.js:914 |
 | `BLOTATO_PUBLISH_SEQUENTIAL` | Yes | services/blotato/utils/autoPublishService.js:1360 |
@@ -141,13 +143,14 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `BLOTATO_PUBLISH_WEBHOOK_SECRET` | Yes | services/shared/middleware/suiteAuth.js:71 |
 | `BLOTATO_RENDERED_MAX_SECONDS` | Yes | services/blotato/utils/renderedVideoQa.js:10 |
 | `BLOTATO_RENDERED_MIN_SECONDS` | Yes | services/blotato/utils/renderedVideoQa.js:9 |
-| `BLOTATO_RENDERED_QA_BLOCK_SOFT_FAILURES` | Yes | services/blotato/utils/autoPublishService.js:2025 |
+| `BLOTATO_RENDERED_QA_BLOCK_HARD_FAILURES` | Yes | services/blotato/utils/autoPublishService.js:2030 |
+| `BLOTATO_RENDERED_QA_BLOCK_SOFT_FAILURES` | Yes | services/blotato/utils/autoPublishService.js:2029 |
 | `BLOTATO_RENDERED_QA_DOWNLOAD_TIMEOUT_MS` | Yes | services/blotato/utils/renderedVideoQa.js:124 |
 | `BLOTATO_RENDERED_QA_FRAMES` | Yes | services/blotato/utils/renderedVideoQa.js:12 |
-| `BLOTATO_RENDERED_QA_JSON_ATTEMPTS` | Yes | services/blotato/utils/renderedVideoQa.js:330 |
+| `BLOTATO_RENDERED_QA_JSON_ATTEMPTS` | Yes | services/blotato/utils/renderedVideoQa.js:337 |
 | `BLOTATO_RENDERED_QA_MAX_BYTES` | Yes | services/blotato/utils/renderedVideoQa.js:13 |
 | `BLOTATO_RENDERED_QA_THRESHOLD` | Yes | services/blotato/utils/renderedVideoQa.js:11 |
-| `BLOTATO_REQUIRE_ALL_CHANNELS` | Yes | services/blotato/utils/autoPublishService.js:2186 |
+| `BLOTATO_REQUIRE_ALL_CHANNELS` | Yes | services/blotato/utils/autoPublishService.js:2197 |
 | `BLOTATO_REQUIRE_SCHEDULE_CONFIRMATION` | Yes | services/blotato/utils/autoPublishService.js:1216 |
 | `BLOTATO_RSS_BUCKET_ALIAS` | Yes | services/blotato/utils/rssArticlePicker.js:94<br>services/blotato/utils/rssArticleSource.js:147 |
 | `BLOTATO_RSS_FEED_URL` | No | services/blotato/utils/rssArticlePicker.js:78<br>services/blotato/utils/rssArticleSource.js:134 |
@@ -155,7 +158,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `BLOTATO_RSS_JSON_KEY` | Yes | services/blotato/utils/rssArticlePicker.js:95<br>services/blotato/utils/rssArticleSource.js:148 |
 | `BLOTATO_RSS_PICK_MODE` | Yes | services/blotato/utils/autoPublishService.js:1419<br>services/blotato/utils/rssArticlePicker.js:67<br>services/blotato/utils/rssArticleSource.js:220 |
 | `BLOTATO_RSS_PREFER_R2` | Yes | services/blotato/utils/rssArticlePicker.js:117<br>services/blotato/utils/rssArticleSource.js:146 |
-| `BLOTATO_SCHEDULE_RECOVERY_ENABLED` | Yes | services/blotato/utils/autoPublishService.js:1651 |
+| `BLOTATO_SCHEDULE_RECOVERY_ENABLED` | Yes | services/blotato/utils/autoPublishService.js:1655 |
 | `BLOTATO_SCRIPT_TIMEOUT_MS` | Yes | services/blotato/utils/newsShortsService.js:1313 |
 | `BLOTATO_STEP0_PREFLIGHT_ENABLED` | Yes | services/blotato/utils/autoPublishService.js:930 |
 | `BLOTATO_TEMPLATE_AUTO_DISCOVERY` | Yes | services/blotato/utils/autoPublishService.js:346<br>services/blotato/utils/autoPublishService.js:1417 |
@@ -195,9 +198,9 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `COMMS_HUB_AUTONOMOUS_REPLIES_ENABLED` | Yes | services/comms-hub/routes/index.js:139 |
 | `COMMS_HUB_BACKUP_ENABLED` | Yes | services/comms-hub/routes/index.js:121 |
 | `COMMS_HUB_CONTENT_AUTOMATION_BLOG_ENABLED` | Yes | services/comms-hub/routes/index.js:134 |
-| `COMMS_HUB_CONTENT_AUTOMATION_BLOTATO_VIDEO_BRIEF_LIMIT` | Yes | services/blotato/utils/autoPublishService.js:2494 |
+| `COMMS_HUB_CONTENT_AUTOMATION_BLOTATO_VIDEO_BRIEF_LIMIT` | Yes | services/blotato/utils/autoPublishService.js:2505 |
 | `COMMS_HUB_CONTENT_AUTOMATION_BRIEF_LEASE_MS` | Yes | services/comms-hub/contentAutomationQueueCore.js:325 |
-| `COMMS_HUB_CONTENT_AUTOMATION_BRIEF_LIMIT` | Yes | services/blog/social/buildDailySocialBlogPost.js:615<br>services/blog/weekly/buildWeeklyBlogPost.js:499<br>services/podcast/runPodcastPipeline.js:140 |
+| `COMMS_HUB_CONTENT_AUTOMATION_BRIEF_LIMIT` | Yes | services/blog/social/buildDailySocialBlogPost.js:624<br>services/blog/weekly/buildWeeklyBlogPost.js:499<br>services/podcast/runPodcastPipeline.js:140 |
 | `COMMS_HUB_CONTENT_AUTOMATION_BRIEF_MAX_AGE_HOURS` | Yes | services/comms-hub/contentAutomationQueueCore.js:328 |
 | `COMMS_HUB_CONTENT_AUTOMATION_CONTEXT_MAX_CHARS` | Yes | services/comms-hub/contentAutomationQueueCore.js:126 |
 | `COMMS_HUB_CONTENT_AUTOMATION_ENABLED` | Yes | services/comms-hub/routes/index.js:132 |
@@ -267,7 +270,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `MAX_URL_FEEDS_PER_RUN` | Yes | services/rss-feed-creator/utils/feedRotationManager.js:20<br>services/rss-feed-creator/utils/fetchFeeds.js:29 |
 | `MIN_SUMMARY_CHARS` | Yes | services/rss-feed-creator/utils/rss-prompts.js:17<br>services/rss-feed-creator/utils/rss-prompts.js:18 |
 | `NEWSLETTER_BREVO_ALLOW_LIST_CREATE` | Yes | services/newsletter/brevo/campaign.js:178 |
-| `NODE_ENV` | Yes | logger.js:8<br>scripts/deploySmoke.js:4<br>scripts/performanceGate.js:5<br>scripts/startupCheck.js:34<br>server.js:30<br>server.js:386<br>+14 more |
+| `NODE_ENV` | Yes | logger.js:8<br>scripts/deploySmoke.js:4<br>scripts/performanceGate.js:5<br>scripts/startupCheck.js:34<br>server.js:30<br>server.js:386<br>+22 more |
 | `ONEUP_EBOOK_CATALOGUE_PATH` | No | services/zernio/utils/ebookCatalogue.js:42 |
 | `ON_BRAND_AUDIT_MAX_TOKENS` | No | audits/utils/onBrandAudit.js:13 |
 | `ON_BRAND_AUDIT_TEMPERATURE` | No | audits/utils/onBrandAudit.js:14 |
@@ -415,7 +418,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `SOCIAL_LEDGER_RESERVATION_TTL_HOURS` | No | services/social/editorialLedger.js:7 |
 | `STARTUP_CHECK_REQUIRED_POST_START` | Yes | scripts/bootstrap.js:106<br>scripts/deploySmoke.js:6<br>scripts/performanceGate.js:9 |
 | `STARTUP_CHECK_SCRIPT` | No | scripts/bootstrap.js:107 |
-| `STATE_BACKEND` | Yes | scripts/startupCheck.js:36<br>services/shared/utils/stateFile.js:25 |
+| `STATE_BACKEND` | Yes | scripts/startupCheck.js:36<br>services/shared/utils/durableLease.js:17<br>services/shared/utils/stateFile.js:25 |
 | `STATE_REMOTE_PREFIX` | Yes | services/shared/utils/stateFile.js:12 |
 | `TRUST_PROXY` | Yes | server.js:110 |
 | `URLENCODED_BODY_LIMIT` | Yes | server.js:374 |
@@ -429,11 +432,11 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `WEBSITE_AUDIT_COUNCIL_TIMEOUT_MS` | Yes | audits/utils/websiteAuditCouncil.js:904 |
 | `WEBSITE_AUDIT_FINALISATION_STALE_MS` | Yes | audits/utils/websiteAuditPipeline.js:43 |
 | `WEBSITE_AUDIT_RUN_REUSE_ACTIVE_MS` | Yes | audits/utils/websiteAuditPipeline.js:38 |
-| `WEBSITE_REBUILD_HOOK` | Yes | scripts/backfill-blog-main-site-links.js:20<br>services/blog/social/buildDailySocialBlogPost.js:229<br>services/blog/weekly/buildWeeklyBlogPost.js:219<br>services/podcast/runPodcastPipeline.js:73 |
-| `WEBSITE_REBUILD_HOOK_FALLBACK` | Yes | scripts/backfill-blog-main-site-links.js:21<br>services/blog/social/buildDailySocialBlogPost.js:230<br>services/blog/weekly/buildWeeklyBlogPost.js:220<br>services/podcast/runPodcastPipeline.js:74 |
+| `WEBSITE_REBUILD_HOOK` | Yes | scripts/backfill-blog-main-site-links.js:20<br>services/blog/social/buildDailySocialBlogPost.js:236<br>services/blog/weekly/buildWeeklyBlogPost.js:219<br>services/podcast/runPodcastPipeline.js:73 |
+| `WEBSITE_REBUILD_HOOK_FALLBACK` | Yes | scripts/backfill-blog-main-site-links.js:21<br>services/blog/social/buildDailySocialBlogPost.js:237<br>services/blog/weekly/buildWeeklyBlogPost.js:220<br>services/podcast/runPodcastPipeline.js:74 |
 | `X` | No | config/thresholds.js:6<br>config/thresholds.js:16 |
 | `ZERNIO_ACCOUNT_ID` | Yes | services/zernio/utils/config.js:64 |
-| `ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK` | Yes | services/zernio/utils/socialScheduler.js:1763<br>services/zernio/utils/socialScheduler.js:2629<br>services/zernio/utils/socialScheduler.js:3088<br>services/zernio/utils/socialScheduler.js:3491 |
+| `ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK` | Yes | services/zernio/utils/socialScheduler.js:1763<br>services/zernio/utils/socialScheduler.js:2629<br>services/zernio/utils/socialScheduler.js:3088<br>services/zernio/utils/socialScheduler.js:3497 |
 | `ZERNIO_API_BASE_URL` | Yes | services/zernio/utils/config.js:55<br>services/zernio/utils/zernioClient.js:36 |
 | `ZERNIO_ARTWORK_TIMEOUT_MS` | Yes | services/artwork/createSocialArtwork.js:13 |
 | `ZERNIO_BLOG_RSS_FEED_URL` | Yes | services/zernio/utils/blogRssFeed.js:80<br>services/zernio/utils/config.js:97 |
@@ -498,8 +501,8 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `ZERNIO_SCHEDULE_MIN_LEAD_MS` | Yes | services/zernio/utils/socialScheduler.js:798 |
 | `ZERNIO_SCHEDULE_RECOVERY_ENABLED` | Yes | services/zernio/utils/socialScheduler.js:797 |
 | `ZERNIO_SCHEDULE_TIME_TOLERANCE_MS` | Yes | services/zernio/utils/socialScheduler.js:862 |
-| `ZERNIO_SLOT_COMPLETED_TTL_MS` | No | services/zernio/utils/state.js:10 |
-| `ZERNIO_SLOT_PENDING_TTL_MS` | No | services/zernio/utils/state.js:9 |
+| `ZERNIO_SLOT_COMPLETED_TTL_MS` | No | services/zernio/utils/state.js:11 |
+| `ZERNIO_SLOT_PENDING_TTL_MS` | No | services/zernio/utils/state.js:10 |
 | `ZERNIO_SUNDAY_IMAGE_URL` | No | services/zernio/utils/config.js:172 |
 | `ZERNIO_SUNDAY_TIME` | Yes | services/zernio/utils/config.js:171 |
 | `ZERNIO_THURSDAY_IMAGE_URL` | No | services/zernio/utils/config.js:145 |
