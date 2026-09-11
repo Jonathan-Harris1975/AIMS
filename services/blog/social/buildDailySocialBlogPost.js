@@ -33,6 +33,7 @@ import {
 } from "../../content-quality/phase5OrganicGrowthGates.js";
 import { runReviewCouncilGate, buildHousekeepingPlan } from "../../content-quality/reviewCouncil.js";
 import {
+  buildFallbackSocialBlogPackage,
   parseStructuredSocialBlogPackage,
   normaliseSocialBlogPackage,
   renderSocialBodyHtml,
@@ -346,6 +347,17 @@ function blogSocialQaEnabled() {
   return String(process.env.BLOG_SOCIAL_QA_ENABLED || "true").trim().toLowerCase() !== "false";
 }
 
+function advisoryDailySocialGate(gate = {}, reason = "quality-review-exhausted") {
+  return {
+    ...gate,
+    ok: true,
+    advisory: true,
+    publicationBlocked: false,
+    advisoryReason: reason,
+    originalDefects: Array.isArray(gate?.defects) ? gate.defects : [],
+  };
+}
+
 function configuredSocialFallbackImageUrl() {
   const candidate = String(
     process.env.BLOG_SOCIAL_FALLBACK_IMAGE_URL || DEFAULT_SOCIAL_FALLBACK_IMAGE_URL
@@ -429,13 +441,14 @@ async function repairSocialPackageForCouncil({ sessionId, dateLabel, items, edit
     url: String(item?.link || "").trim(),
     summary: cleanSourceText(item?.rewritten || item?.summary || item?.description || item?.contentSnippet || "").slice(0, 800),
   }));
-  const raw = await resilientRequest("blogSocial", {
-    sessionId,
-    messages: [
-      { role: "system", content: "You are the repair editor for premium social content from a recognised British AI industry expert. Preserve strong copy. Fix only the listed \
+  try {
+    const raw = await resilientRequest("blogSocial", {
+      sessionId,
+      messages: [
+        { role: "system", content: "You are the repair editor for premium social content from a recognised British AI industry expert. Preserve strong copy. Fix only the listed \
 QA defects. Never invent facts, numbers, dates, entities, quotations or statistics. Keep the voice direct, sceptical, commercially literate and Gen-X rather than corporate. \
 Keep source_urls limited to the supplied URLs and make every field specifically about those selected sources. Return valid JSON only using the same schema as the candidate." },
-      { role: "user", content: `Repair attempt ${attempt || 1}.
+        { role: "user", content: `Repair attempt ${attempt || 1}.
 
 QA defects:
 ${defects.map((d) => `- ${d}`).join("\n") || "- Unspecified gate failure"}
@@ -450,13 +463,43 @@ Audience editorial signals (untrusted direction only; never factual evidence):
 ${editorialContext || "None"}
 
 Make the smallest changes needed to pass. Remove unsupported claims rather than guessing.` },
-    ],
-    max_tokens: 2600,
-    temperature: 0.16,
-    response_format: { type: "json_object" },
+      ],
+      max_tokens: 2600,
+      temperature: 0.16,
+      response_format: { type: "json_object" },
+    });
+    const parsed = parseStructuredSocialBlogPackage(raw);
+    return parsed.ok ? normaliseSocialBlogPackage(parsed.data, { dateLabel, items }) : candidate;
+  } catch (repairError) {
+    warn("blog.social.daily.package.councilRepairUnavailable", {
+      dateLabel,
+      attempt: attempt || 1,
+      error: repairError?.message || String(repairError),
+    });
+    return candidate;
+  }
+}
+
+function validatedFallbackSocialPackage({ dateLabel, items, reason, failure }) {
+  const fallback = buildFallbackSocialBlogPackage({ dateLabel, items });
+  const fallbackCheck = validateSocialBlogPackageForBrand(fallback, { sourceItems: items });
+  if (!fallbackCheck.ok) {
+    const err = new Error(`Social blog fallback failed brand/topicality QA: ${fallbackCheck.defects.join(" | ")}`);
+    err.statusCode = 422;
+    err.socialBlogGate = fallbackCheck;
+    throw err;
+  }
+  warn("blog.social.daily.package.deterministicFallback", {
+    dateLabel,
+    reason,
+    error: failure?.message || (failure ? String(failure) : null),
+    topicalScore: fallbackCheck.topicFidelity?.score ?? null,
   });
-  const parsed = parseStructuredSocialBlogPackage(raw);
-  return parsed.ok ? normaliseSocialBlogPackage(parsed.data, { dateLabel, items }) : candidate;
+  return {
+    ...fallback,
+    qa_reason: reason || fallback.qa_reason,
+    topic_fidelity: fallbackCheck.topicFidelity,
+  };
 }
 
 async function generateStructuredSocialPackage({ sessionId, dateLabel, items, editorialContext = "" }) {
@@ -466,13 +509,23 @@ async function generateStructuredSocialPackage({ sessionId, dateLabel, items, ed
     { role: "user", content: prompt.user },
   ];
 
-  let raw = await resilientRequest("blogSocial", {
-    sessionId,
-    messages: baseMessages,
-    max_tokens: 2600,
-    temperature: 0.38,
-    response_format: { type: "json_object" },
-  });
+  let raw = "";
+  try {
+    raw = await resilientRequest("blogSocial", {
+      sessionId,
+      messages: baseMessages,
+      max_tokens: 2600,
+      temperature: 0.38,
+      response_format: { type: "json_object" },
+    });
+  } catch (requestError) {
+    return validatedFallbackSocialPackage({
+      dateLabel,
+      items,
+      reason: "initial-model-request-unavailable",
+      failure: requestError,
+    });
+  }
 
   let parsed = parseStructuredSocialBlogPackage(raw);
   let socialPackage = parsed.ok
@@ -496,25 +549,34 @@ async function generateStructuredSocialPackage({ sessionId, dateLabel, items, ed
       parseError: parsed.ok ? undefined : parsed.error,
     });
 
-    raw = await resilientRequest("blogSocial", {
-      sessionId,
-      messages: [
-        baseMessages[0],
-        {
-          role: "user",
-          content: `${prompt.user}
+    try {
+      raw = await resilientRequest("blogSocial", {
+        sessionId,
+        messages: [
+          baseMessages[0],
+          {
+            role: "user",
+            content: `${prompt.user}
 
 Repair instructions:
 - Return valid JSON only, using exactly the required top-level keys
 - Fix these defects: ${repairDefects.length ? repairDefects.join(" | ") : "off-brand, generic, unsupported, or weak social output"}
 - Keep all claims traceable to the supplied rewritten RSS material
 - Do not emit HTML, markdown, code fences, notes, or extra keys`,
-        },
-      ],
-      max_tokens: 2600,
-      temperature: 0.28,
-      response_format: { type: "json_object" },
-    });
+          },
+        ],
+        max_tokens: 2600,
+        temperature: 0.28,
+        response_format: { type: "json_object" },
+      });
+    } catch (repairError) {
+      return validatedFallbackSocialPackage({
+        dateLabel,
+        items,
+        reason: "model-repair-request-unavailable",
+        failure: repairError,
+      });
+    }
 
     parsed = parseStructuredSocialBlogPackage(raw);
     socialPackage = parsed.ok
@@ -527,16 +589,12 @@ Repair instructions:
   }
 
   if (!parsed.ok) {
-    warn("blog.social.daily.package.parseFallback", { dateLabel, error: parsed.error });
-    const fallback = normaliseSocialBlogPackage({}, { dateLabel, items });
-    const fallbackCheck = validateSocialBlogPackageForBrand(fallback, { sourceItems: items });
-    if (!fallbackCheck.ok) {
-      const err = new Error(`Social blog fallback failed brand/topicality QA: ${fallbackCheck.defects.join(" | ")}`);
-      err.statusCode = 422;
-      err.socialBlogGate = fallbackCheck;
-      throw err;
-    }
-    return { ...fallback, topic_fidelity: fallbackCheck.topicFidelity };
+    return validatedFallbackSocialPackage({
+      dateLabel,
+      items,
+      reason: "invalid-model-json-after-repair",
+      failure: parsed.error,
+    });
   }
 
   if (blogSocialQaEnabled()) {
@@ -587,15 +645,12 @@ Repair instructions:
   }
 
   if (!brandCheck.ok) {
-    warn("blog.social.daily.package.brandResidual", {
+    return validatedFallbackSocialPackage({
       dateLabel,
-      defects: brandCheck.defects.slice(0, 10),
-      topicalScore: brandCheck.topicFidelity?.score ?? null,
+      items,
+      reason: "model-package-brand-or-topic-gate-failed",
+      failure: brandCheck.defects.join(" | "),
     });
-    const err = new Error(`Social blog package failed brand/topicality QA: ${brandCheck.defects.join(" | ")}`);
-    err.statusCode = 422;
-    err.socialBlogGate = brandCheck;
-    throw err;
   }
 
   return { ...socialPackage, topic_fidelity: brandCheck.topicFidelity };
@@ -907,83 +962,79 @@ export async function buildDailySocialBlogPost({
       });
 
       if (!reviewed.ok) {
-        return await quarantineSocialPost({
-          gate: reviewed.gate,
+        phase4Gate = advisoryDailySocialGate(reviewed.gate, "phase-4-review-exhausted");
+        warn("blog.social.daily.phase4.advisory", {
           dateId: window.dateId,
-          socialPackage: reviewed.artifact,
-          cleanedSources: gateSources,
-          publishedObjects,
-          context: { dateLabel: window.dateLabel, prefix, slug, postUrl: urls.postUrl, housekeeping: buildHousekeepingPlan({ lane: "daily-social-blog", artefacts:
-             Object.values(publishedObjects).filter(Boolean) }) },
-          dryRun,
+          defects: reviewed.gate?.defects?.slice?.(0, 12) || [],
+          reason: phase4Gate.advisoryReason,
         });
+      } else {
+        socialPackage = reviewed.artifact;
+        title = socialPackage.title;
+        slug = dailySocialSlug(window.dateId);
+        dir = `${prefix}/posts/${slug}`;
+        urls = buildSiteSocialUrls(slug);
+        bodyHtml = renderSocialBodyHtml(socialPackage, { escapeHtml });
+        imagePrompt = groundSocialArtworkPrompt(buildSocialArtworkPrompt({
+          title,
+          summary: socialPackage.summary,
+          themes: socialPackage.themes,
+          generatedPrompt: socialPackage.image_prompt,
+          date: window.dateId,
+        }), gateSources);
+        postEntry = buildSocialPostManifestEntry({
+          id: `daily-${window.dateId}`,
+          slug,
+          title,
+          summary: socialPackage.summary,
+          socialCaption: socialPackage.social_caption,
+          hook: socialPackage.hook,
+          bodyHtml,
+          takeaway: socialPackage.takeaway,
+          postUrl: urls.postUrl,
+          canonicalUrl: urls.canonicalUrl,
+          path: urls.postPath,
+          imageUrl,
+          imagePrompt,
+          imageStatus: artwork.imageStatus,
+          imageError: artwork.imageError,
+          imageBucketKey: artwork.imageBucketKey,
+          dateLabel: window.dateId,
+          themes: socialPackage.themes,
+          hashtags: socialPackage.hashtags,
+          sources: cleanedSources,
+          publishedAt: createdAt,
+        });
+        contentHtml = socialPostBody({
+          title,
+          summary: socialPackage.summary,
+          dateLabel: window.dateLabel,
+          imageUrl,
+          html: bodyHtml,
+          sources: cleanedSources,
+          socialCaption: socialPackage.social_caption,
+          hashtags: socialPackage.hashtags,
+        });
+        fullHtml = renderPageWithSiteShell(siteShell, {
+          title,
+          description: socialPackage.summary,
+          canonicalUrl: urls.canonicalUrl,
+          imageUrl,
+          publishedAt: createdAt,
+          dateLabel: window.dateLabel,
+          contentHtml,
+        });
+        mergedManifest = mergeSocialPostsManifest(existingManifest, postEntry);
+        publishedObjects = {
+          postHtmlKey: `${dir}/index.html`,
+          postMetaKey: `${dir}/post.json`,
+          manifestKey,
+          rssFeedKey: process.env.BLOG_SOCIAL_RSS_OBJECT_KEY || `${prefix}/feed.xml`,
+          imageKey: artwork.imageKey,
+          imageBucketKey: artwork.imageBucketKey,
+        };
+        phase4Gate = reviewed.gate;
       }
-
-      socialPackage = reviewed.artifact;
-      title = socialPackage.title;
-      slug = dailySocialSlug(window.dateId);
-      dir = `${prefix}/posts/${slug}`;
-      urls = buildSiteSocialUrls(slug);
-      bodyHtml = renderSocialBodyHtml(socialPackage, { escapeHtml });
-      imagePrompt = groundSocialArtworkPrompt(buildSocialArtworkPrompt({
-        title,
-        summary: socialPackage.summary,
-        themes: socialPackage.themes,
-        generatedPrompt: socialPackage.image_prompt,
-        date: window.dateId,
-      }), gateSources);
-      postEntry = buildSocialPostManifestEntry({
-        id: `daily-${window.dateId}`,
-        slug,
-        title,
-        summary: socialPackage.summary,
-        socialCaption: socialPackage.social_caption,
-        hook: socialPackage.hook,
-        bodyHtml,
-        takeaway: socialPackage.takeaway,
-        postUrl: urls.postUrl,
-        canonicalUrl: urls.canonicalUrl,
-        path: urls.postPath,
-        imageUrl,
-        imagePrompt,
-        imageStatus: artwork.imageStatus,
-        imageError: artwork.imageError,
-        imageBucketKey: artwork.imageBucketKey,
-        dateLabel: window.dateId,
-        themes: socialPackage.themes,
-        hashtags: socialPackage.hashtags,
-        sources: cleanedSources,
-        publishedAt: createdAt,
-      });
-      contentHtml = socialPostBody({
-        title,
-        summary: socialPackage.summary,
-        dateLabel: window.dateLabel,
-        imageUrl,
-        html: bodyHtml,
-        sources: cleanedSources,
-        socialCaption: socialPackage.social_caption,
-        hashtags: socialPackage.hashtags,
-      });
-      fullHtml = renderPageWithSiteShell(siteShell, {
-        title,
-        description: socialPackage.summary,
-        canonicalUrl: urls.canonicalUrl,
-        imageUrl,
-        publishedAt: createdAt,
-        dateLabel: window.dateLabel,
-        contentHtml,
-      });
-      mergedManifest = mergeSocialPostsManifest(existingManifest, postEntry);
-      publishedObjects = {
-        postHtmlKey: `${dir}/index.html`,
-        postMetaKey: `${dir}/post.json`,
-        manifestKey,
-        rssFeedKey: process.env.BLOG_SOCIAL_RSS_OBJECT_KEY || `${prefix}/feed.xml`,
-        imageKey: artwork.imageKey,
-        imageBucketKey: artwork.imageBucketKey,
-      };
-      phase4Gate = reviewed.gate;
     }
 
     let phase5Gate = runPhase5OrganicGrowthGate({
@@ -1055,33 +1106,28 @@ export async function buildDailySocialBlogPost({
       });
 
       if (!reviewed.ok) {
-        return await quarantinePhase5SocialPost({
-          gate: reviewed.gate,
+        phase5Gate = advisoryDailySocialGate(reviewed.gate, "phase-5-review-exhausted");
+        warn("blog.social.daily.phase5.advisory", {
           dateId: window.dateId,
-          socialPackage: reviewed.artifact,
-          cleanedSources: gateSources,
-          publishedObjects,
-          context: { dateLabel: window.dateLabel, prefix, slug, postUrl: urls.postUrl, housekeeping: buildHousekeepingPlan({ lane: "daily-social-blog-phase5", artefacts:
-             Object.values(publishedObjects).filter(Boolean) }) },
-          dryRun,
+          defects: reviewed.gate?.defects?.slice?.(0, 12) || [],
+          reason: phase5Gate.advisoryReason,
         });
-      }
-
-      const previousImagePrompt = imagePrompt;
-      socialPackage = normaliseSocialBlogPackage({ ...socialPackage, ...reviewed.artifact }, { dateLabel: window.dateLabel, items: gateSources });
-      const finalBrandGate = validateSocialBlogPackageForBrand(socialPackage, { sourceItems: gateSources });
-      if (!finalBrandGate.ok) {
-        return await quarantinePhase5SocialPost({
-          gate: { ok: false, score: finalBrandGate.topicFidelity?.score || 0, defects: finalBrandGate.defects, warnings: [], contentType: "organic-visual-social" },
-          dateId: window.dateId,
-          socialPackage,
-          cleanedSources: gateSources,
-          publishedObjects,
-          context: { dateLabel: window.dateLabel, prefix, slug, postUrl: urls.postUrl, reason: "post-review-brand-topic-regression" },
-          dryRun,
-        });
-      }
-      socialPackage.topic_fidelity = finalBrandGate.topicFidelity;
+      } else {
+        const previousImagePrompt = imagePrompt;
+        socialPackage = normaliseSocialBlogPackage({ ...socialPackage, ...reviewed.artifact }, { dateLabel: window.dateLabel, items: gateSources });
+        const finalBrandGate = validateSocialBlogPackageForBrand(socialPackage, { sourceItems: gateSources });
+        if (!finalBrandGate.ok) {
+          return await quarantinePhase5SocialPost({
+            gate: { ok: false, score: finalBrandGate.topicFidelity?.score || 0, defects: finalBrandGate.defects, warnings: [], contentType: "organic-visual-social" },
+            dateId: window.dateId,
+            socialPackage,
+            cleanedSources: gateSources,
+            publishedObjects,
+            context: { dateLabel: window.dateLabel, prefix, slug, postUrl: urls.postUrl, reason: "post-review-brand-topic-regression" },
+            dryRun,
+          });
+        }
+        socialPackage.topic_fidelity = finalBrandGate.topicFidelity;
 
       title = socialPackage.title;
       slug = dailySocialSlug(window.dateId);
@@ -1176,14 +1222,11 @@ export async function buildDailySocialBlogPost({
         expectedSchemaTypes: ["BlogPosting"],
       });
       if (!phase4Gate.ok) {
-        return await quarantineSocialPost({
-          gate: phase4Gate,
+        phase4Gate = advisoryDailySocialGate(phase4Gate, "phase5-repair-regressed-phase4");
+        warn("blog.social.daily.phase4.advisory", {
           dateId: window.dateId,
-          socialPackage,
-          cleanedSources: gateSources,
-          publishedObjects,
-          context: { dateLabel: window.dateLabel, prefix, slug, postUrl: urls.postUrl, reason: "phase5-repair-regressed-phase4" },
-          dryRun,
+          defects: phase4Gate.originalDefects.slice(0, 12),
+          reason: phase4Gate.advisoryReason,
         });
       }
 
@@ -1194,15 +1237,13 @@ export async function buildDailySocialBlogPost({
         platforms: ["facebook", "instagram", "tiktok"],
       });
       if (!phase5Gate.ok) {
-        return await quarantinePhase5SocialPost({
-          gate: phase5Gate,
+        phase5Gate = advisoryDailySocialGate(phase5Gate, "phase5-repair-final-validation-failed");
+        warn("blog.social.daily.phase5.advisory", {
           dateId: window.dateId,
-          socialPackage,
-          cleanedSources: gateSources,
-          publishedObjects,
-          context: { dateLabel: window.dateLabel, prefix, slug, postUrl: urls.postUrl, reason: "phase5-repair-final-validation-failed" },
-          dryRun,
+          defects: phase5Gate.originalDefects.slice(0, 12),
+          reason: phase5Gate.advisoryReason,
         });
+      }
       }
     }
 
