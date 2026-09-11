@@ -988,7 +988,6 @@ function buildTarget(platform, pack, channel = {}) {
       targetType: "instagram",
       mediaType: "reel",
       shareToFeed: parseBoolean(process.env.BLOTATO_INSTAGRAM_SHARE_TO_FEED, true),
-      altText: pack.thumbnailText || pack.internalTitle || "AI news short",
     };
   }
 
@@ -1557,18 +1556,24 @@ export function isReplaceableRenderedQualityFailure(job = {}) {
 export function isRetryableRenderedPublishFailure(job = {}) {
   if (job.status !== "failed") return false;
   const phase = trim(job.phase).toLowerCase();
-  if (!["rendered-quality-failed", "pre-publish", "publishing", "publish-failed"].includes(phase)) return false;
+  const prePublicationQaPhase = ["rendered-quality-review", "rendered-quality-failed"].includes(phase);
+  if (!["rendered-quality-review", "rendered-quality-failed", "pre-publish", "publishing", "publish-failed"].includes(phase)) return false;
   if (!job.videoId && !job.mediaUrl && !job.result?.visualId && !job.result?.mediaUrl) return false;
   const qa = job.renderedVideoQa || job.result?.renderedVideoQa || {};
-  if (phase !== "rendered-quality-failed"
+  if (!prePublicationQaPhase
     && !(qa.pass === true || qa.skipped === true || qa.acceptedAfterSoftFailure === true || qa.acceptedForScheduling === true)) return false;
-  if (phase === "rendered-quality-failed" && jobHasPublicationEvidence(job)) return false;
+  if (prePublicationQaPhase && jobHasPublicationEvidence(job)) return false;
 
   const references = Array.isArray(job.publicationReferences) ? job.publicationReferences : [];
   if (references.some((item) => item?.submissionOutcome === "ambiguous")) return false;
   const failures = Array.isArray(job.failedPublishes) ? job.failedPublishes : [];
   if (failures.some((item) => item?.submissionOutcome === "ambiguous")) return false;
   if (failures.length && failures.some((item) => !["rejected", "reconciliation-unavailable"].includes(item?.submissionOutcome))) return false;
+
+  // This phase is reached before POST /v2/posts. Reusing the already-paid
+  // render therefore cannot duplicate a social submission, irrespective of
+  // how many earlier operation-window attempts were spent on advisory QA.
+  if (prePublicationQaPhase) return true;
 
   const maxAttempts = positiveIntEnv("BLOTATO_POST_SUBMISSION_RETRY_ATTEMPTS", 3, 5);
   return Math.max(1, Number(job.attempt || 1)) < maxAttempts;
@@ -2017,17 +2022,50 @@ async function runPublishJob({
       });
     }
 
-    const renderedVideoQa = recoveredPublishVideo && failedPublishRecovery?.renderedVideoQa
-      ? { ...failedPublishRecovery.renderedVideoQa, reusedForScheduleRetry: true }
-      : await reviewRenderedVideo({
+    let renderedVideoQa;
+    if (recoveredPublishVideo && failedPublishRecovery?.renderedVideoQa) {
+      renderedVideoQa = { ...failedPublishRecovery.renderedVideoQa, reusedForScheduleRetry: true };
+    } else {
+      try {
+        renderedVideoQa = await reviewRenderedVideo({
           mediaUrl: video.mediaUrl,
           pack,
           article: articleSource.article,
           sessionId: `${sessionId}-rendered-qa`,
         });
+      } catch (qaError) {
+        if (!scheduledTime) throw qaError;
+        // A scheduled paid render must always reach Blotato's provider hand-off.
+        // Rendered QA remains visible in the job, but an unavailable reviewer
+        // cannot strand the video before POST /v2/posts.
+        renderedVideoQa = {
+          pass: true,
+          skipped: true,
+          reason: "scheduled_qa_infrastructure_advisory",
+          error: trim(qaError?.message || qaError).slice(0, 500),
+          score: null,
+          threshold: null,
+          defects: [],
+          hardDefects: [],
+        };
+        warn("blotato.finished_video.qa_unavailable_scheduling_continues", {
+          sessionId,
+          lane: lane.slug,
+          visualId: video.visualId,
+          error: renderedVideoQa.error,
+        });
+      }
+    }
     if (!renderedVideoQa.pass) {
-      const blockSoftQaFailures = parseBoolean(process.env.BLOTATO_RENDERED_QA_BLOCK_SOFT_FAILURES, false);
-      const blockHardQaFailures = parseBoolean(process.env.BLOTATO_RENDERED_QA_BLOCK_HARD_FAILURES, false);
+      // Strict QA flags remain available for immediate/manual publishing. A
+      // scheduled operation is audit-only even when an old Koyeb environment
+      // still contains the former fail-closed values.
+      const blockSoftQaFailures = scheduledTime
+        ? false
+        : parseBoolean(process.env.BLOTATO_RENDERED_QA_BLOCK_SOFT_FAILURES, false);
+      const blockHardQaFailures = scheduledTime
+        ? false
+        : parseBoolean(process.env.BLOTATO_RENDERED_QA_BLOCK_HARD_FAILURES, false);
       const qaPublication = assessRenderedVideoQaPublication(renderedVideoQa, {
         blockSoftFailures: blockSoftQaFailures,
         blockHardFailures: blockHardQaFailures,

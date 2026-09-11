@@ -1414,9 +1414,10 @@ function applyHookExpertReview(pack = {}, laneConfig = {}) {
 export async function buildShortLanePack(options = {}) {
   const laneConfig = requireShortLaneConfig(options.lane || DEFAULT_BLOTATO_SHORT_LANE);
   const prompt = buildNewsShortPrompt({ ...options, lane: laneConfig.slug });
-  const raw = await requestNewsShortJson(prompt);
+  let raw = "";
 
   try {
+    raw = await requestNewsShortJson(prompt);
     const parsed = normalisePack({ ...parseJsonObject(raw), lane: laneConfig.slug });
     applyHookExpertReview(parsed, laneConfig);
     return enhancePackForBlotatoDuration(parsed, options, laneConfig);
@@ -1427,6 +1428,7 @@ export async function buildShortLanePack(options = {}) {
     });
 
     try {
+      if (!raw) throw error;
       const repaired = await requestNewsShortJson(prompt, { repairRaw: raw });
       const parsed = normalisePack({ ...parseJsonObject(repaired, "repaired Blotato news short"), lane: laneConfig.slug });
       applyHookExpertReview(parsed, laneConfig);
