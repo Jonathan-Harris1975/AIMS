@@ -46,9 +46,19 @@ const BRITISH_SPELLINGS = new Map([
 ]);
 
 const ANTI_HYPE_REPLACEMENTS = [
+  [/\bbuy\s+now\b/gi, "purchase now"],
+  [/\bfor\s+a\s+limited\s+time\b/gi, "temporarily"],
+  [/\blimited\s+time\b/gi, "short-term"],
+  [/\bdon['’]?t\s+miss\s+out\b/gi, "consider it"],
+  [/\bguaranteed\b/gi, "assured"],
+  [/\bmake\s+money\s+fast\b/gi, "earn money quickly"],
+  [/\bget\s+rich\b/gi, "build wealth"],
+  [/\bsecret\s+formula\b/gi, "method"],
+  [/\bunlock\s+the\s+future\b/gi, "shape what follows"],
   [/\bdelve into\b/gi, "examine"],
   [/\bdelves into\b/gi, "examines"],
   [/\bdelving into\b/gi, "examining"],
+  [/\bdelve\b/gi, "examine"],
   [/\bgroundbreaking\b/gi, "notable"],
   [/\blandscape\b/gi, "field"],
   [/\blandscapes\b/gi, "fields"],
@@ -57,8 +67,11 @@ const ANTI_HYPE_REPLACEMENTS = [
   [/\brevolutionizes\b/gi, "changes"],
   [/\brevolutionized\b/gi, "changed"],
   [/\brevolutionizing\b/gi, "changing"],
-  [/\bgame-changing\b/gi, "material"],
+  [/\bgame[-\s]?changing\b/gi, "material"],
+  [/\bgame\s+changer\b/gi, "material change"],
   [/\bcutting-edge\b/gi, "new"],
+  [/\btransformative\b/gi, "substantial"],
+  [/\bparadigm\s+shift\b/gi, "major change"],
 ];
 
 const HIGH_CONFIDENCE_PUNCTUATION_REPAIRS = new Set([

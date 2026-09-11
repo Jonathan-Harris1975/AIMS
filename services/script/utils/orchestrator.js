@@ -56,8 +56,14 @@ function extractRepairableMain(text = "", lockedIntro = "", lockedOutro = "", fa
 }
 
 async function repairPodcastTranscriptForCouncil(candidate = {}, { gate, attempt, sessionMeta, lockedIntro, lockedOutro, fallbackMain } = {}) {
-  const fullText = String(candidate?.text || "").trim();
-  const mainText = extractRepairableMain(fullText, lockedIntro, lockedOutro, fallbackMain);
+  // The council must work from the same deterministic representation that
+  // the gate validates. This also lets us remove the formatted locked blocks
+  // reliably instead of accidentally sending the full transcript as MAIN BODY.
+  const safeLockedIntro = editAndFormat(lockedIntro);
+  const safeLockedOutro = editAndFormat(lockedOutro);
+  const safeFallbackMain = editAndFormat(fallbackMain);
+  const fullText = editAndFormat(String(candidate?.text || "").trim());
+  const mainText = extractRepairableMain(fullText, safeLockedIntro, safeLockedOutro, safeFallbackMain);
   const defects = Array.isArray(gate?.defects) ? gate.defects.slice(0, 10) : [];
   const raw = await resilientRequest("editorialPass", {
     sessionId: sessionMeta?.sessionId,
@@ -84,9 +90,16 @@ ${mainText}`,
     reasoning: { effort: process.env.PODCAST_REPAIR_REASONING_EFFORT || "none", exclude: true },
   });
   const rawRepairedMain = String(raw || mainText).trim() || mainText;
-  const repairedMain = stripLeadingIntroEcho(rawRepairedMain, lockedIntro);
-  // Never trust an LLM repair to preserve deterministic brand blocks. Reattach them here.
-  return { text: [lockedIntro, repairedMain, lockedOutro].filter(Boolean).join("\n\n").trim() };
+  const repairedMain = editAndFormat(stripLeadingIntroEcho(rawRepairedMain, safeLockedIntro));
+  // Never trust an LLM repair to preserve deterministic brand blocks. Reattach
+  // their cleaned forms, then run the assembled transcript through the exact
+  // formatter used before the gate so repair output cannot introduce new
+  // sentence-length or banned-language failures.
+  return {
+    text: editAndFormat(
+      [safeLockedIntro, repairedMain, safeLockedOutro].filter(Boolean).join("\n\n")
+    ),
+  };
 }
 
 function hasOnlyRepairableSpokenLengthDefects(validation = {}) {
