@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { analyseTopicFidelity, jaccardTopicSimilarity } from "../services/content-quality/topicFidelity.js";
-import { normaliseSocialBlogPackage, validateSocialBlogPackageForBrand } from "../services/blog/utils/socialBlogPackage.js";
+import { buildFallbackSocialBlogPackage, normaliseSocialBlogPackage, validateSocialBlogPackageForBrand } from "../services/blog/utils/socialBlogPackage.js";
 
 const sourceItems = [{
   title: "Hong Kong uses AI to detect construction safety risks",
@@ -57,6 +57,14 @@ seasonal palette, teal safety accents, cinematic lighting, strong contrast, prem
   const gate = validateSocialBlogPackageForBrand(pkg, { sourceItems });
   assert.equal(gate.ok, true, gate.defects.join(" | "));
   assert.deepEqual(gate.contract.source_urls, [sourceItems[0].link]);
+});
+
+test("social blog deterministic fallback remains publishable and source-grounded when the model is unavailable", () => {
+  const pkg = buildFallbackSocialBlogPackage({ items: sourceItems, dateLabel: "2026-09-11" });
+  const gate = validateSocialBlogPackageForBrand(pkg, { sourceItems });
+  assert.equal(gate.ok, true, gate.defects.join(" | "));
+  assert.deepEqual(pkg.source_urls, [sourceItems[0].link]);
+  assert.match(pkg.social_caption, /construction-site footage/i);
 });
 
 test("mini-series angle similarity detects near-duplicate plans", () => {

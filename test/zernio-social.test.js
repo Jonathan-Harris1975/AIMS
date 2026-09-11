@@ -39,6 +39,7 @@ function applyBaseEnv() {
 
 const scheduledRequests = [];
 const listedPostRequests = [];
+const blogRssRequests = [];
 let zernioScheduleFailuresRemaining = 0;
 let zernioScheduleAttempts = 0;
 let analyticsRequests = 0;
@@ -167,6 +168,10 @@ const mockServer = http.createServer(async (req, res) => {
   }
 
   if (req.method === "GET" && url.pathname === "/blog-rss-feed.xml") {
+    blogRssRequests.push({
+      query: Object.fromEntries(url.searchParams.entries()),
+      cacheControl: req.headers["cache-control"],
+    });
     res.writeHead(200, { "content-type": "application/rss+xml; charset=utf-8" });
     res.end(mockBlogRssXml());
     return;
@@ -261,6 +266,7 @@ test.after(async () => {
 test.afterEach(() => {
   scheduledRequests.length = 0;
   listedPostRequests.length = 0;
+  blogRssRequests.length = 0;
   zernioScheduleFailuresRemaining = 0;
   zernioScheduleAttempts = 0;
   analyticsRequests = 0;
@@ -732,7 +738,7 @@ test("buildAndScheduleBlogRssDaily builds a dry-run post from the newest blog RS
 
   const mod = await import(`../services/zernio/utils/socialScheduler.js?zernio-blog-rss-dry=${Date.now()}`);
   const result = await mod.buildAndScheduleBlogRssDaily({
-    publishDate: "2026-07-16",
+    publishDate: "2026-07-15",
     dryRun: true,
   });
 
@@ -747,9 +753,11 @@ test("buildAndScheduleBlogRssDaily builds a dry-run post from the newest blog RS
   assert.match(result.post.content, /#ArtificialIntelligence/);
   assert.match(result.post.content, /#AIAgents/);
   assert.equal(result.post.imageUrl, "https://images.jonathan-harris.online/ai-agents-human-judgement");
+  assert.match(blogRssRequests[0].query._aims, /^2026-07-15-\d+$/);
+  assert.match(blogRssRequests[0].cacheControl, /no-cache/);
 });
 
-test("buildAndScheduleBlogRssDaily skips items already posted and schedules live via mediaItems", async () => {
+test("buildAndScheduleBlogRssDaily never falls back to an older or already-posted item", async () => {
   restoreEnv();
   applyBaseEnv();
   process.env.OPENROUTER_API_BASE = mockBase;
@@ -763,7 +771,7 @@ test("buildAndScheduleBlogRssDaily skips items already posted and schedules live
 
   // First run consumes the newest item.
   const first = await mod.buildAndScheduleBlogRssDaily({
-    publishDate: "2026-07-16",
+    publishDate: "2026-07-15",
     profileName: "General",
     accountId: "fb-page-1",
     force: true,
@@ -771,23 +779,24 @@ test("buildAndScheduleBlogRssDaily skips items already posted and schedules live
   assert.equal(first.scheduled, true);
   assert.equal(first.source.title, "Why AI Agents Still Need Human Judgement");
 
-  // Second run (feed unchanged) must fall through to the next unused item.
+  // A replay must stop. It must not fall through to the older feed item.
   const second = await mod.buildAndScheduleBlogRssDaily({
-    publishDate: "2026-07-17",
+    publishDate: "2026-07-15",
     profileName: "General",
     accountId: "fb-page-1",
-    force: true,
   });
-  assert.equal(second.scheduled, true);
-  assert.equal(second.source.title, "The Quiet Cost of Prompt Sprawl");
+  assert.equal(second.scheduled, false);
+  assert.equal(second.duplicatePrevented, true);
+  assert.equal(second.reason, "current-day-blog-item-already-used");
+  assert.equal(second.source.title, "Why AI Agents Still Need Human Judgement");
 
-  assert.equal(scheduledRequests.length, 2);
+  assert.equal(scheduledRequests.length, 1);
   assert.deepEqual(scheduledRequests[0].body.mediaItems, [
     { type: "image", url: "https://images.jonathan-harris.online/ai-agents-human-judgement" },
   ]);
 });
 
-test("buildAndScheduleBlogRssDaily raises a clear error when the feed has no usable items", async () => {
+test("buildAndScheduleBlogRssDaily raises a clear retryable error when today's item is not visible", async () => {
   restoreEnv();
   applyBaseEnv();
   process.env.OPENROUTER_API_BASE = mockBase;
@@ -798,7 +807,7 @@ test("buildAndScheduleBlogRssDaily raises a clear error when the feed has no usa
 
   await assert.rejects(
     () => mod.buildAndScheduleBlogRssDaily({ publishDate: "2026-07-16", dryRun: true }),
-    /No usable items found in the blog social RSS feed/
+    /current daily social-blog item for 2026-07-16 is not yet visible/
   );
 });
 

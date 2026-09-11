@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import {
   evaluateOperationWindowClaim,
+  OPERATION_RECOVERY_REVISION,
   reusableOperationTaskResults,
 } from "../services/ops/operationWindowState.js";
 
@@ -17,6 +18,8 @@ test("daily operation windows stay idempotent but recover failed runs within a b
   assert.match(source, /AIMS_OPERATION_RECOVERY_COOLDOWN_MS/);
   assert.match(source, /AIMS_OPERATION_STALE_AFTER_MS/);
   assert.match(source, /AIMS_OPERATION_HEARTBEAT_MS/);
+  assert.match(source, /recoveryRevision: OPERATION_RECOVERY_REVISION/);
+  assert.match(source, /asyncFailureDetails/);
   assert.match(source, /allowRecovery,/);
   assert.match(source, /resumeResults/);
   assert.match(source, /getOperationWindowReceipt\(id\)/);
@@ -65,6 +68,31 @@ test("failed operation receipts can recover, while active and successful receipt
   });
   assert.equal(exhausted.claimable, false);
   assert.equal(exhausted.reason, "same-day-window-recovery-exhausted");
+
+  const repairedDeployment = evaluateOperationWindowClaim({ ...failed, attempt: 3 }, {
+    allowRecovery: true,
+    maxAttempts: 3,
+    recoveryCooldownMs: 0,
+    recoveryRevision: OPERATION_RECOVERY_REVISION,
+    nowMs: Date.parse("2026-09-02T10:00:00.000Z"),
+  });
+  assert.equal(repairedDeployment.claimable, true);
+  assert.equal(repairedDeployment.attempt, 4);
+  assert.equal(repairedDeployment.revisionRecovery, true);
+  assert.equal(repairedDeployment.recoveryRevision, OPERATION_RECOVERY_REVISION);
+
+  const repairedDeploymentExhausted = evaluateOperationWindowClaim({
+    ...failed,
+    attempt: 4,
+    recoveryRevision: OPERATION_RECOVERY_REVISION,
+  }, {
+    allowRecovery: true,
+    maxAttempts: 3,
+    recoveryRevision: OPERATION_RECOVERY_REVISION,
+    nowMs: Date.parse("2026-09-02T11:00:00.000Z"),
+  });
+  assert.equal(repairedDeploymentExhausted.claimable, false);
+  assert.equal(repairedDeploymentExhausted.reason, "same-day-window-recovery-exhausted");
 
   assert.equal(evaluateOperationWindowClaim({ status: "running" }, { allowRecovery: true }).reason, "same-day-window-already-running");
   assert.equal(evaluateOperationWindowClaim({ status: "completed", failures: 0 }, { allowRecovery: true }).reason, "same-day-window-already-executed");

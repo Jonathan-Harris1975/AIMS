@@ -49,6 +49,7 @@ test("current external-provider contracts stay aligned", async () => {
   assert.match(blotato, /ambiguous 5xx\/network retry could create a duplicate paid video\/post/);
   assert.match(blotato, /`videos\/\$\{encodeURIComponent\(cleaned\)\}`/);
   assert.match(autoPublish, /return extractUuid\(value\).*DEFAULT_AI_STORY_TEMPLATE_UUID/);
+  assert.doesNotMatch(autoPublish, /altText:\s*pack\.thumbnailText/);
   assert.match(ai, /max_completion_tokens: max_tokens/);
   assert.match(ai, /retry-after/);
   assert.match(zernio, /account\?\.isActive === false/);

@@ -59,11 +59,19 @@ test("Blotato reuses rendered videos for provider handoff but blocks ambiguous r
     assert.equal(isRetryableRenderedPublishFailure({
       ...failedPublish,
       phase: "rendered-quality-failed",
+      attempt: 3,
       renderedVideoQa: {
         pass: false,
         hardDefects: ["Model-labelled visual defect"],
         technical: { pass: true },
       },
+      failedPublishes: [],
+    }), true);
+    assert.equal(isRetryableRenderedPublishFailure({
+      ...failedPublish,
+      phase: "rendered-quality-review",
+      attempt: 3,
+      renderedVideoQa: undefined,
       failedPublishes: [],
     }), true);
     assert.equal(isRetryableRenderedPublishFailure({ ...failedPublish, attempt: 3 }), false);
