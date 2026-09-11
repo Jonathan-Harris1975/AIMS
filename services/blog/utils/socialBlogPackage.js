@@ -362,7 +362,8 @@ export function buildFallbackSocialBlogPackage({ items = [], dateLabel } = {}) {
     social_caption: `Today's AI brief is not chasing shiny theatre. The source material points to ${theme}, delivery pressure, and the boring operational questions that decide \
 whether artificial intelligence actually helps or merely decorates a pitch deck. ${lead[0] ? firstSentence(lead[0].rewritten, 220) :
    "The sensible reading is to watch the practical constraints, not the launch language."} For social posting, the useful angle is simple: treat the claims with interest, but \
-keep one hand on the calculator and the other on the risk register.`,
+keep one hand on the calculator and the other on the risk register. Verify what the evidence actually shows, decide who remains accountable, and separate an impressive product \
+claim from a dependable operating result.`,
     hook: "The shiny bit was not the interesting bit.",
     body_sections: [
       {
