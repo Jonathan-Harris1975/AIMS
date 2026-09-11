@@ -6,6 +6,12 @@ const TERMINAL_STATUSES = new Set(["completed", "completed-with-failures", "fail
 const RECOVERABLE_STATUSES = new Set(["completed-with-failures", "failed"]);
 const ACTIVE_STATUSES = new Set(["accepted", "running"]);
 
+// A deployment that repairs a failed operation window needs one bounded way
+// past an already-exhausted receipt. Bumping this value deliberately grants
+// that deployment one recovery attempt; the revision is persisted with the
+// new receipt, so normal scheduler polling cannot turn it into a retry loop.
+export const OPERATION_RECOVERY_REVISION = "social-provider-handoff-2026-09-11-v1";
+
 function normalise(value = "") {
   return String(value || "").trim();
 }
@@ -71,6 +77,7 @@ export function evaluateOperationWindowClaim(existing, {
   recoveryCooldownMs = 60_000,
   staleAfterMs = 0,
   nowMs = Date.now(),
+  recoveryRevision = "",
 } = {}) {
   if (!existing) {
     return { claimable: true, attempt: 1, recovery: false };
@@ -100,7 +107,10 @@ export function evaluateOperationWindowClaim(existing, {
   }
 
   const attemptLimit = Math.max(1, Number(maxAttempts || 3));
-  if (currentAttempt >= attemptLimit) {
+  const requestedRevision = normalise(recoveryRevision);
+  const existingRevision = normalise(existing.recoveryRevision);
+  const revisionRecovery = Boolean(requestedRevision && requestedRevision !== existingRevision);
+  if (currentAttempt >= attemptLimit && !revisionRecovery) {
     return {
       claimable: false,
       reason: "same-day-window-recovery-exhausted",
@@ -124,6 +134,8 @@ export function evaluateOperationWindowClaim(existing, {
     claimable: true,
     attempt: currentAttempt + 1,
     recovery: true,
+    recoveryRevision: requestedRevision || existingRevision || null,
+    revisionRecovery,
     recoveredFromExecutionId: existing.executionId || null,
   };
 }
@@ -144,6 +156,7 @@ export async function claimOperationWindow({
   maxAttempts = 3,
   recoveryCooldownMs = 60_000,
   staleAfterMs = 0,
+  recoveryRevision = "",
 } = {}) {
   const cleanId = normalise(id);
   if (!cleanId) throw new Error("operation window id is required");
@@ -156,6 +169,7 @@ export async function claimOperationWindow({
     maxAttempts,
     recoveryCooldownMs,
     staleAfterMs,
+    recoveryRevision,
   });
   if (!decision.claimable) {
     return {
@@ -174,6 +188,8 @@ export async function claimOperationWindow({
     executionId: normalise(executionId),
     attempt: decision.attempt,
     recovery: Boolean(decision.recovery),
+    recoveryRevision: decision.recoveryRevision || normalise(recoveryRevision) || null,
+    revisionRecovery: Boolean(decision.revisionRecovery),
     recoveredFromExecutionId: decision.recoveredFromExecutionId || null,
     status: "accepted",
     startedAt: timestamp,
@@ -227,6 +243,8 @@ export async function persistOperationWindow(job = {}) {
     executionId: normalise(job.executionId || existing.executionId),
     attempt: Math.max(1, Number(job.attempt || existing.attempt || 1)),
     recovery: Boolean(job.recovery ?? existing.recovery),
+    recoveryRevision: normalise(job.recoveryRevision || existing.recoveryRevision) || null,
+    revisionRecovery: Boolean(job.revisionRecovery ?? existing.revisionRecovery),
     recoveredFromExecutionId: job.recoveredFromExecutionId || existing.recoveredFromExecutionId || null,
     window: normalise(job.window || existing.window),
     status: normalise(job.status || existing.status || "accepted"),

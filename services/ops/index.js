@@ -10,6 +10,7 @@ import {
   getOperationWindowReceipt,
   operationTaskSucceeded,
   operationWindowNeedsRecovery,
+  OPERATION_RECOVERY_REVISION,
   persistOperationWindow,
 } from "./operationWindowState.js";
 import { info, warn } from "../../logger.js";
@@ -165,6 +166,8 @@ function publicJob(job) {
     status: job.status,
     attempt: Math.max(1, Number(job.attempt || 1)),
     recovery: Boolean(job.recovery),
+    recoveryRevision: job.recoveryRevision || null,
+    revisionRecovery: Boolean(job.revisionRecovery),
     recoveredFromExecutionId: job.recoveredFromExecutionId || null,
     terminal: ["completed", "completed-with-failures", "failed"].includes(job.status),
     updatedAt: job.updatedAt || job.startedAt,
@@ -394,6 +397,25 @@ function asyncDispatchPath(path) {
   return `${path}${path.includes("?") ? "&" : "?"}async=true`;
 }
 
+function asyncFailureDetails(asyncJob = {}) {
+  const payload = asyncJob?.payload && typeof asyncJob.payload === "object" ? asyncJob.payload : {};
+  const childJob = payload?.job && typeof payload.job === "object" ? payload.job : payload;
+  const childResult = childJob?.result && typeof childJob.result === "object"
+    ? childJob.result
+    : (payload?.result && typeof payload.result === "object" ? payload.result : {});
+  const childError = childJob?.error && typeof childJob.error === "object" ? childJob.error : {};
+  const error = normalise(childResult?.error || childError?.message || payload?.error);
+  const reason = normalise(childResult?.reason || childError?.code || payload?.reason);
+  const status = Number(childResult?.statusCode || childError?.status || payload?.statusCode || 0);
+  return {
+    ...(error ? { error } : {}),
+    ...(reason ? { reason } : {}),
+    ...(normalise(childError?.code) ? { errorCode: normalise(childError.code) } : {}),
+    ...(Number.isInteger(status) && status >= 400 && status <= 599 ? { status } : {}),
+    ...(childResult?.quarantined === true ? { quarantined: true } : {}),
+  };
+}
+
 async function runInternalTask([name, path, body = {}, feature = null, addWeekStartDate = false], requestContext, job) {
   if (feature === "newsletter" && !operationNewsletterEnabled()) {
     return { name, path, ok: true, skipped: true, reason: "newsletter-disabled-until-brevo-ready" };
@@ -489,12 +511,13 @@ async function runInternalTask([name, path, body = {}, feature = null, addWeekSt
       });
 
       const taskOutcome = assessAsyncTaskOutcome(path, asyncJob);
+      const failureDetails = taskOutcome.ok ? {} : asyncFailureDetails(asyncJob);
 
       return {
         name,
         path,
         ok: taskOutcome.ok,
-        status: taskOutcome.ok ? 200 : 500,
+        status: taskOutcome.ok ? 200 : (failureDetails.status || 500),
         acceptedStatus: response.status,
         result,
         sessionId,
@@ -506,6 +529,7 @@ async function runInternalTask([name, path, body = {}, feature = null, addWeekSt
         warning: taskOutcome.warning || undefined,
         nonRetryablePartialPublication: taskOutcome.nonRetryablePartialPublication || undefined,
         publicationIssues: taskOutcome.issues || undefined,
+        ...failureDetails,
       };
     }
 
@@ -742,7 +766,13 @@ async function executeOperationWindow(job, tasks, req) {
     attempt: job.attempt,
     status: job.status,
     failures: job.failures,
-    failedTasks: job.results.filter((item) => item?.ok === false).map((item) => item.name),
+    failedTasks: job.results.filter((item) => item?.ok === false).map((item) => ({
+      name: item.name,
+      status: item.status || null,
+      reason: item.reason || null,
+      error: item.error || null,
+      errorCode: item.errorCode || null,
+    })),
   });
 }
 
@@ -792,6 +822,7 @@ router.post("/run/:window", async (req, res, next) => {
       maxAttempts,
       recoveryCooldownMs,
       staleAfterMs,
+      recoveryRevision: OPERATION_RECOVERY_REVISION,
     });
     if (!durableClaim.claimed) {
       if (durableClaim.receipt) operationJobs.set(id, durableClaim.receipt);
@@ -831,6 +862,8 @@ router.post("/run/:window", async (req, res, next) => {
       executionId,
       attempt: durableClaim.receipt?.attempt || 1,
       recovery: Boolean(durableClaim.receipt?.recovery),
+      recoveryRevision: durableClaim.receipt?.recoveryRevision || null,
+      revisionRecovery: Boolean(durableClaim.receipt?.revisionRecovery),
       recoveredFromExecutionId: durableClaim.receipt?.recoveredFromExecutionId || null,
       window: windowName,
       status: "accepted",
@@ -850,6 +883,8 @@ router.post("/run/:window", async (req, res, next) => {
       window: windowName,
       attempt: job.attempt,
       recovery: job.recovery,
+      recoveryRevision: job.recoveryRevision,
+      revisionRecovery: job.revisionRecovery,
     });
 
     void executeOperationWindow(job, tasks, req).catch((error) => {
