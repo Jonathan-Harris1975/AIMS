@@ -1899,11 +1899,21 @@ export async function buildAndScheduleDailyLane(laneKey, options = {}) {
 // ------------------------------------------------------------
 // Blog daily briefing repost (Zernio has no native RSS import)
 // ------------------------------------------------------------
-// Reposts the newest not-yet-used item from the blog service's public
+// Reposts only today's not-yet-used item from the blog service's public
 // "social media blog" RSS feed. Unlike the other lanes, the post text
 // comes directly from the feed item (already written for social use by
 // the blog service) rather than being generated fresh here, so this
 // skips the AI content-generation and review-council gate steps.
+function blogRssItemMatchesPublishDate(item = {}, publishDate = "") {
+  const expected = String(publishDate || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(expected)) return false;
+  const linkDate = String(item?.link || "").match(/\/(\d{4}-\d{2}-\d{2})-daily-ai-briefing(?:\/|$)/i)?.[1];
+  if (linkDate) return linkDate === expected;
+  const publishedMs = Date.parse(item?.pubDate || "");
+  return Number.isFinite(publishedMs)
+    && zonedDateString(new Date(publishedMs), DEFAULT_TIMEZONE) === expected;
+}
+
 export async function buildAndScheduleBlogRssDaily(options = {}) {
   const publishDate = options.publishDate || zonedDateString(new Date(), DEFAULT_TIMEZONE);
   let scheduledDateTime = options.scheduledDateTime || toScheduledDateTime(publishDate, BLOG_RSS_CONFIG.publishTime);
@@ -1912,14 +1922,38 @@ export async function buildAndScheduleBlogRssDaily(options = {}) {
   const apiKey = resolveSchedulerApiKey(options);
   const dryRun = Boolean(options.dryRun);
 
-  const { url: feedUrl, items } = await fetchBlogRssItems({});
-  const unused = items.filter((item) => !hasRecentSocialSource(item));
-  const candidates = unused.length ? unused : items;
-  const article = candidates[0];
+  const { url: feedUrl, items } = await fetchBlogRssItems({ cacheBustKey: `${publishDate}-${Date.now()}` });
+  const currentItems = items.filter((item) => blogRssItemMatchesPublishDate(item, publishDate));
+  const article = currentItems.find((item) => !hasRecentSocialSource(item))
+    || (options.force ? currentItems[0] : null);
 
   if (!article) {
-    const err = new Error(`No usable items found in the blog social RSS feed (${feedUrl}).`);
-    err.statusCode = 502;
+    if (currentItems.length) {
+      info("zernio.blogRss.duplicate_prevented", {
+        publishDate,
+        scheduledDateTime,
+        reason: "current-day-blog-item-already-used",
+        feedUrl,
+      });
+      return {
+        ok: true,
+        lane: "blog-rss",
+        publishDate,
+        scheduledDateTime,
+        dryRun: false,
+        scheduled: false,
+        duplicatePrevented: true,
+        reason: "current-day-blog-item-already-used",
+        profile: { id: null, name: profileName },
+        warnings: ["Today's social-blog item has already been handed to Zernio; no duplicate was created."],
+        post: null,
+        source: { title: currentItems[0].title, link: currentItems[0].link, feedUrl },
+        zernioResponse: null,
+      };
+    }
+    const err = new Error(`The current daily social-blog item for ${publishDate} is not yet visible in the RSS feed (${feedUrl}).`);
+    err.statusCode = 424;
+    err.code = "zernio-blog-rss-current-day-not-ready";
     throw err;
   }
 

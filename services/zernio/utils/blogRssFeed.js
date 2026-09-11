@@ -80,13 +80,20 @@ export function getBlogRssFeedUrl() {
   return trim(process.env.ZERNIO_BLOG_RSS_FEED_URL, DEFAULT_FEED_URL);
 }
 
-export async function fetchBlogRssItems({ timeoutMs } = {}) {
+export async function fetchBlogRssItems({ timeoutMs, cacheBustKey = "" } = {}) {
   const url = getBlogRssFeedUrl();
   const timeout = Number(timeoutMs || process.env.ZERNIO_BLOG_RSS_FETCH_TIMEOUT_MS || 15000);
+  const requestUrl = new URL(url);
+  if (trim(cacheBustKey)) requestUrl.searchParams.set("_aims", trim(cacheBustKey));
 
-  const response = await fetchWithTimeout(url, {
+  const response = await fetchWithTimeout(requestUrl, {
     timeout,
-    headers: { accept: FEED_ACCEPT_HEADER },
+    cache: "no-store",
+    headers: {
+      accept: FEED_ACCEPT_HEADER,
+      "cache-control": "no-cache, no-store, max-age=0",
+      pragma: "no-cache",
+    },
   });
 
   if (!response.ok) {
