@@ -23,7 +23,7 @@ function sanitiseJobError(err) {
       name: err.name,
       message: err.message,
       code: err.code,
-      status: err.status,
+      status: err.status ?? err.statusCode,
     };
   }
 
@@ -32,7 +32,7 @@ function sanitiseJobError(err) {
       name: err.name,
       message: err.message || String(err),
       code: err.code,
-      status: err.status,
+      status: err.status ?? err.statusCode,
     };
   }
 
