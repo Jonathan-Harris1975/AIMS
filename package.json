@@ -38,7 +38,7 @@
     "cors": "^2.8.6",
     "dotenv": "^16.6.1",
     "express": "^5.2.1",
-    "fast-xml-parser": "^5.2.5",
+    "fast-xml-parser": "^5.11.1",
     "googleapis": "^176.0.0",
     "node-fetch": "^3.3.2",
     "p-limit": "^7.3.1",
