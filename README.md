@@ -95,6 +95,10 @@ Accepted podcast contributions are advanced automatically only after RSS publica
 
 AIMS orchestrates the final website and content audit artefacts and can hand exact R2 JSON keys to RAMS for governed remediation. The content master audit includes editorial, authority, platform, podcast, eBook, artwork and commercial checks. Production evidence is still required before a final content-system audit can be considered complete.
 
+## Model governance
+
+AIMS uses advisory model-spend controls: model choice, expert justification, reported cost and fallback position are recorded, but requests are never stopped by a monetary threshold. The authenticated `/ops/model-governance/apply` receiver can accept future monthly HIVE AI Council assignments, and `/ops/model-governance/status` exposes the active AIMS record. HIVE scheduling and cross-repository coordination are intentionally outside this repository. See [Model governance](docs/MODEL_GOVERNANCE.md).
+
 ## Local verification
 
 ```bash
@@ -124,6 +128,7 @@ FFmpeg and FFprobe are required for audio/media workflows. Production durable-st
 - [Comms Hub](services/comms-hub/README.md)
 - [Newsletter](services/newsletter/README.md)
 - [Operations](services/ops/README.md)
+- [Model governance](docs/MODEL_GOVERNANCE.md)
 - [Outreach](services/outreach/README.md)
 - [Podcast](services/podcast/README.md)
 - [RSS feed creator](services/rss-feed-creator/README.md)

@@ -60,10 +60,10 @@ const claudeSonnet5 = provider(
   [...SHARED_OPENROUTER_KEY, "OPENROUTER_API_KEY_CLAUDE_SONNET_5", "OPENROUTER_API_KEY_ANTHROPIC_SONNET_5"]
 );
 
-const claudeOpus47 = provider(
-  "claudeOpus47",
-  ["OPENROUTER_CLAUDE_OPUS_4_7", "OPENROUTER_ANTHROPIC_OPUS_4_7"],
-  [...SHARED_OPENROUTER_KEY, "OPENROUTER_API_KEY_CLAUDE_OPUS_4_7", "OPENROUTER_API_KEY_ANTHROPIC_OPUS_4_7"]
+const claudeOpus = provider(
+  "claudeOpus",
+  ["OPENROUTER_CLAUDE_OPUS", "OPENROUTER_CLAUDE_OPUS_4_7", "OPENROUTER_ANTHROPIC_OPUS_4_7"],
+  [...SHARED_OPENROUTER_KEY, "OPENROUTER_API_KEY_CLAUDE_OPUS", "OPENROUTER_API_KEY_CLAUDE_OPUS_4_7", "OPENROUTER_API_KEY_ANTHROPIC_OPUS_4_7"]
 );
 
 const gpt56Sol = provider(
@@ -176,7 +176,9 @@ const modelRegistry = {
   anthropic46,
   google25FlashLite,
   claudeSonnet5,
-  claudeOpus47,
+  claudeOpus,
+  // Compatibility alias for callers that still inspect the historical ID.
+  claudeOpus47: claudeOpus,
   gpt56Sol,
   commsFreePrimary,
   commsFreeBackup,
@@ -228,10 +230,10 @@ export const aiConfig = {
     outro: routeChain(["fast", "standard", "fallback"], ["google25FlashLite", "gpt56Sol", "meta"]),
     scriptIntro: fixedRouteChain(["claudeSonnet5", "anthropic46", "highQuality", "standard", "gpt56Sol", "google25FlashLite", "meta"]),
     scriptMain: fixedRouteChain(["claudeSonnet5", "anthropic46", "highQuality", "standard", "gpt56Sol", "google25FlashLite"]),
-    scriptMainSynthesis: fixedRouteChain(["claudeSonnet5", "gpt56Sol", "claudeOpus47"]),
+    scriptMainSynthesis: fixedRouteChain(["claudeSonnet5", "gpt56Sol", "claudeOpus"]),
     scriptOutro: fixedRouteChain(["claudeSonnet5", "anthropic46", "highQuality", "standard", "gpt56Sol", "google25FlashLite", "meta"]),
     compose: routeChain(["highQuality", "standard", "fallback"], ["anthropic46", "gpt56Sol", "google25FlashLite"]),
-    editorialPass: fixedRouteChain(["claudeOpus47", "gpt56Sol", "claudeSonnet5"]),
+    editorialPass: fixedRouteChain(["claudeOpus", "gpt56Sol", "claudeSonnet5"]),
     editAndFormat: routeChain(["standard", "fast", "fallback"], ["gpt56Sol", "google25FlashLite"]),
     metadata: routeChain(["summary", "json", "fast", "fallback"], ["google25FlashLite", "gpt56Sol"]),
     podcastHelper: routeChain(["summary", "fast", "fallback"], ["google25FlashLite", "gpt56Sol", "meta"]),
@@ -264,7 +266,7 @@ export const aiConfig = {
     // GPT-5.6 Sol provides an independent premium fallback, while Gemini handles
     // low-latency subject work. Each route retains provider
     // failover through the shared resilient requester.
-    newsletterCompose: routeChain(["newsletterEditorial", "highQuality"], ["gpt56Sol", "claudeOpus47"]),
+    newsletterCompose: routeChain(["newsletterEditorial", "highQuality"], ["gpt56Sol", "claudeOpus"]),
     newsletterSubject: routeChain(["fast", "summary", "highQuality"], ["google25FlashLite", "gpt56Sol"]),
     newsletterFactCheck: routeChain(["audit", "highQuality"], ["claudeSonnet5", "anthropic46"]),
     newsletterVoiceReview: routeChain(["newsletterEditorial", "highQuality"], ["gpt56Sol", "anthropic46"]),
@@ -272,7 +274,7 @@ export const aiConfig = {
     newsletterCouncilChair: routeChain(["audit", "highQuality"], ["claudeSonnet5", "anthropic46"]),
     newsletterHeroPrompt: routeChain(["summary", "fast", "fallback"], ["meta", "google25FlashLite"]),
     // Comms Hub: routine communications are free-first and privacy-gated.
-    // Production order is GLM 5.2 Free -> Dots3-Note Free -> paid economy safety net.
+    // Production order is GLM 5.2 Free -> OpenRouter Free -> paid economy safety net.
     // An optional third free fallback is included only when explicitly configured.
     commsHubTriage: routeChain(commsRoutineProviderIds, []),
     commsHubModeration: routeChain(commsRoutineProviderIds, []),
