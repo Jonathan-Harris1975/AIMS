@@ -4,31 +4,33 @@
 
 This inventory makes the runtime configuration contract auditable without duplicating secret values. `.env.example` and `env.template` remain the curated operator templates; this file records every production `process.env` dependency and its source locations.
 
-- Runtime variables referenced in production code: **505**
-- Present in curated templates: **392**
+- Runtime variables referenced in production code: **507**
+- Present in curated templates: **394**
 - Not present in curated templates: **113**
 
 | Variable | Curated template | Production references |
 | --- | --- | --- |
 | `AIMS_ALLOW_UNAUTHENTICATED_DEV` | Yes | services/shared/middleware/suiteAuth.js:86 |
-| `AIMS_API_KEY` | Yes | server.js:196<br>services/ops/index.js:424<br>services/shared/middleware/suiteAuth.js:55 |
+| `AIMS_API_KEY` | Yes | server.js:196<br>services/ops/index.js:427<br>services/shared/middleware/suiteAuth.js:55 |
 | `AIMS_BUSY_CONCURRENCY_THRESHOLD` | No | services/shared/utils/lifecycle.js:15 |
 | `AIMS_FAILURE_ALERT_THRESHOLD` | Yes | services/shared/utils/operationalExcellence.js:5 |
-| `AIMS_INTERNAL_BASE_URL` | Yes | services/ops/index.js:423 |
-| `AIMS_OPERATION_ASYNC_JOB_TIMEOUT_MS` | Yes | services/ops/index.js:506 |
-| `AIMS_OPERATION_ASYNC_MAX_POLL_ERRORS` | No | services/ops/index.js:508 |
-| `AIMS_OPERATION_ASYNC_NOT_FOUND_GRACE_MS` | No | services/ops/index.js:509 |
-| `AIMS_OPERATION_ASYNC_POLL_INTERVAL_MS` | Yes | services/ops/index.js:505 |
-| `AIMS_OPERATION_ASYNC_REQUEST_TIMEOUT_MS` | Yes | services/ops/index.js:507 |
-| `AIMS_OPERATION_DISPATCH_TIMEOUT_MS` | No | services/ops/index.js:443 |
-| `AIMS_OPERATION_FRIDAY_PM_DELAY_MS` | Yes | services/ops/index.js:141 |
-| `AIMS_OPERATION_TASK_TIMEOUT_MS` | Yes | services/ops/index.js:444 |
+| `AIMS_INTERNAL_BASE_URL` | Yes | services/ops/index.js:426 |
+| `AIMS_OPERATION_ASYNC_JOB_TIMEOUT_MS` | Yes | services/ops/index.js:509 |
+| `AIMS_OPERATION_ASYNC_MAX_POLL_ERRORS` | No | services/ops/index.js:511 |
+| `AIMS_OPERATION_ASYNC_NOT_FOUND_GRACE_MS` | No | services/ops/index.js:512 |
+| `AIMS_OPERATION_ASYNC_POLL_INTERVAL_MS` | Yes | services/ops/index.js:508 |
+| `AIMS_OPERATION_ASYNC_REQUEST_TIMEOUT_MS` | Yes | services/ops/index.js:510 |
+| `AIMS_OPERATION_DISPATCH_TIMEOUT_MS` | No | services/ops/index.js:446 |
+| `AIMS_OPERATION_FRIDAY_PM_DELAY_MS` | Yes | services/ops/index.js:144 |
+| `AIMS_OPERATION_TASK_TIMEOUT_MS` | Yes | services/ops/index.js:447 |
 | `AIMS_STARTUP_GRACE_MS` | No | services/shared/utils/lifecycle.js:14 |
+| `AI_MODEL_BLOCKLIST` | Yes | services/shared/utils/ai-service.js:85 |
 | `AI_RETRY_BASE_MS` | Yes | audits/utils/seoAeoGeoAnalysis.js:1932 |
+| `AI_STICKY_PROVIDER_ROUTING` | Yes | services/shared/utils/ai-service.js:77 |
 | `AI_SUITE_API_KEY` | Yes | server.js:196<br>server.js:197<br>services/shared/middleware/suiteAuth.js:55 |
 | `AI_SUITE_AUDIT_CALLBACK_TOKEN` | Yes | audits/utils/callbackAuth.js:9<br>audits/utils/orchestrator.js:147<br>services/shared/middleware/suiteAuth.js:59 |
 | `AI_TIMEOUT` | Yes | services/artwork/createPodcastArtwork.js:14<br>services/artwork/createQuizArtwork.js:11<br>services/blotato/utils/newsShortsService.js:1313<br>services/script/utils/getSponsor.js:38<br>services/tts/utils/mergeProcessor.js:26 |
-| `AI_USAGE_LOG_ENABLED` | Yes | services/shared/utils/ai-service.js:221 |
+| `AI_USAGE_LOG_ENABLED` | Yes | services/shared/utils/ai-service.js:234 |
 | `ALLOW_EPHEMERAL_STATE` | Yes | scripts/performanceGate.js:10<br>scripts/startupCheck.js:35<br>server.js:183<br>services/outreach/services/batchService.js:45<br>services/shared/utils/stateFile.js:74 |
 | `API_HUNTER_KEY` | Yes | services/outreach/services/outreachCore.js:15 |
 | `API_KEY_PODCAST_INDEX` | Yes | services/shared/utils/podcastIndexClient.js:31 |
@@ -39,9 +41,9 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `API_ZERO_KEY` | Yes | services/outreach/services/zeroBounceBatch.js:21 |
 | `APP_ENV` | No | scripts/performanceGate.js:6<br>server.js:393 |
 | `APP_STATE_DIR` | Yes | services/shared/utils/stateFile.js:9 |
-| `APP_TITLE` | Yes | ai-config.js:300<br>services/artwork/utils/artwork.js:292 |
+| `APP_TITLE` | Yes | ai-config.js:302<br>services/artwork/utils/artwork.js:292 |
 | `APP_TMP_DIR` | Yes | scripts/tempStorage.js:10<br>services/blotato/utils/renderedVideoQa.js:305<br>services/shared/utils/stateFile.js:10<br>services/tts/utils/editingProcessor.js:22<br>services/tts/utils/mergeProcessor.js:14<br>services/tts/utils/podcastProcessor.js:56 |
-| `APP_URL` | Yes | ai-config.js:299<br>audits/utils/orchestrator.js:143<br>services/artwork/utils/artwork.js:291<br>services/rss-feed-creator/utils/feedGenerator.js:32 |
+| `APP_URL` | Yes | ai-config.js:301<br>audits/utils/orchestrator.js:143<br>services/artwork/utils/artwork.js:291<br>services/rss-feed-creator/utils/feedGenerator.js:32 |
 | `APP_VERSION` | No | server.js:392<br>server.js:411<br>services/shared/utils/operationalExcellence.js:106<br>services/shared/utils/operationalExcellence.js:147 |
 | `ARTWORK_CAPABILITY_CACHE_MS` | No | services/artwork/utils/openrouterImageCapabilities.js:21 |
 | `ARTWORK_CAPABILITY_DISCOVERY_ENABLED` | No | services/artwork/utils/openrouterImageCapabilities.js:55 |
@@ -216,8 +218,8 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `COMMS_HUB_FORM_SMART_PROCESSING_ENABLED` | Yes | services/comms-hub/routes/index.js:131 |
 | `COMMS_HUB_MAX_WEBHOOK_BYTES` | Yes | server.js:254<br>server.js:344 |
 | `COMMS_HUB_MONTH_END_ARCHIVE_ENABLED` | Yes | services/comms-hub/routes/index.js:142 |
-| `COMMS_HUB_OPENROUTER_DATA_COLLECTION` | Yes | services/shared/utils/ai-service.js:185 |
-| `COMMS_HUB_OPENROUTER_ZDR_ONLY` | Yes | services/shared/utils/ai-service.js:192 |
+| `COMMS_HUB_OPENROUTER_DATA_COLLECTION` | Yes | services/shared/utils/ai-service.js:198 |
+| `COMMS_HUB_OPENROUTER_ZDR_ONLY` | Yes | services/shared/utils/ai-service.js:205 |
 | `COMMS_HUB_RETENTION_WORKER_ENABLED` | Yes | services/comms-hub/routes/index.js:141 |
 | `COMMS_HUB_SMART_RESPONSE_ENABLED` | Yes | services/comms-hub/routes/index.js:129 |
 | `CONTENT_MASTER_COUNCIL_MAX_RETRIES` | Yes | audits/utils/contentMasterCouncil.js:145 |
@@ -276,21 +278,21 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `ON_BRAND_AUDIT_TEMPERATURE` | No | audits/utils/onBrandAudit.js:14 |
 | `ON_BRAND_AUDIT_TIMEOUT_MS` | No | audits/utils/onBrandAudit.js:538<br>audits/utils/onBrandAudit.js:553 |
 | `OPENPAGERANK_API_BASE` | No | services/outreach/services/outreachCore.js:138 |
-| `OPENROUTER_API_BASE` | Yes | services/artwork/utils/artwork.js:30<br>services/shared/utils/ai-service.js:13 |
+| `OPENROUTER_API_BASE` | Yes | services/artwork/utils/artwork.js:30<br>services/shared/utils/ai-service.js:14 |
 | `OPENROUTER_API_KEY` | Yes | server.js:185 |
-| `OPENROUTER_APP_NAME` | Yes | ai-config.js:300<br>services/artwork/utils/artwork.js:292 |
-| `OPENROUTER_BASE_URL` | Yes | services/artwork/utils/artwork.js:30<br>services/shared/utils/ai-service.js:13 |
-| `OPENROUTER_DATA_COLLECTION` | No | services/shared/utils/ai-service.js:188 |
-| `OPENROUTER_ENABLE_FALLBACKS` | Yes | services/shared/utils/ai-service.js:174 |
-| `OPENROUTER_PROVIDER_IGNORE` | No | services/shared/utils/ai-service.js:171 |
-| `OPENROUTER_PROVIDER_ONLY` | No | services/shared/utils/ai-service.js:168 |
-| `OPENROUTER_PROVIDER_ORDER` | No | services/shared/utils/ai-service.js:165 |
-| `OPENROUTER_REASONING_EFFORT` | No | services/shared/utils/ai-service.js:212 |
-| `OPENROUTER_REQUIRE_PARAMETERS` | No | services/shared/utils/ai-service.js:177 |
-| `OPENROUTER_REQUIRE_PARAMETERS_FOR_JSON` | Yes | services/shared/utils/ai-service.js:178 |
-| `OPENROUTER_SERVICE_TIER` | Yes | services/shared/utils/ai-service.js:200 |
-| `OPENROUTER_SITE_URL` | Yes | ai-config.js:299<br>services/artwork/utils/artwork.js:291 |
-| `OPENROUTER_SORT_BY` | Yes | services/shared/utils/ai-service.js:160 |
+| `OPENROUTER_APP_NAME` | Yes | ai-config.js:302<br>services/artwork/utils/artwork.js:292 |
+| `OPENROUTER_BASE_URL` | Yes | services/artwork/utils/artwork.js:30<br>services/shared/utils/ai-service.js:14 |
+| `OPENROUTER_DATA_COLLECTION` | No | services/shared/utils/ai-service.js:201 |
+| `OPENROUTER_ENABLE_FALLBACKS` | Yes | services/shared/utils/ai-service.js:187 |
+| `OPENROUTER_PROVIDER_IGNORE` | No | services/shared/utils/ai-service.js:184 |
+| `OPENROUTER_PROVIDER_ONLY` | No | services/shared/utils/ai-service.js:181 |
+| `OPENROUTER_PROVIDER_ORDER` | No | services/shared/utils/ai-service.js:178 |
+| `OPENROUTER_REASONING_EFFORT` | No | services/shared/utils/ai-service.js:225 |
+| `OPENROUTER_REQUIRE_PARAMETERS` | No | services/shared/utils/ai-service.js:190 |
+| `OPENROUTER_REQUIRE_PARAMETERS_FOR_JSON` | Yes | services/shared/utils/ai-service.js:191 |
+| `OPENROUTER_SERVICE_TIER` | Yes | services/shared/utils/ai-service.js:213 |
+| `OPENROUTER_SITE_URL` | Yes | ai-config.js:301<br>services/artwork/utils/artwork.js:291 |
+| `OPENROUTER_SORT_BY` | Yes | services/shared/utils/ai-service.js:173 |
 | `OPS_ALERT_TIMEOUT_MS` | Yes | services/shared/utils/operationalExcellence.js:6 |
 | `OUTREACH_AUTOMATION_ENABLED` | Yes | services/outreach/services/outreachService.js:32 |
 | `OUTREACH_BATCH_CYCLE` | Yes | services/outreach/services/batchService.js:151 |
@@ -327,9 +329,9 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `PODCAST_LINK` | Yes | services/rss-feed-creator/utils/feedGenerator.js:33 |
 | `PODCAST_MASTER_TMP_DIR` | Yes | services/tts/utils/podcastProcessor.js:56 |
 | `PODCAST_MERGE_TMP_DIR` | Yes | services/tts/utils/mergeProcessor.js:14 |
-| `PODCAST_REPAIR_MAX_TOKENS` | Yes | services/script/utils/orchestrator.js:88 |
-| `PODCAST_REPAIR_REASONING_EFFORT` | Yes | services/script/utils/orchestrator.js:90 |
-| `PODCAST_REPAIR_TIMEOUT_MS` | Yes | services/script/utils/orchestrator.js:89 |
+| `PODCAST_REPAIR_MAX_TOKENS` | Yes | services/script/utils/orchestrator.js:82 |
+| `PODCAST_REPAIR_REASONING_EFFORT` | Yes | services/script/utils/orchestrator.js:84 |
+| `PODCAST_REPAIR_TIMEOUT_MS` | Yes | services/script/utils/orchestrator.js:83 |
 | `PODCAST_RSS_EP` | Yes | services/script/utils/episodeCounter.js:17<br>services/script/utils/episodeCounter.js:60 |
 | `PODCAST_RSS_FEED_URL` | Yes | services/zernio/utils/config.js:215<br>services/zernio/utils/podcastRssFeed.js:56 |
 | `PODCAST_SPOTIFY_URL` | No | services/zernio/utils/config.js:216 |
@@ -338,12 +340,12 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `PODCAST_SYNTHESIS_TIMEOUT_MS` | Yes | services/script/utils/mainChunker.js:206 |
 | `PODCAST_TARGET_MINS` | No | services/script/utils/durationCalculator.js:77 |
 | `PODCAST_TARGET_MINUTES` | Yes | services/script/utils/durationCalculator.js:78 |
-| `PODCAST_TRANSCRIPT_HARD_MAX_SENTENCE_WORDS` | Yes | services/script/utils/orchestrator.js:112 |
-| `PODCAST_TRANSCRIPT_HTML_BASE_URL` | Yes | scripts/backfill-transcript-html.js:80<br>scripts/backfill-transcript-html.js:131<br>services/script/utils/orchestrator.js:397<br>services/tts/utils/podcastProcessor.js:152 |
-| `PODCAST_TRANSCRIPT_MAX_SENTENCE_WORDS` | Yes | services/script/utils/editAndFormat.js:197<br>services/script/utils/orchestrator.js:111<br>services/script/utils/orchestrator.js:314<br>services/script/utils/scriptValidation.js:293 |
+| `PODCAST_TRANSCRIPT_HARD_MAX_SENTENCE_WORDS` | Yes | services/script/utils/orchestrator.js:99 |
+| `PODCAST_TRANSCRIPT_HTML_BASE_URL` | Yes | scripts/backfill-transcript-html.js:80<br>scripts/backfill-transcript-html.js:131<br>services/script/utils/orchestrator.js:384<br>services/tts/utils/podcastProcessor.js:152 |
+| `PODCAST_TRANSCRIPT_MAX_SENTENCE_WORDS` | Yes | services/script/utils/editAndFormat.js:184<br>services/script/utils/orchestrator.js:98<br>services/script/utils/orchestrator.js:301<br>services/script/utils/scriptValidation.js:293 |
 | `PODCAST_TRANSCRIPT_MIN_SOURCE_TERMS` | No | services/script/utils/scriptValidation.js:390 |
 | `POLLY_VOICE_ID` | Yes | services/tts/utils/ttsProcessor.js:24 |
-| `PORT` | Yes | routes/podcast-pipeline.js:14<br>scripts/deploySmoke.js:3<br>scripts/startupCheck.js:67<br>server.js:481<br>services/ops/index.js:423 |
+| `PORT` | Yes | routes/podcast-pipeline.js:14<br>scripts/deploySmoke.js:3<br>scripts/startupCheck.js:67<br>server.js:481<br>services/ops/index.js:426 |
 | `QA_ALERT_WEBHOOK_URL` | Yes | config/thresholds.js:96 |
 | `R2_ACCESS_KEY_ID` | Yes | audits/utils/publishAuditArtifacts.js:62<br>scripts/startupCheck.js:69 |
 | `R2_BUCKET_ART` | Yes | services/artwork/utils/io.js:15 |
@@ -361,8 +363,8 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `R2_PUBLIC_BASE_URL_PODCAST` | Yes | scripts/backfill-transcript-html.js:85<br>services/tts/utils/io.js:12<br>services/tts/utils/orchestrator.js:17 |
 | `R2_PUBLIC_BASE_URL_RSS` | Yes | audits/utils/onBrandEvidence.js:455<br>services/blotato/utils/rssArticlePicker.js:84<br>services/blotato/utils/rssArticleSource.js:124<br>services/rss-feed-creator/utils/feedGenerator.js:36<br>services/rss-feed-creator/utils/feedGenerator.js:37 |
 | `R2_PUBLIC_BASE_URL_RSS_FEEDS` | No | audits/utils/onBrandEvidence.js:455 |
-| `R2_PUBLIC_BASE_URL_TRANSCRIPT` | Yes | scripts/backfill-transcript-html.js:78<br>scripts/backfill-transcript-html.js:83<br>scripts/backfill-transcript-html.js:134<br>services/script/utils/generateTranscriptHtml.js:248<br>services/script/utils/orchestrator.js:400<br>services/tts/utils/podcastProcessor.js:149<br>+1 more |
-| `R2_PUBLIC_BASE_URL_TRANSCRIPT_HTML` | Yes | scripts/backfill-transcript-html.js:81<br>scripts/backfill-transcript-html.js:132<br>services/script/utils/orchestrator.js:398<br>services/tts/utils/podcastProcessor.js:153 |
+| `R2_PUBLIC_BASE_URL_TRANSCRIPT` | Yes | scripts/backfill-transcript-html.js:78<br>scripts/backfill-transcript-html.js:83<br>scripts/backfill-transcript-html.js:134<br>services/script/utils/generateTranscriptHtml.js:248<br>services/script/utils/orchestrator.js:387<br>services/tts/utils/podcastProcessor.js:149<br>+1 more |
+| `R2_PUBLIC_BASE_URL_TRANSCRIPT_HTML` | Yes | scripts/backfill-transcript-html.js:81<br>scripts/backfill-transcript-html.js:132<br>services/script/utils/orchestrator.js:385<br>services/tts/utils/podcastProcessor.js:153 |
 | `R2_REGION` | Yes | audits/utils/publishAuditArtifacts.js:59 |
 | `R2_REQUEST_TIMEOUT_MS` | No | services/shared/utils/r2-client.js:116 |
 | `R2_RETRY_ATTEMPTS` | No | services/shared/utils/r2-client.js:117 |

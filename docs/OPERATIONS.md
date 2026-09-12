@@ -16,6 +16,8 @@ AIMS runs as one non-root Koyeb Web Service with durable R2-backed state and fai
 | `POST /ops/preflight` | AIMS bearer | Governed preflight checks before MAST/HIVE-triggered work. |
 | `POST /ops/warmup` | AIMS bearer | Warmup infrastructure for downstream workflows. |
 | `GET /ops/excellence` | AIMS bearer | Bounded production telemetry without prompts or secrets. |
+| `GET /ops/model-governance/status` | AIMS bearer | Active model assignments, council dates and advisory compliance findings. |
+| `POST /ops/model-governance/apply` | AIMS bearer | Persist approved AIMS model assignments from a council decision. |
 
 ## Koyeb deployment contract
 
@@ -77,6 +79,7 @@ curl -fsS https://<aims-service>/livez
 curl -fsS https://<aims-service>/readyz
 curl -fsS https://<aims-service>/ops/health
 curl -fsS -H "Authorization: Bearer $AIMS_API_KEY" https://<aims-service>/ops/excellence
+curl -fsS -H "Authorization: Bearer $AIMS_API_KEY" https://<aims-service>/ops/model-governance/status
 ```
 
 ## Partial-run recovery
