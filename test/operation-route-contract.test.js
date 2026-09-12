@@ -56,7 +56,9 @@ test("Friday podcast and operation status endpoints exist", () => {
 
 test("HIVE AI Council model-governance apply endpoint is mounted in ops", () => {
   assert.match(ops, /applyAimsModelGovernance/);
+  assert.match(ops, /getAimsModelGovernanceStatus/);
   assert.match(ops, /router\.post\("\/model-governance\/apply"/);
+  assert.match(ops, /router\.get\("\/model-governance\/status"/);
   assert.match(ops, /sourceRunId is required/);
-  assert.match(ops, /registry must be an object keyed by HIVE model category/);
+  assert.match(ops, /registry or assignments must be provided as an object/);
 });
