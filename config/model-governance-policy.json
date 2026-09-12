@@ -1,0 +1,105 @@
+{
+  "schemaVersion": "aims-model-spend-policy/v1",
+  "service": "AIMS",
+  "spendControl": {
+    "mode": "advisory",
+    "runtimeRequestBlocking": false,
+    "hardSpendCaps": false,
+    "purpose": "Prefer the least expensive model that meets the measured quality requirement while preserving service continuity."
+  },
+  "council": {
+    "owner": "HIVE AI Council",
+    "cadence": "monthly",
+    "consumer": "AIMS",
+    "schedulerOwnedHere": false,
+    "reviewStaleAfterDays": 45
+  },
+  "costTiers": [
+    {
+      "id": "free",
+      "use": "Validated opportunistic work where model variability is acceptable."
+    },
+    {
+      "id": "economy",
+      "use": "Routine extraction, classification, summaries, metadata and bounded structured output."
+    },
+    {
+      "id": "balanced",
+      "use": "Multi-step work that needs stronger reasoning or writing without an expert model."
+    },
+    {
+      "id": "expert",
+      "use": "High-consequence synthesis, specialist review or work that has failed a measured cheaper alternative."
+    },
+    {
+      "id": "unknown",
+      "use": "Temporary classification pending the next council review."
+    }
+  ],
+  "expertJustificationFields": [
+    "justificationId",
+    "task",
+    "complexity",
+    "cheaperAlternative",
+    "justification",
+    "evaluationEvidence",
+    "approvedBy"
+  ],
+  "assignmentEnvironmentVariables": [
+    "AI_MODEL_FAST",
+    "AI_MODEL_STANDARD",
+    "AI_MODEL_HIGH_QUALITY",
+    "AI_MODEL_FALLBACK",
+    "AI_MODEL_JSON",
+    "AI_MODEL_SUMMARY",
+    "AI_MODEL_AUDIT",
+    "AI_MODEL_IMAGE",
+    "OPENROUTER_FREE_PRIMARY_MODEL",
+    "OPENROUTER_ANTHROPIC_4_6",
+    "OPENROUTER_GOOGLE_2_5_flashlite",
+    "OPENROUTER_CLAUDE_SONNET_5",
+    "OPENROUTER_CLAUDE_OPUS",
+    "OPENROUTER_CLAUDE_OPUS_4_7",
+    "OPENROUTER_GPT_5_6_SOL",
+    "OPENROUTER_META",
+    "OPENROUTER_ART",
+    "OPENROUTER_ART_BACKUP",
+    "BLOTATO_SCRIPT_MODEL",
+    "BLOTATO_NEWS_SCRIPT_MODEL",
+    "OPENROUTER_BLOTATO_SCRIPT_MODEL",
+    "COMMS_HUB_MODEL_FREE_PRIMARY",
+    "COMMS_HUB_MODEL_FREE_BACKUP",
+    "COMMS_HUB_MODEL_FREE_FALLBACK",
+    "COMMS_HUB_MODEL_PAID_ECONOMY",
+    "COMMS_HUB_MODEL_PAID_PRIMARY",
+    "COMMS_HUB_MODEL_PAID_BACKUP",
+    "COMMS_HUB_MODEL_PAID_FALLBACK",
+    "OUTREACH_ARTICLE_MODEL",
+    "OUTREACH_PITCH_MODEL",
+    "OUTREACH_REPLY_MODEL",
+    "OUTREACH_ARTICLE_REVIEW_MODEL",
+    "OUTREACH_ARTICLE_FALLBACK_MODEL",
+    "NEWSLETTER_MODEL_EDITORIAL"
+  ],
+  "modelTierSignals": {
+    "free": [
+      "openrouter/free",
+      ":free"
+    ],
+    "economy": [
+      "gpt-oss-20b",
+      "gpt-5.6-luna",
+      "flash-lite",
+      "llama-4-scout"
+    ],
+    "balanced": [
+      "gpt-5.6-terra"
+    ],
+    "expert": [
+      "claude-sonnet",
+      "claude-opus",
+      "gpt-5.6-sol",
+      "gpt-6-astra"
+    ]
+  }
+}
