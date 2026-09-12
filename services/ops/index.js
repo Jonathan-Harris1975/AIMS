@@ -1,7 +1,10 @@
 import crypto from "node:crypto";
 import express from "express";
 import { getOperationalExcellenceSnapshot } from "../shared/utils/operationalExcellence.js";
-import { applyAimsModelGovernance } from "../shared/utils/modelGovernance.js";
+import {
+  applyAimsModelGovernance,
+  getAimsModelGovernanceStatus,
+} from "../shared/utils/modelGovernance.js";
 import { assessAsyncTaskOutcome, extractAsyncStatusUrl, waitForAsyncOperation } from "./asyncOperation.js";
 import { getWebsiteAuditReadiness } from "../../audits/utils/websiteAuditReadiness.js";
 import {
@@ -938,12 +941,15 @@ router.get("/jobs/:id", async (req, res, next) => {
 router.post("/model-governance/apply", async (req, res, next) => {
   try {
     const registry = req.body?.registry;
+    const assignments = req.body?.assignments;
     const sourceRunId = normalise(req.body?.sourceRunId);
+    const hasRegistry = registry && typeof registry === "object" && !Array.isArray(registry);
+    const hasAssignments = assignments && typeof assignments === "object" && !Array.isArray(assignments);
 
-    if (!registry || typeof registry !== "object" || Array.isArray(registry)) {
+    if (!hasRegistry && !hasAssignments) {
       return res.status(400).json({
         ok: false,
-        error: "registry must be an object keyed by HIVE model category",
+        error: "registry or assignments must be provided as an object",
       });
     }
     if (!sourceRunId) {
@@ -953,7 +959,16 @@ router.post("/model-governance/apply", async (req, res, next) => {
       });
     }
 
-    const result = await applyAimsModelGovernance({ registry, sourceRunId });
+    const result = await applyAimsModelGovernance({
+      registry: hasRegistry ? registry : {},
+      assignments: hasAssignments ? assignments : {},
+      decisions: req.body?.decisions,
+      retiringModels: req.body?.retiringModels,
+      sourceRunId,
+      councilDate: req.body?.councilDate,
+      catalogueCheckedAt: req.body?.catalogueCheckedAt,
+      nextReviewDueAt: req.body?.nextReviewDueAt,
+    });
     return res.status(200).json(result);
   } catch (error) {
     warn("model-governance.aims.apply-failed", {
@@ -962,6 +977,10 @@ router.post("/model-governance/apply", async (req, res, next) => {
     });
     return next(error);
   }
+});
+
+router.get("/model-governance/status", (_req, res) => {
+  res.status(200).json(getAimsModelGovernanceStatus());
 });
 
 router.get("/health", sendStage("health"));
