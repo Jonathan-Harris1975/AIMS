@@ -8,6 +8,7 @@ import { safeRouteLog } from "../../../logger.js";
 import { info, error as logError } from "../../../logger.js";
 import { recordProviderOutcome } from "./operationalExcellence.js";
 import { compressForOpenRouter } from "./headroom.js";
+import { getAimsModelSpendContext } from "./modelGovernance.js";
 
 function getOpenRouterBaseUrl() {
   return process.env.OPENROUTER_BASE_URL || process.env.OPENROUTER_API_BASE || "https://openrouter.ai/api/v1";
@@ -29,8 +30,8 @@ const DEFAULT_MAX_TOKENS = finiteEnvNumber("AI_MAX_TOKENS", 4096, { min: 1, inte
 const DEFAULT_TEMPERATURE = finiteEnvNumber("AI_TEMPERATURE", aiConfig?.commonParams?.temperature ?? 0.7, { min: 0, max: 2 });
 const DEFAULT_TIMEOUT_MS = finiteEnvNumber("AI_TIMEOUT", aiConfig?.commonParams?.timeout ?? 90000, { min: 1, integer: true });
 const DEFAULT_TOP_P = finiteEnvNumber("AI_TOP_P", aiConfig?.commonParams?.top_p ?? 0.9, { min: 0, max: 1 });
-// Retries are deliberately configurable. Do not impose a hidden minimum: a
-// production operator must be able to cap paid retries when budget is tight.
+// Retries are deliberately configurable for latency and reliability. This is
+// an operational attempt limit, not a monetary spend cut-off.
 const MAX_RETRIES = finiteEnvNumber("AI_MAX_RETRIES", 4, { min: 0, integer: true });
 const RETRY_BASE_MS = finiteEnvNumber("AI_RETRY_BASE_MS", 750, { min: 0, integer: true });
 const EMPTY_COMPLETION_RETRIES_PER_PROVIDER = finiteEnvNumber("AI_EMPTY_COMPLETION_RETRIES_PER_PROVIDER", 1, { min: 0, integer: true });
@@ -71,14 +72,25 @@ function resolveRouteKey(routeName) {
 function getProviderChainForRoute(routeKey) {
   const chain = aiConfig?.routeModels?.[routeKey];
   if (!Array.isArray(chain) || chain.length === 0) throw new Error(`No model route defined for: ${routeKey}`);
+  // Do not let one successful expensive fallback silently become the next
+  // request's primary. Operators may temporarily opt in during an incident.
+  if (parseBoolean(process.env.AI_STICKY_PROVIDER_ROUTING, false) !== true) return chain;
   const cached = __lastSuccessProvider.get(routeKey);
   if (cached && chain.includes(cached)) return [cached, ...chain.filter((provider) => provider !== cached)];
   return chain;
 }
 
-function isRetiredModel(value) {
+function isLocallyBlockedModel(value) {
   const model = String(value || "").trim();
-  return /^deepseek\//i.test(model) || /^openai\/gpt-5\.6-luna$/i.test(model);
+  const configured = process.env.AI_MODEL_BLOCKLIST;
+  const patterns = parseCsv(configured === undefined ? "deepseek/*" : configured);
+  return patterns.some((pattern) => {
+    const cleaned = pattern.toLowerCase();
+    const candidate = model.toLowerCase();
+    return cleaned.endsWith("*")
+      ? candidate.startsWith(cleaned.slice(0, -1))
+      : candidate === cleaned;
+  });
 }
 
 function looksLikeTemplatePlaceholder(value) {
@@ -110,9 +122,10 @@ function getProviderConfig(providerId) {
   const model = resolvedModel.value || conf.name;
   const apiKey = resolvedKey.value || conf.apiKey;
 
-  // Retired model families are blocked even if stale Koyeb/process env values survive an older deployment.
-  // This keeps the canonical model policy authoritative at runtime, not just in templates.
-  if (isRetiredModel(model)) return null;
+  // The local blocklist is for deliberate provider/model exclusions. Model
+  // retirement is reviewed through the OpenRouter council evidence instead of
+  // being hard-coded here, so current models cannot remain falsely retired.
+  if (isLocallyBlockedModel(model)) return null;
   if (!model || !apiKey) return null;
   if (looksLikeTemplatePlaceholder(model) || looksLikeTemplatePlaceholder(apiKey)) return null;
 
@@ -219,6 +232,20 @@ function getReasoningOptions() {
 
 function shouldLogUsage() {
   return parseBoolean(process.env.AI_USAGE_LOG_ENABLED, true) !== false;
+}
+
+function getSpendLogFields({ model, assignmentEnv, providerPosition }) {
+  const context = getAimsModelSpendContext({ modelId: model, assignmentEnv });
+  return {
+    providerPosition,
+    fallbackUsed: providerPosition > 1,
+    spendControlMode: context.spendControlMode,
+    spendRuntimeBlocking: context.runtimeRequestBlocking,
+    modelCostTier: context.costTier,
+    modelJustificationStatus: context.justificationStatus,
+    modelJustificationId: context.justificationId,
+    modelGovernanceSourceRunId: context.sourceRunId,
+  };
 }
 
 function parseRetryAfterMs(value) {
@@ -408,6 +435,7 @@ export async function resilientRequest(routeName, {
   const attemptedProviderTargets = new Set();
 
   for (const providerId of chain) {
+    const providerPosition = chain.indexOf(providerId) + 1;
     const provider = getProviderConfig(providerId);
     if (!provider) {
       attempted.push({ providerId, status: "misconfigured" });
@@ -449,6 +477,11 @@ export async function resilientRequest(routeName, {
             completionTokens: result.usage?.completion_tokens,
             totalTokens: result.usage?.total_tokens,
             cost: result.usage?.cost,
+            ...getSpendLogFields({
+              model: result.model || provider.name,
+              assignmentEnv: provider.modelEnv,
+              providerPosition,
+            }),
             headroomCompressed: headroom.compressed,
             headroomTokensSaved: headroom.tokensSaved || 0,
             headroomReason: headroom.reason || null,
@@ -523,6 +556,11 @@ export async function resilientRequest(routeName, {
                 completionTokens: relaxed.usage?.completion_tokens,
                 totalTokens: relaxed.usage?.total_tokens,
                 cost: relaxed.usage?.cost,
+                ...getSpendLogFields({
+                  model: relaxed.model || provider.name,
+                  assignmentEnv: provider.modelEnv,
+                  providerPosition,
+                }),
                 headroomCompressed: headroom.compressed,
                 headroomTokensSaved: headroom.tokensSaved || 0,
                 headroomReason: headroom.reason || null,
