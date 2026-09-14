@@ -92,9 +92,10 @@ test("Blotato finished duration and visual QA are applied before publishing", as
 });
 
 
-test("operation windows call newsletter send directly after a successful generation", async () => {
+test("operation windows preflight newsletter delivery before generation and send", async () => {
   const ops = await readFile(new URL("../services/ops/index.js", import.meta.url), "utf8");
-  assert.doesNotMatch(ops, /newsletter-readiness.*\/newsletter\/readiness/);
+  assert.match(ops, /newsletter-readiness.*\/newsletter\/readiness/);
+  assert.match(ops, /newsletter-generate.*newsletter-readiness/);
   assert.match(ops, /newsletter-send.*newsletter-generate/);
   assert.match(ops, /operation-dependency-not-ready/);
 });
@@ -197,12 +198,14 @@ test("paid Blotato renders survive QA plumbing failures and rendered QA uses str
   assert.match(env, /^BLOTATO_RENDER_REUSE_MAX_AGE_MS=21600000$/m);
 });
 
-test("newsletter council cannot burn a rewrite merely because verdict text contradicts a passing score", async () => {
+test("newsletter council requires full attendance and accepts only non-blocking near-threshold misses", async () => {
   const council = await readFile(new URL("../services/newsletter/engine/editorialCouncil.js", import.meta.url), "utf8");
   assert.match(council, /blocking: \{ type: "boolean" \}/);
-  assert.match(council, /reviewerScore >= THRESHOLDS\.newsletter\.qaPassThreshold && !blocking/);
-  assert.match(council, /!review\.blocking && review\.score >= THRESHOLDS\.newsletter\.qaPassThreshold/);
-  assert.match(council, /!chairBlocking && chairScore >= THRESHOLDS\.newsletter\.qaPassThreshold/);
+  assert.match(council, /runCouncilSpecialists/);
+  assert.match(council, /attendanceComplete/);
+  assert.match(council, /nearThresholdTolerance/);
+  assert.match(council, /nearThresholdPass/);
+  assert.match(council, /allReviews\.every\(\(review\) => !review\.blocking\)/);
 });
 
 test("Zernio and Blotato scheduled publishing require provider confirmation", async () => {

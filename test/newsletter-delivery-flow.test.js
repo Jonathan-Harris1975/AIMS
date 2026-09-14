@@ -18,10 +18,12 @@ campaignSource = campaignSource
   .replace(/^import \{ readCampaignDelivery, recordCampaignDelivery \} from .*?;\n/m, "")
   .replace(/^import \{ ensureList \} from .*?;\n/m, "")
   .replace(/^import \{ ensureSender, inspectSender \} from .*?;\n/m, "")
-  .replace(/^import \{[\s\S]*?\} from "\.\/client\.js";\n/m, "");
+  .replace(/^import \{[\s\S]*?\} from "\.\/client\.js";\n/m, "")
+  .replace(/^import \{ THRESHOLDS \} from .*?;\n/m, "");
 const adapterStubs = `
 const info = () => {};
 const warn = () => {};
+const THRESHOLDS = { newsletter: { dispatchVerifyAttempts: 3, dispatchVerifyIntervalMs: 0 } };
 const unavailable = async () => { throw new Error("uninjected test adapter"); };
 const getObjectAsText = unavailable;
 const readCampaignDelivery = unavailable;
@@ -228,4 +230,114 @@ test("newsletter never sends when the campaign idempotency record cannot be stor
   assert.equal(result.campaignDeleted, true);
   assert.equal(calls.send, 0);
   assert.equal(calls.deleted, 1);
+});
+
+test("newsletter polls Brevo until queued/sent is confirmed", async () => {
+  let statusCalls = 0;
+  let sleeps = 0;
+  const { writes, deps } = baseDependencies({
+    getCampaign: async () => {
+      statusCalls += 1;
+      return { ok: true, data: { id: 101, status: statusCalls < 3 ? "draft" : "queued" } };
+    },
+    sleep: async () => { sleeps += 1; },
+  });
+
+  const result = await deliverNewsletterIssue(
+    { profile, sessionId: "session-poll", buildResult },
+    deps,
+  );
+
+  assert.equal(result.ok, true);
+  assert.equal(result.campaignStatus, "queued");
+  assert.equal(statusCalls, 3);
+  assert.equal(sleeps, 2);
+  assert.equal(writes.at(-1).status, "dispatched");
+});
+
+test("newsletter records an unverified accepted send and never blindly sends it twice", async () => {
+  let sendCalls = 0;
+  const first = baseDependencies({
+    sendCampaignNow: async () => { sendCalls += 1; return { ok: true }; },
+    getCampaign: async () => ({ ok: true, data: { id: 101, status: "draft" } }),
+    sleep: async () => {},
+  });
+
+  const firstResult = await deliverNewsletterIssue(
+    { profile, sessionId: "session-ambiguous", buildResult },
+    first.deps,
+  );
+
+  assert.equal(firstResult.ok, false);
+  assert.equal(firstResult.status, "dispatch_verification_pending");
+  assert.equal(sendCalls, 1);
+  assert.equal(first.writes.at(-1).status, "dispatch_pending_verification");
+
+  const pending = first.writes.at(-1);
+  const second = baseDependencies({
+    readCampaignDelivery: async () => ({ delivery: pending }),
+    sendCampaignNow: async () => { sendCalls += 1; return { ok: true }; },
+    getCampaign: async () => ({ ok: true, data: { id: 101, status: "sent" } }),
+  });
+
+  const recovered = await deliverNewsletterIssue(
+    { profile, sessionId: "session-ambiguous", buildResult },
+    second.deps,
+  );
+
+  assert.equal(recovered.ok, true);
+  assert.equal(recovered.recovered, true);
+  assert.equal(sendCalls, 1);
+  assert.equal(second.writes.at(-1).status, "dispatched");
+  assert.equal(second.writes.at(-1).campaignStatus, "sent");
+});
+
+test("newsletter resolves an ambiguous sendNow timeout by checking Brevo before declaring failure", async () => {
+  let sendCalls = 0;
+  let statusCalls = 0;
+  const { writes, deps } = baseDependencies({
+    sendCampaignNow: async () => {
+      sendCalls += 1;
+      return { ok: false, status: 0, error: "socket timeout" };
+    },
+    getCampaign: async () => {
+      statusCalls += 1;
+      return { ok: true, data: { id: 101, status: statusCalls < 2 ? "draft" : "queued" } };
+    },
+  });
+
+  const result = await deliverNewsletterIssue(
+    { profile, sessionId: "session-timeout-recovered", buildResult },
+    deps,
+  );
+
+  assert.equal(result.ok, true);
+  assert.equal(result.campaignStatus, "queued");
+  assert.equal(sendCalls, 1);
+  assert.equal(statusCalls, 2);
+  assert.equal(writes.at(-1).status, "dispatched");
+  assert.equal(writes.at(-1).createdAt, writes[0].createdAt);
+});
+
+test("newsletter treats a definitive Brevo 4xx send rejection as a failure without status polling", async () => {
+  let statusCalls = 0;
+  const { writes, deps } = baseDependencies({
+    sendCampaignNow: async () => ({ ok: false, status: 400, code: "invalid_parameter", error: "Invalid campaign" }),
+    getCampaign: async () => {
+      statusCalls += 1;
+      return { ok: true, data: { id: 101, status: "draft" } };
+    },
+  });
+
+  const result = await deliverNewsletterIssue(
+    { profile, sessionId: "session-definitive-rejection", buildResult },
+    deps,
+  );
+
+  assert.equal(result.ok, false);
+  assert.equal(result.status, "send_failed");
+  assert.equal(result.providerStatus, 400);
+  assert.equal(statusCalls, 0);
+  assert.equal(writes.length, 1);
+  assert.equal(writes[0].status, "created");
 });

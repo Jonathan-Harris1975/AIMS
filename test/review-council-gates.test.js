@@ -39,5 +39,23 @@ test("gate review repairs then revalidates before quarantine", async () => {
 
   assert.equal(reviewed.ok, true);
   assert.equal(reviewed.reviewCouncil.memberCount >= 6, true);
-  assert.equal(reviewed.reviewCouncil.decision, "repair_approved");
+  assert.equal(reviewed.reviewCouncil.decision, "self_improvement_approved");
+  assert.equal(reviewed.reviewCouncil.councilRuns, 0);
+  assert.ok(reviewed.reviewCouncil.selfImproveLoops <= 4);
+});
+
+
+test("council may accept a non-blocking result within five percent of an explicit threshold", async () => {
+  const reviewed = await runReviewCouncilGate({
+    councilKey: "quiz-logic",
+    gate: { ok: false, score: 80, threshold: 85, defects: ["minor wording polish"], warnings: [] },
+    artifact: { content: "Already structurally sound" },
+    maxAttempts: 1,
+    repairArtifact: async (artifact) => artifact,
+    validate: async () => ({ ok: false, score: 82, threshold: 85, defects: ["minor wording polish"], warnings: [] }),
+  });
+  assert.equal(reviewed.ok, true);
+  assert.equal(reviewed.reviewCouncil.councilRuns, 1);
+  assert.equal(reviewed.reviewCouncil.acceptedWithinTolerance, true);
+  assert.equal(reviewed.reviewCouncil.decision, "council_accepted_within_tolerance");
 });
