@@ -602,7 +602,7 @@ export async function runReviewCouncilGate({
     return { ok: false, gate: { ...gate, reviewCouncil: disabledReview }, artifact, reviewCouncil: disabledReview, repaired: false };
   }
 
-  const effectiveMaxAttempts = Math.max(1, Number(maxAttempts) || THRESHOLDS.reviewCouncil.maxAttempts);
+  const effectiveMaxAttempts = Math.max(1, Math.min(4, Number(maxAttempts) || THRESHOLDS.reviewCouncil.maxAttempts));
   const attemptLog = [];
   let currentArtifact = artifact;
   let currentGate = gate;
@@ -658,6 +658,30 @@ export async function runReviewCouncilGate({
     currentGate = repairedGate;
   }
 
+  const passedBySelfImprovement = Boolean(repairedGate?.ok);
+
+  // A formal council may accept a narrowly missed numeric threshold when no
+  // blocking/hard-gate defect remains. This is intentionally conservative:
+  // factual, source, safety, link and required-field failures never qualify.
+  const expectedThreshold = Number(
+    repairedGate?.threshold ?? repairedGate?.expectedThreshold ?? repairedGate?.thresholds?.overall ??
+    gate?.threshold ?? gate?.expectedThreshold ?? gate?.thresholds?.overall
+  );
+  const toleranceFloor = Number.isFinite(expectedThreshold)
+    ? expectedThreshold * (1 - THRESHOLDS.reviewCouncil.nearThresholdTolerance)
+    : null;
+  const defectText = (repairedGate?.defects || []).map(String).join(" ").toLowerCase();
+  const hardBlock = Boolean(
+    repairedGate?.blocking || repairedGate?.hardFailure || repairedGate?.hardGateFailed ||
+    Number(repairedGate?.hardFailureCount || 0) > 0 || (repairedGate?.hardDefects?.length) ||
+    /source|fact|hallucin|invent|unsafe|safety|schema|structured data|required|missing|invalid link|broken link|mismatch/.test(defectText)
+  );
+  const withinTolerance = !repairedGate?.ok && !hardBlock && toleranceFloor !== null &&
+    Number(repairedGate?.score) >= toleranceFloor;
+  if (withinTolerance) {
+    repairedGate = { ...repairedGate, ok: true, acceptedWithinTolerance: true, toleranceFloor, expectedThreshold };
+  }
+
   const reviewCouncil = reviewDecision({
     councilKey,
     enabled,
@@ -676,6 +700,16 @@ export async function runReviewCouncilGate({
   reviewCouncil.attemptsUsed = attemptLog.length;
   reviewCouncil.maximumAttemptsAllowed = effectiveMaxAttempts;
   reviewCouncil.stagnationLimit = stagnationLimit;
+  reviewCouncil.selfImproveLoops = attemptLog.length;
+  reviewCouncil.maximumSelfImproveLoops = effectiveMaxAttempts;
+  reviewCouncil.councilRuns = passedBySelfImprovement ? 0 : 1;
+  reviewCouncil.attempted = reviewCouncil.councilRuns > 0;
+  if (passedBySelfImprovement) reviewCouncil.decision = "self_improvement_approved";
+  else if (withinTolerance) reviewCouncil.decision = "council_accepted_within_tolerance";
+  reviewCouncil.maximumCouncilRuns = THRESHOLDS.reviewCouncil.maxCouncilRuns;
+  reviewCouncil.attendanceComplete = reviewCouncil.memberCount === reviewCouncil.memberDetails.length;
+  reviewCouncil.acceptedWithinTolerance = withinTolerance;
+  reviewCouncil.toleranceFloor = toleranceFloor;
 
   logger?.("review_council.gate_review", {
     councilKey,

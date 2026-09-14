@@ -353,6 +353,7 @@ export function runPhase5OrganicGrowthGate({
   const decision = decisionFrom(gates, threshold);
   return {
     ...decision,
+    threshold,
     phase: "5A/5B",
     mode: "organic-growth-auto-gated-fail-closed",
     contentType,
