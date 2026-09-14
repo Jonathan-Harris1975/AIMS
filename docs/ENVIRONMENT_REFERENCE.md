@@ -11,18 +11,18 @@ This inventory makes the runtime configuration contract auditable without duplic
 | Variable | Curated template | Production references |
 | --- | --- | --- |
 | `AIMS_ALLOW_UNAUTHENTICATED_DEV` | Yes | services/shared/middleware/suiteAuth.js:86 |
-| `AIMS_API_KEY` | Yes | server.js:196<br>services/ops/index.js:427<br>services/shared/middleware/suiteAuth.js:55 |
+| `AIMS_API_KEY` | Yes | server.js:196<br>services/ops/index.js:434<br>services/shared/middleware/suiteAuth.js:55 |
 | `AIMS_BUSY_CONCURRENCY_THRESHOLD` | No | services/shared/utils/lifecycle.js:15 |
 | `AIMS_FAILURE_ALERT_THRESHOLD` | Yes | services/shared/utils/operationalExcellence.js:5 |
-| `AIMS_INTERNAL_BASE_URL` | Yes | services/ops/index.js:426 |
-| `AIMS_OPERATION_ASYNC_JOB_TIMEOUT_MS` | Yes | services/ops/index.js:509 |
-| `AIMS_OPERATION_ASYNC_MAX_POLL_ERRORS` | No | services/ops/index.js:511 |
-| `AIMS_OPERATION_ASYNC_NOT_FOUND_GRACE_MS` | No | services/ops/index.js:512 |
-| `AIMS_OPERATION_ASYNC_POLL_INTERVAL_MS` | Yes | services/ops/index.js:508 |
-| `AIMS_OPERATION_ASYNC_REQUEST_TIMEOUT_MS` | Yes | services/ops/index.js:510 |
-| `AIMS_OPERATION_DISPATCH_TIMEOUT_MS` | No | services/ops/index.js:446 |
+| `AIMS_INTERNAL_BASE_URL` | Yes | services/ops/index.js:433 |
+| `AIMS_OPERATION_ASYNC_JOB_TIMEOUT_MS` | Yes | services/ops/index.js:516 |
+| `AIMS_OPERATION_ASYNC_MAX_POLL_ERRORS` | No | services/ops/index.js:518 |
+| `AIMS_OPERATION_ASYNC_NOT_FOUND_GRACE_MS` | No | services/ops/index.js:519 |
+| `AIMS_OPERATION_ASYNC_POLL_INTERVAL_MS` | Yes | services/ops/index.js:515 |
+| `AIMS_OPERATION_ASYNC_REQUEST_TIMEOUT_MS` | Yes | services/ops/index.js:517 |
+| `AIMS_OPERATION_DISPATCH_TIMEOUT_MS` | No | services/ops/index.js:453 |
 | `AIMS_OPERATION_FRIDAY_PM_DELAY_MS` | Yes | services/ops/index.js:144 |
-| `AIMS_OPERATION_TASK_TIMEOUT_MS` | Yes | services/ops/index.js:447 |
+| `AIMS_OPERATION_TASK_TIMEOUT_MS` | Yes | services/ops/index.js:454 |
 | `AIMS_STARTUP_GRACE_MS` | No | services/shared/utils/lifecycle.js:14 |
 | `AI_MODEL_BLOCKLIST` | Yes | services/shared/utils/ai-service.js:85 |
 | `AI_RETRY_BASE_MS` | Yes | audits/utils/seoAeoGeoAnalysis.js:1932 |
@@ -41,9 +41,9 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `API_ZERO_KEY` | Yes | services/outreach/services/zeroBounceBatch.js:21 |
 | `APP_ENV` | No | scripts/performanceGate.js:6<br>server.js:393 |
 | `APP_STATE_DIR` | Yes | services/shared/utils/stateFile.js:9 |
-| `APP_TITLE` | Yes | ai-config.js:302<br>services/artwork/utils/artwork.js:292 |
+| `APP_TITLE` | Yes | ai-config.js:304<br>services/artwork/utils/artwork.js:292 |
 | `APP_TMP_DIR` | Yes | scripts/tempStorage.js:10<br>services/blotato/utils/renderedVideoQa.js:305<br>services/shared/utils/stateFile.js:10<br>services/tts/utils/editingProcessor.js:22<br>services/tts/utils/mergeProcessor.js:14<br>services/tts/utils/podcastProcessor.js:56 |
-| `APP_URL` | Yes | ai-config.js:301<br>audits/utils/orchestrator.js:143<br>services/artwork/utils/artwork.js:291<br>services/rss-feed-creator/utils/feedGenerator.js:32 |
+| `APP_URL` | Yes | ai-config.js:303<br>audits/utils/orchestrator.js:143<br>services/artwork/utils/artwork.js:291<br>services/rss-feed-creator/utils/feedGenerator.js:32 |
 | `APP_VERSION` | No | server.js:392<br>server.js:411<br>services/shared/utils/operationalExcellence.js:106<br>services/shared/utils/operationalExcellence.js:147 |
 | `ARTWORK_CAPABILITY_CACHE_MS` | No | services/artwork/utils/openrouterImageCapabilities.js:21 |
 | `ARTWORK_CAPABILITY_DISCOVERY_ENABLED` | No | services/artwork/utils/openrouterImageCapabilities.js:55 |
@@ -208,7 +208,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `COMMS_HUB_CONTENT_AUTOMATION_ENABLED` | Yes | services/comms-hub/routes/index.js:132 |
 | `COMMS_HUB_CONTENT_AUTOMATION_PODCAST_ENABLED` | Yes | services/comms-hub/routes/index.js:136 |
 | `COMMS_HUB_CONTENT_AUTOMATION_SOCIAL_ENABLED` | Yes | services/comms-hub/routes/index.js:135 |
-| `COMMS_HUB_CONTENT_AUTOMATION_ZERNIO_MINI_SERIES_BRIEF_LIMIT` | Yes | services/zernio/utils/socialScheduler.js:2266 |
+| `COMMS_HUB_CONTENT_AUTOMATION_ZERNIO_MINI_SERIES_BRIEF_LIMIT` | Yes | services/zernio/utils/socialScheduler.js:2267 |
 | `COMMS_HUB_CREDENTIAL_VAULT_ENABLED` | Yes | services/comms-hub/routes/index.js:143 |
 | `COMMS_HUB_DELAYED_ACTION_WORKER_ENABLED` | Yes | services/comms-hub/routes/index.js:140 |
 | `COMMS_HUB_EMAIL_ENABLED` | Yes | services/comms-hub/routes/index.js:127 |
@@ -271,7 +271,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `MAX_SUMMARY_CHARS` | Yes | services/rss-feed-creator/utils/rss-prompts.js:22<br>services/rss-feed-creator/utils/rss-prompts.js:23 |
 | `MAX_URL_FEEDS_PER_RUN` | Yes | services/rss-feed-creator/utils/feedRotationManager.js:20<br>services/rss-feed-creator/utils/fetchFeeds.js:29 |
 | `MIN_SUMMARY_CHARS` | Yes | services/rss-feed-creator/utils/rss-prompts.js:17<br>services/rss-feed-creator/utils/rss-prompts.js:18 |
-| `NEWSLETTER_BREVO_ALLOW_LIST_CREATE` | Yes | services/newsletter/brevo/campaign.js:178 |
+| `NEWSLETTER_BREVO_ALLOW_LIST_CREATE` | Yes | services/newsletter/brevo/campaign.js:272 |
 | `NODE_ENV` | Yes | logger.js:8<br>scripts/deploySmoke.js:4<br>scripts/performanceGate.js:5<br>scripts/startupCheck.js:34<br>server.js:30<br>server.js:393<br>+22 more |
 | `ONEUP_EBOOK_CATALOGUE_PATH` | No | services/zernio/utils/ebookCatalogue.js:42 |
 | `ON_BRAND_AUDIT_MAX_TOKENS` | No | audits/utils/onBrandAudit.js:13 |
@@ -280,7 +280,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `OPENPAGERANK_API_BASE` | No | services/outreach/services/outreachCore.js:138 |
 | `OPENROUTER_API_BASE` | Yes | services/artwork/utils/artwork.js:30<br>services/shared/utils/ai-service.js:14 |
 | `OPENROUTER_API_KEY` | Yes | server.js:185 |
-| `OPENROUTER_APP_NAME` | Yes | ai-config.js:302<br>services/artwork/utils/artwork.js:292 |
+| `OPENROUTER_APP_NAME` | Yes | ai-config.js:304<br>services/artwork/utils/artwork.js:292 |
 | `OPENROUTER_BASE_URL` | Yes | services/artwork/utils/artwork.js:30<br>services/shared/utils/ai-service.js:14 |
 | `OPENROUTER_DATA_COLLECTION` | No | services/shared/utils/ai-service.js:201 |
 | `OPENROUTER_ENABLE_FALLBACKS` | Yes | services/shared/utils/ai-service.js:187 |
@@ -291,7 +291,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `OPENROUTER_REQUIRE_PARAMETERS` | No | services/shared/utils/ai-service.js:190 |
 | `OPENROUTER_REQUIRE_PARAMETERS_FOR_JSON` | Yes | services/shared/utils/ai-service.js:191 |
 | `OPENROUTER_SERVICE_TIER` | Yes | services/shared/utils/ai-service.js:213 |
-| `OPENROUTER_SITE_URL` | Yes | ai-config.js:301<br>services/artwork/utils/artwork.js:291 |
+| `OPENROUTER_SITE_URL` | Yes | ai-config.js:303<br>services/artwork/utils/artwork.js:291 |
 | `OPENROUTER_SORT_BY` | Yes | services/shared/utils/ai-service.js:173 |
 | `OPS_ALERT_TIMEOUT_MS` | Yes | services/shared/utils/operationalExcellence.js:6 |
 | `OUTREACH_AUTOMATION_ENABLED` | Yes | services/outreach/services/outreachService.js:32 |
@@ -345,8 +345,8 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `PODCAST_TRANSCRIPT_MAX_SENTENCE_WORDS` | Yes | services/script/utils/editAndFormat.js:197<br>services/script/utils/orchestrator.js:111<br>services/script/utils/orchestrator.js:314<br>services/script/utils/scriptValidation.js:293 |
 | `PODCAST_TRANSCRIPT_MIN_SOURCE_TERMS` | No | services/script/utils/scriptValidation.js:390 |
 | `POLLY_VOICE_ID` | Yes | services/tts/utils/ttsProcessor.js:24 |
-| `PORT` | Yes | routes/podcast-pipeline.js:14<br>scripts/deploySmoke.js:3<br>scripts/startupCheck.js:67<br>server.js:481<br>services/ops/index.js:426 |
-| `QA_ALERT_WEBHOOK_URL` | Yes | config/thresholds.js:96 |
+| `PORT` | Yes | routes/podcast-pipeline.js:14<br>scripts/deploySmoke.js:3<br>scripts/startupCheck.js:67<br>server.js:481<br>services/ops/index.js:433 |
+| `QA_ALERT_WEBHOOK_URL` | Yes | config/thresholds.js:100 |
 | `R2_ACCESS_KEY_ID` | Yes | audits/utils/publishAuditArtifacts.js:62<br>scripts/startupCheck.js:69 |
 | `R2_BUCKET_ART` | Yes | services/artwork/utils/io.js:15 |
 | `R2_BUCKET_CHUNKS` | Yes | services/tts/utils/io.js:20 |
@@ -438,7 +438,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `WEBSITE_REBUILD_HOOK_FALLBACK` | Yes | scripts/backfill-blog-main-site-links.js:21<br>services/blog/social/buildDailySocialBlogPost.js:238<br>services/blog/weekly/buildWeeklyBlogPost.js:220<br>services/podcast/runPodcastPipeline.js:74 |
 | `X` | No | config/thresholds.js:6<br>config/thresholds.js:16 |
 | `ZERNIO_ACCOUNT_ID` | Yes | services/zernio/utils/config.js:64 |
-| `ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK` | Yes | services/zernio/utils/socialScheduler.js:1763<br>services/zernio/utils/socialScheduler.js:2663<br>services/zernio/utils/socialScheduler.js:3122<br>services/zernio/utils/socialScheduler.js:3531 |
+| `ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK` | Yes | services/zernio/utils/socialScheduler.js:1764<br>services/zernio/utils/socialScheduler.js:2664<br>services/zernio/utils/socialScheduler.js:3123<br>services/zernio/utils/socialScheduler.js:3532 |
 | `ZERNIO_API_BASE_URL` | Yes | services/zernio/utils/config.js:55<br>services/zernio/utils/zernioClient.js:36 |
 | `ZERNIO_ARTWORK_TIMEOUT_MS` | Yes | services/artwork/createSocialArtwork.js:13 |
 | `ZERNIO_BLOG_RSS_FEED_URL` | Yes | services/zernio/utils/blogRssFeed.js:80<br>services/zernio/utils/config.js:97 |
@@ -449,7 +449,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `ZERNIO_CANONICAL_IMAGE_HOSTS` | Yes | services/zernio/utils/socialScheduler.js:127 |
 | `ZERNIO_DAILY_MAX_TOKENS` | No | services/zernio/utils/socialScheduler.js:43 |
 | `ZERNIO_DEFAULT_DRY_RUN` | Yes | services/zernio/utils/config.js:80 |
-| `ZERNIO_DUPLICATE_RECONCILIATION_TOLERANCE_MS` | Yes | services/zernio/utils/socialScheduler.js:940 |
+| `ZERNIO_DUPLICATE_RECONCILIATION_TOLERANCE_MS` | Yes | services/zernio/utils/socialScheduler.js:941 |
 | `ZERNIO_EBOOK_MAX_TOKENS` | No | services/zernio/utils/socialScheduler.js:49 |
 | `ZERNIO_EBOOK_SATURDAY_TIME` | Yes | services/zernio/utils/config.js:227 |
 | `ZERNIO_EBOOK_THURSDAY_TIME` | Yes | services/zernio/utils/config.js:226 |
@@ -468,7 +468,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `ZERNIO_MINI_SERIES_MIN_SCORE` | No | services/zernio/utils/config.js:197 |
 | `ZERNIO_MINI_SERIES_POST_MAX_TOKENS` | No | services/zernio/utils/socialScheduler.js:47 |
 | `ZERNIO_MINI_SERIES_RESEARCH_MAX_TOKENS` | No | services/zernio/utils/socialScheduler.js:45 |
-| `ZERNIO_MINI_SERIES_RETRY_BASE_MS` | Yes | services/zernio/utils/socialScheduler.js:2721 |
+| `ZERNIO_MINI_SERIES_RETRY_BASE_MS` | Yes | services/zernio/utils/socialScheduler.js:2722 |
 | `ZERNIO_MINI_SERIES_SATURDAY_TIME` | Yes | services/zernio/utils/config.js:206 |
 | `ZERNIO_MINI_SERIES_SUNDAY_TIME` | Yes | services/zernio/utils/config.js:207 |
 | `ZERNIO_MINI_SERIES_THEME_MAX_TOKENS` | No | services/zernio/utils/socialScheduler.js:46 |
@@ -495,14 +495,14 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `ZERNIO_REPORT_FROM_DATE` | No | audits/utils/zernioSocialPerformance.js:61 |
 | `ZERNIO_REPORT_TO_DATE` | No | audits/utils/zernioSocialPerformance.js:62 |
 | `ZERNIO_REQUIRED_PLATFORMS` | Yes | services/zernio/utils/config.js:70 |
-| `ZERNIO_REQUIRE_IMAGE` | Yes | services/zernio/utils/socialScheduler.js:1000 |
-| `ZERNIO_REQUIRE_SCHEDULE_CONFIRMATION` | Yes | services/zernio/utils/socialScheduler.js:1160 |
+| `ZERNIO_REQUIRE_IMAGE` | Yes | services/zernio/utils/socialScheduler.js:1001 |
+| `ZERNIO_REQUIRE_SCHEDULE_CONFIRMATION` | Yes | services/zernio/utils/socialScheduler.js:1161 |
 | `ZERNIO_RSS_LOOKBACK_DAYS` | Yes | services/zernio/utils/config.js:81 |
 | `ZERNIO_SATURDAY_IMAGE_URL` | No | services/zernio/utils/config.js:163 |
 | `ZERNIO_SATURDAY_TIME` | Yes | services/zernio/utils/config.js:162 |
-| `ZERNIO_SCHEDULE_MIN_LEAD_MS` | Yes | services/zernio/utils/socialScheduler.js:798 |
-| `ZERNIO_SCHEDULE_RECOVERY_ENABLED` | Yes | services/zernio/utils/socialScheduler.js:797 |
-| `ZERNIO_SCHEDULE_TIME_TOLERANCE_MS` | Yes | services/zernio/utils/socialScheduler.js:862 |
+| `ZERNIO_SCHEDULE_MIN_LEAD_MS` | Yes | services/zernio/utils/socialScheduler.js:799 |
+| `ZERNIO_SCHEDULE_RECOVERY_ENABLED` | Yes | services/zernio/utils/socialScheduler.js:798 |
+| `ZERNIO_SCHEDULE_TIME_TOLERANCE_MS` | Yes | services/zernio/utils/socialScheduler.js:863 |
 | `ZERNIO_SLOT_COMPLETED_TTL_MS` | No | services/zernio/utils/state.js:11 |
 | `ZERNIO_SLOT_PENDING_TTL_MS` | No | services/zernio/utils/state.js:10 |
 | `ZERNIO_SUNDAY_IMAGE_URL` | No | services/zernio/utils/config.js:172 |
