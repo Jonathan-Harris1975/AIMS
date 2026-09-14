@@ -42,7 +42,11 @@ export const THRESHOLDS = Object.freeze({
     // a failing artefact before it is quarantined. Applies to every caller
     // of runReviewCouncilGate() (RSS rewrite, blog phase4/5, Blotato script
     // quality, Zernio social posts).
-    maxAttempts: Math.max(1, num("REVIEW_COUNCIL_MAX_ATTEMPTS", 5)),
+    // Self-improvement passes happen before any formal council escalation.
+    // Clamp at four even if a legacy deployment still carries the old value of 5.
+    maxAttempts: Math.max(1, Math.min(4, num("REVIEW_COUNCIL_MAX_ATTEMPTS", 4))),
+    maxCouncilRuns: Math.max(1, Math.min(2, num("REVIEW_COUNCIL_MAX_RUNS", 2))),
+    nearThresholdTolerance: Math.max(0, Math.min(0.20, num("REVIEW_COUNCIL_NEAR_THRESHOLD_TOLERANCE", 0.05))),
   }),
   scheduler: Object.freeze({
     // Window in hours within which identical content (by content hash) posted
@@ -106,10 +110,14 @@ export const THRESHOLDS = Object.freeze({
     storyCount: Math.max(1, num("NEWSLETTER_STORY_COUNT", 10)),
     // QA review loop: minimum composite score (0-100) required to publish.
     qaPassThreshold: Math.max(0, Math.min(100, num("NEWSLETTER_QA_PASS_THRESHOLD", 85))),
-    // QA review loop: hard ceiling on rewrite iterations before quarantine.
-    // Kept at/above THRESHOLDS.minRetryAttemptsFloor — a newsletter is only
-    // quarantined after at least 5 compose->validate passes.
-    maxRewriteIterations: Math.max(MIN_RETRY_ATTEMPTS_FLOOR, num("NEWSLETTER_MAX_REWRITE_ITERATIONS", 5)),
+    // Cheap self-improvement happens before the expensive editorial council.
+    // Legacy NEWSLETTER_MAX_REWRITE_ITERATIONS remains supported, but is capped
+    // at four so old production values cannot silently restore five-pass loops.
+    maxRewriteIterations: Math.max(1, Math.min(4, num("NEWSLETTER_SELF_IMPROVE_MAX_LOOPS", num("NEWSLETTER_MAX_REWRITE_ITERATIONS", 4)))),
+    maxCouncilRuns: Math.max(1, Math.min(2, num("NEWSLETTER_COUNCIL_MAX_RUNS", 2))),
+    nearThresholdTolerance: Math.max(0, Math.min(0.20, num("NEWSLETTER_COUNCIL_NEAR_THRESHOLD_TOLERANCE", 0.05))),
+    dispatchVerifyAttempts: Math.max(1, Math.min(30, num("NEWSLETTER_BREVO_DISPATCH_VERIFY_ATTEMPTS", 10))),
+    dispatchVerifyIntervalMs: Math.max(0, num("NEWSLETTER_BREVO_DISPATCH_VERIFY_INTERVAL_MS", 2000)),
     // RSS retrieval retry/backoff for transient upstream feed failures.
     // rss.js treats this as additional retries after the first attempt, so
     // 4 here yields 5 total attempts.
