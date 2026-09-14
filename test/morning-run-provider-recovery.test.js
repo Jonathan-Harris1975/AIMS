@@ -135,8 +135,11 @@ test("Brevo delivery resolves the populated list and persists an exactly-once ca
   assert.match(campaign, /status:\s*"created"/);
   assert.match(campaign, /sendCampaignNow/);
   assert.match(campaign, /getCampaign/);
-  assert.match(campaign, /campaignStatus = "queued"/);
-  assert.doesNotMatch(ops, /\["newsletter-readiness", "\/newsletter\/readiness"/);
+  assert.match(campaign, /verifyDispatchStatus/);
+  assert.match(campaign, /CONFIRMED_DISPATCH_STATUSES\.has\(campaignStatus\)/);
+  assert.match(campaign, /status:\s*"dispatched",\s*campaignStatus/);
+  assert.match(ops, /newsletter-readiness.*\/newsletter\/readiness/);
+  assert.match(ops, /newsletter-generate.*newsletter-readiness/);
   assert.match(ops, /newsletter-send.*newsletter-generate/);
 });
 
