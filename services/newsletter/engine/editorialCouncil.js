@@ -1,14 +1,10 @@
-// services/newsletter/engine/editorialCouncil.js
-//
-// Dedicated multi-model editorial council for AI Edge. Reviewers have
-// deliberately different jobs and model routes; the chair sees their reports
-// and makes the final publish/revise decision. This avoids one model writing
-// and rubber-stamping its own work.
+// Dedicated full-seat editorial council for AI Edge. The council is expensive
+// by design and is only reached after the cheaper self-improvement loop fails.
 
 import { resilientRequest } from "../../shared/utils/ai-service.js";
 import { parseStructuredJson, strictJsonResponseFormat } from "../../shared/utils/structuredJson.js";
 import { THRESHOLDS } from "../../../config/thresholds.js";
-import { getReviewCouncilMembers, isReviewCouncilEnabled } from "../../content-quality/reviewCouncil.js";
+import { getReviewCouncilDefinition, getReviewCouncilMembers, isReviewCouncilEnabled } from "../../content-quality/reviewCouncil.js";
 import { warn } from "../../../logger.js";
 
 const REVIEW_SCHEMA = Object.freeze({
@@ -37,10 +33,6 @@ const CHAIR_SCHEMA = Object.freeze({
   required: ["score", "verdict", "blocking", "issues", "priorityFixes"],
 });
 
-function parseJson(raw = "", label = "newsletter council response") {
-  return parseStructuredJson(raw, label);
-}
-
 function boundedScore(value) {
   const score = Number(value);
   return Number.isFinite(score) ? Math.max(0, Math.min(100, score)) : 0;
@@ -62,9 +54,23 @@ function newsletterPayload(newsletter) {
 }
 
 function sourcePayload(lead, stories) {
-  return [lead, ...stories].map(({ title, summary, link, sourceFeed, publishedAt }) => ({
+  return [lead, ...stories].filter(Boolean).map(({ title, summary, link, sourceFeed, publishedAt }) => ({
     title, summary, link, sourceFeed, publishedAt,
   }));
+}
+
+function routeForMember(member) {
+  const role = member.role.toLowerCase();
+  if (/source|fact|reality check|red-team|publishing readiness/.test(role)) return "newsletterFactCheck";
+  if (/voice|british english/.test(role)) return "newsletterVoiceReview";
+  return "newsletterAudienceReview";
+}
+
+function payloadForMember(member, { profile, draft, sources }) {
+  const role = member.role.toLowerCase();
+  if (/source|fact|reality check|red-team|publishing readiness/.test(role)) return { draft, sources };
+  if (/voice|british english/.test(role)) return { profile: { displayName: profile.displayName, brandVoice: profile.brandVoice }, draft };
+  return { draft };
 }
 
 async function requestCouncilJson(route, { sessionId, messages, maxTokens = 900, schema = REVIEW_SCHEMA } = {}) {
@@ -78,133 +84,131 @@ async function requestCouncilJson(route, { sessionId, messages, maxTokens = 900,
       response_format: strictJsonResponseFormat(`newsletter_${route}`, schema),
       messages: attempt === 1
         ? messages
-        : [
-            messages[0],
-            {
-              role: "user",
-              content: `${messages[1]?.content || ""}\n\nYour previous response was not parseable JSON. Return one valid JSON object only, with no code fence or commentary.`,
-            },
-          ],
+        : [messages[0], { role: "user", content: `${messages[1]?.content || ""}\n\nReturn one valid JSON object only.` }],
     });
-    try { return parseJson(raw); } catch (error) { lastError = error; }
+    try { return parseStructuredJson(raw, "newsletter council response"); }
+    catch (error) { lastError = error; }
   }
   throw lastError || new Error("Council response was not valid JSON.");
 }
 
-async function runReviewer(route, role, instructions, payload, sessionId) {
+async function runMember(member, context, sessionId) {
+  const route = routeForMember(member);
   const data = await requestCouncilJson(route, {
     sessionId,
     messages: [
       {
         role: "system",
         content:
-          `You are the ${role} on the AI Edge editorial council. ${instructions} ` +
-          `Score from 0-100. A publishable result must score at least ${THRESHOLDS.newsletter.qaPassThreshold}. ` +
-          'Set blocking=true only for an unresolved defect that makes the newsletter unfit to publish. A score at or above the threshold with only polish suggestions must pass. ' +
-          'Respond ONLY as JSON: {"score":number,"verdict":"pass"|"revise","blocking":boolean,"issues":[string],"strengths":[string]}.',
+          `You are seat ${member.seat}, the ${member.role}, on the AI Edge editorial council. Your remit: ${member.remit} ` +
+          `Your authority is ${member.authority}. Score 0-100; the normal pass threshold is ${THRESHOLDS.newsletter.qaPassThreshold}. ` +
+          "Set blocking=true only for an unresolved defect serious enough to make publication unsafe or materially misleading. Minor polish must not be marked blocking. " +
+          'Return JSON only: {"score":number,"verdict":"pass"|"revise","blocking":boolean,"issues":[string],"strengths":[string]}.',
       },
-      { role: "user", content: JSON.stringify(payload, null, 2) },
+      { role: "user", content: JSON.stringify(payloadForMember(member, context), null, 2) },
     ],
   });
-  const reviewerScore = boundedScore(data.score);
-  const blocking = data.blocking === true || reviewerScore < THRESHOLDS.newsletter.qaPassThreshold;
-  const passed = reviewerScore >= THRESHOLDS.newsletter.qaPassThreshold && !blocking;
+  const score = boundedScore(data.score);
+  const blocking = data.blocking === true;
   return {
-    role,
-    score: reviewerScore,
-    verdict: passed ? "pass" : "revise",
+    seat: member.seat,
+    role: member.role,
+    authority: member.authority,
+    score,
+    verdict: score >= THRESHOLDS.newsletter.qaPassThreshold && !blocking ? "pass" : "revise",
     blocking,
     issues: Array.isArray(data.issues) ? data.issues : [],
     strengths: Array.isArray(data.strengths) ? data.strengths : [],
   };
 }
 
+async function runCouncilSpecialists(members, context, sessionId, batchSize = 4) {
+  const reports = [];
+  for (let index = 0; index < members.length; index += batchSize) {
+    const batch = members.slice(index, index + batchSize);
+    reports.push(...await Promise.all(batch.map((member) => runMember(member, context, sessionId))));
+  }
+  return reports;
+}
+
 export async function runNewsletterEditorialCouncil({ profile, newsletter, lead, stories, sessionId }) {
   const councilKey = "newsletter-editorial";
+  const definition = getReviewCouncilDefinition(councilKey);
   const members = getReviewCouncilMembers(councilKey);
   if (!isReviewCouncilEnabled(councilKey)) {
     return {
-      ok: false,
-      score: 0,
-      verdict: "revise",
-      members,
-      reviews: [],
-      issues: ["Newsletter editorial council is disabled; publication remains hard-gated."],
+      ok: false, score: 0, verdict: "revise", members, reviews: [],
+      issues: ["Newsletter editorial council is disabled."],
+      attendance: { complete: false, required: members.length, present: 0 },
     };
   }
 
+  const chairMember = definition.members.find((member) => member.seat === 1);
+  const specialistMembers = definition.members.filter((member) => member.seat !== 1);
   const draft = newsletterPayload(newsletter);
   const sources = sourcePayload(lead, stories);
 
   try {
-    const sourceReview = await runReviewer(
-      "newsletterFactCheck",
-      "Source Integrity and Fact-Checking Reviewer",
-      "Check every factual assertion against the supplied source summaries. Flag invented detail, unsupported certainty, source/title mismatch, and opinion presented as fact. \
-Treat source fidelity as a hard gate.",
-      { draft, sources },
+    // A council is only a council if the declared seats actually attend.
+    const reports = await runCouncilSpecialists(
+      specialistMembers,
+      { profile, draft, sources },
       sessionId
     );
 
-    const voiceReview = await runReviewer(
-      "newsletterVoiceReview",
-      "Jonathan Harris Voice and Editorial Reviewer",
-      "Judge British English, sceptical Gen-X judgement, clarity, authority, restraint, natural first-person commentary and absence of generic AI copy. Jonathan's take should \
-add judgement rather than repeat the summary.",
-      { profile: { displayName: profile.displayName, brandVoice: profile.brandVoice }, draft },
-      sessionId
-    );
-
-    const readerReview = await runReviewer(
-      "newsletterAudienceReview",
-      "Audience Value and Newsletter Performance Reviewer",
-      "Judge five-minute scanability, hierarchy, usefulness, subject/preview strength, Big Three selection, Worth Using value, On the Radar compression, Reality Check \
-distinctiveness, reader question quality and whether any promotion overwhelms editorial content.",
-      { draft },
-      sessionId
-    );
-
-    const reports = [sourceReview, voiceReview, readerReview];
-    const chair = await requestCouncilJson("newsletterCouncilChair", {
+    const chairData = await requestCouncilJson("newsletterCouncilChair", {
       sessionId,
       schema: CHAIR_SCHEMA,
+      maxTokens: 1100,
       messages: [
         {
           role: "system",
           content:
-            `You chair the AI Edge editorial council. Review the three specialist reports and make the final decision. ` +
-            `Source integrity is a hard gate. The issue must also preserve Jonathan Harris's voice and provide genuine reader value. ` +
-            `A pass requires every specialist score to be at least ${THRESHOLDS.newsletter.qaPassThreshold}. ` +
-            'Set blocking=true only when an unresolved hard-gate defect remains. A score at or above the threshold with non-blocking polish suggestions must pass. ' +
-            'Respond ONLY as JSON: {"score":number,"verdict":"pass"|"revise","blocking":boolean,"issues":[string],"priorityFixes":[string]}.',
+            `You are seat 1, the ${chairMember.role}. Your remit: ${chairMember.remit} Review every specialist report before deciding. ` +
+            `The normal pass threshold is ${THRESHOLDS.newsletter.qaPassThreshold}. Source/factual blockers remain hard gates. ` +
+            "Set blocking=true only for an unresolved publication blocker; minor monthly-audit-level polish is non-blocking. " +
+            'Return JSON only: {"score":number,"verdict":"pass"|"revise","blocking":boolean,"issues":[string],"priorityFixes":[string]}.',
         },
         { role: "user", content: JSON.stringify({ reports, draft }, null, 2) },
       ],
     });
-    const chairScore = boundedScore(chair.score);
-    const chairBlocking = chair.blocking === true || chairScore < THRESHOLDS.newsletter.qaPassThreshold;
-    const specialistsPass = reports.every(
-      (review) => !review.blocking && review.score >= THRESHOLDS.newsletter.qaPassThreshold
-    );
-    const passed = specialistsPass && !chairBlocking && chairScore >= THRESHOLDS.newsletter.qaPassThreshold;
+
+    const chairScore = boundedScore(chairData.score);
+    const chairBlocking = chairData.blocking === true;
+    const chair = {
+      seat: 1,
+      role: chairMember.role,
+      authority: chairMember.authority,
+      score: chairScore,
+      verdict: chairScore >= THRESHOLDS.newsletter.qaPassThreshold && !chairBlocking ? "pass" : "revise",
+      blocking: chairBlocking,
+      issues: Array.isArray(chairData.issues) ? chairData.issues : [],
+      priorityFixes: Array.isArray(chairData.priorityFixes) ? chairData.priorityFixes : [],
+    };
+
+    const attendedRoles = new Set([chair.role, ...reports.map((review) => review.role)]);
+    const attendanceComplete = definition.members.every((member) => attendedRoles.has(member.role));
+    const allReviews = [chair, ...reports];
+    const noBlockers = allReviews.every((review) => !review.blocking);
+    const strictPass = attendanceComplete && noBlockers && allReviews.every((review) => review.score >= THRESHOLDS.newsletter.qaPassThreshold);
+    const toleranceFloor = THRESHOLDS.newsletter.qaPassThreshold * (1 - THRESHOLDS.newsletter.nearThresholdTolerance);
+    const nearThresholdPass = !strictPass && attendanceComplete && noBlockers && allReviews.every((review) => review.score >= toleranceFloor);
+    const passed = strictPass || nearThresholdPass;
+    const score = Math.min(...allReviews.map((review) => review.score));
 
     return {
       ok: passed,
-      score: Math.min(chairScore, ...reports.map((review) => review.score)),
-      verdict: passed ? "pass" : "revise",
+      score,
+      verdict: strictPass ? "pass" : nearThresholdPass ? "pass_with_tolerance" : "revise",
+      nearThresholdAccepted: nearThresholdPass,
+      toleranceFloor,
       members,
       reviews: reports,
-      chair: {
-        role: "Publishing Readiness Chair",
-        score: chairScore,
-        verdict: passed ? "pass" : "revise",
-        blocking: chairBlocking,
-        issues: Array.isArray(chair.issues) ? chair.issues : [],
-        priorityFixes: Array.isArray(chair.priorityFixes) ? chair.priorityFixes : [],
-      },
+      chair,
+      attendance: { complete: attendanceComplete, required: definition.members.length, present: attendedRoles.size, roles: [...attendedRoles] },
       issues: [
         ...reports.flatMap((review) => review.issues.map((issue) => `${review.role}: ${issue}`)),
-        ...(Array.isArray(chair.issues) ? chair.issues.map((issue) => `Chair: ${issue}`) : []),
+        ...chair.issues.map((issue) => `${chair.role}: ${issue}`),
       ],
     };
   } catch (err) {
@@ -215,6 +219,7 @@ distinctiveness, reader question quality and whether any promotion overwhelms ed
       verdict: "revise",
       members,
       reviews: [],
+      attendance: { complete: false, required: definition.members.length, present: 0 },
       issues: [`Editorial council failed: ${err.message}`],
     };
   }
