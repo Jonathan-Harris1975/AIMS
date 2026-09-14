@@ -49,11 +49,10 @@ services:
       HEADROOM_PROTECT_RECENT: ${HEADROOM_PROTECT_RECENT:-0}
       HEADROOM_COMPRESS_USER_MESSAGES: ${HEADROOM_COMPRESS_USER_MESSAGES:-true}
       HEADROOM_LOG_SAVINGS: ${HEADROOM_LOG_SAVINGS:-true}
-      HEADROOM_ROUTES: intro,main,outro,scriptIntro,scriptMain,scriptMainSynthesis,scriptOutro,compose,editorialPass,editAndFormat,metadata,podcastHelper,seoKeywords,artworkPrompt,rssRewrite,rssShortTitle,blogWeekly,blogSocial,onBrandAudit,auditForensic,zernioDaily,zernioMiniSeriesResearch,zernioMiniSeriesTheme,zernioMiniSeriesPost,zernioQuiz,zernioEbook,zernioPodcastPromo,blotatoNewsShort,newsletterCompose,newsletterSubject,newsletterFactCheck,newsletterVoiceReview,newsletterAudienceReview,newsletterCouncilChair,newsletterHeroPrompt,commsHubTriage,commsHubModeration,commsHubSummary,commsHubDraft,commsHubDraftContact,commsHubDraftContribute,commsHubDraftPodcast,commsHubDraftSocial,commsHubFollowUp,commsHubDraftComplex,commsHubOutreachPitch,commsHubOutreachReply,commsHubOutreachArticle,commsHubOutreachArticleReview
+      HEADROOM_ROUTES: intro,main,outro,scriptIntro,scriptMain,scriptMainSynthesis,scriptOutro,compose,editorialPass,editAndFormat,metadata,podcastHelper,seoKeywords,artworkPrompt,rssRewrite,rssShortTitle,blogWeekly,blogSocial,onBrandAudit,auditForensic,zernioDaily,zernioMiniSeriesResearch,zernioMiniSeriesTheme,zernioMiniSeriesPost,zernioQuiz,zernioEbook,zernioPodcastPromo,blotatoNewsShort,newsletterCompose,newsletterSubject,newsletterSelfImprove,newsletterFactCheck,newsletterVoiceReview,newsletterAudienceReview,newsletterCouncilChair,newsletterHeroPrompt,commsHubTriage,commsHubModeration,commsHubSummary,commsHubDraft,commsHubDraftContact,commsHubDraftContribute,commsHubDraftPodcast,commsHubDraftSocial,commsHubFollowUp,commsHubDraftComplex,commsHubOutreachPitch,commsHubOutreachReply,commsHubOutreachArticle,commsHubOutreachArticleReview
     healthcheck:
       test: ["CMD-SHELL", "curl --fail --silent --show-error http://127.0.0.1:${PORT:-3000}/livez >/dev/null"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 30s
-
