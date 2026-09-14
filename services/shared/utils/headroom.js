@@ -36,6 +36,7 @@ const DEFAULT_ROUTES = Object.freeze([
   "blotatoNewsShort",
   "newsletterCompose",
   "newsletterSubject",
+  "newsletterSelfImprove",
   "newsletterFactCheck",
   "newsletterVoiceReview",
   "newsletterAudienceReview",
