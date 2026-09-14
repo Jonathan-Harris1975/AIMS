@@ -409,6 +409,7 @@ function runZernioSocialGate({ contentType = "zernio-social", laneKey = "", post
   return {
     ok: defects.length === 0 && score >= 86,
     score,
+    threshold: 86,
     contentType,
     laneKey,
     defects,
@@ -421,7 +422,7 @@ function addExternalGateDefects(gate = {}, extraDefects = [], extraWarnings = []
   const defects = [...new Set([...(gate.defects || []), ...extraDefects].filter(Boolean))];
   const warnings = [...new Set([...(gate.warnings || []), ...extraWarnings].filter(Boolean))];
   const score = scoreFromGate(defects, warnings);
-  return { ...gate, defects, warnings, score, ok: defects.length === 0 && score >= 86 };
+  return { ...gate, defects, warnings, score, threshold: Number(gate.threshold || 86), ok: defects.length === 0 && score >= 86 };
 }
 
 export function buildZernioSemanticRepairPrompt({ laneKey = "", post = {}, gate = {}, attempt = 1, semanticContext = {} } = {}) {
