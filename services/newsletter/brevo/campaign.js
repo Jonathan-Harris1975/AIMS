@@ -4,9 +4,9 @@
 // v3 API supports full campaign creation and immediate sending, so delivery
 // is a straight create -> sendNow flow.
 //
-// Scheduling is owned entirely by MAST (a separate repository): this module
-// never sets Brevo's own `scheduledAt` — POST /newsletter/send is called
-// exactly when MAST wants the issue to go out, and sendNow fires immediately.
+// AIMS owns generate -> send ordering inside its operation window. An external
+// scheduler may trigger that window, but this module never sets Brevo's own
+// `scheduledAt`; sendNow fires only when the AIMS send step executes.
 //
 // Idempotency: MAST (or an operator) may call /newsletter/send more than
 // once for the same issue — a retried request after a timeout, a manual
@@ -14,10 +14,11 @@
 // state (see engine/storage.js) *before* calling Brevo's sendNow, and checks
 // that record on every call before creating anything new:
 //   - no record                -> create the campaign, then send it
-//   - record with status "created" (draft only, sendNow never confirmed)
-//                               -> reuse the existing campaignId, call
-//                                  sendNow again rather than create a
-//                                  second campaign
+//   - record with status "created" -> verify the existing campaign first;
+//                                  only a confirmed draft is eligible for
+//                                  another sendNow attempt
+//   - record with status "dispatch_pending_verification" -> check Brevo
+//                                  status only; never blindly send again
 //   - record with status "dispatched" -> already sent; return the stored
 //                                  result without calling Brevo again
 // If the durable record write itself fails right after creating the draft,
@@ -30,6 +31,7 @@ import { readCampaignDelivery, recordCampaignDelivery } from "../engine/storage.
 import { ensureList } from "./audience.js";
 import { ensureSender, inspectSender } from "./sender.js";
 import { createCampaign, sendCampaignNow, getCampaign, deleteCampaign } from "./client.js";
+import { THRESHOLDS } from "../../../config/thresholds.js";
 
 
 export async function getNewsletterDeliveryReadiness({ profile }) {
@@ -109,6 +111,44 @@ export async function getNewsletterDeliveryReadiness({ profile }) {
  * `deps` lets tests substitute every external adapter; production callers
  * should omit it and get the real Brevo/R2 implementations.
  */
+const CONFIRMED_DISPATCH_STATUSES = new Set(["queued", "sent"]);
+
+function normaliseCampaignStatus(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+async function defaultSleep(ms) {
+  if (ms <= 0) return;
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isAmbiguousSendFailure(result) {
+  const status = Number(result?.status || 0);
+  return status === 0 || status === 408 || status >= 500;
+}
+
+async function verifyDispatchStatus({ campaignId, getCampaign: doGetCampaign, sleep: doSleep }) {
+  let campaignStatus = "";
+  let lastStatusError = null;
+
+  for (let attempt = 1; attempt <= THRESHOLDS.newsletter.dispatchVerifyAttempts; attempt += 1) {
+    try {
+      const live = await doGetCampaign(campaignId);
+      if (live?.ok && live.data?.status) campaignStatus = normaliseCampaignStatus(live.data.status);
+      else lastStatusError = live?.error || "Brevo status lookup did not return a campaign status.";
+    } catch (statusErr) {
+      lastStatusError = statusErr?.message || String(statusErr);
+    }
+
+    if (CONFIRMED_DISPATCH_STATUSES.has(campaignStatus)) break;
+    if (attempt < THRESHOLDS.newsletter.dispatchVerifyAttempts) {
+      await doSleep(THRESHOLDS.newsletter.dispatchVerifyIntervalMs);
+    }
+  }
+
+  return { campaignStatus, lastStatusError };
+}
+
 export async function deliverNewsletterIssue({ profile, sessionId, buildResult, date }, deps = {}) {
   const {
     getObjectAsText: readText = getObjectAsText,
@@ -120,6 +160,7 @@ export async function deliverNewsletterIssue({ profile, sessionId, buildResult, 
     sendCampaignNow: doSendCampaignNow = sendCampaignNow,
     getCampaign: doGetCampaign = getCampaign,
     deleteCampaign: doDeleteCampaign = deleteCampaign,
+    sleep: doSleep = defaultSleep,
   } = deps;
 
   if (!buildResult?.ok) {
@@ -143,6 +184,59 @@ export async function deliverNewsletterIssue({ profile, sessionId, buildResult, 
         sentAt: delivery.sentAt,
         alreadyDispatched: true,
       };
+    }
+
+    if (delivery?.status === "dispatch_pending_verification" && delivery?.campaignId) {
+      stage = "campaign-verify-pending";
+      const live = await doGetCampaign(delivery.campaignId);
+      const liveStatus = normaliseCampaignStatus(live?.data?.status);
+      if (live?.ok && CONFIRMED_DISPATCH_STATUSES.has(liveStatus)) {
+        const sentAt = delivery.sentAt || new Date().toISOString();
+        await recordDelivery({
+          profile, sessionId, date, campaignId: delivery.campaignId, listId: delivery.listId,
+          status: "dispatched", campaignStatus: liveStatus, createdAt: delivery.createdAt || null, sentAt,
+        });
+        return { ok: true, status: "sent", campaignId: delivery.campaignId, listId: delivery.listId, campaignStatus: liveStatus, sentAt, recovered: true };
+      }
+      return {
+        ok: false, status: "dispatch_verification_pending", stage, campaignId: delivery.campaignId,
+        campaignStatus: liveStatus || delivery.campaignStatus || null,
+        error: "Brevo previously received an ambiguous/accepted send request but AIMS still cannot confirm queued/sent status. The campaign was not sent again to avoid a duplicate.",
+      };
+    }
+
+    const resumed = Boolean(delivery?.status === "created" && delivery?.campaignId);
+    if (resumed) {
+      stage = "campaign-resume-check";
+      const live = await doGetCampaign(delivery.campaignId);
+      const liveStatus = normaliseCampaignStatus(live?.data?.status);
+      if (!live?.ok) {
+        return {
+          ok: false,
+          status: "resume_status_unavailable",
+          stage,
+          campaignId: delivery.campaignId,
+          error: live?.error || "Could not verify the existing Brevo campaign before retrying sendNow.",
+        };
+      }
+      if (CONFIRMED_DISPATCH_STATUSES.has(liveStatus)) {
+        const sentAt = delivery.sentAt || new Date().toISOString();
+        await recordDelivery({
+          profile, sessionId, date, campaignId: delivery.campaignId, listId: delivery.listId, status: "dispatched", campaignStatus: liveStatus,
+          createdAt: delivery.createdAt || null, sentAt,
+        });
+        return { ok: true, status: "sent", campaignId: delivery.campaignId, campaignStatus: liveStatus, listId: delivery.listId, sentAt, resumed: true, recovered: true };
+      }
+      if (liveStatus && liveStatus !== "draft") {
+        return {
+          ok: false,
+          status: "resume_status_blocked",
+          stage,
+          campaignId: delivery.campaignId,
+          campaignStatus: liveStatus,
+          error: `Existing Brevo campaign is in "${liveStatus}" state; AIMS will not issue another sendNow unless the provider reports a draft.`,
+        };
+      }
     }
 
     stage = "sender";
@@ -206,6 +300,7 @@ export async function deliverNewsletterIssue({ profile, sessionId, buildResult, 
     }
 
     let campaignId = delivery?.campaignId || null;
+    let campaignCreatedAt = delivery?.createdAt || null;
 
     if (!campaignId) {
       // No prior attempt recorded for this sessionId — create a fresh
@@ -255,12 +350,13 @@ export async function deliverNewsletterIssue({ profile, sessionId, buildResult, 
       // Brevo rather than leave an unrecorded draft that could later be
       // sent (by AIMS retrying, or manually) with no idempotency guard.
       stage = "delivery-record-create";
+      campaignCreatedAt = new Date().toISOString();
       try {
         await recordDelivery({
           profile, sessionId, date,
           campaignId, listId: list.listId,
           status: "created", campaignStatus: "draft",
-          createdAt: new Date().toISOString(), sentAt: null,
+          createdAt: campaignCreatedAt, sentAt: null,
         });
       } catch (writeErr) {
         warn("newsletter.brevo.delivery_record_write_failed", { sessionId, profileId: profile.id, campaignId, error: writeErr?.message || String(writeErr) });
@@ -283,11 +379,11 @@ export async function deliverNewsletterIssue({ profile, sessionId, buildResult, 
       }
     }
 
-    const resumed = Boolean(delivery?.status === "created");
-
     stage = "campaign-send";
     const sent = await doSendCampaignNow(campaignId);
-    if (!sent.ok) {
+    const sentAt = new Date().toISOString();
+
+    if (!sent.ok && !isAmbiguousSendFailure(sent)) {
       warn("newsletter.brevo.send_now_failed", {
         sessionId,
         campaignId,
@@ -307,34 +403,52 @@ export async function deliverNewsletterIssue({ profile, sessionId, buildResult, 
       };
     }
 
-    const sentAt = new Date().toISOString();
-    let campaignStatus = "queued";
-    try {
-      const live = await doGetCampaign(campaignId);
-      if (live?.ok && live.data?.status) campaignStatus = live.data.status;
-    } catch (statusErr) {
-      warn("newsletter.brevo.post_send_status_check_failed", { sessionId, campaignId, error: statusErr?.message || String(statusErr) });
+    if (!sent.ok) {
+      warn("newsletter.brevo.send_now_ambiguous", {
+        sessionId,
+        campaignId,
+        providerStatus: sent.status || null,
+        error: sent.error,
+      });
+    }
+
+    stage = "campaign-send-verify";
+    const { campaignStatus, lastStatusError } = await verifyDispatchStatus({
+      campaignId,
+      getCampaign: doGetCampaign,
+      sleep: doSleep,
+    });
+
+    if (!CONFIRMED_DISPATCH_STATUSES.has(campaignStatus)) {
+      warn("newsletter.brevo.dispatch_unverified", {
+        sessionId,
+        campaignId,
+        campaignStatus: campaignStatus || null,
+        sendResultAmbiguous: !sent.ok,
+        error: lastStatusError || sent.error,
+      });
+      stage = "delivery-record-pending-verification";
+      await recordDelivery({
+        profile, sessionId, date, campaignId, listId: list.listId, status: "dispatch_pending_verification",
+        campaignStatus: campaignStatus || "unknown", createdAt: campaignCreatedAt, sentAt,
+      });
+      return {
+        ok: false, status: "dispatch_verification_pending", stage, campaignId, campaignStatus: campaignStatus || null,
+        error: lastStatusError || sent.error || `Brevo sendNow did not reach queued/sent within ${THRESHOLDS.newsletter.dispatchVerifyAttempts} verification attempts.`,
+      };
     }
 
     stage = "delivery-record-dispatch";
     await recordDelivery({
-      profile, sessionId, date,
-      campaignId, listId: list.listId,
-      status: "dispatched", campaignStatus,
-      createdAt: delivery?.createdAt || null, sentAt,
+      profile, sessionId, date, campaignId, listId: list.listId, status: "dispatched", campaignStatus,
+      createdAt: campaignCreatedAt, sentAt,
     });
 
-    info("newsletter.brevo.campaign_sent", { sessionId, profileId: profile.id, campaignId, resumed });
+    info("newsletter.brevo.campaign_sent", { sessionId, profileId: profile.id, campaignId, resumed, campaignStatus });
 
     return {
-      ok: true,
-      status: "sent",
-      campaignId,
-      campaignStatus,
-      listId: list.listId,
-      audienceSubscribers: list.totalSubscribers,
-      sentAt,
-      ...(resumed ? { resumed: true } : {}),
+      ok: true, status: "sent", campaignId, campaignStatus, listId: list.listId,
+      audienceSubscribers: list.totalSubscribers, sentAt, ...(resumed ? { resumed: true } : {}),
     };
   } catch (err) {
     warn("newsletter.brevo.delivery_exception", { sessionId, profileId: profile.id, stage, error: err?.message || String(err) });
