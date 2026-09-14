@@ -268,6 +268,8 @@ export const aiConfig = {
     // failover through the shared resilient requester.
     newsletterCompose: routeChain(["newsletterEditorial", "highQuality"], ["gpt56Sol", "claudeOpus"]),
     newsletterSubject: routeChain(["fast", "summary", "highQuality"], ["google25FlashLite", "gpt56Sol"]),
+    // Economical independent reviewer used for up to four self-improvement passes before a full council is convened.
+    newsletterSelfImprove: routeChain(["fast", "summary", "standard"], ["google25FlashLite", "gpt56Sol"]),
     newsletterFactCheck: routeChain(["audit", "highQuality"], ["claudeSonnet5", "anthropic46"]),
     newsletterVoiceReview: routeChain(["newsletterEditorial", "highQuality"], ["gpt56Sol", "anthropic46"]),
     newsletterAudienceReview: routeChain(["highQuality", "audit"], ["claudeSonnet5", "anthropic46"]),
