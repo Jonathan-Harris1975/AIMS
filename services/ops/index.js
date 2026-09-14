@@ -191,7 +191,8 @@ const OPERATION_WINDOWS = Object.freeze({
     ["blog-social", "/blog/social/daily/build", {}, null, false, "rss-rewrite"],
     ["zernio-blog-social", "/zernio/blog-rss/daily", {}, null, false, "blog-social"],
     ["blotato-pm", "/blotato/shorts/news-insight/schedule", {}],
-    ["newsletter-generate", "/newsletter/generate", { profileId: "ai-edge" }, "newsletter", false, "rss-rewrite"],
+    ["newsletter-readiness", "/newsletter/readiness", { profileId: "ai-edge" }, "newsletter", false, "rss-rewrite"],
+    ["newsletter-generate", "/newsletter/generate", { profileId: "ai-edge" }, "newsletter", false, "newsletter-readiness"],
     ["newsletter-send", "/newsletter/send", { profileId: "ai-edge" }, "newsletter", false, "newsletter-generate"],
     ["weekly-blog", "/blog/weekly/build", {}, null, false, "rss-rewrite"],
     ["zernio-ebooks", "/zernio/ebooks/weekly", { dryRun: false, profileName: "Default", accountId: "ALL", usePodcastFeaturedBook: true }, null, true],
@@ -204,7 +205,8 @@ const OPERATION_WINDOWS = Object.freeze({
     ["blog-social", "/blog/social/daily/build", {}, null, false, "rss-rewrite"],
     ["zernio-blog-social", "/zernio/blog-rss/daily", {}, null, false, "blog-social"],
     ["blotato-pm", "/blotato/shorts/model-verdict/schedule", {}],
-    ["newsletter-generate", "/newsletter/generate", { profileId: "ai-edge" }, "newsletter", false, "rss-rewrite"],
+    ["newsletter-readiness", "/newsletter/readiness", { profileId: "ai-edge" }, "newsletter", false, "rss-rewrite"],
+    ["newsletter-generate", "/newsletter/generate", { profileId: "ai-edge" }, "newsletter", false, "newsletter-readiness"],
     ["newsletter-send", "/newsletter/send", { profileId: "ai-edge" }, "newsletter", false, "newsletter-generate"],
   ],
   "wednesday-am": [
@@ -214,7 +216,8 @@ const OPERATION_WINDOWS = Object.freeze({
     ["blog-social", "/blog/social/daily/build", {}, null, false, "rss-rewrite"],
     ["zernio-blog-social", "/zernio/blog-rss/daily", {}, null, false, "blog-social"],
     ["blotato-pm", "/blotato/shorts/ai-at-work/schedule", {}],
-    ["newsletter-generate", "/newsletter/generate", { profileId: "ai-edge" }, "newsletter", false, "rss-rewrite"],
+    ["newsletter-readiness", "/newsletter/readiness", { profileId: "ai-edge" }, "newsletter", false, "rss-rewrite"],
+    ["newsletter-generate", "/newsletter/generate", { profileId: "ai-edge" }, "newsletter", false, "newsletter-readiness"],
     ["newsletter-send", "/newsletter/send", { profileId: "ai-edge" }, "newsletter", false, "newsletter-generate"],
   ],
   "thursday-am": [
@@ -224,7 +227,8 @@ const OPERATION_WINDOWS = Object.freeze({
     ["blog-social", "/blog/social/daily/build", {}, null, false, "rss-rewrite"],
     ["zernio-blog-social", "/zernio/blog-rss/daily", {}, null, false, "blog-social"],
     ["blotato-pm", "/blotato/shorts/reality-check/schedule", {}],
-    ["newsletter-generate", "/newsletter/generate", { profileId: "ai-edge" }, "newsletter", false, "rss-rewrite"],
+    ["newsletter-readiness", "/newsletter/readiness", { profileId: "ai-edge" }, "newsletter", false, "rss-rewrite"],
+    ["newsletter-generate", "/newsletter/generate", { profileId: "ai-edge" }, "newsletter", false, "newsletter-readiness"],
     ["newsletter-send", "/newsletter/send", { profileId: "ai-edge" }, "newsletter", false, "newsletter-generate"],
   ],
   "friday-am": [
@@ -236,7 +240,8 @@ const OPERATION_WINDOWS = Object.freeze({
     ["blog-social", "/blog/social/daily/build", {}, null, false, "rss-rewrite"],
     ["zernio-blog-social", "/zernio/blog-rss/daily", {}, null, false, "blog-social"],
     ["blotato-pm", "/blotato/shorts/ai-playbook/schedule", {}],
-    ["newsletter-generate", "/newsletter/generate", { profileId: "ai-edge" }, "newsletter", false, "rss-rewrite"],
+    ["newsletter-readiness", "/newsletter/readiness", { profileId: "ai-edge" }, "newsletter", false, "rss-rewrite"],
+    ["newsletter-generate", "/newsletter/generate", { profileId: "ai-edge" }, "newsletter", false, "newsletter-readiness"],
     ["newsletter-send", "/newsletter/send", { profileId: "ai-edge" }, "newsletter", false, "newsletter-generate"],
   ],
   "friday-pm": [
@@ -273,6 +278,16 @@ function assertContentOperationWindows() {
       throw new Error(`${windowName} Zernio blog handoff must depend on blog-social`);
     }
 
+    const newsletterReadinessIndex = paths.indexOf("/newsletter/readiness");
+    const newsletterGenerateIndex = paths.indexOf("/newsletter/generate");
+    const newsletterSendIndex = paths.indexOf("/newsletter/send");
+    if (newsletterReadinessIndex < 0 || newsletterGenerateIndex !== newsletterReadinessIndex + 1 || newsletterSendIndex !== newsletterGenerateIndex + 1) {
+      throw new Error(`${windowName} must run newsletter readiness -> generate -> send in order`);
+    }
+    if (tasks[newsletterGenerateIndex]?.[5] !== "newsletter-readiness" || tasks[newsletterSendIndex]?.[5] !== "newsletter-generate") {
+      throw new Error(`${windowName} newsletter tasks must preserve readiness/generate/send dependencies`);
+    }
+
     const blotatoAmTask = tasks.find((task) => task[0] === "blotato-am");
     const blotatoPmTask = tasks.find((task) => task[0] === "blotato-pm");
     if (blotatoAmTask?.[5] || blotatoPmTask?.[5]) {
@@ -295,14 +310,6 @@ function assertContentOperationWindows() {
       throw new Error(`${windowName} ${dailyZernio[0]} must not be suppressed by another content lane`);
     }
 
-    const newsletterGenerateIndex = paths.indexOf("/newsletter/generate");
-    const newsletterSendIndex = paths.indexOf("/newsletter/send");
-    if (newsletterGenerateIndex < 0 || newsletterSendIndex !== newsletterGenerateIndex + 1) {
-      throw new Error(`${windowName} must run newsletter generate -> send in order`);
-    }
-    if (tasks[newsletterSendIndex]?.[5] !== "newsletter-generate") {
-      throw new Error(`${windowName} newsletter send must depend on newsletter-generate`);
-    }
   }
 
   const mondayPaths = OPERATION_WINDOWS["monday-am"].map((task) => task[1]);
