@@ -40,9 +40,9 @@ async function loadStoredIssue(profile, sessionId, date) {
 }
 
 // POST /newsletter/send — deliver a previously-built, QA-passed issue via
-// Brevo. Scheduling is owned entirely by MAST (a separate repository): this
-// route creates the Brevo campaign and sends it immediately (sendNow) the
-// moment MAST calls it — there is no internal scheduledAt.
+// Brevo. AIMS owns readiness -> generate -> send ordering inside the operation
+// window. The external scheduler only triggers that window; this route sends
+// immediately with sendNow and never uses Brevo scheduledAt.
 //
 // sessionId is optional. The AIMS morning operation runs generate and send
 // sequentially, but it deliberately does not couple routes through an
@@ -129,8 +129,9 @@ router.get("/readiness/:profileId", readinessHandler);
 
 // POST /newsletter/readiness — operator-compatible, side-effect-free Brevo
 // preflight. It remains available for diagnostics but is deliberately not a
-// hard gate in the morning operation; /newsletter/send performs the same
-// checks and returns the precise provider failure without being skipped.
+// operator preflight and is also the first hard gate in the weekday AIMS
+// newsletter operation, preventing expensive generation when delivery cannot
+// possibly succeed. /newsletter/send repeats the checks before dispatch.
 router.post("/readiness", asyncRoute(async (req, res) => (
   handleReadiness(req.body?.profileId || req.query.profileId, res)
 )));
