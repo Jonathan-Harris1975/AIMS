@@ -44,6 +44,8 @@ const NUMERIC_ENVS = new Set([
   "AI_TOP_P",
   "AI_EMPTY_COMPLETION_RETRIES_PER_PROVIDER",
   "HEADROOM_TIMEOUT_MS",
+  "HEADROOM_FAILURE_THRESHOLD",
+  "HEADROOM_CIRCUIT_OPEN_MS",
   "HEADROOM_MIN_INPUT_CHARS",
   "HEADROOM_TARGET_RATIO",
   "HEADROOM_PROTECT_RECENT",
@@ -102,6 +104,8 @@ const POSITIVE_INTEGER_ENVS = new Set([
   "AI_MAX_TOKENS",
   "AI_TIMEOUT",
   "HEADROOM_TIMEOUT_MS",
+  "HEADROOM_FAILURE_THRESHOLD",
+  "HEADROOM_CIRCUIT_OPEN_MS",
   "HEADROOM_MIN_INPUT_CHARS",
   "HEADROOM_MIN_TOKENS",
   "ARTWORK_VISUAL_QA_THRESHOLD",
@@ -155,6 +159,7 @@ const BOOLEAN_ENVS = new Set([
   "ARTWORK_VISUAL_QA_REQUIRED",
   "ARTWORK_IMAGE_CONFIG_ENABLED",
   "HEADROOM_ENABLED",
+  "HEADROOM_REQUIRED",
   "HEADROOM_COMPRESS_ALLOW_REMOTE",
   "HEADROOM_COMPRESS_USER_MESSAGES",
   "HEADROOM_COMPRESS_SYSTEM_MESSAGES",
@@ -342,6 +347,10 @@ function validateNumber({ key, value, line }, errors) {
     errors.push({ line, key, message: `${key} must be at least 100` });
   }
 
+  if (key === "HEADROOM_CIRCUIT_OPEN_MS" && number < 100) {
+    errors.push({ line, key, message: `${key} must be at least 100` });
+  }
+
   if (key === "HEADROOM_TARGET_RATIO" && (number < 0.05 || number > 1)) {
     errors.push({ line, key, message: `${key} must be between 0.05 and 1` });
   }
@@ -484,6 +493,14 @@ export function validateEnvEntries(entries) {
 
   const byKey = new Map(entries.map((entry) => [entry.key, entry]));
   const headroomEnabled = ["1", "true", "yes", "on"].includes(clean(byKey.get("HEADROOM_ENABLED")?.value).toLowerCase());
+  const headroomRequired = ["1", "true", "yes", "on"].includes(clean(byKey.get("HEADROOM_REQUIRED")?.value).toLowerCase());
+  if (headroomRequired && !headroomEnabled) {
+    errors.push({
+      line: byKey.get("HEADROOM_REQUIRED")?.line ?? null,
+      key: "HEADROOM_REQUIRED",
+      message: "HEADROOM_REQUIRED=true requires HEADROOM_ENABLED=true",
+    });
+  }
   if (headroomEnabled) {
     const enabledEntry = byKey.get("HEADROOM_ENABLED");
     const baseUrl = clean(byKey.get("HEADROOM_BASE_URL")?.value);
