@@ -18,6 +18,8 @@ const HEADROOM_ENV = [
   "HEADROOM_API_KEY",
   "HEADROOM_PROXY_TOKEN",
   "HEADROOM_TIMEOUT_MS",
+  "HEADROOM_FAILURE_THRESHOLD",
+  "HEADROOM_CIRCUIT_OPEN_MS",
   "HEADROOM_MIN_INPUT_CHARS",
   "HEADROOM_TARGET_RATIO",
   "HEADROOM_PROTECT_RECENT",
@@ -34,6 +36,7 @@ test("Headroom compresses eligible text-only messages and preserves system messa
   process.env.HEADROOM_MIN_INPUT_CHARS = "1";
   process.env.HEADROOM_ROUTES = "scriptMain";
   process.env.HEADROOM_PROXY_TOKEN = "headroom-test-token";
+  process.env.HEADROOM_API_KEY = "legacy-api-key-must-not-win";
   process.env.HEADROOM_LOG_SAVINGS = "false";
 
   const original = [
@@ -225,6 +228,8 @@ test("Headroom opens a short fail-open circuit after repeated proxy failures", a
   process.env.HEADROOM_MIN_INPUT_CHARS = "1";
   process.env.HEADROOM_ROUTES = "main";
   process.env.HEADROOM_LOG_SAVINGS = "false";
+  process.env.HEADROOM_FAILURE_THRESHOLD = "2";
+  process.env.HEADROOM_CIRCUIT_OPEN_MS = "100";
   let calls = 0;
   globalThis.fetch = async () => {
     calls += 1;
@@ -237,9 +242,8 @@ test("Headroom opens a short fail-open circuit after repeated proxy failures", a
     const request = { routeName: "main", routeKey: "main", model: "test/model", messages: [{ role: "user", content: "long payload" }] };
     assert.equal((await compressForOpenRouter(request)).reason, "http-error");
     assert.equal((await compressForOpenRouter(request)).reason, "http-error");
-    assert.equal((await compressForOpenRouter(request)).reason, "http-error");
     assert.equal((await compressForOpenRouter(request)).reason, "circuit-open");
-    assert.equal(calls, 3);
+    assert.equal(calls, 2);
   } finally {
     restoreEnv(snapshot);
     globalThis.fetch = oldFetch;

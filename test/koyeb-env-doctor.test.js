@@ -120,6 +120,8 @@ test("koyeb env doctor rejects invalid core AI and Headroom numeric values", () 
     AI_TIMEOUT: "0",
     AI_TOP_P: "1.5",
     HEADROOM_TIMEOUT_MS: "0",
+    HEADROOM_FAILURE_THRESHOLD: "0",
+    HEADROOM_CIRCUIT_OPEN_MS: "0",
     HEADROOM_MIN_INPUT_CHARS: "0",
     HEADROOM_TARGET_RATIO: "1.5",
     HEADROOM_PROTECT_RECENT: "-1",
@@ -132,6 +134,8 @@ test("koyeb env doctor rejects invalid core AI and Headroom numeric values", () 
   assert.ok(errors.some((error) => error.key === "AI_TIMEOUT" && /positive integer/i.test(error.message)));
   assert.ok(errors.some((error) => error.key === "AI_TOP_P" && /between 0 and 1/i.test(error.message)));
   assert.ok(errors.some((error) => error.key === "HEADROOM_TIMEOUT_MS" && /positive integer/i.test(error.message)));
+  assert.ok(errors.some((error) => error.key === "HEADROOM_FAILURE_THRESHOLD" && /positive integer/i.test(error.message)));
+  assert.ok(errors.some((error) => error.key === "HEADROOM_CIRCUIT_OPEN_MS" && /positive integer/i.test(error.message)));
   assert.ok(errors.some((error) => error.key === "HEADROOM_MIN_INPUT_CHARS" && /positive integer/i.test(error.message)));
   assert.ok(errors.some((error) => error.key === "HEADROOM_TARGET_RATIO" && /between 0.05 and 1/i.test(error.message)));
   assert.ok(errors.some((error) => error.key === "HEADROOM_PROTECT_RECENT" && /non-negative integer/i.test(error.message)));
@@ -174,4 +178,13 @@ test("koyeb env doctor requires a reachable Headroom configuration when enabled"
     HEADROOM_TARGET_RATIO: "0.30",
   });
   assert.deepEqual(configured, []);
+});
+
+
+test("koyeb env doctor rejects required Headroom when compression is disabled", () => {
+  const errors = validateEnvObject({
+    HEADROOM_ENABLED: "false",
+    HEADROOM_REQUIRED: "true",
+  });
+  assert.ok(errors.some((error) => error.key === "HEADROOM_REQUIRED" && /requires HEADROOM_ENABLED=true/i.test(error.message)));
 });
