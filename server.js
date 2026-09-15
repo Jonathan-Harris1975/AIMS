@@ -184,6 +184,7 @@ async function productionReadiness() {
   const durableConfigured = hasDurableStateEnv(process.env);
   const openrouterConfigured = usableSecret(process.env.OPENROUTER_API_KEY);
   const headroomEnabled = ["1", "true", "yes", "on", "y"].includes(normaliseEnvString(process.env.HEADROOM_ENABLED).toLowerCase());
+  const headroomRequired = ["1", "true", "yes", "on", "y"].includes(normaliseEnvString(process.env.HEADROOM_REQUIRED).toLowerCase());
   const probes = production
     ? await probeCriticalDependencies()
     : {
@@ -209,8 +210,10 @@ async function productionReadiness() {
     },
     {
       name: "headroom",
-      ok: !production || !headroomEnabled || probes.headroom.ok,
-      detail: headroomEnabled ? probes.headroom.detail : "disabled",
+      ok: !production || !headroomEnabled || !headroomRequired || probes.headroom.ok,
+      detail: headroomEnabled
+        ? `${headroomRequired ? "required" : "optional"}:${probes.headroom.detail}`
+        : "disabled",
     },
     (() => {
       const configuration = getCommsHubReadiness();

@@ -1,6 +1,8 @@
 # Headroom compression-only companion service for AIMS.
-# Pinned to the current production release for deterministic deployments.
-FROM ghcr.io/headroomlabs-ai/headroom:0.37.0
+# Default to the current published stable release. Override the build arg only
+# after validating a newer Headroom release against AIMS's compression contract.
+ARG HEADROOM_VERSION=0.37.0
+FROM ghcr.io/headroomlabs-ai/headroom:${HEADROOM_VERSION}
 
 ENV HEADROOM_HOST=0.0.0.0 \
     HEADROOM_PORT=8787 \
