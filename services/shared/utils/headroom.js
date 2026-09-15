@@ -59,8 +59,6 @@ const DEFAULT_ROUTES = Object.freeze([
 ]);
 
 const HARD_BYPASS_ROUTES = new Set(["artworkVisualQa", "blotatoVisualQa", "artworkImage"]);
-const FAILURE_THRESHOLD = 3;
-const CIRCUIT_OPEN_MS = 30_000;
 let warnedMissingBaseUrl = false;
 let consecutiveFailures = 0;
 let circuitOpenUntil = 0;
@@ -106,7 +104,9 @@ function cleanSecret(value) {
 }
 
 function getBearerToken() {
-  return cleanSecret(process.env.HEADROOM_API_KEY) || cleanSecret(process.env.HEADROOM_PROXY_TOKEN);
+  // HEADROOM_PROXY_TOKEN is the server-side auth contract for remote /v1/compress.
+  // HEADROOM_API_KEY remains a backwards-compatible client alias only.
+  return cleanSecret(process.env.HEADROOM_PROXY_TOKEN) || cleanSecret(process.env.HEADROOM_API_KEY);
 }
 
 function textCharacterCount(messages = []) {
@@ -219,10 +219,18 @@ function recordSuccess() {
   circuitOpenUntil = 0;
 }
 
+function getFailureThreshold() {
+  return Math.floor(finiteNumber(process.env.HEADROOM_FAILURE_THRESHOLD, 3, { min: 1 }));
+}
+
+function getCircuitOpenMs() {
+  return Math.floor(finiteNumber(process.env.HEADROOM_CIRCUIT_OPEN_MS, 30_000, { min: 100 }));
+}
+
 function recordFailure() {
   consecutiveFailures += 1;
-  if (consecutiveFailures >= FAILURE_THRESHOLD) {
-    circuitOpenUntil = Date.now() + CIRCUIT_OPEN_MS;
+  if (consecutiveFailures >= getFailureThreshold()) {
+    circuitOpenUntil = Date.now() + getCircuitOpenMs();
     consecutiveFailures = 0;
   }
 }
@@ -397,6 +405,8 @@ export const __headroomTestHooks = {
   isTextOnly,
   shapePreserved,
   textCharacterCount,
+  getFailureThreshold,
+  getCircuitOpenMs,
   resetCircuit,
 };
 
