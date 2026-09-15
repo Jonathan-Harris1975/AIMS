@@ -36,7 +36,7 @@ test("Headroom compresses eligible text-only messages and preserves system messa
   process.env.HEADROOM_MIN_INPUT_CHARS = "1";
   process.env.HEADROOM_ROUTES = "scriptMain";
   process.env.HEADROOM_PROXY_TOKEN = "headroom-test-token";
-  process.env.HEADROOM_API_KEY = "legacy-api-key-must-not-win";
+  process.env.HEADROOM_API_KEY = "test-legacy-api-key-must-not-win";
   process.env.HEADROOM_LOG_SAVINGS = "false";
 
   const original = [
