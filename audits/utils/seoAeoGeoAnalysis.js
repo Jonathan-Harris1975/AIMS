@@ -198,7 +198,7 @@ function buildUserPrompt(payload) {
     "",
     "Use the evidence payload only. Do not invent evidence. If the payload is thin for a family, record that limitation.",
     "The allRoutes and coverage arrays are the URL ledger for this run unless a payload field explicitly says otherwise.",
-    "The skillsBaseline block is governance and evidence-readiness metadata only; do not treat installed skills as proof that a crawl, screenshot or monitoring run succeeded \
+    "The skillsBaseline block is repository-local governance and evidence-readiness metadata only; do not treat a listed capability as proof that a crawl, screenshot or monitoring run succeeded \
 unless matching artefacts are present.",
     "Return one compact JSON object only, following the mandatory contract.",
     "Do not echo the complete route ledger; use [] for fullUrlCoverageAppendix unless a row adds unique judgement beyond allRoutes.",

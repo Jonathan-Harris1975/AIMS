@@ -1,40 +1,40 @@
-import { getHiveSkillPoolConfig, getLane1SkillReferences } from "../../services/shared/hiveSkillPool.js";
+import { getLane1SkillReferences, getLocalSkillRegistryConfig } from "../../services/shared/localSkills.js";
 
 const LANE_1_GOVERNANCE = Object.freeze({
   mode: "reports-only",
-  skillSource: "central HIVE R2 shared skill pool",
+  skillSource: "AIMS repository-local skills",
   blockedActions: Object.freeze(["auto-deploy", "direct-push", "secret-write", "blind-browser-action"]),
   requiredGates: Object.freeze(["dry-run", "evidence-capture", "manual-review-before-write"]),
 });
 
-export function buildLane1SkillsBaseline(upstreamBaseline = undefined, env = process.env) {
-  const pool = getHiveSkillPoolConfig(env);
-  const skills = getLane1SkillReferences(env);
-  const batchCounts = { "Central R2 AIMS manifest": skills.length };
+export function buildLane1SkillsBaseline(upstreamBaseline = undefined) {
+  const registry = getLocalSkillRegistryConfig();
+  const skills = getLane1SkillReferences();
+  const batchCounts = { "AIMS local Lane 1 skill": skills.length };
 
   return {
     generatedAt: new Date().toISOString(),
-    schemaVersion: "hive.manifest.aims.v1",
+    schemaVersion: "aims.local-skills.lane1.v1",
     lane: "Lane 1 - Autonomous",
-    repoSideSetup: false,
-    centralSkillPool: true,
+    repoSideSetup: true,
+    centralSkillPool: false,
+    localSkillRegistry: true,
     externalInstallRequired: false,
     localAgentsRequired: false,
     upstreamBaselinePresent: Boolean(upstreamBaseline && typeof upstreamBaseline === "object"),
     upstreamSkillCount: Number(upstreamBaseline?.skillCount || 0),
-    r2Bucket: pool.r2Bucket,
-    manifestUrl: pool.manifestUrl,
-    skillsIndexUrl: pool.skillsIndexUrl,
+    skillRegistry: registry,
     skillCount: skills.length,
     skills: skills.map((skill) => ({
       skill: skill.name,
       slug: skill.slug,
+      skillId: skill.skillId,
       referencePrefix: skill.referencePrefix,
-      descriptorUrl: skill.descriptorUrl,
-      batch: "Central R2 AIMS manifest",
-      priority: skill.referencePrefix ? "manifest-allowed" : "manifest-lookup-required",
-      repository: "HIVE shared skill pool",
-      ecosystemFit: "AIMS consumes the shared descriptor; HIVE owns execution and orchestration.",
+      descriptorPath: skill.descriptorPath,
+      batch: "AIMS local Lane 1 skill",
+      priority: "repo-local",
+      repository: "AIMS",
+      ecosystemFit: "AIMS owns the report lens metadata and executes the underlying audit workflow locally.",
       manualCheckpoint: "Review required before any write, deploy, browser or token-bearing action.",
     })),
     batchCounts,
