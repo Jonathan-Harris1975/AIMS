@@ -25,8 +25,8 @@ Dedupe utilities provide idempotency protection for triggerable workflows where 
 ### Content quality
 The shared content-quality system enforces reusable policy such as British English, Jonathan Harris voice, source integrity, anti-hype language and format-independent publication standards. Specialist services add their own channel gates.
 
-### HIVE skills
-Shared HIVE utilities read the configured AIMS skill index/manifest from the central read-only skill store. AIMS consumes these capabilities without granting content services write authority over HIVE policy.
+### Local skills
+Repository-local skill metadata documents AIMS-native capabilities and governance lenses. Resolution is file-backed and network-free; content services do not discover or install external skill bundles at runtime.
 
 ## Production route registry
 
@@ -41,7 +41,7 @@ The deployment environment provides:
 - R2 endpoint, bucket and public-base settings
 - request-dedupe settings
 - operational timeout/state settings
-- HIVE skill manifest settings
+- repository-local skill metadata under `config/skills/`
 
 See `config/production.defaults.env` and `env.template` for the complete current contract.
 
