@@ -2,7 +2,7 @@ services:
   headroom:
     build:
       context: .
-      dockerfile: Dockerfile.headroom
+      dockerfile: headroom/Dockerfile
       args:
         HEADROOM_VERSION: ${HEADROOM_VERSION:-0.37.0}
     image: aims-headroom:${HEADROOM_VERSION:-0.37.0}
