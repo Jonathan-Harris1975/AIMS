@@ -6,13 +6,17 @@ updates:
       interval: "weekly"
     open-pull-requests-limit: 10
     groups:
-      production-patch-and-minor:
-        dependency-type: "production"
+      aws-sdk-family:
+        patterns:
+          - "@aws-sdk/*"
         update-types:
           - "patch"
           - "minor"
-      development-patch-and-minor:
-        dependency-type: "development"
+      pino-family:
+        patterns:
+          - "pino"
+          - "pino-http"
+          - "pino-pretty"
         update-types:
           - "patch"
           - "minor"
