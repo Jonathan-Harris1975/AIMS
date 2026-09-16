@@ -1,4 +1,4 @@
-import { getCentralSkillReference, getHiveSkillPoolConfig } from "../shared/hiveSkillPool.js";
+import { getLocalSkillReference, getLocalSkillRegistryConfig } from "../shared/localSkills.js";
 import { AMERICAN_TO_BRITISH } from "./britishEnglish.js";
 const DEFAULT_THRESHOLDS = Object.freeze({
   overall: 85,
@@ -16,9 +16,9 @@ const PHASE_4_SKILLS = Object.freeze({
   execution: "phase-4-engineering-auto-pr",
 });
 
-function phase4CentralSkillReferences() {
+function phase4LocalSkillReferences() {
   return Object.fromEntries(
-    Object.entries(PHASE_4_SKILLS).map(([key, name]) => [key, getCentralSkillReference(name)])
+    Object.entries(PHASE_4_SKILLS).map(([key, name]) => [key, getLocalSkillReference(name, "phase4")])
   );
 }
 
@@ -355,10 +355,10 @@ export function runPhase4AutonomousContentGate({
     decision: ok ? "auto_publish" : "quarantine",
     phase: "4A/4B",
     skills: [PHASE_4_SKILLS.schema, PHASE_4_SKILLS.social],
-    skillPool: getHiveSkillPoolConfig(),
+    skillPool: getLocalSkillRegistryConfig(),
     skillReferences: {
-      schema: getCentralSkillReference(PHASE_4_SKILLS.schema),
-      social: getCentralSkillReference(PHASE_4_SKILLS.social),
+      schema: getLocalSkillReference(PHASE_4_SKILLS.schema, "phase4"),
+      social: getLocalSkillReference(PHASE_4_SKILLS.social, "phase4"),
     },
     contentType,
     score,
@@ -412,10 +412,10 @@ export function phase4SkillsSummary() {
   return {
     phase: "4A/4B/4C",
     autonomousMode: "auto-review auto-publish fail-closed",
-    skillSource: "central HIVE R2 shared skill pool",
-    skillPool: getHiveSkillPoolConfig(),
+    skillSource: "AIMS repository-local skills",
+    skillPool: getLocalSkillRegistryConfig(),
     skills: PHASE_4_SKILLS,
-    skillReferences: phase4CentralSkillReferences(),
+    skillReferences: phase4LocalSkillReferences(),
     rules: [
       "Schema markup may be auto-applied only when required JSON-LD fields validate.",
       "Social content may auto-publish only when source-backed, brand-safe, and schema-valid.",
