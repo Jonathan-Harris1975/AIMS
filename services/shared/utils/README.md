@@ -25,8 +25,8 @@ Request-dedupe and schedule-claim helpers prevent duplicate execution/publicatio
 ### Operational health
 Operational helpers expose readiness, excellence/failure snapshots and alert hooks without leaking secrets.
 
-### HIVE
-HIVE utilities resolve the central AIMS skills manifest/index in read-only mode and provide controlled skill lookup to service code.
+### Local skill metadata
+Local skill utilities resolve repository-owned descriptor paths for AIMS-native capabilities and governance lenses. They do not perform network discovery or external installation.
 
 ## Configuration source of truth
 
