@@ -30,7 +30,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 22
+          node-version: 22.22.3
+      - name: Verify pinned Node/npm toolchain
+        run: |
+          test "$(node --version)" = "v22.22.3"
+          test "$(npm --version)" = "10.9.8"
       - name: Validate Worker syntax
         run: node --check worker.js
       - name: Validate Wrangler configuration
@@ -48,7 +52,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 22
+          node-version: 22.22.3
+      - name: Verify pinned Node/npm toolchain
+        run: |
+          test "$(node --version)" = "v22.22.3"
+          test "$(npm --version)" = "10.9.8"
       - name: Deploy Worker at exact Wrangler version
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
