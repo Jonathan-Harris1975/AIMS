@@ -1,0 +1,39 @@
+{
+  "schema_version": "aims.local_skill.v1",
+  "skill_id": "AIMS-sk002",
+  "skill_name": "lane-1-audit-lenses",
+  "owner": "AIMS",
+  "runtime_dependency": "none",
+  "mode": "reports-only-metadata-lenses",
+  "adapted_at": "2026-09-16",
+  "purpose": "Local governance and evidence-readiness labels used by the Lane 1 SEO/AEO/GEO reporting workflow. These labels do not claim an external tool or provider executed.",
+  "capability_labels": [
+    "seo-audit",
+    "ai-seo",
+    "pdf",
+    "docx",
+    "pptx",
+    "xlsx",
+    "schema-markup",
+    "social-content",
+    "systematic-debugging",
+    "copywriting",
+    "copy-editing",
+    "marketing-psychology",
+    "accessibility-audit",
+    "podcast-seo"
+  ],
+  "implementation_paths": [
+    "audits/utils/lane1Skills.js",
+    "audits/utils/searchVisibilityBaseline.js",
+    "audits/utils/seoAeoGeoAnalysis.js",
+    "audits/utils/seoGeoSkillLenses.js"
+  ],
+  "guardrails": [
+    "report-only",
+    "evidence-required",
+    "manual-review-before-write",
+    "no-runtime-discovery",
+    "no-external-skill-install"
+  ]
+}

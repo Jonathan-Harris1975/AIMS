@@ -1,0 +1,33 @@
+{
+  "schema_version": "aims.local_skill.v1",
+  "skill_id": "AIMS-sk004",
+  "skill_name": "phase-5-organic-growth-gates",
+  "owner": "AIMS",
+  "runtime_dependency": "none",
+  "adapted_at": "2026-09-16",
+  "purpose": "Native fail-closed Phase 5 organic growth, visual social, accessibility and podcast SEO gate metadata.",
+  "capability_labels": [
+    "copywriting",
+    "copy-editing",
+    "marketing-psychology",
+    "product-marketing-context",
+    "social-content",
+    "ai-social-media-content",
+    "social-media-carousel",
+    "og-image-design",
+    "ai-image-generation",
+    "image-upscaling",
+    "content-repurposing",
+    "accessibility-audit",
+    "podcast-seo"
+  ],
+  "implementation_paths": [
+    "services/content-quality/phase5OrganicGrowthGates.js"
+  ],
+  "guardrails": [
+    "organic-only",
+    "source-safety",
+    "brand-safety",
+    "quarantine-on-failure"
+  ]
+}

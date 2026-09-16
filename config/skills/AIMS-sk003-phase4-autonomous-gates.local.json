@@ -1,0 +1,25 @@
+{
+  "schema_version": "aims.local_skill.v1",
+  "skill_id": "AIMS-sk003",
+  "skill_name": "phase-4-autonomous-gates",
+  "owner": "AIMS",
+  "runtime_dependency": "none",
+  "adapted_at": "2026-09-16",
+  "purpose": "Native fail-closed Phase 4 content, schema, social and engineering gate metadata.",
+  "capability_labels": [
+    "schema-markup",
+    "social-content",
+    "phase-4-autonomous-gates",
+    "systematic-debugging",
+    "phase-4-engineering-auto-pr"
+  ],
+  "implementation_paths": [
+    "services/content-quality/phase4AutonomousGates.js"
+  ],
+  "guardrails": [
+    "schema-validation",
+    "source-integrity",
+    "brand-safety",
+    "quarantine-on-blocking-failure"
+  ]
+}

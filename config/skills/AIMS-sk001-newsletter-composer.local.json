@@ -1,0 +1,40 @@
+{
+  "schema_version": "aims.local_skill.v1",
+  "skill_id": "AIMS-sk001",
+  "skill_name": "newsletter-composer",
+  "owner": "AIMS",
+  "runtime_dependency": "none",
+  "adapted_at": "2026-09-16",
+  "purpose": "Repository-owned newsletter generation, QA and Brevo delivery capability.",
+  "capabilities": [
+    "rss_ingestion_24h_window",
+    "story_ranking_and_selection",
+    "editorial_composition_subject_preview_lead_top10_footer",
+    "single_hero_image_per_issue",
+    "deterministic_and_ai_qa_review_loop",
+    "bounded_rewrite_with_quarantine",
+    "multi_profile_configuration",
+    "brevo_documented_api_delivery"
+  ],
+  "profiles": [
+    "ai-edge"
+  ],
+  "implementation_paths": [
+    "services/newsletter/engine/buildNewsletter.js",
+    "services/newsletter/brevo/campaign.js",
+    "audits/utils/newsletterAudit.js"
+  ],
+  "entry_points": {
+    "generate": "services/newsletter/engine/buildNewsletter.js#buildNewsletter",
+    "deliver": "services/newsletter/brevo/campaign.js#deliverNewsletterIssue",
+    "audit": "audits/utils/newsletterAudit.js#runNewsletterAudit"
+  },
+  "http_routes": [
+    "POST /newsletter/generate",
+    "GET /newsletter/jobs/:lane/:sessionId",
+    "POST /newsletter/send",
+    "GET /newsletter/campaigns/:campaignId/status",
+    "POST /audits/newsletter/run",
+    "GET /audits/newsletter/health"
+  ]
+}
