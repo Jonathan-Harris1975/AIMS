@@ -45,6 +45,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: docker build -t aims:ci .
+      - name: Build Headroom companion image
+        run: docker build -f headroom/Dockerfile -t aims-headroom:ci .
       - name: Verify Node runtime and smoke AIMS inside production image
         run: |
           docker run --rm aims:ci node -e "const major=Number(process.versions.node.split('.')[0]); if (major !== 22) process.exit(1);"
