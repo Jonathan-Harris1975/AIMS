@@ -28,8 +28,8 @@
     "perf:gate": "node scripts/performanceGate.js"
   },
   "engines": {
-    "node": "22.x",
-    "npm": "10.x"
+    "node": "22.22.3",
+    "npm": "10.9.8"
   },
   "dependencies": {
     "@aws-sdk/client-polly": "^3.1119.0",
@@ -53,5 +53,5 @@
   "devDependencies": {
     "supertest": "^7.2.2"
   },
-  "packageManager": "npm@10.9.2"
+  "packageManager": "npm@10.9.8"
 }
