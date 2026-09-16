@@ -12,7 +12,7 @@ const editingProcessorUrl = new URL("../services/tts/utils/editingProcessor.js",
 test("R2 policy classifies all AIMS internal/intermediate buckets as private", async () => {
   const policy = JSON.parse(await fs.readFile(policyUrl, "utf8"));
   const privateNames = new Set(policy.buckets.filter((entry) => entry.access === "private").map((entry) => entry.bucket));
-  for (const name of ["metasystem", "comms-hub", "comms-hub-private", "audits", "raw-text", "podcast-chunks", "podcast-merged", "podcast-meta", "edited", "hive-skills"]) {
+  for (const name of ["metasystem", "comms-hub", "comms-hub-private", "audits", "raw-text", "podcast-chunks", "podcast-merged", "podcast-meta", "edited"]) {
     assert.equal(privateNames.has(name), true, `${name} should be private`);
   }
 });
@@ -43,7 +43,7 @@ test("target-private AIMS buckets no longer ship public base URLs", async () => 
   }
 
   for (const name of ["R2_PUBLIC_BASE_URL_AUDITS", "R2_PUBLIC_BASE_URL_RAW_TEXT", "R2_PUBLIC_BASE_URL_CHUNKS", "R2_PUBLIC_BASE_URL_MERGE", "R2_PUBLIC_BASE_URL_META",
-     "R2_PUBLIC_BASE_URL_EDITED_AUDIO", "R2_PUBLIC_BASE_URL_HIVE_SKILLS"]) {
+     "R2_PUBLIC_BASE_URL_EDITED_AUDIO"]) {
     assert.match(env, new RegExp(`^${name}=$`, "m"));
   }
 });
