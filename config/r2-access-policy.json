@@ -105,14 +105,6 @@
       "reason": "intermediate mastered audio before publication"
     },
     {
-      "bucket": "hive-skills",
-      "access": "private",
-      "aliases": [],
-      "publicBaseEnv": "R2_PUBLIC_BASE_URL_HIVE_SKILLS",
-      "compatibilityPublicUrl": false,
-      "reason": "shared skill descriptors and indexes are internal catalogue data read through authenticated R2"
-    },
-    {
       "bucket": "podcast",
       "access": "public",
       "aliases": [
