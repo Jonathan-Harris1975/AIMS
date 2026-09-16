@@ -50,8 +50,6 @@ AIMS runs as one non-root Koyeb Web Service with durable R2-backed state and fai
 
 - `R2_BUCKET_AUDITS=audits`
 - `R2_PUBLIC_BASE_URL_AUDITS=` (leave blank; `audits` is private and uses authenticated R2 access)
-- `R2_BUCKET_HIVE_SKILLS=hive-skills`
-- `R2_PUBLIC_BASE_URL_HIVE_SKILLS=` (leave blank; `hive-skills` is private and uses authenticated R2 access)
 - `BLOTATO_DEFAULT_CHANNELS=instagram,youtube,tiktok,facebook`
 - `BLOTATO_REQUIRE_ALL_CHANNELS=true` in the current production defaults; every configured required channel must be confirmed before the Blotato operation is treated as successful.
 - `CLOUDFLARE_PURGE_ALLOW_PUBLIC=false`
