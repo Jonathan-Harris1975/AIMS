@@ -1,5 +1,0 @@
-config/hive-skills.json
-config/skills/S094-newsletter-composer.local.json
-docs/hive-shared-skills.md
-services/shared/hiveSkillPool.js
-services/shared/utils/hiveSkillPool.js
