@@ -4,17 +4,42 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    open-pull-requests-limit: 10
+    groups:
+      production-patch-and-minor:
+        dependency-type: "production"
+        update-types:
+          - "patch"
+          - "minor"
+      development-patch-and-minor:
+        dependency-type: "development"
+        update-types:
+          - "patch"
+          - "minor"
     commit-message:
       prefix: "deps"
+
   - package-ecosystem: "docker"
     directory: "/"
     schedule:
       interval: "weekly"
+    open-pull-requests-limit: 10
     commit-message:
       prefix: "deps(docker)"
+
+  # Headroom uses its own literal Dockerfile so Dependabot can track the image tag.
+  - package-ecosystem: "docker"
+    directory: "/headroom"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: "deps(headroom)"
+
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
+    open-pull-requests-limit: 10
     commit-message:
       prefix: "deps(ci)"
