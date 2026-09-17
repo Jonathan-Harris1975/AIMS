@@ -93,6 +93,23 @@ async function assertPublicRegistryLockfile() {
 async function assertKoyebBuildCommandsAreRuntimeEnvIsolated() {
   const dockerfile = await readFile(path.join(projectRoot, "Dockerfile"), "utf8");
   const nixpacks = await readFile(path.join(projectRoot, "nixpacks.toml"), "utf8");
+  const packageJson = JSON.parse(await readFile(path.join(projectRoot, "package.json"), "utf8"));
+  const pinnedNodeVersion = String(packageJson.engines?.node || "").trim();
+  const nodeImage = dockerfile.match(/^FROM\s+node:([^@\s]+)@sha256:[0-9a-f]{64}\s+AS\s+runtime\s*$/m);
+
+  if (!pinnedNodeVersion) {
+    throw new Error("package.json must pin engines.node before validating the production image");
+  }
+
+  if (!nodeImage) {
+    throw new Error("Dockerfile runtime must use a digest-pinned node image");
+  }
+
+  if (!nodeImage[1].startsWith(`${pinnedNodeVersion}-`)) {
+    throw new Error(
+      `Dockerfile Node image (${nodeImage[1]}) must match package.json engines.node (${pinnedNodeVersion})`
+    );
+  }
 
   if (!dockerfile.includes("npm ci") || !dockerfile.includes("--ignore-scripts")) {
     throw new Error("Dockerfile dependency installation must use npm ci with lifecycle scripts disabled");
