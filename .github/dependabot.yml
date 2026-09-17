@@ -20,6 +20,12 @@ updates:
         update-types:
           - "patch"
           - "minor"
+      google-api-family:
+        patterns:
+          - "googleapis"
+        update-types:
+          - "patch"
+          - "minor"
     commit-message:
       prefix: "deps"
 
