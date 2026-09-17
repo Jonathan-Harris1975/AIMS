@@ -51,9 +51,18 @@ jobs:
       - run: docker build -t aims:ci .
       - name: Build Headroom companion image
         run: docker build -f headroom/Dockerfile -t aims-headroom:ci .
-      - name: Verify Node runtime and smoke AIMS inside production image
+      - name: Verify pinned runtime and smoke AIMS inside production image
         run: |
-          docker run --rm aims:ci node -e "const major=Number(process.versions.node.split('.')[0]); if (major !== 22) process.exit(1);"
+          docker run --rm aims:ci node -e '
+            const { execFileSync } = require("node:child_process");
+            const pkg = require("./package.json");
+            const actualNode = process.versions.node;
+            const actualNpm = execFileSync("npm", ["--version"], { encoding: "utf8" }).trim();
+            if (actualNode !== pkg.engines.node || actualNpm !== pkg.engines.npm) {
+              console.error(`Runtime mismatch: node=${actualNode}, npm=${actualNpm}; expected node=${pkg.engines.node}, npm=${pkg.engines.npm}`);
+              process.exit(1);
+            }
+          '
           docker run --rm \
             -e NODE_ENV=production \
             -e ALLOW_EPHEMERAL_STATE=true \
