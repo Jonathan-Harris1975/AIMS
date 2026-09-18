@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import { CommsHubChatService } from '../services/comms-hub/chatService.js';
 import { CommsHubError } from '../services/comms-hub/errors.js';
+import { CommsOperationsRepository } from '../services/comms-hub/repositories/commsOperationsRepository.js';
 import { isPublicCommsHubIntakePath } from '../services/shared/middleware/suiteAuth.js';
 
 function baseContext(overrides = {}) {
@@ -111,6 +112,30 @@ function baseContext(overrides = {}) {
     },
   };
 }
+
+test('chat transcript repository returns the newest bounded history in chronological order', async () => {
+  const calls = [];
+  const newestFirst = [
+    {
+      id: 'msg-3', direction: 'outbound', sender: 'AIMS', body_text: 'third', provider_message_id: 'provider-3',
+      received_at: '2026-09-18T10:00:03.000Z', created_at: '2026-09-18T10:00:03.000Z', metadata_json: '{}',
+    },
+    {
+      id: 'msg-2', direction: 'inbound', sender: 'visitor', body_text: 'second', provider_message_id: 'provider-2',
+      received_at: '2026-09-18T10:00:02.000Z', created_at: '2026-09-18T10:00:02.000Z', metadata_json: '{}',
+    },
+  ];
+  const repository = new CommsOperationsRepository({
+    async query(sql, params) { calls.push({ sql, params }); return { results: newestFirst }; },
+  });
+  const history = await repository.listChatMessages({ conversationId: 'cnv-1', limit: 2 });
+  assert.match(calls[0].sql, /ORDER BY received_at DESC, id DESC/);
+  assert.deepEqual(history.map((message) => message.id), ['msg-2', 'msg-3']);
+
+  calls.length = 0;
+  await repository.listChatMessages({ conversationId: 'cnv-1', after: '2026-09-18T10:00:01.000Z', limit: 2 });
+  assert.match(calls[0].sql, /ORDER BY received_at ASC, id ASC/);
+});
 
 test('chat intake persists a first-party website message and sync returns it', async () => {
   const { context } = baseContext();
