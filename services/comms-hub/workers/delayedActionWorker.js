@@ -73,6 +73,14 @@ export class CommsHubDelayedActionWorker {
       });
     }
     if (item.action_type === 'recheck') {
+      if (payload.inboundAutomationRetry === true) {
+        return runInboundConversationAutomation({
+          context: this.context,
+          conversationId: item.conversation_id,
+          actor: payload.actor || 'inbound-automation-retry',
+          scheduleFollowUp: payload.scheduleFollowUp !== false,
+        });
+      }
       return this.context.workflowEngineService.evaluate({
         conversationId: item.conversation_id,
         trigger: 'delayed_recheck',
@@ -140,6 +148,7 @@ export class CommsHubDelayedActionWorker {
   }
 
   async process(item) {
+    const payload = parse(item.payload_json);
     try {
       const businessReplyTypes = new Set(['reply_draft', 'email_reply', 'form_reply', 'outreach_follow_up', 'outreach_reply_process']);
       if (businessReplyTypes.has(item.action_type)) {
@@ -193,6 +202,30 @@ export class CommsHubDelayedActionWorker {
             idempotencySeed: `chat-ai-retry-exhausted:${item.id}`,
           }).catch((notificationError) => {
             log.error('commsHub.chat.automationRetryNotificationFailed', { itemId: item.id, error: safeErrorLog(notificationError) });
+          });
+        }
+
+        const inboundAutomationRetry = item.action_type === 'recheck' && payload.inboundAutomationRetry === true;
+        let conversation = null;
+        if (item.action_type === 'reply_draft' || inboundAutomationRetry) {
+          conversation = await this.context.repository?.getConversation?.(item.conversation_id).catch(() => null);
+        }
+        const emailAutomationFailure = item.action_type === 'email_reply'
+          || item.action_type === 'form_reply'
+          || (item.action_type === 'reply_draft' && ['email', 'form'].includes(String(conversation?.channel || '').toLowerCase()))
+          || (inboundAutomationRetry && ['email', 'form'].includes(String(conversation?.channel || '').toLowerCase()));
+        if (emailAutomationFailure) {
+          await this.context.notificationService.create({
+            actor: 'admin',
+            conversationId: item.conversation_id,
+            type: 'system',
+            title: 'Automated email reply needs attention',
+            bodyText: 'An automated email action exhausted its retry budget and was quarantined. The conversation is preserved for manual follow-up.',
+            severity: 'critical',
+            emailRequested: false,
+            idempotencySeed: `email-automation-exhausted:${item.id}`,
+          }).catch((notificationError) => {
+            log.error('commsHub.email.automationRetryNotificationFailed', { itemId: item.id, error: safeErrorLog(notificationError) });
           });
         }
       }

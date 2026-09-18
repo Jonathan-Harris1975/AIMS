@@ -90,12 +90,12 @@ export class CommsHubEmailPollWorker {
       throw new CommsHubError(409, 'email_poll_replay_target_invalid', 'Email poll replay target does not match the configured mailbox.');
     }
     await this.context.operationsRepository.resetEmailPollStateForReplay({ accountKey, mailbox });
-    const result = await this.runOnce({ force: true });
+    const result = await this.runOnce({ force: true, lookbackUids: Number(this.context.config.emailManualRecoveryUidLookback || 100) });
     if (result.skipped) throw new CommsHubError(409, 'email_poll_replay_not_run', 'Email poll replay could not be started.');
     return result;
   }
 
-  async runOnce({ limit, force = false, now: nowValue = new Date() } = {}) {
+  async runOnce({ limit, force = false, lookbackUids = 0, now: nowValue = new Date() } = {}) {
     if (this.running || this.stopping) {
       const reason = this.stopping ? 'stopping' : 'already_running';
       log.info('commsHub.emailPoll.skipped', { workerId: this.workerId, reason });
@@ -103,6 +103,13 @@ export class CommsHubEmailPollWorker {
     }
 
     const now = nowValue instanceof Date ? nowValue : new Date(nowValue);
+    const requestedLookbackUids = Number(lookbackUids || 0);
+    if (!Number.isInteger(requestedLookbackUids) || requestedLookbackUids < 0 || requestedLookbackUids > 100) {
+      throw new CommsHubError(400, 'email_poll_lookback_invalid', 'Email recovery lookback must be an integer between 0 and 100.');
+    }
+    if (requestedLookbackUids > 0 && !force) {
+      throw new CommsHubError(400, 'email_poll_lookback_requires_force', 'Email recovery lookback requires an explicit forced poll.');
+    }
     const mailbox = this.account.mailbox;
     const accountKey = this.account.key;
     const policy = businessHoursPolicy(this.context.config);
@@ -132,6 +139,7 @@ export class CommsHubEmailPollWorker {
       mailbox,
       force,
       requestedLimit: limit || null,
+      requestedLookbackUids,
     });
 
     try {
@@ -181,8 +189,9 @@ export class CommsHubEmailPollWorker {
       });
 
       // Safety boundary: inspect mailbox metadata before fetching any body.
-      // First run, UIDVALIDITY changes and mailbox resets establish a fresh
-      // watermark rather than risking historical message processing.
+      // UIDVALIDITY changes and mailbox resets still establish a fresh watermark.
+      // A normal first run performs a tightly bounded recent-message recovery so
+      // mail that arrived shortly before a deployment cannot be skipped forever.
       stage = 'mailbox_cursor';
       log.info('commsHub.emailPoll.imapCursor.start', { workerId: this.workerId, accountKey, mailbox });
       const cursor = await this.mailClient.getMailboxCursor({ mailbox });
@@ -201,7 +210,7 @@ export class CommsHubEmailPollWorker {
       const uidValidityChanged = Boolean(previousUidValidity && cursor.uidValidity && previousUidValidity !== cursor.uidValidity);
       const mailboxReset = lastUid > Number(cursor.highestUid || 0);
 
-      if ((!lastUid && !this.context.config.emailHistoricalBackfillEnabled) || uidValidityChanged || mailboxReset) {
+      if (uidValidityChanged || mailboxReset) {
         stage = 'complete_baseline';
         await this.context.operationsRepository.completeEmailPollState({
           accountKey,
@@ -211,7 +220,7 @@ export class CommsHubEmailPollWorker {
           uidValidity: cursor.uidValidity,
           nextAttemptAt: new Date(now.getTime() + this.context.config.emailPollMs).toISOString(),
         });
-        const reason = uidValidityChanged ? 'uidvalidity_rebaseline' : mailboxReset ? 'mailbox_reset_rebaseline' : 'historical_baseline_established';
+        const reason = uidValidityChanged ? 'uidvalidity_rebaseline' : 'mailbox_reset_rebaseline';
         log.info('commsHub.emailPoll.baseline', {
           workerId: this.workerId,
           accountKey,
@@ -223,14 +232,28 @@ export class CommsHubEmailPollWorker {
         return { skipped: true, reason, highestUid: cursor.highestUid };
       }
 
+      const startupRecovery = !lastUid && !this.context.config.emailHistoricalBackfillEnabled;
+      const recoveryLookbackUids = requestedLookbackUids || (startupRecovery ? Number(this.context.config.emailStartupRecoveryUidLookback || 25) : 0);
+      const fetchAfterUid = recoveryLookbackUids
+        ? Math.max(0, (startupRecovery ? Number(cursor.highestUid || 0) : lastUid) - recoveryLookbackUids)
+        : lastUid;
+      const startupRecoveryCutoffMs = startupRecovery
+        ? now.getTime() - Number(this.context.config.emailStartupRecoveryMaxAgeDays || 14) * 86_400_000
+        : null;
+
       stage = 'fetch_messages';
-      const batchLimit = Math.min(Math.max(Number(limit || this.context.config.emailPollBatchSize) || 1, 1), 100);
+      const requestedBatchLimit = Number(limit || this.context.config.emailPollBatchSize) || 1;
+      const batchLimit = Math.min(Math.max(requestedBatchLimit, recoveryLookbackUids || 1, 1), 100);
       log.info('commsHub.emailPoll.fetch.start', {
         workerId: this.workerId,
         accountKey,
         mailbox,
-        afterUid: lastUid,
+        afterUid: fetchAfterUid,
+        lastUid,
         limit: batchLimit,
+        startupRecovery,
+        recoveryLookbackUids,
+        startupRecoveryMaxAgeDays: startupRecovery ? this.context.config.emailStartupRecoveryMaxAgeDays : null,
         mode: 'bounded_one_message_at_a_time',
       });
 
@@ -240,7 +263,7 @@ export class CommsHubEmailPollWorker {
       // Fetch and persist exactly one message at a time, then release its raw
       // buffer before moving to the next UID.
       const results = [];
-      let workingUid = lastUid;
+      let workingUid = fetchAfterUid;
       let observedUidValidity = cursor.uidValidity;
       for (let index = 0; index < batchLimit; index += 1) {
         stage = 'fetch_message';
@@ -262,6 +285,21 @@ export class CommsHubEmailPollWorker {
           limit: batchLimit,
         });
 
+        workingUid = Number(message.uid || fetched.highestUid || workingUid);
+        if (startupRecovery && startupRecoveryCutoffMs) {
+          const receivedAtMs = Date.parse(message.parsed?.receivedAt || '');
+          if (Number.isFinite(receivedAtMs) && receivedAtMs < startupRecoveryCutoffMs) {
+            log.info('commsHub.emailPoll.startupRecoverySkippedOldMessage', {
+              workerId: this.workerId,
+              accountKey,
+              mailbox,
+              uid: workingUid,
+              receivedAt: message.parsed?.receivedAt || null,
+            });
+            continue;
+          }
+        }
+
         stage = 'persist_message';
         const persisted = await this.context.emailService.persistFetched({
           uid: message.uid,
@@ -273,7 +311,6 @@ export class CommsHubEmailPollWorker {
           automationEnabled: this.account.workflowEvaluationEnabled === true,
         });
         results.push(persisted);
-        workingUid = Number(message.uid || fetched.highestUid || workingUid);
 
         log.info('commsHub.emailPoll.messagePersisted', {
           workerId: this.workerId,
@@ -289,9 +326,9 @@ export class CommsHubEmailPollWorker {
         workerId: this.workerId,
         accountKey,
         mailbox,
-        afterUid: lastUid,
+        afterUid: fetchAfterUid,
         fetched: results.length,
-        highestUid: workingUid,
+        highestUid: Math.max(lastUid, workingUid),
         uidValidity: Number(observedUidValidity || 0) || null,
       });
 
@@ -300,7 +337,7 @@ export class CommsHubEmailPollWorker {
         accountKey,
         mailbox,
         workerId: this.workerId,
-        lastUid: workingUid,
+        lastUid: startupRecovery ? Number(cursor.highestUid || workingUid) : Math.max(lastUid, workingUid),
         uidValidity: observedUidValidity,
         // Drain another batch almost immediately when the configured batch was
         // filled; otherwise return to the normal poll cadence.
@@ -316,7 +353,7 @@ export class CommsHubEmailPollWorker {
         processed: results.length,
         attachmentCount,
         previousUid: lastUid,
-        highestUid: workingUid,
+        highestUid: startupRecovery ? Number(cursor.highestUid || workingUid) : Math.max(lastUid, workingUid),
       });
       if (results.length) {
         log.info('commsHub.emailPoll.processed', {
@@ -328,7 +365,8 @@ export class CommsHubEmailPollWorker {
           attachmentCount,
         });
       }
-      return { processed: results.length, highestUid: workingUid, results };
+      const completedUid = startupRecovery ? Number(cursor.highestUid || workingUid) : Math.max(lastUid, workingUid);
+      return { processed: results.length, highestUid: completedUid, results, startupRecovery, recoveryLookbackUids };
     } catch (error) {
       const failure = safeErrorLog(error);
       const failedStage = providerStage(error, stage);
