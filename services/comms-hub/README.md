@@ -56,7 +56,7 @@ Primary controls include:
 
 ## Email safety
 
-Production polls only the configured `info@jonathan-harris.online` account. Admin/newsletter mailbox automation is disabled. `COMMS_HUB_EMAIL_HISTORICAL_BACKFILL_ENABLED=false` makes the first enabled poll record the current UID watermark without importing historical message bodies. Mailbox resets/UIDVALIDITY changes re-baseline before new body fetches.
+Production polls only the configured `info@jonathan-harris.online` account. Admin/newsletter mailbox automation is disabled. With `COMMS_HUB_EMAIL_HISTORICAL_BACKFILL_ENABLED=false`, the first enabled poll performs a bounded recovery of the latest `COMMS_HUB_EMAIL_STARTUP_RECOVERY_UID_LOOKBACK` UIDs (default 25) and ignores recovered messages older than `COMMS_HUB_EMAIL_STARTUP_RECOVERY_MAX_AGE_DAYS` (default 14) before establishing the current watermark. This avoids silently skipping messages that arrived shortly before a deployment without turning startup into an unlimited historical import. Mailbox resets/UIDVALIDITY changes still re-baseline before new body fetches. A privileged forced drain can pass `lookbackUids` (maximum 100; default recovery replay 100) to safely re-check recent UIDs; message persistence remains idempotent.
 
 Email attachments use the same private quarantine, malware scan and clean-promotion flow as form attachments. An unsafe attachment does not silently discard its parent conversation.
 

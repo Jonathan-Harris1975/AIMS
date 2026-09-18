@@ -185,6 +185,7 @@ export class CommsHubEmailService {
       metadata: { managedAddress: effectiveManagedAddress, mailboxRole: effectiveMailboxRole, accountKey: account.key },
       updatedAt: now,
     });
+    const attachmentReviewRequired = attachmentResults.some((item) => item.status !== 'stored');
     if (outreachReply && !persistence.duplicate) {
       await this.context.outreachAutomationService?.scheduleReplyProcessing(conversationId, messageId);
     } else {
@@ -192,13 +193,26 @@ export class CommsHubEmailService {
         await this.context.workflowEngineService.evaluate({ conversationId, event: { type: 'message_received', channel: 'email', sender, text: parsed.text, occurredAt: now } });
       }
       if (!persistence.duplicate && evaluateWorkflow) {
-        kickInboundConversationAutomation({
+        const kicked = kickInboundConversationAutomation({
           context: this.context,
           conversationId,
           actor: 'email-inbound-automation',
           scheduleFollowUp: true,
-          blockedReason: parsed.attachments.length ? 'attachment_review_required' : '',
+          triggerMessageId: messageId,
+          blockedReason: attachmentReviewRequired ? 'attachment_review_required' : '',
         });
+        if (!kicked && attachmentReviewRequired) {
+          await this.context.notificationService?.create({
+            actor: 'admin',
+            conversationId,
+            type: 'system',
+            title: 'Email attachment requires review',
+            bodyText: 'An inbound email is preserved, but automatic reply generation is paused because one or more attachments did not complete clean malware scanning.',
+            severity: 'warning',
+            emailRequested: false,
+            idempotencySeed: `email-attachment-review:${messageId}`,
+          }).catch(() => null);
+        }
       }
     }
     return { duplicate: persistence.duplicate, conversationId, messageId, workflow: outreachReply ? 'outreach_guest_article' : 'email_inbox', accountKey: account.key,
@@ -270,7 +284,7 @@ export class CommsHubEmailService {
       return { duplicate: false, providerMessageId: sent.messageId };
     } catch (error) {
       await this.context.operationsRepository.failChannelOutboundAction({ idempotencyKey, failureClass: error.failureClass || 'temporary', error: error.message,
-         reconciliationRequired: Boolean(error.retryable) });
+         reconciliationRequired: Boolean(error.deliveryUncertain) });
       throw error;
     }
   }
@@ -327,7 +341,7 @@ export class CommsHubEmailService {
       return { duplicate: false, providerMessageId: sent.messageId };
     } catch (error) {
       await this.context.operationsRepository.failChannelOutboundAction({
-        idempotencyKey, failureClass: error.failureClass || 'temporary', error: error.message, reconciliationRequired: Boolean(error.retryable),
+        idempotencyKey, failureClass: error.failureClass || 'temporary', error: error.message, reconciliationRequired: Boolean(error.deliveryUncertain),
       });
       throw error;
     }

@@ -5,6 +5,7 @@ function classify(entry, config, nowMs) {
   const stale = !lastAt || nowMs - lastAt > config.providerHealthStaleMs;
   const lastStatus = String(entry.lastStatus || "unknown").toLowerCase();
   if (lastStatus === "configured" || lastStatus === "disabled") return "unknown";
+  if (lastStatus === "unconfigured") return "unavailable";
   if (/429|rate|throttl/.test(lastStatus)) return "rate_limited";
   if (!stale && entry.failures >= config.providerHealthFailureThreshold && entry.failureRate >= 0.8) return "unavailable";
   if (stale) return entry.calls ? "degraded" : "unknown";
@@ -13,9 +14,19 @@ function classify(entry, config, nowMs) {
 }
 
 function readinessEntries(context) {
+  const emailConfigured = Boolean(
+    context.config.oneComEmailAddress
+    && context.config.oneComEmailUsername
+    && context.config.oneComEmailPassword
+    && context.config.oneComImapHost
+    && context.config.oneComSmtpHost
+  );
+  const emailReadinessStatus = context.config.emailEnabled ? (emailConfigured ? "configured" : "unconfigured") : "disabled";
   const entries = [
     { routeKey: "comms-hub:storage", provider: "cloudflare-d1", calls: 0, successes: 0, failures: 0, failureRate: 0, lastStatus: "configured", lastAt: null },
     { routeKey: "comms-hub:intake", provider: "jotform", calls: 0, successes: 0, failures: 0, failureRate: 0, lastStatus: "configured", lastAt: null },
+    { routeKey: "comms-hub:email-imap", provider: "one.com-imap", calls: 0, successes: 0, failures: 0, failureRate: 0, lastStatus: emailReadinessStatus, lastAt: null },
+    { routeKey: "comms-hub:email-smtp", provider: "one.com-smtp", calls: 0, successes: 0, failures: 0, failureRate: 0, lastStatus: emailReadinessStatus, lastAt: null },
   ];
   for (const [family, config] of Object.entries(context.config.zernioFamilies)) {
     entries.push({

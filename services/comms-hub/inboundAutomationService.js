@@ -6,6 +6,30 @@ import { ensureSocialPostContext } from "./socialPostContextService.js";
 
 const pending = new Set();
 
+async function scheduleInboundAutomationRetry(context, { conversationId, actor, scheduleFollowUp, triggerMessageId } = {}) {
+  if (!context?.operationsRepository?.scheduleDelayedAction || !conversationId) return null;
+  const messageId = String(triggerMessageId || "latest").slice(0, 200);
+  const retryKey = `inbound-automation-retry:${conversationId}:${messageId}`;
+  const now = context.now ? new Date(context.now()) : new Date();
+  const dueAt = new Date(now.getTime() + 60_000).toISOString();
+  return context.operationsRepository.scheduleDelayedAction({
+    id: stableId("dla", retryKey),
+    conversationId,
+    actionType: "recheck",
+    payload: {
+      inboundAutomationRetry: true,
+      actor: actor || "inbound-automation-retry",
+      scheduleFollowUp: scheduleFollowUp !== false,
+      triggerMessageId: messageId,
+    },
+    dueAt,
+    maxAttempts: 8,
+    idempotencyKey: retryKey,
+    actor: "inbound-automation-retry",
+    createdAt: now.toISOString(),
+  });
+}
+
 async function scheduleSocialContextRetry(context, conversation, actor) {
   if (!context?.operationsRepository?.scheduleDelayedAction || !conversation?.id) return null;
   const latestInbound = (conversation.messages || []).filter((message) => message?.direction !== "outbound").at(-1);
@@ -35,6 +59,27 @@ function enabled(context) {
   );
 }
 
+async function notifyEmailApprovalRequired(context, { conversation, conversationId, draftId } = {}) {
+  if (conversation?.channel !== "email" || !context?.notificationService?.create) return null;
+  return context.notificationService.create({
+    actor: "admin",
+    conversationId,
+    type: "system",
+    title: "Email reply approval required",
+    bodyText: "An automated email reply draft requires human approval before it can be sent.",
+    severity: "warning",
+    emailRequested: false,
+    idempotencySeed: `email-approval-required:${draftId || conversationId}`,
+  }).catch((error) => {
+    log.warn("commsHub.inboundAutomation.approvalNotificationFailed", {
+      conversationId,
+      draftId: draftId || null,
+      error: safeErrorLog(error),
+    });
+    return null;
+  });
+}
+
 export async function runInboundConversationAutomation({ context, conversationId, actor = "inbound-automation", scheduleFollowUp = true, scheduleContextRetry = true } = {}) {
   if (!conversationId || !enabled(context)) return { skipped: true, reason: "automation_disabled" };
   const conversation = context.repository?.getConversation
@@ -55,7 +100,10 @@ export async function runInboundConversationAutomation({ context, conversationId
   if (operations?.owner_type === "person") return { skipped: true, reason: "human_assigned" };
   const analysis = await context.aiWorkflowService.analyseConversation(conversationId, { operation: "analyse", scheduleFollowUp });
   if (!analysis?.draft?.id) return { skipped: true, reason: "no_draft", analysis };
-  if (analysis.draft.requiresApproval) return { skipped: true, reason: "approval_required", analysis };
+  if (analysis.draft.requiresApproval) {
+    await notifyEmailApprovalRequired(context, { conversation, conversationId, draftId: analysis.draft.id });
+    return { skipped: true, reason: "approval_required", analysis };
+  }
   try {
     const delivery = await context.governanceService.attemptAutonomousReply(
       { conversationId, draftId: analysis.draft.id },
@@ -74,11 +122,14 @@ export async function runInboundConversationAutomation({ context, conversationId
       "autonomous_reply_human_assigned",
     ]);
     if (!expected.has(error?.code)) throw error;
+    if (error?.code === "autonomous_reply_requires_approval") {
+      await notifyEmailApprovalRequired(context, { conversation, conversationId, draftId: analysis.draft.id });
+    }
     return { skipped: true, reason: error.code, analysis };
   }
 }
 
-export function kickInboundConversationAutomation({ context, conversationId, actor = "inbound-automation", scheduleFollowUp = true, blockedReason = "" } = {}) {
+export function kickInboundConversationAutomation({ context, conversationId, actor = "inbound-automation", scheduleFollowUp = true, triggerMessageId = "", blockedReason = "" } = {}) {
   if (blockedReason) return false;
   if (!conversationId || !enabled(context) || pending.has(conversationId)) return false;
   pending.add(conversationId);
@@ -91,7 +142,24 @@ export function kickInboundConversationAutomation({ context, conversationId, act
         skipped: Boolean(result?.skipped),
         reason: result?.reason || null,
       }))
-      .catch((error) => log.warn("commsHub.inboundAutomation.failed", { conversationId, actor, error: safeErrorLog(error) }))
+      .catch(async (error) => {
+        log.warn("commsHub.inboundAutomation.failed", { conversationId, actor, error: safeErrorLog(error) });
+        try {
+          const retry = await scheduleInboundAutomationRetry(context, { conversationId, actor, scheduleFollowUp, triggerMessageId });
+          log.warn("commsHub.inboundAutomation.retryScheduled", {
+            conversationId,
+            actor,
+            scheduled: Boolean(retry),
+            triggerMessageId: triggerMessageId || null,
+          });
+        } catch (retryError) {
+          log.error("commsHub.inboundAutomation.retryScheduleFailed", {
+            conversationId,
+            actor,
+            error: safeErrorLog(retryError),
+          });
+        }
+      })
       .finally(() => pending.delete(conversationId));
   });
   return true;
