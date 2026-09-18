@@ -1314,15 +1314,17 @@ export class CommsOperationsRepository extends CommsIdentityArchiveRepository {
 
   async listChatMessages({ conversationId, after = "", limit = 100 }) {
     const safeLimit = Math.min(Math.max(Number(limit) || 100, 1), 250);
+    const incremental = Boolean(after);
+    const direction = incremental ? "ASC" : "DESC";
     const result = await this.d1.query(
       `SELECT id, direction, sender, body_text, provider_message_id, received_at, created_at, metadata_json
          FROM comms_hub_messages
         WHERE conversation_id = ? AND (? = '' OR received_at > ?)
-        ORDER BY received_at ASC
+        ORDER BY received_at ${direction}, id ${direction}
         LIMIT ?`,
       [conversationId, after, after, safeLimit]
     );
-    return rows(result).map((row) => ({
+    const messages = rows(result).map((row) => ({
       id: row.id,
       direction: row.direction,
       sender: row.sender || null,
@@ -1332,6 +1334,9 @@ export class CommsOperationsRepository extends CommsIdentityArchiveRepository {
       createdAt: row.created_at,
       metadata: parseJson(row.metadata_json, {}),
     }));
+    // A reconnect should receive the newest bounded history, displayed oldest to
+    // newest. Cursor-based sync remains forward-only and already arrives ASC.
+    return incremental ? messages : messages.reverse();
   }
 
   async updateChatTakeover({ conversationId, mode, actor = null, at = nowIso() }) {
