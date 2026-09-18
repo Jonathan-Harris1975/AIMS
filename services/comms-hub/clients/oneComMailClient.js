@@ -1,6 +1,7 @@
 import tls from "node:tls";
 import { CommsHubError } from "../errors.js";
 import { buildRawEmail, parseRawEmail } from "../domain/email.js";
+import { recordProviderOutcome } from "../../shared/utils/operationalExcellence.js";
 
 function quoteImap(value) {
   return `"${String(value ?? "").replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
@@ -261,6 +262,7 @@ export class OneComMailClient {
 
   async withImapSession(callback) {
     this.assertConfigured();
+    const startedAt = Date.now();
     let socket;
     let session;
     let providerStage = "tls_connect";
@@ -281,9 +283,11 @@ export class OneComMailClient {
       providerStage = "logout";
       await session.command("LOGOUT").catch(() => null);
       session.close();
+      recordProviderOutcome({ routeKey: "comms-hub:email-imap", provider: "one.com-imap", ok: true, durationMs: Date.now() - startedAt, status: "success" });
       return result;
     } catch (cause) {
       socket?.destroy();
+      recordProviderOutcome({ routeKey: "comms-hub:email-imap", provider: "one.com-imap", ok: false, durationMs: Date.now() - startedAt, status: session?.stage || providerStage || "failed" });
       const error = new CommsHubError(502, "onecom_imap_failed", "one.com IMAP operation failed.", {
         cause,
         retryable: true,
@@ -361,7 +365,10 @@ export class OneComMailClient {
       attachments,
       messageId,
     });
+    const startedAt = Date.now();
     let socket;
+    let providerStage = "tls_connect";
+    let deliveryUncertain = false;
     try {
       socket = await createTlsSocket({
         host: this.config.oneComSmtpHost,
@@ -370,19 +377,30 @@ export class OneComMailClient {
         timeoutMs: this.config.oneComEmailTimeoutMs,
       });
       const reader = new BufferedSocketReader(socket, this.config.oneComEmailTimeoutMs);
+      providerStage = "greeting";
       await smtpCommand(socket, reader, null, [220]);
+      providerStage = "ehlo";
       await smtpCommand(socket, reader, `EHLO ${this.config.oneComSmtpEhloName}`, [250]);
       const authPayload = Buffer.from(`\0${this.config.oneComEmailUsername}\0${this.config.oneComEmailPassword}`, "utf8").toString("base64");
+      providerStage = "auth";
       await smtpCommand(socket, reader, `AUTH PLAIN ${authPayload}`, [235]);
+      providerStage = "mail_from";
       await smtpCommand(socket, reader, `MAIL FROM:<${this.config.oneComEmailAddress}>`, [250]);
+      providerStage = "rcpt_to";
       for (const recipient of recipientList) await smtpCommand(socket, reader, `RCPT TO:<${recipient}>`, [250, 251]);
+      providerStage = "data_command";
       await smtpCommand(socket, reader, "DATA", [354]);
       const dotStuffed = built.raw.replace(/(^|\r\n)\./g, "$1..");
+      providerStage = "data_response";
+      deliveryUncertain = true;
       socket.write(`${dotStuffed.replace(/\r?\n/g, "\r\n").replace(/\r\n$/, "")}\r\n.\r\n`);
       const dataResponse = await readSmtpResponse(reader);
+      deliveryUncertain = false;
       if (dataResponse.code !== 250) throw new Error(`SMTP DATA failed (${dataResponse.code}): ${dataResponse.message}`);
+      providerStage = "quit";
       await smtpCommand(socket, reader, "QUIT", [221]).catch(() => null);
       socket.end();
+      recordProviderOutcome({ routeKey: "comms-hub:email-smtp", provider: "one.com-smtp", ok: true, durationMs: Date.now() - startedAt, status: "success" });
       return Object.freeze({
         provider: "one.com",
         messageId: built.messageId,
@@ -391,12 +409,16 @@ export class OneComMailClient {
       });
     } catch (cause) {
       socket?.destroy();
-      throw new CommsHubError(502, "onecom_smtp_failed", "one.com SMTP operation failed.", {
+      recordProviderOutcome({ routeKey: "comms-hub:email-smtp", provider: "one.com-smtp", ok: false, durationMs: Date.now() - startedAt, status: providerStage || "failed" });
+      const error = new CommsHubError(502, "onecom_smtp_failed", "one.com SMTP operation failed.", {
         cause,
         retryable: true,
         failureClass: "temporary",
         publicMessage: "Email could not be sent at this time.",
       });
+      error.providerStage = providerStage;
+      error.deliveryUncertain = deliveryUncertain;
+      throw error;
     }
   }
 }
