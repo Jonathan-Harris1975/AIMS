@@ -938,6 +938,7 @@ export function createCommsHubRouter({
       const result = await worker.runOnce({
         limit: Number(req.body?.limit || 0) || undefined,
         force: req.body?.force === true,
+        lookbackUids: Number(req.body?.lookbackUids || 0) || 0,
       });
       return res.json({ ok: true, ...result });
     }
