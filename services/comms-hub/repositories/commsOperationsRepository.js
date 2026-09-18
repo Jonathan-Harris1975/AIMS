@@ -1567,7 +1567,25 @@ export class CommsOperationsRepository extends CommsIdentityArchiveRepository {
     if (existing.request_sha256 !== requestSha256 || existing.conversation_id !== conversationId || existing.channel !== channel) {
       throw new CommsHubError(409, 'channel_idempotency_conflict', 'Idempotency key was already used for a different channel action.');
     }
-    return { acquired: false, duplicate: existing.status === 'complete', existing };
+    if (existing.status === 'complete') return { acquired: false, duplicate: true, existing };
+    if (existing.status === 'failed') {
+      const reclaimed = await this.d1.query(
+        `UPDATE comms_hub_channel_outbound_actions
+            SET status = 'processing', attempts = attempts + 1, failure_class = NULL, error = NULL,
+                updated_at = ?
+          WHERE idempotency_key = ? AND status = 'failed'
+          RETURNING *`,
+        [at, idempotencyKey]
+      );
+      const action = rows(reclaimed)[0] || null;
+      if (action) return { acquired: true, duplicate: false, action, retry: true };
+    }
+    const refreshedResult = await this.d1.query(
+      `SELECT * FROM comms_hub_channel_outbound_actions WHERE idempotency_key = ?`,
+      [idempotencyKey]
+    );
+    const refreshed = rows(refreshedResult)[0] || existing;
+    return { acquired: false, duplicate: refreshed.status === 'complete', existing: refreshed };
   }
 
   async completeChannelOutboundAction({ idempotencyKey, providerMessageId, response, at = nowIso() }) {
@@ -1584,7 +1602,7 @@ export class CommsOperationsRepository extends CommsIdentityArchiveRepository {
   async failChannelOutboundAction({ idempotencyKey, failureClass, error, reconciliationRequired = false, at = nowIso() }) {
     const result = await this.d1.query(
       `UPDATE comms_hub_channel_outbound_actions
-          SET status = ?, failure_class = ?, error = ?, attempts = attempts + 1, updated_at = ?
+          SET status = ?, failure_class = ?, error = ?, updated_at = ?
         WHERE idempotency_key = ? RETURNING *`,
       [reconciliationRequired ? 'reconciliation_required' : 'failed', failureClass, text(error, 1000), at, idempotencyKey]
     );
