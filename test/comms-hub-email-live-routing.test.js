@@ -98,3 +98,47 @@ test("email role map manages only info and marks admin/newsletter outside automa
   assert.equal(cfg.emailAddressRoles.newsletter.automationExcluded, true);
   assert.equal(cfg.emailAddressRoles.newsletter.purpose, "newsletter_brevo");
 });
+
+test("clean scanned attachment does not block automated email reply generation", async () => {
+  const c = context();
+  let analysed = 0;
+  let sent = 0;
+  c.config.emailWorkflowEvaluationEnabled = true;
+  c.config.aiEnabled = true;
+  c.config.autonomousRepliesEnabled = true;
+  c.workflowEngineService.evaluate = async () => ({ ok: true });
+  c.repository.getConversation = async (id) => ({ id, channel: "email", status: "open", metadata: { accountKey: "info" }, messages: [] });
+  c.operationsRepository.getConversationOperations = async () => ({ operational_status: "open", owner_type: null });
+  c.aiWorkflowService = { async analyseConversation() { analysed += 1; return { draft: { id: "draft-clean", requiresApproval: false } }; } };
+  c.governanceService = { async attemptAutonomousReply() { sent += 1; return { ok: true }; } };
+  c.notificationService = { async create() { throw new Error("clean attachment must not create review warning"); } };
+
+  const result = await new CommsHubEmailService({ context: c }).persistFetched({ uid: 503, parsed: parsed({ messageId: "<clean@example.com>" }), mailbox: "INBOX" });
+  assert.equal(result.attachments[0].status, "stored");
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.equal(analysed, 1);
+  assert.equal(sent, 1);
+});
+
+test("attachment that cannot be cleanly scanned pauses automation and creates an internal warning", async () => {
+  const c = context();
+  let analysed = 0;
+  const notifications = [];
+  c.config.emailWorkflowEvaluationEnabled = true;
+  c.config.aiEnabled = true;
+  c.config.autonomousRepliesEnabled = true;
+  c.workflowEngineService.evaluate = async () => ({ ok: true });
+  c.repository.getConversation = async (id) => ({ id, channel: "email", status: "open", metadata: { accountKey: "info" }, messages: [] });
+  c.operationsRepository.getConversationOperations = async () => ({ operational_status: "open", owner_type: null });
+  c.aiWorkflowService = { async analyseConversation() { analysed += 1; return { draft: { id: "draft-blocked", requiresApproval: false } }; } };
+  c.governanceService = { async attemptAutonomousReply() { throw new Error("must not send"); } };
+  c.notificationService = { async create(value) { notifications.push(value); return value; } };
+  c.attachmentService.ingest = async () => { throw Object.assign(new Error("scan unavailable"), { code: "attachment_scan_unavailable", failureClass: "temporary" }); };
+
+  const result = await new CommsHubEmailService({ context: c }).persistFetched({ uid: 504, parsed: parsed({ messageId: "<blocked@example.com>" }), mailbox: "INBOX" });
+  assert.equal(result.attachments[0].status, "quarantined");
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.equal(analysed, 0);
+  assert.equal(notifications.length, 1);
+  assert.match(notifications[0].title, /attachment requires review/i);
+});

@@ -2,8 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { CommsHubEmailPollWorker } from "../services/comms-hub/workers/emailPollWorker.js";
 
-test("first email poll establishes a UID watermark without fetching historical message bodies", async () => {
-  const calls = { cursor: 0, fetch: 0, complete: [] };
+test("first email poll performs bounded recent recovery before establishing the current UID watermark", async () => {
+  const calls = { cursor: 0, fetch: [], persist: [], complete: [] };
   const context = {
     config: {
       emailPollWorkerEnabled: true,
@@ -11,6 +11,8 @@ test("first email poll establishes a UID watermark without fetching historical m
       emailPollLeaseMs: 180_000,
       emailPollBatchSize: 25,
       emailHistoricalBackfillEnabled: false,
+      emailStartupRecoveryUidLookback: 25,
+      emailStartupRecoveryMaxAgeDays: 14,
       oneComEmailAccountKey: "primary",
       oneComMailbox: "INBOX",
     },
@@ -21,22 +23,65 @@ test("first email poll establishes a UID watermark without fetching historical m
     },
     oneComMail: {
       async getMailboxCursor() { calls.cursor += 1; return { mailbox: "INBOX", uidValidity: 77, highestUid: 4321 }; },
-      async fetchMessages() { calls.fetch += 1; throw new Error("historical bodies must not be fetched"); },
+      async fetchMessages({ afterUid }) {
+        calls.fetch.push(afterUid);
+        if (afterUid === 4296) {
+          return { mailbox: "INBOX", uidValidity: 77, highestUid: 4321, messages: [{ uid: 4310, parsed: { receivedAt: "2026-09-07T09:30:00.000Z" } }] };
+        }
+        return { mailbox: "INBOX", uidValidity: 77, highestUid: 4321, messages: [] };
+      },
     },
-    emailService: { async persistFetched() { throw new Error("historical mail must not be persisted"); } },
+    emailService: { async persistFetched(value) { calls.persist.push(value); return { attachments: [], conversationId: "conv-1", messageId: "msg-1" }; } },
     quarantineService: { async quarantine() {} },
   };
 
   const worker = new CommsHubEmailPollWorker({ context });
   const result = await worker.runOnce({ now: new Date("2026-09-07T10:00:00.000Z") });
-  assert.equal(result.skipped, true);
-  assert.equal(result.reason, "historical_baseline_established");
+  assert.equal(result.processed, 1);
+  assert.equal(result.startupRecovery, true);
+  assert.equal(result.recoveryLookbackUids, 25);
   assert.equal(result.highestUid, 4321);
   assert.equal(calls.cursor, 1);
-  assert.equal(calls.fetch, 0);
+  assert.deepEqual(calls.fetch, [4296, 4310]);
+  assert.equal(calls.persist.length, 1);
+  assert.equal(calls.persist[0].uid, 4310);
   assert.equal(calls.complete.length, 1);
   assert.equal(calls.complete[0].lastUid, 4321);
   assert.equal(calls.complete[0].uidValidity, 77);
+});
+
+test("forced email poll can re-check a bounded UID window without moving the watermark backwards", async () => {
+  const calls = { fetch: [], persist: [], complete: [] };
+  const context = {
+    config: {
+      emailPollWorkerEnabled: true, emailPollMs: 60_000, emailPollLeaseMs: 180_000, emailPollBatchSize: 25,
+      emailHistoricalBackfillEnabled: false, oneComEmailAccountKey: "info", oneComMailbox: "INBOX",
+    },
+    operationsRepository: {
+      async resetEmailPollStateForReplay() {},
+      async claimEmailPollState() { return { last_uid: 500, uid_validity: 77, attempts: 1 }; },
+      async completeEmailPollState(value) { calls.complete.push(value); return value; },
+      async failEmailPollState() { throw new Error("must not fail"); },
+    },
+    oneComMail: {
+      async getMailboxCursor() { return { mailbox: "INBOX", uidValidity: 77, highestUid: 500 }; },
+      async fetchMessages({ afterUid }) {
+        calls.fetch.push(afterUid);
+        if (afterUid === 400) return { uidValidity: 77, highestUid: 500, messages: [{ uid: 450, parsed: { receivedAt: "2026-09-01T10:00:00.000Z" } }] };
+        return { uidValidity: 77, highestUid: 500, messages: [] };
+      },
+    },
+    emailService: { async persistFetched(value) { calls.persist.push(value); return { duplicate: true, attachments: [] }; } },
+    quarantineService: { async quarantine() {} },
+  };
+
+  const worker = new CommsHubEmailPollWorker({ context });
+  const result = await worker.runOnce({ force: true, lookbackUids: 100, now: new Date("2026-09-07T10:00:00.000Z") });
+  assert.equal(result.processed, 1);
+  assert.equal(result.highestUid, 500);
+  assert.deepEqual(calls.fetch, [400, 450]);
+  assert.equal(calls.persist[0].uid, 450);
+  assert.equal(calls.complete[0].lastUid, 500);
 });
 
 test("email poll start catches a rejected boot-time run instead of leaking an unhandled rejection", async () => {

@@ -4,10 +4,12 @@ import fs from "node:fs";
 
 const source = fs.readFileSync(new URL("../services/comms-hub/workers/emailPollWorker.js", import.meta.url), "utf8");
 
-test("email poll worker preserves first-run no-history boundary", () => {
+test("email poll worker uses bounded first-run recovery instead of silently skipping recent mail", () => {
   assert.match(source, /emailHistoricalBackfillEnabled/);
-  assert.match(source, /historical_baseline_established/);
+  assert.match(source, /emailStartupRecoveryUidLookback/);
+  assert.match(source, /startupRecoveryMaxAgeDays/);
   assert.match(source, /getMailboxCursor/);
+  assert.match(source, /lookbackUids/);
 });
 
 test("email poll worker re-baselines on UIDVALIDITY change or mailbox reset", () => {
