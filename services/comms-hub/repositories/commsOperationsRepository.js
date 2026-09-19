@@ -1315,15 +1315,23 @@ export class CommsOperationsRepository extends CommsIdentityArchiveRepository {
   async listChatMessages({ conversationId, after = "", limit = 100 }) {
     const safeLimit = Math.min(Math.max(Number(limit) || 100, 1), 250);
     const incremental = Boolean(after);
-    const direction = incremental ? "ASC" : "DESC";
-    const result = await this.d1.query(
-      `SELECT id, direction, sender, body_text, provider_message_id, received_at, created_at, metadata_json
-         FROM comms_hub_messages
-        WHERE conversation_id = ? AND (? = '' OR received_at > ?)
-        ORDER BY received_at ${direction}, id ${direction}
-        LIMIT ?`,
-      [conversationId, after, after, safeLimit]
-    );
+    const result = incremental
+      ? await this.d1.query(
+        `SELECT id, direction, sender, body_text, provider_message_id, received_at, created_at, metadata_json
+           FROM comms_hub_messages
+          WHERE conversation_id = ? AND received_at > ?
+          ORDER BY received_at ASC, id ASC
+          LIMIT ?`,
+        [conversationId, after, safeLimit]
+      )
+      : await this.d1.query(
+        `SELECT id, direction, sender, body_text, provider_message_id, received_at, created_at, metadata_json
+           FROM comms_hub_messages
+          WHERE conversation_id = ?
+          ORDER BY received_at DESC, id DESC
+          LIMIT ?`,
+        [conversationId, safeLimit]
+      );
     const messages = rows(result).map((row) => ({
       id: row.id,
       direction: row.direction,
@@ -1631,14 +1639,19 @@ export class CommsOperationsRepository extends CommsIdentityArchiveRepository {
   }
 
   async claimEmailPollState({ accountKey, mailbox, workerId, now, leaseExpiresAt }) {
-    await this.ensureEmailPollState({ accountKey, mailbox, at: now });
     const result = await this.d1.query(
-      `UPDATE comms_hub_email_poll_state
-          SET lease_owner = ?, lease_expires_at = ?, attempts = attempts + 1, updated_at = ?
-        WHERE account_key = ? AND mailbox = ? AND next_attempt_at <= ?
-          AND (lease_expires_at IS NULL OR lease_expires_at <= ?)
-        RETURNING *`,
-      [workerId, leaseExpiresAt, now, accountKey, mailbox, now, now]
+      `INSERT INTO comms_hub_email_poll_state
+        (account_key, mailbox, last_uid, next_attempt_at, attempts, lease_owner, lease_expires_at, created_at, updated_at)
+       VALUES (?, ?, 0, ?, 1, ?, ?, ?, ?)
+       ON CONFLICT(account_key, mailbox) DO UPDATE SET
+         lease_owner = excluded.lease_owner,
+         lease_expires_at = excluded.lease_expires_at,
+         attempts = comms_hub_email_poll_state.attempts + 1,
+         updated_at = excluded.updated_at
+       WHERE comms_hub_email_poll_state.next_attempt_at <= excluded.updated_at
+         AND (comms_hub_email_poll_state.lease_expires_at IS NULL OR comms_hub_email_poll_state.lease_expires_at <= excluded.updated_at)
+       RETURNING *`,
+      [accountKey, mailbox, now, workerId, leaseExpiresAt, now, now]
     );
     return rows(result)[0] || null;
   }

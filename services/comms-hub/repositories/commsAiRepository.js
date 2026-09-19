@@ -461,16 +461,21 @@ export class CommsAiRepository {
   }
 
   async recordProviderHealth(snapshot) {
-    await this.d1.query(
-      `INSERT INTO comms_hub_provider_health
+    await this.recordProviderHealthBatch([snapshot]);
+  }
+
+  async recordProviderHealthBatch(snapshots = []) {
+    if (!snapshots.length) return;
+    await this.d1.batch(snapshots.map((snapshot) => ({
+      sql: `INSERT INTO comms_hub_provider_health
         (id, provider, adapter, status, success_count, failure_count, consecutive_failures,
          last_status_code, last_success_at, last_failure_at, observed_at, evidence_json)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [snapshot.id, snapshot.provider, snapshot.adapter, snapshot.status, snapshot.successCount,
+      params: [snapshot.id, snapshot.provider, snapshot.adapter, snapshot.status, snapshot.successCount,
         snapshot.failureCount, snapshot.consecutiveFailures, snapshot.lastStatusCode || null,
         snapshot.lastSuccessAt || null, snapshot.lastFailureAt || null, snapshot.observedAt,
-        json(snapshot.evidence || {})]
-    );
+        json(snapshot.evidence || {})],
+    })));
   }
 
   async listLatestProviderHealth() {
