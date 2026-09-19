@@ -99,9 +99,9 @@ export class CommsHubProviderHealthService {
           releaseId: snapshot.releaseId || null,
         },
       };
-      await this.context.aiRepository.recordProviderHealth(record);
       captured.push(record);
     }
+    if (captured.length) await this.context.aiRepository.recordProviderHealthBatch(captured);
     return captured;
   }
 
