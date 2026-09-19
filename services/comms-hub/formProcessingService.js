@@ -107,7 +107,10 @@ export class CommsHubFormProcessingService {
 
   async registerVerifiedSubmission({ intake, duplicate = false }) {
     const digest = buildJotformInformationDigest(intake);
-    if (duplicate) return { duplicate: true, digest };
+    if (duplicate) {
+      const existing = await this.context.operationsRepository.getFormProcessing?.(intake.conversationId);
+      if (existing) return { duplicate: true, digest, processing: existing };
+    }
     const match = await this.context.operationsRepository.matchPendingFormRequestForSubmission?.({
       formId: intake.formId,
       email: intake.contact?.email,
@@ -125,7 +128,7 @@ export class CommsHubFormProcessingService {
       digest,
       createdAt: intake.processedAt,
     });
-    return { duplicate: false, digest, match, processing };
+    return { duplicate, recovered: duplicate, digest, match, processing };
   }
 
   async processConversation(conversationId, { autoSend = this.context.config.formAutoSendEnabled } = {}) {
@@ -134,7 +137,9 @@ export class CommsHubFormProcessingService {
     }
     const state = await this.context.operationsRepository.getFormProcessing?.(conversationId);
     if (!state) throw new CommsHubError(404, "form_processing_not_found", "Form processing state was not found.");
-    if (["replied"].includes(state.status)) return { duplicate: true, state };
+    if (state.status === "replied" || (["draft_ready", "pending_approval"].includes(state.status) && state.reply_draft_id)) {
+      return { duplicate: true, state };
+    }
     if (!this.context.config.aiEnabled) {
       await this.context.operationsRepository.updateFormProcessing?.({ conversationId, status: "review_required", error: "ai_disabled" });
       return { processed: false, reviewRequired: true, reason: "ai_disabled" };

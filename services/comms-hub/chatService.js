@@ -273,8 +273,8 @@ export class CommsHubChatService {
       conductAutomationBlocked: conversationConduct.automationBlocked,
     });
 
-    if (!persistence.duplicate && !requestHuman && !conversationConduct.automationBlocked && this.context.config.chatAiWorkflowEnabled && this.context.config.aiEnabled) {
-      queueMicrotask(() => void this.runOptionalAutomation(conversationId, { triggerMessageId: messageId }));
+    if (!requestHuman && !conversationConduct.automationBlocked && this.context.config.chatAiWorkflowEnabled && this.context.config.aiEnabled) {
+      await this.scheduleAutomation(conversationId, messageId);
     }
 
     return { duplicate: persistence.duplicate, conversationId, messageId, takeoverRequested: Boolean(requestHuman && handoff.available), handoffAvailable: handoff.available,
@@ -319,8 +319,16 @@ export class CommsHubChatService {
   }
 
   async scheduleAutomationRetry(conversationId, triggerMessageId, error) {
+    return this.scheduleAutomation(conversationId, triggerMessageId, {
+      delayMs: CHAT_AI_RETRY_INITIAL_DELAY_MS,
+      reason: 'recoverable_failure',
+      error,
+    });
+  }
+
+  async scheduleAutomation(conversationId, triggerMessageId, { delayMs = 0, reason = 'inbound_message', error = null } = {}) {
     const now = this.context.now ? new Date(this.context.now()) : new Date();
-    const dueAt = new Date(now.getTime() + CHAT_AI_RETRY_INITIAL_DELAY_MS).toISOString();
+    const dueAt = new Date(now.getTime() + Math.max(0, Number(delayMs) || 0)).toISOString();
     const retryKey = `chat-ai-retry:${conversationId}:${text(triggerMessageId, 200) || 'latest'}`;
     const action = await this.context.operationsRepository.scheduleDelayedAction({
       id: stableId('dla', retryKey),
@@ -333,12 +341,18 @@ export class CommsHubChatService {
       actor: 'coginpal-automation',
       createdAt: now.toISOString(),
     });
-    log.warn('commsHub.chat.automationRetryScheduled', {
+    log[error ? 'warn' : 'info']('commsHub.chat.automationScheduled', {
       conversationId,
       delayedActionId: action?.id || null,
       dueAt,
-      error: safeErrorLog(error),
+      reason,
+      ...(error ? { error: safeErrorLog(error) } : {}),
     });
+    if (delayMs <= 0 && typeof this.context.delayedActionWorker?.runOnce === 'function') {
+      queueMicrotask(() => void this.context.delayedActionWorker.runOnce().catch((workerError) => {
+        log.warn('commsHub.chat.workerNudgeFailed', { conversationId, error: safeErrorLog(workerError) });
+      }));
+    }
     return action;
   }
 

@@ -6,6 +6,15 @@ import { ensureSocialPostContext } from "./socialPostContextService.js";
 
 const pending = new Set();
 
+function nudgeDelayedActionWorker(context) {
+  if (typeof context?.delayedActionWorker?.runOnce !== "function") return;
+  queueMicrotask(() => {
+    void context.delayedActionWorker.runOnce().catch((error) => {
+      log.warn("commsHub.inboundAutomation.workerNudgeFailed", { error: safeErrorLog(error) });
+    });
+  });
+}
+
 async function scheduleInboundAutomationRetry(context, { conversationId, actor, scheduleFollowUp, triggerMessageId } = {}) {
   if (!context?.operationsRepository?.scheduleDelayedAction || !conversationId) return null;
   const messageId = String(triggerMessageId || "latest").slice(0, 200);
@@ -57,6 +66,46 @@ function enabled(context) {
     && context?.aiWorkflowService
     && context?.governanceService
   );
+}
+
+export async function scheduleInboundConversationAutomation({
+  context,
+  conversationId,
+  actor = "inbound-automation",
+  scheduleFollowUp = true,
+  triggerMessageId = "",
+  blockedReason = "",
+} = {}) {
+  if (blockedReason) return { scheduled: false, reason: blockedReason };
+  if (!conversationId || !enabled(context)) return { scheduled: false, reason: "automation_disabled" };
+  if (!context?.operationsRepository?.scheduleDelayedAction) {
+    return {
+      scheduled: kickInboundConversationAutomation({ context, conversationId, actor, scheduleFollowUp, triggerMessageId }),
+      fallback: true,
+    };
+  }
+
+  const messageId = String(triggerMessageId || "latest").slice(0, 200);
+  const idempotencyKey = `inbound-automation:${conversationId}:${messageId}`;
+  const now = context.now ? new Date(context.now()) : new Date();
+  const action = await context.operationsRepository.scheduleDelayedAction({
+    id: stableId("dla", idempotencyKey),
+    conversationId,
+    actionType: "recheck",
+    payload: {
+      inboundAutomationRetry: true,
+      actor,
+      scheduleFollowUp: scheduleFollowUp !== false,
+      triggerMessageId: messageId,
+    },
+    dueAt: now.toISOString(),
+    maxAttempts: 8,
+    idempotencyKey,
+    actor,
+    createdAt: now.toISOString(),
+  });
+  nudgeDelayedActionWorker(context);
+  return { scheduled: Boolean(action), action };
 }
 
 async function notifyEmailApprovalRequired(context, { conversation, conversationId, draftId } = {}) {

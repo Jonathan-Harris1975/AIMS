@@ -1,10 +1,10 @@
 import { CommsHubError } from "./errors.js";
-import { newCorrelationId, sha256Hex } from "./domain/ids.js";
+import { newCorrelationId, sha256Hex, stableId } from "./domain/ids.js";
 import { normaliseZernioEvent, zernioWebhookEventsForFamily } from "./domain/zernioWebhook.js";
 import { executeSocialAction } from './socialActionsService.js';
 import { humanContactOffer, humanContactRequested, humanHandoffStatus, notifyHumanHandoff } from './humanContactService.js';
 import { safeErrorLog } from './domain/redaction.js';
-import { kickInboundConversationAutomation } from './inboundAutomationService.js';
+import { scheduleInboundConversationAutomation } from './inboundAutomationService.js';
 import { log } from '../../logger.js';
 
 function text(value) {
@@ -178,6 +178,7 @@ export async function handleSocialDmHumanContact(event, context) {
     });
   } catch (error) {
     log.warn('commsHub.social.humanContactOfferFailed', { conversationId: event.conversationId, platform: event.platform, error: safeErrorLog(error) });
+    throw error;
   }
 }
 
@@ -187,25 +188,79 @@ function kickSocialDmHumanContact(event, context) {
      event.conversationId, error: safeErrorLog(error) })); });
 }
 
+async function scheduleSocialDmHumanContact(event, context) {
+  if (!event || event.threadType !== 'dm' || event.direction !== 'inbound' || !event.conversationId || !event.messageId) return null;
+  if (!humanContactRequested(event.bodyText)) return null;
+  if (!context.operationsRepository?.scheduleDelayedAction) {
+    kickSocialDmHumanContact(event, context);
+    return null;
+  }
+  const idempotencyKey = `social-human-contact:${event.messageId}`;
+  const now = context.now ? new Date(context.now()) : new Date();
+  const action = await context.operationsRepository.scheduleDelayedAction({
+    id: stableId('dla', idempotencyKey),
+    conversationId: event.conversationId,
+    actionType: 'recheck',
+    payload: {
+      socialHumanContact: true,
+      event: {
+        threadType: event.threadType,
+        direction: event.direction,
+        bodyText: String(event.bodyText || '').slice(0, 10_000),
+        conversationId: event.conversationId,
+        messageId: event.messageId,
+        platform: event.platform,
+      },
+    },
+    dueAt: now.toISOString(),
+    maxAttempts: 6,
+    idempotencyKey,
+    actor: 'social-human-contact',
+    createdAt: now.toISOString(),
+  });
+  if (typeof context.delayedActionWorker?.runOnce === 'function') {
+    queueMicrotask(() => void context.delayedActionWorker.runOnce().catch((error) => {
+      log.warn('commsHub.social.workerNudgeFailed', { conversationId: event.conversationId, error: safeErrorLog(error) });
+    }));
+  }
+  return action;
+}
 
-function kickSocialConversationAutomation(event, context) {
+
+async function scheduleSocialConversationAutomation(event, context) {
   if (!event || event.direction !== 'inbound' || !event.bodyText || !event.conversationId) return false;
   if (event.threadType === 'dm' && humanContactRequested(event.bodyText)) return false;
-  return kickInboundConversationAutomation({
+  if (Array.isArray(event.attachments) && event.attachments.length) {
+    await context.notificationService?.create?.({
+      actor: 'admin',
+      conversationId: event.conversationId,
+      type: 'system',
+      title: 'Social attachment requires review',
+      bodyText: 'An inbound social message is preserved, but automatic reply generation is paused until its attachment has been reviewed.',
+      severity: 'warning',
+      emailRequested: false,
+      idempotencySeed: `social-attachment-review:${event.messageId}`,
+    }).catch(() => null);
+    return false;
+  }
+  const scheduled = await scheduleInboundConversationAutomation({
     context,
     conversationId: event.conversationId,
     actor: `social-${event.platform || 'unknown'}-automation`,
     scheduleFollowUp: true,
-    blockedReason: Array.isArray(event.attachments) && event.attachments.length ? 'attachment_review_required' : '',
+    triggerMessageId: event.messageId,
   });
+  return scheduled.scheduled;
 }
 
 export async function processZernioWebhook({ envelope, correlationId, context }) {
   const event = normaliseZernioEvent(envelope, { correlationId, source: "webhook" });
   if (event.kind === "test") return { test: true, duplicate: false, event };
   const persistence = await context.repository.persistZernioEvent(event);
-  if (!persistence.duplicate) { await scheduleAttachmentIngestion(event, context); kickSocialAttachmentIngestion(event, context); kickSocialDmHumanContact(event, context);
-     kickSocialConversationAutomation(event, context); }
+  await scheduleAttachmentIngestion(event, context);
+  await scheduleSocialDmHumanContact(event, context);
+  await scheduleSocialConversationAutomation(event, context);
+  if (!persistence.duplicate) kickSocialAttachmentIngestion(event, context);
   return { test: false, ...persistence, event };
 }
 
@@ -295,8 +350,10 @@ export async function persistPolledConversation({ family, platform, conversation
     });
     const event = normaliseZernioEvent(envelope, { correlationId: newCorrelationId(), source: "poll" });
     const result = await context.repository.persistZernioEvent(event);
-    if (!result.duplicate) { await scheduleAttachmentIngestion(event, context); kickSocialAttachmentIngestion(event, context); kickSocialDmHumanContact(event, context);
-       kickSocialConversationAutomation(event, context); }
+    await scheduleAttachmentIngestion(event, context);
+    await scheduleSocialDmHumanContact(event, context);
+    await scheduleSocialConversationAutomation(event, context);
+    if (!result.duplicate) kickSocialAttachmentIngestion(event, context);
     processed += result.duplicate ? 0 : 1;
     duplicates += result.duplicate ? 1 : 0;
   }
@@ -368,8 +425,10 @@ export async function persistPolledComments({ family, platform, post, comments, 
     });
     const event = normaliseZernioEvent(envelope, { correlationId: newCorrelationId(), source: "poll" });
     const result = await context.repository.persistZernioEvent(event);
-    if (!result.duplicate) { await scheduleAttachmentIngestion(event, context); kickSocialAttachmentIngestion(event, context); kickSocialDmHumanContact(event, context);
-       kickSocialConversationAutomation(event, context); }
+    await scheduleAttachmentIngestion(event, context);
+    await scheduleSocialDmHumanContact(event, context);
+    await scheduleSocialConversationAutomation(event, context);
+    if (!result.duplicate) kickSocialAttachmentIngestion(event, context);
     processed += result.duplicate ? 0 : 1;
     duplicates += result.duplicate ? 1 : 0;
   }

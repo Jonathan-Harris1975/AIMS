@@ -249,7 +249,15 @@ export function getCommsHubMissingEnv(env = process.env) {
   const delayedRepliesRequired = booleanValue(env.COMMS_HUB_EMAIL_INITIAL_REPLY_DELAY_ENABLED, true)
     || booleanValue(env.COMMS_HUB_FORM_REPLY_DELAY_ENABLED, true);
   const contentAutomationRequired = booleanValue(env.COMMS_HUB_CONTENT_AUTOMATION_ENABLED, false);
-  if ((delayedRepliesRequired || contentAutomationRequired) && !booleanValue(env.COMMS_HUB_DELAYED_ACTION_WORKER_ENABLED, true)) {
+  const durableInboundAutomationRequired = aiEnabled && (
+    booleanValue(env.COMMS_HUB_AUTONOMOUS_REPLIES_ENABLED, false)
+    || booleanValue(env.COMMS_HUB_FORM_SMART_PROCESSING_ENABLED, true)
+    || (effectiveChatEnabled(env) && booleanValue(env.COMMS_HUB_CHAT_AI_WORKFLOW_ENABLED, true))
+    || (booleanValue(env.COMMS_HUB_EMAIL_ENABLED, false) && booleanValue(env.COMMS_HUB_EMAIL_WORKFLOW_EVALUATION_ENABLED, true))
+    || Object.keys(ZERNIO_CHANNEL_FAMILIES).some((family) => booleanValue(env[ZERNIO_CHANNEL_FAMILIES[family].enabledEnv], false))
+  );
+  if ((delayedRepliesRequired || contentAutomationRequired || durableInboundAutomationRequired)
+    && !booleanValue(env.COMMS_HUB_DELAYED_ACTION_WORKER_ENABLED, true)) {
     missing.push("COMMS_HUB_DELAYED_ACTION_WORKER_ENABLED");
   }
   if (contentAutomationRequired && !usableEnvValue(env.R2_BUCKET_COMMS_HUB_PRIVATE)) {

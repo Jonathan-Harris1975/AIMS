@@ -72,7 +72,7 @@ export async function processJotformIntake({ envelope, correlationId, context, n
 
   // Keep the durable delayed-action record as a recovery path when that worker is enabled,
   // but form attachment ingestion no longer depends on the generic delayed worker being on.
-  if (!persistence.duplicate && context.workflowEngineService && intake.attachments.length) {
+  if (context.workflowEngineService && intake.attachments.length) {
     const dueAt = new Date(now.getTime() + 120_000).toISOString();
     for (const attachment of intake.attachments) {
       await context.workflowEngineService.schedule({
@@ -86,12 +86,24 @@ export async function processJotformIntake({ envelope, correlationId, context, n
     }
   }
 
+  const formProcessingAction = context.config?.formSmartProcessingEnabled && context.workflowEngineService
+    ? await context.workflowEngineService.schedule({
+        conversationId: intake.conversationId,
+        actionType: "recheck",
+        dueAt: new Date(now.getTime() + 150_000).toISOString(),
+        payload: { formProcessing: true, submissionId: intake.submissionId },
+        idempotencyKey: `form-processing:${intake.conversationId}:${intake.submissionId}`,
+        maxAttempts: 8,
+      }, { actor: "jotform-intake", role: "admin" })
+    : null;
+
   return {
     identifiers,
     intake,
     persistence,
     formProcessing,
     contentAutomation,
+    formProcessingAction,
     acknowledgement: Object.freeze({ provider: "jotform", sentByAims: false }),
   };
 }

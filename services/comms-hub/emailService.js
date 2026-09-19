@@ -4,7 +4,7 @@ import { sha256Hex, stableId } from './domain/ids.js';
 import { scanOutboundLanguagePolicy } from './conversationConductService.js';
 import { assertConversationReplyAllowed } from './domain/replySafety.js';
 import { businessHoursPolicy, conversationFirstInboundAt, delayedBusinessReplyAt, ensureFutureBusinessTime, hasOutboundMessages } from './domain/businessHours.js';
-import { kickInboundConversationAutomation } from "./inboundAutomationService.js";
+import { scheduleInboundConversationAutomation } from "./inboundAutomationService.js";
 import { isAutomationExcludedEmailAccountKey } from './domain/automationScope.js';
 
 function address(value) { return String(value || '').trim().toLowerCase(); }
@@ -192,16 +192,8 @@ export class CommsHubEmailService {
       if (evaluateWorkflow) {
         await this.context.workflowEngineService.evaluate({ conversationId, event: { type: 'message_received', channel: 'email', sender, text: parsed.text, occurredAt: now } });
       }
-      if (!persistence.duplicate && evaluateWorkflow) {
-        const kicked = kickInboundConversationAutomation({
-          context: this.context,
-          conversationId,
-          actor: 'email-inbound-automation',
-          scheduleFollowUp: true,
-          triggerMessageId: messageId,
-          blockedReason: attachmentReviewRequired ? 'attachment_review_required' : '',
-        });
-        if (!kicked && attachmentReviewRequired) {
+      if (evaluateWorkflow) {
+        if (attachmentReviewRequired) {
           await this.context.notificationService?.create({
             actor: 'admin',
             conversationId,
@@ -212,6 +204,14 @@ export class CommsHubEmailService {
             emailRequested: false,
             idempotencySeed: `email-attachment-review:${messageId}`,
           }).catch(() => null);
+        } else {
+          await scheduleInboundConversationAutomation({
+            context: this.context,
+            conversationId,
+            actor: 'email-inbound-automation',
+            scheduleFollowUp: true,
+            triggerMessageId: messageId,
+          });
         }
       }
     }
