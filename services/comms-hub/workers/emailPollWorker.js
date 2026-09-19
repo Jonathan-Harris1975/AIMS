@@ -29,6 +29,7 @@ export class CommsHubEmailPollWorker {
     };
     this.mailClient = context.oneComMailAccounts?.[this.account.key] || context.oneComMail;
     this.timer = null;
+    this.drainTimer = null;
     this.running = false;
     this.stopping = false;
     this.workerId = `email-${this.account.key}-${randomUUID()}`;
@@ -78,7 +79,9 @@ export class CommsHubEmailPollWorker {
   async stop() {
     this.stopping = true;
     if (this.timer) clearInterval(this.timer);
+    if (this.drainTimer) clearTimeout(this.drainTimer);
     this.timer = null;
+    this.drainTimer = null;
     while (this.running) await new Promise((resolve) => setTimeout(resolve, 25));
     log.info('commsHub.emailPoll.stopped', { workerId: this.workerId });
   }
@@ -366,6 +369,18 @@ export class CommsHubEmailPollWorker {
         });
       }
       const completedUid = startupRecovery ? Number(cursor.highestUid || workingUid) : Math.max(lastUid, workingUid);
+      if (results.length >= batchLimit && this.timer && !this.stopping && !this.drainTimer) {
+        this.drainTimer = setTimeout(() => {
+          this.drainTimer = null;
+          void this.runOnce().catch((error) => log.error('commsHub.emailPoll.drainFailed', {
+            workerId: this.workerId,
+            accountKey,
+            mailbox,
+            error: safeErrorLog(error),
+          }));
+        }, 1_100);
+        this.drainTimer.unref?.();
+      }
       return { processed: results.length, highestUid: completedUid, results, startupRecovery, recoveryLookbackUids };
     } catch (error) {
       const failure = safeErrorLog(error);

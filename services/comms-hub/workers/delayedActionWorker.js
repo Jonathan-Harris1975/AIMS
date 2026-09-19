@@ -5,6 +5,7 @@ import { CommsHubError } from '../errors.js';
 import { businessHoursPolicy, isWithinBusinessHours, nextBusinessOpening } from '../domain/businessHours.js';
 import { sendReplyDraft } from '../replyDraftService.js';
 import { runInboundConversationAutomation } from '../inboundAutomationService.js';
+import { handleSocialDmHumanContact } from '../socialService.js';
 
 function parse(value) {
   try { return JSON.parse(value || '{}'); } catch { return {}; }
@@ -73,6 +74,12 @@ export class CommsHubDelayedActionWorker {
       });
     }
     if (item.action_type === 'recheck') {
+      if (payload.formProcessing === true) {
+        return this.context.formProcessingService.processConversation(item.conversation_id);
+      }
+      if (payload.socialHumanContact === true) {
+        return handleSocialDmHumanContact(payload.event || {}, this.context);
+      }
       if (payload.inboundAutomationRetry === true) {
         return runInboundConversationAutomation({
           context: this.context,
@@ -206,8 +213,10 @@ export class CommsHubDelayedActionWorker {
         }
 
         const inboundAutomationRetry = item.action_type === 'recheck' && payload.inboundAutomationRetry === true;
+        const formProcessing = item.action_type === 'recheck' && payload.formProcessing === true;
+        const socialHumanContact = item.action_type === 'recheck' && payload.socialHumanContact === true;
         let conversation = null;
-        if (item.action_type === 'reply_draft' || inboundAutomationRetry) {
+        if (item.action_type === 'reply_draft' || inboundAutomationRetry || formProcessing || socialHumanContact) {
           conversation = await this.context.repository?.getConversation?.(item.conversation_id).catch(() => null);
         }
         const emailAutomationFailure = item.action_type === 'email_reply'
@@ -226,6 +235,22 @@ export class CommsHubDelayedActionWorker {
             idempotencySeed: `email-automation-exhausted:${item.id}`,
           }).catch((notificationError) => {
             log.error('commsHub.email.automationRetryNotificationFailed', { itemId: item.id, error: safeErrorLog(notificationError) });
+          });
+        }
+        const otherInboundAutomationFailure = !emailAutomationFailure && (inboundAutomationRetry || formProcessing || socialHumanContact);
+        if (otherInboundAutomationFailure) {
+          const channel = String(conversation?.channel || (formProcessing ? 'form' : 'social')).toLowerCase();
+          await this.context.notificationService.create({
+            actor: 'admin',
+            conversationId: item.conversation_id,
+            type: 'system',
+            title: 'Inbound automation needs attention',
+            bodyText: `Automatic ${channel} processing exhausted its retry budget and was quarantined. The inbound message is preserved for manual follow-up.`,
+            severity: 'critical',
+            emailRequested: false,
+            idempotencySeed: `inbound-automation-exhausted:${item.id}`,
+          }).catch((notificationError) => {
+            log.error('commsHub.inboundAutomation.retryNotificationFailed', { itemId: item.id, error: safeErrorLog(notificationError) });
           });
         }
       }

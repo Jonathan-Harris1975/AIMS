@@ -8,6 +8,30 @@ function failureClass(error) {
   return "recoverable";
 }
 
+const EXPECTED_AUTOMATION_SKIP_CODES = new Set([
+  "autonomous_policy_not_found",
+  "autonomous_reply_policy_rejected",
+  "autonomous_reply_response_intelligence_blocked",
+  "autonomous_reply_security_blocked",
+  "autonomous_reply_requires_approval",
+  "autonomous_reply_rate_limited",
+  "autonomous_replies_disabled",
+  "autonomous_reply_human_assigned",
+]);
+
+async function notifyFollowUpReview(context, job, draftId) {
+  return context.notificationService?.create?.({
+    actor: "admin",
+    conversationId: job.conversation_id,
+    type: "system",
+    title: "Follow-up draft requires review",
+    bodyText: "A scheduled follow-up draft is ready but requires human review before it can be sent.",
+    severity: "warning",
+    emailRequested: false,
+    idempotencySeed: `follow-up-review:${job.id}:${draftId || "draft"}`,
+  }).catch(() => null);
+}
+
 export class CommsHubFollowUpWorker {
   constructor({ context, workerId = `aims-follow-up-${randomUUID()}` }) {
     this.context = context;
@@ -39,11 +63,36 @@ export class CommsHubFollowUpWorker {
             operation: "follow_up",
             scheduleFollowUp: false,
           });
+          let delivery = null;
+          let deliveryStatus = result?.draft?.id ? "draft_created" : "no_draft";
+          if (result?.draft?.id && result.draft.requiresApproval) {
+            deliveryStatus = "approval_required";
+            await notifyFollowUpReview(this.context, job, result.draft.id);
+          } else if (result?.draft?.id && this.context.config.autonomousRepliesEnabled) {
+            try {
+              delivery = await this.context.governanceService.attemptAutonomousReply(
+                { conversationId: job.conversation_id, draftId: result.draft.id },
+                { actor: "follow-up-worker", role: "admin" },
+              );
+              deliveryStatus = "sent";
+            } catch (error) {
+              if (!EXPECTED_AUTOMATION_SKIP_CODES.has(error?.code)) throw error;
+              deliveryStatus = error.code;
+              if (error.code === "autonomous_reply_requires_approval") {
+                await notifyFollowUpReview(this.context, job, result.draft.id);
+              }
+            }
+          }
           await this.context.aiRepository.completeFollowUp({
             id: job.id,
             workerId: this.workerId,
             completedAt: new Date().toISOString(),
-            metadata: { aiRunId: result.runId, draftId: result.draft?.id || null },
+            metadata: {
+              aiRunId: result.runId,
+              draftId: result.draft?.id || null,
+              deliveryStatus,
+              providerMessageId: delivery?.providerMessageId || delivery?.messageId || null,
+            },
           });
           completed += 1;
         } catch (error) {
@@ -59,6 +108,18 @@ export class CommsHubFollowUpWorker {
           });
           failed += 1;
           log.warn("commsHub.followUp.failed", { followUpId: job.id, conversationId: job.conversation_id, error: safeErrorLog(error) });
+          if (exhausted) {
+            await this.context.notificationService?.create?.({
+              actor: "admin",
+              conversationId: job.conversation_id,
+              type: "system",
+              title: "Scheduled follow-up needs attention",
+              bodyText: "A scheduled follow-up exhausted its retry budget. The conversation and draft history are preserved for manual follow-up.",
+              severity: "critical",
+              emailRequested: false,
+              idempotencySeed: `follow-up-exhausted:${job.id}`,
+            }).catch(() => null);
+          }
         }
       }
       return { skipped: false, processed, completed, failed, cancelled };
