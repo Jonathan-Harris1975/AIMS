@@ -134,7 +134,9 @@ test('chat transcript repository returns the newest bounded history in chronolog
 
   calls.length = 0;
   await repository.listChatMessages({ conversationId: 'cnv-1', after: '2026-09-18T10:00:01.000Z', limit: 2 });
+  assert.match(calls[0].sql, /WHERE conversation_id = \? AND received_at > \?/);
   assert.match(calls[0].sql, /ORDER BY received_at ASC, id ASC/);
+  assert.deepEqual(calls[0].params, ['cnv-1', '2026-09-18T10:00:01.000Z', 2]);
 });
 
 test('chat intake persists a first-party website message and sync returns it', async () => {

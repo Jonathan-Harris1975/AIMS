@@ -9,13 +9,21 @@ import { CommsHubEmailService } from '../services/comms-hub/emailService.js';
 class SqliteD1 {
   constructor() {
     this.db = new DatabaseSync(':memory:');
+    this.queryCalls = 0;
+    this.batchCalls = 0;
     for (const migration of COMMS_HUB_REQUIRED_MIGRATIONS) {
       this.db.exec(readFileSync(new URL(`../services/comms-hub/migrations/${migration}.sql`, import.meta.url), 'utf8'));
     }
     this.db.exec('PRAGMA foreign_keys = OFF');
   }
-  query(sql, params = []) { return { success: true, results: this.db.prepare(sql).all(...params) }; }
-  batch(statements) { return statements.map(({ sql, params = [] }) => this.query(sql, params)); }
+  query(sql, params = []) {
+    this.queryCalls += 1;
+    return { success: true, results: this.db.prepare(sql).all(...params) };
+  }
+  batch(statements) {
+    this.batchCalls += 1;
+    return statements.map(({ sql, params = [] }) => ({ success: true, results: this.db.prepare(sql).all(...params) }));
+  }
 }
 
 test('failed outbound email idempotency claim can be reacquired for a safe retry', async () => {
@@ -31,6 +39,31 @@ test('failed outbound email idempotency claim can be reacquired for a safe retry
   assert.equal(second.retry, true);
   assert.equal(second.action.status, 'processing');
   assert.equal(second.action.attempts, 2);
+});
+
+test('email poll state is initialised and leased in one D1 request', async () => {
+  const d1 = new SqliteD1();
+  const repo = new CommsOperationsRepository(d1);
+  const claimed = await repo.claimEmailPollState({
+    accountKey: 'info',
+    mailbox: 'INBOX',
+    workerId: 'worker-1',
+    now: '2026-09-19T20:00:00.000Z',
+    leaseExpiresAt: '2026-09-19T20:05:00.000Z',
+  });
+  assert.equal(d1.queryCalls, 1);
+  assert.equal(claimed.lease_owner, 'worker-1');
+  assert.equal(claimed.attempts, 1);
+
+  const skipped = await repo.claimEmailPollState({
+    accountKey: 'info',
+    mailbox: 'INBOX',
+    workerId: 'worker-2',
+    now: '2026-09-19T20:01:00.000Z',
+    leaseExpiresAt: '2026-09-19T20:06:00.000Z',
+  });
+  assert.equal(d1.queryCalls, 2);
+  assert.equal(skipped, null);
 });
 
 test('delivery-uncertain outbound email remains reconciliation-required and is not resent automatically', async () => {
@@ -102,7 +135,7 @@ test('provider health exposes enabled one.com email as unavailable when credenti
       providerHealthFailureThreshold: 3,
     },
     aiRepository: {
-      async recordProviderHealth(value) { recorded.push(value); },
+      async recordProviderHealthBatch(values) { recorded.push(...values); },
       async listLatestProviderHealth() { return recorded; },
     },
   };
