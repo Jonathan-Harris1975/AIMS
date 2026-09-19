@@ -13,6 +13,14 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 MAX_PYTHON_LINE_LENGTH = 200
 BASELINE_PATH = ROOT / "config" / "repository-hygiene-baseline.json"
+UNTRACKED_SCAN_EXCLUDES = frozenset({
+    ".git",
+    ".cache",
+    ".npm",
+    "__pycache__",
+    "coverage",
+    "node_modules",
+})
 
 
 def tracked_files() -> list[Path]:
@@ -26,7 +34,7 @@ def tracked_files() -> list[Path]:
         return [
             path
             for path in ROOT.rglob("*")
-            if path.is_file() and ".git" not in path.parts and "__pycache__" not in path.parts
+            if path.is_file() and not UNTRACKED_SCAN_EXCLUDES.intersection(path.parts)
         ]
 
     return [ROOT / raw.decode("utf-8") for raw in output.split(b"\0") if raw]
