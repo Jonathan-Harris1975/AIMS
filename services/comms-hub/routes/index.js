@@ -923,6 +923,40 @@ export function createCommsHubRouter({
     catch (error) { next(error); }
   });
 
+  router.get("/email/status", permit("read_queue"), async (_req, res, next) => {
+    try {
+      const active = contextProvider();
+      const accounts = await Promise.all(Object.entries(active.config.emailAccounts || {}).map(async ([key, account]) => {
+        const pollState = typeof active.operationsRepository.getEmailPollState === "function"
+          ? await active.operationsRepository.getEmailPollState({ accountKey: key, mailbox: account.mailbox }).catch(() => null)
+          : null;
+        const worker = active.emailPollWorkers?.[key];
+        return [key, {
+          enabled: account.enabled,
+          address: account.address,
+          mailbox: account.mailbox,
+          workflowEvaluationEnabled: account.workflowEvaluationEnabled,
+          workerStarted: Boolean(worker?.timer),
+          workerRunning: Boolean(worker?.running),
+          pollState: pollState ? {
+            status: pollState.status || null,
+            lastUid: Number(pollState.last_uid || 0),
+            lastSuccessAt: pollState.last_success_at || null,
+            nextAttemptAt: pollState.next_attempt_at || null,
+            failureClass: pollState.failure_class || null,
+          } : null,
+        }];
+      }));
+      return res.json({
+        ok: true,
+        enabled: active.config.emailEnabled,
+        pollWorkerEnabled: active.config.emailPollWorkerEnabled,
+        pollIntervalMs: active.config.emailPollMs,
+        accounts: Object.fromEntries(accounts),
+      });
+    } catch (error) { next(error); }
+  });
+
   router.post("/email/poll/drain", permit("manage_workflows"), async (req, res, next) => {
     try {
       const active = contextProvider();
