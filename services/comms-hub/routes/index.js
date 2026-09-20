@@ -1147,9 +1147,27 @@ export function createCommsHubRouter({
   });
 
   router.get("/metrics", permit("read_metrics"), async (req, res, next) => {
-    try { const to = req.query.to || new Date().toISOString(); const from = req.query.from || new Date(Date.parse(to) - 30 * 86400000).toISOString(); return res.json({ ok:
-       true, metrics: await contextProvider().metricsService.get({ from, to }) }); }
-    catch (error) { next(error); }
+    try {
+      const to = req.query.to || new Date().toISOString();
+      const from = req.query.from || new Date(Date.parse(to) - 30 * 86400000).toISOString();
+      const context = contextProvider();
+      const [metrics, workerHealth] = await Promise.all([
+        context.metricsService.get({ from, to }),
+        context.workerHeartbeatService.getHealth(),
+      ]);
+      return res.json({ ok: true, metrics, workerHealth });
+    } catch (error) { next(error); }
+  });
+
+  router.get("/workers/health", permit("read_metrics"), async (_req, res, next) => {
+    try {
+      const health = await contextProvider().workerHeartbeatService.getHealth();
+      return res.status(health.overall === "stale" ? 503 : 200).json({
+        ok: health.overall !== "stale",
+        service: "comms-hub",
+        health,
+      });
+    } catch (error) { next(error); }
   });
 
   router.get("/notifications", permit("read_notifications"), async (req, res, next) => {
