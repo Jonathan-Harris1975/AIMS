@@ -31,17 +31,14 @@ jobs:
         run: |
           test "$(node --version)" = "v22.22.3"
           test "$(npm --version)" = "10.9.8"
-      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm ci
       - name: Reject legacy envBootstrap imports
         run: |
           if grep -RInE 'scripts/envBootstrap\.js|import[[:space:]]+[^;]*\bENV\b[^;]*from' deployment-check.js scripts services routes server.js --exclude='envBootstrap.js' --exclude='*.md'; then
             exit 1
           fi
-      - run: npm run verify
-      - run: npm run deploy:smoke
-      - name: Enforce health endpoint performance SLO
-        run: npm run perf:gate
-      - run: npm audit --omit=dev --audit-level=high
+      - name: Run canonical release verification
+        run: npm run verify:release
 
   docker:
     runs-on: ubuntu-latest
@@ -51,7 +48,7 @@ jobs:
       - run: docker build -t aims:ci .
       - name: Build Headroom companion image
         run: docker build -f headroom/Dockerfile -t aims-headroom:ci .
-      - name: Verify pinned runtime and smoke AIMS inside production image
+      - name: Verify pinned runtime, non-root user and writable runtime state
         run: |
           docker run --rm aims:ci node -e '
             const { execFileSync } = require("node:child_process");
@@ -63,11 +60,32 @@ jobs:
               process.exit(1);
             }
           '
+          test "$(docker image inspect aims:ci --format '{{.Config.User}}')" = "node"
+          docker run --rm aims:ci sh -eu -c 'test "$(id -u)" -ne 0; test -w /app/local-data'
+      - name: Smoke AIMS production image and validate fail-closed readiness
+        run: |
           docker run --rm \
             -e NODE_ENV=production \
             -e ALLOW_EPHEMERAL_STATE=true \
             -e STATE_BACKEND=local \
+            -e DEPLOY_SMOKE_EXPECT_READY=false \
             aims:ci npm run deploy:smoke
+      - name: Scan AIMS production image for vulnerabilities and secrets
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: aims:ci
+          format: table
+          exit-code: '1'
+          severity: CRITICAL,HIGH
+          scanners: vuln,secret
+      - name: Scan Headroom companion image for vulnerabilities and secrets
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: aims-headroom:ci
+          format: table
+          exit-code: '1'
+          severity: CRITICAL,HIGH
+          scanners: vuln,secret
 
   notify_failure:
     name: Notify central operations on CI failure
