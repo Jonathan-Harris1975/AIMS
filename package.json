@@ -26,7 +26,10 @@
     "r2:policy:check": "node scripts/r2AccessPolicyCheck.js",
     "secret:scan": "python3 scripts/secret_scan.py",
     "perf:gate": "node scripts/performanceGate.js",
-    "koyeb:min-instances:check": "node scripts/verifyKoyebMinInstances.js"
+    "koyeb:min-instances:check": "node scripts/verifyKoyebMinInstances.js",
+    "test:migrations": "node --test --test-concurrency=1 --test-timeout=60000 test/comms-hub-migration-release-gate.test.js docs/comms-hub-auto-migration.test.js",
+    "test:comms:reliability": "node --test --test-concurrency=1 --test-timeout=60000 test/comms-hub-email-reliability.test.js test/comms-hub-runtime-reliability-v2141.test.js test/comms-hub-worker-heartbeat.test.js test/comms-hub-social-all-channels.test.js test/comms-hub-chat-enable-regression.test.js test/comms-hub-phase4-hardening.test.js docs/comms-hub-notification-delivery.test.js",
+    "verify:release": "npm run verify && npm run test:migrations && npm run test:comms:reliability && npm run deploy:smoke && npm run perf:gate && npm run secret:scan && npm audit --omit=dev --audit-level=high"
   },
   "engines": {
     "node": "22.22.3",
