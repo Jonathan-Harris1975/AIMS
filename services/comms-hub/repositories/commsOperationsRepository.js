@@ -556,17 +556,40 @@ export class CommsOperationsRepository extends CommsIdentityArchiveRepository {
 
   async scheduleDelayedAction(action) {
     const result = await this.d1.query(
-      `INSERT OR IGNORE INTO comms_hub_delayed_actions
+      `INSERT INTO comms_hub_delayed_actions
         (id, conversation_id, action_type, payload_json, due_at, status, attempts, max_attempts,
          idempotency_key, next_attempt_at, created_by, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, 'scheduled', 0, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(idempotency_key) DO NOTHING
        RETURNING *`,
-      [action.id, action.conversationId, action.actionType, json(action.payload || {}), action.dueAt,
+      [action.id, action.conversationId || null, action.actionType, json(action.payload || {}), action.dueAt,
         action.maxAttempts || 8, action.idempotencyKey, action.dueAt, action.actor, action.createdAt, action.createdAt]
     );
     if (rows(result)[0]) return rows(result)[0];
     const existing = await this.d1.query(`SELECT * FROM comms_hub_delayed_actions WHERE idempotency_key = ?`, [action.idempotencyKey]);
     return rows(existing)[0] || null;
+  }
+
+  async ensurePendingNotificationEmailActions({ at = nowIso() } = {}) {
+    const result = await this.d1.query(
+      `INSERT INTO comms_hub_delayed_actions
+        (id, conversation_id, action_type, payload_json, due_at, status, attempts, max_attempts,
+         idempotency_key, next_attempt_at, created_by, created_at, updated_at)
+       SELECT 'delay_notification_email_' || n.id, NULL, 'notification_email',
+              json_object('notificationId', n.id), ?, 'scheduled', 0, 6,
+              'notification-email:' || n.id, ?, 'notification-recovery', ?, ?
+         FROM comms_hub_notifications n
+        WHERE n.email_requested = 1
+          AND n.email_delivery_status IN ('pending','retry_pending')
+          AND NOT EXISTS (
+            SELECT 1 FROM comms_hub_delayed_actions da
+             WHERE da.idempotency_key = 'notification-email:' || n.id
+          )
+       ON CONFLICT(idempotency_key) DO NOTHING
+       RETURNING *`,
+      [at, at, at, at]
+    );
+    return rows(result);
   }
 
   async claimDelayedAction({ workerId, now, leaseExpiresAt }) {
@@ -576,10 +599,11 @@ export class CommsOperationsRepository extends CommsIdentityArchiveRepository {
               attempts = attempts + 1, updated_at = ?
         WHERE id = (
           SELECT da.id FROM comms_hub_delayed_actions da
-          JOIN comms_hub_conversations c ON c.id = da.conversation_id
+          LEFT JOIN comms_hub_conversations c ON c.id = da.conversation_id
           LEFT JOIN comms_hub_email_threads et ON et.conversation_id = c.id
            WHERE da.attempts < da.max_attempts AND da.due_at <= ? AND da.next_attempt_at <= ?
-             AND (c.channel <> 'email' OR COALESCE(et.account_key, '') NOT IN ('admin', 'newsletter'))
+             AND (da.conversation_id IS NULL OR c.id IS NOT NULL)
+             AND (da.conversation_id IS NULL OR c.channel <> 'email' OR COALESCE(et.account_key, '') NOT IN ('admin', 'newsletter'))
              AND (da.status IN ('scheduled','failed') OR
                   (da.status = 'leased' AND (da.lease_expires_at IS NULL OR da.lease_expires_at <= ?)))
            ORDER BY da.due_at ASC LIMIT 1
@@ -623,6 +647,25 @@ export class CommsOperationsRepository extends CommsIdentityArchiveRepository {
           )
         RETURNING *`,
       [at, at, at, id]
+    );
+    return rows(result)[0] || null;
+  }
+
+  async resetDelayedActionForReplayByIdempotencyKey(idempotencyKey, at = nowIso()) {
+    const result = await this.d1.query(
+      `UPDATE comms_hub_delayed_actions
+          SET status = 'scheduled', attempts = 0, next_attempt_at = ?, due_at = ?,
+              lease_owner = NULL, lease_expires_at = NULL,
+              failure_class = NULL, error = NULL, updated_at = ?
+        WHERE idempotency_key = ? AND status IN ('failed','quarantined')
+          AND NOT EXISTS (
+            SELECT 1 FROM comms_hub_conversations c
+            LEFT JOIN comms_hub_email_threads et ON et.conversation_id = c.id
+            WHERE c.id = comms_hub_delayed_actions.conversation_id
+              AND c.channel = 'email' AND COALESCE(et.account_key, '') IN ('admin', 'newsletter')
+          )
+        RETURNING *`,
+      [at, at, at, idempotencyKey]
     );
     return rows(result)[0] || null;
   }
@@ -1206,17 +1249,79 @@ export class CommsOperationsRepository extends CommsIdentityArchiveRepository {
   }
 
   async createNotification(notification) {
+    const emailRequested = notification.emailRequested ? 1 : 0;
     const result = await this.d1.query(
-      `INSERT OR IGNORE INTO comms_hub_notifications
+      `INSERT INTO comms_hub_notifications
         (id, actor, conversation_id, type, title, body_text, severity, status,
-         email_requested, created_at, metadata_json)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'unread', ?, ?, ?)
+         email_requested, email_delivery_status, created_at, metadata_json)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'unread', ?, ?, ?, ?)
+       ON CONFLICT(id) DO NOTHING
        RETURNING *`,
       [notification.id, notification.actor, notification.conversationId || null,
         notification.type, notification.title, notification.bodyText, notification.severity,
-        notification.emailRequested ? 1 : 0, notification.createdAt, json(notification.metadata || {})]
+        emailRequested, emailRequested ? 'pending' : 'not_requested', notification.createdAt, json(notification.metadata || {})]
+    );
+    const inserted = rows(result)[0] || null;
+    if (inserted) return inserted;
+
+    const existingResult = await this.d1.query(`SELECT * FROM comms_hub_notifications WHERE id = ?`, [notification.id]);
+    const existing = rows(existingResult)[0] || null;
+    if (!existing) {
+      throw new CommsHubError(500, 'notification_insert_failed', 'Notification creation failed without a persisted record.');
+    }
+    const sameContract = existing.actor === notification.actor
+      && (existing.conversation_id || null) === (notification.conversationId || null)
+      && existing.type === notification.type
+      && existing.title === notification.title
+      && existing.body_text === notification.bodyText
+      && existing.severity === notification.severity
+      && Number(existing.email_requested || 0) === emailRequested;
+    if (!sameContract) {
+      throw new CommsHubError(409, 'notification_idempotency_conflict', 'Notification idempotency key was reused for different notification content.');
+    }
+    return existing;
+  }
+
+  async getNotification(id) {
+    const result = await this.d1.query(`SELECT * FROM comms_hub_notifications WHERE id = ?`, [id]);
+    const notification = rows(result)[0] || null;
+    return notification ? { ...notification, metadata: parseJson(notification.metadata_json, {}) } : null;
+  }
+
+  async markNotificationEmailState({ id, status, providerMessageId = null, failureClass = null, error = null, at = nowIso() }) {
+    const sent = status === 'sent';
+    const result = await this.d1.query(
+      `UPDATE comms_hub_notifications
+          SET email_delivery_status = ?,
+              email_sent_at = CASE WHEN ? THEN COALESCE(email_sent_at, ?) ELSE email_sent_at END,
+              email_provider_message_id = CASE WHEN ? THEN COALESCE(?, email_provider_message_id) ELSE email_provider_message_id END,
+              email_failure_class = ?, email_error = ?, email_last_attempt_at = ?
+        WHERE id = ? AND email_requested = 1
+        RETURNING *`,
+      [status, sent ? 1 : 0, at, sent ? 1 : 0, providerMessageId || null,
+        failureClass || null, text(error, 1000) || null, at, id]
     );
     return rows(result)[0] || null;
+  }
+
+  async reconcileNotificationEmail({ id, outcome, providerMessageId = null, actor = 'operator', at = nowIso() }) {
+    const current = await this.getNotification(id);
+    if (!current || !current.email_requested) {
+      throw new CommsHubError(404, 'notification_email_not_found', 'Requested notification email was not found.');
+    }
+    if (current.email_delivery_status !== 'reconciliation_required') {
+      throw new CommsHubError(409, 'notification_email_not_reconcilable', 'Notification email is not awaiting reconciliation.');
+    }
+    if (!['sent', 'retry', 'quarantined'].includes(outcome)) {
+      throw new CommsHubError(400, 'notification_email_reconciliation_outcome_invalid', 'Reconciliation outcome must be sent, retry, or quarantined.');
+    }
+    if (outcome === 'sent') {
+      return this.markNotificationEmailState({ id, status: 'sent', providerMessageId, at });
+    }
+    if (outcome === 'quarantined') {
+      return this.markNotificationEmailState({ id, status: 'quarantined', failureClass: 'manual', error: `Reconciled by ${actor}`, at });
+    }
+    return this.markNotificationEmailState({ id, status: 'retry_pending', failureClass: 'manual', error: `Retry authorised by ${actor}`, at });
   }
 
   async listNotifications({ actor, status = "unread", limit = 100 }) {
@@ -1558,10 +1663,11 @@ export class CommsOperationsRepository extends CommsIdentityArchiveRepository {
 
   async claimChannelOutboundAction({ id, idempotencyKey, conversationId, channel, actionType, requestSha256, at = nowIso() }) {
     const inserted = await this.d1.query(
-      `INSERT OR IGNORE INTO comms_hub_channel_outbound_actions
+      `INSERT INTO comms_hub_channel_outbound_actions
         (id, idempotency_key, conversation_id, channel, action_type, request_sha256,
          status, attempts, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, 'processing', 1, ?, ?)
+       ON CONFLICT(idempotency_key) DO NOTHING
        RETURNING *`,
       [id, idempotencyKey, conversationId, channel, actionType, requestSha256, at, at]
     );

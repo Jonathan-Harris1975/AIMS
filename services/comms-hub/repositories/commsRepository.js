@@ -568,10 +568,11 @@ export class CommsHubRepository {
 
   async claimOutboundAction({ id, idempotencyKey, conversationId, family, platform, actionType, requestSha256, now }) {
     const inserted = await this.d1.query(
-      `INSERT OR IGNORE INTO comms_hub_social_outbound_actions
+      `INSERT INTO comms_hub_social_outbound_actions
         (id, idempotency_key, conversation_id, credential_family, platform, action_type,
          request_sha256, status, attempts, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, 'processing', 1, ?, ?)
+       ON CONFLICT(idempotency_key) DO NOTHING
        RETURNING id`,
       [id, idempotencyKey, conversationId, family, platform, actionType, requestSha256, now, now]
     );
