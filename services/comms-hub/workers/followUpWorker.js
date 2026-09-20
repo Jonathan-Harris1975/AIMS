@@ -42,7 +42,7 @@ export class CommsHubFollowUpWorker {
   }
 
   async runOnce({ limit = this.context.config.followUpBatchSize } = {}) {
-    if (this.running || this.stopping) return { skipped: true, processed: 0 };
+    if (this.running || this.stopping) return { skipped: true, reason: this.stopping ? "stopping" : "already_running", processed: 0 };
     this.running = true;
     let processed = 0; let completed = 0; let failed = 0;
     try {

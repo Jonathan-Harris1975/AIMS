@@ -49,10 +49,11 @@ export class CommsHubEmailPollWorker {
       });
     };
 
-    const businessPolicy = businessHoursPolicy(this.context.config);
     this.timer = setInterval(
       () => {
-        if (!isWithinBusinessHours(new Date(), businessPolicy)) return;
+        // Always enter runOnce so durable worker freshness continues to advance
+        // outside business hours. runOnce applies the business-hours policy and
+        // returns a safe skipped result without touching the mailbox.
         void this.runOnce().catch((error) => reportUnhandledRunFailure('commsHub.emailPoll.tickFailed', error));
       },
       this.context.config.emailPollMs

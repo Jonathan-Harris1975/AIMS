@@ -4,7 +4,7 @@ import { safeErrorLog } from "../domain/redaction.js";
 export class CommsHubProviderHealthWorker {
   constructor({ context }) { this.context = context; this.timer = null; this.running = false; this.stopping = false; }
   async runOnce() {
-    if (this.running || this.stopping) return { skipped: true, captured: 0 };
+    if (this.running || this.stopping) return { skipped: true, reason: this.stopping ? "stopping" : "already_running", captured: 0 };
     this.running = true;
     try { const captured = await this.context.providerHealthService.capture(); return { skipped: false, captured: captured.length }; }
     finally { this.running = false; }

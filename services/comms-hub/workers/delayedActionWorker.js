@@ -345,7 +345,7 @@ export class CommsHubDelayedActionWorker {
   }
 
   async runOnce({ limit } = {}) {
-    if (this.running || this.stopping) return { skipped: true };
+    if (this.running || this.stopping) return { skipped: true, reason: this.stopping ? "stopping" : "already_running" };
     this.running = true;
     const output = [];
     try {
