@@ -218,7 +218,8 @@ test("an allow-listed form handoff is a deterministic autonomous delivery path",
 test("migration 0020 is delivered and keeps all three customer-facing autonomous policies active", () => {
   assert.ok(COMMS_HUB_REQUIRED_MIGRATIONS.includes("0018_default_channel_automation"));
   assert.ok(COMMS_HUB_REQUIRED_MIGRATIONS.includes("0019_social_context_retry"));
-  assert.equal(COMMS_HUB_REQUIRED_MIGRATIONS.at(-1), "0020_professional_autonomous_comms");
+  assert.ok(COMMS_HUB_REQUIRED_MIGRATIONS.includes("0020_professional_autonomous_comms"));
+  assert.equal(COMMS_HUB_REQUIRED_MIGRATIONS.at(-1), "0021_notification_delivery_reliability");
   const db = new DatabaseSync(":memory:");
   for (const key of COMMS_HUB_REQUIRED_MIGRATIONS) db.exec(readFileSync(new URL(`../services/comms-hub/migrations/${key}.sql`, import.meta.url), "utf8"));
   const rows = db.prepare("SELECT policy_key, status FROM comms_hub_autonomous_reply_policies WHERE policy_key IN ('full-chat-low-risk','full-email-low-risk','full-social-low-\
