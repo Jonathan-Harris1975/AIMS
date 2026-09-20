@@ -4,9 +4,9 @@
 
 This inventory makes the runtime configuration contract auditable without duplicating secret values. `.env.example` and `env.template` remain the curated operator templates; this file records every production `process.env` dependency and its source locations.
 
-- Runtime variables referenced in production code: **510**
+- Runtime variables referenced in production code: **511**
 - Present in curated templates: **397**
-- Not present in curated templates: **113**
+- Not present in curated templates: **114**
 
 | Variable | Curated template | Production references |
 | --- | --- | --- |
@@ -228,6 +228,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `CONTENT_MASTER_COUNCIL_TIMEOUT_MS` | Yes | audits/utils/contentMasterCouncil.js:144 |
 | `CORS_ORIGINS` | Yes | server.js:232 |
 | `DEBUG_ROUTES` | Yes | logger.js:114 |
+| `DEPLOY_SMOKE_EXPECT_READY` | No | scripts/deploySmoke.js:8 |
 | `DIGITAL_GROWTH_AI_MAX_INPUT_CHARS` | Yes | audits/utils/digitalGrowthAnalysis.js:330 |
 | `DIGITAL_GROWTH_AI_MAX_RETRIES` | Yes | audits/utils/digitalGrowthAnalysis.js:467 |
 | `DIGITAL_GROWTH_AI_MAX_TOKENS` | Yes | audits/utils/digitalGrowthAnalysis.js:464 |
