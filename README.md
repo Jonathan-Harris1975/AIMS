@@ -6,13 +6,13 @@ This document describes the current repository implementation and operating cont
 
 ## Runtime
 
-- **Node.js:** 22.x
+- **Node.js:** 22.22.3 (npm 10.9.8)
 - **Entry point:** `server.js`
 - **Production start:** `npm start`
 - **Direct server start:** `npm run start:server`
 - **Route registry:** `routes/index.js`
 - **Configuration:** `config/production.defaults.env`, `env.template`, `config/thresholds.js`, then service-local configuration
-- **Durable storage/state:** Cloudflare R2 where persistence is required
+- **Durable storage/state:** Cloudflare D1 for Comms Hub operational state and Cloudflare R2 for durable artefacts/state where required
 - **Primary model gateway:** OpenRouter
 
 All routes mounted through `routes/index.js` are protected by the AIMS bearer-auth middleware unless a narrower public contract is explicitly implemented elsewhere.
@@ -91,6 +91,14 @@ Comms Hub is part of the AIMS process and is mounted at `/comms-hub`. The curren
 
 Accepted podcast contributions are advanced automatically only after RSS publication and the website rebuild both confirm success. The hand-off is idempotent, records the canonical episode URL, and leaves the contribution queued for retry if publication or Comms Hub advancement fails. See `services/comms-hub/README.md`.
 
+### Background communications reliability
+
+Comms Hub email/IMAP polling, social polling, delayed actions, follow-ups and provider monitoring are in-process background workers. Production therefore **must not scale AIMS to zero**. The canonical `.github/workflows/koyeb-deployment-watch.yml` release path now fails closed unless `KOYEB_TOKEN` and `KOYEB_SERVICE` are configured and verifies the live Koyeb service definition with `npm run koyeb:min-instances:check` both before and after the deployment watch. Any configured scaling scope with `min < 1`, an unverified service identity, an API/auth failure or an unreadable Koyeb response fails the release validation.
+
+Worker progress is stored durably in D1 by migration `0022_worker_heartbeat`. Critical worker categories record registration, last attempt, last success and last failure per runtime instance. `GET /comms-hub/workers/health` (AIMS-authenticated, `read_metrics`) returns enabled/disabled state, freshness age, cadence-derived degraded/stale thresholds and multi-instance visibility without message data, email addresses or provider secrets. The same summary is included in `GET /comms-hub/metrics`.
+
+`/health` and `/livez` remain HTTP/process liveness signals. `/readyz` verifies application/runtime readiness. Background-worker freshness is intentionally separate at `/comms-hub/workers/health`, so an HTTP process cannot masquerade as proof that continuous communication loops are advancing.
+
 ## Audits and RAMS hand-off
 
 AIMS orchestrates the final website and content audit artefacts and can hand exact R2 JSON keys to RAMS for governed remediation. The content master audit includes editorial, authority, platform, podcast, eBook, artwork and commercial checks. Production evidence is still required before a final content-system audit can be considered complete.
@@ -99,17 +107,41 @@ AIMS orchestrates the final website and content audit artefacts and can hand exa
 
 AIMS uses advisory model-spend controls: model choice, expert justification, reported cost and fallback position are recorded, but requests are never stopped by a monetary threshold. The authenticated `/ops/model-governance/apply` receiver can accept future monthly HIVE AI Council assignments, and `/ops/model-governance/status` exposes the active AIMS record. HIVE scheduling and cross-repository coordination are intentionally outside this repository. See [Model governance](docs/MODEL_GOVERNANCE.md).
 
-## Local verification
+## Development and verification
+
+Use the pinned Node/npm toolchain from `package.json`. From a clean checkout:
 
 ```bash
-npm ci
+npm ci --ignore-scripts --no-audit --no-fund
 npm run verify
+npm run deploy:smoke
+npm run perf:gate
+npm run secret:scan
+npm audit --omit=dev --audit-level=high
 npm run env:doctor:file -- env.template
 ```
 
-FFmpeg and FFprobe are required for audio/media workflows. Production durable-state paths also require the configured R2 credentials and bucket aliases.
+`npm run verify` runs lint/static checks, repository hygiene, the dependency-backed test suite, build/import checks and environment-reference validation. FFmpeg and FFprobe are required for audio/media workflows. Production durable-state paths also require the configured D1/R2 credentials and bucket aliases.
+
+## Deployment and operations
+
+The governed release sequence is: AIMS CI on the exact SHA, Docker validation, the exact-SHA release attestation, then the Koyeb production deployment-watch workflow for `main`. The Koyeb workflow is a mandatory post-deploy gate, uses the checked-in minimum-instance verifier, watches the expected deployment SHA, re-verifies scaling after the deployment becomes healthy, retains deployment evidence and then dispatches the ecosystem smoke workflow. Missing Koyeb verification credentials fail the gate rather than silently skipping it.
+
+Operational endpoints and controls:
+
+- `GET /health` — shallow HTTP service response;
+- `GET /livez` — process/lifecycle liveness;
+- `GET /readyz` — application readiness, including Comms Hub runtime readiness;
+- `GET /comms-hub/workers/health` — authenticated durable background-worker freshness;
+- `GET /comms-hub/metrics` — authenticated communications metrics plus worker-health summary;
+- `npm run koyeb:min-instances:check` — manual/CI live Koyeb minimum-instance verification;
+- `npm run comms:migrate:status` / `npm run comms:migrate` — Comms Hub migration inspection/application.
+
+Rollback and recovery must preserve exact-SHA evidence, durable job/idempotency state and quarantine/reconciliation records. Do not replay publishing, email or other irreversible actions until downstream state is checked; see `docs/OPERATIONAL_ALERTING.md` and the service-specific recovery documentation.
 
 ## Configuration rules
+
+`config/production.defaults.env`, `.env.example`, `env.template`, service-local `env.template` files and the relevant `config.js` modules define the supported configuration surface. Environment-specific values override committed defaults; unresolved `{{ secret.* }}` placeholders are treated as missing. Channel/provider enable switches must be explicit, and examples must contain placeholders rather than live credentials.
 
 - Keep secrets in the deployment secret store, never in committed environment files.
 - Treat unresolved `{{ secret.* }}` placeholders as missing configuration.
@@ -117,6 +149,10 @@ FFmpeg and FFprobe are required for audio/media workflows. Production durable-st
 - Preserve request deduplication and scheduling claims on externally triggered workflows.
 - Do not weaken final content or media QA merely because an upstream model/provider call succeeded.
 - Use the configured private/public R2 lanes rather than inventing service-local storage contracts.
+
+## Security gates
+
+AIMS uses suite bearer authentication for protected routes plus narrower webhook/signature contracts for public intake. Secret values belong in Koyeb/Cloudflare/GitHub secret stores and are excluded from operational payloads and worker heartbeat state. CI runs the repository secret scan before dependency installation, then the full verify/build/smoke/performance path and a high-severity production dependency audit. CodeQL runs separately under `.github/workflows/codeql.yml`.
 
 ## Documentation
 

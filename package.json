@@ -25,7 +25,8 @@
     "comms:migrate:status": "node scripts/commsHubMigrate.js --status",
     "r2:policy:check": "node scripts/r2AccessPolicyCheck.js",
     "secret:scan": "python3 scripts/secret_scan.py",
-    "perf:gate": "node scripts/performanceGate.js"
+    "perf:gate": "node scripts/performanceGate.js",
+    "koyeb:min-instances:check": "node scripts/verifyKoyebMinInstances.js"
   },
   "engines": {
     "node": "22.22.3",
