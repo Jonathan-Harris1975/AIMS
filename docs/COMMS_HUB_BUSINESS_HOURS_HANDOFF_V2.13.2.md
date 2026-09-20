@@ -35,7 +35,7 @@
 
 ### Wake behaviour
 
-The public website's signed request to the first-party CogniPal AIMS endpoint is itself sufficient to wake a scale-to-zero HTTP service. The separate Comms Hub wake relay was retired in v2.14.1. Continuous background polling still requires AIMS to remain running, so production should keep at least one AIMS instance active.
+The public website's signed request to the first-party CogniPal AIMS endpoint is itself sufficient to wake a scale-to-zero HTTP service. The separate Comms Hub wake relay was retired in v2.14.1. Continuous background polling still requires AIMS to remain running, so production must keep at least one AIMS instance active. The canonical Koyeb deployment-watch workflow enforces this with `npm run koyeb:min-instances:check` before and after the deployment watch; scale-to-zero or unverifiable scaling fails the release gate.
 
 ## Persistence / migration
 

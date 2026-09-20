@@ -1,7 +1,7 @@
 # AIMS professional operations and alerting
 
 **Status:** Paid Koyeb production service
-**Last reviewed:** 21 June 2026
+**Last reviewed:** 20 September 2026
 
 AIMS records bounded professional-excellence telemetry in durable state. `GET /ops/excellence` exposes job success/failure counts, retry recoveries, repeated failure streaks and provider latency/failure aggregates without returning prompts, credentials, raw provider payloads or bearer tokens.
 
@@ -34,4 +34,6 @@ The telemetry file is `professional-excellence.json` and follows the existing du
 
 ## Deployment notifications
 
-GitHub CI failures and Koyeb paid-production deployment failures are forwarded to HIVE where configured. Configure repository secrets `KOYEB_TOKEN`, `KOYEB_SERVICE`, `OPS_ALERT_WEBHOOK_URL` and `OPS_ALERT_WEBHOOK_TOKEN`. Alert delivery is deliberately non-blocking so it cannot mask the original failure.
+GitHub CI failures and Koyeb paid-production deployment failures are forwarded to HIVE where configured. The production deployment-watch workflow now treats `KOYEB_TOKEN` and `KOYEB_SERVICE` as mandatory release-gate configuration; missing values fail the workflow instead of skipping deployment verification. `OPS_ALERT_WEBHOOK_URL` and `OPS_ALERT_WEBHOOK_TOKEN` remain optional for alert forwarding, and alert delivery is deliberately non-blocking so it cannot mask the original failure.
+
+The deployment workflow runs `npm run koyeb:min-instances:check` before and after watching the expected production SHA. A live Koyeb API/auth failure or any scaling scope with a minimum below 1 fails validation. The verifier never logs the token. Background-loop freshness is monitored separately through authenticated `GET /comms-hub/workers/health`.
