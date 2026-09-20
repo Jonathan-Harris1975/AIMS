@@ -37,7 +37,7 @@ No committed production credential literals, PEM private keys, AWS access keys, 
 
 ## GitHub Actions secret references
 
-The repository workflows reference these GitHub Actions secrets: `KOYEB_TOKEN`, `KOYEB_SERVICE`, `OPS_ALERT_WEBHOOK_URL`, `OPS_ALERT_WEBHOOK_TOKEN`, and `WEBSITE_REBUILD_HOOK`. The repository cannot prove whether those secret values exist in GitHub; that must be checked in GitHub repository settings.
+The repository workflows reference these GitHub Actions secrets: `KOYEB_TOKEN`, `KOYEB_SERVICE`, `OPS_ALERT_WEBHOOK_URL`, `OPS_ALERT_WEBHOOK_TOKEN`, and `WEBSITE_REBUILD_HOOK`. `KOYEB_TOKEN` and `KOYEB_SERVICE` are mandatory for the production deployment-watch job: missing values now fail closed before any Koyeb verification or deployment watch runs. The repository still cannot prove the secret values exist until the workflow executes in GitHub; the production job is the authoritative release-time check.
 
 ## Runtime env-list drift
 
