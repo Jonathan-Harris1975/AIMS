@@ -173,7 +173,7 @@ export class CommsHubChatService {
         actor: 'admin', conversationId, type: 'human_handoff_requested', title: 'Website visitor requested Jonathan',
         bodyText: "A website visitor requested a live hand-off during Jonathan's published hand-off hours.",
         severity: 'critical', emailRequested: true, idempotencySeed: `chat-handoff:${messageId}`,
-      }).catch(() => null);
+      });
     } else if (requestHuman) {
       await this.context.auditService?.record?.({
         actor: 'website-visitor', role: 'external', action: 'chat_handoff_deferred_outside_business_hours',
@@ -378,7 +378,7 @@ export class CommsHubChatService {
     if (decision.requestLiveHandoff) {
       await this.context.operationsRepository.updateChatTakeover({ conversationId, mode: 'takeover_requested', actor: null, at: new Date().toISOString() });
       await notifyHumanHandoff({ context: this.context, conversationId, reason: decision.reason, idempotencySeed: `proactive-handoff:${conversationId}:${triggerMessageId ||
-         'latest'}` }).catch(() => null);
+         'latest'}` });
       await this.context.auditService?.record?.({ actor: 'coginpal-automation', role: 'operator', action: 'chat_proactive_handoff_requested', objectType: 'conversation',
          objectId: conversationId, conversationId, details: { reason: decision.reason } }).catch(() => null);
       return { routed: true, mode: 'takeover_requested', decision };

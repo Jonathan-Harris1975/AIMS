@@ -115,7 +115,7 @@ export class CommsHubContentAutomationService {
       emailRequested: false,
       idempotencySeed: `content-quality:${conversationId}:${quality?.score ?? "unknown"}`,
       metadata: { formKey, quality, threshold, reason },
-    }).catch?.(() => null);
+    });
     return { queued: false, reviewRequired: true, reason, quality, threshold };
   }
 

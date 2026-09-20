@@ -54,6 +54,18 @@ Primary controls include:
 - `COMMS_HUB_AUTO_SEND_SOCIAL_ENABLED=true`
 - `COMMS_HUB_AUTO_SEND_FORM_ENABLED=true`
 
+## Notification and human-handoff reliability
+
+Operator notifications use the database-backed notification contract. Production notification types are `assignment`, `mention`, `escalation`, `sla_warning`, `sla_breach`, `failure`, `system`, `human_handoff_requested`, `human_callback` and `content_quality_review`. Unsupported values fail as database contract violations rather than being silently ignored. Callback-email capture uses the `callback_email` contact-alias type introduced by migration `0021_notification_delivery_reliability`.
+
+When `emailRequested` is true, notification creation persists the notification first and enqueues a durable `notification_email` delayed action. Delivery state is stored on the notification as `pending`, `sending`, `retry_pending`, `sent`, `reconciliation_required` or `quarantined`; `email_sent_at` and the provider message ID are persisted on success. Temporary pre-delivery failures use bounded delayed-action backoff with a six-attempt ceiling. Permanent provider rejection is quarantined immediately. A transport failure after the SMTP DATA phase may have been accepted by the provider, so that state is **not** blindly retried: it becomes `reconciliation_required`.
+
+The delayed-action worker repairs any missing queue row for a persisted `pending`/`retry_pending` notification, and migration `0021_notification_delivery_reliability` backfills unsent historical email-requested notifications. This means a process restart or an interrupted enqueue does not discard requested notification email. Worker leases and notification success state prevent concurrent workers or replayed work from sending the same notification repeatedly.
+
+Human handoff from website chat, proactive CogniPal review and supported social DM flows uses `human_handoff_requested`; live handoff requests are critical and request notification email. Callback capture emits `human_callback`. These notification writes are no longer discarded behind silent promise catches.
+
+For an uncertain SMTP outcome, inspect provider/mailbox state before taking action. An authorised operator with `manage_workflows` may reconcile with `POST /comms-hub/notifications/:id/email/reconcile` using `outcome` = `sent`, `retry` or `quarantined`. Use `sent` only when provider evidence confirms delivery (optionally include `providerMessageId`); use `retry` only when evidence confirms the original message was not accepted; otherwise keep the item quarantined for manual review.
+
 ## Email safety
 
 Production polls only the configured `info@jonathan-harris.online` account. Admin/newsletter mailbox automation is disabled. With `COMMS_HUB_EMAIL_HISTORICAL_BACKFILL_ENABLED=false`, the first enabled poll performs a bounded recovery of the latest `COMMS_HUB_EMAIL_STARTUP_RECOVERY_UID_LOOKBACK` UIDs (default 25) and ignores recovered messages older than `COMMS_HUB_EMAIL_STARTUP_RECOVERY_MAX_AGE_DAYS` (default 14) before establishing the current watermark. This avoids silently skipping messages that arrived shortly before a deployment without turning startup into an unlimited historical import. Mailbox resets/UIDVALIDITY changes still re-baseline before new body fetches. A privileged forced drain can pass `lookbackUids` (maximum 100; default recovery replay 100) to safely re-check recent UIDs; message persistence remains idempotent.

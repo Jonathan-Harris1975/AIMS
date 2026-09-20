@@ -163,7 +163,7 @@ export async function handleSocialDmHumanContact(event, context) {
 
   const handoff = humanHandoffStatus(context.config, context.now ? new Date(context.now()) : new Date());
   if (handoff.available) {
-    await notifyHumanHandoff({ context, conversationId: event.conversationId, reason: 'explicit_social_dm_human_request', idempotencySeed: `social-handoff:${event.messageId}` }).catch(() => null);
+    await notifyHumanHandoff({ context, conversationId: event.conversationId, reason: 'explicit_social_dm_human_request', idempotencySeed: `social-handoff:${event.messageId}` });
   }
 
   if (context.config.socialMonitorOnly === true || priorOffer) return;
@@ -240,7 +240,7 @@ async function scheduleSocialConversationAutomation(event, context) {
       severity: 'warning',
       emailRequested: false,
       idempotencySeed: `social-attachment-review:${event.messageId}`,
-    }).catch(() => null);
+    });
     return false;
   }
   const scheduled = await scheduleInboundConversationAutomation({

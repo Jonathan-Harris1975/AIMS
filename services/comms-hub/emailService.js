@@ -203,7 +203,7 @@ export class CommsHubEmailService {
             severity: 'warning',
             emailRequested: false,
             idempotencySeed: `email-attachment-review:${messageId}`,
-          }).catch(() => null);
+          });
         } else {
           await scheduleInboundConversationAutomation({
             context: this.context,
@@ -349,8 +349,18 @@ export class CommsHubEmailService {
 
   async sendSystemNotification(notification) {
     const recipient = this.context.config.notificationEmailMap?.[notification.actor] || this.context.config.notificationDefaultEmail;
-    if (!recipient) return { skipped: true };
-    return this.context.oneComMail.sendMessage({ to: [recipient], subject: `[AIMS Comms Hub] ${notification.title}`, bodyText: notification.body_text, messageId: `${notification.id}@aims.local` });
+    if (!recipient) {
+      throw new CommsHubError(503, 'notification_email_recipient_unconfigured', 'Notification email was requested but no recipient is configured.', {
+        failureClass: 'permanent',
+        publicMessage: 'Notification email delivery is not configured.',
+      });
+    }
+    return this.context.oneComMail.sendMessage({
+      to: [recipient],
+      subject: `[AIMS Comms Hub] ${notification.title}`,
+      bodyText: notification.body_text,
+      messageId: `${notification.id}@aims.local`,
+    });
   }
 }
 export default CommsHubEmailService;
