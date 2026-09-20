@@ -1163,6 +1163,20 @@ export function createCommsHubRouter({
     catch (error) { next(error); }
   });
 
+  router.post("/notifications/:id/email/reconcile", permit("manage_workflows"), async (req, res, next) => {
+    try {
+      const id = boundedId(req.params.id, "ntf");
+      if (!id) throw new CommsHubError(400, "notification_id_invalid", "Notification ID is invalid.");
+      const notification = await contextProvider().notificationService.reconcileEmail({
+        id,
+        outcome: String(req.body?.outcome || "").trim().toLowerCase(),
+        providerMessageId: String(req.body?.providerMessageId || "").trim().slice(0, 500) || null,
+        actor: authenticatedActor(req),
+      });
+      return res.json({ ok: true, notification });
+    } catch (error) { next(error); }
+  });
+
   router.put("/credentials/:key", permit("manage_credentials"), async (req, res, next) => {
     try { return res.status(201).json({ ok: true, credential: await contextProvider().credentialVaultService.put({ key: req.params.key, ...req.body }, req.commsIdentity) }); }
     catch (error) { next(error); }
