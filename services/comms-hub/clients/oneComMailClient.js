@@ -1,6 +1,7 @@
 import tls from "node:tls";
 import { CommsHubError } from "../errors.js";
 import { buildRawEmail, parseRawEmail } from "../domain/email.js";
+import { classifySmtpSendFailure } from "../domain/smtp.js";
 import { recordProviderOutcome } from "../../shared/utils/operationalExcellence.js";
 
 function quoteImap(value) {
@@ -231,10 +232,20 @@ async function readSmtpResponse(reader) {
   }
 }
 
-async function smtpCommand(socket, reader, command, expectedCodes) {
+class SmtpResponseError extends Error {
+  constructor(response, stage = 'smtp') {
+    super(`SMTP command failed (${response.code}): ${response.message.slice(0, 500)}`);
+    this.name = 'SmtpResponseError';
+    this.smtpCode = Number(response.code) || 0;
+    this.smtpStage = stage;
+    this.response = response;
+  }
+}
+
+async function smtpCommand(socket, reader, command, expectedCodes, stage = 'smtp') {
   if (command !== null) socket.write(`${command}\r\n`);
   const response = await readSmtpResponse(reader);
-  if (!expectedCodes.includes(response.code)) throw new Error(`SMTP command failed (${response.code}): ${response.message.slice(0, 500)}`);
+  if (!expectedCodes.includes(response.code)) throw new SmtpResponseError(response, stage);
   return response;
 }
 
@@ -378,27 +389,27 @@ export class OneComMailClient {
       });
       const reader = new BufferedSocketReader(socket, this.config.oneComEmailTimeoutMs);
       providerStage = "greeting";
-      await smtpCommand(socket, reader, null, [220]);
+      await smtpCommand(socket, reader, null, [220], providerStage);
       providerStage = "ehlo";
-      await smtpCommand(socket, reader, `EHLO ${this.config.oneComSmtpEhloName}`, [250]);
+      await smtpCommand(socket, reader, `EHLO ${this.config.oneComSmtpEhloName}`, [250], providerStage);
       const authPayload = Buffer.from(`\0${this.config.oneComEmailUsername}\0${this.config.oneComEmailPassword}`, "utf8").toString("base64");
       providerStage = "auth";
-      await smtpCommand(socket, reader, `AUTH PLAIN ${authPayload}`, [235]);
+      await smtpCommand(socket, reader, `AUTH PLAIN ${authPayload}`, [235], providerStage);
       providerStage = "mail_from";
-      await smtpCommand(socket, reader, `MAIL FROM:<${this.config.oneComEmailAddress}>`, [250]);
+      await smtpCommand(socket, reader, `MAIL FROM:<${this.config.oneComEmailAddress}>`, [250], providerStage);
       providerStage = "rcpt_to";
-      for (const recipient of recipientList) await smtpCommand(socket, reader, `RCPT TO:<${recipient}>`, [250, 251]);
+      for (const recipient of recipientList) await smtpCommand(socket, reader, `RCPT TO:<${recipient}>`, [250, 251], providerStage);
       providerStage = "data_command";
-      await smtpCommand(socket, reader, "DATA", [354]);
+      await smtpCommand(socket, reader, "DATA", [354], providerStage);
       const dotStuffed = built.raw.replace(/(^|\r\n)\./g, "$1..");
       providerStage = "data_response";
       deliveryUncertain = true;
       socket.write(`${dotStuffed.replace(/\r?\n/g, "\r\n").replace(/\r\n$/, "")}\r\n.\r\n`);
       const dataResponse = await readSmtpResponse(reader);
       deliveryUncertain = false;
-      if (dataResponse.code !== 250) throw new Error(`SMTP DATA failed (${dataResponse.code}): ${dataResponse.message}`);
+      if (dataResponse.code !== 250) throw new SmtpResponseError(dataResponse, providerStage);
       providerStage = "quit";
-      await smtpCommand(socket, reader, "QUIT", [221]).catch(() => null);
+      await smtpCommand(socket, reader, "QUIT", [221], providerStage).catch(() => null);
       socket.end();
       recordProviderOutcome({ routeKey: "comms-hub:email-smtp", provider: "one.com-smtp", ok: true, durationMs: Date.now() - startedAt, status: "success" });
       return Object.freeze({
@@ -410,13 +421,16 @@ export class OneComMailClient {
     } catch (cause) {
       socket?.destroy();
       recordProviderOutcome({ routeKey: "comms-hub:email-smtp", provider: "one.com-smtp", ok: false, durationMs: Date.now() - startedAt, status: providerStage || "failed" });
-      const error = new CommsHubError(502, "onecom_smtp_failed", "one.com SMTP operation failed.", {
+      const smtpCode = cause instanceof SmtpResponseError ? cause.smtpCode : 0;
+      const classification = classifySmtpSendFailure({ smtpCode, deliveryUncertain });
+      const error = new CommsHubError(classification.statusCode, "onecom_smtp_failed", "one.com SMTP operation failed.", {
         cause,
-        retryable: true,
-        failureClass: "temporary",
-        publicMessage: "Email could not be sent at this time.",
+        retryable: classification.retryable,
+        failureClass: classification.failureClass,
+        publicMessage: classification.publicMessage,
       });
       error.providerStage = providerStage;
+      error.providerStatusCode = smtpCode || null;
       error.deliveryUncertain = deliveryUncertain;
       throw error;
     }
