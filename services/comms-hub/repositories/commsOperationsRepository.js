@@ -1797,6 +1797,57 @@ export class CommsOperationsRepository extends CommsIdentityArchiveRepository {
     return rows(result)[0] || null;
   }
 
+  async recordWorkerHeartbeat({ category, key = "default", instanceId, enabled, pollIntervalMs, event, errorCode = null, at = nowIso() }) {
+    const allowedEvents = new Set(["registered", "attempt", "success", "failure"]);
+    if (!allowedEvents.has(event)) throw new CommsHubError(400, "worker_heartbeat_event_invalid", "Worker heartbeat event is invalid.");
+    const result = await this.d1.query(
+      `INSERT INTO comms_hub_worker_heartbeats
+        (worker_category, worker_key, instance_id, enabled, poll_interval_ms, registered_at,
+         last_attempt_at, last_success_at, last_failure_at, last_error_code, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(worker_category, worker_key, instance_id) DO UPDATE SET
+         enabled = excluded.enabled,
+         poll_interval_ms = excluded.poll_interval_ms,
+         last_attempt_at = COALESCE(excluded.last_attempt_at, comms_hub_worker_heartbeats.last_attempt_at),
+         last_success_at = COALESCE(excluded.last_success_at, comms_hub_worker_heartbeats.last_success_at),
+         last_failure_at = COALESCE(excluded.last_failure_at, comms_hub_worker_heartbeats.last_failure_at),
+         last_error_code = CASE
+           WHEN excluded.last_success_at IS NOT NULL THEN NULL
+           WHEN excluded.last_failure_at IS NOT NULL THEN excluded.last_error_code
+           ELSE comms_hub_worker_heartbeats.last_error_code
+         END,
+         updated_at = excluded.updated_at
+       RETURNING *`,
+      [
+        text(category, 100), text(key, 100) || "default", text(instanceId, 200), enabled ? 1 : 0,
+        Math.max(0, Number(pollIntervalMs) || 0), at,
+        event === "attempt" ? at : null,
+        event === "success" ? at : null,
+        event === "failure" ? at : null,
+        event === "failure" ? (text(errorCode, 200) || "worker_run_failed") : null,
+        at,
+      ]
+    );
+    return rows(result)[0] || null;
+  }
+
+  async listWorkerHeartbeats() {
+    const result = await this.d1.query(
+      `SELECT worker_category, worker_key, instance_id, enabled, poll_interval_ms, registered_at,
+              last_attempt_at, last_success_at, last_failure_at, last_error_code, updated_at
+         FROM comms_hub_worker_heartbeats
+        ORDER BY worker_category, worker_key, updated_at DESC`
+    );
+    return rows(result);
+  }
+
+  async pruneWorkerHeartbeats({ before }) {
+    const result = await this.d1.query(
+      `DELETE FROM comms_hub_worker_heartbeats WHERE updated_at < ? RETURNING worker_category`,
+      [before]
+    );
+    return rows(result).length;
+  }
 
 }
 
