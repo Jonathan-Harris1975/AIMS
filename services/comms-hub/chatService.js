@@ -213,7 +213,9 @@ export class CommsHubChatService {
           reviewStrikeThreshold: this.context.config.conductReviewStrikeThreshold,
           automationBlockThreshold: this.context.config.conductAutomationBlockThreshold,
         });
-      } catch {}
+      } catch (error) {
+        log.warn('commsHub.chat.conductReloadFailed', { conversationId, error: safeErrorLog(error) });
+      }
     }
     if (conversationConduct.level !== 'none') {
       await this.context.auditService?.record?.({

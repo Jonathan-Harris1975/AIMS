@@ -111,19 +111,35 @@ Public exact-path intake/health routes have their own verification contract. Oth
 
 Use the route modules under `services/comms-hub/routes/` as the exact HTTP contract rather than duplicating a long endpoint catalogue here.
 
-## Runtime workers
+## Runtime workers and durable freshness
 
 The current service can run email polling, social polling, workflow evaluation, delayed actions, follow-ups, provider health and runtime supervision. Continuous polling/delayed work requires an AIMS instance to remain available; the retired public wake relay is not part of the current design.
 
+Production Koyeb scaling is release-gated. `.github/workflows/koyeb-deployment-watch.yml` requires `KOYEB_TOKEN` and `KOYEB_SERVICE`, queries the actual service definition and runs `npm run koyeb:min-instances:check` before and after the deployment watch. The verifier fails closed when the service cannot be queried/identified, scaling cannot be parsed or any configured scaling scope has a minimum below 1. A scale-to-zero production definition therefore makes the deployment validation fail.
+
+Migration `0022_worker_heartbeat` stores per-instance heartbeat records for critical continuous worker classes: inbound email, social polling, delayed actions, follow-ups and provider monitoring. Each enabled worker exposes its poll cadence, last attempt, last success, last failure, freshness age, instance count and a cadence-derived `healthy`, `degraded` or `stale` state. Disabled worker classes are reported as `disabled`. No message body, address, token or provider secret is stored in this heartbeat table.
+
+Use authenticated `GET /comms-hub/workers/health` (`read_metrics`) for background-loop monitoring. A stale overall state returns HTTP 503; healthy/degraded states return 200 and retain the detailed worker statuses. `GET /comms-hub/metrics` includes the same current worker-health summary alongside historical communications metrics.
+
+These signals are deliberately separate:
+
+- `/health` and `/livez` prove the AIMS HTTP process is alive;
+- `/readyz` proves application/runtime readiness;
+- `/comms-hub/workers/health` proves the durable background loops are continuing to advance.
+
+Email polling still honours business hours for mailbox work. Its timer now enters the worker on every configured cadence even outside the delivery window, allowing a safe `outside_business_hours` cycle to advance the worker heartbeat without fetching mail.
+
 ## D1 and storage
 
-Comms Hub migrations are additive and are applied/checkable through the existing migration tooling. The runtime D1 bridge under `workers/comms-hub-data-plane/` has a narrow authenticated SQL contract. Private attachments and workflow artefacts use the configured Comms Hub R2 lanes.
+Comms Hub migrations are additive and are applied/checkable through the existing migration tooling; the current required manifest ends at `0022_worker_heartbeat`. The runtime D1 bridge under `workers/comms-hub-data-plane/` has a narrow authenticated SQL contract. Conversation/worker operational state is durable in D1, while private attachments and workflow artefacts use the configured Comms Hub R2 lanes.
 
 ## Production controls
 
 Use `config/production.defaults.env`, `config/comms-hub-all-channels.env.example`, `.env.example` and `services/comms-hub/config.js` as the configuration source of truth. Keep secrets in Koyeb/Cloudflare secret stores. Outreach remains separately controlled by `AIMS_OPERATION_OUTREACH_ENABLED` and is not part of Comms Hub channel activation.
 
-Before enabling a channel, verify D1, provider credentials, webhook signatures, required account/family IDs, provider health and the relevant worker flags. Missing required live configuration should fail readiness rather than silently pretending the channel is active.
+Before enabling a channel, verify D1, provider credentials, webhook signatures, required account/family IDs, provider health and the relevant worker flags. Missing required live configuration should fail readiness rather than silently pretending the channel is active. For production release validation, `KOYEB_TOKEN` and `KOYEB_SERVICE` are mandatory GitHub Actions secrets available to the production deployment job; the token is never emitted by the verifier.
+
+Useful verification commands are `npm run verify`, `npm run secret:scan`, `npm audit --omit=dev --audit-level=high`, `npm run comms:migrate:status` and `npm run koyeb:min-instances:check`.
 
 
 ### Restore database bootstrap

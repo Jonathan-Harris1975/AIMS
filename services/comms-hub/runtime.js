@@ -40,6 +40,7 @@ import { CommsHubGovernanceService } from "./governanceService.js";
 import { CommsHubCredentialVaultService } from "./credentialVaultService.js";
 import { CommsHubQuarantineService } from "./quarantineService.js";
 import { CommsHubMetricsService } from "./metricsService.js";
+import { CommsHubWorkerHeartbeatService } from "./workerHeartbeatService.js";
 import { OutreachAutomationService } from "../outreach/services/automationService.js";
 import { safeErrorLog } from "./domain/redaction.js";
 import { recoverCommsHubSchema } from "./migrations/schemaRecovery.js";
@@ -156,6 +157,8 @@ export function createCommsHubContext({ env = process.env, fetchImpl, r2ArchiveS
   active.retentionWorker = new CommsHubRetentionWorker({ context: active });
   active.monthEndConversationArchiveWorker = new CommsHubMonthEndConversationArchiveWorker({ context: active });
   active.webhookReconcileWorker = new CommsHubWebhookReconcileWorker({ context: active });
+  active.workerHeartbeatService = new CommsHubWorkerHeartbeatService({ context: active });
+  active.workerHeartbeatService.instrumentCriticalWorkers();
   active.quarantineService.register('email_poll', (item) => {
     const accountKey = String(item.source_id || '').split(':')[0];
     const worker = active.emailPollWorkers[accountKey];
@@ -232,6 +235,8 @@ export async function startCommsHubRuntime() {
         if (active.config.autoMigrateOnStart) scheduleRuntimeSupervisorRetry(active, "schema_missing");
         return { started: false, reason: "schema_missing", missing: schema.missing || [] };
       }
+
+      await active.workerHeartbeatService.registerCriticalWorkers();
 
       if (active.config.backupEnabled) {
         runtimeState = { status: "starting", ready: false, detail: "ensuring_restore_database" };
