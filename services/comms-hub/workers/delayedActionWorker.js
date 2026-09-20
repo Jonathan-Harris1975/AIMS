@@ -61,6 +61,58 @@ export class CommsHubDelayedActionWorker {
         idempotencySeed: item.id,
       });
     }
+    if (item.action_type === 'notification_email') {
+      const notificationId = String(payload.notificationId || '').trim();
+      if (!notificationId) {
+        throw new CommsHubError(422, 'notification_email_id_missing', 'Notification email action is missing its notification ID.', { failureClass: 'permanent' });
+      }
+      const notification = await this.context.operationsRepository.getNotification(notificationId);
+      if (!notification) {
+        throw new CommsHubError(404, 'notification_email_record_missing', 'Notification email record no longer exists.', { failureClass: 'permanent' });
+      }
+      if (!notification.email_requested) return { duplicate: true, skipped: true, reason: 'email_not_requested' };
+      if (notification.email_delivery_status === 'sent' && notification.email_sent_at) {
+        return { duplicate: true, providerMessageId: notification.email_provider_message_id || null };
+      }
+      if (notification.email_delivery_status === 'reconciliation_required') {
+        const error = new CommsHubError(409, 'notification_email_reconciliation_required', 'Notification email requires reconciliation before it can be retried.', { failureClass: 'temporary' });
+        error.deliveryUncertain = true;
+        throw error;
+      }
+      if (notification.email_delivery_status === 'sending') {
+        await this.context.operationsRepository.markNotificationEmailState({
+          id: notificationId,
+          status: 'reconciliation_required',
+          failureClass: 'uncertain',
+          error: 'Previous worker stopped while delivery was in progress.',
+        });
+        const error = new CommsHubError(
+          409,
+          'notification_email_previous_send_uncertain',
+          'A previous notification email attempt ended while delivery was in progress.',
+          { failureClass: 'temporary' },
+        );
+        error.deliveryUncertain = true;
+        throw error;
+      }
+      await this.context.operationsRepository.markNotificationEmailState({ id: notificationId, status: 'sending' });
+      const sent = await this.context.emailService.sendSystemNotification(notification);
+      try {
+        await this.context.operationsRepository.markNotificationEmailState({
+          id: notificationId,
+          status: 'sent',
+          providerMessageId: sent?.messageId || sent?.providerMessageId || null,
+        });
+      } catch (cause) {
+        const error = new CommsHubError(503, 'notification_email_success_persistence_failed', 'Notification email was accepted by the provider but its success state could not be persisted.', {
+          cause,
+          failureClass: 'temporary',
+        });
+        error.deliveryUncertain = true;
+        throw error;
+      }
+      return sent;
+    }
     if (item.action_type === 'sla_warning' || item.action_type === 'sla_breach') {
       return this.context.notificationService.create({
         actor: payload.actor || 'admin',
@@ -176,12 +228,30 @@ export class CommsHubDelayedActionWorker {
       return { id: item.id, status: 'complete', result };
     } catch (error) {
       const attempts = Number(item.attempts || 1);
-      const final = attempts >= Number(item.max_attempts || 8);
+      const notificationEmail = item.action_type === 'notification_email';
+      const deliveryUncertain = notificationEmail && Boolean(error.deliveryUncertain);
+      const permanentFailure = notificationEmail && (error.failureClass === 'permanent' || error.retryable === false);
+      const exhausted = attempts >= Number(item.max_attempts || 8);
+      const final = deliveryUncertain || permanentFailure || exhausted;
+      if (notificationEmail) {
+        const notificationId = String(payload.notificationId || '').trim();
+        if (notificationId) {
+          const emailStatus = deliveryUncertain ? 'reconciliation_required' : final ? 'quarantined' : 'retry_pending';
+          await this.context.operationsRepository.markNotificationEmailState({
+            id: notificationId,
+            status: emailStatus,
+            failureClass: deliveryUncertain ? 'uncertain' : (error.failureClass || (final ? 'recoverable' : 'temporary')),
+            error: error.message,
+          }).catch((stateError) => {
+            log.error('commsHub.notification.emailStateFailed', { notificationId, error: safeErrorLog(stateError) });
+          });
+        }
+      }
       await this.context.operationsRepository.failDelayedAction({
         id: item.id,
         workerId: this.workerId,
         status: final ? 'quarantined' : 'scheduled',
-        failureClass: error.failureClass || (final ? 'recoverable' : 'temporary'),
+        failureClass: deliveryUncertain ? 'uncertain' : (error.failureClass || (final ? 'recoverable' : 'temporary')),
         error: error.message,
         nextAttemptAt: new Date(Date.now() + retryDelayMs(item, attempts)).toISOString(),
         failedAt: new Date().toISOString(),
@@ -279,6 +349,7 @@ export class CommsHubDelayedActionWorker {
     this.running = true;
     const output = [];
     try {
+      await this.context.operationsRepository.ensurePendingNotificationEmailActions?.({ at: new Date().toISOString() });
       for (let i = 0; i < (limit || this.context.config.delayedActionBatchSize); i += 1) {
         const now = new Date();
         const item = await this.context.operationsRepository.claimDelayedAction({

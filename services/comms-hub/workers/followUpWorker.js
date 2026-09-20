@@ -29,7 +29,7 @@ async function notifyFollowUpReview(context, job, draftId) {
     severity: "warning",
     emailRequested: false,
     idempotencySeed: `follow-up-review:${job.id}:${draftId || "draft"}`,
-  }).catch(() => null);
+  });
 }
 
 export class CommsHubFollowUpWorker {
@@ -118,7 +118,7 @@ export class CommsHubFollowUpWorker {
               severity: "critical",
               emailRequested: false,
               idempotencySeed: `follow-up-exhausted:${job.id}`,
-            }).catch(() => null);
+            });
           }
         }
       }
