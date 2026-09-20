@@ -80,6 +80,23 @@ curl -fsS -H "Authorization: Bearer $AIMS_API_KEY" https://<aims-service>/ops/ex
 curl -fsS -H "Authorization: Bearer $AIMS_API_KEY" https://<aims-service>/ops/model-governance/status
 ```
 
+## Comms Hub notification-email recovery
+
+Migration `0021_notification_delivery_reliability` extends notification types, adds durable notification-email delivery state, permits the callback-email alias used by human-contact capture, adds the `notification_email` delayed-action type and backfills pre-existing unsent requested notification email. Historical migrations are not edited.
+
+Notification-email lifecycle:
+
+- `pending` -> durable work exists or is repaired by the delayed-action worker;
+- `sending` -> a worker owns a lease and is attempting SMTP delivery;
+- `retry_pending` -> a safe temporary failure will be retried with bounded backoff;
+- `sent` -> `email_sent_at` is populated and the provider message ID is retained when available;
+- `reconciliation_required` -> delivery may have happened, so automatic resend is blocked;
+- `quarantined` -> retry budget is exhausted, the provider rejected delivery permanently, or an operator deliberately quarantined it.
+
+For `reconciliation_required`, inspect one.com/provider evidence and the recipient mailbox before replay. Use the authenticated `POST /comms-hub/notifications/:id/email/reconcile` route with `outcome: "sent"` when delivery is confirmed, `outcome: "retry"` only when non-delivery is confirmed, or `outcome: "quarantined"` to retain it for manual handling. A retry resets the same durable idempotent action rather than creating a second delivery architecture. Never replay an uncertain notification solely because it is old.
+
+If a notification is `pending` or `retry_pending` but its delayed-action row is absent, the worker recreates the durable action on its next run. If a worker dies while state is `sending`, the next lease treats the previous attempt as uncertain and moves it to reconciliation rather than sending blindly.
+
 ## Partial-run recovery
 
 1. Inspect durable job state, quarantine state and `/ops/excellence`.

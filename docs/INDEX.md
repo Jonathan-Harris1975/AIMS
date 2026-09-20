@@ -25,6 +25,7 @@ This index separates durable operational references from versioned implementatio
 | [`COMMS_HUB_MULTI_MAILBOX_V2.13.5.md`](./COMMS_HUB_MULTI_MAILBOX_V2.13.5.md) | Historical/versioned implementation record; consult current operational references for present-day policy |
 | [`COMMS_HUB_PRE_OUTREACH_SANITY_V2.13.1.md`](./COMMS_HUB_PRE_OUTREACH_SANITY_V2.13.1.md) | Historical/versioned implementation record; consult current operational references for present-day policy |
 | [`COMMS_HUB_RUNTIME_RELIABILITY_V2.14.1.md`](./COMMS_HUB_RUNTIME_RELIABILITY_V2.14.1.md) | Historical/versioned implementation record; consult current operational references for present-day policy |
+| [`COMMS_HUB_NOTIFICATION_RELIABILITY_REMEDIATION.md`](./COMMS_HUB_NOTIFICATION_RELIABILITY_REMEDIATION.md) | Current remediation record for notification schema, durable notification email and reconciliation |
 | [`COMMS_HUB_SMART_CONDUCT_MEMORY_V2.md`](./COMMS_HUB_SMART_CONDUCT_MEMORY_V2.md) | Historical/versioned implementation record; consult current operational references for present-day policy |
 | [`COMMS_HUB_SMART_CONTEXT_V1.md`](./COMMS_HUB_SMART_CONTEXT_V1.md) | Historical/versioned implementation record; consult current operational references for present-day policy |
 | [`COMMS_HUB_SMART_RESPONSE_FORMS_V4.md`](./COMMS_HUB_SMART_RESPONSE_FORMS_V4.md) | Historical/versioned implementation record; consult current operational references for present-day policy |
