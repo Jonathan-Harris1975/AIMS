@@ -155,25 +155,43 @@ async function readAppliedMigrations(d1) {
   return new Map((appliedResult.results || []).map((row) => [row.version, row]));
 }
 
+function migrationError(code, message, { migration = null, cause = null } = {}) {
+  const options = cause ? { cause } : undefined;
+  const error = new Error(message, options);
+  error.code = code;
+  error.migration = migration;
+  return error;
+}
+
 function validateMigrationFiles(migrations, applied) {
   const discoveredVersions = new Set(migrations.map((migration) => migration.version));
   const missingFiles = COMMS_HUB_REQUIRED_MIGRATIONS.filter((version) => !discoveredVersions.has(version));
   if (missingFiles.length) {
-    throw new Error(`Required Comms Hub migration files are missing: ${missingFiles.join(", ")}`);
+    throw migrationError("comms_hub_migration_files_missing", `Required Comms Hub migration files are missing: ${missingFiles.join(", ")}`);
   }
 
   for (const migration of migrations) {
     const existing = applied.get(migration.version);
     if (existing && existing.checksum !== migration.checksum) {
-      throw new Error(`Migration checksum mismatch for ${migration.name}. Applied migrations are immutable.`);
+      throw migrationError("comms_hub_migration_checksum_mismatch", `Migration checksum mismatch for ${migration.name}. Applied migrations are immutable.`, { migration: migration.version });
     }
   }
 }
 
 export async function runCommsHubMigrations({ env = process.env, statusOnly = false, d1: providedD1 = null } = {}) {
-  const config = migrationConfig(env);
+  let config;
+  try {
+    config = migrationConfig(env);
+  } catch (cause) {
+    throw migrationError("comms_hub_migration_config_failed", "Comms Hub migration configuration is invalid.", { cause });
+  }
   const d1 = providedD1 || new D1Client(config);
-  const discoveredMigrations = await loadMigrations();
+  let discoveredMigrations;
+  try {
+    discoveredMigrations = await loadMigrations();
+  } catch (cause) {
+    throw migrationError("comms_hub_migration_files_unreadable", "Comms Hub migration files could not be loaded.", { cause });
+  }
   const required = new Set(COMMS_HUB_REQUIRED_MIGRATIONS);
   const migrations = discoveredMigrations.filter((migration) => required.has(migration.version));
 
@@ -193,11 +211,20 @@ export async function runCommsHubMigrations({ env = process.env, statusOnly = fa
   }
 
   const owner = `aims:${process.pid}:${randomUUID()}`;
-  await acquireMigrationLock(d1, env, owner);
+  try {
+    await acquireMigrationLock(d1, env, owner);
+  } catch (cause) {
+    throw migrationError("comms_hub_migration_lock_failed", "Comms Hub migration lock could not be acquired.", { cause });
+  }
   try {
     // Re-read after acquiring the lock. Another instance may have completed
     // migrations while this instance was waiting.
-    const applied = await readAppliedMigrations(d1);
+    let applied;
+    try {
+      applied = await readAppliedMigrations(d1);
+    } catch (cause) {
+      throw migrationError("comms_hub_migration_ledger_failed", "Comms Hub migration ledger could not be read.", { cause });
+    }
     validateMigrationFiles(migrations, applied);
 
     let appliedCount = 0;
