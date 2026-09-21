@@ -206,13 +206,23 @@ export async function runCommsHubMigrations({ env = process.env, statusOnly = fa
       if (applied.has(migration.version)) continue;
       await renewMigrationLock(d1, env, owner);
       const appliedAt = new Date().toISOString();
-      await d1.batch([
-        ...d1MigrationStatements(migration.sql).map((sql) => ({ sql })),
-        {
-          sql: `INSERT INTO comms_hub_schema_migrations (version, checksum, applied_at) VALUES (?, ?, ?)`,
-          params: [migration.version, migration.checksum, appliedAt],
-        },
-      ]);
+      try {
+        await d1.batch([
+          ...d1MigrationStatements(migration.sql).map((sql) => ({ sql })),
+          {
+            sql: `INSERT INTO comms_hub_schema_migrations (version, checksum, applied_at) VALUES (?, ?, ?)`,
+            params: [migration.version, migration.checksum, appliedAt],
+          },
+        ]);
+      } catch (cause) {
+        // Keep the D1 error as the cause while identifying the exact migration.
+        // This is intentionally metadata-only: no SQL, credentials or provider
+        // response bodies are exposed through readiness.
+        const error = new Error(`Comms Hub migration ${migration.version} failed.`, { cause });
+        error.code = cause?.code || "comms_hub_migration_failed";
+        error.migration = migration.version;
+        throw error;
+      }
       appliedCount += 1;
       appliedVersions.push(migration.version);
     }

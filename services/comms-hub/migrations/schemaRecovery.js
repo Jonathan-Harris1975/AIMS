@@ -27,7 +27,16 @@ export async function recoverCommsHubSchema({
     migration = await migrationRunner({ env });
   } catch (cause) {
     const error = new Error("Automatic Comms Hub schema migration failed.", { cause });
+    // Preserve a safe machine-readable root cause for readiness/operations.
+    // The previous implementation collapsed every D1/configuration/migration
+    // failure into one generic token, which made a production 503 impossible
+    // to diagnose from HIVE without direct service-log access.
     error.code = "comms_hub_auto_migration_failed";
+    error.failureCode = String(cause?.code || cause?.name || "migration_failed")
+      .trim()
+      .replace(/[^A-Za-z0-9_.:-]+/g, "_")
+      .slice(0, 120) || "migration_failed";
+    error.migration = cause?.migration || null;
     throw error;
   }
 
