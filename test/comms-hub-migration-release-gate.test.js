@@ -256,7 +256,15 @@ test("a failed migration is not recorded and a retry resumes from the last commi
 
   await assert.rejects(
     () => runCommsHubMigrations({ env: migrationEnv(), d1: adapter }),
-    /Synthetic migration failure for 0021_notification_delivery_reliability/
+    (error) => {
+      assert.match(error.message, /Comms Hub migration 0021_notification_delivery_reliability failed/);
+      assert.equal(error.migration, "0021_notification_delivery_reliability");
+      assert.match(
+        error.cause?.message || "",
+        /Synthetic migration failure for 0021_notification_delivery_reliability/
+      );
+      return true;
+    }
   );
 
   const afterFailure = adapter.db.prepare(
