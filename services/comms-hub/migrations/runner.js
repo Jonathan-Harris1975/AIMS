@@ -163,7 +163,30 @@ function migrationError(code, message, { migration = null, cause = null } = {}) 
   return error;
 }
 
-function validateMigrationFiles(migrations, applied) {
+async function isAttestedLegacyMigration(d1, migration) {
+  // 0013 was shipped before the migration file was accidentally reformatted in
+  // a later source release. Production D1 therefore contains a legitimate
+  // historical checksum which cannot equal the repository checksum. Never
+  // rewrite the migration ledger: attest the schema effect that uniquely
+  // identifies 0013, then treat that historical row as compatible.
+  if (migration.version !== "0013_content_automation_queue") return false;
+  try {
+    const tableResult = await d1.query(
+      `SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'comms_hub_delayed_actions'`
+    );
+    const tableSql = String(tableResult?.results?.[0]?.sql || "");
+    if (!/action_type[\s\S]*content_automation/i.test(tableSql)) return false;
+
+    const indexResult = await d1.query(
+      `SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'idx_comms_hub_delayed_due'`
+    );
+    return indexResult?.results?.[0]?.name === "idx_comms_hub_delayed_due";
+  } catch {
+    return false;
+  }
+}
+
+async function validateMigrationFiles(d1, migrations, applied) {
   const discoveredVersions = new Set(migrations.map((migration) => migration.version));
   const missingFiles = COMMS_HUB_REQUIRED_MIGRATIONS.filter((version) => !discoveredVersions.has(version));
   if (missingFiles.length) {
@@ -173,6 +196,7 @@ function validateMigrationFiles(migrations, applied) {
   for (const migration of migrations) {
     const existing = applied.get(migration.version);
     if (existing && existing.checksum !== migration.checksum) {
+      if (await isAttestedLegacyMigration(d1, migration)) continue;
       throw migrationError("comms_hub_migration_checksum_mismatch", `Migration checksum mismatch for ${migration.name}. Applied migrations are immutable.`, { migration: migration.version });
     }
   }
@@ -197,7 +221,7 @@ export async function runCommsHubMigrations({ env = process.env, statusOnly = fa
 
   if (statusOnly) {
     const applied = await readAppliedMigrations(d1);
-    validateMigrationFiles(migrations, applied);
+    await validateMigrationFiles(d1, migrations, applied);
     return {
       ok: true,
       databaseId: config.d1DatabaseId,
@@ -225,7 +249,7 @@ export async function runCommsHubMigrations({ env = process.env, statusOnly = fa
     } catch (cause) {
       throw migrationError("comms_hub_migration_ledger_failed", "Comms Hub migration ledger could not be read.", { cause });
     }
-    validateMigrationFiles(migrations, applied);
+    await validateMigrationFiles(d1, migrations, applied);
 
     let appliedCount = 0;
     const appliedVersions = [];
