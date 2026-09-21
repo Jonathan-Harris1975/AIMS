@@ -51,11 +51,15 @@ jobs:
       - name: Verify Headroom hardened runtime
         run: |
           test "$(docker image inspect aims-headroom:ci --format '{{.Config.User}}')" = "nonroot"
-          docker run --rm --entrypoint python3 aims-headroom:ci -c '
+          docker run --rm --entrypoint /opt/headroom/bin/python aims-headroom:ci -c '
           from importlib.metadata import version
+          from pathlib import Path
           assert version("headroom-ai") == "0.37.0", version("headroom-ai")
           assert version("msgpack") == "1.2.1", version("msgpack")
           assert version("setuptools") == "83.0.0", version("setuptools")
+          site = Path("/opt/headroom/lib")
+          stale = [p for p in site.rglob("*") if p.name.startswith(("msgpack-1.1.2.dist-info", "setuptools-70.3.0.dist-info"))]
+          assert not stale, f"stale vulnerable package metadata present: {stale}"
           from headroom._core import DiffCompressor, SmartCrusher
           print(f"Headroom runtime verified: {DiffCompressor.__name__}, {SmartCrusher.__name__}")
           '
