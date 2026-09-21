@@ -75,7 +75,9 @@ export function describeCommsHubRuntimeReadiness(configuration, runtime) {
   if (runtime?.ready) return status;
   const stage = safeReadinessToken(runtime?.stage, "startup");
   const detail = safeReadinessToken(runtime?.detail);
-  return `${status}:${stage}:${detail}`;
+  const failureCode = runtime?.failureCode ? `:${safeReadinessToken(runtime.failureCode)}` : "";
+  const migration = runtime?.migration ? `:${safeReadinessToken(runtime.migration)}` : "";
+  return `${status}:${stage}:${detail}${failureCode}${migration}`;
 }
 
 export async function prepareCommsHubBackupRuntime(active, { writeLog = log } = {}) {
@@ -398,8 +400,19 @@ export async function startCommsHubRuntime() {
          backupWorkerStarted, emailPollWorkerStarted, delayedActionWorkerStarted, retentionWorkerStarted, monthEndConversationArchiveWorkerStarted };
     } catch (error) {
       const detail = safeRuntimeCode(error);
-      runtimeState = { status: "failed", ready: false, stage: startupStage, detail };
-      log.error("commsHub.runtime.startFailed", { error: safeErrorLog(error) });
+      const failureCode = safeReadinessToken(error?.failureCode || error?.cause?.code || error?.cause?.name, "unknown");
+      const migration = error?.migration || error?.cause?.migration
+        ? safeReadinessToken(error?.migration || error?.cause?.migration)
+        : null;
+      runtimeState = {
+        status: "failed",
+        ready: false,
+        stage: startupStage,
+        detail,
+        failureCode,
+        ...(migration ? { migration } : {}),
+      };
+      log.error("commsHub.runtime.startFailed", { error: safeErrorLog(error), failureCode, migration });
       if (active) scheduleRuntimeSupervisorRetry(active, detail);
       return { started: false, reason: "failed" };
     }
