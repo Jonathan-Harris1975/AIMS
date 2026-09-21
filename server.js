@@ -13,7 +13,7 @@ import { hasDurableStateEnv, durableStateEnvHint } from "./services/shared/utils
 import * as lifecycle from "./services/shared/utils/lifecycle.js";
 import { requireAimsBearerAuth } from "./services/shared/middleware/suiteAuth.js";
 import { getCommsHubReadiness } from "./services/comms-hub/config.js";
-import { getCommsHubRuntimeReadiness, startCommsHubRuntime, stopCommsHubRuntime } from "./services/comms-hub/runtime.js";
+import { describeCommsHubRuntimeReadiness, getCommsHubRuntimeReadiness, startCommsHubRuntime, stopCommsHubRuntime } from "./services/comms-hub/runtime.js";
 import { restoreAimsModelGovernance } from "./services/shared/utils/modelGovernance.js";
 import { probeCriticalDependencies } from "./services/shared/readiness/dependencyProbes.js";
 
@@ -221,7 +221,7 @@ async function productionReadiness() {
       return {
         name: "comms_hub",
         ok: configuration.enabled && configuration.ready && runtime.ready,
-        detail: configuration.enabled ? runtime.status : "disabled",
+        detail: describeCommsHubRuntimeReadiness(configuration, runtime),
       };
     })(),
   ];
