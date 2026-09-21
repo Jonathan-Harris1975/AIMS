@@ -34,6 +34,7 @@ function isRowReturningSql(sql) {
 class SqliteD1Adapter {
   constructor({ failMigrationVersion = null } = {}) {
     this.db = new DatabaseSync(":memory:");
+    this.db.exec("PRAGMA foreign_keys = ON");
     this.failMigrationVersion = failMigrationVersion;
     this.failedVersions = new Set();
   }
@@ -52,6 +53,9 @@ class SqliteD1Adapter {
   }
 
   async batch(statements) {
+    if (statements.some(({ sql }) => /^\s*PRAGMA\s+foreign_keys\b/i.test(String(sql || "")))) {
+      throw new Error("Cloudflare D1 cannot change PRAGMA foreign_keys inside its implicit transaction");
+    }
     const migrationInsert = statements.at(-1);
     const migrationVersion = /INSERT INTO comms_hub_schema_migrations/i.test(String(migrationInsert?.sql || ""))
       ? String(migrationInsert?.params?.[0] || "")
