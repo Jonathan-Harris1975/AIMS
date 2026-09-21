@@ -1021,7 +1021,10 @@ export function createCommsHubRouter({
       const messages = result.messages.slice().reverse().map(({ uid, parsed }) => ({
         uid, messageId: parsed.messageId, inReplyTo: parsed.inReplyTo || "", references: parsed.references || [],
         from: parsed.from || null, to: parsed.to || [], cc: parsed.cc || [], subject: parsed.subject || "(No subject)",
-        text: parsed.text || "", receivedAt: parsed.receivedAt || null, attachments: (parsed.attachments || []).map((item) => ({ filename: item.filename, contentType: item.contentType, size: item.size })),
+        text: parsed.text || "", receivedAt: parsed.receivedAt || null,
+        attachments: (parsed.attachments || []).map((item) => ({
+          filename: item.filename, contentType: item.contentType, size: item.size,
+        })),
       }));
       return res.json({ ok: true, account: { key, address: account.address }, messages });
     } catch (error) { next(error); }
@@ -1068,12 +1071,20 @@ export function createCommsHubRouter({
       if (!account || !client || !account.enabled) throw new CommsHubError(404, "manual_mailbox_not_configured", "Manual mailbox is not configured.");
       const to = [...new Set((Array.isArray(req.body?.to) ? req.body.to : [req.body?.to]).map((value) => String(value || "").trim().toLowerCase()).filter(Boolean))];
       const cc = [...new Set((Array.isArray(req.body?.cc) ? req.body.cc : []).map((value) => String(value || "").trim().toLowerCase()).filter(Boolean))];
-      if (!to.length || to.some((value) => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) || cc.some((value) => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value))) throw new CommsHubError(422, "manual_mail_recipient_invalid", "A valid recipient is required.");
+      const invalidTo = to.some((value) => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value));
+      const invalidCc = cc.some((value) => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value));
+      if (!to.length || invalidTo || invalidCc) {
+        throw new CommsHubError(422, "manual_mail_recipient_invalid", "A valid recipient is required.");
+      }
       const bodyText = String(req.body?.bodyText || "").trim();
       const subject = String(req.body?.subject || "").trim().slice(0, 500);
       if (!bodyText) throw new CommsHubError(422, "manual_mail_body_empty", "Email body cannot be empty.");
       if (bodyText.length > active.config.emailMaxReplyChars) throw new CommsHubError(413, "manual_mail_body_too_long", "Email body exceeds the configured character limit.");
-      const result = await client.sendMessage({ to, cc, subject, bodyText, inReplyTo: String(req.body?.inReplyTo || ""), references: Array.isArray(req.body?.references) ? req.body.references.map(String).slice(0, 50) : [] });
+      const result = await client.sendMessage({
+        to, cc, subject, bodyText,
+        inReplyTo: String(req.body?.inReplyTo || ""),
+        references: Array.isArray(req.body?.references) ? req.body.references.map(String).slice(0, 50) : [],
+      });
       return res.json({ ok: true, account: key, providerMessageId: result.messageId });
     } catch (error) { next(error); }
   });
