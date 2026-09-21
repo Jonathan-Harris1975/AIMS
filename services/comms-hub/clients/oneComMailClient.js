@@ -310,6 +310,44 @@ export class OneComMailClient {
     }
   }
 
+  async listMailboxes() {
+    return this.withImapSession(async (session) => {
+      const result = await session.command('LIST "" "*"');
+      return result.lines.filter((line) => /^\* LIST\b/i.test(line)).map((line) => {
+        const match = line.match(/^\* LIST \(([^)]*)\) (?:"([^"]*)"|NIL) (.+)$/i);
+        if (!match) return null;
+        let name = match[3].trim();
+        if (name.startsWith('"') && name.endsWith('"')) name = name.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+        const flags = match[1].split(/\s+/).filter(Boolean);
+        return { name, delimiter: match[2] || null, selectable: !flags.some((flag) => /\\Noselect/i.test(flag)), flags };
+      }).filter(Boolean);
+    });
+  }
+
+  async moveMessage({ mailbox = "INBOX", uid, destination }) {
+    const messageUid = Number(uid);
+    if (!Number.isSafeInteger(messageUid) || messageUid < 1) throw new CommsHubError(400, "email_uid_invalid", "Email UID is invalid.");
+    if (!String(destination || "").trim()) throw new CommsHubError(400, "email_destination_missing", "Destination folder is required.");
+    return this.withImapSession(async (session) => {
+      await session.command(`SELECT ${quoteImap(mailbox)}`);
+      await session.command(`UID COPY ${messageUid} ${quoteImap(destination)}`);
+      await session.command(`UID STORE ${messageUid} +FLAGS.SILENT (\\Deleted)`);
+      await session.command("EXPUNGE");
+      return { uid: messageUid, mailbox, destination };
+    });
+  }
+
+  async deleteMessage({ mailbox = "INBOX", uid }) {
+    const messageUid = Number(uid);
+    if (!Number.isSafeInteger(messageUid) || messageUid < 1) throw new CommsHubError(400, "email_uid_invalid", "Email UID is invalid.");
+    return this.withImapSession(async (session) => {
+      await session.command(`SELECT ${quoteImap(mailbox)}`);
+      await session.command(`UID STORE ${messageUid} +FLAGS.SILENT (\\Deleted)`);
+      await session.command("EXPUNGE");
+      return { uid: messageUid, mailbox };
+    });
+  }
+
   async getMailboxCursor({ mailbox = "INBOX" } = {}) {
     return this.withImapSession(async (session) => {
       const selected = await session.command(`EXAMINE ${quoteImap(mailbox)}`);
