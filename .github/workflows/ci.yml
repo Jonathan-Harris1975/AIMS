@@ -48,6 +48,17 @@ jobs:
       - run: docker build -t aims:ci .
       - name: Build Headroom companion image
         run: docker build -f headroom/Dockerfile -t aims-headroom:ci .
+      - name: Verify Headroom hardened runtime
+        run: |
+          test "$(docker image inspect aims-headroom:ci --format '{{.Config.User}}')" = "nonroot"
+          docker run --rm --entrypoint python3 aims-headroom:ci -c '
+          from importlib.metadata import version
+          assert version("headroom-ai") == "0.37.0", version("headroom-ai")
+          assert version("msgpack") == "1.2.1", version("msgpack")
+          assert version("setuptools") == "83.0.0", version("setuptools")
+          from headroom._core import DiffCompressor, SmartCrusher
+          print(f"Headroom runtime verified: {DiffCompressor.__name__}, {SmartCrusher.__name__}")
+          '
       - name: Verify pinned runtime, minimal attack surface, non-root user and writable runtime state
         run: |
           docker run --rm aims:ci node -e '
