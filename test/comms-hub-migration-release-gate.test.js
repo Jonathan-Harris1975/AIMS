@@ -250,6 +250,43 @@ test("upgrade from migration 0020 preserves communication state and backfills pe
   );
 });
 
+test("attested legacy 0013 checksum does not block forward production migrations", async (t) => {
+  const adapter = new SqliteD1Adapter();
+  t.after(() => adapter.close());
+
+  applyHistoricalSnapshot(adapter, "0020_professional_autonomous_comms");
+  adapter.db.prepare(
+    "UPDATE comms_hub_schema_migrations SET checksum = ? WHERE version = ?"
+  ).run("legacy-production-checksum", "0013_content_automation_queue");
+
+  const result = await runCommsHubMigrations({ env: migrationEnv(), d1: adapter });
+  assert.deepEqual(result.appliedVersions, [
+    "0021_notification_delivery_reliability",
+    "0022_worker_heartbeat",
+  ]);
+  assert.equal(
+    adapter.db.prepare("SELECT checksum FROM comms_hub_schema_migrations WHERE version = ?")
+      .get("0013_content_automation_queue").checksum,
+    "legacy-production-checksum",
+    "legacy migration ledger must remain immutable"
+  );
+});
+
+test("an unattested checksum mismatch still fails closed", async (t) => {
+  const adapter = new SqliteD1Adapter();
+  t.after(() => adapter.close());
+
+  applyHistoricalSnapshot(adapter, "0012_excluded_email_automation_scope");
+  adapter.db.prepare(
+    "UPDATE comms_hub_schema_migrations SET checksum = ? WHERE version = ?"
+  ).run("tampered", "0012_excluded_email_automation_scope");
+
+  await assert.rejects(
+    () => runCommsHubMigrations({ env: migrationEnv(), d1: adapter }),
+    (error) => error?.code === "comms_hub_migration_checksum_mismatch" && error?.migration === "0012_excluded_email_automation_scope"
+  );
+});
+
 test("a failed migration is not recorded and a retry resumes from the last committed version", async (t) => {
   const adapter = new SqliteD1Adapter({ failMigrationVersion: "0021_notification_delivery_reliability" });
   t.after(() => adapter.close());
