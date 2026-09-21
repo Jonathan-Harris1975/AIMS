@@ -1,31 +1,39 @@
 # Headroom compression-only companion service for AIMS.
 #
-# The upstream 0.37.0 release publishes a python-slim image as its default
-# runtime, but its own Dockerfile also defines a distroless Python runtime.
-# Keep the validated Headroom release pinned to the digest observed by CI and
-# copy only its runtime artefacts into a minimal distroless image. This avoids
-# carrying apt/dpkg, perl, util-linux, ncurses and other packages that are not
-# required by the AIMS compression sidecar.
+# Build Headroom into an isolated virtual environment on Chainguard's hardened
+# Python image, then copy only that environment into the minimal runtime image.
+# The previous Debian distroless Python base still carried HIGH vulnerabilities
+# with no Debian fixes available, so it could never satisfy AIMS' release gate.
+#
+# The final image is still scanned by Trivy for HIGH/CRITICAL OS, library and
+# secret findings. Do not add scanner exclusions here to make a release pass.
 ARG HEADROOM_VERSION=0.37.0
-ARG HEADROOM_DIGEST=sha256:4e559273659ebc5ce8711a60278e288550fa596377af18a7058e10036d63ef0b
+ARG MSGPACK_VERSION=1.2.1
+ARG SETUPTOOLS_VERSION=83.0.0
 
-FROM ghcr.io/headroomlabs-ai/headroom:${HEADROOM_VERSION}@${HEADROOM_DIGEST} AS headroom-runtime
+FROM cgr.dev/chainguard/python:latest-dev AS headroom-build
+
+ARG HEADROOM_VERSION
+ARG MSGPACK_VERSION
+ARG SETUPTOOLS_VERSION
 
 USER root
+WORKDIR /build
 
-# Trivy identified these Python packages in the upstream image. Upgrade them in
-# the staging layer before copying site-packages into the final runtime.
-RUN python -m pip install --no-cache-dir --upgrade \
-      "msgpack==1.2.1" \
-      "setuptools==83.0.0" \
- && python -c 'from importlib.metadata import version; assert version("msgpack") == "1.2.1"; assert version("setuptools") == "83.0.0"'
+RUN python -m venv /opt/headroom \
+ && /opt/headroom/bin/pip install --no-cache-dir --upgrade \
+      "pip" \
+      "setuptools==${SETUPTOOLS_VERSION}" \
+ && /opt/headroom/bin/pip install --no-cache-dir \
+      "headroom-ai[proxy,proxy-prod]==${HEADROOM_VERSION}" \
+      "msgpack==${MSGPACK_VERSION}" \
+ && /opt/headroom/bin/python -c 'from importlib.metadata import version; assert version("headroom-ai") == "0.37.0"; assert version("msgpack") == "1.2.1"; assert version("setuptools") == "83.0.0"; from headroom._core import DiffCompressor, SmartCrusher'
 
-FROM gcr.io/distroless/python3-debian13:nonroot
+FROM cgr.dev/chainguard/python:latest
 
-COPY --from=headroom-runtime /usr/local/lib/python3.13/site-packages /usr/local/lib/python3.13/site-packages
-COPY --from=headroom-runtime /usr/local/bin/headroom-proxy /usr/local/bin/headroom-proxy
+COPY --from=headroom-build /opt/headroom /opt/headroom
 
-ENV PYTHONPATH=/usr/local/lib/python3.13/site-packages \
+ENV PATH=/opt/headroom/bin \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     HEADROOM_HOST=0.0.0.0 \
@@ -46,8 +54,10 @@ WORKDIR /app
 USER nonroot
 EXPOSE 8787
 
+# Chainguard's minimal runtime deliberately contains no shell/package manager.
+# Use Python itself for the health probe.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-  CMD ["python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8787/readyz', timeout=5)"]
+  CMD ["/opt/headroom/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8787/readyz', timeout=5)"]
 
-ENTRYPOINT ["python3", "-m", "headroom.cli", "proxy"]
+ENTRYPOINT ["/opt/headroom/bin/python", "-m", "headroom.cli", "proxy"]
 CMD ["--host", "0.0.0.0", "--port", "8787"]
