@@ -6,6 +6,7 @@ import { DatabaseSync } from "node:sqlite";
 import { CommsHubSocialPollWorker } from "../services/comms-hub/workers/socialPollWorker.js";
 import { CommsHubWebhookReconcileWorker } from "../services/comms-hub/workers/webhookReconcileWorker.js";
 import { COMMS_HUB_REQUIRED_MIGRATIONS } from "../services/comms-hub/migrations/manifest.js";
+import { describeCommsHubRuntimeReadiness, prepareCommsHubBackupRuntime } from "../services/comms-hub/runtime.js";
 
 const flush = () => new Promise((resolve) => setImmediate(resolve));
 
@@ -174,4 +175,46 @@ test("runtime source contains bounded self-recovery and automatic webhook reconc
   assert.match(source, /webhookReconcileWorker\.start\(\)/);
   assert.match(source, /new CommsHubSocialPollWorker\(\{ context: active \}\)/);
   assert.doesNotMatch(source, /CommsHubWakeClient|wakeClient/);
+});
+
+test("an auxiliary backup preflight failure does not take the communications runtime offline", async () => {
+  const events = [];
+  const result = await prepareCommsHubBackupRuntime({
+    config: { backupEnabled: true },
+    backupClient: {
+      async ensureRestoreDatabase() {
+        throw Object.assign(new Error("provider response omitted"), { code: "cloudflare_backup_api_failed" });
+      },
+    },
+  }, {
+    writeLog: {
+      info(event, detail) { events.push({ level: "info", event, detail }); },
+      error(event, detail) { events.push({ level: "error", event, detail }); },
+    },
+  });
+
+  assert.deepEqual(result, {
+    status: "degraded",
+    ready: false,
+    detail: "cloudflare_backup_api_failed",
+  });
+  assert.equal(events[0].event, "commsHub.runtime.backupDegraded");
+  assert.equal(events[0].level, "error");
+});
+
+test("readiness detail exposes safe startup stage and warning codes", () => {
+  assert.equal(
+    describeCommsHubRuntimeReadiness(
+      { enabled: true },
+      { status: "failed", ready: false, stage: "schema_recovery", detail: "d1_unreachable" }
+    ),
+    "failed:schema_recovery:d1_unreachable"
+  );
+  assert.equal(
+    describeCommsHubRuntimeReadiness(
+      { enabled: true },
+      { status: "ready_with_warnings", ready: true, warnings: [{ component: "backup", detail: "cloudflare_backup_api_failed" }] }
+    ),
+    "ready_with_warnings:backup=cloudflare_backup_api_failed"
+  );
 });
