@@ -104,7 +104,10 @@ export function createCommsHubRouter({
       runtime: {
         status: runtime.status,
         ready: runtime.ready,
+        stage: runtime.stage || null,
         detail: runtime.detail,
+        warnings: runtime.warnings || [],
+        components: runtime.components || null,
         workers: runtime.workers || null,
       },
       channels: {
