@@ -982,6 +982,55 @@ export function createCommsHubRouter({
     catch (error) { next(error); }
   });
 
+  router.get("/manual-mail/accounts", permit("read_queue"), async (_req, res, next) => {
+    try {
+      const active = contextProvider();
+      const accounts = Object.values(active.config.manualEmailAccounts || {}).map((account) => ({
+        key: account.key, address: account.address, enabled: account.enabled === true, manualOnly: true, automationExcluded: true,
+      }));
+      return res.json({ ok: true, accounts });
+    } catch (error) { next(error); }
+  });
+
+  router.get("/manual-mail/:accountKey/messages", permit("read_queue"), async (req, res, next) => {
+    try {
+      const active = contextProvider();
+      const key = String(req.params.accountKey || "").trim().toLowerCase();
+      const account = active.config.manualEmailAccounts?.[key];
+      const client = active.manualMailAccounts?.[key];
+      if (!account || !client || !account.enabled) throw new CommsHubError(404, "manual_mailbox_not_configured", "Manual mailbox is not configured.");
+      const limit = Math.min(Math.max(Number(req.query.limit) || 30, 1), 50);
+      const cursor = await client.getMailboxCursor({ mailbox: account.mailbox });
+      const afterUid = Math.max(Number(cursor.highestUid || 0) - limit, 0);
+      const result = await client.fetchMessages({ mailbox: account.mailbox, afterUid, limit });
+      const messages = result.messages.slice().reverse().map(({ uid, parsed }) => ({
+        uid, messageId: parsed.messageId, inReplyTo: parsed.inReplyTo || "", references: parsed.references || [],
+        from: parsed.from || null, to: parsed.to || [], cc: parsed.cc || [], subject: parsed.subject || "(No subject)",
+        text: parsed.text || "", receivedAt: parsed.receivedAt || null, attachments: (parsed.attachments || []).map((item) => ({ filename: item.filename, contentType: item.contentType, size: item.size })),
+      }));
+      return res.json({ ok: true, account: { key, address: account.address }, messages });
+    } catch (error) { next(error); }
+  });
+
+  router.post("/manual-mail/:accountKey/send", permit("send_reply"), async (req, res, next) => {
+    try {
+      const active = contextProvider();
+      const key = String(req.params.accountKey || "").trim().toLowerCase();
+      const account = active.config.manualEmailAccounts?.[key];
+      const client = active.manualMailAccounts?.[key];
+      if (!account || !client || !account.enabled) throw new CommsHubError(404, "manual_mailbox_not_configured", "Manual mailbox is not configured.");
+      const to = [...new Set((Array.isArray(req.body?.to) ? req.body.to : [req.body?.to]).map((value) => String(value || "").trim().toLowerCase()).filter(Boolean))];
+      const cc = [...new Set((Array.isArray(req.body?.cc) ? req.body.cc : []).map((value) => String(value || "").trim().toLowerCase()).filter(Boolean))];
+      if (!to.length || to.some((value) => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) || cc.some((value) => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value))) throw new CommsHubError(422, "manual_mail_recipient_invalid", "A valid recipient is required.");
+      const bodyText = String(req.body?.bodyText || "").trim();
+      const subject = String(req.body?.subject || "").trim().slice(0, 500);
+      if (!bodyText) throw new CommsHubError(422, "manual_mail_body_empty", "Email body cannot be empty.");
+      if (bodyText.length > active.config.emailMaxReplyChars) throw new CommsHubError(413, "manual_mail_body_too_long", "Email body exceeds the configured character limit.");
+      const result = await client.sendMessage({ to, cc, subject, bodyText, inReplyTo: String(req.body?.inReplyTo || ""), references: Array.isArray(req.body?.references) ? req.body.references.map(String).slice(0, 50) : [] });
+      return res.json({ ok: true, account: key, providerMessageId: result.messageId });
+    } catch (error) { next(error); }
+  });
+
   router.post("/conversations/:conversationId/email", permit("send_reply"), async (req, res, next) => {
     try { const result = await contextProvider().emailService.send({ conversationId: req.params.conversationId, bodyText: req.body?.bodyText, bodyHtml: req.body?.bodyHtml,
        subject: req.body?.subject, recipients: req.body?.recipients || [], cc: req.body?.cc || [], attachments: [], attachmentIds: req.body?.attachmentIds || [],
