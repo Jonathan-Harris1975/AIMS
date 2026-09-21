@@ -992,6 +992,18 @@ export function createCommsHubRouter({
     } catch (error) { next(error); }
   });
 
+  router.get("/manual-mail/:accountKey/folders", permit("read_queue"), async (req, res, next) => {
+    try {
+      const active = contextProvider();
+      const key = String(req.params.accountKey || "").trim().toLowerCase();
+      const account = active.config.manualEmailAccounts?.[key];
+      const client = active.manualMailAccounts?.[key];
+      if (!account || !client || !account.enabled) throw new CommsHubError(404, "manual_mailbox_not_configured", "Manual mailbox is not configured.");
+      const folders = (await client.listMailboxes()).filter((folder) => folder.selectable).map(({ name, delimiter }) => ({ name, delimiter }));
+      return res.json({ ok: true, account: { key, address: account.address }, folders });
+    } catch (error) { next(error); }
+  });
+
   router.get("/manual-mail/:accountKey/messages", permit("read_queue"), async (req, res, next) => {
     try {
       const active = contextProvider();
@@ -1000,15 +1012,50 @@ export function createCommsHubRouter({
       const client = active.manualMailAccounts?.[key];
       if (!account || !client || !account.enabled) throw new CommsHubError(404, "manual_mailbox_not_configured", "Manual mailbox is not configured.");
       const limit = Math.min(Math.max(Number(req.query.limit) || 30, 1), 50);
-      const cursor = await client.getMailboxCursor({ mailbox: account.mailbox });
+      const mailbox = String(req.query.folder || account.mailbox || "INBOX").trim().slice(0, 500);
+      const availableFolders = await client.listMailboxes();
+      if (!availableFolders.some((folder) => folder.selectable && folder.name === mailbox)) throw new CommsHubError(404, "manual_mail_folder_not_found", "Mail folder was not found.");
+      const cursor = await client.getMailboxCursor({ mailbox });
       const afterUid = Math.max(Number(cursor.highestUid || 0) - limit, 0);
-      const result = await client.fetchMessages({ mailbox: account.mailbox, afterUid, limit });
+      const result = await client.fetchMessages({ mailbox, afterUid, limit });
       const messages = result.messages.slice().reverse().map(({ uid, parsed }) => ({
         uid, messageId: parsed.messageId, inReplyTo: parsed.inReplyTo || "", references: parsed.references || [],
         from: parsed.from || null, to: parsed.to || [], cc: parsed.cc || [], subject: parsed.subject || "(No subject)",
         text: parsed.text || "", receivedAt: parsed.receivedAt || null, attachments: (parsed.attachments || []).map((item) => ({ filename: item.filename, contentType: item.contentType, size: item.size })),
       }));
       return res.json({ ok: true, account: { key, address: account.address }, messages });
+    } catch (error) { next(error); }
+  });
+
+  router.post("/manual-mail/:accountKey/messages/:uid/move", permit("send_reply"), async (req, res, next) => {
+    try {
+      const active = contextProvider();
+      const key = String(req.params.accountKey || "").trim().toLowerCase();
+      const account = active.config.manualEmailAccounts?.[key];
+      const client = active.manualMailAccounts?.[key];
+      if (!account || !client || !account.enabled) throw new CommsHubError(404, "manual_mailbox_not_configured", "Manual mailbox is not configured.");
+      const mailbox = String(req.body?.folder || account.mailbox || "INBOX").trim().slice(0, 500);
+      const destination = String(req.body?.destination || "").trim().slice(0, 500);
+      const folders = await client.listMailboxes();
+      const selectable = new Set(folders.filter((folder) => folder.selectable).map((folder) => folder.name));
+      if (!selectable.has(mailbox) || !selectable.has(destination) || mailbox === destination) throw new CommsHubError(422, "manual_mail_move_invalid", "Choose a valid destination folder.");
+      await client.moveMessage({ mailbox, uid: req.params.uid, destination });
+      return res.json({ ok: true, account: key, uid: Number(req.params.uid), folder: mailbox, destination });
+    } catch (error) { next(error); }
+  });
+
+  router.delete("/manual-mail/:accountKey/messages/:uid", permit("send_reply"), async (req, res, next) => {
+    try {
+      const active = contextProvider();
+      const key = String(req.params.accountKey || "").trim().toLowerCase();
+      const account = active.config.manualEmailAccounts?.[key];
+      const client = active.manualMailAccounts?.[key];
+      if (!account || !client || !account.enabled) throw new CommsHubError(404, "manual_mailbox_not_configured", "Manual mailbox is not configured.");
+      const mailbox = String(req.query.folder || account.mailbox || "INBOX").trim().slice(0, 500);
+      const folders = await client.listMailboxes();
+      if (!folders.some((folder) => folder.selectable && folder.name === mailbox)) throw new CommsHubError(404, "manual_mail_folder_not_found", "Mail folder was not found.");
+      await client.deleteMessage({ mailbox, uid: req.params.uid });
+      return res.json({ ok: true, account: key, uid: Number(req.params.uid), folder: mailbox });
     } catch (error) { next(error); }
   });
 
