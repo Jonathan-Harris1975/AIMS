@@ -26,6 +26,11 @@ WORKDIR /app
 RUN echo "[build] timeout utility" \
  && apk add --no-cache coreutils
 
+RUN echo "[build] refresh base security packages" \
+ && timeout --signal=TERM --kill-after=20s 300s apk upgrade --no-cache \
+    libcrypto3 \
+    libssl3
+
 RUN echo "[build] runtime packages" \
  && timeout --signal=TERM --kill-after=20s 600s apk add --no-cache \
     ca-certificates \
@@ -68,6 +73,14 @@ RUN echo "[build] AIMS source validation" \
     NPM_CONFIG_FUND=false \
     timeout --signal=TERM --kill-after=10s 120s npm run build
 
+# npm is required to reproduce the canonical install/build toolchain, but it is
+# not required to run AIMS. Removing it from the production image eliminates
+# npm's package-manager dependency tree from the runtime attack surface.
+RUN rm -rf /usr/local/lib/node_modules/npm \
+ && rm -f /usr/local/bin/npm /usr/local/bin/npx \
+ && ! command -v npm >/dev/null 2>&1 \
+ && ! command -v npx >/dev/null 2>&1
+
 EXPOSE 3000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=45s --retries=3 \
@@ -76,4 +89,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=45s --retries=3 \
 USER node
 
 ENTRYPOINT ["dumb-init", "--"]
-CMD ["npm", "start"]
+CMD ["node", "scripts/bootstrap.js"]
