@@ -99,6 +99,7 @@ test("runtime waits for schema recovery before worker startup", () => {
 
 test("migration runner can apply the full required manifest through a serialised administrative D1 adapter", async () => {
   let migrationBatches = 0;
+  const deferredConstraintMigrations = [];
   const fakeD1 = {
     async query(sql, params = []) {
       const text = String(sql);
@@ -118,6 +119,12 @@ test("migration runner can apply the full required manifest through a serialised
         ];
       }
       migrationBatches += 1;
+      const migrationVersion = String(statements.at(-1)?.params?.[0] || "");
+      const sql = statements.map((statement) => String(statement.sql || "")).join("\n");
+      assert.doesNotMatch(sql, /PRAGMA\s+foreign_keys/i, "D1 batches must not try to change foreign_keys");
+      if (/PRAGMA\s+defer_foreign_keys\s*=\s*ON/i.test(sql)) {
+        deferredConstraintMigrations.push(migrationVersion);
+      }
       return statements.map(() => ({ success: true, results: [] }));
     },
   };
@@ -127,6 +134,10 @@ test("migration runner can apply the full required manifest through a serialised
   assert.equal(result.total, COMMS_HUB_REQUIRED_MIGRATIONS.length);
   assert.equal(migrationBatches, COMMS_HUB_REQUIRED_MIGRATIONS.length);
   assert.deepEqual(result.appliedVersions, [...COMMS_HUB_REQUIRED_MIGRATIONS]);
+  assert.deepEqual(deferredConstraintMigrations, [
+    "0019_social_context_retry",
+    "0021_notification_delivery_reliability",
+  ]);
 });
 
 test("migration runner bypasses runtime proxy, serialises writers and preserves checksum immutability", () => {
