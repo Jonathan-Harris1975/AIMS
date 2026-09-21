@@ -157,6 +157,18 @@ export function createCommsHubContext({ env = process.env, fetchImpl, r2ArchiveS
         oneComMailbox: account.mailbox,
       })])
   ));
+  const manualMailAccounts = Object.freeze(Object.fromEntries(
+    Object.entries(config.manualEmailAccounts || {})
+      .filter(([, account]) => account.enabled)
+      .map(([key, account]) => [key, new OneComMailClient({
+        ...config,
+        oneComEmailAccountKey: account.key,
+        oneComEmailAddress: account.address,
+        oneComEmailUsername: account.username,
+        oneComEmailPassword: account.password,
+        oneComMailbox: account.mailbox,
+      })])
+  ));
   const active = {
     config,
     d1,
@@ -173,6 +185,7 @@ export function createCommsHubContext({ env = process.env, fetchImpl, r2ArchiveS
     restoreR2,
     backupClient: config.backupEnabled ? new CloudflareBackupClient(config, fetchImpl ? { fetchImpl } : undefined) : null,
     oneComMailAccounts,
+    manualMailAccounts,
     oneComMail: oneComMailAccounts.info || new OneComMailClient(config),
     coginPal: new CoginPalClient(config, fetchImpl ? { fetchImpl } : undefined),
     malwareScanner: new MalwareScannerClient(config, fetchImpl ? { fetchImpl } : undefined),

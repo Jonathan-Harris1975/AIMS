@@ -424,6 +424,17 @@ export function loadCommsHubConfig(env = process.env, { requireEnabled = false }
       automationExcluded: true,
     }),
   });
+  // Manual mail is intentionally separate from emailAccounts. These credentials
+  // may be used by an authenticated operator, but never create automation pollers.
+  const manualEmailAccounts = Object.freeze(Object.fromEntries(Object.entries(excludedEmailAccounts).map(([key, account]) => [key, Object.freeze({
+    ...account,
+    enabled: Boolean(usableEnvValue(env[key === "admin" ? "ONECOM_ADMIN_PASSWORD" : "ONECOM_NEWSLETTER_PASSWORD"])),
+    username: account.address,
+    password: usableEnvValue(env[key === "admin" ? "ONECOM_ADMIN_PASSWORD" : "ONECOM_NEWSLETTER_PASSWORD"]),
+    mailbox: oneComMailbox,
+    manualOnly: true,
+    workflowEvaluationEnabled: false,
+  })])));
 
   return Object.freeze({
     enabled: readiness.enabled,
@@ -550,6 +561,7 @@ export function loadCommsHubConfig(env = process.env, { requireEnabled = false }
     emailMaxReplyChars: positiveInteger(env.COMMS_HUB_EMAIL_MAX_REPLY_CHARS, 20_000, "COMMS_HUB_EMAIL_MAX_REPLY_CHARS", { min: 1000, max: 100_000 }),
     emailAccounts,
     excludedEmailAccounts,
+    manualEmailAccounts,
     oneComEmailAccountKey: emailAccounts.info.key,
     oneComEmailAddress: emailAccounts.info.address,
     oneComEmailUsername: emailAccounts.info.username,
