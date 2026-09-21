@@ -32,6 +32,23 @@ function splitSqlStatements(sql) {
     .filter(Boolean);
 }
 
+function d1MigrationStatements(sql) {
+  return splitSqlStatements(sql).flatMap((statement) => {
+    // D1 always enforces foreign keys and executes a batch in an implicit
+    // transaction, where SQLite cannot change PRAGMA foreign_keys. Historical
+    // rebuild migrations use OFF/ON around copy-and-rename operations, so keep
+    // their immutable source/checksums intact while translating that execution
+    // contract to D1's supported transaction-scoped constraint deferral.
+    if (/^PRAGMA\s+foreign_keys\s*=\s*(?:OFF|FALSE|0)$/i.test(statement)) {
+      return ["PRAGMA defer_foreign_keys = ON"];
+    }
+    if (/^PRAGMA\s+foreign_keys\s*=\s*(?:ON|TRUE|1)$/i.test(statement)) {
+      return [];
+    }
+    return [statement];
+  });
+}
+
 function positiveInteger(value, fallback, { min = 1, max = Number.MAX_SAFE_INTEGER } = {}) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return fallback;
@@ -190,7 +207,7 @@ export async function runCommsHubMigrations({ env = process.env, statusOnly = fa
       await renewMigrationLock(d1, env, owner);
       const appliedAt = new Date().toISOString();
       await d1.batch([
-        ...splitSqlStatements(migration.sql).map((sql) => ({ sql })),
+        ...d1MigrationStatements(migration.sql).map((sql) => ({ sql })),
         {
           sql: `INSERT INTO comms_hub_schema_migrations (version, checksum, applied_at) VALUES (?, ?, ?)`,
           params: [migration.version, migration.checksum, appliedAt],
