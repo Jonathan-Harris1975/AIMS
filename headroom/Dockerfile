@@ -20,6 +20,9 @@ ARG SETUPTOOLS_VERSION
 USER root
 WORKDIR /build
 
+# pip vendors vulnerable msgpack/setuptools snapshots in its own runtime tree.
+# It is a build tool, not a Headroom runtime dependency, so do not copy it
+# into the production image or suppress the scanner findings it creates.
 RUN python -m venv /opt/headroom \
  && /opt/headroom/bin/pip install --no-cache-dir --upgrade \
       "pip" \
@@ -27,7 +30,8 @@ RUN python -m venv /opt/headroom \
  && /opt/headroom/bin/pip install --no-cache-dir \
       "headroom-ai[proxy,proxy-prod]==${HEADROOM_VERSION}" \
       "msgpack==${MSGPACK_VERSION}" \
- && /opt/headroom/bin/python -c 'from importlib.metadata import version; assert version("headroom-ai") == "0.37.0"; assert version("msgpack") == "1.2.1"; assert version("setuptools") == "83.0.0"; from headroom._core import DiffCompressor, SmartCrusher'
+ && /opt/headroom/bin/pip uninstall --yes pip \
+ && /opt/headroom/bin/python -c 'from importlib.metadata import version; from importlib.util import find_spec; from pathlib import Path; assert version("headroom-ai") == "0.37.0"; assert version("msgpack") == "1.2.1"; assert version("setuptools") == "83.0.0"; assert find_spec("pip") is None; assert not any(Path("/opt/headroom/bin").glob("pip*")); from headroom._core import DiffCompressor, SmartCrusher'
 
 FROM cgr.dev/chainguard/python:latest
 
