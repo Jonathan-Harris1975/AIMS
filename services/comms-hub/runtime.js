@@ -51,6 +51,56 @@ let runtimeStartPromise = null;
 let runtimeSupervisorTimer = null;
 let runtimeFailureCount = 0;
 
+function safeRuntimeCode(error) {
+  const value = String(error?.code || error?.name || "runtime_start_failed").trim();
+  return /^[A-Za-z0-9_.:-]{1,120}$/.test(value) ? value : "runtime_start_failed";
+}
+
+function safeReadinessToken(value, fallback = "unknown") {
+  const token = String(value || "").trim().replace(/[^A-Za-z0-9_.:-]+/g, "_").slice(0, 120);
+  return token || fallback;
+}
+
+export function describeCommsHubRuntimeReadiness(configuration, runtime) {
+  if (!configuration?.enabled) return "disabled";
+  const status = safeReadinessToken(runtime?.status);
+  const warnings = Array.isArray(runtime?.warnings) ? runtime.warnings : [];
+  if (warnings.length) {
+    const warningDetail = warnings
+      .slice(0, 5)
+      .map((warning) => `${safeReadinessToken(warning?.component, "component")}=${safeReadinessToken(warning?.detail)}`)
+      .join(",");
+    return `${status}:${warningDetail}`;
+  }
+  if (runtime?.ready) return status;
+  const stage = safeReadinessToken(runtime?.stage, "startup");
+  const detail = safeReadinessToken(runtime?.detail);
+  return `${status}:${stage}:${detail}`;
+}
+
+export async function prepareCommsHubBackupRuntime(active, { writeLog = log } = {}) {
+  if (!active?.config?.backupEnabled) {
+    return { status: "disabled", ready: true, detail: "backup_disabled" };
+  }
+  try {
+    const restoreDatabase = await active.backupClient.ensureRestoreDatabase();
+    writeLog.info("commsHub.runtime.restoreDatabaseReady", {
+      created: restoreDatabase.created,
+      source: restoreDatabase.source,
+    });
+    return {
+      status: "ready",
+      ready: true,
+      detail: "restore_database_ready",
+      source: safeReadinessToken(restoreDatabase.source),
+    };
+  } catch (error) {
+    const detail = safeRuntimeCode(error);
+    writeLog.error("commsHub.runtime.backupDegraded", { error: safeErrorLog(error) });
+    return { status: "degraded", ready: false, detail };
+  }
+}
+
 function clearRuntimeSupervisorTimer() {
   if (runtimeSupervisorTimer) clearTimeout(runtimeSupervisorTimer);
   runtimeSupervisorTimer = null;
@@ -201,16 +251,20 @@ export async function startCommsHubRuntime() {
       return { started: false, reason: "misconfigured", missing: readiness.missing };
     }
 
-    runtimeState = { status: "starting", ready: false, detail: "checking_schema" };
+    let startupStage = "context_initialisation";
+    runtimeState = { status: "starting", ready: false, stage: startupStage, detail: "creating_runtime_context" };
     let active;
     try {
       active = getCommsHubContext();
+      startupStage = "schema_recovery";
+      runtimeState = { status: "starting", ready: false, stage: startupStage, detail: "checking_schema" };
       const recovery = await recoverCommsHubSchema({
         repository: active.repository,
         autoMigrateOnStart: active.config.autoMigrateOnStart,
         env: process.env,
         onMigrationStart: async (schema) => {
-          runtimeState = { status: "migrating", ready: false, detail: "auto_migrating_schema", missing: schema.missing || [] };
+          startupStage = "schema_migration";
+          runtimeState = { status: "migrating", ready: false, stage: startupStage, detail: "auto_migrating_schema", missing: schema.missing || [] };
           log.warn("commsHub.runtime.autoMigration.start", { missing: schema.missing || [] });
         },
       });
@@ -225,6 +279,7 @@ export async function startCommsHubRuntime() {
         runtimeState = {
           status: "schema_missing",
           ready: false,
+          stage: "schema_verification",
           detail: active.config.autoMigrateOnStart ? "auto_migration_incomplete" : "auto_migration_disabled",
           missing: schema.missing || [],
         };
@@ -236,18 +291,14 @@ export async function startCommsHubRuntime() {
         return { started: false, reason: "schema_missing", missing: schema.missing || [] };
       }
 
+      startupStage = "worker_registration";
       await active.workerHeartbeatService.registerCriticalWorkers();
 
-      if (active.config.backupEnabled) {
-        runtimeState = { status: "starting", ready: false, detail: "ensuring_restore_database" };
-        const restoreDatabase = await active.backupClient.ensureRestoreDatabase();
-        log.info("commsHub.runtime.restoreDatabaseReady", {
-          name: restoreDatabase.name,
-          created: restoreDatabase.created,
-          source: restoreDatabase.source,
-        });
-      }
+      startupStage = "backup_preflight";
+      runtimeState = { status: "starting", ready: false, stage: startupStage, detail: "checking_backup_runtime" };
+      const backupRuntime = await prepareCommsHubBackupRuntime(active);
 
+      startupStage = "worker_startup";
       const archiveWorkerStarted = active.archiveWorker.start();
       const socialPollWorkerStarted = active.socialPollWorker.start();
       const webhookReconcileWorkerStarted = active.webhookReconcileWorker.start();
@@ -260,10 +311,14 @@ export async function startCommsHubRuntime() {
       const monthEndConversationArchiveWorkerStarted = active.monthEndConversationArchiveWorker.start();
       clearRuntimeSupervisorTimer();
       runtimeFailureCount = 0;
+      const warnings = backupRuntime.ready ? [] : [{ component: "backup", detail: backupRuntime.detail }];
       runtimeState = {
-        status: "ready",
+        status: warnings.length ? "ready_with_warnings" : "ready",
         ready: true,
-        detail: "configured_workers_started",
+        stage: "running",
+        detail: warnings.length ? "configured_workers_started_with_warnings" : "configured_workers_started",
+        warnings,
+        components: { backup: backupRuntime },
         workers: {
           archive: archiveWorkerStarted,
           socialPoll: socialPollWorkerStarted,
@@ -342,9 +397,10 @@ export async function startCommsHubRuntime() {
       return { started: true, archiveWorkerStarted, socialPollWorkerStarted, webhookReconcileWorkerStarted, followUpWorkerStarted, providerHealthWorkerStarted,
          backupWorkerStarted, emailPollWorkerStarted, delayedActionWorkerStarted, retentionWorkerStarted, monthEndConversationArchiveWorkerStarted };
     } catch (error) {
-      runtimeState = { status: "failed", ready: false, detail: error?.code || error?.name || "runtime_start_failed" };
+      const detail = safeRuntimeCode(error);
+      runtimeState = { status: "failed", ready: false, stage: startupStage, detail };
       log.error("commsHub.runtime.startFailed", { error: safeErrorLog(error) });
-      if (active) scheduleRuntimeSupervisorRetry(active, error?.code || error?.name || "runtime_start_failed");
+      if (active) scheduleRuntimeSupervisorRetry(active, detail);
       return { started: false, reason: "failed" };
     }
   })();
@@ -378,7 +434,7 @@ export async function stopCommsHubRuntime() {
 }
 
 export function kickCommsHubArchiveDrain() {
-  if (!context || !context.config.archiveWorkerEnabled || runtimeState.status !== "ready") return false;
+  if (!context || !context.config.archiveWorkerEnabled || !runtimeState.ready) return false;
   queueMicrotask(() => {
     void context.archiveWorker.runOnce().catch((error) => {
       log.error("commsHub.archive.kickFailed", { error: safeErrorLog(error) });
@@ -388,7 +444,7 @@ export function kickCommsHubArchiveDrain() {
 }
 
 export function kickCommsHubSocialPoll() {
-  if (!context || !context.config.socialPollWorkerEnabled || runtimeState.status !== "ready") return false;
+  if (!context || !context.config.socialPollWorkerEnabled || !runtimeState.ready) return false;
   queueMicrotask(() => {
     void context.socialPollWorker.runOnce().catch((error) => {
       log.error("commsHub.socialPoll.kickFailed", { error: safeErrorLog(error) });
