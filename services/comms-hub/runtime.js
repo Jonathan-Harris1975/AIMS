@@ -32,6 +32,7 @@ import { CommsHubOperationsService } from "./operationsService.js";
 import { CommsHubWorkflowEngineService } from "./workflowEngineService.js";
 import { CommsHubAttachmentService } from "./attachmentService.js";
 import { CommsHubEmailService } from "./emailService.js";
+import { CommsHubEmailMailboxCleanupService } from "./emailMailboxCleanupService.js";
 import { CommsHubChatService } from "./chatService.js";
 import { CommsHubReplyDeliveryService } from "./replyDeliveryService.js";
 import { CommsHubFormProcessingService } from "./formProcessingService.js";
@@ -196,6 +197,7 @@ export function createCommsHubContext({ env = process.env, fetchImpl, r2ArchiveS
   active.workflowEngineService = new CommsHubWorkflowEngineService({ context: active });
   active.attachmentService = new CommsHubAttachmentService({ context: active, ...(fetchImpl ? { fetchImpl } : {}) });
   active.emailService = new CommsHubEmailService({ context: active });
+  active.emailMailboxCleanupService = new CommsHubEmailMailboxCleanupService({ context: active });
   active.chatService = new CommsHubChatService({ context: active });
   active.replyDelivery = new CommsHubReplyDeliveryService({ context: active });
   active.formProcessingService = new CommsHubFormProcessingService({ context: active });

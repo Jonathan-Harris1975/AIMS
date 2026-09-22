@@ -298,6 +298,12 @@ export function getCommsHubMissingEnv(env = process.env) {
       missing.push("ONECOM_INFO_PASSWORD");
     }
   }
+  if (booleanValue(env.COMMS_HUB_EMAIL_CLEANUP_ENABLED, false)) {
+    if (!booleanValue(env.COMMS_HUB_EMAIL_ENABLED, false)) missing.push("COMMS_HUB_EMAIL_ENABLED");
+    if (!usableEnvValue(env.COMMS_HUB_ONECOM_PASSWORD) && !usableEnvValue(env.ONECOM_INFO_PASSWORD)) missing.push("ONECOM_INFO_PASSWORD");
+    if (!usableEnvValue(env.ONECOM_ADMIN_PASSWORD)) missing.push("ONECOM_ADMIN_PASSWORD");
+    if (!usableEnvValue(env.ONECOM_NEWSLETTER_PASSWORD)) missing.push("ONECOM_NEWSLETTER_PASSWORD");
+  }
   if (effectiveChatEnabled(env)) {
     if (!usableEnvValue(env.COMMS_HUB_COGINPAL_WEBHOOK_SECRET)) missing.push("COMMS_HUB_COGINPAL_WEBHOOK_SECRET");
     const coginPalApiBaseUrl = usableEnvValue(env.COMMS_HUB_COGINPAL_API_BASE_URL);
@@ -328,6 +334,7 @@ export function getCommsHubReadiness(env = process.env) {
     zernio,
     channels: {
       email: booleanValue(env.COMMS_HUB_EMAIL_ENABLED, false),
+      emailCleanup: booleanValue(env.COMMS_HUB_EMAIL_CLEANUP_ENABLED, false),
       chat: effectiveChatEnabled(env),
     },
   };
@@ -395,8 +402,10 @@ export function loadCommsHubConfig(env = process.env, { requireEnabled = false }
   const primaryEmailUsername = usableEnvValue(env.COMMS_HUB_ONECOM_USERNAME) || primaryEmailAddress;
   const oneComMailbox = usableEnvValue(env.COMMS_HUB_ONECOM_MAILBOX) || "INBOX";
   // Only info@ is a Comms Hub-managed mailbox. Admin and newsletter are hard
-  // exclusions: stale deployment flags or credentials must never create pollers,
-  // workflow evaluation, AI classification or outbound delivery for those inboxes.
+  // exclusions from message automation: stale deployment flags or credentials
+  // must never create pollers, workflow evaluation, AI classification or
+  // outbound delivery for those inboxes. The separate cleanup service may use
+  // their credentials only to expunge server-advertised Trash/Junk folders.
   const emailAccounts = Object.freeze({
     info: Object.freeze({
       key: "info",
@@ -425,7 +434,8 @@ export function loadCommsHubConfig(env = process.env, { requireEnabled = false }
     }),
   });
   // Manual mail is intentionally separate from emailAccounts. These credentials
-  // may be used by an authenticated operator, but never create automation pollers.
+  // may be used by an authenticated operator and the cleanup-only maintenance
+  // service, but never create message automation pollers.
   const manualEmailAccounts = Object.freeze(Object.fromEntries(Object.entries(excludedEmailAccounts).map(([key, account]) => [key, Object.freeze({
     ...account,
     enabled: Boolean(usableEnvValue(env[key === "admin" ? "ONECOM_ADMIN_PASSWORD" : "ONECOM_NEWSLETTER_PASSWORD"])),
@@ -557,6 +567,7 @@ export function loadCommsHubConfig(env = process.env, { requireEnabled = false }
     zernioWebhookReconcileEnabled: booleanValue(env.COMMS_HUB_ZERNIO_WEBHOOK_RECONCILE_ENABLED, true),
     zernioWebhookReconcileIntervalMs: positiveInteger(env.COMMS_HUB_ZERNIO_WEBHOOK_RECONCILE_INTERVAL_MS, 900_000, "COMMS_HUB_ZERNIO_WEBHOOK_RECONCILE_INTERVAL_MS", { min: 60_000, max: 86_400_000 }),
     emailEnabled: booleanValue(env.COMMS_HUB_EMAIL_ENABLED, false),
+    emailCleanupEnabled: booleanValue(env.COMMS_HUB_EMAIL_CLEANUP_ENABLED, false),
     emailExternalRecipientsEnabled: booleanValue(env.COMMS_HUB_EMAIL_EXTERNAL_RECIPIENTS_ENABLED, false),
     emailMaxReplyChars: positiveInteger(env.COMMS_HUB_EMAIL_MAX_REPLY_CHARS, 20_000, "COMMS_HUB_EMAIL_MAX_REPLY_CHARS", { min: 1000, max: 100_000 }),
     emailAccounts,
