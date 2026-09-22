@@ -16,6 +16,9 @@ This document describes the current repository implementation and operating cont
 - **Primary model gateway:** OpenRouter
 
 All routes mounted through `routes/index.js` are protected by the AIMS bearer-auth middleware unless a narrower public contract is explicitly implemented elsewhere.
+The `/script` service has one production router,
+`services/script/routes/index.js`, which owns its request schemas and deduplication
+middleware; legacy per-stage route modules are not part of the runtime.
 
 ## Mounted service groups
 

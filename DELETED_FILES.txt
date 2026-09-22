@@ -1,0 +1,5 @@
+Delete these repository-relative files when applying this update:
+
+services/script/routes/intro.js
+services/script/routes/main.js
+services/script/routes/outro.js
