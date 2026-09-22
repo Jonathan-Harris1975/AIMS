@@ -187,8 +187,12 @@ class ImapSession {
     const upper = commandText.toUpperCase();
     this.stage = upper.startsWith("UID SEARCH") ? "uid_search"
       : upper.startsWith("UID FETCH") ? "uid_fetch"
+        : upper.startsWith("UID STORE") ? "uid_store"
         : upper.startsWith("LOGIN") ? "login"
+          : upper.startsWith("LIST") ? "list"
           : upper.startsWith("EXAMINE") ? "examine"
+            : upper.startsWith("SELECT") ? "select"
+              : upper.startsWith("EXPUNGE") ? "expunge"
             : upper.startsWith("LOGOUT") ? "logout"
               : upper.split(/\s+/)[0].toLowerCase() || "command";
     const tag = `A${String(this.sequence).padStart(4, "0")}`;
@@ -312,7 +316,16 @@ export class OneComMailClient {
 
   async listMailboxes() {
     return this.withImapSession(async (session) => {
-      const result = await session.command('LIST "" "*"');
+      // RFC 6154 special-use flags let the server identify Trash and Junk
+      // without relying on provider-specific or localised mailbox names. Older
+      // IMAP servers may reject RETURN (SPECIAL-USE), so retain a plain LIST
+      // fallback and let the caller fail closed if the required flags are absent.
+      let result;
+      try {
+        result = await session.command('LIST "" "*" RETURN (SPECIAL-USE)');
+      } catch {
+        result = await session.command('LIST "" "*"');
+      }
       return result.lines.filter((line) => /^\* LIST\b/i.test(line)).map((line) => {
         const match = line.match(/^\* LIST \(([^)]*)\) (?:"([^"]*)"|NIL) (.+)$/i);
         if (!match) return null;
@@ -345,6 +358,34 @@ export class OneComMailClient {
       await session.command(`UID STORE ${messageUid} +FLAGS.SILENT (\\Deleted)`);
       await session.command("EXPUNGE");
       return { uid: messageUid, mailbox };
+    });
+  }
+
+  async deleteAllMessages({ mailbox }) {
+    const mailboxName = String(mailbox || "").trim();
+    if (!mailboxName) throw new CommsHubError(400, "email_mailbox_missing", "Email mailbox is required.");
+    return this.withImapSession(async (session) => {
+      await session.command(`SELECT ${quoteImap(mailboxName)}`);
+      const search = await session.command("UID SEARCH ALL");
+      const uids = search.lines
+        .filter((line) => /^\* SEARCH\b/i.test(line))
+        .flatMap((line) => line.replace(/^\* SEARCH\s*/i, "").split(/\s+/))
+        .map(Number)
+        .filter((value) => Number.isSafeInteger(value) && value > 0);
+
+      // Keep commands bounded for large folders. A retry is safe: already
+      // expunged UIDs simply no longer appear in the next SEARCH result.
+      const batchSize = 250;
+      for (let index = 0; index < uids.length; index += batchSize) {
+        const uidSet = uids.slice(index, index + batchSize).join(",");
+        await session.command(`UID STORE ${uidSet} +FLAGS.SILENT (\\Deleted)`);
+      }
+      if (uids.length) await session.command("EXPUNGE");
+      return {
+        mailbox: mailboxName,
+        deletedCount: uids.length,
+        batches: Math.ceil(uids.length / batchSize),
+      };
     });
   }
 
