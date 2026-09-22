@@ -12,9 +12,13 @@ function parseEnvFile(filePath) {
   return dotenv.parse(readFileSync(filePath, "utf8"));
 }
 
-export function loadEnv({ env = process.env } = {}) {
-  const defaults = parseEnvFile(DEFAULT_ENV_PATH);
-  const local = parseEnvFile(LOCAL_ENV_PATH);
+export function loadEnv({
+  env = process.env,
+  defaultEnvPath = DEFAULT_ENV_PATH,
+  localEnvPath = LOCAL_ENV_PATH,
+} = {}) {
+  const defaults = parseEnvFile(defaultEnvPath);
+  const local = parseEnvFile(localEnvPath);
   const merged = { ...defaults, ...local };
 
   for (const [key, value] of Object.entries(merged)) {
@@ -24,8 +28,8 @@ export function loadEnv({ env = process.env } = {}) {
   }
 
   return {
-    defaultEnvPath: DEFAULT_ENV_PATH,
-    localEnvPath: LOCAL_ENV_PATH,
+    defaultEnvPath,
+    localEnvPath,
     defaultsLoaded: Object.keys(defaults).length,
     localLoaded: Object.keys(local).length,
   };
