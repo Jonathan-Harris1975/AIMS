@@ -128,6 +128,7 @@ export function createCommsHubRouter({
           && process.env.COMMS_HUB_ATTACHMENT_SCANNER_TOKEN
         ),
         email: booleanValue(process.env.COMMS_HUB_EMAIL_ENABLED, false),
+        emailCleanup: configuration.channels.emailCleanup,
         chat: effectiveChatEnabled(process.env),
         smartResponse: aiEnabled && booleanValue(process.env.COMMS_HUB_SMART_RESPONSE_ENABLED, true),
         formOrchestration: booleanValue(process.env.COMMS_HUB_FORM_ORCHESTRATION_ENABLED, true),
@@ -980,6 +981,33 @@ export function createCommsHubRouter({
       return res.json({ ok: true, ...result });
     }
     catch (error) { next(error); }
+  });
+
+  router.post("/email/maintenance/cleanup", permit("manage_retention"), async (req, res, next) => {
+    const startedAt = Date.now();
+    try {
+      const active = contextProvider();
+      const result = await active.emailMailboxCleanupService.run({
+        confirmation: String(req.body?.confirmation || ""),
+      });
+      log[result.ok ? "info" : "warn"]("commsHub.emailCleanup.complete", {
+        requestId: req.id || null,
+        ok: result.ok,
+        accountsTotal: result.accountsTotal,
+        accountsSucceeded: result.accountsSucceeded,
+        accountsFailed: result.accountsFailed,
+        deletedMessages: result.deletedMessages,
+        durationMs: Date.now() - startedAt,
+      });
+      return res.json(result);
+    } catch (error) {
+      log.error("commsHub.emailCleanup.failed", {
+        requestId: req.id || null,
+        durationMs: Date.now() - startedAt,
+        error: safeErrorLog(error),
+      });
+      return next(error);
+    }
   });
 
   router.get("/manual-mail/accounts", permit("read_queue"), async (_req, res, next) => {
