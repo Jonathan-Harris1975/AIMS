@@ -13,7 +13,11 @@ Creates the written episode components used by the podcast pipeline: intro, main
 - `POST /script/compose`
 - `POST /script/orchestrate`
 
-The production router is `services/script/routes/index.js`.
+The only production script router is `services/script/routes/index.js`; the central
+`routes/index.js` registry mounts it at `/script`. Schema validation and shared
+request deduplication are mandatory for every generation route. The deterministic
+source contract can be run with
+`node --test test/script-router-source-contract.test.js`.
 
 ## Behaviour
 
