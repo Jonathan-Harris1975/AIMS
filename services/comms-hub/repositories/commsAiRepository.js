@@ -502,6 +502,7 @@ export class CommsAiRepository {
     const allowed = {
       status: "status", exportBookmark: "export_bookmark", exportSha256: "export_sha256",
       manifestSha256: "manifest_sha256", r2ExportKey: "r2_export_key", r2ManifestKey: "r2_manifest_key",
+      restoreDatabaseId: "restore_database_id",
       linkedObjectCount: "linked_object_count", validationStatus: "validation_status",
       validationDetails: "validation_details_json", completedAt: "completed_at", validatedAt: "validated_at",
       failureClass: "failure_class", error: "error", metadata: "metadata_json",
@@ -560,6 +561,35 @@ export class CommsAiRepository {
       this.d1.query(`SELECT backup_run_id, status, COUNT(*) AS count FROM comms_hub_backup_objects GROUP BY backup_run_id, status`),
     ]);
     return { runs: rows(runs), objects: rows(objects) };
+  }
+
+  async getLatestRestorableBackup() {
+    const result = await this.d1.query(
+      `SELECT * FROM comms_hub_backup_runs
+        WHERE status IN ('complete','validated')
+          AND r2_export_key IS NOT NULL AND r2_manifest_key IS NOT NULL
+        ORDER BY completed_at DESC, started_at DESC LIMIT 1`
+    );
+    return rows(result)[0] || null;
+  }
+
+  async listBackupRunsForRotation({ retain = 14 }) {
+    const keep = Math.min(Math.max(Number(retain) || 14, 1), 365);
+    const result = await this.d1.query(
+      `SELECT * FROM comms_hub_backup_runs
+        WHERE status IN ('complete','validated','failed','quarantined')
+        ORDER BY started_at DESC LIMIT -1 OFFSET ?`,
+      [keep]
+    );
+    return rows(result);
+  }
+
+  async deleteBackupRun(id) {
+    const results = await this.d1.batch([
+      { sql: "DELETE FROM comms_hub_backup_objects WHERE backup_run_id = ? RETURNING id", params: [id] },
+      { sql: "DELETE FROM comms_hub_backup_runs WHERE id = ? RETURNING id", params: [id] },
+    ]);
+    return { objects: rows(results[0]).length, runs: rows(results[1]).length };
   }
 }
 

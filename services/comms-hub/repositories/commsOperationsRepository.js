@@ -415,7 +415,15 @@ export class CommsOperationsRepository extends CommsIdentityArchiveRepository {
     const lastResult = await this.d1.query(
       `SELECT chain_sha256 FROM comms_hub_audit_events ORDER BY occurred_at DESC, id DESC LIMIT 1`
     );
-    const previous = rows(lastResult)[0]?.chain_sha256 || null;
+    let previous = rows(lastResult)[0]?.chain_sha256 || null;
+    if (!previous) {
+      const checkpoint = await this.d1.query(
+        `SELECT last_chain_sha256
+           FROM comms_hub_audit_archive_segments
+          ORDER BY last_occurred_at DESC, id DESC LIMIT 1`
+      );
+      previous = rows(checkpoint)[0]?.last_chain_sha256 || null;
+    }
     const canonical = JSON.stringify({
       id: event.id,
       occurredAt: event.occurredAt,
@@ -876,11 +884,14 @@ export class CommsOperationsRepository extends CommsIdentityArchiveRepository {
          FROM comms_hub_conversations c
          JOIN comms_hub_retention_policies p ON p.active = 1 AND (p.channel IN (c.channel, 'any') OR (c.channel IN ('social_dm','social_comment') AND p.channel = 'social'))
          LEFT JOIN comms_hub_email_threads et ON et.conversation_id = c.id
+         LEFT JOIN comms_hub_conversation_operations o ON o.conversation_id = c.id
         WHERE (c.channel <> 'email' OR COALESCE(et.account_key, '') NOT IN ('admin', 'newsletter'))
+          AND (COALESCE(o.operational_status, '') IN ('resolved','archived') OR c.status = 'closed')
           AND c.updated_at <= datetime(?, '-' || p.retain_days || ' days')
           AND NOT EXISTS (
             SELECT 1 FROM comms_hub_retention_jobs j
-             WHERE j.conversation_id = c.id AND j.status IN ('pending','processing','complete')
+             WHERE j.conversation_id = c.id AND j.policy_id = p.id
+               AND j.status IN ('pending','processing','complete')
           )
           AND (p.legal_hold_tag IS NULL OR NOT EXISTS (
             SELECT 1 FROM comms_hub_conversation_tags ct
