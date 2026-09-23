@@ -123,6 +123,36 @@ export class CloudflareBackupClient {
     return { id, name: String(created?.name || name), created: true, source: "created" };
   }
 
+  async recreateRestoreDatabase() {
+    const current = await this.ensureRestoreDatabase();
+    const id = String(current?.id || "").trim();
+    const name = String(current?.name || this.config.restoreDatabaseName || "COMMS_HUB_RESTORE_DATABASE").trim();
+    if (!id || id === this.config.d1DatabaseId) {
+      throw new CommsHubError(409, "restore_target_unsafe", "Restore validation may only recreate the isolated restore database.", {
+        failureClass: "permanent",
+        publicMessage: "Restore target must be an isolated database.",
+      });
+    }
+    if (!name) {
+      throw new CommsHubError(503, "restore_database_name_unconfigured", "The restore database name is required before it can be recreated.", {
+        failureClass: "permanent",
+      });
+    }
+    const collection = this.databaseCollectionEndpoint();
+    await this.requestApi("DELETE", `${collection}/${encodeURIComponent(id)}`);
+    this.configuredRestoreDatabaseId = "";
+    const created = await this.requestApi("POST", collection, { name });
+    const createdId = String(created?.uuid || "").trim();
+    if (!createdId || createdId === this.config.d1DatabaseId) {
+      throw new CommsHubError(502, "restore_database_recreate_invalid", "Cloudflare did not return a safe UUID for the recreated restore database.", {
+        failureClass: "recoverable",
+        publicMessage: "Restore database recreation returned an invalid response.",
+      });
+    }
+    this.configuredRestoreDatabaseId = createdId;
+    return { id: createdId, name: String(created?.name || name), created: true, replacedId: id, source: "recreated" };
+  }
+
   async exportDatabase(databaseId = this.config.d1DatabaseId) {
     const url = this.endpoint(databaseId, "export");
     let result = await this.requestJson(url, { output_format: "polling" });

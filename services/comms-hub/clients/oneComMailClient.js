@@ -187,6 +187,7 @@ class ImapSession {
     const upper = commandText.toUpperCase();
     this.stage = upper.startsWith("UID SEARCH") ? "uid_search"
       : upper.startsWith("UID FETCH") ? "uid_fetch"
+        : upper.startsWith("UID COPY") ? "uid_copy"
         : upper.startsWith("UID STORE") ? "uid_store"
         : upper.startsWith("LOGIN") ? "login"
           : upper.startsWith("LIST") ? "list"
@@ -347,6 +348,43 @@ export class OneComMailClient {
       await session.command(`UID STORE ${messageUid} +FLAGS.SILENT (\\Deleted)`);
       await session.command("EXPUNGE");
       return { uid: messageUid, mailbox, destination };
+    });
+  }
+
+  async moveMessages({ mailbox = "INBOX", uids, destination }) {
+    const requested = [...new Set((Array.isArray(uids) ? uids : [])
+      .map(Number)
+      .filter((uid) => Number.isSafeInteger(uid) && uid > 0))]
+      .sort((left, right) => left - right);
+    if (!requested.length || requested.length > 250) {
+      throw new CommsHubError(400, "email_uids_invalid", "Email UIDs must contain between 1 and 250 valid values.");
+    }
+    const destinationName = String(destination || "").trim();
+    if (!destinationName) throw new CommsHubError(400, "email_destination_missing", "Destination folder is required.");
+    return this.withImapSession(async (session) => {
+      await session.command(`SELECT ${quoteImap(mailbox)}`);
+      const requestedSet = requested.join(",");
+      const search = await session.command(`UID SEARCH UID ${requestedSet}`);
+      const present = [...new Set(search.lines
+        .filter((line) => /^\* SEARCH\b/i.test(line))
+        .flatMap((line) => line.replace(/^\* SEARCH\s*/i, "").split(/\s+/))
+        .map(Number)
+        .filter((uid) => requested.includes(uid)))]
+        .sort((left, right) => left - right);
+      if (present.length) {
+        const presentSet = present.join(",");
+        // Deletion is attempted only after the server confirms the copy.
+        await session.command(`UID COPY ${presentSet} ${quoteImap(destinationName)}`);
+        await session.command(`UID STORE ${presentSet} +FLAGS.SILENT (\\Deleted)`);
+        await session.command("EXPUNGE");
+      }
+      const found = new Set(present);
+      return {
+        mailbox,
+        destination: destinationName,
+        movedUids: present,
+        missingUids: requested.filter((uid) => !found.has(uid)),
+      };
     });
   }
 
