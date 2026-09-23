@@ -129,6 +129,7 @@ export function createCommsHubRouter({
         ),
         email: booleanValue(process.env.COMMS_HUB_EMAIL_ENABLED, false),
         emailCleanup: configuration.channels.emailCleanup,
+        emailArchive: configuration.channels.emailArchive,
         chat: effectiveChatEnabled(process.env),
         smartResponse: aiEnabled && booleanValue(process.env.COMMS_HUB_SMART_RESPONSE_ENABLED, true),
         formOrchestration: booleanValue(process.env.COMMS_HUB_FORM_ORCHESTRATION_ENABLED, true),
@@ -143,6 +144,7 @@ export function createCommsHubRouter({
         autonomousReplies: aiEnabled && booleanValue(process.env.COMMS_HUB_AUTONOMOUS_REPLIES_ENABLED, false),
         delayedActions: booleanValue(process.env.COMMS_HUB_DELAYED_ACTION_WORKER_ENABLED, true),
         retention: booleanValue(process.env.COMMS_HUB_RETENTION_WORKER_ENABLED, false),
+        housekeeping: booleanValue(process.env.COMMS_HUB_HOUSEKEEPING_ENABLED, true),
         monthEndArchive: booleanValue(process.env.COMMS_HUB_MONTH_END_ARCHIVE_ENABLED, true),
         credentialVault: booleanValue(process.env.COMMS_HUB_CREDENTIAL_VAULT_ENABLED, false),
       },
@@ -364,10 +366,11 @@ export function createCommsHubRouter({
   router.get("/diagnostics", permit("read_queue"), async (_req, res, next) => {
     try {
       const active = contextProvider();
-      const [schema, archive, social] = await Promise.all([
+      const [schema, archive, social, activeRetentionPolicies] = await Promise.all([
         active.repository.schemaStatus(),
         active.repository.getArchiveCounts(),
         active.repository.getSocialStatus(),
+        active.housekeepingRepository.activeRetentionPolicyCount(),
       ]);
       return res.status(schema.available ? 200 : 503).json({
         ok: schema.available,
@@ -375,6 +378,10 @@ export function createCommsHubRouter({
         schema,
         archive,
         social,
+        retention: {
+          activePolicies: activeRetentionPolicies,
+          healthy: activeRetentionPolicies > 0,
+        },
         configuration: {
           forms: 3,
           r2Bucket: active.config.r2BucketName,
@@ -1273,6 +1280,40 @@ export function createCommsHubRouter({
     catch (error) { next(error); }
   });
 
+  router.get("/maintenance/status", permit("read_metrics"), async (_req, res, next) => {
+    try {
+      const status = await contextProvider().housekeepingService.status();
+      return res.status(status.retentionPolicyHealthy ? 200 : 503).json({
+        ok: status.retentionPolicyHealthy,
+        service: "comms-hub",
+        status,
+      });
+    } catch (error) { next(error); }
+  });
+
+  router.post("/maintenance/run", permit("manage_retention"), async (req, res, next) => {
+    try {
+      const result = await contextProvider().housekeepingService.run({
+        runType: "monthly",
+        actor: authenticatedActor(req),
+        dryRun: req.body?.dryRun === true,
+        confirmation: String(req.body?.confirmation || ""),
+      });
+      return res.json(result);
+    } catch (error) { next(error); }
+  });
+
+  router.post("/maintenance/quarantine-review", permit("replay_quarantine"), async (req, res, next) => {
+    try {
+      const result = await contextProvider().housekeepingService.run({
+        runType: "quarantine_review",
+        actor: authenticatedActor(req),
+        dryRun: req.body?.dryRun === true,
+      });
+      return res.json(result);
+    } catch (error) { next(error); }
+  });
+
   router.get("/quarantine", permit("read_queue"), async (req, res, next) => {
     try { return res.json({ ok: true, items: await contextProvider().quarantineService.list({ status: String(req.query.status || "quarantined"), failureClass: String(
       req.query.failureClass || ""), limit: Number(req.query.limit || 100) }) }); }
@@ -1282,6 +1323,26 @@ export function createCommsHubRouter({
   router.post("/quarantine/:id/replay", permit("replay_quarantine"), async (req, res, next) => {
     try { return res.json({ ok: true, result: await contextProvider().quarantineService.replay(req.params.id, req.commsIdentity) }); }
     catch (error) { next(error); }
+  });
+
+  router.post("/quarantine/:id/resolve", permit("replay_quarantine"), async (req, res, next) => {
+    try {
+      const result = await contextProvider().quarantineService.resolve(req.params.id, req.commsIdentity, {
+        disposition: "resolved",
+        reason: String(req.body?.reason || ""),
+      });
+      return res.json({ ok: true, result });
+    } catch (error) { next(error); }
+  });
+
+  router.post("/quarantine/:id/dismiss", permit("replay_quarantine"), async (req, res, next) => {
+    try {
+      const result = await contextProvider().quarantineService.resolve(req.params.id, req.commsIdentity, {
+        disposition: "dismissed",
+        reason: String(req.body?.reason || ""),
+      });
+      return res.json({ ok: true, result });
+    } catch (error) { next(error); }
   });
 
   router.get("/metrics", permit("read_metrics"), async (req, res, next) => {
