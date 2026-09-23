@@ -91,6 +91,7 @@ Comms Hub is part of the AIMS process and is mounted at `/comms-hub`. The curren
 - delayed substantive email/Jotform replies, 2-3 calendar days later and only Monday-Friday 09:00-17:00 Europe/London;
 - podcast/case-study contribution state and editorial-brief queues;
 - provider health, follow-up and backup/restore support.
+- daily and monthly Comms Hub housekeeping with safe Info-mail archival, quarantine review, private-R2 reconciliation and checksummed audit retention.
 
 Accepted podcast contributions are advanced automatically only after RSS publication and the website rebuild both confirm success. The hand-off is idempotent, records the canonical episode URL, and leaves the contribution queued for retry if publication or Comms Hub advancement fails. See `services/comms-hub/README.md`.
 
@@ -98,7 +99,7 @@ Accepted podcast contributions are advanced automatically only after RSS publica
 
 Comms Hub email/IMAP polling, social polling, delayed actions, follow-ups and provider monitoring are in-process background workers. Production therefore **must not scale AIMS to zero**. The canonical `.github/workflows/koyeb-deployment-watch.yml` release path now fails closed unless `KOYEB_TOKEN` and `KOYEB_SERVICE` are configured and verifies the live Koyeb service definition with `npm run koyeb:min-instances:check` both before and after the deployment watch. Any configured scaling scope with `min < 1`, an unverified service identity, an API/auth failure or an unreadable Koyeb response fails the release validation.
 
-Worker progress is stored durably in D1 by migration `0022_worker_heartbeat`. Critical worker categories record registration, last attempt, last success and last failure per runtime instance. `GET /comms-hub/workers/health` (AIMS-authenticated, `read_metrics`) returns enabled/disabled state, freshness age, cadence-derived degraded/stale thresholds and multi-instance visibility without message data, email addresses or provider secrets. The same summary is included in `GET /comms-hub/metrics`.
+Worker progress is stored durably in D1 by migration `0022_worker_heartbeat`. Critical worker categories, including archive, webhook reconciliation, backup, retention, month-end archive and housekeeping, record registration, last attempt, last success and last failure per runtime instance. `GET /comms-hub/workers/health` (AIMS-authenticated, `read_metrics`) returns enabled/disabled state, freshness age, cadence-derived degraded/stale thresholds and multi-instance visibility without message data, email addresses or provider secrets. The same summary is included in `GET /comms-hub/metrics`.
 
 `/health` and `/livez` remain HTTP/process liveness signals. `/readyz` verifies application/runtime readiness. Background-worker freshness is intentionally separate at `/comms-hub/workers/health`, so an HTTP process cannot masquerade as proof that continuous communication loops are advancing.
 
