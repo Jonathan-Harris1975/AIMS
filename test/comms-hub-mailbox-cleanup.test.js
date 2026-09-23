@@ -67,6 +67,28 @@ test("one.com bulk cleanup marks bounded UID batches deleted and expunges once",
   assert.equal(commands.at(-1), "EXPUNGE");
 });
 
+test("one.com archive move copies persisted UIDs before marking only present messages deleted", async () => {
+  const commands = [];
+  const client = new OneComMailClient({});
+  client.withImapSession = async (callback) => callback({
+    async command(command) {
+      commands.push(command);
+      if (command === "UID SEARCH UID 5,6,7") return { lines: ["* SEARCH 5 7"], literals: [] };
+      return { lines: [], literals: [] };
+    },
+  });
+  const result = await client.moveMessages({ mailbox: "INBOX", uids: [5, 6, 7], destination: "Stored" });
+  assert.deepEqual(result.movedUids, [5, 7]);
+  assert.deepEqual(result.missingUids, [6]);
+  assert.deepEqual(commands, [
+    'SELECT "INBOX"',
+    "UID SEARCH UID 5,6,7",
+    'UID COPY 5,7 "Stored"',
+    "UID STORE 5,7 +FLAGS.SILENT (\\Deleted)",
+    "EXPUNGE",
+  ]);
+});
+
 function cleanupContext({ adminHasSpam = true } = {}) {
   const calls = [];
   const account = (key) => ({

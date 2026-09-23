@@ -208,6 +208,7 @@ test("upgrade from migration 0020 preserves communication state and backfills pe
   assert.deepEqual(result.appliedVersions, [
     "0021_notification_delivery_reliability",
     "0022_worker_heartbeat",
+    "0023_housekeeping",
   ]);
 
   const message = adapter.db.prepare(
@@ -263,6 +264,7 @@ test("attested legacy 0013 checksum does not block forward production migrations
   assert.deepEqual(result.appliedVersions, [
     "0021_notification_delivery_reliability",
     "0022_worker_heartbeat",
+    "0023_housekeeping",
   ]);
   assert.equal(
     adapter.db.prepare("SELECT checksum FROM comms_hub_schema_migrations WHERE version = ?")
@@ -318,6 +320,7 @@ test("a failed migration is not recorded and a retry resumes from the last commi
   assert.deepEqual(retry.appliedVersions, [
     "0021_notification_delivery_reliability",
     "0022_worker_heartbeat",
+    "0023_housekeeping",
   ]);
 
   const finalPass = await runCommsHubMigrations({ env: migrationEnv(), d1: adapter });

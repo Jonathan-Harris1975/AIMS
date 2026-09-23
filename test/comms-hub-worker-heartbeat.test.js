@@ -9,6 +9,7 @@ import {
   evaluateWorkerHeartbeat,
   workerRunAdvanced,
 } from "../services/comms-hub/workerHeartbeatState.js";
+import { CommsHubWorkerHeartbeatService } from "../services/comms-hub/workerHeartbeatService.js";
 
 class SqliteD1 {
   constructor() {
@@ -72,4 +73,27 @@ test("heartbeat success does not advance for overlapping or stopping worker tick
   assert.equal(workerRunAdvanced({ skipped: true, reason: "not_due" }), true);
   assert.equal(workerRunAdvanced({ skipped: true, reason: "outside_business_hours" }), true);
   assert.equal(workerRunAdvanced({ processed: 0 }), true);
+});
+
+test("heartbeat coverage includes every critical Comms Hub maintenance worker", () => {
+  const context = {
+    config: {
+      socialPollWorkerEnabled: false, socialPollMs: 60_000,
+      followUpWorkerEnabled: false, followUpPollMs: 60_000,
+      providerHealthWorkerEnabled: false, providerHealthPollMs: 60_000,
+      delayedActionWorkerEnabled: false, delayedActionPollMs: 60_000,
+      archiveWorkerEnabled: true, archivePollMs: 60_000,
+      zernioWebhookReconcileEnabled: true, zernioWebhookReconcileIntervalMs: 60_000,
+      zernioFamilies: { meta: { enabled: true } },
+      backupEnabled: true, backupAutomaticEnabled: true, backupIntervalMs: 86_400_000,
+      retentionWorkerEnabled: true, retentionPollMs: 86_400_000,
+      monthEndArchiveEnabled: true, monthEndArchivePollMs: 21_600_000,
+      housekeepingEnabled: true, housekeepingWorkerEnabled: true, housekeepingPollMs: 86_400_000,
+      emailAccounts: {},
+    },
+  };
+  const categories = new Set(new CommsHubWorkerHeartbeatService({ context }).criticalDescriptors().map((item) => item.category));
+  for (const category of ["archive", "webhook_reconcile", "backup", "retention", "month_end_archive", "housekeeping"]) {
+    assert.equal(categories.has(category), true, `${category} must be monitored`);
+  }
 });

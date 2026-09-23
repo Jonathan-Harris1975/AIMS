@@ -354,6 +354,42 @@ test("AIMS reuses an existing COMMS_HUB_RESTORE_DATABASE by exact name", async (
   assert.deepEqual(result, { id: "existing-restore-db", name: "COMMS_HUB_RESTORE_DATABASE", created: false, source: "discovered_by_name" });
 });
 
+test("monthly restore validation can safely recreate only the isolated restore database", async () => {
+  const calls = [];
+  const config = {
+    cloudflareApiBaseUrl: "https://api.cloudflare.com/client/v4",
+    cloudflareAccountId: "account-1",
+    d1DatabaseId: "production-db",
+    d1ApiToken: "token",
+    restoreDatabaseName: "COMMS_HUB_RESTORE_DATABASE",
+    restoreDatabaseId: "",
+    backupRequestTimeoutMs: 10_000,
+  };
+  const fetchImpl = async (url, options) => {
+    calls.push({ url, method: options.method, body: options.body });
+    if (options.method === "GET") {
+      return { ok: true, status: 200, json: async () => ({ success: true, result: [{ uuid: "old-restore-db", name: "COMMS_HUB_RESTORE_DATABASE" }] }) };
+    }
+    if (options.method === "DELETE" && url.endsWith("/d1/database/old-restore-db")) {
+      return { ok: true, status: 200, json: async () => ({ success: true, result: null }) };
+    }
+    if (options.method === "POST" && url.endsWith("/d1/database")) {
+      return { ok: true, status: 200, json: async () => ({ success: true, result: { uuid: "new-restore-db", name: "COMMS_HUB_RESTORE_DATABASE" } }) };
+    }
+    throw new Error(`Unexpected request: ${options.method} ${url}`);
+  };
+  const result = await new CloudflareBackupClient(config, { fetchImpl }).recreateRestoreDatabase();
+  assert.deepEqual(result, {
+    id: "new-restore-db",
+    name: "COMMS_HUB_RESTORE_DATABASE",
+    created: true,
+    replacedId: "old-restore-db",
+    source: "recreated",
+  });
+  assert.deepEqual(calls.map((call) => call.method), ["GET", "DELETE", "POST"]);
+  assert.equal(calls.some((call) => call.url.includes("production-db")), false);
+});
+
 test("Cloudflare D1 import uses init, checksum upload and ingest, and refuses the production target", async () => {
   const sql = Buffer.from("CREATE TABLE x(id INTEGER);");
   const expectedEtag = createHash("md5").update(sql).digest("hex");
