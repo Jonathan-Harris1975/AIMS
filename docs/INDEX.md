@@ -7,6 +7,7 @@ This index separates durable operational references from versioned implementatio
 | Document | Status |
 |---|---|
 | [`ENVIRONMENT_REFERENCE.md`](./ENVIRONMENT_REFERENCE.md) | Current reference |
+| [`COMMS_HUB_HOUSEKEEPING.md`](./COMMS_HUB_HOUSEKEEPING.md) | Current reference |
 | [`MODEL_GOVERNANCE.md`](./MODEL_GOVERNANCE.md) | Current reference |
 | [`OPERATIONAL_ALERTING.md`](./OPERATIONAL_ALERTING.md) | Current reference |
 | [`OPERATIONS.md`](./OPERATIONS.md) | Current reference |
