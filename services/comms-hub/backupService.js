@@ -154,16 +154,22 @@ export class CommsHubBackupService {
     }
   }
 
-  async validateRestore(backupRunId, { actor = "aims:comms-hub" } = {}) {
+  async validateRestore(backupRunId, { actor = "aims:comms-hub", resetTarget = false } = {}) {
     this.assertEnabled();
     const run = await this.context.aiRepository.getBackupRun(backupRunId);
     if (!run) throw new CommsHubError(404, "backup_run_not_found", "Backup run was not found.");
     if (!run.r2_export_key || !run.export_sha256 || !run.r2_manifest_key || !run.manifest_sha256) {
       throw new CommsHubError(409, "backup_not_complete", "Backup has no completed export and manifest to validate.");
     }
-    const restoreDatabase = await this.context.backupClient.ensureRestoreDatabase();
+    const restoreDatabase = resetTarget
+      ? await this.context.backupClient.recreateRestoreDatabase()
+      : await this.context.backupClient.ensureRestoreDatabase();
     const target = restoreDatabase.id;
-    await this.context.aiRepository.updateBackupRun(run.id, { status: "validating", validationStatus: "running" });
+    await this.context.aiRepository.updateBackupRun(run.id, {
+      status: "validating",
+      validationStatus: "running",
+      restoreDatabaseId: target,
+    });
     try {
       const sql = await this.context.backupR2.getBuffer(run.r2_export_key);
       const actualExportSha256 = sha256Hex(sql);

@@ -12,6 +12,7 @@ import { MalwareScannerClient } from "./clients/malwareScannerClient.js";
 import { CommsHubRepository } from "./repositories/commsRepository.js";
 import { CommsAiRepository } from "./repositories/commsAiRepository.js";
 import { CommsOperationsRepository } from "./repositories/commsOperationsRepository.js";
+import { CommsHousekeepingRepository } from "./repositories/commsHousekeepingRepository.js";
 import { CommsHubArchiveWorker } from "./workers/archiveWorker.js";
 import { CommsHubSocialPollWorker } from "./workers/socialPollWorker.js";
 import { CommsHubFollowUpWorker } from "./workers/followUpWorker.js";
@@ -22,6 +23,7 @@ import { CommsHubDelayedActionWorker } from "./workers/delayedActionWorker.js";
 import { CommsHubRetentionWorker } from "./workers/retentionWorker.js";
 import { CommsHubMonthEndConversationArchiveWorker } from "./workers/monthEndConversationArchiveWorker.js";
 import { CommsHubWebhookReconcileWorker } from "./workers/webhookReconcileWorker.js";
+import { CommsHubHousekeepingWorker } from "./workers/housekeepingWorker.js";
 import { CommsHubAiWorkflowService } from "./aiWorkflowService.js";
 import { PodcastContributionWorkflowService } from "./podcastWorkflowService.js";
 import { CommsHubProviderHealthService } from "./providerHealthService.js";
@@ -33,6 +35,8 @@ import { CommsHubWorkflowEngineService } from "./workflowEngineService.js";
 import { CommsHubAttachmentService } from "./attachmentService.js";
 import { CommsHubEmailService } from "./emailService.js";
 import { CommsHubEmailMailboxCleanupService } from "./emailMailboxCleanupService.js";
+import { CommsHubEmailArchiveService } from "./emailArchiveService.js";
+import { CommsHubHousekeepingService } from "./housekeepingService.js";
 import { CommsHubChatService } from "./chatService.js";
 import { CommsHubReplyDeliveryService } from "./replyDeliveryService.js";
 import { CommsHubFormProcessingService } from "./formProcessingService.js";
@@ -139,6 +143,7 @@ export function createCommsHubContext({ env = process.env, fetchImpl, r2ArchiveS
   const repository = new CommsHubRepository(d1);
   const aiRepository = new CommsAiRepository(d1);
   const operationsRepository = new CommsOperationsRepository(d1);
+  const housekeepingRepository = new CommsHousekeepingRepository(d1);
   const primaryR2 = r2ArchiveStore || new PrivateR2Client({ ...config, r2PrivateBucketName: config.r2BucketName });
   const privateR2 = config.r2PrivateBucketName ? new PrivateR2Client(config) : null;
   const sourceR2 = config.backupEnabled ? primaryR2 : null;
@@ -178,6 +183,7 @@ export function createCommsHubContext({ env = process.env, fetchImpl, r2ArchiveS
     repository,
     aiRepository,
     operationsRepository,
+    housekeepingRepository,
     aiSearch: new AiSearchClient(config, fetchImpl ? { fetchImpl } : undefined),
     primaryR2,
     privateR2,
@@ -198,6 +204,7 @@ export function createCommsHubContext({ env = process.env, fetchImpl, r2ArchiveS
   active.attachmentService = new CommsHubAttachmentService({ context: active, ...(fetchImpl ? { fetchImpl } : {}) });
   active.emailService = new CommsHubEmailService({ context: active });
   active.emailMailboxCleanupService = new CommsHubEmailMailboxCleanupService({ context: active });
+  active.emailArchiveService = new CommsHubEmailArchiveService({ context: active });
   active.chatService = new CommsHubChatService({ context: active });
   active.replyDelivery = new CommsHubReplyDeliveryService({ context: active });
   active.formProcessingService = new CommsHubFormProcessingService({ context: active });
@@ -224,6 +231,8 @@ export function createCommsHubContext({ env = process.env, fetchImpl, r2ArchiveS
   active.retentionWorker = new CommsHubRetentionWorker({ context: active });
   active.monthEndConversationArchiveWorker = new CommsHubMonthEndConversationArchiveWorker({ context: active });
   active.webhookReconcileWorker = new CommsHubWebhookReconcileWorker({ context: active });
+  active.housekeepingService = new CommsHubHousekeepingService({ context: active });
+  active.housekeepingWorker = new CommsHubHousekeepingWorker({ context: active });
   active.workerHeartbeatService = new CommsHubWorkerHeartbeatService({ context: active });
   active.workerHeartbeatService.instrumentCriticalWorkers();
   active.quarantineService.register('email_poll', (item) => {
@@ -311,6 +320,9 @@ export async function startCommsHubRuntime() {
       startupStage = "worker_registration";
       await active.workerHeartbeatService.registerCriticalWorkers();
 
+      startupStage = "retention_policy_health";
+      const activeRetentionPolicies = await active.housekeepingRepository.activeRetentionPolicyCount();
+
       startupStage = "backup_preflight";
       runtimeState = { status: "starting", ready: false, stage: startupStage, detail: "checking_backup_runtime" };
       const backupRuntime = await prepareCommsHubBackupRuntime(active);
@@ -326,16 +338,23 @@ export async function startCommsHubRuntime() {
       const delayedActionWorkerStarted = active.delayedActionWorker.start();
       const retentionWorkerStarted = active.retentionWorker.start();
       const monthEndConversationArchiveWorkerStarted = active.monthEndConversationArchiveWorker.start();
+      const housekeepingWorkerStarted = active.housekeepingWorker.start();
       clearRuntimeSupervisorTimer();
       runtimeFailureCount = 0;
-      const warnings = backupRuntime.ready ? [] : [{ component: "backup", detail: backupRuntime.detail }];
+      const warnings = [
+        ...(backupRuntime.ready ? [] : [{ component: "backup", detail: backupRuntime.detail }]),
+        ...(activeRetentionPolicies > 0 ? [] : [{ component: "retention", detail: "no_active_policy" }]),
+      ];
       runtimeState = {
         status: warnings.length ? "ready_with_warnings" : "ready",
         ready: true,
         stage: "running",
         detail: warnings.length ? "configured_workers_started_with_warnings" : "configured_workers_started",
         warnings,
-        components: { backup: backupRuntime },
+        components: {
+          backup: backupRuntime,
+          retention: { ready: activeRetentionPolicies > 0, activePolicies: activeRetentionPolicies },
+        },
         workers: {
           archive: archiveWorkerStarted,
           socialPoll: socialPollWorkerStarted,
@@ -347,6 +366,7 @@ export async function startCommsHubRuntime() {
           delayedActions: delayedActionWorkerStarted,
           retention: retentionWorkerStarted,
           monthEndConversationArchive: monthEndConversationArchiveWorkerStarted,
+          housekeeping: housekeepingWorkerStarted,
         },
       };
       log.info("commsHub.runtime.started", {
@@ -360,6 +380,7 @@ export async function startCommsHubRuntime() {
         delayedActionWorkerStarted,
         retentionWorkerStarted,
         monthEndConversationArchiveWorkerStarted,
+        housekeepingWorkerStarted,
         forms: readiness.forms,
         email: {
           enabled: active.config.emailEnabled,
@@ -412,7 +433,8 @@ export async function startCommsHubRuntime() {
         },
       });
       return { started: true, archiveWorkerStarted, socialPollWorkerStarted, webhookReconcileWorkerStarted, followUpWorkerStarted, providerHealthWorkerStarted,
-         backupWorkerStarted, emailPollWorkerStarted, delayedActionWorkerStarted, retentionWorkerStarted, monthEndConversationArchiveWorkerStarted };
+         backupWorkerStarted, emailPollWorkerStarted, delayedActionWorkerStarted, retentionWorkerStarted, monthEndConversationArchiveWorkerStarted,
+         housekeepingWorkerStarted };
     } catch (error) {
       const detail = safeRuntimeCode(error);
       const failureCode = safeReadinessToken(error?.failureCode || error?.cause?.code || error?.cause?.name, "unknown");
@@ -455,6 +477,7 @@ export async function stopCommsHubRuntime() {
       context.delayedActionWorker.stop(),
       context.retentionWorker.stop(),
       context.monthEndConversationArchiveWorker.stop(),
+      context.housekeepingWorker.stop(),
     ]);
   }
   context = null;

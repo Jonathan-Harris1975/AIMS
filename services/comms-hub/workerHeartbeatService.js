@@ -18,6 +18,17 @@ export class CommsHubWorkerHeartbeatService {
       { category: "follow_up", key: "default", enabled: config.followUpWorkerEnabled === true, pollIntervalMs: config.followUpPollMs },
       { category: "provider_monitor", key: "default", enabled: config.providerHealthWorkerEnabled === true, pollIntervalMs: config.providerHealthPollMs },
       { category: "delayed_actions", key: "default", enabled: config.delayedActionWorkerEnabled === true, pollIntervalMs: config.delayedActionPollMs },
+      { category: "archive", key: "default", enabled: config.archiveWorkerEnabled === true, pollIntervalMs: config.archivePollMs },
+      {
+        category: "webhook_reconcile",
+        key: "default",
+        enabled: config.zernioWebhookReconcileEnabled === true && Object.values(config.zernioFamilies || {}).some((family) => family.enabled),
+        pollIntervalMs: config.zernioWebhookReconcileIntervalMs,
+      },
+      { category: "backup", key: "default", enabled: config.backupEnabled === true && config.backupAutomaticEnabled === true, pollIntervalMs: config.backupIntervalMs },
+      { category: "retention", key: "default", enabled: config.retentionWorkerEnabled === true, pollIntervalMs: config.retentionPollMs },
+      { category: "month_end_archive", key: "default", enabled: config.monthEndArchiveEnabled === true, pollIntervalMs: config.monthEndArchivePollMs },
+      { category: "housekeeping", key: "default", enabled: config.housekeepingEnabled === true && config.housekeepingWorkerEnabled === true, pollIntervalMs: config.housekeepingPollMs },
     ];
     for (const [accountKey, account] of Object.entries(config.emailAccounts || {})) {
       descriptors.push({
@@ -89,6 +100,12 @@ export class CommsHubWorkerHeartbeatService {
     bind(this.context.followUpWorker, "follow_up");
     bind(this.context.providerHealthWorker, "provider_monitor");
     bind(this.context.delayedActionWorker, "delayed_actions");
+    bind(this.context.archiveWorker, "archive");
+    bind(this.context.webhookReconcileWorker, "webhook_reconcile");
+    bind(this.context.backupWorker, "backup");
+    bind(this.context.retentionWorker, "retention");
+    bind(this.context.monthEndConversationArchiveWorker, "month_end_archive");
+    bind(this.context.housekeepingWorker, "housekeeping");
     for (const [accountKey, worker] of Object.entries(this.context.emailPollWorkers || {})) bind(worker, "inbound_email", accountKey);
   }
 

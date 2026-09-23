@@ -70,6 +70,8 @@ For an uncertain SMTP outcome, inspect provider/mailbox state before taking acti
 
 Production polls only the configured `info@jonathan-harris.online` account. Admin/newsletter mailbox automation is disabled. With `COMMS_HUB_EMAIL_HISTORICAL_BACKFILL_ENABLED=false`, the first enabled poll performs a bounded recovery of the latest `COMMS_HUB_EMAIL_STARTUP_RECOVERY_UID_LOOKBACK` UIDs (default 25) and ignores recovered messages older than `COMMS_HUB_EMAIL_STARTUP_RECOVERY_MAX_AGE_DAYS` (default 14) before establishing the current watermark. This avoids silently skipping messages that arrived shortly before a deployment without turning startup into an unlimited historical import. Mailbox resets/UIDVALIDITY changes still re-baseline before new body fetches. A privileged forced drain can pass `lookbackUids` (maximum 100; default recovery replay 100) to safely re-check recent UIDs; message persistence remains idempotent.
 
+Monthly housekeeping may archive old mail only for the managed Info account. A message is eligible only after it has been persisted in D1, is older than `COMMS_HUB_EMAIL_ARCHIVE_AFTER_DAYS` and belongs to a closed, resolved or already archived conversation. AIMS resolves exactly one selectable server-advertised `\Archive` special-use folder, copies matching UIDs there, and marks the source messages deleted only after the copy succeeds. Missing UIDs are reconciled in metadata. Admin and Newsletter remain outside message automation and are touched only by the explicit Trash/Junk cleanup route.
+
 Email attachments use the same private quarantine, malware scan and clean-promotion flow as form attachments. An unsafe attachment does not silently discard its parent conversation.
 
 ## Forms and attachments
@@ -108,6 +110,8 @@ Public exact-path intake/health routes have their own verification contract. Oth
 - chat status, reply and takeover routes;
 - provider-health snapshot routes;
 - backup/status/restore-validation routes.
+- housekeeping status/run/quarantine-review routes;
+- explicit quarantine replay, resolve and dismiss routes.
 
 Use the route modules under `services/comms-hub/routes/` as the exact HTTP contract rather than duplicating a long endpoint catalogue here.
 
@@ -117,7 +121,7 @@ The current service can run email polling, social polling, workflow evaluation, 
 
 Production Koyeb scaling is release-gated. `.github/workflows/koyeb-deployment-watch.yml` requires `KOYEB_TOKEN` and `KOYEB_SERVICE`, queries the actual service definition and runs `npm run koyeb:min-instances:check` before and after the deployment watch. The verifier fails closed when the service cannot be queried/identified, scaling cannot be parsed or any configured scaling scope has a minimum below 1. A scale-to-zero production definition therefore makes the deployment validation fail.
 
-Migration `0022_worker_heartbeat` stores per-instance heartbeat records for critical continuous worker classes: inbound email, social polling, delayed actions, follow-ups and provider monitoring. Each enabled worker exposes its poll cadence, last attempt, last success, last failure, freshness age, instance count and a cadence-derived `healthy`, `degraded` or `stale` state. Disabled worker classes are reported as `disabled`. No message body, address, token or provider secret is stored in this heartbeat table.
+Migration `0022_worker_heartbeat` stores per-instance heartbeat records for critical continuous worker classes: inbound email, social polling, delayed actions, follow-ups, provider monitoring, intake archive, webhook reconciliation, backup, retention, month-end archive and housekeeping. Each enabled worker exposes its poll cadence, last attempt, last success, last failure, freshness age, instance count and a cadence-derived `healthy`, `degraded` or `stale` state. Disabled worker classes are reported as `disabled`. No message body, address, token or provider secret is stored in this heartbeat table.
 
 Use authenticated `GET /comms-hub/workers/health` (`read_metrics`) for background-loop monitoring. A stale overall state returns HTTP 503; healthy/degraded states return 200 and retain the detailed worker statuses. `GET /comms-hub/metrics` includes the same current worker-health summary alongside historical communications metrics.
 
@@ -129,9 +133,15 @@ These signals are deliberately separate:
 
 Email polling still honours business hours for mailbox work. Its timer now enters the worker on every configured cadence even outside the delivery window, allowing a safe `outside_business_hours` cycle to advance the worker heartbeat without fetching mail.
 
+## Governed housekeeping
+
+Migration `0023_housekeeping` seeds a conservative 365-day archive-only retention policy and adds durable housekeeping-run and audit-archive checkpoint tables. The daily worker expires stale approvals/forms and webhook nonces, prunes only safe completed records and rolls off provider-health samples while retaining each provider's latest state. The monthly MAST run adds restore validation and backup rotation, private-R2 reconciliation, checksummed audit archival, subject-access export expiry and resolved Info-mail archival. The weekly review reports unresolved quarantine; it never automatically deletes unresolved items.
+
+`GET /comms-hub/maintenance/status` exposes policy health and recent run results. `POST /comms-hub/maintenance/run` requires `confirmation=run-comms-hub-monthly-housekeeping` for a mutating monthly run. `POST /comms-hub/maintenance/quarantine-review` generates the bounded weekly report. Authorised reviewers resolve or dismiss individual records through `/comms-hub/quarantine/:id/resolve` and `/dismiss`, preserving an audit attempt.
+
 ## D1 and storage
 
-Comms Hub migrations are additive and are applied/checkable through the existing migration tooling; the current required manifest ends at `0022_worker_heartbeat`. The runtime D1 bridge under `workers/comms-hub-data-plane/` has a narrow authenticated SQL contract. Conversation/worker operational state is durable in D1, while private attachments and workflow artefacts use the configured Comms Hub R2 lanes.
+Comms Hub migrations are additive and are applied/checkable through the existing migration tooling; the current required manifest ends at `0023_housekeeping`. The runtime D1 bridge under `workers/comms-hub-data-plane/` has a narrow authenticated SQL contract. Conversation/worker operational state is durable in D1, while private attachments and workflow artefacts use the configured Comms Hub R2 lanes.
 
 ## Production controls
 
@@ -144,6 +154,6 @@ Useful verification commands are `npm run verify`, `npm run secret:scan`, `npm a
 
 ### Restore database bootstrap
 
-When governed backups are enabled, AIMS resolves `COMMS_HUB_RESTORE_DATABASE` (default: `COMMS_HUB_RESTORE_DATABASE`) against Cloudflare D1 and creates it when absent. `COMMS_HUB_RESTORE_DATABASE_ID` is retained only as an optional explicit UUID override. The production `D1_UUID` is never accepted as a restore target.
+When governed backups are enabled, AIMS resolves `COMMS_HUB_RESTORE_DATABASE` (default: `COMMS_HUB_RESTORE_DATABASE`) against Cloudflare D1 and creates it when absent. Monthly housekeeping deletes and recreates this isolated database before importing the latest complete backup, so every restore test starts empty. `COMMS_HUB_RESTORE_DATABASE_ID` is retained only as an optional explicit UUID override; leave it blank in production so name-based discovery follows a recreated database UUID. The production `D1_UUID` is never accepted as a restore target.
 
 AI Search retrieval is fail-soft at runtime: missing/unindexed search evidence does not take the AI workflow offline. Evidence-required replies without retrieved evidence remain human-review-only. Book discovery does not depend on AI Search retrieval because verified catalogue records are injected as first-party evidence.
