@@ -21,6 +21,14 @@ test("artwork policy layers base brand, season and optional calendar event", asy
   assert.equal(getArtworkEvent("2026-12-24"), "christmas");
   assert.equal(getArtworkEvent("2026-12-31"), "new_year");
   assert.equal(getArtworkEvent("2026-04-05"), "easter");
+  assert.equal(getArtworkEvent("2026-02-10"), "safer_internet_day");
+  assert.equal(getArtworkEvent("2026-03-08"), "international_womens_day");
+  assert.equal(getArtworkEvent("2026-03-15"), "mothering_sunday");
+  assert.equal(getArtworkEvent("2026-04-22"), "earth_day");
+  assert.equal(getArtworkEvent("2026-06-01"), "pride_month");
+  assert.equal(getArtworkEvent("2026-06-21"), "fathers_day");
+  assert.equal(getArtworkEvent("2026-11-05"), "bonfire_night");
+  assert.equal(getArtworkEvent("2026-11-11"), "remembrance");
   assert.equal(getArtworkEvent("2026-09-24"), null);
   const direction = getSeasonalPaletteDirection("2026-12-24");
   assert.match(direction, /Base brand:/);
