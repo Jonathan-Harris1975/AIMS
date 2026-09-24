@@ -13,6 +13,15 @@ const EVENT_PALETTES = Object.freeze({
   easter: "Keep the active seasonal palette and add restrained soft yellow, fresh green and pale lavender highlights. Keep the treatment modern and editorial rather than novelty or confectionery-led.",
   halloween: "Keep the active seasonal palette and add restrained ember-orange, aubergine and smoky-violet highlights. Keep the treatment atmospheric rather than horror, gore or novelty styling.",
   christmas: "Keep the active seasonal palette and add restrained evergreen, warm gold and cranberry highlights. Keep the treatment elegant and editorial rather than novelty, cartoon or excessive festive styling.",
+  safer_internet_day: "Keep the active seasonal palette and add restrained trustworthy cyan, cobalt and cool-violet highlights. Keep the treatment digital, calm and security-aware rather than alarmist.",
+  international_womens_day: "Keep the active seasonal palette and add restrained violet, magenta and warm-white highlights. Keep the treatment contemporary and editorial, avoiding tokenistic iconography.",
+  st_patricks_day: "Keep the active seasonal palette and add restrained emerald, moss and soft-gold highlights. Keep the treatment elegant rather than novelty shamrock styling.",
+  mothering_sunday: "Keep the active seasonal palette and add restrained rose, soft lilac and warm cream highlights. Keep the treatment warm and editorial rather than greeting-card styling.",
+  earth_day: "Keep the active seasonal palette and add restrained leaf-green, ocean-teal and earth-toned highlights. Keep the treatment environmental and modern rather than generic globe imagery.",
+  pride_month: "Keep the active seasonal palette and allow restrained spectrum highlights as secondary accents only. Preserve brand hierarchy, readability and editorial restraint rather than using a full rainbow wash.",
+  fathers_day: "Keep the active seasonal palette and add restrained cobalt, teal and warm-amber highlights. Keep the treatment warm and editorial rather than greeting-card styling.",
+  bonfire_night: "Keep the active seasonal palette and add restrained ember-orange, warm gold and smoke-violet highlights. Keep the treatment atmospheric and abstract rather than depicting unsafe pyrotechnic handling.",
+  remembrance: "Keep the active seasonal palette and add restrained poppy-red and warm-grey accents. Keep the treatment quiet, respectful and minimal rather than celebratory.",
 });
 
 function easterSundayUtc(year) {
@@ -105,12 +114,25 @@ export function getArtworkEvent(value) {
   // Event layer is intentionally short-lived and overrides only accent direction.
   if ((month === 12 && day === 31) || (month === 1 && day <= 2)) return "new_year";
   if (month === 2 && day === 14) return "valentines";
+  if (month === 3 && day === 8) return "international_womens_day";
+  if (month === 3 && day === 17) return "st_patricks_day";
+  if (month === 4 && day === 22) return "earth_day";
   if (month === 10 && day === 31) return "halloween";
+  if (month === 11 && day === 5) return "bonfire_night";
+  if (month === 11 && day === 11) return "remembrance";
   if (month === 12 && day >= 20 && day <= 30) return "christmas";
+
+  // Safer Internet Day: second Tuesday in February.
+  if (month === 2 && date.getUTCDay() === 2 && day >= 8 && day <= 14) return "safer_internet_day";
 
   const easter = easterSundayUtc(year);
   const deltaDays = Math.round((utcDayKey(date) - utcDayKey(easter)) / 86400000);
+  if (deltaDays === -21) return "mothering_sunday";
   if (deltaDays >= -2 && deltaDays <= 1) return "easter";
+
+  // Father's Day: third Sunday in June. Specific day overrides the month-long Pride accent.
+  if (month === 6 && date.getUTCDay() === 0 && day >= 15 && day <= 21) return "fathers_day";
+  if (month === 6) return "pride_month";
   return null;
 }
 
