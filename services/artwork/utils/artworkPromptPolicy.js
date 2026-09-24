@@ -8,19 +8,33 @@ const SEASONAL_PALETTES = Object.freeze({
 });
 
 const EVENT_PALETTES = Object.freeze({
-  new_year: "Keep the active seasonal palette and add restrained champagne-gold, silver and midnight-blue celebratory highlights. Avoid fireworks text, year numerals and party clichés unless the brief explicitly requires them.",
+  new_year:
+    "Keep the active seasonal palette and add restrained champagne-gold, silver and midnight-blue celebratory highlights. " +
+    "Avoid fireworks text, year numerals and party clichés unless the brief explicitly requires them.",
   valentines: "Keep the active seasonal palette and add restrained berry, rose and warm blush highlights. Keep the treatment editorial rather than romantic-card styling.",
-  easter: "Keep the active seasonal palette and add restrained soft yellow, fresh green and pale lavender highlights. Keep the treatment modern and editorial rather than novelty or confectionery-led.",
+  easter:
+    "Keep the active seasonal palette and add restrained soft yellow, fresh green and pale lavender highlights. " +
+    "Keep the treatment modern and editorial rather than novelty or confectionery-led.",
   halloween: "Keep the active seasonal palette and add restrained ember-orange, aubergine and smoky-violet highlights. Keep the treatment atmospheric rather than horror, gore or novelty styling.",
-  christmas: "Keep the active seasonal palette and add restrained evergreen, warm gold and cranberry highlights. Keep the treatment elegant and editorial rather than novelty, cartoon or excessive festive styling.",
-  safer_internet_day: "Keep the active seasonal palette and add restrained trustworthy cyan, cobalt and cool-violet highlights. Keep the treatment digital, calm and security-aware rather than alarmist.",
-  international_womens_day: "Keep the active seasonal palette and add restrained violet, magenta and warm-white highlights. Keep the treatment contemporary and editorial, avoiding tokenistic iconography.",
+  christmas:
+    "Keep the active seasonal palette and add restrained evergreen, warm gold and cranberry highlights. " +
+    "Keep the treatment elegant and editorial rather than novelty, cartoon or excessive festive styling.",
+  safer_internet_day:
+    "Keep the active seasonal palette and add restrained trustworthy cyan, cobalt and cool-violet highlights. " +
+    "Keep the treatment digital, calm and security-aware rather than alarmist.",
+  international_womens_day:
+    "Keep the active seasonal palette and add restrained violet, magenta and warm-white highlights. " +
+    "Keep the treatment contemporary and editorial, avoiding tokenistic iconography.",
   st_patricks_day: "Keep the active seasonal palette and add restrained emerald, moss and soft-gold highlights. Keep the treatment elegant rather than novelty shamrock styling.",
   mothering_sunday: "Keep the active seasonal palette and add restrained rose, soft lilac and warm cream highlights. Keep the treatment warm and editorial rather than greeting-card styling.",
   earth_day: "Keep the active seasonal palette and add restrained leaf-green, ocean-teal and earth-toned highlights. Keep the treatment environmental and modern rather than generic globe imagery.",
-  pride_month: "Keep the active seasonal palette and allow restrained spectrum highlights as secondary accents only. Preserve brand hierarchy, readability and editorial restraint rather than using a full rainbow wash.",
+  pride_month:
+    "Keep the active seasonal palette and allow restrained spectrum highlights as secondary accents only. " +
+    "Preserve brand hierarchy, readability and editorial restraint rather than using a full rainbow wash.",
   fathers_day: "Keep the active seasonal palette and add restrained cobalt, teal and warm-amber highlights. Keep the treatment warm and editorial rather than greeting-card styling.",
-  bonfire_night: "Keep the active seasonal palette and add restrained ember-orange, warm gold and smoke-violet highlights. Keep the treatment atmospheric and abstract rather than depicting unsafe pyrotechnic handling.",
+  bonfire_night:
+    "Keep the active seasonal palette and add restrained ember-orange, warm gold and smoke-violet highlights. " +
+    "Keep the treatment atmospheric and abstract rather than depicting unsafe pyrotechnic handling.",
   remembrance: "Keep the active seasonal palette and add restrained poppy-red and warm-grey accents. Keep the treatment quiet, respectful and minimal rather than celebratory.",
 });
 
