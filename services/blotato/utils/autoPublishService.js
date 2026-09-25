@@ -655,7 +655,7 @@ async function createAndWaitForVideo({ templateId, templateIdCandidates = [], pa
       maxAttempts,
       intervalMs,
       finalGraceMs,
-      maxDurationMs: positiveIntEnv("BLOTATO_VIDEO_POLL_MAX_DURATION_MS", 600_000, 3_600_000),
+      maxDurationMs: positiveIntEnv("BLOTATO_VIDEO_POLL_MAX_DURATION_MS", 1_800_000, 3_600_000),
       maxConsecutivePendingErrors: positiveIntEnv("BLOTATO_VIDEO_PENDING_ERROR_LIMIT", 120, 180),
       progressEvery: positiveIntEnv("BLOTATO_VIDEO_POLL_PROGRESS_EVERY", 30, 240),
       onProgress: (kind, details) => info(`blotato.poll.${kind}`, details),
