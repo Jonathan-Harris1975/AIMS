@@ -1761,7 +1761,7 @@ export async function buildAndScheduleDailyLane(laneKey, options = {}) {
         date: publishDate,
         prompt: imagePrompt,
         fallbackUrl: lane.imageUrl,
-        allowFallback: booleanValue(process.env.ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK, true),
+        allowFallback: booleanValue(process.env.ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK, false),
       });
 
       if (!artwork?.ok || !artwork.publicUrl) {
@@ -2661,7 +2661,7 @@ infrastructure grounded in this part's evidence.",
           "No visible text, labels, logos or typography.",
         ].join("\n"),
         fallbackUrl: MINI_SERIES_CONFIG.fallbackImageUrl,
-        allowFallback: booleanValue(process.env.ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK, true),
+        allowFallback: booleanValue(process.env.ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK, false),
       });
       if (!artwork?.ok || !artwork.publicUrl) {
         const errorMessage = artwork?.error || `Mini-series part ${item.index + 1} did not produce a usable image.`;
@@ -3120,7 +3120,7 @@ export async function buildAndSchedulePodcastThursdayPromo(options = {}) {
         "Avoid generic glowing brains, circuit-head silhouettes, floating decorative networks, stock-office scenes and decorative AI wallpaper.",
       ].filter(Boolean).join("\n"),
       fallbackUrl: PODCAST_PROMO_CONFIG.fallbackImageUrl,
-      allowFallback: booleanValue(process.env.ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK, true),
+      allowFallback: booleanValue(process.env.ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK, false),
     });
     if (!artwork.ok || !artwork.publicUrl) {
       const err = new Error(`Thursday podcast promotion artwork unavailable: ${artwork.error || "no usable image URL returned"}`);
@@ -3529,7 +3529,7 @@ export async function buildAndScheduleQuizSeries(options = {}) {
   const dryRun = Boolean(options.dryRun);
   let questionImageUrl = options.questionImageUrl || QUIZ_CONFIG.questionImageUrl;
   let answerImageUrl = options.answerImageUrl || QUIZ_CONFIG.answerImageUrl;
-  const allowCuratedArtworkFallback = booleanValue(process.env.ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK, true);
+  const allowCuratedArtworkFallback = booleanValue(process.env.ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK, false);
   const artworkWarnings = [];
 
   const questionSlotClaim = await claimZernioSlot({
