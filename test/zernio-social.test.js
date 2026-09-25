@@ -825,7 +825,7 @@ test("Sunday spotlight avoids fabricated likenesses and daily evergreen artwork 
   assert.match(source, /no books, papers, notebooks, theses, whiteboards, chalkboards/i);
   assert.match(source, /createSocialArtwork\(/);
   assert.match(source, /fallbackUrl: lane\.imageUrl/);
-  assert.match(source, /allowFallback: booleanValue\(process\.env\.ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK, true\)/);
+  assert.match(source, /allowFallback: booleanValue\(process\.env\.ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK, false\)/);
   assert.match(source, /!artwork\?\.ok \|\| !artwork\.publicUrl/);
   assert.doesNotMatch(source, /!artwork\?\.ok \|\| !artwork\.publicUrl \|\| artwork\.fallback/);
   assert.match(source, /post\.imagePrompt = imagePrompt/);

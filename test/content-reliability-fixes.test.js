@@ -286,7 +286,7 @@ test("Zernio keeps fresh generated artwork primary and permits the curated store
   assert.match(socialArtwork, /if \(!allowFallback\)/);
   assert.match(socialArtwork, /ok: publishableFallback,[\s\S]*diagnosticUrl: publicUrl,[\s\S]*publicUrl: publishableFallback \? publicUrl : ""/);
   assert.match(zernioScheduler, /fallbackUrl: lane\.imageUrl/);
-  assert.match(zernioScheduler, /allowFallback: booleanValue\(process\.env\.ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK, true\)/);
+  assert.match(zernioScheduler, /allowFallback: booleanValue\(process\.env\.ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK, false\)/);
   assert.match(zernioScheduler, /artwork\.fallback/);
   assert.match(weeklyBlog, /reason: "artwork-unavailable"/);
   assert.match(socialBlog, /DEFAULT_SOCIAL_FALLBACK_IMAGE_URL/);
@@ -301,7 +301,7 @@ test("Zernio keeps fresh generated artwork primary and permits the curated store
   assert.match(env, /^NEWSLETTER_AI_EDGE_FALLBACK_IMAGE_URL=$/m);
   assert.match(env, /^SOCIAL_BLOG_ALLOW_DETERMINISTIC_FALLBACK=false$/m);
   assert.match(env, /^NEWSLETTER_ALLOW_DETERMINISTIC_FALLBACK=true$/m);
-  assert.match(env, /^ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK=true$/m);
+  assert.match(env, /^ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK=false$/m);
   assert.match(env, /^ZERNIO_ALLOW_DETERMINISTIC_FALLBACK=false$/m);
 });
 
@@ -346,7 +346,7 @@ test("mini-series creation retries weak plans and duplicate parts, then fails cl
   assert.match(client, /export async function deletePost/);
   assert.match(client, /"x-request-id": requestId/);
   assert.match(scheduler, /zernio-daily-artwork-unavailable/);
-  assert.match(scheduler, /allowFallback: booleanValue\(process\.env\.ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK, true\)/);
+  assert.match(scheduler, /allowFallback: booleanValue\(process\.env\.ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK, false\)/);
   assert.doesNotMatch(scheduler, /!artwork\?\.ok \|\| !artwork\.publicUrl \|\| artwork\.fallback/);
   assert.match(env, /^ZERNIO_MINI_SERIES_THEME_ATTEMPTS=3$/m);
   assert.match(env, /^ZERNIO_MINI_SERIES_DISTINCTNESS_ATTEMPTS=3$/m);
@@ -401,7 +401,7 @@ test("critical orchestration defaults stay aligned across deployment templates",
     ZERNIO_MINI_SERIES_IMAGE_URL: "https://images.jonathan-harris.online/site-logo",
     ZERNIO_PODCAST_PROMO_TIME: "18:30",
     ZERNIO_PODCAST_PROMO_IMAGE_URL: "https://images.jonathan-harris.online/Podcast",
-    ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK: "true",
+    ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK: "false",
     ZERNIO_ALLOW_DETERMINISTIC_FALLBACK: "false",
     ZERNIO_SCHEDULE_RECOVERY_ENABLED: "true",
     ZERNIO_SCHEDULE_MIN_LEAD_MS: "900000",
