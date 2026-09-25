@@ -549,7 +549,7 @@ test("Zernio reaches the provider with curated fallback artwork when generation 
   ]);
 });
 
-test("Zernio schedules fresh generated artwork before the enabled stored-image fallback", async () => {
+test("Zernio schedules fresh generated artwork while stored-image fallback remains disabled by default", async () => {
   restoreEnv();
   applyBaseEnv();
   process.env.OPENROUTER_API_BASE = mockBase;
@@ -579,7 +579,7 @@ test("Zernio schedules fresh generated artwork before the enabled stored-image f
 
   assert.equal(result.scheduled, true);
   assert.equal(result.post.imageStatus, "generated");
-  assert.equal(artworkCalls[0].allowFallback, true);
+  assert.equal(artworkCalls[0].allowFallback, false);
   assert.deepEqual(scheduledRequests.at(-1).body.mediaItems, [{
     type: "image",
     url: "https://images.jonathan-harris.online/zernio/monday/generated-qa-safe.png",
