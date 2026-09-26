@@ -90,6 +90,21 @@ async function assertPublicRegistryLockfile() {
   }
 }
 
+async function assertCloudflareWorkerBuildRedirect() {
+  const redirectPath = path.join(projectRoot, ".wrangler", "deploy", "config.json");
+  const redirect = JSON.parse(await readFile(redirectPath, "utf8"));
+  const expectedConfigPath = "../../workers/comms-hub-data-plane/wrangler.toml";
+
+  if (redirect.configPath !== expectedConfigPath) {
+    throw new Error(
+      `.wrangler/deploy/config.json must point Wrangler at ${expectedConfigPath}`
+    );
+  }
+
+  await assertFile("workers/comms-hub-data-plane/worker.js");
+  await assertFile("workers/comms-hub-data-plane/wrangler.toml");
+}
+
 async function assertKoyebBuildCommandsAreRuntimeEnvIsolated() {
   const dockerfile = await readFile(path.join(projectRoot, "Dockerfile"), "utf8");
   const nixpacks = await readFile(path.join(projectRoot, "nixpacks.toml"), "utf8");
@@ -200,6 +215,7 @@ async function main() {
   ]);
 
   await assertPublicRegistryLockfile();
+  await assertCloudflareWorkerBuildRedirect();
   await assertKoyebBuildCommandsAreRuntimeEnvIsolated();
   await assertKoyebEnvFilesArePasteSafe();
   await assertProductionDefaultsAreSafe();
