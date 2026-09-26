@@ -90,19 +90,19 @@ async function assertPublicRegistryLockfile() {
   }
 }
 
-async function assertCloudflareWorkerBuildRedirect() {
-  const redirectPath = path.join(projectRoot, ".wrangler", "deploy", "config.json");
-  const redirect = JSON.parse(await readFile(redirectPath, "utf8"));
-  const expectedConfigPath = "../../workers/comms-hub-data-plane/wrangler.toml";
-
-  if (redirect.configPath !== expectedConfigPath) {
-    throw new Error(
-      `.wrangler/deploy/config.json must point Wrangler at ${expectedConfigPath}`
-    );
-  }
-
+async function assertCloudflareWorkerConfig() {
   await assertFile("workers/comms-hub-data-plane/worker.js");
   await assertFile("workers/comms-hub-data-plane/wrangler.toml");
+
+  const legacyRedirect = path.join(projectRoot, ".wrangler", "deploy", "config.json");
+  try {
+    await readFile(legacyRedirect, "utf8");
+    throw new Error(
+      ".wrangler/deploy/config.json must not exist: Cloudflare deploys from workers/comms-hub-data-plane, where wrangler.toml is already the canonical configuration"
+    );
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
+  }
 }
 
 async function assertKoyebBuildCommandsAreRuntimeEnvIsolated() {
@@ -215,7 +215,7 @@ async function main() {
   ]);
 
   await assertPublicRegistryLockfile();
-  await assertCloudflareWorkerBuildRedirect();
+  await assertCloudflareWorkerConfig();
   await assertKoyebBuildCommandsAreRuntimeEnvIsolated();
   await assertKoyebEnvFilesArePasteSafe();
   await assertProductionDefaultsAreSafe();
