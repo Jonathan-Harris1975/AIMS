@@ -3696,6 +3696,12 @@ export async function buildAndScheduleQuizSeries(options = {}) {
               question: parsedQuiz.question,
               options: parsedQuiz.options,
             }),
+            card: {
+              title: questionPost.title,
+              question: parsedQuiz.question,
+              options: parsedQuiz.options,
+              footer: "Comment your answer below.",
+            },
             fallbackUrl: QUIZ_CONFIG.questionImageUrl,
             allowFallback: allowCuratedArtworkFallback,
           });
@@ -3724,6 +3730,13 @@ export async function buildAndScheduleQuizSeries(options = {}) {
               options: parsedQuiz.options,
               correct,
             }),
+            card: {
+              title: answerPost.title,
+              question: parsedQuiz.question,
+              options: parsedQuiz.options,
+              correct,
+              footer: "Did you get it right?",
+            },
             fallbackUrl: QUIZ_CONFIG.answerImageUrl,
             allowFallback: allowCuratedArtworkFallback,
           });
