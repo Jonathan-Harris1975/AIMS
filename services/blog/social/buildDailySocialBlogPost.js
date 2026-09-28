@@ -52,7 +52,6 @@ const SOURCE_RSS_BUCKET_KEY = "rss";
 const SOURCE_RSS_FEED_KEY = "feed.json";
 const OUT_BLOG_BUCKET_KEY = "blog";
 const MS_PER_DAY = 86_400_000;
-const DEFAULT_SOCIAL_FALLBACK_IMAGE_URL = "https://images.jonathan-harris.online/site-logo";
 const DAILY_BUILD_PENDING_TTL_MS = Number(process.env.BLOG_SOCIAL_BUILD_PENDING_TTL_MS || 2 * 60 * 60 * 1000);
 const DAILY_BUILD_COMPLETED_TTL_MS = Number(process.env.BLOG_SOCIAL_BUILD_COMPLETED_TTL_MS || 90 * 24 * 60 * 60 * 1000);
 
@@ -358,18 +357,6 @@ function advisoryDailySocialGate(gate = {}, reason = "quality-review-exhausted")
   };
 }
 
-function configuredSocialFallbackImageUrl() {
-  const candidate = String(
-    process.env.BLOG_SOCIAL_FALLBACK_IMAGE_URL || DEFAULT_SOCIAL_FALLBACK_IMAGE_URL
-  ).trim();
-  try {
-    const parsed = new URL(candidate);
-    return ["http:", "https:"].includes(parsed.protocol) ? parsed.toString() : "";
-  } catch {
-    return "";
-  }
-}
-
 function groundSocialArtworkPrompt(basePrompt, sources = []) {
   const evidence = (Array.isArray(sources) ? sources : []).slice(0, 3).map((source) => ({
     title: cleanSourceTitle(source?.title || ""),
@@ -397,26 +384,10 @@ async function resolveSocialArtwork({ sessionId, imagePrompt, dateId, prefix }) 
   }
 
   const imageError = art?.error || art?.warning || "Unknown social blog artwork error";
-  const fallbackImageUrl = configuredSocialFallbackImageUrl();
 
-  if (fallbackImageUrl) {
-    warn("blog.social.daily.image.curated_fallback", {
-      dateId,
-      sessionId,
-      error: imageError,
-      fallbackImageUrl,
-      reason: "fresh-artwork-unavailable",
-    });
-
-    return {
-      imageUrl: fallbackImageUrl,
-      imageStatus: "curated-static-fallback",
-      imageError,
-      imageKey: null,
-      imageBucketKey: null,
-    };
-  }
-
+  // The daily blog must carry the fresh, source-grounded artwork generated for
+  // this edition. A site icon or other static brand asset is not a valid
+  // substitute because it makes the social post look unrelated to the story.
   warn("blog.social.daily.image.unavailable", {
     dateId,
     sessionId,
