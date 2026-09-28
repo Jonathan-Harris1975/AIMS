@@ -102,9 +102,8 @@ export const BLOG_RSS_CONFIG = {
   key: "blog-rss",
   label: "Blog Daily Briefing Repost",
   publishTime: normaliseTime(process.env.ZERNIO_BLOG_RSS_TIME, "12:00"),
-  // The daily social-blog builder supplies fresh topic artwork. This stored
-  // brand asset is used only when that upstream generation cannot complete.
-  fallbackImageUrl: trimString(process.env.ZERNIO_BLOG_RSS_IMAGE_URL, DEFAULT_STORED_IMAGE_URL),
+  // The daily social-blog builder supplies fresh topic artwork. The RSS lane
+  // must not replace it with a stored/site icon when that artwork is absent.
   hashtagLimit: Math.max(0, Number(process.env.ZERNIO_BLOG_RSS_HASHTAG_LIMIT || 3)),
   audienceIntent: "blog-daily-briefing-repost",
 };

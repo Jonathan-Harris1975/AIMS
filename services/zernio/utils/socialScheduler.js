@@ -1958,7 +1958,13 @@ export async function buildAndScheduleBlogRssDaily(options = {}) {
     throw err;
   }
 
-  const imageUrl = article.imageUrl || BLOG_RSS_CONFIG.fallbackImageUrl;
+  const imageUrl = String(article.imageUrl || "").trim();
+  if (!imageUrl) {
+    const err = new Error(`The current daily social-blog item for ${publishDate} has no fresh generated artwork in the RSS feed.`);
+    err.statusCode = 424;
+    err.code = "zernio-blog-rss-fresh-artwork-not-ready";
+    throw err;
+  }
 
   const slotClaim = await claimZernioSlot({
     scope: "blog-rss:daily",
