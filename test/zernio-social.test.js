@@ -757,6 +757,17 @@ test("buildAndScheduleBlogRssDaily builds a dry-run post from the newest blog RS
   assert.match(blogRssRequests[0].cacheControl, /no-cache/);
 });
 
+
+test("buildAndScheduleBlogRssDaily requires the daily blog's fresh RSS artwork and has no stored-image fallback", async () => {
+  const scheduler = await readFile(new URL("../services/zernio/utils/socialScheduler.js", import.meta.url), "utf8");
+  const config = await readFile(new URL("../services/zernio/utils/config.js", import.meta.url), "utf8");
+
+  assert.match(scheduler, /zernio-blog-rss-fresh-artwork-not-ready/);
+  assert.match(scheduler, /const imageUrl = String\(article\.imageUrl \|\| ""\)\.trim\(\)/);
+  assert.doesNotMatch(scheduler, /article\.imageUrl \|\| BLOG_RSS_CONFIG\.fallbackImageUrl/);
+  assert.doesNotMatch(config, /fallbackImageUrl: trimString\(process\.env\.ZERNIO_BLOG_RSS_IMAGE_URL/);
+});
+
 test("buildAndScheduleBlogRssDaily never falls back to an older or already-posted item", async () => {
   restoreEnv();
   applyBaseEnv();
