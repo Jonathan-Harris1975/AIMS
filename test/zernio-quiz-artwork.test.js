@@ -35,6 +35,8 @@ test("quiz scheduler builds separate question and answer reveal artwork", async 
   assert.match(source, /buildQuizAnswerArtworkPrompt/);
   assert.match(source, /cardType: "question"/);
   assert.match(source, /cardType: "answer"/);
+  assert.match(source, /card:\s*\{\s*title: questionPost\.title,[\s\S]*question: parsedQuiz\.question,[\s\S]*options: parsedQuiz\.options/);
+  assert.match(source, /card:\s*\{\s*title: answerPost\.title,[\s\S]*correct,[\s\S]*footer: "Did you get it right\?"/);
   assert.match(source, /Keep the three incorrect options visible but visually quieter/);
   assert.match(source, /Quiz topic:/);
   assert.match(source, /specific, recognisable real-world scene, mechanism, device, workflow or consequence/);
