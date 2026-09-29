@@ -15,9 +15,14 @@ concurrency:
 
 jobs:
   watch:
-    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main') }}
+    if: >-
+      ${{ (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+          (github.event_name == 'workflow_run' && github.event.workflow_run.event == 'push' &&
+           github.event.workflow_run.head_repository.full_name == github.repository &&
+           github.event.workflow_run.conclusion == 'success' &&
+           github.event.workflow_run.head_branch == 'main') }}
     runs-on: ubuntu-latest
-    environment: production
+    environment: Koyeb
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -29,7 +34,7 @@ jobs:
       - name: Require Koyeb production release-gate configuration
         env:
           KOYEB_TOKEN: ${{ secrets.KOYEB_TOKEN }}
-          KOYEB_SERVICE: ${{ secrets.KOYEB_SERVICE }}
+          KOYEB_SERVICE: ${{ vars.KOYEB_SERVICE }}
         run: |
           set -euo pipefail
           test -n "${KOYEB_TOKEN:-}" || { echo "KOYEB_TOKEN is required for the production release gate." >&2; exit 2; }
@@ -60,12 +65,12 @@ jobs:
       - name: Verify Koyeb minimum instances before deployment watch
         env:
           KOYEB_TOKEN: ${{ secrets.KOYEB_TOKEN }}
-          KOYEB_SERVICE: ${{ secrets.KOYEB_SERVICE }}
+          KOYEB_SERVICE: ${{ vars.KOYEB_SERVICE }}
         run: npm run koyeb:min-instances:check
       - name: Watch production deployment
         env:
           KOYEB_TOKEN: ${{ secrets.KOYEB_TOKEN }}
-          KOYEB_SERVICE: ${{ secrets.KOYEB_SERVICE }}
+          KOYEB_SERVICE: ${{ vars.KOYEB_SERVICE }}
           SERVICE_DISPLAY_NAME: AIMS
           OPS_ALERT_WEBHOOK_URL: ${{ secrets.OPS_ALERT_WEBHOOK_URL }}
           OPS_ALERT_WEBHOOK_TOKEN: ${{ secrets.OPS_ALERT_WEBHOOK_TOKEN }}
@@ -76,7 +81,7 @@ jobs:
       - name: Verify Koyeb minimum instances after deployment
         env:
           KOYEB_TOKEN: ${{ secrets.KOYEB_TOKEN }}
-          KOYEB_SERVICE: ${{ secrets.KOYEB_SERVICE }}
+          KOYEB_SERVICE: ${{ vars.KOYEB_SERVICE }}
         run: npm run koyeb:min-instances:check
       - name: Record exact-SHA production deployment attestation
         env:
