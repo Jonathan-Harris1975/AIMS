@@ -5,7 +5,7 @@
 // the selected list exists and contains at least one active subscriber.
 
 import { info, warn } from "../../../logger.js";
-import { getFolders, createFolder, getLists, getList, createList, addContactsToList } from "./client.js";
+import { getFolders, createFolder, getLists, getList, getContactsFromList, createList, addContactsToList } from "./client.js";
 
 async function findFolderByName(name) {
   const result = await getFolders({ limit: 50 });
@@ -15,10 +15,24 @@ async function findFolderByName(name) {
 }
 
 async function findListByName(name, folderId = null) {
-  const result = await getLists({ limit: 50, folderId });
-  if (!result.ok) return { ok: false, error: result.error, providerStatus: result.status, providerCode: result.code };
-  const match = (result.data?.lists || []).find((l) => l.name === name);
-  return { ok: true, list: match || null };
+  const matches = [];
+  for (let offset = 0; offset < 10_000; offset += 50) {
+    const result = await getLists({ limit: 50, offset, folderId });
+    if (!result.ok) return { ok: false, error: result.error, providerStatus: result.status, providerCode: result.code };
+    const lists = result.data?.lists || [];
+    matches.push(...lists.filter((list) => list.name === name));
+    if (matches.length > 1) {
+      return {
+        ok: false, status: "audience_ambiguous",
+        error: `More than one Brevo list is named '${name}'. Configure NEWSLETTER_AI_EDGE_BREVO_LIST_ID to select the intended list.`,
+      };
+    }
+    const count = result.data?.count == null ? NaN : Number(result.data.count);
+    if (lists.length < 50 || (Number.isFinite(count) && offset + lists.length >= count)) {
+      return { ok: true, list: matches[0] || null };
+    }
+  }
+  return { ok: false, status: "audience_lookup_incomplete", error: "Brevo list search exceeded 10,000 lists. Configure NEWSLETTER_AI_EDGE_BREVO_LIST_ID." };
 }
 
 function subscriberCounts(data = {}) {
@@ -32,12 +46,12 @@ function subscriberCounts(data = {}) {
   };
 }
 
-export async function inspectList(listId) {
+export async function inspectList(listId, { loadList = getList, loadContacts = getContactsFromList } = {}) {
   if (!Number.isFinite(Number(listId)) || Number(listId) <= 0) {
     return { ok: false, error: "A valid Brevo list ID is required." };
   }
 
-  const result = await getList(Number(listId));
+  const result = await loadList(Number(listId));
   if (!result.ok) {
     return {
       ok: false,
@@ -48,12 +62,44 @@ export async function inspectList(listId) {
     };
   }
 
+  const counts = subscriberCounts(result.data);
+  let hasDeliverableContact = false;
+  const subscriberCountSource = "contacts";
+
+  // Brevo is retiring list-level counters, and a positive contact count does
+  // not prove any address is eligible. Check actual subscription state before
+  // sending, while excluding unsubscribed and blocked addresses.
+  const pageSize = 500;
+  let fullyInspected = false;
+  for (let offset = 0; offset < 2_500; offset += pageSize) {
+    const page = await loadContacts(Number(listId), { limit: pageSize, offset });
+    if (!page.ok) {
+      return { ok: false, status: "audience_inspection_failed", error: page.error, providerStatus: page.status, providerCode: page.code, listId: Number(listId) };
+    }
+    const contacts = page.data?.contacts || [];
+    hasDeliverableContact = contacts.some((contact) =>
+      Boolean(contact.email) && contact.emailBlacklisted === false
+      && !contact.listUnsubscribed?.some((id) => Number(id) === Number(listId))
+    );
+    if (hasDeliverableContact) break;
+    const count = page.data?.count == null ? NaN : Number(page.data.count);
+    if (contacts.length < pageSize || (Number.isFinite(count) && offset + contacts.length >= count)) {
+      fullyInspected = true;
+      break;
+    }
+  }
+  if (!hasDeliverableContact && !fullyInspected) {
+    return { ok: false, status: "audience_unconfirmed", error: "Could not verify an eligible contact within the first 2,500 Brevo list contacts; delivery remains blocked.", listId: Number(listId) };
+  }
+
   return {
     ok: true,
     listId: Number(result.data?.id || listId),
     name: String(result.data?.name || "").trim(),
     folderId: result.data?.folderId ?? null,
-    ...subscriberCounts(result.data),
+    ...counts,
+    hasDeliverableContact,
+    subscriberCountSource,
   };
 }
 
@@ -73,19 +119,25 @@ export async function ensureList({ id = null, name, folderName, allowCreate = tr
 
   if (id) {
     resolved = { ok: true, listId: Number(id), created: false, source: "configured-id" };
+  } else if (!allowCreate) {
+    // A Jotform-managed existing audience need not live in an AIMS-created
+    // Brevo folder. Only a unique exact name is safe without an explicit ID.
+    const found = await findListByName(name);
+    if (!found.ok) return { ...found, stage: "list-lookup" };
+    if (!found.list) {
+      return {
+        ok: false,
+        status: "audience_not_configured",
+        stage: "list-lookup",
+        error: `Brevo list '${name}' was not found. Configure NEWSLETTER_AI_EDGE_BREVO_LIST_ID to the existing populated list before production sending.`,
+      };
+    }
+    resolved = { ok: true, listId: Number(found.list.id), created: false, source: "matched-name" };
   } else {
     const foundFolder = await findFolderByName(folderName);
     if (!foundFolder.ok) return { ...foundFolder, stage: "folder-lookup" };
 
     let folderId = foundFolder.folder?.id || null;
-    if (!folderId && !allowCreate) {
-      return {
-        ok: false,
-        status: "audience_not_configured",
-        stage: "folder-lookup",
-        error: `Brevo folder '${folderName}' was not found. Configure NEWSLETTER_AI_EDGE_BREVO_LIST_ID to the existing populated list before production sending.`,
-      };
-    }
     if (!folderId) {
       const folder = await ensureFolder(folderName);
       if (!folder.ok) return { ...folder, stage: "folder-create" };
@@ -101,13 +153,6 @@ export async function ensureList({ id = null, name, folderName, allowCreate = tr
         created: false,
         folderId,
         source: "matched-name",
-      };
-    } else if (!allowCreate) {
-      return {
-        ok: false,
-        status: "audience_not_configured",
-        stage: "list-lookup",
-        error: `Brevo list '${name}' was not found. Configure NEWSLETTER_AI_EDGE_BREVO_LIST_ID to the existing populated list before production sending.`,
       };
     } else {
       const created = await createList({ name, folderId });

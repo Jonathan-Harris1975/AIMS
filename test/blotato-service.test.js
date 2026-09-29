@@ -183,7 +183,7 @@ will be the ones who build better systems around the tools.",
       assert.equal(body.inputs.scenes.length, 5);
       assert.ok(body.inputs.scenes.every((scene) => scene.mediaSource && scene.script));
       assert.equal(body.inputs.aiImageModel, "replicate/black-forest-labs/flux-schnell");
-      assert.equal(body.inputs.animateAiImages, true);
+      assert.equal(body.inputs.animateAiImages, false);
       assert.deepEqual(Object.keys(body.inputs).sort(), [
         "aiImageModel", "animateAiImages", "aspectRatio", "captionPosition", "highlightColor",
         "scenes", "transition", "trimToVoiceover", "voiceName",
@@ -340,7 +340,11 @@ process.env.BLOTATO_TEMPLATE_AUTO_DISCOVERY = "true";
 process.env.BLOTATO_NEWS_TEMPLATE_SEARCH = "AI Video with AI Voice,AI Story Video,AI Voice,Story Video";
 process.env.BLOTATO_USE_MANUAL_TEMPLATE_INPUTS = "true";
 process.env.BLOTATO_VIDEO_SCENE_COUNT = "5";
-process.env.BLOTATO_MAX_EXPECTED_CREDITS = "70";
+process.env.BLOTATO_BRAND_ANIMATE_IMAGES = "false";
+process.env.BLOTATO_MAX_EXPECTED_CREDITS = "10";
+// Provider lifecycle fixtures exercise three different renders on one date;
+// the production cap of one is covered by blotato-credit-guard.test.js.
+process.env.BLOTATO_DAILY_PAID_RENDER_CAP = "3";
 process.env.BLOTATO_NEWS_JSON_RESPONSE_FORMAT = "false";
 process.env.BLOTATO_NEWS_RESPONSE_FORMAT_MODE = "json_object";
 process.env.BLOTATO_STEP0_PREFLIGHT_ENABLED = "true";
@@ -396,7 +400,9 @@ test.afterEach(() => {
   process.env.BLOTATO_NEWS_TEMPLATE_SEARCH = "AI Video with AI Voice,AI Story Video,AI Voice,Story Video";
   process.env.BLOTATO_USE_MANUAL_TEMPLATE_INPUTS = "true";
   process.env.BLOTATO_VIDEO_SCENE_COUNT = "5";
-  process.env.BLOTATO_MAX_EXPECTED_CREDITS = "70";
+  process.env.BLOTATO_BRAND_ANIMATE_IMAGES = "false";
+  process.env.BLOTATO_MAX_EXPECTED_CREDITS = "10";
+  process.env.BLOTATO_DAILY_PAID_RENDER_CAP = "3";
   process.env.BLOTATO_NEWS_JSON_RESPONSE_FORMAT = "false";
   process.env.BLOTATO_NEWS_RESPONSE_FORMAT_MODE = "json_object";
   process.env.BLOTATO_STEP0_PREFLIGHT_ENABLED = "true";
@@ -543,7 +549,7 @@ test("Blotato news insight route builds a dry-run short pack", async () => {
   assert.equal(response.body.visualInputs.thumbnailText, "AI Gets Chores");
   assert.equal(response.body.visualRequest.inputs.scenes.length, 5);
   assert.equal(response.body.visualRequest.inputs.aiImageModel, "replicate/black-forest-labs/flux-schnell");
-  assert.equal(response.body.visualRequest.inputs.animateAiImages, true);
+  assert.equal(response.body.visualRequest.inputs.animateAiImages, false);
   assert.equal(response.body.visualRequest.inputs.thumbnailText, undefined);
   assert.match(response.body.visualPrompt, /HUMAN-CENTRED SOCIAL VISUALS/i);
   assert.ok(response.body.visualInputs.scenes.filter((scene) => /adult|human|hands|face|silhouette|professional/i.test(scene.mediaSource)).length >= 3);
@@ -591,7 +597,7 @@ test("Blotato publish-now endpoint requires explicit opt-in and runs the RSS-to-
     ["instagram", "youtube", "tiktok", "facebook"]
   );
   assert.ok(["tpl-ai-video", AI_STORY_TEMPLATE_UUID].includes(jobStatus.body.job.result.templateId));
-  assert.equal(jobStatus.body.job.result.video.creditBudget.expectedCredits <= 70, true);
+  assert.equal(jobStatus.body.job.result.video.creditBudget.expectedCredits <= 10, true);
   assert.ok(jobStatus.body.job.result.video.visualInputs.scenes.length >= 3);
   assert.equal(jobStatus.body.job.result.video.visualInputs.thumbnailText, "AI Gets Chores");
   assert.ok(jobStatus.body.job.result.video.visualInputs.scenes.filter((scene) => /adult|human|hands|face|silhouette|professional/i.test(scene.mediaSource)).length >= 3);
@@ -614,7 +620,7 @@ test("Blotato publish-now endpoint requires explicit opt-in and runs the RSS-to-
   assert.ok(visualRequest, "the paid render request should be captured");
   assert.equal(visualRequest.inputs.scenes.length, 5);
   assert.equal(visualRequest.inputs.aiImageModel, "replicate/black-forest-labs/flux-schnell");
-  assert.equal(visualRequest.inputs.animateAiImages, true);
+  assert.equal(visualRequest.inputs.animateAiImages, false);
   assert.deepEqual(
     jobStatus.body.job.result.channelPreflight.platforms.map((item) => item.platform),
     ["instagram", "youtube", "tiktok", "facebook"]

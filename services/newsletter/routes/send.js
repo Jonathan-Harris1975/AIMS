@@ -40,7 +40,7 @@ async function loadStoredIssue(profile, sessionId, date) {
 }
 
 // POST /newsletter/send — deliver a previously-built, QA-passed issue via
-// Brevo. AIMS owns readiness -> generate -> send ordering inside the operation
+// Brevo. AIMS owns generate -> readiness -> send ordering inside the operation
 // window. The external scheduler only triggers that window; this route sends
 // immediately with sendNow and never uses Brevo scheduledAt.
 //
@@ -84,6 +84,11 @@ router.post("/send", requestDedupe("newsletter:send"), asyncRoute(async (req, re
       "sender_pending_validation",
       "audience_empty",
       "audience_not_configured",
+      "audience_ambiguous",
+      "audience_unconfirmed",
+      "audience_lookup_incomplete",
+      "provider_not_configured",
+      "sender_not_configured",
       "content_error",
     ]);
     const status = configurationStatuses.has(result.status) ? 409 : 502;
@@ -102,13 +107,17 @@ router.post("/send", requestDedupe("newsletter:send"), asyncRoute(async (req, re
 }));
 
 
-async function handleReadiness(profileId, res) {
+async function handleReadiness(profileId, res, { provisionSender = false } = {}) {
   const profile = getNewsletterProfile(profileId || "ai-edge");
-  const result = await getNewsletterDeliveryReadiness({ profile });
+  const result = await getNewsletterDeliveryReadiness({ profile, provisionSender });
   if (!result.ok) {
     const configurationStatuses = new Set([
       "audience_not_configured",
       "audience_empty",
+      "audience_ambiguous",
+      "audience_unconfirmed",
+      "audience_lookup_incomplete",
+      "provider_not_configured",
       "sender_not_configured",
       "sender_pending_validation",
     ]);
@@ -127,13 +136,13 @@ const readinessHandler = asyncRoute(async (req, res) => (
 router.get("/readiness", readinessHandler);
 router.get("/readiness/:profileId", readinessHandler);
 
-// POST /newsletter/readiness — operator-compatible, side-effect-free Brevo
-// preflight. It remains available for diagnostics but is deliberately not a
-// operator preflight and is also the first hard gate in the weekday AIMS
-// newsletter operation, preventing expensive generation when delivery cannot
-// possibly succeed. /newsletter/send repeats the checks before dispatch.
+// POST /newsletter/readiness — the weekday operation builds first, then checks delivery
+// readiness before send. A provider configuration issue must not prevent an
+// otherwise sound issue from being generated and stored. A missing Brevo sender
+// is created once here so its verification email can be completed; GET remains
+// read-only. Neither route can mark an unverified sender ready to send.
 router.post("/readiness", asyncRoute(async (req, res) => (
-  handleReadiness(req.body?.profileId || req.query.profileId, res)
+  handleReadiness(req.body?.profileId || req.query.profileId, res, { provisionSender: true })
 )));
 
 // GET /newsletter/campaigns/:campaignId/status — poll Brevo for status/

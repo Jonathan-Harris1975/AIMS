@@ -44,3 +44,15 @@ test("Friday AM prepares weekend Zernio and Friday PM is podcast only", () => {
   assert.equal(fridayPm.includes('/blotato/'), false);
   assert.equal(fridayPm.includes('/zernio/'), false);
 });
+
+test("weekday newsletter build is independent and delivery waits for readiness", () => {
+  for (const day of ["monday", "tuesday", "wednesday", "thursday", "friday"]) {
+    const start = opsSource.indexOf(`"${day}-am": [`);
+    const end = opsSource.indexOf("  ],", start);
+    const lines = opsSource.slice(start, end).split(/\r?\n/).filter((line) => line.includes('"newsletter-'));
+    assert.equal(lines.length, 3, `${day} must have one build, readiness and send`);
+    assert.match(lines[0], /"newsletter-generate".*"newsletter"\],/);
+    assert.match(lines[1], /"newsletter-readiness".*"newsletter-generate"/);
+    assert.match(lines[2], /"newsletter-send".*"newsletter-readiness"/);
+  }
+});

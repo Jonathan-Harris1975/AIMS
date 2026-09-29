@@ -38,7 +38,7 @@ const getCampaign = unavailable;
 `;
 const campaignTestPath = join(tempDir, "campaign-under-test.mjs");
 await writeFile(campaignTestPath, `${adapterStubs}\n${campaignSource}`, "utf8");
-const { deliverNewsletterIssue } = await import(`${pathToFileURL(campaignTestPath).href}?v=${Date.now()}`);
+const { deliverNewsletterIssue, getNewsletterDeliveryReadiness } = await import(`${pathToFileURL(campaignTestPath).href}?v=${Date.now()}`);
 test.after(async () => { await rm(tempDir, { recursive: true, force: true }); });
 
 const profile = Object.freeze({
@@ -164,6 +164,19 @@ test("newsletter retry resumes the recorded draft instead of creating another ca
   assert.equal(writes.at(-1).status, "dispatched");
 });
 
+test("newsletter does not retry sendNow when a recorded draft has no confirmed live status", async () => {
+  let sent = 0;
+  const { deps } = baseDependencies({
+    readCampaignDelivery: async () => ({ delivery: { campaignId: 77, listId: 23, status: "created" } }),
+    getCampaign: async () => ({ ok: true, data: { id: 77 } }),
+    sendCampaignNow: async () => { sent += 1; return { ok: true }; },
+  });
+  const result = await deliverNewsletterIssue({ profile, sessionId: "session-unknown", buildResult }, deps);
+  assert.equal(result.ok, false);
+  assert.equal(result.status, "resume_status_blocked");
+  assert.equal(sent, 0);
+});
+
 test("newsletter retry returns an already dispatched campaign without sending again", async () => {
   const calls = { create: 0, send: 0, get: 0 };
   const { deps } = baseDependencies({
@@ -230,6 +243,55 @@ test("newsletter never sends when the campaign idempotency record cannot be stor
   assert.equal(result.campaignDeleted, true);
   assert.equal(calls.send, 0);
   assert.equal(calls.deleted, 1);
+});
+
+test("newsletter never creates a campaign when the previous delivery record is unavailable", async () => {
+  let created = 0;
+  const { deps } = baseDependencies({
+    readCampaignDelivery: async () => { throw new Error("R2 temporarily unavailable"); },
+    createCampaign: async () => { created += 1; return { ok: true, data: { id: 999 } }; },
+  });
+  const result = await deliverNewsletterIssue({ profile, sessionId: "session-r2-failed", buildResult }, deps);
+  assert.equal(result.ok, false);
+  assert.equal(result.stage, "delivery-record");
+  assert.equal(created, 0);
+});
+
+test("readiness accepts an eligible contact when Brevo's list counter is zero", async () => {
+  const result = await getNewsletterDeliveryReadiness({ profile }, {
+    inspectSender: async () => ({ ok: true, exists: true, verified: true, email: profile.brevo.fromEmail, senderId: 17 }),
+    ensureList: async () => ({ ok: true, listId: 23, name: "AI Edge", totalSubscribers: 0, hasDeliverableContact: true, subscriberCountSource: "contacts" }),
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.ready, true);
+  assert.equal(result.audience.subscriberCountSource, "contacts");
+});
+
+test("POST readiness provisions a missing sender once but never clears verification", async () => {
+  let creations = 0;
+  const deps = {
+    inspectSender: async () => { throw new Error("inspection must not be used for provisioning"); },
+    ensureSender: async () => {
+      creations += 1;
+      return { ok: true, exists: true, verified: false, justCreated: true, senderId: 17, email: profile.brevo.fromEmail };
+    },
+    ensureList: async () => ({ ok: true, listId: 23, totalSubscribers: 42 }),
+  };
+  const result = await getNewsletterDeliveryReadiness({ profile, provisionSender: true }, deps);
+  assert.equal(creations, 1);
+  assert.equal(result.ready, false);
+  assert.equal(result.sender.justCreated, true);
+  assert.deepEqual(result.blockers, ["sender_unverified"]);
+});
+
+test("GET readiness inspects without creating a sender", async () => {
+  const result = await getNewsletterDeliveryReadiness({ profile }, {
+    inspectSender: async () => ({ ok: true, exists: false, verified: false, email: profile.brevo.fromEmail }),
+    ensureSender: async () => { throw new Error("GET must not provision a sender"); },
+    ensureList: async () => ({ ok: true, listId: 23, totalSubscribers: 42 }),
+  });
+  assert.equal(result.ready, false);
+  assert.deepEqual(result.blockers, ["sender_missing"]);
 });
 
 test("newsletter polls Brevo until queued/sent is confirmed", async () => {

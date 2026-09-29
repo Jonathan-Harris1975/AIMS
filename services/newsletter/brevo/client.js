@@ -5,6 +5,7 @@
 // only documented endpoints actually used by the newsletter engine:
 //   - GET/POST /contacts/folders                    (folder lookup/creation)
 //   - GET/POST /contacts/lists                        (list lookup/creation)
+//   - GET /contacts/lists/{listId}/contacts           (subscriber eligibility)
 //   - POST /contacts/lists/{listId}/contacts/add       (audience sync)
 //   - POST /contacts                                    (upsert one contact)
 //   - GET/POST /senders                                 (sender lookup/creation)
@@ -126,6 +127,10 @@ export async function getList(listId) {
   return request("GET", `/contacts/lists/${encodeURIComponent(listId)}`);
 }
 
+export async function getContactsFromList(listId, { limit = 500, offset = 0 } = {}) {
+  return request("GET", `/contacts/lists/${encodeURIComponent(listId)}/contacts`, { params: { limit, offset } });
+}
+
 export async function createList({ name, folderId }) {
   return request("POST", "/contacts/lists", { data: { name, folderId } });
 }
@@ -190,7 +195,7 @@ export async function deleteCampaign(campaignId) {
 }
 
 export default {
-  getFolders, createFolder, getLists, getList, createList,
+  getFolders, createFolder, getLists, getList, getContactsFromList, createList,
   createContact, addContactsToList,
   getSenders, createSender, validateSenderOtp,
   createCampaign, updateCampaign, sendCampaignNow, sendTestEmail, getCampaign, getCampaigns, deleteCampaign,
