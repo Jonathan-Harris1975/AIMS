@@ -19,7 +19,7 @@ const AI_STORY_HIGHLIGHT = process.env.BLOTATO_BRAND_HIGHLIGHT_COLOR || "#00E5FF
 const AI_STORY_CAPTION_POSITION = process.env.BLOTATO_BRAND_CAPTION_POSITION || "bottom";
 const AI_STORY_TRANSITION = process.env.BLOTATO_BRAND_TRANSITION || "fade";
 const AI_STORY_ASPECT_RATIO = process.env.BLOTATO_BRAND_ASPECT_RATIO || "9:16";
-const AI_STORY_ANIMATE_IMAGES = process.env.BLOTATO_BRAND_ANIMATE_IMAGES !== "false";
+const AI_STORY_ANIMATE_IMAGES = String(process.env.BLOTATO_BRAND_ANIMATE_IMAGES || "false").trim().toLowerCase() === "true";
 const AI_STORY_TRIM_TO_VOICEOVER = process.env.BLOTATO_BRAND_TRIM_TO_VOICEOVER !== "false";
 
 // Media generation cost preference labels. Current Blotato template requests are steered through prompt + template settings, not unsupported top-level model fields.

@@ -3,6 +3,7 @@ import {
   beginJob,
   completeJob,
   failJob,
+  getJob,
   getJobsByType,
   getPublicJobFresh,
   refreshJobStoreFromState,
@@ -38,6 +39,7 @@ import { assessRenderedVideoQaPublication, buildRenderedVideoQaError, reviewRend
 import { looksLikePendingVideoError } from "./renderStatus.js";
 import { pollUntil } from "./pollUntil.js";
 import { buildVisualCreationRequest } from "./visualRequest.js";
+import { reservePaidRender } from "./creditGuard.js";
 import {
   claimPendingEditorialBriefs,
   editorialBriefFingerprint,
@@ -472,13 +474,15 @@ function expectedCreditBudget(pack = {}) {
   const videoModel = trim(process.env.BLOTATO_LOW_COST_VIDEO_MODEL_LABEL || process.env.BLOTATO_IMAGE_TO_VIDEO_MODEL, "framepack");
   const sceneCount = Array.isArray(pack.scenes) ? pack.scenes.length : 0;
   const imageCredits = creditLookup("image", imageModel, 1);
-  const videoCredits = creditLookup("video", videoModel, 55);
+  const animationEnabled = parseBoolean(process.env.BLOTATO_BRAND_ANIMATE_IMAGES, false);
+  const videoCredits = animationEnabled ? creditLookup("video", videoModel, 55) : 0;
   return {
     sceneCount,
     imageModel,
     videoModel,
     imageCreditsEach: imageCredits,
     videoCredits,
+    animationEnabled,
     expectedCredits: sceneCount * imageCredits + videoCredits,
   };
 }
@@ -557,7 +561,7 @@ async function createAndWaitForVideo({ templateId, templateIdCandidates = [], pa
   const visualPrompt = buildBlotatoVisualPrompt(pack);
   const visualInputs = buildBlotatoVideoInputs(pack);
   const creditBudget = expectedCreditBudget(pack);
-  const maxExpectedCredits = positiveIntEnv("BLOTATO_MAX_EXPECTED_CREDITS", 70, 10_000);
+  const maxExpectedCredits = positiveIntEnv("BLOTATO_MAX_EXPECTED_CREDITS", 10, 10_000);
   if (creditBudget.expectedCredits > maxExpectedCredits) {
     const err = new Error(`Blotato expected credit budget too high: ${creditBudget.expectedCredits}/${maxExpectedCredits}`);
     err.statusCode = 422;
@@ -1484,19 +1488,6 @@ function createScheduledSessionId(laneSlug, scheduleSlot, scheduleDate) {
   return `BLT-${lane}-${scheduleDate}-${slot}`.slice(0, 150);
 }
 
-async function paidVisualIdsForDate(scheduleDate) {
-  await refreshJobStoreFromState();
-  const ids = new Set();
-  for (const type of getShortLaneJobTypes()) {
-    for (const job of getJobsByType(type)) {
-      if (scheduleDateFromJob(job) !== scheduleDate) continue;
-      const visualId = trim(job.videoId || job.result?.visualId);
-      if (visualId) ids.add(visualId);
-    }
-  }
-  return ids;
-}
-
 function inferScheduleSlotFromJob(job = {}) {
   const explicit = trim(job.scheduleSlot).toLowerCase();
   if (["am", "pm"].includes(explicit)) return explicit;
@@ -1541,7 +1532,7 @@ export function isReplaceableRenderedQualityFailure(job = {}) {
   if (job.status !== "failed" || job.phase !== "rendered-quality-failed") return false;
   if (!job.videoId && !job.mediaUrl && !job.result?.visualId && !job.result?.mediaUrl) return false;
   if (jobHasPublicationEvidence(job)) return false;
-  const allowedReplacements = nonNegativeIntEnv("BLOTATO_FAILED_RENDER_REPLACEMENTS", 1, 2);
+  const allowedReplacements = nonNegativeIntEnv("BLOTATO_FAILED_RENDER_REPLACEMENTS", 0, 2);
   const completedAttempts = Math.max(1, Number(job.attempt || 1));
   return completedAttempts - 1 < allowedReplacements;
 }
@@ -1965,15 +1956,30 @@ async function runPublishJob({
         briefFingerprint,
       });
     if (!reusedVideo && scheduleSlot && activeScheduleDate) {
-      const paidRenderCap = positiveIntEnv("BLOTATO_DAILY_PAID_RENDER_CAP", 2, 10);
-      const paidVisualIds = await paidVisualIdsForDate(activeScheduleDate);
-      if (paidVisualIds.size >= paidRenderCap) {
-        const err = new Error(`Blotato daily paid-render cap reached (${paidVisualIds.size}/${paidRenderCap}) for ${activeScheduleDate}. No additional video was created.`);
-        err.statusCode = 409;
-        err.code = "blotato-daily-paid-render-cap";
-        err.paidVisualIds = [...paidVisualIds];
+      await refreshJobStoreFromState();
+      const paidRenderCap = positiveIntEnv("BLOTATO_DAILY_PAID_RENDER_CAP", 1, 10);
+      const nextBudget = expectedCreditBudget(pack);
+      const maxExpectedCredits = positiveIntEnv("BLOTATO_MAX_EXPECTED_CREDITS", 10, 10_000);
+      if (nextBudget.expectedCredits > maxExpectedCredits) {
+        const err = new Error(`Blotato expected credit budget too high: ${nextBudget.expectedCredits}/${maxExpectedCredits}`);
+        err.statusCode = 422;
+        err.creditBudget = nextBudget;
         throw err;
       }
+      const monthlyBudget = positiveIntEnv("BLOTATO_MONTHLY_ESTIMATED_CREDIT_CAP", 100, 10_000);
+      const priorRenders = getShortLaneJobTypes().flatMap((type) => getJobsByType(type))
+        .map((job) => ({
+          visualId: trim(job.videoId || job.result?.visualId),
+          reservationId: job.creditGuardReservationId,
+          date: scheduleDateFromJob(job),
+          expectedCredits: Number(job.creditBudget?.expectedCredits || job.result?.creditBudget?.expectedCredits),
+        }));
+      const reservationId = `${sessionId}:attempt-${getJob(lane.jobType, sessionId)?.attempt || 1}`;
+      const reservation = await reservePaidRender({
+        reservationId, scheduleDate: activeScheduleDate, expectedCredits: nextBudget.expectedCredits,
+        dailyCap: paidRenderCap, monthlyCap: monthlyBudget, priorRenders,
+      });
+      updateJob(lane.jobType, sessionId, { creditGuardReservationId: reservation.reservationId, creditBudget: nextBudget });
     }
     const video = reusedVideo || await createAndWaitForVideo({
       templateId,

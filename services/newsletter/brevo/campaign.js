@@ -34,26 +34,52 @@ import { createCampaign, sendCampaignNow, getCampaign, deleteCampaign } from "./
 import { THRESHOLDS } from "../../../config/thresholds.js";
 
 
-export async function getNewsletterDeliveryReadiness({ profile }) {
-  const sender = await inspectSender({ email: profile?.brevo?.fromEmail });
+export async function getNewsletterDeliveryReadiness({ profile, provisionSender = false }, {
+  inspectSender: doInspectSender = inspectSender,
+  ensureSender: doEnsureSender = ensureSender,
+  ensureList: doEnsureList = ensureList,
+} = {}) {
+  let sender;
+  try {
+    sender = provisionSender
+      ? await doEnsureSender({ name: profile?.brevo?.fromName, email: profile?.brevo?.fromEmail })
+      : await doInspectSender({ email: profile?.brevo?.fromEmail });
+  } catch (error) {
+    const message = error?.message || String(error);
+    return {
+      ok: false, ready: false, stage: "sender",
+      status: /BREVO_API_KEY/.test(message) ? "provider_not_configured" : "sender_error",
+      error: message,
+    };
+  }
   if (!sender.ok) {
     return {
       ok: false,
       ready: false,
       stage: "sender",
-      status: "sender_error",
+      status: sender.status || "sender_error",
       error: sender.error,
       providerStatus: sender.providerStatus || null,
       providerCode: sender.providerCode || null,
     };
   }
 
-  const list = await ensureList({
-    id: profile?.brevo?.listId,
-    name: profile?.brevo?.listName,
-    folderName: profile?.brevo?.folderName,
-    allowCreate: false,
-  });
+  let list;
+  try {
+    list = await doEnsureList({
+      id: profile?.brevo?.listId,
+      name: profile?.brevo?.listName,
+      folderName: profile?.brevo?.folderName,
+      allowCreate: false,
+    });
+  } catch (error) {
+    const message = error?.message || String(error);
+    return {
+      ok: false, ready: false, stage: "audience",
+      status: /BREVO_API_KEY/.test(message) ? "provider_not_configured" : "list_error",
+      error: message, sender,
+    };
+  }
   if (!list.ok) {
     return {
       ok: false,
@@ -67,7 +93,7 @@ export async function getNewsletterDeliveryReadiness({ profile }) {
     };
   }
 
-  const audienceReady = Number(list.totalSubscribers || 0) > 0;
+  const audienceReady = Boolean(list.hasDeliverableContact ?? (Number(list.totalSubscribers || 0) > 0));
   const ready = Boolean(sender.exists && sender.verified && audienceReady);
   return {
     ok: true,
@@ -78,6 +104,7 @@ export async function getNewsletterDeliveryReadiness({ profile }) {
       exists: sender.exists,
       verified: sender.verified,
       senderId: sender.senderId,
+      justCreated: Boolean(sender.justCreated),
     },
     audience: {
       listId: list.listId,
@@ -85,6 +112,7 @@ export async function getNewsletterDeliveryReadiness({ profile }) {
       source: list.source,
       totalSubscribers: list.totalSubscribers,
       uniqueSubscribers: list.uniqueSubscribers,
+      subscriberCountSource: list.subscriberCountSource || "list-details",
       ready: audienceReady,
     },
     blockers: [
@@ -227,14 +255,14 @@ export async function deliverNewsletterIssue({ profile, sessionId, buildResult, 
         });
         return { ok: true, status: "sent", campaignId: delivery.campaignId, campaignStatus: liveStatus, listId: delivery.listId, sentAt, resumed: true, recovered: true };
       }
-      if (liveStatus && liveStatus !== "draft") {
+      if (liveStatus !== "draft") {
         return {
           ok: false,
           status: "resume_status_blocked",
           stage,
           campaignId: delivery.campaignId,
           campaignStatus: liveStatus,
-          error: `Existing Brevo campaign is in "${liveStatus}" state; AIMS will not issue another sendNow unless the provider reports a draft.`,
+          error: `Existing Brevo campaign status is "${liveStatus || "unknown"}"; AIMS will not issue another sendNow unless the provider confirms a draft.`,
         };
       }
     }
@@ -244,7 +272,7 @@ export async function deliverNewsletterIssue({ profile, sessionId, buildResult, 
     if (!sender.ok) {
       return {
         ok: false,
-        status: "sender_error",
+        status: sender.status || "sender_error",
         stage,
         error: sender.error,
         providerStatus: sender.providerStatus || null,
@@ -281,7 +309,7 @@ export async function deliverNewsletterIssue({ profile, sessionId, buildResult, 
         providerCode: list.providerCode || null,
       };
     }
-    if (Number(list.totalSubscribers || 0) < 1) {
+    if (!(list.hasDeliverableContact ?? (Number(list.totalSubscribers || 0) > 0))) {
       warn("newsletter.brevo.send_blocked_empty_audience", {
         sessionId,
         profileId: profile.id,
@@ -448,11 +476,13 @@ export async function deliverNewsletterIssue({ profile, sessionId, buildResult, 
 
     return {
       ok: true, status: "sent", campaignId, campaignStatus, listId: list.listId,
-      audienceSubscribers: list.totalSubscribers, sentAt, ...(resumed ? { resumed: true } : {}),
+      audienceSubscribers: list.totalSubscribers || null, audienceVerifiedBy: list.subscriberCountSource || "list-details",
+      sentAt, ...(resumed ? { resumed: true } : {}),
     };
   } catch (err) {
     warn("newsletter.brevo.delivery_exception", { sessionId, profileId: profile.id, stage, error: err?.message || String(err) });
-    return { ok: false, status: "delivery_exception", stage, error: err?.message || String(err) };
+    const message = err?.message || String(err);
+    return { ok: false, status: /BREVO_API_KEY/.test(message) ? "provider_not_configured" : "delivery_exception", stage, error: message };
   }
 }
 

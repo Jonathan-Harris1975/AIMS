@@ -104,20 +104,29 @@ export async function recordCampaignDelivery({ profile, sessionId, campaignId, l
 
 /**
  * Reads back the delivery record written by recordCampaignDelivery, if any.
- * Returns { delivery: null } (never throws) when no record exists yet —
- * callers use this to distinguish "never attempted", "campaign created but
+ * Returns { delivery: null } only when the record does not exist. Storage
+ * errors and invalid records throw so a retry cannot mistake an unknown
+ * delivery state for "never attempted", "campaign created but
  * not yet sent" and "already dispatched" before deciding whether to call
  * Brevo again.
  */
-export async function readCampaignDelivery({ profile, sessionId, date = new Date() }) {
+export async function readCampaignDelivery({ profile, sessionId, date = new Date() }, { readText = getObjectAsText } = {}) {
   const prefix = buildIssueKeyPrefix(profile, { date, sessionId });
   const key = `${prefix}/campaign.json`;
+  let raw;
   try {
-    const raw = await getObjectAsText(profile.storage.htmlBucketKey, key);
-    return { delivery: JSON.parse(raw) };
-  } catch {
-    return { delivery: null };
+    raw = await readText(profile.storage.htmlBucketKey, key);
+  } catch (error) {
+    const status = Number(error?.$metadata?.httpStatusCode || error?.statusCode || error?.status || 0);
+    const code = String(error?.name || error?.code || "").toLowerCase();
+    if (status === 404 || ["nosuchkey", "notfound"].includes(code)) return { delivery: null };
+    throw error; // A transient R2 failure cannot be interpreted as "never sent".
   }
+  const delivery = JSON.parse(raw);
+  if (!delivery || typeof delivery !== "object" || !delivery.campaignId || !delivery.status) {
+    throw new Error(`Invalid newsletter delivery record at ${key}`);
+  }
+  return { delivery };
 }
 
 export default { buildIssueKeyPrefix, storeNewsletterIssue, recordCampaignDelivery, readCampaignDelivery, findLatestIssueSessionId };

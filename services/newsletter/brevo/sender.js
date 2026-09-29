@@ -1,8 +1,8 @@
 // services/newsletter/brevo/sender.js
 //
 // Brevo requires a sender to exist and be verified before campaign delivery.
-// Inspection is side-effect free; creation remains an explicit consequence of
-// an attempted send, where the pending OTP state is returned clearly.
+// GET readiness inspects without side effects. POST readiness and send may
+// provision a missing sender once, surfacing the pending OTP state clearly.
 
 import { info, warn } from "../../../logger.js";
 import { getSenders, createSender } from "./client.js";
@@ -14,7 +14,7 @@ function isVerified(sender) {
 }
 
 export async function inspectSender({ email }) {
-  if (!email) return { ok: false, error: "No sender email configured for this profile." };
+  if (!email) return { ok: false, status: "sender_not_configured", error: "No sender email configured for this profile." };
 
   const list = await getSenders();
   if (!list.ok) {

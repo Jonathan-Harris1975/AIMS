@@ -27,7 +27,7 @@ The AI Voice template receives the approved `scenes[].mediaSource` and `scenes[]
 
 Provider submission state is polled rather than assuming acceptance means publication. `BLOTATO_SCHEDULE_RECOVERY_ENABLED=true` safely moves a missed same-day slot forward while retaining the deterministic slot claim.
 
-Production defaults require every configured channel and scheduling confirmation: `BLOTATO_REQUIRE_ALL_CHANNELS=true` and `BLOTATO_REQUIRE_SCHEDULE_CONFIRMATION=true`. The two daily renders are serialised so one render does not collide with another. A hard-QA render rejected before any social submission may be replaced once; completed or provider-submitted slots remain duplicate-protected.
+Production defaults require every configured channel and scheduling confirmation: `BLOTATO_REQUIRE_ALL_CHANNELS=true` and `BLOTATO_REQUIRE_SCHEDULE_CONFIRMATION=true`. Paid rendering is limited to one scheduled video per day and 100 estimated credits per calendar month. The credit reservations are stored in durable state before Blotato is called, and remain charged to the guard when a provider response is uncertain. Automatic paid replacements are disabled by default (`BLOTATO_FAILED_RENDER_REPLACEMENTS=0`); a finished video can still be reused for a safe scheduling retry. Actual credit use must be checked in the Blotato dashboard because AIMS receives no billing total from the rendering API.
 
 The `ai-playbook` lane is prepared in the **Friday AM** operation. Friday PM is podcast-only.
 
