@@ -6,42 +6,73 @@ import {
   verifyKoyebServicePayload,
 } from "../scripts/verifyKoyebMinInstances.js";
 
-function payload({ name = "AIMS", app = "production", min = 1, secondMin = null } = {}) {
+const serviceId = "5102061c-a0d2-4195-84d3-0f75b8b8eaa2";
+const deploymentId = "93e95d1e-7549-4774-969d-868435ed7594";
+
+function payload({ min = 1, secondMin = null, manual = [], activeId = deploymentId, deploymentServiceId = serviceId } = {}) {
   const scalings = [{ scopes: ["region:fra"], min, max: 2 }];
   if (secondMin !== null) scalings.push({ scopes: ["region:was"], min: secondMin, max: 2 });
-  return { service: { id: "svc-123", app: { name: app }, definition: { name, scalings } } };
+  return {
+    // The CLI service response contains metadata; scaling lives on the active deployment.
+    service: { id: serviceId, name: "aims", active_deployment_id: activeId },
+    deployment: { id: deploymentId, service_id: deploymentServiceId, definition: { scalings } },
+    manualScaling: { scalings: manual },
+  };
 }
 
-test("Koyeb minimum-instance parser accepts compliant scoped scaling", () => {
-  const parsed = verifyKoyebServicePayload(payload(), "production/AIMS");
+test("Koyeb gate accepts the active deployment's compliant scoped scaling", () => {
+  const parsed = verifyKoyebServicePayload(payload(), serviceId);
   assert.equal(parsed.minimum, 1);
-  assert.equal(parsed.serviceName, "AIMS");
+  assert.equal(parsed.deploymentId, deploymentId);
+  assert.equal(parsed.serviceName, "aims");
 });
 
-test("Koyeb minimum-instance gate fails closed when any scope permits scale to zero", () => {
+test("Koyeb gate rejects any deployment scope that permits scale to zero", () => {
   assert.throws(
-    () => verifyKoyebServicePayload(payload({ min: 1, secondMin: 0 }), "production/AIMS"),
+    () => verifyKoyebServicePayload(payload({ secondMin: 0 }), serviceId),
     (error) => error instanceof KoyebScalingVerificationError && error.code === "minimum_instances_non_compliant"
   );
 });
 
-test("Koyeb minimum-instance parser rejects missing scaling configuration", () => {
+test("Koyeb gate rejects a manual zero-instance override", () => {
   assert.throws(
-    () => parseKoyebScaling({ service: { definition: { name: "AIMS" } } }),
+    () => verifyKoyebServicePayload(payload({ manual: [{ scopes: ["region:fra"], instances: 0 }] }), serviceId),
+    (error) => error.code === "minimum_instances_non_compliant"
+  );
+});
+
+test("Koyeb gate rejects missing or mismatched active deployments", () => {
+  for (const input of [payload({ activeId: "" }), payload({ activeId: "different" }), payload({ deploymentServiceId: "different" })]) {
+    assert.throws(
+      () => verifyKoyebServicePayload(input, serviceId),
+      (error) => ["active_deployment_missing", "deployment_identity_mismatch"].includes(error.code)
+    );
+  }
+});
+
+test("Koyeb gate fails closed when the deployment has no scaling configuration", () => {
+  const input = payload();
+  delete input.deployment.definition.scalings;
+  assert.throws(
+    () => parseKoyebScaling(input),
     (error) => error.code === "scaling_configuration_missing"
   );
 });
 
-test("Koyeb minimum-instance gate rejects a different service identity", () => {
+test("Koyeb gate rejects a different service identity", () => {
   assert.throws(
-    () => verifyKoyebServicePayload(payload({ name: "other" }), "production/AIMS"),
+    () => verifyKoyebServicePayload(payload(), "another-service-id"),
     (error) => error.code === "service_identity_mismatch"
   );
 });
 
-test("Koyeb minimum-instance parser rejects malformed minimum values", () => {
+test("Koyeb gate rejects malformed configured or manual instance counts", () => {
   assert.throws(
-    () => parseKoyebScaling({ service: { definition: { name: "AIMS", scalings: [{ min: "unknown" }] } } }),
+    () => parseKoyebScaling(payload({ min: "unknown" })),
     (error) => error.code === "scaling_minimum_invalid"
+  );
+  assert.throws(
+    () => parseKoyebScaling(payload({ manual: [{ instances: "unknown" }] })),
+    (error) => error.code === "manual_scaling_invalid"
   );
 });
