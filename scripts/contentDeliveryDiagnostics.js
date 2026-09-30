@@ -38,9 +38,27 @@ function childResult(task = {}) {
   return task.asyncJob?.job?.result || task.asyncJob?.result || task.result || {};
 }
 
+function failureSignals(task = {}) {
+  if (task.ok === true) return [];
+  const child = task.asyncJob?.job || task.asyncJob || {};
+  const message = [task.error, task.reason, child.error?.message, child.result?.error, task.result?.error]
+    .filter((value) => typeof value === "string").join(" ").toLowerCase();
+  const patterns = [
+    ["visual-qa", /visual qa|visual quality|quality gate/],
+    ["authentication", /\b(?:401|403)\b|unauthori[sz]ed|invalid api key|forbidden/],
+    ["credits-or-billing", /\b402\b|insufficient (?:credits|balance)|payment required|billing/],
+    ["rate-limit", /\b429\b|rate limit|too many requests/],
+    ["timeout", /timed out|timeout|duration-exceeded|poll-attempt-limit|aborted/],
+    ["missing-image-data", /no image data|image data missing/],
+    ["storage", /\br2\b|\bs3\b|upload failed|no such bucket/],
+  ];
+  return patterns.filter(([, pattern]) => pattern.test(message)).map(([signal]) => signal);
+}
+
 function summariseTask(task = {}) {
   const result = childResult(task);
   const summary = { ok: task.ok === true, status: task.status || null, errorCode: task.errorCode || null };
+  if (task.ok !== true) summary.failureSignals = failureSignals(task);
   if (/^blotato-/.test(task.name || "")) {
     summary.scheduledTime = result.scheduledTime || null;
     summary.confirmedChannels = Array.isArray(result.posts) ? result.posts.filter((post) => post.confirmed).length : null;
@@ -49,7 +67,7 @@ function summariseTask(task = {}) {
   if (task.name === "podcast") {
     summary.artworkGenerated = result.artwork?.source === "generated" && Boolean(result.artwork?.key);
     summary.rssPublished = result.rss?.ok === true;
-    summary.publicationConfirmed = result.ok === true;
+    summary.publicationConfirmed = task.ok === true && result.ok === true;
   }
   return summary;
 }
@@ -125,6 +143,10 @@ const readiness = await safeCheck(async () => {
     senderExists: result.sender?.exists ?? null,
     senderVerified: result.sender?.verified ?? null,
     audienceReady: result.audience?.ready ?? null,
+    audienceSource: result.audience?.source || null,
+    audienceListId: result.audience?.listId || null,
+    audienceTotalSubscribers: result.audience?.totalSubscribers ?? null,
+    audienceUniqueSubscribers: result.audience?.uniqueSubscribers ?? null,
     eligibleContactCheck: result.audience?.subscriberCountSource || null,
   };
 });
