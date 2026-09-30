@@ -11,7 +11,7 @@ import { loadRecentRssContext } from "./feedContext.js";
 import { fetchBlogRssItems } from "./blogRssFeed.js";
 import { fetchPodcastPromoEpisode } from "./podcastRssFeed.js";
 import { getLaneHistory, getWeeklyTopicLedger, recordLaneSchedule, getQuizHistory, recordQuizSchedule, claimScheduleSlot, resetScheduleSlotClaim, completeScheduleSlot,
-   releaseScheduleSlot, clearScheduleSlotClaim, isRecentSpotlightPerson, recordSpotlightPerson, hasRecentSocialSource, recordUsedSocialSource } from "./state.js";
+   releaseScheduleSlot, clearScheduleSlotClaim, isRecentSpotlightPerson, getRecentSpotlightPeople, recordSpotlightPerson, hasRecentSocialSource, recordUsedSocialSource } from "./state.js";
 import { resolveProfile, inspectZernioTargeting, listPosts, getPost, createPost, deletePost, getZernioApiKey } from "./zernioClient.js";
 import getSponsor from "../../script/utils/getSponsor.js";
 import { resolveFeaturedEbook } from "./ebookCatalogue.js";
@@ -282,6 +282,9 @@ simplif|trade[- ]?off|because|therefore|means)\\b", "i").test(content);
     } else if (!normaliseSimple(content).includes(normaliseSimple(person))) {
       defects.push("Sunday spotlight content must name the supplied spotlightPerson.");
     }
+    if (person && isRecentSpotlightPerson(person)) {
+      defects.push(`Sunday spotlight repetition guard blocked recent person: ${person}. Choose a different person.`);
+    }
     if (!/\b(created|developed|introduced|pioneered|invented|founded|research|researcher|work|contribution|contributed|known for|helped build|designed|proposed|published)\b/i.test(content)) {
       defects.push("Sunday spotlight must explain the person's concrete contribution, not merely discuss an AI topic.");
     }
@@ -436,14 +439,20 @@ export function buildZernioSemanticRepairPrompt({ laneKey = "", post = {}, gate 
       ]
     : [];
   const sundayRules = laneKey === "sunday"
-    ? ["Preserve or supply a canonical human spotlightPerson and name their concrete contribution in the content."]
+    ? [
+        "Supply a canonical human spotlightPerson and name their concrete contribution in the content.",
+        ...(defects.some((defect) => /repetition guard blocked recent person/i.test(defect))
+          ? ["Choose a different person from the current post. Rewrite the title, topic and content to match that person's real contribution. " +
+             "Do not invent facts or reuse the previous person's contribution."]
+          : []),
+      ]
     : [];
 
   return {
     system: [
       "You are repairing one Zernio social post that failed a deterministic production gate.",
       "Repair only the failed editorial components while preserving accurate facts, source meaning, British English and Jonathan Harris's direct, sceptical voice.",
-      "Return valid JSON only with exactly these string keys: title, topic, content, firstComment, spotlightPerson.",
+      "Return valid JSON only with string keys title, topic, content, firstComment, spotlightPerson and an array of exact sourceUrls from the supplied evidence.",
       "No markdown fences, notes, hashtags or extra keys.",
       ...saturdayRules,
       ...sundayRules,
@@ -452,6 +461,8 @@ export function buildZernioSemanticRepairPrompt({ laneKey = "", post = {}, gate 
       `Lane: ${lane.label} (${laneKey})`,
       `Repair attempt: ${attempt}`,
       `Failed checks: ${defects.join(" | ")}`,
+      laneKey === "sunday" && semanticContext.recentSpotlightPeople?.length
+        ? `Recently featured people to avoid: ${semanticContext.recentSpotlightPeople.join(", ")}` : "",
       semanticContext.requiredTopic ? `Required topic/angle: ${semanticContext.requiredTopic}` : "",
       Array.isArray(semanticContext.sources) && semanticContext.sources.length
         ? `Source evidence (use only this): ${JSON.stringify(semanticContext.sources.slice(0, 6).map((source) => ({ title: source.title || "", summary: source.summary ||
@@ -474,7 +485,7 @@ export function buildZernioSemanticRepairPrompt({ laneKey = "", post = {}, gate 
 
 function gateNeedsSemanticRepair(gate = {}) {
   return (gate.defects || []).some((defect) => new RegExp("drifted|aligned|topical|fidelity|source-topic|tension|debate question|two-sided|contribution|person name|concrete|\
-industry|task where AI helps|first-person|reader prompt", "i").test(String(defect)));
+industry|task where AI helps|first-person|reader prompt|repetition guard blocked recent person", "i").test(String(defect)));
 }
 
 async function repairZernioPostWithSemanticModel(candidate, { laneKey = "", gate = {}, attempt = 1, semanticContext = {} } = {}) {
@@ -1603,6 +1614,7 @@ export async function buildAndScheduleDailyLane(laneKey, options = {}) {
   try {
     const laneHistory = getLaneHistory(laneKey);
     const weeklyHistory = getWeeklyTopicLedger();
+    const recentSpotlightPeople = laneKey === "sunday" ? getRecentSpotlightPeople() : [];
     const verifiedQuote = laneKey === "monday" ? selectVerifiedQuote(publishDate) : null;
     const buildContextResolved = laneKey === "friday" ? resolveVerifiedBuildContext(options) : { text: "", warnings: [] };
     const buildContext = buildContextResolved.text;
@@ -1617,6 +1629,7 @@ export async function buildAndScheduleDailyLane(laneKey, options = {}) {
       publishDate,
       history: laneHistory.topics,
       weeklyHistory: weeklyHistory.topics,
+      recentSpotlightPeople,
       rssItems: rssContext.items,
       verifiedQuote,
       buildContext,
@@ -1693,6 +1706,7 @@ export async function buildAndScheduleDailyLane(laneKey, options = {}) {
         label: `${lane.label} social gate`,
         semanticContext: {
           requiredTopic: `${lane.label} ${post.topic || post.title || ""}`,
+          recentSpotlightPeople,
           sources: selectedRssSources.length
             ? selectedRssSources
             : (availableRssItems.length

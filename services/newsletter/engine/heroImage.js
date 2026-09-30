@@ -80,7 +80,14 @@ export async function generateHeroImage({ profile, heroHeadline, leadStory = nul
     return { ok: false, error: result.error, prompt };
   }
 
-  return { ok: true, prompt, imageUrl: result.publicUrl, key: result.key };
+  return {
+    ok: true,
+    prompt,
+    imageUrl: result.publicUrl,
+    key: result.key,
+    bucketKey: result.bucketKey,
+    imageStatus: result.fallback ? "deterministic-fallback" : "generated",
+  };
 }
 
 export default { buildHeroImagePrompt, generateHeroImage };

@@ -463,6 +463,13 @@ export function isRecentSpotlightPerson(person) {
   return ensureArray(state.spotlightPeople).slice(-12).some((entry) => normaliseIdentity(entry?.person) === key);
 }
 
+export function getRecentSpotlightPeople() {
+  return ensureArray(readZernioState().spotlightPeople)
+    .slice(-12)
+    .map((entry) => String(entry?.person || "").trim())
+    .filter(Boolean);
+}
+
 export function recordSpotlightPerson(person, context = {}) {
   const cleaned = String(person || "").trim();
   if (!cleaned) return readZernioState().spotlightPeople || [];

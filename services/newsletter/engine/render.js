@@ -140,7 +140,7 @@ export function renderNewsletterPlaintext({ profile, newsletter }) {
   return lines.join("\n").trim();
 }
 
-export function buildNewsletterMetadata({ profile, newsletter, qaResult, generatedAt, siteShellReleaseSha = "" }) {
+export function buildNewsletterMetadata({ profile, newsletter, qaResult, generatedAt, siteShellReleaseSha = "", heroImage = null }) {
   const sourceLinks = [
     ...(newsletter.bigThree || []).map((s) => s.link),
     newsletter.worthUsing?.link,
@@ -154,6 +154,9 @@ export function buildNewsletterMetadata({ profile, newsletter, qaResult, generat
     previewText: newsletter.previewText,
     heroHeadline: newsletter.heroHeadline,
     heroImageUrl: newsletter.heroImageUrl,
+    heroImageKey: heroImage?.key || null,
+    heroImageBucketKey: heroImage?.bucketKey || null,
+    heroImageStatus: heroImage?.imageStatus || null,
     storyCount: new Set(sourceLinks).size,
     sourceLinks: [...new Set(sourceLinks)],
     promotion: newsletter.promotion ? { type: newsletter.promotion.type, title: newsletter.promotion.title, url: newsletter.promotion.url } : null,

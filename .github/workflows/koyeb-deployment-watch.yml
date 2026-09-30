@@ -83,6 +83,17 @@ jobs:
           KOYEB_TOKEN: ${{ secrets.KOYEB_TOKEN }}
           KOYEB_SERVICE: ${{ vars.KOYEB_SERVICE }}
         run: npm run koyeb:min-instances:check
+      - name: Inspect content delivery in the deployed service
+        continue-on-error: true
+        timeout-minutes: 5
+        env:
+          KOYEB_TOKEN: ${{ secrets.KOYEB_TOKEN }}
+          KOYEB_SERVICE: ${{ vars.KOYEB_SERVICE }}
+        run: |
+          set -euo pipefail
+          # The CLI uses an interactive exec transport. This is a read-only
+          # snapshot; no credentials or subscriber details are printed.
+          script -q -e -c 'koyeb services exec "$KOYEB_SERVICE" node -- scripts/contentDeliveryDiagnostics.js' /dev/null < /dev/null
       - name: Record exact-SHA production deployment attestation
         env:
           DEPLOYED_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
