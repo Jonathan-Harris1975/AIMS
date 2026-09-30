@@ -22,7 +22,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `AIMS_OPERATION_ASYNC_REQUEST_TIMEOUT_MS` | Yes | services/ops/index.js:517 |
 | `AIMS_OPERATION_DISPATCH_TIMEOUT_MS` | No | services/ops/index.js:453 |
 | `AIMS_OPERATION_FRIDAY_PM_DELAY_MS` | Yes | services/ops/index.js:144 |
-| `AIMS_OPERATION_NEWSLETTER_ENABLED` | Yes | scripts/contentDeliveryDiagnostics.js:140 |
+| `AIMS_OPERATION_NEWSLETTER_ENABLED` | Yes | scripts/contentDeliveryDiagnostics.js:141 |
 | `AIMS_OPERATION_TASK_TIMEOUT_MS` | Yes | services/ops/index.js:454 |
 | `AIMS_STARTUP_GRACE_MS` | No | services/shared/utils/lifecycle.js:14 |
 | `AI_MODEL_BLOCKLIST` | Yes | services/shared/utils/ai-service.js:85 |
@@ -109,7 +109,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `BLOTATO_BRAND_TRANSITION` | Yes | services/blotato/utils/newsShortsService.js:20 |
 | `BLOTATO_BRAND_TRIM_TO_VOICEOVER` | Yes | services/blotato/utils/newsShortsService.js:23 |
 | `BLOTATO_BRAND_VOICE_NAME` | Yes | services/blotato/utils/newsShortsService.js:17 |
-| `BLOTATO_DAILY_PAID_RENDER_CAP` | Yes | scripts/contentDeliveryDiagnostics.js:141<br>scripts/contentDeliveryDiagnostics.js:144 |
+| `BLOTATO_DAILY_PAID_RENDER_CAP` | Yes | scripts/contentDeliveryDiagnostics.js:142<br>scripts/contentDeliveryDiagnostics.js:145 |
 | `BLOTATO_DEFAULT_CHANNELS` | Yes | services/blotato/utils/autoPublishService.js:1403 |
 | `BLOTATO_DEFAULT_FOLLOW_CTA` | Yes | services/blotato/utils/newsShortsService.js:230 |
 | `BLOTATO_FACEBOOK_MEDIA_TYPE` | Yes | services/blotato/utils/autoPublishService.js:1027 |
@@ -125,8 +125,8 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `BLOTATO_KEEPALIVE_ENABLED` | Yes | services/blotato/utils/autoPublishService.js:1687 |
 | `BLOTATO_LOW_COST_IMAGE_MODEL_LABEL` | Yes | services/blotato/utils/autoPublishService.js:473<br>services/blotato/utils/newsShortsService.js:30 |
 | `BLOTATO_LOW_COST_VIDEO_MODEL_LABEL` | Yes | services/blotato/utils/autoPublishService.js:474<br>services/blotato/utils/newsShortsService.js:31 |
-| `BLOTATO_MAX_EXPECTED_CREDITS` | Yes | scripts/contentDeliveryDiagnostics.js:28 |
-| `BLOTATO_MONTHLY_ESTIMATED_CREDIT_CAP` | Yes | scripts/contentDeliveryDiagnostics.js:142<br>scripts/contentDeliveryDiagnostics.js:145 |
+| `BLOTATO_MAX_EXPECTED_CREDITS` | Yes | scripts/contentDeliveryDiagnostics.js:29 |
+| `BLOTATO_MONTHLY_ESTIMATED_CREDIT_CAP` | Yes | scripts/contentDeliveryDiagnostics.js:143<br>scripts/contentDeliveryDiagnostics.js:146 |
 | `BLOTATO_NEWS_AUDIENCE` | No | services/blotato/utils/autoPublishService.js:1731 |
 | `BLOTATO_NEWS_CTA` | Yes | services/blotato/utils/autoPublishService.js:1736 |
 | `BLOTATO_NEWS_DURATION_SECONDS` | Yes | services/blotato/utils/autoPublishService.js:1729 |
