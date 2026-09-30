@@ -24,7 +24,10 @@ export function parseKoyebScaling({ service: servicePayload, deployment: deploym
   const deployment = asObject(deploymentPayload?.deployment) || asObject(deploymentPayload);
   const serviceId = String(service?.id || "").trim();
   const activeDeploymentId = String(service?.active_deployment_id || "").trim();
-  if (!serviceId || !activeDeploymentId) {
+  if (!serviceId) {
+    throw new KoyebScalingVerificationError("service_response_invalid", "Koyeb service response has no verifiable service ID.");
+  }
+  if (!activeDeploymentId) {
     throw new KoyebScalingVerificationError("active_deployment_missing", "Koyeb service has no verifiable active deployment.");
   }
   if (String(deployment?.id || "").trim() !== activeDeploymentId || String(deployment?.service_id || "").trim() !== serviceId) {
@@ -52,7 +55,8 @@ export function parseKoyebScaling({ service: servicePayload, deployment: deploym
 
   const manual = asObject(manualScaling);
   const manualRaw = manual?.scalings;
-  if (!manual || (manualRaw !== undefined && !Array.isArray(manualRaw))) {
+  if (!manual || (manualRaw === undefined && Object.keys(manual).length > 0) ||
+      (manualRaw !== undefined && !Array.isArray(manualRaw))) {
     throw new KoyebScalingVerificationError("manual_scaling_invalid", "Koyeb manual scaling response is unreadable.");
   }
   const manualScalings = (manualRaw || []).map((entry, index) => {
