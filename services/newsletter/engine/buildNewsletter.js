@@ -132,6 +132,7 @@ export async function buildNewsletter({ profileId = "ai-edge", sessionId: reques
     qaResult,
     generatedAt: now.toISOString(),
     siteShellReleaseSha: siteShell.manifest.releaseSha,
+    heroImage: heroImageResult,
   });
 
   const stored = await storeNewsletterIssue({ profile, sessionId, html, emailHtml, plaintext, metadata, date: now });

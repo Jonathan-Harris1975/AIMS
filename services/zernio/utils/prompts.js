@@ -27,7 +27,7 @@ function renderRssBlock(rssItems = []) {
 
 const BRAND_VOICE = buildZernioPersona();
 
-export function buildDailyPrompt({ lane, publishDate, history = [], rssItems = [], weeklyHistory = [], verifiedQuote = null, buildContext = "" }) {
+export function buildDailyPrompt({ lane, publishDate, history = [], rssItems = [], weeklyHistory = [], recentSpotlightPeople = [], verifiedQuote = null, buildContext = "" }) {
   const laneGuidance = {
     monday: `Write a Monday post built around the verified quote supplied below.
 Use the exact quote and author once only. Do not alter, British-localise, paraphrase, repeat, retype, modernise, or "correct" any word, punctuation, dash, spelling, or \
@@ -117,6 +117,9 @@ ${String(buildContext || "").trim() || "No verified build context supplied. Avoi
 
 Cross-lane weekly history to avoid same-week repetition:
 ${renderHistoryBlock(weeklyHistory)}
+
+${lane.key === "sunday" ? `People featured recently (choose a different person, even if an RSS item mentions one of these):
+${renderHistoryBlock(recentSpotlightPeople)}` : ""}
 
 RSS context for weekend-aware lanes:
 ${renderRssBlock(rssItems)}
