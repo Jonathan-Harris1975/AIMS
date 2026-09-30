@@ -42,12 +42,32 @@ test("Koyeb gate rejects a manual zero-instance override", () => {
 });
 
 test("Koyeb gate rejects missing or mismatched active deployments", () => {
-  for (const input of [payload({ activeId: "" }), payload({ activeId: "different" }), payload({ deploymentServiceId: "different" })]) {
+  const cases = [
+    [payload({ activeId: "" }), "active_deployment_missing"],
+    [payload({ activeId: "different" }), "deployment_identity_mismatch"],
+    [payload({ deploymentServiceId: "different" }), "deployment_identity_mismatch"],
+  ];
+  for (const [input, expectedCode] of cases) {
     assert.throws(
       () => verifyKoyebServicePayload(input, serviceId),
-      (error) => ["active_deployment_missing", "deployment_identity_mismatch"].includes(error.code)
+      (error) => error.code === expectedCode
     );
   }
+});
+
+test("Koyeb gate rejects a missing service ID and a drifted manual scaling response", () => {
+  const missingId = payload();
+  delete missingId.service.id;
+  assert.throws(
+    () => parseKoyebScaling(missingId),
+    (error) => error.code === "service_response_invalid"
+  );
+  const driftedManual = payload();
+  driftedManual.manualScaling = { overrides: [{ instances: 0 }] };
+  assert.throws(
+    () => verifyKoyebServicePayload(driftedManual, serviceId),
+    (error) => error.code === "manual_scaling_invalid"
+  );
 });
 
 test("Koyeb gate fails closed when the deployment has no scaling configuration", () => {
