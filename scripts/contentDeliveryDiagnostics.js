@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Read-only production snapshot. Run inside the AIMS service so Koyeb keeps
 // provider credentials private; print only booleans, IDs and delivery states.
+import "../config/loadEnv.js";
 import { readJsonStateFresh } from "../services/shared/utils/stateFile.js";
 import { getObjectAsText, listKeys } from "../services/shared/utils/r2-client.js";
 import { getNewsletterProfile } from "../services/newsletter/config/profiles.js";
