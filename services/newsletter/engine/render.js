@@ -88,7 +88,8 @@ ${sectionLabel("Reality Check")}
 ${renderPromotion(newsletter.promotion)}
 ${sectionLabel("Your Turn")}
 <tr><td style="padding:8px 24px 22px;font-family:Georgia,'Times New Roman',serif;font-size:17px;line-height:1.5;color:#0D1420;">${escapeHtml(newsletter.yourTurn || "")}</td></tr>
-<tr><td style="padding:22px 24px;border-top:1px solid #E5E7EB;font-size:12px;line-height:1.65;color:#64748B;text-align:center;">${escapeHtml(newsletter.footer?.text || "")}<br/><span style="color:#94A3B8;">AI Edge is written for people who want useful AI analysis without vendor theatre.</span></td></tr>
+<tr><td style="padding:22px 24px;border-top:1px solid #E5E7EB;font-size:12px;line-height:1.65;color:#64748B;text-align:center;">${escapeHtml(newsletter.footer?.text || "")}<br/>
+<span style="color:#94A3B8;">AI Edge is written for people who want useful AI analysis without vendor theatre.</span></td></tr>
 </table></td></tr></table></body></html>`;
 }
 
@@ -104,9 +105,14 @@ site-shell-version" content="${escapeHtml(siteShell.manifest.releaseSha)}"/><tit
   profile.displayName)}</title><meta name="robots" content="index,follow"/><link href="${escapeHtml(
     siteShell.manifest.stylesheetUrl)}" rel="stylesheet"/></head><body class="page-newsletter jh-growth-page">
 ${siteShell.headerHtml}
-<section class="hero jh-page-hero" data-jh-header-reveal-anchor><div class="wrap"><a class="jh-page-hero__brand" href="https://jonathan-harris.online/" aria-label="Jonathan Harris home"><img class="jh-page-hero__logo" src="https://images.jonathan-harris.online/site-logo" alt="Jonathan Harris" width="96" height="96" loading="eager" fetchpriority="high" decoding="async"/></a><p class="tag">${escapeHtml(profile.displayName)}</p><h1>${escapeHtml(
+<section class="hero jh-page-hero" data-jh-header-reveal-anchor><div class="wrap">
+<a class="jh-page-hero__brand" href="https://jonathan-harris.online/" aria-label="Jonathan Harris home">
+<img class="jh-page-hero__logo" src="https://images.jonathan-harris.online/site-logo" alt="Jonathan Harris" width="96" height="96" loading="eager" fetchpriority="high" decoding="as
+ync"/></a><p class="tag">${escapeHtml(profile.displayName)}</p><h1>${escapeHtml(
   newsletter.heroHeadline)}</h1><p>${escapeHtml(newsletter.previewText || "Practical AI analysis, minus the hype.")}</p></div></section>
-<main class="main" id="main" role="main"><div class="wrap"><article class="card">${newsletter.heroImageUrl ? `<img class="cover" src="${escapeHtml(newsletter.heroImageUrl)}" alt="" loading="eager" decoding="async"/>` : ""}${newsletter.openingNoteHtml || ""}</article><section aria-labelledby="newsletter-big-three"><h2 id="newsletter-big-three">The Big Three</h2>${(newsletter.bigThree || [
+<main class="main" id="main" role="main"><div class="wrap"><article class="card">${newsletter.heroImageUrl ? `
+<img class="cover" src="${escapeHtml(newsletter.heroImageUrl)}" alt="" loading="eager" decoding="async"/>` : ""}${newsletter.openingNoteHtml || ""}</article>
+<section aria-labelledby="newsletter-big-three"><h2 id="newsletter-big-three">The Big Three</h2>${(newsletter.bigThree || [
   ]).map(webStory).join("\n")}</section>
 ${newsletter.worthUsing ? `<section class="card"><p class="tag">${escapeHtml(newsletter.worthUsing.label || "Worth Using")}</p><h2><a href="${escapeHtml(
   newsletter.worthUsing.link)}">${escapeHtml(newsletter.worthUsing.title)}</a></h2><p>${escapeHtml(
