@@ -46,16 +46,11 @@ const aiEdge = Object.freeze({
   ),
   feedUrls: envList("NEWSLETTER_AI_EDGE_FEED_URLS", []),
 
-  // Brevo delivery target. Production sending should use the exact existing,
-  // populated list ID. Automatic folder/list creation is disabled by default
-  // so a successful build cannot silently send to a new empty audience.
-  brevo: Object.freeze({
-    listId: Number(env("NEWSLETTER_AI_EDGE_BREVO_LIST_ID", "")) || null,
-    listName: env("NEWSLETTER_AI_EDGE_BREVO_LIST_NAME", `${env("NEWSLETTER_AI_EDGE_NAME", "AI Edge")} Subscribers`),
-    folderName: env("NEWSLETTER_AI_EDGE_BREVO_FOLDER_NAME", "AIMS Newsletters"),
+  // Delivery identity. Audience, consent and suppression state live in the existing AIMS D1 database.
+  delivery: Object.freeze({
     fromName: env("NEWSLETTER_AI_EDGE_FROM_NAME", "Jonathan Harris — AI Edge"),
-    fromEmail: env("NEWSLETTER_AI_EDGE_FROM_EMAIL", env("BREVO_FROM_EMAIL")),
-    replyTo: env("NEWSLETTER_AI_EDGE_REPLY_TO", env("NEWSLETTER_AI_EDGE_FROM_EMAIL", env("BREVO_FROM_EMAIL"))),
+    fromEmail: env("COMMS_HUB_EMAIL_NEWSLETTER_ADDRESS", "newsletter@jonathan-harris.online"),
+    replyTo: env("NEWSLETTER_AI_EDGE_REPLY_TO", env("COMMS_HUB_EMAIL_NEWSLETTER_ADDRESS", "newsletter@jonathan-harris.online")),
   }),
 
   // R2 storage layout — reuses the existing blog / blog-images buckets
