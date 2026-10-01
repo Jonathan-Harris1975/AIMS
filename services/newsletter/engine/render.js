@@ -63,8 +63,10 @@ export function renderNewsletterHtml({ profile, newsletter }) {
 <div style="display:none;max-height:0;overflow:hidden;opacity:0;">${escapeHtml(newsletter.previewText || "")}</div>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#EEF0F3;"><tr><td align="center" style="padding:24px 12px;">
 <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;width:100%;background:#fff;border-radius:12px;overflow:hidden;">
-<tr><td style="padding:20px 24px;border-bottom:1px solid #E5E7EB;font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#0D1420;">${escapeHtml(
-  profile.displayName)}</td></tr>
+<tr><td align="center" style="padding:24px 24px 18px;border-bottom:1px solid #E5E7EB;">
+  <div style="font-family:Georgia,'Times New Roman',serif;font-size:24px;font-weight:700;color:#0D1420;">${escapeHtml(profile.displayName)}</div>
+  <div style="padding-top:5px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#64748B;">Jonathan Harris · practical AI, minus the hype</div>
+</td></tr>
 ${newsletter.heroImageUrl ? `<tr><td><img src="${escapeHtml(newsletter.heroImageUrl)}" alt="" width="600" style="display:block;width:100%;max-width:600px;height:auto;"/></td></tr>` : ""}
 <tr><td style="padding:24px 24px 8px;font-family:Georgia,'Times New Roman',serif;font-size:25px;line-height:1.25;font-weight:700;color:#0D1420;">${escapeHtml(newsletter.heroHeadline)}</td></tr>
 <tr><td style="padding:0 24px 18px;font-size:15px;line-height:1.6;color:#1F2937;">${newsletter.openingNoteHtml || ""}</td></tr>
@@ -86,7 +88,7 @@ ${sectionLabel("Reality Check")}
 ${renderPromotion(newsletter.promotion)}
 ${sectionLabel("Your Turn")}
 <tr><td style="padding:8px 24px 22px;font-family:Georgia,'Times New Roman',serif;font-size:17px;line-height:1.5;color:#0D1420;">${escapeHtml(newsletter.yourTurn || "")}</td></tr>
-<tr><td style="padding:20px 24px;border-top:1px solid #E5E7EB;font-size:12px;line-height:1.5;color:#9CA3AF;">${escapeHtml(newsletter.footer?.text || "")}</td></tr>
+<tr><td style="padding:22px 24px;border-top:1px solid #E5E7EB;font-size:12px;line-height:1.65;color:#64748B;text-align:center;">${escapeHtml(newsletter.footer?.text || "")}<br/><span style="color:#94A3B8;">AI Edge is written for people who want useful AI analysis without vendor theatre.</span></td></tr>
 </table></td></tr></table></body></html>`;
 }
 
@@ -102,14 +104,14 @@ site-shell-version" content="${escapeHtml(siteShell.manifest.releaseSha)}"/><tit
   profile.displayName)}</title><meta name="robots" content="index,follow"/><link href="${escapeHtml(
     siteShell.manifest.stylesheetUrl)}" rel="stylesheet"/></head><body class="page-newsletter jh-growth-page">
 ${siteShell.headerHtml}
-<section class="hero jh-page-hero" data-jh-header-reveal-anchor><div class="wrap"><p class="tag">${escapeHtml(profile.displayName)}</p><h1>${escapeHtml(
-  newsletter.heroHeadline)}</h1>${newsletter.heroImageUrl ? `<img class="cover" src="${escapeHtml(newsletter.heroImageUrl)}" alt="" loading="eager" decoding="async"/>` : ""}</div></section>
-<main class="main" id="main" role="main"><div class="wrap"><article class="card">${newsletter.openingNoteHtml || ""}</article><h2>The Big Three</h2>${(newsletter.bigThree || [
-  ]).map(webStory).join("\n")}
+<section class="hero jh-page-hero" data-jh-header-reveal-anchor><div class="wrap"><a class="jh-page-hero__brand" href="https://jonathan-harris.online/" aria-label="Jonathan Harris home"><img class="jh-page-hero__logo" src="https://images.jonathan-harris.online/site-logo" alt="Jonathan Harris" width="96" height="96" loading="eager" fetchpriority="high" decoding="async"/></a><p class="tag">${escapeHtml(profile.displayName)}</p><h1>${escapeHtml(
+  newsletter.heroHeadline)}</h1><p>${escapeHtml(newsletter.previewText || "Practical AI analysis, minus the hype.")}</p></div></section>
+<main class="main" id="main" role="main"><div class="wrap"><article class="card">${newsletter.heroImageUrl ? `<img class="cover" src="${escapeHtml(newsletter.heroImageUrl)}" alt="" loading="eager" decoding="async"/>` : ""}${newsletter.openingNoteHtml || ""}</article><section aria-labelledby="newsletter-big-three"><h2 id="newsletter-big-three">The Big Three</h2>${(newsletter.bigThree || [
+  ]).map(webStory).join("\n")}</section>
 ${newsletter.worthUsing ? `<section class="card"><p class="tag">${escapeHtml(newsletter.worthUsing.label || "Worth Using")}</p><h2><a href="${escapeHtml(
   newsletter.worthUsing.link)}">${escapeHtml(newsletter.worthUsing.title)}</a></h2><p>${escapeHtml(
     newsletter.worthUsing.summary)}</p><p><strong>Why it's worth your time:</strong> ${escapeHtml(newsletter.worthUsing.whyUseful)}</p></section>` : ""}
-<section><h2>On the Radar</h2>${(newsletter.onRadar || []).map((story) => `<article class="card"><h3><a href="${escapeHtml(story.link)}">${escapeHtml(
+<section class="card"><h2>On the Radar</h2>${(newsletter.onRadar || []).map((story) => `<article class="card"><h3><a href="${escapeHtml(story.link)}">${escapeHtml(
   story.title)}</a></h3><p>${escapeHtml(story.summary)}</p></article>`).join("\n")}</section>
 <section class="card"><p class="tag">Reality Check</p><h2>${escapeHtml(newsletter.realityCheck?.claim || "")}</h2><p>${escapeHtml(newsletter.realityCheck?.assessment || "")}</p></section>
 ${newsletter.promotion ? `<section class="card"><p class="tag">${escapeHtml(newsletter.promotion.eyebrow || "Featured")}</p><h2>${escapeHtml(
