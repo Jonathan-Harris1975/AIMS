@@ -61,7 +61,7 @@ export async function beginSubscription({ email, publicationId = "ai-edge", sour
 
 export async function confirmSubscription(token, { d1 = client() } = {}) {
   const at = nowIso();
-  const found = await d1.query(`SELECT vt.subscriber_id, vt.publication_id, vt.expires_at, vt.used_at, ns.email_hash
+  const found = await d1.query(`SELECT vt.subscriber_id, vt.publication_id, vt.expires_at, vt.used_at, ns.email_hash, ns.email
     FROM newsletter_verification_tokens vt JOIN newsletter_subscribers ns ON ns.id=vt.subscriber_id
     WHERE vt.token_hash=? AND vt.purpose='confirm'`, [hash(token)]);
   const row = found.results?.[0];
@@ -75,7 +75,7 @@ export async function confirmSubscription(token, { d1 = client() } = {}) {
     { sql: `INSERT INTO newsletter_consent_events(id,subscriber_id,publication_id,event_type,lawful_basis,purpose,consent_text_version,privacy_notice_version,source,occurred_at,metadata_json)
       VALUES(?,?,?,'consent_confirmed','consent','email_newsletter','confirmed','current','double_opt_in',?,'{}')`, params: [randomUUID(), row.subscriber_id, row.publication_id, at] },
   ]);
-  return { ok: true, status: "subscribed" };
+  return { ok: true, status: "subscribed", subscriberId: row.subscriber_id, publicationId: row.publication_id, email: row.email };
 }
 
 export async function createUnsubscribeToken(subscriberId, publicationId = "ai-edge", { d1 = client() } = {}) {
