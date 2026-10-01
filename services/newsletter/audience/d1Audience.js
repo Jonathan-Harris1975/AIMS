@@ -33,7 +33,14 @@ export async function listEligibleSubscribers(publicationId = "ai-edge", { d1 = 
   return result.results || [];
 }
 
-export async function beginSubscription({ email, publicationId = "ai-edge", source = "jotform", sourceReference = "", consentTextVersion = "1", privacyNoticeVersion = "1" }, { d1 = client() } = {}) {
+export async function beginSubscription({
+  email,
+  publicationId = "ai-edge",
+  source = "jotform",
+  sourceReference = "",
+  consentTextVersion = "1",
+  privacyNoticeVersion = "1",
+}, { d1 = client() } = {}) {
   const normalised = emailOf(email);
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalised)) throw new Error("A valid email address is required.");
   const emailHash = hash(normalised);
@@ -50,11 +57,18 @@ export async function beginSubscription({ email, publicationId = "ai-edge", sour
     { sql: `INSERT INTO newsletter_subscribers(id,email,email_hash,status,created_at,updated_at) VALUES(?,?,?,'pending',?,?)
       ON CONFLICT(email) DO UPDATE SET status='pending', updated_at=excluded.updated_at`, params: [subscriberId, normalised, emailHash, at, at] },
     { sql: `INSERT INTO newsletter_subscriptions(id,subscriber_id,publication_id,status,source,created_at,updated_at) VALUES(?,?,?,'pending',?,?,?)
-      ON CONFLICT(subscriber_id,publication_id) DO UPDATE SET status='pending', source=excluded.source, updated_at=excluded.updated_at`, params: [subscriptionId, subscriberId, publicationId, source, at, at] },
-    { sql: `INSERT INTO newsletter_consent_events(id,subscriber_id,publication_id,event_type,lawful_basis,purpose,consent_text_version,privacy_notice_version,source,source_reference,occurred_at,metadata_json)
-      VALUES(?,?,?,'consent_requested','consent','email_newsletter',?,?,?,?,?,'{}')`, params: [randomUUID(), subscriberId, publicationId, consentTextVersion, privacyNoticeVersion, source, sourceReference || null, at] },
+      ON CONFLICT(subscriber_id,publication_id) DO UPDATE SET status='pending', source=excluded.source, updated_at=excluded.updated_at`,
+      params: [subscriptionId, subscriberId, publicationId, source, at, at] },
+    { sql: `INSERT INTO newsletter_consent_events(
+      id,subscriber_id,publication_id,event_type,lawful_basis,purpose,consent_text_version,
+      privacy_notice_version,source,source_reference,occurred_at,metadata_json)
+      VALUES(?,?,?,'consent_requested','consent','email_newsletter',?,?,?,?,?,'{}')`,
+      params: [randomUUID(), subscriberId, publicationId, consentTextVersion, privacyNoticeVersion, source, sourceReference || null, at] },
     { sql: "DELETE FROM newsletter_verification_tokens WHERE subscriber_id=? AND publication_id=? AND purpose='confirm'", params: [subscriberId, publicationId] },
-    { sql: `INSERT INTO newsletter_verification_tokens(token_hash,subscriber_id,publication_id,purpose,expires_at,created_at) VALUES(?,?,?,'confirm',?,?)`, params: [tokenHash, subscriberId, publicationId, expiresAt, at] },
+    {
+      sql: `INSERT INTO newsletter_verification_tokens(token_hash,subscriber_id,publication_id,purpose,expires_at,created_at) VALUES(?,?,?,'confirm',?,?)`,
+      params: [tokenHash, subscriberId, publicationId, expiresAt, at],
+    },
   ]);
   return { ok: true, subscriberId, token, expiresAt };
 }
@@ -71,9 +85,15 @@ export async function confirmSubscription(token, { d1 = client() } = {}) {
   await d1.batch([
     { sql: "UPDATE newsletter_verification_tokens SET used_at=? WHERE token_hash=? AND used_at IS NULL", params: [at, hash(token)] },
     { sql: "UPDATE newsletter_subscribers SET status='active', verified_at=?, updated_at=? WHERE id=?", params: [at, at, row.subscriber_id] },
-    { sql: "UPDATE newsletter_subscriptions SET status='active', subscribed_at=?, unsubscribed_at=NULL, updated_at=? WHERE subscriber_id=? AND publication_id=?", params: [at, at, row.subscriber_id, row.publication_id] },
-    { sql: `INSERT INTO newsletter_consent_events(id,subscriber_id,publication_id,event_type,lawful_basis,purpose,consent_text_version,privacy_notice_version,source,occurred_at,metadata_json)
-      VALUES(?,?,?,'consent_confirmed','consent','email_newsletter','confirmed','current','double_opt_in',?,'{}')`, params: [randomUUID(), row.subscriber_id, row.publication_id, at] },
+    {
+      sql: "UPDATE newsletter_subscriptions SET status='active', subscribed_at=?, unsubscribed_at=NULL, updated_at=? WHERE subscriber_id=? AND publication_id=?",
+      params: [at, at, row.subscriber_id, row.publication_id],
+    },
+    { sql: `INSERT INTO newsletter_consent_events(
+      id,subscriber_id,publication_id,event_type,lawful_basis,purpose,consent_text_version,
+      privacy_notice_version,source,occurred_at,metadata_json)
+      VALUES(?,?,?,'consent_confirmed','consent','email_newsletter','confirmed','current','double_opt_in',?,'{}')`,
+      params: [randomUUID(), row.subscriber_id, row.publication_id, at] },
   ]);
   return { ok: true, status: "subscribed", subscriberId: row.subscriber_id, publicationId: row.publication_id, email: row.email };
 }
@@ -95,11 +115,20 @@ export async function unsubscribe(token, { d1 = client() } = {}) {
   if (row.used_at) return { ok: true, status: "already_unsubscribed" };
   await d1.batch([
     { sql: "UPDATE newsletter_verification_tokens SET used_at=? WHERE token_hash=?", params: [at, hash(token)] },
-    { sql: "UPDATE newsletter_subscriptions SET status='unsubscribed', unsubscribed_at=?, updated_at=? WHERE subscriber_id=? AND publication_id=?", params: [at, at, row.subscriber_id, row.publication_id] },
+    {
+      sql: "UPDATE newsletter_subscriptions SET status='unsubscribed', unsubscribed_at=?, updated_at=? WHERE subscriber_id=? AND publication_id=?",
+      params: [at, at, row.subscriber_id, row.publication_id],
+    },
     { sql: "UPDATE newsletter_subscribers SET status='unsubscribed', updated_at=? WHERE id=?", params: [at, row.subscriber_id] },
-    { sql: "INSERT OR IGNORE INTO newsletter_suppressions(email_hash,reason,source,created_at) VALUES(?,'consent_withdrawn','one_click_unsubscribe',?)", params: [row.email_hash, at] },
-    { sql: `INSERT INTO newsletter_consent_events(id,subscriber_id,publication_id,event_type,lawful_basis,purpose,consent_text_version,privacy_notice_version,source,occurred_at,metadata_json)
-      VALUES(?,?,?,'consent_withdrawn','consent','email_newsletter','withdrawal','current','one_click_unsubscribe',?,'{}')`, params: [randomUUID(), row.subscriber_id, row.publication_id, at] },
+    {
+      sql: "INSERT OR IGNORE INTO newsletter_suppressions(email_hash,reason,source,created_at) VALUES(?,'consent_withdrawn','one_click_unsubscribe',?)",
+      params: [row.email_hash, at],
+    },
+    { sql: `INSERT INTO newsletter_consent_events(
+      id,subscriber_id,publication_id,event_type,lawful_basis,purpose,consent_text_version,
+      privacy_notice_version,source,occurred_at,metadata_json)
+      VALUES(?,?,?,'consent_withdrawn','consent','email_newsletter','withdrawal','current','one_click_unsubscribe',?,'{}')`,
+      params: [randomUUID(), row.subscriber_id, row.publication_id, at] },
   ]);
   return { ok: true, status: "unsubscribed" };
 }
