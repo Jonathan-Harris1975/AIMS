@@ -5,7 +5,7 @@
   "owner": "AIMS",
   "runtime_dependency": "none",
   "adapted_at": "2026-09-16",
-  "purpose": "Repository-owned newsletter generation, QA and Brevo delivery capability.",
+  "purpose": "Repository-owned newsletter generation, QA, D1 audience management and one.com delivery capability.",
   "capabilities": [
     "rss_ingestion_24h_window",
     "story_ranking_and_selection",
@@ -14,19 +14,20 @@
     "deterministic_and_ai_qa_review_loop",
     "bounded_rewrite_with_quarantine",
     "multi_profile_configuration",
-    "brevo_documented_api_delivery"
+    "d1_consent_audience_management",
+    "onecom_direct_delivery"
   ],
   "profiles": [
     "ai-edge"
   ],
   "implementation_paths": [
     "services/newsletter/engine/buildNewsletter.js",
-    "services/newsletter/brevo/campaign.js",
+    "services/newsletter/delivery/aimsDelivery.js",
     "audits/utils/newsletterAudit.js"
   ],
   "entry_points": {
     "generate": "services/newsletter/engine/buildNewsletter.js#buildNewsletter",
-    "deliver": "services/newsletter/brevo/campaign.js#deliverNewsletterIssue",
+    "deliver": "services/newsletter/delivery/aimsDelivery.js#deliverNewsletterIssue",
     "audit": "audits/utils/newsletterAudit.js#runNewsletterAudit"
   },
   "http_routes": [
