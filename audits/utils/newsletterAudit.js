@@ -13,10 +13,9 @@
 //   - QA pass rate (how many issues cleared review without hitting
 //     maxRewriteIterations / quarantine)
 //   - Average rewrite iterations per issue
-//   - Subscriber growth (from Brevo list counts)
-//   - Open/click/unsubscribe rates (from Brevo campaign reports, for every
-//     issue that was actually delivered — see campaign.json alongside each
-//     issue's metadata.json, written by services/newsletter/brevo/campaign.js)
+//   - Current eligible/pending audience state (from AIMS D1)
+//   - Per-issue delivery counts (from AIMS D1 recipient delivery records;
+//     one.com SMTP does not expose Brevo-style open/click analytics)
 //   - Content quality trends (banned-phrase / Americanism hit-rate across
 //     the period, from stored issue metadata)
 
@@ -25,9 +24,8 @@ import { listKeys, getObjectAsText } from "../../services/shared/utils/r2-client
 import { buildAuditPrefix } from "./auditPaths.js";
 import { publishAuditJson, publishAuditText, publishAuditLatest } from "./publishAuditArtifacts.js";
 import { listNewsletterProfiles } from "../../services/newsletter/config/profiles.js";
-import { ensureList } from "../../services/newsletter/brevo/audience.js";
-import { getList } from "../../services/newsletter/brevo/client.js";
-import { getCampaignStatus } from "../../services/newsletter/brevo/campaign.js";
+import { getAudienceReadiness } from "../../services/newsletter/audience/d1Audience.js";
+import { getCampaignStatus } from "../../services/newsletter/delivery/aimsDelivery.js";
 
 const AUDIT_TYPE = "newsletter";
 
@@ -107,49 +105,31 @@ function summariseQa(issues) {
 }
 
 async function summariseAudience(profile) {
-  const list = await ensureList({ name: profile.brevo.listName, folderName: profile.brevo.folderName });
-  if (!list.ok) return { configured: true, error: list.error };
-
-  const result = await getList(list.listId);
-  if (!result.ok) return { configured: true, listId: list.listId, error: result.error };
-
+  const result = await getAudienceReadiness(profile.id);
   return {
     configured: true,
-    listId: list.listId,
-    totalSubscribers: result.data?.totalSubscribers ?? null,
-    totalBlacklisted: result.data?.totalBlacklisted ?? null,
+    active: result.audience?.active ?? 0,
+    pending: result.audience?.pending ?? 0,
+    ready: result.ready === true,
   };
 }
 
 async function summariseCampaignPerformance(issues) {
   const delivered = issues.filter((i) => i.campaign?.campaignId);
   if (!delivered.length) {
-    return { available: false, deliveredCount: 0, reason: "No issues in this window have a recorded Brevo campaign delivery." };
+    return { available: false, deliveredCount: 0, reason: "No issues in this window have a recorded AIMS delivery." };
   }
-
-  const stats = [];
+  let sent = 0;
+  let failed = 0;
+  let reconciliationRequired = 0;
   for (const { campaign } of delivered) {
     const status = await getCampaignStatus(campaign.campaignId);
-    if (status.ok && status.statistics) stats.push(status.statistics);
+    if (!status.ok) continue;
+    sent += Number(status.counts?.sent || 0);
+    failed += Number(status.counts?.failed || 0);
+    reconciliationRequired += Number(status.counts?.reconciliation_required || 0);
   }
-
-  if (!stats.length) {
-    return { available: false, deliveredCount: delivered.length, reason: "Brevo campaign reports were not retrievable for any delivered issue in this window." };
-  }
-
-  const avg = (field) => {
-    const values = stats.map((s) => Number(s[field])).filter((n) => Number.isFinite(n));
-    return values.length ? Number((values.reduce((a, b) => a + b, 0) / values.length).toFixed(2)) : null;
-  };
-
-  return {
-    available: true,
-    deliveredCount: delivered.length,
-    reportedCount: stats.length,
-    avgUniqueOpens: avg("uniqueViews"),
-    avgUniqueClicks: avg("clickers"),
-    avgUnsubscribed: avg("unsubscriptions"),
-  };
+  return { available: true, deliveredCount: delivered.length, sent, failed, reconciliationRequired };
 }
 
 async function buildProfileSection(profile, window) {
@@ -177,8 +157,8 @@ function renderHtml(report) {
 <td>${p.qa.passRate ?? "—"}%</td>
 <td>${p.qa.avgIterations ?? "—"}</td>
 <td>${p.qa.quarantineCount}</td>
-<td>${p.audience.totalSubscribers ?? "—"}</td>
-<td>${p.campaignPerformance.available ? `${p.campaignPerformance.avgUniqueOpens ?? "—"} / ${p.campaignPerformance.avgUniqueClicks ?? "—"} / ${p.campaignPerformance.avgUnsubscribed ?? "—"}` : "—"}</td>
+<td>${p.audience.active ?? "—"}</td>
+<td>${p.campaignPerformance.available ? `${p.campaignPerformance.sent ?? 0} sent / ${p.campaignPerformance.failed ?? 0} failed` : "—"}</td>
 </tr>`
     )
     .join("\n");
@@ -189,7 +169,7 @@ function renderHtml(report) {
 <h1>Newsletter Engine — Monthly Audit</h1>
 <p>Window: ${escapeHtml(report.window.start)} to ${escapeHtml(report.window.end)}</p>
 <table border="1" cellpadding="6" cellspacing="0">
-<tr><th>Profile</th><th>Issues</th><th>QA pass rate</th><th>Avg rewrite iterations</th><th>Quarantined</th><th>Subscribers</th><th>Avg opens/clicks/unsubs</th></tr>
+<tr><th>Profile</th><th>Issues</th><th>QA pass rate</th><th>Avg rewrite iterations</th><th>Quarantined</th><th>Active subscribers</th><th>Delivery</th></tr>
 ${rows}
 </table>
 </body></html>`;
