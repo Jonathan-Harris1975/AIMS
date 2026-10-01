@@ -439,7 +439,7 @@ export function loadCommsHubConfig(env = process.env, { requireEnabled = false }
     newsletter: Object.freeze({
       key: "newsletter",
       address: usableEnvValue(env.COMMS_HUB_EMAIL_NEWSLETTER_ADDRESS) || "newsletter@jonathan-harris.online",
-      purpose: "newsletter_brevo",
+      purpose: "newsletter_delivery",
       automationExcluded: true,
     }),
   });
@@ -605,7 +605,7 @@ export function loadCommsHubConfig(env = process.env, { requireEnabled = false }
       }),
       newsletter: Object.freeze({
         address: excludedEmailAccounts.newsletter.address,
-        purpose: "newsletter_brevo",
+        purpose: "newsletter_delivery",
         commsHubManaged: false,
         automationExcluded: true,
       }),

@@ -141,7 +141,7 @@ Migration `0023_housekeeping` seeds a conservative 365-day archive-only retentio
 
 ## D1 and storage
 
-Comms Hub migrations are additive and are applied/checkable through the existing migration tooling; the current required manifest ends at `0023_housekeeping`. The runtime D1 bridge under `workers/comms-hub-data-plane/` has a narrow authenticated SQL contract. Conversation/worker operational state is durable in D1, while private attachments and workflow artefacts use the configured Comms Hub R2 lanes.
+Comms Hub migrations are additive and are applied/checkable through the existing migration tooling; the current required manifest ends at `0024_newsletter_audience`. The runtime D1 bridge under `workers/comms-hub-data-plane/` has a narrow authenticated SQL contract. Conversation/worker operational state is durable in D1, while private attachments and workflow artefacts use the configured Comms Hub R2 lanes.
 
 ## Production controls
 
