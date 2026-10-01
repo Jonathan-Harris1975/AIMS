@@ -11,7 +11,14 @@ function newsletterMailer() {
   const config = loadCommsHubConfig(process.env, { requireEnabled: true });
   const account = config.manualEmailAccounts?.newsletter;
   if (!account?.enabled) return null;
-  return new OneComMailClient({ ...config, oneComEmailAccountKey: account.key, oneComEmailAddress: account.address, oneComEmailUsername: account.username, oneComEmailPassword: account.password, oneComMailbox: account.mailbox });
+  return new OneComMailClient({
+    ...config,
+    oneComEmailAccountKey: account.key,
+    oneComEmailAddress: account.address,
+    oneComEmailUsername: account.username,
+    oneComEmailPassword: account.password,
+    oneComMailbox: account.mailbox,
+  });
 }
 
 router.post("/subscribe", asyncRoute(async (req, res) => {
