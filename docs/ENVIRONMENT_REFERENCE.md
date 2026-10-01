@@ -4,8 +4,8 @@
 
 This inventory makes the runtime configuration contract auditable without duplicating secret values. `.env.example` and `env.template` remain the curated operator templates; this file records every production `process.env` dependency and its source locations.
 
-- Runtime variables referenced in production code: **518**
-- Present in curated templates: **404**
+- Runtime variables referenced in production code: **515**
+- Present in curated templates: **401**
 - Not present in curated templates: **114**
 
 | Variable | Curated template | Production references |
@@ -22,7 +22,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `AIMS_OPERATION_ASYNC_REQUEST_TIMEOUT_MS` | Yes | services/ops/index.js:517 |
 | `AIMS_OPERATION_DISPATCH_TIMEOUT_MS` | No | services/ops/index.js:453 |
 | `AIMS_OPERATION_FRIDAY_PM_DELAY_MS` | Yes | services/ops/index.js:144 |
-| `AIMS_OPERATION_NEWSLETTER_ENABLED` | Yes | scripts/contentDeliveryDiagnostics.js:163 |
+| `AIMS_OPERATION_NEWSLETTER_ENABLED` | Yes | scripts/contentDeliveryDiagnostics.js:152 |
 | `AIMS_OPERATION_TASK_TIMEOUT_MS` | Yes | services/ops/index.js:454 |
 | `AIMS_STARTUP_GRACE_MS` | No | services/shared/utils/lifecycle.js:14 |
 | `AI_MODEL_BLOCKLIST` | Yes | services/shared/utils/ai-service.js:85 |
@@ -109,7 +109,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `BLOTATO_BRAND_TRANSITION` | Yes | services/blotato/utils/newsShortsService.js:20 |
 | `BLOTATO_BRAND_TRIM_TO_VOICEOVER` | Yes | services/blotato/utils/newsShortsService.js:23 |
 | `BLOTATO_BRAND_VOICE_NAME` | Yes | services/blotato/utils/newsShortsService.js:17 |
-| `BLOTATO_DAILY_PAID_RENDER_CAP` | Yes | scripts/contentDeliveryDiagnostics.js:164<br>scripts/contentDeliveryDiagnostics.js:167 |
+| `BLOTATO_DAILY_PAID_RENDER_CAP` | Yes | scripts/contentDeliveryDiagnostics.js:153<br>scripts/contentDeliveryDiagnostics.js:156 |
 | `BLOTATO_DEFAULT_CHANNELS` | Yes | services/blotato/utils/autoPublishService.js:1403 |
 | `BLOTATO_DEFAULT_FOLLOW_CTA` | Yes | services/blotato/utils/newsShortsService.js:230 |
 | `BLOTATO_FACEBOOK_MEDIA_TYPE` | Yes | services/blotato/utils/autoPublishService.js:1027 |
@@ -125,8 +125,8 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `BLOTATO_KEEPALIVE_ENABLED` | Yes | services/blotato/utils/autoPublishService.js:1687 |
 | `BLOTATO_LOW_COST_IMAGE_MODEL_LABEL` | Yes | services/blotato/utils/autoPublishService.js:473<br>services/blotato/utils/newsShortsService.js:30 |
 | `BLOTATO_LOW_COST_VIDEO_MODEL_LABEL` | Yes | services/blotato/utils/autoPublishService.js:474<br>services/blotato/utils/newsShortsService.js:31 |
-| `BLOTATO_MAX_EXPECTED_CREDITS` | Yes | scripts/contentDeliveryDiagnostics.js:29 |
-| `BLOTATO_MONTHLY_ESTIMATED_CREDIT_CAP` | Yes | scripts/contentDeliveryDiagnostics.js:165<br>scripts/contentDeliveryDiagnostics.js:168 |
+| `BLOTATO_MAX_EXPECTED_CREDITS` | Yes | scripts/contentDeliveryDiagnostics.js:28 |
+| `BLOTATO_MONTHLY_ESTIMATED_CREDIT_CAP` | Yes | scripts/contentDeliveryDiagnostics.js:154<br>scripts/contentDeliveryDiagnostics.js:157 |
 | `BLOTATO_NEWS_AUDIENCE` | No | services/blotato/utils/autoPublishService.js:1731 |
 | `BLOTATO_NEWS_CTA` | Yes | services/blotato/utils/autoPublishService.js:1736 |
 | `BLOTATO_NEWS_DURATION_SECONDS` | Yes | services/blotato/utils/autoPublishService.js:1729 |
@@ -189,8 +189,6 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `BLOTATO_YOUTUBE_PRIVACY_STATUS` | Yes | services/blotato/utils/autoPublishService.js:1002 |
 | `BOOTSTRAP_STEP_TIMEOUT_MS` | Yes | scripts/bootstrap.js:5 |
 | `BRAND_SOCIAL_COUNCIL_RUN_AFTER_SOCIAL` | Yes | audits/utils/zernioSocialPerformance.js:722 |
-| `BREVO_API_BASE_URL` | Yes | services/newsletter/brevo/client.js:24 |
-| `BREVO_API_KEY` | Yes | services/newsletter/brevo/client.js:31 |
 | `CHROME_BIN` | No | audits/utils/socialThumbnailAudit.js:133 |
 | `CHROMIUM_PATH` | No | audits/utils/contentMasterCouncil.js:188<br>audits/utils/socialThumbnailAudit.js:132<br>audits/utils/websiteAuditCouncil.js:1080<br>services/artwork/utils/quizCardRenderer.js:20 |
 | `CLOUDFLARE_PURGE_ALLOW_PUBLIC` | Yes | services/shared/middleware/suiteAuth.js:76 |
@@ -215,7 +213,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `COMMS_HUB_CREDENTIAL_VAULT_ENABLED` | Yes | services/comms-hub/routes/index.js:150 |
 | `COMMS_HUB_DELAYED_ACTION_WORKER_ENABLED` | Yes | services/comms-hub/routes/index.js:146 |
 | `COMMS_HUB_EMAIL_ENABLED` | Yes | services/comms-hub/routes/index.js:131 |
-| `COMMS_HUB_EMAIL_NEWSLETTER_ADDRESS` | Yes | services/newsletter/delivery/aimsDelivery.js:36 |
+| `COMMS_HUB_EMAIL_NEWSLETTER_ADDRESS` | Yes | services/newsletter/delivery/aimsDelivery.js:98 |
 | `COMMS_HUB_ENABLED` | Yes | scripts/performanceGate.js:7 |
 | `COMMS_HUB_FORM_AUTO_SEND_ENABLED` | Yes | services/comms-hub/routes/index.js:144 |
 | `COMMS_HUB_FORM_ORCHESTRATION_ENABLED` | Yes | services/comms-hub/routes/index.js:136 |
@@ -225,7 +223,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `COMMS_HUB_MONTH_END_ARCHIVE_ENABLED` | Yes | services/comms-hub/routes/index.js:149 |
 | `COMMS_HUB_OPENROUTER_DATA_COLLECTION` | Yes | services/shared/utils/ai-service.js:198 |
 | `COMMS_HUB_OPENROUTER_ZDR_ONLY` | Yes | services/shared/utils/ai-service.js:205 |
-| `COMMS_HUB_PUBLIC_BASE_URL` | Yes | services/newsletter/delivery/aimsDelivery.js:23<br>services/newsletter/jotformIntake.js:71<br>services/newsletter/routes/subscriptions.js:29 |
+| `COMMS_HUB_PUBLIC_BASE_URL` | Yes | services/newsletter/delivery/aimsDelivery.js:25<br>services/newsletter/jotformIntake.js:76<br>services/newsletter/routes/subscriptions.js:30 |
 | `COMMS_HUB_RETENTION_WORKER_ENABLED` | Yes | services/comms-hub/routes/index.js:147 |
 | `COMMS_HUB_SMART_RESPONSE_ENABLED` | Yes | services/comms-hub/routes/index.js:135 |
 | `CONTENT_MASTER_COUNCIL_MAX_RETRIES` | Yes | audits/utils/contentMasterCouncil.js:145 |
@@ -281,9 +279,8 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `MAX_SUMMARY_CHARS` | Yes | services/rss-feed-creator/utils/rss-prompts.js:22<br>services/rss-feed-creator/utils/rss-prompts.js:23 |
 | `MAX_URL_FEEDS_PER_RUN` | Yes | services/rss-feed-creator/utils/feedRotationManager.js:20<br>services/rss-feed-creator/utils/fetchFeeds.js:29 |
 | `MIN_SUMMARY_CHARS` | Yes | services/rss-feed-creator/utils/rss-prompts.js:17<br>services/rss-feed-creator/utils/rss-prompts.js:18 |
-| `NEWSLETTER_BREVO_ALLOW_LIST_CREATE` | Yes | services/newsletter/brevo/campaign.js:300 |
-| `NEWSLETTER_CONSENT_TEXT_VERSION` | Yes | services/newsletter/jotformIntake.js:64<br>services/newsletter/jotformIntake.js:78<br>services/newsletter/routes/subscriptions.js:23 |
-| `NEWSLETTER_PRIVACY_NOTICE_VERSION` | Yes | services/newsletter/jotformIntake.js:65<br>services/newsletter/jotformIntake.js:79<br>services/newsletter/routes/subscriptions.js:24 |
+| `NEWSLETTER_CONSENT_TEXT_VERSION` | Yes | services/newsletter/jotformIntake.js:69<br>services/newsletter/jotformIntake.js:83<br>services/newsletter/routes/subscriptions.js:24 |
+| `NEWSLETTER_PRIVACY_NOTICE_VERSION` | Yes | services/newsletter/jotformIntake.js:70<br>services/newsletter/jotformIntake.js:84<br>services/newsletter/routes/subscriptions.js:25 |
 | `NODE_ENV` | Yes | logger.js:8<br>scripts/deploySmoke.js:4<br>scripts/performanceGate.js:5<br>scripts/startupCheck.js:34<br>server.js:30<br>server.js:396<br>+22 more |
 | `ONEUP_EBOOK_CATALOGUE_PATH` | No | services/zernio/utils/ebookCatalogue.js:42 |
 | `ON_BRAND_AUDIT_MAX_TOKENS` | No | audits/utils/onBrandAudit.js:13 |
