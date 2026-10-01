@@ -98,10 +98,23 @@ export function buildSmartResponseIntelligence({
     && !humanReview
     && !securityBlocked
     && Number(moderation?.severity || 0) < 0.2;
+  // Website chat must not silently swallow an ordinary low-risk reply just because
+  // model triage confidence lands below the stricter cross-channel auto-send threshold.
+  // Keep this exception chat-only and retain every security, moderation, evidence,
+  // unresolved-action and human-review gate.
+  const safeDirectResponseEligible = String(conversation?.channel || '').toLowerCase() === 'chat'
+    && !humanReview
+    && !securityBlocked
+    && !clarificationRequired
+    && !formDecision.selected
+    && unresolvedCount === 0
+    && clamp(intent?.confidence) >= Number(config.smartResponseChatMinimumConfidence ?? 0.62)
+    && (!evidenceRequired || hasEvidence)
+    && Number(moderation?.severity || 0) < 0.2;
   const autonomousEligible = channelAutoSendEnabled
     && !humanReview
     && !clarificationRequired
-    && (safeFormDeliveryEligible || clamp(intent?.confidence) >= Number(config.smartResponseMinimumConfidence ?? 0.86))
+    && (safeFormDeliveryEligible || safeDirectResponseEligible || clamp(intent?.confidence) >= Number(config.smartResponseMinimumConfidence ?? 0.86))
     && (!evidenceRequired || hasEvidence || safeFormDeliveryEligible)
     && Number(moderation?.severity || 0) < 0.2;
 
@@ -119,6 +132,7 @@ export function buildSmartResponseIntelligence({
     safeClarificationEligible,
     safeDeterministicResponseEligible,
     safeFormDeliveryEligible,
+    safeDirectResponseEligible,
     nextBestMove,
     formDecision,
     reasons: Object.freeze([
@@ -133,6 +147,7 @@ export function buildSmartResponseIntelligence({
       ...(safeClarificationEligible ? ["safe_deterministic_clarification"] : []),
       ...(safeDeterministicResponseEligible ? [`safe_deterministic_response:${conversationalIntelligence?.deterministicResponseKind}`] : []),
       ...(safeFormDeliveryEligible ? [`safe_form_delivery:${formDecision.formKey}`] : []),
+      ...(safeDirectResponseEligible ? ["safe_direct_chat_response"] : []),
       ...(ambiguousIntent && !safeFormDeliveryEligible ? ["intent_ambiguous"] : []),
       ...(evidenceRequired && !hasEvidence ? ["evidence_missing"] : []),
       ...(formDecision.selected ? [`form:${formDecision.formKey}`] : []),

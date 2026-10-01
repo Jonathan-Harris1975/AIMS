@@ -82,7 +82,8 @@ export class CommsHubGovernanceService {
     const safeClarification = latestResponseIntelligence.safeClarificationEligible === true;
     const safeDeterministicResponse = latestResponseIntelligence.safeDeterministicResponseEligible === true;
     const safeFormDelivery = latestResponseIntelligence.safeFormDeliveryEligible === true;
-    const safeDeterministicDelivery = safeClarification || safeDeterministicResponse || safeFormDelivery;
+    const safeDirectResponse = latestResponseIntelligence.safeDirectResponseEligible === true;
+    const safeDeterministicDelivery = safeClarification || safeDeterministicResponse || safeFormDelivery || safeDirectResponse;
     if (latestResponseIntelligence.version && latestResponseIntelligence.autonomousEligible !== true && !safeDeterministicDelivery) {
       throw new CommsHubError(409, 'autonomous_reply_response_intelligence_blocked', 'Smart Response Intelligence did not authorise autonomous delivery for this draft.');
     }
@@ -108,7 +109,7 @@ export class CommsHubGovernanceService {
     await this.context.auditService.record({ actor: identity.actor, role: identity.role, action: 'autonomous_reply_sent', objectType: 'reply_draft', objectId: draftId,
        conversationId, details: { policyKey: policy.policy_key, channel: conversation.channel, risk, confidence, evidenceCount, responseReasons:
           latestResponseIntelligence.reasons || [], answerability: latestResponseIntelligence.answerability || null, model: ai?.runs?.[0]?.model || ai?.runs?.[0]?.model_name ||
-             null, safeClarification, safeDeterministicResponse, safeFormDelivery, automated: true } });
+             null, safeClarification, safeDeterministicResponse, safeFormDelivery, safeDirectResponse, automated: true } });
     return { policy: policy.policy_key, ...result };
   }
 
