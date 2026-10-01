@@ -1,6 +1,13 @@
 import { CommsHubError } from "./errors.js";
 
 export const COMMS_HUB_FORM_ROUTES = Object.freeze({
+  "262733359026055": Object.freeze({
+    key: "newsletter_signup",
+    label: "AI Edge newsletter signup",
+    workflow: "newsletter_double_opt_in",
+    subject: "AI Edge newsletter signup",
+    defaultUrl: "https://form.jotform.com/262733359026055",
+  }),
   "260281179574362": Object.freeze({
     key: "contact",
     label: "Contact form",
@@ -362,6 +369,8 @@ export function loadCommsHubConfig(env = process.env, { requireEnabled = false }
     || extractAccountIdFromR2Endpoint(env.R2_ENDPOINT);
   const aiEnabled = booleanValue(env.COMMS_HUB_AI_ENABLED, false);
   const jotformForms = Object.freeze({
+    newsletter_signup: Object.freeze({ ...COMMS_HUB_FORM_ROUTES["262733359026055"], formId: "262733359026055", url: normaliseBaseUrl(env.COMMS_HUB_JOTFORM_NEWSLETTER_URL,
+       COMMS_HUB_FORM_ROUTES["262733359026055"].defaultUrl) }),
     contact: Object.freeze({ ...COMMS_HUB_FORM_ROUTES["260281179574362"], formId: "260281179574362", url: normaliseBaseUrl(env.COMMS_HUB_JOTFORM_CONTACT_URL,
        COMMS_HUB_FORM_ROUTES["260281179574362"].defaultUrl) }),
     case_study: Object.freeze({ ...COMMS_HUB_FORM_ROUTES["262063136008044"], formId: "262063136008044", url: normaliseBaseUrl(env.COMMS_HUB_JOTFORM_CASE_STUDY_URL,
