@@ -115,7 +115,7 @@ export async function recordCampaignDelivery({ profile, sessionId, campaignId, l
     campaignStatus: campaignStatus || null,
     createdAt: createdAt || null,
     sentAt: sentAt || null,
-    provider: "brevo",
+    provider: "aims-onecom",
     updatedAt: new Date().toISOString(),
   };
   const url = await putJson(profile.storage.htmlBucketKey, key, payload);
