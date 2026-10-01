@@ -7,7 +7,7 @@ import { newCorrelationId, stableId } from "../domain/ids.js";
 import { isAutomationExcludedEmailAccountKey } from "../domain/automationScope.js";
 import { normalisePriorityOverride } from "../domain/ai.js";
 import { attachCommsIdentity, requireCommsPermission } from "../domain/rbac.js";
-import { readJotformWebhookEnvelope } from "../domain/webhook.js";
+import { readJotformWebhookEnvelope, resolveJotformWebhook } from "../domain/webhook.js";
 import { readZernioWebhookEnvelope, zernioWebhookEventsForFamily } from "../domain/zernioWebhook.js";
 import { safeErrorLog } from "../domain/redaction.js";
 import { CommsHubError, toCommsHubError } from "../errors.js";
@@ -23,6 +23,7 @@ import { decideApproval } from "../approvalService.js";
 import { sendReplyDraft } from "../replyDraftService.js";
 import { getFirstPartyBookCatalogueStatus } from "../smartContextService.js";
 import { processZernioWebhook, reconcileEnabledZernioWebhooks, reconcileZernioWebhook, withZernioAcceptanceDeadline } from "../socialService.js";
+import { processNewsletterJotformSignup } from "../../newsletter/jotformIntake.js";
 
 function publicError(error) {
   const normalised = toCommsHubError(error, {
@@ -160,6 +161,16 @@ export function createCommsHubRouter({
       requireReady(runtimeReadinessProvider);
       const envelope = await readJotformWebhookEnvelope(req, config.maxWebhookBytes);
       const active = contextProvider();
+      identifiers = resolveJotformWebhook(envelope);
+      if (identifiers.route.key === "newsletter_signup") {
+        const newsletterResult = await processNewsletterJotformSignup({ identifiers, context: active });
+        recordProviderOutcome({
+          routeKey: "comms-hub:jotform-newsletter-intake", provider: "jotform", ok: true,
+          durationMs: Date.now() - startedAt, status: newsletterResult.status,
+        });
+        log.info("newsletter.jotform.accepted", { correlationId, formId: identifiers.formId, duplicate: newsletterResult.duplicate, status: newsletterResult.status });
+        return res.status(newsletterResult.duplicate ? 200 : 202).json({ ok: true, accepted: true, duplicate: newsletterResult.duplicate, status: newsletterResult.status, correlationId });
+      }
       const processed = await processJotformIntake({ envelope, correlationId, context: active });
       identifiers = processed.identifiers;
       const intake = processed.intake;
