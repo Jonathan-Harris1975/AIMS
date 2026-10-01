@@ -2,6 +2,7 @@ import express from "express";
 import { loadCommsHubConfig } from "../../comms-hub/config.js";
 import { OneComMailClient } from "../../comms-hub/clients/oneComMailClient.js";
 import { beginSubscription, confirmSubscription, unsubscribe } from "../audience/d1Audience.js";
+import { deliverTodaysIssueToSubscriber } from "../delivery/aimsDelivery.js";
 
 const router = express.Router();
 const asyncRoute = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
@@ -39,9 +40,27 @@ router.post("/subscribe", asyncRoute(async (req, res) => {
 
 router.get("/confirm/:token", asyncRoute(async (req, res) => {
   const result = await confirmSubscription(req.params.token);
-  return res.status(result.ok ? 200 : 400).type("html").send(result.ok
-    ? "<!doctype html><title>AI Edge subscription confirmed</title><h1>Subscription confirmed</h1><p>You are now subscribed to AI Edge.</p>"
-    : "<!doctype html><title>Confirmation failed</title><h1>Confirmation link invalid or expired</h1>");
+  if (!result.ok) {
+    return res.status(400).type("html").send("<!doctype html><title>Confirmation failed</title><h1>Confirmation link invalid or expired</h1>");
+  }
+
+  // A new subscriber should not have to wait for the next scheduled issue if
+  // today's QA-passed newsletter already exists. This is deliberately best
+  // effort: subscription confirmation succeeds even if R2 or mail delivery is
+  // temporarily unavailable, and the normal newsletter send remains able to
+  // pick up the active subscriber later.
+  const todaysIssue = await deliverTodaysIssueToSubscriber({
+    subscriberId: result.subscriberId,
+    email: result.email,
+    publicationId: result.publicationId,
+    date: new Date(),
+  });
+  const issueMessage = todaysIssue.status === "sent"
+    ? "<p>Today's AI Edge newsletter has also been sent to your inbox.</p>"
+    : todaysIssue.status === "already_sent"
+      ? "<p>Today's AI Edge newsletter is already in your inbox.</p>"
+      : "";
+  return res.status(200).type("html").send(`<!doctype html><title>AI Edge subscription confirmed</title><h1>Subscription confirmed</h1><p>You are now subscribed to AI Edge.</p>${issueMessage}`);
 }));
 
 router.get("/unsubscribe/:token", asyncRoute(async (req, res) => {
