@@ -6,7 +6,7 @@ import { requestDedupe } from "../../shared/utils/requestDedupe.js";
 import { validateBody, newsletterSendBodySchema } from "../../shared/utils/requestSchemas.js";
 import { getNewsletterProfile } from "../config/profiles.js";
 import { buildIssueKeyPrefix, findLatestIssueSessionId } from "../engine/storage.js";
-import { deliverNewsletterIssue, getNewsletterDeliveryReadiness, getCampaignStatus } from "../brevo/campaign.js";
+import { deliverNewsletterIssue, getNewsletterDeliveryReadiness, getCampaignStatus } from "../delivery/aimsDelivery.js";
 
 const router = express.Router();
 const asyncRoute = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
@@ -20,6 +20,7 @@ async function loadStoredIssue(profile, sessionId, date) {
   // deliverNewsletterIssue doesn't need to re-fetch it from R2 — it's handed
   // the content directly on buildResult.emailHtml.
   const emailHtml = await getObjectAsText(bucketKey, `${prefix}/email.html`);
+  const plaintext = await getObjectAsText(bucketKey, `${prefix}/index.txt`);
 
   return {
     ok: true,
@@ -29,6 +30,7 @@ async function loadStoredIssue(profile, sessionId, date) {
       heroHeadline: metadata.heroHeadline,
     },
     emailHtml,
+    plaintext,
     storage: {
       prefix,
       htmlUrl: buildPublicUrl(bucketKey, `${prefix}/index.html`),
@@ -40,7 +42,7 @@ async function loadStoredIssue(profile, sessionId, date) {
 }
 
 // POST /newsletter/send — deliver a previously-built, QA-passed issue via
-// Brevo. AIMS owns generate -> readiness -> send ordering inside the operation
+// the AIMS newsletter delivery service. AIMS owns generate -> readiness -> send ordering inside the operation
 // window. The external scheduler only triggers that window; this route sends
 // immediately with sendNow and never uses Brevo scheduledAt.
 //
@@ -127,7 +129,7 @@ async function handleReadiness(profileId, res, { provisionSender = false } = {})
 }
 
 // GET /newsletter/readiness and /newsletter/readiness/:profileId —
-// side-effect-free Brevo delivery preflight for operators and diagnostics.
+// side-effect-free newsletter delivery preflight for operators and diagnostics.
 // Express 5 / path-to-regexp no longer accepts the legacy `:param?` syntax,
 // so register the optional-profile variants explicitly.
 const readinessHandler = asyncRoute(async (req, res) => (
@@ -138,15 +140,12 @@ router.get("/readiness/:profileId", readinessHandler);
 
 // POST /newsletter/readiness — the weekday operation builds first, then checks delivery
 // readiness before send. A provider configuration issue must not prevent an
-// otherwise sound issue from being generated and stored. A missing Brevo sender
-// is created once here so its verification email can be completed; GET remains
-// read-only. Neither route can mark an unverified sender ready to send.
+// otherwise sound issue from being generated and stored. POST and GET are both side-effect-free; delivery readiness is derived from D1 audience state and the existing one.com newsletter sender.
 router.post("/readiness", asyncRoute(async (req, res) => (
   handleReadiness(req.body?.profileId || req.query.profileId, res, { provisionSender: true })
 )));
 
-// GET /newsletter/campaigns/:campaignId/status — poll Brevo for status/
-// performance of a real Brevo campaign.
+// GET /newsletter/campaigns/:campaignId/status — read delivery status for an AIMS newsletter delivery.
 router.get("/campaigns/:campaignId/status", asyncRoute(async (req, res) => {
   const result = await getCampaignStatus(req.params.campaignId);
   if (!result.ok) return res.status(502).json(result);
