@@ -26,7 +26,9 @@ function publicBaseUrl() {
 }
 
 function withUnsubscribe(html, url) {
-  const footer = `<p style="margin:24px 0 0;color:#687386;font-size:12px;line-height:1.5;text-align:center">You are receiving AI Edge because you subscribed to it. <a href="${url}" style="color:#475569">Unsubscribe</a></p>`;
+  const footer = '<p style="margin:24px 0 0;color:#687386;font-size:12px;line-height:1.5;text-align:center">'
+    + 'You are receiving AI Edge because you subscribed to it. '
+    + `<a href="${url}" style="color:#475569">Unsubscribe</a></p>`;
   return /<\/body>/i.test(html) ? html.replace(/<\/body>/i, `${footer}</body>`) : `${html}${footer}`;
 }
 
@@ -47,7 +49,9 @@ async function sendIssueToRecipient({ profile, sessionId, recipient, buildResult
     });
     const deliveredAt = new Date().toISOString();
     await d1.query(`INSERT INTO newsletter_delivery_recipients(issue_id,subscriber_id,status,attempted_at,delivered_at,provider_message_id)
-      VALUES(?,?,'sent',?,?,?) ON CONFLICT(issue_id,subscriber_id) DO UPDATE SET status='sent',attempted_at=excluded.attempted_at,delivered_at=excluded.delivered_at,provider_message_id=excluded.provider_message_id,error_code=NULL`,
+      VALUES(?,?,'sent',?,?,?) ON CONFLICT(issue_id,subscriber_id) DO UPDATE SET status='sent',
+      attempted_at=excluded.attempted_at,delivered_at=excluded.delivered_at,
+      provider_message_id=excluded.provider_message_id,error_code=NULL`,
     [sessionId, recipient.id, attemptedAt, deliveredAt, result.messageId || randomUUID()]);
     return { ok: true, status: "sent" };
   } catch (error) {
@@ -120,7 +124,17 @@ export async function deliverNewsletterIssue({ profile, sessionId, buildResult, 
     }
   }
   const deliveryId = `aims-${sessionId}`;
-  await recordCampaignDelivery({ profile, sessionId, campaignId: deliveryId, listId: profile.id, status: failed ? "partial" : "dispatched", campaignStatus: failed ? "partial" : "sent", createdAt: new Date().toISOString(), sentAt: new Date().toISOString(), date });
+  await recordCampaignDelivery({
+    profile,
+    sessionId,
+    campaignId: deliveryId,
+    listId: profile.id,
+    status: failed ? "partial" : "dispatched",
+    campaignStatus: failed ? "partial" : "sent",
+    createdAt: new Date().toISOString(),
+    sentAt: new Date().toISOString(),
+    date,
+  });
   return { ok: failed === 0, status: failed ? "partial_delivery" : "dispatched", provider: "aims-onecom", deliveryId, audience: recipients.length, sent, failed };
 }
 
