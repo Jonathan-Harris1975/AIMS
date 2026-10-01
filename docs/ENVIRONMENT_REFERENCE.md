@@ -4,8 +4,8 @@
 
 This inventory makes the runtime configuration contract auditable without duplicating secret values. `.env.example` and `env.template` remain the curated operator templates; this file records every production `process.env` dependency and its source locations.
 
-- Runtime variables referenced in production code: **514**
-- Present in curated templates: **400**
+- Runtime variables referenced in production code: **518**
+- Present in curated templates: **404**
 - Not present in curated templates: **114**
 
 | Variable | Curated template | Production references |
@@ -42,9 +42,9 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `API_ZERO_KEY` | Yes | services/outreach/services/zeroBounceBatch.js:21 |
 | `APP_ENV` | No | scripts/performanceGate.js:6<br>server.js:396 |
 | `APP_STATE_DIR` | Yes | services/shared/utils/stateFile.js:9 |
-| `APP_TITLE` | Yes | ai-config.js:304<br>services/artwork/utils/artwork.js:292 |
+| `APP_TITLE` | Yes | ai-config.js:313<br>services/artwork/utils/artwork.js:292 |
 | `APP_TMP_DIR` | Yes | scripts/tempStorage.js:10<br>services/blotato/utils/renderedVideoQa.js:305<br>services/shared/utils/stateFile.js:10<br>services/tts/utils/editingProcessor.js:22<br>services/tts/utils/mergeProcessor.js:14<br>services/tts/utils/podcastProcessor.js:56 |
-| `APP_URL` | Yes | ai-config.js:303<br>audits/utils/orchestrator.js:143<br>services/artwork/utils/artwork.js:291<br>services/rss-feed-creator/utils/feedGenerator.js:32 |
+| `APP_URL` | Yes | ai-config.js:312<br>audits/utils/orchestrator.js:143<br>services/artwork/utils/artwork.js:291<br>services/rss-feed-creator/utils/feedGenerator.js:32 |
 | `APP_VERSION` | No | server.js:395<br>server.js:414<br>services/shared/utils/operationalExcellence.js:106<br>services/shared/utils/operationalExcellence.js:147 |
 | `ARTWORK_CAPABILITY_CACHE_MS` | No | services/artwork/utils/openrouterImageCapabilities.js:21 |
 | `ARTWORK_CAPABILITY_DISCOVERY_ENABLED` | No | services/artwork/utils/openrouterImageCapabilities.js:55 |
@@ -88,12 +88,12 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `BLOG_RSS_TITLE` | No | services/blog/rss/publishBlogRssFeed.js:146 |
 | `BLOG_SOCIAL_BUILD_COMPLETED_TTL_MS` | No | services/blog/social/buildDailySocialBlogPost.js:56 |
 | `BLOG_SOCIAL_BUILD_PENDING_TTL_MS` | No | services/blog/social/buildDailySocialBlogPost.js:55 |
-| `BLOG_SOCIAL_PREFIX` | Yes | services/blog/routes/social.js:41<br>services/blog/social/buildDailySocialBlogPost.js:636<br>services/blog/social/publishSocialBlogRssFeed.js:69 |
+| `BLOG_SOCIAL_PREFIX` | Yes | services/blog/routes/social.js:41<br>services/blog/social/buildDailySocialBlogPost.js:654<br>services/blog/social/publishSocialBlogRssFeed.js:69 |
 | `BLOG_SOCIAL_PUBLIC_BASE_URL` | Yes | services/blog/social/buildDailySocialBlogPost.js:209<br>services/blog/social/publishSocialBlogRssFeed.js:74 |
 | `BLOG_SOCIAL_PUBLIC_POSTS_BASE_URL` | Yes | services/blog/social/buildDailySocialBlogPost.js:213<br>services/blog/social/publishSocialBlogRssFeed.js:83 |
 | `BLOG_SOCIAL_QA_ENABLED` | Yes | services/blog/social/buildDailySocialBlogPost.js:346 |
 | `BLOG_SOCIAL_RSS_DESCRIPTION` | Yes | services/blog/social/publishSocialBlogRssFeed.js:358 |
-| `BLOG_SOCIAL_RSS_OBJECT_KEY` | Yes | services/blog/social/buildDailySocialBlogPost.js:873<br>services/blog/social/buildDailySocialBlogPost.js:1003<br>services/blog/social/buildDailySocialBlogPost.js:1183<br>services/blog/social/publishSocialBlogRssFeed.js:91 |
+| `BLOG_SOCIAL_RSS_OBJECT_KEY` | Yes | services/blog/social/buildDailySocialBlogPost.js:891<br>services/blog/social/buildDailySocialBlogPost.js:1021<br>services/blog/social/buildDailySocialBlogPost.js:1201<br>services/blog/social/publishSocialBlogRssFeed.js:91 |
 | `BLOG_SOCIAL_RSS_TITLE` | Yes | services/blog/social/publishSocialBlogRssFeed.js:357 |
 | `BLOG_WEEKLY_JSON_RESPONSE_FORMAT` | No | services/blog/weekly/buildWeeklyBlogPost.js:358<br>services/blog/weekly/buildWeeklyBlogPost.js:376<br>services/blog/weekly/buildWeeklyBlogPost.js:416 |
 | `BLOG_WEEKLY_QA_ENABLED` | No | services/blog/weekly/buildWeeklyBlogPost.js:271 |
@@ -205,7 +205,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `COMMS_HUB_CONTENT_AUTOMATION_BLOG_ENABLED` | Yes | services/comms-hub/routes/index.js:139 |
 | `COMMS_HUB_CONTENT_AUTOMATION_BLOTATO_VIDEO_BRIEF_LIMIT` | Yes | services/blotato/utils/autoPublishService.js:2549 |
 | `COMMS_HUB_CONTENT_AUTOMATION_BRIEF_LEASE_MS` | Yes | services/comms-hub/contentAutomationQueueCore.js:325 |
-| `COMMS_HUB_CONTENT_AUTOMATION_BRIEF_LIMIT` | Yes | services/blog/social/buildDailySocialBlogPost.js:650<br>services/blog/weekly/buildWeeklyBlogPost.js:499<br>services/podcast/runPodcastPipeline.js:140 |
+| `COMMS_HUB_CONTENT_AUTOMATION_BRIEF_LIMIT` | Yes | services/blog/social/buildDailySocialBlogPost.js:668<br>services/blog/weekly/buildWeeklyBlogPost.js:499<br>services/podcast/runPodcastPipeline.js:140 |
 | `COMMS_HUB_CONTENT_AUTOMATION_BRIEF_MAX_AGE_HOURS` | Yes | services/comms-hub/contentAutomationQueueCore.js:328 |
 | `COMMS_HUB_CONTENT_AUTOMATION_CONTEXT_MAX_CHARS` | Yes | services/comms-hub/contentAutomationQueueCore.js:126 |
 | `COMMS_HUB_CONTENT_AUTOMATION_ENABLED` | Yes | services/comms-hub/routes/index.js:137 |
@@ -215,6 +215,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `COMMS_HUB_CREDENTIAL_VAULT_ENABLED` | Yes | services/comms-hub/routes/index.js:149 |
 | `COMMS_HUB_DELAYED_ACTION_WORKER_ENABLED` | Yes | services/comms-hub/routes/index.js:145 |
 | `COMMS_HUB_EMAIL_ENABLED` | Yes | services/comms-hub/routes/index.js:130 |
+| `COMMS_HUB_EMAIL_NEWSLETTER_ADDRESS` | Yes | services/newsletter/delivery/aimsDelivery.js:36 |
 | `COMMS_HUB_ENABLED` | Yes | scripts/performanceGate.js:7 |
 | `COMMS_HUB_FORM_AUTO_SEND_ENABLED` | Yes | services/comms-hub/routes/index.js:143 |
 | `COMMS_HUB_FORM_ORCHESTRATION_ENABLED` | Yes | services/comms-hub/routes/index.js:135 |
@@ -224,6 +225,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `COMMS_HUB_MONTH_END_ARCHIVE_ENABLED` | Yes | services/comms-hub/routes/index.js:148 |
 | `COMMS_HUB_OPENROUTER_DATA_COLLECTION` | Yes | services/shared/utils/ai-service.js:198 |
 | `COMMS_HUB_OPENROUTER_ZDR_ONLY` | Yes | services/shared/utils/ai-service.js:205 |
+| `COMMS_HUB_PUBLIC_BASE_URL` | Yes | services/newsletter/delivery/aimsDelivery.js:23<br>services/newsletter/routes/subscriptions.js:29 |
 | `COMMS_HUB_RETENTION_WORKER_ENABLED` | Yes | services/comms-hub/routes/index.js:146 |
 | `COMMS_HUB_SMART_RESPONSE_ENABLED` | Yes | services/comms-hub/routes/index.js:134 |
 | `CONTENT_MASTER_COUNCIL_MAX_RETRIES` | Yes | audits/utils/contentMasterCouncil.js:145 |
@@ -280,6 +282,8 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `MAX_URL_FEEDS_PER_RUN` | Yes | services/rss-feed-creator/utils/feedRotationManager.js:20<br>services/rss-feed-creator/utils/fetchFeeds.js:29 |
 | `MIN_SUMMARY_CHARS` | Yes | services/rss-feed-creator/utils/rss-prompts.js:17<br>services/rss-feed-creator/utils/rss-prompts.js:18 |
 | `NEWSLETTER_BREVO_ALLOW_LIST_CREATE` | Yes | services/newsletter/brevo/campaign.js:300 |
+| `NEWSLETTER_CONSENT_TEXT_VERSION` | Yes | services/newsletter/routes/subscriptions.js:23 |
+| `NEWSLETTER_PRIVACY_NOTICE_VERSION` | Yes | services/newsletter/routes/subscriptions.js:24 |
 | `NODE_ENV` | Yes | logger.js:8<br>scripts/deploySmoke.js:4<br>scripts/performanceGate.js:5<br>scripts/startupCheck.js:34<br>server.js:30<br>server.js:396<br>+22 more |
 | `ONEUP_EBOOK_CATALOGUE_PATH` | No | services/zernio/utils/ebookCatalogue.js:42 |
 | `ON_BRAND_AUDIT_MAX_TOKENS` | No | audits/utils/onBrandAudit.js:13 |
@@ -288,7 +292,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `OPENPAGERANK_API_BASE` | No | services/outreach/services/outreachCore.js:138 |
 | `OPENROUTER_API_BASE` | Yes | services/artwork/utils/artwork.js:30<br>services/shared/utils/ai-service.js:14 |
 | `OPENROUTER_API_KEY` | Yes | server.js:185 |
-| `OPENROUTER_APP_NAME` | Yes | ai-config.js:304<br>services/artwork/utils/artwork.js:292 |
+| `OPENROUTER_APP_NAME` | Yes | ai-config.js:313<br>services/artwork/utils/artwork.js:292 |
 | `OPENROUTER_BASE_URL` | Yes | services/artwork/utils/artwork.js:30<br>services/shared/utils/ai-service.js:14 |
 | `OPENROUTER_DATA_COLLECTION` | No | services/shared/utils/ai-service.js:201 |
 | `OPENROUTER_ENABLE_FALLBACKS` | Yes | services/shared/utils/ai-service.js:187 |
@@ -299,7 +303,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `OPENROUTER_REQUIRE_PARAMETERS` | No | services/shared/utils/ai-service.js:190 |
 | `OPENROUTER_REQUIRE_PARAMETERS_FOR_JSON` | Yes | services/shared/utils/ai-service.js:191 |
 | `OPENROUTER_SERVICE_TIER` | Yes | services/shared/utils/ai-service.js:213 |
-| `OPENROUTER_SITE_URL` | Yes | ai-config.js:303<br>services/artwork/utils/artwork.js:291 |
+| `OPENROUTER_SITE_URL` | Yes | ai-config.js:312<br>services/artwork/utils/artwork.js:291 |
 | `OPENROUTER_SORT_BY` | Yes | services/shared/utils/ai-service.js:173 |
 | `OPS_ALERT_TIMEOUT_MS` | Yes | services/shared/utils/operationalExcellence.js:6 |
 | `OUTREACH_AUTOMATION_ENABLED` | Yes | services/outreach/services/outreachService.js:32 |
