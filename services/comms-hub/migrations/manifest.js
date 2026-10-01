@@ -22,6 +22,7 @@ export const COMMS_HUB_REQUIRED_MIGRATIONS = Object.freeze([
   "0021_notification_delivery_reliability",
   "0022_worker_heartbeat",
   "0023_housekeeping",
+  "0024_newsletter_audience",
 ]);
 
 export default COMMS_HUB_REQUIRED_MIGRATIONS;
