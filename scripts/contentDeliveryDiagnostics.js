@@ -6,8 +6,7 @@ import { readJsonStateFresh } from "../services/shared/utils/stateFile.js";
 import { getObjectAsText, listKeys } from "../services/shared/utils/r2-client.js";
 import { getNewsletterProfile } from "../services/newsletter/config/profiles.js";
 import { buildIssueKeyPrefix, findLatestIssueSessionId, readCampaignDelivery } from "../services/newsletter/engine/storage.js";
-import { getNewsletterDeliveryReadiness } from "../services/newsletter/brevo/campaign.js";
-import { getCampaign } from "../services/newsletter/brevo/client.js";
+import { getNewsletterDeliveryReadiness, getCampaignStatus } from "../services/newsletter/delivery/aimsDelivery.js";
 
 function londonDay(date = new Date()) {
   const parts = Object.fromEntries(new Intl.DateTimeFormat("en-GB", {
@@ -105,14 +104,9 @@ async function issueSnapshot(profile) {
     const { delivery } = await readCampaignDelivery({ profile, sessionId, date });
     let provider = null;
     if (delivery?.campaignId) {
-      const campaign = await getCampaign(delivery.campaignId);
-      provider = campaign.ok ? {
-        status: String(campaign.data?.status || "unknown"),
-        subjectMatches: campaign.data?.subject === metadata.subject,
-        artworkInCampaign: Boolean(metadata.heroImageUrl && String(campaign.data?.htmlContent || "").includes(metadata.heroImageUrl)),
-        recipientListMatches: Array.isArray(campaign.data?.recipients?.listIds)
-          ? campaign.data.recipients.listIds.some((id) => Number(id) === Number(delivery.listId)) : null,
-      } : { status: "lookup_failed", httpStatus: campaign.status || null };
+      const status = await getCampaignStatus(delivery.campaignId);
+      provider = status.ok ? { status: delivery.campaignStatus || delivery.status || "unknown", recipientCounts: status.counts }
+        : { status: "lookup_failed" };
     }
     return {
       day, sessionId,
@@ -140,14 +134,9 @@ const readiness = await safeCheck(async () => {
   return {
     ok: result.ok, ready: result.ready, stage: result.stage || null,
     status: result.status || null,
-    senderExists: result.sender?.exists ?? null,
-    senderVerified: result.sender?.verified ?? null,
-    audienceReady: result.audience?.ready ?? null,
-    audienceSource: result.audience?.source || null,
-    audienceListId: result.audience?.listId || null,
-    audienceTotalSubscribers: result.audience?.totalSubscribers ?? null,
-    audienceUniqueSubscribers: result.audience?.uniqueSubscribers ?? null,
-    eligibleContactCheck: result.audience?.subscriberCountSource || null,
+    sender: result.sender || null,
+    audienceActive: result.audience?.active ?? null,
+    audiencePending: result.audience?.pending ?? null,
   };
 });
 
@@ -157,7 +146,7 @@ const report = {
   configuration: {
     zernioKeyPresent: configured("ZERNIO_API_KEY") || configured("ZERNIO_META_API_KEY"),
     blotatoKeyPresent: configured("BLOTATO_API_KEY") || configured("Blotato_API_key"),
-    brevoKeyPresent: configured("BREVO_API_KEY"),
+    newsletterSenderConfigured: configured("ONECOM_NEWSLETTER_PASSWORD") && configured("COMMS_HUB_EMAIL_NEWSLETTER_ADDRESS"),
     artworkKeyPresent: configured("OPENROUTER_API_KEY") || configured("OPENROUTER_API_KEY_ART") || configured("OPENROUTER_API_KEY_ART_BACKUP"),
     artworkModelPresent: configured("OPENROUTER_ART") || configured("OPENROUTER_ART_BACKUP") || configured("AI_MODEL_IMAGE"),
     newsletterEnabled: String(process.env.AIMS_OPERATION_NEWSLETTER_ENABLED || "true").toLowerCase() !== "false",
