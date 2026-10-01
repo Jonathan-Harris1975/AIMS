@@ -28,7 +28,6 @@ function provider(providerId, modelEnvNames, keyEnvNames) {
 }
 
 const SHARED_OPENROUTER_KEY = ["OPENROUTER_API_KEY"];
-const COMMON_FREE_MODEL_ENVS = ["OPENROUTER_FREE_PRIMARY_MODEL"];
 const ART_OPENROUTER_KEY_FALLBACKS = ["OPENROUTER_API_KEY_ART_BACKUP", "OPENROUTER_API_KEY_ART"];
 
 const fast = provider("fast", ["AI_MODEL_FAST"], SHARED_OPENROUTER_KEY);
@@ -75,7 +74,7 @@ const gpt56Sol = provider(
 
 const commsFreePrimary = provider(
   "commsFreePrimary",
-  ["COMMS_HUB_MODEL_FREE_PRIMARY", ...COMMON_FREE_MODEL_ENVS],
+  ["COMMS_HUB_MODEL_FREE_PRIMARY"],
   SHARED_OPENROUTER_KEY
 );
 
@@ -195,7 +194,17 @@ const modelRegistry = {
 
 function providerIsConfigured(providerId) {
   const conf = modelRegistry[providerId];
-  return Boolean(conf?.name && conf?.apiKey);
+  if (!conf?.name || !conf?.apiKey) return false;
+
+  // Production evidence on 2026-10-01 showed GLM 5.2 Free had been withdrawn
+  // and OpenRouter's shared free router was both rate-limited and capable of
+  // returning invalid structured output. Ignore stale Koyeb overrides for these
+  // two Comms Hub slots so routine communications go straight to the tiny paid
+  // economy safety net instead of failing through known-bad providers first.
+  const model = String(conf.name).trim().toLowerCase();
+  if (providerId === "commsFreePrimary" && model === "z-ai/glm-5.2:free") return false;
+  if (providerId === "commsFreeBackup" && model === "openrouter/free") return false;
+  return true;
 }
 
 function routeChain(preferredProviderIds, fallbackProviderIds) {
@@ -276,8 +285,8 @@ export const aiConfig = {
     newsletterCouncilChair: routeChain(["audit", "highQuality"], ["claudeSonnet5", "anthropic46"]),
     newsletterHeroPrompt: routeChain(["summary", "fast", "fallback"], ["meta", "google25FlashLite"]),
     // Comms Hub: routine communications are free-first and privacy-gated.
-    // Production order is GLM 5.2 Free -> OpenRouter Free -> paid economy safety net.
-    // An optional third free fallback is included only when explicitly configured.
+    // Routine Comms Hub routes use only explicitly configured free models, then the paid economy safety net.
+    // This prevents a retired or rate-limited global free alias from silently becoming a Comms Hub dependency.
     commsHubTriage: routeChain(commsRoutineProviderIds, []),
     commsHubModeration: routeChain(commsRoutineProviderIds, []),
     commsHubSummary: routeChain(commsRoutineProviderIds, []),
