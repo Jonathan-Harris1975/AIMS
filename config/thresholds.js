@@ -116,8 +116,6 @@ export const THRESHOLDS = Object.freeze({
     maxRewriteIterations: Math.max(1, Math.min(4, num("NEWSLETTER_SELF_IMPROVE_MAX_LOOPS", num("NEWSLETTER_MAX_REWRITE_ITERATIONS", 4)))),
     maxCouncilRuns: Math.max(1, Math.min(2, num("NEWSLETTER_COUNCIL_MAX_RUNS", 2))),
     nearThresholdTolerance: Math.max(0, Math.min(0.20, num("NEWSLETTER_COUNCIL_NEAR_THRESHOLD_TOLERANCE", 0.05))),
-    dispatchVerifyAttempts: Math.max(1, Math.min(30, num("NEWSLETTER_BREVO_DISPATCH_VERIFY_ATTEMPTS", 10))),
-    dispatchVerifyIntervalMs: Math.max(0, num("NEWSLETTER_BREVO_DISPATCH_VERIFY_INTERVAL_MS", 2000)),
     // RSS retrieval retry/backoff for transient upstream feed failures.
     // rss.js treats this as additional retries after the first attempt, so
     // 4 here yields 5 total attempts.
@@ -127,12 +125,6 @@ export const THRESHOLDS = Object.freeze({
     // Tuesday featured-book lookup follows the same 5-attempt policy.
     featuredBookRetries: Math.max(0, num("NEWSLETTER_FEATURED_BOOK_RETRIES", 4)),
     featuredBookRetryBaseMs: Math.max(100, num("NEWSLETTER_FEATURED_BOOK_RETRY_BASE_MS", 500)),
-    // Brevo API client retry/backoff. brevo/client.js treats this as
-    // additional retries after the first attempt, so 4 here yields 5 total
-    // attempts.
-    brevoRetries: Math.max(0, num("BREVO_RETRIES", 4)),
-    brevoRetryBaseMs: Math.max(100, num("BREVO_RETRY_BASE_MS", 500)),
-    brevoTimeoutMs: Math.max(1000, num("BREVO_TIMEOUT_MS", 15000)),
   }),
 });
 
