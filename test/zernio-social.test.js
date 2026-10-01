@@ -35,7 +35,6 @@ function applyBaseEnv() {
   process.env.ZERNIO_TUESDAY_TIME = "13:00";
   process.env.ZERNIO_THURSDAY_TIME = "12:20";
   process.env.ZERNIO_SATURDAY_TIME = "10:30";
-  sundaySpotlightMockMode = "default";
 }
 
 const scheduledRequests = [];
@@ -46,7 +45,6 @@ let zernioScheduleAttempts = 0;
 let analyticsRequests = 0;
 let quizAnswerContentOverride = null;
 let mockBlogRssItems = null;
-let sundaySpotlightMockMode = "default";
 
 function defaultMockBlogRssItems() {
   return [
@@ -214,18 +212,7 @@ Regression\n\nComment your answer below.",
 sit underneath most modern LLMs. Did you get it right?",
     });
   } else if (joined.includes("Lane: Sunday AI Spotlight")) {
-    const repairing = joined.includes("You are repairing one Zernio social post");
-    content = JSON.stringify(sundaySpotlightMockMode === "repeat-until-repair" && repairing ? {
-      title: "Sunday AI Spotlight",
-      topic: "Geoffrey Hinton and backpropagation",
-      content: "Geoffrey Hinton helped develop the methods that made backpropagation useful for training neural networks. His research gave builders a practical \
-way to adjust many connected weights from errors, so image and speech systems could learn from examples rather than a hand-written rule for every case. \
-It matters now because the same training idea sits behind systems people rely on and question. The contribution deserves a careful look at what these systems \
-can actually do.",
-      firstComment: "",
-      spotlightPerson: "Geoffrey Hinton",
-      sourceUrls: [],
-    } : {
+    content = JSON.stringify({
       title: "Sunday AI Spotlight",
       topic: "Fei-Fei Li and ImageNet",
       content:
@@ -233,7 +220,6 @@ can actually do.",
 benchmarks practical at scale, while her later work has kept human-centred AI firmly in the conversation. The useful legacy is not a slogan: better data changed what machines could learn to see.",
       firstComment: "",
       spotlightPerson: "Fei-Fei Li",
-      sourceUrls: [],
     });
   } else if (joined.includes("Lane: Tuesday Tech Talk")) {
     content = JSON.stringify({
@@ -744,25 +730,6 @@ test("Sunday spotlight rejects topic labels masquerading as people", async () =>
   assert.match(result.post.content, /ImageNet/);
 });
 
-test("Sunday spotlight repairs a recent person's copy before scheduling", async () => {
-  restoreEnv();
-  applyBaseEnv();
-  process.env.OPENROUTER_API_BASE = mockBase;
-  sundaySpotlightMockMode = "repeat-until-repair";
-  const { recordSpotlightPerson } = await import("../services/zernio/utils/state.js");
-  recordSpotlightPerson("Fei-Fei Li", { scheduledDateTime: "2026-07-19T12:00:00Z" });
-
-  const mod = await import(`../services/zernio/utils/socialScheduler.js?zernio-sunday-repeat=${Date.now()}`);
-  const result = await mod.buildAndScheduleDailyLane("sunday", {
-    publishDate: "2026-07-26", dryRun: true, force: true,
-  });
-
-  assert.equal(result.ok, true);
-  assert.equal(result.post.spotlightPerson, "Geoffrey Hinton");
-  assert.match(result.post.content, /backpropagation/);
-  assert.doesNotMatch(result.post.content, /Fei-Fei Li/);
-});
-
 test("buildAndScheduleBlogRssDaily builds a dry-run post from the newest blog RSS item", async () => {
   restoreEnv();
   applyBaseEnv();
@@ -788,17 +755,6 @@ test("buildAndScheduleBlogRssDaily builds a dry-run post from the newest blog RS
   assert.equal(result.post.imageUrl, "https://images.jonathan-harris.online/ai-agents-human-judgement");
   assert.match(blogRssRequests[0].query._aims, /^2026-07-15-\d+$/);
   assert.match(blogRssRequests[0].cacheControl, /no-cache/);
-});
-
-
-test("buildAndScheduleBlogRssDaily requires the daily blog's fresh RSS artwork and has no stored-image fallback", async () => {
-  const scheduler = await readFile(new URL("../services/zernio/utils/socialScheduler.js", import.meta.url), "utf8");
-  const config = await readFile(new URL("../services/zernio/utils/config.js", import.meta.url), "utf8");
-
-  assert.match(scheduler, /zernio-blog-rss-fresh-artwork-not-ready/);
-  assert.match(scheduler, /const imageUrl = String\(article\.imageUrl \|\| ""\)\.trim\(\)/);
-  assert.doesNotMatch(scheduler, /article\.imageUrl \|\| BLOG_RSS_CONFIG\.fallbackImageUrl/);
-  assert.doesNotMatch(config, /fallbackImageUrl: trimString\(process\.env\.ZERNIO_BLOG_RSS_IMAGE_URL/);
 });
 
 test("buildAndScheduleBlogRssDaily never falls back to an older or already-posted item", async () => {

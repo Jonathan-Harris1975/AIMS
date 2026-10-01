@@ -139,18 +139,14 @@ test("blotatoNewsShort route resolves with highQuality before standard in fallba
   }
 });
 
-test("Comms Hub routes use free-first routing with an economy paid safety net and premium models only on the complex route", async () => {
+test("Comms Hub skips known-bad free routes and uses the economy paid safety net", async () => {
   const oldEnv = snapshotEnv(OPENROUTER_ENV_NAMES);
   applySpreadsheetOpenRouterEnv();
 
   try {
     const { getProviderDiagnosticsForRoute } = await import(`../services/shared/utils/ai-service.js?commsModelPolicy=${Date.now()}`);
     const routine = getProviderDiagnosticsForRoute("commsHubDraftSocial").configuredProviders.filter((p) => p.configured);
-    assert.deepEqual(routine.map((p) => p.model), [
-      "z-ai/glm-5.2:free",
-      "openrouter/free",
-      "openai/gpt-oss-20b",
-    ]);
+    assert.deepEqual(routine.map((p) => p.model), ["openai/gpt-oss-20b"]);
     assert.ok(routine.every((p) => p.apiKeyEnv === "OPENROUTER_API_KEY"));
 
     const complex = getProviderDiagnosticsForRoute("commsHubDraftComplex").configuredProviders.filter((p) => p.configured);
@@ -409,11 +405,8 @@ test("Comms Hub structured-output validation fails over before accepting invalid
         }
       },
     });
-    assert.equal(result.model, "openrouter/free");
-    assert.deepEqual(requestedModels.slice(0, 2), [
-      "z-ai/glm-5.2:free",
-      "openrouter/free",
-    ]);
+    assert.equal(result.model, "openai/gpt-oss-20b");
+    assert.deepEqual(requestedModels, ["openai/gpt-oss-20b"]);
   } finally {
     restoreEnv(oldEnv);
     globalThis.fetch = oldFetch;
@@ -462,12 +455,9 @@ test("Comms Hub immediately fails over a rate-limited free provider instead of s
       returnMetadata: true,
       validateContent(content) { JSON.parse(content); },
     });
-    assert.equal(result.model, "openrouter/free");
-    assert.deepEqual(requestedModels.slice(0, 2), [
-      "z-ai/glm-5.2:free",
-      "openrouter/free",
-    ]);
-    assert.equal(requestedModels.filter((model) => model === "z-ai/glm-5.2:free").length, 1);
+    assert.equal(result.model, "openai/gpt-oss-20b");
+    assert.deepEqual(requestedModels, ["openai/gpt-oss-20b"]);
+    assert.equal(requestedModels.includes("z-ai/glm-5.2:free"), false);
   } finally {
     restoreEnv(oldEnv);
     globalThis.fetch = oldFetch;
@@ -517,10 +507,9 @@ test("a successful fallback does not become the next request's primary by defaul
 
     await request("non-sticky-first");
     await request("non-sticky-second");
-    assert.deepEqual(requestedModels.slice(0, 3), [
-      "z-ai/glm-5.2:free",
-      "openrouter/free",
-      "z-ai/glm-5.2:free",
+    assert.deepEqual(requestedModels, [
+      "openai/gpt-oss-20b",
+      "openai/gpt-oss-20b",
     ]);
   } finally {
     restoreEnv(oldEnv);

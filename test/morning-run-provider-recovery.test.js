@@ -123,7 +123,7 @@ test("OpenRouter retries parameter-incompatible structured requests with a porta
   assert.match(text, /ai\.request\.parameter_relaxation/);
 });
 
-test("Brevo delivery resolves the populated list and persists an exactly-once campaign hand-off", async () => {
+test("AIMS newsletter delivery uses the D1 audience and persists an exactly-once hand-off", async () => {
   const audience = await source("services/newsletter/audience/d1Audience.js");
   const delivery = await source("services/newsletter/delivery/aimsDelivery.js");
   const ops = await source("services/ops/index.js");
@@ -131,12 +131,10 @@ test("Brevo delivery resolves the populated list and persists an exactly-once ca
   assert.match(audience, /newsletter_suppressions/);
   assert.match(delivery, /OneComMailClient/);
   assert.match(delivery, /readCampaignDelivery/);
-  assert.match(campaign, /status:\s*"created"/);
-  assert.match(campaign, /sendCampaignNow/);
-  assert.match(campaign, /getCampaign/);
-  assert.match(campaign, /verifyDispatchStatus/);
-  assert.match(campaign, /CONFIRMED_DISPATCH_STATUSES\.has\(campaignStatus\)/);
-  assert.match(campaign, /status:\s*"dispatched",\s*campaignStatus/);
+  assert.match(delivery, /status:\s*"already_dispatched"/);
+  assert.match(delivery, /newsletter_delivery_recipients/);
+  assert.match(delivery, /status:\s*failed \? "partial" : "dispatched"/);
+  assert.match(delivery, /provider:\s*"aims-onecom"/);
   assert.match(ops, /newsletter-generate.*\/newsletter\/generate/);
   assert.match(ops, /newsletter-readiness.*newsletter-generate/);
   assert.match(ops, /newsletter-send.*newsletter-readiness/);

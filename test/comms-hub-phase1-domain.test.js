@@ -128,12 +128,13 @@ test("Phase 1 readiness requires real storage and Jotform credentials", () => {
   assert.ok(readiness.missing.includes("JOTFORM_API_KEY"));
 });
 
-test("Only the three supplied Jotforms are registered", () => {
+test("Only the governed Jotforms are registered", () => {
   assert.deepEqual(Object.keys(COMMS_HUB_FORM_ROUTES).sort(), [
-    "260281179574362", "262063136008044", "262097861889073",
+    "260281179574362", "262063136008044", "262097861889073", "262733359026055",
   ]);
   assert.equal(COMMS_HUB_FORM_ROUTES["262063136008044"].workflow, "case_study_intake");
   assert.equal(COMMS_HUB_FORM_ROUTES["262097861889073"].workflow, "podcast_enquiry_intake");
+  assert.equal(COMMS_HUB_FORM_ROUTES["262733359026055"].workflow, "newsletter_double_opt_in");
 });
 
 test("Jotform webhook resolution accepts canonical identifiers and rawRequest", () => {
@@ -314,6 +315,7 @@ test("Migration manifest requires all delivered Comms Hub phases", () => {
     "0021_notification_delivery_reliability",
     "0022_worker_heartbeat",
     "0023_housekeeping",
+    "0024_newsletter_audience",
   ]);
 });
 
