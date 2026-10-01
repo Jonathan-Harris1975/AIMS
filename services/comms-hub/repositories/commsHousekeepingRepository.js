@@ -96,6 +96,13 @@ export class CommsHousekeepingRepository {
         params: [at],
       },
       {
+        key: "newsletterVerificationTokensDeleted",
+        sql: `DELETE FROM newsletter_verification_tokens
+               WHERE (used_at IS NOT NULL AND created_at < ?) OR expires_at < ?
+               RETURNING token_hash`,
+        params: [recordCutoff, recordCutoff],
+      },
+      {
         key: "delayedActionsDeleted",
         sql: `DELETE FROM comms_hub_delayed_actions
                WHERE status IN ('complete','cancelled') AND updated_at < ?
@@ -151,6 +158,8 @@ export class CommsHousekeepingRepository {
       ["approvalsExpired", "SELECT COUNT(*) AS count FROM comms_hub_approvals WHERE status = 'pending' AND expires_at IS NOT NULL AND expires_at <= ?", [at]],
       ["formRequestsExpired", "SELECT COUNT(*) AS count FROM comms_hub_form_requests WHERE status = 'sent' AND expires_at <= ?", [at]],
       ["webhookNoncesDeleted", "SELECT COUNT(*) AS count FROM comms_hub_webhook_nonces WHERE expires_at <= ?", [at]],
+      ["newsletterVerificationTokensDeleted", `SELECT COUNT(*) AS count FROM newsletter_verification_tokens
+        WHERE (used_at IS NOT NULL AND created_at < ?) OR expires_at < ?`, [recordCutoff, recordCutoff]],
       ["delayedActionsDeleted", `SELECT COUNT(*) AS count FROM comms_hub_delayed_actions
         WHERE status IN ('complete','cancelled') AND updated_at < ?
           AND (conversation_id IS NULL OR NOT EXISTS (SELECT 1 FROM comms_hub_conversations c WHERE c.id = comms_hub_delayed_actions.conversation_id))`, [recordCutoff]],
