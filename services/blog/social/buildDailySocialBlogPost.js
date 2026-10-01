@@ -371,7 +371,25 @@ function groundSocialArtworkPrompt(basePrompt, sources = []) {
 }
 
 async function resolveSocialArtwork({ sessionId, imagePrompt, dateId, prefix }) {
-  const art = await createBlogArtwork({ sessionId, prompt: imagePrompt, keyPrefix: prefix, date: dateId, mode: "social-blog" });
+  let art = await createBlogArtwork({ sessionId, prompt: imagePrompt, keyPrefix: prefix, date: dateId, mode: "social-blog" });
+
+  // Image models occasionally satisfy the subject while missing a literal visual
+  // constraint (for example, rendering readable text on a document). Give the
+  // artwork pipeline one tightly-scoped corrective attempt using its own QA
+  // feedback. This keeps the fresh-image requirement without falling back to a
+  // site icon or turning one imperfect render into a failed daily post.
+  if ((!art?.ok || !art.publicUrl || art.fallback) && (art?.error || art?.warning)) {
+    const correction = String(art.error || art.warning).slice(0, 1200);
+    const repairPrompt = `${imagePrompt}\n\nCORRECTIVE RENDER: The previous image was rejected by visual QA. Fix these exact defects and preserve the original subject and brand direction: ${correction}. Do not include any readable text, letters, labels, signatures, logos or UI copy anywhere in the image.`;
+    warn("blog.social.daily.image.corrective_retry", { dateId, sessionId, reason: correction });
+    art = await createBlogArtwork({
+      sessionId: `${sessionId}-artwork-repair`,
+      prompt: repairPrompt,
+      keyPrefix: prefix,
+      date: dateId,
+      mode: "social-blog",
+    });
+  }
 
   if (art?.ok && art.publicUrl && !art.fallback) {
     return {
