@@ -380,7 +380,9 @@ async function resolveSocialArtwork({ sessionId, imagePrompt, dateId, prefix }) 
   // site icon or turning one imperfect render into a failed daily post.
   if ((!art?.ok || !art.publicUrl || art.fallback) && (art?.error || art?.warning)) {
     const correction = String(art.error || art.warning).slice(0, 1200);
-    const repairPrompt = `${imagePrompt}\n\nCORRECTIVE RENDER: The previous image was rejected by visual QA. Fix these exact defects and preserve the original subject and brand direction: ${correction}. Do not include any readable text, letters, labels, signatures, logos or UI copy anywhere in the image.`;
+    const repairPrompt = `${imagePrompt}\n\nCORRECTIVE RENDER: The previous image was rejected by visual QA. `
+      + `Fix these exact defects and preserve the original subject and brand direction: ${correction}. `
+      + "Do not include any readable text, letters, labels, signatures, logos or UI copy anywhere in the image.";
     warn("blog.social.daily.image.corrective_retry", { dateId, sessionId, reason: correction });
     art = await createBlogArtwork({
       sessionId: `${sessionId}-artwork-repair`,
