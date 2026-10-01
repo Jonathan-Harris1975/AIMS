@@ -36,7 +36,7 @@ function context() {
       emailAddressRoles: {
         admin: { address: "admin@jonathan-harris.online", purpose: "service_admin", commsHubManaged: false },
         info: { address: "info@jonathan-harris.online", purpose: "customer_facing", commsHubManaged: true },
-        newsletter: { address: "newsletter@jonathan-harris.online", purpose: "newsletter_brevo", commsHubManaged: false },
+        newsletter: { address: "newsletter@jonathan-harris.online", purpose: "newsletter_delivery", commsHubManaged: false },
       },
       emailWorkflowEvaluationEnabled: false,
     },
@@ -96,7 +96,7 @@ test("email role map manages only info and marks admin/newsletter outside automa
   assert.equal(cfg.emailAddressRoles.admin.automationExcluded, true);
   assert.equal(cfg.emailAddressRoles.newsletter.commsHubManaged, false);
   assert.equal(cfg.emailAddressRoles.newsletter.automationExcluded, true);
-  assert.equal(cfg.emailAddressRoles.newsletter.purpose, "newsletter_brevo");
+  assert.equal(cfg.emailAddressRoles.newsletter.purpose, "newsletter_delivery");
 });
 
 test("clean scanned attachment does not block automated email reply generation", async () => {

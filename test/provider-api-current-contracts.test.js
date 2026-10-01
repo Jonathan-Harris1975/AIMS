@@ -5,7 +5,7 @@ import { readFile } from "node:fs/promises";
 test("current external-provider contracts stay aligned", async () => {
   const [
     outreach, zeroBounce, blotato, autoPublish, ai, zernio, artworkPayload, artwork,
-    brevo, podcastPipeline, dailyBlog, weeklyBlog, zernioInbox, thresholds, d1, d1Backup,
+    newsletterDelivery, podcastPipeline, dailyBlog, weeklyBlog, zernioInbox, thresholds, d1, d1Backup,
     aiSearch, jotform, podcastIndex, cloudflarePurge, weather, sheets, siteSyncWorkflow, envBootstrap, polly, r2,
   ] = await Promise.all([
     readFile(new URL("../services/outreach/services/outreachCore.js", import.meta.url), "utf8"),
@@ -16,7 +16,7 @@ test("current external-provider contracts stay aligned", async () => {
     readFile(new URL("../services/zernio/utils/zernioClient.js", import.meta.url), "utf8"),
     readFile(new URL("../services/artwork/utils/openrouterImagePayload.js", import.meta.url), "utf8"),
     readFile(new URL("../services/artwork/utils/artwork.js", import.meta.url), "utf8"),
-    readFile(new URL("../services/newsletter/brevo/client.js", import.meta.url), "utf8"),
+    readFile(new URL("../services/newsletter/delivery/aimsDelivery.js", import.meta.url), "utf8"),
     readFile(new URL("../services/podcast/runPodcastPipeline.js", import.meta.url), "utf8"),
     readFile(new URL("../services/blog/social/buildDailySocialBlogPost.js", import.meta.url), "utf8"),
     readFile(new URL("../services/blog/weekly/buildWeeklyBlogPost.js", import.meta.url), "utf8"),
@@ -56,9 +56,9 @@ test("current external-provider contracts stay aligned", async () => {
   assert.match(artworkPayload, /ARTWORK_PROVIDER_RETRIES \|\| 1/);
   assert.match(artwork, /ARTWORK_VISUAL_QA_MAX_REGENERATIONS \?\? 0/);
   assert.match(thresholds, /PODCAST_ARTWORK_SHORT_PROMPT_RETRY", false/);
-  assert.match(brevo, /function isSafeBrevoRetry/);
-  assert.match(brevo, /ambiguous 5xx\/network retry could duplicate a campaign/);
-  assert.match(brevo, /isIdempotentMethod\(method\) && attempt < retries/);
+  assert.match(newsletterDelivery, /OneComMailClient/);
+  assert.match(newsletterDelivery, /newsletter_delivery_recipients/);
+  assert.match(newsletterDelivery, /deliverTodaysIssueToSubscriber/);
   assert.match(zernioInbox, /x-request-id idempotency for POST \/v1\/posts/);
   assert.match(zernioInbox, /const providerAttempts = [\s\S]*?\? this\.config\.providerRetryAttempts\s*:\s*1;/);
   for (const source of [podcastPipeline, dailyBlog, weeklyBlog]) {

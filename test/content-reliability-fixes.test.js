@@ -26,16 +26,14 @@ test("newsletter artwork QA rejects travel drift and pseudo-text", () => {
   assert.equal(result.pass, false);
 });
 
-test("newsletter delivery uses an existing populated Brevo list and exposes readiness", async () => {
-  const audience = await readFile(new URL("../services/newsletter/brevo/audience.js", import.meta.url), "utf8");
-  const campaign = await readFile(new URL("../services/newsletter/brevo/campaign.js", import.meta.url), "utf8");
+test("newsletter delivery uses AIMS D1 audience state and one.com readiness", async () => {
+  const audience = await readFile(new URL("../services/newsletter/audience/d1Audience.js", import.meta.url), "utf8");
+  const delivery = await readFile(new URL("../services/newsletter/delivery/aimsDelivery.js", import.meta.url), "utf8");
   const routes = await readFile(new URL("../services/newsletter/routes/send.js", import.meta.url), "utf8");
-  const env = await readFile(new URL("../config/production.defaults.env", import.meta.url), "utf8");
-  assert.match(audience, /audience_not_configured/);
-  assert.match(campaign, /audience_empty/);
-  assert.match(campaign, /getNewsletterDeliveryReadiness/);
+  assert.match(audience, /getAudienceReadiness/);
+  assert.match(delivery, /OneComMailClient/);
+  assert.match(delivery, /getNewsletterDeliveryReadiness/);
   assert.match(routes, /router\.post\("\/readiness"/);
-  assert.match(env, /^NEWSLETTER_BREVO_ALLOW_LIST_CREATE=false$/m);
 });
 
 test("newsletter structured output avoids provider-incompatible array cardinality and disables reasoning", async () => {
