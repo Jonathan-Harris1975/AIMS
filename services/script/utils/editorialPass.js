@@ -4,6 +4,8 @@
 
 import { resilientRequest } from "../../shared/utils/ai-service.js";
 import { info, warn, error } from "../../../logger.js";
+import chunkText from "./chunkText.js";
+import { countWords } from "./wordBudget.js";
 import { buildPersona } from "./toneSetter.js";
 
 function buildEditorialPrompt(scriptText, meta = {}) {
@@ -74,31 +76,25 @@ export async function runEditorialPass(meta = {}, scriptText = "") {
   const sessionId = meta.sessionId || "session";
 
   try {
-    const prompt = buildEditorialPrompt(scriptText, meta);
-
-    const refined = await resilientRequest("editorialPass", {
-      sessionId,
-      section: "editorial-human",
-      messages: [{ role: "user", content: prompt }],
-      temperature: 0.25,
-      // 4096 was repeatedly exhausted by reasoning/long-form output.
-      max_tokens: Number(process.env.PODCAST_EDITORIAL_MAX_TOKENS || 32000),
-      timeoutMs: Number(process.env.PODCAST_EDITORIAL_TIMEOUT_MS || 900000),
-      reasoning: { effort: process.env.PODCAST_EDITORIAL_REASONING_EFFORT || "none", exclude: true },
-    });
-
-    if (!refined || refined.length < scriptText.length * 0.6) {
-      warn("editorialPass.weakResponse", { sessionId });
-      return scriptText;
+    const blocks = chunkText(scriptText, 5000);
+    const edited = [];
+    for (const [index, block] of blocks.entries()) {
+      const result = await resilientRequest("editorialPass", {
+        sessionId, section: `editorial-${index + 1}`,
+        messages: [{ role: "user", content: buildEditorialPrompt(block, meta) }],
+        temperature: 0.25,
+        max_tokens: Math.min(Number(process.env.PODCAST_EDITORIAL_MAX_TOKENS || 32000), Math.max(4096, Math.ceil(countWords(block) * 2.8))),
+        timeoutMs: Number(process.env.PODCAST_EDITORIAL_TIMEOUT_MS || 900000),
+        reasoning: { effort: process.env.PODCAST_EDITORIAL_REASONING_EFFORT || "none", exclude: true }, returnMetadata: true,
+      });
+      const refined = String(result?.content ?? result ?? "").trim();
+      const retained = refined && result?.finishReason !== "length" && /[.!?]["'”’]?\s*$/.test(refined)
+        && countWords(refined) >= countWords(block) * 0.98 && countWords(refined) <= countWords(block) * 1.05;
+      info("editorialPass.section", { sessionId, section: index + 1, originalWords: countWords(block),
+        refinedWords: countWords(refined), retained: Boolean(retained), finishReason: result?.finishReason || null });
+      edited.push(retained ? refined : block);
     }
-
-    info("editorialPass.complete", {
-      sessionId,
-      originalLength: scriptText.length,
-      refinedLength: refined.length,
-    });
-
-    return refined.trim();
+    return edited.join("\n\n");
   } catch (err) {
     error("editorialPass.fail", { sessionId, err: String(err) });
     return scriptText;

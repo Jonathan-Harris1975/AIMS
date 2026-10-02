@@ -1,3 +1,4 @@
+import { MIN_SPOKEN_WORDS_PER_MINUTE } from "./wordBudget.js";
 import {
   BANNED_PROMO_PATTERNS,
   cleanLexiconText,
@@ -8,7 +9,7 @@ import { OUTRO_CLOSING_TAGLINE } from "./promptTemplates.js";
 
 const MIN_TRANSCRIPT_LENGTH = 500;
 const MIN_OUTRO_LENGTH = 120;
-const MIN_SPOKEN_WORDS_PER_MINUTE = 105;
+
 
 const LOWERCASE_PUNCTUATION_ABBREVIATIONS = new Set([
   "approx",

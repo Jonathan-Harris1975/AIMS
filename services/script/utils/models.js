@@ -17,6 +17,8 @@ import { getWeatherSummary } from "./getWeatherSummary.js";
 import getTuringQuote from "./getTuringQuote.js";
 import editAndFormat from "./editAndFormat.js";
 import chunkText from "./chunkText.js";
+import { prepareArticleSources } from "./articleSources.js";
+import { loadMainCheckpoint } from "./mainChunker.js";
 import { generateMainLongform } from "./mainChunker.js";
 import * as sessionCache from "./sessionCache.js";
 import { generateEpisodeMetaLLM } from "./podcastHelper.js";
@@ -95,23 +97,17 @@ export async function generateIntro(sessionIdLike) {
 // MAIN – Longform via batching + synthesis (Option B)
 export async function generateMain(sessionIdLike) {
   const sessionMeta = normalizeSessionMeta(sessionIdLike);
-  const { items } = await fetchFeedArticles();
-
-  const articles = (items || [])
-    .map((it) => ({
-      title: it?.title?.trim() || "",
-      summary:
-        it?.summary?.trim() ||
-        it?.contentSnippet?.trim() ||
-        it?.description?.trim() ||
-        "",
-      link: it?.link || it?.url || "",
-    }))
-    .filter((a) => a.title || a.summary);
+  const saved = await loadMainCheckpoint(sessionMeta);
+  const prepared = saved?.version === 2 && saved.articles?.length
+    ? { articles: saved.articles, stats: saved.sourceStats }
+    : await prepareArticleSources((await fetchFeedArticles()).items, { sessionId: sessionMeta.sessionId });
+  const { articles, stats } = prepared;
+  sessionMeta.sourceStats = stats;
 
   sessionMeta.sourceItems = articles;
   if (sessionIdLike && typeof sessionIdLike === "object") {
     sessionIdLike.sourceItems = articles;
+    sessionIdLike.sourceStats = stats;
   }
 
   const { mainSeconds, targetMins } = calculateDuration(
@@ -125,14 +121,6 @@ export async function generateMain(sessionIdLike) {
     targetMinutes: targetMins,
     mainSeconds,
   });
-
-  if (!articles.length) {
-    debug("No articles available for MAIN – returning empty main section", {
-      sessionId: sessionMeta.sessionId,
-    });
-    await sessionCache.storeTempPart(sessionMeta, "main", "");
-    return "";
-  }
 
   const combined = await generateMainLongform(sessionMeta, articles, mainSeconds);
   const cleaned = sanitizeOutput(combined);
