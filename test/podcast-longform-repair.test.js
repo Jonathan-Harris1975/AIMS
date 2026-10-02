@@ -278,9 +278,9 @@ test("real transcript orchestration uploads every validated word and the real TT
   const dependencies = harness(async (_, options) => response(options));
   const main = await generateMainLongform(meta, articles(), seconds, dependencies);
   const uploaded = new Map();
-  const symbol = `podcastUploadTest${Date.now()}`;
-  globalThis[symbol] = { main, uploaded, received: null };
-  const store = `globalThis[${JSON.stringify(symbol)}]`;
+  const storeKey = "__podcastUploadTestState";
+  globalThis[storeKey] = { main, uploaded, received: null };
+  const store = "globalThis.__podcastUploadTestState";
   const silent = 'export const info = () => {}; export const debug = info; export const warn = info; export const error = info;';
   const script = await moduleWithStubs("../services/script/utils/orchestrator.js", {
     "../../../logger.js": silent,
@@ -315,10 +315,10 @@ ${store}.received = chunks.map(chunk=>chunk.text).join(" "); return chunks.map((
       "./podcastProcessor.js": 'export const podcastProcessor = async () => ({key:"episode.mp3",buffer:Buffer.from("mock audio")});',
     });
     assert.equal((await tts.orchestrateTTS({ sessionId: "TT-test-upload" })).ok, true);
-    assert.equal(countWords(globalThis[symbol].received), countWords(result.fullText));
-    assert.equal(globalThis[symbol].received.replace(/\s+/g, " "), result.fullText.replace(/\s+/g, " "));
+    assert.equal(countWords(globalThis[storeKey].received), countWords(result.fullText));
+    assert.equal(globalThis[storeKey].received.replace(/\s+/g, " "), result.fullText.replace(/\s+/g, " "));
   } finally {
-    delete globalThis[symbol];
+    delete globalThis[storeKey];
     for (const [name, value] of Object.entries(env)) { if (value === undefined) delete process.env[name]; else process.env[name] = value; }
   }
 });
