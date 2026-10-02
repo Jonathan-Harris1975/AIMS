@@ -20,7 +20,7 @@ export async function buildHeroImagePrompt({ profile, heroHeadline, leadStory = 
       content:
         "You write a single concise image-generation prompt (1-2 sentences) for the hero " +
         "illustration for the AI Edge newsletter. Build one visually immediate editorial scene from the actual lead news story, not merely the headline wording. " +
-        "Use cinematic lighting, emotional resonance, bold controlled colour, high contrast and magazine-quality thumbnail composition. " +
+        "Use cinematic lighting, emotional resonance, bold controlled colour, high contrast and magazine-quality thumbnail composition. The image must be newly generated for this issue and specific to today's lead story; never use a generic brand image, site icon, logo or reusable fallback artwork. " +
         "Prefer a concrete human-scale scene, real-world object, consequence or workplace moment over generic abstract AI geometry. Use believable adult humans when a person helps tell the story. " +
         "Do not depict humanoid robots, cyborgs, androids, chrome people, synthetic heads or robot substitutes unless the lead story is specifically about physical robotics. " +
         "Avoid corporate stock-photo language, boardrooms, handshakes, staged office teams, generic data centres, floating dashboards, polygon networks and glowing AI orbs \
@@ -28,8 +28,7 @@ unless the headline genuinely requires them. " +
         "The image must visibly belong to technology, AI security, governance, software engineering or the specific news domain described. " +
         "Never use beaches, coastlines, oceans, resorts, tourism, travel, countryside, mountains, roads, paths, signposts, sunsets or lifestyle imagery unless the lead article \
 itself is explicitly about that subject. " +
-        "Never include typography, headlines, letters, numbers, logos, watermarks or pseudo-text inside the image. Seasonal colour direction is applied downstream, so do not \
-fight it. No depictions of real named people. " +
+        "Prefer physical objects and human-scale consequences that do not require visible screens. If a screen is unavoidable, turn it away or keep it dark and naturally defocused. Never include typography, headlines, letters, numbers, logos, watermarks or pseudo-text inside the image. Seasonal colour direction is applied downstream, so do not fight it. No depictions of real named people. " +
         "Respond with ONLY the prompt text, nothing else.",
     },
     {
