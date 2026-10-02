@@ -48,7 +48,7 @@ function allowDeterministicFallback(mode) {
   // remains documented for backwards compatibility but is intentionally ignored.
   // Newsletter/blog modes retain their separate compatibility behaviour.
   if (mode === "social-blog") return false;
-  if (mode === "newsletter") return boolEnv("NEWSLETTER_ALLOW_DETERMINISTIC_FALLBACK", true);
+  if (mode === "newsletter") return false;
   return boolEnv("BLOG_ALLOW_DETERMINISTIC_FALLBACK", false);
 }
 
