@@ -76,9 +76,12 @@ security or governance anchor supported by the lead story. No travel, landscape,
       "Create a premium wide editorial image for a social-distributed AI blog post.",
       "Composition: one source-specific real-world consequence, decision or technical action with a strong phone-feed focal subject. It must visually match the selected source \
 story, not generic AI news.",
-      "Style: cinematic editorial realism, high contrast, bold controlled colour and immediate visual tension. Avoid phones, monitors, server dashboards, control panels, signs, documents and other surfaces that invite generated text. No infographic, dashboard, diagram, travel scene, generic office or decorative data-centre glamour.",
+      "Style: cinematic editorial realism, high contrast, bold controlled colour and immediate visual tension. " +
+        "Avoid phones, monitors, server dashboards, control panels, signs, documents and other surfaces that invite generated text. " +
+        "No infographic, dashboard, diagram, travel scene, generic office or decorative data-centre glamour.",
       `Creative direction: ${policyPrompt}`,
-      "Final compliance check: use a clean physical scene with one focal subject and minimal background objects. No visible screens facing camera. No text, pseudo-text, callout boxes, labels, logos, interface chrome or watermarks.",
+      "Final compliance check: use a clean physical scene with one focal subject and minimal background objects. " +
+        "No visible screens facing camera. No text, pseudo-text, callout boxes, labels, logos, interface chrome or watermarks.",
     ].join(" ");
   }
 
