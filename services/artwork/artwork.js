@@ -8,14 +8,14 @@
 // ============================================================
 
 import { createHash } from "node:crypto";
-import { warn, error, info } from "../../../logger.js";
-import { fetchWithTimeout } from "../../shared/http-client.js";
-import { getArtworkProviders } from "./openrouterProviders.js";
-import { applyArtworkPromptPolicy } from "./artworkPromptPolicy.js";
-import { buildModelAwareArtworkPrompt } from "./artworkModelPrompt.js";
-import { THRESHOLDS } from "../../../config/thresholds.js";
-import { auditArtworkBase64 } from "./artworkVisualQa.js";
-import { filterImagePayloadByCapabilities, getImageSupportedParameters } from "./openrouterImageCapabilities.js";
+import { warn, error, info } from "../../logger.js";
+import { fetchWithTimeout } from "../shared/http-client.js";
+import { getArtworkProviders } from "./utils/openrouterProviders.js";
+import { applyArtworkPromptPolicy } from "./utils/artworkPromptPolicy.js";
+import { buildModelAwareArtworkPrompt } from "./utils/artworkModelPrompt.js";
+import { THRESHOLDS } from "../../config/thresholds.js";
+import { auditArtworkBase64 } from "./utils/artworkVisualQa.js";
+import { filterImagePayloadByCapabilities, getImageSupportedParameters } from "./utils/openrouterImageCapabilities.js";
 import {
   artworkRetryDelayMs,
   buildArtworkImagePayload,
@@ -24,7 +24,7 @@ import {
   isTransientArtworkError,
   makeArtworkHttpError,
   safeSnippet,
-} from "./openrouterImagePayload.js";
+} from "./utils/openrouterImagePayload.js";
 
 const OPENROUTER_BASE_URL =
   process.env.OPENROUTER_BASE_URL || process.env.OPENROUTER_API_BASE || "https://openrouter.ai/api/v1";
