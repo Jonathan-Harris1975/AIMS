@@ -299,7 +299,7 @@ test("Zernio keeps fresh generated artwork primary and permits the curated store
   assert.match(env, /^BLOG_SOCIAL_FALLBACK_IMAGE_URL=https:\/\/images\.jonathan-harris\.online\/site-logo$/m);
   assert.match(env, /^NEWSLETTER_AI_EDGE_FALLBACK_IMAGE_URL=$/m);
   assert.match(env, /^SOCIAL_BLOG_ALLOW_DETERMINISTIC_FALLBACK=false$/m);
-  assert.match(env, /^NEWSLETTER_ALLOW_DETERMINISTIC_FALLBACK=true$/m);
+  assert.match(env, /^NEWSLETTER_ALLOW_DETERMINISTIC_FALLBACK=false$/m);
   assert.match(env, /^ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK=false$/m);
   assert.match(env, /^ZERNIO_ALLOW_DETERMINISTIC_FALLBACK=false$/m);
 });
