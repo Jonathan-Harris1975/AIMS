@@ -1,0 +1,15 @@
+version: 2
+
+triggerPaths:
+  - "package.json"
+  - "package-lock.json"
+  - "renovate.json"
+  - ".github/dependabot.yml"
+
+githubApp:
+  enabled: true
+  dependencyOverviewEnabled: true
+  disableCommentsAndCheckRuns: false
+
+issueRules:
+  unresolvedRequire: true

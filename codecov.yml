@@ -1,0 +1,7 @@
+# Common Codecov surface retained, but coverage reporting is disabled for this repository until a meaningful coverage artefact is produced.
+coverage:
+  status:
+    project: false
+    patch: false
+comment: false
+github_checks: false
