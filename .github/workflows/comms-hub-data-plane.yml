@@ -42,35 +42,16 @@ jobs:
       - name: Validate Wrangler configuration
         run: npx --yes wrangler@${WRANGLER_VERSION} deploy --dry-run
 
-  deploy:
+  verify-live:
+    name: Verify current Worker health
     needs: validate
     if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-    defaults:
-      run:
-        working-directory: workers/comms-hub-data-plane
+    timeout-minutes: 5
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 24.21.0
-      - name: Install pinned npm toolchain
-        run: npm install --global npm@12.2.0 --no-audit --no-fund
-      - name: Verify pinned Node/npm toolchain
+      - name: Verify current Worker health
         run: |
-          test "$(node --version)" = "v24.21.0"
-          test "$(npm --version)" = "12.2.0"
-      - name: Deploy Worker at exact Wrangler version
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: |
-          test -n "${CLOUDFLARE_API_TOKEN:-}" || { echo 'CLOUDFLARE_API_TOKEN is required' >&2; exit 1; }
-          test -n "${CLOUDFLARE_ACCOUNT_ID:-}" || { echo 'CLOUDFLARE_ACCOUNT_ID is required' >&2; exit 1; }
-          npx --yes wrangler@${WRANGLER_VERSION} deploy
-      - name: Verify Worker health
-        run: |
+          set -euo pipefail
           for attempt in 1 2 3 4 5; do
             if curl --fail --silent --show-error --proto '=https' --tlsv1.2 "${WORKER_URL}/health" | grep -Fq '"ok":true'; then
               exit 0
