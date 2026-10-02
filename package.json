@@ -32,8 +32,8 @@
     "verify:release": "npm run verify && npm run test:migrations && npm run test:comms:reliability && npm run deploy:smoke && npm run perf:gate && npm run secret:scan && npm audit --omit=dev --audit-level=high"
   },
   "engines": {
-    "node": "22.22.3",
-    "npm": "10.9.8"
+    "node": "22.23.3",
+    "npm": "10.9.9"
   },
   "dependencies": {
     "@aws-sdk/client-polly": "^3.1137.0",
@@ -57,5 +57,5 @@
   "devDependencies": {
     "supertest": "^7.3.0"
   },
-  "packageManager": "npm@10.9.8"
+  "packageManager": "npm@10.9.9"
 }
