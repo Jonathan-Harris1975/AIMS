@@ -16,7 +16,7 @@ function withinDays(dateValue, days = 7) {
   const pubDate = new Date(dateValue);
   if (isNaN(pubDate.getTime())) return false;
   const diffDays = (Date.now() - pubDate.getTime()) / (1000 * 60 * 60 * 24);
-  return diffDays <= days;
+  return diffDays >= 0 && diffDays <= days;
 }
 
 function calculateArticleScore(item) {
@@ -161,6 +161,8 @@ export default async function fetchFeedArticles(feedUrlArg, windowDays = 7) {
         source: loaded.source,
         feedUrl: loaded.feedUrl,
         feedTitle: loaded.feed?.title,
+        itemsFetched: loaded.feed?.items?.length || 0,
+        windowDays,
         recentItems: scoredItems.length,
         returnedItems: scoredItems.length,
       });

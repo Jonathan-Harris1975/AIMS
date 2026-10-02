@@ -18,7 +18,7 @@ test("daily operation windows stay idempotent but recover failed runs within a b
   assert.match(source, /AIMS_OPERATION_RECOVERY_COOLDOWN_MS/);
   assert.match(source, /AIMS_OPERATION_STALE_AFTER_MS/);
   assert.match(source, /AIMS_OPERATION_HEARTBEAT_MS/);
-  assert.match(source, /recoveryRevision: OPERATION_RECOVERY_REVISION/);
+  assert.match(source, /recoveryRevision: windowName === "friday-pm" \? PODCAST_RECOVERY_REVISION : OPERATION_RECOVERY_REVISION/);
   assert.match(source, /asyncFailureDetails/);
   assert.match(source, /allowRecovery,/);
   assert.match(source, /resumeResults/);

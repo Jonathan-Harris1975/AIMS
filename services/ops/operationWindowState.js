@@ -11,6 +11,7 @@ const ACTIVE_STATUSES = new Set(["accepted", "running"]);
 // that deployment one recovery attempt; the revision is persisted with the
 // new receipt, so normal scheduler polling cannot turn it into a retry loop.
 export const OPERATION_RECOVERY_REVISION = "social-provider-handoff-2026-09-11-v1";
+export const PODCAST_RECOVERY_REVISION = "podcast-section-recovery-2026-10-02-v1";
 
 function normalise(value = "") {
   return String(value || "").trim();
@@ -60,6 +61,8 @@ export function operationWindowNeedsRecovery(receipt = {}, {
   staleAfterMs = 0,
   nowMs = Date.now(),
 } = {}) {
+  const failures = (receipt.results || []).filter((result) => result?.ok === false);
+  if (failures.length && failures.every((result) => result.retryable === false)) return false;
   if (RECOVERABLE_STATUSES.has(receipt?.status)) return true;
   if (receipt?.status === "completed" && Number(receipt?.failures || 0) > 0) return true;
   if (!ACTIVE_STATUSES.has(receipt?.status)) return false;
@@ -116,6 +119,12 @@ export function evaluateOperationWindowClaim(existing, {
       reason: "same-day-window-recovery-exhausted",
       attempt: currentAttempt,
     };
+  }
+
+  const sourceRetryAt = Math.max(0, ...(existing.results || []).filter((result) => result?.ok === false)
+    .map((result) => Date.parse(result.nextRetryAt || "") || 0));
+  if (sourceRetryAt > Number(nowMs)) {
+    return { claimable: false, reason: "same-day-window-recovery-cooldown", retryAt: new Date(sourceRetryAt).toISOString() };
   }
 
   const lastFinishedAt = Date.parse(existing.finishedAt || existing.updatedAt || existing.startedAt || "");

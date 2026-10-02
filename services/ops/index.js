@@ -14,6 +14,7 @@ import {
   operationTaskSucceeded,
   operationWindowNeedsRecovery,
   OPERATION_RECOVERY_REVISION,
+  PODCAST_RECOVERY_REVISION,
   persistOperationWindow,
 } from "./operationWindowState.js";
 import { info, warn } from "../../logger.js";
@@ -423,6 +424,9 @@ function asyncFailureDetails(asyncJob = {}) {
     ...(normalise(childError?.code) ? { errorCode: normalise(childError.code) } : {}),
     ...(Number.isInteger(status) && status >= 400 && status <= 599 ? { status } : {}),
     ...(childResult?.quarantined === true ? { quarantined: true } : {}),
+    ...(typeof childResult?.retryable === "boolean" ? { retryable: childResult.retryable } : {}),
+    ...(childResult?.nextRetryAt ? { nextRetryAt: childResult.nextRetryAt } : {}),
+    ...(childResult?.sourceAssessment ? { sourceAssessment: childResult.sourceAssessment } : {}),
   };
 }
 
@@ -832,7 +836,7 @@ router.post("/run/:window", async (req, res, next) => {
       maxAttempts,
       recoveryCooldownMs,
       staleAfterMs,
-      recoveryRevision: OPERATION_RECOVERY_REVISION,
+      recoveryRevision: windowName === "friday-pm" ? PODCAST_RECOVERY_REVISION : OPERATION_RECOVERY_REVISION,
     });
     if (!durableClaim.claimed) {
       if (durableClaim.receipt) operationJobs.set(id, durableClaim.receipt);

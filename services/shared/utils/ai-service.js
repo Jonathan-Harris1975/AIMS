@@ -369,6 +369,7 @@ async function callOpenRouter({ routeKey, providerId, model, apiKey, messages, m
 
     return {
       content,
+      finishReason: json?.choices?.[0]?.finish_reason || null,
       usage,
       id: json?.id,
       model: json?.model || model,
@@ -493,6 +494,7 @@ export async function resilientRequest(routeName, {
         __maybePrintSummary(sessionId, routeName);
         return returnMetadata ? {
           content: result.content,
+          finishReason: result.finishReason,
           providerId,
           model: result.model || provider.name,
           durationMs: result.durationMs,
@@ -572,6 +574,7 @@ export async function resilientRequest(routeName, {
             __maybePrintSummary(sessionId, routeName);
             return returnMetadata ? {
               content: relaxed.content,
+              finishReason: relaxed.finishReason,
               providerId,
               model: relaxed.model || provider.name,
               durationMs: relaxed.durationMs,

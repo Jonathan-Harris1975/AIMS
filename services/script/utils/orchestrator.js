@@ -16,6 +16,7 @@ import { findLongSpokenSentences, validateTranscriptSourceIntegrity, validateTra
 import { validateSpokenCadence } from "../../content-quality/validators/spokenCadenceValidator.js";
 import { runReviewCouncilGate } from "../../content-quality/reviewCouncil.js";
 import { resilientRequest } from "../../shared/utils/ai-service.js";
+import { countWords } from "./wordBudget.js";
 import { resolveTargetMins } from "./durationCalculator.js";
 
 function transcriptValidationOptions(sessionMeta = {}) {
@@ -89,7 +90,8 @@ ${mainText}`,
     timeoutMs: Number(process.env.PODCAST_REPAIR_TIMEOUT_MS || 900000),
     reasoning: { effort: process.env.PODCAST_REPAIR_REASONING_EFFORT || "none", exclude: true },
   });
-  const rawRepairedMain = String(raw || mainText).trim() || mainText;
+  const candidateMain = String(raw || mainText).trim() || mainText;
+  const rawRepairedMain = countWords(candidateMain) >= countWords(mainText) * 0.98 ? candidateMain : mainText;
   const repairedMain = editAndFormat(stripLeadingIntroEcho(rawRepairedMain, safeLockedIntro));
   // Never trust an LLM repair to preserve deterministic brand blocks. Reattach
   // their cleaned forms, then run the assembled transcript through the exact
@@ -274,6 +276,8 @@ export async function orchestrateScript(input) {
       safeEditorialText ||
       initialFullText;
 
+    info("podcast.script.validation", { sessionId: sid, stage: "final-assembly", actualWords: countWords(finalCandidate),
+      plannedMinutes: resolveTargetMins(sessionMeta) });
     let transcriptGate = evaluatePodcastTranscriptGate(finalCandidate, sessionMeta);
     if (!transcriptGate.ok) {
       const reviewed = await runReviewCouncilGate({

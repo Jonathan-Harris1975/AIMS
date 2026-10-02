@@ -80,35 +80,35 @@ async function triggerWebsiteRebuild(log, sessionId) {
 
   let lastError = null;
 
-  for (const hookUrl of hooks) {
+  for (const [hookIndex, hookUrl] of hooks.entries()) {
     for (let attempt = 1; attempt <= 3; attempt += 1) {
       try {
         const response = await fetchWithTimeout(hookUrl, { method: "POST", timeout: WEBHOOK_TIMEOUT_MS });
-        const body = await response.text().catch(() => "");
+        await response.text().catch(() => "");
 
         if (response.ok) {
           log.info("🌐 Website rebuild triggered", {
             sessionId,
-            hookUrl,
+            hookIndex,
             attempt,
             status: response.status,
           });
-          return { ok: true, hookUrl, attempt, status: response.status, body };
+          return { ok: true, hookIndex, attempt, status: response.status };
         }
 
         lastError = new Error(`non-2xx response ${response.status}`);
         log.warn("⚠️ Website rebuild trigger returned non-2xx", {
           sessionId,
-          hookUrl,
+          hookIndex,
           attempt,
           status: response.status,
-          body: body.slice(0, 500),
+
         });
       } catch (rebuildErr) {
         lastError = rebuildErr;
         log.warn("⚠️ Website rebuild trigger attempt failed", {
           sessionId,
-          hookUrl,
+          hookIndex,
           attempt,
           error: rebuildErr?.message,
         });
@@ -128,6 +128,7 @@ export async function runPodcastPipeline(input = {}, maybeOptions = {}) {
   const log = { info, warn, error };
   let editorialBriefEntries = [];
   let editorialBriefFinalised = false;
+  let pipelineStage = "editorial-briefs";
 
   if (!sessionId) {
     throw new Error("Missing required sessionId");
@@ -143,6 +144,7 @@ export async function runPodcastPipeline(input = {}, maybeOptions = {}) {
     const editorialContext = editorialBriefPromptContext(editorialBriefEntries);
     const editorialFingerprint = editorialBriefFingerprint(editorialBriefEntries);
 
+    pipelineStage = "script-generation";
     log.info("📝 Generating podcast script…");
     const script = await getScriptForPodcast({
       ...pipelineInput,
@@ -158,6 +160,7 @@ export async function runPodcastPipeline(input = {}, maybeOptions = {}) {
     }
     log.info("📝 Podcast script ready", { sessionId });
 
+    pipelineStage = "artwork";
     log.info("🎨 Generating podcast artwork…");
     const artworkPrompt = String(script?.metadata?.artworkPrompt || "").trim();
     const artwork = await processArtwork({
@@ -174,6 +177,7 @@ export async function runPodcastPipeline(input = {}, maybeOptions = {}) {
       imageUrl: artwork.publicUrl,
     });
 
+    pipelineStage = "tts-and-audio-storage";
     log.info("🗣️ TTS pipeline starting…");
     const tts = await orchestrateTTS({
       sessionId,
@@ -187,6 +191,7 @@ export async function runPodcastPipeline(input = {}, maybeOptions = {}) {
     }
     log.info("🗣️ TTS pipeline complete", { sessionId });
 
+    pipelineStage = "rss-publication";
     log.info("📡 Updating RSS feed…");
     let rss;
     try {
@@ -228,6 +233,7 @@ export async function runPodcastPipeline(input = {}, maybeOptions = {}) {
       });
     }
 
+    pipelineStage = "website-publication";
     log.info("🌐 Triggering website rebuild…");
     const rebuild = await triggerWebsiteRebuild(log, sessionId);
     if (!rebuild.ok) {
@@ -324,10 +330,18 @@ export async function runPodcastPipeline(input = {}, maybeOptions = {}) {
     }
     return summary;
   } catch (err) {
+    if (["PODCAST_INSUFFICIENT_SOURCE", "PODCAST_SECTION_EXHAUSTED"].includes(err?.code)) {
+      const result = { ok: false, reason: err.code, statusCode: err.statusCode, stage: err.stage,
+        error: err.message, sourceAssessment: err.details || null,
+        retryable: err.code === "PODCAST_INSUFFICIENT_SOURCE", nextRetryAt: err.details?.nextRetryAt || null };
+      log.warn("podcast.production.deferred", { sessionId, ...result });
+      return result;
+    }
     log.error("💥 Podcast pipeline failed", {
       sessionId,
       error: err?.message,
-      stack: err?.stack,
+      stage: err?.stage || pipelineStage,
+      code: err?.code || null,
     });
     throw err;
   } finally {

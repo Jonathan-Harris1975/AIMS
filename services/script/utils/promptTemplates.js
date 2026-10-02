@@ -2,6 +2,7 @@
 // promptTemplates.js – Updated Editorial Flow Version (Batch Option B)
 // ====================================================================
 
+import { SPOKEN_WORDS_PER_SECOND } from "./wordBudget.js";
 import { buildPersona } from "./toneSetter.js";
 import { calculateDuration } from "./durationCalculator.js";
 import { britishEnglishPromptGuidance } from "../../content-quality/britishEnglish.js";
@@ -66,7 +67,7 @@ export function getMainPrompt({ articles, sessionMeta, targetSeconds, batchIndex
 
   const approxSeconds = targetSeconds || 600;
   const approxMinutes = Math.max(4, Math.round(approxSeconds / 60));
-  const approxWords = Math.max(220, Math.round(approxSeconds * 2.3)); // ~2.3 w/s
+  const approxWords = Math.max(220, Math.round(approxSeconds * SPOKEN_WORDS_PER_SECOND)); // ~2.3 w/s
 
   const editorialContext = String(sessionMeta?.editorialContext || "").trim();
 
