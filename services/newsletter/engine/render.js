@@ -102,22 +102,102 @@ export function renderNewsletterWebHtml({ profile, newsletter, siteShell }) {
   if (!siteShell?.manifest?.releaseSha || !siteShell?.headerHtml || !siteShell?.footerHtml) {
     throw new Error("A canonical site shell is required to render the newsletter web archive.");
   }
+
   const heroImage = newsletter.heroImageUrl
-    ? `<img src="${escapeHtml(newsletter.heroImageUrl)}" alt="" loading="eager" fetchpriority="high" decoding="async" style="display:block;width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:16px;border:1px solid #cbd5e1;margin:0 0 20px;"/>`
+    ? [
+        `<img src="${escapeHtml(newsletter.heroImageUrl)}" alt="" loading="eager" fetchpriority="high" decoding="async" `,
+        'style="display:block;width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:16px;',
+        'border:1px solid #cbd5e1;margin:0 0 20px;"/>',
+      ].join("")
     : "";
-  const radar = (newsletter.onRadar || []).map((story) => `<article style="padding:14px 0;border-top:1px solid #e5e7eb;"><h3 style="margin:0 0 6px;"><a href="${escapeHtml(story.link)}">${escapeHtml(story.title)}</a></h3><p style="margin:0;">${escapeHtml(story.summary)}</p></article>`).join("\n");
-  return `<!DOCTYPE html><html lang="en-GB"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/><meta name="jh-site-shell-version" content="${escapeHtml(siteShell.manifest.releaseSha)}"/><title>${escapeHtml(newsletter.subject)} | ${escapeHtml(profile.displayName)}</title><meta name="robots" content="index,follow"/><link href="${escapeHtml(siteShell.manifest.stylesheetUrl)}" rel="stylesheet"/></head><body class="page-newsletter jh-growth-page">
-${siteShell.headerHtml}
-<header class="hero jh-page-hero" data-jh-header-reveal-anchor><div class="wrap"><a class="jh-page-hero__brand" href="https://jonathan-harris.online/" aria-label="Jonathan Harris home"><img class="jh-page-hero__logo" src="https://images.jonathan-harris.online/site-logo" alt="Jonathan Harris" width="96" height="96" loading="eager" fetchpriority="high" decoding="async"/></a><p class="tag">${escapeHtml(profile.displayName)}</p><h1>${escapeHtml(newsletter.heroHeadline)}</h1><p>${escapeHtml(newsletter.previewText || "Practical AI analysis, minus the hype.")}</p></div></header>
-<main class="main" id="main" role="main"><div class="wrap">
-<article class="card">${heroImage}${newsletter.openingNoteHtml || ""}</article>
-<section class="card" aria-labelledby="newsletter-big-three"><h2 id="newsletter-big-three">The Big Three</h2>${(newsletter.bigThree || []).map(webStory).join("\n")}</section>
-${newsletter.worthUsing ? `<section class="card"><p class="tag">${escapeHtml(newsletter.worthUsing.label || "Worth Using")}</p><h2><a href="${escapeHtml(newsletter.worthUsing.link)}">${escapeHtml(newsletter.worthUsing.title)}</a></h2><p>${escapeHtml(newsletter.worthUsing.summary)}</p><p><strong>Why it's worth your time:</strong> ${escapeHtml(newsletter.worthUsing.whyUseful)}</p></section>` : ""}
-<section class="card"><h2>On the Radar</h2>${radar}</section>
-<section class="card"><p class="tag">Reality Check</p><h2>${escapeHtml(newsletter.realityCheck?.claim || "")}</h2><p>${escapeHtml(newsletter.realityCheck?.assessment || "")}</p>${newsletter.realityCheck?.link ? `<p><a class="button secondary" href="${escapeHtml(newsletter.realityCheck.link)}">Read the source</a></p>` : ""}</section>
-${newsletter.promotion ? `<section class="card"><p class="tag">${escapeHtml(newsletter.promotion.eyebrow || "Featured")}</p><h2>${escapeHtml(newsletter.promotion.title)}</h2>${newsletter.promotion.imageUrl ? `<img src="${escapeHtml(newsletter.promotion.imageUrl)}" alt="${escapeHtml(newsletter.promotion.title)}" loading="lazy" decoding="async" style="display:block;width:100%;max-height:420px;object-fit:contain;border-radius:14px;margin:0 0 16px;"/>` : ""}<p>${escapeHtml(newsletter.promotion.blurb || "")}</p><p><a class="button" href="${escapeHtml(newsletter.promotion.url)}">${escapeHtml(newsletter.promotion.ctaLabel || "Take a look")}</a></p></section>` : ""}
-<section class="card"><p class="tag">Your Turn</p><h2>${escapeHtml(newsletter.yourTurn || "")}</h2></section>
-</div></main>${siteShell.footerHtml}${siteShell.manifest.scriptGovernanceUrl ? `<script defer data-cookieyes="ignore" data-cookieconsent="ignore" src="${escapeHtml(siteShell.manifest.scriptGovernanceUrl)}"></script>` : ""}<script defer src="${escapeHtml(siteShell.manifest.siteUiScriptUrl)}"></script></body></html>`;
+
+  const radar = (newsletter.onRadar || []).map((story) => [
+    '<article style="padding:14px 0;border-top:1px solid #e5e7eb;">',
+    `<h3 style="margin:0 0 6px;"><a href="${escapeHtml(story.link)}">${escapeHtml(story.title)}</a></h3>`,
+    `<p style="margin:0;">${escapeHtml(story.summary)}</p></article>`,
+  ].join("")).join("\n");
+
+  const documentStart = [
+    '<!DOCTYPE html><html lang="en-GB"><head><meta charset="utf-8"/>',
+    '<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>',
+    `<meta name="jh-site-shell-version" content="${escapeHtml(siteShell.manifest.releaseSha)}"/>`,
+    `<title>${escapeHtml(newsletter.subject)} | ${escapeHtml(profile.displayName)}</title>`,
+    '<meta name="robots" content="index,follow"/>',
+    `<link href="${escapeHtml(siteShell.manifest.stylesheetUrl)}" rel="stylesheet"/>`,
+    '</head><body class="page-newsletter jh-growth-page">',
+  ].join("");
+
+  const header = [
+    '<header class="hero jh-page-hero" data-jh-header-reveal-anchor><div class="wrap">',
+    '<a class="jh-page-hero__brand" href="https://jonathan-harris.online/" aria-label="Jonathan Harris home">',
+    '<img class="jh-page-hero__logo" src="https://images.jonathan-harris.online/site-logo" alt="Jonathan Harris" ',
+    'width="96" height="96" loading="eager" fetchpriority="high" decoding="async"/></a>',
+    `<p class="tag">${escapeHtml(profile.displayName)}</p>`,
+    `<h1>${escapeHtml(newsletter.heroHeadline)}</h1>`,
+    `<p>${escapeHtml(newsletter.previewText || "Practical AI analysis, minus the hype.")}</p></div></header>`,
+  ].join("");
+
+  const worthUsing = newsletter.worthUsing
+    ? [
+        `<section class="card"><p class="tag">${escapeHtml(newsletter.worthUsing.label || "Worth Using")}</p>`,
+        `<h2><a href="${escapeHtml(newsletter.worthUsing.link)}">${escapeHtml(newsletter.worthUsing.title)}</a></h2>`,
+        `<p>${escapeHtml(newsletter.worthUsing.summary)}</p>`,
+        `<p><strong>Why it's worth your time:</strong> ${escapeHtml(newsletter.worthUsing.whyUseful)}</p></section>`,
+      ].join("")
+    : "";
+
+  const realityCheck = [
+    '<section class="card"><p class="tag">Reality Check</p>',
+    `<h2>${escapeHtml(newsletter.realityCheck?.claim || "")}</h2>`,
+    `<p>${escapeHtml(newsletter.realityCheck?.assessment || "")}</p>`,
+    newsletter.realityCheck?.link
+      ? `<p><a class="button secondary" href="${escapeHtml(newsletter.realityCheck.link)}">Read the source</a></p>`
+      : "",
+    '</section>',
+  ].join("");
+
+  const promotion = newsletter.promotion
+    ? [
+        `<section class="card"><p class="tag">${escapeHtml(newsletter.promotion.eyebrow || "Featured")}</p>`,
+        `<h2>${escapeHtml(newsletter.promotion.title)}</h2>`,
+        newsletter.promotion.imageUrl
+          ? [
+              `<img src="${escapeHtml(newsletter.promotion.imageUrl)}" alt="${escapeHtml(newsletter.promotion.title)}" `,
+              'loading="lazy" decoding="async" style="display:block;width:100%;max-height:420px;object-fit:contain;',
+              'border-radius:14px;margin:0 0 16px;"/>',
+            ].join("")
+          : "",
+        `<p>${escapeHtml(newsletter.promotion.blurb || "")}</p>`,
+        `<p><a class="button" href="${escapeHtml(newsletter.promotion.url)}">`,
+        `${escapeHtml(newsletter.promotion.ctaLabel || "Take a look")}</a></p></section>`,
+      ].join("")
+    : "";
+
+  const governanceScript = siteShell.manifest.scriptGovernanceUrl
+    ? [
+        '<script defer data-cookieyes="ignore" data-cookieconsent="ignore" src="',
+        escapeHtml(siteShell.manifest.scriptGovernanceUrl),
+        '"></script>',
+      ].join("")
+    : "";
+  const siteUiScript = `<script defer src="${escapeHtml(siteShell.manifest.siteUiScriptUrl)}"></script></body></html>`;
+
+  return [
+    documentStart,
+    siteShell.headerHtml,
+    header,
+    '<main class="main" id="main" role="main"><div class="wrap">',
+    `<article class="card">${heroImage}${newsletter.openingNoteHtml || ""}</article>`,
+    `<section class="card" aria-labelledby="newsletter-big-three"><h2 id="newsletter-big-three">The Big Three</h2>${
+      (newsletter.bigThree || []).map(webStory).join("\n")
+    }</section>`,
+    worthUsing,
+    `<section class="card"><h2>On the Radar</h2>${radar}</section>`,
+    realityCheck,
+    promotion,
+    `<section class="card"><p class="tag">Your Turn</p><h2>${escapeHtml(newsletter.yourTurn || "")}</h2></section>`,
+    `</div></main>${siteShell.footerHtml}${governanceScript}${siteUiScript}`,
+  ].join("\n");
 }
 
 export function renderNewsletterPlaintext({ profile, newsletter }) {
