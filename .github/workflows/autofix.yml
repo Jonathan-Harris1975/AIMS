@@ -1,0 +1,39 @@
+name: autofix.ci
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: autofix-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  autofix:
+    if: >-
+      github.actor != 'autofix-ci[bot]' &&
+      github.actor != 'renovate[bot]' &&
+      github.actor != 'dependabot[bot]' &&
+      !startsWith(github.head_ref, 'mergify/merge-queue/') &&
+      !startsWith(github.head_ref, 'autonomy/repair-')
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Apply repository-supported safe fixer if configured
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f package.json ] && node -e 'const p=require("./package.json"); process.exit(p.scripts?.["lint:fix"]||p.scripts?.["format:fix"]?0:1)'; then
+            script="$(node -e 'const p=require("./package.json"); console.log(p.scripts?.["lint:fix"]?"lint:fix":"format:fix")')"
+            npm ci --ignore-scripts --no-audit --no-fund
+            npm run "$script"
+          else
+            echo "No repository-declared safe fixer is configured; leaving source unchanged."
+          fi
+      - name: Submit patch only when a safe fixer changed files
+        uses: autofix-ci/action@c5b2d67aa2274e7b5a18224e8171550871fc7e4a
+        with:
+          fail-fast: false

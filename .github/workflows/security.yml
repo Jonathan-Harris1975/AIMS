@@ -1,0 +1,47 @@
+name: Security and repository quality
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aims-security-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  repository_security:
+    name: Trivy, Gitleaks and actionlint
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Repository secret policy scan
+        run: python3 scripts/secret_scan.py
+      - name: Install pinned Gitleaks and actionlint
+        env:
+          GOBIN: ${{ runner.temp }}/ci-bin
+        run: |
+          set -euo pipefail
+          mkdir -p "$GOBIN"
+          go install github.com/gitleaks/gitleaks/v8@v8.28.0
+          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
+      - name: Gitleaks history scan
+        run: |
+          "${{ runner.temp }}/ci-bin/gitleaks" git . --redact --no-banner
+      - name: Validate GitHub Actions workflows
+        run: |
+          "${{ runner.temp }}/ci-bin/actionlint" -color
+      - name: Trivy filesystem vulnerability and misconfiguration scan
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,misconfig
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'

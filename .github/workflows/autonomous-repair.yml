@@ -1,0 +1,307 @@
+name: Autonomous main-branch repair PR
+
+on:
+  workflow_run:
+    workflows: ["AIMS CI", "CodeQL", "Security and repository quality"]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: autonomous-repair-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  create_repair_pr:
+    if: >-
+      ${{
+        github.event_name == 'workflow_dispatch' ||
+        (github.event.workflow_run.event != 'pull_request' &&
+         github.event.workflow_run.head_branch == github.event.repository.default_branch &&
+         github.event.workflow_run.head_repository.full_name == github.repository)
+      }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mint autonomous repair GitHub App token
+        id: app_token
+        env:
+          APP_ID: ${{ vars.AUTONOMY_REPAIR_APP_ID }}
+          APP_PRIVATE_KEY: ${{ secrets.AUTONOMY_REPAIR_APP_PRIVATE_KEY }}
+          REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${APP_ID:-}" || { echo "::error::Repository variable AUTONOMY_REPAIR_APP_ID is required."; exit 1; }
+          test -n "${APP_PRIVATE_KEY:-}" || { echo "::error::Repository secret AUTONOMY_REPAIR_APP_PRIVATE_KEY is required."; exit 1; }
+
+          key_file="${RUNNER_TEMP}/autonomy-repair-app.pem"
+          printf '%s\n' "$APP_PRIVATE_KEY" > "$key_file"
+          chmod 600 "$key_file"
+
+          b64url() {
+            openssl base64 -A | tr '+/' '-_' | tr -d '='
+          }
+
+          now="$(date +%s)"
+          iat="$((now - 60))"
+          exp="$((now + 540))"
+          header="$(printf '%s' '{"alg":"RS256","typ":"JWT"}' | b64url)"
+          payload="$(printf '{"iat":%s,"exp":%s,"iss":"%s"}' "$iat" "$exp" "$APP_ID" | b64url)"
+          unsigned="${header}.${payload}"
+          signature="$(printf '%s' "$unsigned" | openssl dgst -sha256 -sign "$key_file" -binary | b64url)"
+          jwt="${unsigned}.${signature}"
+
+          installation="$(
+            curl --fail-with-body --silent --show-error \
+              --header "Accept: application/vnd.github+json" \
+              --header "Authorization: Bearer ${jwt}" \
+              --header "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/repos/${REPO}/installation"
+          )"
+          installation_id="$(jq -er '.id' <<< "$installation")"
+          repair_app_slug="$(jq -er '.app_slug' <<< "$installation")"
+
+          app_token="$(
+            curl --fail-with-body --silent --show-error \
+              --request POST \
+              --header "Accept: application/vnd.github+json" \
+              --header "Authorization: Bearer ${jwt}" \
+              --header "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/app/installations/${installation_id}/access_tokens" |
+              jq -er '.token'
+          )"
+
+          rm -f "$key_file"
+          echo "::add-mask::${app_token}"
+          printf 'token=%s\n' "$app_token" >> "$GITHUB_OUTPUT"
+          printf 'repair_app_login=%s[bot]\n' "$repair_app_slug" >> "$GITHUB_OUTPUT"
+
+      - name: Check out trusted webhook validator
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Create or continue one repair PR and start Kilo Cloud Agent
+        env:
+          GH_TOKEN: ${{ steps.app_token.outputs.token }}
+          REPAIR_APP_LOGIN: ${{ steps.app_token.outputs.repair_app_login }}
+          REPO: ${{ github.repository }}
+          EVENT_NAME: ${{ github.event_name }}
+          RUN_WORKFLOW_ID: ${{ github.event.workflow_run.workflow_id }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          RUN_NAME: ${{ github.event.workflow_run.name }}
+          RUN_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          KILO_REPAIR_TRIGGER_URL: ${{ secrets.KILO_REPAIR_TRIGGER_URL }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            echo "GitHub App authentication succeeded; manual dispatch creates no repair PR."
+            exit 0
+          fi
+
+          # An old/out-of-order completion must not retire or create current repairs.
+          current_sha="$(gh api "repos/${REPO}/commits/${DEFAULT_BRANCH}" --jq '.sha')"
+          if [ "$HEAD_SHA" != "$current_sha" ]; then
+            echo "Ignoring completion for a default-branch SHA that is no longer current."
+            exit 0
+          fi
+          latest_run="$(gh api "repos/${REPO}/actions/workflows/${RUN_WORKFLOW_ID}/runs?branch=${DEFAULT_BRANCH}&head_sha=${HEAD_SHA}&per_page=100" \
+            --jq '[.workflow_runs[] | select(.event != "pull_request")] | sort_by(.run_number, .run_attempt) | last | .id')"
+          if [ "$latest_run" != "$RUN_ID" ]; then
+            echo "Ignoring an older attempt superseded by a newer workflow run."
+            exit 0
+          fi
+
+          gh label create autonomy:repair --repo "$REPO" --color "0E8A16" --description "Autonomous repair PR awaiting a validated fix" --force
+          gh label create autonomy:security-repair --repo "$REPO" --color "D93F0B" --description "Security finding routed through autonomous repair" --force
+          gh label create autonomy:superseded --repo "$REPO" --color "B60205" --description "Superseded by a newer authoritative repair" --force
+          gh label create autonomy:obsolete --repo "$REPO" --color "D4C5F9" --description "Repair is no longer required" --force
+          gh label create autonomy:human-hold --repo "$REPO" --color "FBCA04" --description "Automation must stop for human action" --force
+
+          verified_carriers() {
+            gh pr list --repo "$REPO" --state open --label autonomy:repair --limit 1000 \
+              --json number,author,headRefName |
+              jq -r --arg login "$REPAIR_APP_LOGIN" \
+                '.[] | select(.author.login == $login and (.headRefName | test("^autonomy/repair-[0-9]+$"))) | .number'
+          }
+
+          carriers="$(verified_carriers)"
+
+          security_workflow=false
+          if [ "$RUN_NAME" = "CodeQL" ] || [ "$RUN_NAME" = "Security and repository quality" ]; then
+            security_workflow=true
+          fi
+
+          dispatch_kilo() {
+            local repair_pr="$1" marker already payload status
+            marker="<!-- kilo-main-repair:${RUN_ID} -->"
+            already="$(gh api --paginate "repos/${REPO}/issues/${repair_pr}/comments" \
+              --jq ".[] | select(.user.login == \"${REPAIR_APP_LOGIN}\" and (.body | contains(\"${marker}\"))) | .id" | sed -n '1p')"
+            if [ -n "$already" ]; then
+              echo "Kilo was already dispatched for run $RUN_ID."
+              return
+            fi
+            if ! python3 .github/scripts/kilo_webhook_url.py; then
+              echo "::error::Configure KILO_REPAIR_TRIGGER_URL with this repository's Kilo Cloud Agent webhook trigger."
+              exit 1
+            fi
+            local carrier_url="https://github.com/${REPO}/pull/${repair_pr}"
+            payload="$(jq -n --arg repo "$REPO" --arg pr "$carrier_url" \
+              --arg sha "$HEAD_SHA" --arg run "$RUN_URL" --arg workflow "$RUN_NAME" \
+              '{repository:$repo,carrier_pr:$pr,failed_sha:$sha,failed_run:$run,workflow:$workflow,
+                task:("Investigate the failed workflow " + $workflow + " at " + $run +
+                ". Repair the smallest verified code/manifest/lockfile defect on a new branch. " +
+                "Open one implementation PR against the default branch and include " + $pr +
+                " in its PR body. Do not merge or deploy, dismiss alerts, weaken security checks, " +
+                "change allowlists, or expose credentials. If no safe code fix exists, report the blocker.")}')"
+            status="$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 30 \
+              --request POST \
+              --header 'Content-Type: application/json' --data "$payload" \
+              "$KILO_REPAIR_TRIGGER_URL")"
+            if [[ "$status" != 2?? ]]; then
+              echo "::error::Kilo Cloud Agent trigger returned HTTP $status for run $RUN_ID."
+              exit 1
+            fi
+            gh pr comment "$repair_pr" --repo "$REPO" --body "$marker Kilo Cloud Agent repair requested for $RUN_URL."
+          }
+
+          if [ "$RUN_CONCLUSION" = "success" ]; then
+            while read -r old_pr; do
+              [ -n "$old_pr" ] || continue
+              labels="$(gh pr view "$old_pr" --repo "$REPO" --json labels --jq '[.labels[].name] | join(",")')"
+              case ",$labels," in
+                *,autonomy:superseded,*|*,autonomy:obsolete,*)
+                  gh pr close "$old_pr" --repo "$REPO"
+                  gh pr edit "$old_pr" --repo "$REPO" --remove-label autonomy:repair
+                  continue ;;
+              esac
+              body="$(gh pr view "$old_pr" --repo "$REPO" --json body --jq '.body')"
+              if [[ "$body" == *"Failed workflow: **${RUN_NAME}**"* ]]; then
+                # A successful current main-branch run makes the old failure carrier stale,
+                # including a previous human hold that was attached only to that failure.
+                gh pr edit "$old_pr" --repo "$REPO" --remove-label autonomy:human-hold >/dev/null 2>&1 || true
+                gh pr edit "$old_pr" --repo "$REPO" --add-label autonomy:obsolete
+                gh pr close "$old_pr" --repo "$REPO"
+                gh pr edit "$old_pr" --repo "$REPO" --remove-label autonomy:repair
+              fi
+            done <<< "$carriers"
+            exit 0
+          fi
+
+          if [ "$RUN_CONCLUSION" != "failure" ]; then
+            echo "Workflow conclusion is $RUN_CONCLUSION; no repair action required."
+            exit 0
+          fi
+
+          # Do not wake Kilo for formatting/lint already owned by autofix.ci, or for
+          # runner/cache/deployment/provider plumbing. Require a failed step that
+          # identifies a repository code, test, build, dependency or security defect.
+          failed_steps="$(gh api "repos/${REPO}/actions/runs/${RUN_ID}/jobs?per_page=100" \
+            --jq '.jobs[] | select(.conclusion == "failure") | .steps[]? | select(.conclusion == "failure") | .name')"
+          if ! printf '%s\n' "$failed_steps" | python3 .github/scripts/kilo_failure_classifier.py >/dev/null; then
+            echo "No repository-repairable failure identified; no carrier PR or Kilo task will be created."
+            exit 0
+          fi
+
+          existing=""
+          while read -r candidate; do
+            [ -n "$candidate" ] || continue
+            body="$(gh pr view "$candidate" --repo "$REPO" --json body --jq '.body')"
+            labels="$(gh pr view "$candidate" --repo "$REPO" --json labels --jq '[.labels[].name] | join(",")')"
+            case ",$labels," in
+              *,autonomy:superseded,*|*,autonomy:obsolete,*) continue ;;
+            esac
+            if [[ "$body" == *'Failed commit: `'"$HEAD_SHA"'`'* ]] && [[ "$body" == *"Failed workflow: **${RUN_NAME}**"* ]]; then
+              case ",$labels," in
+                *,autonomy:human-hold,*) echo "Current repair requires human action."; exit 0 ;;
+              esac
+              existing="$candidate"
+              break
+            fi
+          done <<< "$carriers"
+          if [ -n "$existing" ]; then
+            echo "Repair PR #$existing already tracks failed SHA $HEAD_SHA."
+            dispatch_kilo "$existing"
+            exit 0
+          fi
+
+          while read -r old_pr; do
+            [ -n "$old_pr" ] || continue
+            body="$(gh pr view "$old_pr" --repo "$REPO" --json body --jq '.body')"
+            [[ "$body" == *"Failed workflow: **${RUN_NAME}**"* ]] || continue
+            # A newer authoritative failure in the same workflow supersedes the old carrier.
+            # Clear a stale hold before labelling it superseded so Mergify can close it.
+            gh pr edit "$old_pr" --repo "$REPO" --remove-label autonomy:human-hold >/dev/null 2>&1 || true
+            gh pr edit "$old_pr" --repo "$REPO" --add-label autonomy:superseded
+            gh pr close "$old_pr" --repo "$REPO"
+            gh pr edit "$old_pr" --repo "$REPO" --remove-label autonomy:repair
+          done <<< "$carriers"
+
+          workdir="$(mktemp -d)"
+          trap 'rm -rf "$workdir"' EXIT
+          gh auth setup-git --hostname github.com --force
+          gh repo clone "$REPO" "$workdir/repo" -- --quiet
+          cd "$workdir/repo"
+          git checkout --quiet "$HEAD_SHA"
+
+          branch="autonomy/repair-${RUN_ID}"
+          git checkout -b "$branch"
+          mkdir -p .autonomy
+          request=".autonomy/repair-request-${RUN_ID}.md"
+          cat > "$request" <<EOF
+          # Autonomous repair request
+
+          - Failed workflow: ${RUN_NAME}
+          - Failed commit: ${HEAD_SHA}
+          - Failed run: ${RUN_URL}
+          - Run ID: ${RUN_ID}
+          - Security-classified workflow: ${security_workflow}
+
+          Fix the smallest code, dependency-manifest, lockfile, build or deployment-configuration defect that caused this failure.
+          Delete this file only after the underlying defect is fixed and the relevant repository checks pass.
+
+          Guardrails:
+          - Do not weaken tests, CodeQL, Trivy, Gitleaks, required checks, branch/ruleset protections, workflow permissions, secret handling or security policy.
+          - Do not dismiss CodeQL alerts, reduce query coverage, add broad suppressions or change secret allowlists merely to make CI green.
+          - Do not merge or deploy directly.
+          - If credentials, destructive data changes, platform administration, alert dismissal or a security-policy decision are required, keep this marker and use autonomy:human-hold.
+          EOF
+
+          git config user.name "autonomy-repair[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$request"
+          git commit --quiet -m "chore: open autonomous repair request for run $RUN_ID"
+          git push --quiet origin "$branch"
+
+          body="$(cat <<EOF
+          Main-branch CI/deployment/security verification failed.
+
+          Failed workflow: **${RUN_NAME}**
+          Failed commit: \`${HEAD_SHA}\`
+          Failed run: ${RUN_URL}
+
+          This carrier PR is blocked by the **Autonomous repair marker gate**. Kilo Cloud Agent is asked to open one linked implementation PR. The marker stays until a successful default-branch rerun marks this carrier obsolete.
+          EOF
+          )"
+
+          labels="autonomy:repair"
+          if [ "$security_workflow" = "true" ]; then
+            labels="autonomy:repair,autonomy:security-repair"
+          fi
+          pr_url="$(gh pr create --repo "$REPO" --base "$DEFAULT_BRANCH" --head "$branch" \
+            --title "[autonomy] Repair $RUN_NAME failure ($RUN_ID)" \
+            --body "$body" --label "$labels")"
+          echo "Created repair PR: $pr_url"
+
+          repair_pr="${pr_url##*/}"
+          dispatch_kilo "$repair_pr"
