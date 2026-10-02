@@ -177,14 +177,30 @@ async function pipelineWithStubs(script) {
   const path = new URL("../services/podcast/runPodcastPipeline.js", import.meta.url);
   let source = await readFile(path, "utf8");
   let ttsCalls = 0;
+  const escapeUnsafeChars = (str) => str.replace(/[<>\b\f\n\r\t\0\u2028\u2029]/g, (ch) => {
+    const map = {
+      "<": "\\u003C",
+      ">": "\\u003E",
+      "\b": "\\b",
+      "\f": "\\f",
+      "\n": "\\n",
+      "\r": "\\r",
+      "\t": "\\t",
+      "\0": "\\0",
+      "\u2028": "\\u2028",
+      "\u2029": "\\u2029",
+    };
+    return map[ch];
+  });
   const symbol = `podcastRepairTest${Date.now()}${Math.random()}`;
+  const safeSymbol = escapeUnsafeChars(JSON.stringify(symbol));
   globalThis[symbol] = { script, tts: async () => { ttsCalls += 1; return { ok: true }; } };
   const modules = {
     "../../logger.js": 'export const info = () => {}; export const warn = info; export const error = info;',
-    "../script/index.js": `export const getScriptForPodcast = async () => { const value = globalThis[${JSON.stringify(symbol)}].script;
+    "../script/index.js": `export const getScriptForPodcast = async () => { const value = globalThis[${safeSymbol}].script;
 if (value instanceof Error) throw value; return value; };`,
     "../artwork/index.js": 'export const processArtwork = async () => ({ ok:true, source:"generated", key:"art", publicUrl:"https://example.com/art" });',
-    "../tts/index.js": `export const orchestrateTTS = (...args) => globalThis[${JSON.stringify(symbol)}].tts(...args);`,
+    "../tts/index.js": `export const orchestrateTTS = (...args) => globalThis[${safeSymbol}].tts(...args);`,
     "../rss-feed-podcast/index.js": 'export const runRssFeedCreator = async () => ({ ok:true, episode:{url:"https://example.com/episode"} });',
     "../shared/utils/cleanupSession.js": 'export default async () => {};',
     "../shared/utils/cleanupSessionFinal.js": 'export default async () => {};',
