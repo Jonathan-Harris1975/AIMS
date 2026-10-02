@@ -1,7 +1,7 @@
 # ============================================================
 # AI Management Suite — Koyeb production image
 # ============================================================
-FROM node:22.22.3-alpine3.22@sha256:cd7807368cf24826297cbad5dca1a44972ccfd770647db52a8c7589eb4599ac8 AS runtime
+FROM node:24.16.0-alpine3.22@sha256:191c9f0080fcbbc6547a85dc0ff7988072214a355aabdc1d2ec55a7dae5eea8a AS runtime
 
 ENV NODE_ENV=production \
     TZ=UTC \

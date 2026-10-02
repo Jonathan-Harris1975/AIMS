@@ -32,7 +32,7 @@
     "verify:release": "npm run verify && npm run test:migrations && npm run test:comms:reliability && npm run deploy:smoke && npm run perf:gate && npm run secret:scan && npm audit --omit=dev --audit-level=high"
   },
   "engines": {
-    "node": "22.23.3",
+    "node": "24.21.0",
     "npm": "10.9.9"
   },
   "dependencies": {
