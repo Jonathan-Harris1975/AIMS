@@ -1,47 +1,104 @@
 name: Security and repository quality
-
-on:
-  pull_request:
-  workflow_dispatch:
-
+'on':
+  pull_request: null
+  workflow_dispatch: null
 permissions:
   contents: read
-
 concurrency:
   group: aims-security-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-
 jobs:
   repository_security:
     name: Trivy, Gitleaks and actionlint
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-      - name: Repository secret policy scan
-        run: python3 scripts/secret_scan.py
-      - name: Install pinned Gitleaks and actionlint
-        env:
-          GOBIN: ${{ runner.temp }}/ci-bin
-        run: |
-          set -euo pipefail
-          mkdir -p "$GOBIN"
-          go install github.com/zricethezav/gitleaks/v8@v8.28.0
-          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
-      - name: Gitleaks history scan
-        run: |
-          "${{ runner.temp }}/ci-bin/gitleaks" git . --redact --no-banner
-      - name: Validate GitHub Actions workflows
-        run: |
-          "${{ runner.temp }}/ci-bin/actionlint" -color
-      - name: Trivy filesystem vulnerability and misconfiguration scan
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        with:
-          scan-type: fs
-          scan-ref: .
-          scanners: vuln,misconfig
-          severity: HIGH,CRITICAL
-          ignore-unfixed: true
-          exit-code: '1'
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        fetch-depth: 0
+    - name: Prepare isolated diagnostic paths
+      run: mkdir -p "$RUNNER_TEMP/security-raw" "$RUNNER_TEMP/security-diagnostics"
+    - name: Test diagnostic redaction and failure handling
+      id: security_tests
+      run: python3 .github/scripts/test_security_diagnostics.py
+    - name: Repository secret policy scan
+      run: python3 scripts/secret_scan.py
+      id: secret_policy
+    - name: Install pinned Gitleaks and actionlint
+      env:
+        GOBIN: ${{ runner.temp }}/ci-bin
+      run: |
+        set -euo pipefail
+        mkdir -p "$GOBIN"
+        go install github.com/zricethezav/gitleaks/v8@v8.28.0
+        go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
+      id: install_security_tools
+    - name: Gitleaks history scan
+      run: |
+        set -uo pipefail
+        set +e
+        "${RUNNER_TEMP}/ci-bin/gitleaks" git . --redact=100 --no-banner --report-format json --report-path "$RUNNER_TEMP/security-raw/gitleaks.json" --exit-code 42
+        status=$?
+        if [ "$status" -eq 42 ]; then
+          echo '::error::Potential secrets detected. See the Security findings and deployment blockers summary and security-diagnostics artifact.'
+        elif [ "$status" -ne 0 ]; then
+          echo "::error::Gitleaks execution failed (exit $status); this is an operational error, not a finding count. Inspect this step."
+        fi
+        exit "$status"
+      id: gitleaks
+      continue-on-error: true
+      if: ${{ !cancelled() && steps.install_security_tools.outcome == 'success' }}
+      shell: bash
+    - name: Validate GitHub Actions workflows
+      run: |
+        "${{ runner.temp }}/ci-bin/actionlint" -color
+      id: actionlint
+      continue-on-error: true
+      if: ${{ !cancelled() && steps.install_security_tools.outcome == 'success' }}
+    - name: Trivy filesystem vulnerability and misconfiguration scan
+      uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+      with:
+        scan-type: fs
+        scan-ref: .
+        scanners: vuln,misconfig
+        severity: HIGH,CRITICAL
+        ignore-unfixed: true
+        exit-code: '1'
+        format: json
+        output: ${{ runner.temp }}/security-raw/trivy.json
+      id: trivy
+      continue-on-error: true
+      if: ${{ !cancelled() && steps.install_security_tools.outcome == 'success' }}
+    - name: Publish actionable security findings
+      if: always()
+      env:
+        SECURITY_STEPS: ${{ toJSON(steps) }}
+        RAW_REPORT_DIR: ${{ runner.temp }}/security-raw
+        REPORT_DIR: ${{ runner.temp }}/security-diagnostics
+      run: python3 .github/scripts/security_diagnostics.py
+    - name: Upload metadata-only diagnostic reports
+      if: always()
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: security-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+        path: ${{ runner.temp }}/security-diagnostics/
+        retention-days: 30
+        if-no-files-found: error
+    - name: Enforce all scanner results
+      if: always()
+      env:
+        SECURITY_STEPS: ${{ toJSON(steps) }}
+      run: |-
+        python3 - <<'PYCODE'
+        import json
+        import os
+        steps = json.loads(os.environ['SECURITY_STEPS'])
+        failed = [name for name, step in steps.items() if step.get('outcome') in ('failure', 'cancelled')]
+        if failed:
+            print('::error::Security check blocked by: ' + ', '.join(failed) + '. Open the job summary and diagnostic artifact for details.')
+            raise SystemExit(1)
+        for name in ('gitleaks', 'trivy', 'actionlint'):
+            if steps.get(name, {}).get('outcome') != 'success':
+                print('::error::Required scanner did not complete successfully: ' + name)
+                raise SystemExit(1)
+        PYCODE
