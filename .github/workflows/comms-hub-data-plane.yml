@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - 'workers/comms-hub-data-plane/**'
+      - 'scripts/deployCommsHubDataPlaneWorker.js'
+      - 'test/comms-hub-worker-deploy.test.js'
       - '.github/workflows/comms-hub-data-plane.yml'
   workflow_dispatch:
 
@@ -37,6 +39,10 @@ jobs:
         run: |
           test "$(node --version)" = "v24.21.0"
           test "$(npm --version)" = "12.2.0"
+      - name: Validate Node-only runtime deployment
+        run: |
+          node ../../scripts/deployCommsHubDataPlaneWorker.js --check
+          node --test ../../test/comms-hub-worker-deploy.test.js
       - name: Validate Worker syntax
         run: node --check worker.js
       - name: Validate Wrangler configuration
