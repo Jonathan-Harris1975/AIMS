@@ -673,7 +673,8 @@ export function createCommsHubRouter({
         status: String(req.query.status || ""), channel: String(req.query.channel || ""),
         interactionType: String(req.query.interactionType || "").trim().toLowerCase(),
         emailAccountKey: String(req.query.emailAccountKey || "").trim().toLowerCase(),
-        ownerId: String(req.query.ownerId || ""), priority: String(req.query.priority || ""),
+        owner: String(req.query.ownerId || req.query.owner || ""), priority: String(req.query.priority || ""),
+        aiStatus: String(req.query.aiStatus || ""),
         tag: String(req.query.tag || ""), overdue: String(req.query.overdue || "") === "true",
         before: String(req.query.before || ""), limit: Number(req.query.limit || 50),
       }, req);

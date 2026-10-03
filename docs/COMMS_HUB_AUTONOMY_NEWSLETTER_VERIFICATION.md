@@ -10,6 +10,8 @@ The same authoritative query runs immediately before unapproved form-draft dispa
 
 The existing email provider adapter retains its durable outbound idempotency/reconciliation handling. The attachment tables expose no versioned transaction spanning an external provider send. The query protects changes observed before dispatch; it cannot retract an email after a later quarantine event. Validate concurrent lifecycle changes in staging before accepting P1. Tests do not establish distributed exactly-once delivery.
 
+Autonomous draft dispatch also checks current AI/autonomous enablement and current human ownership, including delayed drafts. Disabling automation or assigning a person after scheduling holds the draft for review; manually requested replies remain available through their existing permission and safety gates.
+
 ## Continuous worker watch
 
 Workflow: `.github/workflows/comms-hub-worker-watch.yml`, scheduled at minutes 7 and 37 UTC, independently of deployment. Manual dispatch is supported on `main`.
@@ -53,6 +55,10 @@ The authoritative active audience requires active subscriber and publication sub
 
 Before retrying an uncertain record, inspect the provider/inbox outcome using authorised operational tooling. Preserve the row and audit evidence. Do not reset a `sending` or `reconciliation_required` record on a timer or merely because an HTTP request failed. Automated provider reconciliation is not established by the local tests; this remains a production acceptance criterion.
 
+The confirmation service returns the persisted subscriber ID internally so the verified Jotform path can associate its confirmation audit event correctly. Public subscription responses continue to exclude this ID. A webhook retry repairs a failed post-send audit write from the durable SMTP receipt without sending another confirmation; the conditional audit insert is limited to the submission that recorded the original consent request. Final active audience membership still requires confirmation.
+
+Optional delivery of today's issue is best effort after confirmation. A failure in that optional step does not turn a successfully confirmed subscription into an HTTP error or claim the issue was delivered.
+
 Confirmation links use the configured trusted HTTPS origin, not request Host/return URLs. Only exact GET/HEAD token navigation bypasses suite bearer authentication. Tokens still undergo expiry, suppression and state validation. Successful confirmation updates state transactionally with in-transaction suppression/token checks. Repeated clicks are idempotent and do not trigger a second immediate issue delivery. Confirmation after suppression does not reactivate the subscriber. Token navigation responses prohibit caching/referrer propagation; request and rate-limit logs redact token-bearing paths.
 
 ## Newsletter operational signals
@@ -67,4 +73,4 @@ Required effective runtime values include `COMMS_HUB_ENABLED`, D1/account/proxy 
 
 Local tests use SQLite and controlled provider adapters. They verify code behaviour, not a Jotform provider receipt, real mailbox arrival, deployed D1 state or the actual public form UX. Authorised runtime/provider access, a staging environment and an explicitly authorised controlled test inbox are required before P7 PASS.
 
-The website repository's automation checks were failed when inspected during this run. Its source was read but not changed. Recheck its current-SHA prerequisite before any frontend repairs. Complete real Jotform → webhook → D1 pending → SMTP inbox → confirmation → verified active subscriber evidence, then verify duplicate/invalid/suppressed and controlled downstream failure behaviour. Never trigger a newsletter campaign during this acceptance test.
+The website repository's current-SHA production-readiness checks passed on 3 October 2026, superseding the earlier failed-check observation. Its newsletter embed repair aligns the fallback form ID and verifies completion messages originate from the embedded frame. AIMS-UI's deployed integration still fails at widget signed synchronisation; source repairs proceeded under the owner's instruction to revisit that failure at the end. Neither result certifies the deployed newsletter path. Complete real Jotform → webhook → D1 pending → SMTP inbox → confirmation → verified active subscriber evidence, then verify duplicate/invalid/suppressed and controlled downstream failure behaviour. Never trigger a newsletter campaign during this acceptance test.
