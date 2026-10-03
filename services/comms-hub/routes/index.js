@@ -142,7 +142,7 @@ export function createCommsHubRouter({
           podcast: booleanValue(process.env.COMMS_HUB_CONTENT_AUTOMATION_PODCAST_ENABLED, true),
         },
         formAutoSend: aiEnabled && booleanValue(process.env.COMMS_HUB_FORM_AUTO_SEND_ENABLED, false),
-        autonomousReplies: aiEnabled && booleanValue(process.env.COMMS_HUB_AUTONOMOUS_REPLIES_ENABLED, false),
+        autonomousReplies: aiEnabled && booleanValue(process.env.COMMS_HUB_AUTONOMOUS_REPLIES_ENABLED, aiEnabled),
         delayedActions: booleanValue(process.env.COMMS_HUB_DELAYED_ACTION_WORKER_ENABLED, true),
         retention: booleanValue(process.env.COMMS_HUB_RETENTION_WORKER_ENABLED, false),
         housekeeping: booleanValue(process.env.COMMS_HUB_HOUSEKEEPING_ENABLED, true),

@@ -257,7 +257,7 @@ export function getCommsHubMissingEnv(env = process.env) {
     || booleanValue(env.COMMS_HUB_FORM_REPLY_DELAY_ENABLED, true);
   const contentAutomationRequired = booleanValue(env.COMMS_HUB_CONTENT_AUTOMATION_ENABLED, false);
   const durableInboundAutomationRequired = aiEnabled && (
-    booleanValue(env.COMMS_HUB_AUTONOMOUS_REPLIES_ENABLED, false)
+    booleanValue(env.COMMS_HUB_AUTONOMOUS_REPLIES_ENABLED, aiEnabled)
     || booleanValue(env.COMMS_HUB_FORM_SMART_PROCESSING_ENABLED, true)
     || (effectiveChatEnabled(env) && booleanValue(env.COMMS_HUB_CHAT_AI_WORKFLOW_ENABLED, true))
     || (booleanValue(env.COMMS_HUB_EMAIL_ENABLED, false) && booleanValue(env.COMMS_HUB_EMAIL_WORKFLOW_EVALUATION_ENABLED, true))
@@ -322,7 +322,7 @@ export function getCommsHubMissingEnv(env = process.env) {
   if (booleanValue(env.COMMS_HUB_RETENTION_WORKER_ENABLED, false) && !usableEnvValue(env.R2_BUCKET_COMMS_HUB_PRIVATE)) missing.push("R2_BUCKET_COMMS_HUB_PRIVATE");
   if (booleanValue(env.COMMS_HUB_CREDENTIAL_VAULT_ENABLED, false) && !usableEnvValue(env.COMMS_HUB_CREDENTIAL_MASTER_KEY)) missing.push("COMMS_HUB_CREDENTIAL_MASTER_KEY");
   if (booleanValue(env.COMMS_HUB_EMAIL_POLL_WORKER_ENABLED, false) && !booleanValue(env.COMMS_HUB_EMAIL_ENABLED, false)) missing.push("COMMS_HUB_EMAIL_ENABLED");
-  if (booleanValue(env.COMMS_HUB_AUTONOMOUS_REPLIES_ENABLED, false) && !aiEnabled) missing.push("COMMS_HUB_AI_ENABLED");
+  if (booleanValue(env.COMMS_HUB_AUTONOMOUS_REPLIES_ENABLED, aiEnabled) && !aiEnabled) missing.push("COMMS_HUB_AI_ENABLED");
   return [...new Set(missing)];
 }
 

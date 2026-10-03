@@ -51,6 +51,11 @@ export function isPublicHealthRequest(req) {
   );
 }
 
+export function isNewsletterTokenRequest(req) {
+  return ['GET', 'HEAD'].includes(String(req.method || '').toUpperCase())
+    && /^\/newsletter\/(?:confirm|unsubscribe)\/[A-Za-z0-9_-]{43}\/?$/.test(pathWithoutQuery(req));
+}
+
 function expectedSuiteKey() {
   return usableSecret(process.env.AIMS_API_KEY || process.env.AI_SUITE_API_KEY);
 }
@@ -217,7 +222,7 @@ export function getBlotatoPublishAuthStrategy(req) {
 
 export function requireAimsBearerAuth(req, res, next) {
   if (String(req.method || "").toUpperCase() === "OPTIONS") return next();
-  if (isPublicHealthRequest(req)) return next();
+  if (isPublicHealthRequest(req) || isNewsletterTokenRequest(req)) return next();
 
   if (isPublicCommsHubIntakePath(req)) {
     const path = pathWithoutQuery(req).replace(/\/+$/, "").toLowerCase();

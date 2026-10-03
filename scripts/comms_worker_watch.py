@@ -1,0 +1,175 @@
+"""Bounded external worker check with incident state retained between Actions runs."""
+from __future__ import annotations
+
+import io
+import math
+import json
+import os
+import sys
+import urllib.error
+import urllib.parse
+import urllib.request
+import uuid
+import zipfile
+from datetime import UTC, datetime
+from pathlib import Path
+
+from ops_notify import send_event
+
+STATE = Path('worker-watch-state.json')
+
+
+def validate_health(payload, expected, now):
+    if not expected:
+        return 'expected_inventory_unconfigured'
+    health = payload.get('health', {}) if isinstance(payload, dict) else {}
+    workers = health.get('workers')
+    if not isinstance(workers, list) or not workers:
+        return 'inventory_missing'
+    try:
+        checked = datetime.fromisoformat(health['checkedAt'].replace('Z', '+00:00'))
+        age = (now - checked).total_seconds()
+        if age < -30 or age > 120:
+            return 'health_response_stale'
+    except (KeyError, TypeError, ValueError):
+        return 'health_response_invalid'
+    identities = {f"{w.get('category')}:{w.get('key')}" for w in workers if isinstance(w, dict) and w.get('enabled') is True}
+    if not set(expected).issubset(identities):
+        return 'expected_worker_missing'
+    if health.get('enabledWorkers') != len(identities) or not identities:
+        return 'inventory_invalid'
+    if payload.get('ok') is not True or payload.get('service') != 'comms-hub' or health.get('overall') != 'healthy':
+        return 'workers_unhealthy'
+    for worker in workers:
+        if not isinstance(worker, dict):
+            return 'health_response_invalid'
+        if worker.get('enabled') is True:
+            age_ms = worker.get('ageMs')
+            threshold = worker.get('degradedAfterMs')
+            if (worker.get('status') != 'healthy' or not isinstance(age_ms, (int, float))
+                    or not isinstance(threshold, (int, float)) or not math.isfinite(age_ms) or not math.isfinite(threshold)
+                    or age_ms < 0 or threshold <= 0 or age_ms > threshold):
+                return 'worker_unhealthy'
+    return None
+
+
+def advance_incident(state, failure, now, notify):
+    stamp = now.isoformat()
+    if failure:
+        if not state.get('active'):
+            state = {'active': True, 'incident_id': str(uuid.uuid4()), 'detected_at': stamp, 'notified': False}
+        if not state.get('notified'):
+            delivered = notify({'event_id': f"worker-watch:{state['incident_id']}:failure", 'event_type': 'worker_health_failure',
+                                'service': 'AIMS', 'source': 'github_actions', 'severity': 'critical',
+                                'title': 'Comms Hub worker health failed', 'summary': failure,
+                                'details': {'detected_at': state['detected_at'], 'started_at': os.getenv('WATCH_STARTED_AT'),
+                                            'scheduled_at': os.getenv('WATCH_SCHEDULED_AT') or None}})
+            state['notified'] = delivered is True
+            if delivered:
+                state['notified_at'] = stamp
+        state['last_failure'] = failure
+    elif state.get('active'):
+        if state.get('notified'):
+            delivered = notify({'event_id': f"worker-watch:{state['incident_id']}:recovery", 'event_type': 'worker_health_recovered',
+                'service': 'AIMS', 'source': 'github_actions', 'severity': 'info', 'title': 'Comms Hub workers recovered',
+                'summary': 'Expected workers are healthy again.'})
+            recovery_delivery = 'sent' if delivered else 'failed'
+        else:
+            recovery_delivery = 'not_required'
+        # A failed recovery notification must not suppress the next real incident.
+        state = {'active': False, 'recovered_at': stamp, 'recovery_delivery': recovery_delivery}
+    state['checked_at'] = stamp
+    return state
+
+
+def check_health(url, token, expected, now, opener=None):
+    opener = opener or urllib.request.build_opener(NoRedirect()).open
+    parsed = urllib.parse.urlsplit(url)
+    if parsed.scheme != 'https' or parsed.username or parsed.password or parsed.query or parsed.fragment or not token:
+        return 'monitor_configuration_invalid'
+    request = urllib.request.Request(url, headers={'Authorization': f'Bearer {token}', 'Accept': 'application/json'})
+    for attempt in range(2):
+        try:
+            with opener(request, timeout=10) as response:
+                if response.status != 200:
+                    return 'health_http_failure'
+                return validate_health(json.loads(response.read(256_001)), expected, now)
+        except urllib.error.HTTPError:
+            return 'health_http_failure'
+        except (TimeoutError, urllib.error.URLError):
+            if attempt == 1:
+                return 'health_network_failure'
+        except (ValueError, TypeError, AttributeError):
+            return 'health_response_invalid'
+    return 'health_network_failure'
+
+
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *_args):
+        return None
+
+
+def github_json(path):
+    request = urllib.request.Request(f'https://api.github.com/repos/{os.environ["GITHUB_REPOSITORY"]}/{path}',
+        headers={'Authorization': f'Bearer {os.environ["GH_TOKEN"]}', 'Accept': 'application/vnd.github+json'})
+    with urllib.request.urlopen(request, timeout=10) as response:
+        return json.load(response)
+
+
+def restore_state():
+    artifacts = github_json('actions/artifacts?name=comms-worker-watch-state&per_page=100')['artifacts']
+    for artifact in sorted(artifacts, key=lambda a: a['id'], reverse=True):
+        if artifact.get('expired'):
+            continue
+        run = github_json(f'actions/runs/{artifact["workflow_run"]["id"]}')
+        if (run.get('path') != '.github/workflows/comms-hub-worker-watch.yml' or run.get('head_branch') != 'main'
+                or run.get('event') not in ('schedule', 'workflow_dispatch')):
+            continue
+        url = f'https://api.github.com/repos/{os.environ["GITHUB_REPOSITORY"]}/actions/artifacts/{artifact["id"]}/zip'
+        request = urllib.request.Request(url, headers={'Authorization': f'Bearer {os.environ["GH_TOKEN"]}'})
+        # Never forward the GitHub credential to the signed artifact host.
+        try:
+            urllib.request.build_opener(NoRedirect()).open(request, timeout=10)
+            raise ValueError('Expected signed artifact redirect')
+        except urllib.error.HTTPError as response:
+            if response.code != 302:
+                raise
+            signed = response.headers['Location']
+        if urllib.parse.urlsplit(signed).scheme != 'https':
+            raise ValueError('Invalid artifact transfer')
+        with urllib.request.urlopen(signed, timeout=10) as response:
+            data = response.read(1_000_001)
+        with zipfile.ZipFile(io.BytesIO(data)) as archive:
+            state = json.loads(archive.read('worker-watch-state.json'))
+        if not isinstance(state, dict) or not isinstance(state.get('active'), bool):
+            raise ValueError('Invalid saved incident state')
+        return state
+    prior = github_json('actions/workflows/comms-hub-worker-watch.yml/runs?per_page=100')['workflow_runs']
+    if any(str(run['id']) != os.getenv('GITHUB_RUN_ID') and run['status'] == 'completed' for run in prior):
+        raise ValueError('Prior monitoring state unavailable; reconcile before reset')
+    return {'active': False}
+
+
+def main():
+    try:
+        state = restore_state()
+    except Exception as error:
+        print(f'Monitor state restore failed: {type(error).__name__}', file=sys.stderr)
+        return 1
+    now = datetime.now(UTC)
+    url = os.getenv('COMMS_HUB_WATCH_URL', '')
+    expected = [item.strip() for item in os.getenv('COMMS_HUB_WATCH_EXPECTED_WORKERS', '').split(',') if item.strip()]
+    failure = check_health(url, os.getenv('AIMS_API_KEY', ''), expected, now)
+    alert_url = os.getenv('OPS_ALERT_WEBHOOK_URL', '')
+    independent = bool(alert_url and os.getenv('OPS_ALERT_WEBHOOK_TOKEN') and urllib.parse.urlsplit(alert_url).scheme == 'https'
+                       and urllib.parse.urlsplit(alert_url).netloc != urllib.parse.urlsplit(url).netloc)
+    state = advance_incident(state, failure, now, lambda event: independent and send_event(event))
+    STATE.write_text(json.dumps(state, sort_keys=True), encoding='utf-8')
+    print(json.dumps({'health': failure or 'healthy', 'detected_at': state.get('detected_at'),
+                      'notified_at': state.get('notified_at'), 'urgent_delivery': 'unverified',
+                      'independent_alert_configured': independent}))
+    return 1 if failure or not independent else 0
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())

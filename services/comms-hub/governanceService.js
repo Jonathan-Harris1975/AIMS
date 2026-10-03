@@ -57,6 +57,26 @@ export class CommsHubGovernanceService {
   }
 
   async attemptAutonomousReply({ conversationId, draftId }, identity = { actor: 'autonomous-worker', role: 'admin' }) {
+    try {
+      return await this.attemptAssessedAutonomousReply({ conversationId, draftId }, identity);
+    } catch (error) {
+      const reasons = {
+        autonomous_replies_disabled: 'automation_disabled', autonomous_reply_human_assigned: 'approval_required',
+        autonomous_reply_requires_approval: 'approval_required', autonomous_reply_security_blocked: 'safety_or_conduct',
+        autonomous_reply_response_intelligence_blocked: 'low_confidence', autonomous_policy_not_found: 'automation_disabled',
+        autonomous_reply_policy_rejected: error.holdReason || 'low_confidence', autonomous_reply_rate_limited: 'rate_limited',
+        form_attachment_review_required: 'attachment_review',
+      };
+      if (reasons[error.code]) {
+        const heldConversation = await this.context.repository.getConversation(conversationId);
+        if (heldConversation) await this.context.operationsRepository?.recordAutonomyOutcome?.({ conversationId, channel: heldConversation.channel,
+          outcome: 'held_for_review', reason: reasons[error.code] });
+      }
+      throw error;
+    }
+  }
+
+  async attemptAssessedAutonomousReply({ conversationId, draftId }, identity) {
     if (!this.context.config.autonomousRepliesEnabled) throw new CommsHubError(409, 'autonomous_replies_disabled', 'Autonomous replies are disabled.');
     const operationsPromise = this.context.operationsRepository?.getConversationOperations
       ? this.context.operationsRepository.getConversationOperations(conversationId)
@@ -96,17 +116,20 @@ export class CommsHubGovernanceService {
     const minimumConfidence = Number(policy.minimum_confidence);
     const evidenceRequired = Number(policy.require_evidence) === 1;
     if (risk > maximumRisk || (!safeDeterministicDelivery && confidence < minimumConfidence) || (!safeDeterministicDelivery && evidenceRequired && evidenceCount < 1)) {
-      throw new CommsHubError(
+      const rejection = new CommsHubError(
         409,
         'autonomous_reply_policy_rejected',
         `Draft does not meet autonomous policy ${policy.policy_key}: risk=${risk.toFixed(3)}/${maximumRisk.toFixed(3)}, confidence=${confidence.toFixed(
           3)}/${minimumConfidence.toFixed(3)}, evidence=${evidenceCount}${evidenceRequired ? ' required' : ' optional'}, safeDeterministicDelivery=${safeDeterministicDelivery}.`,
       );
+      rejection.holdReason = risk > maximumRisk ? 'safety_or_conduct' : confidence < minimumConfidence ? 'low_confidence' : 'missing_information';
+      throw rejection;
     }
     const sentSince = await this.context.operationsRepository.countAutonomousSendsSince(policy.policy_key, new Date(Date.now() - 3_600_000).toISOString());
     if (sentSince >= Number(policy.maximum_per_hour)) throw new CommsHubError(429, 'autonomous_reply_rate_limited', 'Autonomous reply hourly limit has been reached.');
-    const result = await sendReplyDraft({ draftId, context: this.context });
-    await this.context.auditService.record({ actor: identity.actor, role: identity.role, action: 'autonomous_reply_sent', objectType: 'reply_draft', objectId: draftId,
+    const result = await sendReplyDraft({ draftId, context: this.context, autonomous: true });
+    if (!result.scheduled && !result.duplicate) await this.context.auditService.record({ actor: identity.actor, role: identity.role,
+      action: 'autonomous_reply_sent', objectType: 'reply_draft', objectId: draftId,
        conversationId, details: { policyKey: policy.policy_key, channel: conversation.channel, risk, confidence, evidenceCount, responseReasons:
           latestResponseIntelligence.reasons || [], answerability: latestResponseIntelligence.answerability || null, model: ai?.runs?.[0]?.model || ai?.runs?.[0]?.model_name ||
              null, safeClarification, safeDeterministicResponse, safeFormDelivery, safeDirectResponse, automated: true } });

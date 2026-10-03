@@ -1,6 +1,7 @@
 import { CommsHubError } from "./errors.js";
 import { sendReplyDraft } from "./replyDraftService.js";
 import { sanitiseUntrustedText } from "./domain/promptSecurity.js";
+import { attachmentReviewState } from "./domain/attachmentReview.js";
 
 function clean(value, max = 4000) {
   return String(value ?? "").replace(/\u0000/g, "").trim().slice(0, max);
@@ -137,8 +138,22 @@ export class CommsHubFormProcessingService {
     }
     const state = await this.context.operationsRepository.getFormProcessing?.(conversationId);
     if (!state) throw new CommsHubError(404, "form_processing_not_found", "Form processing state was not found.");
-    if (state.status === "replied" || (["draft_ready", "pending_approval"].includes(state.status) && state.reply_draft_id)) {
+    if (state.status === "replied" || (state.status === "pending_approval" && state.reply_draft_id)) {
       return { duplicate: true, state };
+    }
+    if (state.status === 'draft_ready' && state.reply_draft_id) {
+      if (!autoSend || !this.context.config.aiEnabled) return { duplicate: true, state };
+      const attachments = await attachmentReviewState(this.context, conversationId, state.digest);
+      await this.context.operationsRepository.updateFormAttachmentReview?.({ conversationId, required: attachments.reviewRequired });
+      if (attachments.reviewRequired) return { duplicate: true, sent: false, reviewRequired: true, state };
+      const existingDraft = await this.context.aiRepository.getDraft(state.reply_draft_id);
+      let metadata = existingDraft?.metadata;
+      if (!metadata) { try { metadata = JSON.parse(existingDraft?.metadata_json || '{}'); } catch { metadata = {}; } }
+      if (Number(existingDraft?.requires_approval) === 1 || metadata?.smartLayers?.responseIntelligence?.autonomousEligible !== true) {
+        return { duplicate: true, sent: false, state };
+      }
+      const delivery = await sendReplyDraft({ draftId: state.reply_draft_id, context: this.context, autonomous: true });
+      return { processed: true, sent: !delivery.scheduled, scheduled: Boolean(delivery.scheduled), delivery };
     }
     if (!this.context.config.aiEnabled) {
       await this.context.operationsRepository.updateFormProcessing?.({ conversationId, status: "review_required", error: "ai_disabled" });
@@ -146,6 +161,9 @@ export class CommsHubFormProcessingService {
     }
     await this.context.operationsRepository.updateFormProcessing?.({ conversationId, status: "processing" });
     try {
+      const attachments = await attachmentReviewState(this.context, conversationId, state.digest);
+      state.digest = { ...state.digest, attachmentReviewRequired: attachments.reviewRequired };
+      await this.context.operationsRepository.updateFormAttachmentReview?.({ conversationId, required: attachments.reviewRequired });
       const analysis = await this.context.aiWorkflowService.analyseConversation(conversationId, { operation: "form_submission", scheduleFollowUp: false });
       const draft = analysis?.draft || {};
       const status = draft.requiresApproval ? "pending_approval" : "draft_ready";
@@ -157,9 +175,11 @@ export class CommsHubFormProcessingService {
       });
       const responseEligible = analysis?.responseIntelligence?.autonomousEligible === true;
       if (!autoSend || !draft.id || draft.requiresApproval || !responseEligible || state?.digest?.attachmentReviewRequired) {
+        await this.context.operationsRepository?.recordAutonomyOutcome?.({ conversationId, channel: 'form', outcome: 'held_for_review',
+          reason: !autoSend ? 'automation_disabled' : state?.digest?.attachmentReviewRequired ? 'attachment_review' : draft.requiresApproval ? 'approval_required' : 'low_confidence' });
         return { processed: true, sent: false, status, responseEligible, analysis };
       }
-      const sent = await sendReplyDraft({ draftId: draft.id, context: this.context });
+      const sent = await sendReplyDraft({ draftId: draft.id, context: this.context, autonomous: true });
       if (sent?.scheduled) {
         return { processed: true, sent: false, scheduled: true, dueAt: sent.dueAt, status: "draft_ready", analysis, delivery: sent };
       }

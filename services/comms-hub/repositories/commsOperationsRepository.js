@@ -393,6 +393,19 @@ export class CommsOperationsRepository extends CommsIdentityArchiveRepository {
     return rows(result)[0] || null;
   }
 
+  async listAttachmentReviewStates(conversationId) {
+    const result = await this.d1.query(
+      `SELECT a.id AS attachment_id, a.status AS attachment_status,
+              ao.object_key, ao.bucket_name, ao.sha256, ao.scan_status,
+              ao.scan_provider, ao.scanned_at, ao.deleted_at
+         FROM comms_hub_attachments a
+         JOIN comms_hub_messages m ON m.id = a.message_id
+         LEFT JOIN comms_hub_attachment_objects ao ON ao.attachment_id = a.id
+        WHERE m.conversation_id = ? AND m.direction = 'inbound'`, [conversationId]
+    );
+    return rows(result);
+  }
+
   async consumeWebhookNonce({ source, nonce, payloadSha256, receivedAt, expiresAt }) {
     const result = await this.d1.query(
       `INSERT OR IGNORE INTO comms_hub_webhook_nonces
@@ -1514,7 +1527,7 @@ export class CommsOperationsRepository extends CommsIdentityArchiveRepository {
   }
 
   async metrics({ from, to }) {
-    const [volume, response, resolution, automation, failures, channel] = await Promise.all([
+    const [volume, response, resolution, automation, failures, channel, autonomyOutcomes, newsletterOutcomes] = await Promise.all([
       this.d1.query(
         `SELECT COUNT(*) AS conversations,
                 SUM((SELECT COUNT(*) FROM comms_hub_messages m WHERE m.conversation_id = c.id)) AS messages
@@ -1550,6 +1563,14 @@ export class CommsOperationsRepository extends CommsIdentityArchiveRepository {
            FROM comms_hub_conversations c
           WHERE c.created_at >= ? AND c.created_at < ? GROUP BY channel ORDER BY channel`, [from, to]
       ),
+      this.d1.query(`SELECT channel, outcome, reason, COUNT(*) AS count
+        FROM comms_hub_autonomy_outcomes WHERE first_decided_at >= ? AND first_decided_at < ?
+        GROUP BY channel, outcome, reason`, [from, to]),
+      this.d1.query(`SELECT status AS outcome, COUNT(*) AS count FROM newsletter_confirmation_deliveries
+        WHERE created_at >= ? AND created_at < ? GROUP BY status
+        UNION ALL SELECT event_type AS outcome, COUNT(*) AS count FROM newsletter_consent_events
+        WHERE occurred_at >= ? AND occurred_at < ? AND event_type IN ('consent_requested','consent_confirmed','consent_withdrawn')
+        GROUP BY event_type`, [from, to, from, to]),
     ]);
     const automationRow = rows(automation)[0] || {};
     const total = Number(automationRow.total || 0);
@@ -1565,7 +1586,21 @@ export class CommsOperationsRepository extends CommsIdentityArchiveRepository {
       },
       failures: rows(failures),
       channels: rows(channel),
+      autonomyOutcomes: rows(autonomyOutcomes),
+      newsletterConfirmations: rows(newsletterOutcomes),
     };
+  }
+
+  async recordAutonomyOutcome({ conversationId, channel, outcome, reason = null, at = nowIso() }) {
+    if (!['held_for_review', 'auto_sent'].includes(outcome)) throw new TypeError('Invalid autonomy outcome.');
+    const allowedChannels = ['chat', 'email', 'form', 'facebook', 'instagram', 'youtube', 'linkedin', 'x', 'threads', 'tiktok'];
+    const allowedReasons = ['low_confidence', 'attachment_review', 'approval_required', 'safety_or_conduct', 'missing_information', 'automation_disabled', 'rate_limited'];
+    const safeChannel = allowedChannels.includes(channel) ? channel : 'other';
+    const safeReason = outcome === 'auto_sent' ? null : allowedReasons.includes(reason) ? reason : 'missing_information';
+    await this.d1.query(`INSERT INTO comms_hub_autonomy_outcomes
+      (conversation_id, channel, outcome, reason, first_decided_at, updated_at) VALUES(?,?,?,?,?,?)
+      ON CONFLICT(conversation_id) DO UPDATE SET outcome=excluded.outcome, reason=excluded.reason, updated_at=excluded.updated_at
+      WHERE comms_hub_autonomy_outcomes.outcome <> 'auto_sent'`, [conversationId, safeChannel, outcome, safeReason, at, at]);
   }
 
   async persistChannelMessage({ contact, conversation, message, attachments = [], at = nowIso() }) {

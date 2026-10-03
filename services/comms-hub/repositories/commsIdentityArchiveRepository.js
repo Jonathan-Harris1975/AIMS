@@ -240,6 +240,12 @@ export class CommsIdentityArchiveRepository {
     return row;
   }
 
+  async updateFormAttachmentReview({ conversationId, required }) {
+    await this.d1.query(`UPDATE comms_hub_form_processing
+      SET digest_json = json_set(digest_json, '$.attachmentReviewRequired', json(?)), updated_at = ?
+      WHERE conversation_id = ?`, [required ? 'true' : 'false', nowIso(), conversationId]);
+  }
+
   async updateFormProcessing({ conversationId, status, aiRunId = null, replyDraftId = null, replySentAt = null, failureClass = null, error = null, at = nowIso() }) {
     const result = await this.d1.query(
       `UPDATE comms_hub_form_processing SET status = ?,

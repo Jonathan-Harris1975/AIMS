@@ -20,6 +20,20 @@ Comms Hub migrations do not use this endpoint. `npm run comms:migrate` deliberat
 7. Set Koyeb `COMMS_HUB_D1_PROXY_URL=https://<worker-host>/query`.
 8. Set Koyeb `COMMS_HUB_D1_PROXY_TOKEN` to the same secret.
 
+### Cloudflare Workers Builds configuration
+
+The 3 October 2026 production build log passed `npm run build` but failed at the repository-root command `npx wrangler versions upload` with “Missing entry-point to Worker script or to assets directory”. The canonical configuration lives below the repository root. Keep the build root at the repository root when using `npm run build`, and set the upload command to:
+
+```sh
+npx --yes wrangler@4.127.1 versions upload --config workers/comms-hub-data-plane/wrangler.toml
+```
+
+Set the Workers Builds Node version to `24.21.0` and npm to `12.2.0`. The supplied log used Node `24.18.0`, which caused an engine warning; this warning was separate from the missing entry-point failure. Do not create a second root configuration or deploy the Express application as the Worker.
+
+`versions upload` creates a version without promoting it to active production traffic. The existing Koyeb deployment watcher remains the production deployment path. Verify the upload result and the exact-SHA production watcher separately before calling the release ready. These dashboard settings have not been changed by this source repair.
+
+References: [Workers Builds configuration](https://developers.cloudflare.com/workers/ci-cd/builds/configuration/) and [Wrangler Worker commands](https://developers.cloudflare.com/workers/wrangler/commands/workers/).
+
 ### Hardened Koyeb deployment
 
 The production deployment watcher runs `node scripts/deployCommsHubDataPlaneWorker.js` inside the verified Koyeb deployment. The script uploads the self-contained ES module directly through Cloudflare's Workers API using the existing `D1_API_KEY` and `CLOUDFLARE_ACCOUNT_ID` / `CF_ACCOUNT_ID`. The token must have Workers Scripts Write permission, including access to Worker settings; a D1-only token is insufficient. Tokens remain inside Koyeb and are never printed or copied to GitHub.

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { normaliseJotformAnswers, extractJotformContact } from "../comms-hub/domain/submission.js";
-import { beginSubscription } from "./audience/d1Audience.js";
+import { sendSubscriptionConfirmation } from "./confirmationDelivery.js";
 import { CommsHubError } from "../comms-hub/errors.js";
 
 const FORM_ID = "262733359026055";
@@ -94,22 +94,20 @@ export async function processNewsletterJotformSignup({ identifiers, context }) {
   );
   if (alreadySent.results?.length) return { ok: true, duplicate: true, status: "confirmation_already_sent" };
 
-  const result = await beginSubscription({
+  const result = await sendSubscriptionConfirmation({ input: {
     email: contact.email,
     publicationId: PUBLICATION_ID,
     source: "jotform",
     sourceReference,
     consentTextVersion: process.env.NEWSLETTER_CONSENT_TEXT_VERSION || "2026-10-01",
     privacyNoticeVersion: process.env.NEWSLETTER_PRIVACY_NOTICE_VERSION || "2026-10-01",
-  }, { d1: context.d1 });
+  }, d1: context.d1, mail: context.manualMailAccounts?.newsletter,
+    baseUrl: process.env.COMMS_HUB_PUBLIC_BASE_URL,
+    compose: ({ confirmationUrl }) => confirmationEmail({ firstName, confirmationUrl }),
+  });
   if (!result.ok) throw new CommsHubError(result.status === "suppressed" ? 409 : 400, `newsletter_${result.status}`, result.error || "Newsletter signup could not be started.");
 
-  const mail = context.manualMailAccounts?.newsletter;
-  if (!mail) throw new CommsHubError(503, "newsletter_sender_not_configured", "Newsletter confirmation sender is not configured.", { retryable: true, failureClass: "temporary" });
-  const base = String(process.env.COMMS_HUB_PUBLIC_BASE_URL || "").replace(/\/$/, "");
-  if (!base) throw new CommsHubError(503, "newsletter_public_base_url_missing", "COMMS_HUB_PUBLIC_BASE_URL is required for newsletter confirmation links.");
-  const confirmationUrl = `${base}/newsletter/confirm/${encodeURIComponent(result.token)}`;
-  await mail.sendMessage({ to: [contact.email], ...confirmationEmail({ firstName, confirmationUrl }) });
+  if (result.duplicate || result.status === 'already_subscribed') return result;
   await context.d1.query(
     `INSERT INTO newsletter_consent_events(
       id,subscriber_id,publication_id,event_type,lawful_basis,purpose,consent_text_version,
