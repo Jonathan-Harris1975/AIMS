@@ -19,13 +19,7 @@ concurrency:
 
 jobs:
   signal:
-    if: >-
-      ${{
-        github.ref_name != github.event.repository.default_branch &&
-        github.actor != 'dependabot[bot]' &&
-        github.actor != 'renovate[bot]' &&
-        github.actor != 'github-actions[bot]'
-      }}
+    if: ${{ github.ref_name != github.event.repository.default_branch }}
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
