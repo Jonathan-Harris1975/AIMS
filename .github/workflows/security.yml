@@ -21,9 +21,11 @@ jobs:
     - name: Test diagnostic redaction and failure handling
       id: security_tests
       run: python3 .github/scripts/test_security_diagnostics.py
+      continue-on-error: true
     - name: Repository secret policy scan
-      run: python3 scripts/secret_scan.py
+      run: python3 scripts/secret_scan.py --report-path "$RUNNER_TEMP/security-raw/secret-policy.json"
       id: secret_policy
+      continue-on-error: true
     - name: Install pinned Gitleaks and actionlint
       env:
         GOBIN: ${{ runner.temp }}/ci-bin

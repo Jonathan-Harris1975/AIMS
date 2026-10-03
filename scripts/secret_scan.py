@@ -10,6 +10,7 @@ secret-bearing environment/config keys.
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import subprocess
 import sys
@@ -152,12 +153,17 @@ def scan_file(path: Path, root: Path) -> list[str]:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Fail if committed source appears to contain literal secrets.")
     parser.add_argument("root", nargs="?", default=".")
+    parser.add_argument("--report-path", help="Write file/line/reason metadata as JSON without matched values.")
     args = parser.parse_args()
     root = Path(args.root).resolve()
     findings: list[str] = []
     for path in tracked_files(root):
         if is_text_candidate(path, root):
             findings.extend(scan_file(path, root))
+    if args.report_path:
+        report = Path(args.report_path)
+        report.parent.mkdir(parents=True, exist_ok=True)
+        report.write_text(json.dumps(sorted(set(findings)), indent=2) + "\n")
     if findings:
         print("Secret scan failed:", file=sys.stderr)
         for finding in sorted(set(findings)):

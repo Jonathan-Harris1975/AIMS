@@ -1,5 +1,7 @@
 """Regression tests for actionable, secret-free diagnostic evidence."""
 import importlib.util
+import csv
+import subprocess
 import json
 import os
 from unittest.mock import patch
@@ -107,6 +109,53 @@ class Diagnostics(unittest.TestCase):
                 with self.assertRaises(RuntimeError):
                     security.main()
             self.assertIn('No report was produced', (root / 'summary.md').read_text())
+
+    def test_unavailable_json_is_distinct_from_zero_findings(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            security.render(root / 'missing', {}, 'owner/repo', 'run', root / 'raw')
+            self.assertIsNone(json.loads((root / 'missing/gitleaks-findings.json').read_text()))
+            status = json.loads((root / 'missing/report-status.json').read_text())
+            self.assertFalse(status['gitleaks']['available'])
+            self.assertIsNone(status['gitleaks']['finding_count'])
+            raw = root / 'raw'
+            raw.mkdir()
+            (raw / 'gitleaks.json').write_text('[]')
+            security.render(root / 'clean', {}, 'owner/repo', 'run', raw)
+            self.assertEqual(json.loads((root / 'clean/gitleaks-findings.json').read_text()), [])
+            self.assertEqual(json.loads((root / 'clean/report-status.json').read_text())['gitleaks']['finding_count'], 0)
+
+    def test_csv_keeps_all_findings_and_neutralises_formulas(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            rows = [{'File': '=FORMULA()', 'StartLine': n} for n in range(125)]
+            security.write_evidence(root, 'findings', rows, ('File', 'StartLine'), None)
+            with (root / 'findings.csv').open() as stream:
+                records = list(csv.DictReader(stream))
+            self.assertEqual(len(records), 125)
+            self.assertEqual(records[0]['File'], "'=FORMULA()")
+            self.assertEqual(json.loads((root / 'findings.json').read_text())[0]['File'], '=FORMULA()')
+
+    def test_real_actionlint_json_array_format_is_accepted(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'actionlint.json'
+            path.write_text(json.dumps([{'filepath': '.github/workflows/ci.yml', 'line': 4, 'column': 2, 'kind': 'syntax-check', 'message': 'unknown key'}, {'filepath': '.github/workflows/ci.yml', 'line': 8, 'column': 3, 'kind': 'shellcheck', 'message': 'SC2086: quote expansion'}]))
+            data, error = security.read_report(path, list)
+            self.assertIsNone(error)
+            self.assertEqual(len(security.actionlint_findings(data)), 2)
+
+    def test_final_gate_rejects_every_preliminary_failure(self):
+        text = (ROOT.parent / 'workflows/security.yml').read_text()
+        gate = text.split("        python3 - <<'PYCODE'\n", 1)[1].split('        PYCODE', 1)[0]
+        gate = "python3 - <<'PYCODE'\n" + '\n'.join(line[8:] for line in gate.splitlines()) + '\nPYCODE'
+        names = ('gitleaks', 'trivy', 'actionlint', 'secret_policy', 'security_tests', 'autonomy_tests', 'gitleaks_selftest')
+        outcomes = {name: {'outcome': 'success'} for name in names}
+        for name in names:
+            failed = {**outcomes, name: {'outcome': 'failure'}}
+            result = subprocess.run(['bash', '-c', gate], env={**os.environ, 'SECURITY_STEPS': json.dumps(failed)}, capture_output=True)
+            self.assertNotEqual(result.returncode, 0, name)
+        result = subprocess.run(['bash', '-c', gate], env={**os.environ, 'SECURITY_STEPS': json.dumps(outcomes)}, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
 
 if __name__ == '__main__':
     unittest.main()

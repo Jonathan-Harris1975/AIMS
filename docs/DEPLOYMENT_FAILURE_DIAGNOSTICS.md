@@ -13,3 +13,9 @@ For a genuine secret, revoke/rotate with its provider and remove it from current
 After **Deployment failure diagnostics** is merged to the default branch, failed/cancelled GitHub Actions workflows produce a separate summary listing the exact job and failed step, linked logs and diagnostic artifacts. It uses read-only access and default-branch reporting code; it never downloads or executes failed-branch code, artifacts or logs. It cannot see external-provider checks that have no GitHub Actions run; open those check's Details link directly.
 
 Use the diagnostics workflow's **Run workflow** form with an existing run ID to investigate an older failure. The report records the source run's latest attempt and head commit. Original failed check conclusions and protection rules remain enforced.
+
+## Downloadable evidence
+
+The artifact contains `security-findings.md` for reading, CSV tables for filtering, JSON tables for tooling, and `check-outcomes.json` for step results. `report-status.json` records whether each scanner produced usable evidence and the finding count. An unavailable report has JSON `null` and an unknown count; it must never be treated as a clean scan. CSV values are escaped against spreadsheet formulas.
+
+Preliminary policy, diagnostic-test and detector-self-test failures are collected before enforcing the final security gate, so they do not hide evidence from the remaining scanners. Scanner installation failures still block deployment and are shown as operational errors.
