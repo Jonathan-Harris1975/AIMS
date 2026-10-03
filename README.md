@@ -1,4 +1,4 @@
-# AI Management Suite
+# AI Management Suite.
 AIMS is the orchestration and quality-control service for Jonathan Harris's automated content, communications and audit workflows. It is a Node.js/Express application with authenticated service routes, governed content pipelines, durable R2-backed state and operational windows triggered by MAST.
 
 This document describes the current repository implementation and operating contract.
