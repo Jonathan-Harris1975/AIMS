@@ -20,6 +20,10 @@ import { COMMS_HUB_REQUIRED_MIGRATIONS } from '../services/comms-hub/migrations/
 import { CommsHubWorkflowEngineService } from '../services/comms-hub/workflowEngineService.js';
 import { CommsHubDelayedActionWorker } from '../services/comms-hub/workers/delayedActionWorker.js';
 import { newsletterRequestSignals } from '../services/newsletter/telemetry.js';
+import { processNewsletterJotformSignup } from '../services/newsletter/jotformIntake.js';
+import { rawLog } from '../logger.js';
+import { createCommsHubRouter } from '../services/comms-hub/routes/index.js';
+import { CommsHubOperationsService } from '../services/comms-hub/operationsService.js';
 
 function database(t, full = false) {
   const db = new DatabaseSync(':memory:');
@@ -47,6 +51,28 @@ function database(t, full = false) {
 
 const safeAttachment = { attachment_status: 'stored', scan_status: 'clean', sha256: 'a'.repeat(64), object_key: 'attachments/day/id/hash-file',
   bucket_name: 'private', scan_provider: 'test-scanner', scanned_at: '2026-10-01T09:00:00Z' };
+
+test('operator queue route applies owner and AI filters through the actual repository', async (t) => {
+  const d1 = database(t, true);
+  const at = '2026-10-01T09:00:00Z';
+  d1.db.prepare('INSERT INTO comms_hub_contacts(id,created_at,updated_at) VALUES(?,?,?)').run('contact', at, at);
+  const repo = new CommsOperationsRepository(d1);
+  for (const [id, owner, aiStatus] of [['first', 'operator-a', 'complete'], ['second', 'operator-b', 'complete'], ['third', 'operator-a', 'failed']]) {
+    d1.db.prepare(`INSERT INTO comms_hub_conversations(id,channel,provider,workflow,status,contact_id,subject,source_reference,created_at,updated_at,last_message_at,metadata_json)
+      VALUES(?,'form','test','test','open','contact','',?,?,?,?,'{}')`).run(id, id, at, at, at);
+    await repo.assignConversation({ conversationId: id, ownerType: 'person', ownerId: owner, actor: 'fixture' });
+    d1.db.prepare('INSERT INTO comms_hub_ai_runs(id,conversation_id,operation,status,started_at) VALUES(?,?,?,?,?)').run(id, id, 'test', aiStatus, at);
+  }
+  const context = { config: { suiteRole: 'read_only' }, operationsRepository: repo, auditService: { async record() {} } };
+  context.operationsService = new CommsHubOperationsService({ context });
+  const app = express();
+  app.use('/comms-hub', createCommsHubRouter({ contextProvider: () => context }));
+  const response = await request(app).get('/comms-hub/queue?ownerId=operator-a&aiStatus=complete');
+  assert.equal(response.status, 200);
+  assert.deepEqual(response.body.conversations.map(row => row.id), ['first']);
+  const alias = await request(app).get('/comms-hub/queue?owner=operator-a&aiStatus=failed');
+  assert.deepEqual(alias.body.conversations.map(row => row.id), ['third']);
+});
 
 test('attachment clearance requires scan proof, promotion and all expected records', () => {
   assert.equal(attachmentStatesSafe([safeAttachment], 1), true);
@@ -111,6 +137,23 @@ test('delayed dispatch rechecks changed attachment state', async () => {
   fixture.row = { ...safeAttachment, scan_status: 'infected' };
   await assert.rejects(sendReplyDraft({ draftId: 'draft', context: fixture.context, scheduledDelivery: true, autonomous: true }), { code: 'form_attachment_review_required' });
   assert.equal(fixture.sends, 0);
+});
+
+test('queued autonomous drafts honour current disablement and human takeover without blocking manual replies', async () => {
+  for (const override of [{ autonomousRepliesEnabled: false }, { aiEnabled: false }, { humanOwner: true }]) {
+    const fixture = formContext();
+    Object.assign(fixture.context.config, override);
+    if (override.humanOwner) fixture.context.operationsRepository.getConversationOperations = async () => ({ operational_status: 'open', owner_type: 'person' });
+    let held;
+    fixture.context.operationsRepository.recordAutonomyOutcome = async (input) => { held = input; };
+    await assert.rejects(sendReplyDraft({ draftId: 'draft', context: fixture.context, scheduledDelivery: true, autonomous: true }), {
+      code: override.humanOwner ? 'autonomous_reply_human_assigned' : 'autonomous_replies_disabled',
+    });
+    assert.equal(fixture.sends, 0);
+    assert.equal(held.reason, override.humanOwner ? 'approval_required' : 'automation_disabled');
+    await sendReplyDraft({ draftId: 'draft', context: fixture.context, scheduledDelivery: true });
+    assert.equal(fixture.sends, 1);
+  }
 });
 
 test('attachment review can resume the existing eligible draft after clean promotion', async () => {
@@ -233,6 +276,49 @@ function sendInput(d1, mail) {
     compose: ({ confirmationUrl }) => ({ subject: 'Confirm', bodyText: confirmationUrl }) };
 }
 
+test('verified Jotform signup records its confirmation receipt against the persisted subscriber and retries once', async (t) => {
+  const d1 = database(t);
+  const priorBase = process.env.COMMS_HUB_PUBLIC_BASE_URL;
+  process.env.COMMS_HUB_PUBLIC_BASE_URL = 'https://aims.example.com';
+  t.after(() => { if (priorBase === undefined) delete process.env.COMMS_HUB_PUBLIC_BASE_URL; else process.env.COMMS_HUB_PUBLIC_BASE_URL = priorBase; });
+  let sends = 0;
+  let token;
+  const identifiers = { formId: '262733359026055', submissionId: 'test-submission', route: { key: 'newsletter_signup' } };
+  const context = {
+    d1,
+    jotform: { async verifySubmission(input) {
+      assert.equal(input.submissionId, identifiers.submissionId);
+      return { answers: {
+        1: { type: 'control_email', answer: ' Reader@Example.com ' },
+        2: { name: 'emailConsent', text: 'Newsletter consent', answer: 'Yes, send me the AI Edge newsletter. I can unsubscribe.' },
+      } };
+    } },
+    manualMailAccounts: { newsletter: { async sendMessage(message) {
+      sends += 1;
+      token = message.bodyText.split('\n').find(line => line.startsWith('https://aims.example.com/newsletter/confirm/')).split('/').at(-1);
+      return { messageId: 'receipt' };
+    } } },
+  };
+  const query = d1.query.bind(d1);
+  let failAudit = true;
+  d1.query = async (sql, params) => {
+    if (failAudit && sql.includes("'confirmation_sent','consent'")) { failAudit = false; throw new Error('temporary audit failure'); }
+    return query(sql, params);
+  };
+  await assert.rejects(processNewsletterJotformSignup({ identifiers, context }), /temporary audit failure/);
+  assert.equal((await processNewsletterJotformSignup({ identifiers, context })).duplicate, true);
+  const subscriber = d1.db.prepare('SELECT id,status,verified_at FROM newsletter_subscribers').get();
+  const receipt = d1.db.prepare("SELECT subscriber_id FROM newsletter_consent_events WHERE event_type='confirmation_sent'").get();
+  assert.equal(receipt?.subscriber_id, subscriber.id);
+  assert.equal(subscriber.status, 'pending');
+  assert.equal(subscriber.verified_at, null);
+  assert.equal((await processNewsletterJotformSignup({ identifiers, context })).duplicate, true);
+  assert.equal(d1.db.prepare("SELECT COUNT(*) AS n FROM newsletter_consent_events WHERE event_type='confirmation_sent'").get().n, 1);
+  assert.equal(sends, 1);
+  assert.equal((await confirmSubscription(token, { d1 })).status, 'subscribed');
+  assert.equal((await listEligibleSubscribers('ai-edge', { d1 })).length, 1);
+});
+
 test('confirmation delivery is durable across duplicate requests and worker restart', async (t) => {
   const d1 = database(t);
   let sends = 0;
@@ -292,6 +378,7 @@ test('concurrent browser-style confirmation requests acquire only one durable SM
 });
 
 test('HTTP subscription/confirmation flow preserves consent, pending and error semantics', async (t) => {
+  const warning = t.mock.method(rawLog, 'warn', () => {});
   const d1 = database(t);
   let token;
   let issueDeliveries = 0;
@@ -301,7 +388,7 @@ test('HTTP subscription/confirmation flow preserves consent, pending and error s
     env: { COMMS_HUB_PUBLIC_BASE_URL: 'https://aims.example.com' }, d1Provider: () => d1,
     mailer: () => ({ async sendMessage(message) { token = message.bodyText.split('\n').find(line => line.startsWith('https://')).split('/').at(-1); return { messageId: 'receipt' }; } }),
     confirm: value => confirmSubscription(value, { d1 }), withdraw: value => unsubscribe(value, { d1 }),
-    deliverIssue: async () => { issueDeliveries += 1; return { status: 'not_available' }; },
+    deliverIssue: async () => { issueDeliveries += 1; throw new Error('optional issue storage unavailable'); },
   }));
   app.use((error, _req, res, _next) => res.status(error.statusCode || 500).json({ ok: false, error: error.code || 'internal_error' }));
   assert.equal((await request(app).post('/newsletter/subscribe').send({ email: 'reader@example.com' })).status, 400);
@@ -317,6 +404,7 @@ test('HTTP subscription/confirmation flow preserves consent, pending and error s
   assert.equal((await listEligibleSubscribers('ai-edge', { d1 })).length, 1);
   assert.equal((await request(app).get(`/newsletter/confirm/${token}`)).status, 200);
   assert.equal(issueDeliveries, 1);
+  assert.ok(warning.mock.calls.some(call => call.arguments[1] === 'newsletter.confirmation.optionalIssueUnavailable'));
   assert.equal((await request(app).get('/newsletter/confirm/invalid')).status, 400);
   assert.equal((await request(app).post('/newsletter/subscribe').send({ email: 'reader@example.com', consent: true })).body.status, 'already_subscribed');
   const telemetry = newsletterRequestSignals();

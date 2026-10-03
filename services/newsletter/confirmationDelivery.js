@@ -32,12 +32,12 @@ async function deliverConfirmation({ input, d1, mail, baseUrl, compose, now = ()
   const email = String(input.email || '').trim().toLowerCase();
   if (email.length > 320 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new CommsHubError(400, 'newsletter_email_invalid', 'A valid email address is required.');
   if ((input.publicationId || 'ai-edge') !== 'ai-edge') throw new CommsHubError(400, 'newsletter_publication_invalid', 'Unknown newsletter publication.');
-  const subscriber = (await d1.query(`SELECT ns.status, ns.verified_at, s.status AS subscription_status, sup.email_hash AS suppressed
+  const subscriber = (await d1.query(`SELECT ns.id, ns.status, ns.verified_at, s.status AS subscription_status, sup.email_hash AS suppressed
     FROM newsletter_subscribers ns LEFT JOIN newsletter_subscriptions s ON s.subscriber_id=ns.id AND s.publication_id='ai-edge'
     LEFT JOIN newsletter_suppressions sup ON sup.email_hash=ns.email_hash WHERE ns.email=?`, [email])).results?.[0];
   if (subscriber?.suppressed || subscriber?.status === 'erased') return { ok: false, status: 'suppressed' };
   if (subscriber?.status === 'active' && subscriber?.subscription_status === 'active' && subscriber?.verified_at) {
-    return { ok: true, duplicate: true, status: 'already_subscribed' };
+    return { ok: true, duplicate: true, status: 'already_subscribed', subscriberId: subscriber.id };
   }
   // Stable per email/publication: concurrent browser and webhook retries cannot
   // both send. Only hashes are retained here; no token or address is logged.
@@ -50,7 +50,7 @@ async function deliverConfirmation({ input, d1, mail, baseUrl, compose, now = ()
     RETURNING request_key`, [requestKey, at, at]);
   if (!claimed.results?.length) {
     const prior = (await d1.query('SELECT status,expires_at FROM newsletter_confirmation_deliveries WHERE request_key=?', [requestKey])).results?.[0];
-    if (prior?.status === 'sent') return { ok: true, duplicate: true, status: 'confirmation_already_sent', expiresAt: prior.expires_at };
+    if (prior?.status === 'sent') return { ok: true, duplicate: true, status: 'confirmation_already_sent', expiresAt: prior.expires_at, subscriberId: subscriber?.id };
     throw new CommsHubError(409, 'newsletter_confirmation_reconciliation_required', 'Confirmation delivery is pending or requires reconciliation.', { retryable: false });
   }
   let sending = false;
@@ -72,7 +72,7 @@ async function deliverConfirmation({ input, d1, mail, baseUrl, compose, now = ()
     accepted = true;
     await d1.query("UPDATE newsletter_confirmation_deliveries SET status='sent',expires_at=?,provider_message_id=?,updated_at=? WHERE request_key=?",
       [result.expiresAt, receipt?.messageId || null, now().toISOString(), requestKey]);
-    return { ok: true, duplicate: false, status: 'confirmation_sent', expiresAt: result.expiresAt };
+    return { ok: true, duplicate: false, status: 'confirmation_sent', expiresAt: result.expiresAt, subscriberId: result.subscriberId };
   } catch (error) {
     const uncertain = accepted || (sending && (error.deliveryUncertain === true || error.deliveryUncertain === undefined));
     await d1.query("UPDATE newsletter_confirmation_deliveries SET status=?,retryable=?,error_code=?,updated_at=? WHERE request_key=?",

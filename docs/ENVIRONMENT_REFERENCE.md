@@ -279,8 +279,8 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `MAX_SUMMARY_CHARS` | Yes | services/rss-feed-creator/utils/rss-prompts.js:22<br>services/rss-feed-creator/utils/rss-prompts.js:23 |
 | `MAX_URL_FEEDS_PER_RUN` | Yes | services/rss-feed-creator/utils/feedRotationManager.js:20<br>services/rss-feed-creator/utils/fetchFeeds.js:29 |
 | `MIN_SUMMARY_CHARS` | Yes | services/rss-feed-creator/utils/rss-prompts.js:17<br>services/rss-feed-creator/utils/rss-prompts.js:18 |
-| `NEWSLETTER_CONSENT_TEXT_VERSION` | Yes | services/newsletter/jotformIntake.js:102<br>services/newsletter/jotformIntake.js:118 |
-| `NEWSLETTER_PRIVACY_NOTICE_VERSION` | Yes | services/newsletter/jotformIntake.js:103<br>services/newsletter/jotformIntake.js:119 |
+| `NEWSLETTER_CONSENT_TEXT_VERSION` | Yes | services/newsletter/jotformIntake.js:102<br>services/newsletter/jotformIntake.js:124 |
+| `NEWSLETTER_PRIVACY_NOTICE_VERSION` | Yes | services/newsletter/jotformIntake.js:103<br>services/newsletter/jotformIntake.js:125 |
 | `NODE_ENV` | Yes | logger.js:8<br>scripts/deploySmoke.js:4<br>scripts/performanceGate.js:5<br>scripts/startupCheck.js:34<br>server.js:30<br>server.js:397<br>+22 more |
 | `ONEUP_EBOOK_CATALOGUE_PATH` | No | services/zernio/utils/ebookCatalogue.js:42 |
 | `ON_BRAND_AUDIT_MAX_TOKENS` | No | audits/utils/onBrandAudit.js:13 |

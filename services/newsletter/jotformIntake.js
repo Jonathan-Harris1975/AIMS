@@ -107,20 +107,27 @@ export async function processNewsletterJotformSignup({ identifiers, context }) {
   });
   if (!result.ok) throw new CommsHubError(result.status === "suppressed" ? 409 : 400, `newsletter_${result.status}`, result.error || "Newsletter signup could not be started.");
 
-  if (result.duplicate || result.status === 'already_subscribed') return result;
+  if (result.status === 'already_subscribed') return result;
+  // A durable SMTP receipt can exist even if the subsequent consent-audit write
+  // failed. Repair that write on a verified webhook retry without sending again.
+  // Require this submission's original consent request so another submission
+  // cannot claim it initiated a confirmation that was already sent.
   await context.d1.query(
     `INSERT INTO newsletter_consent_events(
       id,subscriber_id,publication_id,event_type,lawful_basis,purpose,consent_text_version,
       privacy_notice_version,source,source_reference,occurred_at,metadata_json)
-    VALUES(?,?,?,'confirmation_sent','consent','email_newsletter',?,?,?,?,?,?)`,
+    SELECT ?,?,?,'confirmation_sent','consent','email_newsletter',?,?,?,?,?,?
+    WHERE EXISTS(SELECT 1 FROM newsletter_consent_events WHERE subscriber_id=? AND source_reference=? AND event_type='consent_requested')
+    AND NOT EXISTS(SELECT 1 FROM newsletter_consent_events WHERE source_reference=? AND event_type='confirmation_sent')`,
     [
     randomUUID(), result.subscriberId, PUBLICATION_ID,
     process.env.NEWSLETTER_CONSENT_TEXT_VERSION || "2026-10-01",
     process.env.NEWSLETTER_PRIVACY_NOTICE_VERSION || "2026-10-01",
       "jotform", sourceReference, new Date().toISOString(), JSON.stringify({ formId: identifiers.formId }),
+      result.subscriberId, sourceReference, sourceReference,
     ],
   );
-  return { ok: true, duplicate: false, status: "confirmation_sent" };
+  return { ok: true, duplicate: Boolean(result.duplicate), status: result.status };
 }
 
 export const NEWSLETTER_JOTFORM_FORM_ID = FORM_ID;

@@ -56,6 +56,19 @@ export async function sendReplyDraft({ draftId, context, scheduledDelivery = fal
   }
   const operations = await context.operationsRepository.getConversationOperations(conversation.id);
   assertConversationReplyAllowed({ conversation, operations });
+  // Scheduled drafts must honour current disablement/takeover, rather than the
+  // configuration and ownership that were assessed when the draft was queued.
+  if (autonomous) {
+    const disabled = context.config?.autonomousRepliesEnabled === false || context.config?.aiEnabled === false;
+    if (disabled || operations?.owner_type === 'person') {
+      await context.operationsRepository?.recordAutonomyOutcome?.({ conversationId: conversation.id, channel: conversation.channel,
+        outcome: 'held_for_review', reason: disabled ? 'automation_disabled' : 'approval_required' });
+      throw new CommsHubError(409, disabled ? 'autonomous_replies_disabled' : 'autonomous_reply_human_assigned',
+        disabled ? 'Autonomous replies are disabled.' : 'Autonomous replies are paused while a person owns this conversation.', {
+          failureClass: 'recoverable', publicMessage: 'This conversation requires operator review before autonomous delivery.',
+        });
+    }
+  }
 
   const shouldDelayInitialEmail = !scheduledDelivery && conversation.channel === 'email' && context.config?.emailInitialReplyDelayEnabled && !hasOutboundMessages(conversation);
   const shouldDelayFormReply = !scheduledDelivery && conversation.channel === 'form' && context.config?.formReplyDelayEnabled && !hasOutboundMessages(conversation);

@@ -1,4 +1,5 @@
 import express from "express";
+import { log } from "../../../logger.js";
 import { loadCommsHubConfig } from "../../comms-hub/config.js";
 import { OneComMailClient } from "../../comms-hub/clients/oneComMailClient.js";
 import { confirmSubscription, unsubscribe } from "../audience/d1Audience.js";
@@ -68,11 +69,14 @@ router.get("/confirm/:token", asyncRoute(async (req, res) => {
   // effort: subscription confirmation succeeds even if R2 or mail delivery is
   // temporarily unavailable, and the normal newsletter send remains able to
   // pick up the active subscriber later.
-  const todaysIssue = result.duplicate ? { status: 'already_confirmed' } : await deliverIssue({
+  const todaysIssue = result.duplicate ? { status: 'already_confirmed' } : await Promise.resolve().then(() => deliverIssue({
     subscriberId: result.subscriberId,
     email: result.email,
     publicationId: result.publicationId,
     date: new Date(),
+  })).catch(() => {
+    log.warn('newsletter.confirmation.optionalIssueUnavailable', { status: 'issue_unavailable' });
+    return { status: 'issue_unavailable' };
   });
   const issueMessage = todaysIssue.status === "sent"
     ? "<p>Today's AI Edge newsletter has also been sent to your inbox.</p>"
