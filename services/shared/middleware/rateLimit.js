@@ -1,5 +1,6 @@
 import { warn } from "../../../logger.js";
 import { getRateLimitClientId } from "../http/clientIdentity.js";
+import { redactNewsletterUrl } from "../http/redactNewsletterUrl.js";
 
 const DEFAULT_WINDOW_MS = 60_000;
 const DEFAULT_MAX_REQUESTS = 60;
@@ -83,7 +84,7 @@ export function createRateLimitMiddleware(options = {}) {
 
     warn("rate.limit.exceeded", {
       method: req.method,
-      path: req.originalUrl || req.url,
+      path: redactNewsletterUrl(req.originalUrl || req.url),
       ip: getRateLimitClientId(req),
       retryAfterSeconds,
       requestId: req.id || req.headers["x-request-id"] || null,

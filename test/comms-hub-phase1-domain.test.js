@@ -316,6 +316,7 @@ test("Migration manifest requires all delivered Comms Hub phases", () => {
     "0022_worker_heartbeat",
     "0023_housekeeping",
     "0024_newsletter_audience",
+    "0025_autonomy_newsletter_reliability",
   ]);
 });
 

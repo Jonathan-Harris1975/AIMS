@@ -25,6 +25,7 @@ import { classifyBrandGrounding, officialWebsiteEvidence, brandGroundingPromptGu
 import { buildConversationalIntelligence, conversationalIntelligencePromptGuidance, deterministicConversationalDraft } from "./conversationalIntelligenceService.js";
 import { formPromptGuidance } from "./formOrchestrationService.js";
 import { formProcessingForAi, formProcessingPromptGuidance } from "./formProcessingService.js";
+import { primaryHoldReason } from "./domain/autonomyOutcome.js";
 import {
   assessConversationConduct,
   conductPromptGuidance,
@@ -873,6 +874,10 @@ led material favours blotato_video; a serialisable topic with multiple distinct 
         responseSha256: sha256Hex(allResponses),
       });
 
+      const holdReason = primaryHoldReason({ intelligence: responseIntelligence, approval: Boolean(approval),
+        attachmentReview: Boolean(formProcessing?.digest?.attachmentReviewRequired), enabled: this.context.config.autonomousRepliesEnabled !== false });
+      if (holdReason) await this.context.operationsRepository?.recordAutonomyOutcome?.({ conversationId, channel: conversation.channel,
+        outcome: 'held_for_review', reason: holdReason });
       return {
         runId: run.id,
         conversationId,

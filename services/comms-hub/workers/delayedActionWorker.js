@@ -155,7 +155,7 @@ export class CommsHubDelayedActionWorker {
       });
     }
     if (item.action_type === 'reply_draft') {
-      return sendReplyDraft({ draftId: payload.draftId, context: this.context, scheduledDelivery: true });
+      return sendReplyDraft({ draftId: payload.draftId, context: this.context, scheduledDelivery: true, autonomous: payload.autonomous === true });
     }
     if (item.action_type === 'email_reply') {
       return this.context.emailService.send({ ...payload, scheduledDelivery: true });

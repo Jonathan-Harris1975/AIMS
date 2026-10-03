@@ -306,7 +306,8 @@ app.use(
         return {
           id: req.id,
           method: req.method,
-          url: req.url,
+          url: /^\/newsletter\/(confirm|unsubscribe)\//.test(req.url || '')
+            ? String(req.url).replace(/(\/newsletter\/(?:confirm|unsubscribe)\/).*$/, '$1[redacted]') : req.url,
           remoteAddress: req.ip,
         };
       },

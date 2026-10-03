@@ -6,14 +6,22 @@ import { isSocialChannel } from "./domain/channels.js";
 import { assertConversationReplyAllowed } from "./domain/replySafety.js";
 import { businessHoursPolicy, conversationFirstInboundAt, delayedBusinessReplyAt, ensureFutureBusinessTime, hasOutboundMessages } from "./domain/businessHours.js";
 import { resolveConversationAutomationExclusion } from "./domain/automationScope.js";
+import { assertFormAttachmentsSafe } from "./domain/attachmentReview.js";
 
 function parseArray(value) { try { const parsed = JSON.parse(value || "[]"); return Array.isArray(parsed) ? parsed : []; } catch { return []; } }
 function parseObject(value) { try { const parsed = JSON.parse(value || "{}"); return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {}; } catch { return {}; } }
 
-export async function sendReplyDraft({ draftId, context, scheduledDelivery = false }) {
+export async function sendReplyDraft({ draftId, context, scheduledDelivery = false, autonomous = false }) {
   const draft = await context.aiRepository.getDraft(draftId);
   if (!draft) throw new CommsHubError(404, "reply_draft_not_found", "Reply draft was not found.");
-  if (draft.status === "sent") return { duplicate: true, draft };
+  if (draft.status === "sent") {
+    const metadata = draft.metadata || parseObject(draft.metadata_json);
+    if (metadata.autonomous === true) {
+      const sentConversation = await context.repository.getConversation(draft.conversation_id);
+      await context.operationsRepository?.recordAutonomyOutcome?.({ conversationId: draft.conversation_id, channel: sentConversation?.channel, outcome: 'auto_sent' });
+    }
+    return { duplicate: true, draft };
+  }
   if (["rejected", "quarantined", "pending_approval"].includes(draft.status)) {
     throw new CommsHubError(409, "reply_draft_not_sendable", `Reply draft is ${draft.status}.`, {
       publicMessage: "Reply draft is not ready to send.",
@@ -66,7 +74,7 @@ export async function sendReplyDraft({ draftId, context, scheduledDelivery = fal
       conversationId: conversation.id,
       actionType: 'reply_draft',
       dueAt,
-      payload: { draftId: draft.id },
+      payload: { draftId: draft.id, autonomous },
       idempotencyKey: `business-reply-draft:${draft.id}`,
       maxAttempts: 8,
     }, { actor: 'business-reply-scheduler', role: 'admin' });
@@ -74,6 +82,9 @@ export async function sendReplyDraft({ draftId, context, scheduledDelivery = fal
   }
 
   let delivery;
+  // Re-read the current lifecycle at dispatch, including delayed dispatch. A
+  // reviewed/approved manual draft still follows its scope-matched approval.
+  if (Number(draft.requires_approval) !== 1) await assertFormAttachmentsSafe(context, conversation);
   if (isSocialChannel(conversation.channel)) {
     delivery = await executeSocialAction({
       conversationId: conversation.id,
@@ -95,8 +106,9 @@ export async function sendReplyDraft({ draftId, context, scheduledDelivery = fal
   const sent = await context.aiRepository.markDraftSent({
     id: draft.id,
     sentAt,
-    metadata: { ...draftMetadata, delivery: delivery?.response || delivery || {}, evidenceIds },
+    metadata: { ...draftMetadata, delivery: delivery?.response || delivery || {}, evidenceIds, autonomous },
   });
+  if (autonomous) await context.operationsRepository?.recordAutonomyOutcome?.({ conversationId: conversation.id, channel: conversation.channel, outcome: 'auto_sent', at: sentAt });
   const formDecision = draftMetadata?.smartLayers?.formDecision || null;
   let formRequest = null;
   if (formDecision?.selected && !formDecision?.withholdUrl && conversation.channel !== "form" && context.operationsRepository?.upsertFormRequestSent) {

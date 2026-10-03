@@ -97,7 +97,7 @@ export function buildWorkerHeartbeatHealth({ descriptors, rows, now = new Date()
     now,
   }));
   const enabled = workers.filter((worker) => worker.enabled);
-  const overall = enabled.some((worker) => worker.status === "stale")
+  const overall = enabled.length === 0 || enabled.some((worker) => worker.status === "stale")
     ? "stale"
     : enabled.some((worker) => worker.status === "degraded")
       ? "degraded"
