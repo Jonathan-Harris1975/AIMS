@@ -54,9 +54,24 @@ jobs:
     - name: Validate GitHub Actions workflows
       run: |
         set +e
-        "${{ runner.temp }}/ci-bin/actionlint"  -format '{{json .}}' > "$RUNNER_TEMP/security-raw/actionlint.json"
+        "${{ runner.temp }}/ci-bin/actionlint" -format '{{json .}}' > "$RUNNER_TEMP/security-raw/actionlint.ndjson"
         status=$?
-        if [ "$status" -eq 0 ]; then printf "[]\n" > "$RUNNER_TEMP/security-raw/actionlint.json"; fi
+        python3 - "$RUNNER_TEMP/security-raw/actionlint.ndjson" "$RUNNER_TEMP/security-raw/actionlint.json" <<'PY'
+        import json
+        import sys
+        src, dest = sys.argv[1], sys.argv[2]
+        with open(src) as stream:
+            lines = [line for line in stream.read().splitlines() if line.strip()]
+        if not lines:
+            data = []
+        else:
+            data = [json.loads(line) for line in lines]
+            if len(data) == 1 and isinstance(data[0], list):
+                data = data[0]
+        with open(dest, 'w') as output:
+            output.write(json.dumps(data) + '\n')
+        PY
+        rm -f "$RUNNER_TEMP/security-raw/actionlint.ndjson"
         exit "$status"
       id: actionlint
       continue-on-error: true

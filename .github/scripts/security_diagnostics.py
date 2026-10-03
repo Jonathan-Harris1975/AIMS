@@ -16,9 +16,27 @@ def read_report(path, expected):
     if not path.is_file():
         return None, 'No report was produced; inspect the scanner step for installation, execution or cancellation errors.'
     try:
-        data = json.loads(path.read_text())
-    except (ValueError, OSError):
+        text = path.read_text()
+    except OSError:
         return None, 'Report is unreadable or invalid JSON; this is an operational reporting error.'
+    try:
+        data = json.loads(text)
+    except ValueError:
+        # Defense-in-depth: actionlint `-format '{{json .}}'` emits NDJSON
+        # (one object per line), not a JSON array. Accept that here so real
+        # findings still render even if the workflow conversion is bypassed.
+        if expected is not list:
+            return None, 'Report is unreadable or invalid JSON; this is an operational reporting error.'
+        try:
+            lines = [line for line in text.splitlines() if line.strip()]
+            data = [json.loads(line) for line in lines] if lines else None
+            if data is None:
+                raise ValueError('empty report')
+        except ValueError:
+            return None, 'Report is unreadable or invalid JSON; this is an operational reporting error.'
+    if expected is list and isinstance(data, dict) and path.name == 'actionlint.json':
+        # Single-finding NDJSON: one bare object, no surrounding array.
+        data = [data]
     if not isinstance(data, expected):
         return None, 'Report has an unexpected structure; this is an operational reporting error.'
     return data, None

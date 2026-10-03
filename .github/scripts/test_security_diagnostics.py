@@ -144,6 +144,29 @@ class Diagnostics(unittest.TestCase):
             self.assertIsNone(error)
             self.assertEqual(len(security.actionlint_findings(data)), 2)
 
+    def test_actionlint_ndjson_fallback_covers_zero_one_and_many(self):
+        finding = {'filepath': '.github/workflows/ci.yml', 'line': 4, 'column': 2, 'kind': 'syntax-check', 'message': 'unknown key'}
+        second = {'filepath': '.github/workflows/ci.yml', 'line': 8, 'column': 3, 'kind': 'shellcheck', 'message': 'SC2086: quote expansion'}
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'actionlint.json'
+            # 0 findings: canonical empty array still accepted.
+            path.write_text('[]\n')
+            data, error = security.read_report(path, list)
+            self.assertIsNone(error)
+            self.assertEqual(data, [])
+            self.assertEqual(security.actionlint_findings(data), [])
+            # 1 finding: raw NDJSON single object line.
+            path.write_text(json.dumps(finding) + '\n')
+            data, error = security.read_report(path, list)
+            self.assertIsNone(error)
+            self.assertEqual(len(data), 1)
+            self.assertEqual(security.actionlint_findings(data)[0]['File'], '.github/workflows/ci.yml')
+            # Multi-finding: raw NDJSON one object per line.
+            path.write_text(json.dumps(finding) + '\n' + json.dumps(second) + '\n')
+            data, error = security.read_report(path, list)
+            self.assertIsNone(error)
+            self.assertEqual(len(security.actionlint_findings(data)), 2)
+
     def test_final_gate_rejects_every_preliminary_failure(self):
         text = (ROOT.parent / 'workflows/security.yml').read_text()
         gate = text.split("        python3 - <<'PYCODE'\n", 1)[1].split('        PYCODE', 1)[0]
