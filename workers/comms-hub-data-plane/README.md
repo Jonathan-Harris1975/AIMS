@@ -20,4 +20,20 @@ Comms Hub migrations do not use this endpoint. `npm run comms:migrate` deliberat
 7. Set Koyeb `COMMS_HUB_D1_PROXY_URL=https://<worker-host>/query`.
 8. Set Koyeb `COMMS_HUB_D1_PROXY_TOKEN` to the same secret.
 
+### Hardened Koyeb deployment
+
+The production deployment watcher runs `node scripts/deployCommsHubDataPlaneWorker.js` inside the verified Koyeb deployment. The script uploads the self-contained ES module directly through Cloudflare's Workers API using the existing `D1_API_KEY` and `CLOUDFLARE_ACCOUNT_ID` / `CF_ACCOUNT_ID`. The token must have Workers Scripts Write permission, including access to Worker settings; a D1-only token is insufficient. Tokens remain inside Koyeb and are never printed or copied to GitHub.
+
+The production image intentionally has no npm or npx. Do not restore these tools or install Wrangler inside the runtime. Wrangler remains pinned for local deployment and the CI dry run above.
+
+`wrangler.toml` remains authoritative for the module, compatibility date, observability, preview URLs and D1 binding. The direct uploader supports this Worker's current scalar configuration only; duplicate keys, extra sections, unsupported settings or module imports stop deployment rather than silently omitting configuration. Extend and test the uploader before adding such features.
+
+The uploader requires the existing `COMMS_HUB_D1_PROXY_TOKEN` secret binding before upload, retains all `secret_text` bindings, preserves the current workers.dev enabled state, applies the configured preview setting and verifies the resulting D1 binding, compatibility date, observability and required secret binding. It does not create, rotate or disclose secrets. Unexpected non-secret bindings stop deployment to prevent their removal. Bootstrap a new Worker and its secret through the manual Wrangler steps first.
+
+Every Cloudflare request has a 60-second timeout and rejects redirects. Provider failures, malformed responses and failed verification exit non-zero without printing response bodies. Upload writes are not automatically retried: after an ambiguous timeout, inspect remote state before an explicit rerun. The watcher verifies public Worker health after upload and before issuing a deployment attestation. Health alone does not prove database-query readiness.
+
+Run `node scripts/deployCommsHubDataPlaneWorker.js --check` to validate local configuration without credentials, network access or deployment. The Docker CI gate executes this inside the stripped production image. Run `node --test test/comms-hub-worker-deploy.test.js` for upload/preservation/failure regressions. Real deployment acceptance still requires a successful exact-SHA production watch and the downstream ecosystem smoke.
+
+API contract: [Worker module upload](https://developers.cloudflare.com/api/resources/workers/subresources/scripts/methods/update/), [multipart metadata](https://developers.cloudflare.com/workers/configuration/multipart-upload-metadata/) and [Worker subdomain settings](https://developers.cloudflare.com/api/resources/workers/subresources/scripts/subresources/subdomain/).
+
 Social channel families are deliberately not ready without this Worker. Jotform-only Phase 1 can continue to use Cloudflare's REST API when both social family switches are false.

@@ -79,6 +79,7 @@ jobs:
             }
           '
           docker run --rm aims:ci sh -eu -c '! command -v npm >/dev/null 2>&1; ! command -v npx >/dev/null 2>&1'
+          docker run --rm aims:ci node scripts/deployCommsHubDataPlaneWorker.js --check
           test "$(docker image inspect aims:ci --format '{{.Config.User}}')" = "node"
           docker run --rm aims:ci sh -eu -c 'test "$(id -u)" -ne 0; test -w /app/local-data'
       - name: Smoke AIMS production image and validate fail-closed readiness

@@ -91,9 +91,27 @@ jobs:
         run: |
           set -euo pipefail
           # Run from the exact production SHA already verified above. Koyeb
-          # resolves D1_API_KEY and the Cloudflare account ID inside the service;
-          # no Cloudflare token is duplicated into GitHub Actions.
+          # resolves D1_API_KEY and the Cloudflare account ID inside the service.
+          # Node uploads the canonical module directly: npm/npx are deliberately
+          # absent from this hardened runtime. No token is copied into Actions.
           script -q -e -c 'koyeb services exec "$KOYEB_SERVICE" node -- scripts/deployCommsHubDataPlaneWorker.js' /dev/null < /dev/null
+      - name: Verify Worker health after runtime deployment
+        timeout-minutes: 2
+        run: |
+          node --input-type=module <<'JS'
+          import { setTimeout as delay } from 'node:timers/promises';
+          const url = 'https://aims-comms-hub-data-plane.solitary-salad-3d16.workers.dev/health';
+          for (let attempt = 0; attempt < 5; attempt += 1) {
+            try {
+              const response = await fetch(url, { signal: AbortSignal.timeout(10000), redirect: 'error' });
+              const health = await response.json();
+              if (response.ok && health.ok === true && health.service === 'comms-hub-data-plane') process.exit(0);
+            } catch { /* A bounded read-only retry permits propagation after upload. */ }
+            if (attempt < 4) await delay(5000);
+          }
+          console.error('Deployed Comms Hub data-plane Worker health verification failed.');
+          process.exit(1);
+          JS
       - name: Inspect content delivery in the deployed service
         continue-on-error: true
         timeout-minutes: 5
