@@ -46,7 +46,7 @@ jobs:
       - name: Validate Worker syntax
         run: node --check worker.js
       - name: Validate Wrangler configuration
-        run: npx --yes wrangler@${WRANGLER_VERSION} deploy --dry-run
+        run: npx --yes "wrangler@${WRANGLER_VERSION}" deploy --dry-run
 
   verify-live:
     name: Verify current Worker health
