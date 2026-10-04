@@ -30,20 +30,27 @@ jobs:
       - name: Reject unapproved repository duplication and hygiene regressions
         run: python3 scripts/check_repository_hygiene.py
       - name: Install pinned npm toolchain
-        run: npm install --global npm@12.2.0 --no-audit --no-fund
+        run: |
+          npm ci --prefix .github/ci-toolchain --ignore-scripts --no-audit --no-fund
+          export PATH="$GITHUB_WORKSPACE/.github/ci-toolchain/node_modules/.bin:$PATH"
       - name: Verify pinned Node/npm toolchain
         run: |
+          export PATH="$GITHUB_WORKSPACE/.github/ci-toolchain/node_modules/.bin:$PATH"
           test "$(node --version)" = "v24.21.0"
-          test "$(npm --version)" = "12.2.0"
-      - run: npm ci
+          test "$(npm --version)" = "$(node -p 'require("./.github/ci-toolchain/package-lock.json").packages["node_modules/npm"].version')"
+      - run: |
+          export PATH="$GITHUB_WORKSPACE/.github/ci-toolchain/node_modules/.bin:$PATH"
+          npm ci
       - name: Reject legacy envBootstrap imports
         run: |
+          export PATH="$GITHUB_WORKSPACE/.github/ci-toolchain/node_modules/.bin:$PATH"
           if grep -RInE 'scripts/envBootstrap\.js|import[[:space:]]+[^;]*\bENV\b[^;]*from' deployment-check.js scripts services routes server.js --exclude='envBootstrap.js' --exclude='*.md'; then
             exit 1
           fi
       - name: Run canonical release verification
-        run: npm run verify:release
-
+        run: |
+          export PATH="$GITHUB_WORKSPACE/.github/ci-toolchain/node_modules/.bin:$PATH"
+          npm run verify:release
   docker:
     runs-on: ubuntu-latest
     timeout-minutes: 20

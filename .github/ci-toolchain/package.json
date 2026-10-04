@@ -1,0 +1,9 @@
+{
+  "name": "ci-npm-toolchain",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Locked CI npm executable; version copied from the existing workflow pin. Renovate owns updates.",
+  "dependencies": {
+    "npm": "12.2.0"
+  }
+}
