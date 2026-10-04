@@ -1,0 +1,68 @@
+name: Comms Hub D1 data-plane Worker
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'workers/comms-hub-data-plane/**'
+      - 'scripts/deployCommsHubDataPlaneWorker.js'
+      - 'test/comms-hub-worker-deploy.test.js'
+      - '.github/workflows/comms-hub-data-plane.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: comms-hub-data-plane-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  WRANGLER_VERSION: '4.127.1'
+  WORKER_URL: 'https://aims-comms-hub-data-plane.solitary-salad-3d16.workers.dev'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: workers/comms-hub-data-plane
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.21.0
+      - name: Install pinned npm toolchain
+        run: npm install --global npm@12.2.0 --no-audit --no-fund
+      - name: Verify pinned Node/npm toolchain
+        run: |
+          test "$(node --version)" = "v24.21.0"
+          test "$(npm --version)" = "12.2.0"
+      - name: Validate Node-only runtime deployment
+        run: |
+          node ../../scripts/deployCommsHubDataPlaneWorker.js --check
+          node --test ../../test/comms-hub-worker-deploy.test.js
+      - name: Validate Worker syntax
+        run: node --check worker.js
+      - name: Validate Wrangler configuration
+        run: npx --yes "wrangler@${WRANGLER_VERSION}" deploy --dry-run
+
+  verify-live:
+    name: Verify current Worker health
+    needs: validate
+    if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify current Worker health
+        run: |
+          set -euo pipefail
+          for _ in 1 2 3 4 5; do
+            if curl --fail --silent --show-error --proto '=https' --tlsv1.2 "${WORKER_URL}/health" | grep -Fq '"ok":true'; then
+              exit 0
+            fi
+            sleep 5
+          done
+          echo 'Comms Hub data-plane Worker health check failed' >&2
+          exit 1
