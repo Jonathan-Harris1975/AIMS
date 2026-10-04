@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - 'workers/comms-hub-data-plane/**'
+      - 'wrangler.toml'
+      - '.node-version'
       - 'scripts/deployCommsHubDataPlaneWorker.js'
       - 'test/comms-hub-worker-deploy.test.js'
       - '.github/workflows/comms-hub-data-plane.yml'

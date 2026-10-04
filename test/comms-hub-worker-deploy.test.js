@@ -158,3 +158,11 @@ test("invalid subdomain response or ignored preview settings fails verification"
     await assert.rejects(deployWorker({ config, source: "export default {};", credentials, fetchImpl: mock.fetchImpl }), /subdomain settings/);
   }
 });
+
+
+test("repository-root Workers Builds targets the canonical module and bindings", async () => {
+  const rootConfig = await readFile(new URL("../wrangler.toml", import.meta.url), "utf8");
+  assert.match(rootConfig, /^main = "workers\/comms-hub-data-plane\/worker.js"$/m);
+  const normalised = rootConfig.replace('main = "workers/comms-hub-data-plane/worker.js"', 'main = "worker.js"');
+  assert.deepEqual(parseWorkerConfig(normalised), config);
+});
