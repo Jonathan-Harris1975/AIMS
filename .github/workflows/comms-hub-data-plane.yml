@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - 'workers/comms-hub-data-plane/**'
+      - 'wrangler.toml'
+      - '.node-version'
       - 'scripts/deployCommsHubDataPlaneWorker.js'
       - 'test/comms-hub-worker-deploy.test.js'
       - '.github/workflows/comms-hub-data-plane.yml'
@@ -46,7 +48,7 @@ jobs:
       - name: Validate Worker syntax
         run: node --check worker.js
       - name: Validate Wrangler configuration
-        run: npx --yes wrangler@${WRANGLER_VERSION} deploy --dry-run
+        run: npx --yes "wrangler@${WRANGLER_VERSION}" deploy --dry-run
 
   verify-live:
     name: Verify current Worker health
@@ -58,7 +60,7 @@ jobs:
       - name: Verify current Worker health
         run: |
           set -euo pipefail
-          for attempt in 1 2 3 4 5; do
+          for _ in 1 2 3 4 5; do
             if curl --fail --silent --show-error --proto '=https' --tlsv1.2 "${WORKER_URL}/health" | grep -Fq '"ok":true'; then
               exit 0
             fi

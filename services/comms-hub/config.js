@@ -146,7 +146,7 @@ export function effectiveChatEnabled(env = process.env) {
   // public route into a 404 after the website has already been deployed.
   // COMMS_HUB_CHAT_FORCE_DISABLED remains the explicit emergency kill switch.
   if (booleanValue(env.COMMS_HUB_CHAT_FORCE_DISABLED, false)) return false;
-  if (usableEnvValue(env.COMMS_HUB_COGINPAL_WEBHOOK_SECRET)) return true;
+  if (usableEnvValue(env.COGNIPAL_WEBHOOK_SECRET)) return true;
   return booleanValue(env.COMMS_HUB_CHAT_ENABLED, false);
 }
 
@@ -312,7 +312,7 @@ export function getCommsHubMissingEnv(env = process.env) {
     if (!usableEnvValue(env.ONECOM_NEWSLETTER_PASSWORD)) missing.push("ONECOM_NEWSLETTER_PASSWORD");
   }
   if (effectiveChatEnabled(env)) {
-    if (!usableEnvValue(env.COMMS_HUB_COGINPAL_WEBHOOK_SECRET)) missing.push("COMMS_HUB_COGINPAL_WEBHOOK_SECRET");
+    if (!usableEnvValue(env.COGNIPAL_WEBHOOK_SECRET)) missing.push("COGNIPAL_WEBHOOK_SECRET");
     const coginPalApiBaseUrl = usableEnvValue(env.COMMS_HUB_COGINPAL_API_BASE_URL);
     const coginPalApiKey = usableEnvValue(env.COMMS_HUB_COGINPAL_API_KEY);
     if ((coginPalApiBaseUrl && !coginPalApiKey) || (!coginPalApiBaseUrl && coginPalApiKey)) {
@@ -629,7 +629,7 @@ export function loadCommsHubConfig(env = process.env, { requireEnabled = false }
     chatEnabled: effectiveChatEnabled(env),
     coginPalApiBaseUrl: normaliseBaseUrl(env.COMMS_HUB_COGINPAL_API_BASE_URL, ""),
     coginPalApiKey: usableEnvValue(env.COMMS_HUB_COGINPAL_API_KEY),
-    coginPalWebhookSecret: usableEnvValue(env.COMMS_HUB_COGINPAL_WEBHOOK_SECRET),
+    coginPalWebhookSecret: usableEnvValue(env.COGNIPAL_WEBHOOK_SECRET),
     coginPalTimeoutMs: positiveInteger(env.COMMS_HUB_COGINPAL_TIMEOUT_MS, 15_000, "COMMS_HUB_COGINPAL_TIMEOUT_MS", { min: 1_000, max: 30_000 }),
     chatMaxMessageChars: positiveInteger(env.COMMS_HUB_CHAT_MAX_MESSAGE_CHARS, 4000, "COMMS_HUB_CHAT_MAX_MESSAGE_CHARS", { min: 200, max: 20_000 }),
     chatMaxMessagesPerMinute: positiveInteger(env.COMMS_HUB_CHAT_MAX_MESSAGES_PER_MINUTE, 12, "COMMS_HUB_CHAT_MAX_MESSAGES_PER_MINUTE", { min: 1, max: 120 }),

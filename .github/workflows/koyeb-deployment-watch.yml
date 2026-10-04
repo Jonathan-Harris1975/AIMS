@@ -94,7 +94,8 @@ jobs:
           # resolves D1_API_KEY and the Cloudflare account ID inside the service.
           # Node uploads the canonical module directly: npm/npx are deliberately
           # absent from this hardened runtime. No token is copied into Actions.
-          script -q -e -c 'koyeb services exec "$KOYEB_SERVICE" node -- scripts/deployCommsHubDataPlaneWorker.js' /dev/null < /dev/null
+          printf -v exec_command 'koyeb services exec %q node -- scripts/deployCommsHubDataPlaneWorker.js' "$KOYEB_SERVICE"
+          script -q -e -c "$exec_command" /dev/null < /dev/null
       - name: Verify Worker health after runtime deployment
         timeout-minutes: 2
         run: |
@@ -122,7 +123,8 @@ jobs:
           set -euo pipefail
           # The CLI uses an interactive exec transport. This is a read-only
           # snapshot; no credentials or subscriber details are printed.
-          script -q -e -c 'koyeb services exec "$KOYEB_SERVICE" node -- scripts/contentDeliveryDiagnostics.js' /dev/null < /dev/null
+          printf -v exec_command 'koyeb services exec %q node -- scripts/contentDeliveryDiagnostics.js' "$KOYEB_SERVICE"
+          script -q -e -c "$exec_command" /dev/null < /dev/null
       - name: Record exact-SHA production deployment attestation
         env:
           DEPLOYED_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}

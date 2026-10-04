@@ -57,7 +57,7 @@ test("full production profile is readiness-complete when deployment secrets are 
     COMMS_HUB_ONECOM_PASSWORD: "mail-password",
     ONECOM_ADMIN_PASSWORD: "admin-mail-password",
     ONECOM_NEWSLETTER_PASSWORD: "newsletter-mail-password",
-    COMMS_HUB_COGINPAL_WEBHOOK_SECRET: "chat-secret",
+    COGNIPAL_WEBHOOK_SECRET: "chat-secret",
     COMMS_HUB_AI_SEARCH_INSTANCES: "search-prod",
     CLOUDFLARE_AI_SEARCH_API_TOKEN: "search-token",
     COMMS_HUB_PUBLIC_BASE_URL: "https://zeroth-kara-jonathanharris-3296ed37.koyeb.app",
