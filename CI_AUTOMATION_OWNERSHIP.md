@@ -18,7 +18,7 @@ Renovate discovery/lock maintenance runs Friday 18:00–20:00 Europe/London, bef
 
 - Verify Dependabot security updates are disabled in repository settings and reconcile any unique security PR evidence before closing duplicates.
 - Confirm the installed Mend Renovate, Mergify, Socket, autofix.ci and repair App scopes and identities.
-- Confirm live dependency graph support before enabling Dependency Review.
+- Dependency graph is ON and CodeQL advanced setup is verified. Dependency Review now gates PR deltas at high severity using read-only GitHub capability; live vulnerable-delta acceptance remains pending.
 - Resolve existing scanner findings without broad exceptions. The new zizmor gate deliberately reports existing findings.
 - Observe a clean runner audit, real Renovate eligibility, manual hold, exact-head admission and Mergify merge through existing protections.
 - Prove the CI-PASS-to-Council merge freeze and exact-SHA invalidation.
@@ -29,3 +29,5 @@ Existing open CI bootstrap PRs touch overlapping controllers. Their changes must
 Admission now publishes the `Trusted automation admission` status on the exact verified PR head using the default-branch controller’s scoped status token. Mergify requires this proof for admission/queue/merge and vetoes `dependency:manual` at every stage. Reconciliation resets stale proof to pending and revokes the admission label before evaluating current policy. A changed head cannot inherit the successful proof from its predecessor. Renovate is explicitly denied Mergify queue-command access even if its App has write permission.
 
 The launcher authenticates the event’s scheduled UTC cron against the prescribed London start and current DST offset. Delayed starts remain accepted only inside the fixed allocated window; the alternate DST cron is rejected. Independent CI/scanner/DAST phase crons are removed. Targets, opt-in, reporting and existing application operations are preserved.
+
+Dependabot security-update PR creation is OFF in live repository settings; alerts and dependency graphs remain ON. Auto-triage has no custom PR-creation rule. The pinned native Dependency Review job cannot choose versions, alter manifests or create update PRs. Existing scanner and licensing policies are retained.
