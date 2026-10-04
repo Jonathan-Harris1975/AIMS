@@ -1,0 +1,54 @@
+# AIMS Gitleaks reviewed-finding allowlist
+#
+# Every entry below is an exact Gitleaks fingerprint from the security review
+# completed on 2026-10-04. Do not replace these with broad path/rule exclusions.
+# New findings must continue to fail the Gitleaks history scan until reviewed.
+#
+# The six env.template findings at the end are historical copies of two credentials:
+# AUDIT_CALLBACK_TOKEN and GITHUB_TOKEN_WEBSITE_AUDITS. The owner confirmed on
+# 2026-10-04 that both values were rotated and their active replacements are managed
+# as Koyeb secrets. No current credential value is stored in this file.
+
+# Synthetic test fixtures (2)
+0c15eae17ebac0da2ad3ead44a3310f69b5378e5:scripts/secret_scan.py:aws-access-token:110
+1bbb00a9d734e6acdb7bfcdfb39d645825759f74:test/comms-hub-prompt-security.test.js:generic-api-key:90
+
+# Confirmed false positives (6)
+b28c2df8dc4f097dc32d8543b03257714b98e01b:config/.env.example:generic-api-key:141
+dd24d3e0ad6f9b13ceff549740497f70d2523953:.env.example:generic-api-key:100
+60087bb07c7e25474e2a2092e6cf2b78bea834f8:BUILD-REPORT.md:generic-api-key:53
+929c85b42ad42f2b9b00e701f2f113af4ae2ebaa:.env.example:generic-api-key:113
+633e664ab85a4f14f69dd0c073de7b3bebe4d82f:services/rss-feed-creator/rewrite-pipeline.js:generic-api-key:89
+8946d2541c9f1f1929477790e5c1b9b920ac21e0:services/shared/utils/r2-client.js:generic-api-key:97
+
+# Documentation placeholders (22)
+2b5697879364e3822fd62d08e177aee05aeb87da:README.md:curl-auth-header:206
+2b5697879364e3822fd62d08e177aee05aeb87da:README.md:curl-auth-header:233
+2b5697879364e3822fd62d08e177aee05aeb87da:README.md:curl-auth-header:235
+2b5697879364e3822fd62d08e177aee05aeb87da:README.md:curl-auth-header:249
+2b5697879364e3822fd62d08e177aee05aeb87da:README.md:curl-auth-header:274
+2b5697879364e3822fd62d08e177aee05aeb87da:README.md:curl-auth-header:281
+2b5697879364e3822fd62d08e177aee05aeb87da:README.md:curl-auth-header:288
+2b5697879364e3822fd62d08e177aee05aeb87da:README.md:curl-auth-header:297
+2b5697879364e3822fd62d08e177aee05aeb87da:README.md:curl-auth-header:299
+2b5697879364e3822fd62d08e177aee05aeb87da:README.md:curl-auth-header:305
+8e37b1bc9661488192419bf51bcb1f928d90d937:README.md:curl-auth-header:206
+8e37b1bc9661488192419bf51bcb1f928d90d937:README.md:curl-auth-header:233
+8e37b1bc9661488192419bf51bcb1f928d90d937:README.md:curl-auth-header:235
+8e37b1bc9661488192419bf51bcb1f928d90d937:README.md:curl-auth-header:249
+8e37b1bc9661488192419bf51bcb1f928d90d937:README.md:curl-auth-header:274
+8e37b1bc9661488192419bf51bcb1f928d90d937:README.md:curl-auth-header:281
+8e37b1bc9661488192419bf51bcb1f928d90d937:README.md:curl-auth-header:288
+8e37b1bc9661488192419bf51bcb1f928d90d937:README.md:curl-auth-header:297
+8e37b1bc9661488192419bf51bcb1f928d90d937:README.md:curl-auth-header:299
+8e37b1bc9661488192419bf51bcb1f928d90d937:README.md:curl-auth-header:305
+41d68970ece031ae918ac897563b7c6afd3cb97b:services/blotato/README.md:curl-auth-header:66
+41d68970ece031ae918ac897563b7c6afd3cb97b:services/blotato/README.md:curl-auth-header:83
+
+# Revoked/rotated historical credential occurrences (6)
+ffa70b97f3d58d7a65aaeb18699e70610f14fd0f:env.template:generic-api-key:22
+ffa70b97f3d58d7a65aaeb18699e70610f14fd0f:env.template:github-fine-grained-pat:43
+14d39d3b61f54be2abd1541a8460d0dc115c42bd:env.template:github-fine-grained-pat:61
+14d39d3b61f54be2abd1541a8460d0dc115c42bd:env.template:generic-api-key:57
+a17769a89fb0bc76f2fa76f0526e997cbab3327a:env.template:github-fine-grained-pat:263
+a17769a89fb0bc76f2fa76f0526e997cbab3327a:env.template:generic-api-key:254
