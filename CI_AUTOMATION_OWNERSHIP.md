@@ -27,3 +27,5 @@ Renovate discovery/lock maintenance runs Friday 18:00–20:00 Europe/London, bef
 Existing open CI bootstrap PRs touch overlapping controllers. Their changes must be reconciled before merge so they cannot restore obsolete body-text admission or capture Codex branches.
 
 Admission now publishes the `Trusted automation admission` status on the exact verified PR head using the default-branch controller’s scoped status token. Mergify requires this proof for admission/queue/merge and vetoes `dependency:manual` at every stage. Reconciliation resets stale proof to pending and revokes the admission label before evaluating current policy. A changed head cannot inherit the successful proof from its predecessor. Renovate is explicitly denied Mergify queue-command access even if its App has write permission.
+
+The launcher authenticates the event’s scheduled UTC cron against the prescribed London start and current DST offset. Delayed starts remain accepted only inside the fixed allocated window; the alternate DST cron is rejected. Independent CI/scanner/DAST phase crons are removed. Targets, opt-in, reporting and existing application operations are preserved.

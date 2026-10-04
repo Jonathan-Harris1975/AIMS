@@ -98,6 +98,13 @@ jobs:
       - name: Scan Headroom companion image for vulnerabilities and secrets
         run: .ci-tools/bin/trivy image --exit-code 1 --severity CRITICAL,HIGH --scanners vuln,secret --no-progress aims-headroom:ci
 
+  notify_failure:
+    name: Notify central operations on CI failure
+    needs: [verify, docker]
+    if: ${{ always() && (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')) }}
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Send redacted HIVE operational event
         env:
@@ -112,6 +119,7 @@ jobs:
           --event-id "github:${{ github.repository }}:${{ github.run_id }}:${{ github.run_attempt }}"
           --release-id "${{ github.sha }}"
           --url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
 
   release_gate:
     name: Release gate (exact SHA)
