@@ -28,7 +28,8 @@ jobs:
           OPS_ALERT_WEBHOOK_TOKEN: ${{ secrets.OPS_ALERT_WEBHOOK_TOKEN }}
           WATCH_SCHEDULED_AT: '' # GitHub does not supply the nominal occurrence timestamp.
         run: |
-          export WATCH_STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          WATCH_STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          export WATCH_STARTED_AT
           python3 scripts/comms_worker_watch.py
       - name: Persist incident state and detection timestamps
         if: always()

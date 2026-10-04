@@ -6,7 +6,7 @@ test("CogniPal secret enables first-party chat even when a stale rollout flag sa
   const env = {
     COMMS_HUB_ENABLED: "false",
     COMMS_HUB_CHAT_ENABLED: "false",
-    COMMS_HUB_COGINPAL_WEBHOOK_SECRET: "test-shared-secret",
+    COGNIPAL_WEBHOOK_SECRET: "test-shared-secret",
   };
   assert.equal(effectiveChatEnabled(env), true);
   assert.equal(getCommsHubReadiness(env).channels.chat, true);
@@ -15,7 +15,7 @@ test("CogniPal secret enables first-party chat even when a stale rollout flag sa
 test("explicit force-disable remains the emergency kill switch", () => {
   const env = {
     COMMS_HUB_CHAT_ENABLED: "true",
-    COMMS_HUB_COGINPAL_WEBHOOK_SECRET: "test-shared-secret",
+    COGNIPAL_WEBHOOK_SECRET: "test-shared-secret",
     COMMS_HUB_CHAT_FORCE_DISABLED: "true",
   };
   assert.equal(effectiveChatEnabled(env), false);
@@ -25,7 +25,7 @@ test("first-party config does not require the legacy external CogniPal API", () 
   const env = {
     COMMS_HUB_ENABLED: "true",
     COMMS_HUB_CHAT_ENABLED: "true",
-    COMMS_HUB_COGINPAL_WEBHOOK_SECRET: "test-shared-secret",
+    COGNIPAL_WEBHOOK_SECRET: "test-shared-secret",
     JOTFORM_API_KEY: "test-jotform",
     D1_UUID: "test-db",
     D1_API_KEY: "test-token",
@@ -42,4 +42,8 @@ test("first-party config does not require the legacy external CogniPal API", () 
   const config = loadCommsHubConfig(env);
   assert.equal(config.chatEnabled, true);
   assert.equal(config.coginPalApiBaseUrl, "");
+  assert.equal(config.coginPalWebhookSecret, "test-shared-secret");
+  const legacyOnly = { ...env, COGNIPAL_WEBHOOK_SECRET: "", COMMS_HUB_COGINPAL_WEBHOOK_SECRET: "obsolete-secret" };
+  assert.equal(getCommsHubReadiness(legacyOnly).missing.includes("COGNIPAL_WEBHOOK_SECRET"), true);
+  assert.throws(() => loadCommsHubConfig(legacyOnly), /COGNIPAL_WEBHOOK_SECRET/);
 });

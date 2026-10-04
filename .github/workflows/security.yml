@@ -31,8 +31,33 @@ jobs:
           go install github.com/zricethezav/gitleaks/v8@v8.28.0
           go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
       - name: Gitleaks history scan
+        id: gitleaks
+        continue-on-error: true
         run: |
-          "${{ runner.temp }}/ci-bin/gitleaks" git . --redact --no-banner
+          "${{ runner.temp }}/ci-bin/gitleaks" git . --redact=100 --no-banner \
+            --report-format json --report-path "${{ runner.temp }}/gitleaks-raw.json"
+      - name: Publish safe Gitleaks finding locations
+        if: always()
+        env:
+          RAW_REPORT: ${{ runner.temp }}/gitleaks-raw.json
+          SAFE_REPORT_DIR: ${{ runner.temp }}/gitleaks-safe
+        run: |
+          python3 test/gitleaks_report_test.py
+          python3 scripts/gitleaks_report.py "$RAW_REPORT" "$SAFE_REPORT_DIR" "$GITHUB_REPOSITORY" >> "$GITHUB_STEP_SUMMARY"
+      - name: Retain Gitleaks review report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: gitleaks-review-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/gitleaks-safe/
+          if-no-files-found: error
+          retention-days: 30
+      - name: Enforce Gitleaks result
+        if: always()
+        env:
+          GITLEAKS_OUTCOME: ${{ steps.gitleaks.outcome }}
+        run: |
+          test "$GITLEAKS_OUTCOME" = success
       - name: Validate GitHub Actions workflows
         run: |
           "${{ runner.temp }}/ci-bin/actionlint" -color
