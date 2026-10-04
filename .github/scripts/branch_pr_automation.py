@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-"""Create and safely auto-merge pull requests for approved development branches.
+"""Create pull requests for approved development branches without merge authority.
 
 This script is executed only by the trusted default-branch controller. It
-never checks out or executes code from the pushed branch.
+never checks out or executes code from the pushed branch, never enables native
+auto-merge, and never merges a pull request. Mergify is the sole automated
+merge arbiter after trusted admission.
 """
 from __future__ import annotations
 
@@ -16,17 +18,9 @@ from dataclasses import dataclass
 from typing import Any
 
 API = "https://api.github.com"
-GRAPHQL = "https://api.github.com/graphql"
 TOKEN = os.environ["GH_TOKEN"]
 REPO = os.environ.get("REPO") or os.environ["GITHUB_REPOSITORY"]
 DEFAULT_BRANCH = os.environ.get("DEFAULT_BRANCH", "main")
-REPAIR_APP_LOGIN = os.environ.get("REPAIR_APP_LOGIN", "")
-REQUIRED_WORKFLOWS = [
-    item.strip()
-    for item in os.environ.get("REQUIRED_WORKFLOWS", "").split("|")
-    if item.strip()
-]
-
 MANAGED_LABEL = "automation:branch-pr"
 ALLOWED_PREFIXES = ("fix/", "feat/", "chore/", "ci/", "work/", "codex/")
 EXCLUDED_PREFIXES = (
@@ -38,12 +32,6 @@ EXCLUDED_PREFIXES = (
     "temp/",
     "internal/",
 )
-BLOCKING_LABELS = {
-    "autonomy:human-hold",
-    "do-not-merge",
-    "do not merge",
-    "hold",
-}
 BRANCH_RE = re.compile(r"^(fix|feat|chore|ci|work|codex)/[A-Za-z0-9._/-]+$")
 
 
@@ -95,22 +83,6 @@ def post(path: str, data: Any | None = None, expected: tuple[int, ...] = (200, 2
     return request("POST", path, data=data, expected=expected)
 
 
-def put(path: str, data: Any | None = None, expected: tuple[int, ...] = (200, 202)) -> Any:
-    return request("PUT", path, data=data, expected=expected)
-
-
-def graphql(query: str, variables: dict[str, Any]) -> Any:
-    result = request(
-        "POST",
-        GRAPHQL,
-        {"query": query, "variables": variables},
-        expected=(200,),
-    )
-    errors = result.get("errors", []) if isinstance(result, dict) else []
-    if errors:
-        raise RuntimeError("GitHub GraphQL error: " + json.dumps(errors)[:1000])
-    return result.get("data", {}) if isinstance(result, dict) else {}
-
 
 def event_payload() -> dict[str, Any]:
     path = os.environ.get("GITHUB_EVENT_PATH", "")
@@ -120,9 +92,6 @@ def event_payload() -> dict[str, Any]:
         payload = json.load(handle)
     return payload if isinstance(payload, dict) else {}
 
-
-def issue_labels(pr: dict[str, Any]) -> set[str]:
-    return {str(item.get("name", "")).strip().lower() for item in pr.get("labels", [])}
 
 
 def ensure_label() -> None:
@@ -246,7 +215,8 @@ def pr_metadata(branch: str, sha: str) -> tuple[str, str]:
         f"- Target branch: `{DEFAULT_BRANCH}`\n"
         f"- Signalled head: `{sha}`\n\n"
         "The repository's normal pull-request CI and security workflows must complete "
-        "successfully before native GitHub auto-merge is requested."
+        "successfully. Trusted automation may then admit the PR to Mergify; Mergify is "
+        "the sole automated merger. This branch controller never enables native auto-merge."
         f"{details_block}"
     )
     return title, body
@@ -293,144 +263,9 @@ def create_or_reuse_pr() -> None:
     log(f"Created managed PR #{number} for {branch} -> {DEFAULT_BRANCH}.")
 
 
-def latest_pull_request_runs(sha: str) -> dict[str, dict[str, Any]]:
-    query = urllib.parse.urlencode(
-        {"head_sha": sha, "event": "pull_request", "per_page": 100}
-    )
-    payload = get(f"/repos/{REPO}/actions/runs?{query}")
-    latest: dict[str, dict[str, Any]] = {}
-    for run in payload.get("workflow_runs", []):
-        name = str(run.get("name", ""))
-        current = latest.get(name)
-        if current is None or int(run.get("id", 0)) > int(current.get("id", 0)):
-            latest[name] = run
-    return latest
-
-
-def required_checks_green(pr: dict[str, Any]) -> tuple[bool, str]:
-    sha = str(pr.get("head", {}).get("sha", ""))
-    runs = latest_pull_request_runs(sha)
-    for name in REQUIRED_WORKFLOWS:
-        run = runs.get(name)
-        if run is None:
-            return False, f"required workflow {name!r} has not run on {sha[:12]}"
-        status = str(run.get("status", ""))
-        conclusion = str(run.get("conclusion", ""))
-        if status != "completed" or conclusion != "success":
-            return False, f"required workflow {name!r} is {status}/{conclusion}"
-    return True, "all repository-specific required workflows succeeded"
-
-
-def managed_pr(pr: dict[str, Any]) -> bool:
-    return (
-        pr.get("state") == "open"
-        and not pr.get("draft")
-        and same_repo(pr)
-        and pr.get("base", {}).get("ref") == DEFAULT_BRANCH
-        and allowed_branch(str(pr.get("head", {}).get("ref", "")))
-        and pr.get("user", {}).get("login") == REPAIR_APP_LOGIN
-        and MANAGED_LABEL.lower() in issue_labels(pr)
-        and not issue_labels(pr).intersection(BLOCKING_LABELS)
-    )
-
-
-def refresh_pr(number: int) -> dict[str, Any]:
-    return get(f"/repos/{REPO}/pulls/{number}")
-
-
-def update_branch_if_behind(pr: dict[str, Any]) -> bool:
-    if pr.get("mergeable_state") != "behind":
-        return False
-    number = int(pr["number"])
-    sha = str(pr.get("head", {}).get("sha", ""))
-    try:
-        put(
-            f"/repos/{REPO}/pulls/{number}/update-branch",
-            {"expected_head_sha": sha},
-            expected=(202,),
-        )
-        log(f"Updated PR #{number} from {DEFAULT_BRANCH}; waiting for fresh exact-head CI.")
-    except ApiError as exc:
-        if exc.status not in (403, 409, 422):
-            raise
-        log(f"PR #{number} is behind but GitHub could not update it automatically ({exc.status}).")
-    return True
-
-
-def enable_native_auto_merge(pr: dict[str, Any]) -> None:
-    number = int(pr["number"])
-    if pr.get("auto_merge"):
-        log(f"Native GitHub auto-merge is already enabled for PR #{number}.")
-        return
-    mutation = """
-    mutation EnableAutoMerge($id: ID!) {
-      enablePullRequestAutoMerge(input: {pullRequestId: $id, mergeMethod: SQUASH}) {
-        pullRequest {
-          number
-          state
-          autoMergeRequest { enabledAt }
-        }
-      }
-    }
-    """
-    graphql(mutation, {"id": pr["node_id"]})
-    log(f"Requested native GitHub auto-merge for PR #{number} after exact-head checks passed.")
-
-
-def reconcile_managed_prs() -> None:
-    for listed in list_open_prs():
-        if not managed_pr(listed):
-            continue
-        number = int(listed["number"])
-        current = refresh_pr(number)
-        if not managed_pr(current):
-            continue
-
-        if current.get("mergeable_state") == "dirty" or current.get("mergeable") is False:
-            log(f"PR #{number} has merge conflicts; automatic merge is withheld.")
-            continue
-        if update_branch_if_behind(current):
-            continue
-
-        green, reason = required_checks_green(current)
-        if not green:
-            log(f"PR #{number} not ready: {reason}.")
-            continue
-
-        expected_sha = str(current.get("head", {}).get("sha", ""))
-        current = refresh_pr(number)
-        if not managed_pr(current) or str(current.get("head", {}).get("sha", "")) != expected_sha:
-            log(f"PR #{number} changed while being evaluated; deferring to the next reconciliation.")
-            continue
-        if update_branch_if_behind(current):
-            continue
-
-        base_branch = get(
-            f"/repos/{REPO}/branches/{urllib.parse.quote(DEFAULT_BRANCH, safe='')}"
-        )
-        base_sha = str(base_branch.get("commit", {}).get("sha", ""))
-        pr_base_sha = str(current.get("base", {}).get("sha", ""))
-        if base_sha != pr_base_sha:
-            log(
-                f"PR #{number} base moved from {pr_base_sha[:12]} to {base_sha[:12]}; "
-                "waiting for GitHub to refresh mergeability."
-            )
-            continue
-
-        enable_native_auto_merge(current)
-
-
 def main() -> int:
-    if not REQUIRED_WORKFLOWS:
-        raise RuntimeError(
-            "REQUIRED_WORKFLOWS must list this repository's exact CI/security workflow names"
-        )
-    if not re.fullmatch(r"[A-Za-z0-9-]+\[bot\]", REPAIR_APP_LOGIN):
-        raise RuntimeError("REPAIR_APP_LOGIN must identify the trusted repository GitHub App bot")
-
     ensure_label()
     create_or_reuse_pr()
-    reconcile_managed_prs()
     return 0
 
 
