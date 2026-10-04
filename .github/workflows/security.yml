@@ -1,65 +1,54 @@
 name: Security and repository quality
-
-on:
-  pull_request:
-  push:
-    branches: [main]
-  workflow_dispatch:
-
 permissions:
   contents: read
-
 concurrency:
   group: aims-security-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-
 jobs:
   repository_security:
     name: Trivy, Gitleaks and actionlint
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
-      - name: Observe runner processes and egress
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
-        with:
-          egress-policy: audit
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-      - name: Repository secret policy scan
-        run: python3 scripts/secret_scan.py
-      - name: Verify automation ownership boundaries
-        run: python3 .github/scripts/test_ci_ownership.py
-      - name: Install pinned security tools with integrity verification
-        run: python3 scripts/install_ci_tools.py trivy gitleaks actionlint zizmor
-      - name: Gitleaks history scan
-        run: |
-          .ci-tools/bin/gitleaks git . --redact --no-banner
-      - name: Validate GitHub Actions workflows
-        run: |
-          .ci-tools/bin/actionlint -color
-      - name: Trivy filesystem vulnerability and misconfiguration scan
-        run: .ci-tools/bin/trivy fs . --scanners vuln,misconfig --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 --no-progress
-      - name: Inspect GitHub Actions security posture
-        run: .ci-tools/bin/zizmor --offline .github/workflows
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 24.21.0
-      - name: Strict Renovate configuration validation
-        run: npx --yes --package renovate@44.132.5 -- renovate-config-validator --strict renovate.json
-
+    - name: Observe runner processes and egress
+      uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1
+      with:
+        egress-policy: audit
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        fetch-depth: 0
+        persist-credentials: false
+    - name: Repository secret policy scan
+      run: python3 scripts/secret_scan.py
+    - name: Verify automation ownership boundaries
+      run: python3 .github/scripts/test_ci_ownership.py
+    - name: Install pinned security tools with integrity verification
+      run: python3 scripts/install_ci_tools.py trivy gitleaks actionlint zizmor
+    - name: Gitleaks history scan
+      run: |
+        .ci-tools/bin/gitleaks git . --redact --no-banner
+    - name: Validate GitHub Actions workflows
+      run: |
+        .ci-tools/bin/actionlint -color
+    - name: Trivy filesystem vulnerability and misconfiguration scan
+      run: .ci-tools/bin/trivy fs . --scanners vuln,misconfig --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 --no-progress
+    - name: Inspect GitHub Actions security posture
+      run: .ci-tools/bin/zizmor --offline .github/workflows
+    - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+      with:
+        node-version: 24.21.0
+    - name: Strict Renovate configuration validation
+      run: npx --yes --package renovate@44.132.5 -- renovate-config-validator --strict renovate.json
   docker_quality:
     name: Hadolint production Dockerfiles
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          persist-credentials: false
-      - run: python3 scripts/install_ci_tools.py hadolint
-      - run: .ci-tools/bin/hadolint Dockerfile headroom/Dockerfile
-
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        persist-credentials: false
+    - run: python3 scripts/install_ci_tools.py hadolint
+    - run: .ci-tools/bin/hadolint Dockerfile headroom/Dockerfile
   scorecard:
     name: OpenSSF Scorecard
     if: github.event_name != 'pull_request'
@@ -71,14 +60,20 @@ jobs:
       actions: read
       checks: read
     steps:
-      - name: Install pinned Scorecard CLI from source
-        env:
-          GOBIN: ${{ runner.temp }}/scorecard-bin
-        run: |
-          set -euo pipefail
-          mkdir -p "$GOBIN"
-          go install github.com/ossf/scorecard/v5@v5.5.0
-      - name: Assess repository posture without mutation
-        env:
-          GITHUB_AUTH_TOKEN: ${{ github.token }}
-        run: '"${{ runner.temp }}/scorecard-bin/scorecard" --repo="github.com/$GITHUB_REPOSITORY" --format=json --show-details'
+    - name: Install pinned Scorecard CLI from source
+      env:
+        GOBIN: ${{ runner.temp }}/scorecard-bin
+      run: |
+        set -euo pipefail
+        mkdir -p "$GOBIN"
+        go install github.com/ossf/scorecard/v5@v5.5.0
+    - name: Assess repository posture without mutation
+      env:
+        GITHUB_AUTH_TOKEN: ${{ github.token }}
+      run: '"${{ runner.temp }}/scorecard-bin/scorecard" --repo="github.com/$GITHUB_REPOSITORY" --format=json --show-details'
+'on':
+  pull_request: null
+  push:
+    branches:
+    - main
+  workflow_dispatch: null

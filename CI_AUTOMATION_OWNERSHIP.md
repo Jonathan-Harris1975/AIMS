@@ -25,3 +25,5 @@ Renovate discovery/lock maintenance runs Friday 18:00–20:00 Europe/London, bef
 - Koyeb currently deploys from source. Actions builds ephemeral image tags and does not publish an addressable production image digest; do not manufacture attestation artefacts. Confirm provider OIDC support for the exact deployment flow before replacing credentials.
 
 Existing open CI bootstrap PRs touch overlapping controllers. Their changes must be reconciled before merge so they cannot restore obsolete body-text admission or capture Codex branches.
+
+Admission now publishes the `Trusted automation admission` status on the exact verified PR head using the default-branch controller’s scoped status token. Mergify requires this proof for admission/queue/merge and vetoes `dependency:manual` at every stage. Reconciliation resets stale proof to pending and revokes the admission label before evaluating current policy. A changed head cannot inherit the successful proof from its predecessor. Renovate is explicitly denied Mergify queue-command access even if its App has write permission.
