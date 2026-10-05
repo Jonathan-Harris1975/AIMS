@@ -33,7 +33,7 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 0
     # AIMS pins Node exactly across package.json, CI and the production image.
     # Runtime upgrades must be coordinated across those files, not changed here alone.
     ignore:
@@ -46,7 +46,7 @@ updates:
     directory: "/headroom"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 0
     commit-message:
       prefix: "deps(headroom)"
 
@@ -54,6 +54,6 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 0
     commit-message:
       prefix: "deps(ci)"
