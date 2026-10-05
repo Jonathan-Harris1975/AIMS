@@ -56,7 +56,7 @@ class Recovery(unittest.TestCase):
         self.config.start()
         self.addCleanup(self.config.stop)
 
-    def receipt(self, author="kilo-code-bot[bot]", sha=None, base=None):
+    def receipt(self, author="repair[bot]", sha=None, base=None):
         return {
             "user": {"login": author},
             "body": "<!-- pr-blocker-resolution:"
@@ -146,6 +146,9 @@ class Recovery(unittest.TestCase):
         ]:
             self.assertEqual(m.verified_receipts([receipt], "a" * 40, "b" * 40), {})
         self.assertIn("PRRT_test", m.verified_receipts([self.receipt()], "a" * 40, "b" * 40))
+        self.assertEqual(
+            m.verified_receipts([self.receipt(author="kilo-code-bot[bot]")], "a" * 40, "b" * 40), {}
+        )
 
     def test_receipt_accepts_configured_app_identity(self):
         self.assertIn(
@@ -192,9 +195,12 @@ class Recovery(unittest.TestCase):
             patch.object(m, "review_threads", return_value=[self.thread]),
             patch.object(m.router, "all_pages", return_value=[self.receipt()]),
             patch.object(m, "required_checks_pass", return_value=False),
-            patch.object(m.router, "dispatch"),
+            patch.object(m.router, "dispatch") as dispatch,
         ):
-            self.assertEqual(m.recover(7)["resolved"], [])
+            result = m.recover(7)
+            self.assertEqual(result["resolved"], [])
+            self.assertEqual(result["bot_threads_remaining"], 0)
+        dispatch.assert_not_called()
         self.assertFalse(any(c.args[1] == "/graphql" for c in api.call_args_list))
 
     def test_head_movement_before_resolution_defers(self):
@@ -258,7 +264,14 @@ class Recovery(unittest.TestCase):
                     }
                 ]
             }
-            with patch.object(m.router, "api", side_effect=[requirement, checks, {"statuses": []}]):
+            rulesets = [{"id": 1, "enforcement": "active", "target": "branch"}]
+            detail = {
+                "conditions": {"ref_name": {"include": ["~DEFAULT_BRANCH"]}},
+                "rules": requirement,
+            }
+            with patch.object(
+                m.router, "api", side_effect=[rulesets, detail, checks, {"statuses": []}]
+            ):
                 self.assertEqual(m.required_checks_pass(self.pr), expected)
 
     def test_manual_pr_selection_and_invalid_number(self):
@@ -278,30 +291,36 @@ class Recovery(unittest.TestCase):
         event["comment"] = {"user": {"login": "kilo-code-bot[bot]"}}
         self.assertEqual(m.candidate_numbers(event), [7])
 
-    def test_required_check_on_second_rule_page_cannot_be_omitted(self):
-        first = [
-            {
+    def test_required_checks_from_multiple_applicable_rulesets_are_enforced(self):
+        rulesets = [
+            {"id": 1, "enforcement": "active", "target": "branch"},
+            {"id": 2, "enforcement": "active", "target": "branch"},
+        ]
+        green_rule = {
+            "conditions": {"ref_name": {"include": ["~DEFAULT_BRANCH"]}},
+            "rules": [{
                 "type": "required_status_checks",
                 "parameters": {"required_status_checks": [{"context": "green"}]},
-            }
-        ] + [{"type": "dummy"}] * 99
-        second = [
-            {
+            }],
+        }
+        red_rule = {
+            "conditions": {"ref_name": {"include": [f"refs/heads/{m.router.DEFAULT}"]}},
+            "rules": [{
                 "type": "required_status_checks",
                 "parameters": {"required_status_checks": [{"context": "red"}]},
-            }
-        ]
+            }],
+        }
         checks = {
             "check_runs": [
-                {"name": name, "status": "completed", "conclusion": result}
-                for name, result in [("green", "success"), ("red", "failure")]
+                {"name": "green", "status": "completed", "conclusion": "success"},
+                {"name": "red", "status": "completed", "conclusion": "failure"},
             ]
         }
         with patch.object(
-            m.router, "api", side_effect=[first, second, checks, {"statuses": []}]
-        ) as api:
+            m.router, "api",
+            side_effect=[rulesets, green_rule, red_rule, checks, {"statuses": []}],
+        ):
             self.assertFalse(m.required_checks_pass(self.pr))
-        self.assertIn("page=2", api.call_args_list[1].args[1])
 
     def test_reviews_and_inline_comments_require_trusted_actor(self):
         for key in ["review", "comment"]:
