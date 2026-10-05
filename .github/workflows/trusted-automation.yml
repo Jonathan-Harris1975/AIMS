@@ -1,6 +1,6 @@
 name: Trusted automation admission for Mergify
 
-on:
+on: # zizmor: ignore[dangerous-triggers] trusted event router; code is fixed to the default branch and event provenance is gated
   issue_comment:
     types: [created]
   pull_request_review:
