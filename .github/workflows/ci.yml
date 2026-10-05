@@ -18,13 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - name: Harden runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
-        with:
-          egress-policy: audit
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24.21.0
@@ -34,7 +28,7 @@ jobs:
       - name: Reject unapproved repository duplication and hygiene regressions
         run: python3 scripts/check_repository_hygiene.py
       - name: Install pinned npm toolchain
-        run: npm install --global npm@12.2.0 --no-audit --no-fund # zizmor: ignore[adhoc-packages] exact npm toolchain version is deliberately pinned
+        run: npm install --global npm@12.2.0 --no-audit --no-fund
       - name: Verify pinned Node/npm toolchain
         run: |
           test "$(node --version)" = "v24.21.0"
@@ -52,13 +46,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - name: Harden runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
-        with:
-          egress-policy: audit
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
       - run: docker build -t aims:ci .
       - name: Build Headroom companion image
         run: docker build -f headroom/Dockerfile -t aims-headroom:ci .
@@ -126,13 +114,7 @@ jobs:
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:
-      - name: Harden runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
-        with:
-          egress-policy: audit
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
       - name: Send redacted HIVE operational event
         env:
           OPS_ALERT_WEBHOOK_URL: ${{ secrets.OPS_ALERT_WEBHOOK_URL }}
@@ -155,10 +137,6 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Harden runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
-        with:
-          egress-policy: audit
       - name: Require all release checks to be green
         env:
           RESULT_VERIFY: ${{ needs.verify.result }}
@@ -167,8 +145,6 @@ jobs:
           test "$RESULT_VERIFY" = "success"
           test "$RESULT_DOCKER" = "success"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
       - name: Assert checked-out commit is the workflow SHA
         run: |
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
@@ -188,10 +164,6 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Harden runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
-        with:
-          egress-policy: audit
       - name: Require exact-SHA release gate
         env:
           RELEASE_GATE_RESULT: ${{ needs.release_gate.result }}
