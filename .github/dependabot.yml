@@ -4,6 +4,8 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 0
     groups:
       aws-sdk-family:
@@ -33,6 +35,8 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 0
     # AIMS pins Node exactly across package.json, CI and the production image.
     # Runtime upgrades must be coordinated across those files, not changed here alone.
@@ -46,6 +50,8 @@ updates:
     directory: "/headroom"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 0
     commit-message:
       prefix: "deps(headroom)"
@@ -54,6 +60,8 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 0
     commit-message:
       prefix: "deps(ci)"
