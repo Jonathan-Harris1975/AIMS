@@ -1,11 +1,9 @@
 version: 2
 updates:
-  - package-ecosystem: "npm"
+  - package-ecosystem: "npm" # zizmor: ignore[dependabot-cooldown] Renovate owns version updates; Dependabot remains for security updates.
     directory: "/"
     schedule:
       interval: "weekly"
-    cooldown:
-      default-days: 7
     open-pull-requests-limit: 0
     groups:
       aws-sdk-family:
@@ -31,12 +29,10 @@ updates:
     commit-message:
       prefix: "deps"
 
-  - package-ecosystem: "docker"
+  - package-ecosystem: "docker" # zizmor: ignore[dependabot-cooldown] Renovate owns version updates; Dependabot remains for security updates.
     directory: "/"
     schedule:
       interval: "weekly"
-    cooldown:
-      default-days: 7
     open-pull-requests-limit: 0
     # AIMS pins Node exactly across package.json, CI and the production image.
     # Runtime upgrades must be coordinated across those files, not changed here alone.
@@ -46,22 +42,18 @@ updates:
       prefix: "deps(docker)"
 
   # Headroom uses its own literal Dockerfile so Dependabot can track the image tag.
-  - package-ecosystem: "docker"
+  - package-ecosystem: "docker" # zizmor: ignore[dependabot-cooldown] Renovate owns version updates; Dependabot remains for security updates.
     directory: "/headroom"
     schedule:
       interval: "weekly"
-    cooldown:
-      default-days: 7
     open-pull-requests-limit: 0
     commit-message:
       prefix: "deps(headroom)"
 
-  - package-ecosystem: "github-actions"
+  - package-ecosystem: "github-actions" # zizmor: ignore[dependabot-cooldown] Renovate owns version updates; Dependabot remains for security updates.
     directory: "/"
     schedule:
       interval: "weekly"
-    cooldown:
-      default-days: 7
     open-pull-requests-limit: 0
     commit-message:
       prefix: "deps(ci)"
