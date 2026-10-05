@@ -1,6 +1,6 @@
 name: Koyeb production deployment watch
 
-on:
+on: # zizmor: ignore[dangerous-triggers] trusted event router; code is fixed to the default branch and event provenance is gated
   workflow_run:
     workflows: ["AIMS CI"]
     types: [completed]
