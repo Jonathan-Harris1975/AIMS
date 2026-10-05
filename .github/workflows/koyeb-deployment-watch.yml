@@ -1,6 +1,6 @@
 name: Koyeb production deployment watch
 
-on: # zizmor: ignore[dangerous-triggers] trusted event router; code is fixed to the default branch and event provenance is gated
+on:
   workflow_run:
     workflows: ["AIMS CI"]
     types: [completed]
@@ -27,7 +27,6 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          persist-credentials: false
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
@@ -60,7 +59,9 @@ jobs:
             sha256sum --check --strict archive.sha256
             tar -xzf "$archive"
           )
-          sudo install -m 0755 "$workdir/koyeb" /usr/local/bin/koyeb
+          install -d -m 0755 "$HOME/.local/bin"
+          install -m 0755 "$workdir/koyeb" "$HOME/.local/bin/koyeb"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - name: Verify Koyeb minimum instances before deployment watch
         env:
           KOYEB_TOKEN: ${{ secrets.KOYEB_TOKEN }}
@@ -167,7 +168,6 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          persist-credentials: false
           ref: main
           fetch-depth: 0
       - name: Revert only the failed Renovate merge
@@ -176,7 +176,6 @@ jobs:
           FAILED_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           set -euo pipefail
-          gh auth setup-git
           pr_number="$(gh api \
             -H 'Accept: application/vnd.github+json' \
             "/repos/$GITHUB_REPOSITORY/commits/$FAILED_SHA/pulls" \
