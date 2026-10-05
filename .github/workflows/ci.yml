@@ -34,7 +34,7 @@ jobs:
       - name: Reject unapproved repository duplication and hygiene regressions
         run: python3 scripts/check_repository_hygiene.py
       - name: Install pinned npm toolchain
-        run: npm install --global npm@12.2.0 --no-audit --no-fund
+        run: npm install --global npm@12.2.0 --no-audit --no-fund # zizmor: ignore[adhoc-packages] exact npm toolchain version is deliberately pinned
       - name: Verify pinned Node/npm toolchain
         run: |
           test "$(node --version)" = "v24.21.0"
