@@ -264,7 +264,14 @@ class Recovery(unittest.TestCase):
                     }
                 ]
             }
-            with patch.object(m.router, "api", side_effect=[requirement, checks, {"statuses": []}]):
+            rulesets = [{"id": 1, "enforcement": "active", "target": "branch"}]
+            detail = {
+                "conditions": {"ref_name": {"include": ["~DEFAULT_BRANCH"]}},
+                "rules": requirement,
+            }
+            with patch.object(
+                m.router, "api", side_effect=[rulesets, detail, checks, {"statuses": []}]
+            ):
                 self.assertEqual(m.required_checks_pass(self.pr), expected)
 
     def test_manual_pr_selection_and_invalid_number(self):
@@ -284,30 +291,36 @@ class Recovery(unittest.TestCase):
         event["comment"] = {"user": {"login": "kilo-code-bot[bot]"}}
         self.assertEqual(m.candidate_numbers(event), [7])
 
-    def test_required_check_on_second_rule_page_cannot_be_omitted(self):
-        first = [
-            {
+    def test_required_checks_from_multiple_applicable_rulesets_are_enforced(self):
+        rulesets = [
+            {"id": 1, "enforcement": "active", "target": "branch"},
+            {"id": 2, "enforcement": "active", "target": "branch"},
+        ]
+        green_rule = {
+            "conditions": {"ref_name": {"include": ["~DEFAULT_BRANCH"]}},
+            "rules": [{
                 "type": "required_status_checks",
                 "parameters": {"required_status_checks": [{"context": "green"}]},
-            }
-        ] + [{"type": "dummy"}] * 99
-        second = [
-            {
+            }],
+        }
+        red_rule = {
+            "conditions": {"ref_name": {"include": [f"refs/heads/{m.router.DEFAULT}"]}},
+            "rules": [{
                 "type": "required_status_checks",
                 "parameters": {"required_status_checks": [{"context": "red"}]},
-            }
-        ]
+            }],
+        }
         checks = {
             "check_runs": [
-                {"name": name, "status": "completed", "conclusion": result}
-                for name, result in [("green", "success"), ("red", "failure")]
+                {"name": "green", "status": "completed", "conclusion": "success"},
+                {"name": "red", "status": "completed", "conclusion": "failure"},
             ]
         }
         with patch.object(
-            m.router, "api", side_effect=[first, second, checks, {"statuses": []}]
-        ) as api:
+            m.router, "api",
+            side_effect=[rulesets, green_rule, red_rule, checks, {"statuses": []}],
+        ):
             self.assertFalse(m.required_checks_pass(self.pr))
-        self.assertIn("page=2", api.call_args_list[1].args[1])
 
     def test_reviews_and_inline_comments_require_trusted_actor(self):
         for key in ["review", "comment"]:
