@@ -245,7 +245,78 @@ class CouncilEvidenceFreezeTests(unittest.TestCase):
         self.assertIn("Council completed", reason)
 
     def test_default_branch_move_during_evidence_collection_fails_closed(self):
-        runs = {"workflow_runs": []}
+        runs = {"workflow_runs": [], "total_count": 0}
+        with (
+            patch.object(
+                automation,
+                "current_weekend_bounds",
+                return_value=(
+                    datetime(2026, 10, 2, 20, 0, tzinfo=automation.LONDON),
+                    datetime(2026, 10, 5, 4, 0, tzinfo=automation.LONDON),
+                ),
+            ),
+            patch.object(automation, "log"),
+            patch.object(
+                automation,
+                "get",
+                side_effect=[
+                    {"commit": {"sha": self.sha}},
+                    runs,
+                    {"commit": {"sha": "e" * 40}},
+                    runs,
+                    {"commit": {"sha": "f" * 40}},
+                ],
+            ),
+        ):
+            frozen, reason = automation.council_evidence_freeze()
+        self.assertTrue(frozen)
+        self.assertIn("default branch moved", reason)
+
+    def test_single_branch_move_retries_once_with_new_sha(self):
+        new_sha = "e" * 40
+        first_runs = {"workflow_runs": [], "total_count": 0}
+        second_runs = {
+            "workflow_runs": [
+                {
+                    "id": 100,
+                    "name": "AIMS CI",
+                    "event": "workflow_dispatch",
+                    "status": "completed",
+                    "conclusion": "success",
+                    "head_sha": new_sha,
+                    "created_at": "2026-10-02T19:05:00Z",
+                }
+            ],
+            "total_count": 1,
+        }
+        with (
+            patch.object(
+                automation,
+                "current_weekend_bounds",
+                return_value=(
+                    datetime(2026, 10, 2, 20, 0, tzinfo=automation.LONDON),
+                    datetime(2026, 10, 5, 4, 0, tzinfo=automation.LONDON),
+                ),
+            ),
+            patch.object(automation, "log"),
+            patch.object(
+                automation,
+                "get",
+                side_effect=[
+                    {"commit": {"sha": self.sha}},
+                    first_runs,
+                    {"commit": {"sha": new_sha}},
+                    second_runs,
+                    {"commit": {"sha": new_sha}},
+                ],
+            ),
+        ):
+            frozen, reason = automation.council_evidence_freeze()
+        self.assertTrue(frozen)
+        self.assertIn(new_sha[:12], reason)
+
+    def test_incomplete_pagination_evidence_fails_closed(self):
+        runs = {"workflow_runs": [], "total_count": 150}
         with (
             patch.object(
                 automation,
@@ -261,13 +332,23 @@ class CouncilEvidenceFreezeTests(unittest.TestCase):
                 side_effect=[
                     {"commit": {"sha": self.sha}},
                     runs,
-                    {"commit": {"sha": "e" * 40}},
                 ],
             ),
         ):
-            frozen, reason = automation.council_evidence_freeze()
-        self.assertTrue(frozen)
-        self.assertIn("default branch moved", reason)
+            with self.assertRaises(RuntimeError):
+                automation.council_evidence_freeze()
+
+    def test_exact_1000_workflow_runs_is_complete_not_overflow(self):
+        page = {"workflow_runs": [{} for _ in range(100)], "total_count": 1000}
+        with patch.object(automation, "get", side_effect=[page for _ in range(10)]):
+            runs = automation._fetch_branch_runs()
+        self.assertEqual(len(runs), 1000)
+
+    def test_more_than_1000_workflow_runs_fails_closed(self):
+        page = {"workflow_runs": [{} for _ in range(100)], "total_count": 1001}
+        with patch.object(automation, "get", side_effect=[page for _ in range(10)]):
+            with self.assertRaises(RuntimeError):
+                automation._fetch_branch_runs()
 
 
 
