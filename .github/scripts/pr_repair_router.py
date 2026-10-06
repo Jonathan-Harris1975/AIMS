@@ -291,7 +291,7 @@ def dispatch(pr: dict, kind: str, findings: list[str]) -> str:
 
     api("POST", f"/repos/{REPO}/issues/{number}/comments", {"body":
         f"{marker}\nAutonomous Kilo repair requested for the current {kind} findings through the machine webhook. "
-        "No human reply, GitHub account link, or @kilocode-bot command is required. "
+        "No human reply, GitHub account link, or Kilo mention command is required. "
         "The source PR remains governed by its normal checks."})
     print(f"Sent autonomous {kind} repair for PR #{number} at {sha[:12]} to Kilo.")
     return 'requested'
