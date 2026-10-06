@@ -17,6 +17,57 @@ from pathlib import Path
 from ops_notify import send_event
 
 STATE = Path('worker-watch-state.json')
+PRODUCTION_DEFAULTS = Path('config/production.defaults.env')
+
+
+def load_defaults(path=PRODUCTION_DEFAULTS):
+    values = {}
+    for raw in path.read_text(encoding='utf-8').splitlines():
+        line = raw.strip()
+        if not line or line.startswith('#') or '=' not in line:
+            continue
+        key, value = line.split('=', 1)
+        values[key.strip()] = value.strip()
+    return values
+
+
+def enabled(defaults, key):
+    return defaults.get(key, '').strip().lower() in {'1', 'true', 'yes', 'on'}
+
+
+def production_monitor_config(defaults):
+    base = (defaults.get('APP_URL') or defaults.get('COMMS_HUB_PUBLIC_BASE_URL') or '').strip().rstrip('/')
+    parsed = urllib.parse.urlsplit(base)
+    if parsed.scheme != 'https' or not parsed.netloc or parsed.username or parsed.password or parsed.query or parsed.fragment:
+        raise ValueError('Invalid production APP_URL')
+
+    expected = []
+    if enabled(defaults, 'COMMS_HUB_ZERNIO_POLL_ENABLED'):
+        expected.append('social_poll:default')
+    if enabled(defaults, 'COMMS_HUB_FOLLOW_UP_WORKER_ENABLED'):
+        expected.append('follow_up:default')
+    if enabled(defaults, 'COMMS_HUB_PROVIDER_HEALTH_ENABLED'):
+        expected.append('provider_monitor:default')
+    if enabled(defaults, 'COMMS_HUB_DELAYED_ACTION_WORKER_ENABLED'):
+        expected.append('delayed_actions:default')
+    if enabled(defaults, 'COMMS_HUB_EMAIL_ARCHIVE_ENABLED'):
+        expected.append('archive:default')
+    if (enabled(defaults, 'COMMS_HUB_ZERNIO_WEBHOOK_RECONCILE_ENABLED')
+            and (enabled(defaults, 'COMMS_HUB_ZERNIO_META_ENABLED') or enabled(defaults, 'COMMS_HUB_ZERNIO_VIDEO_ENABLED'))):
+        expected.append('webhook_reconcile:default')
+    if enabled(defaults, 'COMMS_HUB_BACKUP_ENABLED') and enabled(defaults, 'COMMS_HUB_BACKUP_AUTOMATIC_ENABLED'):
+        expected.append('backup:default')
+    if enabled(defaults, 'COMMS_HUB_RETENTION_WORKER_ENABLED'):
+        expected.append('retention:default')
+    if enabled(defaults, 'COMMS_HUB_MONTH_END_ARCHIVE_ENABLED'):
+        expected.append('month_end_archive:default')
+    if enabled(defaults, 'COMMS_HUB_HOUSEKEEPING_ENABLED') and enabled(defaults, 'COMMS_HUB_HOUSEKEEPING_WORKER_ENABLED'):
+        expected.append('housekeeping:default')
+    if enabled(defaults, 'COMMS_HUB_EMAIL_ENABLED') and enabled(defaults, 'COMMS_HUB_EMAIL_POLL_WORKER_ENABLED'):
+        expected.append('inbound_email:info')
+    if not expected:
+        raise ValueError('No production worker inventory enabled')
+    return f'{base}/comms-hub/workers/health', expected
 
 
 def validate_health(payload, expected, now):
@@ -76,7 +127,6 @@ def advance_incident(state, failure, now, notify):
             recovery_delivery = 'sent' if delivered else 'failed'
         else:
             recovery_delivery = 'not_required'
-        # A failed recovery notification must not suppress the next real incident.
         state = {'active': False, 'recovered_at': stamp, 'recovery_delivery': recovery_delivery}
     state['checked_at'] = stamp
     return state
@@ -127,7 +177,6 @@ def restore_state():
             continue
         url = f'https://api.github.com/repos/{os.environ["GITHUB_REPOSITORY"]}/actions/artifacts/{artifact["id"]}/zip'
         request = urllib.request.Request(url, headers={'Authorization': f'Bearer {os.environ["GH_TOKEN"]}'})
-        # Never forward the GitHub credential to the signed artifact host.
         try:
             urllib.request.build_opener(NoRedirect()).open(request, timeout=10)
             raise ValueError('Expected signed artifact redirect')
@@ -153,22 +202,21 @@ def restore_state():
 def main():
     try:
         state = restore_state()
+        url, expected = production_monitor_config(load_defaults())
     except Exception as error:
-        print(f'Monitor state restore failed: {type(error).__name__}', file=sys.stderr)
+        print(f'Monitor configuration/state restore failed: {type(error).__name__}', file=sys.stderr)
         return 1
     now = datetime.now(UTC)
-    url = os.getenv('COMMS_HUB_WATCH_URL', '')
-    expected = [item.strip() for item in os.getenv('COMMS_HUB_WATCH_EXPECTED_WORKERS', '').split(',') if item.strip()]
     failure = check_health(url, os.getenv('AIMS_API_KEY', ''), expected, now)
     alert_url = os.getenv('OPS_ALERT_WEBHOOK_URL', '')
-    independent = bool(alert_url and os.getenv('OPS_ALERT_WEBHOOK_TOKEN') and urllib.parse.urlsplit(alert_url).scheme == 'https'
-                       and urllib.parse.urlsplit(alert_url).netloc != urllib.parse.urlsplit(url).netloc)
-    state = advance_incident(state, failure, now, lambda event: independent and send_event(event))
+    webhook_independent = bool(alert_url and os.getenv('OPS_ALERT_WEBHOOK_TOKEN') and urllib.parse.urlsplit(alert_url).scheme == 'https'
+                               and urllib.parse.urlsplit(alert_url).netloc != urllib.parse.urlsplit(url).netloc)
+    state = advance_incident(state, failure, now, lambda event: webhook_independent and send_event(event))
     STATE.write_text(json.dumps(state, sort_keys=True), encoding='utf-8')
     print(json.dumps({'health': failure or 'healthy', 'detected_at': state.get('detected_at'),
-                      'notified_at': state.get('notified_at'), 'urgent_delivery': 'unverified',
-                      'independent_alert_configured': independent}))
-    return 1 if failure or not independent else 0
+                      'notified_at': state.get('notified_at'), 'github_failure_signal': bool(failure),
+                      'optional_webhook_configured': webhook_independent, 'expected_workers': expected}))
+    return 1 if failure else 0
 
 
 if __name__ == '__main__':
