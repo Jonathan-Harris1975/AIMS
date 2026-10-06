@@ -791,6 +791,18 @@ async function runWebsiteAuditFinalisation(parentSessionId) {
           : "retained-for-diagnosis-and-rerun",
         ramsPipeline: "website",
         ramsDispatchPermitted: completeEvidenceContract,
+        remediationRouting: {
+          schemaVersion: "audit-remediation-routing/v1",
+          repairExecutionPolicy: "external-agent-only",
+          singleWriterRequired: true,
+          auditOwnsRepair: false,
+          primaryRepairAgent: "kilo",
+          plannedEngineeringAgent: "cto.new",
+          ownershipTransferRequired: true,
+          dependencyVersionOwner: "renovate",
+          mergeAuthority: "mergify",
+          humanDecisionSurface: "hive-ui",
+        },
         delegatedAuditFamilies: compactWebsiteAuditPolicy().delegatedAuditFamilies,
       },
     };
