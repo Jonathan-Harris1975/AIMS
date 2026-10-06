@@ -1,9 +1,7 @@
 commands_restrictions:
   queue:
     conditions:
-      - or:
-          - sender-permission >= write
-          - sender = renovate[bot]
+      - sender-permission >= write
 
 merge_protections_settings:
   reporting_method: check-runs
@@ -43,6 +41,7 @@ merge_protections:
       - -label = autonomy:human-hold
       - -label = autonomy:superseded
       - -label = autonomy:obsolete
+      - -label = autonomy:council-freeze
       - "#review-threads-unresolved = 0"
 
 queue_rules:
@@ -58,6 +57,7 @@ queue_rules:
       - check-success = Item 6 / Renovate config
       - -label = autonomy:human-hold
       - -label = autonomy:obsolete
+      - -label = autonomy:council-freeze
       - -label = autonomy:superseded
     merge_conditions:
       - check-success = ci-gate
@@ -99,6 +99,7 @@ pull_request_rules:
       - -label = autonomy:human-hold
       - -label = autonomy:superseded
       - -label = autonomy:obsolete
+      - -label = autonomy:council-freeze
       - -head ~= ^autonomy/repair-
       - "#commits-behind > 0"
     actions:

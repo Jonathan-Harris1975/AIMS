@@ -1,6 +1,6 @@
 version: 2
 updates:
-  - package-ecosystem: "npm" # zizmor: ignore[dependabot-cooldown] Renovate owns version updates; Dependabot remains for security updates.
+  - package-ecosystem: "npm" # zizmor: ignore[dependabot-cooldown] Renovate owns version updates; Dependabot is passive posture only and live security-update PR creation must remain disabled.
     directory: "/"
     schedule:
       interval: "weekly"
@@ -29,7 +29,7 @@ updates:
     commit-message:
       prefix: "deps"
 
-  - package-ecosystem: "docker" # zizmor: ignore[dependabot-cooldown] Renovate owns version updates; Dependabot remains for security updates.
+  - package-ecosystem: "docker" # zizmor: ignore[dependabot-cooldown] Renovate owns version updates; Dependabot is passive posture only and live security-update PR creation must remain disabled.
     directory: "/"
     schedule:
       interval: "weekly"
@@ -42,7 +42,7 @@ updates:
       prefix: "deps(docker)"
 
   # Headroom uses its own literal Dockerfile so Dependabot can track the image tag.
-  - package-ecosystem: "docker" # zizmor: ignore[dependabot-cooldown] Renovate owns version updates; Dependabot remains for security updates.
+  - package-ecosystem: "docker" # zizmor: ignore[dependabot-cooldown] Renovate owns version updates; Dependabot is passive posture only and live security-update PR creation must remain disabled.
     directory: "/headroom"
     schedule:
       interval: "weekly"
@@ -50,7 +50,7 @@ updates:
     commit-message:
       prefix: "deps(headroom)"
 
-  - package-ecosystem: "github-actions" # zizmor: ignore[dependabot-cooldown] Renovate owns version updates; Dependabot remains for security updates.
+  - package-ecosystem: "github-actions" # zizmor: ignore[dependabot-cooldown] Renovate owns version updates; Dependabot is passive posture only and live security-update PR creation must remain disabled.
     directory: "/"
     schedule:
       interval: "weekly"

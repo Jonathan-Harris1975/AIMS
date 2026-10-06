@@ -105,7 +105,7 @@ def required_checks_pass(pr):
 
 
 def verified_receipts(comments, sha, base_sha):
-    trusted = {login(router.REPAIR_APP_LOGIN)} - {""}
+    trusted = {login(router.REPAIR_APP_LOGIN), login(router.KILO_IMPLEMENTER)} - {""}
     receipts = {}
     for comment in comments:
         if login(comment.get("user", {}).get("login")) not in trusted:
@@ -251,23 +251,6 @@ def describe_error(exc):
             "error_code": "github-api-http",
             "http_status": exc.code,
             "guidance": "Check the recovery job's GitHub token permissions and repository access.",
-        }
-    if message.startswith("Configure KILO_REPAIR_TRIGGER_URL with"):
-        return {
-            "error_code": "repair-webhook-configuration",
-            "guidance": "Set KILO_REPAIR_TRIGGER_URL to this repository's supported Kilo Cloud Agent trigger URL.",
-        }
-    match = re.fullmatch(r"Kilo trigger returned HTTP ([0-9]{3})", message)
-    if match:
-        return {
-            "error_code": "repair-webhook-http",
-            "http_status": int(match[1]),
-            "guidance": "Check the configured Kilo trigger's authentication, availability and accepted payload.",
-        }
-    if message == "Kilo trigger could not be reached":
-        return {
-            "error_code": "repair-webhook-unreachable",
-            "guidance": "Check Kilo trigger availability and network connectivity from GitHub Actions.",
         }
     if message in {
         "Unable to read complete review-thread metadata",

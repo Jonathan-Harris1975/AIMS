@@ -1,6 +1,7 @@
 """Regression checks for repair retirement; all GitHub writes are mocked."""
 import copy
 import inspect
+from datetime import datetime, timezone
 import os
 import unittest
 from unittest.mock import patch
@@ -111,6 +112,9 @@ class ManagedBranchOwnershipTests(unittest.TestCase):
         }.items():
             self.enterContext(patch.object(automation, name, value))
         self.enterContext(patch.object(automation, "log"))
+        self.enterContext(
+            patch.object(automation, "council_evidence_freeze", return_value=(False, "test release"))
+        )
 
     def test_branch_controller_has_no_native_merge_authority(self):
         source = inspect.getsource(branch_controller)
@@ -155,6 +159,116 @@ class ManagedBranchOwnershipTests(unittest.TestCase):
 
         hold.assert_called_once()
         admit.assert_not_called()
+
+
+class CouncilEvidenceFreezeTests(unittest.TestCase):
+    def setUp(self):
+        self.sha = "d" * 40
+        for name, value in {"REPO": "owner/repo", "DEFAULT_BRANCH": "main"}.items():
+            self.enterContext(patch.object(automation, name, value))
+
+    def test_weekend_envelope_uses_europe_london(self):
+        inside = datetime(2026, 10, 3, 12, 0, tzinfo=timezone.utc)
+        outside = datetime(2026, 10, 6, 12, 0, tzinfo=timezone.utc)
+        self.assertIsNotNone(automation.current_weekend_bounds(inside))
+        self.assertIsNone(automation.current_weekend_bounds(outside))
+
+    def test_successful_ci_freezes_routine_merges_until_same_sha_council(self):
+        runs = {
+            "workflow_runs": [
+                {
+                    "id": 100,
+                    "name": "AIMS CI",
+                    "event": "workflow_dispatch",
+                    "status": "completed",
+                    "conclusion": "success",
+                    "head_sha": self.sha,
+                    "created_at": "2026-10-02T19:05:00Z",
+                }
+            ]
+        }
+        with (
+            patch.object(
+                automation,
+                "current_weekend_bounds",
+                return_value=(
+                    datetime(2026, 10, 2, 20, 0, tzinfo=automation.LONDON),
+                    datetime(2026, 10, 5, 4, 0, tzinfo=automation.LONDON),
+                ),
+            ),
+            patch.object(
+                automation,
+                "get",
+                side_effect=[
+                    {"commit": {"sha": self.sha}},
+                    runs,
+                    {"commit": {"sha": self.sha}},
+                ],
+            ),
+        ):
+            frozen, reason = automation.council_evidence_freeze()
+        self.assertTrue(frozen)
+        self.assertIn(self.sha[:12], reason)
+
+        runs["workflow_runs"].append(
+            {
+                "id": 101,
+                "name": "Repository Council",
+                "event": "workflow_dispatch",
+                "status": "completed",
+                "conclusion": "success",
+                "head_sha": self.sha,
+                "created_at": "2026-10-04T17:35:00Z",
+            }
+        )
+        with (
+            patch.object(
+                automation,
+                "current_weekend_bounds",
+                return_value=(
+                    datetime(2026, 10, 2, 20, 0, tzinfo=automation.LONDON),
+                    datetime(2026, 10, 5, 4, 0, tzinfo=automation.LONDON),
+                ),
+            ),
+            patch.object(
+                automation,
+                "get",
+                side_effect=[
+                    {"commit": {"sha": self.sha}},
+                    runs,
+                    {"commit": {"sha": self.sha}},
+                ],
+            ),
+        ):
+            frozen, reason = automation.council_evidence_freeze()
+        self.assertFalse(frozen)
+        self.assertIn("Council completed", reason)
+
+    def test_default_branch_move_during_evidence_collection_fails_closed(self):
+        runs = {"workflow_runs": []}
+        with (
+            patch.object(
+                automation,
+                "current_weekend_bounds",
+                return_value=(
+                    datetime(2026, 10, 2, 20, 0, tzinfo=automation.LONDON),
+                    datetime(2026, 10, 5, 4, 0, tzinfo=automation.LONDON),
+                ),
+            ),
+            patch.object(
+                automation,
+                "get",
+                side_effect=[
+                    {"commit": {"sha": self.sha}},
+                    runs,
+                    {"commit": {"sha": "e" * 40}},
+                ],
+            ),
+        ):
+            frozen, reason = automation.council_evidence_freeze()
+        self.assertTrue(frozen)
+        self.assertIn("default branch moved", reason)
+
 
 
 if __name__ == "__main__":
