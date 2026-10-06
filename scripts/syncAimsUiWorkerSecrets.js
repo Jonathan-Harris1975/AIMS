@@ -1,7 +1,7 @@
+#!/usr/bin/env node
+
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-
-#!/usr/bin/env node
 
 const API_BASE = "https://api.cloudflare.com/client/v4";
 const TARGET_WORKER = "aims-ui-gateway";
