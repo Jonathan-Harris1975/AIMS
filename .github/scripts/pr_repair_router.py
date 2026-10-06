@@ -13,6 +13,8 @@ import sys
 import urllib.error
 import urllib.parse
 import urllib.request
+from pathlib import Path
+from kilo_webhook_url import valid_kilo_webhook_url
 from kilo_failure_classifier import repairable_failed_steps
 
 REPO = os.environ["GITHUB_REPOSITORY"]
@@ -22,6 +24,7 @@ DEFAULT = os.environ["DEFAULT_BRANCH"]
 KILO = {"kilo-code-bot", "kilo-code-bot[bot]"}
 KILO_IMPLEMENTER = os.environ.get("KILO_REPAIR_PR_LOGIN") or "kilo-code-bot[bot]"
 REPAIR_APP_LOGIN = os.environ.get("REPAIR_APP_LOGIN", "")
+KILO_MACHINE_CONTRACT = Path(__file__).resolve().parents[1] / "kilo-machine-repair-contract.md"
 REPAIRABLE = re.compile(r"\b(fail(?:s|ed|ure)?|break(?:s|ing)?|broken|regression|mismatch|"
                         r"vulnerab\w*|security|unsafe|incorrect|bug|error|risk|suggest|"
                         r"should|fix|bump|update|regenerat\w*|missing|stale)\b", re.I)
@@ -194,6 +197,13 @@ def extract(event: dict) -> tuple[dict, str, list[str]] | None:
     return pr, "review", [evidence]
 
 
+def machine_contract() -> str:
+    text = KILO_MACHINE_CONTRACT.read_text(encoding="utf-8").strip()
+    if not text:
+        raise RuntimeError("Kilo machine repair contract is empty")
+    return text
+
+
 def dispatch(pr: dict, kind: str, findings: list[str]) -> str:
     number, sha = pr["number"], pr["head"]["sha"]
     marker = f"<!-- kilo-auto-repair:{sha}:{kind} -->"
@@ -251,17 +261,39 @@ def dispatch(pr: dict, kind: str, findings: list[str]) -> str:
         "If the finding is stale, not reproducible, unsafe to repair, or requires credentials, explain it "
         "without opening a speculative PR."
     )
-    verified = "\n".join(f"- {item[:1000]}" for item in findings[:12])
-    body = (
-        f"{marker}\n"
-        "@kilocode-bot fix it\n\n"
-        f"Authenticated autonomous repair request for exact source head \`{sha}\` ({kind}).\n\n"
-        f"{instruction}\n\n"
-        "Verified findings:\n"
-        f"{verified or '- See the linked exact-head check/review context.'}\n"
+    instruction = machine_contract() + "\n\n" + instruction
+    url = os.environ.get("KILO_REPAIR_TRIGGER_URL", "")
+    if not valid_kilo_webhook_url(url):
+        raise RuntimeError("Configure KILO_REPAIR_TRIGGER_URL with this repository's Kilo Cloud Agent webhook trigger")
+
+    payload = {
+        "repository": REPO,
+        "source_pr": source,
+        "source_sha": sha,
+        "kind": kind,
+        "task": instruction,
+        "findings": findings[:12],
+    }
+    request = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode(),
+        method="POST",
+        headers={"Content-Type": "application/json"},
     )
-    api("POST", f"/repos/{REPO}/issues/{number}/comments", {"body": body})
-    print(f"Posted autonomous {kind} repair command for PR #{number} at {sha[:12]} to Kilo.")
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            if response.status not in (200, 201, 202, 204):
+                raise RuntimeError(f"Kilo trigger returned HTTP {response.status}")
+    except urllib.error.HTTPError as exc:
+        raise RuntimeError(f"Kilo trigger returned HTTP {exc.code}") from None
+    except urllib.error.URLError:
+        raise RuntimeError("Kilo trigger could not be reached") from None
+
+    api("POST", f"/repos/{REPO}/issues/{number}/comments", {"body":
+        f"{marker}\nAutonomous Kilo repair requested for the current {kind} findings through the machine webhook. "
+        "No human reply, GitHub account link, or @kilocode-bot command is required. "
+        "The source PR remains governed by its normal checks."})
+    print(f"Sent autonomous {kind} repair for PR #{number} at {sha[:12]} to Kilo.")
     return 'requested'
 
 
