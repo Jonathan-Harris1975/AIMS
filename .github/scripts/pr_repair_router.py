@@ -13,7 +13,6 @@ import sys
 import urllib.error
 import urllib.parse
 import urllib.request
-from kilo_webhook_url import valid_kilo_webhook_url
 from kilo_failure_classifier import repairable_failed_steps
 
 REPO = os.environ["GITHUB_REPOSITORY"]
@@ -207,10 +206,6 @@ def dispatch(pr: dict, kind: str, findings: list[str]) -> str:
     if sum(f":{kind} -->" in c["body"] for c in markers) >= 2:
         print(f"::warning::PR #{number} exhausted its two {kind} repair attempts; inspect the repair agent's results.")
         return 'attempt-limit'
-    url = os.environ.get("KILO_REPAIR_TRIGGER_URL", "")
-    if not valid_kilo_webhook_url(url):
-        raise RuntimeError("Configure KILO_REPAIR_TRIGGER_URL with this repository's Kilo Cloud Agent webhook trigger")
-
     source = pr["html_url"]
     existing_kilo_pr = pr.get("user", {}).get("login") == KILO_IMPLEMENTER
     destination = ("Update this existing Kilo PR branch; do not open a replacement PR. " if existing_kilo_pr else
@@ -256,36 +251,23 @@ def dispatch(pr: dict, kind: str, findings: list[str]) -> str:
         "If the finding is stale, not reproducible, unsafe to repair, or requires credentials, explain it "
         "without opening a speculative PR."
     )
-    payload = {"repository": REPO, "source_pr": source, "source_sha": sha,
-               "kind": kind, "task": instruction, "findings": findings[:12]}
-    request = urllib.request.Request(url, data=json.dumps(payload).encode(), method="POST",
-                                     headers={"Content-Type": "application/json"})
-    try:
-        with urllib.request.urlopen(request, timeout=30) as response:
-            if response.status not in (200, 201, 202, 204):
-                raise RuntimeError(f"Kilo trigger returned HTTP {response.status}")
-    except urllib.error.HTTPError as exc:
-        raise RuntimeError(f"Kilo trigger returned HTTP {exc.code}") from None
-    except urllib.error.URLError:
-        raise RuntimeError("Kilo trigger could not be reached") from None
-    api("POST", f"/repos/{REPO}/issues/{number}/comments", {"body":
-        f"{marker}\nAutonomous Kilo repair requested for the current {kind} findings. "
-        "No human reply or @kilocode-bot command is required. "
-        "The source PR remains governed by its normal checks."})
-    print(f"Sent {kind} repair for PR #{number} at {sha[:12]} to Kilo.")
+    verified = "\n".join(f"- {item[:1000]}" for item in findings[:12])
+    body = (
+        f"{marker}\n"
+        "@kilocode-bot fix it\n\n"
+        f"Authenticated autonomous repair request for exact source head \`{sha}\` ({kind}).\n\n"
+        f"{instruction}\n\n"
+        "Verified findings:\n"
+        f"{verified or '- See the linked exact-head check/review context.'}\n"
+    )
+    api("POST", f"/repos/{REPO}/issues/{number}/comments", {"body": body})
+    print(f"Posted autonomous {kind} repair command for PR #{number} at {sha[:12]} to Kilo.")
     return 'requested'
 
 
 def safe_route_error(exc: Exception) -> str:
     """Return actionable routing diagnostics without exposing the private webhook URL."""
     message = str(exc)
-    if message.startswith("Configure KILO_REPAIR_TRIGGER_URL with"):
-        return "Kilo webhook configuration is missing, unsupported or invalid"
-    match = re.fullmatch(r"Kilo trigger returned HTTP ([0-9]{3})", message)
-    if match:
-        return f"Kilo trigger returned HTTP {match.group(1)}"
-    if message == "Kilo trigger could not be reached":
-        return "Kilo trigger could not be reached"
     return f"{type(exc).__name__}; detail withheld"
 
 
