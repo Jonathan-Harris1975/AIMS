@@ -448,28 +448,11 @@ class CouncilEvidenceFreezeTests(unittest.TestCase):
         self.assertTrue(frozen)
         self.assertIn(new_sha[:12], reason)
 
-    def test_incomplete_pagination_evidence_fails_closed(self):
-        runs = {"workflow_runs": [], "total_count": 150}
-        with (
-            patch.object(
-                automation,
-                "current_weekend_bounds",
-                return_value=(
-                    datetime(2026, 10, 2, 20, 0, tzinfo=automation.LONDON),
-                    datetime(2026, 10, 5, 4, 0, tzinfo=automation.LONDON),
-                ),
-            ),
-            patch.object(
-                automation,
-                "get",
-                side_effect=[
-                    {"commit": {"sha": self.sha}},
-                    runs,
-                ],
-            ),
-        ):
-            with self.assertRaises(RuntimeError):
-                automation.council_evidence_freeze()
+    def test_short_final_page_wins_over_stale_total_count(self):
+        page = {"workflow_runs": [], "total_count": 150}
+        with patch.object(automation, "get", return_value=page):
+            runs = automation._fetch_branch_runs()
+        self.assertEqual(runs, [])
 
     def test_exact_1000_workflow_runs_is_complete_not_overflow(self):
         page = {"workflow_runs": [{} for _ in range(100)], "total_count": 1000}
