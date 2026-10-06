@@ -26,13 +26,6 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      # The autonomy ownership/Council-freeze lifecycle check intentionally lives inside
-      # this required security gate: it is hermetic (stdlib-only, all GitHub writes
-      # mocked) and fast, and keeping it here keeps lifecycle regressions blocking
-      # for Mergify admission. Do not separate it into a non-required job without
-      # updating Mergify/required checks in lockstep.
-      - name: Verify automation ownership and Council-freeze lifecycle
-        run: python3 .github/scripts/test_autonomy_lifecycle.py
       - name: Repository secret policy scan
         run: python3 scripts/secret_scan.py
       - name: Install pinned Gitleaks and actionlint
@@ -135,3 +128,28 @@ jobs:
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           exit-code: '1'
+
+  autonomy_lifecycle:
+    name: Autonomy ownership and Council-freeze lifecycle
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      # Split from the Trivy/Gitleaks/actionlint security gate so a lifecycle-test
+      # flake cannot mask or be masked by scanner results, while remaining a blocking
+      # gate in this workflow. This check is hermetic (stdlib-only, all GitHub writes
+      # mocked) and validates the trusted-automation ownership and Council exact-SHA
+      # freeze lifecycle. Do not weaken it with continue-on-error: lifecycle regressions
+      # must block admission. Mergify/branch protection still key on the unchanged
+      # required check name 'Trivy, Gitleaks and actionlint' for the scanner gate.
+      - name: Harden runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Verify automation ownership and Council-freeze lifecycle
+        run: python3 .github/scripts/test_autonomy_lifecycle.py
