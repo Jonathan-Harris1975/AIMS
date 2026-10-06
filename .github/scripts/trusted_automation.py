@@ -350,8 +350,8 @@ def cto_issue_reference(pr: dict[str, Any]) -> int | None:
         return None
     body = str(pr.get("body") or "")
     patterns = (
-        r"(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\\s+#(\\d+)",
-        rf"https://github\\.com/{re.escape(REPO)}/issues/(\\d+)",
+        r"(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#(\d+)",
+        rf"https://github\.com/{re.escape(REPO)}/issues/(\d+)",
     )
     numbers: set[int] = set()
     for pattern in patterns:
