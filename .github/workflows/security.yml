@@ -26,6 +26,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+      # Intentionally inside the already-required security job so this lifecycle
+      # contract is a hard admission gate, not a merely visible sibling check.
       - name: Verify automation ownership and Council-freeze lifecycle
         run: python3 .github/scripts/test_autonomy_lifecycle.py
       - name: Repository secret policy scan
