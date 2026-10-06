@@ -37,6 +37,7 @@ URL_END = r"(?![A-Za-z0-9/_-])"
 KILO_SENSITIVE_PREFIXES = (
     ".github/workflows/",
     ".github/actions/",
+    ".github/scripts/",
     ".github/CODEOWNERS",
     ".github/dependabot.yml",
     ".mergify.yml",
