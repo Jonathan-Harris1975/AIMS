@@ -87,6 +87,139 @@ class RepairRetirementTests(unittest.TestCase):
         self.delete.assert_not_called()
 
 
+class TrustedImplementationLifecycleTests(unittest.TestCase):
+    def setUp(self):
+        self.sha = "b" * 40
+        self.base = "a" * 40
+        for name, value in {
+            "REPO": "owner/repo",
+            "DEFAULT_BRANCH": "main",
+            "REPAIR_APP_LOGIN": "repair[bot]",
+            "KILO_LOGIN": "kilo-code-bot[bot]",
+        }.items():
+            self.enterContext(patch.object(automation, name, value))
+        self.enterContext(patch.object(automation, "log"))
+        self.write = self.enterContext(patch.object(automation, "request"))
+        self.remove = self.enterContext(patch.object(automation, "remove_label"))
+
+    def kilo_pr(self):
+        return {
+            "number": 31,
+            "state": "open",
+            "draft": False,
+            "title": "fix: Kilo repair",
+            "html_url": "https://github.com/owner/repo/pull/31",
+            "user": {"login": "kilo-code-bot[bot]"},
+            "head": {
+                "ref": "kilo/fix-31",
+                "sha": self.sha,
+                "repo": {"full_name": "owner/repo"},
+            },
+            "base": {"ref": "main"},
+            "labels": [
+                {"name": "autonomy:repair"},
+                {"name": "autonomy:kilo-implementation"},
+            ],
+            "body": "",
+        }
+
+    def test_retired_verified_kilo_implementation_closes(self):
+        pr = self.kilo_pr()
+        pr["labels"].append({"name": "autonomy:obsolete"})
+        pr["labels"].append({"name": "autonomy:admitted"})
+
+        automation.reconcile_retired_implementations([pr])
+
+        self.write.assert_called_once_with(
+            "PATCH", "/repos/owner/repo/pulls/31", {"state": "closed"}
+        )
+        self.remove.assert_called_once_with(31, "autonomy:admitted")
+
+    def test_arbitrary_labelled_pr_is_never_closed(self):
+        pr = self.kilo_pr()
+        pr["user"]["login"] = "some-user"
+        pr["labels"].append({"name": "autonomy:superseded"})
+
+        automation.reconcile_retired_implementations([pr])
+
+        self.write.assert_not_called()
+
+    def test_retired_managed_draft_is_closed_without_becoming_merge_eligible(self):
+        pr = {
+            "number": 32,
+            "state": "open",
+            "draft": True,
+            "user": {"login": "repair[bot]"},
+            "head": {
+                "ref": "codex/retired-work",
+                "sha": self.sha,
+                "repo": {"full_name": "owner/repo"},
+            },
+            "base": {"ref": "main"},
+            "labels": [
+                {"name": "automation:branch-pr"},
+                {"name": "autonomy:superseded"},
+            ],
+        }
+
+        automation.reconcile_retired_implementations([pr])
+
+        self.write.assert_called_once_with(
+            "PATCH", "/repos/owner/repo/pulls/32", {"state": "closed"}
+        )
+        self.assertFalse(automation.is_managed_branch_pr(pr))
+
+    def test_behind_verified_kilo_branch_is_updated_and_stale_admission_removed(self):
+        pr = self.kilo_pr()
+        pr["labels"].append({"name": "autonomy:admitted"})
+        fresh = copy.deepcopy(pr)
+        self.enterContext(patch.object(automation, "linked_kilo_carrier", return_value=9))
+        self.enterContext(patch.object(automation, "linked_kilo_review_source", return_value=None))
+        self.enterContext(
+            patch.object(
+                automation,
+                "get",
+                side_effect=[
+                    {"commit": {"sha": self.base}},
+                    {"behind_by": 2},
+                    fresh,
+                    {"commit": {"sha": self.base}},
+                ],
+            )
+        )
+
+        automation.refresh_behind_kilo_prs([pr])
+
+        self.write.assert_called_once_with(
+            "PUT",
+            "/repos/owner/repo/pulls/31/update-branch",
+            {"expected_head_sha": self.sha},
+            expected=(200, 202),
+        )
+        self.remove.assert_called_once_with(31, "autonomy:admitted")
+
+    def test_human_hold_prevents_kilo_branch_update(self):
+        pr = self.kilo_pr()
+        pr["labels"].append({"name": "autonomy:human-hold"})
+        self.enterContext(
+            patch.object(
+                automation,
+                "get",
+                return_value={"commit": {"sha": self.base}},
+            )
+        )
+
+        automation.refresh_behind_kilo_prs([pr])
+
+        self.write.assert_not_called()
+
+    def test_trusted_github_scripts_are_sensitive(self):
+        self.assertTrue(automation.sensitive_file(".github/scripts/trusted_automation.py"))
+        self.assertTrue(automation.sensitive_file(".github/scripts/test_autonomy_lifecycle.py"))
+        self.assertTrue(automation.sensitive_file(".github/scripts/codeql_gate.py"))
+        self.assertFalse(automation.sensitive_file("services/worker.js"))
+
+
 class ManagedBranchOwnershipTests(unittest.TestCase):
     def setUp(self):
         self.sha = "c" * 40
@@ -245,7 +378,78 @@ class CouncilEvidenceFreezeTests(unittest.TestCase):
         self.assertIn("Council completed", reason)
 
     def test_default_branch_move_during_evidence_collection_fails_closed(self):
-        runs = {"workflow_runs": []}
+        runs = {"workflow_runs": [], "total_count": 0}
+        with (
+            patch.object(
+                automation,
+                "current_weekend_bounds",
+                return_value=(
+                    datetime(2026, 10, 2, 20, 0, tzinfo=automation.LONDON),
+                    datetime(2026, 10, 5, 4, 0, tzinfo=automation.LONDON),
+                ),
+            ),
+            patch.object(automation, "log"),
+            patch.object(
+                automation,
+                "get",
+                side_effect=[
+                    {"commit": {"sha": self.sha}},
+                    runs,
+                    {"commit": {"sha": "e" * 40}},
+                    runs,
+                    {"commit": {"sha": "f" * 40}},
+                ],
+            ),
+        ):
+            frozen, reason = automation.council_evidence_freeze()
+        self.assertTrue(frozen)
+        self.assertIn("default branch moved", reason)
+
+    def test_single_branch_move_retries_once_with_new_sha(self):
+        new_sha = "e" * 40
+        first_runs = {"workflow_runs": [], "total_count": 0}
+        second_runs = {
+            "workflow_runs": [
+                {
+                    "id": 100,
+                    "name": "AIMS CI",
+                    "event": "workflow_dispatch",
+                    "status": "completed",
+                    "conclusion": "success",
+                    "head_sha": new_sha,
+                    "created_at": "2026-10-02T19:05:00Z",
+                }
+            ],
+            "total_count": 1,
+        }
+        with (
+            patch.object(
+                automation,
+                "current_weekend_bounds",
+                return_value=(
+                    datetime(2026, 10, 2, 20, 0, tzinfo=automation.LONDON),
+                    datetime(2026, 10, 5, 4, 0, tzinfo=automation.LONDON),
+                ),
+            ),
+            patch.object(automation, "log"),
+            patch.object(
+                automation,
+                "get",
+                side_effect=[
+                    {"commit": {"sha": self.sha}},
+                    first_runs,
+                    {"commit": {"sha": new_sha}},
+                    second_runs,
+                    {"commit": {"sha": new_sha}},
+                ],
+            ),
+        ):
+            frozen, reason = automation.council_evidence_freeze()
+        self.assertTrue(frozen)
+        self.assertIn(new_sha[:12], reason)
+
+    def test_incomplete_pagination_evidence_fails_closed(self):
+        runs = {"workflow_runs": [], "total_count": 150}
         with (
             patch.object(
                 automation,
@@ -261,13 +465,23 @@ class CouncilEvidenceFreezeTests(unittest.TestCase):
                 side_effect=[
                     {"commit": {"sha": self.sha}},
                     runs,
-                    {"commit": {"sha": "e" * 40}},
                 ],
             ),
         ):
-            frozen, reason = automation.council_evidence_freeze()
-        self.assertTrue(frozen)
-        self.assertIn("default branch moved", reason)
+            with self.assertRaises(RuntimeError):
+                automation.council_evidence_freeze()
+
+    def test_exact_1000_workflow_runs_is_complete_not_overflow(self):
+        page = {"workflow_runs": [{} for _ in range(100)], "total_count": 1000}
+        with patch.object(automation, "get", side_effect=[page for _ in range(10)]):
+            runs = automation._fetch_branch_runs()
+        self.assertEqual(len(runs), 1000)
+
+    def test_more_than_1000_workflow_runs_fails_closed(self):
+        page = {"workflow_runs": [{} for _ in range(100)], "total_count": 1001}
+        with patch.object(automation, "get", side_effect=[page for _ in range(10)]):
+            with self.assertRaises(RuntimeError):
+                automation._fetch_branch_runs()
 
 
 

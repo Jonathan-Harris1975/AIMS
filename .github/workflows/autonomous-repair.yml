@@ -150,20 +150,20 @@ jobs:
               echo "Kilo was already dispatched for run $RUN_ID."
               return
             fi
-            gh pr comment "$repair_pr" --repo "$REPO" --body "$(cat <<EOF
-          ${marker}
-          @kilocode-bot fix it
-
-          This is an authenticated autonomous repair request for failed workflow **${RUN_NAME}** at exact default-branch SHA \`${HEAD_SHA}\`.
-          Failed run: ${RUN_URL}
-
-          Work autonomously. Do not ask for confirmation or approval before making a safe repository repair.
-          Investigate the linked failure and repair the smallest verified code, manifest, lockfile, build or workflow defect.
-          Create one linked implementation PR against ${DEFAULT_BRANCH}; include this carrier PR in its body.
-          Do not merge or deploy, choose dependency versions, dismiss alerts, weaken tests/scanners/rulesets, broaden allow-lists, expose credentials, or force-push.
-          If no safe code repair exists, report the exact blocker and stop.
-          EOF
-          )"
+            local kilo_body
+            printf -v kilo_body '%s\n' \
+              "$marker" \
+              '@kilocode-bot fix it' \
+              '' \
+              "This is an authenticated autonomous repair request for failed workflow **${RUN_NAME}** at exact default-branch SHA \`${HEAD_SHA}\`." \
+              "Failed run: ${RUN_URL}" \
+              '' \
+              'Work autonomously. Do not ask for confirmation or approval before making a safe repository repair.' \
+              'Investigate the linked failure and repair the smallest verified code, manifest, lockfile, build or workflow defect.' \
+              "Create one linked implementation PR against ${DEFAULT_BRANCH}; include this carrier PR in its body." \
+              'Do not merge or deploy, choose dependency versions, dismiss alerts, weaken tests/scanners/rulesets, broaden allow-lists, expose credentials, or force-push.' \
+              'If no safe code repair exists, report the exact blocker and stop.'
+            gh pr comment "$repair_pr" --repo "$REPO" --body "$kilo_body"
             echo "Posted autonomous Kilo repair command for run $RUN_ID on carrier PR #$repair_pr."
           }
 

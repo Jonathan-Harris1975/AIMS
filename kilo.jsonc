@@ -1,0 +1,19 @@
+{
+  "$schema": "https://app.kilo.ai/config.json",
+  "permission": {
+    "*": "allow",
+    "external_directory": "deny",
+    "question": "deny",
+    "bash": {
+      "*": "allow",
+      "sudo *": "deny",
+      "rm *": "deny",
+      "git push *--force*": "deny",
+      "git push * -f*": "deny",
+      "gh pr merge *": "deny",
+      "wrangler deploy *": "deny",
+      "npx wrangler deploy *": "deny",
+      "koyeb *": "deny"
+    }
+  }
+}

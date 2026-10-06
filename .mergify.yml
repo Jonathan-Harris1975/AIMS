@@ -47,6 +47,8 @@ merge_protections:
 queue_rules:
   - name: routine
     merge_method: squash
+    batch_size: 1
+    max_checks_retries: 0
     queue_conditions:
       - base = main
       - label = autonomy:admitted
@@ -60,51 +62,22 @@ queue_rules:
       - -label = autonomy:council-freeze
       - -label = autonomy:superseded
     merge_conditions:
+      - base = main
+      - label = autonomy:admitted
       - check-success = ci-gate
       - check-success = CodeQL security alert gate
       - check-success = Trivy, Gitleaks and actionlint
       - check-success = Item 6 / Dependency Review
       - check-success = Item 6 / Renovate config
-
-pull_request_rules:
-  - name: close explicitly superseded autonomous pull requests
-    conditions:
-      - label = autonomy:superseded
-      - -merged
-      - -closed
-    actions:
-      comment:
-        message: "Closing because a newer authoritative repair supersedes this autonomous PR."
-      close:
-
-  - name: close explicitly obsolete autonomous pull requests
-    conditions:
-      - label = autonomy:obsolete
-      - -merged
-      - -closed
-    actions:
-      comment:
-        message: "Closing because revalidation shows this autonomous repair is no longer required."
-      close:
-
-  - name: refresh admitted Kilo implementation branches
-    conditions:
-      - base = main
-      - -closed
-      - -draft
-      - -from-fork
-      - label = autonomy:repair
-      - label = autonomy:kilo-implementation
-      - -conflict
       - -label = autonomy:human-hold
-      - -label = autonomy:superseded
       - -label = autonomy:obsolete
       - -label = autonomy:council-freeze
-      - -head ~= ^autonomy/repair-
-      - "#commits-behind > 0"
-    actions:
-      update:
+      - -label = autonomy:superseded
+
+
 merge_queue:
+  mode: serial
+  max_parallel_checks: 1
   status_comments: outcomes
   queue_controls_comment: false
   skip_intermediate_results: false
