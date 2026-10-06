@@ -334,7 +334,7 @@ def all_required_checks_green(pr: dict[str, Any]) -> tuple[bool, str]:
 
     # Mergify and the repository ruleset evaluate any additional required contexts.
     # Optional review, link and external-service checks cannot become an extra gate here.
-    return True, "required CI and security workflows succeeded"
+    return True, "all required exact-head workflows succeeded"
 
 
 def pr_files(number: int) -> list[str]:
@@ -380,12 +380,12 @@ def approve_pr(number: int, sha: str) -> None:
         f"/repos/{REPO}/pulls/{number}/reviews",
         {
             "event": "APPROVE",
-            "body": "Trusted automation approval: exact-head CI, CodeQL and repository security checks passed.",
+            "body": "Trusted automation approval: all required exact-head workflows passed.",
             "commit_id": sha,
         },
         expected=(200, 201),
     )
-    log(f"Approved PR #{number} at {sha[:12]} after trusted checks passed.")
+    log(f"Approved PR #{number} at {sha[:12]} after all required exact-head workflows passed.")
 
 
 def admit_to_mergify(number: int) -> None:
@@ -397,7 +397,7 @@ def admit_to_mergify(number: int) -> None:
         log(f"PR #{number} is already admitted to Mergify.")
         return
     add_labels(number, ["autonomy:admitted"])
-    log(f"Admitted PR #{number} to Mergify after exact-head CI, CodeQL and security verification.")
+    log(f"Admitted PR #{number} to Mergify after all required exact-head workflows passed.")
 
 
 def reconcile_stale_carriers(open_prs: list[dict[str, Any]]) -> None:
