@@ -17,7 +17,7 @@ function clean(value) {
 }
 
 function unresolvedSecretPlaceholder(value) {
-  return /^\{\{\s*secret\.[^}]+\}\}$/i.test(clean(value));
+  return /^\{\{\s*secret\.[^}]+?\s*\}\}$/i.test(clean(value));
 }
 
 export function resolveAimsUiSecretSyncConfig(env = process.env) {
@@ -49,9 +49,12 @@ function safeCloudflareError(payload) {
     .join(",") || "none";
 }
 
+const delay = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+
 export async function synchroniseAimsUiWorkerSecrets({
   config,
   fetchImpl = globalThis.fetch,
+  sleepImpl = delay,
 } = {}) {
   if (!config?.accountId || !config?.apiToken || !config?.secrets) {
     throw new Error("AIMS-UI secret synchronisation configuration is incomplete.");
@@ -64,30 +67,58 @@ export async function synchroniseAimsUiWorkerSecrets({
     const text = clean(config.secrets[name]);
     if (!text) throw new Error(`AIMS-UI shared secret ${name} is empty.`);
 
-    let response;
-    try {
-      response = await fetchImpl(endpoint, {
-        method: "PUT",
-        headers: {
-          Authorization: `Bearer ${config.apiToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ name, text, type: "secret_text" }),
-        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-        redirect: "error",
-      });
-    } catch {
-      throw new Error(`Cloudflare secret update for ${name} failed or timed out; remote state must be verified before retrying.`);
+    let lastFailure = null;
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      let response;
+      try {
+        response = await fetchImpl(endpoint, {
+          method: "PUT",
+          headers: {
+            Authorization: `Bearer ${config.apiToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ name, text, type: "secret_text" }),
+          signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+          // Fail on redirect so credentials and secret material are never sent
+          // to an endpoint other than the fixed Cloudflare API hostname.
+          redirect: "error",
+        });
+      } catch {
+        lastFailure = `Cloudflare secret update for ${name} failed or timed out`;
+        if (attempt < 3) {
+          await sleepImpl(250 * (2 ** (attempt - 1)));
+          continue;
+        }
+        break;
+      }
+
+      let payload;
+      try {
+        payload = await response.json();
+      } catch {
+        lastFailure = `Cloudflare secret update for ${name} returned invalid JSON (HTTP ${response.status})`;
+        if (attempt < 3 && response.status >= 500) {
+          await sleepImpl(250 * (2 ** (attempt - 1)));
+          continue;
+        }
+        break;
+      }
+
+      if (response.ok && payload?.success === true && payload?.result?.name === name && payload?.result?.type === "secret_text") {
+        lastFailure = null;
+        break;
+      }
+
+      lastFailure = `Cloudflare secret update for ${name} failed (HTTP ${response.status}; codes: ${safeCloudflareError(payload)})`;
+      if (attempt < 3 && (response.status === 429 || response.status >= 500)) {
+        await sleepImpl(250 * (2 ** (attempt - 1)));
+        continue;
+      }
+      break;
     }
 
-    let payload;
-    try {
-      payload = await response.json();
-    } catch {
-      throw new Error(`Cloudflare secret update for ${name} returned invalid JSON (HTTP ${response.status}).`);
-    }
-    if (!response.ok || payload?.success !== true || payload?.result?.name !== name || payload?.result?.type !== "secret_text") {
-      throw new Error(`Cloudflare secret update for ${name} failed (HTTP ${response.status}; codes: ${safeCloudflareError(payload)}).`);
+    if (lastFailure) {
+      throw new Error(`${lastFailure}; secret value was not logged.`);
     }
     synced.push(name);
   }
