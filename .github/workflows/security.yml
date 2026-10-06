@@ -26,6 +26,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+      # The autonomy ownership/Council-freeze lifecycle check intentionally lives inside
+      # this security gate: it is hermetic (stdlib-only, all GitHub writes mocked) and fast,
+      # and keeping it here keeps it under the required check so lifecycle regressions block
+      # admission. Do not move it to a non-required job without updating Mergify controls.
       - name: Verify automation ownership and Council-freeze lifecycle
         # Intentionally inside the required security gate: this validates the
         # trusted-automation ownership and Council exact-SHA freeze lifecycle that

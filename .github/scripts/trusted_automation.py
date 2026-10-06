@@ -120,7 +120,9 @@ def _github_time(value: str) -> datetime:
 def current_weekend_bounds(now: datetime | None = None) -> tuple[datetime, datetime] | None:
     """Return the active Fri 20:00 -> Mon 04:00 Europe/London envelope."""
     local_now = (now or datetime.now(timezone.utc)).astimezone(LONDON)
-    days_since_friday = (local_now.weekday() - 4) % 7  # Monday=0; result is days back to the most recent Friday.
+    # weekday(): Monday=0 ... Friday=4. The modulo maps every day to the number of
+    # days back to the most recent Friday (0 on Friday, 6 on Thursday).
+    days_since_friday = (local_now.weekday() - 4) % 7
     friday = (local_now - timedelta(days=days_since_friday)).replace(
         hour=20, minute=0, second=0, microsecond=0
     )
