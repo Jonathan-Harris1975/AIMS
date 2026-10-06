@@ -158,15 +158,15 @@ jobs:
             contract="$(cat .github/kilo-machine-repair-contract.md)"
             test -n "$contract" || { echo "::error::Kilo machine repair contract is empty."; exit 1; }
             carrier_url="https://github.com/${REPO}/pull/${repair_pr}"
+            printf -v task '%s\n\n%s' "$contract" \
+              "Investigate failed workflow ${RUN_NAME} at ${RUN_URL} for exact default-branch SHA ${HEAD_SHA}. Treat ${carrier_url} as failure evidence. Repair the smallest verified repository-controlled defect on one implementation branch, open exactly one implementation PR against ${DEFAULT_BRANCH}, and include ${carrier_url} in its body."
             payload="$(jq -n \
               --arg repository "$REPO" \
               --arg carrier_pr "$carrier_url" \
               --arg failed_sha "$HEAD_SHA" \
               --arg failed_run "$RUN_URL" \
               --arg workflow "$RUN_NAME" \
-              --arg task "$contract
-
-Investigate failed workflow ${RUN_NAME} at ${RUN_URL} for exact default-branch SHA ${HEAD_SHA}. Treat ${carrier_url} as failure evidence. Repair the smallest verified repository-controlled defect on one implementation branch, open exactly one implementation PR against ${DEFAULT_BRANCH}, and include ${carrier_url} in its body." \
+              --arg task "$task" \
               '{repository:$repository,carrier_pr:$carrier_pr,failed_sha:$failed_sha,failed_run:$failed_run,workflow:$workflow,kind:"main-branch-repair",task:$task}')"
             status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --max-time 30 \
               --request POST --header 'Content-Type: application/json' --data "$payload" "$KILO_REPAIR_TRIGGER_URL")"
