@@ -10,6 +10,8 @@ import os
 import re
 import subprocess
 import sys
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -28,6 +30,8 @@ KILO_LOGIN = os.environ.get("KILO_REPAIR_PR_LOGIN") or "kilo-code-bot[bot]"
 CARRIER_PREFIX = "[autonomy] Repair "
 BRANCH_PR_LABEL = "automation:branch-pr"
 BRANCH_PR_RE = re.compile(r"^(fix|feat|chore|ci|work|codex)/[A-Za-z0-9._/-]+$")
+COUNCIL_FREEZE_LABEL = "autonomy:council-freeze"
+LONDON = ZoneInfo("Europe/London")
 URL_END = r"(?![A-Za-z0-9/_-])"
 
 KILO_SENSITIVE_PREFIXES = (
@@ -98,6 +102,82 @@ def delete(path: str, expected: tuple[int, ...] = (200, 204)) -> Any:
 
 def issue_labels(pr: dict[str, Any]) -> set[str]:
     return {str(x.get("name", "")) for x in pr.get("labels", [])}
+
+
+def remove_label(number: int, label: str) -> None:
+    encoded = urllib.parse.quote(label, safe="")
+    try:
+        delete(f"/repos/{REPO}/issues/{number}/labels/{encoded}", expected=(200, 204))
+    except ApiError as exc:
+        if exc.status != 404:
+            raise
+
+
+def _github_time(value: str) -> datetime:
+    return datetime.fromisoformat(value.replace("Z", "+00:00"))
+
+
+def current_weekend_bounds(now: datetime | None = None) -> tuple[datetime, datetime] | None:
+    """Return the active Fri 20:00 -> Mon 04:00 Europe/London envelope."""
+    local_now = (now or datetime.now(timezone.utc)).astimezone(LONDON)
+    days_since_friday = (local_now.weekday() - 4) % 7
+    friday = (local_now - timedelta(days=days_since_friday)).replace(
+        hour=20, minute=0, second=0, microsecond=0
+    )
+    end = friday + timedelta(days=2, hours=8)
+    if friday <= local_now < end:
+        return friday, end
+    return None
+
+
+def council_evidence_freeze() -> tuple[bool, str]:
+    """Freeze routine merges after exact-SHA weekend CI until Council succeeds."""
+    bounds = current_weekend_bounds()
+    if bounds is None:
+        return False, "outside the weekend evidence envelope"
+
+    branch = get(f"/repos/{REPO}/branches/{DEFAULT_BRANCH}")
+    current_sha = str(branch.get("commit", {}).get("sha", ""))
+    if not re.fullmatch(r"[0-9a-f]{40}", current_sha):
+        raise RuntimeError("Could not resolve current default-branch SHA for Council freeze")
+
+    payload = get(f"/repos/{REPO}/actions/runs?branch={urllib.parse.quote(DEFAULT_BRANCH, safe='')}&per_page=100")
+    runs = payload.get("workflow_runs", []) if isinstance(payload, dict) else []
+    start_utc, end_utc = (value.astimezone(timezone.utc) for value in bounds)
+
+    def in_window(run: dict[str, Any]) -> bool:
+        created = str(run.get("created_at", ""))
+        if not created:
+            return False
+        when = _github_time(created)
+        return start_utc <= when < end_utc
+
+    ci_runs = [
+        run for run in runs
+        if run.get("name") == "AIMS CI"
+        and run.get("event") != "pull_request"
+        and run.get("status") == "completed"
+        and run.get("conclusion") == "success"
+        and run.get("head_sha") == current_sha
+        and in_window(run)
+    ]
+    if not ci_runs:
+        return False, f"no successful weekend AIMS CI evidence exists for {current_sha[:12]}"
+
+    ci_run = max(ci_runs, key=lambda run: int(run.get("id", 0)))
+    ci_time = _github_time(str(ci_run["created_at"]))
+    council_runs = [
+        run for run in runs
+        if run.get("name") == "Repository Council"
+        and run.get("status") == "completed"
+        and run.get("conclusion") == "success"
+        and run.get("head_sha") == current_sha
+        and in_window(run)
+        and _github_time(str(run.get("created_at", ""))) >= ci_time
+    ]
+    if council_runs:
+        return False, f"Council completed for weekend evidence SHA {current_sha[:12]}"
+    return True, f"weekend CI PASS is recorded for {current_sha[:12]} and Council has not completed"
 
 
 def ensure_label(name: str, color: str, description: str) -> None:
@@ -448,6 +528,20 @@ def reconcile_pr(pr: dict[str, Any]) -> None:
         # Renovate eligibility is explicit metadata; manual/unlabelled updates remain human merge decisions.
         return
 
+    if kind in {"renovate", "branch-pr"}:
+        frozen, freeze_reason = council_evidence_freeze()
+        number = int(pr["number"])
+        if frozen:
+            if "autonomy:admitted" in labels:
+                remove_label(number, "autonomy:admitted")
+            if COUNCIL_FREEZE_LABEL not in labels:
+                add_labels(number, [COUNCIL_FREEZE_LABEL])
+            log(f"PR #{number} ({kind}) held by Council evidence freeze: {freeze_reason}.")
+            return
+        if COUNCIL_FREEZE_LABEL in labels:
+            remove_label(number, COUNCIL_FREEZE_LABEL)
+            log(f"PR #{number} ({kind}) released from Council evidence freeze: {freeze_reason}.")
+
     if kind in {"kilo", "branch-pr"}:
         sensitive = [path for path in pr_files(int(pr["number"])) if sensitive_file(path)]
         if sensitive:
@@ -501,6 +595,7 @@ def main() -> int:
     ensure_label("autonomy:human-hold", "FBCA04", "Automation must stop for human action")
     ensure_label("autonomy:obsolete", "D4C5F9", "Repair carrier is no longer current")
     ensure_label("autonomy:admitted", "0E8A16", "Exact-head CI/security verification complete; Mergify may merge")
+    ensure_label(COUNCIL_FREEZE_LABEL, "D93F0B", "Routine merge held after weekend CI PASS until Council completes on the same SHA")
 
     open_prs = list_open_prs()
     reconcile_stale_carriers(open_prs)
