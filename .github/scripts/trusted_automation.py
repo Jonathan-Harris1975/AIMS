@@ -120,7 +120,7 @@ def _github_time(value: str) -> datetime:
 def current_weekend_bounds(now: datetime | None = None) -> tuple[datetime, datetime] | None:
     """Return the active Fri 20:00 -> Mon 04:00 Europe/London envelope."""
     local_now = (now or datetime.now(timezone.utc)).astimezone(LONDON)
-    days_since_friday = (local_now.weekday() - 4) % 7
+    days_since_friday = (local_now.weekday() - 4) % 7  # Monday=0; result is days back to the most recent Friday.
     friday = (local_now - timedelta(days=days_since_friday)).replace(
         hour=20, minute=0, second=0, microsecond=0
     )
@@ -141,8 +141,29 @@ def council_evidence_freeze() -> tuple[bool, str]:
     if not re.fullmatch(r"[0-9a-f]{40}", current_sha):
         raise RuntimeError("Could not resolve current default-branch SHA for Council freeze")
 
-    payload = get(f"/repos/{REPO}/actions/runs?branch={urllib.parse.quote(DEFAULT_BRANCH, safe='')}&per_page=100")
-    runs = payload.get("workflow_runs", []) if isinstance(payload, dict) else []
+    encoded_branch = urllib.parse.quote(DEFAULT_BRANCH, safe="")
+    runs: list[dict[str, Any]] = []
+    for page in range(1, 11):
+        payload = get(
+            f"/repos/{REPO}/actions/runs?branch={encoded_branch}&per_page=100&page={page}"
+        )
+        chunk = payload.get("workflow_runs", []) if isinstance(payload, dict) else []
+        runs.extend(chunk)
+        if len(chunk) < 100:
+            break
+    else:
+        raise RuntimeError("Workflow-run pagination exceeded the safe 1,000-run limit")
+
+    # Re-read the branch after collecting evidence. If main moved, fail closed for
+    # this reconciliation rather than certifying evidence for a stale SHA.
+    branch_after = get(f"/repos/{REPO}/branches/{DEFAULT_BRANCH}")
+    current_after = str(branch_after.get("commit", {}).get("sha", ""))
+    if current_after != current_sha:
+        return True, (
+            f"default branch moved from {current_sha[:12]} to {current_after[:12]} "
+            "during Council evidence evaluation"
+        )
+
     start_utc, end_utc = (value.astimezone(timezone.utc) for value in bounds)
 
     def in_window(run: dict[str, Any]) -> bool:
