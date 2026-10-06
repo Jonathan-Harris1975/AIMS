@@ -1,7 +1,6 @@
 name: Koyeb production deployment watch
 
-# zizmor: ignore[dangerous-triggers] exact-SHA post-CI gate; only successful same-repository main push runs are accepted below
-on:
+on: # zizmor: ignore[dangerous-triggers] exact-SHA post-CI gate; only successful same-repository main push runs are accepted below
   workflow_run:
     workflows: ["AIMS CI"]
     types: [completed]
