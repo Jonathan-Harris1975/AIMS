@@ -288,19 +288,23 @@ def renovate_auto_eligible(pr: dict[str, Any]) -> bool:
     return is_renovate(pr) and "dependency:auto-eligible" in issue_labels(pr)
 
 
-def is_managed_branch_pr(pr: dict[str, Any]) -> bool:
-    """Recognise trusted same-repository implementation PRs without giving them merge authority."""
+def is_managed_branch_identity(pr: dict[str, Any]) -> bool:
+    """Recognise a trusted same-repository branch-controller PR identity."""
     labels = issue_labels(pr)
     branch = str(pr.get("head", {}).get("ref", ""))
     return (
         pr.get("user", {}).get("login") == REPAIR_APP_LOGIN
         and pr.get("state") == "open"
-        and not pr.get("draft")
         and is_same_repo(pr)
         and pr.get("base", {}).get("ref") == DEFAULT_BRANCH
         and BRANCH_PR_LABEL in labels
         and BRANCH_PR_RE.fullmatch(branch) is not None
     )
+
+
+def is_managed_branch_pr(pr: dict[str, Any]) -> bool:
+    """Return merge-admission eligible managed branch identity."""
+    return is_managed_branch_identity(pr) and not pr.get("draft")
 
 
 def is_repair_carrier_identity(pr: dict[str, Any]) -> bool:
@@ -321,6 +325,19 @@ def is_carrier(pr: dict[str, Any]) -> bool:
     return (
         is_repair_carrier_identity(pr)
         and not labels.intersection({"autonomy:human-hold", "autonomy:superseded", "autonomy:obsolete"})
+    )
+
+
+def is_kilo_implementation_identity(pr: dict[str, Any]) -> bool:
+    """Recognise a Kilo implementation only after trusted linkage labels exist."""
+    labels = issue_labels(pr)
+    return (
+        pr.get("user", {}).get("login") == KILO_LOGIN
+        and pr.get("state") == "open"
+        and is_same_repo(pr)
+        and pr.get("base", {}).get("ref") == DEFAULT_BRANCH
+        and "autonomy:kilo-implementation" in labels
+        and "autonomy:repair" in labels
     )
 
 
@@ -412,8 +429,7 @@ def automation_kind(pr: dict[str, Any]) -> str | None:
         return "branch-pr"
     if is_carrier(pr):
         return "carrier"
-    if (pr.get("user", {}).get("login") == KILO_LOGIN and is_same_repo(pr) and
-            "autonomy:kilo-implementation" in labels and "autonomy:repair" in labels):
+    if is_kilo_implementation_identity(pr):
         return "kilo"
     return None
 
@@ -575,6 +591,92 @@ def reconcile_stale_carriers(open_prs: list[dict[str, Any]]) -> None:
         log(f"Closed retired repair carrier PR #{number}.")
 
 
+def reconcile_retired_implementations(open_prs: list[dict[str, Any]]) -> None:
+    """Close only verified retired implementation PR identities.
+
+    This replaces Mergify Workflow Automation rules that are not enabled for
+    this repository. Arbitrary labelled PRs are never closed.
+    """
+    for pr in open_prs:
+        labels = issue_labels(pr)
+        if not labels.intersection({"autonomy:superseded", "autonomy:obsolete"}):
+            continue
+        if not (is_managed_branch_identity(pr) or is_kilo_implementation_identity(pr)):
+            continue
+        number = int(pr["number"])
+        request("PATCH", f"/repos/{REPO}/pulls/{number}", {"state": "closed"})
+        if "autonomy:admitted" in labels:
+            remove_label(number, "autonomy:admitted")
+        log(f"Closed retired verified implementation PR #{number}.")
+
+
+def refresh_behind_kilo_prs(open_prs: list[dict[str, Any]]) -> None:
+    """Bring verified Kilo implementation branches up to the current base.
+
+    The trusted repair App may update a branch but never merge it. Every update
+    changes the head SHA and therefore forces the normal exact-head checks to
+    run again before Mergify can admit a merge.
+    """
+    carriers = [source for source in open_prs if is_carrier(source)]
+    base_sha = _resolve_branch_sha()
+
+    for pr in open_prs:
+        if not is_kilo_implementation_identity(pr) or pr.get("draft"):
+            continue
+        labels = issue_labels(pr)
+        if labels.intersection(
+            {"autonomy:human-hold", "autonomy:superseded", "autonomy:obsolete", COUNCIL_FREEZE_LABEL}
+        ):
+            continue
+        if (linked_kilo_carrier(pr, carriers) is None and
+                linked_kilo_review_source(pr, open_prs) is None):
+            continue
+
+        number = int(pr["number"])
+        head_sha = str(pr.get("head", {}).get("sha", ""))
+        if not re.fullmatch(r"[0-9a-f]{40}", head_sha):
+            continue
+
+        comparison = get(f"/repos/{REPO}/compare/{base_sha}...{head_sha}")
+        if int(comparison.get("behind_by", 0)) <= 0:
+            continue
+
+        fresh = get(f"/repos/{REPO}/pulls/{number}")
+        if (
+            not is_kilo_implementation_identity(fresh)
+            or fresh.get("draft")
+            or str(fresh.get("head", {}).get("sha", "")) != head_sha
+            or issue_labels(fresh).intersection(
+                {"autonomy:human-hold", "autonomy:superseded", "autonomy:obsolete", COUNCIL_FREEZE_LABEL}
+            )
+        ):
+            log(f"Kilo PR #{number} changed while base refresh was being evaluated; waiting.")
+            continue
+
+        # Fail closed on a moving base rather than updating against evidence
+        # collected for a stale default-branch tip.
+        if _resolve_branch_sha() != base_sha:
+            log(f"Default branch moved while Kilo PR #{number} was being evaluated; waiting.")
+            return
+
+        try:
+            request(
+                "PUT",
+                f"/repos/{REPO}/pulls/{number}/update-branch",
+                {"expected_head_sha": head_sha},
+                expected=(200, 202),
+            )
+        except ApiError as exc:
+            if exc.status in (409, 422):
+                log(f"Kilo PR #{number} could not be refreshed safely yet (HTTP {exc.status}); waiting.")
+                continue
+            raise
+
+        if "autonomy:admitted" in labels:
+            remove_label(number, "autonomy:admitted")
+        log(f"Requested trusted base refresh for Kilo PR #{number} at {head_sha[:12]}.")
+
+
 def reconcile_pr(pr: dict[str, Any]) -> None:
     kind = automation_kind(pr)
     if kind is None or pr.get("draft"):
@@ -666,6 +768,10 @@ def main() -> int:
     open_prs = list_open_prs()  # refresh after stale-carrier lifecycle changes
     adopt_linked_kilo_prs(open_prs)
     open_prs = list_open_prs()  # refresh labels after Kilo correlation
+    reconcile_retired_implementations(open_prs)
+    open_prs = list_open_prs()  # refresh after trusted retirement
+    refresh_behind_kilo_prs(open_prs)
+    open_prs = list_open_prs()  # refresh heads/labels after any accepted base update
     admit_waiting_runs(open_prs)
 
     # Reconcile current trusted PRs. Runs admitted above will normally become ready on a later
