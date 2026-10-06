@@ -165,21 +165,20 @@ def _fetch_branch_runs() -> list[dict[str, Any]]:
             if isinstance(raw_total, int) and raw_total >= 0:
                 total_count = raw_total
         runs.extend(chunk)
-        # Break as soon as GitHub says the complete result set is present. This
-        # makes an exact 1,000-run result valid rather than a false overflow.
-        if total_count is not None and len(runs) >= total_count:
-            break
-        if len(chunk) < 100:
-            break
-    else:
-        if total_count is None or len(runs) < total_count:
-            raise RuntimeError("Workflow-run pagination exceeded the safe 1,000-run limit")
 
-    if total_count is not None and len(runs) < total_count:
-        raise RuntimeError(
-            f"Incomplete workflow-run evidence: fetched {len(runs)} of {total_count} runs"
-        )
-    return runs
+        # A short page is authoritative pagination evidence that there is no next
+        # page, even if total_count is briefly stale or overestimated.
+        if len(chunk) < 100:
+            return runs
+
+        # total_count is still useful for the exact 1,000-run boundary: when the
+        # tenth full page completes the advertised result set, it is complete.
+        if total_count is not None and len(runs) >= total_count:
+            return runs
+
+    # Ten full pages without proving completeness would exceed the bounded
+    # evidence window. Fail closed instead of silently certifying truncated data.
+    raise RuntimeError("Workflow-run pagination exceeded the safe 1,000-run limit")
 
 
 def council_evidence_freeze() -> tuple[bool, str]:
