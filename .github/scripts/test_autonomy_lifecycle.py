@@ -87,6 +87,133 @@ class RepairRetirementTests(unittest.TestCase):
         self.delete.assert_not_called()
 
 
+class TrustedImplementationLifecycleTests(unittest.TestCase):
+    def setUp(self):
+        self.sha = "b" * 40
+        self.base = "a" * 40
+        for name, value in {
+            "REPO": "owner/repo",
+            "DEFAULT_BRANCH": "main",
+            "REPAIR_APP_LOGIN": "repair[bot]",
+            "KILO_LOGIN": "kilo-code-bot[bot]",
+        }.items():
+            self.enterContext(patch.object(automation, name, value))
+        self.enterContext(patch.object(automation, "log"))
+        self.write = self.enterContext(patch.object(automation, "request"))
+        self.remove = self.enterContext(patch.object(automation, "remove_label"))
+
+    def kilo_pr(self):
+        return {
+            "number": 31,
+            "state": "open",
+            "draft": False,
+            "title": "fix: Kilo repair",
+            "html_url": "https://github.com/owner/repo/pull/31",
+            "user": {"login": "kilo-code-bot[bot]"},
+            "head": {
+                "ref": "kilo/fix-31",
+                "sha": self.sha,
+                "repo": {"full_name": "owner/repo"},
+            },
+            "base": {"ref": "main"},
+            "labels": [
+                {"name": "autonomy:repair"},
+                {"name": "autonomy:kilo-implementation"},
+            ],
+            "body": "",
+        }
+
+    def test_retired_verified_kilo_implementation_closes(self):
+        pr = self.kilo_pr()
+        pr["labels"].append({"name": "autonomy:obsolete"})
+        pr["labels"].append({"name": "autonomy:admitted"})
+
+        automation.reconcile_retired_implementations([pr])
+
+        self.write.assert_called_once_with(
+            "PATCH", "/repos/owner/repo/pulls/31", {"state": "closed"}
+        )
+        self.remove.assert_called_once_with(31, "autonomy:admitted")
+
+    def test_arbitrary_labelled_pr_is_never_closed(self):
+        pr = self.kilo_pr()
+        pr["user"]["login"] = "some-user"
+        pr["labels"].append({"name": "autonomy:superseded"})
+
+        automation.reconcile_retired_implementations([pr])
+
+        self.write.assert_not_called()
+
+    def test_retired_managed_draft_is_closed_without_becoming_merge_eligible(self):
+        pr = {
+            "number": 32,
+            "state": "open",
+            "draft": True,
+            "user": {"login": "repair[bot]"},
+            "head": {
+                "ref": "codex/retired-work",
+                "sha": self.sha,
+                "repo": {"full_name": "owner/repo"},
+            },
+            "base": {"ref": "main"},
+            "labels": [
+                {"name": "automation:branch-pr"},
+                {"name": "autonomy:superseded"},
+            ],
+        }
+
+        automation.reconcile_retired_implementations([pr])
+
+        self.write.assert_called_once_with(
+            "PATCH", "/repos/owner/repo/pulls/32", {"state": "closed"}
+        )
+        self.assertFalse(automation.is_managed_branch_pr(pr))
+
+    def test_behind_verified_kilo_branch_is_updated_and_stale_admission_removed(self):
+        pr = self.kilo_pr()
+        pr["labels"].append({"name": "autonomy:admitted"})
+        fresh = copy.deepcopy(pr)
+        self.enterContext(patch.object(automation, "linked_kilo_carrier", return_value=9))
+        self.enterContext(patch.object(automation, "linked_kilo_review_source", return_value=None))
+        self.enterContext(
+            patch.object(
+                automation,
+                "get",
+                side_effect=[
+                    {"commit": {"sha": self.base}},
+                    {"behind_by": 2},
+                    fresh,
+                    {"commit": {"sha": self.base}},
+                ],
+            )
+        )
+
+        automation.refresh_behind_kilo_prs([pr])
+
+        self.write.assert_called_once_with(
+            "PUT",
+            "/repos/owner/repo/pulls/31/update-branch",
+            {"expected_head_sha": self.sha},
+            expected=(200, 202),
+        )
+        self.remove.assert_called_once_with(31, "autonomy:admitted")
+
+    def test_human_hold_prevents_kilo_branch_update(self):
+        pr = self.kilo_pr()
+        pr["labels"].append({"name": "autonomy:human-hold"})
+        self.enterContext(
+            patch.object(
+                automation,
+                "get",
+                return_value={"commit": {"sha": self.base}},
+            )
+        )
+
+        automation.refresh_behind_kilo_prs([pr])
+
+        self.write.assert_not_called()
+
+
 class ManagedBranchOwnershipTests(unittest.TestCase):
     def setUp(self):
         self.sha = "c" * 40
