@@ -266,7 +266,7 @@ def dispatch(pr: dict, kind: str, findings: list[str]) -> str:
 
 
 def safe_route_error(exc: Exception) -> str:
-    """Return actionable routing diagnostics without exposing the private webhook URL."""
+    """Return a bounded routing diagnostic without exposing API details."""
     message = str(exc)
     return f"{type(exc).__name__}; detail withheld"
 
