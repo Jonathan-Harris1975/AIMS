@@ -1,3 +1,6 @@
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
 #!/usr/bin/env node
 
 const API_BASE = "https://api.cloudflare.com/client/v4";
@@ -99,7 +102,7 @@ export async function main(env = process.env) {
   console.log(`[aims-ui-secret-sync] ${result.worker} shared-secret synchronisation completed: ${result.synced.join(", ")}.`);
 }
 
-if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) {
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
     await main(process.env);
   } catch (error) {
