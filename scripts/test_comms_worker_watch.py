@@ -3,7 +3,7 @@ import json
 import unittest
 import urllib.error
 from datetime import UTC, datetime, timedelta
-from comms_worker_watch import advance_incident, check_health, validate_health
+from comms_worker_watch import advance_incident, check_health, production_monitor_config, validate_health
 
 
 class WorkerWatchTests(unittest.TestCase):
@@ -13,6 +13,36 @@ class WorkerWatchTests(unittest.TestCase):
             'enabledWorkers': 1, 'workers': [{'category': 'delayed_actions', 'key': 'default', 'enabled': True,
                                            'status': 'healthy', 'ageMs': 1000, 'degradedAfterMs': 600000}]}}
         self.expected = ['delayed_actions:default']
+
+    def test_production_monitor_config_uses_repo_owned_app_url_and_flags(self):
+        url, expected = production_monitor_config({
+            'APP_URL': 'https://aims.example/',
+            'COMMS_HUB_ZERNIO_POLL_ENABLED': 'true',
+            'COMMS_HUB_ZERNIO_META_ENABLED': 'true',
+            'COMMS_HUB_ZERNIO_WEBHOOK_RECONCILE_ENABLED': 'true',
+            'COMMS_HUB_DELAYED_ACTION_WORKER_ENABLED': 'true',
+            'COMMS_HUB_EMAIL_ARCHIVE_ENABLED': 'true',
+            'COMMS_HUB_BACKUP_ENABLED': 'true',
+            'COMMS_HUB_BACKUP_AUTOMATIC_ENABLED': 'true',
+            'COMMS_HUB_RETENTION_WORKER_ENABLED': 'true',
+            'COMMS_HUB_MONTH_END_ARCHIVE_ENABLED': 'true',
+            'COMMS_HUB_HOUSEKEEPING_ENABLED': 'true',
+            'COMMS_HUB_HOUSEKEEPING_WORKER_ENABLED': 'true',
+            'COMMS_HUB_EMAIL_ENABLED': 'true',
+            'COMMS_HUB_EMAIL_POLL_WORKER_ENABLED': 'true',
+        })
+        self.assertEqual(url, 'https://aims.example/comms-hub/workers/health')
+        self.assertEqual(expected, [
+            'social_poll:default', 'delayed_actions:default', 'archive:default',
+            'webhook_reconcile:default', 'backup:default', 'retention:default',
+            'month_end_archive:default', 'housekeeping:default', 'inbound_email:info',
+        ])
+
+    def test_production_monitor_config_rejects_invalid_base_or_empty_inventory(self):
+        with self.assertRaises(ValueError):
+            production_monitor_config({'APP_URL': 'http://aims.example', 'COMMS_HUB_DELAYED_ACTION_WORKER_ENABLED': 'true'})
+        with self.assertRaises(ValueError):
+            production_monitor_config({'APP_URL': 'https://aims.example'})
 
     def test_inventory_and_health(self):
         self.assertIsNone(validate_health(self.payload, self.expected, self.now))
