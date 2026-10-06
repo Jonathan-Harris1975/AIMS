@@ -1,8 +1,10 @@
 """Regression checks for repair retirement; all GitHub writes are mocked."""
 import copy
+import json
 import inspect
 from datetime import datetime, timezone
 import os
+from pathlib import Path
 import unittest
 from unittest.mock import patch
 
@@ -218,6 +220,74 @@ class TrustedImplementationLifecycleTests(unittest.TestCase):
         self.assertTrue(automation.sensitive_file(".github/scripts/test_autonomy_lifecycle.py"))
         self.assertTrue(automation.sensitive_file(".github/scripts/codeql_gate.py"))
         self.assertFalse(automation.sensitive_file("services/worker.js"))
+
+
+class KiloPermissionPolicyTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        root = Path(__file__).resolve().parents[2]
+        cls.policy = json.loads((root / "kilo.jsonc").read_text(encoding="utf-8"))
+
+    def test_no_prompt_policy_keeps_governance_non_editable(self):
+        permission = self.policy["permission"]
+        self.assertEqual(permission["question"], "deny")
+        self.assertEqual(permission["external_directory"], "deny")
+        protected = [
+            "kilo.jsonc",
+            ".github/workflows/*",
+            ".github/actions/*",
+            ".github/scripts/*",
+            ".mergify.yml",
+            "renovate.json",
+            ".github/dependabot.yml",
+            "scripts/secret_scan.py",
+        ]
+        for tool in ("edit", "write", "apply_patch"):
+            rules = permission[tool]
+            self.assertEqual(rules["*"], "allow")
+            for pattern in protected:
+                self.assertEqual(rules[pattern], "deny")
+                self.assertLess(list(rules).index("*"), list(rules).index(pattern))
+
+    def test_shell_is_deny_by_default_with_exact_safe_pushes(self):
+        bash = self.policy["permission"]["bash"]
+        self.assertEqual(bash["*"], "deny")
+        for command in (
+            "git push origin HEAD",
+            "git push --set-upstream origin HEAD",
+            "git push -u origin HEAD",
+        ):
+            self.assertEqual(bash[command], "allow")
+        self.assertNotIn("git push origin HEAD*", bash)
+        self.assertNotIn("git push --set-upstream origin HEAD*", bash)
+        for command in (
+            "git push *:*",
+            "git push +*",
+            "git push *--force*",
+            "git push * -f*",
+            "bash -c *",
+            "sh -c *",
+            "sudo *",
+            "gh pr merge *",
+            "wrangler deploy *",
+            "koyeb *",
+        ):
+            self.assertEqual(bash[command], "deny")
+
+    def test_main_branch_checkout_is_denied_after_general_checkout_allow(self):
+        bash = self.policy["permission"]["bash"]
+        self.assertEqual(bash["git checkout *"], "allow")
+        self.assertEqual(bash["git switch *"], "allow")
+        for command in (
+            "git checkout main",
+            "git checkout -B main *",
+            "git checkout -b main *",
+            "git switch main",
+            "git switch -C main *",
+            "git switch -c main *",
+        ):
+            self.assertEqual(bash[command], "deny")
+            self.assertGreater(list(bash).index(command), list(bash).index("git checkout *") if command.startswith("git checkout") else list(bash).index("git switch *"))
 
 
 class ManagedBranchOwnershipTests(unittest.TestCase):
