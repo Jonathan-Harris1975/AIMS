@@ -199,7 +199,11 @@ class CouncilEvidenceFreezeTests(unittest.TestCase):
             patch.object(
                 automation,
                 "get",
-                side_effect=[{"commit": {"sha": self.sha}}, runs],
+                side_effect=[
+                    {"commit": {"sha": self.sha}},
+                    runs,
+                    {"commit": {"sha": self.sha}},
+                ],
             ),
         ):
             frozen, reason = automation.council_evidence_freeze()
@@ -229,12 +233,41 @@ class CouncilEvidenceFreezeTests(unittest.TestCase):
             patch.object(
                 automation,
                 "get",
-                side_effect=[{"commit": {"sha": self.sha}}, runs],
+                side_effect=[
+                    {"commit": {"sha": self.sha}},
+                    runs,
+                    {"commit": {"sha": self.sha}},
+                ],
             ),
         ):
             frozen, reason = automation.council_evidence_freeze()
         self.assertFalse(frozen)
         self.assertIn("Council completed", reason)
+
+    def test_default_branch_move_during_evidence_collection_fails_closed(self):
+        runs = {"workflow_runs": []}
+        with (
+            patch.object(
+                automation,
+                "current_weekend_bounds",
+                return_value=(
+                    datetime(2026, 10, 2, 20, 0, tzinfo=automation.LONDON),
+                    datetime(2026, 10, 5, 4, 0, tzinfo=automation.LONDON),
+                ),
+            ),
+            patch.object(
+                automation,
+                "get",
+                side_effect=[
+                    {"commit": {"sha": self.sha}},
+                    runs,
+                    {"commit": {"sha": "e" * 40}},
+                ],
+            ),
+        ):
+            frozen, reason = automation.council_evidence_freeze()
+        self.assertTrue(frozen)
+        self.assertIn("default branch moved", reason)
 
 
 
