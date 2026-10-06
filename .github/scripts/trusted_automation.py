@@ -26,8 +26,8 @@ DEFAULT_BRANCH = os.environ.get("DEFAULT_BRANCH", "main")
 REPAIR_APP_LOGIN = os.environ.get("REPAIR_APP_LOGIN", "")
 
 RENOVATE_LOGIN = "renovate[bot]"
-KILO_LOGIN = os.environ.get("KILO_REPAIR_PR_LOGIN") or "kilo-code-bot[bot]"
-CTO_LOGIN = os.environ.get("CTO_NEW_PR_LOGIN") or "cto-new[bot]"
+KILO_LOGIN = os.environ.get("KILO_REPAIR_PR_LOGIN", "").strip()
+CTO_LOGIN = os.environ.get("CTO_NEW_PR_LOGIN", "").strip()
 CTO_TASK_LABEL = "autonomy:cto-task"
 CTO_IMPLEMENTATION_LABEL = "autonomy:cto-implementation"
 CARRIER_PREFIX = "[autonomy] Repair "
