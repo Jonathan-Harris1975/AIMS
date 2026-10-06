@@ -29,6 +29,14 @@ test("secret sync resolves only the canonical AIMS-owned shared secrets", () => 
   });
 });
 
+test("secret sync accepts the legacy CF_ACCOUNT_ID fallback", () => {
+  const resolved = resolveAimsUiSecretSyncConfig(env({
+    CLOUDFLARE_ACCOUNT_ID: "",
+    CF_ACCOUNT_ID: "fallback-account",
+  }));
+  assert.equal(resolved.accountId, "fallback-account");
+});
+
 test("secret sync rejects missing and unresolved runtime values", () => {
   for (const bad of [
     { CLOUDFLARE_ACCOUNT_ID: "" },
@@ -54,7 +62,7 @@ test("secret sync targets only aims-ui-gateway and never returns secret values",
     }), { status: 200, headers: { "content-type": "application/json" } });
   };
 
-  const result = await synchroniseAimsUiWorkerSecrets({ config, fetchImpl });
+  const result = await synchroniseAimsUiWorkerSecrets({ config, fetchImpl, sleepImpl: async () => {} });
 
   assert.deepEqual(result, {
     worker: "aims-ui-gateway",
@@ -95,8 +103,58 @@ test("secret sync fails closed on a partial Cloudflare update", async () => {
   };
 
   await assert.rejects(
-    synchroniseAimsUiWorkerSecrets({ config, fetchImpl }),
+    synchroniseAimsUiWorkerSecrets({ config, fetchImpl, sleepImpl: async () => {} }),
     /COMMS_HUB_RBAC_DELEGATION_SECRET failed \(HTTP 403; codes: 10000\)/,
   );
   assert.equal(count, 2);
+});
+
+test("secret sync retries transient failures and succeeds without exposing values", async () => {
+  const config = resolveAimsUiSecretSyncConfig(env());
+  let attempts = 0;
+  const waits = [];
+  const fetchImpl = async (_url, init) => {
+    attempts += 1;
+    const name = JSON.parse(init.body).name;
+    if (name === "AIMS_API_KEY" && attempts < 3) {
+      return new Response(JSON.stringify({
+        success: false,
+        errors: [{ code: 1001, message: "temporary" }],
+        result: null,
+      }), { status: 503, headers: { "content-type": "application/json" } });
+    }
+    return new Response(JSON.stringify({
+      success: true,
+      errors: [],
+      result: { name, type: "secret_text" },
+    }), { status: 200, headers: { "content-type": "application/json" } });
+  };
+
+  const result = await synchroniseAimsUiWorkerSecrets({
+    config,
+    fetchImpl,
+    sleepImpl: async (milliseconds) => { waits.push(milliseconds); },
+  });
+  assert.equal(result.worker, "aims-ui-gateway");
+  assert.deepEqual(waits, [250, 500]);
+});
+
+test("secret sync errors never contain secret values", async () => {
+  const config = resolveAimsUiSecretSyncConfig(env());
+  const fetchImpl = async () => new Response(JSON.stringify({
+    success: false,
+    errors: [{ code: 10000, message: "permission denied" }],
+    result: null,
+  }), { status: 403, headers: { "content-type": "application/json" } });
+
+  let failure;
+  try {
+    await synchroniseAimsUiWorkerSecrets({ config, fetchImpl, sleepImpl: async () => {} });
+  } catch (error) {
+    failure = error;
+  }
+  assert.ok(failure instanceof Error);
+  for (const secret of ["aims-api-key", "delegation-secret", "cognipal-secret", "cloudflare-token"]) {
+    assert.equal(failure.message.includes(secret), false);
+  }
 });
