@@ -110,7 +110,7 @@ jobs:
           set -euo pipefail
           # Execute inside the verified Koyeb runtime so the canonical shared
           # secrets and Cloudflare token never transit through GitHub Actions.
-          printf -v exec_command 'koyeb services exec %q node -- scripts/syncAimsUiWorkerSecrets.js' "$KOYEB_SERVICE"
+          # %q requires bash; this workflow explicitly runs on ubuntu-latest with bash.\n          printf -v exec_command 'koyeb services exec %q node -- scripts/syncAimsUiWorkerSecrets.js' "$KOYEB_SERVICE"
           script -q -e -c "$exec_command" /dev/null < /dev/null
       - name: Verify Worker health after runtime deployment
         timeout-minutes: 2
