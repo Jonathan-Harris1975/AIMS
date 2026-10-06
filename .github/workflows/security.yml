@@ -27,6 +27,10 @@ jobs:
         with:
           fetch-depth: 0
       - name: Verify automation ownership and Council-freeze lifecycle
+        # Intentionally inside the required security gate: this validates the
+        # trusted-automation ownership and Council exact-SHA freeze lifecycle that
+        # gates Mergify admission. It must stay blocking; do not separate it into
+        # a non-required job without updating Mergify/required checks in lockstep.
         run: python3 .github/scripts/test_autonomy_lifecycle.py
       - name: Repository secret policy scan
         run: python3 scripts/secret_scan.py
