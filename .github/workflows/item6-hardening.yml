@@ -88,4 +88,8 @@ jobs:
       - name: Validate Renovate configuration
         run: npx --yes --package=renovate@44.133.0 renovate-config-validator --strict renovate.json
 
-# Artifact provenance/SBOM is intentionally N/A in this workflow. AIMS is deployed by\n# Koyeb's git-driven build and this repository does not publish an immutable, addressable\n# production image or release artifact from GitHub Actions. Do not manufacture a repository\n# artifact merely to satisfy provenance controls; add attestation only if the deployment\n# architecture later exposes the real releasable unit and digest to this workflow.\n
+# Artifact provenance/SBOM is intentionally N/A in this workflow. AIMS is deployed by
+# Koyeb's git-driven build and this repository does not publish an immutable, addressable
+# production image or release artifact from GitHub Actions. Do not manufacture a repository
+# artifact merely to satisfy provenance controls; add attestation only if the deployment
+# architecture later exposes the real releasable unit and digest to this workflow.
