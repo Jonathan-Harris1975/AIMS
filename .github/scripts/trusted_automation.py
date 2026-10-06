@@ -47,6 +47,12 @@ KILO_SENSITIVE_PREFIXES = (
     "CI_SETUP.txt",
 )
 KILO_SENSITIVE_EXACT = {
+    "kilo.jsonc",
+    ".github/scripts/trusted_automation.py",
+    ".github/scripts/branch_pr_automation.py",
+    ".github/scripts/pr_blocker_recovery.py",
+    ".github/scripts/pr_repair_router.py",
+    ".github/scripts/kilo_failure_classifier.py",
     "scripts/secret_scan.py",
     "scripts/install_ci_tools.py",
     "scripts/verify_ci_tool_checksums.py",
@@ -120,7 +126,11 @@ def _github_time(value: str) -> datetime:
 def current_weekend_bounds(now: datetime | None = None) -> tuple[datetime, datetime] | None:
     """Return the active Fri 20:00 -> Mon 04:00 Europe/London envelope."""
     local_now = (now or datetime.now(timezone.utc)).astimezone(LONDON)
-    days_since_friday = (local_now.weekday() - 4) % 7  # Monday=0; result is days back to the most recent Friday.
+    # Python weekday(): Monday=0 .. Sunday=6, so Friday=4. Subtracting 4 and
+    # taking modulo 7 yields days back to the most recent Friday (Fri->0,
+    # Sat->1, Sun->2, Mon->3, Tue->4, Wed->5, Thu->6), anchoring the
+    # Fri 20:00-Mon 04:00 Europe/London evidence envelope.
+    days_since_friday = (local_now.weekday() - 4) % 7
     friday = (local_now - timedelta(days=days_since_friday)).replace(
         hour=20, minute=0, second=0, microsecond=0
     )
@@ -130,39 +140,72 @@ def current_weekend_bounds(now: datetime | None = None) -> tuple[datetime, datet
     return None
 
 
+def _resolve_branch_sha() -> str:
+    """Fetch and validate the current default-branch SHA."""
+    branch = get(f"/repos/{REPO}/branches/{DEFAULT_BRANCH}")
+    sha = str(branch.get("commit", {}).get("sha", ""))
+    if not re.fullmatch(r"[0-9a-f]{40}", sha):
+        raise RuntimeError("Could not resolve current default-branch SHA for Council freeze")
+    return sha
+
+
+def _fetch_branch_runs() -> list[dict[str, Any]]:
+    """Fetch complete branch workflow evidence, bounded to 1,000 runs."""
+    encoded_branch = urllib.parse.quote(DEFAULT_BRANCH, safe="")
+    runs: list[dict[str, Any]] = []
+    total_count: int | None = None
+    for page in range(1, 11):
+        payload = get(
+            f"/repos/{REPO}/actions/runs?branch={encoded_branch}&per_page=100&page={page}"
+        )
+        chunk = payload.get("workflow_runs", []) if isinstance(payload, dict) else []
+        if total_count is None and isinstance(payload, dict):
+            raw_total = payload.get("total_count")
+            if isinstance(raw_total, int) and raw_total >= 0:
+                total_count = raw_total
+        runs.extend(chunk)
+        # Break as soon as GitHub says the complete result set is present. This
+        # makes an exact 1,000-run result valid rather than a false overflow.
+        if total_count is not None and len(runs) >= total_count:
+            break
+        if len(chunk) < 100:
+            break
+    else:
+        if total_count is None or len(runs) < total_count:
+            raise RuntimeError("Workflow-run pagination exceeded the safe 1,000-run limit")
+
+    if total_count is not None and len(runs) < total_count:
+        raise RuntimeError(
+            f"Incomplete workflow-run evidence: fetched {len(runs)} of {total_count} runs"
+        )
+    return runs
+
+
 def council_evidence_freeze() -> tuple[bool, str]:
     """Freeze routine merges after exact-SHA weekend CI until Council succeeds."""
     bounds = current_weekend_bounds()
     if bounds is None:
         return False, "outside the weekend evidence envelope"
 
-    branch = get(f"/repos/{REPO}/branches/{DEFAULT_BRANCH}")
-    current_sha = str(branch.get("commit", {}).get("sha", ""))
-    if not re.fullmatch(r"[0-9a-f]{40}", current_sha):
-        raise RuntimeError("Could not resolve current default-branch SHA for Council freeze")
+    current_sha = _resolve_branch_sha()
+    runs = _fetch_branch_runs()
 
-    encoded_branch = urllib.parse.quote(DEFAULT_BRANCH, safe="")
-    runs: list[dict[str, Any]] = []
-    for page in range(1, 11):
-        payload = get(
-            f"/repos/{REPO}/actions/runs?branch={encoded_branch}&per_page=100&page={page}"
-        )
-        chunk = payload.get("workflow_runs", []) if isinstance(payload, dict) else []
-        runs.extend(chunk)
-        if len(chunk) < 100:
-            break
-    else:
-        raise RuntimeError("Workflow-run pagination exceeded the safe 1,000-run limit")
-
-    # Re-read the branch after collecting evidence. If main moved, fail closed for
-    # this reconciliation rather than certifying evidence for a stale SHA.
-    branch_after = get(f"/repos/{REPO}/branches/{DEFAULT_BRANCH}")
-    current_after = str(branch_after.get("commit", {}).get("sha", ""))
+    # Re-read main after collecting evidence. Retry one race using the new SHA;
+    # if main moves a second time, fail closed rather than certify stale evidence.
+    current_after = _resolve_branch_sha()
     if current_after != current_sha:
-        return True, (
-            f"default branch moved from {current_sha[:12]} to {current_after[:12]} "
-            "during Council evidence evaluation"
+        log(
+            f"default branch advanced from {current_sha[:12]} to {current_after[:12]} "
+            "during Council evidence evaluation; retrying once with the new SHA"
         )
+        current_sha = current_after
+        runs = _fetch_branch_runs()
+        current_after = _resolve_branch_sha()
+        if current_after != current_sha:
+            return True, (
+                f"default branch moved from {current_sha[:12]} to {current_after[:12]} "
+                "during Council evidence evaluation"
+            )
 
     start_utc, end_utc = (value.astimezone(timezone.utc) for value in bounds)
 
