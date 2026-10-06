@@ -18,11 +18,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Check workers and notify the existing independent operations route
+      - name: Check workers and retain independent GitHub incident evidence
         env:
           GH_TOKEN: ${{ github.token }}
-          COMMS_HUB_WATCH_URL: ${{ vars.COMMS_HUB_WATCH_URL }}
-          COMMS_HUB_WATCH_EXPECTED_WORKERS: ${{ vars.COMMS_HUB_WATCH_EXPECTED_WORKERS }}
           AIMS_API_KEY: ${{ secrets.AIMS_API_KEY }}
           OPS_ALERT_WEBHOOK_URL: ${{ secrets.OPS_ALERT_WEBHOOK_URL }}
           OPS_ALERT_WEBHOOK_TOKEN: ${{ secrets.OPS_ALERT_WEBHOOK_TOKEN }}
