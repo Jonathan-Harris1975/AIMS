@@ -1,3 +1,4 @@
+          # The watcher derives its target and expected inventory from config/production.defaults.env.
 name: Comms Hub continuous worker watch
 on:
   schedule:
