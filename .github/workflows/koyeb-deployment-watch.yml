@@ -101,6 +101,18 @@ jobs:
           # absent from this hardened runtime. No token is copied into Actions.
           printf -v exec_command 'koyeb services exec %q node -- scripts/deployCommsHubDataPlaneWorker.js' "$KOYEB_SERVICE"
           script -q -e -c "$exec_command" /dev/null < /dev/null
+      - name: Synchronise AIMS-owned AIMS-UI Worker secrets
+        timeout-minutes: 5
+        env:
+          KOYEB_TOKEN: ${{ secrets.KOYEB_TOKEN }}
+          KOYEB_SERVICE: ${{ vars.KOYEB_SERVICE }}
+        run: |
+          set -euo pipefail
+          # Execute inside the verified Koyeb runtime so the canonical shared
+          # secrets and Cloudflare token never transit through GitHub Actions.
+          # %q requires bash; this workflow explicitly runs on ubuntu-latest with bash.
+          printf -v exec_command 'koyeb services exec %q node -- scripts/syncAimsUiWorkerSecrets.js' "$KOYEB_SERVICE"
+          script -q -e -c "$exec_command" /dev/null < /dev/null
       - name: Verify Worker health after runtime deployment
         timeout-minutes: 2
         run: |

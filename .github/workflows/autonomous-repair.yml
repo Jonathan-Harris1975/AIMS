@@ -99,6 +99,7 @@ jobs:
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
           HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          KILO_REPAIR_TRIGGER_URL: ${{ secrets.KILO_REPAIR_TRIGGER_URL }}
         shell: bash
         run: |
           set -euo pipefail
@@ -142,7 +143,7 @@ jobs:
           fi
 
           dispatch_kilo() {
-            local repair_pr="$1" marker already
+            local repair_pr="$1" marker already contract carrier_url payload status
             marker="<!-- kilo-main-repair:${RUN_ID} -->"
             already="$(gh api --paginate "repos/${REPO}/issues/${repair_pr}/comments" \
               --jq ".[] | select(.user.login == \"${REPAIR_APP_LOGIN}\" and (.body | contains(\"${marker}\"))) | .id" | sed -n '1p')"
@@ -150,21 +151,31 @@ jobs:
               echo "Kilo was already dispatched for run $RUN_ID."
               return
             fi
-            local kilo_body
-            printf -v kilo_body '%s\n' \
-              "$marker" \
-              '@kilocode-bot fix it' \
-              '' \
-              "This is an authenticated autonomous repair request for failed workflow **${RUN_NAME}** at exact default-branch SHA \`${HEAD_SHA}\`." \
-              "Failed run: ${RUN_URL}" \
-              '' \
-              'Work autonomously. Do not ask for confirmation or approval before making a safe repository repair.' \
-              'Investigate the linked failure and repair the smallest verified code, manifest, lockfile, build or workflow defect.' \
-              "Create one linked implementation PR against ${DEFAULT_BRANCH}; include this carrier PR in its body." \
-              'Do not merge or deploy, choose dependency versions, dismiss alerts, weaken tests/scanners/rulesets, broaden allow-lists, expose credentials, or force-push.' \
-              'If no safe code repair exists, report the exact blocker and stop.'
-            gh pr comment "$repair_pr" --repo "$REPO" --body "$kilo_body"
-            echo "Posted autonomous Kilo repair command for run $RUN_ID on carrier PR #$repair_pr."
+            if ! python3 .github/scripts/kilo_webhook_url.py; then
+              echo "::error::KILO_REPAIR_TRIGGER_URL is missing, unsupported or invalid for this repository."
+              exit 1
+            fi
+            contract="$(cat .github/kilo-machine-repair-contract.md)"
+            test -n "$contract" || { echo "::error::Kilo machine repair contract is empty."; exit 1; }
+            carrier_url="https://github.com/${REPO}/pull/${repair_pr}"
+            printf -v task '%s\n\n%s' "$contract" \
+              "Investigate failed workflow ${RUN_NAME} at ${RUN_URL} for exact default-branch SHA ${HEAD_SHA}. Treat ${carrier_url} as failure evidence. Repair the smallest verified repository-controlled defect on one implementation branch, open exactly one implementation PR against ${DEFAULT_BRANCH}, and include ${carrier_url} in its body."
+            payload="$(jq -n \
+              --arg repository "$REPO" \
+              --arg carrier_pr "$carrier_url" \
+              --arg failed_sha "$HEAD_SHA" \
+              --arg failed_run "$RUN_URL" \
+              --arg workflow "$RUN_NAME" \
+              --arg task "$task" \
+              '{repository:$repository,carrier_pr:$carrier_pr,failed_sha:$failed_sha,failed_run:$failed_run,workflow:$workflow,kind:"main-branch-repair",task:$task}')"
+            status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --max-time 30 \
+              --request POST --header 'Content-Type: application/json' --data "$payload" "$KILO_REPAIR_TRIGGER_URL")"
+            if [[ "$status" != 2?? ]]; then
+              echo "::error::Kilo machine repair trigger returned HTTP $status for run $RUN_ID."
+              exit 1
+            fi
+            gh pr comment "$repair_pr" --repo "$REPO" --body "$marker Autonomous Kilo machine repair requested for $RUN_URL. No human reply, account linking or @kilocode-bot command is required."
+            echo "Sent autonomous Kilo machine repair for run $RUN_ID on carrier PR #$repair_pr."
           }
 
           if [ "$RUN_CONCLUSION" = "success" ]; then
