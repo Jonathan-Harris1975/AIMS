@@ -222,6 +222,66 @@ class TrustedImplementationLifecycleTests(unittest.TestCase):
         self.assertFalse(automation.sensitive_file("services/worker.js"))
 
 
+class CtoTaskAdmissionTests(unittest.TestCase):
+    def setUp(self):
+        self.sha = "9" * 40
+        self.pr = {
+            "number": 41,
+            "state": "open",
+            "draft": False,
+            "user": {"login": "cto-new[bot]"},
+            "html_url": "https://github.com/owner/repo/pull/41",
+            "head": {"ref": "cto/task-40", "sha": self.sha, "repo": {"full_name": "owner/repo"}},
+            "base": {"ref": "main"},
+            "labels": [],
+            "body": "Fixes #40",
+        }
+        for name, value in {
+            "REPO": "owner/repo",
+            "DEFAULT_BRANCH": "main",
+            "CTO_LOGIN": "cto-new[bot]",
+        }.items():
+            self.enterContext(patch.object(automation, name, value))
+        self.enterContext(patch.object(automation, "log"))
+
+    def task(self, *, assigned=True, labelled=True):
+        return {
+            "number": 40,
+            "state": "open",
+            "assignees": [{"login": "cto-new[bot]"}] if assigned else [],
+            "labels": [{"name": automation.CTO_TASK_LABEL}] if labelled else [],
+        }
+
+    def test_cto_pr_requires_single_explicit_task(self):
+        with patch.object(automation, "get", return_value=self.task()):
+            self.assertEqual(automation.verified_cto_task(self.pr), 40)
+        self.pr["body"] = "Fixes #40 and resolves #39"
+        self.assertIsNone(automation.cto_issue_reference(self.pr))
+
+    def test_unassigned_or_unlabelled_issue_is_not_cto_authority(self):
+        with patch.object(automation, "get", return_value=self.task(assigned=False)):
+            self.assertIsNone(automation.verified_cto_task(self.pr))
+        with patch.object(automation, "get", return_value=self.task(labelled=False)):
+            self.assertIsNone(automation.verified_cto_task(self.pr))
+
+    def test_cto_pr_is_adopted_only_after_task_verification(self):
+        labels = self.enterContext(patch.object(automation, "add_labels"))
+        with patch.object(automation, "verified_cto_task", return_value=40):
+            automation.adopt_linked_cto_prs([copy.deepcopy(self.pr)])
+        labels.assert_called_once_with(41, [automation.CTO_IMPLEMENTATION_LABEL])
+
+    def test_cto_protected_control_change_is_held(self):
+        pr = copy.deepcopy(self.pr)
+        pr["labels"] = [{"name": automation.CTO_IMPLEMENTATION_LABEL}]
+        hold = self.enterContext(patch.object(automation, "place_human_hold"))
+        admit = self.enterContext(patch.object(automation, "admit_to_mergify"))
+        self.enterContext(patch.object(automation, "verified_cto_task", return_value=40))
+        self.enterContext(patch.object(automation, "pr_files", return_value=[".github/workflows/security.yml"]))
+        automation.reconcile_pr(pr)
+        hold.assert_called_once()
+        admit.assert_not_called()
+
+
 class KiloPermissionPolicyTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
