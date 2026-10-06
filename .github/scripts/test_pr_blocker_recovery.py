@@ -7,7 +7,7 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 os.environ.setdefault("GITHUB_REPOSITORY", "owner/repo")
 os.environ.setdefault("GH_TOKEN", "test-token")
@@ -374,9 +374,12 @@ class Recovery(unittest.TestCase):
             with self.assertRaises(ValueError):
                 m.required_checks_pass(self.pr)
 
-    def test_behind_recovery_posts_autonomous_command_for_existing_branch(self):
+    def test_behind_recovery_uses_machine_webhook_for_existing_branch(self):
         self.pr["mergeable_state"] = "behind"
         posted = []
+        response = MagicMock()
+        response.status = 204
+        response.__enter__.return_value = response
 
         def api(method, path, payload=None):
             if method == "GET" and path.endswith("/commits/main"):
@@ -387,15 +390,22 @@ class Recovery(unittest.TestCase):
             raise AssertionError((method, path, payload))
 
         with (
+            patch.dict(os.environ, {"KILO_REPAIR_TRIGGER_URL": "https://hooks.kilosessions.ai/test"}, clear=False),
             patch.object(m.router, "all_pages", return_value=[]),
             patch.object(m.router, "pr_details", return_value=self.pr),
             patch.object(m.router, "api", side_effect=api),
+            patch.object(m.router, "valid_kilo_webhook_url", return_value=True),
+            patch.object(m.router, "machine_contract", return_value="machine contract"),
+            patch.object(m.router.urllib.request, "urlopen", return_value=response) as urlopen,
         ):
             self.assertEqual(m.recover(7)["state"], "behind-requested")
         self.assertEqual(len(posted), 1)
-        self.assertIn("@kilocode-bot fix it", posted[0])
-        self.assertIn("existing source PR branch", posted[0])
-        self.assertNotIn("create one implementation PR", posted[0])
+        self.assertNotIn("@kilocode-bot", posted[0])
+        request = urlopen.call_args.args[0]
+        payload = json.loads(request.data.decode())
+        self.assertEqual(payload["source_sha"], "a" * 40)
+        self.assertIn("existing source PR branch", payload["task"])
+        self.assertNotIn("create one implementation PR", payload["task"])
 
     def test_one_pr_error_does_not_stop_others_and_fails_visibly(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -452,8 +462,11 @@ class Recovery(unittest.TestCase):
             self.assertNotIn("secret-value", json.dumps(result))
         self.assertEqual(m.describe_error(cases[0][0])["http_status"], 403)
 
-    def test_conflict_dispatch_requests_existing_branch_and_no_force_push(self):
+    def test_conflict_dispatch_uses_machine_webhook_and_no_force_push(self):
         posted = []
+        response = MagicMock()
+        response.status = 204
+        response.__enter__.return_value = response
 
         def api(method, path, payload=None):
             if method == "GET" and path.endswith("/commits/main"):
@@ -464,16 +477,21 @@ class Recovery(unittest.TestCase):
             raise AssertionError((method, path, payload))
 
         with (
+            patch.dict(os.environ, {"KILO_REPAIR_TRIGGER_URL": "https://hooks.kilosessions.ai/test"}, clear=False),
             patch.object(m.router, "all_pages", return_value=[]),
             patch.object(m.router, "pr_details", return_value=self.pr),
             patch.object(m.router, "api", side_effect=api),
+            patch.object(m.router, "valid_kilo_webhook_url", return_value=True),
+            patch.object(m.router, "machine_contract", return_value="machine contract"),
+            patch.object(m.router.urllib.request, "urlopen", return_value=response) as urlopen,
         ):
             m.router.dispatch(self.pr, "merge-conflict-" + "b" * 40, ["conflict"])
         self.assertEqual(len(posted), 1)
-        self.assertIn("@kilocode-bot fix it", posted[0])
-        self.assertIn("existing source PR branch", posted[0])
-        self.assertIn("Never force-push", posted[0])
-        self.assertIn("Do not merge pull requests or deploy", posted[0])
+        self.assertNotIn("@kilocode-bot", posted[0])
+        payload = json.loads(urlopen.call_args.args[0].data.decode())
+        self.assertIn("existing source PR branch", payload["task"])
+        self.assertIn("Never force-push", payload["task"])
+        self.assertIn("Do not merge pull requests or deploy", payload["task"])
 
     def test_dispatch_head_race_makes_no_kilo_comment(self):
         changed = copy.deepcopy(self.pr)

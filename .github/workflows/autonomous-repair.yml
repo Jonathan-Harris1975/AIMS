@@ -174,7 +174,7 @@ jobs:
               echo "::error::Kilo machine repair trigger returned HTTP $status for run $RUN_ID."
               exit 1
             fi
-            gh pr comment "$repair_pr" --repo "$REPO" --body "$marker Autonomous Kilo machine repair requested for $RUN_URL. No human reply, account linking or @kilocode-bot command is required."
+            gh pr comment "$repair_pr" --repo "$REPO" --body "$marker Autonomous Kilo machine repair requested for $RUN_URL. No human reply, account linking or Kilo mention command is required."
             echo "Sent autonomous Kilo machine repair for run $RUN_ID on carrier PR #$repair_pr."
           }
 
