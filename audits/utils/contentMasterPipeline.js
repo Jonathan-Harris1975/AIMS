@@ -121,6 +121,18 @@ export async function runContentMasterAudit({ sessionId = `content-master-${Date
       orchestrator: "AIMS",
       ramsPipeline: "content",
       ramsDispatchFeatureFlag: "CONTENT_AUDIT_TRIGGER_RAMS",
+      remediationRouting: {
+        schemaVersion: "audit-remediation-routing/v1",
+        repairExecutionPolicy: "external-agent-only",
+        singleWriterRequired: true,
+        auditOwnsRepair: false,
+        primaryRepairAgent: "kilo",
+        plannedEngineeringAgent: "cto.new",
+        ownershipTransferRequired: true,
+        dependencyVersionOwner: "renovate",
+        mergeAuthority: "mergify",
+        humanDecisionSurface: "hive-ui",
+      },
       retryPolicy: {
         maxTotalAttempts: 5,
         targetedRepair: true,
