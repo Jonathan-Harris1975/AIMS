@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import re
 import os
 import subprocess
 import sys
@@ -101,6 +102,39 @@ def _matches_expected_deployment(item: dict[str, Any], expected_sha: str, expect
     return True
 
 
+def _deployment_irrelevant_since(item: dict[str, Any], expected_sha: str) -> bool:
+    """Return true only when the full deployed->expected delta is GitHub automation."""
+    deployed_sha = _deployment_sha(item).strip().lower()
+    expected_sha = expected_sha.strip().lower()
+    if not re.fullmatch(r"[0-9a-f]{7,40}", deployed_sha) or not re.fullmatch(r"[0-9a-f]{40}", expected_sha):
+        return False
+
+    # The workflow checks out full history. Still fail closed if ancestry cannot
+    # be proven, rather than turning a Git/diff problem into a deployment skip.
+    ancestor = subprocess.run(
+        ["git", "merge-base", "--is-ancestor", deployed_sha, expected_sha],
+        check=False,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        timeout=15,
+    )
+    if ancestor.returncode != 0:
+        return False
+
+    diff = subprocess.run(
+        ["git", "diff", "--name-only", "--no-renames", deployed_sha, expected_sha],
+        check=False,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=30,
+    )
+    if diff.returncode != 0:
+        return False
+    paths = [line.strip() for line in diff.stdout.splitlines() if line.strip()]
+    return bool(paths) and all(path.startswith(".github/") for path in paths)
+
+
 def main() -> int:
     service = os.getenv("KOYEB_SERVICE", "").strip()
     token = os.getenv("KOYEB_TOKEN", "").strip()
@@ -121,6 +155,20 @@ def main() -> int:
             None,
         )
         if last is None:
+            # Koyeb legitimately does not create a deployment for GitHub-only
+            # changes. Compare against the newest healthy deployed revision
+            # across the complete Git range before treating absence as success.
+            healthy = next(
+                (item for item in candidates if _status(item) in SUCCESS and _deployment_sha(item)),
+                None,
+            )
+            if healthy is not None and _deployment_irrelevant_since(healthy, expected_sha):
+                deployed = _deployment_sha(healthy)
+                print(
+                    "No Koyeb deployment required: the complete delta from "
+                    f"deployed {deployed[:12]} to {expected_sha[:12]} changes only .github/ automation."
+                )
+                return 0
             print(f"Expected Koyeb deployment not visible yet ({attempt}/{attempts}).")
             time.sleep(poll_seconds)
             continue
