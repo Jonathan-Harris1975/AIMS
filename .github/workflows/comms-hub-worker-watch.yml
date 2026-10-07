@@ -3,6 +3,9 @@ name: Comms Hub continuous worker watch
 on:
   schedule:
     - cron: '7,37 * * * *'
+  workflow_run:
+    workflows: ["Koyeb production deployment watch"]
+    types: [completed]
   workflow_dispatch:
 permissions:
   contents: read
@@ -12,7 +15,12 @@ concurrency:
   cancel-in-progress: false
 jobs:
   watch:
-    if: github.ref == 'refs/heads/main'
+    if: >-
+      ${{ github.ref == 'refs/heads/main' &&
+          (github.event_name != 'workflow_run' ||
+           (github.event.workflow_run.conclusion == 'success' &&
+            github.event.workflow_run.head_branch == 'main' &&
+            github.event.workflow_run.head_repository.full_name == github.repository)) }}
     runs-on: ubuntu-latest
     environment: Koyeb
     timeout-minutes: 8
