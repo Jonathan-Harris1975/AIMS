@@ -161,8 +161,10 @@ jobs:
     needs: [watch]
     if: ${{ needs.watch.result == 'success' }}
     runs-on: ubuntu-latest
-    environment: Koyeb
-    timeout-minutes: 5
+    environment:
+      name: Koyeb
+      deployment: false
+    timeout-minutes: 15
     permissions:
       contents: read
     steps:
@@ -177,9 +179,15 @@ jobs:
           target="${ECOSYSTEM_SMOKE_REPOSITORY:-${GITHUB_REPOSITORY_OWNER}/MAST}"
           payload="$(jq -cn --arg ref main --arg repo "$GITHUB_REPOSITORY" --arg sha "$SOURCE_SHA" '{ref:$ref,inputs:{source_repository:$repo,source_sha:$sha}}')"
           response="$(mktemp)"
-          trap 'rm -f "$response"' EXIT
-          for attempt in 1 2 3 4 5; do
+          headers="$(mktemp)"
+          trap 'rm -f "$response" "$headers"' EXIT
+          for attempt in 1 2 3; do
+            : > "$response"
+            : > "$headers"
             code="$(curl --silent --show-error \
+              --connect-timeout 5 \
+              --max-time 30 \
+              --dump-header "$headers" \
               --output "$response" \
               --write-out '%{http_code}' \
               --request POST \
@@ -192,18 +200,43 @@ jobs:
               echo "Central ecosystem smoke dispatch accepted on attempt $attempt."
               exit 0
             fi
-            if [ "$code" = "000" ] || [ "$code" = "429" ] || [[ "$code" =~ ^5[0-9][0-9]$ ]]; then
-              if [ "$attempt" -lt 5 ]; then
-                delay=$((attempt * 5))
-                echo "::warning::Transient GitHub dispatch response HTTP $code; retrying in ${delay}s."
-                sleep "$delay"
-                continue
-              fi
-            else
-              echo "::error::Central ecosystem smoke dispatch rejected with HTTP $code." >&2
-              cat "$response" >&2 || true
-              exit 1
+
+            retry_after="$(awk 'BEGIN{IGNORECASE=1} /^retry-after:/ {gsub("\\r","",$2); print $2}' "$headers" | tail -n 1)"
+            remaining="$(awk 'BEGIN{IGNORECASE=1} /^x-ratelimit-remaining:/ {gsub("\\r","",$2); print $2}' "$headers" | tail -n 1)"
+            reset_at="$(awk 'BEGIN{IGNORECASE=1} /^x-ratelimit-reset:/ {gsub("\\r","",$2); print $2}' "$headers" | tail -n 1)"
+            rate_limited=false
+            if [ "$code" = "429" ] || { [ "$code" = "403" ] && { [ -n "$retry_after" ] || [ "$remaining" = "0" ]; }; }; then
+              rate_limited=true
             fi
+
+            if [ "$rate_limited" = "true" ] && [ "$attempt" -lt 3 ]; then
+              delay=60
+              if [[ "$retry_after" =~ ^[0-9]+$ ]]; then
+                delay="$retry_after"
+              elif [[ "$reset_at" =~ ^[0-9]+$ ]]; then
+                now="$(date +%s)"
+                delay=$((reset_at - now + 5))
+                [ "$delay" -lt 1 ] && delay=1
+              fi
+              if [ "$delay" -gt 300 ]; then
+                echo "::error::GitHub rate limit requires waiting ${delay}s, beyond the bounded dispatch recovery window." >&2
+                exit 1
+              fi
+              echo "::warning::GitHub rate-limited ecosystem dispatch (HTTP $code); retrying in ${delay}s."
+              sleep "$delay"
+              continue
+            fi
+
+            if { [ "$code" = "000" ] || [[ "$code" =~ ^5[0-9][0-9]$ ]]; } && [ "$attempt" -lt 3 ]; then
+              delay=$((attempt * 5))
+              echo "::warning::Transient GitHub dispatch response HTTP $code; retrying in ${delay}s."
+              sleep "$delay"
+              continue
+            fi
+
+            echo "::error::Central ecosystem smoke dispatch failed with HTTP $code on attempt $attempt." >&2
+            cat "$response" >&2 || true
+            exit 1
           done
           echo "::error::Central ecosystem smoke dispatch failed after bounded retries." >&2
           cat "$response" >&2 || true
