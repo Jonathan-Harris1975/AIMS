@@ -14,15 +14,52 @@ jobs:
   watch:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    environment: Koyeb
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Install verified Koyeb CLI
+        env:
+          KOYEB_CLI_VERSION: "5.10.2"
+        run: |
+          set -euo pipefail
+          archive="koyeb-cli_${KOYEB_CLI_VERSION}_linux_amd64.tar.gz"
+          release_url="https://github.com/koyeb/koyeb-cli/releases/download/v${KOYEB_CLI_VERSION}"
+          workdir="$(mktemp -d)"
+          trap 'rm -rf "$workdir"' EXIT
+          curl --fail --show-error --silent --location --proto '=https' --tlsv1.2             --output "$workdir/$archive" "$release_url/$archive"
+          curl --fail --show-error --silent --location --proto '=https' --tlsv1.2             --output "$workdir/checksums.txt" "$release_url/checksums.txt"
+          (
+            cd "$workdir"
+            grep -F "  $archive" checksums.txt > archive.sha256
+            test -s archive.sha256
+            sha256sum --check --strict archive.sha256
+            tar -xzf "$archive"
+          )
+          install -d -m 0755 "$HOME/.local/bin"
+          install -m 0755 "$workdir/koyeb" "$HOME/.local/bin/koyeb"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Collect sanitised worker health inside Koyeb
+        env:
+          KOYEB_TOKEN: ${{ secrets.KOYEB_TOKEN }}
+          KOYEB_SERVICE: ${{ vars.KOYEB_SERVICE }}
+        run: |
+          set -euo pipefail
+          test -n "${KOYEB_TOKEN:-}" || { echo "::error::KOYEB_TOKEN is required for the worker watch." >&2; exit 2; }
+          test -n "${KOYEB_SERVICE:-}" || { echo "::error::KOYEB_SERVICE is required for the worker watch." >&2; exit 2; }
+          js='const key=process.env.AIMS_API_KEY||process.env.AI_SUITE_API_KEY||""; if(!key){console.error("runtime suite bearer unavailable");process.exit(2)} const url="http://127.0.0.1:"+(process.env.PORT||"3000")+"/comms-hub/workers/health"; const response=await fetch(url,{headers:{Authorization:"Bearer "+key,Accept:"application/json"}}); if(!response.ok){console.error("worker health HTTP "+response.status);process.exit(3)} const body=await response.text(); JSON.parse(body); process.stdout.write("WORKER_HEALTH_B64="+Buffer.from(body).toString("base64")+"\\n");'
+          printf -v exec_command 'koyeb services exec %q node --input-type=module --eval %q' "$KOYEB_SERVICE" "$js"
+          output="$(script -q -e -c "$exec_command" /dev/null < /dev/null)"
+          encoded="$(printf '%s\n' "$output" | sed -n 's/.*WORKER_HEALTH_B64=//p' | tail -n 1 | tr -d '\r')"
+          test -n "$encoded" || { echo "::error::Koyeb worker health probe returned no sanitised payload." >&2; exit 1; }
+          printf '%s' "$encoded" | base64 --decode > worker-health.json
+          python3 -c 'import json; json.load(open("worker-health.json", encoding="utf-8"))'
       - name: Check workers and retain independent GitHub incident evidence
         env:
           GH_TOKEN: ${{ github.token }}
-          AIMS_API_KEY: ${{ secrets.AIMS_API_KEY }}
+          COMMS_WORKER_HEALTH_FILE: worker-health.json
           OPS_ALERT_WEBHOOK_URL: ${{ secrets.OPS_ALERT_WEBHOOK_URL }}
           OPS_ALERT_WEBHOOK_TOKEN: ${{ secrets.OPS_ALERT_WEBHOOK_TOKEN }}
           WATCH_SCHEDULED_AT: '' # GitHub does not supply the nominal occurrence timestamp.
