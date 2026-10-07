@@ -201,9 +201,9 @@ jobs:
               exit 0
             fi
 
-            retry_after="$(awk 'BEGIN{IGNORECASE=1} /^retry-after:/ {gsub("\\r","",$2); print $2}' "$headers" | tail -n 1)"
-            remaining="$(awk 'BEGIN{IGNORECASE=1} /^x-ratelimit-remaining:/ {gsub("\\r","",$2); print $2}' "$headers" | tail -n 1)"
-            reset_at="$(awk 'BEGIN{IGNORECASE=1} /^x-ratelimit-reset:/ {gsub("\\r","",$2); print $2}' "$headers" | tail -n 1)"
+            retry_after="$(awk 'BEGIN{IGNORECASE=1} /^retry-after:/ {sub(/\r$/, "", $2); print $2}' "$headers" | tail -n 1)"
+            remaining="$(awk 'BEGIN{IGNORECASE=1} /^x-ratelimit-remaining:/ {sub(/\r$/, "", $2); print $2}' "$headers" | tail -n 1)"
+            reset_at="$(awk 'BEGIN{IGNORECASE=1} /^x-ratelimit-reset:/ {sub(/\r$/, "", $2); print $2}' "$headers" | tail -n 1)"
             rate_limited=false
             if [ "$code" = "429" ] || { [ "$code" = "403" ] && { [ -n "$retry_after" ] || [ "$remaining" = "0" ]; }; }; then
               rate_limited=true
