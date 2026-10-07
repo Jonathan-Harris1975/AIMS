@@ -3,7 +3,7 @@ import json
 import unittest
 import urllib.error
 from datetime import UTC, datetime, timedelta
-from comms_worker_watch import advance_incident, check_health, production_monitor_config, validate_health
+from comms_worker_watch import advance_incident, check_health, check_health_file, production_monitor_config, validate_health
 
 
 class WorkerWatchTests(unittest.TestCase):
@@ -54,6 +54,16 @@ class WorkerWatchTests(unittest.TestCase):
             self.assertIsNotNone(validate_health(payload, self.expected, self.now))
         self.assertIsNotNone(validate_health(self.payload, ['inbound_email:missing'], self.now))
         self.assertIsNotNone(validate_health(self.payload, [], self.now))
+
+    def test_sanitised_health_file_uses_existing_validation(self):
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+        with TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'health.json'
+            path.write_text(json.dumps(self.payload), encoding='utf-8')
+            self.assertIsNone(check_health_file(str(path), self.expected, self.now))
+            path.write_text('not-json', encoding='utf-8')
+            self.assertEqual(check_health_file(str(path), self.expected, self.now), 'health_response_invalid')
 
     def test_network_timeout_and_malformed(self):
         calls = []
