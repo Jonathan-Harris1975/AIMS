@@ -15,13 +15,56 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  deployment_scope:
+    name: Determine whether Koyeb deployment verification is required
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      relevant: ${{ steps.scope.outputs.relevant }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          fetch-depth: 2
+      - name: Classify deployment scope
+        id: scope
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            echo "relevant=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          parent="$(git rev-parse HEAD^)"
+          mapfile -t changed < <(git diff --name-only "$parent" HEAD)
+          if [ "${#changed[@]}" -eq 0 ]; then
+            echo "relevant=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          relevant=false
+          for path in "${changed[@]}"; do
+            case "$path" in
+              .github/*) ;;
+              *) relevant=true; break ;;
+            esac
+          done
+          echo "relevant=$relevant" >> "$GITHUB_OUTPUT"
+          if [ "$relevant" = "false" ]; then
+            echo "::notice::Koyeb deployment verification skipped because the source commit changes only GitHub automation."
+          fi
+
   watch:
+    needs: deployment_scope
     if: >-
-      ${{ (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
-          (github.event_name == 'workflow_run' && github.event.workflow_run.event == 'push' &&
-           github.event.workflow_run.head_repository.full_name == github.repository &&
-           github.event.workflow_run.conclusion == 'success' &&
-           github.event.workflow_run.head_branch == 'main') }}
+      ${{ needs.deployment_scope.outputs.relevant == 'true' &&
+          ((github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+           (github.event_name == 'workflow_run' && github.event.workflow_run.event == 'push' &&
+            github.event.workflow_run.head_repository.full_name == github.repository &&
+            github.event.workflow_run.conclusion == 'success' &&
+            github.event.workflow_run.head_branch == 'main')) }}
     runs-on: ubuntu-latest
     environment: Koyeb
     timeout-minutes: 20
