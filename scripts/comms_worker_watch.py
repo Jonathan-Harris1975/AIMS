@@ -132,6 +132,17 @@ def advance_incident(state, failure, now, notify):
     return state
 
 
+def check_health_file(path, expected, now):
+    try:
+        raw = Path(path).read_bytes()
+        if len(raw) > 256_000:
+            return 'health_response_invalid'
+        payload = json.loads(raw)
+    except (OSError, json.JSONDecodeError, TypeError, ValueError):
+        return 'health_response_invalid'
+    return validate_health(payload, expected, now)
+
+
 def check_health(url, token, expected, now, opener=None):
     opener = opener or urllib.request.build_opener(NoRedirect()).open
     parsed = urllib.parse.urlsplit(url)
@@ -207,7 +218,9 @@ def main():
         print(f'Monitor configuration/state restore failed: {type(error).__name__}', file=sys.stderr)
         return 1
     now = datetime.now(UTC)
-    failure = check_health(url, os.getenv('AIMS_API_KEY', ''), expected, now)
+    health_file = os.getenv('COMMS_WORKER_HEALTH_FILE', '').strip()
+    failure = (check_health_file(health_file, expected, now) if health_file
+               else check_health(url, os.getenv('AIMS_API_KEY', ''), expected, now))
     alert_url = os.getenv('OPS_ALERT_WEBHOOK_URL', '')
     webhook_independent = bool(alert_url and os.getenv('OPS_ALERT_WEBHOOK_TOKEN') and urllib.parse.urlsplit(alert_url).scheme == 'https'
                                and urllib.parse.urlsplit(alert_url).netloc != urllib.parse.urlsplit(url).netloc)
