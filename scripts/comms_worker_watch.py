@@ -184,7 +184,7 @@ def restore_state():
             continue
         run = github_json(f'actions/runs/{artifact["workflow_run"]["id"]}')
         if (run.get('path') != '.github/workflows/comms-hub-worker-watch.yml' or run.get('head_branch') != 'main'
-                or run.get('event') not in ('schedule', 'workflow_dispatch')):
+                or run.get('event') not in ('schedule', 'workflow_dispatch', 'workflow_run')):
             continue
         url = f'https://api.github.com/repos/{os.environ["GITHUB_REPOSITORY"]}/actions/artifacts/{artifact["id"]}/zip'
         request = urllib.request.Request(url, headers={'Authorization': f'Bearer {os.environ["GH_TOKEN"]}'})
