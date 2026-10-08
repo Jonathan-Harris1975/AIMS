@@ -2,7 +2,8 @@
 // Read-only production snapshot. Run inside the AIMS service so Koyeb keeps
 // provider credentials private; print only booleans, IDs and delivery states.
 import "../config/loadEnv.js";
-import { loadCommsHubConfig } from "../services/comms-hub/config.js";
+import { usableEnvValue, extractAccountIdFromR2Endpoint } from "../services/comms-hub/config.js";
+import { NEWSLETTER_JOTFORM_FORM_ID } from "../services/newsletter/jotformIntake.js";
 import { D1Client } from "../services/comms-hub/clients/d1Client.js";
 import { trustedNewsletterBase } from "../services/newsletter/confirmationDelivery.js";
 import { readJsonStateFresh } from "../services/shared/utils/stateFile.js";
@@ -134,8 +135,20 @@ async function safeCheck(run) {
 // Provider payloads stay inside the service. Never print answers, addresses,
 // webhook URLs (which may contain secrets), submission IDs or raw errors.
 async function newsletterIntakeSnapshot() {
-  const config = loadCommsHubConfig(process.env, { requireEnabled: true });
-  const formId = config.jotformForms.newsletter_signup.formId;
+  // Only these provider/storage prerequisites apply to this read-only check.
+  // Unrelated enabled Comms Hub features must not suppress intake evidence.
+  const env = process.env;
+  const base = (value, fallback = "") => usableEnvValue(value).replace(/\/$/, "") || fallback;
+  const config = {
+    d1DatabaseId: usableEnvValue(env.D1_UUID), d1ApiToken: usableEnvValue(env.D1_API_KEY),
+    d1ProxyUrl: base(env.COMMS_HUB_D1_PROXY_URL), d1ProxyToken: usableEnvValue(env.COMMS_HUB_D1_PROXY_TOKEN),
+    cloudflareAccountId: usableEnvValue(env.CLOUDFLARE_ACCOUNT_ID) || usableEnvValue(env.CF_ACCOUNT_ID) || extractAccountIdFromR2Endpoint(env.R2_ENDPOINT),
+    cloudflareApiBaseUrl: base(env.CLOUDFLARE_API_BASE_URL, "https://api.cloudflare.com/client/v4"),
+    jotformApiKey: usableEnvValue(env.JOTFORM_API_KEY),
+    jotformApiBaseUrl: base(env.JOTFORM_API_BASE_URL, "https://api.jotform.com"),
+    d1TimeoutMs: 15_000, providerRetryAttempts: 2, providerRetryBaseMs: 500, providerRetryMaxMs: 1_000,
+  };
+  const formId = NEWSLETTER_JOTFORM_FORM_ID;
   const d1 = new D1Client(config);
   let confirmationBase = null;
   try { confirmationBase = trustedNewsletterBase(process.env.COMMS_HUB_PUBLIC_BASE_URL); }
@@ -170,16 +183,18 @@ async function newsletterIntakeSnapshot() {
     if (!result.ok) return result;
     if (!Array.isArray(result.content)) return { ok: false, status: "invalid-submission-list" };
     const submissions = result.content.filter((row) => /^\d+$/.test(String(row.id || "")));
-    let consentRecorded = 0;
-    let confirmationRecorded = 0;
-    for (const row of submissions) {
-      const events = await d1.query("SELECT event_type FROM newsletter_consent_events WHERE publication_id=? AND source_reference=?", [
-        "ai-edge", `jotform:${formId}:${row.id}`,
-      ]);
-      const types = new Set((events.results || []).map((event) => event.event_type));
-      if (types.has("consent_requested")) consentRecorded += 1;
-      if (types.has("confirmation_sent")) confirmationRecorded += 1;
+    const references = [...new Set(submissions.map((row) => `jotform:${formId}:${row.id}`))];
+    const events = references.length ? await d1.query(
+      `SELECT source_reference,event_type FROM newsletter_consent_events WHERE publication_id='ai-edge' AND source_reference IN (${references.map(() => "?").join(",")})`, references,
+    ) : { results: [] };
+    const consent = new Set();
+    const confirmed = new Set();
+    for (const event of events.results || []) {
+      if (event.event_type === "consent_requested") consent.add(event.source_reference);
+      if (event.event_type === "confirmation_sent") confirmed.add(event.source_reference);
     }
+    const consentRecorded = consent.size;
+    const confirmationRecorded = confirmed.size;
     return { ok: true, sampleCount: submissions.length, sampleLimit: 100,
       mayBeTruncated: result.content.length === 100, consentRecorded, confirmationRecorded };
   });
