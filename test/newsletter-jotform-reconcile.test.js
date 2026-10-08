@@ -1,10 +1,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { reconcileNewsletterWebhook, replayNewsletterTest } from '../services/newsletter/jotformReconcile.js';
+import { reconcileNewsletterWebhook, replayNewsletterTest, newsletterRepairScope } from '../services/newsletter/jotformReconcile.js';
 
 const input = { baseUrl: 'https://aims.example', formId: '123', apiBaseUrl: 'https://api.example', apiKey: 'private-test-key' };
 const canonical = 'https://aims.example/comms-hub/intake/jotform';
 const json = content => ({ ok: true, json: async () => content });
+
+test('standalone test recovery requires an explicit valid recipient and date before provider work', () => {
+  assert.deepEqual(newsletterRepairScope([]), { replayOnly: false, email: undefined, date: undefined });
+  assert.equal(newsletterRepairScope(['--replay-only', '--replay-test-email', 'ops@example.test', '--replay-test-date', '2026-10-08']).replayOnly, true);
+  for (const args of [['--replay-only'], ['--replay-test-email', 'ops@example.test'],
+    ['--replay-only', '--replay-test-email', 'bad', '--replay-test-date', '2026-10-08']]) {
+    assert.throws(() => newsletterRepairScope(args), { code: 'newsletter_test_scope_invalid' });
+  }
+});
 
 test('webhook repair requires a healthy AIMS target before any provider write', async () => {
   const calls = [];

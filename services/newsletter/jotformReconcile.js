@@ -1,5 +1,16 @@
 function failure(code, diagnostic = {}) { return Object.assign(new Error(code), { code, diagnostic }); }
 
+export function newsletterRepairScope(args) {
+  const value = flag => args.includes(flag) ? args[args.indexOf(flag) + 1] : undefined;
+  const email = value('--replay-test-email');
+  const date = value('--replay-test-date');
+  const replayOnly = args.includes('--replay-only');
+  if (replayOnly || args.includes('--replay-test-email') || args.includes('--replay-test-date')) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date || '') || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email || '')) throw failure('newsletter_test_scope_invalid');
+  }
+  return { replayOnly, email, date };
+}
+
 export async function reconcileNewsletterWebhook({ baseUrl, formId, apiBaseUrl, apiKey, fetchImpl = fetch }) {
   const base = new URL(baseUrl);
   if (base.protocol !== 'https:' || base.username || base.password || base.search || base.hash || !['', '/'].includes(base.pathname)) {
