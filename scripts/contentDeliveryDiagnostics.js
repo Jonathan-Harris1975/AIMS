@@ -4,6 +4,7 @@
 import "../config/loadEnv.js";
 import { loadCommsHubConfig } from "../services/comms-hub/config.js";
 import { D1Client } from "../services/comms-hub/clients/d1Client.js";
+import { trustedNewsletterBase } from "../services/newsletter/confirmationDelivery.js";
 import { readJsonStateFresh } from "../services/shared/utils/stateFile.js";
 import { getObjectAsText, listKeys } from "../services/shared/utils/r2-client.js";
 import { getNewsletterProfile } from "../services/newsletter/config/profiles.js";
@@ -136,6 +137,9 @@ async function newsletterIntakeSnapshot() {
   const config = loadCommsHubConfig(process.env, { requireEnabled: true });
   const formId = config.jotformForms.newsletter_signup.formId;
   const d1 = new D1Client(config);
+  let confirmationBase = null;
+  try { confirmationBase = trustedNewsletterBase(process.env.COMMS_HUB_PUBLIC_BASE_URL); }
+  catch { /* Report invalid configuration without exposing the supplied URL. */ }
   async function providerGet(path) {
     const response = await fetch(`${config.jotformApiBaseUrl}${path}`, {
       method: "GET", redirect: "error", signal: AbortSignal.timeout(10_000),
@@ -151,11 +155,11 @@ async function newsletterIntakeSnapshot() {
     const result = await providerGet(`/form/${formId}/webhooks`);
     if (!result.ok) return result;
     const urls = Object.values(result.content || {}).filter((value) => typeof value === "string");
-    const expected = new URL("/comms-hub/intake/jotform", config.publicBaseUrl);
-    return { ok: true, registeredCount: urls.length, canonicalIntakeRegistered: urls.some((value) => {
+    const expected = confirmationBase ? new URL("/comms-hub/intake/jotform", confirmationBase) : null;
+    return { ok: true, registeredCount: urls.length, canonicalIntakeRegistered: expected ? urls.some((value) => {
       try { const url = new URL(value); return url.origin === expected.origin && url.pathname === expected.pathname; }
       catch { return false; }
-    }) };
+    }) : null };
   });
   const recentSubmissions = await safeCheck(async () => {
     // Limit the query to the last two calendar days; Jotform timestamps do not
@@ -183,7 +187,7 @@ async function newsletterIntakeSnapshot() {
     const result = await d1.query("SELECT status, COUNT(*) AS count FROM newsletter_confirmation_deliveries GROUP BY status");
     return { ok: true, counts: Object.fromEntries((result.results || []).map((row) => [row.status, Number(row.count)])) };
   });
-  return { webhook, recentSubmissions, confirmations };
+  return { confirmationBaseValid: Boolean(confirmationBase), webhook, recentSubmissions, confirmations };
 }
 
 const profile = getNewsletterProfile("ai-edge");
