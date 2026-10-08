@@ -305,6 +305,9 @@ test('verified Jotform signup records its confirmation receipt against the persi
     if (failAudit && sql.includes("'confirmation_sent','consent'")) { failAudit = false; throw new Error('temporary audit failure'); }
     return query(sql, params);
   };
+  await assert.rejects(processNewsletterJotformSignup({ identifiers, context, expectedEmail: 'different@example.com' }), { code: 'newsletter_test_recipient_changed' });
+  assert.equal(sends, 0);
+  assert.equal(d1.db.prepare('SELECT COUNT(*) AS n FROM newsletter_subscribers').get().n, 0);
   await assert.rejects(processNewsletterJotformSignup({ identifiers, context }), /temporary audit failure/);
   assert.equal((await processNewsletterJotformSignup({ identifiers, context })).duplicate, true);
   const subscriber = d1.db.prepare('SELECT id,status,verified_at FROM newsletter_subscribers').get();
