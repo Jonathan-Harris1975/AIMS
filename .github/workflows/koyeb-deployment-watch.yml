@@ -156,25 +156,73 @@ jobs:
           path: deployment-attestation.json
           if-no-files-found: error
           retention-days: 90
-      - name: Trigger central ecosystem smoke
+      - name: Dispatch central ecosystem smoke
+        continue-on-error: true
+        timeout-minutes: 8
         env:
           ECOSYSTEM_SMOKE_DISPATCH_TOKEN: ${{ secrets.ECOSYSTEM_SMOKE_DISPATCH_TOKEN }}
           ECOSYSTEM_SMOKE_REPOSITORY: ${{ vars.ECOSYSTEM_SMOKE_REPOSITORY }}
           SOURCE_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
         run: |
           set -euo pipefail
-          test -n "${ECOSYSTEM_SMOKE_DISPATCH_TOKEN:-}" || { echo "ECOSYSTEM_SMOKE_DISPATCH_TOKEN is required" >&2; exit 1; }
+          test -n "${ECOSYSTEM_SMOKE_DISPATCH_TOKEN:-}" || { echo "::warning::ECOSYSTEM_SMOKE_DISPATCH_TOKEN is not configured; central smoke dispatch skipped." >&2; exit 0; }
           target="${ECOSYSTEM_SMOKE_REPOSITORY:-${GITHUB_REPOSITORY_OWNER}/MAST}"
           payload="$(jq -cn --arg ref main --arg repo "$GITHUB_REPOSITORY" --arg sha "$SOURCE_SHA" '{ref:$ref,inputs:{source_repository:$repo,source_sha:$sha}}')"
-          curl --fail-with-body --silent --show-error \
-            --request POST \
-            --header "Authorization: Bearer ${ECOSYSTEM_SMOKE_DISPATCH_TOKEN}" \
-            --header "Accept: application/vnd.github+json" \
-            --header "X-GitHub-Api-Version: 2022-11-28" \
-            --data "$payload" \
-            "https://api.github.com/repos/${target}/actions/workflows/ecosystem-smoke.yml/dispatches"
+          response="$(mktemp)"
+          headers="$(mktemp)"
+          trap 'rm -f "$response" "$headers"' EXIT
 
+          for attempt in 1 2 3 4 5; do
+            : > "$response"
+            : > "$headers"
+            code="$(curl --silent --show-error               --connect-timeout 5               --max-time 30               --dump-header "$headers"               --output "$response"               --write-out '%{http_code}'               --request POST               --header "Authorization: Bearer ${ECOSYSTEM_SMOKE_DISPATCH_TOKEN}"               --header "Accept: application/vnd.github+json"               --header "X-GitHub-Api-Version: 2022-11-28"               --data "$payload"               "https://api.github.com/repos/${target}/actions/workflows/ecosystem-smoke.yml/dispatches" || true)"
+            if [ "$code" = "204" ]; then
+              echo "Central ecosystem smoke dispatch accepted on attempt $attempt."
+              exit 0
+            fi
 
+            retry_after="$(awk 'BEGIN{IGNORECASE=1} /^retry-after:/ {sub(/^[^:]*:[[:space:]]*/, ""); gsub(/[[:space:]]+$/, ""); print}' "$headers" | tail -n 1)"
+            remaining="$(awk 'BEGIN{IGNORECASE=1} /^x-ratelimit-remaining:/ {sub(/^[^:]*:[[:space:]]*/, ""); gsub(/[[:space:]]+$/, ""); print}' "$headers" | tail -n 1)"
+            reset_at="$(awk 'BEGIN{IGNORECASE=1} /^x-ratelimit-reset:/ {sub(/^[^:]*:[[:space:]]*/, ""); gsub(/[[:space:]]+$/, ""); print}' "$headers" | tail -n 1)"
+
+            if [ "$attempt" -lt 5 ] && { [ "$code" = "429" ] || { [ "$code" = "403" ] && { [ -n "$retry_after" ] || [ "$remaining" = "0" ]; }; }; }; then
+              delay=60
+              if [[ "$retry_after" =~ ^[0-9]+$ ]]; then
+                delay="$retry_after"
+              elif [ -n "$retry_after" ]; then
+                retry_epoch="$(date -u -d "$retry_after" +%s 2>/dev/null || true)"
+                if [[ "$retry_epoch" =~ ^[0-9]+$ ]]; then
+                  now="$(date +%s)"
+                  delay=$((retry_epoch - now + 5))
+                fi
+              elif [[ "$reset_at" =~ ^[0-9]+$ ]]; then
+                now="$(date +%s)"
+                delay=$((reset_at - now + 5))
+              fi
+              [ "$delay" -lt 1 ] && delay=1
+              if [ "$delay" -gt 300 ]; then
+                echo "::warning::GitHub requested a ${delay}s rate-limit wait, beyond this bounded post-deployment dispatch window." >&2
+                exit 1
+              fi
+              echo "::warning::GitHub rate-limited ecosystem dispatch (HTTP $code); retrying in ${delay}s."
+              sleep "$delay"
+              continue
+            fi
+
+            if [ "$attempt" -lt 5 ] && { [ "$code" = "000" ] || [[ "$code" =~ ^5[0-9][0-9]$ ]]; }; then
+              delay=$((attempt * attempt * 10))
+              [ "$delay" -gt 120 ] && delay=120
+              echo "::warning::Transient GitHub dispatch response HTTP $code; retrying in ${delay}s."
+              sleep "$delay"
+              continue
+            fi
+
+            echo "::error::Central ecosystem smoke dispatch failed with HTTP $code on attempt $attempt." >&2
+            cat "$response" >&2 || true
+            exit 1
+          done
+          echo "::error::Central ecosystem smoke dispatch failed after bounded retries." >&2
+          exit 1
   open_renovate_revert:
     name: Open validated Renovate revert PR
     needs: [watch]
