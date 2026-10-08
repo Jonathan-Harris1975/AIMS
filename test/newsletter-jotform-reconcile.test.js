@@ -38,6 +38,21 @@ test('existing canonical registration is idempotent and needs no write', async (
   } }));
 });
 
+test('provider refusal reports operation and status without response text or credentials', async () => {
+  let error;
+  try {
+    await reconcileNewsletterWebhook({ ...input, fetchImpl: async (url, options) => {
+      if (url.endsWith('/health')) return json({ ok: true, service: 'comms-hub' });
+      if (options.method === 'GET') return json({ responseCode: 200, content: {} });
+      return { ok: false, status: 403, json: async () => ({ responseCode: 403, message: 'private-response-text' }) };
+    } });
+  } catch (caught) { error = caught; }
+  assert.equal(error.code, 'newsletter_webhook_provider_failed');
+  assert.deepEqual(error.diagnostic, { operation: 'POST', httpStatus: 403, providerStatus: 403 });
+  assert(!JSON.stringify(error).includes('private-response-text'));
+  assert(!JSON.stringify(error).includes(input.apiKey));
+});
+
 test('uncertain provider acceptance is not blindly retried and next invocation reads first', async () => {
   let registered = false; let writes = 0;
   const fetchImpl = async (url, options) => {

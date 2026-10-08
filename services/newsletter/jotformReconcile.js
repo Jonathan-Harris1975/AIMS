@@ -1,4 +1,4 @@
-function failure(code) { return Object.assign(new Error(code), { code }); }
+function failure(code, diagnostic = {}) { return Object.assign(new Error(code), { code, diagnostic }); }
 
 export async function reconcileNewsletterWebhook({ baseUrl, formId, apiBaseUrl, apiKey, fetchImpl = fetch }) {
   const base = new URL(baseUrl);
@@ -18,7 +18,10 @@ export async function reconcileNewsletterWebhook({ baseUrl, formId, apiBaseUrl, 
       ...(body ? { body } : {}),
     });
     const payload = await response.json();
-    if (!response.ok || ![200, 201].includes(Number(payload.responseCode))) throw failure('newsletter_webhook_provider_failed');
+    if (!response.ok || ![200, 201].includes(Number(payload.responseCode))) {
+      throw failure('newsletter_webhook_provider_failed', { operation: method, httpStatus: response.status,
+        providerStatus: Number(payload.responseCode) || null });
+    }
     return payload.content;
   }
   const registered = content => Object.values(content || {}).some(value => {
