@@ -2,6 +2,11 @@ import copy
 import json
 import unittest
 import urllib.error
+import os
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from unittest.mock import patch
+import comms_worker_watch as watch
 from datetime import UTC, datetime, timedelta
 from comms_worker_watch import advance_incident, check_health, check_health_file, production_monitor_config, validate_health
 
@@ -64,6 +69,52 @@ class WorkerWatchTests(unittest.TestCase):
             self.assertIsNone(check_health_file(str(path), self.expected, self.now))
             path.write_text('not-json', encoding='utf-8')
             self.assertEqual(check_health_file(str(path), self.expected, self.now), 'health_response_invalid')
+
+    def test_malformed_runtime_payloads_fail_closed_without_crashing(self):
+        for health in (None, [], 'healthy', True):
+            payload = {**self.payload, 'health': health}
+            self.assertEqual(validate_health(payload, self.expected, self.now), 'health_response_invalid')
+        for field, value in [('checkedAt', 123), ('checkedAt', None), ('enabledWorkers', True)]:
+            payload = copy.deepcopy(self.payload)
+            payload['health'][field] = value
+            self.assertIsNotNone(validate_health(payload, self.expected, self.now))
+        for field in ('ageMs', 'degradedAfterMs'):
+            payload = copy.deepcopy(self.payload)
+            payload['health']['workers'][0][field] = True
+            self.assertEqual(validate_health(payload, self.expected, self.now), 'worker_unhealthy')
+        payload = copy.deepcopy(self.payload)
+        payload['health']['workers'].append(copy.deepcopy(payload['health']['workers'][0]))
+        self.assertEqual(validate_health(payload, self.expected, self.now), 'inventory_invalid')
+
+    def test_failed_probe_records_and_notifies_even_with_a_healthy_file(self):
+        with TemporaryDirectory() as tmp:
+            state_path = Path(tmp) / 'state.json'
+            health_path = Path(tmp) / 'health.json'
+            health_path.write_text(json.dumps(self.payload), encoding='utf-8')
+            env = {'COMMS_WORKER_HEALTH_FILE': str(health_path),
+                   'OPS_ALERT_WEBHOOK_URL': 'https://ops.example/events', 'OPS_ALERT_WEBHOOK_TOKEN': 'test-only'}
+            with patch.dict(os.environ, env), patch.object(watch, 'STATE', state_path), \
+                 patch.object(watch, 'restore_state', return_value={'active': False}), \
+                 patch.object(watch, 'load_defaults', return_value={}), \
+                 patch.object(watch, 'production_monitor_config', return_value=('https://aims.example/health', self.expected)), \
+                 patch.object(watch, 'send_event', return_value=True) as send:
+                for outcome in ('failure', 'skipped', 'cancelled'):
+                    with patch.dict(os.environ, {'COMMS_WORKER_PROBE_OUTCOME': outcome}):
+                        self.assertEqual(watch.main(), 1)
+                    state = json.loads(state_path.read_text())
+                    self.assertTrue(state['active'])
+                    self.assertTrue(state['notified'])
+                    self.assertEqual(state['last_failure'], 'health_probe_failed')
+                    self.assertEqual(send.call_args.args[0]['summary'], 'health_probe_failed')
+
+    def test_workflow_runs_incident_handler_after_probe_failure(self):
+        workflow = (Path(__file__).resolve().parents[1] / '.github/workflows/comms-hub-worker-watch.yml').read_text()
+        handler = workflow.split('- name: Check workers and retain independent GitHub incident evidence', 1)[1]
+        self.assertIn("if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}", handler)
+        self.assertIn('COMMS_WORKER_PROBE_OUTCOME: ${{ steps.health_probe.outcome }}', handler)
+        probe = workflow.split('- name: Collect sanitised worker health inside Koyeb', 1)[1].split('- name:', 1)[0]
+        self.assertIn('timeout-minutes: 2', probe)
+        self.assertIn('id: health_probe', probe)
 
     def test_network_timeout_and_malformed(self):
         calls = []

@@ -1,4 +1,4 @@
-          # The watcher derives its target and expected inventory from config/production.defaults.env.
+# The watcher derives its target and expected inventory from config/production.defaults.env.
 name: Comms Hub continuous worker watch
 on:
   schedule:
@@ -28,9 +28,11 @@ jobs:
     timeout-minutes: 8
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        id: checkout
         with:
           persist-credentials: false
       - name: Install verified Koyeb CLI
+        timeout-minutes: 2
         env:
           KOYEB_CLI_VERSION: "5.10.2"
         run: |
@@ -52,6 +54,8 @@ jobs:
           install -m 0755 "$workdir/koyeb" "$HOME/.local/bin/koyeb"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - name: Collect sanitised worker health inside Koyeb
+        id: health_probe
+        timeout-minutes: 2
         env:
           KOYEB_TOKEN: ${{ secrets.KOYEB_TOKEN }}
           KOYEB_SERVICE: ${{ vars.KOYEB_SERVICE }}
@@ -66,9 +70,11 @@ jobs:
           printf '%s' "$encoded" | base64 --decode > worker-health.json
           python3 -c 'import json; json.load(open("worker-health.json", encoding="utf-8"))'
       - name: Check workers and retain independent GitHub incident evidence
+        if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
         env:
           GH_TOKEN: ${{ github.token }}
           COMMS_WORKER_HEALTH_FILE: worker-health.json
+          COMMS_WORKER_PROBE_OUTCOME: ${{ steps.health_probe.outcome }}
           OPS_ALERT_WEBHOOK_URL: ${{ secrets.OPS_ALERT_WEBHOOK_URL }}
           OPS_ALERT_WEBHOOK_TOKEN: ${{ secrets.OPS_ALERT_WEBHOOK_TOKEN }}
           WATCH_SCHEDULED_AT: '' # GitHub does not supply the nominal occurrence timestamp.
