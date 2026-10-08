@@ -3,7 +3,7 @@ name: Comms Hub continuous worker watch
 on:
   schedule:
     - cron: '7,37 * * * *'
-  workflow_run:
+  workflow_run: # zizmor: ignore[dangerous-triggers] same-repository main-branch deployment result is authenticated in the job gate below
     workflows: ["Koyeb production deployment watch"]
     types: [completed]
   workflow_dispatch:
@@ -20,7 +20,7 @@ jobs:
            github.ref == 'refs/heads/main') ||
           (github.event_name == 'workflow_run' &&
            github.event.workflow_run.conclusion == 'success' &&
-           github.event.workflow_run.event == 'workflow_run' &&
+           (github.event.workflow_run.event == 'workflow_run' || github.event.workflow_run.event == 'workflow_dispatch') &&
            github.event.workflow_run.head_branch == 'main' &&
            github.event.workflow_run.head_repository.full_name == github.repository) }}
     runs-on: ubuntu-latest
