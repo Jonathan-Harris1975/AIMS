@@ -152,7 +152,7 @@ async function newsletterIntakeSnapshot() {
     if (!result.ok) return result;
     const urls = Object.values(result.content || {}).filter((value) => typeof value === "string");
     const expected = new URL("/comms-hub/intake/jotform", config.publicBaseUrl);
-    return { ok: true, registeredCount: urls.length, aimsIntakeRegistered: urls.some((value) => {
+    return { ok: true, registeredCount: urls.length, canonicalIntakeRegistered: urls.some((value) => {
       try { const url = new URL(value); return url.origin === expected.origin && url.pathname === expected.pathname; }
       catch { return false; }
     }) };
