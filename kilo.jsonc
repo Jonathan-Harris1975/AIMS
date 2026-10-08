@@ -2,7 +2,6 @@
   "$schema": "https://app.kilo.ai/config.json",
   "permission": {
     "*": "allow",
-
     "edit": {
       "*": "allow",
       "kilo.jsonc": "deny",
@@ -19,7 +18,8 @@
       "CI_SETUP.txt": "deny",
       "scripts/secret_scan.py": "deny",
       "scripts/install_ci_tools.py": "deny",
-      "scripts/verify_ci_tool_checksums.py": "deny"
+      "scripts/verify_ci_tool_checksums.py": "deny",
+      ".github/production-governance.json": "deny"
     },
     "write": {
       "*": "allow",
@@ -37,7 +37,8 @@
       "CI_SETUP.txt": "deny",
       "scripts/secret_scan.py": "deny",
       "scripts/install_ci_tools.py": "deny",
-      "scripts/verify_ci_tool_checksums.py": "deny"
+      "scripts/verify_ci_tool_checksums.py": "deny",
+      ".github/production-governance.json": "deny"
     },
     "apply_patch": {
       "*": "allow",
@@ -55,15 +56,13 @@
       "CI_SETUP.txt": "deny",
       "scripts/secret_scan.py": "deny",
       "scripts/install_ci_tools.py": "deny",
-      "scripts/verify_ci_tool_checksums.py": "deny"
+      "scripts/verify_ci_tool_checksums.py": "deny",
+      ".github/production-governance.json": "deny"
     },
-
     "external_directory": "deny",
     "question": "deny",
-
     "bash": {
       "*": "deny",
-
       "git status *": "allow",
       "git diff *": "allow",
       "git log *": "allow",
@@ -81,7 +80,6 @@
       "git push origin HEAD": "allow",
       "git push --set-upstream origin HEAD": "allow",
       "git push -u origin HEAD": "allow",
-
       "npm ci *": "allow",
       "npm test *": "allow",
       "npm run build *": "allow",
@@ -96,12 +94,10 @@
       "npm run perf:gate *": "allow",
       "npm run r2:policy:check *": "allow",
       "npm audit *": "allow",
-
       "python3 .github/scripts/test_autonomy_lifecycle.py *": "allow",
       "python3 .github/scripts/test_pr_blocker_recovery.py *": "allow",
       "python3 scripts/check_repository_hygiene.py *": "allow",
       "python3 scripts/secret_scan.py *": "allow",
-
       "git checkout main": "deny",
       "git checkout -B main *": "deny",
       "git checkout -b main *": "deny",
