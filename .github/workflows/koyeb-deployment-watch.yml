@@ -131,6 +131,19 @@ jobs:
           console.error('Deployed Comms Hub data-plane Worker health verification failed.');
           process.exit(1);
           JS
+      - name: Repair newsletter intake and recover the authorised dated test
+        if: ${{ github.event_name == 'workflow_run' && startsWith(github.event.workflow_run.head_commit.message, 'Repair newsletter intake registration and authorised test recovery') }}
+        timeout-minutes: 5
+        env:
+          KOYEB_TOKEN: ${{ secrets.KOYEB_TOKEN }}
+          KOYEB_SERVICE: ${{ vars.KOYEB_SERVICE }}
+        run: |
+          set -euo pipefail
+          # One explicit repair release only. The handler verifies the provider
+          # record, consent and expected recipient; durable delivery claims
+          # prevent duplicate sends on workflow retries. No credentials leave Koyeb.
+          printf -v exec_command 'koyeb services exec %q node -- scripts/reconcileNewsletterIntake.js --replay-test-email ops@jonathan-harris.online --replay-test-date 2026-10-08' "$KOYEB_SERVICE"
+          script -q -e -c "$exec_command" /dev/null < /dev/null
       - name: Inspect content delivery in the deployed service
         continue-on-error: true
         timeout-minutes: 5

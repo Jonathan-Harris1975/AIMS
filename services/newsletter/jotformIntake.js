@@ -73,7 +73,7 @@ You will not be added to the active AI Edge audience unless you confirm.</p>
   return { subject, bodyText, bodyHtml };
 }
 
-export async function processNewsletterJotformSignup({ identifiers, context }) {
+export async function processNewsletterJotformSignup({ identifiers, context, expectedEmail }) {
   if (identifiers?.formId !== FORM_ID || identifiers?.route?.key !== "newsletter_signup") {
     throw new CommsHubError(403, "newsletter_jotform_not_allowed", "Jotform is not registered for newsletter signup.");
   }
@@ -83,6 +83,9 @@ export async function processNewsletterJotformSignup({ identifiers, context }) {
   const firstName = text(namedAnswer(answers, /(^|\s)first\s*name($|\s)/)?.value).slice(0, 100);
   const consent = namedAnswer(answers, /email\s*consent|newsletter\s*consent/);
   if (!contact.email) throw new CommsHubError(400, "newsletter_email_missing", "Newsletter signup requires an email address.", { publicMessage: "Email address is required." });
+  if (expectedEmail && contact.email.trim().toLowerCase() !== expectedEmail.trim().toLowerCase()) {
+    throw new CommsHubError(409, "newsletter_test_recipient_changed", "Verified test recipient no longer matches the authorised replay.");
+  }
   if (!hasAffirmativeConsent(consent)) {
     throw new CommsHubError(400, "newsletter_consent_missing", "Newsletter signup requires explicit affirmative email consent.", { publicMessage: "Email consent is required." });
   }
