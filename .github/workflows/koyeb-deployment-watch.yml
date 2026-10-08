@@ -181,9 +181,9 @@ jobs:
               exit 0
             fi
 
-            retry_after="$(awk 'BEGIN{IGNORECASE=1} /^retry-after:/ {sub(/^[^:]*:[[:space:]]*/, ""); sub(/$/, ""); print}' "$headers" | tail -n 1)"
-            remaining="$(awk 'BEGIN{IGNORECASE=1} /^x-ratelimit-remaining:/ {sub(/^[^:]*:[[:space:]]*/, ""); sub(/$/, ""); print}' "$headers" | tail -n 1)"
-            reset_at="$(awk 'BEGIN{IGNORECASE=1} /^x-ratelimit-reset:/ {sub(/^[^:]*:[[:space:]]*/, ""); sub(/$/, ""); print}' "$headers" | tail -n 1)"
+            retry_after="$(awk 'BEGIN{IGNORECASE=1} /^retry-after:/ {sub(/^[^:]*:[[:space:]]*/, ""); sub(/$/, ""); print}' "$headers" | tail -n 1)"
+            remaining="$(awk 'BEGIN{IGNORECASE=1} /^x-ratelimit-remaining:/ {sub(/^[^:]*:[[:space:]]*/, ""); sub(/$/, ""); print}' "$headers" | tail -n 1)"
+            reset_at="$(awk 'BEGIN{IGNORECASE=1} /^x-ratelimit-reset:/ {sub(/^[^:]*:[[:space:]]*/, ""); sub(/$/, ""); print}' "$headers" | tail -n 1)"
 
             if [ "$attempt" -lt 5 ] && { [ "$code" = "429" ] || { [ "$code" = "403" ] && { [ -n "$retry_after" ] || [ "$remaining" = "0" ]; }; }; }; then
               delay=60
