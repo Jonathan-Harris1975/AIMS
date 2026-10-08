@@ -74,10 +74,14 @@ def validate_health(payload, expected, now):
     if not expected:
         return 'expected_inventory_unconfigured'
     health = payload.get('health', {}) if isinstance(payload, dict) else {}
+    if not isinstance(health, dict):
+        return 'health_response_invalid'
     workers = health.get('workers')
     if not isinstance(workers, list) or not workers:
         return 'inventory_missing'
     try:
+        if not isinstance(health.get('checkedAt'), str):
+            return 'health_response_invalid'
         checked = datetime.fromisoformat(health['checkedAt'].replace('Z', '+00:00'))
         age = (now - checked).total_seconds()
         if age < -30 or age > 120:
@@ -87,7 +91,9 @@ def validate_health(payload, expected, now):
     identities = {f"{w.get('category')}:{w.get('key')}" for w in workers if isinstance(w, dict) and w.get('enabled') is True}
     if not set(expected).issubset(identities):
         return 'expected_worker_missing'
-    if health.get('enabledWorkers') != len(identities) or not identities:
+    enabled_rows = [w for w in workers if isinstance(w, dict) and w.get('enabled') is True]
+    if (type(health.get('enabledWorkers')) is not int or health.get('enabledWorkers') != len(identities)
+            or len(enabled_rows) != len(identities) or not identities):
         return 'inventory_invalid'
     if payload.get('ok') is not True or payload.get('service') != 'comms-hub' or health.get('overall') != 'healthy':
         return 'workers_unhealthy'
@@ -97,8 +103,8 @@ def validate_health(payload, expected, now):
         if worker.get('enabled') is True:
             age_ms = worker.get('ageMs')
             threshold = worker.get('degradedAfterMs')
-            if (worker.get('status') != 'healthy' or not isinstance(age_ms, (int, float))
-                    or not isinstance(threshold, (int, float)) or not math.isfinite(age_ms) or not math.isfinite(threshold)
+            if (worker.get('status') != 'healthy' or type(age_ms) not in (int, float)
+                    or type(threshold) not in (int, float) or not math.isfinite(age_ms) or not math.isfinite(threshold)
                     or age_ms < 0 or threshold <= 0 or age_ms > threshold):
                 return 'worker_unhealthy'
     return None
@@ -219,8 +225,14 @@ def main():
         return 1
     now = datetime.now(UTC)
     health_file = os.getenv('COMMS_WORKER_HEALTH_FILE', '').strip()
-    failure = (check_health_file(health_file, expected, now) if health_file
-               else check_health(url, os.getenv('AIMS_API_KEY', ''), expected, now))
+    probe_outcome = os.getenv('COMMS_WORKER_PROBE_OUTCOME', '').strip()
+    if probe_outcome and probe_outcome != 'success':
+        # A failed/skipped runtime probe must reach the same durable incident path
+        # as an unhealthy response. Never reuse a partial or stale probe file.
+        failure = 'health_probe_failed'
+    else:
+        failure = (check_health_file(health_file, expected, now) if health_file
+                   else check_health(url, os.getenv('AIMS_API_KEY', ''), expected, now))
     alert_url = os.getenv('OPS_ALERT_WEBHOOK_URL', '')
     webhook_independent = bool(alert_url and os.getenv('OPS_ALERT_WEBHOOK_TOKEN') and urllib.parse.urlsplit(alert_url).scheme == 'https'
                                and urllib.parse.urlsplit(alert_url).netloc != urllib.parse.urlsplit(url).netloc)

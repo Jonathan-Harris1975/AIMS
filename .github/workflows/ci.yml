@@ -45,6 +45,8 @@ jobs:
           fi
       - name: Run canonical release verification
         run: npm run verify:release
+      - name: Verify worker-watch failure and recovery handling
+        run: python3 -B -m unittest discover -s scripts -p 'test_comms_worker_watch.py'
 
   docker:
     runs-on: ubuntu-latest
