@@ -5,7 +5,7 @@ This document describes the current repository implementation and operating cont
 
 ## Runtime
 
-- **Node.js:** 22.22.3 (npm 10.9.8)
+- **Node.js:** 24.21.0 (npm 12.2.0)
 - **Entry point:** `server.js`
 - **Production start:** `npm start`
 - **Direct server start:** `npm run start:server`
