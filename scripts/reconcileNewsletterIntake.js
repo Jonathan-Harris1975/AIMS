@@ -8,18 +8,16 @@ import { JotformClient } from '../services/comms-hub/clients/jotformClient.js';
 import { OneComMailClient } from '../services/comms-hub/clients/oneComMailClient.js';
 import { normaliseJotformAnswers, extractJotformContact } from '../services/comms-hub/domain/submission.js';
 import { processNewsletterJotformSignup, NEWSLETTER_JOTFORM_FORM_ID } from '../services/newsletter/jotformIntake.js';
-import { reconcileNewsletterWebhook, replayNewsletterTest } from '../services/newsletter/jotformReconcile.js';
+import { reconcileNewsletterWebhook, replayNewsletterTest, newsletterRepairScope } from '../services/newsletter/jotformReconcile.js';
 
 try {
+  const { replayOnly, email, date } = newsletterRepairScope(process.argv.slice(2));
   const config = loadCommsHubConfig(process.env, { requireEnabled: true });
   const formId = NEWSLETTER_JOTFORM_FORM_ID;
-  const registration = await reconcileNewsletterWebhook({ baseUrl: config.publicBaseUrl, formId,
+  const report = {};
+  if (!replayOnly) report.registration = await reconcileNewsletterWebhook({ baseUrl: config.publicBaseUrl, formId,
     apiBaseUrl: config.jotformApiBaseUrl, apiKey: config.jotformApiKey });
-  const report = { registration };
-  const args = process.argv.slice(2);
-  const email = args[args.indexOf('--replay-test-email') + 1];
-  const date = args[args.indexOf('--replay-test-date') + 1];
-  if (args.includes('--replay-test-email') && args.includes('--replay-test-date')) {
+  if (email && date) {
     const query = new URLSearchParams({ limit: '100', filter: JSON.stringify({ 'created_at:gt': `${date} 00:00:00`, 'created_at:lt': `${date} 23:59:59` }) });
     const response = await fetch(`${config.jotformApiBaseUrl}/form/${formId}/submissions?${query}`, {
       method: 'GET', redirect: 'error', signal: AbortSignal.timeout(10_000), headers: { accept: 'application/json', APIKEY: config.jotformApiKey },
