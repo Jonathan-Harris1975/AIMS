@@ -39,6 +39,10 @@ try {
   process.stdout.write(`${JSON.stringify(report)}\n`);
 } catch (error) {
   const code = /^[a-zA-Z0-9_]{1,80}$/.test(error?.code || '') ? error.code : 'newsletter_intake_repair_failed';
-  process.stdout.write(`${JSON.stringify({ ok: false, code })}\n`);
+  const diagnostic = error?.diagnostic || {};
+  process.stdout.write(`${JSON.stringify({ ok: false, code,
+    ...(['GET', 'POST'].includes(diagnostic.operation) ? { operation: diagnostic.operation,
+      httpStatus: Number.isInteger(diagnostic.httpStatus) ? diagnostic.httpStatus : null,
+      providerStatus: Number.isInteger(diagnostic.providerStatus) ? diagnostic.providerStatus : null } : {}) })}\n`);
   process.exitCode = 1;
 }
