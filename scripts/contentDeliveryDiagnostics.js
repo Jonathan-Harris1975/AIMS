@@ -2,6 +2,10 @@
 // Read-only production snapshot. Run inside the AIMS service so Koyeb keeps
 // provider credentials private; print only booleans, IDs and delivery states.
 import "../config/loadEnv.js";
+import { usableEnvValue, extractAccountIdFromR2Endpoint } from "../services/comms-hub/config.js";
+import { NEWSLETTER_JOTFORM_FORM_ID } from "../services/newsletter/jotformIntake.js";
+import { D1Client } from "../services/comms-hub/clients/d1Client.js";
+import { trustedNewsletterBase } from "../services/newsletter/confirmationDelivery.js";
 import { readJsonStateFresh } from "../services/shared/utils/stateFile.js";
 import { getObjectAsText, listKeys } from "../services/shared/utils/r2-client.js";
 import { getNewsletterProfile } from "../services/newsletter/config/profiles.js";
@@ -128,6 +132,79 @@ async function safeCheck(run) {
   catch (error) { return { status: "check-failed", errorType: String(error?.name || "Error").slice(0, 80) }; }
 }
 
+// Provider payloads stay inside the service. Never print answers, addresses,
+// webhook URLs (which may contain secrets), submission IDs or raw errors.
+async function newsletterIntakeSnapshot() {
+  // Only these provider/storage prerequisites apply to this read-only check.
+  // Unrelated enabled Comms Hub features must not suppress intake evidence.
+  const env = process.env;
+  const base = (value, fallback = "") => usableEnvValue(value).replace(/\/$/, "") || fallback;
+  const config = {
+    d1DatabaseId: usableEnvValue(env.D1_UUID), d1ApiToken: usableEnvValue(env.D1_API_KEY),
+    d1ProxyUrl: base(env.COMMS_HUB_D1_PROXY_URL), d1ProxyToken: usableEnvValue(env.COMMS_HUB_D1_PROXY_TOKEN),
+    cloudflareAccountId: usableEnvValue(env.CLOUDFLARE_ACCOUNT_ID) || usableEnvValue(env.CF_ACCOUNT_ID) || extractAccountIdFromR2Endpoint(env.R2_ENDPOINT),
+    cloudflareApiBaseUrl: base(env.CLOUDFLARE_API_BASE_URL, "https://api.cloudflare.com/client/v4"),
+    jotformApiKey: usableEnvValue(env.JOTFORM_API_KEY),
+    jotformApiBaseUrl: base(env.JOTFORM_API_BASE_URL, "https://api.jotform.com"),
+    d1TimeoutMs: 15_000, providerRetryAttempts: 2, providerRetryBaseMs: 500, providerRetryMaxMs: 1_000,
+  };
+  const formId = NEWSLETTER_JOTFORM_FORM_ID;
+  const d1 = new D1Client(config);
+  let confirmationBase = null;
+  try { confirmationBase = trustedNewsletterBase(process.env.COMMS_HUB_PUBLIC_BASE_URL); }
+  catch { /* Report invalid configuration without exposing the supplied URL. */ }
+  async function providerGet(path) {
+    const response = await fetch(`${config.jotformApiBaseUrl}${path}`, {
+      method: "GET", redirect: "error", signal: AbortSignal.timeout(10_000),
+      headers: { accept: "application/json", APIKEY: config.jotformApiKey },
+    });
+    const payload = await response.json();
+    if (!response.ok || Number(payload.responseCode) !== 200) {
+      return { ok: false, httpStatus: response.status, providerStatus: Number(payload.responseCode) || null };
+    }
+    return { ok: true, content: payload.content };
+  }
+  const webhook = await safeCheck(async () => {
+    const result = await providerGet(`/form/${formId}/webhooks`);
+    if (!result.ok) return result;
+    const urls = Object.values(result.content || {}).filter((value) => typeof value === "string");
+    const expected = confirmationBase ? new URL("/comms-hub/intake/jotform", confirmationBase) : null;
+    return { ok: true, registeredCount: urls.length, canonicalIntakeRegistered: expected ? urls.some((value) => {
+      try { const url = new URL(value); return url.origin === expected.origin && url.pathname === expected.pathname; }
+      catch { return false; }
+    }) : null };
+  });
+  const recentSubmissions = await safeCheck(async () => {
+    // Limit the query to the last two calendar days; Jotform timestamps do not
+    // specify an offset, so this is a bounded sample, not an exact UTC window.
+    const since = new Date(Date.now() - 2 * 86_400_000).toISOString().slice(0, 10) + " 00:00:00";
+    const query = new URLSearchParams({ limit: "100", filter: JSON.stringify({ "created_at:gt": since }) });
+    const result = await providerGet(`/form/${formId}/submissions?${query}`);
+    if (!result.ok) return result;
+    if (!Array.isArray(result.content)) return { ok: false, status: "invalid-submission-list" };
+    const submissions = result.content.filter((row) => /^\d+$/.test(String(row.id || "")));
+    const references = [...new Set(submissions.map((row) => `jotform:${formId}:${row.id}`))];
+    const events = references.length ? await d1.query(
+      `SELECT source_reference,event_type FROM newsletter_consent_events WHERE publication_id='ai-edge' AND source_reference IN (${references.map(() => "?").join(",")})`, references,
+    ) : { results: [] };
+    const consent = new Set();
+    const confirmed = new Set();
+    for (const event of events.results || []) {
+      if (event.event_type === "consent_requested") consent.add(event.source_reference);
+      if (event.event_type === "confirmation_sent") confirmed.add(event.source_reference);
+    }
+    const consentRecorded = consent.size;
+    const confirmationRecorded = confirmed.size;
+    return { ok: true, sampleCount: submissions.length, sampleLimit: 100,
+      mayBeTruncated: result.content.length === 100, consentRecorded, confirmationRecorded };
+  });
+  const confirmations = await safeCheck(async () => {
+    const result = await d1.query("SELECT status, COUNT(*) AS count FROM newsletter_confirmation_deliveries GROUP BY status");
+    return { ok: true, counts: Object.fromEntries((result.results || []).map((row) => [row.status, Number(row.count)])) };
+  });
+  return { confirmationBaseValid: Boolean(confirmationBase), webhook, recentSubmissions, confirmations };
+}
+
 const profile = getNewsletterProfile("ai-edge");
 const readiness = await safeCheck(async () => {
   const result = await getNewsletterDeliveryReadiness({ profile, provisionSender: false });
@@ -158,6 +235,7 @@ const report = {
   },
   operations: await safeCheck(operationSnapshot),
   newsletterReadiness: readiness,
+  newsletterIntake: await safeCheck(newsletterIntakeSnapshot),
   latestNewsletterIssue: await safeCheck(() => issueSnapshot(profile)),
 };
 
