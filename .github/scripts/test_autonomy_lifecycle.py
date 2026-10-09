@@ -430,6 +430,11 @@ class CouncilEvidenceFreezeTests(unittest.TestCase):
         for name, value in {"REPO": "owner/repo", "DEFAULT_BRANCH": "main"}.items():
             self.enterContext(patch.object(automation, name, value))
 
+    @staticmethod
+    def weekend_bounds():
+        return (datetime(2026, 10, 2, 20, tzinfo=automation.LONDON),
+                datetime(2026, 10, 5, 4, tzinfo=automation.LONDON))
+
     def test_weekend_envelope_uses_europe_london(self):
         inside = datetime(2026, 10, 3, 12, 0, tzinfo=timezone.utc)
         outside = datetime(2026, 10, 6, 12, 0, tzinfo=timezone.utc)
@@ -580,19 +585,19 @@ class CouncilEvidenceFreezeTests(unittest.TestCase):
 
     def test_short_final_page_wins_over_stale_total_count(self):
         page = {"workflow_runs": [], "total_count": 150}
-        with patch.object(automation, "get", return_value=page):
+        with patch.object(automation, "current_weekend_bounds", return_value=self.weekend_bounds()), patch.object(automation, "get", return_value=page):
             runs = automation._fetch_branch_runs()
         self.assertEqual(runs, [])
 
     def test_exact_1000_workflow_runs_is_complete_not_overflow(self):
         page = {"workflow_runs": [{} for _ in range(100)], "total_count": 1000}
-        with patch.object(automation, "get", side_effect=[page for _ in range(10)]):
+        with patch.object(automation, "current_weekend_bounds", return_value=self.weekend_bounds()), patch.object(automation, "get", side_effect=[page for _ in range(10)]):
             runs = automation._fetch_branch_runs()
         self.assertEqual(len(runs), 1000)
 
     def test_more_than_1000_workflow_runs_fails_closed(self):
         page = {"workflow_runs": [{} for _ in range(100)], "total_count": 1001}
-        with patch.object(automation, "get", side_effect=[page for _ in range(10)]):
+        with patch.object(automation, "current_weekend_bounds", return_value=self.weekend_bounds()), patch.object(automation, "get", side_effect=[page for _ in range(10)]):
             with self.assertRaises(RuntimeError):
                 automation._fetch_branch_runs()
 
