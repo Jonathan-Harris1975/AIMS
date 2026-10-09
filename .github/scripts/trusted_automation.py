@@ -164,12 +164,11 @@ def _fetch_branch_runs() -> list[dict[str, Any]]:
         f"{start.strftime('%Y-%m-%dT%H:%M:%SZ')}..{end.strftime('%Y-%m-%dT%H:%M:%SZ')}", safe=""
     )
     encoded_branch = urllib.parse.quote(DEFAULT_BRANCH, safe="")
-    exact_sha = _resolve_branch_sha()
     runs: list[dict[str, Any]] = []
     total_count: int | None = None
     for page in range(1, 11):
         payload = get(
-            f"/repos/{REPO}/actions/runs?branch={encoded_branch}&head_sha={exact_sha}&created={created}&per_page=100&page={page}"
+            f"/repos/{REPO}/actions/runs?branch={encoded_branch}&created={created}&per_page=100&page={page}"
         )
         chunk = payload.get("workflow_runs", []) if isinstance(payload, dict) else []
         if total_count is None and isinstance(payload, dict):
