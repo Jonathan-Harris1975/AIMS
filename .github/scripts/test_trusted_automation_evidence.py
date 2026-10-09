@@ -41,7 +41,10 @@ class WeekendEvidenceTests(unittest.TestCase):
     def test_incomplete_evidence_fails_closed(self):
         bounds = (datetime(2026, 10, 9, 19, tzinfo=timezone.utc),
                   datetime(2026, 10, 12, 3, tzinfo=timezone.utc))
-        with patch.object(module, "current_weekend_bounds", return_value=bounds), patch.object(module, "_resolve_branch_sha", return_value="a"*40), patch.object(module, "get", return_value={"total_count": 1500, "workflow_runs": [{}]*100}):
+        with (
+            patch.object(module, "current_weekend_bounds", return_value=bounds),
+            patch.object(module, "get", return_value={"total_count": 1500, "workflow_runs": [{}] * 100}),
+        ):
             with self.assertRaisesRegex(RuntimeError, "safe 1,000-run limit"):
                 module._fetch_branch_runs()
 
