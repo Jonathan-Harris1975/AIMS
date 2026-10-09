@@ -154,14 +154,24 @@ def _resolve_branch_sha() -> str:
     return sha
 
 
-def _fetch_branch_runs() -> list[dict[str, Any]]:
-    """Fetch complete branch workflow evidence, bounded to 1,000 runs."""
-    encoded_branch = urllib.parse.quote(DEFAULT_BRANCH, safe="")
+def _fetch_branch_runs(sha: str | None = None, since: datetime | None = None) -> list[dict[str, Any]]:
+    """Fetch bounded default-branch workflow evidence, capped at 1,000 runs.
+
+    Scoping the query to the evaluated commit and evidence window keeps the
+    result set finite as the lifetime main-branch run history grows, while the
+    1,000-run cap still fails closed on genuinely truncated evidence.
+    """
+    query = {"branch": DEFAULT_BRANCH, "per_page": "100"}
+    if sha:
+        query["head_sha"] = sha
+    if since is not None:
+        query["created"] = ">=" + since.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    query_string = urllib.parse.urlencode(query)
     runs: list[dict[str, Any]] = []
     total_count: int | None = None
     for page in range(1, 11):
         payload = get(
-            f"/repos/{REPO}/actions/runs?branch={encoded_branch}&per_page=100&page={page}"
+            f"/repos/{REPO}/actions/runs?{query_string}&page={page}"
         )
         chunk = payload.get("workflow_runs", []) if isinstance(payload, dict) else []
         if total_count is None and isinstance(payload, dict):
@@ -191,8 +201,10 @@ def council_evidence_freeze() -> tuple[bool, str]:
     if bounds is None:
         return False, "outside the weekend evidence envelope"
 
+    start_utc, end_utc = (value.astimezone(timezone.utc) for value in bounds)
+
     current_sha = _resolve_branch_sha()
-    runs = _fetch_branch_runs()
+    runs = _fetch_branch_runs(current_sha, start_utc)
 
     # Re-read main after collecting evidence. Retry one race using the new SHA;
     # if main moves a second time, fail closed rather than certify stale evidence.
@@ -203,15 +215,13 @@ def council_evidence_freeze() -> tuple[bool, str]:
             "during Council evidence evaluation; retrying once with the new SHA"
         )
         current_sha = current_after
-        runs = _fetch_branch_runs()
+        runs = _fetch_branch_runs(current_sha, start_utc)
         current_after = _resolve_branch_sha()
         if current_after != current_sha:
             return True, (
                 f"default branch moved from {current_sha[:12]} to {current_after[:12]} "
                 "during Council evidence evaluation"
             )
-
-    start_utc, end_utc = (value.astimezone(timezone.utc) for value in bounds)
 
     def in_window(run: dict[str, Any]) -> bool:
         created = str(run.get("created_at", ""))
