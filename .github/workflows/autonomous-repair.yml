@@ -2,7 +2,7 @@ name: Autonomous main-branch repair PR
 
 on: # zizmor: ignore[dangerous-triggers] trusted event router; code is fixed to the default branch and event provenance is gated
   workflow_run:
-    workflows: ["AIMS CI", "CodeQL", "Security and repository quality"]
+    workflows: ["AIMS CI", "CodeQL", "Security and repository quality", "Koyeb production deployment watch"]
     types: [completed]
   workflow_dispatch:
 
