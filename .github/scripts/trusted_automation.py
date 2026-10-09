@@ -154,7 +154,7 @@ def _resolve_branch_sha() -> str:
     return sha
 
 
-def _fetch_branch_runs() -> list[dict[str, Any]]:
+def _fetch_branch_runs(sha: str | None = None) -> list[dict[str, Any]]:
     """Fetch complete branch workflow evidence, bounded to 1,000 runs."""
     bounds = current_weekend_bounds()
     if bounds is None:
@@ -164,11 +164,12 @@ def _fetch_branch_runs() -> list[dict[str, Any]]:
         f"{start.strftime('%Y-%m-%dT%H:%M:%SZ')}..{end.strftime('%Y-%m-%dT%H:%M:%SZ')}", safe=""
     )
     encoded_branch = urllib.parse.quote(DEFAULT_BRANCH, safe="")
+    encoded_sha = f"&head_sha={urllib.parse.quote(sha, safe='')}" if sha else ""
     runs: list[dict[str, Any]] = []
     total_count: int | None = None
     for page in range(1, 11):
         payload = get(
-            f"/repos/{REPO}/actions/runs?branch={encoded_branch}&created={created}&per_page=100&page={page}"
+            f"/repos/{REPO}/actions/runs?branch={encoded_branch}{encoded_sha}&created={created}&per_page=100&page={page}"
         )
         chunk = payload.get("workflow_runs", []) if isinstance(payload, dict) else []
         if total_count is None and isinstance(payload, dict):
@@ -199,7 +200,7 @@ def council_evidence_freeze() -> tuple[bool, str]:
         return False, "outside the weekend evidence envelope"
 
     current_sha = _resolve_branch_sha()
-    runs = _fetch_branch_runs()
+    runs = _fetch_branch_runs(current_sha)
 
     # Re-read main after collecting evidence. Retry one race using the new SHA;
     # if main moves a second time, fail closed rather than certify stale evidence.
@@ -210,7 +211,7 @@ def council_evidence_freeze() -> tuple[bool, str]:
             "during Council evidence evaluation; retrying once with the new SHA"
         )
         current_sha = current_after
-        runs = _fetch_branch_runs()
+        runs = _fetch_branch_runs(current_sha)
         current_after = _resolve_branch_sha()
         if current_after != current_sha:
             return True, (
