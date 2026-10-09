@@ -31,13 +31,10 @@ class WeekendEvidenceTests(unittest.TestCase):
         sha = "a" * 40
         seen = []
         def fake_get(path):
-            if path.endswith("/branches/main"):
-                return {"commit": {"sha": sha}}
             seen.append(parse_qs(urlsplit(path).query))
             return {"total_count": 1, "workflow_runs": [{"id": 123}]}
         with patch.object(module, "current_weekend_bounds", return_value=bounds), patch.object(module, "get", side_effect=fake_get):
             self.assertEqual(module._fetch_branch_runs(), [{"id": 123}])
-        self.assertEqual(seen[0]["head_sha"], [sha])
         self.assertEqual(seen[0]["branch"], ["main"])
         self.assertEqual(seen[0]["created"], ["2026-10-09T19:00:00Z..2026-10-12T03:00:00Z"])
 
