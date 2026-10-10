@@ -89,6 +89,22 @@ def _deployment_sha(item: dict[str, Any]) -> str:
 def _matches_expected_deployment(item: dict[str, Any], expected_sha: str, expected_after: datetime | None) -> bool:
     candidate_sha = _deployment_sha(item)
     if expected_sha:
+        # Reject ambiguous nested revision evidence rather than trusting traversal order.
+        revision_keys = {"commit_sha", "commitSha", "git_sha", "gitSha", "sha", "revision"}
+        found = []
+        stack = [item]
+        while stack:
+            node = stack.pop()
+            if isinstance(node, dict):
+                for key, value in node.items():
+                    if key in revision_keys and isinstance(value, str) and re.fullmatch(r"[0-9a-fA-F]{40}", value.strip()):
+                        found.append(value.strip().lower())
+                    elif isinstance(value, (dict, list)):
+                        stack.append(value)
+            elif isinstance(node, list):
+                stack.extend(node)
+        if not found or any(value != expected_sha.lower() for value in found):
+            return False
         if not candidate_sha:
             return False
         expected = expected_sha.lower()
@@ -135,6 +151,11 @@ def _deployment_irrelevant_since(item: dict[str, Any], expected_sha: str) -> boo
     return bool(paths) and all(path.startswith(".github/") for path in paths)
 
 
+def _is_current_expected_deployment(deployments: list[dict[str, Any]], expected_sha: str, expected_after: datetime | None) -> bool:
+    """Never attest an older healthy revision when a newer deployment exists."""
+    return bool(deployments) and _matches_expected_deployment(deployments[0], expected_sha, expected_after)
+
+
 def main() -> int:
     service = os.getenv("KOYEB_SERVICE", "").strip()
     token = os.getenv("KOYEB_TOKEN", "").strip()
@@ -154,6 +175,9 @@ def main() -> int:
             (item for item in candidates if _matches_expected_deployment(item, expected_sha, expected_after)),
             None,
         )
+        if last is not None and not _is_current_expected_deployment(candidates, expected_sha, expected_after):
+            print("A newer or ambiguous Koyeb deployment supersedes the expected revision.", file=sys.stderr)
+            return 1
         if last is None:
             # Koyeb legitimately does not create a deployment for GitHub-only
             # changes. Compare against the newest healthy deployed revision
