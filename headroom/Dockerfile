@@ -11,7 +11,9 @@ ARG HEADROOM_VERSION=0.37.0
 ARG MSGPACK_VERSION=1.2.1
 ARG SETUPTOOLS_VERSION=83.0.0
 
-FROM cgr.dev/chainguard/python:latest-dev AS headroom-build
+# Pin Python to a wheel-supported minor release: latest currently selects 3.15,
+# for which the required onnxruntime>=1.24.0 has no published wheel.
+FROM cgr.dev/chainguard/python:3.13-dev AS headroom-build
 
 ARG HEADROOM_VERSION
 ARG MSGPACK_VERSION
@@ -33,7 +35,7 @@ RUN python -m venv /opt/headroom \
  && /opt/headroom/bin/pip uninstall --yes pip \
  && /opt/headroom/bin/python -c 'from importlib.metadata import version; from importlib.util import find_spec; from pathlib import Path; assert version("headroom-ai") == "0.37.0"; assert version("msgpack") == "1.2.1"; assert version("setuptools") == "83.0.0"; assert find_spec("pip") is None; assert not any(Path("/opt/headroom/bin").glob("pip*")); from headroom._core import DiffCompressor, SmartCrusher'
 
-FROM cgr.dev/chainguard/python:latest
+FROM cgr.dev/chainguard/python:3.13
 
 COPY --from=headroom-build /opt/headroom /opt/headroom
 

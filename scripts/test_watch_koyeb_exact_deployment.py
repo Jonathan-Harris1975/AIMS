@@ -34,5 +34,15 @@ class ExactDeploymentTests(unittest.TestCase):
     def test_stale_timestamp_rejected(self):
         self.assertFalse(watch._matches_expected_deployment({"commit_sha": SHA, "created_at": "2026-10-09T20:00:00Z"}, SHA, NOW))
 
+    def test_nested_conflicting_revision_must_not_pass(self):
+        deployment = {"id": "dep", "status": "healthy", "commit_sha": SHA,
+                      "source": {"revision": "b" * 40}}
+        self.assertFalse(watch._matches_expected_deployment(deployment, SHA, None))
+
+    def test_newer_unrelated_deployment_cannot_be_ignored(self):
+        deployments = [{"id": "new", "status": "healthy", "commit_sha": "b" * 40},
+                       {"id": "old", "status": "healthy", "commit_sha": SHA}]
+        self.assertFalse(watch._is_current_expected_deployment(deployments, SHA, None))
+
 if __name__ == "__main__":
     unittest.main()
