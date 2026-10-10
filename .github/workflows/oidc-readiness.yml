@@ -29,6 +29,8 @@ jobs:
           EXPECTED_REPOSITORY: ${{ github.repository }}
           EXPECTED_REF: refs/heads/main
           EXPECTED_OWNER: ${{ github.repository_owner }}
+          EXPECTED_SHA: ${{ github.sha }}
+          EXPECTED_RUN_ID: ${{ github.run_id }}
         run: |
           set -euo pipefail
           python3 - <<'PY'
@@ -45,11 +47,13 @@ jobs:
           payload = parts[1] + "=" * (-len(parts[1]) % 4)
           claims = json.loads(base64.urlsafe_b64decode(payload))
           expected = {"iss": "https://token.actions.githubusercontent.com", "aud": audience, "repository": os.environ["EXPECTED_REPOSITORY"], "ref": os.environ["EXPECTED_REF"]}
+          expected.update({"sha": os.environ["EXPECTED_SHA"], "run_id": os.environ["EXPECTED_RUN_ID"], "event_name": os.environ["GITHUB_EVENT_NAME"]})
           for key, value in expected.items():
               if claims.get(key) != value:
                   raise RuntimeError(f"OIDC claim {key!r} did not match the expected value")
           safe_claims = {k: claims.get(k) for k in ("iss","aud","repository","repository_id","repository_owner","ref","sha","workflow","job_workflow_ref","event_name","run_id","run_attempt")}
-          safe_claims["verified"] = True
+          # This is a claim-consistency check, not independent JWT signature verification.
+          safe_claims["claims_match_expected_context"] = True
           with open("oidc-readiness.json", "w", encoding="utf-8") as handle:
               json.dump(safe_claims, handle, indent=2, sort_keys=True)
               handle.write("\n")
