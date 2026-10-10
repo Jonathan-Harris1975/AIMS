@@ -93,11 +93,11 @@ def _matches_expected_deployment(item: dict[str, Any], expected_sha: str, expect
             return False
         expected = expected_sha.lower()
         candidate = candidate_sha.lower()
-        if not (candidate.startswith(expected) or expected.startswith(candidate)):
+        if not re.fullmatch(r"[0-9a-f]{40}", expected) or not re.fullmatch(r"[0-9a-f]{40}", candidate) or candidate != expected:
             return False
     if expected_after is not None:
         created = _parse_timestamp(_created(item))
-        if created is not None and created < expected_after - timedelta(minutes=5):
+        if created is None or created < expected_after - timedelta(minutes=5):
             return False
     return True
 
