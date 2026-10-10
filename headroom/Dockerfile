@@ -11,9 +11,10 @@ ARG HEADROOM_VERSION=0.37.0
 ARG MSGPACK_VERSION=1.2.1
 ARG SETUPTOOLS_VERSION=83.0.0
 
-# Pin Python to a wheel-supported minor release: latest currently selects 3.15,
-# for which the required onnxruntime>=1.24.0 has no published wheel.
-FROM cgr.dev/chainguard/python:3.13-dev AS headroom-build
+# Pin Python to a wheel-supported minor release: Chainguard's floating latest
+# selected Python 3.15, and its 3.13 runtime tag was not published.
+# Debian slim is a temporary compatibility base; retain Trivy release gating.
+FROM python:3.13-slim-bookworm AS headroom-build
 
 ARG HEADROOM_VERSION
 ARG MSGPACK_VERSION
@@ -35,7 +36,7 @@ RUN python -m venv /opt/headroom \
  && /opt/headroom/bin/pip uninstall --yes pip \
  && /opt/headroom/bin/python -c 'from importlib.metadata import version; from importlib.util import find_spec; from pathlib import Path; assert version("headroom-ai") == "0.37.0"; assert version("msgpack") == "1.2.1"; assert version("setuptools") == "83.0.0"; assert find_spec("pip") is None; assert not any(Path("/opt/headroom/bin").glob("pip*")); from headroom._core import DiffCompressor, SmartCrusher'
 
-FROM cgr.dev/chainguard/python:3.13
+FROM python:3.13-slim-bookworm
 
 COPY --from=headroom-build /opt/headroom /opt/headroom
 
@@ -57,6 +58,7 @@ ENV PATH=/opt/headroom/bin \
     HEADROOM_STATELESS=true
 
 WORKDIR /app
+RUN useradd --system --uid 65532 --home-dir /nonexistent --shell /usr/sbin/nologin nonroot
 USER nonroot
 EXPOSE 8787
 
