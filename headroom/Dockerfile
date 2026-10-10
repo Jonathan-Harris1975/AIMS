@@ -58,7 +58,7 @@ ENV PATH=/opt/headroom/bin \
     HEADROOM_STATELESS=true
 
 WORKDIR /app
-RUN useradd --system --uid 65532 --home-dir /nonexistent --shell /usr/sbin/nologin nonroot
+RUN addgroup --system --gid 65532 nonroot && adduser --system --uid 65532 --ingroup nonroot --no-create-home nonroot
 USER nonroot
 EXPOSE 8787
 
