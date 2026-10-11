@@ -530,9 +530,8 @@ class Recovery(unittest.TestCase):
 
 
     def test_router_failure_exits_nonzero_and_redacts_secrets(self):
-        error = RuntimeError(
-            "Configure KILO_REPAIR_TRIGGER_URL with "
-            "https://hooks.kilosessions.ai/repair?token=sentinel-secret"
+        error = m.router.KiloConfigurationError(
+            "invalid repair webhook configuration with sentinel-secret"
         )
         with patch("sys.stderr", new_callable=StringIO) as error_log:
             with self.assertRaises(SystemExit) as raised:
@@ -542,9 +541,8 @@ class Recovery(unittest.TestCase):
         self.assertNotIn("sentinel-secret", error_log.getvalue())
         self.assertEqual(
             m.router.safe_route_error(
-                RuntimeError(
-                    "Configure KILO_REPAIR_TRIGGER_URL with "
-                    "https://hooks.kilosessions.ai/repair?token=sentinel-secret"
+                m.router.KiloConfigurationError(
+                    "invalid repair webhook configuration with sentinel-secret"
                 )
             ),
             "repair-agent-configuration: Kilo webhook is missing, unsupported or invalid",
@@ -598,6 +596,7 @@ class Recovery(unittest.TestCase):
             patch.dict(os.environ, {"KILO_REPAIR_TRIGGER_URL": ""}),
             patch.object(m.router, "all_pages", return_value=[]),
             patch.object(m.router, "valid_kilo_webhook_url", return_value=False),
+            patch.object(m.router, "machine_contract", return_value="machine contract"),
         ):
             with self.assertRaises(m.router.KiloConfigurationError) as raised:
                 m.router.dispatch(pr, "review", ["verified finding"])
