@@ -110,29 +110,8 @@ jobs:
           exit-code: '1'
           severity: CRITICAL,HIGH
           scanners: vuln,secret
-      # Use Docker's maintained VEX repository for DHI base packages. Trivy
-      # still fails on unsuppressed HIGH/CRITICAL findings and prints suppressed
-      # findings with their VEX source for auditability.
-      - name: Configure Docker Hardened Images VEX sources
-        run: |
-          mkdir -p "$HOME/.trivy/vex"
-          cat > "$HOME/.trivy/vex/repository.yaml" <<'EOF'
-          repositories:
-            - name: default
-              url: https://github.com/aquasecurity/vexhub
-              enabled: true
-              username: ""
-              password: ""
-              token: ""
-            - name: docker-hardened-images
-              url: https://github.com/docker-hardened-images/advisories
-              enabled: true
-          EOF
       - name: Scan Headroom companion image for vulnerabilities and secrets
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        env:
-          TRIVY_VEX: repo
-          TRIVY_SHOW_SUPPRESSED: 'true'
         with:
           image-ref: aims-headroom:ci
           format: table
