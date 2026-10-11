@@ -46,23 +46,29 @@ RUN /usr/local/bin/python3.14 -m venv /opt/headroom \
       "headroom-ai[proxy,proxy-prod]==${HEADROOM_VERSION}" \
       "msgpack==${MSGPACK_VERSION}" \
  && /opt/headroom/bin/pip uninstall --yes pip \
- && /opt/headroom/bin/python -c 'from importlib.metadata import version; from importlib.util import find_spec; from pathlib import Path; assert version("headroom-ai") == "0.37.0"; assert version("msgpack") == "1.2.1"; assert version("setuptools") == "83.0.0"; assert find_spec("pip") is None; assert not any(Path("/opt/headroom/bin").glob("pip*")); from headroom._core import DiffCompressor, SmartCrusher'
+ && /opt/headroom/bin/python -c 'from importlib.metadata import version; from importlib.util import find_spec; from pathlib import Path; assert version("headroom-ai") == "0.37.0"; assert version("msgpack") == "1.2.1"; assert version("setuptools") == "83.0.0"; assert find_spec("pip") is None; assert not any(Path("/opt/headroom/bin").glob("pip*")); from headroom._core import DiffCompressor, SmartCrusher' \
+ && rm -rf /usr/local/lib/python3.14/test /usr/local/lib/python3.14/ensurepip /usr/local/lib/python3.14/ensurepip-*.dist-info /usr/local/lib/python3.14/site-packages/pip /usr/local/lib/python3.14/site-packages/pip-*.dist-info \
+ && rm -f /usr/local/bin/pip /usr/local/bin/pip3 /usr/local/bin/pip3.14
 
 FROM ${UBUNTU_IMAGE} AS headroom-runtime
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
-      ca-certificates python3.14 python3.14-venv \
-      libgomp1 libstdc++6 \
+      ca-certificates passwd libbz2-1.0 libexpat1 libffi8 libgcc-s1 \
+      libgomp1 liblzma5 libncursesw6 libreadline8 libsqlite3-0 \
+      libssl3t64 libstdc++6 libuuid1 zlib1g \
  && rm -rf /var/lib/apt/lists/* \
+ && rm -f /usr/bin/pebble \
  && groupadd --gid 10001 nonroot \
  && useradd --uid 10001 --gid 10001 --no-create-home --shell /usr/sbin/nologin nonroot
 
 COPY --from=python-build /usr/local /usr/local
 COPY --from=python-build --chown=10001:10001 /opt/headroom /opt/headroom
 
+RUN /opt/headroom/bin/python -c 'import bz2, ctypes, lzma, readline, sqlite3, ssl, uuid, xml.parsers.expat, zlib; import sys; assert sys.version_info[:3] == (3, 14, 8); from headroom._core import DiffCompressor, SmartCrusher'
+
 ENV LD_LIBRARY_PATH=/usr/local/lib \
-    PATH=/opt/headroom/bin \
+    PATH=/opt/headroom/bin:/usr/local/bin:/usr/bin:/bin \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     HEADROOM_HOST=0.0.0.0 \
