@@ -1,28 +1,44 @@
 # Headroom compression-only companion service for AIMS.
 #
-# Build and run Headroom on the same supported Python patch release. Docker's
-# maintained Debian 13 hardened runtime removes the unresolved Bookworm/Trixie
-# OS findings while retaining the strict HIGH/CRITICAL image scan.
-#
-# Pin the production runtime by immutable digest. The build-only image uses the
-# matching fixed Python release and never ships in the final image.
-# Keep Trivy's HIGH/CRITICAL OS, library and secret scan enabled.
+# Build current CPython against Ubuntu's security-maintained system libraries.
+# The runtime image is pinned to an official Ubuntu 26.04 image digest and
+# receives the current signed security repository packages at build time.
+# The final image contains no build toolchain and runs as an unprivileged user.
+ARG UBUNTU_IMAGE=ubuntu:26.04@sha256:3595d7fc4286a33fad0fd853a4063e654287a9c3787437d7937c94ca3f7a804e
+ARG PYTHON_VERSION=3.14.8
+ARG PYTHON_SHA256=c2215904f02b175596dc49351585104f4bc20341e1c47378b26a2c274360ce73
 ARG HEADROOM_VERSION=0.37.0
 ARG MSGPACK_VERSION=1.2.1
 ARG SETUPTOOLS_VERSION=83.0.0
 
-FROM dhi.io/python:3.14.8-debian13-dev AS headroom-build
-
+FROM ${UBUNTU_IMAGE} AS python-build
+ARG PYTHON_VERSION
+ARG PYTHON_SHA256
 ARG HEADROOM_VERSION
 ARG MSGPACK_VERSION
 ARG SETUPTOOLS_VERSION
 
-USER root
-WORKDIR /build
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      build-essential ca-certificates curl pkg-config \
+      libbz2-dev libffi-dev libexpat1-dev liblzma-dev libncursesw6 \
+      libreadline-dev libsqlite3-dev libssl-dev uuid-dev zlib1g-dev \
+ && rm -rf /var/lib/apt/lists/*
 
-# pip and its build-time dependencies are used only to create this venv. Remove
-# pip from the venv before copying it into the runtime image.
-RUN python -m venv /opt/headroom \
+WORKDIR /build
+RUN curl --fail --location --silent --show-error \
+      "https://www.python.org/ftp/python/${PYTHON_VERSION}/Python-${PYTHON_VERSION}.tar.xz" \
+      --output Python.tar.xz \
+ && echo "${PYTHON_SHA256}  Python.tar.xz" | sha256sum --check --status \
+ && tar -xJf Python.tar.xz --strip-components=1 \
+ && ./configure --prefix=/usr/local --enable-shared --with-system-expat --with-ensurepip=install \
+ && make -j"$(nproc)" \
+ && make altinstall \
+ && ldconfig \
+ && /usr/local/bin/python3.14 -c 'import ssl, sqlite3, bz2, lzma, zlib, xml.parsers.expat; assert xml.parsers.expat.EXPAT_VERSION'
+
+RUN /usr/local/bin/python3.14 -m venv /opt/headroom \
  && /opt/headroom/bin/pip install --no-cache-dir --upgrade \
       "pip" \
       "setuptools==${SETUPTOOLS_VERSION}" \
@@ -32,11 +48,21 @@ RUN python -m venv /opt/headroom \
  && /opt/headroom/bin/pip uninstall --yes pip \
  && /opt/headroom/bin/python -c 'from importlib.metadata import version; from importlib.util import find_spec; from pathlib import Path; assert version("headroom-ai") == "0.37.0"; assert version("msgpack") == "1.2.1"; assert version("setuptools") == "83.0.0"; assert find_spec("pip") is None; assert not any(Path("/opt/headroom/bin").glob("pip*")); from headroom._core import DiffCompressor, SmartCrusher'
 
-FROM dhi.io/python:3.14.8-debian13@sha256:3629601491dfd68543fe32b762165f5913b8c7c8b322d86ef06111499aac9151
+FROM ${UBUNTU_IMAGE} AS headroom-runtime
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      ca-certificates python3.14 python3.14-venv \
+      libgomp1 libstdc++6 \
+ && rm -rf /var/lib/apt/lists/* \
+ && groupadd --gid 10001 nonroot \
+ && useradd --uid 10001 --gid 10001 --no-create-home --shell /usr/sbin/nologin nonroot
 
-COPY --from=headroom-build --chown=65532:65532 /opt/headroom /opt/headroom
+COPY --from=python-build /usr/local /usr/local
+COPY --from=python-build --chown=10001:10001 /opt/headroom /opt/headroom
 
-ENV PATH=/opt/headroom/bin \
+ENV LD_LIBRARY_PATH=/usr/local/lib \
+    PATH=/opt/headroom/bin \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     HEADROOM_HOST=0.0.0.0 \
