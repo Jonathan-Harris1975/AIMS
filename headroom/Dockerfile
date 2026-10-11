@@ -5,13 +5,18 @@
 # The previous Debian distroless Python base still carried HIGH vulnerabilities
 # with no Debian fixes available, so it could never satisfy AIMS' release gate.
 #
+# Keep the Python minor version aligned across build and runtime and within the
+# upstream wheel support window for onnxruntime. The floating latest tag advanced
+# to Python 3.15 before that dependency published compatible wheels, breaking CI.
+# Patch-level image updates continue within the supported Python 3.14 line.
+#
 # The final image is still scanned by Trivy for HIGH/CRITICAL OS, library and
 # secret findings. Do not add scanner exclusions here to make a release pass.
 ARG HEADROOM_VERSION=0.37.0
 ARG MSGPACK_VERSION=1.2.1
 ARG SETUPTOOLS_VERSION=83.0.0
 
-FROM cgr.dev/chainguard/python:latest-dev AS headroom-build
+FROM cgr.dev/chainguard/python:3.14-dev AS headroom-build
 
 ARG HEADROOM_VERSION
 ARG MSGPACK_VERSION
@@ -33,7 +38,7 @@ RUN python -m venv /opt/headroom \
  && /opt/headroom/bin/pip uninstall --yes pip \
  && /opt/headroom/bin/python -c 'from importlib.metadata import version; from importlib.util import find_spec; from pathlib import Path; assert version("headroom-ai") == "0.37.0"; assert version("msgpack") == "1.2.1"; assert version("setuptools") == "83.0.0"; assert find_spec("pip") is None; assert not any(Path("/opt/headroom/bin").glob("pip*")); from headroom._core import DiffCompressor, SmartCrusher'
 
-FROM cgr.dev/chainguard/python:latest
+FROM cgr.dev/chainguard/python:3.14
 
 COPY --from=headroom-build /opt/headroom /opt/headroom
 
