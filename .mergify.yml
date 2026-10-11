@@ -21,6 +21,7 @@ merge_protections_settings:
     - -label = autonomy:human-hold
     - -label = autonomy:superseded
     - -label = autonomy:obsolete
+    - -label = autonomy:council-freeze
     - "#review-threads-unresolved = 0"
 
 merge_protections:
@@ -81,4 +82,4 @@ merge_queue:
   status_comments: outcomes
   queue_controls_comment: false
   skip_intermediate_results: false
-  reset_on_external_merge: never
+  reset_on_external_merge: always
