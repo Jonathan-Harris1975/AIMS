@@ -83,13 +83,15 @@ jobs:
           health_container=aims-headroom-health
           trap 'docker rm -f "$health_container" >/dev/null 2>&1 || true' EXIT
           docker run --detach --name "$health_container" --health-interval=2s --health-timeout=2s --health-start-period=5s aims-headroom:ci
-          for attempt in $(seq 1 30); do
+          health_checks_remaining=30
+          while [ "$health_checks_remaining" -gt 0 ]; do
             health="$(docker inspect --format '{{.State.Health.Status}}' "$health_container")"
             case "$health" in
               healthy) exit 0 ;;
               unhealthy) docker logs "$health_container"; exit 1 ;;
             esac
             sleep 1
+            health_checks_remaining=$((health_checks_remaining - 1))
           done
           docker logs "$health_container"
           exit 1
