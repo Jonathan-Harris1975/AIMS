@@ -80,6 +80,19 @@ jobs:
           from headroom._core import DiffCompressor, SmartCrusher
           print(f"Headroom runtime verified: {DiffCompressor.__name__}, {SmartCrusher.__name__}")
           '
+          health_container=aims-headroom-health
+          trap 'docker rm -f "$health_container" >/dev/null 2>&1 || true' EXIT
+          docker run --detach --name "$health_container" --health-interval=2s --health-timeout=2s --health-start-period=5s aims-headroom:ci
+          for attempt in $(seq 1 30); do
+            health="$(docker inspect --format '{{.State.Health.Status}}' "$health_container")"
+            case "$health" in
+              healthy) exit 0 ;;
+              unhealthy) docker logs "$health_container"; exit 1 ;;
+            esac
+            sleep 1
+          done
+          docker logs "$health_container"
+          exit 1
       - name: Verify pinned runtime, minimal attack surface, non-root user and writable runtime state
         run: |
           docker run --rm aims:ci node -e '
