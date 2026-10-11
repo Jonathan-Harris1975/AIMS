@@ -540,6 +540,22 @@ class Recovery(unittest.TestCase):
         self.assertEqual(raised.exception.code, 1)
         self.assertIn("::error::PR repair routing failed:", error_log.getvalue())
         self.assertNotIn("sentinel-secret", error_log.getvalue())
+        self.assertEqual(
+            m.router.safe_route_error(
+                RuntimeError(
+                    "Configure KILO_REPAIR_TRIGGER_URL with "
+                    "https://hooks.kilosessions.ai/repair?token=sentinel-secret"
+                )
+            ),
+            "repair-agent-configuration: Kilo webhook is missing, unsupported or invalid",
+        )
+        provider_error = m.router.urllib.error.HTTPError(
+            "https://hooks.kilosessions.ai/repair", 503, "unavailable", {}, None
+        )
+        self.assertEqual(
+            m.router.safe_route_error(provider_error),
+            "repair-agent-provider-error: Kilo trigger returned HTTP 503",
+        )
 
 
 if __name__ == "__main__":
