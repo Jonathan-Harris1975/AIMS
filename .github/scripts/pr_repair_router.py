@@ -298,9 +298,15 @@ def dispatch(pr: dict, kind: str, findings: list[str]) -> str:
 
 
 def safe_route_error(exc: Exception) -> str:
-    """Return a bounded routing diagnostic without exposing API details."""
+    """Classify known repair-agent failures without exposing private trigger details."""
     message = str(exc)
-    return f"{type(exc).__name__}; detail withheld"
+    if message.startswith("Configure KILO_REPAIR_TRIGGER_URL with"):
+        return "repair-agent-configuration: Kilo webhook is missing, unsupported or invalid"
+    if isinstance(exc, urllib.error.HTTPError):
+        return f"repair-agent-provider-error: Kilo trigger returned HTTP {exc.code}"
+    if isinstance(exc, urllib.error.URLError):
+        return "repair-agent-unavailable: Kilo trigger could not be reached"
+    return f"repair-routing-error: {type(exc).__name__}; detail withheld"
 
 
 
