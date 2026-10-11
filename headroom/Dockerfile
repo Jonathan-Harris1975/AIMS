@@ -35,7 +35,11 @@ RUN python -m venv /opt/headroom \
 FROM python:3.13-slim-bookworm
 
 # Remove the system package installer and create an unprivileged runtime user.
-RUN python -m pip uninstall --yes pip setuptools wheel \
+RUN apt-get update \
+ && apt-get upgrade -y --no-install-recommends \
+ && apt-get clean \
+ && rm -rf /var/lib/apt/lists/* \
+ && python -m pip uninstall --yes pip setuptools wheel \
  && ! command -v pip >/dev/null 2>&1 \
  && ! command -v pip3 >/dev/null 2>&1 \
  && groupadd --system --gid 65532 nonroot \
