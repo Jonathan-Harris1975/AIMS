@@ -1,23 +1,23 @@
 # Headroom compression-only companion service for AIMS.
 #
-# Build Headroom into an isolated virtual environment with the same supported
-# Python minor line used by the runtime image. Headroom 0.37 documents Python
-# 3.13 for its ONNX-backed proxy dependencies. Public CI cannot pull Chainguard's
-# versioned 3.13 image, and the public Trixie image failed the retained HIGH/
-# CRITICAL Trivy gate on unpatched Debian 13 packages.
+# Build and run Headroom on the same supported Python patch release. Docker's
+# maintained Debian 13 hardened runtime removes the unresolved Bookworm/Trixie
+# OS findings while retaining the strict HIGH/CRITICAL image scan.
 #
-# Keep Trivy's HIGH/CRITICAL OS, library and secret scan enabled. Do not add
-# scanner exclusions to make a release pass.
+# Pin the production runtime by immutable digest. The build-only image uses the
+# matching fixed Python release and never ships in the final image.
+# Keep Trivy's HIGH/CRITICAL OS, library and secret scan enabled.
 ARG HEADROOM_VERSION=0.37.0
 ARG MSGPACK_VERSION=1.2.1
 ARG SETUPTOOLS_VERSION=83.0.0
 
-FROM python:3.13-slim-bookworm AS headroom-build
+FROM dhi.io/python:3.14.8-debian13-dev AS headroom-build
 
 ARG HEADROOM_VERSION
 ARG MSGPACK_VERSION
 ARG SETUPTOOLS_VERSION
 
+USER root
 WORKDIR /build
 
 # pip and its build-time dependencies are used only to create this venv. Remove
@@ -32,22 +32,9 @@ RUN python -m venv /opt/headroom \
  && /opt/headroom/bin/pip uninstall --yes pip \
  && /opt/headroom/bin/python -c 'from importlib.metadata import version; from importlib.util import find_spec; from pathlib import Path; assert version("headroom-ai") == "0.37.0"; assert version("msgpack") == "1.2.1"; assert version("setuptools") == "83.0.0"; assert find_spec("pip") is None; assert not any(Path("/opt/headroom/bin").glob("pip*")); from headroom._core import DiffCompressor, SmartCrusher'
 
-FROM python:3.13-slim-bookworm
+FROM dhi.io/python:3.14.8-debian13@sha256:3629601491dfd68543fe32b762165f5913b8c7c8b322d86ef06111499aac9151
 
-# Remove the system package installer and create an unprivileged runtime user.
-RUN apt-get update \
- && apt-get upgrade -y --no-install-recommends \
- && apt-get clean \
- && rm -rf /var/lib/apt/lists/* \
- && python -m pip uninstall --yes pip setuptools wheel \
- && ! command -v pip >/dev/null 2>&1 \
- && ! command -v pip3 >/dev/null 2>&1 \
- && groupadd --system --gid 65532 nonroot \
- && useradd --system --uid 65532 --gid 65532 --home-dir /nonexistent --shell /usr/sbin/nologin nonroot \
- && mkdir -p /app \
- && chown nonroot:nonroot /app
-
-COPY --from=headroom-build --chown=nonroot:nonroot /opt/headroom /opt/headroom
+COPY --from=headroom-build --chown=65532:65532 /opt/headroom /opt/headroom
 
 ENV PATH=/opt/headroom/bin \
     PYTHONUNBUFFERED=1 \
@@ -66,7 +53,7 @@ ENV PATH=/opt/headroom/bin \
     HEADROOM_TELEMETRY=on \
     HEADROOM_STATELESS=true
 
-WORKDIR /app
+WORKDIR /tmp
 USER nonroot
 EXPOSE 8787
 
