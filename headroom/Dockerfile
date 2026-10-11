@@ -1,10 +1,10 @@
 # Headroom compression-only companion service for AIMS.
 #
 # Build Headroom into an isolated virtual environment with the same supported
-# Python minor line used by the runtime image. Headroom 0.37 currently documents
-# Python 3.13 for its ONNX-backed proxy dependencies. The floating Chainguard
-# latest tag moved to Python 3.15 before onnxruntime published compatible wheels;
-# Chainguard's 3.13 tags require registry access that public CI does not have.
+# Python minor line used by the runtime image. Headroom 0.37 documents Python
+# 3.13 for its ONNX-backed proxy dependencies. Public CI cannot pull Chainguard's
+# versioned 3.13 image, and the public Trixie image failed the retained HIGH/
+# CRITICAL Trivy gate on unpatched Debian 13 packages.
 #
 # Keep Trivy's HIGH/CRITICAL OS, library and secret scan enabled. Do not add
 # scanner exclusions to make a release pass.
@@ -12,7 +12,7 @@ ARG HEADROOM_VERSION=0.37.0
 ARG MSGPACK_VERSION=1.2.1
 ARG SETUPTOOLS_VERSION=83.0.0
 
-FROM python:3.13-slim-trixie AS headroom-build
+FROM python:3.13-slim-bookworm AS headroom-build
 
 ARG HEADROOM_VERSION
 ARG MSGPACK_VERSION
@@ -32,7 +32,7 @@ RUN python -m venv /opt/headroom \
  && /opt/headroom/bin/pip uninstall --yes pip \
  && /opt/headroom/bin/python -c 'from importlib.metadata import version; from importlib.util import find_spec; from pathlib import Path; assert version("headroom-ai") == "0.37.0"; assert version("msgpack") == "1.2.1"; assert version("setuptools") == "83.0.0"; assert find_spec("pip") is None; assert not any(Path("/opt/headroom/bin").glob("pip*")); from headroom._core import DiffCompressor, SmartCrusher'
 
-FROM python:3.13-slim-trixie
+FROM python:3.13-slim-bookworm
 
 # Remove the system package installer and create an unprivileged runtime user.
 RUN python -m pip uninstall --yes pip setuptools wheel \
