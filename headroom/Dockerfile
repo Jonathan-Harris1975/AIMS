@@ -1,33 +1,27 @@
 # Headroom compression-only companion service for AIMS.
 #
-# Build Headroom into an isolated virtual environment on Chainguard's hardened
-# Python image, then copy only that environment into the minimal runtime image.
-# The previous Debian distroless Python base still carried HIGH vulnerabilities
-# with no Debian fixes available, so it could never satisfy AIMS' release gate.
+# Build Headroom into an isolated virtual environment with the same supported
+# Python minor line used by the runtime image. Headroom 0.37 currently documents
+# Python 3.13 for its ONNX-backed proxy dependencies. The floating Chainguard
+# latest tag moved to Python 3.15 before onnxruntime published compatible wheels;
+# Chainguard's 3.13 tags require registry access that public CI does not have.
 #
-# Keep the Python minor version aligned across build and runtime and within the
-# upstream wheel support window for onnxruntime. The floating latest tag advanced
-# to Python 3.15 before that dependency published compatible wheels, breaking CI.
-# Patch-level image updates continue within the supported Python 3.14 line.
-#
-# The final image is still scanned by Trivy for HIGH/CRITICAL OS, library and
-# secret findings. Do not add scanner exclusions here to make a release pass.
+# Keep Trivy's HIGH/CRITICAL OS, library and secret scan enabled. Do not add
+# scanner exclusions to make a release pass.
 ARG HEADROOM_VERSION=0.37.0
 ARG MSGPACK_VERSION=1.2.1
 ARG SETUPTOOLS_VERSION=83.0.0
 
-FROM cgr.dev/chainguard/python:3.14-dev AS headroom-build
+FROM python:3.13-slim-trixie AS headroom-build
 
 ARG HEADROOM_VERSION
 ARG MSGPACK_VERSION
 ARG SETUPTOOLS_VERSION
 
-USER root
 WORKDIR /build
 
-# pip vendors vulnerable msgpack/setuptools snapshots in its own runtime tree.
-# It is a build tool, not a Headroom runtime dependency, so do not copy it
-# into the production image or suppress the scanner findings it creates.
+# pip and its build-time dependencies are used only to create this venv. Remove
+# pip from the venv before copying it into the runtime image.
 RUN python -m venv /opt/headroom \
  && /opt/headroom/bin/pip install --no-cache-dir --upgrade \
       "pip" \
@@ -38,9 +32,18 @@ RUN python -m venv /opt/headroom \
  && /opt/headroom/bin/pip uninstall --yes pip \
  && /opt/headroom/bin/python -c 'from importlib.metadata import version; from importlib.util import find_spec; from pathlib import Path; assert version("headroom-ai") == "0.37.0"; assert version("msgpack") == "1.2.1"; assert version("setuptools") == "83.0.0"; assert find_spec("pip") is None; assert not any(Path("/opt/headroom/bin").glob("pip*")); from headroom._core import DiffCompressor, SmartCrusher'
 
-FROM cgr.dev/chainguard/python:3.14
+FROM python:3.13-slim-trixie
 
-COPY --from=headroom-build /opt/headroom /opt/headroom
+# Remove the system package installer and create an unprivileged runtime user.
+RUN python -m pip uninstall --yes pip setuptools wheel \
+ && ! command -v pip >/dev/null 2>&1 \
+ && ! command -v pip3 >/dev/null 2>&1 \
+ && groupadd --system --gid 65532 nonroot \
+ && useradd --system --uid 65532 --gid 65532 --home-dir /nonexistent --shell /usr/sbin/nologin nonroot \
+ && mkdir -p /app \
+ && chown nonroot:nonroot /app
+
+COPY --from=headroom-build --chown=nonroot:nonroot /opt/headroom /opt/headroom
 
 ENV PATH=/opt/headroom/bin \
     PYTHONUNBUFFERED=1 \
@@ -63,8 +66,6 @@ WORKDIR /app
 USER nonroot
 EXPOSE 8787
 
-# Chainguard's minimal runtime deliberately contains no shell/package manager.
-# Use Python itself for the health probe.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD ["/opt/headroom/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8787/readyz', timeout=5)"]
 
