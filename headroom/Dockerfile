@@ -50,6 +50,8 @@ RUN /usr/local/bin/python3.14 -m venv /opt/headroom \
  && /opt/headroom/bin/pip uninstall --yes pip \
  && /opt/headroom/bin/python -c 'from importlib.metadata import version; from importlib.util import find_spec; from pathlib import Path; assert version("headroom-ai") == "0.37.0"; assert version("msgpack") == "1.2.1"; assert version("setuptools") == "83.0.0"; assert find_spec("pip") is None; assert not any(Path("/opt/headroom/bin").glob("pip*")); from headroom._core import DiffCompressor, SmartCrusher' \
  && rm -rf /usr/local/lib/python3.14/test /usr/local/lib/python3.14/ensurepip /usr/local/lib/python3.14/ensurepip-*.dist-info /usr/local/lib/python3.14/site-packages \
+      /usr/local/lib/python3.14/idlelib /usr/local/lib/python3.14/tkinter /usr/local/lib/python3.14/turtledemo \
+ && rm -f /usr/local/lib/python3.14/turtle.py \
  && rm -f /usr/local/bin/pip /usr/local/bin/pip3 /usr/local/bin/pip3.14 /usr/local/bin/python3.14-config \
  && rm -rf /usr/local/include /usr/local/share /usr/local/lib/pkgconfig
 
