@@ -387,6 +387,8 @@ class Recovery(unittest.TestCase):
                 return {"sha": "b" * 40}
             if method == "POST" and path.endswith("/issues/7/comments"):
                 posted.append(payload["body"])
+                return {"id": 99}
+            if method == "PATCH" and path.endswith("/issues/comments/99"):
                 return {}
             raise AssertionError((method, path, payload))
 
@@ -579,6 +581,7 @@ class Recovery(unittest.TestCase):
                 patch.object(m.router, "all_pages", return_value=[]),
                 patch.object(m.router, "valid_kilo_webhook_url", return_value=True),
                 patch.object(m.router, "machine_contract", return_value="machine contract"),
+                patch.object(m.router, "api", return_value={"id": 99}),
                 patch.object(m.router.urllib.request, "urlopen", side_effect=provider_error),
             ):
                 with self.assertRaises(RuntimeError) as raised:
@@ -611,6 +614,52 @@ class Recovery(unittest.TestCase):
             "    - name: Recover merge conflicts and verified review blockers", 1
         )[1].split("\n    - name:", 1)[0]
         self.assertIn("!cancelled()", step)
+
+
+
+    def test_persisted_marker_precedes_dispatch_and_survives_ack_failure(self):
+        events = []
+        saved = []
+        def api(method, path, payload=None):
+            if method == "POST" and path.endswith("/comments"):
+                saved.append(payload["body"])
+                events.append("reservation")
+                return {"id": 99}
+            if method == "PATCH" and path.endswith("/comments/99"):
+                events.append("acknowledgement")
+                raise RuntimeError("transient GitHub failure")
+            raise AssertionError((method, path, payload))
+
+        response = MagicMock()
+        response.status = 202
+        response.__enter__.return_value = response
+        def send(*args, **kwargs):
+            events.append("webhook")
+            return response
+
+        with (
+            patch.object(m.router, "all_pages", return_value=[]),
+            patch.object(m.router, "api", side_effect=api),
+            patch.object(m.router, "valid_kilo_webhook_url", return_value=True),
+            patch.object(m.router, "machine_contract", return_value="machine contract"),
+            patch.object(m.router.urllib.request, "urlopen", side_effect=send),
+            patch.dict(os.environ, {"KILO_REPAIR_TRIGGER_URL": "https://example.invalid/repair"}),
+            patch("builtins.print"),
+        ):
+            self.assertEqual(m.router.dispatch(self.pr, "review", ["finding"]), "requested")
+        self.assertEqual(events, ["reservation", "webhook", "acknowledgement"])
+        self.assertIn("<!-- kilo-auto-repair:" + "a" * 40 + ":review -->", saved[0])
+
+        with (
+            patch.object(
+                m.router,
+                "all_pages",
+                return_value=[{"user": {"login": "github-actions[bot]"}, "body": saved[0]}],
+            ),
+            patch.object(m.router.urllib.request, "urlopen") as retry,
+        ):
+            self.assertEqual(m.router.dispatch(self.pr, "review", ["finding"]), "already-requested")
+            retry.assert_not_called()
 
 
 if __name__ == "__main__":
