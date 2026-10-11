@@ -65,7 +65,7 @@ RUN apt-get update \
 COPY --from=python-build /usr/local /usr/local
 COPY --from=python-build --chown=10001:10001 /opt/headroom /opt/headroom
 
-RUN /opt/headroom/bin/python -c 'import bz2, ctypes, lzma, readline, sqlite3, ssl, uuid, xml.parsers.expat, zlib; import sys; assert sys.version_info[:3] == (3, 14, 8); from headroom._core import DiffCompressor, SmartCrusher'
+RUN LD_LIBRARY_PATH=/usr/local/lib /opt/headroom/bin/python -c 'import bz2, ctypes, lzma, readline, sqlite3, ssl, uuid, xml.parsers.expat, zlib; import sys; assert sys.version_info[:3] == (3, 14, 8); from headroom._core import DiffCompressor, SmartCrusher'
 
 ENV LD_LIBRARY_PATH=/usr/local/lib \
     PATH=/opt/headroom/bin:/usr/local/bin:/usr/bin:/bin \
