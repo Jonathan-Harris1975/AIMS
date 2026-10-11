@@ -17,6 +17,22 @@ from pathlib import Path
 from kilo_webhook_url import valid_kilo_webhook_url
 from kilo_failure_classifier import repairable_failed_steps
 
+class KiloConfigurationError(RuntimeError):
+    """The repair webhook configuration is missing or unsupported."""
+
+
+class KiloProviderError(RuntimeError):
+    """The repair provider rejected a request with an HTTP status."""
+
+    def __init__(self, status: int):
+        self.status = status
+        super().__init__(f"Kilo trigger returned HTTP {status}")
+
+
+class KiloUnavailableError(RuntimeError):
+    """The repair provider could not be reached."""
+
+
 REPO = os.environ["GITHUB_REPOSITORY"]
 TOKEN = os.environ["GH_TOKEN"]
 EVENT = os.environ["GITHUB_EVENT_NAME"]
@@ -264,7 +280,7 @@ def dispatch(pr: dict, kind: str, findings: list[str]) -> str:
     instruction = machine_contract() + "\n\n" + instruction
     url = os.environ.get("KILO_REPAIR_TRIGGER_URL", "")
     if not valid_kilo_webhook_url(url):
-        raise RuntimeError("Configure KILO_REPAIR_TRIGGER_URL with this repository's Kilo Cloud Agent webhook trigger")
+        raise KiloConfigurationError("Kilo repair webhook is missing, unsupported or invalid") from None
 
     payload = {
         "repository": REPO,
@@ -285,9 +301,9 @@ def dispatch(pr: dict, kind: str, findings: list[str]) -> str:
             if response.status not in (200, 201, 202, 204):
                 raise RuntimeError(f"Kilo trigger returned HTTP {response.status}")
     except urllib.error.HTTPError as exc:
-        raise RuntimeError(f"Kilo trigger returned HTTP {exc.code}") from None
+        raise KiloProviderError(exc.code) from None
     except urllib.error.URLError:
-        raise RuntimeError("Kilo trigger could not be reached") from None
+        raise KiloUnavailableError("Kilo trigger could not be reached") from None
 
     api("POST", f"/repos/{REPO}/issues/{number}/comments", {"body":
         f"{marker}\nAutonomous Kilo repair requested for the current {kind} findings through the machine webhook. "
@@ -299,15 +315,15 @@ def dispatch(pr: dict, kind: str, findings: list[str]) -> str:
 
 def safe_route_error(exc: Exception) -> str:
     """Classify known repair-agent failures without exposing private trigger details."""
-    message = str(exc)
-    if message.startswith("Configure KILO_REPAIR_TRIGGER_URL with"):
+    if isinstance(exc, KiloConfigurationError):
         return "repair-agent-configuration: Kilo webhook is missing, unsupported or invalid"
+    if isinstance(exc, KiloProviderError):
+        return f"repair-agent-provider-error: Kilo trigger returned HTTP {exc.status}"
     if isinstance(exc, urllib.error.HTTPError):
         return f"repair-agent-provider-error: Kilo trigger returned HTTP {exc.code}"
-    if isinstance(exc, urllib.error.URLError):
+    if isinstance(exc, (KiloUnavailableError, urllib.error.URLError)):
         return "repair-agent-unavailable: Kilo trigger could not be reached"
     return f"repair-routing-error: {type(exc).__name__}; detail withheld"
-
 
 
 def fail_routing(exc: Exception) -> None:
