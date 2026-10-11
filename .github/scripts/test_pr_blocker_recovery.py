@@ -558,5 +558,61 @@ class Recovery(unittest.TestCase):
         )
 
 
+
+    def test_repair_dispatch_preserves_provider_failure_classification(self):
+        pr = {
+            "number": 7,
+            "html_url": "https://github.com/owner/repo/pull/7",
+            "head": {"sha": "a" * 40},
+        }
+        cases = [
+            (
+                m.router.urllib.error.HTTPError("https://hooks.invalid", 503, "secret", {}, None),
+                "repair-agent-provider-error: Kilo trigger returned HTTP 503",
+            ),
+            (
+                m.router.urllib.error.URLError("secret"),
+                "repair-agent-unavailable: Kilo trigger could not be reached",
+            ),
+        ]
+        for provider_error, expected in cases:
+            with (
+                patch.dict(os.environ, {"KILO_REPAIR_TRIGGER_URL": "https://hooks.kilosessions.ai/test"}),
+                patch.object(m.router, "all_pages", return_value=[]),
+                patch.object(m.router, "valid_kilo_webhook_url", return_value=True),
+                patch.object(m.router, "machine_contract", return_value="machine contract"),
+                patch.object(m.router.urllib.request, "urlopen", side_effect=provider_error),
+            ):
+                with self.assertRaises(RuntimeError) as raised:
+                    m.router.dispatch(pr, "review", ["verified finding"])
+            self.assertEqual(m.router.safe_route_error(raised.exception), expected)
+            self.assertNotIn("secret", m.router.safe_route_error(raised.exception))
+
+    def test_missing_repair_webhook_uses_configuration_classification(self):
+        pr = {
+            "number": 7,
+            "html_url": "https://github.com/owner/repo/pull/7",
+            "head": {"sha": "a" * 40},
+        }
+        with (
+            patch.dict(os.environ, {"KILO_REPAIR_TRIGGER_URL": ""}),
+            patch.object(m.router, "all_pages", return_value=[]),
+            patch.object(m.router, "valid_kilo_webhook_url", return_value=False),
+        ):
+            with self.assertRaises(m.router.KiloConfigurationError) as raised:
+                m.router.dispatch(pr, "review", ["verified finding"])
+        self.assertEqual(
+            m.router.safe_route_error(raised.exception),
+            "repair-agent-configuration: Kilo webhook is missing, unsupported or invalid",
+        )
+
+    def test_recovery_sweep_runs_after_router_failure_unless_cancelled(self):
+        workflow = (Path(__file__).parents[1] / "workflows/pr-issue-repair.yml").read_text()
+        step = workflow.split(
+            "    - name: Recover merge conflicts and verified review blockers", 1
+        )[1].split("\n    - name:", 1)[0]
+        self.assertIn("!cancelled()", step)
+
+
 if __name__ == "__main__":
     unittest.main()
