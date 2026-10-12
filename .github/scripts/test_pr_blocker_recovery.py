@@ -456,6 +456,15 @@ class Recovery(unittest.TestCase):
                 ),
                 "github-api-http",
             ),
+            (m.router.KiloProviderError(403), "repair-agent-provider-error"),
+            (
+                m.router.KiloUnavailableError("https://private.invalid?token=secret-value"),
+                "repair-agent-unavailable",
+            ),
+            (
+                m.router.KiloConfigurationError("webhook=https://private.invalid?token=secret-value"),
+                "repair-agent-configuration",
+            ),
             (
                 RuntimeError("https://private.invalid?token=secret-value"),
                 "unexpected-recovery-error",
@@ -466,6 +475,10 @@ class Recovery(unittest.TestCase):
             self.assertEqual(result["error_code"], code)
             self.assertNotIn("secret-value", json.dumps(result))
         self.assertEqual(m.describe_error(cases[0][0])["http_status"], 403)
+        provider = m.describe_error(cases[1][0])
+        self.assertEqual(provider["http_status"], 403)
+        self.assertIn("No repair completed", provider["guidance"])
+        self.assertIn("provider acceptance is uncertain", m.describe_error(cases[2][0])["guidance"])
 
     def test_conflict_dispatch_uses_machine_webhook_and_no_force_push(self):
         posted = []
