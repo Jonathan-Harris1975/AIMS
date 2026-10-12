@@ -613,5 +613,30 @@ class ProductionGovernanceProtectionTests(unittest.TestCase):
             self.assertEqual(policy["permission"][tool][path], "deny")
 
 
+
+    def test_main_repair_reserves_marker_before_kilo_and_acknowledges_after(self):
+        root = Path(__file__).resolve().parents[1]
+        workflow = (root / "workflows/autonomous-repair.yml").read_text(encoding="utf-8")
+        start = workflow.index("dispatch_kilo() {")
+        end = workflow.index('\n\n          if [ "$RUN_CONCLUSION"', start)
+        dispatch = workflow[start:end]
+        for operation in ("gh api --method POST", 'status="$(curl', "gh api --method PATCH"):
+            self.assertIn(operation, dispatch)
+        reservation = dispatch.index("gh api --method POST")
+        request = dispatch.index('status="$(curl')
+        acknowledgement = dispatch.rindex("gh api --method PATCH")
+        self.assertLess(reservation, request)
+        self.assertLess(request, acknowledgement)
+        self.assertIn('--field body="$marker', dispatch)
+        self.assertIn("--jq '.id'", dispatch)
+        self.assertIn("dispatch-state: pending", dispatch)
+        self.assertIn("dispatch-state: accepted", dispatch)
+        self.assertIn("dispatch-state: rejected-http-$status", dispatch)
+        self.assertIn('rejected_attempts" -ge 2', dispatch)
+        self.assertEqual(dispatch.count("for patch_attempt in 1 2; do"), 2)
+        self.assertIn("both attempts to mark the reservation retryable failed", dispatch)
+        self.assertIn('status="000"', dispatch)
+
+
 if __name__ == "__main__":
     unittest.main()
