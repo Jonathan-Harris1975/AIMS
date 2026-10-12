@@ -38,6 +38,14 @@ TOKEN = os.environ["GH_TOKEN"]
 EVENT = os.environ["GITHUB_EVENT_NAME"]
 DEFAULT = os.environ["DEFAULT_BRANCH"]
 KILO = {"kilo-code-bot", "kilo-code-bot[bot]"}
+HOLD_LABELS = {
+    "autonomy:obsolete",
+    "autonomy:human-hold",
+    "autonomy:superseded",
+    "hold",
+    "do-not-merge",
+    "needs-manual-review",
+}
 KILO_IMPLEMENTER = os.environ.get("KILO_REPAIR_PR_LOGIN") or "kilo-code-bot[bot]"
 REPAIR_APP_LOGIN = os.environ.get("REPAIR_APP_LOGIN", "")
 KILO_MACHINE_CONTRACT = Path(__file__).resolve().parents[1] / "kilo-machine-repair-contract.md"
@@ -265,7 +273,7 @@ def dispatch(pr: dict, kind: str, findings: list[str]) -> str:
         fresh = pr_details(int(number))
         current_base = api('GET', f'/repos/{REPO}/commits/{urllib.parse.quote(DEFAULT, safe="")}')['sha']
         if (not fresh or fresh['head']['sha'] != sha or current_base != base_sha or
-                {x.get("name") for x in fresh.get("labels", [])} & {"hold", "do-not-merge", "needs-manual-review", "autonomy:human-hold"}):
+                {x.get("name") for x in fresh.get("labels", [])} & HOLD_LABELS):
             print(f"PR #{number} or its base moved before dispatch; defer to the next sweep.")
             return 'changed-before-dispatch'
         destination = (
