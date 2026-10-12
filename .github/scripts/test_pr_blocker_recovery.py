@@ -478,6 +478,8 @@ class Recovery(unittest.TestCase):
             if method == "POST" and path.endswith("/issues/7/comments"):
                 posted.append(payload["body"])
                 return {"id": 99}
+            if method == "PATCH" and path.endswith("/issues/comments/99"):
+                return {}
             raise AssertionError((method, path, payload))
 
         with (
@@ -649,7 +651,7 @@ class Recovery(unittest.TestCase):
                 return {"id": 99}
             if method == "PATCH" and path.endswith("/comments/99"):
                 events.append("acknowledgement")
-                raise RuntimeError("transient GitHub failure")
+                raise m.router.urllib.error.URLError("transient GitHub failure")
             raise AssertionError((method, path, payload))
 
         response = MagicMock()
