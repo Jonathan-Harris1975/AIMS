@@ -618,7 +618,7 @@ class ProductionGovernanceProtectionTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[1]
         workflow = (root / "workflows/autonomous-repair.yml").read_text(encoding="utf-8")
         start = workflow.index("dispatch_kilo() {")
-        end = workflow.index('\\n\\n          if [ "$RUN_CONCLUSION"', start)
+        end = workflow.index('\n\n          if [ "$RUN_CONCLUSION"', start)
         dispatch = workflow[start:end]
         for operation in ("gh api --method POST", 'status="$(curl', "gh api --method PATCH"):
             self.assertIn(operation, dispatch)
