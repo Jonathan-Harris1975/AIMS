@@ -239,6 +239,22 @@ def candidate_numbers(event):
 def describe_error(exc):
     """Publish only known-safe diagnostics, never exception URLs or response bodies."""
     message = str(exc)
+    if isinstance(exc, router.KiloProviderError):
+        return {
+            "error_code": "repair-agent-provider-error",
+            "http_status": exc.status,
+            "guidance": "Kilo rejected the repair handoff. No repair completed; inspect the provider authorization and retain human review.",
+        }
+    if isinstance(exc, router.KiloConfigurationError):
+        return {
+            "error_code": "repair-agent-configuration",
+            "guidance": "Check the stored Kilo webhook configuration without printing its value.",
+        }
+    if isinstance(exc, router.KiloUnavailableError):
+        return {
+            "error_code": "repair-agent-unavailable",
+            "guidance": "Inspect the existing pending handoff marker with Kilo before retrying; provider acceptance is uncertain.",
+        }
     if isinstance(exc, router.urllib.error.HTTPError):
         return {
             "error_code": "github-api-http",
