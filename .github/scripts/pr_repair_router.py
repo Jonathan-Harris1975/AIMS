@@ -220,6 +220,21 @@ def machine_contract() -> str:
     return text
 
 
+def patch_reservation(reservation_id: int, body: str) -> bool:
+    """Retry expected GitHub HTTP/transport errors once without hiding programming failures."""
+    for attempt in range(2):
+        try:
+            api("PATCH", f"/repos/{REPO}/issues/comments/{reservation_id}", {"body": body})
+            return True
+        except (urllib.error.HTTPError, urllib.error.URLError) as exc:
+            if attempt == 1:
+                print(
+                    "::warning::Could not update the Kilo repair reservation after two attempts "
+                    f"({type(exc).__name__}); the pending marker remains fail-closed."
+                )
+    return False
+
+
 def dispatch(pr: dict, kind: str, findings: list[str]) -> str:
     number, sha = pr["number"], pr["head"]["sha"]
     marker = f"<!-- kilo-auto-repair:{sha}:{kind} -->"
@@ -227,12 +242,12 @@ def dispatch(pr: dict, kind: str, findings: list[str]) -> str:
     markers = [c for c in comments if c.get("user", {}).get("login") == "github-actions[bot]" and
                "<!-- kilo-auto-repair:" in (c.get("body") or "")]
     matching_markers = [c for c in markers if marker in c["body"]]
-    if matching_markers and any("dispatch-state: rejected-http-" not in c["body"] for c in matching_markers):
+    if matching_markers and not all("dispatch-state: rejected-http-" in c["body"] for c in matching_markers):
         print(f"PR #{number} already has its current {kind} repair request; skipping.")
         return 'already-requested'
     if matching_markers:
         print(f"PR #{number} has an explicit rejected handoff; a bounded retry is eligible.")
-    if sum(f":{kind} -->" in c["body"] for c in markers) >= 2:
+    if len(matching_markers) >= 2:
         print(f"::warning::PR #{number} exhausted its two {kind} repair attempts; inspect the repair agent's results.")
         return 'attempt-limit'
     source = pr["html_url"]
@@ -250,7 +265,7 @@ def dispatch(pr: dict, kind: str, findings: list[str]) -> str:
         fresh = pr_details(int(number))
         current_base = api('GET', f'/repos/{REPO}/commits/{urllib.parse.quote(DEFAULT, safe="")}')['sha']
         if (not fresh or fresh['head']['sha'] != sha or current_base != base_sha or
-                {x.get('name') for x in fresh.get('labels', [])} & {'hold', 'do-not-merge', 'needs-manual-review'}):
+                {x.get("name") for x in fresh.get("labels", [])} & {"hold", "do-not-merge", "needs-manual-review", "autonomy:human-hold"}):
             print(f"PR #{number} or its base moved before dispatch; defer to the next sweep.")
             return 'changed-before-dispatch'
         destination = (
@@ -311,28 +326,26 @@ def dispatch(pr: dict, kind: str, findings: list[str]) -> str:
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
             if response.status not in (200, 201, 202, 204):
-                raise RuntimeError(f"Kilo trigger returned HTTP {response.status}")
+                raise KiloProviderError(response.status)
     except urllib.error.HTTPError as exc:
         if 400 <= exc.code < 500:
-            try:
-                api("PATCH", f"/repos/{REPO}/issues/comments/{reservation_id}", {"body":
-                    f"{marker}\ndispatch-state: rejected-http-{exc.code}\n"
-                    f"Kilo explicitly rejected this repair handoff with HTTP {exc.code}; "
-                    "one bounded retry remains available after correcting or clearing the rejection."})
-            except Exception:
-                print("::warning::Kilo rejected the repair handoff, but its reservation could not be marked retryable; automatic retry remains suppressed.")
+            patch_reservation(
+                reservation_id,
+                f"{marker}\\ndispatch-state: rejected-http-{exc.code}\\n"
+                f"Kilo explicitly rejected this repair handoff with HTTP {exc.code}; "
+                "one bounded retry remains available after correcting or clearing the rejection.",
+            )
         raise KiloProviderError(exc.code) from None
     except urllib.error.URLError:
         # The provider may have accepted before the connection failed; keep the
         # pending marker and require inspection before another dispatch.
         raise KiloUnavailableError("Kilo trigger could not be reached") from None
 
-    try:
-        api("PATCH", f"/repos/{REPO}/issues/comments/{reservation_id}", {"body":
-            f"{marker}\ndispatch-state: accepted\nKilo accepted the repair request for {kind}. "
-            "The source PR remains governed by its normal checks."})
-    except Exception:
-        print("::warning::Kilo accepted the repair request, but its acknowledgement could not be updated; the persisted marker still suppresses duplicate dispatch.")
+    patch_reservation(
+        reservation_id,
+        f"{marker}\\ndispatch-state: accepted\\nKilo accepted the repair request for {kind}. "
+        "The source PR remains governed by its normal checks.",
+    )
     print(f"Sent autonomous {kind} repair for PR #{number} at {sha[:12]} to Kilo.")
     return 'requested'
 
