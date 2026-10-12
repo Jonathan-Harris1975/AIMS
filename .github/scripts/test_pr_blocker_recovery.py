@@ -589,6 +589,27 @@ class Recovery(unittest.TestCase):
             self.assertEqual(m.router.safe_route_error(raised.exception), expected)
             self.assertNotIn("secret", m.router.safe_route_error(raised.exception))
 
+    def test_nonstandard_success_status_is_classified_as_provider_error(self):
+        response = MagicMock()
+        response.__enter__.return_value.status = 206
+        pr = {"number": 7, "html_url": "https://github.com/owner/repo/pull/7",
+              "head": {"sha": "a" * 40}}
+        with (
+            patch.dict(os.environ, {"KILO_REPAIR_TRIGGER_URL": "https://hooks.kilosessions.ai/test"}),
+            patch.object(m.router, "all_pages", return_value=[]),
+            patch.object(m.router, "valid_kilo_webhook_url", return_value=True),
+            patch.object(m.router, "machine_contract", return_value="machine contract"),
+            patch.object(m.router, "api", return_value={"id": 99}),
+            patch.object(m.router.urllib.request, "urlopen", return_value=response),
+        ):
+            with self.assertRaises(m.router.KiloProviderError) as raised:
+                m.router.dispatch(pr, "review", ["verified finding"])
+        self.assertEqual(raised.exception.status, 206)
+        self.assertEqual(
+            m.router.safe_route_error(raised.exception),
+            "repair-agent-provider-error: Kilo trigger returned HTTP 206",
+        )
+
     def test_missing_repair_webhook_uses_configuration_classification(self):
         pr = {
             "number": 7,
