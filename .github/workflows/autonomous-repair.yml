@@ -215,7 +215,6 @@ jobs:
                 echo "::error::Kilo accepted run $RUN_ID, but both acknowledgement attempts failed; the pending marker remains to suppress duplicate dispatch and must be inspected." >&2
               fi
             done
-            fi
             echo "Sent autonomous Kilo machine repair for run $RUN_ID on carrier PR #$repair_pr."
           }
 
