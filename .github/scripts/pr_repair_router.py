@@ -17,6 +17,22 @@ from pathlib import Path
 from kilo_webhook_url import valid_kilo_webhook_url
 from kilo_failure_classifier import repairable_failed_steps
 
+class KiloConfigurationError(RuntimeError):
+    """The repair webhook configuration is missing or unsupported."""
+
+
+class KiloProviderError(RuntimeError):
+    """The repair provider rejected a request with an HTTP status."""
+
+    def __init__(self, status: int):
+        self.status = status
+        super().__init__(f"Kilo trigger returned HTTP {status}")
+
+
+class KiloUnavailableError(RuntimeError):
+    """The repair provider could not be reached."""
+
+
 REPO = os.environ["GITHUB_REPOSITORY"]
 TOKEN = os.environ["GH_TOKEN"]
 EVENT = os.environ["GITHUB_EVENT_NAME"]
@@ -212,16 +228,34 @@ def machine_contract() -> str:
     return text
 
 
+def patch_reservation(reservation_id: int, body: str) -> bool:
+    """Retry expected GitHub HTTP/transport errors once without hiding programming failures."""
+    for attempt in range(2):
+        try:
+            api("PATCH", f"/repos/{REPO}/issues/comments/{reservation_id}", {"body": body})
+            return True
+        except (urllib.error.HTTPError, urllib.error.URLError) as exc:
+            if attempt == 1:
+                print(
+                    "::warning::Could not update the Kilo repair reservation after two attempts "
+                    f"({type(exc).__name__}); the pending marker remains fail-closed."
+                )
+    return False
+
+
 def dispatch(pr: dict, kind: str, findings: list[str]) -> str:
     number, sha = pr["number"], pr["head"]["sha"]
     marker = f"<!-- kilo-auto-repair:{sha}:{kind} -->"
     comments = all_pages(f"/repos/{REPO}/issues/{number}/comments")
     markers = [c for c in comments if c.get("user", {}).get("login") == "github-actions[bot]" and
                "<!-- kilo-auto-repair:" in (c.get("body") or "")]
-    if any(marker in c["body"] for c in markers):
+    matching_markers = [c for c in markers if marker in c["body"]]
+    if matching_markers and not all("dispatch-state: rejected-http-" in c["body"] for c in matching_markers):
         print(f"PR #{number} already has its current {kind} repair request; skipping.")
         return 'already-requested'
-    if sum(f":{kind} -->" in c["body"] for c in markers) >= 2:
+    if matching_markers:
+        print(f"PR #{number} has an explicit rejected handoff; a bounded retry is eligible.")
+    if len(matching_markers) >= 2:
         print(f"::warning::PR #{number} exhausted its two {kind} repair attempts; inspect the repair agent's results.")
         return 'attempt-limit'
     source = pr["html_url"]
@@ -272,7 +306,7 @@ def dispatch(pr: dict, kind: str, findings: list[str]) -> str:
     instruction = machine_contract() + "\n\n" + instruction
     url = os.environ.get("KILO_REPAIR_TRIGGER_URL", "")
     if not valid_kilo_webhook_url(url):
-        raise RuntimeError("Configure KILO_REPAIR_TRIGGER_URL with this repository's Kilo Cloud Agent webhook trigger")
+        raise KiloConfigurationError("Kilo repair webhook is missing, unsupported or invalid") from None
 
     payload = {
         "repository": REPO,
@@ -282,6 +316,15 @@ def dispatch(pr: dict, kind: str, findings: list[str]) -> str:
         "task": instruction,
         "findings": findings[:12],
     }
+    # Persist the deduplication marker before the external side effect. A rerun
+    # after a successful Kilo dispatch can then never create a competing repair.
+    reservation = api("POST", f"/repos/{REPO}/issues/{number}/comments", {"body":
+        f"{marker}\ndispatch-state: pending\nAutonomous Kilo repair handoff reserved for the current {kind} findings. "
+        "If delivery outcome is uncertain, inspect Kilo before retrying; the source PR remains governed by its normal checks."})
+    reservation_id = (reservation or {}).get("id") if isinstance(reservation, dict) else None
+    if not isinstance(reservation_id, int):
+        raise RuntimeError("Could not persist the repair handoff deduplication marker")
+
     request = urllib.request.Request(
         url,
         data=json.dumps(payload).encode(),
@@ -291,24 +334,51 @@ def dispatch(pr: dict, kind: str, findings: list[str]) -> str:
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
             if response.status not in (200, 201, 202, 204):
-                raise RuntimeError(f"Kilo trigger returned HTTP {response.status}")
+                raise KiloProviderError(response.status)
     except urllib.error.HTTPError as exc:
-        raise RuntimeError(f"Kilo trigger returned HTTP {exc.code}") from None
+        if 400 <= exc.code < 500:
+            patch_reservation(
+                reservation_id,
+                f"{marker}\\ndispatch-state: rejected-http-{exc.code}\\n"
+                f"Kilo explicitly rejected this repair handoff with HTTP {exc.code}; "
+                "one bounded retry remains available after correcting or clearing the rejection.",
+            )
+        raise KiloProviderError(exc.code) from None
     except urllib.error.URLError:
-        raise RuntimeError("Kilo trigger could not be reached") from None
+        # The provider may have accepted before the connection failed; keep the
+        # pending marker and require inspection before another dispatch.
+        raise KiloUnavailableError("Kilo trigger could not be reached") from None
 
-    api("POST", f"/repos/{REPO}/issues/{number}/comments", {"body":
-        f"{marker}\nAutonomous Kilo repair requested for the current {kind} findings through the machine webhook. "
-        "No human reply, GitHub account link, or Kilo mention command is required. "
-        "The source PR remains governed by its normal checks."})
+    patch_reservation(
+        reservation_id,
+        f"{marker}\\ndispatch-state: accepted\\nKilo accepted the repair request for {kind}. "
+        "The source PR remains governed by its normal checks.",
+    )
     print(f"Sent autonomous {kind} repair for PR #{number} at {sha[:12]} to Kilo.")
     return 'requested'
 
 
 def safe_route_error(exc: Exception) -> str:
-    """Return a bounded routing diagnostic without exposing API details."""
-    message = str(exc)
-    return f"{type(exc).__name__}; detail withheld"
+    """Classify known repair-agent failures without exposing private trigger details."""
+    if isinstance(exc, KiloConfigurationError):
+        return "repair-agent-configuration: Kilo webhook is missing, unsupported or invalid"
+    if isinstance(exc, KiloProviderError):
+        return f"repair-agent-provider-error: Kilo trigger returned HTTP {exc.status}"
+    if isinstance(exc, urllib.error.HTTPError):
+        return f"repair-agent-provider-error: Kilo trigger returned HTTP {exc.code}"
+    if isinstance(exc, (KiloUnavailableError, urllib.error.URLError)):
+        return "repair-agent-unavailable: Kilo trigger could not be reached"
+    return f"repair-routing-error: {type(exc).__name__}; detail withheld"
+
+
+def fail_routing(exc: Exception) -> None:
+    """Surface a failed repair handoff as a failed workflow step without leaking secrets."""
+    print(
+        f"::error::PR repair routing failed: {safe_route_error(exc)}. "
+        "The source CI/security result remains authoritative.",
+        file=sys.stderr,
+    )
+    raise SystemExit(1)
 
 
 def main() -> None:
@@ -325,6 +395,4 @@ if __name__ == "__main__":
     try:
         main()
     except Exception as exc:
-        print(f"::warning::PR repair routing unavailable: {safe_route_error(exc)}. "
-              "The source CI/security result remains authoritative.", file=sys.stderr)
-        sys.exit(0)
+        fail_routing(exc)

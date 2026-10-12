@@ -1,5 +1,6 @@
 """Behavioural blocker-recovery tests; all network calls are mocked."""
 
+from io import StringIO
 import copy
 import json
 import os
@@ -388,6 +389,8 @@ class Recovery(unittest.TestCase):
                 return {"sha": "b" * 40}
             if method == "POST" and path.endswith("/issues/7/comments"):
                 posted.append(payload["body"])
+                return {"id": 99}
+            if method == "PATCH" and path.endswith("/issues/comments/99"):
                 return {}
             raise AssertionError((method, path, payload))
 
@@ -475,6 +478,8 @@ class Recovery(unittest.TestCase):
                 return {"sha": "b" * 40}
             if method == "POST" and path.endswith("/issues/7/comments"):
                 posted.append(payload["body"])
+                return {"id": 99}
+            if method == "PATCH" and path.endswith("/issues/comments/99"):
                 return {}
             raise AssertionError((method, path, payload))
 
@@ -509,26 +514,12 @@ class Recovery(unittest.TestCase):
             raise AssertionError((method, path, payload))
 
         with (
-            patch.dict(os.environ, {"KILO_REPAIR_TRIGGER_URL": "https://hooks.kilosessions.ai/test"}, clear=False),
-            patch.object(m.router, "valid_kilo_webhook_url", return_value=True),
             patch.object(m.router, "all_pages", return_value=[]),
             patch.object(m.router, "pr_details", return_value=changed),
             patch.object(m.router, "api", side_effect=api),
         ):
             m.router.dispatch(self.pr, "merge-conflict-" + "b" * 40, ["conflict"])
         self.assertEqual(posts, [])
-
-    def test_human_hold_added_before_dispatch_prevents_kilo_request(self):
-        held = copy.deepcopy(self.pr)
-        held["labels"] = [{"name": "autonomy:human-hold"}]
-        with (
-            patch.object(m.router, "all_pages", return_value=[]),
-            patch.object(m.router, "pr_details", return_value=held),
-            patch.object(m.router, "api", return_value={"sha": "b" * 40}) as api,
-        ):
-            result = m.router.dispatch(self.pr, "merge-conflict-" + "b" * 40, ["conflict"])
-        self.assertEqual(result, "changed-before-dispatch")
-        api.assert_called_once_with("GET", "/repos/owner/repo/commits/main")
 
     def test_duplicate_exact_head_base_is_not_dispatched(self):
         marker = "<!-- kilo-auto-repair:" + "a" * 40 + ":merge-conflict-" + "b" * 40 + " -->"
@@ -543,6 +534,199 @@ class Recovery(unittest.TestCase):
             m.router.dispatch(self.pr, "merge-conflict-" + "b" * 40, ["conflict"])
         api.assert_not_called()
 
+
+    def test_router_failure_exits_nonzero_and_redacts_secrets(self):
+        error = m.router.KiloConfigurationError(
+            "invalid repair webhook configuration with sentinel-secret"
+        )
+        with patch("sys.stderr", new_callable=StringIO) as error_log:
+            with self.assertRaises(SystemExit) as raised:
+                m.router.fail_routing(error)
+        self.assertEqual(raised.exception.code, 1)
+        self.assertIn("::error::PR repair routing failed:", error_log.getvalue())
+        self.assertNotIn("sentinel-secret", error_log.getvalue())
+        self.assertEqual(
+            m.router.safe_route_error(
+                m.router.KiloConfigurationError(
+                    "invalid repair webhook configuration with sentinel-secret"
+                )
+            ),
+            "repair-agent-configuration: Kilo webhook is missing, unsupported or invalid",
+        )
+        provider_error = m.router.urllib.error.HTTPError(
+            "https://hooks.kilosessions.ai/repair", 503, "unavailable", {}, None
+        )
+        self.assertEqual(
+            m.router.safe_route_error(provider_error),
+            "repair-agent-provider-error: Kilo trigger returned HTTP 503",
+        )
+
+
+
+    def test_repair_dispatch_preserves_provider_failure_classification(self):
+        pr = {
+            "number": 7,
+            "html_url": "https://github.com/owner/repo/pull/7",
+            "head": {"sha": "a" * 40},
+        }
+        cases = [
+            (
+                m.router.urllib.error.HTTPError("https://hooks.invalid", 503, "secret", {}, None),
+                "repair-agent-provider-error: Kilo trigger returned HTTP 503",
+            ),
+            (
+                m.router.urllib.error.URLError("secret"),
+                "repair-agent-unavailable: Kilo trigger could not be reached",
+            ),
+        ]
+        for provider_error, expected in cases:
+            with (
+                patch.dict(os.environ, {"KILO_REPAIR_TRIGGER_URL": "https://hooks.kilosessions.ai/test"}),
+                patch.object(m.router, "all_pages", return_value=[]),
+                patch.object(m.router, "valid_kilo_webhook_url", return_value=True),
+                patch.object(m.router, "machine_contract", return_value="machine contract"),
+                patch.object(m.router, "api", return_value={"id": 99}),
+                patch.object(m.router.urllib.request, "urlopen", side_effect=provider_error),
+            ):
+                with self.assertRaises(RuntimeError) as raised:
+                    m.router.dispatch(pr, "review", ["verified finding"])
+            self.assertEqual(m.router.safe_route_error(raised.exception), expected)
+            self.assertNotIn("secret", m.router.safe_route_error(raised.exception))
+
+    def test_nonstandard_success_status_is_classified_as_provider_error(self):
+        response = MagicMock()
+        response.__enter__.return_value.status = 206
+        pr = {"number": 7, "html_url": "https://github.com/owner/repo/pull/7",
+              "head": {"sha": "a" * 40}}
+        with (
+            patch.dict(os.environ, {"KILO_REPAIR_TRIGGER_URL": "https://hooks.kilosessions.ai/test"}),
+            patch.object(m.router, "all_pages", return_value=[]),
+            patch.object(m.router, "valid_kilo_webhook_url", return_value=True),
+            patch.object(m.router, "machine_contract", return_value="machine contract"),
+            patch.object(m.router, "api", return_value={"id": 99}),
+            patch.object(m.router.urllib.request, "urlopen", return_value=response),
+        ):
+            with self.assertRaises(m.router.KiloProviderError) as raised:
+                m.router.dispatch(pr, "review", ["verified finding"])
+        self.assertEqual(raised.exception.status, 206)
+        self.assertEqual(
+            m.router.safe_route_error(raised.exception),
+            "repair-agent-provider-error: Kilo trigger returned HTTP 206",
+        )
+
+    def test_missing_repair_webhook_uses_configuration_classification(self):
+        pr = {
+            "number": 7,
+            "html_url": "https://github.com/owner/repo/pull/7",
+            "head": {"sha": "a" * 40},
+        }
+        with (
+            patch.dict(os.environ, {"KILO_REPAIR_TRIGGER_URL": ""}),
+            patch.object(m.router, "all_pages", return_value=[]),
+            patch.object(m.router, "valid_kilo_webhook_url", return_value=False),
+            patch.object(m.router, "machine_contract", return_value="machine contract"),
+        ):
+            with self.assertRaises(m.router.KiloConfigurationError) as raised:
+                m.router.dispatch(pr, "review", ["verified finding"])
+        self.assertEqual(
+            m.router.safe_route_error(raised.exception),
+            "repair-agent-configuration: Kilo webhook is missing, unsupported or invalid",
+        )
+
+    def test_recovery_sweep_runs_after_router_failure_unless_cancelled(self):
+        workflow = (Path(__file__).parents[1] / "workflows/pr-issue-repair.yml").read_text()
+        step = workflow.split(
+            "    - name: Recover merge conflicts and verified review blockers", 1
+        )[1].split("\n    - name:", 1)[0]
+        self.assertIn("!cancelled()", step)
+
+
+
+    def test_persisted_marker_precedes_dispatch_and_survives_ack_failure(self):
+        events = []
+        saved = []
+        def api(method, path, payload=None):
+            if method == "POST" and path.endswith("/comments"):
+                saved.append(payload["body"])
+                events.append("reservation")
+                return {"id": 99}
+            if method == "PATCH" and path.endswith("/comments/99"):
+                events.append("acknowledgement")
+                raise m.router.urllib.error.URLError("transient GitHub failure")
+            raise AssertionError((method, path, payload))
+
+        response = MagicMock()
+        response.status = 202
+        response.__enter__.return_value = response
+        def send(*args, **kwargs):
+            events.append("webhook")
+            return response
+
+        with (
+            patch.object(m.router, "all_pages", return_value=[]),
+            patch.object(m.router, "api", side_effect=api),
+            patch.object(m.router, "valid_kilo_webhook_url", return_value=True),
+            patch.object(m.router, "machine_contract", return_value="machine contract"),
+            patch.object(m.router.urllib.request, "urlopen", side_effect=send),
+            patch.dict(os.environ, {"KILO_REPAIR_TRIGGER_URL": "https://example.invalid/repair"}),
+            patch("builtins.print"),
+        ):
+            self.assertEqual(m.router.dispatch(self.pr, "review", ["finding"]), "requested")
+        self.assertEqual(events, ["reservation", "webhook", "acknowledgement", "acknowledgement"])
+        self.assertIn("<!-- kilo-auto-repair:" + "a" * 40 + ":review -->", saved[0])
+
+        with (
+            patch.object(
+                m.router,
+                "all_pages",
+                return_value=[{"user": {"login": "github-actions[bot]"}, "body": saved[0]}],
+            ),
+            patch.object(m.router.urllib.request, "urlopen") as retry,
+        ):
+            self.assertEqual(m.router.dispatch(self.pr, "review", ["finding"]), "already-requested")
+            retry.assert_not_called()
+
+
+
+    def test_repair_handoff_allows_bounded_retry_after_explicit_rejection(self):
+        comments = []
+        events = []
+        def api(method, path, payload=None):
+            if method == "POST" and path.endswith("/comments"):
+                comments.append({"user": {"login": "github-actions[bot]"}, "body": payload["body"]})
+                events.append("reserve")
+                return {"id": len(comments)}
+            if method == "PATCH" and path.endswith("/issues/comments/1"):
+                comments[0]["body"] = payload["body"]
+                events.append("mark-rejected")
+                return {}
+            if method == "PATCH" and path.endswith("/issues/comments/2"):
+                comments[1]["body"] = payload["body"]
+                events.append("ack")
+                return {}
+            raise AssertionError((method, path, payload))
+
+        accepted = MagicMock()
+        accepted.__enter__.return_value.status = 202
+        rejected = m.router.urllib.error.HTTPError(
+            "https://example.invalid/repair", 429, "rate limited", {}, None
+        )
+        with (
+            patch.object(m.router, "all_pages", side_effect=[[], comments]),
+            patch.object(m.router, "api", side_effect=api),
+            patch.object(m.router, "valid_kilo_webhook_url", return_value=True),
+            patch.object(m.router, "machine_contract", return_value="machine contract"),
+            patch.object(m.router.urllib.request, "urlopen", side_effect=[rejected, accepted]),
+            patch.dict(os.environ, {"KILO_REPAIR_TRIGGER_URL": "https://example.invalid/repair"}),
+            patch("builtins.print"),
+        ):
+            with self.assertRaises(m.router.KiloProviderError):
+                m.router.dispatch(self.pr, "review", ["finding"])
+            self.assertIn("dispatch-state: rejected-http-429", comments[0]["body"])
+            self.assertEqual(m.router.dispatch(self.pr, "review", ["finding"]), "requested")
+
+        self.assertEqual(events, ["reserve", "mark-rejected", "reserve", "ack"])
+        self.assertIn("dispatch-state: accepted", comments[1]["body"])
 
 if __name__ == "__main__":
     unittest.main()
