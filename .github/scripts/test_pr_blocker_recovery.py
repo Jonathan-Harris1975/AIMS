@@ -508,6 +508,8 @@ class Recovery(unittest.TestCase):
             raise AssertionError((method, path, payload))
 
         with (
+            patch.dict(os.environ, {"KILO_REPAIR_TRIGGER_URL": "https://hooks.kilosessions.ai/test"}, clear=False),
+            patch.object(m.router, "valid_kilo_webhook_url", return_value=True),
             patch.object(m.router, "all_pages", return_value=[]),
             patch.object(m.router, "pr_details", return_value=changed),
             patch.object(m.router, "api", side_effect=api),
