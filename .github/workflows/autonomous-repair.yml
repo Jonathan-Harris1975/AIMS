@@ -168,14 +168,14 @@ jobs:
               --arg workflow "$RUN_NAME" \
               --arg task "$task" \
               '{repository:$repository,carrier_pr:$carrier_pr,failed_sha:$failed_sha,failed_run:$failed_run,workflow:$workflow,kind:"main-branch-repair",task:$task}')"
-                        reservation_id="$(gh api --method POST "repos/${REPO}/issues/${repair_pr}/comments" \
+            reservation_id="$(gh api --method POST "repos/${REPO}/issues/${repair_pr}/comments" \
               --field body="$marker Kilo repair handoff reserved for $RUN_URL; inspect this exact run before retrying." \
               --jq '.id')"
             if [[ ! "$reservation_id" =~ ^[0-9]+$ ]]; then
               echo "::error::Could not persist the Kilo repair deduplication marker for run $RUN_ID." >&2
               exit 1
             fi
-status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --max-time 30 \
+            status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --max-time 30 \
               --request POST --header 'Content-Type: application/json' --data "$payload" "$KILO_REPAIR_TRIGGER_URL")"
             if [[ "$status" != 2?? ]]; then
               echo "::error::Kilo machine repair trigger returned HTTP $status for run $RUN_ID."
