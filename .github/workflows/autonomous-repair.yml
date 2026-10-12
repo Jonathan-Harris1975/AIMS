@@ -184,8 +184,11 @@ jobs:
               echo "::error::Could not persist the Kilo repair deduplication marker for run $RUN_ID." >&2
               exit 1
             fi
-            status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --max-time 30 \
-              --request POST --header 'Content-Type: application/json' --data "$payload" "$KILO_REPAIR_TRIGGER_URL")"
+            if ! status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --max-time 30 \
+              --request POST --header 'Content-Type: application/json' --data "$payload" "$KILO_REPAIR_TRIGGER_URL")"; then
+              # Delivery outcome is uncertain; leave the reservation pending to prevent duplicates.
+              status="000"
+            fi
             if [[ "$status" != 2?? ]]; then
               if [[ "$status" =~ ^4[0-9]{2}$ ]]; then
                 rejected_body="$marker dispatch-state: rejected-http-$status Kilo explicitly rejected this handoff; one bounded retry is available."
