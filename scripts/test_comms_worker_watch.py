@@ -1,4 +1,6 @@
+import contextlib
 import copy
+import io
 import json
 import unittest
 import urllib.error
@@ -7,6 +9,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 import comms_worker_watch as watch
+import ops_notify
 from datetime import UTC, datetime, timedelta
 from comms_worker_watch import advance_incident, check_health, check_health_file, production_monitor_config, validate_health
 
@@ -148,6 +151,20 @@ class WorkerWatchTests(unittest.TestCase):
         state = advance_incident(state, 'expected_worker_missing', self.now + timedelta(minutes=90), notify)
         self.assertEqual(len(sent), 3)
         self.assertNotEqual(sent[0]['event_id'], sent[2]['event_id'])
+
+    def test_alert_http_error_reports_status_without_echoing_response_details(self):
+        error = urllib.error.HTTPError(
+            'https://ops.example/events', 503, 'private response detail', {}, None,
+        )
+        with patch.dict(os.environ, {
+            'OPS_ALERT_WEBHOOK_URL': 'https://ops.example/events',
+            'OPS_ALERT_WEBHOOK_TOKEN': 'test-secret-token',
+        }), patch('ops_notify.urllib.request.urlopen', side_effect=error), \
+                contextlib.redirect_stderr(io.StringIO()) as stderr:
+            self.assertFalse(ops_notify.send_event({'event_id': 'test-event'}))
+        self.assertEqual(stderr.getvalue().strip(), 'Operational event delivery failed: HTTP 503')
+        self.assertNotIn('private response detail', stderr.getvalue())
+        self.assertNotIn('test-secret-token', stderr.getvalue())
 
     def test_alert_failure_is_not_marked_delivered(self):
         state = advance_incident({'active': False}, 'health_network_failure', self.now, lambda _event: False)
