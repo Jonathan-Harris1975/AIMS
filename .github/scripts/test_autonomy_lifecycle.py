@@ -776,5 +776,26 @@ class OwnerCodexAdmissionTests(unittest.TestCase):
         admit.assert_not_called()
 
 
+
+
+class AdmissionRetryDelayTests(unittest.TestCase):
+    @patch("autonomy_admission_check.time.time", return_value=30)
+    def test_retry_after_http_date_is_parsed(self, _now):
+        self.assertEqual(
+            admission_check._retry_delay(
+                "Thu, 01 Jan 1970 00:00:45 GMT", None, None, 0
+            ),
+            15.0,
+        )
+
+    def test_delta_seconds_and_invalid_headers(self):
+        self.assertEqual(admission_check._retry_delay("5", None, None, 0), 5.0)
+        self.assertEqual(admission_check._retry_delay("invalid", None, None, 2), 4.0)
+
+    @patch("autonomy_admission_check.time.time", return_value=30)
+    def test_rate_limit_reset_is_bounded(self, _now):
+        self.assertEqual(admission_check._retry_delay(None, "100", "0", 1), 30.0)
+
+
 if __name__ == "__main__":
     unittest.main()
