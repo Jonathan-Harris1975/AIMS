@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Admit only verified automation pull requests to Mergify.
+"""Admit only verified automation pull requests to GitHub native auto-merge.
 
 Runs from the trusted default-branch workflow. It never checks out or executes PR code.
 """
@@ -583,7 +583,7 @@ def all_required_checks_green(pr: dict[str, Any]) -> tuple[bool, str]:
         if run.get("status") != "completed" or run.get("conclusion") != "success":
             return False, f"required workflow {name!r} is {run.get('status')}/{run.get('conclusion')}"
 
-    # Mergify and the repository ruleset evaluate any additional required contexts.
+    # GitHub native auto-merge and the repository ruleset evaluate any additional required contexts.
     # Optional review, link and external-service checks cannot become an extra gate here.
     return True, "all required exact-head workflows succeeded"
 
@@ -639,7 +639,7 @@ def approve_pr(number: int, sha: str) -> None:
     log(f"Approved PR #{number} at {sha[:12]} after all required exact-head workflows passed.")
 
 
-def admit_to_mergify(number: int, expected_sha: str) -> None:
+def admit_to_native_merge(number: int, expected_sha: str) -> None:
     pr = get(f"/repos/{REPO}/pulls/{number}")
     if pr.get("state") != "open":
         return
@@ -677,10 +677,10 @@ def admit_to_mergify(number: int, expected_sha: str) -> None:
     if "autonomy:admitted" not in labels:
         add_labels(number, ["autonomy:admitted"])
     VERIFIED_ADMISSION_HEADS.add((number, expected_sha))
-    log(f"Admitted PR #{number} to Mergify after trusted exact-head verification.")
+    log(f"Admitted PR #{number} to GitHub native auto-merge after trusted exact-head verification.")
 
 def reconcile_stale_carriers(open_prs: list[dict[str, Any]]) -> None:
-    """Close verified retired carriers directly, without waiting for Mergify.
+    """Close verified retired carriers directly, without waiting for GitHub native auto-merge.
 
     Retired carrier branches are retained as failure evidence. Implementations
     and arbitrary PRs are never closed by this lifecycle reconciler.
@@ -713,7 +713,7 @@ def reconcile_stale_carriers(open_prs: list[dict[str, Any]]) -> None:
 def reconcile_retired_implementations(open_prs: list[dict[str, Any]]) -> None:
     """Close only verified retired implementation PR identities.
 
-    This replaces Mergify Workflow Automation rules that are not enabled for
+    This replaces GitHub native auto-merge Workflow Automation rules that are not enabled for
     this repository. Arbitrary labelled PRs are never closed.
     """
     for pr in open_prs:
@@ -734,7 +734,7 @@ def refresh_behind_kilo_prs(open_prs: list[dict[str, Any]]) -> None:
 
     The trusted repair App may update a branch but never merge it. Every update
     changes the head SHA and therefore forces the normal exact-head checks to
-    run again before Mergify can admit a merge.
+    run again before GitHub native auto-merge can admit a merge.
     """
     carriers = [source for source in open_prs if is_carrier(source)]
     base_sha = _resolve_branch_sha()
@@ -867,7 +867,7 @@ def _reconcile_pr_candidate(pr: dict[str, Any]) -> None:
         if current_head_unchanged(number, sha) is None:
             return
 
-    admit_to_mergify(number, sha)
+    admit_to_native_merge(number, sha)
 
 
 def reconcile_pr(pr: dict[str, Any]) -> None:
@@ -915,7 +915,7 @@ def main() -> int:
     ensure_label(CTO_IMPLEMENTATION_LABEL, "5319E7", "cto.new implementation PR linked to an explicitly assigned task")
     ensure_label("autonomy:human-hold", "FBCA04", "Automation must stop for human action")
     ensure_label("autonomy:obsolete", "D4C5F9", "Repair carrier is no longer current")
-    ensure_label("autonomy:admitted", "0E8A16", "Exact-head CI/security verification complete; Mergify may merge")
+    ensure_label("autonomy:admitted", "0E8A16", "Exact-head CI/security verification complete; GitHub native auto-merge may merge")
     ensure_label(COUNCIL_FREEZE_LABEL, "D93F0B", "Routine merge held after weekend CI PASS until Council completes on the same SHA")
 
     open_prs = list_open_prs()
