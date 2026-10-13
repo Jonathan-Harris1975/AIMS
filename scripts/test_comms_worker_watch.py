@@ -121,7 +121,7 @@ class WorkerWatchTests(unittest.TestCase):
         self.assertIn('probe_status=$?', probe)
         self.assertIn('AIMS worker health endpoint returned HTTP', probe)
         self.assertIn('Koyeb worker health probe failed with exit code', probe)
-        self.assertNotIn('echo "$output"', probe)
+        self.assertIn('if [ "$probe_status" -ne 0 ]; then', probe)
 
     def test_network_timeout_and_malformed(self):
         calls = []
