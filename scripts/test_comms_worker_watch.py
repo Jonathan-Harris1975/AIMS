@@ -118,6 +118,10 @@ class WorkerWatchTests(unittest.TestCase):
         probe = workflow.split('- name: Collect sanitised worker health inside Koyeb', 1)[1].split('- name:', 1)[0]
         self.assertIn('timeout-minutes: 2', probe)
         self.assertIn('id: health_probe', probe)
+        self.assertIn('probe_status=$?', probe)
+        self.assertIn('AIMS worker health endpoint returned HTTP', probe)
+        self.assertIn('Koyeb worker health probe failed with exit code', probe)
+        self.assertIn('if [ "$probe_status" -ne 0 ]; then', probe)
 
     def test_network_timeout_and_malformed(self):
         calls = []
