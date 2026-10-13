@@ -1,4 +1,4 @@
-name: Trusted automation admission for Mergify
+name: Trusted automation and native auto-merge
 
 on: # zizmor: ignore[dangerous-triggers] trusted event router; code is fixed to the default branch and event provenance is gated
   pull_request_target: # zizmor: ignore[dangerous-triggers] trusted default-branch automation reads metadata only and never executes PR code
@@ -22,7 +22,7 @@ on: # zizmor: ignore[dangerous-triggers] trusted event router; code is fixed to 
 
 permissions:
   actions: read
-  checks: write
+  checks: read
   contents: read
   security-events: read
 
@@ -32,6 +32,11 @@ concurrency:
 
 jobs:
   reconcile:
+    permissions:
+      actions: read
+      checks: write
+      contents: read
+      security-events: read
     if: >-
       ${{
         (github.event_name != 'issue_comment' ||
@@ -128,3 +133,36 @@ jobs:
           CURRENT_RUN_ID: ${{ github.run_id }}
           REQUIRED_WORKFLOWS: "AIMS CI|CodeQL|Security and repository quality|Item 6 hardening"
         run: python .github/scripts/trusted_automation.py
+
+
+  native_merge:
+    needs: reconcile
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      checks: read
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Check out trusted default-branch automation only
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Reconcile GitHub native auto-merge requests
+        env:
+          NATIVE_MERGE_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          if [[ ! -f .github/scripts/native_auto_merge.py ]]; then
+            if [[ -f .mergify.yml ]]; then
+              echo "Native auto-merge controller is not on the trusted default branch yet; skipping pre-merge reconciliation."
+              exit 0
+            fi
+            echo "::error::Mergify configuration is absent but native auto-merge controller is missing."
+            exit 1
+          fi
+          python .github/scripts/native_auto_merge.py

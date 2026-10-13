@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 import os
 from pathlib import Path
 import unittest
+import native_auto_merge
 from unittest.mock import patch
 
 os.environ.setdefault("GH_TOKEN", "unit-test")
@@ -810,6 +811,113 @@ class AdmissionRetryDelayTests(unittest.TestCase):
     @patch("autonomy_admission_check.time.time", return_value=30)
     def test_rate_limit_reset_is_bounded(self, _now):
         self.assertEqual(admission_check._retry_delay(None, "100", "0", 1), 30.0)
+
+
+
+class NativeAutoMergeCurrentLabelTests(unittest.TestCase):
+    def test_fresh_hold_label_blocks_auto_merge_enable(self):
+        summary = {
+            "number": 7,
+            "labels": [{"name": "autonomy:admitted"}],
+            "node_id": "PR_node_7",
+        }
+        detail = {
+            "state": "open",
+            "draft": False,
+            "base": {"ref": "main"},
+            "head": {"sha": "a" * 40},
+            "mergeable": True,
+            "labels": [
+                {"name": "autonomy:admitted"},
+                {"name": "autonomy:human-hold"},
+            ],
+        }
+        with (
+            patch.object(native_auto_merge, "merge_request", return_value=None),
+            patch.object(native_auto_merge, "request", return_value=detail),
+            patch.object(native_auto_merge, "admission_check", return_value=(True, True)),
+            patch.object(native_auto_merge, "enable") as enable,
+        ):
+            native_auto_merge.reconcile(summary)
+        enable.assert_not_called()
+
+    def test_removed_admission_label_revokes_existing_auto_merge(self):
+        summary = {
+            "number": 7,
+            "labels": [{"name": "autonomy:admitted"}],
+            "node_id": "PR_node_7",
+        }
+        detail = {
+            "state": "open",
+            "draft": False,
+            "base": {"ref": "main"},
+            "head": {"sha": "a" * 40},
+            "mergeable": True,
+            "labels": [],
+        }
+        active = {"enabledAt": "2026-01-01T00:00:00Z", "mergeMethod": "SQUASH"}
+        with (
+            patch.object(native_auto_merge, "merge_request", return_value=active),
+            patch.object(native_auto_merge, "request", return_value=detail),
+            patch.object(native_auto_merge, "admission_check", return_value=(False, True)),
+            patch.object(native_auto_merge, "disable") as disable,
+        ):
+            native_auto_merge.reconcile(summary)
+        disable.assert_called_once_with("PR_node_7")
+
+    def test_uncomputed_mergeability_preserves_existing_auto_merge(self):
+        summary = {
+            "number": 7,
+            "labels": [{"name": "autonomy:admitted"}],
+            "node_id": "PR_node_7",
+        }
+        detail = {
+            "state": "open",
+            "draft": False,
+            "base": {"ref": "main"},
+            "head": {"sha": "a" * 40},
+            "mergeable": None,
+            "labels": [{"name": "autonomy:admitted"}],
+        }
+        active = {"enabledAt": "2026-01-01T00:00:00Z", "mergeMethod": "SQUASH"}
+        with (
+            patch.object(native_auto_merge, "merge_request", return_value=active),
+            patch.object(native_auto_merge, "request", return_value=detail),
+            patch.object(native_auto_merge, "admission_check", return_value=(True, True)),
+            patch.object(native_auto_merge, "enable") as enable,
+            patch.object(native_auto_merge, "disable") as disable,
+        ):
+            native_auto_merge.reconcile(summary)
+        enable.assert_not_called()
+        disable.assert_not_called()
+
+    def test_admission_evidence_from_another_pr_does_not_count(self):
+        sha = "a" * 40
+        runs = [{
+            "app": {"slug": "github-actions"},
+            "name": native_auto_merge.ADMISSION_CHECK,
+            "external_id": f"trusted-autonomy-admission:99:{sha}",
+            "status": "completed",
+            "conclusion": "success",
+        }]
+        with patch.object(native_auto_merge, "request", return_value={"check_runs": runs}):
+            self.assertEqual(native_auto_merge.admission_check(7, sha), (False, False))
+
+    def test_open_pr_listing_fails_closed_at_safety_limit(self):
+        page = [{"number": number} for number in range(100)]
+        with patch.object(native_auto_merge, "request", side_effect=[page] * 10) as request:
+            with self.assertRaisesRegex(RuntimeError, "1,000-item safety limit"):
+                native_auto_merge.pages("/repos/owner/repo/pulls?state=open")
+        self.assertEqual(request.call_count, 10)
+
+
+    def test_native_merge_method_uses_a_strategy_enabled_by_repo(self):
+        with patch.object(
+            native_auto_merge,
+            "request",
+            return_value={"allow_squash_merge": False, "allow_merge_commit": True, "allow_rebase_merge": True},
+        ):
+            self.assertEqual(native_auto_merge.merge_method(), "MERGE")
 
 
 if __name__ == "__main__":
