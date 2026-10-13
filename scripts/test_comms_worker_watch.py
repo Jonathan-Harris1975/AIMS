@@ -180,5 +180,37 @@ class WorkerWatchTests(unittest.TestCase):
         self.assertNotEqual(state['incident_id'], incident)
 
 
+
+class OperationalNotifierCliTests(unittest.TestCase):
+    def _run_main(self, env, *, response=None, error=None):
+        argv = ['ops_notify', '--service', 'AIMS', '--event-type', 'ci_failed',
+                '--title', 'CI failed', '--summary', 'CI failed']
+        with patch.dict(os.environ, env, clear=True), patch.object(ops_notify.sys, 'argv', argv):
+            with patch('ops_notify.urllib.request.urlopen', return_value=response, side_effect=error):
+                return ops_notify.main()
+
+    def test_cli_successful_delivery_exits_zero(self):
+        class Response:
+            status = 202
+            def __enter__(self): return self
+            def __exit__(self, *_args): pass
+        self.assertEqual(self._run_main({
+            'OPS_ALERT_WEBHOOK_URL': 'https://ops.example/events',
+            'OPS_ALERT_WEBHOOK_TOKEN': 'test-token',
+        }, response=Response()), 0)
+
+    def test_cli_failed_delivery_exits_nonzero(self):
+        error = urllib.error.HTTPError('https://ops.example/events', 503, 'private', {}, None)
+        with contextlib.redirect_stderr(io.StringIO()):
+            code = self._run_main({
+                'OPS_ALERT_WEBHOOK_URL': 'https://ops.example/events',
+                'OPS_ALERT_WEBHOOK_TOKEN': 'test-token',
+            }, error=error)
+        self.assertEqual(code, 1)
+
+    def test_cli_missing_configuration_exits_nonzero(self):
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(self._run_main({}), 1)
+
 if __name__ == '__main__':
     unittest.main()
