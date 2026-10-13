@@ -25,7 +25,6 @@ permissions:
   checks: write
   contents: read
   security-events: read
-  pull-requests: write
 
 concurrency:
   group: trusted-automation-${{ github.repository }}
@@ -129,6 +128,23 @@ jobs:
           CURRENT_RUN_ID: ${{ github.run_id }}
           REQUIRED_WORKFLOWS: "AIMS CI|CodeQL|Security and repository quality|Item 6 hardening"
         run: python .github/scripts/trusted_automation.py
+
+
+  native_merge:
+    needs: reconcile
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      checks: read
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Check out trusted default-branch automation only
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
 
       - name: Reconcile GitHub native auto-merge requests
         env:
