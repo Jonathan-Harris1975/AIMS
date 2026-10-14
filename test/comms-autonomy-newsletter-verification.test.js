@@ -442,11 +442,6 @@ test('only exact newsletter token navigation bypasses suite authentication; logs
 });
 
 test('newsletter confirmation base is independently configurable and falls back to the app base', () => {
-  assert.equal(newsletterConfirmationBase({
-    NEWSLETTER_CONFIRMATION_BASE_URL: 'https://confirm.jonathan-harris.online',
-    COMMS_HUB_PUBLIC_BASE_URL: 'https://aims.example.com',
-  }), 'https://confirm.jonathan-harris.online');
-  assert.equal(newsletterConfirmationBase({
-    COMMS_HUB_PUBLIC_BASE_URL: 'https://aims.example.com',
-  }), 'https://aims.example.com');
+  assert.equal(newsletterConfirmationBase('https://confirm.jonathan-harris.online', 'https://aims.example.com'), 'https://confirm.jonathan-harris.online');
+  assert.equal(newsletterConfirmationBase('', 'https://aims.example.com'), 'https://aims.example.com');
 });
