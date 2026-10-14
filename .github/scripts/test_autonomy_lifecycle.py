@@ -221,7 +221,7 @@ class TrustedImplementationLifecycleTests(unittest.TestCase):
         self.assertTrue(automation.sensitive_file(".github/scripts/trusted_automation.py"))
         self.assertTrue(automation.sensitive_file(".github/scripts/test_autonomy_lifecycle.py"))
         self.assertTrue(automation.sensitive_file(".github/scripts/codeql_gate.py"))
-        self.assertFalse(automation.sensitive_file("services/worker.js"))
+        self.assertFalse(automation.sensitive_file("services/example.ts"))
 
 
 class CtoTaskAdmissionTests(unittest.TestCase):
@@ -278,6 +278,7 @@ class CtoTaskAdmissionTests(unittest.TestCase):
         hold = self.enterContext(patch.object(automation, "place_human_hold"))
         admit = self.enterContext(patch.object(automation, "admit_to_mergify"))
         self.enterContext(patch.object(automation, "verified_cto_task", return_value=40))
+        self.enterContext(patch.object(automation, "has_operator_risk_approval", return_value=False))
         self.enterContext(patch.object(automation, "pr_files", return_value=[".github/workflows/security.yml"]))
         automation.reconcile_pr(pr)
         hold.assert_called_once()
@@ -371,7 +372,7 @@ class ManagedBranchOwnershipTests(unittest.TestCase):
             "body": "",
         }
         for name, value in {
-            "REPO": "owner/repo",
+            "REPO": "Jonathan-Harris1975/AIMS",
             "REPAIR_APP_LOGIN": "repair[bot]",
             "DEFAULT_BRANCH": "main",
         }.items():
@@ -419,6 +420,7 @@ class ManagedBranchOwnershipTests(unittest.TestCase):
                 return_value=[".github/workflows/security.yml"],
             )
         )
+        self.enterContext(patch.object(automation, "has_operator_risk_approval", return_value=False))
 
         automation.reconcile_pr(copy.deepcopy(self.pr))
 
