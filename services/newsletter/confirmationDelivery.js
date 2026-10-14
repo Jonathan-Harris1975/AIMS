@@ -3,8 +3,8 @@ import { beginSubscription } from './audience/d1Audience.js';
 import { CommsHubError } from '../comms-hub/errors.js';
 import { recordNewsletterOutcome } from './telemetry.js';
 
-export function newsletterConfirmationBase(env = process.env) {
-  return trustedNewsletterBase(env.NEWSLETTER_CONFIRMATION_BASE_URL || env.COMMS_HUB_PUBLIC_BASE_URL);
+export function newsletterConfirmationBase(confirmationBase, appBase) {
+  return trustedNewsletterBase(confirmationBase || appBase);
 }
 
 export function trustedNewsletterBase(value) {
