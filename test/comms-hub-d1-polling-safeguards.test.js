@@ -167,3 +167,33 @@ test("D1 retries a temporary long-running-export contention response", async () 
   assert.deepEqual(result.results, [{ ok: 1 }]);
   assert.equal(fetchCalls, 2);
 });
+
+
+test("D1 batch retries a temporary long-running-export contention response", async () => {
+  let fetchCalls = 0;
+  const fetchImpl = async () => {
+    fetchCalls += 1;
+    if (fetchCalls === 1) {
+      return new Response(JSON.stringify({
+        success: false,
+        errors: [{ message: "D1_ERROR: SQLITE_BUSY: database is temporarily unavailable." }],
+      }), { status: 400, headers: { "content-type": "application/json" } });
+    }
+    return new Response(JSON.stringify({
+      success: true,
+      result: [
+        { success: true, results: [], meta: { rows_read: 0, rows_written: 1 } },
+        { success: true, results: [], meta: { rows_read: 0, rows_written: 1 } },
+      ],
+    }), { status: 200, headers: { "content-type": "application/json" } });
+  };
+  const client = new D1Client(d1Config(), { fetchImpl });
+
+  const results = await client.batch([
+    { sql: "INSERT INTO test_table (id) VALUES (?)", params: ["first"] },
+    { sql: "INSERT INTO test_table (id) VALUES (?)", params: ["second"] },
+  ]);
+
+  assert.equal(results.length, 2);
+  assert.equal(fetchCalls, 2);
+});
