@@ -274,10 +274,10 @@ class CtoTaskAdmissionTests(unittest.TestCase):
         labels.assert_called_once_with(41, [automation.CTO_IMPLEMENTATION_LABEL])
 
     def test_cto_protected_control_change_is_held(self):
-        risk_label = self.enterContext(patch.object(automation, "add_labels"))
-        self.enterContext(patch.object(automation, "comment"))
         pr = copy.deepcopy(self.pr)
         pr["labels"] = [{"name": automation.CTO_IMPLEMENTATION_LABEL}]
+        risk_label = self.enterContext(patch.object(automation, "add_labels"))
+        self.enterContext(patch.object(automation, "comment"))
         hold = self.enterContext(patch.object(automation, "place_human_hold"))
         admit = self.enterContext(patch.object(automation, "admit_to_mergify"))
         self.enterContext(patch.object(automation, "verified_cto_task", return_value=40))
@@ -288,9 +288,6 @@ class CtoTaskAdmissionTests(unittest.TestCase):
         admit.assert_not_called()
         risk_label.assert_called_once_with(pr["number"], [automation.RISK_APPROVAL_LABEL])
 
-
-class KiloPermissionPolicyTests(unittest.TestCase):
-    @classmethod
     def setUpClass(cls):
         root = Path(__file__).resolve().parents[2]
         cls.policy = json.loads((root / "kilo.jsonc").read_text(encoding="utf-8"))
@@ -420,11 +417,7 @@ class ManagedBranchOwnershipTests(unittest.TestCase):
         hold = self.enterContext(patch.object(automation, "place_human_hold"))
         admit = self.enterContext(patch.object(automation, "admit_to_mergify"))
         self.enterContext(
-            patch.object(
-                automation,
-                "pr_files",
-                return_value=[".github/workflows/security.yml"],
-            )
+            patch.object(automation, "pr_files", return_value=[".github/workflows/security.yml"])
         )
         self.enterContext(patch.object(automation, "has_operator_risk_approval", return_value=False))
 
@@ -434,8 +427,6 @@ class ManagedBranchOwnershipTests(unittest.TestCase):
         admit.assert_not_called()
         risk_label.assert_called_once_with(self.pr["number"], [automation.RISK_APPROVAL_LABEL])
 
-
-class CouncilEvidenceFreezeTests(unittest.TestCase):
     def setUp(self):
         self.sha = "d" * 40
         for name, value in {"REPO": "owner/repo", "DEFAULT_BRANCH": "main"}.items():
