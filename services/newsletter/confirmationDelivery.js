@@ -4,7 +4,9 @@ import { CommsHubError } from '../comms-hub/errors.js';
 import { recordNewsletterOutcome } from './telemetry.js';
 
 export function newsletterConfirmationBase(confirmationBase, appBase) {
-  return trustedNewsletterBase(confirmationBase || appBase);
+  // Keep validation inside sendSubscriptionConfirmation so configuration errors
+  // are captured by its outcome telemetry.
+  return confirmationBase || appBase;
 }
 
 export function trustedNewsletterBase(value) {
