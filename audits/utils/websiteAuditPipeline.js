@@ -800,7 +800,7 @@ async function runWebsiteAuditFinalisation(parentSessionId) {
           plannedEngineeringAgent: "cto.new",
           ownershipTransferRequired: true,
           dependencyVersionOwner: "renovate",
-          mergeAuthority: "mergify",
+          mergeAuthority: "github_native_auto_merge",
           humanDecisionSurface: "hive-ui",
         },
         delegatedAuditFamilies: compactWebsiteAuditPolicy().delegatedAuditFamilies,
