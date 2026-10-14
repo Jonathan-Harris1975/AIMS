@@ -4,6 +4,7 @@ import fs from "node:fs";
 import { D1Client, nextUtcMidnight } from "../services/comms-hub/clients/d1Client.js";
 import { retryableError, withRetry } from "../services/comms-hub/clients/retry.js";
 import dataPlaneWorker from "../workers/comms-hub-data-plane/worker.js";
+import { CommsAiRepository } from "../services/comms-hub/repositories/commsAiRepository.js";
 
 const quotaMessage = "D1_ERROR: Your account has exceeded D1's free tier daily row read limit. Upgrade to a paid plan or wait until tomorrow (midnight UTC).";
 
@@ -115,4 +116,54 @@ test("production polling defaults use webhook-first reconciliation intervals", (
     "COMMS_HUB_EMAIL_POLL_MS=1800000",
     "COMMS_HUB_DELAYED_ACTION_POLL_MS=300000",
   ]) assert.match(source, new RegExp(`^${expected}$`, "m"));
+});
+
+
+test("D1 provider-health snapshots are written in batches of at most 100", async () => {
+  const batchSizes = [];
+  const repository = new CommsAiRepository({
+    async batch(statements) {
+      batchSizes.push(statements.length);
+      return statements.map(() => ({ success: true, results: [] }));
+    },
+  });
+  const snapshots = Array.from({ length: 205 }, (_, index) => ({
+    id: `health-${index}`,
+    provider: "test-provider",
+    adapter: `test-route-${index}`,
+    status: "healthy",
+    successCount: 1,
+    failureCount: 0,
+    consecutiveFailures: 0,
+    observedAt: "2026-10-14T00:00:00.000Z",
+    evidence: {},
+  }));
+
+  await repository.recordProviderHealthBatch(snapshots);
+
+  assert.deepEqual(batchSizes, [100, 100, 5]);
+});
+
+
+test("D1 retries a temporary long-running-export contention response", async () => {
+  let fetchCalls = 0;
+  const fetchImpl = async () => {
+    fetchCalls += 1;
+    if (fetchCalls === 1) {
+      return new Response(JSON.stringify({
+        success: false,
+        errors: [{ message: "D1_ERROR: Currently processing a long-running export." }],
+      }), { status: 400, headers: { "content-type": "application/json" } });
+    }
+    return new Response(JSON.stringify({
+      success: true,
+      result: [{ success: true, results: [{ ok: 1 }], meta: { rows_read: 1, rows_written: 0 } }],
+    }), { status: 200, headers: { "content-type": "application/json" } });
+  };
+  const client = new D1Client(d1Config(), { fetchImpl });
+
+  const result = await client.query("SELECT 1");
+
+  assert.deepEqual(result.results, [{ ok: 1 }]);
+  assert.equal(fetchCalls, 2);
 });
