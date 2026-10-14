@@ -221,7 +221,8 @@ class TrustedImplementationLifecycleTests(unittest.TestCase):
         self.assertTrue(automation.sensitive_file(".github/scripts/trusted_automation.py"))
         self.assertTrue(automation.sensitive_file(".github/scripts/test_autonomy_lifecycle.py"))
         self.assertTrue(automation.sensitive_file(".github/scripts/codeql_gate.py"))
-        self.assertFalse(automation.sensitive_file("services/worker.js"))
+        with patch.object(automation, "REPO", "Jonathan-Harris1975/AIMS"):
+            self.assertFalse(automation.sensitive_file("services/example.ts"))
 
 
 class CtoTaskAdmissionTests(unittest.TestCase):
@@ -275,14 +276,17 @@ class CtoTaskAdmissionTests(unittest.TestCase):
     def test_cto_protected_control_change_is_held(self):
         pr = copy.deepcopy(self.pr)
         pr["labels"] = [{"name": automation.CTO_IMPLEMENTATION_LABEL}]
+        risk_label = self.enterContext(patch.object(automation, "add_labels"))
+        self.enterContext(patch.object(automation, "comment"))
         hold = self.enterContext(patch.object(automation, "place_human_hold"))
         admit = self.enterContext(patch.object(automation, "admit_to_mergify"))
         self.enterContext(patch.object(automation, "verified_cto_task", return_value=40))
+        self.enterContext(patch.object(automation, "has_operator_risk_approval", return_value=False))
         self.enterContext(patch.object(automation, "pr_files", return_value=[".github/workflows/security.yml"]))
         automation.reconcile_pr(pr)
-        hold.assert_called_once()
+        hold.assert_not_called()
         admit.assert_not_called()
-
+        risk_label.assert_called_once_with(pr["number"], [automation.RISK_APPROVAL_LABEL])
 
 class KiloPermissionPolicyTests(unittest.TestCase):
     @classmethod
@@ -364,14 +368,14 @@ class ManagedBranchOwnershipTests(unittest.TestCase):
             "head": {
                 "ref": "codex/requested-change",
                 "sha": self.sha,
-                "repo": {"full_name": "owner/repo"},
+                "repo": {"full_name": "Jonathan-Harris1975/AIMS"},
             },
             "base": {"ref": "main"},
             "labels": [{"name": "automation:branch-pr"}],
             "body": "",
         }
         for name, value in {
-            "REPO": "owner/repo",
+            "REPO": "Jonathan-Harris1975/AIMS",
             "REPAIR_APP_LOGIN": "repair[bot]",
             "DEFAULT_BRANCH": "main",
         }.items():
@@ -410,21 +414,20 @@ class ManagedBranchOwnershipTests(unittest.TestCase):
         approve.assert_not_called()
 
     def test_managed_branch_pr_touching_protected_controls_gets_human_hold(self):
+        risk_label = self.enterContext(patch.object(automation, "add_labels"))
+        self.enterContext(patch.object(automation, "comment"))
         hold = self.enterContext(patch.object(automation, "place_human_hold"))
         admit = self.enterContext(patch.object(automation, "admit_to_mergify"))
         self.enterContext(
-            patch.object(
-                automation,
-                "pr_files",
-                return_value=[".github/workflows/security.yml"],
-            )
+            patch.object(automation, "pr_files", return_value=[".github/workflows/security.yml"])
         )
+        self.enterContext(patch.object(automation, "has_operator_risk_approval", return_value=False))
 
         automation.reconcile_pr(copy.deepcopy(self.pr))
 
-        hold.assert_called_once()
+        hold.assert_not_called()
         admit.assert_not_called()
-
+        risk_label.assert_called_once_with(self.pr["number"], [automation.RISK_APPROVAL_LABEL])
 
 class CouncilEvidenceFreezeTests(unittest.TestCase):
     def setUp(self):
@@ -776,19 +779,55 @@ class OwnerCodexAdmissionTests(unittest.TestCase):
             candidate.update(change)
             self.assertFalse(automation.is_owner_codex_pr(candidate))
 
-    def test_sensitive_owner_codex_changes_are_held(self):
+    def test_owner_exact_head_risk_approval(self):
+        owner_review = {
+            "state": "APPROVED",
+            "commit_id": self.sha,
+            "submitted_at": "2026-10-14T00:00:00Z",
+            "user": {"login": "owner"},
+        }
+        with patch.object(
+            automation,
+            "get",
+            side_effect=lambda endpoint: [owner_review] if "/reviews?" in endpoint else [],
+        ):
+            self.assertTrue(automation.has_operator_risk_approval(int(self.pr['number']), self.sha))
+            self.assertFalse(automation.has_operator_risk_approval(int(self.pr["number"]), "b" * 40))
+
+        rejected_review = dict(owner_review, state="CHANGES_REQUESTED")
+        owner_comment = {
+            "body": f"/risk-approve {self.sha}",
+            "created_at": "2026-10-14T00:01:00Z",
+            "user": {"login": "owner"},
+        }
+        with patch.object(
+            automation,
+            "get",
+            side_effect=lambda endpoint: (
+                [rejected_review] if "/reviews?" in endpoint
+                else [owner_comment] if "/comments?" in endpoint
+                else []
+            ),
+        ):
+            self.assertTrue(automation.has_operator_risk_approval(int(self.pr['number']), self.sha))
+
+    def test_sensitive_owner_codex_changes_require_operator_risk_approval(self):
         with (
             patch.dict(os.environ, {"ADMISSION_TOKEN": "unit-test", "REPO": "owner/repo"}),
-            patch.object(automation, "council_evidence_freeze", return_value=(False, "clear")),
             patch.object(automation, "pr_files", return_value=[".github/workflows/ci.yml"]),
-            patch.object(automation, "has_current_approval", return_value=False),
-            patch.object(automation, "place_human_hold") as hold,
+            patch.object(automation, "has_operator_risk_approval", return_value=False),
+            patch.object(automation, "add_labels") as add_risk_label,
+            patch.object(automation, "comment") as risk_comment,
             patch.object(automation, "admit_to_mergify") as admit,
             patch.object(automation, "set_admission_check"),
             patch.object(automation, "remove_label"),
+            patch.object(automation, "council_evidence_freeze", return_value=(False, "clear")),
         ):
             automation.reconcile_pr(self.pr)
-        hold.assert_called_once()
+        add_risk_label.assert_called_once_with(
+            int(self.pr["number"]), [automation.RISK_APPROVAL_LABEL]
+        )
+        risk_comment.assert_called_once()
         admit.assert_not_called()
 
 
@@ -918,6 +957,86 @@ class NativeAutoMergeCurrentLabelTests(unittest.TestCase):
             return_value={"allow_squash_merge": False, "allow_merge_commit": True, "allow_rebase_merge": True},
         ):
             self.assertEqual(native_auto_merge.merge_method(), "MERGE")
+
+
+class RiskPolicyRegressionTests(unittest.TestCase):
+    def test_repository_security_deployment_and_dependency_paths_are_high_risk(self):
+        cases = {
+            "AIMS": (
+                "services/shared/middleware/suiteAuth.js",
+                "services/comms-hub/domain/rbac.js",
+                "services/comms-hub/domain/promptSecurity.js",
+                "scripts/deployCommsHubDataPlaneWorker.js",
+                "config/deployment-check.js",
+            ),
+            "AIMS-UI": ("workers/gateway/index.js", "workers/gateway/security.ts", "scripts/deploy-production.mjs"),
+            "HIVE": ("requirements.in", "requirements-dev.txt", "backend/app/core/security.py"),
+            "HIVE-UI": ("workers/gateway/security.ts", "src/lib/session.ts", "src/context/AuthContext.tsx"),
+            "MAST": ("src/security.js",),
+        }
+        for repo, paths in cases.items():
+            with self.subTest(repo=repo), patch.object(automation, "REPO", f"Jonathan-Harris1975/{repo}"):
+                for path in paths:
+                    with self.subTest(path=path):
+                        self.assertTrue(automation.sensitive_file(path), path)
+
+    def test_exact_sensitive_paths_are_normalized_before_matching(self):
+        with patch.object(automation, "REPO", "Jonathan-Harris1975/AIMS"):
+            self.assertTrue(automation.sensitive_file(r".github\scripts\trusted_automation.py"))
+
+    def test_renames_classify_both_old_and_new_paths(self):
+        with patch.object(
+            automation,
+            "get",
+            return_value=[{"filename": "docs/new-name.md", "previous_filename": ".github/workflows/ci.yml"}],
+        ):
+            self.assertEqual(
+                automation.pr_files(12),
+                ["docs/new-name.md", ".github/workflows/ci.yml"],
+            )
+
+    def test_stale_risk_hold_is_removed_after_risky_path_leaves_current_diff(self):
+        pr = {"number": 12, "labels": [{"name": automation.RISK_APPROVAL_LABEL}]}
+        with (
+            patch.object(automation, "REPO", "Jonathan-Harris1975/AIMS"),
+            patch.object(automation, "remove_label") as remove_label,
+            patch.object(automation, "log"),
+        ):
+            self.assertFalse(automation.require_operator_risk_approval(pr, ["routes/example.js"], "codex"))
+        remove_label.assert_called_once_with(12, automation.RISK_APPROVAL_LABEL)
+
+    def test_owner_exact_head_comment_can_approve_owner_authored_codex_pr(self):
+        sha = "a" * 40
+        owner_comment = {
+            "body": f"/risk-approve {sha}",
+            "created_at": "2026-10-14T06:00:00+01:00",
+            "user": {"login": "Jonathan-Harris1975"},
+        }
+        with (
+            patch.object(automation, "REPO", "Jonathan-Harris1975/AIMS"),
+            patch.object(automation, "get", side_effect=lambda endpoint: [owner_comment] if "/comments?" in endpoint else []),
+        ):
+            self.assertTrue(automation.has_operator_risk_approval(12, sha))
+            self.assertFalse(automation.has_operator_risk_approval(12, "b" * 40))
+
+    def test_exact_head_comment_must_follow_the_latest_owner_review(self):
+        sha = "c" * 40
+        review = {
+            "state": "CHANGES_REQUESTED",
+            "commit_id": sha,
+            "submitted_at": "2026-10-14T06:30:00Z",
+            "user": {"login": "Jonathan-Harris1975"},
+        }
+        earlier_comment = {
+            "body": f"/risk-approve {sha}",
+            "created_at": "2026-10-14T07:00:00+01:00",
+            "user": {"login": "Jonathan-Harris1975"},
+        }
+        with (
+            patch.object(automation, "REPO", "Jonathan-Harris1975/AIMS"),
+            patch.object(automation, "get", side_effect=lambda endpoint: [review] if "/reviews?" in endpoint else [earlier_comment]),
+        ):
+            self.assertFalse(automation.has_operator_risk_approval(12, sha))
 
 
 if __name__ == "__main__":

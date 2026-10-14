@@ -66,6 +66,60 @@ KILO_SENSITIVE_EXACT = {
     "scripts/verify_ci_tool_checksums.py",
 }
 
+RISK_APPROVAL_LABEL = "autonomy:risk-approval-required"
+RISK_HIGH_RISK_PREFIXES = (
+    ".github/", ".circleci/", ".buildkite/", ".gitlab/", ".devcontainer/",
+    "infra/", "infrastructure/", "terraform/", "k8s/", "kubernetes/", "helm/",
+    "charts/", "migrations/", "db/migrations/", "database/migrations/",
+)
+RISK_HIGH_RISK_BASENAMES = {
+    "dockerfile", "containerfile", "docker-compose.yml", "docker-compose.yaml",
+    "compose.yml", "compose.yaml", "procfile", "koyeb.yaml", "koyeb.yml",
+    "fly.toml", "wrangler.toml", "wrangler.json", "wrangler.jsonc",
+    "vercel.json", "netlify.toml", "render.yaml", "package.json",
+    "package-lock.json", "npm-shrinkwrap.json", "yarn.lock", "pnpm-lock.yaml",
+    "pyproject.toml", "poetry.lock", "requirements.txt", "requirements.in", "pipfile", "pipfile.lock",
+    "uv.lock", "cargo.toml", "cargo.lock", "go.mod", "go.sum",
+    "composer.json", "composer.lock", "gemfile", "gemfile.lock",
+}
+RISK_HIGH_RISK_SEGMENTS = {
+    "auth", "authentication", "authorization", "security", "crypto", "oidc",
+    "saml", "rbac", "permissions", "secrets", "migrations", "migration",
+    "gateway", "middleware",
+}
+RISK_HIGH_RISK_NAME_STEMS = (
+    "auth", "authentication", "authorization", "security", "crypto", "oidc",
+    "saml", "rbac", "permission", "secret", "session", "middleware", "gateway",
+    "deploy", "deployment",
+)
+
+RISK_LOW_RISK_PREFIXES_BY_REPO = {
+    "AIMS": ("routes/", "services/"),
+    "AIMS-UI": ("apps/", "packages/"),
+    "HIVE": ("backend/app/",),
+    "HIVE-UI": ("src/",),
+    "IRS": ("public/",),
+    "RAMS": (),
+    "MAST": (),
+    "jonathan-harris-website": (
+        "blog/", "bio/", "book-finder/", "glossary/", "topics/",
+        "transcripts/", "podcast/", "resources/", "for-teams/",
+    ),
+}
+RISK_LOW_RISK_CODE_EXTENSIONS_BY_REPO = {
+    "AIMS": {".js", ".jsx", ".ts", ".tsx"},
+    "AIMS-UI": {".js", ".jsx", ".ts", ".tsx", ".css", ".scss", ".html", ".svg"},
+    "HIVE": {".py"},
+    "HIVE-UI": {".js", ".jsx", ".ts", ".tsx", ".css", ".scss", ".html", ".svg"},
+    "IRS": {".css", ".html", ".svg"},
+    "RAMS": set(),
+    "MAST": set(),
+    "jonathan-harris-website": {".md", ".mdx"},
+}
+RISK_LOW_RISK_DOC_EXTENSIONS = {".md", ".mdx", ".rst"}
+RISK_LOW_RISK_ROOT_FILES = {"readme.md", "changelog.md"}
+
+
 
 def log(message: str) -> None:
     print(message, flush=True)
@@ -592,17 +646,205 @@ def pr_files(number: int) -> list[str]:
     names: list[str] = []
     for page in range(1, 11):
         chunk = get(f"/repos/{REPO}/pulls/{number}/files?per_page=100&page={page}")
-        names.extend(str(item.get("filename", "")) for item in chunk)
+        for item in chunk:
+            names.append(str(item.get("filename", "")))
+            previous = item.get("previous_filename")
+            if previous:
+                names.append(str(previous))
         if len(chunk) < 100:
-            return names
+            return list(dict.fromkeys(names))
     raise RuntimeError(f"PR #{number} has too many changed files to verify safely")
 
 
 def sensitive_file(path: str) -> bool:
-    if path in KILO_SENSITIVE_EXACT:
+    """Return True for high-risk or unclassified paths; only explicit low-risk paths pass."""
+    normalized = path.replace("\\", "/").removeprefix("./")
+    folded = normalized.casefold()
+    repo_name = REPO.rsplit("/", 1)[-1]
+    basename = folded.rsplit("/", 1)[-1]
+    if folded in {item.casefold() for item in KILO_SENSITIVE_EXACT}:
         return True
-    return any(path == prefix or path.startswith(prefix) for prefix in KILO_SENSITIVE_PREFIXES)
+    if any(folded == prefix.casefold().rstrip("/") or folded.startswith(prefix.casefold())
+           for prefix in KILO_SENSITIVE_PREFIXES + RISK_HIGH_RISK_PREFIXES):
+        return True
+    parts = folded.split("/")
+    if any(part in RISK_HIGH_RISK_SEGMENTS for part in parts):
+        return True
+    if any(part in {"test", "tests", "e2e", "spec", "specs", "data"} for part in parts):
+        return True
+    if basename in RISK_HIGH_RISK_BASENAMES or basename.startswith(
+        ("dockerfile.", "containerfile.", "requirements-")
+    ):
+        return True
+    stem_tokens = re.split(r"[^a-z0-9]+", basename)
+    if any(stem in token for token in stem_tokens for stem in RISK_HIGH_RISK_NAME_STEMS):
+        return True
+    if basename.endswith((".tf", ".tfvars", ".sql", ".prisma")):
+        return True
 
+    # Documentation is eligible only in its dedicated directory or the two
+    # root-level project notes listed below.
+    extension = "." + basename.rsplit(".", 1)[-1] if "." in basename else ""
+    if folded in RISK_LOW_RISK_ROOT_FILES:
+        return False
+    if folded.startswith("docs/") and extension in RISK_LOW_RISK_DOC_EXTENSIONS:
+        return False
+
+    prefixes = RISK_LOW_RISK_PREFIXES_BY_REPO.get(repo_name, ())
+    allowed_extensions = RISK_LOW_RISK_CODE_EXTENSIONS_BY_REPO.get(repo_name, set())
+    if (
+        allowed_extensions
+        and extension in allowed_extensions
+        and any(folded.startswith(prefix.casefold()) for prefix in prefixes)
+    ):
+        return False
+    return True
+
+
+def has_operator_risk_approval(number: int, sha: str) -> bool:
+    """Require a repository-owner approval explicitly bound to this exact PR head."""
+    owner_login = REPO.split("/", 1)[0]
+    owner_reviews: list[dict[str, Any]] = []
+    for page in range(1, 11):
+        chunk = get(f"/repos/{REPO}/pulls/{number}/reviews?per_page=100&page={page}")
+        if not isinstance(chunk, list):
+            return False
+        owner_reviews.extend(
+            review for review in chunk
+            if review.get("user", {}).get("login") == owner_login
+            and review.get("state") != "PENDING"
+        )
+        if len(chunk) < 100:
+            break
+    else:
+        raise RuntimeError(f"PR #{number} has too many review records to verify safely")
+
+    def timestamp_order(item: dict[str, Any], key: str) -> float:
+        value = item.get(key)
+        if not isinstance(value, str) or not value:
+            return float("-inf")
+        try:
+            return datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
+        except ValueError:
+            return float("-inf")
+
+    if any(timestamp_order(review, "submitted_at") == float("-inf") for review in owner_reviews):
+        return False
+    latest_review = max(
+        owner_reviews,
+        key=lambda review: timestamp_order(review, "submitted_at"),
+        default=None,
+    )
+    latest_review_time = timestamp_order(latest_review, "submitted_at") if latest_review else None
+    if (
+        latest_review
+        and latest_review.get("state") == "APPROVED"
+        and latest_review.get("commit_id") == sha
+    ):
+        return True
+
+    owner_comments: list[dict[str, Any]] = []
+    for page in range(1, 11):
+        chunk = get(f"/repos/{REPO}/issues/{number}/comments?per_page=100&page={page}")
+        if not isinstance(chunk, list):
+            return False
+        owner_comments.extend(
+            item for item in chunk
+            if item.get("user", {}).get("login") == owner_login
+            and str(item.get("body") or "").strip() == f"/risk-approve {sha}"
+        )
+        if len(chunk) < 100:
+            break
+    else:
+        raise RuntimeError(f"PR #{number} has too many comments to verify safely")
+
+    if any(timestamp_order(item, "created_at") == float("-inf") for item in owner_comments):
+        return False
+    latest_approval_comment = max(
+        owner_comments,
+        key=lambda item: timestamp_order(item, "created_at"),
+        default=None,
+    )
+    if not latest_approval_comment:
+        return False
+    comment_time = timestamp_order(latest_approval_comment, "created_at")
+    if comment_time == float("-inf"):
+        return False
+    return latest_review_time is None or comment_time > latest_review_time
+
+
+def require_operator_risk_approval(pr: dict[str, Any], paths: list[str], kind: str) -> bool:
+    """Hold high-risk autonomous changes until the repository owner approves the exact head SHA."""
+    risky_paths = [path for path in paths if sensitive_file(path)]
+    number = int(pr["number"])
+    labels = issue_labels(pr)
+    if not risky_paths:
+        if RISK_APPROVAL_LABEL in labels:
+            remove_label(number, RISK_APPROVAL_LABEL)
+            log(f"Cleared stale risk approval hold for PR #{number}: its current diff has no high-risk paths.")
+        return False
+    sha = str(pr.get("head", {}).get("sha", ""))
+    if not re.fullmatch(r"[0-9a-f]{40}", sha):
+        raise RuntimeError(f"PR #{number} has no valid head SHA for risk approval")
+    if has_operator_risk_approval(number, sha):
+        if RISK_APPROVAL_LABEL in labels:
+            remove_label(number, RISK_APPROVAL_LABEL)
+            log(f"Cleared risk approval hold for PR #{number}: repository owner approved exact head {sha[:12]}.")
+        return False
+    if RISK_APPROVAL_LABEL not in labels:
+        add_labels(number, [RISK_APPROVAL_LABEL])
+        comment(
+            number,
+            f"Autonomous merge is paused for high-risk or unclassified changes. The repository owner must approve this exact head "
+            f"SHA: submit an approving review, or comment `/risk-approve {sha}`. Any new commit requires fresh approval. "
+            f"Paths: {', '.join(risky_paths[:8])}{f' … and {len(risky_paths) - 8} more' if len(risky_paths) > 8 else ''}",
+        )
+    if "autonomy:admitted" in labels:
+        remove_label(number, "autonomy:admitted")
+    log(f"PR #{number} ({kind}) is held for owner approval of exact head {sha[:12]}.")
+    return True
+
+
+def risk_policy_contract_test() -> None:
+    """Keep the explicit low-risk allowlist and fail-closed default executable."""
+    repo_name = REPO.rsplit("/", 1)[-1]
+    low_risk_samples = {
+        "AIMS": "routes/health-check.js",
+        "AIMS-UI": "apps/portal/src/components/status.tsx",
+        "HIVE": "backend/app/health_check.py",
+        "HIVE-UI": "src/components/status.tsx",
+        "IRS": "public/status.css",
+        "RAMS": "docs/runbook.md",
+        "MAST": "docs/runbook.md",
+        "jonathan-harris-website": "blog/sample.md",
+    }
+    high_risk = (
+        ".github/workflows/ci.yml", ".github/scripts/trusted_automation.py",
+        "infra/main.tf", "backend/alembic/versions/001.sql",
+        "src/auth/session.ts", "package-lock.json", "tests/test_auth.py",
+        "unknown/README.txt", "unknown/README.md",
+    )
+    repo_high_risk_samples = {
+        "AIMS": (
+            "services/shared/middleware/suiteAuth.js",
+            "services/comms-hub/domain/rbac.js",
+            "services/comms-hub/domain/promptSecurity.js",
+            "scripts/deployCommsHubDataPlaneWorker.js",
+            "config/deployment-check.js",
+        ),
+        "AIMS-UI": ("workers/gateway/index.js", "workers/gateway/security.ts", "scripts/deploy-production.mjs"),
+        "HIVE": ("requirements.in", "requirements-dev.txt", "backend/app/core/security.py"),
+        "HIVE-UI": ("workers/gateway/security.ts", "src/lib/session.ts", "src/context/AuthContext.tsx"),
+        "MAST": ("src/security.js",),
+    }
+    high_risk += repo_high_risk_samples.get(repo_name, ())
+    low_risk = ("docs/runbook.md", "README.md")
+    if repo_name in low_risk_samples:
+        low_risk += (low_risk_samples[repo_name],)
+    failed = [path for path in high_risk if not sensitive_file(path)]
+    failed.extend(path for path in low_risk if sensitive_file(path))
+    if failed:
+        raise RuntimeError("Risk policy contract failed for: " + ", ".join(failed))
 
 def place_human_hold(pr: dict[str, Any], reason: str) -> None:
     labels = issue_labels(pr)
@@ -650,6 +892,7 @@ def admit_to_mergify(number: int, expected_sha: str) -> None:
     labels = issue_labels(pr)
     blocking_labels = {
         "autonomy:human-hold",
+        RISK_APPROVAL_LABEL,
         "autonomy:council-freeze",
         "autonomy:superseded",
         "autonomy:obsolete",
@@ -827,14 +1070,10 @@ def _reconcile_pr_candidate(pr: dict[str, Any]) -> None:
             remove_label(number, COUNCIL_FREEZE_LABEL)
             log(f"PR #{number} ({kind}) released from Council evidence freeze: {freeze_reason}.")
 
-    if kind in {"kilo", "cto", "branch-pr", "codex"}:
-        sensitive = [path for path in pr_files(int(pr["number"])) if sensitive_file(path)]
-        if sensitive:
-            source = "repair" if kind == "kilo" else ("cto.new" if kind == "cto" else ("owner-authorized Codex" if kind == "codex" else "managed branch"))
-            place_human_hold(
-                pr,
-                f"the {source} PR changes governance/security automation files: " + ", ".join(sensitive[:8]),
-            )
+    if kind in {"kilo", "cto", "branch-pr", "renovate", "codex"}:
+        number = int(pr["number"])
+        changed_paths = pr_files(number)
+        if require_operator_risk_approval(pr, changed_paths, kind):
             return
 
     if kind == "cto" and verified_cto_task(pr) is None:
@@ -898,6 +1137,7 @@ def reconcile_pr(pr: dict[str, Any]) -> None:
 
 
 def main() -> int:
+    risk_policy_contract_test()
     if not REQUIRED_WORKFLOWS:
         raise RuntimeError("REQUIRED_WORKFLOWS must list the repository's CI/security workflow names")
     if not re.fullmatch(r"[A-Za-z0-9-]+\[bot\]", REPAIR_APP_LOGIN):
@@ -914,6 +1154,7 @@ def main() -> int:
     ensure_label(CTO_TASK_LABEL, "1D76DB", "Actionable engineering task explicitly assigned to cto.new")
     ensure_label(CTO_IMPLEMENTATION_LABEL, "5319E7", "cto.new implementation PR linked to an explicitly assigned task")
     ensure_label("autonomy:human-hold", "FBCA04", "Automation must stop for human action")
+    ensure_label(RISK_APPROVAL_LABEL, "FBCA04", "High-risk or unclassified autonomous changes require exact-head owner approval")
     ensure_label("autonomy:obsolete", "D4C5F9", "Repair carrier is no longer current")
     ensure_label("autonomy:admitted", "0E8A16", "Exact-head CI/security verification complete; GitHub native auto-merge may merge")
     ensure_label(COUNCIL_FREEZE_LABEL, "D93F0B", "Routine merge held after weekend CI PASS until Council completes on the same SHA")
