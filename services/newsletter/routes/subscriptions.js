@@ -48,7 +48,10 @@ router.post("/subscribe", asyncRoute(async (req, res) => {
     sourceReference: req.body?.sourceReference || "",
     consentTextVersion: env.NEWSLETTER_CONSENT_TEXT_VERSION || "2026-10-01",
     privacyNoticeVersion: env.NEWSLETTER_PRIVACY_NOTICE_VERSION || "2026-10-01",
-  }, d1, mail, baseUrl: newsletterConfirmationBase(env),
+  }, d1, mail, baseUrl: newsletterConfirmationBase(
+    env.NEWSLETTER_CONFIRMATION_BASE_URL || process.env.NEWSLETTER_CONFIRMATION_BASE_URL,
+    env.COMMS_HUB_PUBLIC_BASE_URL || process.env.COMMS_HUB_PUBLIC_BASE_URL,
+  ),
     compose: ({ confirmationUrl }) => ({ subject: "Confirm your AI Edge subscription",
       bodyText: `Confirm your subscription to AI Edge:\n\n${confirmationUrl}\n\nIf you did not request this, ignore this email.`,
       bodyHtml: `<p>Confirm your subscription to <strong>AI Edge</strong>.</p><p><a href="${confirmationUrl}">Confirm subscription</a></p><p>If you did not request this, ignore this email.</p>`,
