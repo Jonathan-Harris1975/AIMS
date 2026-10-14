@@ -3,7 +3,7 @@ import { withRetry } from "./retry.js";
 import { createHash } from "node:crypto";
 
 const HIGH_ROW_READ_WARNING = 1_000;
-const D1_TRANSIENT_CONTENTION = /currently processing a long-running export|database (?:is )?locked|database is busy/i;
+const D1_TRANSIENT_CONTENTION = /currently processing a long-running export|database (?:is )?locked|database is busy|sqlite_(?:busy|locked)|database is temporarily unavailable/i;
 
 async function logRetry(event, data) {
   const { log } = await import("../../../logger.js");
