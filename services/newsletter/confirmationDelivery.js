@@ -3,6 +3,12 @@ import { beginSubscription } from './audience/d1Audience.js';
 import { CommsHubError } from '../comms-hub/errors.js';
 import { recordNewsletterOutcome } from './telemetry.js';
 
+export function newsletterConfirmationBase(confirmationBase, appBase) {
+  // Keep validation inside sendSubscriptionConfirmation so configuration errors
+  // are captured by its outcome telemetry.
+  return confirmationBase || appBase;
+}
+
 export function trustedNewsletterBase(value) {
   let url;
   try { url = new URL(String(value || '')); } catch { throw new CommsHubError(503, 'newsletter_public_base_url_missing', 'A trusted newsletter base URL is required.'); }

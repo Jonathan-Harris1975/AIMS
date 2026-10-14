@@ -1,0 +1,8 @@
+name = "newsletter-confirm-proxy"
+main = "worker.js"
+compatibility_date = "2026-10-14"
+workers_dev = false
+
+[[routes]]
+pattern = "confirm.jonathan-harris.online"
+custom_domain = true
