@@ -89,7 +89,7 @@ jobs:
           COMMS_WORKER_HEALTH_FILE: worker-health.json
           COMMS_WORKER_PROBE_OUTCOME: ${{ steps.health_probe.outcome }}
           OPS_ALERT_WEBHOOK_URL: ${{ secrets.OPS_ALERT_WEBHOOK_URL }}
-          OPS_ALERT_WEBHOOK_TOKEN: ${{ secrets.OPS_ALERT_WEBHOOK_TOKEN }}
+          OPS_ALERT_WEBHOOK_TOKEN: ${{ secrets.OPS_EVENT_INGEST_TOKEN || secrets.OPS_ALERT_WEBHOOK_TOKEN }}
           WATCH_SCHEDULED_AT: '' # GitHub does not supply the nominal occurrence timestamp.
         run: |
           WATCH_STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
