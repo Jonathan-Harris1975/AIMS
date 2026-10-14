@@ -274,6 +274,8 @@ class CtoTaskAdmissionTests(unittest.TestCase):
         labels.assert_called_once_with(41, [automation.CTO_IMPLEMENTATION_LABEL])
 
     def test_cto_protected_control_change_is_held(self):
+        self.enterContext(patch.object(automation, "add_labels"))
+        self.enterContext(patch.object(automation, "comment"))
         pr = copy.deepcopy(self.pr)
         pr["labels"] = [{"name": automation.CTO_IMPLEMENTATION_LABEL}]
         hold = self.enterContext(patch.object(automation, "place_human_hold"))
@@ -412,6 +414,8 @@ class ManagedBranchOwnershipTests(unittest.TestCase):
         approve.assert_not_called()
 
     def test_managed_branch_pr_touching_protected_controls_gets_human_hold(self):
+        self.enterContext(patch.object(automation, "add_labels"))
+        self.enterContext(patch.object(automation, "comment"))
         hold = self.enterContext(patch.object(automation, "place_human_hold"))
         admit = self.enterContext(patch.object(automation, "admit_to_mergify"))
         self.enterContext(
