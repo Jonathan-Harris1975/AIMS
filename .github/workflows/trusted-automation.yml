@@ -4,7 +4,7 @@ on: # zizmor: ignore[dangerous-triggers] trusted event router; code is fixed to 
   pull_request_target: # zizmor: ignore[dangerous-triggers] trusted default-branch automation reads metadata only and never executes PR code
     types: [opened, reopened, edited, synchronize, ready_for_review, converted_to_draft, labeled, unlabeled]
   issue_comment:
-    types: [created]
+    types: [created, edited, deleted]
   pull_request_review:
     types: [submitted, edited, dismissed]
   pull_request_review_comment:
