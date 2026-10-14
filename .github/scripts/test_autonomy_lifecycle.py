@@ -274,7 +274,7 @@ class CtoTaskAdmissionTests(unittest.TestCase):
         labels.assert_called_once_with(41, [automation.CTO_IMPLEMENTATION_LABEL])
 
     def test_cto_protected_control_change_is_held(self):
-        self.enterContext(patch.object(automation, "add_labels"))
+        risk_label = self.enterContext(patch.object(automation, "add_labels"))
         self.enterContext(patch.object(automation, "comment"))
         pr = copy.deepcopy(self.pr)
         pr["labels"] = [{"name": automation.CTO_IMPLEMENTATION_LABEL}]
@@ -284,8 +284,9 @@ class CtoTaskAdmissionTests(unittest.TestCase):
         self.enterContext(patch.object(automation, "has_operator_risk_approval", return_value=False))
         self.enterContext(patch.object(automation, "pr_files", return_value=[".github/workflows/security.yml"]))
         automation.reconcile_pr(pr)
-        hold.assert_called_once()
+        hold.assert_not_called()
         admit.assert_not_called()
+        risk_label.assert_called_once_with(pr["number"], [automation.RISK_APPROVAL_LABEL])
 
 
 class KiloPermissionPolicyTests(unittest.TestCase):
@@ -414,7 +415,7 @@ class ManagedBranchOwnershipTests(unittest.TestCase):
         approve.assert_not_called()
 
     def test_managed_branch_pr_touching_protected_controls_gets_human_hold(self):
-        self.enterContext(patch.object(automation, "add_labels"))
+        risk_label = self.enterContext(patch.object(automation, "add_labels"))
         self.enterContext(patch.object(automation, "comment"))
         hold = self.enterContext(patch.object(automation, "place_human_hold"))
         admit = self.enterContext(patch.object(automation, "admit_to_mergify"))
@@ -429,8 +430,9 @@ class ManagedBranchOwnershipTests(unittest.TestCase):
 
         automation.reconcile_pr(copy.deepcopy(self.pr))
 
-        hold.assert_called_once()
+        hold.assert_not_called()
         admit.assert_not_called()
+        risk_label.assert_called_once_with(self.pr["number"], [automation.RISK_APPROVAL_LABEL])
 
 
 class CouncilEvidenceFreezeTests(unittest.TestCase):
