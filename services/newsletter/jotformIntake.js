@@ -105,7 +105,7 @@ export async function processNewsletterJotformSignup({ identifiers, context, exp
     consentTextVersion: process.env.NEWSLETTER_CONSENT_TEXT_VERSION || "2026-10-01",
     privacyNoticeVersion: process.env.NEWSLETTER_PRIVACY_NOTICE_VERSION || "2026-10-01",
   }, d1: context.d1, mail: context.manualMailAccounts?.newsletter,
-    baseUrl: newsletterConfirmationBase(process.env),
+    baseUrl: newsletterConfirmationBase(process.env.NEWSLETTER_CONFIRMATION_BASE_URL, process.env.COMMS_HUB_PUBLIC_BASE_URL),
     compose: ({ confirmationUrl }) => confirmationEmail({ firstName, confirmationUrl }),
   });
   if (!result.ok) throw new CommsHubError(result.status === "suppressed" ? 409 : 400, `newsletter_${result.status}`, result.error || "Newsletter signup could not be started.");
