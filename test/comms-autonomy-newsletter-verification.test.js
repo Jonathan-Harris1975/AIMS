@@ -8,7 +8,7 @@ import { sendReplyDraft } from '../services/comms-hub/replyDraftService.js';
 import { primaryHoldReason } from '../services/comms-hub/domain/autonomyOutcome.js';
 import { CommsOperationsRepository } from '../services/comms-hub/repositories/commsOperationsRepository.js';
 import { beginSubscription, confirmSubscription, createUnsubscribeToken, unsubscribe, listEligibleSubscribers } from '../services/newsletter/audience/d1Audience.js';
-import { sendSubscriptionConfirmation, trustedNewsletterBase } from '../services/newsletter/confirmationDelivery.js';
+import { sendSubscriptionConfirmation, trustedNewsletterBase, newsletterConfirmationBase } from '../services/newsletter/confirmationDelivery.js';
 import { loadCommsHubConfig, getCommsHubMissingEnv, booleanValue } from '../services/comms-hub/config.js';
 import { isNewsletterTokenRequest, requireAimsBearerAuth } from '../services/shared/middleware/suiteAuth.js';
 import { redactNewsletterUrl } from '../services/shared/http/redactNewsletterUrl.js';
@@ -439,4 +439,14 @@ test('only exact newsletter token navigation bypasses suite authentication; logs
   for (const req of [request('/newsletter/subscribe', 'POST'), request(`/newsletter/confirm/${token}`, 'POST'), request('/newsletter/confirm/short')]) {
     assert.equal(isNewsletterTokenRequest(req), false);
   }
+});
+
+test('newsletter confirmation base is independently configurable and falls back to the app base', () => {
+  assert.equal(newsletterConfirmationBase({
+    NEWSLETTER_CONFIRMATION_BASE_URL: 'https://confirm.jonathan-harris.online',
+    COMMS_HUB_PUBLIC_BASE_URL: 'https://aims.example.com',
+  }), 'https://confirm.jonathan-harris.online');
+  assert.equal(newsletterConfirmationBase({
+    COMMS_HUB_PUBLIC_BASE_URL: 'https://aims.example.com',
+  }), 'https://aims.example.com');
 });
