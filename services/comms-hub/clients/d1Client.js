@@ -3,6 +3,7 @@ import { withRetry } from "./retry.js";
 import { createHash } from "node:crypto";
 
 const HIGH_ROW_READ_WARNING = 1_000;
+const D1_TRANSIENT_CONTENTION = /currently processing a long-running export|database (?:is )?locked|database is busy|sqlite_(?:busy|locked)|database is temporarily unavailable/i;
 
 async function logRetry(event, data) {
   const { log } = await import("../../../logger.js");
@@ -89,6 +90,13 @@ async function parseCloudflareJson(response, operation) {
         retryable: false,
         failureClass: "temporary",
         publicMessage: "Comms Hub storage is paused until the daily Cloudflare allowance resets.",
+      });
+    }
+    if (D1_TRANSIENT_CONTENTION.test(detail)) {
+      throw new CommsHubError(503, "d1_temporary_contention", `${operation} is temporarily unavailable because D1 is busy.`, {
+        retryable: true,
+        failureClass: "temporary",
+        publicMessage: "Comms Hub storage is temporarily unavailable.",
       });
     }
     throw new CommsHubError(status === 401 || status === 403 ? 503 : 502, "cloudflare_api_failed", `${operation} failed${detail ? `: ${detail}` : ` with status ${status}`}.`, {

@@ -466,7 +466,7 @@ export class CommsAiRepository {
 
   async recordProviderHealthBatch(snapshots = []) {
     if (!snapshots.length) return;
-    await this.d1.batch(snapshots.map((snapshot) => ({
+    const statements = snapshots.map((snapshot) => ({
       sql: `INSERT INTO comms_hub_provider_health
         (id, provider, adapter, status, success_count, failure_count, consecutive_failures,
          last_status_code, last_success_at, last_failure_at, observed_at, evidence_json)
@@ -475,7 +475,11 @@ export class CommsAiRepository {
         snapshot.failureCount, snapshot.consecutiveFailures, snapshot.lastStatusCode || null,
         snapshot.lastSuccessAt || null, snapshot.lastFailureAt || null, snapshot.observedAt,
         json(snapshot.evidence || {})],
-    })));
+    }));
+    // Cloudflare D1 accepts at most 100 statements per batch request.
+    for (let offset = 0; offset < statements.length; offset += 100) {
+      await this.d1.batch(statements.slice(offset, offset + 100));
+    }
   }
 
   async listLatestProviderHealth() {
