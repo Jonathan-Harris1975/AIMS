@@ -548,6 +548,7 @@ test("Provider health excludes retired model IDs from active Comms Hub routes", 
   };
   const service = new CommsHubProviderHealthService({
     context,
+    routeModels: { commsHubDraftContact: [] },
     snapshotProvider: () => ({
       providers: {
         retired: {
