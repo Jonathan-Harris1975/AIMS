@@ -464,6 +464,16 @@ test("Provider health includes only Comms Hub route telemetry", async () => {
           lastStatus: "429",
           lastAt: now,
         },
+        outreach: {
+          routeKey: "commsHubOutreachPitch",
+          provider: "outreachWriter",
+          calls: 3,
+          successes: 0,
+          failures: 3,
+          failureRate: 1,
+          lastStatus: "429",
+          lastAt: now,
+        },
         newsletter: {
           routeKey: "newsletter:signup",
           provider: "accepted_pending",
@@ -481,6 +491,7 @@ test("Provider health includes only Comms Hub route telemetry", async () => {
   const captured = await service.capture();
   assert.equal(captured.some((item) => item.adapter === "commsHubTriage" && item.provider === "anthropic46"), true);
   assert.equal(captured.some((item) => item.adapter === "auditForensic"), false);
+  assert.equal(captured.some((item) => item.adapter === "commsHubOutreachPitch"), false);
   assert.equal(captured.some((item) => item.provider === "accepted_pending"), false);
 });
 
