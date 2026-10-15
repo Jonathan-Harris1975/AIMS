@@ -1,7 +1,7 @@
 import { aiConfig } from "../../ai-config.js";
 import { stableId } from "./domain/ids.js";
 
-const CURRENT_AI_PROVIDER_IDS = new Set(Object.keys(aiConfig.models || {}));
+const CURRENT_AI_ROUTE_MODELS = aiConfig.routeModels || {};
 
 function classify(entry, config, nowMs) {
   const lastAt = entry.lastAt ? Date.parse(entry.lastAt) : 0;
@@ -18,12 +18,13 @@ function classify(entry, config, nowMs) {
   return "healthy";
 }
 
-function isCommsHubRoute(entry) {
+function isCommsHubRoute(entry, routeModels = CURRENT_AI_ROUTE_MODELS) {
   const routeKey = String(entry?.routeKey || "");
   if (routeKey.startsWith("comms-hub:")) return true;
-  return routeKey.startsWith("commsHub")
-    && !routeKey.startsWith("commsHubOutreach")
-    && CURRENT_AI_PROVIDER_IDS.has(String(entry?.provider || ""));
+  if (!routeKey.startsWith("commsHub") || routeKey.startsWith("commsHubOutreach")) return false;
+  const configuredProviders = routeModels[routeKey];
+  return Array.isArray(configuredProviders)
+    && configuredProviders.includes(String(entry?.provider || ""));
 }
 
 function readinessEntries(context) {
@@ -60,9 +61,10 @@ function readinessEntries(context) {
 }
 
 export class CommsHubProviderHealthService {
-  constructor({ context, snapshotProvider = null }) {
+  constructor({ context, snapshotProvider = null, routeModels = CURRENT_AI_ROUTE_MODELS }) {
     this.context = context;
     this.snapshotProvider = snapshotProvider;
+    this.routeModels = routeModels;
   }
 
   async getSnapshot() {
@@ -81,7 +83,7 @@ export class CommsHubProviderHealthService {
       entriesByProviderRoute.set(key, entry);
     }
     for (const entry of Object.values(snapshot.providers || {})) {
-      if (!isCommsHubRoute(entry)) continue;
+      if (!isCommsHubRoute(entry, this.routeModels)) continue;
       const key = `${String(entry.provider || "unknown")}::${String(entry.routeKey || "unknown")}`;
       entriesByProviderRoute.set(key, entry);
     }
@@ -122,7 +124,7 @@ export class CommsHubProviderHealthService {
   async status() {
     const storedProviders = await this.context.aiRepository.listLatestProviderHealth();
     // Ignore legacy rows captured before snapshots were scoped to Comms Hub.
-    const providers = storedProviders.filter((item) => isCommsHubRoute({ routeKey: item.adapter }));
+    const providers = storedProviders.filter((item) => isCommsHubRoute({ routeKey: item.adapter, provider: item.provider }, this.routeModels));
     const rank = { unavailable: 4, rate_limited: 3, degraded: 2, unknown: 1, healthy: 0 };
     const overall = providers.reduce((worst, item) => rank[item.status] > rank[worst] ? item.status : worst, "healthy");
     return { overall: providers.length ? overall : "unknown", providers };
