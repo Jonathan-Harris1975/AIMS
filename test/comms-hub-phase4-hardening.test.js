@@ -442,6 +442,7 @@ test("Provider health includes only Comms Hub route telemetry", async () => {
   };
   const service = new CommsHubProviderHealthService({
     context,
+    routeModels: { commsHubTriage: ["anthropic46"] },
     snapshotProvider: () => ({
       providers: {
         commsHub: {
@@ -509,6 +510,7 @@ test("Provider health marks stale rate limits unknown instead of keeping them ac
   };
   const service = new CommsHubProviderHealthService({
     context,
+    routeModels: { commsHubTriage: ["anthropic46"] },
     snapshotProvider: () => ({
       providers: {
         commsHub: {
