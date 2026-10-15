@@ -495,7 +495,7 @@ test("Provider health includes only Comms Hub route telemetry", async () => {
   assert.equal(captured.some((item) => item.provider === "accepted_pending"), false);
 });
 
-test("Provider health downgrades stale rate limits instead of keeping them active", async () => {
+test("Provider health marks stale rate limits unknown instead of keeping them active", async () => {
   const d1 = new SqliteD1();
   const staleAt = new Date(Date.now() - 3_600_000).toISOString();
   const context = {
@@ -527,8 +527,8 @@ test("Provider health downgrades stale rate limits instead of keeping them activ
 
   const captured = await service.capture();
   const route = captured.find((item) => item.adapter === "commsHubTriage");
-  assert.equal(route.status, "degraded");
-  assert.equal((await service.status()).overall, "degraded");
+  assert.equal(route.status, "unknown");
+  assert.equal((await service.status()).overall, "unknown");
 });
 
 
