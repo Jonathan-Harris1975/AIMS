@@ -16,7 +16,14 @@ concurrency:
 
 jobs:
   evidence:
-    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.workflow_run.name != 'HIVE lifecycle evidence' && github.event.workflow_run.head_repository.full_name == github.repository) }}
+    if: >-
+      ${{ github.event_name == 'workflow_dispatch' ||
+          (github.event.workflow_run.head_repository.full_name == github.repository &&
+           github.event.workflow_run.name != 'HIVE lifecycle evidence' &&
+           github.event.workflow_run.name != 'Deployment failure diagnostics' &&
+           github.event.workflow_run.name != 'Trusted automation and native auto-merge' &&
+           github.event.workflow_run.name != 'Autonomous PR issue repair' &&
+           github.event.workflow_run.name != 'Autonomous main-branch repair PR') }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -45,9 +52,10 @@ jobs:
             --output lifecycle-evidence/evidence.json
       - name: Persist exact-run evidence to R2
         env:
-          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT || secrets.R2_ENDPOINT_URL }}
+          R2_ENDPOINT: ${{ vars.CF_R2_ENDPOINT_URL || vars.R2_ENDPOINT_URL || format('https://{0}.r2.cloudflarestorage.com', vars.R2_ACCOUNT_ID || vars.CF_R2_ACCOUNT_ID || secrets.R2_ACCOUNT_ID || secrets.CF_R2_ACCOUNT_ID) }}
+          R2_ACCOUNT_ID: ${{ vars.R2_ACCOUNT_ID || vars.CF_R2_ACCOUNT_ID || secrets.R2_ACCOUNT_ID || secrets.CF_R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID || secrets.CF_R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY || secrets.CF_R2_SECRET_ACCESS_KEY }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           GITHUB_RUN_ID: ${{ github.event.workflow_run.id || github.run_id }}
           GITHUB_RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt || '1' }}
