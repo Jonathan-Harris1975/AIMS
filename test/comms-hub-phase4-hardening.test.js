@@ -426,3 +426,144 @@ test("Cloudflare D1 import uses init, checksum upload and ingest, and refuses th
   assert.equal(calls[1].method, "PUT");
   assert.deepEqual(JSON.parse(calls[2].body), { action: "ingest", etag: expectedEtag, filename: "d1.sql" });
 });
+
+
+test("Provider health includes only Comms Hub route telemetry", async () => {
+  const d1 = new SqliteD1();
+  const now = new Date().toISOString();
+  const context = {
+    config: {
+      providerHealthStaleMs: 900_000,
+      providerHealthFailureThreshold: 3,
+      aiEnabled: false,
+      zernioFamilies: {},
+    },
+    aiRepository: new CommsAiRepository(d1),
+  };
+  const service = new CommsHubProviderHealthService({
+    context,
+    snapshotProvider: () => ({
+      providers: {
+        commsHub: {
+          routeKey: "commsHubTriage",
+          provider: "anthropic46",
+          calls: 2,
+          successes: 2,
+          failures: 0,
+          failureRate: 0,
+          lastStatus: "success",
+          lastAt: now,
+        },
+        audit: {
+          routeKey: "auditForensic",
+          provider: "anthropic46",
+          calls: 8,
+          successes: 2,
+          failures: 6,
+          failureRate: 0.75,
+          lastStatus: "429",
+          lastAt: now,
+        },
+        outreach: {
+          routeKey: "commsHubOutreachPitch",
+          provider: "outreachWriter",
+          calls: 3,
+          successes: 0,
+          failures: 3,
+          failureRate: 1,
+          lastStatus: "429",
+          lastAt: now,
+        },
+        newsletter: {
+          routeKey: "newsletter:signup",
+          provider: "accepted_pending",
+          calls: 1,
+          successes: 1,
+          failures: 0,
+          failureRate: 0,
+          lastStatus: "accepted_pending",
+          lastAt: now,
+        },
+      },
+    }),
+  });
+
+  const captured = await service.capture();
+  assert.equal(captured.some((item) => item.adapter === "commsHubTriage" && item.provider === "anthropic46"), true);
+  assert.equal(captured.some((item) => item.adapter === "auditForensic"), false);
+  assert.equal(captured.some((item) => item.adapter === "commsHubOutreachPitch"), false);
+  assert.equal(captured.some((item) => item.provider === "accepted_pending"), false);
+});
+
+test("Provider health downgrades stale rate limits instead of keeping them active", async () => {
+  const d1 = new SqliteD1();
+  const staleAt = new Date(Date.now() - 3_600_000).toISOString();
+  const context = {
+    config: {
+      providerHealthStaleMs: 900_000,
+      providerHealthFailureThreshold: 3,
+      aiEnabled: false,
+      zernioFamilies: {},
+    },
+    aiRepository: new CommsAiRepository(d1),
+  };
+  const service = new CommsHubProviderHealthService({
+    context,
+    snapshotProvider: () => ({
+      providers: {
+        commsHub: {
+          routeKey: "commsHubTriage",
+          provider: "anthropic46",
+          calls: 1,
+          successes: 0,
+          failures: 1,
+          failureRate: 1,
+          lastStatus: "429",
+          lastAt: staleAt,
+        },
+      },
+    }),
+  });
+
+  const captured = await service.capture();
+  const route = captured.find((item) => item.adapter === "commsHubTriage");
+  assert.equal(route.status, "degraded");
+  assert.equal((await service.status()).overall, "degraded");
+});
+
+
+test("Provider health status hides previously stored telemetry from other AIMS routes", async () => {
+  const d1 = new SqliteD1();
+  const now = new Date().toISOString();
+  const context = {
+    config: {
+      providerHealthStaleMs: 900_000,
+      providerHealthFailureThreshold: 3,
+      aiEnabled: false,
+      zernioFamilies: {},
+    },
+    aiRepository: new CommsAiRepository(d1),
+  };
+  await context.aiRepository.recordProviderHealthBatch([{
+    id: "legacy-audit-row",
+    provider: "anthropic46",
+    adapter: "auditForensic",
+    status: "rate_limited",
+    successCount: 0,
+    failureCount: 1,
+    consecutiveFailures: 1,
+    lastStatusCode: "429",
+    lastSuccessAt: null,
+    lastFailureAt: now,
+    observedAt: now,
+    evidence: {},
+  }]);
+  const service = new CommsHubProviderHealthService({
+    context,
+    snapshotProvider: () => ({ providers: {} }),
+  });
+
+  const status = await service.status();
+  assert.equal(status.providers.some((item) => item.adapter === "auditForensic"), false);
+  assert.equal(status.overall, "unknown");
+});
