@@ -124,7 +124,26 @@ export class CommsHubProviderHealthService {
   async status() {
     const storedProviders = await this.context.aiRepository.listLatestProviderHealth();
     // Ignore legacy rows captured before snapshots were scoped to Comms Hub.
-    const providers = storedProviders.filter((item) => isCommsHubRoute({ routeKey: item.adapter, provider: item.provider }, this.routeModels));
+    const nowMs = Date.now();
+    const providers = storedProviders
+      .filter((item) => isCommsHubRoute({ routeKey: item.adapter, provider: item.provider }, this.routeModels))
+      .map((item) => {
+        let evidence = {};
+        try {
+          evidence = typeof item.evidence_json === "string" ? JSON.parse(item.evidence_json) : (item.evidence || {});
+        } catch {
+          evidence = {};
+        }
+        return {
+          ...item,
+          status: classify({
+            lastAt: item.lastFailureAt || item.lastSuccessAt,
+            lastStatus: item.lastStatusCode,
+            failures: item.failureCount,
+            failureRate: Number(evidence.failureRate || 0),
+          }, this.context.config, nowMs),
+        };
+      });
     const rank = { unavailable: 4, rate_limited: 3, degraded: 2, unknown: 1, healthy: 0 };
     const overall = providers.reduce((worst, item) => rank[item.status] > rank[worst] ? item.status : worst, "healthy");
     return { overall: providers.length ? overall : "unknown", providers };
