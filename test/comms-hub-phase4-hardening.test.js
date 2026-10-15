@@ -519,3 +519,40 @@ test("Provider health downgrades stale rate limits instead of keeping them activ
   assert.equal(route.status, "degraded");
   assert.equal((await service.status()).overall, "degraded");
 });
+
+
+test("Provider health status hides previously stored telemetry from other AIMS routes", async () => {
+  const d1 = new SqliteD1();
+  const now = new Date().toISOString();
+  const context = {
+    config: {
+      providerHealthStaleMs: 900_000,
+      providerHealthFailureThreshold: 3,
+      aiEnabled: false,
+      zernioFamilies: {},
+    },
+    aiRepository: new CommsAiRepository(d1),
+  };
+  await context.aiRepository.recordProviderHealthBatch([{
+    id: "legacy-audit-row",
+    provider: "anthropic46",
+    adapter: "auditForensic",
+    status: "rate_limited",
+    successCount: 0,
+    failureCount: 1,
+    consecutiveFailures: 1,
+    lastStatusCode: "429",
+    lastSuccessAt: null,
+    lastFailureAt: now,
+    observedAt: now,
+    evidence: {},
+  }]);
+  const service = new CommsHubProviderHealthService({
+    context,
+    snapshotProvider: () => ({ providers: {} }),
+  });
+
+  const status = await service.status();
+  assert.equal(status.providers.some((item) => item.adapter === "auditForensic"), false);
+  assert.equal(status.overall, "unknown");
+});
