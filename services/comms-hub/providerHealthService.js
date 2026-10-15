@@ -17,7 +17,8 @@ function classify(entry, config, nowMs) {
 
 function isCommsHubRoute(entry) {
   const routeKey = String(entry?.routeKey || "");
-  return routeKey.startsWith("comms-hub:") || routeKey.startsWith("commsHub");
+  return routeKey.startsWith("comms-hub:")
+    || (routeKey.startsWith("commsHub") && !routeKey.startsWith("commsHubOutreach"));
 }
 
 function readinessEntries(context) {
