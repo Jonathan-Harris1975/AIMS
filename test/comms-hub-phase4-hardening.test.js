@@ -608,3 +608,42 @@ test("Provider health status hides previously stored telemetry from other AIMS r
   assert.equal(status.providers.some((item) => item.adapter === "auditForensic"), false);
   assert.equal(status.overall, "unknown");
 });
+
+
+test("Provider health status expires old failures even before the next poll", async () => {
+  const d1 = new SqliteD1();
+  const staleAt = new Date(Date.now() - 3_600_000).toISOString();
+  const observedAt = new Date().toISOString();
+  const context = {
+    config: {
+      providerHealthStaleMs: 900_000,
+      providerHealthFailureThreshold: 3,
+      aiEnabled: false,
+      zernioFamilies: {},
+    },
+    aiRepository: new CommsAiRepository(d1),
+  };
+  await context.aiRepository.recordProviderHealthBatch([{
+    id: "stale-zernio-failure",
+    provider: "zernio-meta",
+    adapter: "comms-hub:zernio-meta-intake",
+    status: "degraded",
+    successCount: 2,
+    failureCount: 1,
+    consecutiveFailures: 1,
+    lastStatusCode: "zernio_ack_deadline_exceeded",
+    lastSuccessAt: staleAt,
+    lastFailureAt: staleAt,
+    observedAt,
+    evidence: { calls: 3, failureRate: 1 / 3 },
+  }]);
+  const service = new CommsHubProviderHealthService({
+    context,
+    snapshotProvider: () => ({ providers: {} }),
+  });
+
+  const status = await service.status();
+  const route = status.providers.find((item) => item.adapter === "comms-hub:zernio-meta-intake");
+  assert.equal(route.status, "unknown");
+  assert.equal(status.overall, "unknown");
+});
