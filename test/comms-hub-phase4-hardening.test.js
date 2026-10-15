@@ -442,6 +442,7 @@ test("Provider health includes only Comms Hub route telemetry", async () => {
   };
   const service = new CommsHubProviderHealthService({
     context,
+    routeModels: { commsHubTriage: ["anthropic46"] },
     snapshotProvider: () => ({
       providers: {
         commsHub: {
@@ -509,6 +510,7 @@ test("Provider health marks stale rate limits unknown instead of keeping them ac
   };
   const service = new CommsHubProviderHealthService({
     context,
+    routeModels: { commsHubTriage: ["anthropic46"] },
     snapshotProvider: () => ({
       providers: {
         commsHub: {
@@ -529,6 +531,45 @@ test("Provider health marks stale rate limits unknown instead of keeping them ac
   const route = captured.find((item) => item.adapter === "commsHubTriage");
   assert.equal(route.status, "unknown");
   assert.equal((await service.status()).overall, "unknown");
+});
+
+
+test("Provider health excludes retired model IDs from active Comms Hub routes", async () => {
+  const d1 = new SqliteD1();
+  const now = new Date().toISOString();
+  const context = {
+    config: {
+      providerHealthStaleMs: 900_000,
+      providerHealthFailureThreshold: 3,
+      aiEnabled: false,
+      zernioFamilies: {},
+    },
+    aiRepository: new CommsAiRepository(d1),
+  };
+  const service = new CommsHubProviderHealthService({
+    context,
+    routeModels: { commsHubDraftContact: [] },
+    snapshotProvider: () => ({
+      providers: {
+        retired: {
+          routeKey: "commsHubDraftContact",
+          provider: "commsFreePrimaryRoute",
+          calls: 8,
+          successes: 0,
+          failures: 8,
+          failureRate: 1,
+          lastStatus: "429",
+          lastAt: now,
+        },
+      },
+    }),
+  });
+
+  const captured = await service.capture();
+  assert.equal(captured.some((item) => item.adapter === "commsHubDraftContact"), false);
+  const status = await service.status();
+  assert.equal(status.providers.some((item) => item.provider === "commsFreePrimaryRoute"), false);
+  assert.equal(status.overall, "unknown");
 });
 
 
