@@ -1,4 +1,7 @@
+import { aiConfig } from "../../ai-config.js";
 import { stableId } from "./domain/ids.js";
+
+const CURRENT_AI_PROVIDER_IDS = new Set(Object.keys(aiConfig.models || {}));
 
 function classify(entry, config, nowMs) {
   const lastAt = entry.lastAt ? Date.parse(entry.lastAt) : 0;
@@ -17,8 +20,10 @@ function classify(entry, config, nowMs) {
 
 function isCommsHubRoute(entry) {
   const routeKey = String(entry?.routeKey || "");
-  return routeKey.startsWith("comms-hub:")
-    || (routeKey.startsWith("commsHub") && !routeKey.startsWith("commsHubOutreach"));
+  if (routeKey.startsWith("comms-hub:")) return true;
+  return routeKey.startsWith("commsHub")
+    && !routeKey.startsWith("commsHubOutreach")
+    && CURRENT_AI_PROVIDER_IDS.has(String(entry?.provider || ""));
 }
 
 function readinessEntries(context) {
