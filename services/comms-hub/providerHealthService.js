@@ -137,9 +137,9 @@ export class CommsHubProviderHealthService {
         return {
           ...item,
           status: classify({
-            lastAt: item.lastFailureAt || item.lastSuccessAt,
-            lastStatus: item.lastStatusCode,
-            failures: item.failureCount,
+            lastAt: item.last_failure_at || item.last_success_at || item.lastFailureAt || item.lastSuccessAt,
+            lastStatus: item.last_status_code ?? item.lastStatusCode,
+            failures: item.failure_count ?? item.failureCount,
             failureRate: Number(evidence.failureRate || 0),
           }, this.context.config, nowMs),
         };
