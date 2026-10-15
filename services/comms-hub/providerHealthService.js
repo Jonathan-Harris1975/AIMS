@@ -6,11 +6,18 @@ function classify(entry, config, nowMs) {
   const lastStatus = String(entry.lastStatus || "unknown").toLowerCase();
   if (lastStatus === "configured" || lastStatus === "disabled") return "unknown";
   if (lastStatus === "unconfigured") return "unavailable";
-  if (/429|rate|throttl/.test(lastStatus)) return "rate_limited";
-  if (!stale && entry.failures >= config.providerHealthFailureThreshold && entry.failureRate >= 0.8) return "unavailable";
+  // A past 429 is not a current rate limit. Apply the freshness window before
+  // interpreting transient provider statuses so old failures cannot pin health.
   if (stale) return entry.calls ? "degraded" : "unknown";
+  if (/429|rate|throttl/.test(lastStatus)) return "rate_limited";
+  if (entry.failures >= config.providerHealthFailureThreshold && entry.failureRate >= 0.8) return "unavailable";
   if (entry.failures > 0 && entry.failureRate >= 0.25) return "degraded";
   return "healthy";
+}
+
+function isCommsHubRoute(entry) {
+  const routeKey = String(entry?.routeKey || "");
+  return routeKey.startsWith("comms-hub:") || routeKey.startsWith("commsHub");
 }
 
 function readinessEntries(context) {
@@ -68,6 +75,7 @@ export class CommsHubProviderHealthService {
       entriesByProviderRoute.set(key, entry);
     }
     for (const entry of Object.values(snapshot.providers || {})) {
+      if (!isCommsHubRoute(entry)) continue;
       const key = `${String(entry.provider || "unknown")}::${String(entry.routeKey || "unknown")}`;
       entriesByProviderRoute.set(key, entry);
     }
