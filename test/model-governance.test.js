@@ -20,22 +20,22 @@ test("explicit council assignments cover specialist AIMS slots and override rank
     reasoning: [{ model_id: "openai/gpt-5.6-terra", score: 88 }],
   }, {
     AI_MODEL_FAST: "openai/gpt-5.6-luna",
-    COMMS_HUB_MODEL_PAID_PRIMARY: "anthropic/claude-sonnet-5",
-    OUTREACH_ARTICLE_REVIEW_MODEL: "anthropic/claude-opus-4.8",
+    COMMS_HUB_MODEL_PAID_PRIMARY: "anthropic/claude-sonnet-5.5",
+    OUTREACH_ARTICLE_REVIEW_MODEL: "anthropic/claude-opus-5.5",
   });
 
   assert.equal(assignments.AI_MODEL_FAST, "openai/gpt-5.6-luna");
   assert.equal(assignments.AI_MODEL_STANDARD, "openai/gpt-5.6-terra");
-  assert.equal(assignments.COMMS_HUB_MODEL_PAID_PRIMARY, "anthropic/claude-sonnet-5");
-  assert.equal(assignments.OUTREACH_ARTICLE_REVIEW_MODEL, "anthropic/claude-opus-4.8");
+  assert.equal(assignments.COMMS_HUB_MODEL_PAID_PRIMARY, "anthropic/claude-sonnet-5.5");
+  assert.equal(assignments.OUTREACH_ARTICLE_REVIEW_MODEL, "anthropic/claude-opus-5.5");
 });
 
 test("expert assignments without a complete decision record are advisory, not rejected", () => {
-  const assignments = { AI_MODEL_HIGH_QUALITY: "anthropic/claude-sonnet-5" };
+  const assignments = { AI_MODEL_HIGH_QUALITY: "anthropic/claude-sonnet-5.5" };
   const decisions = {
     AI_MODEL_HIGH_QUALITY: {
       assignment: "AI_MODEL_HIGH_QUALITY",
-      modelId: "anthropic/claude-sonnet-5",
+      modelId: "anthropic/claude-sonnet-5.5",
       costTier: "expert",
       justificationId: null,
       task: null,
@@ -53,14 +53,15 @@ test("expert assignments without a complete decision record are advisory, not re
     catalogueCheckedAt: "2026-09-11T09:00:00Z",
   });
 
-  assert.equal(assignments.AI_MODEL_HIGH_QUALITY, "anthropic/claude-sonnet-5");
+  assert.equal(assignments.AI_MODEL_HIGH_QUALITY, "anthropic/claude-sonnet-5.5");
   assert.equal(advisories.some((item) => item.code === "expert-justification-incomplete"), true);
 });
 
 test("current economy models and retiring assignments are classified for council review", () => {
   assert.equal(inferModelCostTier("openai/gpt-5.6-luna"), "economy");
+  assert.equal(inferModelCostTier("anthropic/claude-haiku-5.5"), "economy");
   assert.equal(inferModelCostTier("openrouter/free"), "free");
-  assert.equal(inferModelCostTier("anthropic/claude-opus-4.8"), "expert");
+  assert.equal(inferModelCostTier("anthropic/claude-opus-5.5"), "expert");
 
   const assignments = { AI_MODEL_FAST: "example/model-preview" };
   const advisories = buildAimsModelAdvisories({
