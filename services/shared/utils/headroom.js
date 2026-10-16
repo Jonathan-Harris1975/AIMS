@@ -272,8 +272,8 @@ export async function compressForOpenRouter({ routeName, routeKey, model, messag
   }
 
   const timeoutMs = Math.floor(finiteNumber(process.env.HEADROOM_TIMEOUT_MS, 5000, { min: 100 }));
-  const targetRatio = finiteNumber(process.env.HEADROOM_TARGET_RATIO, 0.30, { min: 0.05, max: 1 });
-  const protectRecent = Math.floor(finiteNumber(process.env.HEADROOM_PROTECT_RECENT, 0, { min: 0 }));
+  const targetRatio = finiteNumber(process.env.HEADROOM_TARGET_RATIO, 0.70, { min: 0.05, max: 1 });
+  const protectRecent = Math.floor(finiteNumber(process.env.HEADROOM_PROTECT_RECENT, 1, { min: 0 }));
   const token = getBearerToken();
   const headers = { "Content-Type": "application/json" };
   if (token) {

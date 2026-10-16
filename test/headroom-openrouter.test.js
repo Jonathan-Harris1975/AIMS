@@ -34,6 +34,8 @@ test("Headroom compresses eligible text-only messages and preserves system messa
   process.env.HEADROOM_ENABLED = "true";
   process.env.HEADROOM_BASE_URL = "http://headroom.test:8787";
   process.env.HEADROOM_MIN_INPUT_CHARS = "1";
+  delete process.env.HEADROOM_TARGET_RATIO;
+  delete process.env.HEADROOM_PROTECT_RECENT;
   process.env.HEADROOM_ROUTES = "scriptMain";
   process.env.HEADROOM_PROXY_TOKEN = "headroom-test-token";
   process.env.HEADROOM_API_KEY = ["test", "legacy", "api", "key", "must", "not", "win"].join("-");
@@ -71,7 +73,8 @@ test("Headroom compresses eligible text-only messages and preserves system messa
     assert.equal(request.url, "http://headroom.test:8787/v1/compress");
     assert.equal(request.body.model, "openai/gpt-5.6-luna");
     assert.equal(request.body.config.compress_user_messages, true);
-    assert.equal(request.body.config.target_ratio, 0.3);
+    assert.equal(request.body.config.target_ratio, 0.7);
+    assert.equal(request.body.config.protect_recent, 1);
     assert.equal(request.body.config.protect_analysis_context, true);
     assert.equal(request.options.headers.Authorization, "Bearer headroom-test-token");
     assert.equal(request.options.headers["X-Headroom-Proxy-Token"], "headroom-test-token");
