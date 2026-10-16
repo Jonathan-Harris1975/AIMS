@@ -88,6 +88,7 @@
     ],
     "economy": [
       "gpt-oss-20b",
+      "claude-haiku-5.5",
       "gpt-5.6-luna",
       "flash-lite",
       "llama-4-scout"
