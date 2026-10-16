@@ -4,7 +4,7 @@
 # The runtime image is pinned to an official Ubuntu 26.04 image digest and
 # receives the current signed security repository packages at build time.
 # The final image contains no build toolchain and runs as an unprivileged user.
-ARG UBUNTU_IMAGE=ubuntu:26.04@sha256:3595d7fc4286a33fad0fd853a4063e654287a9c3787437d7937c94ca3f7a804e
+ARG UBUNTU_IMAGE=ubuntu:26.04@sha256:f144425ff09be612d6d9ad965196e9cdc23dae1f42110a8a11a3e9a8198759f7
 ARG PYTHON_VERSION=3.14.8
 ARG PYTHON_SHA256=c2215904f02b175596dc49351585104f4bc20341e1c47378b26a2c274360ce73
 ARG PIP_VERSION=26.2.1
