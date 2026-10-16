@@ -16,6 +16,8 @@ const OPENROUTER_ENV_NAMES = [
   "AI_MODEL_SUMMARY",
   "AI_MODEL_STANDARD",
   "AI_MODEL_HIGH_QUALITY",
+  "AI_MODEL_AUDIT",
+  "NEWSLETTER_MODEL_EDITORIAL",
   "AI_MODEL_BLOCKLIST",
   "AI_STICKY_PROVIDER_ROUTING",
   "OPENROUTER_GOOGLE_2_5_flashlite",
@@ -50,29 +52,32 @@ function restoreEnv(snapshot) {
 function applySpreadsheetOpenRouterEnv() {
   process.env.OPENROUTER_ART_BACKUP = "bytedance-seed/seedream-4.5";
   process.env.OPENROUTER_META = "meta-llama/llama-4-scout";
-  process.env.OPENROUTER_ANTHROPIC_4_6 = "anthropic/claude-sonnet-4.6";
-  process.env.OPENROUTER_CLAUDE_SONNET_5 = "anthropic/claude-sonnet-5";
-  process.env.OPENROUTER_CLAUDE_OPUS = "anthropic/claude-opus-4.8";
+  process.env.OPENROUTER_ANTHROPIC_4_6 = "anthropic/claude-sonnet-5.5";
+  process.env.OPENROUTER_CLAUDE_SONNET_5 = "anthropic/claude-sonnet-5.5";
+  process.env.OPENROUTER_CLAUDE_OPUS = "anthropic/claude-opus-5.5";
   delete process.env.OPENROUTER_CLAUDE_OPUS_4_7;
   process.env.OPENROUTER_GPT_5_6_SOL = "openai/gpt-5.6-sol";
   process.env.OPENROUTER_FREE_PRIMARY_MODEL = "openrouter/free";
   process.env.AI_MODEL_FAST = "openai/gpt-5.6-luna";
   process.env.AI_MODEL_JSON = "openai/gpt-5.6-luna";
   process.env.AI_MODEL_SUMMARY = "openai/gpt-5.6-luna";
+  process.env.AI_MODEL_AUDIT = "openai/gpt-5.6-sol";
+  process.env.AI_MODEL_HIGH_QUALITY = "anthropic/claude-sonnet-5.5";
+  process.env.NEWSLETTER_MODEL_EDITORIAL = "anthropic/claude-sonnet-5.5";
   process.env.AI_MODEL_BLOCKLIST = "deepseek/*";
   process.env.AI_STICKY_PROVIDER_ROUTING = "false";
-  process.env.OPENROUTER_GOOGLE_2_5_flashlite = "google/gemini-2.5-flash-lite";
+  process.env.OPENROUTER_GOOGLE_2_5_flashlite = "google/gemini-3.5-flash-lite-20260721";
   process.env.OPENROUTER_API_BASE = "https://openrouter.ai/api/v1";
   process.env.OPENROUTER_API_KEY = testCredential("openrouter-global");
   process.env.OPENROUTER_ART = "recraft/recraft-v4.1";
-  process.env.BLOTATO_SCRIPT_MODEL = "anthropic/claude-sonnet-4-5";
+  process.env.BLOTATO_SCRIPT_MODEL = "anthropic/claude-sonnet-5.5";
   process.env.COMMS_HUB_MODEL_FREE_PRIMARY = "z-ai/glm-5.2:free";
   process.env.COMMS_HUB_MODEL_FREE_BACKUP = "openrouter/free";
   delete process.env.COMMS_HUB_MODEL_FREE_FALLBACK;
-  process.env.COMMS_HUB_MODEL_PAID_ECONOMY = "openai/gpt-oss-20b";
-  process.env.COMMS_HUB_MODEL_PAID_PRIMARY = "anthropic/claude-sonnet-4.6";
+  process.env.COMMS_HUB_MODEL_PAID_ECONOMY = "anthropic/claude-haiku-5.5";
+  process.env.COMMS_HUB_MODEL_PAID_PRIMARY = "anthropic/claude-sonnet-5.5";
   process.env.COMMS_HUB_MODEL_PAID_BACKUP = "openai/gpt-5.6-sol";
-  process.env.COMMS_HUB_MODEL_PAID_FALLBACK = "anthropic/claude-opus-4.8";
+  process.env.COMMS_HUB_MODEL_PAID_FALLBACK = "anthropic/claude-opus-5.5";
   process.env.COMMS_HUB_OPENROUTER_ZDR_ONLY = "true";
   process.env.COMMS_HUB_OPENROUTER_DATA_COLLECTION = "deny";
   delete process.env.OPENROUTER_API_KEY_ART;
@@ -126,7 +131,7 @@ test("the free first-pass route only accepts an explicit free model ID", async (
     const { getProviderDiagnosticsForRoute } = await import(`../services/shared/utils/ai-service.js?freeRouteGuard=${Date.now()}`);
     const providers = getProviderDiagnosticsForRoute("rssRewriteFirstPass").configuredProviders.filter((provider) => provider.configured);
     assert.equal(providers.some((provider) => provider.providerId === "openrouterFreePrimary"), false);
-    assert.equal(providers[0]?.model, "google/gemini-2.5-flash-lite");
+    assert.equal(providers[0]?.model, "google/gemini-3.5-flash-lite-20260721");
   } finally {
     restoreEnv(oldEnv);
   }
@@ -176,7 +181,7 @@ test("blotatoNewsShort route resolves with highQuality before standard in fallba
 
     // blotatoScript (BLOTATO_SCRIPT_MODEL) must be first
     assert.equal(configured[0]?.providerId, "blotatoScript", "blotatoScript should be first in chain");
-    assert.equal(configured[0]?.model, "anthropic/claude-sonnet-4-5");
+    assert.equal(configured[0]?.model, "anthropic/claude-sonnet-5.5");
 
     // highQuality (anthropic46) must appear before the general standard lane
     const hqIdx = configured.findIndex((p) => p.providerId === "anthropic46" || p.providerId === "highQuality");
@@ -195,14 +200,14 @@ test("Comms Hub skips known-bad free routes and uses the economy paid safety net
   try {
     const { getProviderDiagnosticsForRoute } = await import(`../services/shared/utils/ai-service.js?commsModelPolicy=${Date.now()}`);
     const routine = getProviderDiagnosticsForRoute("commsHubDraftSocial").configuredProviders.filter((p) => p.configured);
-    assert.deepEqual(routine.map((p) => p.model), ["openai/gpt-oss-20b"]);
+    assert.deepEqual(routine.map((p) => p.model), ["anthropic/claude-haiku-5.5"]);
     assert.ok(routine.every((p) => p.apiKeyEnv === "OPENROUTER_API_KEY"));
 
     const complex = getProviderDiagnosticsForRoute("commsHubDraftComplex").configuredProviders.filter((p) => p.configured);
     assert.deepEqual(complex.map((p) => p.model), [
-      "anthropic/claude-sonnet-4.6",
+      "anthropic/claude-sonnet-5.5",
       "openai/gpt-5.6-sol",
-      "anthropic/claude-opus-4.8",
+      "anthropic/claude-opus-5.5",
     ]);
   } finally {
     restoreEnv(oldEnv);
@@ -242,6 +247,26 @@ test("Comms Hub OpenRouter requests enforce ZDR and deny data collection", async
   } finally {
     restoreEnv(oldEnv);
     globalThis.fetch = oldFetch;
+  }
+});
+
+test("audit and newsletter review routes lead with an independent model", async () => {
+  const oldEnv = snapshotEnv(OPENROUTER_ENV_NAMES);
+  applySpreadsheetOpenRouterEnv();
+
+  try {
+    const { getProviderDiagnosticsForRoute } = await import(`../services/shared/utils/ai-service.js?independentReviews=${Date.now()}`);
+    const audit = getProviderDiagnosticsForRoute("auditForensic").configuredProviders.filter((p) => p.configured);
+    assert.equal(audit[0]?.model, "openai/gpt-5.6-sol");
+
+    const compose = getProviderDiagnosticsForRoute("newsletterCompose").configuredProviders.filter((p) => p.configured);
+    const voiceReview = getProviderDiagnosticsForRoute("newsletterVoiceReview").configuredProviders.filter((p) => p.configured);
+    const audienceReview = getProviderDiagnosticsForRoute("newsletterAudienceReview").configuredProviders.filter((p) => p.configured);
+    assert.equal(compose[0]?.model, "anthropic/claude-sonnet-5.5");
+    assert.equal(voiceReview[0]?.model, "openai/gpt-5.6-sol");
+    assert.equal(audienceReview[0]?.model, "openai/gpt-5.6-sol");
+  } finally {
+    restoreEnv(oldEnv);
   }
 });
 
@@ -357,22 +382,22 @@ test("OpenRouter artwork payload explicitly requests image output modalities", a
 test("podcast script routes use Claude for drafting and premium independent synthesis/editorial fallbacks", async () => {
   const oldEnv = snapshotEnv(OPENROUTER_ENV_NAMES);
   applySpreadsheetOpenRouterEnv();
-  process.env.AI_MODEL_STANDARD = "anthropic/claude-sonnet-4.6";
-  process.env.AI_MODEL_HIGH_QUALITY = "anthropic/claude-sonnet-4.6";
+  process.env.AI_MODEL_STANDARD = "anthropic/claude-sonnet-5.5";
+  process.env.AI_MODEL_HIGH_QUALITY = "anthropic/claude-sonnet-5.5";
 
   try {
     const { getProviderDiagnosticsForRoute } = await import(`../services/shared/utils/ai-service.js?podcastQuality=${Date.now()}`);
     for (const routeName of ["scriptIntro", "scriptMain", "scriptOutro"]) {
       const configured = getProviderDiagnosticsForRoute(routeName).configuredProviders.filter((p) => p.configured);
-      assert.equal(configured[0]?.model, "anthropic/claude-sonnet-5", `${routeName} should draft with Claude Sonnet 5`);
+      assert.equal(configured[0]?.model, "anthropic/claude-sonnet-5.5", `${routeName} should draft with Claude Sonnet 5`);
     }
 
     const synthesis = getProviderDiagnosticsForRoute("scriptMainSynthesis").configuredProviders.filter((p) => p.configured);
-    assert.equal(synthesis[0]?.model, "anthropic/claude-sonnet-5", "synthesis should lead with Claude Sonnet 5");
+    assert.equal(synthesis[0]?.model, "anthropic/claude-sonnet-5.5", "synthesis should lead with Claude Sonnet 5.5");
     assert.equal(synthesis[1]?.model, "openai/gpt-5.6-sol", "synthesis should use GPT-5.6 Sol as the independent premium backup");
 
     const editorial = getProviderDiagnosticsForRoute("editorialPass").configuredProviders.filter((p) => p.configured);
-    assert.equal(editorial[0]?.model, "anthropic/claude-opus-4.8", "editorial/repair should lead with Claude Opus 4.8");
+    assert.equal(editorial[0]?.model, "anthropic/claude-opus-5.5", "editorial/repair should lead with Claude Opus 5.5");
     assert.equal(editorial[1]?.model, "openai/gpt-5.6-sol", "editorial/repair should use GPT-5.6 Sol as the independent premium backup");
   } finally {
     restoreEnv(oldEnv);
@@ -454,8 +479,8 @@ test("Comms Hub structured-output validation fails over before accepting invalid
         }
       },
     });
-    assert.equal(result.model, "openai/gpt-oss-20b");
-    assert.deepEqual(requestedModels, ["openai/gpt-oss-20b"]);
+    assert.equal(result.model, "anthropic/claude-haiku-5.5");
+    assert.deepEqual(requestedModels, ["anthropic/claude-haiku-5.5"]);
   } finally {
     restoreEnv(oldEnv);
     globalThis.fetch = oldFetch;
@@ -504,8 +529,8 @@ test("Comms Hub immediately fails over a rate-limited free provider instead of s
       returnMetadata: true,
       validateContent(content) { JSON.parse(content); },
     });
-    assert.equal(result.model, "openai/gpt-oss-20b");
-    assert.deepEqual(requestedModels, ["openai/gpt-oss-20b"]);
+    assert.equal(result.model, "anthropic/claude-haiku-5.5");
+    assert.deepEqual(requestedModels, ["anthropic/claude-haiku-5.5"]);
     assert.equal(requestedModels.includes("z-ai/glm-5.2:free"), false);
   } finally {
     restoreEnv(oldEnv);
@@ -557,8 +582,8 @@ test("a successful fallback does not become the next request's primary by defaul
     await request("non-sticky-first");
     await request("non-sticky-second");
     assert.deepEqual(requestedModels, [
-      "openai/gpt-oss-20b",
-      "openai/gpt-oss-20b",
+      "anthropic/claude-haiku-5.5",
+      "anthropic/claude-haiku-5.5",
     ]);
   } finally {
     restoreEnv(oldEnv);

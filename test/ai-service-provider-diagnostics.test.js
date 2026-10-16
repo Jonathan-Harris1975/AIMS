@@ -50,8 +50,8 @@ test("auditForensic route supports current Koyeb spreadsheet model vars with one
   clearOpenRouterEnv();
 
   process.env.OPENROUTER_API_KEY = testCredential("openrouter-shared");
-  process.env.OPENROUTER_ANTHROPIC_4_6 = "anthropic/claude-sonnet-4.6";
-  process.env.OPENROUTER_GOOGLE_2_5_flashlite = "google/gemini-2.5-flash-lite";
+  process.env.OPENROUTER_ANTHROPIC_4_6 = "anthropic/claude-sonnet-5.5";
+  process.env.OPENROUTER_GOOGLE_2_5_flashlite = "google/gemini-3.5-flash-lite-20260721";
   process.env.OPENROUTER_GPT_5_6_SOL = "openai/gpt-5.6-sol";
 
   try {
@@ -63,7 +63,7 @@ test("auditForensic route supports current Koyeb spreadsheet model vars with one
 
     assert.equal(diagnostics.routeKey, "auditForensic");
     assert.equal(anthropic.configured, true);
-    assert.equal(anthropic.model, "anthropic/claude-sonnet-4.6");
+    assert.equal(anthropic.model, "anthropic/claude-sonnet-5.5");
     assert.equal(anthropic.modelEnv, "OPENROUTER_ANTHROPIC_4_6");
     assert.equal(anthropic.apiKeyEnv, "OPENROUTER_API_KEY");
     assert.equal(google.configured, true);

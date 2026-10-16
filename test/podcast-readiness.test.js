@@ -5,7 +5,7 @@ import { getPodcastReadiness } from "../services/podcast/readiness.js";
 function completeEnv() {
   return {
     OPENROUTER_API_KEY: "openrouter-key",
-    OPENROUTER_CLAUDE_SONNET_5: "anthropic/claude-sonnet-5",
+    OPENROUTER_CLAUDE_SONNET_5: "anthropic/claude-sonnet-5.5",
     AWS_ACCESS_KEY_ID: "aws-key",
     AWS_SECRET_ACCESS_KEY: "aws-secret",
     AWS_REGION: "eu-west-2",

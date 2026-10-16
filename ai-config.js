@@ -275,13 +275,12 @@ export const aiConfig = {
     zernioQuiz: routeChain(["highQuality", "standard", "fast", "fallback"], ["gpt56Sol", "google25FlashLite"]),
     zernioEbook: routeChain(["highQuality", "standard", "fast", "fallback"], ["gpt56Sol", "google25FlashLite"]),
     zernioPodcastPromo: routeChain(["highQuality", "standard", "fallback"], ["gpt56Sol", "google25FlashLite"]),
-    // Blotato script quality is production-critical. highQuality sits above standard so Claude 4.6
-    // is the first fallback after the dedicated blotatoScript provider, ahead of the lower-cost fallback lane.
+    // Blotato script quality is production-critical. The dedicated Claude writer
+    // leads; GPT-5.6 Sol is the first independent fallback before the economy lane.
     blotatoNewsShort: routeChain(["blotatoScript", "highQuality", "standard", "fallback"], ["anthropic46", "gpt56Sol", "google25FlashLite"]),
-    // Newsletter engine (services/newsletter). Composition needs the same
-    // editorial quality bar as the blog; QA review is intentionally routed
-    // through a different provider than composition so the reviewer isn't
-    // just re-approving its own output.
+    // Newsletter engine (services/newsletter). Composition uses Claude for
+    // editorial writing; review and fact-check routes lead with GPT-5.6 Sol
+    // so the first reviewer is an independent provider/model.
     // AI Edge uses task-specific routes. Sonnet handles editorial writing/voice,
     // GPT-5.6 Sol provides an independent premium fallback, while Gemini handles
     // low-latency subject work. Each route retains provider
@@ -291,8 +290,8 @@ export const aiConfig = {
     // Economical independent reviewer used for up to four self-improvement passes before a full council is convened.
     newsletterSelfImprove: routeChain(["fast", "summary", "standard"], ["google25FlashLite", "gpt56Sol"]),
     newsletterFactCheck: routeChain(["audit", "highQuality"], ["claudeSonnet5", "anthropic46"]),
-    newsletterVoiceReview: routeChain(["newsletterEditorial", "highQuality"], ["gpt56Sol", "anthropic46"]),
-    newsletterAudienceReview: routeChain(["highQuality", "audit"], ["claudeSonnet5", "anthropic46"]),
+    newsletterVoiceReview: routeChain(["gpt56Sol"], ["claudeSonnet5", "highQuality", "anthropic46"]),
+    newsletterAudienceReview: routeChain(["gpt56Sol"], ["claudeSonnet5", "highQuality", "anthropic46"]),
     newsletterCouncilChair: routeChain(["audit", "highQuality"], ["claudeSonnet5", "anthropic46"]),
     newsletterHeroPrompt: routeChain(["summary", "fast", "fallback"], ["meta", "google25FlashLite"]),
     // Comms Hub: routine communications are free-first and privacy-gated.

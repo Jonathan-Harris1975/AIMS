@@ -537,10 +537,10 @@ changes for house style, length or emphasis, send them over and I'll revise it.\
       articleAutoSendEnabled: cfg.articleAutoSend,
       articleQualityMinimum: cfg.minScore,
       models: {
-        pitch: this.env.OUTREACH_PITCH_MODEL || "anthropic/claude-sonnet-5",
-        reply: this.env.OUTREACH_REPLY_MODEL || this.env.OUTREACH_PITCH_MODEL || "anthropic/claude-sonnet-5",
-        article: this.env.OUTREACH_ARTICLE_MODEL || "anthropic/claude-sonnet-5",
-        review: this.env.OUTREACH_ARTICLE_REVIEW_MODEL || "anthropic/claude-opus-4.8",
+        pitch: this.env.OUTREACH_PITCH_MODEL || "anthropic/claude-sonnet-5.5",
+        reply: this.env.OUTREACH_REPLY_MODEL || this.env.OUTREACH_PITCH_MODEL || "anthropic/claude-sonnet-5.5",
+        article: this.env.OUTREACH_ARTICLE_MODEL || "anthropic/claude-sonnet-5.5",
+        review: this.env.OUTREACH_ARTICLE_REVIEW_MODEL || "anthropic/claude-opus-5.5",
         fallback: this.env.OUTREACH_ARTICLE_FALLBACK_MODEL || "openai/gpt-5.6-sol",
       },
     };

@@ -8,6 +8,8 @@
 
 4. **Selection order.** Use deterministic code first where it can complete the task. Otherwise test free or economy models for routine work, balanced models for multi-step work, and expert models only for measured quality or consequence reasons. Select on cost per successful validated task, not token price alone.
 
+   - **AIMS service defaults reviewed 2026-10-16.** Use GPT-5.6 Luna for fast classification, summaries and schema-bound lightweight work; Claude Sonnet 5.5 for regular writing, scripts, audits and standard-quality routes; Claude Haiku 5.5 for routine Comms Hub triage and drafting; GPT-5.6 Sol as the independent audit and newsletter-review lead; and Claude Opus 5.5 only on complex synthesis and editorial-critical work. GPT-5.6 Sol remains the independent paid fallback, while Gemini 3.5 Flash Lite is a lower-priority resilience fallback. Keep Seedream and FLUX on the image-generation route. The Comms Hub free-model variables remain blank; its customer-content calls retain ZDR and data-collection denial.
+
    - **Public RSS first-pass exception.** The first rewrite draft may use `OPENROUTER_FREE_PRIMARY_MODEL` only for publisher-supplied public RSS text. The assignment must resolve to `openrouter/free` or an explicit `:free` model ID. Existing source-overlap, brand, entity, and Phase 3 publication gates still apply; paid candidates handle provider failure and later repair. Do not route Comms Hub messages, customer submissions, or other non-public material through this free route.
 
 5. **No monetary kill switch.** Cost tiers, expected monthly cost and price changes generate audit evidence and advisories only. AIMS does not use `provider.max_price`, workspace budget cut-offs or an application spend ceiling to reject a live request.
@@ -27,7 +29,7 @@
      "nextReviewDueAt": "2026-11-01T09:00:00Z",
      "assignments": {
        "AI_MODEL_FAST": "openai/gpt-5.6-luna",
-       "AI_MODEL_HIGH_QUALITY": "anthropic/claude-sonnet-5"
+       "AI_MODEL_HIGH_QUALITY": "anthropic/claude-sonnet-5.5"
      },
      "decisions": {
        "AI_MODEL_HIGH_QUALITY": {

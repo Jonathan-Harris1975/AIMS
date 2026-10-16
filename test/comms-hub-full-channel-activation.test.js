@@ -42,7 +42,7 @@ test("production defaults activate every Comms Hub conversation channel plus aut
   assert.equal(defaults.COMMS_HUB_MODEL_FREE_PRIMARY, "");
   assert.equal(defaults.COMMS_HUB_MODEL_FREE_BACKUP, "");
   assert.equal(defaults.COMMS_HUB_MODEL_FREE_FALLBACK, "");
-  assert.equal(defaults.COMMS_HUB_MODEL_PAID_ECONOMY, "openai/gpt-oss-20b");
+  assert.equal(defaults.COMMS_HUB_MODEL_PAID_ECONOMY, "anthropic/claude-haiku-5.5");
 });
 
 test("full production profile is readiness-complete when deployment secrets are supplied", () => {
