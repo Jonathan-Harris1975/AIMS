@@ -4,11 +4,14 @@ import { safeErrorLog } from "./domain/redaction.js";
 import { buildWorkerHeartbeatHealth, workerRunAdvanced } from "./workerHeartbeatState.js";
 
 const INSTRUMENTED = Symbol("commsHubWorkerHeartbeatInstrumented");
+// Coalesce routine health writes; failures remain immediate.
+const ROUTINE_HEARTBEAT_INTERVAL_MS = 5 * 60 * 1000;
 
 export class CommsHubWorkerHeartbeatService {
   constructor({ context, instanceId = randomUUID() }) {
     this.context = context;
     this.instanceId = String(instanceId).slice(0, 200);
+    this.lastRoutineHeartbeat = new Map();
   }
 
   criticalDescriptors() {
@@ -42,6 +45,10 @@ export class CommsHubWorkerHeartbeatService {
   }
 
   async safeRecord(event, descriptor, error = null) {
+    const routine = event === "attempt" || event === "success";
+    const key = `${descriptor.category}:${descriptor.key}`;
+    const now = Date.now();
+    if (routine && now - (this.lastRoutineHeartbeat.get(key) || 0) < ROUTINE_HEARTBEAT_INTERVAL_MS) return true;
     try {
       await this.context.operationsRepository.recordWorkerHeartbeat({
         category: descriptor.category,
@@ -52,6 +59,7 @@ export class CommsHubWorkerHeartbeatService {
         event,
         errorCode: error?.code || error?.name || null,
       });
+      if (routine) this.lastRoutineHeartbeat.set(key, now);
       return true;
     } catch (recordError) {
       log.warn("commsHub.workerHeartbeat.persistFailed", {
