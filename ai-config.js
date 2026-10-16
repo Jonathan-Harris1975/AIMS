@@ -71,6 +71,13 @@ const gpt56Sol = provider(
   [...SHARED_OPENROUTER_KEY, "OPENROUTER_API_KEY_GPT_5_6_SOL", "OPENROUTER_API_KEY_GPT56_SOL"]
 );
 
+// This provider is reserved for explicitly public first-pass tasks.
+const openrouterFreePrimary = provider(
+  "openrouterFreePrimary",
+  ["OPENROUTER_FREE_PRIMARY_MODEL"],
+  SHARED_OPENROUTER_KEY
+);
+
 
 const commsFreePrimary = provider(
   "commsFreePrimary",
@@ -179,6 +186,7 @@ const modelRegistry = {
   // Compatibility alias for callers that still inspect the historical ID.
   claudeOpus47: claudeOpus,
   gpt56Sol,
+  openrouterFreePrimary,
   commsFreePrimary,
   commsFreeBackup,
   commsFreeFallback,
@@ -202,6 +210,7 @@ function providerIsConfigured(providerId) {
   // two Comms Hub slots so routine communications go straight to the tiny paid
   // economy safety net instead of failing through known-bad providers first.
   const model = String(conf.name).trim().toLowerCase();
+  if (providerId === "openrouterFreePrimary" && model !== "openrouter/free" && !model.endsWith(":free")) return false;
   if (providerId === "commsFreePrimary" && model === "z-ai/glm-5.2:free") return false;
   if (providerId === "commsFreeBackup" && model === "openrouter/free") return false;
   return true;
@@ -251,7 +260,9 @@ export const aiConfig = {
     artworkImage: routeChain(["image"], ["artworkPrimary", "artworkBackup"]),
     artworkVisualQa: routeChain(["audit", "highQuality"], ["claudeSonnet5", "anthropic46", "gpt56Sol"]),
     blotatoVisualQa: routeChain(["audit", "highQuality"], ["claudeSonnet5", "anthropic46", "gpt56Sol"]),
-    rssRewrite: routeChain(["standard", "fast", "fallback"], ["gpt56Sol", "google25FlashLite"]),
+    // Public RSS source text may use a free first draft; paid models remain the quality-gated fallback.
+    rssRewriteFirstPass: routeChain(["openrouterFreePrimary"], ["google25FlashLite", "gpt56Sol"]),
+    rssRewrite: routeChain(["standard", "fast", "fallback"], ["google25FlashLite", "gpt56Sol"]),
     rssShortTitle: routeChain(["fast", "summary", "fallback"], ["google25FlashLite", "gpt56Sol"]),
     blogWeekly: routeChain(["standard", "summary", "fallback"], ["google25FlashLite", "gpt56Sol"]),
     blogSocial: routeChain(["highQuality", "audit", "standard", "summary", "fallback"], ["claudeSonnet5", "anthropic46", "google25FlashLite"]),
