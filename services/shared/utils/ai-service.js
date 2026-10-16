@@ -126,7 +126,7 @@ function getProviderConfig(providerId) {
   // retirement is reviewed through the OpenRouter council evidence instead of
   // being hard-coded here, so current models cannot remain falsely retired.
   if (isLocallyBlockedModel(model)) return null;
-  if (providerId === "openrouterFreePrimary" && model.toLowerCase() !== "openrouter/free" && !model.toLowerCase().endsWith(":free")) return null;
+  if (providerId === "openrouterFreePrimary" && model && model.toLowerCase() !== "openrouter/free" && !model.toLowerCase().endsWith(":free")) return null;
   if (!model || !apiKey) return null;
   if (looksLikeTemplatePlaceholder(model) || looksLikeTemplatePlaceholder(apiKey)) return null;
 
