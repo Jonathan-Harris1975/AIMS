@@ -32,7 +32,7 @@ const DEFAULT_TIMEOUT_MS = finiteEnvNumber("AI_TIMEOUT", aiConfig?.commonParams?
 const DEFAULT_TOP_P = finiteEnvNumber("AI_TOP_P", aiConfig?.commonParams?.top_p ?? 0.9, { min: 0, max: 1 });
 // Retries are deliberately configurable for latency and reliability. This is
 // an operational attempt limit, not a monetary spend cut-off.
-const MAX_RETRIES = finiteEnvNumber("AI_MAX_RETRIES", 4, { min: 0, integer: true });
+const MAX_RETRIES = finiteEnvNumber("AI_MAX_RETRIES", 1, { min: 0, max: 1, integer: true });
 const RETRY_BASE_MS = finiteEnvNumber("AI_RETRY_BASE_MS", 750, { min: 0, integer: true });
 const EMPTY_COMPLETION_RETRIES_PER_PROVIDER = finiteEnvNumber("AI_EMPTY_COMPLETION_RETRIES_PER_PROVIDER", 1, { min: 0, integer: true });
 const __aiRouteCallsBySession = new Map();
@@ -429,7 +429,7 @@ export async function resilientRequest(routeName, {
   const routeKey = resolveRouteKey(routeName);
   const chain = getProviderChainForRoute(routeKey);
   const requestedMaxRetries = Number.isFinite(Number(maxRetries)) ? Number(maxRetries) : MAX_RETRIES;
-  const effectiveMaxRetries = Math.max(0, requestedMaxRetries);
+  const effectiveMaxRetries = Math.min(1, Math.max(0, requestedMaxRetries));
   const effectiveRetryBaseMs = Number.isFinite(Number(retryBaseMs)) ? Number(retryBaseMs) : RETRY_BASE_MS;
   let lastErr;
   const attempted = [];
