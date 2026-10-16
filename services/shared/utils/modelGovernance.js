@@ -19,6 +19,11 @@ function list(value) {
   return Array.isArray(value) ? value.map(text).filter(Boolean) : [];
 }
 
+function nonNegativeNumber(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+
 function validDate(value) {
   const cleaned = text(value);
   return cleaned && Number.isFinite(Date.parse(cleaned)) ? new Date(cleaned).toISOString() : null;
@@ -30,11 +35,33 @@ function nextMonthlyReview(from) {
   return date.toISOString();
 }
 
+function evaluationReady(item) {
+  const accountAvailable = text(item?.provider).toLowerCase() !== "openrouter"
+    ? item?.available !== false
+    : item?.available === true;
+  return accountAvailable
+    && item?.evaluation_passed === true
+    && Number(item?.evaluation_sample_size) > 0
+    && Boolean(text(item?.evaluation_evidence));
+}
+
+function candidateOrder(a, b) {
+  const costA = Number(a.cost_per_successful_task);
+  const costB = Number(b.cost_per_successful_task);
+  const hasCostA = Number.isFinite(costA) && costA >= 0;
+  const hasCostB = Number.isFinite(costB) && costB >= 0;
+  if (hasCostA !== hasCostB) return hasCostA ? -1 : 1;
+  if (hasCostA && costA !== costB) return costA - costB;
+  return Number(b.task_score || b.score || 0) - Number(a.task_score || a.score || 0)
+    || Number(b.reliability_score || 0) - Number(a.reliability_score || 0)
+    || text(a.model_id).localeCompare(text(b.model_id));
+}
+
 function rankedModels(registry, category) {
   const items = Array.isArray(registry?.[category]) ? registry[category] : [];
   return items
-    .filter((item) => item && typeof item === "object" && text(item.model_id))
-    .sort((a, b) => Number(b.score || 0) - Number(a.score || 0));
+    .filter((item) => item && typeof item === "object" && text(item.model_id) && evaluationReady(item))
+    .sort(candidateOrder);
 }
 
 function firstModel(registry, ...categories) {
@@ -54,7 +81,7 @@ function fallbackModel(registry, primary) {
   return text(candidates.find((item) => text(item.model_id) !== primary)?.model_id || primary);
 }
 
-function validateExplicitAssignments(assignments) {
+function validateExplicitAssignments(assignments, registry) {
   if (assignments === undefined || assignments === null) return {};
   if (typeof assignments !== "object" || Array.isArray(assignments)) {
     throw new TypeError("assignments must be an object keyed by an AIMS model environment variable");
@@ -63,6 +90,18 @@ function validateExplicitAssignments(assignments) {
   const unsupported = Object.keys(assignments).filter((name) => !ALLOWED_ENV_NAMES.includes(name));
   if (unsupported.length) {
     throw new Error(`Unsupported AIMS model assignment variables: ${unsupported.join(", ")}`);
+  }
+
+  const evaluatedModels = Object.values(registry || {}).flatMap((items) =>
+    Array.isArray(items) ? items.filter((item) => item && typeof item === "object") : []);
+  for (const [name, rawValue] of Object.entries(assignments)) {
+    const modelId = text(rawValue);
+    if (!modelId) continue;
+    const evidence = evaluatedModels.find((item) => text(item.model_id) === modelId);
+    const roles = list(evidence?.approved_roles);
+    if (!evaluationReady(evidence) || !roles.includes(name)) {
+      throw new Error(`Explicit AIMS assignment ${name} requires a passing, evidenced evaluation approved for that route`);
+    }
   }
 
   return Object.fromEntries(
@@ -94,7 +133,7 @@ export function buildAimsModelAssignments(registry = {}, explicitAssignments = {
     AI_MODEL_AUDIT: audit,
   }).filter(([, value]) => Boolean(value)));
 
-  return { ...rankedAssignments, ...validateExplicitAssignments(explicitAssignments) };
+  return { ...rankedAssignments, ...validateExplicitAssignments(explicitAssignments, registry) };
 }
 
 export function inferModelCostTier(modelId) {
@@ -107,7 +146,7 @@ export function inferModelCostTier(modelId) {
   return "unknown";
 }
 
-function normaliseDecision(rawDecision, assignment, modelId) {
+function normaliseDecision(rawDecision, assignment, modelId, registryEvidence = {}) {
   const raw = rawDecision && typeof rawDecision === "object" && !Array.isArray(rawDecision)
     ? rawDecision
     : {};
@@ -127,7 +166,13 @@ function normaliseDecision(rawDecision, assignment, modelId) {
     costTier,
     cheaperAlternative: text(raw.cheaperAlternative) || null,
     justification: text(raw.justification) || null,
-    evaluationEvidence: list(raw.evaluationEvidence),
+    evaluationEvidence: list(raw.evaluationEvidence).length
+      ? list(raw.evaluationEvidence)
+      : [text(registryEvidence.evaluation_evidence)].filter(Boolean),
+    evaluationSampleSize: nonNegativeNumber(registryEvidence.evaluation_sample_size),
+    taskScore: nonNegativeNumber(registryEvidence.task_score),
+    reliabilityScore: nonNegativeNumber(registryEvidence.reliability_score),
+    costPerSuccessfulTask: nonNegativeNumber(registryEvidence.cost_per_successful_task),
     approvedBy: text(raw.approvedBy) || null,
     expectedMonthlyUsd: Number.isFinite(expectedMonthlyUsd) && expectedMonthlyUsd >= 0
       ? expectedMonthlyUsd
@@ -135,11 +180,14 @@ function normaliseDecision(rawDecision, assignment, modelId) {
   };
 }
 
-function normaliseDecisions(assignments, decisions = {}) {
+function normaliseDecisions(assignments, decisions = {}, registry = {}) {
   const input = decisions && typeof decisions === "object" && !Array.isArray(decisions) ? decisions : {};
+  const evidence = Object.values(registry || {}).flatMap((items) =>
+    Array.isArray(items) ? items.filter((item) => item && typeof item === "object") : []);
   return Object.fromEntries(Object.entries(assignments).map(([assignment, modelId]) => {
     const raw = input[assignment] || input[modelId] || {};
-    return [assignment, normaliseDecision(raw, assignment, modelId)];
+    const modelEvidence = evidence.find((item) => text(item.model_id) === modelId) || {};
+    return [assignment, normaliseDecision(raw, assignment, modelId, modelEvidence)];
   }));
 }
 
@@ -249,7 +297,7 @@ export async function applyAimsModelGovernance({
 
   const appliedAt = new Date().toISOString();
   const checkedAt = validDate(catalogueCheckedAt);
-  const decisionRecords = normaliseDecisions(assignments, decisions);
+  const decisionRecords = normaliseDecisions(assignments, decisions, registry);
   const retiring = normaliseRetiringModels(retiringModels);
   const advisories = buildAimsModelAdvisories({
     assignments,

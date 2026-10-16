@@ -16,8 +16,18 @@ test("AIMS spend governance is advisory and never blocks runtime requests by pri
 
 test("explicit council assignments cover specialist AIMS slots and override ranked defaults", () => {
   const assignments = buildAimsModelAssignments({
-    fast: [{ model_id: "openai/gpt-oss-20b", score: 90 }],
-    reasoning: [{ model_id: "openai/gpt-5.6-terra", score: 88 }],
+    fast: [{ model_id: "openai/gpt-oss-20b", score: 90, evaluation_passed: true,
+      evaluation_sample_size: 30, evaluation_evidence: "eval/fast.json", cost_per_successful_task: 0.01 }],
+    reasoning: [{ model_id: "openai/gpt-5.6-terra", score: 88, evaluation_passed: true,
+      evaluation_sample_size: 30, evaluation_evidence: "eval/reasoning.json", cost_per_successful_task: 0.03 }],
+    overrides: [
+      { model_id: "openai/gpt-5.6-luna", score: 90, evaluation_passed: true,
+        evaluation_sample_size: 30, evaluation_evidence: "eval/luna.json", approved_roles: ["AI_MODEL_FAST"] },
+      { model_id: "anthropic/claude-sonnet-5.5", score: 88, evaluation_passed: true,
+        evaluation_sample_size: 30, evaluation_evidence: "eval/comms.json", approved_roles: ["COMMS_HUB_MODEL_PAID_PRIMARY"] },
+      { model_id: "anthropic/claude-opus-5.5", score: 87, evaluation_passed: true,
+        evaluation_sample_size: 30, evaluation_evidence: "eval/outreach.json", approved_roles: ["OUTREACH_ARTICLE_REVIEW_MODEL"] },
+    ],
   }, {
     AI_MODEL_FAST: "openai/gpt-5.6-luna",
     COMMS_HUB_MODEL_PAID_PRIMARY: "anthropic/claude-sonnet-5.5",
@@ -28,6 +38,19 @@ test("explicit council assignments cover specialist AIMS slots and override rank
   assert.equal(assignments.AI_MODEL_STANDARD, "openai/gpt-5.6-terra");
   assert.equal(assignments.COMMS_HUB_MODEL_PAID_PRIMARY, "anthropic/claude-sonnet-5.5");
   assert.equal(assignments.OUTREACH_ARTICLE_REVIEW_MODEL, "anthropic/claude-opus-5.5");
+});
+
+test("models without passing task evidence cannot become AIMS defaults", () => {
+  assert.deepEqual(buildAimsModelAssignments({
+    reasoning: [{ model_id: "openai/unmeasured", score: 100 }],
+  }), {});
+});
+
+test("explicit AIMS routes require passing evidence approved for that route", () => {
+  assert.throws(() => buildAimsModelAssignments({
+    fast: [{ model_id: "openai/test", score: 100, evaluation_passed: true,
+      evaluation_sample_size: 10, evaluation_evidence: "eval/test.json", approved_roles: ["AI_MODEL_STANDARD"] }],
+  }, { AI_MODEL_FAST: "openai/test" }), /approved for that route/);
 });
 
 test("expert assignments without a complete decision record are advisory, not rejected", () => {
