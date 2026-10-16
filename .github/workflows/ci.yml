@@ -111,7 +111,7 @@ jobs:
           from importlib.metadata import version
           from importlib.util import find_spec
           from pathlib import Path
-          assert version("headroom-ai") == "0.37.0", version("headroom-ai")
+          assert version("headroom-ai") == "0.38.0", version("headroom-ai")
           assert version("msgpack") == "1.2.1", version("msgpack")
           assert version("setuptools") == "83.0.0", version("setuptools")
           assert find_spec("pip") is None, "pip must not be present in the production image"

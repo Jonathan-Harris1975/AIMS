@@ -8,7 +8,7 @@ ARG UBUNTU_IMAGE=ubuntu:26.04@sha256:3595d7fc4286a33fad0fd853a4063e654287a9c3787
 ARG PYTHON_VERSION=3.14.8
 ARG PYTHON_SHA256=c2215904f02b175596dc49351585104f4bc20341e1c47378b26a2c274360ce73
 ARG PIP_VERSION=26.2.1
-ARG HEADROOM_VERSION=0.37.0
+ARG HEADROOM_VERSION=0.38.0
 ARG MSGPACK_VERSION=1.2.1
 ARG SETUPTOOLS_VERSION=83.0.0
 
@@ -48,7 +48,7 @@ RUN /usr/local/bin/python3.14 -m venv /opt/headroom \
       "headroom-ai[proxy,proxy-prod]==${HEADROOM_VERSION}" \
       "msgpack==${MSGPACK_VERSION}" \
  && /opt/headroom/bin/pip uninstall --yes pip \
- && /opt/headroom/bin/python -c 'from importlib.metadata import version; from importlib.util import find_spec; from pathlib import Path; assert version("headroom-ai") == "0.37.0"; assert version("msgpack") == "1.2.1"; assert version("setuptools") == "83.0.0"; assert find_spec("pip") is None; assert not any(Path("/opt/headroom/bin").glob("pip*")); from headroom._core import DiffCompressor, SmartCrusher' \
+ && /opt/headroom/bin/python -c 'from importlib.metadata import version; from importlib.util import find_spec; from pathlib import Path; assert version("headroom-ai") == "0.38.0"; assert version("msgpack") == "1.2.1"; assert version("setuptools") == "83.0.0"; assert find_spec("pip") is None; assert not any(Path("/opt/headroom/bin").glob("pip*")); from headroom._core import DiffCompressor, SmartCrusher' \
  && rm -rf /usr/local/lib/python3.14/test /usr/local/lib/python3.14/ensurepip /usr/local/lib/python3.14/ensurepip-*.dist-info /usr/local/lib/python3.14/site-packages \
       /usr/local/lib/python3.14/idlelib /usr/local/lib/python3.14/tkinter /usr/local/lib/python3.14/turtledemo \
  && rm -f /usr/local/lib/python3.14/turtle.py \
@@ -67,6 +67,8 @@ RUN apt-get update \
  && groupadd --gid 10001 nonroot \
  && useradd --uid 10001 --gid 10001 --no-create-home --shell /usr/sbin/nologin nonroot
 
+RUN mkdir -p /var/lib/headroom && chown 10001:10001 /var/lib/headroom
+
 COPY --from=python-build /usr/local/bin/python3.14 /usr/local/bin/python3.14
 COPY --from=python-build /usr/local/lib/libpython3.14.so.1.0 /usr/local/lib/libpython3.14.so.1.0
 COPY --from=python-build /usr/local/lib/python3.14 /usr/local/lib/python3.14
@@ -83,14 +85,15 @@ ENV LD_LIBRARY_PATH=/usr/local/lib \
     HEADROOM_COMPRESS_ALLOW_REMOTE=1 \
     HEADROOM_SAVINGS_PROFILE=balanced \
     HEADROOM_MODE=token \
-    HEADROOM_TARGET_RATIO=0.30 \
+    HEADROOM_TARGET_RATIO=0.70 \
     HEADROOM_COMPRESS_USER_MESSAGES=true \
     HEADROOM_COMPRESS_SYSTEM_MESSAGES=false \
-    HEADROOM_PROTECT_RECENT=0 \
+    HEADROOM_PROTECT_RECENT=1 \
     HEADROOM_MIN_TOKENS=250 \
     HEADROOM_KOMPRESS_BACKEND=auto \
     HEADROOM_TELEMETRY=on \
-    HEADROOM_STATELESS=true
+    HEADROOM_WORKSPACE_DIR=/var/lib/headroom \
+    HEADROOM_STATELESS=false
 
 WORKDIR /tmp
 USER nonroot
