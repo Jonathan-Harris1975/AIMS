@@ -21,6 +21,7 @@ const DEFAULT_ROUTES = Object.freeze([
   "seoKeywords",
   "artworkPrompt",
   "rssRewrite",
+  "rssRewriteFirstPass",
   "rssShortTitle",
   "blogWeekly",
   "blogSocial",
