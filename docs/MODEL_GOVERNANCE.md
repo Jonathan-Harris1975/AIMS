@@ -8,11 +8,13 @@
 
 4. **Selection order.** Use deterministic code first where it can complete the task. Otherwise test free or economy models for routine work, balanced models for multi-step work, and expert models only for measured quality or consequence reasons. Select on cost per successful validated task, not token price alone.
 
+   - **Public RSS first-pass exception.** The first rewrite draft may use `OPENROUTER_FREE_PRIMARY_MODEL` only for publisher-supplied public RSS text. The assignment must resolve to `openrouter/free` or an explicit `:free` model ID. Existing source-overlap, brand, entity, and Phase 3 publication gates still apply; paid candidates handle provider failure and later repair. Do not route Comms Hub messages, customer submissions, or other non-public material through this free route.
+
 5. **No monetary kill switch.** Cost tiers, expected monthly cost and price changes generate audit evidence and advisories only. AIMS does not use `provider.max_price`, workspace budget cut-offs or an application spend ceiling to reject a live request.
 
 6. **Expert-model record.** Every expert assignment must include `justificationId`, task, complexity, cheaper alternative, justification, evaluation evidence and approver. Missing fields make the council record non-compliant and visible in status, but do not stop traffic or prevent failover.
 
-7. **Fallback discipline.** Cheap-to-expensive failover remains available for continuity. Sticky provider promotion is off by default so one successful expensive fallback does not silently become the next request's primary. Set `AI_STICKY_PROVIDER_ROUTING=true` only for a documented reliability incident.
+7. **Fallback discipline.** Cheap-to-expensive failover remains available for continuity, with at most one retry per provider before moving to the next candidate. Sticky provider promotion is off by default so one successful expensive fallback does not silently become the next request's primary. Set `AI_STICKY_PROVIDER_ROUTING=true` only for a documented reliability incident.
 
 8. **Applying a council decision.** The authenticated endpoint is `POST /ops/model-governance/apply`. It accepts a legacy ranked `registry`, explicit AIMS `assignments`, or both. Explicit assignments win. The request must contain `sourceRunId`; it may also contain `councilDate`, `catalogueCheckedAt`, `nextReviewDueAt`, `decisions` and `retiringModels`.
 
