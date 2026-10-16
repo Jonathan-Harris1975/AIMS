@@ -89,7 +89,8 @@ test("OpenRouter text routes used by blog, Zernio, RSS and audits resolve spread
       blogWeekly: ["OPENROUTER_GOOGLE_2_5_flashlite", "OPENROUTER_GPT_5_6_SOL"],
       zernioDaily: ["OPENROUTER_CLAUDE_SONNET_5", "OPENROUTER_ANTHROPIC_4_6", "OPENROUTER_GOOGLE_2_5_flashlite"],
       zernioQuiz: ["OPENROUTER_GPT_5_6_SOL", "OPENROUTER_GOOGLE_2_5_flashlite"],
-      rssRewrite: ["OPENROUTER_GPT_5_6_SOL", "OPENROUTER_GOOGLE_2_5_flashlite"],
+      rssRewriteFirstPass: ["OPENROUTER_FREE_PRIMARY_MODEL", "OPENROUTER_GOOGLE_2_5_flashlite", "OPENROUTER_GPT_5_6_SOL"],
+      rssRewrite: ["OPENROUTER_GOOGLE_2_5_flashlite", "OPENROUTER_GPT_5_6_SOL"],
       rssShortTitle: ["OPENROUTER_GOOGLE_2_5_flashlite", "OPENROUTER_GPT_5_6_SOL"],
       auditForensic: [
         "OPENROUTER_ANTHROPIC_4_6",
@@ -113,6 +114,54 @@ test("OpenRouter text routes used by blog, Zernio, RSS and audits resolve spread
     }
   } finally {
     restoreEnv(oldEnv);
+  }
+});
+
+test("the free first-pass route only accepts an explicit free model ID", async () => {
+  const oldEnv = snapshotEnv(OPENROUTER_ENV_NAMES);
+  applySpreadsheetOpenRouterEnv();
+
+  try {
+    process.env.OPENROUTER_FREE_PRIMARY_MODEL = "openai/gpt-5.6-sol";
+    const { getProviderDiagnosticsForRoute } = await import(`../services/shared/utils/ai-service.js?freeRouteGuard=${Date.now()}`);
+    const providers = getProviderDiagnosticsForRoute("rssRewriteFirstPass").configuredProviders.filter((provider) => provider.configured);
+    assert.equal(providers.some((provider) => provider.providerId === "openrouterFreePrimary"), false);
+    assert.equal(providers[0]?.model, "google/gemini-2.5-flash-lite");
+  } finally {
+    restoreEnv(oldEnv);
+  }
+});
+
+test("retry budget is capped at one retry per provider", async () => {
+  const oldEnv = snapshotEnv([...OPENROUTER_ENV_NAMES, "AI_MAX_RETRIES"]);
+  const oldFetch = globalThis.fetch;
+  applySpreadsheetOpenRouterEnv();
+  process.env.AI_MAX_RETRIES = "4";
+  const requestedModels = [];
+
+  globalThis.fetch = async (_url, options = {}) => {
+    requestedModels.push(JSON.parse(options.body).model);
+    return {
+      ok: false,
+      status: 503,
+      text: async () => "temporary provider error",
+      headers: { get: () => null },
+    };
+  };
+
+  try {
+    const { resilientRequest } = await import(`../services/shared/utils/ai-service.js?retryCap=${Date.now()}`);
+    await assert.rejects(() => resilientRequest("rssRewriteFirstPass", {
+      messages: [{ role: "user", content: "Public RSS test content" }],
+      maxRetries: 4,
+      retryBaseMs: 0,
+      timeoutMs: 1000,
+    }));
+    assert.equal(requestedModels.filter((model) => model === "openrouter/free").length, 2);
+    assert.ok(requestedModels.every((model) => requestedModels.filter((candidate) => candidate === model).length <= 2));
+  } finally {
+    restoreEnv(oldEnv);
+    globalThis.fetch = oldFetch;
   }
 });
 
