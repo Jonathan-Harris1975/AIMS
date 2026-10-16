@@ -346,7 +346,7 @@ export async function rewriteArticle(item = {}) {
     sourcePreview: sourceText.slice(0, 220),
   });
 
-  const raw = await resilientRequest("rssRewrite", { messages });
+  const raw = await resilientRequest("rssRewriteFirstPass", { messages });
 
   // Parse model output into title + summary
   const parsed = RSS_PROMPTS.normalizeModelText(raw);
