@@ -12,12 +12,12 @@ concurrency:
 
 env:
   DAST_ENABLED: ${{ vars.DAST_ENABLED || 'false' }}
-  DAST_TARGET_URL: ${{ vars.DAST_TARGET_URL || '' }}
+  DAST_TARGET_URL: ${{ secrets.DAST_TARGET_URL || vars.DAST_TARGET_URL || '' }}
 
 jobs:
   zap-full-scan:
     name: OWASP ZAP full active scan
-    if: ${{ vars.DAST_ENABLED == 'true' && vars.DAST_TARGET_URL != '' }}
+    if: ${{ vars.DAST_ENABLED == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 105
     steps:
