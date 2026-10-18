@@ -24,8 +24,21 @@ jobs:
            github.event.workflow_run.head_branch == 'main') }}
     runs-on: ubuntu-latest
     environment: Koyeb
+    env:
+      KOYEB_SERVICE_REPOSITORY: ${{ vars.KOYEB_SERVICE || '' }}
+      KOYEB_SERVICE_SECRET: ${{ secrets.KOYEB_SERVICE || '' }}
     timeout-minutes: 20
     steps:
+      - name: Resolve Koyeb service from Environment or repository
+        shell: bash
+        run: |
+          set -euo pipefail
+          service="${KOYEB_SERVICE:-${KOYEB_SERVICE_SECRET:-${KOYEB_SERVICE_REPOSITORY:-}}}"
+          if [ -z "$service" ]; then
+            echo "::error::KOYEB_SERVICE is required at the Koyeb Environment or repository scope."
+            exit 1
+          fi
+          printf 'KOYEB_SERVICE=%s\n' "$service" >> "$GITHUB_ENV"
       - name: Harden runner
         uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2
         with:
@@ -40,7 +53,6 @@ jobs:
       - name: Require Koyeb production release-gate configuration
         env:
           KOYEB_TOKEN: ${{ secrets.KOYEB_TOKEN }}
-          KOYEB_SERVICE: ${{ vars.KOYEB_SERVICE }}
         run: |
           set -euo pipefail
           test -n "${KOYEB_TOKEN:-}" || { echo "KOYEB_TOKEN is required for the production release gate." >&2; exit 2; }
@@ -71,13 +83,11 @@ jobs:
       - name: Verify Koyeb minimum instances before deployment watch
         env:
           KOYEB_TOKEN: ${{ secrets.KOYEB_TOKEN }}
-          KOYEB_SERVICE: ${{ vars.KOYEB_SERVICE }}
         run: npm run koyeb:min-instances:check
       - name: Watch production deployment
         id: production_deployment
         env:
           KOYEB_TOKEN: ${{ secrets.KOYEB_TOKEN }}
-          KOYEB_SERVICE: ${{ vars.KOYEB_SERVICE }}
           SERVICE_DISPLAY_NAME: AIMS
           OPS_ALERT_WEBHOOK_URL: ${{ secrets.OPS_ALERT_WEBHOOK_URL }}
           OPS_ALERT_WEBHOOK_TOKEN: ${{ secrets.OPS_ALERT_WEBHOOK_TOKEN }}
@@ -88,13 +98,11 @@ jobs:
       - name: Verify Koyeb minimum instances after deployment
         env:
           KOYEB_TOKEN: ${{ secrets.KOYEB_TOKEN }}
-          KOYEB_SERVICE: ${{ vars.KOYEB_SERVICE }}
         run: npm run koyeb:min-instances:check
       - name: Deploy Comms Hub D1 data-plane Worker from Koyeb runtime credentials
         timeout-minutes: 10
         env:
           KOYEB_TOKEN: ${{ secrets.KOYEB_TOKEN }}
-          KOYEB_SERVICE: ${{ vars.KOYEB_SERVICE }}
         run: |
           set -euo pipefail
           # Run from the exact production SHA already verified above. Koyeb
@@ -107,7 +115,6 @@ jobs:
         timeout-minutes: 5
         env:
           KOYEB_TOKEN: ${{ secrets.KOYEB_TOKEN }}
-          KOYEB_SERVICE: ${{ vars.KOYEB_SERVICE }}
         run: |
           set -euo pipefail
           # Execute inside the verified Koyeb runtime so the canonical shared
@@ -137,7 +144,6 @@ jobs:
         timeout-minutes: 5
         env:
           KOYEB_TOKEN: ${{ secrets.KOYEB_TOKEN }}
-          KOYEB_SERVICE: ${{ vars.KOYEB_SERVICE }}
         run: |
           set -euo pipefail
           # One explicit repair release only. The handler verifies the provider
@@ -153,7 +159,6 @@ jobs:
         timeout-minutes: 5
         env:
           KOYEB_TOKEN: ${{ secrets.KOYEB_TOKEN }}
-          KOYEB_SERVICE: ${{ vars.KOYEB_SERVICE }}
         run: |
           set -euo pipefail
           # The CLI uses an interactive exec transport. This is a read-only
