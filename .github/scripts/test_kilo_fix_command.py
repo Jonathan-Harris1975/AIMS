@@ -92,6 +92,26 @@ class ExplicitKiloFixCommandTests(unittest.TestCase):
             result = router.extract(self.event(body="@kilocode-bot fix it and also do something else"))
         self.assertIsNone(result)
 
+    def test_external_kilo_request_does_not_forward_github_token(self):
+        from unittest.mock import Mock
+
+        response = Mock()
+        response.__enter__ = Mock(return_value=response)
+        response.__exit__ = Mock(return_value=False)
+        response.status = 202
+        with patch.object(router, "all_pages", return_value=[]), patch.object(
+            router, "api", return_value={"id": 99}
+        ), patch.object(router, "machine_contract", return_value="repair contract"), patch.object(
+            router, "valid_kilo_webhook_url", return_value=True
+        ), patch.object(router.urllib.request, "urlopen", return_value=response) as urlopen, patch.dict(
+            os.environ, {"KILO_REPAIR_TRIGGER_URL": "https://kilo.example/repair"}
+        ):
+            router.dispatch(self.pr, "fix-command", ["verified test finding"])
+
+        request = urlopen.call_args.args[0]
+        self.assertNotIn("Authorization", request.headers)
+        self.assertEqual(request.headers["Content-type"], "application/json")
+
     def test_exact_command_also_routes_from_inline_review_reply(self):
         event = {
             "pull_request": {"number": 7},
