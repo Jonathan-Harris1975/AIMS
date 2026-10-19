@@ -140,6 +140,7 @@ def advance_incident(state, failure, now, notify, recovery_evidence=None, incide
             state = {'active': True, 'incident_id': str(uuid.uuid4()), 'detected_at': stamp, 'notified': False}
         if incident_key is not None:
             state['incident_key'] = incident_key
+            state['incident_scope'] = incident_scope
         if not state.get('notified'):
             delivered = notify({'event_id': f"worker-watch:{state['incident_id']}:failure", 'event_type': 'worker_health_failure',
                                 'service': 'AIMS', 'source': 'github_actions', 'severity': 'critical',
