@@ -29,7 +29,7 @@ function transport(override = () => undefined) {
       if (changed !== undefined) return changed;
       if (url.endsWith("/settings")) return response(calls.length >= 5 ? deployedSettings : settings);
       if (url === "https://worker.example/health") {
-        return response({ ok: true, service: config.name, source_commit_sha: sourceSha });
+        return new Response(JSON.stringify({ ok: true, service: config.name, source_commit_sha: sourceSha }), { status: 200 });
       }
       if (url.endsWith("/subdomain")) {
         return response({ enabled: true, previews_enabled: options.method === "POST" ? config.preview_urls : true });
