@@ -17,7 +17,8 @@ from comms_worker_watch import advance_incident, check_health, check_health_file
 class WorkerWatchTests(unittest.TestCase):
     def setUp(self):
         self.now = datetime(2026, 10, 3, 2, 0, tzinfo=UTC)
-        self.payload = {'ok': True, 'service': 'comms-hub', 'health': {'overall': 'healthy', 'checkedAt': self.now.isoformat(),
+        self.revision = 'a' * 40
+        self.payload = {'ok': True, 'service': 'comms-hub', 'health': {'overall': 'healthy', 'revision': self.revision, 'checkedAt': self.now.isoformat(),
             'enabledWorkers': 1, 'workers': [{'category': 'delayed_actions', 'key': 'default', 'enabled': True,
                                            'status': 'healthy', 'ageMs': 1000, 'degradedAfterMs': 600000}]}}
         self.expected = ['delayed_actions:default']
@@ -53,15 +54,22 @@ class WorkerWatchTests(unittest.TestCase):
             production_monitor_config({'APP_URL': 'https://aims.example'})
 
     def test_inventory_and_health(self):
-        self.assertIsNone(validate_health(self.payload, self.expected, self.now))
+        self.assertIsNone(validate_health(self.payload, self.expected, self.now, self.revision))
         for mutate in [lambda p: p['health'].update(workers=[]), lambda p: p['health'].update(overall='stale'),
                        lambda p: p['health'].update(checkedAt='invalid'), lambda p: p['health']['workers'][0].update(status='degraded'),
                        lambda p: p['health']['workers'][0].update(ageMs=float('nan'))]:
             payload = copy.deepcopy(self.payload)
             mutate(payload)
-            self.assertIsNotNone(validate_health(payload, self.expected, self.now))
-        self.assertIsNotNone(validate_health(self.payload, ['inbound_email:missing'], self.now))
-        self.assertIsNotNone(validate_health(self.payload, [], self.now))
+            self.assertIsNotNone(validate_health(payload, self.expected, self.now, self.revision))
+        self.assertIsNotNone(validate_health(self.payload, ['inbound_email:missing'], self.now, self.revision))
+        self.assertIsNotNone(validate_health(self.payload, [], self.now, self.revision))
+
+    def test_health_requires_exact_expected_service_revision(self):
+        self.assertEqual(validate_health(self.payload, self.expected, self.now), 'service_revision_missing')
+        self.assertEqual(validate_health(self.payload, self.expected, self.now, 'b' * 40), 'service_revision_mismatch')
+        payload = copy.deepcopy(self.payload)
+        payload['health'].pop('revision')
+        self.assertEqual(validate_health(payload, self.expected, self.now, self.revision), 'service_revision_missing')
 
     def test_sanitised_health_file_uses_existing_validation(self):
         from pathlib import Path
@@ -69,25 +77,25 @@ class WorkerWatchTests(unittest.TestCase):
         with TemporaryDirectory() as tmp:
             path = Path(tmp) / 'health.json'
             path.write_text(json.dumps(self.payload), encoding='utf-8')
-            self.assertIsNone(check_health_file(str(path), self.expected, self.now))
+            self.assertIsNone(check_health_file(str(path), self.expected, self.now, self.revision))
             path.write_text('not-json', encoding='utf-8')
-            self.assertEqual(check_health_file(str(path), self.expected, self.now), 'health_response_invalid')
+            self.assertEqual(check_health_file(str(path), self.expected, self.now, self.revision), 'health_response_invalid')
 
     def test_malformed_runtime_payloads_fail_closed_without_crashing(self):
         for health in (None, [], 'healthy', True):
             payload = {**self.payload, 'health': health}
-            self.assertEqual(validate_health(payload, self.expected, self.now), 'health_response_invalid')
+            self.assertEqual(validate_health(payload, self.expected, self.now, self.revision), 'health_response_invalid')
         for field, value in [('checkedAt', 123), ('checkedAt', None), ('enabledWorkers', True)]:
             payload = copy.deepcopy(self.payload)
             payload['health'][field] = value
-            self.assertIsNotNone(validate_health(payload, self.expected, self.now))
+            self.assertIsNotNone(validate_health(payload, self.expected, self.now, self.revision))
         for field in ('ageMs', 'degradedAfterMs'):
             payload = copy.deepcopy(self.payload)
             payload['health']['workers'][0][field] = True
-            self.assertEqual(validate_health(payload, self.expected, self.now), 'worker_unhealthy')
+            self.assertEqual(validate_health(payload, self.expected, self.now, self.revision), 'worker_unhealthy')
         payload = copy.deepcopy(self.payload)
         payload['health']['workers'].append(copy.deepcopy(payload['health']['workers'][0]))
-        self.assertEqual(validate_health(payload, self.expected, self.now), 'inventory_invalid')
+        self.assertEqual(validate_health(payload, self.expected, self.now, self.revision), 'inventory_invalid')
 
     def test_failed_probe_records_and_notifies_even_with_a_healthy_file(self):
         with TemporaryDirectory() as tmp:
@@ -122,13 +130,16 @@ class WorkerWatchTests(unittest.TestCase):
         self.assertIn('AIMS worker health endpoint returned HTTP', probe)
         self.assertIn('Koyeb worker health probe failed with exit code', probe)
         self.assertIn('if [ "$probe_status" -ne 0 ]; then', probe)
+        self.assertIn('EXPECTED_SERVICE_REVISION: ${{ steps.deployed_revision.outputs.sha }}', workflow)
+        self.assertIn('id: deployed_revision', workflow)
 
     def test_network_timeout_and_malformed(self):
         calls = []
         def fail(request, timeout):
             calls.append(timeout)
             raise TimeoutError()
-        self.assertEqual(check_health('https://test.example/workers/health', 'test-key', self.expected, self.now, fail), 'health_network_failure')
+        self.assertEqual(check_health('https://test.example/workers/health', 'test-key', self.expected, self.now, fail,
+                                      self.revision), 'health_network_failure')
         self.assertEqual(calls, [10, 10])
         class Response:
             status = 200
@@ -136,10 +147,11 @@ class WorkerWatchTests(unittest.TestCase):
             def __exit__(self, *_args): pass
             def read(self, _limit): return b'not-json'
         self.assertEqual(check_health('https://test.example/workers/health', 'test-key', self.expected, self.now,
-                                    lambda *_args, **_kw: Response()), 'health_response_invalid')
+                                    lambda *_args, **_kw: Response(), self.revision), 'health_response_invalid')
         def http_fail(*_args, **_kwargs):
             raise urllib.error.HTTPError('https://test.example', 503, 'unavailable', {}, None)
-        self.assertEqual(check_health('https://test.example/workers/health', 'test-key', self.expected, self.now, http_fail), 'health_http_failure')
+        self.assertEqual(check_health('https://test.example/workers/health', 'test-key', self.expected, self.now,
+                                      http_fail, self.revision), 'health_http_failure')
 
     def test_incident_deduplication_recovery_and_new_failure_across_runs(self):
         sent = []
@@ -150,8 +162,13 @@ class WorkerWatchTests(unittest.TestCase):
         for _ in range(3):
             state = advance_incident(json.loads(json.dumps(state)), 'health_network_failure', self.now, notify)
         self.assertEqual(len(sent), 1)
-        state = advance_incident(state, None, self.now + timedelta(minutes=30), notify)
-        state = advance_incident(state, None, self.now + timedelta(minutes=60), notify)
+        recovered_at = self.now + timedelta(minutes=30)
+        evidence = {'service': 'comms-hub', 'revision': self.revision, 'expected_revision': self.revision,
+                    'checked_at': recovered_at.isoformat()}
+        state = advance_incident(state, None, recovered_at, notify, evidence)
+        next_check = self.now + timedelta(minutes=60)
+        evidence['checked_at'] = next_check.isoformat()
+        state = advance_incident(state, None, next_check, notify, evidence)
         state = advance_incident(state, 'expected_worker_missing', self.now + timedelta(minutes=90), notify)
         self.assertEqual(len(sent), 3)
         self.assertNotEqual(sent[0]['event_id'], sent[2]['event_id'])
@@ -175,11 +192,26 @@ class WorkerWatchTests(unittest.TestCase):
         self.assertFalse(state['notified'])
         self.assertNotIn('notified_at', state)
 
+    def test_incident_stays_open_without_matching_recovery_evidence(self):
+        state = advance_incident({'active': False}, 'health_http_failure', self.now, lambda _event: True)
+        open_state = advance_incident(state, None, self.now + timedelta(minutes=1), lambda _event: True)
+        self.assertTrue(open_state['active'])
+        self.assertEqual(open_state['last_failure'], 'recovery_evidence_missing_or_mismatched')
+        stale = {'service': 'comms-hub', 'revision': 'b' * 40, 'expected_revision': self.revision,
+                 'checked_at': self.now.isoformat()}
+        open_state = advance_incident(state, None, self.now + timedelta(minutes=2), lambda _event: True, stale)
+        self.assertTrue(open_state['active'])
+
     def test_failed_recovery_notification_does_not_suppress_a_new_incident(self):
         state = advance_incident({'active': False}, 'health_network_failure', self.now, lambda _event: True)
         incident = state['incident_id']
-        state = advance_incident(state, None, self.now, lambda _event: False)
+        evidence = {'service': 'comms-hub', 'revision': self.revision, 'expected_revision': self.revision,
+                    'checked_at': self.now.isoformat()}
+        state = advance_incident(state, None, self.now, lambda _event: False, evidence)
         self.assertFalse(state['active'])
+        self.assertEqual(state['pending_recovery']['delivery'], 'failed')
+        state = advance_incident(state, None, self.now + timedelta(minutes=5), lambda _event: True, evidence)
+        self.assertNotIn('pending_recovery', state)
         state = advance_incident(state, 'worker_unhealthy', self.now, lambda _event: True)
         self.assertNotEqual(state['incident_id'], incident)
 

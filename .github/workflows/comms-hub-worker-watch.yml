@@ -53,6 +53,12 @@ jobs:
           install -d -m 0755 "$HOME/.local/bin"
           install -m 0755 "$workdir/koyeb" "$HOME/.local/bin/koyeb"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Resolve current healthy Koyeb source revision
+        id: deployed_revision
+        env:
+          KOYEB_TOKEN: ${{ secrets.KOYEB_TOKEN }}
+          KOYEB_SERVICE: ${{ vars.KOYEB_SERVICE }}
+        run: python3 scripts/watch_koyeb_deployment.py --current-healthy-sha >> "$GITHUB_OUTPUT"
       - name: Collect sanitised worker health inside Koyeb
         id: health_probe
         timeout-minutes: 2
@@ -88,6 +94,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           COMMS_WORKER_HEALTH_FILE: worker-health.json
           COMMS_WORKER_PROBE_OUTCOME: ${{ steps.health_probe.outcome }}
+          EXPECTED_SERVICE_REVISION: ${{ steps.deployed_revision.outputs.sha }}
           OPS_ALERT_WEBHOOK_URL: ${{ secrets.OPS_ALERT_WEBHOOK_URL }}
           OPS_ALERT_WEBHOOK_TOKEN: ${{ secrets.OPS_EVENT_INGEST_TOKEN || secrets.OPS_ALERT_WEBHOOK_TOKEN }}
           WATCH_SCHEDULED_AT: '' # GitHub does not supply the nominal occurrence timestamp.

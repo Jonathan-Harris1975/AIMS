@@ -32,24 +32,28 @@ async function assertBinaryExists(binaryName) {
 
 function assertProductionStateConfig() {
   const nodeEnv = String(process.env.NODE_ENV || "").trim().toLowerCase();
-  const allowEphemeralState = parseBoolean(process.env.ALLOW_EPHEMERAL_STATE, false);
   const stateBackend = String(process.env.STATE_BACKEND || "auto").trim().toLowerCase();
   const hasRemoteStateEnv = hasDurableStateEnv(process.env);
 
-  if (nodeEnv !== "production" || allowEphemeralState) {
-    return;
+  if (nodeEnv !== "production") return;
+
+  if (parseBoolean(process.env.ALLOW_EPHEMERAL_STATE, false)) {
+    throw new Error("Production cannot allow ephemeral application state.");
   }
 
-  const requireDurableState = parseBoolean(process.env.REQUIRE_DURABLE_STATE, false);
-  const explicitlyRemoteState = stateBackend === "r2" || requireDurableState;
   const explicitlyLocalState = ["local", "file", "filesystem"].includes(stateBackend);
 
-  if (explicitlyRemoteState && !hasRemoteStateEnv) {
+  if (!hasRemoteStateEnv) {
     throw new Error(`Production state backend is not durable. ${durableStateEnvHint()}`);
   }
 
   if (explicitlyLocalState) {
     throw new Error(`Production state backend is explicitly local. ${durableStateEnvHint()}`);
+  }
+
+  const buildSha = String(process.env.AIMS_BUILD_SHA || "").trim();
+  if (!/^[0-9a-f]{40}$/.test(buildSha)) {
+    throw new Error("Production AIMS_BUILD_SHA must be the exact 40-character lowercase Git commit SHA deployed to this service.");
   }
 }
 
@@ -65,9 +69,11 @@ try {
 
   const warnings = [];
   if (!process.env.PORT) warnings.push("PORT not set; default server port 3000 will be used");
-  if (!process.env.R2_ENDPOINT) warnings.push("R2_ENDPOINT missing; R2-backed features may fail");
-  if (!process.env.R2_ACCESS_KEY_ID || !process.env.R2_SECRET_ACCESS_KEY) {
-    warnings.push("R2 credentials missing; storage-backed features may fail");
+  if (String(process.env.NODE_ENV || "").trim().toLowerCase() !== "production") {
+    if (!process.env.R2_ENDPOINT) warnings.push("R2_ENDPOINT missing; R2-backed features may fail");
+    if (!process.env.R2_ACCESS_KEY_ID || !process.env.R2_SECRET_ACCESS_KEY) {
+      warnings.push("R2 credentials missing; storage-backed features may fail");
+    }
   }
 
   debug("startupCheck.binaries", { ffmpegPath, ffprobePath });

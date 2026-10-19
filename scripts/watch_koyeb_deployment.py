@@ -138,6 +138,18 @@ def _deployment_irrelevant_since(item: dict[str, Any], expected_sha: str) -> boo
 def main() -> int:
     service = os.getenv("KOYEB_SERVICE", "").strip()
     token = os.getenv("KOYEB_TOKEN", "").strip()
+    if sys.argv[1:] == ["--current-healthy-sha"]:
+        if not service or not token:
+            print("Koyeb revision lookup requires KOYEB_SERVICE and KOYEB_TOKEN.", file=sys.stderr)
+            return 2
+        deployments = _deployments(service, token)
+        latest = deployments[0] if deployments else None
+        sha = _deployment_sha(latest or "") if latest else ""
+        if latest is None or _status(latest) not in SUCCESS or not re.fullmatch(r"[0-9a-f]{40}", sha):
+            print("Latest Koyeb deployment is not healthy with an exact source SHA.", file=sys.stderr)
+            return 1
+        print(f"sha={sha}")
+        return 0
     display_name = os.getenv("SERVICE_DISPLAY_NAME", service or "Koyeb service").strip()
     if not service or not token:
         print("Koyeb deployment watcher requires KOYEB_SERVICE and KOYEB_TOKEN.", file=sys.stderr)
