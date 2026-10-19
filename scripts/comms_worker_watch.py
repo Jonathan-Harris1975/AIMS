@@ -210,7 +210,8 @@ def advance_incident(state, failure, now, notify, recovery_evidence=None, incide
                                 'service': 'AIMS', 'source': 'github_actions', 'severity': 'critical',
                                 'title': 'Comms Hub worker health failed', 'summary': failure,
                                 'details': {'detected_at': state['detected_at'], 'started_at': os.getenv('WATCH_STARTED_AT'),
-                                            'scheduled_at': os.getenv('WATCH_SCHEDULED_AT') or None}})
+                                            'scheduled_at': os.getenv('WATCH_SCHEDULED_AT') or None,
+                                            'incident_scope': incident_scope}})
             state['notified'] = delivered is True
             if delivered:
                 state['notified_at'] = stamp
@@ -263,7 +264,8 @@ def advance_incident(state, failure, now, notify, recovery_evidence=None, incide
     state['checked_at'] = stamp
     return state
 
-def check_health_file(path, expected, now, expected_revision=None, evidence_out=None):
+def check_health_file(path, expected, now, expected_revision=None, evidence_out=None,
+                      failed_probe=False, diagnostics_out=None):
     try:
         raw = Path(path).read_bytes()
         if len(raw) > 256_000:
@@ -272,6 +274,26 @@ def check_health_file(path, expected, now, expected_revision=None, evidence_out=
     except (OSError, json.JSONDecodeError, TypeError, ValueError):
         return 'health_response_invalid'
     failure = validate_health(payload, expected, now, expected_revision)
+    if failed_probe:
+        # Only a complete, current, exact-revision stale-health response can
+        # refine a failed runtime probe. A healthy/partial file cannot recover it.
+        if (failure != 'workers_unhealthy' or not isinstance(payload, dict)
+                or payload.get('probeHttpStatus') != 503
+                or payload.get('ok') is not False or payload.get('service') != 'comms-hub'
+                or payload.get('health', {}).get('overall') != 'stale'):
+            return 'health_probe_failed'
+    if failure in ('workers_unhealthy', 'worker_unhealthy') and diagnostics_out is not None:
+        health = payload['health']
+        affected = []
+        for worker in health['workers']:
+            if not isinstance(worker, dict) or worker.get('enabled') is not True:
+                continue
+            identity = f"{worker.get('category')}:{worker.get('key')}"
+            status = worker.get('status')
+            if identity in expected and status in ('stale', 'degraded'):
+                affected.append({'worker': identity, 'status': status})
+        diagnostics_out.update({'revision': health['revision'], 'checked_at': health['checkedAt'],
+                                'affected_workers': sorted(affected, key=lambda item: item['worker'])})
     if failure is None and evidence_out is not None:
         evidence_out.update({'service': payload.get('service'), 'revision': payload['health']['revision'],
                              'expected_revision': expected_revision, 'checked_at': payload['health']['checkedAt']})
@@ -365,12 +387,16 @@ def main():
     health_file = os.getenv('COMMS_WORKER_HEALTH_FILE', '').strip()
     probe_outcome = os.getenv('COMMS_WORKER_PROBE_OUTCOME', '').strip()
     recovery_evidence = {}
+    failure_evidence = {}
     if probe_outcome and probe_outcome != 'success':
-        # A failed/skipped runtime probe must reach the same durable incident path
-        # as an unhealthy response. Never reuse a partial or stale probe file.
-        failure = 'health_probe_failed'
+        # A failed/skipped runtime probe always remains an incident; only a
+        # validated 503 body may add current worker-level failure diagnostics.
+        failure = (check_health_file(health_file, expected, now, expected_revision,
+                                     failed_probe=True, diagnostics_out=failure_evidence)
+                   if probe_outcome == 'failure' and health_file else 'health_probe_failed')
     else:
-        failure = (check_health_file(health_file, expected, now, expected_revision, recovery_evidence) if health_file
+        failure = (check_health_file(health_file, expected, now, expected_revision, recovery_evidence,
+                                    diagnostics_out=failure_evidence) if health_file
                    else check_health(url, os.getenv('AIMS_API_KEY', ''), expected, now,
                                      expected_revision=expected_revision, evidence_out=recovery_evidence))
     alert_url = os.getenv('OPS_ALERT_WEBHOOK_URL', '')
@@ -380,14 +406,19 @@ def main():
                              recovery_evidence if not failure else None,
                              incident_scope={'service': 'AIMS Comms Hub',
                                              'worker_inventory': sorted(expected),
-                                             'deployed_sha': expected_revision})
+                                             'deployed_sha': expected_revision,
+                                             'affected_workers': failure_evidence.get('affected_workers', [])})
+    if failure_evidence:
+        state['failure_evidence'] = failure_evidence
+    else:
+        state.pop('failure_evidence', None)
     STATE.write_text(json.dumps(state, sort_keys=True), encoding='utf-8')
     print(json.dumps({'health': failure or 'healthy', 'detected_at': state.get('detected_at'),
                       'notified_at': state.get('notified_at'), 'incident_active': state.get('active', False),
                       'recovery_notification_pending': bool(state.get('pending_recovery')),
                       'recovery_revision': state.get('recovery_revision'),
                       'github_failure_signal': bool(failure), 'optional_webhook_configured': webhook_independent,
-                      'expected_workers': expected}))
+                      'expected_workers': expected, 'failure_evidence': failure_evidence}))
     return 1 if failure else 0
 
 

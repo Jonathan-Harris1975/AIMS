@@ -18,14 +18,52 @@ try {
     signal: controller.signal,
   });
 
-  if (!response.ok) {
+  if (response.status !== 200 && response.status !== 503) {
     console.error(`worker health HTTP ${response.status}`);
     process.exit(3);
   }
 
-  const body = await response.text();
-  JSON.parse(body);
+  const reader = response.body.getReader();
+  const chunks = [];
+  let bytes = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    bytes += value.byteLength;
+    if (bytes > 256_000) {
+      await reader.cancel();
+      throw new Error("HealthPayloadTooLarge");
+    }
+    chunks.push(Buffer.from(value));
+  }
+  const payload = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  if (payload?.service !== "comms-hub" || !payload.health || !Array.isArray(payload.health.workers)) {
+    throw new Error("HealthPayloadInvalid");
+  }
+  // Retain only the health contract, never arbitrary response/error fields.
+  const fields = [
+    "category", "key", "enabled", "status", "freshness", "pollIntervalMs",
+    "degradedAfterMs", "staleAfterMs", "lastAttemptAt", "lastSuccessAt",
+    "lastFailureAt", "ageMs", "instancesSeen",
+  ];
+  const body = JSON.stringify({
+    ok: payload.ok === true,
+    service: payload.service,
+    probeHttpStatus: response.status,
+    health: {
+      overall: payload.health.overall,
+      revision: payload.health.revision,
+      checkedAt: payload.health.checkedAt,
+      enabledWorkers: payload.health.enabledWorkers,
+      workers: payload.health.workers.map((worker) =>
+        Object.fromEntries(fields.map((field) => [field, worker?.[field]]))),
+    },
+  });
   console.log(`WORKER_HEALTH_B64=${Buffer.from(body).toString("base64")}`);
+  if (!response.ok) {
+    console.error(`worker health HTTP ${response.status}`);
+    process.exitCode = 3;
+  }
 } catch (error) {
   console.error(`worker health probe failed: ${error?.name || "Error"}`);
   process.exit(4);

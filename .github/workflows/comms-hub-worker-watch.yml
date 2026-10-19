@@ -75,6 +75,12 @@ jobs:
           # util-linux script returns the child's code, or 128+signal if the child is signalled.
           probe_status=$?
           set -e
+          # Preserve a complete sanitised 503 response before retaining the failed probe status.
+          encoded="$(printf '%s\n' "$output" | sed -n 's/.*WORKER_HEALTH_B64=//p' | tail -n 1 | tr -d '\r')"
+          if [ -n "$encoded" ]; then
+            printf '%s' "$encoded" | base64 --decode > worker-health.json
+            python3 -c 'import json; json.load(open("worker-health.json", encoding="utf-8"))'
+          fi
           if [ "$probe_status" -ne 0 ]; then
             http_status="$(printf '%s\n' "$output" | sed -n 's/.*worker health HTTP \([1-5][0-9][0-9]\).*/\1/p' | tail -n 1)"
             if [ -n "$http_status" ]; then
@@ -84,10 +90,7 @@ jobs:
             fi
             exit "$probe_status"
           fi
-          encoded="$(printf '%s\n' "$output" | sed -n 's/.*WORKER_HEALTH_B64=//p' | tail -n 1 | tr -d '\r')"
-          test -n "$encoded" || { echo "::error::Koyeb worker health probe returned no sanitised payload." >&2; exit 1; }
-          printf '%s' "$encoded" | base64 --decode > worker-health.json
-          python3 -c 'import json; json.load(open("worker-health.json", encoding="utf-8"))'
+          test -s worker-health.json || { echo "::error::Koyeb worker health probe returned no sanitised payload." >&2; exit 1; }
       - name: Check workers and retain independent GitHub incident evidence
         if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
         env:
