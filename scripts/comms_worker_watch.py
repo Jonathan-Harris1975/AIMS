@@ -145,8 +145,12 @@ def _deliver_pending_recoveries(state, now, notify):
             remaining.append(pending)
     if remaining:
         state['pending_recoveries'] = remaining
+        # Retain the original single-record field for existing operator and
+        # workflow consumers while the durable queue handles multiple incidents.
+        state['pending_recovery'] = remaining[0]
     else:
         state.pop('pending_recoveries', None)
+        state.pop('pending_recovery', None)
 
 
 def advance_incident(state, failure, now, notify, recovery_evidence=None, incident_scope=None):
