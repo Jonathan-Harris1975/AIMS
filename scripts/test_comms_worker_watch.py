@@ -78,6 +78,21 @@ class WorkerWatchTests(unittest.TestCase):
             path = Path(tmp) / 'health.json'
             path.write_text(json.dumps(self.payload), encoding='utf-8')
             self.assertIsNone(check_health_file(str(path), self.expected, self.now, self.revision))
+            payload = copy.deepcopy(self.payload)
+            payload.update(ok=False, probeHttpStatus=503)
+            payload['health']['overall'] = 'stale'
+            payload['health']['workers'][0]['status'] = 'stale'
+            path.write_text(json.dumps(payload), encoding='utf-8')
+            diagnostics = {}
+            self.assertEqual(check_health_file(str(path), self.expected, self.now, self.revision,
+                                               failed_probe=True, diagnostics_out=diagnostics),
+                             'workers_unhealthy')
+            self.assertEqual(diagnostics['affected_workers'],
+                             [{'worker': 'delayed_actions:default', 'status': 'stale'}])
+            self.assertEqual(check_health_file(str(path), self.expected, self.now, 'b' * 40,
+                                               failed_probe=True), 'health_probe_failed')
+            self.assertEqual(check_health_file(str(path), self.expected, self.now + timedelta(minutes=3),
+                                               self.revision, failed_probe=True), 'health_probe_failed')
             path.write_text('not-json', encoding='utf-8')
             self.assertEqual(check_health_file(str(path), self.expected, self.now, self.revision), 'health_response_invalid')
 
