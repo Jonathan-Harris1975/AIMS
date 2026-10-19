@@ -154,7 +154,10 @@ def main() -> int:
     if not service or not token:
         print("Koyeb deployment watcher requires KOYEB_SERVICE and KOYEB_TOKEN.", file=sys.stderr)
         return 2
-    attempts = max(1, int(os.getenv("KOYEB_DEPLOYMENT_MAX_ATTEMPTS", "40")))
+    # Keep polling bounded even if a provider-side environment override is
+    # accidentally set to an impractically large value. Forty is the existing
+    # default and the workflow's established upper operating window.
+    attempts = min(40, max(1, int(os.getenv("KOYEB_DEPLOYMENT_MAX_ATTEMPTS", "40"))))
     poll_seconds = max(5, int(os.getenv("KOYEB_DEPLOYMENT_POLL_SECONDS", "15")))
     expected_sha = os.getenv("EXPECTED_DEPLOYMENT_SHA", os.getenv("GITHUB_SHA", "")).strip()
     expected_after = _parse_timestamp(os.getenv("EXPECTED_DEPLOYMENT_AFTER", ""))
