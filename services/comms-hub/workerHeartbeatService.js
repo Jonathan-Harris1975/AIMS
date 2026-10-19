@@ -4,7 +4,7 @@ import { safeErrorLog } from "./domain/redaction.js";
 import { buildWorkerHeartbeatHealth, workerRunAdvanced } from "./workerHeartbeatState.js";
 
 const INSTRUMENTED = Symbol("commsHubWorkerHeartbeatInstrumented");
-// Coalesce routine health writes; failures remain immediate.
+// Coalesce each routine event independently; keep freshness within the polling cadence.
 const ROUTINE_HEARTBEAT_INTERVAL_MS = 5 * 60 * 1000;
 
 export class CommsHubWorkerHeartbeatService {
@@ -46,9 +46,11 @@ export class CommsHubWorkerHeartbeatService {
 
   async safeRecord(event, descriptor, error = null) {
     const routine = event === "attempt" || event === "success";
-    const key = `${descriptor.category}:${descriptor.key}`;
+    const key = `${descriptor.category}:${descriptor.key}:${event}`;
+    const intervalMs = Math.min(ROUTINE_HEARTBEAT_INTERVAL_MS,
+      Math.max(30_000, Number(descriptor.pollIntervalMs) || 30_000));
     const now = Date.now();
-    if (routine && now - (this.lastRoutineHeartbeat.get(key) || 0) < ROUTINE_HEARTBEAT_INTERVAL_MS) return true;
+    if (routine && now - (this.lastRoutineHeartbeat.get(key) || 0) < intervalMs) return true;
     try {
       await this.context.operationsRepository.recordWorkerHeartbeat({
         category: descriptor.category,
