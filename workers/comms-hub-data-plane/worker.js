@@ -88,7 +88,13 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     if (request.method === "GET" && url.pathname === "/health") {
-      return json({ ok: true, service: "comms-hub-data-plane" });
+      return json({
+        ok: true,
+        service: "comms-hub-data-plane",
+        source_commit_sha: /^[a-f0-9]{40}$/i.test(String(env.SOURCE_COMMIT_SHA || ""))
+          ? String(env.SOURCE_COMMIT_SHA).toLowerCase()
+          : null,
+      });
     }
     if (request.method !== "POST" || url.pathname !== "/query") {
       return json({ success: false, errors: [{ message: "Not found" }] }, 404);
