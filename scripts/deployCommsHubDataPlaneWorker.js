@@ -171,6 +171,7 @@ export async function deployWorker({ config, source, sourceSha, healthUrl, crede
   let health;
   try {
     const response = await fetchImpl(runtimeHealthUrl.toString(), {
+      method: "GET",
       headers: { Accept: "application/json" },
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       redirect: "error",
