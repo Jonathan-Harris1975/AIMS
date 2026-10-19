@@ -170,7 +170,7 @@ export async function deployWorker({ config, source, sourceSha, healthUrl, crede
   assertBindings(await api(`${scriptUrl}/settings`), config, { deployed: true, sourceSha });
   let health;
   try {
-    const response = await fetchImpl(runtimeHealthUrl, {
+    const response = await fetchImpl(runtimeHealthUrl.toString(), {
       headers: { Accept: "application/json" },
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       redirect: "error",
