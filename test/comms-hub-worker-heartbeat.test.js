@@ -63,6 +63,19 @@ test("durable heartbeat aggregation survives restart rows and recognises multipl
   assert.equal(delayed.instancesSeen, 2);
   assert.equal(delayed.lastSuccessAt, "2026-09-20T12:09:30.000Z");
   assert.equal(health.overall, "healthy");
+
+  // A real completed tick must persist success even immediately after attempt.
+  const service = new CommsHubWorkerHeartbeatService({
+    context: { operationsRepository: repository }, instanceId: "instrumented-instance",
+  });
+  const worker = service.instrument({ async runOnce() { return { processed: 0 }; } }, descriptor);
+  await worker.runOnce();
+  const first = (await repository.listWorkerHeartbeats()).find((row) => row.instance_id === "instrumented-instance");
+  assert.ok(first.last_attempt_at);
+  assert.ok(first.last_success_at);
+  await worker.runOnce();
+  const repeated = (await repository.listWorkerHeartbeats()).find((row) => row.instance_id === "instrumented-instance");
+  assert.equal(repeated.last_success_at, first.last_success_at);
 });
 
 
