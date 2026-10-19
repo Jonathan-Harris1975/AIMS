@@ -90,7 +90,7 @@ export default {
     if (request.method === "GET" && url.pathname === "/health") {
       return json({
         ok: true,
-        service: "comms-hub-data-plane",
+        service: "aims-comms-hub-data-plane",
         source_commit_sha: /^[a-f0-9]{40}$/i.test(String(env.SOURCE_COMMIT_SHA || ""))
           ? String(env.SOURCE_COMMIT_SHA).toLowerCase()
           : null,
