@@ -12,7 +12,6 @@ This inventory makes the runtime configuration contract auditable without duplic
 | --- | --- | --- |
 | `AIMS_ALLOW_UNAUTHENTICATED_DEV` | Yes | services/shared/middleware/suiteAuth.js:91 |
 | `AIMS_API_KEY` | Yes | scripts/collectCommsWorkerHealth.js:1<br>server.js:197<br>services/ops/index.js:438<br>services/shared/middleware/suiteAuth.js:60 |
-| `AIMS_BUILD_SHA` | No | scripts/startupCheck.js:54<br>services/comms-hub/routes/index.js:1379 |
 | `AIMS_BUSY_CONCURRENCY_THRESHOLD` | No | services/shared/utils/lifecycle.js:15 |
 | `AIMS_FAILURE_ALERT_THRESHOLD` | Yes | services/shared/utils/operationalExcellence.js:5 |
 | `AIMS_INTERNAL_BASE_URL` | Yes | services/ops/index.js:437 |
@@ -272,6 +271,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `INTERNAL_ROUTE_TIMEOUT_MS` | Yes | routes/podcast-pipeline.js:11 |
 | `JOB_STATUS_TTL_MS` | Yes | services/shared/utils/jobStore.js:5 |
 | `JSON_BODY_LIMIT` | Yes | server.js:380 |
+| `KOYEB_GIT_SHA` | No | scripts/startupCheck.js:54<br>services/comms-hub/routes/index.js:1379 |
 | `LOG_LEVEL` | Yes | logger.js:86<br>logger.js:92 |
 | `MAX_ITEMS_PER_FEED` | Yes | services/rss-feed-creator/utils/fetchFeeds.js:30 |
 | `MAX_POLLY_NATURAL_CHUNK_CHARS` | Yes | services/script/utils/chunkText.js:20 |
@@ -283,7 +283,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `NEWSLETTER_CONFIRMATION_BASE_URL` | Yes | services/newsletter/jotformIntake.js:108<br>services/newsletter/routes/subscriptions.js:52 |
 | `NEWSLETTER_CONSENT_TEXT_VERSION` | Yes | services/newsletter/jotformIntake.js:105<br>services/newsletter/jotformIntake.js:127 |
 | `NEWSLETTER_PRIVACY_NOTICE_VERSION` | Yes | services/newsletter/jotformIntake.js:106<br>services/newsletter/jotformIntake.js:128 |
-| `NODE_ENV` | Yes | logger.js:8<br>scripts/deploySmoke.js:4<br>scripts/performanceGate.js:5<br>scripts/startupCheck.js:34<br>scripts/startupCheck.js:72<br>server.js:30<br>+23 more |
+| `NODE_ENV` | Yes | logger.js:8<br>scripts/deploySmoke.js:4<br>scripts/performanceGate.js:5<br>scripts/startupCheck.js:34<br>scripts/startupCheck.js:75<br>server.js:30<br>+23 more |
 | `ONEUP_EBOOK_CATALOGUE_PATH` | No | services/zernio/utils/ebookCatalogue.js:42 |
 | `ON_BRAND_AUDIT_MAX_TOKENS` | No | audits/utils/onBrandAudit.js:13 |
 | `ON_BRAND_AUDIT_TEMPERATURE` | No | audits/utils/onBrandAudit.js:14 |
@@ -353,9 +353,9 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `PODCAST_TRANSCRIPT_MAX_SENTENCE_WORDS` | Yes | services/script/utils/editAndFormat.js:197<br>services/script/utils/orchestrator.js:113<br>services/script/utils/orchestrator.js:318<br>services/script/utils/scriptValidation.js:294 |
 | `PODCAST_TRANSCRIPT_MIN_SOURCE_TERMS` | No | services/script/utils/scriptValidation.js:391 |
 | `POLLY_VOICE_ID` | Yes | services/tts/utils/ttsProcessor.js:24 |
-| `PORT` | Yes | routes/podcast-pipeline.js:14<br>scripts/collectCommsWorkerHealth.js:7<br>scripts/deploySmoke.js:3<br>scripts/startupCheck.js:71<br>server.js:485<br>services/ops/index.js:437 |
+| `PORT` | Yes | routes/podcast-pipeline.js:14<br>scripts/collectCommsWorkerHealth.js:7<br>scripts/deploySmoke.js:3<br>scripts/startupCheck.js:74<br>server.js:485<br>services/ops/index.js:437 |
 | `QA_ALERT_WEBHOOK_URL` | Yes | config/thresholds.js:100 |
-| `R2_ACCESS_KEY_ID` | Yes | audits/utils/publishAuditArtifacts.js:62<br>scripts/startupCheck.js:74 |
+| `R2_ACCESS_KEY_ID` | Yes | audits/utils/publishAuditArtifacts.js:62<br>scripts/startupCheck.js:77 |
 | `R2_BUCKET_ART` | Yes | services/artwork/utils/io.js:15 |
 | `R2_BUCKET_CHUNKS` | Yes | services/tts/utils/io.js:20 |
 | `R2_BUCKET_COMMS_HUB_PRIVATE` | Yes | services/comms-hub/routes/index.js:127 |
@@ -365,7 +365,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `R2_BUCKET_RAW` | Yes | services/tts/utils/io.js:20 |
 | `R2_BUCKET_RAW_TEXT` | Yes | services/tts/utils/orchestrator.js:22 |
 | `R2_BUCKET_RSS_FEEDS` | Yes | scripts/bootstrap.js:120<br>services/rss-feed-creator/startup/rss-init.js:7<br>services/rss-feed-creator/utils/rss-bootstrap.js:44<br>services/rss-feed-creator/utils/rss-bootstrap.js:45<br>services/rss-feed-creator/utils/rss-bootstrap.js:98<br>services/rss-feed-creator/utils/rss-bootstrap.js:99 |
-| `R2_ENDPOINT` | Yes | audits/utils/publishAuditArtifacts.js:60<br>scripts/startupCheck.js:73 |
+| `R2_ENDPOINT` | Yes | audits/utils/publishAuditArtifacts.js:60<br>scripts/startupCheck.js:76 |
 | `R2_PUBLIC_BASE_URL_ART` | Yes | scripts/backfill-transcript-html.js:86<br>services/artwork/generateArtwork.js:38<br>services/artwork/routes/generateArtwork.js:37<br>services/artwork/utils/io.js:7<br>services/tts/utils/podcastProcessor.js:148 |
 | `R2_PUBLIC_BASE_URL_META` | Yes | verifyPodcastEpisode.js:11 |
 | `R2_PUBLIC_BASE_URL_PODCAST` | Yes | scripts/backfill-transcript-html.js:85<br>services/tts/utils/io.js:12<br>services/tts/utils/orchestrator.js:17 |
@@ -378,7 +378,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `R2_RETRY_ATTEMPTS` | No | services/shared/utils/r2-client.js:117 |
 | `R2_RETRY_BASE_MS` | Yes | services/shared/utils/r2-client.js:118 |
 | `R2_RETRY_MAX_MS` | Yes | services/shared/utils/r2-client.js:119 |
-| `R2_SECRET_ACCESS_KEY` | Yes | audits/utils/publishAuditArtifacts.js:63<br>scripts/startupCheck.js:74 |
+| `R2_SECRET_ACCESS_KEY` | Yes | audits/utils/publishAuditArtifacts.js:63<br>scripts/startupCheck.js:77 |
 | `R2_UPLOAD_RETRIES` | Yes | services/shared/utils/r2-client.js:117 |
 | `RAMS_API_KEY` | Yes | audits/utils/ramsContentDispatch.js:5<br>audits/utils/ramsWebsiteDispatch.js:24 |
 | `RAMS_BASE_URL` | Yes | audits/utils/ramsContentDispatch.js:4<br>audits/utils/ramsWebsiteDispatch.js:23 |

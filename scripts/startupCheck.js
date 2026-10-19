@@ -51,9 +51,12 @@ function assertProductionStateConfig() {
     throw new Error(`Production state backend is explicitly local. ${durableStateEnvHint()}`);
   }
 
-  const buildSha = String(process.env.AIMS_BUILD_SHA || "").trim();
+  const buildSha = String(process.env.KOYEB_GIT_SHA || "").trim();
+  if (!buildSha) {
+    throw new Error("Production KOYEB_GIT_SHA is required for this GitHub deployment.");
+  }
   if (!/^[0-9a-f]{40}$/.test(buildSha)) {
-    throw new Error("Production AIMS_BUILD_SHA must be the exact 40-character lowercase Git commit SHA deployed to this service.");
+    throw new Error("Production KOYEB_GIT_SHA must be the exact 40-character lowercase deployed Git commit SHA.");
   }
 }
 
