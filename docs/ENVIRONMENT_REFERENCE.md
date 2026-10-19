@@ -12,7 +12,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | --- | --- | --- |
 | `AIMS_ALLOW_UNAUTHENTICATED_DEV` | Yes | services/shared/middleware/suiteAuth.js:91 |
 | `AIMS_API_KEY` | Yes | scripts/collectCommsWorkerHealth.js:1<br>server.js:197<br>services/ops/index.js:438<br>services/shared/middleware/suiteAuth.js:60 |
-| `AIMS_BUILD_SHA` | No | scripts/startupCheck.js:54<br>services/comms-hub/routes/index.js:1379 |
+| `KOYEB_GIT_SHA` | No | scripts/startupCheck.js:54<br>services/comms-hub/routes/index.js:1379 |
 | `AIMS_BUSY_CONCURRENCY_THRESHOLD` | No | services/shared/utils/lifecycle.js:15 |
 | `AIMS_FAILURE_ALERT_THRESHOLD` | Yes | services/shared/utils/operationalExcellence.js:5 |
 | `AIMS_INTERNAL_BASE_URL` | Yes | services/ops/index.js:437 |
