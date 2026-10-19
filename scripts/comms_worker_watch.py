@@ -162,23 +162,46 @@ def advance_incident(state, failure, now, notify, recovery_evidence=None, incide
         if isinstance(incident_scope, dict):
             encoded_scope = json.dumps(incident_scope, sort_keys=True, separators=(',', ':'))
             incident_key = hashlib.sha256(f"{encoded_scope}|{failure}".encode('utf-8')).hexdigest()
+        pending_keys = ('pending_recoveries', 'pending_recovery')
+        preserved_pending = {key: value for key, value in state.items() if key in pending_keys}
+        superseded = state.get('superseded_incidents', [])
+        if not isinstance(superseded, list):
+            superseded = []
+        # Migrate state written by earlier versions, which retained IDs only.
+        for legacy_id in state.get('superseded_incident_ids', []):
+            if isinstance(legacy_id, str) and not any(
+                    item.get('incident_id') == legacy_id for item in superseded if isinstance(item, dict)):
+                superseded.append({'incident_id': legacy_id, 'incident_key': None,
+                                   'detected_at': None, 'notified': True})
         if not state.get('active'):
-            state = {key: value for key, value in state.items()
-                     if key in ('pending_recoveries', 'pending_recovery')}
+            state = dict(preserved_pending)
             state.update({'active': True, 'incident_id': str(uuid.uuid4()), 'detected_at': stamp, 'notified': False})
+            superseded = []
         elif incident_key is not None and state.get('incident_key') not in (None, incident_key):
-            # Keep every externally opened incident until fresh healthy evidence
-            # lets us send a matching recovery event for each one.
-            superseded = list(state.get('superseded_incident_ids', []))
-            if state.get('notified') and state.get('incident_id') not in superseded:
-                superseded.append(state['incident_id'])
-            prior_pending = state.get('pending_recoveries', [])
-            state = {key: value for key, value in state.items()
-                     if key in ('pending_recoveries', 'pending_recovery')}
-            if prior_pending:
-                state['pending_recoveries'] = prior_pending
-            state.update({'active': True, 'incident_id': str(uuid.uuid4()), 'detected_at': stamp,
-                          'notified': False, 'superseded_incident_ids': superseded})
+            current = {'incident_id': state.get('incident_id'), 'incident_key': state.get('incident_key'),
+                       'detected_at': state.get('detected_at'), 'notified_at': state.get('notified_at'),
+                       'notified': state.get('notified') is True}
+            if current.get('incident_id') and not any(
+                    item.get('incident_id') == current['incident_id'] for item in superseded if isinstance(item, dict)):
+                superseded.append(current)
+            matching_index = next((index for index, item in enumerate(superseded)
+                                   if isinstance(item, dict) and item.get('incident_key') == incident_key), None)
+            state = dict(preserved_pending)
+            if matching_index is not None:
+                matching = superseded.pop(matching_index)
+                state.update({'active': True, 'incident_id': matching['incident_id'],
+                              'detected_at': matching.get('detected_at') or stamp,
+                              'notified': matching.get('notified') is True})
+                if matching.get('notified_at'):
+                    state['notified_at'] = matching['notified_at']
+            else:
+                state.update({'active': True, 'incident_id': str(uuid.uuid4()), 'detected_at': stamp,
+                              'notified': False})
+            if superseded:
+                state['superseded_incidents'] = superseded
+        if incident_key is not None:
+            state['incident_key'] = incident_key
+            state['incident_scope'] = incident_scope
         if incident_key is not None:
             state['incident_key'] = incident_key
             state['incident_scope'] = incident_scope
@@ -209,17 +232,30 @@ def advance_incident(state, failure, now, notify, recovery_evidence=None, incide
             state['last_failure'] = 'recovery_evidence_missing_or_mismatched'
             state['checked_at'] = stamp
             return state
-        notified_ids = list(state.get('superseded_incident_ids', []))
+        superseded = state.get('superseded_incidents', [])
+        if not isinstance(superseded, list):
+            superseded = []
+        for legacy_id in state.get('superseded_incident_ids', []):
+            if isinstance(legacy_id, str) and not any(
+                    item.get('incident_id') == legacy_id for item in superseded if isinstance(item, dict)):
+                superseded.append({'incident_id': legacy_id, 'notified': True})
+        recovery_rows = [item for item in superseded if isinstance(item, dict) and item.get('notified') is True]
         if state.get('notified'):
-            notified_ids.append(state['incident_id'])
-        for incident_id in dict.fromkeys(notified_ids):
-            state.setdefault('pending_recoveries', []).append(
-                {'incident_id': incident_id, 'evidence': recovery_evidence})
+            recovery_rows.append({'incident_id': state['incident_id'], 'notified': True})
+        pending_rows = state.setdefault('pending_recoveries', [])
+        existing_ids = {item.get('incident_id') for item in pending_rows if isinstance(item, dict)}
+        for item in recovery_rows:
+            incident_id = item.get('incident_id')
+            if isinstance(incident_id, str) and incident_id not in existing_ids:
+                pending_rows.append({'incident_id': incident_id, 'evidence': recovery_evidence})
+                existing_ids.add(incident_id)
+        notified_ids = [item.get('incident_id') for item in recovery_rows if item.get('incident_id')]
         state['active'] = False
         state['recovered_at'] = stamp
         state['recovery_revision'] = recovery_evidence['revision']
         state['recovery_evidence'] = recovery_evidence
         state.pop('superseded_incident_ids', None)
+        state.pop('superseded_incidents', None)
         if not notified_ids:
             state['recovery_delivery'] = 'not_required'
         state.pop('last_failure', None)
