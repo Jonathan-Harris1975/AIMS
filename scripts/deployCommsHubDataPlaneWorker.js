@@ -168,21 +168,30 @@ export async function deployWorker({ config, source, sourceSha, healthUrl, crede
     throw new Error("Worker subdomain settings were not preserved.");
   }
   assertBindings(await api(`${scriptUrl}/settings`), config, { deployed: true, sourceSha });
-  let health;
-  try {
-    const response = await fetchImpl(runtimeHealthUrl.toString(), {
-      method: "GET",
-      headers: { Accept: "application/json" },
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-      redirect: "error",
-    });
-    if (!response.ok) throw new Error();
-    health = await response.json();
-  } catch {
-    throw new Error("Cloudflare Worker runtime health could not be verified after upload.");
+  let verifiedHealth = false;
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    try {
+      const response = await fetchImpl(runtimeHealthUrl.toString(), {
+        method: "GET",
+        headers: { Accept: "application/json" },
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        redirect: "error",
+      });
+      if (response.ok) {
+        const health = await response.json();
+        if (health?.ok === true && health?.service === WORKER_NAME
+          && health?.source_commit_sha === sourceSha.toLowerCase()) {
+          verifiedHealth = true;
+          break;
+        }
+      }
+    } catch {
+      // The uploaded Worker can take a short time to propagate. Retry only the
+      // idempotent health read; never repeat the upload.
+    }
+    if (attempt < 7) await new Promise((resolve) => setTimeout(resolve, 1_000));
   }
-  if (health?.ok !== true || health?.service !== WORKER_NAME
-    || health?.source_commit_sha !== sourceSha.toLowerCase()) {
+  if (!verifiedHealth) {
     throw new Error("Cloudflare Worker runtime health or source SHA does not match the deployed release.");
   }
   return { worker: config.name, source_sha: sourceSha.toLowerCase(), verified: true };
