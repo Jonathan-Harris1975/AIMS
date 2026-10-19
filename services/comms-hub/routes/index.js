@@ -1376,7 +1376,7 @@ export function createCommsHubRouter({
       return res.status(health.overall === "stale" ? 503 : 200).json({
         ok: health.overall !== "stale",
         service: "comms-hub",
-        health,
+        health: { ...health, revision: process.env.AIMS_BUILD_SHA || null },
       });
     } catch (error) { next(error); }
   });

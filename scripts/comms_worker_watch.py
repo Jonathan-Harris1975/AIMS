@@ -5,6 +5,7 @@ import io
 import math
 import json
 import os
+import re
 import sys
 import urllib.error
 import urllib.parse
@@ -70,12 +71,18 @@ def production_monitor_config(defaults):
     return f'{base}/comms-hub/workers/health', expected
 
 
-def validate_health(payload, expected, now):
+def validate_health(payload, expected, now, expected_revision=None):
     if not expected:
         return 'expected_inventory_unconfigured'
     health = payload.get('health', {}) if isinstance(payload, dict) else {}
     if not isinstance(health, dict):
         return 'health_response_invalid'
+    revision = health.get('revision')
+    if (not isinstance(expected_revision, str) or not re.fullmatch(r'[0-9a-f]{40}', expected_revision)
+            or not isinstance(revision, str) or not re.fullmatch(r'[0-9a-f]{40}', revision)):
+        return 'service_revision_missing'
+    if revision != expected_revision:
+        return 'service_revision_mismatch'
     workers = health.get('workers')
     if not isinstance(workers, list) or not workers:
         return 'inventory_missing'
@@ -110,8 +117,18 @@ def validate_health(payload, expected, now):
     return None
 
 
-def advance_incident(state, failure, now, notify):
+def advance_incident(state, failure, now, notify, recovery_evidence=None):
     stamp = now.isoformat()
+    state = dict(state)
+    pending = state.get('pending_recovery')
+    if isinstance(pending, dict):
+        delivered = notify({'event_id': f"worker-watch:{pending['incident_id']}:recovery", 'event_type': 'worker_health_recovered',
+            'service': 'AIMS', 'source': 'github_actions', 'severity': 'info', 'title': 'Comms Hub workers recovered',
+            'summary': 'Expected workers are healthy again.', 'details': pending['evidence']})
+        pending['delivery'] = 'sent' if delivered is True else 'failed'
+        if delivered is True:
+            pending['delivered_at'] = stamp
+            state.pop('pending_recovery', None)
     if failure:
         if not state.get('active'):
             state = {'active': True, 'incident_id': str(uuid.uuid4()), 'detected_at': stamp, 'notified': False}
@@ -126,19 +143,44 @@ def advance_incident(state, failure, now, notify):
                 state['notified_at'] = stamp
         state['last_failure'] = failure
     elif state.get('active'):
+        evidence_age = None
+        try:
+            checked = datetime.fromisoformat(recovery_evidence['checked_at'].replace('Z', '+00:00'))
+            evidence_age = (now - checked).total_seconds()
+        except (AttributeError, KeyError, TypeError, ValueError):
+            pass
+        if (not isinstance(recovery_evidence, dict)
+                or recovery_evidence.get('service') != 'comms-hub'
+                or not isinstance(recovery_evidence.get('revision'), str)
+                or not re.fullmatch(r'[0-9a-f]{40}', recovery_evidence['revision'])
+                or recovery_evidence.get('revision') != recovery_evidence.get('expected_revision')
+                or not isinstance(recovery_evidence.get('checked_at'), str)
+                or evidence_age is None or evidence_age < -30 or evidence_age > 120):
+            state['last_failure'] = 'recovery_evidence_missing_or_mismatched'
+            state['checked_at'] = stamp
+            return state
+        state['active'] = False
+        state['recovered_at'] = stamp
+        state['recovery_revision'] = recovery_evidence['revision']
+        state['recovery_evidence'] = recovery_evidence
         if state.get('notified'):
-            delivered = notify({'event_id': f"worker-watch:{state['incident_id']}:recovery", 'event_type': 'worker_health_recovered',
+            state['pending_recovery'] = {'incident_id': state['incident_id'], 'evidence': recovery_evidence}
+            pending = state['pending_recovery']
+            delivered = notify({'event_id': f"worker-watch:{pending['incident_id']}:recovery", 'event_type': 'worker_health_recovered',
                 'service': 'AIMS', 'source': 'github_actions', 'severity': 'info', 'title': 'Comms Hub workers recovered',
-                'summary': 'Expected workers are healthy again.'})
-            recovery_delivery = 'sent' if delivered else 'failed'
+                'summary': 'Expected workers are healthy again.', 'details': recovery_evidence})
+            pending['delivery'] = 'sent' if delivered is True else 'failed'
+            if delivered is True:
+                pending['delivered_at'] = stamp
+                state.pop('pending_recovery', None)
         else:
-            recovery_delivery = 'not_required'
-        state = {'active': False, 'recovered_at': stamp, 'recovery_delivery': recovery_delivery}
+            state['recovery_delivery'] = 'not_required'
+        state.pop('last_failure', None)
     state['checked_at'] = stamp
     return state
 
 
-def check_health_file(path, expected, now):
+def check_health_file(path, expected, now, expected_revision=None, evidence_out=None):
     try:
         raw = Path(path).read_bytes()
         if len(raw) > 256_000:
@@ -146,10 +188,14 @@ def check_health_file(path, expected, now):
         payload = json.loads(raw)
     except (OSError, json.JSONDecodeError, TypeError, ValueError):
         return 'health_response_invalid'
-    return validate_health(payload, expected, now)
+    failure = validate_health(payload, expected, now, expected_revision)
+    if failure is None and evidence_out is not None:
+        evidence_out.update({'service': payload.get('service'), 'revision': payload['health']['revision'],
+                             'expected_revision': expected_revision, 'checked_at': payload['health']['checkedAt']})
+    return failure
 
 
-def check_health(url, token, expected, now, opener=None):
+def check_health(url, token, expected, now, opener=None, expected_revision=None, evidence_out=None):
     opener = opener or urllib.request.build_opener(NoRedirect()).open
     parsed = urllib.parse.urlsplit(url)
     if parsed.scheme != 'https' or parsed.username or parsed.password or parsed.query or parsed.fragment or not token:
@@ -160,7 +206,15 @@ def check_health(url, token, expected, now, opener=None):
             with opener(request, timeout=10) as response:
                 if response.status != 200:
                     return 'health_http_failure'
-                return validate_health(json.loads(response.read(256_001)), expected, now)
+                body = response.read(256_001)
+                if len(body) > 256_000:
+                    return 'health_response_invalid'
+                payload = json.loads(body)
+                failure = validate_health(payload, expected, now, expected_revision)
+                if failure is None and evidence_out is not None:
+                    evidence_out.update({'service': payload.get('service'), 'revision': payload['health']['revision'],
+                                         'expected_revision': expected_revision, 'checked_at': payload['health']['checkedAt']})
+                return failure
         except urllib.error.HTTPError:
             return 'health_http_failure'
         except (TimeoutError, urllib.error.URLError):
@@ -224,23 +278,30 @@ def main():
         print(f'Monitor configuration/state restore failed: {type(error).__name__}', file=sys.stderr)
         return 1
     now = datetime.now(UTC)
+    expected_revision = os.getenv('EXPECTED_SERVICE_REVISION', '').strip()
     health_file = os.getenv('COMMS_WORKER_HEALTH_FILE', '').strip()
     probe_outcome = os.getenv('COMMS_WORKER_PROBE_OUTCOME', '').strip()
+    recovery_evidence = {}
     if probe_outcome and probe_outcome != 'success':
         # A failed/skipped runtime probe must reach the same durable incident path
         # as an unhealthy response. Never reuse a partial or stale probe file.
         failure = 'health_probe_failed'
     else:
-        failure = (check_health_file(health_file, expected, now) if health_file
-                   else check_health(url, os.getenv('AIMS_API_KEY', ''), expected, now))
+        failure = (check_health_file(health_file, expected, now, expected_revision, recovery_evidence) if health_file
+                   else check_health(url, os.getenv('AIMS_API_KEY', ''), expected, now,
+                                     expected_revision=expected_revision, evidence_out=recovery_evidence))
     alert_url = os.getenv('OPS_ALERT_WEBHOOK_URL', '')
     webhook_independent = bool(alert_url and os.getenv('OPS_ALERT_WEBHOOK_TOKEN') and urllib.parse.urlsplit(alert_url).scheme == 'https'
                                and urllib.parse.urlsplit(alert_url).netloc != urllib.parse.urlsplit(url).netloc)
-    state = advance_incident(state, failure, now, lambda event: webhook_independent and send_event(event))
+    state = advance_incident(state, failure, now, lambda event: webhook_independent and send_event(event),
+                             recovery_evidence if not failure else None)
     STATE.write_text(json.dumps(state, sort_keys=True), encoding='utf-8')
     print(json.dumps({'health': failure or 'healthy', 'detected_at': state.get('detected_at'),
-                      'notified_at': state.get('notified_at'), 'github_failure_signal': bool(failure),
-                      'optional_webhook_configured': webhook_independent, 'expected_workers': expected}))
+                      'notified_at': state.get('notified_at'), 'incident_active': state.get('active', False),
+                      'recovery_notification_pending': bool(state.get('pending_recovery')),
+                      'recovery_revision': state.get('recovery_revision'),
+                      'github_failure_signal': bool(failure), 'optional_webhook_configured': webhook_independent,
+                      'expected_workers': expected}))
     return 1 if failure else 0
 
 
