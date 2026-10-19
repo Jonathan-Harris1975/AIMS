@@ -4,6 +4,7 @@ from __future__ import annotations
 import io
 import math
 import json
+import hashlib
 import os
 import re
 import sys
@@ -117,21 +118,93 @@ def validate_health(payload, expected, now, expected_revision=None):
     return None
 
 
-def advance_incident(state, failure, now, notify, recovery_evidence=None):
-    stamp = now.isoformat()
-    state = dict(state)
-    pending = state.get('pending_recovery')
-    if isinstance(pending, dict):
-        delivered = notify({'event_id': f"worker-watch:{pending['incident_id']}:recovery", 'event_type': 'worker_health_recovered',
+def _deliver_pending_recoveries(state, now, notify):
+    pending_rows = state.get('pending_recoveries', [])
+    legacy = state.get('pending_recovery')
+    if isinstance(legacy, dict):
+        pending_rows = [legacy, *pending_rows] if isinstance(pending_rows, list) else [legacy]
+        state.pop('pending_recovery', None)
+    if not isinstance(pending_rows, list):
+        pending_rows = []
+    remaining = []
+    seen = set()
+    for pending in pending_rows:
+        if not isinstance(pending, dict) or not isinstance(pending.get('incident_id'), str):
+            continue
+        incident_id = pending['incident_id']
+        if incident_id in seen:
+            continue
+        seen.add(incident_id)
+        delivered = notify({'event_id': f"worker-watch:{incident_id}:recovery", 'event_type': 'worker_health_recovered',
             'service': 'AIMS', 'source': 'github_actions', 'severity': 'info', 'title': 'Comms Hub workers recovered',
-            'summary': 'Expected workers are healthy again.', 'details': pending['evidence']})
+            'summary': 'Expected workers are healthy again.', 'details': pending.get('evidence', {})})
         pending['delivery'] = 'sent' if delivered is True else 'failed'
         if delivered is True:
-            pending['delivered_at'] = stamp
-            state.pop('pending_recovery', None)
+            pending['delivered_at'] = now.isoformat()
+        else:
+            remaining.append(pending)
+    if remaining:
+        state['pending_recoveries'] = remaining
+        # Retain the original single-record field for existing operator and
+        # workflow consumers while the durable queue handles multiple incidents.
+        state['pending_recovery'] = remaining[0]
+    else:
+        state.pop('pending_recoveries', None)
+        state.pop('pending_recovery', None)
+
+
+def advance_incident(state, failure, now, notify, recovery_evidence=None, incident_scope=None):
+    stamp = now.isoformat()
+    state = dict(state)
+    _deliver_pending_recoveries(state, now, notify)
     if failure:
+        incident_key = None
+        if isinstance(incident_scope, dict):
+            encoded_scope = json.dumps(incident_scope, sort_keys=True, separators=(',', ':'))
+            incident_key = hashlib.sha256(f"{encoded_scope}|{failure}".encode('utf-8')).hexdigest()
+        pending_keys = ('pending_recoveries', 'pending_recovery')
+        preserved_pending = {key: value for key, value in state.items() if key in pending_keys}
+        superseded = state.get('superseded_incidents', [])
+        if not isinstance(superseded, list):
+            superseded = []
+        # Migrate state written by earlier versions, which retained IDs only.
+        for legacy_id in state.get('superseded_incident_ids', []):
+            if isinstance(legacy_id, str) and not any(
+                    item.get('incident_id') == legacy_id for item in superseded if isinstance(item, dict)):
+                superseded.append({'incident_id': legacy_id, 'incident_key': None,
+                                   'detected_at': None, 'notified': True})
         if not state.get('active'):
-            state = {'active': True, 'incident_id': str(uuid.uuid4()), 'detected_at': stamp, 'notified': False}
+            state = dict(preserved_pending)
+            state.update({'active': True, 'incident_id': str(uuid.uuid4()), 'detected_at': stamp, 'notified': False})
+            superseded = []
+        elif incident_key is not None and state.get('incident_key') not in (None, incident_key):
+            current = {'incident_id': state.get('incident_id'), 'incident_key': state.get('incident_key'),
+                       'detected_at': state.get('detected_at'), 'notified_at': state.get('notified_at'),
+                       'notified': state.get('notified') is True}
+            if current.get('incident_id') and not any(
+                    item.get('incident_id') == current['incident_id'] for item in superseded if isinstance(item, dict)):
+                superseded.append(current)
+            matching_index = next((index for index, item in enumerate(superseded)
+                                   if isinstance(item, dict) and item.get('incident_key') == incident_key), None)
+            state = dict(preserved_pending)
+            if matching_index is not None:
+                matching = superseded.pop(matching_index)
+                state.update({'active': True, 'incident_id': matching['incident_id'],
+                              'detected_at': matching.get('detected_at') or stamp,
+                              'notified': matching.get('notified') is True})
+                if matching.get('notified_at'):
+                    state['notified_at'] = matching['notified_at']
+            else:
+                state.update({'active': True, 'incident_id': str(uuid.uuid4()), 'detected_at': stamp,
+                              'notified': False})
+            if superseded:
+                state['superseded_incidents'] = superseded
+        if incident_key is not None:
+            state['incident_key'] = incident_key
+            state['incident_scope'] = incident_scope
+        if incident_key is not None:
+            state['incident_key'] = incident_key
+            state['incident_scope'] = incident_scope
         if not state.get('notified'):
             delivered = notify({'event_id': f"worker-watch:{state['incident_id']}:failure", 'event_type': 'worker_health_failure',
                                 'service': 'AIMS', 'source': 'github_actions', 'severity': 'critical',
@@ -159,26 +232,36 @@ def advance_incident(state, failure, now, notify, recovery_evidence=None):
             state['last_failure'] = 'recovery_evidence_missing_or_mismatched'
             state['checked_at'] = stamp
             return state
+        superseded = state.get('superseded_incidents', [])
+        if not isinstance(superseded, list):
+            superseded = []
+        for legacy_id in state.get('superseded_incident_ids', []):
+            if isinstance(legacy_id, str) and not any(
+                    item.get('incident_id') == legacy_id for item in superseded if isinstance(item, dict)):
+                superseded.append({'incident_id': legacy_id, 'notified': True})
+        recovery_rows = [item for item in superseded if isinstance(item, dict) and item.get('notified') is True]
+        if state.get('notified'):
+            recovery_rows.append({'incident_id': state['incident_id'], 'notified': True})
+        pending_rows = state.setdefault('pending_recoveries', [])
+        existing_ids = {item.get('incident_id') for item in pending_rows if isinstance(item, dict)}
+        for item in recovery_rows:
+            incident_id = item.get('incident_id')
+            if isinstance(incident_id, str) and incident_id not in existing_ids:
+                pending_rows.append({'incident_id': incident_id, 'evidence': recovery_evidence})
+                existing_ids.add(incident_id)
+        notified_ids = [item.get('incident_id') for item in recovery_rows if item.get('incident_id')]
         state['active'] = False
         state['recovered_at'] = stamp
         state['recovery_revision'] = recovery_evidence['revision']
         state['recovery_evidence'] = recovery_evidence
-        if state.get('notified'):
-            state['pending_recovery'] = {'incident_id': state['incident_id'], 'evidence': recovery_evidence}
-            pending = state['pending_recovery']
-            delivered = notify({'event_id': f"worker-watch:{pending['incident_id']}:recovery", 'event_type': 'worker_health_recovered',
-                'service': 'AIMS', 'source': 'github_actions', 'severity': 'info', 'title': 'Comms Hub workers recovered',
-                'summary': 'Expected workers are healthy again.', 'details': recovery_evidence})
-            pending['delivery'] = 'sent' if delivered is True else 'failed'
-            if delivered is True:
-                pending['delivered_at'] = stamp
-                state.pop('pending_recovery', None)
-        else:
+        state.pop('superseded_incident_ids', None)
+        state.pop('superseded_incidents', None)
+        if not notified_ids:
             state['recovery_delivery'] = 'not_required'
         state.pop('last_failure', None)
+        _deliver_pending_recoveries(state, now, notify)
     state['checked_at'] = stamp
     return state
-
 
 def check_health_file(path, expected, now, expected_revision=None, evidence_out=None):
     try:
@@ -294,7 +377,10 @@ def main():
     webhook_independent = bool(alert_url and os.getenv('OPS_ALERT_WEBHOOK_TOKEN') and urllib.parse.urlsplit(alert_url).scheme == 'https'
                                and urllib.parse.urlsplit(alert_url).netloc != urllib.parse.urlsplit(url).netloc)
     state = advance_incident(state, failure, now, lambda event: webhook_independent and send_event(event),
-                             recovery_evidence if not failure else None)
+                             recovery_evidence if not failure else None,
+                             incident_scope={'service': 'AIMS Comms Hub',
+                                             'worker_inventory': sorted(expected),
+                                             'deployed_sha': expected_revision})
     STATE.write_text(json.dumps(state, sort_keys=True), encoding='utf-8')
     print(json.dumps({'health': failure or 'healthy', 'detected_at': state.get('detected_at'),
                       'notified_at': state.get('notified_at'), 'incident_active': state.get('active', False),
