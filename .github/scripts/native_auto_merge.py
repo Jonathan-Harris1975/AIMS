@@ -121,7 +121,7 @@ def enable(pr_node_id: str) -> bool:
         # GitHub can briefly report an otherwise mergeable PR as unstable while
         # required checks settle. Keep this controller check green and let a
         # later workflow or scheduled reconciliation retry the native request.
-        if "Pull request Pull request is in unstable status" in str(exc):
+        if "in unstable status" in str(exc):
             print("GitHub reports an unstable PR status; deferring native auto-merge until a later reconciliation.")
             return False
         raise
