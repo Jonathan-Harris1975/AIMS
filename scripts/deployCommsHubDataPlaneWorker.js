@@ -71,36 +71,59 @@ export function parseWorkerConfig(source) {
   return config;
 }
 
-export function workerUploadMetadata(config) {
+export function workerUploadMetadata(config, sourceSha) {
+  if (!/^[a-f0-9]{40}$/i.test(sourceSha || "")) {
+    throw new Error("Worker deployment requires the exact 40-character Koyeb Git SHA.");
+  }
   return {
     main_module: config.main,
     compatibility_date: config.compatibility_date,
     observability: config.observability,
-    bindings: [{ type: "d1", name: config.d1_databases.binding, id: config.d1_databases.database_id }],
+    bindings: [
+      { type: "d1", name: config.d1_databases.binding, id: config.d1_databases.database_id },
+      { type: "plain_text", name: "SOURCE_COMMIT_SHA", text: sourceSha.toLowerCase() },
+    ],
     keep_bindings: ["secret_text"],
   };
 }
 
-function assertBindings(settings, config, { deployed = false } = {}) {
+function assertBindings(settings, config, { deployed = false, sourceSha } = {}) {
   const bindings = settings?.bindings;
   if (!Array.isArray(bindings)
     || !bindings.some((binding) => binding.type === "secret_text" && binding.name === "COMMS_HUB_D1_PROXY_TOKEN")) {
     throw new Error("Worker COMMS_HUB_D1_PROXY_TOKEN secret binding is missing; deployment cannot be verified.");
   }
-  // A new binding type needs explicit support so upload cannot discard it.
+  // Only the canonical D1 and source revision bindings are supported here.
   if (bindings.some((binding) => binding.type !== "secret_text"
-    && !(binding.type === "d1" && binding.name === config.d1_databases.binding))) {
+    && !(binding.type === "d1" && binding.name === config.d1_databases.binding)
+    && !(binding.type === "plain_text" && binding.name === "SOURCE_COMMIT_SHA"))) {
     throw new Error("Unexpected Worker binding; deployment stopped to preserve existing configuration.");
   }
   if (deployed && (!bindings.some((binding) => binding.type === "d1"
     && binding.name === config.d1_databases.binding && binding.id === config.d1_databases.database_id)
+    || !bindings.some((binding) => binding.type === "plain_text"
+      && binding.name === "SOURCE_COMMIT_SHA" && binding.text === sourceSha?.toLowerCase())
     || settings.compatibility_date !== config.compatibility_date
     || settings.observability?.enabled !== config.observability.enabled)) {
-    throw new Error("Deployed Worker settings do not match the canonical configuration.");
+    throw new Error("Deployed Worker settings do not match the canonical configuration or source SHA.");
   }
 }
 
-export async function deployWorker({ config, source, credentials, fetchImpl = globalThis.fetch }) {
+export async function deployWorker({ config, source, sourceSha, healthUrl, credentials, fetchImpl = globalThis.fetch }) {
+  if (!/^[a-f0-9]{40}$/i.test(sourceSha || "")) {
+    throw new Error("Worker deployment requires the exact 40-character Koyeb Git SHA.");
+  }
+  let runtimeHealthUrl;
+  try {
+    const configured = new URL(healthUrl);
+    if (configured.protocol !== "https:" || configured.username || configured.password || configured.search || configured.hash) {
+      throw new Error();
+    }
+    configured.pathname = "/health";
+    runtimeHealthUrl = configured;
+  } catch {
+    throw new Error("Worker deployment requires an HTTPS data-plane URL for exact-SHA health verification.");
+  }
   const scriptUrl = `${API_BASE}/accounts/${encodeURIComponent(credentials.accountId)}/workers/scripts/${config.name}`;
   async function api(url, { method = "GET", body, json = false } = {}) {
     let response;
@@ -133,7 +156,7 @@ export async function deployWorker({ config, source, credentials, fetchImpl = gl
     throw new Error("Worker subdomain settings are invalid; deployment stopped.");
   }
   const upload = new FormData();
-  upload.set("metadata", new Blob([JSON.stringify(workerUploadMetadata(config))], { type: "application/json" }), "metadata.json");
+  upload.set("metadata", new Blob([JSON.stringify(workerUploadMetadata(config, sourceSha))], { type: "application/json" }), "metadata.json");
   upload.set(config.main, new Blob([source], { type: "application/javascript+module" }), config.main);
   const result = await api(scriptUrl, { method: "PUT", body: upload });
   if (typeof result.id !== "string" || !result.id) throw new Error("Cloudflare upload returned no Worker identifier.");
@@ -144,8 +167,24 @@ export async function deployWorker({ config, source, credentials, fetchImpl = gl
   if (updatedSubdomain.enabled !== subdomain.enabled || updatedSubdomain.previews_enabled !== config.preview_urls) {
     throw new Error("Worker subdomain settings were not preserved.");
   }
-  assertBindings(await api(`${scriptUrl}/settings`), config, { deployed: true });
-  return { worker: config.name, verified: true };
+  assertBindings(await api(`${scriptUrl}/settings`), config, { deployed: true, sourceSha });
+  let health;
+  try {
+    const response = await fetchImpl(runtimeHealthUrl, {
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      redirect: "error",
+    });
+    if (!response.ok) throw new Error();
+    health = await response.json();
+  } catch {
+    throw new Error("Cloudflare Worker runtime health could not be verified after upload.");
+  }
+  if (health?.ok !== true || health?.service !== WORKER_NAME
+    || health?.source_commit_sha !== sourceSha.toLowerCase()) {
+    throw new Error("Cloudflare Worker runtime health or source SHA does not match the deployed release.");
+  }
+  return { worker: config.name, source_sha: sourceSha.toLowerCase(), verified: true };
 }
 
 export async function main(env = process.env, { checkOnly = false } = {}) {
@@ -167,9 +206,18 @@ export async function main(env = process.env, { checkOnly = false } = {}) {
     `[comms-hub-data-plane] Deploying ${WORKER_NAME} through the Cloudflare API using existing Koyeb credentials.`
   );
 
-  await deployWorker({ config, source, credentials });
+  const sourceSha = clean(env.KOYEB_GIT_SHA);
+  if (!/^[a-f0-9]{40}$/i.test(sourceSha)) {
+    throw new Error("Koyeb Git SHA is unavailable; Cloudflare Worker deployment stopped.");
+  }
+  const healthUrl = clean(env.COMMS_HUB_D1_PROXY_URL);
+  if (!healthUrl) {
+    throw new Error("COMMS_HUB_D1_PROXY_URL is required to verify the deployed Worker.");
+  }
 
-  console.log(`[comms-hub-data-plane] ${WORKER_NAME} deployment completed.`);
+  await deployWorker({ config, source, sourceSha, healthUrl, credentials });
+
+  console.log(`[comms-hub-data-plane] ${WORKER_NAME} deployment completed for ${sourceSha.toLowerCase()}.`);
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
