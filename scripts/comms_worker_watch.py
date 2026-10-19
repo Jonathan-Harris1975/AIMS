@@ -118,26 +118,63 @@ def validate_health(payload, expected, now, expected_revision=None):
     return None
 
 
+def _deliver_pending_recoveries(state, now, notify):
+    pending_rows = state.get('pending_recoveries', [])
+    legacy = state.get('pending_recovery')
+    if isinstance(legacy, dict):
+        pending_rows = [legacy, *pending_rows] if isinstance(pending_rows, list) else [legacy]
+        state.pop('pending_recovery', None)
+    if not isinstance(pending_rows, list):
+        pending_rows = []
+    remaining = []
+    seen = set()
+    for pending in pending_rows:
+        if not isinstance(pending, dict) or not isinstance(pending.get('incident_id'), str):
+            continue
+        incident_id = pending['incident_id']
+        if incident_id in seen:
+            continue
+        seen.add(incident_id)
+        delivered = notify({'event_id': f"worker-watch:{incident_id}:recovery", 'event_type': 'worker_health_recovered',
+            'service': 'AIMS', 'source': 'github_actions', 'severity': 'info', 'title': 'Comms Hub workers recovered',
+            'summary': 'Expected workers are healthy again.', 'details': pending.get('evidence', {})})
+        pending['delivery'] = 'sent' if delivered is True else 'failed'
+        if delivered is True:
+            pending['delivered_at'] = now.isoformat()
+        else:
+            remaining.append(pending)
+    if remaining:
+        state['pending_recoveries'] = remaining
+    else:
+        state.pop('pending_recoveries', None)
+
+
 def advance_incident(state, failure, now, notify, recovery_evidence=None, incident_scope=None):
     stamp = now.isoformat()
     state = dict(state)
-    pending = state.get('pending_recovery')
-    if isinstance(pending, dict):
-        delivered = notify({'event_id': f"worker-watch:{pending['incident_id']}:recovery", 'event_type': 'worker_health_recovered',
-            'service': 'AIMS', 'source': 'github_actions', 'severity': 'info', 'title': 'Comms Hub workers recovered',
-            'summary': 'Expected workers are healthy again.', 'details': pending['evidence']})
-        pending['delivery'] = 'sent' if delivered is True else 'failed'
-        if delivered is True:
-            pending['delivered_at'] = stamp
-            state.pop('pending_recovery', None)
+    _deliver_pending_recoveries(state, now, notify)
     if failure:
         incident_key = None
         if isinstance(incident_scope, dict):
             encoded_scope = json.dumps(incident_scope, sort_keys=True, separators=(',', ':'))
             incident_key = hashlib.sha256(f"{encoded_scope}|{failure}".encode('utf-8')).hexdigest()
-        if not state.get('active') or (
-                incident_key is not None and state.get('incident_key') not in (None, incident_key)):
-            state = {'active': True, 'incident_id': str(uuid.uuid4()), 'detected_at': stamp, 'notified': False}
+        if not state.get('active'):
+            state = {key: value for key, value in state.items()
+                     if key in ('pending_recoveries', 'pending_recovery')}
+            state.update({'active': True, 'incident_id': str(uuid.uuid4()), 'detected_at': stamp, 'notified': False})
+        elif incident_key is not None and state.get('incident_key') not in (None, incident_key):
+            # Keep every externally opened incident until fresh healthy evidence
+            # lets us send a matching recovery event for each one.
+            superseded = list(state.get('superseded_incident_ids', []))
+            if state.get('notified') and state.get('incident_id') not in superseded:
+                superseded.append(state['incident_id'])
+            prior_pending = state.get('pending_recoveries', [])
+            state = {key: value for key, value in state.items()
+                     if key in ('pending_recoveries', 'pending_recovery')}
+            if prior_pending:
+                state['pending_recoveries'] = prior_pending
+            state.update({'active': True, 'incident_id': str(uuid.uuid4()), 'detected_at': stamp,
+                          'notified': False, 'superseded_incident_ids': superseded})
         if incident_key is not None:
             state['incident_key'] = incident_key
             state['incident_scope'] = incident_scope
@@ -168,26 +205,23 @@ def advance_incident(state, failure, now, notify, recovery_evidence=None, incide
             state['last_failure'] = 'recovery_evidence_missing_or_mismatched'
             state['checked_at'] = stamp
             return state
+        notified_ids = list(state.get('superseded_incident_ids', []))
+        if state.get('notified'):
+            notified_ids.append(state['incident_id'])
+        for incident_id in dict.fromkeys(notified_ids):
+            state.setdefault('pending_recoveries', []).append(
+                {'incident_id': incident_id, 'evidence': recovery_evidence})
         state['active'] = False
         state['recovered_at'] = stamp
         state['recovery_revision'] = recovery_evidence['revision']
         state['recovery_evidence'] = recovery_evidence
-        if state.get('notified'):
-            state['pending_recovery'] = {'incident_id': state['incident_id'], 'evidence': recovery_evidence}
-            pending = state['pending_recovery']
-            delivered = notify({'event_id': f"worker-watch:{pending['incident_id']}:recovery", 'event_type': 'worker_health_recovered',
-                'service': 'AIMS', 'source': 'github_actions', 'severity': 'info', 'title': 'Comms Hub workers recovered',
-                'summary': 'Expected workers are healthy again.', 'details': recovery_evidence})
-            pending['delivery'] = 'sent' if delivered is True else 'failed'
-            if delivered is True:
-                pending['delivered_at'] = stamp
-                state.pop('pending_recovery', None)
-        else:
+        state.pop('superseded_incident_ids', None)
+        if not notified_ids:
             state['recovery_delivery'] = 'not_required'
         state.pop('last_failure', None)
+        _deliver_pending_recoveries(state, now, notify)
     state['checked_at'] = stamp
     return state
-
 
 def check_health_file(path, expected, now, expected_revision=None, evidence_out=None):
     try:
