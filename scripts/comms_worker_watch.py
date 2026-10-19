@@ -4,6 +4,7 @@ from __future__ import annotations
 import io
 import math
 import json
+import hashlib
 import os
 import re
 import sys
@@ -117,7 +118,7 @@ def validate_health(payload, expected, now, expected_revision=None):
     return None
 
 
-def advance_incident(state, failure, now, notify, recovery_evidence=None):
+def advance_incident(state, failure, now, notify, recovery_evidence=None, incident_scope=None):
     stamp = now.isoformat()
     state = dict(state)
     pending = state.get('pending_recovery')
@@ -130,8 +131,15 @@ def advance_incident(state, failure, now, notify, recovery_evidence=None):
             pending['delivered_at'] = stamp
             state.pop('pending_recovery', None)
     if failure:
-        if not state.get('active'):
+        incident_key = None
+        if isinstance(incident_scope, dict):
+            encoded_scope = json.dumps(incident_scope, sort_keys=True, separators=(',', ':'))
+            incident_key = hashlib.sha256(f"{encoded_scope}|{failure}".encode('utf-8')).hexdigest()
+        if not state.get('active') or (
+                incident_key is not None and state.get('incident_key') not in (None, incident_key)):
             state = {'active': True, 'incident_id': str(uuid.uuid4()), 'detected_at': stamp, 'notified': False}
+        if incident_key is not None:
+            state['incident_key'] = incident_key
         if not state.get('notified'):
             delivered = notify({'event_id': f"worker-watch:{state['incident_id']}:failure", 'event_type': 'worker_health_failure',
                                 'service': 'AIMS', 'source': 'github_actions', 'severity': 'critical',
@@ -294,7 +302,10 @@ def main():
     webhook_independent = bool(alert_url and os.getenv('OPS_ALERT_WEBHOOK_TOKEN') and urllib.parse.urlsplit(alert_url).scheme == 'https'
                                and urllib.parse.urlsplit(alert_url).netloc != urllib.parse.urlsplit(url).netloc)
     state = advance_incident(state, failure, now, lambda event: webhook_independent and send_event(event),
-                             recovery_evidence if not failure else None)
+                             recovery_evidence if not failure else None,
+                             incident_scope={'service': 'AIMS Comms Hub',
+                                             'worker_inventory': sorted(expected),
+                                             'deployed_sha': expected_revision})
     STATE.write_text(json.dumps(state, sort_keys=True), encoding='utf-8')
     print(json.dumps({'health': failure or 'healthy', 'detected_at': state.get('detected_at'),
                       'notified_at': state.get('notified_at'), 'incident_active': state.get('active', False),
