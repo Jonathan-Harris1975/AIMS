@@ -185,7 +185,7 @@ jobs:
               exit 1
             fi
             if ! status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --max-time 30 \
-              --request POST --header 'Content-Type: application/json' --header "Authorization: Bearer ${GH_TOKEN}" --data "$payload" "$KILO_REPAIR_TRIGGER_URL")"; then
+              --request POST --header 'Content-Type: application/json' --data "$payload" "$KILO_REPAIR_TRIGGER_URL")"; then
               # Delivery outcome is uncertain; leave the reservation pending to prevent duplicates.
               status="000"
             fi
