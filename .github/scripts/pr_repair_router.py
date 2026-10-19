@@ -422,7 +422,7 @@ def dispatch(pr: dict, kind: str, findings: list[str]) -> str:
         url,
         data=json.dumps(payload).encode(),
         method="POST",
-        headers={"Content-Type": "application/json", "Authorization": f"Bearer {TOKEN}"},
+        headers={"Content-Type": "application/json"},
     )
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
