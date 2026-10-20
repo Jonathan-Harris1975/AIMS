@@ -13,6 +13,10 @@ const secret = { type: "secret_text", name: "COMMS_HUB_D1_PROXY_TOKEN" };
 const otherSecret = { type: "secret_text", name: "OTHER_EXISTING_SECRET" };
 const database = { type: "d1", name: "COMMS_HUB_DB", id: config.d1_databases.database_id };
 const settings = { bindings: [secret, otherSecret, database], compatibility_date: config.compatibility_date, observability: config.observability };
+const sourceSha = "a".repeat(40);
+const healthUrl = "https://worker.example/query";
+const sourceBinding = { type: "plain_text", name: "SOURCE_COMMIT_SHA", text: sourceSha };
+const deployedSettings = { ...settings, bindings: [...settings.bindings, sourceBinding] };
 const response = (result, overrides = {}) => new Response(JSON.stringify({ success: true, result, ...overrides }), { status: 200 });
 
 function transport(override = () => undefined) {
@@ -23,7 +27,10 @@ function transport(override = () => undefined) {
       calls.push({ url, ...options });
       const changed = await override(url, options, calls.length);
       if (changed !== undefined) return changed;
-      if (url.endsWith("/settings")) return response(settings);
+      if (url.endsWith("/settings")) return response(calls.length >= 5 ? deployedSettings : settings);
+      if (url === "https://worker.example/health") {
+        return new Response(JSON.stringify({ ok: true, service: config.name, source_commit_sha: calls.length === 6 ? "b".repeat(40) : sourceSha }), { status: 200 });
+      }
       if (url.endsWith("/subdomain")) {
         return response({ enabled: true, previews_enabled: options.method === "POST" ? config.preview_urls : true });
       }
@@ -35,9 +42,9 @@ function transport(override = () => undefined) {
 
 test("canonical module deploys without npm/npx and preserves secret, D1 and subdomain settings", async () => {
   const mock = transport();
-  const result = await deployWorker({ config, source: "export default {};", credentials, fetchImpl: mock.fetchImpl });
-  assert.deepEqual(result, { worker: config.name, verified: true });
-  assert.deepEqual(mock.calls.map((call) => call.method), ["GET", "GET", "PUT", "POST", "GET"]);
+  const result = await deployWorker({ config, source: "export default {};", sourceSha, healthUrl, credentials, fetchImpl: mock.fetchImpl });
+  assert.deepEqual(result, { worker: config.name, source_sha: sourceSha, verified: true });
+  assert.deepEqual(mock.calls.map((call) => call.method), ["GET", "GET", "PUT", "POST", "GET", "GET", "GET"]);
   const upload = mock.calls[2];
   assert.equal(upload.url, `https://api.cloudflare.com/client/v4/accounts/test-account/workers/scripts/${config.name}`);
   assert.equal(upload.headers.Authorization, `Bearer ${credentials.apiToken}`);
@@ -45,7 +52,7 @@ test("canonical module deploys without npm/npx and preserves secret, D1 and subd
   const metadata = JSON.parse(await upload.body.get("metadata").text());
   assert.deepEqual(metadata, {
     main_module: "worker.js", compatibility_date: config.compatibility_date,
-    observability: { enabled: true }, bindings: [database], keep_bindings: ["secret_text"],
+    observability: { enabled: true }, bindings: [database, sourceBinding], keep_bindings: ["secret_text"],
   });
   assert.equal(upload.body.get("worker.js").type, "application/javascript+module");
   assert.equal(await upload.body.get("worker.js").text(), "export default {};");
@@ -59,7 +66,7 @@ test("canonical module deploys without npm/npx and preserves secret, D1 and subd
 test("a disabled workers.dev endpoint is preserved instead of enabled by upload", async () => {
   const mock = transport((url, options) => url.endsWith("/subdomain")
     ? response({ enabled: false, previews_enabled: options.method === "POST" ? config.preview_urls : true }) : undefined);
-  await deployWorker({ config, source: "export default {};", credentials, fetchImpl: mock.fetchImpl });
+  await deployWorker({ config, source: "export default {};", sourceSha, healthUrl, credentials, fetchImpl: mock.fetchImpl });
   assert.equal(JSON.parse(mock.calls[3].body).enabled, false);
 });
 
@@ -95,7 +102,7 @@ test("credentials retain legacy account alias and reject missing or unresolved v
 test("missing required secret or unexpected binding prevents all upload writes", async () => {
   for (const bindings of [[database], [secret, database, { type: "kv_namespace", name: "UNSUPPORTED" }]]) {
     const mock = transport((url) => url.endsWith("/settings") ? response({ bindings }) : undefined);
-    await assert.rejects(deployWorker({ config, source: "export default {};", credentials, fetchImpl: mock.fetchImpl }));
+    await assert.rejects(deployWorker({ config, source: "export default {};", sourceSha, healthUrl, credentials, fetchImpl: mock.fetchImpl }));
     assert.equal(mock.calls.length, 1);
     assert.equal(mock.calls[0].method, "GET");
   }
@@ -107,7 +114,7 @@ test("Cloudflare HTTP rejection and API failure stay failures without exposing p
     response(null, { success: false, errors: [{ code: 10000, message: credentials.apiToken }] }),
   ]) {
     const mock = transport(() => rejection);
-    await assert.rejects(deployWorker({ config, source: "export default {};", credentials, fetchImpl: mock.fetchImpl }), (error) => {
+    await assert.rejects(deployWorker({ config, source: "export default {};", sourceSha, healthUrl, credentials, fetchImpl: mock.fetchImpl }), (error) => {
       assert.match(error.message, /Cloudflare GET failed/);
       assert.ok(!error.message.includes(credentials.apiToken));
       return true;
@@ -118,7 +125,7 @@ test("Cloudflare HTTP rejection and API failure stay failures without exposing p
 
 test("malformed provider JSON fails closed", async () => {
   const mock = transport(() => new Response("not json"));
-  await assert.rejects(deployWorker({ config, source: "export default {};", credentials, fetchImpl: mock.fetchImpl }), /invalid JSON/);
+  await assert.rejects(deployWorker({ config, source: "export default {};", sourceSha, healthUrl, credentials, fetchImpl: mock.fetchImpl }), /invalid JSON/);
   assert.equal(mock.calls.length, 1);
 });
 
@@ -126,7 +133,7 @@ test("an ambiguous upload timeout is never retried or claimed as deployment succ
   const mock = transport((_url, options) => {
     if (options.method === "PUT") throw new Error(`timeout with ${credentials.apiToken}`);
   });
-  await assert.rejects(deployWorker({ config, source: "export default {};", credentials, fetchImpl: mock.fetchImpl }), (error) => {
+  await assert.rejects(deployWorker({ config, source: "export default {};", sourceSha, healthUrl, credentials, fetchImpl: mock.fetchImpl }), (error) => {
     assert.match(error.message, /verify remote state before retrying/);
     assert.ok(!error.message.includes(credentials.apiToken));
     return true;
@@ -143,7 +150,7 @@ test("post-upload secret loss, wrong database or settings drift cannot produce s
     { ...settings, observability: { enabled: false } },
   ]) {
     const mock = transport((url, _options, count) => count === 5 && url.endsWith("/settings") ? response(deployed) : undefined);
-    await assert.rejects(deployWorker({ config, source: "export default {};", credentials, fetchImpl: mock.fetchImpl }));
+    await assert.rejects(deployWorker({ config, source: "export default {};", sourceSha, healthUrl, credentials, fetchImpl: mock.fetchImpl }));
     assert.equal(mock.calls.length, 5);
   }
 });
@@ -155,7 +162,7 @@ test("invalid subdomain response or ignored preview settings fails verification"
       if (mode === "invalid") return response({});
       if (options.method === "POST") return response({ enabled: true, previews_enabled: true });
     });
-    await assert.rejects(deployWorker({ config, source: "export default {};", credentials, fetchImpl: mock.fetchImpl }), /subdomain settings/);
+    await assert.rejects(deployWorker({ config, source: "export default {};", sourceSha, healthUrl, credentials, fetchImpl: mock.fetchImpl }), /subdomain settings/);
   }
 });
 
