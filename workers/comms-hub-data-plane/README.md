@@ -16,7 +16,7 @@ Comms Hub migrations do not use this endpoint. `npm run comms:migrate` deliberat
 3. Pin Wrangler to `4.127.1` for local and CI deployments.
 4. Create a long random secret with `npx --yes wrangler@4.127.1 secret put COMMS_HUB_D1_PROXY_TOKEN`.
 5. Deploy with `npx --yes wrangler@4.127.1 deploy`.
-6. Verify `GET /health` returns `{"ok":true,"service":"comms-hub-data-plane"}`.
+6. Verify `GET /health` returns `{"ok":true,"service":"aims-comms-hub-data-plane"}`.
 7. Set Koyeb `COMMS_HUB_D1_PROXY_URL=https://<worker-host>/query`.
 8. Set Koyeb `COMMS_HUB_D1_PROXY_TOKEN` to the same secret.
 
