@@ -3,6 +3,20 @@ main = "worker.js"
 compatibility_date = "2026-10-14"
 workers_dev = false
 
+[observability]
+enabled = true
+head_sampling_rate = 1
+redact_query_string = true
+
+[observability.logs]
+enabled = true
+head_sampling_rate = 1
+persist = true
+invocation_logs = false
+
+[observability.traces]
+enabled = false
+
 [[routes]]
 pattern = "confirm.jonathan-harris.online"
 custom_domain = true
