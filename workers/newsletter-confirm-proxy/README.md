@@ -6,10 +6,20 @@ The custom domain is `confirm.jonathan-harris.online`. Cloudflare manages its DN
 
 AIMS creates confirmation links using `NEWSLETTER_CONFIRMATION_BASE_URL`, with `COMMS_HUB_PUBLIC_BASE_URL` as the fallback. The production default is the branded confirmation origin.
 
-Deploy or update this Worker with:
+Deploy or update this Worker from the repository root. The release command rejects dirty worktrees and verifies the tracked Worker source and configuration match the checked-out commit before injecting its SHA:
 
 ```sh
-npx wrangler deploy --config workers/newsletter-confirm-proxy/wrangler.toml
+if [ -n "$(git status --porcelain --untracked-files=all)" ]; then
+  echo "Refusing to deploy from a dirty worktree." >&2
+  exit 1
+fi
+SOURCE_SHA="$(git rev-parse HEAD)"
+test "${#SOURCE_SHA}" -eq 40
+test "$(git rev-parse "HEAD:workers/newsletter-confirm-proxy/worker.js")" = "$(git hash-object workers/newsletter-confirm-proxy/worker.js)"
+test "$(git rev-parse "HEAD:workers/newsletter-confirm-proxy/wrangler.toml")" = "$(git hash-object workers/newsletter-confirm-proxy/wrangler.toml)"
+npx wrangler deploy --config workers/newsletter-confirm-proxy/wrangler.toml --var "SOURCE_COMMIT_SHA:${SOURCE_SHA}"
 ```
+
+The Worker exposes `/health`, which returns the deployed source SHA and reports 503 if the SHA binding is missing or malformed. Persisted structured logs omit request paths and URLs because confirmation tokens are carried in the path. Invocation logs and traces are disabled for the same privacy reason.
 
 The upstream origin and route policy are deliberately fixed in `worker.js`; change them only with a reviewed code update.
