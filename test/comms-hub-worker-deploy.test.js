@@ -29,7 +29,7 @@ function transport(override = () => undefined) {
       if (changed !== undefined) return changed;
       if (url.endsWith("/settings")) return response(calls.length >= 5 ? deployedSettings : settings);
       if (url === "https://worker.example/health") {
-        return new Response(JSON.stringify({ ok: true, service: config.name, source_commit_sha: sourceSha }), { status: 200 });
+        return new Response(JSON.stringify({ ok: true, service: config.name, source_commit_sha: calls.length === 6 ? "b".repeat(40) : sourceSha }), { status: 200 });
       }
       if (url.endsWith("/subdomain")) {
         return response({ enabled: true, previews_enabled: options.method === "POST" ? config.preview_urls : true });
@@ -44,7 +44,7 @@ test("canonical module deploys without npm/npx and preserves secret, D1 and subd
   const mock = transport();
   const result = await deployWorker({ config, source: "export default {};", sourceSha, healthUrl, credentials, fetchImpl: mock.fetchImpl });
   assert.deepEqual(result, { worker: config.name, source_sha: sourceSha, verified: true });
-  assert.deepEqual(mock.calls.map((call) => call.method), ["GET", "GET", "PUT", "POST", "GET", "GET"]);
+  assert.deepEqual(mock.calls.map((call) => call.method), ["GET", "GET", "PUT", "POST", "GET", "GET", "GET"]);
   const upload = mock.calls[2];
   assert.equal(upload.url, `https://api.cloudflare.com/client/v4/accounts/test-account/workers/scripts/${config.name}`);
   assert.equal(upload.headers.Authorization, `Bearer ${credentials.apiToken}`);
