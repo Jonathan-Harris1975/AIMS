@@ -1,5 +1,5 @@
 const UPSTREAM_ORIGIN = "https://zeroth-kara-jonathanharris-3296ed37.koyeb.app";
-const CONFIRM_PATH = /^\\/newsletter\\/confirm\\/[A-Za-z0-9_-]{43}$/;
+const CONFIRM_PATH = /^\/newsletter\/confirm\/[A-Za-z0-9_-]{43}$/;
 const SOURCE_SHA_PATTERN = /^[0-9a-f]{40}$/;
 
 function log(outcome, status, fields = {}) {
@@ -79,7 +79,10 @@ export default {
     } catch {
       // Do not log exception text; platform errors can include the confirmation URL.
       log("upstream_error", 502, { method: request.method });
-      throw new Error("Newsletter confirmation upstream request failed");
+      return new Response("Upstream unavailable", {
+        status: 502,
+        headers: { "cache-control": "no-store" },
+      });
     }
   },
 };
