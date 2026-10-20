@@ -6,11 +6,17 @@ The custom domain is `confirm.jonathan-harris.online`. Cloudflare manages its DN
 
 AIMS creates confirmation links using `NEWSLETTER_CONFIRMATION_BASE_URL`, with `COMMS_HUB_PUBLIC_BASE_URL` as the fallback. The production default is the branded confirmation origin.
 
-Deploy or update this Worker from the repository root with the exact source commit SHA:
+Deploy or update this Worker from the repository root. The release command rejects dirty worktrees and verifies the tracked Worker source and configuration match the checked-out commit before injecting its SHA:
 
 ```sh
+if [ -n "$(git status --porcelain --untracked-files=all)" ]; then
+  echo "Refusing to deploy from a dirty worktree." >&2
+  exit 1
+fi
 SOURCE_SHA="$(git rev-parse HEAD)"
 test "${#SOURCE_SHA}" -eq 40
+test "$(git rev-parse "HEAD:workers/newsletter-confirm-proxy/worker.js")" = "$(git hash-object workers/newsletter-confirm-proxy/worker.js)"
+test "$(git rev-parse "HEAD:workers/newsletter-confirm-proxy/wrangler.toml")" = "$(git hash-object workers/newsletter-confirm-proxy/wrangler.toml)"
 npx wrangler deploy --config workers/newsletter-confirm-proxy/wrangler.toml --var "SOURCE_COMMIT_SHA:${SOURCE_SHA}"
 ```
 
