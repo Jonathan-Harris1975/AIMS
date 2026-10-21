@@ -96,7 +96,7 @@ export function workerUploadMetadata(config, sourceSha) {
   };
 }
 
-function assertBindings(settings, config, { deployed = false, sourceSha } = {}) {
+function assertBindings(settings, config, { deployed = false } = {}) {
   const bindings = settings?.bindings;
   if (!Array.isArray(bindings)
     || !bindings.some((binding) => binding.type === "secret_text" && binding.name === "COMMS_HUB_D1_PROXY_TOKEN")) {
@@ -118,7 +118,7 @@ function assertBindings(settings, config, { deployed = false, sourceSha } = {}) 
     || settings.observability?.logs?.head_sampling_rate !== config.observability.logs.head_sampling_rate
     || settings.observability?.logs?.persist !== config.observability.logs.persist
     || settings.observability?.logs?.invocation_logs !== config.observability.logs.invocation_logs)) {
-    throw new Error("Deployed Worker settings do not match the canonical configuration or source SHA.");
+    throw new Error("Deployed Worker settings do not match the canonical configuration.");
   }
 }
 
