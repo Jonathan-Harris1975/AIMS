@@ -52,6 +52,8 @@ jobs:
         run: python3 -B -m unittest discover -s .github/scripts -p 'test_trusted_automation_evidence.py'
       - name: Verify PR repair routing and blocker recovery
         run: python3 -B -m unittest discover -s .github/scripts -p 'test_pr_blocker_recovery.py'
+      - name: Verify PR repair trigger routing
+        run: python3 -B -m unittest discover -s .github/scripts -p 'test_kilo_fix_command.py'
       - name: Verify worker-watch failure and recovery handling
         run: python3 -B -m unittest discover -s scripts -p 'test_comms_worker_watch.py'
 

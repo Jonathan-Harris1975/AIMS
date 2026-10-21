@@ -138,7 +138,7 @@ class ExplicitKiloFixCommandTests(unittest.TestCase):
 class TriggerSecretRoutingTests(unittest.TestCase):
     def test_only_failed_check_repairs_use_debug_trigger(self):
         self.assertEqual(router.trigger_secret_for("check"), "KILO_DEBUG_TRIGGER_URL")
-        for kind in ("review", "fix-command", "merge-conflict-base", "review-threads-base"):
+        for kind in ("review", "fix-command", "merge-conflict-" + "a"*40, "branch-behind-" + "a"*40, "review-threads-" + "a"*40):
             with self.subTest(kind=kind):
                 self.assertEqual(router.trigger_secret_for(kind), "KILO_REPAIR_TRIGGER_URL")
 
