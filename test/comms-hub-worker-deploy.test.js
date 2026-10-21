@@ -8,11 +8,17 @@ import { deployWorker, parseWorkerConfig, resolveCloudflareWorkerDeployCredentia
 const repoRoot = fileURLToPath(new URL("../", import.meta.url));
 const source = await readFile(new URL("../workers/comms-hub-data-plane/wrangler.toml", import.meta.url), "utf8");
 const config = parseWorkerConfig(source);
+const expectedObservability = {
+  enabled: true,
+  head_sampling_rate: 0.1,
+  redact_query_string: true,
+  logs: { enabled: true, head_sampling_rate: 0.1, persist: true, invocation_logs: true },
+};
 const credentials = { accountId: "test-account", apiToken: "test-private-token" };
 const secret = { type: "secret_text", name: "COMMS_HUB_D1_PROXY_TOKEN" };
 const otherSecret = { type: "secret_text", name: "OTHER_EXISTING_SECRET" };
 const database = { type: "d1", name: "COMMS_HUB_DB", id: config.d1_databases.database_id };
-const settings = { bindings: [secret, otherSecret, database], compatibility_date: config.compatibility_date, observability: config.observability };
+const settings = { bindings: [secret, otherSecret, database], compatibility_date: config.compatibility_date, observability: expectedObservability };
 const sourceSha = "a".repeat(40);
 const healthUrl = "https://worker.example/query";
 const sourceBinding = { type: "plain_text", name: "SOURCE_COMMIT_SHA", text: sourceSha };
@@ -52,7 +58,7 @@ test("canonical module deploys without npm/npx and preserves secret, D1 and subd
   const metadata = JSON.parse(await upload.body.get("metadata").text());
   assert.deepEqual(metadata, {
     main_module: "worker.js", compatibility_date: config.compatibility_date,
-    observability: config.observability, bindings: [database, sourceBinding], keep_bindings: ["secret_text"],
+    observability: expectedObservability, bindings: [database, sourceBinding], keep_bindings: ["secret_text"],
   });
   assert.equal(upload.body.get("worker.js").type, "application/javascript+module");
   assert.equal(await upload.body.get("worker.js").text(), "export default {};");
