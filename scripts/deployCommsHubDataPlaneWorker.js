@@ -60,7 +60,7 @@ export function parseWorkerConfig(source) {
       }
       continue;
     }
-    const match = line.match(/^([a-z_]+)\s*=\s*("(?:[^"\\]|\\.)*"|true|false)\s*(?:#.*)?$/);
+    const match = line.match(/^([a-z_]+)\s*=\s*("(?:[^"\\]|\\.)*"|true|false|[0-9]+(?:\.[0-9]+)?)\s*(?:#.*)?$/);
     if (!match || !allowed[section]?.has(match[1])) throw new Error("Unsupported Worker configuration; deployment stopped.");
     const target = section === "observability.logs" ? config.observability.logs : section ? config[section] : config;
     if (Object.hasOwn(target, match[1])) throw new Error("Duplicate Worker configuration option.");
