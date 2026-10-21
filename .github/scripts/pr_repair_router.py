@@ -405,9 +405,7 @@ def dispatch(pr: dict, kind: str, findings: list[str]) -> str:
     trigger_secret = trigger_secret_for(kind)
     url = os.environ.get(trigger_secret, "")
     if not valid_kilo_webhook_url(url):
-        raise KiloConfigurationError(
-            f"{trigger_secret} is missing, unsupported or invalid"
-        ) from None
+        raise KiloConfigurationError(f"Configure {trigger_secret} with this repository's Kilo Cloud Agent webhook trigger") from None
 
     payload = {
         "repository": REPO,
