@@ -52,7 +52,7 @@ test("canonical module deploys without npm/npx and preserves secret, D1 and subd
   const metadata = JSON.parse(await upload.body.get("metadata").text());
   assert.deepEqual(metadata, {
     main_module: "worker.js", compatibility_date: config.compatibility_date,
-    observability: { enabled: true }, bindings: [database, sourceBinding], keep_bindings: ["secret_text"],
+    observability: config.observability, bindings: [database, sourceBinding], keep_bindings: ["secret_text"],
   });
   assert.equal(upload.body.get("worker.js").type, "application/javascript+module");
   assert.equal(await upload.body.get("worker.js").text(), "export default {};");
