@@ -681,7 +681,14 @@ class TrustedAdmissionProofTests(unittest.TestCase):
         request.side_effect = [
             {"check_runs": [
                 {"id": 11, "app": {"slug": "other-app"}, "started_at": "2026-01-01T00:00:00Z"},
-                {"id": 12, "app": {"slug": "github-actions"}, "name": "Trusted autonomy admission", "head_sha": "b" * 40, "external_id": "trusted-autonomy-admission:18:" + "b" * 40, "started_at": "2026-01-02T00:00:00Z"},
+                {
+                    "id": 12,
+                    "app": {"slug": "github-actions"},
+                    "name": "Trusted autonomy admission",
+                    "head_sha": "b" * 40,
+                    "external_id": "trusted-autonomy-admission:18:" + "b" * 40,
+                    "started_at": "2026-01-02T00:00:00Z",
+                },
             ]},
             {},
         ]
