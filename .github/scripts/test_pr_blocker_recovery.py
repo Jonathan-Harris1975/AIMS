@@ -643,7 +643,7 @@ class Recovery(unittest.TestCase):
                 m.router.dispatch(pr, "review", ["verified finding"])
         self.assertEqual(
             m.router.safe_route_error(raised.exception),
-            "repair-agent-configuration: Kilo webhook is missing, unsupported or invalid",
+            "repair-agent-configuration: KILO_REPAIR_TRIGGER_URL is missing, unsupported or invalid",
         )
 
     def test_recovery_sweep_runs_after_router_failure_unless_cancelled(self):
