@@ -1092,7 +1092,11 @@ def admit_manual_pr(pr: dict[str, Any]) -> None:
         number,
         sha,
         "success",
-        "The trusted default-branch workflow verified exact-head CI/security evidence, current holds, and required owner approval for any high-risk paths. Manual UI/API merges remain subject to the active server-side ruleset.",
+        (
+            "The trusted default-branch workflow verified exact-head CI/security evidence, "
+            "current holds, and required owner approval for any high-risk paths. "
+            "Manual UI/API merges remain subject to the active server-side ruleset."
+        ),
     )
     VERIFIED_ADMISSION_HEADS.add((number, sha))
     log(f"Published Trusted autonomy admission for manual PR #{number} at {sha[:12]}.")
