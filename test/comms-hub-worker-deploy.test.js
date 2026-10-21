@@ -22,7 +22,8 @@ const settings = { bindings: [secret, otherSecret, database], compatibility_date
 const sourceSha = "a".repeat(40);
 const healthUrl = "https://worker.example/query";
 const sourceBinding = { type: "plain_text", name: "SOURCE_COMMIT_SHA", text: sourceSha };
-const deployedSettings = { ...settings, bindings: [...settings.bindings, sourceBinding] };
+const deployedSettings = { ...settings };
+const uploadedVersion = { resources: { bindings: [...settings.bindings, sourceBinding], script_runtime: { compatibility_date: config.compatibility_date } } };
 const response = (result, overrides = {}) => new Response(JSON.stringify({ success: true, result, ...overrides }), { status: 200 });
 
 function transport(override = () => undefined) {
@@ -34,8 +35,10 @@ function transport(override = () => undefined) {
       const changed = await override(url, options, calls.length);
       if (changed !== undefined) return changed;
       if (url.endsWith("/settings")) return response(calls.length >= 5 ? deployedSettings : settings);
+      if (url.includes("/versions?")) return response({ items: [{ id: "uploaded-version" }] });
+      if (url.endsWith("/versions/uploaded-version")) return response(uploadedVersion);
       if (url === "https://worker.example/health") {
-        return new Response(JSON.stringify({ ok: true, service: config.name, source_commit_sha: calls.length === 6 ? "b".repeat(40) : sourceSha }), { status: 200 });
+        return new Response(JSON.stringify({ ok: true, service: config.name, source_commit_sha: sourceSha }), { status: 200 });
       }
       if (url.endsWith("/subdomain")) {
         return response({ enabled: true, previews_enabled: options.method === "POST" ? config.preview_urls : true });
@@ -50,7 +53,7 @@ test("canonical module deploys without npm/npx and preserves secret, D1 and subd
   const mock = transport();
   const result = await deployWorker({ config, source: "export default {};", sourceSha, healthUrl, credentials, fetchImpl: mock.fetchImpl });
   assert.deepEqual(result, { worker: config.name, source_sha: sourceSha, verified: true });
-  assert.deepEqual(mock.calls.map((call) => call.method), ["GET", "GET", "PUT", "POST", "GET", "GET", "GET"]);
+  assert.deepEqual(mock.calls.map((call) => call.method), ["GET", "GET", "PUT", "POST", "GET", "GET", "GET", "GET"]);
   const upload = mock.calls[2];
   assert.equal(upload.url, `https://api.cloudflare.com/client/v4/accounts/test-account/workers/scripts/${config.name}`);
   assert.equal(upload.headers.Authorization, `Bearer ${credentials.apiToken}`);
