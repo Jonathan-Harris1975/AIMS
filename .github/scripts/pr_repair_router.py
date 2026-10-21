@@ -20,6 +20,14 @@ from kilo_failure_classifier import repairable_failed_steps
 class KiloConfigurationError(RuntimeError):
     """The repair webhook configuration is missing or unsupported."""
 
+    def __init__(self, secret_name: str = ""):
+        self.secret_name = secret_name
+        if secret_name:
+            super().__init__(f"Configure {secret_name} with this repository's Kilo Cloud Agent webhook trigger")
+        else:
+            super().__init__("Configure Kilo Cloud Agent webhook trigger")
+
+
 
 class KiloProviderError(RuntimeError):
     """The repair provider rejected a request with an HTTP status."""
@@ -405,7 +413,7 @@ def dispatch(pr: dict, kind: str, findings: list[str]) -> str:
     trigger_secret = trigger_secret_for(kind)
     url = os.environ.get(trigger_secret, "")
     if not valid_kilo_webhook_url(url):
-        raise KiloConfigurationError(f"Configure {trigger_secret} with this repository's Kilo Cloud Agent webhook trigger") from None
+        raise KiloConfigurationError(trigger_secret) from None
 
     payload = {
         "repository": REPO,
@@ -460,9 +468,8 @@ def dispatch(pr: dict, kind: str, findings: list[str]) -> str:
 def safe_route_error(exc: Exception) -> str:
     """Classify known repair-agent failures without exposing private trigger details."""
     if isinstance(exc, KiloConfigurationError):
-        match = re.search(r"\b(KILO_(?:DEBUG|REPAIR)_TRIGGER_URL)\b", str(exc))
-        if match:
-            return f"repair-agent-configuration: {match.group(1)} is missing, unsupported or invalid"
+        if getattr(exc, "secret_name", ""):
+            return f"repair-agent-configuration: {exc.secret_name} is missing, unsupported or invalid"
         return "repair-agent-configuration: Kilo webhook is missing, unsupported or invalid"
     if isinstance(exc, KiloProviderError):
         return f"repair-agent-provider-error: Kilo trigger returned HTTP {exc.status}"

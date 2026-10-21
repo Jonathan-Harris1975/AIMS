@@ -5,10 +5,10 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-os.environ.setdefault("GITHUB_REPOSITORY", "owner/repository")
-os.environ.setdefault("GH_TOKEN", "test-token")
-os.environ.setdefault("GITHUB_EVENT_NAME", "issue_comment")
-os.environ.setdefault("DEFAULT_BRANCH", "main")
+os.environ["GITHUB_REPOSITORY"] = "owner/repository"
+os.environ["GH_TOKEN"] = "test-token"
+os.environ["GITHUB_EVENT_NAME"] = "issue_comment"
+os.environ["DEFAULT_BRANCH"] = "main"
 sys.path.insert(0, str(Path(__file__).parent))
 import pr_repair_router as router
 
@@ -138,9 +138,7 @@ class ExplicitKiloFixCommandTests(unittest.TestCase):
 class TriggerSecretRoutingTests(unittest.TestCase):
     def test_only_failed_check_repairs_use_debug_trigger(self):
         self.assertEqual(router.trigger_secret_for("check"), "KILO_DEBUG_TRIGGER_URL")
-        for kind in ("review", "fix-command", "merge-conflict-base", "review-threads-base"):
-            with self.subTest(kind=kind):
-                self.assertEqual(router.trigger_secret_for(kind), "KILO_REPAIR_TRIGGER_URL")
+        for kind in ("review", "fix-command", "merge-conflict-" + "a"*40, "branch-behind-" + "a"*40, "review-threads-" + "a"*40):
             with self.subTest(kind=kind):
                 self.assertEqual(router.trigger_secret_for(kind), "KILO_REPAIR_TRIGGER_URL")
 
