@@ -39,7 +39,8 @@ export function parseWorkerConfig(source) {
   const config = {};
   const allowed = {
     "": new Set(["name", "main", "compatibility_date", "preview_urls"]),
-    observability: new Set(["enabled"]),
+    observability: new Set(["enabled", "head_sampling_rate", "redact_query_string"]),
+    "observability.logs": new Set(["enabled", "head_sampling_rate", "persist", "invocation_logs"]),
     d1_databases: new Set(["binding", "database_name", "database_id"]),
   };
   let section = "";
@@ -47,23 +48,31 @@ export function parseWorkerConfig(source) {
   for (const raw of String(source).split(/\r?\n/)) {
     const line = raw.trim();
     if (!line || line.startsWith("#")) continue;
-    if (line === "[observability]" || line === "[[d1_databases]]") {
-      section = line === "[observability]" ? "observability" : "d1_databases";
+    if (line === "[observability]" || line === "[observability.logs]" || line === "[[d1_databases]]") {
+      section = line === "[observability]" ? "observability" : line === "[observability.logs]" ? "observability.logs" : "d1_databases";
       if (sections.has(section)) throw new Error("Duplicate Worker configuration section.");
       sections.add(section);
-      config[section] = {};
+      if (section === "observability.logs") {
+        config.observability ??= {};
+        config.observability.logs = {};
+      } else {
+        config[section] = {};
+      }
       continue;
     }
     const match = line.match(/^([a-z_]+)\s*=\s*("(?:[^"\\]|\\.)*"|true|false)\s*(?:#.*)?$/);
     if (!match || !allowed[section]?.has(match[1])) throw new Error("Unsupported Worker configuration; deployment stopped.");
-    const target = section ? config[section] : config;
+    const target = section === "observability.logs" ? config.observability.logs : section ? config[section] : config;
     if (Object.hasOwn(target, match[1])) throw new Error("Duplicate Worker configuration option.");
     target[match[1]] = JSON.parse(match[2]);
   }
   const database = config.d1_databases;
   if (config.name !== WORKER_NAME || config.main !== "worker.js"
     || typeof config.compatibility_date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(config.compatibility_date)
-    || typeof config.preview_urls !== "boolean" || typeof config.observability?.enabled !== "boolean"
+    || typeof config.preview_urls !== "boolean" || config.observability?.enabled !== true
+    || config.observability?.head_sampling_rate !== 0.1 || config.observability?.redact_query_string !== true
+    || config.observability?.logs?.enabled !== true || config.observability.logs.head_sampling_rate !== 0.1
+    || config.observability.logs.persist !== true || config.observability.logs.invocation_logs !== true
     || database?.binding !== "COMMS_HUB_DB" || typeof database?.database_name !== "string" || !database.database_name
     || typeof database?.database_id !== "string" || !/^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i.test(database.database_id)) {
     throw new Error("Invalid or incomplete Comms Hub Worker configuration.");
@@ -104,7 +113,13 @@ function assertBindings(settings, config, { deployed = false, sourceSha } = {}) 
     || !bindings.some((binding) => binding.type === "plain_text"
       && binding.name === "SOURCE_COMMIT_SHA" && binding.text === sourceSha?.toLowerCase())
     || settings.compatibility_date !== config.compatibility_date
-    || settings.observability?.enabled !== config.observability.enabled)) {
+    || settings.observability?.enabled !== config.observability.enabled
+    || settings.observability?.head_sampling_rate !== config.observability.head_sampling_rate
+    || settings.observability?.redact_query_string !== config.observability.redact_query_string
+    || settings.observability?.logs?.enabled !== config.observability.logs.enabled
+    || settings.observability?.logs?.head_sampling_rate !== config.observability.logs.head_sampling_rate
+    || settings.observability?.logs?.persist !== config.observability.logs.persist
+    || settings.observability?.logs?.invocation_logs !== config.observability.logs.invocation_logs)) {
     throw new Error("Deployed Worker settings do not match the canonical configuration or source SHA.");
   }
 }
