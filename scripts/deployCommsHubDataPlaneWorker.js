@@ -39,7 +39,8 @@ export function parseWorkerConfig(source) {
   const config = {};
   const allowed = {
     "": new Set(["name", "main", "compatibility_date", "preview_urls"]),
-    observability: new Set(["enabled"]),
+    observability: new Set(["enabled", "head_sampling_rate", "redact_query_string"]),
+    "observability.logs": new Set(["enabled", "head_sampling_rate", "persist", "invocation_logs"]),
     d1_databases: new Set(["binding", "database_name", "database_id"]),
   };
   let section = "";
@@ -47,23 +48,31 @@ export function parseWorkerConfig(source) {
   for (const raw of String(source).split(/\r?\n/)) {
     const line = raw.trim();
     if (!line || line.startsWith("#")) continue;
-    if (line === "[observability]" || line === "[[d1_databases]]") {
-      section = line === "[observability]" ? "observability" : "d1_databases";
+    if (line === "[observability]" || line === "[observability.logs]" || line === "[[d1_databases]]") {
+      section = line === "[observability]" ? "observability" : line === "[observability.logs]" ? "observability.logs" : "d1_databases";
       if (sections.has(section)) throw new Error("Duplicate Worker configuration section.");
       sections.add(section);
-      config[section] = {};
+      if (section === "observability.logs") {
+        config.observability ??= {};
+        config.observability.logs = {};
+      } else {
+        config[section] = {};
+      }
       continue;
     }
-    const match = line.match(/^([a-z_]+)\s*=\s*("(?:[^"\\]|\\.)*"|true|false)\s*(?:#.*)?$/);
+    const match = line.match(/^([a-z_]+)\s*=\s*("(?:[^"\\]|\\.)*"|true|false|[0-9]+(?:\.[0-9]+)?)\s*(?:#.*)?$/);
     if (!match || !allowed[section]?.has(match[1])) throw new Error("Unsupported Worker configuration; deployment stopped.");
-    const target = section ? config[section] : config;
+    const target = section === "observability.logs" ? config.observability.logs : section ? config[section] : config;
     if (Object.hasOwn(target, match[1])) throw new Error("Duplicate Worker configuration option.");
     target[match[1]] = JSON.parse(match[2]);
   }
   const database = config.d1_databases;
   if (config.name !== WORKER_NAME || config.main !== "worker.js"
     || typeof config.compatibility_date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(config.compatibility_date)
-    || typeof config.preview_urls !== "boolean" || typeof config.observability?.enabled !== "boolean"
+    || typeof config.preview_urls !== "boolean" || config.observability?.enabled !== true
+    || config.observability?.head_sampling_rate !== 0.1 || config.observability?.redact_query_string !== true
+    || config.observability?.logs?.enabled !== true || config.observability.logs.head_sampling_rate !== 0.1
+    || config.observability.logs.persist !== true || config.observability.logs.invocation_logs !== true
     || database?.binding !== "COMMS_HUB_DB" || typeof database?.database_name !== "string" || !database.database_name
     || typeof database?.database_id !== "string" || !/^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i.test(database.database_id)) {
     throw new Error("Invalid or incomplete Comms Hub Worker configuration.");
@@ -87,7 +96,7 @@ export function workerUploadMetadata(config, sourceSha) {
   };
 }
 
-function assertBindings(settings, config, { deployed = false, sourceSha } = {}) {
+function assertBindings(settings, config, { deployed = false } = {}) {
   const bindings = settings?.bindings;
   if (!Array.isArray(bindings)
     || !bindings.some((binding) => binding.type === "secret_text" && binding.name === "COMMS_HUB_D1_PROXY_TOKEN")) {
@@ -101,14 +110,30 @@ function assertBindings(settings, config, { deployed = false, sourceSha } = {}) 
   }
   if (deployed && (!bindings.some((binding) => binding.type === "d1"
     && binding.name === config.d1_databases.binding && binding.id === config.d1_databases.database_id)
-    || !bindings.some((binding) => binding.type === "plain_text"
-      && binding.name === "SOURCE_COMMIT_SHA" && binding.text === sourceSha?.toLowerCase())
     || settings.compatibility_date !== config.compatibility_date
-    || settings.observability?.enabled !== config.observability.enabled)) {
-    throw new Error("Deployed Worker settings do not match the canonical configuration or source SHA.");
+    || settings.observability?.enabled !== config.observability.enabled
+    || settings.observability?.head_sampling_rate !== config.observability.head_sampling_rate
+    || settings.observability?.redact_query_string !== config.observability.redact_query_string
+    || settings.observability?.logs?.enabled !== config.observability.logs.enabled
+    || settings.observability?.logs?.head_sampling_rate !== config.observability.logs.head_sampling_rate
+    || settings.observability?.logs?.persist !== config.observability.logs.persist
+    || settings.observability?.logs?.invocation_logs !== config.observability.logs.invocation_logs)) {
+    throw new Error("Deployed Worker settings do not match the canonical configuration.");
   }
 }
 
+function assertUploadedVersion(version, config, sourceSha) {
+  const bindings = version?.resources?.bindings;
+  if (!Array.isArray(bindings)
+    || !bindings.some((binding) => binding.type === "secret_text" && binding.name === "COMMS_HUB_D1_PROXY_TOKEN")
+    || !bindings.some((binding) => binding.type === "d1"
+      && binding.name === config.d1_databases.binding && binding.id === config.d1_databases.database_id)
+    || !bindings.some((binding) => binding.type === "plain_text"
+      && binding.name === "SOURCE_COMMIT_SHA" && binding.text === sourceSha.toLowerCase())
+    || version?.resources?.script_runtime?.compatibility_date !== config.compatibility_date) {
+    throw new Error("Uploaded Worker version does not match the configured bindings or source SHA.");
+  }
+}
 export async function deployWorker({ config, source, sourceSha, healthUrl, credentials, fetchImpl = globalThis.fetch }) {
   if (!/^[a-f0-9]{40}$/i.test(sourceSha || "")) {
     throw new Error("Worker deployment requires the exact 40-character Koyeb Git SHA.");
@@ -159,42 +184,56 @@ export async function deployWorker({ config, source, sourceSha, healthUrl, crede
   upload.set("metadata", new Blob([JSON.stringify(workerUploadMetadata(config, sourceSha))], { type: "application/json" }), "metadata.json");
   upload.set(config.main, new Blob([source], { type: "application/javascript+module" }), config.main);
   const result = await api(scriptUrl, { method: "PUT", body: upload });
-  if (typeof result.id !== "string" || !result.id) throw new Error("Cloudflare upload returned no Worker identifier.");
-  const updatedSubdomain = await api(`${scriptUrl}/subdomain`, {
-    method: "POST", json: true,
-    body: JSON.stringify({ enabled: subdomain.enabled, previews_enabled: config.preview_urls }),
-  });
-  if (updatedSubdomain.enabled !== subdomain.enabled || updatedSubdomain.previews_enabled !== config.preview_urls) {
-    throw new Error("Worker subdomain settings were not preserved.");
-  }
-  assertBindings(await api(`${scriptUrl}/settings`), config, { deployed: true, sourceSha });
-  let verifiedHealth = false;
-  for (let attempt = 0; attempt < 8; attempt += 1) {
-    try {
-      const response = await fetchImpl(runtimeHealthUrl.toString(), {
-        method: "GET",
-        headers: { Accept: "application/json" },
-        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-        redirect: "error",
-      });
-      if (response.ok) {
-        const health = await response.json();
-        if (health?.ok === true && health?.service === WORKER_NAME
-          && health?.source_commit_sha === sourceSha.toLowerCase()) {
-          verifiedHealth = true;
-          break;
-        }
-      }
-    } catch {
-      // The uploaded Worker can take a short time to propagate. Retry only the
-      // idempotent health read; never repeat the upload.
+  try {
+    if (typeof result.id !== "string" || !result.id) throw new Error("Upload returned no Worker identifier.");
+    const updatedSubdomain = await api(`${scriptUrl}/subdomain`, {
+      method: "POST", json: true,
+      body: JSON.stringify({ enabled: subdomain.enabled, previews_enabled: config.preview_urls }),
+    });
+    if (updatedSubdomain.enabled !== subdomain.enabled || updatedSubdomain.previews_enabled !== config.preview_urls) {
+      throw new Error("Worker subdomain settings were not preserved.");
     }
-    if (attempt < 7) await new Promise((resolve) => setTimeout(resolve, 1_000));
+    assertBindings(await api(`${scriptUrl}/settings`), config, { deployed: true });
+    const versions = await api(`${scriptUrl}/versions?per_page=1`);
+    const versionId = versions?.items?.[0]?.id;
+    if (typeof versionId !== "string" || !versionId) {
+      throw new Error("Latest uploaded Worker version could not be identified.");
+    }
+    const uploadedVersion = await api(`${scriptUrl}/versions/${encodeURIComponent(versionId)}`);
+    assertUploadedVersion(uploadedVersion, config, sourceSha);
+    let verifiedHealth = false;
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      try {
+        const response = await fetchImpl(runtimeHealthUrl.toString(), {
+          method: "GET",
+          headers: { Accept: "application/json" },
+          signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+          redirect: "error",
+        });
+        if (response.ok) {
+          const health = await response.json();
+          if (health?.ok === true && health?.service === WORKER_NAME
+            && health?.source_commit_sha === sourceSha.toLowerCase()) {
+            verifiedHealth = true;
+            break;
+          }
+        }
+      } catch {
+        // The uploaded Worker can take a short time to propagate. Retry only the
+        // idempotent health read; never repeat the upload.
+      }
+      if (attempt < 7) await new Promise((resolve) => setTimeout(resolve, 1_000));
+    }
+    if (!verifiedHealth) {
+      throw new Error("Cloudflare Worker runtime health or source SHA does not match the deployed release.");
+    }
+    return { worker: config.name, source_sha: sourceSha.toLowerCase(), verified: true };
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : "post-upload verification failed";
+    throw new Error(
+      `Cloudflare accepted the Worker upload, but post-upload verification failed; the new version may be live. Verify remote state before retrying. ${detail}`
+    );
   }
-  if (!verifiedHealth) {
-    throw new Error("Cloudflare Worker runtime health or source SHA does not match the deployed release.");
-  }
-  return { worker: config.name, source_sha: sourceSha.toLowerCase(), verified: true };
 }
 
 export async function main(env = process.env, { checkOnly = false } = {}) {
