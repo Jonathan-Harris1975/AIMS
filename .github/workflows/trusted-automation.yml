@@ -15,9 +15,9 @@ on: # zizmor: ignore[dangerous-triggers] trusted event router; code is fixed to 
   # Safety-net reconciliation only around the weekend window (UTC covers both BST and GMT),
   # plus one daily sweep. Event triggers above handle everything else.
   schedule:
-    - cron: "17,47 22-23 * * 6"
-    - cron: "17,47 0-5 * * 0"
-    - cron: "17 6 * * *"
+    - cron: "3 22-23 * * 6"
+    - cron: "3 0-5 * * 0"
+    - cron: "3 6 * * *"
   workflow_dispatch:
 
 permissions:
