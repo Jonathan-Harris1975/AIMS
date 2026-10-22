@@ -4,8 +4,8 @@ on:
   schedule:
     - cron: "0 20 * * 5"
     - cron: "0 19 * * 5"
-    - cron: "0 22 * * 6"
-    - cron: "0 21 * * 6"
+    - cron: "0 22 1 * *"
+    - cron: "0 21 1 * *"
     - cron: "30 18 * * 0"
     - cron: "30 17 * * 0"
   workflow_dispatch:
@@ -58,7 +58,7 @@ jobs:
             case "${SCHEDULE_EXPR}:${london_offset}" in
               "0 19 * * 5:+0100"|"0 20 * * 5:+0000")
                 phase="ci"; workflow="ci.yml" ;;
-              "0 21 * * 6:+0100"|"0 22 * * 6:+0000")
+              "0 21 1 * *:+0100"|"0 22 1 * *:+0000")
                 phase="dast"; workflow="dast.yml" ;;
               "30 17 * * 0:+0100"|"30 18 * * 0:+0000")
                 phase="council"; workflow="council.yml" ;;
@@ -87,6 +87,6 @@ jobs:
         if: always()
         run: |
           echo "CI: Fri 20:00–Fri 22:30"
-          echo "DAST: Sat 22:00–Sun 00:00"
+          echo "DAST: monthly on the 1st at 22:00 Europe/London"
           echo "Council: Sun 18:30–Sun 21:00"
           echo "Weekend operating envelope: Friday 20:00 to Monday 04:00 Europe/London"
