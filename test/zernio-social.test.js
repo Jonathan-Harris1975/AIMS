@@ -831,3 +831,53 @@ test("Sunday spotlight avoids fabricated likenesses and daily evergreen artwork 
   assert.match(source, /post\.imagePrompt = imagePrompt/);
   assert.match(source, /zernio-daily-artwork-unavailable/);
 });
+
+
+test("scheduled daily posts publish with subjective style QA logged as advisories", async () => {
+  const mod = await import(`../services/zernio/utils/socialScheduler.js?daily-qa-policy=${Date.now()}`);
+  const post = {
+    title: "Transformer attention",
+    topic: "Transformer attention",
+    content: "A transformer model compares token relationships with attention.\n- The color of each token has no bearing on the calculation. 🎯 #Motivation",
+  };
+
+  const daily = mod.runZernioSocialGate({
+    contentType: "zernio-daily-tuesday",
+    laneKey: "tuesday",
+    post,
+  });
+  const strict = mod.runZernioSocialGate({
+    contentType: "zernio-social",
+    laneKey: "tuesday",
+    post,
+  });
+  const offTopic = mod.runZernioSocialGate({
+    contentType: "zernio-daily-tuesday",
+    laneKey: "tuesday",
+    post: { title: "Transformer attention", topic: "Transformer attention", content: "A general thought for today." },
+  });
+
+  assert.equal(daily.dailyScheduled, true);
+  assert.equal(daily.ok, true);
+  assert.ok(daily.warnings.some((warning) => /British English drift/i.test(warning)));
+  assert.ok(daily.warnings.some((warning) => /emoji/i.test(warning)));
+  assert.ok(daily.warnings.some((warning) => /markdown or bullet/i.test(warning)));
+  assert.ok(daily.warnings.some((warning) => /Motivational hashtag/i.test(warning)));
+  assert.equal(strict.ok, false);
+  assert.ok(strict.defects.some((defect) => /British English drift/i.test(defect)));
+  assert.equal(offTopic.ok, true);
+  assert.ok(offTopic.warnings.some((warning) => /Tuesday post drifted away/i.test(warning)));
+  assert.ok(offTopic.warnings.some((warning) => /not clearly aligned/i.test(warning)));
+});
+
+test("scheduled daily posts still fail on missing content and hard publication checks", async () => {
+  const mod = await import(`../services/zernio/utils/socialScheduler.js?daily-qa-hard-gates=${Date.now()}`);
+  const empty = mod.runZernioSocialGate({
+    contentType: "zernio-daily-tuesday",
+    laneKey: "tuesday",
+    post: { title: "Transformer attention", topic: "Transformer attention", content: "" },
+  });
+
+  assert.equal(empty.ok, false);
+  assert.ok(empty.defects.includes("Post content is empty."));
+});
