@@ -293,7 +293,7 @@ simplif|trade[- ]?off|because|therefore|means)\\b", "i").test(content);
   return defects;
 }
 
-function runZernioSocialGate({ contentType = "zernio-social", laneKey = "", post = {}, verifiedQuote = null, buildContext = "" } = {}) {
+export function runZernioSocialGate({ contentType = "zernio-social", laneKey = "", post = {}, verifiedQuote = null, buildContext = "" } = {}) {
   const defects = [];
   const warnings = [];
   const text = compactText([post.title, post.topic, post.content, post.firstComment].filter(Boolean).join("\n"));
@@ -398,8 +398,33 @@ function runZernioSocialGate({ contentType = "zernio-social", laneKey = "", post
     }
   }
 
+  const dailyScheduled = /^zernio-daily-/.test(contentType);
+  if (dailyScheduled) {
+    const advisoryPatterns = [
+      /Motivational hashtag\(s\) do not fit the brand:/i,
+      /Generic hedging phrase detected:/i,
+      /Motivational tone drift:/i,
+      /Post contains markdown or bullet formatting\./i,
+      /Post contains emoji despite brand rules\./i,
+      /Generic abstraction phrase detected:/i,
+      /British English drift:/i,
+      /Monday commentary is too thin/i,
+      /Monday commentary reads like generic explanatory filler/i,
+      /daily post drifted away/i,
+      /Sunday spotlight repetition guard blocked recent person:/i,
+    ];
+    const hardDefects = [];
+    const advisoryDefects = [];
+    for (const defect of defects) {
+      if (advisoryPatterns.some((pattern) => pattern.test(defect))) advisoryDefects.push(defect);
+      else hardDefects.push(defect);
+    }
+    defects.splice(0, defects.length, ...hardDefects);
+    warnings.push(...advisoryDefects.map((defect) => `Daily QA advisory: ${defect}`));
+  }
+
   const score = scoreFromGate(defects, warnings);
-  if (defects.length) {
+  if (defects.length || (dailyScheduled && warnings.length)) {
     emitQaEvent({
       source: `scheduler.gate.${laneKey || contentType}`,
       type: "gate_defects",
@@ -410,9 +435,10 @@ function runZernioSocialGate({ contentType = "zernio-social", laneKey = "", post
   }
 
   return {
-    ok: defects.length === 0 && score >= 86,
+    ok: defects.length === 0 && (dailyScheduled || score >= 86),
     score,
     threshold: 86,
+    dailyScheduled,
     contentType,
     laneKey,
     defects,
@@ -425,7 +451,8 @@ function addExternalGateDefects(gate = {}, extraDefects = [], extraWarnings = []
   const defects = [...new Set([...(gate.defects || []), ...extraDefects].filter(Boolean))];
   const warnings = [...new Set([...(gate.warnings || []), ...extraWarnings].filter(Boolean))];
   const score = scoreFromGate(defects, warnings);
-  return { ...gate, defects, warnings, score, threshold: Number(gate.threshold || 86), ok: defects.length === 0 && score >= 86 };
+  const ok = defects.length === 0 && (gate.dailyScheduled || score >= 86);
+  return { ...gate, defects, warnings, score, threshold: Number(gate.threshold || 86), ok };
 }
 
 export function buildZernioSemanticRepairPrompt({ laneKey = "", post = {}, gate = {}, attempt = 1, semanticContext = {} } = {}) {
