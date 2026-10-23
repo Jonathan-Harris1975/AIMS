@@ -429,8 +429,11 @@ export function runZernioSocialGate({ contentType = "zernio-social", laneKey = "
       source: `scheduler.gate.${laneKey || contentType}`,
       type: "gate_defects",
       severity: score < 86 ? "medium" : "low",
-      message: `${defects.length} defect(s) found in ${contentType} gate`,
+      message: defects.length
+        ? `${defects.length} defect(s) found in ${contentType} gate`
+        : `${warnings.length} advisory finding(s) recorded for ${contentType} gate`,
       detail: { defects, warnings, score, laneKey, contentType },
+      persist: dailyScheduled,
     });
   }
 
