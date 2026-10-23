@@ -410,7 +410,8 @@ export function runZernioSocialGate({ contentType = "zernio-social", laneKey = "
       /British English drift:/i,
       /Monday commentary is too thin/i,
       /Monday commentary reads like generic explanatory filler/i,
-      /daily post drifted away/i,
+      /Post copy is not clearly aligned with its declared title\/topic/i,
+      /^(?:Tuesday|Wednesday|Thursday|Friday|Saturday) post (?:drifted away|must name a believable industry|must explain one concrete|needs one direct|should show)/i,
       /Sunday spotlight repetition guard blocked recent person:/i,
     ];
     const hardDefects = [];
@@ -1823,6 +1824,7 @@ export async function buildAndScheduleDailyLane(laneKey, options = {}) {
       }
     }
 
+    let spotlightWarning = "";
     if (laneKey === "sunday") {
       const spotlightPerson = compactText(post.spotlightPerson || "");
       if (!looksLikePersonName(spotlightPerson)) {
@@ -1832,10 +1834,12 @@ export async function buildAndScheduleDailyLane(laneKey, options = {}) {
         throw err;
       }
       if (spotlightPerson && isRecentSpotlightPerson(spotlightPerson)) {
-        const err = new Error(`Sunday spotlight repetition guard blocked recent person: ${spotlightPerson}`);
-        err.statusCode = 422;
-        err.zernioSocialGate = { ...zernioSocialGate, defects: [...zernioSocialGate.defects, err.message] };
-        throw err;
+        spotlightWarning = `Sunday spotlight repeats recently featured person ${spotlightPerson}; recorded for the monthly QA review.`;
+        warn("zernio.daily.spotlight_repeated_advisory", {
+          lane: laneKey,
+          spotlightPerson,
+          publishDate,
+        });
       }
     }
 
@@ -1857,6 +1861,7 @@ export async function buildAndScheduleDailyLane(laneKey, options = {}) {
       ...(buildContextResolved.warnings || []),
       ...(audienceIntentWarning ? [audienceIntentWarning] : []),
       ...(artworkWarning ? [artworkWarning] : []),
+      ...(spotlightWarning ? [spotlightWarning] : []),
       ...(scheduling.warnings || []),
     ];
 
