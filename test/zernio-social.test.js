@@ -851,6 +851,11 @@ test("scheduled daily posts publish with subjective style QA logged as advisorie
     laneKey: "tuesday",
     post,
   });
+  const offTopic = mod.runZernioSocialGate({
+    contentType: "zernio-daily-tuesday",
+    laneKey: "tuesday",
+    post: { title: "Transformer attention", topic: "Transformer attention", content: "A general thought for today." },
+  });
 
   assert.equal(daily.dailyScheduled, true);
   assert.equal(daily.ok, true);
@@ -860,6 +865,9 @@ test("scheduled daily posts publish with subjective style QA logged as advisorie
   assert.ok(daily.warnings.some((warning) => /Motivational hashtag/i.test(warning)));
   assert.equal(strict.ok, false);
   assert.ok(strict.defects.some((defect) => /British English drift/i.test(defect)));
+  assert.equal(offTopic.ok, true);
+  assert.ok(offTopic.warnings.some((warning) => /Tuesday post drifted away/i.test(warning)));
+  assert.ok(offTopic.warnings.some((warning) => /not clearly aligned/i.test(warning)));
 });
 
 test("scheduled daily posts still fail on missing content and hard publication checks", async () => {
