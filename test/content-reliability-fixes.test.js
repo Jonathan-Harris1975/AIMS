@@ -259,7 +259,7 @@ test("Zernio exact schedules use London time and recover missed slots with a saf
   assert.match(env, /^ZERNIO_SCHEDULE_RECOVERY_ENABLED=true$/m);
   assert.match(env, /^ZERNIO_SCHEDULE_MIN_LEAD_MS=900000$/m);
   assert.match(env, /^ZERNIO_BLOG_RSS_TIME=12:00$/m);
-  assert.match(env, /^ZERNIO_API_RETRY_ATTEMPTS=5$/m);
+  assert.match(env, /^ZERNIO_API_RETRY_ATTEMPTS=2$/m);
 });
 
 test("Zernio keeps fresh generated artwork primary and permits the curated stored image as resilience fallback", async () => {
