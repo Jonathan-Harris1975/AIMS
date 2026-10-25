@@ -11,6 +11,7 @@ ARG PIP_VERSION=26.2.1
 ARG HEADROOM_VERSION=0.38.0
 ARG MSGPACK_VERSION=1.2.1
 ARG SETUPTOOLS_VERSION=83.0.0
+ARG FILELOCK_VERSION=4.2.1
 
 FROM ${UBUNTU_IMAGE} AS python-build
 ARG PYTHON_VERSION
@@ -19,6 +20,7 @@ ARG PIP_VERSION
 ARG HEADROOM_VERSION
 ARG MSGPACK_VERSION
 ARG SETUPTOOLS_VERSION
+ARG FILELOCK_VERSION
 
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update \
@@ -47,8 +49,9 @@ RUN /usr/local/bin/python3.14 -m venv /opt/headroom \
  && /opt/headroom/bin/pip install --no-cache-dir \
       "headroom-ai[proxy,proxy-prod]==${HEADROOM_VERSION}" \
       "msgpack==${MSGPACK_VERSION}" \
+      "filelock==${FILELOCK_VERSION}" \
  && /opt/headroom/bin/pip uninstall --yes pip \
- && /opt/headroom/bin/python -c 'from importlib.metadata import version; from importlib.util import find_spec; from pathlib import Path; assert version("headroom-ai") == "0.38.0"; assert version("msgpack") == "1.2.1"; assert version("setuptools") == "83.0.0"; assert find_spec("pip") is None; assert not any(Path("/opt/headroom/bin").glob("pip*")); from headroom._core import DiffCompressor, SmartCrusher' \
+ && /opt/headroom/bin/python -c 'from importlib.metadata import version; from importlib.util import find_spec; from pathlib import Path; assert version("headroom-ai") == "0.38.0"; assert version("msgpack") == "1.2.1"; assert version("setuptools") == "83.0.0"; assert version("filelock") == "4.2.1"; assert find_spec("pip") is None; assert not any(Path("/opt/headroom/bin").glob("pip*")); from headroom._core import DiffCompressor, SmartCrusher' \
  && rm -rf /usr/local/lib/python3.14/test /usr/local/lib/python3.14/ensurepip /usr/local/lib/python3.14/ensurepip-*.dist-info /usr/local/lib/python3.14/site-packages \
       /usr/local/lib/python3.14/idlelib /usr/local/lib/python3.14/tkinter /usr/local/lib/python3.14/turtledemo \
  && rm -f /usr/local/lib/python3.14/turtle.py \
