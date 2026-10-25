@@ -278,12 +278,21 @@ function keywordSlots(keywords: string[]): string[] {
 }
 
 function stripHtml(html: string): string {
-  return html
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/gi, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/\s+/g, ' ')
-    .trim()
+  if (typeof html !== 'string') return ''
+  let text = html
+  text = text.replace(/<[^>]*>/g, ' ')
+  text = text.replace(/&nbsp;/gi, ' ')
+  text = text.replace(/&amp;/g, '&')
+  text = text.replace(/&lt;/g, '<')
+  text = text.replace(/&gt;/g, '>')
+  text = text.replace(/&quot;/g, '"')
+  text = text.replace(/&#39;/g, "'")
+  text = text.replace(/\r\n/g, ' ')
+  text = text.replace(/\r/g, ' ')
+  text = text.replace(/\n/g, ' ')
+  text = text.replace(/\t/g, ' ')
+  text = text.replace(/ +/g, ' ')
+  return text.trim()
 }
 
 function changesApplied(book: KdpBookMetadata, changes: KdpMetadataChanges): boolean {

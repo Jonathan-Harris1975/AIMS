@@ -41,21 +41,53 @@ async function visibleOtpInput(page) {
   ])
 }
 
+function isKdpReportsUrl(urlString: string): boolean {
+  try {
+    const url = new URL(urlString)
+    const hostname = url.hostname.toLowerCase()
+    if (hostname !== 'kdpreports.amazon.com') return false
+    if (!url.pathname.toLowerCase().startsWith('/reports/')) return false
+    if (url.pathname.toLowerCase().includes('signin')) return false
+    return true
+  } catch {
+    const url = urlString.toLowerCase()
+    if (!url.includes('://kdpreports.amazon.com/')) return false
+    if (!url.includes('/reports/')) return false
+    if (url.includes('signin')) return false
+    return true
+  }
+}
+
+function isKdpReportsSignInUrl(urlString: string): boolean {
+  try {
+    const url = new URL(urlString)
+    const hostname = url.hostname.toLowerCase()
+    if (hostname !== 'kdpreports.amazon.com') return false
+    if (url.pathname.toLowerCase().includes('signin')) return true
+    return false
+  } catch {
+    const url = urlString.toLowerCase()
+    if (!url.includes('://kdpreports.amazon.com/')) return false
+    if (url.includes('signin')) return true
+    return false
+  }
+}
+
 async function waitForOtpInput(page, timeoutMs = 45_000) {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
     const input = await visibleOtpInput(page)
     if (input) return input
-    const url = page.url().toLowerCase()
-    if (url.includes('kdpreports.amazon.com') && url.includes('/reports/') && !url.includes('signin')) return null
+    const url = page.url()
+    if (isKdpReportsUrl(url)) return null
     await page.waitForTimeout(500)
   }
   return null
 }
 
 async function isAuthenticated(page): Promise<boolean> {
-  const url = page.url().toLowerCase()
-  if (!url.includes('kdpreports.amazon.com') || !url.includes('/reports/') || url.includes('signin')) return false
+  const url = page.url()
+  if (!isKdpReportsUrl(url) || isKdpReportsSignInUrl(url)) return false
   const html = await page.content().catch(() => '')
   return html.includes('csrftoken') || html.includes('customerAccountInfoModel')
 }
