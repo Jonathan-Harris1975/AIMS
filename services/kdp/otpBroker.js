@@ -24,12 +24,19 @@ function isAllowedSender(sender) {
   return typeof sender === "string" && allowedSenders().has(sender.trim().toLowerCase());
 }
 
-function findCodeAfterLabel(message) {
+function findCodeNearLabel(message) {
   const label = /\b(?:code|otp)\b/i.exec(message);
   if (!label) return null;
 
-  const codeWindow = message.slice(label.index + label[0].length, label.index + label[0].length + 32);
-  return codeWindow.match(/\b\d{6}\b/)?.[0] ?? null;
+  const afterLabel = message.slice(label.index + label[0].length, label.index + label[0].length + 32);
+  const codeAfterLabel = afterLabel.match(/\b\d{6}\b/)?.[0];
+  if (codeAfterLabel) return codeAfterLabel;
+
+  // Amazon SMS messages may put the code before the label, e.g.
+  // "123456 is your Amazon OTP." Accept the nearest six-digit code there too.
+  const beforeLabel = message.slice(Math.max(0, label.index - 32), label.index);
+  const codesBeforeLabel = beforeLabel.match(/\b\d{6}\b/g);
+  return codesBeforeLabel?.at(-1) ?? null;
 }
 
 export function extractAmazonOtp(message, sender) {
@@ -37,8 +44,7 @@ export function extractAmazonOtp(message, sender) {
   // Require Amazon branding to avoid accepting unrelated OTPs.
   if (!/\bamazon\b/i.test(message)) return null;
 
-  // Look for common Amazon OTP phrasing after label keywords (code/otp).
-  return findCodeAfterLabel(message);
+  return findCodeNearLabel(message);
 }
 
 export function beginKdpOtpChallenge({ timeoutMs = challengeTimeoutMs() } = {}) {
@@ -97,7 +103,7 @@ export function deliverKdpOtpFromTextBee(payload) {
     return { accepted: false, reason: "non_amazon_message" };
   }
 
-  const code = findCodeAfterLabel(payload.message);
+  const code = findCodeNearLabel(payload.message);
   if (!code) return { accepted: false, reason: "verification_code_not_found" };
 
   const challenge = activeChallenge;
