@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 const DEFAULT_CHALLENGE_TIMEOUT_MS = 180_000;
 const MIN_CHALLENGE_TIMEOUT_MS = 30_000;
 const MAX_CHALLENGE_TIMEOUT_MS = 300_000;
-let activeChallenge = null;
+let activeChallenge = null; // process-local; single active challenge (see services/kdp/README.md)
 
 function challengeTimeoutMs() {
   const configured = Number(process.env.KDP_OTP_CHALLENGE_TIMEOUT_MS);
@@ -24,8 +24,11 @@ export function extractAmazonOtp(message, sender) {
   if (typeof message !== "string" || typeof sender !== "string") return null;
   const senderAllowlist = allowedSenders();
   if (!senderAllowlist.size || !senderAllowlist.has(sender.trim().toLowerCase())) return null;
+  // Require Amazon branding to avoid accepting unrelated OTPs.
   if (!/\bamazon\b/i.test(message)) return null;
 
+  // Look for common Amazon OTP phrasing: "verification/security/sign-in/one-time code/otp" followed
+  // by optional separator text and a 6-digit code (allowing up to ~16 chars between keywords and code).
   const match = message.match(/\b(?:verification|security|sign[ -]?in|one[ -]?time)?\s*(?:code|otp)\b\D{0,16}(\d{6})\b/i);
   return match?.[1] ?? null;
 }
@@ -74,8 +77,14 @@ export function beginKdpOtpChallenge({ timeoutMs = challengeTimeoutMs() } = {}) 
 
 export function deliverKdpOtpFromTextBee(payload) {
   const code = extractAmazonOtp(payload?.message, payload?.sender);
-  if (!code || !activeChallenge || Date.now() >= Date.parse(activeChallenge.expiresAt)) {
-    return { accepted: false, reason: !code ? "sender_or_message_not_allowed" : "no_active_challenge" };
+  if (!code) {
+    return { accepted: false, reason: "sender_or_message_not_allowed" };
+  }
+  if (!activeChallenge) {
+    return { accepted: false, reason: "no_active_challenge" };
+  }
+  if (Date.now() >= Date.parse(activeChallenge.expiresAt)) {
+    return { accepted: false, reason: "challenge_expired" };
   }
 
   const challenge = activeChallenge;
