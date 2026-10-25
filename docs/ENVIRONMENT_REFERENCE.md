@@ -4,9 +4,9 @@
 
 This inventory makes the runtime configuration contract auditable without duplicating secret values. `.env.example` and `env.template` remain the curated operator templates; this file records every production `process.env` dependency and its source locations.
 
-- Runtime variables referenced in production code: **518**
-- Present in curated templates: **403**
-- Not present in curated templates: **115**
+- Runtime variables referenced in production code: **525**
+- Present in curated templates: **408**
+- Not present in curated templates: **117**
 
 | Variable | Curated template | Production references |
 | --- | --- | --- |
@@ -189,8 +189,11 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `BLOTATO_YOUTUBE_PRIVACY_STATUS` | Yes | services/blotato/utils/autoPublishService.js:1002 |
 | `BOOTSTRAP_STEP_TIMEOUT_MS` | Yes | scripts/bootstrap.js:5 |
 | `BRAND_SOCIAL_COUNCIL_RUN_AFTER_SOCIAL` | Yes | audits/utils/zernioSocialPerformance.js:722 |
+| `CF_ACCOUNT_ID` | Yes | services/kdp/catalogue.js:18 |
 | `CHROME_BIN` | No | audits/utils/socialThumbnailAudit.js:133 |
 | `CHROMIUM_PATH` | No | audits/utils/contentMasterCouncil.js:188<br>audits/utils/socialThumbnailAudit.js:132<br>audits/utils/websiteAuditCouncil.js:1080<br>services/artwork/utils/quizCardRenderer.js:20 |
+| `CLOUDFLARE_ACCOUNT_ID` | Yes | services/kdp/catalogue.js:18 |
+| `CLOUDFLARE_API_BASE_URL` | No | services/kdp/catalogue.js:19 |
 | `CLOUDFLARE_PURGE_ALLOW_PUBLIC` | Yes | services/shared/middleware/suiteAuth.js:81 |
 | `CLOUDFLARE_PURGE_SHARED_SECRET` | Yes | services/shared/middleware/suiteAuth.js:68 |
 | `CLOUDFLARE_PURGE_TIMEOUT_MS` | Yes | services/cloudflare-purge/utils/purgeCloudflareCache.js:4 |
@@ -231,6 +234,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `CONTENT_MASTER_COUNCIL_TEMPERATURE` | Yes | audits/utils/contentMasterCouncil.js:144 |
 | `CONTENT_MASTER_COUNCIL_TIMEOUT_MS` | Yes | audits/utils/contentMasterCouncil.js:144 |
 | `CORS_ORIGINS` | Yes | server.js:232 |
+| `D1_API_KEY` | Yes | services/kdp/catalogue.js:7<br>services/kdp/catalogue.js:101 |
 | `DEBUG_ROUTES` | Yes | logger.js:114 |
 | `DEPLOY_SMOKE_EXPECT_READY` | No | scripts/deploySmoke.js:8 |
 | `DIGITAL_GROWTH_AI_MAX_INPUT_CHARS` | Yes | audits/utils/digitalGrowthAnalysis.js:330 |
@@ -271,10 +275,13 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `INTERNAL_ROUTE_TIMEOUT_MS` | Yes | routes/podcast-pipeline.js:11 |
 | `JOB_STATUS_TTL_MS` | Yes | services/shared/utils/jobStore.js:5 |
 | `JSON_BODY_LIMIT` | Yes | server.js:380 |
-| `KDP_OTP_ALLOWED_SENDERS` | Yes | services/kdp/index.js:13<br>services/kdp/otpBroker.js:16 |
+| `KDP_CONTENT_MAX_BYTES` | Yes | services/kdp/storage.js:7 |
+| `KDP_D1_DATABASE_ID` | Yes | services/kdp/catalogue.js:6<br>services/kdp/catalogue.js:101<br>services/kdp/catalogue.js:102 |
+| `KDP_D1_TIMEOUT_MS` | No | services/kdp/catalogue.js:20 |
+| `KDP_OTP_ALLOWED_SENDERS` | Yes | services/kdp/index.js:16<br>services/kdp/otpBroker.js:16 |
 | `KDP_OTP_CHALLENGE_TIMEOUT_MS` | Yes | services/kdp/otpBroker.js:9 |
-| `KDP_PASSWORD` | Yes | services/kdp/index.js:12 |
-| `KDP_USERNAME` | Yes | services/kdp/index.js:12 |
+| `KDP_PASSWORD` | Yes | services/kdp/index.js:15 |
+| `KDP_USERNAME` | Yes | services/kdp/index.js:15 |
 | `KOYEB_GIT_SHA` | No | scripts/startupCheck.js:54<br>services/comms-hub/routes/index.js:1379 |
 | `LOG_LEVEL` | Yes | logger.js:86<br>logger.js:92 |
 | `MAX_ITEMS_PER_FEED` | Yes | services/rss-feed-creator/utils/fetchFeeds.js:30 |
@@ -378,12 +385,12 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `R2_PUBLIC_BASE_URL_TRANSCRIPT` | Yes | scripts/backfill-transcript-html.js:78<br>scripts/backfill-transcript-html.js:83<br>scripts/backfill-transcript-html.js:134<br>services/script/utils/generateTranscriptHtml.js:248<br>services/script/utils/orchestrator.js:404<br>services/tts/utils/podcastProcessor.js:149<br>+1 more |
 | `R2_PUBLIC_BASE_URL_TRANSCRIPT_HTML` | Yes | scripts/backfill-transcript-html.js:81<br>scripts/backfill-transcript-html.js:132<br>services/script/utils/orchestrator.js:402<br>services/tts/utils/podcastProcessor.js:153 |
 | `R2_REGION` | Yes | audits/utils/publishAuditArtifacts.js:59 |
-| `R2_REQUEST_TIMEOUT_MS` | No | services/shared/utils/r2-client.js:116 |
-| `R2_RETRY_ATTEMPTS` | No | services/shared/utils/r2-client.js:117 |
-| `R2_RETRY_BASE_MS` | Yes | services/shared/utils/r2-client.js:118 |
-| `R2_RETRY_MAX_MS` | Yes | services/shared/utils/r2-client.js:119 |
+| `R2_REQUEST_TIMEOUT_MS` | No | services/shared/utils/r2-client.js:117 |
+| `R2_RETRY_ATTEMPTS` | No | services/shared/utils/r2-client.js:118 |
+| `R2_RETRY_BASE_MS` | Yes | services/shared/utils/r2-client.js:119 |
+| `R2_RETRY_MAX_MS` | Yes | services/shared/utils/r2-client.js:120 |
 | `R2_SECRET_ACCESS_KEY` | Yes | audits/utils/publishAuditArtifacts.js:63<br>scripts/startupCheck.js:77 |
-| `R2_UPLOAD_RETRIES` | Yes | services/shared/utils/r2-client.js:117 |
+| `R2_UPLOAD_RETRIES` | Yes | services/shared/utils/r2-client.js:118 |
 | `RAMS_API_KEY` | Yes | audits/utils/ramsContentDispatch.js:5<br>audits/utils/ramsWebsiteDispatch.js:24 |
 | `RAMS_BASE_URL` | Yes | audits/utils/ramsContentDispatch.js:4<br>audits/utils/ramsWebsiteDispatch.js:23 |
 | `RAMS_COMPLETION_POLL_INTERVAL_MS` | Yes | audits/utils/ramsWebsiteDispatch.js:32 |

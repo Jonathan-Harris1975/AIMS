@@ -1,9 +1,12 @@
 import express from "express";
 import { deliverKdpOtpFromTextBee, getKdpOtpChallengeStatus } from "./otpBroker.js";
+import kdpOperations from "./operations.js";
+import { getKdpReadiness } from "./readiness.js";
 
 const router = express.Router();
 
 router.get("/status", (_req, res) => {
+  const readiness = getKdpReadiness();
   res.set("Cache-Control", "no-store");
   res.status(200).json({
     ok: true,
@@ -12,9 +15,12 @@ router.get("/status", (_req, res) => {
     credentialsConfigured: Boolean(process.env.KDP_USERNAME && process.env.KDP_PASSWORD),
     otpWebhookConfigured: Boolean(process.env.KDP_OTP_ALLOWED_SENDERS),
     otpChallenge: getKdpOtpChallengeStatus(),
-    phase: "otp-ingress-foundation",
+    readiness,
+    phase: "publishing-and-audit",
   });
 });
+
+router.use("/", kdpOperations);
 
 router.post("/otp/textbee", (req, res) => {
   const payload = req.body && typeof req.body === "object" ? req.body : {};
