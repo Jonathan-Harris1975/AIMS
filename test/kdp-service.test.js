@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import express from "express";
 import request from "supertest";
 import kdpRoutes from "../services/kdp/index.js";
-import { __otpBrokerTestHooks } from "../services/kdp/otpBroker.js";
+import { __otpBrokerTestHooks, beginKdpOtpChallenge } from "../services/kdp/otpBroker.js";
 
 const originalAllowlist = process.env.KDP_OTP_ALLOWED_SENDERS;
 const originalUsername = process.env.KDP_USERNAME;
@@ -50,6 +50,8 @@ test("KDP TextBee handoff only accepts message-received events", async () => {
 
 test("KDP TextBee handoff does not accept codes from non-allow-listed senders", async () => {
   process.env.KDP_OTP_ALLOWED_SENDERS = "Amazon UK";
+  const challenge = beginKdpOtpChallenge({ timeoutMs: 30_000 });
+  const cancellation = challenge.promise.catch(() => undefined);
   const response = await request(createApp())
     .post("/kdp/otp/textbee")
     .send({
@@ -60,5 +62,7 @@ test("KDP TextBee handoff does not accept codes from non-allow-listed senders", 
     });
 
   assert.equal(response.status, 202);
-  assert.deepEqual(response.body, { ok: true, accepted: false, reason: "sender_or_message_not_allowed" });
+  assert.deepEqual(response.body, { ok: true, accepted: false, reason: "sender_not_allowed" });
+  challenge.cancel();
+  await cancellation;
 });
