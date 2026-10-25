@@ -659,7 +659,7 @@ class TrustedAdmissionProofTests(unittest.TestCase):
         self.assertEqual(payload["head_sha"], sha)
         self.assertEqual(payload["name"], "Trusted autonomy admission")
         self.assertEqual(payload["conclusion"], "success")
-        status_get_method, status_get_path, _ = request.call_args_list[2].args
+        status_get_method, status_get_path = request.call_args_list[2].args
         self.assertEqual(status_get_method, "GET")
         self.assertEqual(status_get_path, f"/repos/owner/repo/commits/{sha}/statuses?per_page=100")
         status_method, status_path, status_payload = request.call_args_list[3].args
@@ -711,7 +711,7 @@ class TrustedAdmissionProofTests(unittest.TestCase):
         self.assertEqual(path, "/repos/owner/repo/check-runs/12")
         self.assertEqual(payload["head_sha"], sha)
         self.assertEqual(payload["conclusion"], "failure")
-        status_get_method, status_get_path, _ = request.call_args_list[2].args
+        status_get_method, status_get_path = request.call_args_list[2].args
         self.assertEqual(status_get_method, "GET")
         self.assertEqual(status_get_path, f"/repos/owner/repo/commits/{sha}/statuses?per_page=100")
         status_method, status_path, status_payload = request.call_args_list[3].args
