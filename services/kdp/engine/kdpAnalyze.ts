@@ -53,14 +53,14 @@ export function analyzeBookMetadata(books: KdpBookMetadata[]): MetadataAuditResu
 
   for (const book of books) {
     const filledKeywords = book.keywords.filter((k) => k.trim()).length
-    if (filledKeywords < 7) {
+    if (filledKeywords === 0) {
       summary.emptyKeywords += 1
       pushIssue(
         issues,
         book,
         'keywords',
-        filledKeywords === 0 ? 'error' : 'warning',
-        `Only ${filledKeywords}/7 keyword slots filled.`,
+        'warning',
+        'No keywords are set. KDP allows up to seven relevant keywords; unused slots are optional.',
       )
     }
 
@@ -83,8 +83,8 @@ export function analyzeBookMetadata(books: KdpBookMetadata[]): MetadataAuditResu
         issues,
         book,
         'description',
-        'warning',
-        `Description is only ${book.description.trim().length} characters.`,
+        'info',
+        `Description is only ${book.description.trim().length} characters; review its clarity and completeness rather than treating length alone as a policy failure.`,
       )
     }
 

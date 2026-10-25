@@ -4,6 +4,7 @@ import { requestDedupe } from "../shared/utils/requestDedupe.js";
 import { getAsyncServiceRouteJobFresh, startAsyncServiceRouteJob } from "../shared/utils/asyncServiceRouteJobs.js";
 import { fetchAccountInfo, fetchReportsCatalog } from "./engine/kdpAccount.ts";
 import { analyzeBookMetadata } from "./engine/kdpAnalyze.ts";
+import { analyzeKdpPriceFloors } from "./engine/kdpPriceRules.ts";
 import { uploadBookContent } from "./engine/kdpContentUpdate.ts";
 import { createTitle, publishBook, updateCategories } from "./engine/kdpPublish.ts";
 import { archiveTitle, deleteTitle, unpublishTitle } from "./engine/kdpTitleActions.ts";
@@ -392,6 +393,8 @@ router.post("/audit/run", requestDedupe("kdp:audit-run"), asyncRoute(async (req,
   const cache = await syncAllBookMetadata();
   const snapshotRef = await persistKdpMetadata(cache);
   const [catalogue, account] = await Promise.all([listKdpEbooks(), fetchAccountInfo()]);
+  const metadataAnalysis = analyzeBookMetadata(cache.books);
+  const priceFloorAnalysis = analyzeKdpPriceFloors(cache.books);
   const report = {
     ok: true,
     service: "KDP_audit",
@@ -399,12 +402,13 @@ router.post("/audit/run", requestDedupe("kdp:audit-run"), asyncRoute(async (req,
     createdAt,
     syncedAt: cache.syncedAt,
     account: { accountCreationDate: account.accountCreationDate, catalogSize: account.catalogSize },
-    metadataAnalysis: analyzeBookMetadata(cache.books),
+    metadataAnalysis,
+    priceFloorAnalysis,
     catalogueComparison: auditCatalogueContext(cache.books, catalogue),
     syncStats: cache.stats || null,
     metadataSnapshotRef: snapshotRef,
     changesApplied: false,
-    message: "Audit is read-only. Listing updates use the separate metadata/pricing update routes.",
+    message: "Audit is read-only. Price-band issues include per-market 70% royalty limits; listing updates use separate pricing and metadata routes.",
   };
   const reportRef = await persistKdpAuditReport(report);
   const { putPrivateJson } = await import("../shared/utils/r2-client.js");
@@ -416,7 +420,9 @@ router.post("/audit/run", requestDedupe("kdp:audit-run"), asyncRoute(async (req,
     createdAt,
     syncedAt: cache.syncedAt,
     bookCount: cache.books.length,
-    issueCount: report.metadataAnalysis.issueCount,
+    issueCount: metadataAnalysis.issueCount + priceFloorAnalysis.issueCount,
+    metadataIssueCount: metadataAnalysis.issueCount,
+    priceFloorIssueCount: priceFloorAnalysis.issueCount,
     catalogue: {
       books: report.catalogueComparison.catalogueBooks,
       matchedListings: report.catalogueComparison.matchedListings,
