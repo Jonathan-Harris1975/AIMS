@@ -67,3 +67,20 @@ test('KDP pricing verification requires persisted values for every requested fie
     'must reject an unsaved price in any requested marketplace',
   )
 })
+
+test('KDP pricing verification prefers exact storefront values and matches legacy UK aliases', () => {
+  assert.equal(
+    pricingApplied(
+      book({ prices: { USD: '4.99', US: '3.99' } }),
+      { prices: { US: '4.99' } },
+    ),
+    false,
+  )
+  assert.equal(
+    pricingApplied(
+      book({ prices: { UK: '1.77' } }),
+      { prices: { GBP: '1.77' } },
+    ),
+    true,
+  )
+})

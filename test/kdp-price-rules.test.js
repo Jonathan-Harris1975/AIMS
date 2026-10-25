@@ -20,6 +20,7 @@ function book(overrides = {}) {
 
 test('KDP 70% price rules resolve local currency and marketplace aliases', () => {
   assert.equal(kdpPriceBandForKey('GB')?.minimum, 1.77)
+  assert.equal(kdpPriceBandForKey('UK')?.marketplace, 'GB')
   assert.equal(kdpPriceBandForKey('GBP')?.marketplace, 'GB')
   assert.equal(kdpPriceBandForKey('DE')?.currency, 'EUR')
   assert.equal(kdpPriceBandForKey('EUR')?.minimum, 2.69)
@@ -83,6 +84,18 @@ test('price changes cannot set a Kindle marketplace price below the 70% floor', 
   )
   assert.deepEqual(validateKdpPriceChanges('kindle', { prices: { GB: '1.77' } }), [])
   assert.deepEqual(validateKdpPriceChanges('paperback', { prices: { USD: '0.99' } }), [])
+})
+
+test('price-only updates use the cached royalty plan for 70% ceiling checks', () => {
+  assert.match(
+    validateKdpPriceChanges('kindle', { listPriceUsd: '13.00' }, '70_PERCENT').join(' '),
+    /US eBook price cannot exceed 12\.99 USD/,
+  )
+  assert.deepEqual(validateKdpPriceChanges('kindle', { listPriceUsd: '13.00' }, '35_PERCENT'), [])
+  assert.match(
+    validateKdpPriceChanges('kindle', { listPriceUsd: '13.00' }).join(' '),
+    /Cannot verify the current royalty plan/,
+  )
 })
 
 test('70% plan updates also respect the marketplace upper price band', () => {

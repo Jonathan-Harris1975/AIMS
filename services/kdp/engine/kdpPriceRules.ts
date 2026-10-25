@@ -17,6 +17,7 @@ export type KdpPriceBand = {
 const MARKET_BANDS: Record<string, KdpPriceBand> = {
   US: { marketplace: 'US', currency: 'USD', minimum: 2.99, maximum: 12.99 },
   GB: { marketplace: 'GB', currency: 'GBP', minimum: 1.77, maximum: 12.99 },
+  UK: { marketplace: 'GB', currency: 'GBP', minimum: 1.77, maximum: 12.99 },
   CA: { marketplace: 'CA', currency: 'CAD', minimum: 2.99, maximum: 12.99 },
   BR: { marketplace: 'BR', currency: 'BRL', minimum: 5.99, maximum: 31.99 },
   IN: { marketplace: 'IN', currency: 'INR', minimum: 99, maximum: 599 },
@@ -105,12 +106,15 @@ export function kdpPriceBandForKey(key: string): KdpPriceBand | null {
 export function validateKdpPriceChanges(
   format: KdpBookMetadata['format'],
   changes: { listPriceUsd?: string; prices?: Record<string, string>; royaltyPlan?: string },
+  currentRoyaltyPlan?: string,
 ): string[] {
   if (format !== 'kindle') return []
   const errors: string[] = []
   const proposed = Object.entries(changes.prices || {})
   if (changes.listPriceUsd !== undefined) proposed.push(['USD', changes.listPriceUsd])
-  const require70Maximum = /70/.test(String(changes.royaltyPlan || ''))
+  const effectiveRoyaltyPlan = changes.royaltyPlan ?? currentRoyaltyPlan
+  const require70Maximum = /70/.test(String(effectiveRoyaltyPlan || ''))
+  const royaltyPlanUnknown = !String(effectiveRoyaltyPlan || '').trim()
 
   for (const [key, raw] of proposed) {
     const band = kdpPriceBandForKey(key)
@@ -128,6 +132,8 @@ export function validateKdpPriceChanges(
     }
     if (require70Maximum && value > Math.round(band.maximum * 100)) {
       errors.push(`${band.marketplace} eBook price cannot exceed ${band.maximum} ${band.currency} while selecting the 70% royalty option.`)
+    } else if (royaltyPlanUnknown && value > Math.round(band.maximum * 100)) {
+      errors.push(`Cannot verify the current royalty plan for a ${band.marketplace} eBook price above ${band.maximum} ${band.currency}; refusing the price update.`)
     }
   }
   return errors

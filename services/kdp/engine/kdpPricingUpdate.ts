@@ -10,6 +10,7 @@ import {
   type KdpBookFormat,
   type KdpBookMetadata,
   patchBookInCache,
+  readMetadataCache,
 } from './metadataStore.ts'
 import { clickKdpActionButton, dismissKdpOverlays } from './kdpUiHelpers.ts'
 import { gatherBlockers, recoverFromBlockers, type RecoveryAttempt } from './kdpRecovery.ts'
@@ -152,11 +153,12 @@ export function pricingApplied(book: KdpBookMetadata, changes: KdpPricingChanges
   if (changes.prices !== undefined) {
     for (const [key, expected] of Object.entries(changes.prices)) {
       const wantedMarket = kdpPriceBandForKey(key)?.marketplace
-      const actualEntry = Object.entries(book.prices).find(([actualKey]) => {
-        if (actualKey.toUpperCase() === key.toUpperCase()) return true
-        const actualMarket = kdpPriceBandForKey(actualKey)?.marketplace
-        return Boolean(wantedMarket && actualMarket === wantedMarket)
-      })
+      const priceEntries = Object.entries(book.prices)
+      const actualEntry = priceEntries.find(([actualKey]) => actualKey.toUpperCase() === key.toUpperCase())
+        ?? priceEntries.find(([actualKey]) => {
+          const actualMarket = kdpPriceBandForKey(actualKey)?.marketplace
+          return Boolean(wantedMarket && actualMarket === wantedMarket)
+        })
       const actual = actualEntry?.[1] ?? (
         wantedMarket === 'US' ? book.listPriceUsd : undefined
       )
@@ -190,7 +192,9 @@ export async function updateBookPricingOnPage(
   dryRun: boolean,
   options: { skipOpen?: boolean } = {},
 ): Promise<KdpPricingUpdateResult> {
-  const pricePolicyErrors = validateKdpPriceChanges(format, changes)
+  const cache = await readMetadataCache()
+  const cachedBook = cache?.books.find((book) => book.titleId === titleId && book.format === format)
+  const pricePolicyErrors = validateKdpPriceChanges(format, changes, cachedBook?.royaltyPlan)
   if (pricePolicyErrors.length > 0) {
     throw new KdpClientError(pricePolicyErrors.join(' '))
   }
