@@ -119,7 +119,7 @@ RISK_LOW_RISK_CODE_EXTENSIONS_BY_REPO = {
     "jonathan-harris-website": {".md", ".mdx"},
 }
 RISK_LOW_RISK_DOC_EXTENSIONS = {".md", ".mdx", ".rst"}
-RISK_LOW_RISK_ROOT_FILES = {"readme.md", "changelog.md"}
+RISK_LOW_RISK_ROOT_FILES = {"readme.md", "changelog.md", "config/production.defaults.env"}
 
 
 
