@@ -278,10 +278,21 @@ function keywordSlots(keywords: string[]): string[] {
 }
 
 function stripHtml(html: string): string {
-  return html
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/gi, ' ')
-    .replace(/&amp;/g, '&')
+  let text = ''
+  let inTag = false
+  for (const character of html) {
+    if (character === '<') {
+      inTag = true
+      text += ' '
+    } else if (character === '>') {
+      inTag = false
+    } else if (!inTag) {
+      text += character
+    }
+  }
+  return text
+    .replaceAll(/&nbsp;/gi, ' ')
+    .replaceAll('&amp;', '&')
     .replace(/\s+/g, ' ')
     .trim()
 }

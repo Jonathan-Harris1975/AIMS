@@ -41,21 +41,32 @@ async function visibleOtpInput(page) {
   ])
 }
 
+function isKdpReportsDashboardUrl(value: string): boolean {
+  try {
+    const url = new URL(value)
+    const pathSegments = url.pathname.toLowerCase().split('/').filter(Boolean)
+    return url.protocol === 'https:'
+      && url.hostname === 'kdpreports.amazon.com'
+      && pathSegments[0] === 'reports'
+      && !pathSegments.includes('signin')
+  } catch {
+    return false
+  }
+}
+
 async function waitForOtpInput(page, timeoutMs = 45_000) {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
     const input = await visibleOtpInput(page)
     if (input) return input
-    const url = page.url().toLowerCase()
-    if (url.includes('kdpreports.amazon.com') && url.includes('/reports/') && !url.includes('signin')) return null
+    if (isKdpReportsDashboardUrl(page.url())) return null
     await page.waitForTimeout(500)
   }
   return null
 }
 
 async function isAuthenticated(page): Promise<boolean> {
-  const url = page.url().toLowerCase()
-  if (!url.includes('kdpreports.amazon.com') || !url.includes('/reports/') || url.includes('signin')) return false
+  if (!isKdpReportsDashboardUrl(page.url())) return false
   const html = await page.content().catch(() => '')
   return html.includes('csrftoken') || html.includes('customerAccountInfoModel')
 }
