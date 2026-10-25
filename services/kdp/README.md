@@ -7,6 +7,12 @@ The authenticated AIMS `/kdp` service exposes two subservices backed by the KDP 
 
 Audit runs are read-only. The audit can identify listing issues and return a report for the Council workflow; metadata and pricing changes are separate explicit operations. Monthly Council scheduling and automatic approval of changes are not configured here.
 
+The audit includes a per-market Kindle eBook price-band check. It uses KDP's published 70% royalty minimum and maximum list prices, and records the rule review date and source in each report. A price below the minimum is reported with the minimum as the recommended correction. The maximum is checked when the book uses the 70% plan. Updates are not applied by the audit itself. Pricing update requests are blocked when a Kindle price is below the applicable minimum, when a 70% plan price exceeds its maximum, or when the marketplace/currency cannot be safely mapped.
+
+The price-band rules were last checked on 2026-10-25 against KDP's [eBook List Price Requirements](https://kdp.amazon.com/en_US/help/topic/G200634560). Amazon's current values are marketplace-specific; do not convert one country's minimum into another currency. A price in range does not by itself guarantee a 70% royalty on every sale: title eligibility, buyer territory, KDP Select eligibility in some markets, VAT, delivery costs and Amazon price matching also affect royalties.
+
+Keyword checks distinguish an empty keyword set from unused optional slots. KDP permits up to seven relevant keywords; filling all seven is not treated as a policy requirement. Short descriptions are surfaced for editorial review, not classified as a KDP policy failure based on length alone.
+
 ## Runtime and secrets
 
 Set these Koyeb environment variables/secrets:
@@ -50,7 +56,7 @@ All routes require the normal AIMS bearer authentication. Long-running browser o
 | GET | `/kdp/session/status` | Check session state without exposing cookies |
 | DELETE | `/kdp/session` | Disconnect and remove the local browser session/cache |
 | POST | `/kdp/otp/textbee` | Internal OTP event handoff from HIVE-UI |
-| POST | `/kdp/audit/run` | Sync listings, analyze metadata, compare with D1, and persist a private report |
+| POST | `/kdp/audit/run` | Sync listings, analyze metadata, check per-market 70% price bands, compare with D1, and persist a private report |
 | POST | `/kdp/audit/metadata/sync` | Refresh the full local/R2 metadata snapshot |
 | GET | `/kdp/audit/metadata` | Read the latest metadata snapshot |
 | GET | `/kdp/audit/metadata/analyze` | Analyze the latest snapshot |

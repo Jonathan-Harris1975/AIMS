@@ -13,6 +13,7 @@ import {
 } from './metadataStore.ts'
 import { clickKdpActionButton, dismissKdpOverlays } from './kdpUiHelpers.ts'
 import { gatherBlockers, recoverFromBlockers, type RecoveryAttempt } from './kdpRecovery.ts'
+import { kdpPriceBandForKey, parseKdpPriceMinorUnits, validateKdpPriceChanges } from './kdpPriceRules.ts'
 
 const FILL_PRICING_FN = fs.readFileSync(
   path.join(path.dirname(fileURLToPath(import.meta.url)), './browser/fillBookPricing.js'),
@@ -145,9 +146,22 @@ async function openPricingPageWithRetry(
 
 export function pricingApplied(book: KdpBookMetadata, changes: KdpPricingChanges): boolean {
   if (changes.listPriceUsd !== undefined) {
-    const expected = changes.listPriceUsd.replace(',', '.')
-    const actual = (book.listPriceUsd || book.prices.USD || '').replace(',', '.')
-    if (actual !== expected) return false
+    const actual = book.listPriceUsd || book.prices.USD || book.prices.US || ''
+    if (!samePrice(actual, changes.listPriceUsd)) return false
+  }
+  if (changes.prices !== undefined) {
+    for (const [key, expected] of Object.entries(changes.prices)) {
+      const wantedMarket = kdpPriceBandForKey(key)?.marketplace
+      const actualEntry = Object.entries(book.prices).find(([actualKey]) => {
+        if (actualKey.toUpperCase() === key.toUpperCase()) return true
+        const actualMarket = kdpPriceBandForKey(actualKey)?.marketplace
+        return Boolean(wantedMarket && actualMarket === wantedMarket)
+      })
+      const actual = actualEntry?.[1] ?? (
+        wantedMarket === 'US' ? book.listPriceUsd : undefined
+      )
+      if (actual === undefined || !samePrice(actual, expected)) return false
+    }
   }
   if (changes.kdpSelect !== undefined && book.kdpSelect !== changes.kdpSelect) {
     return false
@@ -161,6 +175,13 @@ export function pricingApplied(book: KdpBookMetadata, changes: KdpPricingChanges
   return true
 }
 
+function samePrice(actual: string, expected: string): boolean {
+  const actualMinor = parseKdpPriceMinorUnits(actual)
+  const expectedMinor = parseKdpPriceMinorUnits(expected)
+  if (actualMinor !== null && expectedMinor !== null) return actualMinor === expectedMinor
+  return actual.trim().toLowerCase() === expected.trim().toLowerCase()
+}
+
 export async function updateBookPricingOnPage(
   page: Page,
   titleId: string,
@@ -169,6 +190,11 @@ export async function updateBookPricingOnPage(
   dryRun: boolean,
   options: { skipOpen?: boolean } = {},
 ): Promise<KdpPricingUpdateResult> {
+  const pricePolicyErrors = validateKdpPriceChanges(format, changes)
+  if (pricePolicyErrors.length > 0) {
+    throw new KdpClientError(pricePolicyErrors.join(' '))
+  }
+
   if (!options.skipOpen) {
     await openPricingPageWithRetry(page, format, titleId)
   }

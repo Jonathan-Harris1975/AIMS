@@ -16,6 +16,7 @@ function book(overrides = {}) {
 test('KDP pricing verification requires persisted values for every requested field', () => {
   const requested = {
     listPriceUsd: '4.99',
+    prices: { US: '4.99', GB: '1.77' },
     territory: 'worldwide',
     royaltyPlan: '70_PERCENT',
     kdpSelect: true,
@@ -25,7 +26,7 @@ test('KDP pricing verification requires persisted values for every requested fie
     pricingApplied(
       book({
         listPriceUsd: '4.99',
-        prices: { USD: '4.99' },
+        prices: { US: '4.99', GB: '1.77' },
         territory: 'worldwide',
         royaltyPlan: '70_PERCENT',
         kdpSelect: true,
@@ -38,7 +39,7 @@ test('KDP pricing verification requires persisted values for every requested fie
   for (const field of ['listPriceUsd', 'territory', 'royaltyPlan', 'kdpSelect']) {
     const persisted = {
       listPriceUsd: '4.99',
-      prices: { USD: '4.99' },
+      prices: { US: '4.99', GB: '1.77' },
       territory: 'worldwide',
       royaltyPlan: '70_PERCENT',
       kdpSelect: true,
@@ -50,4 +51,19 @@ test('KDP pricing verification requires persisted values for every requested fie
       `must reject a persisted mismatch for ${field}`,
     )
   }
+
+  assert.equal(
+    pricingApplied(
+      book({
+        listPriceUsd: '4.99',
+        prices: { US: '4.99', GB: '1.50' },
+        territory: 'worldwide',
+        royaltyPlan: '70_PERCENT',
+        kdpSelect: true,
+      }),
+      requested,
+    ),
+    false,
+    'must reject an unsaved price in any requested marketplace',
+  )
 })
