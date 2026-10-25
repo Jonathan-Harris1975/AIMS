@@ -11,6 +11,7 @@ test("central route registry mounts each service base path once", () => {
   const duplicates = paths.filter((path, index) => paths.indexOf(path) !== index);
 
   assert.deepEqual(duplicates, []);
+  assert.ok(paths.includes("/kdp"));
 });
 
 

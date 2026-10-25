@@ -4,8 +4,8 @@
 
 This inventory makes the runtime configuration contract auditable without duplicating secret values. `.env.example` and `env.template` remain the curated operator templates; this file records every production `process.env` dependency and its source locations.
 
-- Runtime variables referenced in production code: **514**
-- Present in curated templates: **399**
+- Runtime variables referenced in production code: **518**
+- Present in curated templates: **403**
 - Not present in curated templates: **115**
 
 | Variable | Curated template | Production references |
@@ -271,6 +271,10 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `INTERNAL_ROUTE_TIMEOUT_MS` | Yes | routes/podcast-pipeline.js:11 |
 | `JOB_STATUS_TTL_MS` | Yes | services/shared/utils/jobStore.js:5 |
 | `JSON_BODY_LIMIT` | Yes | server.js:380 |
+| `KDP_OTP_ALLOWED_SENDERS` | Yes | services/kdp/index.js:13<br>services/kdp/otpBroker.js:16 |
+| `KDP_OTP_CHALLENGE_TIMEOUT_MS` | Yes | services/kdp/otpBroker.js:9 |
+| `KDP_PASSWORD` | Yes | services/kdp/index.js:12 |
+| `KDP_USERNAME` | Yes | services/kdp/index.js:12 |
 | `KOYEB_GIT_SHA` | No | scripts/startupCheck.js:54<br>services/comms-hub/routes/index.js:1379 |
 | `LOG_LEVEL` | Yes | logger.js:86<br>logger.js:92 |
 | `MAX_ITEMS_PER_FEED` | Yes | services/rss-feed-creator/utils/fetchFeeds.js:30 |
