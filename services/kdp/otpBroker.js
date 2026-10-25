@@ -20,14 +20,23 @@ function allowedSenders() {
   );
 }
 
+function isAllowedSender(sender) {
+  return typeof sender === "string" && allowedSenders().has(sender.trim().toLowerCase());
+}
+
+function findCodeAfterLabel(message) {
+  const label = /\b(?:code|otp)\b/i.exec(message);
+  if (!label) return null;
+
+  const codeWindow = message.slice(label.index + label[0].length, label.index + label[0].length + 32);
+  return codeWindow.match(/\b\d{6}\b/)?.[0] ?? null;
+}
+
 export function extractAmazonOtp(message, sender) {
-  if (typeof message !== "string" || typeof sender !== "string") return null;
-  const senderAllowlist = allowedSenders();
-  if (!senderAllowlist.size || !senderAllowlist.has(sender.trim().toLowerCase())) return null;
+  if (typeof message !== "string" || !isAllowedSender(sender)) return null;
   if (!/\bamazon\b/i.test(message)) return null;
 
-  const match = message.match(/\b(?:verification|security|sign[ -]?in|one[ -]?time)?\s*(?:code|otp)\b\D{0,16}(\d{6})\b/i);
-  return match?.[1] ?? null;
+  return findCodeAfterLabel(message);
 }
 
 export function beginKdpOtpChallenge({ timeoutMs = challengeTimeoutMs() } = {}) {
@@ -73,10 +82,21 @@ export function beginKdpOtpChallenge({ timeoutMs = challengeTimeoutMs() } = {}) 
 }
 
 export function deliverKdpOtpFromTextBee(payload) {
-  const code = extractAmazonOtp(payload?.message, payload?.sender);
-  if (!code || !activeChallenge || Date.now() >= Date.parse(activeChallenge.expiresAt)) {
-    return { accepted: false, reason: !code ? "sender_or_message_not_allowed" : "no_active_challenge" };
+  if (!activeChallenge) return { accepted: false, reason: "no_active_challenge" };
+  if (Date.now() >= Date.parse(activeChallenge.expiresAt)) {
+    const expired = activeChallenge;
+    clearTimeout(expired.timer);
+    activeChallenge = null;
+    expired.rejectOtp(new Error("KDP OTP challenge timed out."));
+    return { accepted: false, reason: "challenge_expired" };
   }
+  if (!isAllowedSender(payload?.sender)) return { accepted: false, reason: "sender_not_allowed" };
+  if (typeof payload?.message !== "string" || !/\bamazon\b/i.test(payload.message)) {
+    return { accepted: false, reason: "non_amazon_message" };
+  }
+
+  const code = findCodeAfterLabel(payload.message);
+  if (!code) return { accepted: false, reason: "verification_code_not_found" };
 
   const challenge = activeChallenge;
   clearTimeout(challenge.timer);

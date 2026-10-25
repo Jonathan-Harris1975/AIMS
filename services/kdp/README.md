@@ -27,7 +27,9 @@ Koyeb service secrets/environment:
 - `KDP_OTP_ALLOWED_SENDERS` — comma-separated sender values observed for Amazon OTP messages in TextBee's delivery log. OTP messages are ignored until the sender is allow-listed.
 - `KDP_OTP_CHALLENGE_TIMEOUT_MS` — optional, defaults to 180000 and is bounded to 30–300 seconds.
 
-OTP text and codes are never logged or persisted by this ingress. The current broker is process-local and supports one active challenge, so KDP write jobs must be serialized and the AIMS service must run a single replica until the broker is moved to shared state.
+OTP text and codes are never logged or persisted by this ingress. The current broker is process-local and supports one active challenge, so KDP write jobs must be serialized and AIMS must run a single replica for this workflow.
+
+Before enabling multiple AIMS replicas or concurrent KDP logins, move challenge metadata into a shared, TTL-capable state store and implement OTP delivery as an atomic, one-use consume operation. Keep OTP values ephemeral and out of R2/D1; only challenge metadata and its consumed/expired state should be shared. Until that migration is implemented and tested, retain the single-replica limit.
 
 ## Current implementation boundary
 
