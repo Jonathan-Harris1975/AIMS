@@ -143,7 +143,7 @@ async function openPricingPageWithRetry(
   )
 }
 
-function pricingApplied(book: KdpBookMetadata, changes: KdpPricingChanges): boolean {
+export function pricingApplied(book: KdpBookMetadata, changes: KdpPricingChanges): boolean {
   if (changes.listPriceUsd !== undefined) {
     const expected = changes.listPriceUsd.replace(',', '.')
     const actual = (book.listPriceUsd || book.prices.USD || '').replace(',', '.')
@@ -153,6 +153,9 @@ function pricingApplied(book: KdpBookMetadata, changes: KdpPricingChanges): bool
     return false
   }
   if (changes.royaltyPlan !== undefined && book.royaltyPlan !== changes.royaltyPlan) {
+    return false
+  }
+  if (changes.territory !== undefined && book.territory !== changes.territory) {
     return false
   }
   return true
@@ -234,7 +237,6 @@ export async function updateBookPricingOnPage(
   await dismissKdpOverlays(page)
 
   const recoveryLog: RecoveryAttempt[] = []
-  let onPageUsd = ''
   let refreshed: KdpBookMetadata | null = null
   let saved = false
 
@@ -242,24 +244,6 @@ export async function updateBookPricingOnPage(
     await dismissKdpOverlays(page)
     await clickSaveOnPricingPage(page)
     await page.waitForTimeout(5000)
-
-    onPageUsd = (await page.evaluate(`(() => {
-      return (
-        document.getElementById('price-input-usd')?.value ||
-        document.querySelector('input[name="data[print_book][list_price][USD][amount]"]')?.value ||
-        document.querySelector('input[name="data[print_book][list_price][US][amount]"]')?.value ||
-        ''
-      )
-    })()`)) as string
-
-    if (
-      changes.listPriceUsd !== undefined &&
-      onPageUsd &&
-      onPageUsd.replace(',', '.') === changes.listPriceUsd.replace(',', '.')
-    ) {
-      saved = true
-      break
-    }
 
     const parsePage = await page.context().newPage()
     try {
@@ -279,20 +263,6 @@ export async function updateBookPricingOnPage(
       recovery.attempt = attempt
       recoveryLog.push(recovery)
       await page.waitForTimeout(1500)
-    }
-  }
-
-  if (saved && onPageUsd) {
-    return {
-      titleId,
-      format,
-      dryRun: false,
-      filled: fillResult.filled,
-      skipped: fillResult.skipped,
-      saved: true,
-      errors: [],
-      book: { titleId, format, listPriceUsd: onPageUsd } as KdpBookMetadata,
-      recoveryLog: recoveryLog.length > 0 ? recoveryLog : undefined,
     }
   }
 
