@@ -82,8 +82,7 @@ def admission_check(number: int, sha: str) -> tuple[bool, bool]:
     exact_id = f"trusted-autonomy-admission:{number}:{sha}"
     exact_runs = [
         run for run in runs
-        if (run.get("app") or {}).get("slug") == "github-actions"
-        and run.get("name") == ADMISSION_CHECK
+        if run.get("name") == ADMISSION_CHECK
         and run.get("head_sha") == sha
         and run.get("external_id") == exact_id
     ]
