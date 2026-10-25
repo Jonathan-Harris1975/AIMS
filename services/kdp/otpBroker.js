@@ -26,6 +26,8 @@ export function extractAmazonOtp(message, sender) {
   if (!senderAllowlist.size || !senderAllowlist.has(sender.trim().toLowerCase())) return null;
   if (!/\bamazon\b/i.test(message)) return null;
 
+  // Expected Amazon SMS forms: "Your Amazon verification/security/sign-in/one-time code is 123456"
+  // (or "Amazon code 123456"). The \D{0,16} window tolerates punctuation/spaces between keyword and code.
   const match = message.match(/\b(?:verification|security|sign[ -]?in|one[ -]?time)?\s*(?:code|otp)\b\D{0,16}(\d{6})\b/i);
   return match?.[1] ?? null;
 }
@@ -74,9 +76,9 @@ export function beginKdpOtpChallenge({ timeoutMs = challengeTimeoutMs() } = {}) 
 
 export function deliverKdpOtpFromTextBee(payload) {
   const code = extractAmazonOtp(payload?.message, payload?.sender);
-  if (!code || !activeChallenge || Date.now() >= Date.parse(activeChallenge.expiresAt)) {
-    return { accepted: false, reason: !code ? "sender_or_message_not_allowed" : "no_active_challenge" };
-  }
+  if (!code) return { accepted: false, reason: "sender_or_message_not_allowed" };
+  if (!activeChallenge) return { accepted: false, reason: "no_active_challenge" };
+  if (Date.now() >= Date.parse(activeChallenge.expiresAt)) return { accepted: false, reason: "challenge_expired" };
 
   const challenge = activeChallenge;
   clearTimeout(challenge.timer);
