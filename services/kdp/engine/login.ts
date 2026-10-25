@@ -31,14 +31,18 @@ async function clickFirst(page, selectors: string[]): Promise<boolean> {
   return true
 }
 
+const EMAIL_SELECTORS = ['#ap_email', 'input[name="email"]', 'input[type="email"]']
+const PASSWORD_SELECTORS = ['#ap_password', 'input[name="password"]', 'input[type="password"]']
+const OTP_SELECTORS = [
+  '#auth-mfa-otpcode',
+  'input[name="otpCode"]',
+  'input[autocomplete="one-time-code"]',
+  'input[name="code"]',
+  'input[id*="otp"]',
+]
+
 async function visibleOtpInput(page) {
-  return firstVisible(page, [
-    '#auth-mfa-otpcode',
-    'input[name="otpCode"]',
-    'input[autocomplete="one-time-code"]',
-    'input[name="code"]',
-    'input[id*="otp"]',
-  ])
+  return firstVisible(page, OTP_SELECTORS)
 }
 
 function isKdpReportsDashboardUrl(value: string): boolean {
@@ -71,6 +75,33 @@ async function isAuthenticated(page): Promise<boolean> {
   return html.includes('csrftoken') || html.includes('customerAccountInfoModel')
 }
 
+function safePageLocation(page): string {
+  try {
+    const url = new URL(page.url())
+    return url.hostname + url.pathname
+  } catch {
+    return 'unknown Amazon sign-in page'
+  }
+}
+
+async function signInFailure(page, stage: 'email' | 'password' | 'otp'): Promise<Error> {
+  const bodyText = (await page.locator('body').innerText().catch(() => '')).toLowerCase()
+  const location = safePageLocation(page)
+  if (/captcha|robot check|sorry, we just need to make sure/.test(bodyText)) {
+    return new Error('Amazon presented a robot check that cannot be completed by the automated sign-in flow (' + location + ').')
+  }
+  if (/incorrect.*password|wrong.*password|password.*incorrect|email.*not found|account.*does not exist/.test(bodyText)) {
+    return new Error('Amazon rejected the sign-in details at the ' + stage + ' step (' + location + '). Check the KDP_USERNAME and KDP_PASSWORD secrets.')
+  }
+  if (stage === 'email') {
+    return new Error('Amazon did not show a password or verification field after the email step. Sign-in stopped before password submission (' + location + ').')
+  }
+  if (stage === 'password') {
+    return new Error('Amazon did not show an OTP field or the KDP reports page after password submission (' + location + ').')
+  }
+  return new Error('Amazon accepted the OTP step but did not reach the KDP reports page (' + location + ').')
+}
+
 async function saveSession(context): Promise<void> {
   await ensureSessionDir()
   const file = sessionFilePath()
@@ -86,37 +117,54 @@ async function runAutomatedLogin(): Promise<void> {
   await ensureSessionDir()
   const browser = await launchKdpBrowser(true)
   let otpChallenge = null
+  const startOtpChallenge = () => {
+    if (otpChallenge) return
+    // Start listening before either credential submission so an immediate
+    // TextBee delivery cannot be discarded while the next form loads.
+    otpChallenge = beginKdpOtpChallenge()
+    void otpChallenge.promise.catch(() => {})
+  }
+
   try {
     const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } })
     const page = await context.newPage()
     await page.goto(KDP_ROYALTIES_PAGE, { waitUntil: 'domcontentloaded', timeout: 60_000 })
 
     if (!(await isAuthenticated(page))) {
-      let emailInput = await firstVisible(page, ['#ap_email', 'input[name="email"]', 'input[type="email"]'])
+      const emailInput = await firstVisible(page, EMAIL_SELECTORS)
       if (emailInput) {
         await emailInput.fill(username)
+        startOtpChallenge()
         if (!(await clickFirst(page, ['#continue', 'input#continue', 'button[type="submit"]']))) {
           await emailInput.press('Enter')
         }
       }
 
-      const passwordInput = await page.locator('#ap_password, input[name="password"], input[type="password"]').first()
-      await passwordInput.waitFor({ state: 'visible', timeout: 30_000 }).catch(() => {})
-      if (await passwordInput.isVisible().catch(() => false)) {
+      let passwordInput = null
+      let otpInput = null
+      const stepDeadline = Date.now() + 30_000
+      while (Date.now() < stepDeadline) {
+        passwordInput = await firstVisible(page, PASSWORD_SELECTORS)
+        if (passwordInput) break
+        otpInput = await visibleOtpInput(page)
+        if (otpInput || await isAuthenticated(page)) break
+        await page.waitForTimeout(250)
+      }
+
+      if (passwordInput) {
         await passwordInput.fill(password)
-        // Register before submitting credentials so a fast TextBee delivery
-        // cannot arrive before the OTP broker is listening.
-        otpChallenge = beginKdpOtpChallenge()
-        void otpChallenge.promise.catch(() => {})
+        startOtpChallenge()
         if (!(await clickFirst(page, ['#signInSubmit', 'input#signInSubmit', 'button[type="submit"]']))) {
           await passwordInput.press('Enter')
         }
         await passwordInput.fill('').catch(() => {})
+        otpInput = await waitForOtpInput(page)
+      } else if (!otpInput && !(await isAuthenticated(page))) {
+        throw await signInFailure(page, 'email')
       }
 
-      let otpInput = await waitForOtpInput(page)
       if (otpInput) {
-        if (!otpChallenge) throw new Error('Amazon requested an SMS verification code before the KDP password step completed.')
+        startOtpChallenge()
         let code = ''
         try {
           code = await otpChallenge.promise
@@ -139,11 +187,7 @@ async function runAutomatedLogin(): Promise<void> {
         }
       }
       if (!(await isAuthenticated(page))) {
-        const bodyText = (await page.locator('body').innerText().catch(() => '')).toLowerCase()
-        const reason = /captcha|robot check|sorry, we just need to make sure/.test(bodyText)
-          ? 'Amazon presented a robot check that cannot be completed by the automated sign-in flow.'
-          : 'Amazon sign-in did not reach the KDP reports page. Check the KDP credentials and sign-in requirements.'
-        throw new Error(reason)
+        throw await signInFailure(page, otpInput ? 'otp' : 'password')
       }
       otpChallenge?.cancel('Amazon sign-in completed without consuming an OTP.')
     }
