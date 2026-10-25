@@ -53,6 +53,7 @@ const {
   R2_BUCKET_BLOG_RSS,
   R2_BUCKET_BRAND_ASSETS,
   R2_BUCKET_AUDITS,
+  R2_BUCKET_KDP,
   R2_BUCKET_COMMS_HUB,
   R2_BUCKET_COMMS_HUB_PRIVATE,
 
@@ -234,6 +235,9 @@ export const R2_BUCKETS = {
   audits:          R2_BUCKET_AUDITS,
   audit:           R2_BUCKET_AUDITS,
 
+  // Private KDP manuscripts, catalogue snapshots and audit reports.
+  kdp:              R2_BUCKET_KDP || "kdp",
+
   // Brand assets / legacy non-audit assets
   brandAssets:     R2_BUCKET_BRAND_ASSETS,
   brandassets:     R2_BUCKET_BRAND_ASSETS,
@@ -293,6 +297,7 @@ export const BUCKET_ENV_BY_ALIAS = {
   "blog-rss": "R2_BUCKET_BLOG_RSS",
   audits: "R2_BUCKET_AUDITS",
   audit: "R2_BUCKET_AUDITS",
+  kdp: "R2_BUCKET_KDP",
   brandAssets: "R2_BUCKET_BRAND_ASSETS",
   brandassets: "R2_BUCKET_BRAND_ASSETS",
   "brand-assets": "R2_BUCKET_BRAND_ASSETS",
@@ -417,6 +422,7 @@ export const PRIVATE_READY_BUCKET_ALIASES = Object.freeze(new Set([
   "chunks", "podcast-chunks", "rawAudio", "rawaudio", "raw-audio",
   "edited", "editedAudio", "edited-audio",
   "audits", "audit",
+  "kdp",
   "commsHub", "commshub", "comms-hub",
   "metasystem", "metaSystem",
 ]));
@@ -560,12 +566,32 @@ export async function uploadPrivateText(bucketKey, key, text, contentType = "tex
   return uploadPrivateBuffer(bucketKey, key, Buffer.from(text, "utf-8"), contentType, options);
 }
 
-export async function getObjectAsBufferWithMetadata(bucketKey, key) {
+export async function getObjectAsBufferWithMetadata(bucketKey, key, { maxBytes = 0 } = {}) {
   const bucket = ensureBucketKey(bucketKey);
   const safeKey = normaliseR2ObjectKey(key);
   const response = await sendR2Command(new GetObjectCommand({ Bucket: bucket, Key: safeKey }));
+  const byteLimit = Number(maxBytes) > 0 ? Number(maxBytes) : 0;
+  if (byteLimit && Number(response.ContentLength) > byteLimit) {
+    response.Body?.destroy?.();
+    const error = new Error(`R2 object exceeds the ${byteLimit} byte read limit.`);
+    error.statusCode = 413;
+    error.code = "r2_object_too_large";
+    throw error;
+  }
   const chunks = [];
-  for await (const chunk of response.Body) chunks.push(Buffer.from(chunk));
+  let byteCount = 0;
+  for await (const chunk of response.Body) {
+    const buffer = Buffer.from(chunk);
+    byteCount += buffer.length;
+    if (byteLimit && byteCount > byteLimit) {
+      response.Body?.destroy?.();
+      const error = new Error(`R2 object exceeds the ${byteLimit} byte read limit.`);
+      error.statusCode = 413;
+      error.code = "r2_object_too_large";
+      throw error;
+    }
+    chunks.push(buffer);
+  }
   return {
     buffer: Buffer.concat(chunks),
     eTag: response.ETag || null,
@@ -574,8 +600,8 @@ export async function getObjectAsBufferWithMetadata(bucketKey, key) {
   };
 }
 
-export async function getObjectAsBuffer(bucketKey, key) {
-  return (await getObjectAsBufferWithMetadata(bucketKey, key)).buffer;
+export async function getObjectAsBuffer(bucketKey, key, options = {}) {
+  return (await getObjectAsBufferWithMetadata(bucketKey, key, options)).buffer;
 }
 
 export async function getObjectAsText(bucketKey, key) {

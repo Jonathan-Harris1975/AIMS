@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import express from "express";
 import request from "supertest";
 import kdpRoutes from "../services/kdp/index.js";
+import kdpOperations from "../services/kdp/operations.js";
 import { __otpBrokerTestHooks, beginKdpOtpChallenge } from "../services/kdp/otpBroker.js";
 
 const originalAllowlist = process.env.KDP_OTP_ALLOWED_SENDERS;
@@ -37,6 +38,27 @@ test("KDP status reports configuration state without exposing credentials", asyn
   assert.equal(response.body.credentialsConfigured, true);
   assert.equal(response.body.otpWebhookConfigured, false);
   assert.equal(JSON.stringify(response.body).includes("kdp-password-test"), false);
+});
+
+test("KDP operations expose publishing, audit and readiness endpoints", async () => {
+  const routePaths = new Set(kdpOperations.stack.filter((layer) => layer.route).map((layer) => layer.route.path));
+  for (const route of [
+    "/audit/run",
+    "/audit/metadata/update",
+    "/audit/pricing/update",
+    "/publishing/content/upload",
+    "/publishing/titles/create",
+    "/publishing/publish",
+    "/publishing/titles/delete",
+  ]) assert.ok(routePaths.has(route), `expected route ${route}`);
+
+  const [readiness, health] = await Promise.all([
+    request(createApp()).get("/kdp/readiness"),
+    request(createApp()).get("/kdp/health"),
+  ]);
+  assert.ok([200, 503].includes(readiness.status));
+  assert.deepEqual(readiness.body.subservices, ["KDP_publishing", "KDP_audit"]);
+  assert.equal(health.status, 200);
 });
 
 test("KDP TextBee handoff only accepts message-received events", async () => {
