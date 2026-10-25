@@ -69,16 +69,6 @@ async function waitForOtpInput(page, timeoutMs = 45_000) {
   return null
 }
 
-async function waitForVisible(page, selectors: string[], timeoutMs: number) {
-  const deadline = Date.now() + timeoutMs
-  while (Date.now() < deadline) {
-    const input = await firstVisible(page, selectors)
-    if (input) return input
-    await page.waitForTimeout(250)
-  }
-  return null
-}
-
 async function isAuthenticated(page): Promise<boolean> {
   if (!isKdpReportsDashboardUrl(page.url())) return false
   const html = await page.content().catch(() => '')
@@ -127,6 +117,14 @@ async function runAutomatedLogin(): Promise<void> {
   await ensureSessionDir()
   const browser = await launchKdpBrowser(true)
   let otpChallenge = null
+  const startOtpChallenge = () => {
+    if (otpChallenge) return
+    // Start listening before either credential submission so an immediate
+    // TextBee delivery cannot be discarded while the next form loads.
+    otpChallenge = beginKdpOtpChallenge()
+    void otpChallenge.promise.catch(() => {})
+  }
+
   try {
     const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } })
     const page = await context.newPage()
@@ -136,40 +134,37 @@ async function runAutomatedLogin(): Promise<void> {
       const emailInput = await firstVisible(page, EMAIL_SELECTORS)
       if (emailInput) {
         await emailInput.fill(username)
+        startOtpChallenge()
         if (!(await clickFirst(page, ['#continue', 'input#continue', 'button[type="submit"]']))) {
           await emailInput.press('Enter')
         }
       }
 
-      let passwordInput = await waitForVisible(page, PASSWORD_SELECTORS, 30_000)
+      let passwordInput = null
       let otpInput = null
+      const stepDeadline = Date.now() + 30_000
+      while (Date.now() < stepDeadline) {
+        passwordInput = await firstVisible(page, PASSWORD_SELECTORS)
+        if (passwordInput) break
+        otpInput = await visibleOtpInput(page)
+        if (otpInput || await isAuthenticated(page)) break
+        await page.waitForTimeout(250)
+      }
 
       if (passwordInput) {
         await passwordInput.fill(password)
-        // Register before submitting credentials so a fast TextBee delivery
-        // cannot arrive before the OTP broker is listening.
-        otpChallenge = beginKdpOtpChallenge()
-        void otpChallenge.promise.catch(() => {})
+        startOtpChallenge()
         if (!(await clickFirst(page, ['#signInSubmit', 'input#signInSubmit', 'button[type="submit"]']))) {
           await passwordInput.press('Enter')
         }
         await passwordInput.fill('').catch(() => {})
         otpInput = await waitForOtpInput(page)
-      } else {
-        // Amazon can occasionally request verification directly after the
-        // account identifier step. Start the broker only when that screen is
-        // actually present, and fail clearly if the password step never came.
-        otpInput = await waitForVisible(page, OTP_SELECTORS, 2_000)
-        if (otpInput) {
-          otpChallenge = beginKdpOtpChallenge()
-          void otpChallenge.promise.catch(() => {})
-        } else if (!(await isAuthenticated(page))) {
-          throw await signInFailure(page, 'email')
-        }
+      } else if (!otpInput && !(await isAuthenticated(page))) {
+        throw await signInFailure(page, 'email')
       }
 
       if (otpInput) {
-        if (!otpChallenge) throw new Error('Amazon requested an SMS verification code, but no OTP challenge could be started.')
+        startOtpChallenge()
         let code = ''
         try {
           code = await otpChallenge.promise
