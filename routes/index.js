@@ -20,6 +20,7 @@ import rssLinksRoutes from "../services/rss-links/index.js";
 import opsRoutes from "../services/ops/index.js";
 import newsletterRoutes from "../services/newsletter/index.js";
 import commsHubRoutes from "../services/comms-hub/index.js";
+import kdpRoutes from "../services/kdp/index.js";
 
 const router = express.Router();
 
@@ -45,6 +46,7 @@ export const routeRegistry = [
   { path: "/ops", name: "Operational Preflight", routes: opsRoutes },
   { path: "/newsletter", name: "Newsletter Engine (AI Edge)", routes: newsletterRoutes },
   { path: "/comms-hub", name: "AIMS Comms Hub", routes: commsHubRoutes },
+  { path: "/kdp", name: "KDP Publishing and Audit", routes: kdpRoutes },
 ];
 
 try {
