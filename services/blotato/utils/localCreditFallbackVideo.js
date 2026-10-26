@@ -41,8 +41,7 @@ export function buildBlotatoCreditFallbackSlides(pack = {}, article = {}) {
     details[0] || takeaway,
     details[1] || takeaway,
     details[2] || takeaway,
-    takeaway,
-    cta,
+    [takeaway, cta].filter(Boolean).join(" "),
   ].filter(Boolean);
   const unique = [...new Set(points)];
   const slides = unique.slice(0, 5);
