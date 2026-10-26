@@ -1,6 +1,7 @@
 import { execFile as nodeExecFile } from "node:child_process";
 import { promisify } from "node:util";
 import fs from "node:fs/promises";
+import { existsSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -11,7 +12,7 @@ const VIDEO_HEIGHT = 1280;
 const VIDEO_FPS = 30;
 
 function clean(value, limit = 320) {
-  return String(value ?? "").replace(/\\s+/g, " ").trim().slice(0, limit);
+  return String(value ?? "").replace(/\s+/g, " ").trim().slice(0, limit);
 }
 
 function escapeHtml(value) {
@@ -24,7 +25,7 @@ function escapeHtml(value) {
 }
 
 function splitSentences(value) {
-  return clean(value, 1800).split(/(?<=[.!?])\\s+/).map((part) => clean(part, 300)).filter(Boolean);
+  return clean(value, 1800).split(/(?<=[.!?])\s+/).map((part) => clean(part, 300)).filter(Boolean);
 }
 
 export function buildBlotatoCreditFallbackSlides(pack = {}, article = {}) {
@@ -87,6 +88,7 @@ export async function createLocalBlotatoCreditFallbackVideo({
   article = {},
   sessionId = "",
   scheduleDate = new Date().toISOString().slice(0, 10),
+  reason = "paid-render-credit-limit",
   loadChromium = () => import("playwright-core"),
   upload = async (...args) => {
     const { uploadBuffer } = await import("../../shared/utils/r2-client.js");
@@ -102,7 +104,7 @@ export async function createLocalBlotatoCreditFallbackVideo({
     const { chromium } = await loadChromium();
     const executablePath = [process.env.CHROMIUM_PATH, process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH, "/usr/bin/chromium"]
       .filter(Boolean)
-      .find((candidate) => candidate === "/usr/bin/chromium" || candidate);
+      .find((candidate) => existsSync(candidate));
     browser = await chromium.launch({
       headless: true,
       ...(executablePath ? { executablePath } : {}),
@@ -147,6 +149,7 @@ export async function createLocalBlotatoCreditFallbackVideo({
       rejectedTemplateIds: [],
       creditBudget: { expectedCredits: 0, actualCreditsUsed: 0, source: "local-no-paid-render" },
       localCreditFallback: true,
+      fallbackReason: clean(reason, 120),
       localCreditFallbackKey: objectKey,
       runtimeSeconds: SLIDE_SECONDS * imagePaths.length,
     };
@@ -162,6 +165,7 @@ export function isBlotatoCreditLimitError(error = {}) {
   return [
     "blotato-daily-paid-render-cap",
     "blotato-monthly-estimated-credit-cap",
+    "blotato-expected-credit-budget-cap",
     "insufficient-credits",
     "insufficient_credits",
     "payment-required",
