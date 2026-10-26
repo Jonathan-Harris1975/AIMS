@@ -405,14 +405,13 @@ async function resolveSocialArtwork({ sessionId, imagePrompt, dateId, prefix }) 
 
   const imageError = art?.error || art?.warning || "Unknown social blog artwork error";
 
-  // The daily blog must carry the fresh, source-grounded artwork generated for
-  // this edition. A site icon or other static brand asset is not a valid
-  // substitute because it makes the social post look unrelated to the story.
+  // Keep the daily slot publishable if generation and the corrective render both
+  // fail. The deterministic brand image is marked explicitly in the manifest.
   warn("blog.social.daily.image.unavailable", {
     dateId,
     sessionId,
     error: imageError,
-    reason: "artwork-failed-no-fallback-configured",
+    reason: "artwork-fallback-unavailable-after-retries",
   });
 
   return {
