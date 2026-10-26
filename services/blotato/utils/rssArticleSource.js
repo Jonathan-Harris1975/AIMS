@@ -33,7 +33,7 @@ function parseBoolean(value, fallback = false) {
 function cleanText(value = "", max = 2500) {
   const text = String(value || "")
     .replace(/<!\[CDATA\[|\]\]>/g, "")
-    .replace(/<[^>]+>/g, " ")
+    .replace(/<[^>]+>/gi, " ")
     .replace(/&nbsp;/gi, " ")
     .replace(/&quot;/gi, '"')
     .replace(/&#39;/g, "'")
