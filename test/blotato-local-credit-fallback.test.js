@@ -35,7 +35,8 @@ test("fallback slide HTML escapes source content before rendering", () => {
     index: 1,
     count: 5,
   });
-  assert.doesNotMatch(html, /<img src=x>|<script>/);
+  assert.equal(html.includes("<img src=x>"), false);
+  assert.equal(html.includes("<script>"), false);
   assert.match(html, /&lt;img src=x&gt;/);
   assert.match(html, /A &amp; B &lt;script&gt;/);
 });
