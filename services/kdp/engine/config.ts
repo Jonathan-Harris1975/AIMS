@@ -14,6 +14,7 @@ export const KDP_REQUEST_DELAY_MS = Math.max(
 export const SESSION_DIR = process.env.KDP_SESSION_DIR || path.join(os.tmpdir(), 'aims-kdp-session')
 export const SESSION_FILE = path.join(SESSION_DIR, 'amazon-kdp.json')
 
+export const KDP_SIGNIN_PAGE = 'https://www.amazon.com/ap/signin?openid.pape.max_auth_age=0&openid.return_to=https%3A%2F%2Fkdp.amazon.com%2Fbookshelf&openid.identity=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0%2Fidentifier_select&openid.assoc_handle=amzn_dtp&openid.mode=checkid_setup&language=en_US&openid.claimed_id=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0%2Fidentifier_select&pageId=kdp-ap&openid.ns=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0'
 export const KDP_REPORTS_ORIGIN = 'https://kdpreports.amazon.com'
 export const KDP_ROYALTIES_PAGE = `${KDP_REPORTS_ORIGIN}/reports/royalties`
 export const KDP_PMR_PAGE = `${KDP_REPORTS_ORIGIN}/reports/pmr`
