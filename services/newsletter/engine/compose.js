@@ -161,7 +161,10 @@ first three ranked items. " +
     if (attempt === 1) {
       messages.push({
         role: "user",
-        content: "Your last response was malformed. Recompose the same issue from the source material already supplied. Return one complete, compact JSON object matching the required schema exactly. Keep prose concise and do not invent facts or source IDs.",
+        content: [
+          "Your last response was malformed. Recompose the same issue from the supplied source material and return one complete JSON object matching the required schema.",
+          "Keep prose concise; do not invent facts or source IDs.",
+        ].join(" "),
       });
     }
   }
