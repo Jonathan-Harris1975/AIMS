@@ -26,8 +26,6 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      # Intentionally inside the already-required security job so this lifecycle
-      # contract is a hard admission gate, not a merely visible sibling check.
       - name: Verify automation ownership and Council-freeze lifecycle
         run: python3 .github/scripts/test_autonomy_lifecycle.py
       - name: Repository secret policy scan
@@ -38,8 +36,12 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$GOBIN"
-          go install github.com/zricethezav/gitleaks/v8@v8.28.0
-          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
+          curl -sSL https://github.com/gitleaks/gitleaks/releases/download/v8.28.0/gitleaks_8.28.0_linux_x64.tar.gz -o /tmp/gitleaks.tar.gz
+          tar -xzf /tmp/gitleaks.tar.gz -C "$GOBIN" gitleaks
+          chmod +x "$GOBIN/gitleaks"
+          curl -sSL https://github.com/rhysd/actionlint/releases/download/v1.7.7/actionlint_1.7.7_linux_amd64.tar.gz -o /tmp/actionlint.tar.gz
+          tar -xzf /tmp/actionlint.tar.gz -C "$GOBIN" actionlint
+          chmod +x "$GOBIN/actionlint"
       - name: Verify Gitleaks exact-fingerprint ignore contract
         env:
           GITLEAKS_BIN: ${{ runner.temp }}/ci-bin/gitleaks
