@@ -3,7 +3,6 @@
 // Resilient AI requester (OpenRouter) — ai-config–driven
 // ============================================================
 
-import { createHash } from "node:crypto";
 import aiConfig from "./ai-config.js";
 import { safeRouteLog } from "../../../logger.js";
 import { info, error as logError } from "../../../logger.js";
@@ -38,11 +37,7 @@ const RETRY_BASE_MS = finiteEnvNumber("AI_RETRY_BASE_MS", 750, { min: 0, integer
 const EMPTY_COMPLETION_RETRIES_PER_PROVIDER = finiteEnvNumber("AI_EMPTY_COMPLETION_RETRIES_PER_PROVIDER", 1, { min: 0, integer: true });
 const __aiRouteCallsBySession = new Map();
 const __lastSuccessProvider = new Map();
-const __loggedCredentialFingerprints = new Set();
-
-function credentialFingerprint(apiKey) {
-  return createHash("sha256").update(String(apiKey)).digest("hex").slice(0, 12);
-}
+const __loggedCredentialSources = new Set();
 
 function __sid(sessionIdLike) {
   if (!sessionIdLike) return "unknown";
@@ -471,16 +466,14 @@ export async function resilientRequest(routeName, {
         const result = await callOpenRouter({ routeKey, providerId, model: provider.name, apiKey: provider.apiKey, messages: providerMessages, max_tokens, temperature, top_p,
            response_format, headers, timeoutMs, reasoning, signal });
         if (typeof validateContent === "function") await validateContent(result.content, { routeName, routeKey, providerId, model: result.model || provider.name });
-        const fingerprint = credentialFingerprint(provider.apiKey);
-        const credentialIdentity = `${provider.apiKeyEnv || provider.providerId || providerId}:${fingerprint}`;
-        if (!__loggedCredentialFingerprints.has(credentialIdentity)) {
-          __loggedCredentialFingerprints.add(credentialIdentity);
+        const credentialSource = provider.apiKeyEnv || "provider-config";
+        if (!__loggedCredentialSources.has(credentialSource)) {
+          __loggedCredentialSources.add(credentialSource);
           info("ai.credential.verified", {
             repo: "AIMS",
             providerId,
             model: result.model || provider.name,
             keyEnv: provider.apiKeyEnv || "provider-config",
-            credentialFingerprint: fingerprint,
             status: "used-successfully",
           });
         }
