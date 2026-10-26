@@ -393,11 +393,11 @@ async function resolveSocialArtwork({ sessionId, imagePrompt, dateId, prefix }) 
     });
   }
 
-  if (art?.ok && art.publicUrl && !art.fallback) {
+  if (art?.ok && art.publicUrl) {
     return {
       imageUrl: art.publicUrl,
-      imageStatus: "generated",
-      imageError: art.error || null,
+      imageStatus: art.fallback ? "deterministic-fallback" : "generated",
+      imageError: art.error || art.warning || null,
       imageKey: art.key,
       imageBucketKey: art.bucketKey || null,
     };
