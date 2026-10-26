@@ -294,7 +294,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `NEWSLETTER_CONFIRMATION_BASE_URL` | Yes | services/newsletter/jotformIntake.js:108<br>services/newsletter/routes/subscriptions.js:52 |
 | `NEWSLETTER_CONSENT_TEXT_VERSION` | Yes | services/newsletter/jotformIntake.js:105<br>services/newsletter/jotformIntake.js:127 |
 | `NEWSLETTER_PRIVACY_NOTICE_VERSION` | Yes | services/newsletter/jotformIntake.js:106<br>services/newsletter/jotformIntake.js:128 |
-| `NODE_ENV` | Yes | logger.js:8<br>scripts/deploySmoke.js:4<br>scripts/performanceGate.js:5<br>scripts/startupCheck.js:34<br>scripts/startupCheck.js:75<br>server.js:30 |
+| `NODE_ENV` | Yes | logger.js:8<br>scripts/deploySmoke.js:4<br>scripts/performanceGate.js:5<br>scripts/startupCheck.js:34<br>scripts/startupCheck.js:75<br>server.js:30<br>+23 more |
 | `ONEUP_EBOOK_CATALOGUE_PATH` | No | services/zernio/utils/ebookCatalogue.js:42 |
 | `ON_BRAND_AUDIT_MAX_TOKENS` | No | audits/utils/onBrandAudit.js:13 |
 | `ON_BRAND_AUDIT_TEMPERATURE` | No | audits/utils/onBrandAudit.js:14 |
@@ -382,7 +382,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `R2_PUBLIC_BASE_URL_PODCAST` | Yes | scripts/backfill-transcript-html.js:85<br>services/tts/utils/io.js:12<br>services/tts/utils/orchestrator.js:17 |
 | `R2_PUBLIC_BASE_URL_RSS` | Yes | audits/utils/onBrandEvidence.js:455<br>services/blotato/utils/rssArticlePicker.js:84<br>services/blotato/utils/rssArticleSource.js:124<br>services/rss-feed-creator/utils/feedGenerator.js:36<br>services/rss-feed-creator/utils/feedGenerator.js:37 |
 | `R2_PUBLIC_BASE_URL_RSS_FEEDS` | No | audits/utils/onBrandEvidence.js:455 |
-| `R2_PUBLIC_BASE_URL_TRANSCRIPT` | Yes | scripts/backfill-transcript-html.js:78<br>scripts/backfill-transcript-html.js:83<br>scripts/backfill-transcript-html.js:134<br>services/script/utils/generateTranscriptHtml.js:248<br>services/script/utils/orchestrator.js:404<br>services/tts/utils/podcastProcessor.js:149 |
+| `R2_PUBLIC_BASE_URL_TRANSCRIPT` | Yes | scripts/backfill-transcript-html.js:78<br>scripts/backfill-transcript-html.js:83<br>scripts/backfill-transcript-html.js:134<br>services/script/utils/generateTranscriptHtml.js:248<br>services/script/utils/orchestrator.js:404<br>services/tts/utils/podcastProcessor.js:149<br>+1 more |
 | `R2_PUBLIC_BASE_URL_TRANSCRIPT_HTML` | Yes | scripts/backfill-transcript-html.js:81<br>scripts/backfill-transcript-html.js:132<br>services/script/utils/orchestrator.js:402<br>services/tts/utils/podcastProcessor.js:153 |
 | `R2_REGION` | Yes | audits/utils/publishAuditArtifacts.js:59 |
 | `R2_REQUEST_TIMEOUT_MS` | No | services/shared/utils/r2-client.js:117 |
@@ -427,7 +427,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `SERP_RATE_DELAY_MS` | Yes | services/outreach/services/batchService.js:148 |
 | `SERVER_LISTEN_TIMEOUT_MS` | No | scripts/bootstrap.js:6 |
 | `SHUTDOWN_TIMEOUT_MS` | Yes | server.js:584 |
-| `SITE_BASE_URL` | Yes | scripts/backfill-blog-main-site-links.js:63<br>scripts/backfill-transcript-html.js:77<br>scripts/backfill-transcript-html.js:133<br>services/blog/rss/publishBlogRssFeed.js:10<br>services/blog/utils/mainSiteLinks.js:20<br>services/blog/utils/mainSiteLinks.js:24 |
+| `SITE_BASE_URL` | Yes | scripts/backfill-blog-main-site-links.js:63<br>scripts/backfill-transcript-html.js:77<br>scripts/backfill-transcript-html.js:133<br>services/blog/rss/publishBlogRssFeed.js:10<br>services/blog/utils/mainSiteLinks.js:20<br>services/blog/utils/mainSiteLinks.js:24<br>+5 more |
 | `SITE_SHELL_ALLOWED_HOSTS` | Yes | services/shared/utils/siteShell.js:30 |
 | `SITE_SHELL_MANIFEST_URL` | Yes | services/shared/utils/siteShell.js:120 |
 | `SITE_SHELL_SYNC_SHARED_SECRET` | Yes | services/shared/middleware/suiteAuth.js:72 |
