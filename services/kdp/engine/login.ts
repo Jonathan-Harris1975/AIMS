@@ -1,5 +1,5 @@
 import fs from 'node:fs/promises'
-import { KDP_ROYALTIES_PAGE } from './config.ts'
+import { KDP_ROYALTIES_PAGE, KDP_SIGNIN_PAGE } from './config.ts'
 import { ensureSessionDir, sessionFilePath, sessionExists } from './session.ts'
 import { launchKdpBrowser } from './browser.ts'
 import { beginKdpOtpChallenge } from '../otpBroker.js'
@@ -58,12 +58,24 @@ function isKdpReportsDashboardUrl(value: string): boolean {
   }
 }
 
+function isKdpBookshelfUrl(value: string): boolean {
+  try {
+    const url = new URL(value)
+    const pathSegments = url.pathname.toLowerCase().split('/').filter(Boolean)
+    return url.protocol === 'https:'
+      && url.hostname === 'kdp.amazon.com'
+      && pathSegments.includes('bookshelf')
+  } catch {
+    return false
+  }
+}
+
 async function waitForOtpInput(page, timeoutMs = 45_000) {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
     const input = await visibleOtpInput(page)
     if (input) return input
-    if (isKdpReportsDashboardUrl(page.url())) return null
+    if (isKdpReportsDashboardUrl(page.url()) || isKdpBookshelfUrl(page.url())) return null
     await page.waitForTimeout(500)
   }
   return null
@@ -172,7 +184,7 @@ async function runAutomatedLogin(): Promise<void> {
   try {
     const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } })
     const page = await context.newPage()
-    await page.goto(KDP_ROYALTIES_PAGE, { waitUntil: 'domcontentloaded', timeout: 60_000 })
+    await page.goto(KDP_SIGNIN_PAGE, { waitUntil: 'domcontentloaded', timeout: 60_000 })
 
     if (!(await isAuthenticated(page))) {
       const emailInput = await firstVisible(page, EMAIL_SELECTORS)
@@ -191,7 +203,7 @@ async function runAutomatedLogin(): Promise<void> {
         passwordInput = await firstVisible(page, PASSWORD_SELECTORS)
         if (passwordInput) break
         otpInput = await visibleOtpInput(page)
-        if (otpInput || await isAuthenticated(page)) break
+        if (otpInput || await isAuthenticated(page) || isKdpBookshelfUrl(page.url())) break
         await page.waitForTimeout(250)
       }
 
@@ -203,7 +215,7 @@ async function runAutomatedLogin(): Promise<void> {
         }
         await passwordInput.fill('').catch(() => {})
         otpInput = await waitForOtpInput(page)
-      } else if (!otpInput && !(await isAuthenticated(page))) {
+      } else if (!otpInput && !(await isAuthenticated(page)) && !isKdpBookshelfUrl(page.url())) {
         throw await signInFailure(page, 'email')
       }
 
@@ -224,13 +236,19 @@ async function runAutomatedLogin(): Promise<void> {
       }
 
       const deadline = Date.now() + 60_000
-      while (Date.now() < deadline && !(await isAuthenticated(page))) {
+      let authenticated = await isAuthenticated(page)
+      while (Date.now() < deadline && !authenticated && !isKdpBookshelfUrl(page.url())) {
         await page.waitForTimeout(750)
         if (await visibleOtpInput(page)) {
           throw new Error('Amazon requested another verification step; this login flow supports one SMS OTP challenge per sign-in.')
         }
+        authenticated = await isAuthenticated(page)
       }
-      if (!(await isAuthenticated(page))) {
+      if (isKdpBookshelfUrl(page.url())) {
+        await page.goto(KDP_ROYALTIES_PAGE, { waitUntil: 'domcontentloaded', timeout: 60_000 })
+        authenticated = await isAuthenticated(page)
+      }
+      if (!authenticated) {
         throw await signInFailure(page, otpInput ? 'otp' : 'password')
       }
       otpChallenge?.cancel('Amazon sign-in completed without consuming an OTP.')
