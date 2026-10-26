@@ -56,13 +56,31 @@ test("known provider and monthly credit limits select a local render and never c
   assert.equal(result.creditFallback.scheduledWithoutPaidRender, true);
 });
 
-test("non-credit failures remain visible and do not invoke fallback", async () => {
+test("scheduled render infrastructure failures also use the local publishing fallback", async () => {
+  let paid = 0;
   let fallback = 0;
-  await assert.rejects(() => renderScheduledBlotatoVideo({
-    reservePaidRender: async () => { throw new Error("R2 is unavailable"); },
+  const result = await renderScheduledBlotatoVideo({
+    reservePaidRender: async () => ({ reservationId: "reserved" }),
+    renderPaidVideo: async () => { paid += 1; throw new Error("renderer unavailable"); },
+    renderLocalFallback: async ({ code }) => { fallback += 1; return { mediaUrl: "https://assets.example/fallback.mp4", fallbackReason: code }; },
+  });
+  assert.equal(paid, 1);
+  assert.equal(fallback, 1);
+  assert.equal(result.video.mediaUrl, "https://assets.example/fallback.mp4");
+  assert.equal(result.creditFallback.creditLimited, false);
+  assert.equal(result.creditFallback.fallbackReason, "scheduled-video-render-failed");
+});
+
+test("paid scheduled renders remain primary when credit reservation and renderer succeed", async () => {
+  let fallback = 0;
+  const result = await renderScheduledBlotatoVideo({
+    reservePaidRender: async () => ({ reservationId: "reserved" }),
     renderPaidVideo: async () => ({ mediaUrl: "https://paid.example/video.mp4" }),
     renderLocalFallback: async () => { fallback += 1; return { mediaUrl: "https://assets.example/fallback.mp4" }; },
-  }), /R2 is unavailable/);
+  });
+  assert.equal(result.video.mediaUrl, "https://paid.example/video.mp4");
+  assert.equal(result.reservation.reservationId, "reserved");
+  assert.equal(result.creditFallback, null);
   assert.equal(fallback, 0);
 });
 
