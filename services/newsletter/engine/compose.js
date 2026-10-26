@@ -142,18 +142,30 @@ first three ranked items. " +
     },
   ];
 
-  const raw = await resilientRequest("newsletterCompose", {
+  const responseOptions = {
     sessionId,
     messages,
-    max_tokens: 3200,
+    max_tokens: 4200,
     reasoning: { effort: "none", exclude: true },
     response_format: strictJsonResponseFormat("newsletter_issue_sections", ISSUE_SECTIONS_SCHEMA),
-  });
-  const parsed = parseJsonResponse(raw, "composeIssueSections");
-  if (!parsed.ok) {
-    warn("newsletter.compose.issue_parse_failed", { sessionId, error: parsed.error });
-    return { ok: false, error: parsed.error };
+  };
+  let parsed = { ok: false, error: "composeIssueSections: no response received" };
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    const raw = await resilientRequest("newsletterCompose", {
+      ...responseOptions,
+      sessionId: attempt === 1 ? sessionId : `${sessionId}-json-retry`,
+    });
+    parsed = parseJsonResponse(raw, "composeIssueSections");
+    if (parsed.ok) break;
+    warn("newsletter.compose.issue_parse_failed", { sessionId, attempt, error: parsed.error });
+    if (attempt === 1) {
+      messages.push({
+        role: "user",
+        content: "Your last response was malformed. Recompose the same issue from the source material already supplied. Return one complete, compact JSON object matching the required schema exactly. Keep prose concise and do not invent facts or source IDs.",
+      });
+    }
   }
+  if (!parsed.ok) return { ok: false, error: parsed.error };
 
   const data = parsed.data || {};
   const sourceMap = new Map(allSources.map((source, index) => [`S${index}`, source]));
