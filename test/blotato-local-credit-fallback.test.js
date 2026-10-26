@@ -1,8 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import {
   buildBlotatoCreditFallbackSlideHtml,
+  createLocalBlotatoCreditFallbackVideo,
   buildBlotatoCreditFallbackSlides,
   isBlotatoCreditLimitError,
   renderScheduledBlotatoVideo,
@@ -90,4 +91,37 @@ test("scheduled Blotato orchestration wires the cap fallback into publishing", a
   assert.match(source, /createLocalBlotatoCreditFallbackVideo/);
   assert.match(source, /phase: "local-credit-fallback-ready"/);
   assert.match(source, /mediaUrl: video\.mediaUrl/);
+});
+
+test("local fallback renderer uploads a valid no-paid-render media URL", async () => {
+  const htmlPages = [];
+  const uploads = [];
+  const fakeBrowser = {
+    newPage: async () => ({
+      setContent: async (html) => { htmlPages.push(html); },
+      screenshot: async () => Buffer.from("png-frame"),
+    }),
+    close: async () => {},
+  };
+  const result = await createLocalBlotatoCreditFallbackVideo({
+    pack: { hook: "A practical AI test", scenes: [{ script: "Check one real workflow." }] },
+    article: { title: "Source article" },
+    sessionId: "BLT-news-insight-2026-10-26-AM",
+    scheduleDate: "2026-10-26",
+    loadChromium: async () => ({ chromium: { launch: async () => fakeBrowser } }),
+    runFfmpeg: async (_command, args) => {
+      await writeFile(args.at(-1), Buffer.alloc(21_000, 1));
+    },
+    upload: async (...args) => {
+      uploads.push(args);
+      return "https://assets.example/blotato-fallback.mp4";
+    },
+  });
+  assert.equal(htmlPages.length, 5);
+  assert.equal(uploads.length, 1);
+  assert.equal(uploads[0][0], "blogImages");
+  assert.equal(uploads[0][3], "video/mp4");
+  assert.equal(result.mediaUrl, "https://assets.example/blotato-fallback.mp4");
+  assert.equal(result.creditBudget.expectedCredits, 0);
+  assert.equal(result.localCreditFallback, true);
 });
