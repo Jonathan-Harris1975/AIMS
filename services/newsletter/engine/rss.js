@@ -12,7 +12,7 @@ import fs from "fs";
 import path from "path";
 import { info, warn } from "../../../logger.js";
 import { THRESHOLDS } from "../../../config/thresholds.js";
-import { fetchWithTimeout } from "../../shared/http-client.js";
+import { fetchTextWithTimeout } from "../../shared/http-client.js";
 
 const parser = new Parser({
   timeout: THRESHOLDS.newsletter.rssFetchTimeoutMs,
@@ -79,14 +79,14 @@ export function loadFeedUrls(profile) {
 export async function fetchFeedResilient(feedUrl, {
   retries = THRESHOLDS.newsletter.rssFetchRetries,
   retryBaseMs = THRESHOLDS.newsletter.rssFetchRetryBaseMs,
+  timeoutMs = THRESHOLDS.newsletter.rssFetchTimeoutMs,
 } = {}) {
   let lastError;
 
   for (let attempt = 0; attempt <= retries; attempt += 1) {
     try {
-      const response = await fetchWithTimeout(feedUrl, { timeout: THRESHOLDS.newsletter.rssFetchTimeoutMs });
+      const { response, text: xml } = await fetchTextWithTimeout(feedUrl, { timeout: timeoutMs });
       if (!response.ok) throw new Error(`Status code ${response.status}`);
-      const xml = await response.text();
       const feed = await parser.parseString(escapeBareXmlAmpersands(xml));
       return { ok: true, feedUrl, items: Array.isArray(feed?.items) ? feed.items : [] };
     } catch (err) {
