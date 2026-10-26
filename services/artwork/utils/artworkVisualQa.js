@@ -39,15 +39,15 @@ const ARTWORK_QA_SCHEMA = {
     brandFit: { type: "number", minimum: 0, maximum: 100 },
     defects: {
       type: "array",
-      maxItems: 8,
-      items: { type: "string", maxLength: 320 },
+      maxItems: 4,
+      items: { type: "string", maxLength: 180 },
     },
     hardDefects: {
       type: "array",
-      maxItems: 6,
-      items: { type: "string", maxLength: 320 },
+      maxItems: 4,
+      items: { type: "string", maxLength: 180 },
     },
-    summary: { type: "string", maxLength: 700 },
+    summary: { type: "string", maxLength: 300 },
   },
   required: ["score", "relevance", "textSafety", "composition", "brandFit", "defects", "hardDefects", "summary"],
 };
@@ -180,14 +180,14 @@ export async function auditArtworkBase64({ base64, mode = "editorial", creativeP
 
   const { base64: cleanBase64, mimeType } = detectImageFormat(image);
   const { resilientRequest } = await import("../../shared/utils/ai-service.js");
-  const parseAttempts = Math.max(1, Math.min(3, Number(process.env.ARTWORK_VISUAL_QA_PARSE_ATTEMPTS || 2)));
+  const parseAttempts = Math.max(1, Math.min(3, Number(process.env.ARTWORK_VISUAL_QA_PARSE_ATTEMPTS || 3)));
   let lastError;
 
   for (let attempt = 1; attempt <= parseAttempts; attempt += 1) {
     if (signal?.aborted) throw signal.reason instanceof Error ? signal.reason : new Error("Artwork visual QA aborted");
     const raw = await resilientRequest("artworkVisualQa", {
       sessionId: `${sessionId}-${attempt}`,
-      max_tokens: 700,
+      max_tokens: 1200,
       temperature: 0.1,
       // Claude/OpenRouter vision routes have repeatedly rejected the stricter
       // optional parameter bundle before succeeding with the portable payload.

@@ -66,6 +66,43 @@ export async function fetchWithTimeout(url, options = {}) {
   }
 }
 
+
+export async function fetchTextWithTimeout(url, options = {}) {
+  const { timeout = 15000, signal: upstreamSignal, headers: callerHeaders, ...rest } = options;
+  const { controller, signal, clear } = withTimeoutSignal(timeout);
+  const abortHandler = () => {
+    if (!signal.aborted) controller.abort(upstreamSignal?.reason || new Error("request aborted"));
+  };
+
+  if (upstreamSignal?.aborted) {
+    abortHandler();
+  } else if (upstreamSignal?.addEventListener) {
+    upstreamSignal.addEventListener("abort", abortHandler, { once: true });
+  }
+
+  try {
+    const fetchImpl = typeof globalThis.fetch === "function" ? globalThis.fetch : nodeFetch;
+    const response = await fetchImpl(url, {
+      ...rest,
+      headers: { ...DEFAULT_HEADERS, ...(callerHeaders || {}) },
+      signal,
+    });
+    const text = await response.text();
+    return { response, text };
+  } catch (err) {
+    if (upstreamSignal?.aborted) {
+      throw upstreamSignal.reason instanceof Error ? upstreamSignal.reason : new Error(`Request aborted: ${url}`);
+    }
+    if (signal.aborted || err?.name === "AbortError" || err?.code === "ABORT_ERR") {
+      throw new Error(`Request timed out after ${timeout}ms: ${url}`);
+    }
+    throw err;
+  } finally {
+    clear();
+    if (upstreamSignal?.removeEventListener) upstreamSignal.removeEventListener("abort", abortHandler);
+  }
+}
+
 export async function fetchTextSafe(url, options = {}) {
   try {
     const resp = await fetchWithTimeout(url, options);

@@ -12,6 +12,7 @@ import fs from "fs";
 import path from "path";
 import { info, warn } from "../../../logger.js";
 import { THRESHOLDS } from "../../../config/thresholds.js";
+import { fetchTextWithTimeout } from "../../shared/http-client.js";
 
 const parser = new Parser({
   timeout: THRESHOLDS.newsletter.rssFetchTimeoutMs,
@@ -19,6 +20,13 @@ const parser = new Parser({
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function escapeBareXmlAmpersands(xml = "") {
+  return String(xml).replace(
+    /<!\[CDATA\[[\s\S]*?\]\]>|&(?!#(?:\d+|x[0-9a-f]+);|[a-z][a-z0-9.-]*;)/gi,
+    (match) => match.startsWith("<![CDATA[") ? match : "&amp;",
+  );
 }
 
 function isPermanentFeedError(err) {
@@ -71,12 +79,15 @@ export function loadFeedUrls(profile) {
 export async function fetchFeedResilient(feedUrl, {
   retries = THRESHOLDS.newsletter.rssFetchRetries,
   retryBaseMs = THRESHOLDS.newsletter.rssFetchRetryBaseMs,
+  timeoutMs = THRESHOLDS.newsletter.rssFetchTimeoutMs,
 } = {}) {
   let lastError;
 
   for (let attempt = 0; attempt <= retries; attempt += 1) {
     try {
-      const feed = await parser.parseURL(feedUrl);
+      const { response, text: xml } = await fetchTextWithTimeout(feedUrl, { timeout: timeoutMs });
+      if (!response.ok) throw new Error(`Status code ${response.status}`);
+      const feed = await parser.parseString(escapeBareXmlAmpersands(xml));
       return { ok: true, feedUrl, items: Array.isArray(feed?.items) ? feed.items : [] };
     } catch (err) {
       lastError = err;
