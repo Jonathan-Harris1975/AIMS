@@ -2597,7 +2597,7 @@ export async function triggerPublishNowJob(req = {}, laneSlug = DEFAULT_BLOTATO_
         consumerId: sessionId,
       });
       const requiredTopic = editorialBriefTopicSeed(editorialBriefEntries);
-      articleSource = await selectRssArticleForBlotato({ laneSlug: lane.slug, topicSeed: requiredTopic });
+      articleSource = await selectRssArticleForBlotato({ laneSlug: lane.slug, topicSeed: requiredTopic, fallbackKey: scheduleSlot || lane.slug });
       const reservationResult = await reserveEditorialSource({
         pipeline: "blotato",
         lane: lane.slug,
