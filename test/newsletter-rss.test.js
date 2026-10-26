@@ -43,6 +43,21 @@ describe("newsletter engine/rss.js — network behaviour", () => {
         return;
       }
 
+      if (req.url === "/bare-ampersand-feed.xml") {
+        const now = new Date().toUTCString();
+        res.writeHead(200, { "Content-Type": "application/rss+xml" });
+        res.end(`<rss version="2.0"><channel><title>Test Feed</title><item><title>Research & Development</title><link>https://source.example.com/research</link><pubDate>${now}</pubDate><description><![CDATA[Research & Development update]]></description></item></channel></rss>`);
+        return;
+      }
+
+      if (req.url === "/slow-body.xml") {
+        res.writeHead(200, { "Content-Type": "application/rss+xml" });
+        res.flushHeaders();
+        res.write("<rss><channel>");
+        setTimeout(() => res.end("<title>Delayed body</title></channel></rss>"), 250);
+        return;
+      }
+
       if (req.url === "/malformed-feed.xml") {
         res.writeHead(200, { "Content-Type": "application/rss+xml" });
         res.end("<rss><channel><item><title>Broken</title" /* truncated, invalid XML */);
@@ -64,6 +79,19 @@ describe("newsletter engine/rss.js — network behaviour", () => {
     const result = await fetchFeedResilient(`${baseUrl}/good-feed.xml`, { retries: 0 });
     assert.equal(result.ok, true);
     assert.equal(result.items.length, 3);
+  });
+
+  test("fetchFeedResilient escapes bare ampersands without corrupting CDATA", async () => {
+    const result = await fetchFeedResilient(`${baseUrl}/bare-ampersand-feed.xml`, { retries: 0 });
+    assert.equal(result.ok, true);
+    assert.equal(result.items[0].title, "Research & Development");
+    assert.equal(result.items[0].contentSnippet, "Research & Development update");
+  });
+
+  test("fetchFeedResilient times out while a response body is stalled", async () => {
+    const result = await fetchFeedResilient(`${baseUrl}/slow-body.xml`, { retries: 0, timeoutMs: 50 });
+    assert.equal(result.ok, false);
+    assert.match(result.error, /timed out/i);
   });
 
   test("fetchFeedResilient fails gracefully (does not throw) on a malformed feed", async () => {
