@@ -85,9 +85,9 @@ function safePageLocation(page): string {
 }
 
 async function safePageDiagnostics(page): Promise<string> {
-  const [title, visibleInputs, visibleActionCount, bodyText] = await Promise.all([
-    page.title().catch(() => ''),
-    page.locator('input').evaluateAll((elements) => elements
+  const title = await page.title().catch(() => '')
+  const visibleInputs = await page.locator('input').evaluateAll((elements) => {
+    return elements
       .filter((element) => {
         const style = window.getComputedStyle(element)
         const bounds = element.getBoundingClientRect()
@@ -100,22 +100,19 @@ async function safePageDiagnostics(page): Promise<string> {
         type: (element.getAttribute('type') || 'text').toLowerCase().slice(0, 24),
         autocomplete: (element.getAttribute('autocomplete') || '').replace(/[^a-z0-9_.:-]/gi, '').slice(0, 40) || null,
       }))
-      .catch(() => []),
-    page.locator('button, input[type="submit"]').evaluateAll((elements) => elements
-      .filter((element) => {
-        const style = window.getComputedStyle(element)
-        const bounds = element.getBoundingClientRect()
-        return style.display !== 'none' && style.visibility !== 'hidden' && bounds.width > 0 && bounds.height > 0
-      }).length)
-      .catch(() => 0),
-    page.locator('body').innerText().catch(() => ''),
-  ])
-  const normalizedBody = bodyText.toLowerCase()
+  }).catch(() => [])
+  const visibleActionCount = await page.locator('button, input[type="submit"]').evaluateAll((elements) => {
+    return elements.filter((element) => {
+      const style = window.getComputedStyle(element)
+      const bounds = element.getBoundingClientRect()
+      return style.display !== 'none' && style.visibility !== 'hidden' && bounds.width > 0 && bounds.height > 0
+    }).length
+  }).catch(() => 0)
   const safeTitle = title
-    .replace(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/gi, '[email]')
-    .replace(/\b\d{6}\b/g, '[code]')
-    .replace(/\+?\d[\d\s().-]{6,}\d/g, '[phone]')
-    .replace(/\s+/g, ' ')
+    .replace(/[a-z0-9._%+-]+@[a-z0-9.-]+\\.[a-z]{2,}/gi, '[email]')
+    .replace(/\\b\\d{6}\\b/g, '[code]')
+    .replace(/\\+?\\d[\\d\\s().-]{6,}\\d/g, '[phone]')
+    .replace(/\\s+/g, ' ')
     .slice(0, 100)
 
   return JSON.stringify({
@@ -123,16 +120,8 @@ async function safePageDiagnostics(page): Promise<string> {
     title: safeTitle,
     visibleInputs,
     visibleActionCount,
-    indicators: {
-      captchaOrRobotCheck: /captcha|robot check|automated access|unusual traffic|verify.{0,20}human|sorry, we just need to make sure/.test(normalizedBody),
-      identityOrSecurityCheck: /verify.{0,20}identity|confirm.{0,20}account|suspicious activity|security check/.test(normalizedBody),
-      passwordPrompt: /password/.test(normalizedBody),
-      verificationPrompt: /verification code|one[- ]time|security code|\botp\b/.test(normalizedBody),
-      emailOrPhonePrompt: /email|phone number/.test(normalizedBody),
-    },
   })
 }
-
 async function signInFailure(page, stage: 'email' | 'password' | 'otp'): Promise<Error> {
   const bodyText = (await page.locator('body').innerText().catch(() => '')).toLowerCase()
   const location = safePageLocation(page)
