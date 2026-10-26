@@ -260,7 +260,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `HEADROOM_COMPRESS_USER_MESSAGES` | Yes | services/shared/utils/headroom.js:288 |
 | `HEADROOM_ENABLED` | Yes | server.js:186<br>services/shared/utils/headroom.js:247 |
 | `HEADROOM_FAILURE_THRESHOLD` | Yes | services/shared/utils/headroom.js:224 |
-| `HEADROOM_LOG_SAVINGS` | Yes | services/shared/utils/headroom.js:371 |
+| `HEADROOM_LOG_SAVINGS` | Yes | services/shared/utils/headroom.js:388 |
 | `HEADROOM_MIN_INPUT_CHARS` | Yes | services/shared/utils/headroom.js:260 |
 | `HEADROOM_PROTECT_RECENT` | Yes | services/shared/utils/headroom.js:276 |
 | `HEADROOM_PROXY_TOKEN` | Yes | services/shared/utils/headroom.js:110 |

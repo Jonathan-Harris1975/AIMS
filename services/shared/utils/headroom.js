@@ -318,10 +318,18 @@ export async function compressForOpenRouter({ routeName, routeKey, model, messag
     const result = await response.json();
     if (result?.compression_skipped) {
       recordSuccess();
-      return skip(result?.skip_reason || "headroom-skipped", original, {
-        inputChars,
-        durationMs: Date.now() - startedAt,
+      const durationMs = Date.now() - startedAt;
+      const reason = result?.skip_reason || "headroom-skipped";
+      info("ai.headroom.verified", {
+        routeName,
+        routeKey: effectiveRoute,
+        model,
+        status: "responded",
+        outcome: "skipped",
+        reason,
+        durationMs,
       });
+      return skip(reason, original, { inputChars, durationMs });
     }
 
     const candidate = result?.messages;
@@ -343,6 +351,15 @@ export async function compressForOpenRouter({ routeName, routeKey, model, messag
     }
 
     recordSuccess();
+    info("ai.headroom.verified", {
+      routeName,
+      routeKey: effectiveRoute,
+      model,
+      status: "responded",
+      outcome: tokensSaved > 0 && tokensAfter < tokensBefore ? "compressed" : "no-savings",
+      tokensSaved: tokensSaved > 0 ? tokensSaved : 0,
+      durationMs: Date.now() - startedAt,
+    });
     if (tokensSaved <= 0 || tokensAfter >= tokensBefore) {
       return skip("no-token-saving", original, {
         inputChars,

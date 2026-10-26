@@ -12,6 +12,19 @@ function restoreEnv(snapshot) {
   }
 }
 
+const logEvents = [];
+const previousLogger = globalThis.__AI_PODCAST_LOGGER__;
+globalThis.__AI_PODCAST_LOGGER__ = {
+  info(fields, message) { logEvents.push({ level: "info", fields, message }); },
+  warn() {},
+  debug() {},
+  error() {},
+};
+test.after(() => {
+  if (previousLogger === undefined) delete globalThis.__AI_PODCAST_LOGGER__;
+  else globalThis.__AI_PODCAST_LOGGER__ = previousLogger;
+});
+
 const HEADROOM_ENV = [
   "HEADROOM_ENABLED",
   "HEADROOM_BASE_URL",
@@ -82,6 +95,11 @@ test("Headroom compresses eligible text-only messages and preserves system messa
     assert.equal(result.messages[1].content, "Compressed source material.");
     assert.equal(result.compressed, true);
     assert.equal(result.tokensSaved, 320);
+    assert.ok(logEvents.some((event) =>
+      event.message === "ai.headroom.verified" &&
+      event.fields.status === "responded" &&
+      event.fields.outcome === "compressed"
+    ));
   } finally {
     restoreEnv(snapshot);
     globalThis.fetch = oldFetch;
