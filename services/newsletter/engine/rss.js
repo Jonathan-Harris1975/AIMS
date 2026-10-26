@@ -24,7 +24,7 @@ function sleep(ms) {
 
 function escapeBareXmlAmpersands(xml = "") {
   return String(xml).replace(
-    /<!\\[CDATA\\[[\\s\\S]*?\\]\\]>|&(?!#(?:\\d+|x[0-9a-f]+);|[a-z][a-z0-9.-]*;)/gi,
+    /<!\[CDATA\[[\s\S]*?\]\]>|&(?!#(?:\d+|x[0-9a-f]+);|[a-z][a-z0-9.-]*;)/gi,
     (match) => match.startsWith("<![CDATA[") ? match : "&amp;",
   );
 }
