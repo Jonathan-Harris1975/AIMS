@@ -84,24 +84,68 @@ function safePageLocation(page): string {
   }
 }
 
+async function safePageDiagnostics(page): Promise<string> {
+  const title = await page.title().catch(() => '')
+  const visibleInputs = await page.locator('input').evaluateAll((elements) => {
+    return elements
+      .filter((element) => {
+        const style = window.getComputedStyle(element)
+        const bounds = element.getBoundingClientRect()
+        return style.display !== 'none' && style.visibility !== 'hidden' && bounds.width > 0 && bounds.height > 0
+      })
+      .slice(0, 12)
+      .map((element) => ({
+        id: (element.id || '').replace(/[^a-z0-9_.:-]/gi, '').slice(0, 80) || null,
+        name: (element.getAttribute('name') || '').replace(/[^a-z0-9_.:-]/gi, '').slice(0, 80) || null,
+        type: (element.getAttribute('type') || 'text').toLowerCase().slice(0, 24),
+        autocomplete: (element.getAttribute('autocomplete') || '').replace(/[^a-z0-9_.:-]/gi, '').slice(0, 40) || null,
+      }))
+  }).catch(() => [])
+  const visibleActionCount = await page.locator('button, input[type="submit"]').evaluateAll((elements) => {
+    return elements.filter((element) => {
+      const style = window.getComputedStyle(element)
+      const bounds = element.getBoundingClientRect()
+      return style.display !== 'none' && style.visibility !== 'hidden' && bounds.width > 0 && bounds.height > 0
+    }).length
+  }).catch(() => 0)
+  const safeTitle = title
+    .replace(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/gi, '[email]')
+    .replace(/\b\d{6}\b/g, '[code]')
+    .replace(/\+?\d[\d\s().-]{6,}\d/g, '[phone]')
+    .replace(/\s+/g, ' ')
+    .slice(0, 100)
+
+  return JSON.stringify({
+    location: safePageLocation(page),
+    title: safeTitle,
+    visibleInputs,
+    visibleActionCount,
+  })
+}
 async function signInFailure(page, stage: 'email' | 'password' | 'otp'): Promise<Error> {
   const bodyText = (await page.locator('body').innerText().catch(() => '')).toLowerCase()
   const location = safePageLocation(page)
+  let diagnostics = ''
+  try { diagnostics = await safePageDiagnostics(page) } catch { diagnostics = '' }
+  const fail = (message: string) => new Error(message + ' Page diagnostics: ' + diagnostics)
+
   if (/captcha|robot check|sorry, we just need to make sure/.test(bodyText)) {
-    return new Error('Amazon presented a robot check that cannot be completed by the automated sign-in flow (' + location + ').')
+    return fail('Amazon presented a robot check that cannot be completed by the automated sign-in flow (' + location + ').')
+  }
+  if (/verify.{0,20}identity|confirm.{0,20}account|suspicious activity|security check/.test(bodyText)) {
+    return fail('Amazon presented an identity or security check that the automated sign-in flow cannot complete (' + location + ').')
   }
   if (/incorrect.*password|wrong.*password|password.*incorrect|email.*not found|account.*does not exist/.test(bodyText)) {
-    return new Error('Amazon rejected the sign-in details at the ' + stage + ' step (' + location + '). Check the KDP_USERNAME and KDP_PASSWORD secrets.')
+    return fail('Amazon rejected the sign-in details at the ' + stage + ' step (' + location + '). Check the KDP_USERNAME and KDP_PASSWORD secrets.')
   }
   if (stage === 'email') {
-    return new Error('Amazon did not show a password or verification field after the email step. Sign-in stopped before password submission (' + location + ').')
+    return fail('Amazon did not show a password or verification field after the email step. Sign-in stopped before password submission (' + location + ').')
   }
   if (stage === 'password') {
-    return new Error('Amazon did not show an OTP field or the KDP reports page after password submission (' + location + ').')
+    return fail('Amazon did not show an OTP field or the KDP reports page after password submission (' + location + ').')
   }
-  return new Error('Amazon accepted the OTP step but did not reach the KDP reports page (' + location + ').')
+  return fail('Amazon accepted the OTP step but did not reach the KDP reports page (' + location + ').')
 }
-
 async function saveSession(context): Promise<void> {
   await ensureSessionDir()
   const file = sessionFilePath()
