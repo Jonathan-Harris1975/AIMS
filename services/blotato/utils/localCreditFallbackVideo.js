@@ -74,6 +74,12 @@ body{font-family:Arial,Helvetica,sans-serif;background:#071426;color:#f8fafc}
 .orb{position:absolute;width:250px;height:250px;border-radius:50%;right:-104px;top:360px;background:radial-gradient(circle,rgba(45,212,191,.18),rgba(45,212,191,0) 72%)}
 .kicker{position:relative;font-size:20px;line-height:1.3;letter-spacing:.14em;text-transform:uppercase;font-weight:800;color:#6ee7dc;margin:0 0 46px}
 h1{position:relative;font-size:32px;line-height:1.18;letter-spacing:-.025em;margin:0 0 40px;color:#dbeafe;max-height:230px;overflow:hidden}
+.rule{position:relative;width:82px;height:5px;border-radius:5px;background:linear-gradient(90deg,#2dd4bf,#fb923c);margin:0 0 42px}
+.body{position:relative;font-size:43px;line-height:1.19;font-weight:750;letter-spacing:-.035em;color:#f8fafc;max-height:690px;overflow:hidden}
+.source{position:relative;margin-top:28px;color:#9fb0c4;font-size:20px;line-height:1.35;max-height:110px;overflow:hidden}
+.footer{position:relative;margin-top:auto;padding-top:36px;border-top:1px solid rgba(255,255,255,.18);display:flex;justify-content:space-between;align-items:center;color:#cbd5e1}
+.brand{font-size:18px;font-weight:800;letter-spacing:.12em;text-transform:uppercase}
+.count{font-size:18px;color:#6ee7dc;font-weight:800}
 </style></head><body>
   <main class="card"><span class="orb"></span>
     <p class="kicker">${escapeHtml(kicker)}</p>
@@ -84,6 +90,20 @@ h1{position:relative;font-size:32px;line-height:1.18;letter-spacing:-.025em;marg
       <span class="count">${String(slide.index || 1).padStart(2, "0")} / 05</span>
     </footer>
   </main></body></html>`;
+}
+async function resolveChromiumExecutable(chromium) {
+  const candidates = [
+    "/usr/bin/chromium",
+    "/usr/bin/chromium-browser",
+    typeof chromium.executablePath === "function" ? chromium.executablePath() : "",
+  ].filter(Boolean);
+  for (const candidate of candidates) {
+    try {
+      await fs.access(candidate);
+      return candidate;
+    } catch {}
+  }
+  throw new Error("No usable Chromium executable was found for the local scheduled video fallback.");
 }
 
 function safeKeyPart(value) {
@@ -103,13 +123,14 @@ export async function createLocalBlotatoCreditFallbackVideo({
   },
   runFfmpeg = execFile,
   ffmpegPath = "ffmpeg",
+  findChromiumExecutable = resolveChromiumExecutable,
 } = {}) {
   const slides = buildBlotatoCreditFallbackSlides(pack, article);
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "aims-blotato-credit-fallback-"));
   let browser;
   try {
     const { chromium } = await loadChromium();
-    const executablePath = "/usr/bin/chromium";
+    const executablePath = await findChromiumExecutable(chromium);
     browser = await chromium.launch({
       headless: true,
       ...(executablePath ? { executablePath } : {}),
@@ -198,7 +219,7 @@ export async function renderScheduledBlotatoVideo({
       video: { ...video, localCreditFallback: true },
       reservation: null,
       creditFallback: {
-        code: String(error.code || "provider-credit-limit"),
+        code,
         message: clean(error.message || error, 300),
         scheduledWithoutPaidRender: true,
         creditLimited,

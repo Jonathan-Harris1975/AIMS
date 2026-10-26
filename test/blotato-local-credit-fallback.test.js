@@ -36,6 +36,8 @@ test("fallback slide HTML escapes source content before rendering", () => {
     count: 5,
   });
   assert.doesNotMatch(html, /<img src=x>|<script>/i);
+  assert.equal(html.includes("<img src=x>"), false);
+  assert.equal(html.includes("<script>"), false);
   assert.match(html, /&lt;img src=x&gt;/);
   assert.match(html, /A &amp; B &lt;script&gt;/);
 });
@@ -70,6 +72,7 @@ test("scheduled render infrastructure failures also use the local publishing fal
   assert.equal(result.video.mediaUrl, "https://assets.example/fallback.mp4");
   assert.equal(result.creditFallback.creditLimited, false);
   assert.equal(result.creditFallback.fallbackReason, "scheduled-video-render-failed");
+  assert.equal(result.creditFallback.code, "scheduled-video-render-failed");
 });
 
 test("paid scheduled renders remain primary when credit reservation and renderer succeed", async () => {
@@ -109,6 +112,7 @@ test("local fallback renderer uploads a valid no-paid-render media URL", async (
     sessionId: "BLT-news-insight-2026-10-26-AM",
     scheduleDate: "2026-10-26",
     loadChromium: async () => ({ chromium: { launch: async () => fakeBrowser } }),
+    findChromiumExecutable: async () => "/usr/bin/chromium",
     runFfmpeg: async (_command, args) => {
       await writeFile(args.at(-1), Buffer.alloc(21_000, 1));
     },
