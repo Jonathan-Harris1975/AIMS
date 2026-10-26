@@ -301,7 +301,7 @@ test("Zernio keeps fresh generated artwork primary and permits the curated store
   assert.match(env, /^NEWSLETTER_AI_EDGE_FALLBACK_IMAGE_URL=$/m);
   assert.match(env, /^SOCIAL_BLOG_ALLOW_DETERMINISTIC_FALLBACK=true$/m);
   assert.match(env, /^NEWSLETTER_ALLOW_DETERMINISTIC_FALLBACK=true$/m);
-  assert.match(env, /^ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK=false$/m);
+  assert.match(env, /^ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK=true$/m);
   assert.match(env, /^ZERNIO_ALLOW_DETERMINISTIC_FALLBACK=false$/m);
 });
 
@@ -401,7 +401,7 @@ test("critical orchestration defaults stay aligned across deployment templates",
     ZERNIO_MINI_SERIES_IMAGE_URL: "https://images.jonathan-harris.online/site-logo",
     ZERNIO_PODCAST_PROMO_TIME: "18:30",
     ZERNIO_PODCAST_PROMO_IMAGE_URL: "https://images.jonathan-harris.online/Podcast",
-    ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK: "false",
+    ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK: "true",
     ZERNIO_ALLOW_DETERMINISTIC_FALLBACK: "false",
     ZERNIO_SCHEDULE_RECOVERY_ENABLED: "true",
     ZERNIO_SCHEDULE_MIN_LEAD_MS: "900000",
