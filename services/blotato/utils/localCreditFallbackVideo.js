@@ -84,21 +84,6 @@ h1{position:relative;font-size:32px;line-height:1.18;letter-spacing:-.025em;marg
       <span class="count">${String(slide.index || 1).padStart(2, "0")} / 05</span>
     </footer>
   </main></body></html>`;
-.body{position:relative;font-size:43px;line-height:1.19;font-weight:750;letter-spacing:-.035em;color:#f8fafc;max-height:690px;overflow:hidden}
-.source{position:relative;margin-top:28px;color:#9fb0c4;font-size:20px;line-height:1.35;max-height:110px;overflow:hidden}
-.footer{position:relative;margin-top:auto;padding-top:36px;border-top:1px solid rgba(255,255,255,.18);display:flex;justify-content:space-between;align-items:center;color:#cbd5e1}
-.brand{font-size:18px;font-weight:800;letter-spacing:.12em;text-transform:uppercase}
-.count{font-size:18px;color:#6ee7dc;font-weight:800}
-</style></head><body>
-  <main class="card"><span class="orb"></span>
-    <p class="kicker">${escapeHtml(kicker)}</p>
-    <h1>${escapeHtml(slide.title || "AI briefing")}</h1>
-    <div class="rule"></div><div class="body">${escapeHtml(slide.body || "")}</div>
-    ${slide.source ? `<p class="source">Source: ${escapeHtml(slide.source)}</p>` : ""}
-    <footer class="footer"><span class="brand">Jonathan Harris</span>
-      <span class="count">${String(slide.index || 1).padStart(2, "0")} / 05</span>
-    </footer>
-  </main></body></html>`;
 }
 
 function safeKeyPart(value) {
