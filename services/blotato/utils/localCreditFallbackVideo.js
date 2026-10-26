@@ -63,27 +63,15 @@ export function buildBlotatoCreditFallbackSlideHtml(slide = {}) {
 <style>
 *{box-sizing:border-box}html,body{width:720px;height:1280px;margin:0;overflow:hidden}
 body{font-family:Arial,Helvetica,sans-serif;background:#071426;color:#f8fafc}
-.card{
-  position:relative;width:720px;height:1280px;
-  padding:76px 56px 58px;display:flex;flex-direction:column;overflow:hidden;
-  background:radial-gradient(ellipse at 90% 12%,rgba(20,184,166,.28),transparent 35%),
-    radial-gradient(ellipse at 0% 94%,rgba(249,115,22,.2),transparent 34%),
-    linear-gradient(152deg,#071426 0%,#10243d 57%,#0b1729 100%)
-}
+.card{position:relative;width:720px;height:1280px;padding:76px 56px 58px;display:flex;flex-direction:column;overflow:hidden}
+.card{background:radial-gradient(ellipse at 90% 12%,rgba(20,184,166,.28),transparent 35%),
+  radial-gradient(ellipse at 0% 94%,rgba(249,115,22,.2),transparent 34%),
+  linear-gradient(152deg,#071426 0%,#10243d 57%,#0b1729 100%)}
 .card:before{content:"";position:absolute;inset:22px;border:1px solid rgba(255,255,255,.16);border-radius:30px;pointer-events:none}
 .orb{position:absolute;width:250px;height:250px;border-radius:50%;right:-104px;top:360px;background:radial-gradient(circle,rgba(45,212,191,.18),rgba(45,212,191,0) 72%)}
 .kicker{position:relative;font-size:20px;line-height:1.3;letter-spacing:.14em;text-transform:uppercase;font-weight:800;color:#6ee7dc;margin:0 0 46px}
 h1{position:relative;font-size:32px;line-height:1.18;letter-spacing:-.025em;margin:0 0 40px;color:#dbeafe;max-height:230px;overflow:hidden}
-</style></head><body>
-  <main class="card"><span class="orb"></span>
-    <p class="kicker">${escapeHtml(kicker)}</p>
-    <h1>${escapeHtml(slide.title || "AI briefing")}</h1>
-    <div class="rule"></div><div class="body">${escapeHtml(slide.body || "")}</div>
-    ${slide.source ? `<p class="source">Source: ${escapeHtml(slide.source)}</p>` : ""}
-    <footer class="footer"><span class="brand">Jonathan Harris</span>
-      <span class="count">${String(slide.index || 1).padStart(2, "0")} / 05</span>
-    </footer>
-  </main></body></html>`;
+.rule{position:relative;width:82px;height:5px;border-radius:5px;background:linear-gradient(90deg,#2dd4bf,#fb923c);margin:0 0 42px}
 .body{position:relative;font-size:43px;line-height:1.19;font-weight:750;letter-spacing:-.035em;color:#f8fafc;max-height:690px;overflow:hidden}
 .source{position:relative;margin-top:28px;color:#9fb0c4;font-size:20px;line-height:1.35;max-height:110px;overflow:hidden}
 .footer{position:relative;margin-top:auto;padding-top:36px;border-top:1px solid rgba(255,255,255,.18);display:flex;justify-content:space-between;align-items:center;color:#cbd5e1}
@@ -100,7 +88,6 @@ h1{position:relative;font-size:32px;line-height:1.18;letter-spacing:-.025em;marg
     </footer>
   </main></body></html>`;
 }
-
 function safeKeyPart(value) {
   return clean(value, 100).replace(/[^a-zA-Z0-9_-]+/g, "_").replace(/^_+|_+$/g, "") || "scheduled-post";
 }
