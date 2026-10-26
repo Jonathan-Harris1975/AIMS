@@ -88,6 +88,21 @@ h1{position:relative;font-size:32px;line-height:1.18;letter-spacing:-.025em;marg
     </footer>
   </main></body></html>`;
 }
+async function resolveChromiumExecutable(chromium) {
+  const candidates = [
+    "/usr/bin/chromium",
+    "/usr/bin/chromium-browser",
+    typeof chromium.executablePath === "function" ? chromium.executablePath() : "",
+  ].filter(Boolean);
+  for (const candidate of candidates) {
+    try {
+      await fs.access(candidate);
+      return candidate;
+    } catch {}
+  }
+  throw new Error("No usable Chromium executable was found for the local scheduled video fallback.");
+}
+
 function safeKeyPart(value) {
   return clean(value, 100).replace(/[^a-zA-Z0-9_-]+/g, "_").replace(/^_+|_+$/g, "") || "scheduled-post";
 }
@@ -105,13 +120,14 @@ export async function createLocalBlotatoCreditFallbackVideo({
   },
   runFfmpeg = execFile,
   ffmpegPath = "ffmpeg",
+  findChromiumExecutable = resolveChromiumExecutable,
 } = {}) {
   const slides = buildBlotatoCreditFallbackSlides(pack, article);
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "aims-blotato-credit-fallback-"));
   let browser;
   try {
     const { chromium } = await loadChromium();
-    const executablePath = "/usr/bin/chromium";
+    const executablePath = await findChromiumExecutable(chromium);
     browser = await chromium.launch({
       headless: true,
       ...(executablePath ? { executablePath } : {}),
@@ -200,7 +216,7 @@ export async function renderScheduledBlotatoVideo({
       video: { ...video, localCreditFallback: true },
       reservation: null,
       creditFallback: {
-        code: String(error.code || "provider-credit-limit"),
+        code,
         message: clean(error.message || error, 300),
         scheduledWithoutPaidRender: true,
         creditLimited,
