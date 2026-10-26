@@ -310,7 +310,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `OPENROUTER_PROVIDER_ONLY` | No | services/shared/utils/ai-service.js:183 |
 | `OPENROUTER_PROVIDER_ORDER` | No | services/shared/utils/ai-service.js:180 |
 | `OPENROUTER_REASONING_EFFORT` | No | services/shared/utils/ai-service.js:227 |
-| `OPENROUTER_REQUIRE_PARAMETERS` | No | services/shared/utils/ai-service.js:193 |
+| `OPENROUTER_REQUIRE_PARAMETERS` | No | services/shared/utils/ai-service.js:192 |
 | `OPENROUTER_REQUIRE_PARAMETERS_FOR_JSON` | Yes | services/shared/utils/ai-service.js:193 |
 | `OPENROUTER_SERVICE_TIER` | Yes | services/shared/utils/ai-service.js:215 |
 | `OPENROUTER_SITE_URL` | Yes | ai-config.js:322<br>services/artwork/artwork.js:293<br>services/artwork/utils/artwork.js:293 |
