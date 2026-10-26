@@ -24,7 +24,7 @@ test("local Blotato fallback preserves the hook, story points, source and brande
   assert.equal(slides[0].body, "A practical question about AI");
   assert.ok(slides.some((slide) => slide.body === "The important constraint is human review."));
   assert.equal(slides[0].source, "Source article");
-  assert.equal(slides[4].body, "Keep a human checkpoint.");
+  assert.match(slides[4].body, /Keep a human checkpoint\\. Follow for practical AI analysis\\./);
 });
 
 test("fallback slide HTML escapes source content before rendering", () => {
