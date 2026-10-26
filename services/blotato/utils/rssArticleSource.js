@@ -33,7 +33,7 @@ function parseBoolean(value, fallback = false) {
 function cleanText(value = "", max = 2500) {
   const text = String(value || "")
     .replace(/<!\[CDATA\[|\]\]>/g, "")
-    .replace(/<[^>]+>/g, " ")
+    .replace(/<[^>]+>/gi, " ")
     .replace(/&nbsp;/gi, " ")
     .replace(/&quot;/gi, '"')
     .replace(/&#39;/g, "'")
@@ -229,8 +229,8 @@ function pickItem(items = [], { topicSeed = "" } = {}) {
   return ranked[0]?.item || null;
 }
 
-export async function selectRssArticleForBlotato({ laneSlug = "", topicSeed = "" } = {}) {
-  const loaders = getLoaders(laneSlug);
+export async function selectRssArticleForBlotato({ laneSlug = "", topicSeed = "", fallbackKey = "", loaders: injectedLoaders } = {}) {
+  const loaders = Array.isArray(injectedLoaders) ? injectedLoaders : getLoaders(laneSlug);
   let lastError = null;
 
   for (const loader of loaders) {
@@ -254,7 +254,21 @@ export async function selectRssArticleForBlotato({ laneSlug = "", topicSeed = ""
     }
   }
 
-  const err = new Error(`No usable RSS article found for Blotato${laneSlug ? ` (lane: ${laneSlug})` : ""}${lastError ? `: ${lastError.message}` : ""}`);
-  err.statusCode = 502;
-  throw err;
+  const slot = cleanText(String(fallbackKey).split(/[-:]/).filter(Boolean).at(-1) || laneSlug, 24).toUpperCase().replace(/[^A-Z0-9 -]/g, "");
+  const title = slot ? `A practical AI workflow check — ${slot}` : "A practical AI workflow check";
+  const article = {
+    title,
+    summary: [
+      "Judge an AI tool by starting with one real task, checking its output against a reliable source, " +
+      "measuring the time or quality change, and keeping a person responsible for the final decision.",
+    ].join(""),
+    source: "Jonathan Harris editorial fallback",
+    guid: fallbackKey ? `aims-editorial-fallback:${fallbackKey}` : `aims-editorial-fallback:${laneSlug || "general"}` ,
+  };
+  warn("blotato.rss.deterministic_evergreen_fallback", {
+    lane: laneSlug || "default",
+    fallbackKey: slot || null,
+    lastError: lastError?.message || null,
+  });
+  return { article, rssSource: "deterministic-evergreen-fallback", itemCount: 0, deterministicFallback: true };
 }
