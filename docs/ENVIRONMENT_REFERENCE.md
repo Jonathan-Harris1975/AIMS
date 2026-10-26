@@ -76,7 +76,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `AWS_REGION` | Yes | services/tts/utils/ttsProcessor.js:23 |
 | `BACKFILL_TRANSCRIPT_HTML` | Yes | scripts/bootstrap.js:156 |
 | `BACKFILL_TRANSCRIPT_HTML_TIMEOUT_MS` | No | scripts/bootstrap.js:161 |
-| `BLOG_ARTWORK_BUCKET_ALIAS` | Yes | services/artwork/createBlogArtwork.js:56 |
+| `BLOG_ARTWORK_BUCKET_ALIAS` | Yes | services/artwork/createBlogArtwork.js:54 |
 | `BLOG_PREFIX` | Yes | services/blog/routes/rss.js:9<br>services/blog/weekly/buildWeeklyBlogPost.js:485 |
 | `BLOG_RSS_DESCRIPTION` | No | services/blog/rss/publishBlogRssFeed.js:147 |
 | `BLOG_RSS_FEED_URL` | No | services/blog/rss/publishBlogRssFeed.js:132 |
@@ -88,12 +88,12 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `BLOG_RSS_TITLE` | No | services/blog/rss/publishBlogRssFeed.js:146 |
 | `BLOG_SOCIAL_BUILD_COMPLETED_TTL_MS` | No | services/blog/social/buildDailySocialBlogPost.js:56 |
 | `BLOG_SOCIAL_BUILD_PENDING_TTL_MS` | No | services/blog/social/buildDailySocialBlogPost.js:55 |
-| `BLOG_SOCIAL_PREFIX` | Yes | services/blog/routes/social.js:41<br>services/blog/social/buildDailySocialBlogPost.js:656<br>services/blog/social/publishSocialBlogRssFeed.js:69 |
+| `BLOG_SOCIAL_PREFIX` | Yes | services/blog/routes/social.js:41<br>services/blog/social/buildDailySocialBlogPost.js:655<br>services/blog/social/publishSocialBlogRssFeed.js:69 |
 | `BLOG_SOCIAL_PUBLIC_BASE_URL` | Yes | services/blog/social/buildDailySocialBlogPost.js:209<br>services/blog/social/publishSocialBlogRssFeed.js:74 |
 | `BLOG_SOCIAL_PUBLIC_POSTS_BASE_URL` | Yes | services/blog/social/buildDailySocialBlogPost.js:213<br>services/blog/social/publishSocialBlogRssFeed.js:83 |
 | `BLOG_SOCIAL_QA_ENABLED` | Yes | services/blog/social/buildDailySocialBlogPost.js:346 |
 | `BLOG_SOCIAL_RSS_DESCRIPTION` | Yes | services/blog/social/publishSocialBlogRssFeed.js:358 |
-| `BLOG_SOCIAL_RSS_OBJECT_KEY` | Yes | services/blog/social/buildDailySocialBlogPost.js:893<br>services/blog/social/buildDailySocialBlogPost.js:1023<br>services/blog/social/buildDailySocialBlogPost.js:1203<br>services/blog/social/publishSocialBlogRssFeed.js:91 |
+| `BLOG_SOCIAL_RSS_OBJECT_KEY` | Yes | services/blog/social/buildDailySocialBlogPost.js:892<br>services/blog/social/buildDailySocialBlogPost.js:1022<br>services/blog/social/buildDailySocialBlogPost.js:1202<br>services/blog/social/publishSocialBlogRssFeed.js:91 |
 | `BLOG_SOCIAL_RSS_TITLE` | Yes | services/blog/social/publishSocialBlogRssFeed.js:357 |
 | `BLOG_WEEKLY_JSON_RESPONSE_FORMAT` | No | services/blog/weekly/buildWeeklyBlogPost.js:358<br>services/blog/weekly/buildWeeklyBlogPost.js:376<br>services/blog/weekly/buildWeeklyBlogPost.js:416 |
 | `BLOG_WEEKLY_QA_ENABLED` | No | services/blog/weekly/buildWeeklyBlogPost.js:271 |
@@ -206,7 +206,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `COMMS_HUB_CONTENT_AUTOMATION_BLOG_ENABLED` | Yes | services/comms-hub/routes/index.js:140 |
 | `COMMS_HUB_CONTENT_AUTOMATION_BLOTATO_VIDEO_BRIEF_LIMIT` | Yes | services/blotato/utils/autoPublishService.js:2549 |
 | `COMMS_HUB_CONTENT_AUTOMATION_BRIEF_LEASE_MS` | Yes | services/comms-hub/contentAutomationQueueCore.js:325 |
-| `COMMS_HUB_CONTENT_AUTOMATION_BRIEF_LIMIT` | Yes | services/blog/social/buildDailySocialBlogPost.js:670<br>services/blog/weekly/buildWeeklyBlogPost.js:499<br>services/podcast/runPodcastPipeline.js:141 |
+| `COMMS_HUB_CONTENT_AUTOMATION_BRIEF_LIMIT` | Yes | services/blog/social/buildDailySocialBlogPost.js:669<br>services/blog/weekly/buildWeeklyBlogPost.js:499<br>services/podcast/runPodcastPipeline.js:141 |
 | `COMMS_HUB_CONTENT_AUTOMATION_BRIEF_MAX_AGE_HOURS` | Yes | services/comms-hub/contentAutomationQueueCore.js:328 |
 | `COMMS_HUB_CONTENT_AUTOMATION_CONTEXT_MAX_CHARS` | Yes | services/comms-hub/contentAutomationQueueCore.js:126 |
 | `COMMS_HUB_CONTENT_AUTOMATION_ENABLED` | Yes | services/comms-hub/routes/index.js:138 |
