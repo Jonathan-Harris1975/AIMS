@@ -46,7 +46,14 @@ describe("newsletter engine/rss.js — network behaviour", () => {
       if (req.url === "/bare-ampersand-feed.xml") {
         const now = new Date().toUTCString();
         res.writeHead(200, { "Content-Type": "application/rss+xml" });
-        res.end(`<rss version="2.0"><channel><title>Test Feed</title><item><title>Research & Development</title><link>https://source.example.com/research</link><pubDate>${now}</pubDate><description><![CDATA[Research & Development update]]></description></item></channel></rss>`);
+        const bareAmpersandXml =
+          '<rss version="2.0"><channel><title>Test Feed</title>' +
+          '<item><title>Research & Development</title>' +
+          '<link>https://source.example.com/research</link>' +
+          `<pubDate>${now}</pubDate>` +
+          '<description><![CDATA[Research & Development update]]>' +
+          '</description></item></channel></rss>';
+        res.end(bareAmpersandXml);
         return;
       }
 
