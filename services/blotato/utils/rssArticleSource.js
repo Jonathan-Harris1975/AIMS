@@ -229,8 +229,8 @@ function pickItem(items = [], { topicSeed = "" } = {}) {
   return ranked[0]?.item || null;
 }
 
-export async function selectRssArticleForBlotato({ laneSlug = "", topicSeed = "" } = {}) {
-  const loaders = getLoaders(laneSlug);
+export async function selectRssArticleForBlotato({ laneSlug = "", topicSeed = "", fallbackKey = "", loaders: injectedLoaders } = {}) {
+  const loaders = Array.isArray(injectedLoaders) ? injectedLoaders : getLoaders(laneSlug);
   let lastError = null;
 
   for (const loader of loaders) {
@@ -254,7 +254,17 @@ export async function selectRssArticleForBlotato({ laneSlug = "", topicSeed = ""
     }
   }
 
-  const err = new Error(`No usable RSS article found for Blotato${laneSlug ? ` (lane: ${laneSlug})` : ""}${lastError ? `: ${lastError.message}` : ""}`);
-  err.statusCode = 502;
-  throw err;
+  const slot = cleanText(fallbackKey, 30).toUpperCase().replace(/[^A-Z0-9 -]/g, "");
+  const title = slot ? `A practical AI workflow check — ${slot}` : "A practical AI workflow check";
+  const article = {
+    title,
+    summary: "A simple way to judge any AI tool is to start with one real task, check its output against a reliable source, measure the time or quality change, and keep a person responsible for the final decision.",
+    source: "Jonathan Harris editorial fallback",
+  };
+  warn("blotato.rss.deterministic_evergreen_fallback", {
+    lane: laneSlug || "default",
+    fallbackKey: slot || null,
+    lastError: lastError?.message || null,
+  });
+  return { article, rssSource: "deterministic-evergreen-fallback", itemCount: 0, deterministicFallback: true };
 }
