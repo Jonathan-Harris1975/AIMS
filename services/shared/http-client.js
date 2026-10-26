@@ -91,7 +91,7 @@ export async function fetchTextWithTimeout(url, options = {}) {
     return { response, text };
   } catch (err) {
     if (upstreamSignal?.aborted) {
-      throw upstreamSignal.reason instanceof Error ? upstreamSignal.reason : new Error(\`Request aborted: \${url}\`);
+      throw upstreamSignal.reason instanceof Error ? upstreamSignal.reason : new Error(`Request aborted: ${url}`);
     }
     if (signal.aborted || err?.name === "AbortError" || err?.code === "ABORT_ERR") {
       throw new Error(`Request timed out after ${timeout}ms: ${url}`);
