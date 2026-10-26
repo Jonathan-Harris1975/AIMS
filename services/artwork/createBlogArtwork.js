@@ -43,11 +43,9 @@ function boolEnv(name, fallback = false) {
 }
 
 function allowDeterministicFallback(mode) {
-  // Social-blog artwork is a published editorial asset. Never silently turn a
-  // generation failure into a generic image. SOCIAL_BLOG_ALLOW_DETERMINISTIC_FALLBACK
-  // remains documented for backwards compatibility but is intentionally ignored.
-  // Newsletter/blog modes retain their separate compatibility behaviour.
-  if (mode === "social-blog") return false;
+  // Use the explicitly enabled deterministic branded image only after generated
+  // artwork and its corrective retry have failed.
+  if (mode === "social-blog") return boolEnv("SOCIAL_BLOG_ALLOW_DETERMINISTIC_FALLBACK", false);
   if (mode === "newsletter") return boolEnv("NEWSLETTER_ALLOW_DETERMINISTIC_FALLBACK", false);
   return boolEnv("BLOG_ALLOW_DETERMINISTIC_FALLBACK", false);
 }
