@@ -466,14 +466,15 @@ export async function resilientRequest(routeName, {
         const result = await callOpenRouter({ routeKey, providerId, model: provider.name, apiKey: provider.apiKey, messages: providerMessages, max_tokens, temperature, top_p,
            response_format, headers, timeoutMs, reasoning, signal });
         if (typeof validateContent === "function") await validateContent(result.content, { routeName, routeKey, providerId, model: result.model || provider.name });
-        const credentialSource = provider.apiKeyEnv || "provider-config";
+        const keyEnv = provider.apiKeyEnv || "provider-config";
+        const credentialSource = `${providerId}:${keyEnv}`;
         if (!__loggedCredentialSources.has(credentialSource)) {
           __loggedCredentialSources.add(credentialSource);
           info("ai.credential.verified", {
             repo: "AIMS",
             providerId,
             model: result.model || provider.name,
-            keyEnv: provider.apiKeyEnv || "provider-config",
+            keyEnv,
             status: "used-successfully",
           });
         }
