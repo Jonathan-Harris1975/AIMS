@@ -109,10 +109,10 @@ async function safePageDiagnostics(page): Promise<string> {
     }).length
   }).catch(() => 0)
   const safeTitle = title
-    .replace(/[a-z0-9._%+-]+@[a-z0-9.-]+\\.[a-z]{2,}/gi, '[email]')
-    .replace(/\\b\\d{6}\\b/g, '[code]')
-    .replace(/\\+?\\d[\\d\\s().-]{6,}\\d/g, '[phone]')
-    .replace(/\\s+/g, ' ')
+    .replace(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/gi, '[email]')
+    .replace(/\b\d{6}\b/g, '[code]')
+    .replace(/\+?\d[\d\s().-]{6,}\d/g, '[phone]')
+    .replace(/\s+/g, ' ')
     .slice(0, 100)
 
   return JSON.stringify({
