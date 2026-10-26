@@ -290,12 +290,13 @@ test("Zernio keeps fresh generated artwork primary and permits the curated store
   assert.match(weeklyBlog, /reason: "artwork-unavailable"/);
   assert.doesNotMatch(socialBlog, /DEFAULT_SOCIAL_FALLBACK_IMAGE_URL/);
   assert.doesNotMatch(socialBlog, /imageStatus: "curated-static-fallback"/);
-  assert.match(socialBlog, /reason: "artwork-failed-no-fallback-configured"/);
-  assert.match(socialBlog, /!art\.fallback/);
+  assert.match(socialBlog, /reason: "artwork-fallback-unavailable-after-retries"/);
+  assert.match(socialBlog, /imageStatus: art\.fallback \? "deterministic-fallback" : "generated"/);
   assert.doesNotMatch(zernioConfig, /ZERNIO_BLOG_RSS_IMAGE_URL, DEFAULT_STORED_IMAGE_URL/);
   assert.match(zernioConfig, /ZERNIO_MINI_SERIES_IMAGE_URL, DEFAULT_STORED_IMAGE_URL/);
   assert.doesNotMatch(hero, /blog-fallback-hero\.png/);
   assert.match(env, /^BLOG_FALLBACK_IMAGE_URL=$/m);
+  assert.match(env, /^BLOG_ALLOW_DETERMINISTIC_FALLBACK=true$/m);
   assert.match(env, /^BLOG_SOCIAL_FALLBACK_IMAGE_URL=https:\/\/images\.jonathan-harris\.online\/site-logo$/m);
   assert.match(env, /^NEWSLETTER_AI_EDGE_FALLBACK_IMAGE_URL=$/m);
   assert.match(env, /^SOCIAL_BLOG_ALLOW_DETERMINISTIC_FALLBACK=true$/m);
