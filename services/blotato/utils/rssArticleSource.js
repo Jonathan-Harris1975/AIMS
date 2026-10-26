@@ -254,12 +254,13 @@ export async function selectRssArticleForBlotato({ laneSlug = "", topicSeed = ""
     }
   }
 
-  const slot = cleanText(fallbackKey, 30).toUpperCase().replace(/[^A-Z0-9 -]/g, "");
+  const slot = cleanText(String(fallbackKey).split(/[-:]/).filter(Boolean).at(-1) || laneSlug, 24).toUpperCase().replace(/[^A-Z0-9 -]/g, "");
   const title = slot ? `A practical AI workflow check — ${slot}` : "A practical AI workflow check";
   const article = {
     title,
     summary: "A simple way to judge any AI tool is to start with one real task, check its output against a reliable source, measure the time or quality change, and keep a person responsible for the final decision.",
     source: "Jonathan Harris editorial fallback",
+    guid: fallbackKey ? `aims-editorial-fallback:${fallbackKey}` : `aims-editorial-fallback:${laneSlug || "general"}` ,
   };
   warn("blotato.rss.deterministic_evergreen_fallback", {
     lane: laneSlug || "default",
