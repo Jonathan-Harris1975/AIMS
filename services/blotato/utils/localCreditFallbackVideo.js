@@ -1,7 +1,6 @@
 import { execFile as nodeExecFile } from "node:child_process";
 import { promisify } from "node:util";
 import fs from "node:fs/promises";
-import { existsSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -95,16 +94,14 @@ export async function createLocalBlotatoCreditFallbackVideo({
     return uploadBuffer(...args);
   },
   runFfmpeg = execFile,
-  ffmpegPath = process.env.FFMPEG_PATH || "ffmpeg",
+  ffmpegPath = "ffmpeg",
 } = {}) {
   const slides = buildBlotatoCreditFallbackSlides(pack, article);
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "aims-blotato-credit-fallback-"));
   let browser;
   try {
     const { chromium } = await loadChromium();
-    const executablePath = [process.env.CHROMIUM_PATH, process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH, "/usr/bin/chromium"]
-      .filter(Boolean)
-      .find((candidate) => existsSync(candidate));
+    const executablePath = "/usr/bin/chromium";
     browser = await chromium.launch({
       headless: true,
       ...(executablePath ? { executablePath } : {}),
