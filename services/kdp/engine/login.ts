@@ -100,7 +100,8 @@ async function safePageDiagnostics(page): Promise<string> {
         type: (element.getAttribute('type') || 'text').toLowerCase().slice(0, 24),
         autocomplete: (element.getAttribute('autocomplete') || '').replace(/[^a-z0-9_.:-]/gi, '').slice(0, 40) || null,
       }))
-      .catch(() => []),
+    )
+    .catch(() => []),
     page.locator('button, input[type="submit"]').evaluateAll((elements) => elements
       .filter((element) => {
         const style = window.getComputedStyle(element)
@@ -136,7 +137,12 @@ async function safePageDiagnostics(page): Promise<string> {
 async function signInFailure(page, stage: 'email' | 'password' | 'otp'): Promise<Error> {
   const bodyText = (await page.locator('body').innerText().catch(() => '')).toLowerCase()
   const location = safePageLocation(page)
-  const diagnostics = await safePageDiagnostics(page)
+  let diagnostics = ''
+  try {
+    diagnostics = await safePageDiagnostics(page)
+  } catch {
+    diagnostics = ''
+  }
   const fail = (message: string) => new Error(message + ' Page diagnostics: ' + diagnostics)
 
   if (/captcha|robot check|sorry, we just need to make sure/.test(bodyText)) {
