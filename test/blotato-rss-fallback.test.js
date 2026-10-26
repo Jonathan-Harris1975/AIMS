@@ -17,6 +17,7 @@ test("Blotato receives a clearly labelled evergreen fallback when every RSS sour
   assert.equal(result.article.title, "A practical AI workflow check — PM");
   assert.equal(result.article.source, "Jonathan Harris editorial fallback");
   assert.equal(result.article.link, undefined);
+  assert.match(result.article.guid, /^aims-editorial-fallback:/);
   assert.match(result.article.summary, /one real task/);
 });
 
