@@ -183,9 +183,9 @@ export async function renderScheduledBlotatoVideo({
     const reservation = await reservePaidRender();
     return { video: await renderPaidVideo(), reservation, creditFallback: null };
   } catch (error) {
-    if (!isBlotatoCreditLimitError(error)) throw error;
-    const video = await renderLocalFallback({ error, code: String(error.code || "provider-credit-limit") });
-    if (!video?.mediaUrl) throw new Error("Local credit fallback did not return a publishable media URL.");
+    const creditLimited = isBlotatoCreditLimitError(error);
+    const code = String(error.code || (creditLimited ? "provider-credit-limit" : "scheduled-video-render-failed"));
+    const video = await renderLocalFallback({ error, code });
     return {
       video: { ...video, localCreditFallback: true },
       reservation: null,
@@ -193,6 +193,8 @@ export async function renderScheduledBlotatoVideo({
         code: String(error.code || "provider-credit-limit"),
         message: clean(error.message || error, 300),
         scheduledWithoutPaidRender: true,
+        creditLimited,
+        fallbackReason: code,
       },
     };
   }
