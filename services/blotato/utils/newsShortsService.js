@@ -412,7 +412,8 @@ ${jonathanVoicePrompt({ format: "spoken short-form social narration", includeArg
 
 # Role — Visual-Aid Shorts Editorial Director
 Create one original spoken narration supported by exactly five static visual-aid cards.\nThe images remain still: no generated video footage or motion.\nSpoken narration is
-required. Do not add music or sound effects. Jonathan Harris is not shown.\nGeneric adults may appear when they add source-specific context, but avoid visible hands and fingers.\nDescribe a real place, role, equipment or consequence from the article. Each image must work as a still and must not contain text.
+required. Do not add music or sound effects. Jonathan Harris is not shown.\nGeneric adults may appear when they add source-specific context, but avoid visible hands and
+fingers.\nDescribe a real place, role, equipment or consequence from the article. Each image must work as a still and must not contain text.
 
 # Visual-Aid Shorts Laws
 1. Card one must show a clear human situation or source-specific tension, not decorative AI wallpaper.
