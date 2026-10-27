@@ -190,15 +190,20 @@ export async function runNewsletterEditorialCouncil({ profile, newsletter, lead,
     const attendanceComplete = definition.members.every((member) => attendedRoles.has(member.role));
     const allReviews = [chair, ...reports];
     const noBlockers = allReviews.every((review) => !review.blocking);
-    const strictPass = attendanceComplete && noBlockers && allReviews.every((review) => review.score >= THRESHOLDS.newsletter.qaPassThreshold);
+    // The chair owns the final quality score. Specialist scores guide the chair;
+    // only an explicit publication blocker can veto from a specialist seat.
+    // This keeps advisory feedback from silently becoming a unanimous score gate.
+    const strictPass = attendanceComplete && noBlockers && chair.score >= THRESHOLDS.newsletter.qaPassThreshold;
     const toleranceFloor = THRESHOLDS.newsletter.qaPassThreshold * (1 - THRESHOLDS.newsletter.nearThresholdTolerance);
-    const nearThresholdPass = !strictPass && attendanceComplete && noBlockers && allReviews.every((review) => review.score >= toleranceFloor);
+    const nearThresholdPass = !strictPass && attendanceComplete && noBlockers && chair.score >= toleranceFloor;
     const passed = strictPass || nearThresholdPass;
-    const score = Math.min(...allReviews.map((review) => review.score));
+    const score = chair.score;
+    const minimumReviewerScore = Math.min(...allReviews.map((review) => review.score));
 
     return {
       ok: passed,
       score,
+      minimumReviewerScore,
       verdict: strictPass ? "pass" : nearThresholdPass ? "pass_with_tolerance" : "revise",
       nearThresholdAccepted: nearThresholdPass,
       toleranceFloor,
