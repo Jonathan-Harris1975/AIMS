@@ -148,7 +148,10 @@ test("provider integrations follow current Blotato and OpenRouter contracts", as
   assert.match(env, /^BLOTATO_STATUS_RETRY_ATTEMPTS=1$/m);
   assert.match(env, /^BLOTATO_VIDEO_PENDING_ERROR_LIMIT=120$/m);
   assert.match(env, /^BLOTATO_PENDING_500_COMPAT=true$/m);
-  assert.match(env, /^BLOTATO_BRAND_VOICE_NAME=Daniel \(British, authoritative\)$/m);
+  assert.match(env, /^BLOTATO_NEWS_TEMPLATE_SEARCH=$/m);
+  assert.match(env, /^BLOTATO_USE_MANUAL_TEMPLATE_INPUTS=true$/m);
+  assert.doesNotMatch(env, /^BLOTATO_BRAND_VOICE_NAME=/m);
+  assert.doesNotMatch(env, /^BLOTATO_BRAND_TRIM_TO_VOICEOVER=/m);
   assert.match(env, /^ARTWORK_TASK_TIMEOUT_MS=600000$/m);
   assert.match(env, /^BLOG_FALLBACK_IMAGE_URL=$/m);
   assert.match(env, /^BLOG_SOCIAL_FALLBACK_IMAGE_URL=https:\/\/images\.jonathan-harris\.online\/site-logo$/m);
