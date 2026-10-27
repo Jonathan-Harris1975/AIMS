@@ -172,6 +172,7 @@ export async function createLocalBlotatoCreditFallbackVideo({
       rejectedTemplateIds: [],
       creditBudget: { expectedCredits: 0, actualCreditsUsed: 0, source: "local-no-paid-render" },
       localCreditFallback: true,
+      silentCardRender: true,
       fallbackReason: clean(reason, 120),
       localCreditFallbackKey: objectKey,
       runtimeSeconds: SLIDE_SECONDS * imagePaths.length,
