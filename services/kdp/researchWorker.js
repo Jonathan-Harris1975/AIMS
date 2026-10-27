@@ -1,9 +1,10 @@
 import { claimDurableLease, releaseDurableLease } from "../shared/utils/durableLease.js";
-import { getObjectAsText, putPrivateJson, parseR2Reference } from "../shared/utils/r2-client.js";
+import { getObjectAsText, putPrivateJson, parseR2Reference, listObjects } from "../shared/utils/r2-client.js";
 import { hasDurableStateEnv } from "../shared/utils/durableStateEnv.js";
 import { listKdpEbooks } from "./catalogue.js";
 import { readKdpAuditReport } from "./storage.js";
 import { discoverBookResearch } from "./researchDiscovery.js";
+import { captureCompetitorEvidence } from "./researchEvidence.js";
 import { inWeeklyWindow, londonTime, selectWeeklyBatch } from "./weeklyResearch.js";
 
 const KEY = "research/weekly/state.json";
@@ -33,11 +34,25 @@ async function readJson(key) {
 
 export async function readWeeklyResearchState() { return readJson(KEY); }
 
-async function latestAudit() {
-  const pointer = await readJson("audit/reports/latest.json");
+export async function latestAudit(now, { readPointer = () => readJson("audit/reports/latest.json"),
+  readReport = readKdpAuditReport, listReports = listObjects } = {}) {
+  const pointer = await readPointer();
   const parsed = pointer?.reportRef && parseR2Reference(pointer.reportRef);
-  if (!parsed?.key?.startsWith("audit/reports/")) return null;
-  return readKdpAuditReport(parsed.key);
+  if (parsed?.key?.startsWith("audit/reports/")) {
+    const latest = await readReport(parsed.key);
+    if (validMondayAudit(latest, now)) return latest;
+  }
+  // Other audit modes can replace latest.json; inspect this week's Monday
+  // reports instead of discarding a valid public audit.
+  const monday = londonWeek(now);
+  const objects = await listReports("kdp", `audit/reports/${monday}/`);
+  const reports = [];
+  for (const object of objects) {
+    const report = await readReport(object.key);
+    if (validMondayAudit(report, now)) reports.push(report);
+  }
+  reports.sort((a, b) => Date.parse(b.completedAt) - Date.parse(a.completedAt));
+  return reports[0] || null;
 }
 
 function batchSize(env) {
@@ -50,7 +65,7 @@ export async function runResearchTick({
   now = () => new Date(), env = process.env, readState = () => readJson(KEY),
   writeState = (state) => putPrivateJson("kdp", KEY, state),
   archive = (week, state) => putPrivateJson("kdp", `research/weekly/${week}.json`, state),
-  getAudit = latestAudit, getBooks = listKdpEbooks, discover = discoverBookResearch,
+  getAudit = latestAudit, getBooks = listKdpEbooks, discover = discoverBookResearch, captureEvidence = captureCompetitorEvidence,
   claim = claimDurableLease, release = releaseDurableLease,
 } = {}) {
   const started = now();
@@ -64,7 +79,7 @@ export async function runResearchTick({
     const week = londonWeek(started);
     const state = await readState() || { cursor: 0 };
     if (state.week !== week) {
-      const audit = await getAudit();
+      const audit = await getAudit(started);
       if (!validMondayAudit(audit, started)) return { status: "monday_audit_unavailable" };
       if (state.week && !state.completed) await archive(state.week, state);
       const carryOver = Array.isArray(state.pending) && state.pending.length ? state.pending : null;
@@ -94,8 +109,18 @@ export async function runResearchTick({
         state.requestsReserved += 1;
         await writeState(state);
       };
-      const result = await discover(book, { apiKey: env.TAVILY_SEARCH_API, now, beforeRequest });
+      let result = state.inProgress;
+      if (!result || result.ebookId !== book.ebookId) {
+        result = await discover(book, { apiKey: env.TAVILY_SEARCH_API, now, beforeRequest });
+        state.inProgress = result;
+        await writeState(state);
+      }
+      result.competitorEvidence = await captureEvidence(result);
+      if (Object.values(result.competitorEvidence.markets).some((market) => market.status === "blocked")) {
+        return { status: "amazon_blocked", week, ebookId: book.ebookId };
+      }
       state.results.push(result);
+      state.inProgress = null;
       state.cursor = book.ebookId;
       state.pending.shift();
       state.updatedAt = now().toISOString();
