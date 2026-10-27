@@ -96,7 +96,7 @@ test("scheduled Blotato orchestration wires the cap fallback into publishing", a
   assert.match(source, /mediaUrl: video\.mediaUrl/);
 });
 
-test("local fallback renderer uploads a valid no-paid-render media URL", async () => {
+test("local fallback renderer uploads static visual cards with spoken narration", async () => {
   const htmlPages = [];
   const uploads = [];
   const fakeBrowser = {
@@ -113,7 +113,10 @@ test("local fallback renderer uploads a valid no-paid-render media URL", async (
     scheduleDate: "2026-10-26",
     loadChromium: async () => ({ chromium: { launch: async () => fakeBrowser } }),
     findChromiumExecutable: async () => "/usr/bin/chromium",
+    synthesizeNarration: async (text) => { assert.match(text, /Check one real workflow/); return Buffer.alloc(200, 1); },
     runFfmpeg: async (_command, args) => {
+      assert.ok(args.includes("-map"));
+      assert.ok(args.includes("-c:a"));
       await writeFile(args.at(-1), Buffer.alloc(21_000, 1));
     },
     upload: async (...args) => {
@@ -128,4 +131,7 @@ test("local fallback renderer uploads a valid no-paid-render media URL", async (
   assert.equal(result.mediaUrl, "https://assets.example/blotato-fallback.mp4");
   assert.equal(result.creditBudget.expectedCredits, 0);
   assert.equal(result.localCreditFallback, true);
+  assert.equal(result.staticCardVisuals, true);
+  assert.equal(result.audioNarration, true);
+  assert.equal(result.narrationProvider, "aws-polly");
 });
