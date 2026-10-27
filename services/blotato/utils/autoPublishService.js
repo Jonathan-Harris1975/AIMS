@@ -1951,91 +1951,33 @@ async function runPublishJob({
           reusedFromSessionId: failedPublishRecovery.sessionId,
         }
       : null;
-    const reusedVideo = recoveredPublishVideo || await reusableRenderedVideo(lane.jobType, articleSource.article, sessionId, {
-        scheduleSlot,
-        scheduleDate: activeScheduleDate,
-        briefFingerprint,
-      });
+    // Keep an already-created asset only when reconciling this exact pending
+    // publication. New scheduled posts are rendered as silent visual-aid cards;
+    // the previous AI Video with AI Voice template is not used for production.
+    const reusedVideo = recoveredPublishVideo;
     let localCreditFallback = null;
-    const renderPaidVideo = () => createAndWaitForVideo({
-      templateId,
-      templateIdCandidates: templateResolution.templateIdCandidates || [
-        templateResolution.rawTemplateId,
-        templateResolution.template?.id,
-        templateResolution.template?.templateId,
-        templateResolution.template?.path,
-        defaults.templatePath,
-      ],
-      pack,
-      apiKey,
-      onVisualCreated: (visualMeta) => {
-        updateJob(lane.jobType, sessionId, {
-          phase: "video-rendering",
-          videoId: visualMeta.visualId,
-          videoDashboardUrl: visualMeta.dashboardUrl,
-          creditBudget: visualMeta.creditBudget,
-          creditEstimateOnly: true,
-          actualCreditsUsed: "not_available_from_aims",
-          creditSourceOfTruth: "Blotato dashboard",
-          templateId: visualMeta.templateId || templateId,
-          requestedTemplateId: templateId,
-          templateIdCandidates: visualMeta.templateIdCandidates,
-          rejectedTemplateIds: visualMeta.rejectedTemplateIds,
-          templateResolution,
-          channelPreflight,
-        });
-      },
-    });
     let video;
     if (reusedVideo) {
       video = reusedVideo;
-    } else if (scheduleSlot && activeScheduleDate) {
-      const result = await renderScheduledBlotatoVideo({
-        reservePaidRender: async () => {
-          await refreshJobStoreFromState();
-          const paidRenderCap = positiveIntEnv("BLOTATO_DAILY_PAID_RENDER_CAP", 2, 10);
-          const nextBudget = expectedCreditBudget(pack);
-          const maxExpectedCredits = positiveIntEnv("BLOTATO_MAX_EXPECTED_CREDITS", 10, 10_000);
-          if (nextBudget.expectedCredits > maxExpectedCredits) {
-            const err = new Error(`Blotato expected credit budget too high: ${nextBudget.expectedCredits}/${maxExpectedCredits}`);
-            err.statusCode = 422;
-            err.code = "blotato-expected-credit-budget-cap";
-            err.creditBudget = nextBudget;
-            throw err;
-          }
-          const monthlyBudget = positiveIntEnv("BLOTATO_MONTHLY_ESTIMATED_CREDIT_CAP", 100, 10_000);
-          const priorRenders = getShortLaneJobTypes().flatMap((type) => getJobsByType(type))
-            .map((job) => ({
-              visualId: trim(job.videoId || job.result?.visualId),
-              reservationId: job.creditGuardReservationId,
-              date: scheduleDateFromJob(job),
-              expectedCredits: Number(job.creditBudget?.expectedCredits || job.result?.creditBudget?.expectedCredits),
-            }));
-          const reservationId = `${sessionId}:attempt-${getJob(lane.jobType, sessionId)?.attempt || 1}`;
-          const reservation = await reservePaidRender({
-            reservationId, scheduleDate: activeScheduleDate, expectedCredits: expectedCreditBudget(pack).expectedCredits,
-            dailyCap: paidRenderCap, monthlyCap: monthlyBudget, priorRenders,
-          });
-          updateJob(lane.jobType, sessionId, { creditGuardReservationId: reservation.reservationId, creditBudget: expectedCreditBudget(pack) });
-          return reservation;
-        },
-        renderPaidVideo,
-        renderLocalFallback: ({ error, code }) => createLocalBlotatoCreditFallbackVideo({
-          pack,
-          article: articleSource.article,
-          sessionId,
-          scheduleDate: activeScheduleDate,
-          reason: code || error?.code || "paid-render-credit-limit",
-        }),
-      });
-      video = result.video;
-      localCreditFallback = result.creditFallback;
     } else {
-      video = await renderPaidVideo();
+      video = await createLocalBlotatoCreditFallbackVideo({
+        pack,
+        article: articleSource.article,
+        sessionId,
+        scheduleDate: activeScheduleDate || new Date().toISOString().slice(0, 10),
+        reason: "silent-visual-aid-cards",
+      });
+      localCreditFallback = {
+        code: "silent-visual-aid-cards",
+        message: "Rendered as five silent visual-aid cards.",
+        scheduledWithoutPaidRender: true,
+        creditLimited: false,
+        fallbackReason: "silent-visual-aid-cards",
+      };
     }
     if (localCreditFallback) {
       updateJob(lane.jobType, sessionId, {
-        phase: "local-credit-fallback-ready",
+        phase: "visual-aid-cards-ready",
         localCreditFallback,
         videoId: null,
         videoDashboardUrl: null,
@@ -2045,7 +1987,7 @@ async function runPublishJob({
         actualCreditsUsed: 0,
         creditSourceOfTruth: "local no-paid-render fallback",
       });
-      warn("blotato.scheduled.local_credit_fallback_ready", {
+      warn("blotato.scheduled.visual_aid_cards_ready", {
         sessionId,
         lane: lane.slug,
         scheduleSlot,
