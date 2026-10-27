@@ -66,6 +66,7 @@ export function parseBooksMetadataRefs(data: unknown): ReportsBookRef[] {
   collectBookRows(data, rows)
 
   const refs = new Map<string, ReportsBookRef>()
+  const conflicting = new Set<string>()
   for (const row of rows) {
     const titleId = titleIdFromRecord(row)
     if (!titleId || !/^[A-Z0-9]{10,14}$/.test(titleId)) continue
@@ -81,16 +82,20 @@ export function parseBooksMetadataRefs(data: unknown): ReportsBookRef[] {
           ? normalizeFormat(fmtRaw)
           : normalizeFormat((fmtRaw as UnknownRecord)?.format ?? (fmtRaw as UnknownRecord)?.type)
       if (!format) continue
-      refs.set(`${titleId}:${format}`, {
+      const key = `${titleId}:${format}`
+      const asin = asinFromRecord(row)
+      const existing = refs.get(key)
+      if (existing?.asin && asin && existing.asin.toUpperCase() !== asin.toUpperCase()) conflicting.add(key)
+      refs.set(key, {
         titleId,
         format,
         title: asString(row.title) ?? asString(row.bookTitle),
-        asin: asinFromRecord(row),
+        asin: asin ?? existing?.asin,
       })
     }
   }
 
-  return [...refs.values()]
+  return [...refs.entries()].map(([key, ref]) => conflicting.has(key) ? { ...ref, asin: undefined } : ref)
 }
 
 export async function fetchReportsBooksMetadata(page: Page): Promise<ReportsBookRef[]> {

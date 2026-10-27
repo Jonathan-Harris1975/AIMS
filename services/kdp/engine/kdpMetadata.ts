@@ -89,6 +89,8 @@ type ParsedPricing = {
 type TitleFormatRef = {
   titleId: string
   format: KdpBookFormat
+  asin?: string
+  title?: string
 }
 
 type BookshelfPageScan = {
@@ -142,7 +144,17 @@ async function collectBookshelfRefsFromReportsApi(
 ): Promise<TitleFormatRef[] | null> {
   const refs = await fetchReportsBooksMetadata(page)
   if (refs.length === 0) return null
-  return refs.map((r) => ({ titleId: r.titleId, format: r.format }))
+  return refs.map((r) => ({ titleId: r.titleId, format: r.format, asin: r.asin, title: r.title }))
+}
+
+/** Never substitute an internal title ID for the retail ASIN. */
+export function verifiedRefAsin(pricingAsin: string, reportAsin?: string): string {
+  const pricing = pricingAsin.trim().toUpperCase()
+  const report = (reportAsin || '').trim().toUpperCase()
+  const valid = (value: string) => /^B0[A-Z0-9]{8}$/.test(value)
+  if (valid(pricing) && valid(report) && pricing !== report) return ''
+  if (valid(pricing)) return pricing
+  return valid(report) ? report : ''
 }
 
 async function collectBookshelfRefsFromHtml(
@@ -443,7 +455,7 @@ export async function fetchBookMetadata(
     pageCount: content.pageCount,
     manuscriptStatus: content.manuscriptStatus,
     coverStatus: content.coverStatus,
-    asin: pricing.asin,
+    asin: verifiedRefAsin(pricing.asin, ref.asin),
     listPriceUsd: pricing.listPriceUsd,
     prices: pricing.prices,
     territory: pricing.territory,
