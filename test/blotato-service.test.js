@@ -186,7 +186,7 @@ will be the ones who build better systems around the tools.",
       assert.equal(body.inputs.animateAiImages, false);
       assert.deepEqual(Object.keys(body.inputs).sort(), [
         "aiImageModel", "animateAiImages", "aspectRatio", "captionPosition", "highlightColor",
-        "scenes", "transition", "trimToVoiceover", "voiceName",
+        "scenes", "transition",
       ].sort());
       assert.match(body.prompt, /Cost guard/i);
     }
@@ -546,7 +546,7 @@ test("Blotato news insight route builds a dry-run short pack", async () => {
   assert.ok(Array.isArray(response.body.pack.scenes));
   assert.ok(response.body.pack.scenes.length >= 3);
   assert.ok(Array.isArray(response.body.visualInputs.scenes));
-  assert.equal(response.body.visualInputs.thumbnailText, "AI Gets Chores");
+  assert.equal(response.body.visualInputs.thumbnailText, "AI agents move from chat");
   assert.equal(response.body.visualRequest.inputs.scenes.length, 5);
   assert.equal(response.body.visualRequest.inputs.aiImageModel, "replicate/black-forest-labs/flux-schnell");
   assert.equal(response.body.visualRequest.inputs.animateAiImages, false);
