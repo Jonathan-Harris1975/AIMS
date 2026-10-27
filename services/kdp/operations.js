@@ -17,6 +17,7 @@ import { readMetadataCache, removeMetadataCache, METADATA_CACHE_VERSION } from "
 import { readRecoveryLearnings } from "./engine/kdpRecoveryStore.ts";
 import { readSessionMeta, removeSession } from "./engine/session.ts";
 import { getKdpEbookByAsin, getKdpEbookById, listKdpEbooks } from "./catalogue.js";
+import { auditPublicCatalogue } from "./publicListingAudit.js";
 import { getKdpReadiness } from "./readiness.js";
 import {
   downloadKdpObjectToTempFile,
@@ -387,51 +388,76 @@ function auditCatalogueContext(metadataBooks, catalogueBooks) {
   };
 }
 
-router.post("/audit/run", requestDedupe("kdp:audit-run"), asyncRoute(async (req, res) => startJob(req, res, "audit-run", async () => {
-  const runId = crypto.randomUUID();
-  const createdAt = new Date().toISOString();
-  const cache = await syncAllBookMetadata();
-  const snapshotRef = await persistKdpMetadata(cache);
-  const [catalogue, account] = await Promise.all([listKdpEbooks(), fetchAccountInfo()]);
-  const metadataAnalysis = analyzeBookMetadata(cache.books);
-  const priceFloorAnalysis = analyzeKdpPriceFloors(cache.books);
-  const report = {
-    ok: true,
-    service: "KDP_audit",
-    runId,
-    createdAt,
-    syncedAt: cache.syncedAt,
-    account: { accountCreationDate: account.accountCreationDate, catalogSize: account.catalogSize },
-    metadataAnalysis,
-    priceFloorAnalysis,
-    catalogueComparison: auditCatalogueContext(cache.books, catalogue),
-    syncStats: cache.stats || null,
-    metadataSnapshotRef: snapshotRef,
-    changesApplied: false,
-    message: "Audit is read-only. Price-band issues include per-market 70% royalty limits; listing updates use separate pricing and metadata routes.",
-  };
-  const reportRef = await persistKdpAuditReport(report);
-  const { putPrivateJson } = await import("../shared/utils/r2-client.js");
-  await putPrivateJson("kdp", "audit/reports/latest.json", { runId, createdAt, reportRef });
-  return {
-    ok: true,
-    service: "KDP_audit",
-    runId,
-    createdAt,
-    syncedAt: cache.syncedAt,
-    bookCount: cache.books.length,
-    issueCount: metadataAnalysis.issueCount + priceFloorAnalysis.issueCount,
-    metadataIssueCount: metadataAnalysis.issueCount,
-    priceFloorIssueCount: priceFloorAnalysis.issueCount,
-    catalogue: {
-      books: report.catalogueComparison.catalogueBooks,
-      matchedListings: report.catalogueComparison.matchedListings,
-      unmatchedListings: report.catalogueComparison.unmatchedListings,
-    },
-    reportRef,
-    metadataSnapshotRef: snapshotRef,
-  };
-})));
+router.post("/audit/run", requestDedupe("kdp:audit-run"), asyncRoute(async (req, res) => {
+  const mode = req.body?.mode || "public";
+  const marketplace = req.body?.marketplace || "US";
+  if (!["public", "kdp"].includes(mode) || !["US", "UK"].includes(marketplace)) {
+    return res.status(400).json({ ok: false, code: "validation", error: "mode must be public or kdp and marketplace must be US or UK." });
+  }
+  return startJob(req, res, "audit-run", async () => {
+    const runId = crypto.randomUUID();
+    const createdAt = new Date().toISOString();
+    if (mode === "public") {
+      const catalogue = await listKdpEbooks();
+      const publicAudit = await auditPublicCatalogue(catalogue, { marketplace });
+      const report = {
+        ok: true, service: "KDP_audit", mode, runId, createdAt,
+        completedAt: new Date().toISOString(), publicAudit,
+        complete: publicAudit.catalogueBooks > 0 && publicAudit.notCaptured === 0,
+        changesApplied: false,
+        message: "Read-only public listing audit. Catalogue values are from D1; Amazon values are reported separately. KDP setup data requires mode=kdp.",
+      };
+      const reportRef = await persistKdpAuditReport(report);
+      const { putPrivateJson } = await import("../shared/utils/r2-client.js");
+      await putPrivateJson("kdp", "audit/reports/latest.json", { runId, createdAt, reportRef });
+      return { ok: true, service: "KDP_audit", mode, runId, createdAt, complete: report.complete,
+        bookCount: publicAudit.catalogueBooks, captured: publicAudit.captured, notCaptured: publicAudit.notCaptured,
+        statusCounts: publicAudit.statusCounts, reportRef };
+    }
+    const cache = await syncAllBookMetadata();
+    const snapshotRef = await persistKdpMetadata(cache);
+    const [catalogue, account] = await Promise.all([listKdpEbooks(), fetchAccountInfo()]);
+    const metadataAnalysis = analyzeBookMetadata(cache.books);
+    const priceFloorAnalysis = analyzeKdpPriceFloors(cache.books);
+    const report = {
+      ok: true,
+      service: "KDP_audit",
+      mode,
+      runId,
+      createdAt,
+      syncedAt: cache.syncedAt,
+      account: { accountCreationDate: account.accountCreationDate, catalogSize: account.catalogSize },
+      metadataAnalysis,
+      priceFloorAnalysis,
+      catalogueComparison: auditCatalogueContext(cache.books, catalogue),
+      syncStats: cache.stats || null,
+      metadataSnapshotRef: snapshotRef,
+      changesApplied: false,
+      message: "Audit is read-only. Price-band issues include per-market 70% royalty limits; listing updates use separate pricing and metadata routes.",
+    };
+    const reportRef = await persistKdpAuditReport(report);
+    const { putPrivateJson } = await import("../shared/utils/r2-client.js");
+    await putPrivateJson("kdp", "audit/reports/latest.json", { runId, createdAt, reportRef });
+    return {
+      ok: true,
+      service: "KDP_audit",
+      runId,
+      createdAt,
+      syncedAt: cache.syncedAt,
+      bookCount: cache.books.length,
+      issueCount: metadataAnalysis.issueCount + priceFloorAnalysis.issueCount,
+      metadataIssueCount: metadataAnalysis.issueCount,
+      priceFloorIssueCount: priceFloorAnalysis.issueCount,
+      catalogue: {
+        books: report.catalogueComparison.catalogueBooks,
+        matchedListings: report.catalogueComparison.matchedListings,
+        unmatchedListings: report.catalogueComparison.unmatchedListings,
+      },
+      reportRef,
+      metadataSnapshotRef: snapshotRef,
+    };
+  });
+}));
 
 router.post("/audit/reports/download", requestDedupe("kdp:royalty-report"), asyncRoute(async (req, res) => startJob(req, res, "audit-royalty-report", async () => {
   const raw = requireObjectBody(req.body);

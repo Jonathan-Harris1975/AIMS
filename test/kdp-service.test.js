@@ -61,6 +61,12 @@ test("KDP operations expose publishing, audit and readiness endpoints", async ()
   assert.equal(health.status, 200);
 });
 
+test("KDP audit rejects unsupported report modes and marketplaces", async () => {
+  const response = await request(createApp()).post("/kdp/audit/run").send({ mode: "public", marketplace: "other" });
+  assert.equal(response.status, 400);
+  assert.equal(response.body.code, "validation");
+});
+
 test("KDP TextBee handoff only accepts message-received events", async () => {
   const response = await request(createApp())
     .post("/kdp/otp/textbee")
