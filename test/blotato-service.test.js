@@ -601,6 +601,7 @@ test("Blotato publish-now endpoint requires explicit opt-in and runs the RSS-to-
   assert.ok(jobStatus.body.job.result.video.visualInputs.scenes.length >= 3);
   assert.equal(jobStatus.body.job.result.video.staticCardVisuals, true);
   assert.equal(jobStatus.body.job.result.video.audioNarration, true);
+  assert.equal(jobStatus.body.job.result.video.audioNarration, true);
   assert.equal(jobStatus.body.job.result.video.localCreditFallback, true);
   assert.equal(jobStatus.body.job.result.video.creditBudget.actualCreditsUsed, 0);
   assert.equal(jobStatus.body.job.result.video.templateId, null);
@@ -621,7 +622,7 @@ test("Blotato publish-now endpoint requires explicit opt-in and runs the RSS-to-
   assert.equal(facebookPost.post.target.pageId, "562160556971997");
   assert.equal(facebookPost.post.target.mediaType, "reel");
   assert.equal(jobStatus.body.job.result.channelPreflight.ready, true);
-  assert.equal(capturedVisualRequests.length, 0, "silent cards must not call the Blotato video renderer");
+  assert.equal(capturedVisualRequests.length, 0, "scheduled card visuals are rendered locally");
   assert.deepEqual(
     jobStatus.body.job.result.channelPreflight.platforms.map((item) => item.platform),
     ["instagram", "youtube", "tiktok", "facebook"]
@@ -653,7 +654,8 @@ test("Blotato scheduled lane reaches the provider and confirms every queued post
   assert.ok(jobStatus.body.job.result.posts.every((post) => post.status === "scheduled" && post.confirmed === true));
   assert.equal(capturedPostRequests.length, 4);
   assert.ok(capturedPostRequests.every((payload) => Boolean(payload.scheduledTime)));
-  assert.equal(jobStatus.body.job.result.video.silentCardRender, true);
+  assert.equal(jobStatus.body.job.result.video.staticCardVisuals, true);
+  assert.equal(jobStatus.body.job.result.video.audioNarration, true);
   assert.equal(jobStatus.body.job.result.video.creditBudget.actualCreditsUsed, 0);
   assert.equal(capturedVisualRequests.length, 0, "scheduled card visuals are rendered locally");
 });
