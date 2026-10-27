@@ -5,11 +5,8 @@ import { listKdpEbooks } from "./catalogue.js";
 import { readKdpAuditReport } from "./storage.js";
 import { discoverBookResearch } from "./researchDiscovery.js";
 import { inWeeklyWindow, londonTime, selectWeeklyBatch } from "./weeklyResearch.js";
-import { warn } from "../../logger.js";
 
 const KEY = "research/weekly/state.json";
-let timer;
-let running;
 
 export function londonWeek(date) {
   const local = londonTime(date);
@@ -58,7 +55,7 @@ export async function runResearchTick({
 } = {}) {
   const started = now();
   if (!inWeeklyWindow(started, "update")) return { status: "outside_window" };
-  if (!env.BRAVE_SEARCH_API_KEY) return { status: "search_not_configured" };
+  if (!env.TAVILY_SEARCH_API) return { status: "search_not_configured" };
   if (!hasDurableStateEnv(env) || ["local", "file", "filesystem"].includes(String(env.STATE_BACKEND || "").toLowerCase())) return { status: "durable_state_not_configured" };
   const acquired = await claim({ namespace: "kdp-research", key: "weekly-research-worker", pendingTtlMs: 60 * 60 * 1000 });
   if (!acquired.claimed) return { status: "already_running" };
@@ -83,7 +80,21 @@ export async function runResearchTick({
     if (state.completed) return { status: "already_complete", week };
     if (state.pending.length && inWeeklyWindow(now(), "update") && londonWeek(now()) === week) {
       const book = state.pending[0];
-      const result = await discover(book, { apiKey: env.BRAVE_SEARCH_API_KEY, now });
+      const maxRequests = Number(env.KDP_RESEARCH_MONTHLY_SEARCH_LIMIT || 900);
+      if (!Number.isSafeInteger(maxRequests) || maxRequests < 1 || maxRequests > 1000) throw new Error("Invalid monthly research limit");
+      const beforeRequest = async () => {
+        const current = londonTime(now());
+        const month = `${current.year}-${current.month}`;
+        if (state.usageMonth !== month) { state.usageMonth = month; state.requestsReserved = 0; }
+        if (state.requestsReserved >= maxRequests) {
+          const error = new Error("Monthly search limit reached");
+          error.code = "research_monthly_limit";
+          throw error;
+        }
+        state.requestsReserved += 1;
+        await writeState(state);
+      };
+      const result = await discover(book, { apiKey: env.TAVILY_SEARCH_API, now, beforeRequest });
       state.results.push(result);
       state.cursor = book.ebookId;
       state.pending.shift();
@@ -93,19 +104,15 @@ export async function runResearchTick({
       await writeState(state);
     }
     if (!state.pending.length) { state.completed = true; await archive(week, state); await writeState(state); }
-    return { status: state.completed ? "complete" : "waiting_for_window", week, processed: state.results.length, pending: state.pending.length };
+    return { status: state.completed ? "complete" : "pending", week, processed: state.results.length, pending: state.pending.length };
   } finally { await release(acquired.lease); }
 }
 
-export function startKdpResearchWorker() {
-  if (timer || !process.env.BRAVE_SEARCH_API_KEY) return;
-  const tick = () => {
-    if (running) return;
-    running = runResearchTick().catch((error) => warn("kdp.research.worker", { error: String(error?.message || error).slice(0, 200) })).finally(() => { running = undefined; });
-  };
-  timer = setInterval(tick, 60_000);
-  timer.unref();
-  tick();
+export async function runResearchBatch({ tick = runResearchTick, pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms)) } = {}) {
+  for (;;) {
+    const result = await tick();
+    if (result.status === "pending") { await pause(60_000); continue; }
+    if (["complete", "already_complete"].includes(result.status)) return { ok: true, ...result };
+    return { ok: false, ...result };
+  }
 }
-
-export function stopKdpResearchWorker() { if (timer) clearInterval(timer); timer = undefined; }

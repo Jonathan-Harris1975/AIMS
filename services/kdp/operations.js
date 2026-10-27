@@ -19,7 +19,7 @@ import { readSessionMeta, removeSession } from "./engine/session.ts";
 import { getKdpEbookByAsin, getKdpEbookById, listKdpEbooks } from "./catalogue.js";
 import { auditPublicCatalogue } from "./publicListingAudit.js";
 import { listPageCountSync, queuePageCountSync, reconcilePageCountSync } from "./pageCountSync.js";
-import { readWeeklyResearchState } from "./researchWorker.js";
+import { readWeeklyResearchState, runResearchBatch } from "./researchWorker.js";
 import { getKdpReadiness } from "./readiness.js";
 import {
   downloadKdpObjectToTempFile,
@@ -120,6 +120,10 @@ function startJob(req, res, lane, runner, payload = {}) {
     metadata: { route: `/kdp/${lane}` },
   }).then((job) => res.status(202).json(job)).catch((error) => sendError(res, error, `Could not start KDP ${lane} job.`));
 }
+
+router.post("/research/weekly/run", asyncRoute(async (req, res) =>
+  startJob(req, res, "weekly-research", () => runResearchBatch()),
+));
 
 async function persistSyncedMetadata(cache) {
   const snapshotRef = await persistKdpMetadata(cache);

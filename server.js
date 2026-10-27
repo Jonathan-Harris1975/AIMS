@@ -15,7 +15,6 @@ import { requireAimsBearerAuth } from "./services/shared/middleware/suiteAuth.js
 import { getCommsHubReadiness } from "./services/comms-hub/config.js";
 import { describeCommsHubRuntimeReadiness, getCommsHubRuntimeReadiness, startCommsHubRuntime, stopCommsHubRuntime } from "./services/comms-hub/runtime.js";
 import { startPageCountSyncWorker, stopPageCountSyncWorker } from "./services/kdp/pageCountSync.js";
-import { startKdpResearchWorker, stopKdpResearchWorker } from "./services/kdp/researchWorker.js";
 import { restoreAimsModelGovernance } from "./services/shared/utils/modelGovernance.js";
 import { probeCriticalDependencies } from "./services/shared/readiness/dependencyProbes.js";
 
@@ -517,7 +516,6 @@ export function startServer(port = PORT, host = "0.0.0.0") {
     .catch((err) => error("model-governance.aims.startup-restore", { error: err?.message || String(err) }));
   void startCommsHubRuntime();
   startPageCountSyncWorker();
-  startKdpResearchWorker();
 
   if (!processHandlersBound) {
     processHandlersBound = true;
@@ -545,7 +543,6 @@ export function startServer(port = PORT, host = "0.0.0.0") {
 export async function stopServer() {
   if (!server) return;
   stopPageCountSyncWorker();
-  stopKdpResearchWorker();
 
   await new Promise((resolve, reject) => {
     server.close((err) => {
@@ -561,7 +558,6 @@ export async function stopServer() {
 function shutdown(signal) {
   info("server.shutdown.start", { signal });
   stopPageCountSyncWorker();
-  stopKdpResearchWorker();
 
   if (!server) {
     info("server.shutdown.complete", { signal, note: "server_not_running" });

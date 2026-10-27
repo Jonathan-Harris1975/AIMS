@@ -1,4 +1,4 @@
-const ENDPOINT = "https://api.search.brave.com/res/v1/web/search";
+const ENDPOINT = "https://api.tavily.com/search";
 const MARKETS = { US: { country: "US", host: "www.amazon.com" }, UK: { country: "GB", host: "www.amazon.co.uk" } };
 
 function safeText(value, max = 300) {
@@ -17,24 +17,28 @@ export function searchQueries(book) {
   };
 }
 
-export async function braveSearch({ query, country, freshness, apiKey, fetchImpl = fetch }) {
+export async function tavilySearch({ query, country, freshness, apiKey, fetchImpl = fetch }) {
   if (!apiKey || !query || !["US", "GB"].includes(country)) throw new Error("Search configuration incomplete");
-  const url = new URL(ENDPOINT);
-  url.search = new URLSearchParams({ q: query, country, search_lang: "en", count: "10", ...(freshness ? { freshness } : {}) }).toString();
-  const response = await fetchImpl(url, { headers: { Accept: "application/json", "X-Subscription-Token": apiKey }, signal: AbortSignal.timeout(15000), redirect: "error" });
+  const body = { query, search_depth: "basic", max_results: 10, auto_parameters: false,
+    include_answer: false, include_raw_content: false, include_published_date: true,
+    country: country === "GB" ? "united kingdom" : "united states",
+    ...(freshness ? { time_range: "month" } : {}) };
+  const response = await fetchImpl(ENDPOINT, { method: "POST", redirect: "error", signal: AbortSignal.timeout(15000),
+    headers: { Accept: "application/json", "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify(body) });
   if (!response.ok) {
     const error = new Error(`Search provider returned HTTP ${response.status}`);
     error.code = "research_provider_error";
     error.statusCode = response.status;
     throw error;
   }
-  const body = await response.json();
-  if (!body || typeof body !== "object" || !Array.isArray(body.web?.results)) throw new Error("Search provider returned an invalid response");
-  return body.web.results.slice(0, 10).flatMap((item) => {
+  const result = await response.json();
+  if (!result || typeof result !== "object" || !Array.isArray(result.results)) throw new Error("Search provider returned an invalid response");
+  return result.results.slice(0, 10).flatMap((item) => {
     let link;
     try { link = new URL(item.url); } catch { return []; }
     if (link.protocol !== "https:" || link.username || link.password || link.port) return [];
-    return [{ title: safeText(item.title), url: link.href, snippet: safeText(item.description, 1000), published: safeText(item.page_age, 50) || null, fetched: safeText(item.age, 50) || null }];
+    return [{ title: safeText(item.title), url: link.href, snippet: safeText(item.content, 1000), published: safeText(item.published_date, 50) || null, fetched: safeText(item.fetched, 50) || null }];
   });
 }
 
@@ -53,7 +57,7 @@ export function competitorCandidates(results, market, ownAsin) {
   return [...found.values()];
 }
 
-export async function discoverBookResearch(book, { apiKey, fetchImpl = fetch, now = () => new Date() } = {}) {
+export async function discoverBookResearch(book, { apiKey, fetchImpl = fetch, now = () => new Date(), beforeRequest = async () => {} } = {}) {
   const queries = searchQueries(book);
   const calls = [
     { key: "US", country: "US" }, { key: "UK", country: "GB" },
@@ -61,7 +65,10 @@ export async function discoverBookResearch(book, { apiKey, fetchImpl = fetch, no
   ];
   const found = {};
   // Sequential requests reduce bursts and make provider failures stop the run.
-  for (const call of calls) found[call.key] = await braveSearch({ query: queries[call.key], country: call.country, freshness: call.freshness, apiKey, fetchImpl });
+  for (const call of calls) {
+    await beforeRequest();
+    found[call.key] = await tavilySearch({ query: queries[call.key], country: call.country, freshness: call.freshness, apiKey, fetchImpl });
+  }
   return {
     ebookId: book.ebookId, asin: book.asin, topic: safeText(book.topic || book.whatBookCovers || book.title, 180),
     researchedAt: now().toISOString(), queries,

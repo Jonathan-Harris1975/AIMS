@@ -7,7 +7,7 @@ The authenticated AIMS `/kdp` service exposes two subservices backed by the KDP 
 
 Public audits automatically reconcile verified Kindle page-count differences to the D1 website catalogue. They do not change KDP listings; metadata and pricing changes on KDP are separate operations. Monthly Council scheduling and automatic approval of other changes are not configured here.
 
-The weekly research worker searches for candidate Kindle competitors in the US and UK and recent topic sources. It requires a complete Monday public audit started between 12:00 and 15:00 Europe/London and runs Tuesday–Thursday in the same window. With `BRAVE_SEARCH_API_KEY` and durable R2 state configured, it selects a rotating batch (default 15), makes four Brave searches per book, and checkpoints after each book. It processes at most one book per minute; unfinished work resumes in the next available window. `/kdp/research/weekly` returns the current private state; completed and carried-over research is archived under `research/weekly/` in the private KDP bucket. Configure a separate Monday audit trigger: this worker does not start the audit.
+The MAST-triggered weekly research job searches for candidate Kindle competitors in the US and UK and recent topic sources. It requires a complete Monday public audit started between 12:00 and 15:00 Europe/London and runs Tuesday–Thursday in the same window. With `TAVILY_SEARCH_API` and durable R2 state configured, it selects a rotating batch (default 15), makes four Tavily basic searches per book, and checkpoints after each book. It processes at most one book per minute; unfinished work resumes in the next available window. `/kdp/research/weekly` returns the current private state; completed and carried-over research is archived under `research/weekly/` in the private KDP bucket. MAST triggers the Monday audit and the Tuesday–Thursday research runs.
 
 Search results are leads only, not verified Kindle prices, comparable-title assessments, validated trends, or proof that the book covers a topic. The worker never writes KDP, D1, or the website. The update pipeline, source verification and LLM evaluation remain separate work. The preliminary pricing helper requires independently verified comparable records and enforces UK/US floors of 4.00; it is not connected to an update endpoint.
 
@@ -31,8 +31,9 @@ Set these Koyeb environment variables/secrets:
 | `KDP_CONTENT_MAX_BYTES` | Optional maximum staged manuscript/cover size; defaults to 200 MiB |
 | `R2_BUCKET_KDP` | Private R2 bucket name; set to `kdp` |
 | `D1_API_KEY` | Cloudflare API token with read and write access to the KDP catalogue D1 database |
-| `BRAVE_SEARCH_API_KEY` | Brave Search API token; when configured, enables scheduled weekly research (four searches per selected book) |
+| `TAVILY_SEARCH_API` | Tavily Search API token; when configured, enables MAST-triggered weekly research (four searches per selected book) |
 | `KDP_RESEARCH_BATCH_SIZE` | Number of ebooks per weekly research batch, 1–100; defaults to 15 |
+| `KDP_RESEARCH_MONTHLY_SEARCH_LIMIT` | Maximum Tavily calls by this service per London calendar month, at most 1000; defaults to 900 |
 | `WEBSITE_REBUILD_HOOK`, `WEBSITE_REBUILD_HOOK_FALLBACK` | Existing private Cloudflare Pages build hooks used after a catalogue update |
 | `CLOUDFLARE_ZONE_ID`, `CLOUDFLARE_PURGE_API_TOKEN` | Existing cache purge configuration used to refresh the D1 catalogue API before a build |
 | `R2_ENDPOINT`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` | Existing AIMS R2 credentials, scoped to the private bucket |
@@ -73,6 +74,7 @@ All routes require the normal AIMS bearer authentication. Long-running browser o
 | POST | `/kdp/audit/pricing/update` and `/batch` | Preview explicit pricing changes; `dryRun` defaults to true |
 | GET | `/kdp/audit/reports/latest` | Read the latest private audit report |
 | GET | `/kdp/audit/page-count-sync` | Read outstanding page-count and website rebuild reconciliation status |
+| POST | `/kdp/research/weekly/run` | Start a resumable MAST-triggered weekly research batch |
 | GET | `/kdp/research/weekly` | Read the current weekly research state and unverified sources |
 | POST | `/kdp/audit/page-count-sync/retry` | Retry outstanding page-count reconciliation immediately |
 | POST | `/kdp/audit/reports/download` | Download and store KDP royalty reports privately |
