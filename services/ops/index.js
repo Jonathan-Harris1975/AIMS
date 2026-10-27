@@ -338,7 +338,7 @@ function assertContentOperationWindows() {
 assertContentOperationWindows();
 
 function operationNewsletterEnabled() {
-  return booleanEnv("AIMS_OPERATION_NEWSLETTER_ENABLED", false);
+  return booleanEnv("AIMS_OPERATION_NEWSLETTER_ENABLED", true);
 }
 
 function operationOutreachEnabled() {
