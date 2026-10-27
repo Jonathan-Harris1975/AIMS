@@ -234,7 +234,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `CONTENT_MASTER_COUNCIL_TEMPERATURE` | Yes | audits/utils/contentMasterCouncil.js:144 |
 | `CONTENT_MASTER_COUNCIL_TIMEOUT_MS` | Yes | audits/utils/contentMasterCouncil.js:144 |
 | `CORS_ORIGINS` | Yes | server.js:233 |
-| `D1_API_KEY` | Yes | services/kdp/catalogue.js:7<br>services/kdp/catalogue.js:138<br>services/kdp/pageCountSync.js:192 |
+| `D1_API_KEY` | Yes | services/kdp/catalogue.js:7<br>services/kdp/catalogue.js:142<br>services/kdp/pageCountSync.js:210 |
 | `DEBUG_ROUTES` | Yes | logger.js:114 |
 | `DEPLOY_SMOKE_EXPECT_READY` | No | scripts/deploySmoke.js:8 |
 | `DIGITAL_GROWTH_AI_MAX_INPUT_CHARS` | Yes | audits/utils/digitalGrowthAnalysis.js:330 |
@@ -276,7 +276,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `JOB_STATUS_TTL_MS` | Yes | services/shared/utils/jobStore.js:5 |
 | `JSON_BODY_LIMIT` | Yes | server.js:381 |
 | `KDP_CONTENT_MAX_BYTES` | Yes | services/kdp/storage.js:7 |
-| `KDP_D1_DATABASE_ID` | Yes | services/kdp/catalogue.js:6<br>services/kdp/catalogue.js:138<br>services/kdp/catalogue.js:139 |
+| `KDP_D1_DATABASE_ID` | Yes | services/kdp/catalogue.js:6<br>services/kdp/catalogue.js:142<br>services/kdp/catalogue.js:143 |
 | `KDP_D1_TIMEOUT_MS` | No | services/kdp/catalogue.js:20 |
 | `KDP_OTP_ALLOWED_SENDERS` | Yes | services/kdp/index.js:16<br>services/kdp/otpBroker.js:16 |
 | `KDP_OTP_CHALLENGE_TIMEOUT_MS` | Yes | services/kdp/otpBroker.js:9 |

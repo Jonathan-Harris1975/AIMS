@@ -113,15 +113,23 @@ export async function processPageCountIntent(key, intent, dependencies = {}) {
       await save();
       return { status: intent.lastStatus };
     }
-    const resolved = [];
     for (const item of intent.items) {
-      const result = await update(item);
-      resolved.push({ ...item, updateStatus: result.status });
+      if (["updated", "already_updated", "conflict"].includes(item.updateStatus)) continue;
+      try {
+        const result = await update(item);
+        item.updateStatus = result.status;
+      } catch (error) {
+        item.updateStatus = error?.code === "kdp_ebook_not_found" ? "conflict" : "retry_pending";
+      }
+      // Persist each result so one failed item cannot erase completed work.
+      await save();
     }
-    intent.items = resolved;
     delete intent.lastStatus;
-    intent.status = "pending_rebuild";
+    const hasApplied = intent.items.some((item) => ["updated", "already_updated"].includes(item.updateStatus));
+    const hasRetry = intent.items.some((item) => item.updateStatus === "retry_pending");
+    intent.status = hasApplied ? "pending_rebuild" : hasRetry ? "prepared" : "conflict";
     await save();
+    if (!hasApplied) return { status: hasRetry ? "retry_pending" : "conflict" };
   }
   const applied = intent.items.filter((item) => ["updated", "already_updated"].includes(item.updateStatus));
   if (!applied.length) {
@@ -139,17 +147,27 @@ export async function processPageCountIntent(key, intent, dependencies = {}) {
   }
   if (intent.status === "rebuild_requested") {
     // If the catalogue has changed again, never verify stale values or retrigger them.
+    const currentItems = [];
     for (const item of applied) {
-      const current = await readBook(item.ebookId);
-      if (current.asin.toUpperCase() !== item.asin || current.pageCount !== item.pageCount) {
-        intent.status = "superseded";
-        await save();
-        return { status: "superseded" };
+      try {
+        const current = await readBook(item.ebookId);
+        if (current.asin.toUpperCase() === item.asin && current.pageCount === item.pageCount) currentItems.push(item);
+        else item.updateStatus = "conflict";
+      } catch (error) {
+        if (error?.code !== "kdp_ebook_not_found") throw error;
+        item.updateStatus = "conflict";
       }
     }
-    if (await verify(applied)) {
+    if (!currentItems.length || await verify(currentItems)) {
+      const outstanding = intent.items.filter((item) => ["retry_pending", "conflict"].includes(item.updateStatus));
+      if (outstanding.length) {
+        intent.items = outstanding;
+        intent.status = outstanding.some((item) => item.updateStatus === "retry_pending") ? "prepared" : "conflict";
+        await save();
+        return { status: "verified_partial", updated: currentItems.length, outstanding: outstanding.length };
+      }
       await remove("kdp", key);
-      return { status: "verified", updated: applied.length };
+      return { status: "verified", updated: currentItems.length };
     }
     if (Date.now() - Date.parse(intent.requestedAt || "") >= REBUILD_RETRY_MS) {
       intent.status = "pending_rebuild";

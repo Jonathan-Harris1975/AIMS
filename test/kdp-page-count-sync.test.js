@@ -45,7 +45,7 @@ test("sync intent is durable before an update is attempted", async () => {
 });
 
 test("missing build or purge configuration leaves D1 untouched", async () => {
-  const intent = { status: "prepared", items: [expected] };
+  const intent = { status: "prepared", items: [{ ...expected }] };
   const missingHook = deps({ env: {} });
   assert.equal((await processPageCountIntent(key, intent, missingHook)).status, "waiting_for_website_hook");
   assert.deepEqual(missingHook.events, ["write:prepared"]);
@@ -55,32 +55,59 @@ test("missing build or purge configuration leaves D1 untouched", async () => {
 });
 
 test("updates D1, purges cached API and starts a rebuild, then waits for live verification", async () => {
-  const intent = { status: "prepared", items: [expected] };
+  const intent = { status: "prepared", items: [{ ...expected }] };
   const d = deps();
   const result = await processPageCountIntent(key, intent, d);
   assert.equal(result.status, "awaiting_website");
   assert.equal(result.updated, 1);
-  assert.deepEqual(d.events, ["update", "write:pending_rebuild", "purge", "rebuild", "write:rebuild_requested"]);
+  assert.deepEqual(d.events, ["update", "write:prepared", "write:pending_rebuild", "purge", "rebuild", "write:rebuild_requested"]);
   d.verify = async () => true;
   assert.equal((await processPageCountIntent(key, intent, d)).status, "verified");
   assert.equal(d.events.at(-1), "remove");
 });
 
 test("conflicting D1 edits are not overwritten or followed by a rebuild", async () => {
-  const intent = { status: "prepared", items: [expected] };
+  const intent = { status: "prepared", items: [{ ...expected }] };
   const d = deps({ update: async () => ({ status: "conflict" }) });
   assert.equal((await processPageCountIntent(key, intent, d)).status, "conflict");
   assert.equal(d.events.includes("rebuild"), false);
 });
 
 test("a failed rebuild is retried without repeating the D1 write", async () => {
-  const intent = { status: "prepared", items: [expected] };
+  const intent = { status: "prepared", items: [{ ...expected }] };
   const d = deps({ rebuild: async () => ({ ok: false, reason: "unavailable" }) });
   assert.equal((await processPageCountIntent(key, intent, d)).status, "rebuild_pending");
   assert.equal(intent.status, "pending_rebuild");
   d.rebuild = async () => ({ ok: true });
   assert.equal((await processPageCountIntent(key, intent, d)).status, "awaiting_website");
   assert.equal(d.events.filter((event) => event === "update").length, 1);
+});
+
+test("deleted or temporarily failing items do not prevent a successful item from reaching the website", async () => {
+  const deleted = { ...expected, ebookId: 3, asin: "B0DQHSD858" };
+  const transient = { ...expected, ebookId: 4, asin: "B0DQK6C564" };
+  const intent = { status: "prepared", items: [{ ...expected }, deleted, transient] };
+  const d = deps({
+    update: async (item) => {
+      if (item.ebookId === 3) throw Object.assign(new Error("deleted"), { code: "kdp_ebook_not_found" });
+      if (item.ebookId === 4) throw new Error("temporary D1 error");
+      return { status: "updated" };
+    },
+    verify: async () => true,
+  });
+  const result = await processPageCountIntent(key, intent, d);
+  assert.equal(result.status, "verified_partial");
+  assert.equal(result.updated, 1);
+  assert.equal(result.outstanding, 2);
+  assert.equal(intent.status, "prepared");
+  assert.deepEqual(intent.items.map((item) => item.updateStatus), ["conflict", "retry_pending"]);
+  assert.equal(d.events.includes("rebuild"), true);
+});
+
+test("intent persistence errors propagate without applying D1 updates", async () => {
+  await assert.rejects(() => queuePageCountSync("59025e25-4150-4830-b5d3-2f2a4823a481", { listings: [captured] }, {
+    write: async () => { throw new Error("storage unavailable"); },
+  }), /storage unavailable/);
 });
 
 test("website verification requires the right ASIN and both visible and structured counts", () => {

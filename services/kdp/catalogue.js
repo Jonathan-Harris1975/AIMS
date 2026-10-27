@@ -129,7 +129,11 @@ export async function updateKdpEbookPageCount({ ebookId, asin, previousPageCount
     [pageCount, ebookId, asin, previousPageCount],
   );
   if (Number(result.meta?.changes) === 1) return { status: "updated" };
-  const current = await getKdpEbookById(ebookId);
+  let current;
+  try { current = await getKdpEbookById(ebookId); } catch (error) {
+    if (error?.code === "kdp_ebook_not_found") return { status: "conflict" };
+    throw error;
+  }
   return { status: current.asin.toUpperCase() === asin && current.pageCount === pageCount ? "already_updated" : "conflict" };
 }
 

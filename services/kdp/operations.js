@@ -401,10 +401,10 @@ router.post("/audit/run", requestDedupe("kdp:audit-run"), asyncRoute(async (req,
     if (mode === "public") {
       const catalogue = await listKdpEbooks();
       const publicAudit = await auditPublicCatalogue(catalogue, { marketplace });
-      let pageCountSync = { queued: 0, status: "no_changes" };
+      // A failed intent write must fail the job: no durable retry exists yet.
+      const queued = await queuePageCountSync(runId, publicAudit);
+      let pageCountSync = { queued: queued.queued, status: queued.key ? "retry_pending" : "no_changes" };
       try {
-        const queued = await queuePageCountSync(runId, publicAudit);
-        pageCountSync = { queued: queued.queued, status: queued.key ? "retry_pending" : "no_changes" };
         const pending = await reconcilePageCountSync();
         const current = pending.find((entry) => entry.key === queued.key);
         pageCountSync = { ...pageCountSync, ...(current || {}), pending };
