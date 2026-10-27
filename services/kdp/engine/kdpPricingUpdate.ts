@@ -74,8 +74,8 @@ async function fillPricingPage(
 
 async function clickSaveOnPricingPage(page: Page): Promise<void> {
   await clickKdpActionButton(page, {
-    buttonIds: ['save-announce', 'save-and-continue-announce'],
-    labels: ['Save as Draft', 'Save and Continue', 'Save and Publish', 'Save'],
+    buttonIds: [],
+    labels: ['Save as Draft', 'Save and Continue', 'Save'],
   })
 }
 

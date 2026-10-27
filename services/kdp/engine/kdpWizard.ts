@@ -66,7 +66,10 @@ export async function clickSaveAndContinue(page: Page): Promise<string> {
 }
 
 export async function clickPublish(page: Page): Promise<string> {
-  return clickPageButton(page, [/^publish$/i, /^save and publish$/i, /^save and continue$/i])
+  return clickKdpActionButton(page, {
+    buttonIds: [],
+    labels: ['Publish', 'Save and Publish', 'Publish Your Kindle eBook'],
+  })
 }
 
 export function titleIdFromUrl(url: string): string | null {
