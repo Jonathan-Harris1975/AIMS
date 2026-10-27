@@ -32,7 +32,8 @@ export function parseProductPage() {
   const canonical = attr('link[rel="canonical"]', "href");
   const canonicalAsin = canonical.match(/\/(?:dp|gp\/product)\/([A-Z0-9]{10})(?:[/?]|$)/i)?.[1] || "";
   const asin = attr('input[name="ASIN"]', "value") || attr("#ASIN", "value") || findDetail("asin") || canonicalAsin;
-  const pageCountText = findDetail("print length", "pages", "paperback", "hardcover") || text('[data-csa-c-content-id="book_pages"]');
+  const printLength = findDetail("print length");
+  const pageCountText = printLength || findDetail("pages") || text('[data-csa-c-content-id="book_pages"]');
   const pageCountMatch = pageCountText.match(/\b([\d,]+)\s*pages?\b/i) || pageCountText.match(/^\s*([\d,]+)\s*$/);
   const categories = unique([...document.querySelectorAll("#wayfinding-breadcrumbs_feature_div a, #zg_hrsr a, #SalesRank a")].map((a) => (a.textContent || "").replace(/\s+/g, " ").trim()));
   return {
@@ -44,6 +45,7 @@ export function parseProductPage() {
     coverUrl: attr("#landingImage", "src") || attr('meta[property="og:image"]', "content"),
     price: text("#kindle-price") || text("#corePrice_feature_div .a-offscreen") || text("#price_inside_buybox") || text("#newBuyBoxPrice"),
     pageCount: pageCountMatch ? Number(pageCountMatch[1].replace(/,/g, "")) : null,
+    pageCountSource: printLength && pageCountMatch ? "print_length" : null,
     language: findDetail("language"),
     publisher: findDetail("publisher"),
     publicationDate: findDetail("publication date"),
