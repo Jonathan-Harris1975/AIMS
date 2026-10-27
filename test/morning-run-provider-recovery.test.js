@@ -140,25 +140,20 @@ test("AIMS newsletter delivery uses the D1 audience and persists an exactly-once
   assert.match(ops, /newsletter-send.*newsletter-readiness/);
 });
 
-test("Blotato scheduled runs use deterministic slots, a daily cap, and bounded rejected-render replacement", async () => {
+test("Blotato scheduled runs use deterministic slots and render silent cards without paid video credits", async () => {
   const text = await source("services/blotato/utils/autoPublishService.js");
   const guard = await source("services/blotato/utils/creditGuard.js");
   const defaults = await source("config/production.defaults.env");
   assert.match(text, /createScheduledSessionId/);
   assert.match(text, /`BLT-\$\{lane\}-\$\{scheduleDate\}-\$\{slot\}`/);
-  assert.match(text, /BLOTATO_DAILY_PAID_RENDER_CAP", 2, 10/);
-  assert.match(guard, /blotato-daily-paid-render-cap/);
-  assert.match(text, /BLOTATO_MONTHLY_ESTIMATED_CREDIT_CAP/);
-  assert.match(text, /reservePaidRender/);
-  assert.match(defaults, /^BLOTATO_MONTHLY_ESTIMATED_CREDIT_CAP=100$/m);
+  assert.match(text, /phase: "silent-card-render-mode"/);
+  assert.match(text, /createLocalBlotatoCreditFallbackVideo/);
+  assert.match(text, /silent-visual-aid-cards/);
+  assert.doesNotMatch(text, /reservePaidRender/);
+  assert.equal(defaults.includes("BLOTATO_DAILY_PAID_RENDER_CAP="), false);
+  assert.equal(defaults.includes("BLOTATO_MONTHLY_ESTIMATED_CREDIT_CAP="), false);
   assert.match(defaults, /^BLOTATO_BRAND_ANIMATE_IMAGES=false$/m);
-  assert.match(text, /BLOTATO_FAILED_RENDER_REPLACEMENTS/);
   assert.match(text, /BLOTATO_POST_SUBMISSION_RETRY_ATTEMPTS/);
   assert.match(text, /inferScheduleSlotFromJob\(job\) === scheduleSlot/);
   assert.match(text, /scheduleDateFromJob\(job\) === scheduleDate/);
-  assert.match(
-    text,
-    /reusableRenderedVideo\(lane\.jobType, articleSource\.article, sessionId, \{\s*scheduleSlot,\s*scheduleDate: activeScheduleDate,\s*briefFingerprint,\s*\}\)/
-  );
-  assert.match(defaults, /^BLOTATO_DAILY_PAID_RENDER_CAP=2$/m);
 });
