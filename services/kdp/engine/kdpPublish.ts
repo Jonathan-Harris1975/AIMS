@@ -77,6 +77,11 @@ function hasMetadata(changes?: KdpMetadataChanges): boolean {
   return Object.keys(changes).length > 0
 }
 
+export function publishBlockers(steps: PublishStepResult[], errors: string[]): string[] {
+  const failed = steps.filter((step) => !step.success || step.errors.length > 0).map((step) => step.step)
+  return [...new Set([...errors.filter(Boolean), ...failed.map((step) => `Step failed: ${step}`)])]
+}
+
 export async function publishBook(
   request: PublishBookRequest,
 ): Promise<PublishBookResult> {
@@ -174,8 +179,9 @@ export async function publishBook(
 
     if (!dryRun && (hasMetadata(request.details) || request.categories?.length)) {
       try {
+        let saveResult: Awaited<ReturnType<typeof saveDetailsOnPage>> | undefined
         if (hasMetadata(request.details)) {
-          const saveResult = await saveDetailsOnPage(
+          saveResult = await saveDetailsOnPage(
             page,
             titleId,
             format,
@@ -228,18 +234,6 @@ export async function publishBook(
         if (resolved) titleId = resolved
         const fromUrl = titleIdFromUrl(page.url())
         if (fromUrl) titleId = fromUrl
-        if (!saveResult.saved && saveResult.filled.length > 0) {
-          const descLen = await page.evaluate(`(() => document.querySelector('input[name="data[print_book][description]"], input[name="data[hardcover_book][description]"], input[name="data[description]"]')?.value?.length || 0)()`) as number
-          if (descLen > 50 || fromUrl) {
-            steps[steps.length - 1] = {
-              step: 'save-details',
-              success: true,
-              detail: { titleId: fromUrl || titleId, descLen },
-              errors: [],
-            }
-            errors.splice(errors.indexOf(saveResult.errors[0] ?? ''), 1)
-          }
-        }
         onDetailsPage = false
       } catch (e) {
         const pageErrors = await collectPageErrors(page)
@@ -313,7 +307,7 @@ export async function publishBook(
         ? true
         : contentStep?.success === true
 
-    if (request.pricing && detailsSaved && contentSaved && !dryRun) {
+    if (request.pricing && detailsSaved && contentSaved && !dryRun && publishBlockers(steps, errors).length === 0) {
       const pricingReady = await waitForPricingPageReady(page, format, titleId, {
         timeoutMs: 600_000,
       })
@@ -379,8 +373,16 @@ export async function publishBook(
       }
     }
 
+    if (request.pricing && !dryRun && !steps.some((step) => step.step === 'pricing')) {
+      steps.push({ step: 'pricing', success: false, errors: ['Pricing step did not complete.'] })
+    }
+
     let published = false
-    if (request.publish && !dryRun) {
+    if (request.publish && !dryRun && publishBlockers(steps, errors).length > 0) {
+      const blockers = publishBlockers(steps, errors)
+      steps.push({ step: 'publish', success: false, errors: blockers })
+      errors.push('Publish was not submitted because an earlier step failed.')
+    } else if (request.publish && !dryRun) {
       try {
         const action = await clickPublish(page)
         published = true
