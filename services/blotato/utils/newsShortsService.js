@@ -57,7 +57,7 @@ const BLOTATO_HUMAN_VISUAL_RULE = [
   "HUMAN-CENTRED SOCIAL VISUALS.",
   "Use believable adult human presence in the first scenes: expressive face, upper-body posture, presenter silhouette, analyst, creator, operator, customer or worker context.",
   "Do not create a Jonathan Harris likeness, celebrity likeness, child, distorted face, visible hands or stock-photo grin.",
-  "People should make the idea emotionally readable; the narration still carries the argument."
+  "People should give each card a clear human context; the visible card copy carries the argument."
 ].join(" ");
 
 
@@ -407,25 +407,19 @@ exact failures:\n${previousDefects.map((item) => `- ${item}`).join("\n") ||
   return {
     system: `${buildBlotatoPersona()}
 
-You create short-form video packs for Jonathan Harris, an AI author and podcast host.
-${jonathanVoicePrompt({ format: "short-form social video", includeArgumentArc: false })}
+You create silent visual-aid card packs for Jonathan Harris, an AI author and podcast host.
+${jonathanVoicePrompt({ format: "written social card copy", includeArgumentArc: false })}
 
-# Role — Human-centred Shorts Creative Director
-You design the complete short as one continuous mini-story before writing individual scenes. You write narration-driven, voiceover-based AI short-form video scripts. Jonathan \
-Harris is not on camera. Generated generic adults, faces and bodies are allowed when they make the idea more watchable, but visible hands and fingers are prohibited because \
-the image generator does not render them reliably. When the preferred image model is Flux Schnell, write scene mediaSource prompts in positive visual language describing what \
-should be visible, not long ban-lists of what should be excluded. Source relevance outranks decorative metaphor: show the actual industry, location, equipment, role and \
-consequence described by the article. Frame people from shoulders-up, behind objects, or with hands fully outside the crop. The narration carries the story. Every scene must \
-be visualisable without text overlays on generated imagery.
+# Role — Silent Card Editorial Director
+Create a coherent sequence of exactly five static visual-aid cards. Each card pairs one generated still image with concise, readable on-card copy. No video footage, animation, narration, dialogue, voice, music, sound effects or sound design is requested or produced. Jonathan Harris is not shown. Generic adults may appear when they add source-specific context, but avoid visible hands and fingers. Describe a real place, role, equipment or consequence from the article. Each image must work as a still and must not contain text.
 
-# Social Video Laws
-1. The first frame must show a human-readable situation, tension or reaction, not decorative AI wallpaper.
-2. The narration carries one story. Every line must cause the next line to make sense. No isolated slogan fragments, stitched-together observations or filler.
+# Silent Card Laws
+1. Card one must show a clear human situation or source-specific tension, not decorative AI wallpaper.
+2. The five card captions must form one useful written story. Each card must make sense on its own and advance the idea without repeating the previous card.
 3. Every mediaSource must obey this absolute rule: ${BLOTATO_STRICT_NO_TEXT_RULE}
 4. ${HUMAN_VISUALS_ENABLED ? BLOTATO_HUMAN_VISUAL_RULE : "Human subjects are optional for this run."}
-5. The hook is non-negotiable. The first 3 seconds must scroll-stop on ${["Facebook", "Instagram", "YouTube Shorts", "TikTok"].join(
-  ", ")}. Target a hook performance score of at least 75/100, with a concrete source anchor, contrast/risk and a clear viewer consequence.
-6. STORYBOARD FIRST. Decide the complete narrative arc and visual continuity before creating any scene. The scenes are chapters of one short, not independent illustrations of sentences.
+5. Card one must work at a glance on ${["Facebook", "Instagram", "YouTube Shorts", "TikTok"].join(", ")}. Use a concrete source anchor, contrast or risk, and a clear viewer consequence.
+6. PLAN THE SEQUENCE FIRST. Decide the card order and visual continuity before writing. Every card must advance the story with distinct evidence or meaning.
 7. CONTINUITY. Reuse one coherent visual world: the same type of protagonist, setting, lighting language, palette and camera grammar unless the story itself requires a \
 deliberate change. Do not randomly switch between unrelated people, abstract graphics, offices and devices.
 8. FLOW. Use this arc unless the lane demands a tighter variant: Hook → context/problem → consequence → practical meaning/action → takeaway. Each scene must hand the viewer naturally into the next.
@@ -513,8 +507,7 @@ Return exactly one JSON object with these keys:
   "visualContinuity": "one sentence defining the recurring protagonist type, setting, palette, lighting and camera language shared across scenes",
   "scenes": [
     {
-      "mediaSource": "AI image/video generation prompt for this scene. No text, labels, captions, or typography. Name the source-specific place, industry, equipment, role or \
-consequence visible in the frame. Describe a distinct action and shot progression. Avoid generic offices, decorative metaphors and robot clichés.",
+      "mediaSource": "Prompt for one static visual-aid image for this card. No text, labels, captions, typography, motion, or video. Show the source-specific place, industry, equipment, role or consequence. Avoid generic offices, decorative metaphors and robot clichés.",
       "script": "visible card copy: one clear, complete sentence of 10–20 words, with no narration or voiceover"
     }
   ],
@@ -532,7 +525,7 @@ Scene rules:
 - Provide exactly ${MAX_SCENES} scenes. If the source is thin, use a clearer practical explainer instead of making the script shorter.
 - Each scene must include a mediaSource and script.
 - Write the full narrative arc first, then divide it into scenes. Never generate scenes as independent sentence illustrations.
-- Scene scripts must be complete spoken thoughts, normally 12-30 words each. Do not output caption-like fragments such as "and communication", "now baseline" or "candidates".
+- Each scene script is visible card copy: one complete, clear sentence of 10–20 words. Do not write narration, dialogue or sound cues.
 - Scene 1 = hook/tension. Middle scenes = context, consequence and practical meaning. Final scene = takeaway/action.
 - Every mediaSource must inherit visualContinuity so the same visual world persists across the short. Deliberate scene changes must still preserve palette, lighting and camera grammar.
 - Each mediaSource must describe a specific physical scene, not a generic instruction.
@@ -546,19 +539,16 @@ Scene rules:
 - ${HUMAN_VISUALS_ENABLED ? `At least ${HUMAN_VISUAL_MIN_SCENES} scenes must include believable adult human presence through face, hands, body language, posture or a clearly \
 human workplace/customer/creator moment. Do not use Jonathan Harris, celebrities or children.` : "Human subjects are optional for this run."}
 - First frame rule: the first scene must contain a human visual anchor plus the story tension. No object-only opener.
-- Hook performance rule: the hook must be 6 to 18 words, name the tool/model/source anchor where possible, include contrast or risk language such as "but", "risk", "fails", \
-"cost", "cuts" or "changes", and make the viewer consequence clear with "your", "teams", "workers", "customers", "workflow", "people" or "business". Weak descriptive hooks \
-will be rejected before video rendering.
+- Hook rule: the first card’s visible copy must be 6 to 18 words, name the tool/model/source anchor where possible, include contrast or risk language, and make the viewer consequence clear. Keep it readable on a phone.
 - Thumbnail rule: thumbnailText must be ${THUMBNAIL_TEXT_WORDS} punchy words, concrete, curiosity-led and readable at phone size. Aim for >=85/100: use a specific model/tool/\
 company/number where supported plus a clear risk, cost, mistake, rule or contrast. No generic AI News wording.
-- Cost guard: select the lowest-cost generation settings available, specifically ${LOW_COST_IMAGE_MODEL_LABEL} for images and ${LOW_COST_VIDEO_MODEL_LABEL} for video if Blotato offers those choices.
-- Do not use premium video models such as Kling, Luma, Runway, Veo, Minimax, or any other high-credit video option.
+- Image guard: select the lowest-cost suitable still-image model, specifically ${LOW_COST_IMAGE_MODEL_LABEL}. Do not request video models or animation.
 - Do not generate extra unused images, duplicate scenes, B-roll packs, or alternate takes.
 - Avoid gimmicky robot clichés.
 - The first scene must support the hook.
 - The final scene must support the CTA or practical takeaway.
 - The five scene scripts must form a clear visual-aid sequence. Keep each card readable at a glance and avoid padding.
-- The main script must be at least ${MIN_SCRIPT_WORDS} words and should land between ${MIN_SCRIPT_WORDS} and ${MAX_SCRIPT_WORDS} words.
+- The combined card copy should convey the full argument in ${MIN_SCRIPT_WORDS}–${MAX_SCRIPT_WORDS} words, with one sentence per card.
 
 Output rules:
 - Keep the script specific to the source.
@@ -879,10 +869,10 @@ export function buildBlotatoVisualPrompt(pack = {}) {
   const scenes = normaliseScenes(pack.scenes, pack);
   const scenePlan = scenes.map((scene, index) => [
     `SCENE ${index + 1} VISUAL: ${cleanText(scene?.mediaSource || "", 420)}`,
-    `SCENE ${index + 1} NARRATION: ${cleanText(scene?.script || "", 220)}`,
+    `CARD ${index + 1} ON-CARD COPY: ${cleanText(scene?.script || "", 220)}`,
   ].join("\n")).join("\n");
   return [
-    `Create a polished faceless vertical AI social video for Jonathan Harris.`,
+    `Create exactly five static visual-aid cards for a silent vertical slideshow for Jonathan Harris. No footage, animation, narration, dialogue, voice, music or sound effects.`,
     `Lane: ${laneConfig.label}.`,
     `Use the supplied scenes as the source of truth. The scene plan below is mandatory, not optional inspiration.`,
     `Do not replace a source-specific scene with a generic office, warehouse, portrait, US map, abstract AI image or unrelated lifestyle footage.`,
@@ -893,20 +883,18 @@ export function buildBlotatoVisualPrompt(pack = {}) {
     `Script: ${pack.script}`,
     `Visual continuity anchor: ${pack.visualContinuity || pack.visualDirection}`,
     `Visual direction: ${pack.visualDirection}`,
-    `Cost guard: use the cheapest suitable generation settings available, preferably ${LOW_COST_IMAGE_MODEL_LABEL} for images and ${LOW_COST_VIDEO_MODEL_LABEL} for video. Do \
-not use premium video models.`,
+    `Image guard: use the cheapest suitable still-image generation setting available, preferably ${LOW_COST_IMAGE_MODEL_LABEL}. Do not generate video or animation.`,
     `Image prompt profile: ${BLOTATO_IMAGE_PROMPT_PROFILE}. If using Flux Schnell, keep every scene prompt concise, positive and visually concrete.`,
     `Style: premium documentary/editorial social video with cinematic lighting, bold controlled colour, high contrast and emotional storytelling. Keep it human-centred and \
 visually immediate, but show the real source environment rather than a decorative metaphor. Avoid corporate stock staging, generic offices, data-centre glamour, floating \
 dashboards, polygon networks and robot clichés. Never use board games, cards, chess pieces, miniatures, toy people, puzzles, abstract blocks or a wall calendar as a substitute \
 for the article's actual people, place, equipment or consequence. Preserve the configured seasonal palette direction where supplied. British AI news commentary tone.`,
-    `Finished-video target: five purposeful scenes inside the 35-55 second finished range, normally targeting 45 seconds, with visible progression from real-world tension to \
-consequence, verification and outcome. Do not repeat the same person-at-a-desk composition.`,
+    `Slideshow target: five purposeful static cards with enough display time to read each one, progressing from source-specific tension to consequence, verification and outcome.`,
     HUMAN_VISUALS_ENABLED ? BLOTATO_HUMAN_VISUAL_RULE : "Human subjects optional.",
     BLOTATO_STRICT_NO_TEXT_RULE,
     `Thumbnail copy is supplied separately in the template inputs. Treat it as metadata only and never render that wording inside generated images.`,
     `Thumbnail text is handled separately by Blotato and must never be rendered into generated visuals.`,
-    `Narration and captions are also handled separately. Never bake them into generated images or video frames.`,
+    `Card copy is overlaid by the slideshow renderer. Never bake words into generated images.`,
     `Final visual compliance check: remove any accidental letter-like, number-like, logo-like or watermark-like marks before rendering.`,
   ].join("\n");
 }
