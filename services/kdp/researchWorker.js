@@ -34,20 +34,21 @@ async function readJson(key) {
 
 export async function readWeeklyResearchState() { return readJson(KEY); }
 
-async function latestAudit(now) {
-  const pointer = await readJson("audit/reports/latest.json");
+export async function latestAudit(now, { readPointer = () => readJson("audit/reports/latest.json"),
+  readReport = readKdpAuditReport, listReports = listObjects } = {}) {
+  const pointer = await readPointer();
   const parsed = pointer?.reportRef && parseR2Reference(pointer.reportRef);
   if (parsed?.key?.startsWith("audit/reports/")) {
-    const latest = await readKdpAuditReport(parsed.key);
+    const latest = await readReport(parsed.key);
     if (validMondayAudit(latest, now)) return latest;
   }
   // Other audit modes can replace latest.json; inspect this week's Monday
   // reports instead of discarding a valid public audit.
   const monday = londonWeek(now);
-  const objects = await listObjects("kdp", `audit/reports/${monday}/`);
+  const objects = await listReports("kdp", `audit/reports/${monday}/`);
   const reports = [];
   for (const object of objects) {
-    const report = await readKdpAuditReport(object.key);
+    const report = await readReport(object.key);
     if (validMondayAudit(report, now)) reports.push(report);
   }
   reports.sort((a, b) => Date.parse(b.completedAt) - Date.parse(a.completedAt));

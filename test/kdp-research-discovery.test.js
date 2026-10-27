@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { tavilySearch, competitorCandidates, discoverBookResearch } from "../services/kdp/researchDiscovery.js";
-import { londonWeek, runResearchTick, validMondayAudit } from "../services/kdp/researchWorker.js";
+import { latestAudit, londonWeek, runResearchTick, validMondayAudit } from "../services/kdp/researchWorker.js";
 
 test("research searches both storefronts and recent topics without treating snippets as verified prices", async () => {
   const calls = [];
@@ -107,4 +107,14 @@ test("Amazon blocks stop the batch and retries reuse the saved search", async ()
   blocked = false;
   assert.equal((await runResearchTick(options)).status, "complete");
   assert.equal(searches, 1);
+});
+
+test("a later signed-in audit does not hide the valid Monday public report", async () => {
+  const report = { mode: "public", ok: true, complete: true, runId: "public", createdAt: "2026-10-26T12:00:00Z", completedAt: "2026-10-26T12:10:00Z" };
+  const found = await latestAudit(new Date("2026-10-27T12:00:00Z"), {
+    readPointer: async () => ({ reportRef: "r2://kdp/audit/reports/2026-10-27/signed.json" }),
+    readReport: async (key) => key.endsWith("signed.json") ? { mode: "kdp" } : report,
+    listReports: async (_bucket, prefix) => [{ key: `${prefix}public.json` }],
+  });
+  assert.equal(found.runId, "public");
 });
