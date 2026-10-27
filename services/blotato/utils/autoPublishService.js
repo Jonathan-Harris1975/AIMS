@@ -39,8 +39,7 @@ import { assessRenderedVideoQaPublication, buildRenderedVideoQaError, reviewRend
 import { looksLikePendingVideoError } from "./renderStatus.js";
 import { pollUntil } from "./pollUntil.js";
 import { buildVisualCreationRequest } from "./visualRequest.js";
-import { reservePaidRender } from "./creditGuard.js";
-import { createLocalBlotatoCreditFallbackVideo, renderScheduledBlotatoVideo } from "./localCreditFallbackVideo.js";
+import { createLocalBlotatoCreditFallbackVideo } from "./localCreditFallbackVideo.js";
 import {
   claimPendingEditorialBriefs,
   editorialBriefFingerprint,
@@ -1954,7 +1953,9 @@ async function runPublishJob({
     // Keep an already-created asset only when reconciling this exact pending
     // publication. New scheduled posts are rendered as silent visual-aid cards;
     // the previous AI Video with AI Voice template is not used for production.
-    const reusedVideo = recoveredPublishVideo;
+    const reusedVideo = recoveredPublishVideo && (recoveredPublishVideo.silentCardRender === true || recoveredPublishVideo.localCreditFallback === true)
+      ? recoveredPublishVideo
+      : null;
     let localCreditFallback = null;
     let video;
     if (reusedVideo) {
