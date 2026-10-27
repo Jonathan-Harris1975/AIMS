@@ -13,7 +13,7 @@ const TARGET_SCRIPT_WORDS = Math.max(MIN_SCRIPT_WORDS, Number(process.env.BLOTAT
 const MAX_SCRIPT_WORDS = Math.max(TARGET_SCRIPT_WORDS, Number(process.env.BLOTATO_NEWS_MAX_SCRIPT_WORDS || 102));
 const MIN_SCENE_VOICEOVER_WORDS = Math.max(75, Number(process.env.BLOTATO_NEWS_MIN_SCENE_WORDS || 80));
 
-// Brand kit — silent card render settings are env-configurable.
+// Brand kit — static card visual settings are env-configurable.
 const AI_STORY_HIGHLIGHT = process.env.BLOTATO_BRAND_HIGHLIGHT_COLOR || "#00E5FF";
 const AI_STORY_CAPTION_POSITION = process.env.BLOTATO_BRAND_CAPTION_POSITION || "bottom";
 const AI_STORY_TRANSITION = process.env.BLOTATO_BRAND_TRANSITION || "fade";
@@ -471,7 +471,7 @@ ${structure}
 ${retryBrief}
 
 Return valid JSON only. The response must be one complete JSON object with double-quoted keys and no trailing text.`,
-    user: `Create one five-card AI social briefing for silent visual-aid cards.
+    user: `Create one five-card AI social briefing with static visual aids and spoken narration.
 
 Lane: ${laneConfig.slug}
 Lane label: ${laneConfig.label}
@@ -552,7 +552,7 @@ company/number where supported plus a clear risk, cost, mistake, rule or contras
 
 Output rules:
 - Keep the script specific to the source.
-- Write concise on-card copy for a silent visual-aid card sequence, not a voiceover.
+- Write concise on-card captions that match the spoken narration and remain readable over static card visuals.
 - Include a hook, the practical meaning, one clear risk or limitation, one useful action, and a soft CTA.
 - Never use engagement-bait CTA wording, including "follow for more", "please share", "smash the like", "tag a friend", "share this with", or "comment yes".
 - Do not use phrases like "game changer", "AI is changing everything", "you won't believe", "the future is here", or "this changes everything".
