@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { tavilySearch, competitorCandidates, discoverBookResearch } from "../services/kdp/researchDiscovery.js";
-import { londonWeek, runResearchTick, validMondayAudit } from "../services/kdp/researchWorker.js";
+import { latestAudit, londonWeek, runResearchTick, validMondayAudit } from "../services/kdp/researchWorker.js";
 
 test("research searches both storefronts and recent topics without treating snippets as verified prices", async () => {
   const calls = [];
@@ -86,4 +86,35 @@ test("monthly quota is persisted before provider calls and prevents the next cal
   await assert.rejects(runResearchTick(options), /Monthly search limit/);
   assert.equal(saved.requestsReserved, 1);
   assert.equal(saved.pending.length, 1);
+});
+
+test("Amazon blocks stop the batch and retries reuse the saved search", async () => {
+  const date = new Date("2026-10-27T12:00:00Z");
+  const env = { TAVILY_SEARCH_API: "test", R2_ENDPOINT: "test", R2_ACCESS_KEY_ID: "test", R2_SECRET_ACCESS_KEY: "test",
+    R2_BUCKET_META_SYSTEM: "test" };
+  let saved = null, searches = 0, blocked = true;
+  const options = {
+    now: () => date, env, readState: async () => saved && structuredClone(saved),
+    writeState: async (s) => { saved = structuredClone(s); }, archive: async () => {},
+    getAudit: async () => ({ ok: true, complete: true, mode: "public", runId: "1", createdAt: "2026-10-26T12:00:00Z", completedAt: "2026-10-26T12:10:00Z" }),
+    getBooks: async () => [{ ebookId: 1, asin: "B012345678" }],
+    discover: async () => { searches++; return { ebookId: 1 }; },
+    captureEvidence: async () => ({ markets: { US: { status: blocked ? "blocked" : "captured" } } }),
+    claim: async () => ({ claimed: true, lease: { backend: "r2" } }), release: async () => {},
+  };
+  assert.equal((await runResearchTick(options)).status, "amazon_blocked");
+  assert.equal(saved.cursor, 0);
+  blocked = false;
+  assert.equal((await runResearchTick(options)).status, "complete");
+  assert.equal(searches, 1);
+});
+
+test("a later signed-in audit does not hide the valid Monday public report", async () => {
+  const report = { mode: "public", ok: true, complete: true, runId: "public", createdAt: "2026-10-26T12:00:00Z", completedAt: "2026-10-26T12:10:00Z" };
+  const found = await latestAudit(new Date("2026-10-27T12:00:00Z"), {
+    readPointer: async () => ({ reportRef: "r2://kdp/audit/reports/2026-10-27/signed.json" }),
+    readReport: async (key) => key.endsWith("signed.json") ? { mode: "kdp" } : report,
+    listReports: async (_bucket, prefix) => [{ key: `${prefix}public.json` }],
+  });
+  assert.equal(found.runId, "public");
 });
