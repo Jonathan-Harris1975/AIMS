@@ -4,8 +4,8 @@
 
 This inventory makes the runtime configuration contract auditable without duplicating secret values. `.env.example` and `env.template` remain the curated operator templates; this file records every production `process.env` dependency and its source locations.
 
-- Runtime variables referenced in production code: **525**
-- Present in curated templates: **408**
+- Runtime variables referenced in production code: **523**
+- Present in curated templates: **406**
 - Not present in curated templates: **117**
 
 | Variable | Curated template | Production references |
