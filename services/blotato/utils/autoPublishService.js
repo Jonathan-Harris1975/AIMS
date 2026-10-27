@@ -1717,9 +1717,9 @@ async function runPublishJob({
     });
     const channelPreflight = await runBlotatoStep0Preflight({ platforms, apiKey });
 
-    updateJob(lane.jobType, sessionId, { phase: "silent-card-render-mode", channelPreflight });
+    updateJob(lane.jobType, sessionId, { phase: "static-card-narration-render-mode", channelPreflight });
     const templateResolution = {
-      mode: "silent-visual-aid-cards",
+      mode: "static-visual-aid-cards-with-narration",
       providerTemplateRequired: false,
     };
     const templateId = null;
@@ -1969,11 +1969,11 @@ async function runPublishJob({
         article: articleSource.article,
         sessionId,
         scheduleDate: activeScheduleDate || new Date().toISOString().slice(0, 10),
-        reason: "silent-visual-aid-cards",
+        reason: "static-cards-with-spoken-narration",
       });
       localCreditFallback = {
-        code: "silent-visual-aid-cards",
-        message: "Rendered as five silent visual-aid cards.",
+        code: "static-cards-with-spoken-narration",
+        message: "Rendered as five static visual-aid cards with spoken narration.",
         scheduledWithoutPaidRender: true,
         creditLimited: false,
         fallbackReason: "silent-visual-aid-cards",
@@ -1981,7 +1981,7 @@ async function runPublishJob({
     }
     if (localCreditFallback) {
       updateJob(lane.jobType, sessionId, {
-        phase: "visual-aid-cards-ready",
+        phase: "visual-aid-cards-with-narration-ready",
         localCreditFallback,
         videoId: null,
         videoDashboardUrl: null,
