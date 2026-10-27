@@ -22,7 +22,9 @@ export async function draftOptimisation(book, research, metadata, { now = new Da
   const match = matchKdpMetadata(book, Array.isArray(metadata?.books) ? metadata.books : []);
   if (match.status !== "matched") return { status: "blocked", reason: `kdp_identity_${match.status}` };
   const synced = Date.parse(metadata.syncedAt || "");
-  if (!Number.isFinite(synced) || synced > now.getTime() || now.getTime() - synced > 8 * 86400000) {
+  const bookSynced = Date.parse(match.metadata.syncedAt || "");
+  if (!Number.isFinite(synced) || synced > now.getTime() || now.getTime() - synced > 8 * 86400000 ||
+      !Number.isFinite(bookSynced) || bookSynced > now.getTime() || now.getTime() - bookSynced > 8 * 86400000) {
     return { status: "blocked", reason: "metadata_stale" };
   }
   const observed = liveListing?.publicListing;
@@ -48,6 +50,10 @@ export async function draftOptimisation(book, research, metadata, { now = new Da
   let candidate;
   try { candidate = JSON.parse(response.content); } catch { return { status: "blocked", reason: "model_invalid_json" }; }
   const original = normalize(context);
+  const originalSentences = new Set([observed.data.title, observed.data.description]
+    .filter((value) => typeof value === "string")
+    .flatMap((value) => value.split(/(?<=[.!?])\s+/))
+    .map(normalize).filter(Boolean));
   const keywords = Array.isArray(candidate.keywords) ? candidate.keywords.filter((value) => {
     const phrase = normalize(value);
     return typeof value === "string" && phrase.length >= 3 && phrase.length <= 50 && original.includes(phrase) &&
@@ -58,7 +64,7 @@ export async function draftOptimisation(book, research, metadata, { now = new Da
   // Sentence-level containment prevents the model inventing claims. Rewrites
   // that cannot be demonstrated from the book data are not accepted.
   const sentences = description.split(/(?<=[.!?])\s+/).filter(Boolean);
-  const safeDescription = description.length <= 4000 && sentences.length && sentences.every((s) => original.includes(normalize(s))) ? description : "";
+  const safeDescription = description.length <= 4000 && sentences.length && sentences.every((s) => originalSentences.has(normalize(s))) ? description : "";
   return {
     status: uniqueKeywords.length || safeDescription ? "draft" : "no_grounded_proposal",
     titleId: match.metadata.titleId, description: safeDescription || null, keywords: uniqueKeywords,
