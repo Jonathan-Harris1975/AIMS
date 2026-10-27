@@ -89,9 +89,10 @@ test("paid scheduled renders remain primary when credit reservation and renderer
 
 test("scheduled Blotato orchestration wires the cap fallback into publishing", async () => {
   const source = await readFile(new URL("../services/blotato/utils/autoPublishService.js", import.meta.url), "utf8");
-  assert.match(source, /renderScheduledBlotatoVideo/);
+  assert.match(source, /phase: "silent-card-render-mode"/);
+  assert.match(source, /reason: "silent-visual-aid-cards"/);
   assert.match(source, /createLocalBlotatoCreditFallbackVideo/);
-  assert.match(source, /phase: "local-credit-fallback-ready"/);
+  assert.match(source, /phase: "visual-aid-cards-ready"/);
   assert.match(source, /mediaUrl: video\.mediaUrl/);
 });
 
