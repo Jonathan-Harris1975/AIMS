@@ -208,7 +208,17 @@ function pickItem(items = [], { topicSeed = "" } = {}) {
       !hasRecentEditorialSource(item) &&
       !hasBeenUsedCrossLaneToday(item)
   );
-  const candidates = unused.length ? unused : usable;
+  // Never recycle a story from another post or lane. If every item has
+  // already been used, let the caller try another feed or use its unique
+  // deterministic editorial fallback.
+  const candidates = unused;
+  if (!candidates.length) {
+    warn("blotato.rss.all_items_already_used", {
+      lane: laneSlug || "default",
+      itemCount: usable.length,
+    });
+    return null;
+  }
   const ranked = topicTokens(topicSeed).length
     ? candidates
         .map((item) => ({ item, editorialTopicScore: editorialTopicScore(item, topicSeed) }))
