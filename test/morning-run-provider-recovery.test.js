@@ -140,15 +140,14 @@ test("AIMS newsletter delivery uses the D1 audience and persists an exactly-once
   assert.match(ops, /newsletter-send.*newsletter-readiness/);
 });
 
-test("Blotato scheduled runs use deterministic slots and render silent cards without paid video credits", async () => {
+test("Blotato scheduled runs use deterministic slots and render static cards with spoken narration", async () => {
   const text = await source("services/blotato/utils/autoPublishService.js");
-  const guard = await source("services/blotato/utils/creditGuard.js");
   const defaults = await source("config/production.defaults.env");
   assert.match(text, /createScheduledSessionId/);
   assert.match(text, /`BLT-\$\{lane\}-\$\{scheduleDate\}-\$\{slot\}`/);
-  assert.match(text, /phase: "silent-card-render-mode"/);
+  assert.match(text, /phase: "static-card-narration-render-mode"/);
   assert.match(text, /createLocalBlotatoCreditFallbackVideo/);
-  assert.match(text, /silent-visual-aid-cards/);
+  assert.match(text, /static-cards-with-spoken-narration/);
   assert.doesNotMatch(text, /reservePaidRender/);
   assert.equal(defaults.includes("BLOTATO_DAILY_PAID_RENDER_CAP="), false);
   assert.equal(defaults.includes("BLOTATO_MONTHLY_ESTIMATED_CREDIT_CAP="), false);
