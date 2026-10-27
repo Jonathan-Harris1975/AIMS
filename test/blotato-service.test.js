@@ -70,12 +70,12 @@ async function handleMockRequest(req, res) {
     capturedChatRequests.push(payload);
     const isRepair = payload.messages.some((message) => String(message.content || "").includes("Repair malformed JSON"));
     if (!isRepair) {
-      assert.ok(payload.messages.some((message) => String(message.content || "").includes("Create one short-form AI social video pack")));
+      assert.ok(payload.messages.some((message) => String(message.content || "").includes("Create one five-card AI social briefing")));
       assert.ok(payload.messages.some((message) => String(message.content || "").includes("Spartan and informative")));
       assert.ok(payload.messages.some((message) => String(message.content || "").includes("Instagram must have no more than 5 hashtags")));
-      assert.ok(payload.messages.some((message) => String(message.content || "").includes("Target duration: about 45 seconds. Allowed finished range: 35-55 seconds")));
+      assert.ok(payload.messages.some((message) => String(message.content || "").includes("exactly five static visual-aid cards in a silent slideshow")));
       assert.ok(payload.messages.some((message) => String(message.content || "").includes("HUMAN-CENTRED SOCIAL VISUALS")));
-      assert.ok(payload.messages.some((message) => String(message.content || "").includes("First frame rule")));
+      assert.ok(payload.messages.some((message) => String(message.content || "").includes("No narration, voice, music, sound effects, live action, or generated video footage")));
       assert.ok(payload.messages.some((message) => String(message.content || "").includes("CTA: For straight-talking artificial intelligence analysis, keep Jonathan Harris on your radar.")));
       assert.ok(!payload.messages.some((message) => String(message.content || "").includes("CTA: Follow Jonathan Harris for more")));
       assert.equal(payload.response_format, undefined);
@@ -599,7 +599,11 @@ test("Blotato publish-now endpoint requires explicit opt-in and runs the RSS-to-
   assert.ok(["tpl-ai-video", AI_STORY_TEMPLATE_UUID].includes(jobStatus.body.job.result.templateId));
   assert.equal(jobStatus.body.job.result.video.creditBudget.expectedCredits <= 10, true);
   assert.ok(jobStatus.body.job.result.video.visualInputs.scenes.length >= 3);
-  assert.equal(jobStatus.body.job.result.video.visualInputs.thumbnailText, "AI Gets Chores");
+  assert.equal(jobStatus.body.job.result.video.silentCardRender, true);
+  assert.equal(jobStatus.body.job.result.video.localCreditFallback, true);
+  assert.equal(jobStatus.body.job.result.video.creditBudget.actualCreditsUsed, 0);
+  assert.equal(jobStatus.body.job.result.video.templateId, undefined);
+  assert.equal(capturedVisualRequests.length, 0, "silent cards must not call the Blotato video renderer");
   assert.ok(jobStatus.body.job.result.video.visualInputs.scenes.filter((scene) => /adult|human|hands|face|silhouette|professional/i.test(scene.mediaSource)).length >= 3);
   const instagramPost = capturedPostRequests.filter((item) => item.post.content.platform === "instagram").at(-1);
   assert.ok(instagramPost);
@@ -616,11 +620,7 @@ test("Blotato publish-now endpoint requires explicit opt-in and runs the RSS-to-
   assert.equal(facebookPost.post.target.pageId, "562160556971997");
   assert.equal(facebookPost.post.target.mediaType, "reel");
   assert.equal(jobStatus.body.job.result.channelPreflight.ready, true);
-  const visualRequest = capturedVisualRequests.find((item) => /Cost guard/i.test(item.prompt || ""));
-  assert.ok(visualRequest, "the paid render request should be captured");
-  assert.equal(visualRequest.inputs.scenes.length, 5);
-  assert.equal(visualRequest.inputs.aiImageModel, "replicate/black-forest-labs/flux-schnell");
-  assert.equal(visualRequest.inputs.animateAiImages, false);
+  assert.equal(capturedVisualRequests.length, 0, "silent cards must not call the Blotato video renderer");
   assert.deepEqual(
     jobStatus.body.job.result.channelPreflight.platforms.map((item) => item.platform),
     ["instagram", "youtube", "tiktok", "facebook"]
@@ -652,7 +652,9 @@ test("Blotato scheduled lane reaches the provider and confirms every queued post
   assert.ok(jobStatus.body.job.result.posts.every((post) => post.status === "scheduled" && post.confirmed === true));
   assert.equal(capturedPostRequests.length, 4);
   assert.ok(capturedPostRequests.every((payload) => Boolean(payload.scheduledTime)));
-  assert.equal(capturedVisualRequests.at(-1).inputs.scenes.length, 5);
+  assert.equal(jobStatus.body.job.result.video.silentCardRender, true);
+  assert.equal(jobStatus.body.job.result.video.creditBudget.actualCreditsUsed, 0);
+  assert.equal(capturedVisualRequests.length, 0, "scheduled cards must not call the Blotato video renderer");
 });
 
 
