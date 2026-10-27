@@ -3,11 +3,11 @@
 The authenticated AIMS `/kdp` service exposes two subservices backed by the KDP template engine:
 
 - `KDP_publishing` prepares titles, uploads manuscript/cover files, updates categories and publishes Kindle Direct Publishing listings.
-- `KDP_audit` synchronizes KDP listing metadata, analyzes metadata, compares Amazon listings with the website's D1 ebook catalogue, and saves private audit and royalty reports.
+- `KDP_audit` builds read-only reports from the D1 ebook catalogue and public Amazon product pages. An optional signed-in KDP audit collects setup metadata and price-band findings. Audit and royalty reports are stored privately.
 
 Audit runs are read-only. The audit can identify listing issues and return a report for the Council workflow; metadata and pricing changes are separate explicit operations. Monthly Council scheduling and automatic approval of changes are not configured here.
 
-The audit includes a per-market Kindle eBook price-band check. It uses KDP's published 70% royalty minimum and maximum list prices, and records the rule review date and source in each report. A price below the minimum is reported with the minimum as the recommended correction. The maximum is checked when the book uses the 70% plan. Updates are not applied by the audit itself. Pricing update requests are blocked when a Kindle price is below the applicable minimum, when a 70% plan price exceeds its maximum, or when the marketplace/currency cannot be safely mapped.
+The optional `mode: "kdp"` audit includes a per-market Kindle eBook price-band check. It uses KDP's published 70% royalty minimum and maximum list prices, and records the rule review date and source in each report. A price below the minimum is reported with the minimum as the recommended correction. The maximum is checked when the book uses the 70% plan. Updates are not applied by the audit itself. Pricing update requests are blocked when a Kindle price is below the applicable minimum, when a 70% plan price exceeds its maximum, or when the marketplace/currency cannot be safely mapped.
 
 The price-band rules were last checked on 2026-10-25 against KDP's [eBook List Price Requirements](https://kdp.amazon.com/en_US/help/topic/G200634560). Amazon's current values are marketplace-specific; do not convert one country's minimum into another currency. A price in range does not by itself guarantee a 70% royalty on every sale: title eligibility, buyer territory, KDP Select eligibility in some markets, VAT, delivery costs and Amazon price matching also affect royalties.
 
@@ -56,7 +56,7 @@ All routes require the normal AIMS bearer authentication. Long-running browser o
 | GET | `/kdp/session/status` | Check session state without exposing cookies |
 | DELETE | `/kdp/session` | Disconnect and remove the local browser session/cache |
 | POST | `/kdp/otp/textbee` | Internal OTP event handoff from HIVE-UI |
-| POST | `/kdp/audit/run` | Sync listings, analyze metadata, check per-market 70% price bands, compare with D1, and persist a private report |
+| POST | `/kdp/audit/run` | Audit every D1 ebook against its public Amazon page and persist a private report. Optional JSON: `{"marketplace":"US"}` (default) or `"UK"`. Use `{"mode":"kdp"}` for the signed-in setup metadata and price-band audit. |
 | POST | `/kdp/audit/metadata/sync` | Refresh the full local/R2 metadata snapshot |
 | GET | `/kdp/audit/metadata` | Read the latest metadata snapshot |
 | GET | `/kdp/audit/metadata/analyze` | Analyze the latest snapshot |
@@ -73,6 +73,10 @@ All routes require the normal AIMS bearer authentication. Long-running browser o
 | GET | `/kdp/jobs/:lane/:sessionId` | Read a long-running operation's job status |
 
 Every live publish requires `dryRun: false`, `publish: true`, and an `X-Idempotency-Key`. Content upload and metadata/pricing updates are dry-run by default; set `dryRun: false` to apply. Deleting, archiving, and unpublishing require `confirm: true` in addition to a separate explicit request.
+
+The default audit uses each D1 ASIN to form a marketplace-specific Amazon URL; it does not follow catalogue redirect URLs. It fetches pages sequentially, validates the page ASIN before associating data with a book, and stops fetching after an Amazon block. A report includes every D1 book even when a page is unavailable, with `publicAudit.statusCounts`, per-book status, capture time and field availability. `complete: false` means at least one page could not be captured. D1 page counts and descriptions are reported as catalogue values, separate from observed Amazon values. Public categories and prices are marketplace observations, not proof of the KDP setup selections or royalty plan. Keywords, drafts, setup fields, and KDP title IDs require the separate signed-in audit. The default audit does not discover books absent from D1 and does not reconcile the KDP account catalogue size.
+
+Existing clients that rely on `metadataAnalysis`, `priceFloorAnalysis`, `catalogueComparison`, or `syncStats` should explicitly request `{"mode":"kdp"}`. Reports from the default mode use `publicAudit` instead.
 
 ## Service limits
 

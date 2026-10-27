@@ -39,8 +39,31 @@ function mapBook(row) {
     author: String(row.author || ""),
     identifier: String(row.identifier || ""),
     asin: String(row.asin || ""),
+    pageCount: Number.isFinite(Number(row.page_count)) && row.page_count != null ? Number(row.page_count) : null,
+    publicationDate: row.publication_date || null,
+    shortDescription: String(row.short_description || ""),
+    topic: String(row.topic || ""),
+    tags: parseJsonArray(row.tags_json),
+    audience: String(row.audience || ""),
+    whoFor: String(row.who_for || ""),
+    whatBookCovers: String(row.what_book_covers || ""),
+    whatYoullLearn: parseJsonArray(row.what_youll_learn_json),
+    whyItMatters: String(row.why_it_matters || ""),
+    tone: String(row.tone || ""),
+    bookUrl: String(row.book_url || ""),
+    buyNowUrl: String(row.buy_now_url || ""),
+    redirectUrl: String(row.redirect_url || ""),
+    coverArtUrl: String(row.cover_art_url || ""),
+    legacyAliasUrl: String(row.legacy_alias_url || ""),
+    manuscriptFilename: String(row.manuscript_filename || ""),
+    manuscriptUrl: row.manuscript_url || null,
+    manuscriptTitleObserved: String(row.manuscript_title_observed || ""),
+    titleAlignmentStatus: String(row.title_alignment_status || ""),
+    createdAt: row.created_at || null,
+    updatedAt: row.updated_at || null,
     manuscriptR2Key: String(row.manuscript_r2_key || ""),
     manuscriptFormat: String(row.manuscript_format || "PDF"),
+    contentType: String(row.content_type || "application/pdf"),
     storageBucket: String(row.storage_bucket || "kdp"),
   };
 }
@@ -56,7 +79,7 @@ function parseJsonArray(value) {
 
 export async function listKdpEbooks() {
   const result = await getKdpD1Client().query(
-    "SELECT ebook_id, slug, title, description, summary, keywords_json, author, identifier, asin, manuscript_r2_key, manuscript_format, storage_bucket FROM ebooks ORDER BY ebook_id",
+    "SELECT * FROM ebooks ORDER BY ebook_id",
   );
   return (Array.isArray(result.results) ? result.results : []).map(mapBook);
 }
@@ -70,7 +93,7 @@ export async function getKdpEbookById(ebookId) {
     throw error;
   }
   const result = await getKdpD1Client().query(
-    "SELECT ebook_id, slug, title, description, summary, keywords_json, author, identifier, asin, manuscript_r2_key, manuscript_format, storage_bucket FROM ebooks WHERE ebook_id = ? LIMIT 1",
+    "SELECT * FROM ebooks WHERE ebook_id = ? LIMIT 1",
     [id],
   );
   const row = Array.isArray(result.results) ? result.results[0] : null;
@@ -87,9 +110,7 @@ export async function getKdpEbookByAsin(asin) {
   const normalized = String(asin || "").trim();
   if (!normalized) return null;
   const result = await getKdpD1Client().query(
-    `SELECT ebook_id, slug, title, description, summary, keywords_json, author, identifier,
-      asin, manuscript_r2_key, manuscript_format, storage_bucket
-      FROM ebooks WHERE lower(asin) = lower(?) LIMIT 1`,
+    `SELECT * FROM ebooks WHERE lower(asin) = lower(?) LIMIT 1`,
     [normalized],
   );
   const row = Array.isArray(result.results) ? result.results[0] : null;
