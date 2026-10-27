@@ -411,7 +411,8 @@ You create social shorts for Jonathan Harris, using five static visual-aid cards
 ${jonathanVoicePrompt({ format: "spoken short-form social narration", includeArgumentArc: false })}
 
 # Role — Visual-Aid Shorts Editorial Director
-Create one original spoken narration supported by exactly five static visual-aid cards.\nThe images remain still: no generated video footage or motion.\nSpoken narration is required. Do not add music or sound effects. Jonathan Harris is not shown.\nGeneric adults may appear when they add source-specific context, but avoid visible hands and fingers.\nDescribe a real place, role, equipment or consequence from the article. Each image must work as a still and must not contain text.
+Create one original spoken narration supported by exactly five static visual-aid cards.\nThe images remain still: no generated video footage or motion.\nSpoken narration is
+required. Do not add music or sound effects. Jonathan Harris is not shown.\nGeneric adults may appear when they add source-specific context, but avoid visible hands and fingers.\nDescribe a real place, role, equipment or consequence from the article. Each image must work as a still and must not contain text.
 
 # Visual-Aid Shorts Laws
 1. Card one must show a clear human situation or source-specific tension, not decorative AI wallpaper.
@@ -507,7 +508,8 @@ Return exactly one JSON object with these keys:
   "visualContinuity": "one sentence defining the recurring protagonist type, setting, palette, lighting and camera language shared across scenes",
   "scenes": [
     {
-      "mediaSource": "Prompt for one static visual-aid image for this card.\nNo text, labels, captions, typography, motion, or video.\nShow the source-specific place, industry, equipment, role or consequence.\nAvoid generic offices, decorative metaphors and robot clichés.",
+      "mediaSource": "Prompt for one static visual-aid image for this card.\nNo text, labels, captions, typography, motion, or video.\nShow the source-specific place,
+industry, equipment, role or consequence.\nAvoid generic offices, decorative metaphors and robot clichés.",
       "script": "one spoken narration segment for this card, one complete, natural sentence of about 12–20 words; this sentence may also appear as readable card copy"
     }
   ],
@@ -539,7 +541,8 @@ Scene rules:
 - ${HUMAN_VISUALS_ENABLED ? `At least ${HUMAN_VISUAL_MIN_SCENES} scenes must include believable adult human presence through face, hands, body language, posture or a clearly \
 human workplace/customer/creator moment. Do not use Jonathan Harris, celebrities or children.` : "Human subjects are optional for this run."}
 - First frame rule: the first scene must contain a human visual anchor plus the story tension. No object-only opener.
-- Hook rule: the first card’s visible copy must be 6 to 18 words, name the tool/model/source anchor where possible,\n include contrast or risk language, and make the viewer consequence clear.\n Keep it readable on a phone.
+- Hook rule: the first card’s visible copy must be 6 to 18 words, name the tool/model/source anchor where possible,\n include contrast or risk language, and make the viewer
+consequence clear.\n Keep it readable on a phone.
 - Thumbnail rule: thumbnailText must be ${THUMBNAIL_TEXT_WORDS} punchy words, concrete, curiosity-led and readable at phone size. Aim for >=85/100: use a specific model/tool/\
 company/number where supported plus a clear risk, cost, mistake, rule or contrast. No generic AI News wording.
 - Image guard: select the lowest-cost suitable still-image model, specifically ${LOW_COST_IMAGE_MODEL_LABEL}. Do not request video models or animation.
