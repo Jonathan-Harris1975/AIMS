@@ -18,14 +18,18 @@ function safeSources(research, now) {
 }
 
 /** Drafts are constrained to phrases already present in the public book data and dated sources. */
-export async function draftOptimisation(book, research, metadata, { now = new Date(), request = resilientRequest } = {}) {
+export async function draftOptimisation(book, research, metadata, { now = new Date(), request = resilientRequest, liveListing = null } = {}) {
   const match = matchKdpMetadata(book, Array.isArray(metadata?.books) ? metadata.books : []);
   if (match.status !== "matched") return { status: "blocked", reason: `kdp_identity_${match.status}` };
   const synced = Date.parse(metadata.syncedAt || "");
   if (!Number.isFinite(synced) || synced > now.getTime() || now.getTime() - synced > 8 * 86400000) {
     return { status: "blocked", reason: "metadata_stale" };
   }
-  const context = [book.title, book.description, book.summary, book.whatBookCovers, ...(book.whatYoullLearn || [])]
+  const observed = liveListing?.publicListing;
+  if (observed?.status !== "captured" || String(observed?.data?.asin || "").toUpperCase() !== String(book.asin || "").toUpperCase()) {
+    return { status: "blocked", reason: "live_listing_unverified" };
+  }
+  const context = [observed.data.title, observed.data.description]
     .filter((value) => typeof value === "string" && value.trim()).join("\n").slice(0, 12000);
   const sources = safeSources(research, now);
   if (normalize(context).length < 100 || !sources.length) return { status: "blocked", reason: "insufficient_content_or_dated_sources" };

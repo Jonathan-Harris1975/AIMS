@@ -90,6 +90,9 @@ export async function runResearchTick({
       state.week = week;
       state.auditRunId = audit.runId;
       state.pending = selection.books;
+      state.auditEvidence = (audit.publicAudit?.listings || []).map((row) => ({
+        ebookId: row.ebookId, publicListing: row.publicListing,
+      }));
       state.results = [];
       state.completed = false;
       await writeState(state);
@@ -122,7 +125,14 @@ export async function runResearchTick({
         return { status: "amazon_blocked", week, ebookId: book.ebookId };
       }
       try {
-        result.optimisation = await draft(book, result, await getMetadata(), { now: now() });
+        let liveListing = state.auditEvidence?.find((row) => row.ebookId === book.ebookId);
+        if (!liveListing) {
+          const currentAudit = await getAudit(started);
+          liveListing = currentAudit?.runId === state.auditRunId
+            ? currentAudit.publicAudit?.listings?.find((row) => row.ebookId === book.ebookId)
+            : null;
+        }
+        result.optimisation = await draft(book, result, await getMetadata(), { now: now(), liveListing });
       } catch {
         result.optimisation = { status: "blocked", reason: "proposal_unavailable", listingUpdated: false };
       }
