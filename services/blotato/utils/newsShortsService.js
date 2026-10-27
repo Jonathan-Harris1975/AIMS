@@ -452,7 +452,7 @@ shoulders or place hands completely outside frame.
 - No corporate filler.
 - No generic setup language.
 - No metaphors or clichés.
-- Write for quick silent reading, not speaking. Each scene script becomes visible card copy. Use one clear, complete sentence per card, aiming for 10–20 words. No academic language.
+- Write exclusively for silent visual-aid cards. Each scene script is the visible card copy: one clear, complete sentence of 10–20 words. Never write narration, voiceover, dialogue, music, or sound cues.
 - One idea per sentence. Never stack two concepts.
 - Rhythm matters: alternate short punchy lines with slightly longer ones.
 - Do not say what the visual already shows — say what it means.
@@ -471,10 +471,7 @@ Example hook: "${laneConfig.hookExample}"
 ## Visual signature for this lane
 ${laneConfig.visualSignature}
 
-## Sound direction for this lane
-${laneConfig.soundMap}
-
-# Lane planning structure
+## Lane planning structure
 ${structure}
 
 ${retryBrief}
@@ -488,7 +485,7 @@ Weekday slot: ${laneConfig.weekday}
 Lane focus: ${laneConfig.promptFocus}
 Source strategy: ${laneConfig.sourceStrategy}
 Theme: ${theme || laneConfig.theme}
-Output format: five static visual-aid cards in a silent slideshow. No narration, voice, music, sound effects, live action, or generated video footage.
+Output format: exactly five static visual-aid cards in a silent slideshow. No narration, voice, music, sound effects, live action, or generated video footage. The MP4 contains image cards only.
 Audience: ${audience}
 CTA: ${resolvedCta}
 
@@ -511,17 +508,17 @@ Return exactly one JSON object with these keys:
   "angle": "one sentence explaining the editorial angle",
   "hook": "opening line following the ${laneConfig.slug} hook rule — see system prompt. No word-count restriction. Content determines length.",
   ${requestHookAlt ? `"hookAlt": "a second candidate hook for the same lane using a different hook pattern from the system prompt — do not repeat the primary hook structure",` : `"hookAlt": "",`}
-  "script": "one continuous spoken story in natural British English, aim for about ${targetScriptWords} words for this story, while staying between ${MIN_SCRIPT_WORDS} and ${MAX_SCRIPT_WORDS} words",
+  "script": "one concise written editorial summary of the five cards, not spoken. Use natural British English and no narration cues.",
   "narrativeArc": "one sentence describing the complete hook-to-takeaway progression",
   "visualContinuity": "one sentence defining the recurring protagonist type, setting, palette, lighting and camera language shared across scenes",
   "scenes": [
     {
       "mediaSource": "AI image/video generation prompt for this scene. No text, labels, captions, or typography. Name the source-specific place, industry, equipment, role or \
 consequence visible in the frame. Describe a distinct action and shot progression. Avoid generic offices, decorative metaphors and robot clichés.",
-      "script": "voiceover text for this scene — one or two short sentences"
+      "script": "visible card copy: one clear, complete sentence of 10–20 words, with no narration or voiceover"
     }
   ],
-  "visualDirection": "specific visual plan for a faceless AI/news short using the lane visual signature",
+  "visualDirection": "specific visual plan for five static AI/news aid cards using the lane visual signature",
   "thumbnailText": "3 to 5 punchy words, concrete and curiosity-led, no clickbait",
   "youtubeTitle": "YouTube Shorts title, max 70 chars",
   "youtubeDescription": "short description with a light CTA and 3 to 5 hashtags, no emoji",
