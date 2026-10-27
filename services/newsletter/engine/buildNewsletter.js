@@ -66,11 +66,31 @@ export async function buildNewsletter({ profileId = "ai-edge", sessionId: reques
 
   const qaResult = await runQaLoop({ profile, newsletter: draft, lead, stories, promotion, sessionId });
   if (qaResult.quarantined) {
+    const councilReviews = [
+      ...(qaResult.council?.chair ? [qaResult.council.chair] : []),
+      ...(qaResult.council?.reviews || []),
+    ];
+    const lastQaHistory = qaResult.history?.[qaResult.history.length - 1] || {};
     logError("newsletter.build.quarantined", {
       sessionId,
       profileId: profile.id,
       iterations: qaResult.iterations,
+      selfImproveIterations: qaResult.selfImproveIterations,
+      councilRuns: qaResult.councilRuns,
       finalScore: qaResult.finalScore,
+      councilVerdict: qaResult.council?.verdict || null,
+      councilChairScore: qaResult.council?.chair?.score ?? null,
+      minimumReviewerScore: qaResult.council?.minimumReviewerScore ?? null,
+      councilAttendance: qaResult.council?.attendance || null,
+      councilBlockingSeats: councilReviews.filter((review) => review.blocking).map((review) => ({
+        seat: review.seat, role: review.role, authority: review.authority,
+      })),
+      councilScores: councilReviews.map((review) => ({
+        seat: review.seat, role: review.role, authority: review.authority,
+        score: review.score, blocking: review.blocking,
+      })),
+      deterministicIssues: (lastQaHistory.deterministicIssues || []).slice(0, 20),
+      councilIssues: (qaResult.council?.issues || []).slice(0, 20),
     });
     return {
       ok: false,
