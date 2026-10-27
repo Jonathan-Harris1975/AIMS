@@ -1954,9 +1954,9 @@ async function runPublishJob({
         }
       : null;
     // Keep an already-created asset only when reconciling this exact pending
-    // publication. New scheduled posts are rendered as silent visual-aid cards;
-    // the previous AI Video with AI Voice template is not used for production.
-    const reusedVideo = recoveredPublishVideo && (recoveredPublishVideo.silentCardRender === true || recoveredPublishVideo.localCreditFallback === true)
+    // publication and confirming it already has audio narration. New scheduled
+    // posts use static visual-aid cards paired with a spoken narration track.
+    const reusedVideo = recoveredPublishVideo && (recoveredPublishVideo.staticCardVisuals === true && recoveredPublishVideo.audioNarration === true)
       ? recoveredPublishVideo
       : null;
     let localCreditFallback = null;
@@ -1976,7 +1976,7 @@ async function runPublishJob({
         message: "Rendered as five static visual-aid cards with spoken narration.",
         scheduledWithoutPaidRender: true,
         creditLimited: false,
-        fallbackReason: "silent-visual-aid-cards",
+        fallbackReason: "static-cards-with-spoken-narration",
       };
     }
     if (localCreditFallback) {
