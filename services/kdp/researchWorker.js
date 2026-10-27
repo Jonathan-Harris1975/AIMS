@@ -2,9 +2,10 @@ import { claimDurableLease, releaseDurableLease } from "../shared/utils/durableL
 import { getObjectAsText, putPrivateJson, parseR2Reference, listObjects } from "../shared/utils/r2-client.js";
 import { hasDurableStateEnv } from "../shared/utils/durableStateEnv.js";
 import { listKdpEbooks } from "./catalogue.js";
-import { readKdpAuditReport } from "./storage.js";
+import { readKdpAuditReport, readKdpMetadataSnapshot } from "./storage.js";
 import { discoverBookResearch } from "./researchDiscovery.js";
 import { captureCompetitorEvidence } from "./researchEvidence.js";
+import { draftOptimisation } from "./optimisationProposal.js";
 import { inWeeklyWindow, londonTime, selectWeeklyBatch } from "./weeklyResearch.js";
 
 const KEY = "research/weekly/state.json";
@@ -66,6 +67,7 @@ export async function runResearchTick({
   writeState = (state) => putPrivateJson("kdp", KEY, state),
   archive = (week, state) => putPrivateJson("kdp", `research/weekly/${week}.json`, state),
   getAudit = latestAudit, getBooks = listKdpEbooks, discover = discoverBookResearch, captureEvidence = captureCompetitorEvidence,
+  getMetadata = readKdpMetadataSnapshot, draft = draftOptimisation,
   claim = claimDurableLease, release = releaseDurableLease,
 } = {}) {
   const started = now();
@@ -118,6 +120,11 @@ export async function runResearchTick({
       result.competitorEvidence = await captureEvidence(result);
       if (Object.values(result.competitorEvidence.markets).some((market) => market.status === "blocked")) {
         return { status: "amazon_blocked", week, ebookId: book.ebookId };
+      }
+      try {
+        result.optimisation = await draft(book, result, await getMetadata(), { now: now() });
+      } catch {
+        result.optimisation = { status: "blocked", reason: "proposal_unavailable", listingUpdated: false };
       }
       state.results.push(result);
       state.inProgress = null;

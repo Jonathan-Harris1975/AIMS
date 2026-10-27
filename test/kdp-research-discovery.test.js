@@ -40,7 +40,7 @@ test("worker requires a successful audit from this Monday and saves rotating pro
   let saved = null, archived = null;
   const env = { TAVILY_SEARCH_API: "test", R2_ENDPOINT: "test", R2_ACCESS_KEY_ID: "test", R2_SECRET_ACCESS_KEY: "test", R2_BUCKET_META_SYSTEM: "test", KDP_RESEARCH_BATCH_SIZE: "1" };
   const options = {
-    now: () => date, env, readState: async () => saved && structuredClone(saved),
+    now: () => date, env, getMetadata: async () => null, readState: async () => saved && structuredClone(saved),
     writeState: async (s) => { saved = structuredClone(s); }, archive: async (_week, s) => { archived = structuredClone(s); },
     getAudit: async () => audit, getBooks: async () => [{ ebookId: 1, asin: "B012345678" }, { ebookId: 2, asin: "B012345679" }],
     discover: async (book) => ({ ebookId: book.ebookId }), claim: async () => ({ claimed: true, lease: { backend: "r2" } }), release: async () => {},
@@ -56,7 +56,7 @@ test("worker does not advance when the audit or search fails", async () => {
   const env = { TAVILY_SEARCH_API: "test", R2_ENDPOINT: "test", R2_ACCESS_KEY_ID: "test", R2_SECRET_ACCESS_KEY: "test", R2_BUCKET_META_SYSTEM: "test" };
   let saved = null;
   const options = {
-    now: () => date, env, readState: async () => saved && structuredClone(saved),
+    now: () => date, env, getMetadata: async () => null, readState: async () => saved && structuredClone(saved),
     writeState: async (s) => { saved = structuredClone(s); }, archive: async () => {},
     getAudit: async () => null, getBooks: async () => [{ ebookId: 1, asin: "B012345678" }],
     discover: async () => { throw new Error("provider failed"); },
@@ -76,7 +76,7 @@ test("monthly quota is persisted before provider calls and prevents the next cal
     R2_BUCKET_META_SYSTEM: "test", KDP_RESEARCH_MONTHLY_SEARCH_LIMIT: "1" };
   let saved = null;
   const options = {
-    now: () => date, env, readState: async () => saved && structuredClone(saved),
+    now: () => date, env, getMetadata: async () => null, readState: async () => saved && structuredClone(saved),
     writeState: async (s) => { saved = structuredClone(s); }, archive: async () => {},
     getAudit: async () => ({ ok: true, complete: true, mode: "public", runId: "1", createdAt: "2026-10-26T12:00:00Z", completedAt: "2026-10-26T12:10:00Z" }),
     getBooks: async () => [{ ebookId: 1, asin: "B012345678" }],
@@ -94,7 +94,7 @@ test("Amazon blocks stop the batch and retries reuse the saved search", async ()
     R2_BUCKET_META_SYSTEM: "test" };
   let saved = null, searches = 0, blocked = true;
   const options = {
-    now: () => date, env, readState: async () => saved && structuredClone(saved),
+    now: () => date, env, getMetadata: async () => null, readState: async () => saved && structuredClone(saved),
     writeState: async (s) => { saved = structuredClone(s); }, archive: async () => {},
     getAudit: async () => ({ ok: true, complete: true, mode: "public", runId: "1", createdAt: "2026-10-26T12:00:00Z", completedAt: "2026-10-26T12:10:00Z" }),
     getBooks: async () => [{ ebookId: 1, asin: "B012345678" }],
