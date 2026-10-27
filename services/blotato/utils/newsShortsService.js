@@ -57,7 +57,7 @@ const BLOTATO_HUMAN_VISUAL_RULE = [
   "HUMAN-CENTRED SOCIAL VISUALS.",
   "Use believable adult human presence in the first scenes: expressive face, upper-body posture, presenter silhouette, analyst, creator, operator, customer or worker context.",
   "Do not create a Jonathan Harris likeness, celebrity likeness, child, distorted face, visible hands or stock-photo grin.",
-  "People should give each card a clear human context; the visible card copy carries the argument."
+  "People should give each card a clear human context; the spoken narration carries the argument and visible copy reinforces it."
 ].join(" ");
 
 
@@ -407,15 +407,15 @@ exact failures:\n${previousDefects.map((item) => `- ${item}`).join("\n") ||
   return {
     system: `${buildBlotatoPersona()}
 
-You create silent visual-aid card packs for Jonathan Harris, an AI author and podcast host.
-${jonathanVoicePrompt({ format: "written social card copy", includeArgumentArc: false })}
+You create social shorts for Jonathan Harris, using five static visual-aid cards with original spoken narration.
+${jonathanVoicePrompt({ format: "spoken short-form social narration", includeArgumentArc: false })}
 
-# Role — Silent Card Editorial Director
-Create a coherent sequence of exactly five static visual-aid cards. Each card pairs one generated still image with concise, readable on-card copy. No video footage, animation, narration, dialogue, voice, music, sound effects or sound design is requested or produced. Jonathan Harris is not shown. Generic adults may appear when they add source-specific context, but avoid visible hands and fingers. Describe a real place, role, equipment or consequence from the article. Each image must work as a still and must not contain text.
+# Role — Visual-Aid Shorts Editorial Director
+Create one original spoken narration supported by exactly five static visual-aid cards. The images remain still: no generated video footage or motion. Spoken narration is required. Do not add music or sound effects. Jonathan Harris is not shown. Generic adults may appear when they add source-specific context, but avoid visible hands and fingers. Describe a real place, role, equipment or consequence from the article. Each image must work as a still and must not contain text.
 
-# Silent Card Laws
+# Visual-Aid Shorts Laws
 1. Card one must show a clear human situation or source-specific tension, not decorative AI wallpaper.
-2. The five card captions must form one useful written story. Each card must make sense on its own and advance the idea without repeating the previous card.
+2. The narration carries one coherent story; the five cards reinforce it with concise visible captions that advance the idea without repeating each other.
 3. Every mediaSource must obey this absolute rule: ${BLOTATO_STRICT_NO_TEXT_RULE}
 4. ${HUMAN_VISUALS_ENABLED ? BLOTATO_HUMAN_VISUAL_RULE : "Human subjects are optional for this run."}
 5. Card one must work at a glance on ${["Facebook", "Instagram", "YouTube Shorts", "TikTok"].join(", ")}. Use a concrete source anchor, contrast or risk, and a clear viewer consequence.
@@ -430,7 +430,7 @@ or affected environment. A generic office person is not source grounding.
 12. HAND SAFETY. Never request visible hands, fingers, typing hands, pointing hands, phones held in hands, handshakes or close-up gestures. If a human is shown, crop below the \
 shoulders or place hands completely outside frame.
 
-# Writing style
+# Narration and card writing style
 - British English.
 - Spartan and informative.
 - Clear, simple language.
@@ -446,7 +446,7 @@ shoulders or place hands completely outside frame.
 - No corporate filler.
 - No generic setup language.
 - No metaphors or clichés.
-- Write exclusively for silent visual-aid cards. Each scene script is the visible card copy: one clear, complete sentence of 10–20 words. Never write narration, voiceover, dialogue, music, or sound cues.
+- Write a natural spoken narration in clear British English. Each scene script is both that card’s narration segment and its concise visible caption. Do not write music or sound-effect cues.
 - One idea per sentence. Never stack two concepts.
 - Rhythm matters: alternate short punchy lines with slightly longer ones.
 - Do not say what the visual already shows — say what it means.
@@ -479,7 +479,7 @@ Weekday slot: ${laneConfig.weekday}
 Lane focus: ${laneConfig.promptFocus}
 Source strategy: ${laneConfig.sourceStrategy}
 Theme: ${theme || laneConfig.theme}
-Output format: exactly five static visual-aid cards in a silent slideshow. No narration, voice, music, sound effects, live action, or generated video footage. The MP4 contains image cards only.
+Output format: exactly five static visual-aid cards in a slideshow with required spoken narration audio. No generated video footage or motion, music, or sound effects.
 Audience: ${audience}
 CTA: ${resolvedCta}
 
@@ -502,13 +502,13 @@ Return exactly one JSON object with these keys:
   "angle": "one sentence explaining the editorial angle",
   "hook": "opening line following the ${laneConfig.slug} hook rule — see system prompt. No word-count restriction. Content determines length.",
   ${requestHookAlt ? `"hookAlt": "a second candidate hook for the same lane using a different hook pattern from the system prompt — do not repeat the primary hook structure",` : `"hookAlt": "",`}
-  "script": "one concise written editorial summary of the five cards, not spoken. Use natural British English and no narration cues.",
+  "script": "one continuous spoken story in natural British English, aim for about ${targetScriptWords} words, within ${MIN_SCRIPT_WORDS}–${MAX_SCRIPT_WORDS} words",
   "narrativeArc": "one sentence describing the complete hook-to-takeaway progression",
   "visualContinuity": "one sentence defining the recurring protagonist type, setting, palette, lighting and camera language shared across scenes",
   "scenes": [
     {
       "mediaSource": "Prompt for one static visual-aid image for this card. No text, labels, captions, typography, motion, or video. Show the source-specific place, industry, equipment, role or consequence. Avoid generic offices, decorative metaphors and robot clichés.",
-      "script": "visible card copy: one clear, complete sentence of 10–20 words, with no narration or voiceover"
+      "script": "one spoken narration segment for this card, one complete, natural sentence of about 12–20 words; this sentence may also appear as readable card copy"
     }
   ],
   "visualDirection": "specific visual plan for five static AI/news aid cards using the lane visual signature",
@@ -525,7 +525,7 @@ Scene rules:
 - Provide exactly ${MAX_SCENES} scenes. If the source is thin, use a clearer practical explainer instead of making the script shorter.
 - Each scene must include a mediaSource and script.
 - Write the full narrative arc first, then divide it into scenes. Never generate scenes as independent sentence illustrations.
-- Each scene script is visible card copy: one complete, clear sentence of 10–20 words. Do not write narration, dialogue or sound cues.
+- Each scene script is a complete, clear sentence of narration. Keep the card caption short enough to read at a glance. Do not write music or sound-effect cues.
 - Scene 1 = hook/tension. Middle scenes = context, consequence and practical meaning. Final scene = takeaway/action.
 - Every mediaSource must inherit visualContinuity so the same visual world persists across the short. Deliberate scene changes must still preserve palette, lighting and camera grammar.
 - Each mediaSource must describe a specific physical scene, not a generic instruction.
@@ -548,7 +548,7 @@ company/number where supported plus a clear risk, cost, mistake, rule or contras
 - The first scene must support the hook.
 - The final scene must support the CTA or practical takeaway.
 - The five scene scripts must form a clear visual-aid sequence. Keep each card readable at a glance and avoid padding.
-- The combined card copy should convey the full argument in ${MIN_SCRIPT_WORDS}–${MAX_SCRIPT_WORDS} words, with one sentence per card.
+- The spoken script should convey the full argument in ${MIN_SCRIPT_WORDS}–${MAX_SCRIPT_WORDS} words, with narration distributed across five card scenes.
 
 Output rules:
 - Keep the script specific to the source.
@@ -869,10 +869,10 @@ export function buildBlotatoVisualPrompt(pack = {}) {
   const scenes = normaliseScenes(pack.scenes, pack);
   const scenePlan = scenes.map((scene, index) => [
     `SCENE ${index + 1} VISUAL: ${cleanText(scene?.mediaSource || "", 420)}`,
-    `CARD ${index + 1} ON-CARD COPY: ${cleanText(scene?.script || "", 220)}`,
+    `CARD ${index + 1} NARRATION AND CAPTION: ${cleanText(scene?.script || "", 220)}`,
   ].join("\n")).join("\n");
   return [
-    `Create exactly five static visual-aid cards for a silent vertical slideshow for Jonathan Harris. No footage, animation, narration, dialogue, voice, music or sound effects.`,
+    `Create exactly five static visual-aid cards for a vertical slideshow accompanied by spoken narration. No generated footage, motion, music or sound effects.`,
     `Lane: ${laneConfig.label}.`,
     `Use the supplied scenes as the source of truth. The scene plan below is mandatory, not optional inspiration.`,
     `Do not replace a source-specific scene with a generic office, warehouse, portrait, US map, abstract AI image or unrelated lifestyle footage.`,
@@ -889,12 +889,12 @@ export function buildBlotatoVisualPrompt(pack = {}) {
 visually immediate, but show the real source environment rather than a decorative metaphor. Avoid corporate stock staging, generic offices, data-centre glamour, floating \
 dashboards, polygon networks and robot clichés. Never use board games, cards, chess pieces, miniatures, toy people, puzzles, abstract blocks or a wall calendar as a substitute \
 for the article's actual people, place, equipment or consequence. Preserve the configured seasonal palette direction where supplied. British AI news commentary tone.`,
-    `Slideshow target: five purposeful static cards with enough display time to read each one, progressing from source-specific tension to consequence, verification and outcome.`,
+    `Short target: five purposeful static visual-aid cards paired with clear spoken narration, progressing from source-specific tension to consequence, verification and outcome.`,
     HUMAN_VISUALS_ENABLED ? BLOTATO_HUMAN_VISUAL_RULE : "Human subjects optional.",
     BLOTATO_STRICT_NO_TEXT_RULE,
     `Thumbnail copy is supplied separately in the template inputs. Treat it as metadata only and never render that wording inside generated images.`,
     `Thumbnail text is handled separately by Blotato and must never be rendered into generated visuals.`,
-    `Card copy is overlaid by the slideshow renderer. Never bake words into generated images.`,
+    `Spoken narration is rendered as an audio track; card captions are overlaid separately. Never bake words into generated images.`,
     `Final visual compliance check: remove any accidental letter-like, number-like, logo-like or watermark-like marks before rendering.`,
   ].join("\n");
 }
