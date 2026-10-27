@@ -14,6 +14,7 @@ import * as lifecycle from "./services/shared/utils/lifecycle.js";
 import { requireAimsBearerAuth } from "./services/shared/middleware/suiteAuth.js";
 import { getCommsHubReadiness } from "./services/comms-hub/config.js";
 import { describeCommsHubRuntimeReadiness, getCommsHubRuntimeReadiness, startCommsHubRuntime, stopCommsHubRuntime } from "./services/comms-hub/runtime.js";
+import { startPageCountSyncWorker, stopPageCountSyncWorker } from "./services/kdp/pageCountSync.js";
 import { restoreAimsModelGovernance } from "./services/shared/utils/modelGovernance.js";
 import { probeCriticalDependencies } from "./services/shared/readiness/dependencyProbes.js";
 
@@ -514,6 +515,7 @@ export function startServer(port = PORT, host = "0.0.0.0") {
   void restoreAimsModelGovernance()
     .catch((err) => error("model-governance.aims.startup-restore", { error: err?.message || String(err) }));
   void startCommsHubRuntime();
+  startPageCountSyncWorker();
 
   if (!processHandlersBound) {
     processHandlersBound = true;
@@ -540,6 +542,7 @@ export function startServer(port = PORT, host = "0.0.0.0") {
 
 export async function stopServer() {
   if (!server) return;
+  stopPageCountSyncWorker();
 
   await new Promise((resolve, reject) => {
     server.close((err) => {
@@ -554,6 +557,7 @@ export async function stopServer() {
 
 function shutdown(signal) {
   info("server.shutdown.start", { signal });
+  stopPageCountSyncWorker();
 
   if (!server) {
     info("server.shutdown.complete", { signal, note: "server_not_running" });

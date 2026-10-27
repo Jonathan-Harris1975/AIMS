@@ -5,7 +5,7 @@ The authenticated AIMS `/kdp` service exposes two subservices backed by the KDP 
 - `KDP_publishing` prepares titles, uploads manuscript/cover files, updates categories and publishes Kindle Direct Publishing listings.
 - `KDP_audit` builds read-only reports from the D1 ebook catalogue and public Amazon product pages. An optional signed-in KDP audit collects setup metadata and price-band findings. Audit and royalty reports are stored privately.
 
-Audit runs are read-only. The audit can identify listing issues and return a report for the Council workflow; metadata and pricing changes are separate explicit operations. Monthly Council scheduling and automatic approval of changes are not configured here.
+Public audits automatically reconcile verified Kindle page-count differences to the D1 website catalogue. They do not change KDP listings; metadata and pricing changes on KDP are separate operations. Monthly Council scheduling and automatic approval of other changes are not configured here.
 
 The optional `mode: "kdp"` audit includes a per-market Kindle eBook price-band check. It uses KDP's published 70% royalty minimum and maximum list prices, and records the rule review date and source in each report. A price below the minimum is reported with the minimum as the recommended correction. The maximum is checked when the book uses the 70% plan. Updates are not applied by the audit itself. Pricing update requests are blocked when a Kindle price is below the applicable minimum, when a 70% plan price exceeds its maximum, or when the marketplace/currency cannot be safely mapped.
 
@@ -26,7 +26,9 @@ Set these Koyeb environment variables/secrets:
 | `KDP_D1_DATABASE_ID` | Website ebook catalogue D1 ID; defaults to the existing KDP catalogue database |
 | `KDP_CONTENT_MAX_BYTES` | Optional maximum staged manuscript/cover size; defaults to 200 MiB |
 | `R2_BUCKET_KDP` | Private R2 bucket name; set to `kdp` |
-| `D1_API_KEY` | Cloudflare API token with read access to the KDP catalogue D1 database |
+| `D1_API_KEY` | Cloudflare API token with read and write access to the KDP catalogue D1 database |
+| `WEBSITE_REBUILD_HOOK`, `WEBSITE_REBUILD_HOOK_FALLBACK` | Existing private Cloudflare Pages build hooks used after a catalogue update |
+| `CLOUDFLARE_ZONE_ID`, `CLOUDFLARE_PURGE_API_TOKEN` | Existing cache purge configuration used to refresh the D1 catalogue API before a build |
 | `R2_ENDPOINT`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` | Existing AIMS R2 credentials, scoped to the private bucket |
 | `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` | Optional Chromium executable override; defaults to `/usr/bin/chromium` |
 
@@ -64,6 +66,8 @@ All routes require the normal AIMS bearer authentication. Long-running browser o
 | POST | `/kdp/audit/metadata/update` and `/batch` | Preview explicit metadata changes; `dryRun` defaults to true |
 | POST | `/kdp/audit/pricing/update` and `/batch` | Preview explicit pricing changes; `dryRun` defaults to true |
 | GET | `/kdp/audit/reports/latest` | Read the latest private audit report |
+| GET | `/kdp/audit/page-count-sync` | Read outstanding page-count and website rebuild reconciliation status |
+| POST | `/kdp/audit/page-count-sync/retry` | Retry outstanding page-count reconciliation immediately |
 | POST | `/kdp/audit/reports/download` | Download and store KDP royalty reports privately |
 | POST | `/kdp/publishing/titles/create` | Create a KDP title draft |
 | POST | `/kdp/publishing/content/upload` and `/batch` | Stage a private R2 manuscript/cover; `dryRun` defaults to true |
@@ -75,6 +79,8 @@ All routes require the normal AIMS bearer authentication. Long-running browser o
 Every live publish requires `dryRun: false`, `publish: true`, and an `X-Idempotency-Key`. Content upload and metadata/pricing updates are dry-run by default; set `dryRun: false` to apply. Deleting, archiving, and unpublishing require `confirm: true` in addition to a separate explicit request.
 
 The default audit uses each D1 ASIN to form a marketplace-specific Amazon URL; it does not follow catalogue redirect URLs. It fetches pages sequentially, validates the page ASIN before associating data with a book, and stops fetching after an Amazon block. A report includes every D1 book even when a page is unavailable, with `publicAudit.statusCounts`, per-book status, capture time and field availability. `complete: false` means at least one page could not be captured. D1 page counts and descriptions are reported as catalogue values, separate from observed Amazon values. Public categories and prices are marketplace observations, not proof of the KDP setup selections or royalty plan. Keywords, drafts, setup fields, and KDP title IDs require the separate signed-in audit. The default audit does not discover books absent from D1 and does not reconcile the KDP account catalogue size.
+
+For a captured Kindle ASIN, an explicitly labelled Amazon `Print length` can update a different D1 `page_count`. The service checks the ASIN, count and slug, records an intent in private R2 before writing, and uses a conditional update to protect concurrent catalogue edits. The public audit does not update from a blocked, unverified, ambiguous or missing value. Before applying updates the rebuild hook and cache purge configuration must be present. After changes it purges the ebook API cache and triggers one website build. A background worker retries pending work every five minutes and confirms the live book's ASIN, visible length and Book schema page count; an accepted build hook alone is not considered confirmation. Pending sync status is available through `/kdp/audit/page-count-sync`. Build failures, missing permissions, inaccessible Amazon pages and stale website pages remain pending for retry rather than being reported as verified. D1 write permission and the existing Cloudflare cache purge credentials are required.
 
 Existing clients that rely on `metadataAnalysis`, `priceFloorAnalysis`, `catalogueComparison`, or `syncStats` should explicitly request `{"mode":"kdp"}`. Reports from the default mode use `publicAudit` instead.
 

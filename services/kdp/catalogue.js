@@ -117,6 +117,26 @@ export async function getKdpEbookByAsin(asin) {
   return row ? mapBook(row) : null;
 }
 
+/** Compare-and-swap avoids overwriting a concurrent catalogue edit. */
+export async function updateKdpEbookPageCount({ ebookId, asin, previousPageCount, pageCount }) {
+  if (!Number.isSafeInteger(ebookId) || ebookId <= 0 || !/^B0[A-Z0-9]{8}$/.test(asin) ||
+      !Number.isSafeInteger(pageCount) || pageCount < 1 || pageCount > 10000 ||
+      !(previousPageCount === null || (Number.isSafeInteger(previousPageCount) && previousPageCount >= 0))) {
+    throw new TypeError("Invalid verified ebook page-count update.");
+  }
+  const result = await getKdpD1Client().query(
+    "UPDATE ebooks SET page_count = ?, updated_at = datetime('now') WHERE ebook_id = ? AND UPPER(asin) = ? AND page_count IS ?",
+    [pageCount, ebookId, asin, previousPageCount],
+  );
+  if (Number(result.meta?.changes) === 1) return { status: "updated" };
+  let current;
+  try { current = await getKdpEbookById(ebookId); } catch (error) {
+    if (error?.code === "kdp_ebook_not_found") return { status: "conflict" };
+    throw error;
+  }
+  return { status: current.asin.toUpperCase() === asin && current.pageCount === pageCount ? "already_updated" : "conflict" };
+}
+
 export function kdpCatalogueConfiguration() {
   return {
     configured: Boolean(process.env.D1_API_KEY && (process.env.KDP_D1_DATABASE_ID || "5f42a55b-c2bc-42a0-8337-1318e2c48ae7")),

@@ -18,6 +18,7 @@ import { readRecoveryLearnings } from "./engine/kdpRecoveryStore.ts";
 import { readSessionMeta, removeSession } from "./engine/session.ts";
 import { getKdpEbookByAsin, getKdpEbookById, listKdpEbooks } from "./catalogue.js";
 import { auditPublicCatalogue } from "./publicListingAudit.js";
+import { listPageCountSync, queuePageCountSync, reconcilePageCountSync } from "./pageCountSync.js";
 import { getKdpReadiness } from "./readiness.js";
 import {
   downloadKdpObjectToTempFile,
@@ -400,19 +401,29 @@ router.post("/audit/run", requestDedupe("kdp:audit-run"), asyncRoute(async (req,
     if (mode === "public") {
       const catalogue = await listKdpEbooks();
       const publicAudit = await auditPublicCatalogue(catalogue, { marketplace });
+      // A failed intent write must fail the job: no durable retry exists yet.
+      const queued = await queuePageCountSync(runId, publicAudit);
+      let pageCountSync = { queued: queued.queued, status: queued.key ? "retry_pending" : "no_changes" };
+      try {
+        const pending = await reconcilePageCountSync();
+        const current = pending.find((entry) => entry.key === queued.key);
+        pageCountSync = { ...pageCountSync, ...(current || {}), pending };
+      } catch {
+        pageCountSync = { ...pageCountSync, status: "retry_pending" };
+      }
       const report = {
         ok: true, service: "KDP_audit", mode, runId, createdAt,
-        completedAt: new Date().toISOString(), publicAudit,
+        completedAt: new Date().toISOString(), publicAudit, pageCountSync,
         complete: publicAudit.catalogueBooks > 0 && publicAudit.notCaptured === 0,
-        changesApplied: false,
-        message: "Read-only public listing audit. Catalogue values are from D1; Amazon values are reported separately. KDP setup data requires mode=kdp.",
+        changesApplied: pageCountSync.updated > 0 ? true : pageCountSync.status === "retry_pending" ? null : false,
+        message: "Verified Kindle page-count differences are reconciled to D1 and followed by a website rebuild. No KDP listings are changed.",
       };
       const reportRef = await persistKdpAuditReport(report);
       const { putPrivateJson } = await import("../shared/utils/r2-client.js");
       await putPrivateJson("kdp", "audit/reports/latest.json", { runId, createdAt, reportRef });
       return { ok: true, service: "KDP_audit", mode, runId, createdAt, complete: report.complete,
         bookCount: publicAudit.catalogueBooks, captured: publicAudit.captured, notCaptured: publicAudit.notCaptured,
-        statusCounts: publicAudit.statusCounts, reportRef };
+        statusCounts: publicAudit.statusCounts, pageCountSync, reportRef };
     }
     const cache = await syncAllBookMetadata();
     const snapshotRef = await persistKdpMetadata(cache);
@@ -458,6 +469,14 @@ router.post("/audit/run", requestDedupe("kdp:audit-run"), asyncRoute(async (req,
     };
   });
 }));
+
+router.get("/audit/page-count-sync", asyncRoute(async (_req, res) => {
+  res.set("Cache-Control", "no-store");
+  return res.json({ ok: true, pending: await listPageCountSync() });
+}));
+
+router.post("/audit/page-count-sync/retry", requestDedupe("kdp:page-count-sync"), asyncRoute(async (req, res) =>
+  startJob(req, res, "page-count-sync", async () => ({ ok: true, results: await reconcilePageCountSync() }))));
 
 router.post("/audit/reports/download", requestDedupe("kdp:royalty-report"), asyncRoute(async (req, res) => startJob(req, res, "audit-royalty-report", async () => {
   const raw = requireObjectBody(req.body);
