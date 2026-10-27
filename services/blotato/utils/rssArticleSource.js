@@ -192,7 +192,7 @@ function editorialTopicScore(item = {}, topicSeed = "") {
   return required.filter((token) => available.has(token)).length / Math.min(required.length, 8);
 }
 
-function pickItem(items = [], { topicSeed = "" } = {}) {
+function pickItem(items = [], { topicSeed = "", laneSlug = "" } = {}) {
   const usable = items
     .filter((item) => item.title && (item.summary || item.link))
     .map((item) => ({ ...item }))
@@ -247,7 +247,7 @@ export async function selectRssArticleForBlotato({ laneSlug = "", topicSeed = ""
     try {
       debug("blotato.rss.load.start", { source: loader.label, lane: laneSlug || "default" });
       const items = await loader.run();
-      const article = pickItem(items, { topicSeed });
+      const article = pickItem(items, { topicSeed, laneSlug });
       if (article) {
         delete article._pubDateMs;
         debug("blotato.rss.load.complete", { source: loader.label, lane: laneSlug || "default", title: article.title });
