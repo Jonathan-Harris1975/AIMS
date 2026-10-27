@@ -104,7 +104,7 @@ export function compareListing(book, publicData) {
     const normalize = (value) => String(value).normalize("NFKC").replace(/\s+/g, " ").trim().toLowerCase();
     const status = !present(catalogueValue) || !present(amazonValue) ? "not_captured" :
       normalize(catalogueValue) === normalize(amazonValue) ? "match" : "different";
-    comparisons[field] = { status, catalogueValue: catalogueValue || null, amazonValue: amazonValue || null };
+    comparisons[field] = { status, catalogueValue: catalogueValue ?? null, amazonValue: amazonValue ?? null };
   }
   return comparisons;
 }
