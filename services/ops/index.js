@@ -15,6 +15,7 @@ import {
   operationWindowNeedsRecovery,
   OPERATION_RECOVERY_REVISION,
   PODCAST_RECOVERY_REVISION,
+  NEWSLETTER_RECOVERY_REVISION,
   persistOperationWindow,
 } from "./operationWindowState.js";
 import { info, warn } from "../../logger.js";
@@ -836,7 +837,11 @@ router.post("/run/:window", async (req, res, next) => {
       maxAttempts,
       recoveryCooldownMs,
       staleAfterMs,
-      recoveryRevision: windowName === "friday-pm" ? PODCAST_RECOVERY_REVISION : OPERATION_RECOVERY_REVISION,
+      recoveryRevision: windowName === "friday-pm"
+        ? PODCAST_RECOVERY_REVISION
+        : tasks.some(([taskName]) => taskName === "newsletter-generate")
+          ? NEWSLETTER_RECOVERY_REVISION
+          : OPERATION_RECOVERY_REVISION,
     });
     if (!durableClaim.claimed) {
       if (durableClaim.receipt) operationJobs.set(id, durableClaim.receipt);
