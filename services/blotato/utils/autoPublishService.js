@@ -1956,7 +1956,7 @@ async function runPublishJob({
     // Keep an already-created asset only when reconciling this exact pending
     // publication and confirming it already has audio narration. New scheduled
     // posts use static visual-aid cards paired with a spoken narration track.
-    const reusedVideo = recoveredPublishVideo && (recoveredPublishVideo.staticCardVisuals === true && recoveredPublishVideo.audioNarration === true)
+    const reusedVideo = recoveredPublishVideo && recoveredPublishVideo.staticCardVisuals === true && recoveredPublishVideo.audioNarration === true
       ? recoveredPublishVideo
       : null;
     let localCreditFallback = null;
