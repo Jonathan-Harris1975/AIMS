@@ -19,6 +19,7 @@ import { readSessionMeta, removeSession } from "./engine/session.ts";
 import { getKdpEbookByAsin, getKdpEbookById, listKdpEbooks } from "./catalogue.js";
 import { auditPublicCatalogue } from "./publicListingAudit.js";
 import { listPageCountSync, queuePageCountSync, reconcilePageCountSync } from "./pageCountSync.js";
+import { readWeeklyResearchState } from "./researchWorker.js";
 import { getKdpReadiness } from "./readiness.js";
 import {
   downloadKdpObjectToTempFile,
@@ -31,6 +32,14 @@ import {
 
 const router = express.Router();
 const ASYNC_STATUS_BASE = "/kdp/jobs";
+
+router.get("/research/weekly", async (req, res, next) => {
+  try {
+    const state = await readWeeklyResearchState();
+    res.set("Cache-Control", "no-store");
+    res.json({ ok: true, state });
+  } catch (error) { next(error); }
+});
 
 function asyncRoute(handler) {
   return (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next);
