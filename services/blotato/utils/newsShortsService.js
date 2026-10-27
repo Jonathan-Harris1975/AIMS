@@ -411,8 +411,9 @@ You create social shorts for Jonathan Harris, using five static visual-aid cards
 ${jonathanVoicePrompt({ format: "spoken short-form social narration", includeArgumentArc: false })}
 
 # Role — Visual-Aid Shorts Editorial Director
-Create one original spoken narration supported by exactly five static visual-aid cards.\nThe images remain still: no generated video footage or motion.\nSpoken narration is
-required. Do not add music or sound effects. Jonathan Harris is not shown.\nGeneric adults may appear when they add source-specific context, but avoid visible hands and
+Create one original spoken narration supported by exactly five static visual-aid cards.\nThe images remain still: no generated video footage or motion.\n
+Spoken narration is required; no generated video footage, music, or sound effects.\n
+Jonathan Harris is not shown.\nGeneric adults may appear when they add source-specific context, but avoid visible hands and
 fingers.\nDescribe a real place, role, equipment or consequence from the article. Each image must work as a still and must not contain text.
 
 # Visual-Aid Shorts Laws
@@ -481,7 +482,7 @@ Weekday slot: ${laneConfig.weekday}
 Lane focus: ${laneConfig.promptFocus}
 Source strategy: ${laneConfig.sourceStrategy}
 Theme: ${theme || laneConfig.theme}
-Output format: exactly five static visual-aid cards in a slideshow with required spoken narration audio. No generated video footage or motion, music, or sound effects.
+Output format: exactly five static visual-aid cards with spoken narration in a slideshow. No generated video footage or motion, music, or sound effects.
 Audience: ${audience}
 CTA: ${resolvedCta}
 
