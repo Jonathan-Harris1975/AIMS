@@ -73,7 +73,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `AUDIT_RUN_REUSE_ACTIVE_MS` | No | audits/utils/orchestrator.js:34 |
 | `AUDIT_WEBSITE_REPO_REF` | Yes | audits/utils/githubDispatch.js:35 |
 | `AUTO_CALL` | Yes | services/rss-feed-podcast/index.js:145 |
-| `AWS_REGION` | Yes | services/tts/utils/ttsProcessor.js:23 |
+| `AWS_REGION` | Yes | services/blotato/utils/localCreditFallbackVideo.js:15<br>services/tts/utils/ttsProcessor.js:23 |
 | `BACKFILL_TRANSCRIPT_HTML` | Yes | scripts/bootstrap.js:156 |
 | `BACKFILL_TRANSCRIPT_HTML_TIMEOUT_MS` | No | scripts/bootstrap.js:161 |
 | `BLOG_ARTWORK_BUCKET_ALIAS` | Yes | services/artwork/createBlogArtwork.js:54 |
@@ -361,7 +361,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `PODCAST_TRANSCRIPT_HTML_BASE_URL` | Yes | scripts/backfill-transcript-html.js:131<br>scripts/backfill-transcript-html.js:80<br>services/script/utils/orchestrator.js:401<br>services/tts/utils/podcastProcessor.js:152 |
 | `PODCAST_TRANSCRIPT_MAX_SENTENCE_WORDS` | Yes | services/script/utils/editAndFormat.js:197<br>services/script/utils/orchestrator.js:113<br>services/script/utils/orchestrator.js:318<br>services/script/utils/scriptValidation.js:294 |
 | `PODCAST_TRANSCRIPT_MIN_SOURCE_TERMS` | No | services/script/utils/scriptValidation.js:391 |
-| `POLLY_VOICE_ID` | Yes | services/tts/utils/ttsProcessor.js:24 |
+| `POLLY_VOICE_ID` | Yes | services/blotato/utils/localCreditFallbackVideo.js:19<br>services/blotato/utils/localCreditFallbackVideo.js:201<br>services/tts/utils/ttsProcessor.js:24 |
 | `PORT` | Yes | routes/podcast-pipeline.js:14<br>scripts/collectCommsWorkerHealth.js:7<br>scripts/deploySmoke.js:3<br>scripts/startupCheck.js:74<br>server.js:486<br>services/ops/index.js:428 |
 | `QA_ALERT_WEBHOOK_URL` | Yes | config/thresholds.js:100 |
 | `R2_ACCESS_KEY_ID` | Yes | audits/utils/publishAuditArtifacts.js:62<br>scripts/startupCheck.js:77 |
