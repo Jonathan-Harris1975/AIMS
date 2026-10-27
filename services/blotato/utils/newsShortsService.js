@@ -13,14 +13,12 @@ const TARGET_SCRIPT_WORDS = Math.max(MIN_SCRIPT_WORDS, Number(process.env.BLOTAT
 const MAX_SCRIPT_WORDS = Math.max(TARGET_SCRIPT_WORDS, Number(process.env.BLOTATO_NEWS_MAX_SCRIPT_WORDS || 102));
 const MIN_SCENE_VOICEOVER_WORDS = Math.max(75, Number(process.env.BLOTATO_NEWS_MIN_SCENE_WORDS || 80));
 
-// Brand kit — all visual and audio identity settings are env-configurable.
-const AI_STORY_VOICE = normaliseBlotatoVoiceName(process.env.BLOTATO_BRAND_VOICE_NAME);
+// Brand kit — silent card render settings are env-configurable.
 const AI_STORY_HIGHLIGHT = process.env.BLOTATO_BRAND_HIGHLIGHT_COLOR || "#00E5FF";
 const AI_STORY_CAPTION_POSITION = process.env.BLOTATO_BRAND_CAPTION_POSITION || "bottom";
 const AI_STORY_TRANSITION = process.env.BLOTATO_BRAND_TRANSITION || "fade";
 const AI_STORY_ASPECT_RATIO = process.env.BLOTATO_BRAND_ASPECT_RATIO || "9:16";
 const AI_STORY_ANIMATE_IMAGES = String(process.env.BLOTATO_BRAND_ANIMATE_IMAGES || "false").trim().toLowerCase() === "true";
-const AI_STORY_TRIM_TO_VOICEOVER = process.env.BLOTATO_BRAND_TRIM_TO_VOICEOVER !== "false";
 
 // Media generation cost preference labels. Current Blotato template requests are steered through prompt + template settings, not unsupported top-level model fields.
 const MAX_SCENES = Math.max(4, Math.min(9, Number(process.env.BLOTATO_VIDEO_SCENE_COUNT || 5)));
@@ -454,7 +452,7 @@ shoulders or place hands completely outside frame.
 - No corporate filler.
 - No generic setup language.
 - No metaphors or clichés.
-- Write for speaking, not reading. Contractions allowed. No academic language.
+- Write for quick silent reading, not speaking. Each scene script becomes visible card copy. Use one clear, complete sentence per card, aiming for 10–20 words. No academic language.
 - One idea per sentence. Never stack two concepts.
 - Rhythm matters: alternate short punchy lines with slightly longer ones.
 - Do not say what the visual already shows — say what it means.
@@ -482,7 +480,7 @@ ${structure}
 ${retryBrief}
 
 Return valid JSON only. The response must be one complete JSON object with double-quoted keys and no trailing text.`,
-    user: `Create one short-form AI social video pack.
+    user: `Create one five-card AI social briefing for silent visual-aid cards.
 
 Lane: ${laneConfig.slug}
 Lane label: ${laneConfig.label}
@@ -490,7 +488,7 @@ Weekday slot: ${laneConfig.weekday}
 Lane focus: ${laneConfig.promptFocus}
 Source strategy: ${laneConfig.sourceStrategy}
 Theme: ${theme || laneConfig.theme}
-Target duration: about ${targetDuration} seconds. Allowed finished range: ${MIN_DURATION_SECONDS}-${MAX_DURATION_SECONDS} seconds. Let the story earn its length rather than padding to the maximum.
+Output format: five static visual-aid cards in a silent slideshow. No narration, voice, music, sound effects, live action, or generated video footage.
 Audience: ${audience}
 CTA: ${resolvedCta}
 
@@ -562,12 +560,12 @@ company/number where supported plus a clear risk, cost, mistake, rule or contras
 - Avoid gimmicky robot clichés.
 - The first scene must support the hook.
 - The final scene must support the CTA or practical takeaway.
-- The combined scene scripts must contain enough spoken copy for a 35-55 second finished short, targeting about 45 seconds. Never return a thin or padded script.
+- The five scene scripts must form a clear visual-aid sequence. Keep each card readable at a glance and avoid padding.
 - The main script must be at least ${MIN_SCRIPT_WORDS} words and should land between ${MIN_SCRIPT_WORDS} and ${MAX_SCRIPT_WORDS} words.
 
 Output rules:
 - Keep the script specific to the source.
-- Write a complete usable voiceover, not a summary stub.
+- Write concise on-card copy for a silent visual-aid card sequence, not a voiceover.
 - Include a hook, the practical meaning, one clear risk or limitation, one useful action, and a soft CTA.
 - Never use engagement-bait CTA wording, including "follow for more", "please share", "smash the like", "tag a friend", "share this with", or "comment yes".
 - Do not use phrases like "game changer", "AI is changing everything", "you won't believe", "the future is here", or "this changes everything".
@@ -920,15 +918,13 @@ export function buildBlotatoVideoInputs(pack = {}) {
   const scenes = normaliseScenes(pack.scenes, pack);
   return {
     scenes,
-    voiceName: AI_STORY_VOICE,
-    aiImageModel: AI_STORY_IMAGE_MODEL,
+        aiImageModel: AI_STORY_IMAGE_MODEL,
     captionPosition: AI_STORY_CAPTION_POSITION,
     highlightColor: AI_STORY_HIGHLIGHT,
     transition: AI_STORY_TRANSITION,
     aspectRatio: AI_STORY_ASPECT_RATIO,
     animateAiImages: AI_STORY_ANIMATE_IMAGES,
-    trimToVoiceover: AI_STORY_TRIM_TO_VOICEOVER,
-    hook: cleanText(pack.hook || "", 180),
+        hook: cleanText(pack.hook || "", 180),
     title: cleanText(pack.youtubeTitle || pack.internalTitle || "", 90),
     thumbnailText: cleanText(pack.thumbnailText || pack.hook || pack.internalTitle || "", 60),
     visualStyle: HUMAN_VISUALS_ENABLED ? "human-centred premium editorial AI short" : "premium editorial AI short",
