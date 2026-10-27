@@ -8,7 +8,7 @@ function occurrences(text, needle) {
   return text.split(needle).length - 1;
 }
 
-test("weekday AM windows contain blog-social handoff and both Blotato schedule slots", () => {
+test("weekday AM windows keep the blog independent and schedule both Blotato slots", () => {
   const eveningPaths = {
     monday: "/blotato/shorts/news-insight/schedule",
     tuesday: "/blotato/shorts/model-verdict/schedule",
@@ -22,7 +22,7 @@ test("weekday AM windows contain blog-social handoff and both Blotato schedule s
       "friday"})[day]}-am": [`, start);
     const block = opsSource.slice(start, next);
     assert.equal(occurrences(block, '/blog/social/daily/build'), 1, `${day} must build one social-blog item`);
-    assert.equal(occurrences(block, '/zernio/blog-rss/daily'), 1, `${day} must schedule one social-blog item`);
+    assert.equal(occurrences(block, '/zernio/blog-rss/daily'), 0, `${day} must not recycle the social-blog item into Zernio`);
     assert.equal(occurrences(block, `/zernio/daily/${day}`), 1, `${day} must schedule one daily evergreen item`);
     assert.equal(occurrences(block, '/blotato/autoshorts/schedule'), 1, `${day} must have one Blotato AM slot`);
     assert.equal(occurrences(block, eveningPaths[day]), 1, `${day} must have one Blotato PM slot`);
