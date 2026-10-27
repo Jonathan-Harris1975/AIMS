@@ -601,7 +601,6 @@ test("Blotato publish-now endpoint requires explicit opt-in and runs the RSS-to-
   assert.ok(jobStatus.body.job.result.video.visualInputs.scenes.length >= 3);
   assert.equal(jobStatus.body.job.result.video.staticCardVisuals, true);
   assert.equal(jobStatus.body.job.result.video.audioNarration, true);
-  assert.equal(jobStatus.body.job.result.video.audioNarration, true);
   assert.equal(jobStatus.body.job.result.video.localCreditFallback, true);
   assert.equal(jobStatus.body.job.result.video.creditBudget.actualCreditsUsed, 0);
   assert.equal(jobStatus.body.job.result.video.templateId, null);
