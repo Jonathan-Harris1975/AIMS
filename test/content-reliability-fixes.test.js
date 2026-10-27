@@ -95,6 +95,7 @@ test("operation windows generate the newsletter independently before gating deli
   assert.match(ops, /newsletter-generate.*\/newsletter\/generate/);
   assert.match(ops, /newsletter-readiness.*newsletter-generate/);
   assert.match(ops, /newsletter-send.*newsletter-readiness/);
+  assert.match(ops, /booleanEnv\("AIMS_OPERATION_NEWSLETTER_ENABLED", true\)/);
   assert.doesNotMatch(ops, /newsletter-generate.*"rss-rewrite"/);
   assert.match(ops, /operation-dependency-not-ready/);
 });
@@ -319,9 +320,9 @@ test("social providers are production schedule-only and the weekday window owns 
     '["blotato-am", "/blotato/autoshorts/schedule"',
     '["zernio-monday", "/zernio/daily/monday"',
     '["blog-social", "/blog/social/daily/build"',
-    '["zernio-blog-social", "/zernio/blog-rss/daily"',
     '["blotato-pm", "/blotato/shorts/news-insight/schedule"',
   ]) assert.ok(ops.includes(contract), `missing social operation task: ${contract}`);
+  assert.equal(ops.includes('["zernio-blog-social", "/zernio/blog-rss/daily"'), false);
   assert.ok(ops.includes('const DEFERRED_OPERATION_TASKS = new Set();'));
 });
 
