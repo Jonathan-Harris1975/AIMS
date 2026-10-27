@@ -94,7 +94,7 @@ export async function runResearchTick({
       state.completed = false;
       await writeState(state);
     }
-    if (state.completed) return { status: "already_complete", week };
+    if (state.completed) return { status: "already_complete", week, listingUpdates: 0, proposalCounts: countProposals(state.results) };
     if (state.pending.length && inWeeklyWindow(now(), "update") && londonWeek(now()) === week) {
       const book = state.pending[0];
       const maxRequests = Number(env.KDP_RESEARCH_MONTHLY_SEARCH_LIMIT || 900);
@@ -136,8 +136,18 @@ export async function runResearchTick({
       await writeState(state);
     }
     if (!state.pending.length) { state.completed = true; await archive(week, state); await writeState(state); }
-    return { status: state.completed ? "complete" : "pending", week, processed: state.results.length, pending: state.pending.length };
+    return { status: state.completed ? "complete" : "pending", week, processed: state.results.length, pending: state.pending.length,
+      listingUpdates: 0, proposalCounts: countProposals(state.results) };
   } finally { await release(acquired.lease); }
+}
+
+function countProposals(results = []) {
+  const counts = {};
+  for (const item of results) {
+    const status = item.optimisation?.status || "unavailable";
+    counts[status] = (counts[status] || 0) + 1;
+  }
+  return counts;
 }
 
 export async function runResearchBatch({ tick = runResearchTick, pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms)) } = {}) {
