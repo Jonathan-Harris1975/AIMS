@@ -358,7 +358,6 @@ const ASYNC_TASK_ROUTES = Object.freeze({
   "/blog/social/daily/build": { statusBase: "/blog/social/jobs", lane: "daily-build" },
   "/blog/weekly/build": { statusBase: "/blog/weekly/jobs", lane: "weekly-build" },
   "/newsletter/generate": { statusBase: "/newsletter/jobs", lane: "generate" },
-  "/zernio/blog-rss/daily": { statusBase: "/zernio/jobs", lane: "blog-rss-daily" },
   "/zernio/ebooks/weekly": { statusBase: "/zernio/jobs", lane: "ebooks-weekly" },
   "/zernio/quiz/weekly": { statusBase: "/zernio/jobs", lane: "quiz-weekly" },
   "/zernio/daily/monday": { statusBase: "/zernio/jobs", lane: "daily-monday" },
