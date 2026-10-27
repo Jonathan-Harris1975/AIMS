@@ -1717,9 +1717,12 @@ async function runPublishJob({
     });
     const channelPreflight = await runBlotatoStep0Preflight({ platforms, apiKey });
 
-    updateJob(lane.jobType, sessionId, { phase: "template-resolution", channelPreflight });
-    const templateResolution = await resolveVideoTemplateId({ requestedTemplateId: defaults.templateId, apiKey, autoDiscoveryOverride: templateIdOverride ? false : null });
-    const templateId = templateResolution.templateId;
+    updateJob(lane.jobType, sessionId, { phase: "silent-card-render-mode", channelPreflight });
+    const templateResolution = {
+      mode: "silent-visual-aid-cards",
+      providerTemplateRequired: false,
+    };
+    const templateId = null;
 
     const scriptOptions = {
       article: articleSource.article,
