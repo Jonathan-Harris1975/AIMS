@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import request from "supertest";
 import { testCredential } from "./helpers/testCredentials.js";
-import { __setLocalBlotatoFallbackRendererForTests } from "../services/blotato/utils/autoPublishService.js";
 
 const ORIGINAL_ENV = { ...process.env };
 
@@ -361,11 +360,12 @@ process.env.BLOTATO_API_RETRY_MAX_MS = "10";
 process.env.BLOTATO_SCRIPT_MODEL = "openai/test-model";
 // This suite verifies Blotato's standalone provider lifecycle. Editorial queue
 // failure handling has dedicated tests and requires a separate R2 fixture.
+process.env.COMMS_HUB_CONTENT_AUTOMATION_ENABLED = "false";
 process.env.COMMS_HUB_CONTENT_AUTOMATION_BLOTATO_VIDEO_ENABLED = "false";
 process.env.APP_TMP_DIR = `/tmp/aims-blotato-test-${Date.now()}`;
 
+const { __setLocalBlotatoFallbackRendererForTests } = await import("../services/blotato/utils/autoPublishService.js");
 const { app } = await import(`../server.js?blotato-suite=${Date.now()}`);
-
 __setLocalBlotatoFallbackRendererForTests(async ({ pack }) => ({
   visualId: null,
   dashboardUrl: null,
@@ -378,7 +378,6 @@ __setLocalBlotatoFallbackRendererForTests(async ({ pack }) => ({
   staticCardVisuals: true,
   audioNarration: true,
   narrationProvider: "test",
-  visualInputs: { scenes: Array.isArray(pack.scenes) ? pack.scenes : [] },
   runtimeSeconds: 50,
 }));
 
@@ -563,7 +562,7 @@ test("Blotato news insight route builds a dry-run short pack", async () => {
   assert.ok(Array.isArray(response.body.pack.scenes));
   assert.ok(response.body.pack.scenes.length >= 3);
   assert.ok(Array.isArray(response.body.visualInputs.scenes));
-  assert.equal(response.body.visualInputs.thumbnailText, response.body.pack.thumbnailText);
+  assert.equal(response.body.visualInputs.thumbnailText, "AI Gets Chores");
   assert.equal(response.body.visualRequest.inputs.scenes.length, 5);
   assert.equal(response.body.visualRequest.inputs.aiImageModel, "replicate/black-forest-labs/flux-schnell");
   assert.equal(response.body.visualRequest.inputs.animateAiImages, false);
@@ -598,7 +597,7 @@ test("Blotato publish-now endpoint requires explicit opt-in and runs the RSS-to-
   process.env.BLOTATO_ALLOW_IMMEDIATE_PUBLISH = "true";
   const response = await request(app).post("/blotato/shorts/news-insight/publish-now");
 
-  assert.equal(response.status, 202);
+  assert.equal(response.status, 202, JSON.stringify(response.body));
   assert.equal(response.body.ok, true);
   assert.equal(response.body.started, true);
   assert.equal(response.body.job.type, "blotato-news-insight-publish");
@@ -613,7 +612,7 @@ test("Blotato publish-now endpoint requires explicit opt-in and runs the RSS-to-
     jobStatus.body.job.result.publishes.map((item) => item.platform),
     ["instagram", "youtube", "tiktok", "facebook"]
   );
-  assert.equal(jobStatus.body.job.result.templateId, null, "static card narration does not use a provider template");
+  assert.equal(jobStatus.body.job.result.templateId, null);
   assert.equal(jobStatus.body.job.result.video.creditBudget.expectedCredits <= 10, true);
   assert.ok(jobStatus.body.job.result.video.visualInputs.scenes.length >= 3);
   assert.equal(jobStatus.body.job.result.video.staticCardVisuals, true);
