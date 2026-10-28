@@ -1,3 +1,4 @@
+import { currentTaskRepairBudget, claimRepairAction } from "../shared/utils/taskRepairBudget.js";
 import { createRepairHistory, currentRepairScope, withRepairHistory } from "../shared/utils/repairHistory.js";
 import { warn } from "../../logger.js";
 import { THRESHOLDS } from "../../config/thresholds.js";
@@ -614,7 +615,13 @@ export async function runReviewCouncilGate({
   let stagnantAttempts = 0;
   const stagnationLimit = Math.max(1, Math.min(3, Number(process.env.REVIEW_COUNCIL_STAGNATION_LIMIT || 2)));
 
+  let budgetExhausted = false;
   for (let attempt = 1; attempt <= effectiveMaxAttempts; attempt += 1) {
+    try { claimRepairAction(); } catch (error) {
+      if (error.code !== "AI_TASK_REPAIR_BUDGET_EXHAUSTED") throw error;
+      budgetExhausted = true;
+      break;
+    }
     repairedArtifact = await withRepairHistory(repairHistory, { stage: councilKey, attempt }, () =>
       repairArtifact(currentArtifact, { contentType, gate: currentGate, attempt, repairHistory: repairHistory.snapshot() }));
     repairedGate = validate ? await validate(repairedArtifact) : currentGate;
@@ -638,6 +645,7 @@ export async function runReviewCouncilGate({
     });
 
     if (repairedGate?.ok) break;
+    if (JSON.stringify(repairedArtifact) === JSON.stringify(currentArtifact)) break;
 
     const fingerprint = JSON.stringify({
       score: repairedGate?.score ?? null,
@@ -682,7 +690,7 @@ export async function runReviewCouncilGate({
     Number(repairedGate?.hardFailureCount || 0) > 0 || (repairedGate?.hardDefects?.length) ||
     /source|fact|hallucin|invent|unsafe|safety|schema|structured data|required|missing|invalid link|broken link|mismatch/.test(defectText)
   );
-  const withinTolerance = !repairedGate?.ok && !hardBlock && toleranceFloor !== null &&
+  const withinTolerance = !budgetExhausted && !repairedGate?.ok && !hardBlock && toleranceFloor !== null &&
     Number(repairedGate?.score) >= toleranceFloor;
   if (withinTolerance) {
     repairedGate = { ...repairedGate, ok: true, acceptedWithinTolerance: true, toleranceFloor, expectedThreshold };
@@ -703,6 +711,8 @@ export async function runReviewCouncilGate({
     ],
   });
   reviewCouncil.repairHistory = repairHistory.snapshot();
+  reviewCouncil.taskBudget = currentTaskRepairBudget()?.snapshot() || null;
+  reviewCouncil.budgetExhausted = budgetExhausted;
   reviewCouncil.attemptLog = attemptLog;
   reviewCouncil.attemptsUsed = attemptLog.length;
   reviewCouncil.maximumAttemptsAllowed = effectiveMaxAttempts;

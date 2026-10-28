@@ -1,11 +1,15 @@
+import { createValidatedResultCache, qaFingerprint } from "../../shared/utils/validatedResultCache.js";
+import { claimRepairAction } from "../../shared/utils/taskRepairBudget.js";
 // Dedicated full-seat editorial council for AI Edge. The council is expensive
 // by design and is only reached after the cheaper self-improvement loop fails.
 
-import { resilientRequest } from "../../shared/utils/ai-service.js";
+import { resilientRequest, getProviderDiagnosticsForRoute } from "../../shared/utils/ai-service.js";
 import { parseStructuredJson, strictJsonResponseFormat } from "../../shared/utils/structuredJson.js";
 import { THRESHOLDS } from "../../../config/thresholds.js";
 import { getReviewCouncilDefinition, getReviewCouncilMembers, isReviewCouncilEnabled } from "../../content-quality/reviewCouncil.js";
 import { warn } from "../../../logger.js";
+
+const passingReviews = createValidatedResultCache();
 
 const REVIEW_SCHEMA = Object.freeze({
   type: "object",
@@ -74,8 +78,16 @@ function payloadForMember(member, { profile, draft, sources }) {
 }
 
 async function requestCouncilJson(route, { sessionId, messages, maxTokens = 900, schema = REVIEW_SCHEMA } = {}) {
+  const cacheKey = qaFingerprint({ version: 1, route, messages, maxTokens, schema,
+    threshold: THRESHOLDS.newsletter.qaPassThreshold,
+    providers: getProviderDiagnosticsForRoute(route),
+    providerPolicy: Object.entries(process.env).filter(([key]) => /^OPENROUTER_(PROVIDER_|SORT_BY|DATA_COLLECTION|SERVICE_TIER)/.test(key)).sort(),
+  });
+  const cached = passingReviews.get(cacheKey);
+  if (cached) return { ...cached.data, reviewReused: true };
   let lastError = null;
   for (let attempt = 1; attempt <= 2; attempt += 1) {
+    if (attempt > 1) claimRepairAction("recoveries");
     const raw = await resilientRequest(route, {
       sessionId,
       max_tokens: maxTokens,
@@ -86,7 +98,14 @@ async function requestCouncilJson(route, { sessionId, messages, maxTokens = 900,
         ? messages
         : [messages[0], { role: "user", content: `${messages[1]?.content || ""}\n\nReturn one valid JSON object only.` }],
     });
-    try { return parseStructuredJson(raw, "newsletter council response"); }
+    try {
+      const data = parseStructuredJson(raw, "newsletter council response");
+      if (Number.isFinite(data.score) && data.score >= THRESHOLDS.newsletter.qaPassThreshold &&
+          data.blocking === false && data.verdict === "pass" && Array.isArray(data.issues)) {
+        passingReviews.put(cacheKey, { pass: true, data });
+      }
+      return data;
+    }
     catch (error) { lastError = error; }
   }
   throw lastError || new Error("Council response was not valid JSON.");
@@ -113,6 +132,7 @@ async function runMember(member, context, sessionId) {
   return {
     seat: member.seat,
     role: member.role,
+    reviewReused: data.reviewReused === true,
     authority: member.authority,
     score,
     verdict: score >= THRESHOLDS.newsletter.qaPassThreshold && !blocking ? "pass" : "revise",
@@ -169,7 +189,7 @@ export async function runNewsletterEditorialCouncil({ profile, newsletter, lead,
             "Set blocking=true only for an unresolved publication blocker; minor monthly-audit-level polish is non-blocking. " +
             'Return JSON only: {"score":number,"verdict":"pass"|"revise","blocking":boolean,"issues":[string],"priorityFixes":[string]}.',
         },
-        { role: "user", content: JSON.stringify({ reports, draft }, null, 2) },
+        { role: "user", content: JSON.stringify({ reports: reports.map(({ reviewReused, ...report }) => report), draft, sourceFingerprint: qaFingerprint(sources) }, null, 2) },
       ],
     });
 
@@ -177,6 +197,7 @@ export async function runNewsletterEditorialCouncil({ profile, newsletter, lead,
     const chairBlocking = chairData.blocking === true;
     const chair = {
       seat: 1,
+      reviewReused: chairData.reviewReused === true,
       role: chairMember.role,
       authority: chairMember.authority,
       score: chairScore,

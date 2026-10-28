@@ -1,3 +1,4 @@
+import { withTaskRepairBudget, claimRepairAction } from "../../shared/utils/taskRepairBudget.js";
 import { info, error, debug, warn } from "../../../logger.js";
 import { getObjectAsText, putText, putJson } from "../../shared/utils/r2-client.js";
 import {
@@ -432,7 +433,7 @@ async function repairSocialPackageForCouncil({ sessionId, dateLabel, items, edit
     summary: cleanSourceText(item?.rewritten || item?.summary || item?.description || item?.contentSnippet || "").slice(0, 800),
   }));
   try {
-    const raw = await resilientRequest("blogSocial", {
+    const raw = await resilientRequest("targetedRepair", {
       sessionId,
       messages: [
         { role: "system", content: "You are the repair editor for premium social content from a recognised British AI industry expert. Preserve strong copy. Fix only the listed \
@@ -540,6 +541,7 @@ async function generateStructuredSocialPackage({ sessionId, dateLabel, items, ed
     });
 
     try {
+      claimRepairAction();
       raw = await resilientRequest("blogSocial", {
         sessionId,
         messages: [
@@ -646,7 +648,7 @@ Repair instructions:
   return { ...socialPackage, topic_fidelity: brandCheck.topicFidelity };
 }
 
-export async function buildDailySocialBlogPost({
+async function buildDailySocialBlogPostImpl({
   date,
   days = 1,
   dryRun = false,
@@ -1488,4 +1490,8 @@ export async function buildDailySocialBlogPost({
       });
     }
   }
+}
+
+export async function buildDailySocialBlogPost(options = {}) {
+  return withTaskRepairBudget(() => buildDailySocialBlogPostImpl(options), { repairs: 4, recoveries: 4 });
 }

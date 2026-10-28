@@ -1,3 +1,4 @@
+import { withTaskRepairBudget } from "../../shared/utils/taskRepairBudget.js";
 import { readFileSync } from "node:fs";
 import { resilientRequest } from "../../shared/utils/ai-service.js";
 import { info, warn } from "../../../logger.js";
@@ -491,7 +492,7 @@ industry|task where AI helps|first-person|reader prompt|repetition guard blocked
 async function repairZernioPostWithSemanticModel(candidate, { laneKey = "", gate = {}, attempt = 1, semanticContext = {} } = {}) {
   if (!laneKey || !gateNeedsSemanticRepair(gate)) return candidate;
   const prompt = buildZernioSemanticRepairPrompt({ laneKey, post: candidate, gate, attempt, semanticContext });
-  const raw = await resilientRequest("zernioDaily", {
+  const raw = await resilientRequest("targetedRepair", {
     sessionId: `ZERNIO-${laneKey.toUpperCase()}-GATE-REPAIR-${attempt}-${Date.now()}`,
     messages: [
       { role: "system", content: prompt.system },
@@ -1554,7 +1555,7 @@ panels or labelled diagrams.",
 }
 
 
-export async function buildAndScheduleDailyLane(laneKey, options = {}) {
+async function buildAndScheduleDailyLaneImpl(laneKey, options = {}) {
   const lane = LANE_CONFIG[laneKey];
   if (!lane) {
     const err = new Error(`Unsupported lane '${laneKey}'`);
@@ -2173,7 +2174,7 @@ export async function buildAndScheduleDailyLaneAccountVariants(laneKey, options 
   return { ...primaryResult, accountVariants: variantResults };
 }
 
-export async function buildAndScheduleWeeklyMiniSeries(options = {}) {
+async function buildAndScheduleWeeklyMiniSeriesImpl(options = {}) {
   const weekStartDate = options.weekStartDate || nextWeekdayDateString("monday", DEFAULT_TIMEZONE, new Date());
   const profileName = options.profileName || ZERNIO_PROFILE_NAME_GENERAL;
   const accountId = normaliseZernioAccountId(options.accountId || getZernioAccountId());
@@ -3192,7 +3193,7 @@ export async function buildAndSchedulePodcastThursdayPromo(options = {}) {
   }
 }
 
-export async function buildAndScheduleEbookWeekly(options = {}) {
+async function buildAndScheduleEbookWeeklyImpl(options = {}) {
   const weekStartDate = options.weekStartDate || nextWeekdayDateString("monday", DEFAULT_TIMEZONE, new Date());
   const profileName = options.profileName || ZERNIO_PROFILE_NAME_EBOOKS;
   const accountId = normaliseZernioAccountId(options.accountId || getZernioAccountId());
@@ -3538,7 +3539,7 @@ function buildQuizAnswerArtworkPrompt({ title, topic, question, options, correct
   ].join("\n");
 }
 
-export async function buildAndScheduleQuizSeries(options = {}) {
+async function buildAndScheduleQuizSeriesImpl(options = {}) {
   const questionPublishDate = options.questionPublishDate || nextWeekdayDateString("wednesday", DEFAULT_TIMEZONE, new Date());
   const answerPublishDate = options.answerPublishDate || addDays(questionPublishDate, 1);
   let questionDateTime = options.questionScheduledDateTime || toScheduledDateTime(questionPublishDate, QUIZ_CONFIG.questionPublishTime);
@@ -3950,4 +3951,20 @@ ${answerPost.content}`,
     await releaseScheduleSlot(answerSlotClaim);
     throw error;
   }
+}
+
+export async function buildAndScheduleDailyLane(laneKey, options = {}) {
+  return withTaskRepairBudget(() => buildAndScheduleDailyLaneImpl(laneKey, options), { repairs: 4, recoveries: 4 });
+}
+
+export async function buildAndScheduleWeeklyMiniSeries(options = {}) {
+  return withTaskRepairBudget(() => buildAndScheduleWeeklyMiniSeriesImpl(options), { repairs: 24, recoveries: 4 });
+}
+
+export async function buildAndScheduleEbookWeekly(options = {}) {
+  return withTaskRepairBudget(() => buildAndScheduleEbookWeeklyImpl(options), { repairs: 12, recoveries: 4 });
+}
+
+export async function buildAndScheduleQuizSeries(options = {}) {
+  return withTaskRepairBudget(() => buildAndScheduleQuizSeriesImpl(options), { repairs: 8, recoveries: 4 });
 }

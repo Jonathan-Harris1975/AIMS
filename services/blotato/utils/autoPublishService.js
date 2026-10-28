@@ -1,3 +1,4 @@
+import { withTaskRepairBudget } from "../../shared/utils/taskRepairBudget.js";
 import { randomBytes } from "node:crypto";
 import {
   beginJob,
@@ -1664,7 +1665,7 @@ function resolveBlotatoScheduledTime(slot = "am", now = new Date(), scheduleDate
   return scheduled.toISOString();
 }
 
-async function runPublishJob({
+async function runPublishJobImpl({
   sessionId,
   articleSource,
   laneSlug = DEFAULT_BLOTATO_SHORT_LANE,
@@ -2672,4 +2673,8 @@ export async function getPublishNowJob(sessionId) {
     if (job) return job;
   }
   return null;
+}
+
+async function runPublishJob(options) {
+  return withTaskRepairBudget(() => runPublishJobImpl(options), { repairs: 4, recoveries: 4 });
 }

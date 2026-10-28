@@ -11,7 +11,7 @@ export function createRepairHistory() {
   };
 }
 export function withRepairHistory(history, details, work) {
-  return scopes.run({ history, ...details }, work);
+  return scopes.run({ ...scopes.getStore(), history, ...details }, work);
 }
 export function prepareRepairRequest(route, messages, { stage } = {}) {
   const scope = currentRepairScope();

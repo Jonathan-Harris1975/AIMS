@@ -381,7 +381,7 @@ test("OpenRouter artwork payload explicitly requests image output modalities", a
 });
 
 
-test("podcast script routes use Claude for drafting and premium independent synthesis/editorial fallbacks", async () => {
+test("podcast drafting and editorial routes lead with Sonnet and reserve Sol for fallback", async () => {
   const oldEnv = snapshotEnv(OPENROUTER_ENV_NAMES);
   applySpreadsheetOpenRouterEnv();
   process.env.AI_MODEL_STANDARD = "anthropic/claude-sonnet-5.5";
@@ -399,7 +399,7 @@ test("podcast script routes use Claude for drafting and premium independent synt
     assert.equal(synthesis[1]?.model, "openai/gpt-5.6-sol", "synthesis should use GPT-5.6 Sol as the independent premium backup");
 
     const editorial = getProviderDiagnosticsForRoute("editorialPass").configuredProviders.filter((p) => p.configured);
-    assert.equal(editorial[0]?.model, "anthropic/claude-opus-5.5", "editorial/repair should lead with Claude Opus 5.5");
+    assert.equal(editorial[0]?.model, "anthropic/claude-sonnet-5.5", "editorial should lead with Claude Sonnet 5.5");
     assert.equal(editorial[1]?.model, "openai/gpt-5.6-sol", "editorial/repair should use GPT-5.6 Sol as the independent premium backup");
   } finally {
     restoreEnv(oldEnv);

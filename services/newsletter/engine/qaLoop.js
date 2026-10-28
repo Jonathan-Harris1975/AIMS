@@ -1,3 +1,5 @@
+import { repairNewsletterDraft } from "./targetedRepair.js";
+import { withTaskRepairBudget } from "../../shared/utils/taskRepairBudget.js";
 // Newsletter QA: use a bounded economical self-improvement loop first and
 // convene the full editorial council only when that loop cannot clear the bar.
 // This keeps routine polishing cheap while retaining expert escalation for the
@@ -6,37 +8,19 @@
 import { info, warn } from "../../../logger.js";
 import { THRESHOLDS } from "../../../config/thresholds.js";
 import { runDeterministicValidators } from "./validators.js";
-import { composeIssueSections, composeSubjectAndPreview, composeFooter } from "./compose.js";
 import { runNewsletterSelfImproveReview } from "./selfImproveReview.js";
 import { runNewsletterEditorialCouncil } from "./editorialCouncil.js";
 
-async function regenerateContent({ profile, lead, stories, promotion, sessionId, repairContext = [] }) {
-  const issue = await composeIssueSections({ profile, lead, stories, sessionId, repairContext });
-  if (!issue.ok) return issue;
-
-  const subject = await composeSubjectAndPreview({
-    profile,
-    heroHeadline: issue.heroHeadline,
-    bigThree: issue.bigThree,
-    sessionId,
-  });
-  if (!subject.ok) return subject;
-
-  return {
-    ok: true,
-    ...issue,
-    subject: subject.subject,
-    previewText: subject.previewText,
-    promotion,
-    footer: composeFooter(profile),
-  };
+async function regenerateContent(options) {
+  try { return await repairNewsletterDraft(options); }
+  catch (error) { return { ok: false, error: error.message }; }
 }
 
 function deterministicIssueText(result) {
   return (result?.issues || []).map((issue) => issue?.message || issue?.code || String(issue));
 }
 
-export async function runQaLoop({ profile, newsletter, lead, stories, promotion = null, sessionId }) {
+async function runQaLoopImpl({ profile, newsletter, lead, stories, promotion = null, sessionId }) {
   const maxLoops = THRESHOLDS.newsletter.maxRewriteIterations;
   const maxCouncilRuns = THRESHOLDS.newsletter.maxCouncilRuns;
   const expectedStoryCount = Math.min(9, 1 + stories.length);
@@ -93,12 +77,13 @@ export async function runQaLoop({ profile, newsletter, lead, stories, promotion 
 
     if (iteration < maxLoops) {
       const repairContext = [...deterministicIssueText(deterministic), ...(selfReview.issues || [])];
-      const regenerated = await regenerateContent({ profile, lead, stories, promotion, sessionId, repairContext });
+      const regenerated = await regenerateContent({ profile, newsletter: current, lead, stories, promotion, sessionId, repairContext });
       if (!regenerated.ok) {
         warn("newsletter.qa.regeneration_failed", { sessionId, iteration, error: regenerated.error });
         break;
       }
-      current = { ...regenerated, heroImageUrl: null };
+      if (JSON.stringify(regenerated) === JSON.stringify({ ...current, ok: true })) break;
+      current = regenerated;
     }
   }
 
@@ -141,8 +126,8 @@ export async function runQaLoop({ profile, newsletter, lead, stories, promotion 
       return {
         ok: true,
         newsletter: current,
-        iterations: maxLoops,
-        selfImproveIterations: maxLoops,
+        iterations: history.filter((entry) => entry.phase === "self-improve").length,
+        selfImproveIterations: history.filter((entry) => entry.phase === "self-improve").length,
         councilRuns: councilRun,
         finalScore: council.score,
         quarantined: false,
@@ -153,19 +138,20 @@ export async function runQaLoop({ profile, newsletter, lead, stories, promotion 
 
     if (councilRun < maxCouncilRuns) {
       const repairContext = [...deterministicIssueText(deterministic), ...(council.issues || [])];
-      const regenerated = await regenerateContent({ profile, lead, stories, promotion, sessionId, repairContext });
+      const regenerated = await regenerateContent({ profile, newsletter: current, lead, stories, promotion, sessionId, repairContext });
       if (!regenerated.ok) {
         warn("newsletter.qa.council_repair_failed", { sessionId, councilRun, error: regenerated.error });
         break;
       }
-      current = { ...regenerated, heroImageUrl: null };
+      if (JSON.stringify(regenerated) === JSON.stringify({ ...current, ok: true })) break;
+      current = regenerated;
     }
   }
 
   warn("newsletter.qa.quarantined", {
     sessionId,
     profileId: profile.id,
-    selfImproveIterations: maxLoops,
+    selfImproveIterations: history.filter((entry) => entry.phase === "self-improve").length,
     councilRuns: history.filter((entry) => entry.phase === "council").length,
     finalScore: council?.score || selfReview?.score || 0,
     deterministicIssues: deterministic?.issues || [],
@@ -175,8 +161,8 @@ export async function runQaLoop({ profile, newsletter, lead, stories, promotion 
   return {
     ok: false,
     newsletter: current,
-    iterations: maxLoops,
-    selfImproveIterations: maxLoops,
+    iterations: history.filter((entry) => entry.phase === "self-improve").length,
+    selfImproveIterations: history.filter((entry) => entry.phase === "self-improve").length,
     councilRuns: history.filter((entry) => entry.phase === "council").length,
     finalScore: council?.score || selfReview?.score || 0,
     quarantined: true,
@@ -186,3 +172,7 @@ export async function runQaLoop({ profile, newsletter, lead, stories, promotion 
 }
 
 export default { runQaLoop };
+
+export async function runQaLoop(options) {
+  return withTaskRepairBudget(() => runQaLoopImpl(options), { repairs: 4, recoveries: 4 });
+}

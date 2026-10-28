@@ -1,3 +1,4 @@
+import { withTaskRepairBudget, claimRepairAction } from "../../shared/utils/taskRepairBudget.js";
 // services/blog/weekly/buildWeeklyBlogPost.js
 import { info, error, debug, warn } from "../../../logger.js";
 import { getObjectAsText, putText, putJson } from "../../shared/utils/r2-client.js";
@@ -332,7 +333,7 @@ async function repairWeeklyPackageForCouncil({ sessionId, week, dateLabel, items
     title: cleanSourceTitle(item?.title || ""),
     summary: cleanSourceText(item?.summary || item?.description || item?.contentSnippet || "").slice(0, 900),
   }));
-  const raw = await resilientRequest("blogWeekly", {
+  const raw = await resilientRequest("targetedRepair", {
     sessionId,
     messages: [
       { role: "system", content: "You are the repair editor for a premium British AI industry blog. Preserve strong copy. Fix only the listed QA defects. Never invent facts, \
@@ -396,6 +397,7 @@ async function generateStructuredWeeklyPackage({ sessionId, week, dateLabel, ite
       parseError: parsed.ok ? undefined : parsed.error,
     });
 
+    claimRepairAction();
     raw = await resilientRequest("blogWeekly", {
       sessionId,
       messages: [
@@ -481,7 +483,7 @@ Repair instructions:
 }
 
 
-export async function buildWeeklyBlogPost({ days, weekId } = {}) {
+async function buildWeeklyBlogPostImpl({ days, weekId } = {}) {
   const prefix = process.env.BLOG_PREFIX || "blog";
   const rssBucketKey = "rss";
   const feedKey = "feed.json";
@@ -902,4 +904,8 @@ export async function buildWeeklyBlogPost({ days, weekId } = {}) {
       });
     }
   }
+}
+
+export async function buildWeeklyBlogPost(options = {}) {
+  return withTaskRepairBudget(() => buildWeeklyBlogPostImpl(options), { repairs: 4, recoveries: 4 });
 }

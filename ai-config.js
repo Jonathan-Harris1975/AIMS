@@ -266,7 +266,7 @@ export const aiConfig = {
     scriptMainSynthesis: fixedRouteChain(["claudeSonnet5", "gpt56Sol", "claudeOpus"]),
     scriptOutro: fixedRouteChain(["claudeSonnet5", "anthropic46", "highQuality", "standard", "gpt56Sol", "google25FlashLite", "meta"]),
     compose: routeChain(["highQuality", "standard", "fallback"], ["anthropic46", "gpt56Sol", "google25FlashLite"]),
-    editorialPass: fixedRouteChain(["claudeOpus", "gpt56Sol", "claudeSonnet5"]),
+    editorialPass: fixedRouteChain(["claudeSonnet5", "gpt56Sol"]),
     editAndFormat: routeChain(["standard", "fast", "fallback"], ["gpt56Sol", "google25FlashLite"]),
     metadata: routeChain(["summary", "json", "fast", "fallback"], ["google25FlashLite", "gpt56Sol"]),
     podcastHelper: routeChain(["summary", "fast", "fallback"], ["google25FlashLite", "gpt56Sol", "meta"]),
@@ -278,6 +278,7 @@ export const aiConfig = {
     blotatoVisualQa: routeChain(["audit", "highQuality"], ["claudeSonnet5", "anthropic46", "gpt56Sol"]),
     // Public RSS source text may use a free first draft; paid models remain the quality-gated fallback.
     rssRewriteFirstPass: routeChain(["openrouterFreePrimary"], ["google25FlashLite", "gpt56Sol"]),
+    targetedRepair: fixedRouteChain(["fast", "standard", "fallback"]),
     rssRelevance: routeChain(["fast", "summary", "standard", "fallback"], ["google25FlashLite", "gpt56Sol"]),
     rssRewrite: routeChain(["standard", "fast", "fallback"], ["google25FlashLite", "gpt56Sol"]),
     rssShortTitle: routeChain(["fast", "summary", "fallback"], ["google25FlashLite", "gpt56Sol"]),
@@ -306,12 +307,12 @@ export const aiConfig = {
     newsletterSubject: routeChain(["fast", "summary", "highQuality"], ["google25FlashLite", "gpt56Sol"]),
     // Economical independent reviewer used for up to four self-improvement passes before a full council is convened.
     newsletterSelfImprove: routeChain(["fast", "summary", "standard"], ["google25FlashLite", "gpt56Sol"]),
-    newsletterFactCheck: routeChain(["audit", "highQuality"], ["claudeSonnet5", "anthropic46"]),
+    newsletterFactCheck: fixedRouteChain(["highQuality", "audit"]),
     // These editorial-only checks share the economy reviewer already used by
     // newsletterSelfImprove. Source/fact checks and chair decisions stay strong.
     newsletterVoiceReview: routeChain(["fast", "summary", "gpt56Sol"], ["claudeSonnet5", "highQuality", "anthropic46"]),
     newsletterAudienceReview: routeChain(["fast", "summary", "gpt56Sol"], ["claudeSonnet5", "highQuality", "anthropic46"]),
-    newsletterCouncilChair: routeChain(["audit", "highQuality"], ["claudeSonnet5", "anthropic46"]),
+    newsletterCouncilChair: fixedRouteChain(["highQuality", "audit"]),
     newsletterHeroPrompt: routeChain(["summary", "fast", "fallback"], ["meta", "google25FlashLite"]),
     // Comms Hub: routine communications are free-first and privacy-gated.
     // Routine Comms Hub routes use only explicitly configured free models, then the paid economy safety net.

@@ -1,3 +1,4 @@
+import { withTaskRepairBudget, claimRepairAction } from "../../shared/utils/taskRepairBudget.js";
 import { createRepairHistory, withRepairHistory } from "../../shared/utils/repairHistory.js";
 // ============================================================
 // 🧠 RSS Feed Creator — AI Rewrite & Short Title Models
@@ -241,7 +242,8 @@ function buildValidationRepairMessages({
 }
 
 async function repairRewriteForValidation({ systemPrompt, userPrompt, rewrittenTitle, rewrittenSummary, defects = [] } = {}) {
-  const repairRaw = await resilientRequest("rssRewrite", {
+  claimRepairAction();
+  const repairRaw = await resilientRequest("targetedRepair", {
     section: "rss-validation-repair",
     messages: buildValidationRepairMessages({
       systemPrompt,
@@ -305,7 +307,7 @@ function evaluatePhase3Gate({ title, sourceText, item, link, rewrittenTitle, rew
 // ============================================================
 
 export async function rewriteArticle(item = {}) {
-  return withRepairHistory(createRepairHistory(), { stage: "rss-rewrite" }, () => rewriteArticleImpl(item));
+  return withTaskRepairBudget(() => withRepairHistory(createRepairHistory(), { stage: "rss-rewrite" }, () => rewriteArticleImpl(item)));
 }
 
 async function rewriteArticleImpl(item = {}) {
@@ -387,7 +389,8 @@ async function rewriteArticleImpl(item = {}) {
       },
     ];
 
-    const raw2 = await resilientRequest("rssRewrite", {
+    claimRepairAction();
+    const raw2 = await resilientRequest("targetedRepair", {
       section: "rss-filler-repair",
       messages: retryMessages,
       temperature: 0.55,
@@ -445,7 +448,8 @@ async function rewriteArticleImpl(item = {}) {
       },
     ];
 
-    const entityRetryRaw = await resilientRequest("rssRewrite", {
+    claimRepairAction();
+    const entityRetryRaw = await resilientRequest("targetedRepair", {
       section: "rss-entity-repair",
       messages: entityRetryMessages,
       temperature: 0.5,
@@ -551,7 +555,8 @@ async function rewriteArticleImpl(item = {}) {
       defects: err.phase3Report.defects?.slice?.(0, 5) || [],
     });
 
-    const repairRaw = await resilientRequest("rssRewrite", {
+    claimRepairAction();
+    const repairRaw = await resilientRequest("targetedRepair", {
       section: "rss-phase3-repair",
       messages: buildPhase3RepairMessages({
         systemPrompt,
@@ -626,7 +631,7 @@ async function rewriteArticleImpl(item = {}) {
         contentType: "rss-rewrite",
         repairArtifact: async (candidate, { gate, attempt } = {}) => {
           const deterministic = repairArtifactForReviewCouncil(candidate, { contentType: "rss-rewrite" });
-          const repairRaw = await resilientRequest("rssRewrite", {
+          const repairRaw = await resilientRequest("targetedRepair", {
             messages: buildPhase3RepairMessages({
               systemPrompt,
               userPrompt,

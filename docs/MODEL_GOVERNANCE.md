@@ -40,7 +40,7 @@ equivalence is claimed from deterministic tests alone.
 4. **Selection order.** Use deterministic code first where it can complete the task. Otherwise use only HIVE candidates that are available under the OpenRouter account's provider/privacy guardrails and have a passing, traceable AIMS task evaluation. Rank qualified candidates by measured cost per successful validated task, then task quality and reliability. Free or economy models are suitable for routine work only when they meet the same evidence bar; expert models need a measured quality or consequence reason.
 5. **Service-specific routes.** HIVE may send a route-specific AIMS assignment only when the model's registry evidence includes that environment variable in `approved_roles`. The AIMS receiver checks the variable allow-list and the evidence before applying the route. With no qualified candidate, AIMS keeps its last persisted assignment or committed fallback.
 
-   - **AIMS service defaults reviewed 2026-10-16.** Use GPT-5.6 Luna for fast classification, summaries and schema-bound lightweight work; Claude Sonnet 5.5 for regular writing, scripts, audits and standard-quality routes; Claude Haiku 5.5 for routine Comms Hub triage and drafting; GPT-5.6 Sol as the independent audit and newsletter-review lead; and Claude Opus 5.5 only on complex synthesis and editorial-critical work. GPT-5.6 Sol remains the independent paid fallback, while Gemini 3.5 Flash Lite is a lower-priority resilience fallback. Keep Seedream and FLUX on the image-generation route. The Comms Hub free-model variables remain blank; its customer-content calls retain ZDR and data-collection denial.
+   - **AIMS service defaults reviewed 2026-10-16.** Use GPT-5.6 Luna for fast classification, summaries and schema-bound lightweight work; Claude Sonnet 5.5 for regular writing, scripts, audits and standard-quality routes; Claude Haiku 5.5 for routine Comms Hub triage and drafting; GPT-5.6 Sol as the audit fallback and targeted final escalation, with Sonnet leading newsletter factual/chair review; and Claude Opus 5.5 only on complex synthesis and editorial-critical work. GPT-5.6 Sol remains the independent paid fallback, while Gemini 3.5 Flash Lite is a lower-priority resilience fallback. Keep Seedream and FLUX on the image-generation route. The Comms Hub free-model variables remain blank; its customer-content calls retain ZDR and data-collection denial.
 
    - **Public RSS first-pass exception.** The first rewrite draft may use `OPENROUTER_FREE_PRIMARY_MODEL` only for publisher-supplied public RSS text. The assignment must resolve to `openrouter/free` or an explicit `:free` model ID. Existing source-overlap, brand, entity, and Phase 3 publication gates still apply; paid candidates handle provider failure and later repair. Do not route Comms Hub messages, customer submissions, or other non-public material through this free route.
 
@@ -102,3 +102,30 @@ fixes route isolation without silently changing article writing or privacy.
 Verify active runtime assignments after deployment, compare editorial defects,
 repair/escalation rates and cost per accepted issue, and restore Sol-first voice
 and audience routing if quality regresses. No measured savings are claimed yet.
+
+
+### Shared repair budgets and targeted editing (2026-10-28)
+
+AIMS content tasks now share a repair allowance across their gates: four repairs
+per RSS article, daily/weekly blog, daily Zernio post, short or podcast script;
+weekly ebook, quiz and mini-series batches allow 12, 8 and 24 respectively.
+These are per-invocation limits, not a durable daily spending cap. Existing
+idempotency receipts/checkpoints remain responsible for cross-run recovery.
+Task-level technical recoveries (retry, provider failover and parameter relaxation)
+share four extra attempts. Normal successful generation/reviewer calls do not
+consume that recovery allowance. Exhaustion holds failing content; it never
+relaxes a quality threshold. Configured provider/model assignments remain authoritative.
+
+Defect-focused text repairs use `targetedRepair`: Luna, then Sonnet, then Sol.
+Newsletter factual specialists/chair and the podcast editorial pass use Sonnet followed by Sol. Full specialist
+attendance remains required. Passing newsletter seat results are reused for ten
+minutes only with identical relevant prompt/evidence, schema, threshold, model
+configuration and provider policy. Failures are never cached as approvals.
+Newsletter corrections use an allowlisted string-field patch: source IDs, URLs,
+source titles, story selection and unrelated content are immutable. All existing
+validators/reviewers run against the repaired candidate; unchanged failing edits
+stop instead of re-buying the same review.
+
+Validate costs per accepted task, repair-budget exhaustion, quarantine rate,
+source defects and publication outcomes before attributing quality equivalence
+or GBP savings to these changes.

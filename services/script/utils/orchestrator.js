@@ -1,3 +1,4 @@
+import { withTaskRepairBudget } from "../../shared/utils/taskRepairBudget.js";
 // ====================================================================
 // orchestrator.js
 // ====================================================================
@@ -66,7 +67,7 @@ async function repairPodcastTranscriptForCouncil(candidate = {}, { gate, attempt
   const fullText = editAndFormat(String(candidate?.text || "").trim());
   const mainText = extractRepairableMain(fullText, safeLockedIntro, safeLockedOutro, safeFallbackMain);
   const defects = Array.isArray(gate?.defects) ? gate.defects.slice(0, 10) : [];
-  const raw = await resilientRequest("editorialPass", {
+  const raw = await resilientRequest("targetedRepair", {
     sessionId: sessionMeta?.sessionId,
     section: `transcript-repair-${attempt || 1}`,
     messages: [{
@@ -183,7 +184,7 @@ function stripLeadingIntroEcho(main = "", intro = "") {
 }
 
 
-export async function orchestrateScript(input) {
+async function orchestrateScriptImpl(input) {
   // Support both legacy string version and meta-object version
   const sessionMeta =
     typeof input === "string"
@@ -443,3 +444,7 @@ export async function orchestrateScript(input) {
 
 export const orchestrateEpisode = orchestrateScript;
 export default orchestrateScript;
+
+export async function orchestrateScript(input) {
+  return withTaskRepairBudget(() => orchestrateScriptImpl(input), { repairs: 4, recoveries: 4 });
+}
