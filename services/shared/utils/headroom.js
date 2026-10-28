@@ -20,6 +20,7 @@ const DEFAULT_ROUTES = Object.freeze([
   "podcastHelper",
   "seoKeywords",
   "artworkPrompt",
+  "rssRelevance",
   "rssRewrite",
   "rssRewriteFirstPass",
   "rssShortTitle",
