@@ -581,7 +581,7 @@ test("Blotato publish-now endpoint requires explicit opt-in and runs the RSS-to-
   process.env.BLOTATO_ALLOW_IMMEDIATE_PUBLISH = "true";
   const response = await request(app).post("/blotato/shorts/news-insight/publish-now");
 
-  assert.equal(response.status, 202);
+  assert.equal(response.status, 202, JSON.stringify(response.body));
   assert.equal(response.body.ok, true);
   assert.equal(response.body.started, true);
   assert.equal(response.body.job.type, "blotato-news-insight-publish");
