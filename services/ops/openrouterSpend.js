@@ -145,9 +145,8 @@ export async function collectOpenRouterDailySpend({ date, now = new Date(), fx =
     if (Object.hasOwn(totals, native)) {
       totals[alias] = totals[native];
       for (const row of breakdown) if (Object.hasOwn(row, native)) row[alias] = row[native];
+      metricAliases[alias] = native;
     }
-    metricAliases[alias] = native;
-  }
   }
   return {
     ok: true, provider: "OpenRouter", scope: "authenticated-management-key-account", source: "OpenRouter Analytics API",
