@@ -8,7 +8,7 @@ const book = {
   description: "Machine learning supports grid operations. This practical guide covers grid data and forecasting for electricity networks.",
   whatBookCovers: "Machine learning supports grid operations.",
 };
-const metadata = { syncedAt: "2026-10-26T12:00:00Z", books: [{ asin: book.asin, titleId: "A123456789012", format: "kindle" }] };
+const metadata = { syncedAt: "2026-10-26T12:00:00Z", books: [{ asin: book.asin, titleId: "A123456789012", format: "kindle", syncedAt: "2026-10-26T12:00:00Z" }] };
 const research = { trendSources: { US: [{ url: "https://example.org/story", published: "2026-10-25", snippet: "Machine learning supports grid operations as a growing research area." }], UK: [] } };
 const liveListing = { publicListing: { status: "captured", data: { asin: book.asin, title: book.title, description: book.description } } };
 
