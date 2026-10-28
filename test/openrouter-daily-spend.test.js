@@ -128,3 +128,38 @@ test("failed analytics validation retains diagnostic stages without credentials 
     return true;
   });
 });
+
+test("observed Analytics numeric strings and native reasoning/cache fields normalize before reconciliation", async () => {
+  const fetchImpl = async (url, options) => {
+    if (url.endsWith("/meta")) return { ok: true, json: async () => ({ data: {
+      metrics: ["total_usage", "request_count", "tokens_total", "tokens_prompt", "tokens_completion", "reasoning_tokens", "cached_tokens"].map(name => ({ name })),
+      dimensions: ["model", "app"].map(name => ({ name })),
+    } }) };
+    const query = JSON.parse(options.body);
+    return { ok: true, json: async () => result([{ total_usage: "1.25", request_count: "2", tokens_total: "150",
+      tokens_prompt: "100", tokens_completion: "50", reasoning_tokens: "10", cached_tokens: "0",
+      ...(query.dimensions.length ? { model: "Luna", app: "test" } : {}) }]) };
+  };
+  const report = await collectOpenRouterDailySpend({ now }, { env, fetchImpl });
+  assert.equal(report.recordedSpendUsd, 1.25);
+  assert.equal(report.totals.request_count, 2);
+  assert.equal(report.breakdown[0].request_count, 2);
+  assert.equal(report.totals.tokens_reasoning, 10);
+  assert.equal(report.totals.tokens_cached, 0);
+  assert.equal(report.metricAliases.tokens_reasoning, "reasoning_tokens");
+  assert.ok(report.availableMetrics.includes("cached_tokens"));
+});
+
+test("numeric coercion rejects empty, malformed, nonfinite and unsafe or fractional counters", async () => {
+  for (const count of ["", "  ", "2 tasks", "NaN", "Infinity", "-1", "2.5", "9007199254740992", null, true]) {
+    const provider = fakeProvider();
+    const fetchImpl = async (url, options) => {
+      const response = await provider.fetchImpl(url, options);
+      if (url.endsWith("/meta")) return response;
+      const payload = await response.json();
+      payload.data.data[0].request_count = count;
+      return { ok: true, json: async () => payload };
+    };
+    await assert.rejects(collectOpenRouterDailySpend({ now }, { env, fetchImpl }));
+  }
+});

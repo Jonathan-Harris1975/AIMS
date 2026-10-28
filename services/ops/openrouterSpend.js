@@ -68,8 +68,14 @@ async function queryApi(path, { key, fetchImpl, body }) {
 }
 
 function amount(value, field) {
-  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) throw new Error(`Missing or invalid analytics metric: ${field}`);
-  return value;
+  // Analytics serializes some integer/Decimal aggregates as strings.
+  const parsed = typeof value === "string" && /^(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$/.test(value)
+    ? Number(value) : value;
+  const counter = field === "request_count" || field.includes("tokens");
+  if (typeof parsed !== "number" || !Number.isFinite(parsed) || parsed < 0 || (counter && !Number.isSafeInteger(parsed))) {
+    throw new Error(`Missing or invalid analytics metric: ${field}`);
+  }
+  return parsed;
 }
 
 function checkedRows(response, metrics) {
@@ -78,8 +84,7 @@ function checkedRows(response, metrics) {
     throw new Error("Analytics coverage is incomplete or truncated");
   }
   return data.data.map(row => {
-    for (const metric of metrics) amount(row[metric], metric);
-    return row;
+    return { ...row, ...Object.fromEntries(metrics.map(metric => [metric, amount(row[metric], metric)])) };
   });
 }
 
@@ -107,7 +112,8 @@ export async function collectOpenRouterDailySpend({ date, now = new Date(), fx =
   if (!names.has("total_usage") || !names.has("request_count") || !dimensions.has("model")) {
     throw new Error("OpenRouter metadata does not expose the required recorded-spend metrics");
   }
-  const metrics = ["total_usage", "request_count", ...["tokens_prompt", "tokens_completion", "tokens_reasoning", "tokens_cached"].filter(name => names.has(name))];
+  const optionalTokens = ["tokens_total", "tokens_prompt", "tokens_completion", "reasoning_tokens", "cached_tokens", "tokens_reasoning", "tokens_cached"];
+  const metrics = ["total_usage", "request_count", ...optionalTokens.filter(name => names.has(name))];
   diagnostics.availableMetrics = [...names];
   diagnostics.availableDimensions = [...dimensions];
   diagnostics.stage = "account-total";
@@ -119,7 +125,7 @@ export async function collectOpenRouterDailySpend({ date, now = new Date(), fx =
   diagnostics.totalShape = shape(totalResponse);
   const totalRows = checkedRows(totalResponse, metrics);
   if (totalRows.length > 1) throw new Error("Unexpected ungrouped analytics totals");
-  const attribution = ["app", "api_key"].find(name => dimensions.has(name)) || null;
+  const attribution = ["app", "api_key_id", "api_key"].find(name => dimensions.has(name)) || null;
   const groupBy = ["model", ...(attribution ? [attribution] : [])];
   diagnostics.stage = "model-breakdown";
   const breakdownResponse = await queryApi("query", { key, fetchImpl, body: { ...query, dimensions: groupBy } });
@@ -133,10 +139,15 @@ export async function collectOpenRouterDailySpend({ date, now = new Date(), fx =
       throw new Error(`Analytics breakdown does not reconcile with account total: ${metric}`);
     }
   }
+  // Stable report aliases preserve UI compatibility while retaining native metrics.
+  const metricAliases = {};
+  for (const [alias, native] of [["tokens_reasoning", "reasoning_tokens"], ["tokens_cached", "cached_tokens"]]) {
+    if (Object.hasOwn(totals, native)) { totals[alias] = totals[native]; metricAliases[alias] = native; }
+  }
   return {
     ok: true, provider: "OpenRouter", scope: "authenticated-management-key-account", source: "OpenRouter Analytics API",
     collectedAt: now.toISOString(), period: window, currency: "USD", recordedSpendUsd: totals.total_usage,
-    gbp: convertSpendToGbp(totals.total_usage, fx), totals, dimensions: groupBy, breakdown,
+    gbp: convertSpendToGbp(totals.total_usage, fx), totals, metricAliases, dimensions: groupBy, breakdown,
     availableMetrics: [...names], availableDimensions: [...dimensions],
     reconciled: true, provisional: true, attribution: attribution || "model-only; repository attribution unavailable",
     notes: ["Provider-recorded usage, not model-price estimates. Later provider adjustments may change totals.",
