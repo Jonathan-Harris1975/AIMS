@@ -142,11 +142,12 @@ export async function collectOpenRouterDailySpend({ date, now = new Date(), fx =
   // Stable report aliases preserve UI compatibility while retaining native metrics.
   const metricAliases = {};
   for (const [alias, native] of [["tokens_reasoning", "reasoning_tokens"], ["tokens_cached", "cached_tokens"]]) {
-    if (Object.hasOwn(totals, native) && !Object.hasOwn(totals, alias)) {
+    if (Object.hasOwn(totals, native)) {
       totals[alias] = totals[native];
       for (const row of breakdown) if (Object.hasOwn(row, native)) row[alias] = row[native];
-      metricAliases[alias] = native;
     }
+    metricAliases[alias] = native;
+  }
   }
   return {
     ok: true, provider: "OpenRouter", scope: "authenticated-management-key-account", source: "OpenRouter Analytics API",
