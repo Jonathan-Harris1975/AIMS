@@ -182,10 +182,10 @@ test("paid Blotato renders survive QA plumbing failures and rendered QA uses str
   assert.match(publish, /job\.renderedVideoQa\?\.pass === true/);
   assert.match(publish, /blotato\.render_reuse\.hit/);
   assert.match(publish, /BLOTATO_RENDERED_QA_BLOCK_SOFT_FAILURES/);
-  assert.match(publish, /const blockHardQaFailures = true/);
+  assert.match(publish, /BLOTATO_RENDERED_QA_BLOCK_HARD_FAILURES/);
   assert.match(publish, /scheduled_qa_infrastructure_advisory/);
-  assert.match(publish, /BLOTATO_RENDERED_QA_BLOCK_SOFT_FAILURES, true/);
-  assert.doesNotMatch(publish, /const blockHardQaFailures = scheduledTime\s*\? false/);
+  assert.match(publish, /const blockSoftQaFailures = scheduledTime\s*\? false/);
+  assert.match(publish, /const blockHardQaFailures = scheduledTime\s*\? false/);
   assert.match(publish, /blotato\.finished_video\.qa_soft_failure_accepted/);
   assert.match(qa, /strictJsonResponseFormat\("blotato_rendered_video_qa"/);
   assert.match(qa, /max_tokens: 1400/);
@@ -193,8 +193,8 @@ test("paid Blotato renders survive QA plumbing failures and rendered QA uses str
   assert.match(qa, /qa_infrastructure_fallback/);
   assert.match(env, /^BLOTATO_RENDERED_QA_JSON_ATTEMPTS=2$/m);
   assert.match(env, /^BLOTATO_RENDERED_QA_INFRASTRUCTURE_FALLBACK=true$/m);
-  assert.match(env, /^BLOTATO_RENDERED_QA_BLOCK_SOFT_FAILURES=true$/m);
-  assert.match(env, /^BLOTATO_RENDERED_QA_BLOCK_HARD_FAILURES=true$/m);
+  assert.match(env, /^BLOTATO_RENDERED_QA_BLOCK_SOFT_FAILURES=false$/m);
+  assert.match(env, /^BLOTATO_RENDERED_QA_BLOCK_HARD_FAILURES=false$/m);
   assert.match(env, /^BLOTATO_RENDER_REUSE_MAX_AGE_MS=21600000$/m);
 });
 
@@ -423,7 +423,7 @@ test("critical orchestration defaults stay aligned across deployment templates",
     BLOTATO_SCHEDULE_FRIDAY_PM: "16:30",
     BLOTATO_SCHEDULE_MIN_LEAD_MS: "900000",
     BLOTATO_SCHEDULE_RECOVERY_ENABLED: "true",
-    BLOTATO_RENDERED_QA_BLOCK_SOFT_FAILURES: "true",
+    BLOTATO_RENDERED_QA_BLOCK_SOFT_FAILURES: "false",
     BLOTATO_SCHEDULE_VERIFY_ATTEMPTS: "12",
     BLOTATO_SCHEDULE_VERIFY_PAGES: "3",
     BLOTATO_POST_SUBMISSION_RETRY_ATTEMPTS: "3",

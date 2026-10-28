@@ -34,5 +34,3 @@ The `ai-playbook` lane is prepared in the **Friday AM** operation. Friday PM is 
 ## Configuration
 
 Use the `BLOTATO_*` variables plus the shared OpenRouter/artwork settings in `config/production.defaults.env` and `env.template`. Secrets remain deployment-only.
-
-Scheduled posts always block hard finished-video QA failures. Soft failure blocking defaults to enabled and can be configured separately. Failed renders are retained for inspection; they are never replaced automatically by local text-card videos.

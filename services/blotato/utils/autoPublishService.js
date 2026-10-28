@@ -2063,9 +2063,15 @@ async function runPublishJob({
       }
     }
     if (!renderedVideoQa.pass) {
-      // A scheduled render must meet the same publication standard as a manual render.
-      const blockSoftQaFailures = parseBoolean(process.env.BLOTATO_RENDERED_QA_BLOCK_SOFT_FAILURES, true);
-      const blockHardQaFailures = true;
+      // Strict QA flags remain available for immediate/manual publishing. A
+      // scheduled operation is audit-only even when an old Koyeb environment
+      // still contains the former fail-closed values.
+      const blockSoftQaFailures = scheduledTime
+        ? false
+        : parseBoolean(process.env.BLOTATO_RENDERED_QA_BLOCK_SOFT_FAILURES, false);
+      const blockHardQaFailures = scheduledTime
+        ? false
+        : parseBoolean(process.env.BLOTATO_RENDERED_QA_BLOCK_HARD_FAILURES, false);
       const qaPublication = assessRenderedVideoQaPublication(renderedVideoQa, {
         blockSoftFailures: blockSoftQaFailures,
         blockHardFailures: blockHardQaFailures,

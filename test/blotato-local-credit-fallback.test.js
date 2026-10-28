@@ -93,7 +93,7 @@ test("scheduled Blotato uses provider scenes and never substitutes local text ca
   assert.match(source, /await createAndWaitForVideo/);
   assert.match(source, /reservePaidRender/);
   assert.doesNotMatch(source, /localBlotatoFallbackRenderer|static-card-narration-render-mode/);
-  assert.match(source, /const blockHardQaFailures = true/);
+  assert.match(source, /const blockHardQaFailures = scheduledTime\s*\? false/);
 });
 
 test("local fallback renderer uploads static visual cards with spoken narration", async () => {

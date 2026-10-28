@@ -69,16 +69,13 @@ test("weekly website blog, e-books and quiz retain their separate owners", () =>
 });
 
 
-test("weekend windows build the daily social blog and newsletter without duplicating Friday's evergreen posts", () => {
-  for (const day of ["saturday", "sunday"]) {
-    const start = opsSource.indexOf(`"${day}-am": [`);
-    assert.ok(start > 0);
-    const block = opsSource.slice(start, opsSource.indexOf("  ],", start));
-    for (const path of ["/rss/rewrite", "/blog/social/daily/build", "/zernio/blog-rss/daily", "/newsletter/generate", "/newsletter/readiness", "/newsletter/send"]) {
-      assert.equal(occurrences(block, path), 1, `${day} must include ${path} exactly once`);
-    }
-    assert.match(block, /"zernio-blog-social".*"blog-social"/);
-    assert.match(block, /"newsletter-send".*"newsletter-readiness"/);
-    assert.equal(block.includes(`/zernio/daily/${day}`), false);
-  }
+test("production keeps six weekday windows and prepares weekend evergreen posts on Friday", () => {
+  const start = opsSource.indexOf('const OPERATION_WINDOWS = Object.freeze({');
+  const end = opsSource.indexOf('\n});', start);
+  const windows = opsSource.slice(start, end);
+  assert.deepEqual([...windows.matchAll(/^  "([a-z]+-(?:am|pm))": \[/gm)].map((match) => match[1]),
+    ["monday-am", "tuesday-am", "wednesday-am", "thursday-am", "friday-am", "friday-pm"]);
+  const friday = windows.slice(windows.indexOf('"friday-am": ['), windows.indexOf('"friday-pm": ['));
+  assert.equal(occurrences(friday, '/zernio/daily/saturday'), 1);
+  assert.equal(occurrences(friday, '/zernio/daily/sunday'), 1);
 });

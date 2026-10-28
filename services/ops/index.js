@@ -246,22 +246,6 @@ const OPERATION_WINDOWS = Object.freeze({
     ["newsletter-readiness", "/newsletter/readiness", { profileId: "ai-edge" }, "newsletter", false, "newsletter-generate"],
     ["newsletter-send", "/newsletter/send", { profileId: "ai-edge" }, "newsletter", false, "newsletter-readiness"],
   ],
-  "saturday-am": [
-    ["rss-rewrite", "/rss/rewrite", { batchSize: 5 }],
-    ["blog-social", "/blog/social/daily/build", {}, null, false, "rss-rewrite"],
-    ["zernio-blog-social", "/zernio/blog-rss/daily", {}, null, false, "blog-social"],
-    ["newsletter-generate", "/newsletter/generate", { profileId: "ai-edge" }, "newsletter"],
-    ["newsletter-readiness", "/newsletter/readiness", { profileId: "ai-edge" }, "newsletter", false, "newsletter-generate"],
-    ["newsletter-send", "/newsletter/send", { profileId: "ai-edge" }, "newsletter", false, "newsletter-readiness"],
-  ],
-  "sunday-am": [
-    ["rss-rewrite", "/rss/rewrite", { batchSize: 5 }],
-    ["blog-social", "/blog/social/daily/build", {}, null, false, "rss-rewrite"],
-    ["zernio-blog-social", "/zernio/blog-rss/daily", {}, null, false, "blog-social"],
-    ["newsletter-generate", "/newsletter/generate", { profileId: "ai-edge" }, "newsletter"],
-    ["newsletter-readiness", "/newsletter/readiness", { profileId: "ai-edge" }, "newsletter", false, "newsletter-generate"],
-    ["newsletter-send", "/newsletter/send", { profileId: "ai-edge" }, "newsletter", false, "newsletter-readiness"],
-  ],
   "friday-pm": [
     ["podcast-readiness", "/podcast/readiness", {}],
     ["podcast", "/podcast/run", {}, null, false, "podcast-readiness"],
