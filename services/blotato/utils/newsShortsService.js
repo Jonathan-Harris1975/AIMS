@@ -1032,7 +1032,7 @@ function enhancePackForBlotatoDuration(pack = {}, options = {}, laneConfig = {})
   );
 
   const grounded = reinforceSourceGrounding(output, options.article);
-  if (options.article?.title) {
+  if (options.article?.title && !grounded.thumbnailText) {
     grounded.thumbnailText = cleanText(options.article.title.split(/\s+/).slice(0, 5).join(" "), 55) || grounded.thumbnailText;
   }
   return applyBritishEnglishPack(grounded);
