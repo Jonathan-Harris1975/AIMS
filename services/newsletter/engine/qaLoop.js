@@ -1,3 +1,4 @@
+import { maybeCompareCouncilShadow } from "./councilShadow.js";
 import { repairNewsletterDraft } from "./targetedRepair.js";
 import { withTaskRepairBudget } from "../../shared/utils/taskRepairBudget.js";
 // Newsletter QA: use a bounded economical self-improvement loop first and
@@ -90,10 +91,16 @@ async function runQaLoopImpl({ profile, newsletter, lead, stories, promotion = n
   // Self-improvement could not confidently clear the bar. Escalate to the
   // expensive full-seat council, never more than twice.
   let council = null;
+  let councilShadow = null;
   for (let councilRun = 1; councilRun <= maxCouncilRuns; councilRun += 1) {
     deterministic = runDeterministicValidators(current, { expectedStoryCount, requireHeroImage: false });
     council = await runNewsletterEditorialCouncil({ profile, newsletter: current, lead, stories, sessionId });
     const passed = deterministic.pass && council.ok;
+    if (councilRun === 1) {
+      councilShadow = await maybeCompareCouncilShadow({ profile, newsletter: current, lead, stories, sessionId,
+        defects: [...deterministicIssueText(deterministic), ...(selfReview?.issues || [])], baseline: council });
+      if (councilShadow) info("newsletter.council.shadow", { sessionId, profileId: profile.id, comparison: councilShadow });
+    }
 
     history.push({
       phase: "council",
@@ -103,6 +110,7 @@ async function runQaLoopImpl({ profile, newsletter, lead, stories, promotion = n
       councilScore: council.score,
       councilVerdict: council.verdict,
       councilIssues: council.issues,
+      councilShadow,
       councilReviews: council.reviews,
       councilChair: council.chair,
       councilAttendance: council.attendance,
@@ -132,6 +140,7 @@ async function runQaLoopImpl({ profile, newsletter, lead, stories, promotion = n
         finalScore: council.score,
         quarantined: false,
         council,
+        councilShadow,
         history,
       };
     }
@@ -167,6 +176,7 @@ async function runQaLoopImpl({ profile, newsletter, lead, stories, promotion = n
     finalScore: council?.score || selfReview?.score || 0,
     quarantined: true,
     council,
+    councilShadow,
     history,
   };
 }

@@ -22,6 +22,11 @@ export function withTaskRepairBudget(work, options) {
   return tasks.getStore() ? work() : tasks.run(createTaskRepairBudget(options), work);
 }
 
+// Observational evaluations must never consume the publishing task's allowance.
+export function withIsolatedTaskRepairBudget(work, options) {
+  return tasks.run(createTaskRepairBudget(options), work);
+}
+
 export function claimRepairAction(kind = "repairs") {
   const budget = currentTaskRepairBudget();
   if (!budget || budget.claim(kind)) return;

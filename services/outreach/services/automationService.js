@@ -1,5 +1,5 @@
 import { info, warn } from "../../../logger.js";
-import { resilientRequest } from "../../shared/utils/ai-service.js";
+import { resilientRequest, getProviderDiagnosticsForRoute } from "../../shared/utils/ai-service.js";
 import { putPrivateJson } from "../../shared/utils/r2-client.js";
 import { stableId } from "../../comms-hub/domain/ids.js";
 import { businessHoursPolicy, ensureFutureBusinessTime, isWithinBusinessHours } from "../../comms-hub/domain/businessHours.js";
@@ -523,6 +523,13 @@ changes for house style, length or emphasis, send them over and I'll revise it.\
 
   async status() {
     const cfg = this.config();
+    const routes = { pitch: "commsHubOutreachPitch", reply: "commsHubOutreachReply",
+      article: "commsHubOutreachArticle", review: "commsHubOutreachArticleReview" };
+    const providers = Object.fromEntries(Object.entries(routes).map(([task, route]) => [task,
+      getProviderDiagnosticsForRoute(route).configuredProviders.filter(provider => provider.configured)]));
+    const models = Object.fromEntries(Object.entries(providers).map(([task, chain]) => [task, chain[0]?.model || null]));
+    models.fallback = Object.values(providers).flat().find(provider => provider.providerId === "outreachFallback")?.model || null;
+    const modelChains = Object.fromEntries(Object.entries(providers).map(([task, chain]) => [task, chain.map(provider => provider.model)]));
     return {
       enabled: cfg.enabled,
       sendEnabled: cfg.sendEnabled,
@@ -536,13 +543,8 @@ changes for house style, length or emphasis, send them over and I'll revise it.\
       articleAutoWriteEnabled: cfg.articleAutoWrite,
       articleAutoSendEnabled: cfg.articleAutoSend,
       articleQualityMinimum: cfg.minScore,
-      models: {
-        pitch: this.env.OUTREACH_PITCH_MODEL || "anthropic/claude-sonnet-5.5",
-        reply: this.env.OUTREACH_REPLY_MODEL || this.env.OUTREACH_PITCH_MODEL || "anthropic/claude-sonnet-5.5",
-        article: this.env.OUTREACH_ARTICLE_MODEL || "anthropic/claude-sonnet-5.5",
-        review: this.env.OUTREACH_ARTICLE_REVIEW_MODEL || "anthropic/claude-opus-5.5",
-        fallback: this.env.OUTREACH_ARTICLE_FALLBACK_MODEL || "openai/gpt-5.6-sol",
-      },
+      models,
+      modelChains,
     };
   }
 }
