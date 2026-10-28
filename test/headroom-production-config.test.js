@@ -40,8 +40,14 @@ test("missing, ambiguous, unhealthy and mismatched companions cannot change AIMS
 
 test("committed production defaults keep Headroom enabled with a private companion address", async () => {
   const { readFile } = await import("node:fs/promises");
-  const { parse } = await import("dotenv");
-  const defaults = parse(await readFile(new URL("../config/production.defaults.env", import.meta.url)));
+  const content = await readFile(new URL("../config/production.defaults.env", import.meta.url), "utf8");
+  const defaults = {};
+  for (const line of content.split(/\r?\n/)) {
+    if (!line || /^\s*#/.test(line)) continue;
+    const i = line.indexOf("=");
+    if (i < 0) continue;
+    defaults[line.slice(0, i).trim()] = line.slice(i + 1).trim();
+  }
   assert.equal(defaults.HEADROOM_ENABLED, "true");
   assert.equal(defaults.HEADROOM_BASE_URL, "http://headroom:8787");
 });
