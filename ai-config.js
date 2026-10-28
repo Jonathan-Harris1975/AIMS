@@ -127,6 +127,19 @@ const outreachWriter = provider(
   SHARED_OPENROUTER_KEY
 );
 
+// Resolve each short-form task independently: the article assignment must not
+// override an explicitly configured pitch or reply model.
+const outreachPitch = provider(
+  "outreachPitch",
+  ["OUTREACH_PITCH_MODEL", "OUTREACH_ARTICLE_MODEL"],
+  SHARED_OPENROUTER_KEY
+);
+const outreachReply = provider(
+  "outreachReply",
+  ["OUTREACH_REPLY_MODEL", "OUTREACH_ARTICLE_MODEL"],
+  SHARED_OPENROUTER_KEY
+);
+
 const outreachReviewer = provider(
   "outreachReviewer",
   ["OUTREACH_ARTICLE_REVIEW_MODEL"],
@@ -195,6 +208,8 @@ const modelRegistry = {
   commsPaidBackup,
   commsPaidFallback,
   outreachWriter,
+  outreachPitch,
+  outreachReply,
   outreachReviewer,
   outreachFallback,
   newsletterEditorial,
@@ -291,8 +306,10 @@ export const aiConfig = {
     // Economical independent reviewer used for up to four self-improvement passes before a full council is convened.
     newsletterSelfImprove: routeChain(["fast", "summary", "standard"], ["google25FlashLite", "gpt56Sol"]),
     newsletterFactCheck: routeChain(["audit", "highQuality"], ["claudeSonnet5", "anthropic46"]),
-    newsletterVoiceReview: routeChain(["gpt56Sol"], ["claudeSonnet5", "highQuality", "anthropic46"]),
-    newsletterAudienceReview: routeChain(["gpt56Sol"], ["claudeSonnet5", "highQuality", "anthropic46"]),
+    // These editorial-only checks share the economy reviewer already used by
+    // newsletterSelfImprove. Source/fact checks and chair decisions stay strong.
+    newsletterVoiceReview: routeChain(["fast", "summary", "gpt56Sol"], ["claudeSonnet5", "highQuality", "anthropic46"]),
+    newsletterAudienceReview: routeChain(["fast", "summary", "gpt56Sol"], ["claudeSonnet5", "highQuality", "anthropic46"]),
     newsletterCouncilChair: routeChain(["audit", "highQuality"], ["claudeSonnet5", "anthropic46"]),
     newsletterHeroPrompt: routeChain(["summary", "fast", "fallback"], ["meta", "google25FlashLite"]),
     // Comms Hub: routine communications are free-first and privacy-gated.
@@ -311,8 +328,8 @@ export const aiConfig = {
     // Outreach guest-article acquisition is deliberately premium. Discovery stays deterministic;
     // only pitch/reply/article writing uses these paid quality routes. Names retain the commsHub
     // prefix so OpenRouter ZDR/data_collection=deny policy remains mandatory.
-    commsHubOutreachPitch: routeChain(["outreachWriter"], ["outreachFallback"]),
-    commsHubOutreachReply: routeChain(["outreachWriter"], ["outreachFallback"]),
+    commsHubOutreachPitch: routeChain(["outreachPitch"], ["outreachFallback"]),
+    commsHubOutreachReply: routeChain(["outreachReply"], ["outreachFallback"]),
     commsHubOutreachArticle: routeChain(["outreachWriter"], ["outreachFallback"]),
     commsHubOutreachArticleReview: routeChain(["outreachReviewer"], ["outreachFallback"]),
   },

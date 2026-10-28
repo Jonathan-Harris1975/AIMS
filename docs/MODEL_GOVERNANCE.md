@@ -54,3 +54,20 @@
 12. **AIMS review checklist.** Confirm the model is live; check retirement date; confirm required inputs, outputs and privacy; classify task complexity; compare at least one cheaper candidate; record validation quality and cost per success; document expert use; preserve a working fallback; apply through the governance endpoint; then verify status and a canary request.
 
 The machine-readable AIMS policy is in `config/model-governance-policy.json`.
+
+## Economy routing adjustment — 28 October 2026
+
+Newsletter voice and audience-only reviews now use the existing fast/summary
+economy assignment (committed default: GPT-5.6 Luna), retaining GPT-5.6 Sol and
+Claude fallbacks. Newsletter composition, source/fact checks and the chair route
+retain their existing models and all publication gates remain active. This reuses
+the economical editorial-review role already used by `newsletterSelfImprove`;
+it does not establish factual accuracy or replace source-aware review.
+
+Outreach pitches and replies now resolve their own model variables before the
+article-model fallback. Their committed model defaults remain Sonnet 5.5; this
+fixes route isolation without silently changing article writing or privacy.
+
+Verify active runtime assignments after deployment, compare editorial defects,
+repair/escalation rates and cost per accepted issue, and restore Sol-first voice
+and audience routing if quality regresses. No measured savings are claimed yet.

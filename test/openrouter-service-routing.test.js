@@ -250,7 +250,7 @@ test("Comms Hub OpenRouter requests enforce ZDR and deny data collection", async
   }
 });
 
-test("audit and newsletter review routes lead with an independent model", async () => {
+test("factual reviews stay strong while newsletter editorial reviews use the economy model", async () => {
   const oldEnv = snapshotEnv(OPENROUTER_ENV_NAMES);
   applySpreadsheetOpenRouterEnv();
 
@@ -263,8 +263,10 @@ test("audit and newsletter review routes lead with an independent model", async 
     const voiceReview = getProviderDiagnosticsForRoute("newsletterVoiceReview").configuredProviders.filter((p) => p.configured);
     const audienceReview = getProviderDiagnosticsForRoute("newsletterAudienceReview").configuredProviders.filter((p) => p.configured);
     assert.equal(compose[0]?.model, "anthropic/claude-sonnet-5.5");
-    assert.equal(voiceReview[0]?.model, "openai/gpt-5.6-sol");
-    assert.equal(audienceReview[0]?.model, "openai/gpt-5.6-sol");
+    assert.equal(voiceReview[0]?.model, "openai/gpt-5.6-luna");
+    assert.equal(audienceReview[0]?.model, "openai/gpt-5.6-luna");
+    assert.ok(voiceReview.some((provider) => provider.model === "openai/gpt-5.6-sol"));
+    assert.ok(audienceReview.some((provider) => provider.model === "openai/gpt-5.6-sol"));
   } finally {
     restoreEnv(oldEnv);
   }
