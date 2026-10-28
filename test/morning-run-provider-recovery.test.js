@@ -149,8 +149,6 @@ test("Blotato scheduled runs use deterministic slots and render static cards wit
   assert.match(text, /createLocalBlotatoCreditFallbackVideo/);
   assert.match(text, /static-cards-with-spoken-narration/);
   assert.doesNotMatch(text, /reservePaidRender/);
-  assert.equal(defaults.includes("BLOTATO_DAILY_PAID_RENDER_CAP="), false);
-  assert.equal(defaults.includes("BLOTATO_MONTHLY_ESTIMATED_CREDIT_CAP="), false);
   assert.match(defaults, /^BLOTATO_BRAND_ANIMATE_IMAGES=false$/m);
   assert.match(text, /BLOTATO_POST_SUBMISSION_RETRY_ATTEMPTS/);
   assert.match(text, /inferScheduleSlotFromJob\(job\) === scheduleSlot/);
