@@ -126,7 +126,7 @@ async function runQaLoopImpl({ profile, newsletter, lead, stories, promotion = n
       return {
         ok: true,
         newsletter: current,
-        iterations: maxLoops,
+        iterations: history.filter((entry) => entry.phase === "self-improve").length,
         selfImproveIterations: history.filter((entry) => entry.phase === "self-improve").length,
         councilRuns: councilRun,
         finalScore: council.score,
@@ -161,7 +161,7 @@ async function runQaLoopImpl({ profile, newsletter, lead, stories, promotion = n
   return {
     ok: false,
     newsletter: current,
-    iterations: maxLoops,
+    iterations: history.filter((entry) => entry.phase === "self-improve").length,
     selfImproveIterations: history.filter((entry) => entry.phase === "self-improve").length,
     councilRuns: history.filter((entry) => entry.phase === "council").length,
     finalScore: council?.score || selfReview?.score || 0,
