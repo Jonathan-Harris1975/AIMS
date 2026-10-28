@@ -1966,7 +1966,7 @@ async function runPublishJob({
         err.creditBudget = nextBudget;
         throw err;
       }
-      const monthlyBudget = positiveIntEnv("BLOTATO_MONTHLY_ESTIMATED_CREDIT_CAP", 100, 10_000);
+      const monthlyBudget = positiveIntEnv("BLOTATO_MONTHLY_ESTIMATED_CREDIT_CAP", 1250, 10_000);
       const priorRenders = getShortLaneJobTypes().flatMap((type) => getJobsByType(type))
         .map((job) => ({
           visualId: trim(job.videoId || job.result?.visualId),

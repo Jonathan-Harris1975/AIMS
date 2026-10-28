@@ -150,7 +150,7 @@ test("Blotato scheduled runs use deterministic slots, a daily cap, and bounded r
   assert.match(guard, /blotato-daily-paid-render-cap/);
   assert.match(text, /BLOTATO_MONTHLY_ESTIMATED_CREDIT_CAP/);
   assert.match(text, /reservePaidRender/);
-  assert.match(defaults, /^BLOTATO_MONTHLY_ESTIMATED_CREDIT_CAP=100$/m);
+  assert.match(defaults, /^BLOTATO_MONTHLY_ESTIMATED_CREDIT_CAP=1250$/m);
   assert.match(defaults, /^BLOTATO_BRAND_ANIMATE_IMAGES=false$/m);
   assert.match(text, /BLOTATO_FAILED_RENDER_REPLACEMENTS/);
   assert.match(text, /BLOTATO_POST_SUBMISSION_RETRY_ATTEMPTS/);
