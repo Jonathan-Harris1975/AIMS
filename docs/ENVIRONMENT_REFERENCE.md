@@ -30,7 +30,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `AI_STICKY_PROVIDER_ROUTING` | Yes | services/shared/utils/ai-service.js:78 |
 | `AI_SUITE_API_KEY` | Yes | scripts/collectCommsWorkerHealth.js:1<br>server.js:198<br>server.js:199<br>services/shared/middleware/suiteAuth.js:60 |
 | `AI_SUITE_AUDIT_CALLBACK_TOKEN` | Yes | audits/utils/callbackAuth.js:9<br>audits/utils/orchestrator.js:147<br>services/shared/middleware/suiteAuth.js:64 |
-| `AI_TIMEOUT` | Yes | services/artwork/createPodcastArtwork.js:14<br>services/artwork/createQuizArtwork.js:11<br>services/blotato/utils/newsShortsService.js:1298<br>services/script/utils/getSponsor.js:38<br>services/tts/utils/mergeProcessor.js:26 |
+| `AI_TIMEOUT` | Yes | services/artwork/createPodcastArtwork.js:14<br>services/artwork/createQuizArtwork.js:11<br>services/blotato/utils/newsShortsService.js:1302<br>services/script/utils/getSponsor.js:38<br>services/tts/utils/mergeProcessor.js:26 |
 | `AI_USAGE_LOG_ENABLED` | Yes | services/shared/utils/ai-service.js:236 |
 | `ALLOW_EPHEMERAL_STATE` | Yes | scripts/performanceGate.js:10<br>scripts/startupCheck.js:40<br>server.js:184<br>services/outreach/services/batchService.js:45<br>services/shared/utils/stateFile.js:74 |
 | `API_HUNTER_KEY` | Yes | services/outreach/services/outreachCore.js:15 |
@@ -73,7 +73,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `AUDIT_RUN_REUSE_ACTIVE_MS` | No | audits/utils/orchestrator.js:34 |
 | `AUDIT_WEBSITE_REPO_REF` | Yes | audits/utils/githubDispatch.js:35 |
 | `AUTO_CALL` | Yes | services/rss-feed-podcast/index.js:145 |
-| `AWS_REGION` | Yes | services/blotato/utils/localCreditFallbackVideo.js:15<br>services/tts/utils/ttsProcessor.js:23 |
+| `AWS_REGION` | Yes | services/blotato/utils/localCreditFallbackVideo.js:16<br>services/tts/utils/ttsProcessor.js:23 |
 | `BACKFILL_TRANSCRIPT_HTML` | Yes | scripts/bootstrap.js:156 |
 | `BACKFILL_TRANSCRIPT_HTML_TIMEOUT_MS` | No | scripts/bootstrap.js:161 |
 | `BLOG_ARTWORK_BUCKET_ALIAS` | Yes | services/artwork/createBlogArtwork.js:54 |
@@ -118,7 +118,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `BLOTATO_HUMAN_VISUAL_MIN_SCENES` | Yes | services/blotato/utils/newsShortsService.js:53 |
 | `BLOTATO_IMAGE_PROMPT_PROFILE` | Yes | services/blotato/utils/newsShortsService.js:30 |
 | `BLOTATO_IMAGE_TO_VIDEO_MODEL` | Yes | services/blotato/utils/autoPublishService.js:481 |
-| `BLOTATO_INLINE_PUBLISH_JOBS` | No | services/blotato/utils/autoPublishService.js:2656 |
+| `BLOTATO_INLINE_PUBLISH_JOBS` | No | services/blotato/utils/autoPublishService.js:2658 |
 | `BLOTATO_INSTAGRAM_SHARE_TO_FEED` | Yes | services/blotato/utils/autoPublishService.js:1001 |
 | `BLOTATO_KEEPALIVE_ENABLED` | Yes | services/blotato/utils/autoPublishService.js:1694 |
 | `BLOTATO_LOW_COST_IMAGE_MODEL_LABEL` | Yes | services/blotato/utils/autoPublishService.js:480<br>services/blotato/utils/newsShortsService.js:28 |
@@ -128,11 +128,11 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `BLOTATO_NEWS_AUDIENCE` | No | services/blotato/utils/autoPublishService.js:1741 |
 | `BLOTATO_NEWS_CTA` | Yes | services/blotato/utils/autoPublishService.js:1746 |
 | `BLOTATO_NEWS_DURATION_SECONDS` | Yes | services/blotato/utils/autoPublishService.js:1739 |
-| `BLOTATO_NEWS_JSON_RESPONSE_FORMAT` | Yes | services/blotato/utils/newsShortsService.js:1273 |
+| `BLOTATO_NEWS_JSON_RESPONSE_FORMAT` | Yes | services/blotato/utils/newsShortsService.js:1277 |
 | `BLOTATO_NEWS_MAX_SCRIPT_WORDS` | Yes | services/blotato/utils/newsShortsService.js:13 |
 | `BLOTATO_NEWS_MIN_SCENE_WORDS` | Yes | services/blotato/utils/newsShortsService.js:14 |
 | `BLOTATO_NEWS_MIN_SCRIPT_WORDS` | Yes | services/blotato/utils/newsShortsService.js:11 |
-| `BLOTATO_NEWS_RESPONSE_FORMAT_MODE` | Yes | services/blotato/utils/newsShortsService.js:1276 |
+| `BLOTATO_NEWS_RESPONSE_FORMAT_MODE` | Yes | services/blotato/utils/newsShortsService.js:1280 |
 | `BLOTATO_NEWS_RSS_URL` | Yes | services/blotato/utils/rssArticlePicker.js:77<br>services/blotato/utils/rssArticleSource.js:133 |
 | `BLOTATO_NEWS_SHORT_MAX_TOKENS` | Yes | services/blotato/utils/newsShortsService.js:10 |
 | `BLOTATO_NEWS_TARGET_SCRIPT_WORDS` | Yes | services/blotato/utils/newsShortsService.js:12 |
@@ -146,14 +146,14 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `BLOTATO_PUBLISH_WEBHOOK_SECRET` | Yes | services/shared/middleware/suiteAuth.js:76 |
 | `BLOTATO_RENDERED_MAX_SECONDS` | Yes | services/blotato/utils/renderedVideoQa.js:10 |
 | `BLOTATO_RENDERED_MIN_SECONDS` | Yes | services/blotato/utils/renderedVideoQa.js:9 |
-| `BLOTATO_RENDERED_QA_BLOCK_HARD_FAILURES` | Yes | services/blotato/utils/autoPublishService.js:2072 |
-| `BLOTATO_RENDERED_QA_BLOCK_SOFT_FAILURES` | Yes | services/blotato/utils/autoPublishService.js:2069 |
+| `BLOTATO_RENDERED_QA_BLOCK_HARD_FAILURES` | Yes | services/blotato/utils/autoPublishService.js:2074 |
+| `BLOTATO_RENDERED_QA_BLOCK_SOFT_FAILURES` | Yes | services/blotato/utils/autoPublishService.js:2071 |
 | `BLOTATO_RENDERED_QA_DOWNLOAD_TIMEOUT_MS` | Yes | services/blotato/utils/renderedVideoQa.js:124 |
 | `BLOTATO_RENDERED_QA_FRAMES` | Yes | services/blotato/utils/renderedVideoQa.js:12 |
 | `BLOTATO_RENDERED_QA_JSON_ATTEMPTS` | Yes | services/blotato/utils/renderedVideoQa.js:337 |
 | `BLOTATO_RENDERED_QA_MAX_BYTES` | Yes | services/blotato/utils/renderedVideoQa.js:13 |
 | `BLOTATO_RENDERED_QA_THRESHOLD` | Yes | services/blotato/utils/renderedVideoQa.js:11 |
-| `BLOTATO_REQUIRE_ALL_CHANNELS` | Yes | services/blotato/utils/autoPublishService.js:2239 |
+| `BLOTATO_REQUIRE_ALL_CHANNELS` | Yes | services/blotato/utils/autoPublishService.js:2241 |
 | `BLOTATO_REQUIRE_SCHEDULE_CONFIRMATION` | Yes | services/blotato/utils/autoPublishService.js:1226 |
 | `BLOTATO_RSS_BUCKET_ALIAS` | Yes | services/blotato/utils/rssArticlePicker.js:94<br>services/blotato/utils/rssArticleSource.js:147 |
 | `BLOTATO_RSS_FEED_URL` | No | services/blotato/utils/rssArticlePicker.js:78<br>services/blotato/utils/rssArticleSource.js:134 |
@@ -162,7 +162,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `BLOTATO_RSS_PICK_MODE` | Yes | services/blotato/utils/autoPublishService.js:1429<br>services/blotato/utils/rssArticlePicker.js:67<br>services/blotato/utils/rssArticleSource.js:230 |
 | `BLOTATO_RSS_PREFER_R2` | Yes | services/blotato/utils/rssArticlePicker.js:117<br>services/blotato/utils/rssArticleSource.js:146 |
 | `BLOTATO_SCHEDULE_RECOVERY_ENABLED` | Yes | services/blotato/utils/autoPublishService.js:1658 |
-| `BLOTATO_SCRIPT_TIMEOUT_MS` | Yes | services/blotato/utils/newsShortsService.js:1298 |
+| `BLOTATO_SCRIPT_TIMEOUT_MS` | Yes | services/blotato/utils/newsShortsService.js:1302 |
 | `BLOTATO_STEP0_PREFLIGHT_ENABLED` | Yes | services/blotato/utils/autoPublishService.js:941 |
 | `BLOTATO_TEMPLATE_AUTO_DISCOVERY` | Yes | services/blotato/utils/autoPublishService.js:355<br>services/blotato/utils/autoPublishService.js:1427 |
 | `BLOTATO_TEMPLATE_ID_MODE` | Yes | services/blotato/utils/autoPublishService.js:176<br>services/blotato/utils/autoPublishService.js:1425 |
@@ -189,7 +189,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `BRAND_SOCIAL_COUNCIL_RUN_AFTER_SOCIAL` | Yes | audits/utils/zernioSocialPerformance.js:722 |
 | `CF_ACCOUNT_ID` | Yes | services/kdp/catalogue.js:18 |
 | `CHROME_BIN` | No | audits/utils/socialThumbnailAudit.js:133 |
-| `CHROMIUM_PATH` | No | audits/utils/contentMasterCouncil.js:188<br>audits/utils/socialThumbnailAudit.js:132<br>audits/utils/websiteAuditCouncil.js:1080<br>services/artwork/utils/quizCardRenderer.js:20 |
+| `CHROMIUM_PATH` | No | audits/utils/contentMasterCouncil.js:188<br>audits/utils/socialThumbnailAudit.js:132<br>audits/utils/websiteAuditCouncil.js:1080<br>services/artwork/utils/quizCardRenderer.js:20<br>services/blotato/utils/localCreditFallbackVideo.js:130 |
 | `CLOUDFLARE_ACCOUNT_ID` | Yes | services/kdp/catalogue.js:18 |
 | `CLOUDFLARE_API_BASE_URL` | No | services/kdp/catalogue.js:19 |
 | `CLOUDFLARE_PURGE_ALLOW_PUBLIC` | Yes | services/shared/middleware/suiteAuth.js:81 |
@@ -202,7 +202,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `COMMS_HUB_AUTONOMOUS_REPLIES_ENABLED` | Yes | services/comms-hub/routes/index.js:145 |
 | `COMMS_HUB_BACKUP_ENABLED` | Yes | services/comms-hub/routes/index.js:125 |
 | `COMMS_HUB_CONTENT_AUTOMATION_BLOG_ENABLED` | Yes | services/comms-hub/routes/index.js:140 |
-| `COMMS_HUB_CONTENT_AUTOMATION_BLOTATO_VIDEO_BRIEF_LIMIT` | Yes | services/blotato/utils/autoPublishService.js:2547 |
+| `COMMS_HUB_CONTENT_AUTOMATION_BLOTATO_VIDEO_BRIEF_LIMIT` | Yes | services/blotato/utils/autoPublishService.js:2549 |
 | `COMMS_HUB_CONTENT_AUTOMATION_BRIEF_LEASE_MS` | Yes | services/comms-hub/contentAutomationQueueCore.js:325 |
 | `COMMS_HUB_CONTENT_AUTOMATION_BRIEF_LIMIT` | Yes | services/blog/social/buildDailySocialBlogPost.js:669<br>services/blog/weekly/buildWeeklyBlogPost.js:499<br>services/podcast/runPodcastPipeline.js:141 |
 | `COMMS_HUB_CONTENT_AUTOMATION_BRIEF_MAX_AGE_HOURS` | Yes | services/comms-hub/contentAutomationQueueCore.js:328 |
@@ -332,7 +332,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `PHASE3_SOURCE_COVERAGE_MIN` | No | services/content-quality/phase3Gates.js:372 |
 | `PHASE3_SOURCE_MIN_CHARS` | Yes | services/content-quality/phase3Gates.js:341 |
 | `PHASE3_SOURCE_OVERLAP_MIN` | No | services/content-quality/phase3Gates.js:369 |
-| `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` | Yes | audits/utils/contentMasterCouncil.js:188<br>audits/utils/websiteAuditCouncil.js:1081<br>services/artwork/utils/quizCardRenderer.js:21 |
+| `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` | Yes | audits/utils/contentMasterCouncil.js:188<br>audits/utils/websiteAuditCouncil.js:1081<br>services/artwork/utils/quizCardRenderer.js:21<br>services/blotato/utils/localCreditFallbackVideo.js:131 |
 | `PODCASTINDEX_USER_AGENT` | Yes | services/shared/utils/podcastIndexClient.js:34 |
 | `PODCAST_ARTWORK_TIMEOUT_MS` | Yes | services/artwork/createPodcastArtwork.js:12 |
 | `PODCAST_DURATION_MINS` | No | services/script/utils/durationCalculator.js:79 |
@@ -361,7 +361,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `PODCAST_TRANSCRIPT_HTML_BASE_URL` | Yes | scripts/backfill-transcript-html.js:80<br>scripts/backfill-transcript-html.js:131<br>services/script/utils/orchestrator.js:401<br>services/tts/utils/podcastProcessor.js:152 |
 | `PODCAST_TRANSCRIPT_MAX_SENTENCE_WORDS` | Yes | services/script/utils/editAndFormat.js:197<br>services/script/utils/orchestrator.js:113<br>services/script/utils/orchestrator.js:318<br>services/script/utils/scriptValidation.js:294 |
 | `PODCAST_TRANSCRIPT_MIN_SOURCE_TERMS` | No | services/script/utils/scriptValidation.js:391 |
-| `POLLY_VOICE_ID` | Yes | services/blotato/utils/localCreditFallbackVideo.js:19<br>services/blotato/utils/localCreditFallbackVideo.js:201<br>services/tts/utils/ttsProcessor.js:24 |
+| `POLLY_VOICE_ID` | Yes | services/blotato/utils/localCreditFallbackVideo.js:20<br>services/blotato/utils/localCreditFallbackVideo.js:229<br>services/tts/utils/ttsProcessor.js:24 |
 | `PORT` | Yes | routes/podcast-pipeline.js:14<br>scripts/collectCommsWorkerHealth.js:7<br>scripts/deploySmoke.js:3<br>scripts/startupCheck.js:74<br>server.js:486<br>services/ops/index.js:428 |
 | `QA_ALERT_WEBHOOK_URL` | Yes | config/thresholds.js:100 |
 | `R2_ACCESS_KEY_ID` | Yes | audits/utils/publishAuditArtifacts.js:62<br>scripts/startupCheck.js:77 |

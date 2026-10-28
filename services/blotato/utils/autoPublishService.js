@@ -1978,6 +1978,8 @@ async function runPublishJob({
         scheduleDate: activeScheduleDate || new Date().toISOString().slice(0, 10),
         reason: "static-cards-with-spoken-narration",
       });
+      video.visualInputs = buildBlotatoVideoInputs(pack);
+      video.visualPrompt = buildBlotatoVisualPrompt(pack);
       localCreditFallback = {
         code: "static-cards-with-spoken-narration",
         message: "Rendered as five static visual-aid cards with spoken narration.",
