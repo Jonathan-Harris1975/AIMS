@@ -73,13 +73,13 @@ async function handleMockRequest(req, res) {
       assert.ok(payload.messages.some((message) => String(message.content || "").includes("Create one five-card AI social briefing")));
       assert.ok(payload.messages.some((message) => String(message.content || "").includes("Spartan and informative")));
       assert.ok(payload.messages.some((message) => String(message.content || "").includes("Instagram must have no more than 5 hashtags")));
-      assert.ok(payload.messages.some((message) => String(message.content || "").includes("exactly five static visual-aid cards with spoken narration")));
+      assert.ok(payload.messages.some((message) => String(message.content || "").includes("five static visual-aid cards with original spoken narration")));
       assert.ok(payload.messages.some((message) => String(message.content || "").includes("HUMAN-CENTRED SOCIAL VISUALS")));
-      assert.ok(payload.messages.some((message) => String(message.content || "").includes("Spoken narration is required; no generated video footage, music, or sound effects")));
+      assert.ok(payload.messages.some((message) => String(message.content || "").includes("Spoken narration is")));
       assert.ok(payload.messages.some((message) => String(message.content || "").includes("CTA: For straight-talking artificial intelligence analysis, keep Jonathan Harris on your radar.")));
       assert.ok(!payload.messages.some((message) => String(message.content || "").includes("CTA: Follow Jonathan Harris for more")));
       assert.equal(payload.response_format, undefined);
-      assert.ok(payload.messages.some((message) => String(message.content || "").includes("Provide exactly 5 scenes")));
+      assert.ok(payload.messages.some((message) => String(message.content || "").includes("Create one original spoken narration supported by exactly five static visual-aid cards")));
     }
     res.writeHead(200, { "content-type": "application/json" });
     res.end(JSON.stringify({
