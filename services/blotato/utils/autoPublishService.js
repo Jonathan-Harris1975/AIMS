@@ -40,6 +40,13 @@ import { looksLikePendingVideoError } from "./renderStatus.js";
 import { pollUntil } from "./pollUntil.js";
 import { buildVisualCreationRequest } from "./visualRequest.js";
 import { createLocalBlotatoCreditFallbackVideo } from "./localCreditFallbackVideo.js";
+
+let localBlotatoFallbackRenderer = createLocalBlotatoCreditFallbackVideo;
+
+export function __setLocalBlotatoFallbackRendererForTests(renderer) {
+  if (typeof renderer !== "function") throw new TypeError("Local Blotato fallback renderer must be a function.");
+  localBlotatoFallbackRenderer = renderer;
+}
 import {
   claimPendingEditorialBriefs,
   editorialBriefFingerprint,
@@ -1964,7 +1971,7 @@ async function runPublishJob({
     if (reusedVideo) {
       video = reusedVideo;
     } else {
-      video = await createLocalBlotatoCreditFallbackVideo({
+      video = await localBlotatoFallbackRenderer({
         pack,
         article: articleSource.article,
         sessionId,
