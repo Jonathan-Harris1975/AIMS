@@ -2,8 +2,11 @@ const API = "https://openrouter.ai/api/v1/analytics";
 const zone = "Europe/London";
 
 export function managementKey(env = process.env) {
-  const key = String(env.OPENROUTER_MANAGEMENT_API_KEY || "").trim();
-  return /^\{\{\s*secret\./i.test(key) ? "" : key;
+  for (const name of ["OPENROUTER_MASTER_KEY", "OPENROUTER_MANAGEMENT_API_KEY"]) {
+    const key = String(env[name] || "").trim();
+    if (key && !/^\{\{\s*secret\./i.test(key)) return key;
+  }
+  return "";
 }
 
 export function londonDate(now = new Date()) {
@@ -91,7 +94,7 @@ export async function collectOpenRouterDailySpend({ date, now = new Date(), fx =
   env = process.env, fetchImpl = fetch,
 } = {}) {
   const key = managementKey(env);
-  if (!key) return { ok: false, status: "not_configured", missing: ["OPENROUTER_MANAGEMENT_API_KEY"], provider: "OpenRouter" };
+  if (!key) return { ok: false, status: "not_configured", missing: ["OPENROUTER_MASTER_KEY", "OPENROUTER_MANAGEMENT_API_KEY"], provider: "OpenRouter" };
   if (fx) convertSpendToGbp(0, fx);
   const window = londonDayWindow(date || shiftDate(londonDate(now), -1), now);
   const meta = (await queryApi("meta", { key, fetchImpl }))?.data;
