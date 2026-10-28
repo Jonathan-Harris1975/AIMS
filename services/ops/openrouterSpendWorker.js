@@ -46,7 +46,7 @@ export async function runOpenRouterSpendTick({ now = new Date(), env = process.e
   read = readPrivate, refresh = refreshOpenRouterSpendReports,
 } = {}) {
   if (!/^(true|1)$/i.test(String(env.OPENROUTER_DAILY_SPEND_ENABLED || ""))) return { ok: true, skipped: "disabled" };
-  if (!managementKey(env)) return { ok: false, status: "not_configured", missing: ["OPENROUTER_MANAGEMENT_API_KEY"] };
+  if (!managementKey(env)) return { ok: false, status: "not_configured", missing: ["OPENROUTER_MASTER_KEY", "OPENROUTER_MANAGEMENT_API_KEY"] };
   const hour = Number(new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", hour: "2-digit", hourCycle: "h23" }).format(now));
   if (hour < 7) return { ok: true, skipped: "before-report-window" };
   const latest = await read(`${prefix}/latest.json`);

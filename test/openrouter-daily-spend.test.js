@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { collectOpenRouterDailySpend, londonDayWindow, convertSpendToGbp, shiftDate } from "../services/ops/openrouterSpend.js";
+import { collectOpenRouterDailySpend, londonDayWindow, convertSpendToGbp, shiftDate, managementKey } from "../services/ops/openrouterSpend.js";
 import { refreshOpenRouterSpendReports, runOpenRouterSpendTick } from "../services/ops/openrouterSpendWorker.js";
 
 const now = new Date("2026-10-28T08:00:00Z");
@@ -104,4 +104,16 @@ test("collector skips disabled/unconfigured/early/already-collected periods", as
   const enabled = { ...env, OPENROUTER_DAILY_SPEND_ENABLED: "true" };
   assert.equal((await runOpenRouterSpendTick({ now: new Date("2026-10-28T05:00:00Z"), env: enabled }, deps)).skipped, "before-report-window");
   assert.equal((await runOpenRouterSpendTick({ now, env: enabled }, deps)).skipped, "already-collected");
+});
+
+
+test("master key is Analytics-only, takes precedence and ignores unresolved secret references", async () => {
+  assert.equal(managementKey({ OPENROUTER_MASTER_KEY: "master", OPENROUTER_MANAGEMENT_API_KEY: "legacy" }), "master");
+  assert.equal(managementKey({ OPENROUTER_MASTER_KEY: "{{secret.OPENROUTER_MASTER_KEY}}", OPENROUTER_MANAGEMENT_API_KEY: "legacy" }), "legacy");
+  assert.equal(managementKey({ OPENROUTER_MASTER_KEY: "{{ secret.OPENROUTER_MASTER_KEY }}", OPENROUTER_API_KEY: "inference" }), "");
+  const provider = fakeProvider();
+  const report = await collectOpenRouterDailySpend({ now }, { env: { OPENROUTER_MASTER_KEY: "master-only" }, fetchImpl: provider.fetchImpl });
+  assert.equal(report.ok, true);
+  assert.ok(provider.calls.every(call => call.options.headers.Authorization === "Bearer master-only"));
+  assert.ok(!JSON.stringify(report).includes("master-only"));
 });

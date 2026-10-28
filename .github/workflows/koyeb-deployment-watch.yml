@@ -80,6 +80,17 @@ jobs:
           install -d -m 0755 "$HOME/.local/bin"
           install -m 0755 "$workdir/koyeb" "$HOME/.local/bin/koyeb"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Bind the authorised OpenRouter Analytics secret for this activation release
+        if: ${{ github.event_name == 'workflow_run' && startsWith(github.event.workflow_run.head_commit.message, 'Activate OpenRouter Analytics') }}
+        env:
+          KOYEB_TOKEN: ${{ secrets.KOYEB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # Additive update: only this named secret reference and the reporting flag.
+          # The secret value never leaves Koyeb. This runs only for the explicit activation release.
+          koyeb services update "$KOYEB_SERVICE" \
+            --env 'OPENROUTER_MASTER_KEY={{secret.OPENROUTER_MASTER_KEY}}' \
+            --env OPENROUTER_DAILY_SPEND_ENABLED=true > /dev/null
       - name: Verify Koyeb minimum instances before deployment watch
         env:
           KOYEB_TOKEN: ${{ secrets.KOYEB_TOKEN }}
@@ -99,6 +110,16 @@ jobs:
         env:
           KOYEB_TOKEN: ${{ secrets.KOYEB_TOKEN }}
         run: npm run koyeb:min-instances:check
+      - name: Collect and verify OpenRouter Analytics from the deployed runtime
+        continue-on-error: true
+        timeout-minutes: 3
+        env:
+          KOYEB_TOKEN: ${{ secrets.KOYEB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # Private snapshots stay in R2; logs contain only verification status and available metric names.
+          printf -v exec_command 'koyeb services exec %q node -- scripts/verifyOpenRouterAnalytics.js' "$KOYEB_SERVICE"
+          script -q -e -c "$exec_command" /dev/null < /dev/null
       - name: Deploy Comms Hub D1 data-plane Worker from Koyeb runtime credentials
         timeout-minutes: 10
         env:

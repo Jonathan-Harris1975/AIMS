@@ -4,7 +4,7 @@ OpenRouter is the sole configured LLM provider for this reporting scope. Analyti
 
 ## Activation
 
-1. Create a separate OpenRouter management API key and install it as the AIMS server secret `OPENROUTER_MANAGEMENT_API_KEY` in Koyeb. Never put its value in source control, report exports, browser URLs or chat. The inference key is deliberately not accepted. The key is used only against the fixed OpenRouter Analytics API host; management credentials must be treated as privileged secrets.
+1. Create a separate OpenRouter management API key and install it as the AIMS server secret `OPENROUTER_MASTER_KEY` (legacy alias: `OPENROUTER_MANAGEMENT_API_KEY`) in Koyeb. Never put its value in source control, report exports, browser URLs or chat. The inference key is deliberately not accepted. The key is used only against the fixed OpenRouter Analytics API host; management credentials must be treated as privileged secrets.
 2. Enable `OPENROUTER_DAILY_SPEND_ENABLED=true` in the deployed environment (production defaults enable it; explicit deployment overrides win). Existing private R2 `metaSystem` storage credentials must work.
 3. Redeploy and use the existing AIMS bearer authentication to POST `/ops/spend/openrouter/refresh`, then GET `/ops/spend/openrouter/daily`. Both return HTTP 503 rather than a zero when credentials or evidence are unavailable. Verify the returned period and collection time before calling the integration live.
 
@@ -34,3 +34,9 @@ The example rate is illustrative, not current market data. CLI output is private
 Monitor daily snapshot age, missing/truncated/reconciliation errors and coverage alongside spend per successful task, QA pass rates, repair counts and publication outcomes. Compare matching workloads and separate weekly podcasts and experimental shadow costs. A lower account total alone does not prove efficiency or maintained quality.
 
 API references: https://openrouter.ai/docs/api/api-reference/analytics/get-available-analytics-metrics-and-dimensions and https://openrouter.ai/docs/api/api-reference/analytics/query-analytics-data
+
+## Activation release verification
+
+The explicit “Activate OpenRouter Analytics” release binds the existing Koyeb secret `OPENROUTER_MASTER_KEY` to the same runtime variable using an additive service update, and enables collection. Creating an organisation secret alone does not expose it to the service. The inference credential remains separate. This one-time binding runs only for the activation merge, before exact-SHA deployment verification; later releases do not rewrite it.
+
+After a verified production deployment, `scripts/verifyOpenRouterAnalytics.js` refreshes private snapshots and prints only verification status, reporting dates and available metric/dimension names. Actual spend, request counts, account identifiers, keys and prompt content stay out of public GitHub logs. This operational diagnostic is non-blocking for application release health; its own failure means Analytics is not verified, regardless of the deployment attestation. A 403 may indicate the new key lacks OpenRouter management privileges. Report success only after observing an `openrouter.analytics.verified` result.

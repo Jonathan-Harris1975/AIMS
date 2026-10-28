@@ -28,11 +28,11 @@ const router = express.Router();
 router.get("/spend/openrouter/daily", async (req, res) => {
   res.set("Cache-Control", "no-store");
   if (!managementKey()) return res.status(503).json({ ok: false, status: "not_configured", provider: "OpenRouter",
-    missing: ["OPENROUTER_MANAGEMENT_API_KEY"] });
+    missing: ["OPENROUTER_MASTER_KEY", "OPENROUTER_MANAGEMENT_API_KEY"] });
   try {
     const report = await readOpenRouterSpendReport(req.query.date);
     if (!report) return res.status(503).json({ ok: false, status: "unavailable", provider: "OpenRouter",
-      configured: Boolean(managementKey()), missing: managementKey() ? [] : ["OPENROUTER_MANAGEMENT_API_KEY"] });
+      configured: Boolean(managementKey()), missing: managementKey() ? [] : ["OPENROUTER_MASTER_KEY", "OPENROUTER_MANAGEMENT_API_KEY"] });
     return res.json(report);
   } catch (error) {
     if (/date|YYYY-MM-DD/i.test(error.message)) return res.status(400).json({ ok: false, error: "Invalid report date" });
