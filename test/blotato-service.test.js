@@ -364,29 +364,26 @@ process.env.COMMS_HUB_CONTENT_AUTOMATION_ENABLED = "false";
 process.env.COMMS_HUB_CONTENT_AUTOMATION_BLOTATO_VIDEO_ENABLED = "false";
 process.env.APP_TMP_DIR = `/tmp/aims-blotato-test-${Date.now()}`;
 
-const { setLocalCreditFallbackVideoFactoryForTests } = await import("../services/blotato/utils/autoPublishService.js");
-setLocalCreditFallbackVideoFactoryForTests(async ({ pack }) => ({
+const { __setLocalBlotatoFallbackRendererForTests } = await import("../services/blotato/utils/autoPublishService.js");
+const { app } = await import(`../server.js?blotato-suite=${Date.now()}`);
+__setLocalBlotatoFallbackRendererForTests(async ({ pack }) => ({
   visualId: null,
   dashboardUrl: null,
   mediaUrl: "https://example.com/video.mp4",
   templateId: null,
   templateIdCandidates: [],
   rejectedTemplateIds: [],
-  creditBudget: { expectedCredits: 0, actualCreditsUsed: 0, source: "local-no-paid-render" },
+  creditBudget: { expectedCredits: 0, actualCreditsUsed: 0, source: "test-renderer" },
   localCreditFallback: true,
   staticCardVisuals: true,
   audioNarration: true,
-  narrationProvider: "test-fixture",
+  narrationProvider: "test",
   runtimeSeconds: 50,
-  visualInputs: { scenes: pack.scenes || [], thumbnailText: pack.thumbnailText || null },
 }));
-
-const { app } = await import(`../server.js?blotato-suite=${Date.now()}`);
 
 const auth = { Authorization: "Bearer suite-key" };
 
 test.after(async () => {
-  setLocalCreditFallbackVideoFactoryForTests(null);
   await new Promise((resolve, reject) => mockServer.close((err) => (err ? reject(err) : resolve())));
   restoreEnv();
 });

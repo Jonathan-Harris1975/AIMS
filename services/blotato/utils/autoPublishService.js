@@ -40,6 +40,13 @@ import { looksLikePendingVideoError } from "./renderStatus.js";
 import { pollUntil } from "./pollUntil.js";
 import { buildVisualCreationRequest } from "./visualRequest.js";
 import { createLocalBlotatoCreditFallbackVideo } from "./localCreditFallbackVideo.js";
+
+let localBlotatoFallbackRenderer = createLocalBlotatoCreditFallbackVideo;
+
+export function __setLocalBlotatoFallbackRendererForTests(renderer) {
+  if (typeof renderer !== "function") throw new TypeError("Local Blotato fallback renderer must be a function.");
+  localBlotatoFallbackRenderer = renderer;
+}
 import {
   claimPendingEditorialBriefs,
   editorialBriefFingerprint,
@@ -65,18 +72,6 @@ const POST_FAILED_STATUSES = new Set(["failed", "error", "insufficient-credits",
 // matching time is acknowledged by POST /posts or the /schedules collection.
 const POST_SCHEDULE_ACCEPTED_STATUSES = new Set(["scheduled"]);
 const DEFAULT_AI_STORY_TEMPLATE_UUID = "5903fe43-514d-40ee-a060-0d6628c5f8fd";
-let localCreditFallbackVideoFactory = createLocalBlotatoCreditFallbackVideo;
-
-export function setLocalCreditFallbackVideoFactoryForTests(factory = null) {
-  if (String(process.env.NODE_ENV || "").trim().toLowerCase() !== "test") {
-    throw new Error("The local Blotato fallback video factory can only be changed in tests.");
-  }
-  if (factory !== null && typeof factory !== "function") {
-    throw new TypeError("The local Blotato fallback video test factory must be a function or null.");
-  }
-  localCreditFallbackVideoFactory = factory || createLocalBlotatoCreditFallbackVideo;
-}
-
 const MODEL_CREDIT_HINTS = Object.freeze({
   image: {
     "flux schnell": 1,
@@ -1976,7 +1971,7 @@ async function runPublishJob({
     if (reusedVideo) {
       video = reusedVideo;
     } else {
-      video = await localCreditFallbackVideoFactory({
+      video = await localBlotatoFallbackRenderer({
         pack,
         article: articleSource.article,
         sessionId,
