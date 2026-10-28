@@ -1,3 +1,5 @@
+import { readOpenRouterSpendReport, refreshOpenRouterSpendReports } from "./openrouterSpendWorker.js";
+import { managementKey } from "./openrouterSpend.js";
 import crypto from "node:crypto";
 import express from "express";
 import { getOperationalExcellenceSnapshot } from "../shared/utils/operationalExcellence.js";
@@ -21,6 +23,32 @@ import {
 import { info, warn } from "../../logger.js";
 
 const router = express.Router();
+
+// Suite bearer authentication is applied by routes/index.js before this router.
+router.get("/spend/openrouter/daily", async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  if (!managementKey()) return res.status(503).json({ ok: false, status: "not_configured", provider: "OpenRouter",
+    missing: ["OPENROUTER_MANAGEMENT_API_KEY"] });
+  try {
+    const report = await readOpenRouterSpendReport(req.query.date);
+    if (!report) return res.status(503).json({ ok: false, status: "unavailable", provider: "OpenRouter",
+      configured: Boolean(managementKey()), missing: managementKey() ? [] : ["OPENROUTER_MANAGEMENT_API_KEY"] });
+    return res.json(report);
+  } catch (error) {
+    if (/date|YYYY-MM-DD/i.test(error.message)) return res.status(400).json({ ok: false, error: "Invalid report date" });
+    return res.status(503).json({ ok: false, status: "storage-unavailable" });
+  }
+});
+
+router.post("/spend/openrouter/refresh", async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  try {
+    const result = await refreshOpenRouterSpendReports();
+    return res.status(result.ok ? 200 : 503).json(result);
+  } catch {
+    return res.status(503).json({ ok: false, status: "analytics-or-storage-unavailable" });
+  }
+});
 
 function normalise(value) {
   return value === undefined || value === null ? "" : String(value).trim();

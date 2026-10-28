@@ -242,3 +242,18 @@ test("robots.txt stays quiet and public on the API service", async () => {
     assert.equal(response.text, "");
   });
 });
+
+test("OpenRouter spend endpoints require suite auth and report missing credentials without storage access", async () => {
+  await withEnv({ NODE_ENV: "production", AIMS_API_KEY: "test-aims-key", OPENROUTER_MANAGEMENT_API_KEY: undefined }, async () => {
+    for (const method of ["get", "post"]) {
+      const path = method === "get" ? "/ops/spend/openrouter/daily" : "/ops/spend/openrouter/refresh";
+      assert.equal((await request(app)[method](path)).status, 401);
+      const response = await request(app)[method](path).set("Authorization", "Bearer test-aims-key");
+      assert.equal(response.status, 503);
+      assert.equal(response.body.status, "not_configured");
+      assert.deepEqual(response.body.missing, ["OPENROUTER_MANAGEMENT_API_KEY"]);
+      assert.match(response.headers["cache-control"], /no-store/);
+      assert.equal(response.body.recordedSpendUsd, undefined);
+    }
+  });
+});
