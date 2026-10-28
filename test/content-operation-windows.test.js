@@ -79,3 +79,17 @@ test("production keeps six weekday windows and prepares weekend evergreen posts 
   assert.equal(occurrences(friday, '/zernio/daily/saturday'), 1);
   assert.equal(occurrences(friday, '/zernio/daily/sunday'), 1);
 });
+
+
+test("social blog and newsletter remain weekday-only without Friday weekend batches", () => {
+  const start = opsSource.indexOf('const OPERATION_WINDOWS = Object.freeze({');
+  const end = opsSource.indexOf('\n});', start);
+  const windows = opsSource.slice(start, end);
+  for (const path of ["/blog/social/daily/build", "/zernio/blog-rss/daily", "/newsletter/generate", "/newsletter/readiness", "/newsletter/send"]) {
+    assert.equal(occurrences(windows, `"${path}"`), 5, `${path} must run exactly once per weekday`);
+  }
+  const friday = windows.slice(windows.indexOf('"friday-am": ['), windows.indexOf('"friday-pm": ['));
+  const builds = friday.split(/\r?\n/).filter((line) => /\["(?:blog-social|newsletter-generate)",/.test(line));
+  assert.equal(builds.length, 2);
+  assert.ok(builds.every((line) => !/publishDate|scheduledDateTime|scheduleDate|"date"/.test(line)));
+});
