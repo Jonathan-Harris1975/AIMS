@@ -77,6 +77,7 @@ export async function buildNewsletter({ profileId = "ai-edge", sessionId: reques
       iterations: qaResult.iterations,
       selfImproveIterations: qaResult.selfImproveIterations,
       councilRuns: qaResult.councilRuns,
+      councilShadow: qaResult.councilShadow || null,
       finalScore: qaResult.finalScore,
       councilVerdict: qaResult.council?.verdict || null,
       councilChairScore: qaResult.council?.chair?.score ?? null,

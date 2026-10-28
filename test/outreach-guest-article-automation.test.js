@@ -63,3 +63,24 @@ test('outreach migration extends delayed actions without dropping earlier action
   assert.ok(db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='comms_hub_outreach_targets'").get());
   assert.ok(db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='comms_hub_outreach_articles'").get());
 });
+
+test('outreach status reports configured route assignments without independent display defaults', async () => {
+  const names = ['OPENROUTER_API_KEY', 'OUTREACH_PITCH_MODEL', 'OUTREACH_ARTICLE_FALLBACK_MODEL'];
+  const previous = Object.fromEntries(names.map(name => [name, process.env[name]]));
+  const savedRoute = aiConfig.routeModels.commsHubOutreachPitch;
+  try {
+    process.env.OPENROUTER_API_KEY = 'test-only';
+    process.env.OUTREACH_PITCH_MODEL = 'test/configured-pitch';
+    process.env.OUTREACH_ARTICLE_FALLBACK_MODEL = 'test/configured-fallback';
+    aiConfig.routeModels.commsHubOutreachPitch = ['outreachPitch', 'outreachFallback'];
+    const status = await service().status();
+    assert.equal(status.models.pitch, 'test/configured-pitch');
+    assert.deepEqual(status.modelChains.pitch, ['test/configured-pitch', 'test/configured-fallback']);
+    assert.equal(status.models.fallback, 'test/configured-fallback');
+  } finally {
+    aiConfig.routeModels.commsHubOutreachPitch = savedRoute;
+    for (const [name, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[name]; else process.env[name] = value;
+    }
+  }
+});

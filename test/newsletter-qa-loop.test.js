@@ -23,6 +23,7 @@ let councilScores = [];
 let selfCallCount = 0;
 let chairCallCount = 0;
 let testCaseCount = 0;
+let shadowScore = 95;
 
 function chat(content) { return { choices: [{ message: { content } }] }; }
 function reviewResponse(score) {
@@ -38,6 +39,11 @@ before(async () => {
       try { parsed = JSON.parse(body); } catch {}
       const system = parsed.messages?.[0]?.content || "";
       res.writeHead(200, { "Content-Type": "application/json" });
+
+      if (system.includes("shadow-only newsletter")) {
+        res.end(JSON.stringify(chat(JSON.stringify({ score: shadowScore, blocking: shadowScore < 85, issues: [] }))));
+        return;
+      }
 
       if (system.includes("economical pre-council editor")) {
         const score = selfScores[Math.min(selfCallCount, selfScores.length - 1)] ?? 90;
@@ -167,4 +173,26 @@ describe("newsletter engine/qaLoop.js", () => {
     assert.equal(result.councilRuns, 2);
     assert.equal(chairCallCount, 2);
   });
+
+  test("shadow disagreement never changes the existing council publication verdict", async () => {
+    const { runQaLoop } = await import("../services/newsletter/engine/qaLoop.js");
+    const previous = process.env.NEWSLETTER_TARGETED_COUNCIL_SHADOW_ENABLED;
+    process.env.NEWSLETTER_TARGETED_COUNCIL_SHADOW_ENABLED = "true";
+    try {
+      selfScores = [60]; councilScores = [95]; shadowScore = 40;
+      const accepted = await runQaLoop({ profile: { ...profile, id: "shadow-accepted" }, newsletter: draftNewsletter(), lead, stories, sessionId: "shadow-accept" });
+      assert.equal(accepted.ok, true);
+      assert.equal(accepted.councilShadow.candidate.ok, false);
+      assert.equal(accepted.councilShadow.disagreement, true);
+      selfCallCount = 0; chairCallCount = 0;
+      councilScores = [60]; shadowScore = 95;
+      const held = await runQaLoop({ profile: { ...profile, id: "shadow-held" }, newsletter: { ...draftNewsletter(), subject: "Distinct held shadow case" }, lead, stories, sessionId: "shadow-hold" });
+      assert.equal(held.ok, false);
+      assert.equal(held.councilShadow.candidateOnlyApproval, true);
+    } finally {
+      if (previous === undefined) delete process.env.NEWSLETTER_TARGETED_COUNCIL_SHADOW_ENABLED;
+      else process.env.NEWSLETTER_TARGETED_COUNCIL_SHADOW_ENABLED = previous;
+    }
+  });
+
 });

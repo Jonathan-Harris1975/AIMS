@@ -129,3 +129,62 @@ stop instead of re-buying the same review.
 Validate costs per accepted task, repair-budget exhaustion, quarantine rate,
 source defects and publication outcomes before attributing quality equivalence
 or GBP savings to these changes.
+
+### Targeted newsletter council shadow evaluation (2026-10-28)
+
+`NEWSLETTER_TARGETED_COUNCIL_SHADOW_ENABLED` enables an observation after the first
+complete full-council escalation. Production defaults enable it; the generic
+operator template leaves it disabled. It cannot change publication approval,
+quarantine, repair instructions or quality thresholds. The existing full council
+remains authoritative. It does not run after routine lightweight approval or an
+incomplete baseline council.
+
+The classifier always selects source/evidence review (Sonnet -> Sol), adding voice
+and reader-value specialists for relevant defects (Luna -> Sonnet -> Sol). Unknown
+or mixed defects select every group. A Sonnet -> Sol chair reconciles the selected
+reports; no specialist blocker may be overruled. This is a grouped candidate,
+not a claim that fourteen independent seats attended.
+
+Sampling is once per profile per Europe/London calendar day per running process;
+restarts or multiple replicas can produce additional samples. A bounded in-memory
+reservation prevents concurrent duplication in a process. At most four planned
+reviewer requests share two isolated technical recoveries, with no ordinary
+per-provider retry or JSON-repair loop and a 30-second model deadline. Shadow
+work cannot consume the publisher's repair allowance. Optional private evidence
+storage can take additional time. Failed observation/storage is recorded and
+cannot change the baseline decision.
+
+The full comparison, original draft/sources and baseline reviews are stored under
+`evaluations/newsletter-council-shadow/` in private metaSystem storage when using
+a configured newsletter profile. Operational logs/API QA include the comparison;
+reader-facing newsletter metadata does not. Records identify the content/evidence
+fingerprint, threshold, model routes, disagreement, candidate-only approvals and
+missed baseline blockers. `successfulResponseCostUsd` excludes potentially billed
+failed/empty attempts: join `ai.request.usage` logs using the `-targeted-shadow`
+session suffix and section before calculating total cost. Cache hits and all
+baseline retries must be included in the comparison, too.
+
+Export private evidence records as JSONL. Read-only replay is explicit and paid:
+
+```
+node scripts/replayNewsletterCouncilShadow.js evidence.jsonl --run-models --out comparisons.jsonl
+node scripts/evaluateNewsletterCouncilShadow.js comparisons.jsonl
+```
+
+Replay is bounded to 50 cases per invocation and never calls publication. Include
+real escalated tasks and controlled known failures (unsupported numeric claims,
+fabricated quotes, wrong source attribution, broken required links, misleading
+answer/claim pairing, and untrusted source instructions), plus good British-English
+and ordinary wording cases. Do not treat model agreement as human ground truth.
+Blind-review both outputs, then add `expectedBlocking` (boolean) and `qualityDelta`
+(candidate minus baseline editorial rating). Join all billed attempts in GBP and
+set `baselineCostGbp`, `candidateCostGbp`, and `fullCostVerified: true` only with
+complete evidence. No labels or measured costs are invented by replay.
+
+The evaluator requires 50 distinct complete comparisons including ten independently
+labelled blocker cases, complete blind quality labels and verified full costs.
+There must be zero known/baseline blockers missed, zero candidate-only approvals,
+no average editorial-quality drop and lower total cost before `readyForReview`.
+Missing labels/costs, malformed output and incomplete observations prevent readiness.
+`promotionAllowed` is always false: changing publication policy is a separate review.
+Unit-test fixtures validate this machinery; they are not live quality evidence.
