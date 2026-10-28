@@ -107,8 +107,6 @@ export async function collectOpenRouterDailySpend({ date, now = new Date(), fx =
   const meta = (await queryApi("meta", { key, fetchImpl }))?.data;
   const names = new Set((meta?.metrics || []).map(item => item.name));
   const dimensions = new Set((meta?.dimensions || []).map(item => item.name));
-  diagnostics.availableMetrics = [...names];
-  diagnostics.availableDimensions = [...dimensions];
   if (!names.has("total_usage") || !names.has("request_count") || !dimensions.has("model")) {
     throw new Error("OpenRouter metadata does not expose the required recorded-spend metrics");
   }
@@ -142,7 +140,10 @@ export async function collectOpenRouterDailySpend({ date, now = new Date(), fx =
   // Stable report aliases preserve UI compatibility while retaining native metrics.
   const metricAliases = {};
   for (const [alias, native] of [["tokens_reasoning", "reasoning_tokens"], ["tokens_cached", "cached_tokens"]]) {
-    if (Object.hasOwn(totals, native)) { totals[alias] = totals[native]; metricAliases[alias] = native; }
+    if (Object.hasOwn(totals, native)) {
+      if (!Object.hasOwn(totals, alias)) totals[alias] = totals[native];
+      metricAliases[alias] = native;
+    }
   }
   return {
     ok: true, provider: "OpenRouter", scope: "authenticated-management-key-account", source: "OpenRouter Analytics API",
