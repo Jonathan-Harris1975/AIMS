@@ -8,7 +8,7 @@ function occurrences(text, needle) {
   return text.split(needle).length - 1;
 }
 
-test("weekday AM windows keep the blog independent and schedule both Blotato slots", () => {
+test("weekday AM windows contain blog-social handoff and both Blotato schedule slots", () => {
   const eveningPaths = {
     monday: "/blotato/shorts/news-insight/schedule",
     tuesday: "/blotato/shorts/model-verdict/schedule",
@@ -18,11 +18,10 @@ test("weekday AM windows keep the blog independent and schedule both Blotato slo
   };
   for (const day of Object.keys(eveningPaths)) {
     const start = opsSource.indexOf(`"${day}-am": [`);
-    const next = day === "friday" ? opsSource.indexOf('"friday-pm": [', start) : opsSource.indexOf(`"${({monday:"tuesday",tuesday:"wednesday",wednesday:"thursday",thursday:
-      "friday"})[day]}-am": [`, start);
+    const next = opsSource.indexOf("  ],", start);
     const block = opsSource.slice(start, next);
     assert.equal(occurrences(block, '/blog/social/daily/build'), 1, `${day} must build one social-blog item`);
-    assert.equal(occurrences(block, '/zernio/blog-rss/daily'), 0, `${day} must not recycle the social-blog item into Zernio`);
+    assert.equal(occurrences(block, '/zernio/blog-rss/daily'), 1, `${day} must schedule one social-blog item`);
     assert.equal(occurrences(block, `/zernio/daily/${day}`), 1, `${day} must schedule one daily evergreen item`);
     assert.equal(occurrences(block, '/blotato/autoshorts/schedule'), 1, `${day} must have one Blotato AM slot`);
     assert.equal(occurrences(block, eveningPaths[day]), 1, `${day} must have one Blotato PM slot`);
@@ -54,5 +53,32 @@ test("weekday newsletter build is independent and delivery waits for readiness",
     assert.match(lines[0], /"newsletter-generate".*"newsletter"\],/);
     assert.match(lines[1], /"newsletter-readiness".*"newsletter-generate"/);
     assert.match(lines[2], /"newsletter-send".*"newsletter-readiness"/);
+  }
+});
+
+test("weekly website blog, e-books and quiz retain their separate owners", () => {
+  const start = opsSource.indexOf('const OPERATION_WINDOWS = Object.freeze({');
+  const end = opsSource.indexOf('\n});', start);
+  const windows = opsSource.slice(start, end);
+  assert.equal(occurrences(windows, '"/blog/weekly/build"'), 1);
+  assert.equal(occurrences(windows, '"/zernio/ebooks/weekly"'), 1);
+  assert.equal(occurrences(windows, '"/zernio/quiz/weekly"'), 1);
+  const routes = fs.readFileSync(new URL('../services/zernio/routes/social.js', import.meta.url), 'utf8');
+  assert.ok(routes.includes('runner: buildAndScheduleBlogRssDaily'));
+  assert.equal(routes.includes('blog-rss-repost-retired'), false);
+});
+
+
+test("weekend windows build the daily social blog and newsletter without duplicating Friday's evergreen posts", () => {
+  for (const day of ["saturday", "sunday"]) {
+    const start = opsSource.indexOf(`"${day}-am": [`);
+    assert.ok(start > 0);
+    const block = opsSource.slice(start, opsSource.indexOf("  ],", start));
+    for (const path of ["/rss/rewrite", "/blog/social/daily/build", "/zernio/blog-rss/daily", "/newsletter/generate", "/newsletter/readiness", "/newsletter/send"]) {
+      assert.equal(occurrences(block, path), 1, `${day} must include ${path} exactly once`);
+    }
+    assert.match(block, /"zernio-blog-social".*"blog-social"/);
+    assert.match(block, /"newsletter-send".*"newsletter-readiness"/);
+    assert.equal(block.includes(`/zernio/daily/${day}`), false);
   }
 });

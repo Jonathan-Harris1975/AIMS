@@ -398,51 +398,21 @@ export function runZernioSocialGate({ contentType = "zernio-social", laneKey = "
     }
   }
 
-  const dailyScheduled = /^zernio-daily-/.test(contentType);
-  if (dailyScheduled) {
-    const advisoryPatterns = [
-      /Motivational hashtag\(s\) do not fit the brand:/i,
-      /Generic hedging phrase detected:/i,
-      /Motivational tone drift:/i,
-      /Post contains markdown or bullet formatting\./i,
-      /Post contains emoji despite brand rules\./i,
-      /Generic abstraction phrase detected:/i,
-      /British English drift:/i,
-      /Monday commentary is too thin/i,
-      /Monday commentary reads like generic explanatory filler/i,
-      /Post copy is not clearly aligned with its declared title\/topic/i,
-      /^(?:Tuesday|Wednesday|Thursday|Friday|Saturday) post (?:drifted away|must name a believable industry|must explain one concrete|needs one direct|should show)/i,
-      /Sunday spotlight repetition guard blocked recent person:/i,
-    ];
-    const hardDefects = [];
-    const advisoryDefects = [];
-    for (const defect of defects) {
-      if (advisoryPatterns.some((pattern) => pattern.test(defect))) advisoryDefects.push(defect);
-      else hardDefects.push(defect);
-    }
-    defects.splice(0, defects.length, ...hardDefects);
-    warnings.push(...advisoryDefects.map((defect) => `Daily QA advisory: ${defect}`));
-  }
-
   const score = scoreFromGate(defects, warnings);
-  if (defects.length || (dailyScheduled && warnings.length)) {
+  if (defects.length) {
     emitQaEvent({
       source: `scheduler.gate.${laneKey || contentType}`,
       type: "gate_defects",
       severity: score < 86 ? "medium" : "low",
-      message: defects.length
-        ? `${defects.length} defect(s) found in ${contentType} gate`
-        : `${warnings.length} advisory finding(s) recorded for ${contentType} gate`,
+      message: `${defects.length} defect(s) found in ${contentType} gate`,
       detail: { defects, warnings, score, laneKey, contentType },
-      persist: dailyScheduled,
     });
   }
 
   return {
-    ok: defects.length === 0 && (dailyScheduled || score >= 86),
+    ok: defects.length === 0 && score >= 86,
     score,
     threshold: 86,
-    dailyScheduled,
     contentType,
     laneKey,
     defects,
@@ -455,8 +425,7 @@ function addExternalGateDefects(gate = {}, extraDefects = [], extraWarnings = []
   const defects = [...new Set([...(gate.defects || []), ...extraDefects].filter(Boolean))];
   const warnings = [...new Set([...(gate.warnings || []), ...extraWarnings].filter(Boolean))];
   const score = scoreFromGate(defects, warnings);
-  const ok = defects.length === 0 && (gate.dailyScheduled || score >= 86);
-  return { ...gate, defects, warnings, score, threshold: Number(gate.threshold || 86), ok };
+  return { ...gate, defects, warnings, score, threshold: Number(gate.threshold || 86), ok: defects.length === 0 && score >= 86 };
 }
 
 export function buildZernioSemanticRepairPrompt({ laneKey = "", post = {}, gate = {}, attempt = 1, semanticContext = {} } = {}) {
@@ -1824,7 +1793,6 @@ export async function buildAndScheduleDailyLane(laneKey, options = {}) {
       }
     }
 
-    let spotlightWarning = "";
     if (laneKey === "sunday") {
       const spotlightPerson = compactText(post.spotlightPerson || "");
       if (!looksLikePersonName(spotlightPerson)) {
@@ -1834,12 +1802,10 @@ export async function buildAndScheduleDailyLane(laneKey, options = {}) {
         throw err;
       }
       if (spotlightPerson && isRecentSpotlightPerson(spotlightPerson)) {
-        spotlightWarning = `Sunday spotlight repeats recently featured person ${spotlightPerson}; recorded for the monthly QA review.`;
-        warn("zernio.daily.spotlight_repeated_advisory", {
-          lane: laneKey,
-          spotlightPerson,
-          publishDate,
-        });
+        const err = new Error(`Sunday spotlight repetition guard blocked recent person: ${spotlightPerson}`);
+        err.statusCode = 422;
+        err.zernioSocialGate = { ...zernioSocialGate, defects: [...zernioSocialGate.defects, err.message] };
+        throw err;
       }
     }
 
@@ -1861,7 +1827,6 @@ export async function buildAndScheduleDailyLane(laneKey, options = {}) {
       ...(buildContextResolved.warnings || []),
       ...(audienceIntentWarning ? [audienceIntentWarning] : []),
       ...(artworkWarning ? [artworkWarning] : []),
-      ...(spotlightWarning ? [spotlightWarning] : []),
       ...(scheduling.warnings || []),
     ];
 

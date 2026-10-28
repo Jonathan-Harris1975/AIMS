@@ -27,10 +27,12 @@ The AI Voice template receives the approved `scenes[].mediaSource` and `scenes[]
 
 Provider submission state is polled rather than assuming acceptance means publication. `BLOTATO_SCHEDULE_RECOVERY_ENABLED=true` safely moves a missed same-day slot forward while retaining the deterministic slot claim. If all RSS inputs are unavailable, scheduled short creation uses a clearly labelled evergreen editorial prompt with no fabricated source attribution.
 
-Production defaults still require confirmation from each configured channel. If a scheduled short cannot use Blotato’s paid renderer because of a credit cap or render-service failure, AIMS creates a branded, text-led 40-second video locally from the reviewed content pack, uploads it to the public R2 media bucket, and submits it through the same channel scheduling path. This local fallback consumes no Blotato render credits. The paid-render guard remains at two per day and 100 estimated credits per month; it is never bypassed. Provider submission confirmation is still required. Actual Blotato credit use must be checked in its dashboard because AIMS receives no billing total from the rendering API.
+Production defaults require every configured channel and scheduling confirmation: `BLOTATO_REQUIRE_ALL_CHANNELS=true` and `BLOTATO_REQUIRE_SCHEDULE_CONFIRMATION=true`. The daily paid-render cap is two, matching the separate AM and PM slots, while the monthly estimated-credit cap remains 100. That monthly cap can still stop later slots once exhausted; two daily posts throughout a month require a funded cap large enough for every scheduled render. The credit reservations are stored in durable state before Blotato is called, and remain charged to the guard when a provider response is uncertain. Automatic paid replacements are disabled by default (`BLOTATO_FAILED_RENDER_REPLACEMENTS=0`); a finished video can still be reused for a safe scheduling retry. Actual credit use must be checked in the Blotato dashboard because AIMS receives no billing total from the rendering API.
 
 The `ai-playbook` lane is prepared in the **Friday AM** operation. Friday PM is podcast-only.
 
 ## Configuration
 
 Use the `BLOTATO_*` variables plus the shared OpenRouter/artwork settings in `config/production.defaults.env` and `env.template`. Secrets remain deployment-only.
+
+Scheduled posts always block hard finished-video QA failures. Soft failure blocking defaults to enabled and can be configured separately. Failed renders are retained for inspection; they are never replaced automatically by local text-card videos.
