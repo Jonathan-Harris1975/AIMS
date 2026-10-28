@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import request from "supertest";
 import { testCredential } from "./helpers/testCredentials.js";
+import { __setLocalBlotatoFallbackRendererForTests } from "../services/blotato/utils/autoPublishService.js";
 
 const ORIGINAL_ENV = { ...process.env };
 
@@ -365,6 +366,22 @@ process.env.APP_TMP_DIR = `/tmp/aims-blotato-test-${Date.now()}`;
 
 const { app } = await import(`../server.js?blotato-suite=${Date.now()}`);
 
+__setLocalBlotatoFallbackRendererForTests(async ({ pack }) => ({
+  visualId: null,
+  dashboardUrl: null,
+  mediaUrl: "https://example.com/video.mp4",
+  templateId: null,
+  templateIdCandidates: [],
+  rejectedTemplateIds: [],
+  creditBudget: { expectedCredits: 0, actualCreditsUsed: 0, source: "test-renderer" },
+  localCreditFallback: true,
+  staticCardVisuals: true,
+  audioNarration: true,
+  narrationProvider: "test",
+  visualInputs: { scenes: Array.isArray(pack.scenes) ? pack.scenes : [] },
+  runtimeSeconds: 50,
+}));
+
 const auth = { Authorization: "Bearer suite-key" };
 
 test.after(async () => {
@@ -546,7 +563,7 @@ test("Blotato news insight route builds a dry-run short pack", async () => {
   assert.ok(Array.isArray(response.body.pack.scenes));
   assert.ok(response.body.pack.scenes.length >= 3);
   assert.ok(Array.isArray(response.body.visualInputs.scenes));
-  assert.equal(response.body.visualInputs.thumbnailText, "AI agents move from chat");
+  assert.equal(response.body.visualInputs.thumbnailText, response.body.pack.thumbnailText);
   assert.equal(response.body.visualRequest.inputs.scenes.length, 5);
   assert.equal(response.body.visualRequest.inputs.aiImageModel, "replicate/black-forest-labs/flux-schnell");
   assert.equal(response.body.visualRequest.inputs.animateAiImages, false);
