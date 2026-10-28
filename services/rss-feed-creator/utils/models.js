@@ -1,3 +1,4 @@
+import { createRepairHistory, withRepairHistory } from "../../shared/utils/repairHistory.js";
 // ============================================================
 // 🧠 RSS Feed Creator — AI Rewrite & Short Title Models
 // ============================================================
@@ -241,6 +242,7 @@ function buildValidationRepairMessages({
 
 async function repairRewriteForValidation({ systemPrompt, userPrompt, rewrittenTitle, rewrittenSummary, defects = [] } = {}) {
   const repairRaw = await resilientRequest("rssRewrite", {
+    section: "rss-validation-repair",
     messages: buildValidationRepairMessages({
       systemPrompt,
       userPrompt,
@@ -303,6 +305,10 @@ function evaluatePhase3Gate({ title, sourceText, item, link, rewrittenTitle, rew
 // ============================================================
 
 export async function rewriteArticle(item = {}) {
+  return withRepairHistory(createRepairHistory(), { stage: "rss-rewrite" }, () => rewriteArticleImpl(item));
+}
+
+async function rewriteArticleImpl(item = {}) {
   const title = String(item?.title || "").trim() || "Untitled article";
   const link = String(item?.link || "").trim();
   const summaryRaw = String(item?.summary || "").trim();
@@ -382,6 +388,7 @@ export async function rewriteArticle(item = {}) {
     ];
 
     const raw2 = await resilientRequest("rssRewrite", {
+      section: "rss-filler-repair",
       messages: retryMessages,
       temperature: 0.55,
       max_tokens: 900,
@@ -439,6 +446,7 @@ export async function rewriteArticle(item = {}) {
     ];
 
     const entityRetryRaw = await resilientRequest("rssRewrite", {
+      section: "rss-entity-repair",
       messages: entityRetryMessages,
       temperature: 0.5,
       max_tokens: 900,
@@ -544,6 +552,7 @@ export async function rewriteArticle(item = {}) {
     });
 
     const repairRaw = await resilientRequest("rssRewrite", {
+      section: "rss-phase3-repair",
       messages: buildPhase3RepairMessages({
         systemPrompt,
         userPrompt,

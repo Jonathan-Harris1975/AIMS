@@ -5,6 +5,7 @@
 // drift into travel imagery or produce a decorative infographic unrelated to
 // the article. This audit inspects the pixels before upload/publication.
 
+import { visualQaCache, qaFingerprint } from "../../shared/utils/validatedResultCache.js";
 import { detectImageFormat } from "./imageFormat.js";
 import { parseStructuredJson, strictJsonResponseFormat } from "../../shared/utils/structuredJson.js";
 
@@ -180,7 +181,14 @@ export async function auditArtworkBase64({ base64, mode = "editorial", creativeP
   if (!image) throw new Error("Artwork visual QA requires a base64 image.");
 
   const { base64: cleanBase64, mimeType } = detectImageFormat(image);
-  const { resilientRequest } = await import("../../shared/utils/ai-service.js");
+  const { resilientRequest, getProviderDiagnosticsForRoute } = await import("../../shared/utils/ai-service.js");
+  if (signal?.aborted) throw signal.reason || new Error("Artwork visual QA aborted");
+  const qaKey = qaFingerprint({ version: 1, route: "artworkVisualQa", image: qaFingerprint(cleanBase64), mimeType,
+    prompt: buildArtworkVisualQaPrompt({ mode, creativePrompt }), thresholds: artworkVisualQaThresholds(mode),
+    schema: ARTWORK_QA_SCHEMA, strictFormat: envFlag("ARTWORK_VISUAL_QA_STRICT_RESPONSE_FORMAT", false), models: getProviderDiagnosticsForRoute("artworkVisualQa").configuredProviders,
+    providerPolicy: Object.entries(process.env).filter(([key]) => /^OPENROUTER_(PROVIDER_|SORT_BY|DATA_COLLECTION|SERVICE_TIER)/.test(key)) });
+  const cached = visualQaCache.get(qaKey);
+  if (cached) return cached;
   const parseAttempts = Math.max(1, Math.min(3, Number(process.env.ARTWORK_VISUAL_QA_PARSE_ATTEMPTS || 3)));
   let lastError;
 
@@ -215,7 +223,9 @@ export async function auditArtworkBase64({ base64, mode = "editorial", creativeP
     });
 
     try {
-      return normaliseArtworkVisualQa(raw, artworkVisualQaThresholds(mode));
+      const result = normaliseArtworkVisualQa(raw, artworkVisualQaThresholds(mode));
+      visualQaCache.put(qaKey, result);
+      return result;
     } catch (error) {
       lastError = error;
       if (attempt >= parseAttempts) throw error;

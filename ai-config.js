@@ -278,6 +278,7 @@ export const aiConfig = {
     blotatoVisualQa: routeChain(["audit", "highQuality"], ["claudeSonnet5", "anthropic46", "gpt56Sol"]),
     // Public RSS source text may use a free first draft; paid models remain the quality-gated fallback.
     rssRewriteFirstPass: routeChain(["openrouterFreePrimary"], ["google25FlashLite", "gpt56Sol"]),
+    rssRelevance: routeChain(["fast", "summary", "standard", "fallback"], ["google25FlashLite", "gpt56Sol"]),
     rssRewrite: routeChain(["standard", "fast", "fallback"], ["google25FlashLite", "gpt56Sol"]),
     rssShortTitle: routeChain(["fast", "summary", "fallback"], ["google25FlashLite", "gpt56Sol"]),
     blogWeekly: routeChain(["standard", "summary", "fallback"], ["google25FlashLite", "gpt56Sol"]),
