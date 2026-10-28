@@ -256,6 +256,7 @@ export const aiConfig = {
     metadata: routeChain(["summary", "json", "fast", "fallback"], ["google25FlashLite", "gpt56Sol"]),
     podcastHelper: routeChain(["summary", "fast", "fallback"], ["google25FlashLite", "gpt56Sol", "meta"]),
     seoKeywords: routeChain(["summary", "fast", "fallback"], ["google25FlashLite", "gpt56Sol"]),
+    kdpResearchDraft: fixedRouteChain(["openrouterFreePrimary"]),
     artworkPrompt: routeChain(["summary", "fast", "fallback"], ["meta", "google25FlashLite"]),
     artworkImage: routeChain(["image"], ["artworkPrimary", "artworkBackup"]),
     artworkVisualQa: routeChain(["audit", "highQuality"], ["claudeSonnet5", "anthropic46", "gpt56Sol"]),
