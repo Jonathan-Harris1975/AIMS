@@ -1,5 +1,36 @@
 # AIMS Model Selection and Spend Governance
 
+## Cost-efficiency package — 28 October 2026
+
+- RSS yes/no relevance checks use the existing economy fast/summary roles before
+  the standard/fallback models. Malformed answers fail validation and escalate;
+  deterministic relevance exclusions and publication gates remain unchanged.
+- Every returned model attempt logs usage before empty-content or caller
+  validation, including provider response ID, session, section, reasoning and
+  cached-input tokens when reported. Successful responses are not counted twice.
+  Transport failures with no returned usage remain unreconciled until provider
+  billing is available.
+- Passing image/video QA verdicts may be reused for ten minutes in a bounded
+  process-local cache. Keys cover exact asset bytes, source/prompt context,
+  configured models, thresholds, schema and provider policy. Failed, skipped and
+  infrastructure-fallback results are never cached as approvals. Reuse does not
+  survive a process restart or waive finished-video technical validation.
+- Podcast title, description and keyword candidates share one metadata request.
+  Existing metadata and discovery validators remain authoritative; missing or
+  invalid keywords use source-derived fallbacks without a second model call.
+- RSS repairs and shared council repair loops carry per-artefact asynchronous
+  repair history. History guides targeted corrections across stages and records
+  validation outcomes, without lowering thresholds, suppressing retries or
+  treating prior model output as factual evidence.
+- Public RSS and grounded KDP drafts retain their existing free-first routes.
+  Private Comms Hub/outreach content retains its paid/privacy-controlled routes.
+  Main writers and substantive factual reviewers retain their model assignments;
+  additional free writers require task evaluations before promotion.
+
+Compare accepted-output quality, repair/fallback counts, QA reuse and actual
+returned usage against the prior routes. No GBP saving or live quality
+equivalence is claimed from deterministic tests alone.
+
 1. **Operating rule.** AIMS uses advisory spend control. A request must never be stopped because a monetary threshold has been reached. Availability, authentication, privacy, malformed configuration and content-quality controls remain valid reasons to fail safely.
 
 2. **Ownership.** AIMS owns model execution, usage evidence and the authenticated governance receiver. The HIVE AI Council is expected to own the future monthly OpenRouter review and send its approved AIMS assignments. This repository does not schedule or configure that HIVE process.

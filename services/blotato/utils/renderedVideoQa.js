@@ -1,3 +1,6 @@
+import { createHash } from "node:crypto";
+import { createReadStream } from "node:fs";
+import { visualQaCache, qaFingerprint } from "../../shared/utils/validatedResultCache.js";
 import { execFile } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
@@ -331,9 +334,17 @@ export async function reviewRenderedVideo({
       };
     }
 
+    const { resilientRequest, getProviderDiagnosticsForRoute } = await import("../../shared/utils/ai-service.js");
+    const digest = createHash("sha256");
+    for await (const chunk of createReadStream(videoPath)) digest.update(chunk);
+    const qaKey = qaFingerprint({ version: 1, route: "blotatoVisualQa", video: digest.digest("hex"), frameCount,
+      prompt: buildRenderedVideoQaPrompt({ pack, article, technical }), technical, schema: RENDERED_VIDEO_QA_SCHEMA,
+      threshold: DEFAULT_THRESHOLD, models: getProviderDiagnosticsForRoute("blotatoVisualQa").configuredProviders,
+      providerPolicy: Object.entries(process.env).filter(([key]) => /^OPENROUTER_(PROVIDER_|SORT_BY|DATA_COLLECTION|SERVICE_TIER)/.test(key)) });
+    const cached = visualQaCache.get(qaKey);
+    if (cached) return cached;
     await createContactSheet(videoPath, contactSheetPath, { durationSeconds: metadata.durationSeconds, frameCount });
     const contactSheet = await readFile(contactSheetPath);
-    const { resilientRequest } = await import("../../shared/utils/ai-service.js");
     const maxJsonAttempts = Math.max(1, Math.min(3, Number(process.env.BLOTATO_RENDERED_QA_JSON_ATTEMPTS || 2)));
     let lastQaError = null;
     for (let attempt = 1; attempt <= maxJsonAttempts; attempt += 1) {
@@ -353,7 +364,9 @@ export async function reviewRenderedVideo({
             ],
           }],
         });
-        return normaliseRenderedVideoQa(raw, { technical });
+        const result = normaliseRenderedVideoQa(raw, { technical });
+        visualQaCache.put(qaKey, result);
+        return result;
       } catch (error) {
         lastQaError = error;
       }

@@ -358,7 +358,8 @@ HARD RULES:
   - Do not keyword-stuff. Human clarity beats search-engine confetti.
 
 Return STRICT JSON ONLY:
-{"title":"","description":""}
+{"title":"","description":"","keywords":[]}
+Keywords: 10-14 unique lowercase search phrases grounded only in the main content, no hashtags.
 
 MAIN CONTENT (use only this):
 ${mainOnly}
@@ -526,7 +527,7 @@ function deriveTopicIndex({ topics = [], keywords = [] } = {}) {
  * Episode Meta Generator
  * -----------------------------------------------------------
  */
-export async function generateEpisodeMetaLLM(rawTranscript, sessionMeta = {}) {
+export async function generateEpisodeMetaLLM(rawTranscript, sessionMeta = {}, { request = resilientRequest, storeTempPart = sessionCache.storeTempPart } = {}) {
   const sessionId = sessionMeta.sessionId || "episode";
 
   let mainOnly = "";
@@ -542,12 +543,15 @@ export async function generateEpisodeMetaLLM(rawTranscript, sessionMeta = {}) {
   // On-brand fallbacks. These are used only if the model output fails validation.
   let title = buildFallbackTitle(mainOnly);
   let description = buildFallbackDescription(mainOnly, durationPlan);
+  let combinedKeywords = [];
 
   try {
     const prompt = getTitleDescriptionPrompt(mainOnly, durationPlan);
-    const tdRaw = await resilientRequest("metadata", {
+    const tdRaw = await request("metadata", {
       sessionId,
       messages: [{ role: "user", content: prompt }],
+      max_tokens: 1400, reasoning: { effort: "none", exclude: true },
+      response_format: { type: "json_object" },
     });
 
     let parsed;
@@ -568,6 +572,8 @@ export async function generateEpisodeMetaLLM(rawTranscript, sessionMeta = {}) {
     if (v.ok) {
       title = candidate.title;
       description = candidate.description;
+      combinedKeywords = Array.isArray(parsed?.keywords)
+        ? parsed.keywords.filter(k => typeof k === "string" && k.length <= 80 && !/[#\r\n]/.test(k)) : [];
     } else {
       warn("meta.titleDesc.invalid", { sessionId, reasons: v.reasons });
     }
@@ -575,28 +581,11 @@ export async function generateEpisodeMetaLLM(rawTranscript, sessionMeta = {}) {
     error("meta.titleDesc.fail", { sessionId, message: err?.message });
   }
 
-  /* SEO Keywords */
-  let keywords = [];
-  try {
-    const kw = await resilientRequest("seoKeywords", {
-      sessionId,
-      messages: [{ role: "user", content: getSEOKeywordsPrompt({ title, description, mainOnly, keywordCandidates: seoKeywordCandidates }) }],
-    });
-
-    keywords = String(kw)
-      .split(",")
-      .map((k) => k.trim().toLowerCase())
-      .filter(Boolean)
-      .slice(0, 14);
-  } catch {
-    keywords = uniqueKeywordList([
-      ...seoKeywordCandidates,
-      "artificial intelligence",
-      "ai governance",
-      "ai podcast",
-      "jonathan harris",
-    ]).map((k) => k.toLowerCase()).slice(0, 14);
-  }
+  /* Keywords share the metadata call. Missing/invalid keywords use existing
+     source-derived candidates; no second model call or invented fallback facts. */
+  let keywords = uniqueKeywordList(combinedKeywords.length ? combinedKeywords : [
+    ...seoKeywordCandidates, "artificial intelligence", "ai governance", "ai podcast", "jonathan harris",
+  ]).map(k => k.toLowerCase()).slice(0, 14);
 
   keywords = uniqueKeywordList([...keywords, ...seoKeywordCandidates])
     .map((k) => k.toLowerCase())
@@ -623,7 +612,7 @@ export async function generateEpisodeMetaLLM(rawTranscript, sessionMeta = {}) {
   /* Artwork Prompt */
   let artworkPrompt = applyArtworkPromptPolicy(getArtworkPrompt(description, sessionId), { date: sessionId, mode: "podcast" });
   try {
-    const candidatePrompt = await resilientRequest("artworkPrompt", {
+    const candidatePrompt = await request("artworkPrompt", {
       sessionId,
       messages: [{ role: "user", content: `${buildPodcastArtworkPersona()}\n\nCreate only an image-generation prompt.\n${getArtworkPrompt(description, sessionId)}` }],
     });
@@ -635,7 +624,7 @@ export async function generateEpisodeMetaLLM(rawTranscript, sessionMeta = {}) {
       warn("meta.artwork.offbrand_or_ungrounded", { sessionId, candidatePrompt: cleanedCandidate });
     }
 
-    await sessionCache.storeTempPart(sessionMeta, "artworkPrompt", artworkPrompt);
+    await storeTempPart(sessionMeta, "artworkPrompt", artworkPrompt);
   } catch {
     error("meta.artwork.fail", { sessionId });
   }

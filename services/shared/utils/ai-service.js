@@ -1,3 +1,4 @@
+import { prepareRepairRequest } from "./repairHistory.js";
 // ============================================================
 // 🧠 services/shared/utils/ai-service.js
 // Resilient AI requester (OpenRouter) — ai-config–driven
@@ -296,7 +297,8 @@ function extractMessageContent(json) {
   return "";
 }
 
-async function callOpenRouter({ routeKey, providerId, model, apiKey, messages, max_tokens, temperature, top_p, response_format, headers, timeoutMs, reasoning, signal, relaxedParameters = false }) {
+async function callOpenRouter({ routeKey, providerId, model, apiKey, messages, max_tokens, temperature, top_p,
+  response_format, headers, timeoutMs, reasoning, signal, relaxedParameters = false, onUsage }) {
   if (signal?.aborted) {
     throw signal.reason instanceof Error ? signal.reason : Object.assign(new Error("OpenRouter request aborted"), { name: "AbortError", code: "AI_REQUEST_ABORTED" });
   }
@@ -349,8 +351,12 @@ async function callOpenRouter({ routeKey, providerId, model, apiKey, messages, m
       throw makeOpenRouterError(res.status, text, providerId, res.headers?.get?.("retry-after"));
     }
     const json = await res.json();
-    const content = extractMessageContent(json);
     const usage = json?.usage || null;
+    // Account for every returned attempt before empty-content or caller validation.
+    onUsage?.({ usage, model: json?.model || model, responseId: json?.id,
+      finishReason: json?.choices?.[0]?.finish_reason || null,
+      durationMs: Date.now() - startedAt, serviceTier: json?.service_tier || serviceTier });
+    const content = extractMessageContent(json);
 
     if (!content) {
       const finishReason = json?.choices?.[0]?.finish_reason;
@@ -429,6 +435,8 @@ export async function resilientRequest(routeName, {
   validateContent,
 } = {}) {
   const routeKey = resolveRouteKey(routeName);
+  const repairRequest = prepareRepairRequest(routeKey, messages, { stage: section });
+  messages = repairRequest.messages;
   const chain = getProviderChainForRoute(routeKey);
   const requestedMaxRetries = Number.isFinite(Number(maxRetries)) ? Number(maxRetries) : MAX_RETRIES;
   const effectiveMaxRetries = Math.min(1, Math.max(0, requestedMaxRetries));
@@ -462,9 +470,39 @@ export async function resilientRequest(routeName, {
     const providerMessages = headroom.messages;
     let compatibilityRelaxationUsed = false;
     for (let attempt = 0; attempt <= effectiveMaxRetries; attempt++) {
+      const logReturnedUsage = (result, parameterMode) => {
+        if (shouldLogUsage()) {
+          info("ai.request.usage", {
+            routeName,
+            routeKey,
+            provider: providerId,
+            requestedModel: provider.name,
+            returnedModel: result.model,
+            durationMs: result.durationMs,
+            serviceTier: result.serviceTier,
+            parameterMode,
+            sessionId: __sid(sessionId), section, attempt: attempt + 1,
+            responseId: result.responseId, finishReason: result.finishReason,
+            promptTokens: result.usage?.prompt_tokens,
+            completionTokens: result.usage?.completion_tokens,
+            totalTokens: result.usage?.total_tokens,
+            cost: result.usage?.cost,
+            reasoningTokens: result.usage?.completion_tokens_details?.reasoning_tokens,
+            cachedInputTokens: result.usage?.prompt_tokens_details?.cached_tokens,
+            ...getSpendLogFields({
+              model: result.model || provider.name,
+              assignmentEnv: provider.modelEnv,
+              providerPosition,
+            }),
+            headroomCompressed: headroom.compressed,
+            headroomTokensSaved: headroom.tokensSaved || 0,
+            headroomReason: headroom.reason || null,
+          });
+        }
+      };
       try {
         const result = await callOpenRouter({ routeKey, providerId, model: provider.name, apiKey: provider.apiKey, messages: providerMessages, max_tokens, temperature, top_p,
-           response_format, headers, timeoutMs, reasoning, signal });
+           response_format, headers, timeoutMs, reasoning, signal, onUsage: result => logReturnedUsage(result, "standard") });
         if (typeof validateContent === "function") await validateContent(result.content, { routeName, routeKey, providerId, model: result.model || provider.name });
         const keyEnv = provider.apiKeyEnv || "provider-config";
         const credentialSource = `${providerId}:${keyEnv}`;
@@ -478,34 +516,11 @@ export async function resilientRequest(routeName, {
             status: "used-successfully",
           });
         }
-        if (shouldLogUsage()) {
-          info("ai.request.usage", {
-            routeName,
-            routeKey,
-            provider: providerId,
-            requestedModel: provider.name,
-            returnedModel: result.model,
-            durationMs: result.durationMs,
-            serviceTier: result.serviceTier,
-            parameterMode: "standard",
-            promptTokens: result.usage?.prompt_tokens,
-            completionTokens: result.usage?.completion_tokens,
-            totalTokens: result.usage?.total_tokens,
-            cost: result.usage?.cost,
-            ...getSpendLogFields({
-              model: result.model || provider.name,
-              assignmentEnv: provider.modelEnv,
-              providerPosition,
-            }),
-            headroomCompressed: headroom.compressed,
-            headroomTokensSaved: headroom.tokensSaved || 0,
-            headroomReason: headroom.reason || null,
-          });
-        }
         recordProviderOutcome({ routeKey, provider: providerId, ok: true, durationMs: result.durationMs, status: "success" });
         __record(sessionId, routeName, providerId, result.model || provider.name);
         __lastSuccessProvider.set(routeKey, providerId);
         __maybePrintSummary(sessionId, routeName);
+        repairRequest.complete(result.content, "returned");
         return returnMetadata ? {
           content: result.content,
           finishReason: result.finishReason,
@@ -556,36 +571,14 @@ export async function resilientRequest(routeName, {
               timeoutMs,
               signal,
               relaxedParameters: true,
+              onUsage: result => logReturnedUsage(result, "relaxed"),
             });
             if (typeof validateContent === "function") await validateContent(relaxed.content, { routeName, routeKey, providerId, model: relaxed.model || provider.name });
-            if (shouldLogUsage()) {
-              info("ai.request.usage", {
-                routeName,
-                routeKey,
-                provider: providerId,
-                requestedModel: provider.name,
-                returnedModel: relaxed.model,
-                durationMs: relaxed.durationMs,
-                serviceTier: relaxed.serviceTier,
-                parameterMode: "relaxed",
-                promptTokens: relaxed.usage?.prompt_tokens,
-                completionTokens: relaxed.usage?.completion_tokens,
-                totalTokens: relaxed.usage?.total_tokens,
-                cost: relaxed.usage?.cost,
-                ...getSpendLogFields({
-                  model: relaxed.model || provider.name,
-                  assignmentEnv: provider.modelEnv,
-                  providerPosition,
-                }),
-                headroomCompressed: headroom.compressed,
-                headroomTokensSaved: headroom.tokensSaved || 0,
-                headroomReason: headroom.reason || null,
-              });
-            }
             recordProviderOutcome({ routeKey, provider: providerId, ok: true, durationMs: relaxed.durationMs, status: "success-relaxed" });
             __record(sessionId, routeName, providerId, relaxed.model || provider.name);
             __lastSuccessProvider.set(routeKey, providerId);
             __maybePrintSummary(sessionId, routeName);
+            repairRequest.complete(relaxed.content, "returned");
             return returnMetadata ? {
               content: relaxed.content,
               finishReason: relaxed.finishReason,
@@ -668,6 +661,7 @@ export async function resilientRequest(routeName, {
   const err = lastErr || new Error(`All providers failed for route: ${routeKey}`);
   err.routeKey = routeKey;
   err.attemptedProviders = attempted;
+  repairRequest.complete(null, "failed");
   throw err;
 }
 

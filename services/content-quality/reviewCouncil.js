@@ -1,3 +1,4 @@
+import { createRepairHistory, currentRepairScope, withRepairHistory } from "../shared/utils/repairHistory.js";
 import { warn } from "../../logger.js";
 import { THRESHOLDS } from "../../config/thresholds.js";
 import { applyBritishEnglishReplacements } from "./britishEnglish.js";
@@ -604,6 +605,7 @@ export async function runReviewCouncilGate({
 
   const effectiveMaxAttempts = Math.max(1, Math.min(4, Number(maxAttempts) || THRESHOLDS.reviewCouncil.maxAttempts));
   const attemptLog = [];
+  const repairHistory = currentRepairScope()?.history || createRepairHistory();
   let currentArtifact = artifact;
   let currentGate = gate;
   let repairedArtifact = artifact;
@@ -613,8 +615,12 @@ export async function runReviewCouncilGate({
   const stagnationLimit = Math.max(1, Math.min(3, Number(process.env.REVIEW_COUNCIL_STAGNATION_LIMIT || 2)));
 
   for (let attempt = 1; attempt <= effectiveMaxAttempts; attempt += 1) {
-    repairedArtifact = await repairArtifact(currentArtifact, { contentType, gate: currentGate, attempt });
+    repairedArtifact = await withRepairHistory(repairHistory, { stage: councilKey, attempt }, () =>
+      repairArtifact(currentArtifact, { contentType, gate: currentGate, attempt, repairHistory: repairHistory.snapshot() }));
     repairedGate = validate ? await validate(repairedArtifact) : currentGate;
+    repairHistory.record({ stage: councilKey, attempt, outcome: repairedGate?.ok ? "validated" : "still_failing",
+      changed: JSON.stringify(repairedArtifact) !== JSON.stringify(currentArtifact),
+      defects: (repairedGate?.defects || []).map(String).slice(0, 8) });
 
     attemptLog.push({
       attempt,
@@ -696,6 +702,7 @@ export async function runReviewCouncilGate({
       repairedGate?.ok ? "chair outcome: approved repaired artefact" : `chair outcome: quarantine after ${attemptLog.length} reviewed attempts`,
     ],
   });
+  reviewCouncil.repairHistory = repairHistory.snapshot();
   reviewCouncil.attemptLog = attemptLog;
   reviewCouncil.attemptsUsed = attemptLog.length;
   reviewCouncil.maximumAttemptsAllowed = effectiveMaxAttempts;
