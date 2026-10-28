@@ -110,10 +110,10 @@ export async function collectOpenRouterDailySpend({ date, now = new Date(), fx =
   if (!names.has("total_usage") || !names.has("request_count") || !dimensions.has("model")) {
     throw new Error("OpenRouter metadata does not expose the required recorded-spend metrics");
   }
-  const optionalTokens = ["tokens_total", "tokens_prompt", "tokens_completion", "reasoning_tokens", "cached_tokens", "tokens_reasoning", "tokens_cached"];
+  const optionalTokens = ["tokens_total", "tokens_prompt", "tokens_completion",
+    names.has("reasoning_tokens") ? "reasoning_tokens" : "tokens_reasoning",
+    names.has("cached_tokens") ? "cached_tokens" : "tokens_cached"];
   const metrics = ["total_usage", "request_count", ...optionalTokens.filter(name => names.has(name))];
-  diagnostics.availableMetrics = [...names];
-  diagnostics.availableDimensions = [...dimensions];
   diagnostics.stage = "account-total";
   const query = { metrics, time_range: { start: window.start, end: window.end }, limit: 1000 };
   // No granularity: aggregate the exact UK-day range, rather than summing UTC day buckets.
@@ -141,7 +141,8 @@ export async function collectOpenRouterDailySpend({ date, now = new Date(), fx =
   const metricAliases = {};
   for (const [alias, native] of [["tokens_reasoning", "reasoning_tokens"], ["tokens_cached", "cached_tokens"]]) {
     if (Object.hasOwn(totals, native)) {
-      if (!Object.hasOwn(totals, alias)) totals[alias] = totals[native];
+      totals[alias] = totals[native];
+      for (const row of breakdown) row[alias] = row[native];
       metricAliases[alias] = native;
     }
   }

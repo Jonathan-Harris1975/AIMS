@@ -132,10 +132,12 @@ test("failed analytics validation retains diagnostic stages without credentials 
 test("observed Analytics numeric strings and native reasoning/cache fields normalize before reconciliation", async () => {
   const fetchImpl = async (url, options) => {
     if (url.endsWith("/meta")) return { ok: true, json: async () => ({ data: {
-      metrics: ["total_usage", "request_count", "tokens_total", "tokens_prompt", "tokens_completion", "reasoning_tokens", "cached_tokens"].map(name => ({ name })),
+      metrics: ["total_usage", "request_count", "tokens_total", "tokens_prompt", "tokens_completion", "reasoning_tokens", "cached_tokens", "tokens_reasoning", "tokens_cached"].map(name => ({ name })),
       dimensions: ["model", "app"].map(name => ({ name })),
     } }) };
     const query = JSON.parse(options.body);
+    assert.ok(!query.metrics.includes("tokens_reasoning"), "native fields take precedence over legacy names");
+    assert.ok(!query.metrics.includes("tokens_cached"));
     return { ok: true, json: async () => result([{ total_usage: "1.25", request_count: "2", tokens_total: "150",
       tokens_prompt: "100", tokens_completion: "50", reasoning_tokens: "10", cached_tokens: "0",
       ...(query.dimensions.length ? { model: "Luna", app: "test" } : {}) }]) };
@@ -146,6 +148,8 @@ test("observed Analytics numeric strings and native reasoning/cache fields norma
   assert.equal(report.breakdown[0].request_count, 2);
   assert.equal(report.totals.tokens_reasoning, 10);
   assert.equal(report.totals.tokens_cached, 0);
+  assert.equal(report.breakdown[0].tokens_reasoning, report.totals.tokens_reasoning);
+  assert.equal(report.breakdown[0].tokens_cached, report.totals.tokens_cached);
   assert.equal(report.metricAliases.tokens_reasoning, "reasoning_tokens");
   assert.ok(report.availableMetrics.includes("cached_tokens"));
 });
