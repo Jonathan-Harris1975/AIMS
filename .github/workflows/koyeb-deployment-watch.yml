@@ -91,6 +91,11 @@ jobs:
           koyeb services update "$KOYEB_SERVICE" \
             --env 'OPENROUTER_MASTER_KEY={{secret.OPENROUTER_MASTER_KEY}}' \
             --env OPENROUTER_DAILY_SPEND_ENABLED=true > /dev/null
+      - name: Restore authorised Headroom production wiring
+        if: ${{ github.event_name == 'workflow_run' && startsWith(github.event.workflow_run.head_commit.message, 'Restore Headroom production') }}
+        env:
+          KOYEB_TOKEN: ${{ secrets.KOYEB_TOKEN }}
+        run: node scripts/restoreHeadroomProduction.js
       - name: Verify Koyeb minimum instances before deployment watch
         env:
           KOYEB_TOKEN: ${{ secrets.KOYEB_TOKEN }}
@@ -110,6 +115,17 @@ jobs:
         env:
           KOYEB_TOKEN: ${{ secrets.KOYEB_TOKEN }}
         run: npm run koyeb:min-instances:check
+      - name: Verify live Headroom compression with synthetic context
+        timeout-minutes: 3
+        env:
+          KOYEB_TOKEN: ${{ secrets.KOYEB_TOKEN }}
+        run: |
+          set -euo pipefail
+          printf -v exec_command 'koyeb services exec %q node -- scripts/verifyHeadroomProduction.js' "$KOYEB_SERVICE"
+          output="$(script -q -e -c "$exec_command" /dev/null < /dev/null)"
+          printf '%s\n' "$output"
+          # Koyeb exec can return success even when the remote process exits nonzero.
+          grep -F '"event":"headroom.production.verified"' <<< "$output" > /dev/null
       - name: Collect and verify OpenRouter Analytics from the deployed runtime
         continue-on-error: true
         timeout-minutes: 3
