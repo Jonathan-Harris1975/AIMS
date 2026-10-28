@@ -10,10 +10,9 @@ try {
     const report = result.latest;
     console.log(JSON.stringify({ event: "openrouter.analytics.verified", provider: report.provider,
       datesRefreshed: result.dates, date: report.period.date, timezone: report.period.timezone,
-      collectedAt: report.collectedAt, currency: report.currency, recordedSpendUsd: report.recordedSpendUsd,
-      requests: report.totals.request_count, metrics: Object.keys(report.totals),
-      dimensions: report.dimensions, breakdownRows: report.breakdown.length,
-      reconciled: report.reconciled, provisional: report.provisional, gbp: report.gbp }));
+      collectedAt: report.collectedAt, currency: report.currency, metrics: Object.keys(report.totals),
+      dimensions: report.dimensions,
+      reconciled: report.reconciled, provisional: report.provisional, privateReportStored: true }));
   }
 } catch (error) {
   console.error(JSON.stringify({ event: "openrouter.analytics.unavailable", status: "analytics-or-private-storage-failed",

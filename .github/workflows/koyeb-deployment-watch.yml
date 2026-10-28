@@ -117,7 +117,7 @@ jobs:
           KOYEB_TOKEN: ${{ secrets.KOYEB_TOKEN }}
         run: |
           set -euo pipefail
-          # Private snapshots stay in R2; logs contain only aggregate charges and metric names.
+          # Private snapshots stay in R2; logs contain only verification status and available metric names.
           printf -v exec_command 'koyeb services exec %q node -- scripts/verifyOpenRouterAnalytics.js' "$KOYEB_SERVICE"
           script -q -e -c "$exec_command" /dev/null < /dev/null
       - name: Deploy Comms Hub D1 data-plane Worker from Koyeb runtime credentials
