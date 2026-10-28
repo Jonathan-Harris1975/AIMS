@@ -613,7 +613,7 @@ test("Blotato publish-now endpoint requires explicit opt-in and runs the RSS-to-
     jobStatus.body.job.result.publishes.map((item) => item.platform),
     ["instagram", "youtube", "tiktok", "facebook"]
   );
-  assert.ok(["tpl-ai-video", AI_STORY_TEMPLATE_UUID].includes(jobStatus.body.job.result.templateId));
+  assert.equal(jobStatus.body.job.result.templateId, null, "static card narration does not use a provider template");
   assert.equal(jobStatus.body.job.result.video.creditBudget.expectedCredits <= 10, true);
   assert.ok(jobStatus.body.job.result.video.visualInputs.scenes.length >= 3);
   assert.equal(jobStatus.body.job.result.video.staticCardVisuals, true);
