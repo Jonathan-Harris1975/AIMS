@@ -2,9 +2,10 @@ import { claimDurableLease, releaseDurableLease } from "../shared/utils/durableL
 import { getObjectAsText, putPrivateJson, parseR2Reference, listObjects } from "../shared/utils/r2-client.js";
 import { hasDurableStateEnv } from "../shared/utils/durableStateEnv.js";
 import { listKdpEbooks } from "./catalogue.js";
-import { readKdpAuditReport } from "./storage.js";
+import { readKdpAuditReport, readKdpMetadataSnapshot } from "./storage.js";
 import { discoverBookResearch } from "./researchDiscovery.js";
 import { captureCompetitorEvidence } from "./researchEvidence.js";
+import { draftOptimisation } from "./optimisationProposal.js";
 import { inWeeklyWindow, londonTime, selectWeeklyBatch } from "./weeklyResearch.js";
 
 const KEY = "research/weekly/state.json";
@@ -66,6 +67,7 @@ export async function runResearchTick({
   writeState = (state) => putPrivateJson("kdp", KEY, state),
   archive = (week, state) => putPrivateJson("kdp", `research/weekly/${week}.json`, state),
   getAudit = latestAudit, getBooks = listKdpEbooks, discover = discoverBookResearch, captureEvidence = captureCompetitorEvidence,
+  getMetadata = readKdpMetadataSnapshot, draft = draftOptimisation,
   claim = claimDurableLease, release = releaseDurableLease,
 } = {}) {
   const started = now();
@@ -88,11 +90,14 @@ export async function runResearchTick({
       state.week = week;
       state.auditRunId = audit.runId;
       state.pending = selection.books;
+      state.auditEvidence = (audit.publicAudit?.listings || []).map((row) => ({
+        ebookId: row.ebookId, publicListing: row.publicListing,
+      }));
       state.results = [];
       state.completed = false;
       await writeState(state);
     }
-    if (state.completed) return { status: "already_complete", week };
+    if (state.completed) return { status: "already_complete", week, listingUpdates: 0, proposalCounts: countProposals(state.results) };
     if (state.pending.length && inWeeklyWindow(now(), "update") && londonWeek(now()) === week) {
       const book = state.pending[0];
       const maxRequests = Number(env.KDP_RESEARCH_MONTHLY_SEARCH_LIMIT || 900);
@@ -119,6 +124,18 @@ export async function runResearchTick({
       if (Object.values(result.competitorEvidence.markets).some((market) => market.status === "blocked")) {
         return { status: "amazon_blocked", week, ebookId: book.ebookId };
       }
+      try {
+        let liveListing = state.auditEvidence?.find((row) => row.ebookId === book.ebookId);
+        if (!liveListing) {
+          const currentAudit = await getAudit(started);
+          liveListing = currentAudit?.runId === state.auditRunId
+            ? currentAudit.publicAudit?.listings?.find((row) => row.ebookId === book.ebookId)
+            : null;
+        }
+        result.optimisation = await draft(book, result, await getMetadata(), { now: now(), liveListing });
+      } catch {
+        result.optimisation = { status: "blocked", reason: "proposal_unavailable", listingUpdated: false };
+      }
       state.results.push(result);
       state.inProgress = null;
       state.cursor = book.ebookId;
@@ -129,8 +146,18 @@ export async function runResearchTick({
       await writeState(state);
     }
     if (!state.pending.length) { state.completed = true; await archive(week, state); await writeState(state); }
-    return { status: state.completed ? "complete" : "pending", week, processed: state.results.length, pending: state.pending.length };
+    return { status: state.completed ? "complete" : "pending", week, processed: state.results.length, pending: state.pending.length,
+      listingUpdates: 0, proposalCounts: countProposals(state.results) };
   } finally { await release(acquired.lease); }
+}
+
+function countProposals(results = []) {
+  const counts = {};
+  for (const item of results) {
+    const status = item.optimisation?.status || "unavailable";
+    counts[status] = (counts[status] || 0) + 1;
+  }
+  return counts;
 }
 
 export async function runResearchBatch({ tick = runResearchTick, pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms)) } = {}) {
