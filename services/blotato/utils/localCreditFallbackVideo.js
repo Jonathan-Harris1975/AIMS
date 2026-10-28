@@ -1,3 +1,4 @@
+import { PollyClient, SynthesizeSpeechCommand } from "@aws-sdk/client-polly";
 import { execFile as nodeExecFile } from "node:child_process";
 import { promisify } from "node:util";
 import fs from "node:fs/promises";
@@ -5,10 +6,22 @@ import os from "node:os";
 import path from "node:path";
 
 const execFile = promisify(nodeExecFile);
-const SLIDE_SECONDS = 8;
+const SLIDE_SECONDS = 10;
 const VIDEO_WIDTH = 720;
 const VIDEO_HEIGHT = 1280;
 const VIDEO_FPS = 30;
+
+async function synthesizePollyNarration(text) {
+  const client = new PollyClient({ region: process.env.AWS_REGION || "eu-west-2" });
+  const response = await client.send(new SynthesizeSpeechCommand({
+    Text: text,
+    OutputFormat: "mp3",
+    VoiceId: process.env.POLLY_VOICE_ID || "Brian",
+    Engine: "neural",
+  }));
+  if (!response.AudioStream) throw new Error("Polly returned no narration audio.");
+  return Buffer.from(await response.AudioStream.transformToByteArray());
+}
 
 function clean(value, limit = 320) {
   return String(value ?? "").replace(/\s+/g, " ").trim().slice(0, limit);
@@ -120,9 +133,14 @@ export async function createLocalBlotatoCreditFallbackVideo({
   },
   runFfmpeg = execFile,
   ffmpegPath = "ffmpeg",
+  synthesizeNarration = synthesizePollyNarration,
   findChromiumExecutable = resolveChromiumExecutable,
 } = {}) {
   const slides = buildBlotatoCreditFallbackSlides(pack, article);
+  const narrationText = clean(pack.script || slides.map((slide) => slide.body).join(" "), 5000);
+  if (!narrationText) throw new Error("Blotato card fallback requires spoken narration text.");
+  const narrationBuffer = Buffer.from(await synthesizeNarration(narrationText));
+  if (narrationBuffer.length < 100) throw new Error("Blotato card fallback narration audio was empty.");
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "aims-blotato-credit-fallback-"));
   let browser;
   try {
@@ -142,18 +160,23 @@ export async function createLocalBlotatoCreditFallbackVideo({
       imagePaths.push(imagePath);
     }
 
+    const narrationPath = path.join(tempDir, "narration.mp3");
+    await fs.writeFile(narrationPath, narrationBuffer);
     const outputPath = path.join(tempDir, "scheduled-fallback.mp4");
     const args = ["-hide_banner", "-loglevel", "error", "-y"];
     for (const imagePath of imagePaths) {
       args.push("-loop", "1", "-framerate", String(VIDEO_FPS), "-t", String(SLIDE_SECONDS), "-i", imagePath);
     }
+    args.push("-i", narrationPath);
+    const runtimeSeconds = SLIDE_SECONDS * imagePaths.length;
     const filters = imagePaths.map((_, index) =>
       `[${index}:v]fps=${VIDEO_FPS},trim=duration=${SLIDE_SECONDS},setpts=PTS-STARTPTS,setsar=1[v${index}]`
     );
     filters.push(`${imagePaths.map((_, index) => `[v${index}]`).join("")}concat=n=${imagePaths.length}:v=1:a=0,format=yuv420p[outv]`);
-    args.push("-filter_complex", filters.join(";"), "-map", "[outv]", "-an", "-c:v", "libx264", "-preset", "veryfast",
-      "-crf", "23", "-r", String(VIDEO_FPS), "-pix_fmt", "yuv420p", "-movflags", "+faststart",
-      "-t", String(SLIDE_SECONDS * imagePaths.length), outputPath);
+    args.push("-filter_complex", filters.join(";"), "-map", "[outv]", "-map", `${imagePaths.length}:a:0`,
+      "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-r", String(VIDEO_FPS), "-pix_fmt", "yuv420p",
+      "-c:a", "aac", "-b:a", "128k", "-af", "apad", "-movflags", "+faststart",
+      "-t", String(runtimeSeconds), outputPath);
     await runFfmpeg(ffmpegPath, args, { timeout: 180_000, maxBuffer: 4 * 1024 * 1024 });
     const buffer = await fs.readFile(outputPath);
     if (buffer.length < 20_000) throw new Error("Local Blotato fallback video was unexpectedly small.");
@@ -172,6 +195,11 @@ export async function createLocalBlotatoCreditFallbackVideo({
       rejectedTemplateIds: [],
       creditBudget: { expectedCredits: 0, actualCreditsUsed: 0, source: "local-no-paid-render" },
       localCreditFallback: true,
+      staticCardVisuals: true,
+      audioNarration: true,
+      narrationProvider: "aws-polly",
+      narrationVoiceId: process.env.POLLY_VOICE_ID || "Brian",
+      narrationWords: narrationText.split(/\s+/).filter(Boolean).length,
       fallbackReason: clean(reason, 120),
       localCreditFallbackKey: objectKey,
       runtimeSeconds: SLIDE_SECONDS * imagePaths.length,

@@ -16,7 +16,7 @@ import { pageTemplate, socialPostBody } from "../utils/templates.js";
 import { createBlogArtwork } from "../../artwork/createBlogArtwork.js";
 import { publishSocialBlogRssFeed } from "./publishSocialBlogRssFeed.js";
 import { cleanSourceText, cleanSourceTitle } from "../utils/weeklyPackage.js";
-import { recordEditorialEvent } from "../../social/editorialLedger.js";
+import { hasBeenUsedCrossLaneToday, hasRecentEditorialSource, recordEditorialEvent } from "../../social/editorialLedger.js";
 import { selectSourcesByUrls } from "../../content-quality/topicFidelity.js";
 import { fetchWithTimeout } from "../../shared/http-client.js";
 import { claimDurableLease, completeDurableLease, releaseDurableLease } from "../../shared/utils/durableLease.js";
@@ -735,13 +735,16 @@ export async function buildDailySocialBlogPost({
     }
 
     const rawFeed = await getObjectAsText(SOURCE_RSS_BUCKET_KEY, SOURCE_RSS_FEED_KEY);
-    const items = normaliseFeedItems(JSON.parse(rawFeed), window);
+    const feedItems = normaliseFeedItems(JSON.parse(rawFeed), window);
+    const items = feedItems.filter((item) =>
+      !hasRecentEditorialSource(item) && !hasBeenUsedCrossLaneToday(item)
+    );
 
     if (!items.length) {
       info("blog.social.daily.build.skipped", {
         dateId: window.dateId,
         dateLabel: window.dateLabel,
-        reason: "no-feed-items-in-window",
+        reason: feedItems.length ? "all-feed-items-already-used" : "no-feed-items-in-window",
         windowStart: window.start.toISOString(),
         windowEnd: window.end.toISOString(),
         rssBucketKey: SOURCE_RSS_BUCKET_KEY,
@@ -751,7 +754,9 @@ export async function buildDailySocialBlogPost({
       return {
         ok: true,
         skipped: true,
-        reason: `No rewritten RSS items found for ${window.dateLabel}.`,
+        reason: feedItems.length
+          ? `All rewritten RSS items for ${window.dateLabel} were already used by another content lane.`
+          : `No rewritten RSS items found for ${window.dateLabel}.`,
         dateId: window.dateId,
         sourceCount: 0,
         window: {
@@ -1238,16 +1243,18 @@ export async function buildDailySocialBlogPost({
     }
 
     if (dryRun) {
-      recordEditorialEvent({
-        pipeline: "blog-social",
-        lane: "daily-social-blog",
-        audienceIntent: "daily-social-blog-briefing",
-        source: cleanedSources[0],
-        angle: socialPackage.themes?.[0] || title,
-        scheduledDateTime: createdAt,
-        text: socialPackage.social_caption,
-        meta: { contentType: "daily-social-blog", dryRun: true, qaMode: socialPackage.qa_mode || "model-package" },
-      });
+      for (const source of cleanedSources) {
+        recordEditorialEvent({
+          pipeline: "blog-social",
+          lane: "daily-social-blog",
+          audienceIntent: "daily-social-blog-briefing",
+          source,
+          angle: socialPackage.themes?.[0] || title,
+          scheduledDateTime: createdAt,
+          text: socialPackage.social_caption,
+          meta: { contentType: "daily-social-blog", dryRun: true, qaMode: socialPackage.qa_mode || "model-package" },
+        });
+      }
 
       const released = await releaseEditorialBriefClaims(editorialBriefEntries, {
         consumerId: sessionId,
@@ -1355,16 +1362,18 @@ export async function buildDailySocialBlogPost({
     const rss = await publishSocialBlogRssFeed({ manifest: publishedManifest, prefix });
     const rebuild = { ok: true, skipped: true, reason: "blog-social-r2-rss-does-not-require-website-rebuild" };
 
-    recordEditorialEvent({
-      pipeline: "blog-social",
-      lane: "daily-social-blog",
-      audienceIntent: "daily-social-blog-briefing",
-      source: cleanedSources[0],
-      angle: socialPackage.themes?.[0] || title,
-      scheduledDateTime: createdAt,
-      text: socialPackage.social_caption,
-      meta: { contentType: "daily-social-blog", postUrl: urls.postUrl, qaMode: socialPackage.qa_mode || "model-package" },
-    });
+    for (const source of cleanedSources) {
+      recordEditorialEvent({
+        pipeline: "blog-social",
+        lane: "daily-social-blog",
+        audienceIntent: "daily-social-blog-briefing",
+        source,
+        angle: socialPackage.themes?.[0] || title,
+        scheduledDateTime: createdAt,
+        text: socialPackage.social_caption,
+        meta: { contentType: "daily-social-blog", postUrl: urls.postUrl, qaMode: socialPackage.qa_mode || "model-package" },
+      });
+    }
 
     info("blog.social.daily.build.success", {
       dateId: window.dateId,

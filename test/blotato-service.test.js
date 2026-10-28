@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import request from "supertest";
 import { testCredential } from "./helpers/testCredentials.js";
+import { __setLocalBlotatoFallbackRendererForTests } from "../services/blotato/utils/autoPublishService.js";
 
 const ORIGINAL_ENV = { ...process.env };
 
@@ -70,16 +71,16 @@ async function handleMockRequest(req, res) {
     capturedChatRequests.push(payload);
     const isRepair = payload.messages.some((message) => String(message.content || "").includes("Repair malformed JSON"));
     if (!isRepair) {
-      assert.ok(payload.messages.some((message) => String(message.content || "").includes("Create one short-form AI social video pack")));
+      assert.ok(payload.messages.some((message) => String(message.content || "").includes("Create one five-card AI social briefing")));
       assert.ok(payload.messages.some((message) => String(message.content || "").includes("Spartan and informative")));
       assert.ok(payload.messages.some((message) => String(message.content || "").includes("Instagram must have no more than 5 hashtags")));
-      assert.ok(payload.messages.some((message) => String(message.content || "").includes("Target duration: about 45 seconds. Allowed finished range: 35-55 seconds")));
+      assert.ok(payload.messages.some((message) => String(message.content || "").includes("five static visual-aid cards with original spoken narration")));
       assert.ok(payload.messages.some((message) => String(message.content || "").includes("HUMAN-CENTRED SOCIAL VISUALS")));
-      assert.ok(payload.messages.some((message) => String(message.content || "").includes("First frame rule")));
+      assert.ok(payload.messages.some((message) => String(message.content || "").includes("Spoken narration is")));
       assert.ok(payload.messages.some((message) => String(message.content || "").includes("CTA: For straight-talking artificial intelligence analysis, keep Jonathan Harris on your radar.")));
       assert.ok(!payload.messages.some((message) => String(message.content || "").includes("CTA: Follow Jonathan Harris for more")));
       assert.equal(payload.response_format, undefined);
-      assert.ok(payload.messages.some((message) => String(message.content || "").includes("Provide exactly 5 scenes")));
+      assert.ok(payload.messages.some((message) => String(message.content || "").includes("Create one original spoken narration supported by exactly five static visual-aid cards")));
     }
     res.writeHead(200, { "content-type": "application/json" });
     res.end(JSON.stringify({
@@ -186,7 +187,7 @@ will be the ones who build better systems around the tools.",
       assert.equal(body.inputs.animateAiImages, false);
       assert.deepEqual(Object.keys(body.inputs).sort(), [
         "aiImageModel", "animateAiImages", "aspectRatio", "captionPosition", "highlightColor",
-        "scenes", "transition", "trimToVoiceover", "voiceName",
+        "scenes", "transition",
       ].sort());
       assert.match(body.prompt, /Cost guard/i);
     }
@@ -364,6 +365,22 @@ process.env.COMMS_HUB_CONTENT_AUTOMATION_BLOTATO_VIDEO_ENABLED = "false";
 process.env.APP_TMP_DIR = `/tmp/aims-blotato-test-${Date.now()}`;
 
 const { app } = await import(`../server.js?blotato-suite=${Date.now()}`);
+
+__setLocalBlotatoFallbackRendererForTests(async ({ pack }) => ({
+  visualId: null,
+  dashboardUrl: null,
+  mediaUrl: "https://example.com/video.mp4",
+  templateId: null,
+  templateIdCandidates: [],
+  rejectedTemplateIds: [],
+  creditBudget: { expectedCredits: 0, actualCreditsUsed: 0, source: "test-renderer" },
+  localCreditFallback: true,
+  staticCardVisuals: true,
+  audioNarration: true,
+  narrationProvider: "test",
+  visualInputs: { scenes: Array.isArray(pack.scenes) ? pack.scenes : [] },
+  runtimeSeconds: 50,
+}));
 
 const auth = { Authorization: "Bearer suite-key" };
 
@@ -546,7 +563,7 @@ test("Blotato news insight route builds a dry-run short pack", async () => {
   assert.ok(Array.isArray(response.body.pack.scenes));
   assert.ok(response.body.pack.scenes.length >= 3);
   assert.ok(Array.isArray(response.body.visualInputs.scenes));
-  assert.equal(response.body.visualInputs.thumbnailText, "AI Gets Chores");
+  assert.equal(response.body.visualInputs.thumbnailText, response.body.pack.thumbnailText);
   assert.equal(response.body.visualRequest.inputs.scenes.length, 5);
   assert.equal(response.body.visualRequest.inputs.aiImageModel, "replicate/black-forest-labs/flux-schnell");
   assert.equal(response.body.visualRequest.inputs.animateAiImages, false);
@@ -596,10 +613,15 @@ test("Blotato publish-now endpoint requires explicit opt-in and runs the RSS-to-
     jobStatus.body.job.result.publishes.map((item) => item.platform),
     ["instagram", "youtube", "tiktok", "facebook"]
   );
-  assert.ok(["tpl-ai-video", AI_STORY_TEMPLATE_UUID].includes(jobStatus.body.job.result.templateId));
+  assert.equal(jobStatus.body.job.result.templateId, null, "static card narration does not use a provider template");
   assert.equal(jobStatus.body.job.result.video.creditBudget.expectedCredits <= 10, true);
   assert.ok(jobStatus.body.job.result.video.visualInputs.scenes.length >= 3);
-  assert.equal(jobStatus.body.job.result.video.visualInputs.thumbnailText, "AI Gets Chores");
+  assert.equal(jobStatus.body.job.result.video.staticCardVisuals, true);
+  assert.equal(jobStatus.body.job.result.video.audioNarration, true);
+  assert.equal(jobStatus.body.job.result.video.localCreditFallback, true);
+  assert.equal(jobStatus.body.job.result.video.creditBudget.actualCreditsUsed, 0);
+  assert.equal(jobStatus.body.job.result.video.templateId, null);
+  assert.equal(capturedVisualRequests.length, 0, "scheduled card visuals are rendered locally");
   assert.ok(jobStatus.body.job.result.video.visualInputs.scenes.filter((scene) => /adult|human|hands|face|silhouette|professional/i.test(scene.mediaSource)).length >= 3);
   const instagramPost = capturedPostRequests.filter((item) => item.post.content.platform === "instagram").at(-1);
   assert.ok(instagramPost);
@@ -616,11 +638,7 @@ test("Blotato publish-now endpoint requires explicit opt-in and runs the RSS-to-
   assert.equal(facebookPost.post.target.pageId, "562160556971997");
   assert.equal(facebookPost.post.target.mediaType, "reel");
   assert.equal(jobStatus.body.job.result.channelPreflight.ready, true);
-  const visualRequest = capturedVisualRequests.find((item) => /Cost guard/i.test(item.prompt || ""));
-  assert.ok(visualRequest, "the paid render request should be captured");
-  assert.equal(visualRequest.inputs.scenes.length, 5);
-  assert.equal(visualRequest.inputs.aiImageModel, "replicate/black-forest-labs/flux-schnell");
-  assert.equal(visualRequest.inputs.animateAiImages, false);
+  assert.equal(capturedVisualRequests.length, 0, "scheduled card visuals are rendered locally");
   assert.deepEqual(
     jobStatus.body.job.result.channelPreflight.platforms.map((item) => item.platform),
     ["instagram", "youtube", "tiktok", "facebook"]
@@ -652,7 +670,10 @@ test("Blotato scheduled lane reaches the provider and confirms every queued post
   assert.ok(jobStatus.body.job.result.posts.every((post) => post.status === "scheduled" && post.confirmed === true));
   assert.equal(capturedPostRequests.length, 4);
   assert.ok(capturedPostRequests.every((payload) => Boolean(payload.scheduledTime)));
-  assert.equal(capturedVisualRequests.at(-1).inputs.scenes.length, 5);
+  assert.equal(jobStatus.body.job.result.video.staticCardVisuals, true);
+  assert.equal(jobStatus.body.job.result.video.audioNarration, true);
+  assert.equal(jobStatus.body.job.result.video.creditBudget.actualCreditsUsed, 0);
+  assert.equal(capturedVisualRequests.length, 0, "scheduled card visuals are rendered locally");
 });
 
 

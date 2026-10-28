@@ -39,8 +39,14 @@ import { assessRenderedVideoQaPublication, buildRenderedVideoQaError, reviewRend
 import { looksLikePendingVideoError } from "./renderStatus.js";
 import { pollUntil } from "./pollUntil.js";
 import { buildVisualCreationRequest } from "./visualRequest.js";
-import { reservePaidRender } from "./creditGuard.js";
-import { createLocalBlotatoCreditFallbackVideo, renderScheduledBlotatoVideo } from "./localCreditFallbackVideo.js";
+import { createLocalBlotatoCreditFallbackVideo } from "./localCreditFallbackVideo.js";
+
+let localBlotatoFallbackRenderer = createLocalBlotatoCreditFallbackVideo;
+
+export function __setLocalBlotatoFallbackRendererForTests(renderer) {
+  if (typeof renderer !== "function") throw new TypeError("Local Blotato fallback renderer must be a function.");
+  localBlotatoFallbackRenderer = renderer;
+}
 import {
   claimPendingEditorialBriefs,
   editorialBriefFingerprint,
@@ -1718,9 +1724,12 @@ async function runPublishJob({
     });
     const channelPreflight = await runBlotatoStep0Preflight({ platforms, apiKey });
 
-    updateJob(lane.jobType, sessionId, { phase: "template-resolution", channelPreflight });
-    const templateResolution = await resolveVideoTemplateId({ requestedTemplateId: defaults.templateId, apiKey, autoDiscoveryOverride: templateIdOverride ? false : null });
-    const templateId = templateResolution.templateId;
+    updateJob(lane.jobType, sessionId, { phase: "static-card-narration-render-mode", channelPreflight });
+    const templateResolution = {
+      mode: "static-visual-aid-cards-with-narration",
+      providerTemplateRequired: false,
+    };
+    const templateId = null;
 
     const scriptOptions = {
       article: articleSource.article,
@@ -1951,91 +1960,35 @@ async function runPublishJob({
           reusedFromSessionId: failedPublishRecovery.sessionId,
         }
       : null;
-    const reusedVideo = recoveredPublishVideo || await reusableRenderedVideo(lane.jobType, articleSource.article, sessionId, {
-        scheduleSlot,
-        scheduleDate: activeScheduleDate,
-        briefFingerprint,
-      });
+    // Keep an already-created asset only when reconciling this exact pending
+    // publication and confirming it already has audio narration. New scheduled
+    // posts use static visual-aid cards paired with a spoken narration track.
+    const reusedVideo = recoveredPublishVideo && recoveredPublishVideo.staticCardVisuals === true && recoveredPublishVideo.audioNarration === true
+      ? recoveredPublishVideo
+      : null;
     let localCreditFallback = null;
-    const renderPaidVideo = () => createAndWaitForVideo({
-      templateId,
-      templateIdCandidates: templateResolution.templateIdCandidates || [
-        templateResolution.rawTemplateId,
-        templateResolution.template?.id,
-        templateResolution.template?.templateId,
-        templateResolution.template?.path,
-        defaults.templatePath,
-      ],
-      pack,
-      apiKey,
-      onVisualCreated: (visualMeta) => {
-        updateJob(lane.jobType, sessionId, {
-          phase: "video-rendering",
-          videoId: visualMeta.visualId,
-          videoDashboardUrl: visualMeta.dashboardUrl,
-          creditBudget: visualMeta.creditBudget,
-          creditEstimateOnly: true,
-          actualCreditsUsed: "not_available_from_aims",
-          creditSourceOfTruth: "Blotato dashboard",
-          templateId: visualMeta.templateId || templateId,
-          requestedTemplateId: templateId,
-          templateIdCandidates: visualMeta.templateIdCandidates,
-          rejectedTemplateIds: visualMeta.rejectedTemplateIds,
-          templateResolution,
-          channelPreflight,
-        });
-      },
-    });
     let video;
     if (reusedVideo) {
       video = reusedVideo;
-    } else if (scheduleSlot && activeScheduleDate) {
-      const result = await renderScheduledBlotatoVideo({
-        reservePaidRender: async () => {
-          await refreshJobStoreFromState();
-          const paidRenderCap = positiveIntEnv("BLOTATO_DAILY_PAID_RENDER_CAP", 2, 10);
-          const nextBudget = expectedCreditBudget(pack);
-          const maxExpectedCredits = positiveIntEnv("BLOTATO_MAX_EXPECTED_CREDITS", 10, 10_000);
-          if (nextBudget.expectedCredits > maxExpectedCredits) {
-            const err = new Error(`Blotato expected credit budget too high: ${nextBudget.expectedCredits}/${maxExpectedCredits}`);
-            err.statusCode = 422;
-            err.code = "blotato-expected-credit-budget-cap";
-            err.creditBudget = nextBudget;
-            throw err;
-          }
-          const monthlyBudget = positiveIntEnv("BLOTATO_MONTHLY_ESTIMATED_CREDIT_CAP", 100, 10_000);
-          const priorRenders = getShortLaneJobTypes().flatMap((type) => getJobsByType(type))
-            .map((job) => ({
-              visualId: trim(job.videoId || job.result?.visualId),
-              reservationId: job.creditGuardReservationId,
-              date: scheduleDateFromJob(job),
-              expectedCredits: Number(job.creditBudget?.expectedCredits || job.result?.creditBudget?.expectedCredits),
-            }));
-          const reservationId = `${sessionId}:attempt-${getJob(lane.jobType, sessionId)?.attempt || 1}`;
-          const reservation = await reservePaidRender({
-            reservationId, scheduleDate: activeScheduleDate, expectedCredits: expectedCreditBudget(pack).expectedCredits,
-            dailyCap: paidRenderCap, monthlyCap: monthlyBudget, priorRenders,
-          });
-          updateJob(lane.jobType, sessionId, { creditGuardReservationId: reservation.reservationId, creditBudget: expectedCreditBudget(pack) });
-          return reservation;
-        },
-        renderPaidVideo,
-        renderLocalFallback: ({ error, code }) => createLocalBlotatoCreditFallbackVideo({
-          pack,
-          article: articleSource.article,
-          sessionId,
-          scheduleDate: activeScheduleDate,
-          reason: code || error?.code || "paid-render-credit-limit",
-        }),
-      });
-      video = result.video;
-      localCreditFallback = result.creditFallback;
     } else {
-      video = await renderPaidVideo();
+      video = await localBlotatoFallbackRenderer({
+        pack,
+        article: articleSource.article,
+        sessionId,
+        scheduleDate: activeScheduleDate || new Date().toISOString().slice(0, 10),
+        reason: "static-cards-with-spoken-narration",
+      });
+      localCreditFallback = {
+        code: "static-cards-with-spoken-narration",
+        message: "Rendered as five static visual-aid cards with spoken narration.",
+        scheduledWithoutPaidRender: true,
+        creditLimited: false,
+        fallbackReason: "static-cards-with-spoken-narration",
+      };
     }
     if (localCreditFallback) {
       updateJob(lane.jobType, sessionId, {
-        phase: "local-credit-fallback-ready",
+        phase: "visual-aid-cards-with-narration-ready",
         localCreditFallback,
         videoId: null,
         videoDashboardUrl: null,
@@ -2045,7 +1998,7 @@ async function runPublishJob({
         actualCreditsUsed: 0,
         creditSourceOfTruth: "local no-paid-render fallback",
       });
-      warn("blotato.scheduled.local_credit_fallback_ready", {
+      warn("blotato.scheduled.visual_aid_cards_ready", {
         sessionId,
         lane: lane.slug,
         scheduleSlot,

@@ -192,7 +192,7 @@ function editorialTopicScore(item = {}, topicSeed = "") {
   return required.filter((token) => available.has(token)).length / Math.min(required.length, 8);
 }
 
-function pickItem(items = [], { topicSeed = "" } = {}) {
+function pickItem(items = [], { topicSeed = "", laneSlug = "" } = {}) {
   const usable = items
     .filter((item) => item.title && (item.summary || item.link))
     .map((item) => ({ ...item }))
@@ -208,7 +208,17 @@ function pickItem(items = [], { topicSeed = "" } = {}) {
       !hasRecentEditorialSource(item) &&
       !hasBeenUsedCrossLaneToday(item)
   );
-  const candidates = unused.length ? unused : usable;
+  // Never recycle a story from another post or lane. If every item has
+  // already been used, let the caller try another feed or use its unique
+  // deterministic editorial fallback.
+  const candidates = unused;
+  if (!candidates.length) {
+    warn("blotato.rss.all_items_already_used", {
+      lane: laneSlug || "default",
+      itemCount: usable.length,
+    });
+    return null;
+  }
   const ranked = topicTokens(topicSeed).length
     ? candidates
         .map((item) => ({ item, editorialTopicScore: editorialTopicScore(item, topicSeed) }))
@@ -237,7 +247,7 @@ export async function selectRssArticleForBlotato({ laneSlug = "", topicSeed = ""
     try {
       debug("blotato.rss.load.start", { source: loader.label, lane: laneSlug || "default" });
       const items = await loader.run();
-      const article = pickItem(items, { topicSeed });
+      const article = pickItem(items, { topicSeed, laneSlug });
       if (article) {
         delete article._pubDateMs;
         debug("blotato.rss.load.complete", { source: loader.label, lane: laneSlug || "default", title: article.title });
