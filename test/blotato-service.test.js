@@ -364,11 +364,29 @@ process.env.COMMS_HUB_CONTENT_AUTOMATION_ENABLED = "false";
 process.env.COMMS_HUB_CONTENT_AUTOMATION_BLOTATO_VIDEO_ENABLED = "false";
 process.env.APP_TMP_DIR = `/tmp/aims-blotato-test-${Date.now()}`;
 
+const { setLocalCreditFallbackVideoFactoryForTests } = await import("../services/blotato/utils/autoPublishService.js");
+setLocalCreditFallbackVideoFactoryForTests(async ({ pack }) => ({
+  visualId: null,
+  dashboardUrl: null,
+  mediaUrl: "https://assets.example/blotato-test-fallback.mp4",
+  templateId: null,
+  templateIdCandidates: [],
+  rejectedTemplateIds: [],
+  creditBudget: { expectedCredits: 0, actualCreditsUsed: 0, source: "local-no-paid-render" },
+  localCreditFallback: true,
+  staticCardVisuals: true,
+  audioNarration: true,
+  narrationProvider: "test-fixture",
+  runtimeSeconds: 50,
+  visualInputs: { scenes: pack.scenes || [], thumbnailText: pack.thumbnailText || null },
+}));
+
 const { app } = await import(`../server.js?blotato-suite=${Date.now()}`);
 
 const auth = { Authorization: "Bearer suite-key" };
 
 test.after(async () => {
+  setLocalCreditFallbackVideoFactoryForTests(null);
   await new Promise((resolve, reject) => mockServer.close((err) => (err ? reject(err) : resolve())));
   restoreEnv();
 });
@@ -547,7 +565,7 @@ test("Blotato news insight route builds a dry-run short pack", async () => {
   assert.ok(Array.isArray(response.body.pack.scenes));
   assert.ok(response.body.pack.scenes.length >= 3);
   assert.ok(Array.isArray(response.body.visualInputs.scenes));
-  assert.equal(response.body.visualInputs.thumbnailText, "AI agents move from chat");
+  assert.equal(response.body.visualInputs.thumbnailText, "AI Gets Chores");
   assert.equal(response.body.visualRequest.inputs.scenes.length, 5);
   assert.equal(response.body.visualRequest.inputs.aiImageModel, "replicate/black-forest-labs/flux-schnell");
   assert.equal(response.body.visualRequest.inputs.animateAiImages, false);
