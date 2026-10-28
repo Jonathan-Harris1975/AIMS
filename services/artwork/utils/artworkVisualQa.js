@@ -169,6 +169,7 @@ identifiable person as the named individual or identity itself is an explicit ve
     `Creative brief: ${compact(creativePrompt, 3000)}`,
     "Return JSON only with exactly these keys:",
     '{"score":0,"relevance":0,"textSafety":0,"composition":0,"brandFit":0,"defects":[],"hardDefects":[],"summary":""}',
+    "Keep the complete JSON under 500 words. Use at most four short defects in each array and a one-sentence summary.",
     "Scores are 0-100. Put only directly observable publication-blocking defects in hardDefects. Speculation such as possible, borderline, cannot confirm or if visible at \
 another zoom belongs in defects, not hardDefects. Be strict about actual readable text, anime/illustration drift and off-topic imagery: attractive but off-topic artwork does not pass.",
   ].join("\n");
@@ -187,7 +188,7 @@ export async function auditArtworkBase64({ base64, mode = "editorial", creativeP
     if (signal?.aborted) throw signal.reason instanceof Error ? signal.reason : new Error("Artwork visual QA aborted");
     const raw = await resilientRequest("artworkVisualQa", {
       sessionId: `${sessionId}-${attempt}`,
-      max_tokens: 1200,
+      max_tokens: 2400,
       temperature: 0.1,
       // Claude/OpenRouter vision routes have repeatedly rejected the stricter
       // optional parameter bundle before succeeding with the portable payload.

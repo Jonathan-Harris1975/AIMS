@@ -87,13 +87,13 @@ test("paid scheduled renders remain primary when credit reservation and renderer
   assert.equal(fallback, 0);
 });
 
-test("scheduled Blotato orchestration pairs static cards with narration", async () => {
+test("scheduled Blotato uses provider scenes and never substitutes local text cards", async () => {
   const source = await readFile(new URL("../services/blotato/utils/autoPublishService.js", import.meta.url), "utf8");
-  assert.match(source, /phase: "static-card-narration-render-mode"/);
-  assert.match(source, /reason: "static-cards-with-spoken-narration"/);
-  assert.match(source, /createLocalBlotatoCreditFallbackVideo/);
-  assert.match(source, /phase: "visual-aid-cards-with-narration-ready"/);
-  assert.match(source, /mediaUrl: video\.mediaUrl/);
+  assert.match(source, /await resolveVideoTemplateId/);
+  assert.match(source, /await createAndWaitForVideo/);
+  assert.match(source, /reservePaidRender/);
+  assert.doesNotMatch(source, /localBlotatoFallbackRenderer|static-card-narration-render-mode/);
+  assert.match(source, /const blockHardQaFailures = scheduledTime\s*\? false/);
 });
 
 test("local fallback renderer uploads static visual cards with spoken narration", async () => {

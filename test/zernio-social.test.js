@@ -833,7 +833,7 @@ test("Sunday spotlight avoids fabricated likenesses and daily evergreen artwork 
 });
 
 
-test("scheduled daily posts publish with subjective style QA logged as advisories", async () => {
+test("scheduled daily posts preserve brand and topic requirements", async () => {
   const mod = await import(`../services/zernio/utils/socialScheduler.js?daily-qa-policy=${Date.now()}`);
   const post = {
     title: "Transformer attention",
@@ -857,17 +857,14 @@ test("scheduled daily posts publish with subjective style QA logged as advisorie
     post: { title: "Transformer attention", topic: "Transformer attention", content: "A general thought for today." },
   });
 
-  assert.equal(daily.dailyScheduled, true);
-  assert.equal(daily.ok, true);
-  assert.ok(daily.warnings.some((warning) => /British English drift/i.test(warning)));
-  assert.ok(daily.warnings.some((warning) => /emoji/i.test(warning)));
-  assert.ok(daily.warnings.some((warning) => /markdown or bullet/i.test(warning)));
-  assert.ok(daily.warnings.some((warning) => /Motivational hashtag/i.test(warning)));
+  assert.equal(daily.ok, false);
+  for (const pattern of [/British English drift/i, /emoji/i, /markdown or bullet/i, /Motivational hashtag/i]) {
+    assert.ok(daily.defects.some((defect) => pattern.test(defect)));
+  }
   assert.equal(strict.ok, false);
-  assert.ok(strict.defects.some((defect) => /British English drift/i.test(defect)));
-  assert.equal(offTopic.ok, true);
-  assert.ok(offTopic.warnings.some((warning) => /Tuesday post drifted away/i.test(warning)));
-  assert.ok(offTopic.warnings.some((warning) => /not clearly aligned/i.test(warning)));
+  assert.equal(offTopic.ok, false);
+  assert.ok(offTopic.defects.some((defect) => /Tuesday post drifted away/i.test(defect)));
+
 });
 
 test("scheduled daily posts still fail on missing content and hard publication checks", async () => {

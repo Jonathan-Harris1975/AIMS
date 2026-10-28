@@ -322,7 +322,7 @@ test("social providers are production schedule-only and the weekday window owns 
     '["blog-social", "/blog/social/daily/build"',
     '["blotato-pm", "/blotato/shorts/news-insight/schedule"',
   ]) assert.ok(ops.includes(contract), `missing social operation task: ${contract}`);
-  assert.equal(ops.includes('["zernio-blog-social", "/zernio/blog-rss/daily"'), false);
+  assert.equal(ops.includes('["zernio-blog-social", "/zernio/blog-rss/daily"'), true);
   assert.ok(ops.includes('const DEFERRED_OPERATION_TASKS = new Set();'));
 });
 

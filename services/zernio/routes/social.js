@@ -9,7 +9,7 @@ import {
   zernioPodcastPromoBodySchema,
   zernioMiniSeriesBodySchema,
 } from "../../shared/utils/requestSchemas.js";
-import { buildAndScheduleDailyLane, buildAndScheduleDailyLaneAccountVariants, buildAndScheduleQuizSeries, buildAndScheduleEbookWeekly,
+import { buildAndScheduleDailyLane, buildAndScheduleDailyLaneAccountVariants, buildAndScheduleQuizSeries, buildAndScheduleEbookWeekly, buildAndScheduleBlogRssDaily,
    buildAndSchedulePodcastThursdayPromo, buildAndScheduleWeeklyMiniSeries } from "../utils/socialScheduler.js";
 import { getAsyncServiceRouteJobFresh, shouldRunAsyncServiceRoute, startAsyncServiceRouteJob } from "../../shared/utils/asyncServiceRouteJobs.js";
 import { fetchPublishedPostsHistory, getZernioConfigSummary, inspectZernioTargeting } from "../utils/zernioClient.js";
@@ -62,6 +62,7 @@ router.get("/health", (_req, res) => {
     lanes: Object.keys(LANE_CONFIG),
     quizRoute: "/zernio/quiz/weekly",
     ebookWeeklyRoute: "/zernio/ebooks/weekly",
+    blogRssDailyRoute: "/zernio/blog-rss/daily",
     weeklyMiniSeriesRoute: "/zernio/mini-series/weekly",
     podcastThursdayPromoRoute: "/zernio/podcast/thursday-promo",
     publishedHistoryRoute: "/zernio/posts/history",
@@ -237,7 +238,28 @@ for (const laneKey of Object.keys(LANE_CONFIG)) {
 
 router.post(
   "/blog-rss/daily",
-  (_req, res) => res.status(410).json({ ok: false, error: "blog-rss-repost-retired" })
+  requestDedupe("zernio:blog-rss:daily"),
+  asyncRoute(async (req, res) => {
+    const parsed = validateBody(zernioDailyBodySchema, req.body);
+    if (!parsed.ok) {
+      return res.status(400).json({ ok: false, error: parsed.error });
+    }
+
+    if (shouldRunAsyncServiceRoute(req)) {
+      const job = await startAsyncServiceRouteJob({
+        service: "zernio",
+        lane: "blog-rss-daily",
+        payload: parsed.data,
+        req,
+        runner: buildAndScheduleBlogRssDaily,
+        metadata: { route: "/zernio/blog-rss/daily" },
+      });
+      return res.status(202).json(job);
+    }
+
+    const result = await buildAndScheduleBlogRssDaily(parsed.data);
+    return res.json(result);
+  })
 );
 
 

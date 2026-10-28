@@ -8,7 +8,7 @@ function occurrences(text, needle) {
   return text.split(needle).length - 1;
 }
 
-test("weekday AM windows keep the blog independent and schedule both Blotato slots", () => {
+test("weekday AM windows contain blog-social handoff and both Blotato schedule slots", () => {
   const eveningPaths = {
     monday: "/blotato/shorts/news-insight/schedule",
     tuesday: "/blotato/shorts/model-verdict/schedule",
@@ -18,11 +18,10 @@ test("weekday AM windows keep the blog independent and schedule both Blotato slo
   };
   for (const day of Object.keys(eveningPaths)) {
     const start = opsSource.indexOf(`"${day}-am": [`);
-    const next = day === "friday" ? opsSource.indexOf('"friday-pm": [', start) : opsSource.indexOf(`"${({monday:"tuesday",tuesday:"wednesday",wednesday:"thursday",thursday:
-      "friday"})[day]}-am": [`, start);
+    const next = opsSource.indexOf("  ],", start);
     const block = opsSource.slice(start, next);
     assert.equal(occurrences(block, '/blog/social/daily/build'), 1, `${day} must build one social-blog item`);
-    assert.equal(occurrences(block, '/zernio/blog-rss/daily'), 0, `${day} must not recycle the social-blog item into Zernio`);
+    assert.equal(occurrences(block, '/zernio/blog-rss/daily'), 1, `${day} must schedule one social-blog item`);
     assert.equal(occurrences(block, `/zernio/daily/${day}`), 1, `${day} must schedule one daily evergreen item`);
     assert.equal(occurrences(block, '/blotato/autoshorts/schedule'), 1, `${day} must have one Blotato AM slot`);
     assert.equal(occurrences(block, eveningPaths[day]), 1, `${day} must have one Blotato PM slot`);
@@ -55,4 +54,42 @@ test("weekday newsletter build is independent and delivery waits for readiness",
     assert.match(lines[1], /"newsletter-readiness".*"newsletter-generate"/);
     assert.match(lines[2], /"newsletter-send".*"newsletter-readiness"/);
   }
+});
+
+test("weekly website blog, e-books and quiz retain their separate owners", () => {
+  const start = opsSource.indexOf('const OPERATION_WINDOWS = Object.freeze({');
+  const end = opsSource.indexOf('\n});', start);
+  const windows = opsSource.slice(start, end);
+  assert.equal(occurrences(windows, '"/blog/weekly/build"'), 1);
+  assert.equal(occurrences(windows, '"/zernio/ebooks/weekly"'), 1);
+  assert.equal(occurrences(windows, '"/zernio/quiz/weekly"'), 1);
+  const routes = fs.readFileSync(new URL('../services/zernio/routes/social.js', import.meta.url), 'utf8');
+  assert.ok(routes.includes('runner: buildAndScheduleBlogRssDaily'));
+  assert.equal(routes.includes('blog-rss-repost-retired'), false);
+});
+
+
+test("production keeps six weekday windows and prepares weekend evergreen posts on Friday", () => {
+  const start = opsSource.indexOf('const OPERATION_WINDOWS = Object.freeze({');
+  const end = opsSource.indexOf('\n});', start);
+  const windows = opsSource.slice(start, end);
+  assert.deepEqual([...windows.matchAll(/^  "([a-z]+-(?:am|pm))": \[/gm)].map((match) => match[1]),
+    ["monday-am", "tuesday-am", "wednesday-am", "thursday-am", "friday-am", "friday-pm"]);
+  const friday = windows.slice(windows.indexOf('"friday-am": ['), windows.indexOf('"friday-pm": ['));
+  assert.equal(occurrences(friday, '/zernio/daily/saturday'), 1);
+  assert.equal(occurrences(friday, '/zernio/daily/sunday'), 1);
+});
+
+
+test("social blog and newsletter remain weekday-only without Friday weekend batches", () => {
+  const start = opsSource.indexOf('const OPERATION_WINDOWS = Object.freeze({');
+  const end = opsSource.indexOf('\n});', start);
+  const windows = opsSource.slice(start, end);
+  for (const path of ["/blog/social/daily/build", "/zernio/blog-rss/daily", "/newsletter/generate", "/newsletter/readiness", "/newsletter/send"]) {
+    assert.equal(occurrences(windows, `"${path}"`), 5, `${path} must run exactly once per weekday`);
+  }
+  const friday = windows.slice(windows.indexOf('"friday-am": ['), windows.indexOf('"friday-pm": ['));
+  const builds = friday.split(/\r?\n/).filter((line) => /\["(?:blog-social|newsletter-generate)",/.test(line));
+  assert.equal(builds.length, 2);
+  assert.ok(builds.every((line) => !/publishDate|scheduledDateTime|scheduleDate|"date"/.test(line)));
 });
