@@ -1,4 +1,5 @@
 import "./config/loadEnv.js";
+import { startOpenRouterSpendWorker, stopOpenRouterSpendWorker } from "./services/ops/openrouterSpendWorker.js";
 import express from "express";
 import cors from "cors";
 import crypto from "node:crypto";
@@ -516,6 +517,7 @@ export function startServer(port = PORT, host = "0.0.0.0") {
     .catch((err) => error("model-governance.aims.startup-restore", { error: err?.message || String(err) }));
   void startCommsHubRuntime();
   startPageCountSyncWorker();
+  startOpenRouterSpendWorker();
 
   if (!processHandlersBound) {
     processHandlersBound = true;
@@ -543,6 +545,7 @@ export function startServer(port = PORT, host = "0.0.0.0") {
 export async function stopServer() {
   if (!server) return;
   stopPageCountSyncWorker();
+  stopOpenRouterSpendWorker();
 
   await new Promise((resolve, reject) => {
     server.close((err) => {
