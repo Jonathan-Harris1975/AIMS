@@ -127,8 +127,12 @@ h1{position:relative;font-size:32px;line-height:1.18;letter-spacing:-.025em;marg
 }
 async function resolveChromiumExecutable(chromium) {
   const candidates = [
+    process.env.CHROMIUM_PATH,
+    process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH,
     "/usr/bin/chromium",
     "/usr/bin/chromium-browser",
+    "/usr/bin/google-chrome",
+    "/usr/bin/google-chrome-stable",
     typeof chromium.executablePath === "function" ? chromium.executablePath() : "",
   ].filter(Boolean);
   for (const candidate of candidates) {
