@@ -87,15 +87,16 @@ test("paid scheduled renders remain primary when credit reservation and renderer
   assert.equal(fallback, 0);
 });
 
-test("scheduled Blotato orchestration wires the cap fallback into publishing", async () => {
+test("scheduled Blotato orchestration pairs static cards with narration", async () => {
   const source = await readFile(new URL("../services/blotato/utils/autoPublishService.js", import.meta.url), "utf8");
-  assert.match(source, /renderScheduledBlotatoVideo/);
+  assert.match(source, /phase: "static-card-narration-render-mode"/);
+  assert.match(source, /reason: "static-cards-with-spoken-narration"/);
   assert.match(source, /createLocalBlotatoCreditFallbackVideo/);
-  assert.match(source, /phase: "local-credit-fallback-ready"/);
+  assert.match(source, /phase: "visual-aid-cards-with-narration-ready"/);
   assert.match(source, /mediaUrl: video\.mediaUrl/);
 });
 
-test("local fallback renderer uploads a valid no-paid-render media URL", async () => {
+test("local fallback renderer uploads static visual cards with spoken narration", async () => {
   const htmlPages = [];
   const uploads = [];
   const fakeBrowser = {
@@ -112,7 +113,10 @@ test("local fallback renderer uploads a valid no-paid-render media URL", async (
     scheduleDate: "2026-10-26",
     loadChromium: async () => ({ chromium: { launch: async () => fakeBrowser } }),
     findChromiumExecutable: async () => "/usr/bin/chromium",
+    synthesizeNarration: async (text) => { assert.match(text, /Check one real workflow/); return Buffer.alloc(200, 1); },
     runFfmpeg: async (_command, args) => {
+      assert.ok(args.includes("-map"));
+      assert.ok(args.includes("-c:a"));
       await writeFile(args.at(-1), Buffer.alloc(21_000, 1));
     },
     upload: async (...args) => {
@@ -127,4 +131,7 @@ test("local fallback renderer uploads a valid no-paid-render media URL", async (
   assert.equal(result.mediaUrl, "https://assets.example/blotato-fallback.mp4");
   assert.equal(result.creditBudget.expectedCredits, 0);
   assert.equal(result.localCreditFallback, true);
+  assert.equal(result.staticCardVisuals, true);
+  assert.equal(result.audioNarration, true);
+  assert.equal(result.narrationProvider, "aws-polly");
 });

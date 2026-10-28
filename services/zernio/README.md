@@ -17,7 +17,6 @@ Zernio owns AIMS static/social scheduling: seven daily editorial lanes, blog-RSS
 - `POST /zernio/daily/friday`
 - `POST /zernio/daily/saturday`
 - `POST /zernio/daily/sunday`
-- `POST /zernio/blog-rss/daily`
 - `POST /zernio/mini-series/weekly`
 - `POST /zernio/podcast/thursday-promo`
 - `POST /zernio/ebooks/weekly`
