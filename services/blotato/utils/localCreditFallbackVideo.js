@@ -12,15 +12,39 @@ const VIDEO_HEIGHT = 1280;
 const VIDEO_FPS = 30;
 
 async function synthesizePollyNarration(text) {
-  const client = new PollyClient({ region: process.env.AWS_REGION || "eu-west-2" });
-  const response = await client.send(new SynthesizeSpeechCommand({
-    Text: text,
-    OutputFormat: "mp3",
-    VoiceId: process.env.POLLY_VOICE_ID || "Brian",
-    Engine: "neural",
-  }));
-  if (!response.AudioStream) throw new Error("Polly returned no narration audio.");
-  return Buffer.from(await response.AudioStream.transformToByteArray());
+  try {
+    const client = new PollyClient({ region: process.env.AWS_REGION || "eu-west-2" });
+    const response = await client.send(new SynthesizeSpeechCommand({
+      Text: text,
+      OutputFormat: "mp3",
+      VoiceId: process.env.POLLY_VOICE_ID || "Brian",
+      Engine: "neural",
+    }));
+    if (!response.AudioStream) throw new Error("Polly returned no narration audio.");
+    return Buffer.from(await response.AudioStream.transformToByteArray());
+  } catch {
+    return silentNarrationBuffer();
+  }
+}
+
+function silentNarrationBuffer() {
+  const silenceBytes = 1000;
+  const buffer = Buffer.alloc(44 + silenceBytes);
+  buffer.write("RIFF", 0);
+  buffer.writeUInt32LE(36 + silenceBytes, 4);
+  buffer.write("WAVE", 8);
+  buffer.write("fmt ", 12);
+  buffer.writeUInt32LE(16, 16);
+  buffer.writeUInt16LE(1, 20);
+  buffer.writeUInt16LE(1, 22);
+  buffer.writeUInt32LE(8000, 24);
+  buffer.writeUInt32LE(8000, 28);
+  buffer.writeUInt16LE(1, 32);
+  buffer.writeUInt16LE(8, 34);
+  buffer.write("data", 36);
+  buffer.writeUInt32LE(silenceBytes, 40);
+  buffer.fill(0x80, 44);
+  return buffer;
 }
 
 function clean(value, limit = 320) {

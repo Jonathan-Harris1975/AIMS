@@ -1031,7 +1031,11 @@ function enhancePackForBlotatoDuration(pack = {}, options = {}, laneConfig = {})
     500
   );
 
-  return applyBritishEnglishPack(reinforceSourceGrounding(output, options.article));
+  const grounded = reinforceSourceGrounding(output, options.article);
+  if (options.article?.title) {
+    grounded.thumbnailText = cleanText(options.article.title.split(/\s+/).slice(0, 5).join(" "), 55) || grounded.thumbnailText;
+  }
+  return applyBritishEnglishPack(grounded);
 }
 
 const KNOWN_AI_ANCHORS = Object.freeze([
