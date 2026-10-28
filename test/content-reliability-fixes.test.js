@@ -48,7 +48,8 @@ test("newsletter structured output avoids provider-incompatible array cardinalit
 test("newsletter review routes avoid the logged unsupported GPT targets", async () => {
   const config = await readFile(new URL("../ai-config.js", import.meta.url), "utf8");
   assert.match(config, /newsletterFactCheck: routeChain\(\["audit", "highQuality"\]/);
-  assert.match(config, /newsletterAudienceReview: routeChain\(\["gpt56Sol"\]/);
+  assert.match(config, /newsletterAudienceReview: routeChain\(\["fast", "summary", "gpt56Sol"\]/);
+  assert.match(config, /newsletterVoiceReview: routeChain\(\["fast", "summary", "gpt56Sol"\]/);
   assert.match(config, /newsletterCouncilChair: routeChain\(\["audit", "highQuality"\]/);
 });
 
