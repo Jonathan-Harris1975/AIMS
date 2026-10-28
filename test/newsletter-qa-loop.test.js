@@ -22,6 +22,7 @@ let selfScores = [];
 let councilScores = [];
 let selfCallCount = 0;
 let chairCallCount = 0;
+let testCaseCount = 0;
 
 function chat(content) { return { choices: [{ message: { content } }] }; }
 function reviewResponse(score) {
@@ -58,6 +59,13 @@ before(async () => {
         return;
       }
 
+      if (system.includes("Repair only the listed newsletter defects")) {
+        res.end(JSON.stringify(chat(JSON.stringify({ edits: [
+          { path: "openingNoteHtml", value: `<p>Targeted repair after review ${selfCallCount} and council ${chairCallCount}.</p>` },
+        ] }))));
+        return;
+      }
+
       if (system.includes("senior editor writing")) {
         res.end(JSON.stringify(chat(JSON.stringify({
           heroHeadline: "A revised headline",
@@ -87,8 +95,8 @@ before(async () => {
   process.env.OPENROUTER_BASE_URL = `http://127.0.0.1:${server.address().port}`;
 });
 
-after(async () => { await new Promise((resolve) => server.close(resolve)); });
-beforeEach(() => { selfCallCount = 0; chairCallCount = 0; selfScores = []; councilScores = []; });
+after(async () => { server.closeAllConnections(); await new Promise((resolve) => server.close(resolve)); });
+beforeEach(() => { testCaseCount += 1; selfCallCount = 0; chairCallCount = 0; selfScores = []; councilScores = []; });
 
 const lead = { title: "A", link: "https://news.example.com/a", summary: "A source summary." };
 const stories = [
@@ -101,7 +109,7 @@ const stories = [
 
 function draftNewsletter() {
   return {
-    subject: "Draft subject", previewText: "Draft preview", heroHeadline: "Draft headline",
+    subject: `Draft subject ${testCaseCount}`, previewText: "Draft preview", heroHeadline: "Draft headline",
     openingNoteHtml: "<p>Draft opening note.</p>", heroImageUrl: "https://images.example.com/hero.png",
     bigThree: [lead, ...stories.slice(0, 2)].map((s) => ({ ...s, whatHappened: "Happened.", whyItMatters: "Matters.", jonathanTake: "Take." })),
     worthUsing: { ...stories[2], label: "Worth Watching", summary: "Summary.", whyUseful: "Useful." },

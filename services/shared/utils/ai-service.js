@@ -1,3 +1,4 @@
+import { claimRepairAction, currentTaskRepairBudget } from "./taskRepairBudget.js";
 import { prepareRepairRequest } from "./repairHistory.js";
 // ============================================================
 // 🧠 services/shared/utils/ai-service.js
@@ -445,6 +446,7 @@ export async function resilientRequest(routeName, {
   const attempted = [];
   const attemptedProviderTargets = new Set();
 
+  let configuredTargetsTried = 0;
   for (const providerId of chain) {
     const providerPosition = chain.indexOf(providerId) + 1;
     const provider = getProviderConfig(providerId);
@@ -461,6 +463,7 @@ export async function resilientRequest(routeName, {
       continue;
     }
     attemptedProviderTargets.add(targetKey);
+    if (configuredTargetsTried++ > 0) claimRepairAction("recoveries");
 
     try { safeRouteLog({ routeName, routeKey, provider: providerId, model: provider.name }); } catch {}
     if (signal?.aborted) {
@@ -470,9 +473,11 @@ export async function resilientRequest(routeName, {
     const providerMessages = headroom.messages;
     let compatibilityRelaxationUsed = false;
     for (let attempt = 0; attempt <= effectiveMaxRetries; attempt++) {
+      if (attempt > 0) claimRepairAction("recoveries");
       const logReturnedUsage = (result, parameterMode) => {
         if (shouldLogUsage()) {
           info("ai.request.usage", {
+            taskRepairBudget: currentTaskRepairBudget()?.snapshot() || null,
             routeName,
             routeKey,
             provider: providerId,
@@ -551,6 +556,7 @@ export async function resilientRequest(routeName, {
         // prompts still require JSON, and deterministic parsers/validators
         // remain the final authority.
         if (!compatibilityRelaxationUsed && isParameterCompatibilityError(err)) {
+          claimRepairAction("recoveries");
           compatibilityRelaxationUsed = true;
           info("ai.request.parameter_relaxation", {
             routeName,
