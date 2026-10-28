@@ -117,3 +117,14 @@ test("master key is Analytics-only, takes precedence and ignores unresolved secr
   assert.ok(provider.calls.every(call => call.options.headers.Authorization === "Bearer master-only"));
   assert.ok(!JSON.stringify(report).includes("master-only"));
 });
+
+test("failed analytics validation retains diagnostic stages without credentials or charge values", async () => {
+  const provider = fakeProvider({ total: null });
+  await assert.rejects(collectOpenRouterDailySpend({ now }, { env, fetchImpl: provider.fetchImpl }), error => {
+    assert.equal(error.analyticsDiagnostics.stage, "account-total");
+    assert.ok(error.analyticsDiagnostics.availableMetrics.includes("total_usage"));
+    assert.equal(error.analyticsDiagnostics.totalShape.rowMetricTypes[0].total_usage, "object");
+    assert.ok(!JSON.stringify(error.analyticsDiagnostics).includes("test-management-secret"));
+    return true;
+  });
+});

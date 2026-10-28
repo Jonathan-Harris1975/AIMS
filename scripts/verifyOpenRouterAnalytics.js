@@ -15,6 +15,13 @@ try {
       reconciled: report.reconciled, provisional: report.provisional, privateReportStored: true }));
   }
 } catch (error) {
+  try {
+    const { putPrivateJson } = await import("../services/shared/utils/r2-client.js");
+    await putPrivateJson("metaSystem", "reports/openrouter-daily/diagnostics.json", {
+      ok: false, collectedAt: new Date().toISOString(),
+      diagnostics: error.analyticsDiagnostics || { stage: "private-storage", error: "Report storage unavailable" },
+    }, { cacheControl: "no-store, max-age=0" });
+  } catch { /* Keep storage/credential details out of public workflow logs. */ }
   console.error(JSON.stringify({ event: "openrouter.analytics.unavailable", status: "analytics-or-private-storage-failed",
     httpStatus: Number.isInteger(error?.status) ? error.status : null }));
   process.exitCode = 1;

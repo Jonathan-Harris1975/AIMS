@@ -97,20 +97,35 @@ export async function collectOpenRouterDailySpend({ date, now = new Date(), fx =
   if (!key) return { ok: false, status: "not_configured", missing: ["OPENROUTER_MASTER_KEY", "OPENROUTER_MANAGEMENT_API_KEY"], provider: "OpenRouter" };
   if (fx) convertSpendToGbp(0, fx);
   const window = londonDayWindow(date || shiftDate(londonDate(now), -1), now);
+  const diagnostics = { stage: "metadata" };
+  try {
   const meta = (await queryApi("meta", { key, fetchImpl }))?.data;
   const names = new Set((meta?.metrics || []).map(item => item.name));
   const dimensions = new Set((meta?.dimensions || []).map(item => item.name));
+  diagnostics.availableMetrics = [...names];
+  diagnostics.availableDimensions = [...dimensions];
   if (!names.has("total_usage") || !names.has("request_count") || !dimensions.has("model")) {
     throw new Error("OpenRouter metadata does not expose the required recorded-spend metrics");
   }
   const metrics = ["total_usage", "request_count", ...["tokens_prompt", "tokens_completion", "tokens_reasoning", "tokens_cached"].filter(name => names.has(name))];
+  diagnostics.availableMetrics = [...names];
+  diagnostics.availableDimensions = [...dimensions];
+  diagnostics.stage = "account-total";
   const query = { metrics, time_range: { start: window.start, end: window.end }, limit: 1000 };
   // No granularity: aggregate the exact UK-day range, rather than summing UTC day buckets.
-  const totalRows = checkedRows(await queryApi("query", { key, fetchImpl, body: { ...query, dimensions: [] } }), metrics);
+  const totalResponse = await queryApi("query", { key, fetchImpl, body: { ...query, dimensions: [] } });
+  const shape = response => ({ metadata: response?.data?.metadata,
+    rowMetricTypes: response?.data?.data?.slice(0, 1).map(row => Object.fromEntries(metrics.map(metric => [metric, typeof row[metric]]))) });
+  diagnostics.totalShape = shape(totalResponse);
+  const totalRows = checkedRows(totalResponse, metrics);
   if (totalRows.length > 1) throw new Error("Unexpected ungrouped analytics totals");
   const attribution = ["app", "api_key"].find(name => dimensions.has(name)) || null;
   const groupBy = ["model", ...(attribution ? [attribution] : [])];
-  const breakdown = checkedRows(await queryApi("query", { key, fetchImpl, body: { ...query, dimensions: groupBy } }), metrics);
+  diagnostics.stage = "model-breakdown";
+  const breakdownResponse = await queryApi("query", { key, fetchImpl, body: { ...query, dimensions: groupBy } });
+  diagnostics.breakdownShape = shape(breakdownResponse);
+  const breakdown = checkedRows(breakdownResponse, metrics);
+  diagnostics.stage = "reconciliation";
   const totals = Object.fromEntries(metrics.map(metric => [metric, totalRows.length ? amount(totalRows[0][metric], metric) : 0]));
   for (const metric of metrics) {
     const sum = breakdown.reduce((total, row) => total + row[metric], 0);
@@ -122,10 +137,15 @@ export async function collectOpenRouterDailySpend({ date, now = new Date(), fx =
     ok: true, provider: "OpenRouter", scope: "authenticated-management-key-account", source: "OpenRouter Analytics API",
     collectedAt: now.toISOString(), period: window, currency: "USD", recordedSpendUsd: totals.total_usage,
     gbp: convertSpendToGbp(totals.total_usage, fx), totals, dimensions: groupBy, breakdown,
+    availableMetrics: [...names], availableDimensions: [...dimensions],
     reconciled: true, provisional: true, attribution: attribution || "model-only; repository attribution unavailable",
     notes: ["Provider-recorded usage, not model-price estimates. Later provider adjustments may change totals.",
       "Application task/QA logs must be joined separately; model or API request counts are not completed-task counts.",
       "All account traffic is included. Do not assume all rows belong to AIMS, HIVE or RAMS without attribution evidence.",
       "No other model providers configured by the user. Credit purchases, VAT and card FX are not inferred from usage."],
   };
+  } catch (error) {
+    error.analyticsDiagnostics = { ...diagnostics, error: error.message, httpStatus: error.status || null };
+    throw error;
+  }
 }
