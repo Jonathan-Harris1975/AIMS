@@ -31,7 +31,7 @@ function parseBoolean(value, fallback = false) {
 }
 
 function cleanText(value = "", max = 2500) {
-  const text = String(value || "")
+  const text = unwrapDescription(value)
     .replace(/<!\[CDATA\[|\]\]>/g, "")
     .replace(/<[^>]+>/gi, " ")
     .replace(/&nbsp;/gi, " ")
@@ -48,11 +48,13 @@ function pubDateMs(value) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function unwrapDescription(value) {
-  if (!value) return "";
+function unwrapDescription(value, depth = 0) {
+  if (value === undefined || value === null || depth > 8) return "";
   if (typeof value === "string") return value;
+  if (Array.isArray(value)) return value.map((part) => unwrapDescription(part, depth + 1)).filter(Boolean).join(" ");
   if (typeof value === "object") {
-    return value.__cdata || value["#text"] || value.text || value.value || "";
+    return [value.__cdata, value["#text"], value.text, value.value, value.summary, value.description, value.rewritten, value.content]
+      .map((part) => unwrapDescription(part, depth + 1)).find(Boolean) || "";
   }
   return String(value);
 }
@@ -60,14 +62,8 @@ function unwrapDescription(value) {
 function normaliseItem(item = {}, sourceFallback = "") {
   const title = cleanText(item.title || item.shortTitle || item.name || "", 300);
   const summary = cleanText(
-    item.summary ||
-      item.contentSnippet ||
-      item.description ||
-      unwrapDescription(item.description) ||
-      item.content ||
-      item.rewritten ||
-      item.excerpt ||
-      "",
+    [item.summary, item.contentSnippet, item.description, item.content, item.rewritten, item.excerpt]
+      .map((value) => unwrapDescription(value)).find(Boolean) || "",
     2500
   );
   const link = trim(item.link || item.url || item.guid || "");
@@ -102,7 +98,7 @@ function normaliseItemsFromJson(json, sourceLabel = "rss-json") {
     .filter(Boolean);
 }
 
-async function parseFeedPayload(raw, sourceLabel) {
+export async function parseFeedPayload(raw, sourceLabel) {
   const text = String(raw || "").trim();
   if (!text) throw new Error(`${sourceLabel} feed payload was empty`);
 

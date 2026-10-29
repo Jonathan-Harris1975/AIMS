@@ -71,8 +71,7 @@ export const BLOTATO_STRICT_NO_TEXT_RULE = [
 ].join(" ");
 
 const BLOTATO_TEXT_FREE_POSITIVE_DETAIL = "Blank unmarked screens, plain equipment surfaces, clean walls and uncluttered environments with no designed signage, logos or readable lettering.";
-const FLUX_SCHNELL_SCENE_STYLE = "Realistic editorial documentary image, vertical 9:16, cinematic cyan highlights, deep navy shadows, clear source context, one coherent action,\
- premium but believable social-video visual.";
+const FLUX_SCHNELL_SCENE_STYLE = "Realistic editorial documentary image, cyan highlights, deep navy shadows, one source-specific action.";
 
 function cleanPromptProfile(value = "") {
   return String(value || "").trim().toLowerCase().replace(/[^a-z0-9-]+/g, "-") || "flux-schnell";
@@ -140,10 +139,14 @@ function buildFluxSchnellScenePrompt(value = "", index = 0, maxLength = 700) {
     .replace(/crop hands and fingers fully outside frame/gi, "shoulders-up framing")
     .replace(/,?\s*not a stock-photo grin/gi, "")
     .replace(/\s{2,}/g, " ");
+  const framing = `Use a ${fluxSceneShotDirection(index)}.`;
+  const style = `Vertical 9:16 ${FLUX_SCHNELL_SCENE_STYLE}`;
+  const reserved = [style, framing, humanCue, BLOTATO_TEXT_FREE_POSITIVE_DETAIL].filter(Boolean).join(" ");
+  const sourceBudget = Math.max(120, maxLength - reserved.length - 3);
   return cleanText([
-    `Vertical 9:16 ${FLUX_SCHNELL_SCENE_STYLE}`,
-    `Use a ${fluxSceneShotDirection(index)}.`,
-    base,
+    style,
+    framing,
+    cleanText(base, sourceBudget),
     humanCue,
     BLOTATO_TEXT_FREE_POSITIVE_DETAIL,
   ].filter(Boolean).join(" "), maxLength);
@@ -261,10 +264,15 @@ function wordCount(value = "") {
   return text ? text.split(/\s+/).filter(Boolean).length : 0;
 }
 
-function trimToWordCount(value = "", maxWords = MAX_SCRIPT_WORDS) {
-  const words = cleanText(value, 10_000).split(/\s+/).filter(Boolean);
+export function trimToWordCount(value = "", maxWords = MAX_SCRIPT_WORDS) {
+  const text = cleanText(value, 10_000);
+  const words = text.split(/\s+/).filter(Boolean);
   if (words.length <= maxWords) return words.join(" ");
-  return `${words.slice(0, maxWords).join(" ").replace(/[,:;]+$/g, "")}.`;
+  const prefix = words.slice(0, maxWords).join(" ");
+  const complete = [...prefix.matchAll(/[.!?](?:["'’”])?(?=\s|$)/g)].at(-1);
+  // Never manufacture a full stop after cutting off a narration sentence.
+  // Very long single sentences remain intact so the length gate can repair them.
+  return complete ? prefix.slice(0, complete.index + complete[0].length).trim() : splitSentences(text)[0];
 }
 
 function preserveReplacementCase(original = "", replacement = "") {
@@ -638,7 +646,7 @@ reader|customer|client|silhouette|portrait|shoulder|desk posture|expression|gest
 function humanVisualPromptSuffix(index = 0) {
   if (!HUMAN_VISUALS_ENABLED || index >= HUMAN_VISUAL_MIN_SCENES) return "";
   const cues = [
-    "Include a believable adult human face or upper body reacting to the situation, editorial lighting, natural expression, not a stock-photo grin; crop hands and fingers fully outside frame.",
+    "Opening reaction: visible adult face and eyes turning towards the situation, natural expression, slow push-in; shoulders-up framing.",
     "Include a professional adult shown shoulders-up beside the AI workflow, with hands and fingers completely outside frame and clear human decision tension.",
     "Include a professional adult silhouette or over-shoulder view showing the work context and consequence, composed so hands and fingers are not visible.",
   ];
@@ -738,8 +746,7 @@ function deriveSourceGroundedScenes(pack = {}, article = {}) {
   const signature = cleanText(laneConfig?.visualSignature || pack.visualDirection || "premium editorial documentary short", 300);
   const continuity = cleanText(pack.visualContinuity || pack.visualDirection || signature, 360);
   const phases = [
-    `Wide establishing shot in the real source environment described by: ${context}. Show the actual industry, location, equipment or affected people and the immediate tension;\
- one adult upper body may anchor the frame, hands fully outside crop; slow push-in`,
+    `Source context: ${context}. Opening close-up of a visible adult face and eyes reacting to the real source-specific risk; shoulders-up framing, slow push-in`,
     `Medium operational action in the same source environment: ${context}. Show the real process, machinery, product or job role changing, not a symbolic prop; different \
 camera angle and visible movement; hands fully outside crop`,
     `Tight source-specific consequence shot from: ${context}. Focus on actual equipment, conditions or affected workflow with a human face or upper body for scale; no office \
@@ -1013,7 +1020,11 @@ function buildDurationSafeScript({ pack = {}, article = {}, laneConfig = {}, cta
     script = `${script} The story to watch is ${ensureSentence(title)}`.trim();
   }
 
-  if (wordCount(script) > MAX_SCRIPT_WORDS) return trimToWordCount(script, MAX_SCRIPT_WORDS);
+  if (wordCount(script) > MAX_SCRIPT_WORDS) script = trimToWordCount(script, MAX_SCRIPT_WORDS);
+  for (const line of padding) {
+    if (wordCount(script) >= MIN_SCRIPT_WORDS) break;
+    if (wordCount(`${script} ${line}`) <= MAX_SCRIPT_WORDS) script = `${script} ${line}`;
+  }
   if (wordCount(script) < TARGET_SCRIPT_WORDS && wordCount(`${script} ${softCta}`) <= MAX_SCRIPT_WORDS) {
     script = `${script} ${softCta}`;
   }
@@ -1031,12 +1042,17 @@ function makeScenePackDurationSafe(pack = {}, article = {}) {
 
 function enhancePackForBlotatoDuration(pack = {}, options = {}, laneConfig = {}) {
   const output = { ...pack };
+  const originalScript = output.script;
   const beforeWords = wordCount(output.script);
   if (beforeWords < MIN_SCRIPT_WORDS || beforeWords > MAX_SCRIPT_WORDS) {
     output.script = buildDurationSafeScript({ pack: output, article: options.article, laneConfig, cta: options.cta });
   }
 
   output.scenes = normaliseScenes(output.scenes, output);
+  if (output.script !== originalScript || combinedSceneWordCount(output.scenes) > MAX_SCRIPT_WORDS) {
+    const narration = balancedSceneScripts(output.script, MAX_SCENES);
+    output.scenes = output.scenes.map((scene, index) => ({ ...scene, script: narration[index] || scene.script }));
+  }
   if (output.scenes.length !== MAX_SCENES || combinedSceneWordCount(output.scenes) < MIN_SCENE_VOICEOVER_WORDS) {
     output.scenes = makeScenePackDurationSafe(output, options.article);
   }

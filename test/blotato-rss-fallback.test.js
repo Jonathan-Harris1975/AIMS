@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { selectRssArticleForBlotato } from "../services/blotato/utils/rssArticleSource.js";
+import { parseFeedPayload, selectRssArticleForBlotato } from "../services/blotato/utils/rssArticleSource.js";
 
 test("Blotato receives a clearly labelled evergreen fallback when every RSS source fails", async () => {
   const result = await selectRssArticleForBlotato({
@@ -34,4 +34,21 @@ test("Blotato uses a usable RSS story instead of the evergreen fallback", async 
   assert.equal(result.deterministicFallback, undefined);
   assert.equal(result.rssSource, "feed");
   assert.equal(result.article.title, "A source-grounded AI story");
+});
+
+
+test("Blotato unwraps the observed RSS JSON CDATA description before using it as source evidence", async () => {
+  const rows = await parseFeedPayload(JSON.stringify({ rss: { channel: { title: "AI news", item: [{
+    title: "Drunken Text Makes Chatbots Leak Secrets",
+    description: { __cdata: "<p>Researchers trained language models on drunken text and exposed security weaknesses.</p>" },
+    link: "https://source.example/drunken-text",
+  }] } } }), "observed-json-feed");
+  assert.equal(rows[0].summary, "Researchers trained language models on drunken text and exposed security weaknesses.");
+  assert.equal(rows[0].summary.includes("[object Object]"), false);
+});
+
+test("an unsupported summary object cannot hide a usable nested description", async () => {
+  const rows = await parseFeedPayload(JSON.stringify({ items: [{ title: "Grounded AI", summary: {},
+    description: { "#text": "Verified evidence from the source." }, link: "https://source.example/evidence" }] }), "nested-feed");
+  assert.equal(rows[0].summary, "Verified evidence from the source.");
 });

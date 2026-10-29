@@ -22,3 +22,13 @@ test("production word-count range supports coherent 35-55 second shorts", async 
   assert.match(news, /targetScriptWords = Math\.min\(MAX_SCRIPT_WORDS, Math\.max\(MIN_SCRIPT_WORDS, TARGET_SCRIPT_WORDS\)\)/);
   assert.doesNotMatch(news, /targetDuration \* 2\.5/);
 });
+
+
+test("the word limiter keeps complete narration sentences instead of an artificial full stop", async () => {
+  const { trimToWordCount } = await import("../services/blotato/utils/newsShortsService.js");
+  const complete = "The source supports one narrow security finding. Teams must check their own systems before changing how they handle business data.";
+  const final = "The source gives us a headline, not a full test, so we need to verify the underlying evidence before drawing a wider conclusion.";
+  const limit = complete.split(/\s+/).length + 15;
+  assert.equal(trimToWordCount(`${complete} ${final}`, limit), complete);
+  assert.doesNotMatch(trimToWordCount(`${complete} ${final}`, limit), /so we\.$/);
+});

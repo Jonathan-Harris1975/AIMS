@@ -134,7 +134,8 @@ test("provider integrations follow current Blotato and OpenRouter contracts", as
   assert.match(blotatoClient, /blotatoRequest\("schedules"/);
   assert.match(capabilities, /images\/models\/\$\{encodeURIComponent\(author\)\}/);
   assert.match(capabilities, /filterImagePayloadByCapabilities/);
-  assert.match(council, /strictJsonResponseFormat/);
+  assert.match(council, /parseNewsletterReview/);
+  assert.doesNotMatch(council, /response_format:/);
   assert.match(compose, /strictJsonResponseFormat/);
   assert.match(visualQa, /strictJsonResponseFormat/);
   assert.doesNotMatch(council, /type: "json_object"/);

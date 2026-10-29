@@ -18,11 +18,18 @@ import { runQaLoop } from "./qaLoop.js";
 import { runDeterministicValidators } from "./validators.js";
 import { renderNewsletterHtml, renderNewsletterWebHtml, renderNewsletterPlaintext, buildNewsletterMetadata } from "./render.js";
 import { storeNewsletterIssue } from "./storage.js";
+import { readEditorialCheckpoint, writeEditorialCheckpoint } from "./buildCheckpoint.js";
 
 export async function buildNewsletter({ profileId = "ai-edge", sessionId: requestedSessionId, now = new Date() } = {}) {
   const profile = getNewsletterProfile(profileId);
   const sessionId = sanitizeSessionId(requestedSessionId || `newsletter-${profile.id}-${Date.now()}`, "NL");
   info("newsletter.build.start", { sessionId, profileId: profile.id });
+
+  const checkpoint = await readEditorialCheckpoint({ profile, now });
+  if (checkpoint) {
+    info("newsletter.build.resumed", { sessionId, profileId: profile.id, day: checkpoint.day });
+    return finishNewsletterBuild({ ...checkpoint, profile, sessionId: checkpoint.sessionId, now });
+  }
 
   const { items, feedResults } = await collectCandidateStories(profile, { now });
   if (items.length === 0) {
@@ -100,13 +107,25 @@ export async function buildNewsletter({ profileId = "ai-edge", sessionId: reques
       quarantined: true,
       qa: qaResult,
       newsletter: qaResult.newsletter,
-      error: "Newsletter failed the editorial council after the maximum review/rewrite attempts and was quarantined.",
+      reviewErrors: qaResult.council?.failedReviews || [],
+      failureKind: qaResult.failureKind,
+      retryable: qaResult.failureKind === "review-service-unavailable",
+      error: qaResult.failureKind === "review-service-unavailable"
+        ? "Newsletter review service could not complete; draft retained in the job result and publication held."
+        : "Newsletter failed editorial review after the bounded correction attempts and was quarantined.",
     };
   }
 
+  const context = { profile, sessionId, now, qaResult, lead, stories, promotion, droppedForDiversity };
+  await writeEditorialCheckpoint(context);
+  return finishNewsletterBuild(context);
+}
+
+async function finishNewsletterBuild({ profile, sessionId, now, qaResult, lead, stories, promotion, droppedForDiversity, heroImageResult: savedHero }) {
   // Only spend image-generation credits after the editorial issue has passed.
   // A failed council run must not leave behind a misleading orphan hero image.
-  const heroImageResult = await generateHeroImage({
+  const heroImageResult = savedHero?.ok && savedHero.imageUrl && savedHero.imageStatus === "generated"
+    ? savedHero : await generateHeroImage({
     profile,
     heroHeadline: qaResult.newsletter.heroHeadline,
     leadStory: lead,
@@ -142,6 +161,8 @@ export async function buildNewsletter({ profileId = "ai-edge", sessionId: reques
       error: `Newsletter final validation failed after hero creation: ${finalValidation.issues.map((issue) => issue.message).join(" | ")}`,
     };
   }
+
+  await writeEditorialCheckpoint({ profile, sessionId, now, qaResult, lead, stories, promotion, droppedForDiversity, heroImageResult });
 
   const siteShell = await loadSiteShell();
   const emailHtml = renderNewsletterHtml({ profile, newsletter: finalNewsletter });

@@ -29,3 +29,5 @@ The service entry point, route modules and domain utilities are contained in thi
 - Retries are for transient failures only; validation, policy and source-integrity failures fail closed.
 - Generated public content must pass its content-quality gates before publication or delivery.
 - Durable artefacts and job state use the configured R2/state utilities rather than process memory where a durable store is required.
+
+Daily social-blog publication requires a generated, source-specific editorial image. Deterministic geometric fallback images are diagnostics and cannot be published, including when a stale deployment still enables `SOCIAL_BLOG_ALLOW_DETERMINISTIC_FALLBACK`. Failed generation leaves the social-blog item quarantined for repair; it does not substitute an unrelated image.

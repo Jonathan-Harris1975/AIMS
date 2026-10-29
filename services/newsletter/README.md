@@ -26,3 +26,9 @@ Delivery records in R2 protect retries. An unavailable or malformed record block
 ## Configuration
 
 Use `NEWSLETTER_*`, the existing AIMS D1/Comms Hub settings, the one.com newsletter mailbox, OpenRouter/artwork settings and the production environment templates. Secrets remain deployment-only.
+
+## Recovery behaviour
+
+Malformed or unavailable reviews are review-service failures, not editorial defects: they never trigger copy rewrites. Council requests settle independently; completed reviews and individual seat errors remain in the result. Incomplete councils still block publication. Reviews use portable JSON instructions with locally validated score, verdict, blocking flag and issue types, plus concise response instructions and adequate output space. Existing quality thresholds and repair limits remain unchanged.
+
+After editorial approval, a private daily checkpoint retains the approved draft, selected sources and review result. A retry on the same UTC date and unchanged profile/model/threshold policy resumes artwork/render/storage; it does not repeat editorial generation. A validated hero is checkpointed before rendering too. Resumption retains the original issue session ID so existing email delivery receipts remain authoritative. Missing or invalid checkpoints fall back to the full normal build. No failed draft can become a checkpoint approval. Existing delivery receipts still control email retries. Schedules remain owned by MAST.
