@@ -149,9 +149,8 @@ export function withinWindow(item, { now = new Date(), windowHours } = {}) {
  * the configured rolling window and removes duplicates (by canonical link,
  * falling back to normalised title).
  */
-export async function collectCandidateStories(profile, { now = new Date() } = {}) {
+export async function collectCandidateStories(profile, { now = new Date(), windowHours = THRESHOLDS.newsletter.rssWindowHours } = {}) {
   const feedUrls = loadFeedUrls(profile);
-  const windowHours = THRESHOLDS.newsletter.rssWindowHours;
 
   if (!feedUrls.length) {
     warn("newsletter.rss.no_feeds_configured", { profileId: profile?.id });

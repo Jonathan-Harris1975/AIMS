@@ -44,6 +44,7 @@ export function validateBannedPhrases(newsletter) {
 }
 
 export function validateDailyOpening(newsletter) {
+  if (["saturday", "sunday"].includes(newsletter.edition)) return { pass: true, issues: [] };
   const opening = String(newsletter.openingNoteHtml || "").replace(/<[^>]*>/g, " ")
     .replace(/&(?:rsquo|apos|#39|#x27);/gi, "'");
   const weeklyFrame = new RegExp([

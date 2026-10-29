@@ -273,6 +273,7 @@ const OPERATION_WINDOWS = Object.freeze({
     ["newsletter-generate", "/newsletter/generate", { profileId: "ai-edge" }, "newsletter"],
     ["newsletter-readiness", "/newsletter/readiness", { profileId: "ai-edge" }, "newsletter", false, "newsletter-generate"],
     ["newsletter-send", "/newsletter/send", { profileId: "ai-edge" }, "newsletter", false, "newsletter-readiness"],
+    ["newsletter-weekend-prepare", "/newsletter/weekend/prepare", {}, "newsletter"],
   ],
   "friday-pm": [
     ["podcast-readiness", "/podcast/readiness", {}],
@@ -395,6 +396,7 @@ const ASYNC_TASK_ROUTES = Object.freeze({
   "/blog/social/daily/build": { statusBase: "/blog/social/jobs", lane: "daily-build" },
   "/zernio/blog-rss/daily": { statusBase: "/zernio/jobs", lane: "blog-rss-daily" },
   "/blog/weekly/build": { statusBase: "/blog/weekly/jobs", lane: "weekly-build" },
+  "/newsletter/weekend/prepare": { statusBase: "/newsletter/jobs", lane: "weekend-prepare" },
   "/newsletter/generate": { statusBase: "/newsletter/jobs", lane: "generate" },
   "/zernio/ebooks/weekly": { statusBase: "/zernio/jobs", lane: "ebooks-weekly" },
   "/zernio/quiz/weekly": { statusBase: "/zernio/jobs", lane: "quiz-weekly" },

@@ -21,6 +21,12 @@ function runtime() {
   return { config, d1: new D1Client(config), mail };
 }
 
+export function issueDeliveryDue(metadata = {}, now = new Date()) {
+  if (!metadata.scheduledAt) return true;
+  const scheduled = Date.parse(metadata.scheduledAt);
+  return Number.isFinite(scheduled) && scheduled <= now.getTime();
+}
+
 function publicBaseUrl() {
   return String(process.env.COMMS_HUB_PUBLIC_BASE_URL || "").replace(/\/$/, "");
 }
@@ -35,6 +41,7 @@ function withUnsubscribe(html, url) {
 
 async function sendIssueToRecipient({ profile, sessionId, recipient, buildResult, d1, mail }) {
   const prior = await d1.query("SELECT status FROM newsletter_delivery_recipients WHERE issue_id=? AND subscriber_id=?", [sessionId, recipient.id]);
+  if (prior.results?.[0]?.status === "reconciliation_required") return { ok: false, status: "delivery_reconciliation_required" };
   if (prior.results?.[0]?.status === "sent") return { ok: true, status: "already_sent" };
   const unsubscribeToken = await createUnsubscribeToken(recipient.id, profile.id, { d1 });
   const unsubscribeUrl = `${publicBaseUrl()}/newsletter/unsubscribe/${encodeURIComponent(unsubscribeToken)}`;
@@ -73,6 +80,7 @@ async function loadStoredIssue(profile, sessionId, date) {
   ]);
   const metadata = JSON.parse(metadataRaw);
   return {
+    metadata,
     newsletter: { subject: metadata.subject, previewText: metadata.previewText, heroHeadline: metadata.heroHeadline },
     emailHtml,
     plaintext,
@@ -87,6 +95,9 @@ export async function deliverTodaysIssueToSubscriber({ subscriberId, email, publ
   if (!sessionId) return { ok: true, status: "no_issue_today" };
   try {
     const buildResult = await loadStoredIssue(profile, sessionId, date);
+    if (!issueDeliveryDue(buildResult.metadata, date)) {
+      return { ok: true, status: "issue_not_due", sessionId };
+    }
     const result = await sendIssueToRecipient({ profile, sessionId, recipient: { id: subscriberId, email }, buildResult, d1, mail });
     return { ...result, sessionId };
   } catch (error) {
@@ -108,7 +119,10 @@ export async function getNewsletterDeliveryReadiness({ profile }, deps = {}) {
 export async function deliverNewsletterIssue({ profile, sessionId, buildResult, date = new Date() }, deps = {}) {
   const { d1, mail } = deps.d1 ? deps : runtime();
   if (!mail) return { ok: false, status: "sender_not_configured", stage: "preflight", error: "Newsletter one.com sender is not configured." };
-  const existing = await readCampaignDelivery({ profile, sessionId, date }).catch(() => ({ delivery: null }));
+  if (!issueDeliveryDue(buildResult.metadata)) {
+    return { ok: false, status: "issue_not_due", stage: "preflight" };
+  }
+  const existing = await readCampaignDelivery({ profile, sessionId, date });
   if (existing.delivery?.status === "dispatched") return { ok: true, status: "already_dispatched", ...existing.delivery };
   const recipients = await listEligibleSubscribers(profile.id, { d1 });
   if (!recipients.length) return { ok: false, status: "audience_empty", stage: "preflight", error: "No verified, consented newsletter subscribers are eligible for delivery." };

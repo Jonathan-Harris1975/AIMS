@@ -52,6 +52,8 @@ border-radius:6px;font-weight:600;font-size:14px;">${escapeHtml(promotion.ctaLab
 }
 
 export function renderNewsletterHtml({ profile, newsletter }) {
+  const editionLabel = newsletter.edition === "saturday" ? "Saturday · The week in debate"
+    : newsletter.edition === "sunday" ? "Sunday · A slower look at the week" : "Jonathan Harris · practical AI, minus the hype";
   const bigThree = (newsletter.bigThree || []).map(renderBigStory).join("\n");
   const radar = (newsletter.onRadar || []).map((story) => `<tr><td style="padding:10px 0;border-top:1px solid #E5E7EB;"><a href="${escapeHtml(
     story.link)}" style="font-size:14px;font-weight:700;color:#0D1420;text-decoration:none;">${escapeHtml(
@@ -65,7 +67,7 @@ export function renderNewsletterHtml({ profile, newsletter }) {
 <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;width:100%;background:#fff;border-radius:12px;overflow:hidden;">
 <tr><td align="center" style="padding:24px 24px 18px;border-bottom:1px solid #E5E7EB;">
   <div style="font-family:Georgia,'Times New Roman',serif;font-size:24px;font-weight:700;color:#0D1420;">${escapeHtml(profile.displayName)}</div>
-  <div style="padding-top:5px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#64748B;">Jonathan Harris · practical AI, minus the hype</div>
+  <div style="padding-top:5px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#64748B;">${escapeHtml(editionLabel)}</div>
 </td></tr>
 ${newsletter.heroImageUrl ? `<tr><td><img src="${escapeHtml(newsletter.heroImageUrl)}" alt="" width="600" style="display:block;width:100%;max-width:600px;height:auto;"/></td></tr>` : ""}
 <tr><td style="padding:24px 24px 8px;font-family:Georgia,'Times New Roman',serif;font-size:25px;line-height:1.25;font-weight:700;color:#0D1420;">${escapeHtml(newsletter.heroHeadline)}</td></tr>
@@ -86,7 +88,8 @@ ${sectionLabel("Reality Check")}
       "")}</div>${newsletter.realityCheck?.link ? `<div style="padding-top:6px;"><a href="${escapeHtml(
         newsletter.realityCheck.link)}" style="font-size:13px;color:#0D1420;">Read the source</a></div>` : ""}</td></tr>
 ${renderPromotion(newsletter.promotion)}
-<tr><td style="padding:22px 24px;border-top:1px solid #E5E7EB;font-size:12px;line-height:1.65;color:#64748B;text-align:center;">${escapeHtml(newsletter.footer?.text || "")}<br/>
+<tr><td style="padding:22px 24px;border-top:1px solid #E5E7EB;font-size:12px;line-height:1.65;color:#64748B;text-align:center;">${escapeHtml(newsletter.footer?.text || "")}${["saturday", "sunday"].includes(newsletter.edition)
+  ? "<br/>Prepared on Friday from the week’s coverage." : ""}<br/>
 <span style="color:#94A3B8;">AI Edge is written for people who want useful AI analysis without vendor theatre.</span></td></tr>
 </table></td></tr></table></body></html>`;
 }
@@ -120,6 +123,7 @@ export function buildNewsletterMetadata({ profile, newsletter, qaResult, generat
     profileId: profile.id,
     formatVersion: "ai-edge-v3-email",
     distribution: "email-only",
+    edition: newsletter.edition || "daily",
     subject: newsletter.subject,
     previewText: newsletter.previewText,
     heroHeadline: newsletter.heroHeadline,

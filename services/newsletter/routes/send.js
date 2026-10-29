@@ -24,6 +24,7 @@ async function loadStoredIssue(profile, sessionId, date) {
 
   return {
     ok: true,
+    metadata,
     newsletter: {
       subject: metadata.subject,
       previewText: metadata.previewText,
