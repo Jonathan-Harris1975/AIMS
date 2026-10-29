@@ -2,7 +2,7 @@ import { access, readFile, readdir } from "node:fs/promises";
 import { constants } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { validateEnvFile } from "./koyebEnvDoctor.js";
+import { parseEnvLines, validateEnvEntries, validateEnvFile } from "./koyebEnvDoctor.js";
 import {
   assertAllSourceRelativeImports,
   assertNoUnexpectedSourceControlCharacters,
@@ -189,7 +189,15 @@ async function assertProductionDefaultsAreSafe() {
     throw new Error("config/production.defaults.env must not contain Koyeb secret references; keep secrets in koyeb-env/aims.secrets-only.txt");
   }
 
-  const result = await validateEnvFile(defaultsPath);
+  const parsed = parseEnvLines(raw);
+  // Build-time validation composes non-secret defaults with the declared Koyeb
+  // binding. Authenticated compression is verified against the deployed environment.
+  const overlay = parseEnvLines(await readFile(path.join(projectRoot, "config", "koyeb.production.env.template"), "utf8"));
+  const tokenBinding = overlay.entries.find(entry => entry.key === "HEADROOM_PROXY_TOKEN" &&
+    /^\{\{\s*secret\.HEADROOM_PROXY_TOKEN\s*\}\}$/.test(entry.value));
+  const entries = parsed.entries.map(entry => entry.key === "HEADROOM_PROXY_TOKEN" && !entry.value && tokenBinding
+    ? { ...entry, value: tokenBinding.value } : entry);
+  const result = { errors: [...parsed.errors, ...validateEnvEntries(entries)] };
   if (result.errors.length) {
     throw new Error(
       `config/production.defaults.env is not production-safe:\n${result.errors
