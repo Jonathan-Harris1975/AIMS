@@ -10,41 +10,45 @@ function cli(args, { json = true } = {}) {
   try { return JSON.parse(result.stdout); } catch { throw new Error("Koyeb Headroom metadata was not valid JSON"); }
 }
 
-export function headroomCompanion(servicePayload, listPayload, deploymentPayload) {
-  const service = servicePayload?.service || servicePayload;
-  const app = service?.app_id || service?.app?.id;
-  if (!service?.id || !app) throw new Error("AIMS service identity/app could not be verified");
-  const rows = Array.isArray(listPayload) ? listPayload : listPayload?.services;
-  if (!Array.isArray(rows)) throw new Error("Headroom service inventory could not be verified");
-  const matches = rows.filter(row => row.name === "headroom" && (!row.app_id || row.app_id === app));
-  if (matches.length !== 1) throw new Error("Exactly one Headroom companion is required in the AIMS app");
-  const companion = matches[0];
+export const SHARED_HEADROOM = Object.freeze({
+  serviceId: "fafd45aa-a95f-4356-9faf-24b42c6dd847",
+  baseUrl: "https://liable-loreen-jonathanharris-57884580.koyeb.app",
+});
+
+export function sharedHeadroomServices(aimsPayload, hivePayload, deploymentPayload, expectedHiveId) {
+  const aims = aimsPayload?.service || aimsPayload;
+  const hive = hivePayload?.service || hivePayload;
   const deployment = deploymentPayload?.deployment || deploymentPayload;
-  if (!deployment || deployment.service_id !== companion.id || String(deployment.status).toLowerCase() !== "healthy") {
-    throw new Error("Headroom companion is not healthy; AIMS configuration was not changed");
+  if (!aims?.id || !hive?.id || aims.id === hive.id || hive.id !== expectedHiveId) throw new Error("AIMS/HIVE service identities could not be verified");
+  if (!deployment || deployment.service_id !== hive.id || String(deployment.status).toLowerCase() !== "healthy") {
+    throw new Error("Shared HIVE Headroom service is not healthy; AIMS wiring was not changed");
   }
-  if (deployment.id !== (companion.latest_deployment_id || companion.active_deployment_id)) throw new Error("Headroom deployment identity mismatch");
-  return { service, companion, deployment };
+  if (deployment.id !== (hive.latest_deployment_id || hive.active_deployment_id)) throw new Error("HIVE deployment identity mismatch");
+  return { aims, hive };
 }
 
 export function restoreHeadroomProduction({ env = process.env, run = cli } = {}) {
   if (!env.KOYEB_SERVICE || !env.KOYEB_TOKEN) throw new Error("Koyeb service/token configuration is required");
-  const payload = run(["services", "get", env.KOYEB_SERVICE]);
-  const service = payload?.service || payload;
-  const app = service?.app_id || service?.app?.id;
-  if (!app) throw new Error("AIMS app identity could not be verified");
-  const list = run(["services", "list", "--app", app, "--name", "headroom"]);
-  const rows = Array.isArray(list) ? list : list?.services;
-  const companion = rows?.find(row => row.name === "headroom" && (!row.app_id || row.app_id === app));
-  if (!companion) throw new Error("Headroom companion is missing from the AIMS app; deploy headroom/Dockerfile as a private service");
-  const id = companion.latest_deployment_id || companion.active_deployment_id;
-  if (!id) throw new Error("Headroom companion has no deployment");
+  if (Boolean(env.HEADROOM_HIVE_SERVICE) !== Boolean(env.HEADROOM_HIVE_BASE_URL)) {
+    throw new Error("A custom HIVE compression target requires both HEADROOM_HIVE_SERVICE and HEADROOM_HIVE_BASE_URL");
+  }
+  const expectedHiveId = env.HEADROOM_HIVE_SERVICE || SHARED_HEADROOM.serviceId;
+  const baseUrl = new URL(env.HEADROOM_HIVE_BASE_URL || SHARED_HEADROOM.baseUrl);
+  if (baseUrl.protocol !== "https:" || baseUrl.username || baseUrl.password || baseUrl.search || baseUrl.hash || baseUrl.pathname !== "/") {
+    throw new Error("HIVE compression target must be an HTTPS origin without credentials, query or path");
+  }
+  const aimsPayload = run(["services", "get", env.KOYEB_SERVICE]);
+  const hivePayload = run(["services", "get", expectedHiveId]);
+  const hive = hivePayload?.service || hivePayload;
+  const id = hive?.latest_deployment_id || hive?.active_deployment_id;
+  if (!id) throw new Error("HIVE has no deployed Headroom endpoint");
   const deployment = run(["deployments", "get", id]);
-  headroomCompanion(payload, list, deployment);
-  run(["services", "update", companion.id, "--min-scale", "1", "--env", "HEADROOM_BEACON=off", "--env", "DO_NOT_TRACK=1"], { json: false });
-  run(["services", "update", service.id, "--env", "HEADROOM_ENABLED=true", "--env", "HEADROOM_BASE_URL=http://headroom:8787",
-    "--env", "HEADROOM_PROXY_TOKEN={{secret.HEADROOM_PROXY_TOKEN}}"], { json: false });
-  return { event: "headroom.production.configured", enabled: true, companionHealthy: true };
+  const services = sharedHeadroomServices(aimsPayload, hivePayload, deployment, expectedHiveId);
+  run(["services", "update", services.hive.id, "--min-scale", "1", "--env", "HEADROOM_ENABLED=true",
+    "--env", "HEADROOM_BEACON=off", "--env", "DO_NOT_TRACK=1"], { json: false });
+  run(["services", "update", services.aims.id, "--env", "HEADROOM_ENABLED=true", "--env", `HEADROOM_BASE_URL=${baseUrl.origin}`,
+    "--env", "HEADROOM_PROXY_TOKEN={{secret.AIMS_API_KEY}}"], { json: false });
+  return { event: "headroom.production.configured", enabled: true, mode: "shared-hive-inline", additionalComputeService: false };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
