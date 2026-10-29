@@ -69,3 +69,15 @@ test("Flux Schnell profile keeps hands out of frame instead of asking for visibl
   assert.match(prompt, /shoulders-up framing|arms outside frame|upper body/i);
   assert.doesNotMatch(prompt, /\bhands?\s+(using|holding|typing)\b/i);
 });
+
+
+test("long scene prompts retain the visible-face opening and text-free constraint", async () => {
+  const mod = await import(`../services/blotato/utils/newsShortsService.js?retained-hook=${Date.now()}`);
+  const inputs = mod.buildBlotatoVideoInputs({ lane: "reality-check", hook: "Chatbot security changed.",
+    script: "A chatbot security test exposed a weakness in training data.",
+    scenes: [{ mediaSource: "A security analyst studies a chatbot failure beside a test terminal. " + "Source-specific security investigation. ".repeat(30),
+      script: "A chatbot security test exposed a weakness in training data." }] });
+  assert.match(inputs.scenes[0].mediaSource, /visible adult face and eyes/i);
+  assert.match(inputs.scenes[0].mediaSource, /blank unmarked screens/i);
+  assert.ok(inputs.scenes[0].mediaSource.length <= 720);
+});

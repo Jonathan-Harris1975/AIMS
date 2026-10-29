@@ -78,9 +78,9 @@ export async function generateHeroImage({ profile, heroHeadline, leadStory = nul
     mode: "newsletter",
   });
 
-  if (!result.ok) {
+  if (!result.ok || result.fallback || result.imageStatus === "deterministic-fallback") {
     warn("newsletter.hero.generation_failed", { sessionId, profileId: profile.id, error: result.error });
-    return { ok: false, error: result.error, prompt };
+    return { ok: false, error: result.error || "Newsletter requires newly generated artwork; diagnostic fallback rejected.", prompt };
   }
 
   return {

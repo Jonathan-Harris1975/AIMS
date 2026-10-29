@@ -4,7 +4,7 @@ import { claimRepairAction } from "../../shared/utils/taskRepairBudget.js";
 // by design and is only reached after the cheaper self-improvement loop fails.
 
 import { resilientRequest, getProviderDiagnosticsForRoute } from "../../shared/utils/ai-service.js";
-import { parseStructuredJson, strictJsonResponseFormat } from "../../shared/utils/structuredJson.js";
+import { parseNewsletterReview } from "./reviewJson.js";
 import { THRESHOLDS } from "../../../config/thresholds.js";
 import { getReviewCouncilDefinition, getReviewCouncilMembers, isReviewCouncilEnabled } from "../../content-quality/reviewCouncil.js";
 import { warn } from "../../../logger.js";
@@ -77,7 +77,7 @@ function payloadForMember(member, { profile, draft, sources }) {
   return { draft };
 }
 
-async function requestCouncilJson(route, { sessionId, messages, maxTokens = 900, schema = REVIEW_SCHEMA } = {}) {
+async function requestCouncilJson(route, { sessionId, messages, maxTokens = 1600, schema = REVIEW_SCHEMA } = {}) {
   const cacheKey = qaFingerprint({ version: 1, route, messages, maxTokens, schema,
     threshold: THRESHOLDS.newsletter.qaPassThreshold,
     providers: getProviderDiagnosticsForRoute(route),
@@ -91,15 +91,14 @@ async function requestCouncilJson(route, { sessionId, messages, maxTokens = 900,
     const raw = await resilientRequest(route, {
       sessionId,
       max_tokens: maxTokens,
-      reasoning: { effort: "none", exclude: true },
+      reasoning: null,
       temperature: attempt === 1 ? 0.15 : 0,
-      response_format: strictJsonResponseFormat(`newsletter_${route}`, schema),
       messages: attempt === 1
         ? messages
         : [messages[0], { role: "user", content: `${messages[1]?.content || ""}\n\nReturn one valid JSON object only.` }],
     });
     try {
-      const data = parseStructuredJson(raw, "newsletter council response");
+      const data = parseNewsletterReview(raw, schema, "newsletter council response");
       if (Number.isFinite(data.score) && data.score >= THRESHOLDS.newsletter.qaPassThreshold &&
           data.blocking === false && data.verdict === "pass" && Array.isArray(data.issues)) {
         passingReviews.put(cacheKey, { pass: true, data });
@@ -122,6 +121,7 @@ async function runMember(member, context, sessionId) {
           `You are seat ${member.seat}, the ${member.role}, on the AI Edge editorial council. Your remit: ${member.remit} ` +
           `Your authority is ${member.authority}. Score 0-100; the normal pass threshold is ${THRESHOLDS.newsletter.qaPassThreshold}. ` +
           "Set blocking=true only for an unresolved defect serious enough to make publication unsafe or materially misleading. Minor polish must not be marked blocking. " +
+          'Keep each issue/fix under 180 characters (at most five); strengths under 120 characters (at most three). Finish one complete JSON object. ' +
           'Return JSON only: {"score":number,"verdict":"pass"|"revise","blocking":boolean,"issues":[string],"strengths":[string]}.',
       },
       { role: "user", content: JSON.stringify(payloadForMember(member, context), null, 2) },
@@ -144,11 +144,17 @@ async function runMember(member, context, sessionId) {
 
 async function runCouncilSpecialists(members, context, sessionId, batchSize = 4) {
   const reports = [];
+  const failedReviews = [];
   for (let index = 0; index < members.length; index += batchSize) {
     const batch = members.slice(index, index + batchSize);
-    reports.push(...await Promise.all(batch.map((member) => runMember(member, context, sessionId))));
+    const outcomes = await Promise.allSettled(batch.map((member) => runMember(member, context, sessionId)));
+    for (const [offset, outcome] of outcomes.entries()) {
+      if (outcome.status === "fulfilled") reports.push(outcome.value);
+      else failedReviews.push({ seat: batch[offset].seat, role: batch[offset].role,
+        error: outcome.reason?.message || String(outcome.reason), code: outcome.reason?.code || null });
+    }
   }
-  return reports;
+  return { reports, failedReviews };
 }
 
 export async function runNewsletterEditorialCouncil({ profile, newsletter, lead, stories, sessionId }) {
@@ -168,18 +174,27 @@ export async function runNewsletterEditorialCouncil({ profile, newsletter, lead,
   const draft = newsletterPayload(newsletter);
   const sources = sourcePayload(lead, stories);
 
+  let reports = [];
   try {
     // A council is only a council if the declared seats actually attend.
-    const reports = await runCouncilSpecialists(
+    const specialistResult = await runCouncilSpecialists(
       specialistMembers,
       { profile, draft, sources },
       sessionId
     );
 
+    reports = specialistResult.reports;
+    if (specialistResult.failedReviews.length) {
+      return { ok: false, score: 0, verdict: "revise", reviewFailed: true,
+        members, reviews: reports, failedReviews: specialistResult.failedReviews,
+        attendance: { complete: false, required: definition.members.length, present: reports.length },
+        issues: specialistResult.failedReviews.map((review) => `${review.role}: ${review.error}`) };
+    }
+
     const chairData = await requestCouncilJson("newsletterCouncilChair", {
       sessionId,
       schema: CHAIR_SCHEMA,
-      maxTokens: 1100,
+      maxTokens: 1600,
       messages: [
         {
           role: "system",
@@ -187,7 +202,8 @@ export async function runNewsletterEditorialCouncil({ profile, newsletter, lead,
             `You are seat 1, the ${chairMember.role}. Your remit: ${chairMember.remit} Review every specialist report before deciding. ` +
             `The normal pass threshold is ${THRESHOLDS.newsletter.qaPassThreshold}. Source/factual blockers remain hard gates. ` +
             "Set blocking=true only for an unresolved publication blocker; minor monthly-audit-level polish is non-blocking. " +
-            'Return JSON only: {"score":number,"verdict":"pass"|"revise","blocking":boolean,"issues":[string],"priorityFixes":[string]}.',
+            'Keep each issue/fix under 180 characters (at most five); strengths under 120 characters (at most three). Finish one complete JSON object. ' +
+          'Return JSON only: {"score":number,"verdict":"pass"|"revise","blocking":boolean,"issues":[string],"priorityFixes":[string]}.',
         },
         { role: "user", content: JSON.stringify({ reports: reports.map(({ reviewReused, ...report }) => report), draft, sourceFingerprint: qaFingerprint(sources) }, null, 2) },
       ],
@@ -244,8 +260,10 @@ export async function runNewsletterEditorialCouncil({ profile, newsletter, lead,
       score: 0,
       verdict: "revise",
       members,
-      reviews: [],
-      attendance: { complete: false, required: definition.members.length, present: 0 },
+      reviewFailed: true,
+      reviews: reports,
+      failedReviews: [{ seat: 1, role: chairMember.role, error: err.message, code: err.code || null }],
+      attendance: { complete: false, required: definition.members.length, present: reports.length },
       issues: [`Editorial council failed: ${err.message}`],
     };
   }

@@ -34,3 +34,5 @@ The `ai-playbook` lane is prepared in the **Friday AM** operation. Friday PM is 
 ## Configuration
 
 Use the `BLOTATO_*` variables plus the shared OpenRouter/artwork settings in `config/production.defaults.env` and `env.template`. Secrets remain deployment-only.
+
+RSS descriptions are unwrapped from JSON/XML CDATA before entering scripts or scene prompts. Narration word limits retain complete sentences; changed narration is redistributed across the scene scripts. Prompt-length limits reserve the opening human reaction and text-free framing instructions.

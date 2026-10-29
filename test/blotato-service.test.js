@@ -47,16 +47,21 @@ function countHashtags(value = "") {
 async function handleMockRequest(req, res) {
   const url = new URL(req.url, "http://127.0.0.1");
 
-  if (req.method === "GET" && ["/feed.xml", "/feed-scheduled.xml"].includes(url.pathname)) {
+  if (req.method === "GET" && ["/feed.xml", "/feed-scheduled.xml", "/feed-in-progress.xml"].includes(url.pathname)) {
     const scheduledFixture = url.pathname === "/feed-scheduled.xml";
+    const inProgressFixture = url.pathname === "/feed-in-progress.xml";
+    const fixtureTitle = inProgressFixture ? "AI agents move into pending office workflows"
+      : scheduledFixture ? "AI agents move into scheduled office workflows" : "AI agents move from chat to office tasks";
+    const fixtureSlug = inProgressFixture ? "agents-pending-office-workflows"
+      : scheduledFixture ? "agents-scheduled-office-workflows" : "agents-office-tasks";
     res.writeHead(200, { "content-type": "application/rss+xml" });
     res.end(`<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0">
   <channel>
     <title>Jonathan Harris AI News</title>
     <item>
-      <title>${scheduledFixture ? "AI agents move into scheduled office workflows" : "AI agents move from chat to office tasks"}</title>
-      <link>https://example.com/${scheduledFixture ? "agents-scheduled-office-workflows" : "agents-office-tasks"}</link>
+      <title>${fixtureTitle}</title>
+      <link>https://example.com/${fixtureSlug}</link>
       <description>A new wave of agent tools is aimed at routine admin and workflow tasks.</description>
       <pubDate>${new Date().toUTCString()}</pubDate>
     </item>
@@ -667,7 +672,8 @@ test("Blotato accepts a provider-acknowledged in-progress scheduled submission",
   process.env.BLOTATO_SCHEDULE_MIN_LEAD_MS = "60000";
   process.env.BLOTATO_SCHEDULE_VERIFY_ATTEMPTS = "2";
   process.env.BLOTATO_SCHEDULE_VERIFY_INTERVAL_MS = "1";
-  process.env.BLOTATO_NEWS_RSS_URL = `${mockBase}/feed.xml`;
+  // A unique source keeps this provider-state test independent of the cross-lane duplicate guard.
+  process.env.BLOTATO_NEWS_RSS_URL = `${mockBase}/feed-in-progress.xml`;
   scheduledPostStatusMode = "in-progress";
 
   try {
@@ -676,7 +682,7 @@ test("Blotato accepts a provider-acknowledged in-progress scheduled submission",
       .set(auth)
       .send({});
 
-    assert.equal(response.status, 202);
+    assert.equal(response.status, 202, JSON.stringify(response.body));
     assert.equal(response.body.started, true);
 
     const jobStatus = await request(app).get(`/blotato/jobs/${response.body.sessionId}`);

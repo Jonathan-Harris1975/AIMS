@@ -24,6 +24,9 @@ let selfCallCount = 0;
 let chairCallCount = 0;
 let testCaseCount = 0;
 let shadowScore = 95;
+let malformedSelfReview = false;
+let failedSpecialist = false;
+let repairCallCount = 0;
 
 function chat(content) { return { choices: [{ message: { content } }] }; }
 function reviewResponse(score) {
@@ -46,6 +49,7 @@ before(async () => {
       }
 
       if (system.includes("economical pre-council editor")) {
+        if (malformedSelfReview) { selfCallCount += 1; res.end(JSON.stringify(chat('{"score":78,"issues":["cut off'))); return; }
         const score = selfScores[Math.min(selfCallCount, selfScores.length - 1)] ?? 90;
         selfCallCount += 1;
         res.end(JSON.stringify(chat(JSON.stringify({ score, blocking: false, issues: score >= 85 ? [] : ["needs a tighter edit"] }))));
@@ -53,6 +57,7 @@ before(async () => {
       }
 
       if (system.includes("on the AI Edge editorial council")) {
+        if (failedSpecialist && system.includes("seat 2,")) { res.end(JSON.stringify(chat('{"score":'))); return; }
         const score = councilScores[Math.min(chairCallCount, councilScores.length - 1)] ?? 90;
         res.end(JSON.stringify(chat(reviewResponse(score))));
         return;
@@ -66,6 +71,7 @@ before(async () => {
       }
 
       if (system.includes("Repair only the listed newsletter defects")) {
+        repairCallCount += 1;
         res.end(JSON.stringify(chat(JSON.stringify({ edits: [
           { path: "openingNoteHtml", value: `<p>Targeted repair after review ${selfCallCount} and council ${chairCallCount}.</p>` },
         ] }))));
@@ -102,7 +108,7 @@ before(async () => {
 });
 
 after(async () => { server.closeAllConnections(); await new Promise((resolve) => server.close(resolve)); });
-beforeEach(() => { testCaseCount += 1; selfCallCount = 0; chairCallCount = 0; selfScores = []; councilScores = []; });
+beforeEach(() => { testCaseCount += 1; selfCallCount = 0; chairCallCount = 0; selfScores = []; councilScores = []; malformedSelfReview = false; failedSpecialist = false; repairCallCount = 0; });
 
 const lead = { title: "A", link: "https://news.example.com/a", summary: "A source summary." };
 const stories = [
@@ -128,6 +134,37 @@ function draftNewsletter() {
 const profile = { id: "test-profile", displayName: "AI Edge", brandVoice: "Clear and practical." };
 
 describe("newsletter engine/qaLoop.js", () => {
+  test("malformed lightweight review escalates unchanged copy without wasting editorial repairs", async () => {
+    const { runQaLoop } = await import("../services/newsletter/engine/qaLoop.js");
+    malformedSelfReview = true;
+    councilScores = [95];
+    const draft = draftNewsletter();
+    const result = await runQaLoop({ profile, newsletter: draft, lead, stories, sessionId: "broken-self-review" });
+    assert.equal(result.ok, true);
+    assert.equal(selfCallCount, 1);
+    assert.equal(repairCallCount, 0);
+    assert.deepEqual(result.newsletter, draft);
+    assert.equal(result.council.attendance.present, 14);
+  });
+
+  test("failed council seat retains completed reviews and never rewrites copy to fix an API error", async () => {
+    const { runQaLoop } = await import("../services/newsletter/engine/qaLoop.js");
+    malformedSelfReview = true;
+    failedSpecialist = true;
+    const draft = draftNewsletter();
+    const result = await runQaLoop({ profile, newsletter: draft, lead, stories, sessionId: "broken-council-seat" });
+    assert.equal(result.ok, false);
+    assert.equal(result.quarantined, true);
+    assert.equal(repairCallCount, 0);
+    assert.deepEqual(result.newsletter, draft);
+    assert.equal(result.council.reviews.length, 12);
+    assert.equal(result.council.attendance.present, 12);
+    assert.equal(result.council.attendance.complete, false);
+    assert.equal(result.council.failedReviews[0].seat, 2);
+    assert.equal(result.council.reviewFailed, true);
+    assert.equal(chairCallCount, 0);
+  });
+
   test("publishes after the lightweight self-review without convening a council", async () => {
     const { runQaLoop } = await import("../services/newsletter/engine/qaLoop.js");
     selfScores = [92];

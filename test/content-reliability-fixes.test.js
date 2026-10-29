@@ -36,13 +36,15 @@ test("newsletter delivery uses AIMS D1 audience state and one.com readiness", as
   assert.match(routes, /router\.post\("\/readiness"/);
 });
 
-test("newsletter structured output avoids provider-incompatible array cardinality and disables reasoning", async () => {
+test("newsletter composition constrains reasoning and reviews use a portable validated JSON payload", async () => {
   const compose = await readFile(new URL("../services/newsletter/engine/compose.js", import.meta.url), "utf8");
   const council = await readFile(new URL("../services/newsletter/engine/editorialCouncil.js", import.meta.url), "utf8");
   assert.doesNotMatch(compose, /maxItems:\s*[35]/);
   assert.doesNotMatch(compose, /minItems:\s*1/);
   assert.match(compose, /reasoning: \{ effort: "none", exclude: true \}/);
-  assert.match(council, /reasoning: \{ effort: "none", exclude: true \}/);
+  assert.match(council, /reasoning: null/);
+  assert.match(council, /parseNewsletterReview/);
+  assert.doesNotMatch(council, /response_format:/);
 });
 
 test("newsletter review routes avoid the logged unsupported GPT targets", async () => {
@@ -163,12 +165,12 @@ test("artwork lanes have separate total budgets and AI-grounded photorealistic p
   assert.match(env, /^ZERNIO_ARTWORK_TIMEOUT_MS=600000$/m);
 });
 
-test("newsletter proceeds only when artwork service returns a usable generated or deterministic image", async () => {
+test("newsletter rejects diagnostic artwork and requires a usable generated image", async () => {
   const hero = await readFile(new URL("../services/newsletter/engine/heroImage.js", import.meta.url), "utf8");
   const build = await readFile(new URL("../services/newsletter/engine/buildNewsletter.js", import.meta.url), "utf8");
   assert.match(hero, /createBlogArtwork/);
-  assert.match(hero, /if \(!result\.ok\)/);
-  assert.match(hero, /return \{ ok: false, error: result\.error, prompt \}/);
+  assert.match(hero, /!result\.ok \|\| result\.fallback/);
+  assert.match(hero, /diagnostic fallback rejected/);
   assert.doesNotMatch(hero, /NEWSLETTER_AI_EDGE_FALLBACK_IMAGE_URL/);
   assert.match(build, /if \(!heroImageResult\.ok\)/);
   assert.match(build, /Newsletter editorial content passed but hero image generation failed/);
@@ -293,7 +295,7 @@ test("Zernio keeps fresh generated artwork primary and permits the curated store
   assert.doesNotMatch(socialBlog, /DEFAULT_SOCIAL_FALLBACK_IMAGE_URL/);
   assert.doesNotMatch(socialBlog, /imageStatus: "curated-static-fallback"/);
   assert.match(socialBlog, /reason: "artwork-fallback-unavailable-after-retries"/);
-  assert.match(socialBlog, /imageStatus: art\.fallback \? "deterministic-fallback" : "generated"/);
+  assert.match(socialBlog, /if \(isGeneratedSocialBlogArtwork\(art\)\)/);
   assert.doesNotMatch(zernioConfig, /ZERNIO_BLOG_RSS_IMAGE_URL, DEFAULT_STORED_IMAGE_URL/);
   assert.match(zernioConfig, /ZERNIO_MINI_SERIES_IMAGE_URL, DEFAULT_STORED_IMAGE_URL/);
   assert.doesNotMatch(hero, /blog-fallback-hero\.png/);
@@ -301,7 +303,7 @@ test("Zernio keeps fresh generated artwork primary and permits the curated store
   assert.match(env, /^BLOG_ALLOW_DETERMINISTIC_FALLBACK=true$/m);
   assert.match(env, /^BLOG_SOCIAL_FALLBACK_IMAGE_URL=https:\/\/images\.jonathan-harris\.online\/site-logo$/m);
   assert.match(env, /^NEWSLETTER_AI_EDGE_FALLBACK_IMAGE_URL=$/m);
-  assert.match(env, /^SOCIAL_BLOG_ALLOW_DETERMINISTIC_FALLBACK=true$/m);
+  assert.match(env, /^SOCIAL_BLOG_ALLOW_DETERMINISTIC_FALLBACK=false$/m);
   assert.match(env, /^NEWSLETTER_ALLOW_DETERMINISTIC_FALLBACK=true$/m);
   assert.match(env, /^ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK=true$/m);
   assert.match(env, /^ZERNIO_ALLOW_DETERMINISTIC_FALLBACK=false$/m);

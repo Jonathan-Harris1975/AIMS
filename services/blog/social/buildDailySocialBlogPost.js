@@ -371,6 +371,10 @@ function groundSocialArtworkPrompt(basePrompt, sources = []) {
   ].filter(Boolean).join(" ");
 }
 
+export function isGeneratedSocialBlogArtwork(art) {
+  return Boolean(art?.ok && art.publicUrl && !art.fallback && art.imageStatus !== "deterministic-fallback");
+}
+
 async function resolveSocialArtwork({ sessionId, imagePrompt, dateId, prefix }) {
   let art = await createBlogArtwork({ sessionId, prompt: imagePrompt, keyPrefix: prefix, date: dateId, mode: "social-blog" });
 
@@ -394,10 +398,10 @@ async function resolveSocialArtwork({ sessionId, imagePrompt, dateId, prefix }) 
     });
   }
 
-  if (art?.ok && art.publicUrl) {
+  if (isGeneratedSocialBlogArtwork(art)) {
     return {
       imageUrl: art.publicUrl,
-      imageStatus: art.fallback ? "deterministic-fallback" : "generated",
+      imageStatus: "generated",
       imageError: art.error || art.warning || null,
       imageKey: art.key,
       imageBucketKey: art.bucketKey || null,
@@ -406,8 +410,7 @@ async function resolveSocialArtwork({ sessionId, imagePrompt, dateId, prefix }) 
 
   const imageError = art?.error || art?.warning || "Unknown social blog artwork error";
 
-  // Keep the daily slot publishable if generation and the corrective render both
-  // fail. The deterministic brand image is marked explicitly in the manifest.
+  // A diagnostic fallback is not editorial artwork and must never be published.
   warn("blog.social.daily.image.unavailable", {
     dateId,
     sessionId,

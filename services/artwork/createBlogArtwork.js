@@ -45,7 +45,9 @@ function boolEnv(name, fallback = false) {
 function allowDeterministicFallback(mode) {
   // Use the explicitly enabled deterministic branded image only after generated
   // artwork and its corrective retry have failed.
-  if (mode === "social-blog") return boolEnv("SOCIAL_BLOG_ALLOW_DETERMINISTIC_FALLBACK", false);
+  // SOCIAL_BLOG_ALLOW_DETERMINISTIC_FALLBACK is retired: diagnostic geometry
+  // cannot substitute for the required source-specific editorial artwork.
+  if (mode === "social-blog") return false;
   if (mode === "newsletter") return boolEnv("NEWSLETTER_ALLOW_DETERMINISTIC_FALLBACK", false);
   return boolEnv("BLOG_ALLOW_DETERMINISTIC_FALLBACK", false);
 }

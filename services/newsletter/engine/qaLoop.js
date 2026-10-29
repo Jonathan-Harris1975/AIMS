@@ -1,6 +1,6 @@
 import { maybeCompareCouncilShadow } from "./councilShadow.js";
 import { repairNewsletterDraft } from "./targetedRepair.js";
-import { withTaskRepairBudget } from "../../shared/utils/taskRepairBudget.js";
+import { withTaskRepairBudget, currentTaskRepairBudget } from "../../shared/utils/taskRepairBudget.js";
 // Newsletter QA: use a bounded economical self-improvement loop first and
 // convene the full editorial council only when that loop cannot clear the bar.
 // This keeps routine polishing cheap while retaining expert escalation for the
@@ -47,6 +47,7 @@ async function runQaLoopImpl({ profile, newsletter, lead, stories, promotion = n
       reviewScore: selfReview.score,
       reviewBlocking: selfReview.blocking,
       reviewIssues: selfReview.issues,
+      reviewFailed: selfReview.reviewFailed === true,
       passed,
     });
 
@@ -75,6 +76,10 @@ async function runQaLoopImpl({ profile, newsletter, lead, stories, promotion = n
         history,
       };
     }
+
+    // A broken reviewer is not evidence of broken copy. Escalate the unchanged
+    // draft rather than spending the repair allowance rewriting an API error.
+    if (selfReview.reviewFailed) break;
 
     if (iteration < maxLoops) {
       const repairContext = [...deterministicIssueText(deterministic), ...(selfReview.issues || [])];
@@ -110,6 +115,8 @@ async function runQaLoopImpl({ profile, newsletter, lead, stories, promotion = n
       councilScore: council.score,
       councilVerdict: council.verdict,
       councilIssues: council.issues,
+      reviewFailed: council.reviewFailed === true,
+      failedReviews: council.failedReviews || [],
       councilShadow,
       councilReviews: council.reviews,
       councilChair: council.chair,
@@ -145,6 +152,13 @@ async function runQaLoopImpl({ profile, newsletter, lead, stories, promotion = n
       };
     }
 
+    // Retry an incomplete review without changing the draft: completed passing
+    // seats can be reused, and transport errors never become editorial edits.
+    if (council.reviewFailed) {
+      if ((council.failedReviews || []).some((review) => review.code === "AI_TASK_REPAIR_BUDGET_EXHAUSTED")) break;
+      continue;
+    }
+
     if (councilRun < maxCouncilRuns) {
       const repairContext = [...deterministicIssueText(deterministic), ...(council.issues || [])];
       const regenerated = await regenerateContent({ profile, newsletter: current, lead, stories, promotion, sessionId, repairContext });
@@ -175,6 +189,8 @@ async function runQaLoopImpl({ profile, newsletter, lead, stories, promotion = n
     councilRuns: history.filter((entry) => entry.phase === "council").length,
     finalScore: council?.score || selfReview?.score || 0,
     quarantined: true,
+    failureKind: council?.reviewFailed ? "review-service-unavailable" : "editorial-rejection",
+    repairBudget: currentTaskRepairBudget()?.snapshot() || null,
     council,
     councilShadow,
     history,

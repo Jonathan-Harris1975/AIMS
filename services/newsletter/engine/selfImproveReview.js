@@ -1,5 +1,5 @@
 import { resilientRequest } from "../../shared/utils/ai-service.js";
-import { parseStructuredJson, strictJsonResponseFormat } from "../../shared/utils/structuredJson.js";
+import { parseNewsletterReview } from "./reviewJson.js";
 import { THRESHOLDS } from "../../../config/thresholds.js";
 
 const REVIEW_SCHEMA = Object.freeze({
@@ -36,10 +36,9 @@ function payload(newsletter) {
 export async function runNewsletterSelfImproveReview({ profile, newsletter, sessionId }) {
   const raw = await resilientRequest("newsletterSelfImprove", {
     sessionId,
-    max_tokens: 700,
-    reasoning: { effort: "none", exclude: true },
+    max_tokens: 1200,
+    reasoning: null,
     temperature: 0.1,
-    response_format: strictJsonResponseFormat("newsletter_self_improve_review", REVIEW_SCHEMA),
     messages: [
       {
         role: "system",
@@ -48,12 +47,13 @@ export async function runNewsletterSelfImproveReview({ profile, newsletter, sess
           "Review only for actionable editorial defects: clarity, scanability, British English, " +
           "Jonathan Harris voice, subject/preview quality, repetition and reader value. " +
           `Do not attempt a full fact-checking council. Score 0-100; ${THRESHOLDS.newsletter.qaPassThreshold}+ is ready without council unless blocking=true. ` +
-          'Set blocking=true only for an obvious publication blocker. Return JSON only: {"score":number,"blocking":boolean,"issues":[string]}.',
+          'List at most five issues, each under 180 characters. Finish the JSON object within the response budget. Set blocking=true only for an obvious publication blocker. ' +
+          'Return JSON only: {"score":number,"blocking":boolean,"issues":[string]}.',
       },
       { role: "user", content: JSON.stringify(payload(newsletter), null, 2) },
     ],
   });
-  const data = parseStructuredJson(raw, "newsletter self-improvement review");
+  const data = parseNewsletterReview(raw, REVIEW_SCHEMA, "newsletter self-improvement review");
   const score = boundedScore(data.score);
   const blocking = data.blocking === true;
   return {
