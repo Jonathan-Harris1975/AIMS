@@ -8,6 +8,12 @@ import { resilientRequest } from "../../shared/utils/ai-service.js";
 import { createBlogArtwork } from "../../artwork/createBlogArtwork.js";
 import { warn } from "../../../logger.js";
 
+export function selectNewsletterArtLead({ lead, stories = [], bigThree = [] }) {
+  const sources = [lead, ...stories].filter(Boolean);
+  const selected = bigThree[0];
+  return sources.find((source) => source.link === selected?.link) || lead;
+}
+
 /**
  * Asks the model for a single, concrete art-direction prompt for the day's
  * hero image, grounded in the lead story's headline (not the individual
@@ -22,6 +28,8 @@ export async function buildHeroImagePrompt({ profile, heroHeadline, leadStory = 
         "illustration for the AI Edge newsletter. Build one visually immediate editorial scene from the actual lead news story, not merely the headline wording. " +
         "Use cinematic lighting, emotional resonance, bold controlled colour, high contrast and magazine-quality thumbnail composition. " +
         "The image must be newly generated for this issue and specific to today's lead story; never use a generic brand image, site icon, logo or reusable fallback artwork. " +
+        "Begin with the specific source-supported subject and visible action, before lighting or styling. Never make geometric shapes, polygons, glowing orbs, networks or \
+decorative AI symbols the subject. " +
         "Prefer a concrete human-scale scene, real-world object, consequence or workplace moment over generic abstract AI geometry. Use believable adult humans when a person helps tell the story. " +
         "Do not depict humanoid robots, cyborgs, androids, chrome people, synthetic heads or robot substitutes unless the lead story is specifically about physical robotics. " +
         "Avoid corporate stock-photo language, boardrooms, handshakes, staged office teams, generic data centres, floating dashboards, polygon networks and glowing AI orbs \
@@ -32,7 +40,7 @@ itself is explicitly about that subject. " +
         "Prefer physical objects and human-scale consequences that do not require visible screens. " +
         "If a screen is unavoidable, turn it away or keep it dark and naturally defocused. " +
         "Never include typography, headlines, letters, numbers, logos, watermarks or pseudo-text inside the image. " +
-        "Seasonal colour direction is applied downstream, so do not fight it. No depictions of real named people. " +
+        "Seasonal colour is a subtle palette accent only; the story scene always takes priority. No depictions of real named people. " +
         "Respond with ONLY the prompt text, nothing else.",
     },
     {
@@ -55,13 +63,10 @@ itself is explicitly about that subject. " +
     warn("newsletter.hero.prompt_generation_failed", { sessionId, error: err.message });
   }
 
-  const context = `${heroHeadline} ${leadStory?.title || ""} ${leadStory?.summary || ""}`.toLowerCase();
-  if (/secure|security|attack|adversarial|vulnerab|governance|agent/.test(context)) {
-    return "Cinematic editorial close-up of an isolated AI inference server behind layered physical security glass, with one subtle corrupted input pattern breaching an \
-otherwise controlled system; tense technical atmosphere, realistic hardware, high contrast, no people, no hands, no text, no logos, no travel or landscape imagery.";
-  }
-  return `Cinematic magazine-quality editorial image rooted directly in this AI news story: ${heroHeadline}. Show a specific real technical consequence or workplace object, \
-not travel, scenery or lifestyle imagery. No text, letters, numbers, logos, humanoid robots, cyborgs or visible hands.`;
+  return `Source-specific editorial photograph: ${leadStory?.title || heroHeadline}. Context: ${leadStory?.summary || ""}. Show one recognisable physical subject and action \
+that expresses this story's actual consequence. Believable human-scale detail, clean unmarked surfaces, cinematic natural light. No geometric wallpaper, floating shapes, \
+glowing networks, text, logos or unrelated scenery.`;
+
 }
 
 /**

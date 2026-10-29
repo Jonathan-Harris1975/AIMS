@@ -52,7 +52,6 @@ function newsletterPayload(newsletter) {
     worthUsing: newsletter.worthUsing,
     onRadar: newsletter.onRadar,
     realityCheck: newsletter.realityCheck,
-    yourTurn: newsletter.yourTurn,
     promotion: newsletter.promotion,
   };
 }

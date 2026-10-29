@@ -25,7 +25,6 @@ function editorialText(newsletter) {
     ...(newsletter.onRadar || []).map((s) => s.summary),
     newsletter.realityCheck?.claim,
     newsletter.realityCheck?.assessment,
-    newsletter.yourTurn,
   ].filter(Boolean).join("\n");
 }
 
@@ -42,6 +41,19 @@ export function validateBannedPhrases(newsletter) {
   const haystack = editorialText(newsletter).toLowerCase();
   const hits = BANNED_PHRASES.filter((phrase) => haystack.includes(phrase));
   return { pass: hits.length === 0, issues: hits.map((phrase) => ({ code: "banned_phrase", message: `Contains banned phrase: "${phrase}"` })) };
+}
+
+export function validateDailyOpening(newsletter) {
+  const opening = String(newsletter.openingNoteHtml || "").replace(/<[^>]*>/g, " ")
+    .replace(/&(?:rsquo|apos|#39|#x27);/gi, "'");
+  const weeklyFrame = new RegExp([
+    "\\b(?:this|the) week['’]s (?:theme|edition|briefing|round-?up|newsletter|issue)\\b",
+    "\\b(?:this|our) weekly (?:theme|edition|briefing|round-?up|newsletter|issue)\\b",
+    "\\bthis week(?:,| we (?:look|cover|explore|examine|discuss))|\\bwelcome to (?:the |our )?week",
+  ].join("|"), "iu");
+  const issues = weeklyFrame.test(opening)
+    ? [{ code: "weekly_opening", message: "Daily opening uses weekly edition framing. Introduce today's selected topics instead." }] : [];
+  return { pass: issues.length === 0, issues };
 }
 
 export function validateBritishSpelling(newsletter) {
@@ -66,7 +78,6 @@ export function validateStructuralCompleteness(newsletter, { expectedStoryCount,
   if (requireHeroImage && !newsletter.heroImageUrl) issues.push({ code: "missing_hero_image", message: "Hero image URL is missing." });
   if (!Array.isArray(newsletter.bigThree) || newsletter.bigThree.length !== 3) issues.push({ code: "big_three_incomplete", message: "The Big Three must contain exactly three stories." });
   if (!newsletter.realityCheck?.assessment) issues.push({ code: "missing_reality_check", message: "Reality Check is missing." });
-  if (!newsletter.yourTurn) issues.push({ code: "missing_reader_question", message: "Your Turn reader question is missing." });
   const uniqueLinks = new Set(sourceLinks(newsletter));
   if (expectedStoryCount && uniqueLinks.size < expectedStoryCount) issues.push({ code: "story_count_short", message:
      `Only ${uniqueLinks.size} of ${expectedStoryCount} expected source stories are represented.` });
@@ -110,7 +121,8 @@ export function validatePromotion(newsletter) {
   return { pass: issues.length === 0, issues };
 }
 
-const ALL_VALIDATORS = [validateBannedPhrases, validateBritishSpelling, validateSubjectLength, validateStructuralCompleteness, validateNoDuplicateStories, validateLinks, validatePromotion];
+const ALL_VALIDATORS = [validateDailyOpening, validateBannedPhrases, validateBritishSpelling, validateSubjectLength, validateStructuralCompleteness, validateNoDuplicateStories,
+  validateLinks, validatePromotion];
 
 export function runDeterministicValidators(newsletter, { expectedStoryCount, requireHeroImage = true } = {}) {
   const issues = [];

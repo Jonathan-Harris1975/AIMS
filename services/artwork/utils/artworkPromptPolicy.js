@@ -179,6 +179,8 @@ web or decorative geometry.",
         "NEWSLETTER EDITORIAL REQUIREMENT: create a specific visual response to the lead AI story, not a generic masthead, banner, scenic backdrop or lifestyle photograph.",
         "The subject must visibly belong to AI, software, robotics, security, governance, infrastructure or the lead story's real-world domain.",
         "Prefer a concrete technical object, consequential workplace moment or human-scale news scene with clear editorial tension.",
+        "Decorative geometric shapes, floating polygons, glowing orbs, circuit mandalas and abstract networks must never be the focal subject. Seasonal styling is only a \
+subtle colour accent, subordinate to the actual story.",
         "Never use beaches, oceans, coastlines, mountains, roads, paths, horizons, sunsets, tourism, resorts, anonymous lone travellers or inspirational journey imagery.",
         "Never imitate a magazine cover or website template. Do not create empty title panels, hero-copy space, buttons, interface chrome or decorative layout boxes.",
       ].join(" ")

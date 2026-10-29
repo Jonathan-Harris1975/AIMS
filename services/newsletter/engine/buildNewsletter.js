@@ -7,16 +7,15 @@
 import { info, warn, error as logError } from "../../../logger.js";
 import { THRESHOLDS } from "../../../config/thresholds.js";
 import { sanitizeSessionId } from "../../shared/utils/sessionId.js";
-import { loadSiteShell } from "../../shared/utils/siteShell.js";
 import { getNewsletterProfile } from "../config/profiles.js";
 import { collectCandidateStories } from "./rss.js";
 import { rankAndSelectStories } from "./rank.js";
 import { composeIssueSections, composeSubjectAndPreview, composeFooter } from "./compose.js";
 import { resolveIssuePromotion, weekdayInLondon } from "./promotion.js";
-import { generateHeroImage } from "./heroImage.js";
+import { generateHeroImage, selectNewsletterArtLead } from "./heroImage.js";
 import { runQaLoop } from "./qaLoop.js";
 import { runDeterministicValidators } from "./validators.js";
-import { renderNewsletterHtml, renderNewsletterWebHtml, renderNewsletterPlaintext, buildNewsletterMetadata } from "./render.js";
+import { renderNewsletterHtml, renderNewsletterPlaintext, buildNewsletterMetadata } from "./render.js";
 import { storeNewsletterIssue } from "./storage.js";
 import { readEditorialCheckpoint, writeEditorialCheckpoint } from "./buildCheckpoint.js";
 
@@ -128,7 +127,7 @@ async function finishNewsletterBuild({ profile, sessionId, now, qaResult, lead, 
     ? savedHero : await generateHeroImage({
     profile,
     heroHeadline: qaResult.newsletter.heroHeadline,
-    leadStory: lead,
+    leadStory: selectNewsletterArtLead({ lead, stories, bigThree: qaResult.newsletter.bigThree }),
     bigThree: qaResult.newsletter.bigThree,
     sessionId,
   });
@@ -164,20 +163,17 @@ async function finishNewsletterBuild({ profile, sessionId, now, qaResult, lead, 
 
   await writeEditorialCheckpoint({ profile, sessionId, now, qaResult, lead, stories, promotion, droppedForDiversity, heroImageResult });
 
-  const siteShell = await loadSiteShell();
   const emailHtml = renderNewsletterHtml({ profile, newsletter: finalNewsletter });
-  const html = renderNewsletterWebHtml({ profile, newsletter: finalNewsletter, siteShell });
   const plaintext = renderNewsletterPlaintext({ profile, newsletter: finalNewsletter });
   const metadata = buildNewsletterMetadata({
     profile,
     newsletter: finalNewsletter,
     qaResult,
     generatedAt: now.toISOString(),
-    siteShellReleaseSha: siteShell.manifest.releaseSha,
     heroImage: heroImageResult,
   });
 
-  const stored = await storeNewsletterIssue({ profile, sessionId, html, emailHtml, plaintext, metadata, date: now });
+  const stored = await storeNewsletterIssue({ profile, sessionId, emailHtml, plaintext, metadata, date: now });
   info("newsletter.build.complete", {
     sessionId,
     profileId: profile.id,

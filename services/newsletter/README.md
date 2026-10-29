@@ -15,6 +15,12 @@ The newsletter service generates, reviews, stores and sends AI Edge through Brev
 
 ## Behaviour
 
+AI Edge is an email-only daily briefing, currently Monday to Friday. Each issue has one email-safe `email.html` artefact, plus plaintext for email clients and metadata for delivery/audits. No website archive is generated or site shell fetched. Existing delivery/session receipts remain authoritative.
+
+The opening introduces the selected stories in that day's edition; weekly edition framing is rejected before sending. The issue ends after Reality Check and any scheduled house promotion, without a generic reader-question closer.
+
+Hero art follows the editorially selected lead and its source summary. Decorative geometry is a hard visual-QA failure, shortened prompts are disabled by default for newsletters, and diagnostic fallback art is never publishable. Changes to this editorial policy invalidate older build checkpoints.
+
 Generation uses source/fact checks, Jonathan Harris voice controls, newsletter performance review and bounded correction attempts. Tuesday issues can promote the featured eBook and Thursday issues can promote Turing's Torch. Artwork receives final relevance/quality inspection.
 
 The weekday operation windows run `generate` → `readiness` → `send`. Generation reads its own RSS feeds and stores a QA-passed issue even when Brevo is unavailable or the separate RSS rewrite task fails. A failed readiness check blocks delivery and reports the provider, sender or audience problem; a later retry can send the stored issue without regenerating it. The operation's POST readiness check creates a missing sender once to trigger Brevo verification; GET readiness only inspects. `send` repeats the provider checks before dispatch.
