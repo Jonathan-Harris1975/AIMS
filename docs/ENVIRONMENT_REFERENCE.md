@@ -227,7 +227,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `COMMS_HUB_MONTH_END_ARCHIVE_ENABLED` | Yes | services/comms-hub/routes/index.js:149 |
 | `COMMS_HUB_OPENROUTER_DATA_COLLECTION` | Yes | services/shared/utils/ai-service.js:202 |
 | `COMMS_HUB_OPENROUTER_ZDR_ONLY` | Yes | services/shared/utils/ai-service.js:209 |
-| `COMMS_HUB_PUBLIC_BASE_URL` | Yes | scripts/contentDeliveryDiagnostics.js:154<br>services/newsletter/delivery/aimsDelivery.js:31<br>services/newsletter/jotformIntake.js:108<br>services/newsletter/routes/subscriptions.js:53 |
+| `COMMS_HUB_PUBLIC_BASE_URL` | Yes | scripts/contentDeliveryDiagnostics.js:154<br>services/newsletter/delivery/aimsDelivery.js:32<br>services/newsletter/jotformIntake.js:108<br>services/newsletter/routes/subscriptions.js:53 |
 | `COMMS_HUB_RETENTION_WORKER_ENABLED` | Yes | services/comms-hub/routes/index.js:147 |
 | `COMMS_HUB_SMART_RESPONSE_ENABLED` | Yes | services/comms-hub/routes/index.js:135 |
 | `CONTENT_MASTER_COUNCIL_MAX_RETRIES` | Yes | audits/utils/contentMasterCouncil.js:145 |

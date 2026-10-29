@@ -1,3 +1,4 @@
+import { checkIssueDeliveryPolicy } from "../engine/deliveryPolicy.js";
 import { randomUUID } from "node:crypto";
 import { loadCommsHubConfig } from "../../comms-hub/config.js";
 import { D1Client } from "../../comms-hub/clients/d1Client.js";
@@ -93,13 +94,12 @@ export async function deliverTodaysIssueToSubscriber({ subscriberId, email, publ
   const { d1, mail } = deps.d1 ? deps : runtime();
   if (!mail) return { ok: false, status: "sender_not_configured" };
   const profile = getNewsletterProfile(publicationId);
-  const sessionId = await findLatestIssueSessionId(profile, { date });
+  const sessionId = await (deps.findSession || findLatestIssueSessionId)(profile, { date });
   if (!sessionId) return { ok: true, status: "no_issue_today" };
   try {
-    const buildResult = await loadStoredIssue(profile, sessionId, date);
-    if (!issueDeliveryDue(buildResult.metadata, date)) {
-      return { ok: true, status: "issue_not_due", sessionId };
-    }
+    const buildResult = await (deps.loadIssue || loadStoredIssue)(profile, sessionId, date);
+    const policy = await checkIssueDeliveryPolicy(buildResult.metadata, date, { maintenance: deps.maintenance });
+    if (!policy.ok) return { ok: true, status: "issue_deferred", reason: policy.status, sessionId };
     const result = await sendIssueToRecipient({ profile, sessionId, recipient: { id: subscriberId, email }, buildResult, d1, mail });
     return { ...result, sessionId };
   } catch (error) {
@@ -119,14 +119,19 @@ export async function getNewsletterDeliveryReadiness({ profile }, deps = {}) {
 }
 
 export async function deliverNewsletterIssue({ profile, sessionId, buildResult, date = new Date() }, deps = {}) {
-  const { d1, mail } = deps.d1 ? deps : runtime();
-  if (!mail) return { ok: false, status: "sender_not_configured", stage: "preflight", error: "Newsletter one.com sender is not configured." };
-  if (!issueDeliveryDue(buildResult.metadata)) {
-    return { ok: false, status: "issue_not_due", stage: "preflight" };
+  const policy = await checkIssueDeliveryPolicy(buildResult.metadata, deps.now || new Date(), { maintenance: deps.maintenance });
+  if (!policy.ok) return { ...policy, stage: "preflight" };
+  if (policy.cutoffAt) buildResult = { ...buildResult, metadata: { ...buildResult.metadata, deliveryCutoffAt: policy.cutoffAt } };
+  let d1, mail, existing, recipients;
+  try {
+    ({ d1, mail } = deps.d1 ? deps : runtime());
+    if (!mail) return { ok: false, status: "sender_not_configured", stage: "preflight", error: "Newsletter one.com sender is not configured." };
+    existing = await (deps.readDelivery || readCampaignDelivery)({ profile, sessionId, date });
+    recipients = await (deps.listRecipients || listEligibleSubscribers)(profile.id, { d1 });
+  } catch (error) {
+    return { ok: false, status: "delivery_preflight_failed", stage: "preflight", safeToRetry: true, error: error.message };
   }
-  const existing = await readCampaignDelivery({ profile, sessionId, date });
   if (existing.delivery?.status === "dispatched") return { ok: true, status: "already_dispatched", ...existing.delivery };
-  const recipients = await listEligibleSubscribers(profile.id, { d1 });
   if (!recipients.length) return { ok: false, status: "audience_empty", stage: "preflight", error: "No verified, consented newsletter subscribers are eligible for delivery." };
   const issueId = sessionId;
   let sent = 0;
