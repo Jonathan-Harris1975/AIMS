@@ -8,7 +8,7 @@ const deployment = { id: "release", service_id: "hive", status: "HEALTHY" };
 
 test("restore reuses healthy HIVE and existing AIMS credential without creating a service", () => {
   const calls = [];
-  const result = restoreHeadroomProduction({ env: { KOYEB_SERVICE: "aims", KOYEB_TOKEN: "test-only", HEADROOM_HIVE_SERVICE: "hive" }, run(args) {
+  const result = restoreHeadroomProduction({ env: { KOYEB_SERVICE: "aims", KOYEB_TOKEN: "test-only", HEADROOM_HIVE_SERVICE: "hive", HEADROOM_HIVE_BASE_URL: SHARED_HEADROOM.baseUrl }, run(args) {
     calls.push(args);
     if (args[0] === "deployments") return { deployment };
     if (args[1] === "get") return { service: args[2] === "aims" ? aims : hive };
@@ -30,7 +30,7 @@ test("unhealthy, incorrect and mismatched service identities cannot change wirin
   assert.throws(() => sharedHeadroomServices(aims, hive, deployment, "wrong"));
   assert.throws(() => sharedHeadroomServices(hive, hive, deployment, "hive"));
   const calls = [];
-  assert.throws(() => restoreHeadroomProduction({ env: { KOYEB_SERVICE: "aims", KOYEB_TOKEN: "test-only", HEADROOM_HIVE_SERVICE: "hive" }, run(args) {
+  assert.throws(() => restoreHeadroomProduction({ env: { KOYEB_SERVICE: "aims", KOYEB_TOKEN: "test-only", HEADROOM_HIVE_SERVICE: "hive", HEADROOM_HIVE_BASE_URL: SHARED_HEADROOM.baseUrl }, run(args) {
     calls.push(args);
     if (args[0] === "deployments") return { ...deployment, status: "failed" };
     return args[2] === "aims" ? aims : hive;
@@ -46,4 +46,23 @@ test("production defaults enable shared Headroom with a declared service-key bin
   assert.equal(defaults.HEADROOM_ENABLED, "true");
   assert.equal(defaults.HEADROOM_BASE_URL, SHARED_HEADROOM.baseUrl);
   assert.equal(overlay.HEADROOM_PROXY_TOKEN, "{{ secret.AIMS_API_KEY }}");
+});
+
+
+test("custom HIVE targets require a paired validated HTTPS origin before any Koyeb operation", () => {
+  for (const target of [{ HEADROOM_HIVE_SERVICE: "replacement" }, { HEADROOM_HIVE_BASE_URL: "https://replacement.example" },
+    { HEADROOM_HIVE_SERVICE: "replacement", HEADROOM_HIVE_BASE_URL: "http://replacement.example" },
+    { HEADROOM_HIVE_SERVICE: "replacement", HEADROOM_HIVE_BASE_URL: "https://user:pass@replacement.example" }]) {
+    let called = false;
+    assert.throws(() => restoreHeadroomProduction({ env: { KOYEB_SERVICE: "aims", KOYEB_TOKEN: "test-only", ...target }, run() { called = true; } }));
+    assert.equal(called, false);
+  }
+  const calls = [];
+  restoreHeadroomProduction({ env: { KOYEB_SERVICE: "aims", KOYEB_TOKEN: "test-only", HEADROOM_HIVE_SERVICE: "hive", HEADROOM_HIVE_BASE_URL: "https://replacement.example" }, run(args) {
+    calls.push(args);
+    if (args[0] === "deployments") return deployment;
+    if (args[1] === "get") return args[2] === "aims" ? aims : hive;
+    return null;
+  } });
+  assert.ok(calls.at(-1).includes("HEADROOM_BASE_URL=https://replacement.example"));
 });

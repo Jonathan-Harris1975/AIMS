@@ -29,7 +29,14 @@ export function sharedHeadroomServices(aimsPayload, hivePayload, deploymentPaylo
 
 export function restoreHeadroomProduction({ env = process.env, run = cli } = {}) {
   if (!env.KOYEB_SERVICE || !env.KOYEB_TOKEN) throw new Error("Koyeb service/token configuration is required");
+  if (Boolean(env.HEADROOM_HIVE_SERVICE) !== Boolean(env.HEADROOM_HIVE_BASE_URL)) {
+    throw new Error("A custom HIVE compression target requires both HEADROOM_HIVE_SERVICE and HEADROOM_HIVE_BASE_URL");
+  }
   const expectedHiveId = env.HEADROOM_HIVE_SERVICE || SHARED_HEADROOM.serviceId;
+  const baseUrl = new URL(env.HEADROOM_HIVE_BASE_URL || SHARED_HEADROOM.baseUrl);
+  if (baseUrl.protocol !== "https:" || baseUrl.username || baseUrl.password || baseUrl.search || baseUrl.hash || baseUrl.pathname !== "/") {
+    throw new Error("HIVE compression target must be an HTTPS origin without credentials, query or path");
+  }
   const aimsPayload = run(["services", "get", env.KOYEB_SERVICE]);
   const hivePayload = run(["services", "get", expectedHiveId]);
   const hive = hivePayload?.service || hivePayload;
@@ -39,7 +46,7 @@ export function restoreHeadroomProduction({ env = process.env, run = cli } = {})
   const services = sharedHeadroomServices(aimsPayload, hivePayload, deployment, expectedHiveId);
   run(["services", "update", services.hive.id, "--min-scale", "1", "--env", "HEADROOM_ENABLED=true",
     "--env", "HEADROOM_BEACON=off", "--env", "DO_NOT_TRACK=1"], { json: false });
-  run(["services", "update", services.aims.id, "--env", "HEADROOM_ENABLED=true", "--env", `HEADROOM_BASE_URL=${SHARED_HEADROOM.baseUrl}`,
+  run(["services", "update", services.aims.id, "--env", "HEADROOM_ENABLED=true", "--env", `HEADROOM_BASE_URL=${baseUrl.origin}`,
     "--env", "HEADROOM_PROXY_TOKEN={{secret.AIMS_API_KEY}}"], { json: false });
   return { event: "headroom.production.configured", enabled: true, mode: "shared-hive-inline", additionalComputeService: false };
 }

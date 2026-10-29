@@ -1,12 +1,13 @@
 import "../config/loadEnv.js";
-// This probe uses only synthetic input; no inference request is made.
+// Deliberately spaced synthetic JSON gives the lossless compressor removable whitespace.
+// No inference request is made; already-compact production input may legitimately be unchanged.
 globalThis.__AI_PODCAST_LOGGER__ = { info() {}, warn() {}, error() {}, debug() {} };
 try {
   if (!/^(true|1|yes|on|y)$/i.test(process.env.HEADROOM_ENABLED || "")) throw new Error("Headroom is disabled");
   const { compressForOpenRouter } = await import("../services/shared/utils/headroom.js");
   const rows = Array.from({ length: 120 }, (_, index) => JSON.stringify({
     id: index, status: "complete", category: "fixture", detail: "Repeated diagnostic context for compression verification", value: index % 7,
-  }));
+  }).replaceAll('":', '": ').replaceAll(',"', ', "'));
   const messages = [
     { role: "system", content: "Preserve this system instruction exactly. This is a synthetic compression check." },
     { role: "user", content: `Read this diagnostic table:\n${rows.join("\n")}` },
