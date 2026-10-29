@@ -4,9 +4,9 @@
 
 This inventory makes the runtime configuration contract auditable without duplicating secret values. `.env.example` and `env.template` remain the curated operator templates; this file records every production `process.env` dependency and its source locations.
 
-- Runtime variables referenced in production code: **526**
+- Runtime variables referenced in production code: **527**
 - Present in curated templates: **409**
-- Not present in curated templates: **117**
+- Not present in curated templates: **118**
 
 | Variable | Curated template | Production references |
 | --- | --- | --- |
@@ -26,6 +26,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `AIMS_OPERATION_TASK_TIMEOUT_MS` | Yes | services/ops/index.js:487 |
 | `AIMS_STARTUP_GRACE_MS` | No | services/shared/utils/lifecycle.js:14 |
 | `AI_MODEL_BLOCKLIST` | Yes | services/shared/utils/ai-service.js:88 |
+| `AI_MODEL_DEFAULT` | No | scripts/verifyHeadroomProduction.js:17 |
 | `AI_RETRY_BASE_MS` | Yes | audits/utils/seoAeoGeoAnalysis.js:1932 |
 | `AI_STICKY_PROVIDER_ROUTING` | Yes | services/shared/utils/ai-service.js:80 |
 | `AI_SUITE_API_KEY` | Yes | scripts/collectCommsWorkerHealth.js:1<br>server.js:199<br>server.js:200<br>services/shared/middleware/suiteAuth.js:60 |
@@ -258,7 +259,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `HEADROOM_BASE_URL` | Yes | services/shared/utils/headroom.js:98 |
 | `HEADROOM_CIRCUIT_OPEN_MS` | Yes | services/shared/utils/headroom.js:231 |
 | `HEADROOM_COMPRESS_USER_MESSAGES` | Yes | services/shared/utils/headroom.js:291 |
-| `HEADROOM_ENABLED` | Yes | server.js:188<br>services/shared/utils/headroom.js:250 |
+| `HEADROOM_ENABLED` | Yes | scripts/verifyHeadroomProduction.js:6<br>server.js:188<br>services/shared/utils/headroom.js:250 |
 | `HEADROOM_FAILURE_THRESHOLD` | Yes | services/shared/utils/headroom.js:227 |
 | `HEADROOM_LOG_SAVINGS` | Yes | services/shared/utils/headroom.js:391 |
 | `HEADROOM_MIN_INPUT_CHARS` | Yes | services/shared/utils/headroom.js:263 |

@@ -315,7 +315,7 @@ export async function compressForOpenRouter({ routeName, routeKey, model, messag
         status: response.status,
         detail: String(text || "").replace(/\s+/g, " ").slice(0, 300),
       });
-      return skip("http-error", original, { inputChars, durationMs: Date.now() - startedAt });
+      return skip("http-error", original, { status: response.status, inputChars, durationMs: Date.now() - startedAt });
     }
 
     const result = await response.json();
