@@ -4,6 +4,7 @@
 // format -> day-aware house promotion -> hero -> multi-model council/QA ->
 // render -> R2. MAST remains the sole owner of timing.
 
+import { EDITIONS } from "./edition.js";
 import { info, warn, error as logError } from "../../../logger.js";
 import { THRESHOLDS } from "../../../config/thresholds.js";
 import { sanitizeSessionId } from "../../shared/utils/sessionId.js";
@@ -19,8 +20,10 @@ import { renderNewsletterHtml, renderNewsletterPlaintext, buildNewsletterMetadat
 import { storeNewsletterIssue } from "./storage.js";
 import { readEditorialCheckpoint, writeEditorialCheckpoint } from "./buildCheckpoint.js";
 
-export async function buildNewsletter({ profileId = "ai-edge", sessionId: requestedSessionId, now = new Date() } = {}) {
-  const profile = getNewsletterProfile(profileId);
+export async function buildNewsletter({ profileId = "ai-edge", sessionId: requestedSessionId, now = new Date(),
+  edition = "daily", publicationDate = null, scheduledAt = null, sourceItems = null } = {}) {
+  if (!EDITIONS.includes(edition)) throw new Error("Invalid newsletter edition");
+  const profile = { ...getNewsletterProfile(profileId), edition, publicationDate, scheduledAt };
   const sessionId = sanitizeSessionId(requestedSessionId || `newsletter-${profile.id}-${Date.now()}`, "NL");
   info("newsletter.build.start", { sessionId, profileId: profile.id });
 
@@ -30,7 +33,8 @@ export async function buildNewsletter({ profileId = "ai-edge", sessionId: reques
     return finishNewsletterBuild({ ...checkpoint, profile, sessionId: checkpoint.sessionId, now });
   }
 
-  const { items, feedResults } = await collectCandidateStories(profile, { now });
+  const { items, feedResults } = sourceItems
+    ? { items: sourceItems, feedResults: [] } : await collectCandidateStories(profile, { now });
   if (items.length === 0) {
     logError("newsletter.build.no_candidates", { sessionId, profileId: profile.id });
     return { ok: false, sessionId, profileId: profile.id, error: "No candidate stories found in the configured RSS window.", feedResults };
@@ -51,7 +55,7 @@ export async function buildNewsletter({ profileId = "ai-edge", sessionId: reques
   });
   if (!subject.ok) return { ok: false, sessionId, profileId: profile.id, error: `Subject composition failed: ${subject.error}` };
 
-  const promotion = await resolveIssuePromotion(profile, { now });
+  const promotion = edition === "daily" ? await resolveIssuePromotion(profile, { now }) : null;
   if (weekdayInLondon(now) === "tuesday" && !promotion) {
     return {
       ok: false,
@@ -68,6 +72,7 @@ export async function buildNewsletter({ profileId = "ai-edge", sessionId: reques
     heroImageUrl: null,
     promotion,
     footer: composeFooter(profile),
+    edition,
   };
 
   const qaResult = await runQaLoop({ profile, newsletter: draft, lead, stories, promotion, sessionId });
@@ -173,7 +178,9 @@ async function finishNewsletterBuild({ profile, sessionId, now, qaResult, lead, 
     heroImage: heroImageResult,
   });
 
-  const stored = await storeNewsletterIssue({ profile, sessionId, emailHtml, plaintext, metadata, date: now });
+  metadata.scheduledAt = profile.scheduledAt || null;
+  metadata.publicationDate = profile.publicationDate || now.toISOString().slice(0, 10);
+  const stored = await storeNewsletterIssue({ profile, sessionId, emailHtml, plaintext, metadata, date: profile.publicationDate ? new Date(`${profile.publicationDate}T12:00:00Z`) : now });
   info("newsletter.build.complete", {
     sessionId,
     profileId: profile.id,

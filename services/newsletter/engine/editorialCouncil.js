@@ -44,6 +44,7 @@ function boundedScore(value) {
 
 function newsletterPayload(newsletter) {
   return {
+    edition: newsletter.edition || "daily",
     subject: newsletter.subject,
     previewText: newsletter.previewText,
     heroHeadline: newsletter.heroHeadline,

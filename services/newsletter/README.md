@@ -15,7 +15,7 @@ The newsletter service generates, reviews, stores and sends AI Edge through Brev
 
 ## Behaviour
 
-AI Edge is an email-only daily briefing, currently Monday to Friday. Each issue has one email-safe `email.html` artefact, plus plaintext for email clients and metadata for delivery/audits. No website archive is generated or site shell fetched. Existing delivery/session receipts remain authoritative.
+AI Edge is an email-only daily briefing, with weekday briefings and Friday-prepared weekend editions. Each issue has one email-safe `email.html` artefact, plus plaintext for email clients and metadata for delivery/audits. No website archive is generated or site shell fetched. Existing delivery/session receipts remain authoritative.
 
 The opening introduces the selected stories in that day's edition; weekly edition framing is rejected before sending. The issue ends after Reality Check and any scheduled house promotion, without a generic reader-question closer.
 
@@ -38,3 +38,12 @@ Use `NEWSLETTER_*`, the existing AIMS D1/Comms Hub settings, the one.com newslet
 Malformed or unavailable reviews are review-service failures, not editorial defects: they never trigger copy rewrites. Council requests settle independently; completed reviews and individual seat errors remain in the result. Incomplete councils still block publication. Reviews use portable JSON instructions with locally validated score, verdict, blocking flag and issue types, plus concise response instructions and adequate output space. Existing quality thresholds and repair limits remain unchanged.
 
 After editorial approval, a private daily checkpoint retains the approved draft, selected sources and review result. A retry on the same UTC date and unchanged profile/model/threshold policy resumes artwork/render/storage; it does not repeat editorial generation. A validated hero is checkpointed before rendering too. Resumption retains the original issue session ID so existing email delivery receipts remain authoritative. Missing or invalid checkpoints fall back to the full normal build. No failed draft can become a checkpoint approval. Existing delivery receipts still control email retries. Schedules remain owned by MAST.
+
+
+## Friday preparation and weekend delivery
+
+Friday AM runs `/newsletter/weekend/prepare` after the daily newsletter stages. It creates the Saturday debate and Sunday philosophical/sarcastic reflection from the actual approved weekday source selections (this week's RSS evidence bootstraps a missing first-week history). Both editions pass the normal editorial, source and artwork checks on Friday. A private R2 schedule records each approved session and publication date. Retry reuses completed editions; a partial build can finish its missing edition without repeating the other.
+
+MAST alone owns the delivery clock: Saturday **17:10** and Sunday **05:10**, Europe/London, with 30-minute same-day recovery. The send-only routes are `/newsletter/weekend/send/saturday` and `/newsletter/weekend/send/sunday`. They read the Friday artefacts, verify QA and due time, re-check eligible subscribers and deliver through one.com. They do not generate content. Before delivery, AIMS checks active CI/council/security workflows across all eight repositories. Busy or unverifiable maintenance holds sending for bounded MAST retry; only busy/unknown results are cached (10 minutes) and a clearance is always fresh. AIMS rejects delivery outside 17:10–17:55 Saturday or 05:10–05:55 Sunday; ambiguous sends retain their durable lease for the whole window. Recipient receipts prevent repeats, including new-subscriber delivery, and an uncertain SMTP outcome requires reconciliation.
+
+Scheduled metadata also gates the ordinary send route and new-subscriber delivery, so a future edition cannot leak early. Weekday operation windows and Friday PM podcast ownership stay separate. See MAST `docs/NEWSLETTER_WEEKEND_SCHEDULE.md` for the estate maintenance timetable checked against these delivery slots.

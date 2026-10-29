@@ -4,26 +4,26 @@
 
 This inventory makes the runtime configuration contract auditable without duplicating secret values. `.env.example` and `env.template` remain the curated operator templates; this file records every production `process.env` dependency and its source locations.
 
-- Runtime variables referenced in production code: **527**
-- Present in curated templates: **409**
+- Runtime variables referenced in production code: **528**
+- Present in curated templates: **410**
 - Not present in curated templates: **118**
 
 | Variable | Curated template | Production references |
 | --- | --- | --- |
 | `AIMS_ALLOW_UNAUTHENTICATED_DEV` | Yes | services/shared/middleware/suiteAuth.js:91 |
-| `AIMS_API_KEY` | Yes | scripts/collectCommsWorkerHealth.js:1<br>server.js:199<br>services/ops/index.js:467<br>services/shared/middleware/suiteAuth.js:60 |
+| `AIMS_API_KEY` | Yes | scripts/collectCommsWorkerHealth.js:1<br>server.js:199<br>services/ops/index.js:469<br>services/shared/middleware/suiteAuth.js:60 |
 | `AIMS_BUSY_CONCURRENCY_THRESHOLD` | No | services/shared/utils/lifecycle.js:15 |
 | `AIMS_FAILURE_ALERT_THRESHOLD` | Yes | services/shared/utils/operationalExcellence.js:5 |
-| `AIMS_INTERNAL_BASE_URL` | Yes | services/ops/index.js:466 |
-| `AIMS_OPERATION_ASYNC_JOB_TIMEOUT_MS` | Yes | services/ops/index.js:549 |
-| `AIMS_OPERATION_ASYNC_MAX_POLL_ERRORS` | No | services/ops/index.js:551 |
-| `AIMS_OPERATION_ASYNC_NOT_FOUND_GRACE_MS` | No | services/ops/index.js:552 |
-| `AIMS_OPERATION_ASYNC_POLL_INTERVAL_MS` | Yes | services/ops/index.js:548 |
-| `AIMS_OPERATION_ASYNC_REQUEST_TIMEOUT_MS` | Yes | services/ops/index.js:550 |
-| `AIMS_OPERATION_DISPATCH_TIMEOUT_MS` | No | services/ops/index.js:486 |
+| `AIMS_INTERNAL_BASE_URL` | Yes | services/ops/index.js:468 |
+| `AIMS_OPERATION_ASYNC_JOB_TIMEOUT_MS` | Yes | services/ops/index.js:551 |
+| `AIMS_OPERATION_ASYNC_MAX_POLL_ERRORS` | No | services/ops/index.js:553 |
+| `AIMS_OPERATION_ASYNC_NOT_FOUND_GRACE_MS` | No | services/ops/index.js:554 |
+| `AIMS_OPERATION_ASYNC_POLL_INTERVAL_MS` | Yes | services/ops/index.js:550 |
+| `AIMS_OPERATION_ASYNC_REQUEST_TIMEOUT_MS` | Yes | services/ops/index.js:552 |
+| `AIMS_OPERATION_DISPATCH_TIMEOUT_MS` | No | services/ops/index.js:488 |
 | `AIMS_OPERATION_FRIDAY_PM_DELAY_MS` | Yes | services/ops/index.js:174 |
 | `AIMS_OPERATION_NEWSLETTER_ENABLED` | Yes | scripts/contentDeliveryDiagnostics.js:229 |
-| `AIMS_OPERATION_TASK_TIMEOUT_MS` | Yes | services/ops/index.js:487 |
+| `AIMS_OPERATION_TASK_TIMEOUT_MS` | Yes | services/ops/index.js:489 |
 | `AIMS_STARTUP_GRACE_MS` | No | services/shared/utils/lifecycle.js:14 |
 | `AI_MODEL_BLOCKLIST` | Yes | services/shared/utils/ai-service.js:88 |
 | `AI_MODEL_DEFAULT` | No | scripts/verifyHeadroomProduction.js:17 |
@@ -217,7 +217,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `COMMS_HUB_CREDENTIAL_VAULT_ENABLED` | Yes | services/comms-hub/routes/index.js:150 |
 | `COMMS_HUB_DELAYED_ACTION_WORKER_ENABLED` | Yes | services/comms-hub/routes/index.js:146 |
 | `COMMS_HUB_EMAIL_ENABLED` | Yes | services/comms-hub/routes/index.js:131 |
-| `COMMS_HUB_EMAIL_NEWSLETTER_ADDRESS` | Yes | services/newsletter/delivery/aimsDelivery.js:102 |
+| `COMMS_HUB_EMAIL_NEWSLETTER_ADDRESS` | Yes | services/newsletter/delivery/aimsDelivery.js:115 |
 | `COMMS_HUB_ENABLED` | Yes | scripts/performanceGate.js:7 |
 | `COMMS_HUB_FORM_AUTO_SEND_ENABLED` | Yes | services/comms-hub/routes/index.js:144 |
 | `COMMS_HUB_FORM_ORCHESTRATION_ENABLED` | Yes | services/comms-hub/routes/index.js:136 |
@@ -227,7 +227,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `COMMS_HUB_MONTH_END_ARCHIVE_ENABLED` | Yes | services/comms-hub/routes/index.js:149 |
 | `COMMS_HUB_OPENROUTER_DATA_COLLECTION` | Yes | services/shared/utils/ai-service.js:202 |
 | `COMMS_HUB_OPENROUTER_ZDR_ONLY` | Yes | services/shared/utils/ai-service.js:209 |
-| `COMMS_HUB_PUBLIC_BASE_URL` | Yes | scripts/contentDeliveryDiagnostics.js:154<br>services/newsletter/delivery/aimsDelivery.js:25<br>services/newsletter/jotformIntake.js:108<br>services/newsletter/routes/subscriptions.js:53 |
+| `COMMS_HUB_PUBLIC_BASE_URL` | Yes | scripts/contentDeliveryDiagnostics.js:154<br>services/newsletter/delivery/aimsDelivery.js:31<br>services/newsletter/jotformIntake.js:108<br>services/newsletter/routes/subscriptions.js:53 |
 | `COMMS_HUB_RETENTION_WORKER_ENABLED` | Yes | services/comms-hub/routes/index.js:147 |
 | `COMMS_HUB_SMART_RESPONSE_ENABLED` | Yes | services/comms-hub/routes/index.js:135 |
 | `CONTENT_MASTER_COUNCIL_MAX_RETRIES` | Yes | audits/utils/contentMasterCouncil.js:145 |
@@ -252,6 +252,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `FEED_FETCH_TIMEOUT_MS` | Yes | services/blotato/utils/rssArticleSource.js:166<br>services/rss-feed-creator/utils/fetchFeeds.js:24<br>services/script/utils/fetchFeeds.js:8 |
 | `FEED_RETENTION_DAYS` | Yes | services/rss-feed-creator/utils/feedGenerator.js:13 |
 | `FEED_URL` | Yes | services/blotato/utils/rssArticleSource.js:132<br>services/script/utils/fetchFeeds.js:139 |
+| `GITHUB_TOKEN_WEBSITE_AUDITS` | Yes | services/newsletter/engine/weekendMaintenance.js:12 |
 | `GOOGLE_CLIENT_EMAIL` | Yes | scripts/sheetService.js:6 |
 | `GOOGLE_PRIVATE_KEY` | Yes | scripts/sheetService.js:7 |
 | `GOOGLE_SHEET_ID` | Yes | scripts/sheetService.js:8 |
@@ -366,7 +367,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `PODCAST_TRANSCRIPT_MAX_SENTENCE_WORDS` | Yes | services/script/utils/editAndFormat.js:197<br>services/script/utils/orchestrator.js:115<br>services/script/utils/orchestrator.js:323<br>services/script/utils/scriptValidation.js:294 |
 | `PODCAST_TRANSCRIPT_MIN_SOURCE_TERMS` | No | services/script/utils/scriptValidation.js:391 |
 | `POLLY_VOICE_ID` | Yes | services/blotato/utils/localCreditFallbackVideo.js:20<br>services/blotato/utils/localCreditFallbackVideo.js:229<br>services/tts/utils/ttsProcessor.js:24 |
-| `PORT` | Yes | routes/podcast-pipeline.js:14<br>scripts/collectCommsWorkerHealth.js:7<br>scripts/deploySmoke.js:3<br>scripts/startupCheck.js:74<br>server.js:487<br>services/ops/index.js:466 |
+| `PORT` | Yes | routes/podcast-pipeline.js:14<br>scripts/collectCommsWorkerHealth.js:7<br>scripts/deploySmoke.js:3<br>scripts/startupCheck.js:74<br>server.js:487<br>services/ops/index.js:468 |
 | `QA_ALERT_WEBHOOK_URL` | Yes | config/thresholds.js:100 |
 | `R2_ACCESS_KEY_ID` | Yes | audits/utils/publishAuditArtifacts.js:62<br>scripts/startupCheck.js:77 |
 | `R2_BUCKET_ART` | Yes | services/artwork/utils/io.js:15 |

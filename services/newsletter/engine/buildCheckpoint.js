@@ -13,7 +13,9 @@ function policyFingerprint(profile) {
 }
 
 function checkpointKey(profile, now) {
-  return `state/newsletter-builds/${now.toISOString().slice(0, 10)}/${qaFingerprint(profile.id)}.json`;
+  const identity = profile.edition && profile.edition !== "daily"
+    ? `${profile.id}:${profile.edition}:${profile.publicationDate}` : profile.id;
+  return `state/newsletter-builds/${now.toISOString().slice(0, 10)}/${qaFingerprint(identity)}.json`;
 }
 
 export function validEditorialCheckpoint(record, { profile, now }) {
