@@ -17,7 +17,7 @@ test("restore uses only the healthy, same-app Headroom companion and additive en
   } });
   assert.equal(result.enabled, true);
   assert.deepEqual(calls[1], ["services", "list", "--app", "app", "--name", "headroom"]);
-  assert.deepEqual(calls.at(-2), ["services", "update", "headroom", "--min-scale", "1", "--deep-sleep-delay", "0", "--light-sleep-delay", "0",
+  assert.deepEqual(calls.at(-2), ["services", "update", "headroom", "--min-scale", "1",
     "--env", "HEADROOM_BEACON=off", "--env", "DO_NOT_TRACK=1"]);
   assert.deepEqual(calls.at(-1), ["services", "update", "aims", "--env", "HEADROOM_ENABLED=true", "--env",
     "HEADROOM_BASE_URL=http://headroom:8787", "--env", "HEADROOM_PROXY_TOKEN={{secret.HEADROOM_PROXY_TOKEN}}"]);

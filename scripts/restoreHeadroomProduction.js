@@ -41,7 +41,7 @@ export function restoreHeadroomProduction({ env = process.env, run = cli } = {})
   if (!id) throw new Error("Headroom companion has no deployment");
   const deployment = run(["deployments", "get", id]);
   headroomCompanion(payload, list, deployment);
-  run(["services", "update", companion.id, "--min-scale", "1", "--deep-sleep-delay", "0", "--light-sleep-delay", "0", "--env", "HEADROOM_BEACON=off", "--env", "DO_NOT_TRACK=1"], { json: false });
+  run(["services", "update", companion.id, "--min-scale", "1", "--env", "HEADROOM_BEACON=off", "--env", "DO_NOT_TRACK=1"], { json: false });
   run(["services", "update", service.id, "--env", "HEADROOM_ENABLED=true", "--env", "HEADROOM_BASE_URL=http://headroom:8787",
     "--env", "HEADROOM_PROXY_TOKEN={{secret.HEADROOM_PROXY_TOKEN}}"], { json: false });
   return { event: "headroom.production.configured", enabled: true, companionHealthy: true };
