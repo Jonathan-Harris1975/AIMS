@@ -144,7 +144,7 @@ export async function collectOpenRouterDailySpend({ date, now = new Date(), fx =
   for (const [alias, native] of [["tokens_reasoning", "reasoning_tokens"], ["tokens_cached", "cached_tokens"]]) {
     if (Object.hasOwn(totals, native)) {
       totals[alias] = totals[native];
-      for (const row of breakdown) row[alias] = row[native];
+      for (const row of breakdown) if (Object.hasOwn(row, native)) row[alias] = row[native];
       metricAliases[alias] = native;
     }
   }
