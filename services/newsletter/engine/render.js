@@ -88,7 +88,8 @@ ${sectionLabel("Reality Check")}
       "")}</div>${newsletter.realityCheck?.link ? `<div style="padding-top:6px;"><a href="${escapeHtml(
         newsletter.realityCheck.link)}" style="font-size:13px;color:#0D1420;">Read the source</a></div>` : ""}</td></tr>
 ${renderPromotion(newsletter.promotion)}
-<tr><td style="padding:22px 24px;border-top:1px solid #E5E7EB;font-size:12px;line-height:1.65;color:#64748B;text-align:center;">${escapeHtml(newsletter.footer?.text || "")}${["saturday", "sunday"].includes(newsletter.edition)
+<tr><td style="padding:22px 24px;border-top:1px solid #E5E7EB;font-size:12px;line-height:1.65;color:#64748B;text-align:center;">${escapeHtml(newsletter.footer?.text || "")}
+${["saturday", "sunday"].includes(newsletter.edition)
   ? "<br/>Prepared on Friday from the week’s coverage." : ""}<br/>
 <span style="color:#94A3B8;">AI Edge is written for people who want useful AI analysis without vendor theatre.</span></td></tr>
 </table></td></tr></table></body></html>`;
