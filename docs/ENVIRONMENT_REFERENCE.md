@@ -252,7 +252,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `FEED_FETCH_TIMEOUT_MS` | Yes | services/blotato/utils/rssArticleSource.js:166<br>services/rss-feed-creator/utils/fetchFeeds.js:24<br>services/script/utils/fetchFeeds.js:8 |
 | `FEED_RETENTION_DAYS` | Yes | services/rss-feed-creator/utils/feedGenerator.js:13 |
 | `FEED_URL` | Yes | services/blotato/utils/rssArticleSource.js:132<br>services/script/utils/fetchFeeds.js:139 |
-| `GITHUB_TOKEN_WEBSITE_AUDITS` | Yes | services/newsletter/engine/weekendMaintenance.js:14 |
+| `GITHUB_TOKEN_WEBSITE_AUDITS` | Yes | services/newsletter/engine/weekendMaintenance.js:12 |
 | `GOOGLE_CLIENT_EMAIL` | Yes | scripts/sheetService.js:6 |
 | `GOOGLE_PRIVATE_KEY` | Yes | scripts/sheetService.js:7 |
 | `GOOGLE_SHEET_ID` | Yes | scripts/sheetService.js:8 |

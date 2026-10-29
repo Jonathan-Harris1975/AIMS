@@ -20,3 +20,14 @@ test('unavailable or incomplete maintenance evidence cannot clear a send', async
   const clear = await checkWeekendMaintenance({ fetcher: async () => ({ ok: true, json: async () => ({ total_count: 0, workflow_runs: [] }) }) });
   assert.equal(clear.ok, true); assert.equal(clear.busy, false);
 });
+
+test('a website-scoped token falls back to public read-only evidence for the other repositories', async () => {
+  let fallbackReads = 0;
+  const result = await checkWeekendMaintenance({ token: 'scoped-test-token', fetcher: async (_url, options) => {
+    if (options.headers.Authorization) return { ok: false, status: 403 };
+    fallbackReads += 1;
+    return { ok: true, json: async () => ({ total_count: 0, workflow_runs: [] }) };
+  } });
+  assert.equal(result.ok, true); assert.equal(result.busy, false);
+  assert.equal(fallbackReads, 8);
+});
