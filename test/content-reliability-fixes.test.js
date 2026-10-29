@@ -282,7 +282,8 @@ test("Zernio keeps fresh generated artwork primary and permits the curated store
   assert.match(blogArtwork, /artwork\.blog\.deterministic_ai_diagnostic/);
   assert.match(socialArtwork, /artwork\.social\.deterministic_ai_diagnostic/);
   assert.match(blogArtwork, /SOCIAL_BLOG_ALLOW_DETERMINISTIC_FALLBACK/);
-  assert.match(blogArtwork, /NEWSLETTER_ALLOW_DETERMINISTIC_FALLBACK/);
+  assert.match(blogArtwork, /if \(\["social-blog", "newsletter"\]\.includes\(mode\)\) return false/);
+  assert.doesNotMatch(blogArtwork, /boolEnv\("NEWSLETTER_ALLOW_DETERMINISTIC_FALLBACK"/);
   assert.match(blogArtwork, /ok: publishableFallback,[\s\S]*diagnosticUrl: publicUrl,[\s\S]*publicUrl: publishableFallback \? publicUrl : ""/);
   assert.match(socialArtwork, /ZERNIO_ALLOW_DETERMINISTIC_FALLBACK/);
   assert.match(socialArtwork, /allowFallback = false/);
