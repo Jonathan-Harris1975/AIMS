@@ -24,7 +24,7 @@ function transcriptValidationOptions(sessionMeta = {}) {
   return { targetMinutes: resolveTargetMins(sessionMeta) };
 }
 
-function evaluatePodcastTranscriptGate(text = "", sessionMeta = {}) {
+export function evaluatePodcastTranscriptGate(text = "", sessionMeta = {}) {
   const structure = validateTranscriptStructure(text, transcriptValidationOptions(sessionMeta));
   const sourceIntegrity = validateTranscriptSourceIntegrity(text, sessionMeta);
   const structureReasons = structure.ok ? [] : (structure.reasons || []);
@@ -41,6 +41,7 @@ function evaluatePodcastTranscriptGate(text = "", sessionMeta = {}) {
   ];
   return {
     ok: defects.length === 0,
+    hardFailure: !sourceIntegrity.ok || (structureReasons.length > 0 && !softCadenceOnly),
     score: Math.max(0, 100 - (defects.length * 12)),
     threshold: 88,
     defects,
@@ -162,7 +163,7 @@ function looksLikeRepeatedIntro(paragraph = "", intro = "") {
   return brandedOpening || similarity >= 0.68 || (similarity >= 0.28 && /\b(?:welcome|episode|this week|today|host|listening)\b/i.test(normalised));
 }
 
-function stripLeadingIntroEcho(main = "", intro = "") {
+export function stripLeadingIntroEcho(main = "", intro = "") {
   const body = String(main || "").trim();
   const introText = String(intro || "").trim();
   if (!body || !introText) return body;
@@ -176,7 +177,10 @@ function stripLeadingIntroEcho(main = "", intro = "") {
 
   const paragraphs = remaining.split(/\n\s*\n+/).map((item) => item.trim()).filter(Boolean);
   let removed = 0;
-  while (paragraphs.length && removed < 3 && looksLikeRepeatedIntro(paragraphs[0], introText)) {
+  // Intro similarity is not permission to discard a full evidence section.
+  // Only short opening-sized paragraphs may be removed by this heuristic.
+  const maximumEchoWords = Math.max(80, Math.ceil(countWords(introText) * 1.5));
+  while (paragraphs.length && removed < 3 && countWords(paragraphs[0]) <= maximumEchoWords && looksLikeRepeatedIntro(paragraphs[0], introText)) {
     paragraphs.shift();
     removed += 1;
   }

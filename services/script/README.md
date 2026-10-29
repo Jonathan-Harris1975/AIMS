@@ -94,3 +94,5 @@ inspection of its transcript, audio, RSS publication and stage logs.
 
 The retired `PODCAST_SYNTHESIS_*` settings no longer control main generation.
 Existing editorial token/timeout/reasoning settings continue to apply per block.
+
+Intro-echo cleanup removes only opening-sized paragraphs; a long evidence section cannot be discarded merely because it mentions the programme or overlaps with intro vocabulary. Transcript structure, duration and source failures are explicit hard council failures and cannot receive numeric tolerance approval.

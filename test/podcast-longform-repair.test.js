@@ -322,3 +322,18 @@ ${store}.received = chunks.map(chunk=>chunk.text).join(" "); return chunks.map((
     for (const [name, value] of Object.entries(env)) { if (value === undefined) delete process.env[name]; else process.env[name] = value; }
   }
 });
+
+
+test("intro-echo cleanup cannot erase long evidence sections that mention the programme", async () => {
+  const script = await moduleWithStubs("../services/script/utils/orchestrator.js", {
+    "./models.js": "export default {};",
+  });
+  const intro = "Welcome to Turing's Torch. I'm Jonathan Harris. This week we examine the evidence.";
+  const main = [1, 2, 3].map((i) => `The report uses the phrase This is Turing's Torch as an example. ${prose(2200, `Section${i}_`)}`).join("\n\n");
+  assert.equal(script.stripLeadingIntroEcho(main, intro), main);
+  assert.equal(script.stripLeadingIntroEcho(`${intro}\n\n${main}`, intro), main);
+  assert.equal(script.stripLeadingIntroEcho(`Welcome back to Turing's Torch.\n\n${main}`, intro), main);
+  const gate = script.evaluatePodcastTranscriptGate(`A tiny episode. ${OUTRO_CLOSING_TAGLINE}`, { targetMinutes: 60 });
+  assert.equal(gate.ok, false);
+  assert.equal(gate.hardFailure, true, "duration/structure failure must never qualify for numeric council tolerance");
+});
