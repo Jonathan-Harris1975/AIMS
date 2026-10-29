@@ -6,7 +6,7 @@ import { runDeterministicValidators } from "./validators.js";
 import { warn } from "../../../logger.js";
 
 function policyFingerprint(profile) {
-  return qaFingerprint({ version: 1, profile, thresholds: THRESHOLDS.newsletter,
+  return qaFingerprint({ version: 2, profile, thresholds: THRESHOLDS.newsletter,
     providers: ["newsletterSelfImprove", "newsletterFactCheck", "newsletterVoiceReview", "newsletterAudienceReview", "newsletterCouncilChair"]
       .map((route) => getProviderDiagnosticsForRoute(route)),
   });

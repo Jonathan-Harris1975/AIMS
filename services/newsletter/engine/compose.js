@@ -1,7 +1,7 @@
 // services/newsletter/engine/compose.js
 //
 // Produces the benchmarked AI Edge issue format: opening note, Big Three,
-// Worth Using, On the Radar, Reality Check and reader question. The model is
+// Worth Using, On the Radar, Reality Check and a practical verdict. The model is
 // only allowed to express supplied source material; source titles/links are
 // reattached deterministically after generation.
 
@@ -63,9 +63,8 @@ const ISSUE_SECTIONS_SCHEMA = Object.freeze({
       },
       required: ["sourceId", "claim", "assessment"],
     },
-    yourTurn: { type: "string" },
   },
-  required: ["heroHeadline", "openingNoteHtml", "bigThree", "worthUsing", "onRadar", "realityCheck", "yourTurn"],
+  required: ["heroHeadline", "openingNoteHtml", "bigThree", "worthUsing", "onRadar", "realityCheck"],
 });
 
 const SUBJECT_PREVIEW_SCHEMA = Object.freeze({
@@ -124,11 +123,14 @@ first three ranked items. " +
         "Each Big Three item MUST return the exact sourceId it uses. Choose one different source for Worth Using/Watching only when it offers genuine practical value; otherwise use Worth Watching. " +
         "Use no more than five additional unused sources for On the Radar. Every On the Radar item MUST carry the exact sourceId it summarises. Never attach a summary to a different source. " +
         "Reality Check may interrogate any supplied source, including a Big Three source, but MUST return that sourceId so its link can be attached deterministically. " +
-        "The opening note is 35-65 words and sounds like Jonathan, not a masthead. The reader question should invite a substantive response.\n\n" +
+        "This is a DAILY email briefing, currently Monday to Friday, not a weekly edition. The opening note is 35-65 words, sounds like Jonathan, and introduces the actual \
+selected Big Three topics and their specific tension. Use today/this edition where needed; never frame the issue as this week's theme, a weekly roundup or this week's \
+briefing. A source may discuss a week, but the editorial opening must frame this edition as daily. End with the existing Reality Check verdict and optional house promotion; do \
+not add a Your Turn section, reader question or generic engagement request.\n\n" +
         "Respond with ONLY valid JSON using this shape: " +
         '{"heroHeadline":string,"openingNoteHtml":string,"bigThree":[{"sourceId":string,"whatHappened":string,"whyItMatters":string,"jonathanTake":string}],"worthUsing":\
 {"sourceId":string,"label":string,"summary":string,"whyUseful":string},"onRadar":[{"sourceId":string,"summary":string}],"realityCheck":{"sourceId":string,"claim":string,\
-"assessment":string},"yourTurn":string}. ' +
+"assessment":string}}. ' +
         "openingNoteHtml must be one <p> paragraph. No other field may contain HTML.",
     },
     {
@@ -270,7 +272,6 @@ first three ranked items. " +
         link: source.link,
       };
     })(),
-    yourTurn: String(data.yourTurn || "Which of these developments deserves a closer look next?").trim(),
   };
 }
 

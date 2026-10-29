@@ -57,38 +57,17 @@ export async function findLatestIssueSessionId(profile, { date = new Date() } = 
  * Stores the HTML, plaintext and metadata for one issue under a single key
  * prefix so an issue's artefacts are easy to locate/audit together.
  */
-function publicIssueSlug(metadata = {}) {
-  const source = String(metadata.heroHeadline || metadata.subject || "ai-edge").toLowerCase();
-  const words = source
-    .normalize("NFKD")
-    .replace(/[^a-z0-9\s-]/g, " ")
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 9);
-  return words.join("-").replace(/-+/g, "-") || "ai-edge";
-}
-
-export async function storeNewsletterIssue({ profile, sessionId, html, emailHtml, plaintext, metadata, date = new Date() }) {
-  // Keep the opaque session path for internal idempotency/audit records, but
-  // publish reader-facing HTML at a stable editorial slug. Humans should not
-  // have to share a UUID disguised as a newsletter URL.
+export async function storeNewsletterIssue({ profile, sessionId, emailHtml, plaintext, metadata, date = new Date() }, storage = { uploadText, putJson }) {
+  if (!emailHtml) throw new Error("Newsletter email HTML is required.");
   const prefix = buildIssueKeyPrefix(profile, { date, sessionId });
-  const day = dateKey(date);
-  const publicPrefix = `${profile.storage.keyPrefix}/${day}/${publicIssueSlug(metadata)}`;
   const bucketKey = profile.storage.htmlBucketKey;
-
-  const [htmlUrl, emailUrl, textUrl, metaUrl] = await Promise.all([
-    uploadText(bucketKey, `${publicPrefix}/index.html`, html, "text/html; charset=utf-8"),
-    uploadText(bucketKey, `${publicPrefix}/email.html`, emailHtml || html, "text/html; charset=utf-8"),
-    uploadText(bucketKey, `${prefix}/index.txt`, plaintext, "text/plain; charset=utf-8"),
-    putJson(bucketKey, `${prefix}/metadata.json`, { ...metadata, publicPrefix }),
-    // Retain internal copies because delivery loads email.html by session ID.
-    uploadText(bucketKey, `${prefix}/index.html`, html, "text/html; charset=utf-8"),
-    uploadText(bucketKey, `${prefix}/email.html`, emailHtml || html, "text/html; charset=utf-8"),
+  const [emailUrl, textUrl, metaUrl] = await Promise.all([
+    storage.uploadText(bucketKey, `${prefix}/email.html`, emailHtml, "text/html; charset=utf-8"),
+    storage.uploadText(bucketKey, `${prefix}/index.txt`, plaintext, "text/plain; charset=utf-8"),
+    storage.putJson(bucketKey, `${prefix}/metadata.json`, { ...metadata, distribution: "email-only" }),
   ]);
-
-  return { prefix, publicPrefix, htmlUrl, emailUrl, textUrl, metaUrl };
+  // Compatibility URL alias points at the same email artefact, never a web edition.
+  return { prefix, htmlUrl: emailUrl, emailUrl, textUrl, metaUrl };
 }
 
 /**

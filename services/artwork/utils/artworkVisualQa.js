@@ -133,6 +133,8 @@ or decorative data network is a hard failure.",
       "Any readable or pseudo-readable typography, logo or watermark is a hard failure.",
     ],
     newsletter: [
+      "Decorative geometric shapes, floating polygons, glowing orbs, abstract networks or generic AI wallpaper as the main subject are hard failures. A generic server room is \
+also a hard failure unless the actual source story requires that scene. The image must express the supplied story context through recognisable subjects and actions.",
       "The image must look like serious photorealistic AI/technology editorial journalism and visibly represent the lead story, not anime, fantasy illustration, travel, \
 tourism, lifestyle, a generic banner, magazine-cover mock-up or scenic wallpaper.",
       "Any readable or pseudo-readable typography is a hard failure.",

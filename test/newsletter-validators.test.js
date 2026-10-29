@@ -1,6 +1,7 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import {
+  validateDailyOpening,
   validateBannedPhrases,
   validateBritishSpelling,
   validateSubjectLength,
@@ -29,7 +30,6 @@ function baseNewsletter(overrides = {}) {
       { title: "F", link: "https://news.example.com/f", summary: "F summary." },
     ],
     realityCheck: { claim: "The claim", assessment: "The evidence is narrower than the headline.", link: "https://news.example.com/a" },
-    yourTurn: "Which development deserves a deeper look?",
     promotion: null,
     ...overrides,
   };
@@ -78,4 +78,12 @@ describe("newsletter engine/validators.js", () => {
     assert.equal(result.pass, true);
     assert.deepEqual(result.issues, []);
   });
+});
+
+test("daily openings reject weekly issue framing but allow source reporting about a week", () => {
+  for (const openingNoteHtml of ["This week's theme is simple: agents.", "This week’s briefing covers agents.", "This week, we look at agents."]) {
+    assert.equal(validateDailyOpening({ openingNoteHtml }).pass, false);
+  }
+  assert.equal(validateDailyOpening({ openingNoteHtml: "Today's stories connect agent deployments with data leakage risks. Researchers tracked tests over a week." }).pass, true);
+  assert.equal(runDeterministicValidators(baseNewsletter()).pass, true);
 });

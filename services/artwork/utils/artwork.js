@@ -215,7 +215,7 @@ function shouldUseShortPromptRetry(mode = "podcast") {
   // The shortened retry was introduced for podcast artwork. For Zernio
   // social images it strips the lane-specific grounding and repeatedly
   // produces generic dashboards/server rooms, so social defaults to off.
-  if (String(mode || "").toLowerCase() === "social") return false;
+  if (["social", "newsletter"].includes(String(mode || "").toLowerCase())) return false;
   return THRESHOLDS.podcastArtwork.shortPromptRetryEnabled;
 }
 
