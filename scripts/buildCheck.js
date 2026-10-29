@@ -194,7 +194,7 @@ async function assertProductionDefaultsAreSafe() {
   // binding. Authenticated compression is verified against the deployed environment.
   const overlay = parseEnvLines(await readFile(path.join(projectRoot, "config", "koyeb.production.env.template"), "utf8"));
   const tokenBinding = overlay.entries.find(entry => entry.key === "HEADROOM_PROXY_TOKEN" &&
-    /^\{\{\s*secret\.HEADROOM_PROXY_TOKEN\s*\}\}$/.test(entry.value));
+    /^\{\{\s*secret\.(?:HEADROOM_PROXY_TOKEN|AIMS_API_KEY)\s*\}\}$/.test(entry.value));
   const entries = parsed.entries.map(entry => entry.key === "HEADROOM_PROXY_TOKEN" && !entry.value && tokenBinding
     ? { ...entry, value: tokenBinding.value } : entry);
   const result = { errors: [...parsed.errors, ...validateEnvEntries(entries)] };

@@ -1,11 +1,11 @@
 # Production Headroom
 
-AIMS production defaults enable Headroom at the private Koyeb companion address `http://headroom:8787`. Its deployment overlay binds `HEADROOM_PROXY_TOKEN`; provider inference credentials are never forwarded to compression.
+AIMS uses HIVE's existing inline Headroom installation through authenticated HTTPS `POST /v1/compress`. This avoids paying for a separate companion service. The AIMS service key is reused solely to authenticate compression; it does not grant HIVE administrator access.
 
-The explicit Restore Headroom production release verifies a single healthy companion in the AIMS app before applying additive service settings. It keeps at least one companion instance running, disables sleeping and disables Headroom's external anonymous beacon. Local savings statistics remain available. Missing or unhealthy companion infrastructure is reported as a deployment verification failure rather than being hidden by a green application build.
+The explicit Restore Headroom production release verifies the configured AIMS and HIVE identities and HIVE deployment health before applying additive settings. HIVE stays at a minimum of one instance with Headroom enabled. The external anonymous beacon is disabled while local savings metrics remain available. Existing HIVE service/storage capacity is reused.
 
-After exact-SHA application deployment, a synthetic check must demonstrate positive compression savings and preservation of system/message shape and the latest protected instruction. It never calls an LLM. The workflow checks the success marker because Koyeb exec can report success even when a remote command fails.
+The AIMS deployment overlay binds `HEADROOM_PROXY_TOKEN` to the existing `AIMS_API_KEY` secret. Source defaults remain free of secret values/references; build-time validation checks the declared overlay binding, and deployed verification checks real authentication.
 
-Production tasks keep their existing content protections: image/visual QA and exact-source paths retain their existing handling; invalid compression cannot replace protected content. A transient proxy failure retains original input under the existing recovery policy rather than silently changing the configured enabled flag. The deployment check independently reports loss of Headroom availability.
+After exact-SHA deployment, the synthetic probe must demonstrate positive compression savings and preservation of message/system shape and the latest protected instruction. It makes no LLM inference request. The workflow checks an explicit success marker rather than relying on Koyeb exec exit status.
 
-The companion image uses `headroom/Dockerfile`; its settings are documented in `config/headroom.koyeb.env.template`. Existing persistent storage at `/var/lib/headroom` should be retained for native savings history. Do not publish provider tokens or prompt bodies in deployment logs.
+Content protections, exact-source and visual handling, and transient recovery retain their existing behaviour. Missing/unsafe compression cannot replace the original input. The production check exposes unavailability rather than silently turning the configured enabled flag off.

@@ -14,7 +14,9 @@ try {
     { role: "user", content: "Summarise the table. Preserve the latest instruction." },
   ];
   const result = await compressForOpenRouter({ routeName: "metadata", routeKey: "metadata", model: process.env.AI_MODEL_DEFAULT || "openai/gpt-5.6-luna", messages });
-  if (!result.compressed || !(result.tokensSaved > 0)) throw new Error(`Headroom did not demonstrate compression: ${result.reason || "no verified saving"}`);
+  if (!result.compressed || !(result.tokensSaved > 0)) {
+    throw new Error(`Headroom did not demonstrate compression: ${result.reason || "no verified saving"}${result.status ? ` (HTTP ${result.status})` : ""}`);
+  }
   if (result.messages.at(-1)?.content !== messages.at(-1).content) throw new Error("Headroom changed the protected latest instruction");
   console.log(JSON.stringify({ event: "headroom.production.verified", enabled: true, compressed: true,
     tokensBefore: result.tokensBefore, tokensAfter: result.tokensAfter, tokensSaved: result.tokensSaved }));
