@@ -46,6 +46,7 @@ async function sendIssueToRecipient({ profile, sessionId, recipient, buildResult
   const unsubscribeToken = await createUnsubscribeToken(recipient.id, profile.id, { d1 });
   const unsubscribeUrl = `${publicBaseUrl()}/newsletter/unsubscribe/${encodeURIComponent(unsubscribeToken)}`;
   const attemptedAt = new Date().toISOString();
+  let acceptedByProvider = false;
   try {
     const result = await mail.sendMessage({
       to: [recipient.email],
@@ -54,6 +55,7 @@ async function sendIssueToRecipient({ profile, sessionId, recipient, buildResult
       bodyHtml: withUnsubscribe(buildResult.emailHtml, unsubscribeUrl),
       messageId: `<newsletter-${sessionId}-${recipient.id}@jonathan-harris.online>`,
     });
+    acceptedByProvider = true;
     const deliveredAt = new Date().toISOString();
     await d1.query(`INSERT INTO newsletter_delivery_recipients(issue_id,subscriber_id,status,attempted_at,delivered_at,provider_message_id)
       VALUES(?,?,'sent',?,?,?) ON CONFLICT(issue_id,subscriber_id) DO UPDATE SET status='sent',
@@ -62,7 +64,7 @@ async function sendIssueToRecipient({ profile, sessionId, recipient, buildResult
     [sessionId, recipient.id, attemptedAt, deliveredAt, result.messageId || randomUUID()]);
     return { ok: true, status: "sent" };
   } catch (error) {
-    const uncertain = Boolean(error?.deliveryUncertain);
+    const uncertain = acceptedByProvider || Boolean(error?.deliveryUncertain);
     await d1.query(`INSERT INTO newsletter_delivery_recipients(issue_id,subscriber_id,status,attempted_at,error_code)
       VALUES(?,?,?,?,?) ON CONFLICT(issue_id,subscriber_id) DO UPDATE SET status=excluded.status,attempted_at=excluded.attempted_at,error_code=excluded.error_code`,
     [sessionId, recipient.id, uncertain ? "reconciliation_required" : "failed", attemptedAt, error?.code || "delivery_failed"]);
@@ -130,6 +132,10 @@ export async function deliverNewsletterIssue({ profile, sessionId, buildResult, 
   let sent = 0;
   let failed = 0;
   for (const recipient of recipients) {
+    if (buildResult.metadata?.deliveryCutoffAt && Date.now() >= Date.parse(buildResult.metadata.deliveryCutoffAt)) {
+      failed += recipients.length - sent - failed;
+      break;
+    }
     const result = await sendIssueToRecipient({ profile, sessionId, recipient, buildResult, d1, mail });
     if (result.ok) { sent += 1; continue; }
     failed += 1;

@@ -128,7 +128,7 @@ export async function sendWeekendNewsletter({ edition, now = new Date() }, deps 
   if (!claim.claimed) return { ok: claim.reason === 'already-completed', status: claim.reason === 'already-completed' ? 'already_dispatched' : 'delivery_in_progress' };
   try {
     const result = await (deps.deliver || deliverNewsletterIssue)({ profile, sessionId: plan.sessionId, date: storageDate,
-      buildResult: { metadata, newsletter: { subject: metadata.subject, previewText: metadata.previewText }, emailHtml, plaintext } });
+      buildResult: { metadata: { ...metadata, deliveryCutoffAt: plan.cutoffAt }, newsletter: { subject: metadata.subject, previewText: metadata.previewText }, emailHtml, plaintext } });
     if (result.ok) await (deps.complete || completeDurableLease)(claim.lease, result);
     else if (result.status !== 'delivery_reconciliation_required') await (deps.release || releaseDurableLease)(claim.lease, result);
     return result;
