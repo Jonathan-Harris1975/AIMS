@@ -62,7 +62,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `ARTWORK_VISUAL_QA_MIN_RELEVANCE` | No | services/artwork/utils/artworkVisualQa.js:13 |
 | `ARTWORK_VISUAL_QA_MIN_TEXT_SAFETY` | No | services/artwork/utils/artworkVisualQa.js:14 |
 | `ARTWORK_VISUAL_QA_MODES` | Yes | services/artwork/artwork.js:199<br>services/artwork/utils/artwork.js:199 |
-| `ARTWORK_VISUAL_QA_PARSE_ATTEMPTS` | No | services/artwork/utils/artworkVisualQa.js:192 |
+| `ARTWORK_VISUAL_QA_PARSE_ATTEMPTS` | No | services/artwork/utils/artworkVisualQa.js:194 |
 | `ARTWORK_VISUAL_QA_REQUIRED` | Yes | services/artwork/artwork.js:337<br>services/artwork/utils/artwork.js:337 |
 | `ARTWORK_VISUAL_QA_THRESHOLD` | Yes | services/artwork/utils/artworkVisualQa.js:12 |
 | `AUDIT_ARTEFACT_READY_POLL_MS` | Yes | audits/utils/websiteAuditPipeline.js:42 |
@@ -77,7 +77,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `AWS_REGION` | Yes | services/blotato/utils/localCreditFallbackVideo.js:16<br>services/tts/utils/ttsProcessor.js:23 |
 | `BACKFILL_TRANSCRIPT_HTML` | Yes | scripts/bootstrap.js:156 |
 | `BACKFILL_TRANSCRIPT_HTML_TIMEOUT_MS` | No | scripts/bootstrap.js:161 |
-| `BLOG_ARTWORK_BUCKET_ALIAS` | Yes | services/artwork/createBlogArtwork.js:56 |
+| `BLOG_ARTWORK_BUCKET_ALIAS` | Yes | services/artwork/createBlogArtwork.js:55 |
 | `BLOG_PREFIX` | Yes | services/blog/routes/rss.js:9<br>services/blog/weekly/buildWeeklyBlogPost.js:487 |
 | `BLOG_RSS_DESCRIPTION` | No | services/blog/rss/publishBlogRssFeed.js:147 |
 | `BLOG_RSS_FEED_URL` | No | services/blog/rss/publishBlogRssFeed.js:132 |
