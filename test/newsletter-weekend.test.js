@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { weekendPlan, londonInstant, prepareWeekendNewsletters, sendWeekendNewsletter } from '../services/newsletter/engine/weekend.js';
-import { issueDeliveryDue } from '../services/newsletter/delivery/aimsDelivery.js';
+import { checkIssueDeliveryPolicy } from '../services/newsletter/engine/deliveryPolicy.js';
+import { deliverNewsletterIssue, deliverTodaysIssueToSubscriber, issueDeliveryDue } from '../services/newsletter/delivery/aimsDelivery.js';
 import { editionDirection } from '../services/newsletter/engine/edition.js';
 import { validateDailyOpening } from '../services/newsletter/engine/validators.js';
 
@@ -89,4 +90,35 @@ test('Friday-prepared content cannot leak to recipients or new subscribers befor
   assert.equal(issueDeliveryDue(metadata, new Date('2026-11-01T05:09:00Z')), false);
   assert.equal(issueDeliveryDue(metadata, new Date('2026-11-01T05:10:00Z')), true);
   assert.equal(issueDeliveryDue({ scheduledAt: 'invalid' }), false);
+});
+
+test('alternate send paths enforce weekend maintenance and closing-time rules', async () => {
+  const metadata = { edition: 'sunday', scheduledAt: '2026-11-01T05:10:00.000Z', qa: { passed: true } };
+  const busy = async () => ({ ok: true, busy: true });
+  const clear = async () => ({ ok: true, busy: false });
+  const now = new Date('2026-11-01T05:15:00Z');
+  assert.equal((await checkIssueDeliveryPolicy(metadata, now, { maintenance: busy })).status, 'maintenance_not_clear');
+  assert.equal((await checkIssueDeliveryPolicy(metadata, new Date('2026-11-01T05:56:00Z'), { maintenance: clear })).status, 'outside_delivery_window');
+  const result = await deliverNewsletterIssue({ profile: { id: 'ai-edge' }, sessionId: 'weekend', buildResult: { metadata } }, {
+    now, maintenance: busy,
+  });
+  assert.equal(result.status, 'maintenance_not_clear');
+  const subscriber = await deliverTodaysIssueToSubscriber({ subscriberId: 'person', date: now }, {
+    d1: {}, mail: {}, findSession: async () => 'weekend', loadIssue: async () => ({ metadata }), maintenance: busy,
+  });
+  assert.equal(subscriber.status, 'issue_deferred'); assert.equal(subscriber.reason, 'maintenance_not_clear');
+});
+
+test('known storage or audience preflight failures remain safe to retry before any SMTP call', async () => {
+  let sends = 0;
+  const base = { d1: {}, mail: { sendMessage: async () => { sends += 1; } } };
+  const options = { profile: { id: 'ai-edge' }, sessionId: 'test', buildResult: { metadata: {} } };
+  for (const fault of ['storage', 'audience']) {
+    const result = await deliverNewsletterIssue(options, { ...base,
+      readDelivery: async () => { if (fault === 'storage') throw new Error('R2 unavailable'); return { delivery: null }; },
+      listRecipients: async () => { throw new Error('D1 unavailable'); },
+    });
+    assert.equal(result.stage, 'preflight'); assert.equal(result.safeToRetry, true);
+  }
+  assert.equal(sends, 0);
 });
