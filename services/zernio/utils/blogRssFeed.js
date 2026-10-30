@@ -5,10 +5,10 @@
 // Zernio has no documented "import from RSS" capability of its own, so this
 // module does the fetch + parse on the AIMS side; the resulting item is
 // then scheduled through the normal Zernio posting path in
-// socialScheduler.js. This module is intentionally read-only against the
-// blog service: it only ever performs a plain HTTP GET of the public feed
-// URL below and never touches the blog service's code, routes, or storage.
+// socialScheduler.js. Public and origin reads never rewrite the feed.
 import Parser from "rss-parser";
+import { getObjectAsText } from "../../shared/utils/r2-client.js";
+import { buildSocialBlogRssXml } from "../../blog/social/publishSocialBlogRssFeed.js";
 import { fetchWithTimeout } from "../../shared/http-client.js";
 
 const parser = new Parser();
@@ -103,6 +103,10 @@ export async function fetchBlogRssItems({ timeoutMs, cacheBustKey = "" } = {}) {
   }
 
   const xml = await response.text();
+  return parseBlogRssXml(xml, url);
+}
+
+async function parseBlogRssXml(xml, url) {
   const parsed = await parser.parseString(xml);
   const items = (parsed.items || [])
     .map(normaliseBlogRssItem)
@@ -111,4 +115,14 @@ export async function fetchBlogRssItems({ timeoutMs, cacheBustKey = "" } = {}) {
     .map(({ _pubDateMs, ...item }) => item);
 
   return { url, feedTitle: trim(parsed.title), items };
+}
+
+// Reconstruct the feed from the committed publication manifest. This also
+// recovers a build that committed its article before the RSS write failed.
+export async function fetchBlogRssOriginItems(read = getObjectAsText) {
+  if (getBlogRssFeedUrl() !== DEFAULT_FEED_URL) return null;
+  const prefix = String(process.env.BLOG_SOCIAL_PREFIX || "social-media-blog").trim().replace(/^\/+|\/+$/g, "");
+  const manifest = JSON.parse(await read("blog", `${prefix}/posts.json`));
+  const xml = buildSocialBlogRssXml({ manifest, feedUrl: getBlogRssFeedUrl() });
+  return parseBlogRssXml(xml, getBlogRssFeedUrl());
 }

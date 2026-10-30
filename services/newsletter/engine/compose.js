@@ -146,6 +146,7 @@ first three ranked items. " +
   const responseOptions = {
     sessionId,
     messages,
+    validateContent: (raw) => parseStructuredJson(raw, "newsletter issue sections"),
     max_tokens: 4200,
     reasoning: { effort: "none", exclude: true },
     response_format: strictJsonResponseFormat("newsletter_issue_sections", ISSUE_SECTIONS_SCHEMA),

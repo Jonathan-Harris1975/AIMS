@@ -9,7 +9,7 @@ import { buildDailyPrompt, buildQuizPrompt, buildEbookPostPrompt, buildPodcastPr
    buildAccountVariant } from "./prompts.js";
 import { addDays, nextWeekdayDateString, toScheduledDateTime, zonedDateString, zonedDateTimeString, zonedDateTimeToUtcDate } from "./date.js";
 import { loadRecentRssContext } from "./feedContext.js";
-import { fetchBlogRssItems } from "./blogRssFeed.js";
+import { fetchBlogRssItems, fetchBlogRssOriginItems } from "./blogRssFeed.js";
 import { fetchPodcastPromoEpisode } from "./podcastRssFeed.js";
 import { getLaneHistory, getWeeklyTopicLedger, recordLaneSchedule, getQuizHistory, recordQuizSchedule, claimScheduleSlot, resetScheduleSlotClaim, completeScheduleSlot,
    releaseScheduleSlot, clearScheduleSlotClaim, isRecentSpotlightPerson, getRecentSpotlightPeople, recordSpotlightPerson, hasRecentSocialSource, recordUsedSocialSource } from "./state.js";
@@ -1938,8 +1938,22 @@ export async function buildAndScheduleBlogRssDaily(options = {}) {
   const apiKey = resolveSchedulerApiKey(options);
   const dryRun = Boolean(options.dryRun);
 
-  const { url: feedUrl, items } = await fetchBlogRssItems({ cacheBustKey: `${publishDate}-${Date.now()}` });
-  const currentItems = items.filter((item) => blogRssItemMatchesPublishDate(item, publishDate));
+  let feed;
+  try { feed = await fetchBlogRssItems({ cacheBustKey: `${publishDate}-${Date.now()}` }); }
+  catch (error) {
+    feed = await fetchBlogRssOriginItems().catch(() => null);
+    if (!feed) throw error;
+  }
+  const feedUrl = feed.url;
+  let currentItems = feed.items.filter((item) => blogRssItemMatchesPublishDate(item, publishDate));
+  if (!currentItems.length) {
+    try {
+      const origin = await fetchBlogRssOriginItems();
+      if (origin) currentItems = origin.items.filter((item) => blogRssItemMatchesPublishDate(item, publishDate));
+    } catch (error) {
+      warn("zernio.blogRss.origin_unavailable", { publishDate, error: error.message });
+    }
+  }
   const article = currentItems.find((item) => !hasRecentSocialSource(item))
     || (options.force ? currentItems[0] : null);
 

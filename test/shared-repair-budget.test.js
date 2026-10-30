@@ -87,3 +87,40 @@ test("passing council seats are reused only with identical evidence and model po
     assert.equal(calls.length - failingCount, 14, "failed reviews are never cached as approvals");
   } finally { globalThis.fetch = oldFetch; }
 });
+
+test("all fourteen council seats recover schema routing errors independently of the draft budget", async () => {
+  process.env.OPENROUTER_API_KEY = "test-key";
+  process.env.AI_MODEL_FAST = "test/luna";
+  process.env.AI_MODEL_HIGH_QUALITY = "test/sonnet";
+  process.env.AI_MODEL_AUDIT = "test/sol";
+  const oldFetch = globalThis.fetch;
+  let compatibilityErrors = 0;
+  let completed = 0;
+  globalThis.fetch = async (_url, options) => {
+    const body = JSON.parse(options.body);
+    if (Object.hasOwn(body, "temperature")) {
+      compatibilityErrors += 1;
+      return { ok: false, status: 404, text: async () => "No endpoints found that can handle requested parameters" };
+    }
+    assert.deepEqual(body.reasoning, { effort: "none", exclude: true });
+    completed += 1;
+    return { ok: true, json: async () => ({ choices: [{ message: { content: JSON.stringify({
+      score: 95, blocking: false, verdict: "pass", issues: [], strengths: [], priorityFixes: [],
+    }) } }] }) };
+  };
+  try {
+    const { runNewsletterEditorialCouncil } = await import("../services/newsletter/engine/editorialCouncil.js");
+    await withTaskRepairBudget(async () => {
+      claimRepairAction("recoveries");
+      const result = await runNewsletterEditorialCouncil({ profile: { displayName: "Isolated recovery", brandVoice: "Clear" },
+        newsletter: { subject: "Independent transport allowances", bigThree: [], onRadar: [] },
+        lead: { title: "Evidence", link: "https://example.test/independent", summary: "Source evidence" },
+        stories: [], sessionId: "independent-recovery" });
+      assert.equal(result.ok, true);
+      assert.equal(result.attendance.complete, true);
+      assert.equal(currentTaskRepairBudget().snapshot().used.recoveries, 1);
+    }, { repairs: 0, recoveries: 1 });
+    assert.equal(completed, 14);
+    assert.equal(compatibilityErrors, 14);
+  } finally { globalThis.fetch = oldFetch; }
+});

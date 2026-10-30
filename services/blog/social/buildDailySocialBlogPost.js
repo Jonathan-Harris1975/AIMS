@@ -692,6 +692,9 @@ async function buildDailySocialBlogPostImpl({
     const existingPost = findExistingSocialPostForDate(existingManifest, window.dateId);
 
     if (existingPost && !force) {
+      // A prior build may have committed posts.json before its RSS write failed.
+      // Repair the handoff without regenerating or republishing the article.
+      const rss = dryRun ? null : await publishSocialBlogRssFeed({ manifest: existingManifest, prefix });
       const reason = `Daily social blog post already exists for ${window.dateId}. Pass force:true to rebuild it.`;
       info("blog.social.daily.build.skipped", {
         dateId: window.dateId,
@@ -707,6 +710,7 @@ async function buildDailySocialBlogPostImpl({
         skipped: true,
         reason,
         existing: existingPost,
+        rss,
         manifestKey,
       };
     }
@@ -1306,6 +1310,7 @@ async function buildDailySocialBlogPostImpl({
     const latestManifest = await loadExistingPostsManifest(OUT_BLOG_BUCKET_KEY, manifestKey);
     const existingAtCommit = findExistingSocialPostForDate(latestManifest, window.dateId);
     if (existingAtCommit && !force) {
+      const rss = await publishSocialBlogRssFeed({ manifest: latestManifest, prefix });
       if (publicationLease) {
         await completeDurableLease(publicationLease, {
           reason: "existing-post-observed-before-commit",
@@ -1320,6 +1325,7 @@ async function buildDailySocialBlogPostImpl({
         duplicatePrevented: true,
         reason: `Daily social blog post already exists for ${window.dateId}.`,
         existing: existingAtCommit,
+        rss,
         manifestKey,
       };
     }
