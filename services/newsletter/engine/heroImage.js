@@ -73,29 +73,41 @@ glowing networks, text, logos or unrelated scenery.`;
  * Generates the prompt and the image, uploads to the profile's configured
  * blog-images bucket under newsletter/{profileId}/{sessionId}.png.
  */
-export async function generateHeroImage({ profile, heroHeadline, leadStory = null, bigThree = [], sessionId }) {
-  const prompt = await buildHeroImagePrompt({ profile, heroHeadline, leadStory, bigThree, sessionId });
-
-  const result = await createBlogArtwork({
-    sessionId,
-    prompt,
-    keyPrefix: profile.storage.keyPrefix,
-    mode: "newsletter",
-  });
-
-  if (!result.ok || result.fallback || result.imageStatus === "deterministic-fallback") {
-    warn("newsletter.hero.generation_failed", { sessionId, profileId: profile.id, error: result.error });
-    return { ok: false, error: result.error || "Newsletter requires newly generated artwork; diagnostic fallback rejected.", prompt };
+export async function generateHeroImage({ profile, heroHeadline, leadStory = null, bigThree = [], sessionId }, {
+  buildPrompt = buildHeroImagePrompt,
+  createArtwork = createBlogArtwork,
+} = {}) {
+  const originalPrompt = await buildPrompt({ profile, heroHeadline, leadStory, bigThree, sessionId });
+  let prompt = originalPrompt;
+  let result;
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    try {
+      result = await createArtwork({
+        sessionId: attempt === 1 ? sessionId : `${sessionId}-artwork-repair`,
+        prompt, keyPrefix: profile.storage.keyPrefix, mode: "newsletter",
+      });
+    } catch (error) { result = { ok: false, error: error.message }; }
+    if (result?.ok && result.publicUrl && !result.fallback && result.imageStatus !== "deterministic-fallback") {
+      return { ok: true, prompt, imageUrl: result.publicUrl, key: result.key,
+        bucketKey: result.bucketKey, imageStatus: "generated" };
+    }
+    if (attempt === 1) {
+      const feedback = String(result?.error || result?.warning || "No usable generated artwork returned.").slice(0, 1400);
+      warn("newsletter.hero.corrective_retry", { sessionId, profileId: profile.id, error: feedback });
+      prompt = [
+        `Source-specific editorial photograph about ${leadStory?.title || heroHeadline}.`,
+        `Source evidence: ${leadStory?.summary || heroHeadline}.`,
+        `Original direction: ${originalPrompt}`,
+        "CORRECTIVE RENDER: simplify the scene to one clear physical subject and one source-supported action. Preserve the news topic and editorial photographic style.",
+        "Replace busy monitor or control-cabinet compositions. Do not show screens, control panels, documents, printed surfaces, " +
+        "labels, logos, readable text or pseudo-text. Keep hands out of frame and avoid complex reflections.",
+        `Previous QA defects to REMOVE, never words to draw: ${feedback}`,
+      ].join(" ");
+    }
   }
-
-  return {
-    ok: true,
-    prompt,
-    imageUrl: result.publicUrl,
-    key: result.key,
-    bucketKey: result.bucketKey,
-    imageStatus: result.fallback ? "deterministic-fallback" : "generated",
-  };
+  const error = result?.error || "Newsletter requires newly generated artwork; diagnostic fallback rejected.";
+  warn("newsletter.hero.generation_failed", { sessionId, profileId: profile.id, error });
+  return { ok: false, error, prompt };
 }
 
 export default { buildHeroImagePrompt, generateHeroImage };

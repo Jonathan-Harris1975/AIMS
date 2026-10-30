@@ -169,7 +169,7 @@ test("newsletter rejects diagnostic artwork and requires a usable generated imag
   const hero = await readFile(new URL("../services/newsletter/engine/heroImage.js", import.meta.url), "utf8");
   const build = await readFile(new URL("../services/newsletter/engine/buildNewsletter.js", import.meta.url), "utf8");
   assert.match(hero, /createBlogArtwork/);
-  assert.match(hero, /!result\.ok \|\| result\.fallback/);
+  assert.match(hero, /result\?\.ok.*result\.publicUrl.*!result\.fallback/);
   assert.match(hero, /diagnostic fallback rejected/);
   assert.doesNotMatch(hero, /NEWSLETTER_AI_EDGE_FALLBACK_IMAGE_URL/);
   assert.match(build, /if \(!heroImageResult\.ok\)/);

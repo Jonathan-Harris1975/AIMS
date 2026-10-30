@@ -124,3 +124,30 @@ test("all fourteen council seats recover schema routing errors independently of 
     assert.equal(compatibilityErrors, 14);
   } finally { globalThis.fetch = oldFetch; }
 });
+
+test("a malformed council seat fails over to another configured model instead of repeating unusable JSON", async () => {
+  process.env.OPENROUTER_API_KEY = "test-key";
+  process.env.AI_MODEL_FAST = "test/luna";
+  process.env.AI_MODEL_HIGH_QUALITY = "test/sonnet";
+  process.env.AI_MODEL_AUDIT = "test/sol";
+  const oldFetch = globalThis.fetch;
+  const factCheckModels = [];
+  globalThis.fetch = async (_url, options) => {
+    const body = JSON.parse(options.body);
+    const factCheck = body.messages[0].content.includes("seat 2,");
+    if (factCheck) factCheckModels.push(body.model);
+    const content = factCheck && body.model === "test/sonnet" ? '{"score":95,"issues":[' : JSON.stringify({
+      score: 95, blocking: false, verdict: "pass", issues: [], strengths: [], priorityFixes: [],
+    });
+    return { ok: true, json: async () => ({ choices: [{ message: { content } }] }) };
+  };
+  try {
+    const { runNewsletterEditorialCouncil } = await import("../services/newsletter/engine/editorialCouncil.js");
+    const result = await runNewsletterEditorialCouncil({ profile: { displayName: "Failover test", brandVoice: "Clear" },
+      newsletter: { subject: "Malformed primary seat transport", bigThree: [], onRadar: [] },
+      lead: { title: "Evidence", link: "https://example.test/failover", summary: "Original source evidence" }, stories: [], sessionId: "council-failover" });
+    assert.equal(result.ok, true);
+    assert.equal(result.attendance.complete, true);
+    assert.deepEqual(factCheckModels, ["test/sonnet", "test/sol"]);
+  } finally { globalThis.fetch = oldFetch; }
+});
