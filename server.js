@@ -16,7 +16,7 @@ import { requireAimsBearerAuth } from "./services/shared/middleware/suiteAuth.js
 import { getCommsHubReadiness } from "./services/comms-hub/config.js";
 import { describeCommsHubRuntimeReadiness, getCommsHubRuntimeReadiness, startCommsHubRuntime, stopCommsHubRuntime } from "./services/comms-hub/runtime.js";
 import { startPageCountSyncWorker, stopPageCountSyncWorker } from "./services/kdp/pageCountSync.js";
-import { restoreAimsModelGovernance } from "./services/shared/utils/modelGovernance.js";
+import { restorePinnedModelDefaults } from "./services/shared/utils/pinnedModelDefaults.js";
 import { probeCriticalDependencies } from "./services/shared/readiness/dependencyProbes.js";
 
 const require = createRequire(import.meta.url);
@@ -513,8 +513,8 @@ export function startServer(port = PORT, host = "0.0.0.0") {
     debug("server.trustProxy", { trustProxy });
   });
 
-  void restoreAimsModelGovernance()
-    .catch((err) => error("model-governance.aims.startup-restore", { error: err?.message || String(err) }));
+  void restorePinnedModelDefaults()
+    .catch((err) => error("model-defaults.startup-restore", { error: err?.message || String(err) }));
   void startCommsHubRuntime();
   startPageCountSyncWorker();
   startOpenRouterSpendWorker();

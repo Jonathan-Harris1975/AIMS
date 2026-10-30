@@ -13,8 +13,6 @@ Owns AIMS weekday morning task sequences, the Friday podcast window and operatio
 - `GET /ops/preflight` — readiness checks for a target service/path.
 - `GET /ops/warmup` — warmup-stage readiness.
 - `GET /ops/excellence` — operational-excellence snapshot.
-- `GET /ops/model-governance/status` — active AIMS model assignments and advisory findings.
-- `POST /ops/model-governance/apply` — persist an approved model council decision for AIMS.
 
 ## Behaviour
 
@@ -22,7 +20,7 @@ Morning task spacing uses `AIMS_OPERATION_AM_DELAY_MS`. The Friday podcast readi
 
 Blotato and the daily Zernio lane run independently of the RSS rewrite task. Tasks remain sequential to control load, but a content failure in one lane no longer suppresses either social provider before its API call.
 
-Model spend governance is advisory. The apply route records council evidence, expert-model justification and retirement notices without introducing a monetary request cut-off. The future monthly council schedule belongs in HIVE, not in this service.
+Model spending reports are advisory. Configured model defaults and existing fallback routes remain active; no automatic model Council or cross-service assignment receiver is installed.
 
 ## Implementation
 
