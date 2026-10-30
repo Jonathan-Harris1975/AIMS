@@ -11,6 +11,7 @@ import {
   getOperationWindowReceipt,
   operationTaskSucceeded,
   operationWindowNeedsRecovery,
+  operationWindowPollStatus,
   OPERATION_RECOVERY_REVISION,
   PODCAST_RECOVERY_REVISION,
   NEWSLETTER_RECOVERY_REVISION,
@@ -969,13 +970,20 @@ router.get("/jobs/:id", async (req, res, next) => {
     // first prevents an instance-local terminal/stale cache entry from hiding a
     // newer recovery attempt from an external scheduler poll.
     const durableJob = await getOperationWindowReceipt(id);
-    if (durableJob) {
-      operationJobs.set(id, durableJob);
-      return res.json({ ok: true, service: "ops", job: durableJob });
+    if (durableJob) operationJobs.set(id, durableJob);
+    const receipt = durableJob || publicJob(operationJobs.get(id));
+    if (receipt) {
+      const job = operationWindowPollStatus(receipt, {
+        staleAfterMs: integerEnv("AIMS_OPERATION_STALE_AFTER_MS", 30 * 60_000, { min: 5 * 60_000, max: 24 * 60 * 60_000 }),
+        allowRecovery: booleanEnv("AIMS_OPERATION_AUTO_RECOVERY_ENABLED", true),
+      });
+      if (job.interrupted) warn("ops.window.interrupted", {
+        jobId: id, executionId: job.executionId, lastHeartbeatAt: job.updatedAt || job.startedAt,
+        currentTask: job.currentTask, retryable: job.retryable,
+      });
+      res.set("Cache-Control", "no-store");
+      return res.json({ ok: true, service: "ops", job });
     }
-
-    const localJob = operationJobs.get(id);
-    if (localJob) return res.json({ ok: true, service: "ops", job: publicJob(localJob) });
     return res.status(404).json({ ok: false, error: "operation-job-not-found" });
   } catch (error) { next(error); }
 });
