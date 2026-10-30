@@ -6,6 +6,7 @@ import { getPublicJobFresh, beginJob, completeJob, failJob } from "../shared/uti
 import { validateBody, podcastRunBodySchema } from "../shared/utils/requestSchemas.js";
 import { info, error } from "../../logger.js";
 import { getPodcastReadiness } from "./readiness.js";
+import { podcastPipelineSucceeded } from "./pipelineOutcome.js";
 
 const router = express.Router();
 
@@ -86,6 +87,13 @@ router.post("/run", requestDedupe("podcast:run"), async (req, res) => {
       targetMinutes: payload.targetMinutes || 60,
     })
       .then((result) => {
+        if (!podcastPipelineSucceeded(result)) {
+          const failure = new Error(result?.error || result?.reason || "Podcast pipeline did not complete publication");
+          failure.code = result?.code || "PODCAST_PIPELINE_INCOMPLETE";
+          failJob("podcast", sessionId, failure, { eventId, result });
+          error("api.podcast.incomplete", { sessionId, eventId, code: failure.code });
+          return;
+        }
         completeJob("podcast", sessionId, { eventId, result });
         info("api.podcast.complete", { sessionId, eventId });
       })
