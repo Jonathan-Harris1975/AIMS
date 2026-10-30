@@ -3,10 +3,6 @@ import { managementKey } from "./openrouterSpend.js";
 import crypto from "node:crypto";
 import express from "express";
 import { getOperationalExcellenceSnapshot } from "../shared/utils/operationalExcellence.js";
-import {
-  applyAimsModelGovernance,
-  getAimsModelGovernanceStatus,
-} from "../shared/utils/modelGovernance.js";
 import { assessAsyncTaskOutcome, extractAsyncStatusUrl, waitForAsyncOperation } from "./asyncOperation.js";
 import { getWebsiteAuditReadiness } from "../../audits/utils/websiteAuditReadiness.js";
 import {
@@ -982,51 +978,6 @@ router.get("/jobs/:id", async (req, res, next) => {
     if (localJob) return res.json({ ok: true, service: "ops", job: publicJob(localJob) });
     return res.status(404).json({ ok: false, error: "operation-job-not-found" });
   } catch (error) { next(error); }
-});
-
-router.post("/model-governance/apply", async (req, res, next) => {
-  try {
-    const registry = req.body?.registry;
-    const assignments = req.body?.assignments;
-    const sourceRunId = normalise(req.body?.sourceRunId);
-    const hasRegistry = registry && typeof registry === "object" && !Array.isArray(registry);
-    const hasAssignments = assignments && typeof assignments === "object" && !Array.isArray(assignments);
-
-    if (!hasRegistry && !hasAssignments) {
-      return res.status(400).json({
-        ok: false,
-        error: "registry or assignments must be provided as an object",
-      });
-    }
-    if (!sourceRunId) {
-      return res.status(400).json({
-        ok: false,
-        error: "sourceRunId is required",
-      });
-    }
-
-    const result = await applyAimsModelGovernance({
-      registry: hasRegistry ? registry : {},
-      assignments: hasAssignments ? assignments : {},
-      decisions: req.body?.decisions,
-      retiringModels: req.body?.retiringModels,
-      sourceRunId,
-      councilDate: req.body?.councilDate,
-      catalogueCheckedAt: req.body?.catalogueCheckedAt,
-      nextReviewDueAt: req.body?.nextReviewDueAt,
-    });
-    return res.status(200).json(result);
-  } catch (error) {
-    warn("model-governance.aims.apply-failed", {
-      sourceRunId: normalise(req.body?.sourceRunId) || null,
-      error: error?.message || String(error),
-    });
-    return next(error);
-  }
-});
-
-router.get("/model-governance/status", (_req, res) => {
-  res.status(200).json(getAimsModelGovernanceStatus());
 });
 
 router.get("/health", sendStage("health"));

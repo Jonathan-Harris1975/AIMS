@@ -10,7 +10,6 @@ import { safeRouteLog } from "../../../logger.js";
 import { info, error as logError } from "../../../logger.js";
 import { recordProviderOutcome } from "./operationalExcellence.js";
 import { compressForOpenRouter } from "./headroom.js";
-import { getAimsModelSpendContext } from "./modelGovernance.js";
 
 function getOpenRouterBaseUrl() {
   return process.env.OPENROUTER_BASE_URL || process.env.OPENROUTER_API_BASE || "https://openrouter.ai/api/v1";
@@ -238,18 +237,8 @@ function shouldLogUsage() {
   return parseBoolean(process.env.AI_USAGE_LOG_ENABLED, true) !== false;
 }
 
-function getSpendLogFields({ model, assignmentEnv, providerPosition }) {
-  const context = getAimsModelSpendContext({ modelId: model, assignmentEnv });
-  return {
-    providerPosition,
-    fallbackUsed: providerPosition > 1,
-    spendControlMode: context.spendControlMode,
-    spendRuntimeBlocking: context.runtimeRequestBlocking,
-    modelCostTier: context.costTier,
-    modelJustificationStatus: context.justificationStatus,
-    modelJustificationId: context.justificationId,
-    modelGovernanceSourceRunId: context.sourceRunId,
-  };
+function getSpendLogFields({ providerPosition }) {
+  return { providerPosition, fallbackUsed: providerPosition > 1, spendControlMode: "advisory", spendRuntimeBlocking: false };
 }
 
 function parseRetryAfterMs(value) {

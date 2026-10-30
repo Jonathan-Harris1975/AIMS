@@ -108,7 +108,7 @@ AIMS orchestrates the final website and content audit artefacts and can hand exa
 
 ## Model governance
 
-AIMS uses advisory model-spend controls: model choice, expert justification, reported cost and fallback position are recorded, but requests are never stopped by a monetary threshold. The authenticated `/ops/model-governance/apply` receiver can accept future monthly HIVE AI Council assignments, and `/ops/model-governance/status` exposes the active AIMS record. HIVE scheduling and cross-repository coordination are intentionally outside this repository. See [Model governance](docs/MODEL_GOVERNANCE.md).
+AIMS uses configured model defaults and bounded provider fallback routes. Usage and OpenRouter cost reporting remain active. Automatic model Council promotion and downstream apply endpoints are retired; the read-only defaults loader preserves the last saved production assignments. See [Model defaults](docs/MODEL_GOVERNANCE.md).
 
 ## Development and verification
 
