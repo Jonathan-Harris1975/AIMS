@@ -89,15 +89,30 @@ export function operationWindowPollStatus(receipt, {
   staleAfterMs = 0,
   nowMs = Date.now(),
   allowRecovery = true,
+  maxAttempts = 3,
+  recoveryCooldownMs = 60_000,
+  recoveryRevision = "",
 } = {}) {
-  if (!receipt || !ACTIVE_STATUSES.has(receipt.status)
-      || !operationWindowNeedsRecovery(receipt, { staleAfterMs, nowMs })) return receipt;
+  if (!receipt) return receipt;
+  const active = ACTIVE_STATUSES.has(receipt.status);
+  const needsRecovery = operationWindowNeedsRecovery(receipt, { staleAfterMs, nowMs });
+  if (!needsRecovery || (!active && !RECOVERABLE_STATUSES.has(receipt.status))) return receipt;
+  const decision = evaluateOperationWindowClaim(receipt, {
+    staleAfterMs, nowMs, allowRecovery, maxAttempts, recoveryCooldownMs, recoveryRevision,
+  });
+  if (!active) {
+    if (!decision.claimable) return receipt;
+    return { ...receipt, recoveryAvailable: true, retryable: true,
+      availableRecoveryRevision: recoveryRevision || null };
+  }
   return {
     ...receipt,
     status: "failed",
     previousStatus: receipt.status,
     terminal: true,
     retryable: Boolean(allowRecovery),
+    recoveryAvailable: decision.claimable,
+    availableRecoveryRevision: decision.claimable ? recoveryRevision || null : null,
     interrupted: true,
     reason: "operation-heartbeat-expired",
     error: "Operation heartbeat expired; the execution was interrupted and must be reclaimed before work can resume.",

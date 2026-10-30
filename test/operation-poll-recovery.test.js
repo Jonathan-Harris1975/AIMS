@@ -35,7 +35,7 @@ test("fresh heartbeats, terminal runs and disabled timeout detection remain unto
   for (const receipt of [
     { ...interrupted(), updatedAt: "2026-10-30T11:57:30Z" },
     { ...interrupted(), status: "completed", failures: 0 },
-    { ...interrupted(), status: "completed-with-failures" },
+
     { ...interrupted(), updatedAt: "invalid", startedAt: "invalid" },
   ]) assert.equal(operationWindowPollStatus(receipt, options), receipt);
   const receipt = interrupted();
@@ -73,4 +73,20 @@ test("the live status route exposes interruption and leaves the receipt availabl
     state.writeJsonState("operation-window-state.json", previous);
     await state.flushStateWrites({ throwOnError: true });
   }
+});
+
+
+test("a settled failure advertises a deployment recovery only when the durable claim permits it", () => {
+  const receipt = { ...interrupted(), status: "completed-with-failures", terminal: true,
+    finishedAt: "2026-10-30T11:00:00Z" };
+  const available = operationWindowPollStatus(receipt, { ...options, recoveryRevision: NEWSLETTER_RECOVERY_REVISION });
+  assert.equal(available.status, "completed-with-failures");
+  assert.equal(available.recoveryAvailable, true);
+  assert.equal(available.retryable, true);
+  assert.equal(operationWindowPollStatus({ ...receipt, recoveryRevision: NEWSLETTER_RECOVERY_REVISION },
+    { ...options, recoveryRevision: NEWSLETTER_RECOVERY_REVISION }).recoveryAvailable, undefined);
+  assert.equal(operationWindowPollStatus(receipt, { ...options, allowRecovery: false,
+    recoveryRevision: NEWSLETTER_RECOVERY_REVISION }).recoveryAvailable, undefined);
+  assert.equal(operationWindowPollStatus({ ...receipt, finishedAt: "2026-10-30T11:57:45Z" },
+    { ...options, recoveryRevision: NEWSLETTER_RECOVERY_REVISION }).recoveryAvailable, undefined);
 });

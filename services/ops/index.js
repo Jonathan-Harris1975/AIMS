@@ -976,6 +976,12 @@ router.get("/jobs/:id", async (req, res, next) => {
       const job = operationWindowPollStatus(receipt, {
         staleAfterMs: integerEnv("AIMS_OPERATION_STALE_AFTER_MS", 30 * 60_000, { min: 5 * 60_000, max: 24 * 60 * 60_000 }),
         allowRecovery: booleanEnv("AIMS_OPERATION_AUTO_RECOVERY_ENABLED", true),
+        maxAttempts: integerEnv("AIMS_OPERATION_MAX_ATTEMPTS", 3, { min: 1, max: 10 }),
+        recoveryCooldownMs: integerEnv("AIMS_OPERATION_RECOVERY_COOLDOWN_MS", 60_000, { max: 24 * 60 * 60_000 }),
+        recoveryRevision: receipt.window === "friday-pm"
+          ? PODCAST_RECOVERY_REVISION
+          : (OPERATION_WINDOWS[receipt.window] || []).some(([name]) => name === "newsletter-generate")
+            ? NEWSLETTER_RECOVERY_REVISION : OPERATION_RECOVERY_REVISION,
       });
       if (job.interrupted) warn("ops.window.interrupted", {
         jobId: id, executionId: job.executionId, lastHeartbeatAt: job.updatedAt || job.startedAt,
