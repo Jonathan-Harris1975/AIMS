@@ -68,7 +68,7 @@ export function sectionValidationFailures(text, section, finishReason, previous 
   if (words < section.minimumWords) failures.push("below-minimum");
   if (words > Math.ceil(section.targetWords * 1.1)) failures.push("above-maximum");
   if (["length", "max_tokens", "content_filter"].includes(finishReason)) failures.push("truncated-or-filtered");
-  if (!/[.!?]["'”’]?\\s*$/.test(text)) failures.push("incomplete-ending");
+  if (!/[.!?]["'”’]?\s*$/.test(text)) failures.push("incomplete-ending");
   if (duplicatesPriorParagraphs(text, previous)) failures.push("repeated-paragraph");
   return failures;
 }
