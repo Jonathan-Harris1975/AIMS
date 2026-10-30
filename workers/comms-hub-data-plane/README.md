@@ -28,7 +28,7 @@ The 3 October 2026 production build log passed `npm run build` but failed at the
 npx --yes wrangler@4.127.1 versions upload --config workers/comms-hub-data-plane/wrangler.toml
 ```
 
-Set the Workers Builds Node version to `24.21.0` and npm to `12.2.0`. The supplied log used Node `24.18.0`, which caused an engine warning; this warning was separate from the missing entry-point failure. Do not create a second root configuration or deploy the Express application as the Worker.
+Set the Workers Builds Node version to `24.22.2` and npm to `12.2.1`. The supplied log used Node `24.18.0`, which caused an engine warning; this warning was separate from the missing entry-point failure. Do not create a second root configuration or deploy the Express application as the Worker.
 
 `versions upload` creates a version without promoting it to active production traffic. The existing Koyeb deployment watcher remains the production deployment path. Verify the upload result and the exact-SHA production watcher separately before calling the release ready. These dashboard settings have not been changed by this source repair.
 

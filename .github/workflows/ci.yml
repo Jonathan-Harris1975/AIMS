@@ -25,7 +25,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 24.22.1
+          node-version: 24.22.2
           cache: npm
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
@@ -35,11 +35,11 @@ jobs:
       - name: Reject unapproved repository duplication and hygiene regressions
         run: python3 scripts/check_repository_hygiene.py
       - name: Install pinned npm toolchain
-        run: npm install --global npm@12.2.0 --no-audit --no-fund
+        run: npm install --global npm@12.2.1 --no-audit --no-fund
       - name: Verify pinned Node/npm toolchain
         run: |
-          test "$(node --version)" = "v24.21.0"
-          test "$(npm --version)" = "12.2.0"
+          test "$(node --version)" = "v24.22.2"
+          test "$(npm --version)" = "12.2.1"
       - run: npm ci
       - name: Reject legacy envBootstrap imports
         run: |
