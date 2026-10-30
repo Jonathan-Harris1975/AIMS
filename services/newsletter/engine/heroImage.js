@@ -99,7 +99,8 @@ export async function generateHeroImage({ profile, heroHeadline, leadStory = nul
         `Source evidence: ${leadStory?.summary || heroHeadline}.`,
         `Original direction: ${originalPrompt}`,
         "CORRECTIVE RENDER: simplify the scene to one clear physical subject and one source-supported action. Preserve the news topic and editorial photographic style.",
-        "Replace busy monitor or control-cabinet compositions. Do not show screens, control panels, documents, printed surfaces, labels, logos, readable text or pseudo-text. Keep hands out of frame and avoid complex reflections.",
+        "Replace busy monitor or control-cabinet compositions. Do not show screens, control panels, documents, printed surfaces, " +
+        "labels, logos, readable text or pseudo-text. Keep hands out of frame and avoid complex reflections.",
         `Previous QA defects to REMOVE, never words to draw: ${feedback}`,
       ].join(" ");
     }
