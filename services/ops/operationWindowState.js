@@ -14,7 +14,7 @@ export const OPERATION_RECOVERY_REVISION = "social-provider-handoff-2026-09-11-v
 export const PODCAST_RECOVERY_REVISION = "podcast-section-recovery-2026-10-02-v1";
 // One deployment-scoped recovery for a failed newsletter window after the
 // editorial-authority gate repair. Successful sibling tasks remain reusable.
-export const NEWSLETTER_RECOVERY_REVISION = "newsletter-structured-recovery-2026-10-30-v1";
+export const NEWSLETTER_RECOVERY_REVISION = "newsletter-poll-recovery-2026-10-30-v2";
 
 function normalise(value = "") {
   return String(value || "").trim();
@@ -78,6 +78,29 @@ export function operationWindowNeedsRecovery(receipt = {}, {
   if (!staleMs) return false;
   const lastHeartbeatMs = Date.parse(receipt.updatedAt || receipt.startedAt || "");
   return Number.isFinite(lastHeartbeatMs) && lastHeartbeatMs + staleMs <= Number(nowMs);
+}
+
+// Status reads must release a scheduler waiting on work whose heartbeat died
+// during a deployment. Project a retryable failure without changing the durable
+// receipt: the next normal POST still owns the claim, budget and deduplication.
+export function operationWindowPollStatus(receipt, {
+  staleAfterMs = 0,
+  nowMs = Date.now(),
+  allowRecovery = true,
+} = {}) {
+  if (!receipt || !ACTIVE_STATUSES.has(receipt.status)
+      || !operationWindowNeedsRecovery(receipt, { staleAfterMs, nowMs })) return receipt;
+  return {
+    ...receipt,
+    status: "failed",
+    previousStatus: receipt.status,
+    terminal: true,
+    retryable: Boolean(allowRecovery),
+    interrupted: true,
+    reason: "operation-heartbeat-expired",
+    error: "Operation heartbeat expired; the execution was interrupted and must be reclaimed before work can resume.",
+    failures: Math.max(1, Number(receipt.failures || 0)),
+  };
 }
 
 export function evaluateOperationWindowClaim(existing, {
