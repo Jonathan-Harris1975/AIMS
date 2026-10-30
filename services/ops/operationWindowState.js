@@ -39,6 +39,10 @@ function publicReceipt(receipt) {
 }
 
 export function operationTaskSucceeded(result = {}) {
+  // Older builds called a source-empty or still-owned blog build a successful
+  // skip. It cannot satisfy today's handoff or be reused as completed work.
+  const payload = result?.result;
+  if (result?.name === "blog-social" && payload?.skipped && !payload?.existing) return false;
   return Boolean(
     result?.ok
     && result?.result?.ok !== false

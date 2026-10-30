@@ -89,12 +89,12 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `BLOG_RSS_TITLE` | No | services/blog/rss/publishBlogRssFeed.js:146 |
 | `BLOG_SOCIAL_BUILD_COMPLETED_TTL_MS` | No | services/blog/social/buildDailySocialBlogPost.js:57 |
 | `BLOG_SOCIAL_BUILD_PENDING_TTL_MS` | No | services/blog/social/buildDailySocialBlogPost.js:56 |
-| `BLOG_SOCIAL_PREFIX` | Yes | services/blog/routes/social.js:41<br>services/blog/social/buildDailySocialBlogPost.js:660<br>services/blog/social/publishSocialBlogRssFeed.js:69<br>services/zernio/utils/blogRssFeed.js:124 |
-| `BLOG_SOCIAL_PUBLIC_BASE_URL` | Yes | services/blog/social/buildDailySocialBlogPost.js:210<br>services/blog/social/publishSocialBlogRssFeed.js:74 |
-| `BLOG_SOCIAL_PUBLIC_POSTS_BASE_URL` | Yes | services/blog/social/buildDailySocialBlogPost.js:214<br>services/blog/social/publishSocialBlogRssFeed.js:83 |
-| `BLOG_SOCIAL_QA_ENABLED` | Yes | services/blog/social/buildDailySocialBlogPost.js:347 |
+| `BLOG_SOCIAL_PREFIX` | Yes | services/blog/routes/social.js:41<br>services/blog/social/buildDailySocialBlogPost.js:666<br>services/blog/social/publishSocialBlogRssFeed.js:69<br>services/zernio/utils/blogRssFeed.js:124 |
+| `BLOG_SOCIAL_PUBLIC_BASE_URL` | Yes | services/blog/social/buildDailySocialBlogPost.js:216<br>services/blog/social/publishSocialBlogRssFeed.js:74 |
+| `BLOG_SOCIAL_PUBLIC_POSTS_BASE_URL` | Yes | services/blog/social/buildDailySocialBlogPost.js:220<br>services/blog/social/publishSocialBlogRssFeed.js:83 |
+| `BLOG_SOCIAL_QA_ENABLED` | Yes | services/blog/social/buildDailySocialBlogPost.js:353 |
 | `BLOG_SOCIAL_RSS_DESCRIPTION` | Yes | services/blog/social/publishSocialBlogRssFeed.js:358 |
-| `BLOG_SOCIAL_RSS_OBJECT_KEY` | Yes | services/blog/social/buildDailySocialBlogPost.js:906<br>services/blog/social/buildDailySocialBlogPost.js:1036<br>services/blog/social/buildDailySocialBlogPost.js:1216<br>services/blog/social/publishSocialBlogRssFeed.js:91 |
+| `BLOG_SOCIAL_RSS_OBJECT_KEY` | Yes | services/blog/social/buildDailySocialBlogPost.js:920<br>services/blog/social/buildDailySocialBlogPost.js:1050<br>services/blog/social/buildDailySocialBlogPost.js:1230<br>services/blog/social/publishSocialBlogRssFeed.js:91 |
 | `BLOG_SOCIAL_RSS_TITLE` | Yes | services/blog/social/publishSocialBlogRssFeed.js:357 |
 | `BLOG_WEEKLY_JSON_RESPONSE_FORMAT` | No | services/blog/weekly/buildWeeklyBlogPost.js:359<br>services/blog/weekly/buildWeeklyBlogPost.js:377<br>services/blog/weekly/buildWeeklyBlogPost.js:418 |
 | `BLOG_WEEKLY_QA_ENABLED` | No | services/blog/weekly/buildWeeklyBlogPost.js:272 |
@@ -207,7 +207,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `COMMS_HUB_CONTENT_AUTOMATION_BLOG_ENABLED` | Yes | services/comms-hub/routes/index.js:140 |
 | `COMMS_HUB_CONTENT_AUTOMATION_BLOTATO_VIDEO_BRIEF_LIMIT` | Yes | services/blotato/utils/autoPublishService.js:2550 |
 | `COMMS_HUB_CONTENT_AUTOMATION_BRIEF_LEASE_MS` | Yes | services/comms-hub/contentAutomationQueueCore.js:325 |
-| `COMMS_HUB_CONTENT_AUTOMATION_BRIEF_LIMIT` | Yes | services/blog/social/buildDailySocialBlogPost.js:674<br>services/blog/weekly/buildWeeklyBlogPost.js:501<br>services/podcast/runPodcastPipeline.js:141 |
+| `COMMS_HUB_CONTENT_AUTOMATION_BRIEF_LIMIT` | Yes | services/blog/social/buildDailySocialBlogPost.js:680<br>services/blog/weekly/buildWeeklyBlogPost.js:501<br>services/podcast/runPodcastPipeline.js:141 |
 | `COMMS_HUB_CONTENT_AUTOMATION_BRIEF_MAX_AGE_HOURS` | Yes | services/comms-hub/contentAutomationQueueCore.js:328 |
 | `COMMS_HUB_CONTENT_AUTOMATION_CONTEXT_MAX_CHARS` | Yes | services/comms-hub/contentAutomationQueueCore.js:126 |
 | `COMMS_HUB_CONTENT_AUTOMATION_ENABLED` | Yes | services/comms-hub/routes/index.js:138 |
@@ -456,8 +456,8 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `WEBSITE_AUDIT_COUNCIL_TIMEOUT_MS` | Yes | audits/utils/websiteAuditCouncil.js:904 |
 | `WEBSITE_AUDIT_FINALISATION_STALE_MS` | Yes | audits/utils/websiteAuditPipeline.js:43 |
 | `WEBSITE_AUDIT_RUN_REUSE_ACTIVE_MS` | Yes | audits/utils/websiteAuditPipeline.js:38 |
-| `WEBSITE_REBUILD_HOOK` | Yes | scripts/backfill-blog-main-site-links.js:20<br>services/blog/social/buildDailySocialBlogPost.js:237<br>services/blog/weekly/buildWeeklyBlogPost.js:220<br>services/podcast/runPodcastPipeline.js:73 |
-| `WEBSITE_REBUILD_HOOK_FALLBACK` | Yes | scripts/backfill-blog-main-site-links.js:21<br>services/blog/social/buildDailySocialBlogPost.js:238<br>services/blog/weekly/buildWeeklyBlogPost.js:221<br>services/podcast/runPodcastPipeline.js:74 |
+| `WEBSITE_REBUILD_HOOK` | Yes | scripts/backfill-blog-main-site-links.js:20<br>services/blog/social/buildDailySocialBlogPost.js:243<br>services/blog/weekly/buildWeeklyBlogPost.js:220<br>services/podcast/runPodcastPipeline.js:73 |
+| `WEBSITE_REBUILD_HOOK_FALLBACK` | Yes | scripts/backfill-blog-main-site-links.js:21<br>services/blog/social/buildDailySocialBlogPost.js:244<br>services/blog/weekly/buildWeeklyBlogPost.js:221<br>services/podcast/runPodcastPipeline.js:74 |
 | `X` | No | config/thresholds.js:6<br>config/thresholds.js:16 |
 | `ZERNIO_ACCOUNT_ID` | Yes | services/zernio/utils/config.js:64 |
 | `ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK` | Yes | services/zernio/utils/socialScheduler.js:1779<br>services/zernio/utils/socialScheduler.js:2699<br>services/zernio/utils/socialScheduler.js:3158<br>services/zernio/utils/socialScheduler.js:3567 |
