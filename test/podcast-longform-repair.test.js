@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { prepareArticleSources, retrieveArticle, deduplicateArticles, htmlToArticleText, isPublicAddress } from "../services/script/utils/articleSources.js";
-import { generateMainLongform, buildSectionPlan } from "../services/script/utils/mainChunker.js";
+import { generateMainLongform, buildSectionPlan, sectionValidationFailures } from "../services/script/utils/mainChunker.js";
 import { countWords } from "../services/script/utils/wordBudget.js";
 import { parseFeedText, filterAndScoreFeedItems } from "../services/script/utils/fetchFeeds.js";
 import { validateTranscriptStructure } from "../services/script/utils/scriptValidation.js";
@@ -113,6 +113,22 @@ test("bounded repairs persist exhausted attempts across retries", async () => {
   assert.equal(calls, 3);
   await assert.rejects(generateMainLongform(meta, articles(), seconds, dependencies), { code: "PODCAST_SECTION_EXHAUSTED" });
   assert.equal(calls, 3);
+});
+
+test("section validation identifies excess length independently of minimum", () => {
+  const section = { minimumWords: 839, targetWords: 892 };
+  assert.deepEqual(sectionValidationFailures(prose(985), section, "stop"), ["above-maximum"]);
+});
+
+test("revision-scoped recovery permits a terminal podcast 422 only once", () => {
+  const receipt = { status: "completed-with-failures", attempt: 3,
+    recoveryRevision: "previous", finishedAt: new Date(0).toISOString(),
+    results: [{ name: "podcast", ok: false, retryable: false, reason: "PODCAST_SECTION_EXHAUSTED" }] };
+  const opts = { allowRecovery: true, maxAttempts: 3, recoveryRevision: "new-repair", nowMs: Date.now() };
+  const claim = evaluateOperationWindowClaim(receipt, opts);
+  assert.equal(claim.claimable, true);
+  assert.equal(claim.attempt, 4);
+  assert.equal(evaluateOperationWindowClaim({ ...receipt, recoveryRevision: "new-repair" }, opts).claimable, false);
 });
 
 test("1133 words still fail final duration validation", () => {
