@@ -11,7 +11,7 @@ const ACTIVE_STATUSES = new Set(["accepted", "running"]);
 // that deployment one recovery attempt; the revision is persisted with the
 // new receipt, so normal scheduler polling cannot turn it into a retry loop.
 export const OPERATION_RECOVERY_REVISION = "social-provider-handoff-2026-09-11-v1";
-export const PODCAST_RECOVERY_REVISION = "podcast-publication-outcome-2026-10-30-v1";
+export const PODCAST_RECOVERY_REVISION = "podcast-section-validation-2026-10-30-v2";
 // One deployment-scoped recovery for a failed newsletter window after the
 // editorial-authority gate repair. Successful sibling tasks remain reusable.
 export const NEWSLETTER_RECOVERY_REVISION = "newsletter-async-recovery-2026-10-30-v3";
@@ -143,7 +143,14 @@ export function evaluateOperationWindowClaim(existing, {
     };
   }
 
-  if (!operationWindowNeedsRecovery(existing, { staleAfterMs, nowMs })) {
+  const revision = normalise(recoveryRevision);
+  const revisionChanged = Boolean(revision && revision !== normalise(existing.recoveryRevision));
+  const failedPodcast = (existing.results || []).some((result) => result?.name === "podcast" && result?.ok === false);
+  // A newly deployed, explicit podcast repair may recover a terminal 422 once;
+  // the receipt records the revision so repeated scheduler calls cannot loop.
+  const podcastRevisionRecovery = allowRecovery && revisionChanged && failedPodcast
+    && RECOVERABLE_STATUSES.has(existing.status);
+  if (!podcastRevisionRecovery && !operationWindowNeedsRecovery(existing, { staleAfterMs, nowMs })) {
     return {
       claimable: false,
       reason: TERMINAL_STATUSES.has(existing.status)
