@@ -1,4 +1,5 @@
-import { collectOpenRouterDailySpend, londonDate, shiftDate, managementKey } from "./openrouterSpend.js";
+import { collectOpenRouterDailySpend, londonDate, shiftDate, managementKey, convertSpendToGbp } from "./openrouterSpend.js";
+import { fetchSpendFx } from "./spendFx.js";
 import { info, warn } from "../../logger.js";
 
 const prefix = "reports/openrouter-daily";
@@ -25,7 +26,7 @@ export async function readOpenRouterSpendReport(date, { read = readPrivate } = {
 }
 
 export async function refreshOpenRouterSpendReports({ now = new Date(), lookback = 2 } = {}, {
-  collect = collectOpenRouterDailySpend, store = storePrivate,
+  collect = collectOpenRouterDailySpend, store = storePrivate, fetchFx = fetchSpendFx,
 } = {}) {
   if (!Number.isInteger(lookback) || lookback < 1 || lookback > 7) throw new Error("Spend lookback must be 1-7 days");
   const dates = Array.from({ length: lookback }, (_, index) => shiftDate(londonDate(now), index - lookback));
@@ -33,6 +34,13 @@ export async function refreshOpenRouterSpendReports({ now = new Date(), lookback
   for (const date of dates) {
     const report = await collect({ date, now });
     if (!report.ok) return report;
+    try {
+      report.gbp = convertSpendToGbp(report.recordedSpendUsd, await fetchFx(date));
+    } catch {
+      // FX failure must never discard verified provider USD evidence. Retry next tick.
+      report.gbp = null;
+      warn("openrouter.spend.fx_unavailable", { date });
+    }
     await store(`${prefix}/${date}.json`, report);
     reports.push(report);
   }
@@ -51,10 +59,10 @@ export async function runOpenRouterSpendTick({ now = new Date(), env = process.e
   if (hour < 7) return { ok: true, skipped: "before-report-window" };
   const latest = await read(`${prefix}/latest.json`);
   const expected = shiftDate(londonDate(now), -1);
-  if (latest?.ok && latest.period?.date === expected && londonDate(new Date(latest.collectedAt)) === londonDate(now)) {
+  if (latest?.ok && latest.gbp && latest.period?.date === expected && londonDate(new Date(latest.collectedAt)) === londonDate(now)) {
     return { ok: true, skipped: "already-collected", date: expected };
   }
-  return refresh({ now, lookback: 2 });
+  return refresh({ now, lookback: latest?.ok && !latest.gbp ? 7 : 2 });
 }
 
 export function startOpenRouterSpendWorker() {

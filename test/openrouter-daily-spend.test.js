@@ -85,19 +85,20 @@ test("provider failures are sanitized and conversion requires explicit dated FX 
 
 test("private refresh reconciles two days and cannot publish a partial latest pointer", async () => {
   const writes = [];
-  const collect = async ({ date }) => ({ ok: true, period: { date }, collectedAt: now.toISOString() });
-  const refresh = await refreshOpenRouterSpendReports({ now }, { collect, store: async (key, report) => writes.push({ key, report }) });
+  const collect = async ({ date }) => ({ ok: true, period: { date }, collectedAt: now.toISOString(), recordedSpendUsd: 2 });
+  const refresh = await refreshOpenRouterSpendReports({ now }, { collect,
+    fetchFx: async () => ({ rate: 0.75, date: "2026-10-27", source: "test" }), store: async (key, report) => writes.push({ key, report }) });
   assert.deepEqual(refresh.dates, ["2026-10-26", "2026-10-27"]);
   assert.equal(writes.at(-1).key, "reports/openrouter-daily/latest.json");
   const failedWrites = [];
-  await assert.rejects(refreshOpenRouterSpendReports({ now }, { collect: async ({ date }) => {
+  await assert.rejects(refreshOpenRouterSpendReports({ now }, { fetchFx: async () => ({ rate: 0.75, date: "2026-10-27", source: "test" }), collect: async ({ date }) => {
     if (date === "2026-10-27") throw new Error("late provider failure"); return collect({ date });
   }, store: async key => failedWrites.push(key) }));
   assert.ok(!failedWrites.some(key => key.endsWith("latest.json")));
 });
 
 test("collector skips disabled/unconfigured/early/already-collected periods", async () => {
-  const deps = { read: async () => ({ ok: true, period: { date: "2026-10-27" }, collectedAt: now.toISOString() }),
+  const deps = { read: async () => ({ ok: true, gbp: { estimate: 1 }, period: { date: "2026-10-27" }, collectedAt: now.toISOString() }),
     refresh() { throw new Error("unexpected refresh"); } };
   assert.equal((await runOpenRouterSpendTick({ now, env: {} }, deps)).skipped, "disabled");
   assert.equal((await runOpenRouterSpendTick({ now, env: { OPENROUTER_DAILY_SPEND_ENABLED: "true" } }, deps)).status, "not_configured");

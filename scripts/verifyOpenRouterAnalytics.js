@@ -11,7 +11,7 @@ try {
     console.log(JSON.stringify({ event: "openrouter.analytics.verified", provider: report.provider,
       datesRefreshed: result.dates, date: report.period.date, timezone: report.period.timezone,
       collectedAt: report.collectedAt, currency: report.currency, metrics: Object.keys(report.totals),
-      dimensions: report.dimensions,
+      dimensions: report.dimensions, gbpAvailable: Boolean(report.gbp), fxRateDate: report.gbp?.rateDate || null,
       reconciled: report.reconciled, provisional: report.provisional, privateReportStored: true }));
   }
 } catch (error) {

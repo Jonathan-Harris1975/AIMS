@@ -21,7 +21,7 @@ The authenticated GET endpoint accepts `?date=YYYY-MM-DD`. Reports and routes us
 
 The collector discovers supported metrics/dimensions, then queries the account total and a model/app (or API-key) breakdown. Truncated, malformed or unreconciled responses are rejected. Account scope includes all traffic visible to the management key; do not label an app/model as AIMS, HIVE or RAMS without a verified mapping. Unattributed spend stays unattributed. Request counts are not completed tasks. Prompt/output text is not collected.
 
-`recordedSpendUsd` is provider-recorded USD usage, excluding inferred VAT, top-ups and card FX. Scheduled snapshots leave `gbp` null: the reporting step must obtain a dated, sourced USD-to-GBP rate and label the conversion an estimate. Actual GBP settlement requires payment evidence. Quality, publication success, task costs, retries and shadow-evaluation overhead must be joined from operational evidence, never inferred from model names or request counts.
+`recordedSpendUsd` is provider-recorded USD usage, excluding inferred VAT, top-ups and card FX. Scheduled snapshots automatically fetch a dated USD-to-GBP reference rate from Frankfurter v2 and store the rate, actual reference date and source URL with the estimate. Weekend/holiday rates may precede the reporting day by up to seven days. If FX is unavailable, verified USD is still published and the worker retries on its next tick. Existing GBP-less snapshots trigger a seven-day backfill. Actual GBP settlement requires payment evidence. Quality, publication success, task costs, retries and shadow-evaluation overhead must be joined from operational evidence, never inferred from model names or request counts.
 
 For a read-only historical query with an explicit FX reference:
 
