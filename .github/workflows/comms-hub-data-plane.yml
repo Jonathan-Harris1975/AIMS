@@ -39,7 +39,7 @@ jobs:
         run: npm install --global npm@12.2.0 --no-audit --no-fund
       - name: Verify pinned Node/npm toolchain
         run: |
-          test "$(node --version)" = "v24.21.0"
+          test "$(node --version)" = "v26.12.1"
           test "$(npm --version)" = "12.2.0"
       - name: Validate Node-only runtime deployment
         run: |
