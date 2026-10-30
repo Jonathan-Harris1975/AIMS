@@ -120,6 +120,16 @@ test("section validation identifies excess length independently of minimum", () 
   assert.deepEqual(sectionValidationFailures(prose(985), section, "stop"), ["above-maximum"]);
 });
 
+test("section validation detects incomplete endings by trailing whitespace", () => {
+  const complete = prose(840, "Complete");
+  const section = { minimumWords: 839, targetWords: 892 };
+  assert.deepEqual(sectionValidationFailures(complete, section, "stop"), []);
+  assert.deepEqual(sectionValidationFailures(complete, section, "length"), ["truncated-or-filtered"]);
+  assert.deepEqual(sectionValidationFailures(complete.slice(0, -1), section, "stop"), ["incomplete-ending"]);
+  assert.deepEqual(sectionValidationFailures(complete.slice(0, -1), section, "length"),
+    ["truncated-or-filtered", "incomplete-ending"]);
+});
+
 test("revision-scoped recovery permits a terminal podcast 422 only once", () => {
   const receipt = { status: "completed-with-failures", attempt: 3,
     recoveryRevision: "previous", finishedAt: new Date(0).toISOString(),

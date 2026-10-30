@@ -68,7 +68,7 @@ export function sectionValidationFailures(text, section, finishReason, previous 
   if (words < section.minimumWords) failures.push("below-minimum");
   if (words > Math.ceil(section.targetWords * 1.1)) failures.push("above-maximum");
   if (["length", "max_tokens", "content_filter"].includes(finishReason)) failures.push("truncated-or-filtered");
-  if (!/[.!?]["'”’]?\\s*$/.test(text)) failures.push("incomplete-ending");
+  if (!/[.!?]["'”’]?\s*$/.test(text)) failures.push("incomplete-ending");
   if (duplicatesPriorParagraphs(text, previous)) failures.push("repeated-paragraph");
   return failures;
 }
@@ -142,7 +142,9 @@ ${attempt > 1 ? "The previous output failed length or completeness checks; use t
     }
     if (!complete) {
       const failures = sectionValidationFailures(text, section, state.sections[section.id]?.finishReason, previous);
-      const err = new Error(`Podcast section ${section.id} failed bounded validation (${countWords(text)} words; minimum ${section.minimumWords}; maximum ${Math.ceil(section.targetWords * 1.1)}; reasons: ${failures.join(", ")})`);
+      const reasonText = failures.join(", ") || "none";
+      const err = new Error(`Podcast section ${section.id} failed bounded validation (${countWords(text)} words; ` +
+        `minimum ${section.minimumWords}; maximum ${Math.ceil(section.targetWords * 1.1)}; reasons: ${reasonText})`);
       err.validationFailures = failures;
       err.code = "PODCAST_SECTION_EXHAUSTED";
       err.stage = "section-generation";
