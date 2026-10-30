@@ -89,12 +89,12 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `BLOG_RSS_TITLE` | No | services/blog/rss/publishBlogRssFeed.js:146 |
 | `BLOG_SOCIAL_BUILD_COMPLETED_TTL_MS` | No | services/blog/social/buildDailySocialBlogPost.js:57 |
 | `BLOG_SOCIAL_BUILD_PENDING_TTL_MS` | No | services/blog/social/buildDailySocialBlogPost.js:56 |
-| `BLOG_SOCIAL_PREFIX` | Yes | services/blog/routes/social.js:41<br>services/blog/social/buildDailySocialBlogPost.js:660<br>services/blog/social/publishSocialBlogRssFeed.js:69 |
+| `BLOG_SOCIAL_PREFIX` | Yes | services/blog/routes/social.js:41<br>services/blog/social/buildDailySocialBlogPost.js:660<br>services/blog/social/publishSocialBlogRssFeed.js:69<br>services/zernio/utils/blogRssFeed.js:124 |
 | `BLOG_SOCIAL_PUBLIC_BASE_URL` | Yes | services/blog/social/buildDailySocialBlogPost.js:210<br>services/blog/social/publishSocialBlogRssFeed.js:74 |
 | `BLOG_SOCIAL_PUBLIC_POSTS_BASE_URL` | Yes | services/blog/social/buildDailySocialBlogPost.js:214<br>services/blog/social/publishSocialBlogRssFeed.js:83 |
 | `BLOG_SOCIAL_QA_ENABLED` | Yes | services/blog/social/buildDailySocialBlogPost.js:347 |
 | `BLOG_SOCIAL_RSS_DESCRIPTION` | Yes | services/blog/social/publishSocialBlogRssFeed.js:358 |
-| `BLOG_SOCIAL_RSS_OBJECT_KEY` | Yes | services/blog/social/buildDailySocialBlogPost.js:902<br>services/blog/social/buildDailySocialBlogPost.js:1032<br>services/blog/social/buildDailySocialBlogPost.js:1212<br>services/blog/social/publishSocialBlogRssFeed.js:91 |
+| `BLOG_SOCIAL_RSS_OBJECT_KEY` | Yes | services/blog/social/buildDailySocialBlogPost.js:906<br>services/blog/social/buildDailySocialBlogPost.js:1036<br>services/blog/social/buildDailySocialBlogPost.js:1216<br>services/blog/social/publishSocialBlogRssFeed.js:91 |
 | `BLOG_SOCIAL_RSS_TITLE` | Yes | services/blog/social/publishSocialBlogRssFeed.js:357 |
 | `BLOG_WEEKLY_JSON_RESPONSE_FORMAT` | No | services/blog/weekly/buildWeeklyBlogPost.js:359<br>services/blog/weekly/buildWeeklyBlogPost.js:377<br>services/blog/weekly/buildWeeklyBlogPost.js:418 |
 | `BLOG_WEEKLY_QA_ENABLED` | No | services/blog/weekly/buildWeeklyBlogPost.js:272 |
@@ -213,7 +213,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `COMMS_HUB_CONTENT_AUTOMATION_ENABLED` | Yes | services/comms-hub/routes/index.js:138 |
 | `COMMS_HUB_CONTENT_AUTOMATION_PODCAST_ENABLED` | Yes | services/comms-hub/routes/index.js:142 |
 | `COMMS_HUB_CONTENT_AUTOMATION_SOCIAL_ENABLED` | Yes | services/comms-hub/routes/index.js:141 |
-| `COMMS_HUB_CONTENT_AUTOMATION_ZERNIO_MINI_SERIES_BRIEF_LIMIT` | Yes | services/zernio/utils/socialScheduler.js:2288 |
+| `COMMS_HUB_CONTENT_AUTOMATION_ZERNIO_MINI_SERIES_BRIEF_LIMIT` | Yes | services/zernio/utils/socialScheduler.js:2302 |
 | `COMMS_HUB_CREDENTIAL_VAULT_ENABLED` | Yes | services/comms-hub/routes/index.js:150 |
 | `COMMS_HUB_DELAYED_ACTION_WORKER_ENABLED` | Yes | services/comms-hub/routes/index.js:146 |
 | `COMMS_HUB_EMAIL_ENABLED` | Yes | services/comms-hub/routes/index.js:131 |
@@ -460,7 +460,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `WEBSITE_REBUILD_HOOK_FALLBACK` | Yes | scripts/backfill-blog-main-site-links.js:21<br>services/blog/social/buildDailySocialBlogPost.js:238<br>services/blog/weekly/buildWeeklyBlogPost.js:221<br>services/podcast/runPodcastPipeline.js:74 |
 | `X` | No | config/thresholds.js:6<br>config/thresholds.js:16 |
 | `ZERNIO_ACCOUNT_ID` | Yes | services/zernio/utils/config.js:64 |
-| `ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK` | Yes | services/zernio/utils/socialScheduler.js:1779<br>services/zernio/utils/socialScheduler.js:2685<br>services/zernio/utils/socialScheduler.js:3144<br>services/zernio/utils/socialScheduler.js:3553 |
+| `ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK` | Yes | services/zernio/utils/socialScheduler.js:1779<br>services/zernio/utils/socialScheduler.js:2699<br>services/zernio/utils/socialScheduler.js:3158<br>services/zernio/utils/socialScheduler.js:3567 |
 | `ZERNIO_API_BASE_URL` | Yes | services/zernio/utils/config.js:55<br>services/zernio/utils/zernioClient.js:36 |
 | `ZERNIO_ARTWORK_TIMEOUT_MS` | Yes | services/artwork/createSocialArtwork.js:13 |
 | `ZERNIO_BLOG_RSS_FEED_URL` | Yes | services/zernio/utils/blogRssFeed.js:80<br>services/zernio/utils/config.js:97 |
@@ -489,7 +489,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `ZERNIO_MINI_SERIES_MIN_SCORE` | No | services/zernio/utils/config.js:196 |
 | `ZERNIO_MINI_SERIES_POST_MAX_TOKENS` | No | services/zernio/utils/socialScheduler.js:48 |
 | `ZERNIO_MINI_SERIES_RESEARCH_MAX_TOKENS` | No | services/zernio/utils/socialScheduler.js:46 |
-| `ZERNIO_MINI_SERIES_RETRY_BASE_MS` | Yes | services/zernio/utils/socialScheduler.js:2743 |
+| `ZERNIO_MINI_SERIES_RETRY_BASE_MS` | Yes | services/zernio/utils/socialScheduler.js:2757 |
 | `ZERNIO_MINI_SERIES_SATURDAY_TIME` | Yes | services/zernio/utils/config.js:205 |
 | `ZERNIO_MINI_SERIES_SUNDAY_TIME` | Yes | services/zernio/utils/config.js:206 |
 | `ZERNIO_MINI_SERIES_THEME_MAX_TOKENS` | No | services/zernio/utils/socialScheduler.js:47 |
