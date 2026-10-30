@@ -132,7 +132,9 @@ ${attempt > 1 ? "The previous output failed length or completeness checks; use t
       if (attempt < MAX_SECTION_ATTEMPTS) await (dependencies.backoff || ((ms) => new Promise((resolve) => setTimeout(resolve, ms))))(500 * attempt);
     }
     if (!complete) {
-      const err = new Error(`Podcast section ${section.id} failed bounded length/completeness validation (${countWords(text)} words; minimum ${section.minimumWords})`);
+      const failures = sectionValidationFailures(text, section, state.sections[section.id]?.finishReason, previous);
+      const err = new Error(`Podcast section ${section.id} failed bounded validation (${countWords(text)} words; minimum ${section.minimumWords}; maximum ${Math.ceil(section.targetWords * 1.1)}; reasons: ${failures.join(", ")})`);
+      err.validationFailures = failures;
       err.code = "PODCAST_SECTION_EXHAUSTED";
       err.stage = "section-generation";
       err.statusCode = 422;
