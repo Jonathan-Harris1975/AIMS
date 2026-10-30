@@ -44,7 +44,7 @@
     "exceljs": "^4.4.0",
     "express": "^5.2.1",
     "fast-xml-parser": "^5.11.1",
-    "googleapis": "^184.0.0",
+    "googleapis": "^188.0.0",
     "node-fetch": "^3.3.2",
     "p-limit": "^7.3.3",
     "pino": "^10.3.1",
