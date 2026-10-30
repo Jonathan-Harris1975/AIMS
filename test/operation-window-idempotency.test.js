@@ -150,3 +150,21 @@ test("legacy successful blog skips cannot suppress missing daily publication rec
     existing: { id: "daily-2026-10-30", url: "https://example.test/today" } } };
   assert.deepEqual(reusableOperationTaskResults({ results: [published] }), [published]);
 });
+
+test("async blog acknowledgements cannot hide final successful skips without publication", () => {
+  const acknowledgement = { ok: true, accepted: true, status: "running" };
+  for (const asyncJob of [
+    { status: "completed", result: { ok: true, skipped: true, sourceCount: 0 } },
+    { job: { status: "completed", result: { ok: true, skipped: true, duplicatePrevented: true } } },
+  ]) {
+    const task = { name: "blog-social", ok: true, result: acknowledgement, asyncJob };
+    assert.deepEqual(reusableOperationTaskResults({ results: [task] }), []);
+  }
+  const existing = { id: "daily-2026-10-30", url: "https://example.test/today" };
+  const published = { name: "blog-social", ok: true, result: acknowledgement,
+    asyncJob: { job: { status: "completed", result: { ok: true, skipped: true, existing } } } };
+  assert.deepEqual(reusableOperationTaskResults({ results: [published] }), [published]);
+  const podcast = { name: "podcast", ok: true, warning: true, nonRetryablePartialPublication: true,
+    result: acknowledgement, asyncJob: { result: { ok: false, partialFailure: true } } };
+  assert.deepEqual(reusableOperationTaskResults({ results: [podcast] }), [podcast]);
+});

@@ -14,7 +14,7 @@ export const OPERATION_RECOVERY_REVISION = "social-provider-handoff-2026-09-11-v
 export const PODCAST_RECOVERY_REVISION = "podcast-section-recovery-2026-10-02-v1";
 // One deployment-scoped recovery for a failed newsletter window after the
 // editorial-authority gate repair. Successful sibling tasks remain reusable.
-export const NEWSLETTER_RECOVERY_REVISION = "newsletter-poll-recovery-2026-10-30-v2";
+export const NEWSLETTER_RECOVERY_REVISION = "newsletter-async-recovery-2026-10-30-v3";
 
 function normalise(value = "") {
   return String(value || "").trim();
@@ -41,7 +41,9 @@ function publicReceipt(receipt) {
 export function operationTaskSucceeded(result = {}) {
   // Older builds called a source-empty or still-owned blog build a successful
   // skip. It cannot satisfy today's handoff or be reused as completed work.
-  const payload = result?.result;
+  const payload = result?.asyncJob?.job?.result
+    ?? result?.asyncJob?.result
+    ?? result?.result;
   if (result?.name === "blog-social" && payload?.skipped && !payload?.existing) return false;
   return Boolean(
     result?.ok
