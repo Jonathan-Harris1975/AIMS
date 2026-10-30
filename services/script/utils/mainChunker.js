@@ -62,10 +62,19 @@ function duplicatesPriorParagraphs(text, previous) {
   return text.split(/\n\s*\n/).some((part) => countWords(part) >= 25 && prior.has(normalise(part)));
 }
 
+export function sectionValidationFailures(text, section, finishReason, previous = "") {
+  const words = countWords(text);
+  const failures = [];
+  if (words < section.minimumWords) failures.push("below-minimum");
+  if (words > Math.ceil(section.targetWords * 1.1)) failures.push("above-maximum");
+  if (["length", "max_tokens", "content_filter"].includes(finishReason)) failures.push("truncated-or-filtered");
+  if (!/[.!?]["'”’]?\s*$/.test(text)) failures.push("incomplete-ending");
+  if (duplicatesPriorParagraphs(text, previous)) failures.push("repeated-paragraph");
+  return failures;
+}
+
 export function acceptableSection(text, section, finishReason, previous = "") {
-  return countWords(text) >= section.minimumWords && countWords(text) <= Math.ceil(section.targetWords * 1.1)
-    && !["length", "max_tokens", "content_filter"].includes(finishReason)
-    && /[.!?]["'”’]?\s*$/.test(text) && !duplicatesPriorParagraphs(text, previous);
+  return sectionValidationFailures(text, section, finishReason, previous).length === 0;
 }
 
 export async function generateMainLongform(sessionMeta, articles, totalMainSeconds, dependencies = {}) {
@@ -132,7 +141,11 @@ ${attempt > 1 ? "The previous output failed length or completeness checks; use t
       if (attempt < MAX_SECTION_ATTEMPTS) await (dependencies.backoff || ((ms) => new Promise((resolve) => setTimeout(resolve, ms))))(500 * attempt);
     }
     if (!complete) {
-      const err = new Error(`Podcast section ${section.id} failed bounded length/completeness validation (${countWords(text)} words; minimum ${section.minimumWords})`);
+      const failures = sectionValidationFailures(text, section, state.sections[section.id]?.finishReason, previous);
+      const detail = `${countWords(text)} words; minimum ${section.minimumWords}; `
+        + `maximum ${Math.ceil(section.targetWords * 1.1)}; reasons: ${failures.join(", ")}`;
+      const err = new Error(`Podcast section ${section.id} failed bounded validation (${detail})`);
+      err.validationFailures = failures;
       err.code = "PODCAST_SECTION_EXHAUSTED";
       err.stage = "section-generation";
       err.statusCode = 422;
