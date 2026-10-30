@@ -1,5 +1,5 @@
 import { createValidatedResultCache, qaFingerprint } from "../../shared/utils/validatedResultCache.js";
-import { claimRepairAction } from "../../shared/utils/taskRepairBudget.js";
+import { claimRepairAction, withIsolatedTaskRepairBudget } from "../../shared/utils/taskRepairBudget.js";
 // Dedicated full-seat editorial council for AI Edge. The council is expensive
 // by design and is only reached after the cheaper self-improvement loop fails.
 
@@ -77,7 +77,13 @@ function payloadForMember(member, { profile, draft, sources }) {
   return { draft };
 }
 
-async function requestCouncilJson(route, { sessionId, messages, maxTokens = 1600, schema = REVIEW_SCHEMA } = {}) {
+function requestCouncilJson(route, options) {
+  // Each independent seat gets a bounded transport allowance. A schema error
+  // in one seat must not consume the recovery capacity of the other reviewers.
+  return withIsolatedTaskRepairBudget(() => requestCouncilJsonImpl(route, options), { repairs: 0, recoveries: 6 });
+}
+
+async function requestCouncilJsonImpl(route, { sessionId, messages, maxTokens = 1600, schema = REVIEW_SCHEMA } = {}) {
   const cacheKey = qaFingerprint({ version: 1, route, messages, maxTokens, schema,
     threshold: THRESHOLDS.newsletter.qaPassThreshold,
     providers: getProviderDiagnosticsForRoute(route),
@@ -90,8 +96,8 @@ async function requestCouncilJson(route, { sessionId, messages, maxTokens = 1600
     if (attempt > 1) claimRepairAction("recoveries");
     const raw = await resilientRequest(route, {
       sessionId,
-      max_tokens: maxTokens,
-      reasoning: null,
+      max_tokens: attempt === 1 ? maxTokens : maxTokens * 2,
+      reasoning: { effort: "none", exclude: true },
       temperature: attempt === 1 ? 0.15 : 0,
       messages: attempt === 1
         ? messages

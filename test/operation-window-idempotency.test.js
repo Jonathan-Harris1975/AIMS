@@ -139,3 +139,14 @@ test("stale active receipts recover without replaying successful tasks", () => {
   assert.deepEqual(reusable.map((item) => item.name), ["rss-rewrite", "zernio-wednesday"]);
   assert.equal(reusable[0].result.revision, 2);
 });
+
+test("legacy successful blog skips cannot suppress missing daily publication recovery", () => {
+  const results = [
+    { name: "blog-social", ok: true, result: { ok: true, skipped: true, sourceCount: 0 } },
+    { name: "newsletter-send", ok: true, result: { ok: true, sent: true } },
+  ];
+  assert.deepEqual(reusableOperationTaskResults({ results }).map(r => r.name), ["newsletter-send"]);
+  const published = { name: "blog-social", ok: true, result: { ok: true, skipped: true,
+    existing: { id: "daily-2026-10-30", url: "https://example.test/today" } } };
+  assert.deepEqual(reusableOperationTaskResults({ results: [published] }), [published]);
+});

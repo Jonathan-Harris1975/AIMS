@@ -314,6 +314,8 @@ async function callOpenRouter({ routeKey, providerId, model, apiKey, messages, m
     if (effectiveReasoning) payload.reasoning = effectiveReasoning;
   }
 
+  // Schema compatibility must not silently re-enable expensive default reasoning.
+  if (relaxedParameters && reasoning?.effort === "none") payload.reasoning = reasoning;
   const serviceTier = relaxedParameters ? undefined : payload.service_tier;
 
   const reqHeaders = {
@@ -363,6 +365,14 @@ async function callOpenRouter({ routeKey, providerId, model, apiKey, messages, m
       emptyErr.status = "empty_completion";
       emptyErr.nonRetryable = false;
       throw emptyErr;
+    }
+
+    if (json?.choices?.[0]?.finish_reason === "length" && response_format) {
+      const error = new Error(`OpenRouter truncated structured output for ${providerId} at ${max_tokens} completion tokens`);
+      error.code = "AI_TRUNCATED_COMPLETION";
+      error.status = "truncated_completion";
+      error.nonRetryable = false;
+      throw error;
     }
 
     return {
@@ -461,6 +471,7 @@ export async function resilientRequest(routeName, {
     const headroom = await compressForOpenRouter({ routeName, routeKey, model: provider.name, messages, signal });
     const providerMessages = headroom.messages;
     let compatibilityRelaxationUsed = false;
+    let completionBudget = max_tokens;
     for (let attempt = 0; attempt <= effectiveMaxRetries; attempt++) {
       if (attempt > 0) claimRepairAction("recoveries");
       const logReturnedUsage = (result, parameterMode) => {
@@ -495,8 +506,9 @@ export async function resilientRequest(routeName, {
         }
       };
       try {
-        const result = await callOpenRouter({ routeKey, providerId, model: provider.name, apiKey: provider.apiKey, messages: providerMessages, max_tokens, temperature, top_p,
-           response_format, headers, timeoutMs, reasoning, signal, onUsage: result => logReturnedUsage(result, "standard") });
+        const result = await callOpenRouter({ routeKey, providerId, model: provider.name, apiKey: provider.apiKey, messages: providerMessages, max_tokens: completionBudget, temperature, top_p,
+           response_format, headers, timeoutMs, reasoning, signal, relaxedParameters: compatibilityRelaxationUsed,
+           onUsage: result => logReturnedUsage(result, compatibilityRelaxationUsed ? "relaxed" : "standard") });
         if (typeof validateContent === "function") await validateContent(result.content, { routeName, routeKey, providerId, model: result.model || provider.name });
         const keyEnv = provider.apiKeyEnv || "provider-config";
         const credentialSource = `${providerId}:${keyEnv}`;
@@ -561,7 +573,9 @@ export async function resilientRequest(routeName, {
               model: provider.name,
               apiKey: provider.apiKey,
               messages: providerMessages,
-              max_tokens,
+              max_tokens: completionBudget,
+              response_format,
+              reasoning,
               headers,
               timeoutMs,
               signal,
@@ -607,6 +621,9 @@ export async function resilientRequest(routeName, {
         // A request that has already consumed the full timeout window should
         // fail over to the next configured provider instead of repeating the
         // same slow target for another full timeout cycle.
+        if (err?.code === "AI_TRUNCATED_COMPLETION" || err?.status === "empty_completion") {
+          completionBudget = Math.min(Math.max(completionBudget * 2, completionBudget + 2048), 32768);
+        }
         const timedOut = err?.code === "OPENROUTER_TIMEOUT";
         const emptyCompletion = err?.status === "empty_completion";
         const invalidCompletion = err?.status === "invalid_completion" || err?.code === "AI_INVALID_STRUCTURED_OUTPUT";

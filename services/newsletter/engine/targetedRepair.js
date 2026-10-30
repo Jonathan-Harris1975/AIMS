@@ -46,6 +46,7 @@ export async function repairNewsletterDraft({ newsletter, lead, stories, profile
   claimRepairAction();
   const raw = await resilientRequest("targetedRepair", {
     sessionId, section: "newsletter-targeted-repair", max_tokens: 2600,
+    validateContent: (raw) => parseStructuredJson(raw, "newsletter targeted repair"),
     temperature: 0.15, reasoning: { effort: "none", exclude: true },
     response_format: strictJsonResponseFormat("newsletter_targeted_edits", EDIT_SCHEMA),
     messages: [

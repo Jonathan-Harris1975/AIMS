@@ -83,3 +83,34 @@ test("resilientRequest retries the same model once with relaxed parameters after
     globalThis.fetch = oldFetch;
   }
 });
+
+test("structured truncation after schema relaxation retries with more output capacity and reasoning disabled", async () => {
+  const names = ["AI_MODEL_STANDARD", "OPENROUTER_API_KEY", "OPENROUTER_API_BASE"];
+  const previous = saveEnv(names);
+  const oldFetch = globalThis.fetch;
+  const payloads = [];
+  process.env.AI_MODEL_STANDARD = "mock/truncation";
+  process.env.OPENROUTER_API_KEY = testCredential("openrouter");
+  process.env.OPENROUTER_API_BASE = "https://openrouter.example/api/v1";
+  globalThis.fetch = async (_url, options) => {
+    const payload = JSON.parse(options.body);
+    payloads.push(payload);
+    if (payloads.length === 1) return { ok: false, status: 404,
+      text: async () => "No endpoints found that can handle requested parameters" };
+    return { ok: true, json: async () => ({ choices: [{ finish_reason: payloads.length === 2 ? "length" : "stop",
+      message: { content: payloads.length === 2 ? '{"issue":"cut' : '{"issue":"complete"}' } }], usage: {} }) };
+  };
+  try {
+    const { resilientRequest } = await import(`../services/shared/utils/ai-service.js?truncation=${Date.now()}`);
+    const result = await resilientRequest("main", { messages: [{ role: "user", content: "Return JSON" }],
+      max_tokens: 4200, maxRetries: 1, retryBaseMs: 0,
+      reasoning: { effort: "none", exclude: true }, response_format: { type: "json_object" } });
+    assert.equal(result, '{"issue":"complete"}');
+    assert.equal(payloads.length, 3);
+    assert.deepEqual(payloads[1].reasoning, { effort: "none", exclude: true });
+    assert.equal(payloads[1].response_format, undefined);
+    assert.equal(payloads[2].max_completion_tokens, 8400);
+    assert.equal(payloads[2].response_format, undefined);
+    assert.deepEqual(payloads[2].reasoning, { effort: "none", exclude: true });
+  } finally { restoreEnv(previous); globalThis.fetch = oldFetch; }
+});

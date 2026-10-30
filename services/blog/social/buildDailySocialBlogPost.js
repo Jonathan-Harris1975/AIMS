@@ -188,6 +188,12 @@ function normaliseFeedItems(feed, window) {
     .sort((a, b) => b.pubDate - a.pubDate);
 }
 
+export function selectDailySocialSources(feedItems, isUsed = (item) =>
+  hasRecentEditorialSource(item) || hasBeenUsedCrossLaneToday(item)) {
+  const unused = feedItems.filter((item) => !isUsed(item));
+  return unused.length ? unused : feedItems;
+}
+
 async function loadExistingPostsManifest(bucketKey, key) {
   try {
     const raw = await getObjectAsText(bucketKey, key);
@@ -692,6 +698,9 @@ async function buildDailySocialBlogPostImpl({
     const existingPost = findExistingSocialPostForDate(existingManifest, window.dateId);
 
     if (existingPost && !force) {
+      // A prior build may have committed posts.json before its RSS write failed.
+      // Repair the handoff without regenerating or republishing the article.
+      const rss = dryRun ? null : await publishSocialBlogRssFeed({ manifest: existingManifest, prefix });
       const reason = `Daily social blog post already exists for ${window.dateId}. Pass force:true to rebuild it.`;
       info("blog.social.daily.build.skipped", {
         dateId: window.dateId,
@@ -707,6 +716,7 @@ async function buildDailySocialBlogPostImpl({
         skipped: true,
         reason,
         existing: existingPost,
+        rss,
         manifestKey,
       };
     }
@@ -728,10 +738,13 @@ async function buildDailySocialBlogPostImpl({
           leaseObjectKey: leaseResult.objectKey,
         });
         return {
-          ok: true,
+          ok: false,
+          ready: false,
+          retryable: true,
+          statusCode: 424,
           skipped: true,
           duplicatePrevented: true,
-          reason: `Daily social blog build for ${window.dateId} is already owned or completed.`,
+          reason: `Daily social blog build for ${window.dateId} is owned but has no committed article yet.`,
           dateId: window.dateId,
           manifestKey,
         };
@@ -741,9 +754,13 @@ async function buildDailySocialBlogPostImpl({
 
     const rawFeed = await getObjectAsText(SOURCE_RSS_BUCKET_KEY, SOURCE_RSS_FEED_KEY);
     const feedItems = normaliseFeedItems(JSON.parse(rawFeed), window);
-    const items = feedItems.filter((item) =>
-      !hasRecentEditorialSource(item) && !hasBeenUsedCrossLaneToday(item)
-    );
+    // Other channels covering today's news must not suppress the daily blog.
+    // Prefer unused evidence, then reuse only this build's fresh source window.
+    // The dated manifest/lease still prevents publishing the blog twice.
+    const items = selectDailySocialSources(feedItems);
+    if (items === feedItems && feedItems.length) {
+      info("blog.social.daily.sources.reused", { dateId: window.dateId, sourceCount: feedItems.length });
+    }
 
     if (!items.length) {
       info("blog.social.daily.build.skipped", {
@@ -757,11 +774,12 @@ async function buildDailySocialBlogPostImpl({
       });
 
       return {
-        ok: true,
+        ok: false,
+        ready: false,
+        retryable: true,
+        statusCode: 424,
         skipped: true,
-        reason: feedItems.length
-          ? `All rewritten RSS items for ${window.dateLabel} were already used by another content lane.`
-          : `No rewritten RSS items found for ${window.dateLabel}.`,
+        reason: `No rewritten RSS items found for ${window.dateLabel}.`,
         dateId: window.dateId,
         sourceCount: 0,
         window: {
@@ -1306,6 +1324,7 @@ async function buildDailySocialBlogPostImpl({
     const latestManifest = await loadExistingPostsManifest(OUT_BLOG_BUCKET_KEY, manifestKey);
     const existingAtCommit = findExistingSocialPostForDate(latestManifest, window.dateId);
     if (existingAtCommit && !force) {
+      const rss = await publishSocialBlogRssFeed({ manifest: latestManifest, prefix });
       if (publicationLease) {
         await completeDurableLease(publicationLease, {
           reason: "existing-post-observed-before-commit",
@@ -1320,6 +1339,7 @@ async function buildDailySocialBlogPostImpl({
         duplicatePrevented: true,
         reason: `Daily social blog post already exists for ${window.dateId}.`,
         existing: existingAtCommit,
+        rss,
         manifestKey,
       };
     }
