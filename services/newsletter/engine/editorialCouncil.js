@@ -96,6 +96,14 @@ async function requestCouncilJsonImpl(route, { sessionId, messages, maxTokens = 
     if (attempt > 1) claimRepairAction("recoveries");
     const raw = await resilientRequest(route, {
       sessionId,
+      validateContent: (raw) => {
+        try { parseNewsletterReview(raw, schema, "newsletter council response"); }
+        catch (error) {
+          error.code = "AI_INVALID_STRUCTURED_OUTPUT";
+          error.status = "invalid_completion";
+          throw error;
+        }
+      },
       max_tokens: attempt === 1 ? maxTokens : maxTokens * 2,
       reasoning: { effort: "none", exclude: true },
       temperature: attempt === 1 ? 0.15 : 0,
