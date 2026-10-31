@@ -127,7 +127,7 @@ test("overlong complete section is shortened without another LLM call", async ()
     const sectionId = Number(options.section.split("-")[2]);
     const expected = buildSectionPlan(articles(), seconds)[sectionId - 1].targetWords;
     return { content: Array.from({ length: Math.ceil(expected * 1.13 / 20) },
-      (_, i) => prose(20, `Sentence${i}_`)).join(" "), finishReason: "stop" };
+      (_, i) => prose(20, `${options.section}Sentence${i}_`)).join(" "), finishReason: "stop" };
   });
   const result = await generateMainLongform(meta, articles(), seconds, dependencies);
   assert.ok(countWords(result) > 6300);
@@ -136,7 +136,7 @@ test("overlong complete section is shortened without another LLM call", async ()
 });
 
 test("shortening refuses truncated, duplicated or too-short outcomes", () => {
-  const section = { targetWords: 100, minimumWords: 94 };
+  const section = { targetWords: 100, minimumWords: 105 };
   const text = [prose(90, "Evidence"), prose(24, "Tail")].join(" ");
   assert.equal(shortenOverlongSection(text, section, "length"), null);
   assert.equal(shortenOverlongSection(text, section, "stop"), null);
