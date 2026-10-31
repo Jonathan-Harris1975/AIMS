@@ -79,7 +79,7 @@ test("durable heartbeat aggregation survives restart rows and recognises multipl
 });
 
 
-test("heartbeat success does not advance for skipped worker ticks", () => {
+test("heartbeat success advances only for completed worker ticks", () => {
   assert.equal(workerRunAdvanced({ skipped: true, reason: "already_running" }), false);
   assert.equal(workerRunAdvanced({ skipped: true, reason: "stopping" }), false);
   assert.equal(workerRunAdvanced({ skipped: true, reason: "not_due" }), false);
