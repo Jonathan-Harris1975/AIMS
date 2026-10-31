@@ -217,7 +217,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `COMMS_HUB_CREDENTIAL_VAULT_ENABLED` | Yes | services/comms-hub/routes/index.js:150 |
 | `COMMS_HUB_DELAYED_ACTION_WORKER_ENABLED` | Yes | services/comms-hub/routes/index.js:146 |
 | `COMMS_HUB_EMAIL_ENABLED` | Yes | services/comms-hub/routes/index.js:131 |
-| `COMMS_HUB_EMAIL_NEWSLETTER_ADDRESS` | Yes | services/newsletter/delivery/aimsDelivery.js:115 |
+| `COMMS_HUB_EMAIL_NEWSLETTER_ADDRESS` | Yes | services/newsletter/delivery/aimsDelivery.js:141 |
 | `COMMS_HUB_ENABLED` | Yes | scripts/performanceGate.js:7 |
 | `COMMS_HUB_FORM_AUTO_SEND_ENABLED` | Yes | services/comms-hub/routes/index.js:144 |
 | `COMMS_HUB_FORM_ORCHESTRATION_ENABLED` | Yes | services/comms-hub/routes/index.js:136 |

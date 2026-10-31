@@ -40,15 +40,40 @@ function withUnsubscribe(html, url) {
 }
 
 
-async function sendIssueToRecipient({ profile, sessionId, recipient, buildResult, d1, mail }) {
-  const prior = await d1.query("SELECT status FROM newsletter_delivery_recipients WHERE issue_id=? AND subscriber_id=?", [sessionId, recipient.id]);
-  if (prior.results?.[0]?.status === "reconciliation_required") return { ok: false, status: "delivery_reconciliation_required" };
-  if (prior.results?.[0]?.status === "sent") return { ok: true, status: "already_sent" };
-  const unsubscribeToken = await createUnsubscribeToken(recipient.id, profile.id, { d1 });
-  const unsubscribeUrl = `${publicBaseUrl()}/newsletter/unsubscribe/${encodeURIComponent(unsubscribeToken)}`;
+export async function claimNewsletterRecipient({ d1, sessionId, subscriberId }) {
+  // Atomically reserve a recipient before SMTP. A pending reservation after a
+  // crash is deliberately not replayed: provider acceptance may be unknown.
+  const claimId = randomUUID();
   const attemptedAt = new Date().toISOString();
+  const inserted = await d1.query(`INSERT INTO newsletter_delivery_recipients
+    (issue_id,subscriber_id,status,attempted_at,provider_message_id)
+    VALUES(?,?,'pending',?,?) ON CONFLICT(issue_id,subscriber_id) DO NOTHING
+    RETURNING subscriber_id`, [sessionId, subscriberId, attemptedAt, claimId]);
+  let claimed = Boolean(inserted.results?.length);
+  if (!claimed) {
+    const retried = await d1.query(`UPDATE newsletter_delivery_recipients
+      SET status='pending',attempted_at=?,provider_message_id=?,error_code=NULL
+      WHERE issue_id=? AND subscriber_id=? AND status='failed'
+      RETURNING subscriber_id`, [attemptedAt, claimId, sessionId, subscriberId]);
+    claimed = Boolean(retried.results?.length);
+  }
+  if (!claimed) {
+    const prior = await d1.query("SELECT status FROM newsletter_delivery_recipients WHERE issue_id=? AND subscriber_id=?", [sessionId, subscriberId]);
+    const status = prior.results?.[0]?.status;
+    if (status === "sent") return { claimed: false, status: "already_sent" };
+    return { claimed: false, status: "delivery_reconciliation_required" };
+  }
+  return { claimed: true, claimId };
+}
+
+async function sendIssueToRecipient({ profile, sessionId, recipient, buildResult, d1, mail }) {
+  const claim = await claimNewsletterRecipient({ d1, sessionId, subscriberId: recipient.id });
+  if (!claim.claimed) return { ok: claim.status === "already_sent", status: claim.status };
+  const { claimId } = claim;
   let acceptedByProvider = false;
   try {
+    const unsubscribeToken = await createUnsubscribeToken(recipient.id, profile.id, { d1 });
+    const unsubscribeUrl = `${publicBaseUrl()}/newsletter/unsubscribe/${encodeURIComponent(unsubscribeToken)}`;
     const result = await mail.sendMessage({
       to: [recipient.email],
       subject: buildResult.newsletter.subject,
@@ -58,17 +83,18 @@ async function sendIssueToRecipient({ profile, sessionId, recipient, buildResult
     });
     acceptedByProvider = true;
     const deliveredAt = new Date().toISOString();
-    await d1.query(`INSERT INTO newsletter_delivery_recipients(issue_id,subscriber_id,status,attempted_at,delivered_at,provider_message_id)
-      VALUES(?,?,'sent',?,?,?) ON CONFLICT(issue_id,subscriber_id) DO UPDATE SET status='sent',
-      attempted_at=excluded.attempted_at,delivered_at=excluded.delivered_at,
-      provider_message_id=excluded.provider_message_id,error_code=NULL`,
-    [sessionId, recipient.id, attemptedAt, deliveredAt, result.messageId || randomUUID()]);
+    const persisted = await d1.query(`UPDATE newsletter_delivery_recipients SET status='sent',
+      delivered_at=?,provider_message_id=?,error_code=NULL
+      WHERE issue_id=? AND subscriber_id=? AND status='pending' AND provider_message_id=?
+      RETURNING subscriber_id`,
+    [deliveredAt, result.messageId || randomUUID(), sessionId, recipient.id, claimId]);
+    if (!persisted.results?.length) throw new Error("newsletter_delivery_claim_lost");
     return { ok: true, status: "sent" };
   } catch (error) {
     const uncertain = acceptedByProvider || Boolean(error?.deliveryUncertain);
-    await d1.query(`INSERT INTO newsletter_delivery_recipients(issue_id,subscriber_id,status,attempted_at,error_code)
-      VALUES(?,?,?,?,?) ON CONFLICT(issue_id,subscriber_id) DO UPDATE SET status=excluded.status,attempted_at=excluded.attempted_at,error_code=excluded.error_code`,
-    [sessionId, recipient.id, uncertain ? "reconciliation_required" : "failed", attemptedAt, error?.code || "delivery_failed"]);
+    await d1.query(`UPDATE newsletter_delivery_recipients SET status=?,error_code=?
+      WHERE issue_id=? AND subscriber_id=? AND status='pending' AND provider_message_id=?`,
+    [uncertain ? "reconciliation_required" : "failed", error?.code || "delivery_failed", sessionId, recipient.id, claimId]);
     return { ok: false, status: uncertain ? "delivery_reconciliation_required" : "failed", error: error?.message || String(error) };
   }
 }
