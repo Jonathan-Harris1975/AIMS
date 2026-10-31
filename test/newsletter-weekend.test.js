@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { weekendPlan, londonInstant, prepareWeekendNewsletters, sendWeekendNewsletter } from '../services/newsletter/engine/weekend.js';
 import { checkIssueDeliveryPolicy } from '../services/newsletter/engine/deliveryPolicy.js';
-import { deliverNewsletterIssue, deliverTodaysIssueToSubscriber, issueDeliveryDue } from '../services/newsletter/delivery/aimsDelivery.js';
+import { claimNewsletterRecipient, deliverNewsletterIssue, deliverTodaysIssueToSubscriber, issueDeliveryDue } from '../services/newsletter/delivery/aimsDelivery.js';
 import { editionDirection } from '../services/newsletter/engine/edition.js';
 import { validateDailyOpening } from '../services/newsletter/engine/validators.js';
 
@@ -121,4 +121,36 @@ test('known storage or audience preflight failures remain safe to retry before a
     assert.equal(result.stage, 'preflight'); assert.equal(result.safeToRetry, true);
   }
   assert.equal(sends, 0);
+});
+
+
+test('newsletter recipient reservation admits only one concurrent SMTP owner and never reclaims uncertain sends', async () => {
+  const records = new Map();
+  const d1 = { async query(sql, params) {
+    if (sql.includes('INSERT INTO newsletter_delivery_recipients')) {
+      const [issue, subscriber, , token] = params;
+      const key = issue + ':' + subscriber;
+      if (records.has(key)) return { results: [] };
+      records.set(key, { status: 'pending', token });
+      return { results: [{ subscriber_id: subscriber }] };
+    }
+    if (sql.includes('UPDATE newsletter_delivery_recipients')) {
+      const [, token, issue, subscriber] = params;
+      const row = records.get(issue + ':' + subscriber);
+      if (row?.status !== 'failed') return { results: [] };
+      row.status = 'pending'; row.token = token;
+      return { results: [{ subscriber_id: subscriber }] };
+    }
+    const row = records.get(params[0] + ':' + params[1]);
+    return { results: row ? [{ status: row.status }] : [] };
+  } };
+  const args = { d1, sessionId: 'edition-1', subscriberId: 'reader-1' };
+  const results = await Promise.all(Array.from({ length: 8 }, () => claimNewsletterRecipient(args)));
+  assert.equal(results.filter(x => x.claimed).length, 1);
+  assert.equal(results.filter(x => !x.claimed && x.status === 'delivery_reconciliation_required').length, 7);
+  records.get('edition-1:reader-1').status = 'failed';
+  const retries = await Promise.all([claimNewsletterRecipient(args), claimNewsletterRecipient(args)]);
+  assert.equal(retries.filter(x => x.claimed).length, 1);
+  records.get('edition-1:reader-1').status = 'sent';
+  assert.deepEqual(await claimNewsletterRecipient(args), { claimed: false, status: 'already_sent' });
 });
