@@ -1,3 +1,5 @@
+import { isWithinBusinessHours } from "./domain/businessHours.js";
+
 function iso(value) {
   const date = value instanceof Date ? value : new Date(value);
   return Number.isFinite(date.getTime()) ? date.toISOString() : null;
@@ -66,6 +68,23 @@ export function evaluateWorkerHeartbeat({ descriptor, rows = [], now = new Date(
       status = "stale";
       freshness = "stale";
     }
+  }
+
+  // A regularly ticking email poll is intentionally paused outside business hours.
+  // Do not turn that expected pause into an incident, or hide a more recent failure.
+  const attemptMs = lastAttemptAt ? Date.parse(lastAttemptAt) : NaN;
+  const failureMs = lastFailureAt ? Date.parse(lastFailureAt) : NaN;
+  const scheduledPause = descriptor.category === "inbound_email"
+    && descriptor.businessHoursPolicy
+    && !isWithinBusinessHours(now, descriptor.businessHoursPolicy)
+    && Number.isFinite(attemptMs)
+    && Number.isFinite(nowMs)
+    && nowMs - attemptMs >= 0
+    && nowMs - attemptMs <= thresholds.staleAfterMs
+    && (!Number.isFinite(failureMs) || (Number.isFinite(successMs) && failureMs <= successMs));
+  if (scheduledPause && status !== "healthy") {
+    status = "paused";
+    freshness = "scheduled_pause";
   }
 
   return {
