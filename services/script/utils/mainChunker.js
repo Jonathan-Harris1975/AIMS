@@ -126,7 +126,9 @@ ${attempt > 1 ? "The previous output failed length or completeness checks; use t
         sessionId: sessionMeta.sessionId, section: `main-section-${section.id}-${attempt}`,
         messages: [{ role: "user", content: prompt + context }], returnMetadata: true,
         max_tokens: Math.max(4096, Math.ceil(target * 2.8) + 600), maxRetries: 1,
-        reasoning: { effort: "none", exclude: true }, timeoutMs: 180_000,
+        // Leave reasoning unset: some configured OpenRouter models require it.
+        // Section word-count and completeness gates remain unchanged.
+        timeoutMs: 180_000,
       });
       const generated = cleanTranscript(String(result?.content ?? result ?? ""));
       text = continuation ? [text, generated].join("\n\n") : generated;
