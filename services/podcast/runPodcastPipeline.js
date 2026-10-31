@@ -168,7 +168,7 @@ export async function runPodcastPipeline(input = {}, maybeOptions = {}) {
       force,
       prompt: artworkPrompt || undefined,
     });
-    if (!artwork?.ok || !artwork?.publicUrl || !["generated", "fallback"].includes(artwork?.source) || (artwork?.source === "generated" && !artwork?.key)) {
+    if (!artwork?.ok || !artwork?.publicUrl || artwork?.source !== "generated" || !artwork?.key) {
       throw new Error(artwork?.error || "Artwork generation failed");
     }
     log.info("🎨 Artwork generation complete", {
