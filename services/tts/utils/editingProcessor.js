@@ -135,6 +135,48 @@ function verifyFileReady(filePath, description) {
   return stats;
 }
 
+function runCommand(command, args, timeoutMs) {
+  return new Promise((resolve) => {
+    let stdout = "";
+    let stderr = "";
+    let settled = false;
+    const child = spawn(command, args);
+    const timeout = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      child.kill("SIGKILL");
+      resolve({ status: null, stdout, stderr, timedOut: true });
+    }, timeoutMs);
+    timeout.unref?.();
+
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      resolve(result);
+    };
+
+    child.stdout.on("data", (d) => { stdout += d.toString(); });
+    child.stderr.on("data", (d) => { stderr += d.toString(); });
+    child.on("error", (err) => finish({ status: null, stdout, stderr, error: err }));
+    child.on("close", (code) => finish({ status: code, stdout, stderr }));
+  });
+}
+
+async function getFfmpegFilters() {
+  try {
+    const result = await runCommand("ffmpeg", ["-hide_banner", "-filters"], 10_000);
+    if (result.timedOut) {
+      log.warn("⚠️ ffmpeg -filters timed out; assuming rubberband unavailable");
+      return false;
+    }
+    return result.status === 0 && /\brubberband\b/.test(result.stdout || "");
+  } catch (error) {
+    log.warn("⚠️ Could not query ffmpeg filters", { error: error.message });
+    return false;
+  }
+}
+
 function getAudioDuration(filePath) {
   try {
     const probe = spawnSync('ffprobe', [
@@ -220,10 +262,7 @@ export async function editingProcessor(sessionId, inputPathObj) {
   try {
     // Use the Rubber Band pitch filter when available. Alpine FFmpeg builds
     // may omit it; atempo alone cannot provide an equivalent pitch shift.
-    const filters = spawnSync("ffmpeg", ["-hide_banner", "-filters"], {
-      encoding: "utf8", timeout: 10_000,
-    });
-    const hasRubberband = filters.status === 0 && /\brubberband\b/.test(filters.stdout || "");
+    const hasRubberband = await getFfmpegFilters();
     if (!hasRubberband) {
       log.warn("Podcast pitch shift unavailable; continuing with remaining audio processing", { sessionId });
     }
