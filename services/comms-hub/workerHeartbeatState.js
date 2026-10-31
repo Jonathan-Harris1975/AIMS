@@ -87,7 +87,9 @@ export function evaluateWorkerHeartbeat({ descriptor, rows = [], now = new Date(
 export function workerRunAdvanced(result) {
   if (!result?.skipped) return true;
   if (!result.reason) return false;
-  return !["already_running", "stopping"].includes(result.reason);
+  // A skipped poll does not prove provider or mailbox processing succeeded.
+  // Only completed work advances the success heartbeat; attempts are recorded separately.
+  return false;
 }
 
 export function buildWorkerHeartbeatHealth({ descriptors, rows, now = new Date() }) {
