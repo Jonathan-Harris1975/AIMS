@@ -218,12 +218,20 @@ export async function editingProcessor(sessionId, inputPathObj) {
   let previousStagePath = null; // Track the stage before current for cleanup
 
   try {
-    // Stage 1: Pitch Shift
+    // Use the Rubber Band pitch filter when available. Alpine FFmpeg builds
+    // may omit it; atempo alone cannot provide an equivalent pitch shift.
+    const filters = spawnSync("ffmpeg", ["-hide_banner", "-filters"], {
+      encoding: "utf8", timeout: 10_000,
+    });
+    const hasRubberband = filters.status === 0 && /\\brubberband\\b/.test(filters.stdout || "");
+    if (!hasRubberband) {
+      log.warn("Podcast pitch shift unavailable; continuing with remaining audio processing", { sessionId });
+    }
     currentInput = await runFFmpegStage(
       sessionId,
       currentInput,
       stage1Path,
-      "rubberband=pitch=0.93:tempo=1.0",
+      hasRubberband ? "rubberband=pitch=0.93:tempo=1.0" : "anull",
       "Stage 1: 🗣️ Pitch Shift"
     );
     verifyFileReady(stage1Path, "Stage 1 output");
