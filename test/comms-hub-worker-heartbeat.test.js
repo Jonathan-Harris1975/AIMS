@@ -129,3 +129,21 @@ test("heartbeat coverage includes every critical Comms Hub maintenance worker", 
     assert.equal(categories.has(category), true, `${category} must be monitored`);
   }
 });
+
+
+test("inbound email scheduled pause is not mistaken for successful processing or a worker outage", () => {
+  const email = { category: "inbound_email", key: "info", enabled: true, pollIntervalMs: 60_000,
+    businessHoursPolicy: { timeZone: "Europe/London", startHour: 9, endHour: 17 } };
+  const now = new Date("2026-10-31T16:45:00.000Z"); // Saturday
+  const rows = [{ instance_id: "one", last_attempt_at: "2026-10-31T16:44:00.000Z",
+    last_success_at: "2026-10-30T16:00:00.000Z" }];
+  const paused = evaluateWorkerHeartbeat({ descriptor: email, rows, now });
+  assert.equal(paused.status, "paused");
+  assert.equal(paused.freshness, "scheduled_pause");
+  assert.equal(paused.lastSuccessAt, "2026-10-30T16:00:00.000Z");
+  assert.equal(buildWorkerHeartbeatHealth({ descriptors: [email], rows: rows.map(row => ({...row, worker_category: "inbound_email", worker_key: "info"})), now }).overall, "healthy");
+  assert.equal(evaluateWorkerHeartbeat({ descriptor: email, rows: [{...rows[0], last_attempt_at: "2026-10-31T16:20:00.000Z"}], now }).status, "stale");
+  assert.equal(evaluateWorkerHeartbeat({ descriptor: email, rows: [{...rows[0], last_failure_at: "2026-10-30T17:00:00.000Z"}], now }).status, "stale");
+  assert.equal(evaluateWorkerHeartbeat({ descriptor: email, rows: [], now }).status, "stale");
+  assert.equal(evaluateWorkerHeartbeat({ descriptor: email, rows, now: new Date("2026-11-02T10:00:00.000Z") }).status, "stale");
+});
