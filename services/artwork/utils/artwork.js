@@ -124,7 +124,7 @@ connection must be visually legible through supported software, compute, robotic
     "Composition: one dominant episode-specific real-world story occupying roughly seventy per cent of the frame, with at most one supporting element. The subject must be \
 recognisable from the episode rather than a generic AI symbol.",
     "Mood: sharp, sceptical, intelligent, cinematic, grounded and modern.",
-    "Style: premium photographic editorial realism with one physical focal subject, believable details and clean negative space. Avoid labelled racks, equipment front panels, readable displays and typography-friendly surfaces.",
+    "Style: premium photographic realism, one physical focal subject and clean negative space. Avoid labelled equipment and readable displays.",
     `Creative direction: ${policyPrompt}`,
     "Final compliance check: remove all accidental text, pseudo-text, logos, UI, generic glowing brains, symmetric emblems and unrelated decorative technology motifs.",
   ].join(" ");
