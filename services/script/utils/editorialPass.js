@@ -85,7 +85,7 @@ export async function runEditorialPass(meta = {}, scriptText = "") {
         temperature: 0.25,
         max_tokens: Math.min(Number(process.env.PODCAST_EDITORIAL_MAX_TOKENS || 32000), Math.max(4096, Math.ceil(countWords(block) * 2.8))),
         timeoutMs: Number(process.env.PODCAST_EDITORIAL_TIMEOUT_MS || 900000),
-        reasoning: { effort: process.env.PODCAST_EDITORIAL_REASONING_EFFORT || "none", exclude: true }, returnMetadata: true,
+        returnMetadata: true,
       });
       const refined = String(result?.content ?? result ?? "").trim();
       const retained = refined && result?.finishReason !== "length" && /[.!?]["'”’]?\s*$/.test(refined)
