@@ -54,7 +54,7 @@ test("current external-provider contracts stay aligned", async () => {
   assert.match(ai, /retry-after/);
   assert.match(zernio, /account\?\.isActive === false/);
   assert.match(artworkPayload, /ARTWORK_PROVIDER_RETRIES \|\| 1/);
-  assert.match(artwork, /ARTWORK_VISUAL_QA_MAX_REGENERATIONS \?\? 0/);
+  assert.match(artwork, /ARTWORK_VISUAL_QA_MAX_REGENERATIONS \?\? \(mode === "podcast" \? 1 : 0\)/);
   assert.match(thresholds, /PODCAST_ARTWORK_SHORT_PROMPT_RETRY", false/);
   assert.match(newsletterDelivery, /OneComMailClient/);
   assert.match(newsletterDelivery, /newsletter_delivery_recipients/);
