@@ -1,3 +1,4 @@
+import { businessHoursPolicy } from "./domain/businessHours.js";
 import { randomUUID } from "node:crypto";
 import { log } from "../../logger.js";
 import { safeErrorLog } from "./domain/redaction.js";
@@ -39,6 +40,7 @@ export class CommsHubWorkerHeartbeatService {
         key: accountKey,
         enabled: config.emailPollWorkerEnabled === true && account.enabled === true,
         pollIntervalMs: config.emailPollMs,
+        businessHoursPolicy: businessHoursPolicy(config),
       });
     }
     return descriptors;
