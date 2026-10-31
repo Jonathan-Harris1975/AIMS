@@ -79,6 +79,25 @@ test("durable heartbeat aggregation survives restart rows and recognises multipl
 });
 
 
+test("instrumented skipped runs record attempts without recording success", async () => {
+  const events = [];
+  const service = new CommsHubWorkerHeartbeatService({
+    context: {
+      operationsRepository: {
+        async recordWorkerHeartbeat(event) { events.push(event.event); },
+      },
+    },
+    instanceId: "skipped-run-test",
+  });
+  const worker = service.instrument({ async runOnce() {
+    return { skipped: true, reason: "outside_business_hours" };
+  } }, descriptor);
+  const result = await worker.runOnce();
+  assert.equal(result.skipped, true);
+  assert.deepEqual(events, ["attempt"]);
+});
+
+
 test("heartbeat success advances only for completed worker ticks", () => {
   assert.equal(workerRunAdvanced({ skipped: true, reason: "already_running" }), false);
   assert.equal(workerRunAdvanced({ skipped: true, reason: "stopping" }), false);
