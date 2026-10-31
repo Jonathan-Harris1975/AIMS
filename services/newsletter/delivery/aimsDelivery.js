@@ -72,8 +72,8 @@ async function sendIssueToRecipient({ profile, sessionId, recipient, buildResult
   const { claimId } = claim;
   let acceptedByProvider = false;
   try {
-  const unsubscribeToken = await createUnsubscribeToken(recipient.id, profile.id, { d1 });
-  const unsubscribeUrl = `${publicBaseUrl()}/newsletter/unsubscribe/${encodeURIComponent(unsubscribeToken)}`;
+    const unsubscribeToken = await createUnsubscribeToken(recipient.id, profile.id, { d1 });
+    const unsubscribeUrl = `${publicBaseUrl()}/newsletter/unsubscribe/${encodeURIComponent(unsubscribeToken)}`;
     const result = await mail.sendMessage({
       to: [recipient.email],
       subject: buildResult.newsletter.subject,
