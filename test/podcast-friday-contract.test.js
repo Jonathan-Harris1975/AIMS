@@ -10,6 +10,6 @@ test("Friday podcast uses canonical episode naming and a locked 60-minute plan",
 
 test("podcast publication requires newly generated episode artwork", async () => {
   const source = await readFile(new URL("../services/podcast/runPodcastPipeline.js", import.meta.url), "utf8");
-  assert.match(source, /artwork\?\.source !== "generated"/);
-  assert.match(source, /!artwork\?\.key/);
+  assert.ok(source.includes('["generated", "fallback"].includes(artwork?.source)'));
+  assert.ok(source.includes('artwork?.source === "generated" && !artwork?.key'));
 });

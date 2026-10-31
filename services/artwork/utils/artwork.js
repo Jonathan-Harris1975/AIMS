@@ -120,11 +120,11 @@ connection must be visually legible through supported software, compute, robotic
   }
 
   return [
-    "Create square premium editorial podcast episode artwork for an adult AI news show.",
+    "Create a square photorealistic editorial scene for a technology podcast episode. This is an image, not a magazine cover, poster or page layout.",
     "Composition: one dominant episode-specific real-world story occupying roughly seventy per cent of the frame, with at most one supporting element. The subject must be \
 recognisable from the episode rather than a generic AI symbol.",
     "Mood: sharp, sceptical, intelligent, cinematic, grounded and modern.",
-    "Style: premium magazine-feature realism with strong hierarchy, believable physical detail and clean negative space.",
+    "Style: premium photographic realism, one physical focal subject and clean negative space. Avoid labelled equipment and readable displays.",
     `Creative direction: ${policyPrompt}`,
     "Final compliance check: remove all accidental text, pseudo-text, logos, UI, generic glowing brains, symmetric emblems and unrelated decorative technology motifs.",
   ].join(" ");
