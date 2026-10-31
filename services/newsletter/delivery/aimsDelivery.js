@@ -63,10 +63,10 @@ async function sendIssueToRecipient({ profile, sessionId, recipient, buildResult
     if (status === "sent") return { ok: true, status: "already_sent" };
     return { ok: false, status: "delivery_reconciliation_required" };
   }
-  const unsubscribeToken = await createUnsubscribeToken(recipient.id, profile.id, { d1 });
-  const unsubscribeUrl = `${publicBaseUrl()}/newsletter/unsubscribe/${encodeURIComponent(unsubscribeToken)}`;
   let acceptedByProvider = false;
   try {
+  const unsubscribeToken = await createUnsubscribeToken(recipient.id, profile.id, { d1 });
+  const unsubscribeUrl = `${publicBaseUrl()}/newsletter/unsubscribe/${encodeURIComponent(unsubscribeToken)}`;
     const result = await mail.sendMessage({
       to: [recipient.email],
       subject: buildResult.newsletter.subject,
