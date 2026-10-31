@@ -79,12 +79,12 @@ test("durable heartbeat aggregation survives restart rows and recognises multipl
 });
 
 
-test("heartbeat success does not advance for overlapping or stopping worker ticks", () => {
+test("heartbeat success advances only for completed worker ticks", () => {
   assert.equal(workerRunAdvanced({ skipped: true, reason: "already_running" }), false);
   assert.equal(workerRunAdvanced({ skipped: true, reason: "stopping" }), false);
+  assert.equal(workerRunAdvanced({ skipped: true, reason: "not_due" }), false);
+  assert.equal(workerRunAdvanced({ skipped: true, reason: "outside_business_hours" }), false);
   assert.equal(workerRunAdvanced({ skipped: true }), false);
-  assert.equal(workerRunAdvanced({ skipped: true, reason: "not_due" }), true);
-  assert.equal(workerRunAdvanced({ skipped: true, reason: "outside_business_hours" }), true);
   assert.equal(workerRunAdvanced({ processed: 0 }), true);
 });
 
