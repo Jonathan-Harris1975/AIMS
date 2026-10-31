@@ -125,7 +125,7 @@ export function buildArtworkVisualQaPrompt({ mode = "editorial", creativePrompt 
       "The image must visibly communicate a concrete subject from the episode brief. A generic AI emblem, digital snowflake, circuit mandala, neural flower, floating polygon \
 or decorative data network is a hard failure.",
       "It must look like adult technology journalism rather than fantasy, lifestyle, generic sci-fi or a permanent show logo.",
-      "Prominent readable text, invented headlines, magazine-layout pseudo-text, logos or watermarks are hard failures. Tiny incidental unreadable equipment markings that do not survive podcast-thumbnail viewing are advisory defects, not hard failures.",
+      "Prominent invented text, logos and watermarks are hard failures. Tiny unreadable equipment markings are advisory defects.",
     ],
     blog: [
       "The image must visibly represent artificial intelligence or the article's AI-enabled consequence through one concrete editorial scene rather than generic decoration.",
