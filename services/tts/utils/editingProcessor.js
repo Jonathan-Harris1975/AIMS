@@ -223,7 +223,7 @@ export async function editingProcessor(sessionId, inputPathObj) {
     const filters = spawnSync("ffmpeg", ["-hide_banner", "-filters"], {
       encoding: "utf8", timeout: 10_000,
     });
-    const hasRubberband = filters.status === 0 && /\\brubberband\\b/.test(filters.stdout || "");
+    const hasRubberband = filters.status === 0 && /\brubberband\b/.test(filters.stdout || "");
     if (!hasRubberband) {
       log.warn("Podcast pitch shift unavailable; continuing with remaining audio processing", { sessionId });
     }
