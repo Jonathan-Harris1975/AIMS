@@ -40,7 +40,7 @@ function withUnsubscribe(html, url) {
 }
 
 
-async function sendIssueToRecipient({ profile, sessionId, recipient, buildResult, d1, mail }) {
+export async function claimNewsletterRecipient({ d1, sessionId, subscriberId }) {
   // Atomically reserve a recipient before SMTP. A pending reservation after a
   // crash is deliberately not replayed: provider acceptance may be unknown.
   const claimId = randomUUID();
@@ -48,21 +48,28 @@ async function sendIssueToRecipient({ profile, sessionId, recipient, buildResult
   const inserted = await d1.query(`INSERT INTO newsletter_delivery_recipients
     (issue_id,subscriber_id,status,attempted_at,provider_message_id)
     VALUES(?,?,'pending',?,?) ON CONFLICT(issue_id,subscriber_id) DO NOTHING
-    RETURNING subscriber_id`, [sessionId, recipient.id, attemptedAt, claimId]);
+    RETURNING subscriber_id`, [sessionId, subscriberId, attemptedAt, claimId]);
   let claimed = Boolean(inserted.results?.length);
   if (!claimed) {
     const retried = await d1.query(`UPDATE newsletter_delivery_recipients
       SET status='pending',attempted_at=?,provider_message_id=?,error_code=NULL
       WHERE issue_id=? AND subscriber_id=? AND status='failed'
-      RETURNING subscriber_id`, [attemptedAt, claimId, sessionId, recipient.id]);
+      RETURNING subscriber_id`, [attemptedAt, claimId, sessionId, subscriberId]);
     claimed = Boolean(retried.results?.length);
   }
   if (!claimed) {
-    const prior = await d1.query("SELECT status FROM newsletter_delivery_recipients WHERE issue_id=? AND subscriber_id=?", [sessionId, recipient.id]);
+    const prior = await d1.query("SELECT status FROM newsletter_delivery_recipients WHERE issue_id=? AND subscriber_id=?", [sessionId, subscriberId]);
     const status = prior.results?.[0]?.status;
-    if (status === "sent") return { ok: true, status: "already_sent" };
-    return { ok: false, status: "delivery_reconciliation_required" };
+    if (status === "sent") return { claimed: false, status: "already_sent" };
+    return { claimed: false, status: "delivery_reconciliation_required" };
   }
+  return { claimed: true, claimId };
+}
+
+async function sendIssueToRecipient({ profile, sessionId, recipient, buildResult, d1, mail }) {
+  const claim = await claimNewsletterRecipient({ d1, sessionId, subscriberId: recipient.id });
+  if (!claim.claimed) return { ok: claim.status === "already_sent", status: claim.status };
+  const { claimId } = claim;
   let acceptedByProvider = false;
   try {
   const unsubscribeToken = await createUnsubscribeToken(recipient.id, profile.id, { d1 });
