@@ -37,10 +37,12 @@ RUN echo "[build] runtime packages" \
     curl \
     dumb-init \
     ffmpeg \
+    rubberband \
     chromium \
  && command -v chromium >/dev/null \
  && command -v ffmpeg >/dev/null \
  && command -v ffprobe >/dev/null \
+ && ffmpeg -hide_banner -filters 2>/dev/null | grep -q rubberband \
  && command -v dumb-init >/dev/null
 
 # Install production dependencies before copying the app for better build caching.
