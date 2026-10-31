@@ -79,7 +79,7 @@ export function shortenOverlongSection(text, section, finishReason, previous = "
   const failures = sectionValidationFailures(text, section, finishReason, previous);
   if (failures.length !== 1 || failures[0] !== "above-maximum") return null;
   const maximum = Math.ceil(section.targetWords * 1.1);
-  const sentences = String(text).trim().split(/(?<=[.!?]["'”’]?)\\s+/u);
+  const sentences = String(text).trim().split(/(?<=[.!?]["'”’]?)\s+/u);
   while (sentences.length > 1 && countWords(sentences.join(" ")) > maximum) {
     const candidate = sentences.slice(0, -1).join(" ").trim();
     if (countWords(candidate) < section.minimumWords) return null;
