@@ -124,6 +124,9 @@ connection must be visually legible through supported software, compute, robotic
     "Composition: one dominant episode-specific real-world story occupying roughly seventy per cent of the frame, with at most one supporting element. The subject must be \
 recognisable from the episode rather than a generic AI symbol.",
     "Mood: sharp, sceptical, intelligent, cinematic, grounded and modern.",
+    "Use realistic object scale, correct physical details and credible protective clothing where appropriate.",
+    "Crop closely around the subject; keep it central and dominant, without empty floor or distracting control panels.",
+    "For semiconductor wafers show a realistic circular silicon wafer with a repeating die grid, not PCB traces.",
     "Style: premium photographic realism, one physical focal subject and clean negative space. Avoid labelled equipment and readable displays.",
     `Creative direction: ${policyPrompt}`,
     "Final compliance check: remove all accidental text, pseudo-text, logos, UI, generic glowing brains, symmetric emblems and unrelated decorative technology motifs.",
@@ -335,7 +338,7 @@ async function requestArtworkFromProvider(provider, prompt, mode, date, { useSho
 
       if (shouldAuditArtwork(mode)) {
         const qaRequired = parseBoolean(process.env.ARTWORK_VISUAL_QA_REQUIRED, true);
-        const maxRegenerations = Math.max(0, Math.min(2, Number(process.env.ARTWORK_VISUAL_QA_MAX_REGENERATIONS ?? 0)));
+        const maxRegenerations = Math.max(0, Math.min(2, Number(process.env[`${String(mode).toUpperCase()}_ARTWORK_VISUAL_QA_MAX_REGENERATIONS`] ?? process.env.ARTWORK_VISUAL_QA_MAX_REGENERATIONS ?? (mode === "podcast" ? 1 : 0))));
         let qa;
         let qaPrompt = prompt;
         for (let qaAttempt = 0; qaAttempt <= maxRegenerations; qaAttempt += 1) {
