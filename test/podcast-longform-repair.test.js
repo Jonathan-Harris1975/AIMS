@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { prepareArticleSources, retrieveArticle, deduplicateArticles, htmlToArticleText, isPublicAddress } from "../services/script/utils/articleSources.js";
-import { generateMainLongform, buildSectionPlan, sectionValidationFailures } from "../services/script/utils/mainChunker.js";
+import { generateMainLongform, buildSectionPlan, sectionValidationFailures, shortenOverlongSection } from "../services/script/utils/mainChunker.js";
 import { countWords } from "../services/script/utils/wordBudget.js";
 import { parseFeedText, filterAndScoreFeedItems } from "../services/script/utils/fetchFeeds.js";
 import { validateTranscriptStructure } from "../services/script/utils/scriptValidation.js";
@@ -118,6 +118,28 @@ test("bounded repairs persist exhausted attempts across retries", async () => {
 test("section validation identifies excess length independently of minimum", () => {
   const section = { minimumWords: 839, targetWords: 892 };
   assert.deepEqual(sectionValidationFailures(prose(985), section, "stop"), ["above-maximum"]);
+});
+
+test("overlong complete section is shortened without another LLM call", async () => {
+  let calls = 0;
+  const dependencies = harness(async (_, options) => {
+    calls += 1;
+    const sectionId = Number(options.section.split("-")[2]);
+    const expected = buildSectionPlan(articles(), seconds)[sectionId - 1].targetWords;
+    return { content: Array.from({ length: Math.ceil(expected * 1.13 / 20) },
+      (_, i) => prose(20, `${options.section}Sentence${i}_`)).join(" "), finishReason: "stop" };
+  });
+  const result = await generateMainLongform(meta, articles(), seconds, dependencies);
+  assert.ok(countWords(result) > 6300);
+  assert.equal(calls, buildSectionPlan(articles(), seconds).length);
+  assert.ok(Object.values(dependencies.state().sections).every((entry) => entry.complete));
+});
+
+test("shortening refuses truncated, duplicated or too-short outcomes", () => {
+  const section = { targetWords: 100, minimumWords: 105 };
+  const text = [prose(90, "Evidence"), prose(24, "Tail")].join(" ");
+  assert.equal(shortenOverlongSection(text, section, "length"), null);
+  assert.equal(shortenOverlongSection(text, section, "stop"), null);
 });
 
 test("section validation detects incomplete endings by trailing whitespace", () => {

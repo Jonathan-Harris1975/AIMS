@@ -73,6 +73,22 @@ export function sectionValidationFailures(text, section, finishReason, previous 
   return failures;
 }
 
+// Only remove complete trailing sentences from an otherwise valid overlong section.
+// Never truncate a sentence, relax the word floor, or conceal other quality defects.
+export function shortenOverlongSection(text, section, finishReason, previous = "") {
+  const failures = sectionValidationFailures(text, section, finishReason, previous);
+  if (failures.length !== 1 || failures[0] !== "above-maximum") return null;
+  const maximum = Math.ceil(section.targetWords * 1.1);
+  const sentences = String(text).trim().split(/(?<=[.!?]["'”’]?)\s+/u);
+  while (sentences.length > 1 && countWords(sentences.join(" ")) > maximum) {
+    const candidate = sentences.slice(0, -1).join(" ").trim();
+    if (countWords(candidate) < section.minimumWords) return null;
+    sentences.pop();
+  }
+  const shortened = sentences.join(" ").trim();
+  return sectionValidationFailures(shortened, section, finishReason, previous).length === 0 ? shortened : null;
+}
+
 export function acceptableSection(text, section, finishReason, previous = "") {
   return sectionValidationFailures(text, section, finishReason, previous).length === 0;
 }
@@ -101,9 +117,20 @@ export async function generateMainLongform(sessionMeta, articles, totalMainSecon
     }
     let text = cached?.text || "";
     let complete = false;
+    // Recover already-exhausted checkpoints without another paid model request.
+    const cachedShortened = cached?.complete ? null
+      : shortenOverlongSection(text, section, cached?.finishReason, previous);
+    if (cachedShortened) {
+      text = cachedShortened;
+      complete = true;
+      state.sections[section.id] = { ...cached, text, complete: true };
+      await save(sessionMeta, state);
+      log("podcast.section.shortened", { sessionId: sessionMeta.sessionId, section: section.id,
+        originalWords: countWords(cached.text), actualWords: countWords(text), source: "checkpoint" });
+    }
     // Persist the attempt count as well as text so process restarts cannot
     // turn a bounded stage repair into three fresh doomed requests each time.
-    for (let attempt = Number(cached?.attempts || 0) + 1; attempt <= MAX_SECTION_ATTEMPTS; attempt += 1) {
+    for (let attempt = Number(cached?.attempts || 0) + 1; !complete && attempt <= MAX_SECTION_ATTEMPTS; attempt += 1) {
       const continuation = text && countWords(text) < section.minimumWords && /[.!?]\s*$/.test(text)
         && !["length", "max_tokens", "content_filter"].includes(state.sections[section.id]?.finishReason);
       const missing = Math.max(100, section.targetWords - countWords(text));
@@ -133,6 +160,16 @@ ${attempt > 1 ? "The previous output failed length or completeness checks; use t
       const generated = cleanTranscript(String(result?.content ?? result ?? ""));
       text = continuation ? [text, generated].join("\n\n") : generated;
       complete = acceptableSection(text, section, result?.finishReason, previous);
+      if (!complete) {
+        const shortened = shortenOverlongSection(text, section, result?.finishReason, previous);
+        if (shortened) {
+          const originalWords = countWords(text);
+          text = shortened;
+          complete = true;
+          log("podcast.section.shortened", { sessionId: sessionMeta.sessionId, section: section.id,
+            originalWords, actualWords: countWords(text), source: "generated" });
+        }
+      }
       state.sections[section.id] = { text, complete, attempts: attempt, finishReason: result?.finishReason || null };
       await save(sessionMeta, state);
       log("podcast.section.generated", { sessionId: sessionMeta.sessionId, section: section.id, attempt,
