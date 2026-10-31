@@ -124,7 +124,8 @@ test("overlong complete section is shortened without another LLM call", async ()
   let calls = 0;
   const dependencies = harness(async (_, options) => {
     calls += 1;
-    const expected = Number(options.messages[0].content.match(/word budget is (\\d+)/)[1]);
+    const sectionId = Number(options.section.split("-")[2]);
+    const expected = buildSectionPlan(articles(), seconds)[sectionId - 1].targetWords;
     return { content: Array.from({ length: Math.ceil(expected * 1.13 / 20) },
       (_, i) => prose(20, `Sentence${i}_`)).join(" "), finishReason: "stop" };
   });
