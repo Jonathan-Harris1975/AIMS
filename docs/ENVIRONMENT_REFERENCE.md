@@ -361,8 +361,8 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `PODCAST_TARGET_MINS` | No | services/script/utils/durationCalculator.js:77 |
 | `PODCAST_TARGET_MINUTES` | Yes | services/script/utils/durationCalculator.js:78 |
 | `PODCAST_TRANSCRIPT_HARD_MAX_SENTENCE_WORDS` | Yes | services/script/utils/orchestrator.js:115 |
-| `PODCAST_TRANSCRIPT_HTML_BASE_URL` | Yes | scripts/backfill-transcript-html.js:80<br>scripts/backfill-transcript-html.js:131<br>services/script/utils/orchestrator.js:405<br>services/tts/utils/podcastProcessor.js:152 |
-| `PODCAST_TRANSCRIPT_MAX_SENTENCE_WORDS` | Yes | services/script/utils/editAndFormat.js:197<br>services/script/utils/orchestrator.js:114<br>services/script/utils/orchestrator.js:322<br>services/script/utils/scriptValidation.js:294 |
+| `PODCAST_TRANSCRIPT_HTML_BASE_URL` | Yes | scripts/backfill-transcript-html.js:80<br>scripts/backfill-transcript-html.js:131<br>services/script/utils/orchestrator.js:406<br>services/tts/utils/podcastProcessor.js:152 |
+| `PODCAST_TRANSCRIPT_MAX_SENTENCE_WORDS` | Yes | services/script/utils/editAndFormat.js:197<br>services/script/utils/orchestrator.js:114<br>services/script/utils/orchestrator.js:324<br>services/script/utils/scriptValidation.js:294 |
 | `PODCAST_TRANSCRIPT_MIN_SOURCE_TERMS` | No | services/script/utils/scriptValidation.js:391 |
 | `POLLY_VOICE_ID` | Yes | services/blotato/utils/localCreditFallbackVideo.js:20<br>services/blotato/utils/localCreditFallbackVideo.js:229<br>services/tts/utils/ttsProcessor.js:24 |
 | `PORT` | Yes | routes/podcast-pipeline.js:14<br>scripts/collectCommsWorkerHealth.js:7<br>scripts/deploySmoke.js:3<br>scripts/startupCheck.js:74<br>server.js:487<br>services/ops/index.js:465 |
@@ -383,8 +383,8 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `R2_PUBLIC_BASE_URL_PODCAST` | Yes | scripts/backfill-transcript-html.js:85<br>services/tts/utils/io.js:12<br>services/tts/utils/orchestrator.js:17 |
 | `R2_PUBLIC_BASE_URL_RSS` | Yes | audits/utils/onBrandEvidence.js:455<br>services/blotato/utils/rssArticlePicker.js:84<br>services/blotato/utils/rssArticleSource.js:120<br>services/rss-feed-creator/utils/feedGenerator.js:36<br>services/rss-feed-creator/utils/feedGenerator.js:37 |
 | `R2_PUBLIC_BASE_URL_RSS_FEEDS` | No | audits/utils/onBrandEvidence.js:455 |
-| `R2_PUBLIC_BASE_URL_TRANSCRIPT` | Yes | scripts/backfill-transcript-html.js:78<br>scripts/backfill-transcript-html.js:83<br>scripts/backfill-transcript-html.js:134<br>services/script/utils/generateTranscriptHtml.js:248<br>services/script/utils/orchestrator.js:408<br>services/tts/utils/podcastProcessor.js:149<br>+1 more |
-| `R2_PUBLIC_BASE_URL_TRANSCRIPT_HTML` | Yes | scripts/backfill-transcript-html.js:81<br>scripts/backfill-transcript-html.js:132<br>services/script/utils/orchestrator.js:406<br>services/tts/utils/podcastProcessor.js:153 |
+| `R2_PUBLIC_BASE_URL_TRANSCRIPT` | Yes | scripts/backfill-transcript-html.js:78<br>scripts/backfill-transcript-html.js:83<br>scripts/backfill-transcript-html.js:134<br>services/script/utils/generateTranscriptHtml.js:248<br>services/script/utils/orchestrator.js:409<br>services/tts/utils/podcastProcessor.js:149<br>+1 more |
+| `R2_PUBLIC_BASE_URL_TRANSCRIPT_HTML` | Yes | scripts/backfill-transcript-html.js:81<br>scripts/backfill-transcript-html.js:132<br>services/script/utils/orchestrator.js:407<br>services/tts/utils/podcastProcessor.js:153 |
 | `R2_REGION` | Yes | audits/utils/publishAuditArtifacts.js:59 |
 | `R2_REQUEST_TIMEOUT_MS` | No | services/shared/utils/r2-client.js:117 |
 | `R2_RETRY_ATTEMPTS` | No | services/shared/utils/r2-client.js:118 |
