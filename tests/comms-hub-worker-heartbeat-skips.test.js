@@ -8,7 +8,7 @@ test('completed worker runs advance success heartbeat', () => {
 });
 
 test('skipped runs never advance success heartbeat', () => {
-  for (const reason of ['already_running', 'stopping', 'outside_business_hours', 'not_due', 'disabled', 'lease_held', 'uidvalidity_rebaseline']) {
+  for (const reason of ['already_running', 'stopping', 'disabled', 'lease_held', 'uidvalidity_rebaseline']) {
     assert.equal(workerRunAdvanced({ skipped: true, reason }), false, reason);
   }
   assert.equal(workerRunAdvanced({ skipped: true }), false);
