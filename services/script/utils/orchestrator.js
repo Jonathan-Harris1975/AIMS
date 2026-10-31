@@ -209,13 +209,14 @@ async function orchestrateScriptImpl(input) {
     // ============================================================
     // 1) Generate intro, main, outro (using updated Option A models)
     // ============================================================
+    // Generate and checkpoint the spoken outro before feed-dependent longform work.
+    const outro = await generateOutro(sessionMeta);
     const intro = await generateIntro(sessionMeta);
     const generatedMain = await generateMain(sessionMeta);
     const main = stripLeadingIntroEcho(generatedMain, intro);
     if (main !== String(generatedMain || "").trim()) {
       info("script.main.intro_echo_removed", { sessionId: sid });
     }
-    const outro = await generateOutro(sessionMeta);
 
     // ============================================================
     // 2) High-level composition pass (structure, ordering, cleanup)
