@@ -315,7 +315,7 @@ async function callOpenRouter({ routeKey, providerId, model, apiKey, messages, m
   }
 
   // Schema compatibility must not silently re-enable expensive default reasoning.
-  if (relaxedParameters && reasoning?.effort === "none") payload.reasoning = reasoning;
+  if (relaxedParameters && reasoning?.effort) payload.reasoning = reasoning;
   const serviceTier = relaxedParameters ? undefined : payload.service_tier;
 
   const reqHeaders = {
