@@ -123,6 +123,14 @@ test("OpenRouter retries parameter-incompatible structured requests with a porta
   assert.match(text, /ai\.request\.parameter_relaxation/);
 });
 
+test("OpenRouter mandatory-reasoning errors retry with explicit low effort", async () => {
+  const text = await source("services/shared/utils/ai-service.js");
+  assert.match(text, /function isMandatoryReasoningError/);
+  assert.match(text, /isParameterCompatibilityError\(err\) \|\| isMandatoryReasoningError\(err\)/);
+  assert.match(text, /reasoning: isMandatoryReasoningError\(err\) \? \{ effort: "low" \} : reasoning/);
+  assert.match(text, /if \(relaxedParameters && reasoning\?\.effort\) payload\.reasoning = reasoning/);
+});
+
 test("AIMS newsletter delivery uses the D1 audience and persists an exactly-once hand-off", async () => {
   const audience = await source("services/newsletter/audience/d1Audience.js");
   const delivery = await source("services/newsletter/delivery/aimsDelivery.js");
