@@ -22,7 +22,8 @@ function provider(providerId, modelEnvNames, keyEnvNames) {
       return envValue(...modelEnvNames);
     },
     get apiKey() {
-      return envValue(...keyEnvNames);
+      // Never use legacy provider-specific OpenRouter credentials.
+      return envValue("OPENROUTER_API_KEY");
     },
   };
 }
