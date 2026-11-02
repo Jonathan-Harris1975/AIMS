@@ -271,6 +271,12 @@ function isParameterCompatibilityError(error = {}) {
   return /no endpoints found.*requested parameters|cannot handle.*parameters|unsupported parameter|response[_ ]format|structured output|output_config\.format\.schema|minitems|json schema/.test(text);
 }
 
+function isMandatoryReasoningError(error = {}) {
+  if (Number(error?.status || 0) !== 400) return false;
+  const text = [error?.message, error?.bodySnippet].filter(Boolean).join(" ").toLowerCase();
+  return /reasoning.*mandatory|reasoning.*required|cannot disable reasoning|reasoning.*cannot be disabled/.test(text);
+}
+
 function extractMessageContent(json) {
   const content = json?.choices?.[0]?.message?.content;
   if (typeof content === "string") return content;
@@ -556,7 +562,7 @@ export async function resilientRequest(routeName, {
         // once with the portable core payload before abandoning it. The
         // prompts still require JSON, and deterministic parsers/validators
         // remain the final authority.
-        if (!compatibilityRelaxationUsed && isParameterCompatibilityError(err)) {
+        if (!compatibilityRelaxationUsed && (isParameterCompatibilityError(err) || isMandatoryReasoningError(err))) {
           claimRepairAction("recoveries");
           compatibilityRelaxationUsed = true;
           info("ai.request.parameter_relaxation", {
@@ -575,7 +581,7 @@ export async function resilientRequest(routeName, {
               messages: providerMessages,
               max_tokens: completionBudget,
               response_format,
-              reasoning,
+              reasoning: isMandatoryReasoningError(err) ? { effort: "low" } : reasoning,
               headers,
               timeoutMs,
               signal,
