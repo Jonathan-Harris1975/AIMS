@@ -94,7 +94,7 @@ export async function runResearchTick({
       if (!validMondayAudit(audit, started)) return { status: "monday_audit_unavailable" };
       if (state.cycle && !state.completed) await archive(state.cycle, state);
       const carryOver = Array.isArray(state.pending) && state.pending.length ? state.pending : null;
-      const selection = carryOver ? { books: carryOver } : selectWeeklyBatch(await getBooks(), 0, 100);
+      const selection = carryOver ? { books: carryOver } : selectWeeklyBatch(await getBooks(), 0, 10000);
       if (!selection.books.length) return { status: "no_eligible_books" };
       state.week = week;
       state.cycle = cycle;
