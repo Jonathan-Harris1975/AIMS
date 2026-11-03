@@ -148,7 +148,7 @@ first three ranked items. " +
     messages,
     validateContent: (raw) => parseStructuredJson(raw, "newsletter issue sections"),
     max_tokens: 4200,
-    reasoning: { effort: "none", exclude: true },
+    reasoning: { effort: "low" },
     response_format: strictJsonResponseFormat("newsletter_issue_sections", ISSUE_SECTIONS_SCHEMA),
   };
   let parsed = { ok: false, error: "composeIssueSections: no response received" };
@@ -293,7 +293,7 @@ export async function composeSubjectAndPreview({ profile, heroHeadline, bigThree
     },
   ];
 
-  const raw = await resilientRequest("newsletterSubject", { sessionId, messages, max_tokens: 500, reasoning: { effort: "none", exclude: true }, response_format:
+  const raw = await resilientRequest("newsletterSubject", { sessionId, messages, max_tokens: 500, reasoning: { effort: "low" }, response_format:
      strictJsonResponseFormat("newsletter_subject_preview", SUBJECT_PREVIEW_SCHEMA) });
   const parsed = parseJsonResponse(raw, "composeSubjectAndPreview");
   if (!parsed.ok) return { ok: false, error: parsed.error };

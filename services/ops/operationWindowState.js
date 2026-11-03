@@ -10,11 +10,11 @@ const ACTIVE_STATUSES = new Set(["accepted", "running"]);
 // past an already-exhausted receipt. Bumping this value deliberately grants
 // that deployment one recovery attempt; the revision is persisted with the
 // new receipt, so normal scheduler polling cannot turn it into a retry loop.
-export const OPERATION_RECOVERY_REVISION = "social-provider-handoff-2026-09-11-v1";
+export const OPERATION_RECOVERY_REVISION = "content-upstream-recovery-2026-11-03-v1";
 export const PODCAST_RECOVERY_REVISION = "podcast-section-validation-2026-10-30-v2";
 // One deployment-scoped recovery for a failed newsletter window after the
 // editorial-authority gate repair. Successful sibling tasks remain reusable.
-export const NEWSLETTER_RECOVERY_REVISION = "newsletter-async-recovery-2026-10-30-v3";
+export const NEWSLETTER_RECOVERY_REVISION = "newsletter-reasoning-recovery-2026-11-03-v1";
 
 function normalise(value = "") {
   return String(value || "").trim();
