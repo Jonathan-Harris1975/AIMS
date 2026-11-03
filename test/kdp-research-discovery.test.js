@@ -45,9 +45,10 @@ test("worker requires a successful audit from this Monday and saves rotating pro
     getAudit: async () => audit, getBooks: async () => [{ ebookId: 1, asin: "B012345678" }, { ebookId: 2, asin: "B012345679" }],
     discover: async (book) => ({ ebookId: book.ebookId }), claim: async () => ({ claimed: true, lease: { backend: "r2" } }), release: async () => {},
   };
-  assert.equal((await runResearchTick(options)).status, "complete");
+  assert.equal((await runResearchTick(options)).status, "pending");
   assert.equal(saved.cursor, 1);
   assert.equal(archived.results[0].ebookId, 1);
+  assert.equal((await runResearchTick(options)).status, "complete");
   assert.equal((await runResearchTick(options)).status, "already_complete");
 });
 
