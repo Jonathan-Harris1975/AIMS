@@ -122,7 +122,7 @@ function startJob(req, res, lane, runner, payload = {}) {
 }
 
 router.post("/research/weekly/run", asyncRoute(async (req, res) =>
-  startJob(req, res, "weekly-research", () => runResearchBatch()),
+  startJob(req, res, "weekly-research", () => runResearchBatch(), { sessionId: `kdp-review-${new Date().toISOString().slice(0, 10)}` }),
 ));
 
 async function persistSyncedMetadata(cache) {
