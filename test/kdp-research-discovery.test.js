@@ -47,8 +47,9 @@ test("worker requires a successful audit from this Monday and saves rotating pro
   };
   assert.equal((await runResearchTick(options)).status, "pending");
   assert.equal(saved.cursor, 1);
-  assert.equal(archived.results[0].ebookId, 1);
+  assert.equal(archived, null);
   assert.equal((await runResearchTick(options)).status, "complete");
+  assert.equal(archived.results.length, 2);
   assert.equal((await runResearchTick(options)).status, "already_complete");
 });
 
