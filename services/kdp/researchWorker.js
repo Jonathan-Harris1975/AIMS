@@ -17,6 +17,14 @@ export function londonWeek(date) {
   return day.toISOString().slice(0, 10);
 }
 
+// A fixed UTC Monday anchor creates stable, non-overlapping 28-day cycles.
+export function reviewCycle(date) {
+  const monday = londonWeek(date);
+  const weeks = Math.floor((Date.parse(monday + "T00:00:00Z") - Date.parse("2026-10-26T00:00:00Z")) / (7 * 86400000));
+  const start = new Date(Date.parse("2026-10-26T00:00:00Z") + Math.floor(weeks / 4) * 28 * 86400000);
+  return start.toISOString().slice(0, 10);
+}
+
 export function validMondayAudit(report, now) {
   if (!report || report.mode !== "public" || report.ok !== true || report.complete !== true) return false;
   const created = new Date(report.createdAt);
@@ -79,15 +87,17 @@ export async function runResearchTick({
   try {
     if (acquired.lease.backend !== "r2") return { status: "durable_state_not_configured" };
     const week = londonWeek(started);
+    const cycle = reviewCycle(started);
     const state = await readState() || { cursor: 0 };
-    if (state.week !== week) {
+    if (state.cycle !== cycle) {
       const audit = await getAudit(started);
       if (!validMondayAudit(audit, started)) return { status: "monday_audit_unavailable" };
-      if (state.week && !state.completed) await archive(state.week, state);
+      if (state.cycle && !state.completed) await archive(state.cycle, state);
       const carryOver = Array.isArray(state.pending) && state.pending.length ? state.pending : null;
-      const selection = carryOver ? { books: carryOver } : selectWeeklyBatch(await getBooks(), state.cursor || 0, batchSize(env));
+      const selection = carryOver ? { books: carryOver } : selectWeeklyBatch(await getBooks(), 0, 100);
       if (!selection.books.length) return { status: "no_eligible_books" };
       state.week = week;
+      state.cycle = cycle;
       state.auditRunId = audit.runId;
       state.pending = selection.books;
       state.auditEvidence = (audit.publicAudit?.listings || []).map((row) => ({
@@ -97,7 +107,7 @@ export async function runResearchTick({
       state.completed = false;
       await writeState(state);
     }
-    if (state.completed) return { status: "already_complete", week, listingUpdates: 0, proposalCounts: countProposals(state.results) };
+    if (state.completed) return { status: "already_complete", week, cycle, listingUpdates: 0, proposalCounts: countProposals(state.results) };
     if (state.pending.length && inWeeklyWindow(now(), "update") && londonWeek(now()) === week) {
       const book = state.pending[0];
       const maxRequests = Number(env.KDP_RESEARCH_MONTHLY_SEARCH_LIMIT || 900);
@@ -145,8 +155,8 @@ export async function runResearchTick({
       // but cannot silently skip an ebook or trigger a KDP listing update.
       await writeState(state);
     }
-    if (!state.pending.length) { state.completed = true; await archive(week, state); await writeState(state); }
-    return { status: state.completed ? "complete" : "pending", week, processed: state.results.length, pending: state.pending.length,
+    if (!state.pending.length) { state.completed = true; await archive(cycle, state); await writeState(state); }
+    return { status: state.completed ? "complete" : "pending", week, cycle, processed: state.results.length, pending: state.pending.length,
       listingUpdates: 0, proposalCounts: countProposals(state.results) };
   } finally { await release(acquired.lease); }
 }
@@ -165,6 +175,7 @@ export async function runResearchBatch({ tick = runResearchTick, pause = (ms) =>
     const result = await tick();
     if (result.status === "pending") { await pause(60_000); continue; }
     if (["complete", "already_complete"].includes(result.status)) return { ok: true, ...result };
-    return { ok: false, ...result };
+    // Missing prerequisites are explicit skips, not failed jobs that trigger retries.
+    return { ok: true, skipped: true, reason: result.status, ...result };
   }
 }
