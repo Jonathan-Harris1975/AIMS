@@ -170,3 +170,17 @@ test("Blotato scheduled runs use deterministic slots, a daily cap, and bounded r
   );
   assert.match(defaults, /^BLOTATO_DAILY_PAID_RENDER_CAP=2$/m);
 });
+
+test("newsletter composition requests low reasoning rather than disabling required reasoning", async () => {
+  const text = await source("services/newsletter/engine/compose.js");
+  assert.match(text, /reasoning:\s*\{ effort: "low" \}/);
+  assert.match(text, /const responseOptions = \{[\s\S]*?reasoning:\s*\{ effort: "low" \}/);
+});
+
+test("content operation recovery revisions permit one bounded recovery of failed windows", async () => {
+  const text = await source("services/ops/operationWindowState.js");
+  assert.match(text, /OPERATION_RECOVERY_REVISION = "content-upstream-recovery-2026-11-03-v1"/);
+  assert.match(text, /NEWSLETTER_RECOVERY_REVISION = "newsletter-reasoning-recovery-2026-11-03-v1"/);
+  assert.match(text, /reusableOperationTaskResults/);
+});
+
