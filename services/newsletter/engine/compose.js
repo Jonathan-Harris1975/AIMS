@@ -293,7 +293,7 @@ export async function composeSubjectAndPreview({ profile, heroHeadline, bigThree
     },
   ];
 
-  const raw = await resilientRequest("newsletterSubject", { sessionId, messages, max_tokens: 500, reasoning: { effort: "none", exclude: true }, response_format:
+  const raw = await resilientRequest("newsletterSubject", { sessionId, messages, max_tokens: 500, reasoning: { effort: "low" }, response_format:
      strictJsonResponseFormat("newsletter_subject_preview", SUBJECT_PREVIEW_SCHEMA) });
   const parsed = parseJsonResponse(raw, "composeSubjectAndPreview");
   if (!parsed.ok) return { ok: false, error: parsed.error };
