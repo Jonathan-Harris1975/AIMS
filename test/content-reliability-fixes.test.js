@@ -41,7 +41,7 @@ test("newsletter composition constrains reasoning and reviews use a portable val
   const council = await readFile(new URL("../services/newsletter/engine/editorialCouncil.js", import.meta.url), "utf8");
   assert.doesNotMatch(compose, /maxItems:\s*[35]/);
   assert.doesNotMatch(compose, /minItems:\s*1/);
-  assert.match(compose, /reasoning: \{ effort: "none", exclude: true \}/);
+  assert.match(compose, /reasoning: \{ effort: "low" \}/);
   assert.match(council, /reasoning: \{ effort: "none", exclude: true \}/);
   assert.match(council, /parseNewsletterReview/);
   assert.doesNotMatch(council, /response_format:/);
