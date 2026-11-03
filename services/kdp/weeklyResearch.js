@@ -21,7 +21,7 @@ export function inWeeklyWindow(date, phase) {
 
 /** A cursor is the last attempted ebook ID, persisted by the caller. */
 export function selectWeeklyBatch(books, lastEbookId = 0, size = 15) {
-  if (!Number.isSafeInteger(size) || size < 1 || size > 100) throw new RangeError("Invalid batch size");
+  if (!Number.isSafeInteger(size) || size < 1 || size > 10000) throw new RangeError("Invalid batch size");
   if (!Number.isSafeInteger(lastEbookId) || lastEbookId < 0) throw new RangeError("Invalid cursor");
   const byId = new Map();
   for (const book of books) {

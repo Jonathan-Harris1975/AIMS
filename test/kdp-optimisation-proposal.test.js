@@ -25,7 +25,8 @@ test("model suggestions require supporting book text and a recent dated source",
     description: "Machine learning supports grid operations. New topics invented here.", keywords: ["machine learning", "new invention"],
   }), model: "free" });
   const result = await draftOptimisation(book, research, metadata, { now, request, liveListing });
-  assert.deepEqual(result.keywords, ["machine learning"]);
+  assert.ok(result.keywords.includes("machine learning"));
+  assert.ok(result.keywords.every((keyword) => book.description.toLowerCase().includes(keyword) || book.title.toLowerCase().includes(keyword)));
   assert.equal(result.description, null);
   assert.equal(result.listingUpdated, false);
   assert.equal(result.price.status, "blocked");

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { tavilySearch, competitorCandidates, discoverBookResearch } from "../services/kdp/researchDiscovery.js";
-import { latestAudit, londonWeek, runResearchTick, validMondayAudit } from "../services/kdp/researchWorker.js";
+import { latestAudit, londonWeek, reviewCycle, runResearchTick, validMondayAudit } from "../services/kdp/researchWorker.js";
 
 test("research searches both storefronts and recent topics without treating snippets as verified prices", async () => {
   const calls = [];
@@ -45,9 +45,11 @@ test("worker requires a successful audit from this Monday and saves rotating pro
     getAudit: async () => audit, getBooks: async () => [{ ebookId: 1, asin: "B012345678" }, { ebookId: 2, asin: "B012345679" }],
     discover: async (book) => ({ ebookId: book.ebookId }), claim: async () => ({ claimed: true, lease: { backend: "r2" } }), release: async () => {},
   };
-  assert.equal((await runResearchTick(options)).status, "complete");
+  assert.equal((await runResearchTick(options)).status, "pending");
   assert.equal(saved.cursor, 1);
-  assert.equal(archived.results[0].ebookId, 1);
+  assert.equal(archived, null);
+  assert.equal((await runResearchTick(options)).status, "complete");
+  assert.equal(archived.results.length, 2);
   assert.equal((await runResearchTick(options)).status, "already_complete");
 });
 
@@ -117,4 +119,9 @@ test("a later signed-in audit does not hide the valid Monday public report", asy
     listReports: async (_bucket, prefix) => [{ key: `${prefix}public.json` }],
   });
   assert.equal(found.runId, "public");
+});
+
+test("four-week cycle", () => {
+ assert.equal(reviewCycle(new Date("2026-11-03T12:00:00Z")), "2026-10-26");
+ assert.equal(reviewCycle(new Date("2026-11-24T12:00:00Z")), "2026-11-23");
 });

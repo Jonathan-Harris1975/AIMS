@@ -175,6 +175,7 @@ test("newsletter composition requests low reasoning rather than disabling requir
   const text = await source("services/newsletter/engine/compose.js");
   assert.match(text, /reasoning:\s*\{ effort: "low" \}/);
   assert.doesNotMatch(text, /reasoning:\s*\{ effort: "none", exclude: true \}/);
+  assert.match(text, /const responseOptions = \{[\s\S]*?reasoning:\s*\{ effort: "low" \}/);
 });
 
 test("content operation recovery revisions permit one bounded recovery of failed windows", async () => {
