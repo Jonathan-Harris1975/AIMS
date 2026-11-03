@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { tavilySearch, competitorCandidates, discoverBookResearch } from "../services/kdp/researchDiscovery.js";
-import { latestAudit, londonWeek, runResearchTick, validMondayAudit } from "../services/kdp/researchWorker.js";
+import { latestAudit, londonWeek, reviewCycle, runResearchTick, validMondayAudit } from "../services/kdp/researchWorker.js";
 
 test("research searches both storefronts and recent topics without treating snippets as verified prices", async () => {
   const calls = [];
@@ -117,4 +117,9 @@ test("a later signed-in audit does not hide the valid Monday public report", asy
     listReports: async (_bucket, prefix) => [{ key: `${prefix}public.json` }],
   });
   assert.equal(found.runId, "public");
+});
+
+test("four-week cycle", () => {
+ assert.equal(reviewCycle(new Date("2026-11-03T12:00:00Z")), "2026-10-26");
+ assert.equal(reviewCycle(new Date("2026-11-24T12:00:00Z")), "2026-11-23");
 });
