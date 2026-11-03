@@ -37,8 +37,10 @@ export async function draftOptimisation(book, research, metadata, { now = new Da
   // Deterministic, zero-LLM review: only propose keywords independently
   // supported by both the existing listing and dated external evidence.
   // Never rewrite descriptions or invent marketing claims.
-  const existingKeywords = [observed.data.title, ...(match.metadata.keywords || [])]
-    .filter((value) => typeof value === "string" && value.trim());
+  const existingKeywords = [...new Set(sources.flatMap((source) => {
+    const words = normalize(source.snippet).match(/[a-z0-9]+/g) || [];
+    return words.slice(0, 150).flatMap((word, i) => i + 1 < words.length ? [`${word} ${words[i + 1]}`] : []);
+  }))].filter((phrase) => normalize(context).includes(phrase)).slice(0, 7);
   const candidate = { keywords: existingKeywords, description: "" };
   const original = normalize(context);
   const originalSentences = new Set([observed.data.title, observed.data.description]
