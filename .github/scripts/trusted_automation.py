@@ -118,6 +118,11 @@ RISK_LOW_RISK_CODE_EXTENSIONS_BY_REPO = {
     "MAST": set(),
     "jonathan-harris-website": {".md", ".mdx"},
 }
+RISK_LOW_RISK_FILES_BY_REPO = {
+    # A narrowly scoped operational monitor; deployment and migration scripts
+    # remain high-risk and require exact-head owner approval.
+    "AIMS": {"scripts/comms_worker_watch.py"},
+}
 RISK_LOW_RISK_DOC_EXTENSIONS = {".md", ".mdx", ".rst"}
 RISK_LOW_RISK_ROOT_FILES = {"readme.md", "changelog.md", "config/production.defaults.env"}
 
@@ -687,13 +692,16 @@ def sensitive_file(path: str) -> bool:
     # Documentation is eligible only in its dedicated directory or the two
     # root-level project notes listed below.
     extension = "." + basename.rsplit(".", 1)[-1] if "." in basename else ""
+    basename_stem = basename.rsplit(".", 1)[0] if "." in basename else ""
     # Ordinary source tests can be maintained autonomously. Security/authentication
     # tests remain high-risk through the path and filename checks above; E2E/spec/data
     # paths remain high-risk through the explicit directory rule above.
     if (
-        any(part in {"test", "tests"} for part in parts)
+        (any(part in {"test", "tests"} for part in parts) or basename_stem.startswith("test_"))
         and extension in {".py", ".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"}
     ):
+        return False
+    if folded in RISK_LOW_RISK_FILES_BY_REPO.get(repo_name, set()):
         return False
     if folded in RISK_LOW_RISK_ROOT_FILES:
         return False
