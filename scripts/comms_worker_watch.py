@@ -111,6 +111,28 @@ def validate_health(payload, expected, now, expected_revision=None):
         if worker.get('enabled') is True:
             age_ms = worker.get('ageMs')
             threshold = worker.get('degradedAfterMs')
+            identity = f"{worker.get('category')}:{worker.get('key')}"
+            if worker.get('status') == 'paused' and worker.get('freshness') == 'scheduled_pause':
+                # Inbound email is deliberately paused outside business hours. Its
+                # recent attempt heartbeat and absence of a newer failure are the
+                # health contract while no successful poll is expected.
+                if identity != 'inbound_email:info':
+                    return 'worker_unhealthy'
+                try:
+                    attempted = datetime.fromisoformat(worker['lastAttemptAt'].replace('Z', '+00:00'))
+                    attempt_age_ms = (now - attempted).total_seconds() * 1000
+                    stale_threshold = worker.get('staleAfterMs')
+                    if (type(stale_threshold) not in (int, float) or not math.isfinite(stale_threshold)
+                            or stale_threshold <= 0 or attempt_age_ms < 0 or attempt_age_ms > stale_threshold):
+                        return 'worker_unhealthy'
+                    succeeded = datetime.fromisoformat(worker['lastSuccessAt'].replace('Z', '+00:00'))
+                    failed_raw = worker.get('lastFailureAt')
+                    failed = datetime.fromisoformat(failed_raw.replace('Z', '+00:00')) if failed_raw else None
+                    if failed is not None and failed > succeeded:
+                        return 'worker_unhealthy'
+                except (KeyError, TypeError, ValueError):
+                    return 'worker_unhealthy'
+                continue
             if (worker.get('status') != 'healthy' or type(age_ms) not in (int, float)
                     or type(threshold) not in (int, float) or not math.isfinite(age_ms) or not math.isfinite(threshold)
                     or age_ms < 0 or threshold <= 0 or age_ms > threshold):
