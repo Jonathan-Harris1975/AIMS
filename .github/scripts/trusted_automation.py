@@ -96,7 +96,7 @@ RISK_HIGH_RISK_NAME_STEMS = (
 )
 
 RISK_LOW_RISK_PREFIXES_BY_REPO = {
-    "AIMS": ("routes/", "services/"),
+    "AIMS": ("routes/", "services/", "scripts/"),
     "AIMS-UI": ("apps/", "packages/"),
     "HIVE": ("backend/app/",),
     "HIVE-UI": ("src/",),
@@ -109,7 +109,7 @@ RISK_LOW_RISK_PREFIXES_BY_REPO = {
     ),
 }
 RISK_LOW_RISK_CODE_EXTENSIONS_BY_REPO = {
-    "AIMS": {".js", ".jsx", ".ts", ".tsx"},
+    "AIMS": {".js", ".jsx", ".ts", ".tsx", ".py"},
     "AIMS-UI": {".js", ".jsx", ".ts", ".tsx", ".css", ".scss", ".html", ".svg"},
     "HIVE": {".py"},
     "HIVE-UI": {".js", ".jsx", ".ts", ".tsx", ".css", ".scss", ".html", ".svg"},
@@ -687,11 +687,12 @@ def sensitive_file(path: str) -> bool:
     # Documentation is eligible only in its dedicated directory or the two
     # root-level project notes listed below.
     extension = "." + basename.rsplit(".", 1)[-1] if "." in basename else ""
+    basename_stem = basename.rsplit(".", 1)[0] if "." in basename else ""
     # Ordinary source tests can be maintained autonomously. Security/authentication
     # tests remain high-risk through the path and filename checks above; E2E/spec/data
     # paths remain high-risk through the explicit directory rule above.
     if (
-        any(part in {"test", "tests"} for part in parts)
+        (any(part in {"test", "tests"} for part in parts) or basename_stem.startswith("test_"))
         and extension in {".py", ".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"}
     ):
         return False
