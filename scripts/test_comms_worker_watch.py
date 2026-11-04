@@ -148,6 +148,15 @@ class WorkerWatchTests(unittest.TestCase):
         self.assertIn('EXPECTED_SERVICE_REVISION: ${{ steps.deployed_revision.outputs.sha }}', workflow)
         self.assertIn('id: deployed_revision', workflow)
 
+    def test_workflow_retains_sanitised_health_payload_when_available(self):
+        workflow = (Path(__file__).resolve().parents[1] / '.github/workflows/comms-hub-worker-watch.yml').read_text()
+        evidence = workflow.split('- name: Retain sanitised worker health evidence', 1)[1]
+        self.assertIn("if: ${{ always() && hashFiles('worker-health.json') != '' }}", evidence)
+        self.assertIn('name: comms-worker-health-evidence', evidence)
+        self.assertIn('path: worker-health.json', evidence)
+        self.assertIn('retention-days: 30', evidence)
+        self.assertIn('Persist incident state and detection timestamps', workflow)
+
     def test_network_timeout_and_malformed(self):
         calls = []
         def fail(request, timeout):
