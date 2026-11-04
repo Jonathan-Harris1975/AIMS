@@ -96,7 +96,7 @@ RISK_HIGH_RISK_NAME_STEMS = (
 )
 
 RISK_LOW_RISK_PREFIXES_BY_REPO = {
-    "AIMS": ("routes/", "services/", "scripts/"),
+    "AIMS": ("routes/", "services/"),
     "AIMS-UI": ("apps/", "packages/"),
     "HIVE": ("backend/app/",),
     "HIVE-UI": ("src/",),
@@ -109,7 +109,7 @@ RISK_LOW_RISK_PREFIXES_BY_REPO = {
     ),
 }
 RISK_LOW_RISK_CODE_EXTENSIONS_BY_REPO = {
-    "AIMS": {".js", ".jsx", ".ts", ".tsx", ".py"},
+    "AIMS": {".js", ".jsx", ".ts", ".tsx"},
     "AIMS-UI": {".js", ".jsx", ".ts", ".tsx", ".css", ".scss", ".html", ".svg"},
     "HIVE": {".py"},
     "HIVE-UI": {".js", ".jsx", ".ts", ".tsx", ".css", ".scss", ".html", ".svg"},
@@ -117,6 +117,11 @@ RISK_LOW_RISK_CODE_EXTENSIONS_BY_REPO = {
     "RAMS": set(),
     "MAST": set(),
     "jonathan-harris-website": {".md", ".mdx"},
+}
+RISK_LOW_RISK_FILES_BY_REPO = {
+    # A narrowly scoped operational monitor; deployment and migration scripts
+    # remain high-risk and require exact-head owner approval.
+    "AIMS": {"scripts/comms_worker_watch.py"},
 }
 RISK_LOW_RISK_DOC_EXTENSIONS = {".md", ".mdx", ".rst"}
 RISK_LOW_RISK_ROOT_FILES = {"readme.md", "changelog.md", "config/production.defaults.env"}
@@ -695,6 +700,8 @@ def sensitive_file(path: str) -> bool:
         (any(part in {"test", "tests"} for part in parts) or basename_stem.startswith("test_"))
         and extension in {".py", ".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"}
     ):
+        return False
+    if folded in RISK_LOW_RISK_FILES_BY_REPO.get(repo_name, set()):
         return False
     if folded in RISK_LOW_RISK_ROOT_FILES:
         return False
