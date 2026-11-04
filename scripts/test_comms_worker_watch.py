@@ -64,6 +64,41 @@ class WorkerWatchTests(unittest.TestCase):
         self.assertIsNotNone(validate_health(self.payload, ['inbound_email:missing'], self.now, self.revision))
         self.assertIsNotNone(validate_health(self.payload, [], self.now, self.revision))
 
+    def test_expected_inbound_email_worker_scheduled_pause_is_healthy_with_recent_attempt(self):
+        payload = copy.deepcopy(self.payload)
+        email = {
+            'category': 'inbound_email', 'key': 'info', 'enabled': True,
+            'status': 'paused', 'freshness': 'scheduled_pause',
+            'pollIntervalMs': 1800000, 'degradedAfterMs': 3600000,
+            'staleAfterMs': 5400000,
+            'lastAttemptAt': (self.now - timedelta(minutes=5)).isoformat(),
+            'lastSuccessAt': (self.now - timedelta(days=5)).isoformat(),
+            'lastFailureAt': '1970-01-01T00:00:00Z',
+            'ageMs': 5 * 24 * 60 * 60 * 1000, 'instancesSeen': 1,
+        }
+        payload['health']['workers'].append(email)
+        payload['health']['enabledWorkers'] = 2
+        expected = [*self.expected, 'inbound_email:info']
+        self.assertIsNone(validate_health(payload, expected, self.now, self.revision))
+
+        stale_attempt = copy.deepcopy(payload)
+        stale_attempt['health']['workers'][1]['lastAttemptAt'] = (
+            self.now - timedelta(hours=2)).isoformat()
+        self.assertEqual(validate_health(stale_attempt, expected, self.now, self.revision),
+                         'worker_unhealthy')
+
+        recent_failure = copy.deepcopy(payload)
+        recent_failure['health']['workers'][1]['lastFailureAt'] = (
+            self.now - timedelta(minutes=4)).isoformat()
+        self.assertEqual(validate_health(recent_failure, expected, self.now, self.revision),
+                         'worker_unhealthy')
+
+        unexpected_pause = copy.deepcopy(payload)
+        unexpected_pause['health']['workers'][0]['status'] = 'paused'
+        unexpected_pause['health']['workers'][0]['freshness'] = 'scheduled_pause'
+        self.assertEqual(validate_health(unexpected_pause, expected, self.now, self.revision),
+                         'worker_unhealthy')
+
     def test_health_requires_exact_expected_service_revision(self):
         self.assertEqual(validate_health(self.payload, self.expected, self.now), 'service_revision_missing')
         self.assertEqual(validate_health(self.payload, self.expected, self.now, 'b' * 40), 'service_revision_mismatch')
