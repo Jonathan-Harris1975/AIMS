@@ -84,7 +84,7 @@ itself is explicitly about that subject. " +
   try {
     const raw = await resilientRequest("newsletterHeroPrompt", { sessionId, messages, max_tokens: 150 });
     const prompt = String(raw || "").trim();
-    const forbidden = /\\b(beach|coast|coastline|ocean|sea|resort|tourism|travel|holiday|countryside|mountain|road|path|signpost|sunset|landscape|vacation)\\b/i;
+    const forbidden = /\b(beach|coast|coastline|ocean|sea|resort|tourism|travel|holiday|countryside|mountain|road|path|signpost|sunset|landscape|vacation)\b/i;
     if (prompt && !forbidden.test(prompt)) return prompt;
     if (prompt) warn("newsletter.hero.prompt_rejected_off_topic", { sessionId, heroHeadline, prompt });
   } catch (err) {
