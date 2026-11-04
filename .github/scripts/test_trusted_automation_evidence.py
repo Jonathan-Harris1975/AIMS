@@ -23,6 +23,7 @@ class RiskPolicyTests(unittest.TestCase):
     def test_ordinary_aims_python_scripts_are_eligible(self):
         self.assertFalse(module.sensitive_file("scripts/comms_worker_watch.py"))
         self.assertFalse(module.sensitive_file("scripts/test_comms_worker_watch.py"))
+        self.assertTrue(module.sensitive_file("scripts/unlisted_operational_script.py"))
 
     def test_security_and_deployment_scripts_remain_high_risk(self):
         for path in (
@@ -30,6 +31,8 @@ class RiskPolicyTests(unittest.TestCase):
             "scripts/install_ci_tools.py",
             "scripts/verify_ci_tool_checksums.py",
             "scripts/deployCommsHubDataPlaneWorker.js",
+            "scripts/restoreHeadroomProduction.js",
+            "scripts/commsHubMigrate.js",
         ):
             with self.subTest(path=path):
                 self.assertTrue(module.sensitive_file(path))
