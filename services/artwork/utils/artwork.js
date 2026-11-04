@@ -528,7 +528,13 @@ async function generateArtworkBase64(prompt, { mode = "podcast", date, signal, g
     }
   }
 
-  throw new Error(`Failed to generate artwork: ${lastError?.message || "all providers failed"}`);
+  const failure = new Error(`Failed to generate artwork: ${lastError?.message || "all providers failed"}`);
+  const lastQaCandidate = qaCandidates.at(-1);
+  if (lastQaCandidate) {
+    failure.artworkVisualQa = lastQaCandidate.qa;
+    failure.artworkCandidate = lastQaCandidate;
+  }
+  throw failure;
 }
 
 export async function generatePodcastArtwork(prompt, options = {}) {
