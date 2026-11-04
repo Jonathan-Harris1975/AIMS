@@ -23,7 +23,7 @@ function artworkTaskTimeoutMs(mode = "blog") {
 function normaliseKeyPrefix(value = "") {
   return String(value || "")
     .trim()
-    .replace(/^\\/+|\\/+$/g, "");
+    .replace(/^\/+|\/+$/g, "");
 }
 
 function normaliseAlias(value = "") {
