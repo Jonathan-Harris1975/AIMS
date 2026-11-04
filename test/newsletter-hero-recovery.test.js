@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { generateHeroImage } from "../services/newsletter/engine/heroImage.js";
+import { attachArtworkQaEvidence } from "../services/artwork/utils/artwork.js";
 const input = { profile: { id: "ai-edge", storage: { keyPrefix: "newsletter/ai-edge" } },
   heroHeadline: "AI access controls", leadStory: { title: "AI access controls", summary: "A review of access to AI systems." }, sessionId: "NL-recovery" };
 const generated = { ok: true, publicUrl: "https://images.example/fresh.png", key: "fresh.png", bucketKey: "blogImages" };
@@ -58,4 +59,12 @@ test("failed visual QA exposes bounded scores and provider identity without defe
   assert.deepEqual(result.artworkDiagnostics.attempts[0].provider, { id: "primary", model: "openrouter/image-model" });
   assert.doesNotMatch(JSON.stringify(result.artworkDiagnostics), /Private story prompt|decorative polygons/);
   assert.match(result.error, /did not pass visual QA/);
+});
+
+test("provider retry failure retains the last QA scores and provider identity", () => {
+  const qa = { score: 61, threshold: 80, hardDefects: ["Decorative geometric wallpaper"], defects: [] };
+  const candidate = { qa, provider: { id: "primary", model: "openrouter/image-model" } };
+  const failure = attachArtworkQaEvidence(new Error("all image providers rejected"), [candidate]);
+  assert.equal(failure.artworkVisualQa, qa);
+  assert.equal(failure.artworkCandidate, candidate);
 });
