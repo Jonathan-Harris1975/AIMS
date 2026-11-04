@@ -146,8 +146,9 @@ export async function createBlogArtwork(input) {
     log("done", { key, publicUrl });
     return { ok: true, key, publicUrl, bucketKey, bucketReason };
   } catch (err) {
-    error("artwork.blog.fail", { sessionId, keyPrefix: keyPrefix || undefined, bucketKey, bucketReason, error: err.message });
     const artworkDiagnostics = visualQaFailureDiagnostics(err);
+    error("artwork.blog.fail", { sessionId, keyPrefix: keyPrefix || undefined, bucketKey, bucketReason,
+      error: artworkDiagnostics ? "Artwork failed visual QA." : err.message, artworkDiagnostics });
     try {
       const fallbackBuffer = createDeterministicAiFallbackPng({
         width: 1200,
