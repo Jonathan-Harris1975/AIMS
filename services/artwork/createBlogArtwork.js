@@ -42,6 +42,37 @@ function boolEnv(name, fallback = false) {
   return fallback;
 }
 
+function boundedIdentifier(value) {
+  const text = String(value || "");
+  return /^[a-zA-Z0-9._:/-]{1,120}$/.test(text) ? text : null;
+}
+
+function visualQaFailureDiagnostics(err) {
+  const qa = err?.artworkVisualQa || err?.artworkCandidate?.qa;
+  if (!qa || typeof qa !== "object") return null;
+  const reported = [...(Array.isArray(qa.hardDefects) ? qa.hardDefects : []),
+    ...(Array.isArray(qa.defects) ? qa.defects : [])].join(" ").toLowerCase();
+  const reasonCodes = [];
+  if (/geometr|polygon|orb|network|wallpaper|abstract/.test(reported)) reasonCodes.push("decorative_geometry");
+  if (/text|typograph|letter|logo|watermark/.test(reported)) reasonCodes.push("text_or_pseudotext");
+  if (/unrelated|off.?topic|mismatch|does not (?:match|represent)|not relevant/.test(reported)) reasonCodes.push("story_mismatch");
+  if (/generic|stock|server room/.test(reported)) reasonCodes.push("generic_scene");
+  if (reasonCodes.length === 0) reasonCodes.push("visual_qa_rejected");
+  const scoreFields = ["score", "threshold", "relevance", "minRelevance", "textSafety", "minTextSafety", "composition", "brandFit"];
+  const scores = Object.fromEntries(scoreFields
+    .filter((key) => Number.isFinite(Number(qa[key])))
+    .map((key) => [key, Math.max(0, Math.min(100, Math.round(Number(qa[key]))))]));
+  const provider = err?.artworkCandidate?.provider || {};
+  const providerId = boundedIdentifier(provider.id);
+  const modelId = boundedIdentifier(provider.model);
+  return {
+    stage: "visual_qa",
+    reasonCodes: [...new Set(reasonCodes)].slice(0, 4),
+    scores,
+    provider: providerId || modelId ? { ...(providerId ? { id: providerId } : {}), ...(modelId ? { model: modelId } : {}) } : null,
+  };
+}
+
 function allowDeterministicFallback(mode) {
   // Use the explicitly enabled deterministic branded image only after generated
   // artwork and its corrective retry have failed.
@@ -115,7 +146,9 @@ export async function createBlogArtwork(input) {
     log("done", { key, publicUrl });
     return { ok: true, key, publicUrl, bucketKey, bucketReason };
   } catch (err) {
-    error("artwork.blog.fail", { sessionId, keyPrefix: keyPrefix || undefined, bucketKey, bucketReason, error: err.message });
+    const artworkDiagnostics = visualQaFailureDiagnostics(err);
+    error("artwork.blog.fail", { sessionId, keyPrefix: keyPrefix || undefined, bucketKey, bucketReason,
+      error: artworkDiagnostics ? "Artwork failed visual QA." : err.message, artworkDiagnostics });
     try {
       const fallbackBuffer = createDeterministicAiFallbackPng({
         width: 1200,
@@ -141,6 +174,7 @@ export async function createBlogArtwork(input) {
         warning: publishableFallback ? "Generated artwork unavailable; deterministic editorial fallback used." : undefined,
         error: publishableFallback ? undefined : (err?.message || String(err)),
         originalError: err?.message || String(err),
+        ...(artworkDiagnostics ? { artworkDiagnostics } : {}),
         key: publishableFallback ? fallbackKey : undefined,
         diagnosticKey: fallbackKey,
         diagnosticUrl: publicUrl,
@@ -158,6 +192,7 @@ export async function createBlogArtwork(input) {
       return {
         ok: false,
         error: `${err?.message || String(err)}; deterministic AI diagnostic failed: ${fallbackError?.message || String(fallbackError)}`,
+        ...(artworkDiagnostics ? { artworkDiagnostics } : {}),
         bucketKey,
         bucketReason,
       };

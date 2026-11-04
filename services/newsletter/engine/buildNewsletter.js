@@ -137,7 +137,7 @@ async function finishNewsletterBuild({ profile, sessionId, now, qaResult, lead, 
     sessionId,
   });
   if (!heroImageResult.ok) {
-    warn("newsletter.build.hero_image_missing", { sessionId, profileId: profile.id, error: heroImageResult.error });
+    warn("newsletter.build.hero_image_missing", { sessionId, profileId: profile.id, error: heroImageResult.error, artworkDiagnostics: heroImageResult.artworkDiagnostics || null });
     return {
       ok: false,
       sessionId,
@@ -145,6 +145,7 @@ async function finishNewsletterBuild({ profile, sessionId, now, qaResult, lead, 
       quarantined: true,
       qa: qaResult,
       newsletter: qaResult.newsletter,
+      artworkDiagnostics: heroImageResult.artworkDiagnostics || null,
       error: `Newsletter editorial content passed but hero image generation failed: ${heroImageResult.error}`,
     };
   }

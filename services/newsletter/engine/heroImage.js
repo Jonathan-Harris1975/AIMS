@@ -14,6 +14,34 @@ export function selectNewsletterArtLead({ lead, stories = [], bigThree = [] }) {
   return sources.find((source) => source.link === selected?.link) || lead;
 }
 
+function safeAttemptDiagnostic(result, attempt) {
+  const supplied = result?.artworkDiagnostics;
+  const reasonCodes = Array.isArray(supplied?.reasonCodes)
+    ? supplied.reasonCodes.filter((code) => /^[a-z_]{1,48}$/.test(String(code))).slice(0, 4)
+    : [];
+  const scores = supplied?.scores && typeof supplied.scores === "object"
+    ? Object.fromEntries(Object.entries(supplied.scores)
+      .filter(([, value]) => Number.isFinite(Number(value)))
+      .slice(0, 8)
+      .map(([key, value]) => [key, Math.max(0, Math.min(100, Math.round(Number(value))))]))
+    : null;
+  const provider = supplied?.provider && typeof supplied.provider === "object"
+    ? Object.fromEntries(["id", "model"].filter((key) =>
+      typeof supplied.provider[key] === "string" && /^[a-zA-Z0-9._:/-]{1,120}$/.test(supplied.provider[key]))
+      .map((key) => [key, supplied.provider[key]]))
+    : null;
+  const stage = supplied?.stage === "visual_qa" ? "visual_qa" : "generation";
+  return {
+    attempt,
+    outcome: stage === "visual_qa" ? "visual_qa_failed" : "generation_failed",
+    stage,
+    reasonCodes,
+    scores,
+    provider: provider && Object.keys(provider).length ? provider : null,
+    recoveryAttempted: attempt === 1,
+  };
+}
+
 /**
  * Asks the model for a single, concrete art-direction prompt for the day's
  * hero image, grounded in the lead story's headline (not the individual
@@ -80,6 +108,7 @@ export async function generateHeroImage({ profile, heroHeadline, leadStory = nul
   const originalPrompt = await buildPrompt({ profile, heroHeadline, leadStory, bigThree, sessionId });
   let prompt = originalPrompt;
   let result;
+  const attempts = [];
   for (let attempt = 1; attempt <= 2; attempt += 1) {
     try {
       result = await createArtwork({
@@ -91,9 +120,15 @@ export async function generateHeroImage({ profile, heroHeadline, leadStory = nul
       return { ok: true, prompt, imageUrl: result.publicUrl, key: result.key,
         bucketKey: result.bucketKey, imageStatus: "generated" };
     }
+    attempts.push(safeAttemptDiagnostic(result, attempt));
     if (attempt === 1) {
-      const feedback = String(result?.error || result?.warning || "No usable generated artwork returned.").slice(0, 1400);
-      warn("newsletter.hero.corrective_retry", { sessionId, profileId: profile.id, error: feedback });
+      const feedback = result?.artworkDiagnostics?.stage === "visual_qa"
+        ? "Newsletter artwork failed visual QA."
+        : String(result?.error || result?.warning || "No usable generated artwork returned.").slice(0, 500);
+      warn("newsletter.hero.corrective_retry", {
+        sessionId, profileId: profile.id, error: feedback,
+        artworkDiagnostics: attempts[0],
+      });
       prompt = [
         `Source-specific editorial photograph about ${leadStory?.title || heroHeadline}.`,
         `Source evidence: ${leadStory?.summary || heroHeadline}.`,
@@ -105,9 +140,23 @@ export async function generateHeroImage({ profile, heroHeadline, leadStory = nul
       ].join(" ");
     }
   }
-  const error = result?.error || "Newsletter requires newly generated artwork; diagnostic fallback rejected.";
-  warn("newsletter.hero.generation_failed", { sessionId, profileId: profile.id, error });
-  return { ok: false, error, prompt };
+  const artworkDiagnostics = {
+    stage: attempts.some((item) => item.stage === "visual_qa") ? "visual_qa" : "generation",
+    attemptCount: attempts.length,
+    recoveryAttempted: attempts.length > 1,
+    attempts,
+  };
+  const visualQaFailed = artworkDiagnostics.stage === "visual_qa";
+  const error = visualQaFailed
+    ? "Newsletter artwork did not pass visual QA after bounded recovery."
+    : result?.error || "Newsletter requires newly generated artwork; diagnostic fallback rejected.";
+  warn("newsletter.hero.generation_failed", {
+    sessionId,
+    profileId: profile.id,
+    error: visualQaFailed ? error : String(error).slice(0, 500),
+    artworkDiagnostics,
+  });
+  return { ok: false, error, prompt, artworkDiagnostics };
 }
 
 export default { buildHeroImagePrompt, generateHeroImage };
