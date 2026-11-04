@@ -26,6 +26,15 @@ import {
   safeSnippet,
 } from "./openrouterImagePayload.js";
 
+export function attachArtworkQaEvidence(error, qaCandidates = []) {
+  const candidate = qaCandidates.at(-1);
+  if (candidate) {
+    error.artworkVisualQa = candidate.qa;
+    error.artworkCandidate = candidate;
+  }
+  return error;
+}
+
 const OPENROUTER_BASE_URL =
   process.env.OPENROUTER_BASE_URL || process.env.OPENROUTER_API_BASE || "https://openrouter.ai/api/v1";
 
@@ -529,12 +538,7 @@ async function generateArtworkBase64(prompt, { mode = "podcast", date, signal, g
   }
 
   const failure = new Error(`Failed to generate artwork: ${lastError?.message || "all providers failed"}`);
-  const lastQaCandidate = qaCandidates.at(-1);
-  if (lastQaCandidate) {
-    failure.artworkVisualQa = lastQaCandidate.qa;
-    failure.artworkCandidate = lastQaCandidate;
-  }
-  throw failure;
+  throw attachArtworkQaEvidence(failure, qaCandidates);
 }
 
 export async function generatePodcastArtwork(prompt, options = {}) {
