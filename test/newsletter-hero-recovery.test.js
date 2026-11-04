@@ -18,6 +18,7 @@ test("a failed hero image gets a source-grounded corrective render without repea
   assert.match(calls[1].prompt, /AI access controls/);
   assert.doesNotMatch(calls[1].prompt, /Readable cabinet labels and malformed fingers/);
   assert.match(calls[1].prompt, /single plausible physical object/);
+  assert.match(calls[1].prompt, /no robotic manipulators, molecular diagrams, glassware labels, interfaces or written markings/);
   assert.match(calls[1].prompt, /Keep hands out of frame/);
   assert.match(calls[1].prompt, /Do not show screens/);
   assert.equal(result.prompt, calls[1].prompt);
