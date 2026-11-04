@@ -5,7 +5,7 @@ const input = { profile: { id: "ai-edge", storage: { keyPrefix: "newsletter/ai-e
   heroHeadline: "AI access controls", leadStory: { title: "AI access controls", summary: "A review of access to AI systems." }, sessionId: "NL-recovery" };
 const generated = { ok: true, publicUrl: "https://images.example/fresh.png", key: "fresh.png", bucketKey: "blogImages" };
 
-test("a failed hero image gets a source-grounded corrective render using its QA defects", async () => {
+test("a failed hero image gets a source-grounded corrective render without repeating QA defects", async () => {
   const calls = [];
   const result = await generateHeroImage(input, { buildPrompt: async () => "An engineer at an access cabinet.",
     createArtwork: async (options) => { calls.push(options); return calls.length === 1
@@ -16,7 +16,8 @@ test("a failed hero image gets a source-grounded corrective render using its QA 
   assert.equal(calls[1].mode, "newsletter");
   assert.equal(calls[1].sessionId, "NL-recovery-artwork-repair");
   assert.match(calls[1].prompt, /AI access controls/);
-  assert.match(calls[1].prompt, /Readable cabinet labels and malformed fingers/);
+  assert.doesNotMatch(calls[1].prompt, /Readable cabinet labels and malformed fingers/);
+  assert.match(calls[1].prompt, /single plausible physical object/);
   assert.match(calls[1].prompt, /Keep hands out of frame/);
   assert.match(calls[1].prompt, /Do not show screens/);
   assert.equal(result.prompt, calls[1].prompt);

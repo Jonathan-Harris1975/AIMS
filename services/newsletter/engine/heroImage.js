@@ -101,7 +101,7 @@ export async function generateHeroImage({ profile, heroHeadline, leadStory = nul
         "CORRECTIVE RENDER: simplify the scene to one clear physical subject and one source-supported action. Preserve the news topic and editorial photographic style.",
         "Replace busy monitor or control-cabinet compositions. Do not show screens, control panels, documents, printed surfaces, " +
         "labels, logos, readable text or pseudo-text. Keep hands out of frame and avoid complex reflections.",
-        `Previous QA defects to REMOVE, never words to draw: ${feedback}`,
+        "Use a close-up of a single plausible physical object, with no robotic manipulators, molecular diagrams, glassware labels, interfaces or written markings.",
       ].join(" ");
     }
   }
