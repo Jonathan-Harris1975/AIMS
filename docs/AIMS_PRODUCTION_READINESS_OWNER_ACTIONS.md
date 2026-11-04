@@ -8,12 +8,12 @@ The application exposes its deployed source revision as `health.revision` from K
 
 The historical HTTP 503 recorded on 19 October 2026 remains unresolved by this repository change. No live probe or production recovery was performed.
 
-## Read-only external state checked on 19 October 2026
+## External evidence
 
 - GitHub run [39185361555](https://github.com/Jonathan-Harris1975/AIMS/actions/runs/39185361555) logged `KILO_REPAIR_TRIGGER_URL` as a masked, nonempty Actions value. The upstream workflow conclusion was `skipped`; the log says no repair action was required, so that run did not call the endpoint. It does not supersede the audit's HTTP 403.
 - The latest relevant worker-watch run, [39179452806](https://github.com/Jonathan-Harris1975/AIMS/actions/runs/39179452806), failed at 00:08:52Z and reported HTTP 503 from the AIMS worker health endpoint. This is runtime evidence of an unresolved failure, not a current deployment-SHA verification.
 - A read-only Cloudflare API check found the production data-plane Worker D1 and secret bindings matching the checked-in Wrangler configuration. Cloudflare account-level `enforce_twofactor` is `false`.
-- No direct Koyeb API or CLI connection was available in this check. Koyeb deployment metadata and the service's current environment variables, and durable-state settings remain unverified. No live probe, deployment, or production setting was changed.
+- The 4 November deployment watch verified Koyeb minimum-instance configuration before and after the watch and passed the deployed-SHA check. The independent worker watch then executed the authenticated health probe inside Koyeb. Repository evidence still cannot expose current environment-variable values or independently verify downstream alert acknowledgement.
 
 ## Owner configuration still required
 
