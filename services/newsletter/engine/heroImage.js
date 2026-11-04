@@ -122,7 +122,9 @@ export async function generateHeroImage({ profile, heroHeadline, leadStory = nul
     }
     attempts.push(safeAttemptDiagnostic(result, attempt));
     if (attempt === 1) {
-      const feedback = String(result?.error || result?.warning || "No usable generated artwork returned.").slice(0, 1400);
+      const feedback = result?.artworkDiagnostics?.stage === "visual_qa"
+        ? "Newsletter artwork failed visual QA."
+        : String(result?.error || result?.warning || "No usable generated artwork returned.").slice(0, 500);
       warn("newsletter.hero.corrective_retry", {
         sessionId, profileId: profile.id, error: feedback,
         artworkDiagnostics: attempts[0],
