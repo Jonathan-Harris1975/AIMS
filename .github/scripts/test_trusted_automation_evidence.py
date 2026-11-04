@@ -19,6 +19,22 @@ sys.modules[spec.name] = module
 spec.loader.exec_module(module)
 
 
+class RiskPolicyTests(unittest.TestCase):
+    def test_ordinary_aims_python_scripts_are_eligible(self):
+        self.assertFalse(module.sensitive_file("scripts/comms_worker_watch.py"))
+        self.assertFalse(module.sensitive_file("scripts/test_comms_worker_watch.py"))
+
+    def test_security_and_deployment_scripts_remain_high_risk(self):
+        for path in (
+            "scripts/secret_scan.py",
+            "scripts/install_ci_tools.py",
+            "scripts/verify_ci_tool_checksums.py",
+            "scripts/deployCommsHubDataPlaneWorker.js",
+        ):
+            with self.subTest(path=path):
+                self.assertTrue(module.sensitive_file(path))
+
+
 class WeekendEvidenceTests(unittest.TestCase):
     def test_outside_window_does_not_query_api(self):
         with patch.object(module, "current_weekend_bounds", return_value=None), patch.object(module, "get") as get:
