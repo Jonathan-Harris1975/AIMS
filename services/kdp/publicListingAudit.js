@@ -36,7 +36,12 @@ export function parseProductPage() {
   const pageCountText = printLength || findDetail("pages") || text('[data-csa-c-content-id="book_pages"]');
   const pageCountMatch = pageCountText.match(/\b([\d,]+)\s*pages?\b/i) || pageCountText.match(/^\s*([\d,]+)\s*$/);
   const categories = unique([...document.querySelectorAll("#wayfinding-breadcrumbs_feature_div a, #zg_hrsr a, #SalesRank a")].map((a) => (a.textContent || "").replace(/\s+/g, " ").trim()));
-  const kindlePrice = text("#kindle-price");
+  // Amazon's newer Kindle buy box can display a converted amount alongside
+  // the native purchase charge. Only the explicit paid Kindle offer is trusted.
+  const charge = text("#kindleALCAccordionRow_desktop_content #CoP-ActualPrice-Message")
+    .match(/^You will be charged (USD|GBP)\s+(\d+(?:,\d{3})*\.\d{2})$/i);
+  const nativeCharge = charge ? `${charge[1].toUpperCase() === "USD" ? "$" : "£"}${charge[2]}` : "";
+  const kindlePrice = nativeCharge || text("#kindle-price");
   return {
     asin: asin.toUpperCase(),
     title: text("#productTitle") || attr('meta[property="og:title"]', "content"),

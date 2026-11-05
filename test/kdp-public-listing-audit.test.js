@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { auditPublicCatalogue, compareListing, fetchProductPage, productUrl } from "../services/kdp/publicListingAudit.js";
+import vm from "node:vm";
+import { auditPublicCatalogue, compareListing, fetchProductPage, productUrl, parseProductPage } from "../services/kdp/publicListingAudit.js";
 import { __kdpCatalogueTestHooks } from "../services/kdp/catalogue.js";
 
 const books = [
@@ -93,4 +94,37 @@ test("browser startup failures still report every catalogue entry", async () => 
   assert.equal(result.catalogueBooks, 2);
   assert.deepEqual(result.statusCounts, { parser_unavailable: 2 });
   assert.equal(result.listings[0].catalogue.pageCount, 227);
+});
+
+
+function parsePriceFixture(elements) {
+  const document = {
+    querySelector: (selector) => elements[selector] ? { textContent: elements[selector], getAttribute: () => null } : null,
+    querySelectorAll: () => [],
+  };
+  return vm.runInNewContext(`(${parseProductPage.toString()})()`, { document });
+}
+
+test("new Kindle buy box retains the native charge instead of converted or subscription prices", () => {
+  for (const [charge, expected] of [["You will be charged USD\u00a05.99", "$5.99"], ["You will be charged GBP 4.99", "£4.99"]]) {
+    const result = parsePriceFixture({
+      "#kindleALCAccordionRow_desktop_content #CoP-ActualPrice-Message": charge,
+      "#tmm-grid-swatch-KINDLE": "Kindle EUR 0.00 or EUR 5.34 to buy",
+      "#corePrice_feature_div .a-offscreen": "$19.99",
+    });
+    assert.equal(result.price, expected);
+    assert.equal(result.priceSource, "kindle_price_element");
+  }
+});
+
+test("only a scoped and unambiguous native Kindle charge supplies a trusted price", () => {
+  for (const charge of ["You will be charged EUR 5.34", "You will be charged USD 5.99 or USD 9.99", "Read for free", "USD 5.99"]) {
+    const result = parsePriceFixture({
+      "#kindleALCAccordionRow_desktop_content #CoP-ActualPrice-Message": charge,
+      "#corePrice_feature_div .a-offscreen": "$19.99",
+    });
+    assert.equal(result.priceSource, "unverified_format");
+  }
+  assert.equal(parsePriceFixture({ "#CoP-ActualPrice-Message": "You will be charged USD 5.99" }).priceSource, "unverified_format");
+  assert.equal(parsePriceFixture({ "#kindle-price": "$6.99" }).priceSource, "kindle_price_element");
 });
