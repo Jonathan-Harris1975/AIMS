@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Create pull requests for approved development branches without merge authority.
 
-This script is executed only by the trusted default-branch controller. It
-never checks out or executes code from the pushed branch, never enables native
-auto-merge, and never merges a pull request. Mergify is the sole automated
-merge arbiter after trusted admission.
+This script is executed only by the trusted default-branch controller.
+It never checks out or executes code from the pushed branch, and it never
+merges pull requests. The trusted admission controller enables GitHub native
+auto-merge only after exact-head checks pass.
 """
 from __future__ import annotations
 
@@ -27,7 +27,6 @@ EXCLUDED_PREFIXES = (
     "autonomy/",
     "renovate/",
     "dependabot/",
-    "mergify/",
     "tmp/",
     "temp/",
     "internal/",
@@ -215,8 +214,8 @@ def pr_metadata(branch: str, sha: str) -> tuple[str, str]:
         f"- Target branch: `{DEFAULT_BRANCH}`\n"
         f"- Signalled head: `{sha}`\n\n"
         "The repository's normal pull-request CI and security workflows must complete "
-        "successfully. Trusted automation may then admit the PR to Mergify; Mergify is "
-        "the sole automated merger. This branch controller never enables native auto-merge."
+        "successfully. Trusted automation may then admit the PR for GitHub native auto-merge; GitHub's protected ruleset is "
+        "the merge authority. This branch controller never enables native auto-merge."
         f"{details_block}"
     )
     return title, body
