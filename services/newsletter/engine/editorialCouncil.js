@@ -252,11 +252,11 @@ export async function runNewsletterEditorialCouncil({ profile, newsletter, lead,
     const strictPass = attendanceComplete && noBlockers && qualityTargetMet;
     const toleranceFloor = THRESHOLDS.newsletter.qaPassThreshold * (1 - THRESHOLDS.newsletter.nearThresholdTolerance);
     const nearThresholdPass = !strictPass && attendanceComplete && noBlockers && chair.score >= toleranceFloor;
-    // Below-threshold polish is recorded for the monthly audit. It does not
-    // block the daily send when deterministic checks pass and the council
-    // reports no unresolved publication blocker.
+    // Below-threshold polish is recorded for the monthly audit only. It must
+    // never authorise publication: a council whose chair score sits well under
+    // the quality target is a revise, not a pass.
     const acceptedWithAdvisoryScore = attendanceComplete && noBlockers && !qualityTargetMet;
-    const passed = strictPass || nearThresholdPass || acceptedWithAdvisoryScore;
+    const passed = strictPass || nearThresholdPass;
     const score = chair.score;
     const minimumReviewerScore = Math.min(...allReviews.map((review) => review.score));
 
