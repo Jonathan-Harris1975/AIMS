@@ -131,7 +131,7 @@ export async function publishBook(
         onDetailsPage = true
         steps.push({
           step: 'details',
-          success: result.filled.length > 0,
+          success: result.filled.length > 0 && result.skipped.length === 0,
           detail: { filled: result.filled, skipped: result.skipped },
           errors: result.errors,
         })
@@ -361,7 +361,7 @@ export async function publishBook(
         )
         steps.push({
           step: 'pricing',
-          success: result.filled.length > 0,
+          success: result.filled.length > 0 && result.skipped.length === 0,
           detail: { filled: result.filled, saved: result.saved },
           errors: result.errors,
         })
@@ -384,6 +384,8 @@ export async function publishBook(
       errors.push('Publish was not submitted because an earlier step failed.')
     } else if (request.publish && !dryRun) {
       try {
+        // Metadata-only updates also finish on the pricing page.
+        if (!request.pricing) await openSetupStep(page, format, titleId, 'pricing')
         const action = await clickPublish(page)
         published = true
         steps.push({ step: 'publish', success: true, detail: { action }, errors: [] })

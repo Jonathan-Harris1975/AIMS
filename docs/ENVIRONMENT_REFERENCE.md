@@ -4,9 +4,9 @@
 
 This inventory makes the runtime configuration contract auditable without duplicating secret values. `.env.example` and `env.template` remain the curated operator templates; this file records every production `process.env` dependency and its source locations.
 
-- Runtime variables referenced in production code: **531**
+- Runtime variables referenced in production code: **532**
 - Present in curated templates: **408**
-- Not present in curated templates: **123**
+- Not present in curated templates: **124**
 
 | Variable | Curated template | Production references |
 | --- | --- | --- |
@@ -283,6 +283,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `KDP_OTP_ALLOWED_SENDERS` | Yes | services/kdp/index.js:16<br>services/kdp/otpBroker.js:16 |
 | `KDP_OTP_CHALLENGE_TIMEOUT_MS` | Yes | services/kdp/otpBroker.js:9 |
 | `KDP_PASSWORD` | Yes | services/kdp/index.js:15 |
+| `KDP_UPDATE_DELAY_MINUTES` | No | services/kdp/optimisationUpdates.js:14 |
 | `KDP_USERNAME` | Yes | services/kdp/index.js:15 |
 | `KOYEB_GIT_SHA` | No | scripts/startupCheck.js:54<br>services/comms-hub/routes/index.js:1379<br>services/ops/koyebMonitor.js:32<br>services/ops/koyebMonitor.js:104<br>services/shared/utils/operationalExcellence.js:139 |
 | `KOYEB_MONITOR_INTERVAL_MS` | No | services/ops/koyebMonitor.js:234 |

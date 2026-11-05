@@ -149,3 +149,24 @@ export const __kdpCatalogueTestHooks = {
   mapBook,
   parseJsonArray,
 };
+
+/** Confirmed KDP metadata only. CAS preserves concurrent catalogue edits. Prices remain in the private update ledger until the website has a price schema. */
+export async function updateKdpEbookMetadata(intent) {
+  const { ebookId, asin, details, previous } = intent;
+  const current = await getKdpEbookById(ebookId);
+  if (current.asin.toUpperCase() !== asin) return { status: "conflict" };
+  const description = details.description || current.description;
+  const keywords = details.keywords || current.keywords;
+  if (current.description === description && JSON.stringify(current.keywords) === JSON.stringify(keywords)) return { status: "already_updated" };
+  if ((details.description && current.description !== previous.description)
+      || (details.keywords && JSON.stringify(current.keywords) !== JSON.stringify(previous.keywords))) return { status: "conflict" };
+  const raw = await getKdpD1Client().query("SELECT description, keywords_json FROM ebooks WHERE ebook_id = ?", [ebookId]);
+  const before = raw.results?.[0];
+  if (!before || String(before.description || "") !== current.description ||
+      JSON.stringify(parseJsonArray(before.keywords_json)) !== JSON.stringify(current.keywords)) return { status: "conflict" };
+  const result = await getKdpD1Client().query(
+    "UPDATE ebooks SET description = ?, keywords_json = ?, updated_at = datetime('now') WHERE ebook_id = ? AND UPPER(asin) = ? AND description IS ? AND keywords_json IS ?",
+    [description, JSON.stringify(keywords), ebookId, asin, before.description, before.keywords_json],
+  );
+  return { status: Number(result.meta?.changes) === 1 ? "updated" : "conflict" };
+}

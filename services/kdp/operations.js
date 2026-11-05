@@ -30,6 +30,8 @@ import {
   readKdpMetadataSnapshot,
 } from "./storage.js";
 
+import { runOptimisationUpdates } from "./optimisationUpdates.js";
+
 const router = express.Router();
 const ASYNC_STATUS_BASE = "/kdp/jobs";
 
@@ -120,6 +122,10 @@ function startJob(req, res, lane, runner, payload = {}) {
     metadata: { route: `/kdp/${lane}` },
   }).then((job) => res.status(202).json(job)).catch((error) => sendError(res, error, `Could not start KDP ${lane} job.`));
 }
+
+router.post("/research/updates/run", asyncRoute(async (req, res) =>
+  startJob(req, res, "weekly-update-verification", () => runOptimisationUpdates()),
+));
 
 router.post("/research/weekly/run", asyncRoute(async (req, res) =>
   startJob(req, res, "weekly-research", () => runResearchBatch(), { sessionId: `kdp-review-${new Date().toISOString().slice(0, 10)}` }),

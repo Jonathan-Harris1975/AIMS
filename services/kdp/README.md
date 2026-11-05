@@ -103,3 +103,52 @@ Existing clients that rely on `metadataAnalysis`, `priceFloorAnalysis`, `catalog
 - Automated login supports one SMS OTP step through TextBee. Amazon CAPTCHA, unsupported MFA challenges, or an additional verification step fail closed and require operational intervention.
 - A live KDP publishing transaction has not been exercised against the account in this integration. Use dry runs, verify staged assets and metadata, then perform an initial supervised publish before enabling automated publishing.
 - `KDP_audit` is ready as an on-demand endpoint and report contract. Monthly Council scheduling and automated application of audit recommendations should be connected in a follow-up after reviewing report output and change policy.
+
+## Weekly optimisation and rollout
+
+MAST remains the sole clock: public D1/ASIN listing audit Monday 12:00 London,
+setup metadata refresh Monday 12:15, rotating research batches Tuesday–Thursday
+12:00. `KDP_RESEARCH_BATCH_SIZE` defaults to 15. Each research tick processes one
+book, and pauses five minutes before continuing. The research never substitutes
+KDP search results for the public audit.
+
+Research combines captured Amazon recommendations with Tavily candidates and
+recent dated sources. A free-only drafter and separate critic use
+`kdpResearchDraft` with no application retries. Both must accept the evidence;
+there is no paid fallback. Competitor private keyword fields are not available.
+Public wording informs suggestions, and every accepted keyword requires book and
+source quotes. Proposed descriptions require supporting quotes for every sentence.
+Two distinct source domains are required; a news mention is not search-volume data.
+
+Prices target comparable medians with average prices retained in the evidence.
+`KDP_RESEARCH_PRICE_FLOOR_USD_MINOR` and `KDP_RESEARCH_PRICE_FLOOR_GBP_MINOR`
+default to 499 (cannot be below 400). At least three fresh unique Kindle
+comparisons are needed, with explicit local currency and no visible promotion.
+This means **no promotion was visible**, not proof that the competitor has never
+been discounted. Changes over 25% are withheld, and confirmed prices have a
+28-day cooldown. Royalty-band validation is reused from the KDP engine.
+
+Private R2 `research/updates/<week>/<ebookId>.json` records preserve proposals,
+previous D1/KDP values, submission state and confirmation. Prepared records expire
+after 48 hours. A crash or timeout after entering `submitting` never automatically
+replays Publish. Verification checks fresh signed-in identity, Live status and
+keywords, then both UK/US public listings. Unconfirmed submissions require attention
+after five days. `KDP_UPDATE_DELAY_MINUTES` defaults to five (minimum five).
+
+MAST calls `POST /kdp/research/updates/run` daily at 12:05, 13:05, 14:05, 16:05
+and 20:05 London. Submission remains Tuesday–Thursday 12:00–15:00; the later
+calls only reconcile. Publication checks are spaced at least four hours apart.
+Existing authenticated service middleware protects the routes.
+
+Confirmed descriptions and keywords use compare-and-swap D1 writes, then the
+existing cache purge and website rebuild hooks. Website confirmation checks the
+ASIN and description. Prices are retained in the private ledger: no unverified
+D1 price columns or website price fields are assumed. This change does not alter
+other-marketplace manual/automatic conversion settings in KDP.
+
+Deploy AIMS before enabling its companion MAST schedules. Production acceptance
+still requires a fresh signed-in snapshot with unique ASIN associations, a live
+Tavily/free-model request, configured D1 write/cache-purge/rebuild credentials,
+and one confirmed KDP-to-website update. Local mocks and CI do not establish those
+production facts. Inspect `GET /kdp/research/weekly` and private update records for
+blocked/uncertain states; never classify a saved draft or button click as live.

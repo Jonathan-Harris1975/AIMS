@@ -20,16 +20,22 @@ test("unmatched or stale KDP metadata never calls the model", async () => {
   assert.equal(called, false);
 });
 
-test("model suggestions require supporting book text and a recent dated source", async () => {
-  const request = async () => ({ content: JSON.stringify({
-    description: "Machine learning supports grid operations. New topics invented here.", keywords: ["machine learning", "new invention"],
-  }), model: "free" });
-  const result = await draftOptimisation(book, research, metadata, { now, request, liveListing });
-  assert.ok(result.keywords.includes("machine learning"));
-  assert.ok(result.keywords.every((keyword) => book.description.toLowerCase().includes(keyword) || book.title.toLowerCase().includes(keyword)));
+test("targeted council rejects unsupported claims and approves supported keyword proposals", async () => {
+  const twoSources = { trendSources: { US: [...research.trendSources.US,
+    { ...research.trendSources.US[0], url: "https://another.org/research" }] } };
+  let calls = 0;
+  const request = async () => ({ content: JSON.stringify(++calls === 1 ? {
+    reason: "Recent sources support a more specific reader search phrase.",
+    description: "Invented book coverage.", descriptionClaims: [],
+    keywords: [{ phrase: "machine learning", bookQuote: "Machine learning supports grid operations.",
+      sourceUrl: "https://example.org/story", sourceQuote: "Machine learning supports grid operations" }],
+  } : { approved: true, reason: "The retained keyword is supported by both the book and dated evidence." }), model: "free" });
+  const result = await draftOptimisation(book, twoSources, metadata, { now, request, liveListing });
+  assert.deepEqual(result.keywords, ["machine learning"]);
   assert.equal(result.description, null);
   assert.equal(result.listingUpdated, false);
-  assert.equal(result.price.status, "blocked");
+  assert.equal(result.council.calls, 2);
+  assert.equal(calls, 2);
 });
 
 test("undated or stale sources do not generate a proposal", async () => {

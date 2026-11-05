@@ -5,6 +5,7 @@ import request from "supertest";
 import { testCredential } from "./helpers/testCredentials.js";
 
 const ORIGINAL_ENV = { ...process.env };
+const originalFetch = globalThis.fetch;
 
 function restoreEnv() {
   for (const key of Object.keys(process.env)) {
@@ -309,6 +310,14 @@ await new Promise((resolve) => mockServer.listen(0, "127.0.0.1", resolve));
 const mockAddress = mockServer.address();
 const mockBase = `http://127.0.0.1:${mockAddress.port}`;
 
+// This provider fixture must never send prompts or credentials to production.
+globalThis.fetch = (input, options) => {
+  const url = new URL(typeof input === "string" || input instanceof URL ? input : input.url);
+  if (url.origin !== mockBase) throw new Error("Non-fixture HTTP request blocked in Blotato test");
+  return originalFetch(input, options);
+};
+process.env.HEADROOM_BASE_URL = mockBase;
+process.env.HEADROOM_API_KEY = testCredential("openrouter");
 process.env.NODE_ENV = "test";
 process.env.LOG_LEVEL = "silent";
 process.env.AIMS_API_KEY = "suite-key";
@@ -374,6 +383,7 @@ const auth = { Authorization: "Bearer suite-key" };
 
 test.after(async () => {
   await new Promise((resolve, reject) => mockServer.close((err) => (err ? reject(err) : resolve())));
+  globalThis.fetch = originalFetch;
   restoreEnv();
 });
 
