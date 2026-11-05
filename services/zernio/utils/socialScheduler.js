@@ -144,7 +144,7 @@ function scoreFromGate(defects = [], warnings = []) {
 }
 
 function buildGateError(gate, label = "Zernio social gate") {
-  const err = new Error(`${label} blocked by ${gate.defects.length} hard defect(s) (quality score ${gate.score}/86): ${gate.defects.join(" | ")}`);
+  const err = new Error(`${label} blocked by ${gate.defects.length} hard defect(s) (advisory quality score ${gate.score}/86): ${gate.defects.join(" | ")}`);
   err.statusCode = 422;
   err.zernioSocialGate = gate;
   return err;
@@ -415,6 +415,7 @@ export function runZernioSocialGate({ contentType = "zernio-social", laneKey = "
     // block publication; warning volume alone does not.
     ok: defects.length === 0,
     score,
+    // Retained for audit comparisons; style score alone no longer blocks daily scheduling.
     threshold: 86,
     contentType,
     laneKey,
@@ -428,6 +429,7 @@ function addExternalGateDefects(gate = {}, extraDefects = [], extraWarnings = []
   const defects = [...new Set([...(gate.defects || []), ...extraDefects].filter(Boolean))];
   const warnings = [...new Set([...(gate.warnings || []), ...extraWarnings].filter(Boolean))];
   const score = scoreFromGate(defects, warnings);
+  // Preserve the historical threshold as audit metadata; hard defects alone block.
   return { ...gate, defects, warnings, score, threshold: Number(gate.threshold || 86), ok: defects.length === 0 };
 }
 
@@ -563,7 +565,7 @@ async function reviewPhase5GateOrThrow({ gate, post, featuredBook, dayKey, label
   });
 
   if (review.ok) return { post: review.artifact, gate: review.gate, reviewCouncil: review.reviewCouncil };
-  const err = new Error(`${label} failed after council review (${review.gate.score}/88): ${review.gate.defects.join(" | ")}`);
+  const err = new Error(`${label} failed after council review (advisory quality score ${review.gate.score}/88): ${review.gate.defects.join(" | ")}`);
   err.statusCode = 422;
   err.phase5Gate = review.gate;
   throw err;
