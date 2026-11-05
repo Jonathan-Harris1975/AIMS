@@ -96,7 +96,7 @@ type TitleFormatRef = {
 type BookshelfPageScan = {
   bookshelfRows: number
   titleIds: string[]
-  refs: Array<{ titleId: string; format: string }>
+  refs: Array<{ titleId: string; format: string; asin?: string }>
 }
 
 type BookshelfScan = {
@@ -178,12 +178,6 @@ async function collectBookshelfRefsFromHtml(
     titleIdSet.add(id)
   }
 
-  for (const titleId of titleIdSet) {
-    const hasRef = FORMAT_ORDER.some((format) => refMap.has(`${titleId}:${format}`))
-    if (!hasRef) {
-      refMap.set(`${titleId}:paperback`, { titleId, format: 'paperback' })
-    }
-  }
 
   return {
     refs: [...refMap.values()],
@@ -225,110 +219,53 @@ async function collectBookshelfRefs(
 }
 
 /** Paginated Bookshelf scrape — fallback when API/HTML fetch do not return refs. */
-async function collectBookshelfRefsViaBrowser(page: Page): Promise<BookshelfScan> {
-  await kdpGoto(page, BOOKSHELF_URL, { waitUntil: 'networkidle', timeout: 120_000 })
-  if (page.url().toLowerCase().includes('signin')) {
-    throw new KdpAuthError()
-  }
+export async function collectBookshelfRefsViaBrowser(page: Page, {
+  scanPage = scanCurrentBookshelfPage, navigate = kdpGoto, throttle = kdpThrottle,
+} = {}): Promise<BookshelfScan> {
+  await navigate(page, BOOKSHELF_URL, { waitUntil: 'networkidle', timeout: 120_000 })
+  if (page.url().toLowerCase().includes('signin')) throw new KdpAuthError()
 
-  const refMap = new Map<string, TitleFormatRef>()
-  const titleIdSet = new Set<string>()
+  let refs: TitleFormatRef[] = []
   let totalRows = 0
-  let pagesScanned = 0
-
-  const mergeScan = (scan: BookshelfPageScan) => {
+  const seen = new Set<string>()
+  for (let pagesScanned = 1; pagesScanned <= 200; pagesScanned++) {
+    const scan = await scanPage(page)
+    const signature = scan.refs.map((r) => `${r.titleId}:${r.format}`).sort().join(',')
+    if (!signature || seen.has(signature)) throw new KdpClientError('KDP Bookshelf pagination did not advance; refusing an incomplete snapshot.')
+    seen.add(signature)
     totalRows += scan.bookshelfRows
-    pagesScanned += 1
-    for (const id of scan.titleIds) {
-      titleIdSet.add(id)
+    refs = normalizeRefs([...refs, ...scan.refs])
+    const next = page.locator('.a-pagination li.a-last:not(.a-disabled) a').first()
+    if (await next.count() === 0) {
+      return { refs, bookshelfRows: totalRows, uniqueTitleIds: new Set(refs.map((r) => r.titleId)).size, pagesScanned }
     }
-    for (const ref of normalizeRefs(scan.refs)) {
-      refMap.set(`${ref.titleId}:${ref.format}`, ref)
-    }
+    if (pagesScanned === 200) throw new KdpClientError('KDP Bookshelf exceeded the pagination limit.')
+    await throttle()
+    await next.click({ timeout: 15_000 })
+    await page.waitForFunction(`(previous) => {
+      const scan = (${SCAN_BOOKSHELF_FN})()
+      return scan.refs.map((r) => r.titleId + ':' + r.format).sort().join(',') !== previous
+    }`, signature, { timeout: 30_000 })
+    await page.waitForLoadState('networkidle', { timeout: 60_000 })
   }
-
-  mergeScan(await scanCurrentBookshelfPage(page))
-
-  const pageNumbers = (await page.evaluate(`(() => {
-    const nums = new Set()
-    for (const anchor of document.querySelectorAll('.a-pagination li a')) {
-      const text = (anchor.textContent ?? '').trim()
-      if (/^\\d+$/.test(text)) nums.add(Number(text))
-    }
-    return [...nums].sort((a, b) => a - b)
-  })()`)) as number[]
-
-  let previousIds = [...titleIdSet].sort().join(',')
-
-  for (const pageNum of pageNumbers) {
-    if (pageNum === 1) continue
-
-    let loaded = false
-    for (let attempt = 0; attempt < 3 && !loaded; attempt++) {
-      const clicked = await page
-        .locator('.a-pagination li a')
-        .filter({ hasText: new RegExp(`^${pageNum}$`) })
-        .first()
-        .click({ timeout: 15_000 })
-        .then(() => true)
-        .catch(() => false)
-
-      if (!clicked) continue
-
-      await kdpThrottle()
-
-      await page
-        .waitForFunction(
-          `(num) => {
-            const selected = document.querySelector('.a-pagination .a-selected')
-            return (selected?.textContent ?? '').trim() === String(num)
-          }`,
-          pageNum,
-          { timeout: 15_000 },
-        )
-        .catch(() => {})
-
-      await page.waitForLoadState('networkidle', { timeout: 60_000 }).catch(() => {})
-
-      const scan = await scanCurrentBookshelfPage(page)
-      const currentIds = scan.titleIds.sort().join(',')
-      if (currentIds !== previousIds && scan.titleIds.length > 0) {
-        mergeScan(scan)
-        previousIds = [...titleIdSet].sort().join(',')
-        loaded = true
-      }
-    }
-  }
-
-  // Fallback: titles visible on Bookshelf without an edit/details link still
-  // often have a paperback details page (e.g. Live titles with pricing only).
-  for (const titleId of titleIdSet) {
-    const hasRef = FORMAT_ORDER.some(
-      (format) => refMap.has(`${titleId}:${format}`),
-    )
-    if (!hasRef) {
-      refMap.set(`${titleId}:paperback`, { titleId, format: 'paperback' })
-    }
-  }
-
-  return {
-    refs: [...refMap.values()],
-    bookshelfRows: totalRows,
-    uniqueTitleIds: titleIdSet.size,
-    pagesScanned,
-  }
+  throw new KdpClientError('KDP Bookshelf scan did not complete.')
 }
 
-function normalizeRefs(raw: Array<{ titleId: string; format: string }>): TitleFormatRef[] {
+export function normalizeRefs(raw: Array<{ titleId: string; format: string; asin?: string }>): TitleFormatRef[] {
   const map = new Map<string, TitleFormatRef>()
+  const conflicts = new Set<string>()
   for (const ref of raw) {
     const format = ref.format as KdpBookFormat
     if (format !== 'kindle' && format !== 'paperback' && format !== 'hardcover') {
       continue
     }
-    map.set(`${ref.titleId}:${format}`, { titleId: ref.titleId, format })
+    const key = `${ref.titleId}:${format}`
+    const existing = map.get(key)
+    const asin = verifiedRefAsin('', ref.asin)
+    if (existing?.asin && asin && existing.asin !== asin) conflicts.add(key)
+    map.set(key, { titleId: ref.titleId, format, asin: asin || existing?.asin })
   }
-  return [...map.values()].sort((a, b) => {
+  return [...map.entries()].map(([key, ref]) => conflicts.has(key) ? { ...ref, asin: undefined } : ref).sort((a, b) => {
     const titleCmp = a.titleId.localeCompare(b.titleId)
     if (titleCmp !== 0) return titleCmp
     return FORMAT_ORDER.indexOf(a.format) - FORMAT_ORDER.indexOf(b.format)
@@ -506,7 +443,10 @@ export async function syncBookMetadata(
   format: KdpBookFormat,
 ): Promise<KdpBookMetadata> {
   return withKdpPages(async ({ action, parse }) => {
-    const meta = await fetchBookMetadata(action, parse, { titleId, format })
+    const scan = await collectBookshelfRefs(action, parse)
+    const ref = scan.refs.find((candidate) => candidate.titleId === titleId && candidate.format === format)
+    if (!ref) throw new KdpClientError(`KDP Bookshelf has no exact ${format} record for ${titleId}.`)
+    const meta = await fetchBookMetadata(action, parse, ref)
     if (!meta) {
       throw new KdpClientError(
         `Could not read metadata for ${titleId} (${format}).`,
