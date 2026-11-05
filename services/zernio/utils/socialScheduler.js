@@ -297,6 +297,8 @@ simplif|trade[- ]?off|because|therefore|means)\\b", "i").test(content);
 export function runZernioSocialGate({ contentType = "zernio-social", laneKey = "", post = {}, verifiedQuote = null, buildContext = "" } = {}) {
   const defects = [];
   const warnings = [];
+  const dailyAdvisoryStyle = contentType.startsWith("zernio-daily-");
+  const addStyleFinding = (message) => (dailyAdvisoryStyle ? warnings : defects).push(message);
   const text = compactText([post.title, post.topic, post.content, post.firstComment].filter(Boolean).join("\n"));
   const content = compactText(post.content || "");
   const styleText = laneKey === "monday" && verifiedQuote?.quote
@@ -306,30 +308,30 @@ export function runZernioSocialGate({ contentType = "zernio-social", laneKey = "
   const words = wordCount(content);
 
   if (!content) defects.push("Post content is empty.");
-  if (hashtags.length > 3) warnings.push("Post has more than three hashtags; consider trimming for a cleaner caption.");
+  if (hashtags.length > 3) addStyleFinding("Post has more than three hashtags; consider trimming for a cleaner caption.");
   const genericTags = hashtags.filter((tag) => GENERIC_HASHTAGS.includes(String(tag).toLowerCase()));
   if (genericTags.length > 1) warnings.push("Post uses more than one generic hashtag; keep premium channels tidy.");
   const motivationalTags = hashtags.filter((tag) => MOTIVATIONAL_HASHTAGS.includes(String(tag).toLowerCase()));
-  if (motivationalTags.length) warnings.push(`Motivational hashtag(s) may not fit the brand: ${motivationalTags.join(", ")}`);
+  if (motivationalTags.length) addStyleFinding(`Motivational hashtag(s) may not fit the brand: ${motivationalTags.join(", ")}`);
   for (const phrase of findPlainPhraseBreaches(styleText, ANTI_HYPE_HEDGING_PHRASES)) {
-    warnings.push(`Generic hedging phrase detected: ${phrase}`);
+    addStyleFinding(`Generic hedging phrase detected: ${phrase}`);
   }
   for (const breach of findPatternBreaches(styleText, MOTIVATIONAL_TONE_PATTERNS)) {
-    warnings.push(`Motivational tone drift: ${breach}`);
+    addStyleFinding(`Motivational tone drift: ${breach}`);
   }
   if (/```|\*\*|^\s*[-*]\s+/m.test(content)) warnings.push("Post contains markdown or bullet formatting; plain social copy is preferred.");
-  if (/\p{Extended_Pictographic}/u.test(content)) warnings.push("Post contains emoji; the established brand style generally avoids them.");
+  if (/\p{Extended_Pictographic}/u.test(content)) addStyleFinding("Post contains emoji; the established brand style generally avoids them.");
 
   for (const breach of findPatternBreaches(styleText, BANNED_PROMO_PATTERNS)) {
     defects.push(`Brand tone breach: ${breach}`);
   }
   for (const term of findGenericAbstractionBreaches(styleText)) {
-    warnings.push(
+    addStyleFinding(
       `Generic abstraction phrase detected: "${term}". Replace with a concrete effect (what specifically changes: who/what/impact).`
     );
   }
   for (const { american, british } of findAmericanSpellings(styleText)) {
-    warnings.push(`British English drift: use ${british} instead of ${american}`);
+    addStyleFinding(`British English drift: use ${british} instead of ${american}`);
   }
 
   const baitCheckText = content.replace(/Comment your answer below\.?/gi, "");
@@ -374,11 +376,11 @@ export function runZernioSocialGate({ contentType = "zernio-social", laneKey = "
       .trim();
 
     if (wordCount(commentary) < 22) {
-      warnings.push("Monday commentary is too thin for the preferred style; consider adding an expert implication, tension, consequence, or judgement after the quote.");
+      addStyleFinding("Monday commentary is too thin for the preferred style; consider adding an expert implication, tension, consequence, or judgement after the quote.");
     }
 
     if (/\b(this (?:is|isn't) (?:about|just about)|the key is|what matters is|the future of|shifting the frontier|genuinely useful outcomes|new possibilities)\b/i.test(commentary)) {
-      warnings.push("Monday commentary may read as generic explanation; consider adding a more specific expert observation.");
+      addStyleFinding("Monday commentary may read as generic explanation; consider adding a more specific expert observation.");
     }
   }
 
