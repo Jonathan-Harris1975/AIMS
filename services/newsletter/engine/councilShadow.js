@@ -54,7 +54,7 @@ export async function runTargetedCouncil({ profile, newsletter, lead, stories = 
     async function review(route, group, evidence) {
       const response = await request(route, {
         sessionId: `${sessionId}-targeted-shadow`, section: `newsletter-shadow-${group}`, returnMetadata: true,
-        maxRetries: 0, timeoutMs: 8000, signal: controller.signal, max_tokens: 1000, temperature: 0.1, reasoning: { effort: "none", exclude: true },
+        maxRetries: 0, timeoutMs: 8000, signal: controller.signal, max_tokens: 1000, temperature: 0.1,
         response_format: strictJsonResponseFormat("newsletter_shadow", SCHEMA),
         messages: [
           { role: "system", content: `You are a shadow-only newsletter ${group} reviewer. ${evidence.remit} ` +
