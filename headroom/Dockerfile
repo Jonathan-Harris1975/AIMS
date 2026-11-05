@@ -61,7 +61,9 @@ RUN /usr/local/bin/python3.14 -m venv /opt/headroom \
 FROM ${UBUNTU_IMAGE} AS headroom-runtime
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update \
- && apt-get install -y --no-install-recommends \
+  && apt-get upgrade -y --no-install-recommends \
+      apt libapt-pkg7.0 \
+  && apt-get install -y --no-install-recommends \
       ca-certificates passwd libbz2-1.0 libexpat1 libffi8 libgcc-s1 \
       libgomp1 liblzma5 libncursesw6 libreadline8 libsqlite3-0 \
       libssl3t64 libstdc++6 libuuid1 zlib1g \
