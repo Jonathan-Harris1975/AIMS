@@ -41,10 +41,40 @@ test("newsletter repairs preserve untouched copy and immutable source fields", (
   assert.equal(repaired.subject, "Original");
   assert.equal(draft.bigThree[0].whatHappened, "Before");
   for (const path of ["bigThree.0.link", "bigThree.0.sourceId", "bigThree.0.title", "__proto__.polluted"]) {
-    const rejected = applyNewsletterEdits(draft, [{ path, value: "invalid" }]);
-    assert.equal(rejected.bigThree[0].link, draft.bigThree[0].link);
-    assert.equal(rejected.bigThree[0].sourceId, draft.bigThree[0].sourceId);
-    assert.equal(rejected.bigThree[0].title, draft.bigThree[0].title);
+    assert.throws(() => applyNewsletterEdits(draft, [{ path, value: "invalid" }]));
+  }
+});
+
+test("newsletter targeted repair fails over when the primary returns an invalid edit contract", async () => {
+  const values = { OPENROUTER_API_KEY: "test-key", AI_MODEL_FAST: "test/luna", AI_MODEL_STANDARD: "test/sonnet" };
+  const prior = Object.fromEntries(Object.keys(values).map(key => [key, process.env[key]]));
+  Object.assign(process.env, values);
+  const oldFetch = globalThis.fetch;
+  const models = [];
+  globalThis.fetch = async (_url, options) => {
+    const body = JSON.parse(options.body);
+    models.push(body.model);
+    const content = body.model === "test/luna"
+      ? JSON.stringify({ changes: [] })
+      : JSON.stringify({ edits: [{ path: "subject", value: "Supported subject" }] });
+    return { ok: true, json: async () => ({ choices: [{ message: { content } }] }) };
+  };
+  try {
+    const { repairNewsletterDraft } = await import(`../services/newsletter/engine/targetedRepair.js?repair-failover=${Date.now()}`);
+    const result = await withTaskRepairBudget(() => repairNewsletterDraft({
+      newsletter: { subject: "Old subject", bigThree: [], onRadar: [] },
+      lead: { title: "Evidence", link: "https://example.test", summary: "A cited event" },
+      stories: [], profile: { edition: "daily", brandVoice: "Clear" }, sessionId: "repair-contract-test",
+      repairContext: ["Sharpen the subject"],
+    }), { repairs: 1, recoveries: 2 });
+    assert.equal(result.subject, "Supported subject");
+    assert.deepEqual(models, ["test/luna", "test/luna", "test/sonnet"]);
+  } finally {
+    globalThis.fetch = oldFetch;
+    for (const [key, value] of Object.entries(prior)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
   }
 });
 
