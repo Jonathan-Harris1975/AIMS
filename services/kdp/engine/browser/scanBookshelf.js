@@ -31,7 +31,7 @@
     refs.set(key, { ...existing, ...ref })
   }
 
-  const verifiedRefs = [...refs.entries()].map(([key, ref]) => conflicts.has(key) ? { ...ref, asin: undefined } : ref)
+  const verifiedRefs = [...refs.entries()].map(([key, ref]) => conflicts.has(key) ? { ...ref, asin: undefined, asinConflict: true } : ref)
   return {
     bookshelfRows: document.querySelectorAll('#bookshelftable tbody tr, table tbody tr').length,
     titleIds: [...new Set(verifiedRefs.map((ref) => ref.titleId))],

@@ -90,13 +90,14 @@ type TitleFormatRef = {
   titleId: string
   format: KdpBookFormat
   asin?: string
+  asinConflict?: boolean
   title?: string
 }
 
 type BookshelfPageScan = {
   bookshelfRows: number
   titleIds: string[]
-  refs: Array<{ titleId: string; format: string; asin?: string }>
+  refs: Array<{ titleId: string; format: string; asin?: string; asinConflict?: boolean }>
 }
 
 type BookshelfScan = {
@@ -251,7 +252,7 @@ export async function collectBookshelfRefsViaBrowser(page: Page, {
   throw new KdpClientError('KDP Bookshelf scan did not complete.')
 }
 
-export function normalizeRefs(raw: Array<{ titleId: string; format: string; asin?: string }>): TitleFormatRef[] {
+export function normalizeRefs(raw: Array<{ titleId: string; format: string; asin?: string; asinConflict?: boolean }>): TitleFormatRef[] {
   const map = new Map<string, TitleFormatRef>()
   const conflicts = new Set<string>()
   for (const ref of raw) {
@@ -261,11 +262,12 @@ export function normalizeRefs(raw: Array<{ titleId: string; format: string; asin
     }
     const key = `${ref.titleId}:${format}`
     const existing = map.get(key)
+    if (ref.asinConflict) conflicts.add(key)
     const asin = verifiedRefAsin('', ref.asin)
     if (existing?.asin && asin && existing.asin !== asin) conflicts.add(key)
     map.set(key, { titleId: ref.titleId, format, asin: asin || existing?.asin })
   }
-  return [...map.entries()].map(([key, ref]) => conflicts.has(key) ? { ...ref, asin: undefined } : ref).sort((a, b) => {
+  return [...map.entries()].map(([key, ref]) => conflicts.has(key) ? { ...ref, asin: undefined, asinConflict: true } : ref).sort((a, b) => {
     const titleCmp = a.titleId.localeCompare(b.titleId)
     if (titleCmp !== 0) return titleCmp
     return FORMAT_ORDER.indexOf(a.format) - FORMAT_ORDER.indexOf(b.format)
@@ -392,7 +394,7 @@ export async function fetchBookMetadata(
     pageCount: content.pageCount,
     manuscriptStatus: content.manuscriptStatus,
     coverStatus: content.coverStatus,
-    asin: verifiedRefAsin(pricing.asin, ref.asin),
+    asin: ref.asinConflict ? '' : verifiedRefAsin(pricing.asin, ref.asin),
     listPriceUsd: pricing.listPriceUsd,
     prices: pricing.prices,
     territory: pricing.territory,

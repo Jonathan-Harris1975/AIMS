@@ -37,7 +37,9 @@ test('ambiguous editions, conflicting retail links and external links cannot sup
 test('normalisation retains verified associations and clears cross-page conflicts', () => {
   const base = { titleId: 'A31ZRJGLFAETHB', format: 'kindle' };
   assert.equal(normalizeRefs([{ ...base, asin: 'B0DMYF3YH3' }])[0].asin, 'B0DMYF3YH3');
-  assert.equal(normalizeRefs([{ ...base, asin: 'B0DMYF3YH3' }, { ...base, asin: 'B0DQHSD858' }])[0].asin, undefined);
+  const conflicted = normalizeRefs([{ ...base, asin: 'B0DMYF3YH3' }, { ...base, asin: 'B0DQHSD858' }]);
+  assert.equal(conflicted[0].asin, undefined);
+  assert.equal(normalizeRefs([...conflicted, { ...base, asin: 'B0DQHSD858' }])[0].asin, undefined);
 });
 
 function paginatedPage(size) {
