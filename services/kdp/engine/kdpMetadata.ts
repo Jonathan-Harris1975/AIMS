@@ -210,7 +210,7 @@ async function collectBookshelfRefs(
   if (htmlScan && htmlScan.refs.length > 0) {
     const catalogSize = await fetchAccountCatalogSize(actionPage)
     const looksComplete =
-      catalogSize == null || htmlScan.uniqueTitleIds >= catalogSize * 0.9
+      catalogSize != null && htmlScan.uniqueTitleIds >= catalogSize
     if (looksComplete) {
       return htmlScan
     }
@@ -243,10 +243,10 @@ export async function collectBookshelfRefsViaBrowser(page: Page, {
     if (pagesScanned === 200) throw new KdpClientError('KDP Bookshelf exceeded the pagination limit.')
     await throttle()
     await next.click({ timeout: 15_000 })
-    await page.waitForFunction(`(previous) => {
+    await page.waitForFunction(`(() => {
       const scan = (${SCAN_BOOKSHELF_FN})()
-      return scan.refs.map((r) => r.titleId + ':' + r.format).sort().join(',') !== previous
-    }`, signature, { timeout: 30_000 })
+      return scan.refs.length > 0 && scan.refs.map((r) => r.titleId + ':' + r.format).sort().join(',') !== ${JSON.stringify(signature)}
+    })()`, undefined, { timeout: 30_000 })
     await page.waitForLoadState('networkidle', { timeout: 60_000 })
   }
   throw new KdpClientError('KDP Bookshelf scan did not complete.')
@@ -439,6 +439,18 @@ export async function listBookshelf(): Promise<BookshelfListResult> {
   })
 }
 
+/** A partial API/HTML result is not proof that a setup ID is absent. */
+export async function requireExactBookshelfRef(
+  titleId: string, format: KdpBookFormat, scan: BookshelfScan,
+  completeScan: () => Promise<BookshelfScan>,
+): Promise<TitleFormatRef> {
+  const exact = (refs: TitleFormatRef[]) => refs.find((candidate) => candidate.titleId === titleId && candidate.format === format)
+  let ref = exact(scan.refs)
+  if (!ref && scan.pagesScanned <= 1) ref = exact((await completeScan()).refs)
+  if (!ref) throw new KdpClientError(`KDP Bookshelf has no exact ${format} record for ${titleId}.`)
+  return ref
+}
+
 /** Refresh metadata for a single title/format and patch the local cache. */
 export async function syncBookMetadata(
   titleId: string,
@@ -446,8 +458,7 @@ export async function syncBookMetadata(
 ): Promise<KdpBookMetadata> {
   return withKdpPages(async ({ action, parse }) => {
     const scan = await collectBookshelfRefs(action, parse)
-    const ref = scan.refs.find((candidate) => candidate.titleId === titleId && candidate.format === format)
-    if (!ref) throw new KdpClientError(`KDP Bookshelf has no exact ${format} record for ${titleId}.`)
+    const ref = await requireExactBookshelfRef(titleId, format, scan, () => collectBookshelfRefsViaBrowser(action))
     const meta = await fetchBookMetadata(action, parse, ref)
     if (!meta) {
       throw new KdpClientError(

@@ -2,19 +2,22 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
-import { normalizeRefs, collectBookshelfRefsViaBrowser } from '../services/kdp/engine/kdpMetadata.ts';
+import { normalizeRefs, collectBookshelfRefsViaBrowser, requireExactBookshelfRef } from '../services/kdp/engine/kdpMetadata.ts';
 
 const source = fs.readFileSync(new URL('../services/kdp/engine/browser/scanBookshelf.js', import.meta.url), 'utf8');
 const edit = (id, format = 'kindle') => `/action/dualbookshelf.editkindledetails/en_US/title-setup/${format}/${id}/details`;
 const retail = (asin) => `/amazon-dp-action/uk/dualbookshelf.marketplacelink/${asin}`;
-function scan(rowLinks) {
+function fixtureDocument(rowLinks) {
   const rows = rowLinks.map((hrefs) => {
     const row = { id: 'GROUPROW123', querySelectorAll: () => links };
     const links = hrefs.map((href) => ({ getAttribute: () => href, closest: () => row }));
     return { row, links };
   });
   const document = { querySelectorAll: (selector) => selector === 'a[href]' ? rows.flatMap((r) => r.links) : rows.map((r) => r.row) };
-  return JSON.parse(JSON.stringify(vm.runInNewContext(`(${source})()`, { document })));
+  return document;
+}
+function scan(rowLinks) {
+  return JSON.parse(JSON.stringify(vm.runInNewContext(`(${source})()`, { document: fixtureDocument(rowLinks) })));
 }
 
 test('bookshelf retains the actual edit ID and its explicitly linked retail ASIN, never a grouping row ID', () => {
@@ -45,7 +48,11 @@ test('normalisation retains verified associations and clears cross-page conflict
 function paginatedPage(size) {
   const page = { index: 0, url: () => 'https://kdp.amazon.com/en_US/bookshelf',
     locator: () => ({ first: () => ({ count: async () => page.index < size - 1 ? 1 : 0, click: async () => { page.index++; } }) }),
-    waitForFunction: async () => {}, waitForLoadState: async () => {},
+    waitForFunction: async (expression) => {
+      const documentAt = (index) => fixtureDocument([[edit(`A1234567890${index}`), retail(`B01234567${index}`)]]);
+      assert.equal(vm.runInNewContext(expression, { document: documentAt(page.index - 1) }), false);
+      assert.equal(vm.runInNewContext(expression, { document: documentAt(page.index) }), true);
+    }, waitForLoadState: async () => {},
   };
   return page;
 }
@@ -65,4 +72,17 @@ test('a stuck bookshelf page fails rather than replacing the cache with a partia
   await assert.rejects(collectBookshelfRefsViaBrowser(paginatedPage(2), {
     scanPage: async () => pageScan(0), navigate: async () => {}, throttle: async () => {},
   }), /pagination did not advance/);
+});
+
+test('single-title refresh searches later pages before rejecting an exact setup ID', async () => {
+  const partial = { ...pageScan(0), pagesScanned: 1 };
+  const later = { ...pageScan(8), pagesScanned: 9 };
+  let calls = 0;
+  const complete = async () => { calls++; return later; };
+  const ref = await requireExactBookshelfRef('A12345678908', 'kindle', partial, complete);
+  assert.equal(ref.asin, 'B012345678');
+  assert.equal(calls, 1);
+  await requireExactBookshelfRef('A12345678900', 'kindle', partial, complete);
+  assert.equal(calls, 1);
+  await assert.rejects(requireExactBookshelfRef('GROUPROW123', 'kindle', partial, complete), /no exact kindle record/);
 });
