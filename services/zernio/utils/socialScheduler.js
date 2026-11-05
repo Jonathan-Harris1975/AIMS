@@ -319,7 +319,7 @@ export function runZernioSocialGate({ contentType = "zernio-social", laneKey = "
   for (const breach of findPatternBreaches(styleText, MOTIVATIONAL_TONE_PATTERNS)) {
     addStyleFinding(`Motivational tone drift: ${breach}`);
   }
-  if (/```|\*\*|^\s*[-*]\s+/m.test(content)) warnings.push("Post contains markdown or bullet formatting; plain social copy is preferred.");
+  if (/```|\*\*|^\s*[-*]\s+/m.test(content)) addStyleFinding("Post contains markdown or bullet formatting; plain social copy is preferred.");
   if (/\p{Extended_Pictographic}/u.test(content)) addStyleFinding("Post contains emoji; the established brand style generally avoids them.");
 
   for (const breach of findPatternBreaches(styleText, BANNED_PROMO_PATTERNS)) {
