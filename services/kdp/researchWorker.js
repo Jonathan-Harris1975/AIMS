@@ -8,6 +8,8 @@ import { captureCompetitorEvidence } from "./researchEvidence.js";
 import { draftOptimisation } from "./optimisationProposal.js";
 import { inWeeklyWindow, londonTime, selectWeeklyBatch } from "./weeklyResearch.js";
 
+import { queueOptimisation, runOptimisationUpdates } from "./optimisationUpdates.js";
+
 const KEY = "research/weekly/state.json";
 
 export function londonWeek(date) {
@@ -75,7 +77,7 @@ export async function runResearchTick({
   writeState = (state) => putPrivateJson("kdp", KEY, state),
   archive = (week, state) => putPrivateJson("kdp", `research/weekly/${week}.json`, state),
   getAudit = latestAudit, getBooks = listKdpEbooks, discover = discoverBookResearch, captureEvidence = captureCompetitorEvidence,
-  getMetadata = readKdpMetadataSnapshot, draft = draftOptimisation,
+  getMetadata = readKdpMetadataSnapshot, draft = draftOptimisation, queueUpdate = queueOptimisation, updateTick = runOptimisationUpdates,
   claim = claimDurableLease, release = releaseDurableLease,
 } = {}) {
   const started = now();
@@ -86,15 +88,15 @@ export async function runResearchTick({
   if (!acquired.claimed) return { status: "already_running" };
   try {
     if (acquired.lease.backend !== "r2") return { status: "durable_state_not_configured" };
+    await updateTick();
     const week = londonWeek(started);
     const cycle = reviewCycle(started);
     const state = await readState() || { cursor: 0 };
-    if (state.cycle !== cycle) {
+    if (state.week !== week) {
       const audit = await getAudit(started);
       if (!validMondayAudit(audit, started)) return { status: "monday_audit_unavailable" };
-      if (state.cycle && !state.completed) await archive(state.cycle, state);
-      const carryOver = Array.isArray(state.pending) && state.pending.length ? state.pending : null;
-      const selection = carryOver ? { books: carryOver } : selectWeeklyBatch(await getBooks(), 0, 10000);
+      if (state.week && !state.completed) await archive(state.week, state);
+      const selection = selectWeeklyBatch(await getBooks(), state.cursor || 0, batchSize(env));
       if (!selection.books.length) return { status: "no_eligible_books" };
       state.week = week;
       state.cycle = cycle;
@@ -130,6 +132,15 @@ export async function runResearchTick({
         state.inProgress = result;
         await writeState(state);
       }
+      const auditedBook = state.auditEvidence?.find((row) => row.ebookId === book.ebookId)?.publicListing;
+      if (auditedBook?.status === "captured" && auditedBook.data?.asin === book.asin) {
+        const recommended = (auditedBook.data.recommendedAsins || []).filter((asin) => /^B0[A-Z0-9]{8}$/.test(asin) && asin !== book.asin).slice(0, 3);
+        result.competitors ||= {};
+        for (const market of ["US", "UK"]) {
+          const leads = recommended.map((asin) => ({ asin, url: `https://www.amazon.${market === "US" ? "com" : "co.uk"}/dp/${asin}`, source: "amazon_recommendation" }));
+          result.competitors[market] = [...leads, ...(result.competitors[market] || [])].filter((lead, i, all) => all.findIndex((x) => x.asin === lead.asin) === i);
+        }
+      }
       result.competitorEvidence = await captureEvidence(result);
       if (Object.values(result.competitorEvidence.markets).some((market) => market.status === "blocked")) {
         return { status: "amazon_blocked", week, ebookId: book.ebookId };
@@ -146,6 +157,7 @@ export async function runResearchTick({
       } catch {
         result.optimisation = { status: "blocked", reason: "proposal_unavailable", listingUpdated: false };
       }
+      if (result.optimisation?.status === "approved") result.update = await queueUpdate(week, book, result.optimisation);
       state.results.push(result);
       state.inProgress = null;
       state.cursor = book.ebookId;
@@ -155,7 +167,7 @@ export async function runResearchTick({
       // but cannot silently skip an ebook or trigger a KDP listing update.
       await writeState(state);
     }
-    if (!state.pending.length) { state.completed = true; await archive(cycle, state); await writeState(state); }
+    if (!state.pending.length) { state.completed = true; await archive(week, state); await writeState(state); }
     return { status: state.completed ? "complete" : "pending", week, cycle, processed: state.results.length, pending: state.pending.length,
       listingUpdates: 0, proposalCounts: countProposals(state.results) };
   } finally { await release(acquired.lease); }
@@ -173,7 +185,7 @@ function countProposals(results = []) {
 export async function runResearchBatch({ tick = runResearchTick, pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms)) } = {}) {
   for (;;) {
     const result = await tick();
-    if (result.status === "pending") { await pause(60_000); continue; }
+    if (result.status === "pending") { await pause(5 * 60_000); continue; }
     if (["complete", "already_complete"].includes(result.status)) return { ok: true, ...result };
     // Missing prerequisites are explicit skips, not failed jobs that trigger retries.
     return { ok: true, skipped: true, reason: result.status, ...result };

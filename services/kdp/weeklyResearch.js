@@ -36,9 +36,11 @@ export function selectWeeklyBatch(books, lastEbookId = 0, size = 15) {
 }
 
 /** Evidence must already have been independently checked for comparability. */
-export function priceFromComparables({ marketplace, ownAsin, comparables, observedAt = new Date(), discountMinor = 10, maxAgeHours = 48 }) {
+export function priceFromComparables({ marketplace, ownAsin, comparables, observedAt = new Date(), discountMinor = 0, floorMinor = 499, maxAgeHours = 48 }) {
   const market = MARKET[marketplace];
-  if (!market || !Number.isSafeInteger(discountMinor) || discountMinor < 1 || !Number.isFinite(maxAgeHours) || maxAgeHours <= 0) throw new TypeError("Invalid price settings");
+  if (!market || !Number.isSafeInteger(discountMinor) || discountMinor < 0
+      || !Number.isSafeInteger(floorMinor) || floorMinor < market.floor || !Number.isFinite(maxAgeHours) || maxAgeHours <= 0)
+    throw new TypeError("Invalid price settings");
   const now = new Date(observedAt).getTime();
   if (!Number.isFinite(now) || !Array.isArray(comparables)) throw new TypeError("Invalid evidence");
   const unique = new Map();
@@ -60,7 +62,8 @@ export function priceFromComparables({ marketplace, ownAsin, comparables, observ
   const prices = valid.map((x) => x.priceMinor).sort((a, b) => a - b);
   const mid = Math.floor(prices.length / 2);
   const medianMinor = prices.length % 2 ? prices[mid] : Math.floor((prices[mid - 1] + prices[mid]) / 2);
-  return { status: "proposed", currency: market.currency, medianMinor, priceMinor: Math.max(market.floor, medianMinor - discountMinor), evidence: valid };
+  return { status: "proposed", currency: market.currency, medianMinor,
+    averageMinor: Math.round(prices.reduce((a, b) => a + b, 0) / prices.length), priceMinor: Math.max(floorMinor, medianMinor - discountMinor), evidence: valid };
 }
 
 /** Exact unique ASIN match only; title IDs and ASINs are different identifiers. */

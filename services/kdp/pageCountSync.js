@@ -38,7 +38,7 @@ function configuredHooks(env) {
   return [env.WEBSITE_REBUILD_HOOK, env.WEBSITE_REBUILD_HOOK_FALLBACK].map((v) => String(v || "").trim()).filter(Boolean);
 }
 
-async function triggerRebuild(env = process.env) {
+export async function triggerRebuild(env = process.env) {
   for (const hook of configuredHooks(env)) {
     try {
       const response = await fetch(hook, { method: "POST", signal: AbortSignal.timeout(15000) });

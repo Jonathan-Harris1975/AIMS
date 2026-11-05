@@ -21,7 +21,7 @@ export async function captureCompetitorEvidence(research, { audit = auditPublicC
       return {
         asin: row.asin, url: row.url, status: row.publicListing.status, observedAt: row.publicListing.checkedAt,
         title: data?.title || null, description: data?.description || null, pageCount: data?.pageCount ?? null,
-        price: data?.price || null, priceSource: data?.priceSource || "not_captured",
+        price: data?.price || null, priceSource: data?.priceSource || "not_captured", promotionText: data?.promotionText || null,
         comparability: "unverified", promotionalStatus: "unknown",
       };
     });

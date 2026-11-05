@@ -45,6 +45,11 @@ export function parseProductPage() {
     description: text("#bookDescription_feature_div .a-expander-content") || text("#bookDescription_feature_div") || text("#productDescription"),
     coverUrl: attr("#landingImage", "src") || attr('meta[property="og:image"]', "content"),
     price: kindlePrice || text("#corePrice_feature_div .a-offscreen") || text("#price_inside_buybox") || text("#newBuyBoxPrice"),
+    recommendedAsins: unique([...document.querySelectorAll('[data-asin]')]
+      .filter((node) => node.closest('[id*="similar"], [id*="recommend"], [id*="purchase"], [id*="also"], [id*="sims"]'))
+      .map((node) => node.getAttribute('data-asin'))).filter((id) => /^B0[A-Z0-9]{8}$/.test(id) && id !== asin.toUpperCase()).slice(0, 10),
+    promotionText: text('#kindlePrice .savingsPercentage') || text('#kindle-price-column .savingsPercentage') ||
+      text('#kindle-price-column .a-text-price') || text('#ebooksDesktopsEbooksCountdownTimer_feature_div'),
     priceSource: kindlePrice ? "kindle_price_element" : "unverified_format",
     pageCount: pageCountMatch ? Number(pageCountMatch[1].replace(/,/g, "")) : null,
     pageCountSource: printLength && pageCountMatch ? "print_length" : null,
