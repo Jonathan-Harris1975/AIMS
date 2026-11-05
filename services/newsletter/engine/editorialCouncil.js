@@ -151,7 +151,7 @@ async function runMember(member, context, sessionId) {
     score,
     // The score is an editorial quality signal; only an explicit blocker
     // can veto a fully attended council after the bounded repair loop.
-    verdict: blocking ? "revise" : "pass",
+    verdict: blocking || score < THRESHOLDS.newsletter.qaDailyAdvisoryFloor ? "revise" : "pass",
     belowQualityTarget: score < THRESHOLDS.newsletter.qaPassThreshold,
     blocking,
     issues: Array.isArray(data.issues) ? data.issues : [],
@@ -234,7 +234,7 @@ export async function runNewsletterEditorialCouncil({ profile, newsletter, lead,
       role: chairMember.role,
       authority: chairMember.authority,
       score: chairScore,
-      verdict: chairBlocking ? "revise" : "pass",
+      verdict: chairBlocking || chairScore < THRESHOLDS.newsletter.qaDailyAdvisoryFloor ? "revise" : "pass",
       belowQualityTarget: chairScore < THRESHOLDS.newsletter.qaPassThreshold,
       blocking: chairBlocking,
       issues: Array.isArray(chairData.issues) ? chairData.issues : [],
