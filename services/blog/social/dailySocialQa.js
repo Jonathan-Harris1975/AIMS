@@ -1,8 +1,11 @@
 const DAILY_SOCIAL_ADVISORY_DEFECTS = Object.freeze([
   /British English drift/i,
   /Banned or hype phrase detected/i,
+  /Organic tone breach:/i,
   /Sentence length exceeds the autonomous readability limit/i,
   /Social caption is too thin for autonomous scheduling/i,
+  /Social caption is too long for the autonomous social contract/i,
+  /Caption is too long for the organic visual social lane/i,
   /At least three hashtags are required/i,
   /No more than eight hashtags are allowed/i,
   /Hashtags must be plain #CamelCase tags/i,
