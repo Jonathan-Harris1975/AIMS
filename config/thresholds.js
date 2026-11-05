@@ -108,7 +108,9 @@ export const THRESHOLDS = Object.freeze({
     rssWindowHours: Math.max(1, num("NEWSLETTER_RSS_WINDOW_HOURS", 24)),
     // Number of curated stories in the daily digest (excludes the lead).
     storyCount: Math.max(1, num("NEWSLETTER_STORY_COUNT", 10)),
-    // QA review loop: minimum composite score (0-100) required to publish.
+    // QA review loop target (0-100). Falling below it triggers bounded
+    // improvement/council review; after deterministic checks pass, only an
+    // explicit unresolved publication blocker prevents the daily send.
     qaPassThreshold: Math.max(0, Math.min(100, num("NEWSLETTER_QA_PASS_THRESHOLD", 85))),
     // Cheap self-improvement happens before the expensive editorial council.
     // Legacy NEWSLETTER_MAX_REWRITE_ITERATIONS remains supported, but is capped
