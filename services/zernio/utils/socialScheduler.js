@@ -374,7 +374,7 @@ export function runZernioSocialGate({ contentType = "zernio-social", laneKey = "
       .trim();
 
     if (wordCount(commentary) < 22) {
-      warnings.push("Monday commentary is brief; consider adding an expert implication, tension, consequence, or judgement after the quote.");
+      warnings.push("Monday commentary is too thin for the preferred style; consider adding an expert implication, tension, consequence, or judgement after the quote.");
     }
 
     if (/\b(this (?:is|isn't) (?:about|just about)|the key is|what matters is|the future of|shifting the frontier|genuinely useful outcomes|new possibilities)\b/i.test(commentary)) {
