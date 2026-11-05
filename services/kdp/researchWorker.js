@@ -95,7 +95,7 @@ export async function runResearchTick({
     if (state.week !== week) {
       const audit = await getAudit(started);
       if (!validMondayAudit(audit, started)) return { status: "monday_audit_unavailable" };
-      if (state.cycle && !state.completed) await archive(state.cycle, state);
+      if (state.week && !state.completed) await archive(state.week, state);
       const selection = selectWeeklyBatch(await getBooks(), state.cursor || 0, batchSize(env));
       if (!selection.books.length) return { status: "no_eligible_books" };
       state.week = week;
@@ -167,7 +167,7 @@ export async function runResearchTick({
       // but cannot silently skip an ebook or trigger a KDP listing update.
       await writeState(state);
     }
-    if (!state.pending.length) { state.completed = true; await archive(cycle, state); await writeState(state); }
+    if (!state.pending.length) { state.completed = true; await archive(week, state); await writeState(state); }
     return { status: state.completed ? "complete" : "pending", week, cycle, processed: state.results.length, pending: state.pending.length,
       listingUpdates: 0, proposalCounts: countProposals(state.results) };
   } finally { await release(acquired.lease); }

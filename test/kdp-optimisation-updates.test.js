@@ -70,3 +70,50 @@ test('keyword-only uncertain submissions cannot be confirmed from saved draft fi
   const result = await processOptimisation('key', value, deps());
   assert.equal(result.status, 'awaiting_submission_acknowledgement');
 });
+
+test('description comparisons decode quotes, numeric entities and typographic characters', async () => {
+  const { normaliseDescription, currentKdpPrice } = await import('../services/kdp/metadataValues.js');
+  assert.equal(normaliseDescription('<p>A &quot;useful&quot; guide&#39;s scope&nbsp;— AI.</p>'), 'A "useful" guide\'s scope — AI.');
+  assert.equal(currentKdpPrice({ prices: { GB: '5.99' } }, 'GBP'), '5.99');
+});
+
+test('research invalidated by a manual KDP edit is retired so other proposals can proceed', async () => {
+  const value = { ...intent(), proposal: { basis: { description: 'Original', keywords: ['old'] } } };
+  let published = false;
+  const result = await processOptimisation('key', value, deps({ publish: async () => { published = true; } }));
+  assert.equal(result.status, 'conflict');
+  assert.equal(value.status, 'conflict');
+  assert.equal(published, false);
+});
+
+test('a committed D1 change with a lost response reconciles instead of blocking website work', async () => {
+  const { updateKdpEbookMetadata } = await import('../services/kdp/catalogue.js');
+  let reads = 0;
+  const after = { ...book, description: 'New description', keywords: ['new'] };
+  const result = await updateKdpEbookMetadata(intent(), {
+    readBook: async () => ++reads === 1 ? book : after,
+    query: async (sql) => sql.startsWith('SELECT') ? { results: [{ description: book.description, keywords_json: JSON.stringify(book.keywords) }] }
+      : { meta: { changes: 0 } },
+  });
+  assert.equal(result.status, 'already_updated');
+});
+
+test('price-only changes wait for the four-week cooldown', async () => {
+  const value = { ...intent(), details: {}, prices: { USD: '6.50' } };
+  let calls = 0;
+  const result = await processOptimisation('key', value, deps({
+    sync: async () => ({ ...meta, listPriceUsd: '6.00' }),
+    load: async () => ({ priceVerifiedAt: '2026-11-09T12:00:00Z' }),
+    publish: async () => { calls++; },
+  }));
+  assert.equal(result.status, 'price_cooldown');
+  assert.equal(calls, 0);
+});
+
+test('a slow setup refresh cannot carry submission past the London window', async () => {
+  let clock = date, calls = 0;
+  const result = await processOptimisation('key', intent(), deps({ now: () => clock,
+    sync: async () => { clock = new Date('2026-11-10T15:01:00Z'); return meta; }, publish: async () => { calls++; } }));
+  assert.equal(result.status, 'outside_window');
+  assert.equal(calls, 0);
+});

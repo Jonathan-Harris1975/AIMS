@@ -38,10 +38,11 @@ test("worker requires a successful audit from this Monday and saves rotating pro
   assert.equal(validMondayAudit(audit, date), true);
   assert.equal(validMondayAudit({ ...audit, complete: false }, date), false);
   let saved = null, archived = null;
+  const archiveWeeks = [];
   const env = { TAVILY_SEARCH_API: "test", R2_ENDPOINT: "test", R2_ACCESS_KEY_ID: "test", R2_SECRET_ACCESS_KEY: "test", R2_BUCKET_META_SYSTEM: "test", KDP_RESEARCH_BATCH_SIZE: "1" };
   const options = {
     updateTick: async () => ({}), now: () => date, env, getMetadata: async () => null, readState: async () => saved && structuredClone(saved),
-    writeState: async (s) => { saved = structuredClone(s); }, archive: async (_week, s) => { archived = structuredClone(s); },
+    writeState: async (s) => { saved = structuredClone(s); }, archive: async (week, s) => { archiveWeeks.push(week); archived = structuredClone(s); },
     getAudit: async () => audit, getBooks: async () => [{ ebookId: 1, asin: "B012345678" }, { ebookId: 2, asin: "B012345679" }],
     discover: async (book) => ({ ebookId: book.ebookId }), claim: async () => ({ claimed: true, lease: { backend: "r2" } }), release: async () => {},
   };
@@ -49,6 +50,12 @@ test("worker requires a successful audit from this Monday and saves rotating pro
   assert.equal(saved.cursor, 1);
   assert.equal(archived.results.length, 1);
   assert.equal((await runResearchTick(options)).status, "already_complete");
+  date.setUTCDate(date.getUTCDate() + 7);
+  audit.createdAt = "2026-11-02T12:05:00Z";
+  audit.completedAt = "2026-11-02T12:30:00Z";
+  assert.equal((await runResearchTick(options)).status, "complete");
+  assert.equal(saved.cursor, 2);
+  assert.deepEqual(archiveWeeks, ["2026-10-26", "2026-11-02"]);
 });
 
 test("worker does not advance when the audit or search fails", async () => {

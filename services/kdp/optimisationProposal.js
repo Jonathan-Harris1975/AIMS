@@ -1,3 +1,4 @@
+import { currentKdpPrice } from "./metadataValues.js";
 import { resilientRequest } from "../shared/utils/ai-service.js";
 import { matchKdpMetadata, priceFromComparables } from "./weeklyResearch.js";
 import { parseKdpPriceMinorUnits, validateKdpPriceChanges } from "./engine/kdpPriceRules.ts";
@@ -77,7 +78,7 @@ export async function draftOptimisation(book, research, metadata, { now = new Da
     const proposed = priceFromComparables({ marketplace, floorMinor, ownAsin: book.asin, observedAt: now, comparables: observations.map((row) => ({
       ...row, currency, format: 'kindle', comparable: true, promotional: false, priceMinor: parseKdpPriceMinorUnits(row.price),
     })) });
-    const current = parseKdpPriceMinorUnits(marketplace === 'US' ? match.metadata.listPriceUsd || '' : match.metadata.prices?.GBP || match.metadata.prices?.UK || '');
+    const current = parseKdpPriceMinorUnits(currentKdpPrice(match.metadata, currency));
     const errors = proposed.status === 'proposed' ? validateKdpPriceChanges('kindle', { prices: { [currency]: (proposed.priceMinor / 100).toFixed(2) } }, match.metadata.royaltyPlan) : [];
     prices[marketplace] = proposed.status === 'proposed' && current !== null && current > 0 && !errors.length && Math.abs(proposed.priceMinor - current) / current <= 0.25
       ? { ...proposed, promotionAssessment: 'no_visible_promotion', previousMinor: current }

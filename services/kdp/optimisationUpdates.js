@@ -1,3 +1,4 @@
+import { normaliseDescription, currentKdpPrice } from './metadataValues.js';
 import { createHash } from 'node:crypto';
 import { getObjectAsText, putPrivateJson, listObjects } from '../shared/utils/r2-client.js';
 import { claimDurableLease, releaseDurableLease } from '../shared/utils/durableLease.js';
@@ -17,7 +18,7 @@ function submissionDelayMs() {
 }
 
 const PREFIX = 'research/updates/';
-const norm = (s) => String(s || '').replace(/<[^>]*>/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
+const norm = normaliseDescription;
 const missing = (error) => error?.name === 'NoSuchKey' || error?.$metadata?.httpStatusCode === 404;
 const read = async (key) => { try { return JSON.parse(await getObjectAsText('kdp', key)); } catch (e) { if (missing(e)) return null; throw e; } };
 const write = (key, value) => putPrivateJson('kdp', key, value);
@@ -62,12 +63,16 @@ export async function processOptimisation(key, intent, {
     }
     const basis = intent.proposal?.basis;
     if (basis && ((intent.details.description && norm(current.description) !== norm(basis.description)) ||
-        (intent.details.keywords && JSON.stringify(current.keywords) !== JSON.stringify(basis.keywords)))) return { status: 'kdp_changed_since_research' };
+        (intent.details.keywords && JSON.stringify(current.keywords) !== JSON.stringify(basis.keywords)))) {
+      intent.status = 'conflict'; intent.reason = 'kdp_changed_since_research'; await persist(); return { status: 'conflict' };
+    }
     for (const [currency, value] of Object.entries(intent.prices)) {
-      const observed = currency === 'USD' ? current.listPriceUsd : current.prices?.GBP || current.prices?.UK;
+      const observed = currentKdpPrice(current, currency);
       const before = parseKdpPriceMinorUnits(observed || '');
       const after = parseKdpPriceMinorUnits(value);
-      if (before === null || before <= 0 || after === null || Math.abs(after - before) / before > 0.25) return { status: 'price_changed_since_research' };
+      if (before === null || before <= 0 || after === null || Math.abs(after - before) / before > 0.25) {
+        intent.status = 'conflict'; intent.reason = 'price_changed_since_research'; await persist(); return { status: 'conflict' };
+      }
     }
     const history = await load(`research/history/${intent.ebookId}.json`);
     if (Object.keys(intent.prices).length && history?.priceVerifiedAt && +now() - Date.parse(history.priceVerifiedAt) < 28 * 86400000) {
@@ -106,7 +111,7 @@ export async function processOptimisation(key, intent, {
     if (intent.details.description && norm(current.description) !== norm(intent.details.description)) return { status: 'awaiting_metadata' };
     if (intent.details.keywords && JSON.stringify((current.keywords || []).map(norm).filter(Boolean)) !== JSON.stringify(intent.details.keywords.map(norm))) return { status: 'awaiting_keywords' };
     for (const [currency, value] of Object.entries(intent.prices)) {
-      const actual = currency === 'USD' ? current.listPriceUsd : current.prices?.GBP || current.prices?.UK;
+      const actual = currentKdpPrice(current, currency);
       if (parseKdpPriceMinorUnits(actual || '') !== parseKdpPriceMinorUnits(value)) return { status: 'awaiting_pricing' };
     }
     for (const marketplace of ['US', 'UK']) {
