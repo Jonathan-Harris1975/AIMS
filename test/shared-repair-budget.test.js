@@ -45,6 +45,39 @@ test("newsletter repairs preserve untouched copy and immutable source fields", (
   }
 });
 
+test("newsletter targeted repair fails over when the primary returns an invalid edit contract", async () => {
+  const values = { OPENROUTER_API_KEY: "test-key", AI_MODEL_FAST: "test/luna", AI_MODEL_STANDARD: "test/sonnet" };
+  const prior = Object.fromEntries(Object.keys(values).map(key => [key, process.env[key]]));
+  Object.assign(process.env, values);
+  const oldFetch = globalThis.fetch;
+  const models = [];
+  globalThis.fetch = async (_url, options) => {
+    const body = JSON.parse(options.body);
+    models.push(body.model);
+    const content = body.model === "test/luna"
+      ? JSON.stringify({ changes: [] })
+      : JSON.stringify({ edits: [{ path: "subject", value: "Supported subject" }] });
+    return { ok: true, json: async () => ({ choices: [{ message: { content } }] }) };
+  };
+  try {
+    const { repairNewsletterDraft } = await import(`../services/newsletter/engine/targetedRepair.js?repair-failover=${Date.now()}`);
+    const result = await withTaskRepairBudget(() => repairNewsletterDraft({
+      newsletter: { subject: "Old subject", bigThree: [], onRadar: [] },
+      lead: { title: "Evidence", link: "https://example.test", summary: "A cited event" },
+      stories: [], profile: { edition: "daily", brandVoice: "Clear" }, sessionId: "repair-contract-test",
+      repairContext: ["Sharpen the subject"],
+    }), { repairs: 1, recoveries: 2 });
+    assert.equal(result.subject, "Supported subject");
+    assert.deepEqual(models, ["test/luna", "test/luna", "test/sonnet"]);
+  } finally {
+    globalThis.fetch = oldFetch;
+    for (const [key, value] of Object.entries(prior)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
+
 test("passing council seats are reused only with identical evidence and model policy", async () => {
   process.env.OPENROUTER_API_KEY = "test-key";
   process.env.AI_MODEL_FAST = "test/luna";
