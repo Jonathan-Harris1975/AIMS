@@ -249,13 +249,14 @@ export async function runNewsletterEditorialCouncil({ profile, newsletter, lead,
     // only an explicit publication blocker can veto from a specialist seat.
     // This keeps advisory feedback from silently becoming a unanimous score gate.
     const qualityTargetMet = chair.score >= THRESHOLDS.newsletter.qaPassThreshold;
+    const dailyAdvisoryFloor = Math.min(THRESHOLDS.newsletter.qaPassThreshold, THRESHOLDS.newsletter.qaDailyAdvisoryFloor);
     const strictPass = attendanceComplete && noBlockers && qualityTargetMet;
     const toleranceFloor = THRESHOLDS.newsletter.qaPassThreshold * (1 - THRESHOLDS.newsletter.nearThresholdTolerance);
     const nearThresholdPass = !strictPass && attendanceComplete && noBlockers && chair.score >= toleranceFloor;
-    // Below-threshold polish is recorded for the monthly audit. It does not
-    // block the daily send when deterministic checks pass and the council
-    // reports no unresolved publication blocker.
-    const acceptedWithAdvisoryScore = attendanceComplete && noBlockers && !qualityTargetMet;
+    // A modestly below-target score is recorded for monthly audit. Very low
+    // council scores still quarantine the issue even when no reviewer flags
+    // a specific blocker.
+    const acceptedWithAdvisoryScore = attendanceComplete && noBlockers && !qualityTargetMet && chair.score >= dailyAdvisoryFloor;
     const passed = strictPass || nearThresholdPass || acceptedWithAdvisoryScore;
     const score = chair.score;
     const minimumReviewerScore = Math.min(...allReviews.map((review) => review.score));
@@ -267,6 +268,7 @@ export async function runNewsletterEditorialCouncil({ profile, newsletter, lead,
       verdict: strictPass ? "pass" : nearThresholdPass ? "pass_with_tolerance" : acceptedWithAdvisoryScore ? "pass_with_advisory" : "revise",
       nearThresholdAccepted: nearThresholdPass,
       acceptedWithAdvisoryScore,
+      dailyAdvisoryFloor,
       toleranceFloor,
       members,
       reviews: reports,
