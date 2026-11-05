@@ -26,17 +26,19 @@ export function newsletterRepairPaths(draft) {
 
 export function applyNewsletterEdits(draft, edits) {
   const allowed = new Set(newsletterRepairPaths(draft));
-  if (!Array.isArray(edits) || edits.length > allowed.size) throw new Error("Invalid newsletter repair edits");
+  if (!Array.isArray(edits)) throw new Error("Newsletter repair response must contain an edits array");
   const result = structuredClone(draft);
   const seen = new Set();
   for (const edit of edits) {
-    if (!allowed.has(edit?.path) || seen.has(edit.path) || typeof edit.value !== "string") {
-      throw new Error("Newsletter repair attempted an invalid or immutable field");
-    }
+    // Model output is untrusted: ignore malformed, duplicate, immutable, or
+    // over-limit rows while applying only unique paths from this draft's allowlist.
+    if (!allowed.has(edit?.path) || seen.has(edit.path) || typeof edit.value !== "string" ||
+        seen.size >= allowed.size) continue;
     seen.add(edit.path);
     const parts = edit.path.split(".");
     const field = parts.pop();
-    const parent = parts.reduce((value, part) => value[part], result);
+    const parent = parts.reduce((value, part) => value?.[part], result);
+    if (!parent || typeof parent !== "object") continue;
     parent[field] = edit.value;
   }
   return result;
