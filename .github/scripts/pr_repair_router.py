@@ -204,22 +204,8 @@ def safe_codeql_findings(pr: dict) -> list[str]:
 
 def extract(event: dict) -> tuple[dict, str, list[str]] | None:
     if EVENT == "workflow_dispatch":
-        inputs = event.get("inputs", {})
-        try:
-            number = int(inputs.get("pr_number", ""))
-        except (TypeError, ValueError):
-            return None
-        pr = pr_details(number)
-        expected_sha = str(inputs.get("source_head_sha", ""))
-        review_id = str(inputs.get("review_id", ""))
-        prompt = str(inputs.get("repair_prompt", "")).strip()
-        if (not pr or not re.fullmatch(r"[0-9a-f]{40}", expected_sha)
-                or pr.get("head", {}).get("sha") != expected_sha
-                or not re.fullmatch(r"review-[0-9a-f]{24}", review_id)
-                or len(prompt) < 30 or len(prompt) > 3500):
-            print("HIVE repair dispatch lacks a current exact-head review decision or bounded prompt.")
-            return None
-        return pr, "review", [f"HIVE accepted repair proposal {review_id} at exact source head {expected_sha}.", prompt]
+        # Repair authority is local to AIMS event routing; HIVE decisions are not a dispatch source.
+        return None
 
     if EVENT == "workflow_run":
         run = event["workflow_run"]
