@@ -25,9 +25,9 @@ test("economy editorial reviews preserve strong factual and writing routes", asy
     }
     assert.equal(modelFor("newsletterCompose"), values.NEWSLETTER_MODEL_EDITORIAL);
     assert.equal(modelFor("newsletterFactCheck"), values.AI_MODEL_HIGH_QUALITY);
-    assert.deepEqual(aiConfig.routeModels.newsletterFactCheck, ["highQuality", "audit"]);
+    assert.deepEqual(aiConfig.routeModels.newsletterFactCheck, ["claudeSonnet5", "gpt56Sol"]);
     assert.equal(modelFor("newsletterCouncilChair"), values.AI_MODEL_HIGH_QUALITY);
-    assert.deepEqual(aiConfig.routeModels.newsletterCouncilChair, ["highQuality", "audit"]);
+    assert.deepEqual(aiConfig.routeModels.newsletterCouncilChair, ["claudeSonnet5", "gpt56Sol"]);
     assert.equal(modelFor("commsHubOutreachPitch"), "pitch-writer");
     assert.equal(modelFor("commsHubOutreachReply"), "reply-writer");
     assert.equal(modelFor("commsHubOutreachArticle"), "article-writer");
