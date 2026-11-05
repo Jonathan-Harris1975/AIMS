@@ -133,7 +133,7 @@ async function runMember(member, context, sessionId) {
         role: "system",
         content:
           `You are seat ${member.seat}, the ${member.role}, on the AI Edge editorial council. Your remit: ${member.remit} ` +
-          `Your authority is ${member.authority}. Score 0-100; the normal pass threshold is ${THRESHOLDS.newsletter.qaPassThreshold}. ` +
+          `Your authority is ${member.authority}. Score 0-100; ${THRESHOLDS.newsletter.qaPassThreshold} is a repair/escalation target, not a standalone send blocker. ` +
           "Set blocking=true only for an unresolved defect serious enough to make publication unsafe or materially misleading. Minor polish must not be marked blocking. " +
           'Keep each issue/fix under 180 characters (at most five); strengths under 120 characters (at most three). Finish one complete JSON object. ' +
           'Return JSON only: {"score":number,"verdict":"pass"|"revise","blocking":boolean,"issues":[string],"strengths":[string]}.',
@@ -149,7 +149,10 @@ async function runMember(member, context, sessionId) {
     reviewReused: data.reviewReused === true,
     authority: member.authority,
     score,
-    verdict: score >= THRESHOLDS.newsletter.qaPassThreshold && !blocking ? "pass" : "revise",
+    // The score is an editorial quality signal; only an explicit blocker
+    // can veto a fully attended council after the bounded repair loop.
+    verdict: blocking ? "revise" : "pass",
+    belowQualityTarget: score < THRESHOLDS.newsletter.qaPassThreshold,
     blocking,
     issues: Array.isArray(data.issues) ? data.issues : [],
     strengths: Array.isArray(data.strengths) ? data.strengths : [],
@@ -214,7 +217,7 @@ export async function runNewsletterEditorialCouncil({ profile, newsletter, lead,
           role: "system",
           content:
             `You are seat 1, the ${chairMember.role}. Your remit: ${chairMember.remit} Review every specialist report before deciding. ` +
-            `The normal pass threshold is ${THRESHOLDS.newsletter.qaPassThreshold}. Source/factual blockers remain hard gates. ` +
+            `A score of ${THRESHOLDS.newsletter.qaPassThreshold} is the repair target, not a standalone send blocker. Source/factual blockers remain hard gates. ` +
             "Set blocking=true only for an unresolved publication blocker; minor monthly-audit-level polish is non-blocking. " +
             'Keep each issue/fix under 180 characters (at most five); strengths under 120 characters (at most three). Finish one complete JSON object. ' +
           'Return JSON only: {"score":number,"verdict":"pass"|"revise","blocking":boolean,"issues":[string],"priorityFixes":[string]}.',
@@ -231,7 +234,8 @@ export async function runNewsletterEditorialCouncil({ profile, newsletter, lead,
       role: chairMember.role,
       authority: chairMember.authority,
       score: chairScore,
-      verdict: chairScore >= THRESHOLDS.newsletter.qaPassThreshold && !chairBlocking ? "pass" : "revise",
+      verdict: chairBlocking ? "revise" : "pass",
+      belowQualityTarget: chairScore < THRESHOLDS.newsletter.qaPassThreshold,
       blocking: chairBlocking,
       issues: Array.isArray(chairData.issues) ? chairData.issues : [],
       priorityFixes: Array.isArray(chairData.priorityFixes) ? chairData.priorityFixes : [],
@@ -244,10 +248,15 @@ export async function runNewsletterEditorialCouncil({ profile, newsletter, lead,
     // The chair owns the final quality score. Specialist scores guide the chair;
     // only an explicit publication blocker can veto from a specialist seat.
     // This keeps advisory feedback from silently becoming a unanimous score gate.
-    const strictPass = attendanceComplete && noBlockers && chair.score >= THRESHOLDS.newsletter.qaPassThreshold;
+    const qualityTargetMet = chair.score >= THRESHOLDS.newsletter.qaPassThreshold;
+    const strictPass = attendanceComplete && noBlockers && qualityTargetMet;
     const toleranceFloor = THRESHOLDS.newsletter.qaPassThreshold * (1 - THRESHOLDS.newsletter.nearThresholdTolerance);
     const nearThresholdPass = !strictPass && attendanceComplete && noBlockers && chair.score >= toleranceFloor;
-    const passed = strictPass || nearThresholdPass;
+    // Below-threshold polish is recorded for the monthly audit. It does not
+    // block the daily send when deterministic checks pass and the council
+    // reports no unresolved publication blocker.
+    const acceptedWithAdvisoryScore = attendanceComplete && noBlockers && !qualityTargetMet;
+    const passed = strictPass || nearThresholdPass || acceptedWithAdvisoryScore;
     const score = chair.score;
     const minimumReviewerScore = Math.min(...allReviews.map((review) => review.score));
 
@@ -255,8 +264,9 @@ export async function runNewsletterEditorialCouncil({ profile, newsletter, lead,
       ok: passed,
       score,
       minimumReviewerScore,
-      verdict: strictPass ? "pass" : nearThresholdPass ? "pass_with_tolerance" : "revise",
+      verdict: strictPass ? "pass" : nearThresholdPass ? "pass_with_tolerance" : acceptedWithAdvisoryScore ? "pass_with_advisory" : "revise",
       nearThresholdAccepted: nearThresholdPass,
+      acceptedWithAdvisoryScore,
       toleranceFloor,
       members,
       reviews: reports,
