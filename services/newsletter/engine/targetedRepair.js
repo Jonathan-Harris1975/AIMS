@@ -63,11 +63,12 @@ export async function repairNewsletterDraft({ newsletter, lead, stories, profile
   claimRepairAction();
   const allowedPaths = newsletterRepairPaths(newsletter);
   const response_format = strictJsonResponseFormat("newsletter_targeted_edits", editSchema(allowedPaths));
+  let parsed;
   const raw = await resilientRequest("targetedRepair", {
     sessionId, section: "newsletter-targeted-repair", max_tokens: 2600,
     // Validate the whole safety contract before accepting a provider response.
     // Invalid structured output then follows normal bounded provider failover.
-    validateContent: (raw) => parseNewsletterEdits(raw, allowedPaths),
+    validateContent: (raw) => { parsed = parseNewsletterEdits(raw, allowedPaths); },
     temperature: 0.15, reasoning: { effort: "none", exclude: true },
     response_format,
     messages: [
@@ -81,5 +82,5 @@ export async function repairNewsletterDraft({ newsletter, lead, stories, profile
         sources: [lead, ...stories].filter(Boolean).map(({ title, link, summary }) => ({ title, link, summary })) }) },
     ],
   });
-  return { ...applyNewsletterEdits(newsletter, parseNewsletterEdits(raw, allowedPaths).edits), ok: true };
+  return { ...applyNewsletterEdits(newsletter, (parsed || parseNewsletterEdits(raw, allowedPaths)).edits), ok: true };
 }

@@ -8,6 +8,7 @@ test("economy editorial reviews preserve strong factual and writing routes", asy
     AI_MODEL_SUMMARY: "openai/gpt-5.6-luna",
     AI_MODEL_AUDIT: "openai/gpt-5.6-sol",
     AI_MODEL_HIGH_QUALITY: "anthropic/claude-sonnet-5.5",
+    OPENROUTER_CLAUDE_SONNET_5: "anthropic/claude-sonnet-5.5",
     OPENROUTER_GPT_5_6_SOL: "openai/gpt-5.6-sol",
     NEWSLETTER_MODEL_EDITORIAL: "anthropic/claude-sonnet-5.5",
     OUTREACH_ARTICLE_MODEL: "article-writer",
@@ -24,9 +25,9 @@ test("economy editorial reviews preserve strong factual and writing routes", asy
       assert.ok(aiConfig.routeModels[route].includes("gpt56Sol"));
     }
     assert.equal(modelFor("newsletterCompose"), values.NEWSLETTER_MODEL_EDITORIAL);
-    assert.equal(modelFor("newsletterFactCheck"), values.OPENROUTER_CLAUDE_SONNET_5 || values.AI_MODEL_HIGH_QUALITY);
+    assert.equal(modelFor("newsletterFactCheck"), values.OPENROUTER_CLAUDE_SONNET_5);
     assert.deepEqual(aiConfig.routeModels.newsletterFactCheck, ["claudeSonnet5", "audit"]);
-    assert.equal(modelFor("newsletterCouncilChair"), values.OPENROUTER_CLAUDE_SONNET_5 || values.AI_MODEL_HIGH_QUALITY);
+    assert.equal(modelFor("newsletterCouncilChair"), values.OPENROUTER_CLAUDE_SONNET_5);
     assert.deepEqual(aiConfig.routeModels.newsletterCouncilChair, ["claudeSonnet5", "audit"]);
     assert.equal(modelFor("commsHubOutreachPitch"), "pitch-writer");
     assert.equal(modelFor("commsHubOutreachReply"), "reply-writer");
