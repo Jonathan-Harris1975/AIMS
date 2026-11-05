@@ -862,6 +862,9 @@ test("scheduled daily posts preserve brand and topic requirements", async () => 
     assert.ok(daily.warnings.some((warning) => pattern.test(warning)));
   }
   assert.equal(strict.ok, false);
+  for (const pattern of [/British English drift/i, /emoji/i, /markdown or bullet/i, /Motivational hashtag/i]) {
+    assert.ok(strict.defects.some((defect) => pattern.test(defect)));
+  }
   assert.equal(offTopic.ok, false);
   assert.ok(offTopic.defects.some((defect) => /Tuesday post drifted away/i.test(defect)));
 
