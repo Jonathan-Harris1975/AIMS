@@ -73,7 +73,7 @@ export async function draftOptimisation(book, research, metadata, { now = new Da
     const observations = competitors.filter((row) => comparable.some((c) => c.asin === row.asin && c.marketplace === marketplace) &&
       row.marketplace === marketplace && row.priceSource === 'kindle_price_element' && !row.promotionText &&
       (marketplace === 'UK' ? /^£\s*\d/ : /^(?:US\s*)?\$\s*\d/).test(row.price || ''));
-    const floorMinor = Number(process.env[marketplace === 'US' ? 'KDP_RESEARCH_PRICE_FLOOR_USD_MINOR' : 'KDP_RESEARCH_PRICE_FLOOR_GBP_MINOR'] || 499);
+    const floorMinor = Number((marketplace === 'US' ? process.env.KDP_RESEARCH_PRICE_FLOOR_USD_MINOR : process.env.KDP_RESEARCH_PRICE_FLOOR_GBP_MINOR) || 499);
     const proposed = priceFromComparables({ marketplace, floorMinor, ownAsin: book.asin, observedAt: now, comparables: observations.map((row) => ({
       ...row, currency, format: 'kindle', comparable: true, promotional: false, priceMinor: parseKdpPriceMinorUnits(row.price),
     })) });

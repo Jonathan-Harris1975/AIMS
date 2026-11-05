@@ -74,6 +74,7 @@ export async function processOptimisation(key, intent, {
       intent.deferredPrices = intent.prices; intent.prices = {};
       if (!Object.keys(intent.details).length) { intent.status = 'expired'; await persist(); return { status: 'price_cooldown' }; }
     }
+    if (!inWeeklyWindow(now(), 'update')) return { status: 'outside_window' };
     // Keep original KDP fields as well as D1 values for the audit trail.
     intent.previousKdp = { description: current.description, keywords: current.keywords, prices: current.prices, listPriceUsd: current.listPriceUsd };
     intent.status = 'submitting'; intent.submissionStartedAt = now().toISOString(); await persist();
@@ -96,7 +97,12 @@ export async function processOptimisation(key, intent, {
     }
     intent.nextVerificationAt = new Date(+now() + 4 * 3600000).toISOString(); await persist();
     const current = await sync(intent.titleId, 'kindle');
-    if (current.asin !== intent.asin || !/^live$/i.test(current.publishingStatus || '')) return { status: 'awaiting_publication' };
+    if (current.asin !== intent.asin) return { status: 'identity_unverified' };
+    if (!/^live$/i.test(current.publishingStatus || '')) {
+      intent.seenNonLive = true; await persist(); return { status: 'awaiting_publication' };
+    }
+    if (!intent.submission?.published && !intent.seenNonLive && !intent.details.description && !Object.keys(intent.prices).length)
+      return { status: 'awaiting_submission_acknowledgement' };
     if (intent.details.description && norm(current.description) !== norm(intent.details.description)) return { status: 'awaiting_metadata' };
     if (intent.details.keywords && JSON.stringify((current.keywords || []).map(norm).filter(Boolean)) !== JSON.stringify(intent.details.keywords.map(norm))) return { status: 'awaiting_keywords' };
     for (const [currency, value] of Object.entries(intent.prices)) {
@@ -127,6 +133,9 @@ export async function processOptimisation(key, intent, {
     intent.status = 'website_pending'; intent.rebuildAt = now().toISOString(); await persist();
   }
   if (intent.status === 'website_pending') {
+    if (intent.details.description && norm((await readBook(intent.ebookId)).description) !== norm(intent.details.description)) {
+      intent.status = 'conflict'; await persist(); return { status: 'conflict' };
+    }
     if (await verifyWebsite(intent)) { intent.status = 'complete'; await persist(); }
     else if (+now() - Date.parse(intent.rebuildAt) > 20 * 60000) { intent.status = 'catalogue_updated'; await persist(); }
   }
@@ -156,7 +165,8 @@ export async function runOptimisationUpdates({ now = () => new Date(), list = ()
     let submittedThisTick = false;
     for (const object of await list()) {
       const intent = await load(object.key);
-      if (!intent || ['complete', 'expired', 'conflict', 'needs_attention'].includes(intent.status)) continue;
+      if (!intent || ['complete', 'expired'].includes(intent.status)) continue;
+      if (['conflict', 'needs_attention'].includes(intent.status)) { results.push({ key: object.key, status: intent.status }); continue; }
       if (intent.nextAttemptAt && +now() < Date.parse(intent.nextAttemptAt)) continue;
       if (intent.status === 'prepared') {
         if (submittedThisTick || !inWeeklyWindow(now(), 'update') || +now() - Date.parse(control.lastSubmissionAt || '1970-01-01') < submissionDelayMs()) continue;

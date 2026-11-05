@@ -7,7 +7,8 @@ const proposal = { status: 'approved', titleId: 'A123', description: 'New descri
 const intent = () => ({ ...book, titleId: 'A123', status: 'prepared', createdAt: date.toISOString(),
   previous: { description: book.description, keywords: book.keywords }, details: { description: 'New description', keywords: ['new'] }, prices: {} });
 const meta = { titleId: 'A123', format: 'kindle', asin: book.asin, publishingStatus: 'Live', description: 'New description', keywords: ['new'] };
-function deps(extra = {}) { return { now: () => date, save: async () => {}, load: async () => null, readBook: async () => book, sync: async () => meta, ...extra }; }
+function deps(extra = {}) { return { now: () => date, save: async () => {}, load: async () => null,
+  readBook: async () => ({ ...book, description: 'New description' }), sync: async () => meta, ...extra }; }
 
 test('queue writes an intent before side effects and preserves an existing submission', async () => {
   let stored;
@@ -61,4 +62,11 @@ test('global delay allows one prepared submission per tick and persists before p
     save: async () => events.push('reserved'), process: async () => { events.push('submitted'); return { status: 'submitted' }; } });
   assert.deepEqual(events, ['reserved', 'submitted']);
   assert.equal(result.results.length, 1);
+});
+
+
+test('keyword-only uncertain submissions cannot be confirmed from saved draft fields alone', async () => {
+  const value = { ...intent(), details: { keywords: ['new'] }, status: 'submission_uncertain', submissionStartedAt: date.toISOString() };
+  const result = await processOptimisation('key', value, deps());
+  assert.equal(result.status, 'awaiting_submission_acknowledgement');
 });
