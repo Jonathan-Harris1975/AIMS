@@ -4,14 +4,14 @@
 
 This inventory makes the runtime configuration contract auditable without duplicating secret values. `.env.example` and `env.template` remain the curated operator templates; this file records every production `process.env` dependency and its source locations.
 
-- Runtime variables referenced in production code: **526**
+- Runtime variables referenced in production code: **529**
 - Present in curated templates: **408**
-- Not present in curated templates: **118**
+- Not present in curated templates: **121**
 
 | Variable | Curated template | Production references |
 | --- | --- | --- |
 | `AIMS_ALLOW_UNAUTHENTICATED_DEV` | Yes | services/shared/middleware/suiteAuth.js:91 |
-| `AIMS_API_KEY` | Yes | scripts/collectCommsWorkerHealth.js:1<br>server.js:199<br>services/ops/index.js:466<br>services/shared/middleware/suiteAuth.js:60 |
+| `AIMS_API_KEY` | Yes | scripts/collectCommsWorkerHealth.js:1<br>server.js:200<br>services/ops/index.js:466<br>services/shared/middleware/suiteAuth.js:60 |
 | `AIMS_BUSY_CONCURRENCY_THRESHOLD` | No | services/shared/utils/lifecycle.js:15 |
 | `AIMS_FAILURE_ALERT_THRESHOLD` | Yes | services/shared/utils/operationalExcellence.js:5 |
 | `AIMS_INTERNAL_BASE_URL` | Yes | services/ops/index.js:465 |
@@ -29,11 +29,11 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `AI_MODEL_DEFAULT` | No | scripts/verifyHeadroomProduction.js:17 |
 | `AI_RETRY_BASE_MS` | Yes | audits/utils/seoAeoGeoAnalysis.js:1932 |
 | `AI_STICKY_PROVIDER_ROUTING` | Yes | services/shared/utils/ai-service.js:79 |
-| `AI_SUITE_API_KEY` | Yes | scripts/collectCommsWorkerHealth.js:1<br>server.js:199<br>server.js:200<br>services/shared/middleware/suiteAuth.js:60 |
+| `AI_SUITE_API_KEY` | Yes | scripts/collectCommsWorkerHealth.js:1<br>server.js:200<br>server.js:201<br>services/shared/middleware/suiteAuth.js:60 |
 | `AI_SUITE_AUDIT_CALLBACK_TOKEN` | Yes | audits/utils/callbackAuth.js:9<br>audits/utils/orchestrator.js:147<br>services/shared/middleware/suiteAuth.js:64 |
 | `AI_TIMEOUT` | Yes | services/artwork/createPodcastArtwork.js:14<br>services/artwork/createQuizArtwork.js:11<br>services/blotato/utils/newsShortsService.js:1329<br>services/script/utils/getSponsor.js:38<br>services/tts/utils/mergeProcessor.js:26 |
 | `AI_USAGE_LOG_ENABLED` | Yes | services/shared/utils/ai-service.js:237 |
-| `ALLOW_EPHEMERAL_STATE` | Yes | scripts/performanceGate.js:10<br>scripts/startupCheck.js:40<br>server.js:185<br>services/outreach/services/batchService.js:45<br>services/shared/utils/stateFile.js:74 |
+| `ALLOW_EPHEMERAL_STATE` | Yes | scripts/performanceGate.js:10<br>scripts/startupCheck.js:40<br>server.js:186<br>services/outreach/services/batchService.js:45<br>services/shared/utils/stateFile.js:75 |
 | `API_HUNTER_KEY` | Yes | services/outreach/services/outreachCore.js:15 |
 | `API_KEY_PODCAST_INDEX` | Yes | services/shared/utils/podcastIndexClient.js:31 |
 | `API_OPENPAGERANK_KEY` | Yes | services/outreach/services/outreachCore.js:12 |
@@ -41,12 +41,12 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `API_SERP_KEY` | Yes | services/outreach/services/outreachCore.js:11 |
 | `API_URLSCAN_KEY` | Yes | services/outreach/services/outreachCore.js:14 |
 | `API_ZERO_KEY` | Yes | services/outreach/services/zeroBounceBatch.js:21 |
-| `APP_ENV` | No | scripts/performanceGate.js:6<br>server.js:399 |
+| `APP_ENV` | No | scripts/performanceGate.js:6<br>server.js:400 |
 | `APP_STATE_DIR` | Yes | services/shared/utils/stateFile.js:9 |
 | `APP_TITLE` | Yes | ai-config.js:344<br>services/artwork/artwork.js:294<br>services/artwork/utils/artwork.js:306 |
 | `APP_TMP_DIR` | Yes | scripts/tempStorage.js:10<br>services/blotato/utils/renderedVideoQa.js:308<br>services/shared/utils/stateFile.js:10<br>services/tts/utils/editingProcessor.js:22<br>services/tts/utils/mergeProcessor.js:14<br>services/tts/utils/podcastProcessor.js:56 |
 | `APP_URL` | Yes | ai-config.js:343<br>audits/utils/orchestrator.js:143<br>services/artwork/artwork.js:293<br>services/artwork/utils/artwork.js:305<br>services/rss-feed-creator/utils/feedGenerator.js:32 |
-| `APP_VERSION` | No | server.js:398<br>server.js:417<br>services/shared/utils/operationalExcellence.js:106<br>services/shared/utils/operationalExcellence.js:147 |
+| `APP_VERSION` | No | server.js:399<br>server.js:418<br>services/shared/utils/operationalExcellence.js:158 |
 | `ARTWORK_CAPABILITY_CACHE_MS` | No | services/artwork/utils/openrouterImageCapabilities.js:21 |
 | `ARTWORK_CAPABILITY_DISCOVERY_ENABLED` | No | services/artwork/utils/openrouterImageCapabilities.js:55 |
 | `ARTWORK_CAPABILITY_TIMEOUT_MS` | No | services/artwork/utils/openrouterImageCapabilities.js:67 |
@@ -223,7 +223,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `COMMS_HUB_FORM_ORCHESTRATION_ENABLED` | Yes | services/comms-hub/routes/index.js:136 |
 | `COMMS_HUB_FORM_SMART_PROCESSING_ENABLED` | Yes | services/comms-hub/routes/index.js:137 |
 | `COMMS_HUB_HOUSEKEEPING_ENABLED` | Yes | services/comms-hub/routes/index.js:148 |
-| `COMMS_HUB_MAX_WEBHOOK_BYTES` | Yes | server.js:259<br>server.js:350 |
+| `COMMS_HUB_MAX_WEBHOOK_BYTES` | Yes | server.js:260<br>server.js:351 |
 | `COMMS_HUB_MONTH_END_ARCHIVE_ENABLED` | Yes | services/comms-hub/routes/index.js:149 |
 | `COMMS_HUB_OPENROUTER_DATA_COLLECTION` | Yes | services/shared/utils/ai-service.js:201 |
 | `COMMS_HUB_OPENROUTER_ZDR_ONLY` | Yes | services/shared/utils/ai-service.js:208 |
@@ -234,7 +234,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `CONTENT_MASTER_COUNCIL_MAX_TOKENS` | Yes | audits/utils/contentMasterCouncil.js:143 |
 | `CONTENT_MASTER_COUNCIL_TEMPERATURE` | Yes | audits/utils/contentMasterCouncil.js:144 |
 | `CONTENT_MASTER_COUNCIL_TIMEOUT_MS` | Yes | audits/utils/contentMasterCouncil.js:144 |
-| `CORS_ORIGINS` | Yes | server.js:234 |
+| `CORS_ORIGINS` | Yes | server.js:235 |
 | `D1_API_KEY` | Yes | services/kdp/catalogue.js:7<br>services/kdp/catalogue.js:142<br>services/kdp/pageCountSync.js:210 |
 | `DEBUG_ROUTES` | Yes | logger.js:114 |
 | `DEPLOY_SMOKE_EXPECT_READY` | No | scripts/deploySmoke.js:8 |
@@ -260,13 +260,13 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `HEADROOM_BASE_URL` | Yes | services/shared/utils/headroom.js:98 |
 | `HEADROOM_CIRCUIT_OPEN_MS` | Yes | services/shared/utils/headroom.js:231 |
 | `HEADROOM_COMPRESS_USER_MESSAGES` | Yes | services/shared/utils/headroom.js:291 |
-| `HEADROOM_ENABLED` | Yes | scripts/verifyHeadroomProduction.js:6<br>server.js:188<br>services/shared/utils/headroom.js:250 |
+| `HEADROOM_ENABLED` | Yes | scripts/verifyHeadroomProduction.js:6<br>server.js:189<br>services/shared/utils/headroom.js:250 |
 | `HEADROOM_FAILURE_THRESHOLD` | Yes | services/shared/utils/headroom.js:227 |
 | `HEADROOM_LOG_SAVINGS` | Yes | services/shared/utils/headroom.js:391 |
 | `HEADROOM_MIN_INPUT_CHARS` | Yes | services/shared/utils/headroom.js:263 |
 | `HEADROOM_PROTECT_RECENT` | Yes | services/shared/utils/headroom.js:279 |
 | `HEADROOM_PROXY_TOKEN` | Yes | services/shared/utils/headroom.js:113 |
-| `HEADROOM_REQUIRED` | Yes | server.js:189 |
+| `HEADROOM_REQUIRED` | Yes | server.js:190 |
 | `HEADROOM_ROUTES` | Yes | services/shared/utils/headroom.js:93 |
 | `HEADROOM_TARGET_RATIO` | Yes | services/shared/utils/headroom.js:278 |
 | `HEADROOM_TIMEOUT_MS` | Yes | services/shared/utils/headroom.js:277 |
@@ -276,7 +276,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `INTERNAL_BASE_PROTO` | Yes | routes/podcast-pipeline.js:16 |
 | `INTERNAL_ROUTE_TIMEOUT_MS` | Yes | routes/podcast-pipeline.js:11 |
 | `JOB_STATUS_TTL_MS` | Yes | services/shared/utils/jobStore.js:5 |
-| `JSON_BODY_LIMIT` | Yes | server.js:382 |
+| `JSON_BODY_LIMIT` | Yes | server.js:383 |
 | `KDP_CONTENT_MAX_BYTES` | Yes | services/kdp/storage.js:7 |
 | `KDP_D1_DATABASE_ID` | Yes | services/kdp/catalogue.js:6<br>services/kdp/catalogue.js:142<br>services/kdp/catalogue.js:143 |
 | `KDP_D1_TIMEOUT_MS` | No | services/kdp/catalogue.js:20 |
@@ -284,7 +284,10 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `KDP_OTP_CHALLENGE_TIMEOUT_MS` | Yes | services/kdp/otpBroker.js:9 |
 | `KDP_PASSWORD` | Yes | services/kdp/index.js:15 |
 | `KDP_USERNAME` | Yes | services/kdp/index.js:15 |
-| `KOYEB_GIT_SHA` | No | scripts/startupCheck.js:54<br>services/comms-hub/routes/index.js:1379 |
+| `KOYEB_GIT_SHA` | No | scripts/startupCheck.js:54<br>services/comms-hub/routes/index.js:1379<br>services/ops/koyebMonitor.js:32<br>services/ops/koyebMonitor.js:135<br>services/ops/koyebMonitor.js:136<br>services/shared/utils/operationalExcellence.js:105<br>+1 more |
+| `KOYEB_MONITOR_INTERVAL_MS` | No | services/ops/koyebMonitor.js:165 |
+| `KOYEB_SERVICE` | No | services/ops/koyebMonitor.js:66 |
+| `KOYEB_TOKEN` | No | services/ops/koyebMonitor.js:65<br>services/ops/koyebMonitor.js:164 |
 | `LOG_LEVEL` | Yes | logger.js:86<br>logger.js:92 |
 | `MAX_ITEMS_PER_FEED` | Yes | services/rss-feed-creator/utils/fetchFeeds.js:30 |
 | `MAX_POLLY_NATURAL_CHUNK_CHARS` | Yes | services/script/utils/chunkText.js:20 |
@@ -297,14 +300,14 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `NEWSLETTER_CONSENT_TEXT_VERSION` | Yes | services/newsletter/jotformIntake.js:105<br>services/newsletter/jotformIntake.js:127 |
 | `NEWSLETTER_PRIVACY_NOTICE_VERSION` | Yes | services/newsletter/jotformIntake.js:106<br>services/newsletter/jotformIntake.js:128 |
 | `NEWSLETTER_TARGETED_COUNCIL_SHADOW_ENABLED` | Yes | services/newsletter/engine/councilShadow.js:124 |
-| `NODE_ENV` | Yes | logger.js:8<br>scripts/deploySmoke.js:4<br>scripts/performanceGate.js:5<br>scripts/startupCheck.js:34<br>scripts/startupCheck.js:75<br>server.js:32<br>+23 more |
+| `NODE_ENV` | Yes | logger.js:8<br>scripts/deploySmoke.js:4<br>scripts/performanceGate.js:5<br>scripts/startupCheck.js:34<br>scripts/startupCheck.js:75<br>server.js:33<br>+23 more |
 | `ONEUP_EBOOK_CATALOGUE_PATH` | No | services/zernio/utils/ebookCatalogue.js:42 |
 | `ON_BRAND_AUDIT_MAX_TOKENS` | No | audits/utils/onBrandAudit.js:13 |
 | `ON_BRAND_AUDIT_TEMPERATURE` | No | audits/utils/onBrandAudit.js:14 |
 | `ON_BRAND_AUDIT_TIMEOUT_MS` | No | audits/utils/onBrandAudit.js:538<br>audits/utils/onBrandAudit.js:553 |
 | `OPENPAGERANK_API_BASE` | No | services/outreach/services/outreachCore.js:138 |
 | `OPENROUTER_API_BASE` | Yes | services/artwork/artwork.js:30<br>services/artwork/utils/artwork.js:39<br>services/shared/utils/ai-service.js:15 |
-| `OPENROUTER_API_KEY` | Yes | server.js:187 |
+| `OPENROUTER_API_KEY` | Yes | server.js:188 |
 | `OPENROUTER_APP_NAME` | Yes | ai-config.js:344<br>services/artwork/artwork.js:294<br>services/artwork/utils/artwork.js:306 |
 | `OPENROUTER_BASE_URL` | Yes | services/artwork/artwork.js:30<br>services/artwork/utils/artwork.js:39<br>services/shared/utils/ai-service.js:15 |
 | `OPENROUTER_DATA_COLLECTION` | No | services/shared/utils/ai-service.js:204 |
@@ -365,7 +368,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `PODCAST_TRANSCRIPT_MAX_SENTENCE_WORDS` | Yes | services/script/utils/editAndFormat.js:197<br>services/script/utils/orchestrator.js:114<br>services/script/utils/orchestrator.js:322<br>services/script/utils/scriptValidation.js:294 |
 | `PODCAST_TRANSCRIPT_MIN_SOURCE_TERMS` | No | services/script/utils/scriptValidation.js:391 |
 | `POLLY_VOICE_ID` | Yes | services/blotato/utils/localCreditFallbackVideo.js:20<br>services/blotato/utils/localCreditFallbackVideo.js:229<br>services/tts/utils/ttsProcessor.js:24 |
-| `PORT` | Yes | routes/podcast-pipeline.js:14<br>scripts/collectCommsWorkerHealth.js:7<br>scripts/deploySmoke.js:3<br>scripts/startupCheck.js:74<br>server.js:487<br>services/ops/index.js:465 |
+| `PORT` | Yes | routes/podcast-pipeline.js:14<br>scripts/collectCommsWorkerHealth.js:7<br>scripts/deploySmoke.js:3<br>scripts/startupCheck.js:74<br>server.js:488<br>services/ops/index.js:465 |
 | `QA_ALERT_WEBHOOK_URL` | Yes | config/thresholds.js:100 |
 | `R2_ACCESS_KEY_ID` | Yes | audits/utils/publishAuditArtifacts.js:62<br>scripts/startupCheck.js:77 |
 | `R2_BUCKET_ART` | Yes | services/artwork/utils/io.js:15 |
@@ -404,7 +407,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `RATE_LIMIT_MAX_REQUESTS` | Yes | services/shared/middleware/rateLimit.js:53 |
 | `RATE_LIMIT_WINDOW_MS` | Yes | services/shared/middleware/rateLimit.js:52 |
 | `REQUEST_DEDUPE_TTL_MS` | Yes | services/shared/utils/requestDedupe.js:4 |
-| `REQUIRE_DURABLE_STATE` | No | services/shared/utils/stateFile.js:27 |
+| `REQUIRE_DURABLE_STATE` | No | services/shared/utils/stateFile.js:28 |
 | `RETRY_BACKOFF_MULTIPLIER` | Yes | services/tts/utils/mergeProcessor.js:32<br>services/tts/utils/ttsProcessor.js:37 |
 | `REVIEW_COUNCIL_STAGNATION_LIMIT` | Yes | services/content-quality/reviewCouncil.js:616 |
 | `RMS_API_KEY` | Yes | audits/utils/ramsContentDispatch.js:5<br>audits/utils/ramsWebsiteDispatch.js:24 |
@@ -427,7 +430,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `RSS_TOPIC_GUARD_MIN_SHARED` | Yes | services/rss-feed-creator/utils/models.js:37 |
 | `SERP_RATE_DELAY_MS` | Yes | services/outreach/services/batchService.js:148 |
 | `SERVER_LISTEN_TIMEOUT_MS` | No | scripts/bootstrap.js:6 |
-| `SHUTDOWN_TIMEOUT_MS` | Yes | server.js:591 |
+| `SHUTDOWN_TIMEOUT_MS` | Yes | server.js:595 |
 | `SITE_BASE_URL` | Yes | scripts/backfill-blog-main-site-links.js:63<br>scripts/backfill-transcript-html.js:77<br>scripts/backfill-transcript-html.js:133<br>services/blog/rss/publishBlogRssFeed.js:10<br>services/blog/utils/mainSiteLinks.js:20<br>services/blog/utils/mainSiteLinks.js:24<br>+5 more |
 | `SITE_SHELL_ALLOWED_HOSTS` | Yes | services/shared/utils/siteShell.js:30 |
 | `SITE_SHELL_MANIFEST_URL` | Yes | services/shared/utils/siteShell.js:120 |
@@ -440,10 +443,10 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `SOCIAL_LEDGER_RESERVATION_TTL_HOURS` | No | services/social/editorialLedger.js:7 |
 | `STARTUP_CHECK_REQUIRED_POST_START` | Yes | scripts/bootstrap.js:106<br>scripts/deploySmoke.js:6<br>scripts/performanceGate.js:9 |
 | `STARTUP_CHECK_SCRIPT` | No | scripts/bootstrap.js:107 |
-| `STATE_BACKEND` | Yes | scripts/startupCheck.js:35<br>services/blotato/utils/creditGuard.js:9<br>services/shared/utils/durableLease.js:17<br>services/shared/utils/stateFile.js:25 |
+| `STATE_BACKEND` | Yes | scripts/startupCheck.js:35<br>services/blotato/utils/creditGuard.js:9<br>services/shared/utils/durableLease.js:17<br>services/shared/utils/stateFile.js:26 |
 | `STATE_REMOTE_PREFIX` | Yes | services/shared/utils/stateFile.js:12 |
-| `TRUST_PROXY` | Yes | server.js:112 |
-| `URLENCODED_BODY_LIMIT` | Yes | server.js:387 |
+| `TRUST_PROXY` | Yes | server.js:113 |
+| `URLENCODED_BODY_LIMIT` | Yes | server.js:388 |
 | `URLSCAN_API_KEY` | Yes | services/outreach/services/outreachCore.js:14 |
 | `WEBHOOK_TIMEOUT_MS` | Yes | services/podcast/runPodcastPipeline.js:21 |
 | `WEBSITE_AUDIT_CHILD_RECONCILE_AFTER_MS` | No | audits/utils/websiteAuditPipeline.js:44 |

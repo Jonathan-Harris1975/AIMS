@@ -56,8 +56,8 @@ export async function sendOperationalEvent(event) {
       headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
       body: JSON.stringify({
         source: "aims_runtime",
-        service: "AIMS",
-        environment: process.env.NODE_ENV || "production",
+        service: "Jonathan-Harris1975/AIMS",
+        environment: process.env.NODE_ENV || "unknown",
         occurred_at: new Date().toISOString(),
         ...event,
       }),
@@ -95,15 +95,26 @@ export function recordJobTransition(previous, next) {
       error: String(next.error?.message || "job failed").slice(0, 300),
       failureStreak: streak,
     };
+    void sendOperationalEvent({
+      event_id: `aims:${type}:${next.sessionId || next.updatedAt || next.finishedAt || "unknown"}:failed`,
+      severity: "critical",
+      event_type: "scheduled_workflow_failed",
+      status: "failure",
+      title: `AIMS workflow ${type} failed`,
+      summary: "An AIMS workflow reported a failed operation. No publishing retry is initiated by the monitor.",
+      release_id: process.env.KOYEB_GIT_SHA || null,
+      details: { type, sessionId: next.sessionId, attempt: next.attempt, failureStreak: streak },
+    });
     if (streak === FAILURE_ALERT_THRESHOLD) {
       state.jobs.repeatedFailures += 1;
       void sendOperationalEvent({
         event_id: `aims:${type}:${next.sessionId}:failure-threshold`,
         severity: "critical",
         event_type: "repeated_workflow_failure",
+        status: "failure",
         title: `AIMS workflow ${type} failed repeatedly`,
         summary: `The workflow reached ${FAILURE_ALERT_THRESHOLD} consecutive failures.`,
-        release_id: process.env.APP_VERSION || process.env.npm_package_version || null,
+        release_id: process.env.KOYEB_GIT_SHA || null,
         details: { type, sessionId: next.sessionId, failureStreak: streak },
       });
     }

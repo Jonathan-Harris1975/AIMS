@@ -5,6 +5,10 @@ import test from "node:test";
 process.env.APP_TMP_DIR = `/tmp/aims-excellence-${process.pid}-${randomUUID()}`;
 process.env.ALLOW_EPHEMERAL_STATE = "true";
 process.env.STATE_BACKEND = "local";
+process.env.OPS_ALERT_WEBHOOK_URL = "https://hive.example.test/ops/events";
+process.env.OPS_ALERT_WEBHOOK_TOKEN = "test-only-token";
+process.env.NODE_ENV = "production";
+process.env.KOYEB_GIT_SHA = "a".repeat(40);
 
 const { recordJobTransition, recordProviderOutcome, getOperationalExcellenceSnapshot } = await import("../services/shared/utils/operationalExcellence.js");
 
@@ -18,4 +22,35 @@ test("professional excellence metrics record recovery and provider outcomes", ()
   assert.equal(snapshot.providers["audit:primary"].calls, 2);
   assert.equal(snapshot.providers["audit:primary"].failureRate, 0.5);
   assert.equal(snapshot.providers["audit:primary"].averageLatencyMs, 100);
+});
+
+test("failed AIMS scheduled operations emit a canonical, exact-revision HIVE signal", async () => {
+  const originalFetch = globalThis.fetch;
+  let resolveRequest;
+  const request = new Promise((resolve) => { resolveRequest = resolve; });
+  globalThis.fetch = async (url, options) => {
+    resolveRequest({ url, options, payload: JSON.parse(options.body) });
+    return { ok: true, status: 202 };
+  };
+  try {
+    recordJobTransition(null, {
+      type: "daily_blog_artwork",
+      sessionId: "failed-session-1",
+      attempt: 1,
+      status: "failed",
+      finishedAt: new Date().toISOString(),
+      error: { message: "provider detail should not be forwarded" },
+    });
+    const sent = await request;
+    assert.equal(sent.url, "https://hive.example.test/ops/events");
+    assert.equal(sent.payload.source, "aims_runtime");
+    assert.equal(sent.payload.service, "Jonathan-Harris1975/AIMS");
+    assert.equal(sent.payload.environment, "production");
+    assert.equal(sent.payload.status, "failure");
+    assert.equal(sent.payload.release_id, "a".repeat(40));
+    assert.equal(sent.payload.event_type, "scheduled_workflow_failed");
+    assert.equal(JSON.stringify(sent.payload).includes("provider detail should not be forwarded"), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });

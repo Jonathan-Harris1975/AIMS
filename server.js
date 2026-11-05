@@ -1,5 +1,6 @@
 import "./config/loadEnv.js";
 import { startOpenRouterSpendWorker, stopOpenRouterSpendWorker } from "./services/ops/openrouterSpendWorker.js";
+import { startKoyebMonitor, stopKoyebMonitor } from "./services/ops/koyebMonitor.js";
 import express from "express";
 import cors from "cors";
 import crypto from "node:crypto";
@@ -518,6 +519,7 @@ export function startServer(port = PORT, host = "0.0.0.0") {
   void startCommsHubRuntime();
   startPageCountSyncWorker();
   startOpenRouterSpendWorker();
+  startKoyebMonitor();
 
   if (!processHandlersBound) {
     processHandlersBound = true;
@@ -546,6 +548,7 @@ export async function stopServer() {
   if (!server) return;
   stopPageCountSyncWorker();
   stopOpenRouterSpendWorker();
+  stopKoyebMonitor();
 
   await new Promise((resolve, reject) => {
     server.close((err) => {
@@ -561,6 +564,7 @@ export async function stopServer() {
 function shutdown(signal) {
   info("server.shutdown.start", { signal });
   stopPageCountSyncWorker();
+  stopKoyebMonitor();
 
   if (!server) {
     info("server.shutdown.complete", { signal, note: "server_not_running" });
