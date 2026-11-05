@@ -39,6 +39,17 @@ function selectedAimsService(service, configured) {
   return [service?.id, service?.name, service?.slug].some((value) => String(value || "").trim().toLowerCase() === target);
 }
 
+function identifyAimsService(services, configured, runtimeSha) {
+  if (String(configured || "").trim()) {
+    const matches = services.filter((service) => selectedAimsService(service, configured));
+    return matches.length === 1 ? String(matches[0].id || matches[0].name) : null;
+  }
+  const sha = String(runtimeSha || "").trim().toLowerCase();
+  if (!/^[0-9a-f]{40}$/.test(sha)) return null;
+  const matches = services.filter((service) => serviceRevision(service, false) === sha);
+  return matches.length === 1 ? String(matches[0].id || matches[0].name) : null;
+}
+
 async function requestServices({ token, fetchImpl = fetch, apiBase = API_BASE }) {
   const services = [];
   for (let page = 0; page < MAX_PAGES; page += 1) {
@@ -66,6 +77,7 @@ export async function checkKoyebServices({
   configuredService = process.env.KOYEB_SERVICE,
   fetchImpl = fetch,
   apiBase = API_BASE,
+  runtimeSha = process.env.KOYEB_GIT_SHA,
   readState = readJsonStateFresh,
   writeState = writeJsonState,
   flushWrites = flushStateWrites,
@@ -78,13 +90,14 @@ export async function checkKoyebServices({
   const previous = state?.services && typeof state.services === "object" ? state.services : {};
   const next = { version: 1, checkedAt: now().toISOString(), services: {} };
   const events = [];
-  const aimsServiceSeen = services.some((service) => selectedAimsService(service, configuredService));
+  const aimsServiceId = identifyAimsService(services, configuredService, runtimeSha);
+  const aimsServiceSeen = Boolean(aimsServiceId);
 
   for (const service of services) {
     const id = String(service?.id || service?.name || "").trim();
     if (!id) continue;
     const status = serviceStatus(service);
-    const isAims = selectedAimsService(service, configuredService);
+    const isAims = id === aimsServiceId;
     const revision = serviceRevision(service, isAims);
     const current = { name: String(service.name || id).slice(0, 120), status, revision, checkedAt: next.checkedAt };
     next.services[id] = current;
@@ -132,8 +145,8 @@ export async function checkKoyebServices({
   }
 
   if (configuredService && !aimsServiceSeen) {
-    const revision = /^[0-9a-f]{40}$/.test(String(process.env.KOYEB_GIT_SHA || "").trim().toLowerCase())
-      ? String(process.env.KOYEB_GIT_SHA).trim().toLowerCase()
+    const revision = /^[0-9a-f]{40}$/.test(String(runtimeSha || "").trim().toLowerCase())
+      ? String(runtimeSha).trim().toLowerCase()
       : null;
     const result = await sendEvent({
       event_id: `koyeb:aims-service-not-found:${revision || "revision-unavailable"}`,

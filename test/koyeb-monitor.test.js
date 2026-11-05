@@ -8,12 +8,13 @@ function response(services) {
   return { ok: true, json: async () => ({ services, has_next: false }) };
 }
 
-function harness(serviceList, { prior = { version: 1, services: {} }, delivery = { ok: true } } = {}) {
+function harness(serviceList, { prior = { version: 1, services: {} }, delivery = { ok: true }, configuredService = "aims-service-id", runtimeSha = "" } = {}) {
   const sent = [];
   let saved;
   const result = checkKoyebServices({
     token: "test-token",
-    configuredService: "aims-service-id",
+    configuredService,
+    runtimeSha,
     fetchImpl: async (url, options) => {
       assert.match(url, /^https:\/\/app\.koyeb\.com\/v1\/services\?limit=100&offset=0$/);
       assert.equal(options.headers.authorization, "Bearer test-token");
@@ -42,6 +43,16 @@ test("monitors the service inventory and reports AIMS failures with the exact ru
   assert.equal(run.sent[0].status, "failure");
   assert.equal(run.sent[0].details.service_id, "aims-service-id");
   assert.equal(run.saved.services["aims-service-id"].status, "unhealthy");
+});
+
+test("identifies the running AIMS service by a unique exact deployed revision when KOYEB_SERVICE is unset", async () => {
+  const run = harness([
+    { id: "aims-service-id", name: "aims", status: "UNHEALTHY", deployment: { git: { sha: SHA } } },
+    { id: "other-service-id", name: "other", status: "HEALTHY", deployment: { git: { sha: "b".repeat(40) } } },
+  ], { configuredService: "", runtimeSha: SHA });
+  await run.result;
+  assert.equal(run.sent[0].service, "Jonathan-Harris1975/AIMS");
+  assert.equal(run.sent[0].release_id, SHA);
 });
 
 test("does not associate unrelated account services with the AIMS repository", async () => {
