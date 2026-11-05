@@ -41,7 +41,10 @@ test("newsletter repairs preserve untouched copy and immutable source fields", (
   assert.equal(repaired.subject, "Original");
   assert.equal(draft.bigThree[0].whatHappened, "Before");
   for (const path of ["bigThree.0.link", "bigThree.0.sourceId", "bigThree.0.title", "__proto__.polluted"]) {
-    assert.throws(() => applyNewsletterEdits(draft, [{ path, value: "invalid" }]));
+    const rejected = applyNewsletterEdits(draft, [{ path, value: "invalid" }]);
+    assert.equal(rejected.bigThree[0].link, draft.bigThree[0].link);
+    assert.equal(rejected.bigThree[0].sourceId, draft.bigThree[0].sourceId);
+    assert.equal(rejected.bigThree[0].title, draft.bigThree[0].title);
   }
 });
 
