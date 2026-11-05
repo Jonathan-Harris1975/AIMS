@@ -29,9 +29,8 @@ export function applyNewsletterEdits(draft, edits) {
   if (!Array.isArray(edits)) throw new Error("Newsletter repair response must contain an edits array");
   const result = structuredClone(draft);
   const seen = new Set();
+  let applied = 0;
   for (const edit of edits) {
-    // Model output is untrusted: ignore malformed, duplicate, immutable, or
-    // over-limit rows while applying only unique paths from this draft's allowlist.
     if (!allowed.has(edit?.path) || seen.has(edit.path) || typeof edit.value !== "string" ||
         seen.size >= allowed.size) continue;
     seen.add(edit.path);
@@ -40,7 +39,9 @@ export function applyNewsletterEdits(draft, edits) {
     const parent = parts.reduce((value, part) => value?.[part], result);
     if (!parent || typeof parent !== "object") continue;
     parent[field] = edit.value;
+    applied += 1;
   }
+  if (applied === 0) throw new Error("Newsletter repair applied no valid edits");
   return result;
 }
 
