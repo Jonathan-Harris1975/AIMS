@@ -288,7 +288,7 @@ class CtoTaskAdmissionTests(unittest.TestCase):
         risk_label = self.enterContext(patch.object(automation, "add_labels"))
         self.enterContext(patch.object(automation, "comment"))
         hold = self.enterContext(patch.object(automation, "place_human_hold"))
-        admit = self.enterContext(patch.object(automation, "admit_to_mergify"))
+        admit = self.enterContext(patch.object(automation, "admit_to_github_native_auto_merge"))
         self.enterContext(patch.object(automation, "verified_cto_task", return_value=40))
         self.enterContext(patch.object(automation, "has_operator_risk_approval", return_value=False))
         self.enterContext(patch.object(automation, "pr_files", return_value=[".github/workflows/security.yml"]))
@@ -312,7 +312,6 @@ class KiloPermissionPolicyTests(unittest.TestCase):
             ".github/workflows/*",
             ".github/actions/*",
             ".github/scripts/*",
-            ".mergify.yml",
             "renovate.json",
             ".github/dependabot.yml",
             "scripts/secret_scan.py",
@@ -400,8 +399,8 @@ class ManagedBranchOwnershipTests(unittest.TestCase):
         self.assertNotIn("enable_native_auto_merge", source)
         self.assertNotIn("/merge", source)
 
-    def test_managed_branch_pr_is_admitted_to_mergify_after_green_checks(self):
-        admit = self.enterContext(patch.object(automation, "admit_to_mergify"))
+    def test_managed_branch_pr_is_admitted_to_github_native_auto_merge_after_green_checks(self):
+        admit = self.enterContext(patch.object(automation, "admit_to_github_native_auto_merge"))
         approve = self.enterContext(patch.object(automation, "approve_pr"))
         self.enterContext(
             patch.object(automation, "pr_files", return_value=["services/example.js"])
@@ -426,7 +425,7 @@ class ManagedBranchOwnershipTests(unittest.TestCase):
         risk_label = self.enterContext(patch.object(automation, "add_labels"))
         self.enterContext(patch.object(automation, "comment"))
         hold = self.enterContext(patch.object(automation, "place_human_hold"))
-        admit = self.enterContext(patch.object(automation, "admit_to_mergify"))
+        admit = self.enterContext(patch.object(automation, "admit_to_github_native_auto_merge"))
         self.enterContext(
             patch.object(automation, "pr_files", return_value=[".github/workflows/security.yml"])
         )
@@ -875,7 +874,7 @@ class OwnerCodexAdmissionTests(unittest.TestCase):
             patch.object(automation, "has_operator_risk_approval", return_value=False),
             patch.object(automation, "add_labels") as add_risk_label,
             patch.object(automation, "comment") as risk_comment,
-            patch.object(automation, "admit_to_mergify") as admit,
+            patch.object(automation, "admit_to_github_native_auto_merge") as admit,
             patch.object(automation, "set_admission_check"),
             patch.object(automation, "remove_label"),
             patch.object(automation, "council_evidence_freeze", return_value=(False, "clear")),
