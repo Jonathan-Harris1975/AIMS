@@ -123,7 +123,7 @@ RISK_LOW_RISK_FILES_BY_REPO = {
     "AIMS": {"scripts/comms_worker_watch.py"},
 }
 RISK_LOW_RISK_DOC_EXTENSIONS = {".md", ".mdx", ".rst"}
-RISK_LOW_RISK_ROOT_FILES = {"readme.md", "changelog.md", "config/production.defaults.env"}
+RISK_LOW_RISK_ROOT_FILES = {"readme.md", "changelog.md", "config/production.defaults.env", "ai-config.js"}
 
 
 
