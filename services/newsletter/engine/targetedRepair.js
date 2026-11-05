@@ -32,7 +32,7 @@ export function applyNewsletterEdits(draft, edits) {
   for (const edit of edits) {
     // Model output is untrusted: ignore malformed, duplicate, immutable, or
     // over-limit rows while applying only unique paths from this draft's allowlist.
-    if (!allowed.has(edit?.path) || seen.has(edit.path) || typeof edit.value !== "string" ||
+    if (!allowed.has(edit?.path) || seen.has(edit?.path) || typeof edit?.value !== "string" ||
         seen.size >= allowed.size) continue;
     seen.add(edit.path);
     const parts = edit.path.split(".");
