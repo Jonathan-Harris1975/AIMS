@@ -6,7 +6,7 @@ function safeText(value, max = 300) {
 }
 
 export function searchQueries(book) {
-  const topic = safeText(book.topic || book.whatBookCovers || book.title, 180);
+  const topic = safeText(book.title || book.whatBookCovers || book.topic, 180);
   if (!topic) throw new Error("Book has no usable research topic");
   // Search phrases are catalogue data, never instructions to a model.
   return {
@@ -70,7 +70,7 @@ export async function discoverBookResearch(book, { apiKey, fetchImpl = fetch, no
     found[call.key] = await tavilySearch({ query: queries[call.key], country: call.country, freshness: call.freshness, apiKey, fetchImpl });
   }
   return {
-    ebookId: book.ebookId, asin: book.asin, topic: safeText(book.topic || book.whatBookCovers || book.title, 180),
+    ebookId: book.ebookId, asin: book.asin, topic: safeText(book.title || book.whatBookCovers || book.topic, 180),
     researchedAt: now().toISOString(), queries,
     competitors: { US: competitorCandidates(found.US, "US", book.asin), UK: competitorCandidates(found.UK, "UK", book.asin) },
     trendSources: { US: found.trendsUS, UK: found.trendsUK },
