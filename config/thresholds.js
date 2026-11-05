@@ -109,9 +109,11 @@ export const THRESHOLDS = Object.freeze({
     // Number of curated stories in the daily digest (excludes the lead).
     storyCount: Math.max(1, num("NEWSLETTER_STORY_COUNT", 10)),
     // QA review loop target (0-100). Falling below it triggers bounded
-    // improvement/council review; after deterministic checks pass, only an
-    // explicit unresolved publication blocker prevents the daily send.
+    // improvement/council review. Scores between the daily advisory floor
+    // and this target can pass after full council attendance if no blocker
+    // remains; lower scores stay quarantined for further work.
     qaPassThreshold: Math.max(0, Math.min(100, num("NEWSLETTER_QA_PASS_THRESHOLD", 85))),
+    qaDailyAdvisoryFloor: Math.max(0, Math.min(100, num("NEWSLETTER_QA_DAILY_ADVISORY_FLOOR", 70))),
     // Cheap self-improvement happens before the expensive editorial council.
     // Legacy NEWSLETTER_MAX_REWRITE_ITERATIONS remains supported, but is capped
     // at four so old production values cannot silently restore five-pass loops.
