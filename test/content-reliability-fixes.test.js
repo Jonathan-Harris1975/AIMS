@@ -49,10 +49,10 @@ test("newsletter composition constrains reasoning and reviews use a portable val
 
 test("newsletter review routes avoid the logged unsupported GPT targets", async () => {
   const config = await readFile(new URL("../ai-config.js", import.meta.url), "utf8");
-  assert.match(config, /newsletterFactCheck: fixedRouteChain\(\["highQuality", "audit"\]/);
+  assert.match(config, /newsletterFactCheck: fixedRouteChain\(\["claudeSonnet5", "audit"\]/);
   assert.match(config, /newsletterAudienceReview: routeChain\(\["fast", "summary", "gpt56Sol"\]/);
   assert.match(config, /newsletterVoiceReview: routeChain\(\["fast", "summary", "gpt56Sol"\]/);
-  assert.match(config, /newsletterCouncilChair: fixedRouteChain\(\["highQuality", "audit"\]/);
+  assert.match(config, /newsletterCouncilChair: fixedRouteChain\(\["claudeSonnet5", "audit"\]/);
 });
 
 test("Saturday semantic repair and social artwork rules are present", async () => {

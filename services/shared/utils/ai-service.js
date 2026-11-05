@@ -86,6 +86,9 @@ function isLocallyBlockedModel(value) {
   const model = String(value || "").trim();
   const configured = process.env.AI_MODEL_BLOCKLIST;
   const patterns = parseCsv(configured === undefined ? "deepseek/*" : configured);
+  // This model family was explicitly retired from the AIMS policy. Keep this
+  // deny rule independent of Koyeb overrides so a stale secret cannot revive it.
+  if (/^anthropic\/claude-fable(?:[-:]|$)/i.test(model)) return true;
   return patterns.some((pattern) => {
     const cleaned = pattern.toLowerCase();
     const candidate = model.toLowerCase();
@@ -121,7 +124,12 @@ function getProviderConfig(providerId) {
 
   const resolvedModel = firstEnvValue(Array.isArray(conf.modelEnvNames) ? conf.modelEnvNames : []);
   const resolvedKey = firstEnvValue(Array.isArray(conf.keyEnvNames) ? conf.keyEnvNames : []);
-  const model = resolvedModel.value || conf.name;
+  const configuredModel = resolvedModel.value || conf.name;
+  // Koyeb still has a dated Sol identifier which OpenRouter resolves to the
+  // current stable slug. Use the verified stable slug directly to avoid the
+  // production 404/parameter-relaxation cycle seen in newsletter runs.
+  const model = /^openai\/gpt-5\.6-sol-\d{8}$/i.test(String(configuredModel || ""))
+    ? "openai/gpt-5.6-sol" : configuredModel;
   const apiKey = resolvedKey.value || conf.apiKey;
 
   // The local blocklist is for deliberate provider/model exclusions. Model

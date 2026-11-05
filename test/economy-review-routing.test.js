@@ -24,10 +24,10 @@ test("economy editorial reviews preserve strong factual and writing routes", asy
       assert.ok(aiConfig.routeModels[route].includes("gpt56Sol"));
     }
     assert.equal(modelFor("newsletterCompose"), values.NEWSLETTER_MODEL_EDITORIAL);
-    assert.equal(modelFor("newsletterFactCheck"), values.AI_MODEL_HIGH_QUALITY);
-    assert.deepEqual(aiConfig.routeModels.newsletterFactCheck, ["highQuality", "audit"]);
-    assert.equal(modelFor("newsletterCouncilChair"), values.AI_MODEL_HIGH_QUALITY);
-    assert.deepEqual(aiConfig.routeModels.newsletterCouncilChair, ["highQuality", "audit"]);
+    assert.equal(modelFor("newsletterFactCheck"), values.OPENROUTER_CLAUDE_SONNET_5 || values.AI_MODEL_HIGH_QUALITY);
+    assert.deepEqual(aiConfig.routeModels.newsletterFactCheck, ["claudeSonnet5", "audit"]);
+    assert.equal(modelFor("newsletterCouncilChair"), values.OPENROUTER_CLAUDE_SONNET_5 || values.AI_MODEL_HIGH_QUALITY);
+    assert.deepEqual(aiConfig.routeModels.newsletterCouncilChair, ["claudeSonnet5", "audit"]);
     assert.equal(modelFor("commsHubOutreachPitch"), "pitch-writer");
     assert.equal(modelFor("commsHubOutreachReply"), "reply-writer");
     assert.equal(modelFor("commsHubOutreachArticle"), "article-writer");
@@ -36,6 +36,39 @@ test("economy editorial reviews preserve strong factual and writing routes", asy
     assert.equal(aiConfig.models.outreachPitch.name, "article-writer");
     assert.equal(aiConfig.models.outreachReply.name, "article-writer");
   } finally {
+    for (const [key, value] of Object.entries(prior)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
+
+test("newsletter routing blocks retired Fable overrides and canonicalises the observed dated Sol alias", async () => {
+  const values = {
+    OPENROUTER_API_KEY: "test-only",
+    OPENROUTER_CLAUDE_SONNET_5: "anthropic/claude-fable-5.1-20260831",
+    AI_MODEL_HIGH_QUALITY: "anthropic/claude-fable-5.1-20260831",
+    AI_MODEL_AUDIT: "openai/gpt-5.6-sol",
+    AI_MODEL_FAST: "openai/gpt-5.6-sol-20260709",
+  };
+  const prior = Object.fromEntries(Object.keys(values).map(key => [key, process.env[key]]));
+  Object.assign(process.env, values);
+  const oldFetch = globalThis.fetch;
+  const called = [];
+  globalThis.fetch = async (_url, options) => {
+    const body = JSON.parse(options.body);
+    called.push(body.model);
+    return { ok: true, json: async () => ({ choices: [{ message: { content: "ok" } }] }) };
+  };
+  try {
+    const { resilientRequest } = await import(`../services/shared/utils/ai-service.js?model-policy=${Date.now()}`);
+    await resilientRequest("newsletterFactCheck", { messages: [{ role: "user", content: "review" }], max_tokens: 10 });
+    assert.deepEqual(called, ["openai/gpt-5.6-sol"], "retired Fable is rejected and the Sol audit fallback is used");
+    called.length = 0;
+    await resilientRequest("targetedRepair", { messages: [{ role: "user", content: "repair" }], max_tokens: 10 });
+    assert.deepEqual(called, ["openai/gpt-5.6-sol"], "the observed dated Sol override is sent as its verified stable slug");
+  } finally {
+    globalThis.fetch = oldFetch;
     for (const [key, value] of Object.entries(prior)) {
       if (value === undefined) delete process.env[key];
       else process.env[key] = value;
