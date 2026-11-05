@@ -2,7 +2,7 @@
 """Create pull requests for approved development branches without merge authority.
 
 This script is executed only by the trusted default-branch controller. It
-never checks out or executes code from the pushed branch, never enables or merges pull requests. GitHub native auto-merge is enabled only by the trusted admission controller after exact-head checks pass.
+never checks out or executes code from the pushed branch, never enables or merges PRs. GitHub native auto-merge is enabled only by the trusted admission controller after exact-head checks pass.
 """
 from __future__ import annotations
 
