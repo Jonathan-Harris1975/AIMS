@@ -308,12 +308,12 @@ export const aiConfig = {
     newsletterSubject: routeChain(["fast", "summary", "highQuality"], ["google25FlashLite", "gpt56Sol"]),
     // Economical independent reviewer used for up to four self-improvement passes before a full council is convened.
     newsletterSelfImprove: routeChain(["fast", "summary", "standard"], ["google25FlashLite", "gpt56Sol"]),
-    newsletterFactCheck: fixedRouteChain(["highQuality", "audit"]),
+    newsletterFactCheck: fixedRouteChain(["claudeSonnet5", "gpt56Sol"]),
     // These editorial-only checks share the economy reviewer already used by
     // newsletterSelfImprove. Source/fact checks and chair decisions stay strong.
     newsletterVoiceReview: routeChain(["fast", "summary", "gpt56Sol"], ["claudeSonnet5", "highQuality", "anthropic46"]),
     newsletterAudienceReview: routeChain(["fast", "summary", "gpt56Sol"], ["claudeSonnet5", "highQuality", "anthropic46"]),
-    newsletterCouncilChair: fixedRouteChain(["highQuality", "audit"]),
+    newsletterCouncilChair: fixedRouteChain(["claudeSonnet5", "gpt56Sol"]),
     newsletterHeroPrompt: routeChain(["summary", "fast", "fallback"], ["meta", "google25FlashLite"]),
     // Comms Hub: routine communications are free-first and privacy-gated.
     // Routine Comms Hub routes use only explicitly configured free models, then the paid economy safety net.
