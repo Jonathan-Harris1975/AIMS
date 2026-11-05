@@ -1,73 +1,40 @@
 () => {
   const refs = new Map()
-  const titleIds = new Set()
-
-  const addRef = (format, titleId) => {
-    if (!/^[A-Z0-9]{10,14}$/.test(titleId)) return
-    if (format !== 'kindle' && format !== 'paperback' && format !== 'hardcover') return
-    refs.set(`${titleId}:${format}`, { titleId, format })
-  }
-
-  for (const tr of document.querySelectorAll('tr[id]')) {
-    if (/^[A-Z0-9]{10,14}$/.test(tr.id)) {
-      titleIds.add(tr.id)
-    }
+  const conflicts = new Set()
+  const setupRef = (href) => {
+    const match = (href || '').match(/title-setup\/(paperback|kindle|hardcover)\/([A-Z0-9]{10,14})(?:\/|$)/i)
+    return match ? { format: match[1].toLowerCase(), titleId: match[2].toUpperCase() } : null
   }
 
   for (const anchor of document.querySelectorAll('a[href]')) {
-    const href = anchor.getAttribute('href') ?? ''
-    let match = href.match(/title-setup\/(paperback|kindle|hardcover)\/([A-Z0-9]{10,14})/i)
-    if (match) {
-      addRef(match[1].toLowerCase(), match[2])
-      continue
+    const ref = setupRef(anchor.getAttribute('href'))
+    if (!ref) continue
+    const key = `${ref.titleId}:${ref.format}`
+    const row = anchor.closest('tr[id]')
+    // Row IDs group editions; only the edit link supplies a setup title ID.
+    // Associate a retail link only inside an unambiguous single-format row.
+    if (row) {
+      const rowRefs = new Set()
+      const asins = new Set()
+      for (const link of row.querySelectorAll('a[href]')) {
+        const href = link.getAttribute('href') || ''
+        const linkedRef = setupRef(href)
+        if (linkedRef) rowRefs.add(`${linkedRef.titleId}:${linkedRef.format}`)
+        const asin = href.match(/^\/amazon-dp-action\/[a-z]+\/dualbookshelf\.marketplacelink\/(B0[A-Z0-9]{8})(?:[/?#]|$)/i)?.[1]
+        if (asin) asins.add(asin.toUpperCase())
+      }
+      if (rowRefs.size === 1 && rowRefs.has(key) && asins.size === 1) ref.asin = [...asins][0]
+      if (asins.size > 1 && rowRefs.size === 1) conflicts.add(key)
     }
-    match = href.match(
-      /edit(?:paperback|kindle|hardcover)details.*?title-setup\/(paperback|kindle|hardcover)\/([A-Z0-9]{10,14})/i,
-    )
-    if (match) {
-      addRef(match[1].toLowerCase(), match[2])
-    }
+    const existing = refs.get(key)
+    if (existing?.asin && ref.asin && existing.asin !== ref.asin) conflicts.add(key)
+    refs.set(key, { ...existing, ...ref })
   }
 
-  for (const tr of document.querySelectorAll('tr[id]')) {
-    const id = tr.id
-    if (!/^[A-Z0-9]{10,14}$/.test(id)) continue
-
-    const text = tr.textContent ?? ''
-    const hasEditLink = tr.querySelector(
-      'a[href*="editpaperback"], a[href*="editkindle"], a[href*="edithardcover"]',
-    )
-
-    if (
-      /Paperback/i.test(text) &&
-      hasEditLink &&
-      !/Create paperback/i.test(text)
-    ) {
-      addRef('paperback', id)
-    }
-    if (
-      /Kindle eBook/i.test(text) &&
-      hasEditLink &&
-      !/Create Kindle eBook/i.test(text)
-    ) {
-      addRef('kindle', id)
-    }
-    if (
-      /Hardcover/i.test(text) &&
-      hasEditLink &&
-      !/Create hardcover/i.test(text)
-    ) {
-      addRef('hardcover', id)
-    }
-  }
-
-  const bookshelfRows = document.querySelectorAll(
-    '#bookshelftable tbody tr, table tbody tr',
-  ).length
-
+  const verifiedRefs = [...refs.entries()].map(([key, ref]) => conflicts.has(key) ? { ...ref, asin: undefined, asinConflict: true } : ref)
   return {
-    bookshelfRows,
-    titleIds: [...titleIds],
-    refs: [...refs.values()],
+    bookshelfRows: document.querySelectorAll('#bookshelftable tbody tr, table tbody tr').length,
+    titleIds: [...new Set(verifiedRefs.map((ref) => ref.titleId))],
+    refs: verifiedRefs,
   }
 }

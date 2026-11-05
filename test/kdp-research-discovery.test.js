@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { tavilySearch, competitorCandidates, discoverBookResearch } from "../services/kdp/researchDiscovery.js";
+import { tavilySearch, competitorCandidates, discoverBookResearch, searchQueries } from "../services/kdp/researchDiscovery.js";
 import { latestAudit, londonWeek, reviewCycle, runResearchTick, validMondayAudit } from "../services/kdp/researchWorker.js";
 
 test("research searches both storefronts and recent topics without treating snippets as verified prices", async () => {
@@ -129,4 +129,12 @@ test("a later signed-in audit does not hide the valid Monday public report", asy
 test("four-week cycle", () => {
  assert.equal(reviewCycle(new Date("2026-11-03T12:00:00Z")), "2026-10-26");
  assert.equal(reviewCycle(new Date("2026-11-24T12:00:00Z")), "2026-11-23");
+});
+
+
+test("specific book subject takes priority over a broad catalogue category", () => {
+  const queries = searchQueries({ title: "AI and Formula 1: Race strategy", topic: "Transportation" });
+  assert.match(queries.US, /AI and Formula 1/);
+  assert.match(queries.trendsUK, /Race strategy/);
+  assert.doesNotMatch(queries.UK, /Transportation/);
 });
