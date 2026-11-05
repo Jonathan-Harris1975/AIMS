@@ -4,9 +4,9 @@
 
 This inventory makes the runtime configuration contract auditable without duplicating secret values. `.env.example` and `env.template` remain the curated operator templates; this file records every production `process.env` dependency and its source locations.
 
-- Runtime variables referenced in production code: **529**
+- Runtime variables referenced in production code: **531**
 - Present in curated templates: **408**
-- Not present in curated templates: **121**
+- Not present in curated templates: **123**
 
 | Variable | Curated template | Production references |
 | --- | --- | --- |
@@ -46,7 +46,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `APP_TITLE` | Yes | ai-config.js:344<br>services/artwork/artwork.js:294<br>services/artwork/utils/artwork.js:306 |
 | `APP_TMP_DIR` | Yes | scripts/tempStorage.js:10<br>services/blotato/utils/renderedVideoQa.js:308<br>services/shared/utils/stateFile.js:10<br>services/tts/utils/editingProcessor.js:22<br>services/tts/utils/mergeProcessor.js:14<br>services/tts/utils/podcastProcessor.js:56 |
 | `APP_URL` | Yes | ai-config.js:343<br>audits/utils/orchestrator.js:143<br>services/artwork/artwork.js:293<br>services/artwork/utils/artwork.js:305<br>services/rss-feed-creator/utils/feedGenerator.js:32 |
-| `APP_VERSION` | No | server.js:399<br>server.js:418<br>services/shared/utils/operationalExcellence.js:158 |
+| `APP_VERSION` | No | server.js:399<br>server.js:418<br>services/shared/utils/operationalExcellence.js:192 |
 | `ARTWORK_CAPABILITY_CACHE_MS` | No | services/artwork/utils/openrouterImageCapabilities.js:21 |
 | `ARTWORK_CAPABILITY_DISCOVERY_ENABLED` | No | services/artwork/utils/openrouterImageCapabilities.js:55 |
 | `ARTWORK_CAPABILITY_TIMEOUT_MS` | No | services/artwork/utils/openrouterImageCapabilities.js:67 |
@@ -284,10 +284,12 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `KDP_OTP_CHALLENGE_TIMEOUT_MS` | Yes | services/kdp/otpBroker.js:9 |
 | `KDP_PASSWORD` | Yes | services/kdp/index.js:15 |
 | `KDP_USERNAME` | Yes | services/kdp/index.js:15 |
-| `KOYEB_GIT_SHA` | No | scripts/startupCheck.js:54<br>services/comms-hub/routes/index.js:1379<br>services/ops/koyebMonitor.js:32<br>services/ops/koyebMonitor.js:135<br>services/ops/koyebMonitor.js:136<br>services/shared/utils/operationalExcellence.js:105<br>+1 more |
-| `KOYEB_MONITOR_INTERVAL_MS` | No | services/ops/koyebMonitor.js:165 |
-| `KOYEB_SERVICE` | No | services/ops/koyebMonitor.js:66 |
-| `KOYEB_TOKEN` | No | services/ops/koyebMonitor.js:65<br>services/ops/koyebMonitor.js:164 |
+| `KOYEB_GIT_SHA` | No | scripts/startupCheck.js:54<br>services/comms-hub/routes/index.js:1379<br>services/ops/koyebMonitor.js:32<br>services/ops/koyebMonitor.js:104<br>services/shared/utils/operationalExcellence.js:139 |
+| `KOYEB_MONITOR_INTERVAL_MS` | No | services/ops/koyebMonitor.js:234 |
+| `KOYEB_SERVICE` | No | services/ops/koyebMonitor.js:101 |
+| `KOYEB_SERVICE_ID` | No | services/ops/koyebMonitor.js:101 |
+| `KOYEB_SERVICE_NAME` | No | services/ops/koyebMonitor.js:101 |
+| `KOYEB_TOKEN` | No | services/ops/koyebMonitor.js:100<br>services/ops/koyebMonitor.js:233 |
 | `LOG_LEVEL` | Yes | logger.js:86<br>logger.js:92 |
 | `MAX_ITEMS_PER_FEED` | Yes | services/rss-feed-creator/utils/fetchFeeds.js:30 |
 | `MAX_POLLY_NATURAL_CHUNK_CHARS` | Yes | services/script/utils/chunkText.js:20 |

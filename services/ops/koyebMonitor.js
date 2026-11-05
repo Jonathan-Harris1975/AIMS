@@ -1,5 +1,5 @@
 import { flushStateWrites, readJsonStateFresh, writeJsonState } from "../shared/utils/stateFile.js";
-import { sendOperationalEvent } from "../shared/utils/operationalExcellence.js";
+import { flushOperationalEventOutbox, sendOperationalEvent } from "../shared/utils/operationalExcellence.js";
 import { info, warn } from "../../logger.js";
 
 const STATE_FILE = "koyeb-monitor-state.json";
@@ -36,13 +36,40 @@ function serviceRevision(service, isAimsService) {
 function selectedAimsService(service, configured) {
   const target = String(configured || "").trim().toLowerCase();
   if (!target) return false;
-  return [service?.id, service?.name, service?.slug].some((value) => String(value || "").trim().toLowerCase() === target);
+  if ([service?.id, service?.name, service?.slug].some((value) => String(value || "").trim().toLowerCase() === target)) return true;
+  const slash = target.lastIndexOf("/");
+  if (slash <= 0) return false;
+  const appName = String(service?.app?.name || service?.app_name || "").trim().toLowerCase();
+  const serviceName = String(service?.name || "").trim().toLowerCase();
+  return serviceName === target.slice(slash + 1) && appName === target.slice(0, slash);
 }
 
-function identifyAimsService(services, configured, runtimeSha) {
+async function identifyAimsService(services, configured, runtimeSha, { token, fetchImpl, apiBase }) {
   if (String(configured || "").trim()) {
     const matches = services.filter((service) => selectedAimsService(service, configured));
-    return matches.length === 1 ? String(matches[0].id || matches[0].name) : null;
+    if (matches.length === 1) return String(matches[0].id || matches[0].name);
+    const target = String(configured).trim().toLowerCase();
+    const slash = target.lastIndexOf("/");
+    if (slash > 0) {
+      const expectedApp = target.slice(0, slash);
+      const expectedService = target.slice(slash + 1);
+      const namedCandidates = services.filter((service) => String(service.name || "").trim().toLowerCase() === expectedService);
+      const appMatches = [];
+      for (const service of namedCandidates) {
+        if (!service.app_id) continue;
+        const response = await fetchImpl(`${apiBase}/apps/${encodeURIComponent(service.app_id)}`, {
+          method: "GET",
+          headers: { authorization: `Bearer ${token}`, accept: "application/json" },
+          signal: AbortSignal.timeout(10000),
+        });
+        if (!response.ok) throw new Error(`Koyeb app identity API returned HTTP ${response.status}`);
+        const payload = await response.json();
+        const app = payload?.app || payload;
+        if (String(app?.name || "").trim().toLowerCase() === expectedApp) appMatches.push(service);
+      }
+      if (appMatches.length === 1) return String(appMatches[0].id || appMatches[0].name);
+    }
+    return null;
   }
   const sha = String(runtimeSha || "").trim().toLowerCase();
   if (!/^[0-9a-f]{40}$/.test(sha)) return null;
@@ -64,17 +91,14 @@ async function requestServices({ token, fetchImpl = fetch, apiBase = API_BASE })
     if (!Array.isArray(payload?.services)) throw new Error("Koyeb services API returned an invalid service list");
     services.push(...payload.services);
     if (payload.has_next !== true || payload.services.length === 0) break;
+    if (page === MAX_PAGES - 1) throw new Error("Koyeb service inventory exceeds the bounded 500-service monitor limit");
   }
   return services;
 }
 
-function eventId(service, status, revision) {
-  return `koyeb:${service.id || service.name || "unknown"}:${status}:${revision || "revision-unavailable"}`.slice(0, 160);
-}
-
 export async function checkKoyebServices({
   token = process.env.KOYEB_TOKEN,
-  configuredService = process.env.KOYEB_SERVICE,
+  configuredService = process.env.KOYEB_SERVICE || process.env.KOYEB_SERVICE_ID || process.env.KOYEB_SERVICE_NAME,
   fetchImpl = fetch,
   apiBase = API_BASE,
   runtimeSha = process.env.KOYEB_GIT_SHA,
@@ -88,9 +112,16 @@ export async function checkKoyebServices({
   const services = await requestServices({ token: String(token).trim(), fetchImpl, apiBase });
   const state = await readState(STATE_FILE, { version: 1, services: {} });
   const previous = state?.services && typeof state.services === "object" ? state.services : {};
-  const next = { version: 1, checkedAt: now().toISOString(), services: {} };
-  const events = [];
-  const aimsServiceId = identifyAimsService(services, configuredService, runtimeSha);
+  const next = {
+    version: 2,
+    checkedAt: now().toISOString(),
+    services: {},
+    pendingEvents: Array.isArray(state?.pendingEvents) ? [...state.pendingEvents] : [],
+    inventoryMismatchActive: Boolean(state?.inventoryMismatchActive),
+  };
+  const aimsServiceId = await identifyAimsService(services, configuredService, runtimeSha, {
+    token: String(token).trim(), fetchImpl, apiBase,
+  });
   const aimsServiceSeen = Boolean(aimsServiceId);
 
   for (const service of services) {
@@ -99,75 +130,100 @@ export async function checkKoyebServices({
     const status = serviceStatus(service);
     const isAims = id === aimsServiceId;
     const revision = serviceRevision(service, isAims);
-    const current = { name: String(service.name || id).slice(0, 120), status, revision, checkedAt: next.checkedAt };
-    next.services[id] = current;
-    const wasFailure = FAILURE_STATUSES.has(previous[id]?.status);
+    const prior = previous[id] || {};
+    const current = {
+      name: String(service.name || id).slice(0, 120), status, revision,
+      checkedAt: next.checkedAt,
+      activeIncidentId: prior.activeIncidentId || null,
+    };
     const isFailure = FAILURE_STATUSES.has(status);
-    if (isFailure && (!wasFailure || previous[id]?.status !== status || previous[id]?.revision !== revision)) {
-      const result = await sendEvent({
-        event_id: eventId(service, status, revision),
-        source: "koyeb",
-        service: isAims ? "Jonathan-Harris1975/AIMS" : "Koyeb",
-        environment: "production",
-        severity: "critical",
-        event_type: "koyeb_service_unhealthy",
-        status: "failure",
-        release_id: revision,
-        title: `Koyeb service ${current.name} is ${status}`,
-        summary: `The read-only AIMS Koyeb monitor detected service status ${status}.`,
-        details: {
-          service_id: id,
-          service_name: current.name,
-          service_status: status,
-          active_deployment_id: String(service.active_deployment_id || "").slice(0, 120) || null,
-          repository_mapping: isAims ? "configured_aims_service" : "unmapped_service_in_account_inventory",
+    if (isFailure && !current.activeIncidentId) {
+      current.activeIncidentId = `koyeb:${id}:failure:${next.checkedAt}`.slice(0, 160);
+      next.pendingEvents.push({
+        event: {
+          event_id: current.activeIncidentId,
+          source: "koyeb",
+          service: isAims ? "Jonathan-Harris1975/AIMS" : "Koyeb",
+          environment: "production",
+          severity: "critical",
+          event_type: "koyeb_service_unhealthy",
+          status: "failure",
+          release_id: revision,
+          title: `Koyeb service ${current.name} is ${status}`,
+          summary: `The read-only AIMS Koyeb monitor detected service status ${status}.`,
+          details: {
+            service_id: id,
+            service_name: current.name,
+            service_status: status,
+            active_deployment_id: String(service.active_deployment_id || "").slice(0, 120) || null,
+            repository_mapping: isAims ? "configured_aims_service" : "unmapped_service_in_account_inventory",
+          },
         },
       });
-      events.push({ service_id: id, status, delivered: Boolean(result?.ok), revision_available: Boolean(revision) });
-      if (!result?.ok) next.services[id] = previous[id] || { ...current, status: "unknown" };
     }
-    if (!isFailure && wasFailure) {
-      const result = await sendEvent({
-        event_id: `koyeb:${id}:recovered:${revision || "revision-unavailable"}`.slice(0, 160),
-        source: "koyeb",
-        service: isAims ? "Jonathan-Harris1975/AIMS" : "Koyeb",
-        environment: "production",
-        severity: "info",
-        event_type: "koyeb_service_recovered",
-        status: "recovered",
-        release_id: revision,
-        title: `Koyeb service ${current.name} recovered`,
-        summary: "The Koyeb service has returned to a non-failure state.",
-        details: { service_id: id, service_name: current.name, service_status: status },
+    if (status === "healthy" && current.activeIncidentId) {
+      next.pendingEvents.push({
+        event: {
+          event_id: `${current.activeIncidentId}:recovered`.slice(0, 160),
+          source: "koyeb",
+          service: isAims ? "Jonathan-Harris1975/AIMS" : "Koyeb",
+          environment: "production",
+          severity: "info",
+          event_type: "koyeb_service_recovered",
+          status: "recovered",
+          release_id: revision,
+          title: `Koyeb service ${current.name} recovered`,
+          summary: "The Koyeb service reported an explicit healthy status after a recorded failure.",
+          details: { service_id: id, service_name: current.name, service_status: status },
+        },
       });
-      if (!result?.ok) next.services[id] = previous[id];
+      current.activeIncidentId = null;
     }
+    next.services[id] = current;
   }
 
-  if (configuredService && !aimsServiceSeen) {
+  if (configuredService && !aimsServiceSeen && !next.inventoryMismatchActive) {
     const revision = /^[0-9a-f]{40}$/.test(String(runtimeSha || "").trim().toLowerCase())
       ? String(runtimeSha).trim().toLowerCase()
       : null;
-    const result = await sendEvent({
-      event_id: `koyeb:aims-service-not-found:${revision || "revision-unavailable"}`,
-      source: "koyeb",
-      service: "Jonathan-Harris1975/AIMS",
-      environment: "production",
-      severity: "critical",
-      event_type: "koyeb_service_inventory_mismatch",
-      status: "failure",
-      release_id: revision,
-      title: "Configured AIMS Koyeb service is missing from the service inventory",
-      summary: "The Koyeb API did not return the service selected by KOYEB_SERVICE.",
-      details: { configured_service_present: true, service_count: services.length },
+    next.inventoryMismatchActive = true;
+    next.pendingEvents.push({
+      event: {
+        event_id: `koyeb:aims-service-not-found:${next.checkedAt}`.slice(0, 160),
+        source: "koyeb",
+        service: "Jonathan-Harris1975/AIMS",
+        environment: "production",
+        severity: "critical",
+        event_type: "koyeb_service_inventory_mismatch",
+        status: "failure",
+        release_id: revision,
+        title: "Configured AIMS Koyeb service is missing from the service inventory",
+        summary: "The Koyeb API did not return the service selected by KOYEB_SERVICE.",
+        details: { configured_service_present: true, service_count: services.length },
+      },
     });
-    events.push({ service_id: String(configuredService).slice(0, 120), status: "inventory_mismatch", delivered: Boolean(result?.ok), revision_available: Boolean(revision) });
   }
+  if (aimsServiceSeen) next.inventoryMismatchActive = false;
 
-  const saved = await writeState(STATE_FILE, next);
-  if (!saved) throw new Error("Koyeb monitor state could not be persisted");
-  await flushWrites({ throwOnError: true });
-  return { ok: true, service_count: Object.keys(next.services).length, events };
+  const persist = async () => {
+    const saved = await writeState(STATE_FILE, next);
+    if (!saved) throw new Error("Koyeb monitor state could not be persisted");
+    await flushWrites({ throwOnError: true });
+  };
+  await persist();
+
+  const attempted = [];
+  const remaining = [];
+  for (const pending of next.pendingEvents) {
+    const result = await sendEvent(pending.event);
+    attempted.push({ event_id: pending.event.event_id, delivered: Boolean(result?.ok) });
+    if (!result?.ok) remaining.push(pending);
+  }
+  if (remaining.length !== next.pendingEvents.length) {
+    next.pendingEvents = remaining;
+    await persist();
+  }
+  return { ok: true, service_count: Object.keys(next.services).length, events: attempted };
 }
 
 let timer;
@@ -180,6 +236,7 @@ export function startKoyebMonitor() {
     if (running) return;
     running = true;
     try {
+      await flushOperationalEventOutbox();
       const result = await checkKoyebServices();
       if (result.ok) info("koyeb.monitor.checked", { services: result.service_count, events: result.events.length });
     } catch (error) {

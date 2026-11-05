@@ -10,7 +10,7 @@ process.env.OPS_ALERT_WEBHOOK_TOKEN = "test-only-token";
 process.env.NODE_ENV = "production";
 process.env.KOYEB_GIT_SHA = "a".repeat(40);
 
-const { recordJobTransition, recordProviderOutcome, getOperationalExcellenceSnapshot } = await import("../services/shared/utils/operationalExcellence.js");
+const { recordJobTransition, recordProviderOutcome, getOperationalExcellenceSnapshot, flushOperationalEventOutbox } = await import("../services/shared/utils/operationalExcellence.js");
 
 test("professional excellence metrics record recovery and provider outcomes", () => {
   const base = { type: "audit", sessionId: "session-1", attempt: 2, updatedAt: new Date().toISOString() };
@@ -50,6 +50,34 @@ test("failed AIMS scheduled operations emit a canonical, exact-revision HIVE sig
     assert.equal(sent.payload.release_id, "a".repeat(40));
     assert.equal(sent.payload.event_type, "scheduled_workflow_failed");
     assert.equal(JSON.stringify(sent.payload).includes("provider detail should not be forwarded"), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("failed HIVE delivery stays in the durable outbox and is retried with the same event identity", async () => {
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+  globalThis.fetch = async (_url, options) => {
+    requests.push(JSON.parse(options.body));
+    return { ok: requests.length > 1, status: requests.length > 1 ? 202 : 503 };
+  };
+  try {
+    recordJobTransition(null, {
+      type: "daily_blog_artwork_retry",
+      sessionId: "failed-session-retry",
+      attempt: 1,
+      status: "failed",
+      finishedAt: new Date().toISOString(),
+    });
+    for (let attempt = 0; attempt < 20 && requests.length === 0; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    assert.equal(requests.length, 1);
+    await flushOperationalEventOutbox({ now: new Date(Date.now() + 120_000) });
+    assert.equal(requests.length, 2);
+    assert.equal(requests[0].event_id, requests[1].event_id);
+    assert.equal(getOperationalExcellenceSnapshot().jobs.pendingOperationalEvents.length, 0);
   } finally {
     globalThis.fetch = originalFetch;
   }
