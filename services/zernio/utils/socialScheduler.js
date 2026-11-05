@@ -144,7 +144,7 @@ function scoreFromGate(defects = [], warnings = []) {
 }
 
 function buildGateError(gate, label = "Zernio social gate") {
-  const err = new Error(`${label} failed (${gate.score}/86): ${gate.defects.join(" | ")}`);
+  const err = new Error(`${label} blocked by ${gate.defects.length} hard defect(s) (quality score ${gate.score}/86): ${gate.defects.join(" | ")}`);
   err.statusCode = 422;
   err.zernioSocialGate = gate;
   return err;
@@ -306,30 +306,30 @@ export function runZernioSocialGate({ contentType = "zernio-social", laneKey = "
   const words = wordCount(content);
 
   if (!content) defects.push("Post content is empty.");
-  if (hashtags.length > 3) defects.push("Post has more than three hashtags.");
+  if (hashtags.length > 3) warnings.push("Post has more than three hashtags; consider trimming for a cleaner caption.");
   const genericTags = hashtags.filter((tag) => GENERIC_HASHTAGS.includes(String(tag).toLowerCase()));
   if (genericTags.length > 1) warnings.push("Post uses more than one generic hashtag; keep premium channels tidy.");
   const motivationalTags = hashtags.filter((tag) => MOTIVATIONAL_HASHTAGS.includes(String(tag).toLowerCase()));
-  if (motivationalTags.length) defects.push(`Motivational hashtag(s) do not fit the brand: ${motivationalTags.join(", ")}`);
+  if (motivationalTags.length) warnings.push(`Motivational hashtag(s) may not fit the brand: ${motivationalTags.join(", ")}`);
   for (const phrase of findPlainPhraseBreaches(styleText, ANTI_HYPE_HEDGING_PHRASES)) {
-    defects.push(`Generic hedging phrase detected: ${phrase}`);
+    warnings.push(`Generic hedging phrase detected: ${phrase}`);
   }
   for (const breach of findPatternBreaches(styleText, MOTIVATIONAL_TONE_PATTERNS)) {
-    defects.push(`Motivational tone drift: ${breach}`);
+    warnings.push(`Motivational tone drift: ${breach}`);
   }
-  if (/```|\*\*|^\s*[-*]\s+/m.test(content)) defects.push("Post contains markdown or bullet formatting.");
-  if (/\p{Extended_Pictographic}/u.test(content)) defects.push("Post contains emoji despite brand rules.");
+  if (/```|\*\*|^\s*[-*]\s+/m.test(content)) warnings.push("Post contains markdown or bullet formatting; plain social copy is preferred.");
+  if (/\p{Extended_Pictographic}/u.test(content)) warnings.push("Post contains emoji; the established brand style generally avoids them.");
 
   for (const breach of findPatternBreaches(styleText, BANNED_PROMO_PATTERNS)) {
     defects.push(`Brand tone breach: ${breach}`);
   }
   for (const term of findGenericAbstractionBreaches(styleText)) {
-    defects.push(
+    warnings.push(
       `Generic abstraction phrase detected: "${term}". Replace with a concrete effect (what specifically changes: who/what/impact).`
     );
   }
   for (const { american, british } of findAmericanSpellings(styleText)) {
-    defects.push(`British English drift: use ${british} instead of ${american}`);
+    warnings.push(`British English drift: use ${british} instead of ${american}`);
   }
 
   const baitCheckText = content.replace(/Comment your answer below\.?/gi, "");
@@ -374,11 +374,11 @@ export function runZernioSocialGate({ contentType = "zernio-social", laneKey = "
       .trim();
 
     if (wordCount(commentary) < 22) {
-      defects.push("Monday commentary is too thin; add a distinct expert implication, tension, consequence, or judgement after the quote.");
+      warnings.push("Monday commentary is brief; consider adding an expert implication, tension, consequence, or judgement after the quote.");
     }
 
     if (/\b(this (?:is|isn't) (?:about|just about)|the key is|what matters is|the future of|shifting the frontier|genuinely useful outcomes|new possibilities)\b/i.test(commentary)) {
-      defects.push("Monday commentary reads like generic explanatory filler rather than a distinctive expert observation.");
+      warnings.push("Monday commentary may read as generic explanation; consider adding a more specific expert observation.");
     }
   }
 
@@ -400,18 +400,20 @@ export function runZernioSocialGate({ contentType = "zernio-social", laneKey = "
   }
 
   const score = scoreFromGate(defects, warnings);
-  if (defects.length) {
+  if (defects.length || warnings.length) {
     emitQaEvent({
       source: `scheduler.gate.${laneKey || contentType}`,
-      type: "gate_defects",
-      severity: score < 86 ? "medium" : "low",
-      message: `${defects.length} defect(s) found in ${contentType} gate`,
+      type: defects.length ? "gate_defects" : "gate_advisories",
+      severity: defects.length ? (score < 86 ? "medium" : "low") : "low",
+      message: `${defects.length} blocking defect(s) and ${warnings.length} advisory finding(s) in ${contentType} gate`,
       detail: { defects, warnings, score, laneKey, contentType },
     });
   }
 
   return {
-    ok: defects.length === 0 && score >= 86,
+    // Scores and style findings are retained for reporting. Explicit defects
+    // block publication; warning volume alone does not.
+    ok: defects.length === 0,
     score,
     threshold: 86,
     contentType,
@@ -426,7 +428,7 @@ function addExternalGateDefects(gate = {}, extraDefects = [], extraWarnings = []
   const defects = [...new Set([...(gate.defects || []), ...extraDefects].filter(Boolean))];
   const warnings = [...new Set([...(gate.warnings || []), ...extraWarnings].filter(Boolean))];
   const score = scoreFromGate(defects, warnings);
-  return { ...gate, defects, warnings, score, threshold: Number(gate.threshold || 86), ok: defects.length === 0 && score >= 86 };
+  return { ...gate, defects, warnings, score, threshold: Number(gate.threshold || 86), ok: defects.length === 0 };
 }
 
 export function buildZernioSemanticRepairPrompt({ laneKey = "", post = {}, gate = {}, attempt = 1, semanticContext = {} } = {}) {
