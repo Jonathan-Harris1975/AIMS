@@ -122,6 +122,7 @@ async function runQaLoopImpl({ profile, newsletter, lead, stories, promotion = n
       councilChair: council.chair,
       councilAttendance: council.attendance,
       nearThresholdAccepted: council.nearThresholdAccepted === true,
+      acceptedWithAdvisoryScore: council.acceptedWithAdvisoryScore === true,
       passed,
     });
 

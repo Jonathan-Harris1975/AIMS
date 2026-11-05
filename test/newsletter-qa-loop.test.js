@@ -199,6 +199,21 @@ describe("newsletter engine/qaLoop.js", () => {
     assert.equal(result.council.verdict, "pass_with_tolerance");
   });
 
+  test("accepts modestly below-target daily scores but quarantines scores below the advisory floor", async () => {
+    const { runQaLoop } = await import("../services/newsletter/engine/qaLoop.js");
+    selfScores = [60, 60, 60, 60];
+    councilScores = [75];
+    const advisory = await runQaLoop({ profile, newsletter: draftNewsletter(), lead, stories, sessionId: "test-advisory-floor" });
+    assert.equal(advisory.ok, true);
+    assert.equal(advisory.council.acceptedWithAdvisoryScore, true);
+    assert.equal(advisory.council.verdict, "pass_with_advisory");
+    selfCallCount = 0; chairCallCount = 0;
+    councilScores = [60, 60];
+    const held = await runQaLoop({ profile, newsletter: { ...draftNewsletter(), subject: "Distinct low-score case" }, lead, stories, sessionId: "test-below-advisory-floor" });
+    assert.equal(held.ok, false);
+    assert.equal(held.quarantined, true);
+  });
+
   test("quarantines after no more than two failed full councils", async () => {
     const { runQaLoop } = await import("../services/newsletter/engine/qaLoop.js");
     selfScores = [60, 60, 60, 60];

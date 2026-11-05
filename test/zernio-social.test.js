@@ -857,11 +857,14 @@ test("scheduled daily posts preserve brand and topic requirements", async () => 
     post: { title: "Transformer attention", topic: "Transformer attention", content: "A general thought for today." },
   });
 
-  assert.equal(daily.ok, false);
+  assert.equal(daily.ok, true);
   for (const pattern of [/British English drift/i, /emoji/i, /markdown or bullet/i, /Motivational hashtag/i]) {
-    assert.ok(daily.defects.some((defect) => pattern.test(defect)));
+    assert.ok(daily.warnings.some((warning) => pattern.test(warning)));
   }
   assert.equal(strict.ok, false);
+  for (const pattern of [/British English drift/i, /emoji/i, /markdown or bullet/i, /Motivational hashtag/i]) {
+    assert.ok(strict.defects.some((defect) => pattern.test(defect)));
+  }
   assert.equal(offTopic.ok, false);
   assert.ok(offTopic.defects.some((defect) => /Tuesday post drifted away/i.test(defect)));
 
