@@ -284,10 +284,10 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `KDP_OTP_CHALLENGE_TIMEOUT_MS` | Yes | services/kdp/otpBroker.js:9 |
 | `KDP_PASSWORD` | Yes | services/kdp/index.js:15 |
 | `KDP_USERNAME` | Yes | services/kdp/index.js:15 |
-| `KOYEB_GIT_SHA` | No | scripts/startupCheck.js:54<br>services/comms-hub/routes/index.js:1379<br>services/ops/koyebMonitor.js:32<br>services/ops/koyebMonitor.js:135<br>services/ops/koyebMonitor.js:136<br>services/shared/utils/operationalExcellence.js:105<br>+1 more |
-| `KOYEB_MONITOR_INTERVAL_MS` | No | services/ops/koyebMonitor.js:165 |
-| `KOYEB_SERVICE` | No | services/ops/koyebMonitor.js:66 |
-| `KOYEB_TOKEN` | No | services/ops/koyebMonitor.js:65<br>services/ops/koyebMonitor.js:164 |
+| `KOYEB_GIT_SHA` | No | scripts/startupCheck.js:54<br>services/comms-hub/routes/index.js:1379<br>services/ops/koyebMonitor.js:32<br>services/ops/koyebMonitor.js:80<br>services/shared/utils/operationalExcellence.js:105<br>services/shared/utils/operationalExcellence.js:117 |
+| `KOYEB_MONITOR_INTERVAL_MS` | No | services/ops/koyebMonitor.js:178 |
+| `KOYEB_SERVICE` | No | services/ops/koyebMonitor.js:77 |
+| `KOYEB_TOKEN` | No | services/ops/koyebMonitor.js:76<br>services/ops/koyebMonitor.js:177 |
 | `LOG_LEVEL` | Yes | logger.js:86<br>logger.js:92 |
 | `MAX_ITEMS_PER_FEED` | Yes | services/rss-feed-creator/utils/fetchFeeds.js:30 |
 | `MAX_POLLY_NATURAL_CHUNK_CHARS` | Yes | services/script/utils/chunkText.js:20 |
