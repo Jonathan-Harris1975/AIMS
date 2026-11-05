@@ -1,9 +1,11 @@
-import { readJsonState, writeJsonState } from "./stateFile.js";
+import { flushStateWrites, readJsonState, readJsonStateFresh, writeJsonState } from "./stateFile.js";
 import { warn } from "../../../logger.js";
 
 const STATE_FILE = "professional-excellence.json";
 const FAILURE_ALERT_THRESHOLD = Math.max(1, Number(process.env.AIMS_FAILURE_ALERT_THRESHOLD || 3));
 const WEBHOOK_TIMEOUT_MS = Math.max(1000, Number(process.env.OPS_ALERT_TIMEOUT_MS || 8000));
+const OUTBOX_MAX_ATTEMPTS = 10;
+let outboxFlush;
 
 function cleanEnv(name) {
   const value = String(process.env[name] || "").trim();
@@ -24,6 +26,7 @@ function emptyState() {
       failureStreakByType: {},
       lastFailure: null,
       lastSuccess: null,
+      pendingOperationalEvents: [],
     },
     providers: {},
   };
@@ -44,6 +47,37 @@ function saveState(state) {
   writeJsonState(STATE_FILE, state);
 }
 
+export async function flushOperationalEventOutbox({ now = new Date() } = {}) {
+  if (outboxFlush) return outboxFlush;
+  outboxFlush = (async () => {
+    await flushStateWrites({ throwOnError: true });
+    const state = await readJsonStateFresh(STATE_FILE, emptyState());
+    const pending = Array.isArray(state?.jobs?.pendingOperationalEvents)
+      ? state.jobs.pendingOperationalEvents
+      : [];
+    if (!pending.length) return { attempted: 0, pending: 0 };
+    const retained = [];
+    let attempted = 0;
+    for (const item of pending) {
+      if (item.attempts >= OUTBOX_MAX_ATTEMPTS || new Date(item.nextAttemptAt || 0) > now) {
+        retained.push(item);
+        continue;
+      }
+      attempted += 1;
+      const result = await sendOperationalEvent(item.event);
+      if (result.ok) continue;
+      const attempts = item.attempts + 1;
+      const delayMs = Math.min(60 * 60 * 1000, 30_000 * (2 ** Math.min(attempts - 1, 7)));
+      retained.push({ ...item, attempts, nextAttemptAt: new Date(now.getTime() + delayMs).toISOString() });
+    }
+    state.jobs.pendingOperationalEvents = retained;
+    writeJsonState(STATE_FILE, state);
+    await flushStateWrites({ throwOnError: true });
+    return { attempted, pending: retained.length };
+  })().finally(() => { outboxFlush = undefined; });
+  return outboxFlush;
+}
+
 export async function sendOperationalEvent(event) {
   const url = cleanEnv("OPS_ALERT_WEBHOOK_URL");
   const token = cleanEnv("OPS_ALERT_WEBHOOK_TOKEN");
@@ -56,8 +90,8 @@ export async function sendOperationalEvent(event) {
       headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
       body: JSON.stringify({
         source: "aims_runtime",
-        service: "AIMS",
-        environment: process.env.NODE_ENV || "production",
+        service: "Jonathan-Harris1975/AIMS",
+        environment: process.env.NODE_ENV || "unknown",
         occurred_at: new Date().toISOString(),
         ...event,
       }),
@@ -95,20 +129,31 @@ export function recordJobTransition(previous, next) {
       error: String(next.error?.message || "job failed").slice(0, 300),
       failureStreak: streak,
     };
+    const failureEvent = {
+      event_id: `aims:${type}:${next.sessionId || next.updatedAt || next.finishedAt || "unknown"}:failed`,
+      severity: "critical",
+      event_type: "scheduled_workflow_failed",
+      status: "failure",
+      title: `AIMS workflow ${type} failed`,
+      summary: "An AIMS workflow reported a failed operation. No publishing retry is initiated by the monitor.",
+      release_id: process.env.KOYEB_GIT_SHA || null,
+      details: { type, sessionId: next.sessionId, attempt: next.attempt, failureStreak: streak },
+    };
+    state.jobs.pendingOperationalEvents = Array.isArray(state.jobs.pendingOperationalEvents)
+      ? state.jobs.pendingOperationalEvents
+      : [];
+    if (!state.jobs.pendingOperationalEvents.some((item) => item.event?.event_id === failureEvent.event_id)) {
+      state.jobs.pendingOperationalEvents.push({ event: failureEvent, attempts: 0, nextAttemptAt: new Date().toISOString() });
+      state.jobs.pendingOperationalEvents = state.jobs.pendingOperationalEvents.slice(-500);
+    }
     if (streak === FAILURE_ALERT_THRESHOLD) {
       state.jobs.repeatedFailures += 1;
-      void sendOperationalEvent({
-        event_id: `aims:${type}:${next.sessionId}:failure-threshold`,
-        severity: "critical",
-        event_type: "repeated_workflow_failure",
-        title: `AIMS workflow ${type} failed repeatedly`,
-        summary: `The workflow reached ${FAILURE_ALERT_THRESHOLD} consecutive failures.`,
-        release_id: process.env.APP_VERSION || process.env.npm_package_version || null,
-        details: { type, sessionId: next.sessionId, failureStreak: streak },
-      });
     }
   }
   saveState(state);
+  if (next.status === "failed") {
+    void flushOperationalEventOutbox().catch((err) => warn("ops.alert.outbox.fail", { errorName: err?.name || "Error" }));
+  }
 }
 
 export function recordProviderOutcome({ routeKey, provider, ok, durationMs, status }) {
