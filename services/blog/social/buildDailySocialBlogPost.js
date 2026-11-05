@@ -33,6 +33,7 @@ import {
   phase5QuarantineKey,
 } from "../../content-quality/phase5OrganicGrowthGates.js";
 import { runReviewCouncilGate, buildHousekeepingPlan } from "../../content-quality/reviewCouncil.js";
+import { advisoryDailySocialGate } from "./dailySocialQa.js";
 import {
   buildFallbackSocialBlogPackage,
   parseStructuredSocialBlogPackage,
@@ -351,17 +352,6 @@ async function quarantineSocialPost({ gate, dateId, socialPackage, cleanedSource
 
 function blogSocialQaEnabled() {
   return String(process.env.BLOG_SOCIAL_QA_ENABLED || "true").trim().toLowerCase() !== "false";
-}
-
-function advisoryDailySocialGate(gate = {}, reason = "quality-review-exhausted") {
-  return {
-    ...gate,
-    ok: true,
-    advisory: true,
-    publicationBlocked: false,
-    advisoryReason: reason,
-    originalDefects: Array.isArray(gate?.defects) ? gate.defects : [],
-  };
 }
 
 function groundSocialArtworkPrompt(basePrompt, sources = []) {
@@ -984,8 +974,20 @@ async function buildDailySocialBlogPostImpl({
         warn("blog.social.daily.phase4.advisory", {
           dateId: window.dateId,
           defects: reviewed.gate?.defects?.slice?.(0, 12) || [],
+          blockingDefects: phase4Gate.blockingDefects,
           reason: phase4Gate.advisoryReason,
         });
+        if (phase4Gate.publicationBlocked) {
+          return await quarantineSocialPost({
+            gate: phase4Gate,
+            dateId: window.dateId,
+            socialPackage,
+            cleanedSources: gateSources,
+            publishedObjects,
+            context: { dateLabel: window.dateLabel, prefix, slug, postUrl: urls.postUrl, reason: "daily-phase4-hard-defect" },
+            dryRun,
+          });
+        }
       } else {
         socialPackage = reviewed.artifact;
         title = socialPackage.title;
@@ -1128,8 +1130,20 @@ async function buildDailySocialBlogPostImpl({
         warn("blog.social.daily.phase5.advisory", {
           dateId: window.dateId,
           defects: reviewed.gate?.defects?.slice?.(0, 12) || [],
+          blockingDefects: phase5Gate.blockingDefects,
           reason: phase5Gate.advisoryReason,
         });
+        if (phase5Gate.publicationBlocked) {
+          return await quarantinePhase5SocialPost({
+            gate: phase5Gate,
+            dateId: window.dateId,
+            socialPackage,
+            cleanedSources: gateSources,
+            publishedObjects,
+            context: { dateLabel: window.dateLabel, prefix, slug, postUrl: urls.postUrl, reason: "daily-phase5-hard-defect" },
+            dryRun,
+          });
+        }
       } else {
         const previousImagePrompt = imagePrompt;
         socialPackage = normaliseSocialBlogPackage({ ...socialPackage, ...reviewed.artifact }, { dateLabel: window.dateLabel, items: gateSources });
@@ -1244,8 +1258,20 @@ async function buildDailySocialBlogPostImpl({
         warn("blog.social.daily.phase4.advisory", {
           dateId: window.dateId,
           defects: phase4Gate.originalDefects.slice(0, 12),
+          blockingDefects: phase4Gate.blockingDefects,
           reason: phase4Gate.advisoryReason,
         });
+        if (phase4Gate.publicationBlocked) {
+          return await quarantineSocialPost({
+            gate: phase4Gate,
+            dateId: window.dateId,
+            socialPackage,
+            cleanedSources: gateSources,
+            publishedObjects,
+            context: { dateLabel: window.dateLabel, prefix, slug, postUrl: urls.postUrl, reason: "daily-phase4-final-hard-defect" },
+            dryRun,
+          });
+        }
       }
 
       phase5Gate = runPhase5OrganicGrowthGate({
@@ -1259,8 +1285,20 @@ async function buildDailySocialBlogPostImpl({
         warn("blog.social.daily.phase5.advisory", {
           dateId: window.dateId,
           defects: phase5Gate.originalDefects.slice(0, 12),
+          blockingDefects: phase5Gate.blockingDefects,
           reason: phase5Gate.advisoryReason,
         });
+        if (phase5Gate.publicationBlocked) {
+          return await quarantinePhase5SocialPost({
+            gate: phase5Gate,
+            dateId: window.dateId,
+            socialPackage,
+            cleanedSources: gateSources,
+            publishedObjects,
+            context: { dateLabel: window.dateLabel, prefix, slug, postUrl: urls.postUrl, reason: "daily-phase5-final-hard-defect" },
+            dryRun,
+          });
+        }
       }
       }
     }
