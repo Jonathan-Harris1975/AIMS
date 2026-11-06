@@ -1,10 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
+import express from "express";
+import request from "supertest";
 import { HousekeepingClient } from "../services/storage-housekeeping/client.js";
 import { maintainDatabase, recoveryDeletes } from "../services/storage-housekeeping/databases.js";
 import { createHousekeepingService, maintainBucket, verifiedArchive } from "../services/storage-housekeeping/service.js";
 import { DAY, KDP_DATABASE_ID, SCOPE, assertObjectScope, excludedDatabase, ruleFor, selectObjects } from "../services/storage-housekeeping/policy.js";
+import { createStorageHousekeepingRouter } from "../services/storage-housekeeping/index.js";
 
 const NOW = Date.parse("2026-11-06T12:00:00Z");
 const DATABASE = { name: "aims-autonomous-recovery", uuid: "recovery-test" };
@@ -58,6 +61,22 @@ test("recovery retention archives verified incidents atomically while protecting
     ["eligible", "held", "leased", "open", "recent-attempt", "unfinished"]);
   assert.equal(db.prepare("SELECT status FROM recovery_incidents WHERE incident_id='eligible'").get().status, "verified");
   assert.equal(db.prepare("SELECT COUNT(*) AS n FROM recovery_attempts").get().n, 5);
+  const second = await maintainDatabase(DATABASE, context(client, { archive: async () => { throw Error("receipt must not be archived repeatedly"); } }));
+  assert.equal(second.archived, 0);
+});
+
+test("RAMS legacy event history is retired without removing its resolved replay barrier", async (t) => {
+  const { db, client } = sqliteClient(t);
+  db.exec(`CREATE TABLE incidents(incident_key TEXT PRIMARY KEY, attempt_key TEXT, repository TEXT, head_sha TEXT,
+      owner TEXT, lease_until INTEGER, attempts INTEGER, state TEXT, updated_at INTEGER);
+    CREATE TABLE incident_events(id INTEGER PRIMARY KEY, incident_key TEXT, attempt_key TEXT, event TEXT, owner TEXT, occurred_at INTEGER);
+    INSERT INTO incidents VALUES('resolved','attempt','RAMS','sha',NULL,0,1,'resolved',1),('active','attempt','RAMS','sha',NULL,0,1,'pending',1);
+    INSERT INTO incident_events VALUES(1,'resolved','attempt','resolved','owner',1),(2,'active','attempt','acquired','owner',1);`);
+  const result = await maintainDatabase({ ...DATABASE, name: "rams-autonomous-recovery" }, context(client));
+  assert.equal(result.deleted, 1);
+  assert.equal(db.prepare("SELECT attempt_key FROM incidents WHERE incident_key='resolved'").get().attempt_key, "attempt");
+  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM incidents").get().n, 2);
+  assert.equal(db.prepare("SELECT incident_key FROM incident_events").get().incident_key, "active");
 });
 
 test("a re-opened incident is preserved with all attempts after its archive snapshot", async (t) => {
@@ -253,4 +272,12 @@ test("lifecycle maintenance leaves KDP rules untouched and disables broad raw-ev
   await client.lifecycle("hive-repositories", { apply: true });
   assert.equal(stored.rules[0].enabled, false);
   assert.ok(stored.rules.some((rule) => rule.abortMultipartUploadsTransition));
+});
+
+test("the route rejects string booleans and unconfirmed live mutations before starting a job", async () => {
+  const app = express(); app.use(express.json());
+  app.use(createStorageHousekeepingRouter({ service: { run: () => { throw Error("must not start"); } } }));
+  assert.equal((await request(app).post("/run").send({ dryRun: "true" })).status, 400);
+  assert.equal((await request(app).post("/run").send({ dryRun: false })).status, 422);
+  assert.equal((await request(app).post("/run").send({ force: "false" })).status, 400);
 });
