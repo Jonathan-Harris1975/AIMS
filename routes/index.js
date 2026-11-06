@@ -21,6 +21,7 @@ import opsRoutes from "../services/ops/index.js";
 import newsletterRoutes from "../services/newsletter/index.js";
 import commsHubRoutes from "../services/comms-hub/index.js";
 import kdpRoutes from "../services/kdp/index.js";
+import storageHousekeepingRoutes from "../services/storage-housekeeping/index.js";
 
 const router = express.Router();
 
@@ -47,6 +48,7 @@ export const routeRegistry = [
   { path: "/newsletter", name: "Newsletter Engine (AI Edge)", routes: newsletterRoutes },
   { path: "/comms-hub", name: "AIMS Comms Hub", routes: commsHubRoutes },
   { path: "/kdp", name: "KDP Publishing and Audit", routes: kdpRoutes },
+  { path: "/storage/housekeeping", name: "Governed Storage Housekeeping", routes: storageHousekeepingRoutes },
 ];
 
 try {
