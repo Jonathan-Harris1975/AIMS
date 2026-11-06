@@ -3,6 +3,7 @@ import { CloudflareBackupClient } from "../comms-hub/clients/cloudflareBackupCli
 import { ARCHIVE_BUCKET, LIMITS, REQUIRED_DATABASES, SCOPE, assertObjectScope, canonical, excludedDatabase } from "./policy.js";
 
 export const missing = (error) => error?.$metadata?.httpStatusCode === 404 || error?.name === "NoSuchKey";
+const lifecycleShape = (rules) => JSON.stringify(canonical([...rules].sort((left, right) => left.id.localeCompare(right.id))));
 
 export class HousekeepingClient {
   constructor(config, { api, s3 } = {}) {
@@ -135,11 +136,11 @@ export class HousekeepingClient {
       rules.push({ id: "governed-abort-incomplete-uploads-7d", enabled: true, conditions: {},
         abortMultipartUploadsTransition: { condition: { type: "Age", maxAge: 604800 } } });
     }
-    const changed = JSON.stringify(canonical(rules)) !== JSON.stringify(canonical(current.rules));
+    const changed = lifecycleShape(rules) !== lifecycleShape(current.rules);
     if (apply && changed) {
       await this.request("PUT", path, { rules });
       const verified = await this.request("GET", path);
-      if (JSON.stringify(canonical(verified.rules)) !== JSON.stringify(canonical(rules))) throw new Error("Lifecycle read-back mismatch");
+      if (!Array.isArray(verified.rules) || lifecycleShape(verified.rules) !== lifecycleShape(rules)) throw new Error("Lifecycle read-back mismatch");
     }
     return { ok: true, changed, applied: apply && changed, disabledBroadExpiryRules: disabled, incompleteUploadsDays: 7 };
   }
