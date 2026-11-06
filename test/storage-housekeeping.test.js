@@ -261,17 +261,31 @@ test("R2 pagination cannot silently truncate inventory", async () => {
   await assert.rejects(() => client.list("kdp", "Manuscripts pdf format/"), /outside/);
 });
 
-test("lifecycle maintenance leaves KDP rules untouched and disables broad raw-evidence expiry", async () => {
+test("lifecycle maintenance tolerates server rule ordering, leaves KDP untouched and disables broad expiry", async () => {
   const rules = [{ id: "ci-reports-expire-90-days", enabled: true, conditions: { prefix: "ci-reports/" }, deleteObjectsTransition: {} }];
   let stored = { rules };
   const calls = [];
-  const api = { async requestApi(method, url, body) { calls.push({ method, url }); if (method === "PUT") stored = body; return stored; } };
+  const api = { async requestApi(method, url, body) {
+    calls.push({ method, url });
+    if (method === "PUT") stored = body;
+    return { rules: [...stored.rules].reverse() };
+  } };
   const client = new HousekeepingClient({ cloudflareApiBaseUrl: "https://api.cloudflare.com/client/v4", cloudflareAccountId: "account" }, { api, s3: {} });
   await client.lifecycle("kdp", { apply: true });
   assert.equal(calls.filter((call) => call.method === "PUT").length, 0);
   await client.lifecycle("hive-repositories", { apply: true });
   assert.equal(stored.rules[0].enabled, false);
   assert.ok(stored.rules.some((rule) => rule.abortMultipartUploadsTransition));
+});
+
+test("lifecycle verification still rejects semantic changes to the retention rules", async () => {
+  let stored = { rules: [] };
+  const api = { async requestApi(method, _url, body) {
+    if (method === "PUT") { stored = structuredClone(body); stored.rules[0].abortMultipartUploadsTransition.condition.maxAge = 1; }
+    return stored;
+  } };
+  const client = new HousekeepingClient({ cloudflareApiBaseUrl: "https://api.cloudflare.com/client/v4", cloudflareAccountId: "account" }, { api, s3: {} });
+  await assert.rejects(() => client.lifecycle("hive", { apply: true }), /read-back mismatch/);
 });
 
 test("the route rejects string booleans and unconfirmed live mutations before starting a job", async () => {
