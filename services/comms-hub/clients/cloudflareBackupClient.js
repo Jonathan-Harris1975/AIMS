@@ -41,8 +41,11 @@ export class CloudflareBackupClient {
     const response = await this.fetchImpl(url, options);
     const payload = await response.json().catch(() => null);
     if (!response.ok || !payload || payload.success === false) {
-      throw new CommsHubError(response.status === 429 ? 429 : 502, "cloudflare_backup_api_failed", `Cloudflare backup API failed${messages(payload) ? `: ${messages(payload)}` :
-         ` with HTTP ${response.status}`}.`, {
+      const operation = new URL(url).pathname.split("/").at(-1);
+      const action = body?.action ? ` (${body.action})` : "";
+      const detail = messages(payload) ? `: ${messages(payload)}` : ` with HTTP ${response.status}`;
+      throw new CommsHubError(response.status === 429 ? 429 : 502, "cloudflare_backup_api_failed",
+        `Cloudflare backup API ${method} ${operation}${action} failed${detail}.`, {
         retryable: response.status === 429 || response.status >= 500,
         failureClass: response.status === 429 || response.status >= 500 ? "temporary" : "permanent",
         publicMessage: "Cloudflare backup operation failed.",
@@ -211,14 +214,24 @@ export class CloudflareBackupClient {
       throw new CommsHubError(502, "d1_import_etag_mismatch", "D1 import upload ETag did not match the SQL payload.");
     }
     let result = await this.requestJson(url, { action: "ingest", etag, filename: initial.filename });
-    for (let attempt = 0; attempt < this.config.backupPollAttempts; attempt += 1) {
-      if (result.status === "complete" || result.success === true) return result;
-      if (result.status === "error" || (result.error && result.error !== "Not currently importing anything.")) {
+    let bookmark = result.at_bookmark;
+    for (let attempt = 0; attempt <= this.config.backupPollAttempts; attempt += 1) {
+      // success only acknowledges the request: an accepted import can still be active.
+      if (result.status === "error" || result.success === false || result.error) {
         throw new CommsHubError(502, "d1_import_failed", `D1 import failed: ${result.error || "unknown error"}.`);
       }
-      if (!result.at_bookmark) throw new CommsHubError(502, "d1_import_response_invalid", "D1 import did not return a polling bookmark.");
+      if (result.status === "complete") return result;
+      if (attempt === this.config.backupPollAttempts) break;
+      if (!bookmark) throw new CommsHubError(502, "d1_import_response_invalid", "D1 import did not return a polling bookmark.");
       await this.sleepImpl(this.config.backupPollMs);
-      result = await this.requestJson(url, { action: "poll", current_bookmark: result.at_bookmark });
+      try {
+        result = await this.requestJson(url, { action: "poll", current_bookmark: bookmark });
+        bookmark = result.at_bookmark || bookmark;
+      } catch (error) {
+        // Polls are read-only. Retry temporary API errors within the same total
+        // polling budget, without repeating upload/ingest or changing the target.
+        if (!error.retryable || attempt + 1 === this.config.backupPollAttempts) throw error;
+      }
     }
     throw new CommsHubError(504, "d1_import_timeout", "D1 restore validation timed out.", {
       retryable: true,
