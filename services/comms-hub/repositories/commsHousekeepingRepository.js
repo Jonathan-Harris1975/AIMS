@@ -32,6 +32,16 @@ export class CommsHousekeepingRepository {
     );
     const created = rows(inserted)[0] || null;
     if (created) return { created: true, run: created };
+    const resumed = await this.d1.query(
+      `UPDATE comms_hub_housekeeping_runs
+          SET status = 'running', actor = ?, started_at = ?, completed_at = NULL, error = NULL
+        WHERE window_key = ? AND status IN ('partial', 'failed')
+          AND run_type = ? AND dry_run = ?
+        RETURNING *`,
+      [text(actor, 200), startedAt, windowKey, runType, dryRun ? 1 : 0]
+    );
+    const claimed = rows(resumed)[0] || null;
+    if (claimed) return { created: true, resumed: true, run: claimed };
     const existing = await this.d1.query(
       "SELECT * FROM comms_hub_housekeeping_runs WHERE window_key = ?",
       [windowKey]

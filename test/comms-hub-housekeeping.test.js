@@ -229,3 +229,54 @@ test("monthly orchestration requires confirmation and reports every required sta
   ]);
   assert.equal(finished[0].status, "complete");
 });
+
+test("a partial monthly run resumes only failed stages and completed runs remain deduplicated", async (t) => {
+  const d1 = new SqliteD1();
+  t.after(() => d1.close());
+  const repository = new CommsHousekeepingRepository(d1);
+  const audits = [];
+  const service = new CommsHubHousekeepingService({ context: {
+    config: { housekeepingEnabled: true, businessTimeZone: "Europe/London" },
+    housekeepingRepository: repository,
+    auditService: { async record(event) { audits.push(event); } },
+  } });
+  const options = {
+    runType: "monthly", confirmation: COMMS_HUB_HOUSEKEEPING_CONFIRMATION,
+    now: new Date("2026-11-01T03:00:00.000Z"),
+  };
+  service.executeStage = async (name) => {
+    if (name === "backup_restore_and_rotation") throw new Error("import still active");
+    return { dryRun: false };
+  };
+  const initial = await service.run(options);
+  assert.equal(initial.ok, false);
+  assert.deepEqual(initial.failedStages, ["backup_restore_and_rotation"]);
+  const calls = [];
+  service.executeStage = async (name) => { calls.push(name); return { validated: true }; };
+  const retry = await service.run({ ...options, now: new Date("2026-11-06T03:00:00.000Z") });
+  assert.equal(retry.ok, true);
+  assert.equal(retry.resumed, true);
+  assert.deepEqual(calls, ["backup_restore_and_rotation"]);
+  assert.equal(retry.stages.filter((stage) => stage.reused).length, 6);
+  assert.equal(audits.at(-1).details.resumed, true);
+  assert.equal((await repository.latestRuns())[0].status, "complete");
+  assert.equal((await service.run(options)).skipped, true);
+  assert.equal(calls.length, 1);
+});
+
+test("only one worker can claim a failed housekeeping retry", async (t) => {
+  const d1 = new SqliteD1();
+  t.after(() => d1.close());
+  const repository = new CommsHousekeepingRepository(d1);
+  const input = {
+    id: "retry-run", windowKey: "monthly:2026-11", runType: "monthly", dryRun: false,
+    actor: "housekeeping", startedAt: "2026-11-01T03:00:00.000Z",
+  };
+  await repository.beginRun(input);
+  await repository.finishRun({ id: input.id, status: "failed", stages: [], error: "interrupted", completedAt: input.startedAt });
+  const claims = await Promise.all([repository.beginRun(input), repository.beginRun(input)]);
+  assert.equal(claims.filter((claim) => claim.created).length, 1);
+  assert.equal(claims.filter((claim) => claim.resumed).length, 1);
+  assert.equal(claims.find((claim) => !claim.created).run.status, "running");
+  assert.equal((await repository.latestRuns())[0].error, null);
+});

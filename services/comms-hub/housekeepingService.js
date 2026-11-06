@@ -320,8 +320,8 @@ export class CommsHubHousekeepingService {
     const startedAt = at.toISOString();
     const id = stableId("hkr", key);
     const begun = await this.context.housekeepingRepository.beginRun({ id, windowKey: key, runType, dryRun, actor, startedAt });
+    const previousStages = (() => { try { return JSON.parse(begun.run?.stages_json || "[]"); } catch { return []; } })();
     if (!begun.created) {
-      const existingStages = (() => { try { return JSON.parse(begun.run?.stages_json || "[]"); } catch { return []; } })();
       if (begun.run?.status === "running") {
         throw new CommsHubError(409, "housekeeping_window_running", "This housekeeping window is already running.", {
           retryable: true,
@@ -335,8 +335,8 @@ export class CommsHubHousekeepingService {
         runType,
         windowKey: key,
         permanent: !dryRun,
-        stages: existingStages,
-        failedStages: existingStages.filter((stage) => !stage.ok).map((stage) => stage.name),
+        stages: previousStages,
+        failedStages: previousStages.filter((stage) => !stage.ok).map((stage) => stage.name),
       };
     }
 
@@ -344,6 +344,11 @@ export class CommsHubHousekeepingService {
     const stages = [];
     try {
       for (const name of this.stagesFor(runType)) {
+        const completed = begun.resumed && previousStages.find((stage) => stage.name === name && stage.ok === true);
+        if (completed) {
+          stages.push({ ...completed, reused: true });
+          continue;
+        }
         try {
           const result = await this.executeStage(name, { at, dryRun, runType });
           stages.push({ name, ok: true, ...result });
@@ -362,7 +367,7 @@ export class CommsHubHousekeepingService {
         objectType: "housekeeping_run",
         objectId: id,
         outcome: failedStages.length ? "failed" : "success",
-        details: { runType, windowKey: key, dryRun, failedStages },
+        details: { runType, windowKey: key, dryRun, resumed: Boolean(begun.resumed), failedStages },
       }).catch(() => null);
       return {
         ok: failedStages.length === 0,
@@ -371,6 +376,7 @@ export class CommsHubHousekeepingService {
         runType,
         windowKey: key,
         dryRun,
+        resumed: Boolean(begun.resumed),
         startedAt,
         completedAt,
         stages,
