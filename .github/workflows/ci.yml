@@ -35,11 +35,11 @@ jobs:
       - name: Reject unapproved repository duplication and hygiene regressions
         run: python3 scripts/check_repository_hygiene.py
       - name: Install pinned npm toolchain
-        run: npm install --global npm@12.2.1 --no-audit --no-fund
+        run: npm install --global npm@12.2.2 --no-audit --no-fund
       - name: Verify pinned Node/npm toolchain
         run: |
           test "$(node --version)" = "v24.22.2"
-          test "$(npm --version)" = "12.2.1"
+          test "$(npm --version)" = "12.2.2"
       - run: npm ci
       - name: Reject legacy envBootstrap imports
         run: |
