@@ -167,3 +167,17 @@ spoken-word bloat still triggers the hard quality control instead of slipping th
   assert.equal(defects.length, 1);
   assert.ok(defects[0].wordCount > 25);
 });
+
+test("AI expansion preserves sentence starts without introducing a transcript blocker", () => {
+  const formatted = editAndFormat("AI supports a decision. People still own it. AI can help. They use AI for research.");
+  assert.match(formatted, /^Artificial intelligence supports/);
+  assert.match(formatted, /own it\. Artificial intelligence can help/);
+  assert.match(formatted, /use artificial intelligence for research/);
+  assert.deepEqual(findBrokenPunctuationJoins(formatted), []);
+});
+
+test("AI expansion preserves quoted and paragraph sentence starts", () => {
+  const formatted = editAndFormat('He asked: “AI?” AI supports the work.\n\nAI needs evidence.');
+  assert.match(formatted, /\?\s*\u201d Artificial intelligence/);
+  assert.match(formatted, /\n\nArtificial intelligence needs evidence/);
+});
