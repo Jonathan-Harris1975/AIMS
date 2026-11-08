@@ -448,6 +448,21 @@ class CouncilEvidenceFreezeTests(unittest.TestCase):
         return (datetime(2026, 10, 2, 20, tzinfo=automation.LONDON),
                 datetime(2026, 10, 5, 4, tzinfo=automation.LONDON))
 
+    def test_newer_hold_failure_or_pending_report_supersedes_older_acceptance(self):
+        bounds = (datetime(2026, 10, 2, 20, 0, tzinfo=automation.LONDON),
+                  datetime(2026, 10, 5, 4, 0, tzinfo=automation.LONDON))
+        common = {"event": "workflow_dispatch", "status": "completed", "conclusion": "success", "head_sha": self.sha}
+        accepted = {**common, "id": 101, "name": "Persist completed Council report to R2", "created_at": "2026-10-04T17:35:00Z"}
+        ci = {**common, "id": 100, "name": "AIMS CI", "created_at": "2026-10-02T19:05:00Z"}
+        for status, conclusion in [("completed", "failure"), ("in_progress", None), ("completed", "cancelled")]:
+            newer = {**accepted, "id": 102, "status": status, "conclusion": conclusion}
+            with self.subTest(status=status), \
+                 patch.object(automation, "current_weekend_bounds", return_value=bounds), \
+                 patch.object(automation, "_resolve_branch_sha", return_value=self.sha), \
+                 patch.object(automation, "_fetch_branch_runs", return_value=[ci, accepted, newer]):
+                frozen, _ = automation.council_evidence_freeze()
+            self.assertTrue(frozen)
+
     def test_dispatch_success_alone_does_not_release_council_freeze(self):
         bounds = (datetime(2026, 10, 2, 20, 0, tzinfo=automation.LONDON),
                   datetime(2026, 10, 5, 4, 0, tzinfo=automation.LONDON))
