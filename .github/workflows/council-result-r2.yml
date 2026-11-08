@@ -88,7 +88,7 @@ jobs:
           case "$DISPOSITION" in READY_FOR_COUNCIL_ACCEPTANCE|HUMAN_HOLD|NOT_READY) ;; *) echo "::error::Unknown Council disposition."; exit 1 ;; esac
           json_disposition="$(jq -r '.disposition // empty' "$RUNNER_TEMP/council-r2/council-report.json")"
           test "$json_disposition" = "$DISPOSITION" || { echo "::error::Council JSON disposition mismatch."; exit 1; }
-          gh api --paginate --slurp "repos/$REPO/actions/runs?head_sha=$TARGET_SHA&per_page=100" --jq 'map(.workflow_runs) | add | map({id,name,status,conclusion,event,head_sha,run_number,run_attempt,html_url,created_at,updated_at})' > "$RUNNER_TEMP/council-r2/exact-sha-workflow-evidence.json"
+          gh api --paginate --slurp "repos/$REPO/actions/runs?head_sha=$TARGET_SHA&per_page=100" | jq 'map(.workflow_runs) | add | map({id,name,status,conclusion,event,head_sha,run_number,run_attempt,html_url,created_at,updated_at})' > "$RUNNER_TEMP/council-r2/exact-sha-workflow-evidence.json"
           gh pr list --repo "$REPO" --state open --limit 1000 --json number,title,labels,url,headRefName,baseRefName > "$RUNNER_TEMP/council-r2/open-pr-state.json"
           jq -n --arg repository "$REPO" --arg sha "$TARGET_SHA" --arg source_run_id "$SOURCE_COUNCIL_RUN_ID" --arg source_run_attempt "$SOURCE_COUNCIL_RUN_ATTEMPT" --arg disposition "$DISPOSITION" --arg collected_at "$(date -u +%FT%TZ)"             '{repository:$repository,exact_evaluated_sha:$sha,source_council_run_id:$source_run_id,source_council_run_attempt:$source_run_attempt,council_disposition:$disposition,collected_at:$collected_at}' > "$RUNNER_TEMP/council-r2/council-return-context.json"
       - name: Persist and verify completed Council evidence
