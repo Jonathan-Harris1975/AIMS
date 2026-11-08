@@ -36,11 +36,11 @@ jobs:
         with:
           node-version: 24.22.2
       - name: Install pinned npm toolchain
-        run: npm install --global npm@12.2.1 --no-audit --no-fund
+        run: npm install --global npm@12.2.2 --no-audit --no-fund
       - name: Verify pinned Node/npm toolchain
         run: |
           test "$(node --version)" = "v24.22.2"
-          test "$(npm --version)" = "12.2.1"
+          test "$(npm --version)" = "12.2.2"
       - name: Validate Node-only runtime deployment
         run: |
           node ../../scripts/deployCommsHubDataPlaneWorker.js --check
