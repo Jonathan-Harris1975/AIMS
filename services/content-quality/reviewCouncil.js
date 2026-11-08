@@ -616,15 +616,36 @@ export async function runReviewCouncilGate({
   const stagnationLimit = Math.max(1, Math.min(3, Number(process.env.REVIEW_COUNCIL_STAGNATION_LIMIT || 2)));
 
   let budgetExhausted = false;
+  let repairFailure = null;
   for (let attempt = 1; attempt <= effectiveMaxAttempts; attempt += 1) {
     try { claimRepairAction(); } catch (error) {
       if (error.code !== "AI_TASK_REPAIR_BUDGET_EXHAUSTED") throw error;
       budgetExhausted = true;
       break;
     }
-    repairedArtifact = await withRepairHistory(repairHistory, { stage: councilKey, attempt }, () =>
-      repairArtifact(currentArtifact, { contentType, gate: currentGate, attempt, repairHistory: repairHistory.snapshot() }));
-    repairedGate = validate ? await validate(repairedArtifact) : currentGate;
+    let failureStage = "repair";
+    try {
+      const candidate = await withRepairHistory(repairHistory, { stage: councilKey, attempt }, () =>
+        repairArtifact(currentArtifact, { contentType, gate: currentGate, attempt, repairHistory: repairHistory.snapshot() }));
+      failureStage = "validation";
+      const candidateGate = validate ? await validate(candidate) : currentGate;
+      repairedArtifact = candidate;
+      repairedGate = candidateGate;
+    } catch (error) {
+      // Keep only a previously validated pair. An optional repair outage must
+      // reach the caller's existing advisory policy without leaking a candidate
+      // that has never passed validation or relaxing any original hard defect.
+      repairedArtifact = currentArtifact;
+      repairedGate = currentGate;
+      budgetExhausted = error?.code === "AI_TASK_REPAIR_BUDGET_EXHAUSTED";
+      repairFailure = { stage: failureStage, reason: budgetExhausted ? "repair_budget_exhausted" : "repair_unavailable" };
+      repairHistory.record({ stage: councilKey, attempt, outcome: "unavailable", changed: false,
+        defects: (currentGate?.defects || []).map(String).slice(0, 8) });
+      attemptLog.push({ attempt, maxAttempts: effectiveMaxAttempts, score: currentGate?.score ?? null,
+        approved: false, failure: repairFailure });
+      logger?.("review_council.repair_unavailable", { councilKey, attempt, ...repairFailure });
+      break;
+    }
     repairHistory.record({ stage: councilKey, attempt, outcome: repairedGate?.ok ? "validated" : "still_failing",
       changed: JSON.stringify(repairedArtifact) !== JSON.stringify(currentArtifact),
       defects: (repairedGate?.defects || []).map(String).slice(0, 8) });
@@ -690,7 +711,7 @@ export async function runReviewCouncilGate({
     Number(repairedGate?.hardFailureCount || 0) > 0 || (repairedGate?.hardDefects?.length) ||
     /source|fact|hallucin|invent|unsafe|safety|schema|structured data|required|missing|invalid link|broken link|mismatch/.test(defectText)
   );
-  const withinTolerance = !budgetExhausted && !repairedGate?.ok && !hardBlock && toleranceFloor !== null &&
+  const withinTolerance = !repairFailure && !budgetExhausted && !repairedGate?.ok && !hardBlock && toleranceFloor !== null &&
     Number(repairedGate?.score) >= toleranceFloor;
   if (withinTolerance) {
     repairedGate = { ...repairedGate, ok: true, acceptedWithinTolerance: true, toleranceFloor, expectedThreshold };
@@ -713,6 +734,7 @@ export async function runReviewCouncilGate({
   reviewCouncil.repairHistory = repairHistory.snapshot();
   reviewCouncil.taskBudget = currentTaskRepairBudget()?.snapshot() || null;
   reviewCouncil.budgetExhausted = budgetExhausted;
+  reviewCouncil.repairFailure = repairFailure;
   reviewCouncil.attemptLog = attemptLog;
   reviewCouncil.attemptsUsed = attemptLog.length;
   reviewCouncil.maximumAttemptsAllowed = effectiveMaxAttempts;
