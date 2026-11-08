@@ -632,16 +632,16 @@ export async function runReviewCouncilGate({
       repairedArtifact = candidate;
       repairedGate = candidateGate;
     } catch (error) {
-      // Keep only a previously validated pair. An optional repair outage must
+      // Keep the original validated pair. An optional repair outage must
       // reach the caller's existing advisory policy without leaking a candidate
       // that has never passed validation or relaxing any original hard defect.
-      repairedArtifact = currentArtifact;
-      repairedGate = currentGate;
+      repairedArtifact = artifact;
+      repairedGate = gate;
       budgetExhausted = error?.code === "AI_TASK_REPAIR_BUDGET_EXHAUSTED";
       repairFailure = { stage: failureStage, reason: budgetExhausted ? "repair_budget_exhausted" : "repair_unavailable" };
       repairHistory.record({ stage: councilKey, attempt, outcome: "unavailable", changed: false,
         defects: (currentGate?.defects || []).map(String).slice(0, 8) });
-      attemptLog.push({ attempt, maxAttempts: effectiveMaxAttempts, score: currentGate?.score ?? null,
+      attemptLog.push({ attempt, maxAttempts: effectiveMaxAttempts, score: gate?.score ?? null,
         approved: false, failure: repairFailure });
       logger?.("review_council.repair_unavailable", { councilKey, attempt, ...repairFailure });
       break;

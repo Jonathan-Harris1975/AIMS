@@ -98,7 +98,7 @@ test("repair outage never downgrades factual or source failures", async () => {
   assert.equal(advisoryDailySocialGate(reviewed.gate).publicationBlocked, true);
 });
 
-test("later repair outage retains the preceding validated repair", async () => {
+test("later repair outage retains the original pair used by advisory callers", async () => {
   const gate = { ok: false, score: 60, defects: ["Missing source"] };
   let attempts = 0;
   const reviewed = await runReviewCouncilGate({
@@ -107,12 +107,14 @@ test("later repair outage retains the preceding validated repair", async () => {
       if (++attempts === 2) throw new Error("provider unavailable");
       return { content: "First validated repair" };
     },
-    validate: async () => ({ ...gate, score: 70 }),
+    validate: async () => ({ ok: false, score: 70, defects: ["British English drift: use organise instead of organize"] }),
   });
   assert.equal(attempts, 2);
-  assert.equal(reviewed.artifact.content, "First validated repair");
-  assert.equal(reviewed.gate.score, 70);
+  assert.equal(reviewed.artifact.content, "Original");
+  assert.equal(reviewed.gate.score, 60);
   assert.equal(reviewed.ok, false);
+  const { advisoryDailySocialGate } = await import("../services/blog/social/dailySocialQa.js");
+  assert.equal(advisoryDailySocialGate(reviewed.gate).publicationBlocked, true);
 });
 
 test("nested repair budget exhaustion is recorded without another attempt", async () => {
