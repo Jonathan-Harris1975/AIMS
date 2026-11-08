@@ -284,6 +284,9 @@ function splitLongSentences(text = "") {
 function expandAI(text) {
   return text
     .replace(/\bAI\b(?![a-zA-Z])/g, "artificial intelligence")
+    // Expansion must not introduce the lowercase sentence join rejected by
+    // transcript validation (for example, "it. AI" -> "it. artificial").
+    .replace(/(^|[.!?][”"'’)]*\s+|\n\s*)([“"'‘(]*)artificial intelligence/g, "$1$2Artificial intelligence")
     .replace(
       /(artificial intelligence)(\s+artificial intelligence)+/gi,
       "artificial intelligence"
