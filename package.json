@@ -33,7 +33,7 @@
   },
   "engines": {
     "node": "24.22.2",
-    "npm": "12.2.1"
+    "npm": "12.2.2"
   },
   "dependencies": {
     "@aws-sdk/client-polly": "^3.1137.0",
@@ -58,7 +58,7 @@
   "devDependencies": {
     "supertest": "^7.3.0"
   },
-  "packageManager": "npm@12.2.1",
+  "packageManager": "npm@12.2.2",
   "overrides": {
     "uuid": "^11.1.1"
   }
