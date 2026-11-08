@@ -13,6 +13,9 @@ HOLD_LABELS = router.HOLD_LABELS
 RECEIPT = re.compile(r"<!-- pr-blocker-resolution:(\{[^\n]*\}) -->")
 
 
+# Policy rejection is not a code defect; never feed admission back into Kilo.
+POLICY_CHECKS = {"trusted autonomy admission"}
+
 def login(value):
     return str(value or "").removesuffix("[bot]")
 
@@ -143,6 +146,8 @@ def current_head_failure_findings(pr):
             if app.startswith("kilo"):
                 continue
             name = str(check.get("name") or "unnamed check")[:160]
+            if name.casefold() in POLICY_CHECKS:
+                continue
             key = (app, name)
             if key in seen:
                 continue
@@ -174,6 +179,8 @@ def current_head_failure_findings(pr):
             if creator in trusted_kilo_logins:
                 continue
             name = str(status.get("context") or "unnamed status")[:160]
+            if name.casefold() in POLICY_CHECKS:
+                continue
             key = ("commit-status", name)
             if key not in seen:
                 seen.add(key)

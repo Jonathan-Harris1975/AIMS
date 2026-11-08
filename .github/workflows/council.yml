@@ -79,6 +79,7 @@ jobs:
           set -euo pipefail
           prompt="$(cat .council/council.md)"
           task="Run the checked-in Council contract for $REPO@$TARGET_SHA. Do not create a cosmetic PR.\n\n$prompt"
+          task+=" Complete and persist the result through council-result-r2.yml on main: target_sha=$TARGET_SHA; source_council_run_id=$GITHUB_RUN_ID; source_council_run_attempt=$GITHUB_RUN_ATTEMPT; disposition=READY_FOR_COUNCIL_ACCEPTANCE, HUMAN_HOLD or NOT_READY; report_md_b64 and report_json_b64 encode the completed reports. JSON must include repository=$REPO, exact_evaluated_sha=$TARGET_SHA and matching disposition. If Actions dispatch permission is unavailable, report that blocker; never fabricate completion. Refuse stale results if main advances."
           payload="$(jq -n --arg repository "$REPO" --arg sha "$TARGET_SHA" --arg task "$task" '{repository:$repository,target_sha:$sha,kind:"repository-council",task:$task}')"
           code="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --max-time 30 -X POST -H 'Content-Type: application/json' --data "$payload" "$KILO_REPAIR_TRIGGER_URL")"
           [[ "$code" == 2?? ]] || { echo "::error::Kilo Council trigger returned HTTP $code"; exit 1; }

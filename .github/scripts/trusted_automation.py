@@ -257,7 +257,7 @@ def _fetch_branch_runs(sha: str | None = None) -> list[dict[str, Any]]:
 
 
 def council_evidence_freeze() -> tuple[bool, str]:
-    """Freeze routine merges after exact-SHA weekend CI until Council succeeds."""
+    """Require a persisted, accepted Council result; dispatch is not completion."""
     bounds = current_weekend_bounds()
     if bounds is None:
         return False, "outside the weekend evidence envelope"
@@ -307,14 +307,14 @@ def council_evidence_freeze() -> tuple[bool, str]:
     ci_time = _github_time(str(ci_run["created_at"]))
     council_runs = [
         run for run in runs
-        if run.get("name") == "Repository Council"
-        and run.get("status") == "completed"
-        and run.get("conclusion") == "success"
+        if run.get("name") == "Persist completed Council report to R2"
         and run.get("head_sha") == current_sha
+        and run.get("event") == "workflow_dispatch"
         and in_window(run)
         and _github_time(str(run.get("created_at", ""))) >= ci_time
     ]
-    if council_runs:
+    latest = max(council_runs, key=lambda run: (int(run.get("id", 0)), int(run.get("run_attempt", 1))), default=None)
+    if latest and latest.get("status") == "completed" and latest.get("conclusion") == "success":
         return False, f"Council completed for weekend evidence SHA {current_sha[:12]}"
     return True, f"weekend CI PASS is recorded for {current_sha[:12]} and Council has not completed"
 
