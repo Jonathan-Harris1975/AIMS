@@ -37,8 +37,9 @@ function transport(override = () => undefined) {
       if (url.endsWith("/settings")) return response(calls.length >= 5 ? deployedSettings : settings);
       if (url.includes("/versions?")) return response({ items: [{ id: "uploaded-version" }] });
       if (url.endsWith("/versions/uploaded-version")) return response(uploadedVersion);
-      if (url.endsWith("/deployments")) return options.method === "POST" ? response({ id: "verified-deployment" })
-        : response({ deployments: [{ versions: [{ version_id: "uploaded-version", percentage: 100 }] }] });
+      if (url.endsWith("/deployments")) return response({ id: "verified-deployment" });
+      if (url.endsWith("/deployments/verified-deployment")) return response({ id: "verified-deployment",
+        versions: [{ version_id: "uploaded-version", percentage: 100 }] });
       if (url === "https://worker.example/health") {
         return new Response(JSON.stringify({ ok: true, service: config.name, source_commit_sha: sourceSha }), { status: 200 });
       }
@@ -191,12 +192,13 @@ test("verified upload is activated explicitly before runtime health is accepted"
   await deployWorker({ config, source: "export default {};", sourceSha, healthUrl, credentials, fetchImpl: mock.fetchImpl });
   const activation = mock.calls.find(call => call.url.endsWith("/deployments") && call.method === "POST");
   assert.deepEqual(JSON.parse(activation.body).versions, [{ version_id: "uploaded-version", percentage: 100 }]);
+  assert.ok(mock.calls.some(call => call.url.endsWith("/deployments/verified-deployment") && call.method === "GET"));
   assert.ok(mock.calls.indexOf(activation) < mock.calls.findIndex(call => call.url === "https://worker.example/health"));
 });
 
 test("stale or split runtime activation is rejected despite a successful upload", async () => {
-  const mock = transport((url, options) => url.endsWith("/deployments") && options.method === "GET"
-    ? response({ deployments: [{ versions: [{ version_id: "stale-version", percentage: 100 }] }] }) : undefined);
+  const mock = transport((url, options) => url.endsWith("/deployments/verified-deployment") && options.method === "GET"
+    ? response({ id: "verified-deployment", versions: [{ version_id: "stale-version", percentage: 100 }] }) : undefined);
   await assert.rejects(deployWorker({ config, source: "export default {};", sourceSha, healthUrl, credentials, fetchImpl: mock.fetchImpl }), /verified version exclusively/);
   assert.equal(mock.calls.filter(call => call.method === "PUT").length, 1);
   assert.equal(mock.calls.filter(call => call.url.endsWith("/deployments") && call.method === "POST").length, 1);

@@ -141,12 +141,16 @@ export async function finishNewsletterBuild({ profile, sessionId, now, qaResult,
   const reusable = savedHero?.ok && savedHero.imageUrl && savedHero.imageStatus === "generated";
   const textOnlyCheckpoint = !requireHeroImage && savedHero?.ok === false && !savedHero.imageUrl && savedHero?.imageStatus === "editorial-text-only";
   if (!reusable && !textOnlyCheckpoint) {
+    const heroRequest = { profile, heroHeadline: qaResult.newsletter.heroHeadline,
+      leadStory: selectNewsletterArtLead({ lead, stories, bigThree: qaResult.newsletter.bigThree }),
+      bigThree: qaResult.newsletter.bigThree, sessionId };
     try {
-      heroImageResult = await generateHero({ profile, heroHeadline: qaResult.newsletter.heroHeadline,
-        leadStory: selectNewsletterArtLead({ lead, stories, bigThree: qaResult.newsletter.bigThree }),
-        bigThree: qaResult.newsletter.bigThree, sessionId });
-    } catch {
-      heroImageResult = { ok: false, error: "Artwork service unavailable." };
+      heroImageResult = await generateHero(heroRequest);
+    } catch (error) {
+      const errorType = /^[A-Za-z][A-Za-z0-9]{0,48}$/.test(String(error?.name || "")) ? error.name : "Error";
+      warn("newsletter.build.artwork_exception", { sessionId, profileId: profile.id, errorType });
+      heroImageResult = { ok: false, error: "Artwork service unavailable.",
+        artworkDiagnostics: { stage: "generation", reasonCodes: ["artwork_service_exception"], errorType } };
     }
   }
   if (!heroImageResult?.ok) {
