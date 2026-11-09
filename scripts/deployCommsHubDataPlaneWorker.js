@@ -201,6 +201,23 @@ export async function deployWorker({ config, source, sourceSha, healthUrl, crede
     }
     const uploadedVersion = await api(`${scriptUrl}/versions/${encodeURIComponent(versionId)}`);
     assertUploadedVersion(uploadedVersion, config, sourceSha);
+    // Upload acknowledgement alone did not always move the live runtime to
+    // the verified version. Activate that exact immutable version explicitly.
+    const deployment = await api(`${scriptUrl}/deployments`, {
+      method: "POST", json: true,
+      body: JSON.stringify({ strategy: "percentage", versions: [{ version_id: versionId, percentage: 100 }],
+        annotations: { "workers/message": `Verified AIMS release ${sourceSha.toLowerCase()}` } }),
+    });
+    if (typeof deployment?.id !== "string" || !deployment.id) {
+      throw new Error("Worker activation returned no deployment identifier.");
+    }
+    const active = await api(`${scriptUrl}/deployments`);
+    const versionsInUse = active?.deployments?.[0]?.versions;
+    if (!Array.isArray(versionsInUse) || versionsInUse.length !== 1
+      || versionsInUse[0].version_id !== versionId || versionsInUse[0].percentage !== 100) {
+      throw new Error("Worker activation does not serve the verified version exclusively.");
+    }
+
     let verifiedHealth = false;
     for (let attempt = 0; attempt < 8; attempt += 1) {
       try {

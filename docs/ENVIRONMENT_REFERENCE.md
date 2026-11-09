@@ -4,9 +4,9 @@
 
 This inventory makes the runtime configuration contract auditable without duplicating secret values. `.env.example` and `env.template` remain the curated operator templates; this file records every production `process.env` dependency and its source locations.
 
-- Runtime variables referenced in production code: **534**
+- Runtime variables referenced in production code: **535**
 - Present in curated templates: **408**
-- Not present in curated templates: **126**
+- Not present in curated templates: **127**
 
 | Variable | Curated template | Production references |
 | --- | --- | --- |
@@ -303,6 +303,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `MIN_SUMMARY_CHARS` | Yes | services/rss-feed-creator/utils/rss-prompts.js:17<br>services/rss-feed-creator/utils/rss-prompts.js:18 |
 | `NEWSLETTER_CONFIRMATION_BASE_URL` | Yes | services/newsletter/jotformIntake.js:108<br>services/newsletter/routes/subscriptions.js:52 |
 | `NEWSLETTER_CONSENT_TEXT_VERSION` | Yes | services/newsletter/jotformIntake.js:105<br>services/newsletter/jotformIntake.js:127 |
+| `NEWSLETTER_HERO_IMAGE_REQUIRED` | No | services/newsletter/engine/buildNewsletter.js:133 |
 | `NEWSLETTER_PRIVACY_NOTICE_VERSION` | Yes | services/newsletter/jotformIntake.js:106<br>services/newsletter/jotformIntake.js:128 |
 | `NEWSLETTER_TARGETED_COUNCIL_SHADOW_ENABLED` | Yes | services/newsletter/engine/councilShadow.js:124 |
 | `NODE_ENV` | Yes | logger.js:8<br>scripts/deploySmoke.js:4<br>scripts/performanceGate.js:5<br>scripts/startupCheck.js:34<br>scripts/startupCheck.js:75<br>server.js:33<br>+23 more |

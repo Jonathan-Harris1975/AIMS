@@ -13,8 +13,8 @@ const ACTIVE_STATUSES = new Set(["accepted", "running"]);
 export const OPERATION_RECOVERY_REVISION = "content-upstream-recovery-2026-11-03-v1";
 export const PODCAST_RECOVERY_REVISION = "podcast-section-validation-2026-10-30-v2";
 // One deployment-scoped recovery for a failed newsletter window after the
-// editorial-authority gate repair. Successful sibling tasks remain reusable.
-export const NEWSLETTER_RECOVERY_REVISION = "newsletter-source-window-recovery-2026-11-09-v1";
+// source/artwork continuity repair. Successful sibling tasks remain reusable.
+export const NEWSLETTER_RECOVERY_REVISION = "newsletter-publication-continuity-2026-11-09-v2";
 
 function normalise(value = "") {
   return String(value || "").trim();
