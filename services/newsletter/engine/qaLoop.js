@@ -14,7 +14,9 @@ import { runNewsletterEditorialCouncil } from "./editorialCouncil.js";
 
 async function regenerateContent(options) {
   try { return await repairNewsletterDraft(options); }
-  catch (error) { return { ok: false, error: error.message }; }
+  catch (error) { return { ok: false, error: error.message, repairUnavailable: true,
+    diagnostics: { code: /^[A-Z0-9_]{1,64}$/.test(String(error.code || "")) ? error.code : "REPAIR_REQUEST_FAILED",
+      providers: (error.attemptedProviders || []).slice(-6).map(({ providerId, status }) => ({ providerId, status })) } }; }
 }
 
 function deterministicIssueText(result) {
@@ -29,6 +31,7 @@ async function runQaLoopImpl({ profile, newsletter, lead, stories, promotion = n
   const history = [];
   let selfReview = null;
   let deterministic = null;
+  let repairUnavailable = false;
 
   for (let iteration = 1; iteration <= maxLoops; iteration += 1) {
     deterministic = runDeterministicValidators(current, { expectedStoryCount, requireHeroImage: false });
@@ -85,9 +88,12 @@ async function runQaLoopImpl({ profile, newsletter, lead, stories, promotion = n
       const repairContext = [...deterministicIssueText(deterministic), ...(selfReview.issues || [])];
       const regenerated = await regenerateContent({ profile, newsletter: current, lead, stories, promotion, sessionId, repairContext });
       if (!regenerated.ok) {
+        repairUnavailable = regenerated.repairUnavailable === true;
+        history.push({ phase: "repair", stage: "self-improve", repairUnavailable, diagnostics: regenerated.diagnostics || null });
         warn("newsletter.qa.regeneration_failed", { sessionId, iteration, error: regenerated.error });
         break;
       }
+      repairUnavailable = false;
       if (JSON.stringify(regenerated) === JSON.stringify({ ...current, ok: true })) break;
       current = regenerated;
     }
@@ -161,12 +167,17 @@ async function runQaLoopImpl({ profile, newsletter, lead, stories, promotion = n
     }
 
     if (councilRun < maxCouncilRuns) {
-      const repairContext = [...deterministicIssueText(deterministic), ...(council.issues || [])];
+      const priorities = council.chair?.priorityFixes?.length ? council.chair.priorityFixes : (council.issues || []);
+      const hardIssues = (council.reviews || []).filter((review) => review.blocking).flatMap((review) => review.issues || []);
+      const repairContext = [...new Set([...deterministicIssueText(deterministic), ...priorities, ...hardIssues])].slice(0, 12);
       const regenerated = await regenerateContent({ profile, newsletter: current, lead, stories, promotion, sessionId, repairContext });
       if (!regenerated.ok) {
+        repairUnavailable = regenerated.repairUnavailable === true;
+        history.push({ phase: "repair", stage: "council", repairUnavailable, diagnostics: regenerated.diagnostics || null });
         warn("newsletter.qa.council_repair_failed", { sessionId, councilRun, error: regenerated.error });
         break;
       }
+      repairUnavailable = false;
       if (JSON.stringify(regenerated) === JSON.stringify({ ...current, ok: true })) break;
       current = regenerated;
     }
@@ -190,7 +201,7 @@ async function runQaLoopImpl({ profile, newsletter, lead, stories, promotion = n
     councilRuns: history.filter((entry) => entry.phase === "council").length,
     finalScore: council?.score || selfReview?.score || 0,
     quarantined: true,
-    failureKind: council?.reviewFailed ? "review-service-unavailable" : "editorial-rejection",
+    failureKind: council?.reviewFailed ? "review-service-unavailable" : repairUnavailable ? "repair-service-unavailable" : "editorial-rejection",
     repairBudget: currentTaskRepairBudget()?.snapshot() || null,
     council,
     councilShadow,

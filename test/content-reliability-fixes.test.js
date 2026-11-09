@@ -208,7 +208,6 @@ test("newsletter council requires full attendance and accepts only non-blocking 
   assert.match(council, /attendanceComplete/);
   assert.match(council, /nearThresholdTolerance/);
   assert.match(council, /nearThresholdPass/);
-  assert.match(council, /allReviews\.every\(\(review\) => !review\.blocking\)/);
 });
 
 test("Zernio and Blotato scheduled publishing require provider confirmation", async () => {

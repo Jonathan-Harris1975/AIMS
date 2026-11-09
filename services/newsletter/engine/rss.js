@@ -144,21 +144,7 @@ export function withinWindow(item, { now = new Date(), windowHours } = {}) {
   return published >= cutoff && published <= now;
 }
 
-/**
- * Fetches every configured feed for a profile, normalises items, filters to
- * the configured rolling window and removes duplicates (by canonical link,
- * falling back to normalised title).
- */
-export async function collectCandidateStories(profile, { now = new Date(), windowHours = THRESHOLDS.newsletter.rssWindowHours } = {}) {
-  const feedUrls = loadFeedUrls(profile);
-
-  if (!feedUrls.length) {
-    warn("newsletter.rss.no_feeds_configured", { profileId: profile?.id });
-    return { items: [], feedResults: [] };
-  }
-
-  const feedResults = await Promise.all(feedUrls.map((url) => fetchFeedResilient(url)));
-
+export function selectCandidateWindow(feedResults, { now = new Date(), windowHours = 24 } = {}) {
   const seen = new Map();
   for (const result of feedResults) {
     if (!result.ok) continue;
@@ -174,7 +160,35 @@ export async function collectCandidateStories(profile, { now = new Date(), windo
     }
   }
 
-  const items = Array.from(seen.values()).sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt));
+  return Array.from(seen.values()).sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt));
+
+}
+
+export function selectNewsletterCandidates(feedResults, { now = new Date(), windowHours = THRESHOLDS.newsletter.rssWindowHours,
+  fallbackWindowHours = THRESHOLDS.newsletter.rssFallbackWindowHours } = {}) {
+  const primary = selectCandidateWindow(feedResults, { now, windowHours });
+  const effectiveWindow = primary.length < 3 ? Math.max(windowHours, fallbackWindowHours) : windowHours;
+  return { items: effectiveWindow === windowHours ? primary : selectCandidateWindow(feedResults, { now, windowHours: effectiveWindow }),
+    sourceWindowHours: effectiveWindow, primaryCandidateCount: primary.length, expandedWindow: effectiveWindow > windowHours };
+}
+
+/**
+ * Fetches every configured feed for a profile, normalises items, filters to
+ * the configured rolling window and removes duplicates (by canonical link,
+ * falling back to normalised title).
+ */
+export async function collectCandidateStories(profile, { now = new Date(), windowHours = THRESHOLDS.newsletter.rssWindowHours } = {}) {
+  const feedUrls = loadFeedUrls(profile);
+
+  if (!feedUrls.length) {
+    warn("newsletter.rss.no_feeds_configured", { profileId: profile?.id });
+    return { items: [], feedResults: [] };
+  }
+
+  const feedResults = await Promise.all(feedUrls.map((url) => fetchFeedResilient(url)));
+
+  const selection = selectNewsletterCandidates(feedResults, { now, windowHours });
+  const { items } = selection;
 
   info("newsletter.rss.collected", {
     profileId: profile?.id,
@@ -183,9 +197,11 @@ export async function collectCandidateStories(profile, { now = new Date(), windo
     feedsFailed: feedResults.filter((r) => !r.ok).length,
     windowHours,
     candidateCount: items.length,
+    sourceWindowHours: selection.sourceWindowHours,
+    expandedWindow: selection.expandedWindow,
   });
 
-  return { items, feedResults };
+  return { ...selection, feedResults };
 }
 
 export default { loadFeedUrls, fetchFeedResilient, withinWindow, collectCandidateStories };

@@ -45,7 +45,7 @@ test("newsletter repairs preserve untouched copy and immutable source fields", (
   }
 });
 
-test("newsletter targeted repair fails over when the primary returns an invalid edit contract", async () => {
+test("newsletter repair transport can fail over even when the parent recovery allowance is depleted", async () => {
   const values = { OPENROUTER_API_KEY: "test-key", AI_MODEL_FAST: "test/luna", AI_MODEL_STANDARD: "test/sonnet" };
   const prior = Object.fromEntries(Object.keys(values).map(key => [key, process.env[key]]));
   Object.assign(process.env, values);
@@ -66,7 +66,7 @@ test("newsletter targeted repair fails over when the primary returns an invalid 
       lead: { title: "Evidence", link: "https://example.test", summary: "A cited event" },
       stories: [], profile: { edition: "daily", brandVoice: "Clear" }, sessionId: "repair-contract-test",
       repairContext: ["Sharpen the subject"],
-    }), { repairs: 1, recoveries: 2 });
+    }), { repairs: 1, recoveries: 0 });
     assert.equal(result.subject, "Supported subject");
     assert.deepEqual(models, ["test/luna", "test/luna", "test/sonnet"]);
   } finally {
