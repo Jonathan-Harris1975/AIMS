@@ -37,6 +37,8 @@ function transport(override = () => undefined) {
       if (url.endsWith("/settings")) return response(calls.length >= 5 ? deployedSettings : settings);
       if (url.includes("/versions?")) return response({ items: [{ id: "uploaded-version" }] });
       if (url.endsWith("/versions/uploaded-version")) return response(uploadedVersion);
+      if (url.endsWith("/deployments")) return options.method === "POST" ? response({ id: "verified-deployment" })
+        : response({ deployments: [{ versions: [{ version_id: "uploaded-version", percentage: 100 }] }] });
       if (url === "https://worker.example/health") {
         return new Response(JSON.stringify({ ok: true, service: config.name, source_commit_sha: sourceSha }), { status: 200 });
       }
@@ -53,7 +55,7 @@ test("canonical module deploys without npm/npx and preserves secret, D1 and subd
   const mock = transport();
   const result = await deployWorker({ config, source: "export default {};", sourceSha, healthUrl, credentials, fetchImpl: mock.fetchImpl });
   assert.deepEqual(result, { worker: config.name, source_sha: sourceSha, verified: true });
-  assert.deepEqual(mock.calls.map((call) => call.method), ["GET", "GET", "PUT", "POST", "GET", "GET", "GET", "GET"]);
+  assert.deepEqual(mock.calls.map((call) => call.method), ["GET", "GET", "PUT", "POST", "GET", "GET", "GET", "POST", "GET", "GET"]);
   const upload = mock.calls[2];
   assert.equal(upload.url, `https://api.cloudflare.com/client/v4/accounts/test-account/workers/scripts/${config.name}`);
   assert.equal(upload.headers.Authorization, `Bearer ${credentials.apiToken}`);
@@ -181,4 +183,21 @@ test("repository-root Workers Builds targets the canonical module and bindings",
   assert.match(rootConfig, /^main = "workers\/comms-hub-data-plane\/worker.js"$/m);
   const normalised = rootConfig.replace('main = "workers/comms-hub-data-plane/worker.js"', 'main = "worker.js"');
   assert.deepEqual(parseWorkerConfig(normalised), config);
+});
+
+
+test("verified upload is activated explicitly before runtime health is accepted", async () => {
+  const mock = transport();
+  await deployWorker({ config, source: "export default {};", sourceSha, healthUrl, credentials, fetchImpl: mock.fetchImpl });
+  const activation = mock.calls.find(call => call.url.endsWith("/deployments") && call.method === "POST");
+  assert.deepEqual(JSON.parse(activation.body).versions, [{ version_id: "uploaded-version", percentage: 100 }]);
+  assert.ok(mock.calls.indexOf(activation) < mock.calls.findIndex(call => call.url === "https://worker.example/health"));
+});
+
+test("stale or split runtime activation is rejected despite a successful upload", async () => {
+  const mock = transport((url, options) => url.endsWith("/deployments") && options.method === "GET"
+    ? response({ deployments: [{ versions: [{ version_id: "stale-version", percentage: 100 }] }] }) : undefined);
+  await assert.rejects(deployWorker({ config, source: "export default {};", sourceSha, healthUrl, credentials, fetchImpl: mock.fetchImpl }), /verified version exclusively/);
+  assert.equal(mock.calls.filter(call => call.method === "PUT").length, 1);
+  assert.equal(mock.calls.filter(call => call.url.endsWith("/deployments") && call.method === "POST").length, 1);
 });
