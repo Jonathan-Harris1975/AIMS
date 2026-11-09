@@ -4,6 +4,7 @@
 // format -> day-aware house promotion -> hero -> multi-model council/QA ->
 // render -> R2. MAST remains the sole owner of timing.
 
+import { londonDate } from "./weekendSchedule.js";
 import { EDITIONS } from "./edition.js";
 import { info, warn, error as logError } from "../../../logger.js";
 import { THRESHOLDS } from "../../../config/thresholds.js";
@@ -23,7 +24,7 @@ import { readEditorialCheckpoint, writeEditorialCheckpoint } from "./buildCheckp
 export async function buildNewsletter({ profileId = "ai-edge", sessionId: requestedSessionId, now = new Date(),
   edition = "daily", publicationDate = null, scheduledAt = null, sourceItems = null } = {}) {
   if (!EDITIONS.includes(edition)) throw new Error("Invalid newsletter edition");
-  const profile = { ...getNewsletterProfile(profileId), edition, publicationDate, scheduledAt };
+  const profile = { ...getNewsletterProfile(profileId), edition, publicationDate: publicationDate || londonDate(now), scheduledAt };
   const sessionId = sanitizeSessionId(requestedSessionId || `newsletter-${profile.id}-${Date.now()}`, "NL");
   info("newsletter.build.start", { sessionId, profileId: profile.id });
 
@@ -42,7 +43,9 @@ export async function buildNewsletter({ profileId = "ai-edge", sessionId: reques
 
   const storyCount = profile.storyCount || THRESHOLDS.newsletter.storyCount;
   const { lead, stories, droppedForDiversity } = rankAndSelectStories(items, { storyCount, now });
-  if (!lead) return { ok: false, sessionId, profileId: profile.id, error: "Ranking produced no lead story." };
+  if (!lead || stories.length < 2) return { ok: false, sessionId, profileId: profile.id,
+    failureKind: "source-intake-unavailable", retryable: true, candidateCount: items.length,
+    error: "At least three dated source stories are required before newsletter composition.", feedResults };
 
   const issue = await composeIssueSections({ profile, lead, stories, sessionId });
   if (!issue.ok) return { ok: false, sessionId, profileId: profile.id, error: `Issue composition failed: ${issue.error}` };
@@ -81,7 +84,7 @@ export async function buildNewsletter({ profileId = "ai-edge", sessionId: reques
       ...(qaResult.council?.chair ? [qaResult.council.chair] : []),
       ...(qaResult.council?.reviews || []),
     ];
-    const lastQaHistory = qaResult.history?.[qaResult.history.length - 1] || {};
+    const lastQaHistory = qaResult.history?.findLast((entry) => entry.deterministicIssues) || {};
     logError("newsletter.build.quarantined", {
       sessionId,
       profileId: profile.id,
@@ -113,7 +116,7 @@ export async function buildNewsletter({ profileId = "ai-edge", sessionId: reques
       newsletter: qaResult.newsletter,
       reviewErrors: qaResult.council?.failedReviews || [],
       failureKind: qaResult.failureKind,
-      retryable: qaResult.failureKind === "review-service-unavailable",
+      retryable: ["review-service-unavailable", "repair-service-unavailable"].includes(qaResult.failureKind),
       error: qaResult.failureKind === "review-service-unavailable"
         ? "Newsletter review service could not complete; draft retained in the job result and publication held."
         : "Newsletter failed editorial review after the bounded correction attempts and was quarantined.",

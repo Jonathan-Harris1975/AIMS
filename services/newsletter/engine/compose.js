@@ -1,3 +1,4 @@
+import { publicationContext } from "./publicationContext.js";
 import { editionDirection } from "./edition.js";
 // services/newsletter/engine/compose.js
 //
@@ -95,7 +96,7 @@ function brandGuardrails(profile) {
 
 function sourceBlock(lead, stories) {
   return [lead, ...stories].map((s, i) =>
-    `[S${i}] ${s.title}\nSummary: ${s.summary || "(none supplied)"}\nSource: ${s.link}`
+    `[S${i}] ${s.title}\nPublished: ${s.publishedAt || "unknown"}\nSummary: ${s.summary || "(none supplied)"}\nSource: ${s.link}`
   ).join("\n\n");
 }
 
@@ -135,6 +136,7 @@ first three ranked items. " +
     {
       role: "user",
       content: [
+        JSON.stringify(publicationContext(profile)),
         sourceBlock(lead, stories),
         repairContext.length
           ? `\n\nPRIOR COUNCIL DEFECTS TO FIX IN THIS REVISION:\n${repairContext.slice(0, 18).map((issue) => `- ${issue}`).join("\n")}`

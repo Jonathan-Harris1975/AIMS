@@ -1,3 +1,4 @@
+import { publicationContext } from "./publicationContext.js";
 import { resilientRequest } from "../../shared/utils/ai-service.js";
 import { parseNewsletterReview } from "./reviewJson.js";
 import { THRESHOLDS } from "../../../config/thresholds.js";
@@ -50,7 +51,7 @@ export async function runNewsletterSelfImproveReview({ profile, newsletter, sess
           'List at most five issues, each under 180 characters. Finish the JSON object within the response budget. Set blocking=true only for an obvious publication blocker. ' +
           'Return JSON only: {"score":number,"blocking":boolean,"issues":[string]}.',
       },
-      { role: "user", content: JSON.stringify(payload(newsletter), null, 2) },
+      { role: "user", content: JSON.stringify({ ...publicationContext(profile), draft: payload(newsletter) }, null, 2) },
     ],
   });
   const data = parseNewsletterReview(raw, REVIEW_SCHEMA, "newsletter self-improvement review");

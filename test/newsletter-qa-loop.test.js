@@ -27,6 +27,9 @@ let shadowScore = 95;
 let malformedSelfReview = false;
 let failedSpecialist = false;
 let repairCallCount = 0;
+let repairOutage = false;
+let blockingSeat = null;
+const reviewDates = [];
 
 function chat(content) { return { choices: [{ message: { content } }] }; }
 function reviewResponse(score) {
@@ -41,6 +44,9 @@ before(async () => {
       let parsed = {};
       try { parsed = JSON.parse(body); } catch {}
       const system = parsed.messages?.[0]?.content || "";
+      if (/economical pre-council editor|on the AI Edge editorial council|AI Edge Editorial Chair/.test(system)) {
+        reviewDates.push(JSON.parse(parsed.messages[1].content).publicationDate);
+      }
       res.writeHead(200, { "Content-Type": "application/json" });
 
       if (system.includes("shadow-only newsletter")) {
@@ -59,6 +65,9 @@ before(async () => {
       if (system.includes("on the AI Edge editorial council")) {
         if (failedSpecialist && system.includes("seat 2,")) { res.end(JSON.stringify(chat('{"score":'))); return; }
         const score = councilScores[Math.min(chairCallCount, councilScores.length - 1)] ?? 90;
+        if (blockingSeat && system.includes(`seat ${blockingSeat},`)) {
+          res.end(JSON.stringify(chat(JSON.stringify({ score: 90, verdict: "revise", blocking: true, issues: ["Review finding"], strengths: [] })))); return;
+        }
         res.end(JSON.stringify(chat(reviewResponse(score))));
         return;
       }
@@ -72,6 +81,7 @@ before(async () => {
 
       if (system.includes("Repair only the listed newsletter defects")) {
         repairCallCount += 1;
+        if (repairOutage) { res.end(JSON.stringify(chat('{"wrong":"contract"}'))); return; }
         res.end(JSON.stringify(chat(JSON.stringify({ edits: [
           { path: "openingNoteHtml", value: `<p>Targeted repair after review ${selfCallCount} and council ${chairCallCount}.</p>` },
         ] }))));
@@ -108,7 +118,10 @@ before(async () => {
 });
 
 after(async () => { server.closeAllConnections(); await new Promise((resolve) => server.close(resolve)); });
-beforeEach(() => { testCaseCount += 1; selfCallCount = 0; chairCallCount = 0; selfScores = []; councilScores = []; malformedSelfReview = false; failedSpecialist = false; repairCallCount = 0; });
+beforeEach(() => {
+  testCaseCount += 1; selfCallCount = 0; chairCallCount = 0; selfScores = []; councilScores = []; malformedSelfReview = false; failedSpecialist = false;
+  repairCallCount = 0; repairOutage = false; blockingSeat = null; reviewDates.length = 0;
+});
 
 const lead = { title: "A", link: "https://news.example.com/a", summary: "A source summary." };
 const stories = [
@@ -248,3 +261,41 @@ describe("newsletter engine/qaLoop.js", () => {
   });
 
 });
+
+
+test("all newsletter reviewers receive the supplied publication date", async () => {
+  const { runQaLoop } = await import("../services/newsletter/engine/qaLoop.js");
+  selfScores = [75, 75, 75, 75]; councilScores = [90];
+  const sources = Array.from({ length: 6 }, (_, i) => ({ title: `Dated story ${i}`, link: `https://dated.example/${i}`, summary: "Dated evidence.", publishedAt: "2026-11-09T05:00:00Z" }));
+  await runQaLoop({ profile: { displayName: "Date context", publicationDate: "2026-11-09" }, newsletter: draftNewsletter(),
+    lead: sources[0], stories: sources.slice(1), sessionId: "dated-context" });
+  assert.ok(reviewDates.length >= 15);
+  assert.ok(reviewDates.every(date => date === "2026-11-09"));
+});
+
+test("unavailable repair is recorded as retryable infrastructure failure, with hard QA still held", async () => {
+  const { runQaLoop } = await import("../services/newsletter/engine/qaLoop.js");
+  repairOutage = true; selfScores = [40]; councilScores = [40];
+  const sources = Array.from({ length: 6 }, (_, i) => ({ title: `Repair story ${i}`, link: `https://repair.example/${i}`, summary: "Evidence." }));
+  const result = await runQaLoop({ profile: { displayName: "Repair outage" }, newsletter: draftNewsletter(),
+    lead: sources[0], stories: sources.slice(1), sessionId: "repair-outage" });
+  assert.equal(result.ok, false);
+  assert.equal(result.quarantined, true);
+  assert.equal(result.failureKind, "repair-service-unavailable");
+  assert.ok(result.history.some(entry => entry.phase === "repair" && entry.repairUnavailable && entry.diagnostics.code));
+  assert.ok(result.repairBudget.used.repairs <= 4);
+  assert.equal(result.repairBudget.used.recoveries, 0);
+});
+
+
+for (const seat of [8, 2]) {
+  test(`seat ${seat} respects advisory versus hard-gate authority`, async () => {
+    const { runNewsletterEditorialCouncil } = await import("../services/newsletter/engine/editorialCouncil.js");
+    blockingSeat = seat; councilScores = [90];
+    const result = await runNewsletterEditorialCouncil({ profile, newsletter: { ...draftNewsletter(), subject: `Authority test seat ${seat}` },
+      lead, stories, sessionId: `authority-seat-${seat}` });
+    assert.equal(result.chair.blocking, false);
+    assert.equal(result.reviews.find(review => review.seat === seat).blocking, true);
+    assert.equal(result.ok, seat === 8);
+  });
+}

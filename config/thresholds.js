@@ -104,8 +104,9 @@ export const THRESHOLDS = Object.freeze({
   // selection, RSS ingestion window and Brevo delivery behaviour.
   newsletter: Object.freeze({
     // Rolling ingestion window: only articles published within this many
-    // hours of "now" are eligible for selection. Spec: previous 24 hours.
+    // hours of "now" are preferred. Quiet news days use a bounded weekend window.
     rssWindowHours: Math.max(1, num("NEWSLETTER_RSS_WINDOW_HOURS", 24)),
+    rssFallbackWindowHours: Math.max(24, Math.min(72, num("NEWSLETTER_RSS_FALLBACK_WINDOW_HOURS", 72))),
     // Number of curated stories in the daily digest (excludes the lead).
     storyCount: Math.max(1, num("NEWSLETTER_STORY_COUNT", 10)),
     // QA review loop target (0-100). Falling below it triggers bounded

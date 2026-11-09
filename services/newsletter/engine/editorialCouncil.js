@@ -1,3 +1,4 @@
+import { publicationContext } from "./publicationContext.js";
 import { createValidatedResultCache, qaFingerprint } from "../../shared/utils/validatedResultCache.js";
 import { claimRepairAction, withIsolatedTaskRepairBudget } from "../../shared/utils/taskRepairBudget.js";
 // Dedicated full-seat editorial council for AI Edge. The council is expensive
@@ -138,7 +139,7 @@ async function runMember(member, context, sessionId) {
           'Keep each issue/fix under 180 characters (at most five); strengths under 120 characters (at most three). Finish one complete JSON object. ' +
           'Return JSON only: {"score":number,"verdict":"pass"|"revise","blocking":boolean,"issues":[string],"strengths":[string]}.',
       },
-      { role: "user", content: JSON.stringify(payloadForMember(member, context), null, 2) },
+      { role: "user", content: JSON.stringify({ ...publicationContext(context.profile), ...payloadForMember(member, context) }, null, 2) },
     ],
   });
   const score = boundedScore(data.score);
@@ -222,7 +223,8 @@ export async function runNewsletterEditorialCouncil({ profile, newsletter, lead,
             'Keep each issue/fix under 180 characters (at most five); strengths under 120 characters (at most three). Finish one complete JSON object. ' +
           'Return JSON only: {"score":number,"verdict":"pass"|"revise","blocking":boolean,"issues":[string],"priorityFixes":[string]}.',
         },
-        { role: "user", content: JSON.stringify({ reports: reports.map(({ reviewReused, ...report }) => report), draft, sourceFingerprint: qaFingerprint(sources) }, null, 2) },
+        { role: "user", content: JSON.stringify({ ...publicationContext(profile), sources,
+          reports: reports.map(({ reviewReused, ...report }) => report), draft, sourceFingerprint: qaFingerprint(sources) }, null, 2) },
       ],
     });
 
@@ -244,7 +246,9 @@ export async function runNewsletterEditorialCouncil({ profile, newsletter, lead,
     const attendedRoles = new Set([chair.role, ...reports.map((review) => review.role)]);
     const attendanceComplete = definition.members.every((member) => attendedRoles.has(member.role));
     const allReviews = [chair, ...reports];
-    const noBlockers = allReviews.every((review) => !review.blocking);
+    // Advisory seats inform the chair; they cannot acquire a veto by returning
+    // blocking=true. The chair and declared hard-gate seats retain their veto.
+    const noBlockers = allReviews.every((review) => review.authority === "advisory" || !review.blocking);
     // The chair owns the final quality score. Specialist scores guide the chair;
     // only an explicit publication blocker can veto from a specialist seat.
     // This keeps advisory feedback from silently becoming a unanimous score gate.

@@ -2,6 +2,8 @@
 // Read-only production snapshot. Run inside the AIMS service so Koyeb keeps
 // provider credentials private; print only booleans, IDs and delivery states.
 import "../config/loadEnv.js";
+import { loadFeedUrls } from "../services/newsletter/engine/rss.js";
+import { THRESHOLDS } from "../config/thresholds.js";
 import { usableEnvValue, extractAccountIdFromR2Endpoint } from "../services/comms-hub/config.js";
 import { NEWSLETTER_JOTFORM_FORM_ID } from "../services/newsletter/jotformIntake.js";
 import { D1Client } from "../services/comms-hub/clients/d1Client.js";
@@ -226,6 +228,9 @@ const report = {
     newsletterSenderConfigured: configured("ONECOM_NEWSLETTER_PASSWORD") && configured("COMMS_HUB_EMAIL_NEWSLETTER_ADDRESS"),
     artworkKeyPresent: configured("OPENROUTER_API_KEY") || configured("OPENROUTER_API_KEY_ART") || configured("OPENROUTER_API_KEY_ART_BACKUP"),
     artworkModelPresent: configured("OPENROUTER_ART") || configured("OPENROUTER_ART_BACKUP") || configured("AI_MODEL_IMAGE"),
+    newsletterFeedCount: loadFeedUrls(profile).length,
+    newsletterPrimaryWindowHours: THRESHOLDS.newsletter.rssWindowHours,
+    newsletterFallbackWindowHours: THRESHOLDS.newsletter.rssFallbackWindowHours,
     newsletterEnabled: String(process.env.AIMS_OPERATION_NEWSLETTER_ENABLED || "true").toLowerCase() !== "false",
     blotatoDailyPaidRenderCap: Number(process.env.BLOTATO_DAILY_PAID_RENDER_CAP || 2),
     blotatoMonthlyEstimatedCreditCap: Number(process.env.BLOTATO_MONTHLY_ESTIMATED_CREDIT_CAP || 1250),
