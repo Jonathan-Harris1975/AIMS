@@ -128,35 +128,42 @@ export async function buildNewsletter({ profileId = "ai-edge", sessionId: reques
   return finishNewsletterBuild(context);
 }
 
-async function finishNewsletterBuild({ profile, sessionId, now, qaResult, lead, stories, promotion, droppedForDiversity, heroImageResult: savedHero }) {
-  // Only spend image-generation credits after the editorial issue has passed.
-  // A failed council run must not leave behind a misleading orphan hero image.
-  const heroImageResult = savedHero?.ok && savedHero.imageUrl && savedHero.imageStatus === "generated"
-    ? savedHero : await generateHeroImage({
-    profile,
-    heroHeadline: qaResult.newsletter.heroHeadline,
-    leadStory: selectNewsletterArtLead({ lead, stories, bigThree: qaResult.newsletter.bigThree }),
-    bigThree: qaResult.newsletter.bigThree,
-    sessionId,
-  });
-  if (!heroImageResult.ok) {
-    warn("newsletter.build.hero_image_missing", { sessionId, profileId: profile.id, error: heroImageResult.error, artworkDiagnostics: heroImageResult.artworkDiagnostics || null });
-    return {
-      ok: false,
-      sessionId,
-      profileId: profile.id,
-      quarantined: true,
-      qa: qaResult,
-      newsletter: qaResult.newsletter,
-      artworkDiagnostics: heroImageResult.artworkDiagnostics || null,
-      error: `Newsletter editorial content passed but hero image generation failed: ${heroImageResult.error}`,
+export async function finishNewsletterBuild({ profile, sessionId, now, qaResult, lead, stories, promotion, droppedForDiversity, heroImageResult: savedHero }, {
+  generateHero = generateHeroImage, checkpoint = writeEditorialCheckpoint, storeIssue = storeNewsletterIssue,
+  requireHeroImage = /^(1|true|yes|on)$/i.test(String(process.env.NEWSLETTER_HERO_IMAGE_REQUIRED || "false")),
+} = {}) {
+  if (qaResult?.ok !== true || qaResult.quarantined !== false) {
+    return { ok: false, sessionId, quarantined: true, error: "Newsletter editorial approval is required before publication." };
+  }
+  // Optional artwork may improve an approved issue; failed pixels must never
+  // suppress verified copy or be published as a substitute image.
+  let heroImageResult = savedHero;
+  const reusable = savedHero?.ok && savedHero.imageUrl && savedHero.imageStatus === "generated";
+  const textOnlyCheckpoint = !requireHeroImage && savedHero?.ok === false && !savedHero.imageUrl && savedHero?.imageStatus === "editorial-text-only";
+  if (!reusable && !textOnlyCheckpoint) {
+    try {
+      heroImageResult = await generateHero({ profile, heroHeadline: qaResult.newsletter.heroHeadline,
+        leadStory: selectNewsletterArtLead({ lead, stories, bigThree: qaResult.newsletter.bigThree }),
+        bigThree: qaResult.newsletter.bigThree, sessionId });
+    } catch {
+      heroImageResult = { ok: false, error: "Artwork service unavailable." };
+    }
+  }
+  if (!heroImageResult?.ok) {
+    warn("newsletter.build.hero_image_missing", { sessionId, profileId: profile.id, required: requireHeroImage,
+      artworkDiagnostics: heroImageResult?.artworkDiagnostics || null });
+    if (requireHeroImage) return {
+      ok: false, sessionId, profileId: profile.id, quarantined: true, qa: qaResult, newsletter: qaResult.newsletter,
+      artworkDiagnostics: heroImageResult?.artworkDiagnostics || null,
+      error: `Newsletter editorial content passed but hero image generation failed: ${heroImageResult?.error || "No approved image."}`,
     };
+    heroImageResult = { ...heroImageResult, ok: false, imageUrl: null, imageStatus: "editorial-text-only" };
   }
 
-  const finalNewsletter = { ...qaResult.newsletter, heroImageUrl: heroImageResult.imageUrl };
+  const finalNewsletter = { ...qaResult.newsletter, heroImageUrl: heroImageResult.ok ? heroImageResult.imageUrl : null };
   const finalValidation = runDeterministicValidators(finalNewsletter, {
     expectedStoryCount: Math.min(9, 1 + stories.length),
-    requireHeroImage: true,
+    requireHeroImage: requireHeroImage || heroImageResult.ok,
   });
   if (!finalValidation.pass) {
     return {
@@ -170,7 +177,7 @@ async function finishNewsletterBuild({ profile, sessionId, now, qaResult, lead, 
     };
   }
 
-  await writeEditorialCheckpoint({ profile, sessionId, now, qaResult, lead, stories, promotion, droppedForDiversity, heroImageResult });
+  await checkpoint({ profile, sessionId, now, qaResult, lead, stories, promotion, droppedForDiversity, heroImageResult });
 
   const emailHtml = renderNewsletterHtml({ profile, newsletter: finalNewsletter });
   const plaintext = renderNewsletterPlaintext({ profile, newsletter: finalNewsletter });
@@ -182,9 +189,10 @@ async function finishNewsletterBuild({ profile, sessionId, now, qaResult, lead, 
     heroImage: heroImageResult,
   });
 
+  metadata.artwork = { required: requireHeroImage, status: heroImageResult.imageStatus, diagnostics: heroImageResult.artworkDiagnostics || null };
   metadata.scheduledAt = profile.scheduledAt || null;
   metadata.publicationDate = profile.publicationDate || now.toISOString().slice(0, 10);
-  const stored = await storeNewsletterIssue({ profile, sessionId, emailHtml, plaintext, metadata, date: profile.publicationDate ? new Date(`${profile.publicationDate}T12:00:00Z`) : now });
+  const stored = await storeIssue({ profile, sessionId, emailHtml, plaintext, metadata, date: profile.publicationDate ? new Date(`${profile.publicationDate}T12:00:00Z`) : now });
   info("newsletter.build.complete", {
     sessionId,
     profileId: profile.id,

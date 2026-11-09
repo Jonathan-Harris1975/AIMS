@@ -165,15 +165,12 @@ test("artwork lanes have separate total budgets and AI-grounded photorealistic p
   assert.match(env, /^ZERNIO_ARTWORK_TIMEOUT_MS=600000$/m);
 });
 
-test("newsletter rejects diagnostic artwork and requires a usable generated image", async () => {
+test("newsletter generated artwork rejects diagnostic fallback", async () => {
   const hero = await readFile(new URL("../services/newsletter/engine/heroImage.js", import.meta.url), "utf8");
-  const build = await readFile(new URL("../services/newsletter/engine/buildNewsletter.js", import.meta.url), "utf8");
   assert.match(hero, /createBlogArtwork/);
   assert.match(hero, /result\?\.ok.*result\.publicUrl.*!result\.fallback/);
   assert.match(hero, /diagnostic fallback rejected/);
   assert.doesNotMatch(hero, /NEWSLETTER_AI_EDGE_FALLBACK_IMAGE_URL/);
-  assert.match(build, /if \(!heroImageResult\.ok\)/);
-  assert.match(build, /Newsletter editorial content passed but hero image generation failed/);
 });
 
 test("paid Blotato renders survive QA plumbing failures and rendered QA uses structured output", async () => {
