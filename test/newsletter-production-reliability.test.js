@@ -49,6 +49,7 @@ test("an impossible source pool is rejected before any model composition or coun
 test("publication date is explicit London context and respects prepared weekend dates", () => {
   assert.equal(publicationContext({ publicationDate: "2026-11-09" }).publicationDate, "2026-11-09");
   assert.equal(publicationContext({ publicationDate: "2026-11-15" }).publicationDate, "2026-11-15");
+  assert.equal(publicationContext({ editorialDate: "2026-07-02", publicationDate: null }).publicationDate, "2026-07-02");
   assert.equal(publicationContext({}).timezone, "Europe/London");
   assert.match(publicationContext({}).dateRule, /matching date is not future-dated/);
 });

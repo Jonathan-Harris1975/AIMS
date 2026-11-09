@@ -93,6 +93,7 @@ async function runQaLoopImpl({ profile, newsletter, lead, stories, promotion = n
         warn("newsletter.qa.regeneration_failed", { sessionId, iteration, error: regenerated.error });
         break;
       }
+      repairUnavailable = false;
       if (JSON.stringify(regenerated) === JSON.stringify({ ...current, ok: true })) break;
       current = regenerated;
     }
@@ -176,6 +177,7 @@ async function runQaLoopImpl({ profile, newsletter, lead, stories, promotion = n
         warn("newsletter.qa.council_repair_failed", { sessionId, councilRun, error: regenerated.error });
         break;
       }
+      repairUnavailable = false;
       if (JSON.stringify(regenerated) === JSON.stringify({ ...current, ok: true })) break;
       current = regenerated;
     }

@@ -24,7 +24,7 @@ import { readEditorialCheckpoint, writeEditorialCheckpoint } from "./buildCheckp
 export async function buildNewsletter({ profileId = "ai-edge", sessionId: requestedSessionId, now = new Date(),
   edition = "daily", publicationDate = null, scheduledAt = null, sourceItems = null } = {}) {
   if (!EDITIONS.includes(edition)) throw new Error("Invalid newsletter edition");
-  const profile = { ...getNewsletterProfile(profileId), edition, publicationDate: publicationDate || londonDate(now), scheduledAt };
+  const profile = { ...getNewsletterProfile(profileId), edition, publicationDate, editorialDate: publicationDate || londonDate(now), scheduledAt };
   const sessionId = sanitizeSessionId(requestedSessionId || `newsletter-${profile.id}-${Date.now()}`, "NL");
   info("newsletter.build.start", { sessionId, profileId: profile.id });
 

@@ -81,7 +81,7 @@ before(async () => {
 
       if (system.includes("Repair only the listed newsletter defects")) {
         repairCallCount += 1;
-        if (repairOutage) { res.end(JSON.stringify(chat('{"wrong":"contract"}'))); return; }
+        if (repairOutage === true || (repairOutage === "self" && chairCallCount === 0)) { res.end(JSON.stringify(chat('{"wrong":"contract"}'))); return; }
         res.end(JSON.stringify(chat(JSON.stringify({ edits: [
           { path: "openingNoteHtml", value: `<p>Targeted repair after review ${selfCallCount} and council ${chairCallCount}.</p>` },
         ] }))));
@@ -299,3 +299,15 @@ for (const seat of [8, 2]) {
     assert.equal(result.ok, seat === 8);
   });
 }
+
+
+test("a recovered repair service does not make a later genuine editorial rejection retryable", async () => {
+  const { runQaLoop } = await import("../services/newsletter/engine/qaLoop.js");
+  repairOutage = "self"; selfScores = [40]; councilScores = [40, 40];
+  const result = await runQaLoop({ profile, newsletter: { ...draftNewsletter(), subject: "Recovered repair, real rejection" },
+    lead, stories, sessionId: "recovered-repair-rejected" });
+  assert.equal(result.ok, false);
+  assert.equal(result.failureKind, "editorial-rejection");
+  assert.equal(result.councilRuns, 2);
+  assert.ok(result.history.some(entry => entry.phase === "repair" && entry.repairUnavailable));
+});
