@@ -41,7 +41,11 @@ test("failed artwork is omitted while approved copy is published in the existing
 
 test("an artwork service exception does not suppress approved editorial content", async () => {
   const deps = dependencies(async () => { throw new Error("Provider unavailable"); });
-  assert.equal((await finishNewsletterBuild(context(), deps)).ok, true);
+  const result = await finishNewsletterBuild(context(), deps);
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.metadata.artwork.diagnostics, {
+    stage: "generation_exception", errorName: "Error", message: "Provider unavailable",
+  });
   assert.equal(deps.stored.length, 1);
 });
 

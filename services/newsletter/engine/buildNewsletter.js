@@ -145,8 +145,16 @@ export async function finishNewsletterBuild({ profile, sessionId, now, qaResult,
       heroImageResult = await generateHero({ profile, heroHeadline: qaResult.newsletter.heroHeadline,
         leadStory: selectNewsletterArtLead({ lead, stories, bigThree: qaResult.newsletter.bigThree }),
         bigThree: qaResult.newsletter.bigThree, sessionId });
-    } catch {
-      heroImageResult = { ok: false, error: "Artwork service unavailable." };
+    } catch (error) {
+      heroImageResult = {
+        ok: false,
+        error: "Artwork service unavailable.",
+        artworkDiagnostics: {
+          stage: "generation_exception",
+          errorName: error instanceof Error ? error.name : typeof error,
+          message: error instanceof Error ? error.message : String(error),
+        },
+      };
     }
   }
   if (!heroImageResult?.ok) {

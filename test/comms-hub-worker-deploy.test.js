@@ -38,7 +38,8 @@ function transport(override = () => undefined) {
       if (url.includes("/versions?")) return response({ items: [{ id: "uploaded-version" }] });
       if (url.endsWith("/versions/uploaded-version")) return response(uploadedVersion);
       if (url.endsWith("/deployments")) return options.method === "POST" ? response({ id: "verified-deployment" })
-        : response({ deployments: [{ versions: [{ version_id: "uploaded-version", percentage: 100 }] }] });
+        : response({ deployments: [{ id: "older-deployment", versions: [{ version_id: "stale-version", percentage: 100 }] },
+          { id: "verified-deployment", versions: [{ version_id: "uploaded-version", percentage: 100 }] }] });
       if (url === "https://worker.example/health") {
         return new Response(JSON.stringify({ ok: true, service: config.name, source_commit_sha: sourceSha }), { status: 200 });
       }
@@ -196,7 +197,7 @@ test("verified upload is activated explicitly before runtime health is accepted"
 
 test("stale or split runtime activation is rejected despite a successful upload", async () => {
   const mock = transport((url, options) => url.endsWith("/deployments") && options.method === "GET"
-    ? response({ deployments: [{ versions: [{ version_id: "stale-version", percentage: 100 }] }] }) : undefined);
+    ? response({ deployments: [{ id: "verified-deployment", versions: [{ version_id: "stale-version", percentage: 100 }] }] }) : undefined);
   await assert.rejects(deployWorker({ config, source: "export default {};", sourceSha, healthUrl, credentials, fetchImpl: mock.fetchImpl }), /verified version exclusively/);
   assert.equal(mock.calls.filter(call => call.method === "PUT").length, 1);
   assert.equal(mock.calls.filter(call => call.url.endsWith("/deployments") && call.method === "POST").length, 1);
