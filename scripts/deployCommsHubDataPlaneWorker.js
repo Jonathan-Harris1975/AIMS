@@ -211,9 +211,9 @@ export async function deployWorker({ config, source, sourceSha, healthUrl, crede
     if (typeof deployment?.id !== "string" || !deployment.id) {
       throw new Error("Worker activation returned no deployment identifier.");
     }
-    const active = await api(`${scriptUrl}/deployments`);
-    const versionsInUse = active?.deployments?.[0]?.versions;
-    if (!Array.isArray(versionsInUse) || versionsInUse.length !== 1
+    const active = await api(`${scriptUrl}/deployments/${encodeURIComponent(deployment.id)}`);
+    const versionsInUse = active?.versions;
+    if (active?.id !== deployment.id || !Array.isArray(versionsInUse) || versionsInUse.length !== 1
       || versionsInUse[0].version_id !== versionId || versionsInUse[0].percentage !== 100) {
       throw new Error("Worker activation does not serve the verified version exclusively.");
     }

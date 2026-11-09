@@ -43,6 +43,7 @@ test("an artwork service exception does not suppress approved editorial content"
   const deps = dependencies(async () => { throw new Error("Provider unavailable"); });
   assert.equal((await finishNewsletterBuild(context(), deps)).ok, true);
   assert.equal(deps.stored.length, 1);
+  assert.equal(deps.stored[0].metadata.artwork.diagnostics.errorType, "Error");
 });
 
 test("a strict artwork policy still holds publication without an approved image", async () => {
@@ -68,4 +69,12 @@ test("an approved generated image is kept without changing the normal layout", a
   assert.equal(result.ok, true);
   assert.equal(result.metadata.heroImageStatus, "generated");
   assert.match(deps.stored[0].emailHtml, /approved\.png/);
+});
+
+
+test("corrupt editorial input is not swallowed as an optional image outage", async () => {
+  const broken = context(); broken.qaResult.newsletter = null;
+  const deps = dependencies(async () => ({ ok: false }));
+  await assert.rejects(finishNewsletterBuild(broken, deps), TypeError);
+  assert.equal(deps.stored.length, 0);
 });
