@@ -184,3 +184,46 @@ test("a malformed council seat fails over to another configured model instead of
     assert.deepEqual(factCheckModels, ["test/sonnet", "test/sol"]);
   } finally { globalThis.fetch = oldFetch; }
 });
+
+test("Reality Check can repair a mismatched citation only from supplied canonical sources", () => {
+  const draft = { realityCheck: { sourceId: "S9", sourceTitle: "Microservices", link: "https://example.test/microservices",
+    claim: "Context matters", assessment: "Evidence from the context article" } };
+  const sources = [{ sourceId: "S1", title: "Context engineering", link: "https://example.test/context" }];
+  const result = applyNewsletterEdits(draft, [{ path: "realityCheck.sourceId", value: "S1" }], sources);
+  assert.deepEqual(result.realityCheck, { ...draft.realityCheck, sourceId: "S1", sourceTitle: sources[0].title, link: sources[0].link });
+  assert.equal(draft.realityCheck.sourceId, "S9");
+  for (const value of ["S99", "https://attacker.test", "__proto__"]) {
+    assert.throws(() => applyNewsletterEdits(draft, [{ path: "realityCheck.sourceId", value }], sources));
+  }
+  for (const path of ["realityCheck.link", "realityCheck.sourceTitle"]) {
+    assert.throws(() => applyNewsletterEdits(draft, [{ path, value: "Invented" }], sources));
+  }
+});
+
+test("targeted repair supplies composer source IDs and validates citation selection before accepting a response", async () => {
+  const oldFetch = globalThis.fetch;
+  process.env.OPENROUTER_API_KEY = "test-key";
+  process.env.AI_MODEL_FAST = "test/luna";
+  let calls = 0;
+  globalThis.fetch = async (_url, options) => {
+    const body = JSON.parse(options.body);
+    const input = JSON.parse(body.messages[1].content);
+    assert.deepEqual(input.sources.map(source => source.sourceId), ["S0", "S1"]);
+    assert.ok(input.allowedPaths.includes("realityCheck.sourceId"));
+    calls++;
+    // Invalid citations must follow bounded provider recovery, not enter a draft.
+    const content = JSON.stringify({ edits: [{ path: "realityCheck.sourceId", value: calls === 1 ? "S99" : "S1" }] });
+    return { ok: true, json: async () => ({ choices: [{ message: { content } }] }) };
+  };
+  try {
+    const { repairNewsletterDraft } = await import("../services/newsletter/engine/targetedRepair.js");
+    const result = await repairNewsletterDraft({ newsletter: { realityCheck: { sourceId: "S0", claim: "Context", assessment: "Context evidence" } },
+      lead: { title: "Lead", link: "https://example.test/lead" },
+      stories: [{ title: "Context", link: "https://example.test/context" }],
+      profile: { edition: "daily" }, sessionId: "citation-repair", repairContext: ["Correct Reality Check attribution"] });
+    assert.ok(calls >= 2);
+    assert.equal(result.realityCheck.sourceId, "S1");
+    assert.equal(result.realityCheck.sourceTitle, "Context");
+    assert.equal(result.realityCheck.link, "https://example.test/context");
+  } finally { globalThis.fetch = oldFetch; }
+});
