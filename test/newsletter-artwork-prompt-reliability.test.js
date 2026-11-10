@@ -1,3 +1,4 @@
+// This regression suite is deterministic and does not require a live image-provider call.
 import test from "node:test";
 import assert from "node:assert/strict";
 process.env.OPENROUTER_API_KEY = "test-key";
