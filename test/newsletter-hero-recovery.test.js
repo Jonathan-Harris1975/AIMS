@@ -8,13 +8,21 @@ const generated = { ok: true, publicUrl: "https://images.example/fresh.png", key
 
 test("a failed hero image gets a source-grounded corrective render without repeating QA defects", async () => {
   const calls = [];
-  const result = await generateHeroImage(input, { buildPrompt: async () => "An engineer at an access cabinet.",
+  const directions = [];
+  const result = await generateHeroImage(input, { buildPrompt: async (options) => {
+    directions.push(options);
+    return options.repairDiagnostics ? "AI access controls: an unmarked hardware key disconnected from a secured workstation." : "An engineer at an access cabinet.";
+  },
     createArtwork: async (options) => { calls.push(options); return calls.length === 1
       ? { ok: false, error: "Readable cabinet labels and malformed fingers", fallback: true } : generated; } });
   assert.equal(result.ok, true);
   assert.equal(result.imageStatus, "generated");
   assert.equal(calls.length, 2);
   assert.equal(calls[1].mode, "newsletter");
+  assert.equal(directions.length, 2);
+  assert.ok(directions[1].repairDiagnostics);
+  assert.equal(directions[1].sessionId, "NL-recovery-art-direction-repair");
+  assert.doesNotMatch(calls[1].prompt, /An engineer at an access cabinet/);
   assert.equal(calls[1].sessionId, "NL-recovery-artwork-repair");
   assert.match(calls[1].prompt, /AI access controls/);
   assert.doesNotMatch(calls[1].prompt, /Readable cabinet labels and malformed fingers/);
