@@ -70,12 +70,13 @@ export function buildInstruction(prompt, mode = "podcast", date) {
 
   if (mode === "newsletter") {
     return [
+      // Preserve the source scene before model-family prompt length limits.
+      `Creative direction: ${policyPrompt}`,
       "Create a wide premium editorial news image for the AI Edge newsletter.",
       "Composition: one concrete artificial-intelligence news scene with a decisive focal subject and cinematic depth. This is a photorealistic editorial news image, not an \
 illustration, anime frame, banner design or magazine-cover mock-up.",
       "Style: intelligent, current, grounded, high-contrast technology-journalism realism. The image must visibly contain an AI, machine-learning, software, robotics, compute, \
 security or governance anchor supported by the lead story. No travel, landscape, lifestyle or inspirational-journey imagery.",
-      `Creative direction: ${policyPrompt}`,
       "Final compliance check: remove all text, pseudo-text, title panels, buttons, interface labels, logos and watermarks before returning the image.",
     ].join(" ");
   }

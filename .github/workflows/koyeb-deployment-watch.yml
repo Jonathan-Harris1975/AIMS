@@ -24,7 +24,7 @@ jobs:
            github.event.workflow_run.head_branch == 'main') }}
     runs-on: ubuntu-latest
     environment: Koyeb
-    timeout-minutes: 20
+    timeout-minutes: 40
     steps:
       - name: Resolve Koyeb service from Environment or repository
         env:
@@ -195,6 +195,19 @@ jobs:
           script -q -e -c "$test_command" /dev/null < /dev/null
           printf -v exec_command 'koyeb services exec %q node -- scripts/reconcileNewsletterIntake.js' "$KOYEB_SERVICE"
           script -q -e -c "$exec_command" /dev/null < /dev/null
+      - name: Verify newsletter artwork on the explicit repair release
+        if: ${{ github.event_name == 'workflow_run' && startsWith(github.event.workflow_run.head_commit.message, 'Repair newsletter artwork reliability') }}
+        timeout-minutes: 18
+        env:
+          KOYEB_TOKEN: ${{ secrets.KOYEB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # Bounded generated artwork only: no newsletter generation or sending.
+          printf -v exec_command 'koyeb services exec %q node -- scripts/verifyNewsletterArtwork.js' "$KOYEB_SERVICE"
+          output="$(script -q -e -c "$exec_command" /dev/null < /dev/null)"
+          printf '%s\n' "$output"
+          # Koyeb exec may not propagate the remote exit status.
+          grep -F '"event":"newsletter.artwork.verified"' <<< "$output" > /dev/null
       - name: Inspect content delivery in the deployed service
         if: ${{ always() && steps.production_deployment.outcome == 'success' }}
         continue-on-error: true

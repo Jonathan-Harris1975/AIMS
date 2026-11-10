@@ -16,6 +16,8 @@ const MODE_SPECS = {
   },
   newsletter: {
     format: "wide 16:9 AI-news newsletter hero",
+    surfaceRule: "Stage one physical action in a source-supported environment. Keep equipment surfaces plain and unmarked, screens facing away or out of frame, " +
+      "and the background quiet. Communicate software and security through physical access, equipment and human action rather than diagrams or interface panels.",
     composition: "one concrete lead-story scene with a decisive focal subject and no banner, cover or template layout",
     style: "serious technology journalism, contemporary editorial realism, controlled colour, high contrast and believable physical detail",
     textRule: "Render only the visual scene. Every surface is clean and unmarked; there is no typography, lettering, numbering, logo, interface copy or watermark.",
@@ -90,6 +92,7 @@ export function buildModelAwareArtworkPrompt({ model, mode = "podcast", creative
       `CORE CONCEPT: ${direction || "a concrete, source-specific artificial-intelligence editorial scene"}`,
       `BACKGROUND AND ENVIRONMENT: use only the real environment supported by the subject; keep it quiet enough for a clear silhouette.`,
       `PRIMARY FRAMING: ${spec.composition}.`,
+      spec.surfaceRule ? `SCENE DISCIPLINE: ${spec.surfaceRule}` : "",
       `PHYSICAL DETAIL: believable materials, objects and relationships; avoid generic symbolic filler.`,
       `LIGHTING: purposeful cinematic key light with controlled falloff and readable depth.`,
       `CAMERA AND FORMAT: ${spec.format}; editorial framing with strong hierarchy.`,
@@ -114,6 +117,7 @@ export function buildModelAwareArtworkPrompt({ model, mode = "podcast", creative
   return [
     `${spec.format}.`,
     direction,
+    spec.surfaceRule || "",
     spec.composition,
     spec.style,
     spec.textRule,
