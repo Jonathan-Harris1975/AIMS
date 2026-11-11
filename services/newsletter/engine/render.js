@@ -74,14 +74,13 @@ ${newsletter.heroImageUrl ? `<tr><td><img src="${escapeHtml(newsletter.heroImage
 <tr><td style="padding:0 24px 18px;font-size:15px;line-height:1.6;color:#1F2937;">${newsletter.openingNoteHtml || ""}</td></tr>
 ${sectionLabel("The Big Three")}
 ${bigThree}
-${newsletter.worthUsing ? `${sectionLabel(newsletter.worthUsing.label || "Worth Using")}
+${newsletter.worthUsing ? `${sectionLabel(newsletter.edition === "daily" ? "Actually Useful" : (newsletter.worthUsing.label || "Worth Using"))}
 <tr><td style="padding:8px 24px 12px;"><a href="${escapeHtml(newsletter.worthUsing.link)}" style="font-size:16px;font-weight:700;color:#0D1420;text-decoration:none;\
 ">${escapeHtml(newsletter.worthUsing.title)}</a><div style="font-size:14px;line-height:1.55;color:#374151;padding-top:6px;">${escapeHtml(
   newsletter.worthUsing.summary)}</div>${newsletter.worthUsing.whyUseful ?
      `<div style="font-size:14px;line-height:1.55;color:#1F2937;padding-top:6px;"><strong>Why it's worth your time:</strong> ${escapeHtml(
        newsletter.worthUsing.whyUseful)}</div>` : ""}</td></tr>` : ""}
-${sectionLabel("On the Radar")}
-<tr><td style="padding:0 24px 8px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">${radar}</table></td></tr>
+${radar ? `${sectionLabel("On the Radar")}\n<tr><td style="padding:0 24px 8px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">${radar}</table></td></tr>` : ""}
 ${sectionLabel("Reality Check")}
 <tr><td style="padding:8px 24px 16px;"><div style="font-size:15px;font-weight:700;color:#0D1420;">${escapeHtml(newsletter.realityCheck?.claim ||
    "")}</div><div style="font-size:14px;line-height:1.6;color:#374151;padding-top:6px;">${escapeHtml(newsletter.realityCheck?.assessment ||
@@ -104,8 +103,10 @@ export function renderNewsletterPlaintext({ profile, newsletter }) {
   });
   if (newsletter.worthUsing) lines.push((newsletter.worthUsing.label || "WORTH USING").toUpperCase(), "",
      `${newsletter.worthUsing.title}\n${newsletter.worthUsing.summary}\n${newsletter.worthUsing.whyUseful}\n${newsletter.worthUsing.link}`, "");
-  lines.push("ON THE RADAR", "");
-  (newsletter.onRadar || []).forEach((story) => lines.push(`${story.title}\n${story.summary}\n${story.link}\n`));
+  if ((newsletter.onRadar || []).length) {
+    lines.push("ON THE RADAR", "");
+    (newsletter.onRadar || []).forEach((story) => lines.push(`${story.title}\n${story.summary}\n${story.link}\n`));
+  }
   lines.push("REALITY CHECK", "", `${newsletter.realityCheck?.claim || ""}\n${newsletter.realityCheck?.assessment || ""}\n${newsletter.realityCheck?.link || ""}`, "");
   if (newsletter.promotion) lines.push((newsletter.promotion.eyebrow || "FEATURED").toUpperCase(), "", `${newsletter.promotion.title}\n${newsletter.promotion.blurb ||
      ""}\n${newsletter.promotion.url}`, "");
@@ -134,6 +135,8 @@ export function buildNewsletterMetadata({ profile, newsletter, qaResult, generat
     heroImageStatus: heroImage?.imageStatus || null,
     storyCount: new Set(sourceLinks).size,
     sourceLinks: [...new Set(sourceLinks)],
+    storyTitles: [...(newsletter.bigThree || []), newsletter.worthUsing, ...(newsletter.onRadar || [])]
+      .filter(Boolean).map((story) => story.title).filter(Boolean),
     promotion: newsletter.promotion ? { type: newsletter.promotion.type, title: newsletter.promotion.title, url: newsletter.promotion.url } : null,
     qa: {
       passed: qaResult.ok,
