@@ -27,8 +27,3 @@ https://dlabs.ai/feed
 https://www.technologyreview.com/topic/artificial-intelligence/feed
 https://www.deepmind.com/blog/rss.xml
 https://ainowinstitute.org/feed
-
-# Broader first-party launch and research coverage
-https://huggingface.co/blog/feed.xml
-# Anthropic does not publish an official RSS feed; public mirror links back to its newsroom
-https://raw.githubusercontent.com/Olshansk/rss-feeds/main/feeds/feed_anthropic_news.xml
