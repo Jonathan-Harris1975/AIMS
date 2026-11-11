@@ -1,4 +1,5 @@
 import { canonicalStoryUrl, canonicalStoryTitle } from './editorialHistory.js';
+import { findJonathanVoiceDrift } from '../../content-quality/jonathanVoice.js';
 // services/newsletter/engine/validators.js
 // Deterministic QA for AI Edge v2. Mechanical failures are caught before the
 // multi-model council spends tokens on a draft that cannot be published.
@@ -42,6 +43,12 @@ export function validateBannedPhrases(newsletter) {
   const haystack = editorialText(newsletter).toLowerCase();
   const hits = BANNED_PHRASES.filter((phrase) => haystack.includes(phrase));
   return { pass: hits.length === 0, issues: hits.map((phrase) => ({ code: "banned_phrase", message: `Contains banned phrase: "${phrase}"` })) };
+}
+
+export function validateCanonicalVoice(newsletter) {
+  const hits = findJonathanVoiceDrift(editorialText(newsletter));
+  return { pass: hits.length === 0,
+    issues: hits.map((phrase) => ({ code: "canonical_voice_drift", message: "AIMS editorial voice drift: " + phrase })) };
 }
 
 export function validateDailyOpening(newsletter) {
@@ -181,7 +188,7 @@ export function validateQuantitativeEvidence(newsletter, { sources = [] } = {}) 
   return { pass: issues.length === 0, issues };
 }
 
-const ALL_VALIDATORS = [validateDailyOpening, validateBannedPhrases, validateBritishSpelling,
+const ALL_VALIDATORS = [validateDailyOpening, validateBannedPhrases, validateCanonicalVoice, validateBritishSpelling,
   validateSubjectLength, validateStructuralCompleteness, validateNoDuplicateStories,
   validateLinks, validatePromotion, validateRecentCoverage, validatePracticalValue,
   validatePromotionalResidue, validateQuantitativeEvidence];
