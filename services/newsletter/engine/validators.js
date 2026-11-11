@@ -1,3 +1,4 @@
+import { canonicalStoryUrl, canonicalStoryTitle } from './editorialHistory.js';
 // services/newsletter/engine/validators.js
 // Deterministic QA for AI Edge v2. Mechanical failures are caught before the
 // multi-model council spends tokens on a draft that cannot be published.
@@ -122,12 +123,76 @@ export function validatePromotion(newsletter) {
   return { pass: issues.length === 0, issues };
 }
 
-const ALL_VALIDATORS = [validateDailyOpening, validateBannedPhrases, validateBritishSpelling, validateSubjectLength, validateStructuralCompleteness, validateNoDuplicateStories,
-  validateLinks, validatePromotion];
 
-export function runDeterministicValidators(newsletter, { expectedStoryCount, requireHeroImage = true } = {}) {
+export function validateRecentCoverage(newsletter, { recentHistory = null } = {}) {
+  if (!recentHistory) return { pass: true, issues: [] };
+  const links = recentHistory.recentLinks || new Set();
+  const titles = recentHistory.recentTitles || new Set();
+  const stories = [...(newsletter.bigThree || []), newsletter.worthUsing, ...(newsletter.onRadar || [])].filter(Boolean);
+  const issues = stories.filter((story) => links.has(canonicalStoryUrl(story.link))
+    || (story.title && titles.has(canonicalStoryTitle(story.title))))
+    .map((story) => ({ code: 'recently_published_story', message: 'Already dispatched in the last seven days: ' + story.title }));
+  return { pass: issues.length === 0, issues };
+}
+
+export function validatePracticalValue(newsletter) {
+  if (newsletter.edition !== 'daily') return { pass: true, issues: [] };
+  const tip = String(newsletter.worthUsing?.whyUseful || '');
+  const useful = tip.length >= 50 && /\b(check|compare|try|test|ask|use|measure|review|verify|look|read|run|track|start|consider|inspect|request|require)\b/i.test(tip);
+  return { pass: useful, issues: useful ? [] :
+    [{ code: 'missing_actionable_takeaway', message: 'Worth Using needs a concrete, source-grounded reader action (50+ characters), not a generic claim.' }] };
+}
+
+export function validatePromotionalResidue(newsletter) {
+  const text = [newsletter.worthUsing?.summary, ...(newsletter.onRadar || []).map((story) => story.summary)].filter(Boolean).join('\n');
+  const leaked = /\b(the post .{5,140} appeared first on|read more at|click here to read more|book a demo today|subscribe to our blog)\b/i.test(text);
+  return { pass: !leaked, issues: leaked ? [{ code: 'promotional_rss_residue', message: 'Unedited RSS/marketing boilerplate leaked into reader-facing copy.' }] : [] };
+}
+
+const NUMBER_WORDS = { one: '1', two: '2', three: '3', four: '4', five: '5',
+  six: '6', seven: '7', eight: '8', nine: '9', ten: '10' };
+function quantitativeClaims(value) {
+  const normalised = String(value || '').toLowerCase()
+    .replace(/\b(one|two|three|four|five|six|seven|eight|nine|ten)\s+(million|billion|thousand|trillion)\b/gi,
+      (_, word, unit) => NUMBER_WORDS[word.toLowerCase()] + ' ' + unit.toLowerCase());
+  const pattern = /\b(?:\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?\s*(?:thousand|million|billion|trillion|percent|per cent)|\d+(?:\.\d+)?%)\b/gi;
+  return [...normalised.matchAll(pattern)].map((m) => m[0].replace(/[\s,]/g, ''));
+}
+
+export function validateQuantitativeEvidence(newsletter, { sources = [] } = {}) {
+  const sourceMap = new Map(sources.map((source, i) => ['S' + i, source]));
+  const claims = [
+    ...(newsletter.bigThree || []).map((s) => ({ sourceId: s.sourceId, text: s.whatHappened })),
+    { sourceId: newsletter.realityCheck?.sourceId, text: newsletter.realityCheck?.claim },
+    { sourceId: newsletter.worthUsing?.sourceId, text: newsletter.worthUsing?.summary },
+  ];
   const issues = [];
-  for (const validator of ALL_VALIDATORS) issues.push(...validator(newsletter, { expectedStoryCount, requireHeroImage }).issues);
+  for (const claim of claims) {
+    const source = sourceMap.get(claim.sourceId);
+    if (!source?.evidenceVerified || !source.evidence) continue;
+    const supported = new Set(quantitativeClaims(source.title + '\n' + source.evidence));
+    for (const number of quantitativeClaims(claim.text)) {
+      if (!supported.has(number)) {
+        issues.push({ code: 'quantitative_claim_unverified', message:
+          'Quantitative claim ' + number + ' is not supported by retrieved original article for ' + source.title });
+      }
+    }
+  }
+  return { pass: issues.length === 0, issues };
+}
+
+const ALL_VALIDATORS = [validateDailyOpening, validateBannedPhrases, validateBritishSpelling,
+  validateSubjectLength, validateStructuralCompleteness, validateNoDuplicateStories,
+  validateLinks, validatePromotion, validateRecentCoverage, validatePracticalValue,
+  validatePromotionalResidue, validateQuantitativeEvidence];
+
+export function runDeterministicValidators(newsletter, {
+  expectedStoryCount, requireHeroImage = true, recentHistory = null, sources = [],
+} = {}) {
+  const issues = [];
+  for (const validator of ALL_VALIDATORS) {
+    issues.push(...validator(newsletter, { expectedStoryCount, requireHeroImage, recentHistory, sources }).issues);
+  }
   return { pass: issues.length === 0, issues };
 }
 
