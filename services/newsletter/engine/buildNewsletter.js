@@ -47,7 +47,19 @@ export async function buildNewsletter({ profileId = "ai-edge", sessionId: reques
   let recentHistory = null;
   if (edition === "daily" && !sourceItems) {
     try {
-      recentHistory = await loadRecentEditorialHistory(profile, { now });
+      // History is valuable, but an R2 outage must not stall the scheduled briefing.
+      let deadline;
+      try {
+        recentHistory = await Promise.race([
+          loadRecentEditorialHistory(profile, { now }),
+          new Promise((_, reject) => {
+            deadline = setTimeout(() => reject(new Error("Recent-coverage lookup exceeded 8 seconds")), 8000);
+            deadline.unref?.();
+          }),
+        ]);
+      } finally {
+        clearTimeout(deadline);
+      }
       if (!recentHistory.complete) warn("newsletter.editorial_history.partial", { sessionId, profileId: profile.id });
     } catch (historyError) {
       warn("newsletter.editorial_history.unavailable", { sessionId, profileId: profile.id, error: historyError.message });
