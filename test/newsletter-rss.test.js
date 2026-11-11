@@ -1,7 +1,7 @@
 import { test, describe, before, after } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
-import { withinWindow, collectCandidateStories, fetchFeedResilient } from "../services/newsletter/engine/rss.js";
+import { withinWindow, collectCandidateStories, fetchFeedResilient, loadFeedUrls } from "../services/newsletter/engine/rss.js";
 
 describe("newsletter engine/rss.js — withinWindow (pure)", () => {
   test("accepts an item published within the window", () => {
@@ -19,6 +19,18 @@ describe("newsletter engine/rss.js — withinWindow (pure)", () => {
   test("rejects an item with no publish date", () => {
     assert.equal(withinWindow({ publishedAt: null }, { now: new Date(), windowHours: 24 }), false);
   });
+});
+
+test("supplemental AI Edge feeds apply only to the base feed list, not explicit override", () => {
+  const isolated = { feedUrls: ["https://example.com/manual.xml"],
+    supplementaryFeedUrls: ["https://example.com/extra.xml"] };
+  assert.deepEqual(loadFeedUrls(isolated), ["https://example.com/manual.xml"]);
+  const base = loadFeedUrls({
+    feedListPath: "services/rss-feed-creator/data/feeds.txt",
+    supplementaryFeedUrls: ["https://example.com/extra.xml", "https://example.com/extra.xml"],
+  });
+  assert.ok(base.includes("https://example.com/extra.xml"));
+  assert.equal(base.filter((url) => url === "https://example.com/extra.xml").length, 1);
 });
 
 describe("newsletter engine/rss.js — network behaviour", () => {
