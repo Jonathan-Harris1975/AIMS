@@ -26,7 +26,6 @@ import { publishAuditJson, publishAuditText, publishAuditLatest } from "./publis
 import { listNewsletterProfiles } from "../../services/newsletter/config/profiles.js";
 import { getAudienceReadiness } from "../../services/newsletter/audience/d1Audience.js";
 import { getCampaignStatus } from "../../services/newsletter/delivery/aimsDelivery.js";
-import { canonicalStoryUrl } from "../../services/newsletter/engine/editorialHistory.js";
 
 const AUDIT_TYPE = "newsletter";
 
@@ -105,41 +104,6 @@ function summariseQa(issues) {
   };
 }
 
-
-export function summariseEditorialQuality(issues) {
-  const published = issues.filter((issue) => issue.campaign?.status === 'dispatched')
-    .sort((a, b) => String(a.metadata.generatedAt || '').localeCompare(String(b.metadata.generatedAt || '')));
-  const seen = new Map();
-  let repeatStoryIncidents = 0;
-  let historyChecked = 0;
-  let historyComplete = 0;
-  let evidenceCount = 0;
-  let measuredIssues = 0;
-  for (const { metadata } of published) {
-    if (metadata.editorialQuality) {
-      measuredIssues += 1;
-      if (metadata.editorialQuality.historyChecked) historyChecked += 1;
-      if (metadata.editorialQuality.historyComplete) historyComplete += 1;
-      evidenceCount += Number(metadata.editorialQuality.articleEvidenceVerified || 0);
-    }
-    const publishedAt = Date.parse(metadata.generatedAt || '');
-    const links = new Set((metadata.sourceLinks || []).map(canonicalStoryUrl));
-    for (const link of links) {
-      const previous = seen.get(link);
-      if (previous && Number.isFinite(publishedAt) && publishedAt - previous < 7 * 86400000) repeatStoryIncidents += 1;
-      if (Number.isFinite(publishedAt)) seen.set(link, publishedAt);
-    }
-  }
-  return {
-    publishedIssues: published.length,
-    repeatStoryIncidents,
-    historyChecked,
-    historyComplete,
-    avgOriginalArticlesRetrieved: measuredIssues ? Number((evidenceCount / measuredIssues).toFixed(1)) : null,
-    measuredIssues,
-  };
-}
-
 async function summariseAudience(profile) {
   const result = await getAudienceReadiness(profile.id);
   return {
@@ -173,7 +137,6 @@ async function buildProfileSection(profile, window) {
   const qa = summariseQa(issues);
   const audience = await summariseAudience(profile);
   const campaignPerformance = await summariseCampaignPerformance(issues);
-  const editorialQuality = summariseEditorialQuality(issues);
 
   return {
     profileId: profile.id,
@@ -182,7 +145,6 @@ async function buildProfileSection(profile, window) {
     qa,
     audience,
     campaignPerformance,
-    editorialQuality,
   };
 }
 
@@ -197,9 +159,6 @@ function renderHtml(report) {
 <td>${p.qa.quarantineCount}</td>
 <td>${p.audience.active ?? "—"}</td>
 <td>${p.campaignPerformance.available ? `${p.campaignPerformance.sent ?? 0} sent / ${p.campaignPerformance.failed ?? 0} failed` : "—"}</td>
-<td>${p.editorialQuality.repeatStoryIncidents}</td>
-<td>${p.editorialQuality.historyComplete} / ${p.editorialQuality.historyChecked}</td>
-<td>${p.editorialQuality.avgOriginalArticlesRetrieved ?? "—"}</td>
 </tr>`
     )
     .join("\n");
@@ -210,10 +169,7 @@ function renderHtml(report) {
 <h1>Newsletter Engine — Monthly Audit</h1>
 <p>Window: ${escapeHtml(report.window.start)} to ${escapeHtml(report.window.end)}</p>
 <table border="1" cellpadding="6" cellspacing="0">
-<tr><th>Profile</th><th>Issues</th><th>QA pass rate</th><th>Avg rewrite iterations</th>
-<th>Quarantined</th><th>Active subscribers</th><th>Delivery</th>
-<th>7-day repeat incidents</th><th>Complete history checks</th>
-<th>Avg source articles retrieved</th></tr>
+<tr><th>Profile</th><th>Issues</th><th>QA pass rate</th><th>Avg rewrite iterations</th><th>Quarantined</th><th>Active subscribers</th><th>Delivery</th></tr>
 ${rows}
 </table>
 </body></html>`;
@@ -251,7 +207,7 @@ export async function runNewsletterAudit({ sessionId = `newsletter-audit-${Date.
       reportPrefix,
       reportUrl: reportHtml.url,
       reportJsonUrl: reportJson.url,
-      profiles: profileSections.map((p) => ({ profileId: p.profileId, qa: p.qa, campaignPerformance: p.campaignPerformance, editorialQuality: p.editorialQuality })),
+      profiles: profileSections.map((p) => ({ profileId: p.profileId, qa: p.qa, campaignPerformance: p.campaignPerformance })),
     },
   });
 
