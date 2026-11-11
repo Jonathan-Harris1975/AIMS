@@ -23,7 +23,7 @@ function deterministicIssueText(result) {
   return (result?.issues || []).map((issue) => issue?.message || issue?.code || String(issue));
 }
 
-async function runQaLoopImpl({ profile, newsletter, lead, stories, promotion = null, sessionId }) {
+async function runQaLoopImpl({ profile, newsletter, lead, stories, promotion = null, sessionId, recentHistory = null }) {
   const maxLoops = THRESHOLDS.newsletter.maxRewriteIterations;
   const maxCouncilRuns = THRESHOLDS.newsletter.maxCouncilRuns;
   const expectedStoryCount = Math.min(9, 1 + stories.length);
@@ -34,7 +34,8 @@ async function runQaLoopImpl({ profile, newsletter, lead, stories, promotion = n
   let repairUnavailable = false;
 
   for (let iteration = 1; iteration <= maxLoops; iteration += 1) {
-    deterministic = runDeterministicValidators(current, { expectedStoryCount, requireHeroImage: false });
+    deterministic = runDeterministicValidators(current, { expectedStoryCount, requireHeroImage: false,
+      recentHistory, sources: [lead, ...stories] });
     try {
       selfReview = await runNewsletterSelfImproveReview({ profile, newsletter: current, sessionId });
     } catch (error) {
@@ -104,7 +105,8 @@ async function runQaLoopImpl({ profile, newsletter, lead, stories, promotion = n
   let council = null;
   let councilShadow = null;
   for (let councilRun = 1; councilRun <= maxCouncilRuns; councilRun += 1) {
-    deterministic = runDeterministicValidators(current, { expectedStoryCount, requireHeroImage: false });
+    deterministic = runDeterministicValidators(current, { expectedStoryCount, requireHeroImage: false,
+      recentHistory, sources: [lead, ...stories] });
     council = await runNewsletterEditorialCouncil({ profile, newsletter: current, lead, stories, sessionId });
     const passed = deterministic.pass && council.ok;
     if (councilRun === 1) {

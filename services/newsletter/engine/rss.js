@@ -52,7 +52,7 @@ export function loadFeedUrls(profile) {
 
   try {
     const raw = fs.readFileSync(resolved, "utf8");
-    return raw
+    const configured = raw
       .split(/\r?\n/)
       .map((line) => line.trim())
       .filter((line) => line && !line.startsWith("#"))
@@ -66,6 +66,11 @@ export function loadFeedUrls(profile) {
           return false;
         }
       });
+    const supplementary = (profile?.supplementaryFeedUrls || []).filter((url) => {
+      try { return new URL(url).protocol === "https:"; }
+      catch { return false; }
+    });
+    return [...new Set([...configured, ...supplementary])];
   } catch (err) {
     warn("newsletter.rss.feed_list_unreadable", { listPath: resolved, error: err.message });
     return [];

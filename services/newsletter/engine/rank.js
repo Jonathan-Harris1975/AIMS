@@ -1,78 +1,89 @@
-// services/newsletter/engine/rank.js
-//
-// Ranks candidate stories and selects the lead story + top N summary slots.
-// Deliberately simple and transparent (recency + source diversity + light
-// keyword signal) rather than a black-box score, so an editor can reason
-// about why a story was chosen. Pure function — no network, no AI call —
-// so it is fully unit-testable.
+// Rank for newsworthiness, reader impact, source quality and freshness,
+// rather than merely counting AI keywords in vendor RSS headlines.
+import { canonicalStoryUrl, canonicalStoryTitle } from './editorialHistory.js';
 
-const AI_SIGNAL_TERMS = [
-  "openai", "anthropic", "claude", "gpt", "gemini", "llm", "large language model",
-  "artificial intelligence", "machine learning", "generative ai", "chatgpt",
-  "microsoft ai", "google ai", "meta ai", "nvidia", "deepmind", "mistral",
-  "copilot", "agent", "model release", "foundation model",
+const SIGNAL_TERMS = [
+  'openai', 'anthropic', 'claude', 'gpt', 'gemini', 'llm', 'large language model',
+  'artificial intelligence', 'machine learning', 'generative ai', 'chatgpt',
+  'microsoft ai', 'google ai', 'meta ai', 'nvidia', 'deepmind', 'mistral',
+  'copilot', 'agent', 'model release', 'foundation model',
 ];
+const TRUSTED_EDITORIAL = /(^|\.)((technologyreview|nature|bbc|reuters|apnews|arstechnica|theverge|wired)\.com|bbc\.co\.uk|reuters\.com|spectrum\.ieee\.org|aihub\.org|oreilly\.com)$/i;
+const PRIMARY_RESEARCH = /(^|\.)(openai\.com|anthropic\.com|deepmind\.google|huggingface\.co|arxiv\.org|acm\.org|ieee\.org)$/i;
+const COMMERCIAL_COPY = /\b(complete guide|ultimate guide|top \d+|best practices|our solution|our platform|services? provider|why you should buy|book a demo|contact sales|buy now)\b/i;
+const SIGNIFICANT_RELEASE = /\b(launch(?:es|ed)?|releas(?:e|ed)|introduc(?:es|ed)|unveil(?:s|ed)|announc(?:es|ed)|ship(?:s|ped)|general availability)\b/i;
+const TECHNOLOGY = /\b(claude|gemini|gpt|chatgpt|llm|model|agent|inference|open.weight|AI)\b/i;
+const IMPACT = /\b(independent study|benchmark|safety|security|law|regulat|research|scientist|energy|healthcare|education|jobs|copyright|court|cost|pricing|privacy|accessibility)\b/i;
 
-function scoreItem(item, { now = new Date() } = {}) {
+function sourceDomain(item) {
+  try { return new URL(item.link).hostname.toLowerCase().replace(/^www\./, ''); }
+  catch { return String(item.sourceFeed || '').toLowerCase(); }
+}
+
+export function scoreNewsletterStory(item, { now = new Date() } = {}) {
   let score = 0;
-
-  // Recency: newer stories score higher, linearly decayed across the window.
   if (item.publishedAt) {
-    const ageHours = Math.max(0, (now - new Date(item.publishedAt)) / (60 * 60 * 1000));
-    score += Math.max(0, 24 - ageHours) * 2;
+    const age = Math.max(0, (now - new Date(item.publishedAt)) / 3600000);
+    score += Math.max(0, 36 - age) * 1.5;
   }
-
-  // Topical relevance: reward stories that actually mention AI-industry terms
-  // in title or summary, so an off-topic item from a mixed-content feed
-  // doesn't crowd out real AI news.
-  const haystack = `${item.title} ${item.summary}`.toLowerCase();
-  const hits = AI_SIGNAL_TERMS.filter((term) => haystack.includes(term)).length;
-  score += Math.min(hits, 5) * 4;
-
-  // Mild bonus for a non-trivial summary (more to work with editorially).
-  if (item.summary && item.summary.length > 120) score += 3;
-
+  const title = String(item.title || '');
+  const body = String(item.summary || '');
+  const haystack = (title + ' ' + body).toLowerCase();
+  score += Math.min(5, SIGNAL_TERMS.filter((term) => haystack.includes(term)).length) * 4;
+  if (body.length > 120) score += 3;
+  const domain = sourceDomain(item);
+  if (TRUSTED_EDITORIAL.test(domain)) score += 15;
+  if (PRIMARY_RESEARCH.test(domain)) score += 17;
+  if (SIGNIFICANT_RELEASE.test(title) && TECHNOLOGY.test(title)) score += 42;
+  if (IMPACT.test(title)) score += 18;
+  if (/\b(first|independent|study|data|benchmark|trial|evidence)\b/i.test(title)) score += 10;
+  if (COMMERCIAL_COPY.test(title) || COMMERCIAL_COPY.test(body.slice(0, 200))) score -= 42;
+  if (/\b(sponsored|partner content|advertorial|paid post)\b/i.test(haystack)) score -= 60;
   return score;
 }
 
-/**
- * @param {Array} items normalised RSS items (see engine/rss.js)
- * @param {Object} options
- * @param {number} options.storyCount how many top-N summary stories to select (excludes the lead)
- * @param {number} [options.maxPerSourceFeed] source-diversity cap
- */
-export function rankAndSelectStories(items, { storyCount, maxPerSourceFeed = 3, now = new Date() } = {}) {
-  if (!Array.isArray(items) || items.length === 0) {
-    return { lead: null, stories: [], droppedForDiversity: [] };
+export function rankAndSelectStories(items, {
+  storyCount, maxPerSourceFeed = 3, maxPerDomain = 3, now = new Date(),
+  recentLinks = new Set(), recentTitles = new Set(),
+} = {}) {
+  if (!Array.isArray(items) || !items.length) {
+    return { lead: null, stories: [], droppedForDiversity: [], droppedRecentlyCovered: [] };
   }
-
-  const scored = items
-    .map((item) => ({ item, score: scoreItem(item, { now }) }))
+  const scored = items.map((item) => ({ item, score: scoreNewsletterStory(item, { now }) }))
     .sort((a, b) => b.score - a.score);
-
-  const perFeedCount = new Map();
+  const perFeed = new Map();
+  const perDomain = new Map();
   const selected = [];
   const droppedForDiversity = [];
-
+  const droppedRecentlyCovered = [];
+  const seenLinks = new Set();
+  const seenTitles = new Set();
   for (const { item, score } of scored) {
-    const feedCount = perFeedCount.get(item.sourceFeed) || 0;
-    if (feedCount >= maxPerSourceFeed) {
+    const urlKey = canonicalStoryUrl(item.link);
+    const titleKey = canonicalStoryTitle(item.title);
+    if (recentLinks.has(urlKey) || recentTitles.has(titleKey) || seenLinks.has(urlKey) || seenTitles.has(titleKey)) {
+      droppedRecentlyCovered.push(item);
+      continue;
+    }
+    const domain = sourceDomain(item);
+    const feedCount = perFeed.get(item.sourceFeed) || 0;
+    const domainCount = perDomain.get(domain) || 0;
+    if (feedCount >= maxPerSourceFeed || domainCount >= maxPerDomain) {
       droppedForDiversity.push(item);
       continue;
     }
-    perFeedCount.set(item.sourceFeed, feedCount + 1);
+    seenLinks.add(urlKey);
+    seenTitles.add(titleKey);
+    perFeed.set(item.sourceFeed, feedCount + 1);
+    perDomain.set(domain, domainCount + 1);
     selected.push({ ...item, rankScore: score });
-    if (selected.length >= storyCount + 1) break;
+    if (selected.length >= (storyCount ?? 8) + 1) break;
   }
-
   const [lead, ...stories] = selected;
-
   return {
-    lead: lead || null,
-    stories,
-    droppedForDiversity,
+    lead: lead || null, stories, droppedForDiversity, droppedRecentlyCovered,
     totalCandidates: items.length,
   };
 }
 
-export default { rankAndSelectStories };
+export default { rankAndSelectStories, scoreNewsletterStory };
