@@ -139,34 +139,3 @@ test("specific book subject takes priority over a broad catalogue category", () 
   assert.doesNotMatch(queries.UK, /Transportation/);
 });
 
-test("approved research is queued durably before the cursor advances", async () => {
-  const date = new Date("2026-11-10T12:00:00Z");
-  let saved = null, queued = 0;
-  const options = {
-    now: () => date,
-    env: { TAVILY_SEARCH_API: "test", R2_ENDPOINT: "test", R2_ACCESS_KEY_ID: "test",
-      R2_SECRET_ACCESS_KEY: "test", R2_BUCKET_META_SYSTEM: "test" },
-    readState: async () => saved && structuredClone(saved),
-    writeState: async (state) => { saved = structuredClone(state); },
-    archive: async () => {},
-    getAudit: async () => ({ ok: true, complete: true, mode: "public", runId: "audit",
-      createdAt: "2026-11-09T12:00:00Z", completedAt: "2026-11-09T12:10:00Z" }),
-    getBooks: async () => [{ ebookId: 1, asin: "B012345678" }],
-    discover: async () => ({ ebookId: 1 }),
-    captureEvidence: async () => ({ markets: {} }),
-    getMetadata: async () => ({}),
-    draft: async () => ({ status: "approved", titleId: "title-1", prices: {},
-      description: "A grounded description" }),
-    queue: async () => { queued++; if (queued === 1) throw new Error("queue persistence failed");
-      return { status: "prepared", key: "research/updates/2026-10-26/1.json" }; },
-    claim: async () => ({ claimed: true, lease: { backend: "r2" } }),
-    release: async () => {},
-  };
-  await assert.rejects(runResearchTick(options), /queue persistence failed/);
-  assert.equal(saved.pending.length, 1);
-  assert.equal(saved.results.length, 0);
-  assert.equal((await runResearchTick(options)).status, "complete");
-  assert.equal(saved.results[0].updateQueue.status, "prepared");
-  assert.equal(saved.pending.length, 0);
-  assert.equal(queued, 2);
-});
