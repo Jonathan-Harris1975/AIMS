@@ -10,7 +10,9 @@ import { info, warn, error as logError } from "../../../logger.js";
 import { THRESHOLDS } from "../../../config/thresholds.js";
 import { sanitizeSessionId } from "../../shared/utils/sessionId.js";
 import { getNewsletterProfile } from "../config/profiles.js";
-import { collectCandidateStories } from "./rss.js";
+import { collectCandidateStories, selectCandidateWindow } from "./rss.js";
+import { loadRecentEditorialHistory } from "./editorialHistory.js";
+import { enrichArticleEvidence } from "./articleEvidence.js";
 import { rankAndSelectStories } from "./rank.js";
 import { composeIssueSections, composeSubjectAndPreview, composeFooter } from "./compose.js";
 import { resolveIssuePromotion, weekdayInLondon } from "./promotion.js";
@@ -42,7 +44,32 @@ export async function buildNewsletter({ profileId = "ai-edge", sessionId: reques
   }
 
   const storyCount = profile.storyCount || THRESHOLDS.newsletter.storyCount;
-  const { lead, stories, droppedForDiversity } = rankAndSelectStories(items, { storyCount, now });
+  let recentHistory = null;
+  if (edition === "daily" && !sourceItems) {
+    try {
+      recentHistory = await loadRecentEditorialHistory(profile, { now });
+      if (!recentHistory.complete) warn("newsletter.editorial_history.partial", { sessionId, profileId: profile.id });
+    } catch (historyError) {
+      warn("newsletter.editorial_history.unavailable", { sessionId, profileId: profile.id, error: historyError.message });
+    }
+  }
+  const rankingOptions = { storyCount, now, recentLinks: recentHistory?.recentLinks, recentTitles: recentHistory?.recentTitles };
+  let selection = rankAndSelectStories(items, rankingOptions);
+  if (edition === "daily" && !sourceItems && 1 + selection.stories.length < 3) {
+    // Reuse already-fetched feeds, not yesterday\'s published article, when news is thin.
+    const expandedItems = selectCandidateWindow(feedResults, { now, windowHours: 72 });
+    selection = rankAndSelectStories(expandedItems, rankingOptions);
+  }
+  const { droppedForDiversity, droppedRecentlyCovered } = selection;
+  let { lead, stories } = selection;
+  if (lead && stories.length >= 2 && !sourceItems) {
+    const enriched = await enrichArticleEvidence([lead, ...stories]);
+    [lead, ...stories] = enriched;
+  }
+  info("newsletter.editorial_selection", { sessionId, profileId: profile.id,
+    excludedPreviouslyPublished: droppedRecentlyCovered.length,
+    historyIssues: recentHistory?.recentIssues.length || 0,
+    articleEvidenceVerified: [lead, ...stories].filter((story) => story?.evidenceVerified).length });
   if (!lead || stories.length < 2) return { ok: false, sessionId, profileId: profile.id,
     failureKind: "source-intake-unavailable", retryable: true, candidateCount: items.length,
     error: "At least three dated source stories are required before newsletter composition.", feedResults };
@@ -78,7 +105,7 @@ export async function buildNewsletter({ profileId = "ai-edge", sessionId: reques
     edition,
   };
 
-  const qaResult = await runQaLoop({ profile, newsletter: draft, lead, stories, promotion, sessionId });
+  const qaResult = await runQaLoop({ profile, newsletter: draft, lead, stories, promotion, sessionId, recentHistory });
   if (qaResult.quarantined) {
     const councilReviews = [
       ...(qaResult.council?.chair ? [qaResult.council.chair] : []),
@@ -123,12 +150,12 @@ export async function buildNewsletter({ profileId = "ai-edge", sessionId: reques
     };
   }
 
-  const context = { profile, sessionId, now, qaResult, lead, stories, promotion, droppedForDiversity };
+  const context = { profile, sessionId, now, qaResult, lead, stories, promotion, droppedForDiversity, recentHistory };
   await writeEditorialCheckpoint(context);
   return finishNewsletterBuild(context);
 }
 
-export async function finishNewsletterBuild({ profile, sessionId, now, qaResult, lead, stories, promotion, droppedForDiversity, heroImageResult: savedHero }, {
+export async function finishNewsletterBuild({ profile, sessionId, now, qaResult, lead, stories, promotion, droppedForDiversity, recentHistory = null, heroImageResult: savedHero }, {
   generateHero = generateHeroImage, checkpoint = writeEditorialCheckpoint, storeIssue = storeNewsletterIssue,
   requireHeroImage = /^(1|true|yes|on)$/i.test(String(process.env.NEWSLETTER_HERO_IMAGE_REQUIRED || "false")),
 } = {}) {
@@ -167,6 +194,7 @@ export async function finishNewsletterBuild({ profile, sessionId, now, qaResult,
   const finalNewsletter = { ...qaResult.newsletter, heroImageUrl: heroImageResult.ok ? heroImageResult.imageUrl : null };
   const finalValidation = runDeterministicValidators(finalNewsletter, {
     expectedStoryCount: Math.min(9, 1 + stories.length),
+    sources: [lead, ...stories], recentHistory,
     requireHeroImage: requireHeroImage || heroImageResult.ok,
   });
   if (!finalValidation.pass) {
@@ -194,6 +222,10 @@ export async function finishNewsletterBuild({ profile, sessionId, now, qaResult,
   });
 
   metadata.artwork = { required: requireHeroImage, status: heroImageResult.imageStatus, diagnostics: heroImageResult.artworkDiagnostics || null };
+  metadata.editorialQuality = { historyChecked: Boolean(recentHistory),
+    historyComplete: recentHistory?.complete ?? false,
+    recentPublishedIssues: recentHistory?.recentIssues.length || 0,
+    articleEvidenceVerified: [lead, ...stories].filter((story) => story?.evidenceVerified).length };
   metadata.scheduledAt = profile.scheduledAt || null;
   metadata.publicationDate = profile.publicationDate || now.toISOString().slice(0, 10);
   const stored = await storeIssue({ profile, sessionId, emailHtml, plaintext, metadata, date: profile.publicationDate ? new Date(`${profile.publicationDate}T12:00:00Z`) : now });
