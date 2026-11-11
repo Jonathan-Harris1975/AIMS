@@ -45,6 +45,12 @@ const aiEdge = Object.freeze({
     "services/rss-feed-creator/data/feeds.txt"
   ),
   feedUrls: envList("NEWSLETTER_AI_EDGE_FEED_URLS", []),
+  // Supplemental launch sources apply ONLY to AI Edge, never the RSS rewrite pipeline.
+  // Explicit NEWSLETTER_AI_EDGE_FEED_URLS remains an override for this profile.
+  supplementaryFeedUrls: Object.freeze([
+    "https://huggingface.co/blog/feed.xml",
+    "https://raw.githubusercontent.com/Olshansk/rss-feeds/main/feeds/feed_anthropic_news.xml",
+  ]),
 
   // Delivery identity. Audience, consent and suppression state live in the existing AIMS D1 database.
   delivery: Object.freeze({
