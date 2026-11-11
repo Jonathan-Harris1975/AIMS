@@ -1,4 +1,5 @@
 import { publicationContext } from "./publicationContext.js";
+import { jonathanVoicePrompt } from "../../content-quality/jonathanVoice.js";
 import { editionDirection } from "./edition.js";
 // services/newsletter/engine/compose.js
 //
@@ -84,6 +85,7 @@ function parseJsonResponse(raw, label) {
 function brandGuardrails(profile) {
   return [
     `Brand voice: ${profile.brandVoice}`,
+    jonathanVoicePrompt({ format: "AI Edge newsletter", includeArgumentArc: true }),
     "Write in Jonathan Harris's first-person editorial voice where an opinion is requested.",
     "British English spelling throughout.",
     "Be sceptical, practical and specific. Separate evidence from interpretation.",
