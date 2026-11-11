@@ -27,9 +27,10 @@ export function extractArticleEvidence(html, maxChars = 5500) {
   const unique = [...new Set(paragraphs)];
   if (unique.join(' ').length < 300) return null;
   // Keep introductory context and quantitative evidence from elsewhere in the article.
-  const head = unique.slice(0, 9);
-  const numeric = unique.slice(9).filter((p) => /\b(?:\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?\s*(?:million|billion|thousand|percent|per cent|%))\b/i.test(p)).slice(0, 8);
-  return [...head, ...numeric].join('\n').slice(0, maxChars);
+  const head = unique.slice(0, 6).join('\n').slice(0, 2100);
+  const numeric = unique.filter((p) => /\b(?:\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?\s*(?:million|billion|thousand|percent|per cent))\b/i.test(p))
+    .slice(0, 7).join('\n').slice(0, 2200);
+  return [head, numeric].filter(Boolean).join('\n').slice(0, maxChars);
 }
 
 export function isSafeArticleUrl(raw) {
@@ -51,7 +52,7 @@ export async function fetchArticleEvidence(item, { fetchText = fetchTextWithTime
   try {
     // Reject redirects to avoid RSS-supplied URLs redirecting to internal services.
     const { response, text } = await fetchText(item.link, {
-      timeoutMs: 5500, timeout: 5500, redirect: 'error',
+      timeout: 5500, redirect: 'error',
       headers: { accept: 'text/html' },
     });
     if (!response.ok || !/html/i.test(response.headers?.get?.('content-type') || '')) {
