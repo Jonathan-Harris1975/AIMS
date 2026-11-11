@@ -6,7 +6,6 @@ import { readKdpAuditReport, readKdpMetadataSnapshot } from "./storage.js";
 import { discoverBookResearch } from "./researchDiscovery.js";
 import { captureCompetitorEvidence } from "./researchEvidence.js";
 import { draftOptimisation } from "./optimisationProposal.js";
-import { queueOptimisation } from "./optimisationUpdates.js";
 import { inWeeklyWindow, londonTime, selectWeeklyBatch } from "./weeklyResearch.js";
 
 import { queueOptimisation, runOptimisationUpdates } from "./optimisationUpdates.js";
@@ -78,7 +77,7 @@ export async function runResearchTick({
   writeState = (state) => putPrivateJson("kdp", KEY, state),
   archive = (week, state) => putPrivateJson("kdp", `research/weekly/${week}.json`, state),
   getAudit = latestAudit, getBooks = listKdpEbooks, discover = discoverBookResearch, captureEvidence = captureCompetitorEvidence,
-  getMetadata = readKdpMetadataSnapshot, draft = draftOptimisation, queue = queueOptimisation, queueUpdate = queueOptimisation, updateTick = runOptimisationUpdates,
+  getMetadata = readKdpMetadataSnapshot, draft = draftOptimisation, queueUpdate = queueOptimisation, updateTick = runOptimisationUpdates,
   claim = claimDurableLease, release = releaseDurableLease,
 } = {}) {
   const started = now();
@@ -159,11 +158,6 @@ export async function runResearchTick({
         result.optimisation = { status: "blocked", reason: "proposal_unavailable", listingUpdated: false };
       }
       if (result.optimisation?.status === "approved") result.update = await queueUpdate(week, book, result.optimisation);
-      // Persist an approved change intent before advancing the research cursor.
-      // The separate update worker verifies identity and publication; research never publishes directly.
-      result.updateQueue = result.optimisation?.status === "approved"
-        ? await queue(cycle, book, result.optimisation)
-        : { status: "not_approved" };
       state.results.push(result);
       state.inProgress = null;
       state.cursor = book.ebookId;
