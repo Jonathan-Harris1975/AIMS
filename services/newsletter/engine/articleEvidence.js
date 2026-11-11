@@ -14,19 +14,68 @@ function decodeEntities(text) {
   }).replace(/\s+/g, ' ').trim();
 }
 
-export function extractArticleEvidence(html, maxChars = 5500) {
-  const stripped = String(html || '').slice(0, 500000)
-    .replace(/<(?:script|style|nav|footer|header|aside)\b[^>]*>[\s\S]*?<\/(?:script|style|nav|footer|header|aside)>/gi, '');
-  const article = stripped.match(/<article\b[^>]*>([\s\S]*?)<\/article>/i)?.[1]
-    || stripped.match(/<main\b[^>]*>([\s\S]*?)<\/main>/i)?.[1] || stripped;
+// A small tag scanner extracts visible paragraphs without regex-based HTML
+// sanitisation. The result is untrusted evidence, never rendered as HTML.
+function visibleParagraphs(markup) {
+  const input = String(markup || '').slice(0, 500000);
+  const lower = input.toLowerCase();
+  const skipBlocks = new Set(['script', 'style', 'nav', 'footer', 'header', 'aside', 'noscript']);
   const paragraphs = [];
-  for (const match of article.matchAll(/<p\b[^>]*>([\s\S]*?)<\/p>/gi)) {
-    const text = decodeEntities(match[1].replace(/<[^>]+>/g, ' '));
-    if (text.length >= 45 && text.length <= 1700) paragraphs.push(text);
+  let current = '';
+  let inParagraph = false;
+  let index = 0;
+  while (index < input.length && paragraphs.length < 160) {
+    const open = input.indexOf('<', index);
+    const endText = open < 0 ? input.length : open;
+    if (inParagraph) current += input.slice(index, endText);
+    if (open < 0) break;
+    if (input.startsWith('<!--', open)) {
+      const commentEnd = input.indexOf('-->', open + 4);
+      index = commentEnd < 0 ? input.length : commentEnd + 3;
+      continue;
+    }
+    let close = open + 1;
+    let quote = null;
+    for (; close < input.length; close += 1) {
+      const char = input[close];
+      if (quote) { if (char === quote) quote = null; }
+      else if (char === '"' || char === "'") quote = char;
+      else if (char === '>') break;
+    }
+    if (close >= input.length) break;
+    const tagText = input.slice(open + 1, close).trim();
+    const tag = tagText.match(/^\/?\s*([a-z][a-z0-9]*)/i)?.[1]?.toLowerCase();
+    const closing = tagText.startsWith('/');
+    if (tag && !closing && skipBlocks.has(tag)) {
+      const closingTag = lower.indexOf('</' + tag, close + 1);
+      index = closingTag < 0 ? input.length : closingTag;
+      if (closingTag >= 0) {
+        const closingEnd = input.indexOf('>', closingTag);
+        index = closingEnd < 0 ? input.length : closingEnd + 1;
+      }
+      continue;
+    }
+    if (tag === 'p') {
+      if (closing) {
+        if (inParagraph) {
+          const text = decodeEntities(current);
+          if (text.length >= 45 && text.length <= 1700) paragraphs.push(text);
+        }
+        current = '';
+        inParagraph = false;
+      } else {
+        current = '';
+        inParagraph = true;
+      }
+    } else if (inParagraph && ['br', 'li'].includes(tag)) current += ' ';
+    index = close + 1;
   }
-  const unique = [...new Set(paragraphs)];
+  return [...new Set(paragraphs)];
+}
+
+export function extractArticleEvidence(html, maxChars = 5500) {
+  const unique = visibleParagraphs(html);
   if (unique.join(' ').length < 300) return null;
-  // Keep introductory context and quantitative evidence from elsewhere in the article.
   const head = unique.slice(0, 6).join('\n').slice(0, 2100);
   const numeric = unique.filter((p) => /\b(?:\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?\s*(?:million|billion|thousand|percent|per cent))\b/i.test(p))
     .slice(0, 7).join('\n').slice(0, 2200);
