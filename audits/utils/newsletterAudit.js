@@ -210,7 +210,10 @@ function renderHtml(report) {
 <h1>Newsletter Engine — Monthly Audit</h1>
 <p>Window: ${escapeHtml(report.window.start)} to ${escapeHtml(report.window.end)}</p>
 <table border="1" cellpadding="6" cellspacing="0">
-<tr><th>Profile</th><th>Issues</th><th>QA pass rate</th><th>Avg rewrite iterations</th><th>Quarantined</th><th>Active subscribers</th><th>Delivery</th><th>7-day repeat incidents</th><th>Complete history checks</th><th>Avg source articles retrieved</th></tr>
+<tr><th>Profile</th><th>Issues</th><th>QA pass rate</th><th>Avg rewrite iterations</th>
+<th>Quarantined</th><th>Active subscribers</th><th>Delivery</th>
+<th>7-day repeat incidents</th><th>Complete history checks</th>
+<th>Avg source articles retrieved</th></tr>
 ${rows}
 </table>
 </body></html>`;
