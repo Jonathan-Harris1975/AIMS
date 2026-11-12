@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildPrintPreflight, getPrintRolloutCapacity } from "../services/kdp/printPreflight.js";
+import { buildPrintPreflight, getPrintRolloutCapacity, parsePrintWeeklyLimit } from "../services/kdp/printPreflight.js";
 
 const book = (ebookId, pageCount = 200) => ({
   ebookId, slug: "book-" + ebookId, title: "Book " + ebookId, author: "Author",
@@ -80,4 +80,11 @@ test("only a configured higher cap opens all three Thursday slots", () => {
   assert.equal(getPrintRolloutCapacity({ observedAt: thursday, weeklyLimit: 12 }).scheduledSlotsPerFormatToday, 3);
   assert.throws(() => getPrintRolloutCapacity({ observedAt: thursday, weeklyLimit: 0 }), /weekly limit/);
   assert.throws(() => getPrintRolloutCapacity({ observedAt: thursday, weeklyLimit: 12.5 }), /weekly limit/);
+});
+
+test("invalid configured weekly caps use the documented safe default", () => {
+  assert.equal(parsePrintWeeklyLimit("12"), 12);
+  for (const configuredLimit of [undefined, "", "  ", "abc", "1.5", "0", "101", "9".repeat(400)]) {
+    assert.equal(parsePrintWeeklyLimit(configuredLimit), 10, String(configuredLimit));
+  }
 });
