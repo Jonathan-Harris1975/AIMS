@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildPrintPreflight } from "../services/kdp/printPreflight.js";
+import { buildPrintPreflight, getPrintRolloutCapacity, parsePrintWeeklyLimit } from "../services/kdp/printPreflight.js";
 
 const book = (ebookId, pageCount = 200) => ({
   ebookId, slug: "book-" + ebookId, title: "Book " + ebookId, author: "Author",
@@ -16,8 +16,8 @@ test("40 titles create 80 preparation-only edition records, no live claims", () 
   assert.equal(report.kdpWritesPerformed, false);
   for (const format of ["paperback", "hardcover"]) {
     assert.equal(report.byFormat[format].total, 40);
-    assert.equal(report.byFormat[format].weeklyCreationCap, 2);
-    assert.equal(report.byFormat[format].weeklyFirstSubmissionCap, 2);
+    assert.equal(report.byFormat[format].weeklyCreationCap, 10);
+    assert.equal(report.byFormat[format].weeklyFirstSubmissionCap, 10);
     assert.equal(report.byFormat[format].sourceReviewRequired, 40);
   }
   assert.ok(report.records.every((x) => x.state === "source_pdf_review_required"));
@@ -52,5 +52,39 @@ test("every record sharing a normalized Kindle ASIN is blocked from preparation"
   for (const format of ["paperback", "hardcover"]) {
     assert.deepEqual(report.byFormat[format].preparationQueue, []);
     assert.equal(report.byFormat[format].sourceReviewRequired, 0);
+  }
+});
+
+test("print rollout capacity is three per weekday until the weekly ten-per-format cap", () => {
+  const dates = [
+    "2026-11-16", // Monday
+    "2026-11-17", // Tuesday
+    "2026-11-18", // Wednesday
+    "2026-11-19", // Thursday
+    "2026-11-20", // Friday
+    "2026-11-21", // Saturday
+    "2026-11-22", // Sunday
+  ];
+  const expected = [3, 3, 3, 1, 0, 0, 0];
+  for (let i = 0; i < dates.length; i++) {
+    const plan = getPrintRolloutCapacity({ observedAt: dates[i] + "T17:10:00Z" });
+    assert.equal(plan.scheduledSlotsPerFormatToday, expected[i], dates[i]);
+    assert.equal(plan.scheduledSlotsTodayTotal, expected[i] * 2);
+    assert.equal(plan.authorisesKdpWrites, false);
+    assert.equal(plan.fridayReservedForNewBooks, true);
+  }
+});
+test("only a configured higher cap opens all three Thursday slots", () => {
+  const thursday = "2026-11-19T17:10:00Z";
+  assert.equal(getPrintRolloutCapacity({ observedAt: thursday }).scheduledSlotsPerFormatToday, 1);
+  assert.equal(getPrintRolloutCapacity({ observedAt: thursday, weeklyLimit: 12 }).scheduledSlotsPerFormatToday, 3);
+  assert.throws(() => getPrintRolloutCapacity({ observedAt: thursday, weeklyLimit: 0 }), /weekly limit/);
+  assert.throws(() => getPrintRolloutCapacity({ observedAt: thursday, weeklyLimit: 12.5 }), /weekly limit/);
+});
+
+test("invalid configured weekly caps use the documented safe default", () => {
+  assert.equal(parsePrintWeeklyLimit("12"), 12);
+  for (const configuredLimit of [undefined, "", "  ", "abc", "1.5", "0", "101", "9".repeat(400)]) {
+    assert.equal(parsePrintWeeklyLimit(configuredLimit), 10, String(configuredLimit));
   }
 });
