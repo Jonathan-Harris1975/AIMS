@@ -160,8 +160,11 @@ export function artworkRetryDelayMs(attempt) {
   return Math.min(base * Math.max(Number(attempt) || 1, 1), 5_000);
 }
 
-export function getArtworkProviderAttempts() {
-  const raw = Number(process.env.ARTWORK_PROVIDER_ATTEMPTS || process.env.ARTWORK_PROVIDER_RETRIES || 1);
+export function getArtworkProviderAttempts(mode = "podcast") {
+  const socialAttempts = String(mode || "").toLowerCase() === "social"
+    ? process.env.SOCIAL_ARTWORK_PROVIDER_ATTEMPTS
+    : undefined;
+  const raw = Number(socialAttempts || process.env.ARTWORK_PROVIDER_ATTEMPTS || process.env.ARTWORK_PROVIDER_RETRIES || 1);
   if (!Number.isFinite(raw)) return 1;
   return Math.min(Math.max(Math.floor(raw), 1), 6);
 }
