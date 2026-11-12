@@ -104,10 +104,18 @@ test("a timed-out paid render is recovered by GET, never counted as a fresh paid
     assert.equal(isRetryablePendingRenderFailure({
       ...pending, publicationReferences: [{ postSubmissionId: "maybe-published" }],
     }), false);
+    assert.equal(isRetryablePendingRenderFailure({
+      ...pending, error: { code: "blotato-paid-render-visual-link-failed" },
+    }), true);
+    assert.equal(isRetryablePendingRenderFailure({
+      ...pending, error: { code: "blotato-paid-render-visual-conflict" },
+    }), false);
     const source = await readFile(new URL("../services/blotato/utils/autoPublishService.js", import.meta.url), "utf8");
     assert.match(source, /awaitExistingBlotatoRender\(pendingRenderRecovery\.visualId, apiKey/);
     assert.match(source, /blotato\.schedule\.pending_render_reconcile/);
-    assert.match(source, /linkPaidRenderVisual/);
+    assert.match(source, /reservationId: pending\.creditGuardReservationId \|\| null/);
+    assert.match(source, /persistPaidRenderVisualLink\(\{[\s\S]*?reservationId: pendingRenderRecovery\.reservationId,[\s\S]*?visualId: pendingRenderRecovery\.visualId/);
+    assert.match(source, /await persistPaidRenderVisualLink\(\{[\s\S]*?visualId: visualMeta\.visualId/);
   } finally {
     if (previous === undefined) delete process.env.BLOTATO_RENDER_RECONCILE_ATTEMPTS;
     else process.env.BLOTATO_RENDER_RECONCILE_ATTEMPTS = previous;
@@ -212,4 +220,3 @@ test("content operation recovery revisions permit one bounded recovery of failed
   assert.match(text, /NEWSLETTER_RECOVERY_REVISION = "newsletter-publication-continuity-2026-11-09-v2"/);
   assert.match(text, /reusableOperationTaskResults/);
 });
-
