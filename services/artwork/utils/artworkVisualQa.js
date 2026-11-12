@@ -146,8 +146,7 @@ action, consequence or decision.",
 research, security, governance or human-tool context can carry the story without labels.",
       "Treat unmistakably unrelated subject matter, anime/fantasy drift, a fabricated identifiable likeness of a named person, prominent readable text, or a dominant labelled \
 dashboard/infographic layout as hard failures.",
-      "A broadly relevant workstation, compute or operational scene that lacks specificity is a relevance/composition defect, not a hard failure by itself. A small unreadable \
-or naturally defocused screen graphic is also a soft defect unless it dominates the composition or contains readable text.",
+      "A broadly AI-relevant workstation, compute or operational scene that does not show the specific action, sector, contribution or consequence named in the post must score below the topical-relevance acceptance floor, not merely receive a token composition note. A small unreadable or naturally defocused screen graphic is a soft defect unless it dominates the composition or contains readable text.",
       "Do not require or reward a fabricated likeness of a named person when the brief contains no verified reference image. A source-specific scene, rear-view human, \
 silhouette or other deliberately non-identifiable treatment can satisfy a named-person story. Only flag identity as a hard defect when the pixels falsely present an \
 identifiable person as the named individual or identity itself is an explicit verified-reference requirement.",
