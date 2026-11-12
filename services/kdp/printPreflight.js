@@ -5,7 +5,7 @@ export const PRINT_FORMATS = Object.freeze({
   hardcover: { minimumPages: 75, maximumPages: 550 },
 });
 export const PRINT_KDP_WEEKLY_LIMIT_PER_FORMAT = 10;
-// Desired existing-catalogue throughput per format; the KDP weekly cap still applies.
+// Target three existing-catalogue titles per format Mon-Wed; the default weekly cap leaves one for Thu.
 export const PRINT_DAILY_TARGET_TITLES = 3;
 export const PRINT_ROLLOUT_WEEKDAYS = Object.freeze(["monday", "tuesday", "wednesday", "thursday"]);
 

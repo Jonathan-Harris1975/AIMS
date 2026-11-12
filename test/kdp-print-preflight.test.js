@@ -56,7 +56,15 @@ test("every record sharing a normalized Kindle ASIN is blocked from preparation"
 });
 
 test("print rollout capacity is three per weekday until the weekly ten-per-format cap", () => {
-  const dates = ["2026-11-16", "2026-11-17", "2026-11-18", "2026-11-19", "2026-11-20", "2026-11-21", "2026-11-22"];
+  const dates = [
+    "2026-11-16", // Monday
+    "2026-11-17", // Tuesday
+    "2026-11-18", // Wednesday
+    "2026-11-19", // Thursday
+    "2026-11-20", // Friday
+    "2026-11-21", // Saturday
+    "2026-11-22", // Sunday
+  ];
   const expected = [3, 3, 3, 1, 0, 0, 0];
   for (let i = 0; i < dates.length; i++) {
     const plan = getPrintRolloutCapacity({ observedAt: dates[i] + "T17:10:00Z" });
