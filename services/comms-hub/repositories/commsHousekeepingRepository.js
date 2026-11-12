@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { CommsHubError } from "../errors.js";
 import { stableId } from "../domain/ids.js";
 import { json, parseJson, placeholders, rows, text } from "./commsOperationsRepositorySupport.js";
@@ -136,6 +137,9 @@ export class CommsHousekeepingRepository {
                WHERE quarantine_id IN (
                  SELECT id FROM comms_hub_quarantine_items
                   WHERE status IN ('replayed','resolved','dismissed') AND updated_at < ?
+                     AND NOT EXISTS (SELECT 1 FROM comms_hub_delayed_actions a
+                       WHERE comms_hub_quarantine_items.source_type = 'delayed_action'
+                         AND a.id = source_id AND a.status NOT IN ('complete','cancelled'))
                ) RETURNING id`,
         params: [recordCutoff],
       },
@@ -143,6 +147,9 @@ export class CommsHousekeepingRepository {
         key: "quarantineItemsDeleted",
         sql: `DELETE FROM comms_hub_quarantine_items
                WHERE status IN ('replayed','resolved','dismissed') AND updated_at < ?
+                     AND NOT EXISTS (SELECT 1 FROM comms_hub_delayed_actions a
+                       WHERE comms_hub_quarantine_items.source_type = 'delayed_action'
+                         AND a.id = source_id AND a.status NOT IN ('complete','cancelled'))
                RETURNING id`,
         params: [recordCutoff],
       },
@@ -176,7 +183,10 @@ export class CommsHousekeepingRepository {
       ["notificationsDeleted", `SELECT COUNT(*) AS count FROM comms_hub_notifications
         WHERE status IN ('read','dismissed','sent') AND created_at < ? AND email_delivery_status IN ('not_requested','sent')`, [recordCutoff]],
       ["quarantineItemsDeleted", `SELECT COUNT(*) AS count FROM comms_hub_quarantine_items
-        WHERE status IN ('replayed','resolved','dismissed') AND updated_at < ?`, [recordCutoff]],
+        WHERE status IN ('replayed','resolved','dismissed') AND updated_at < ?
+                     AND NOT EXISTS (SELECT 1 FROM comms_hub_delayed_actions a
+                       WHERE comms_hub_quarantine_items.source_type = 'delayed_action'
+                         AND a.id = source_id AND a.status NOT IN ('complete','cancelled'))`, [recordCutoff]],
       ["retentionJobsDeleted", `SELECT COUNT(*) AS count FROM comms_hub_retention_jobs
         WHERE conversation_id IS NULL AND status IN ('complete','failed') AND COALESCE(completed_at, requested_at) < ?`, [recordCutoff]],
     ];
@@ -327,29 +337,114 @@ export class CommsHousekeepingRepository {
     return { open, olderThanCount: count(aged), byStatus: rows(grouped), oldest: rows(oldest) };
   }
 
-  async resolveQuarantine({ id, disposition, actor, reason, at }) {
+  async resolveQuarantine({ id, disposition, actor, reason, at, automatic = false, orphanBefore = at }) {
     if (!["resolved", "dismissed"].includes(disposition)) {
       throw new CommsHubError(400, "quarantine_disposition_invalid", "Quarantine disposition is invalid.");
     }
-    const updated = await this.d1.query(
-      `UPDATE comms_hub_quarantine_items
-          SET status = ?, attempts = attempts + 1, resolved_at = ?, updated_at = ?,
-              metadata_json = json_set(CASE WHEN json_valid(metadata_json) THEN metadata_json ELSE '{}' END,
-                '$.resolutionReason', ?, '$.resolvedBy', ?)
-        WHERE id = ? AND status IN ('quarantined','replay_pending') RETURNING *`,
-      [disposition, at, at, text(reason, 1000), text(actor, 200), id]
-    );
-    const item = rows(updated)[0] || null;
-    if (!item) {
-      throw new CommsHubError(409, "quarantine_not_resolvable", "Quarantine item is not awaiting resolution.");
-    }
-    await this.d1.query(
-      `INSERT INTO comms_hub_quarantine_attempts
-        (id, quarantine_id, attempt_number, actor, action, outcome, detail, created_at)
-       VALUES (?, ?, ?, ?, ?, 'success', ?, ?)`,
-      [stableId("qat", id, String(item.attempts)), id, item.attempts, text(actor, 200), disposition, text(reason, 1000) || null, at]
-    );
+    const token = stableId("qres", id, disposition, actor, at, randomUUID());
+    const results = await this.d1.batch([
+      {
+        sql: `UPDATE comms_hub_quarantine_items
+                SET status = ?, attempts = attempts + 1, resolved_at = ?, updated_at = ?,
+                    metadata_json = json_set(CASE WHEN json_valid(metadata_json) THEN metadata_json ELSE '{}' END,
+                      '$.resolutionReason', ?, '$.resolvedBy', ?, '$.resolutionToken', ?)
+              WHERE id = ? AND status = 'quarantined'
+                AND NOT EXISTS (
+                  SELECT 1 FROM comms_hub_delayed_actions a
+                  LEFT JOIN comms_hub_notifications n ON a.action_type = 'notification_email'
+                    AND n.id = json_extract(CASE WHEN json_valid(a.payload_json) THEN a.payload_json ELSE '{}' END, '$.notificationId')
+                  WHERE comms_hub_quarantine_items.source_type = 'delayed_action'
+                    AND a.id = comms_hub_quarantine_items.source_id
+                    AND (a.status = 'leased' OR a.failure_class = 'uncertain'
+                      OR n.email_delivery_status IN ('sending','reconciliation_required'))
+                )
+                AND (? = 0 OR (
+                  source_type = 'delayed_action' AND (
+                    EXISTS (SELECT 1 FROM comms_hub_delayed_actions a WHERE a.id = source_id AND a.status IN ('complete','cancelled'))
+                    OR (conversation_id IS NULL AND created_at < ? AND NOT EXISTS (
+                      SELECT 1 FROM comms_hub_delayed_actions a WHERE a.id = source_id
+                    ))
+                  )
+                )) RETURNING *`,
+        params: [disposition, at, at, text(reason, 1000), text(actor, 200), token, id, automatic ? 1 : 0, orphanBefore],
+      },
+      {
+        sql: `UPDATE comms_hub_delayed_actions
+                SET status = 'cancelled', lease_owner = NULL, lease_expires_at = NULL, updated_at = ?
+              WHERE status IN ('scheduled','failed','quarantined') AND id IN (
+                SELECT source_id FROM comms_hub_quarantine_items
+                 WHERE id = ? AND source_type = 'delayed_action'
+                   AND json_extract(metadata_json, '$.resolutionToken') = ?
+              ) RETURNING id`,
+        params: [at, id, token],
+      },
+      {
+        sql: `INSERT INTO comms_hub_quarantine_attempts
+                (id, quarantine_id, attempt_number, actor, action, outcome, detail, created_at)
+              SELECT ?, id, attempts, ?, ?, 'success', ?, ? FROM comms_hub_quarantine_items
+               WHERE id = ? AND json_extract(metadata_json, '$.resolutionToken') = ?`,
+        params: [token, text(actor, 200), disposition, text(reason, 1000), at, id, token],
+      },
+    ]);
+    const item = rows(results[0])[0] || null;
+    if (!item) throw new CommsHubError(409, "quarantine_not_resolvable", "This item changed, is running, or requires delivery reconciliation. Refresh its status.");
     return { ...item, metadata: parseJson(item.metadata_json, {}) };
+  }
+
+  async tidyQuarantine({ actor, at, orphanBefore, dryRun = false }) {
+    const candidates = rows(await this.d1.query(
+      `SELECT q.id, a.status AS action_status FROM comms_hub_quarantine_items q
+       LEFT JOIN comms_hub_delayed_actions a ON a.id = q.source_id
+       WHERE q.status = 'quarantined' AND q.source_type = 'delayed_action'
+         AND (a.status IN ('complete','cancelled') OR
+           (a.id IS NULL AND q.conversation_id IS NULL AND q.created_at < ?))
+         AND COALESCE(a.failure_class, '') != 'uncertain'
+         AND NOT EXISTS (SELECT 1 FROM comms_hub_notifications n
+           WHERE a.action_type = 'notification_email'
+             AND n.id = json_extract(CASE WHEN json_valid(a.payload_json) THEN a.payload_json ELSE '{}' END, '$.notificationId')
+             AND n.email_delivery_status IN ('sending','reconciliation_required'))
+       ORDER BY q.created_at LIMIT 500`, [orphanBefore]
+    ));
+    let cleared = 0;
+    let changed = 0;
+    if (!dryRun) for (const item of candidates) {
+      try {
+        await this.resolveQuarantine({ id: item.id, disposition: item.action_status === 'complete' ? 'resolved' : 'dismissed',
+          actor, at, automatic: true, orphanBefore,
+          reason: item.action_status ? `Automatic tidy: original action is ${item.action_status}.`
+            : 'Automatic tidy: original action and conversation reference are absent; historical failure retained in history.' });
+        cleared += 1;
+      } catch (error) {
+        if (error.code !== 'quarantine_not_resolvable') throw error;
+        changed += 1;
+      }
+    }
+    const retained = count(await this.d1.query("SELECT COUNT(*) AS count FROM comms_hub_quarantine_items WHERE status IN ('quarantined','replay_pending')"));
+    return { candidates: candidates.length, cleared, retained, changed, limit: 500 };
+  }
+
+  quarantinePurgeStatements({ recordCutoff }) {
+    // Never purge a terminal-looking failure while its source can still execute.
+    const eligible = `status IN ('replayed','resolved','dismissed') AND updated_at < ?
+      AND NOT EXISTS (SELECT 1 FROM comms_hub_delayed_actions a
+        WHERE comms_hub_quarantine_items.source_type = 'delayed_action'
+          AND a.id = source_id AND a.status NOT IN ('complete','cancelled'))`;
+    return [
+      { sql: `DELETE FROM comms_hub_quarantine_attempts WHERE quarantine_id IN
+          (SELECT id FROM comms_hub_quarantine_items WHERE ${eligible}) RETURNING id`, params: [recordCutoff] },
+      { sql: `DELETE FROM comms_hub_quarantine_items WHERE ${eligible} RETURNING id`, params: [recordCutoff] },
+    ];
+  }
+
+  async purgeQuarantineHistory(input) {
+    const results = await this.d1.batch(this.quarantinePurgeStatements(input));
+    return { attempts: changed(results[0]), items: changed(results[1]) };
+  }
+
+  async previewQuarantinePurge({ recordCutoff }) {
+    const statement = this.quarantinePurgeStatements({ recordCutoff })[1];
+    const result = await this.d1.query(statement.sql.replace('DELETE FROM', 'SELECT COUNT(*) AS count FROM').replace(' RETURNING id', ''), statement.params);
+    return { items: count(result) };
   }
 
   async listInfoArchiveCandidates({ mailbox, before, limit = 100 }) {

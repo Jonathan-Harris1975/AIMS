@@ -232,7 +232,7 @@ export class CommsHubDelayedActionWorker {
       const deliveryUncertain = notificationEmail && Boolean(error.deliveryUncertain);
       const permanentFailure = notificationEmail && (error.failureClass === 'permanent' || error.retryable === false);
       const exhausted = attempts >= Number(item.max_attempts || 8);
-      const final = deliveryUncertain || permanentFailure || exhausted;
+      const final = deliveryUncertain || permanentFailure || exhausted || error.code === 'reply_evidence_reference_invalid';
       if (notificationEmail) {
         const notificationId = String(payload.notificationId || '').trim();
         if (notificationId) {
@@ -329,16 +329,15 @@ export class CommsHubDelayedActionWorker {
   }
 
   async replay(id) {
-    const reset = await this.context.operationsRepository.resetDelayedActionForReplay(id);
-    if (!reset) throw new CommsHubError(409, 'delayed_action_not_replayable', 'Delayed action is not in a replayable state.');
     const now = new Date();
-    const item = await this.context.operationsRepository.claimDelayedActionById({
+    const item = await this.context.operationsRepository.claimDelayedActionForReplay({
       id,
       workerId: this.workerId,
       now: now.toISOString(),
       leaseExpiresAt: new Date(now.getTime() + this.context.config.delayedActionLeaseMs).toISOString(),
     });
-    if (!item) throw new CommsHubError(409, 'delayed_action_replay_claim_failed', 'Delayed action could not be claimed for replay.');
+    if (!item) throw new CommsHubError(409, 'delayed_action_not_replayable',
+      'This action is missing, already scheduled, running, completed, cancelled or awaiting delivery reconciliation. Refresh its status.');
     const result = await this.process(item);
     if (result.status !== 'complete') throw new CommsHubError(502, 'delayed_action_replay_failed', result.error || 'Delayed action replay failed.');
     return result;
