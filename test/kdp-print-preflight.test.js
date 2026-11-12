@@ -41,3 +41,16 @@ test("private source and distinct Kindle identity are prerequisites", () => {
   assert.ok(report.records.filter((r) => r.ebookId === 2).every((r) => r.blockers.includes("missing_private_source_pdf")));
   assert.throws(() => buildPrintPreflight([book(1), book(1)]), /duplicate ebookId/);
 });
+
+test("every record sharing a normalized Kindle ASIN is blocked from preparation", () => {
+  const first = book(1);
+  const second = { ...book(2), asin: " " + first.asin.toLowerCase() + " " };
+  const report = buildPrintPreflight([first, second]);
+
+  assert.ok(report.records.every((record) => record.state === "catalogue_blocked"));
+  assert.ok(report.records.every((record) => record.blockers.includes("duplicate_kindle_asin")));
+  for (const format of ["paperback", "hardcover"]) {
+    assert.deepEqual(report.byFormat[format].preparationQueue, []);
+    assert.equal(report.byFormat[format].sourceReviewRequired, 0);
+  }
+});

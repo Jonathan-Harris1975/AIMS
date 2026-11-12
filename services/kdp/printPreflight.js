@@ -9,7 +9,11 @@ export const PRINT_KDP_WEEKLY_LIMIT_PER_FORMAT = 2;
 export function buildPrintPreflight(books, { observedAt = new Date().toISOString() } = {}) {
   if (!Array.isArray(books)) throw new TypeError("KDP catalogue must be an array.");
   const ids = new Set();
-  const asins = new Set();
+  const asinCounts = new Map();
+  for (const book of books) {
+    const asin = String(book?.asin || "").trim().toUpperCase();
+    if (asin) asinCounts.set(asin, (asinCounts.get(asin) || 0) + 1);
+  }
   const records = [];
   for (const book of books) {
     const ebookId = Number(book?.ebookId);
@@ -18,8 +22,7 @@ export function buildPrintPreflight(books, { observedAt = new Date().toISOString
     }
     ids.add(ebookId);
     const asin = String(book.asin || "").trim().toUpperCase();
-    const duplicateAsin = !!asin && asins.has(asin);
-    if (asin) asins.add(asin);
+    const duplicateAsin = !!asin && asinCounts.get(asin) > 1;
     const pages = Number.isSafeInteger(book.pageCount) && book.pageCount > 0 ? book.pageCount : null;
     const manuscriptRefValid = book.storageBucket === "kdp"
       && book.manuscriptFormat === "PDF"
