@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { CommsHubError } from "../errors.js";
 import { sha256Hex, stableId } from "../domain/ids.js";
 import { channelFamily } from "../domain/channels.js";
@@ -1235,9 +1236,10 @@ export class CommsOperationsRepository extends CommsIdentityArchiveRepository {
          created_at, updated_at, metadata_json)
        VALUES (?, ?, ?, ?, ?, 'quarantined', ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(source_type, source_id) DO UPDATE SET
-         failure_class = excluded.failure_class, status = 'quarantined',
+         failure_class = excluded.failure_class,
+          status = CASE WHEN comms_hub_quarantine_items.status = 'replay_pending' THEN 'replay_pending' ELSE 'quarantined' END,
          payload_reference = excluded.payload_reference, error_code = excluded.error_code,
-         error_message = excluded.error_message, attempts = excluded.attempts,
+         error_message = excluded.error_message, attempts = MAX(comms_hub_quarantine_items.attempts, excluded.attempts),
          updated_at = excluded.updated_at, metadata_json = excluded.metadata_json
        RETURNING *`,
       [item.id, item.sourceType, item.sourceId, item.conversationId || null,
@@ -1273,21 +1275,25 @@ export class CommsOperationsRepository extends CommsIdentityArchiveRepository {
   }
 
   async beginQuarantineReplay({ id, actor, at = nowIso() }) {
-    const itemResult = await this.d1.query(
-      `UPDATE comms_hub_quarantine_items
-          SET status = 'replay_pending', attempts = attempts + 1, updated_at = ?
-        WHERE id = ? AND status = 'quarantined' RETURNING *`,
-      [at, id]
-    );
-    const item = rows(itemResult)[0] || null;
+    const attemptId = stableId("qat", id, actor, at, randomUUID());
+    const result = await this.d1.batch([
+      {
+        sql: `UPDATE comms_hub_quarantine_items
+                SET status = 'replay_pending', attempts = attempts + 1, updated_at = ?,
+                    metadata_json = json_set(CASE WHEN json_valid(metadata_json) THEN metadata_json ELSE '{}' END, '$.replayToken', ?)
+              WHERE id = ? AND status = 'quarantined' RETURNING *`,
+        params: [at, attemptId, id],
+      },
+      {
+        sql: `INSERT INTO comms_hub_quarantine_attempts
+                (id, quarantine_id, attempt_number, actor, action, outcome, created_at)
+              SELECT ?, id, attempts, ?, 'replay', 'started', ? FROM comms_hub_quarantine_items
+               WHERE id = ? AND status = 'replay_pending' AND json_extract(metadata_json, '$.replayToken') = ?`,
+        params: [attemptId, actor, at, id, attemptId],
+      },
+    ]);
+    const item = rows(result[0])[0] || null;
     if (!item) throw new CommsHubError(409, "quarantine_not_replayable", "Quarantine item is not replayable.");
-    const attemptId = stableId("qat", id, String(item.attempts));
-    await this.d1.query(
-      `INSERT INTO comms_hub_quarantine_attempts
-        (id, quarantine_id, attempt_number, actor, action, outcome, created_at)
-       VALUES (?, ?, ?, ?, 'replay', 'started', ?)`,
-      [attemptId, id, item.attempts, actor, at]
-    );
     return { item, attemptId };
   }
 

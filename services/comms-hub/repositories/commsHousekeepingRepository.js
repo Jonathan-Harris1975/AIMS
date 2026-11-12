@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { CommsHubError } from "../errors.js";
 import { stableId } from "../domain/ids.js";
 import { json, parseJson, placeholders, rows, text } from "./commsOperationsRepositorySupport.js";
@@ -340,7 +341,7 @@ export class CommsHousekeepingRepository {
     if (!["resolved", "dismissed"].includes(disposition)) {
       throw new CommsHubError(400, "quarantine_disposition_invalid", "Quarantine disposition is invalid.");
     }
-    const token = stableId("qres", id, disposition, actor, at);
+    const token = stableId("qres", id, disposition, actor, at, randomUUID());
     const results = await this.d1.batch([
       {
         sql: `UPDATE comms_hub_quarantine_items

@@ -127,3 +127,26 @@ test('invalid citation repair uses one extra call on the same route and still re
     assert.match(calls[1].options.messages[1].content, /approved\/source/);
   }
 });
+
+test('a failed replay cannot reset attempt numbering or release the replay gate before completion', async (t) => {
+  const { seed, operations, db } = fixture(t);
+  await seed('failure', 'quarantined');
+  const replay = await operations.beginQuarantineReplay({ id: 'q-failure', actor: 'admin' });
+  await operations.upsertQuarantineItem({ id: 'q-failure', sourceType: 'delayed_action', sourceId: 'failure',
+    failureClass: 'recoverable', attempts: 1, idempotencyKey: 'q-failure', createdAt: at });
+  assert.equal(db.prepare("SELECT status FROM comms_hub_quarantine_items WHERE id = 'q-failure'").get().status, 'replay_pending');
+  await assert.rejects(operations.beginQuarantineReplay({ id: 'q-failure', actor: 'other' }), { code: 'quarantine_not_replayable' });
+  await operations.finishQuarantineReplay({ id: 'q-failure', attemptId: replay.attemptId, outcome: 'failed' });
+  const next = await operations.beginQuarantineReplay({ id: 'q-failure', actor: 'admin' });
+  assert.equal(next.item.attempts, 10);
+});
+
+test('replay claim rolls back when attempt history cannot be persisted', async (t) => {
+  const { seed, operations, db } = fixture(t);
+  await seed('rollback-replay', 'quarantined');
+  db.exec("CREATE TRIGGER reject_replay BEFORE INSERT ON comms_hub_quarantine_attempts BEGIN SELECT RAISE(ABORT, 'test audit failure'); END;");
+  await assert.rejects(operations.beginQuarantineReplay({ id: 'q-rollback-replay', actor: 'admin' }));
+  const item = db.prepare("SELECT status, attempts FROM comms_hub_quarantine_items WHERE id = 'q-rollback-replay'").get();
+  assert.equal(item.status, 'quarantined');
+  assert.equal(item.attempts, 8);
+});
