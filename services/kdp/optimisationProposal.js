@@ -85,7 +85,12 @@ export async function draftOptimisation(book, research, metadata, { now = new Da
       ...row, currency, format: 'kindle', comparable: true, promotional: false, priceMinor: parseKdpPriceMinorUnits(row.price),
     })) });
     const current = parseKdpPriceMinorUnits(currentKdpPrice(match.metadata, currency));
-    const errors = proposed.status === 'proposed' ? validateKdpPriceChanges('kindle', { prices: { [currency]: (proposed.priceMinor / 100).toFixed(2) } }, match.metadata.royaltyPlan, match.metadata.fileSizeKb) : [];
+    const errors = proposed.status === 'proposed'
+      ? validateKdpPriceChanges(
+          'kindle', { prices: { [currency]: (proposed.priceMinor / 100).toFixed(2) } },
+          match.metadata.royaltyPlan, match.metadata.fileSizeKb,
+        )
+      : [];
     prices[marketplace] = proposed.status === 'proposed' && current !== null && current > 0 && !errors.length && Math.abs(proposed.priceMinor - current) / current <= 0.25
       ? { ...proposed, promotionAssessment: 'no_visible_promotion', previousMinor: current }
       : { status: 'blocked', reason: errors.length ? 'royalty_band' : proposed.status === 'proposed' ? 'price_change_or_current_value_unverified' : 'insufficient_evidence' };
