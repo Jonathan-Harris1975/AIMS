@@ -1,7 +1,7 @@
 import { currentKdpPrice } from "./metadataValues.js";
 import { resilientRequest } from "../shared/utils/ai-service.js";
 import { matchKdpMetadata, priceFromComparables } from "./weeklyResearch.js";
-import { parseKdpPriceMinorUnits, validateKdpPriceChanges } from "./engine/kdpPriceRules.ts";
+import { parseKdpPriceMinorUnits, uk70RoyaltyFloorMinor, validateKdpPriceChanges } from "./engine/kdpPriceRules.ts";
 
 const normalize = (value) => String(value || "").normalize("NFKC").replace(/\s+/g, " ").trim().toLowerCase();
 const fresh = (value, now, days) => Number.isFinite(Date.parse(value)) && Date.parse(value) <= +now && +now - Date.parse(value) <= days * 86400000;
@@ -74,12 +74,18 @@ export async function draftOptimisation(book, research, metadata, { now = new Da
     const observations = competitors.filter((row) => comparable.some((c) => c.asin === row.asin && c.marketplace === marketplace) &&
       row.marketplace === marketplace && row.priceSource === 'kindle_price_element' && !row.promotionText &&
       (marketplace === 'UK' ? /^£\s*\d/ : /^(?:US\s*)?\$\s*\d/).test(row.price || ''));
-    const floorMinor = Number((marketplace === 'US' ? process.env.KDP_RESEARCH_PRICE_FLOOR_USD_MINOR : process.env.KDP_RESEARCH_PRICE_FLOOR_GBP_MINOR) || 499);
+    const ukMinimumMinor = marketplace === 'UK' ? uk70RoyaltyFloorMinor(match.metadata.fileSizeKb) : null;
+    if (marketplace === 'UK' && ukMinimumMinor === null) {
+      prices[marketplace] = { status: 'blocked', reason: 'kdp_delivery_file_size_unverified' };
+      continue;
+    }
+    const configuredFloor = Number((marketplace === 'US' ? process.env.KDP_RESEARCH_PRICE_FLOOR_USD_MINOR : process.env.KDP_RESEARCH_PRICE_FLOOR_GBP_MINOR) || (marketplace === 'US' ? 499 : 643));
+    const floorMinor = marketplace === 'UK' ? Math.max(configuredFloor, ukMinimumMinor) : configuredFloor;
     const proposed = priceFromComparables({ marketplace, floorMinor, ownAsin: book.asin, observedAt: now, comparables: observations.map((row) => ({
       ...row, currency, format: 'kindle', comparable: true, promotional: false, priceMinor: parseKdpPriceMinorUnits(row.price),
     })) });
     const current = parseKdpPriceMinorUnits(currentKdpPrice(match.metadata, currency));
-    const errors = proposed.status === 'proposed' ? validateKdpPriceChanges('kindle', { prices: { [currency]: (proposed.priceMinor / 100).toFixed(2) } }, match.metadata.royaltyPlan) : [];
+    const errors = proposed.status === 'proposed' ? validateKdpPriceChanges('kindle', { prices: { [currency]: (proposed.priceMinor / 100).toFixed(2) } }, match.metadata.royaltyPlan, match.metadata.fileSizeKb) : [];
     prices[marketplace] = proposed.status === 'proposed' && current !== null && current > 0 && !errors.length && Math.abs(proposed.priceMinor - current) / current <= 0.25
       ? { ...proposed, promotionAssessment: 'no_visible_promotion', previousMinor: current }
       : { status: 'blocked', reason: errors.length ? 'royalty_band' : proposed.status === 'proposed' ? 'price_change_or_current_value_unverified' : 'insufficient_evidence' };
