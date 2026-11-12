@@ -5,6 +5,7 @@ export const PRINT_FORMATS = Object.freeze({
   hardcover: { minimumPages: 75, maximumPages: 550 },
 });
 export const PRINT_KDP_WEEKLY_LIMIT_PER_FORMAT = 10;
+// Desired existing-catalogue throughput per format; the KDP weekly cap still applies.
 export const PRINT_DAILY_TARGET_TITLES = 3;
 export const PRINT_ROLLOUT_WEEKDAYS = Object.freeze(["monday", "tuesday", "wednesday", "thursday"]);
 
@@ -91,11 +92,12 @@ export function getPrintRolloutCapacity({
     timeZone: "Europe/London", weekday: "long",
   }).format(when).toLowerCase();
   const dayIndex = PRINT_ROLLOUT_WEEKDAYS.indexOf(weekday);
-  const alreadyAllocated = Math.min(weeklyLimit, Math.max(0, dayIndex) * PRINT_DAILY_TARGET_TITLES);
+  const alreadyAllocated = dayIndex === -1 ? 0 : Math.min(weeklyLimit, dayIndex * PRINT_DAILY_TARGET_TITLES);
   const slotsPerFormat = dayIndex === -1
     ? 0 : Math.min(PRINT_DAILY_TARGET_TITLES, Math.max(0, weeklyLimit - alreadyAllocated));
   // The baseline allowance means three slots Mon/Tue/Wed, one Thu. At a
   // documented account-specific 12/week allowance this becomes 3 each day.
+  // Date.UTC normalises negative days across month boundaries as intended.
   const sundayUtc = new Date(Date.UTC(when.getUTCFullYear(), when.getUTCMonth(), when.getUTCDate() - when.getUTCDay()));
   return {
     observedAt: when.toISOString(), localWeekday: weekday,
