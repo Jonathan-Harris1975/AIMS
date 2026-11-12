@@ -45,7 +45,11 @@ async function uploadApprovedSocialArtwork(key, image, sessionId, lane) {
   const attempts = Number.isFinite(rawAttempts) ? Math.max(1, Math.min(3, Math.trunc(rawAttempts))) : 3;
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     try {
-      return await uploadBuffer("blogImages", key, image.buffer, image.mimeType);
+      const publicUrl = await uploadBuffer("blogImages", key, image.buffer, image.mimeType);
+      if (!validFallbackUrl(publicUrl)) {
+        throw new Error("R2 artwork upload did not return a usable HTTP(S) public image URL");
+      }
+      return publicUrl;
     } catch (err) {
       if (attempt === attempts) throw err;
       warn("artwork.social.upload_retry", {
