@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { artworkQaRegenerationLimit, selectPublishableSocialArtworkCandidate } from "../services/artwork/utils/artwork.js";
 import { buildArtworkVisualQaPrompt } from "../services/artwork/utils/artworkVisualQa.js";
 import { readFile } from "node:fs/promises";
+import { getArtworkProviderAttempts } from "../services/artwork/utils/openrouterImagePayload.js";
 
 const observedPrimary = {
   base64: "primary-generated-image",
@@ -129,4 +130,22 @@ test("approved image upload is retried without another paid generation and last-
   assert.match(source, /persist: true/);
   assert.match(defaults, /^SOCIAL_ARTWORK_VISUAL_QA_MAX_REGENERATIONS=1$/m);
   assert.match(defaults, /^ZERNIO_ARTWORK_UPLOAD_ATTEMPTS=3$/m);
+});
+
+test("evergreen provider retry budget is independent and bounded to transient errors", () => {
+  const originalProvider = process.env.ARTWORK_PROVIDER_ATTEMPTS;
+  const originalSocial = process.env.SOCIAL_ARTWORK_PROVIDER_ATTEMPTS;
+  try {
+    process.env.ARTWORK_PROVIDER_ATTEMPTS = "1";
+    process.env.SOCIAL_ARTWORK_PROVIDER_ATTEMPTS = "2";
+    assert.equal(getArtworkProviderAttempts("social"), 2);
+    assert.equal(getArtworkProviderAttempts("blog"), 1);
+    process.env.SOCIAL_ARTWORK_PROVIDER_ATTEMPTS = "99";
+    assert.equal(getArtworkProviderAttempts("social"), 6);
+  } finally {
+    if (originalProvider === undefined) delete process.env.ARTWORK_PROVIDER_ATTEMPTS;
+    else process.env.ARTWORK_PROVIDER_ATTEMPTS = originalProvider;
+    if (originalSocial === undefined) delete process.env.SOCIAL_ARTWORK_PROVIDER_ATTEMPTS;
+    else process.env.SOCIAL_ARTWORK_PROVIDER_ATTEMPTS = originalSocial;
+  }
 });
