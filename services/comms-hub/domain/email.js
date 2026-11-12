@@ -1,3 +1,4 @@
+import { parseDeliveryReport } from "./deliveryReport.js";
 import { randomUUID } from "node:crypto";
 import { CommsHubError } from "../errors.js";
 import { sha256Hex } from "./ids.js";
@@ -139,6 +140,8 @@ export function parseRawEmail(raw) {
     attachments: mime.attachments,
     headers: Object.fromEntries([...headers.entries()].map(([key, values]) => [key, values])),
     rawSha256: sha256Hex(source),
+    deliveryReport: parseDeliveryReport(source),
+    deliveryReportCandidate: /^multipart\/report\b/i.test(firstHeader(headers, "content-type")),
   });
 }
 

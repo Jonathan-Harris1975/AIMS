@@ -76,6 +76,7 @@ async function sendIssueToRecipient({ profile, sessionId, recipient, buildResult
     const unsubscribeUrl = `${publicBaseUrl()}/newsletter/unsubscribe/${encodeURIComponent(unsubscribeToken)}`;
     const result = await mail.sendMessage({
       to: [recipient.email],
+      requestDeliveryStatus: true,
       subject: buildResult.newsletter.subject,
       bodyText: `${buildResult.plaintext || buildResult.newsletter.previewText || ""}\n\nUnsubscribe: ${unsubscribeUrl}`,
       bodyHtml: withUnsubscribe(buildResult.emailHtml, unsubscribeUrl),
@@ -84,12 +85,14 @@ async function sendIssueToRecipient({ profile, sessionId, recipient, buildResult
     acceptedByProvider = true;
     const deliveredAt = new Date().toISOString();
     const persisted = await d1.query(`UPDATE newsletter_delivery_recipients SET status='sent',
-      delivered_at=?,provider_message_id=?,error_code=NULL
+      delivered_at=?,provider_message_id=?,error_code=NULL,
+      smtp_accepted_at=?,smtp_response=?,smtp_dsn_requested=?,transport_status='smtp_accepted',transport_updated_at=?
       WHERE issue_id=? AND subscriber_id=? AND status='pending' AND provider_message_id=?
       RETURNING subscriber_id`,
-    [deliveredAt, result.messageId || randomUUID(), sessionId, recipient.id, claimId]);
+    [deliveredAt, result.messageId || randomUUID(), deliveredAt, String(result.response || "").slice(0, 1000), result.dsnRequested ? 1 : 0,
+      deliveredAt, sessionId, recipient.id, claimId]);
     if (!persisted.results?.length) throw new Error("newsletter_delivery_claim_lost");
-    return { ok: true, status: "sent" };
+    return { ok: true, status: "sent", deliveryAssurance: "smtp_acceptance_only", inboxConfirmed: false };
   } catch (error) {
     const uncertain = acceptedByProvider || Boolean(error?.deliveryUncertain);
     await d1.query(`UPDATE newsletter_delivery_recipients SET status=?,error_code=?
@@ -157,7 +160,8 @@ export async function deliverNewsletterIssue({ profile, sessionId, buildResult, 
   } catch (error) {
     return { ok: false, status: "delivery_preflight_failed", stage: "preflight", safeToRetry: true, error: error.message };
   }
-  if (existing.delivery?.status === "dispatched") return { ok: true, status: "already_dispatched", ...existing.delivery };
+  if (existing.delivery?.status === "dispatched") return { ok: true, status: "already_dispatched", ...existing.delivery,
+    deliveryAssurance: "smtp_acceptance_only", inboxConfirmed: false };
   if (!recipients.length) return { ok: false, status: "audience_empty", stage: "preflight", error: "No verified, consented newsletter subscribers are eligible for delivery." };
   const issueId = sessionId;
   let sent = 0;
@@ -186,11 +190,20 @@ export async function deliverNewsletterIssue({ profile, sessionId, buildResult, 
     sentAt: new Date().toISOString(),
     date,
   });
-  return { ok: failed === 0, status: failed ? "partial_delivery" : "dispatched", provider: "aims-onecom", deliveryId, audience: recipients.length, sent, failed };
+  return { ok: failed === 0, status: failed ? "partial_delivery" : "dispatched", provider: "aims-onecom", deliveryId, audience: recipients.length, sent, failed,
+    deliveryAssurance: "smtp_acceptance_only", inboxConfirmed: false };
 }
 
 export async function getCampaignStatus(deliveryId, { d1 = runtime().d1 } = {}) {
   const issueId = String(deliveryId || "").replace(/^aims-/, "");
   const result = await d1.query("SELECT status, COUNT(*) AS count FROM newsletter_delivery_recipients WHERE issue_id=? GROUP BY status", [issueId]);
-  return { ok: true, provider: "aims-onecom", deliveryId, counts: Object.fromEntries((result.results || []).map((row) => [row.status, Number(row.count)])) };
+  const transport = await d1.query(`SELECT transport_status, COUNT(*) AS count FROM newsletter_delivery_recipients
+    WHERE issue_id=? GROUP BY transport_status`, [issueId]);
+  const monitor = await d1.query("SELECT MAX(last_success_at) AS last_success_at FROM newsletter_delivery_monitor_state");
+  const lastSuccessAt = monitor.results?.[0]?.last_success_at || null;
+  return { ok: true, provider: "aims-onecom", deliveryId, inboxConfirmed: false,
+    deliveryMonitor: { lastSuccessAt },
+    deliveryAssurance: "smtp_acceptance_and_reports_only",
+    transportCounts: Object.fromEntries((transport.results || []).map(row => [row.transport_status, Number(row.count)])),
+    counts: Object.fromEntries((result.results || []).map((row) => [row.status, Number(row.count)])) };
 }

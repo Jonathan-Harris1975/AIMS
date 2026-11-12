@@ -211,6 +211,7 @@ test("upgrade from migration 0020 preserves communication state and backfills pe
     "0023_housekeeping",
     "0024_newsletter_audience",
     "0025_autonomy_newsletter_reliability",
+    "0026_newsletter_delivery_evidence",
   ]);
 
   const message = adapter.db.prepare(
@@ -269,6 +270,7 @@ test("attested legacy 0013 checksum does not block forward production migrations
     "0023_housekeeping",
     "0024_newsletter_audience",
     "0025_autonomy_newsletter_reliability",
+    "0026_newsletter_delivery_evidence",
   ]);
   assert.equal(
     adapter.db.prepare("SELECT checksum FROM comms_hub_schema_migrations WHERE version = ?")
@@ -327,6 +329,7 @@ test("a failed migration is not recorded and a retry resumes from the last commi
     "0023_housekeeping",
     "0024_newsletter_audience",
     "0025_autonomy_newsletter_reliability",
+    "0026_newsletter_delivery_evidence",
   ]);
 
   const finalPass = await runCommsHubMigrations({ env: migrationEnv(), d1: adapter });

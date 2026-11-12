@@ -18,6 +18,8 @@ export class CommsHubWorkerHeartbeatService {
   criticalDescriptors() {
     const config = this.context.config;
     const descriptors = [
+      { category: "newsletter_delivery", key: "default", enabled: config.newsletterDeliveryMonitorEnabled === true,
+        pollIntervalMs: config.newsletterDeliveryMonitorPollMs },
       { category: "social_poll", key: "default", enabled: config.socialPollWorkerEnabled === true, pollIntervalMs: config.socialPollMs },
       { category: "follow_up", key: "default", enabled: config.followUpWorkerEnabled === true, pollIntervalMs: config.followUpPollMs },
       { category: "provider_monitor", key: "default", enabled: config.providerHealthWorkerEnabled === true, pollIntervalMs: config.providerHealthPollMs },
@@ -117,6 +119,7 @@ export class CommsHubWorkerHeartbeatService {
     bind(this.context.backupWorker, "backup");
     bind(this.context.retentionWorker, "retention");
     bind(this.context.monthEndConversationArchiveWorker, "month_end_archive");
+    bind(this.context.newsletterDeliveryWorker, "newsletter_delivery");
     bind(this.context.housekeepingWorker, "housekeeping");
     for (const [accountKey, worker] of Object.entries(this.context.emailPollWorkers || {})) bind(worker, "inbound_email", accountKey);
   }

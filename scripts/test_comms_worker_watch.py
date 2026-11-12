@@ -39,12 +39,13 @@ class WorkerWatchTests(unittest.TestCase):
             'COMMS_HUB_HOUSEKEEPING_WORKER_ENABLED': 'true',
             'COMMS_HUB_EMAIL_ENABLED': 'true',
             'COMMS_HUB_EMAIL_POLL_WORKER_ENABLED': 'true',
+            'NEWSLETTER_DELIVERY_MONITOR_ENABLED': 'true',
         })
         self.assertEqual(url, 'https://aims.example/comms-hub/workers/health')
         self.assertEqual(expected, [
             'social_poll:default', 'delayed_actions:default', 'archive:default',
             'webhook_reconcile:default', 'backup:default', 'retention:default',
-            'month_end_archive:default', 'housekeeping:default', 'inbound_email:info',
+            'month_end_archive:default', 'housekeeping:default', 'inbound_email:info', 'newsletter_delivery:default',
         ])
 
     def test_production_monitor_config_rejects_invalid_base_or_empty_inventory(self):

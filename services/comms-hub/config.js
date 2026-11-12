@@ -416,6 +416,10 @@ export function loadCommsHubConfig(env = process.env, { requireEnabled = false }
   // must never create pollers, workflow evaluation, AI classification or
   // outbound delivery for those inboxes. The separate cleanup service may use
   // their credentials only to expunge server-advertised Trash/Junk folders.
+  // The separate delivery-report monitor reads newsletter DSNs without routing
+  // them into message automation, AI classification or replies.
+  // A separate read-only newsletter DSN monitor may inspect delivery reports.
+  // It never imports conversations, classifies mail or sends replies.
   const emailAccounts = Object.freeze({
     info: Object.freeze({
       key: "info",
@@ -583,6 +587,11 @@ export function loadCommsHubConfig(env = process.env, { requireEnabled = false }
     emailArchiveBatchSize: positiveInteger(env.COMMS_HUB_EMAIL_ARCHIVE_BATCH_SIZE, 100, "COMMS_HUB_EMAIL_ARCHIVE_BATCH_SIZE", { min: 1, max: 250 }),
     emailExternalRecipientsEnabled: booleanValue(env.COMMS_HUB_EMAIL_EXTERNAL_RECIPIENTS_ENABLED, false),
     emailMaxReplyChars: positiveInteger(env.COMMS_HUB_EMAIL_MAX_REPLY_CHARS, 20_000, "COMMS_HUB_EMAIL_MAX_REPLY_CHARS", { min: 1000, max: 100_000 }),
+    newsletterDeliveryMonitorEnabled: booleanValue(env.NEWSLETTER_DELIVERY_MONITOR_ENABLED, manualEmailAccounts.newsletter.enabled),
+    newsletterDeliveryMonitorPollMs: positiveInteger(env.NEWSLETTER_DELIVERY_MONITOR_POLL_MS, 300_000,
+      "NEWSLETTER_DELIVERY_MONITOR_POLL_MS", { min: 30_000, max: 3_600_000 }),
+    newsletterDeliveryUnconfirmedMs: positiveInteger(env.NEWSLETTER_DELIVERY_UNCONFIRMED_MS, 3_600_000,
+      "NEWSLETTER_DELIVERY_UNCONFIRMED_MS", { min: 300_000, max: 86_400_000 }),
     emailAccounts,
     excludedEmailAccounts,
     manualEmailAccounts,
