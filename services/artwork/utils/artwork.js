@@ -333,7 +333,7 @@ async function requestArtworkFromProvider(provider, prompt, mode, date, { useSho
   });
   const payload = filterImagePayloadByCapabilities(rawPayload, supportedParameters);
 
-  const attempts = getArtworkProviderAttempts();
+  const attempts = getArtworkProviderAttempts(mode);
   let lastError;
 
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
