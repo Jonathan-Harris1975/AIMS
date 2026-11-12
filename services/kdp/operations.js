@@ -148,9 +148,9 @@ router.post("/print/preflight/run", requestDedupe("kdp:print-preflight"), asyncR
 // required before a scheduled job may create or submit a print edition.
 router.post("/print/rollout/plan/run", requestDedupe("kdp:print-rollout-plan"), asyncRoute(async (req, res) =>
   startJob(req, res, "print-rollout-plan", async () => {
-    const configuredLimit = process.env.KDP_PRINT_WEEKLY_LIMIT_PER_FORMAT;
+    const configuredLimit = process.env.KDP_PRINT_WEEKLY_LIMIT_PER_FORMAT?.trim();
     const weeklyLimit = configuredLimit === undefined || configuredLimit === ""
-      ? PRINT_KDP_WEEKLY_LIMIT_PER_FORMAT : Number(configuredLimit);
+      ? PRINT_KDP_WEEKLY_LIMIT_PER_FORMAT : /^\d+$/.test(configuredLimit) ? Number(configuredLimit) : NaN;
     const capacity = getPrintRolloutCapacity({ weeklyLimit });
     const inventory = buildPrintPreflight(await listKdpEbooks(), { observedAt: capacity.observedAt });
     const byFormat = Object.fromEntries(Object.entries(inventory.byFormat).map(([format, record]) => [
@@ -159,8 +159,8 @@ router.post("/print/rollout/plan/run", requestDedupe("kdp:print-rollout-plan"), 
         catalogueBlocked: record.catalogueBlocked,
         sourcePdfReviewRequired: record.sourceReviewRequired,
         scheduledSlotsToday: capacity.scheduledSlotsPerFormatToday,
-        verifiedReadyToPublish: 0,
-        createdToday: 0, submittedToday: 0,
+        readinessReconciled: false,
+        submissionCountsReconciled: false,
       },
     ]));
     const report = {
