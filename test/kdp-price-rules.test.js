@@ -5,6 +5,7 @@ import {
   analyzeKdpPriceFloors,
   kdpPriceBandForKey,
   parseKdpPriceMinorUnits,
+  uk70RoyaltyFloorMinor,
   validateKdpPriceChanges,
 } from '../services/kdp/engine/kdpPriceRules.ts'
 
@@ -82,7 +83,11 @@ test('price changes cannot set a Kindle marketplace price below the 70% floor', 
     validateKdpPriceChanges('kindle', { prices: { GB: '1.76' } }).join(' '),
     /GB eBook price must be at least 1\.77 GBP/,
   )
-  assert.deepEqual(validateKdpPriceChanges('kindle', { prices: { GB: '1.77' } }), [])
+  assert.match(
+    validateKdpPriceChanges('kindle', { prices: { GB: '1.77' } }).join(' '),
+    /delivery file size/,
+  )
+  assert.deepEqual(validateKdpPriceChanges('kindle', { prices: { GB: '6.53' }, royaltyPlan: '70_PERCENT' }, undefined, '1024'), [])
   assert.deepEqual(validateKdpPriceChanges('paperback', { prices: { USD: '0.99' } }), [])
 })
 
@@ -107,4 +112,42 @@ test('70% plan updates also respect the marketplace upper price band', () => {
     validateKdpPriceChanges('kindle', { prices: { AE: '12.00' } }).join(' '),
     /Cannot verify AE/,
   )
+})
+
+test('UK 70% pricing floors target at least £4.50 after KDP delivery', () => {
+  assert.equal(uk70RoyaltyFloorMinor('1024'), 653)
+  assert.equal(uk70RoyaltyFloorMinor('2048'), 663)
+  assert.equal(uk70RoyaltyFloorMinor('3072'), 673)
+  assert.equal(uk70RoyaltyFloorMinor('5120'), 693)
+  assert.equal(uk70RoyaltyFloorMinor(''), null)
+  assert.equal(uk70RoyaltyFloorMinor('-1'), null)
+  assert.equal(uk70RoyaltyFloorMinor('1.5'), null)
+  for (const [fileSizeKb, floorMinor] of [['1024', 653], ['5120', 693]]) {
+    const low = ((floorMinor - 1) / 100).toFixed(2)
+    assert.match(
+      validateKdpPriceChanges('kindle', { prices: { UK: low }, royaltyPlan: '70_PERCENT' }, undefined, fileSizeKb).join(' '),
+      /£4.50 estimated 70% royalty/,
+    )
+    assert.deepEqual(
+      validateKdpPriceChanges('kindle', { prices: { GBP: (floorMinor / 100).toFixed(2) }, royaltyPlan: '70_PERCENT' }, undefined, fileSizeKb),
+      [],
+    )
+  }
+})
+
+test('UK royalty target refuses unknown delivery sizes and 35% plans', () => {
+  assert.match(validateKdpPriceChanges('kindle', { prices: { GBP: '6.99' } }, '70_PERCENT').join(' '), /delivery file size/)
+  assert.match(validateKdpPriceChanges('kindle', { prices: { GBP: '6.99' } }, '35_PERCENT', '1024').join(' '), /requires a verified 70%/)
+  assert.deepEqual(validateKdpPriceChanges('kindle', { prices: { GBP: '6.99' } }, '70_PERCENT', '1024'), [])
+})
+
+test('signed-in KDP audit reports a UK royalty shortfall or unverifiable cost', () => {
+  const low = analyzeKdpPriceFloors([book({ royaltyPlan: '70_PERCENT', fileSizeKb: '1024', prices: { GB: '6.52' } })])
+  assert.equal(low.belowMinimumCount, 1)
+  assert.equal(low.issues[0].code, 'below_target_royalty')
+  assert.equal(low.issues[0].recommendedPrice, 6.53)
+  assert.equal(analyzeKdpPriceFloors([book({ royaltyPlan: '70_PERCENT', fileSizeKb: '1024', prices: { GB: '6.53' } })]).issueCount, 0)
+  const unknown = analyzeKdpPriceFloors([book({ royaltyPlan: '70_PERCENT', prices: { GB: '6.99' } })])
+  assert.equal(unknown.issues[0].code, 'target_royalty_unverifiable')
+  assert.equal(unknown.unverifiedPriceCount, 1)
 })
