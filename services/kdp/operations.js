@@ -31,6 +31,7 @@ import {
 } from "./storage.js";
 
 import { runOptimisationUpdates } from "./optimisationUpdates.js";
+import { buildPrintPreflight } from "./printPreflight.js";
 
 const router = express.Router();
 const ASYNC_STATUS_BASE = "/kdp/jobs";
@@ -122,6 +123,24 @@ function startJob(req, res, lane, runner, payload = {}) {
     metadata: { route: `/kdp/${lane}` },
   }).then((job) => res.status(202).json(job)).catch((error) => sendError(res, error, `Could not start KDP ${lane} job.`));
 }
+
+// Preparation-only MAST checkpoint. All KDP account mutations remain separate.
+router.get("/print/preflight", asyncRoute(async (_req, res) => {
+  res.set("Cache-Control", "no-store");
+  return res.json(buildPrintPreflight(await listKdpEbooks()));
+}));
+
+router.post("/print/preflight/run", requestDedupe("kdp:print-preflight"), asyncRoute(async (req, res) =>
+  startJob(req, res, "print-preflight", async () => {
+    const report = buildPrintPreflight(await listKdpEbooks());
+    const { putPrivateJson } = await import("../shared/utils/r2-client.js");
+    const day = report.observedAt.slice(0, 10);
+    const key = "print/preflight/" + day + ".json";
+    await putPrivateJson("kdp", key, report);
+    return { ok: true, catalogueCount: report.catalogueCount,
+      editionCount: report.editionCount, byFormat: report.byFormat,
+      kdpWritesPerformed: false, reportRef: { bucket: "kdp", key } };
+  })));
 
 router.post("/research/updates/run", asyncRoute(async (req, res) =>
   startJob(req, res, "weekly-update-verification", () => runOptimisationUpdates()),
