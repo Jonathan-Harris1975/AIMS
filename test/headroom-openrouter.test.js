@@ -270,3 +270,33 @@ test("Headroom opens a short fail-open circuit after repeated proxy failures", a
     globalThis.fetch = oldFetch;
   }
 });
+
+
+test("Headroom rejects malformed compressed text parts and sends the original evidence", async () => {
+  const snapshot = snapshotEnv(HEADROOM_ENV);
+  const oldFetch = globalThis.fetch;
+  Object.assign(process.env, {
+    HEADROOM_ENABLED: "true", HEADROOM_BASE_URL: "http://headroom.test:8787",
+    HEADROOM_MIN_INPUT_CHARS: "1", HEADROOM_ROUTES: "zernioMiniSeriesResearch",
+    HEADROOM_LOG_SAVINGS: "false",
+  });
+  const { compressForOpenRouter, __headroomTestHooks } = await import("../services/shared/utils/headroom.js");
+  __headroomTestHooks.resetCircuit();
+  const original = [{ role: "system", content: "Keep the source evidence." }, { role: "user", content: "Source material ".repeat(100) }];
+  try {
+    for (const content of [[{ type: "text" }], [{ type: "text", text: null }], undefined]) {
+      globalThis.fetch = async () => ({ ok: true, json: async () => ({
+        messages: [original[0], { role: "user", content }],
+        tokens_before: 400, tokens_after: 200, tokens_saved: 200,
+      }) });
+      const result = await compressForOpenRouter({ routeName: "zernioMiniSeriesResearch", model: "test/model", messages: original });
+      assert.equal(result.reason, "unsafe-message-change");
+      assert.deepEqual(result.messages, original);
+      __headroomTestHooks.resetCircuit();
+    }
+  } finally {
+    globalThis.fetch = oldFetch;
+    restoreEnv(snapshot);
+    __headroomTestHooks.resetCircuit();
+  }
+});

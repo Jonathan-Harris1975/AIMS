@@ -149,7 +149,7 @@ function systemMessagesPreserved(original, candidate) {
 }
 
 function shapePreserved(original, candidate) {
-  if (!Array.isArray(candidate) || candidate.length !== original.length) return false;
+  if (!isTextOnly(candidate) || candidate.length !== original.length) return false;
   for (let i = 0; i < original.length; i += 1) {
     if (!candidate[i] || typeof candidate[i] !== "object") return false;
     if (candidate[i].role !== original[i].role) return false;
