@@ -31,7 +31,7 @@ import {
 } from "./storage.js";
 
 import { runOptimisationUpdates } from "./optimisationUpdates.js";
-import { buildPrintPreflight } from "./printPreflight.js";
+import { buildPrintPreflight, getPrintRolloutCapacity, PRINT_KDP_WEEKLY_LIMIT_PER_FORMAT } from "./printPreflight.js";
 
 const router = express.Router();
 const ASYNC_STATUS_BASE = "/kdp/jobs";
@@ -140,6 +140,40 @@ router.post("/print/preflight/run", requestDedupe("kdp:print-preflight"), asyncR
     return { ok: true, catalogueCount: report.catalogueCount,
       editionCount: report.editionCount, byFormat: report.byFormat,
       kdpWritesPerformed: false, reportRef: { bucket: "kdp", key } };
+  })));
+
+
+// A capacity checkpoint, not a publishing endpoint. A complete per-format
+// print-QA pipeline, durable quota ledger, and KDP listing reconciliation are
+// required before a scheduled job may create or submit a print edition.
+router.post("/print/rollout/plan/run", requestDedupe("kdp:print-rollout-plan"), asyncRoute(async (req, res) =>
+  startJob(req, res, "print-rollout-plan", async () => {
+    const configuredLimit = process.env.KDP_PRINT_WEEKLY_LIMIT_PER_FORMAT;
+    const weeklyLimit = configuredLimit === undefined || configuredLimit === ""
+      ? PRINT_KDP_WEEKLY_LIMIT_PER_FORMAT : Number(configuredLimit);
+    const capacity = getPrintRolloutCapacity({ weeklyLimit });
+    const inventory = buildPrintPreflight(await listKdpEbooks(), { observedAt: capacity.observedAt });
+    const byFormat = Object.fromEntries(Object.entries(inventory.byFormat).map(([format, record]) => [
+      format, {
+        total: record.total,
+        catalogueBlocked: record.catalogueBlocked,
+        sourcePdfReviewRequired: record.sourceReviewRequired,
+        scheduledSlotsToday: capacity.scheduledSlotsPerFormatToday,
+        verifiedReadyToPublish: 0,
+        createdToday: 0, submittedToday: 0,
+      },
+    ]));
+    const report = {
+      ok: true, schemaVersion: "kdp-print-rollout-plan/v1",
+      ...capacity, catalogueCount: inventory.catalogueCount,
+      editionCount: inventory.editionCount, byFormat,
+      kdpWritesPerformed: false,
+      blockedReason: "Print-specific interiors, wraparound covers, ISBNs, royalties, and QA must be verified before KDP submission.",
+    };
+    const { putPrivateJson } = await import("../shared/utils/r2-client.js");
+    const key = "print/rollout/plans/" + capacity.observedAt.slice(0, 10) + ".json";
+    await putPrivateJson("kdp", key, report);
+    return { ...report, reportRef: { bucket: "kdp", key } };
   })));
 
 router.post("/research/updates/run", asyncRoute(async (req, res) =>
