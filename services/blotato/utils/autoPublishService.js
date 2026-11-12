@@ -1585,7 +1585,7 @@ export function isRetryablePendingRenderFailure(job = {}) {
   if (job.status !== "failed" || job.phase !== "video-rendering" || !job.videoId) return false;
   if (jobHasPublicationEvidence(job)) return false;
   const code = String(job.error?.code || "").trim();
-  if (!["blotato-poll-duration-exceeded", "blotato-poll-attempt-limit", "blotato-poll-provider-error-limit"].includes(code)) return false;
+  if (!["blotato-poll-duration-exceeded", "blotato-poll-attempt-limit", "blotato-poll-provider-error-limit", "blotato-credit-visual-link-failed"].includes(code)) return false;
   const maxAttempts = positiveIntEnv("BLOTATO_RENDER_RECONCILE_ATTEMPTS", 4, 8);
   return Math.max(1, Number(job.attempt || 1)) < maxAttempts;
 }
@@ -2019,6 +2019,19 @@ async function runPublishJobImpl({
       ? await (async () => {
           updateJob(lane.jobType, sessionId, { phase: "video-rendering",
             videoId: pendingRenderRecovery.visualId, videoDashboardUrl: pendingRenderRecovery.dashboardUrl || null });
+          // Reconcile the exact original paid reservation before interacting
+          // with the existing provider render. If the durable ledger disagrees,
+          // fail closed: never schedule a visual charged to a different slot.
+          try {
+            await linkPaidRenderVisual({
+              reservationId: pendingRenderRecovery.creditGuardReservationId,
+              scheduleDate: activeScheduleDate,
+              visualId: pendingRenderRecovery.visualId,
+            });
+          } catch (error) {
+            error.code = "blotato-credit-visual-link-failed";
+            throw error;
+          }
           const recovered = await awaitExistingBlotatoRender(pendingRenderRecovery.visualId, apiKey, {
             usedTemplateId: pendingRenderRecovery.templateId || templateId,
           });
@@ -2062,15 +2075,22 @@ async function runPublishJobImpl({
           channelPreflight,
         });
         const existingReservation = getJob(lane.jobType, sessionId)?.creditGuardReservationId;
-        if (existingReservation && activeScheduleDate) {
+        if (activeScheduleDate) {
+          // The provider has already accepted the paid render. If its durable
+          // reservation cannot be linked, fail this slot as recoverable and
+          // retry the same provider ID later. Never hide ledger conflicts.
           try {
-            await linkPaidRenderVisual({ reservationId: existingReservation, scheduleDate: activeScheduleDate, visualId: visualMeta.visualId });
+            await linkPaidRenderVisual({
+              reservationId: existingReservation || `${sessionId}:attempt-${getJob(lane.jobType, sessionId)?.attempt || 1}`,
+              scheduleDate: activeScheduleDate,
+              visualId: visualMeta.visualId,
+            });
           } catch (error) {
-            // The provider has already created the video: keep its ID and
-            // continue polling. R2 reconciliation must never start a second render.
             warn("blotato.credit.visual_link_pending_reconciliation", {
               sessionId, visualId: visualMeta.visualId, error: error?.message || String(error),
             });
+            error.code = "blotato-credit-visual-link-failed";
+            throw error;
           }
         }
       },
@@ -2556,6 +2576,8 @@ export async function triggerPublishNowJob(req = {}, laneSlug = DEFAULT_BLOTATO_
         templateId: pending.templateId || null,
         templateIdCandidates: pending.templateIdCandidates || [],
         rejectedTemplateIds: pending.rejectedTemplateIds || [],
+        creditGuardReservationId: pending.creditGuardReservationId || `${pending.sessionId}:attempt-${Number(pending.attempt || 1)}`,
+        attempt: Number(pending.attempt || 1),
       };
       warn("blotato.schedule.pending_render_reconcile", {
         sessionId: pending.sessionId, visualId: pending.videoId,
