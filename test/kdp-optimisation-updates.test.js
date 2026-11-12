@@ -117,3 +117,27 @@ test('a slow setup refresh cannot carry submission past the London window', asyn
   assert.equal(result.status, 'outside_window');
   assert.equal(calls, 0);
 });
+
+test('stale queued UK prices below £4.50 royalty floor are refused before publishing', async () => {
+  const value = { ...intent(), prices: { GBP: '6.52' } };
+  let published = false;
+  const result = await processOptimisation('key', value, deps({
+    sync: async () => ({ ...meta, royaltyPlan: '70_PERCENT', fileSizeKb: '1024', prices: { GB: '6.99' } }),
+    publish: async () => { published = true; },
+  }));
+  assert.equal(result.status, 'conflict');
+  assert.equal(value.reason, 'royalty_floor_invalid');
+  assert.equal(published, false);
+});
+
+test('queued UK price fails closed when delivery size is not verified', async () => {
+  const value = { ...intent(), prices: { GBP: '6.99' } };
+  let published = false;
+  const result = await processOptimisation('key', value, deps({
+    sync: async () => ({ ...meta, royaltyPlan: '70_PERCENT', prices: { GB: '6.99' } }),
+    publish: async () => { published = true; },
+  }));
+  assert.equal(result.status, 'conflict');
+  assert.equal(value.reason, 'royalty_floor_invalid');
+  assert.equal(published, false);
+});
