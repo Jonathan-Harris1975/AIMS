@@ -4,8 +4,24 @@ import type { KdpBookMetadata } from './metadataStore.ts'
  * Official KDP 70% eBook price bands, reviewed against the KDP help page on
  * 2026-10-25. Refresh these rules when Amazon changes its published bands.
  */
-export const KDP_PRICE_RULES_REVIEWED_AT = '2026-10-25'
+export const KDP_PRICE_RULES_REVIEWED_AT = '2026-11-12'
 export const KDP_PRICE_RULES_SOURCE = 'https://kdp.amazon.com/en_US/help/topic/G200634560'
+export const KDP_UK_TARGET_ROYALTY_MINOR = 450
+
+/**
+ * Minimum UK price yielding at least £4.50 at the 70% royalty rate.
+ * KDP delivery charge: £0.10/MB, rounded to a penny. KDP metadata is
+ * reported in rounded KB; include one extra KB to avoid understating cost.
+ * A missing file size cannot establish a royalty guarantee.
+ */
+export function uk70RoyaltyFloorMinor(fileSizeKb: string | number | null | undefined): number | null {
+  const raw = String(fileSizeKb ?? '').trim()
+  if (!/^\d+$/.test(raw)) return null
+  const kb = Number(raw)
+  if (!Number.isSafeInteger(kb) || kb > 1_000_000) return null
+  const deliveryMinor = Math.max(1, Math.round(((kb + 1) * 10) / 1024))
+  return Math.ceil((KDP_UK_TARGET_ROYALTY_MINOR * 10) / 7) + deliveryMinor
+}
 
 export type KdpPriceBand = {
   marketplace: string
@@ -60,7 +76,7 @@ export type KdpPriceFloorIssue = {
   minimum: number | null
   maximum: number | null
   severity: 'error' | 'warning'
-  code: 'below_70_percent_minimum' | 'above_70_percent_maximum' | 'marketplace_price_unreadable' | 'marketplace_price_unmapped'
+  code: 'below_70_percent_minimum' | 'above_70_percent_maximum' | 'marketplace_price_unreadable' | 'marketplace_price_unmapped' | 'below_target_royalty' | 'target_royalty_unverifiable' | 'target_royalty_requires_70_percent'
   recommendedPrice: number | null
   message: string
 }
@@ -107,6 +123,7 @@ export function validateKdpPriceChanges(
   format: KdpBookMetadata['format'],
   changes: { listPriceUsd?: string; prices?: Record<string, string>; royaltyPlan?: string },
   currentRoyaltyPlan?: string,
+  fileSizeKb?: string,
 ): string[] {
   if (format !== 'kindle') return []
   const errors: string[] = []
@@ -129,6 +146,15 @@ export function validateKdpPriceChanges(
     }
     if (value < Math.round(band.minimum * 100)) {
       errors.push(`${band.marketplace} eBook price must be at least ${band.minimum} ${band.currency} for the 70% royalty price band.`)
+    }
+    if (band.marketplace === 'GB') {
+      const royaltyFloor = uk70RoyaltyFloorMinor(fileSizeKb)
+      if (!require70Maximum) errors.push('GB eBook pricing requires a verified 70% royalty plan for the £4.50 minimum royalty target.')
+      if (royaltyFloor === null) {
+        errors.push('Cannot verify the GB £4.50 royalty floor without a KDP delivery file size; refusing the price update.')
+      } else if (value < royaltyFloor) {
+        errors.push(`GB eBook price must be at least £${(royaltyFloor / 100).toFixed(2)} for a £4.50 estimated 70% royalty at the recorded delivery size.`)
+      }
     }
     if (require70Maximum && value > Math.round(band.maximum * 100)) {
       errors.push(`${band.marketplace} eBook price cannot exceed ${band.maximum} ${band.currency} while selecting the 70% royalty option.`)
@@ -199,6 +225,26 @@ function analyzePriceEntry(
       message: `${band.marketplace} list price is below the 70% royalty minimum of ${band.minimum} ${band.currency}.`,
     }
   }
+  if (band.marketplace === 'GB') {
+    const royaltyFloor = uk70RoyaltyFloorMinor(book.fileSizeKb)
+    if (!enforceMaximum) return {
+      titleId: book.titleId, format: book.format, title: book.title, market: band.marketplace, currency: band.currency, listPrice: value,
+      minimum: royaltyFloor === null ? null : royaltyFloor / 100, maximum: band.maximum, severity: 'warning',
+      code: 'target_royalty_requires_70_percent', recommendedPrice: null,
+      message: 'UK £4.50 minimum royalties require the verified 70% royalty plan.',
+    }
+    if (royaltyFloor === null) return {
+      titleId: book.titleId, format: book.format, title: book.title, market: band.marketplace, currency: band.currency, listPrice: value,
+      minimum: null, maximum: band.maximum, severity: 'warning', code: 'target_royalty_unverifiable',
+      recommendedPrice: null, message: 'UK £4.50 royalty floor cannot be verified without the KDP delivery file size.',
+    }
+    if (actual < royaltyFloor) return {
+      titleId: book.titleId, format: book.format, title: book.title, market: band.marketplace, currency: band.currency, listPrice: value,
+      minimum: royaltyFloor / 100, maximum: band.maximum, severity: 'error', code: 'below_target_royalty',
+      recommendedPrice: royaltyFloor / 100,
+      message: `GB list price is below the £${(royaltyFloor / 100).toFixed(2)} minimum for a £4.50 estimated 70% royalty.`,
+    }
+  }
   if (enforceMaximum && actual > maximum) {
     return {
       titleId: book.titleId,
@@ -254,9 +300,9 @@ export function analyzeKdpPriceFloors(books: KdpBookMetadata[]): KdpPriceFloorAn
     rulesSource: KDP_PRICE_RULES_SOURCE,
     bookCount: books.filter((book) => book.format === 'kindle').length,
     issueCount: issues.length,
-    belowMinimumCount: issues.filter((issue) => issue.code === 'below_70_percent_minimum').length,
+    belowMinimumCount: issues.filter((issue) => issue.code === 'below_70_percent_minimum' || issue.code === 'below_target_royalty').length,
     aboveMaximumCount: issues.filter((issue) => issue.code === 'above_70_percent_maximum').length,
-    unverifiedPriceCount: issues.filter((issue) => issue.code === 'marketplace_price_unmapped' || issue.code === 'marketplace_price_unreadable').length,
+    unverifiedPriceCount: issues.filter((issue) => issue.code === 'marketplace_price_unmapped' || issue.code === 'marketplace_price_unreadable' || issue.code === 'target_royalty_unverifiable' || issue.code === 'target_royalty_requires_70_percent').length,
     issues,
   }
 }
