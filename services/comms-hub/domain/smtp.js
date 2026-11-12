@@ -13,3 +13,9 @@ export function classifySmtpSendFailure({ smtpCode = 0, deliveryUncertain = fals
 }
 
 export default classifySmtpSendFailure;
+
+// RFC 3461: parameters are valid only when the submitting server advertises DSN.
+export function deliveryStatusParameters(ehlo, requested = false) {
+  const enabled = requested === true && (ehlo?.lines || []).some(line => /^250[ -]DSN(?:\s|$)/i.test(line));
+  return { requested: enabled, mailFrom: enabled ? ' RET=HDRS' : '', rcptTo: enabled ? ' NOTIFY=SUCCESS,FAILURE,DELAY' : '' };
+}

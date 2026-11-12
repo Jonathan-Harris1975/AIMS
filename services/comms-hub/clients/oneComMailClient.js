@@ -1,7 +1,7 @@
 import tls from "node:tls";
 import { CommsHubError } from "../errors.js";
 import { buildRawEmail, parseRawEmail } from "../domain/email.js";
-import { classifySmtpSendFailure } from "../domain/smtp.js";
+import { classifySmtpSendFailure, deliveryStatusParameters } from "../domain/smtp.js";
 import { recordProviderOutcome } from "../../shared/utils/operationalExcellence.js";
 
 function quoteImap(value) {
@@ -477,7 +477,7 @@ export class OneComMailClient {
     });
   }
 
-  async sendMessage({ to, cc = [], subject, bodyText, bodyHtml = null, inReplyTo = "", references = [], attachments = [], messageId = "" }) {
+  async sendMessage({ to, cc = [], subject, bodyText, bodyHtml = null, inReplyTo = "", references = [], attachments = [], messageId = "", requestDeliveryStatus = false }) {
     this.assertConfigured();
     const recipientList = [...new Set([...to, ...cc].map((value) => String(value || "").trim().toLowerCase()).filter(Boolean))];
     if (!recipientList.length) throw new CommsHubError(400, "email_recipients_missing", "At least one email recipient is required.");
@@ -508,14 +508,17 @@ export class OneComMailClient {
       providerStage = "greeting";
       await smtpCommand(socket, reader, null, [220], providerStage);
       providerStage = "ehlo";
-      await smtpCommand(socket, reader, `EHLO ${this.config.oneComSmtpEhloName}`, [250], providerStage);
+      const ehlo = await smtpCommand(socket, reader, `EHLO ${this.config.oneComSmtpEhloName}`, [250], providerStage);
+      const dsn = deliveryStatusParameters(ehlo, requestDeliveryStatus);
       const authPayload = Buffer.from(`\0${this.config.oneComEmailUsername}\0${this.config.oneComEmailPassword}`, "utf8").toString("base64");
       providerStage = "auth";
       await smtpCommand(socket, reader, `AUTH PLAIN ${authPayload}`, [235], providerStage);
       providerStage = "mail_from";
-      await smtpCommand(socket, reader, `MAIL FROM:<${this.config.oneComEmailAddress}>`, [250], providerStage);
+      await smtpCommand(socket, reader, `MAIL FROM:<${this.config.oneComEmailAddress}>${dsn.mailFrom}`, [250], providerStage);
       providerStage = "rcpt_to";
-      for (const recipient of recipientList) await smtpCommand(socket, reader, `RCPT TO:<${recipient}>`, [250, 251], providerStage);
+      for (const recipient of recipientList) {
+        await smtpCommand(socket, reader, `RCPT TO:<${recipient}>${dsn.rcptTo}`, [250, 251], providerStage);
+      }
       providerStage = "data_command";
       await smtpCommand(socket, reader, "DATA", [354], providerStage);
       const dotStuffed = built.raw.replace(/(^|\r\n)\./g, "$1..");
@@ -534,6 +537,7 @@ export class OneComMailClient {
         messageId: built.messageId,
         acceptedRecipients: recipientList,
         response: dataResponse.message,
+        dsnRequested: dsn.requested,
       });
     } catch (cause) {
       socket?.destroy();

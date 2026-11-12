@@ -67,6 +67,8 @@ def production_monitor_config(defaults):
         expected.append('housekeeping:default')
     if enabled(defaults, 'COMMS_HUB_EMAIL_ENABLED') and enabled(defaults, 'COMMS_HUB_EMAIL_POLL_WORKER_ENABLED'):
         expected.append('inbound_email:info')
+    if enabled(defaults, 'NEWSLETTER_DELIVERY_MONITOR_ENABLED'):
+        expected.append('newsletter_delivery:default')
     if not expected:
         raise ValueError('No production worker inventory enabled')
     return f'{base}/comms-hub/workers/health', expected

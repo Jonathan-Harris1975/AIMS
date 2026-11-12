@@ -1,3 +1,5 @@
+import { NewsletterDeliveryMonitor } from "../newsletter/delivery/deliveryMonitor.js";
+import { NewsletterDeliveryWorker } from "./workers/newsletterDeliveryWorker.js";
 import { log } from "../../logger.js";
 import { loadCommsHubConfig, getCommsHubReadiness, SOCIAL_CHANNEL_CAPABILITIES } from "./config.js";
 import { D1Client } from "./clients/d1Client.js";
@@ -233,6 +235,8 @@ export function createCommsHubContext({ env = process.env, fetchImpl, r2ArchiveS
   active.webhookReconcileWorker = new CommsHubWebhookReconcileWorker({ context: active });
   active.housekeepingService = new CommsHubHousekeepingService({ context: active });
   active.housekeepingWorker = new CommsHubHousekeepingWorker({ context: active });
+  active.newsletterDeliveryMonitor = new NewsletterDeliveryMonitor({ context: active });
+  active.newsletterDeliveryWorker = new NewsletterDeliveryWorker({ context: active });
   active.workerHeartbeatService = new CommsHubWorkerHeartbeatService({ context: active });
   active.workerHeartbeatService.instrumentCriticalWorkers();
   active.quarantineService.register('email_poll', (item) => {
@@ -338,6 +342,7 @@ export async function startCommsHubRuntime() {
       const delayedActionWorkerStarted = active.delayedActionWorker.start();
       const retentionWorkerStarted = active.retentionWorker.start();
       const monthEndConversationArchiveWorkerStarted = active.monthEndConversationArchiveWorker.start();
+      const newsletterDeliveryWorkerStarted = active.newsletterDeliveryWorker.start();
       const housekeepingWorkerStarted = active.housekeepingWorker.start();
       clearRuntimeSupervisorTimer();
       runtimeFailureCount = 0;
@@ -366,6 +371,7 @@ export async function startCommsHubRuntime() {
           delayedActions: delayedActionWorkerStarted,
           retention: retentionWorkerStarted,
           monthEndConversationArchive: monthEndConversationArchiveWorkerStarted,
+          newsletterDelivery: newsletterDeliveryWorkerStarted,
           housekeeping: housekeepingWorkerStarted,
         },
       };
@@ -478,6 +484,7 @@ export async function stopCommsHubRuntime() {
       context.retentionWorker.stop(),
       context.monthEndConversationArchiveWorker.stop(),
       context.housekeepingWorker.stop(),
+      context.newsletterDeliveryWorker.stop(),
     ]);
   }
   context = null;
