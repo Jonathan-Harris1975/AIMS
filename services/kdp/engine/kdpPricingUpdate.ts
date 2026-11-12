@@ -194,7 +194,7 @@ export async function updateBookPricingOnPage(
 ): Promise<KdpPricingUpdateResult> {
   const cache = await readMetadataCache()
   const cachedBook = cache?.books.find((book) => book.titleId === titleId && book.format === format)
-  const pricePolicyErrors = validateKdpPriceChanges(format, changes, cachedBook?.royaltyPlan)
+  const pricePolicyErrors = validateKdpPriceChanges(format, changes, cachedBook?.royaltyPlan, cachedBook?.fileSizeKb)
   if (pricePolicyErrors.length > 0) {
     throw new KdpClientError(pricePolicyErrors.join(' '))
   }
