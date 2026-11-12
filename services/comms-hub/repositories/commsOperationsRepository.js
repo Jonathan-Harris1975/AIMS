@@ -1274,6 +1274,40 @@ export class CommsOperationsRepository extends CommsIdentityArchiveRepository {
     return (await this.listQuarantine({ status: "", id, limit: 1 }))[0] || null;
   }
 
+  async recoverStaleQuarantineReplays({ at = nowIso() } = {}) {
+    const before = new Date(Date.parse(at) - 30 * 60_000).toISOString();
+    const eligible = `status = 'replay_pending' AND updated_at < ? AND source_type = 'delayed_action'
+      AND NOT EXISTS (
+        SELECT 1 FROM comms_hub_delayed_actions a
+        LEFT JOIN comms_hub_notifications n ON a.action_type = 'notification_email'
+          AND n.id = json_extract(CASE WHEN json_valid(a.payload_json) THEN a.payload_json ELSE '{}' END, '$.notificationId')
+        WHERE a.id = source_id AND (a.status = 'leased' OR a.failure_class = 'uncertain'
+          OR n.email_delivery_status IN ('sending','reconciliation_required'))
+      )`;
+    const result = await this.d1.batch([
+      {
+        sql: `UPDATE comms_hub_quarantine_attempts SET outcome = 'blocked',
+                detail = 'Interrupted replay recovered after checking live source state.'
+              WHERE outcome = 'started' AND quarantine_id IN (
+                SELECT id FROM comms_hub_quarantine_items WHERE ${eligible}
+              ) RETURNING id`,
+        params: [before],
+      },
+      {
+        sql: `UPDATE comms_hub_quarantine_items
+                SET status = CASE WHEN EXISTS (SELECT 1 FROM comms_hub_delayed_actions a
+                    WHERE a.id = source_id AND a.status = 'complete') THEN 'replayed' ELSE 'quarantined' END,
+                    resolved_at = CASE WHEN EXISTS (SELECT 1 FROM comms_hub_delayed_actions a
+                    WHERE a.id = source_id AND a.status = 'complete') THEN ? ELSE resolved_at END,
+                    updated_at = ?, metadata_json = json_set(
+                      CASE WHEN json_valid(metadata_json) THEN metadata_json ELSE '{}' END, '$.interruptedReplayRecoveredAt', ?)
+              WHERE ${eligible} RETURNING id`,
+        params: [at, at, at, before],
+      },
+    ]);
+    return rows(result[1]).length;
+  }
+
   async beginQuarantineReplay({ id, actor, at = nowIso() }) {
     const attemptId = stableId("qat", id, actor, at, randomUUID());
     const result = await this.d1.batch([
@@ -1378,11 +1412,34 @@ export class CommsOperationsRepository extends CommsIdentityArchiveRepository {
     if (!['sent', 'retry', 'quarantined'].includes(outcome)) {
       throw new CommsHubError(400, 'notification_email_reconciliation_outcome_invalid', 'Reconciliation outcome must be sent, retry, or quarantined.');
     }
-    if (outcome === 'sent') {
-      return this.markNotificationEmailState({ id, status: 'sent', providerMessageId, at });
-    }
-    if (outcome === 'quarantined') {
-      return this.markNotificationEmailState({ id, status: 'quarantined', failureClass: 'manual', error: `Reconciled by ${actor}`, at });
+    if (outcome === 'sent' || outcome === 'quarantined') {
+      const sent = outcome === 'sent';
+      const result = await this.d1.batch([
+        {
+          sql: `UPDATE comms_hub_notifications
+                  SET email_delivery_status = ?, email_failure_class = ?, email_error = ?,
+                      email_sent_at = CASE WHEN ? THEN COALESCE(email_sent_at, ?) ELSE email_sent_at END,
+                      email_provider_message_id = CASE WHEN ? THEN COALESCE(?, email_provider_message_id) ELSE email_provider_message_id END,
+                      email_last_attempt_at = ?
+                WHERE id = ? AND email_delivery_status = 'reconciliation_required'
+                  AND NOT EXISTS (SELECT 1 FROM comms_hub_delayed_actions a
+                    WHERE a.idempotency_key = ? AND a.status = 'leased') RETURNING *`,
+          params: [outcome, sent ? null : 'manual', sent ? null : `Reconciled by ${actor}`,
+            sent ? 1 : 0, at, sent ? 1 : 0, providerMessageId, at, id, `notification-email:${id}`],
+        },
+        {
+          sql: `UPDATE comms_hub_delayed_actions SET status = ?, failure_class = ?, error = NULL,
+                  completed_at = CASE WHEN ? THEN ? ELSE completed_at END, updated_at = ?
+                WHERE idempotency_key = ? AND status IN ('scheduled','failed','quarantined')
+                  AND EXISTS (SELECT 1 FROM comms_hub_notifications n WHERE n.id = ?
+                    AND n.email_delivery_status = ? AND n.email_last_attempt_at = ?) RETURNING id`,
+          params: [sent ? 'complete' : 'quarantined', sent ? null : 'manual', sent ? 1 : 0, at, at,
+            `notification-email:${id}`, id, outcome, at],
+        },
+      ]);
+      const reconciled = rows(result[0])[0];
+      if (!reconciled) throw new CommsHubError(409, 'notification_email_not_reconcilable', 'Notification email changed or is being delivered. Refresh its status.');
+      return reconciled;
     }
     return this.markNotificationEmailState({ id, status: 'retry_pending', failureClass: 'manual', error: `Retry authorised by ${actor}`, at });
   }

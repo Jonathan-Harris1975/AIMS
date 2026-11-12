@@ -150,3 +150,23 @@ test('replay claim rolls back when attempt history cannot be persisted', async (
   assert.equal(item.status, 'quarantined');
   assert.equal(item.attempts, 8);
 });
+
+test('stale replay recovery releases interrupted work but preserves recent, leased and uncertain claims', async (t) => {
+  const { seed, operations, db } = fixture(t);
+  for (const status of ['scheduled', 'quarantined', 'complete', 'leased']) {
+    await seed(`stale-${status}`, status);
+    await operations.beginQuarantineReplay({ id: `q-stale-${status}`, actor: 'admin', at: '2026-11-16T06:00:00.000Z' });
+  }
+  await seed('uncertain-stale', 'quarantined', { uncertain: true });
+  await operations.beginQuarantineReplay({ id: 'q-uncertain-stale', actor: 'admin', at: '2026-11-16T06:00:00.000Z' });
+  await seed('recent-replay', 'quarantined');
+  await operations.beginQuarantineReplay({ id: 'q-recent-replay', actor: 'admin', at: '2026-11-16T07:59:00.000Z' });
+  assert.equal(await operations.recoverStaleQuarantineReplays({ at }), 3);
+  const status = (id) => db.prepare('SELECT status FROM comms_hub_quarantine_items WHERE id = ?').get(`q-${id}`).status;
+  assert.equal(status('stale-complete'), 'replayed');
+  assert.equal(status('stale-scheduled'), 'quarantined');
+  assert.equal(status('stale-quarantined'), 'quarantined');
+  for (const id of ['stale-leased', 'uncertain-stale', 'recent-replay']) assert.equal(status(id), 'replay_pending');
+  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM comms_hub_quarantine_attempts WHERE outcome = 'blocked'").get().n, 3);
+  assert.equal(await operations.recoverStaleQuarantineReplays({ at }), 0);
+});

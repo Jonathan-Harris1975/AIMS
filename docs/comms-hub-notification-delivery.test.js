@@ -484,3 +484,22 @@ test('production handoff, callback, content-review, and critical escalation path
   assert.equal(Number(escalation.email_requested), 1);
   assert.ok(actionForNotification(d1, escalation.id));
 });
+
+test('confirming uncertain delivery atomically completes its action and permits quarantine resolution', async () => {
+  const d1 = new SqliteD1();
+  const context = durableContext(d1, async () => { throw uncertainError(); });
+  const notification = await createEmailNotification(context, 'reconcile-sent-cleanup');
+  const worker = new CommsHubDelayedActionWorker({ context });
+  await worker.runOnce({ limit: 1 });
+  const source = actionForNotification(d1, notification.id);
+  const quarantine = d1.query('SELECT id FROM comms_hub_quarantine_items WHERE source_id = ?', [source.id]).results[0];
+  await context.notificationService.reconcileEmail({ id: notification.id, outcome: 'sent', providerMessageId: '<confirmed@example.test>', actor: 'admin' });
+  const completed = actionForNotification(d1, notification.id);
+  assert.equal(completed.status, 'complete');
+  assert.equal(completed.failure_class, null);
+  const { CommsHousekeepingRepository } = await import('../services/comms-hub/repositories/commsHousekeepingRepository.js');
+  const housekeeping = new CommsHousekeepingRepository(d1);
+  const resolved = await housekeeping.resolveQuarantine({ id: quarantine.id, disposition: 'resolved', actor: 'admin', reason: 'Confirmed sent', at: new Date().toISOString() });
+  assert.equal(resolved.status, 'resolved');
+  assert.equal((await worker.runOnce({ limit: 1 })).processed, 0);
+});

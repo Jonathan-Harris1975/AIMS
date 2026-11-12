@@ -47,10 +47,12 @@ export class CommsHubQuarantineService {
   }
 
   async list(filters) {
+    await this.context.operationsRepository.recoverStaleQuarantineReplays();
     return (await this.context.operationsRepository.listQuarantine(filters)).map((item) => this.describe(item));
   }
 
   async replay(id, identity) {
+    await this.context.operationsRepository.recoverStaleQuarantineReplays();
     const current = await this.context.operationsRepository.getQuarantineItem(id);
     if (!current) throw new CommsHubError(404, "quarantine_not_found", "Quarantine item was not found.");
     const eligibility = this.describe(current);
@@ -87,6 +89,7 @@ export class CommsHubQuarantineService {
 
   async tidy(identity, { dryRun = false } = {}) {
     const at = new Date();
+    if (!dryRun) await this.context.operationsRepository.recoverStaleQuarantineReplays({ at: at.toISOString() });
     const result = await this.context.housekeepingRepository.tidyQuarantine({
       actor: identity.actor, at: at.toISOString(),
       orphanBefore: new Date(at.getTime() - 7 * 86400000).toISOString(), dryRun,
@@ -102,6 +105,7 @@ export class CommsHubQuarantineService {
 
   async resolve(id, identity, { disposition = "resolved", reason = "" } = {}) {
     if (!String(reason).trim()) throw new CommsHubError(422, "quarantine_reason_required", "Enter a reason for resolving or dismissing this failure.");
+    await this.context.operationsRepository.recoverStaleQuarantineReplays();
     const item = await this.context.housekeepingRepository.resolveQuarantine({
       id,
       disposition,

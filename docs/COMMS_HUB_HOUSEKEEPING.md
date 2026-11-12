@@ -58,3 +58,8 @@ current replay eligibility, Active/History filters, redacted technical details a
 Invalid evidence references receive one draft-only repair using the same route and approved evidence.
 A second invalid draft is quarantined immediately, avoiding eight full pipeline retries; validation
 still rejects unknown references, ungrounded URLs and unsafe output.
+
+Interrupted delayed-action replays are recovered after 30 minutes only if their live source is no
+longer leased and no delivery reconciliation is outstanding. Completed sources move to history;
+other idle sources return to review with an interrupted-attempt record. Confirming a notification
+as delivered updates both its notification and delayed-action state atomically, allowing closure.
