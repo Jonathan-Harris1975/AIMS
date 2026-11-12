@@ -4,7 +4,9 @@ export const PRINT_FORMATS = Object.freeze({
   paperback: { minimumPages: 24 },
   hardcover: { minimumPages: 75, maximumPages: 550 },
 });
-export const PRINT_KDP_WEEKLY_LIMIT_PER_FORMAT = 2;
+export const PRINT_KDP_WEEKLY_LIMIT_PER_FORMAT = 10;
+export const PRINT_DAILY_TARGET_TITLES = 3;
+export const PRINT_ROLLOUT_WEEKDAYS = Object.freeze(["monday", "tuesday", "wednesday", "thursday"]);
 
 export function buildPrintPreflight(books, { observedAt = new Date().toISOString() } = {}) {
   if (!Array.isArray(books)) throw new TypeError("KDP catalogue must be an array.");
@@ -54,6 +56,8 @@ export function buildPrintPreflight(books, { observedAt = new Date().toISOString
       sourceReviewRequired: items.filter((item) => item.state === "source_pdf_review_required").length,
       weeklyCreationCap: PRINT_KDP_WEEKLY_LIMIT_PER_FORMAT,
       weeklyFirstSubmissionCap: PRINT_KDP_WEEKLY_LIMIT_PER_FORMAT,
+      dailyTargetTitles: PRINT_DAILY_TARGET_TITLES,
+      rolloutWeekdays: PRINT_ROLLOUT_WEEKDAYS,
       // This is a preparation queue, not authorisation to create or submit to KDP.
       preparationQueue: items.filter((item) => item.state === "source_pdf_review_required").map((item) => item.ebookId),
     }];
@@ -63,5 +67,48 @@ export function buildPrintPreflight(books, { observedAt = new Date().toISOString
     catalogueCount: books.length, editionCount: records.length,
     byFormat, records, kdpWritesPerformed: false,
     message: "Preparation-only inventory. Catalogue page counts are not verified PDF print counts. No KDP title creation or publishing is authorised by this report.",
+  };
+}
+
+/**
+ * Return planning capacity, not permission to publish. Amazon currently documents
+ * a 10-title weekly creation limit per format. Only an independently authorised
+ * higher allowance should be configured by KDP_PRINT_WEEKLY_LIMIT_PER_FORMAT.
+ *
+ * KDP resets weekly quotas at Sunday 00:00 UTC. MAST is the sole run clock and
+ * schedules these slots on Monday–Thursday in Europe/London.
+ */
+export function getPrintRolloutCapacity({
+  observedAt = new Date().toISOString(),
+  weeklyLimit = PRINT_KDP_WEEKLY_LIMIT_PER_FORMAT,
+} = {}) {
+  if (!Number.isInteger(weeklyLimit) || weeklyLimit < 1 || weeklyLimit > 100) {
+    throw new RangeError("Print weekly limit must be an integer between 1 and 100.");
+  }
+  const when = new Date(observedAt);
+  if (!Number.isFinite(when.getTime())) throw new TypeError("Invalid print rollout observedAt.");
+  const weekday = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/London", weekday: "long",
+  }).format(when).toLowerCase();
+  const dayIndex = PRINT_ROLLOUT_WEEKDAYS.indexOf(weekday);
+  const alreadyAllocated = Math.min(weeklyLimit, Math.max(0, dayIndex) * PRINT_DAILY_TARGET_TITLES);
+  const slotsPerFormat = dayIndex === -1
+    ? 0 : Math.min(PRINT_DAILY_TARGET_TITLES, Math.max(0, weeklyLimit - alreadyAllocated));
+  // The baseline allowance means three slots Mon/Tue/Wed, one Thu. At a
+  // documented account-specific 12/week allowance this becomes 3 each day.
+  const sundayUtc = new Date(Date.UTC(when.getUTCFullYear(), when.getUTCMonth(), when.getUTCDate() - when.getUTCDay()));
+  return {
+    observedAt: when.toISOString(), localWeekday: weekday,
+    quotaResetsAt: "Sunday 00:00 UTC", quotaWeekStartUtc: sundayUtc.toISOString(),
+    dailyTargetTitles: PRINT_DAILY_TARGET_TITLES,
+    weeklyLimitPerFormat: weeklyLimit,
+    scheduledWeekdays: PRINT_ROLLOUT_WEEKDAYS,
+    scheduledSlotsPerFormatToday: slotsPerFormat,
+    scheduledSlotsTodayTotal: slotsPerFormat * Object.keys(PRINT_FORMATS).length,
+    fridayReservedForNewBooks: true,
+    // Creation and first submission are independently metered by KDP;
+    // actual usage must be reconciled before any live write.
+    requiresLiveQuotaReconciliation: true,
+    authorisesKdpWrites: false,
   };
 }
