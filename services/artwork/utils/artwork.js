@@ -249,10 +249,21 @@ function boundedQaFloor(value, fallback) {
 
 function socialAdvisoryFloors() {
   return {
-    minScore: boundedQaFloor(process.env.SOCIAL_ARTWORK_VISUAL_QA_ADVISORY_MIN_SCORE, 55),
-    minRelevance: boundedQaFloor(process.env.SOCIAL_ARTWORK_VISUAL_QA_ADVISORY_MIN_RELEVANCE, 60),
-    minTextSafety: boundedQaFloor(process.env.SOCIAL_ARTWORK_VISUAL_QA_ADVISORY_MIN_TEXT_SAFETY, 60),
+    minScore: boundedQaFloor(process.env.SOCIAL_ARTWORK_VISUAL_QA_ADVISORY_MIN_SCORE, 60),
+    minRelevance: boundedQaFloor(process.env.SOCIAL_ARTWORK_VISUAL_QA_ADVISORY_MIN_RELEVANCE, 70),
+    minTextSafety: boundedQaFloor(process.env.SOCIAL_ARTWORK_VISUAL_QA_ADVISORY_MIN_TEXT_SAFETY, 70),
   };
+}
+
+// Evergreen images can repair one genuinely poor generated image before
+// falling through to a static weekday card. Keep the limit independent of
+// the shared artwork setting so other pipelines retain their own budgets.
+export function artworkQaRegenerationLimit(mode = "podcast") {
+  const prefix = String(mode || "podcast").replace(/[^a-z0-9]+/gi, "_").toUpperCase();
+  const configured = process.env[`${prefix}_ARTWORK_VISUAL_QA_MAX_REGENERATIONS`]
+    ?? (mode === "social" ? 1 : process.env.ARTWORK_VISUAL_QA_MAX_REGENERATIONS ?? (mode === "podcast" ? 1 : 0));
+  const parsed = Number(configured);
+  return Number.isFinite(parsed) ? Math.max(0, Math.min(2, Math.trunc(parsed))) : 0;
 }
 
 function candidateRank(candidate = {}) {
@@ -348,9 +359,7 @@ async function requestArtworkFromProvider(provider, prompt, mode, date, { useSho
 
       if (shouldAuditArtwork(mode)) {
         const qaRequired = parseBoolean(process.env.ARTWORK_VISUAL_QA_REQUIRED, true);
-        const configuredRegenerations = process.env.ARTWORK_VISUAL_QA_MAX_REGENERATIONS
-          ?? (mode === "podcast" ? 1 : 0);
-        const maxRegenerations = Math.max(0, Math.min(2, Number(configuredRegenerations)));
+        const maxRegenerations = artworkQaRegenerationLimit(mode);
         let qa;
         let qaPrompt = prompt;
         for (let qaAttempt = 0; qaAttempt <= maxRegenerations; qaAttempt += 1) {
@@ -383,7 +392,13 @@ async function requestArtworkFromProvider(provider, prompt, mode, date, { useSho
             hardDefects: qa.hardDefects,
           });
           if (qa.pass) return image;
-          if (qaAttempt >= maxRegenerations) {
+          // If this image misses only advisory targets, save the extra
+          // generation cost: compare it with the other provider's candidate.
+          // Re-render only when the image has a real relevance/safety defect.
+          const softCandidateUsable = mode === "social" && Boolean(selectPublishableSocialArtworkCandidate([
+            { base64: image, qa },
+          ]));
+          if (qaAttempt >= maxRegenerations || softCandidateUsable) {
             const err = new Error(`Generated ${mode} artwork failed visual QA (${qa.score}/${qa.threshold}): ${[...(qa.hardDefects || []), ...(qa.defects || [])].join(" | ") || qa.summary}`);
             err.statusCode = 422;
             err.artworkVisualQa = qa;
