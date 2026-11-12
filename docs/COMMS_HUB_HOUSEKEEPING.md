@@ -7,7 +7,8 @@ This is the operating contract for automated Communications Hub housekeeping.
 | Cadence | Owner | Work |
 |---|---|---|
 | Daily | AIMS in-process worker | Retention-policy health, expiry/janitor work and provider-health pruning |
-| Sunday 08:00 Europe/London | MAST | Unresolved-quarantine report; no automatic unresolved-item deletion |
+| Saturday 08:00 Europe/London | MAST | Unresolved-quarantine report; no automatic unresolved-item deletion |
+| Monday 08:00 Europe/London | MAST | Audited quarantine tidy-up and eligible terminal-history purge; unresolved work retained |
 | Day 1, 04:00 Europe/London | MAST | Full monthly cycle after the 03:00 one.com Trash/Junk cleanup |
 
 MAST calls `POST /comms-hub/maintenance/run` with the exact confirmation `run-comms-hub-monthly-housekeeping`. The D1 run ledger gives each period one idempotent window.
@@ -28,6 +29,7 @@ MAST calls `POST /comms-hub/maintenance/run` with the exact confirmation `run-co
 - `GET /comms-hub/maintenance/status`
 - `POST /comms-hub/maintenance/run`
 - `POST /comms-hub/maintenance/quarantine-review`
+- `POST /comms-hub/maintenance/quarantine-tidy`
 - `POST /comms-hub/quarantine/:id/replay`
 - `POST /comms-hub/quarantine/:id/resolve`
 - `POST /comms-hub/quarantine/:id/dismiss`
@@ -36,11 +38,15 @@ All are AIMS-authenticated and permission-gated. A monthly response is successfu
 
 ## Quarantine tidy-up
 
-The authorised weekly automation runs on Monday at 08:00 Europe/London (including BST).
-It calls `POST /comms-hub/maintenance/quarantine-tidy`, first with `{"dryRun":true}`
-and then with `{"dryRun":false}`. This endpoint never invokes replay handlers or sends communications.
+MAST owns the native `comms-hub-weekly-quarantine-tidy` job, scheduled every Monday at
+08:00 Europe/London (including BST). It uses its existing AIMS authentication to call
+`POST /comms-hub/maintenance/quarantine-tidy` with `{"dryRun":false}`. MAST supplies durable
+run-window deduplication, health/preflight/warmup checks, a twelve-hour catch-up window,
+two bounded request retries, response validation, execution history and failure alerts.
+No ChatGPT task or LLM call is involved. Manual previews remain available with `{"dryRun":true}`.
+This endpoint never invokes replay handlers or sends communications.
 It moves failures whose original delayed action is complete/cancelled into history. It also
- dismisses orphaned failures older than seven days only when both their original delayed action
+dismisses orphaned failures older than seven days only when both their original delayed action
 and their conversation reference are absent. Existing open conversations, failed/quarantined work,
 scheduled retries, leased actions and uncertain deliveries remain for review. Each decision is
 rechecked in the transaction and recorded in the quarantine attempt history. Each pass handles
@@ -48,7 +54,7 @@ at most 500 candidates and reports cleared, retained, concurrently changed and p
 
 Only terminal history beyond `COMMS_HUB_HOUSEKEEPING_COMPLETED_RECORD_DAYS` (production: 180 days)
 is purged, and records whose source can still execute are excluded. Clearing the active queue
-therefore preserves recent failure details and the audit trail. The existing Sunday report is unchanged.
+therefore preserves recent failure details and the audit trail. The existing Saturday report is unchanged.
 
 Manual resolve/dismiss requires a reason. Cancelling the corresponding queued action and recording
 the decision are atomic; a leased action or uncertain delivery cannot be dismissed. Replay uses
