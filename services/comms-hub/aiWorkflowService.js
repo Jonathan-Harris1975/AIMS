@@ -129,6 +129,32 @@ async function requestJson(aiRequest, routeName, system, payload, options = {}) 
   return { parsed: parseStrictJson(result.content, `${routeName} response`), result };
 }
 
+function invalidEvidenceReferences(parsed, evidence) {
+  const allowed = new Set(evidence.map((item) => item.sourceReference));
+  return Array.isArray(parsed.evidenceSourceReferences)
+    && parsed.evidenceSourceReferences.some((reference) => !allowed.has(String(reference)));
+}
+
+export async function requestGroundedDraft(aiRequest, routeName, system, payload, options = {}) {
+  let draft = await requestJson(aiRequest, routeName, system, payload, options);
+  if (!invalidEvidenceReferences(draft.parsed, payload.evidence)) return draft;
+  // Repair only this draft, on the same route, with the same approved evidence.
+  // Do not restart classification, retrieval or a model council.
+  const repairGuidance = [
+    system,
+    "The previous draft used an invalid evidence reference. Regenerate the answer using only the supplied evidence.",
+    "Copy sourceReference values exactly; never use evidenceId, titles or invented URLs as references.",
+    "If no supplied evidence supports a claim, omit that claim.",
+  ].join("\n");
+  draft = await requestJson(aiRequest, routeName, repairGuidance, payload, options);
+  if (invalidEvidenceReferences(draft.parsed, payload.evidence)) {
+    throw new CommsHubError(422, "reply_evidence_reference_invalid", "The draft cited evidence that was not returned by an approved index after one repair attempt.", {
+      failureClass: "recoverable", publicMessage: "The reply cited an invalid source and needs review.",
+    });
+  }
+  return { ...draft, evidenceRepaired: true };
+}
+
 function evidencePrompt(evidence) {
   return evidence.map((item) => ({
     evidenceId: item.id,
@@ -664,7 +690,7 @@ led material favours blotato_video; a serialisable topic with multiple distinct 
               result: { content: JSON.stringify(brandFallbackDraft), providerId: "aims-brand-grounding", model: "official-website-no-guess-v1", routeKey: draftRoute },
             }
           : null;
-      const resolvedDraftCall = draftCall || await requestJson(aiRequest, draftRoute, [
+      const resolvedDraftCall = draftCall || await requestGroundedDraft(aiRequest, draftRoute, [
 
             policy.purpose,
             operation === "follow_up" ? "This is a scheduled follow-up. Refer only to the unresolved dependency and do not repeat the full earlier reply." : "",
@@ -821,6 +847,7 @@ led material favours blotato_video; a serialisable topic with multiple distinct 
           model: resolvedDraftCall.result.model,
           metadata: {
             citedSourceReferences: citedReferences,
+            evidenceRepaired: resolvedDraftCall.evidenceRepaired === true,
             approvalReasons: approvalPolicy.reasons,
             modelRoute: draftRoute,
             complexity,

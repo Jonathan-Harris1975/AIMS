@@ -1326,6 +1326,11 @@ export function createCommsHubRouter({
     } catch (error) { next(error); }
   });
 
+  router.post("/maintenance/quarantine-tidy", permit("replay_quarantine"), async (req, res, next) => {
+    try { return res.json({ ok: true, result: await contextProvider().quarantineService.tidy(req.commsIdentity, { dryRun: req.body?.dryRun === true }) }); }
+    catch (error) { next(error); }
+  });
+
   router.get("/quarantine", permit("read_queue"), async (req, res, next) => {
     try { return res.json({ ok: true, items: await contextProvider().quarantineService.list({ status: String(req.query.status || "quarantined"), failureClass: String(
       req.query.failureClass || ""), limit: Number(req.query.limit || 100) }) }); }

@@ -33,3 +33,28 @@ MAST calls `POST /comms-hub/maintenance/run` with the exact confirmation `run-co
 - `POST /comms-hub/quarantine/:id/dismiss`
 
 All are AIMS-authenticated and permission-gated. A monthly response is successful only when all seven reported stages have `ok=true`.
+
+## Quarantine tidy-up
+
+The authorised weekly automation runs on Monday at 08:00 Europe/London (including BST).
+It calls `POST /comms-hub/maintenance/quarantine-tidy`, first with `{"dryRun":true}`
+and then with `{"dryRun":false}`. This endpoint never invokes replay handlers or sends communications.
+It moves failures whose original delayed action is complete/cancelled into history. It also
+ dismisses orphaned failures older than seven days only when both their original delayed action
+and their conversation reference are absent. Existing open conversations, failed/quarantined work,
+scheduled retries, leased actions and uncertain deliveries remain for review. Each decision is
+rechecked in the transaction and recorded in the quarantine attempt history. Each pass handles
+at most 500 candidates and reports cleared, retained, concurrently changed and purged counts.
+
+Only terminal history beyond `COMMS_HUB_HOUSEKEEPING_COMPLETED_RECORD_DAYS` (production: 180 days)
+is purged, and records whose source can still execute are excluded. Clearing the active queue
+therefore preserves recent failure details and the audit trail. The existing Sunday report is unchanged.
+
+Manual resolve/dismiss requires a reason. Cancelling the corresponding queued action and recording
+the decision are atomic; a leased action or uncertain delivery cannot be dismissed. Replay uses
+an atomic claim and never resets a running/scheduled/completed/missing action. The UI shows the
+current replay eligibility, Active/History filters, redacted technical details and a previewed tidy action.
+
+Invalid evidence references receive one draft-only repair using the same route and approved evidence.
+A second invalid draft is quarantined immediately, avoiding eight full pipeline retries; validation
+still rejects unknown references, ungrounded URLs and unsafe output.

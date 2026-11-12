@@ -288,7 +288,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `KDP_RESEARCH_PRICE_FLOOR_USD_MINOR` | No | services/kdp/optimisationProposal.js:82 |
 | `KDP_UPDATE_DELAY_MINUTES` | No | services/kdp/optimisationUpdates.js:15 |
 | `KDP_USERNAME` | Yes | services/kdp/index.js:15 |
-| `KOYEB_GIT_SHA` | No | scripts/startupCheck.js:54<br>services/comms-hub/routes/index.js:1379<br>services/ops/koyebMonitor.js:32<br>services/ops/koyebMonitor.js:104<br>services/shared/utils/operationalExcellence.js:139 |
+| `KOYEB_GIT_SHA` | No | scripts/startupCheck.js:54<br>services/comms-hub/routes/index.js:1384<br>services/ops/koyebMonitor.js:32<br>services/ops/koyebMonitor.js:104<br>services/shared/utils/operationalExcellence.js:139 |
 | `KOYEB_MONITOR_INTERVAL_MS` | No | services/ops/koyebMonitor.js:234 |
 | `KOYEB_SERVICE` | No | services/ops/koyebMonitor.js:101 |
 | `KOYEB_SERVICE_ID` | No | services/ops/koyebMonitor.js:101 |

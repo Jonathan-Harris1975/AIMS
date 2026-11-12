@@ -653,6 +653,30 @@ export class CommsOperationsRepository extends CommsIdentityArchiveRepository {
     return rows(result)[0] || null;
   }
 
+  async claimDelayedActionForReplay({ id, workerId, now, leaseExpiresAt }) {
+    const result = await this.d1.query(
+      `UPDATE comms_hub_delayed_actions
+          SET status = 'leased', attempts = 1, next_attempt_at = ?, due_at = ?,
+              lease_owner = ?, lease_expires_at = ?, failure_class = NULL, error = NULL, updated_at = ?
+        WHERE id = ? AND status IN ('failed','quarantined')
+          AND COALESCE(failure_class, '') != 'uncertain'
+          AND NOT EXISTS (
+            SELECT 1 FROM comms_hub_conversations c
+            LEFT JOIN comms_hub_email_threads et ON et.conversation_id = c.id
+            WHERE c.id = comms_hub_delayed_actions.conversation_id
+              AND c.channel = 'email' AND COALESCE(et.account_key, '') IN ('admin','newsletter')
+          )
+          AND NOT EXISTS (
+            SELECT 1 FROM comms_hub_notifications n
+            WHERE comms_hub_delayed_actions.action_type = 'notification_email'
+              AND n.id = json_extract(CASE WHEN json_valid(payload_json) THEN payload_json ELSE '{}' END, '$.notificationId')
+              AND n.email_delivery_status IN ('sending','reconciliation_required')
+          ) RETURNING *`,
+      [now, now, workerId, leaseExpiresAt, now, id]
+    );
+    return rows(result)[0] || null;
+  }
+
   async resetDelayedActionForReplay(id, at = nowIso()) {
     const result = await this.d1.query(
       `UPDATE comms_hub_delayed_actions
@@ -1224,26 +1248,35 @@ export class CommsOperationsRepository extends CommsIdentityArchiveRepository {
     return rows(result)[0] || null;
   }
 
-  async listQuarantine({ status = "quarantined", failureClass = "", limit = 100 } = {}) {
+  async listQuarantine({ status = "quarantined", failureClass = "", id = "", limit = 100 } = {}) {
     const result = await this.d1.query(
-      `SELECT * FROM comms_hub_quarantine_items
-        WHERE (? = '' OR status = ?) AND (? = '' OR failure_class = ?)
-        ORDER BY created_at ASC LIMIT ?`,
-      [status, status, failureClass, failureClass, Math.min(Math.max(Number(limit) || 100, 1), 500)]
+      `SELECT q.*, a.id AS action_id, a.status AS action_status, a.action_type,
+              a.failure_class AS action_failure_class, c.channel, et.account_key,
+              n.email_delivery_status
+         FROM comms_hub_quarantine_items q
+         LEFT JOIN comms_hub_delayed_actions a ON q.source_type = 'delayed_action' AND a.id = q.source_id
+         LEFT JOIN comms_hub_conversations c ON c.id = a.conversation_id
+         LEFT JOIN comms_hub_email_threads et ON et.conversation_id = c.id
+         LEFT JOIN comms_hub_notifications n ON a.action_type = 'notification_email'
+           AND n.id = json_extract(CASE WHEN json_valid(a.payload_json) THEN a.payload_json ELSE '{}' END, '$.notificationId')
+        WHERE (? = '' OR q.status = ? OR (? = 'active' AND q.status IN ('quarantined','replay_pending'))
+          OR (? = 'history' AND q.status IN ('replayed','resolved','dismissed')))
+          AND (? = '' OR q.failure_class = ?) AND (? = '' OR q.id = ?)
+        ORDER BY q.created_at ASC LIMIT ?`,
+      [status, status, status, status, failureClass, failureClass, id, id, Math.min(Math.max(Number(limit) || 100, 1), 500)]
     );
     return rows(result).map((row) => ({ ...row, metadata: parseJson(row.metadata_json, {}) }));
   }
 
   async getQuarantineItem(id) {
-    const result = await this.d1.query(`SELECT * FROM comms_hub_quarantine_items WHERE id = ?`, [id]);
-    return rows(result)[0] || null;
+    return (await this.listQuarantine({ status: "", id, limit: 1 }))[0] || null;
   }
 
   async beginQuarantineReplay({ id, actor, at = nowIso() }) {
     const itemResult = await this.d1.query(
       `UPDATE comms_hub_quarantine_items
           SET status = 'replay_pending', attempts = attempts + 1, updated_at = ?
-        WHERE id = ? AND status IN ('quarantined','replay_pending') RETURNING *`,
+        WHERE id = ? AND status = 'quarantined' RETURNING *`,
       [at, id]
     );
     const item = rows(itemResult)[0] || null;
