@@ -4,9 +4,9 @@
 
 This inventory makes the runtime configuration contract auditable without duplicating secret values. `.env.example` and `env.template` remain the curated operator templates; this file records every production `process.env` dependency and its source locations.
 
-- Runtime variables referenced in production code: **537**
+- Runtime variables referenced in production code: **538**
 - Present in curated templates: **408**
-- Not present in curated templates: **129**
+- Not present in curated templates: **130**
 
 | Variable | Curated template | Production references |
 | --- | --- | --- |
@@ -50,10 +50,10 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `ARTWORK_CAPABILITY_CACHE_MS` | No | services/artwork/utils/openrouterImageCapabilities.js:21 |
 | `ARTWORK_CAPABILITY_DISCOVERY_ENABLED` | No | services/artwork/utils/openrouterImageCapabilities.js:55 |
 | `ARTWORK_CAPABILITY_TIMEOUT_MS` | No | services/artwork/utils/openrouterImageCapabilities.js:67 |
-| `ARTWORK_PROVIDER_ATTEMPTS` | Yes | services/artwork/utils/openrouterImagePayload.js:164 |
-| `ARTWORK_PROVIDER_RETRIES` | No | services/artwork/utils/openrouterImagePayload.js:164 |
-| `ARTWORK_PROVIDER_TIMEOUT_MS` | No | services/artwork/artwork.js:39<br>services/artwork/utils/artwork.js:48<br>services/artwork/utils/openrouterImagePayload.js:170 |
-| `ARTWORK_REQUEST_TIMEOUT_MS` | Yes | services/artwork/artwork.js:38<br>services/artwork/utils/artwork.js:47<br>services/artwork/utils/openrouterImagePayload.js:170 |
+| `ARTWORK_PROVIDER_ATTEMPTS` | Yes | services/artwork/utils/openrouterImagePayload.js:167 |
+| `ARTWORK_PROVIDER_RETRIES` | No | services/artwork/utils/openrouterImagePayload.js:167 |
+| `ARTWORK_PROVIDER_TIMEOUT_MS` | No | services/artwork/artwork.js:39<br>services/artwork/utils/artwork.js:48<br>services/artwork/utils/openrouterImagePayload.js:173 |
+| `ARTWORK_REQUEST_TIMEOUT_MS` | Yes | services/artwork/artwork.js:38<br>services/artwork/utils/artwork.js:47<br>services/artwork/utils/openrouterImagePayload.js:173 |
 | `ARTWORK_RETRY_DELAY_MS` | No | services/artwork/utils/openrouterImagePayload.js:159 |
 | `ARTWORK_TASK_TIMEOUT_MS` | Yes | services/artwork/createBlogArtwork.js:19<br>services/artwork/createSocialArtwork.js:14 |
 | `ARTWORK_TIMEOUT_MS` | Yes | services/artwork/createBlogArtwork.js:19<br>services/artwork/createPodcastArtwork.js:13<br>services/artwork/createQuizArtwork.js:11<br>services/artwork/createSocialArtwork.js:14 |
@@ -441,6 +441,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `SITE_SHELL_ALLOWED_HOSTS` | Yes | services/shared/utils/siteShell.js:30 |
 | `SITE_SHELL_MANIFEST_URL` | Yes | services/shared/utils/siteShell.js:120 |
 | `SITE_SHELL_SYNC_SHARED_SECRET` | Yes | services/shared/middleware/suiteAuth.js:72 |
+| `SOCIAL_ARTWORK_PROVIDER_ATTEMPTS` | No | services/artwork/utils/openrouterImagePayload.js:165 |
 | `SOCIAL_ARTWORK_VISUAL_QA_ADVISORY_MIN_RELEVANCE` | Yes | services/artwork/artwork.js:240<br>services/artwork/utils/artwork.js:253 |
 | `SOCIAL_ARTWORK_VISUAL_QA_ADVISORY_MIN_SCORE` | Yes | services/artwork/artwork.js:239<br>services/artwork/utils/artwork.js:252 |
 | `SOCIAL_ARTWORK_VISUAL_QA_ADVISORY_MIN_TEXT_SAFETY` | Yes | services/artwork/artwork.js:241<br>services/artwork/utils/artwork.js:254 |
