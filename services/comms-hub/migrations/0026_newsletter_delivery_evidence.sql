@@ -27,3 +27,13 @@ CREATE TABLE newsletter_delivery_monitor_state (
   lease_owner TEXT,
   lease_expires_at TEXT
 );
+-- Reports can arrive before SMTP acceptance has been persisted. Retain them
+-- for bounded later reconciliation instead of losing them behind the IMAP cursor.
+CREATE TABLE newsletter_delivery_report_inbox (
+  report_id TEXT PRIMARY KEY,
+  report_json TEXT NOT NULL,
+  observed_at TEXT NOT NULL,
+  last_attempt_at TEXT NOT NULL,
+  matched_at TEXT
+);
+CREATE INDEX idx_newsletter_report_pending ON newsletter_delivery_report_inbox(matched_at,last_attempt_at);

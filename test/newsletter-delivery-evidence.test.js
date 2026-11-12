@@ -169,3 +169,19 @@ test('Gmail 550 5.7.26 rejection creates an explicit sender-authentication incid
   assert.equal(notification.severity, 'critical');
   assert.equal(f.row().transport_status, 'failure_reported');
 });
+
+test('bounce arriving before acceptance persistence is durably reconciled after the mailbox cursor advances', async t => {
+  const f = fixture(); t.after(f.close);
+  f.db.prepare("UPDATE newsletter_delivery_recipients SET status='pending',provider_message_id='claim-token'").run();
+  assert.equal((await f.monitor.recordReport(parseRawEmail(dsn({ status: '5.7.26' })), now)).unmatched, 1);
+  assert.equal(f.db.prepare('SELECT matched_at FROM newsletter_delivery_report_inbox').get().matched_at, null);
+  f.db.prepare("UPDATE newsletter_delivery_recipients SET status='sent',provider_message_id=?").run(`<${originalId}>`);
+  const restarted = new NewsletterDeliveryMonitor({ context: f.context });
+  const later = new Date(now.getTime() + 300000);
+  assert.equal(await restarted.reconcilePending(later), 1);
+  assert.equal(f.row().transport_status, 'failure_reported');
+  assert.ok(f.db.prepare('SELECT matched_at FROM newsletter_delivery_report_inbox').get().matched_at);
+  assert.equal(await restarted.reconcilePending(new Date(later.getTime() + 300000)), 0);
+  assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM newsletter_delivery_reports').get().n, 1);
+  assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM comms_hub_notifications').get().n, 1);
+});

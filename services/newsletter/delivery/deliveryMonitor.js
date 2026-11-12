@@ -18,6 +18,9 @@ export class NewsletterDeliveryMonitor {
     const report = message.deliveryReport;
     if (!report) return { matched: 0, unmatched: message.deliveryReportCandidate ? 1 : 0 };
     const { d1 } = this.context;
+    await d1.query(`INSERT INTO newsletter_delivery_report_inbox(report_id,report_json,observed_at,last_attempt_at)
+      VALUES(?,?,?,?) ON CONFLICT(report_id) DO NOTHING`,
+    [message.messageId, JSON.stringify(report), now.toISOString(), now.toISOString()]);
     let matched = 0;
     let unmatched = 0;
     for (const recipient of report.recipients.slice(0, 100)) {
@@ -53,7 +56,24 @@ export class NewsletterDeliveryMonitor {
       }
       matched += 1;
     }
+    await d1.query(`UPDATE newsletter_delivery_report_inbox SET last_attempt_at=?,matched_at=? WHERE report_id=?`,
+      [now.toISOString(), unmatched ? null : now.toISOString(), message.messageId]);
     return { matched, unmatched };
+  }
+
+  async reconcilePending(now) {
+    const since = new Date(now.getTime() - 7 * 86400000).toISOString();
+    const { d1 } = this.context;
+    const pending = await d1.query(`SELECT report_id,report_json FROM newsletter_delivery_report_inbox
+      WHERE matched_at IS NULL AND observed_at>=? AND last_attempt_at<? ORDER BY last_attempt_at LIMIT 25`, [since, now.toISOString()]);
+    let matched = 0;
+    for (const row of pending.results || []) {
+      const result = await this.recordReport({ messageId: row.report_id, deliveryReport: JSON.parse(row.report_json) }, now);
+      matched += result.matched;
+    }
+    // This is a bounded correlation inbox, not a second mail archive.
+    await d1.query("DELETE FROM newsletter_delivery_report_inbox WHERE observed_at<?", [since]);
+    return matched;
   }
 
   async alertUnconfirmed(now) {
@@ -98,6 +118,7 @@ export class NewsletterDeliveryMonitor {
         unmatched += result.unmatched;
         high = Math.max(high, entry.uid);
       }
+      const reconciled = await this.reconcilePending(now);
       const unconfirmedIssues = await this.alertUnconfirmed(now);
       if (unmatched) await this.notify('unmatched_report', now.toISOString().slice(0, 10),
         'A delivery report could not be matched to exactly one newsletter recipient. Inspect the Newsletter mailbox; no receipt was changed.');
@@ -106,7 +127,7 @@ export class NewsletterDeliveryMonitor {
         SET uid_validity=?,last_uid=?,last_success_at=? WHERE mailbox=? AND lease_owner=? AND lease_expires_at>?
         RETURNING mailbox`, [cursor.uidValidity, high, now.toISOString(), mailbox, owner, this.clock().toISOString()]);
       if (!saved.results?.length) throw Object.assign(new Error('Newsletter monitor lease expired.'), { code: 'newsletter_monitor_lease_lost' });
-      return { skipped: false, processed: batch.messages.length, matched, unmatched, unconfirmedIssues };
+      return { skipped: false, processed: batch.messages.length, matched, unmatched, reconciled, unconfirmedIssues };
     } finally {
       await d1.query(`UPDATE newsletter_delivery_monitor_state SET lease_owner=NULL,lease_expires_at=NULL WHERE mailbox=? AND lease_owner=?`, [mailbox, owner]);
     }
