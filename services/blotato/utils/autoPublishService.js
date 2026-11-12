@@ -1988,7 +1988,7 @@ async function runPublishJobImpl({
         scheduleDate: activeScheduleDate,
         briefFingerprint,
       });
-    if (!reusedVideo && scheduleSlot && activeScheduleDate) {
+    if (!reusedVideo && !pendingRenderRecovery?.visualId && scheduleSlot && activeScheduleDate) {
       await refreshJobStoreFromState();
       const paidRenderCap = positiveIntEnv("BLOTATO_DAILY_PAID_RENDER_CAP", 2, 10);
       const nextBudget = expectedCreditBudget(pack);
@@ -2017,6 +2017,8 @@ async function runPublishJobImpl({
     }
     const video = reusedVideo || (pendingRenderRecovery?.visualId
       ? await (async () => {
+          updateJob(lane.jobType, sessionId, { phase: "video-rendering",
+            videoId: pendingRenderRecovery.visualId, videoDashboardUrl: pendingRenderRecovery.dashboardUrl || null });
           const recovered = await awaitExistingBlotatoRender(pendingRenderRecovery.visualId, apiKey, {
             usedTemplateId: pendingRenderRecovery.templateId || templateId,
           });
