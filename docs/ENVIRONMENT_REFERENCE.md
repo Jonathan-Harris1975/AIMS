@@ -4,9 +4,9 @@
 
 This inventory makes the runtime configuration contract auditable without duplicating secret values. `.env.example` and `env.template` remain the curated operator templates; this file records every production `process.env` dependency and its source locations.
 
-- Runtime variables referenced in production code: **535**
+- Runtime variables referenced in production code: **536**
 - Present in curated templates: **408**
-- Not present in curated templates: **127**
+- Not present in curated templates: **128**
 
 | Variable | Curated template | Production references |
 | --- | --- | --- |
@@ -43,9 +43,9 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `API_ZERO_KEY` | Yes | services/outreach/services/zeroBounceBatch.js:21 |
 | `APP_ENV` | No | scripts/performanceGate.js:6<br>server.js:400 |
 | `APP_STATE_DIR` | Yes | services/shared/utils/stateFile.js:9 |
-| `APP_TITLE` | Yes | ai-config.js:347<br>services/artwork/artwork.js:294<br>services/artwork/utils/artwork.js:307 |
+| `APP_TITLE` | Yes | ai-config.js:347<br>services/artwork/artwork.js:294<br>services/artwork/utils/artwork.js:318 |
 | `APP_TMP_DIR` | Yes | scripts/tempStorage.js:10<br>services/blotato/utils/renderedVideoQa.js:308<br>services/shared/utils/stateFile.js:10<br>services/tts/utils/editingProcessor.js:22<br>services/tts/utils/mergeProcessor.js:14<br>services/tts/utils/podcastProcessor.js:56 |
-| `APP_URL` | Yes | ai-config.js:346<br>audits/utils/orchestrator.js:143<br>services/artwork/artwork.js:293<br>services/artwork/utils/artwork.js:306<br>services/rss-feed-creator/utils/feedGenerator.js:32 |
+| `APP_URL` | Yes | ai-config.js:346<br>audits/utils/orchestrator.js:143<br>services/artwork/artwork.js:293<br>services/artwork/utils/artwork.js:317<br>services/rss-feed-creator/utils/feedGenerator.js:32 |
 | `APP_VERSION` | No | server.js:399<br>server.js:418<br>services/shared/utils/operationalExcellence.js:192 |
 | `ARTWORK_CAPABILITY_CACHE_MS` | No | services/artwork/utils/openrouterImageCapabilities.js:21 |
 | `ARTWORK_CAPABILITY_DISCOVERY_ENABLED` | No | services/artwork/utils/openrouterImageCapabilities.js:55 |
@@ -55,15 +55,15 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `ARTWORK_PROVIDER_TIMEOUT_MS` | No | services/artwork/artwork.js:39<br>services/artwork/utils/artwork.js:48<br>services/artwork/utils/openrouterImagePayload.js:170 |
 | `ARTWORK_REQUEST_TIMEOUT_MS` | Yes | services/artwork/artwork.js:38<br>services/artwork/utils/artwork.js:47<br>services/artwork/utils/openrouterImagePayload.js:170 |
 | `ARTWORK_RETRY_DELAY_MS` | No | services/artwork/utils/openrouterImagePayload.js:159 |
-| `ARTWORK_TASK_TIMEOUT_MS` | Yes | services/artwork/createBlogArtwork.js:19<br>services/artwork/createSocialArtwork.js:13 |
-| `ARTWORK_TIMEOUT_MS` | Yes | services/artwork/createBlogArtwork.js:19<br>services/artwork/createPodcastArtwork.js:13<br>services/artwork/createQuizArtwork.js:11<br>services/artwork/createSocialArtwork.js:13 |
+| `ARTWORK_TASK_TIMEOUT_MS` | Yes | services/artwork/createBlogArtwork.js:19<br>services/artwork/createSocialArtwork.js:14 |
+| `ARTWORK_TIMEOUT_MS` | Yes | services/artwork/createBlogArtwork.js:19<br>services/artwork/createPodcastArtwork.js:13<br>services/artwork/createQuizArtwork.js:11<br>services/artwork/createSocialArtwork.js:14 |
 | `ARTWORK_VISUAL_QA_ENABLED` | Yes | services/artwork/artwork.js:206<br>services/artwork/utils/artwork.js:219 |
-| `ARTWORK_VISUAL_QA_MAX_REGENERATIONS` | Yes | services/artwork/artwork.js:338<br>services/artwork/utils/artwork.js:351 |
+| `ARTWORK_VISUAL_QA_MAX_REGENERATIONS` | Yes | services/artwork/artwork.js:338<br>services/artwork/utils/artwork.js:264 |
 | `ARTWORK_VISUAL_QA_MIN_RELEVANCE` | No | services/artwork/utils/artworkVisualQa.js:13 |
 | `ARTWORK_VISUAL_QA_MIN_TEXT_SAFETY` | No | services/artwork/utils/artworkVisualQa.js:14 |
 | `ARTWORK_VISUAL_QA_MODES` | Yes | services/artwork/artwork.js:199<br>services/artwork/utils/artwork.js:212 |
-| `ARTWORK_VISUAL_QA_PARSE_ATTEMPTS` | No | services/artwork/utils/artworkVisualQa.js:194 |
-| `ARTWORK_VISUAL_QA_REQUIRED` | Yes | services/artwork/artwork.js:337<br>services/artwork/utils/artwork.js:350 |
+| `ARTWORK_VISUAL_QA_PARSE_ATTEMPTS` | No | services/artwork/utils/artworkVisualQa.js:196 |
+| `ARTWORK_VISUAL_QA_REQUIRED` | Yes | services/artwork/artwork.js:337<br>services/artwork/utils/artwork.js:361 |
 | `ARTWORK_VISUAL_QA_THRESHOLD` | Yes | services/artwork/utils/artworkVisualQa.js:12 |
 | `AUDIT_ARTEFACT_READY_POLL_MS` | Yes | audits/utils/websiteAuditPipeline.js:42 |
 | `AUDIT_ARTEFACT_READY_TIMEOUT_MS` | Yes | audits/utils/websiteAuditPipeline.js:41 |
@@ -213,7 +213,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `COMMS_HUB_CONTENT_AUTOMATION_ENABLED` | Yes | services/comms-hub/routes/index.js:138 |
 | `COMMS_HUB_CONTENT_AUTOMATION_PODCAST_ENABLED` | Yes | services/comms-hub/routes/index.js:142 |
 | `COMMS_HUB_CONTENT_AUTOMATION_SOCIAL_ENABLED` | Yes | services/comms-hub/routes/index.js:141 |
-| `COMMS_HUB_CONTENT_AUTOMATION_ZERNIO_MINI_SERIES_BRIEF_LIMIT` | Yes | services/zernio/utils/socialScheduler.js:2308 |
+| `COMMS_HUB_CONTENT_AUTOMATION_ZERNIO_MINI_SERIES_BRIEF_LIMIT` | Yes | services/zernio/utils/socialScheduler.js:2311 |
 | `COMMS_HUB_CREDENTIAL_VAULT_ENABLED` | Yes | services/comms-hub/routes/index.js:150 |
 | `COMMS_HUB_DELAYED_ACTION_WORKER_ENABLED` | Yes | services/comms-hub/routes/index.js:146 |
 | `COMMS_HUB_EMAIL_ENABLED` | Yes | services/comms-hub/routes/index.js:131 |
@@ -314,7 +314,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `OPENPAGERANK_API_BASE` | No | services/outreach/services/outreachCore.js:138 |
 | `OPENROUTER_API_BASE` | Yes | services/artwork/artwork.js:30<br>services/artwork/utils/artwork.js:39<br>services/shared/utils/ai-service.js:15 |
 | `OPENROUTER_API_KEY` | Yes | server.js:188 |
-| `OPENROUTER_APP_NAME` | Yes | ai-config.js:347<br>services/artwork/artwork.js:294<br>services/artwork/utils/artwork.js:307 |
+| `OPENROUTER_APP_NAME` | Yes | ai-config.js:347<br>services/artwork/artwork.js:294<br>services/artwork/utils/artwork.js:318 |
 | `OPENROUTER_BASE_URL` | Yes | services/artwork/artwork.js:30<br>services/artwork/utils/artwork.js:39<br>services/shared/utils/ai-service.js:15 |
 | `OPENROUTER_DATA_COLLECTION` | No | services/shared/utils/ai-service.js:212 |
 | `OPENROUTER_ENABLE_FALLBACKS` | Yes | services/shared/utils/ai-service.js:198 |
@@ -325,7 +325,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `OPENROUTER_REQUIRE_PARAMETERS` | No | services/shared/utils/ai-service.js:201 |
 | `OPENROUTER_REQUIRE_PARAMETERS_FOR_JSON` | Yes | services/shared/utils/ai-service.js:202 |
 | `OPENROUTER_SERVICE_TIER` | Yes | services/shared/utils/ai-service.js:224 |
-| `OPENROUTER_SITE_URL` | Yes | ai-config.js:346<br>services/artwork/artwork.js:293<br>services/artwork/utils/artwork.js:306 |
+| `OPENROUTER_SITE_URL` | Yes | ai-config.js:346<br>services/artwork/artwork.js:293<br>services/artwork/utils/artwork.js:317 |
 | `OPENROUTER_SORT_BY` | Yes | services/shared/utils/ai-service.js:184 |
 | `OPS_ALERT_TIMEOUT_MS` | Yes | services/shared/utils/operationalExcellence.js:6 |
 | `OUTREACH_AUTOMATION_ENABLED` | Yes | services/outreach/services/outreachService.js:32 |
@@ -444,7 +444,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `SOCIAL_ARTWORK_VISUAL_QA_ADVISORY_MIN_RELEVANCE` | Yes | services/artwork/artwork.js:240<br>services/artwork/utils/artwork.js:253 |
 | `SOCIAL_ARTWORK_VISUAL_QA_ADVISORY_MIN_SCORE` | Yes | services/artwork/artwork.js:239<br>services/artwork/utils/artwork.js:252 |
 | `SOCIAL_ARTWORK_VISUAL_QA_ADVISORY_MIN_TEXT_SAFETY` | Yes | services/artwork/artwork.js:241<br>services/artwork/utils/artwork.js:254 |
-| `SOCIAL_ARTWORK_VISUAL_QA_ALLOW_SOFT_FAILURES` | Yes | services/artwork/artwork.js:263<br>services/artwork/utils/artwork.js:276 |
+| `SOCIAL_ARTWORK_VISUAL_QA_ALLOW_SOFT_FAILURES` | Yes | services/artwork/artwork.js:263<br>services/artwork/utils/artwork.js:287 |
 | `SOCIAL_LEDGER_INTENT_LOOKBACK_DAYS` | No | services/social/editorialLedger.js:8 |
 | `SOCIAL_LEDGER_RESERVATION_TTL_HOURS` | No | services/social/editorialLedger.js:7 |
 | `STARTUP_CHECK_REQUIRED_POST_START` | Yes | scripts/bootstrap.js:106<br>scripts/deploySmoke.js:6<br>scripts/performanceGate.js:9 |
@@ -467,9 +467,10 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `WEBSITE_REBUILD_HOOK_FALLBACK` | Yes | scripts/backfill-blog-main-site-links.js:21<br>services/blog/social/buildDailySocialBlogPost.js:245<br>services/blog/weekly/buildWeeklyBlogPost.js:221<br>services/podcast/runPodcastPipeline.js:74 |
 | `X` | No | config/thresholds.js:6<br>config/thresholds.js:16 |
 | `ZERNIO_ACCOUNT_ID` | Yes | services/zernio/utils/config.js:64 |
-| `ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK` | Yes | services/zernio/utils/socialScheduler.js:1785<br>services/zernio/utils/socialScheduler.js:2705<br>services/zernio/utils/socialScheduler.js:3164<br>services/zernio/utils/socialScheduler.js:3573 |
+| `ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK` | Yes | services/zernio/utils/socialScheduler.js:1785<br>services/zernio/utils/socialScheduler.js:2708<br>services/zernio/utils/socialScheduler.js:3167<br>services/zernio/utils/socialScheduler.js:3576 |
 | `ZERNIO_API_BASE_URL` | Yes | services/zernio/utils/config.js:55<br>services/zernio/utils/zernioClient.js:36 |
-| `ZERNIO_ARTWORK_TIMEOUT_MS` | Yes | services/artwork/createSocialArtwork.js:13 |
+| `ZERNIO_ARTWORK_TIMEOUT_MS` | Yes | services/artwork/createSocialArtwork.js:14 |
+| `ZERNIO_ARTWORK_UPLOAD_ATTEMPTS` | No | services/artwork/createSocialArtwork.js:44 |
 | `ZERNIO_BLOG_RSS_FEED_URL` | Yes | services/zernio/utils/blogRssFeed.js:80<br>services/zernio/utils/config.js:97 |
 | `ZERNIO_BLOG_RSS_FETCH_TIMEOUT_MS` | No | services/zernio/utils/blogRssFeed.js:85 |
 | `ZERNIO_BLOG_RSS_HASHTAG_LIMIT` | No | services/zernio/utils/config.js:107 |
@@ -496,7 +497,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `ZERNIO_MINI_SERIES_MIN_SCORE` | No | services/zernio/utils/config.js:196 |
 | `ZERNIO_MINI_SERIES_POST_MAX_TOKENS` | No | services/zernio/utils/socialScheduler.js:48 |
 | `ZERNIO_MINI_SERIES_RESEARCH_MAX_TOKENS` | No | services/zernio/utils/socialScheduler.js:46 |
-| `ZERNIO_MINI_SERIES_RETRY_BASE_MS` | Yes | services/zernio/utils/socialScheduler.js:2763 |
+| `ZERNIO_MINI_SERIES_RETRY_BASE_MS` | Yes | services/zernio/utils/socialScheduler.js:2766 |
 | `ZERNIO_MINI_SERIES_SATURDAY_TIME` | Yes | services/zernio/utils/config.js:205 |
 | `ZERNIO_MINI_SERIES_SUNDAY_TIME` | Yes | services/zernio/utils/config.js:206 |
 | `ZERNIO_MINI_SERIES_THEME_MAX_TOKENS` | No | services/zernio/utils/socialScheduler.js:47 |
