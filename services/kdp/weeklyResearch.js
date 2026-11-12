@@ -1,7 +1,7 @@
 // Deterministic guardrails for the weekly KDP research workflow. These helpers
 // do not perform research, write to KDP, or schedule a job.
 const ASIN = /^B0[A-Z0-9]{8}$/;
-const MARKET = { US: { currency: "USD", floor: 400, host: "www.amazon.com" }, UK: { currency: "GBP", floor: 400, host: "www.amazon.co.uk" } };
+const MARKET = { US: { currency: "USD", floor: 400, host: "www.amazon.com" }, UK: { currency: "GBP", floor: 643, host: "www.amazon.co.uk" } };
 
 export function londonTime(date = new Date()) {
   if (!(date instanceof Date) || !Number.isFinite(date.getTime())) throw new TypeError("Invalid date");
@@ -36,7 +36,7 @@ export function selectWeeklyBatch(books, lastEbookId = 0, size = 15) {
 }
 
 /** Evidence must already have been independently checked for comparability. */
-export function priceFromComparables({ marketplace, ownAsin, comparables, observedAt = new Date(), discountMinor = 0, floorMinor = 499, maxAgeHours = 48 }) {
+export function priceFromComparables({ marketplace, ownAsin, comparables, observedAt = new Date(), discountMinor = 0, floorMinor = marketplace === "UK" ? 643 : 499, maxAgeHours = 48 }) {
   const market = MARKET[marketplace];
   if (!market || !Number.isSafeInteger(discountMinor) || discountMinor < 0
       || !Number.isSafeInteger(floorMinor) || floorMinor < market.floor || !Number.isFinite(maxAgeHours) || maxAgeHours <= 0)
