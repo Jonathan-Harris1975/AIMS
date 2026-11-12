@@ -1795,6 +1795,7 @@ async function buildAndScheduleDailyLaneImpl(laneKey, options = {}) {
       post.imageUrl = artwork.publicUrl;
       post.imagePrompt = imagePrompt;
       post.imageStatus = artwork.imageStatus || (artwork.fallback ? "fallback" : "generated");
+      post.imageFallbackReason = artwork.fallback ? (artwork.fallbackReason || "unspecified") : "";
       if (artwork.fallback) {
         artworkWarning = artwork.warning || `Generated ${lane.label} artwork was unavailable; the curated lane image was used.`;
       }
@@ -1843,6 +1844,8 @@ async function buildAndScheduleDailyLaneImpl(laneKey, options = {}) {
         topic: post.topic,
         title: post.title,
         imageUrl: post.imageUrl,
+        imageStatus: post.imageStatus || (options.imageUrl ? "supplied" : "generated"),
+        imageFallbackReason: post.imageFallbackReason || "",
       });
       if (laneKey === "sunday") recordSpotlightPerson(detectSpotlightPerson(post), { scheduledDateTime, topic: post.topic, title: post.title });
       for (const item of selectedRssSources.slice(0, 3)) {
