@@ -5,6 +5,7 @@ import { uploadBuffer } from "../shared/utils/r2-client.js";
 import { generateSocialArtwork } from "./utils/artwork.js";
 import { detectImageFormat } from "./utils/imageFormat.js";
 import { runArtworkTask } from "./utils/artworkTask.js";
+import { emitQaEvent } from "../shared/utils/qaEvents.js";
 import { createDeterministicAiFallbackPng } from "./utils/deterministicAiFallback.js";
 
 const DEFAULT_ZERNIO_ARTWORK_TIMEOUT_MS = 8 * 60_000;
@@ -28,6 +29,35 @@ function validFallbackUrl(value = "") {
     return ["http:", "https:"].includes(url.protocol) ? url.toString() : "";
   } catch {
     return "";
+  }
+}
+
+function fallbackFailureReason(err) {
+  if (err?.code === "ARTWORK_TASK_TIMEOUT") return "generation-timeout";
+  if (err?.artworkVisualQa) return "visual-qa-rejected";
+  return "generation-or-storage-error";
+}
+
+// R2 upload failures should not waste a successfully generated, QA-approved
+// image. Retry the SAME bytes and key; never re-bill an image model for this.
+async function uploadApprovedSocialArtwork(key, image, sessionId, lane) {
+  const rawAttempts = Number(process.env.ZERNIO_ARTWORK_UPLOAD_ATTEMPTS || 3);
+  const attempts = Number.isFinite(rawAttempts) ? Math.max(1, Math.min(3, Math.trunc(rawAttempts))) : 3;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await uploadBuffer("blogImages", key, image.buffer, image.mimeType);
+    } catch (err) {
+      if (attempt === attempts) throw err;
+      warn("artwork.social.upload_retry", {
+        sessionId,
+        lane,
+        key,
+        attempt,
+        attempts,
+        error: err?.message || String(err),
+      });
+      await new Promise((resolve) => setTimeout(resolve, attempt * 750));
+    }
   }
 }
 
@@ -60,11 +90,13 @@ export async function createSocialArtwork({
 
     const image = detectImageFormat(base64Data);
     const key = `zernio/${safeLane}/${safeSession}.${image.extension}`;
-    const publicUrl = await uploadBuffer("blogImages", key, image.buffer, image.mimeType);
+    const publicUrl = await uploadApprovedSocialArtwork(key, image, safeSession, safeLane);
 
     info("artwork.social.done", { sessionId: safeSession, lane: safeLane, key, publicUrl });
     return { ok: true, key, publicUrl, fallback: false, imageStatus: "generated" };
   } catch (err) {
+    const failureReason = fallbackFailureReason(err);
+    const qa = err?.artworkVisualQa || null;
     if (!allowFallback) {
       error("artwork.social.required_generation_failed", {
         sessionId: safeSession,
@@ -86,13 +118,33 @@ export async function createSocialArtwork({
         sessionId: safeSession,
         lane: safeLane,
         publicUrl: curatedFallback,
+        reason: failureReason,
+        qaScore: qa?.score ?? null,
+        qaRelevance: qa?.relevance ?? null,
         originalError: err?.message || String(err),
+      });
+      emitQaEvent({
+        source: "zernio.artwork",
+        type: "curated_static_fallback",
+        severity: "medium",
+        message: `Fresh artwork failed for ${safeLane}; published the curated static image only after generation/recovery was exhausted.`,
+        detail: {
+          sessionId: safeSession,
+          lane: safeLane,
+          fallbackReason: failureReason,
+          qaScore: qa?.score ?? null,
+          qaRelevance: qa?.relevance ?? null,
+          qaTextSafety: qa?.textSafety ?? null,
+          originalError: String(err?.message || err).slice(0, 500),
+        },
+        persist: true,
       });
       return {
         ok: true,
         fallback: true,
         imageStatus: "curated-static-fallback",
-        warning: "Generated artwork unavailable; curated lane image used.",
+        fallbackReason: failureReason,
+        warning: `Generated artwork unavailable (${failureReason}); curated lane image used as last resort.`,
         originalError: err?.message || String(err),
         publicUrl: curatedFallback,
       };
