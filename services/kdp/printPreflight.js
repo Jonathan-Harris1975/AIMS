@@ -9,6 +9,13 @@ export const PRINT_KDP_WEEKLY_LIMIT_PER_FORMAT = 10;
 export const PRINT_DAILY_TARGET_TITLES = 3;
 export const PRINT_ROLLOUT_WEEKDAYS = Object.freeze(["monday", "tuesday", "wednesday", "thursday"]);
 
+export function getConfiguredPrintWeeklyLimit(value) {
+  const configured = typeof value === "string" ? value.trim() : "";
+  const parsed = configured ? Number(configured) : NaN;
+  return Number.isInteger(parsed) && parsed >= 1 && parsed <= 100
+    ? parsed : PRINT_KDP_WEEKLY_LIMIT_PER_FORMAT;
+}
+
 export function buildPrintPreflight(books, { observedAt = new Date().toISOString() } = {}) {
   if (!Array.isArray(books)) throw new TypeError("KDP catalogue must be an array.");
   const ids = new Set();

@@ -31,7 +31,7 @@ import {
 } from "./storage.js";
 
 import { runOptimisationUpdates } from "./optimisationUpdates.js";
-import { buildPrintPreflight, getPrintRolloutCapacity, PRINT_KDP_WEEKLY_LIMIT_PER_FORMAT } from "./printPreflight.js";
+import { buildPrintPreflight, getConfiguredPrintWeeklyLimit, getPrintRolloutCapacity } from "./printPreflight.js";
 
 const router = express.Router();
 const ASYNC_STATUS_BASE = "/kdp/jobs";
@@ -148,9 +148,7 @@ router.post("/print/preflight/run", requestDedupe("kdp:print-preflight"), asyncR
 // required before a scheduled job may create or submit a print edition.
 router.post("/print/rollout/plan/run", requestDedupe("kdp:print-rollout-plan"), asyncRoute(async (req, res) =>
   startJob(req, res, "print-rollout-plan", async () => {
-    const configuredLimit = process.env.KDP_PRINT_WEEKLY_LIMIT_PER_FORMAT?.trim();
-    const weeklyLimit = configuredLimit === undefined || configuredLimit === ""
-      ? PRINT_KDP_WEEKLY_LIMIT_PER_FORMAT : /^\d+$/.test(configuredLimit) ? Number(configuredLimit) : NaN;
+    const weeklyLimit = getConfiguredPrintWeeklyLimit(process.env.KDP_PRINT_WEEKLY_LIMIT_PER_FORMAT);
     const capacity = getPrintRolloutCapacity({ weeklyLimit });
     const inventory = buildPrintPreflight(await listKdpEbooks(), { observedAt: capacity.observedAt });
     const byFormat = Object.fromEntries(Object.entries(inventory.byFormat).map(([format, record]) => [
