@@ -260,8 +260,11 @@ function socialAdvisoryFloors() {
 // the shared artwork setting so other pipelines retain their own budgets.
 export function artworkQaRegenerationLimit(mode = "podcast") {
   const prefix = String(mode || "podcast").replace(/[^a-z0-9]+/gi, "_").toUpperCase();
-  const configured = process.env[`${prefix}_ARTWORK_VISUAL_QA_MAX_REGENERATIONS`]
-    ?? (mode === "social" ? 1 : process.env.ARTWORK_VISUAL_QA_MAX_REGENERATIONS ?? (mode === "podcast" ? 1 : 0));
+  const configured = mode === "social"
+    ? (process.env.SOCIAL_ARTWORK_VISUAL_QA_MAX_REGENERATIONS ?? 1)
+    : (process.env[`${prefix}_ARTWORK_VISUAL_QA_MAX_REGENERATIONS`]
+      ?? process.env.ARTWORK_VISUAL_QA_MAX_REGENERATIONS
+      ?? (mode === "podcast" ? 1 : 0));
   const parsed = Number(configured);
   return Number.isFinite(parsed) ? Math.max(0, Math.min(2, Math.trunc(parsed))) : 0;
 }
