@@ -9,15 +9,15 @@ Public audits automatically reconcile verified Kindle page-count differences to 
 
 The MAST-triggered weekly research job searches for candidate Kindle competitors in the US and UK and recent topic sources. It requires a complete Monday public audit started between 12:00 and 15:00 Europe/London and runs Tuesday–Thursday in the same window. With `TAVILY_SEARCH_API` and durable R2 state configured, it selects a rotating batch (default 15), makes four Tavily basic searches per book, and checkpoints after each book. It processes at most one book per minute; unfinished work resumes in the next available window. `/kdp/research/weekly` returns the current private state; completed and carried-over research is archived under `research/weekly/` in the private KDP bucket. MAST triggers the Monday audit and the Tuesday–Thursday research runs.
 
-Search results are leads only, not verified Kindle prices, comparable-title assessments, validated trends, or proof that the book covers a topic. The worker never writes KDP, D1, or the website. The update pipeline, source verification and LLM evaluation remain separate work. The preliminary pricing helper requires independently verified comparable records and enforces UK/US floors of 4.00; it is not connected to an update endpoint.
+Search results are leads only, not verified Kindle prices, comparable-title assessments, validated trends, or proof that the book covers a topic. The worker never writes KDP, D1, or the website. The update pipeline, source verification and LLM evaluation remain separate work. The preliminary pricing helper requires independently verified comparable records. UK candidate prices have a £6.43 baseline, and the live optimisation process applies a higher file-size-aware royalty floor. US candidates retain a $4.99 default. The weekly workflow has separate evidence and update stages.
 
 The research job also attempts to capture up to five candidate product pages per market. It records page identity, title, description, page count, price and whether the price came from an explicit Kindle element. Comparability and promotion status remain unknown. If Amazon blocks a request, the job stops and preserves the search leads for a later retry without spending additional search credits.
 
 When a fresh signed-in metadata snapshot uniquely matches the catalogue ASIN, an ASIN-verified live product page was captured in the Monday audit, and dated topic sources exist, the research job can create a first-pass optimisation draft using the configured free OpenRouter model. It filters keywords against the live listing and source snippets and only retains description sentences already present on the live listing. The draft is recorded in the research result and is not submitted to KDP. Price changes remain blocked until comparability and promotion status can be verified. Missing identity, dated sources or model availability is recorded as a blocked reason.
 
-The optional `mode: "kdp"` audit includes a per-market Kindle eBook price-band check. It uses KDP's published 70% royalty minimum and maximum list prices, and records the rule review date and source in each report. A price below the minimum is reported with the minimum as the recommended correction. The maximum is checked when the book uses the 70% plan. Updates are not applied by the audit itself. Pricing update requests are blocked when a Kindle price is below the applicable minimum, when a 70% plan price exceeds its maximum, or when the marketplace/currency cannot be safely mapped.
+The optional `mode: "kdp"` audit includes a per-market Kindle eBook price-band check and reports its rule review date and source. For UK Kindle prices it also checks the commercial floor needed to yield at least £4.50 on an eligible 70% royalty sale, after Amazon's file-size-dependent delivery cost. Signed-in KDP file size and 70% plan verification are required; otherwise the audit reports that the target is unverified. A price below a minimum is reported with the correction, while a price above a 70% band maximum is flagged. The audit never changes prices. UK pricing updates fail closed when the royalty plan, delivery size or price is insufficient.
 
-The price-band rules were last checked on 2026-10-25 against KDP's [eBook List Price Requirements](https://kdp.amazon.com/en_US/help/topic/G200634560). Amazon's current values are marketplace-specific; do not convert one country's minimum into another currency. A price in range does not by itself guarantee a 70% royalty on every sale: title eligibility, buyer territory, KDP Select eligibility in some markets, VAT, delivery costs and Amazon price matching also affect royalties.
+The price-band rules were checked on 2026-11-12 against KDP's [eBook List Price Requirements](https://kdp.amazon.com/en_US/help/topic/G200634560) and [Digital Book Pricing](https://kdp.amazon.com/en_US/help/topic/G200634500). The UK delivery rate is £0.10/MB and UK eBook VAT is currently zero. For example, a verified 1 MB delivery file requires £6.53 list price, and 5 MB requires £6.93, for an estimated £4.50 royalty. Do not confuse the commercial floor with Amazon's much lower legal 70% price-band minimum of £1.77. The target concerns eligible UK sales at the standard list price only: 35% territories, price matching, promotions, refunds, tax changes and exchange rates can reduce the realised payout. Other marketplaces are not automatically converted from GBP.
 
 Keyword checks distinguish an empty keyword set from unused optional slots. KDP permits up to seven relevant keywords; filling all seven is not treated as a policy requirement. Short descriptions are surfaced for editorial review, not classified as a KDP policy failure based on length alone.
 
@@ -121,9 +121,13 @@ source quotes. Proposed descriptions require supporting quotes for every sentenc
 Two distinct source domains are required; a news mention is not search-volume data.
 
 Prices target comparable medians with average prices retained in the evidence.
-`KDP_RESEARCH_PRICE_FLOOR_USD_MINOR` and `KDP_RESEARCH_PRICE_FLOOR_GBP_MINOR`
-default to 499 (cannot be below 400). At least three fresh unique Kindle
-comparisons are needed, with explicit local currency and no visible promotion.
+`KDP_RESEARCH_PRICE_FLOOR_USD_MINOR` defaults to 499 and
+`KDP_RESEARCH_PRICE_FLOOR_GBP_MINOR` defaults to 643, both in pennies/cents;
+the UK effective minimum is always the greater of its configured floor and
+`ceil(£4.50 / 0.70)` plus verified KDP delivery cost. Existing lower GBP
+environment overrides cannot defeat that rule. When signed-in delivery size or
+70% plan cannot be verified, UK price changes are blocked rather than guessed.
+At least three fresh unique Kindle comparisons are needed, with explicit local currency and no visible promotion.
 This means **no promotion was visible**, not proof that the competitor has never
 been discounted. Changes over 25% are withheld, and confirmed prices have a
 28-day cooldown. Royalty-band validation is reused from the KDP engine.

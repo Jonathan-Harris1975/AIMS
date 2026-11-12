@@ -9,7 +9,7 @@ import { getKdpEbookById, updateKdpEbookMetadata } from './catalogue.js';
 import { inWeeklyWindow } from './weeklyResearch.js';
 import { triggerRebuild } from './pageCountSync.js';
 import { purgeCloudflareCache } from '../cloudflare-purge/utils/purgeCloudflareCache.js';
-import { parseKdpPriceMinorUnits } from './engine/kdpPriceRules.ts';
+import { parseKdpPriceMinorUnits, validateKdpPriceChanges } from './engine/kdpPriceRules.ts';
 
 function submissionDelayMs() {
   const minutes = Number(process.env.KDP_UPDATE_DELAY_MINUTES || 5);
@@ -72,6 +72,15 @@ export async function processOptimisation(key, intent, {
       const after = parseKdpPriceMinorUnits(value);
       if (before === null || before <= 0 || after === null || Math.abs(after - before) / before > 0.25) {
         intent.status = 'conflict'; intent.reason = 'price_changed_since_research'; await persist(); return { status: 'conflict' };
+      }
+    }
+    // A queued price may predate a royalty-policy change. Revalidate against
+    // fresh signed-in file size and royalty plan before marking submission begun.
+    if (Object.keys(intent.prices).length) {
+      const errors = validateKdpPriceChanges('kindle', { prices: intent.prices }, current.royaltyPlan, current.fileSizeKb);
+      if (errors.length) {
+        intent.status = 'conflict'; intent.reason = 'royalty_floor_invalid'; intent.pricePolicyErrors = errors;
+        await persist(); return { status: 'conflict' };
       }
     }
     const history = await load(`research/history/${intent.ebookId}.json`);

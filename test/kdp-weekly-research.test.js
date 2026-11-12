@@ -24,7 +24,8 @@ test("pricing requires current unique matching Kindle evidence and respects both
     marketplace: "UK", currency: "GBP", format: "kindle", comparable: true, promotional: false, priceMinor: 350 + id * 10, observedAt,
   }));
   const params = { marketplace: "UK", ownAsin: "B099999999", comparables: evidence, observedAt };
-  assert.equal(priceFromComparables(params).priceMinor, 499);
+  assert.equal(priceFromComparables(params).priceMinor, 643);
+  assert.equal(priceFromComparables({ ...params, floorMinor: 693 }).priceMinor, 693);
   assert.equal(priceFromComparables({ ...params, comparables: [...evidence.slice(0, 2), evidence[0]] }).status, "insufficient_evidence");
   assert.equal(priceFromComparables({ ...params, observedAt: "2026-10-30T12:00:00Z" }).status, "insufficient_evidence");
   assert.equal(priceFromComparables({ ...params, comparables: evidence.map((x) => ({ ...x, promotional: true })) }).status, "insufficient_evidence");

@@ -194,13 +194,29 @@ export async function updateBookPricingOnPage(
 ): Promise<KdpPricingUpdateResult> {
   const cache = await readMetadataCache()
   const cachedBook = cache?.books.find((book) => book.titleId === titleId && book.format === format)
-  const pricePolicyErrors = validateKdpPriceChanges(format, changes, cachedBook?.royaltyPlan)
-  if (pricePolicyErrors.length > 0) {
-    throw new KdpClientError(pricePolicyErrors.join(' '))
-  }
-
   if (!options.skipOpen) {
     await openPricingPageWithRetry(page, format, titleId)
+  }
+
+  // A new KDP title may not be in the metadata cache yet. Prefer the actual
+  // signed-in pricing page, including its delivery file size, before filling.
+  const pagePricing = await page.evaluate(`(() => {
+    const read = (name) => document.querySelector('input[name="' + name + '"]')?.value?.trim() || ''
+    const bytes = read('data[digital][filesize_bytes]')
+    const fileSizeKb = /^\\d+$/.test(bytes) && Number.isSafeInteger(Number(bytes))
+      ? String(Math.ceil(Number(bytes) / 1024)) : ''
+    const royaltyPlan =
+      document.querySelector('input[name="data[digital][royalty_plan]"]:checked')?.value ||
+      document.querySelector('input[name="data[digital][royalty_rate]-radio"]:checked')?.value ||
+      read('data[digital][royalty_plan]') || read('data[digital][royalty_rate]')
+    return { fileSizeKb, royaltyPlan }
+  })()`) as { fileSizeKb: string; royaltyPlan: string }
+  const pricePolicyErrors = validateKdpPriceChanges(
+    format, changes, pagePricing.royaltyPlan || cachedBook?.royaltyPlan,
+    pagePricing.fileSizeKb || cachedBook?.fileSizeKb,
+  )
+  if (pricePolicyErrors.length > 0) {
+    throw new KdpClientError(pricePolicyErrors.join(' '))
   }
 
   const fillResult = await fillPricingPage(page, format, changes)
