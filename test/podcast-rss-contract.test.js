@@ -5,7 +5,7 @@ process.env.SITE_BASE_URL = "https://jonathan-harris.online";
 process.env.R2_PUBLIC_BASE_URL_TRANSCRIPT = "https://transcripts.jonathan-harris.online";
 process.env.PODCAST_TRANSCRIPT_HTML_BASE_URL = "https://jonathan-harris.online/transcripts";
 
-const { generateFeedXML } = await import("../services/rss-feed-podcast/generateFeed.js");
+const { generateFeedXML, podcastChannelImageUrl } = await import("../services/rss-feed-podcast/generateFeed.js");
 
 test("generateFeedXML keeps episode page, audio enclosure, and transcript URLs distinct", () => {
   const xml = generateFeedXML([
@@ -84,4 +84,21 @@ test("generateFeedXML emits item itunes summary for podcast directory discovery"
   ]);
 
   assert.match(xml, /<itunes:summary>What matters is that AI governance/);
+});
+
+
+test("podcast show cover always migrates the old configured URL without changing episode art", () => {
+  const originalImage = process.env.PODCAST_IMAGE_URL;
+  const expected = "https://podcast-coverart.jonathan-harris.online/cover-art-2026-11-13-3000.png";
+  try {
+    delete process.env.PODCAST_IMAGE_URL;
+    assert.equal(podcastChannelImageUrl(), expected);
+    process.env.PODCAST_IMAGE_URL = "https://podcast-coverart.jonathan-harris.online/cover-art.png";
+    assert.equal(podcastChannelImageUrl(), expected);
+    process.env.PODCAST_IMAGE_URL = "https://images.example.com/approved-show-cover.png";
+    assert.equal(podcastChannelImageUrl(), process.env.PODCAST_IMAGE_URL);
+  } finally {
+    if (originalImage === undefined) delete process.env.PODCAST_IMAGE_URL;
+    else process.env.PODCAST_IMAGE_URL = originalImage;
+  }
 });
