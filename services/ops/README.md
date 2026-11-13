@@ -42,3 +42,10 @@ Successful and actively heartbeating operation windows remain one-shot for the L
 The daily social-blog build hands its current dated RSS item and single generated image to `/zernio/blog-rss/daily`. This handoff waits for a successful blog build. It is separate from the daily evergreen Zernio lane. E-book and paired quiz question/answer content also remain Zernio responsibilities.
 
 The social blog and newsletter run Monday–Friday only. Friday prepares Saturday and Sunday evergreen posts through Zernio. There are no weekend content-production operation windows; weekend time remains reserved for maintenance.
+
+
+## Verified content completion and recovery
+
+The operation window distinguishes a received HTTP acknowledgement from proof of a completed content task. A child task reporting `skipped` without a confirmed existing artefact, an already-completed provider handoff, or an intentional feature-disable policy is not recorded as finished. An unconfirmed `accepted` or `pending` status is not proof of publication. Such outcomes stay retryable and cannot unblock downstream dependencies.
+
+Durable daily operation receipts retain the confirmed successful tasks. MAST performs bounded checks against the same operation ID; AIMS applies its normal recovery attempt/cooldown budget and resumes only incomplete steps. Never use forced reruns for ambiguous paid renders, posts, newsletters or other externally irreversible handoffs. Provider-specific lease reconciliation and expense controls remain in force.
