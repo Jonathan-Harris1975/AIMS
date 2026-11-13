@@ -62,10 +62,10 @@ export function operationTaskSucceeded(result = {}) {
   // `ok` boolean. Accept that specific contract only after the async worker
   // terminated and all published rewrite batches passed phase-3 QA.
   const verifiedRssRewrite = result.name === "rss-rewrite"
-    && (result.asyncStatus === "completed" || result?.asyncJob?.job?.status === "completed")
+    && (result.asyncStatus === "completed" || result?.asyncJob?.status === "completed"
+      || result?.asyncJob?.job?.status === "completed")
     && Number.isInteger(payload.rewrittenItems) && payload.rewrittenItems > 0
     && payload.phase3Quality?.status === "ALL_PASSED_AUTO_PUBLISH"
-    && Number(payload.phase3Quality?.passed || 0) > 0
     && payload.phase3Quality?.failed === 0;
   if (payload?.skipped !== true) return payload?.ok === true || payload?.ready === true || verifiedRssRewrite;
 

@@ -244,8 +244,9 @@ export function buildQaRepairPrompt(prompt, qa = {}, mode = "podcast") {
     return [
       "PIXEL QA REPAIR: change the entire scene, not only colours or framing.",
       `Mandatory repairs: ${defects.join(" | ") || String(qa.summary || "Fix scene relevance").slice(0, 250)}.`,
-      "Choose one source-specific real human decision, physical consequence or clearly documented technical result.",
-      "No server-room wallpaper, dashboards, whiteboards, labels, signs, screens, pseudo-text or watermarks.",
+      "Choose one source-specific human decision, physical consequence or clearly documented technical result.",
+      "No visible text, pseudo-text, labels, signs, dashboards, whiteboards or watermarks.",
+      "Overrule any earlier staging involving server racks; show the human decision instead.",
       `Source-specific subject: ${String(prompt || "").slice(0, 1050)}.`,
     ].join(" ");
   }

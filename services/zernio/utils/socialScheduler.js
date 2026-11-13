@@ -443,6 +443,7 @@ export function buildZernioSemanticRepairPrompt({ laneKey = "", post = {}, gate 
         "The repaired content must centre on one explicit AI ethics, governance, rights, privacy, safety, accountability, bias, consent or policy trade-off.",
         "State the strongest credible case on both sides before Jonathan's measured view.",
         "End with one direct open question asking where the reader would draw the line and why.",
+        "Artwork must be a source-specific scene, not an infographic, dashboard, diagram or generic racks of servers.",
       ]
     : [];
   const sundayRules = laneKey === "sunday"
@@ -1540,10 +1541,10 @@ them into one real physical action, decision or consequence.",
     ],
     sunday: [
       "SUNDAY — REAL CONTRIBUTION SPOTLIGHT.",
-      "Never fabricate the named person's face, likeness, identity or biographical appearance.",
+      "Never render, approximate or imply their face or recognisable likeness; do not invent identity or biographical appearance.",
       "Show the concrete source-supported technical result or research contribution, not a generic black box.",
       "Prefer a clean close-up of the actual physical mechanism without people or text-bearing surfaces.",
-      "No papers, notebooks, whiteboards, monitor screens, pseudo-writing, names, equations or labels.",
+      "No books, papers, notebooks, theses, whiteboards, chalkboards, monitor screens, pseudo-writing, names, equations or labels.",
     ],
   };
 
