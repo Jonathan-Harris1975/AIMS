@@ -47,11 +47,12 @@ export function operationTaskSucceeded(result = {}) {
   // A partially published episode is deliberately NOT safe to replay. Keep
   // its existing provider handoff, preserve the warning for reconciliation,
   // and do not generate a duplicate podcast when the operation resumes.
-  if (result.nonRetryablePartialPublication === true && result.warning === true) return true;
+  if (result.name === "podcast" && result.nonRetryablePartialPublication === true && result.warning === true) return true;
 
   const payload = result?.asyncJob?.job?.result
     ?? result?.asyncJob?.result
     ?? result?.result;
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return false;
   if (payload?.ok === false || payload?.ready === false || payload?.failed === true
       || payload?.partialFailure === true || payload?.quarantined === true) return false;
   const status = String(payload?.status || "").toLowerCase();
@@ -67,7 +68,6 @@ export function operationTaskSucceeded(result = {}) {
     || payload.alreadyPublished === true
     || payload.alreadyDispatched === true
     || payload.alreadyScheduled === true
-    || payload.scheduled === true
     || (Array.isArray(payload.publicationReferences) && payload.publicationReferences.length > 0)
     || ["already_dispatched", "already_published", "already_scheduled", "already_completed"].includes(status)
   );
@@ -156,6 +156,8 @@ export function sameDayBackstopAllowance(receipt = {}, nowMs = Date.now()) {
     timeZone: "Europe/London", year: "numeric", month: "2-digit", day: "2-digit",
     hour: "2-digit", minute: "2-digit", hourCycle: "h23",
   }).formatToParts(new Date(nowMs)).map((part) => [part.type, part.value]));
+  if (!parts.year || !parts.month || !parts.day || !/^\d{2}$/.test(parts.hour || "")
+      || !/^\d{2}$/.test(parts.minute || "")) return 0;
   const londonDate = `${parts.year}-${parts.month}-${parts.day}`;
   if (!normalise(receipt.id).startsWith(`${londonDate}:`)) return 0;
   const localMinute = Number(parts.hour) * 60 + Number(parts.minute);

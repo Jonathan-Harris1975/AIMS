@@ -105,6 +105,19 @@ test("an incomplete or ambiguous skip cannot count as finished content", () => {
   const intentionalDisable = { name: "newsletter-generate", ok: true,
     skipped: true, reason: "newsletter-disabled-by-configuration" };
 
+  assert.equal(operationTaskSucceeded({ name: "newsletter-send", ok: true }), false,
+    "bare transport success must not be reused as published content");
+  assert.equal(operationTaskSucceeded({ name: "newsletter-send", ok: true, result: null }), false);
+  assert.equal(operationTaskSucceeded({ name: "zernio-tuesday", ok: true,
+    result: { ok: true, skipped: true, scheduled: true } }), false,
+    "scheduled but unconfirmed is not already published");
+  const partialPodcast = { name: "podcast", ok: true, warning: true,
+    nonRetryablePartialPublication: true, result: { ok: true, status: "running" },
+    asyncJob: { result: { ok: false, partialFailure: true } } };
+  assert.equal(operationTaskSucceeded(partialPodcast), true,
+    "previously submitted podcast must be preserved for reconciliation rather than replayed");
+  assert.equal(operationTaskSucceeded({ ...partialPodcast, name: "zernio-tuesday" }), false,
+    "the podcast partial-publication exception must not apply to other services");
   assert.equal(operationTaskSucceeded(confirmed), true);
   assert.equal(operationTaskSucceeded(missingSource), false);
   assert.equal(operationTaskSucceeded(skippedPublish), false);
