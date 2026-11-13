@@ -119,7 +119,9 @@ export async function fetchArticleEvidence(item, { fetchText = fetchTextWithTime
 export async function enrichArticleEvidence(items, { fetchOne = fetchArticleEvidence, parallel = 3 } = {}) {
   const result = [...items];
   for (let start = 0; start < items.length; start += parallel) {
-    const batch = await Promise.all(items.slice(start, start + parallel).map((item) => fetchOne(item)));
+    const batch = await Promise.all(items.slice(start, start + parallel).map((item) =>
+      item?.evidenceVerified === true && typeof item.evidence === "string" && item.evidence.length >= 300
+        ? item : fetchOne(item)));
     batch.forEach((enriched, index) => { result[start + index] = enriched; });
   }
   return result;
