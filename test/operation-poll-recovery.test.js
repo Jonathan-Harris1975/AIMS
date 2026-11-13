@@ -140,6 +140,36 @@ test("operation orchestration fails uncertain successful HTTP skips rather than 
   assert.match(source, /if \(taskResult\.ok && !operationTaskSucceeded\(taskResult\)\)/);
 });
 
+test("completion requires positive evidence and never mistakes future scheduling for completed work", () => {
+  assert.equal(operationTaskSucceeded({ name: "sync", ok: true }), false);
+  assert.equal(operationTaskSucceeded({ name: "sync", ok: true, result: { ok: true } }), true);
+  assert.equal(operationTaskSucceeded({ name: "sync", ok: true, result: { ready: true } }), true);
+  assert.equal(operationTaskSucceeded({ name: "social", ok: true,
+    result: { skipped: true, scheduled: true } }), false);
+  assert.equal(operationTaskSucceeded({ name: "social", ok: true,
+    result: { skipped: true, alreadyScheduled: true } }), true);
+});
+
+test("a partially published podcast is retained only with its warning marker", () => {
+  assert.equal(operationTaskSucceeded({ name: "podcast", ok: true,
+    nonRetryablePartialPublication: true, warning: true }), true);
+  assert.equal(operationTaskSucceeded({ name: "podcast", ok: true,
+    nonRetryablePartialPublication: true, warning: false }), false);
+});
+
+test("late recovery returns no allowance when London date parts are incomplete", () => {
+  const DateTimeFormat = Intl.DateTimeFormat;
+  Intl.DateTimeFormat = class {
+    formatToParts() { return [{ type: "year", value: "2026" }, { type: "day", value: "13" }]; }
+  };
+  try {
+    const receipt = { id: "2026-11-13:friday-am", window: "friday-am" };
+    assert.equal(sameDayBackstopAllowance(receipt, Date.parse("2026-11-13T15:45:00Z")), 0);
+  } finally {
+    Intl.DateTimeFormat = DateTimeFormat;
+  }
+});
+
 test("late content recovery slots each reserve exactly one bounded extra attempt", () => {
   const id = "2026-11-13:friday-am";
   const failed = { id, window: "friday-am", status: "completed-with-failures",
