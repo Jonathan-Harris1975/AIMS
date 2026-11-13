@@ -141,3 +141,25 @@ test("podcast RSS or pre-publication failures still fail the operation window", 
   });
   assert.equal(prePublicationFailure.ok, false);
 });
+
+
+test("podcast recovery does not treat the previous attempt's failed status as current", async () => {
+  const old = "ops:previous:podcast";
+  const current = "ops:current:podcast";
+  const payloads = [
+    { ok: true, job: { status: "failed", eventId: old, error: { message: "old Polly denial" } } },
+    { ok: true, job: { status: "running", eventId: current } },
+    { ok: true, job: { status: "completed", eventId: current, result: { ok: true } } },
+  ];
+  const result = await waitForAsyncOperation({
+    baseUrl: "http://127.0.0.1:8000",
+    statusUrl: "/podcast/status/TT-2026-11-13",
+    expectedEventId: current,
+    pollIntervalMs: 1,
+    timeoutMs: 1_000,
+    fetchImpl: async () => response(payloads.shift()),
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.status, "completed");
+  assert.equal(result.polls, 3);
+});
