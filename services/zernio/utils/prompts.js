@@ -354,40 +354,39 @@ Read more: ${featuredBook.bookUrl || ""}
 
 export function buildPodcastPromoPrompt({ publishDate, episode = {} } = {}) {
   return {
-    system: `${buildZernioPersona()}
-
-You are writing the Thursday preview for Turing's Torch: AI Weekly.
-This is a static social promotion post, not a second podcast performance.
-Do not write a voiceover, spoken script, narration, dialogue, or text-to-speech instructions.
-The podcast audio identity belongs exclusively to the podcast production pipeline. Zernio must never synthesise or replace the programme voice.
-Use only supplied episode metadata. Use British English. Be sharp, sceptical, useful and concise.
-No invented guests, claims, quotes, topics, release details or conclusions. No hype, fake urgency, emojis, markdown or hashtags.
-Do not say the episode is available now. It lands Friday.
-Return valid JSON only with exactly: title, topic, content, imagePrompt.`,
-    user: `Create the Thursday social preview for Friday's Turing's Torch: AI Weekly episode.
-
-Promotion date: ${publishDate}
-Episode title: ${episode.title || ""}
-Episode description: ${episode.description || ""}
-Episode number: ${episode.episodeNumber || ""}
-Episode page/link: ${episode.link || ""}
-Episode publication date from RSS: ${episode.pubDate || ""}
-
-Requirements:
-- content target: 100 to 160 words
-- content must never exceed ${ZERNIO_POST_MAX_CHARACTERS} characters including spaces
-- open with the strongest concrete tension, consequence or question supported by the episode description
-- mention Turing's Torch: AI Weekly naturally
-- make clear the episode lands Friday
-- include the episode title once
-- finish with a restrained reason to listen, not engagement bait
-- imagePrompt: describe one premium, unmistakably technology-focused editorial scene grounded in the supplied episode title and description. Use concrete AI infrastructure, \
-compute hardware, data-centre systems, cybersecurity equipment, model evaluation environments, developer tooling or another episode-specific technical setting. The image must \
-look like podcast/editorial technology artwork at first glance, not a generic life-choice metaphor. Use cinematic lighting, bold seasonal colour contrast, depth and negative \
-space. Do not design a magazine cover or title card. No people, humanoid robots, androids, cyborgs, hands or fingers. No visible words, letters, numbers, captions, logos, \
-labels, signage, UI, pseudo-text or typographic shapes. Never use countryside, rural landscapes, moorland, fields, forests, mountains, beaches, roads, paths, crossroads, \
-arrows, direction signs, signposts, doors or forks in a road as the main metaphor. Avoid generic glowing brains, circuit-head silhouettes, decorative networks and corporate stock imagery.
-- JSON only`,
+    system: [
+      buildZernioPersona(),
+      "Write Thursday's static social recommendation for Turing's Torch: AI Weekly, based on an ACTUALLY PUBLISHED episode.",
+      "This is not a podcast performance. Do not write voiceover, spoken script, narration, dialogue or text-to-speech instructions.",
+      "The podcast audio identity belongs solely to the production pipeline. Never synthesise or replace the show voice.",
+      "The excerpt from the approved previous episode transcript guides authentic Gen X tone and is evidence for this episode only.",
+      "Do not claim the episode is arriving tomorrow, that a future episode covers its subjects, or that its guests, quotes or conclusions belong to a future show.",
+      "Speak of the featured episode as available to listen to. Do not invent facts, guests, quotes or future releases.",
+      "British English. Crisp, sceptical, useful, dry where appropriate. No self-advertising superlatives, hype, fake urgency, emojis, markdown or hashtags.",
+      "Return valid JSON only with exactly: title, topic, content, imagePrompt.",
+    ].join("\n"),
+    user: [
+      "Create a Thursday recommendation for the latest published Turing's Torch: AI Weekly episode.",
+      "Promotion date: " + publishDate,
+      "Published episode title: " + (episode.title || ""),
+      "Verified description: " + (episode.description || ""),
+      "Episode number: " + (episode.episodeNumber || ""),
+      "Actual publication date: " + (episode.pubDate || ""),
+      "Verified episode link: " + (episode.link || ""),
+      "Evidence source: " + (episode.source || ""),
+      "Approved previous-episode transcript excerpt (may be empty if RSS fallback):",
+      episode.transcriptExcerpt || "No verified transcript was accessible: rely strictly on the published episode description.",
+      "Requirements:",
+      "- 90 to 145 words with a concrete opening and one real implication or tension in the episode",
+      "- accurately name the featured PUBLISHED episode once",
+      "- say what was discussed in the published episode, not what tomorrow's programme will cover",
+      "- mention Turing's Torch: AI Weekly naturally; finish with a restrained reason to listen",
+      "- no hashtags, invented quotes, full transcript extracts or invented release claims",
+      "- content must not exceed " + ZERNIO_POST_MAX_CHARACTERS + " characters",
+      "- imagePrompt: one recognisable technical editorial scene grounded in the actual published title and description: AI infrastructure, compute, cybersecurity, AI governance or developer tooling as supported by the episode",
+      "- cinematic colour and contrast, with no typography, logos, words, numbers, people, humanoid robots, hands, lifestyle metaphors, roads or decorative glowing brains",
+      "- JSON only",
+    ].join("\n"),
   };
 }
 
