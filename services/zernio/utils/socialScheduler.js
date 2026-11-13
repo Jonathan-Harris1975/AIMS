@@ -718,7 +718,7 @@ function duplicateSlotWarning(reason) {
   return `A Zernio post for this exact schedule slot was already ${reason === "same-slot-already-running" ? "being processed" : "processed"}, so no new post was created.`;
 }
 
-async function claimZernioSlot({ scope, scheduledDateTime, profileName, accountId, imageUrl, dryRun, apiKey, force, sourceIntentHash }) {
+export async function claimZernioSlot({ scope, scheduledDateTime, profileName, accountId, imageUrl, dryRun, apiKey, force, sourceIntentHash }) {
   const originalScheduledDateTime = String(scheduledDateTime || "").trim();
   if (isEffectiveDryRun({ dryRun, apiKey })) {
     return {
