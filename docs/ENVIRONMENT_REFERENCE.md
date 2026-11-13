@@ -73,7 +73,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `AUDIT_CALLBACK_TOKEN` | Yes | audits/utils/callbackAuth.js:9<br>audits/utils/orchestrator.js:147<br>services/shared/middleware/suiteAuth.js:64 |
 | `AUDIT_RUN_REUSE_ACTIVE_MS` | No | audits/utils/orchestrator.js:34 |
 | `AUDIT_WEBSITE_REPO_REF` | Yes | audits/utils/githubDispatch.js:35 |
-| `AUTO_CALL` | Yes | services/rss-feed-podcast/index.js:145 |
+| `AUTO_CALL` | Yes | services/rss-feed-podcast/index.js:161 |
 | `AWS_REGION` | Yes | services/blotato/utils/localCreditFallbackVideo.js:16<br>services/tts/utils/ttsProcessor.js:23 |
 | `BACKFILL_TRANSCRIPT_HTML` | Yes | scripts/bootstrap.js:156 |
 | `BACKFILL_TRANSCRIPT_HTML_TIMEOUT_MS` | No | scripts/bootstrap.js:161 |

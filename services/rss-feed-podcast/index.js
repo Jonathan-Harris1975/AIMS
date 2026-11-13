@@ -9,9 +9,10 @@
 // - Optional: AUTO_CALL=yes → notify PodcastIndex Hub automatically
 // ============================================================
 
-import { listKeys, getObjectAsText, putObject, R2_PUBLIC_URLS } from "../shared/utils/r2-client.js";
+import { listKeys, getObjectAsBuffer, getObjectAsText, putObject, R2_PUBLIC_URLS } from "../shared/utils/r2-client.js";
 import { info, warn, error } from "../../logger.js";
-import { generateFeedXML, mapMetaToEpisode } from "./generateFeed.js";
+import { generateFeedXML, mapMetaToEpisode, podcastChannelImageUrl } from "./generateFeed.js";
+import { validatePodcastShowCoverPng } from "./showCoverValidation.js";
 import { hasPodcastIndexCredentials, notifyHubByUrl } from "../shared/utils/podcastIndexClient.js";
 
 function envString(...keys) {
@@ -107,6 +108,21 @@ export async function runRssFeedCreator({ requiredSessionId = null } = {}) {
     }
   }
 
+  // Validate the owned show-cover asset before updating directory-visible RSS.
+  // This is deliberately independent of per-episode artwork QA and publication.
+  const channelCoverUrl = podcastChannelImageUrl();
+  const channelCoverHost = new URL(channelCoverUrl).hostname;
+  let showCoverValidation;
+  if (channelCoverHost === "podcast-coverart.jonathan-harris.online") {
+    const key = new URL(channelCoverUrl).pathname.slice(1);
+    const coverData = await getObjectAsBuffer("art", key);
+    showCoverValidation = validatePodcastShowCoverPng(coverData);
+    info("podcast.show_cover.validated", { url: channelCoverUrl, ...showCoverValidation });
+  } else {
+    showCoverValidation = { ok: false, reason: "custom_cover_not_verified" };
+    warn("podcast.show_cover.unverified_custom", { host: channelCoverHost });
+  }
+
   // ------------------------------------------------------------
   // Build XML
   // ------------------------------------------------------------
@@ -150,6 +166,7 @@ export async function runRssFeedCreator({ requiredSessionId = null } = {}) {
     bucketAlias: RSS_BUCKET_ALIAS,
     key: RSS_KEY,
     episodeCount: episodes.length,
+    showCoverValidation,
     episode: requiredEpisode
       ? {
           sessionId: required,
