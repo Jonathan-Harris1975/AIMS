@@ -40,7 +40,7 @@ import { assessRenderedVideoQaPublication, buildRenderedVideoQaError, reviewRend
 import { looksLikePendingVideoError } from "./renderStatus.js";
 import { pollUntil } from "./pollUntil.js";
 import { buildVisualCreationRequest } from "./visualRequest.js";
-import { reservePaidRender } from "./creditGuard.js";
+import { linkPaidRenderVisual, reservePaidRender } from "./creditGuard.js";
 import {
   claimPendingEditorialBriefs,
   editorialBriefFingerprint,
@@ -558,6 +558,64 @@ function findMediaUrl(value, depth = 0) {
 
 
 
+async function awaitExistingBlotatoRender(visualId, apiKey, { initialVisual = null, usedTemplateId = null } = {}) {
+  const maxAttempts = positiveIntEnv("BLOTATO_VIDEO_POLL_ATTEMPTS", 720, 2880);
+  const intervalMs = positiveIntEnv("BLOTATO_VIDEO_POLL_INTERVAL_MS", 3000, 60_000);
+  const finalGraceMs = positiveIntEnv("BLOTATO_VIDEO_FINAL_GRACE_MS", 15_000, 180_000);
+  let completed;
+  try {
+    completed = await pollUntil({
+      label: "Blotato video render",
+      run: () => getVisualStatus(visualId, apiKey),
+      extractStatus: extractVideoStatus,
+      isDone: (status) => VIDEO_DONE_STATUSES.has(status),
+      isDonePayload: (payload) => Boolean(findMediaUrl(payload)),
+      isFailed: (status) => VIDEO_FAILED_STATUSES.has(status),
+      isPendingError: looksLikePendingVideoError,
+      maxAttempts,
+      intervalMs,
+      finalGraceMs,
+      maxDurationMs: positiveIntEnv("BLOTATO_VIDEO_POLL_MAX_DURATION_MS", 1_800_000, 3_600_000),
+      maxConsecutivePendingErrors: positiveIntEnv("BLOTATO_VIDEO_PENDING_ERROR_LIMIT", 120, 180),
+      progressEvery: positiveIntEnv("BLOTATO_VIDEO_POLL_PROGRESS_EVERY", 30, 240),
+      onProgress: (kind, details) => info(`blotato.poll.${kind}`, details),
+    });
+  } catch (error) {
+    const safeDetails = sanitiseBlotatoFailure(error?.details || null);
+    const providerMessage = extractBlotatoFailureMessage(error?.details || {});
+    const status = extractVideoStatus(error?.details || {});
+
+    error.blotatoFailure = {
+      visualId,
+      dashboardUrl: templateDashboardUrl(visualId),
+      templateId: usedTemplateId,
+      status: status || "unknown",
+      providerMessage: providerMessage || null,
+      details: safeDetails,
+      creditAssessment: "not-determined-by-aims",
+    };
+
+    warn("blotato.video.render.failed", error.blotatoFailure);
+
+    if (status && VIDEO_FAILED_STATUSES.has(status)) {
+      error.message = providerMessage
+        ? `Blotato video render failed with status ${status}: ${providerMessage}`
+        : `Blotato video render failed with status ${status}`;
+    }
+    throw error;
+  }
+
+  const mediaUrl = findMediaUrl(completed) || findMediaUrl(initialVisual);
+  if (!mediaUrl) {
+    const err = new Error("Blotato video completed but no public media URL was found");
+    err.statusCode = 502;
+    err.details = completed;
+    throw err;
+  }
+
+  return { completed, mediaUrl };
+}
+
 async function createAndWaitForVideo({ templateId, templateIdCandidates = [], pack, apiKey, onVisualCreated }) {
   const visualPrompt = buildBlotatoVisualPrompt(pack);
   const visualInputs = buildBlotatoVideoInputs(pack);
@@ -641,62 +699,10 @@ async function createAndWaitForVideo({ templateId, templateIdCandidates = [], pa
     throw err;
   }
 
-  onVisualCreated?.({ visualId, visual, visualInputs, visualPrompt, creditBudget, dashboardUrl: templateDashboardUrl(visualId), templateId: usedTemplateId,
+  await onVisualCreated?.({ visualId, visual, visualInputs, visualPrompt, creditBudget, dashboardUrl: templateDashboardUrl(visualId), templateId: usedTemplateId,
      templateIdCandidates: candidates, rejectedTemplateIds });
 
-  const maxAttempts = positiveIntEnv("BLOTATO_VIDEO_POLL_ATTEMPTS", 720, 2880);
-  const intervalMs = positiveIntEnv("BLOTATO_VIDEO_POLL_INTERVAL_MS", 3000, 60_000);
-  const finalGraceMs = positiveIntEnv("BLOTATO_VIDEO_FINAL_GRACE_MS", 15_000, 180_000);
-  let completed;
-  try {
-    completed = await pollUntil({
-      label: "Blotato video render",
-      run: () => getVisualStatus(visualId, apiKey),
-      extractStatus: extractVideoStatus,
-      isDone: (status) => VIDEO_DONE_STATUSES.has(status),
-      isDonePayload: (payload) => Boolean(findMediaUrl(payload)),
-      isFailed: (status) => VIDEO_FAILED_STATUSES.has(status),
-      isPendingError: looksLikePendingVideoError,
-      maxAttempts,
-      intervalMs,
-      finalGraceMs,
-      maxDurationMs: positiveIntEnv("BLOTATO_VIDEO_POLL_MAX_DURATION_MS", 1_800_000, 3_600_000),
-      maxConsecutivePendingErrors: positiveIntEnv("BLOTATO_VIDEO_PENDING_ERROR_LIMIT", 120, 180),
-      progressEvery: positiveIntEnv("BLOTATO_VIDEO_POLL_PROGRESS_EVERY", 30, 240),
-      onProgress: (kind, details) => info(`blotato.poll.${kind}`, details),
-    });
-  } catch (error) {
-    const safeDetails = sanitiseBlotatoFailure(error?.details || null);
-    const providerMessage = extractBlotatoFailureMessage(error?.details || {});
-    const status = extractVideoStatus(error?.details || {});
-
-    error.blotatoFailure = {
-      visualId,
-      dashboardUrl: templateDashboardUrl(visualId),
-      templateId: usedTemplateId,
-      status: status || "unknown",
-      providerMessage: providerMessage || null,
-      details: safeDetails,
-      creditAssessment: "not-determined-by-aims",
-    };
-
-    warn("blotato.video.render.failed", error.blotatoFailure);
-
-    if (status && VIDEO_FAILED_STATUSES.has(status)) {
-      error.message = providerMessage
-        ? `Blotato video render failed with status ${status}: ${providerMessage}`
-        : `Blotato video render failed with status ${status}`;
-    }
-    throw error;
-  }
-
-  const mediaUrl = findMediaUrl(completed) || findMediaUrl(visual);
-  if (!mediaUrl) {
-    const err = new Error("Blotato video completed but no public media URL was found");
-    err.statusCode = 502;
-    err.details = completed;
-    throw err;
-  }
+  const { completed, mediaUrl } = await awaitExistingBlotatoRender(visualId, apiKey, { initialVisual: visual, usedTemplateId });
 
   return { visualId, visual, completed, mediaUrl, visualPrompt, visualInputs, creditBudget, dashboardUrl: templateDashboardUrl(visualId), templateId: usedTemplateId,
      templateIdCandidates: candidates, rejectedTemplateIds };
@@ -1571,11 +1577,25 @@ export function isRetryableRenderedPublishFailure(job = {}) {
   return Math.max(1, Number(job.attempt || 1)) < maxAttempts;
 }
 
+/**
+ * A provider timeout is not evidence that the paid visual failed. Retry only
+ * its GET status lookup, never POST another render for this slot.
+ */
+export function isRetryablePendingRenderFailure(job = {}) {
+  if (job.status !== "failed" || job.phase !== "video-rendering" || !job.videoId) return false;
+  if (jobHasPublicationEvidence(job)) return false;
+  const code = String(job.error?.code || "").trim();
+  if (!["blotato-poll-duration-exceeded", "blotato-poll-attempt-limit", "blotato-poll-provider-error-limit", "blotato-credit-visual-link-failed"].includes(code)) return false;
+  const maxAttempts = positiveIntEnv("BLOTATO_RENDER_RECONCILE_ATTEMPTS", 4, 8);
+  return Math.max(1, Number(job.attempt || 1)) < maxAttempts;
+}
+
 function jobOwnsScheduledSlot(job = {}) {
   if (["queued", "running", "completed"].includes(job.status)) return true;
   if (job.status !== "failed") return false;
   if (isReplaceableRenderedQualityFailure(job)) return false;
   if (isRetryableRenderedPublishFailure(job)) return false;
+  if (isRetryablePendingRenderFailure(job)) return false;
   // Once Blotato has created a visual, a blind rerun can create another paid
   // render. Keep the slot claimed unless this is the one bounded, pre-publish
   // quality replacement handled above. Failures before visual creation remain
@@ -1590,6 +1610,16 @@ async function findExistingScheduledSlotJob(jobType, scheduleSlot, scheduleDate)
     .filter((job) => inferScheduleSlotFromJob(job) === scheduleSlot)
     .filter((job) => scheduleDateFromJob(job) === scheduleDate)
     .filter(jobOwnsScheduledSlot)
+    .sort((a, b) => Date.parse(b.updatedAt || b.createdAt || 0) - Date.parse(a.updatedAt || a.createdAt || 0))[0] || null;
+}
+
+async function findRetryableScheduledRender(jobType, scheduleSlot, scheduleDate) {
+  if (!scheduleSlot || !scheduleDate) return null;
+  await refreshJobStoreFromState();
+  return getJobsByType(jobType)
+    .filter((job) => inferScheduleSlotFromJob(job) === scheduleSlot)
+    .filter((job) => scheduleDateFromJob(job) === scheduleDate)
+    .filter(isRetryablePendingRenderFailure)
     .sort((a, b) => Date.parse(b.updatedAt || b.createdAt || 0) - Date.parse(a.updatedAt || a.createdAt || 0))[0] || null;
 }
 
@@ -1682,6 +1712,7 @@ async function runPublishJobImpl({
   scheduleDate = null,
   failedRenderReplacement = null,
   failedPublishRecovery = null,
+  pendingRenderRecovery = null,
 }) {
   const lane = requireShortLaneConfig(laneSlug);
   const keepAliveLabel = `blotato:${lane.slug}:${sessionId}`;
@@ -1742,7 +1773,8 @@ async function runPublishJobImpl({
     const qualityAttempts = [];
     let priorGate = null;
     let bestRejected = null;
-    let pack = failedPublishRecovery?.pack ? normalisePackForPublish(failedPublishRecovery.pack) : null;
+    let pack = failedPublishRecovery?.pack || pendingRenderRecovery?.pack
+      ? normalisePackForPublish(failedPublishRecovery?.pack || pendingRenderRecovery?.pack) : null;
     let blotatoShortGate = pack ? runBlotatoShortGate({
       pack,
       article: articleSource.article,
@@ -1956,7 +1988,7 @@ async function runPublishJobImpl({
         scheduleDate: activeScheduleDate,
         briefFingerprint,
       });
-    if (!reusedVideo && scheduleSlot && activeScheduleDate) {
+    if (!reusedVideo && !pendingRenderRecovery?.visualId && scheduleSlot && activeScheduleDate) {
       await refreshJobStoreFromState();
       const paidRenderCap = positiveIntEnv("BLOTATO_DAILY_PAID_RENDER_CAP", 2, 10);
       const nextBudget = expectedCreditBudget(pack);
@@ -1970,6 +2002,7 @@ async function runPublishJobImpl({
       const monthlyBudget = positiveIntEnv("BLOTATO_MONTHLY_ESTIMATED_CREDIT_CAP", 1250, 10_000);
       const priorRenders = getShortLaneJobTypes().flatMap((type) => getJobsByType(type))
         .map((job) => ({
+          sessionId: job.sessionId,
           visualId: trim(job.videoId || job.result?.visualId),
           reservationId: job.creditGuardReservationId,
           date: scheduleDateFromJob(job),
@@ -1982,7 +2015,39 @@ async function runPublishJobImpl({
       });
       updateJob(lane.jobType, sessionId, { creditGuardReservationId: reservation.reservationId, creditBudget: nextBudget });
     }
-    const video = reusedVideo || await createAndWaitForVideo({
+    const video = reusedVideo || (pendingRenderRecovery?.visualId
+      ? await (async () => {
+          updateJob(lane.jobType, sessionId, { phase: "video-rendering",
+            videoId: pendingRenderRecovery.visualId, videoDashboardUrl: pendingRenderRecovery.dashboardUrl || null });
+          // Reconcile the exact original paid reservation before interacting
+          // with the existing provider render. If the durable ledger disagrees,
+          // fail closed: never schedule a visual charged to a different slot.
+          try {
+            await linkPaidRenderVisual({
+              reservationId: pendingRenderRecovery.creditGuardReservationId,
+              scheduleDate: activeScheduleDate,
+              visualId: pendingRenderRecovery.visualId,
+            });
+          } catch (error) {
+            error.code = "blotato-credit-visual-link-failed";
+            throw error;
+          }
+          const recovered = await awaitExistingBlotatoRender(pendingRenderRecovery.visualId, apiKey, {
+            usedTemplateId: pendingRenderRecovery.templateId || templateId,
+          });
+          info("blotato.schedule.pending_render_recovered", { sessionId, visualId: pendingRenderRecovery.visualId });
+          return {
+            visualId: pendingRenderRecovery.visualId,
+            dashboardUrl: pendingRenderRecovery.dashboardUrl || templateDashboardUrl(pendingRenderRecovery.visualId),
+            ...recovered,
+            creditBudget: pendingRenderRecovery.creditBudget || null,
+            templateId: pendingRenderRecovery.templateId || templateId,
+            templateIdCandidates: pendingRenderRecovery.templateIdCandidates || [],
+            rejectedTemplateIds: pendingRenderRecovery.rejectedTemplateIds || [],
+            reusedFromSessionId: pendingRenderRecovery.sessionId,
+          };
+        })()
+      : await createAndWaitForVideo({
       templateId,
       templateIdCandidates: templateResolution.templateIdCandidates || [
         templateResolution.rawTemplateId,
@@ -1993,7 +2058,7 @@ async function runPublishJobImpl({
       ],
       pack,
       apiKey,
-      onVisualCreated: (visualMeta) => {
+      onVisualCreated: async (visualMeta) => {
         updateJob(lane.jobType, sessionId, {
           phase: "video-rendering",
           videoId: visualMeta.visualId,
@@ -2009,8 +2074,27 @@ async function runPublishJobImpl({
           templateResolution,
           channelPreflight,
         });
+        const existingReservation = getJob(lane.jobType, sessionId)?.creditGuardReservationId;
+        if (activeScheduleDate) {
+          // The provider has already accepted the paid render. If its durable
+          // reservation cannot be linked, fail this slot as recoverable and
+          // retry the same provider ID later. Never hide ledger conflicts.
+          try {
+            await linkPaidRenderVisual({
+              reservationId: existingReservation || `${sessionId}:attempt-${getJob(lane.jobType, sessionId)?.attempt || 1}`,
+              scheduleDate: activeScheduleDate,
+              visualId: visualMeta.visualId,
+            });
+          } catch (error) {
+            warn("blotato.credit.visual_link_pending_reconciliation", {
+              sessionId, visualId: visualMeta.visualId, error: error?.message || String(error),
+            });
+            error.code = "blotato-credit-visual-link-failed";
+            throw error;
+          }
+        }
       },
-    });
+    }));
     updateJob(lane.jobType, sessionId, {
       phase: "rendered-quality-review",
       videoId: video.visualId,
@@ -2452,6 +2536,7 @@ export async function triggerPublishNowJob(req = {}, laneSlug = DEFAULT_BLOTATO_
   const scheduleDate = scheduleSlot ? londonDateString(new Date()) : null;
   let failedRenderReplacement = null;
   let failedPublishRecovery = null;
+  let pendingRenderRecovery = null;
   if (scheduleSlot) {
     const existing = await findExistingScheduledSlotJob(lane.jobType, scheduleSlot, scheduleDate);
     if (existing) {
@@ -2478,6 +2563,26 @@ export async function triggerPublishNowJob(req = {}, laneSlug = DEFAULT_BLOTATO_
         rss: existing.rss || null,
         job: publicJob,
       };
+    }
+    const pending = await findRetryableScheduledRender(lane.jobType, scheduleSlot, scheduleDate);
+    if (pending) {
+      pendingRenderRecovery = {
+        sessionId: pending.sessionId,
+        visualId: pending.videoId,
+        dashboardUrl: pending.videoDashboardUrl || null,
+        source: pending.source || null,
+        pack: pending.pack || null,
+        creditBudget: pending.creditBudget || null,
+        templateId: pending.templateId || null,
+        templateIdCandidates: pending.templateIdCandidates || [],
+        rejectedTemplateIds: pending.rejectedTemplateIds || [],
+        creditGuardReservationId: pending.creditGuardReservationId || `${pending.sessionId}:attempt-${Number(pending.attempt || 1)}`,
+        attempt: Number(pending.attempt || 1),
+      };
+      warn("blotato.schedule.pending_render_reconcile", {
+        sessionId: pending.sessionId, visualId: pending.videoId,
+        scheduleSlot, scheduleDate, attempt: Number(pending.attempt || 1),
+      });
     }
     const retryablePublish = await findRetryableScheduledPublish(lane.jobType, scheduleSlot, scheduleDate);
     if (retryablePublish) {
@@ -2544,8 +2649,8 @@ export async function triggerPublishNowJob(req = {}, laneSlug = DEFAULT_BLOTATO_
   let job;
 
   try {
-    if (failedPublishRecovery?.source?.article) {
-      articleSource = failedPublishRecovery.source;
+    if (failedPublishRecovery?.source?.article || pendingRenderRecovery?.source?.article) {
+      articleSource = failedPublishRecovery?.source || pendingRenderRecovery.source;
     } else {
       const configuredBriefLimit = Number(process.env.COMMS_HUB_CONTENT_AUTOMATION_BLOTATO_VIDEO_BRIEF_LIMIT || 1);
       editorialBriefEntries = await claimPendingEditorialBriefs("blotato_video", {
@@ -2589,6 +2694,7 @@ export async function triggerPublishNowJob(req = {}, laneSlug = DEFAULT_BLOTATO_
       editorialBriefFingerprint: editorialBriefFingerprint(editorialBriefEntries),
       failedRenderReplacement,
       failedPublishRecovery,
+      pendingRenderRecovery,
       publicationReferences: [],
       failedPublishes: [],
       // Remove the rejected render from the active job before the daily cap is
@@ -2625,6 +2731,7 @@ export async function triggerPublishNowJob(req = {}, laneSlug = DEFAULT_BLOTATO_
     job: publicJob,
     failedRenderReplacement,
     failedPublishRecovery,
+    pendingRenderRecovery,
   };
 
   if (!started) {
@@ -2655,6 +2762,7 @@ export async function triggerPublishNowJob(req = {}, laneSlug = DEFAULT_BLOTATO_
     scheduleDate,
     failedRenderReplacement,
     failedPublishRecovery,
+    pendingRenderRecovery,
   });
   if (parseBoolean(process.env.BLOTATO_INLINE_PUBLISH_JOBS, false)) {
     await run();

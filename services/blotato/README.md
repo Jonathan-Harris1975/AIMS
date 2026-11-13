@@ -29,6 +29,8 @@ Provider submission state is polled rather than assuming acceptance means public
 
 Production defaults require every configured channel and scheduling confirmation: `BLOTATO_REQUIRE_ALL_CHANNELS=true` and `BLOTATO_REQUIRE_SCHEDULE_CONFIRMATION=true`. The daily paid-render cap is two, matching the separate AM and PM slots, while the monthly estimated-credit cap is 1,250, matching the confirmed included plan allowance. The monthly cap remains enforced and can stop later slots once exhausted. The credit reservations are stored in durable state before Blotato is called, and remain charged to the guard when a provider response is uncertain. Automatic paid replacements are disabled by default (`BLOTATO_FAILED_RENDER_REPLACEMENTS=0`); a finished video can still be reused for a safe scheduling retry. Actual credit use must be checked in the Blotato dashboard because AIMS receives no billing total from the rendering API.
 
+Provider render timeouts are treated as **uncertain**, not permission to pay for another video. A failed scheduled slot retaining a provider video ID is retried through status polling of that same ID (up to `BLOTATO_RENDER_RECONCILE_ATTEMPTS` attempts). No new paid render is reserved during reconciliation. A durable video-ID link to the original credit reservation prevents historical job imports from counting the same video twice. Unmatched and ambiguous provider renders remain charged, and exhausted/terminal provider failures remain visible for intervention.
+
 The `ai-playbook` lane is prepared in the **Friday AM** operation. Friday PM is podcast-only.
 
 ## Configuration

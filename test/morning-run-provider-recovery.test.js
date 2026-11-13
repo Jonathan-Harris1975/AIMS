@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import {
   isReplaceableRenderedQualityFailure,
   isRetryableRenderedPublishFailure,
+  isRetryablePendingRenderFailure,
 } from "../services/blotato/utils/autoPublishService.js";
 
 async function source(path) {
@@ -82,6 +83,40 @@ test("Blotato reuses rendered videos for provider handoff but blocks ambiguous r
   } finally {
     if (previous === undefined) delete process.env.BLOTATO_POST_SUBMISSION_RETRY_ATTEMPTS;
     else process.env.BLOTATO_POST_SUBMISSION_RETRY_ATTEMPTS = previous;
+  }
+});
+
+test("a timed-out paid render is recovered by GET, never counted as a fresh paid render", async () => {
+  const previous = process.env.BLOTATO_RENDER_RECONCILE_ATTEMPTS;
+  process.env.BLOTATO_RENDER_RECONCILE_ATTEMPTS = "4";
+  try {
+    const pending = {
+      status: "failed", phase: "video-rendering", attempt: 1,
+      videoId: "existing-visual", pack: { script: "original script" },
+      error: { code: "blotato-poll-duration-exceeded", status: 504 },
+    };
+    assert.equal(isRetryablePendingRenderFailure(pending), true);
+    assert.equal(isRetryablePendingRenderFailure({ ...pending, attempt: 4 }), false);
+    assert.equal(isRetryablePendingRenderFailure({ ...pending, phase: "publish-failed" }), false);
+    assert.equal(isRetryablePendingRenderFailure({
+      ...pending, error: { code: "blotato-daily-paid-render-cap" },
+    }), false);
+    assert.equal(isRetryablePendingRenderFailure({
+      ...pending, publicationReferences: [{ postSubmissionId: "maybe-published" }],
+    }), false);
+    const source = await readFile(new URL("../services/blotato/utils/autoPublishService.js", import.meta.url), "utf8");
+    assert.match(source, /awaitExistingBlotatoRender\(pendingRenderRecovery\.visualId, apiKey/);
+    assert.match(source, /blotato\.schedule\.pending_render_reconcile/);
+    assert.match(source, /linkPaidRenderVisual/);
+    assert.match(source, /error\.code = "blotato-credit-visual-link-failed"/);
+    assert.match(source, /reservationId: pendingRenderRecovery\.creditGuardReservationId/);
+    assert.match(source, /if \(!reusedVideo && !pendingRenderRecovery\?\.visualId && scheduleSlot/);
+    assert.equal(isRetryablePendingRenderFailure({ ...pending,
+      error: { code: "blotato-credit-visual-link-failed" },
+    }), true);
+  } finally {
+    if (previous === undefined) delete process.env.BLOTATO_RENDER_RECONCILE_ATTEMPTS;
+    else process.env.BLOTATO_RENDER_RECONCILE_ATTEMPTS = previous;
   }
 });
 

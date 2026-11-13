@@ -58,6 +58,20 @@ async function writeLedger(month, ledger, previous) {
   return true;
 }
 
+function matchingReservation(entries, render) {
+  const reservationId = String(render?.reservationId || "").trim();
+  const sessionId = String(render?.sessionId || "").trim();
+  const visualId = String(render?.visualId || "").trim();
+  const candidates = entries.filter((entry) => !entry.id.startsWith("legacy:")
+    && entry.date === render.date
+    && ((reservationId && entry.id === reservationId)
+      || (visualId && entry.visualId === visualId)
+      || (sessionId && entry.id.startsWith(`${sessionId}:attempt-`))));
+  // Multiple reservations for one session may indicate several paid render attempts.
+  // Never collapse them without a unique, durable match.
+  return candidates.length === 1 ? candidates[0] : null;
+}
+
 function capError(code, message, details) {
   const error = new Error(message);
   error.statusCode = 409;
@@ -84,18 +98,28 @@ export async function reservePaidRender({
         || !Number.isFinite(entry.credits) || entry.credits <= 0)) {
       throw new Error(`Invalid Blotato credit ledger for ${month}; refusing a paid render.`);
     }
-    const entries = [...ledger.entries];
+    const reconciledRenders = priorRenders.filter((render) => render?.visualId
+      && render.date?.startsWith(`${month}-`));
+    // The live failure in November 2026 exposed a legacy import of the SAME
+    // visual already covered by a durable reservation. Identify it from the
+    // exact reservation, persisted visual ID, or unique session/attempt prefix.
+    // Do not silently refund any uncorrelated provider render.
+    const entries = ledger.entries.filter((entry) => {
+      if (!entry.id.startsWith("legacy:")) return true;
+      const render = reconciledRenders.find((item) => entry.id === `legacy:${item.visualId}`);
+      return !render || !matchingReservation(ledger.entries, render);
+    });
     const known = new Set(entries.map((entry) => entry.id));
-    for (const render of priorRenders) {
+    for (const render of reconciledRenders) {
       const id = `legacy:${render.visualId}`;
-      if (!render.visualId || known.has(id) || render.reservationId) continue;
-      if (!render.date?.startsWith(`${month}-`)) continue;
+      if (known.has(id) || matchingReservation(entries, render)) continue;
       entries.push({ id, date: render.date, credits: render.expectedCredits > 0 ? render.expectedCredits : 70 });
       known.add(id);
     }
-    // Persist discovered renders even when they already exhaust a cap. If we
-    // only kept them in memory, the 24-hour job prune would erase that spend.
-    if (entries.length !== ledger.entries.length) {
+    // Reconcile and import under the same conditional write. The daily/monthly
+    // limits must observe the corrected ledger even across concurrent workers.
+    if (entries.length !== ledger.entries.length
+      || entries.some((entry, index) => entry.id !== ledger.entries[index]?.id)) {
       if (await write(month, { version: 1, month, entries }, previous)) continue;
       continue;
     }
@@ -120,4 +144,28 @@ export async function reservePaidRender({
     }
   }
   throw new Error("Could not reserve Blotato credits after concurrent ledger updates; no paid render was started.");
+}
+
+/**
+ * Associate the provider-created visual with its already-reserved paid render.
+ * This does not reserve any extra credits and survives the 24-hour job TTL.
+ */
+export async function linkPaidRenderVisual({ reservationId, scheduleDate, visualId },
+  { read = readLedger, write = writeLedger } = {}) {
+  if (!reservationId || !visualId || !/^\d{4}-\d{2}-\d{2}$/.test(scheduleDate || "")) {
+    throw new Error("Invalid paid-render visual linkage.");
+  }
+  const month = scheduleDate.slice(0, 7);
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const previous = await read(month);
+    const entries = previous.ledger?.entries;
+    if (!Array.isArray(entries)) throw new Error("Paid-render reservation ledger missing.");
+    const entry = entries.find((item) => item.id === reservationId && item.date === scheduleDate);
+    if (!entry) throw new Error("Paid-render reservation not found.");
+    if (entry.visualId === visualId) return true;
+    if (entry.visualId && entry.visualId !== visualId) throw new Error("Paid-render reservation is linked to another visual.");
+    const updated = entries.map((item) => item === entry ? { ...item, visualId } : item);
+    if (await write(month, { ...previous.ledger, entries: updated }, previous)) return true;
+  }
+  throw new Error("Could not persist paid-render visual association.");
 }
