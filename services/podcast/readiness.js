@@ -123,7 +123,7 @@ export function getPodcastReadiness({ env = process.env, checkCommand = commandA
 
 export default getPodcastReadiness;
 
- 
+
 // Runtime readiness requires one real, short Polly synthesis, with a bounded
 // cache, so a revoked IAM permission blocks the podcast before LLM spending.
 export async function getPodcastRuntimeReadiness({ env = process.env, checkCommand, probe } = {}) {
