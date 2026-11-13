@@ -108,12 +108,15 @@ test("a timed-out paid render is recovered by GET, never counted as a fresh paid
     assert.match(source, /awaitExistingBlotatoRender\(pendingRenderRecovery\.visualId, apiKey/);
     assert.match(source, /blotato\.schedule\.pending_render_reconcile/);
     assert.match(source, /linkPaidRenderVisual/);
-    assert.match(source, /error\.code = "blotato-credit-visual-link-failed"/);
+    assert.match(source, /blotato-credit-visual-conflict/);
     assert.match(source, /reservationId: pendingRenderRecovery\.creditGuardReservationId/);
     assert.match(source, /if \(!reusedVideo && !pendingRenderRecovery\?\.visualId && scheduleSlot/);
     assert.equal(isRetryablePendingRenderFailure({ ...pending,
       error: { code: "blotato-credit-visual-link-failed" },
     }), true);
+    assert.equal(isRetryablePendingRenderFailure({ ...pending,
+      error: { code: "blotato-credit-visual-conflict" },
+    }), false);
   } finally {
     if (previous === undefined) delete process.env.BLOTATO_RENDER_RECONCILE_ATTEMPTS;
     else process.env.BLOTATO_RENDER_RECONCILE_ATTEMPTS = previous;
