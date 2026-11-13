@@ -23,6 +23,7 @@ import { buildOrCreateNewsInsightShort, buildOrCreateShortLane } from "../utils/
 import { listShortLaneConfigs, requireShortLaneConfig } from "../utils/shortLanes.js";
 import { getPublishNowJob, triggerPublishNowJob } from "../utils/autoPublishService.js";
 import { getAutoShortStyleConfigSummary, getAutoShortStyleRotation } from "../utils/autoShortStyles.js";
+import { weekendVideoPreparation } from "../utils/weekendSchedule.js";
 
 const router = express.Router();
 
@@ -191,6 +192,27 @@ router.post(
     const result = await triggerPublishNowJob(req, laneSlug, { creativeStyle: style.creativeStyle, publishMode: "autoshorts-scheduled", scheduleSlot: "am" });
     return res.status(result.statusCode || 202).json({ ok: true, service: "blotato", lane: "autoshorts-scheduled", style, sourceLane: laneSlug, message:
        "Blotato AM scheduled-post job accepted.", ...result });
+  })
+);
+
+// Friday creates the actual weekend videos while Blotato queues delivery
+// for the target Saturday/Sunday AM and PM slots. Every target day and slot
+// has a stable session ID; rerunning Friday cannot pay for or publish twice.
+router.post(
+  "/weekend/:day/:slot/prepare",
+  requestDedupe("blotato:weekend:prepare"),
+  asyncRoute(async (req, res) => {
+    const plan = weekendVideoPreparation({ day: req.params.day, slot: req.params.slot });
+    const result = await triggerPublishNowJob(req, plan.lane, {
+      publishMode: "weekend-prepared-scheduled",
+      scheduleSlot: plan.slot,
+      scheduleDate: plan.publishDate,
+    });
+    return res.status(result.statusCode || 202).json({
+      ok: true, service: "blotato", lane: plan.lane, ...plan,
+      message: "Friday-prepared weekend Blotato video accepted for provider scheduling.",
+      ...result,
+    });
   })
 );
 
