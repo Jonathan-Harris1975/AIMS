@@ -114,7 +114,7 @@ export async function runRssFeedCreator({ requiredSessionId = null } = {}) {
   const channelCoverHost = new URL(channelCoverUrl).hostname;
   let showCoverValidation;
   if (channelCoverHost === "podcast-coverart.jonathan-harris.online") {
-    const key = new URL(channelCoverUrl).pathname.replace(/^\\/+/, "");
+    const key = new URL(channelCoverUrl).pathname.slice(1);
     const coverData = await getObjectAsBuffer("art", key);
     showCoverValidation = validatePodcastShowCoverPng(coverData);
     info("podcast.show_cover.validated", { url: channelCoverUrl, ...showCoverValidation });
