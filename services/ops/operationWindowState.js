@@ -14,7 +14,7 @@ export const OPERATION_RECOVERY_REVISION = "content-upstream-recovery-2026-11-03
 export const PODCAST_RECOVERY_REVISION = "podcast-section-validation-2026-10-30-v2";
 // One deployment-scoped recovery for a failed newsletter window after the
 // source/artwork continuity repair. Successful sibling tasks remain reusable.
-export const NEWSLETTER_RECOVERY_REVISION = "newsletter-publication-continuity-2026-11-09-v2";
+export const NEWSLETTER_RECOVERY_REVISION = "newsletter-source-grounding-weekend-2026-11-13-v3";
 
 function normalise(value = "") {
   return String(value || "").trim();
@@ -58,7 +58,19 @@ export function operationTaskSucceeded(result = {}) {
   const status = String(payload?.status || "").toLowerCase();
   if (["failed", "error", "partial", "pending", "queued", "accepted", "running"].includes(status)
       && result?.asyncStatus !== "completed") return false;
-  if (payload?.skipped !== true) return payload?.ok === true || payload?.ready === true;
+  if (payload?.skipped !== true) {
+    if (payload?.ok === true || payload?.ready === true) return true;
+    // RSS reports QA statistics, rather than a generic ok flag. The child
+    // must have terminated and produced genuine, fully-passed rewritten items.
+    // A bare HTTP 202/running acknowledgement never satisfies this contract.
+    if (result.name === "rss-rewrite" && result.asyncStatus === "completed") {
+      return payload?.phase3Quality?.status === "ALL_PASSED_AUTO_PUBLISH"
+        && Number(payload.phase3Quality.passed || 0) > 0
+        && Number(payload.phase3Quality.failed || 0) === 0
+        && Number(payload.rewrittenItems || 0) > 0;
+    }
+    return false;
+  }
 
   // A skip is successful only when backed by a confirmed existing artefact
   // or already-completed provider handoff. These are read-only confirmations;
