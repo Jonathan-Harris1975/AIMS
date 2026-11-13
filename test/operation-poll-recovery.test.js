@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { operationWindowPollStatus, evaluateOperationWindowClaim, operationTaskSucceeded, reusableOperationTaskResults,
+import { operationWindowPollStatus, evaluateOperationWindowClaim, operationTaskSucceeded, reusableOperationTaskResults, sameDayBackstopAllowance,
   NEWSLETTER_RECOVERY_REVISION } from "../services/ops/operationWindowState.js";
 
 const nowMs = Date.parse("2026-10-30T11:58:00Z");
@@ -125,4 +125,39 @@ test("operation orchestration fails uncertain successful HTTP skips rather than 
   assert.match(source, /reason: "content-task-completion-unverified", retryable: true/);
   assert.match(source, /operationDependencyReady = \(dependency\) => operationTaskSucceeded\(dependency\)/);
   assert.match(source, /if \(taskResult\.ok && !operationTaskSucceeded\(taskResult\)\)/);
+});
+
+test("late content recovery slots each reserve exactly one bounded extra attempt", () => {
+  const id = "2026-11-13:friday-am";
+  const failed = { id, window: "friday-am", status: "completed-with-failures",
+    attempt: 3, recoveryRevision: NEWSLETTER_RECOVERY_REVISION,
+    finishedAt: "2026-11-13T10:55:00Z",
+    results: [{ name: "newsletter-generate", ok: false, retryable: true }] };
+  const check = (receipt, time) => evaluateOperationWindowClaim(receipt, {
+    nowMs: Date.parse(`2026-11-13T${time}:00Z`),
+    allowRecovery: true, maxAttempts: 3, recoveryCooldownMs: 60_000,
+    recoveryRevision: NEWSLETTER_RECOVERY_REVISION,
+  });
+
+  assert.equal(sameDayBackstopAllowance(failed, Date.parse("2026-11-13T15:44:00Z")), 0);
+  assert.equal(check(failed, "15:44").claimable, false);
+  assert.equal(sameDayBackstopAllowance(failed, Date.parse("2026-11-13T15:45:00Z")), 1);
+  assert.deepEqual({ allowed: check(failed, "15:45").claimable,
+    attempt: check(failed, "15:45").attempt }, { allowed: true, attempt: 4 });
+  const fourthAttempt = { ...failed, attempt: 4, finishedAt: "2026-11-13T15:55:00Z" };
+  assert.equal(check(fourthAttempt, "16:30").claimable, false);
+  assert.equal(sameDayBackstopAllowance(fourthAttempt, Date.parse("2026-11-13T21:20:00Z")), 2);
+  assert.equal(check(fourthAttempt, "21:20").attempt, 5);
+  const fifthAttempt = { ...failed, attempt: 5, finishedAt: "2026-11-13T21:30:00Z" };
+  assert.equal(check(fifthAttempt, "22:00").claimable, false);
+  assert.equal(sameDayBackstopAllowance(failed, Date.parse("2026-11-14T15:45:00Z")), 0);
+
+  const podcast = { ...failed, id: "2026-11-13:friday-pm", window: "friday-pm" };
+  assert.equal(sameDayBackstopAllowance(podcast, Date.parse("2026-11-13T18:29:00Z")), 0);
+  assert.equal(sameDayBackstopAllowance(podcast, Date.parse("2026-11-13T18:30:00Z")), 1);
+  assert.equal(sameDayBackstopAllowance(podcast, Date.parse("2026-11-13T22:10:00Z")), 2);
+  assert.equal(sameDayBackstopAllowance({ ...failed, window: "unrecognised" },
+    Date.parse("2026-11-13T22:00:00Z")), 0);
+  assert.equal(sameDayBackstopAllowance({ ...failed, id: "2026-11-12:thursday-am" },
+    Date.parse("2026-11-13T21:20:00Z")), 0);
 });
