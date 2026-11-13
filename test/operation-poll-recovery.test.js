@@ -170,6 +170,21 @@ test("late recovery returns no allowance when London date parts are incomplete",
   }
 });
 
+test("terminal RSS phase-three proof unblocks downstream blog without trusting an HTTP acknowledgement", () => {
+  const proof = { name: "rss-rewrite", ok: true, asyncStatus: "completed", result: { ok: true, status: "running" },
+    asyncJob: { job: { result: { rewrittenItems: 4,
+      phase3Quality: { status: "ALL_PASSED_AUTO_PUBLISH", passed: 1, failed: 0 } } } } };
+  assert.equal(operationTaskSucceeded(proof), true);
+  assert.equal(operationTaskSucceeded({ ...proof, asyncStatus: "running" }), false);
+  assert.equal(operationTaskSucceeded({ ...proof, asyncJob: {
+    job: { result: { rewrittenItems: 4, phase3Quality: { status: "HAS_QUARANTINED_ITEMS", passed: 0, failed: 1 } } },
+  } }), false);
+  assert.equal(operationTaskSucceeded({ ...proof, asyncJob: {
+    job: { result: { rewrittenItems: 0, phase3Quality: { status: "ALL_PASSED_AUTO_PUBLISH", passed: 0, failed: 0 } } },
+  } }), false);
+  assert.deepEqual(reusableOperationTaskResults({ results: [proof] }).map(x => x.name), ["rss-rewrite"]);
+});
+
 test("late content recovery slots each reserve exactly one bounded extra attempt", () => {
   const id = "2026-11-13:friday-am";
   const failed = { id, window: "friday-am", status: "completed-with-failures",
