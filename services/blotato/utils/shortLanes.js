@@ -148,7 +148,8 @@ signal-vs-noise geometry on dark backgrounds. Hard cut between two contrasting v
     rssEnvKey: "BLOTATO_WEEKEND_DEBATE_RSS_URL",
     hookPattern: "Lead with the concrete trade-off, not an outrage cue or generic question.",
     hookExample: "An AI can approve this decision faster. Should anyone let it?",
-    visualSignature: "Two adult perspectives around one consequential AI-assisted decision in the same real environment, with human gestures and physical consequences. No dashboard, labelling, pseudo-text or logos.",
+    visualSignature: "Two adult perspectives around one real AI-assisted decision, with opposing gestures " +
+      "and visible consequences. No dashboard, labels, pseudo-text or logos.",
     soundMap: "Measured, tense and thoughtful opening. Quiet restrained electronic bed; end on an unresolved but constructive note.",
   },
   {
@@ -164,7 +165,8 @@ signal-vs-noise geometry on dark backgrounds. Hard cut between two contrasting v
     rssEnvKey: "BLOTATO_WEEKEND_SPOTLIGHT_RSS_URL",
     hookPattern: "Open with the concrete discovery or practical contribution, not invented personal drama.",
     hookExample: "This small research breakthrough changed what a machine could recognise.",
-    visualSignature: "Premium documentary close-ups of actual research apparatus or tangible model consequences, keeping named-person likenesses out unless references are verified. No text, monitors, logos or diagrams.",
+    visualSignature: "Documentary close-ups of real research apparatus or tangible model consequences. " +
+      "No invented likeness, labels, monitors, logos or diagrams.",
     soundMap: "Curious and warm documentary opening, quiet thoughtful pace, reassuring resolution.",
   },
   {
