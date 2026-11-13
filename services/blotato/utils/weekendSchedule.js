@@ -1,8 +1,8 @@
 // Prepare both weekend video slots on Friday, never after the intended
 // publication day has arrived. Publication timing remains the provider's job.
 export const WEEKEND_VIDEO_LANES = Object.freeze({
-  saturday: "weekend-debate",
-  sunday: "weekend-spotlight",
+  saturday: Object.freeze({ am: "weekend-brief", pm: "weekend-debate" }),
+  sunday: Object.freeze({ am: "weekend-lesson", pm: "weekend-spotlight" }),
 });
 export const WEEKEND_VIDEO_SLOTS = Object.freeze(["am", "pm"]);
 
@@ -29,7 +29,7 @@ export function weekendVideoPreparation({ day, slot, now = new Date() } = {}) {
   const publishDate = new Date(friday.getTime() + (targetDay === "saturday" ? 1 : 2) * 86_400_000)
     .toISOString().slice(0, 10);
   return {
-    lane: WEEKEND_VIDEO_LANES[targetDay],
+    lane: WEEKEND_VIDEO_LANES[targetDay][targetSlot],
     day: targetDay,
     slot: targetSlot,
     publishDate,
