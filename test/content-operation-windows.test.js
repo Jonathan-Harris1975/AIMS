@@ -23,8 +23,10 @@ test("weekday AM windows contain blog-social handoff and both Blotato schedule s
     assert.equal(occurrences(block, '/blog/social/daily/build'), 1, `${day} must build one social-blog item`);
     assert.equal(occurrences(block, '/zernio/blog-rss/daily'), 1, `${day} must schedule one social-blog item`);
     assert.equal(occurrences(block, `/zernio/daily/${day}`), 1, `${day} must schedule one daily evergreen item`);
-    assert.equal(occurrences(block, '/blotato/autoshorts/schedule'), 1, `${day} must have one Blotato AM slot`);
-    assert.equal(occurrences(block, eveningPaths[day]), 1, `${day} must have one Blotato PM slot`);
+    assert.equal(occurrences(block, '/blotato/autoshorts/schedule'), day === "friday" ? 3 : 1,
+      `${day} must have the designated Blotato AM slots`);
+    assert.equal(occurrences(block, eveningPaths[day]), day === "friday" ? 2 : 1,
+      `${day} must have the designated Blotato PM slots`);
     const socialLines = block.split(/\r?\n/).filter((line) => /\["(?:blotato-(?:am|pm)|zernio-(?:monday|tuesday|wednesday|thursday|friday))"/.test(line));
     assert.ok(socialLines.length >= 3, `${day} must expose the independent provider tasks`);
     for (const line of socialLines) {
@@ -38,6 +40,16 @@ test("Friday AM prepares weekend Zernio and Friday PM is podcast only", () => {
   const fridayAm = opsSource.slice(opsSource.indexOf('"friday-am": ['), opsSource.indexOf('"friday-pm": ['));
   assert.ok(fridayAm.includes('/zernio/daily/saturday'));
   assert.ok(fridayAm.includes('/zernio/daily/sunday'));
+  for (const [name, lane, day] of [
+    ["blotato-saturday-am", "/blotato/autoshorts/schedule", "saturday"],
+    ["blotato-saturday-pm", "/blotato/shorts/ai-playbook/schedule", "saturday"],
+    ["blotato-sunday-am", "/blotato/autoshorts/schedule", "sunday"],
+    ["blotato-sunday-pm", "/blotato/shorts/reality-check/schedule", "sunday"],
+  ]) {
+    assert.ok(fridayAm.includes(`["${name}", "${lane}", { weekendTarget: "${day}" }]`));
+  }
+  assert.match(opsSource, /payload\.scheduleDate = upcomingFridayWeekendDate\(payload\.weekendTarget\)/);
+  assert.match(opsSource, /delete payload\.weekendTarget/);
   const fridayPm = opsSource.slice(opsSource.indexOf('"friday-pm": ['), opsSource.indexOf('});', opsSource.indexOf('"friday-pm": [')));
   assert.ok(fridayPm.includes('/podcast/run'));
   assert.equal(fridayPm.includes('/blotato/'), false);
