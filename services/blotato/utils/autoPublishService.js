@@ -2029,7 +2029,7 @@ async function runPublishJobImpl({
               visualId: pendingRenderRecovery.visualId,
             });
           } catch (error) {
-            error.code = "blotato-credit-visual-link-failed";
+            error.code = /linked to another visual/i.test(error?.message || "") ? "blotato-credit-visual-conflict" : "blotato-credit-visual-link-failed";
             throw error;
           }
           const recovered = await awaitExistingBlotatoRender(pendingRenderRecovery.visualId, apiKey, {
@@ -2089,7 +2089,7 @@ async function runPublishJobImpl({
             warn("blotato.credit.visual_link_pending_reconciliation", {
               sessionId, visualId: visualMeta.visualId, error: error?.message || String(error),
             });
-            error.code = "blotato-credit-visual-link-failed";
+            error.code = /linked to another visual/i.test(error?.message || "") ? "blotato-credit-visual-conflict" : "blotato-credit-visual-link-failed";
             throw error;
           }
         }
