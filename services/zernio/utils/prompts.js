@@ -353,39 +353,44 @@ Read more: ${featuredBook.bookUrl || ""}
 
 
 export function buildPodcastPromoPrompt({ publishDate, episode = {} } = {}) {
+  const preview = episode.mode === "preview";
   return {
     system: [
       buildZernioPersona(),
-      "Write Thursday's static social recommendation for Turing's Torch: AI Weekly, based on an ACTUALLY PUBLISHED episode.",
+      "Write the existing Thursday social advertisement for Turing's Torch: AI Weekly.",
       "This is not a podcast performance. Do not write voiceover, spoken script, narration, dialogue or text-to-speech instructions.",
       "The podcast audio identity belongs solely to the production pipeline. Never synthesise or replace the show voice.",
-      "The excerpt from the approved previous episode transcript guides authentic Gen X tone and is evidence for this episode only.",
-      "Do not claim the episode is arriving tomorrow, that a future episode covers its subjects, or that its guests, quotes or conclusions belong to a future show.",
-      "Speak of the featured episode as available to listen to. Do not invent facts, guests, quotes or future releases.",
-      "British English. Crisp, sceptical, useful, dry where appropriate. No self-advertising superlatives, hype, fake urgency, emojis, markdown or hashtags.",
+      "The excerpt from LAST WEEK'S approved transcript provides voice and tone only, NOT facts for the upcoming episode.",
+      "Use ONLY the featured episode's own title and verified description for factual claims. Do not invent guests, quotes, conclusions or release details.",
+      preview
+        ? "The verified next episode has been planned, not released: introduce it as a preview for Friday. Never say it is available now."
+        : "Only a previously published episode is verified: recommend it truthfully as available, never pretend it arrives on Friday.",
+      "British English. Crisp, sceptical, useful, naturally dry Gen X voice. No hype, fake urgency, emojis, markdown or hashtags.",
       "Return valid JSON only with exactly: title, topic, content, imagePrompt.",
     ].join("\n"),
     user: [
-      "Create a Thursday recommendation for the latest published Turing's Torch: AI Weekly episode.",
-      "Promotion date: " + publishDate,
-      "Published episode title: " + (episode.title || ""),
-      "Verified description: " + (episode.description || ""),
+      "Thursday promotion date: " + publishDate,
+      "Mode: " + (preview ? "verified Friday preview" : "published episode recommendation"),
+      "Featured episode title: " + (episode.title || ""),
+      "Verified episode description: " + (episode.description || ""),
       "Episode number: " + (episode.episodeNumber || ""),
-      "Actual publication date: " + (episode.pubDate || ""),
-      "Verified episode link: " + (episode.link || ""),
-      "Evidence source: " + (episode.source || ""),
-      "Approved previous-episode transcript excerpt (may be empty if RSS fallback):",
-      episode.transcriptExcerpt || "No verified transcript was accessible: rely strictly on the published episode description.",
+      "Episode date if verified: " + (episode.pubDate || ""),
+      "Factual evidence source: " + (episode.source || ""),
+      "Previous published episode title (for voice only): " + (episode.previousTranscriptTitle || ""),
+      "Previous week's approved transcript excerpt, STYLE CONTEXT ONLY:",
+      episode.transcriptExcerpt || "No verified previous transcript is accessible. Use established brand voice without inventing transcript evidence.",
       "Requirements:",
-      "- 90 to 145 words with a concrete opening and one real implication or tension in the episode",
-      "- accurately name the featured PUBLISHED episode once",
-      "- say what was discussed in the published episode, not what tomorrow's programme will cover",
-      "- mention Turing's Torch: AI Weekly naturally; finish with a restrained reason to listen",
-      "- no hashtags, invented quotes, full transcript extracts or invented release claims",
+      "- 90 to 145 words, concrete opening and one useful practical implication verified by the FEATURED episode's description",
+      "- accurately name the featured episode's title once, mention Turing's Torch: AI Weekly naturally",
+      preview
+        ? "- clearly state the featured upcoming episode lands Friday, without claiming it is already available"
+        : "- clearly describe the previously published episode as already available, without referring to a new release Friday",
+      "- last week's transcript is a style reference; DO NOT borrow its subject matter or imply it is part of the featured episode unless supported independently",
+      "- finish with a restrained reason to listen rather than engagement bait",
+      "- no hashtags, invented quotes or claims, or unattributed transcript extracts",
       "- content must not exceed " + ZERNIO_POST_MAX_CHARACTERS + " characters",
-      "- imagePrompt: one recognisable technical editorial scene grounded in the actual published title and description: " +
-        "AI infrastructure, compute, cybersecurity, AI governance or developer tooling as supported by the episode",
-      "- cinematic colour and contrast, with no typography, logos, words, numbers, people, humanoid robots, hands, lifestyle metaphors, roads or decorative glowing brains",
+      "- imagePrompt: one recognisable technical editorial scene grounded only in the FEATURED episode's own verified title and description",
+      "- cinematic colour and contrast, no typography, logos, words, numbers, people, humanoid robots, hands, lifestyle metaphors, roads or decorative glowing brains",
       "- JSON only",
     ].join("\n"),
   };
