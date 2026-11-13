@@ -11,19 +11,19 @@ This inventory makes the runtime configuration contract auditable without duplic
 | Variable | Curated template | Production references |
 | --- | --- | --- |
 | `AIMS_ALLOW_UNAUTHENTICATED_DEV` | Yes | services/shared/middleware/suiteAuth.js:91 |
-| `AIMS_API_KEY` | Yes | scripts/collectCommsWorkerHealth.js:1<br>server.js:200<br>services/ops/index.js:466<br>services/shared/middleware/suiteAuth.js:60 |
+| `AIMS_API_KEY` | Yes | scripts/collectCommsWorkerHealth.js:1<br>server.js:200<br>services/ops/index.js:474<br>services/shared/middleware/suiteAuth.js:60 |
 | `AIMS_BUSY_CONCURRENCY_THRESHOLD` | No | services/shared/utils/lifecycle.js:15 |
 | `AIMS_FAILURE_ALERT_THRESHOLD` | Yes | services/shared/utils/operationalExcellence.js:5 |
-| `AIMS_INTERNAL_BASE_URL` | Yes | services/ops/index.js:465 |
-| `AIMS_OPERATION_ASYNC_JOB_TIMEOUT_MS` | Yes | services/ops/index.js:548 |
-| `AIMS_OPERATION_ASYNC_MAX_POLL_ERRORS` | No | services/ops/index.js:550 |
-| `AIMS_OPERATION_ASYNC_NOT_FOUND_GRACE_MS` | No | services/ops/index.js:551 |
-| `AIMS_OPERATION_ASYNC_POLL_INTERVAL_MS` | Yes | services/ops/index.js:547 |
-| `AIMS_OPERATION_ASYNC_REQUEST_TIMEOUT_MS` | Yes | services/ops/index.js:549 |
-| `AIMS_OPERATION_DISPATCH_TIMEOUT_MS` | No | services/ops/index.js:485 |
+| `AIMS_INTERNAL_BASE_URL` | Yes | services/ops/index.js:473 |
+| `AIMS_OPERATION_ASYNC_JOB_TIMEOUT_MS` | Yes | services/ops/index.js:556 |
+| `AIMS_OPERATION_ASYNC_MAX_POLL_ERRORS` | No | services/ops/index.js:558 |
+| `AIMS_OPERATION_ASYNC_NOT_FOUND_GRACE_MS` | No | services/ops/index.js:559 |
+| `AIMS_OPERATION_ASYNC_POLL_INTERVAL_MS` | Yes | services/ops/index.js:555 |
+| `AIMS_OPERATION_ASYNC_REQUEST_TIMEOUT_MS` | Yes | services/ops/index.js:557 |
+| `AIMS_OPERATION_DISPATCH_TIMEOUT_MS` | No | services/ops/index.js:493 |
 | `AIMS_OPERATION_FRIDAY_PM_DELAY_MS` | Yes | services/ops/index.js:171 |
 | `AIMS_OPERATION_NEWSLETTER_ENABLED` | Yes | scripts/contentDeliveryDiagnostics.js:234 |
-| `AIMS_OPERATION_TASK_TIMEOUT_MS` | Yes | services/ops/index.js:486 |
+| `AIMS_OPERATION_TASK_TIMEOUT_MS` | Yes | services/ops/index.js:494 |
 | `AIMS_STARTUP_GRACE_MS` | No | services/shared/utils/lifecycle.js:14 |
 | `AI_MODEL_BLOCKLIST` | Yes | services/shared/utils/ai-service.js:87 |
 | `AI_MODEL_DEFAULT` | No | scripts/verifyHeadroomProduction.js:17 |
@@ -43,9 +43,9 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `API_ZERO_KEY` | Yes | services/outreach/services/zeroBounceBatch.js:21 |
 | `APP_ENV` | No | scripts/performanceGate.js:6<br>server.js:400 |
 | `APP_STATE_DIR` | Yes | services/shared/utils/stateFile.js:9 |
-| `APP_TITLE` | Yes | ai-config.js:347<br>services/artwork/artwork.js:294<br>services/artwork/utils/artwork.js:321 |
+| `APP_TITLE` | Yes | ai-config.js:347<br>services/artwork/artwork.js:294<br>services/artwork/utils/artwork.js:332 |
 | `APP_TMP_DIR` | Yes | scripts/tempStorage.js:10<br>services/blotato/utils/renderedVideoQa.js:308<br>services/shared/utils/stateFile.js:10<br>services/tts/utils/editingProcessor.js:22<br>services/tts/utils/mergeProcessor.js:14<br>services/tts/utils/podcastProcessor.js:56 |
-| `APP_URL` | Yes | ai-config.js:346<br>audits/utils/orchestrator.js:143<br>services/artwork/artwork.js:293<br>services/artwork/utils/artwork.js:320<br>services/rss-feed-creator/utils/feedGenerator.js:32 |
+| `APP_URL` | Yes | ai-config.js:346<br>audits/utils/orchestrator.js:143<br>services/artwork/artwork.js:293<br>services/artwork/utils/artwork.js:331<br>services/rss-feed-creator/utils/feedGenerator.js:32 |
 | `APP_VERSION` | No | server.js:399<br>server.js:418<br>services/shared/utils/operationalExcellence.js:192 |
 | `ARTWORK_CAPABILITY_CACHE_MS` | No | services/artwork/utils/openrouterImageCapabilities.js:21 |
 | `ARTWORK_CAPABILITY_DISCOVERY_ENABLED` | No | services/artwork/utils/openrouterImageCapabilities.js:55 |
@@ -58,12 +58,12 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `ARTWORK_TASK_TIMEOUT_MS` | Yes | services/artwork/createBlogArtwork.js:19<br>services/artwork/createSocialArtwork.js:14 |
 | `ARTWORK_TIMEOUT_MS` | Yes | services/artwork/createBlogArtwork.js:19<br>services/artwork/createPodcastArtwork.js:13<br>services/artwork/createQuizArtwork.js:11<br>services/artwork/createSocialArtwork.js:14 |
 | `ARTWORK_VISUAL_QA_ENABLED` | Yes | services/artwork/artwork.js:206<br>services/artwork/utils/artwork.js:219 |
-| `ARTWORK_VISUAL_QA_MAX_REGENERATIONS` | Yes | services/artwork/artwork.js:338<br>services/artwork/utils/artwork.js:266 |
+| `ARTWORK_VISUAL_QA_MAX_REGENERATIONS` | Yes | services/artwork/artwork.js:338<br>services/artwork/utils/artwork.js:277 |
 | `ARTWORK_VISUAL_QA_MIN_RELEVANCE` | No | services/artwork/utils/artworkVisualQa.js:13 |
 | `ARTWORK_VISUAL_QA_MIN_TEXT_SAFETY` | No | services/artwork/utils/artworkVisualQa.js:14 |
 | `ARTWORK_VISUAL_QA_MODES` | Yes | services/artwork/artwork.js:199<br>services/artwork/utils/artwork.js:212 |
 | `ARTWORK_VISUAL_QA_PARSE_ATTEMPTS` | No | services/artwork/utils/artworkVisualQa.js:196 |
-| `ARTWORK_VISUAL_QA_REQUIRED` | Yes | services/artwork/artwork.js:337<br>services/artwork/utils/artwork.js:364 |
+| `ARTWORK_VISUAL_QA_REQUIRED` | Yes | services/artwork/artwork.js:337<br>services/artwork/utils/artwork.js:375 |
 | `ARTWORK_VISUAL_QA_THRESHOLD` | Yes | services/artwork/utils/artworkVisualQa.js:12 |
 | `AUDIT_ARTEFACT_READY_POLL_MS` | Yes | audits/utils/websiteAuditPipeline.js:42 |
 | `AUDIT_ARTEFACT_READY_TIMEOUT_MS` | Yes | audits/utils/websiteAuditPipeline.js:41 |
@@ -99,7 +99,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `BLOG_WEEKLY_JSON_RESPONSE_FORMAT` | No | services/blog/weekly/buildWeeklyBlogPost.js:359<br>services/blog/weekly/buildWeeklyBlogPost.js:377<br>services/blog/weekly/buildWeeklyBlogPost.js:418 |
 | `BLOG_WEEKLY_QA_ENABLED` | No | services/blog/weekly/buildWeeklyBlogPost.js:272 |
 | `BLOTATO_AI_IMAGE_MODEL` | Yes | services/blotato/utils/newsShortsService.js:45 |
-| `BLOTATO_ALLOW_IMMEDIATE_PUBLISH` | Yes | services/blotato/routes/index.js:41 |
+| `BLOTATO_ALLOW_IMMEDIATE_PUBLISH` | Yes | services/blotato/routes/index.js:42 |
 | `BLOTATO_ALLOW_PUBLIC_PUBLISH_HOOKS` | Yes | services/shared/middleware/suiteAuth.js:86 |
 | `BLOTATO_API_BASE` | Yes | services/blotato/utils/blotatoClient.js:61 |
 | `BLOTATO_AUTOSHORT_ROTATION_DAYS` | Yes | services/blotato/utils/autoShortStyles.js:1 |
@@ -304,7 +304,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `MIN_SUMMARY_CHARS` | Yes | services/rss-feed-creator/utils/rss-prompts.js:17<br>services/rss-feed-creator/utils/rss-prompts.js:18 |
 | `NEWSLETTER_CONFIRMATION_BASE_URL` | Yes | services/newsletter/jotformIntake.js:108<br>services/newsletter/routes/subscriptions.js:52 |
 | `NEWSLETTER_CONSENT_TEXT_VERSION` | Yes | services/newsletter/jotformIntake.js:105<br>services/newsletter/jotformIntake.js:127 |
-| `NEWSLETTER_HERO_IMAGE_REQUIRED` | No | services/newsletter/engine/buildNewsletter.js:172 |
+| `NEWSLETTER_HERO_IMAGE_REQUIRED` | No | services/newsletter/engine/buildNewsletter.js:174 |
 | `NEWSLETTER_PRIVACY_NOTICE_VERSION` | Yes | services/newsletter/jotformIntake.js:106<br>services/newsletter/jotformIntake.js:128 |
 | `NEWSLETTER_TARGETED_COUNCIL_SHADOW_ENABLED` | Yes | services/newsletter/engine/councilShadow.js:124 |
 | `NODE_ENV` | Yes | logger.js:8<br>scripts/deploySmoke.js:4<br>scripts/performanceGate.js:5<br>scripts/startupCheck.js:34<br>scripts/startupCheck.js:75<br>server.js:33<br>+23 more |
@@ -315,7 +315,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `OPENPAGERANK_API_BASE` | No | services/outreach/services/outreachCore.js:138 |
 | `OPENROUTER_API_BASE` | Yes | services/artwork/artwork.js:30<br>services/artwork/utils/artwork.js:39<br>services/shared/utils/ai-service.js:15 |
 | `OPENROUTER_API_KEY` | Yes | server.js:188 |
-| `OPENROUTER_APP_NAME` | Yes | ai-config.js:347<br>services/artwork/artwork.js:294<br>services/artwork/utils/artwork.js:321 |
+| `OPENROUTER_APP_NAME` | Yes | ai-config.js:347<br>services/artwork/artwork.js:294<br>services/artwork/utils/artwork.js:332 |
 | `OPENROUTER_BASE_URL` | Yes | services/artwork/artwork.js:30<br>services/artwork/utils/artwork.js:39<br>services/shared/utils/ai-service.js:15 |
 | `OPENROUTER_DATA_COLLECTION` | No | services/shared/utils/ai-service.js:212 |
 | `OPENROUTER_ENABLE_FALLBACKS` | Yes | services/shared/utils/ai-service.js:198 |
@@ -326,7 +326,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `OPENROUTER_REQUIRE_PARAMETERS` | No | services/shared/utils/ai-service.js:201 |
 | `OPENROUTER_REQUIRE_PARAMETERS_FOR_JSON` | Yes | services/shared/utils/ai-service.js:202 |
 | `OPENROUTER_SERVICE_TIER` | Yes | services/shared/utils/ai-service.js:224 |
-| `OPENROUTER_SITE_URL` | Yes | ai-config.js:346<br>services/artwork/artwork.js:293<br>services/artwork/utils/artwork.js:320 |
+| `OPENROUTER_SITE_URL` | Yes | ai-config.js:346<br>services/artwork/artwork.js:293<br>services/artwork/utils/artwork.js:331 |
 | `OPENROUTER_SORT_BY` | Yes | services/shared/utils/ai-service.js:184 |
 | `OPS_ALERT_TIMEOUT_MS` | Yes | services/shared/utils/operationalExcellence.js:6 |
 | `OUTREACH_AUTOMATION_ENABLED` | Yes | services/outreach/services/outreachService.js:32 |
@@ -375,7 +375,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `PODCAST_TRANSCRIPT_MAX_SENTENCE_WORDS` | Yes | services/script/utils/editAndFormat.js:197<br>services/script/utils/orchestrator.js:114<br>services/script/utils/orchestrator.js:322<br>services/script/utils/scriptValidation.js:294 |
 | `PODCAST_TRANSCRIPT_MIN_SOURCE_TERMS` | No | services/script/utils/scriptValidation.js:391 |
 | `POLLY_VOICE_ID` | Yes | services/blotato/utils/localCreditFallbackVideo.js:20<br>services/blotato/utils/localCreditFallbackVideo.js:229<br>services/tts/utils/ttsProcessor.js:24 |
-| `PORT` | Yes | routes/podcast-pipeline.js:14<br>scripts/collectCommsWorkerHealth.js:7<br>scripts/deploySmoke.js:3<br>scripts/startupCheck.js:74<br>server.js:488<br>services/ops/index.js:465 |
+| `PORT` | Yes | routes/podcast-pipeline.js:14<br>scripts/collectCommsWorkerHealth.js:7<br>scripts/deploySmoke.js:3<br>scripts/startupCheck.js:74<br>server.js:488<br>services/ops/index.js:473 |
 | `QA_ALERT_WEBHOOK_URL` | Yes | config/thresholds.js:100 |
 | `R2_ACCESS_KEY_ID` | Yes | audits/utils/publishAuditArtifacts.js:62<br>scripts/startupCheck.js:77 |
 | `R2_BUCKET_ART` | Yes | services/artwork/utils/io.js:15 |
@@ -443,11 +443,11 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `SITE_SHELL_MANIFEST_URL` | Yes | services/shared/utils/siteShell.js:120 |
 | `SITE_SHELL_SYNC_SHARED_SECRET` | Yes | services/shared/middleware/suiteAuth.js:72 |
 | `SOCIAL_ARTWORK_PROVIDER_ATTEMPTS` | No | services/artwork/utils/openrouterImagePayload.js:165 |
-| `SOCIAL_ARTWORK_VISUAL_QA_ADVISORY_MIN_RELEVANCE` | Yes | services/artwork/artwork.js:240<br>services/artwork/utils/artwork.js:253 |
-| `SOCIAL_ARTWORK_VISUAL_QA_ADVISORY_MIN_SCORE` | Yes | services/artwork/artwork.js:239<br>services/artwork/utils/artwork.js:252 |
-| `SOCIAL_ARTWORK_VISUAL_QA_ADVISORY_MIN_TEXT_SAFETY` | Yes | services/artwork/artwork.js:241<br>services/artwork/utils/artwork.js:254 |
-| `SOCIAL_ARTWORK_VISUAL_QA_ALLOW_SOFT_FAILURES` | Yes | services/artwork/artwork.js:263<br>services/artwork/utils/artwork.js:290 |
-| `SOCIAL_ARTWORK_VISUAL_QA_MAX_REGENERATIONS` | No | services/artwork/utils/artwork.js:264 |
+| `SOCIAL_ARTWORK_VISUAL_QA_ADVISORY_MIN_RELEVANCE` | Yes | services/artwork/artwork.js:240<br>services/artwork/utils/artwork.js:264 |
+| `SOCIAL_ARTWORK_VISUAL_QA_ADVISORY_MIN_SCORE` | Yes | services/artwork/artwork.js:239<br>services/artwork/utils/artwork.js:263 |
+| `SOCIAL_ARTWORK_VISUAL_QA_ADVISORY_MIN_TEXT_SAFETY` | Yes | services/artwork/artwork.js:241<br>services/artwork/utils/artwork.js:265 |
+| `SOCIAL_ARTWORK_VISUAL_QA_ALLOW_SOFT_FAILURES` | Yes | services/artwork/artwork.js:263<br>services/artwork/utils/artwork.js:301 |
+| `SOCIAL_ARTWORK_VISUAL_QA_MAX_REGENERATIONS` | No | services/artwork/utils/artwork.js:275 |
 | `SOCIAL_LEDGER_INTENT_LOOKBACK_DAYS` | No | services/social/editorialLedger.js:8 |
 | `SOCIAL_LEDGER_RESERVATION_TTL_HOURS` | No | services/social/editorialLedger.js:7 |
 | `STARTUP_CHECK_REQUIRED_POST_START` | Yes | scripts/bootstrap.js:106<br>scripts/deploySmoke.js:6<br>scripts/performanceGate.js:9 |
