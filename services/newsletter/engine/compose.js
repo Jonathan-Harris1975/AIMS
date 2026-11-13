@@ -95,6 +95,9 @@ function brandGuardrails(profile) {
     "Never fabricate first-hand tests, personal career anecdotes, memories or experiences on Jonathan’s behalf.",
     "Prefer sharp judgements with verifiable reasons to bland phrases like worth watching or time will tell.",
     "Never invent facts, quotes, statistics, product capabilities or conclusions not supported by the supplied source material.",
+    "EVIDENCE LOCK: every statistic, journal, quote, model version and causal claim must appear in the " +
+      "corresponding RSS preview or verified article evidence. Otherwise omit or qualify it.",
+    "If a source has only a short RSS preview, limit reporting to supported headline-level information plus a clearly separated, grounded practical interpretation.",
     "Avoid generic AI-newsletter filler and corporate PR language.",
     "Never use: game-changing, revolutionary, groundbreaking, cutting-edge, delve, paradigm shift, unlock the power of.",
     "No emoji, clickbait, breathless hype or exclamation-mark stacking.",

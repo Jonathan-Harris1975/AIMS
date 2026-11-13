@@ -74,7 +74,9 @@ export async function buildNewsletter({ profileId = "ai-edge", sessionId: reques
   }
   const { droppedForDiversity, droppedRecentlyCovered } = selection;
   let { lead, stories } = selection;
-  if (lead && stories.length >= 2 && !sourceItems) {
+  // Friday weekend editions reuse weekday source lists. They still need the
+  // same original-article evidence as daily editions before editorial review.
+  if (lead && stories.length >= 2) {
     const enriched = await enrichArticleEvidence([lead, ...stories]);
     [lead, ...stories] = enriched;
   }

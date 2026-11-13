@@ -125,6 +125,9 @@ cinematic depth and modern magazine-quality framing.",
       "Style: intelligent, contemporary, human, engaging technology journalism rather than anime, fantasy, corporate stock photography or unrelated machinery. The AI \
 connection must be visually legible through supported software, compute, robotics, research, security, governance or human-tool context.",
       `Creative direction: ${policyPrompt}`,
+      "Depict a source-specific human decision using real-world objects; not a generic server room, monitor, " +
+        "electronics bench, mysterious AI box, whiteboard or abstract network graphic.",
+      "Compose a text-resistant frame: no readable screens, product labels, device stickers, written documents or whiteboards, and minimise complex hands.",
       "Final compliance check: inspect the whole composition and remove every accidental letter-like, number-like, logo-like or watermark-like mark before returning the image.",
     ].join(" ");
   }
@@ -232,13 +235,26 @@ function shouldUseShortPromptRetry(mode = "podcast") {
   return THRESHOLDS.podcastArtwork.shortPromptRetryEnabled;
 }
 
-function buildQaRepairPrompt(prompt, qa = {}) {
-  const defects = [...(qa.hardDefects || []), ...(qa.defects || [])].filter(Boolean).slice(0, 8);
+export function buildQaRepairPrompt(prompt, qa = {}, mode = "podcast") {
+  // The model-specific prompt builder truncates long creative directions.
+  // Put specific pixel-QA defects first, where they cannot be clipped.
+  const defects = [...(qa.hardDefects || []), ...(qa.defects || [])]
+    .filter(Boolean).slice(0, 4).map((item) => String(item).slice(0, 190));
+  if (mode === "social") {
+    return [
+      "PIXEL QA REPAIR: change the entire scene, not only colours or framing.",
+      `Mandatory repairs: ${defects.join(" | ") || String(qa.summary || "Fix scene relevance").slice(0, 250)}.`,
+      "Choose one source-specific human decision, physical consequence or clearly documented technical result.",
+      "No visible text, pseudo-text, labels, signs, dashboards, whiteboards or watermarks.",
+      "Overrule any earlier staging involving server racks; show the human decision instead.",
+      `Source-specific subject: ${String(prompt || "").slice(0, 1050)}.`,
+    ].join(" ");
+  }
   return [
-    prompt,
     "REGENERATION REQUIRED AFTER PIXEL-LEVEL QA.",
     `Previous defects: ${defects.join(" | ") || qa.summary || "image failed visual QA"}.`,
-    "Create a materially different composition that fixes every listed defect. Do not preserve the failed layout.",
+    "Create a materially different composition that fixes every listed defect.",
+    String(prompt || "").slice(0, 1300),
   ].join(" ");
 }
 
@@ -417,7 +433,7 @@ async function requestArtworkFromProvider(provider, prompt, mode, date, { useSho
             throw err;
           }
 
-          qaPrompt = buildQaRepairPrompt(prompt, qa);
+          qaPrompt = buildQaRepairPrompt(prompt, qa, mode);
           const retryInstruction = buildModelAwareArtworkPrompt({
             model: provider.model,
             mode,

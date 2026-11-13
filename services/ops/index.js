@@ -271,6 +271,12 @@ const OPERATION_WINDOWS = Object.freeze({
     ["newsletter-readiness", "/newsletter/readiness", { profileId: "ai-edge" }, "newsletter", false, "newsletter-generate"],
     ["newsletter-send", "/newsletter/send", { profileId: "ai-edge" }, "newsletter", false, "newsletter-readiness"],
     ["newsletter-weekend-prepare", "/newsletter/weekend/prepare", {}, "newsletter"],
+    // Create and schedule both videos for each weekend day on Friday. Each
+    // video has a target-day reservation, deterministic ID and independent QA.
+    ["blotato-saturday-am", "/blotato/weekend/saturday/am/schedule", {}],
+    ["blotato-saturday-pm", "/blotato/weekend/saturday/pm/schedule", {}],
+    ["blotato-sunday-am", "/blotato/weekend/sunday/am/schedule", {}],
+    ["blotato-sunday-pm", "/blotato/weekend/sunday/pm/schedule", {}],
   ],
   "friday-pm": [
     ["podcast-readiness", "/podcast/readiness", {}],
@@ -356,7 +362,9 @@ function assertContentOperationWindows() {
   if (!thursdayPaths.includes("/zernio/daily/thursday")) throw new Error("thursday-am missing Zernio Thursday lane/podcast promo trigger");
 
   const fridayAmPaths = OPERATION_WINDOWS["friday-am"].map((task) => task[1]);
-  for (const required of ["/zernio/daily/saturday", "/zernio/daily/sunday", "/blotato/shorts/ai-playbook/schedule"]) {
+  for (const required of ["/zernio/daily/saturday", "/zernio/daily/sunday", "/blotato/shorts/ai-playbook/schedule",
+    "/blotato/weekend/saturday/am/schedule", "/blotato/weekend/saturday/pm/schedule",
+    "/blotato/weekend/sunday/am/schedule", "/blotato/weekend/sunday/pm/schedule"]) {
     if (!fridayAmPaths.includes(required)) throw new Error(`friday-am missing required scheduled-content task ${required}`);
   }
 

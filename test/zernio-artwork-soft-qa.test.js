@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { artworkQaRegenerationLimit, selectPublishableSocialArtworkCandidate } from "../services/artwork/utils/artwork.js";
+import { artworkQaRegenerationLimit, selectPublishableSocialArtworkCandidate, buildQaRepairPrompt } from "../services/artwork/utils/artwork.js";
 import { buildArtworkVisualQaPrompt } from "../services/artwork/utils/artworkVisualQa.js";
 import { readFile } from "node:fs/promises";
 import { getArtworkProviderAttempts } from "../services/artwork/utils/openrouterImagePayload.js";
@@ -148,4 +148,14 @@ test("evergreen provider retry budget is independent and bounded to transient er
     if (originalSocial === undefined) delete process.env.SOCIAL_ARTWORK_PROVIDER_ATTEMPTS;
     else process.env.SOCIAL_ARTWORK_PROVIDER_ATTEMPTS = originalSocial;
   }
+});
+
+test("social recovery changes the failed IT scene instead of repeating screens and pseudo-text", () => {
+  const prompt = buildQaRepairPrompt("Agent supervision is about when a reviewer intervenes, not merely running jobs in a rack.",
+    { defects: ["tiny unreadable labels", "generic server room", "no visible allow-versus-intervene decision"] }, "social");
+  assert.match(prompt, /source-specific human decision/i);
+  assert.match(prompt, /Overrule any earlier staging involving server racks/i);
+  assert.match(prompt, /No visible text, pseudo-text/i);
+  assert.match(prompt, /Agent supervision is about when a reviewer intervenes/i);
+  assert.doesNotMatch(buildQaRepairPrompt("test artwork", {}, "podcast"), /Overrule any earlier staging/);
 });
