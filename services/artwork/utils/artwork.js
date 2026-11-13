@@ -124,6 +124,8 @@ unrelated machinery or decorative technology wallpaper.",
 cinematic depth and modern magazine-quality framing.",
       "Style: intelligent, contemporary, human, engaging technology journalism rather than anime, fantasy, corporate stock photography or unrelated machinery. The AI \
 connection must be visually legible through supported software, compute, robotics, research, security, governance or human-tool context.",
+      "Stage one credible action or outcome that belongs to the exact post. Do not substitute a generic server room, electronics bench, invented black box or monitor for an abstract software topic.",
+      "Build a text-resistant frame: no readable screens, stickers, writing surfaces, whiteboards, signage, diagrams, pseudo-text or logos.",
       `Creative direction: ${policyPrompt}`,
       "Final compliance check: inspect the whole composition and remove every accidental letter-like, number-like, logo-like or watermark-like mark before returning the image.",
     ].join(" ");
