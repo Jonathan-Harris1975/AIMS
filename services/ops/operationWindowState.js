@@ -39,16 +39,33 @@ function publicReceipt(receipt) {
 }
 
 export function operationTaskSucceeded(result = {}) {
-  // Older builds called a source-empty or still-owned blog build a successful
-  // skip. It cannot satisfy today's handoff or be reused as completed work.
+  // A 2xx transport acknowledgement does not prove a content item exists.
+  // In particular, "skipped because no source / previous work is still owned"
+  // must not satisfy dependencies or be cached as a completed operation task.
+  if (!result?.ok || result?.result?.ok === false || result?.result?.ready === false) return false;
+  if (result.skipped) return result.reason === "newsletter-disabled-by-configuration";
+
   const payload = result?.asyncJob?.job?.result
     ?? result?.asyncJob?.result
     ?? result?.result;
-  if (result?.name === "blog-social" && payload?.skipped && !payload?.existing) return false;
+  if (payload?.ok === false || payload?.ready === false || payload?.failed === true
+      || payload?.partialFailure === true || payload?.quarantined === true) return false;
+  const status = String(payload?.status || "").toLowerCase();
+  if (["failed", "error", "partial", "pending", "queued", "accepted", "running"].includes(status)
+      && result?.asyncStatus !== "completed") return false;
+  if (payload?.skipped !== true) return true;
+
+  // A skip is successful only when backed by a confirmed existing artefact
+  // or already-completed provider handoff. These are read-only confirmations;
+  // ambiguous/unknown skips are recovered, never silently marked delivered.
   return Boolean(
-    result?.ok
-    && result?.result?.ok !== false
-    && result?.result?.ready !== false
+    payload.existing
+    || payload.alreadyPublished === true
+    || payload.alreadyDispatched === true
+    || payload.alreadyScheduled === true
+    || payload.scheduled === true
+    || (Array.isArray(payload.publicationReferences) && payload.publicationReferences.length > 0)
+    || ["already_dispatched", "already_published", "already_scheduled", "already_completed"].includes(status)
   );
 }
 
