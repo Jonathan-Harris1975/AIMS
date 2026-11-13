@@ -74,7 +74,7 @@ export async function buildNewsletter({ profileId = "ai-edge", sessionId: reques
   }
   const { droppedForDiversity, droppedRecentlyCovered } = selection;
   let { lead, stories } = selection;
-  if (lead && stories.length >= 2 && !sourceItems) {
+  // Friday-prepared weekend editions need original-article grounding too.\n  // RSS-only sourceItems were producing invented figures and failed QA on Sundays.\n  if (lead && stories.length >= 2) {
     const enriched = await enrichArticleEvidence([lead, ...stories]);
     [lead, ...stories] = enriched;
   }
