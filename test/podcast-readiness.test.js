@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { getPodcastReadiness } from "../services/podcast/readiness.js";
+import { getPodcastReadiness, getPodcastRuntimeReadiness } from "../services/podcast/readiness.js";
 
 function completeEnv() {
   return {
@@ -67,7 +67,33 @@ test("podcast readiness rejects non-HTTPS production assets", () => {
 test("podcast run route cannot bypass readiness", async () => {
   const { readFile } = await import("node:fs/promises");
   const source = await readFile(new URL("../services/podcast/index.js", import.meta.url), "utf8");
-  assert.match(source, /const readiness = getPodcastReadiness\(\)/);
+  assert.match(source, /const readiness = await getPodcastRuntimeReadiness\(\)/);
   assert.match(source, /Podcast dependencies are not ready/);
   assert.match(source, /res\.status\(503\)/);
+});
+
+
+test("real Polly synthesis permission is required before a podcast can start", async () => {
+  const report = await getPodcastRuntimeReadiness({
+    env: completeEnv(), checkCommand: () => true,
+    probe: async () => {
+      const e = new Error("arn:aws:iam::123456789012:user/Pod-cast is not authorized to perform polly:SynthesizeSpeech");
+      e.name = "AccessDeniedException";
+      throw e;
+    },
+  });
+  assert.equal(report.ready, false);
+  assert.equal(report.status, "blocked");
+  assert.equal(report.errorCode, "POLLY_ACCESS_DENIED");
+  assert.ok(report.checks.some(c => c.name === "provider:aws-polly-synthesize-speech" && c.ok === false));
+  assert.doesNotMatch(JSON.stringify(report), /123456789012/);
+});
+
+test("valid Polly synthesis permission allows the Friday readiness gate", async () => {
+  const report = await getPodcastRuntimeReadiness({
+    env: completeEnv(), checkCommand: () => true,
+    probe: async () => true,
+  });
+  assert.equal(report.ready, true);
+  assert.ok(report.checks.some(c => c.code === "POLLY_SYNTHESIS_VERIFIED"));
 });

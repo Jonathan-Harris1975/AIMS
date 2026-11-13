@@ -558,6 +558,7 @@ async function runInternalTask([name, path, body = {}, feature = null, addWeekSt
         maxConsecutiveErrors: Math.max(1, Number(process.env.AIMS_OPERATION_ASYNC_MAX_POLL_ERRORS || 8)),
         notFoundGraceMs: Math.max(0, Number(process.env.AIMS_OPERATION_ASYNC_NOT_FOUND_GRACE_MS || 120_000)),
         onPoll: heartbeat,
+        expectedEventId: name === "podcast" ? idempotencyKey : null,
       });
 
       const taskOutcome = assessAsyncTaskOutcome(path, asyncJob);

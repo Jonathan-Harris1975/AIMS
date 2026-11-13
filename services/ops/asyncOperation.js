@@ -125,6 +125,7 @@ export async function waitForAsyncOperation({
   maxConsecutiveErrors = 8,
   notFoundGraceMs = 120_000,
   onPoll = null,
+  expectedEventId = null,
 } = {}) {
   const resolvedStatusUrl = new URL(statusUrl, `${normalise(baseUrl).replace(/\/+$/, "")}/`).toString();
   const headers = token ? { authorization: `Bearer ${token}` } : {};
@@ -168,6 +169,14 @@ export async function waitForAsyncOperation({
     }
 
     polls += 1;
+    // A recovered podcast uses the same session ID. Ignore the persisted
+    // failure from the previous attempt until this execution's job appears.
+    const childJob = payload?.job && typeof payload.job === "object" ? payload.job : payload;
+    if (expectedEventId && String(childJob?.eventId || "") !== String(expectedEventId)) {
+      onPoll?.({ polls, pollErrors, statusUrl: resolvedStatusUrl, staleEventId: true });
+      await sleep(pollIntervalMs);
+      continue;
+    }
     const assessment = assessAsyncOperationPayload(payload);
     onPoll?.({ polls, pollErrors, statusUrl: resolvedStatusUrl, payload, assessment });
 

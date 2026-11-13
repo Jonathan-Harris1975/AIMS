@@ -94,7 +94,10 @@ async function synthesizeTextWithRetry(text, retries = 3) {
 // ------------------------------------------------------------
 // 🔄 Chunk Processing with Exponential Backoff
 // ------------------------------------------------------------
-async function processChunkWithRetry(sessionId, chunk, chunkNumber, attempt = 1) {
+async function processChunkWithRetry(sessionId, chunk, chunkNumber, attempt = 1, batchState = {}) {
+  if (batchState.fatalError) {
+    return { success: false, index: chunkNumber, attempts: 0, error: batchState.fatalError };
+  }
   try {
     const cleaned = cleanText(chunk.text);
     const audioBuffer = await synthesizeTextWithRetry(cleaned, 1);
@@ -125,6 +128,9 @@ async function processChunkWithRetry(sessionId, chunk, chunkNumber, attempt = 1)
     };
   } catch (err) {
     const message = err?.message || err.toString();
+    if (/AccessDenied|Unauthorized|not authorized|not permitted/i.test(String(err?.name || "") + " " + message)) {
+      batchState.fatalError = "AWS Polly synthesis access denied";
+    }
     const isRetryable =
       message.includes("Throttling") ||
       message.includes("TooManyRequests") ||
@@ -146,7 +152,7 @@ async function processChunkWithRetry(sessionId, chunk, chunkNumber, attempt = 1)
       });
 
       await new Promise(resolve => setTimeout(resolve, delay));
-      return processChunkWithRetry(sessionId, chunk, chunkNumber, attempt + 1);
+      return processChunkWithRetry(sessionId, chunk, chunkNumber, attempt + 1, batchState);
     }
 
     error(`Chunk ${chunkNumber} permanently failed after ${attempt} attempts`, {
@@ -181,9 +187,10 @@ async function ttsProcessor(sessionId, chunkList = []) {
   }
 
   const limit = pLimit(CONCURRENCY);
+  const batchState = { fatalError: null };
 
   const tasks = chunkList.map((chunk, index) =>
-    limit(() => processChunkWithRetry(sessionId, chunk, index + 1))
+    limit(() => processChunkWithRetry(sessionId, chunk, index + 1, 1, batchState))
   );
 
   const results = await Promise.all(tasks);
@@ -201,15 +208,15 @@ async function ttsProcessor(sessionId, chunkList = []) {
   };
 
   if (failed.length > 0) {
-    warn(`TTS completed with ${failed.length} failures`, summary);
-  } else {
-   debug (`TTS completed successfully`, summary);}
-  info("🗣️ TTS completed successfully")
-
-  if (successful.length === 0) {
-    throw new Error("TTS processing failed - no chunks were successfully produced");
+    error("TTS failed; refusing to merge incomplete audio", summary);
+    const cause = batchState.fatalError || `TTS processing failed: ${failed.length} of ${chunkList.length} chunks missing`;
+    const failure = new Error(cause);
+    failure.code = batchState.fatalError ? "POLLY_ACCESS_DENIED" : "TTS_INCOMPLETE";
+    failure.retryable = !batchState.fatalError;
+    throw failure;
   }
 
+  info("🗣️ TTS completed successfully", summary);
   return successful;
 }
 
