@@ -16,7 +16,7 @@ Owns AIMS weekday morning task sequences, the Friday podcast window and operatio
 
 ## Behaviour
 
-Morning task spacing uses `AIMS_OPERATION_AM_DELAY_MS`. The Friday podcast readiness check flows immediately into the pipeline through `AIMS_OPERATION_FRIDAY_PM_DELAY_MS=0`; the legacy general PM delay remains available for any future multi-service PM window. Task execution uses `AIMS_OPERATION_TASK_TIMEOUT_MS`. `AIMS_OPS_PREFLIGHT_STRICT` controls whether missing readiness inputs become hard failures. Friday AM prepares both Blotato schedule slots and Saturday/Sunday Zernio content. Friday PM runs only the podcast pipeline.
+Morning task spacing uses `AIMS_OPERATION_AM_DELAY_MS`. The Friday podcast readiness check flows immediately into the pipeline through `AIMS_OPERATION_FRIDAY_PM_DELAY_MS=0`; the legacy general PM delay remains available for any future multi-service PM window. Task execution uses `AIMS_OPERATION_TASK_TIMEOUT_MS`. `AIMS_OPS_PREFLIGHT_STRICT` controls whether missing readiness inputs become hard failures. Friday AM prepares the two Friday Blotato slots, four additional Blotato videos for Saturday/Sunday, Saturday/Sunday Zernio evergreen posts, and both weekend AI Edge editions. Friday PM runs only the podcast pipeline.
 
 Blotato and the daily Zernio lane run independently of the RSS rewrite task. Tasks remain sequential to control load, but a content failure in one lane no longer suppresses either social provider before its API call.
 
@@ -41,7 +41,7 @@ Successful and actively heartbeating operation windows remain one-shot for the L
 
 The daily social-blog build hands its current dated RSS item and single generated image to `/zernio/blog-rss/daily`. This handoff waits for a successful blog build. It is separate from the daily evergreen Zernio lane. E-book and paired quiz question/answer content also remain Zernio responsibilities.
 
-The social blog and newsletter run Monday–Friday only. Friday prepares Saturday and Sunday evergreen posts through Zernio. There are no weekend content-production operation windows; weekend time remains reserved for maintenance.
+The social blog and daily newsletter run Monday–Friday only. Friday prepares Saturday and Sunday evergreen posts through Zernio and four future-scheduled Blotato videos. Weekend AI Edge editions are built on Friday and delivered within their scheduled weekend windows. There are no weekend content-production operation windows; weekend time remains reserved for maintenance.
 
 
 ## Verified content completion and recovery
