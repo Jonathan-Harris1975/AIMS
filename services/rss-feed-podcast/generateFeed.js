@@ -7,6 +7,17 @@ import { buildLegacyItunesKeywordsCsv, buildPodcastDiscoveryMetadata, normaliseD
 import { R2_PUBLIC_BASE_URL_RSS_RESOLVED } from "../shared/utils/r2-client.js";
 import { info, warn } from "../../logger.js";
 
+// Keep the show-level cover URL versioned so podcast directories refresh it.
+// Migrate the legacy Koyeb env value transparently; explicit custom URLs remain supported.
+const PODCAST_SHOW_COVER_URL = "https://podcast-coverart.jonathan-harris.online/cover-art-2026-11-13-3000.png";
+const LEGACY_PODCAST_SHOW_COVER_URL = "https://podcast-coverart.jonathan-harris.online/cover-art.png";
+
+export function podcastChannelImageUrl(env = process.env) {
+  const configured = String(env.PODCAST_IMAGE_URL || "").trim().replace(/^"+|"+$/g, "");
+  if (!configured || configured === LEGACY_PODCAST_SHOW_COVER_URL) return PODCAST_SHOW_COVER_URL;
+  return configured;
+}
+
 function envString(...keys) {
   for (const key of keys) {
     const value = process.env[key];
@@ -156,7 +167,7 @@ analysis for people who would rather not swallow the vendor confetti.";
     itunesKeywords: channelDiscovery.legacy.itunesKeywordsCsv,
     ownerName: envString("PODCAST_OWNER_NAME") || "Jonathan Harris",
     ownerEmail: envString("PODCAST_OWNER_EMAIL"),
-    imageUrl: envString("PODCAST_IMAGE_URL"),
+    imageUrl: podcastChannelImageUrl(),
     categories: channelCategories,
     fundingUrl: envString("PODCAST_FUNDING_URL", "funding_url"),
     fundingText: envString("PODCAST_FUNDING_TEXT", "funding_text"),
